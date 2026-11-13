@@ -1490,8 +1490,9 @@ fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> World
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
         // A giant world takes no less than the smallest giant's mass: a
-        // mini-Neptune under it renders as an ice giant of that mass (its
-        // body keeps the model's radius, see planet_body).
+        // mini-Neptune under it renders as an ice giant of that mass. Its
+        // body takes the giant look's radius (`giant_radius`, see
+        // planet_body), not the model's: issue #446 tracks the gap.
         mass_earth: giant.then(|| {
             (mass_earth as f32).clamp(
                 crate::request::GIANT_MASS.min,
@@ -1761,6 +1762,24 @@ pub fn world_params(body: &Body) -> WorldParams {
     let rocky = body.kind == BodyKind::Moon || params.planet.giant.is_none();
     if rocky && params.gravity.is_none() {
         params.gravity = Some(body.physical.gravity as f32);
+    }
+    params
+}
+
+/// The parameters a body's world is generated with: [`world_params`],
+/// and for a planet whose model gives it a surface (no giant) the sea
+/// level its water fills and the warming toward its model's temperature
+/// ([`crate::planet::interim::calibrate`]). Those pass over its relief,
+/// so the system's draw leaves them to here; listing and indexing a
+/// system read [`world_params`], which stays cheap.
+pub fn generation_params(body: &Body) -> WorldParams {
+    let mut params = world_params(body);
+    if let Some(model) = &body.model
+        && model.surface.is_some()
+        && !model.class.is_giant()
+        && params.giant_mass_earth.is_none()
+    {
+        crate::planet::interim::calibrate(&mut params, model);
     }
     params
 }
@@ -2242,7 +2261,7 @@ pub fn generate_neighbourhood_with(
     let report = std::cell::RefCell::new(&mut progress as &mut dyn FnMut(BodyProgress));
     for (k, id) in ids.iter().enumerate() {
         let body = system.bodies.iter().find(|b| &b.id == id).expect("listed");
-        let params = world_params(body);
+        let params = generation_params(body);
         let temp = bodies_dir.join(format!(".tmp-{id}"));
         let _ = std::fs::remove_dir_all(&temp);
         let size = crate::sizes::size_dir(&temp, params.width, params.height);
@@ -2309,7 +2328,7 @@ pub fn generate_size(
     if target.exists() {
         return Err(format!("body {body_id} has its {name} size already"));
     }
-    let mut params = world_params(body);
+    let mut params = generation_params(body);
     params.width = width;
     params.height = height;
     let temp = body_dir
@@ -2353,7 +2372,7 @@ pub fn body_svg(
     let world = match crate::export::raw_data::load_world(&size) {
         Ok(world) => world,
         Err(_) => {
-            let mut params = world_params(body);
+            let mut params = generation_params(body);
             params.width = width;
             params.height = height;
             crate::generation::generate(&params).world
@@ -4252,6 +4271,33 @@ mod lone_tests {
         let params = planet_params(&model, request, 5);
         let look = base_of(&model);
         planet_body("b", "Test b", &slot, look, Some(model), &params, star)
+    }
+
+    #[test]
+    fn a_planet_is_calibrated_when_its_world_is_generated() {
+        // Seed 1: a rocky planet b, a mini-Neptune d, a hydrocarbon world e.
+        let system = around("terran", 1, None, None);
+        let body = |id: &str| system.bodies.iter().find(|b| b.id == id).unwrap();
+        let json = |p: &WorldParams| serde_json::to_string(p).unwrap();
+        // The draw leaves the temperature shift to the generation.
+        for id in ["b", "e"] {
+            let drawn = world_params(body(id));
+            assert_eq!(drawn.planet.climate.temperature, 0.0, "{id}");
+            let mut expected = drawn.clone();
+            let model = body(id).model.as_ref().unwrap();
+            crate::planet::interim::calibrate(&mut expected, model);
+            let generated = generation_params(body(id));
+            assert_eq!(json(&generated), json(&expected), "{id}");
+            assert_ne!(generated.planet.climate.temperature, 0.0, "{id}");
+        }
+        // A giant world, the world asked for and a moon are not calibrated.
+        for id in ["c", "d", "d-1"] {
+            assert_eq!(
+                json(&generation_params(body(id))),
+                json(&world_params(body(id))),
+                "{id}"
+            );
+        }
     }
 
     #[test]

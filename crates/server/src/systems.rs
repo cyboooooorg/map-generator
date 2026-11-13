@@ -296,12 +296,14 @@ pub fn size_revision(root: &Path, id: &str, body: &str, size: (u32, u32)) -> Opt
 }
 
 /// The parameters a body of a system is generated with, from its
-/// `system.json`: `None` when the system or the body is not there or the
-/// file cannot be read.
+/// `system.json` ([`mapgen::system::generation_params`]: a planet's sea
+/// level and warming are calibrated, which takes a pass over its relief):
+/// `None` when the system or the body is not there or the file cannot be
+/// read.
 pub fn body_params(root: &Path, id: &str, body: &str) -> Option<mapgen::world::WorldParams> {
     let system = mapgen::system::read_system(&system_dir(root, id)).ok()?;
     let body = system.bodies.iter().find(|b| b.id == body)?;
-    Some(mapgen::system::world_params(body))
+    Some(mapgen::system::generation_params(body))
 }
 
 /// A system's summary from the bytes of its `system.json` (modified at

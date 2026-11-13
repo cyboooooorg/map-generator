@@ -1962,7 +1962,7 @@ pub(crate) mod tests {
             assert!((mean - target_k).abs() < 5.0, "{mean} vs {target_k}");
         }
         // Earth's, Mars's and Venus's models through
-        // `planet::interim::params_for` at their orbits round the Sun
+        // `planet::interim::params_for` and `calibrate` at their orbits round the Sun
         // (seed 1, 128x64): Venus at the grid's ceiling, above it.
         use crate::planet::reference::{model_inputs, reference, sun_at};
         use rand::SeedableRng;
@@ -1983,11 +1983,12 @@ pub(crate) mod tests {
                 height: Some(64),
                 ..crate::request::WorldRequest::default()
             };
-            let params = crate::planet::interim::params_for(
+            let mut params = crate::planet::interim::params_for(
                 &model,
                 request,
                 &mut rand::rngs::StdRng::seed_from_u64(1),
             );
+            crate::planet::interim::calibrate(&mut params, &model);
             let model_k = model.surface.unwrap().climate.temperature_k;
             let target_k = model_k.min(f64::from(TEMPERATURE_RANGE.1) + 273.15);
             let mean = mean_k(&params);

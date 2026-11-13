@@ -478,6 +478,11 @@ systems/<system-id>/
     surface pressure, regime, sky, erosion, volcanism, surface age, the
     sea level its oceans fill, a world without life stripped of its
     forests and grasslands, and a mean temperature aimed at the model's.
+    The sea level and the temperature pass over the relief, so they are
+    set when the world is generated (`system::generation_params`), not
+    when the system is drawn: `bodies[].params` stores the drawn sea
+    level and no temperature shift, and the body's `world.json` the
+    calibrated ones.
     A giant class keeps the giant world of its preset at the model's
     mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request still
     asks for planets by preset name: the name places the planet (its

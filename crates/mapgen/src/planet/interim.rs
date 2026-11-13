@@ -282,7 +282,8 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
 ///   ([`HEAT_PIPE_SURFACE_AGE_GA`]), a stagnant lid most of the system's
 ///   age ([`STAGNANT_SURFACE_AGE_SHARE`]);
 ///
-/// then [`finish`]es them: its gravity, regime, sea level and temperature.
+/// then [`finish`]es them: its gravity and regime. The sea level and the
+/// temperature shift are [`calibrate`]'s, when the world is generated.
 ///
 /// # Panics
 ///
@@ -366,16 +367,12 @@ pub fn params_for(
     params
 }
 
-/// Completes the parameters of a planet with a surface, in this order
-/// (each step reads the ones before): its gravity, the model's (and the
-/// tilt of a planet the star's tides despin at that mass, none); its
-/// regime, the model's (not [`crate::geology::regime_of`]'s); its sea
-/// level, where its oceans ([`ocean_depth_m`]) fill the relief
-/// ([`sea_level_for_water`]; a runaway's water is steam, none on the
-/// ground), or for a hydrocarbon world, whose lakes the model does not
-/// size, Titan's share of land ([`HYDROCARBON_LAND_FRACTION`]); then the
-/// temperature shift that brings the world's mean to the model's
-/// ([`warming_for`]).
+/// Completes the parameters of a planet with a surface with what needs no
+/// pass over its relief, in this order (each step reads the ones
+/// before): its gravity, the model's (and the tilt of a planet the
+/// star's tides despin at that mass, none); its regime, the model's (not
+/// [`crate::geology::regime_of`]'s). Its sea level and temperature wait
+/// for [`calibrate`], when its world is generated.
 fn finish(params: &mut WorldParams, model: &PlanetModel) {
     let surface = model.surface.as_ref().expect("a planet with a surface");
     params.gravity = Some(model.interior.gravity as f32);
@@ -384,6 +381,27 @@ fn finish(params: &mut WorldParams, model: &PlanetModel) {
     // they no longer despin keeps the tilt the resolution left it.
     params.axial_tilt_deg = crate::spin::upright(params, params.axial_tilt_deg);
     params.planet.geology.regime = surface.regime;
+}
+
+/// Sets the sea level and the temperature shift of the world of a planet
+/// with a surface, from [`params_for`]'s parameters, in this order (the
+/// warming reads the sea level): its sea level, where its oceans
+/// ([`ocean_depth_m`]) fill the relief ([`sea_level_for_water`]; a
+/// runaway's water is steam, none on the ground), or for a hydrocarbon
+/// world, whose lakes the model does not size, Titan's share of land
+/// ([`HYDROCARBON_LAND_FRACTION`]); then the temperature shift that brings
+/// the world's mean to the model's ([`warming_for`]).
+///
+/// Both pass over a coarse grid of the relief (about a second in all in
+/// release), so a system's draw leaves them to the generation of the
+/// world (`crate::system::generation_params`): the drawn parameters keep
+/// the sea level the resolution drew and no temperature shift.
+///
+/// # Panics
+///
+/// When `model` has no surface (a giant).
+pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
+    let surface = model.surface.as_ref().expect("a planet with a surface");
     params.sea_level = if surface.climate.liquid == SurfaceLiquid::Hydrocarbons {
         sea_level_for_land_fraction(params, HYDROCARBON_LAND_FRACTION)
     } else {
