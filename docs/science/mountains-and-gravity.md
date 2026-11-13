@@ -158,14 +158,17 @@ flowchart LR
    ([`generation.rs`](../../crates/mapgen/src/generation.rs)). The blend is
    $0.45 \times \min(1/g,\ 2)$: 0.45 at Earth's gravity, 0.9 at the cap,
    0.14 at 3.2 g (twice Earth's size). The 0.45 is a calibration on
-   Earth's hypsometry, with the platform below. The regime keeps a share of
-   the mountain weight: 0.5 with plates (their other ranges follow the
-   plate boundaries), 0.55 without (`NOISE_MOUNTAINS_WITHOUT_PLATES`):
-   without plates to stack crust into ranges, a world is plains with its
-   craters, basins and volcanoes. The 0.55 is a calibration on Venus,
-   whose hypsometry is unimodal, more than 80 % of it within 1 km of the
-   mean radius (Pettengill et al. 1980; Ford & Pettengill 1992): the
-   `venus-like` archetype gets 80 % within ±1 km of its median.
+   Earth's hypsometry, with the platform below. Worlds with plates keep
+   half the mountain weight (their other ranges follow the plate
+   boundaries). Worlds without keep it whole, but only in a few highland
+   provinces (`HIGHLANDS`): without plates to stack crust into ranges, a
+   world is plains with its craters, basins and volcanoes. A low-frequency
+   noise ramps the mountains in past its middle on about 9 % of the
+   sphere, Venus's share: tesserae cover about 7–8 % of it (Ivanov & Head
+   2011), highlands with them about a tenth, plains 70–80 %. Venus's
+   hypsometry is unimodal, more than 80 % of it within 1 km of the mean
+   radius (Pettengill et al. 1980; Ford & Pettengill 1992): the
+   `venus-like` archetype gets 91 % within ±1 km of its median.
 3. **Plate boundaries.** The ranges, arcs and trenches that
    [`plates.rs`](../../crates/mapgen/src/plates.rs) raises at plate
    boundaries are given "at Earth's gravity" and multiplied by the same
@@ -196,8 +199,7 @@ flowchart LR
    capped at 9 km (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one
    (bulk density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
    resurfaces it, and its sinking crust breaks into blocks up to 17 km
-   high (Schenk et al. 2001). The span counts the mountains at the
-   regime's weight, so the cap keeps its 9 km whatever that weight.
+   high (Schenk et al. 2001).
 8. **Craters.** The size above which a crater gets a flat floor and a
    central peak is $15\,\text{km} \times 1.62 / g$ (g in m/s²), the Moon's
    15 km scaled as $1/g$
@@ -268,17 +270,18 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   rock's transition, so its span is 0.75 of rock's, not 0.4. Dead planets
   (`mercury-like`, airless `barren`) have the 9 km cap too, whatever their
   gravity.
-- **Worlds without plates rest on one calibration.** Their mountain
-  weight, 0.55, is fitted on one `venus-like` world (seed 12345,
-  2048 × 1024) to Venus's share of surface within 1 km of the mean radius.
-  Checked against two other bodies, not fitted: `mars-like` spans 24 km
-  with a standard deviation of 3.0 km (Mars: about 30 km, Smith et al.
-  1999; 34 km and 4.8 km at the full weight), `mercury-like` 8.4 km
-  (Mercury: 9.9 km, Becker et al. 2016). The relief does not fall as the
-  weight: the ridged noise has a floor, and below about 0.45 a dry
-  Venus-sized world is nearly flat. Heavier dry worlds are flatter still
-  (`1/g`): a 1.4 g episodic world keeps nearly all of its surface within
-  1 km of its median.
+- **Worlds without plates: provinces from noise, a squeezed datum.**
+  Their highland provinces are noise blobs: real ones are tesserae and
+  volcanic rises on Venus, the cratered southern highlands and Tharsis on
+  Mars (two thirds of the planet, not a tenth), impact-shaped terrain on
+  Mercury and the Moon; the same share serves them all. And a dry world's
+  sea level is the lowest the request allows, so its plains sit near the
+  bottom of the elevation range, where `within_range` compresses: the
+  plains stand flat, without Venus's ±1 km of rolling lowlands and
+  uplands (`venus-like` has 91 % within ±1 km of its median where Venus
+  has about 80 %), and the foot of the highlands is squeezed. `mars-like`
+  spans 30 km (Mars: about 30 km, Smith et al. 1999), `mercury-like`
+  7.9 km (Mercury: 9.9 km, Becker et al. 2016).
 
 ## Sources
 
@@ -334,6 +337,9 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
     global digital elevation model of Mercury", 47th Lunar and Planetary
     Science Conference, abstract 2959: highest point 4.48 km above the
     mean radius, lowest 5.38 km below.
+14. Ivanov, M. A. & Head, J. W. 2011, "Global geological map of Venus",
+    *Planetary and Space Science* 59, 1559–1600,
+    [doi:10.1016/j.pss.2011.07.008](https://doi.org/10.1016/j.pss.2011.07.008).
 
 ## See also
 

@@ -183,14 +183,11 @@ pub(crate) fn relief_share(p: &WorldParams) -> f32 {
 
 /// Span of the noise relief of the world `p`, km: from the old floor
 /// ([`ABYSS_KM`]) to the top of the platform and of the mountains at its
-/// gravity and their weight in its regime ([`noise_mountains`]).
+/// gravity.
 fn noise_span_km(p: &WorldParams) -> f32 {
     ABYSS_KM
         + PLATFORM_KM
-        + noise_mountains(p.look.geology.regime)
-            * MOUNTAIN_BLEND
-            * relief_scale(p.gravity_modifier())
-            * crate::craters::ELEVATION_KM
+        + MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()) * crate::craters::ELEVATION_KM
 }
 
 /// Whether the world `p` is mostly ice: a bulk density, from its gravity
@@ -342,38 +339,40 @@ const NEW_CRUST_ROUGHNESS: f32 = 0.5;
 /// Share of the noise's mountain weight kept on worlds with plate
 /// tectonics: the rest of their ranges follow the plate boundaries.
 const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
-/// Share of the noise's mountain weight kept on worlds without plates
-/// (stagnant, episodic or heat-pipe lids). With no plates to stack crust
-/// into ranges, such a world is plains with what the generator places on
-/// them (craters, basins, volcanoes, old sea floors), not a mountain fabric
-/// over the whole globe: Venus's hypsometry is unimodal, more than 80 % of
-/// its surface within 1 km of the mean radius and about 5 % more than 2 km
-/// above it (Pettengill et al. 1980, doi:10.1029/JA085iA13p08261, from
-/// Pioneer Venus; Ford & Pettengill 1992, doi:10.1029/92JE01085,
-/// from Magellan).
+/// The highland provinces of a world without plates (stagnant, episodic
+/// or heat-pipe lids), the only places its noise mountains rise: with no
+/// plates to stack crust into ranges, such a world is plains with what the
+/// generator places on them (craters, basins, maria, volcanoes, old sea
+/// floors), and a few highland provinces, not a mountain fabric over the
+/// whole globe (a dry world stands all above the mountains' onset). On
+/// Venus, tesserae cover about 7-8 % of the surface (Ivanov & Head 2011,
+/// doi:10.1016/j.pss.2011.07.008) and the highlands with them about a
+/// tenth, against 70-80 % of plains; the hypsometry is unimodal, more
+/// than 80 % of the surface within 1 km of the mean radius (Ford &
+/// Pettengill 1992, doi:10.1029/92JE01085, from Magellan) and about 5 %
+/// more than 2 km above it (Pettengill et al. 1980,
+/// doi:10.1029/JA085iA13p08261), Maxwell Montes about 11 km.
 ///
-/// Calibration on the venus-like archetype (seed 12345, 2048×1024): 0.55
-/// puts about 80 % of its area within ±1 km of its median elevation (at
-/// the full weight, 1, only a third). The noise's ridges have a floor, so
-/// the relief falls faster than the weight: 0.45 already leaves nearly all
-/// of it within ±1 km. Checked, not fitted, on Mars and Mercury: the
-/// mars-like archetype keeps its dichotomy (old sea floors) and a span of
-/// about 24 km (Mars's dynamic range is about 30 km, Smith et al. 1999,
-/// doi:10.1126/science.284.5419.1495, Olympus Mons included); airless
-/// bodies keep the span [`IMPACT_RELIEF_KM`] gives them, since that span
-/// counts the mountains at this weight (see [`noise_span_km`]): the
-/// mercury-like archetype spans 8.4 km (Mercury's highest and lowest points are 4.48 km
-/// above and 5.38 km below its mean radius, Becker et al. 2016, LPSC
-/// abstract 2959).
-const NOISE_MOUNTAINS_WITHOUT_PLATES: f32 = 0.55;
-
-/// Share of the noise's mountain weight kept in the tectonic `regime`.
-fn noise_mountains(regime: Regime) -> f32 {
-    match regime {
-        Regime::Plates => NOISE_MOUNTAINS_WITH_PLATES,
-        Regime::Stagnant | Regime::Episodic | Regime::HeatPipe => NOISE_MOUNTAINS_WITHOUT_PLATES,
-    }
+/// A three-octave noise at a fixed frequency on the unit sphere, a few
+/// provinces whatever the world's size, ramps the mountains in between
+/// `edge.0` and `edge.1`. Calibration: over 40 seeds, the noise passes the
+/// middle of the ramp (0.28) on about 9 % of the sphere (its 90th
+/// percentile is 0.27, its 92nd 0.29), the top of the ramp on about 5 %,
+/// its foot on about 14 %; a seed draws more or fewer. Inside, the
+/// mountains keep their whole weight: the `venus-like` archetype spans
+/// 9 km, `mars-like` 30 km (Mars's dynamic range is about 30 km, Smith et
+/// al. 1999, doi:10.1126/science.284.5419.1495), `mercury-like` 8 km
+/// (Mercury: 9.9 km, Becker et al. 2016, LPSC abstract 2959).
+struct Highlands {
+    frequency: f64,
+    octaves: u32,
+    edge: (f32, f32),
 }
+const HIGHLANDS: Highlands = Highlands {
+    frequency: 1.6,
+    octaves: 3,
+    edge: (0.23, 0.33),
+};
 /// Weight of volcanic arcs in the volcanic zone, on a world without
 /// volcanism and on a fully volcanic one.
 const ARC_VOLCANISM: (f32, f32) = (0.8, 1.0);
@@ -460,8 +459,8 @@ pub struct Sampler {
     grid: Grid,
     /// The plates and their boundaries, on worlds with plate tectonics.
     tectonics: Option<crate::plates::PlateMap>,
-    /// Share of the noise's mountain weight kept in the world's regime
-    /// (see [`noise_mountains`]).
+    /// Share of the noise's mountain weight kept on worlds with plates:
+    /// their ranges follow the plate boundaries.
     noise_mountains: f32,
     /// Weight of volcanic arcs in the volcanic zone.
     arc_volcanism: f32,
@@ -490,6 +489,9 @@ pub struct Sampler {
     /// Regional climate variability (soils, aspect, local circulation).
     variability_noise: Perlin,
     highland_noise: Perlin,
+    /// The highland provinces of a world without plates, outside which
+    /// the noise mountains vanish (see [`HIGHLANDS`]); `None` with plates.
+    highlands: Option<Perlin>,
 }
 
 impl Sampler {
@@ -512,7 +514,7 @@ impl Sampler {
         let grid = p.grid();
         let mut sampler = Self {
             tectonics: None,
-            noise_mountains: noise_mountains(p.look.geology.regime),
+            noise_mountains: 1.0,
             arc_volcanism: ARC_VOLCANISM.0
                 + (ARC_VOLCANISM.1 - ARC_VOLCANISM.0) * p.volcanic_intensity.clamp(0.0, 1.0),
             coast_octaves: coast_octaves(noise_scale, &grid),
@@ -541,6 +543,8 @@ impl Sampler {
             anomaly_noise: Perlin::new(stream_seed(seed, stream::ANOMALY)),
             variability_noise: Perlin::new(stream_seed(seed, stream::VARIABILITY)),
             highland_noise: Perlin::new(stream_seed(seed, stream::HIGHLAND)),
+            highlands: (p.look.geology.regime != crate::geology::Regime::Plates)
+                .then(|| Perlin::new(stream_seed(seed, stream::HIGHLANDS))),
         };
         if p.look.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
@@ -553,8 +557,21 @@ impl Sampler {
                 _ => crate::plates::PlateMap::at_epoch(p, f64::from(p.drift_ma), continental),
             };
             sampler.tectonics = Some(map);
+            sampler.noise_mountains = NOISE_MOUNTAINS_WITH_PLATES;
         }
         sampler
+    }
+
+    /// Share of the noise mountains kept at a unit vector: 1 inside the
+    /// highland provinces of a world without plates, 0 on its plains, 1
+    /// everywhere on a world with plates.
+    fn highland(&self, p: [f64; 3]) -> f32 {
+        let Some(noise) = &self.highlands else {
+            return 1.0;
+        };
+        let f = HIGHLANDS.frequency;
+        let v = fbm(noise, p[0] * f, p[1] * f, p[2] * f, HIGHLANDS.octaves);
+        smoothstep(HIGHLANDS.edge.0, HIGHLANDS.edge.1, v)
     }
 
     /// Whether the crust at a unit vector is continental: above the edge of
@@ -799,7 +816,9 @@ impl Sampler {
         // The young floor's swell is thermal isostasy: the same at any
         // gravity.
         let tectonic_uplift = plates.uplift * self.relief_scale + plates.swell;
-        let mountain_weight = (mountain_weight * self.noise_mountains).max(plates.orogeny);
+        let mountain_weight =
+            (mountain_weight * self.noise_mountains * self.highland([nx, ny, nz]))
+                .max(plates.orogeny);
         let broad = ((volcanic_raw - self.volcanic_threshold) * 4.0)
             .clamp(0.0, 1.0)
             .max(plates.arc * self.arc_volcanism);
@@ -2543,21 +2562,16 @@ pub(crate) mod tests {
         assert!(within_range(-3.0) >= -1.0);
     }
 
-    /// A dry Venus-sized world without plates is plains, not a mountain
-    /// fabric: most of it within 1 km of its median, as on Venus (more than
-    /// 80 % within 1 km of the mean radius, Ford & Pettengill 1992).
+    /// A dry Venus-sized world without plates is plains with a few
+    /// highland provinces, not a mountain fabric: most of it within 1 km
+    /// of its median, as on Venus (more than 80 % within 1 km of the mean
+    /// radius, Ford & Pettengill 1992), yet mountains in its highlands,
+    /// even at 1.4 g.
     #[test]
-    fn a_world_without_plates_is_mostly_plains() {
-        let mut p = WorldParams {
-            width: 256,
-            height: 128,
-            sea_level: -1.0,
-            pressure_bar: 90.0,
-            volcanic_intensity: 0.2,
-            gravity: Some(0.9),
-            ..params(12345, "terran")
-        };
-        let share_within_1km = |p: &WorldParams| {
+    fn a_world_without_plates_is_plains_and_highlands() {
+        // Area-weighted shares of a world within 1 km of its median
+        // elevation and more than 2 km above it.
+        let hypsometry = |p: &WorldParams| {
             let s = Sampler::new(p);
             let mut cells: Vec<(f32, f32)> = (0..p.height)
                 .flat_map(|y| (0..p.width).map(move |x| (x, y)))
@@ -2578,17 +2592,32 @@ pub(crate) mod tests {
                 })
                 .unwrap()
                 .0;
-            let near: f32 = cells
-                .iter()
-                .filter(|c| (c.0 - median).abs() <= 1.0)
-                .map(|c| c.1)
-                .sum();
-            near / total
+            let share = |keep: &dyn Fn(f32) -> bool| {
+                cells
+                    .iter()
+                    .filter(|c| keep(c.0 - median))
+                    .map(|c| c.1)
+                    .sum::<f32>()
+                    / total
+            };
+            (share(&|d| d.abs() <= 1.0), share(&|d| d > 2.0))
         };
         for regime in [Regime::Stagnant, Regime::Episodic, Regime::HeatPipe] {
-            p.look.geology.regime = regime;
-            let share = share_within_1km(&p);
-            assert!(share > 0.7, "{regime:?} {share}");
+            for (seed, gravity) in [(12345, 0.9), (7, 0.9), (12345, 1.4)] {
+                let mut p = WorldParams {
+                    width: 256,
+                    height: 128,
+                    sea_level: -1.0,
+                    pressure_bar: 90.0,
+                    volcanic_intensity: 0.2,
+                    gravity: Some(gravity),
+                    ..params(seed, "terran")
+                };
+                p.look.geology.regime = regime;
+                let (plains, high) = hypsometry(&p);
+                assert!(plains > 0.75, "{regime:?} {seed} {gravity}: {plains}");
+                assert!(high > 0.005, "{regime:?} {seed} {gravity}: {high}");
+            }
         }
     }
 
