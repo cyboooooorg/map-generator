@@ -124,8 +124,10 @@ pub struct Track<'a> {
 }
 
 impl Track<'_> {
+    /// A giant to the small bodies ([`PlanetClass::sculpts_belts`]): a
+    /// mini-Neptune is not.
     fn giant(&self) -> bool {
-        self.class.is_giant()
+        self.class.sculpts_belts()
     }
 
     /// The span it clears round the star, AU.

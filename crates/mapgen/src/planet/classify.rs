@@ -54,6 +54,15 @@ impl PlanetClass {
             Self::GasGiant | Self::IceGiant | Self::HotJupiter | Self::MiniNeptune
         )
     }
+
+    /// Whether the class is a giant to the small bodies: a gas giant, an
+    /// ice giant or a hot Jupiter, massive enough to shape belts, empty
+    /// trojan points and stir impactors (see `crate::belts`). A
+    /// mini-Neptune, a few Earth masses, is not, though its world is a
+    /// giant's ([`Self::is_giant`]).
+    pub fn sculpts_belts(self) -> bool {
+        matches!(self, Self::GasGiant | Self::IceGiant | Self::HotJupiter)
+    }
 }
 
 /// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
@@ -292,6 +301,11 @@ mod tests {
             assert_eq!(PLANET_CLASSES[i], class.key());
             let giant = matches!(class, GasGiant | IceGiant | HotJupiter | MiniNeptune);
             assert_eq!(class.is_giant(), giant, "{class:?}");
+            assert_eq!(
+                class.sculpts_belts(),
+                giant && class != MiniNeptune,
+                "{class:?}"
+            );
         }
         assert_eq!(SuperEarth.key(), "super-earth");
         assert_eq!(HotJupiter.key(), "hot-jupiter");

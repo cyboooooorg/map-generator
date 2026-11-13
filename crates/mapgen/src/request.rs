@@ -725,8 +725,11 @@ impl WorldRequest {
         }
         // The world decides whether it has plates (its size, water and
         // star), applied to its preset so that `world.json` tells the
-        // regime it was generated with.
-        params.planet.geology.regime = crate::geology::regime_of(&params);
+        // regime it was generated with; a preset built from a physical
+        // model carries the regime the model derived.
+        if !params.planet.derived {
+            params.planet.geology.regime = crate::geology::regime_of(&params);
+        }
         if let Some(fraction) = land_fraction
             && !giant
         {

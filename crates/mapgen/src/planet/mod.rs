@@ -29,7 +29,8 @@
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`derive_model`] for a planet of a system as it is
 //! drawn, which stores it on the body ([`body_model`] reads it back).
-//! [`interim::base_of`] maps a model onto today's presets until #424.
+//! [`interim::base_of`] maps a model onto today's presets until #424, and
+//! [`interim::params_for`] generates its world from what it derived.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
 //! are checked against.
 use serde::{Deserialize, Serialize};

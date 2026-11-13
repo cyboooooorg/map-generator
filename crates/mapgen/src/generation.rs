@@ -1957,18 +1957,59 @@ pub(crate) mod tests {
             (params.width, params.height) = (128, 64);
             params.planet.atmosphere.greenhouse = 0.0;
             params.planet.climate.temperature = warming_for(&params, target_k);
-            let world = generate(&params).world;
-            let grid = params.grid();
-            let (mut sum, mut total) = (0.0_f64, 0.0_f64);
-            for (i, &t) in world.temperature.iter().enumerate() {
-                let w = grid.latitude((i / world.width as usize) as u32).cos();
-                sum += w * f64::from(t);
-                total += w;
-            }
-            let mean = sum / total + 273.15;
+            let mean = mean_k(&params);
             eprintln!("target {target_k} K: mean {mean:.2} K");
             assert!((mean - target_k).abs() < 5.0, "{mean} vs {target_k}");
         }
+        // Earth's, Mars's and Venus's models through
+        // `planet::interim::params_for` at their orbits round the Sun
+        // (seed 1, 128x64): Venus at the grid's ceiling, above it.
+        use crate::planet::reference::{model_inputs, reference, sun_at};
+        use rand::SeedableRng;
+        for name in ["Earth", "Mars", "Venus"] {
+            let body = reference(name);
+            let model = crate::planet::planet_model(&sun_at(body.orbit_au), model_inputs(body));
+            let request = crate::request::WorldRequest {
+                seed: Some(1),
+                star: Some("G2V".into()),
+                age_gyr: Some(4.6),
+                orbit_au: Some(body.orbit_au as f32),
+                eccentricity: Some(0.0),
+                metallicity: Some(0.0),
+                moons: Some(crate::moons::MoonsMode::Auto),
+                giants: Some(crate::giants::GiantsMode::None),
+                host: Some(crate::exomoon::HostMode::None),
+                width: Some(128),
+                height: Some(64),
+                ..crate::request::WorldRequest::default()
+            };
+            let params = crate::planet::interim::params_for(
+                &model,
+                request,
+                &mut rand::rngs::StdRng::seed_from_u64(1),
+            );
+            let model_k = model.surface.unwrap().climate.temperature_k;
+            let target_k = model_k.min(f64::from(TEMPERATURE_RANGE.1) + 273.15);
+            let mean = mean_k(&params);
+            eprintln!("{name}: model {model_k:.2} K, target {target_k:.2} K, mean {mean:.2} K");
+            assert!(
+                (mean - target_k).abs() < 5.0,
+                "{name}: {mean} vs {target_k}"
+            );
+        }
+    }
+
+    /// Area-weighted mean temperature of the world `params` generates, K.
+    fn mean_k(params: &WorldParams) -> f64 {
+        let world = generate(params).world;
+        let grid = params.grid();
+        let (mut sum, mut total) = (0.0_f64, 0.0_f64);
+        for (i, &t) in world.temperature.iter().enumerate() {
+            let w = grid.latitude((i / world.width as usize) as u32).cos();
+            sum += w * f64::from(t);
+            total += w;
+        }
+        sum / total + 273.15
     }
 
     #[test]

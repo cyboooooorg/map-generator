@@ -42,7 +42,7 @@ use crate::giants::{
 use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
-use crate::planet::interim::base_of;
+use crate::planet::interim::{base_of, params_for};
 use crate::planet::mass::{Origin, draw_mass};
 use crate::planet::{Context, PlanetClass, PlanetModel, derive_model};
 use crate::request::{RequestError, WorldRequest};
@@ -1224,13 +1224,19 @@ fn assemble(
                 crate::exomoon::host_params(&f.params, host.giant.mass_earth, host.seed)
             }
             _ => planet_params(
-                slot,
                 model.as_ref().expect("a drawn planet has a model"),
-                star_code,
-                age_gyr,
-                metallicity,
-                width,
-                height,
+                WorldRequest {
+                    seed: Some(planet_seed),
+                    star: Some(StarInfo::new(star_code, 1.0, 0.0, age_gyr).kind),
+                    age_gyr: Some(age_gyr),
+                    orbit_au: Some(slot.orbit_au as f32),
+                    eccentricity: Some(slot.eccentricity as f32),
+                    metallicity: Some(metallicity),
+                    moons: Some(MoonsMode::Auto),
+                    width: Some(width),
+                    height: Some(height),
+                    ..WorldRequest::default()
+                },
                 planet_seed,
             ),
         };
@@ -1458,39 +1464,34 @@ fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
     if circular { 0.0 } else { slot.eccentricity }
 }
 
-/// The world parameters of a placed planet, the preset closest to its
-/// `model` ([`base_of`]) resolved with its own seed at its orbit: a giant
-/// of the model's mass, a rocky planet of the size of its mass.
-// Task 5 of part 3a replaces it with `planet::interim::params_for`.
-#[allow(clippy::too_many_arguments)]
-fn planet_params(
-    slot: &Slot,
-    model: &PlanetModel,
-    star: f32,
-    age_gyr: f32,
-    metallicity: f32,
-    width: u32,
-    height: u32,
-    seed: u32,
-) -> WorldParams {
+/// The world parameters of a placed planet from its `model`, `request`
+/// carrying its seed, star, orbit and map size, resolved with its own
+/// `seed`: a planet with a surface as the model derives it
+/// ([`params_for`]); a giant class with today's giant path, its giant
+/// preset ([`base_of`]) at the model's mass (a mini-Neptune under the
+/// smallest giant's mass at that mass); a body without a surface that is
+/// no giant with its base preset at the size of its mass.
+fn planet_params(model: &PlanetModel, request: WorldRequest, seed: u32) -> WorldParams {
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
     let base = base_of(model);
     let giant = is_giant(base);
+    if !giant && model.surface.is_some() {
+        // The system places its giants; the planet is nobody's moon.
+        let request = WorldRequest {
+            giants: Some(GiantsMode::None),
+            host: Some(HostMode::None),
+            ..request
+        };
+        return params_for(model, request, &mut rng);
+    }
     let mass_earth = model.inputs.mass_earth;
     let request = WorldRequest {
         planet: Some(base.to_string()),
-        seed: Some(seed),
-        star: Some(StarInfo::new(star, 1.0, 0.0, age_gyr).kind),
-        age_gyr: Some(age_gyr),
-        orbit_au: Some(slot.orbit_au as f32),
-        eccentricity: Some(slot.eccentricity as f32),
-        metallicity: Some(metallicity),
-        moons: Some(MoonsMode::Auto),
         giants: if giant { None } else { Some(GiantsMode::None) },
         host: if giant { None } else { Some(HostMode::None) },
         // A giant world takes no less than the smallest giant's mass: a
-        // mini-Neptune under it renders as an ice giant of that mass (until
-        // Task 5 of part 3a generates its own world).
+        // mini-Neptune under it renders as an ice giant of that mass (its
+        // body keeps the model's radius, see planet_body).
         mass_earth: giant.then(|| {
             (mass_earth as f32).clamp(
                 crate::request::GIANT_MASS.min,
@@ -1502,31 +1503,31 @@ fn planet_params(
         // gives, see planet_body), rather than its preset's own draw, so
         // that the spacing holds.
         circumference_km: (!giant).then(|| crate::world::rocky_circumference_km(mass_earth)),
-        width: Some(width),
-        height: Some(height),
-        ..WorldRequest::default()
+        ..request
     };
     match request.resolve(&mut rng) {
         Ok(resolved) => resolved.params,
         // A preset that refuses this orbit (its own limits): its defaults
         // at the orbit kept as is.
         Err(_) => {
-            let request = WorldRequest {
+            let bare = WorldRequest {
                 planet: Some(base.to_string()),
-                seed: Some(seed),
-                width: Some(width),
-                height: Some(height),
+                seed: request.seed,
+                width: request.width,
+                height: request.height,
                 ..WorldRequest::default()
             };
-            let mut params = request
+            let mut params = bare
                 .resolve(&mut rng)
                 .expect("built-in presets resolve")
                 .params;
-            params.star = star;
-            params.age_gyr = age_gyr;
-            params.metallicity = metallicity;
-            params.orbit_au = slot.orbit_au as f32;
-            params.eccentricity = slot.eccentricity as f32;
+            if let Some(star) = &request.star {
+                params.star = crate::star::parse_type(star).unwrap_or(params.star);
+            }
+            params.age_gyr = request.age_gyr.unwrap_or(params.age_gyr);
+            params.metallicity = request.metallicity.unwrap_or(params.metallicity);
+            params.orbit_au = request.orbit_au.unwrap_or(params.orbit_au);
+            params.eccentricity = request.eccentricity.unwrap_or(params.eccentricity);
             params
         }
     }
@@ -4204,14 +4205,64 @@ mod lone_tests {
 
     /// Drawn by the generator since part 3a of #423 stored each planet's
     /// model (seeds 1 to 4): planets typed by class (the world asked keeps
-    /// its preset), drawn small slots kept near their drawn orbit. Regenerated on purpose then; any other change is a
-    /// regression of a normal system.
+    /// its preset), drawn small slots kept near their drawn orbit, and a
+    /// mini-Neptune no giant to the small bodies (it shapes no belt,
+    /// empties no trojan point, stirs no impactor). Regenerated on purpose
+    /// then; any other change is a regression of a normal system.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-57979-1 belts=2 b:rocky:0.0200:0.4394:true c:terran:0.3626:0.4394:true d:mini-neptune:0.7069:0.3612:true d-1:icy-moon:0.0002:0.3612:false d-2:icy-moon:0.0002:0.3612:false d-3:icy-moon:0.0003:0.3612:false d-4:rocky-moon:0.0006:0.3612:false d-5:icy-moon:0.0010:0.3612:false e:hydrocarbon-world:3.0647:0.3612:true f:ice-world:5.0697:0.3612:true",
-        "mgs-59108-2 belts=0 b:ice-world:0.0212:0.0418:true c:terran:0.1137:0.0418:true d:mini-neptune:0.3133:0.0350:true d-1:icy-moon:0.0002:0.0350:false d-2:rocky-moon:0.0005:0.0350:false d-3:rocky-moon:0.0007:0.0350:false d-4:icy-moon:0.0012:0.0350:false d-5:icy-moon:0.0019:0.0350:false e:ice-world:0.6848:0.0350:true e-1:icy-moon:0.0001:0.0350:false",
+        "mgs-57979-1 belts=1 b:rocky:0.0200:0.0920:true c:terran:0.3626:0.0920:true d:mini-neptune:0.7069:0.0920:true d-1:icy-moon:0.0002:0.0920:false d-2:icy-moon:0.0002:0.0920:false d-3:icy-moon:0.0003:0.0920:false d-4:rocky-moon:0.0006:0.0920:false d-5:icy-moon:0.0010:0.0920:false e:hydrocarbon-world:3.0647:0.0920:true f:ice-world:5.0697:0.0920:true",
+        "mgs-59108-2 belts=0 b:ice-world:0.0212:0.0350:true c:terran:0.1137:0.0350:true d:mini-neptune:0.3133:0.0350:true d-1:icy-moon:0.0002:0.0350:false d-2:rocky-moon:0.0005:0.0350:false d-3:rocky-moon:0.0007:0.0350:false d-4:icy-moon:0.0012:0.0350:false d-5:icy-moon:0.0019:0.0350:false e:ice-world:0.6848:0.0350:true e-1:icy-moon:0.0001:0.0350:false",
         "mgs-83289-3 belts=0 b:ice-world:0.0200:0.0632:true c:rocky:0.0254:0.0632:true d:terran:0.0393:0.0632:false d-1:rocky-moon:0.0003:0.0632:false d-2:rocky-moon:0.0006:0.0632:false e:ice-giant:0.0756:0.0350:true e-1:icy-moon:0.0003:0.0350:false e-2:icy-moon:0.0003:0.0350:false e-3:icy-moon:0.0004:0.0350:false e-4:icy-moon:0.0004:0.0350:false e-5:rocky-moon:0.0006:0.0350:false e-6:rocky-moon:0.0010:0.0350:false",
-        "mgs-33182-4 belts=0 b:rocky:0.0339:0.0438:true c:rocky:0.0931:0.0438:true c-1:rocky-moon:0.0001:0.0438:false d:terran:0.3711:0.0438:false e:mini-neptune:0.6675:0.0350:true e-1:rocky-moon:0.0003:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:icy-moon:0.0013:0.0350:false f:ice-world:2.9560:0.0350:true",
+        "mgs-33182-4 belts=0 b:rocky:0.0339:0.0350:true c:rocky:0.0931:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:terran:0.3711:0.0350:true e:mini-neptune:0.6675:0.0350:true e-1:rocky-moon:0.0003:0.0350:false e-2:rocky-moon:0.0004:0.0350:false e-3:icy-moon:0.0013:0.0350:false f:ice-world:2.9560:0.0350:true",
     ];
+
+    /// The body of a 6 M⊕ planet at 0.1 AU round a G2V that keeps 2 % of
+    /// its mass in hydrogen and helium, placed as a system places it.
+    fn mini_neptune_body() -> Body {
+        let star = crate::star::parse_type("G2V").unwrap();
+        let slot = Slot {
+            placement: Placement::Drawn(crate::planet::Origin::Small),
+            mass_earth: 6.0,
+            orbit_au: 0.1,
+            drawn_au: 0.1,
+            eccentricity: 0.0,
+            fixed: false,
+        };
+        let at = StarInfo::new(star, 0.1, 0.0, 4.6);
+        let context = Context::of(&at, 0.0, 2.7);
+        // Formed with more, so that photoevaporation leaves it about 2 %.
+        let mut inputs = crate::planet::reference::with_envelope(6.0, 0.02);
+        let mut model = crate::planet::planet_model(&context, inputs.clone());
+        while model.inputs.envelope_fraction < 0.02 {
+            inputs.envelope_fraction *= 1.2;
+            model = crate::planet::planet_model(&context, inputs.clone());
+        }
+        let request = WorldRequest {
+            seed: Some(5),
+            star: Some("G2V".into()),
+            age_gyr: Some(4.6),
+            orbit_au: Some(0.1),
+            eccentricity: Some(0.0),
+            metallicity: Some(0.0),
+            moons: Some(MoonsMode::Auto),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let params = planet_params(&model, request, 5);
+        let look = base_of(&model);
+        planet_body("b", "Test b", &slot, look, Some(model), &params, star)
+    }
+
+    #[test]
+    fn a_mini_neptune_generates_a_giant_world() {
+        // A 6 M⊕ slot at 0.1 AU round a G2V that keeps 2 % envelope.
+        let body = mini_neptune_body();
+        assert_eq!(body.body_type, "mini-neptune");
+        assert!(body.params.giant_mass_earth.is_some());
+        let r = body.physical.radius_km / 6371.0;
+        assert!((2.0..=4.0).contains(&r), "{r}");
+    }
 
     #[test]
     fn a_normal_system_is_the_one_main_drew() {

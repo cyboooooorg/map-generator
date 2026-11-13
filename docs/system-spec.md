@@ -193,7 +193,11 @@ them today (metallicity and star mass), a hot Jupiter included: about
 
 Once the planets are placed, the system draws its belts and trojans
 (`src/belts.rs`, analysis 13), each from a stream of its own (`BELTS`,
-`TROJANS`). The planets and moons of a seed do not move.
+`TROJANS`). The planets and moons of a seed do not move. A giant, here,
+is a gas giant, an ice giant or a hot Jupiter
+(`PlanetClass::sculpts_belts`): a mini-Neptune, whose world is
+generated as a giant's, is too light to shape belts, empty trojan points
+or stir impactors.
 
 - **Inner belt.** It needs a giant beyond half the ice line that is not a
   hot Jupiter, the first of them. Its span runs from 0.40 of that giant's
@@ -469,7 +473,13 @@ systems/<system-id>/
     `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     `ocean-world`), its `physical.mass_earth` the model's mass after
     photoevaporation; its world renders, until #424, with the preset
-    closest to the model (`planet::interim::base_of`). A request still
+    closest to the model (`planet::interim::base_of`), and the model
+    drives the world (`planet::interim::params_for`): its size, gravity,
+    surface pressure, regime, sky, erosion, volcanism, surface age, the
+    sea level its oceans fill, a world without life stripped of its
+    forests and grasslands, and a mean temperature aimed at the model's.
+    A giant class keeps the giant world of its preset at the model's
+    mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request still
     asks for planets by preset name: the name places the planet (its
     band, below), the model types it. The world a request around one
     asks for keeps its named preset as `type` and has no model until part
