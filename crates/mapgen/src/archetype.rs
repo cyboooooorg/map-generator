@@ -42,21 +42,29 @@
 //! that it renders as Mars does: its water, 0.002 to 0.008 oceans, about
 //! the 0.004 of its polar deposits and ground ice (Carr & Head 2015, see
 //! `planet::classify::ICE_WORLD_MIN_OCEANS`), stays under the 0.01 that
-//! shows as ice; its CO₂ and N₂ factors, 0.4 (Calibration, no source:
+//! shows as ice; its CO₂ and N₂ factors, 0.3 (Calibration, no source:
 //! Mars lost most of its early air, which the formation rule does not
-//! model), bring its air to the fact sheet's 6 mbar on the median of the
-//! seeds.
+//! model), bring its air to about the fact sheet's 6 mbar at the Sun's
+//! age on the median of the seeds; single worlds spread from about 0.002
+//! to 0.02 bar with the mass (escape takes more from a lighter one) and
+//! the star's age (a young one has lost less).
 //! The exoplanet kinds (`super-earth`, `mini-neptune`, `ocean-world`,
 //! `lava-world`, `hot-jupiter`) name a range typical of the kind:
 //! Calibration, no source. The four small ones keep near-circular orbits
 //! (`eccentricity = [0, 0.05]`), as the tides keep close-in small planets
 //! (Van Eylen et al. 2019, doi:10.3847/1538-3881/aaf22f, fit a mean of
-//! 0.05 to the small planets of multi-transiting systems), rather than the formation draw, which can carry
-//! an ocean world to a runaway at periastron. `lava-world` and
+//! 0.05 to the small planets of multi-transiting systems), rather than
+//! the formation draw, which can carry an ocean world to a runaway at
+//! periastron. `lava-world` and
 //! `mini-neptune` asked alone sit round a K dwarf (`K0V`, `K2V`), as the
 //! known lava worlds do (55 Cnc e, CoRoT-7 b and K2-141 b orbit K stars),
 //! so that a drawn M dwarf does not pull their orbit inside the closest
-//! one a request allows; in a system they take the system's star.
+//! one a request allows. `ocean-world` asked alone sits round a `G2V`:
+//! Earth's light (its 0.9 to 1.1) lies inside the Sun's habitable zone,
+//! whose inner edge is at 1.107 (Kopparapu et al. 2014, see
+//! `crate::star::habitable_fluxes`), but past that of a cooler star (1.01
+//! for a K2V, about 0.9 for a red M dwarf), where the ocean runs away.
+//! In a system they take the system's star.
 use crate::planet::InputOverrides;
 use crate::request::Limits;
 use rand::RngExt;
@@ -479,19 +487,23 @@ mod tests {
 
     const AGE_GYR: f32 = 4.6;
 
-    /// The model of `a` at its own insolation (or period) round a G2V of
-    /// 4.6 Gyr and metallicity 0, drawn from `seed`. What the archetype
-    /// leaves out is drawn by the formation context.
+    /// The model of `a` at its own insolation (or period) round its own
+    /// star (a G2V when it names none) of 4.6 Gyr and metallicity 0, drawn
+    /// from `seed`. What the archetype leaves out is drawn by the
+    /// formation context.
     fn model_of(a: &Archetype, seed: u32) -> PlanetModel {
         let mut rng = StdRng::seed_from_u64(u64::from(seed));
-        let v = crate::star::values(SUN);
+        let host = a.orbit.star.as_deref().map_or(SUN, |s| {
+            crate::star::parse_type(s).expect("a valid spectral type")
+        });
+        let v = crate::star::values(host);
         let mass_earth = a.mass(&mut rng);
         let orbit_au = a
             .orbit
             .orbit_au(f64::from(v.luminosity), f64::from(v.mass), &mut rng)
             .unwrap_or_else(|| panic!("{} has no orbit", a.name)) as f32;
         let eccentricity = a.orbit.eccentricity.map_or(0.0, |e| e.pick(&mut rng));
-        let star = StarInfo::new(SUN, orbit_au, eccentricity, AGE_GYR);
+        let star = StarInfo::new(host, orbit_au, eccentricity, AGE_GYR);
         let ice_line_au = 2.7 * star.luminosity.sqrt();
         let context = Context::of(&star, 0.0, ice_line_au);
         let overrides = a.overrides(&mut rng);

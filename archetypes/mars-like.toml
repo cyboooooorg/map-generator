@@ -10,8 +10,8 @@ mass_earth = [0.096, 0.118]
 core_mass_fraction = 0.24
 water_oceans = [0.002, 0.008]
 envelope_fraction = 0.0
-co2 = 0.4
-n2 = 0.4
+co2 = 0.3
+n2 = 0.3
 
 [orbit]
 star = "G2V"

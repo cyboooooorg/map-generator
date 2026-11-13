@@ -319,7 +319,7 @@ An archetype file has an `[inputs]` table and an optional `[orbit]` table. Every
 |            | `eccentricity`       | of the orbit                                                                             |
 |            | `axial_tilt`         | degrees                                                                                  |
 
-`name` (lowercase letters and dashes), `description` and `[locales.<language>]` (`name` and `description` in another language, two or three lowercase letters; the web app shows them when its interface is in that language) complete the file. Unknown fields are errors. The Solar System archetypes take the masses, core shares and orbits of `crates/mapgen/src/planet/reference.rs`, with ranges of about ±10 % on mass and insolation. `mars-like` departs from them on two inputs so that it renders as Mars does: 0.002 to 0.008 oceans of water (Mars's polar deposits and ground ice, about 0.004, stay under the 0.01 that shows as ice, so its look is `barren`) and CO₂ and N₂ factors of 0.4 (Mars lost most of its early air, which the formation rule does not model), which give its 6 mbar on the median of the seeds. The exoplanet kinds name a range typical of the kind; the four small ones (`super-earth`, `mini-neptune`, `ocean-world`, `lava-world`) keep a near-circular orbit (`eccentricity = [0, 0.05]`), and `lava-world` and `mini-neptune` asked alone orbit a K dwarf (`K0V`, `K2V`), as 55 Cnc e, CoRoT-7 b and K2-141 b do, rather than a drawn M dwarf that would pull them inside the closest orbit allowed. A copy-pasteable example, `archetypes/mars-like.toml`:
+`name` (lowercase letters and dashes), `description` and `[locales.<language>]` (`name` and `description` in another language, two or three lowercase letters; the web app shows them when its interface is in that language) complete the file. Unknown fields are errors. The Solar System archetypes take the masses, core shares and orbits of `crates/mapgen/src/planet/reference.rs`, with ranges of about ±10 % on mass and insolation. `mars-like` departs from them on two inputs so that it renders as Mars does: 0.002 to 0.008 oceans of water (Mars's polar deposits and ground ice, about 0.004, stay under the 0.01 that shows as ice, so its look is `barren`) and CO₂ and N₂ factors of 0.3 (Mars lost most of its early air, which the formation rule does not model), which give about its 6 mbar at the Sun's age on the median of the seeds; single worlds spread from about 0.002 to 0.02 bar with the mass (escape takes more from a lighter one) and the age of the star (a young one has lost less). The exoplanet kinds name a range typical of the kind; the four small ones (`super-earth`, `mini-neptune`, `ocean-world`, `lava-world`) keep a near-circular orbit (`eccentricity = [0, 0.05]`), and asked alone they orbit a star of their own rather than a drawn one: `lava-world` and `mini-neptune` a K dwarf (`K0V`, `K2V`), as 55 Cnc e, CoRoT-7 b and K2-141 b do, so that a red dwarf does not pull them inside the closest orbit allowed; `ocean-world` a `G2V`, whose habitable zone keeps Earth's light (0.9 to 1.1) inside its inner edge (1.107, Kopparapu et al. 2014), where a cooler star's would run the ocean away. A copy-pasteable example, `archetypes/mars-like.toml`:
 
 ```toml
 name = "mars-like"
@@ -334,8 +334,8 @@ mass_earth = [0.096, 0.118]
 core_mass_fraction = 0.24
 water_oceans = [0.002, 0.008]
 envelope_fraction = 0.0
-co2 = 0.4
-n2 = 0.4
+co2 = 0.3
+n2 = 0.3
 
 [orbit]
 star = "G2V"

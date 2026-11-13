@@ -12,5 +12,6 @@ envelope_fraction = 0.0
 co2 = 1.0
 
 [orbit]
+star = "G2V"
 insolation = [0.9, 1.1]
 eccentricity = [0.0, 0.05]
