@@ -1,0 +1,217 @@
+//! The runaway greenhouse, the water a planet keeps and its tectonic
+//! regime, derived from its light, its mass and its heat (part 2 of the
+//! physical planet model, issue #423).
+use serde::{Deserialize, Serialize};
+
+use super::escape::energy_limited_loss_kg;
+use super::{Context, Interior, InternalHeat, PlanetInputs};
+use crate::exomoon::EARTH_KG;
+use crate::geology::{PLATES_MIN_MASS_EARTH, Regime};
+use crate::star::habitable_fluxes;
+
+/// Mass of one Earth ocean, kg: 1.4e21. Earth's oceans hold 1.335e9 km³
+/// (Charette & Smith 2010, *Oceanography* 23(2)), about 1.37e21 kg at a
+/// mean density of 1027 kg/m³; rounded up with the ice caps and
+/// groundwater.
+pub const OCEAN_KG: f64 = 1.4e21;
+
+/// Mass of water per unit mass of hydrogen lost: `H₂O` is 18 for 2 of
+/// hydrogen. Stoichiometry. The oxygen left behind is not tracked.
+const WATER_PER_HYDROGEN: f64 = 9.0;
+
+/// Internal heat flux above which a body loses its heat through volcanic
+/// heat pipes rather than by plates or conduction, W/m². Calibration, no
+/// source: no paper sets such a threshold. Moore & Webb 2013 ("Heat-pipe
+/// Earth", *Nature* 501, 501, doi:10.1038/nature12473) take Io as the
+/// heat-pipe body of today, carrying about 2.5 W/m², some 40 times
+/// Earth's mean (from Veeder et al. 2004, their ref. 13; checked in the
+/// paper); Lainey et al. 2009 (doi:10.1038/nature08108) measure
+/// 2.24 ± 0.45 W/m² from Io's orbit (not checked). 1 W/m², under half of
+/// Io's flux and over ten times Earth's, keeps Io a heat pipe even at the
+/// low end of that range.
+pub const HEAT_PIPE_FLUX_W_M2: f64 = 1.0;
+
+/// The water a planet keeps.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Water {
+    /// The water ran away: the insolation exceeds the runaway greenhouse
+    /// limit, or the climate boiled the ocean (`boiled`).
+    pub runaway: bool,
+    /// The runaway came from the climate carrying a wet surface past
+    /// water's critical point ([`super::climate::boils`]), not from the
+    /// insolation limit. Always `false` without a runaway.
+    pub boiled: bool,
+    /// Water kept, kg. In a runaway, all of it is steam in the air.
+    pub kept_kg: f64,
+    /// Water kept, Earth oceans ([`OCEAN_KG`] each).
+    pub oceans: f64,
+}
+
+impl Water {
+    /// The same water with `kept_kg` left: what escape to space leaves of
+    /// a runaway's steam.
+    pub(crate) fn keeping(self, kept_kg: f64) -> Self {
+        let kept_kg = kept_kg.max(0.0);
+        Self {
+            kept_kg,
+            oceans: kept_kg / OCEAN_KG,
+            ..self
+        }
+    }
+}
+
+/// The water a planet keeps after its star's light.
+///
+/// A runaway greenhouse starts when the insolation exceeds the runaway
+/// limit of [`habitable_fluxes`] (Kopparapu et al. 2014,
+/// doi:10.1088/2041-8205/787/2/L29, the fit for 1 M-earth; their mass
+/// correction is not applied, not checked); then the water is
+/// [`steam`]'s. Without a runaway the cold trap keeps the water. The
+/// climate can still find a runaway the limit missed (a wet surface
+/// carried past water's critical point, see
+/// [`super::climate::boils`]); the chain then takes [`steam`].
+pub fn water(
+    context: &Context,
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    fluence_rel: f64,
+) -> Water {
+    let (runaway_limit, _) = habitable_fluxes(context.teff_k as f32);
+    if context.insolation > f64::from(runaway_limit) {
+        steam(inputs, interior, fluence_rel)
+    } else {
+        let kept_kg = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
+        Water {
+            runaway: false,
+            boiled: false,
+            kept_kg,
+            oceans: kept_kg / OCEAN_KG,
+        }
+    }
+}
+
+/// The water a planet keeps in a runaway greenhouse. The water is in the
+/// air, where the XUV splits it and the hydrogen escapes at the
+/// energy-limited rate (Owen & Wu 2017, [`energy_limited_loss_kg`]) with
+/// 9 kg of water for each kg of hydrogen: `kept = max(0, water - 9 H)`.
+pub fn steam(inputs: &PlanetInputs, interior: &Interior, fluence_rel: f64) -> Water {
+    let initial = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
+    let hydrogen = energy_limited_loss_kg(interior, inputs.mass_earth, fluence_rel);
+    let kept_kg = (initial - WATER_PER_HYDROGEN * hydrogen).max(0.0);
+    Water {
+        runaway: true,
+        boiled: false,
+        kept_kg,
+        oceans: kept_kg / OCEAN_KG,
+    }
+}
+
+/// The tectonic regime of a body. A labelled calibration: the literature
+/// disagrees on the mass dependence (see [`crate::geology::regime_of`]).
+///
+/// - heat pipe above [`HEAT_PIPE_FLUX_W_M2`] of internal heat (Io);
+/// - plates from [`PLATES_MIN_MASS_EARTH`] when liquid water is kept
+///   (Earth): a runaway's steam does not weaken the lithosphere;
+/// - episodic when the mass allows plates but the water is gone or
+///   steam (Venus, Weller et al. 2023, doi:10.1038/s41550-023-02102-w);
+/// - stagnant otherwise (Mars, Mercury, the Moon).
+///
+/// Calibration, no source, for the mass threshold and the water rule:
+/// Earth, Venus, Mars and Mercury.
+pub fn regime(
+    inputs: &PlanetInputs,
+    heat: &InternalHeat,
+    interior: &Interior,
+    water: &Water,
+) -> Regime {
+    if heat.flux_w_m2(interior.radius_earth) > HEAT_PIPE_FLUX_W_M2 {
+        Regime::HeatPipe
+    } else if inputs.mass_earth < f64::from(PLATES_MIN_MASS_EARTH) {
+        Regime::Stagnant
+    } else if water.kept_kg > 0.0 && !water.runaway {
+        Regime::Plates
+    } else {
+        Regime::Episodic
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planet::heat::{EARTH_SILICATE_KG, radiogenic_w};
+    use crate::planet::interior::interior;
+    use crate::planet::reference::{exposure_at, inputs, inputs_of, reference};
+    use crate::planet::xuv::xuv_fluence;
+    use crate::star::{StarInfo, parse_type};
+
+    /// The Sun's context at `orbit_au`, 4.6 Gyr, with the insolation of
+    /// exactly `1/a²` (the table's G2V is slightly brighter).
+    fn sun(orbit_au: f64) -> Context {
+        let star = StarInfo::new(parse_type("G2V").unwrap(), orbit_au as f32, 0.0, 4.6);
+        let mut c = Context::of(&star, 0.0, 2.7);
+        c.insolation = 1.0 / (orbit_au * orbit_au);
+        c.star_mass = 1.0;
+        c
+    }
+
+    /// Water, heat and regime of a body at `orbit_au` with `tidal_w`.
+    fn derive(inputs: &PlanetInputs, orbit_au: f64, tidal_w: f64) -> (Water, Regime) {
+        let c = sun(orbit_au);
+        let int = interior(inputs, &exposure_at(orbit_au));
+        let w = water(&c, inputs, &int, xuv_fluence(&c));
+        let silicate = inputs.mass_earth * (1.0 - inputs.water_fraction) * 5.972e24;
+        let heat = InternalHeat {
+            radiogenic_w: radiogenic_w(silicate.min(EARTH_SILICATE_KG * 10.0), 1.0, 4.6),
+            tidal_w,
+        };
+        (w, regime(inputs, &heat, &int, &w))
+    }
+
+    #[test]
+    fn venus_ran_away_and_dried() {
+        let v = reference("Venus");
+        let (w, _) = derive(&inputs_of(v), v.orbit_au, 0.0);
+        assert!(w.runaway);
+        assert_eq!(w.kept_kg, 0.0);
+        // Given an Earth ocean, it would have lost it too.
+        let wet = PlanetInputs {
+            water_fraction: 0.00023,
+            ..inputs_of(v)
+        };
+        let (w, _) = derive(&wet, v.orbit_au, 0.0);
+        assert!(w.runaway);
+        assert_eq!(w.kept_kg, 0.0);
+    }
+
+    #[test]
+    fn earth_keeps_its_ocean() {
+        let e = reference("Earth");
+        let (w, _) = derive(&inputs_of(e), e.orbit_au, 0.0);
+        assert!(!w.runaway);
+        assert!((0.9..=1.1).contains(&w.oceans), "{}", w.oceans);
+    }
+
+    #[test]
+    fn the_solar_system_has_its_regimes() {
+        let regime_of_body = |name: &str, tidal: f64| {
+            let b = reference(name);
+            derive(&inputs_of(b), b.orbit_au, tidal).1
+        };
+        assert_eq!(regime_of_body("Earth", 0.0), Regime::Plates);
+        assert_eq!(regime_of_body("Venus", 0.0), Regime::Episodic);
+        assert_eq!(regime_of_body("Mars", 0.0), Regime::Stagnant);
+        assert_eq!(regime_of_body("Mercury", 0.0), Regime::Stagnant);
+        assert_eq!(regime_of_body("Io", 1.0e14), Regime::HeatPipe);
+        // Still at the low end of Lainey et al. 2009, 1.79 W/m² over Io's
+        // 4.17e13 m².
+        assert_eq!(regime_of_body("Io", 7.5e13), Regime::HeatPipe);
+    }
+
+    #[test]
+    fn a_dry_super_earth_is_not_plated() {
+        let dry = inputs(5.0, 0.325, 0.0);
+        let (w, r) = derive(&dry, 1.5, 0.0);
+        assert!(!w.runaway);
+        assert_ne!(r, Regime::Plates);
+    }
+}

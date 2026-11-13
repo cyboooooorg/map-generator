@@ -232,11 +232,11 @@ and envelope per class
   generator's existing giant radius, which gives Uranus 3.52 $R_\oplus$
   against 3.98 observed. A test for it is ignored until the radius is
   fixed (issue #432).
-- **Too many mini-Neptunes.** The model has no atmospheric escape yet:
-  close-in planets keep gas that photoevaporation would strip, which
-  carves the radius valley Fulton et al. (2017) found at 1.5 to 2 $R_\oplus$.
-  Until a later part adds it, mini-Neptunes are over-represented and the
-  valley is shallow. The census reports this as it is.
+- **Mini-Neptunes and the radius valley.** Photoevaporation now strips
+  close-in envelopes (see [planet-atmospheres.md](planet-atmospheres.md)),
+  and mini-Neptunes fall to 3.6 % of the planets. The census still shows
+  no dip between 1.5 and 2 $R_\oplus$ (Fulton et al. 2017), because the
+  generator draws few planets that large; the doc reports it as measured.
 - **Envelope grid.** The envelope fit stops at 20 % of the mass: a small
   planet with a 30 % envelope (the model allows up to 30 %) is sized as if
   it had 20 %.
@@ -358,3 +358,6 @@ reports of the paper) were not checked in the papers themselves.
   locking has gone.
 - [docs/superpowers/specs/2026-11-11-physical-planet-model-design.md](../superpowers/specs/2026-11-11-physical-planet-model-design.md):
   the design of the model.
+
+For the atmosphere, climate and XUV history of a planet see
+[planet-atmospheres.md](planet-atmospheres.md).

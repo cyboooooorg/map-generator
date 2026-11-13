@@ -12,7 +12,18 @@
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
 //! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`], with the
 //! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
-//! [`classify::classify`] reads its [`PlanetClass`] off the result, and
+//! [`core::core`] derives whether its iron core is liquid and drives a
+//! dynamo, and the field at its surface.
+//! [`atmosphere::outgassed`], [`atmosphere::atmosphere`] and
+//! [`atmosphere::cold_trap`] and [`atmosphere::photochemistry`] derive its air, as [`Gases`], from what it
+//! outgasses, what escape leaves and what its cold freezes out.
+//! [`climate::climate`] sets its surface temperature through a grey
+//! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
+//! its surface.
+//! [`life::life`] decides whether life arose where water lasted, and
+//! [`life::oxygenate`] gives the air its oxygen.
+//! [`classify::classify`] reads its [`PlanetClass`], including the surface
+//! classes, off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`body_model`] for a planet of a stored system.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
@@ -26,17 +37,33 @@ use crate::exomoon::{EARTH_KG, EARTH_M};
 use crate::star::StarInfo;
 use crate::system::{Body, BodyKind, System, body_seed};
 
+pub mod atmosphere;
 pub mod classify;
+pub mod climate;
+pub mod core;
+pub mod escape;
 pub mod heat;
 pub mod inputs;
 pub mod interior;
+pub mod life;
 pub mod reference;
+pub mod regime;
+pub mod xuv;
 
+pub use atmosphere::{
+    Gases, atmosphere, cold_trap, escape_velocity_km_s, outgassed, photochemistry,
+};
 pub use classify::{PlanetClass, classify};
+pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
+pub use core::{Core, CoreState, core};
+pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use inputs::{Context, draw_inputs};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
+pub use life::{Life, life, oxygenate};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
+pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, steam, water};
+pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
 
 /// Kilograms of each volatile per kilogram of planet.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -62,6 +89,9 @@ pub struct PlanetInputs {
     pub volatiles: Volatiles,
     /// Radiogenic abundance at formation, relative to Earth's (1.0).
     pub radiogenic: f64,
+    /// Uniform in `[0, 1)`, drawn last: life arises where it is below
+    /// [`life::LIFE_CHANCE`] (and the world allows it).
+    pub life_draw: f64,
 }
 
 /// What a layer of a planet is made of.
@@ -115,7 +145,36 @@ pub struct PlanetModel {
     pub inputs: PlanetInputs,
     pub interior: Interior,
     pub heat: InternalHeat,
+    /// XUV energy received over the system's age, Earth's = 1.
+    pub xuv_fluence: f64,
+    /// Share of the initial envelope that photoevaporation took, 0 to 1.
+    pub envelope_lost: f64,
+    /// What the body's surface is like; `None` when an envelope is left
+    /// (at least [`escape::MIN_ENVELOPE`] of the mass), which hides it.
+    pub surface: Option<Surface>,
     pub class: PlanetClass,
+}
+
+/// A bare body's surface: the water it kept, how it loses its heat, its
+/// core, its air and climate, and its life.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Surface {
+    pub water: Water,
+    pub regime: crate::geology::Regime,
+    pub core: Core,
+    /// The air as the climate and the life leave it (oxygenated if so).
+    pub gases: Gases,
+    pub climate: Climate,
+    pub life: Life,
+}
+
+/// What the chain derives before the climate, for the tests that vary the
+/// climate afterwards.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) struct Air {
+    pub water: Water,
+    pub regime: crate::geology::Regime,
+    pub gases: Gases,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -127,14 +186,43 @@ const SUN_KG: f64 = 1.988_5e30;
 const AU_M: f64 = 1.495_978_707e11;
 
 /// The model of a planet of `inputs` in its formation `context`: its
-/// [`interior`] under the star's exposure; its radiogenic heat from its
+/// [`interior`] under the star's exposure; the XUV fluence of its star
+/// ([`xuv_fluence`]) and the envelope that [`envelope_after_escape`] leaves
+/// it, from which the interior is derived again; its radiogenic heat from its
 /// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
 /// the system's age; its tidal heat from the star at its orbit, with the
 /// [`heat::k2_over_q`] of its envelope and water shares (a giant's is
 /// over a thousand times smaller than a rock's); then its [`classify`]
-/// class, which feeds back into none of them.
+/// class, which feeds back into none of them. A body that keeps an
+/// envelope of [`escape::MIN_ENVELOPE`] or more has no surface; any other
+/// goes on to its [`water`] and [`regime`], its [`core`], its air
+/// ([`outgassed`], [`atmosphere`], [`cold_trap`], [`photochemistry`], in
+/// that order: the photochemistry reads the cold trap's air), its
+/// [`climate`] and its [`life`] with the oxygen it makes. A body whose
+/// climate carries its water past the critical point
+/// ([`climate::boils`]) has run away: it goes through those steps again
+/// from its [`steam`], flagged `boiled`, and keeps that second pass only
+/// if its steam holds the surface past the critical point too
+/// ([`climate::past_critical`]). In a runaway the water kept is what the
+/// escape of [`atmosphere`] leaves of the steam in the air, so the
+/// [`Water`] and the air's H₂O agree.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
-    let interior = interior(&inputs, &context.exposure());
+    chain(context, inputs).0
+}
+
+/// [`planet_model`] and the air it had before the climate (see [`Air`]).
+pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Option<Air>) {
+    let exposure = context.exposure();
+    let fluence = xuv_fluence(context);
+    let initial_envelope = inputs.mass_earth * inputs.envelope_fraction;
+    let drawn = interior(&inputs, &exposure);
+    let inputs = envelope_after_escape(&inputs, &drawn, fluence);
+    let envelope_lost = if initial_envelope > 0.0 {
+        1.0 - inputs.mass_earth * inputs.envelope_fraction / initial_envelope
+    } else {
+        0.0
+    };
+    let interior = interior(&inputs, &exposure);
     let silicate_kg = inputs.mass_earth
         * (1.0 - inputs.water_fraction - inputs.envelope_fraction)
         * (1.0 - inputs.core_mass_fraction)
@@ -149,13 +237,73 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
             k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
         ),
     };
-    let class = classify(&inputs, &interior, context.period_days());
-    PlanetModel {
+    let mut air = None;
+    let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
+        None
+    } else {
+        let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
+        let bare = |w: Water| {
+            let r = regime(&inputs, &heat, &interior, &w);
+            let k = core(&inputs, &interior, r, context.age_gyr);
+            let out = outgassed(&inputs, &w, r, &interior);
+            let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
+            // A runaway's water is the steam escape has left in its air.
+            let w = if w.runaway {
+                w.keeping(atm.h2o / bar_per_kg)
+            } else {
+                w
+            };
+            let gases =
+                photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
+            let flux = heat.flux_w_m2(interior.radius_earth);
+            let water_bar = w.kept_kg * bar_per_kg;
+            let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
+            let life = life(&inputs, &climate, context.age_gyr);
+            let surface = Surface {
+                water: w,
+                regime: r,
+                core: k,
+                gases: oxygenate(after, &life),
+                climate,
+                life,
+            };
+            let before = Air {
+                water: w,
+                regime: r,
+                gases,
+            };
+            (surface, before)
+        };
+        let w = water(context, &inputs, &interior, fluence);
+        let (mut surface, mut before) = bare(w);
+        if climate::boils(&w, &surface.climate) {
+            let boiled = Water {
+                boiled: true,
+                ..steam(&inputs, &interior, fluence)
+            };
+            let (hot, air) = bare(boiled);
+            // Kept only if the steam holds the surface past the critical
+            // point itself: a boil whose steam escape leaves too little
+            // to stay hot has no consistent runaway, and the first pass,
+            // wet and bounded by its own water, stands.
+            if climate::past_critical(&hot.climate) {
+                (surface, before) = (hot, air);
+            }
+        }
+        air = Some(before);
+        Some(surface)
+    };
+    let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
+    let model = PlanetModel {
         inputs,
         interior,
         heat,
+        xuv_fluence: fluence,
+        envelope_lost,
+        surface,
         class,
-    }
+    };
+    (model, air)
 }
 
 /// The model of a planet of a stored system; `None` for a moon (part 4).
@@ -214,7 +362,10 @@ mod tests {
                 "{}",
                 body.id
             );
-            assert_eq!(model.inputs.mass_earth, body.physical.mass_earth);
+            // Photoevaporation can only lower the mass, by the envelope lost.
+            let lost = body.physical.mass_earth - model.inputs.mass_earth;
+            assert!(lost >= 0.0, "{}", body.id);
+            assert!(lost <= 1.0e-3 + model.envelope_lost * body.physical.mass_earth);
         }
         // Removing another planet leaves the model of b as it was.
         let b = planets[0];

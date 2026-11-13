@@ -31,6 +31,8 @@ pub struct Context {
     pub equilibrium_k: f64,
     /// Age of the system, Gyr.
     pub age_gyr: f64,
+    /// Effective temperature of the star, K.
+    pub teff_k: f64,
 }
 
 impl Context {
@@ -47,6 +49,7 @@ impl Context {
             insolation: f64::from(star.insolation),
             equilibrium_k: f64::from(star.equilibrium_k),
             age_gyr: f64::from(star.age_gyr),
+            teff_k: f64::from(star.teff_k),
         }
     }
 
@@ -197,7 +200,8 @@ const RADIOGENIC_SPREAD_DEX: f64 = 0.15;
 ///   beyond it;
 /// - envelope by [`envelope_fraction`];
 /// - volatiles by [`volatiles`];
-/// - radiogenic abundance `10^N(0, 0.15)` of Earth's.
+/// - radiogenic abundance `10^N(0, 0.15)` of Earth's;
+/// - the life draw `U(0, 1)`, read by [`life`](super::life::life).
 ///
 /// The ice share is of the mass that is not hydrogen and helium, so the
 /// water share of the whole is that times `1 − envelope`: a wet giant
@@ -206,7 +210,8 @@ const RADIOGENIC_SPREAD_DEX: f64 = 0.15;
 /// The draws come in a fixed order and count, whatever the branch taken:
 /// core share (one normal), stripping (two uniforms), water (two
 /// uniforms), migration (one uniform), envelope (three draws), volatiles
-/// (five normals), radiogenic abundance (one normal). A later draw (the
+/// (five normals), radiogenic abundance (one normal), life (one uniform,
+/// always last). A later draw (the
 /// mass, in part 3) goes in front of them.
 pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) -> PlanetInputs {
     let x = context.orbit_au / context.ice_line_au;
@@ -231,6 +236,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
     let refractory = 1.0 - water_fraction - envelope_fraction;
     let volatiles = volatiles(refractory, water_fraction, rng);
     let radiogenic = 10f64.powf(RADIOGENIC_SPREAD_DEX * normal(rng));
+    let life_draw = rng.random::<f64>();
 
     PlanetInputs {
         mass_earth,
@@ -239,6 +245,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
         envelope_fraction,
         volatiles,
         radiogenic,
+        life_draw,
     }
 }
 
@@ -290,18 +297,32 @@ fn envelope_fraction(mass_earth: f64, rng: &mut impl RngExt) -> f64 {
 /// s   = 1e-4 r LN               ch4 = 0.01 w LN    nh3 = 0.01 w LN
 /// ```
 fn volatiles(refractory: f64, water: f64, rng: &mut impl RngExt) -> Volatiles {
+    let rule = volatile_rule(refractory, water);
     let mut ln = || 10f64.powf(VOLATILE_SPREAD_DEX * normal(rng));
-    let co2 = (ROCK_CO2 * refractory + ICE_CO2 * water) * ln();
-    let n2 = (ROCK_N2 * refractory + ICE_N2 * water) * ln();
-    let s = ROCK_S * refractory * ln();
-    let ch4 = ICE_CH4 * water * ln();
-    let nh3 = ICE_NH3 * water * ln();
+    let co2 = rule.co2 * ln();
+    let n2 = rule.n2 * ln();
+    let s = rule.s * ln();
+    let ch4 = rule.ch4 * ln();
+    let nh3 = rule.nh3 * ln();
     Volatiles {
         co2,
         n2,
         ch4,
         nh3,
         s,
+    }
+}
+
+/// The volatiles of [`volatiles`] without their scatter: what a
+/// `refractory` share of rock and iron and a `water` share of ices carry
+/// by the rule alone.
+pub(crate) fn volatile_rule(refractory: f64, water: f64) -> Volatiles {
+    Volatiles {
+        co2: ROCK_CO2 * refractory + ICE_CO2 * water,
+        n2: ROCK_N2 * refractory + ICE_N2 * water,
+        ch4: ICE_CH4 * water,
+        nh3: ICE_NH3 * water,
+        s: ROCK_S * refractory,
     }
 }
 
@@ -328,6 +349,7 @@ mod tests {
             insolation,
             equilibrium_k: 255.0 * insolation.powf(0.25),
             age_gyr: 4.6,
+            teff_k: 5772.0,
         }
     }
 

@@ -106,6 +106,20 @@ pub(crate) fn inputs_of(body: &ReferenceBody) -> super::PlanetInputs {
         envelope_fraction: body.envelope_fraction,
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
+        life_draw: 0.0,
+    }
+}
+
+/// The inputs of a reference body as the model draws them, without the
+/// scatter: its composition, the volatiles of the rule of
+/// [`super::inputs::draw_inputs`] for its rock and ice, Earth's radiogenic
+/// abundance. Every Solar System test from the atmosphere on uses it.
+#[cfg(test)]
+pub(crate) fn model_inputs(body: &ReferenceBody) -> super::PlanetInputs {
+    let refractory = 1.0 - body.water_fraction - body.envelope_fraction;
+    super::PlanetInputs {
+        volatiles: super::inputs::volatile_rule(refractory, body.water_fraction),
+        ..inputs_of(body)
     }
 }
 
@@ -124,6 +138,7 @@ pub(crate) fn inputs(
         envelope_fraction: 0.0,
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
+        life_draw: 0.0,
     }
 }
 
@@ -146,6 +161,52 @@ pub(crate) fn exposure_at(orbit_au: f64) -> super::Exposure {
         insolation,
         equilibrium_k: f64::from(crate::star::equilibrium_k(insolation as f32)),
         age_gyr: 4.6,
+    }
+}
+
+/// What part 2's chain derives for a body before its climate.
+#[cfg(test)]
+pub(crate) struct Derived {
+    pub context: super::Context,
+    pub gases: super::Gases,
+    pub water: super::Water,
+    pub regime: crate::geology::Regime,
+    /// Internal heat flux through the surface, W/m².
+    pub heat_flux_w_m2: f64,
+    /// What all the water kept would weigh as vapour, bar.
+    pub water_bar: f64,
+}
+
+/// The Sun's context at `orbit_au`, 4.6 Gyr, with the insolation of
+/// exactly `1/a²` and its equilibrium temperature.
+#[cfg(test)]
+pub(crate) fn sun_at(orbit_au: f64) -> super::Context {
+    use crate::star::{StarInfo, parse_type};
+    let star = StarInfo::new(parse_type("G2V").unwrap(), orbit_au as f32, 0.0, 4.6);
+    let mut c = super::Context::of(&star, 0.0, 2.7);
+    let exposure = exposure_at(orbit_au);
+    c.insolation = exposure.insolation;
+    c.equilibrium_k = exposure.equilibrium_k;
+    c.star_mass = 1.0;
+    c
+}
+
+/// Runs [`super::planet_model`]'s chain on `inputs` at `orbit_au` round
+/// the Sun and returns what it had before the climate; no tides
+/// (circular orbit). `inputs` must leave no envelope.
+#[cfg(test)]
+pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived {
+    let context = sun_at(orbit_au);
+    let (model, air) = super::chain(&context, inputs.clone());
+    let air = air.expect("a body with an envelope has no surface");
+    let bar_per_kg = super::atmosphere::bar_per_kg(model.inputs.mass_earth, &model.interior);
+    Derived {
+        heat_flux_w_m2: model.heat.flux_w_m2(model.interior.radius_earth),
+        water_bar: air.water.kept_kg * bar_per_kg,
+        context,
+        gases: air.gases,
+        water: air.water,
+        regime: air.regime,
     }
 }
 
