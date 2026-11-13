@@ -563,7 +563,10 @@ addressed as `<system-id>/<body-id>` everywhere.
 
 - `GET /api/systems`: the systems, most recent first. Each gives its id,
   star, body count per type, the bodies generated, names, map size and
-  date.
+  date, and for each body whether it is a habitable world (`habitable`:
+  a planet whose model keeps liquid water on its surface; the planet a
+  request around one asked for, which has no model, when its preset is
+  `terran` or `earth-like`), which the index stores.
 - `POST /api/systems`: draw a system and queue its first generation.
   The body is a `SystemRequest`:
   - mode 1, `{"system": {"star": "K1V", "planets": {"terran": 2,

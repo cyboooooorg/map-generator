@@ -13,6 +13,7 @@ const body = (id: string, orbit_au: number, extra: Partial<BodySummary> = {}): B
   orbit_au,
   eccentricity: 0,
   periapsis_deg: 0,
+  habitable: false,
   ...extra,
 });
 

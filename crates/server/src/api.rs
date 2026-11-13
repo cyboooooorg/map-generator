@@ -325,7 +325,8 @@ pub struct BodySummary {
     pub designation: String,
     /// `planet` or `moon`.
     pub kind: String,
-    /// Its type: a preset name.
+    /// Its type: a planet's class (`rocky`, `ocean-world`, …), or a
+    /// preset name for the planet a request asked for and for a moon.
     pub body_type: String,
     /// Its main colour in the preview (linear RGB), for the library's strip.
     pub colour: [f32; 3],
@@ -339,6 +340,11 @@ pub struct BodySummary {
     /// 0 to 360), for the library's orrery (0 when not given).
     pub eccentricity: f64,
     pub periapsis_deg: f64,
+    /// A habitable world: a planet with liquid water on its surface, as
+    /// its model says; a planet with no model (the one a request around a
+    /// planet asked for) when its preset is `terran` or `earth-like`. A
+    /// moon never is.
+    pub habitable: bool,
 }
 
 /// Query of a system request (`POST /api/systems?replace=true`).

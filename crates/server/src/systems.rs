@@ -163,6 +163,45 @@ struct MetaBody {
     preview: MetaPreview,
     #[serde(default)]
     orbit: MetaOrbit,
+    /// A planet's physical model, as far as the library needs it.
+    #[serde(default)]
+    model: Option<MetaModel>,
+}
+
+/// A planet's model, as far as the library needs it: what is liquid on
+/// its surface (none under an envelope or for a giant).
+#[derive(Deserialize, Default)]
+struct MetaModel {
+    #[serde(default)]
+    surface: Option<MetaSurface>,
+}
+
+#[derive(Deserialize)]
+struct MetaSurface {
+    climate: MetaClimate,
+}
+
+#[derive(Deserialize)]
+struct MetaClimate {
+    liquid: mapgen::planet::SurfaceLiquid,
+}
+
+/// The presets a request can name for a planet that hold liquid water
+/// and life, for the planet it asks for, which has no model.
+const HABITABLE_PRESETS: [&str; 2] = ["terran", "earth-like"];
+
+impl MetaBody {
+    /// Whether it is a habitable world (see `BodySummary::habitable`).
+    fn habitable(&self) -> bool {
+        self.kind == "planet"
+            && match &self.model {
+                Some(model) => model
+                    .surface
+                    .as_ref()
+                    .is_some_and(|s| s.climate.liquid == mapgen::planet::SurfaceLiquid::Water),
+                None => HABITABLE_PRESETS.contains(&self.preset.as_str()),
+            }
+    }
 }
 
 /// The preview of a body, as far as the library's strip needs it.
@@ -388,6 +427,7 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
                 orbit_au: b.orbit.semi_major_axis_au,
                 eccentricity: b.orbit.eccentricity,
                 periapsis_deg: (b.orbit.node_deg + b.orbit.periapsis_deg).rem_euclid(360.0),
+                habitable: b.habitable(),
             })
             .collect(),
         names: GivenNames::new(),
@@ -665,6 +705,36 @@ mod tests {
             (0.1, 30.0)
         );
         assert!(summarize("x-1", b"not json", 0).is_none());
+    }
+
+    #[test]
+    fn a_habitable_world_has_liquid_water_or_an_earth_like_preset() {
+        let json = format!(
+            r#"{{
+            "format_version": {}, "seed": 42, "width": 1024, "height": 512,
+            "star": {{"type": "K1V", "designation": "MGS 48213"}},
+            "bodies": [
+                {{"id": "b", "kind": "planet", "type": "rocky", "designation": "b",
+                  "model": {{"surface": {{"climate": {{"liquid": "water"}}}}}}}},
+                {{"id": "c", "kind": "planet", "type": "ice-world", "designation": "c",
+                  "model": {{"surface": {{"climate": {{"liquid": "none"}}}}}}}},
+                {{"id": "d", "kind": "planet", "type": "super-earth", "designation": "d",
+                  "model": {{"surface": null}}}},
+                {{"id": "e", "kind": "planet", "type": "terran", "designation": "e"}},
+                {{"id": "f", "kind": "planet", "type": "barren", "designation": "f"}},
+                {{"id": "e-1", "kind": "moon", "type": "terran", "designation": "e I"}}
+            ]
+        }}"#,
+            mapgen::system::SYSTEM_FORMAT_VERSION
+        );
+        let s = summarize("mgs-48213-42", json.as_bytes(), 0).unwrap();
+        let habitable: Vec<&str> = s
+            .bodies
+            .iter()
+            .filter(|b| b.habitable)
+            .map(|b| b.id.as_str())
+            .collect();
+        assert_eq!(habitable, ["b", "e"]);
     }
 
     #[test]

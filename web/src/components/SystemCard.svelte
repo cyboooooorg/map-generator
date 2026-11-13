@@ -1,8 +1,8 @@
 <script lang="ts">
   // A system's card in the main menu. Full: an orbit strip with the star's
   // glow, the name (the designation under it when renamed), the star, one
-  // chip per planet type, a line when a rocky world is in the habitable
-  // zone, and a footer with the moons, the age and the buttons. Compact:
+  // chip per planet type, a line when a planet has liquid water on its
+  // surface (`BodySummary.habitable`), and a footer with the moons, the age and the buttons. Compact:
   // a top-down orrery on the left, the same facts in less room.
   import { getLocale, t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';

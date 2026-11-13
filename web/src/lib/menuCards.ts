@@ -2,7 +2,7 @@
 // world), the planet strip and the view setting (components/SystemList.svelte).
 import type { BodySummary } from './api/types/BodySummary';
 import type { SystemSummary } from './api/types/SystemSummary';
-import { canBeHabitable, isGiantType } from './planetClass';
+import { isGiantType } from './planetClass';
 import { loadSetting } from './settings';
 
 // -- Views -------------------------------------------------------------
@@ -90,23 +90,16 @@ export function presentClasses(systems: Pick<SystemSummary, 'star'>[]): StarClas
 // -- Habitable worlds --------------------------------------------------
 
 /**
- * Whether a body is a planet of a type that can be habitable (`terran`, `earth-like`,
- * or the classes `rocky`, `super-earth` and `ocean-world`; see `canBeHabitable`;
- * the summary carries no model, so the real water is not known here) whose semi-major axis lies
- * inside the zone [inner, outer] AU. Only planets count: a moon of a giant
- * in the zone does not (its `orbit_au` is round its planet), and a planet
- * on an eccentric orbit that only passes through the zone is judged by its
- * semi-major axis.
+ * Whether a body is a habitable world: a planet with liquid water on its
+ * surface, as the server reads it from the planet's model (or, for the
+ * planet a request around one asked for, which has no model, its `terran`
+ * or `earth-like` preset; see `BodySummary.habitable`). A moon never is,
+ * whatever its planet's orbit.
  */
-export function isHabitableWorld(body: BodySummary, inner: number, outer: number): boolean {
-  return (
-    body.kind === 'planet' && canBeHabitable(body.body_type) && outer > 0 && body.orbit_au >= inner && body.orbit_au <= outer
-  );
-}
+export const isHabitableWorld = (body: BodySummary): boolean => body.kind === 'planet' && body.habitable;
 
-/** The worlds of a system that sit in its habitable zone and could hold life. */
-export const habitableWorlds = (system: SystemSummary): BodySummary[] =>
-  system.bodies.filter((b) => isHabitableWorld(b, system.hz_inner_au, system.hz_outer_au));
+/** The habitable worlds of a system (see `isHabitableWorld`). */
+export const habitableWorlds = (system: SystemSummary): BodySummary[] => system.bodies.filter(isHabitableWorld);
 
 export const hasHabitableWorld = (system: SystemSummary): boolean => habitableWorlds(system).length > 0;
 

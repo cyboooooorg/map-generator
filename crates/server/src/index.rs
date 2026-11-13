@@ -135,6 +135,8 @@ CREATE TABLE bodies (
     orbit_au          REAL NOT NULL,
     eccentricity      REAL NOT NULL,
     periapsis_deg     REAL NOT NULL,
+    -- a planet with liquid water on its surface (BodySummary::habitable)
+    habitable         INTEGER NOT NULL,
     -- what generates the body again: its seed and parameters (JSON)
     seed              INTEGER,
     params            TEXT,
@@ -507,7 +509,7 @@ impl Index {
 
         let mut stmt = conn.prepare(
             "SELECT system_id, id, designation, kind, body_type, colour_r, colour_g, colour_b,
-                    generated, orbit_au, eccentricity, periapsis_deg
+                    generated, orbit_au, eccentricity, periapsis_deg, habitable
              FROM bodies WHERE ?1 IS NULL OR system_id = ?1 ORDER BY system_id, position",
         )?;
         let rows = stmt.query_map([only], |r| {
@@ -523,6 +525,7 @@ impl Index {
                     orbit_au: r.get(9)?,
                     eccentricity: r.get(10)?,
                     periapsis_deg: r.get(11)?,
+                    habitable: r.get(12)?,
                 },
             ))
         })?;
@@ -1351,9 +1354,9 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                                  colour_r, colour_g, colour_b, generated, orbit_au,
                                  eccentricity, periapsis_deg, seed, params,
                                  generator_version, generator_format, last_opened_ms,
-                                 displayed_width, displayed_height)
+                                 displayed_width, displayed_height, habitable)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                     ?18, ?19, ?20)",
+                     ?18, ?19, ?20, ?21)",
             params![
                 s.id,
                 body.id,
@@ -1375,6 +1378,7 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                 last_opened,
                 old.and_then(|o| o.4),
                 old.and_then(|o| o.5),
+                body.habitable,
             ],
         )?;
     }
