@@ -468,7 +468,52 @@ the peak still falls with nitrogen (239 W/m² at twice Earth's N₂, 211
 with the plain square root), whereas the limit of a real moist
 atmosphere is set by the water vapour alone (Nakajima, Hayashi & Abe
 1992, doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2, abstract
-checked). Issue #438 bounds the steam side of that limit.
+checked). Issue #438 bounded the steam side of that limit (below); this
+moist side stays as it is.
+
+**Steam: the Simpson–Nakajima limit** (`STEAM_MAX_TAU`, issue #438). A
+thick steam atmosphere sends out a fixed flux whatever its surface
+temperature: its emission comes from a level pinned to water's
+saturation curve. Goldblatt, Robinson, Zahnle & Crisp 2013
+(doi:10.1038/ngeo1892, abstract checked) find this limit at 282 W/m²
+(`SIMPSON_NAKAJIMA_W_M2`) line by line; Boukrouche, Lichtenberg &
+Pierrehumbert 2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv
+2107.14150) find 283 W/m² and Hamano et al. 2015
+(doi:10.1088/0004-637X/806/2/216, read in arXiv 1505.03552) 280 W/m².
+The plateau ends when the dry adiabat reaches the emitting levels:
+Boukrouche et al. find it flat from 300 to 1800 K under 260 bar of steam
+(to 1050 K under 10 bar), its end reaching a constant of about 1800 K
+(`STEAM_BREAKDOWN_K`) as the steam thickens to 295 bar, and the radiation
+rising almost exponentially past it; Goldblatt 2015
+(doi:10.1089/ast.2014.1268, read in arXiv 1503.04835) puts the rise past
+1500 K, through the 4 µm window.
+
+The grey law has no such plateau: the opacity of pure steam grows as its
+pressure, `5.9 p`, so the outgoing radiation at a given surface
+temperature falls without bound as the column thickens, and a 1 M⊕
+planet of 30 % water at 0.7 AU came out at 8805 K under 1.6e5 bar of
+steam. The model now caps the water's optical depth at the one with which
+steam alone sends out the limit from a surface at 1800 K:
+
+```text
+τ_H2O ≤ (4/3) (σ T_b⁴ / F_SN − 1) ≈ 2813      T_b = 1800 K, F_SN = 282 W/m²
+```
+
+Pure steam thick enough to reach the cap then sends out `F_SN (T / T_b)⁴`
+from a surface at `T`, whatever its column: no more than the limit up to
+the breakdown, rising past it as from a fixed emitting column (the `T⁴`
+rise is slower than the near-exponential one Boukrouche et al. find, so
+the hot state is an upper estimate); thinner steam sends out more. A pure steam runaway absorbing `A`
+settles at `T_b (A / F_SN)^¼` plus its other gases' greenhouse: the
+30 %-water planet at 0.7 AU (489 W/m² absorbed) now sits at 2068 K,
+2073 K with a third of the water and 57 bar of CO₂. The cap binds past
+about 480 bar of steam (2813 / 5.9); thinner steam keeps the grey law,
+which emits more than the limit at the breakdown, so its hot state stays
+cooler than Boukrouche et al. find (10 bar of grey steam sends out the
+limit from about 680 K, not 1050 K). The wet climate never reaches the
+cap: its vapour, 77 % of saturation capped at the critical point, is at
+most about 283 bar. The Solar System is unchanged: none of its bodies
+holds that much steam.
 
 **Water vapour.** Where water is kept and there is no runaway, the air
 above the ocean or the ice holds 77 % of the saturation pressure (the
@@ -647,7 +692,9 @@ the water a body has, a boil kept only if its steam stays past 647 K, a
 runaway's water all in its air, the XUV saturation time anchored on
 Jackson et al. and Johnstone et al., the heat-pipe threshold at 1 W/m²
 and the seafloor power 4.1, then again after methane photolysis (issue
-#439) and after the broadening by thick air was tempered (issue #440). The census also counts the runaways by their source
+#439), after the broadening by thick air was tempered (issue #440) and
+after the steam was capped at the Simpson–Nakajima limit (issue #438,
+the output unchanged). The census also counts the runaways by their source
 (`Water::boiled`) and the wet planets left past 647 K because their boil
 was not kept.
 
@@ -798,11 +845,17 @@ What it shows, plainly:
   their first pass, whose broadening carried their vapour away; with it
   tempered (issue #440) their thermostats hold them at 288 K, a `rocky`
   planet and an `ocean-world`. The dense CO₂ runaways with several bar
-  of N₂ cooled by up to 37 K. The steam temperature is not bounded yet (issue #438). One
+  of N₂ cooled by up to 37 K. Capping the steam at the Simpson–Nakajima
+  limit (issue #438) moved five steam runaways round red dwarfs, under
+  550 to 2.7e5 bar of steam, and no class: they fell from 8554, 7328,
+  6302, 2617 and 2209 K to 1755, 1826, 1705, 1708 and 2133 K. The
+  runaway class now spans 322 to 2133 K (median 719 K, unchanged). One
   wet planet stays past 647 K out of a runaway (two before #440): its
   boil was not kept, because its steam escaped until the dry re-run was
-  cool. The other, under 8.5 bar of N₂, is now a wet `rocky` planet at
-  290 K, with life.
+  cool (458 c: 93 bar of CO₂ and 282 bar of vapour at 1488 K in its
+  first pass, all its water lost and 618 K in the steam pass). The cap
+  does not touch it: 282 bar of vapour is under it. The other, under
+  8.5 bar of N₂, is now a wet `rocky` planet at 290 K, with life.
 - **Tectonic regimes**: heat pipes rose from 2.7 % (39) to 3.5 % (51)
   with the threshold lowered from 2 to 1 W/m². The two planets that
   stopped boiling (#440) moved from episodic to plates.

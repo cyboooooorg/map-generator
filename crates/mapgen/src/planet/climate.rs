@@ -126,28 +126,73 @@ fn broadening_bar(partial: f64, total: f64) -> f64 {
     partial + foreign
 }
 
+/// The Simpson–Nakajima limit, W/m²: the outgoing longwave radiation of
+/// a thick steam atmosphere, whose emission comes from a level pinned to
+/// water's saturation curve and so no longer depends on the surface
+/// temperature. Goldblatt, Robinson, Zahnle & Crisp 2013 (*Nature
+/// Geosci.* 6, 661, doi:10.1038/ngeo1892; abstract checked) find 282 W/m²
+/// line by line; Boukrouche, Lichtenberg & Pierrehumbert 2021 (*ApJ* 919,
+/// 130, doi:10.3847/1538-4357/ac1345; §III.1 read in arXiv 2107.14150)
+/// 283 W/m², and Hamano et al. 2015 (*ApJ* 806, 216,
+/// doi:10.1088/0004-637X/806/2/216; read in arXiv 1505.03552) 280 W/m².
+const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
+
+/// Surface temperature, K, at which the radiation limit of a thick steam
+/// atmosphere ends. Boukrouche et al. 2021 (§III.1) find the outgoing
+/// radiation flat between 300 and 1800 K under 260 bar of steam (1050 K
+/// under 10 bar), the end of the plateau reaching a constant of about
+/// 1800 K as the steam thickens to 295 bar; past it the dry adiabat
+/// reaches the emitting levels and the radiation rises again. Goldblatt
+/// 2015 (*Astrobiology* 15, 362, doi:10.1089/ast.2014.1268; read in arXiv
+/// 1503.04835) puts the rise past 1500 K, through the 4 µm window.
+const STEAM_BREAKDOWN_K: f64 = 1800.0;
+
+/// Largest grey optical depth of water vapour: the one at which a steam
+/// atmosphere alone sends out [`SIMPSON_NAKAJIMA_W_M2`] from a surface at
+/// [`STEAM_BREAKDOWN_K`], `(4/3) (σ T_b⁴ / F_SN − 1)`, about 2800. Pure
+/// steam thick enough to reach it then sends out `F_SN (T / T_b)⁴` from a
+/// surface at `T`, whatever its column: no more than the limit up to the
+/// breakdown, rising past it as from a fixed emitting column (slower than
+/// the near-exponential rise Boukrouche et al. find, so an upper
+/// estimate), and a steam runaway absorbing more than the limit settles a
+/// little past 1800 K. The grey law alone (`k p` for pure steam) passes this depth
+/// past about 480 bar of steam, and put the 1.6e5 bar of a 30 %-water
+/// Earth at 0.7 AU at 8800 K (issue #438). Under that, the grey steam is
+/// left as it was: thinner than this cap, it emits more than the limit
+/// at the breakdown, and its hot state is cooler than Boukrouche et al.
+/// find (with 10 bar of steam the grey surface sends out the limit at
+/// about 680 K, not 1050 K).
+const STEAM_MAX_TAU: f64 = 4.0 / 3.0
+    * (SIGMA * STEAM_BREAKDOWN_K * STEAM_BREAKDOWN_K * STEAM_BREAKDOWN_K * STEAM_BREAKDOWN_K
+        / SIMPSON_NAKAJIMA_W_M2
+        - 1.0);
+
 /// Grey infrared optical depth of the air: each absorber's
 /// `k_i (p_i / 1 bar)^a_i (P_b / 1 bar)^½`, the last factor the pressure
 /// broadening of its lines (see [`LINE_EXPONENT`]). For CO₂ and water
 /// vapour `P_b` is [`broadening_bar`]; for methane it is the whole
 /// pressure, since its opacity stands for Titan's collision-induced
-/// greenhouse (see [`CH4_OPACITY`]). Pressures in bar.
+/// greenhouse (see [`CH4_OPACITY`]). The water's share is capped at
+/// [`STEAM_MAX_TAU`], the Simpson–Nakajima limit of a steam atmosphere.
+/// Pressures in bar.
 fn optical_depth(gases: &Gases) -> f64 {
     let total = gases.total().max(0.0);
     let line = |opacity: f64, partial: f64, exponent: f64, broadening: f64| {
         opacity * partial.max(0.0).powf(exponent) * broadening.powf(LINE_EXPONENT)
     };
+    let water = line(
+        H2O_OPACITY,
+        gases.h2o,
+        LINE_EXPONENT,
+        broadening_bar(gases.h2o, total),
+    );
     line(
         CO2_OPACITY,
         gases.co2,
         CO2_EXPONENT,
         broadening_bar(gases.co2, total),
-    ) + line(
-        H2O_OPACITY,
-        gases.h2o,
-        LINE_EXPONENT,
-        broadening_bar(gases.h2o, total),
-    ) + line(CH4_OPACITY, gases.ch4, LINE_EXPONENT, total)
+    ) + water.min(STEAM_MAX_TAU)
+        + line(CH4_OPACITY, gases.ch4, LINE_EXPONENT, total)
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
@@ -158,8 +203,10 @@ fn optical_depth(gases: &Gases) -> f64 {
 /// §4.6): `T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`, with `T_eq` the context's
 /// equilibrium temperature (Bond albedo 0.3) and `τ` the infrared optical
 /// depth of `optical_depth`, whose opacities are calibrated on Venus,
-/// Earth and Titan. Without air, the surface sits at `T_eq` warmed by its
-/// internal heat alone.
+/// Earth and Titan and whose steam is capped at the Simpson–Nakajima
+/// limit ([`STEAM_MAX_TAU`]): a thick steam runaway settles a little past
+/// 1800 K. Without air, the surface sits at `T_eq` warmed by its internal
+/// heat alone.
 pub fn surface_temperature_k(context: &Context, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
     let tau = optical_depth(gases);
     let t_eq4 = context.equilibrium_k.max(0.0).powi(4);
@@ -761,6 +808,67 @@ mod tests {
         let expected = p.sqrt()
             * (CO2_OPACITY * 3e-4_f64.powf(CO2_EXPONENT) + H2O_OPACITY * 0.0126_f64.sqrt());
         assert!((optical_depth(&earth) / expected - 1.0).abs() < 1e-12);
+    }
+
+    /// A 1 M⊕ planet with `water_fraction` of its mass in water and the
+    /// volatiles `draw_inputs` gives its rock and ice (no scatter), round
+    /// the Sun at `orbit_au`, through the whole chain.
+    fn water_world_at(water_fraction: f64, orbit_au: f64) -> crate::planet::Surface {
+        let inputs = PlanetInputs {
+            water_fraction,
+            volatiles: crate::planet::inputs::volatile_rule(1.0 - water_fraction, water_fraction),
+            ..crate::planet::reference::inputs(1.0, 0.325, 0.0)
+        };
+        let model =
+            crate::planet::planet_model(&crate::planet::reference::sun_at(orbit_au), inputs);
+        model.surface.expect("a bare body has a surface")
+    }
+
+    #[test]
+    fn a_steam_runaway_settles_past_the_end_of_the_radiation_limit() {
+        // Issue #438: 30 % water (some 1300 oceans) at 0.7 AU, over the
+        // runaway limit, puts about 1.4e5 bar of steam in the air. A thick
+        // steam atmosphere radiates the Simpson-Nakajima limit until its
+        // surface reaches about 1800 K, and more beyond (Boukrouche et al.
+        // 2021): absorbing twice the limit, it settles a little past 1800 K,
+        // not at thousands of kelvin.
+        let surface = water_world_at(0.3, 0.7);
+        assert!(surface.water.runaway, "{surface:?}");
+        assert!(surface.gases.h2o > 1.0e5, "{:?}", surface.gases);
+        let t = surface.climate.temperature_k;
+        assert!((1800.0..=2500.0).contains(&t), "{t} K: {surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::None, "{surface:?}");
+        // Past the breakdown the steam column no longer matters: with a
+        // third of the water (and more CO₂ left in the air), nearly the
+        // same hot state.
+        let less = water_world_at(0.1, 0.7);
+        assert!(less.water.runaway && less.gases.h2o > 1.0e4, "{less:?}");
+        let dt = (less.climate.temperature_k - t).abs();
+        assert!(dt < 20.0, "{t} K and {} K", less.climate.temperature_k);
+    }
+
+    #[test]
+    fn thick_steam_sends_out_the_simpson_nakajima_limit_at_the_breakdown() {
+        let olr = |t: f64, gases: &Gases| SIGMA * t.powi(4) / (1.0 + 0.75 * optical_depth(gases));
+        for h2o in [1.0e3, 1.0e4, 1.6e5] {
+            let steam = Gases {
+                h2o,
+                ..Gases::default()
+            };
+            let at_breakdown = olr(STEAM_BREAKDOWN_K, &steam);
+            assert!(
+                (at_breakdown - SIMPSON_NAKAJIMA_W_M2).abs() < 1e-6,
+                "{h2o} bar: {at_breakdown} W/m²"
+            );
+            assert!(olr(1500.0, &steam) < SIMPSON_NAKAJIMA_W_M2, "{h2o} bar");
+            assert!(olr(2000.0, &steam) > SIMPSON_NAKAJIMA_W_M2, "{h2o} bar");
+        }
+        // Under about 480 bar the grey law is under the cap and holds.
+        let steam = Gases {
+            h2o: 400.0,
+            ..Gases::default()
+        };
+        assert!((optical_depth(&steam) / (H2O_OPACITY * 400.0) - 1.0).abs() < 1e-12);
     }
 
     #[test]
