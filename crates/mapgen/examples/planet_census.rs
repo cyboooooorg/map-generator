@@ -14,7 +14,11 @@
 //!    envelope fraction, surface temperature and surface pressure of each
 //!    class (the last two over the planets that have a surface);
 //! 4. the class mix, the surface liquid mix, the share with life and the
-//!    tectonic regime mix, over the planets that have a surface;
+//!    tectonic regime mix, over the planets that have a surface, and how
+//!    many runaways came from the insolation limit or from boiling their
+//!    ocean (`Water::boiled`), all of them and the runaway-greenhouse
+//!    class alone, and how many wet planets stay past 647 K (a boil whose
+//!    steam would have cooled, so the first pass stands);
 //! 5. the radius histogram, in bins of 0.25 R_earth, of the planets with a
 //!    period under 100 days (the radius valley of Fulton et al. 2017
 //!    shows as a dip between 1.5 and 2 R_earth).
@@ -77,6 +81,10 @@ fn main() {
     let mut liquids: BTreeMap<String, u32> = BTreeMap::new();
     let mut regimes: BTreeMap<String, u32> = BTreeMap::new();
     let mut life = 0u32;
+    // [by the insolation limit, boiled]: all runaways, then the class.
+    let mut runaways = [0u32; 2];
+    let mut runaway_class = [0u32; 2];
+    let mut hot_and_wet = 0u32;
     let mut oxygenated = 0u32;
     let mut close_in = [0u32; 20];
     let mut close_in_total = 0u32;
@@ -106,6 +114,18 @@ fn main() {
                     .or_default() += 1;
                 *regimes.entry(format!("{:?}", surface.regime)).or_default() += 1;
                 life += u32::from(surface.life.arose);
+                hot_and_wet += u32::from(
+                    !surface.water.runaway
+                        && surface.water.kept_kg > 0.0
+                        && surface.climate.temperature_k >= 647.096,
+                );
+                if surface.water.runaway {
+                    let source = usize::from(surface.water.boiled);
+                    runaways[source] += 1;
+                    if model.class == mapgen::planet::PlanetClass::RunawayGreenhouse {
+                        runaway_class[source] += 1;
+                    }
+                }
                 oxygenated += u32::from(surface.life.oxygenated);
             }
             if body.orbit.period_days < 100.0 {
@@ -208,6 +228,12 @@ fn main() {
     for (regime, n) in &regimes {
         println!("{regime:<20}{:>6.1} %  ({n})", share(*n, with_surface));
     }
+    println!(
+        "\nrunaways: {} by the insolation limit, {} boiled; \
+         of the runaway-greenhouse class: {} by the limit, {} boiled",
+        runaways[0], runaways[1], runaway_class[0], runaway_class[1]
+    );
+    println!("wet, not in runaway and past 647 K (a boil not kept): {hot_and_wet}");
     println!(
         "\nlife: {:.1} % of planets with a surface ({life}), {:.1} % oxygenated ({oxygenated})",
         share(life, with_surface),
