@@ -61,27 +61,93 @@ const H2O_OPACITY: f64 = 5.9;
 /// greenhouse is mostly collision-induced (N₂–N₂, N₂–CH₄, N₂–H₂; McKay,
 /// Pollack & Courtin 1991, doi:10.1126/science.11538492, not checked),
 /// and its haze cools it by about 9 K; this opacity carries all of it.
+/// That is why it keeps the square root of the whole air's pressure (see
+/// [`optical_depth`]): collision-induced absorption grows with the
+/// nitrogen faster than line broadening does, not slower.
 const CH4_OPACITY: f64 = 3.4;
 
-/// Power of a partial pressure, and of the total pressure, in a gas's
-/// opacity: the strong-line (square-root) limit, where a pressure-
+/// Power of a partial pressure, and of the broadening pressure, in a
+/// gas's opacity: the strong-line (square-root) limit, where a pressure-
 /// broadened line absorbs as `sqrt(S u α)`, its absorber path `u ∝ p_i`
-/// and its width `α ∝ P` (Pierrehumbert 2010, *Principles of Planetary
-/// Climate*, §4.4; Goody & Yung 1989, *Atmospheric Radiation*, ch. 4).
+/// and its width `α` growing with the pressure of the gases round it
+/// (Pierrehumbert 2010, *Principles of Planetary Climate*, §4.4; Goody &
+/// Yung 1989, *Atmospheric Radiation*, ch. 4).
 const LINE_EXPONENT: f64 = 0.5;
 
+/// Pressure of the other gases, bar, up to which they broaden the lines
+/// of CO₂ and water vapour in proportion (see [`broadening_bar`]).
+/// Calibration: Earth's air, so that Earth, Mars and Venus keep the plain
+/// square root of their pressure they were calibrated with.
+const BROADENING_KNEE_BAR: f64 = 1.0;
+
+/// Power of the other gases' pressure in the broadening pressure past
+/// [`BROADENING_KNEE_BAR`]: their share of a grey opacity then grows as
+/// its square root, `P^0.1`, not `P^0.5`.
+///
+/// Calibration on the warming of doubled nitrogen. Goldblatt et al. 2009
+/// (*Nature Geosci.* 2, 891, doi:10.1038/ngeo692; abstract checked) find
+/// that doubling the present nitrogen warms the late Archean Earth by
+/// 4.4 °C in a 1-D radiative–convective model; Charnay et al. 2013 (*JGR
+/// Atmos.* 118, 10414, doi:10.1002/jgrd.50808; §5.2 checked in arXiv
+/// 1310.4286) find +7 °C in a GCM for the air going from 1 to 2 bar at
+/// 2.5 Ga with 10 mbar of CO₂ and 2 mbar of CH₄, and Wolf & Toon 2014
+/// (*Astrobiology* 14, 241, doi:10.1089/ast.2013.1112; abstract checked)
+/// 3 to 7 K for plausible nitrogen. In Charnay's setting (no CH₄) the
+/// model warms by about 5 K with 0.2, by about 3 K with 0.1 and 8.5 K
+/// with 0.3; with the plain square root (1) it ran away, and so did an
+/// Earth at 1 AU with 2 bar of N₂ (issue #440). The real rise is milder
+/// than the strong-line law because lines overlap and saturate (Vladilo
+/// et al. 2013, ApJ 767, 65, doi:10.1088/0004-637X/767/1/65, App. A.3,
+/// checked), and the moist runaway limit is set by the water vapour
+/// alone (Nakajima, Hayashi & Abe 1992, *J. Atmos. Sci.* 49, 2256,
+/// doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2; abstract
+/// checked), which a grey opacity growing as `sqrt(P)` lowers with every
+/// bar of nitrogen. The 0.2 power still lowers it, less: the model's
+/// peak outgoing radiation at Earth's composition is 253 W/m², 239 W/m²
+/// with twice its N₂ (211 with the square root), so past about 11 bar of
+/// N₂ an Earth at 1 AU still runs away once its thermostat has no CO₂
+/// left to remove.
+const THICK_AIR_EXPONENT: f64 = 0.2;
+
+/// Pressure, bar, that broadens the lines of a gas at `partial` bar in
+/// air of `total` bar: the gas itself in full (pure CO₂ on Venus and
+/// Mars, a steam atmosphere), plus the other gases, in proportion up to
+/// [`BROADENING_KNEE_BAR`] and as the [`THICK_AIR_EXPONENT`] power past
+/// it. It is the whole pressure in any air with less than 1 bar of other
+/// gases.
+fn broadening_bar(partial: f64, total: f64) -> f64 {
+    let partial = partial.max(0.0);
+    let others = (total - partial).max(0.0);
+    let foreign = if others <= BROADENING_KNEE_BAR {
+        others
+    } else {
+        BROADENING_KNEE_BAR * (others / BROADENING_KNEE_BAR).powf(THICK_AIR_EXPONENT)
+    };
+    partial + foreign
+}
+
 /// Grey infrared optical depth of the air: each absorber's
-/// `k_i (p_i / 1 bar)^a_i (P / 1 bar)^½`, the last factor the pressure
-/// broadening of its lines by the whole air (see [`LINE_EXPONENT`]).
-/// Pressures in bar.
+/// `k_i (p_i / 1 bar)^a_i (P_b / 1 bar)^½`, the last factor the pressure
+/// broadening of its lines (see [`LINE_EXPONENT`]). For CO₂ and water
+/// vapour `P_b` is [`broadening_bar`]; for methane it is the whole
+/// pressure, since its opacity stands for Titan's collision-induced
+/// greenhouse (see [`CH4_OPACITY`]). Pressures in bar.
 fn optical_depth(gases: &Gases) -> f64 {
-    let broadening = gases.total().max(0.0).powf(LINE_EXPONENT);
-    let line =
-        |opacity: f64, partial: f64, exponent: f64| opacity * partial.max(0.0).powf(exponent);
-    broadening
-        * (line(CO2_OPACITY, gases.co2, CO2_EXPONENT)
-            + line(H2O_OPACITY, gases.h2o, LINE_EXPONENT)
-            + line(CH4_OPACITY, gases.ch4, LINE_EXPONENT))
+    let total = gases.total().max(0.0);
+    let line = |opacity: f64, partial: f64, exponent: f64, broadening: f64| {
+        opacity * partial.max(0.0).powf(exponent) * broadening.powf(LINE_EXPONENT)
+    };
+    line(
+        CO2_OPACITY,
+        gases.co2,
+        CO2_EXPONENT,
+        broadening_bar(gases.co2, total),
+    ) + line(
+        H2O_OPACITY,
+        gases.h2o,
+        LINE_EXPONENT,
+        broadening_bar(gases.h2o, total),
+    ) + line(CH4_OPACITY, gases.ch4, LINE_EXPONENT, total)
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
@@ -585,6 +651,116 @@ mod tests {
         let bare = surface_temperature_k(&c, &Gases::default(), 0.0);
         assert!((bare - c.equilibrium_k).abs() < 1e-9);
         assert!(surface_temperature_k(&c, &Gases::default(), 100.0) > bare);
+    }
+
+    /// The model Earth at 1 AU with `n2_bar` of nitrogen in its air and
+    /// `water_fraction` of its mass in water, through the whole climate
+    /// (the carbonate thermostat included).
+    fn earth_with_nitrogen(n2_bar: f64, water_fraction: f64) -> (Gases, Climate) {
+        let earth = PlanetInputs {
+            water_fraction,
+            ..model_inputs(reference("Earth"))
+        };
+        let d = derive_at(&earth, 1.0);
+        let gases = Gases {
+            n2: n2_bar,
+            ..d.gases
+        };
+        climate(
+            &d.context,
+            gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+        )
+    }
+
+    #[test]
+    fn an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate() {
+        // Archean Earth may have held 2 to 3 bar of N₂ (Goldblatt et al.
+        // 2009; Charnay et al. 2013): the thermostat still holds it, with
+        // Earth's water and with 1 % of its mass in water.
+        for water_fraction in [0.000_23, 0.01] {
+            for n2 in [2.0, 3.0] {
+                let (g, c) = earth_with_nitrogen(n2, water_fraction);
+                assert!(c.regulated, "{n2} bar, {water_fraction}: {c:?} {g:?}");
+                assert!(
+                    (282.0..=294.0).contains(&c.temperature_k),
+                    "{n2} bar, {water_fraction}: {c:?} {g:?}"
+                );
+                assert_eq!(c.liquid, SurfaceLiquid::Water, "{c:?}");
+                assert!(g.co2 > 0.0, "{g:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
+        // Charnay et al. 2013 (§5.2): the Sun at 2.5 Ga (Gough 1981,
+        // doi:10.1007/BF00151270, 0.82 of today's light), 10 mbar of CO₂, the air from 1 to 2 bar
+        // of N₂: +7 K in their GCM, +4 to 5 K in the 1-D model of
+        // Goldblatt et al. 2009. Their CO₂ held fixed, no thermostat.
+        let d = derive_at(&model_inputs(reference("Earth")), 1.0);
+        let faint = Context {
+            equilibrium_k: d.context.equilibrium_k * 0.82_f64.powf(0.25),
+            ..d.context
+        };
+        let air = |n2: f64| Gases {
+            n2,
+            co2: 0.010,
+            h2o: 0.0,
+            ch4: 0.0,
+            nh3: 0.0,
+            so2: 0.0,
+            o2: 0.0,
+        };
+        let temperature = |gases: Gases| {
+            let (g, c) = climate(
+                &faint,
+                gases,
+                &d.water,
+                Regime::Stagnant,
+                d.heat_flux_w_m2,
+                d.water_bar,
+            );
+            (g, c.temperature_k)
+        };
+        let (g1, t1) = temperature(air(0.99));
+        let (g2, t2) = temperature(air(1.99));
+        assert!((270.0..=290.0).contains(&t1), "{t1} {g1:?}");
+        let warming = t2 - t1;
+        assert!((3.0..=8.0).contains(&warming), "{t1} -> {t2}: {g2:?}");
+    }
+
+    #[test]
+    fn a_pure_gas_broadens_its_own_lines_in_full() {
+        // Venus's CO₂ and a steam atmosphere: the gas is its own air, so
+        // the strong-line law holds whole.
+        let venus = Gases {
+            co2: 85.0,
+            ..Gases::default()
+        };
+        let expected = CO2_OPACITY * 85.0_f64.powf(CO2_EXPONENT) * 85.0_f64.sqrt();
+        assert!((optical_depth(&venus) / expected - 1.0).abs() < 1e-12);
+        let steam = Gases {
+            h2o: 260.0,
+            ..Gases::default()
+        };
+        let expected = H2O_OPACITY * 260.0;
+        assert!((optical_depth(&steam) / expected - 1.0).abs() < 1e-12);
+        // Below 1 bar of other gases, nothing changes from the plain
+        // square root of the whole pressure.
+        let earth = Gases {
+            n2: 0.9,
+            co2: 3e-4,
+            h2o: 0.0126,
+            ..Gases::default()
+        };
+        let p = earth.total();
+        let expected = p.sqrt()
+            * (CO2_OPACITY * 3e-4_f64.powf(CO2_EXPONENT) + H2O_OPACITY * 0.0126_f64.sqrt());
+        assert!((optical_depth(&earth) / expected - 1.0).abs() < 1e-12);
     }
 
     #[test]
