@@ -12,7 +12,7 @@ import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
 import type { Belt } from './api/types/Belt';
 import type { Trojans } from './api/types/Trojans';
-import { hasFrozenSurface } from './planetClass';
+import { hasFrozenSurface, surfaceTemperatureK } from './planetClass';
 import { resonanceTurns } from './spinResonance';
 import { placeSystem, type Placement } from './systemSky';
 import { type SystemGiant, withOrbitDefaults } from './viewer/starSystem';
@@ -43,6 +43,8 @@ export interface SystemPlanet {
   eccentricity: number;
   year_days: number;
   equilibrium_k: number;
+  /** Its mean surface temperature from its model, K; null for a giant or a body without a model. */
+  surface_k: number | null;
   /** How many moons it has. */
   moons: number;
   /** Its moons, nearest first: id, name (given, else designation) and orbit. */
@@ -174,6 +176,7 @@ export function systemStarView(
       eccentricity: body.orbit.eccentricity,
       year_days: body.orbit.period_days,
       equilibrium_k: body.surroundings.equilibrium_k,
+      surface_k: surfaceTemperatureK(body.model),
       moons: system.bodies.filter((b) => b.parent === body.id).length,
       moonList: moonsOf(body.id),
       inclination_deg: body.orbit.inclination_deg,

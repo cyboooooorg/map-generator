@@ -7,6 +7,7 @@ import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import type { WorldRequest } from './api/types/WorldRequest';
 import { getLocale, t } from './i18n/index.svelte';
+import { type SurfaceModel, surfaceTemperatureK } from './planetClass';
 
 /** Number formats of the active locale, built once per locale and options. */
 const numberFormats = new Map<string, Intl.NumberFormat>();
@@ -351,6 +352,21 @@ export function formatStarlight(star: StarInfo): string {
     flux: `${formatUpTo(star.insolation, star.insolation < 0.1 ? 3 : 2)}×`,
     equilibrium: withUnit(formatInt(star.equilibrium_k - 273.15), '°C'),
   });
+}
+
+/**
+ * A body's mean surface temperature from its `model`, as the equilibrium
+ * one is shown (whole °C); null for a body without a surface (a giant, no
+ * model).
+ */
+export function formatSurfaceTemperature(model: SurfaceModel): string | null {
+  const k = surfaceTemperatureK(model);
+  return k === null ? null : formatCelsius(k);
+}
+
+/** A temperature in kelvin as whole °C, as the equilibrium one is shown. */
+export function formatCelsius(k: number): string {
+  return withUnit(formatInt(Math.round(k - 273.15)), '°C');
 }
 
 /** The year: in days under two Earth years, in Earth years above. */

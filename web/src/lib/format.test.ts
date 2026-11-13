@@ -3,7 +3,7 @@ import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { driftRequest } from './drift';
 import { setLocale } from './i18n/index.svelte';
-import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatAge, formatSurfaceAge, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { keepAlone, cliCommand, formatInt, formatSurfaceTemperature, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatAge, formatSurfaceAge, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const S = '\u202f';
 
@@ -210,5 +210,14 @@ describe('ages on the cards', () => {
     } finally {
       setLocale('en');
     }
+  });
+});
+
+describe('formatSurfaceTemperature', () => {
+  it('shows the surface temperature in degrees Celsius, nothing without a surface', () => {
+    const model = { surface: { water: { oceans: 1 }, climate: { temperature_k: 288.15, liquid: 'water' } } };
+    expect(formatSurfaceTemperature(model)).toMatch(/^15\s°C$/);
+    expect(formatSurfaceTemperature({ surface: null })).toBeNull();
+    expect(formatSurfaceTemperature(undefined)).toBeNull();
   });
 });

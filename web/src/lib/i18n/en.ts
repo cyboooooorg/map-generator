@@ -133,6 +133,7 @@ export const en = {
     ageValue: (p: { age: string; surface: string }) => `${p.age} · surface ${p.surface}`,
     light: 'Light',
     lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
+    surfaceTemperature: 'Surface temperature',
     moons: 'Moons',
     rings: 'Rings',
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
@@ -345,6 +346,7 @@ export const en = {
     hzRange: (p: { inner: string; outer: string }) => `Habitable zone: ${p.inner} to ${p.outer}`,
     light: 'Starlight',
     lightValue: (p: { flux: string; equilibrium: string }) => `${p.flux} Earth's · equilibrium ${p.equilibrium}`,
+    surfaceTemperature: 'Surface temperature',
     year: 'Year',
     yearDays: (p: { days: string }) => `${p.days} days`,
     yearYears: (p: { years: string }) => `${p.years} Earth years`,
@@ -1086,6 +1088,7 @@ export const en = {
     zone: 'Habitable zone',
     range: (p: { inner: string; outer: string }) => `${p.inner} to ${p.outer}`,
     equilibrium: 'Equilibrium temperature',
+    surfaceTemperature: 'Surface temperature',
     animate: 'Animate',
     distances: 'Distances',
     /** A planet's label in the star view: its name and mean distance from the star. */
@@ -1183,6 +1186,7 @@ export const en = {
     orbit: 'Orbit',
     motion: 'Speed',
     equilibrium: 'Equilibrium',
+    surfaceTemperature: 'Surface temperature',
     zone: 'Habitable zone',
     zoneInside: 'inside',
     zoneInner: (p: { gap: string }) => `${p.gap} short of it`,

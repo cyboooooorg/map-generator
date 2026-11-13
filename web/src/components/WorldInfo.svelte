@@ -3,7 +3,7 @@
   import { archetypeDescription, archetypeName, biomeName, classLabel } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import { downloadRawData, downloadSvg } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatSurfaceTemperature, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
@@ -202,6 +202,10 @@
           <dd class="unit-help" title={unitTooltip('AU')}>{formatEccentricity(star)}</dd>
           <dt>{t.worldInfo.light}</dt>
           <dd>{formatStarlight(star)}</dd>
+          {#if formatSurfaceTemperature(meta.model)}
+            <dt>{t.worldInfo.surfaceTemperature}</dt>
+            <dd>{formatSurfaceTemperature(meta.model)}</dd>
+          {/if}
           <dt>{t.worldInfo.year}</dt>
           <dd>{formatYear(star.year_days)}</dd>
           <dt>{t.worldInfo.starSize}</dt>

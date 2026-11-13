@@ -11,7 +11,7 @@
   import type { Body } from '../lib/api/types/Body';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import { errorText } from '../lib/i18n/errors';
-  import { formatAge, formatAu, formatInt, formatSurfaceAge, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAge, formatAu, formatSurfaceTemperature, formatInt, formatSurfaceAge, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { toasts } from '../lib/toasts.svelte';
   import type { LoadedWorld } from '../lib/world.svelte';
   import { MAX_NAME_CHARS } from '../lib/names';
@@ -201,6 +201,10 @@
           temperature: withUnit(formatInt(Math.round(body.surroundings.equilibrium_k - 273.15)), '°C'),
         })}
       </dd>
+      {#if formatSurfaceTemperature(body.model)}
+        <dt>{t.card.surfaceTemperature}</dt>
+        <dd>{formatSurfaceTemperature(body.model)}</dd>
+      {/if}
       <dt>{t.card.age}</dt>
       <dd>{t.card.ageValue({ age: formatAge(body.params.age_gyr), surface: formatSurfaceAge(body.params.surface_age_ga) })}</dd>
       {#if rings}
