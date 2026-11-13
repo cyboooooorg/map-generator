@@ -7,6 +7,7 @@
   import { t } from '../lib/i18n/index.svelte';
   import { presetName } from '../lib/i18n/names.svelte';
   import { api } from '../lib/api/client';
+  import { isGiantType } from '../lib/planetClass';
   import type { Body } from '../lib/api/types/Body';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
   import { errorText } from '../lib/i18n/errors';
@@ -46,8 +47,7 @@
     const srgb = (c: number) => Math.round(255 * Math.min(1, Math.max(0, c)) ** (1 / 2.2));
     return `rgb(${srgb(r)} ${srgb(g)} ${srgb(b)})`;
   }
-  const GIANTS = new Set(['gas-giant', 'ice-giant', 'hot-jupiter']);
-  const giant = (b: Body) => GIANTS.has(b.type);
+  const giant = (b: Body) => isGiantType(b.type);
   /** A mass in Earth masses, or Jupiter masses for a giant. */
   function mass(b: Body): string {
     const earth = b.physical.mass_earth;

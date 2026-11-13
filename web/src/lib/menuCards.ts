@@ -2,6 +2,7 @@
 // world), the planet strip and the view setting (components/SystemList.svelte).
 import type { BodySummary } from './api/types/BodySummary';
 import type { SystemSummary } from './api/types/SystemSummary';
+import { canBeHabitable, isGiantType } from './planetClass';
 import { loadSetting } from './settings';
 
 // -- Views -------------------------------------------------------------
@@ -89,17 +90,9 @@ export function presentClasses(systems: Pick<SystemSummary, 'star'>[]): StarClas
 // -- Habitable worlds --------------------------------------------------
 
 /**
- * The body types (preset names, `presets/`) of a world that can hold liquid
- * water and life: the Earth-like `terran`, and `earth-like` (the example
- * preset modelled on it). These are the built-in preset names: a user
- * preset with another name never matches, even if it describes a habitable
- * world. `barren`, `frozen`, `volcanic` and `caustic` rocks
- * never count (dead, ice-bound, magma-covered, acid), nor do the giants.
- */
-export const HABITABLE_TYPES: ReadonlySet<string> = new Set(['terran', 'earth-like']);
-
-/**
- * Whether a body is a planet of a habitable type whose semi-major axis lies
+ * Whether a body is a planet of a type that can be habitable (`terran`, `earth-like`,
+ * or the classes `rocky`, `super-earth` and `ocean-world`; see `canBeHabitable`;
+ * the summary carries no model, so the real water is not known here) whose semi-major axis lies
  * inside the zone [inner, outer] AU. Only planets count: a moon of a giant
  * in the zone does not (its `orbit_au` is round its planet), and a planet
  * on an eccentric orbit that only passes through the zone is judged by its
@@ -107,7 +100,7 @@ export const HABITABLE_TYPES: ReadonlySet<string> = new Set(['terran', 'earth-li
  */
 export function isHabitableWorld(body: BodySummary, inner: number, outer: number): boolean {
   return (
-    body.kind === 'planet' && HABITABLE_TYPES.has(body.body_type) && outer > 0 && body.orbit_au >= inner && body.orbit_au <= outer
+    body.kind === 'planet' && canBeHabitable(body.body_type) && outer > 0 && body.orbit_au >= inner && body.orbit_au <= outer
   );
 }
 
@@ -180,8 +173,6 @@ export interface Strip {
   zone: { from: number; width: number } | null;
 }
 
-const GIANT_TYPES = new Set(['gas-giant', 'ice-giant', 'hot-jupiter']);
-
 /**
  * The planets of a system along a line from the star, by the logarithm of
  * their distance (so that tight M-dwarf systems and wide ones both fill the
@@ -201,7 +192,7 @@ export function strip(system: SystemSummary, margin = 6): Strip {
     planets: planets.map((p) => ({
       id: p.id,
       at: at(p.orbit_au),
-      giant: GIANT_TYPES.has(p.body_type),
+      giant: isGiantType(p.body_type),
       colour: p.colour,
       generated: p.generated,
     })),

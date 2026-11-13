@@ -111,4 +111,10 @@ describe('cssColour', () => {
     }
     expect(log.starR).toBeLessThan(sqrt.starR);
   });
+
+  it('draws a mini-Neptune with the giant radius rule', () => {
+    const radius = (body_type: string) => orrery(system([body('b', 1, { body_type })]), 72, 40).planets[0]!.r;
+    expect(radius('mini-neptune')).toBe(radius('gas-giant'));
+    expect(radius('mini-neptune')).toBeGreaterThan(radius('super-earth'));
+  });
 });

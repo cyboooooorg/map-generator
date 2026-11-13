@@ -2442,6 +2442,23 @@ mod tests {
     }
 
     #[test]
+    fn viewer_and_server_agree_on_the_planet_classes() {
+        let viewer = include_str!("../../../web/src/lib/planetClass.test.ts");
+        for key in mapgen::planet::PLANET_CLASSES {
+            assert!(
+                viewer.contains(&format!("'{key}'")),
+                "planetClass.test.ts must list the class `{key}`"
+            );
+        }
+        let listed = viewer.matches("\n  '").count();
+        assert_eq!(
+            listed,
+            mapgen::planet::PLANET_CLASSES.len(),
+            "planetClass.test.ts lists a class the server does not know"
+        );
+    }
+
+    #[test]
     fn viewer_and_server_agree_on_the_oldest_format() {
         let viewer = include_str!("../../../web/src/lib/formatVersion.ts");
         let min = mapgen::export::raw_data::MIN_FORMAT_VERSION;

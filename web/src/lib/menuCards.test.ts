@@ -103,6 +103,15 @@ describe('habitable worlds', () => {
     expect(isHabitableWorld(body('a', 2), 0.9, 1.5)).toBe(false);
   });
 
+  it('counts the classes that can hold liquid water', () => {
+    for (const body_type of ['rocky', 'super-earth', 'ocean-world']) {
+      expect(isHabitableWorld(body('a', 1, { body_type }), 0.9, 1.5)).toBe(true);
+    }
+    for (const body_type of ['ice-world', 'lava-world', 'mini-neptune', 'hot-jupiter']) {
+      expect(isHabitableWorld(body('a', 1, { body_type }), 0.9, 1.5)).toBe(false);
+    }
+  });
+
   it('does not count dead, frozen, burning or acid rocks, giants or moons', () => {
     for (const body_type of ['barren', 'frozen', 'volcanic', 'caustic', 'gas-giant', 'ice-giant']) {
       expect(isHabitableWorld(body('a', 1, { body_type }), 0.9, 1.5)).toBe(false);

@@ -3,6 +3,7 @@
 // middle, the habitable zone as a ring, each planet as a dot on its orbit,
 // seen a little from above so that the orbits fill a wide box.
 import type { SystemSummary } from './api/types/SystemSummary';
+import { isGiantType } from './planetClass';
 
 /** A planet of the orrery: its orbit and its dot, in box units. */
 export interface OrreryPlanet {
@@ -32,7 +33,6 @@ export interface Orrery {
   planets: OrreryPlanet[];
 }
 
-const GIANTS = new Set(['gas-giant', 'ice-giant', 'hot-jupiter']);
 /** Points along an orbit's path. */
 const ORBIT_POINTS = 48;
 /** A coordinate as the path writes it: two decimals are plenty at thumbnail size. */
@@ -110,7 +110,7 @@ export function orrery(system: SystemSummary, width: number, height: number, sca
         ry,
         x,
         y,
-        r: (GIANTS.has(planet.body_type) ? 2.1 : 1.4) * scale,
+        r: (isGiantType(planet.body_type) ? 2.1 : 1.4) * scale,
         colour: planet.colour,
         generated: planet.generated,
       };
