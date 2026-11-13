@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { seaIsLiquid } from './sea';
 
-function meta(remap: WorldMetadata['preset']['remap']): WorldMetadata {
+function meta(remap: WorldMetadata['look']['remap']): WorldMetadata {
   return {
-    preset: { remap },
+    look: { remap },
     biomes: [
       { id: 1, key: 'Ocean', name: 'Ocean', color: '#1E46C8', water: true },
       { id: 22, key: 'CausticLake', name: 'Caustic Lake', color: '#30A870', water: true },

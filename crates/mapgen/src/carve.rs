@@ -415,7 +415,7 @@ mod tests {
     #[test]
     fn carving_never_raises_ground_or_creates_water() {
         let w = world();
-        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        let waterline = w.params.sea_level + w.params.look.rules.waterline;
         let grid = w.params.grid();
         let mut above: Vec<f32> = w.elevation.iter().map(|e| e - waterline).collect();
         let before = above.clone();

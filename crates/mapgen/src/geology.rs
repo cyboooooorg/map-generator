@@ -1,10 +1,10 @@
-//! The geology of a planet type: its tectonic regime and the history of its
+//! The geology of a world: its tectonic regime and the history of its
 //! surface, which the impact craters (`crate::craters`) and the plates
 //! (`crate::plates`) follow (`docs/analysis/08-geology.md`).
 //!
-//! The age of the surface is a generation parameter (`surface_age_ga`),
-//! drawn from the preset's `[defaults]` like the pressure; the rest comes
-//! from the preset's `[geology]` table:
+//! The age of the surface is a generation parameter (`surface_age_ga`);
+//! the rest comes from the `[geology]` table of the world's look
+//! ([`crate::look`]):
 //!
 //! ```toml
 //! [geology]
@@ -13,11 +13,11 @@
 //! maria = [3.9, 3.1]                 # Ga: when lava flooded large basins
 //! ```
 //!
-//! Every field is optional; a preset without the table gets Earth's.
+//! Every field is optional; a look without the table gets Earth's.
 //!
-//! **The world decides plates.** The preset's regime is what its type has
-//! at Earth's size and in its star's habitable zone; a world of a plate
-//! preset that cannot hold plates gets another ([`regime_of`]), so a
+//! **The world decides plates.** A world's regime is the model's, or the look's
+//! for a body whose surface the model does not derive; a world of a plate
+//! look that cannot hold plates gets another ([`regime_of`]), so a
 //! Mars-sized `terran` world has a stagnant lid.
 use crate::atmosphere::LIQUID_WATER_BAR;
 use crate::request::SURFACE_AGE_GA;
@@ -35,8 +35,8 @@ use serde::{Deserialize, Serialize};
 /// The geometric mean of Mars and Venus, about 0.72 Earth radii.
 pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
 
-/// The tectonic regime of the world `p`: its preset's, except that a plate
-/// preset's world without what plates need has none.
+/// The tectonic regime of the world `p`: its look's, except that a plate
+/// look's world without what plates need has none.
 ///
 /// - **Dry**: under [`LIQUID_WATER_BAR`], no water weakens its lithosphere,
 ///   a stagnant lid: the likelihood of plates "is controlled largely by the
@@ -49,8 +49,8 @@ pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
 /// doi:10.1086/524012) find them inevitable, O'Neill & Lenardic (2007,
 /// doi:10.1029/2007GL030598) unlikely; the app follows the first, with
 /// Korenaga (2010), for whom size plays a minor role (which argues against
-/// any size threshold: the one above is the app's choice). Other presets
-/// keep their regime: a stagnant preset's world does not gain plates.
+/// any size threshold: the one above is the app's choice). Other looks
+/// keep their regime: a stagnant look's world does not gain plates.
 ///
 /// A world near its star keeps its plates: no source ties the inner edge
 /// of the habitable zone to a regime (Venus's present mode is "stagnant
@@ -58,7 +58,7 @@ pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
 /// doi:10.1038/s41550-023-02102-w, a history, not a threshold), and
 /// switching there would cut its carbon cycle at a hard edge.
 pub fn regime_of(p: &WorldParams) -> Regime {
-    let preset = p.planet.geology.regime;
+    let preset = p.look.geology.regime;
     if preset != Regime::Plates || p.giant_mass_earth.is_some() {
         return preset;
     }
@@ -107,7 +107,7 @@ pub struct Geology {
     /// Tectonic regime. `plates` gives the world tectonic plates whose
     /// boundaries shape its relief (`crate::plates`) and, with liquid
     /// water, a carbon cycle that steadies its climate; the others shape it
-    /// through the age of its surface and its craters. A plate preset's
+    /// through the age of its surface and its craters. A plate look's
     /// world can lose its plates (see [`regime_of`]).
     pub regime: Regime,
     /// End of the era of liquid water, in Ga before present. 0 means still
@@ -184,7 +184,7 @@ impl Geology {
     }
 
     /// End of the wet era of a world of this surface pressure, in Ga: 0 for
-    /// a world with liquid water today, whatever the preset says.
+    /// a world with liquid water today, whatever the look says.
     pub fn wet_until_ga(&self, pressure_bar: f32) -> f32 {
         if pressure_bar >= LIQUID_WATER_BAR {
             0.0
@@ -199,7 +199,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_world_decides_whether_a_plate_preset_has_plates() {
+    fn the_world_decides_whether_a_plate_look_has_plates() {
         let world = |planet: &str, circumference_km: f32, pressure_bar: f32, orbit_au: f32| {
             let p = WorldParams {
                 circumference_km,
@@ -220,7 +220,7 @@ mod tests {
         // Near its star too: no jump of its climate at the habitable
         // zone's inner edge.
         assert_eq!(world("terran", earth, 1.0, 0.72), Regime::Plates);
-        // A stagnant preset never gains plates.
+        // A stagnant look never gains plates.
         assert_eq!(world("barren", earth, 1.0, 1.0), Regime::Stagnant);
         // A world of the planet model carries its model's regime: Mars's
         // is a stagnant lid.
@@ -232,7 +232,7 @@ mod tests {
             ..Default::default()
         };
         let params = small.resolve(&mut rand::rng()).unwrap().params;
-        assert_eq!(params.planet.geology.regime, Regime::Stagnant);
+        assert_eq!(params.look.geology.regime, Regime::Stagnant);
     }
 
     #[test]

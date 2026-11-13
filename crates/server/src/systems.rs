@@ -155,7 +155,7 @@ struct MetaBody {
     id: String,
     kind: String,
     #[serde(rename = "type")]
-    preset: String,
+    class: String,
     designation: String,
     #[serde(default)]
     generated: bool,
@@ -186,21 +186,15 @@ struct MetaClimate {
     liquid: mapgen::planet::SurfaceLiquid,
 }
 
-/// The presets a request can name for a planet that hold liquid water
-/// and life, for the planet it asks for, which has no model.
-const HABITABLE_PRESETS: [&str; 2] = ["terran", "earth-like"];
-
 impl MetaBody {
     /// Whether it is a habitable world (see `BodySummary::habitable`).
     fn habitable(&self) -> bool {
         self.kind == "planet"
-            && match &self.model {
-                Some(model) => model
-                    .surface
-                    .as_ref()
-                    .is_some_and(|s| s.climate.liquid == mapgen::planet::SurfaceLiquid::Water),
-                None => HABITABLE_PRESETS.contains(&self.preset.as_str()),
-            }
+            && self
+                .model
+                .as_ref()
+                .and_then(|model| model.surface.as_ref())
+                .is_some_and(|s| s.climate.liquid == mapgen::planet::SurfaceLiquid::Water)
     }
 }
 
@@ -395,7 +389,7 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
     }
     let mut planets: BTreeMap<String, u32> = BTreeMap::new();
     for body in meta.bodies.iter().filter(|b| b.kind == "planet") {
-        *planets.entry(body.preset.clone()).or_default() += 1;
+        *planets.entry(body.class.clone()).or_default() += 1;
     }
     Some(SystemSummary {
         id: id.to_string(),
@@ -416,7 +410,7 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
                 id: b.id.clone(),
                 designation: b.designation.clone(),
                 kind: b.kind.clone(),
-                body_type: b.preset.clone(),
+                body_type: b.class.clone(),
                 colour: b
                     .preview
                     .colours
@@ -581,7 +575,7 @@ struct BodyMeta {
     format_version: u32,
     pressure_bar: f32,
     surface_age_ga: Option<f32>,
-    preset: BodyPreset,
+    look: BodyLook,
 }
 
 impl Default for BodyMeta {
@@ -590,14 +584,14 @@ impl Default for BodyMeta {
             format_version: 1,
             pressure_bar: 1.0,
             surface_age_ga: None,
-            preset: BodyPreset::default(),
+            look: BodyLook::default(),
         }
     }
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
-struct BodyPreset {
+struct BodyLook {
     geology: BodyGeology,
 }
 
@@ -618,7 +612,7 @@ pub fn epochs_at(dir: &Path) -> Option<Option<[i32; 2]>> {
         return Some(None);
     }
     let range = meta.surface_age_ga.and_then(|age| {
-        mapgen::epoch::range_ga(meta.pressure_bar, age, meta.preset.geology.wet_until)
+        mapgen::epoch::range_ga(meta.pressure_bar, age, meta.look.geology.wet_until)
     });
     // Whole Ma, within the range.
     Some(range.map(|(future, past)| {
@@ -642,7 +636,7 @@ mod tests {
     }
 
     const SYSTEM: &str = r#"{
-        "format_version": 3, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 4, "seed": 42, "width": 1024, "height": 512,
         "star": {"type": "K1V", "designation": "MGS 48213",
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
@@ -708,7 +702,7 @@ mod tests {
     }
 
     #[test]
-    fn a_habitable_world_has_liquid_water_or_an_earth_like_preset() {
+    fn a_habitable_world_has_liquid_water() {
         let json = format!(
             r#"{{
             "format_version": {}, "seed": 42, "width": 1024, "height": 512,
@@ -720,9 +714,8 @@ mod tests {
                   "model": {{"surface": {{"climate": {{"liquid": "none"}}}}}}}},
                 {{"id": "d", "kind": "planet", "type": "super-earth", "designation": "d",
                   "model": {{"surface": null}}}},
-                {{"id": "e", "kind": "planet", "type": "terran", "designation": "e"}},
-                {{"id": "f", "kind": "planet", "type": "barren", "designation": "f"}},
-                {{"id": "e-1", "kind": "moon", "type": "terran", "designation": "e I"}}
+                {{"id": "e", "kind": "planet", "type": "rocky", "designation": "e"}},
+                {{"id": "e-1", "kind": "moon", "type": "rocky-moon", "designation": "e I"}}
             ]
         }}"#,
             mapgen::system::SYSTEM_FORMAT_VERSION
@@ -734,7 +727,7 @@ mod tests {
             .filter(|b| b.habitable)
             .map(|b| b.id.as_str())
             .collect();
-        assert_eq!(habitable, ["b", "e"]);
+        assert_eq!(habitable, ["b"]);
     }
 
     #[test]
@@ -801,7 +794,7 @@ mod tests {
 
     #[test]
     fn each_body_has_its_original_size() {
-        let json = r#"{"format_version": 3, "width": 1024, "height": 512, "bodies": [
+        let json = r#"{"format_version": 4, "width": 1024, "height": 512, "bodies": [
             {"id": "c", "params": {"width": 1024, "height": 512}},
             {"id": "c-1", "params": {"width": 512, "height": 256}},
             {"id": "d"}
@@ -823,7 +816,7 @@ mod tests {
         assert!(originals.original_size(&root, "mgs-2-2", "c").is_err());
         // The file rewritten (a system drawn again under its id) is read
         // again, here one of the layout before sizes, which is refused.
-        let old = json.replace(r#""format_version": 3"#, r#""format_version": 1"#);
+        let old = json.replace(r#""format_version": 4"#, r#""format_version": 1"#);
         let error = original_sizes(old.as_bytes()).unwrap_err();
         assert!(error.contains("format version 1"), "{error}");
         // (A length of its own: some file systems stamp in coarse ticks.)

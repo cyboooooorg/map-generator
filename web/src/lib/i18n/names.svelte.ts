@@ -1,6 +1,5 @@
 // Names of things that come from the generator, in the active locale.
 import type { BiomeInfo } from '../api/types/BiomeInfo';
-import type { Preset } from '../api/types/Preset';
 import type { PresetInfo } from '../api/types/PresetInfo';
 import type { Locale } from '../api/types/Locale';
 import { getLocale, t } from './index.svelte';
@@ -14,15 +13,20 @@ export function biomeName(biome: Pick<BiomeInfo, 'key' | 'name'>): string {
 }
 
 /**
- * Translations of the presets the server offers, by preset name. The
- * presets of `world.json` carry none (a world does not change when a
- * translation does): a world's card finds them here by the preset's name.
+ * Translations of the archetypes the server offers, by archetype name. A
+ * world's `world.json` carries none (a world does not change when a
+ * translation does): a world's card finds them here by the archetype's
+ * name.
  */
-const known = $state<{ locales: Record<string, Record<string, Locale>> }>({ locales: {} });
+const known = $state<{
+  locales: Record<string, Record<string, Locale>>;
+  descriptions: Record<string, string>;
+}>({ locales: {}, descriptions: {} });
 
-/** Records the translations of the presets the server offers. */
+/** Records the translations of the archetypes the server offers. */
 export function setPresetLocales(presets: readonly PresetInfo[]): void {
   known.locales = Object.fromEntries(presets.map((p) => [p.name, p.locales]));
+  known.descriptions = Object.fromEntries(presets.map((p) => [p.name, p.description]));
 }
 
 function translation(name: string): Locale | undefined {
@@ -30,14 +34,14 @@ function translation(name: string): Locale | undefined {
 }
 
 /**
- * The display name of a preset, translated when its file says how, else
- * worded as a body type: a drawn planet's `meta.preset.name` is its class key.
+ * The display name of an archetype, translated when its file says how, else
+ * worded as a body type: a planet's class key (`rocky`, `ice-giant`…).
  */
-export function presetName(preset: Pick<Preset, 'name'>): string {
+export function presetName(preset: { name: string }): string {
   return translation(preset.name)?.name ?? (t.viewer.bodyTypes as Record<string, string>)[preset.name] ?? preset.name;
 }
 
-/** The description of a preset, translated when its file says how. */
-export function presetDescription(preset: Pick<Preset, 'name' | 'description'>): string {
-  return translation(preset.name)?.description ?? preset.description;
+/** The description of an archetype, translated when its file says how, else the server's. */
+export function presetDescription(preset: { name: string; description?: string }): string {
+  return translation(preset.name)?.description ?? preset.description ?? known.descriptions[preset.name] ?? '';
 }

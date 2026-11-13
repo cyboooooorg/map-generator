@@ -7,7 +7,7 @@
  * in `[-1, 1]`; temperatures in °C (annual means); moisture in `[-1, 1]`; volcanic
  * zone in `[0, 1]`.
  *
- * In a planet preset, the `[rules]` table overrides any of these fields;
+ * In a look, the `[rules]` table overrides any of these fields;
  * the others keep their default value.
  */
 export type BiomeRules = { 

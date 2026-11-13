@@ -510,7 +510,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         );
     }
     let p = &resolved.params;
-    let model = &resolved.model;
+    let model = resolved.model();
     let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
     // The class and the regime the model derived (a giant keeps its
     // envelope and has none).
@@ -522,7 +522,11 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         "Planet → {} ({}) seed={} mass={:.3} M⊕ radius={:.3} R⊕ gravity≈{:.2}g \
          core={:.3} water={:.3} oceans envelope={:.4} life={} ({regime})",
         model.class.key(),
-        resolved.archetype.as_deref().unwrap_or("no archetype"),
+        resolved
+            .params
+            .archetype
+            .as_deref()
+            .unwrap_or("no archetype"),
         p.seed,
         model.inputs.mass_earth,
         model.interior.radius_earth,
@@ -607,7 +611,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     let system = mapgen::system::draw_around_params(
         &request,
         resolved.params.clone(),
-        resolved.model.clone(),
+        resolved.model().clone(),
     );
     let id = mapgen::system::system_id(&system);
     let dir = args.systems_dir.join(&id);

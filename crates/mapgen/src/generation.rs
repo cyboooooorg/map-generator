@@ -167,7 +167,7 @@ const CONTINENTAL_SHELF: f32 = 0.05;
 pub(crate) fn relief_share(p: &WorldParams) -> f32 {
     let radius_km = p.circumference_km / (2.0 * std::f32::consts::PI);
     let mut cap = SMALL_BODY_RELIEF * radius_km;
-    let stagnant = p.planet.geology.regime == Regime::Stagnant;
+    let stagnant = p.look.geology.regime == Regime::Stagnant;
     if stagnant && p.pressure_bar <= AIRLESS_BAR {
         let ice = if icy(p) { ICE_RELIEF } else { 1.0 };
         cap = cap.min(IMPACT_RELIEF_KM * ice);
@@ -477,7 +477,7 @@ impl Sampler {
             coast_octaves: coast_octaves(noise_scale, &grid),
             grid,
             sea_level: p.sea_level,
-            waterline: p.sea_level + p.planet.rules.waterline,
+            waterline: p.sea_level + p.look.rules.waterline,
             noise_scale,
             coast_noise: Perlin::new(stream_seed(seed, stream::COAST)),
             plate_seed: stream_seed(seed, stream::PLATES),
@@ -501,7 +501,7 @@ impl Sampler {
             variability_noise: Perlin::new(stream_seed(seed, stream::VARIABILITY)),
             highland_noise: Perlin::new(stream_seed(seed, stream::HIGHLAND)),
         };
-        if p.planet.geology.regime == crate::geology::Regime::Plates {
+        if p.look.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
             // edge of the shelf, from the continents' shape alone.
             let continental = |q| sampler.continental(q);
@@ -1096,9 +1096,9 @@ pub fn mean_surface_temperature_c(params: &WorldParams) -> f32 {
     let (rows, locked) = sea_level_rows(&coarse, &grid);
     let lapse = crate::climate::lapse_rate(&coarse);
     let flatten = relief_share(&coarse);
-    let rules_waterline = coarse.planet.rules.waterline;
+    let rules_waterline = coarse.look.rules.waterline;
     let waterline = coarse.sea_level + rules_waterline;
-    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+    let frame = (coarse.look.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
         .then(|| crate::plates::PlateFrame::new(&coarse));
     let sampler = Sampler::with_frame(&coarse, frame.as_ref());
     let (sum, total) = (0..grid.height)
@@ -1168,7 +1168,7 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let target = f64::from(fraction.clamp(0.0, 1.0));
     // The plates do not depend on the sea level, only their crust: built
     // once (at the present; drifted plates move with their crust).
-    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+    let frame = (coarse.look.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
         .then(|| crate::plates::PlateFrame::new(&coarse));
     // The land share minus the target, at a sea level.
     let excess = |level: f32| {
@@ -1176,7 +1176,7 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
             sea_level: level,
             ..coarse.clone()
         };
-        let waterline = level + p.planet.rules.waterline;
+        let waterline = level + p.look.rules.waterline;
         let sampler = Sampler::with_frame(&p, frame.as_ref());
         let land: f64 = (0..grid.height)
             .into_par_iter()
@@ -1267,7 +1267,7 @@ pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
     let grid = coarse.grid();
     let weights: Vec<f64> = (0..grid.height).map(|y| grid.latitude(y).cos()).collect();
     let total: f64 = weights.iter().sum::<f64>() * grid.width as f64;
-    let frame = (coarse.planet.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
+    let frame = (coarse.look.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
         .then(|| crate::plates::PlateFrame::new(&coarse));
     let metres = f64::from(crate::craters::ELEVATION_KM) * 1000.0;
     // The mean depth of the water at a sea level, minus the target, m.
@@ -1276,7 +1276,7 @@ pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
             sea_level: level,
             ..coarse.clone()
         };
-        let waterline = level + p.planet.rules.waterline;
+        let waterline = level + p.look.rules.waterline;
         let sampler = Sampler::with_frame(&p, frame.as_ref());
         let water: f64 = (0..grid.height)
             .into_par_iter()
@@ -1313,16 +1313,16 @@ const WATER_PASSES: usize = 12;
 /// regulated by a carbon cycle on wet worlds (fully with plate tectonics,
 /// partly under a stagnant lid), and the planet's own heat.
 fn star_climate(params: &WorldParams) -> StarClimate {
-    let planet = &params.planet;
+    let look = &params.look;
     StarClimate {
         star: params.star,
         orbit_au: params.orbit_au,
         eccentricity: params.eccentricity,
-        regulation: carbon_cycle(planet.geology.regime, params.pressure_bar),
+        regulation: carbon_cycle(look.geology.regime, params.pressure_bar),
         // A giant's moon: its tidal heat adds to its own, as radiated power.
         internal_heat_k: crate::exomoon::HostGiant::draw(params)
-            .map_or(planet.climate.internal_heat, |h| {
-                (planet.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
+            .map_or(look.climate.internal_heat, |h| {
+                (look.climate.internal_heat.powi(4) + h.tidal_heat_k.powi(4)).powf(0.25)
             }),
     }
 }
@@ -1408,7 +1408,7 @@ pub fn generate_with_progress(
         return crate::giant_world::generate(params, &progress);
     }
     let (width, height) = (params.width, params.height);
-    let planet = &params.planet;
+    let look = &params.look;
     let sink = options.debug;
     // Hands a debug layer to the sink, computing it only when there is one.
     let debug = |name: &'static str, ramp: Ramp, values: &dyn Fn() -> Vec<f32>| {
@@ -1428,7 +1428,7 @@ pub fn generate_with_progress(
     let sampler = Sampler::new(params);
     let fields = NoiseFields::sample(&sampler, width, height, sink);
 
-    let rules = &planet.rules;
+    let rules = &look.rules;
     let grid = params.grid();
     let n = params.pixel_count();
     // The tectonic plates, as diagnostic maps: those shaping the relief
@@ -1493,7 +1493,7 @@ pub fn generate_with_progress(
     if flatten < 1.0 {
         // Towards the waterline, where the floating crust is measured
         // from: the sea level itself sits above the altitude lines.
-        let waterline = params.sea_level + planet.rules.waterline;
+        let waterline = params.sea_level + look.rules.waterline;
         elevation
             .par_iter_mut()
             .for_each(|e| *e = waterline + (*e - waterline) * flatten);
@@ -1503,7 +1503,7 @@ pub fn generate_with_progress(
     let (row_temperature, locked) = sea_level_rows(params, &grid);
     let seasons = seasons(params);
     // The planet's shift and its atmosphere's greenhouse warming.
-    let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
+    let warming = look.climate.temperature + look.atmosphere.greenhouse;
     // Water carves where it thaws in summer.
     let thaw = crate::erosion::thaw(&seasons.land_summer(&row_temperature), warming, rules.polar);
     // Impact craters: those of the wet era are worn by the erosion, the
@@ -1676,7 +1676,7 @@ pub fn generate_with_progress(
     // Planet-type global offsets shift the whole climate before rivers and
     // biomes. Store the climate exactly as biome selection sees it, so the
     // exported data explains the biome of every pixel.
-    let shift = planet.climate;
+    let shift = look.climate;
     let (dt, dm, dvz) = (warming, shift.moisture, shift.volcanic);
     // Too thin an atmosphere keeps no liquid water: no rain anywhere, so no
     // rivers or lakes.
@@ -1718,9 +1718,9 @@ pub fn generate_with_progress(
         kind: if params.pressure_bar < AIRLESS_BAR {
             CloudKind::None
         } else {
-            planet.atmosphere.clouds
+            look.atmosphere.clouds
         },
-        cover_shift: planet.atmosphere.cloud_cover,
+        cover_shift: look.atmosphere.cloud_cover,
         precipitation: &precipitation,
         belts,
         seed: params.seed,
@@ -1730,7 +1730,7 @@ pub fn generate_with_progress(
         || {
             // Lava does not depend on rain: the flows of a volcanic world
             // run off everywhere alike.
-            let lava = planet.remap(Biome::River).is_lava();
+            let lava = look.remap(Biome::River).is_lava();
             let runoff: Vec<f32> = moisture
                 .par_iter()
                 .zip(&temperature)
@@ -1760,7 +1760,7 @@ pub fn generate_with_progress(
     // Planets without anything liquid to flow (rivers remapped to dry
     // ground) have no rivers to draw, carve or end in deltas: only the
     // drainage flow is kept. Lava rivers of volcanic worlds still flow.
-    let flowing = planet.remap(Biome::River);
+    let flowing = look.remap(Biome::River);
     let traced = (flowing.is_water() || flowing.is_lava()).then(|| rivers::trace(&grid, &water));
     // The receivers and river pixels only serve the tracing.
     water.release_routing();
@@ -1825,7 +1825,7 @@ pub fn generate_with_progress(
                 river: !lake[i] && river_coverage[i] >= rivers::RIVER_COVERAGE,
                 highland_offset: highland_offset[i],
             };
-            planet.remap(rules.choose(input))
+            look.remap(rules.choose(input))
         })
         .collect();
 
@@ -1866,7 +1866,7 @@ pub fn generate_with_progress(
 pub(crate) mod tests {
     use super::*;
     use crate::climate::EARTH_AXIAL_TILT_DEG;
-    use crate::preset::Preset;
+    use crate::look::Look;
 
     #[test]
     fn volcanoes_rise_without_a_step() {
@@ -1906,7 +1906,7 @@ pub(crate) mod tests {
             ..params.clone()
         };
         let grid = p.grid();
-        let waterline = level + p.planet.rules.waterline;
+        let waterline = level + p.look.rules.waterline;
         let sampler = Sampler::new(&p);
         let (mut land, mut total) = (0.0, 0.0);
         for y in 0..grid.height {
@@ -1964,8 +1964,8 @@ pub(crate) mod tests {
         for target_k in [250.0, 288.0, 330.0] {
             let mut params = params(7, "terran");
             (params.width, params.height) = (128, 64);
-            params.planet.atmosphere.greenhouse = 0.0;
-            params.planet.climate.temperature = warming_for(&params, target_k);
+            params.look.atmosphere.greenhouse = 0.0;
+            params.look.climate.temperature = warming_for(&params, target_k);
             let mean = mean_k(&params);
             eprintln!("target {target_k} K: mean {mean:.2} K");
             assert!((mean - target_k).abs() < 5.0, "{mean} vs {target_k}");
@@ -1980,8 +1980,8 @@ pub(crate) mod tests {
             (params.width, params.height) = (128, 64);
             (params.star, params.orbit_au) = (m4, orbit);
             params.locked_to_star = Some(true);
-            params.planet.atmosphere.greenhouse = 0.0;
-            params.planet.climate.temperature = warming_for(&params, target_k);
+            params.look.atmosphere.greenhouse = 0.0;
+            params.look.climate.temperature = warming_for(&params, target_k);
             let mean = mean_k(&params);
             eprintln!("locked, target {target_k} K: mean {mean:.2} K");
             assert!(
@@ -2056,7 +2056,10 @@ pub(crate) mod tests {
             width: 64,
             height: 32,
             seed,
-            planet: Preset::load(planet).unwrap(),
+            class: planet.to_string(),
+            archetype: None,
+            model: None,
+            look: Look::load(planet),
             sea_level: 0.1,
             volcanic_intensity: 0.5,
             circumference_km: EARTH_CIRCUMFERENCE_KM,
@@ -2084,80 +2087,58 @@ pub(crate) mod tests {
         }
     }
 
-    /// The parameters a preset (a built-in name or a preset file) gives a
-    /// world without the planet model, as tests pin them: [`params`] at
-    /// `width` × `height`, with the preset's star and orbit (`[star]`,
-    /// its resonance included) and defaults (each range drawn from
-    /// `seed`), its land share turned into a sea level, no erosion without
-    /// air unless the preset sets one, and its regime decided from them.
-    /// What resolving a request gave before the planet model (part 3b of
-    /// #423), without the moons' effects on the tilt and the shores.
+    /// The parameters of a world as tests pin them, at `width` × `height`:
+    ///
+    /// - a built-in archetype (`earth-like`, `mars-like`…): its world as a
+    ///   request resolves it (its star, orbit, size and model), its sea
+    ///   level and temperature calibrated on its model, without moons;
+    /// - a built-in look (`terran`, `caustic`…): [`params`], without the
+    ///   planet model, with the look's own regime decided from its size
+    ///   and air.
     pub fn preset_params(planet: &str, seed: u32, width: u32, height: u32) -> WorldParams {
-        use rand::SeedableRng;
+        if crate::archetype::built_in_names().contains(&planet) {
+            let request = crate::request::WorldRequest {
+                planet: Some(planet.to_string()),
+                seed: Some(seed),
+                width: Some(width),
+                height: Some(height),
+                moons: Some(crate::moons::MoonsMode::None),
+                ..Default::default()
+            };
+            let resolved = request
+                .resolve(
+                    &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed)),
+                )
+                .unwrap();
+            let mut p = resolved.params.clone();
+            crate::planet::interim::calibrate(&mut p, resolved.model());
+            return p;
+        }
         let mut p = params(seed, planet);
         (p.width, p.height) = (width, height);
-        let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(seed));
-        let d = p.planet.defaults.clone();
-        let mut pick =
-            |v: Option<crate::preset::ParamDefault>, fb: f32| v.map_or(fb, |v| v.pick(&mut rng));
-        p.sea_level = pick(d.sea_level, p.sea_level);
-        p.volcanic_intensity = pick(d.volcanic, p.volcanic_intensity);
-        p.circumference_km = pick(d.circumference, p.circumference_km);
-        p.axial_tilt_deg = pick(d.axial_tilt, p.axial_tilt_deg);
-        p.erosion = pick(d.erosion, p.erosion);
-        p.pressure_bar = pick(d.pressure, p.pressure_bar);
-        p.surface_age_ga = pick(d.surface_age, p.surface_age_ga);
-        let land = d.land_fraction.map(|f| pick(Some(f), 0.0));
-        let star = p.planet.star.clone();
-        if let Some(kind) = &star.kind {
-            p.star = crate::star::parse_type(kind).unwrap();
-        }
-        if let Some(au) = star.orbit_au {
-            p.orbit_au = au;
-        }
-        if let Some(e) = star.eccentricity {
-            p.eccentricity = pick(Some(e), 0.0);
-        }
-        if let Some(m) = star.metallicity {
-            p.metallicity = m;
-        }
-        if let Some(turns) = star
-            .resonance
-            .as_deref()
-            .and_then(crate::spin::parse_resonance)
-        {
-            p.locked_to_star = Some(turns == 1.0);
-            p.resonance_to_star = Some(if turns == 1.0 { 0.0 } else { turns });
-        }
-        if d.erosion.is_none() && p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR {
-            p.erosion = 0.0;
-        }
-        if let Some(fraction) = land {
-            p.sea_level = sea_level_for_land_fraction(&p, fraction);
-        }
-        p.planet.geology.regime = crate::geology::regime_of(&p);
+        p.look.geology.regime = crate::geology::regime_of(&p);
         p
     }
 
-    /// An example world resolved at a small size.
+    /// An archetype's world resolved at a small size.
     fn example_world(planet: &str, star: Option<&str>, orbit_au: Option<f32>) -> WorldParams {
-        let path = format!(
-            "{}/../../presets/examples/{planet}.toml",
-            env!("CARGO_MANIFEST_DIR")
-        );
-        let mut p = preset_params(&path, 1, 192, 96);
+        let mut p = preset_params(planet, 1, 192, 96);
         if let Some(star) = star {
             p.star = crate::star::parse_type(star).unwrap();
         }
         if let Some(au) = orbit_au {
             p.orbit_au = au;
             p.eccentricity = 0.1;
-            // Its preset's spin holds at its own orbit only.
+            // Its spin holds at its own orbit only.
             p.locked_to_star = None;
             p.resonance_to_star = None;
         }
         p.moons = crate::moons::MoonsMode::None;
-        p.planet.geology.regime = crate::geology::regime_of(&p);
+        // Aimed again at the temperature of its model, at the star and
+        // orbit it was moved to.
+        if let Some(model) = p.model.clone().filter(|m| m.surface.is_some()) {
+            crate::planet::interim::calibrate(&mut p, &model);
+        }
         p
     }
 
@@ -2269,15 +2250,15 @@ pub(crate) mod tests {
             let mut p = params(5, planet);
             // Without plate tectonics on either, which would add relief to
             // the terran world only.
-            p.planet.geology.regime = crate::geology::Regime::Episodic;
+            p.look.geology.regime = crate::geology::Regime::Episodic;
             generate(&WorldParams { erosion: 0.0, ..p }).world
         };
         // Both around the Sun at 1 AU, where the star changes nothing.
         let (caustic, terran) = (world("caustic"), world("terran"));
-        // The caustic preset warms every pixel by its shift and greenhouse.
-        let planet = &caustic.params.planet;
-        let shift = planet.climate.temperature + planet.atmosphere.greenhouse;
-        assert_eq!(planet.climate.temperature, 4.5);
+        // The caustic look warms every pixel by its shift and greenhouse.
+        let look = &caustic.params.look;
+        let shift = look.climate.temperature + look.atmosphere.greenhouse;
+        assert_eq!(look.climate.temperature, 4.5);
         for (c, t) in caustic.temperature.iter().zip(&terran.temperature) {
             assert!((c - (t + shift)).abs() < 1e-3, "{c} vs {t}");
         }
@@ -2314,7 +2295,7 @@ pub(crate) mod tests {
     /// waterline, km, each with its pixel's area.
     fn hypsometry(w: &World) -> (Heights, Heights) {
         let p = &w.params;
-        let waterline = p.sea_level + p.planet.rules.waterline;
+        let waterline = p.sea_level + p.look.rules.waterline;
         let grid = p.grid();
         let (mut land, mut sea) = (Vec::new(), Vec::new());
         for (i, &e) in w.elevation.iter().enumerate() {
@@ -2340,14 +2321,11 @@ pub(crate) mod tests {
         // ETOPO 2022 (ice surface): land median 0.42 km, 56 % under 500 m,
         // 10.8 % above 2 km, 1.8 % above 4 km; 1 % of the sea floor deeper
         // than 6 km. Each seed within a band around them.
-        let earth = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/examples/earth-like.toml"
-        );
+        let earth = "earth-like";
         for seed in [1u32, 2, 3] {
             let p = preset_params(earth, seed, 256, 128);
             let (land, sea) = hypsometry(&generate(&p).world);
-            // The land the preset asks for (0.29).
+            // The land share of Earth's oceans (0.29).
             let area = |v: &[(f32, f32)]| v.iter().map(|x| x.1).sum::<f32>();
             let share = area(&land) / (area(&land) + area(&sea));
             assert!((share - 0.29).abs() < 0.05, "seed {seed}: land {share}");
@@ -2368,10 +2346,7 @@ pub(crate) mod tests {
         // Köppen's arid climates B cover 30.2 % of Earth's land (Peel et al.
         // 2007), the tropical ones 19.0 %. Four seeds together, as the
         // calibration was made.
-        let earth = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/examples/earth-like.toml"
-        );
+        let earth = "earth-like";
         let (mut land, mut arid, mut tropical) = (0.0f64, 0.0f64, 0.0f64);
         // Mean rain of the 0-10° belt and of the 20-35° belts, mm.
         let mut belt = [(0.0f64, 0.0f64); 2];
@@ -2564,12 +2539,9 @@ pub(crate) mod tests {
 
     #[test]
     fn an_icy_moon_asked_for_alone_has_ices_gravity() {
-        let file = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/moons/icy-moon.toml"
-        );
         let p = WorldParams {
-            planet: Preset::load(file).unwrap(),
+            class: "icy-moon".into(),
+            look: Look::moon(crate::moons::Composition::Ice),
             circumference_km: 9_800.0,
             ..params(0, "terran")
         };

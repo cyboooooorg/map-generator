@@ -4,7 +4,7 @@ import { liftSky, skyFromWorld, sunDeclinationDeg } from './sky';
 
 const EARTH = { rayleigh: [0.17, 0.41, 1.0], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds: 'water', cloud_cover: 0 };
 const world = (pressure: number, atmosphere: object = EARTH) =>
-  ({ pressure_bar: pressure, preset: { atmosphere: { ...EARTH, ...atmosphere } } }) as unknown as WorldMetadata;
+  ({ pressure_bar: pressure, look: { atmosphere: { ...EARTH, ...atmosphere } } }) as unknown as WorldMetadata;
 
 describe('skyFromWorld', () => {
   it('gives airless worlds no sky', () => {

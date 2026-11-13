@@ -6,7 +6,7 @@
 //!    altitude/temperature/moisture → base biome → volcanic override.
 //!
 //! Planet-specific climate shifts and biome remapping live in the planet
-//! presets (see [`crate::preset`]).
+//! looks (see [`crate::look`]).
 use serde::{Deserialize, Serialize};
 
 // ── Biome type ────────────────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ pub fn biome_name(b: Biome) -> &'static str {
 /// in `[-1, 1]`; temperatures in °C (annual means); moisture in `[-1, 1]`; volcanic
 /// zone in `[0, 1]`.
 ///
-/// In a planet preset, the `[rules]` table overrides any of these fields;
+/// In a look, the `[rules]` table overrides any of these fields;
 /// the others keep their default value.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
@@ -513,7 +513,7 @@ impl BiomeInput {
 
 impl BiomeRules {
     /// Selects the biome of a pixel: altitude band, then volcanic override.
-    /// Planet presets remap the result afterwards.
+    /// Planet looks remap the result afterwards.
     pub fn choose(&self, input: BiomeInput) -> Biome {
         let BiomeInput {
             elevation: e,
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn lava_overrides_lakes_and_rivers() {
-        let rules = crate::preset::Preset::load("terran").unwrap().rules;
+        let rules = crate::look::Look::load("terran").rules;
         let input = |lake: bool, river: bool, volcanic_zone: f32| BiomeInput {
             elevation: rules.highland + 0.05,
             moisture: 0.2,
@@ -753,7 +753,7 @@ mod tests {
 
     #[test]
     fn cones_rise_out_of_the_lowland() {
-        let rules = crate::preset::Preset::load("terran").unwrap().rules;
+        let rules = crate::look::Look::load("terran").rules;
         let forest = |volcanic_zone: f32| {
             rules.choose(BiomeInput {
                 elevation: -0.12,
@@ -774,10 +774,10 @@ mod tests {
         assert_eq!(forest(0.95), Biome::Volcano);
     }
 
-    use crate::preset::Preset;
+    use crate::look::Look;
 
-    /// Every biome a planet preset can produce, over a coarse grid of inputs.
-    fn reachable(preset: &Preset) -> std::collections::BTreeSet<Biome> {
+    /// Every biome a planet look can produce, over a coarse grid of inputs.
+    fn reachable(look: &Look) -> std::collections::BTreeSet<Biome> {
         let steps = |lo: f32, hi: f32| (0..=20).map(move |i| lo + (hi - lo) * i as f32 / 20.0);
         let mut out = std::collections::BTreeSet::new();
         for e in steps(-1.0, 1.0) {
@@ -796,7 +796,7 @@ mod tests {
                                 river,
                                 highland_offset: 0.0,
                             };
-                            out.insert(preset.remap(preset.rules.choose(input)));
+                            out.insert(look.remap(look.rules.choose(input)));
                         }
                     }
                 }
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn barren_worlds_have_no_water_or_life() {
-        let biomes = reachable(&Preset::load("barren").unwrap());
+        let biomes = reachable(&Look::load("barren"));
         for b in [
             Biome::Lake,
             Biome::River,
@@ -941,16 +941,11 @@ mod tests {
             ),
             ("barren", &[Biome::RockyWaste, Biome::DustPlain]),
         ];
-        for preset in Preset::built_in() {
-            let biomes = reachable(&preset);
+        for (name, look) in Look::built_in() {
+            let biomes = reachable(&look);
             for (owner, list) in exclusive {
                 for b in list {
-                    assert_eq!(
-                        biomes.contains(b),
-                        owner == preset.name,
-                        "{b:?} on {}",
-                        preset.name
-                    );
+                    assert_eq!(biomes.contains(b), owner == name, "{b:?} on {name}");
                 }
             }
         }

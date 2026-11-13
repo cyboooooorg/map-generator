@@ -138,7 +138,7 @@ function round(value: number, digits: number): number {
 /** The generation request that reproduces a world exactly. */
 export function requestFromWorld(meta: WorldMetadata): WorldRequest {
   return {
-    planet: meta.planet_type,
+    ...(meta.archetype ? { planet: meta.archetype } : {}),
     seed: meta.seed,
     sea_level: round(meta.sea_level, 4),
     // A giant has no ground: its volcanism, circumference and erosion are
@@ -239,7 +239,7 @@ export function formatAtmosphere(meta: WorldMetadata): string {
   }
   const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
   const bar = withUnit(formatNumber(pressure, digits), 'bar');
-  const clouds = meta.preset.atmosphere.clouds;
+  const clouds = meta.look.atmosphere.clouds;
   return clouds === 'none'
     ? t.worldInfo.pressureNoClouds({ pressure: bar })
     : t.worldInfo.pressureClouds({ pressure: bar, clouds: t.clouds[clouds] });
@@ -250,7 +250,7 @@ export function formatAtmosphere(meta: WorldMetadata): string {
  * surface 3.8 billion years", in the active locale.
  */
 export function formatGeology(meta: WorldMetadata): string {
-  const regime = t.regimes[meta.preset.geology.regime];
+  const regime = t.regimes[meta.look.geology.regime];
   return t.worldInfo.geologySurface({ regime, age: formatSurfaceAge(meta.surface_age_ga) });
 }
 

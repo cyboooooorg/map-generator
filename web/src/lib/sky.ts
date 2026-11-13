@@ -33,7 +33,7 @@ const HAZE_DEPTH = 2.0;
 /** The sky of a world, or null when it has none. */
 export function skyFromWorld(meta: WorldMetadata): Sky | null {
   const pressure = meta.pressure_bar;
-  const atmosphere = meta.preset.atmosphere;
+  const atmosphere = meta.look.atmosphere;
   if (pressure < AIRLESS_BAR) {
     return null;
   }
@@ -80,7 +80,7 @@ export function liftSky(sky: Sky, lift: number): Sky {
 
 /** Linear colour of a world's clouds: white water, pale yellow sulfuric acid, ochre dust. */
 export function cloudTint(meta: WorldMetadata): [number, number, number] {
-  switch (meta.preset.atmosphere?.clouds) {
+  switch (meta.look.atmosphere?.clouds) {
     case 'sulfuric':
       return [0.9, 0.82, 0.55];
     case 'dust':

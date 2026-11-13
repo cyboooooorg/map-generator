@@ -25,7 +25,8 @@
 use crate::biome::{biome_color, surface_color};
 use crate::climate::TEMPERATURE_RANGE;
 use crate::generation::COAST_DISTANCE_CAP_KM;
-use crate::preset::Preset;
+use crate::look::Look;
+use crate::planet::PlanetModel;
 use crate::rivers::{RiverLine, RiversFile};
 use crate::star::StarInfo;
 use crate::world::WorldParams;
@@ -51,8 +52,11 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// which have no normals, are refused. Version 17 generates a planet's
 /// world from its derived state (see [`crate::planet`]) and goes with
 /// the second [`crate::system::SYSTEM_FORMAT_VERSION`] bump: worlds and
-/// systems of the earlier formats are refused.
-pub const FORMAT_VERSION: u32 = 17;
+/// systems of the earlier formats are refused. Version 18 stores the
+/// planet's `class`, `archetype`, `model` and `look` in `world.json`
+/// instead of its `planet_type` and `preset`, and goes with the fourth
+/// [`crate::system::SYSTEM_FORMAT_VERSION`].
+pub const FORMAT_VERSION: u32 = 18;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -60,7 +64,7 @@ pub const FORMAT_VERSION: u32 = 17;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 17;
+pub const MIN_FORMAT_VERSION: u32 = 18;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -74,11 +78,19 @@ pub struct WorldMetadata {
     pub height: u32,
     pub projection: String,
     pub seed: u32,
-    /// Name of the planet preset.
-    pub planet_type: String,
-    /// The full resolved preset, so the world can be regenerated even if the
-    /// preset file changes or disappears.
-    pub preset: Preset,
+    /// The class key of the world (`rocky`, `ice-giant`…), or `rocky-moon` /
+    /// `icy-moon` for a moon.
+    pub class: String,
+    /// The archetype the planet was asked as, for display only; left out
+    /// for a planet drawn from its context and for a moon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archetype: Option<String>,
+    /// The planet's model; left out for a moon (part 4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<PlanetModel>,
+    /// The full look the world renders with, so it can be regenerated even
+    /// if the look files change (internal until #424).
+    pub look: Look,
     pub sea_level: f32,
     pub volcanic_intensity: f32,
     pub circumference_km: f32,
@@ -588,8 +600,10 @@ pub(crate) fn write_raw_data(
         height: h,
         projection: "equirectangular, row 0 = north pole, column 0 = longitude 0".into(),
         seed: world.params.seed,
-        planet_type: world.params.planet.name.clone(),
-        preset: world.params.planet.clone(),
+        class: world.params.class.clone(),
+        archetype: world.params.archetype.clone(),
+        model: world.params.model.clone(),
+        look: world.params.look.clone(),
         sea_level: world.params.sea_level,
         volcanic_intensity: world.params.volcanic_intensity,
         circumference_km: world.params.circumference_km,
@@ -1011,7 +1025,10 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         width: meta.width,
         height: meta.height,
         seed: meta.seed,
-        planet: meta.preset.clone(),
+        class: meta.class.clone(),
+        archetype: meta.archetype.clone(),
+        model: meta.model.clone(),
+        look: meta.look.clone(),
         sea_level: meta.sea_level,
         volcanic_intensity: meta.volcanic_intensity,
         circumference_km: meta.circumference_km,
@@ -1155,7 +1172,6 @@ pub fn load_world(world_dir: &Path) -> Result<World, String> {
 mod tests {
     use super::*;
     use crate::generation::generate;
-    use crate::preset::Preset;
     use crate::world::WorldParams;
 
     #[test]
@@ -1188,17 +1204,14 @@ mod tests {
         // The seasons the biomes were chosen with are those a world reads
         // (on the generated world: its stored temperatures are quantised,
         // which can move a pixel right at a threshold).
-        let rules = &world.params.planet.rules;
+        let rules = &world.params.look.rules;
         for i in 0..world.biomes.len() {
             let stored = world.biomes[i];
             // The lake flag is not stored: lakes, and frozen lakes stored
             // as ice cap, are left out.
             if !matches!(stored, Biome::Lake | Biome::River | Biome::IceCap) {
                 assert_eq!(
-                    world
-                        .params
-                        .planet
-                        .remap(rules.choose(world.biome_input(i))),
+                    world.params.look.remap(rules.choose(world.biome_input(i))),
                     stored
                 );
             }
@@ -1210,15 +1223,7 @@ mod tests {
     #[test]
     fn a_world_with_a_long_solar_day_reads_the_swing_of_its_day() {
         // Mercury in its 3:2 resonance: a solar day of two years.
-        let params = crate::generation::tests::preset_params(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../presets/examples/mercury-like.toml"
-            ),
-            3,
-            32,
-            16,
-        );
+        let params = crate::generation::tests::preset_params("mercury-like", 3, 32, 16);
         let world = generate(&params).world;
         let world_dir =
             std::env::temp_dir().join(format!("map-generator-day-test-{}", std::process::id()));
@@ -1232,6 +1237,58 @@ mod tests {
         std::fs::remove_dir_all(&world_dir).unwrap();
     }
 
+    /// An Earth-like world at 128×64, exported into a fresh directory.
+    fn exported_earth(name: &str) -> (World, std::path::PathBuf) {
+        let params = crate::generation::tests::preset_params("earth-like", 5, 128, 64);
+        assert_eq!(params.archetype.as_deref(), Some("earth-like"));
+        let world = generate(&params).world;
+        let world_dir =
+            std::env::temp_dir().join(format!("map-generator-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&world_dir);
+        let dir = world_dir.join("raw_data");
+        std::fs::create_dir_all(&dir).unwrap();
+        export_raw_data(&world, &dir, None).unwrap();
+        (world, world_dir)
+    }
+
+    #[test]
+    fn world_json_carries_the_model_and_the_look() {
+        let (world, world_dir) = exported_earth("world-json");
+        let text = std::fs::read_to_string(world_dir.join("raw_data/world.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(json["format_version"], FORMAT_VERSION);
+        assert_eq!(json["class"], world.params.class.as_str());
+        assert_eq!(json["archetype"], "earth-like");
+        assert!(json["model"]["inputs"].is_object(), "{}", json["model"]);
+        assert!(json["look"]["rules"].is_object());
+        assert!(json.get("preset").is_none());
+        assert!(json.get("planet_type").is_none());
+        std::fs::remove_dir_all(&world_dir).unwrap();
+    }
+
+    #[test]
+    fn a_world_reloads_from_its_metadata() {
+        let (world, world_dir) = exported_earth("reload");
+        let back = load_world(&world_dir).unwrap();
+        let json = |p: &WorldParams| {
+            (
+                p.class.clone(),
+                p.archetype.clone(),
+                serde_json::to_value(&p.model).unwrap(),
+                serde_json::to_value(&p.look).unwrap(),
+            )
+        };
+        assert_eq!(json(&back.params), json(&world.params));
+        for b in Biome::ALL {
+            assert_eq!(
+                back.params.look.remap(b),
+                world.params.look.remap(b),
+                "{b:?}"
+            );
+        }
+        std::fs::remove_dir_all(&world_dir).unwrap();
+    }
+
     #[test]
     fn layers_round_trip() {
         let world = generate(&WorldParams {
@@ -1239,7 +1296,10 @@ mod tests {
             width: 32,
             height: 16,
             seed: 9,
-            planet: Preset::load("caustic").unwrap(),
+            class: "caustic".into(),
+            archetype: None,
+            model: None,
+            look: Look::load("caustic"),
             sea_level: 0.0,
             volcanic_intensity: 0.5,
             circumference_km: 40_075.0,
@@ -1282,12 +1342,15 @@ mod tests {
                 assert!((decoded - world.elevation[i]).abs() < 1e-4);
             }
         }
-        // world.json reads back into its typed form, preset included.
+        // world.json reads back into its typed form, look included.
         let meta: WorldMetadata =
             serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap())
                 .unwrap();
-        assert_eq!(meta.planet_type, "caustic");
-        assert_eq!(meta.preset.name, "caustic");
+        assert_eq!(meta.class, "caustic");
+        assert_eq!(
+            meta.look.remap(Biome::Ocean),
+            Look::load("caustic").remap(Biome::Ocean)
+        );
         assert_eq!(meta.biomes.len(), Biome::ALL.len());
         assert_eq!(meta.layers.flow.encoding, "gray16-log10");
         // The star round-trips: a red dwarf at 0.1 AU.
@@ -1295,7 +1358,7 @@ mod tests {
         assert_eq!(star.kind, "M4.5V");
         assert_eq!((star.code(), star.orbit_au), (64.5, 0.1));
 
-        // The world reloads with every layer, and its preset can remap.
+        // The world reloads with every layer, and its look can remap.
         // The stored layers are exactly the quantised world, and decode to
         // the same values as the full reload.
         let layers = load_layers(&world_dir).unwrap();
@@ -1319,7 +1382,7 @@ mod tests {
 
         let back = load_world(&world_dir).unwrap();
         assert_eq!(back.biomes, world.biomes);
-        assert_eq!(back.params.planet.name, "caustic");
+        assert_eq!(back.params.class, "caustic");
         assert!(
             back.volcanic_zone
                 .iter()
@@ -1332,7 +1395,7 @@ mod tests {
                 .zip(&world.coast_distance_km)
                 .all(|(a, b)| (a - b).abs() < 0.05)
         );
-        assert_eq!(back.params.planet.remap(Biome::Ocean), Biome::AcidSea);
+        assert_eq!(back.params.look.remap(Biome::Ocean), Biome::AcidSea);
         assert_eq!(back.rivers.len(), world.rivers.len());
         assert!(
             back.floodplain

@@ -1,23 +1,12 @@
 # A hot Jupiter: a gas giant a few days from its star, tidally locked,
 # inflated, dark (alkali metals or silicate clouds), its night side
 # glowing when it is hot enough.
-name = "hot-jupiter"
-description = "Hot Jupiter: a giant days from its star, locked, dark and inflated"
-
-[locales.fr]
-name = "Jupiter chaud"
-description = "Une géante à quelques jours de son étoile : verrouillée, sombre, gonflée"
 
 [giant]                                # see `mapgen::giant_world`
 kind = "gas"
 mass = [60.0, 3000.0]                  # Earth masses: 51 Peg b about 150
 period_days = [1.0, 8.0]               # days: placed by its period, not in the habitable zone
 rings = [0.0, 0.05]                    # ice rings would boil away
-
-[defaults]
-pressure = 0.3                         # bar: a thin sky above the cloud tops, so the bands show
-surface_age = 0.0                      # no ground: no craters
-axial_tilt = [0.0, 3.0]                # tides have righted it
 
 [atmosphere]
 rayleigh = [0.4, 0.38, 0.36]             # the gas scatters little blue: the bands keep their colours

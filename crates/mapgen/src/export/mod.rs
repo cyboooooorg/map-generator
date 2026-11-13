@@ -348,9 +348,9 @@ pub(crate) fn water_depths_of(
     biomes: &[Biome],
 ) -> Vec<f32> {
     let (w, h) = (params.width as usize, params.height as usize);
-    let planet = &params.planet;
-    let waterline = params.sea_level + planet.rules.waterline;
-    let river = planet.remap(Biome::River);
+    let look = &params.look;
+    let waterline = params.sea_level + look.rules.waterline;
+    let river = look.remap(Biome::River);
     let lake = |i: usize| biomes[i].is_water() && biomes[i] != river && elevation(i) >= waterline;
     let mut depth: Vec<f32> = (0..w * h)
         .into_par_iter()
@@ -455,7 +455,7 @@ impl MapLayers {
     /// Whether pixel `i` is drawn as a river over land (a river biome the
     /// coverage marks), not as water.
     pub fn on_river(&self, world: &World, i: usize) -> bool {
-        let river_biome = world.params.planet.remap(Biome::River);
+        let river_biome = world.params.look.remap(Biome::River);
         world.biomes[i] == river_biome && self.coverage[i] >= rivers::RIVER_COVERAGE
     }
 
@@ -475,7 +475,7 @@ impl MapLayers {
 /// over `raw_data/colour.png`, which has none.
 pub fn draw_contours(world: &World, layers: &MapLayers, pixels: &mut [[u8; 3]]) {
     let (w, h) = (world.width, world.height);
-    let river_biome = world.params.planet.remap(Biome::River);
+    let river_biome = world.params.look.remap(Biome::River);
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)];
     let crosses_contour = |a: f32, b: f32| CONTOUR_LEVELS.iter().any(|&lvl| (a < lvl) != (b < lvl));
     pixels
@@ -550,9 +550,9 @@ pub struct Rendered {
 pub fn render_both(world: &World, layers: &MapLayers) -> Rendered {
     let (w, h) = (world.width, world.height);
     let grid = world.params.grid();
-    let planet = &world.params.planet;
+    let look = &world.params.look;
     let (coverage, depths) = (&layers.coverage, &layers.depths);
-    let river_biome = planet.remap(Biome::River);
+    let river_biome = look.remap(Biome::River);
     let river_colour = linear_of(surface_color(river_biome));
     let variation = SurfaceVariation::new(world.params.seed, world.params.circumference_km as f64);
     let (lon_step, lat_step) = (
@@ -581,12 +581,12 @@ pub fn render_both(world: &World, layers: &MapLayers) -> Rendered {
             }
             // The land under a river: the biome the pixel has without it.
             let input = world.biome_input(i);
-            let dry = planet.rules.choose(input);
-            let land = planet.remap(dry);
+            let dry = look.rules.choose(input);
+            let land = look.remap(dry);
             // Lakes are not recomputed without their flag: a pixel whose
             // biome differs from its recomputed one keeps a flat colour.
             let color = if land == biome || on_river {
-                ecotone_colour_around(planet, input, Some(land))
+                ecotone_colour_around(look, input, Some(land))
             } else {
                 surface_color(biome).map(f32::from)
             };
@@ -601,7 +601,7 @@ pub fn render_both(world: &World, layers: &MapLayers) -> Rendered {
                 f = 1.0 + (f - 1.0) * crate::detail::LAVA_SHADE;
                 normal = relief::soften(normal, crate::detail::LAVA_SHADE);
             }
-            let frozen = planet.rules.frozen(world.biome_input(i));
+            let frozen = look.rules.frozen(world.biome_input(i));
             let finish = |shade: f32| {
                 let mut color = color.map(|c| c * shade);
                 // Fresh craters: bright ejecta and rays, on rock (not on lava).
@@ -638,8 +638,8 @@ pub fn render_both(world: &World, layers: &MapLayers) -> Rendered {
 /// variation, so its run-length encoding stays compact; rivers are drawn
 /// as vector paths over it.
 fn render_flat(world: &World, layers: &MapLayers) -> Vec<[u8; 3]> {
-    let planet = &world.params.planet;
-    let river_biome = planet.remap(Biome::River);
+    let look = &world.params.look;
+    let river_biome = look.remap(Biome::River);
     (0..world.height)
         .into_par_iter()
         .flat_map_iter(|y| (0..world.width).map(move |x| (x, y)))
@@ -651,7 +651,7 @@ fn render_flat(world: &World, layers: &MapLayers) -> Vec<[u8; 3]> {
                 return flat_water_colour(biome, layers.depths[i])
                     .map(|c| c.clamp(0.0, 255.0) as u8);
             }
-            let land = planet.remap(planet.rules.choose(world.biome_input(i)));
+            let land = look.remap(look.rules.choose(world.biome_input(i)));
             biome_color(if on_river { land } else { biome })
         })
         .collect()
@@ -738,7 +738,7 @@ mod tests {
                     water += 1;
                     continue;
                 }
-                let dry = world.params.planet.rules.choose(world.biome_input(i));
+                let dry = world.params.look.rules.choose(world.biome_input(i));
                 let expected = if dry.is_lava() {
                     lava += 1;
                     soften(
@@ -908,7 +908,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mapgen-moons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // Generated as bodies of the planet's system, with it.
-        let drawn = crate::system::draw_around_params(&request, resolved.params, resolved.model);
+        let drawn = crate::system::draw_around_params(
+            &request,
+            resolved.params.clone(),
+            resolved.model().clone(),
+        );
         crate::system::write_system(&dir, &drawn).unwrap();
         let planet = drawn.focus.clone().unwrap();
         let done = crate::system::generate_neighbourhood(&dir, &planet, |_| {}).unwrap();
@@ -921,9 +925,9 @@ mod tests {
                 .join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
             assert!(
-                ["icy-moon", "rocky-moon"].contains(&meta.planet_type.as_str()),
+                ["icy-moon", "rocky-moon"].contains(&meta.class.as_str()),
                 "{}",
-                meta.planet_type
+                meta.class
             );
             assert_eq!(meta.seed, moon.seed);
             assert!(
@@ -978,9 +982,9 @@ mod reference {
         let style = Style::Detailed;
         let (w, h) = (world.width, world.height);
         let grid = world.params.grid();
-        let planet = &world.params.planet;
+        let look = &world.params.look;
         let (coverage, depths) = (&layers.coverage, &layers.depths);
-        let river_biome = planet.remap(Biome::River);
+        let river_biome = look.remap(Biome::River);
         let river_colour = linear_of(surface_color(river_biome));
         let variation =
             SurfaceVariation::new(world.params.seed, world.params.circumference_km as f64);
@@ -1012,8 +1016,8 @@ mod reference {
                 }
                 // The land under a river: the biome the pixel has without it.
                 let input = world.biome_input(i);
-                let dry = planet.rules.choose(input);
-                let land = planet.remap(dry);
+                let dry = look.rules.choose(input);
+                let land = look.remap(dry);
                 if style == Style::Flat {
                     // Rivers are drawn as vector paths over the flat SVG map.
                     return biome_color(if on_river { land } else { biome });
@@ -1021,7 +1025,7 @@ mod reference {
                 // Lakes are not recomputed without their flag: a pixel whose
                 // biome differs from its recomputed one keeps a flat colour.
                 let mut color = if land == biome || on_river {
-                    ecotone_colour_around(planet, input, Some(land))
+                    ecotone_colour_around(look, input, Some(land))
                 } else {
                     surface_color(biome).map(f32::from)
                 };
@@ -1043,7 +1047,7 @@ mod reference {
                 // Anti-aliased river on top, except where it is frozen or under
                 // lava.
                 let c = coverage[i];
-                if c > 0.0 && !planet.rules.frozen(world.biome_input(i)) && !dry.is_lava() {
+                if c > 0.0 && !look.rules.frozen(world.biome_input(i)) && !dry.is_lava() {
                     color = blend_river(color, river_colour, c);
                 }
                 color.map(|c| c.clamp(0.0, 255.0) as u8)

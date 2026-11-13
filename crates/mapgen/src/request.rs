@@ -35,7 +35,7 @@ impl Limits {
 }
 
 // The ranges of the world parameters below (sea level to surface age, and
-// the erosion) bound what the planet model and the presets give a world;
+// the erosion) bound what the planet model and the looks give a world;
 // a request no longer sets them.
 
 /// Waterline shift: positive means more ocean.
@@ -111,9 +111,9 @@ pub const MAP_SIZE: (u32, u32) = (2, 16_384);
 pub const SIZE_PRESETS: [(u32, u32); 4] = [(1024, 512), (2048, 1024), (4096, 2048), (8192, 4096)];
 
 /// Generator defaults for world parameters that neither the planet model
-/// nor its preset sets.
+/// nor the look of its world sets (see `planet::interim`).
 pub mod fallback {
-    use crate::preset::ParamDefault;
+    use crate::archetype::ParamDefault;
     /// About 10–70 % land (mostly 20–55 %); Earth has 29 %.
     pub const SEA_LEVEL: ParamDefault = ParamDefault::Range([0.10, 0.40]);
     pub const VOLCANIC: ParamDefault = ParamDefault::Range([0.0, 1.0]);
@@ -334,22 +334,30 @@ impl fmt::Display for RequestError {
 
 impl std::error::Error for RequestError {}
 
-/// A resolved request: complete parameters and the planet model they come
-/// from.
+/// A resolved request: complete parameters, which carry the planet's model
+/// (`params.model`, derived under `body_seed(seed, "world/model")` in the
+/// context of its star and orbit; for the moon of a giant, the giant's
+/// orbit round the star) and the archetype the request named
+/// (`params.archetype`, `None` for a planet drawn from its formation
+/// context).
 #[derive(Clone, Debug)]
 pub struct Resolved {
     pub params: WorldParams,
-    /// The planet's model, derived under `body_seed(seed, "world/model")`
-    /// in the context of its star and orbit (for the moon of a giant, the
-    /// giant's orbit round the star).
-    pub model: PlanetModel,
-    /// The archetype the request named, `None` for a planet drawn from its
-    /// formation context.
-    pub archetype: Option<String>,
     /// Fields of the request the planet has no use for, ignored: a giant
     /// has no giant neighbours and is nobody's moon (`giants`, `host`); a
     /// lone planet has no giant neighbours (`giants`).
     pub ignored: Vec<&'static str>,
+}
+
+impl Resolved {
+    /// The planet's model.
+    ///
+    /// # Panics
+    ///
+    /// Never for a resolved request: only a moon has no model.
+    pub fn model(&self) -> &PlanetModel {
+        self.params.model.as_ref().expect("a planet has a model")
+    }
 }
 
 /// Where and around what a world sits, and what it asks of its world, once
@@ -577,7 +585,7 @@ impl WorldRequest {
         });
         let moons = self.moons.unwrap_or_default();
         let mut attempts = 0;
-        let (params, model) = loop {
+        let mut params = loop {
             let (star, age_gyr, orbit_au) = place(rng)?;
             let eccentricity = match asked_eccentricity {
                 Some(e) => e,
@@ -687,7 +695,7 @@ impl WorldRequest {
                 attempts += 1;
                 continue;
             }
-            break (params, model);
+            break params;
         };
         let giant = params.giant_mass_earth.is_some();
         let ignored: Vec<&'static str> = [
@@ -703,12 +711,8 @@ impl WorldRequest {
         .into_iter()
         .filter_map(|(field, set)| set.then_some(field))
         .collect();
-        Ok(Resolved {
-            params,
-            model,
-            archetype: archetype.map(|a| a.name),
-            ignored,
-        })
+        params.archetype = archetype.map(|a| a.name);
+        Ok(Resolved { params, ignored })
     }
 
     /**
@@ -897,8 +901,8 @@ mod tests {
     #[test]
     fn earth_like_resolves_through_the_model() {
         let resolved = resolve(&named(Some("earth-like"), 3)).unwrap();
-        assert_eq!(resolved.model.class, PlanetClass::Rocky);
-        assert_eq!(resolved.archetype.as_deref(), Some("earth-like"));
+        assert_eq!(resolved.model().class, PlanetClass::Rocky);
+        assert_eq!(resolved.params.archetype.as_deref(), Some("earth-like"));
         let p = &resolved.params;
         assert!(
             (p.circumference_km - 40_075.0).abs() < 4_007.5,
@@ -918,13 +922,13 @@ mod tests {
             ..named(Some("earth-like"), 3)
         };
         let resolved = resolve(&request).unwrap();
-        let surface = resolved.model.surface.expect("a surface");
+        let surface = resolved.model().surface.expect("a surface");
         assert_eq!(surface.water.oceans, 0.0);
-        let mut params = resolved.params;
-        crate::planet::interim::calibrate(&mut params, &resolved.model);
+        let mut params = resolved.params.clone();
+        crate::planet::interim::calibrate(&mut params, resolved.model());
         assert_eq!(params.sea_level, SEA_LEVEL.min);
         // The other inputs stay the archetype's.
-        assert_eq!(resolved.model.inputs.core_mass_fraction, 0.325_f32 as f64);
+        assert_eq!(resolved.model().inputs.core_mass_fraction, 0.325_f32 as f64);
     }
 
     #[test]
@@ -958,7 +962,7 @@ mod tests {
             let resolved = resolve(&named(Some("jupiter-like"), seed)).unwrap();
             let mass = resolved.params.giant_mass_earth.expect("a giant world");
             assert!((286.0..350.0).contains(&mass), "seed {seed}: {mass}");
-            assert_eq!(resolved.model.class, PlanetClass::GasGiant, "seed {seed}");
+            assert_eq!(resolved.model().class, PlanetClass::GasGiant, "seed {seed}");
             assert_eq!(resolved.params.gravity, None);
         }
     }
@@ -978,15 +982,15 @@ mod tests {
     fn an_unnamed_world_is_drawn_from_its_context() {
         let a = resolve(&named(None, 9)).unwrap();
         let b = resolve(&named(None, 9)).unwrap();
-        assert_eq!(a.archetype, None);
+        assert_eq!(a.params.archetype, None);
         assert_eq!(
             serde_json::to_value(&a.params).unwrap(),
             serde_json::to_value(&b.params).unwrap()
         );
-        assert_eq!(a.model, b.model);
+        assert_eq!(a.model(), b.model());
         // Drawn like a small planet.
         let (lo, hi) = crate::planet::SMALL_MASS;
-        assert!((lo..=hi).contains(&a.model.drawn_mass_earth));
+        assert!((lo..=hi).contains(&a.model().drawn_mass_earth));
     }
 
     #[test]
@@ -1033,12 +1037,12 @@ mod tests {
             for draw in 0..3u64 {
                 let rng = &mut StdRng::seed_from_u64(draw);
                 let resolved = request.resolve(rng).unwrap();
-                let pinned = request.pinned(&resolved.params, Some(&resolved.model));
+                let pinned = request.pinned(&resolved.params, Some(resolved.model()));
                 let again = pinned
                     .resolve(&mut StdRng::seed_from_u64(draw + 1000))
                     .unwrap();
                 assert!(again.ignored.is_empty(), "{pinned:?}: {:?}", again.ignored);
-                assert_eq!(again.model, resolved.model, "{pinned:?}");
+                assert_eq!(again.model(), resolved.model(), "{pinned:?}");
                 assert_eq!(
                     serde_json::to_value(&again.params).unwrap(),
                     serde_json::to_value(&resolved.params).unwrap(),
@@ -1194,13 +1198,13 @@ mod tests {
         let (mut free, mut steady) = (0, 0);
         for seed in 0..400 {
             let resolved = resolve(&earth_mass(seed)).unwrap();
-            let p = resolved.params;
+            let p = resolved.params.clone();
             let system = crate::moons::MoonSystem::draw(&p).unwrap();
             let effects = crate::moons::PlanetEffects::of(&p, Some(&system));
-            let base = crate::planet::interim::preset_for(&resolved.model)
+            let base = crate::planet::interim::look_for(resolved.model())
                 .rules
                 .shore_width_km;
-            assert!((p.planet.rules.shore_width_km - base * effects.shore_factor).abs() < 1e-3);
+            assert!((p.look.rules.shore_width_km - base * effects.shore_factor).abs() < 1e-3);
             if effects.stabilised {
                 steady += 1;
                 assert!(
@@ -1406,11 +1410,11 @@ mod tests {
                 }
                 forced += 1;
                 let p = &resolved.params;
-                let pinned = request.pinned(p, Some(&resolved.model));
+                let pinned = request.pinned(p, Some(resolved.model()));
                 let again = pinned
                     .resolve(&mut StdRng::seed_from_u64(u64::from(draw) + 1000))
                     .unwrap_or_else(|e| panic!("{pinned:?}: {e}"));
-                assert_eq!(again.model, resolved.model, "{pinned:?}");
+                assert_eq!(again.model(), resolved.model(), "{pinned:?}");
                 assert_eq!(
                     crate::spin::star_info(&again.params),
                     crate::spin::star_info(p),

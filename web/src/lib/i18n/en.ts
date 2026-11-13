@@ -725,11 +725,6 @@ export const en = {
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · not generated'}`,
     bodyTypes: {
-      terran: 'temperate',
-      barren: 'barren',
-      caustic: 'caustic',
-      frozen: 'frozen',
-      volcanic: 'volcanic',
       'gas-giant': 'Gas giant',
       'ice-giant': 'Ice giant',
       'hot-jupiter': 'Hot Jupiter',

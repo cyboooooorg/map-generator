@@ -603,7 +603,11 @@ async fn create_system(
                 let resolved = world.resolve(rng)?;
                 let ignored = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
                 Ok((
-                    mapgen::system::draw_around_params(world, resolved.params, resolved.model),
+                    mapgen::system::draw_around_params(
+                        world,
+                        resolved.params.clone(),
+                        resolved.model().clone(),
+                    ),
                     ignored,
                 ))
             }
@@ -2500,7 +2504,7 @@ mod tests {
         Config {
             systems_dir: root.join("systems"),
             db_path: root.join("db").join("mapgen.sqlite"),
-            presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
+            presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../archetypes")),
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
             tile_cache_bytes: tiles::DEFAULT_BUDGET_BYTES,
@@ -4046,12 +4050,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lists_built_in_and_example_presets() {
+    async fn lists_the_built_in_archetypes() {
         let app = router(temp_config("presets"));
         let (status, body) = call(&app, "GET", "/api/presets", None).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.contains("\"spec\":\"terran\""));
-        assert!(body.contains("\"spec\":\"examples/mars-like.toml\""));
+        assert!(body.contains("\"spec\":\"earth-like\""));
+        assert!(body.contains("\"spec\":\"jupiter-like\""));
     }
 
     #[tokio::test]
@@ -4459,7 +4463,7 @@ mod tests {
         let app = router(temp_config("system-paths"));
         for body in [
             r#"{"around": {"planet": "/etc/passwd.toml"}}"#,
-            r#"{"around": {"planet": "../presets/terran.toml"}}"#,
+            r#"{"around": {"planet": "../archetypes/earth-like.toml"}}"#,
             r#"{"around": {"planet": "nowhere"}}"#,
             r#"{"system": {"star": null, "metallicity": null, "planets": {"/etc/x.toml": 1}, "seed": 1, "width": 64, "height": 32}}"#,
         ] {

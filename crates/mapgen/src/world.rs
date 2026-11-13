@@ -1,7 +1,8 @@
 use crate::biome::BiomeInput;
 use crate::geo::Grid;
+use crate::look::Look;
 use crate::noise::EARTH_CIRCUMFERENCE_KM;
-use crate::preset::Preset;
+use crate::planet::PlanetModel;
 use crate::rivers::RiverLine;
 
 // Re-export so existing `use crate::world::*;` in other modules keeps working.
@@ -16,8 +17,19 @@ pub struct WorldParams {
     pub width: u32,
     pub height: u32,
     pub seed: u32,
-    /// Planet preset: climate shift, biome rules and biome remapping.
-    pub planet: Preset,
+    /// The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`.
+    pub class: String,
+    /// The archetype asked for, for display only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub archetype: Option<String>,
+    /// The planet's model; `None` for a moon (part 4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub model: Option<PlanetModel>,
+    /// How the world is drawn until #424 (see [`crate::look`]): climate
+    /// shift, biome rules and remapping, sky, geology and giant look.
+    pub look: Look,
     /// Elevation bias applied before biome selection.
     /// 0.0 = default. Positive → more ocean, negative → more land. Range [-1, 1].
     pub sea_level: f32,
@@ -59,7 +71,7 @@ pub struct WorldParams {
     /// Whether the world has the giant planets its seed draws (see
     /// `crate::giants`).
     pub giants: crate::giants::GiantsMode,
-    /// Mass of a giant planet, Earth masses: `Some` for a giant (its preset
+    /// Mass of a giant planet, Earth masses: `Some` for a giant (its look
     /// has a `[giant]` table, see `crate::giant_world`), `None` otherwise.
     pub giant_mass_earth: Option<f32>,
     /// Whether the world is the moon of a giant planet (see
@@ -207,7 +219,7 @@ impl WorldParams {
         }
         // An icy moon asked for on its own: the density of the icy moons
         // a system draws, 1.9 g/cm³ against Earth's 5.513.
-        if self.planet.name == "icy-moon" {
+        if self.class == "icy-moon" {
             return 1.9 / 5.513 * radius;
         }
         rocky_gravity(radius)
@@ -296,7 +308,7 @@ impl World {
     /// the pixel would have without them.
     pub fn biome_input(&self, i: usize) -> BiomeInput {
         let elevation = (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0);
-        let land = elevation >= self.params.planet.rules.waterline;
+        let land = elevation >= self.params.look.rules.waterline;
         BiomeInput {
             elevation,
             moisture: self.moisture[i],

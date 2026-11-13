@@ -8,7 +8,8 @@ import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, 
 const S = '\u202f';
 
 const meta = {
-  planet_type: 'frozen',
+  class: 'rocky',
+  archetype: 'earth-like',
   seed: 2590618090,
   sea_level: 0.121345,
   volcanic_intensity: 0.61071,
@@ -27,7 +28,7 @@ const meta = {
 describe('format', () => {
   it('rebuilds the request and the command line of a world', () => {
     expect(requestFromWorld(meta)).toEqual({
-      planet: 'frozen',
+      planet: 'earth-like',
       seed: 2590618090,
       sea_level: 0.1213,
       volcanic: 0.6107,
@@ -45,7 +46,7 @@ describe('format', () => {
       height: 1080,
     });
     expect(cliCommand(meta)).toBe(
-      'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
+      'mise run gen -- --planet earth-like --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
         '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 ' +
         '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --age 8.123456 --metallicity=0.1 --width 1920 --height 1080',
     );
@@ -76,19 +77,19 @@ describe('format', () => {
   });
 
   it('describes the atmosphere', () => {
-    const preset = { atmosphere: { clouds: 'dust' } };
-    expect(formatAtmosphere({ ...meta, pressure_bar: 0.006, preset } as unknown as WorldMetadata)).toBe(
+    const look = { atmosphere: { clouds: 'dust' } };
+    expect(formatAtmosphere({ ...meta, pressure_bar: 0.006, look } as unknown as WorldMetadata)).toBe(
       '0.0060 bar, dust clouds',
     );
-    expect(formatAtmosphere({ ...meta, pressure_bar: 0, preset } as unknown as WorldMetadata)).toBe('none');
+    expect(formatAtmosphere({ ...meta, pressure_bar: 0, look } as unknown as WorldMetadata)).toBe('none');
   });
 
   it("describes the geology", () => {
-    const preset = { geology: { regime: 'stagnant', wet_until: 3.5 } };
-    expect(formatGeology({ ...meta, surface_age_ga: 3.8, preset } as unknown as WorldMetadata)).toBe(
+    const look = { geology: { regime: 'stagnant', wet_until: 3.5 } };
+    expect(formatGeology({ ...meta, surface_age_ga: 3.8, look } as unknown as WorldMetadata)).toBe(
       'stagnant lid, surface 3.8 billion years (3.8 Ga)',
     );
-    expect(formatGeology({ ...meta, surface_age_ga: 0.02, preset } as unknown as WorldMetadata)).toBe(
+    expect(formatGeology({ ...meta, surface_age_ga: 0.02, look } as unknown as WorldMetadata)).toBe(
       'stagnant lid, surface 20 million years (20 Ma)',
     );
   });

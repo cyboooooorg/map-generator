@@ -46,7 +46,9 @@
   const size = $derived(meta ? world.size : null);
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
-  const title = $derived(forcedTitle ?? (meta ? presetName(meta.preset) : worldId));
+  // The archetype asked for, else the class of the planet.
+  const kind = $derived(meta ? { name: meta.archetype ?? meta.class } : null);
+  const title = $derived(forcedTitle ?? (kind ? presetName(kind) : worldId));
 
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
@@ -94,7 +96,7 @@
       <span class="title">
         <strong>{ofMoon ? t.worldInfo.planetHeading({ name: title ?? '' }) : title}</strong>
         <small
-          >{[meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
+          >{[kind ? presetName(kind) : null, forcedTitle ? null : worldId]
             .filter(Boolean)
             .join(' · ')}</small
         >
@@ -102,7 +104,7 @@
     </summary>
 
     {#if meta}
-      <p class="description">{presetDescription(meta.preset)}</p>
+      <p class="description">{presetDescription({ name: meta.archetype ?? meta.class })}</p>
       <dl>
         <dt>{t.worldInfo.seed}</dt>
         <dd>{meta.seed}</dd>

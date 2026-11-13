@@ -25,7 +25,7 @@ export function epochRange(meta: WorldMetadata): [number, number] | null {
   if (meta.pressure_bar >= LIQUID_WATER_BAR) {
     return null;
   }
-  const wetUntil = meta.preset.geology.wet_until;
+  const wetUntil = meta.look.geology.wet_until;
   return [-FUTURE_MA, Math.floor(Math.min(age, wetUntil) * 1000)];
 }
 

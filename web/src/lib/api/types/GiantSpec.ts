@@ -3,7 +3,7 @@ import type { GiantKind } from "./GiantKind";
 import type { ParamDefault } from "./ParamDefault";
 
 /**
- * The `[giant]` table of a giant planet's preset.
+ * The `[giant]` table of a giant planet's look.
  */
 export type GiantSpec = { 
 /**

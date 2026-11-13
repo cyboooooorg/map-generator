@@ -1041,7 +1041,7 @@ const EARTH_SUN_TIDE: f64 = 0.46 * EARTH_MOON_TIDE;
 /// Share of a giant's still tidal bulge that an eccentric orbit swings,
 /// per unit of eccentricity (the radial tide varies as `3e`).
 const GIANT_TIDE_SWING: f64 = 3.0;
-/// Range of the shore width, as a share of the preset's: no tides (a
+/// Range of the shore width, as a share of the look's: no tides (a
 /// planet locked to its star) to strong ones. It follows the fourth root of
 /// the tides: flats widen with their range, but far more with the slope of
 /// the coast, which the tides do not change.
@@ -1066,7 +1066,7 @@ pub struct PlanetEffects {
     pub stabilised: bool,
     /// The range of the tides (moons and star), relative to Earth's.
     pub tide: f32,
-    /// The preset's shore width is multiplied by this: tidal flats widen
+    /// The look's shore width is multiplied by this: tidal flats widen
     /// with the tides.
     pub shore_factor: f32,
 }
@@ -1177,7 +1177,7 @@ pub fn moon_tilt_deg(moon: &Moon) -> f32 {
 const SHAPE_BUMPS: f64 = 0.12;
 
 /// The world of `moon`, one of the moons of the world `planet`: a body of
-/// the `rocky-moon` or `icy-moon` preset, airless and never wet, cratered
+/// the `rocky-moon` or `icy-moon` look, airless and never wet, cratered
 /// for 4 Ga, under the planet's star, its map as many pixels per km as the
 /// planet's (at least [`MOON_MIN_WIDTH`] wide, at most the planet's
 /// width), tilted by [`moon_tilt_deg`]. The long axis of an irregular or
@@ -1199,9 +1199,25 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
 }
 
 /// Whether `p` is the world of a moon of a system (the `rocky-moon` or
-/// `icy-moon` preset, see [`small_body_params`]).
+/// `icy-moon` class, see [`small_body_params`]).
 pub fn is_moon_world(p: &WorldParams) -> bool {
-    matches!(p.planet.name.as_str(), "rocky-moon" | "icy-moon")
+    matches!(p.class.as_str(), "rocky-moon" | "icy-moon")
+}
+
+/// Age of the oldest surviving surface of a moon, Ga: impacts since it
+/// formed, as the moon looks (`looks/moons/*.toml`) had it; both kinds the
+/// age of the Solar System (4.57 Ga) within a few per cent.
+/// Calibration, no source: reproduces the former `surface_age` of the
+/// `rocky-moon` and `icy-moon` looks.
+const ICY_MOON_SURFACE_AGE_GA: f32 = 4.0;
+const ROCKY_MOON_SURFACE_AGE_GA: f32 = 4.0;
+
+/// The surface age of a moon of `composition`, Ga.
+fn moon_surface_age_ga(composition: Composition) -> f32 {
+    match composition {
+        Composition::Rock => ROCKY_MOON_SURFACE_AGE_GA,
+        Composition::Ice => ICY_MOON_SURFACE_AGE_GA,
+    }
 }
 
 /// Bulk density of a small body of `composition` whose own is not given,
@@ -1227,29 +1243,24 @@ pub fn small_body_params(
     seed: u32,
     shape: Option<[f32; 3]>,
 ) -> WorldParams {
-    let name = match composition {
-        Composition::Rock => "rocky-moon",
-        Composition::Ice => "icy-moon",
-    };
-    let mut preset = crate::preset::Preset::moon(name).expect("moon presets are valid");
+    let mut look = crate::look::Look::moon(composition);
     if radius_km < MARIA_MIN_RADIUS_KM {
-        preset.geology.maria = None;
+        look.geology.maria = None;
     }
     let ratio = f64::from(radius_km) * 2.0 * PI / f64::from(planet.circumference_km);
     let widest = planet.width.max(MOON_MIN_WIDTH);
     let width =
         ((f64::from(planet.width) * ratio).round() as u32).clamp(MOON_MIN_WIDTH, widest) & !1;
-    let surface_age_ga = preset.defaults.surface_age.map_or(4.0, |d| match d {
-        crate::preset::ParamDefault::Fixed(v) => v,
-        crate::preset::ParamDefault::Range([lo, _]) => lo,
-    });
     // A surface is never older than its system.
-    let surface_age_ga = surface_age_ga.min(planet.age_gyr);
+    let surface_age_ga = moon_surface_age_ga(composition).min(planet.age_gyr);
     WorldParams {
         width,
         height: width / 2,
         seed,
-        planet: preset,
+        class: crate::look::Look::moon_name(composition).to_string(),
+        archetype: None,
+        model: None,
+        look,
         sea_level: 0.0,
         volcanic_intensity: 0.0,
         circumference_km: (f64::from(radius_km) * 2.0 * PI) as f32,
@@ -1415,7 +1426,7 @@ fn regular_moon(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::Preset;
+    use crate::look::Look;
 
     fn params(seed: u32, circumference_km: f32) -> WorldParams {
         WorldParams {
@@ -1423,7 +1434,10 @@ mod tests {
             width: 64,
             height: 32,
             seed,
-            planet: Preset::load("terran").unwrap(),
+            class: "rocky".into(),
+            archetype: None,
+            model: None,
+            look: Look::load("terran"),
             sea_level: 0.2,
             volcanic_intensity: 0.5,
             circumference_km,
@@ -1448,6 +1462,25 @@ mod tests {
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             gravity: None,
+        }
+    }
+
+    #[test]
+    fn a_moon_has_a_moon_look_and_no_model() {
+        let planet = params(3, 40_000.0);
+        for (composition, class) in [
+            (Composition::Rock, "rocky-moon"),
+            (Composition::Ice, "icy-moon"),
+        ] {
+            let moon = small_body_params(&planet, composition, 300.0, 7, None);
+            assert_eq!(moon.class, class);
+            assert!(is_moon_world(&moon));
+            assert!(moon.model.is_none() && moon.archetype.is_none());
+            let look = Look::moon(composition);
+            for b in crate::biome::Biome::ALL {
+                assert_eq!(moon.look.remap(b), look.remap(b), "{b:?}");
+            }
+            assert_eq!(moon.surface_age_ga, 4.0);
         }
     }
 
@@ -1684,7 +1717,7 @@ mod tests {
         let body = body_params(&planet, small);
         assert_eq!((body.width, body.height), (512, 256));
         assert_eq!(body.pressure_bar, 0.0);
-        assert!(body.planet.geology.maria.is_none());
+        assert!(body.look.geology.maria.is_none());
         let shape = shape_layer(&body).unwrap();
         assert_eq!(shape.len(), body.pixel_count());
         let (lo, hi) = shape
@@ -1705,7 +1738,7 @@ mod tests {
     fn giants_have_regular_moons_on_a_resonant_chain_and_hot_ones_none() {
         let giant = |preset: &str, seed: u32, mass: f32, orbit_au: f32, moons: MoonsMode| {
             let mut p = params(seed, 40_075.0);
-            p.planet = crate::preset::Preset::load(preset).unwrap();
+            p.look = crate::look::Look::load(preset);
             p.giant_mass_earth = Some(mass);
             p.orbit_au = orbit_au;
             p.moons = moons;
@@ -1765,7 +1798,7 @@ mod tests {
         for (preset, mass, orbit_au) in [("ice-giant", 17.0, 20.0), ("gas-giant", 3000.0, 5.2)] {
             for seed in 0..200 {
                 let mut p = params(seed, 40_075.0);
-                p.planet = crate::preset::Preset::load(preset).unwrap();
+                p.look = crate::look::Look::load(preset);
                 p.giant_mass_earth = Some(mass);
                 p.orbit_au = orbit_au;
                 p.circumference_km = crate::giant_world::radius_earth(&p, mass) * 40_075.0;
@@ -1951,7 +1984,7 @@ mod tests {
         let (mut small, mut checked) = (0, 0);
         for seed in 0..200 {
             let mut p = params(seed, 40_075.0);
-            p.planet = crate::preset::Preset::load("ice-giant").unwrap();
+            p.look = crate::look::Look::load("ice-giant");
             p.giant_mass_earth = Some(17.0);
             p.orbit_au = 20.0;
             p.circumference_km = crate::giant_world::radius_earth(&p, 17.0) * 40_075.0;
@@ -1974,7 +2007,7 @@ mod tests {
         // Hill sphere.
         for seed in 0..60 {
             let mut p = params(seed, 40_075.0);
-            p.planet = crate::preset::Preset::load("gas-giant").unwrap();
+            p.look = crate::look::Look::load("gas-giant");
             p.giant_mass_earth = Some(318.0);
             p.orbit_au = 0.12;
             p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;
@@ -1996,7 +2029,7 @@ mod tests {
         // Far out, the full chain, kept apart.
         for seed in 0..60 {
             let mut p = params(seed, 40_075.0);
-            p.planet = crate::preset::Preset::load("gas-giant").unwrap();
+            p.look = crate::look::Look::load("gas-giant");
             p.giant_mass_earth = Some(318.0);
             p.orbit_au = 5.2;
             p.circumference_km = crate::giant_world::radius_earth(&p, 318.0) * 40_075.0;

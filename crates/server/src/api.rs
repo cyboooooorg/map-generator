@@ -1,14 +1,14 @@
 //! Types exchanged with the web front-end. `cargo test` regenerates their
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
+use mapgen::archetype::{Locale, ParamDefault};
 use mapgen::generation::Stage;
-use mapgen::preset::{Defaults, GiantSpec, ParamDefault, PresetLocale};
 use mapgen::request::{Limits, WorldRequest};
-use mapgen::star::StarSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::TS;
 
-/// A planet preset the generation form can offer.
+/// An archetype the generation form can offer (Task 7 of part 3b of #423
+/// gives this type its final shape).
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
 pub struct PresetInfo {
@@ -18,15 +18,8 @@ pub struct PresetInfo {
     pub description: String,
     /// Whether the preset is embedded in the generator or read from a file.
     pub built_in: bool,
-    pub defaults: Defaults,
-    /// The preset's host star and orbit (`[star]`).
-    pub star: StarSpec,
-    /// A giant planet's `[giant]` table; absent for a rocky world.
-    #[ts(optional)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub giant: Option<GiantSpec>,
     /// Translated name and description, by language code (`fr`).
-    pub locales: BTreeMap<String, PresetLocale>,
+    pub locales: BTreeMap<String, Locale>,
 }
 
 /// Limits and default draw of one numeric parameter.
@@ -328,8 +321,8 @@ pub struct BodySummary {
     pub designation: String,
     /// `planet` or `moon`.
     pub kind: String,
-    /// Its type: a planet's class (`rocky`, `ocean-world`, …), or a
-    /// preset name for the planet a request asked for and for a moon.
+    /// Its type: a planet's class (`rocky`, `ocean-world`, …), or
+    /// `rocky-moon` or `icy-moon` for a moon.
     pub body_type: String,
     /// Its main colour in the preview (linear RGB), for the library's strip.
     pub colour: [f32; 3],
@@ -344,9 +337,7 @@ pub struct BodySummary {
     pub eccentricity: f64,
     pub periapsis_deg: f64,
     /// A habitable world: a planet with liquid water on its surface, as
-    /// its model says; a planet with no model (the one a request around a
-    /// planet asked for) when its preset is `terran` or `earth-like`. A
-    /// moon never is.
+    /// its model says. A moon never is.
     pub habitable: bool,
 }
 

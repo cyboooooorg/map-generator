@@ -3,36 +3,27 @@ import type { Atmosphere } from "./Atmosphere";
 import type { Biome } from "./Biome";
 import type { BiomeRules } from "./BiomeRules";
 import type { ClimateShift } from "./ClimateShift";
-import type { Defaults } from "./Defaults";
 import type { Geology } from "./Geology";
 import type { GiantSpec } from "./GiantSpec";
-import type { StarSpec } from "./StarSpec";
 
 /**
- * A planet type. See the module documentation for the file format.
+ * How a world is drawn until #424: biome rules and remap, climate shift,
+ * sky, geology and giant look. Chosen by `planet::interim` (or by the moon
+ * draw), never named by a request.
  *
- * Deserialising validates the preset and builds its biome lookup, whether
- * it comes from a preset file or from a world's `world.json`.
+ * Deserialising validates the look and builds its biome lookup, whether it
+ * comes from a look file or from a world's `world.json`.
  */
-export type Preset = { 
+export type Look = { climate: ClimateShift, rules: BiomeRules, 
 /**
- * Short identifier, used in output directory names.
- */
-name: string, description: string, defaults: Defaults, climate: ClimateShift, rules: BiomeRules, 
-/**
- * Sky and clouds; Earth's when the preset has no `[atmosphere]` table.
+ * Sky and clouds; Earth's when the look has no `[atmosphere]` table.
  */
 atmosphere: Atmosphere, 
 /**
- * Tectonic regime and wet era; Earth's when the preset has no
+ * Tectonic regime and wet era; Earth's when the look has no
  * `[geology]` table.
  */
 geology: Geology, 
-/**
- * The host star and the planet's orbit: drawn when left out (see
- * `crate::star`).
- */
-star: StarSpec, 
 /**
  * A giant planet: cloud bands instead of a surface (see
  * `crate::giant_world`); `None` for a rocky or icy world.

@@ -28,9 +28,9 @@ fn params(seed: u32) -> WorldParams {
 
 /// Land mask downsampled to `COARSE` by majority per block (ties: sea).
 /// Land is what the biomes call land: relief (`elevation - sea_level`) at
-/// or above the preset's waterline.
+/// or above the look's waterline.
 fn land_mask(world: &World) -> Vec<bool> {
-    let waterline = world.params.sea_level + world.params.planet.rules.waterline;
+    let waterline = world.params.sea_level + world.params.look.rules.waterline;
     let (cw, ch) = COARSE;
     let (bw, bh) = (world.width / cw, world.height / ch);
     let mut out = Vec::with_capacity((cw * ch) as usize);

@@ -1,20 +1,20 @@
-//! Transitional mapping of a [`PlanetModel`] onto today's presets, so that
+//! Transitional mapping of a [`PlanetModel`] onto today's looks, so that
 //! a planet the model describes renders with the rules, palette and remap
-//! of the built-in preset closest to it. Deleted by #424, when archetypes
-//! replace the presets.
+//! of the built-in look closest to it. Deleted by #424, when the model
+//! alone draws a planet.
 use rand::RngExt;
 
 use super::classify::ICE_WORLD_MIN_OCEANS;
 use super::{PlanetClass, PlanetModel, SurfaceLiquid};
+use crate::archetype::ParamDefault;
 use crate::atmosphere::{AIRLESS_BAR, Atmosphere, CloudKind};
 use crate::biome::Biome;
 use crate::generation::{
     ocean_depth_m, sea_level_for_land_fraction, sea_level_for_water, warming_for,
 };
 use crate::geology::Regime;
-use crate::preset::{ParamDefault, Preset};
+use crate::look::Look;
 use crate::request::fallback;
-use crate::star::StarSpec;
 use crate::world::WorldParams;
 
 /// Mean surface temperature under which a dry body with water renders
@@ -26,7 +26,7 @@ const FREEZING_K: f64 = 273.0;
 /// is one; Earth, 0.02 %, is not).
 const FROZEN_MIN_WATER: f64 = 0.05;
 
-/// The built-in preset whose rules and remap render `model`, the first
+/// The built-in look whose rules and remap render `model`, the first
 /// rule that holds:
 ///
 /// 1. a giant class: `gas-giant`, `hot-jupiter` or `ice-giant` (a
@@ -44,7 +44,7 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 ///
 /// A body that is no giant whose envelope hides its surface (the model
 /// derives none under at least [`super::escape::MIN_ENVELOPE`] of its
-/// mass) renders with its class's preset: `frozen` for an ice world,
+/// mass) renders with its class's look: `frozen` for an ice world,
 /// `barren` for the others (rocky, super-Earth). Part 3b of #423 derives
 /// the surface under the envelope.
 pub fn base_of(model: &PlanetModel) -> &'static str {
@@ -95,7 +95,7 @@ const EARTH_HEAT_FLUX_W_M2: f64 = 0.087;
 
 /// Volcanism of a world with Earth's heat flux, on the `[0, 1]` scale of
 /// [`crate::request::VOLCANIC`]. Calibration, no source: the middle of
-/// the range the presets draw from ([`fallback::VOLCANIC`]).
+/// the range worlds draw from ([`fallback::VOLCANIC`]).
 const EARTH_VOLCANIC: f64 = 0.5;
 
 /// Surface pressure under which water and hydrocarbons carve less, bar:
@@ -143,7 +143,7 @@ const EARTH_COLUMN: (f64, f64) = (0.8, 1.25);
 /// logarithmic scale.
 const YELLOW_BAR: (f64, f64) = (10.0, 100.0);
 
-/// Rayleigh colour of caustic's sky, the Venus look (`presets/caustic.toml`).
+/// Rayleigh colour of caustic's sky, the Venus look (`looks/caustic.toml`).
 const CAUSTIC_RAYLEIGH: [f32; 3] = [0.4, 0.55, 0.25];
 
 /// Largest Rayleigh channel the atmosphere accepts
@@ -183,39 +183,87 @@ const LIFELESS: [(Biome, &[Biome]); 4] = [
     (Biome::Tundra, &[Biome::Taiga]),
 ];
 
-/// The preset a planet with a surface renders with: its [`base_of`]
-/// preset's rules, palette and remap, named after its class, with what the
-/// model derived: no temperature shift nor greenhouse ([`calibrate`]
-/// aims the world at the model's temperature), the internal heat
-/// `(F / σ)^¼` of its heat flux `F` (the temperature it alone would keep
-/// the surface at), its regime, its sky ([`sky_of`]), and the lifeless
-/// remap after the base one when life did not arise ([`LIFELESS`]). Its
-/// orbit comes from the system and its sea level from its water: no star
-/// spec, no land share.
+/// The look a planet with a surface renders with: its [`base_of`] look's
+/// rules, palette and remap with what the model derived: no temperature
+/// shift nor greenhouse ([`calibrate`] aims the world at the model's
+/// temperature), the internal heat `(F / σ)^¼` of its heat flux `F` (the
+/// temperature it alone would keep the surface at), its regime, its sky
+/// ([`sky_of`]), and the lifeless remap after the base one when life did
+/// not arise ([`LIFELESS`]). Its orbit comes from the system and its sea
+/// level from its water.
 ///
 /// # Panics
 ///
 /// When `model` has no surface (a giant).
-pub fn preset_for(model: &PlanetModel) -> Preset {
+pub fn look_for(model: &PlanetModel) -> Look {
     let surface = model.surface.as_ref().expect("a planet with a surface");
-    let mut preset = Preset::load(base_of(model)).expect("built-in presets load");
-    preset.name = model.class.key().to_string();
-    preset.locales.clear();
-    preset.climate.temperature = 0.0;
+    let mut look = Look::load(base_of(model));
+    look.climate.temperature = 0.0;
     let flux = model.heat.flux_w_m2(model.interior.radius_earth);
-    preset.climate.internal_heat = (flux / SIGMA).powf(0.25) as f32;
-    preset.geology.regime = surface.regime;
-    preset.atmosphere = sky_of(model);
-    preset.atmosphere.greenhouse = 0.0;
-    preset.star = StarSpec::default();
-    preset.giant = None;
-    preset.defaults.land_fraction = None;
-    preset.defaults.sea_level = None;
-    preset.derived = true;
+    look.climate.internal_heat = (flux / SIGMA).powf(0.25) as f32;
+    look.geology.regime = surface.regime;
+    look.atmosphere = sky_of(model);
+    look.atmosphere.greenhouse = 0.0;
+    look.giant = None;
     if surface.life.arose {
-        preset
+        look
     } else {
-        preset.then_remap(&LIFELESS)
+        look.then_remap(&LIFELESS)
+    }
+}
+
+/// What a built-in look draws when the model leaves it open (the
+/// `[defaults]` of the former preset files): its pressure, surface age,
+/// tilt and erosion, each a value or a range, `None` for the generator's
+/// [`fallback`]. Calibration, no source: the values the presets drew
+/// from, which keep Venus's air dense, a frozen world's thin, a giant's
+/// sky thin above its cloud tops and the tilts of the ice giants
+/// and hot Jupiters (tides have righted a hot one's; Uranus lies on its
+/// side, 97.8° or 82° spinning backwards).
+#[derive(Default)]
+struct LookDraws {
+    pressure: Option<ParamDefault>,
+    surface_age: Option<ParamDefault>,
+    axial_tilt: Option<ParamDefault>,
+    erosion: Option<ParamDefault>,
+}
+
+/// The [`LookDraws`] of the built-in look `base`.
+fn draws_of(base: &str) -> LookDraws {
+    use ParamDefault::{Fixed, Range};
+    let giant = |axial_tilt| LookDraws {
+        pressure: Some(Fixed(0.3)),
+        surface_age: Some(Fixed(0.0)),
+        axial_tilt,
+        erosion: None,
+    };
+    match base {
+        "barren" => LookDraws {
+            pressure: Some(Range([0.0, 0.01])),
+            surface_age: Some(Range([3.0, 4.2])),
+            // Water shaped its valleys long ago.
+            erosion: Some(Fixed(1.0)),
+            ..LookDraws::default()
+        },
+        "caustic" => LookDraws {
+            pressure: Some(Range([2.0, 5.0])),
+            surface_age: Some(Range([0.3, 0.8])),
+            ..LookDraws::default()
+        },
+        "frozen" => LookDraws {
+            pressure: Some(Range([0.3, 1.0])),
+            surface_age: Some(Range([0.5, 2.0])),
+            ..LookDraws::default()
+        },
+        "volcanic" => LookDraws {
+            pressure: Some(Range([5.0, 20.0])),
+            surface_age: Some(Range([0.001, 0.05])),
+            ..LookDraws::default()
+        },
+        "gas-giant" => giant(None),
+        "hot-jupiter" => giant(Some(Range([0.0, 3.0]))),
+        "ice-giant" => giant(Some(Range([0.0, 90.0]))),
+        _ => LookDraws::default(),
     }
 }
 
@@ -278,7 +326,7 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
 }
 
 /// Whether the world of `model` renders as a giant's: its [`base_of`]
-/// preset is a giant's (a gas giant, a hot Jupiter, an ice giant or a
+/// look is a giant's (a gas giant, a hot Jupiter, an ice giant or a
 /// mini-Neptune).
 pub fn renders_as_giant(model: &PlanetModel) -> bool {
     matches!(base_of(model), "gas-giant" | "hot-jupiter" | "ice-giant")
@@ -288,7 +336,7 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 /// says (its seed, star, orbit, map size, moons…), with three kinds of
 /// world:
 ///
-/// - a planet with a surface, with [`preset_for`]'s preset and what the
+/// - a planet with a surface, with [`look_for`]'s look and what the
 ///   model derived:
 ///   - its circumference, `2π R`;
 ///   - its surface pressure, the air's total (within
@@ -306,21 +354,21 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///     system's age ([`STAGNANT_SURFACE_AGE_SHARE`]);
 ///   - its gravity, the model's (the star's tides, the moons, the tilt
 ///     they leave it and its tidal flats see the model's mass);
-///   - its regime, the model's (its preset's, see [`preset_for`]), not
+///   - its regime, the model's (its look's, see [`look_for`]), not
 ///     [`crate::geology::regime_of`]'s;
-/// - a giant ([`renders_as_giant`]): its giant preset at the model's mass
+/// - a giant ([`renders_as_giant`]): its giant look at the model's mass
 ///   (no less than the smallest giant's, [`crate::request::GIANT_MASS`]:
 ///   a mini-Neptune renders as an ice giant of that mass), its radius the
 ///   giant look's (`giant_radius`: issue #446 tracks the gap), no ground,
 ///   no giant neighbours and nobody's moon;
 /// - a body that is no giant whose envelope hides its surface: its class's
-///   preset ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
+///   look ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
 ///   the model's radius and gravity, with no ocean and no temperature
 ///   shift (its generation aims it at its bare temperature,
 ///   [`calibrate_enveloped`]). Part 3b of #423 derives the surface under
 ///   such an envelope.
 ///
-/// What the model leaves open comes from the preset's defaults, else the
+/// What the model leaves open comes from the look's own draws, else the
 /// generator's [`fallback`], drawn from `rng` in a fixed order (sea level,
 /// volcanism, tilt, erosion, pressure, surface age) whatever is set. A
 /// tilt `placed` leaves open is then steadied by the moons and stood
@@ -339,21 +387,21 @@ pub fn params_for(
     let base = base_of(model);
     let giant = renders_as_giant(model);
     let surface = model.surface.as_ref().filter(|_| !giant);
-    let mut preset = match surface {
-        Some(_) => preset_for(model),
-        None => Preset::load(base).expect("built-in presets load"),
+    let mut look = match surface {
+        Some(_) => look_for(model),
+        None => Look::load(base),
     };
-    let d = preset.defaults.clone();
-    let pick = |preset: Option<ParamDefault>, fb: ParamDefault, mut rng: &mut dyn rand::Rng| {
-        preset.unwrap_or(fb).pick(&mut rng)
+    let d = draws_of(base);
+    let pick = |own: Option<ParamDefault>, fb: ParamDefault, mut rng: &mut dyn rand::Rng| {
+        own.unwrap_or(fb).pick(&mut rng)
     };
     // Drawn in this order whatever is used, so that no draw shifts another.
-    let sea_level = pick(d.sea_level, fallback::SEA_LEVEL, rng);
-    let preset_volcanic = pick(d.volcanic, fallback::VOLCANIC, rng);
+    let sea_level = pick(None, fallback::SEA_LEVEL, rng);
+    let look_volcanic = pick(None, fallback::VOLCANIC, rng);
     let drawn_tilt = pick(d.axial_tilt, fallback::AXIAL_TILT_DEG, rng);
-    let preset_erosion = pick(d.erosion, fallback::EROSION, rng);
-    let preset_pressure = pick(d.pressure, fallback::PRESSURE_BAR, rng);
-    let preset_age = pick(d.surface_age, fallback::SURFACE_AGE_GA, rng);
+    let look_erosion = pick(d.erosion, fallback::EROSION, rng);
+    let look_pressure = pick(d.pressure, fallback::PRESSURE_BAR, rng);
+    let look_age = pick(d.surface_age, fallback::SURFACE_AGE_GA, rng);
     let regime_age = match surface.map(|s| s.regime) {
         Some(Regime::Plates) | None => fallback::SURFACE_AGE_GA.pick(rng),
         Some(Regime::Episodic) => EPISODIC_SURFACE_AGE_GA.pick(rng),
@@ -403,32 +451,31 @@ pub fn params_for(
             None if giant => (
                 sea_level,
                 crate::giants::giant_radius(giant_mass, star.equilibrium_k) * 40_075.0,
-                preset_pressure,
+                look_pressure,
                 0.0,
                 0.0,
-                preset_age,
+                look_age,
             ),
             None => {
                 // Without liquid water, rain carves nothing, unless the
-                // preset sets its erosion (a planet that was wetter once).
-                let erosion = if d.erosion.is_none()
-                    && preset_pressure < crate::atmosphere::LIQUID_WATER_BAR
-                {
-                    0.0
-                } else {
-                    preset_erosion
-                };
+                // look sets its erosion (a planet that was wetter once).
+                let erosion =
+                    if d.erosion.is_none() && look_pressure < crate::atmosphere::LIQUID_WATER_BAR {
+                        0.0
+                    } else {
+                        look_erosion
+                    };
                 // Its generation sets the whole temperature shift (see
                 // `crate::system::generation_params`).
-                preset.climate.temperature = 0.0;
-                preset.atmosphere.greenhouse = 0.0;
+                look.climate.temperature = 0.0;
+                look.atmosphere.greenhouse = 0.0;
                 (
                     SEA_LEVEL.min,
                     model_circumference,
-                    preset_pressure,
+                    look_pressure,
                     erosion,
-                    preset_volcanic,
-                    preset_age,
+                    look_volcanic,
+                    look_age,
                 )
             }
         };
@@ -437,7 +484,10 @@ pub fn params_for(
         width: placed.width,
         height: placed.height,
         seed: placed.seed,
-        planet: preset,
+        class: model.class.key().to_string(),
+        archetype: None,
+        model: Some(model.clone()),
+        look,
         sea_level,
         volcanic_intensity: volcanic.clamp(VOLCANIC.min, VOLCANIC.max),
         circumference_km,
@@ -490,7 +540,7 @@ pub fn params_for(
     // What the moons do to their planet: a large one keeps a drawn tilt in
     // the usual range (a free one ranges wider), and the tides (moons and
     // star) widen or narrow the tidal flats. Applied to the parameters, so
-    // `world.json` (its tilt, its preset's shore width) explains the world
+    // `world.json` (its tilt, its look's shore width) explains the world
     // as generated.
     let system = crate::moons::MoonSystem::draw(&params);
     let effects = crate::moons::PlanetEffects::of(&params, system.as_ref());
@@ -502,17 +552,18 @@ pub fn params_for(
     if tilt_drawn && !giant {
         params.axial_tilt_deg = crate::spin::upright(&params, params.axial_tilt_deg);
     }
-    params.planet.rules.shore_width_km *= effects.shore_factor;
+    params.look.rules.shore_width_km *= effects.shore_factor;
     // Tidal heat raises the volcanism of a giant's moon, so that
     // `host.tidal_flux` in `world.json` explains it.
     if let Some(host) = crate::exomoon::HostGiant::draw(&params) {
         params.volcanic_intensity = params.volcanic_intensity.max(host.volcanism());
     }
-    // A world whose preset was not built from the model decides whether it
-    // has plates (its size, water and star), applied to its preset so that
+    // A body whose surface the model does not derive (a giant, or a world
+    // under its envelope) has the regime of its base look, a plate look's
+    // decided by its size and water, applied to its look so that
     // `world.json` tells the regime it was generated with.
-    if !params.planet.derived {
-        params.planet.geology.regime = crate::geology::regime_of(&params);
+    if surface.is_none() {
+        params.look.geology.regime = crate::geology::regime_of(&params);
     }
     params
 }
@@ -546,7 +597,7 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
         };
         sea_level_for_water(params, ocean_depth_m(oceans, model.interior.radius_earth))
     };
-    params.planet.climate.temperature = warming_for(params, surface.climate.temperature_k);
+    params.look.climate.temperature = warming_for(params, surface.climate.temperature_k);
 }
 
 /// Temperature of a bare surface under the starlight `equilibrium_k`
@@ -566,8 +617,7 @@ fn bare_temperature_k(equilibrium_k: f64, heat_flux_w_m2: f64) -> f64 {
 pub fn calibrate_enveloped(params: &mut WorldParams, model: &PlanetModel) {
     let equilibrium_k = f64::from(crate::spin::star_info(params).equilibrium_k);
     let flux = model.heat.flux_w_m2(model.interior.radius_earth);
-    params.planet.climate.temperature =
-        warming_for(params, bare_temperature_k(equilibrium_k, flux));
+    params.look.climate.temperature = warming_for(params, bare_temperature_k(equilibrium_k, flux));
 }
 
 #[cfg(test)]
@@ -652,9 +702,9 @@ mod tests {
                 assert_eq!(params.gravity, Some(model.interior.gravity as f32));
                 let moons = crate::moons::MoonSystem::draw(&params);
                 let effects = crate::moons::PlanetEffects::of(&params, moons.as_ref());
-                let base = preset_for(&model).rules.shore_width_km;
+                let base = look_for(&model).rules.shore_width_km;
                 assert_eq!(
-                    params.planet.rules.shore_width_km,
+                    params.look.rules.shore_width_km,
                     base * effects.shore_factor,
                     "{name} {seed}"
                 );
@@ -685,7 +735,7 @@ mod tests {
     fn a_lifeless_earth_has_no_forest() {
         let mut earth = model_of("Earth");
         earth.surface.as_mut().unwrap().life.arose = false;
-        let p = preset_for(&earth);
+        let p = look_for(&earth);
         for b in [
             Biome::Forest,
             Biome::Jungle,
@@ -699,7 +749,7 @@ mod tests {
         }
         assert_eq!(p.remap(Biome::Taiga), Biome::Tundra);
         // The composed remap reads back from JSON the same.
-        let back: Preset = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        let back: Look = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         for b in Biome::ALL {
             assert_eq!(back.remap(b), p.remap(b), "{b:?}");
         }
@@ -709,10 +759,8 @@ mod tests {
     fn a_living_earth_keeps_its_forests() {
         let earth = model_of("Earth");
         assert!(earth.surface.unwrap().life.arose);
-        let p = preset_for(&earth);
+        let p = look_for(&earth);
         assert_eq!(p.remap(Biome::Forest), Biome::Forest);
-        assert_eq!(p.name, "rocky");
-        assert!(p.derived);
     }
 
     #[test]
@@ -755,7 +803,7 @@ mod tests {
             "{}",
             params.pressure_bar
         );
-        assert_eq!(params.planet.geology.regime, Regime::Plates);
+        assert_eq!(params.look.geology.regime, Regime::Plates);
         // land share and mean temperature checked by Tasks 3 and 4
     }
 }

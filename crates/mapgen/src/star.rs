@@ -14,7 +14,7 @@
 //! outer edge (maximum greenhouse), below 0 closer in, above 1 farther
 //! out; the flux varies geometrically with the position, so it extends
 //! smoothly beyond the edges.
-use crate::preset::ParamDefault;
+use crate::archetype::ParamDefault;
 use crate::request::{ECCENTRICITY, HZ_POSITION, ORBIT_AU};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};

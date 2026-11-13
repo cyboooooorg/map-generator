@@ -24,7 +24,7 @@ describe('eclipses', () => {
 describe('halo', () => {
   const earth = { rayleigh: [0.17, 0.41, 1.0], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds: 'water', cloud_cover: 0 };
   const world = (pressure: number, atmosphere: object = {}) =>
-    ({ pressure_bar: pressure, preset: { atmosphere: { ...earth, ...atmosphere } } }) as unknown as WorldMetadata;
+    ({ pressure_bar: pressure, look: { atmosphere: { ...earth, ...atmosphere } } }) as unknown as WorldMetadata;
 
   it('gives an airless planet no halo', () => {
     expect(halo(skyFromWorld(world(0, { haze: 0 })))).toBeNull();
@@ -49,7 +49,7 @@ describe('halo', () => {
 
 describe('planetLook', () => {
   const world = (pressure: number, layers: object, clouds = 'water') =>
-    ({ pressure_bar: pressure, layers, preset: { atmosphere: { rayleigh: [0.17, 0.41, 1], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds, cloud_cover: 0.5 } } }) as unknown as WorldMetadata;
+    ({ pressure_bar: pressure, layers, look: { atmosphere: { rayleigh: [0.17, 0.41, 1], haze: 0.1, haze_colour: [1, 1, 1], greenhouse: 0, clouds, cloud_cover: 0.5 } } }) as unknown as WorldMetadata;
   const url = (file: string) => `/w/raw_data/${file}`;
 
   it('gives a cloudy world with air its halo, its cloud map and its cloud colour', () => {
@@ -67,7 +67,7 @@ describe('planetLook', () => {
 
 describe('planetLook of a giant', () => {
   it('gives a giant no halo, whatever its nominal pressure', () => {
-    const giant = { pressure_bar: 0.3, giant: {}, layers: {}, preset: { atmosphere: { rayleigh: [0.55, 0.5, 0.42], haze: 0.15, haze_colour: [0.9, 0.9, 0.7], greenhouse: 0, clouds: 'none', cloud_cover: 0 } } } as unknown as WorldMetadata;
+    const giant = { pressure_bar: 0.3, giant: {}, layers: {}, look: { atmosphere: { rayleigh: [0.55, 0.5, 0.42], haze: 0.15, haze_colour: [0.9, 0.9, 0.7], greenhouse: 0, clouds: 'none', cloud_cover: 0 } } } as unknown as WorldMetadata;
     const look = planetLook(giant, (f) => f);
     expect(look.halo).toBeNull();
     expect(look.clouds).toBeNull();

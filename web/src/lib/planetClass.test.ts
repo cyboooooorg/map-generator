@@ -27,6 +27,13 @@ describe('planet classes', () => {
     }
   });
 
+  it('words no old type', () => {
+    for (const key of ['terran', 'barren', 'caustic', 'frozen', 'volcanic']) {
+      expect(en.viewer.bodyTypes, key).not.toHaveProperty(key);
+      expect(fr.viewer.bodyTypes, key).not.toHaveProperty(key);
+    }
+  });
+
   it('draws the giants and the mini-Neptune as giants', () => {
     expect([...GIANT_CLASSES].sort()).toEqual(['gas-giant', 'hot-jupiter', 'ice-giant', 'mini-neptune']);
     expect(isGiantType('super-earth')).toBe(false);

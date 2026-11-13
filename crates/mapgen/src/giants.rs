@@ -569,7 +569,7 @@ fn describe(
     let radius_earth = giant_radius(mass_earth, equilibrium);
     let class = cloud_class(effective, surface_gravity(mass_earth, radius_earth));
     let hot = equilibrium > 1000.0;
-    // The odds of the giant worlds' presets (`[giant] rings`): bright
+    // The odds of the giant worlds' looks (`[giant] rings`): bright
     // rings only on cold gas giants, faint ones on most giants, rarely on
     // hot ones, whose ice would boil away.
     let [bright, faint] = match (hot, kind) {
@@ -605,7 +605,7 @@ fn describe(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::Preset;
+    use crate::look::Look;
     use crate::star::lifetime_gyr;
 
     #[test]
@@ -630,7 +630,10 @@ mod tests {
             width: 64,
             height: 32,
             seed,
-            planet: Preset::load("terran").unwrap(),
+            class: "rocky".into(),
+            archetype: None,
+            model: None,
+            look: Look::load("terran"),
             sea_level: 0.0,
             volcanic_intensity: 0.0,
             circumference_km: 40_075.0,

@@ -83,7 +83,7 @@ pub struct ExportBody {
     pub name: Option<String>,
     /// `planet` or `moon`.
     pub kind: String,
-    /// Its preset: a planet type, `rocky-moon` or `icy-moon`.
+    /// Its class: a planet's (`rocky`, `ice-giant`…), `rocky-moon` or `icy-moon`.
     #[serde(rename = "type")]
     pub body_type: String,
     /// The planet a moon orbits.

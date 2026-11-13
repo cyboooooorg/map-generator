@@ -4,8 +4,9 @@ import type { GiantInfo } from "./GiantInfo";
 import type { GiantSystem } from "./GiantSystem";
 import type { HostGiant } from "./HostGiant";
 import type { Layers } from "./Layers";
+import type { Look } from "./Look";
 import type { MoonSystem } from "./MoonSystem";
-import type { Preset } from "./Preset";
+import type { PlanetModel } from "./PlanetModel";
 import type { StarInfo } from "./StarInfo";
 
 /**
@@ -13,14 +14,24 @@ import type { StarInfo } from "./StarInfo";
  */
 export type WorldMetadata = { format_version: number, width: number, height: number, projection: string, seed: number, 
 /**
- * Name of the planet preset.
+ * The class key of the world (`rocky`, `ice-giant`…), or `rocky-moon` /
+ * `icy-moon` for a moon.
  */
-planet_type: string, 
+class: string, 
 /**
- * The full resolved preset, so the world can be regenerated even if the
- * preset file changes or disappears.
+ * The archetype the planet was asked as, for display only; left out
+ * for a planet drawn from its context and for a moon.
  */
-preset: Preset, sea_level: number, volcanic_intensity: number, circumference_km: number, gravity_modifier: number, axial_tilt_deg: number, erosion: number, 
+archetype?: string | null, 
+/**
+ * The planet's model; left out for a moon (part 4).
+ */
+model?: PlanetModel | null, 
+/**
+ * The full look the world renders with, so it can be regenerated even
+ * if the look files change (internal until #424).
+ */
+look: Look, sea_level: number, volcanic_intensity: number, circumference_km: number, gravity_modifier: number, axial_tilt_deg: number, erosion: number, 
 /**
  * Surface pressure in bar.
  */

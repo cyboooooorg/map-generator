@@ -34,12 +34,12 @@ pub fn epoch_range_ga(params: &WorldParams) -> Option<(f64, f64)> {
     range_ga(
         params.pressure_bar,
         params.surface_age_ga,
-        params.planet.geology.wet_until,
+        params.look.geology.wet_until,
     )
 }
 
 /// [`epoch_range_ga`] from the values a world's `world.json` holds: its
-/// surface pressure (bar), surface age and the end of its preset's wet era
+/// surface pressure (bar), surface age and the end of its look's wet era
 /// (Ga).
 pub fn range_ga(pressure_bar: f32, surface_age_ga: f32, wet_until_ga: f32) -> Option<(f64, f64)> {
     if pressure_bar >= LIQUID_WATER_BAR || surface_age_ga <= 0.0 {
@@ -62,7 +62,7 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
         &grid,
         Era::Dry,
     );
-    let rules = &p.planet.rules;
+    let rules = &p.look.rules;
     let above = |e: f32| (e - p.sea_level).clamp(-1.0, 1.0) - rules.waterline;
     let lapse = world.lapse_rate;
     let temperature: Vec<f32> = (0..elevation.len())
@@ -91,7 +91,7 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
                 river: false,
                 highland_offset: world.highland_offset.get(i),
             };
-            p.planet.remap(rules.choose(input))
+            p.look.remap(rules.choose(input))
         })
         .collect();
     // The rays of the craters fresh at the epoch.
@@ -114,29 +114,37 @@ mod tests {
     use crate::world::World;
 
     fn world(planet: &str) -> World {
-        let planet = format!("{}/../../presets/{planet}", env!("CARGO_MANIFEST_DIR"));
-        let params = crate::world::WorldParams {
+        let mut params = crate::world::WorldParams {
             sea_level: 0.15,
             surface_age_ga: 4.0,
-            ..crate::generation::tests::preset_params(&planet, 4, 512, 256)
+            ..crate::generation::tests::preset_params(planet, 4, 512, 256)
         };
+        // Mercury kept its water until the end of its surface's age, never
+        // wet since: the look of a barren world has Mars's era.
+        if planet == "mercury-like" {
+            params.look.geology.wet_until = 4.6;
+        }
         generate(&params).world
     }
 
     #[test]
     fn worlds_without_liquid_water_offer_epochs() {
-        let mercury = world("examples/mercury-like.toml");
+        let mercury = world("mercury-like");
         assert_eq!(epoch_range_ga(&mercury.params), Some((-FUTURE_GA, 4.0)));
-        // Mars: back to the end of its wet era.
-        let mars = world("examples/mars-like.toml");
-        assert_eq!(epoch_range_ga(&mars.params), Some((-FUTURE_GA, 3.5)));
-        let terran = world("terran.toml");
+        // Mars: back to the end of its wet era, its look's.
+        let mars = world("mars-like");
+        let wet_until = f64::from(mars.params.look.geology.wet_until);
+        assert_eq!(
+            epoch_range_ga(&mars.params),
+            Some((-FUTURE_GA, wet_until.min(4.0)))
+        );
+        let terran = world("terran");
         assert_eq!(epoch_range_ga(&terran.params), None);
     }
 
     #[test]
     fn the_present_epoch_is_the_world_itself() {
-        let w = world("examples/mercury-like.toml");
+        let w = world("mercury-like");
         let base = w.elevation_base.clone().unwrap();
         assert_ne!(base, w.elevation, "the world has young craters");
         let loaded = LoadedWorld::from_world(&w);
@@ -163,7 +171,7 @@ mod tests {
 
     #[test]
     fn other_epochs_change_the_relief() {
-        let w = world("examples/mercury-like.toml");
+        let w = world("mercury-like");
         let base = w.elevation_base.clone().unwrap();
         let loaded = LoadedWorld::from_world(&w);
         let changed = |epoch: f64| {

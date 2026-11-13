@@ -54,8 +54,8 @@ fn write_svg<W: Write>(world: &World, layers: &MapLayers, mut out: W) -> std::io
     drop(pixels);
 
     // Rivers as stroked paths, in short chunks so the width follows the flow.
-    let planet = &world.params.planet;
-    let [rr, rg, rb] = biome_color(planet.remap(Biome::River));
+    let look = &world.params.look;
+    let [rr, rg, rb] = biome_color(look.remap(Biome::River));
     let chunk = 8;
     for line in &world.rivers {
         let widths = rivers::widths_px(line, world.width, world.params.circumference_km as f64);
@@ -71,8 +71,8 @@ fn write_svg<W: Write>(world: &World, layers: &MapLayers, mut out: W) -> std::io
             // Frozen rivers and rivers under lava are not drawn, as in the PNG.
             let i = my * w + mx;
             let input = world.biome_input(i);
-            let lava = planet.rules.choose(input).is_lava();
-            if !planet.rules.frozen(input) && !lava {
+            let lava = look.rules.choose(input).is_lava();
+            if !look.rules.frozen(input) && !lava {
                 let width = widths[start..=stop].iter().sum::<f64>() / (stop - start + 1) as f64;
                 let min_x = points.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
                 let max_x = points.iter().map(|p| p[0]).fold(f64::MIN, f64::max);

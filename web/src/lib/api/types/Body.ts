@@ -25,8 +25,7 @@ id: string,
 designation: string, kind: BodyKind, 
 /**
  * A planet's class ([`PlanetClass::key`], one of
- * [`crate::planet::PLANET_CLASSES`]); the preset the world a request
- * around one asked for was named by; a moon's preset, `rocky-moon` or
+ * [`crate::planet::PLANET_CLASSES`]); a moon's, `rocky-moon` or
  * `icy-moon`.
  */
 type: string, 

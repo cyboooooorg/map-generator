@@ -1,27 +1,26 @@
-//! Planet presets the server accepts: the built-in ones plus every `.toml`
-//! file under the presets directory that is not a built-in, nor a moon
-//! preset (`moons/`).
+//! Archetypes the server accepts: the built-in ones plus every `.toml`
+//! file under the archetypes directory that is not a built-in.
 //!
-//! Requests name a preset by its catalog `spec`, never by a raw path, so a
-//! client cannot make the server read arbitrary files. Presets are parsed
-//! once, at startup: a changed or added file is picked up on restart.
+//! Requests name an archetype by its catalog `spec`, never by a raw path, so
+//! a client cannot make the server read arbitrary files. Archetypes are
+//! parsed once, at startup: a changed or added file is picked up on restart.
 use crate::api::PresetInfo;
-use mapgen::preset::{Preset, built_in_names};
+use mapgen::archetype::{Archetype, built_in_names};
 use std::path::{Path, PathBuf};
 
 pub struct Catalog {
-    entries: Vec<(PresetInfo, Preset)>,
+    entries: Vec<(PresetInfo, Archetype)>,
 }
 
 impl Catalog {
-    /// Loads the built-in presets and the preset files under `dir`. Invalid
-    /// files are skipped with a warning.
+    /// Loads the built-in archetypes and the archetype files under `dir`.
+    /// Invalid files are skipped with a warning.
     pub fn load(dir: &Path) -> Self {
-        let mut entries: Vec<(PresetInfo, Preset)> = Preset::built_in()
+        let mut entries: Vec<(PresetInfo, Archetype)> = Archetype::built_in()
             .into_iter()
-            .map(|p| {
-                let spec = p.name.clone();
-                (info(&p, &spec, true), p)
+            .map(|a| {
+                let spec = a.name.clone();
+                (info(&a, &spec, true), a)
             })
             .collect();
 
@@ -33,20 +32,16 @@ impl Catalog {
                 continue;
             };
             let spec = relative.to_string_lossy().replace('\\', "/");
-            // presets/moons/ holds the presets of moons, not planet types.
-            if spec.starts_with("moons/") {
-                continue;
-            }
-            // presets/<name>.toml are the built-in sources: already listed.
+            // archetypes/<name>.toml are the built-in sources: already listed.
             if built_in_names()
                 .iter()
                 .any(|name| spec == format!("{name}.toml"))
             {
                 continue;
             }
-            match Preset::load(&path.to_string_lossy()) {
-                Ok(p) => entries.push((info(&p, &spec, false), p)),
-                Err(e) => tracing::warn!("skipping preset {spec}: {e}"),
+            match Archetype::load(&path.to_string_lossy()) {
+                Ok(a) => entries.push((info(&a, &spec, false), a)),
+                Err(e) => tracing::warn!("skipping archetype {spec}: {e}"),
             }
         }
         Self { entries }
@@ -57,16 +52,13 @@ impl Catalog {
     }
 }
 
-fn info(p: &Preset, spec: &str, built_in: bool) -> PresetInfo {
+fn info(a: &Archetype, spec: &str, built_in: bool) -> PresetInfo {
     PresetInfo {
         spec: spec.to_string(),
-        name: p.name.clone(),
-        description: p.description.clone(),
+        name: a.name.clone(),
+        description: a.description.clone(),
         built_in,
-        defaults: p.defaults.clone(),
-        star: p.star.clone(),
-        giant: p.giant.clone(),
-        locales: p.locales.clone(),
+        locales: a.locales.clone(),
     }
 }
 

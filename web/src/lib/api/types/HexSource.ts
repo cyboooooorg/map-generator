@@ -3,4 +3,4 @@
 /**
  * The world a hex map was made from.
  */
-export type HexSource = { width: number, height: number, seed: number, planet_type: string, };
+export type HexSource = { width: number, height: number, seed: number, class: string, };

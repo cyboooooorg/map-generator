@@ -47,7 +47,7 @@ impl std::fmt::Display for PreviewError {
 /// Whether the plates of the world `p` can drift: a rocky world with plate
 /// tectonics.
 pub fn has_plates(p: &WorldParams) -> bool {
-    p.giant_mass_earth.is_none() && p.planet.geology.regime == Regime::Plates
+    p.giant_mass_earth.is_none() && p.look.geology.regime == Regime::Plates
 }
 
 /// A rendered preview: `width × height` rows of RGB.
@@ -112,7 +112,7 @@ mod tests {
             moons: MoonsMode::None,
             ..crate::generation::tests::preset_params(planet, 11, 1024, 512)
         };
-        p.planet.geology.regime = crate::geology::regime_of(&p);
+        p.look.geology.regime = crate::geology::regime_of(&p);
         p
     }
 

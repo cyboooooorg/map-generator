@@ -687,11 +687,6 @@ export const fr: Messages = {
     systemBodyOption: ({ name, type, generated }: { name: string; type: string; generated: boolean }) =>
       `${name} (${type})${generated ? '' : ' · non générée'}`,
     bodyTypes: {
-      terran: 'tempérée',
-      barren: 'stérile',
-      caustic: 'caustique',
-      frozen: 'glacée',
-      volcanic: 'volcanique',
       'gas-giant': 'Géante gazeuse',
       'ice-giant': 'Géante de glace',
       'hot-jupiter': 'Jupiter chaud',
