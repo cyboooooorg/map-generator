@@ -1265,6 +1265,8 @@ export const en = {
     noRoomForMoons: (p: { count: number }) =>
       `No stable orbits for ${p.count === 1 ? 'a moon' : `${p.count} moons`}: the star and orbit chosen keep the planet too close to its star, whose tides pull down all but the lightest moons. Leave them random, or pick a farther orbit or a hotter star.`,
     moonsOfAMoon: "The moon of a giant keeps no moons of its own (its Hill sphere is too small): ask for moons or for a giant's moon, not both.",
+    waterHeavierThanPlanet: (p: { water: string; mass: string }) =>
+      `${p.water} Earth oceans of water weigh more than a planet of ${p.mass} Earth masses holds beside its hydrogen envelope: ask for less water or a heavier planet.`,
     tooManyPlanets: (p: { asked: number; max: number }) => `${p.asked} planets asked for: a system holds ${p.max} at most.`,
     zoneFull: (p: { type: string; asked: number; fits: number }) =>
       `${p.asked} ${p.type} planets asked for, but their band of distances round this star holds ${p.fits}.`,

@@ -32,6 +32,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.moonsOfAMoon;
     case 'hot_giant_moons':
       return t.errors.hotGiantMoons({ count: detail.count });
+    case 'water_heavier_than_planet':
+      return t.errors.waterHeavierThanPlanet({ water: formatUpTo(detail.water_oceans, 3), mass: formatUpTo(detail.mass_earth, 3) });
     case 'too_many_planets':
       return t.errors.tooManyPlanets({ asked: detail.asked, max: detail.max });
     case 'zone_full':

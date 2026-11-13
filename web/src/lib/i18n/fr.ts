@@ -1200,6 +1200,8 @@ export const fr: Messages = {
     noRoomForMoons: (p) =>
       `Aucune orbite stable pour ${p.count === 1 ? 'une lune' : `${p.count} lunes`}${S}: l’étoile et l’orbite choisies gardent la planète trop près de son étoile, dont les marées font tomber toutes les lunes sauf les plus légères. Laissez-les au hasard, ou choisissez une orbite plus lointaine ou une étoile plus chaude.`,
     moonsOfAMoon: `La lune d’une géante ne garde aucune lune (sa sphère de Hill est trop petite)${S}: demandez des lunes ou une lune de géante, pas les deux.`,
+    waterHeavierThanPlanet: (p) =>
+      `${p.water} océans terrestres d’eau pèsent plus que ce que tient une planète de ${p.mass} masses terrestres à côté de son enveloppe d’hydrogène${S}: demandez moins d’eau ou une planète plus lourde.`,
     tooManyPlanets: (p) => `${p.asked} planètes demandées${S}: un système en compte ${p.max} au plus.`,
     zoneFull: (p) => `${p.asked} planètes de type ${p.type} demandées, mais leur bande de distances autour de cette étoile n’en tient que ${p.fits}.`,
     typeImpossible: (p) => `Cette étoile ne laisse aucune place à une planète de type ${p.type}.`,

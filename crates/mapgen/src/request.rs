@@ -603,6 +603,18 @@ impl WorldRequest {
                 overrides: &overrides,
             };
             let mut model = at(eccentricity).model();
+            // Water set beside an envelope drawn from the mass: together
+            // they may weigh more than the planet (the check above only
+            // knows a set envelope).
+            if let Some(water_oceans) = overrides.water_oceans {
+                let envelope = model.formation().overrides.envelope_fraction;
+                if model.inputs.water_fraction + envelope.unwrap_or(0.0) > 1.0 {
+                    return Err(RequestError::WaterHeavierThanPlanet {
+                        water_oceans,
+                        mass_earth,
+                    });
+                }
+            }
             // The star's tides circularise the closest orbits (a planet
             // they despin on an eccentric orbit keeps it, in the 3:2
             // resonance: see `crate::spin`).
@@ -984,6 +996,21 @@ mod tests {
         assert!(
             message.contains("5000") && message.contains("0.1"),
             "{message}"
+        );
+        // Under the mass alone, but not beside the envelope an 8 M⊕
+        // planet draws (it forms in the gas disc, about 3 % of its mass).
+        let wet = WorldRequest {
+            mass_earth: Some(8.0),
+            water_oceans: Some(34_000.0),
+            ..named(None, 1)
+        };
+        assert!(
+            matches!(
+                resolve(&wet),
+                Err(RequestError::WaterHeavierThanPlanet { .. })
+            ),
+            "{:?}",
+            resolve(&wet).map(|r| r.model().inputs.clone())
         );
     }
 

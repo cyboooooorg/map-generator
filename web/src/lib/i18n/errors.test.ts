@@ -15,6 +15,9 @@ describe('error messages', () => {
       'mystery must be between 0.25 and 2.',
     );
     expect(detailText({ code: 'busy' })).toMatch(/generation is running/);
+    expect(detailText({ code: 'water_heavier_than_planet', water_oceans: 5000, mass_earth: 0.1 })).toMatch(
+      /^5,000 Earth oceans of water weigh more than a planet of 0\.1 Earth masses/,
+    );
     expect(detailText({ code: 'size_not_offered', width: 1000, height: 500 })).toBe(
       '1000 × 500 is not one of the offered map sizes.',
     );

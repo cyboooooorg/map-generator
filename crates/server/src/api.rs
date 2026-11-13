@@ -208,6 +208,8 @@ pub enum ErrorDetail {
     /// hot giant keeps none, one its star has locked only light ones, and
     /// a small Hill sphere fewer.
     HotGiantMoons { count: u8 },
+    /// More water asked for than the planet weighs with its envelope.
+    WaterHeavierThanPlanet { water_oceans: f64, mass_earth: f64 },
     /// More planets asked for than a system holds.
     TooManyPlanets { asked: u32, max: u32 },
     /// More planets of a type than its band of distances holds.
@@ -254,11 +256,16 @@ impl ErrorDetail {
             RequestError::UnknownArchetype(name) => Some(Self::UnknownArchetype {
                 archetype: name.clone(),
             }),
-            // The text names the file, the age and the star's life, or the
-            // water and the mass; no structured detail.
-            RequestError::BadArchetype(_)
-            | RequestError::BadAge { .. }
-            | RequestError::WaterHeavierThanPlanet { .. } => None,
+            RequestError::WaterHeavierThanPlanet {
+                water_oceans,
+                mass_earth,
+            } => Some(Self::WaterHeavierThanPlanet {
+                water_oceans: *water_oceans,
+                mass_earth: *mass_earth,
+            }),
+            // The text names the file, or the age and the star's life; no
+            // structured detail.
+            RequestError::BadArchetype(_) | RequestError::BadAge { .. } => None,
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
                 max: *max,
