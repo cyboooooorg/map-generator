@@ -1085,13 +1085,15 @@ fn relief_above(elevation: f32, sea_level: f32) -> f32 {
 /// Celsius, with its warming (shift and greenhouse) left out, sampled on a
 /// coarse grid: the sea-level rows of temperature minus the cooling of the
 /// land by altitude (the lapse rate over the relief of a coarse elevation
-/// pass at `params.sea_level`), highlands included. Regional variability
+/// pass at `params.sea_level`), highlands included; a tidally locked
+/// planet's cells by their angle from the point under its star, dayside
+/// and nightside, as [`generate`] reads them. Regional variability
 /// and the climate's anomalies average out and are not included.
 pub fn mean_surface_temperature_c(params: &WorldParams) -> f32 {
     let mut coarse = params.clone();
     (coarse.width, coarse.height) = LAND_GRID;
     let grid = coarse.grid();
-    let (rows, _) = sea_level_rows(&coarse, &grid);
+    let (rows, locked) = sea_level_rows(&coarse, &grid);
     let lapse = crate::climate::lapse_rate(&coarse);
     let flatten = relief_share(&coarse);
     let rules_waterline = coarse.planet.rules.waterline;
@@ -1106,6 +1108,13 @@ pub fn mean_surface_temperature_c(params: &WorldParams) -> f32 {
             let row = rows[y as usize];
             let mean: f64 = (0..grid.width)
                 .map(|x| {
+                    // A locked planet's cell by its angle from the point
+                    // under its star, as `generate` reads it: its rows
+                    // hold only their warmest (dayside) temperature.
+                    let row = match &locked {
+                        Some(locked) => locked.at_angle(LockedClimate::angle_at(&grid, x, y)),
+                        None => row,
+                    };
                     let mut e = sampler.sample(x, y).elevation;
                     if flatten < 1.0 {
                         e = waterline + (e - waterline) * flatten;
@@ -1960,6 +1969,25 @@ pub(crate) mod tests {
             let mean = mean_k(&params);
             eprintln!("target {target_k} K: mean {mean:.2} K");
             assert!((mean - target_k).abs() < 5.0, "{mean} vs {target_k}");
+        }
+        // The same world locked to an M4V in its habitable zone: its
+        // dayside is far warmer than its nightside, and the mean is taken
+        // over both (seed 7, 128x64).
+        let m4 = crate::star::parse_type("M4V").unwrap();
+        let orbit = crate::star::distance_au(crate::star::values(m4).luminosity, 1.0);
+        for target_k in [180.0, 250.0, 288.0] {
+            let mut params = params(7, "terran");
+            (params.width, params.height) = (128, 64);
+            (params.star, params.orbit_au) = (m4, orbit);
+            params.locked_to_star = Some(true);
+            params.planet.atmosphere.greenhouse = 0.0;
+            params.planet.climate.temperature = warming_for(&params, target_k);
+            let mean = mean_k(&params);
+            eprintln!("locked, target {target_k} K: mean {mean:.2} K");
+            assert!(
+                (mean - target_k).abs() < 5.0,
+                "locked: {mean} vs {target_k}"
+            );
         }
         // Earth's, Mars's and Venus's models through
         // `planet::interim::params_for` and `calibrate` at their orbits round the Sun
