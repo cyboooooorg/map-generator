@@ -630,12 +630,19 @@ mass_earth = 5000.0
             let m = model_of(&a, seed);
             assert_eq!(crate::planet::interim::base_of(&m), "barren", "seed {seed}");
             let s = m.surface.expect("a bare world has a surface");
-            assert!(s.water.oceans < 0.01, "seed {seed}: {} oceans", s.water.oceans);
+            assert!(
+                s.water.oceans < 0.01,
+                "seed {seed}: {} oceans",
+                s.water.oceans
+            );
             bars.push(s.gases.total());
         }
         bars.sort_by(f64::total_cmp);
         let median = (bars[9] + bars[10]) / 2.0;
-        assert!((0.004..0.012).contains(&median), "median {median} bar: {bars:?}");
+        assert!(
+            (0.004..0.012).contains(&median),
+            "median {median} bar: {bars:?}"
+        );
         assert!(bars[0] > 0.001 && bars[19] < 0.03, "{bars:?}");
     }
 

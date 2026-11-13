@@ -1189,7 +1189,9 @@ mod tests {
         let mut checked = 0;
         for body in &system.bodies {
             let Some(model) = &body.model else { continue };
-            let Some(surface) = model.surface else { continue };
+            let Some(surface) = model.surface else {
+                continue;
+            };
             let request = WorldRequest {
                 drift_ma: Some(-100.0),
                 ..from_world(&body.params, model, body.params.seed)
@@ -1198,10 +1200,15 @@ mod tests {
             let what = format!("{} drifted", body.id);
             assert_same_formation(again.model(), model, &what);
             let air = again.model().surface.expect("a surface").gases;
-            let co2 = (air.co2 - surface.gases.co2).abs() / surface.gases.co2.max(f64::MIN_POSITIVE);
+            let co2 =
+                (air.co2 - surface.gases.co2).abs() / surface.gases.co2.max(f64::MIN_POSITIVE);
             assert!(co2 <= SAME, "{what}: {air:?} vs {:?}", surface.gases);
             let ratio = air.total() / surface.gases.total();
-            assert!((0.5..2.0).contains(&ratio), "{what}: {air:?} vs {:?}", surface.gases);
+            assert!(
+                (0.5..2.0).contains(&ratio),
+                "{what}: {air:?} vs {:?}",
+                surface.gases
+            );
             checked += 1;
         }
         assert!(checked > 0);
