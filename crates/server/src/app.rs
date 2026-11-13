@@ -3671,11 +3671,13 @@ mod tests {
     }
 
     /// A system with a planet and a moon, both generated: the system id,
-    /// the planet and the moon.
+    /// the planet and the moon. The request asks for one moon, so the
+    /// first seed normally gives it; the other seeds only guard against a
+    /// request the generator turns down.
     async fn system_with_a_moon(app: &Router, state: &Shared) -> (String, String, String) {
         for seed in 101..140 {
             let request = format!(
-                r#"{{"around": {{"planet": "terran", "seed": {seed}, "width": 256, "height": 128, "moons": "auto", "giants": "none"}}}}"#
+                r#"{{"around": {{"planet": "terran", "seed": {seed}, "width": 256, "height": 128, "moons": {{"count": 1}}, "giants": "none"}}}}"#
             );
             let (status, created) = call(app, "POST", "/api/systems", Some(&request)).await;
             if status != StatusCode::CREATED {
