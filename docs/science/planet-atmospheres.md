@@ -706,6 +706,34 @@ broadening above): it is a `runaway-greenhouse`, never a lava world. The model i
 finite and non-negative on mass 0.01 and 20 M⊕, insolation 1e-3 and 1e4,
 age 0.5 and 13 Gyr, M5V and A0V stars.
 
+## From the model to the map
+
+`planet::interim` turns the model's air into the sky and the climate of
+the world the planet renders (part 3a; issue #424 replaces it):
+
+- The sky (`sky_of`) is Earth's for an air of Earth's column (0.8 to
+  1.25 times its `P / g`); otherwise Earth's Rayleigh colour scaled by the
+  column, yellowed toward Venus's past 10 bar and held to the
+  atmosphere's brightest-channel limit. A methane haze of Titan's orange
+  appears where CH4 is over 1 % of an air thicker than 0.5 bar. Clouds
+  follow the air: none under the airless limit; water where water or
+  hydrocarbons are liquid or the vapour reaches 1 mbar; sulfuric where
+  SO2 reaches 1 mbar; dust on a dry air under 0.1 bar.
+- The pressure the world is drawn with is the model's total, clamped to
+  the request's limits; the greenhouse of the preset is zero, because the
+  temperature is aimed at the model's instead.
+- The sea level is where the model's oceans fill the relief; the
+  temperature offset (grid offset) is the shift that brings the grid's
+  mean to the model's surface temperature. Both are set when the world is
+  generated and are only in `world.json`; the drawn parameters of the
+  body hold the values the resolution drew.
+- Life: a planet where life did not arise renders with the lifeless
+  remap (no vegetation biomes).
+- Calibrations, no source: the airless, cloud and dust pressure limits,
+  the yellowing range, the methane haze share and the 99 % land share of a
+  hydrocarbon world. Sea level and temperature are calibrated against the
+  model, not measured on a globe.
+
 ## Census
 
 Measured, not tuned: `cargo run --release -p mapgen --example planet_census
@@ -723,6 +751,10 @@ the output unchanged), and after CO₂ and water vapour were counted in
 full in each other's broadening. The census also counts the runaways by their source
 (`Water::boiled`) and the wet planets left past 647 K because their boil
 was not kept.
+
+The `body_type` against derived class table below is the part 2 output; the
+census no longer prints it, since a planet's `body_type` is now its class
+(it prints the base presets the worlds render with instead).
 
 ```text
 500 systems, 1677 planets

@@ -216,10 +216,44 @@ cargo run --release -p mapgen --example planet_census -- 500
 ```
 
 draws 500 whole systems (seeds 1 to 500, nothing written) and prints the
-current `body_type` against the derived class, the share of planets per
+base preset each world renders with (`planet::interim::base_of`; the
+`body_type` is the class itself), the share of planets per
 radius bin of Fulton et al. (2017), and the median age, iron share, water
 and envelope per class
 ([planet_census.rs](../../crates/mapgen/examples/planet_census.rs)).
+
+### From the model to the map
+
+A drawn planet's world is generated from its model, not from a type name
+(`planet::interim`, a transitional layer that issue #424 replaces with
+archetypes):
+
+- `base_of` picks the built-in preset whose rules, palette and remap
+  render the model, the first rule that holds: a giant class renders as
+  `gas-giant`, `hot-jupiter` or `ice-giant` (a mini-Neptune as an ice
+  giant); a lava world or a heat-pipe regime as `volcanic`; a runaway
+  greenhouse as `caustic`; liquid hydrocarbons as `frozen`; liquid water
+  as `terran`; no liquid, under 273 K and at least 5 % water as `frozen`;
+  otherwise `barren`. The thresholds are the ones of the classes, so the
+  look follows the class (Earth is `terran`, Venus `caustic`, Mars and
+  Mercury `barren`, Titan `frozen`).
+- The gravity and the tectonic regime are the model's, and the radius is
+  the interior's. The relief parameters follow: volcanism from the heat
+  flux (Earth's 0.087 W/m2 gives the preset's value), halved when
+  stagnant, full under a heat pipe; the age of the surface from the
+  regime.
+- The grid offset: the temperature shift of the world is found when the
+  world is generated, so that the grid's mean matches the model's surface
+  temperature (`generation::warming_for`). The sea level is found the
+  same way, where the oceans the model keeps fill the relief
+  (`sea_level_for_water`), none for a runaway whose water is steam. Both
+  pass over a coarse grid of the relief (about a second in release), so a
+  system's draw leaves them to the generation of the world: the
+  parameters stored with the body keep the drawn values, and the
+  calibrated ones are in the world's `world.json`.
+- Calibrations, no source: the share of water that makes a body frozen
+  (5 %), the hydrocarbon world's land share (Titan's 99 %), the erosion of
+  methane (half of water's).
 
 ### Where it departs from the science
 
