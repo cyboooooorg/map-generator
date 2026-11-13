@@ -637,8 +637,9 @@ addressed as `<system-id>/<body-id>` everywhere.
     a low-resolution preview of a planet with plate tectonics at
     another epoch of its plates (`ma` from -300 to 300, negative in the
     past; `width` 256 or 512, the default). The server generates the
-    planet again from its stored parameters with `drift_ma` set, at the
-    preview's size. 404 for a body without plates, 400 out of range,
+    planet again from its stored parameters (calibrated once per
+    revision as its generation calibrates them, and kept for every
+    epoch) with `drift_ma` set, at the preview's size. 404 for a body without plates, 400 out of range,
     503 while a generation runs;
   - `GET /api/systems/{id}/bodies/{body}/thumb?rev=`;
   - `POST /api/systems/{id}/bodies/{body}/hex`.

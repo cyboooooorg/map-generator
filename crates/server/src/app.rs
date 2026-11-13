@@ -1797,19 +1797,29 @@ async fn body_drift_preview(
     if let Some(png) = state.drift_cache.get(&key) {
         return Ok(png_response(png, loc.revision));
     }
-    let root = state.config.systems_dir.clone();
-    let (owned_system, owned_body) = (system.to_owned(), body.to_owned());
-    let params = tokio::task::spawn_blocking(move || {
-        systems::body_params(&root, &owned_system, &owned_body)
-    })
-    .await
-    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or_else(|| {
-        Failure(
-            StatusCode::NOT_FOUND,
-            format!("no parameters for {}", loc.key),
-        )
-    })?;
+    // The calibrated parameters, when kept; otherwise the body, whose
+    // drawn parameters check the request at once (the calibration keeps
+    // its plates) and whose calibration waits for a turn.
+    let cached = state.drift_cache.params(&loc.key, loc.revision);
+    let found = match &cached {
+        Some(_) => None,
+        None => {
+            let root = state.config.systems_dir.clone();
+            let (owned_system, owned_body) = (system.to_owned(), body.to_owned());
+            let found = tokio::task::spawn_blocking(move || {
+                systems::read_body(&root, &owned_system, &owned_body)
+            })
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or_else(|| {
+                Failure(
+                    StatusCode::NOT_FOUND,
+                    format!("no parameters for {}", loc.key),
+                )
+            })?;
+            Some(found)
+        }
+    };
     // Refused before waiting for a turn.
     let refused = |e: PreviewError| match e {
         PreviewError::NoPlates => Failure(StatusCode::NOT_FOUND, e.to_string()),
@@ -1817,7 +1827,14 @@ async fn body_drift_preview(
             Failure(StatusCode::BAD_REQUEST, e.to_string())
         }
     };
-    drift::preview_params(&params, drift_ma as f32, width).map_err(refused)?;
+    let checked = match (&cached, &found) {
+        (Some(params), _) => drift::preview_params(params, drift_ma as f32, width),
+        (None, Some(body)) => {
+            drift::preview_params(&mapgen::system::world_params(body), drift_ma as f32, width)
+        }
+        (None, None) => unreachable!("a body read when no parameters are kept"),
+    };
+    checked.map_err(refused)?;
     let _turn = state
         .drift_previews
         .acquire()
@@ -1828,9 +1845,27 @@ async fn body_drift_preview(
         return Ok(png_response(png, loc.revision));
     }
     // A generation uses every core and all the memory it can: previews
-    // wait for it to end, as tiles do.
+    // (and the calibration of their parameters) wait for it to end, as
+    // tiles do.
     let Ok(_generation) = state.queue.try_acquire() else {
         return Ok(world_failure(TileError::Busy, "drift previews"));
+    };
+    // Calibrated once per revision, whatever the epoch (another request
+    // may have kept them while this one waited).
+    let params = match cached.or_else(|| state.drift_cache.params(&loc.key, loc.revision)) {
+        Some(params) => params,
+        None => {
+            let body = found.expect("a body read when no parameters are kept");
+            let params = tokio::task::spawn_blocking(move || {
+                Arc::new(mapgen::system::generation_params(&body))
+            })
+            .await
+            .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            state
+                .drift_cache
+                .insert_params(loc.key.clone(), loc.revision, params.clone());
+            params
+        }
     };
     let png = tokio::task::spawn_blocking(move || {
         let preview = drift::preview(&params, drift_ma as f32, width).map_err(|e| e.to_string())?;
