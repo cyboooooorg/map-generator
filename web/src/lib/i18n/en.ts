@@ -837,6 +837,9 @@ export const en = {
     skySystem: "System's sky",
     skyFixed: 'Fixed sky',
     skyOff: 'No sky',
+    longExposure: 'Long exposure',
+    longExposureHelp:
+      "How the system's sky is rendered: on, as a long-exposure photograph shows it (saturated reds and blue-greens in the nebulae, a bright galactic core); off, as the naked eye sees it (faint, washed-out colours). The fixed sky is the same either way",
     clouds: 'Clouds',
     drift: 'Drift',
     skyLabels: 'Labels',
@@ -929,6 +932,7 @@ export const en = {
     seasons: 'Play / pause the seasons (turns sunlight on)',
     atmosphere: 'Atmosphere',
     sky: 'Sky: the system’s, the fixed one, none',
+    skyExposure: 'Sky: long exposure or naked eye',
     starView: 'Planet / its star',
     moonView: 'Next body of the system (the world, its moons, or a giant and its moons)',
     clouds: 'Clouds',

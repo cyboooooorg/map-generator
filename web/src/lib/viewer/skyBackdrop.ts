@@ -1,10 +1,14 @@
 // The sky behind a view: the baked gas and dust clouds (a cube map drawn at
-// the far plane) and the star field, in one group so that a single matrix
-// orients both. Shared by the planet, star and star-body views.
+// the far plane), the nebulae (one patch of the far sphere each) and the star
+// field, in one group so that a single matrix orients all of them. Shared by the planet, star and star-body views.
 //
 // The look is in the system frame; `setAxes` gives the group the system's
 // axes in the view's frame. Without axes (a standalone world) the group is
 // free for the view to turn about y, as the stars were before.
+//
+// The stars show at once; the clouds and nebulae come when the worker's bake
+// arrives (skyBakeClient.ts), one nebula at a time. A result for a sky or an
+// exposure no longer wanted is dropped.
 
 import {
   AdditiveBlending,
@@ -13,20 +17,38 @@ import {
   BufferAttribute,
   BufferGeometry,
   CubeTexture,
+  CustomBlending,
   DataTexture,
+  Float32BufferAttribute,
   Group,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
   Points,
   RGBAFormat,
   ShaderMaterial,
   SRGBColorSpace,
   UnsignedByteType,
   Vector3,
+  ZeroFactor,
 } from 'three';
 import type { Vec3 } from '../skyBodies';
-import { bakeSkyClouds, dustAt, type SkyFaces } from './skyClouds';
+import type { NebulaTexture } from './nebulaTextures';
+import { dustAt, type SkyExposure, type SkyFaces } from './skyClouds';
+import { acquireSkyBaker, releaseSkyBaker, subscribeSkyBake } from './skyBakeClient';
+import type { SkyPart } from './skyBake';
 import { FIXED_SKY, type SkyLook } from './skyLook';
-import { skyBackdropFragment, skyBackdropVertex, starsFragment, starsVertex } from './shaders';
+import { nebulaBasis, skyNebulae, type Nebula } from './skyNebulae';
+import {
+  skyBackdropFragment,
+  skyBackdropVertex,
+  skyNebulaFragment,
+  skyNebulaVertex,
+  starsFragment,
+  starsVertex,
+} from './shaders';
 import { starField } from './stars';
 
 /** Which sky a view draws: the system's own, today's fixed one, or none. */
@@ -68,18 +90,77 @@ function cubeOf(faces: SkyFaces): CubeTexture {
   return cube;
 }
 
+function nebulaTextureOf(texture: NebulaTexture): DataTexture {
+  const map = new DataTexture(texture.rgba, texture.size, texture.size, RGBAFormat, UnsignedByteType);
+  map.colorSpace = SRGBColorSpace;
+  map.magFilter = LinearFilter;
+  map.minFilter = LinearMipmapLinearFilter;
+  map.generateMipmaps = true;
+  map.needsUpdate = true;
+  return map;
+}
+
+/**
+ * A nebula's patch: a quad tangent to the sky sphere at `dir`, turned by
+ * `roll` (see nebulaBasis), `radius` wide each way in angle. Its corners are
+ * directions in the system frame, so the group's matrix orients it like the
+ * cube; the vertex shader sends them to the far plane. Row 0 of the texture
+ * is the top: v runs down.
+ */
+function nebulaGeometry(n: Nebula): BufferGeometry {
+  const { right, up } = nebulaBasis(n);
+  const half = Math.tan(n.radius);
+  const corners: [number, number][] = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ];
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  for (const [x, y] of corners) {
+    for (let k = 0; k < 3; k++) positions.push(n.dir[k]! + (x * right[k]! + y * up[k]!) * half);
+    uvs.push((x + 1) / 2, (1 - y) / 2);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  return geometry;
+}
+
+/** One nebula of the catalogue: its patch, hidden until its texture is baked. */
+interface NebulaPatch {
+  mesh: Mesh<BufferGeometry, ShaderMaterial>;
+  texture: DataTexture | null;
+}
+
 export class SkyBackdrop {
   /** The cube backdrop and the star points. */
   readonly group = new Group();
   readonly stars: Points<BufferGeometry, ShaderMaterial>;
   private readonly cube: Mesh<BoxGeometry, ShaderMaterial>;
+  /** The nebulae's patches, in the order of `skyNebulae(look)`; empty unless the system's sky shows. */
+  private readonly nebulae = new Group();
+  private patches: NebulaPatch[] = [];
+  private readonly renderOrder: number;
+  private opacity = 1;
+  private exposure: SkyExposure = 'photo';
   private texture: CubeTexture | null = null;
   private faces: SkyFaces | null = null;
+  /** The look the system's sky draws now, null for the fixed sky and none. */
+  private baked: SkyLook | null = null;
+  /** Ends the bake being waited for. */
+  private unsubscribe: (() => void) | null = null;
+  /** Bumped at every new request: a part carrying an older one is stale. */
+  private request = 0;
   private key = '';
   private choice: SkyChoice = 'off';
   private axes: [Vec3, Vec3, Vec3] | null = null;
 
   constructor(options: { hideHostStar: boolean; renderOrder: number }) {
+    acquireSkyBaker();
+    this.renderOrder = options.renderOrder;
     const defines: Record<string, number> = options.hideHostStar ? { HIDE_HOST_STAR: 1 } : {};
     const uniforms: ShaderMaterial['uniforms'] = {
       uPixelRatio: { value: 1 },
@@ -123,7 +204,23 @@ export class SkyBackdrop {
 
     // Nothing is baked here: the first look shown builds what it needs.
     this.cube.visible = false;
-    this.group.add(this.cube, this.stars);
+    this.group.add(this.cube, this.nebulae, this.stars);
+  }
+
+  /** How many nebulae the sky draws (hidden or not): none but for the system's own sky. */
+  get nebulaCount(): number {
+    return this.patches.length;
+  }
+
+  /**
+   * The rendering of the system's clouds and nebulae: as the eye sees them
+   * or as a long exposure shows them. The catalogue stays; the textures are
+   * swapped as the new bake arrives (those already baked at once).
+   */
+  setExposure(exposure: SkyExposure): void {
+    if (exposure === this.exposure) return;
+    this.exposure = exposure;
+    if (this.baked) this.bake(this.baked);
   }
 
   /**
@@ -136,6 +233,7 @@ export class SkyBackdrop {
   setSky(choice: SkyChoice, own: SkyLook): void {
     this.choice = choice;
     this.applyAxes();
+    if (choice !== 'system') this.dropClouds();
     if (choice === 'off') return;
     const look = lookFor(choice, own);
     const clouds = choice === 'system';
@@ -154,16 +252,91 @@ export class SkyBackdrop {
       old.dispose();
     }
 
-    this.cube.visible = clouds;
     if (clouds) {
-      const faces = bakeSkyClouds(look, 'photo');
-      if (faces !== this.faces) {
-        this.faces = faces;
-        this.texture?.dispose();
-        this.texture = cubeOf(faces);
-        this.cube.material.uniforms['uSky']!.value = this.texture;
+      const wanted = lookKey(look);
+      if (this.baked === null || lookKey(this.baked) !== wanted) {
+        this.baked = look;
+        this.faces = null;
+        // The old sky's clouds must not linger under the new stars.
+        this.cube.visible = false;
+        this.setNebulae(look);
+        this.bake(look);
       }
     }
+  }
+
+  /** Asks for the look's parts in the exposure now wanted; the ones of an earlier request are dropped. */
+  private bake(look: SkyLook): void {
+    this.unsubscribe?.();
+    const request = ++this.request;
+    this.unsubscribe = subscribeSkyBake(look, this.exposure, (part) => {
+      if (request === this.request) this.accept(part);
+    });
+  }
+
+  private accept(part: SkyPart): void {
+    if (part.part === 'cube') {
+      if (part.faces === this.faces) return;
+      this.faces = part.faces;
+      this.texture?.dispose();
+      this.texture = cubeOf(part.faces);
+      this.cube.material.uniforms['uSky']!.value = this.texture;
+      this.cube.visible = true;
+      return;
+    }
+    const patch = this.patches[part.index];
+    if (!patch) return;
+    patch.texture?.dispose();
+    patch.texture = nebulaTextureOf(part.texture);
+    patch.mesh.material.uniforms['uMap']!.value = patch.texture;
+    patch.mesh.visible = true;
+  }
+
+  /** One patch per nebula of the look, textureless and hidden until its bake arrives. */
+  private setNebulae(look: SkyLook): void {
+    this.clearNebulae();
+    for (const n of skyNebulae(look)) {
+      const dark = n.kind === 'dark';
+      const material = new ShaderMaterial({
+        vertexShader: skyNebulaVertex,
+        fragmentShader: skyNebulaFragment,
+        defines: dark ? { DARKEN: 1 } : {},
+        uniforms: { uMap: { value: null }, uOpacity: { value: this.opacity } },
+        transparent: true,
+        depthWrite: false,
+        blending: CustomBlending,
+        // Premultiplied: a glow adds its colour, a dark nebula keeps (1 - alpha) of what is behind.
+        blendSrc: dark ? ZeroFactor : OneFactor,
+        blendDst: dark ? OneMinusSrcAlphaFactor : OneFactor,
+      });
+      const mesh = new Mesh(nebulaGeometry(n), material);
+      mesh.frustumCulled = false;
+      mesh.visible = false;
+      // Between the cloud cube and the stars; dark patches after the glows, to dim them too.
+      mesh.renderOrder = this.renderOrder - (dark ? 0.25 : 0.5);
+      this.nebulae.add(mesh);
+      this.patches.push({ mesh, texture: null });
+    }
+  }
+
+  private clearNebulae(): void {
+    for (const { mesh, texture } of this.patches) {
+      texture?.dispose();
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    }
+    this.patches = [];
+    this.nebulae.clear();
+  }
+
+  /** The fixed sky and none draw no clouds and no nebulae: ends any bake, frees the patches. */
+  private dropClouds(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.request++;
+    this.baked = null;
+    this.clearNebulae();
+    this.cube.visible = false;
   }
 
   /**
@@ -199,6 +372,8 @@ export class SkyBackdrop {
   setOpacity(o: number): void {
     this.stars.material.uniforms['uOpacity']!.value = o;
     this.cube.material.uniforms['uOpacity']!.value = o;
+    this.opacity = o;
+    for (const { mesh } of this.patches) mesh.material.uniforms['uOpacity']!.value = o;
   }
 
   setPixelRatio(r: number): void {
@@ -212,5 +387,11 @@ export class SkyBackdrop {
     this.cube.material.dispose();
     this.texture?.dispose();
     this.texture = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.request++;
+    this.baked = null;
+    this.clearNebulae();
+    releaseSkyBaker();
   }
 }

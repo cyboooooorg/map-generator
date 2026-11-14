@@ -4,6 +4,7 @@ import type { Vec3 } from '../skyBodies';
 import { lookFor, skyShown, skyToRestore, SkyBackdrop } from './skyBackdrop';
 import { FIXED_SKY, skyLook } from './skyLook';
 import * as clouds from './skyClouds';
+import { skyNebulae } from './skyNebulae';
 import { starField } from './stars';
 
 const options = { hideHostStar: true, renderOrder: -3 };
@@ -124,5 +125,61 @@ describe('SkyBackdrop', () => {
     expect(lookFor('fixed', own)).toBe(FIXED_SKY);
     expect(skyShown('off')).toBe(false);
     expect(skyShown('fixed')).toBe(true);
+  });
+
+  describe('nebulae', () => {
+    const nebulaMeshes = (backdrop: SkyBackdrop) =>
+      (backdrop.group.children[1] as unknown as {
+        children: { visible: boolean; geometry: { dispose(): void }; material: { dispose(): void; uniforms: { uMap: { value: { dispose(): void } | null } } } }[];
+      }).children;
+    const look = { ...FIXED_SKY, seed: 91 };
+
+    it('creates one mesh per nebula for the system sky, textured at once without a worker', () => {
+      const backdrop = new SkyBackdrop(options);
+      backdrop.setSky('system', look);
+      const meshes = nebulaMeshes(backdrop);
+      expect(meshes.length).toBe(skyNebulae(look).length);
+      expect(backdrop.nebulaCount).toBe(meshes.length);
+      expect(meshes.length).toBeGreaterThan(0);
+      expect(meshes.every((m) => m.visible && m.material.uniforms.uMap.value)).toBe(true);
+    });
+
+    it('creates none for the fixed sky nor for no sky', () => {
+      const backdrop = new SkyBackdrop(options);
+      backdrop.setSky('fixed', look);
+      expect(backdrop.nebulaCount).toBe(0);
+      backdrop.setSky('system', look);
+      expect(backdrop.nebulaCount).toBeGreaterThan(0);
+      backdrop.setSky('off', look);
+      expect(backdrop.nebulaCount).toBe(0);
+    });
+
+    it('swaps the textures with the exposure without rebuilding the catalogue', () => {
+      const backdrop = new SkyBackdrop(options);
+      backdrop.setSky('system', look);
+      const before = nebulaMeshes(backdrop).map((m) => m);
+      const textures = before.map((m) => m.material.uniforms.uMap.value);
+      const bake = vi.spyOn(clouds, 'bakeSkyClouds');
+      backdrop.setExposure('eye');
+      const after = nebulaMeshes(backdrop);
+      expect(after.every((m, k) => m === before[k])).toBe(true);
+      expect(after.some((m, k) => m.material.uniforms.uMap.value !== textures[k])).toBe(true);
+      expect(bake).toHaveBeenCalledWith(look, 'eye');
+      // Back to the first exposure: its parts are cached, nothing is baked again.
+      bake.mockClear();
+      backdrop.setExposure('photo');
+      expect(bake).not.toHaveBeenCalled();
+      bake.mockRestore();
+    });
+
+    it('frees every nebula texture on dispose', () => {
+      const backdrop = new SkyBackdrop(options);
+      backdrop.setSky('system', look);
+      const spies = nebulaMeshes(backdrop).map((m) => vi.spyOn(m.material.uniforms.uMap.value!, 'dispose'));
+      expect(spies.length).toBeGreaterThan(0);
+      backdrop.dispose();
+      expect(spies.every((spy) => spy.mock.calls.length > 0)).toBe(true);
+      expect(backdrop.nebulaCount).toBe(0);
+    });
   });
 });

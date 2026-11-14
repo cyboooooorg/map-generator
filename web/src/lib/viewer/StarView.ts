@@ -63,6 +63,7 @@ import {
 import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
 import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import type { SkyExposure } from './skyClouds';
 import { FIXED_SKY, type SkyLook } from './skyLook';
 import { CoronalLoops } from './coronalLoops';
 import { Eruption, eruptive } from './eruption';
@@ -1635,6 +1636,12 @@ export class StarView {
   setSkyLook(look: SkyLook): void {
     this.ownLook = look;
     this.backdrop.setSky(this.skyChoice, look);
+    this.requestRender();
+  }
+
+  /** The sky's rendering: as the eye sees it or as a long exposure shows it. */
+  setSkyExposure(exposure: SkyExposure): void {
+    this.backdrop.setExposure(exposure);
     this.requestRender();
   }
 

@@ -28,6 +28,7 @@
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
   import { currentProfile } from '../lib/viewer/quality';
   import type { SkyChoice } from '../lib/viewer/skyBackdrop';
+  import type { SkyExposure } from '../lib/viewer/skyClouds';
   import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
 
   interface Props {
@@ -133,6 +134,8 @@
     look?: SkyLook;
     /** Which sky is drawn: the system's own, the fixed one or none. */
     sky?: SkyChoice;
+    /** How its clouds and nebulae are rendered: as the eye sees them or as a long exposure. */
+    skyExposure?: SkyExposure;
   }
 
   let {
@@ -182,6 +185,7 @@
     onOpenStar = null,
     look = FIXED_SKY,
     sky = 'system',
+    skyExposure = 'photo',
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -235,6 +239,7 @@
   $effect(() => view?.setSkyLook(look));
   $effect(() => view?.setSkyAxes(STAR_VIEW_SKY_AXES));
   $effect(() => view?.setSkyChoice(sky));
+  $effect(() => view?.setSkyExposure(skyExposure));
   $effect(() => view?.setStar(star, omega, giantList, selected, activity));
   /** The last day this view reported (see clockDays): any other is a day set from outside. */
   let reported = Number.NaN;

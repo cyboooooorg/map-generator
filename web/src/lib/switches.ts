@@ -9,6 +9,7 @@
 // `Part`).
 
 import type { SkyChoice } from './viewer/skyBackdrop';
+import type { SkyExposure } from './viewer/skyClouds';
 
 /** A switch's state on the body shown (a moon, say) and on its host planet. */
 export interface BodyPair {
@@ -160,6 +161,11 @@ export const SKY_CHOICES: readonly SkyChoice[] = ['system', 'fixed', 'off'];
 export function parseSky(stored: unknown): SkyChoice {
   if (stored === false) return 'off';
   return SKY_CHOICES.find((choice) => choice === stored) ?? 'system';
+}
+
+/** A stored sky exposure: 'eye' as it is, anything else (nothing stored yet) the default, 'photo'. */
+export function parseExposure(stored: unknown): SkyExposure {
+  return stored === 'eye' ? 'eye' : 'photo';
 }
 
 /** The choice after `choice` in the cycle system, fixed, off. */

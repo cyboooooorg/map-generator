@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inScope, localGroup, migrateDisplay, nextSky, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups } from './switches';
+import { inScope, localGroup, migrateDisplay, nextSky, parseExposure, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups } from './switches';
 
 describe('pressBody', () => {
   it('sets both bodies to the opposite of the body shown', () => {
@@ -187,5 +187,14 @@ describe('the sky choice', () => {
     expect(nextSky('system')).toBe('fixed');
     expect(nextSky('fixed')).toBe('off');
     expect(nextSky('off')).toBe('system');
+  });
+});
+
+describe('parseExposure', () => {
+  it('gives a stored display without the key the long exposure', () => {
+    expect(parseExposure(undefined)).toBe('photo');
+    expect(parseExposure('photo')).toBe('photo');
+    expect(parseExposure('eye')).toBe('eye');
+    expect(parseExposure(42)).toBe('photo');
   });
 });

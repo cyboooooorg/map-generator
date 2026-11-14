@@ -800,6 +800,9 @@ export const fr: Messages = {
     skySystem: 'Ciel du système',
     skyFixed: 'Ciel fixe',
     skyOff: 'Pas de ciel',
+    longExposure: 'Pose longue',
+    longExposureHelp:
+      `Le rendu du ciel du système${S}: activé, comme le montre une photographie en pose longue (rouges et bleu-vert saturés dans les nébuleuses, un cœur galactique brillant)${S}; désactivé, comme le voit l’œil nu (faible, aux couleurs délavées). Le ciel fixe est le même dans les deux cas`,
     clouds: 'Nuages',
     drift: 'Dérive',
     skyLabels: 'Étiquettes',
@@ -889,6 +892,7 @@ export const fr: Messages = {
     seasons: 'Lancer / arrêter les saisons (allume le soleil)',
     atmosphere: 'Atmosphère',
     sky: 'Ciel : du système, fixe, aucun',
+    skyExposure: 'Ciel : pose longue ou œil nu',
     starView: 'Planète / son étoile',
     moonView: 'Astre suivant du système (le monde, ses lunes, ou une géante et ses lunes)',
     clouds: 'Nuages',

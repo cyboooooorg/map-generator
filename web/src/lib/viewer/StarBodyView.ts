@@ -45,6 +45,7 @@ import { StarSurfaceState, displayedLight, starLook, starSurfaceUniforms } from 
 import { STAR_RADIUS } from './starSystem';
 import type { Vec3 } from '../skyBodies';
 import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import type { SkyExposure } from './skyClouds';
 import { FIXED_SKY, type SkyLook } from './skyLook';
 
 /** Closest and farthest camera, star radii from the centre: close enough for granules, far enough for the corona. */
@@ -317,6 +318,12 @@ export class StarBodyView {
   setSkyLook(look: SkyLook): void {
     this.ownLook = look;
     this.backdrop.setSky(this.skyChoice, look);
+    this.requestRender();
+  }
+
+  /** The sky's rendering: as the eye sees it or as a long exposure shows it. */
+  setSkyExposure(exposure: SkyExposure): void {
+    this.backdrop.setExposure(exposure);
     this.requestRender();
   }
 

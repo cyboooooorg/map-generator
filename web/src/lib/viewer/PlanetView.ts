@@ -161,6 +161,7 @@ import type { RingSystem } from '../api/types/RingSystem';
 import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
 import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import type { SkyExposure } from './skyClouds';
 import { FIXED_SKY, type SkyLook } from './skyLook';
 
 export type ViewMode = 'globe' | 'map';
@@ -1872,6 +1873,12 @@ export class PlanetView {
   setSkyLook(look: SkyLook): void {
     this.ownLook = look;
     this.backdrop.setSky(this.skyChoice, look);
+    this.requestRender();
+  }
+
+  /** The sky's rendering: as the eye sees it or as a long exposure shows it. */
+  setSkyExposure(exposure: SkyExposure): void {
+    this.backdrop.setExposure(exposure);
     this.requestRender();
   }
 

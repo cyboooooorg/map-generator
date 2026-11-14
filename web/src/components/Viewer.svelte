@@ -7,6 +7,7 @@
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import { skyToRestore, type SkyChoice } from '../lib/viewer/skyBackdrop';
+  import type { SkyExposure } from '../lib/viewer/skyClouds';
   import { skyLook } from '../lib/viewer/skyLook';
   import ToggleBar, { type SubToggle, type Toggle } from './dock/ToggleBar.svelte';
   import AxesGizmo from './AxesGizmo.svelte';
@@ -40,7 +41,7 @@
   import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
   import { dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
-  import { localGroup, migrateDisplay, nextSky, parseSky, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups, type ScopePair } from '../lib/switches';
+  import { localGroup, migrateDisplay, nextSky, parseExposure, parseSky, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups, type ScopePair } from '../lib/switches';
   import { bodyTitle, forgetTold, remadeToasts } from '../lib/evicted';
   import { toasts } from '../lib/toasts.svelte';
   import { cssGradient } from '../lib/viewer/colormaps';
@@ -183,6 +184,8 @@
     landContours: true,
     atmosphere: true,
     sky: 'system' as string,
+    // The rendering of the system's sky: 'photo' (long exposure) unless 'eye'.
+    skyExposure: 'photo' as string,
     // The planet in a moon's sky, by its own part of each switch (see lib/switches.ts).
     hostAtmosphere: true,
     hostClouds: true,
@@ -261,6 +264,7 @@
   let landContours = $state(saved.landContours);
   let atmosphere = $state(saved.atmosphere);
   let sky = $state<SkyChoice>(parseSky(saved.sky));
+  let skyExposure = $state<SkyExposure>(parseExposure(saved.skyExposure));
   /** The choice a click on the sky switch's main button brings back after it turned the sky off. */
   let skyBeforeOff: SkyChoice = 'system';
   // Whatever changes the choice (the squares, the B shortcut, a link, a display link) keeps it current.
@@ -584,6 +588,7 @@
       landContours,
       atmosphere,
       sky,
+      skyExposure,
       starLight,
       clouds,
       cloudDrift,
@@ -628,7 +633,7 @@
 
   /** The settings "Link display" mirrors, as this pane has them. */
   function currentLinked(): LinkedDisplay {
-    return { layer, relief, sun, season, sunLongitude, atmosphere, sky, starLight, clouds, graticule };
+    return { layer, relief, sun, season, sunLongitude, atmosphere, sky, skyExposure, starLight, clouds, graticule };
   }
 
   $effect(() => {
@@ -650,6 +655,7 @@
     if (changes.sunLongitude !== undefined) sunLongitude = changes.sunLongitude;
     if (changes.atmosphere !== undefined) atmosphere = changes.atmosphere;
     if (changes.sky !== undefined) sky = changes.sky;
+    if (changes.skyExposure !== undefined) skyExposure = changes.skyExposure;
     if (changes.starLight !== undefined) starLight = changes.starLight;
     if (changes.clouds !== undefined) clouds = changes.clouds;
     if (changes.graticule !== undefined) graticule = changes.graticule;
@@ -907,6 +913,7 @@
   $effect(() => view?.setLandContours(landContours && !giant));
   $effect(() => view?.setAtmosphere(atmosphere));
   $effect(() => view?.setSkyChoice(sky));
+  $effect(() => view?.setSkyExposure(skyExposure));
   $effect(() => view?.setStarLight(starLight));
   /**
    * A biome's colour in the legend, as the globe shows it: under "Star
@@ -1939,6 +1946,14 @@
       { key: 'starLight', label: t.viewer.starLight, help: t.viewer.starLightHelp, icon: 'starlight', on: starLight, set: (v) => (starLight = v) },
       perBody({ key: 'atmosphere', label: t.viewer.atmosphere, icon: 'atmosphere' }, atmosphere, hostAtmosphere, (v) => (atmosphere = v), (v) => (hostAtmosphere = v), !hostHasAir),
       skyToggle(),
+      {
+        key: 'skyExposure',
+        label: t.viewer.longExposure,
+        help: t.viewer.longExposureHelp,
+        icon: 'sparkles',
+        on: skyExposure === 'photo',
+        set: (v) => (skyExposure = v ? 'photo' : 'eye'),
+      },
     ],
     [
       ...(giant
@@ -2256,6 +2271,9 @@
         break;
       case 'sky':
         sky = nextSky(sky);
+        break;
+      case 'skyExposure':
+        skyExposure = skyExposure === 'photo' ? 'eye' : 'photo';
         break;
       case 'starView':
         if (worldId) {
@@ -2633,6 +2651,7 @@
       onOpenStar={sys ? () => (world.starMode = 'star') : null}
       look={ownSkyLook}
       {sky}
+      {skyExposure}
     />
   {/if}
   {#if world.subject === 'star' && world.starMode === 'star' && sys}
@@ -2647,6 +2666,7 @@
       onOpenSystem={() => (world.starMode = 'system')}
       look={ownSkyLook}
       {sky}
+      {skyExposure}
     />
   {/if}
 

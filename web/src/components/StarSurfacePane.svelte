@@ -13,6 +13,7 @@
   import { currentProfile } from '../lib/viewer/quality';
   import { StarBodyView } from '../lib/viewer/StarBodyView';
   import type { SkyChoice } from '../lib/viewer/skyBackdrop';
+  import type { SkyExposure } from '../lib/viewer/skyClouds';
   import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
@@ -39,6 +40,8 @@
     look?: SkyLook;
     /** Which sky is drawn: the system's own, the fixed one or none. */
     sky?: SkyChoice;
+    /** How its clouds and nebulae are rendered: as the eye sees them or as a long exposure. */
+    skyExposure?: SkyExposure;
   }
 
   let {
@@ -51,6 +54,7 @@
     onOpenSystem,
     look = FIXED_SKY,
     sky = 'system',
+    skyExposure = 'photo',
   }: Props = $props();
 
   const DAYS_PER_YEAR = 365.25;
@@ -90,6 +94,7 @@
 
   $effect(() => view?.setSkyLook(look));
   $effect(() => view?.setSkyChoice(sky));
+  $effect(() => view?.setSkyExposure(skyExposure));
   $effect(() => view?.setStar(star, activity));
   // The day set from outside (on opening, the system view's), after setStar.
   $effect(() => {

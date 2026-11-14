@@ -836,6 +836,35 @@ export const skyBackdropFragment = /* glsl */ `
   }
 `;
 
+// A nebula: a quad tangent to the sky sphere (corners in system-frame
+// directions, see skyBackdrop), drawn at the far plane like the cube. The
+// texture has premultiplied alpha and sRGB colour (nebulaTextures.ts): glows
+// add their colour (blending One, One), dark nebulae darken what is behind
+// (DARKEN: blending Zero, OneMinusSrcAlpha, the alpha is the opacity).
+export const skyNebulaVertex = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vec4 clip = projectionMatrix * vec4(mat3(modelViewMatrix) * position * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+export const skyNebulaFragment = /* glsl */ `
+  uniform sampler2D uMap;
+  uniform float uOpacity;
+  varying vec2 vUv;
+  void main() {
+    vec4 t = texture2D(uMap, vUv);
+  #ifdef DARKEN
+    gl_FragColor = vec4(0.0, 0.0, 0.0, t.a * uOpacity);
+  #else
+    gl_FragColor = vec4(t.rgb * uOpacity, t.a * uOpacity);
+  #endif
+    #include <colorspace_fragment>
+  }
+`;
+
 // The host star: a square at infinity in the sun's direction, like the
 // star field, `uSize` drawing-buffer pixels across. A disk of the star's
 // apparent diameter inside a glow. A quad rather than a point sprite: a
