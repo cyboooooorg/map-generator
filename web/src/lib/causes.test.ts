@@ -4,6 +4,7 @@ import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
 import { formatCause, treeFor } from './causes';
+import { formatMassEarth, formatSurfaceTemperature, formatUpTo, withUnit } from './format';
 import { setLocale, t } from './i18n/index.svelte';
 
 const node = (quantity: Quantity, value: number, over: Partial<Cause> = {}): Cause => ({ quantity, value, label: null, input: null, causes: [], ...over });
@@ -33,10 +34,30 @@ describe('treeFor', () => {
 describe('formatCause', () => {
   it('writes a value with its unit', () => {
     setLocale('en');
-    expect(formatCause(node('surface_temperature', 288.4))).toMatch(/^288(\.4)?\s?K$/);
+    expect(formatCause(node('greenhouse', 33.4))).toMatch(/^33\.4\s?K$/);
     expect(formatCause(node('pressure', 1.013))).toMatch(/^1\.01\s?bar$/);
     expect(formatCause(node('radiogenic_heat', 2e13))).toMatch(/W$/);
     expect(formatCause(node('core_mass_fraction', 0.33))).toMatch(/^33\s?%$/);
+  });
+  it('writes the surface temperature in °C, as the card does', () => {
+    setLocale('en');
+    expect(formatCause(node('surface_temperature', 93))).toBe(formatSurfaceTemperature({ surface: { climate: { temperature_k: 93 } } } as never));
+    expect(formatCause(node('surface_temperature', 288.15))).toMatch(/^15\s?°C$/);
+    expect(formatCause(node('equilibrium_temperature', 255))).toMatch(/°C$/);
+    // A warming is a difference: kelvin.
+    expect(formatCause(node('greenhouse', 33))).toMatch(/K$/);
+  });
+  it('writes the water and the mass as the cards do', () => {
+    setLocale('en');
+    expect(formatCause(node('water_kept', 38.978))).toBe(withUnit(formatUpTo(38.978, 3), 'oceans'));
+    expect(formatCause(node('water_kept', 38.978))).toContain('38.978');
+    expect(formatCause(node('mass', 0.022))).toBe(formatMassEarth(0.022));
+    expect(formatCause(node('mass', 0.5))).toMatch(/^0\.5\s?M⊕$/);
+  });
+  it('writes a power of ten with superscript digits', () => {
+    setLocale('en');
+    expect(formatCause(node('radiogenic_heat', 1.76e13))).toMatch(/^1\.76×10¹³\s?W$/);
+    expect(formatCause(node('radiogenic_heat', 2e-5))).toMatch(/^2×10⁻⁵\s?W$/);
   });
   it('writes a key in the active language', () => {
     setLocale('en');

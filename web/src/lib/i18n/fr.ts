@@ -500,7 +500,7 @@ export const fr: Messages = {
     giantWinds: 'Vents',
     giantWindsHelp: 'Jets vers l’est dans chaque hémisphère (échelle de Rhines : plus nombreux sur une planète grande et rapide aux vents lents ; un jet vers l’ouest s’intercale entre deux d’entre eux, et un de plus souffle à l’équateur), et les vents d’ouest et d’est les plus forts au sommet des nuages',
     giantWindsValue: (p) => `${p.jets} jets vers l’est par hémisphère · ${p.west} vers l’ouest à ${p.east} vers l’est`,
-    giantHeat: 'Chaleur interne',
+    giantHeat: 'Chaleur / lumière absorbée',
     giantHeatHelp: `Chaleur rayonnée par rapport à celle reçue de l’étoile${S}: Jupiter 1,7, Neptune 2,6, Uranus environ 1`,
     giantHeatValue: (p) => `${p.ratio}× la lumière absorbée`,
     poles: 'Pôles',

@@ -3,7 +3,7 @@
 import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { Quantity } from './api/types/Quantity';
-import { formatNumber, formatUpTo, withUnit } from './format';
+import { formatCelsius, formatMassEarth, formatNumber, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 import { className } from './i18n/names.svelte';
 
@@ -27,10 +27,19 @@ function keyLabel(quantity: Quantity, key: string): string {
   return tables[quantity]?.[key] ?? key;
 }
 
+const SUPERSCRIPT: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+
+/** A power of ten written with superscript digits: 1.76×10¹³. */
+function scientific(value: number): string {
+  const [mantissa, exponent] = Number(value.toPrecision(3)).toExponential().split('e');
+  const digits = String(Number(exponent)).replace(/./g, (c) => SUPERSCRIPT[c] ?? c);
+  return `${mantissa}×10${digits}`;
+}
+
 /** A number to three significant digits. */
 function significant(value: number): string {
   if (value === 0) return '0';
-  if (Math.abs(value) >= 1e6 || Math.abs(value) < 1e-3) return Number(value.toPrecision(3)).toExponential().replace('e+', '×10^').replace('e-', '×10^-');
+  if (Math.abs(value) >= 1e6 || Math.abs(value) < 1e-3) return scientific(value);
   return formatUpTo(Number(value.toPrecision(3)), 6);
 }
 
@@ -40,6 +49,10 @@ function significant(value: number): string {
  */
 export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): string {
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);
+  // The same quantity is written as the cards write it.
+  if (cause.quantity === 'surface_temperature' || cause.quantity === 'equilibrium_temperature') return formatCelsius(cause.value);
+  if (cause.quantity === 'mass') return formatMassEarth(cause.value);
+  if (cause.quantity === 'water_kept' || cause.quantity === 'water_formed') return withUnit(formatUpTo(cause.value, 3), t.causes.units[cause.quantity]);
   const percent = PERCENT.has(cause.quantity);
   const unit = t.causes.units[cause.quantity === 'escape' ? unitOf : cause.quantity];
   const text = percent ? formatNumber(Math.round(cause.value * 100)) : significant(cause.value);

@@ -4,8 +4,7 @@
   import './facts.css';
   import { t } from '../../lib/i18n/index.svelte';
   import { bulkLine, oceanUnderIce } from '../../lib/planetCard';
-  import { formatInt, formatUpTo, withUnit } from '../../lib/format';
-  import type { Body } from '../../lib/api/types/Body';
+  import { formatInt, formatMassEarth, formatUpTo, withUnit } from '../../lib/format';
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
   import type { Quantity } from '../../lib/api/types/Quantity';
@@ -29,13 +28,6 @@
   const model = $derived(body?.model ?? null);
   const core = $derived(model?.surface?.core ?? null);
 
-  /** A mass in Earth masses, or Jupiter masses for a giant. */
-  function mass(b: Body): string {
-    const earth = b.physical.mass_earth;
-    if (earth >= 30) return withUnit(formatUpTo(earth / 317.8, 2), 'MJ');
-    if (earth < 0.01) return withUnit(formatUpTo(earth * 81.3, 2), t.card.lunarMasses);
-    return withUnit(formatUpTo(earth, 2), 'M⊕');
-  }
   const share = (x: number) => withUnit(formatInt(Math.round(x * 100)), '%');
   /** What the layers are made of, by share of the mass; the ocean under the ice after it. */
   const layers = $derived.by(() => {
@@ -59,7 +51,7 @@
         })}
       </dd>
     {:else}
-      <dd>{mass(body)}</dd>
+      <dd>{formatMassEarth(body.physical.mass_earth)}</dd>
     {/if}
     <dt>{t.cards.radius}</dt>
     {#if giant}
@@ -71,8 +63,7 @@
       </dd>
     {:else}
       <dd>
-        {withUnit(formatInt(body.physical.radius_km), 'km')}{#if body.physical.axes_km}
-          (<span class="unit-help" title={t.card.axesHelp}>{t.card.axes({
+        {withUnit(formatInt(body.physical.radius_km), 'km')}{#if body.physical.axes_km}{' '}(<span class="unit-help" title={t.card.axesHelp}>{t.card.axes({
             a: withUnit(formatInt(2 * body.physical.axes_km[0]), 'km'),
             b: formatInt(2 * body.physical.axes_km[1]),
             c: formatInt(2 * body.physical.axes_km[2]),

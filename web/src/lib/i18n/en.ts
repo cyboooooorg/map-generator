@@ -536,7 +536,7 @@ export const en = {
     giantWinds: 'Winds',
     giantWindsHelp: 'Eastward jets in each hemisphere (Rhines scale: more on a large, fast-spinning planet with slow winds; a westward jet lies between two of them, and one more blows at the equator), and the strongest westward and eastward winds at the cloud tops',
     giantWindsValue: (p: { jets: number; west: string; east: string }) => `${p.jets} eastward jets per hemisphere · ${p.west} west to ${p.east} east`,
-    giantHeat: 'Internal heat',
+    giantHeat: 'Heat over sunlight',
     giantHeatHelp: 'Heat it radiates over what it gets from its star: Jupiter 1.7, Neptune 2.6, Uranus about 1',
     giantHeatValue: (p: { ratio: string }) => `${p.ratio}× the starlight it absorbs`,
     poles: 'Poles',
