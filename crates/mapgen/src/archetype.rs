@@ -735,7 +735,7 @@ mod tests {
             "titan-like" => "hydrocarbon-world",
             "europa-like" | "ganymede-like" | "callisto-like" | "triton-like"
             | "enceladus-like" => "ice-world",
-            "io-like" => "rocky",
+            "io-like" => "volcanic-world",
             other => panic!("no expected class for {other}"),
         }
     }

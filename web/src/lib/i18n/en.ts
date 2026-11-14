@@ -732,11 +732,17 @@ export const en = {
       'ice-world': 'Ice world',
       'mini-neptune': 'Mini-Neptune',
       'lava-world': 'Lava world',
+      'volcanic-world': 'Volcanic world',
       'runaway-greenhouse': 'Runaway greenhouse',
       'hydrocarbon-world': 'Hydrocarbon world',
       'ocean-world': 'Ocean world',
       'rocky-moon': 'rocky moon',
       'icy-moon': 'icy moon',
+    },
+    // The classes a round moon words otherwise than a planet (`classLabel`).
+    moonBodyTypes: {
+      rocky: 'Rocky moon',
+      'volcanic-world': 'Volcanic moon',
     },
     ringMoonTypes: {
       embedded: 'ring moon',

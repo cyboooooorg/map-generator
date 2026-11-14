@@ -161,7 +161,7 @@
         <button class="link" onclick={() => startRenaming(body.id)} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
       {/if}
       <small
-        >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model)} · {body.kind === 'moon'
+        >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model, body.kind === 'moon')} · {body.kind === 'moon'
           ? t.card.moonOf({ planet: planet ? nameOf(planet.id, planet.designation) : '' })
           : t.card.planetOf({ star: starName })}</small
       >

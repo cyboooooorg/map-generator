@@ -246,6 +246,15 @@ mod tests {
     }
 
     #[test]
+    fn io_is_a_volcanic_world() {
+        let m = model(
+            5.2,
+            &moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041),
+        );
+        assert_eq!(m.class, PlanetClass::VolcanicWorld, "{m:?}");
+    }
+
+    #[test]
     fn europa_has_an_ocean() {
         let m = model(
             5.2,

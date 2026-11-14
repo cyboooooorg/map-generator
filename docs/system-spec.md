@@ -551,7 +551,7 @@ systems/<system-id>/
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
     `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
-    `hot-neptune`, `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     `ocean-world`), its `physical.mass_earth` the model's mass after
     photoevaporation; its world renders, until #424, with the look
     closest to the model (`planet::interim::base_of`), and the model of

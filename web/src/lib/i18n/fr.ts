@@ -694,11 +694,17 @@ export const fr: Messages = {
       'ice-world': 'Monde glacé',
       'mini-neptune': 'Mini-Neptune',
       'lava-world': 'Monde de lave',
+      'volcanic-world': 'Monde volcanique',
       'runaway-greenhouse': 'Serre emballée',
       'hydrocarbon-world': "Monde d'hydrocarbures",
       'ocean-world': 'Monde océan',
       'rocky-moon': 'lune rocheuse',
       'icy-moon': 'lune glacée',
+    },
+    // The classes a round moon words otherwise than a planet (`classLabel`).
+    moonBodyTypes: {
+      rocky: 'Lune rocheuse',
+      'volcanic-world': 'Lune volcanique',
     },
     ringMoonTypes: {
       embedded: 'lune des anneaux',

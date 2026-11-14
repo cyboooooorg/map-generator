@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::climate::SurfaceLiquid;
+use crate::geology::Regime;
 use super::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, Interior, PlanetInputs, Surface};
 
 /// The kind of a planet, from its derived quantities.
@@ -20,6 +21,9 @@ pub enum PlanetClass {
     HotJupiter,
     HotNeptune,
     LavaWorld,
+    /// A solid surface in the heat-pipe regime (Io; Moore & Webb 2013,
+    /// doi:10.1038/nature12424) that no earlier class of [`classify`] claims.
+    VolcanicWorld,
     RunawayGreenhouse,
     HydrocarbonWorld,
     OceanWorld,
@@ -28,7 +32,7 @@ pub enum PlanetClass {
 impl PlanetClass {
     /// The class as stored: `rocky`, `super-earth`, `ice-world`,
     /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
-    /// `hot-neptune`, `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    /// `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     /// `ocean-world`.
     pub fn key(self) -> &'static str {
         match self {
@@ -41,6 +45,7 @@ impl PlanetClass {
             Self::HotJupiter => "hot-jupiter",
             Self::HotNeptune => "hot-neptune",
             Self::LavaWorld => "lava-world",
+            Self::VolcanicWorld => "volcanic-world",
             Self::RunawayGreenhouse => "runaway-greenhouse",
             Self::HydrocarbonWorld => "hydrocarbon-world",
             Self::OceanWorld => "ocean-world",
@@ -83,7 +88,7 @@ impl PlanetClass {
 /// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
 /// order: the types a planet of a system is stored as. The server and the
 /// web read the same list.
-pub const PLANET_CLASSES: [&str; 12] = [
+pub const PLANET_CLASSES: [&str; 13] = [
     "rocky",
     "super-earth",
     "ice-world",
@@ -93,6 +98,7 @@ pub const PLANET_CLASSES: [&str; 12] = [
     "hot-jupiter",
     "hot-neptune",
     "lava-world",
+    "volcanic-world",
     "runaway-greenhouse",
     "hydrocarbon-world",
     "ocean-world",
@@ -175,7 +181,12 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///    lava), a runaway greenhouse (runaway and over
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
 ///    more than [`METHANE_TRIPLE_BAR`]), an
-///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
+///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]), a
+///    volcanic world (a solid surface in the heat-pipe regime, none of
+///    the above), checked last because the others name what covers the
+///    surface (magma, a dense greenhouse air, a sea) and a volcanic world
+///    is what is left when only the resurfacing sets it apart, as Io's
+///    (Moore & Webb 2013, doi:10.1038/nature12424, heat-pipe tectonics);
 /// 4. at least 5 % water and ices, and with a `surface`, at least
 ///    [`ICE_WORLD_MIN_OCEANS`] of them kept there: an ice world (a body
 ///    that lost its ice falls through);
@@ -228,6 +239,8 @@ fn surface_class(surface: &Surface) -> Option<PlanetClass> {
         Some(PlanetClass::HydrocarbonWorld)
     } else if liquid == SurfaceLiquid::Water && surface.water.oceans >= OCEAN_WORLD_OCEANS {
         Some(PlanetClass::OceanWorld)
+    } else if surface.regime == Regime::HeatPipe {
+        Some(PlanetClass::VolcanicWorld)
     } else {
         None
     }
@@ -368,6 +381,7 @@ mod tests {
             HotJupiter,
             HotNeptune,
             LavaWorld,
+            VolcanicWorld,
             RunawayGreenhouse,
             HydrocarbonWorld,
             OceanWorld,

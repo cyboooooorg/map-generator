@@ -2,7 +2,7 @@
   import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
   import { nightSources } from '../lib/nightLight';
-  import { biomeName } from '../lib/i18n/names.svelte';
+  import { biomeName, className } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
@@ -2631,7 +2631,7 @@
               name: world.systemNames[body.id] ?? body.designation,
               type: body.ring_role
                 ? t.viewer.ringMoonTypes[body.ring_role]
-                : (t.viewer.bodyTypes[body.type as keyof typeof t.viewer.bodyTypes] ?? body.type),
+                : className(body.type, body.kind === 'moon'),
               generated: body.generated,
             })}</option
           >
