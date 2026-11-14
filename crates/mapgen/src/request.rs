@@ -70,13 +70,6 @@ pub const PERIHELION_LONGITUDE_DEG: Limits = Limits {
     min: 0.0,
     max: 360.0,
 };
-/// Mass of a giant planet's world, Earth masses: from a small ice giant to
-/// the deuterium-burning limit (13 Jupiter masses). A giant's world takes
-/// no less (a mini-Neptune renders as an ice giant of that mass).
-pub const GIANT_MASS: Limits = Limits {
-    min: 5.0,
-    max: 4_131.0,
-};
 /// Number of moons a request can ask for.
 pub const MOON_COUNT: Limits = Limits {
     min: 1.0,

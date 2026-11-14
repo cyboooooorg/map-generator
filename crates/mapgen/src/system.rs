@@ -2206,7 +2206,10 @@ fn shape_rings(
         slot.eccentricity as f32,
         params.age_gyr,
     );
-    let mass_kg = slot.mass_earth * EARTH_KG;
+    // The mass its world and moons take (the model's, issue #446), not
+    // the slot's, drawn before photoevaporation.
+    let mass_earth = params.giant_mass_earth.map_or(slot.mass_earth, f64::from);
+    let mass_kg = mass_earth * EARTH_KG;
     let radius_m = f64::from(params.circumference_km) * 1000.0 / (2.0 * PI);
     let density = mass_kg / (4.0 / 3.0 * PI * radius_m.powi(3)) / 1000.0;
     let hill = slot.orbit_au
@@ -2223,7 +2226,7 @@ fn shape_rings(
                 / (1.0 + 2.0 * 3f64.powf(1.0 / 6.0) * mu.cbrt())
         })
         .fold(hill / 3.0, f64::min);
-    let look = crate::giant_world::Look::draw(params, slot.mass_earth as f32).info;
+    let look = crate::giant_world::Look::draw(params, mass_earth as f32).info;
     let omega = 2.0 * PI / (f64::from(look.rotation_hours) * 3600.0);
     let q = omega * omega * (f64::from(look.radius_earth) * EARTH_M).powi(3) / (G * mass_kg);
     // The globe is drawn flattened by `min(0.7 q, 0.12)` (`giant_world`):
@@ -5459,10 +5462,12 @@ mod lone_tests {
     /// change is a regression of a normal system. Seeds 1 and 2
     /// regenerated again for issue #432: their mini-Neptune `d` is sized
     /// from its composition, as its model is (seed 1: 4.01 R⊕, was 1.62;
-    /// seed 2: 2.19 R⊕, was 1.56), so it keeps more moons.
+    /// seed 2: 2.19 R⊕, was 1.56), so it keeps more moons. Again for
+    /// issue #446: `d`'s world, moons and rings take the model's mass
+    /// (3.90 and 3.66 M⊕, was 5), so its outer moons' orbits moved.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0003:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0007:0.0822:false d-6:rocky:0.0013:0.0822:false d-7:rocky:0.0021:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0033:1.0306:false f-7:ice-world:0.0051:0.7879:false f-8:ice-world:0.0080:0.6381:false f-9:ice-world:0.0129:0.5346:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
-        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0006:0.0365:false d-4:rocky:0.0009:0.0365:false d-5:rocky:0.0014:0.0365:false d-6:rocky:0.0022:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
+        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0003:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0007:0.0822:false d-6:rocky:0.0014:0.0822:false d-7:rocky:0.0022:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0033:1.0306:false f-7:ice-world:0.0051:0.7879:false f-8:ice-world:0.0080:0.6381:false f-9:ice-world:0.0129:0.5346:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
+        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0006:0.0365:false d-4:rocky:0.0009:0.0365:false d-5:rocky:0.0014:0.0365:false d-6:rocky:0.0021:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
         "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:volcanic-world:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:0.9970:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
         "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:0.9925:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:hydrocarbon-world:13.6131:0.0350:true",
     ];
@@ -5491,10 +5496,17 @@ mod lone_tests {
     /// The body of a 6 M⊕ planet at 0.1 AU round a G2V that keeps 2 % of
     /// its mass in hydrogen and helium, placed as a system places it.
     fn mini_neptune_body() -> Body {
+        mini_neptune_body_of(6.0)
+    }
+
+    /// The body of a planet of `mass_earth` at 0.1 AU round a G2V that
+    /// keeps 2 % of its mass in hydrogen and helium, placed as a system
+    /// places it.
+    fn mini_neptune_body_of(mass_earth: f64) -> Body {
         let star = crate::star::parse_type("G2V").unwrap();
         let slot = Slot {
             placement: Placement::Drawn(crate::planet::Origin::Small),
-            mass_earth: 6.0,
+            mass_earth,
             orbit_au: 0.1,
             drawn_au: 0.1,
             eccentricity: 0.0,
@@ -5503,7 +5515,7 @@ mod lone_tests {
         let at = StarInfo::new(star, 0.1, 0.0, 4.6);
         let context = Context::of(&at, 0.0, 2.7);
         // Formed with more, so that photoevaporation leaves it about 2 %.
-        let mut inputs = crate::planet::reference::with_envelope(6.0, 0.02);
+        let mut inputs = crate::planet::reference::with_envelope(mass_earth, 0.02);
         let mut model = crate::planet::planet_model(&context, inputs.clone());
         while model.inputs.envelope_fraction < 0.02 {
             inputs.envelope_fraction *= 1.2;
@@ -5512,6 +5524,38 @@ mod lone_tests {
         let params = planet_params(&model, &placed_at(0.1));
         let look = base_of(&model);
         planet_body("b", "Test b", &slot, look, Some(model), &params, star)
+    }
+
+    #[test]
+    fn a_light_mini_neptune_is_its_models_size_and_mass() {
+        // Issue #446: under the smallest requested giant (5 M⊕), the world
+        // of a mini-Neptune took 5 M⊕, its moons drawn for that mass.
+        let body = mini_neptune_body_of(3.0);
+        assert_eq!(body.body_type, "mini-neptune");
+        let model = body.model.as_ref().unwrap();
+        assert!(model.inputs.mass_earth < 5.0, "{}", model.inputs.mass_earth);
+        let radius_km = model.interior.radius_earth * EARTH_M / 1000.0;
+        assert!(
+            (body.physical.radius_km / radius_km - 1.0).abs() < 1e-3,
+            "body {} km, model {radius_km} km",
+            body.physical.radius_km
+        );
+        assert_eq!(body.physical.mass_earth, model.inputs.mass_earth);
+        // Its world, and the moons drawn from it, of the same mass and size.
+        let world_mass = body.params.giant_mass_earth.expect("a giant world");
+        assert!(
+            (f64::from(world_mass) / model.inputs.mass_earth - 1.0).abs() < 1e-6,
+            "world {world_mass} M⊕, model {} M⊕",
+            model.inputs.mass_earth
+        );
+        // A giant world's circumference is its radius times Earth's
+        // equatorial 40 075 km, the body's radius of the mean 6 371 km.
+        let circumference = 2.0 * PI * radius_km;
+        assert!(
+            (f64::from(body.params.circumference_km) / circumference - 1.0).abs() < 2e-3,
+            "world {} km, model {circumference} km",
+            body.params.circumference_km
+        );
     }
 
     #[test]

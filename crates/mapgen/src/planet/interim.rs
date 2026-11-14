@@ -435,12 +435,11 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///     they leave it and its tidal flats see the model's mass);
 ///   - its regime, the model's (its look's, see [`look_for`]), not
 ///     [`crate::geology::regime_of`]'s;
-/// - a giant ([`renders_as_giant`]): its giant look at the model's mass
-///   (no less than the smallest giant's, [`crate::request::GIANT_MASS`]:
-///   a mini-Neptune renders as an ice giant of that mass), its radius the
+/// - a giant ([`renders_as_giant`]): its giant look at the model's mass,
+///   a mini-Neptune's too, however light (issue #446), its radius the
 ///   giant look's (`giant_radius_of` for the model's composition and
-///   light, the model's own radius at that mass; issue #446), no ground,
-///   no giant neighbours and nobody's moon;
+///   light, the model's own radius), no ground, no giant neighbours and
+///   nobody's moon;
 /// - a body that is no giant whose envelope hides its surface: its class's
 ///   look ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
 ///   the model's radius and gravity, with no ocean and no temperature
@@ -463,7 +462,7 @@ pub fn params_for(
     placed: &crate::request::Placed,
     rng: &mut impl RngExt,
 ) -> WorldParams {
-    use crate::request::{GIANT_MASS, PRESSURE_BAR, SEA_LEVEL, SURFACE_AGE_GA, VOLCANIC};
+    use crate::request::{PRESSURE_BAR, SEA_LEVEL, SURFACE_AGE_GA, VOLCANIC};
     let base = base_of(model);
     let giant = renders_as_giant(model);
     let surface = model.surface.as_ref().filter(|_| !giant);
@@ -504,7 +503,9 @@ pub fn params_for(
         placed.eccentricity,
         placed.age_gyr,
     );
-    let giant_mass = (model.inputs.mass_earth as f32).clamp(GIANT_MASS.min, GIANT_MASS.max);
+    // The model's own mass, a light mini-Neptune's too, so that the body,
+    // its world and the moons drawn from it agree (issue #446).
+    let giant_mass = model.inputs.mass_earth as f32;
     let (sea_level, circumference_km, pressure_bar, erosion, volcanic, surface_age_ga) =
         match surface {
             Some(surface) => {
