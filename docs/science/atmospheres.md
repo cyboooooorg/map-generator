@@ -318,8 +318,8 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
   round moon (`planet::derive_moon_model`, see
   [planet-atmospheres.md](planet-atmospheres.md)): a Titan comes out a
   hydrocarbon world with about 1.5 bar of N₂ and a few percent of CH₄,
-  Jupiter's moons airless and Triton with a thin N₂ air. Drawn systems do
-  not use it yet (part 4 of #423).
+  Jupiter's moons airless and Triton with a thin N₂ air; round moons of
+  drawn systems go through it (part 4 of #423).
 - **Hydrocarbon lakes sit poleward of a set latitude.** On a world whose
   surface liquid is methane and ethane, such as a Titan, the app puts the
   liquid poleward of 55° and keeps the lower latitudes dry
@@ -334,6 +334,25 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
   from the world's circulation, and does not model the north-south
   asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
   band is a straight line of latitude.
+- **Nitrogen keeps methane liquid, by a simple rule.** Pure methane
+  freezes at 90.67 K, but a sea under a nitrogen air is a mixture: N₂
+  dissolves in liquid methane, and the mixture freezes lower. Thompson,
+  Zollweg & Gabis 1992 [15] find that methane condensing under Titan's air
+  holds 16 to 30 % N₂, about half of what Raoult's law gives, and
+  Richardson, Hartwig & Leachman 2019 [16] measured methane–ethane–nitrogen
+  liquids freezing at 71.5 K (13.4 % N₂) and 74.0 K (7.9 % N₂), more than
+  15 K below the pure ices. The app (`methane_freezes_k`) takes the N₂ in
+  the liquid as half of Raoult's law at the surface's N₂ partial pressure
+  and methane's triple point (nitrogen's vapour pressure from NIST's
+  Antoine fit), at most 30 %, and lowers the freezing point as an ideal
+  solution would (the Schröder–van Laar equation, with methane's enthalpy
+  of fusion, 0.939 kJ/mol): about 78 K under Titan's 1.45 bar of N₂,
+  pure methane's 90.67 K with no nitrogen, never below 70.4 K. It is a
+  simple fit, not the full phase diagram: it leaves the ethane out, which
+  lowers the freezing point further (the binary rule gives 81 and 85 K for
+  Richardson's two liquids), so it errs towards freezing. A Titan drawn
+  with a thinner air than Titan's keeps its lakes; under 1 bar it is
+  still classed an ice world (`planet::classify`).
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon
@@ -416,6 +435,15 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
     Titan as a possible consequence of orbital forcing", *Nature
     Geoscience* 2, 851–854,
     [doi:10.1038/ngeo698](https://doi.org/10.1038/ngeo698).
+15. Thompson, W. R., Zollweg, J. A. & Gabis, D. H. 1992, "Vapor-liquid
+    equilibrium thermodynamics of N₂ + CH₄: Model and Titan
+    applications", *Icarus* 97, 187–199,
+    [doi:10.1016/0019-1035(92)90127-S](https://doi.org/10.1016/0019-1035(92)90127-S).
+16. Richardson, I. A., Hartwig, J. W. & Leachman, J. W. 2019,
+    "Experimental effervescence and freezing point depression
+    measurements of nitrogen in liquid methane-ethane mixtures",
+    *International Journal of Thermal Sciences* 137, 534–538,
+    [doi:10.1016/j.ijthermalsci.2018.12.024](https://doi.org/10.1016/j.ijthermalsci.2018.12.024).
 
 ## See also
 

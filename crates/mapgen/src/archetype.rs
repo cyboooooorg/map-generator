@@ -762,28 +762,38 @@ mod tests {
         assert_eq!(built_in_names().len(), 20);
     }
 
-    /// Known departure: a Titan whose surface the draw leaves under
-    /// pure methane's triple point (90.7 K) keeps its methane frozen and
-    /// comes out an ice world, where Titan's nitrogen–methane–ethane
-    /// mixtures stay liquid down to about 72 K; the model takes pure
-    /// methane. Its air scatters with the radiogenic and volatile draws
-    /// (0.6 to 6 bar), and with it its greenhouse: 16 seeds of 20 come
-    /// out a hydrocarbon world.
+    /// Every Titan that keeps methane in its air keeps liquid
+    /// hydrocarbons, its nitrogen holding them liquid below pure methane's
+    /// triple point (`planet::climate::methane_freezes_k`), and is a
+    /// hydrocarbon world when its air passes the 1 bar from which
+    /// `planet::classify` names one. Over seeds 0 to 19, 17 are; seeds 5
+    /// and 10 keep their lakes under 0.61 and 0.57 bar and are classed ice
+    /// worlds; seed 8, drawn with little methane (0.15 % of its mass), has
+    /// lost it all to its star's Lyman α (`atmosphere::methane_photolysis`).
     #[test]
     fn titan_like_is_mostly_a_hydrocarbon_world() {
         let a = Archetype::load("titan-like").unwrap();
         let mut hydrocarbon = 0;
         for seed in 0..20 {
             let m = moon_model_of(&a, seed);
-            if m.class.key() == expected(&a.name) {
+            let s = m.surface.expect("a moon has a surface");
+            if s.gases.ch4 > 0.0 {
+                assert_eq!(
+                    s.climate.liquid,
+                    crate::planet::SurfaceLiquid::Hydrocarbons,
+                    "seed {seed}: {m:?}"
+                );
+            }
+            if s.climate.liquid == crate::planet::SurfaceLiquid::Hydrocarbons
+                && s.gases.total() > 1.0
+            {
+                assert_eq!(m.class.key(), expected(&a.name), "seed {seed}: {m:?}");
                 hydrocarbon += 1;
             } else {
-                let s = m.surface.expect("a moon has a surface");
                 assert_eq!(m.class.key(), "ice-world", "seed {seed}: {m:?}");
-                assert!(s.climate.temperature_k < 90.7, "seed {seed}: {s:?}");
             }
         }
-        assert!(hydrocarbon >= 15, "{hydrocarbon} of 20");
+        assert_eq!(hydrocarbon, 17, "{hydrocarbon} of 20");
     }
 
     #[test]

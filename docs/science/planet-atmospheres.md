@@ -628,7 +628,10 @@ and pressure, in this order:
   pressure (the same Clausius–Clapeyron, 373 K at 1 atm, capped at the
   critical point), above the triple-point pressure, with water kept out
   of a runaway;
-- `hydrocarbons` between methane's triple point (90.7 K) and ethane's
+- `hydrocarbons` between methane's freezing point, lowered by the
+  nitrogen of the air dissolved in it (`methane_freezes_k`: 90.67 K with
+  no N₂, about 78 K under Titan's 1.45 bar, see
+  [atmospheres.md](atmospheres.md)), and ethane's
   boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
   at 1 atm with 14.7 kJ/mol, capped at its critical 305 K; NIST values
   from memory, not checked), with methane in the air;

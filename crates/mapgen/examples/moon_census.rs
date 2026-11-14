@@ -252,8 +252,8 @@ fn why_not_hydrocarbon(model: &mapgen::planet::PlanetModel, p_bar: f64, t: f64) 
         }
     } else if s.gases.ch4 <= 0.0 {
         "air kept, its CH4 photolysed (Lyman alpha outran outgassing)"
-    } else if t < 90.7 {
-        "air kept, too cold for liquid CH4 (< 90.7 K)"
+    } else if t < mapgen::planet::methane_freezes_k(s.gases.n2) {
+        "air kept, too cold for liquid CH4 (its N2 lowers the 90.7 K)"
     } else if s.climate.liquid != SurfaceLiquid::Hydrocarbons {
         "air kept, too warm for liquid CH4 (ethane boils)"
     } else if p_bar <= 1.0 {

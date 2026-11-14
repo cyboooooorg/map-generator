@@ -4453,12 +4453,13 @@ mod tests {
     /// ocean is a known departure (issue #463), as are the oceans of
     /// Ganymede and Callisto, which follow the radiogenic draw.
     ///
-    /// Known departure: Titan's air scatters with its draws (0.8 to
-    /// 2.9 bar over these seeds), and with it its greenhouse; a Titan left
-    /// under pure methane's triple point (90.7 K) keeps its methane frozen
-    /// and comes out an ice world (seeds 6, 7 and 9, at 88.6 to 90.0 K),
-    /// where Titan's nitrogen–methane mixtures stay liquid below it. The
-    /// model takes pure methane.
+    /// Every Titan keeps liquid hydrocarbons, its nitrogen holding them
+    /// liquid below pure methane's triple point
+    /// (`planet::climate::methane_freezes_k`). Its air scatters with its
+    /// draws (0.8 to 2.9 bar over these seeds): a Titan under the 1 bar
+    /// from which `planet::classify` names a hydrocarbon world (seeds 6
+    /// and 7, 0.81 and 0.97 bar) keeps its lakes and haze but is classed
+    /// an ice world.
     #[test]
     fn each_moon_archetype_comes_out_as_itself() {
         use crate::geology::Regime;
@@ -4475,12 +4476,20 @@ mod tests {
             };
             let surface = |m: &PlanetModel| m.surface.expect("a moon has a surface");
             let (_, titan) = one("titan-like");
-            if titan.class.key() == "hydrocarbon-world" {
-                hydrocarbon += 1;
+            let air = surface(&titan).gases.total();
+            assert_eq!(
+                surface(&titan).climate.liquid,
+                crate::planet::SurfaceLiquid::Hydrocarbons,
+                "seed {seed}: {titan:?}"
+            );
+            let class = if air > 1.0 {
+                "hydrocarbon-world"
             } else {
-                assert_eq!(titan.class.key(), "ice-world", "seed {seed}: {titan:?}");
-                let t = surface(&titan).climate.temperature_k;
-                assert!(t < 90.7, "seed {seed}: {titan:?}");
+                "ice-world"
+            };
+            assert_eq!(titan.class.key(), class, "seed {seed}: {titan:?}");
+            if air > 1.0 {
+                hydrocarbon += 1;
             }
             let (_, europa) = one("europa-like");
             let ocean = europa.ice_shell.map_or(0.0, |s| s.ocean_km);
@@ -4507,7 +4516,7 @@ mod tests {
                 "icy-moon" | "rocky-moon"
             ));
         }
-        assert_eq!(hydrocarbon, 7, "Titans that are hydrocarbon worlds");
+        assert_eq!(hydrocarbon, 8, "Titans that are hydrocarbon worlds");
     }
 
     /// A giant its star despins keeps only the light moons (`moons.rs`,
@@ -5123,13 +5132,15 @@ mod lone_tests {
     /// disk's mass, shape and temperature (the moons' rock or ice and
     /// orbits changed), when a small moon drew its bulk composition (more
     /// draws, and a density that sets its size), and when round moons went
-    /// through the planet model (typed by their class); any other change
-    /// is a regression of a normal system.
+    /// through the planet model (typed by their class), and when nitrogen
+    /// kept methane liquid below its triple point (seed 4's `f` became a
+    /// hydrocarbon world); any other change is a regression of a normal
+    /// system.
     const MAIN_SIGNATURES: [&str; 4] = [
         "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky:0.0006:0.0822:false d-5:rocky:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:ice-world:0.0019:0.0350:false f-6:ice-world:0.0033:0.0350:false f-7:ice-world:0.0051:0.0350:false f-8:ice-world:0.0080:0.0350:false f-9:ice-world:0.0129:0.0350:false g:ice-world:13.6776:0.0350:false",
         "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:rocky:0.0005:0.0365:false d-3:rocky:0.0007:0.0365:false d-4:rocky:0.0012:0.0365:false d-5:rocky:0.0018:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
         "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true e:rocky:0.9970:0.0350:true f:rocky:2.4861:0.0350:true f-1:rocky-moon:0.0001:0.0350:false",
-        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:rocky:0.9925:0.0350:true d-1:rocky-moon:0.0014:0.0350:false e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false f:ice-world:13.6131:0.0350:true",
+        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:rocky:0.9925:0.0350:true d-1:rocky-moon:0.0014:0.0350:false e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false f:hydrocarbon-world:13.6131:0.0350:true",
     ];
 
     /// A planet of seed 5 at `orbit_au` round a G2V of 4.6 Gyr on a

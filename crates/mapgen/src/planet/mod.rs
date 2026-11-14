@@ -65,7 +65,7 @@ pub use atmosphere::{
     photochemistry,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
-pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
+pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
