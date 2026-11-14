@@ -14,6 +14,7 @@
 
 import type { Vec3 } from '../skyBodies';
 import { bandFrame, type SkyLook } from './skyLook';
+import { nebulaDustAt } from './skyNebulae';
 import { random } from './skyRandom';
 
 /** Six RGBA faces in Three's cube order (+x, -x, +y, -y, +z, -z), sRGB-encoded. */
@@ -208,7 +209,7 @@ function coreLane(look: SkyLook, dir: Vec3): number {
  * silhouettes.
  */
 export function dustAt(look: SkyLook, dir: Vec3): number {
-  const extra = 1 - (1 - coreLane(look, dir));
+  const extra = 1 - (1 - nebulaDustAt(look, dir)) * (1 - coreLane(look, dir));
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
   const sigma = look.bandWidth * 0.8;
   const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));

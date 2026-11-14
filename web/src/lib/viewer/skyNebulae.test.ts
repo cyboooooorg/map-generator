@@ -1,0 +1,153 @@
+import { describe, expect, it } from 'vitest';
+import type { Vec3 } from '../skyBodies';
+import { dustAt } from './skyClouds';
+import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
+import {
+  NEBULA_SIZE_DEG,
+  nebulaBasis,
+  pillarColumns,
+  pillarMask,
+  skyNebulae,
+  type NebulaKind,
+} from './skyNebulae';
+
+const KINDS: NebulaKind[] = ['planetary', 'emission', 'pillars', 'remnant', 'reflection', 'dark'];
+const DEG = Math.PI / 180;
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const lookAt = (x: number, seed = 5): SkyLook =>
+  skyLook({
+    source: 'Derived',
+    position_kpc: [x, 0, 0.02],
+    axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    sky_seed: seed,
+  } as never);
+const latOf = (look: SkyLook, dir: Vec3) => Math.asin(dot(dir, look.north));
+const count = (look: SkyLook, kind: NebulaKind) => skyNebulae(look).filter((n) => n.kind === kind).length;
+
+describe('skyNebulae', () => {
+  const sun = lookAt(8.2);
+
+  it('is deterministic and memoised per look', () => {
+    expect(skyNebulae(sun)).toBe(skyNebulae(sun));
+    expect(skyNebulae({ ...sun })).toBe(skyNebulae(sun));
+    expect(skyNebulae(lookAt(8.2))).toEqual(skyNebulae(sun));
+  });
+
+  it('differs between sky seeds', () => {
+    expect(skyNebulae(lookAt(8.2, 6))).not.toEqual(skyNebulae(sun));
+  });
+
+  it('draws every kind for at least 80% of 200 seeds', () => {
+    const seen = new Map<NebulaKind, number>(KINDS.map((k) => [k, 0]));
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const kinds = new Set(skyNebulae(lookAt(8.2, seed * 7919)).map((n) => n.kind));
+      for (const k of kinds) seen.set(k, seen.get(k)! + 1);
+    }
+    for (const k of KINDS) expect(seen.get(k)!).toBeGreaterThanOrEqual(160);
+  });
+
+  it("draws the counts of the spec's starting point at the Sun", () => {
+    const ranges: Record<NebulaKind, [number, number]> = {
+      planetary: [3, 8],
+      emission: [2, 5],
+      pillars: [1, 3],
+      remnant: [1, 3],
+      reflection: [2, 6],
+      dark: [4, 10],
+    };
+    for (let seed = 1; seed <= 50; seed += 1) {
+      const look = lookAt(8.2, seed);
+      for (const k of KINDS) {
+        expect(count(look, k)).toBeGreaterThanOrEqual(ranges[k][0]);
+        expect(count(look, k)).toBeLessThanOrEqual(ranges[k][1]);
+      }
+    }
+  });
+
+  it('keeps the sizes within the table and the vectors unit', () => {
+    for (let seed = 1; seed <= 30; seed += 1) {
+      for (const n of skyNebulae(lookAt(8.2, seed))) {
+        const [lo, hi] = NEBULA_SIZE_DEG[n.kind];
+        expect(n.radius).toBeGreaterThanOrEqual(lo * DEG - 1e-9);
+        expect(n.radius).toBeLessThanOrEqual(hi * DEG + 1e-9);
+        expect(Math.hypot(...n.dir)).toBeCloseTo(1, 9);
+        expect(n.tint).toBeGreaterThanOrEqual(0);
+        expect(n.tint).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('keeps the band kinds within 15 degrees of the plane, closer than uniform on average', () => {
+    // Mean |latitude| of a uniform sphere is (pi / 2 - 1) radians.
+    const uniform = Math.PI / 2 - 1;
+    for (const k of KINDS) {
+      let sum = 0;
+      let total = 0;
+      for (let seed = 1; seed <= 100; seed += 1) {
+        const look = lookAt(8.2, seed);
+        for (const n of skyNebulae(look).filter((x) => x.kind === k)) {
+          const lat = Math.abs(latOf(look, n.dir));
+          if (k === 'emission' || k === 'pillars' || k === 'reflection' || k === 'dark') {
+            expect(lat).toBeLessThanOrEqual(15 * DEG + 1e-9);
+          }
+          sum += lat;
+          total += 1;
+        }
+      }
+      expect(sum / total).toBeLessThan(uniform);
+    }
+  });
+
+  it('draws more nebulae near the centre than far out', () => {
+    let near = 0;
+    let far = 0;
+    for (let seed = 1; seed <= 20; seed += 1) {
+      near += skyNebulae(lookAt(3, seed)).length;
+      far += skyNebulae(lookAt(14, seed)).length;
+    }
+    expect(near).toBeGreaterThan(far);
+  });
+
+  it('draws each kind from its own stream, whatever the others hold', () => {
+    // The dark nebulae of a seed are the same whichever look scale draws the others.
+    const a = skyNebulae(sun).filter((n) => n.kind === 'dark');
+    const b = skyNebulae({ ...sun }).filter((n) => n.kind === 'dark');
+    expect(a).toEqual(b);
+    expect(skyNebulae(lookAt(8.2, 9)).filter((n) => n.kind === 'dark')).not.toEqual(a);
+  });
+
+  it('works for the fixed sky', () => {
+    expect(skyNebulae(FIXED_SKY).length).toBeGreaterThan(0);
+  });
+});
+
+describe('dust of nebulae', () => {
+  const look = lookAt(8.2);
+
+  it('is higher at the centre of a dark nebula than just outside it', () => {
+    const dark = skyNebulae(look).find((n) => n.kind === 'dark')!;
+    const { right } = nebulaBasis(dark);
+    const at = (angle: number): Vec3 => {
+      const d = dark.dir.map((v, i) => v * Math.cos(angle) + right[i]! * Math.sin(angle)) as Vec3;
+      return d;
+    };
+    expect(dustAt(look, dark.dir)).toBeGreaterThan(dustAt(look, at(dark.radius * 1.3)));
+    expect(dustAt(look, dark.dir)).toBeGreaterThan(0.5);
+  });
+
+  it('dims the stars behind a pillar column', () => {
+    const p = skyNebulae(look).find((n) => n.kind === 'pillars')!;
+    const column = pillarColumns(p)[0]!;
+    const { right, up } = nebulaBasis(p);
+    const t = Math.tan(p.radius);
+    const at = (x: number, y: number): Vec3 => {
+      const v = p.dir.map((c, i) => c + t * (x * right[i]! + y * up[i]!)) as Vec3;
+      const l = Math.hypot(...v);
+      return [v[0] / l, v[1] / l, v[2] / l];
+    };
+    const inside = dustAt(look, at(column.x, -0.6));
+    const outside = dustAt(look, at(column.x + 0.9, -0.6));
+    expect(pillarMask(pillarColumns(p), column.x, -0.6)).toBeGreaterThan(0.9);
+    expect(inside).toBeGreaterThan(outside);
+  });
+});
