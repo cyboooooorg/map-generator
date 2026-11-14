@@ -137,6 +137,17 @@ pub struct Exposure {
     pub age_gyr: f64,
 }
 
+impl Exposure {
+    /// What `star` gives a planet on its orbit.
+    pub fn of(star: &crate::star::StarInfo) -> Self {
+        Self {
+            insolation: f64::from(star.insolation),
+            equilibrium_k: f64::from(star.equilibrium_k),
+            age_gyr: f64::from(star.age_gyr),
+        }
+    }
+}
+
 /// The layered structure of a planet and its bulk quantities.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

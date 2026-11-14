@@ -25,7 +25,8 @@
 //! - Giants: envelope and ice shares of Guillot 2005
 //!   (doi:10.1146/annurev.earth.33.092203.122639) and Helled et al. 2011
 //!   (doi:10.1088/0004-637X/726/1/15), rounded. Their radii come from
-//!   `giants::giant_radius` (see `interior::interior`).
+//!   `giants::giant_radius_of` for their composition (see
+//!   `interior::interior`).
 
 /// A Solar System body with its composition and its observed radius.
 #[derive(Clone, Debug, PartialEq)]

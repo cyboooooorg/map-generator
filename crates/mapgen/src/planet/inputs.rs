@@ -143,7 +143,7 @@ const ENVELOPE_SPREAD_DEX: f64 = 0.5;
 /// Largest envelope share of a planet under [`GIANT_MIN_MASS_EARTH`].
 /// Calibration, no source: the super-puffs of Lee & Chiang (2016), about
 /// 20 % and more.
-const ENVELOPE_MAX_SMALL: f64 = 0.3;
+pub(crate) const ENVELOPE_MAX_SMALL: f64 = 0.3;
 
 /// Envelope share of the ice giants, 10 to 30 M⊕. Calibration, no
 /// source: Uranus and Neptune hold about 10 to 20 % of their mass in
@@ -154,7 +154,7 @@ const ICE_GIANT_ENVELOPE: (f64, f64) = (0.05, 0.3);
 /// (Pollack et al. 1996, doi:10.1006/icar.1996.0190: runaway accretion
 /// once the envelope weighs as much as the core). Calibration, no source,
 /// for 30 rather than the crossover of about 20.
-const GAS_GIANT_MASS: f64 = 30.0;
+pub(crate) const GAS_GIANT_MASS: f64 = 30.0;
 
 /// Heavy-element mass of a gas giant, Earth masses, at most a tenth of
 /// the planet. Calibration, no source: Saturn's 95 M⊕ keep about 15 to

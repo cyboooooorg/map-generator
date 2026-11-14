@@ -11,6 +11,7 @@
 //! `R³ = M / ρ`.
 use super::{Exposure, Interior, Layer, Material, PlanetInputs};
 use crate::world::UNCOMPRESSED_ROCK_DENSITY;
+use std::sync::LazyLock;
 
 /// Earth's bulk density, g/cm³ (NASA Earth fact sheet: 5.513).
 pub const EARTH_DENSITY: f64 = 5.513;
@@ -116,27 +117,87 @@ pub const GIANT_MIN_MASS_EARTH: f64 = 10.0;
 /// of a few percent on the envelope fit of Lopez & Fortney (2014).
 pub const GIANT_MIN_ENVELOPE: f64 = 0.05;
 
-/// Thickness of a hydrogen and helium envelope, Earth radii, from the
-/// planet's mass (Earth masses), the envelope's share of it, the
-/// insolation (Earth's = 1) and the age (Gyr).
+/// Thickness of a hydrogen and helium envelope of solar make on a rocky
+/// core, Earth radii, from the planet's mass (Earth masses), the
+/// envelope's share of it, the insolation (Earth's = 1) and the age (Gyr).
 ///
 /// Lopez & Fortney (2014, doi:10.1088/0004-637X/792/1/1), their fit:
 /// `R_env = 2.06 R⊕ M^−0.21 (f/5 %)^0.59 S^0.044 (age/5 Gyr)^−0.11`, with
 /// the age exponent of their solar-metallicity models (the printed fit,
 /// made on enhanced-opacity models, has −0.18). The fit is within about
 /// 0.1 dex of their full models. The mass, insolation and age are clamped
-/// to the grid it was fitted on (1–20 M⊕, 0.1–1000 S⊕, 0.1–10 Gyr), and
-/// the envelope share to at most 20 % of the mass. Below the grid's
-/// smallest envelope (0.01 % of the mass) the `f^0.59` term is
-/// extrapolated, unclamped, so that the envelope thins to nothing as its
-/// share goes to zero instead of jumping at `f = 0`. The thin radiative
-/// atmosphere above it (their `R_atm`, about 0.1 R⊕) is left out.
-fn envelope_thickness(mass_earth: f64, envelope: f64, insolation: f64, age_gyr: f64) -> f64 {
+/// to the grid it was fitted on (1–20 M⊕, 0.1–1000 S⊕, 0.1–10 Gyr). The
+/// envelope share is extrapolated below the grid's smallest envelope
+/// (0.01 % of the mass), so that the envelope thins to nothing as its
+/// share goes to zero instead of jumping at `f = 0`, and above its largest
+/// (20 %) up to the largest share the model draws under 30 M⊕
+/// ([`ENVELOPE_MAX_SMALL`], 30 %), so that more gas makes a larger planet
+/// over every drawn share; a larger share, which only a request asks for,
+/// is sized as 30 % (a giant from [`GAS_GIANT_MIN_ENVELOPE`] takes the gas
+/// giants' law instead, see [`crate::giants::giant_radius_of`]). The thin
+/// radiative atmosphere above it (their `R_atm`, about 0.1 R⊕) is left
+/// out.
+///
+/// [`ENVELOPE_MAX_SMALL`]: super::inputs::ENVELOPE_MAX_SMALL
+/// [`GAS_GIANT_MIN_ENVELOPE`]: super::classify::GAS_GIANT_MIN_ENVELOPE
+fn lopez_fortney_thickness(mass_earth: f64, envelope: f64, insolation: f64, age_gyr: f64) -> f64 {
     let m = mass_earth.clamp(1.0, 20.0);
-    let f = envelope.clamp(0.0, 0.2);
+    let f = envelope.clamp(0.0, super::inputs::ENVELOPE_MAX_SMALL);
     let s = insolation.clamp(0.1, 1000.0);
     let age = age_gyr.clamp(0.1, 10.0);
     2.06 * m.powf(-0.21) * (f / 0.05).powf(0.59) * s.powf(0.044) * (age / 5.0).powf(-0.11)
+}
+
+/// Light Neptune gets, Earth's = 1 (`1 / 30.07²`): under the grid of
+/// [`lopez_fortney_thickness`], which takes it as 0.1.
+const NEPTUNE_INSOLATION: f64 = 1.0 / (30.07 * 30.07);
+
+/// How much thinner than [`lopez_fortney_thickness`] Neptune's envelope
+/// is: what puts its composition ([`GiantComposition::NEPTUNE`]) at
+/// Neptune's mass, light and age at Neptune's radius
+/// ([`crate::giants::NEPTUNE_RADIUS_EARTH`]). About 0.49: its solid
+/// layers come out 2.91 R⊕, the fit gives an envelope of 1.98 R⊕ (Neptune
+/// would come out 4.89 R⊕, 27 % too large, and Uranus 22 %), and 0.97 is
+/// left for it.
+///
+/// [`GiantComposition::NEPTUNE`]: crate::giants::GiantComposition::NEPTUNE
+static NEPTUNE_ENVELOPE_SHARE: LazyLock<f64> = LazyLock::new(|| {
+    let neptune = crate::giants::GiantComposition::NEPTUNE;
+    let mass = crate::giants::NEPTUNE_MASS_EARTH;
+    let solid = solid_interior(&neptune.inputs(mass)).radius_earth;
+    let fit = lopez_fortney_thickness(
+        mass,
+        neptune.envelope_fraction,
+        NEPTUNE_INSOLATION,
+        f64::from(crate::star::DEFAULT_AGE_GYR),
+    );
+    (crate::giants::NEPTUNE_RADIUS_EARTH - solid) / fit
+});
+
+/// Thickness of a planet's hydrogen and helium envelope, Earth radii:
+/// [`lopez_fortney_thickness`] for its mass, envelope share, insolation
+/// and age, times a factor of its water share `water` that runs linearly
+/// from 1 for a dry planet to [`NEPTUNE_ENVELOPE_SHARE`] (about 0.49) at
+/// Neptune's 65 %.
+///
+/// The fit of Lopez & Fortney is made on envelopes of pure hydrogen and
+/// helium over rocky cores. A water-rich planet mixes heavy elements into
+/// its envelope (Uranus's and Neptune's hold them up to their outer
+/// layers: Helled et al. 2011, doi:10.1088/0004-637X/726/1/15; Nettelmann
+/// et al. 2013, doi:10.1016/j.pss.2012.06.019), which makes it denser and
+/// thinner. The linear factor is a calibration, no source, set on Neptune
+/// alone: Uranus, with Neptune's composition and 15 % less mass, comes out
+/// 3.80 R⊕ (3.98 observed, −4.5 %).
+pub(crate) fn envelope_thickness(
+    mass_earth: f64,
+    envelope: f64,
+    water: f64,
+    exposure: &Exposure,
+) -> f64 {
+    let neptune = crate::giants::GiantComposition::NEPTUNE;
+    let wet = (water / neptune.water_fraction).clamp(0.0, 1.0 / neptune.water_fraction);
+    let factor = 1.0 - (1.0 - *NEPTUNE_ENVELOPE_SHARE) * wet;
+    lopez_fortney_thickness(mass_earth, envelope, exposure.insolation, exposure.age_gyr) * factor
 }
 
 /// The layers of a planet with its hydrogen and helium envelope, its
@@ -144,10 +205,12 @@ fn envelope_thickness(mass_earth: f64, envelope: f64, insolation: f64, age_gyr: 
 ///
 /// Without an envelope, the [`solid_interior`]. A giant (at least
 /// [`GIANT_MIN_MASS_EARTH`] and [`GIANT_MIN_ENVELOPE`]) takes the radius
-/// of [`crate::giants::giant_radius`], the model the giant worlds already
-/// use: the solid layers stay inside it and the envelope fills the rest.
-/// Any other planet gets the envelope of [`envelope_thickness`] on top of
-/// its solid part. Density and gravity count the whole mass.
+/// of [`crate::giants::giant_radius_of`]: under 30 M⊕ the same solid layers
+/// and [`envelope_thickness`] as any other planet, so that the radius does
+/// not jump across those lines, then the giant law of the gas giants. The
+/// solid layers stay inside it and the envelope fills the rest. Any other
+/// planet gets the envelope of [`envelope_thickness`] on top of its solid
+/// part. Density and gravity count the whole mass.
 pub fn interior(inputs: &PlanetInputs, exposure: &Exposure) -> Interior {
     let solid = solid_interior(inputs);
     let mass = inputs.mass_earth;
@@ -157,9 +220,10 @@ pub fn interior(inputs: &PlanetInputs, exposure: &Exposure) -> Interior {
     }
     let radius_earth =
         if mass >= GIANT_MIN_MASS_EARTH && inputs.envelope_fraction >= GIANT_MIN_ENVELOPE {
-            f64::from(crate::giants::giant_radius(
+            f64::from(crate::giants::giant_radius_of(
                 mass as f32,
-                exposure.equilibrium_k as f32,
+                &crate::giants::GiantComposition::of(inputs),
+                exposure,
             ))
             .max(solid.radius_earth)
         } else {
@@ -167,8 +231,8 @@ pub fn interior(inputs: &PlanetInputs, exposure: &Exposure) -> Interior {
                 + envelope_thickness(
                     mass,
                     inputs.envelope_fraction,
-                    exposure.insolation,
-                    exposure.age_gyr,
+                    inputs.water_fraction,
+                    exposure,
                 )
         };
     let mut layers = solid.layers;
@@ -299,10 +363,126 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "giants::giant_radius gives Uranus 3.52 R⊕ (3.98 observed, −11.6 %): \
-                its M^0.59 law below Neptune's mass; issue #432"]
     fn uranus_comes_out_its_size() {
         assert_giant_size("Uranus", 0.08);
+    }
+
+    /// Inputs of `mass_earth` with a `water` and an `envelope` share,
+    /// Earth-like rock.
+    fn made_of(mass_earth: f64, water: f64, envelope: f64) -> PlanetInputs {
+        PlanetInputs {
+            envelope_fraction: envelope,
+            ..inputs(mass_earth, 0.325, water)
+        }
+    }
+
+    fn lit(insolation: f64) -> Exposure {
+        Exposure {
+            insolation,
+            equilibrium_k: 278.0 * insolation.powf(0.25),
+            age_gyr: 4.6,
+        }
+    }
+
+    #[test]
+    fn the_radius_is_continuous_across_the_giant_lines() {
+        // The 5 % gas line at 12 M⊕ and the 10 M⊕ line, for dry, wet and
+        // Neptune-like planets, cold and hot: no step of more than 1 %.
+        for water in [0.0, 0.35, 0.6] {
+            for insolation in [0.01, 1.0, 100.0, 1000.0] {
+                let at =
+                    |m: f64, f: f64| interior(&made_of(m, water, f), &lit(insolation)).radius_earth;
+                let (below, above) = (at(12.0, 0.0499), at(12.0, 0.0501));
+                assert!(
+                    (above / below - 1.0).abs() < 0.01,
+                    "5 % line, water {water}, S {insolation}: {below} then {above}"
+                );
+                for f in [0.06, 0.15, 0.3] {
+                    let (below, above) = (at(9.999, f), at(10.001, f));
+                    assert!(
+                        (above / below - 1.0).abs() < 0.01,
+                        "10 M⊕ line, water {water}, gas {f}, S {insolation}: \
+                         {below} then {above}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn more_gas_makes_a_larger_planet() {
+        for water in [0.0, 0.35, 0.6] {
+            for m in [5.0, 12.0, 20.0, 25.0] {
+                for insolation in [0.01, 100.0] {
+                    let mut last = 0.0;
+                    for f in [0.001, 0.01, 0.03, 0.049, 0.051, 0.1, 0.2, 0.3] {
+                        let r = interior(&made_of(m, water, f), &lit(insolation)).radius_earth;
+                        assert!(
+                            r > last,
+                            "{m} M⊕, water {water}, gas {f}, S {insolation}: {r}"
+                        );
+                        last = r;
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_giant_of_fixed_composition_barely_grows_up_to_thirty_earth_masses() {
+        // A dry planet with 6 % gas and a Neptune-like one: from Neptune's
+        // mass to the gas giants' line the radius grows slower than
+        // `M^0.35` (a solid body's `M^0.27`, an envelope that thins).
+        for (water, gas) in [(0.0, 0.06), (0.6, 0.15)] {
+            for insolation in [0.01, 100.0] {
+                let at = |m: f64| interior(&made_of(m, water, gas), &lit(insolation)).radius_earth;
+                let growth = at(29.9) / at(17.6);
+                assert!(
+                    growth < (29.9f64 / 17.6).powf(0.35),
+                    "water {water}, gas {gas}, S {insolation}: {} then {}",
+                    at(17.6),
+                    at(29.9)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_requested_gas_giant_under_thirty_earth_masses_is_sized_as_one() {
+        // `jupiter-like` asked at 20 M⊕ keeps about 95 % gas: a gas giant
+        // by its class, sized by the gas giants' law, whose radius never
+        // falls with the mass across 30 M⊕.
+        for insolation in [0.01, 100.0] {
+            let exposure = lit(insolation);
+            let at = |m: f64| interior(&made_of(m, 0.0, 0.95), &exposure).radius_earth;
+            let law = f64::from(crate::giants::gas_giant_radius(
+                20.0,
+                exposure.equilibrium_k as f32,
+            ));
+            assert!(
+                (at(20.0) - law).abs() < 1e-6,
+                "S {insolation}: {}",
+                at(20.0)
+            );
+            let mut last = 0.0;
+            for m in [10.0, 12.0, 17.15, 20.0, 25.0, 29.9, 30.0, 31.0, 40.0] {
+                let r = at(m);
+                assert!(r >= last, "S {insolation}, {m} M⊕: {r} after {last}");
+                last = r;
+            }
+        }
+    }
+
+    #[test]
+    fn the_envelope_fit_is_not_extrapolated_past_the_drawn_shares() {
+        // Under the gas giants' class line, a requested share above the
+        // 30 % the model draws is sized as 30 %.
+        for (m, water) in [(1.0, 0.0), (5.0, 0.3), (12.0, 0.0), (25.0, 0.3)] {
+            let at = |f: f64| interior(&made_of(m, water, f), &lit(1.0)).radius_earth;
+            assert!(at(0.45) <= at(0.3) + 1e-9, "{m}: {} {}", at(0.3), at(0.45));
+        }
+        let puff = interior(&made_of(1.0, 0.0, 0.999), &lit(1.0));
+        assert!(puff.radius_earth < 7.0, "{}", puff.radius_earth);
     }
 
     #[test]

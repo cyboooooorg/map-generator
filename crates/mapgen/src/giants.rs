@@ -249,12 +249,97 @@ fn equilibrium_k_of_earth() -> f32 {
     equilibrium_k(1.0)
 }
 
-/// Radius of a giant, Earth radii, from its mass (Earth masses): through
-/// Neptune (`M^0.59` below it, Chen & Kipping 2017), Saturn and Jupiter,
-/// then `M^−0.04`; inflated when hot, by the heat of [`inflation_heat`]
-/// (Thorngren & Fortney 2018), most near 1 700 K, the less massive the
-/// more.
-pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
+/// What a giant is made of, as shares of its mass (those of
+/// [`crate::planet::PlanetInputs`]): it sets the radius of a giant under
+/// 30 M⊕ (see [`giant_radius_of`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GiantComposition {
+    /// Iron core share of the refractory (iron + rock) mass.
+    pub core_mass_fraction: f64,
+    /// Share of the mass in water and ices.
+    pub water_fraction: f64,
+    /// Hydrogen and helium share of the mass.
+    pub envelope_fraction: f64,
+}
+
+impl GiantComposition {
+    /// Neptune's (and Uranus's), rounded: 65 % water and ices, 15 %
+    /// hydrogen and helium, the rest rock with a third of iron (Guillot
+    /// 2005, doi:10.1146/annurev.earth.33.092203.122639; Helled et al.
+    /// 2011, doi:10.1088/0004-637X/726/1/15). [`giant_radius`] takes it
+    /// up to Neptune's mass.
+    pub const NEPTUNE: Self = Self {
+        core_mass_fraction: 0.30,
+        water_fraction: 0.65,
+        envelope_fraction: 0.15,
+    };
+
+    /// The composition of a planet of the model.
+    pub fn of(inputs: &crate::planet::PlanetInputs) -> Self {
+        Self {
+            core_mass_fraction: inputs.core_mass_fraction,
+            water_fraction: inputs.water_fraction,
+            envelope_fraction: inputs.envelope_fraction,
+        }
+    }
+
+    /// The planet model's inputs of a body of `mass_earth` of this
+    /// composition (no volatiles, Earth's radiogenic abundance: the
+    /// radius does not read them).
+    pub(crate) fn inputs(&self, mass_earth: f64) -> crate::planet::PlanetInputs {
+        crate::planet::PlanetInputs {
+            mass_earth,
+            core_mass_fraction: self.core_mass_fraction,
+            water_fraction: self.water_fraction,
+            envelope_fraction: self.envelope_fraction,
+            volatiles: crate::planet::Volatiles::default(),
+            radiogenic: 1.0,
+            life_draw: 0.0,
+        }
+    }
+}
+
+/// Neptune's mass, Earth masses, and the radius the giant law gives it,
+/// Earth radii (3.86 observed, NASA Neptune fact sheet): the first
+/// anchor of [`gas_giant_radius`].
+pub const NEPTUNE_MASS_EARTH: f64 = 17.15;
+pub const NEPTUNE_RADIUS_EARTH: f64 = 3.88;
+
+/// Mass from which a giant takes the law of the gas giants whatever its
+/// composition, Earth masses: the planet model's gas giant line (under
+/// it, an ice giant has 5 to 30 % gas; from it, 90 % and more).
+const GAS_GIANT_LAW_MASS: f64 = crate::planet::inputs::GAS_GIANT_MASS;
+
+/// Radius of a body of `mass_earth` and `composition` under `exposure`,
+/// Earth radii: the planet model's solid layers
+/// ([`crate::planet::interior::solid_interior`]) under its envelope
+/// ([`crate::planet::interior::envelope_thickness`], the fit of Lopez &
+/// Fortney 2014 thinned by the heavy elements of a wet planet). Uranus,
+/// with Neptune's composition, comes out 3.80 R⊕ (3.98 observed), Neptune
+/// 3.88 (3.86).
+fn composition_radius(
+    mass_earth: f64,
+    composition: &GiantComposition,
+    exposure: &crate::planet::Exposure,
+) -> f64 {
+    let inputs = composition.inputs(mass_earth);
+    crate::planet::interior::solid_interior(&inputs).radius_earth
+        + crate::planet::interior::envelope_thickness(
+            mass_earth,
+            composition.envelope_fraction,
+            composition.water_fraction,
+            exposure,
+        )
+}
+
+/// The law of the gas giants, Earth radii: through Neptune, Saturn and
+/// Jupiter (log-linear between them; Chen & Kipping 2017,
+/// doi:10.3847/1538-4357/834/1/17), then `M^−0.04`; inflated when hot, by
+/// the heat of [`inflation_heat`] (Thorngren & Fortney 2018), most near
+/// 1 700 K, the less massive the more, from 30 M⊕. Below Neptune's mass,
+/// which only a requested gas giant reaches (see [`giant_radius_of`]),
+/// `M^0.59` (Chen & Kipping 2017).
+pub(crate) fn gas_giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
     const ANCHORS: [(f32, f32); 3] = [(17.15, 3.88), (95.16, 9.45), (317.8, 11.21)];
     let m = mass_earth;
     let cold = if m <= ANCHORS[0].0 {
@@ -270,6 +355,60 @@ pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
     let heat = inflation_heat(equilibrium_k);
     let inflation = (1.0 + 0.7 * heat * (JUPITER_EARTH_MASSES / m.max(30.0)).powf(0.25)).min(1.9);
     cold * if m > 30.0 { inflation } else { 1.0 }
+}
+
+/// Radius of a giant whose composition is not known, Earth radii, from its
+/// mass (Earth masses) and its equilibrium temperature (K): the giant
+/// neighbours of a world, the host giants of moons, the giant worlds
+/// without a planet model and the giants placed before their model is
+/// drawn.
+///
+/// Up to Neptune's mass, a giant of Neptune's composition
+/// ([`GiantComposition::NEPTUNE`]) at the coldest light of the envelope
+/// fit and 4.6 Gyr: 3.42 R⊕ at 5 M⊕, 3.64 at 10, 3.80 at Uranus's mass
+/// and 3.88 at Neptune's. (A law of the mass alone, `M^0.59` (Chen &
+/// Kipping 2017), fits a population whose gas share grows with its mass,
+/// and gave Uranus 3.52 R⊕, 11.6 % small.) Above, the law of the gas
+/// giants ([`gas_giant_radius`]), which carries that growing gas share
+/// from Neptune to Saturn.
+pub fn giant_radius(mass_earth: f32, equilibrium_k: f32) -> f32 {
+    if f64::from(mass_earth) <= NEPTUNE_MASS_EARTH {
+        let cold = crate::planet::Exposure {
+            insolation: 0.1,
+            equilibrium_k: f64::from(equilibrium_k),
+            age_gyr: f64::from(DEFAULT_AGE_GYR),
+        };
+        composition_radius(f64::from(mass_earth), &GiantComposition::NEPTUNE, &cold) as f32
+    } else {
+        gas_giant_radius(mass_earth, equilibrium_k)
+    }
+}
+
+/// Radius of a giant of known `composition`, Earth radii, from its mass
+/// (Earth masses) under its star's `exposure`.
+///
+/// Under [`GAS_GIANT_LAW_MASS`] (30 M⊕) and under the gas giants' class
+/// line (half the mass in gas, `planet::classify`), the radius its
+/// composition gives ([`composition_radius`]), the same as the planet
+/// model gives a planet that is no giant: at a fixed composition it barely
+/// grows with the mass (a heavier core squeezes its envelope), and more
+/// gas or more light make it larger. From either line, the law of the gas
+/// giants ([`gas_giant_radius`]), whatever the composition: the model
+/// draws no more than 30 % gas under 30 M⊕, so only a requested gas giant
+/// (a `jupiter-like` asked at 20 M⊕) takes that law under 30 M⊕, and its
+/// radius does not fall as its mass crosses 30 M⊕.
+pub fn giant_radius_of(
+    mass_earth: f32,
+    composition: &GiantComposition,
+    exposure: &crate::planet::Exposure,
+) -> f32 {
+    if f64::from(mass_earth) < GAS_GIANT_LAW_MASS
+        && composition.envelope_fraction < crate::planet::classify::GAS_GIANT_MIN_ENVELOPE
+    {
+        composition_radius(f64::from(mass_earth), composition, exposure) as f32
+    } else {
+        gas_giant_radius(mass_earth, exposure.equilibrium_k as f32)
+    }
 }
 
 /// Sudarsky class (1 to 5) of a giant of effective temperature `teff` (K)
@@ -691,6 +830,70 @@ mod tests {
         assert!((inflation_heat(2200.0) - 0.5).abs() < 0.05);
         assert!(inflation_heat(1000.0) < 0.05);
         assert!(giant_radius(317.8, 2600.0) < giant_radius(317.8, 1800.0));
+    }
+
+    #[test]
+    fn an_ice_giant_swells_with_its_gas_and_its_light() {
+        let lit = |insolation: f64| crate::planet::Exposure {
+            insolation,
+            equilibrium_k: 278.0 * insolation.powf(0.25),
+            age_gyr: 4.6,
+        };
+        let at = |m: f32, water: f64, envelope: f64, insolation: f64| {
+            let composition = GiantComposition {
+                core_mass_fraction: 0.3,
+                water_fraction: water,
+                envelope_fraction: envelope,
+            };
+            giant_radius_of(m, &composition, &lit(insolation))
+        };
+        // The default is the reference bodies' Uranus and Neptune.
+        for name in ["Uranus", "Neptune"] {
+            let body = crate::planet::reference::reference(name);
+            let composition = GiantComposition {
+                core_mass_fraction: body.core_mass_fraction,
+                water_fraction: body.water_fraction,
+                envelope_fraction: body.envelope_fraction,
+            };
+            assert_eq!(composition, GiantComposition::NEPTUNE, "{name}");
+        }
+        // Uranus with Neptune's composition (3.98 R⊕ observed; the mass
+        // law alone gave 3.52), and Neptune.
+        let uranus = giant_radius(14.54, 60.0);
+        assert!((uranus - 3.80).abs() < 0.01, "{uranus}");
+        assert!((giant_radius(17.15, 60.0) - 3.88).abs() < 1e-4);
+        assert_eq!(giant_radius(14.54, 60.0), at(14.54, 0.65, 0.15, 0.01));
+        // More gas, more light: larger, up to the gas giants' line. More
+        // ice at the same gas share changes it by less than 15 %: the solid
+        // layers grow, the envelope thins with its heavy elements.
+        for m in [5.0, 10.0, 14.54, 17.15, 22.0, 29.9] {
+            assert!(at(m, 0.6, 0.2, 1.0) > at(m, 0.6, 0.1, 1.0), "{m}");
+            assert!(at(m, 0.0, 0.1, 100.0) > at(m, 0.0, 0.1, 1.0), "{m}");
+            let (dry, wet) = (at(m, 0.0, 0.1, 1.0), at(m, 0.6, 0.1, 1.0));
+            assert!((wet / dry - 1.0).abs() < 0.15, "{m}: {dry} {wet}");
+        }
+        // From it, the gas giants' law whatever the composition, as it
+        // was.
+        for m in [30.0, 31.8, 60.0, 95.16, 317.8, 3000.0] {
+            for (water, envelope, insolation) in [(0.0, 0.06, 100.0), (0.6, 0.9, 0.01)] {
+                let eq = 278.0 * f64::powf(insolation, 0.25);
+                assert_eq!(
+                    at(m, water, envelope, insolation),
+                    gas_giant_radius(m, eq as f32),
+                    "{m}"
+                );
+            }
+            assert_eq!(giant_radius(m, 900.0), gas_giant_radius(m, 900.0));
+        }
+        // A giant of unknown composition grows with its mass up to
+        // Jupiter's (then shrinks as `M^−0.04`).
+        let mut last = 0.0;
+        for i in 0..=209 {
+            let m = 5.0 * 1.02f32.powi(i);
+            let r = giant_radius(m, 60.0);
+            assert!(r > last, "{m}: {r} after {last}");
+            last = r;
+        }
     }
 
     #[test]

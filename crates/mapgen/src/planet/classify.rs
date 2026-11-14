@@ -103,7 +103,7 @@ pub const PLANET_CLASSES: [&str; 12] = [
 /// 0.85 to 0.95 of their mass, Guillot 2005,
 /// doi:10.1146/annurev.earth.33.092203.122639) from Uranus and Neptune
 /// (about 0.1 to 0.2, Helled et al. 2011, doi:10.1088/0004-637X/726/1/15).
-const GAS_GIANT_MIN_ENVELOPE: f64 = 0.5;
+pub(crate) const GAS_GIANT_MIN_ENVELOPE: f64 = 0.5;
 
 /// Longest orbital period of a hot Jupiter or a hot Neptune, days (Wright
 /// et al. 2012, doi:10.1088/0004-637X/753/2/160: giants within 10 days of
