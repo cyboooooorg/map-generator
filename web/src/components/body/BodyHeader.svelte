@@ -30,6 +30,11 @@
   const starName = $derived(system ? nameOf('star', system.star.designation) : '');
   const explanation = $derived(world.shownExtras?.explanation ?? null);
   let classOpen = $state(false);
+  // The tree starts closed on every body.
+  $effect(() => {
+    void world.systemBody;
+    classOpen = false;
+  });
   const similar = $derived(world.shownExtras?.similar ?? null);
 </script>
 

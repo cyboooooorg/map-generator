@@ -4,7 +4,6 @@
   // it, download its files.
   import './facts.css';
   import { getLocale, t } from '../../lib/i18n/index.svelte';
-  import { archetypeDescription, archetypeName } from '../../lib/i18n/names.svelte';
   import { worldFile } from '../../lib/api/client';
   import { downloadRawData, downloadSvg } from '../../lib/download';
   import { cliCommand, copyText, formatAgo } from '../../lib/format';
@@ -74,10 +73,6 @@
   <dl class="facts">
     <dt>{t.worldInfo.seed}</dt>
     <dd>{meta.seed}</dd>
-    {#if meta.archetype}
-      <dt>{t.cards.archetype}</dt>
-      <dd title={archetypeDescription({ name: meta.archetype })}>{archetypeName({ name: meta.archetype })}</dd>
-    {/if}
     {#if revision}
       <dt>{t.worldInfo.generated}</dt>
       <dd title={new Date(revision).toLocaleString(getLocale())}>{formatAgo(revision)}</dd>

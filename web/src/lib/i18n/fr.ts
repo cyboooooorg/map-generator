@@ -194,7 +194,6 @@ export const fr: Messages = {
     flattening: 'Aplatissement',
     spot: 'Tempête',
     surfaceAge: 'Âge de la surface',
-    archetype: 'Archétype demandé',
     impacts: 'Géantes et impacts',
   },
   systemList: {
@@ -1026,9 +1025,6 @@ export const fr: Messages = {
     coastCap: (p) => `${p.km} (échelle en √)`,
     biomeLegend: 'Légende des biomes',
     biomes: 'Biomes',
-    legendHide: 'masquer',
-    legendShow: (p) => `${p.count}, afficher`,
-    legendDrag: 'Glisser pour déplacer la légende, double-cliquer pour la remettre en place',
     highlightHelp: 'Survolez pour mettre en évidence, cliquez pour la garder',
     shortcuts: 'Raccourcis clavier',
     close: 'Fermer',

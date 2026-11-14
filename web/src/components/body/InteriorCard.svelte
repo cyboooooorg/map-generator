@@ -17,6 +17,11 @@
   /** The value whose causes are unfolded: one at a time in a card. */
   let open = $state<Quantity | null>(null);
   const toggle = (q: Quantity) => () => (open = open === q ? null : q);
+  // Trees start closed on every body.
+  $effect(() => {
+    void world.systemBody;
+    open = null;
+  });
 
   const body = $derived(world.shownSystemBody);
   const meta = $derived(world.meta);

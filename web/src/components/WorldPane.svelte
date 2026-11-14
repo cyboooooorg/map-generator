@@ -195,8 +195,8 @@
     position: absolute;
     left: 12px;
     bottom: 12px;
-    /* Room for the 240 px legend in the other corner, but never unreadable. */
-    max-width: max(120px, calc(100% - 276px));
+    /* Within the pane, whatever its width. */
+    max-width: calc(100% - 24px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

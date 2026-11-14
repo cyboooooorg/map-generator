@@ -214,7 +214,6 @@ export const en = {
     flattening: 'Flattening',
     spot: 'Storm',
     surfaceAge: 'Surface age',
-    archetype: 'Archetype asked',
     impacts: 'Giants and impacts',
   },
   systemList: {
@@ -1075,9 +1074,6 @@ export const en = {
     coastCap: (p: { km: string }) => `${p.km} (√ scale)`,
     biomeLegend: 'Biome legend',
     biomes: 'Biomes',
-    legendHide: 'hide',
-    legendShow: (p: { count: number }) => `${p.count}, show`,
-    legendDrag: 'Drag to move the legend; double-click to put it back',
     highlightHelp: 'Hover to highlight, click to keep it highlighted',
     shortcuts: 'Keyboard shortcuts',
     close: 'Close',
