@@ -306,8 +306,14 @@ archetypes):
   world is generated, so that the grid's mean matches the model's surface
   temperature (`generation::warming_for`). The sea level is found the
   same way, where the oceans the model keeps fill the relief
-  (`sea_level_for_water`), none for a runaway whose water is steam. A
-  world with no water at its surface is dry: no open water anywhere, its
+  (`sea_level_for_water`), none for a runaway whose water is steam, and
+  none for a body whose water lies under its ice shell: a crust of ice
+  (an ice world's share of water, no liquid water at its surface) with a
+  shell over its water layer (Europa, Ganymede, Callisto, Enceladus) has
+  that shell for its surface, land with its regime's relief and craters,
+  not a frozen sea over a rocky floor. A frozen sea on a rocky planet (a
+  snowball Earth, a cold Mars that kept its water) still fills its
+  basins. A world with no water at its surface is dry: no open water anywhere, its
   sea level only the datum of its relief (`DRY_SEA_LEVEL`, see
   [mountains and gravity](mountains-and-gravity.md)). Both
   pass over a coarse grid of the relief (about a second in release), so a

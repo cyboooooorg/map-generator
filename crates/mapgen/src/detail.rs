@@ -1161,6 +1161,72 @@ mod tests {
         assert!(crate::generation::icy(&small) && !ice_shell(&small));
     }
 
+    /// A Europa's ocean lies under its ice shell: its surface is that
+    /// shell, land with the relief and the small craters of its crust,
+    /// not a flat frozen sea. (The Europa of
+    /// `{"system":{"planets":{"europa-like":1},"seed":1}}` at 256 × 128.)
+    #[test]
+    fn a_europa_is_an_ice_crust_not_a_frozen_sea() {
+        use rand::SeedableRng;
+        let request: crate::system::SystemRequest =
+            serde_json::from_str(r#"{"system":{"planets":{"europa-like":1},"seed":1}}"#).unwrap();
+        let system =
+            crate::system::draw(&request, &mut rand::rngs::StdRng::seed_from_u64(1)).unwrap();
+        let moon = system
+            .bodies
+            .iter()
+            .find(|b| b.params.archetype.as_deref() == Some("europa-like"))
+            .unwrap();
+        let model = moon.model.as_ref().unwrap();
+        assert!(model.ice_shell.is_some_and(|s| s.ocean_km > 0.0));
+        let mut params = crate::system::generation_params(moon);
+        assert!(ice_shell(&params));
+        (params.width, params.height) = (256, 128);
+        let world = generate(&params).world;
+        let grid = params.grid();
+        let (mut land, mut total) = (0.0, 0.0);
+        for (i, biome) in world.biomes.iter().enumerate() {
+            let area = grid.latitude((i / world.width as usize) as u32).cos();
+            total += area;
+            if !biome.is_water() {
+                land += area;
+            }
+        }
+        assert!(land / total > 0.9, "land {}", land / total);
+        // Its relief is a small body's, flattened (`relief_share`, about a
+        // ninth of a planet's): its tiles keep their full detail against
+        // it, not the tenth that smooth ice keeps (see `roughness`).
+        let europa = DetailWorld::new(LoadedWorld::from_world(&world));
+        let share = f64::from(crate::generation::relief_share(&params));
+        let (detail, planet) = (relief_detail(&europa), relief_detail(&detail_world()));
+        assert!(
+            detail > 0.5 * share * planet,
+            "Europa {detail}, planet {planet}, share {share}"
+        );
+        // And the small craters dig its tiles.
+        let (cols, rows) = TileId {
+            z: MAX_LEVEL,
+            x: 0,
+            y: 0,
+        }
+        .grid();
+        let pixel_km = f64::from(params.circumference_km) / f64::from(cols * TILE_SIZE);
+        let side = TILE_SIZE as usize + 2;
+        let dug = (0..16)
+            .filter(|&k| {
+                let tile = TileId {
+                    z: MAX_LEVEL,
+                    x: (k * 7919) % cols,
+                    y: rows / 4 + (k * 104_729) % (rows / 2),
+                };
+                let (cratered, bare) =
+                    europa.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
+                cratered != bare
+            })
+            .count();
+        assert!(dug > 0, "no small crater on 16 tiles");
+    }
+
     #[test]
     fn longitude_seam_is_continuous() {
         let d = detail_world();

@@ -631,7 +631,9 @@ pub fn params_for(
 /// with a surface, from [`params_for`]'s parameters, in this order (the
 /// warming reads the sea level): its sea level, where its oceans
 /// ([`ocean_depth_m`]) fill the relief ([`sea_level_for_water`]; a
-/// runaway's water is steam, none on the ground; with no water at all the
+/// runaway's water is steam, none on the ground; an ice crust's lies under
+/// its shell, none on the ground either, see `under_shell`; with no water
+/// at all the
 /// world is [`dry`](crate::biome::BiomeRules::dry), its sea level
 /// [`DRY_SEA_LEVEL`](crate::generation::DRY_SEA_LEVEL)), or for a hydrocarbon
 /// world, whose lakes the model does not size, Titan's share of land
@@ -653,7 +655,8 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
     params.sea_level = if surface.climate.liquid == SurfaceLiquid::Hydrocarbons {
         sea_level_for_land_fraction(params, HYDROCARBON_LAND_FRACTION)
     } else {
-        let oceans = if surface.water.runaway {
+        // A runaway's water is steam; an ice crust's lies under its shell.
+        let oceans = if surface.water.runaway || under_shell(params, model) {
             0.0
         } else {
             surface.water.oceans
@@ -669,6 +672,22 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
         }
     };
     params.look.climate.temperature = warming_for(params, surface.climate.temperature_k);
+}
+
+/// Whether the water of the world `params` of `model` lies under its
+/// surface, an ice shell over it ([`super::IceShell`]): its crust is ice
+/// ([`crate::generation::icy`]: an ice world's share of water, and no
+/// liquid water at its surface) and the model gives it a shell (a frozen
+/// surface over its water layer). That ice is then its crust, the relief
+/// the world draws with its regime's highlands and craters (Europa,
+/// Ganymede, Callisto, Enceladus), not a frozen sea over a rocky floor:
+/// no sea. Water under a shell is no surface ocean, liquid or frozen. A
+/// frozen sea on a rocky planet (a snowball Earth, a cold Mars that kept
+/// its water: under an ice world's share of water, a rock crust) still
+/// fills its basins, and so does liquid water (no shell); hydrocarbons
+/// are sized apart.
+fn under_shell(params: &WorldParams, model: &PlanetModel) -> bool {
+    model.ice_shell.is_some() && crate::generation::icy(params)
 }
 
 /// Temperature of a bare surface under the starlight `equilibrium_k`
