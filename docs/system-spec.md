@@ -103,6 +103,21 @@ read, the same value a new draw stores, and it is saved with the system
 the next time its file is written (when a body is generated, for
 example).
 
+The system carries its **place in the galaxy** (`galaxy`, `galaxy.rs`),
+from which the sky seen from its planets is drawn: `source` (`drawn`; a
+catalogue system will say `observed`), `position_kpc` (galactocentric,
+the Sun at `(8.2, 0, 0.02)`), `axes` (the galactic x, y, z axes in the
+system's frame, the star's equatorial frame with y its spin axis) and
+`sky_seed` (the seed of the clouds and stars). The radius inverts the
+disc's metallicity gradient (−0.06 dex/kpc, Genovali et al. 2014) from
+the star's `[Fe/H]` with a 1.67 kpc scatter, clamped to 2 to 16 kpc, so a
+metal-rich star sits nearer the core; the height is a two-sided
+exponential of scale 0.3 kpc, the azimuth uniform and the orientation a
+uniform random rotation, all on their own stream (`GALAXY`), so no other
+value of a system moves. A system drawn before it existed has none in its
+file: `read_system` derives it from the seed and the stored metallicity,
+the same value a new draw stores (no format bump).
+
 The physics of today's draws stays where it is (`star.rs`, `giants.rs`,
 `moons.rs`, `exomoon.rs`, `giant_world.rs`): the system draw calls them
 and records their results. What the viewer draws from a seed today (a

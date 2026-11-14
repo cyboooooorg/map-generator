@@ -150,11 +150,7 @@ mod tests {
         for m in [-1.0, 0.5] {
             for s in 0..2000 {
                 let p = draw_place(s, m);
-                assert!(
-                    (2.0..=16.0).contains(&(radius(&p) + 0.0))
-                        || (radius(&p) - 2.0).abs() < 1e-9
-                        || (radius(&p) - 16.0).abs() < 1e-9
-                );
+                assert!((2.0 - 1e-9..=16.0 + 1e-9).contains(&radius(&p)));
                 assert!(p.position_kpc[2].abs() <= 1.5);
             }
         }
