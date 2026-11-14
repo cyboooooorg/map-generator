@@ -119,6 +119,109 @@ pub enum Composition {
     Ice,
 }
 
+/// What a moon is made of, as shares of its mass (they sum to 1).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Bulk {
+    pub rock: f32,
+    pub ice: f32,
+    pub carbon: f32,
+}
+
+impl Default for Bulk {
+    fn default() -> Self {
+        Self {
+            rock: 1.0,
+            ice: 0.0,
+            carbon: 0.0,
+        }
+    }
+}
+
+/// Densities of the three constituents, g/cm³: silicate rock, water ice,
+/// carbonaceous (organic and carbon-rich) material.
+/// Calibration, no source: round values of the usual orders of magnitude.
+const ROCK_DENSITY: f64 = 3.3;
+const ICE_DENSITY: f64 = 0.93;
+const CARBON_DENSITY: f64 = 1.8;
+
+impl Bulk {
+    /// Shares of `ice` and `carbon`, the rest rock.
+    fn of(ice: f64, carbon: f64) -> Self {
+        Self {
+            rock: (1.0 - ice - carbon) as f32,
+            ice: ice as f32,
+            carbon: carbon as f32,
+        }
+    }
+
+    /// The bulk density, g/cm³: the constituents mixed by volume (the
+    /// harmonic mean of their densities, weighted by mass), without
+    /// porosity.
+    pub fn density(&self) -> f64 {
+        1.0 / (f64::from(self.rock) / ROCK_DENSITY
+            + f64::from(self.ice) / ICE_DENSITY
+            + f64::from(self.carbon) / CARBON_DENSITY)
+    }
+
+    /// A moon born where it is warm: rock with a little carbon.
+    /// Calibration, no source.
+    fn warm(rng: &mut Draws) -> Self {
+        let carbon = rng.uniform(0.0, 0.04);
+        let _ = rng.next();
+        Self::of(0.0, carbon)
+    }
+
+    /// A moon born beyond the ice line: rock and ice about 1:1 by mass, as
+    /// Saturn's mid-sized moons (Thomas 2010,
+    /// doi:10.1016/j.icarus.2010.01.025: 0.98 g/cm³ for Tethys to 1.6 for
+    /// Enceladus), with a little carbon. The scatter is a calibration. The
+    /// mix is not compressed, so a large moon comes out lighter than
+    /// Ganymede (1.94 g/cm³) and bigger for its mass.
+    fn cold(rng: &mut Draws) -> Self {
+        let ice = rng.uniform(0.4, 0.6);
+        let carbon = rng.uniform(0.0, 0.05);
+        Self::of(ice, carbon)
+    }
+
+    /// A body captured from the outer system, carbon-rich as the C-type
+    /// Phoebe (Johnson & Lunine 2005, doi:10.1038/nature03384: 1.64
+    /// g/cm³, rock, ice and carbon-bearing material). A planet inside the
+    /// ice line captures from the asteroids around it, with less carbon
+    /// and no ice. The ranges are a calibration.
+    fn captured(cold: bool, rng: &mut Draws) -> Self {
+        if cold {
+            let carbon = rng.uniform(0.2, 0.45);
+            let ice = rng.uniform(0.2, 0.4);
+            Self::of(ice, carbon)
+        } else {
+            let carbon = rng.uniform(0.1, 0.3);
+            let _ = rng.next();
+            Self::of(0.0, carbon)
+        }
+    }
+
+    /// A captured Kuiper-belt body as Triton (2.06 g/cm³, a rock core
+    /// under ice): rock-rich, a little carbon. Calibration to that density.
+    fn kuiper(rng: &mut Draws) -> Self {
+        let ice = rng.uniform(0.15, 0.3);
+        let carbon = rng.uniform(0.0, 0.05);
+        Self::of(ice, carbon)
+    }
+
+    /// A ring moon's: mostly ice, as the moonlets of Saturn's rings (Pan
+    /// and Atlas, 0.4 to 0.5 g/cm³: Thomas 2010,
+    /// doi:10.1016/j.icarus.2010.01.025), drawn from its `seed`. Their
+    /// density is the rings' own (accretion, see `crate::rings`), not this
+    /// mix's.
+    pub fn ring_moon(seed: u32) -> Self {
+        let u = |salt: u32| {
+            f64::from(crate::noise::stream_seed(seed, salt)) / (f64::from(u32::MAX) + 1.0)
+        };
+        Self::of(0.8 + 0.15 * u(0xB01), 0.05 * u(0xB02))
+    }
+}
+
 /// Where a moon's orbit is heading, under the planet's tides.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -153,6 +256,9 @@ pub struct Moon {
     pub mass_ratio: f32,
     /// Bulk density, g/cm³.
     pub density: f32,
+    /// What it is made of, by mass; a small moon's density follows it.
+    #[serde(default)]
+    pub bulk: Bulk,
     /// Surface gravity, relative to Earth's.
     pub gravity: f32,
     /// Semi-major axis of the orbit, km and planet radii.
@@ -432,6 +538,7 @@ struct Candidate {
     origin: MoonOrigin,
     composition: Composition,
     mass_kg: f64,
+    bulk: Bulk,
     density: f64,
     a_km: f64,
     eccentricity: f64,
@@ -698,13 +805,19 @@ impl MoonSystem {
             let a_km = rng.log_uniform(orbit.0, orbit.1) * r_p;
             let (eccentricity, inclination_deg) = (rng.uniform(0.0, 0.06), rng.uniform(0.0, 8.0));
             let shape = [rng.next(), rng.next()];
-            // Small cold worlds are ice and rock, like Charon (1.7 g/cm³).
+            // Small cold worlds are ice and rock, like Charon.
             let icy = cold && size < LARGE_WORLD;
+            let bulk = if icy {
+                Bulk::cold(rng)
+            } else {
+                Bulk::warm(rng)
+            };
             Candidate {
                 origin: MoonOrigin::GiantImpact,
                 composition: surface(icy),
                 mass_kg: q * m_p,
-                density: if icy { 1.7 } else { 3.3 },
+                density: bulk.density(),
+                bulk,
                 a_km,
                 eccentricity,
                 inclination_deg,
@@ -721,10 +834,16 @@ impl MoonSystem {
             } * r_p;
             let (eccentricity, inclination_deg) = (rng.uniform(0.0, 0.02), rng.uniform(0.0, 2.0));
             let shape = [rng.next(), rng.next()];
-            let density = 1.9;
+            let bulk = if cold {
+                Bulk::cold(rng)
+            } else {
+                Bulk::warm(rng)
+            };
+            let density = bulk.density();
             Candidate {
                 origin: MoonOrigin::Debris,
                 composition: surface(cold),
+                bulk,
                 mass_kg: 4.0 / 3.0 * PI * radius.powi(3) * density * 1e12,
                 density,
                 a_km,
@@ -744,10 +863,12 @@ impl MoonSystem {
                 rng.uniform(10.0, UNSTABLE_INCLINATION_DEG.0)
             };
             let shape = [rng.next(), rng.next()];
-            let density = if cold { 1.5 } else { 1.9 };
+            let bulk = Bulk::captured(cold, rng);
+            let density = bulk.density();
             Candidate {
                 origin: MoonOrigin::Captured,
                 composition: surface(cold),
+                bulk,
                 mass_kg: 4.0 / 3.0 * PI * radius.powi(3) * density * 1e12,
                 density,
                 a_km,
@@ -929,6 +1050,7 @@ impl MoonSystem {
                     round,
                     mass_ratio: (c.mass_kg / m_p) as f32,
                     density: c.density as f32,
+                    bulk: c.bulk,
                     gravity: gravity as f32,
                     semi_major_axis_km: c.a_km as f32,
                     semi_major_axis_radii: (c.a_km / r_p) as f32,
@@ -1073,7 +1195,11 @@ impl MoonSystem {
             for (k, (&a_radii, share)) in slots.iter().zip(shares).enumerate() {
                 let mass = disk * m_g * share * if captured_triton { 0.02 } else { 1.0 };
                 let icy = a_radii > ice_line;
-                let density = if icy { 1.9 } else { 3.3 };
+                let bulk = if icy {
+                    Bulk::cold(&mut rng)
+                } else {
+                    Bulk::warm(&mut rng)
+                };
                 let eccentricity = if dominant == Some(k) {
                     rng.uniform(0.0, DOMINANT_MAX_ECCENTRICITY)
                 } else {
@@ -1086,7 +1212,7 @@ impl MoonSystem {
                     r_g,
                     a_radii * r_g,
                     mass,
-                    density,
+                    bulk,
                     icy,
                     synchronous,
                     MoonOrigin::Disk,
@@ -1099,6 +1225,7 @@ impl MoonSystem {
                 let a = triton_radii.unwrap_or(14.0) * r_g;
                 let mass = rng.uniform(1.5e-4, 3e-4) * m_g;
                 let eccentricity = rng.uniform(0.0, 0.01);
+                let bulk = Bulk::kuiper(&mut rng);
                 let triton = regular_moon(
                     p,
                     &mut rng,
@@ -1106,7 +1233,7 @@ impl MoonSystem {
                     r_g,
                     a,
                     mass,
-                    2.06,
+                    bulk,
                     true,
                     synchronous,
                     MoonOrigin::Captured,
@@ -1536,7 +1663,7 @@ fn regular_moon(
     r_g: f64,
     a: f64,
     mass: f64,
-    density: f64,
+    bulk: Bulk,
     icy: bool,
     synchronous: f64,
     origin: MoonOrigin,
@@ -1549,6 +1676,7 @@ fn regular_moon(
         p.eccentricity,
         p.age_gyr,
     )));
+    let density = bulk.density();
     let radius = (3.0 * mass / (4.0 * PI * density * 1e12)).cbrt();
     let period = 2.0 * PI * (a.powi(3) / (G * (m_g + mass))).sqrt() / 86_400.0;
     let retrograde = inclination > 90.0;
@@ -1575,6 +1703,7 @@ fn regular_moon(
         round: is_round(composition, radius),
         mass_ratio: (mass / m_g) as f32,
         density: density as f32,
+        bulk,
         gravity: (G * mass / (radius * radius) * 1000.0 / 9.81) as f32,
         semi_major_axis_km: a as f32,
         semi_major_axis_radii: (a / r_g) as f32,
@@ -1733,6 +1862,7 @@ mod tests {
             round: true,
             mass_ratio: 0.0123,
             density: 3.3,
+            bulk: Bulk::default(),
             gravity: 0.17,
             semi_major_axis_km: 384_400.0,
             semi_major_axis_radii: 60.27,
@@ -1931,11 +2061,13 @@ mod tests {
                 let ratio = pair[1].period_days / pair[0].period_days;
                 assert!((1.6..2.4).contains(&ratio), "{ratio}");
             }
-            // Galilean sizes on a chain (up to 3700 km, two moons sharing
-            // 2.5e-4 of Jupiter's mass 0.85 to 0.15); a dominant moon up
-            // to 3900 km, 97 % of it, beside smaller ones.
+            // Galilean sizes on a chain (up to 3700 km at Ganymede's
+            // density, two moons sharing 2.5e-4 of Jupiter's mass 0.85 to
+            // 0.15); a dominant moon up to 3900 km, 97 % of it, beside
+            // smaller ones. The uncompressed mix of ice and rock is lighter
+            // than Ganymede, so the largest comes out up to 4500 km.
             let largest = system.moons.iter().map(|m| m.radius_km).fold(0.0, f32::max);
-            assert!((1000.0..4000.0).contains(&largest), "{largest}");
+            assert!((1000.0..4500.0).contains(&largest), "{largest}");
             let smallest = if system.disk_shape == Some(DiskShape::Chain) {
                 300.0
             } else {
@@ -2230,6 +2362,93 @@ mod tests {
         // of 60 km at Phobos's density.
         let mid = lasting_moon_kg(1.0 / 3.0, 0.07 * AU_KM, star_kg, EARTH_MASS_KG, 6371.0, 4.6);
         assert!((1e18..4e18).contains(&mid), "{mid:e}");
+    }
+
+    /// Every moon the generator draws, over `seeds` seeds of a small
+    /// rocky planet at `orbit_au` and of the giants.
+    fn bulk_moons(seeds: u32, orbit_au: f32) -> Vec<Moon> {
+        let mut out = Vec::new();
+        for seed in 0..seeds {
+            let mut p = params(seed, 21_300.0);
+            p.orbit_au = orbit_au;
+            p.moons = MoonsMode::Count(5);
+            out.extend(MoonSystem::draw(&p).unwrap().moons);
+            for (mass, au) in [(317.8, 5.2), (95.0, 9.5), (14.5, 19.0), (17.1, 30.0)] {
+                let mut g = params(seed, 40_075.0);
+                g.giant_mass_earth = Some(mass);
+                g.orbit_au = au;
+                g.circumference_km = crate::giant_world::radius_earth(&g, mass) * 40_075.0;
+                out.extend(MoonSystem::draw(&g).unwrap().moons);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn bulk_shares_sum_to_one() {
+        let moons: Vec<Moon> = [1.0, 12.0]
+            .into_iter()
+            .flat_map(|au| bulk_moons(200, au))
+            .collect();
+        assert!(moons.len() > 1000, "{}", moons.len());
+        for m in &moons {
+            let b = m.bulk;
+            assert!(b.rock >= 0.0 && b.ice >= 0.0 && b.carbon >= 0.0, "{b:?}");
+            assert!((b.rock + b.ice + b.carbon - 1.0).abs() < 1e-5, "{b:?}");
+        }
+        let ring = Bulk::ring_moon(77);
+        assert!((ring.rock + ring.ice + ring.carbon - 1.0).abs() < 1e-5 && ring.ice > 0.75);
+    }
+
+    #[test]
+    fn captured_outer_moons_are_carbon_rich() {
+        let mut carbon: Vec<f32> = bulk_moons(300, 12.0)
+            .iter()
+            .filter(|m| m.origin == MoonOrigin::Captured)
+            .map(|m| m.bulk.carbon)
+            .collect();
+        assert!(carbon.len() > 30, "{}", carbon.len());
+        carbon.sort_by(f32::total_cmp);
+        assert!(
+            carbon[carbon.len() / 2] > 0.2,
+            "{}",
+            carbon[carbon.len() / 2]
+        );
+    }
+
+    #[test]
+    fn warm_impact_moons_are_rock() {
+        let impacts: Vec<Moon> = bulk_moons(300, 1.0)
+            .into_iter()
+            .filter(|m| m.origin == MoonOrigin::GiantImpact)
+            .collect();
+        assert!(impacts.len() > 30, "{}", impacts.len());
+        for m in impacts {
+            assert!(m.bulk.rock > 0.8 && m.bulk.ice == 0.0, "{:?}", m.bulk);
+        }
+    }
+
+    #[test]
+    fn density_follows_bulk() {
+        let moons = bulk_moons(100, 12.0);
+        for m in &moons {
+            assert!(
+                (f64::from(m.density) - m.bulk.density()).abs() < 1e-3,
+                "{:?} {} vs {}",
+                m.origin,
+                m.density,
+                m.bulk.density()
+            );
+        }
+        // Pure constituents give their own densities.
+        let pure = |rock, ice, carbon| Bulk { rock, ice, carbon }.density();
+        assert!((pure(1.0, 0.0, 0.0) - 3.3).abs() < 1e-9);
+        assert!((pure(0.0, 1.0, 0.0) - 0.93).abs() < 1e-9);
+        assert!((pure(0.0, 0.0, 1.0) - 1.8).abs() < 1e-9);
+        // Half rock, half ice by mass: 1.45 g/cm³.
+        assert!((pure(0.5, 0.5, 0.0) - 1.45).abs() < 0.01);
+        // An icy moon beyond the ice line is lighter than a rocky one.
+        assert!(moons.iter().any(|m| m.density < 1.5));
     }
 
     #[test]

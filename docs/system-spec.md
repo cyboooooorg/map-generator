@@ -61,7 +61,8 @@ round planets. Every body has:
   direction);
 - its **physical facts**: mass, radius, density, surface gravity, shape
   (`axes_km`: an irregular moon's axes, or a round one's stretched by its
-  planet's tides);
+  planet's tides; `bulk` for a moon: its shares of rock, ice and carbon
+  by mass, see Moons);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
   parent (and to what), and for a planet whether its star holds it in
   a spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
@@ -248,6 +249,26 @@ Triton), one recipe for a
 giant of a system and a giant world. A giant's large regular
 moon may be a habitable world: in mode 2 that is the planet asked for; in
 mode 1 a request can ask for it (`moons of giants: earth-like`).
+
+A moon's **bulk composition** (`Moon.bulk`, `Physical.bulk`: shares of
+rock, ice and carbon by mass, summing to 1) is drawn from the moon's
+stream, and its density follows it: rock 3.3, ice 0.93 and carbon
+1.8 g/cm³ mixed by volume, with no porosity or compression (a large
+moon comes out lighter than Ganymede). A moon born where it is warm is
+rock with 0 to 4 % carbon (calibration, no source). Beyond the ice line
+(a cold small planet's, a giant disk's) it is about half ice and half
+rock by mass, 40 to 60 % ice with up to 5 % carbon, as Saturn's
+mid-sized moons (Thomas 2010, doi:10.1016/j.icarus.2010.01.025). A body
+captured beyond the ice line is carbon-rich, 20 to 45 % carbon and 20 to
+40 % ice, as the C-type Phoebe (Johnson & Lunine 2005,
+doi:10.1038/nature03384); one captured inside it, 10 to 30 % carbon and
+no ice. A captured Triton is 15 to 30 % ice and up to 5 % carbon
+(calibration to its 2.06 g/cm³). A ring moon is 80 to 95 % ice (the
+moonlets of Saturn's rings, 0.4 to 0.5 g/cm³, Thomas 2010); its density
+stays the rings' own. `Composition` (the moon's look) is unchanged: it
+still follows the ice line, so a captured outer moon looks icy though
+its ice share is below half. The moons of a giant's host chain, a
+planet's own and a world asked for carry no `bulk`.
 
 A giant with rings also gets the moons that shape them (`rings.rs`,
 backlog item 18), drawn from the stream `RING_MOONS` so the other moons

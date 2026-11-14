@@ -265,6 +265,11 @@ pub struct Physical {
     pub gravity: f64,
     /// An irregular moon's semi-axes, km.
     pub axes_km: Option<[f32; 3]>,
+    /// What a moon is made of, by mass; absent for a planet and for the
+    /// moons that are drawn as worlds (a giant's host chain).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub bulk: Option<crate::moons::Bulk>,
 }
 
 /// How a body turns.
@@ -1656,6 +1661,7 @@ fn planet_body(
             density,
             gravity,
             axes_km: None,
+            bulk: None,
         },
         spin: Spin {
             period_hours: if locked {
@@ -1744,6 +1750,7 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
             gravity: f64::from(moon.gravity),
             // Irregular, or stretched by its planet's tides.
             axes_km: (moon.axes_km[0] > moon.axes_km[2]).then_some(moon.axes_km),
+            bulk: Some(moon.bulk),
         },
         Spin {
             period_hours,
@@ -1966,6 +1973,7 @@ fn ring_moon_parts(
             density: moon.density,
             gravity,
             axes_km: shape.map(|s| s.map(|a| a * moon.radius_km as f32)),
+            bulk: Some(crate::moons::Bulk::ring_moon(moon.seed)),
         },
         Spin {
             period_hours: period_days * 24.0,
@@ -2007,6 +2015,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     / 1000.0,
                 gravity: f64::from(world.gravity_modifier()),
                 axes_km: None,
+                bulk: None,
             },
             Spin {
                 period_hours: f64::from(host.period_days) * 24.0,
@@ -2049,6 +2058,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     density: if sibling.icy { 1.9 } else { 3.3 },
                     gravity: (G * mass_kg / (f64::from(sibling.radius_km) * 1000.0).powi(2)) / 9.81,
                     axes_km: None,
+                    bulk: None,
                 },
                 Spin {
                     period_hours: f64::from(sibling.period_days) * 24.0,
@@ -4393,13 +4403,14 @@ mod lone_tests {
     /// sits at the archetype's star and light, so the systems around it
     /// changed), and again when part 4 drew a giant's moons from its
     /// disk's mass, shape and temperature (the moons' rock or ice and
-    /// orbits changed); any other change is a regression of a normal
+    /// orbits changed), and when a small moon drew its bulk composition
+    /// (more draws, and a density that sets its size); any other change is a regression of a normal
     /// system.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky-moon:0.0006:0.0822:false d-5:rocky-moon:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:icy-moon:0.0019:0.0350:false f-6:icy-moon:0.0033:0.0350:false f-7:icy-moon:0.0051:0.0350:false f-8:icy-moon:0.0080:0.0350:false f-9:icy-moon:0.0129:0.0350:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
+        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky-moon:0.0006:0.0822:false d-5:rocky-moon:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:icy-moon:0.0019:0.0350:false f-6:icy-moon:0.0033:0.0350:false f-7:icy-moon:0.0051:0.0350:false f-8:icy-moon:0.0080:0.0350:false f-9:icy-moon:0.0129:0.0350:false g:ice-world:13.6776:0.0350:false",
         "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:rocky-moon:0.0005:0.0365:false d-3:rocky-moon:0.0007:0.0365:false d-4:rocky-moon:0.0012:0.0365:false d-5:rocky-moon:0.0018:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
-        "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:0.9970:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
-        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:0.9925:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky-moon:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:ice-world:13.6131:0.0350:true",
+        "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true e:rocky:0.9970:0.0350:true f:rocky:2.4861:0.0350:true f-1:rocky-moon:0.0001:0.0350:false",
+        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:rocky:0.9925:0.0350:true d-1:rocky-moon:0.0014:0.0350:false e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky-moon:0.0012:0.0350:false f:ice-world:13.6131:0.0350:true",
     ];
 
     /// A planet of seed 5 at `orbit_au` round a G2V of 4.6 Gyr on a
