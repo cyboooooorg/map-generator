@@ -257,8 +257,17 @@ fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
     bare(context, i, interior, &model.heat, fluence, start)
 }
 
+/// The mass kept. It is the request's own when escape took nothing of the
+/// envelope; otherwise it is derived from the mass drawn, which is the input.
 fn mass(model: &PlanetModel) -> Cause {
-    Cause::of(Quantity::Mass, model.inputs.mass_earth).set_by(InputField::MassEarth)
+    let kept = Cause::of(Quantity::Mass, model.inputs.mass_earth);
+    if model.drawn_mass_earth == model.inputs.mass_earth {
+        kept.set_by(InputField::MassEarth)
+    } else {
+        kept.because(vec![
+            Cause::of(Quantity::Mass, model.drawn_mass_earth).set_by(InputField::MassEarth),
+        ])
+    }
 }
 
 fn water_kept(surface: &Surface) -> Cause {
@@ -608,5 +617,39 @@ mod tests {
                 .iter()
                 .all(|c| c.quantity != Quantity::SurfaceTemperature)
         );
+    }
+
+    #[test]
+    fn an_escaped_mass_is_derived_from_the_drawn_one() {
+        let context = sun_at(0.03);
+        let model = planet_model(&context, with_envelope(6.0, 0.05));
+        assert!(model.envelope_lost > 0.0, "{}", model.envelope_lost);
+        assert!(model.drawn_mass_earth > model.inputs.mass_earth);
+        let e = explain(&context, &model).expect("explained");
+        let mass = root(&e, Quantity::Class)
+            .causes
+            .iter()
+            .find(|c| c.quantity == Quantity::Mass)
+            .expect("the class reads the mass");
+        assert_eq!(mass.input, None);
+        assert_eq!(mass.value, model.inputs.mass_earth);
+        let [drawn] = mass.causes.as_slice() else {
+            panic!("one cause: {:?}", mass.causes)
+        };
+        assert_eq!(drawn.input, Some(InputField::MassEarth));
+        assert_eq!(drawn.value, model.drawn_mass_earth);
+    }
+
+    #[test]
+    fn an_unescaped_mass_is_the_input_itself() {
+        let (context, model) = earth();
+        let e = explain(&context, &model).expect("explained");
+        let mass = root(&e, Quantity::Class)
+            .causes
+            .iter()
+            .find(|c| c.quantity == Quantity::Mass)
+            .unwrap();
+        assert_eq!(mass.input, Some(InputField::MassEarth));
+        assert!(mass.causes.is_empty());
     }
 }
