@@ -871,7 +871,7 @@ export class PlanetView {
 
     // The sky, behind everything: the clouds and the stars (see
     // SkyBackdrop). The host star's disc hides the stars behind it.
-    this.backdrop = new SkyBackdrop({ hideHostStar: true, renderOrder: -3 });
+    this.backdrop = new SkyBackdrop({ hideHostStar: true, renderOrder: -3, requestRender: () => this.requestRender() });
     this.stars = this.backdrop.stars;
     // The sky, farthest first: the clouds and the star field, the host star, then the
     // bodies of the system, which hide both (all at infinity, drawn in

@@ -1,4 +1,4 @@
-import { Vector3 } from 'three';
+import { LinearFilter, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { Vec3 } from '../skyBodies';
 import { lookFor, nebulaGeometry, skyShown, skyToRestore, SkyBackdrop } from './skyBackdrop';
@@ -244,6 +244,75 @@ describe('nebula patches', () => {
     expect(patches.length).toBeGreaterThan(0);
     // DoubleSide (2): a mirrored basis (determinant -1) cannot cull them either.
     for (const p of patches) expect(p.material.side).toBe(2);
+    backdrop.dispose();
+  });
+});
+
+describe('the bake reaching the screen', () => {
+  // The app renders on demand: a part that arrives must ask for a frame,
+  // and its upload must not land all at once (60-130 ms long tasks).
+  const look = { ...FIXED_SKY, seed: 77 };
+  type Patch = { visible: boolean; material: { uniforms: { uMap: { value: { generateMipmaps: boolean; minFilter: number } | null } } } };
+  const parts = (backdrop: SkyBackdrop) => {
+    const cube = backdrop.group.children[0] as unknown as { visible: boolean };
+    const patches = (backdrop.group.children[1] as unknown as { children: Patch[] }).children;
+    return { cube, patches, shown: () => patches.filter((p) => p.visible).length };
+  };
+  const manual = () => {
+    const ticks: (() => void)[] = [];
+    return { ticks, schedule: (f: () => void) => void ticks.push(f), run: () => ticks.shift()?.() };
+  };
+
+  it('asks for a render as the parts arrive, a few each frame', () => {
+    const frames = manual();
+    const requestRender = vi.fn();
+    const backdrop = new SkyBackdrop({ ...options, requestRender, schedule: frames.schedule });
+    backdrop.setSky('system', look);
+    const { cube, patches, shown } = parts(backdrop);
+    // Baked (synchronously here), not yet shown: nothing until a frame runs.
+    expect(cube.visible).toBe(false);
+    expect(frames.ticks.length).toBe(1);
+    frames.run();
+    // The cube alone in its frame.
+    expect(cube.visible).toBe(true);
+    expect(shown()).toBe(0);
+    expect(requestRender).toHaveBeenCalledTimes(1);
+    let frame = 1;
+    while (frames.ticks.length) {
+      const before = shown();
+      frames.run();
+      frame += 1;
+      const added = patches.filter((p) => p.visible).length - before;
+      expect(added).toBeGreaterThan(0);
+      expect(requestRender).toHaveBeenCalledTimes(frame);
+    }
+    expect(shown()).toBe(patches.length);
+    // Spread over several frames, not one.
+    expect(frame).toBeGreaterThan(3);
+    backdrop.dispose();
+  });
+
+  it('drops the parts still queued for a sky no longer wanted', () => {
+    const frames = manual();
+    const backdrop = new SkyBackdrop({ ...options, schedule: frames.schedule });
+    backdrop.setSky('system', look);
+    backdrop.setSky('off', look);
+    while (frames.ticks.length) frames.run();
+    const { cube, patches } = parts(backdrop);
+    expect(cube.visible).toBe(false);
+    expect(patches.length).toBe(0);
+    backdrop.dispose();
+  });
+
+  it('builds the nebula textures without mipmaps: no generateMipmap burst at upload', () => {
+    const backdrop = new SkyBackdrop(options);
+    backdrop.setSky('system', look);
+    const { patches } = parts(backdrop);
+    expect(patches.length).toBeGreaterThan(0);
+    for (const p of patches) {
+      expect(p.material.uniforms.uMap.value!.generateMipmaps).toBe(false);
+      expect(p.material.uniforms.uMap.value!.minFilter).toBe(LinearFilter);
+    }
     backdrop.dispose();
   });
 });

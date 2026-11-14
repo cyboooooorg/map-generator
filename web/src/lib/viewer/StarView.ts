@@ -421,7 +421,7 @@ export class StarView {
     });
 
     // The sky, behind everything: the clouds and the stars (see SkyBackdrop).
-    this.backdrop = new SkyBackdrop({ hideHostStar: false, renderOrder: -1 });
+    this.backdrop = new SkyBackdrop({ hideHostStar: false, renderOrder: -1, requestRender: () => this.requestRender() });
     this.backdrop.setPixelRatio(this.renderer.getPixelRatio());
     this.scene.add(this.backdrop.group);
 

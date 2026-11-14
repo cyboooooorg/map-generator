@@ -8,7 +8,10 @@
 //
 // The stars show at once; the clouds and nebulae come when the worker's bake
 // arrives (skyBakeClient.ts), one nebula at a time. A result for a sky or an
-// exposure no longer wanted is dropped.
+// exposure no longer wanted is dropped. The parts that arrived are shown a
+// few per frame (`UPLOAD_TEXELS_PER_FRAME`): Three uploads a texture at its
+// first draw, and all of them in one frame was a 60-130 ms long task. Each
+// frame that shows some asks the view for a render: the views draw on demand.
 
 import {
   AdditiveBlending,
@@ -23,7 +26,6 @@ import {
   Float32BufferAttribute,
   Group,
   LinearFilter,
-  LinearMipmapLinearFilter,
   Mesh,
   OneFactor,
   OneMinusSrcAlphaFactor,
@@ -91,15 +93,38 @@ function cubeOf(faces: SkyFaces): CubeTexture {
   return cube;
 }
 
+/**
+ * A nebula's texture. No mipmaps: the textures are sized for the planet
+ * view (about a texel a screen pixel, see nebulaTextureSize) and the sky's
+ * angular scale never changes, so they are hardly minified; generating them
+ * at upload cost a burst of GPU time.
+ */
 function nebulaTextureOf(texture: NebulaTexture): DataTexture {
   const map = new DataTexture(texture.rgba, texture.size, texture.size, RGBAFormat, UnsignedByteType);
   map.colorSpace = SRGBColorSpace;
   map.magFilter = LinearFilter;
-  map.minFilter = LinearMipmapLinearFilter;
-  map.generateMipmaps = true;
+  map.minFilter = LinearFilter;
+  map.generateMipmaps = false;
   map.needsUpdate = true;
   return map;
 }
+
+/**
+ * Texels shown (so uploaded) per frame at most, past the first part of the
+ * frame: about 1.2 MB. The cube (6 x 256 x 256) comes alone, the largest
+ * nebulae one or two a frame, the small ones by the dozen.
+ */
+export const UPLOAD_TEXELS_PER_FRAME = 300_000;
+
+function texelsOf(part: SkyPart): number {
+  return part.part === 'cube' ? 6 * part.faces.size ** 2 : part.texture.size ** 2;
+}
+
+/** Runs `tick` at the next frame; null where there are no frames (tests): parts are then shown at once. */
+type Schedule = (tick: () => void) => void;
+
+const nextFrame: Schedule | null =
+  typeof requestAnimationFrame === 'function' ? (tick) => void requestAnimationFrame(() => tick()) : null;
 
 /**
  * A nebula's patch: a quad tangent to the sky sphere at `dir`, turned by
@@ -162,10 +187,23 @@ export class SkyBackdrop {
   private starKey = '';
   private choice: SkyChoice = 'off';
   private axes: [Vec3, Vec3, Vec3] | null = null;
+  /** Parts that arrived and are not shown yet, with the request they belong to. */
+  private queue: { request: number; part: SkyPart }[] = [];
+  private draining = false;
+  private disposed = false;
+  private readonly requestRender: () => void;
+  private readonly schedule: Schedule | null;
 
-  constructor(options: { hideHostStar: boolean; renderOrder: number }) {
+  /**
+   * `requestRender` asks the view for a frame (a part became visible);
+   * `schedule` runs a callback at the next frame (requestAnimationFrame by
+   * default, a test's own clock otherwise).
+   */
+  constructor(options: { hideHostStar: boolean; renderOrder: number; requestRender?: () => void; schedule?: Schedule }) {
     acquireSkyBaker();
     this.renderOrder = options.renderOrder;
+    this.requestRender = options.requestRender ?? (() => {});
+    this.schedule = options.schedule ?? nextFrame;
     const defines: Record<string, number> = options.hideHostStar ? { HIDE_HOST_STAR: 1 } : {};
     const uniforms: ShaderMaterial['uniforms'] = {
       uPixelRatio: { value: 1 },
@@ -286,8 +324,47 @@ export class SkyBackdrop {
     this.unsubscribe?.();
     const request = ++this.request;
     this.unsubscribe = subscribeSkyBake(look, this.exposure, (part) => {
-      if (request === this.request) this.accept(part);
+      if (request !== this.request) return;
+      this.queue.push({ request, part });
+      this.kick();
     });
+  }
+
+  /** Shows the queued parts: at once without frames, else from the next frame on. */
+  private kick(): void {
+    if (this.draining || this.disposed) return;
+    if (!this.schedule) {
+      this.drain(Infinity);
+      return;
+    }
+    this.draining = true;
+    this.schedule(() => {
+      this.draining = false;
+      this.drain(UPLOAD_TEXELS_PER_FRAME);
+    });
+  }
+
+  /** Shows queued parts up to `budget` texels (one at least), asks for a render, and comes back for the rest. */
+  private drain(budget: number): void {
+    if (this.disposed) return;
+    let texels = 0;
+    let shown = false;
+    while (this.queue.length > 0) {
+      const { request, part } = this.queue[0]!;
+      // A part of an older request is dropped, whatever its size.
+      if (request !== this.request) {
+        this.queue.shift();
+        continue;
+      }
+      const cost = texelsOf(part);
+      if (shown && texels + cost > budget) break;
+      this.queue.shift();
+      this.accept(part);
+      texels += cost;
+      shown = true;
+    }
+    if (shown) this.requestRender();
+    if (this.queue.length > 0) this.kick();
   }
 
   private accept(part: SkyPart): void {
@@ -352,6 +429,7 @@ export class SkyBackdrop {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.request++;
+    this.queue = [];
     this.baked = null;
     this.clearNebulae();
     this.cube.visible = false;
@@ -399,6 +477,8 @@ export class SkyBackdrop {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.queue = [];
     this.stars.geometry.dispose();
     this.stars.material.dispose();
     this.cube.geometry.dispose();
