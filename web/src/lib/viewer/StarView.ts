@@ -19,7 +19,6 @@ import {
   MOUSE,
   PerspectiveCamera,
   PlaneGeometry,
-  Points,
   Raycaster,
   Vector2,
   RingGeometry,
@@ -53,7 +52,6 @@ import { fullPixelRatio } from './pixelRatio';
 import { opaqueContext } from './opaqueContext';
 import { PROFILES, type QualityProfile } from './quality';
 import { axesOnScreen, type ScreenAxis } from './axes';
-import { starsFragment, starsVertex } from './shaders';
 import {
   glowFragment,
   glowVertex,
@@ -64,7 +62,8 @@ import {
 } from './starShaders';
 import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
-import { starField } from './stars';
+import { lookFor, SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import { FIXED_SKY, type SkyLook } from './skyLook';
 import { CoronalLoops } from './coronalLoops';
 import { Eruption, eruptive } from './eruption';
 import {
@@ -187,7 +186,10 @@ export class StarView {
   private readonly zone: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly orbit: Line<BufferGeometry, LineBasicMaterial>;
   private readonly planet: Mesh<SphereGeometry, MeshBasicMaterial>;
-  private readonly sky: Points<BufferGeometry, ShaderMaterial>;
+  private readonly backdrop: SkyBackdrop;
+  private skyChoice: SkyChoice = 'system';
+  /** The system's own look; the fixed choice ignores it. */
+  private ownLook: SkyLook = FIXED_SKY;
   private readonly resizeObserver: ResizeObserver;
   private frame: number | null = null;
   private loop: number | null = null;
@@ -417,25 +419,10 @@ export class StarView {
       if (index !== null) this.onPickPlanet(index);
     });
 
-    const field = starField();
-    const skyGeometry = new BufferGeometry();
-    skyGeometry.setAttribute('position', new BufferAttribute(field.directions, 3));
-    skyGeometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
-    skyGeometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
-    this.sky = new Points(
-      skyGeometry,
-      new ShaderMaterial({
-        vertexShader: starsVertex,
-        fragmentShader: starsFragment,
-        uniforms: { uPixelRatio: { value: this.renderer.getPixelRatio() }, uOpacity: { value: 1 } },
-        blending: AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    this.sky.frustumCulled = false;
-    this.sky.renderOrder = -1;
-    this.scene.add(this.sky);
+    // The sky, behind everything: the clouds and the stars (see SkyBackdrop).
+    this.backdrop = new SkyBackdrop({ hideHostStar: false, renderOrder: -1 });
+    this.backdrop.setPixelRatio(this.renderer.getPixelRatio());
+    this.scene.add(this.backdrop.group);
 
     this.star = new Mesh(
       new SphereGeometry(STAR_RADIUS, quality.starSegments, quality.starSegments / 2),
@@ -1644,6 +1631,27 @@ export class StarView {
     return ray.intersectObject(this.star, false).length > 0;
   }
 
+  /** The sky of the system the view shows (see skyLook); the fixed choice ignores it. */
+  setSkyLook(look: SkyLook): void {
+    this.ownLook = look;
+    this.backdrop.setLook(lookFor(this.skyChoice, look));
+    this.requestRender();
+  }
+
+  /** Draws the system's own sky, the fixed one, or none. */
+  setSkyChoice(choice: SkyChoice): void {
+    this.skyChoice = choice;
+    this.backdrop.setLook(lookFor(choice, this.ownLook));
+    this.backdrop.group.visible = skyShown(choice);
+    this.requestRender();
+  }
+
+  /** The system's axes in this view's frame, or null for the identity. */
+  setSkyAxes(axes: [Vec3, Vec3, Vec3] | null): void {
+    this.backdrop.setAxes(axes);
+    this.requestRender();
+  }
+
   dispose(): void {
     this.disposed = true;
     this.frames.dispose();
@@ -1667,7 +1675,8 @@ export class StarView {
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.dispose();
-    for (const object of [this.star, this.glow, this.zone, this.orbit, this.planet, this.sky, this.link, ...this.apsides]) {
+    this.backdrop.dispose();
+    for (const object of [this.star, this.glow, this.zone, this.orbit, this.planet, this.link, ...this.apsides]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -1786,7 +1795,7 @@ export class StarView {
     this.renderer.setSize(clientWidth, clientHeight, false);
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
-    this.sky.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
+    this.backdrop.setPixelRatio(this.renderer.getPixelRatio());
     for (const material of this.fatMaterials) material.resolution.set(clientWidth, clientHeight);
     this.requestRender();
   }
