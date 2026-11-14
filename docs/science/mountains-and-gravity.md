@@ -79,6 +79,29 @@ crust can bear, which still scales as $1/g$.
 root reaches 5.6 times the height of the range: a range 5 km high stands on
 a root 28 km deep.
 
+**Thickness sets height.** The same balance, read the other way, says how
+high a crust of thickness $t$ stands above a thinner one $t_o$: their tops
+differ by
+
+```math
+\Delta h = (t - t_o)\left(1 - \frac{\rho_c}{\rho_m}\right)
+```
+
+**In words.** A thick crust floats high, a thin one low, and gravity
+cancels out again. Earth's continental crust is 41.1 km thick on average,
+weighted by the area of each kind of province (Christensen & Mooney 1995;
+Cogley 1984 finds 36 km), its mean density 2.83 g/cm³ (Christensen &
+Mooney 1995); the igneous oceanic crust is 7.1 ± 0.8 km thick away from
+fracture zones and hot spots (White et al. 1992). Over a mantle of
+3.3 g/cm³, the continents stand $34 \times (1 - 2.83/3.3) \approx 4.8$ km
+above old ocean floor. Continental crust covers 41 % of Earth's surface,
+30.6 % of it under the sea (Cogley 1984): the shore lies on the
+continents, not at their edge. Mars has no continents but a dichotomy:
+the modal thickness of its crust is 58 km in the southern highlands and
+32 km in the northern lowlands, with a mantle 600 kg/m³ denser than the
+crust (Neumann et al. 2004), so $26 \times 0.6/3.5 \approx 4.5$ km for a
+crust of 2.9 g/cm³.
+
 ### Erosion: often the real limit on Earth
 
 Strength gives an upper bound. On Earth, the height of many ranges is set
@@ -137,7 +160,7 @@ flowchart LR
   B --> M["Mountain ridges"]
   S --> P["Plate boundary<br/>uplift"]
   S --> V["Volcanic cones"]
-  G --> K["Crater transition<br/>15 km × 1.62 / g"]
+  G --> K["Crater transition<br/>9.0 Y / (ρ g)"]
 ```
 
 1. **Gravity.** `rocky_gravity` in
@@ -181,14 +204,44 @@ flowchart LR
 4. **Volcanoes.** The height of cones, provincial and arc, is multiplied by
    `relief_scale` as well.
 5. **Floating crust.** The continents and the sea floor are not scaled.
-   `floating` maps the continents' noise to a platform rising to 0.5 km
-   above the waterline on land, and at sea to a shelf (0.2 km), a slope down
-   to the generator's old floor (4 km) and an abyss levelling off towards
-   6.4 km (Parsons & Sclater 1977). Crust floats at the same height under
-   any $g$ (Airy), so none of it depends on gravity. The values are
-   calibrations on Earth's hypsometry (ETOPO 2022, NOAA NCEI,
-   doi:10.25921/fd45-gt74): about 0.42 km median land height, a tenth of the
-   land above 2 km, 2 % above 4 km.
+   A wet world's crust has a thickness, read from the continents' noise
+   (`crust_thickness_km`): thin crust below a crust line, the level that
+   leaves 41 % of the surface above it (Cogley's share, on a fixed grid
+   whatever the resolution), and above it a slope, a shelf and a platform
+   thickening inland to the full thick crust. `floating` turns the
+   thickness into a height by Airy's balance, above a fixed datum (the old
+   ocean floor), and lets the old floor deepen below the line by up to
+   2.4 km, Parsons & Sclater's (1977) 6.4 km less their 4 km. The datum
+   does not set the depths under the sea, the water's volume does: with
+   Earth's ocean the old floor lies about 3.25 km under the sea on
+   `earth-like` worlds and the abyss reaches about 5.65 km, shallower than
+   Earth's 4 and 6.4 km, since the noise's basins have no ridges or
+   margins to hold part of the water above 4 km. Worlds with plates take Earth's crust
+   (41.1 and 7.1 km, 2.83 and 3.3 g/cm³: the continents 4.8 km above the
+   old floor), worlds without plates Mars's dichotomy (58 and 32 km, 2.9
+   and 3.5 g/cm³: the highlands 4.5 km above the lowlands; `crust_of`).
+   The sea does not shape the crust: it fills the relief from its water
+   (`sea_level_for_water`), so a world with less water than Earth's
+   exposes its shelves, then its ocean floors. Crust floats at the same
+   height under any $g$ (Airy), so none of it depends on gravity. The
+   widths in the noise, the shelf (0.3 km) and the platform's inland rise
+   (1.45 km), and the mountains' onset are calibrations on Earth's
+   hypsometry (ETOPO 2022, NOAA NCEI, doi:10.25921/fd45-gt74): about
+   0.42 km median land height, 56 % of the land under 500 m, a tenth above
+   2 km, 2 % above 4 km. With Earth's ocean, `earth-like` worlds (seeds 1
+   to 3, 256 × 128) keep 29–32 % land, 52–65 % of it under 500 m, 6–9 %
+   above 2 km and 1.3–2.9 % above 4 km. A dry world keeps its rolling
+   plains, laid from its datum. The biomes' highland band (mountain and
+   snow, 2 km above the waterline) ignores the Airy step on worlds without
+   plates (`platform_highlands`): the height of the thick crust above the
+   datum is taken off the elevation it reads, so a highland plateau counts
+   as if its crust were thin, and only the relief built on it (mountains,
+   volcanoes, crater rims) reaches the band. A choice, no source: Mars's
+   southern highlands are cratered plains, not mountains. Measured from
+   the sea, the whole plateau of `mars-like` was mountain (41 % of the
+   sphere, seeds 1–3, against about 9 % before the crust floated); without
+   the step, 11–16 %. Worlds with plates, dry worlds and moons keep the
+   band above the sea.
 6. **Range.** Elevations beyond ±0.85 units are compressed with `tanh` into
    $[-1, 1]$ (`within_range`), not clipped, so the tall relief of light
    worlds keeps its summits.
@@ -200,13 +253,17 @@ flowchart LR
    body without plates whose lid is stagnant or episodic (a moon, a dead
    world, an airless world that overturns now and then) the span is also
    capped at 9 km (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one
-   (bulk density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
+   (an ice world's crust, `generation::crust_kind`; for a moon, a bulk
+   density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
    resurfaces it, and its sinking crust breaks into blocks up to 17 km
    high (Schenk et al. 2001).
 8. **Craters.** The size above which a crater gets a flat floor and a
-   central peak is $15\,\text{km} \times 1.62 / g$ (g in m/s²), the Moon's
-   15 km scaled as $1/g$
-   ([`craters.rs`](../../crates/mapgen/src/craters.rs)).
+   central peak is $9.0\,Y/(\rho g)$ (O'Keefe & Ahrens 1993) on a planet,
+   with the strength $Y$ and density $\rho$ of its crust (dry rock, wet
+   rock or ice), and $15\,\text{km} \times 1.62 / g$ (g in m/s²), the
+   Moon's 15 km scaled as $1/g$, on a moon
+   ([`craters.rs`](../../crates/mapgen/src/craters.rs),
+   [impact craters](impact-craters.md#simple-and-complex-craters)).
 
 The gravity and the relief scale, trimmed (from
 `crates/mapgen/src/world.rs` and `crates/mapgen/src/generation.rs`):
@@ -250,13 +307,26 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 - **Heights in kilometres are a fixed unit.** One elevation unit is 25 km on
   every world (`ELEVATION_KM`, calibrated on Earth-like worlds). Relief
   scales with gravity; the unit does not.
-- **Isostasy is a calibration, not a balance.** The platform's height and
-  the shelf, slope and abyss of the sea floor are fitted on Earth's
-  hypsometry. There is no field of crustal thickness, so no root under a
-  range and no densities in the code; there is no flexure of the crust
-  under a volcano; and since the platform floats at the waterline, a world
-  with a lower sea level shows platform, not old basins. Sea floor older
-  than about 18 Ma lies between 4 and 6.4 km by the noise, not by its age.
+- **Isostasy balances two crusts, read from the noise.** The thickness
+  follows the continents' noise, not a history of the crust: two
+  thicknesses per world, Earth's or Mars's, the profile between them
+  (slope, shelf, the platform's rise) fitted on Earth's hypsometry. The
+  ranges, plate boundaries and volcanoes are added on top, without a root
+  of their own; there is no flexure of the crust under a volcano. The
+  thick crust covers 41 % of every wet world, Earth's share: a world's
+  mean thickness from its mass and heat, and Mars's larger highlands, are
+  not modelled. Sea floor older than about 18 Ma lies at the old floor and
+  below it by the noise, not by its age (about 3.25 to 5.65 km under
+  Earth's ocean, against Parsons & Sclater's 4 to 6.4 km).
+- **The water does not load the sea floor.** Airy's balance here weighs
+  the crust alone: the floor stands at the same height whatever the
+  water above it. Water presses a basin down by about $\rho_w/\rho_m$ of
+  its depth (1.03/3.3, about a third), so a drier world's basins would
+  rebound by that much where the water left them, about 1.4 km under
+  Earth's 4.5 km deep abyssal plains, and a wetter world's sink. The sea
+  of a world with less water than Earth's therefore lies a little lower
+  on its continents than it would, its exposed ocean floors a little
+  deeper.
 - **Erosion ignores gravity.** The droplets of the hydraulic erosion run
   with a fixed `gravity` of 4 (a constant of the droplet method, not the
   planet's); a heavier world is not worn faster or slower. There is no
@@ -341,6 +411,21 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 14. Ivanov, M. A. & Head, J. W. 2011, "Global geological map of Venus",
     *Planetary and Space Science* 59, 1559–1600,
     [doi:10.1016/j.pss.2011.07.008](https://doi.org/10.1016/j.pss.2011.07.008).
+15. Cogley, J. G. 1984, "Continental margins and the extent and number of
+    the continents", *Reviews of Geophysics* 22, 101–122,
+    [doi:10.1029/RG022i002p00101](https://doi.org/10.1029/RG022i002p00101).
+16. Christensen, N. I. & Mooney, W. D. 1995, "Seismic velocity structure
+    and composition of the continental crust: a global view", *Journal of
+    Geophysical Research* 100, 9761–9788,
+    [doi:10.1029/95JB00259](https://doi.org/10.1029/95JB00259).
+17. White, R. S., McKenzie, D. & O'Nions, R. K. 1992, "Oceanic crustal
+    thickness from seismic measurements and rare earth element
+    inversions", *Journal of Geophysical Research* 97, 19683–19715,
+    [doi:10.1029/92JB01749](https://doi.org/10.1029/92JB01749).
+18. Neumann, G. A., Zuber, M. T., Wieczorek, M. A. et al. 2004, "Crustal
+    structure of Mars from gravity and topography", *Journal of
+    Geophysical Research* 109, E08002,
+    [doi:10.1029/2004JE002262](https://doi.org/10.1029/2004JE002262).
 
 ## See also
 

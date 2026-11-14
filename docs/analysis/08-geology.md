@@ -502,6 +502,90 @@ Implemented in `craters.rs`, with these changes from the plan:
   Hesperian plains), `mercury-like` 4.0–3.6 (its smooth plains). Their
   worlds change.
 
+### Outcome (transition from the crust, #312, 2026-11-14)
+
+Part 3c of the planet model (#423). A planet's simple–complex transition
+now follows O'Keefe & Ahrens (1993), `D_t = 9.0 Y / (ρ g)`, with the
+strength and density of its crust read from its model
+(`generation::crust_kind`): dry rock (12.5 MPa at 2.8 g/cm³), wet rock
+1.5 times weaker (no plates, no runaway, over 0.001 Earth oceans kept),
+or ice (an ice world without liquid water, the icy moons' calibration
+written as a strength). `earth-like` turns complex at 4.0 km (3–5),
+`mercury-like` at 10.9 (10–12), `mars-like` at 7.2 (7–8), `venus-like`
+at 4.4. The strengths are calibrations on those bodies; nothing is read
+from an archetype's name. Moons have no model yet and keep
+`15 km × 1.62 / g` (0.15 of it on ice) until part 4: the planets' rock
+strength would put the Moon at 24 km. A frozen Earth keeps a rock crust
+under its ice sheet. Worlds with craters change.
+
+### Outcome (crust thickness and Airy isostasy, #315, 2026-11-14)
+
+Part 3c of the planet model (#423). A wet world's crust now has a
+thickness, and its height follows from Airy's balance
+(`generation::floating`, `crust_thickness_km`, `crust_of`): thin crust
+below a crust line, the level of the continents' noise that leaves 41 %
+of the surface above it (Earth's continental crust, Cogley 1984), and a
+slope, a shelf and a platform thickening inland above it. Worlds with
+plates take Earth's crust (41.1 km continental, Christensen & Mooney
+1995; 7.1 km oceanic, White et al. 1992; 2.83 and 3.3 g/cm³: 4.8 km of
+contrast), worlds without plates Mars's dichotomy (58 and 32 km, Neumann
+et al. 2004: 4.5 km). The relief stands on a fixed datum, the old ocean
+floor; the sea no longer moves the crust, it fills it from its water
+(`sea_level_for_water`), so less water exposes shelves, then basins.
+
+The crust line is a quantile of the noise on a fixed 128 × 64 grid, not a
+fixed noise level as planned: a fixed level gave `earth-like` seeds 36 to
+44 % of continental crust, their seas stood 0.5 km apart on their
+continents, and no calibration kept Earth's hypsometry on seeds 1 to 3
+and the terran test seed together. The grid does not depend on the
+world's resolution (`tests/resolution_invariance.rs` passes).
+
+`earth-like` at 256 × 128, Earth's ocean, before → after (land share,
+land under 500 m, above 2 km, above 4 km, sea floor deeper than 6 km):
+seed 1 0.25 → 0.29, 64 → 65 %, 8.7 → 8.2 %, 2.1 → 2.3 %, 0.9 → 0.9 %;
+seed 2 0.28 → 0.30, 55 → 52 %, 9.2 → 8.7 %, 1.3 → 1.3 %, 0.9 → 0.8 %;
+seed 3 0.29 → 0.32, 70 → 63 %, 6.1 → 6.3 %, 2.7 → 2.9 %, 0.9 → 0.9 %.
+The terran look's test seed keeps 0.26 of land (0.23 before), 16 seeds
+0.24 to 0.35. With half of Earth's ocean the terran world shows 0.40 of
+land, with a tenth 0.64, part of it old ocean floor. `mars-like` (seed 1)
+goes from 0.95 to 0.83 of land: its little water now lies in its
+lowlands (99.7 % of its sea on thin crust), not as a ring round a raised
+platform. Dry worlds keep their plains. Worlds with seas change.
+
+### Outcome (impact flux and crater size from the orbit, #313, 2026-11-14)
+
+Part 3c of the planet model (#423). `[geology] impact_ratio` and
+`crater_scale` are gone: a world with a model takes its flux and crater
+size from its orbit (`impacts::rates`, see `docs/science/impact-craters.md`
+§ The flux from the orbit). The flux is the rate of a body in a swarm,
+the asteroids crossing its orbit (the near-Earth ones everywhere, the
+belt's own where their eccentricity reaches it) × their encounter speed
+(Earth's 17.2 km/s, Le Feuvre & Wieczorek 2011, scaled as `√(M★/a)`) ×
+its gravitational focusing, against the Moon's, times its system's
+impactors (1 for a lone world, whose context is unknown). The crossers
+are bounded by 6 times the Moon's, the whole orbit's flux by 20; the
+crater follows π-scaling (`μ` = 0.55) with the impact speed against the
+Moon's cited 19.7 km/s, bounded by Mercury's 2.16 times it. Among the
+Solar System's impactors: `mercury-like` 1.55 and 0.98 (Le Feuvre &
+Wieczorek: 1.82 and 1.18), `venus-like` 1.42 and 0.74 (1.75 and 0.78),
+`earth-like` 1.38 and 0.69 (1.58 and 0.69), `mars-like` 2.60 and 0.74
+(Hartmann: 2.6 and 0.751; its 8–16 km craters 1.52 times the Moon's,
+against Hartmann's 1.55). Moons keep the Moon's craters at their
+system's rate until part 4. Worlds with craters change.
+
+### Outcome (crater rims on sloping ground, 2026-11-14)
+
+Found while checking part 3c's craters: a crater's profile was drawn from
+the mean level of its site, so on sloping ground its rim crest sank below
+the ground uphill and the crater had no rim there, large craters most
+(their rim is low against their radius, and they span more relief). The
+floor still lies flat at the site's level; the wall and the rim now stand
+on the ground they are dug in, passing from the one to the other between
+0.5 and 1 crater radius (`craters::RIM_GROUND`, a calibration). A 150 km
+crater on ground rising 2° keeps its rim all round
+(`a_large_crater_on_a_slope_keeps_its_rim_all_round`). Worlds with
+craters change.
+
 ## 6. Time slider
 
 ### What it shows

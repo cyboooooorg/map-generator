@@ -709,22 +709,22 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     depth-to-diameter only in figures (Schenk 1991 unreadable), so icy
     simple craters keep rock's bowl (`0.2 D`); Earth's 3 to 5 km
     (Melosh & Ivanov 1999) is not reached (2.5 km); no rule gives a
-    crust's strength from composition.
+    crust's strength from composition. The transition from the crust:
+    done in #312 (part 3c of #423), a planet's transition now follows
+    O'Keefe & Ahrens (1993) with its crust's strength and density
+    (`craters::transition_km`, `generation::crust_kind`; see
+    `docs/analysis/08-geology.md` § Outcome (transition from the crust)).
   - Multi-ring basins, crustal thickness, flexure and the other
     chronologies were weighed on 2026-11-08 and stay: the sources
     (Melosh & Ivanov 1999 for the weak layer, Le Feuvre & Wieczorek
     2011, Marchi et al. 2009) give no rule that scales to other bodies
     or no numbers in text, and each needs a model the app lacks.
-  - The lunar chronology on most worlds (moved to #313): `[geology] impact_ratio` and
-    `crater_scale` carry a body's flux and crater size against the
-    Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
-    0.751). Mercury, Venus and Earth keep 1: Le Feuvre & Wieczorek 2011
-    (doi:10.1016/j.icarus.2011.03.010) could not be read (paywall, HAL
-    behind a bot wall), and Marchi et al. 2009 give Mercury's production
-    function only in figures. A world of another system keeps the
-    Moon's flux, scaled by its giants and belts and by locking; a
-    general rule would need the flux of impactors and their speeds per
-    orbit (gravitational focusing included).
+  - The lunar chronology on most worlds: done in #313 (part 3c of #423).
+    `[geology] impact_ratio` and `crater_scale` are gone; a world with a
+    model takes its flux and crater size from its orbit
+    (`crates/mapgen/src/impacts.rs`, `docs/science/impact-craters.md`
+    § The flux from the orbit), against Hartmann's Mars and Le Feuvre &
+    Wieczorek 2011's Mercury, Venus and Earth (read in the HAL copy).
 - **Plates:**
   - Slab pull sets the present speed of each plate from its sinking
     edge (2026-11-07), on one pass over the present boundary cells; at
@@ -741,11 +741,12 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   - Isostasy: continents float as a platform and the sea floor is
     bounded between the shelf and Parsons & Sclater's old floor
     (`generation::floating`, 2026-11-07), calibrated on Earth's
-    hypsometry (ETOPO 2022). What remains (moved to #315 and #316): no crustal-thickness field
-    (the platform's height is a calibration rather than Airy's balance
-    of a thickness), no flexure (volcanoes and ranges do not bend the
-    lithosphere into moats), and the platform floats at the waterline,
-    so a sea level lowered on a world exposes platform, not old basins.
+    hypsometry (ETOPO 2022). Since 2026-11-14 (#315, part 3c of #423)
+    the crust has a thickness, Earth's or Mars's, and floats by Airy's
+    balance on a fixed datum; the sea fills it from its water, so less
+    water exposes old basins (see `docs/analysis/08-geology.md`, outcome
+    #315). What remains (#316): no flexure (volcanoes and ranges do not
+    bend the lithosphere into moats).
   - The age of old ocean floor is unknown (moved to #317): floor older than about 18 Ma
     lies between 4 and 6.4 km by the noise (`generation::floating`), not
     by its age. Examined 2026-11-08,

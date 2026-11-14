@@ -126,7 +126,7 @@ const MINI_NEPTUNE_MIN_RADIUS: f64 = 1.6;
 
 /// Least share of water and ices of an ice world. Calibration, no source:
 /// Europa (about 8 %) is one, Earth (0.02 %) is not.
-const ICE_WORLD_MIN_WATER: f64 = 0.05;
+pub const ICE_WORLD_MIN_WATER: f64 = 0.05;
 
 /// Earth oceans an ice world keeps at its surface, at least, and a cold dry
 /// body keeps to render frozen. A little over twice Mars's water: its polar
