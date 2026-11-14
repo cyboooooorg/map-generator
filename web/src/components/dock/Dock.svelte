@@ -7,7 +7,23 @@
     id: string;
     title: string;
     icon: IconName;
+    /** What the panel shows; optional when it holds `cards` instead. */
+    content?: Snippet;
+    /** A panel made of cards, shown in a grid, each detachable as a floating card. */
+    cards?: DockCard[];
+    /** A wider body, for a panel of cards in two columns. */
+    wide?: boolean;
+  }
+
+  /** A card of a panel: its id (remembered with the layout, unique among panels and cards), title and content. */
+  export interface DockCard {
+    id: string;
+    title: string;
     content: Snippet;
+    /** Spans both columns of the grid. */
+    full?: boolean;
+    /** Whether it can be taken out as a floating card; true when absent. */
+    detachable?: boolean;
   }
 </script>
 
@@ -33,7 +49,10 @@
   let { kind, panels, defaultActive = null }: Props = $props();
 
   const ids = $derived(panels.map((p) => p.id));
-  let layout = $state(untrack(() => loadLayout(kind, ids, defaultActive ?? ids[0] ?? null)));
+  const allCards = $derived(panels.flatMap((p) => p.cards ?? []));
+  /** Panel and card ids together: both can float. */
+  const floatIds = $derived([...ids, ...allCards.map((c) => c.id)]);
+  let layout = $state(untrack(() => loadLayout(kind, floatIds, defaultActive ?? ids[0] ?? null)));
   $effect(() => saveLayout(kind, $state.snapshot(layout)));
 
   let viewWidth = $state(0);
@@ -41,7 +60,7 @@
   const narrow = $derived(viewWidth > 0 && viewWidth < FLOAT_MIN_WIDTH);
   /** The floating panels, front last; none in a narrow view. */
   let order = $state<string[]>(untrack(() => Object.keys(layout.floating)));
-  const floating = $derived(narrow ? [] : order.filter((id) => layout.floating[id] && ids.includes(id)));
+  const floating = $derived(narrow ? [] : order.filter((id) => layout.floating[id] && floatIds.includes(id)));
   const docked = $derived(layout.active && !floating.includes(layout.active) ? panels.find((p) => p.id === layout.active) : undefined);
   /** Each floating card's size once drawn, to keep it on screen. */
   let sizes = $state<Record<string, { width: number; height: number }>>({});
@@ -69,6 +88,8 @@
   function dockBack(id: string): void {
     delete layout.floating[id];
     order = order.filter((o) => o !== id);
+    // A card goes back to its panel, which stays as it is.
+    if (!ids.includes(id)) return;
     layout.active = id;
     layout.folded = false;
   }
@@ -134,7 +155,7 @@
       >
     </div>
     {#if docked && !layout.folded}
-      <div class="body" role="tabpanel" aria-label={docked.title}>
+      <div class="body" class:wide={docked.wide} role="tabpanel" aria-label={docked.title}>
         <header>
           <h3>{docked.title}</h3>
           {#if !narrow}
@@ -146,12 +167,30 @@
             ><Icon name="close" size={16} /></button
           >
         </header>
-        <div class="content">{@render docked.content()}</div>
+        {#if docked.cards}
+          <div class="content cards">
+            {#each docked.cards.filter((c) => !floating.includes(c.id)) as card (card.id)}
+              <section class="card" class:full={card.full} aria-label={card.title}>
+                <header>
+                  <h4>{card.title}</h4>
+                  {#if !narrow && card.detachable !== false}
+                    <button type="button" class="icon-button" title={t.dock.detach} aria-label={t.dock.detach} onclick={() => detach(card.id)}
+                      ><Icon name="detach" size={14} /></button
+                    >
+                  {/if}
+                </header>
+                <div class="card-body">{@render card.content()}</div>
+              </section>
+            {/each}
+          </div>
+        {:else}
+          <div class="content">{@render docked.content?.()}</div>
+        {/if}
       </div>
     {/if}
   </aside>
   {#each floating as id (id)}
-    {@const panel = panels.find((p) => p.id === id)}
+    {@const panel = panels.find((p) => p.id === id) ?? allCards.find((c) => c.id === id)}
     {@const at = layout.floating[id]}
     {#if panel && at}
       <section
@@ -166,13 +205,13 @@
       >
         <!-- Dragged by the pointer; the dock button puts it back for keyboards. -->
         <header class="handle" role="toolbar" aria-label={panel.title} tabindex="-1" onpointerdown={(event) => drag(id, event)}>
-          <Icon name={panel.icon} size={16} />
+          {#if 'icon' in panel}<Icon name={panel.icon} size={16} />{/if}
           <h3>{panel.title}</h3>
           <button type="button" class="icon-button" title={t.dock.dockBack} aria-label={t.dock.dockBack} onclick={() => dockBack(id)}
             ><Icon name="dock" size={16} /></button
           >
         </header>
-        <div class="content">{@render panel.content()}</div>
+        <div class="content">{@render panel.content?.()}</div>
       </section>
     {/if}
   {/each}
@@ -259,6 +298,9 @@
     width: clamp(260px, 26vw, 380px);
     max-height: 100%;
   }
+  .body.wide {
+    width: clamp(260px, 50vw, 680px);
+  }
   .narrow .body {
     width: min(380px, calc(100vw - 96px));
   }
@@ -295,6 +337,41 @@
     padding: 3px;
     background: transparent;
     border-color: transparent;
+  }
+  .content.cards {
+    container-type: inline-size;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+  }
+  /* Two columns from 560 px of body. */
+  @container (max-width: 559px) {
+    .content.cards {
+      grid-template-columns: 1fr;
+    }
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    min-width: 0;
+  }
+  .card.full {
+    grid-column: 1 / -1;
+  }
+  .card header {
+    padding: 3px 6px 3px 10px;
+  }
+  h4 {
+    flex: 1;
+    margin: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .card-body {
+    padding: 8px 10px;
+    display: grid;
+    gap: 6px;
   }
   .content {
     overflow-y: auto;
