@@ -85,11 +85,9 @@ const MIN_PIXELS: f64 = 4.0;
 const EJECTA_RADII: f64 = 3.0;
 /// Simple-to-complex transition on the Moon, km, and the Moon's gravity,
 /// m/s²: the transition scales as `1/g` (Melosh & Ivanov 1999,
-/// doi:10.1146/annurev.earth.27.1.385). The target's strength moves it
-/// ([`ICE_TRANSITION`] for ice). Rock is left at the law: at the gravity
-/// the app derives for Mercury's size (2.3 m/s², not the real 3.7) it
-/// gives 10.7 km, within the 10 to 12 km Barnouin et al. 2012 report
-/// (doi:10.1016/j.icarus.2012.02.029); Mars's 7.3 km is in their 7 to 8.
+/// doi:10.1146/annurev.earth.27.1.385, read). Worlds without a model
+/// (moons, until part 4) keep this lunar law, with [`ICE_TRANSITION`] on
+/// ice; model worlds take [`transition_km`] from their crust's strength.
 const MOON_TRANSITION_KM: f64 = 15.0;
 const MOON_GRAVITY: f64 = 1.62;
 const EARTH_GRAVITY: f64 = 9.81;
@@ -104,6 +102,46 @@ const EARTH_GRAVITY: f64 = 9.81;
 /// Schenk 2002 (read) plots their depth-to-diameter in a figure and gives
 /// no value in text.
 const ICE_TRANSITION: f64 = 0.15;
+/// Coefficient of O'Keefe & Ahrens (1993, doi:10.1029/93JE01330, abstract
+/// read in Caltech's repository): "The diameter for this transition to
+/// occur is given by D_t = 9.0 Y/ρg", for a crust of effective strength
+/// `Y` and density `ρ`. Melosh & Ivanov 1999 (read) recall that their model
+/// gives "the same threshold ... with the same 1/g dependence" as a
+/// Bingham fluid's.
+const STRENGTH_TRANSITION: f64 = 9.0;
+/// Density of a rock crust, kg/m³: 2.8 g/cm³, the typical crust of
+/// `docs/science/mountains-and-gravity.md` § Isostasy, an assumption. Only
+/// `Y / ρ` sets the transition, so the strengths below absorb it.
+const ROCK_DENSITY: f64 = 2800.0;
+/// Effective strength of a dry rock crust, Pa, in [`STRENGTH_TRANSITION`]'s
+/// law. Calibration, no source: 12.5 MPa puts Earth (with the model's
+/// 10.0 m/s²) at 4.0 km, within its 3 to 5 km (Melosh & Ivanov 1999, read:
+/// sedimentary or crystalline rock), Mercury (3.7 m/s²) at 10.9 km, within
+/// the 10 to 12 km of Barnouin et al. 2012 (doi:10.1016/j.icarus.2012.02.029,
+/// read), and Venus at 4.4 km. It is not the strength of intact rock but
+/// of rock shattered by the impact; it leaves the Moon at 24 km against its
+/// 15, which is why moons keep the lunar law.
+const ROCK_STRENGTH: f64 = 12.5e6;
+/// How much weaker a crust rich in volatiles is than dry rock. Barnouin et
+/// al. 2012 (read) give Mercury's and Mars's transitions a factor of 1.5
+/// (Garvin & Frawley 1998) to 2 apart at nearly the same gravity (3.70 and
+/// 3.72 m/s²), and recall Pike's explanation: Mars's crust, "richer in
+/// volatiles" and sedimentary, is weaker. The low end, 1.5, puts Mars at
+/// 7.2 km, within its 7 to 8 km; with the strength the only cause here,
+/// the factor stands for the impact speed too, which they name as a
+/// second one.
+const WET_ROCK_WEAKENING: f64 = 1.5;
+/// Density of an ice crust, kg/m³: ice Ih at 0 °C, 0.917 g/cm³ (CRC
+/// Handbook of Chemistry and Physics, 61st edition, 1981, F-1, as quoted
+/// by The Physics Factbook, hypertextbook.com/facts/2000/AlexDallas).
+const ICE_DENSITY: f64 = 917.0;
+/// Effective strength of an ice crust, Pa: the lunar law times
+/// [`ICE_TRANSITION`] written as a strength at [`ICE_DENSITY`], so that a
+/// model ice world turns complex where an icy moon of its gravity does
+/// (Ganymede near 2.5 km). Calibration, the same as [`ICE_TRANSITION`]:
+/// 0.37 MPa.
+const ICE_STRENGTH: f64 =
+    ICE_TRANSITION * MOON_TRANSITION_KM * 1000.0 * MOON_GRAVITY * ICE_DENSITY / STRENGTH_TRANSITION;
 /// Depth of complex lunar craters, km, from the rim crest to the floor:
 /// `d = 1.044 D^0.301` above the transition (Pike 1977, as quoted by
 /// Feoktistova & Ipatov 2021, doi:10.1007/s11038-021-09538-y), 4.2 km at
@@ -527,6 +565,31 @@ pub fn base_min_diameter_km(grid: &Grid) -> f64 {
     MIN_PIXELS * grid.circumference_km as f64 / grid.width as f64
 }
 
+/// Simple-to-complex transition diameter of the world `p`, km. A world
+/// with a model: `9.0 Y / (ρ g)` (O'Keefe & Ahrens 1993) with the strength
+/// and density of its crust ([`crate::generation::crust_kind`]): dry rock,
+/// rock weakened by volatiles, or ice. Without one (a moon): the lunar law
+/// `15 km × 1.62 / g`, times [`ICE_TRANSITION`] on ice.
+pub(crate) fn transition_km(p: &WorldParams) -> f64 {
+    use crate::generation::CrustKind;
+    let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
+    let kind = crate::generation::crust_kind(p);
+    if p.model.is_none() {
+        let ice = if kind == CrustKind::Ice {
+            ICE_TRANSITION
+        } else {
+            1.0
+        };
+        return MOON_TRANSITION_KM * MOON_GRAVITY / gravity * ice;
+    }
+    let (strength, density) = match kind {
+        CrustKind::Rock => (ROCK_STRENGTH, ROCK_DENSITY),
+        CrustKind::WetRock => (ROCK_STRENGTH / WET_ROCK_WEAKENING, ROCK_DENSITY),
+        CrustKind::Ice => (ICE_STRENGTH, ICE_DENSITY),
+    };
+    STRENGTH_TRANSITION * strength / (density * gravity) / 1000.0
+}
+
 impl CraterField {
     /// The crater field of the world `p` without any crater yet: what
     /// drawing and finding them needs (see [`Self::near`]).
@@ -570,17 +633,11 @@ impl CraterField {
         // (`[geology] impact_ratio`, 1 elsewhere).
         let raise = locked_raise * impact * f64::from(p.look.geology.impact_ratio);
         let crater_scale = f64::from(p.look.geology.crater_scale);
-        let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
             floods: Vec::new(),
             radius_km,
-            transition_km: MOON_TRANSITION_KM * MOON_GRAVITY / gravity
-                * if crate::generation::icy(p) {
-                    ICE_TRANSITION
-                } else {
-                    1.0
-                },
+            transition_km: transition_km(p),
             complex_depth: if crate::generation::icy(p) {
                 f64::from(crate::generation::ICE_RELIEF)
             } else {
@@ -1795,6 +1852,64 @@ mod tests {
         ganymede.gravity = Some(1.43 / 9.81);
         let ice = CraterField::context(&ganymede).transition_km;
         assert!((2.0..3.5).contains(&ice), "{ice}");
+    }
+
+    #[test]
+    fn model_worlds_turn_complex_where_their_crust_gives_way() {
+        let t = |name| transition_km(&crate::generation::tests::preset_params(name, 1, 64, 32));
+        // Earth 3 to 5 km (Melosh & Ivanov 1999), Mercury 10 to 12 km
+        // (Barnouin et al. 2012), Mars 7 to 8 km.
+        assert!(
+            (3.0..=5.0).contains(&t("earth-like")),
+            "earth {}",
+            t("earth-like")
+        );
+        assert!(
+            (10.0..=12.0).contains(&t("mercury-like")),
+            "mercury {}",
+            t("mercury-like")
+        );
+        assert!(
+            (7.0..=8.0).contains(&t("mars-like")),
+            "mars {}",
+            t("mars-like")
+        );
+        // The crater field takes the same transition.
+        let p = crate::generation::tests::preset_params("mars-like", 1, 64, 32);
+        assert_eq!(CraterField::context(&p).transition_km, transition_km(&p));
+    }
+
+    #[test]
+    fn a_frozen_earth_keeps_a_rock_crust() {
+        use crate::generation::{CrustKind, crust_kind};
+        // Review Focus 1: an ice sheet on a plate world is not an icy crust.
+        let mut p = crate::generation::tests::preset_params("earth-like", 1, 64, 32);
+        let surface = p.model.as_mut().and_then(|m| m.surface.as_mut()).unwrap();
+        surface.climate.liquid = crate::planet::climate::SurfaceLiquid::None;
+        surface.climate.temperature_k = 230.0;
+        assert_eq!(crust_kind(&p), CrustKind::Rock);
+        assert!(!crate::generation::icy(&p));
+    }
+
+    #[test]
+    fn a_crust_is_read_from_the_model_not_the_name() {
+        use crate::generation::{CrustKind, crust_kind};
+        let kind = |name| crust_kind(&crate::generation::tests::preset_params(name, 1, 64, 32));
+        assert_eq!(kind("earth-like"), CrustKind::Rock);
+        assert_eq!(kind("mercury-like"), CrustKind::Rock);
+        assert_eq!(kind("venus-like"), CrustKind::Rock);
+        assert_eq!(kind("mars-like"), CrustKind::WetRock);
+        // Mars dried out: a dry stagnant lid, Mercury's rock.
+        let mut p = crate::generation::tests::preset_params("mars-like", 1, 64, 32);
+        let surface = p.model.as_mut().and_then(|m| m.surface.as_mut()).unwrap();
+        surface.water.oceans = 0.0;
+        assert_eq!(crust_kind(&p), CrustKind::Rock);
+        // Without a model (a moon): ice from the bulk density only.
+        let mut body = moon(3.5);
+        assert_eq!(crust_kind(&body), CrustKind::Rock);
+        body.circumference_km = 16_540.0;
+        body.gravity = Some(1.43 / 9.81);
+        assert_eq!(crust_kind(&body), CrustKind::Ice);
     }
 
     #[test]

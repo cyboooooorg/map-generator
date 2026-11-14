@@ -196,12 +196,73 @@ fn noise_span_km(p: &WorldParams) -> f32 {
     }
 }
 
-/// Whether the world `p` is mostly ice: a bulk density, from its gravity
-/// and size, under 2.5 g/cm³ (rock and iron bodies are denser, the Moon
-/// 3.34; icy moons 1.8–1.9, Ganymede and Callisto, NASA).
+/// What a world's crust is made of, as its craters and relief feel it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CrustKind {
+    /// Dry rock, or crust recycled by plates (Mercury, Venus, Earth).
+    Rock,
+    /// Rock rich in volatiles under a stagnant lid, weaker (Mars).
+    WetRock,
+    /// An ice shell (Ganymede, Europa).
+    Ice,
+}
+
+/// Earth oceans of water a world without plates and without a runaway
+/// keeps, from which its crust is rich in volatiles ([`CrustKind::WetRock`]).
+/// Calibration, no source: Mars's polar deposits and ground ice, about
+/// 0.004 oceans (Carr & Head 2015, as
+/// [`crate::planet::classify::ICE_WORLD_MIN_OCEANS`] gives them; the
+/// `mars-like` model keeps 0.006), lie above it, Mercury's none below it.
+const WET_CRUST_MIN_OCEANS: f64 = 1e-3;
+
+/// What the crust of the world `p` is made of, read from its model:
+///
+/// - an ice shell when it has at least
+///   [`crate::planet::classify::ICE_WORLD_MIN_WATER`] of water and ices,
+///   keeps at least [`crate::planet::classify::ICE_WORLD_MIN_OCEANS`] of
+///   them at its surface and has no liquid water there (an ice world: an
+///   ocean world's sea floor is rock, and a frozen Earth's ice sheet lies
+///   on rock);
+/// - wet rock without plates and without a runaway, keeping over
+///   [`WET_CRUST_MIN_OCEANS`] of water (Mars);
+/// - rock otherwise.
+///
+/// A model without a surface (an envelope hides it) is rock. Without a
+/// model (a moon, part 4): ice when the bulk density is under 2.5 g/cm³
+/// (rock and iron bodies are denser, the Moon 3.34; icy moons 1.8–1.9,
+/// Ganymede and Callisto, NASA), rock otherwise.
+pub(crate) fn crust_kind(p: &WorldParams) -> CrustKind {
+    use crate::planet::classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
+    use crate::planet::climate::SurfaceLiquid;
+    let Some(model) = &p.model else {
+        let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
+        return if radius > 0.0 && 5.513 * p.gravity_modifier() / radius < 2.5 {
+            CrustKind::Ice
+        } else {
+            CrustKind::Rock
+        };
+    };
+    let Some(surface) = &model.surface else {
+        return CrustKind::Rock;
+    };
+    if model.inputs.water_fraction >= ICE_WORLD_MIN_WATER
+        && surface.water.oceans >= ICE_WORLD_MIN_OCEANS
+        && surface.climate.liquid != SurfaceLiquid::Water
+    {
+        CrustKind::Ice
+    } else if surface.regime != Regime::Plates
+        && !surface.water.runaway
+        && surface.water.oceans > WET_CRUST_MIN_OCEANS
+    {
+        CrustKind::WetRock
+    } else {
+        CrustKind::Rock
+    }
+}
+
+/// Whether the crust of the world `p` is ice ([`crust_kind`]).
 pub(crate) fn icy(p: &WorldParams) -> bool {
-    let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
-    radius > 0.0 && 5.513 * p.gravity_modifier() / radius < 2.5
+    crust_kind(p) == CrustKind::Ice
 }
 
 /// Largest relief of a small body, as a share of its radius: Vesta's
@@ -2760,8 +2821,9 @@ pub(crate) mod tests {
         let moon = span(1737.0, 3.34, Rock);
         assert!((9.0..18.0).contains(&moon), "Moon {moon}");
         // An icy moon of Ganymede's size holds less than rock: its noise
-        // relief 0.4 of rock's; its simple craters are still rock's (the
-        // transition does not know ice).
+        // relief 0.4 of rock's and its complex craters 0.4 as deep; it
+        // turns complex sooner (`ICE_TRANSITION`), but its simple craters
+        // keep rock's bowl (#311).
         let ice = span(2634.0, 1.94, Ice);
         assert!(ice < 0.8 * moon, "ice {ice} rock {moon}");
         // A moonlet: within 8 % of its radius, craters aside.

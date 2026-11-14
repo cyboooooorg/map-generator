@@ -502,6 +502,22 @@ Implemented in `craters.rs`, with these changes from the plan:
   Hesperian plains), `mercury-like` 4.0–3.6 (its smooth plains). Their
   worlds change.
 
+### Outcome (transition from the crust, #312, 2026-11-14)
+
+Part 3c of the planet model (#423). A planet's simple–complex transition
+now follows O'Keefe & Ahrens (1993), `D_t = 9.0 Y / (ρ g)`, with the
+strength and density of its crust read from its model
+(`generation::crust_kind`): dry rock (12.5 MPa at 2.8 g/cm³), wet rock
+1.5 times weaker (no plates, no runaway, over 0.001 Earth oceans kept),
+or ice (an ice world without liquid water, the icy moons' calibration
+written as a strength). `earth-like` turns complex at 4.0 km (3–5),
+`mercury-like` at 10.9 (10–12), `mars-like` at 7.2 (7–8), `venus-like`
+at 4.4. The strengths are calibrations on those bodies; nothing is read
+from an archetype's name. Moons have no model yet and keep
+`15 km × 1.62 / g` (0.15 of it on ice) until part 4: the planets' rock
+strength would put the Moon at 24 km. A frozen Earth keeps a rock crust
+under its ice sheet. Worlds with craters change.
+
 ## 6. Time slider
 
 ### What it shows

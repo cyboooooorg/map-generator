@@ -137,7 +137,7 @@ flowchart LR
   B --> M["Mountain ridges"]
   S --> P["Plate boundary<br/>uplift"]
   S --> V["Volcanic cones"]
-  G --> K["Crater transition<br/>15 km × 1.62 / g"]
+  G --> K["Crater transition<br/>9.0 Y / (ρ g)"]
 ```
 
 1. **Gravity.** `rocky_gravity` in
@@ -200,13 +200,17 @@ flowchart LR
    body without plates whose lid is stagnant or episodic (a moon, a dead
    world, an airless world that overturns now and then) the span is also
    capped at 9 km (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one
-   (bulk density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
+   (an ice world's crust, `generation::crust_kind`; for a moon, a bulk
+   density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
    resurfaces it, and its sinking crust breaks into blocks up to 17 km
    high (Schenk et al. 2001).
 8. **Craters.** The size above which a crater gets a flat floor and a
-   central peak is $15\,\text{km} \times 1.62 / g$ (g in m/s²), the Moon's
-   15 km scaled as $1/g$
-   ([`craters.rs`](../../crates/mapgen/src/craters.rs)).
+   central peak is $9.0\,Y/(\rho g)$ (O'Keefe & Ahrens 1993) on a planet,
+   with the strength $Y$ and density $\rho$ of its crust (dry rock, wet
+   rock or ice), and $15\,\text{km} \times 1.62 / g$ (g in m/s²), the
+   Moon's 15 km scaled as $1/g$, on a moon
+   ([`craters.rs`](../../crates/mapgen/src/craters.rs),
+   [impact craters](impact-craters.md#simple-and-complex-craters)).
 
 The gravity and the relief scale, trimmed (from
 `crates/mapgen/src/world.rs` and `crates/mapgen/src/generation.rs`):

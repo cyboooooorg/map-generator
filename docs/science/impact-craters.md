@@ -104,7 +104,8 @@ stronger the gravity, the sooner it collapses. For the same rock, $D_t$
 scales as $1/g$. The strength that matters is not that of intact rock: the
 impact shatters and shakes the ground, which behaves for a short while as a
 weak material. Melosh & Ivanov (1999) call its apparent strength "very low:
-only a few bars".
+only a few bars"; the Bingham fluid that reproduces the collapsed craters
+needs a yield stress "in the vicinity of 30 bars" (3 MPa).
 
 **Orders of magnitude.** The transition lies at about 15 km on the Moon
 (Melosh & Ivanov 1999), 15 to 20 km by other counts (Silber et al. 2017,
@@ -272,8 +273,25 @@ depends only on the planet and the seed:
    craters still to come, up to 1 Ga ahead.
 5. **Air.** No crater below `0.1 km × p^0.75` ($p$ in bar), and fewer up to
    ten times that: 3 km and 30 km on Venus, 2 m on Mars.
-6. **Shape.** A radial profile with a transition at
-   `15 km × 1.62 / g`. Below it, a bowl $0.2\,D$ deep. Above it, Pike's
+6. **Shape.** A radial profile with a transition $D_t$. A planet takes
+   it from O'Keefe & Ahrens's $9.0\,Y/(\rho g)$ with the strength and
+   density of its crust, read from its model (`generation::crust_kind`):
+   - **dry rock** (Mercury, Venus, and plate worlds like Earth, whose
+     crust is recycled): $Y$ = 12.5 MPa at 2.8 g/cm³, which gives Earth
+     4.0 km, Mercury 10.9 km and Venus 4.4 km;
+   - **wet rock**, a crust rich in volatiles: no plates, no runaway and
+     over 0.001 Earth oceans of water kept (Mars, about 0.006), 1.5 times
+     weaker, the low end of Barnouin et al.'s factor between Mercury and
+     Mars: 7.2 km on Mars;
+   - **ice**, an ice world (at least 5 % water and ices, 0.01 oceans of
+     them at the surface, no liquid water): 0.37 MPa at 0.917 g/cm³,
+     where an icy moon of the same gravity turns complex. An ocean world's
+     sea floor and a frozen Earth's ground under its ice sheet stay rock.
+
+   The strengths are calibrations on those bodies, not measured
+   strengths. A moon has no model yet: it keeps the lunar law
+   `15 km × 1.62 / g`, times 0.15 when its bulk density is under
+   2.5 g/cm³ (ice). Below the transition, a bowl $0.2\,D$ deep. Above it, Pike's
    complex depth law, written in transition diameters,
    $0.157\,D_t\,(D/D_t)^{0.301}$ (4.2 km at 100 km on the Moon); the depth
    passes from the bowl to that law as the crater turns complex, from 1 to
@@ -327,8 +345,8 @@ if exposure > 0.0 && self.erosion > 0.0 {
 }
 ```
 
-`t` is the transition diameter, `MOON_TRANSITION_KM * MOON_GRAVITY /
-gravity`, and `complex_depth` is 1, or 0.4 on ice. Diffusion is that of a
+`t` is the transition diameter, `craters::transition_km` (step 6), and
+`complex_depth` is 1, or 0.4 on ice. Diffusion is that of a
 hollow spreading under $\partial h / \partial t = \kappa\,\nabla^2 h$: it
 keeps its volume, so its depth falls as the inverse of its widening area, not
 exponentially. A crater of radius $R$ keeps $1 / (1 + \kappa t / (s R^2))$ of
@@ -368,14 +386,15 @@ more are flooded flat at a date of that window and darkened.
 
 ### Where it departs from the science
 
-- **The transition follows gravity only.** `15 km × 1.62 / g` gives 6.6 km on
-  Mercury, where the real transition is about 12 km, and 2.5 km on Earth,
-  against 3 to 5 km. The Moon matches and Mars nearly does (6.6 km against
-  7 to 8). Rock strength, volatiles and impact speed are left out. Icy moons
-  turn complex far sooner than rock at the same gravity (about 2 to 3 km on
-  Ganymede, from secondary sources), so an `icy-moon` world gets a transition
-  several times too large, though its complex craters are shallower. The
-  backlog keeps this (item 20).
+- **The crust's strength is calibrated, in three kinds.** O'Keefe &
+  Ahrens's law is sourced, but its strengths are not: they are fitted so
+  that Earth, Mercury and Mars land in their measured ranges, and a crust
+  is dry rock, wet rock or ice, with nothing in between. One rock strength
+  cannot fit both Earth and the Moon: the planets' 12.5 MPa puts the Moon
+  at 24 km against its 15, so moons keep the lunar law until they get a
+  model (part 4). The impact speed, which Barnouin et al. (2012) name as a
+  second cause of the gap between Mercury and Mars, is folded into wet
+  rock's weakening. Icy simple craters keep rock's bowl (#311).
 - **No multi-ring basins.** The largest basins, up to the planet's radius,
   are peak-ring craters scaled up. Orientale's rings of scarps are not drawn:
   their onset does not scale as $1/g$ and no rule scales it from the Moon.

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 520" width="860" height="520" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 540" width="860" height="540" role="img" aria-labelledby="title desc" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">Simple-to-complex crater transition diameter against surface gravity</title>
-  <desc id="desc">Log-log chart. Horizontal axis: surface gravity from 1 to 12 metres per second squared. Vertical axis: the crater diameter above which craters are complex, from 1 to 30 kilometres. Measured ranges: the Moon, 1.62 m/s², 15 to 20 km; Mercury, 3.70 m/s², about 10 to 14 km; Mars, 3.71 m/s², 6 to 8 km; Earth, 9.8 m/s², 3 to 5 km. A line shows the rule the app uses, 15 km times 1.62 divided by g: 15 km on the Moon, 6.6 km on Mercury and Mars, 2.5 km on Earth. Mercury and Mars have the same gravity but different transitions.</desc>
+  <desc id="desc">Log-log chart. Horizontal axis: surface gravity from 1 to 12 metres per second squared. Vertical axis: the crater diameter above which craters are complex, from 1 to 30 kilometres. Measured ranges: the Moon, 1.62 m/s², 15 to 20 km; Mercury, 3.70 m/s², about 10 to 14 km; Mars, 3.71 m/s², 6 to 8 km; Earth, 9.8 m/s², 3 to 5 km. Three lines show the app's rules. Planets take 9.0 Y over rho g with the strength of their crust: dry rock, 12.5 MPa at 2.8 g/cm³, gives 10.9 km at Mercury's gravity and 4.0 km at Earth's; rock rich in volatiles, 1.5 times weaker, gives 7.2 km at Mars's. Moons keep the lunar law, 15 km times 1.62 divided by g. Mercury and Mars have the same gravity but different transitions.</desc>
   <style>
     .t { fill: #e6edf3; font-size: 13px; }
     .s { fill: #9aa7b4; font-size: 11px; }
@@ -8,12 +8,14 @@
     .grid { stroke: #2a3644; stroke-width: 1; }
     .axis { stroke: #6b7886; stroke-width: 1; }
     .app { stroke: #ffcc66; stroke-width: 2; stroke-dasharray: 7 5; fill: none; }
+    .rock { stroke: #ff8f66; stroke-width: 2; fill: none; }
+    .wet { stroke: #c79bff; stroke-width: 2; fill: none; }
     .bar { stroke: #7cc4ff; stroke-width: 3; stroke-linecap: round; }
     .dot { fill: #7cc4ff; stroke: #0f1622; stroke-width: 1; }
   </style>
-  <rect width="860" height="520" fill="#0f1622"/>
+  <rect width="860" height="540" fill="#0f1622"/>
   <text class="h" x="20" y="30">Where craters turn complex: the transition diameter against gravity</text>
-  <text class="s" x="20" y="48">Both axes logarithmic. Blue: measured ranges. Gold dashes: the app's rule, 15 km × 1.62 / g.</text>
+  <text class="s" x="20" y="48">Both axes logarithmic. Blue: measured ranges. Lines: the app's rules, 9.0 Y / (ρ g) on planets, the lunar law on moons.</text>
   <line class="grid" x1="110.0" y1="70" x2="110.0" y2="400"/>
   <text class="s" x="110.0" y="418" text-anchor="middle">1</text>
   <line class="grid" x1="280.2" y1="70" x2="280.2" y2="400"/>
@@ -43,7 +45,11 @@
   <text class="t" x="415" y="442" text-anchor="middle">Surface gravity g (m/s²)</text>
   <text class="t" transform="translate(44 235) rotate(-90)" text-anchor="middle">Transition diameter (km)</text>
   <polyline class="app" points="110.0,90.4 720.0,331.5"/>
-  <text class="t" x="122" y="225" style="fill:#ffcc66">app: 15 km × 1.62 / g</text>
+  <text class="t" x="122" y="225" style="fill:#ffcc66">moons: 15 km × 1.62 / g</text>
+  <polyline class="rock" points="181.7,70.0 720.0,282.8"/>
+  <text class="t" x="728" y="286" style="fill:#ff8f66">dry rock</text>
+  <polyline class="wet" points="110.0,81.0 720.0,322.1"/>
+  <text class="t" x="728" y="326" style="fill:#c79bff">wet rock</text>
   <line class="bar" x1="228.4" y1="137.3" x2="228.4" y2="109.3"/>
   <circle class="dot" cx="228.4" cy="125.1" r="4"/>
   <text class="t" x="240.4" y="123.1" text-anchor="start">Moon</text>
@@ -64,4 +70,5 @@
   <text class="s" x="445.2" y="148.9">weaker, volatile-rich rock on Mars?</text>
   <text class="s" x="20" y="480">Mercury and Mars are drawn a few pixels apart; their gravities differ by 0.3 %. Ranges, not error bars: estimates differ by method and terrain.</text>
   <text class="s" x="20" y="500">Sources: Pike 1977, Silber et al. 2017 (Moon); Barnouin et al. 2012 (Mercury, Mars); Melosh &amp; Ivanov 1999 (Earth); NASA fact sheets (g).</text>
+  <text class="s" x="20" y="520">Planets' rule: O'Keefe &amp; Ahrens 1993, with calibrated strengths (dry rock 12.5 MPa, wet rock 1.5 times weaker, at 2.8 g/cm³).</text>
 </svg>
