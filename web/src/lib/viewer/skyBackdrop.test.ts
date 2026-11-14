@@ -1,10 +1,11 @@
 import { Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { lookFor, skyShown, skyToRestore, SkyBackdrop } from './skyBackdrop';
+import { lookFor, nebulaGeometry, skyShown, skyToRestore, SkyBackdrop } from './skyBackdrop';
 import { FIXED_SKY, skyLook } from './skyLook';
 import * as clouds from './skyClouds';
-import { skyNebulae } from './skyNebulae';
+import { skyNebulae, type Nebula } from './skyNebulae';
+import { random } from './skyRandom';
 import { starField } from './stars';
 
 // Without a worker the bake runs in the test, and a sky is a few seconds of it.
@@ -202,5 +203,47 @@ describe('SkyBackdrop', () => {
       expect(spies.every((spy) => spy.mock.calls.length > 0)).toBe(true);
       expect(backdrop.nebulaCount).toBe(0);
     });
+  });
+});
+
+describe('nebula patches', () => {
+  /** The triangles' normals (counter-clockwise front faces, Three's default) of a patch. */
+  const normals = (n: Nebula): Vector3[] => {
+    const geometry = nebulaGeometry(n);
+    const pos = geometry.getAttribute('position');
+    const index = geometry.getIndex()!;
+    const at = (i: number) => new Vector3().fromBufferAttribute(pos, index.getX(i));
+    const out: Vector3[] = [];
+    for (let t = 0; t < index.count; t += 3) {
+      const [a, b, c] = [at(t), at(t + 1), at(t + 2)];
+      out.push(b.clone().sub(a).cross(c.clone().sub(a)));
+    }
+    return out;
+  };
+
+  // The camera sits at the sphere's centre: a front face must face it, or
+  // the default FrontSide culls every patch (as it did on develop 8b6f7be).
+  it('face the centre of the sky sphere, whatever the direction and the roll', () => {
+    const next = random(12345);
+    for (let k = 0; k < 200; k++) {
+      const z = 2 * next() - 1;
+      const phi = 2 * Math.PI * next();
+      const s = Math.sqrt(1 - z * z);
+      const dir: Vec3 = [s * Math.cos(phi), z, s * Math.sin(phi)];
+      const n: Nebula = { kind: 'emission', dir, radius: 0.02 + 0.2 * next(), roll: 2 * Math.PI * next(), seed: k, tint: 0.5 };
+      for (const normal of normals(n)) expect(normal.dot(new Vector3(...dir))).toBeLessThan(0);
+    }
+  });
+
+  it('face the centre for every nebula of a real sky, and draw from both sides', () => {
+    const backdrop = new SkyBackdrop(options);
+    const look = skyLook({ source: 'drawn', position_kpc: [4.5, 0.01, -0.14], axes: [[0, 1, 0], [-1, 0, 0], [0, 0, 1]], sky_seed: 2725666414 });
+    for (const n of skyNebulae(look)) for (const normal of normals(n)) expect(normal.dot(new Vector3(...n.dir))).toBeLessThan(0);
+    backdrop.setSky('system', look);
+    const patches = (backdrop.group.children[1] as unknown as { children: { material: { side: number } }[] }).children;
+    expect(patches.length).toBeGreaterThan(0);
+    // DoubleSide (2): a mirrored basis (determinant -1) cannot cull them either.
+    for (const p of patches) expect(p.material.side).toBe(2);
+    backdrop.dispose();
   });
 });

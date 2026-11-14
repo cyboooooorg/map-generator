@@ -19,6 +19,7 @@ import {
   CubeTexture,
   CustomBlending,
   DataTexture,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   LinearFilter,
@@ -106,8 +107,12 @@ function nebulaTextureOf(texture: NebulaTexture): DataTexture {
  * directions in the system frame, so the group's matrix orients it like the
  * cube; the vertex shader sends them to the far plane. Row 0 of the texture
  * is the top: v runs down.
+ *
+ * The camera is at the sphere's centre, looking out: the triangles turn
+ * clockwise in (right, up), since right x up points outward (along `dir`),
+ * so that they are counter-clockwise, front faces, seen from the centre.
  */
-function nebulaGeometry(n: Nebula): BufferGeometry {
+export function nebulaGeometry(n: Nebula): BufferGeometry {
   const { right, up } = nebulaBasis(n);
   const half = Math.tan(n.radius);
   const corners: [number, number][] = [
@@ -125,7 +130,7 @@ function nebulaGeometry(n: Nebula): BufferGeometry {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
-  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.setIndex([0, 2, 1, 0, 3, 2]);
   return geometry;
 }
 
@@ -319,6 +324,8 @@ export class SkyBackdrop {
         // Premultiplied: a glow adds its colour, a dark nebula keeps (1 - alpha) of what is behind.
         blendSrc: dark ? ZeroFactor : OneFactor,
         blendDst: dark ? OneMinusSrcAlphaFactor : OneFactor,
+        // A guard: the winding faces the centre (nebulaGeometry), but a culled patch draws nothing at all.
+        side: DoubleSide,
       });
       const mesh = new Mesh(nebulaGeometry(n), material);
       mesh.frustumCulled = false;
