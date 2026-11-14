@@ -37,20 +37,23 @@ interface KindSpec {
   size: [number, number];
   /** Share drawn about the band (the rest is uniform on the sphere). */
   bandShare: number;
-  /** Latitude spread of the band-drawn ones, in band widths. */
-  spread: number;
-  /** Hard limit of the latitude, degrees. */
+  /** Latitude spread (standard deviation) of the band-drawn ones, degrees: wide, so the nebulae are not a thin strip. */
+  spreadDeg: number;
+  /** Hard limit of the latitude of the band-drawn ones, degrees. */
   maxLatitude: number;
 }
 
 const KINDS: KindSpec[] = [
-  { kind: 'planetary', count: [3, 8], size: [0.5, 3], bandShare: 0.35, spread: 2, maxLatitude: 90 },
-  { kind: 'emission', count: [2, 5], size: [3, 12], bandShare: 1, spread: 0.8, maxLatitude: 15 },
-  { kind: 'pillars', count: [1, 3], size: [1.5, 5], bandShare: 1, spread: 0.6, maxLatitude: 15 },
-  { kind: 'remnant', count: [1, 3], size: [2, 8], bandShare: 0.5, spread: 1.5, maxLatitude: 90 },
-  { kind: 'reflection', count: [2, 6], size: [0.5, 3], bandShare: 1, spread: 1, maxLatitude: 15 },
-  { kind: 'dark', count: [4, 10], size: [1.5, 7], bandShare: 1, spread: 0.4, maxLatitude: 8 },
+  { kind: 'planetary', count: [3, 8], size: [0.5, 3], bandShare: 0.5, spreadDeg: 16, maxLatitude: 90 },
+  { kind: 'emission', count: [2, 5], size: [3, 12], bandShare: 0.6, spreadDeg: 14, maxLatitude: 60 },
+  { kind: 'pillars', count: [1, 3], size: [1.5, 5], bandShare: 0.6, spreadDeg: 14, maxLatitude: 60 },
+  { kind: 'remnant', count: [1, 3], size: [2, 8], bandShare: 0.5, spreadDeg: 20, maxLatitude: 90 },
+  { kind: 'reflection', count: [2, 6], size: [0.5, 3], bandShare: 0.6, spreadDeg: 16, maxLatitude: 70 },
+  { kind: 'dark', count: [4, 10], size: [1.5, 7], bandShare: 0.8, spreadDeg: 8, maxLatitude: 30 },
 ];
+
+/** Two nebulae's centres are at least the sum of their radii plus this apart, degrees. */
+export const NEBULA_MARGIN_DEG = 3;
 
 /** The size table, degrees, for the tests and the texture resolution. */
 export const NEBULA_SIZE_DEG: Record<NebulaKind, [number, number]> = Object.fromEntries(
@@ -81,43 +84,46 @@ function alongBandRoll(n: Nebula, north: Vec3): number {
   return Math.atan2(dot(tangent, up), dot(tangent, right));
 }
 
-function draw(look: SkyLook, spec: KindSpec): Nebula[] {
+function draw(look: SkyLook, spec: KindSpec, placed: Nebula[]): Nebula[] {
   const next = random(subSeed(look.seed, `nebula:${spec.kind}`));
   const scale = Math.min(1.8, Math.max(0.5, Math.sqrt(look.brightness)));
   const [lo, hi] = spec.count;
   const base = lo + Math.floor(next() * (hi - lo + 1));
   const count = Math.max(1, Math.round(base * scale));
   const frame = bandFrame(look);
-  const centreBias = 0.25 + 0.5 * look.bulge;
+  const centreBias = 0.15 + 0.3 * look.bulge;
   const out: Nebula[] = [];
   for (let i = 0; i < count; i += 1) {
-    let dir: Vec3;
-    if (next() < spec.bandShare) {
-      const limit = spec.maxLatitude * RAD;
-      const lat = Math.max(-limit, Math.min(limit, gauss(next) * look.bandWidth * spec.spread));
-      const lon = next() < centreBias ? gauss(next) * 0.9 : (next() * 2 - 1) * Math.PI;
-      const cl = Math.cos(lat);
-      dir = [
-        cl * (Math.cos(lon) * frame.along[0] + Math.sin(lon) * frame.across[0]) + Math.sin(lat) * frame.north[0],
-        cl * (Math.cos(lon) * frame.along[1] + Math.sin(lon) * frame.across[1]) + Math.sin(lat) * frame.north[1],
-        cl * (Math.cos(lon) * frame.along[2] + Math.sin(lon) * frame.across[2]) + Math.sin(lat) * frame.north[2],
-      ];
-    } else {
-      const z = next() * 2 - 1;
-      const a = next() * 2 * Math.PI;
-      const r = Math.sqrt(1 - z * z);
-      dir = [r * Math.cos(a), r * Math.sin(a), z];
-    }
     const [smin, smax] = spec.size;
     const radius = smin * (smax / smin) ** next() * RAD;
-    const nebula: Nebula = {
-      kind: spec.kind,
-      dir: unit(dir),
-      radius,
-      roll: next() * 2 * Math.PI,
-      seed: Math.floor(next() * 4_294_967_296) >>> 0,
-      tint: next(),
-    };
+    let nebula: Nebula | null = null;
+    // Dart throwing: a centre too close to a placed nebula is drawn again; the later tries ignore the band.
+    for (let attempt = 0; attempt < 80 && !nebula; attempt += 1) {
+      let dir: Vec3;
+      if (attempt < 40 && next() < spec.bandShare) {
+        const limit = spec.maxLatitude * RAD;
+        const lat = Math.max(-limit, Math.min(limit, gauss(next) * spec.spreadDeg * RAD));
+        const lon = next() < centreBias ? gauss(next) * 0.9 : (next() * 2 - 1) * Math.PI;
+        const cl = Math.cos(lat);
+        dir = [
+          cl * (Math.cos(lon) * frame.along[0] + Math.sin(lon) * frame.across[0]) + Math.sin(lat) * frame.north[0],
+          cl * (Math.cos(lon) * frame.along[1] + Math.sin(lon) * frame.across[1]) + Math.sin(lat) * frame.north[1],
+          cl * (Math.cos(lon) * frame.along[2] + Math.sin(lon) * frame.across[2]) + Math.sin(lat) * frame.north[2],
+        ];
+      } else {
+        const z = next() * 2 - 1;
+        const a = next() * 2 * Math.PI;
+        const r = Math.sqrt(1 - z * z);
+        dir = [r * Math.cos(a), r * Math.sin(a), z];
+      }
+      const centre = unit(dir);
+      const free = [...placed, ...out].every(
+        (o) => Math.acos(Math.max(-1, Math.min(1, dot(centre, o.dir)))) >= o.radius + radius + NEBULA_MARGIN_DEG * RAD,
+      );
+      if (!free) continue;
+      nebula = { kind: spec.kind, dir: centre, radius, roll: next() * 2 * Math.PI, seed: Math.floor(next() * 4_294_967_296) >>> 0, tint: next() };
+    }
+    if (!nebula) continue;
     // Dark nebulae are elongated and lie along the band: their long axis follows the plane.
     if (spec.kind === 'dark') nebula.roll = alongBandRoll(nebula, frame.north) + (next() - 0.5) * 0.5;
     out.push(nebula);
@@ -135,7 +141,8 @@ export function skyNebulae(look: SkyLook): Nebula[] {
   const key = [look.seed, look.brightness, look.bandWidth, look.bulge, ...look.north, ...look.centre].join('|');
   let list = byKey.get(key);
   if (!list) {
-    list = KINDS.flatMap((spec) => draw(look, spec));
+    list = [];
+    for (const spec of KINDS) list.push(...draw(look, spec, list));
     if (byKey.size >= 16) byKey.clear();
     byKey.set(key, list);
   }

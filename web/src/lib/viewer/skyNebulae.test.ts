@@ -3,6 +3,7 @@ import type { Vec3 } from '../skyBodies';
 import { dustAt } from './skyClouds';
 import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 import {
+  NEBULA_MARGIN_DEG,
   NEBULA_SIZE_DEG,
   nebulaBasis,
   pillarColumns,
@@ -78,24 +79,56 @@ describe('skyNebulae', () => {
     }
   });
 
-  it('keeps the band kinds within 15 degrees of the plane, closer than uniform on average', () => {
+  it('keeps every kind closer to the plane than a uniform sphere on average, most dark ones within 30 degrees', () => {
     // Mean |latitude| of a uniform sphere is (pi / 2 - 1) radians.
     const uniform = Math.PI / 2 - 1;
     for (const k of KINDS) {
       let sum = 0;
       let total = 0;
+      let near = 0;
       for (let seed = 1; seed <= 100; seed += 1) {
         const look = lookAt(8.2, seed);
         for (const n of skyNebulae(look).filter((x) => x.kind === k)) {
           const lat = Math.abs(latOf(look, n.dir));
-          if (k === 'emission' || k === 'pillars' || k === 'reflection' || k === 'dark') {
-            expect(lat).toBeLessThanOrEqual(15 * DEG + 1e-9);
-          }
+          if (lat <= 30 * DEG) near += 1;
           sum += lat;
           total += 1;
         }
       }
       expect(sum / total).toBeLessThan(uniform);
+      if (k === 'dark') expect(near / total).toBeGreaterThan(0.7);
+    }
+  });
+
+  it('spreads the nebulae over the sphere, not along a thin band', () => {
+    let beyond20 = 0;
+    let beyond50 = 0;
+    let total = 0;
+    for (let seed = 1; seed <= 100; seed += 1) {
+      const look = lookAt(8.2, seed);
+      for (const n of skyNebulae(look)) {
+        const lat = Math.abs(latOf(look, n.dir));
+        total += 1;
+        if (lat > 20 * DEG) beyond20 += 1;
+        if (lat > 50 * DEG) beyond50 += 1;
+      }
+    }
+    // A sphere has 66% of its area beyond 20 degrees of a great circle and 23% beyond 50.
+    expect(beyond20 / total).toBeGreaterThan(0.3);
+    expect(beyond50 / total).toBeGreaterThan(0.05);
+  });
+
+  it('keeps two nebulae apart: their radii plus the margin between the centres', () => {
+    for (const x of [3, 8.2, 14]) {
+      for (let seed = 1; seed <= 60; seed += 1) {
+        const list = skyNebulae(lookAt(x, seed));
+        for (let i = 0; i < list.length; i += 1) {
+          for (let j = i + 1; j < list.length; j += 1) {
+            const angle = Math.acos(Math.min(1, dot(list[i]!.dir, list[j]!.dir)));
+            expect(angle).toBeGreaterThanOrEqual(list[i]!.radius + list[j]!.radius + NEBULA_MARGIN_DEG * DEG - 1e-9);
+          }
+        }
+      }
     }
   });
 
@@ -207,6 +240,8 @@ describe('dust of nebulae', () => {
     const inside = dustAt(look, at(column.x, -0.6));
     const outside = dustAt(look, at(column.x + 0.9, -0.6));
     expect(pillarMask(pillarColumns(p), column.x, -0.6)).toBeGreaterThan(0.9);
-    expect(inside).toBeGreaterThan(outside);
+    // The pillar's own extinction (0.75 at most), whatever rift crosses beside it.
+    expect(inside).toBeGreaterThan(0.6);
+    expect(outside).toBeLessThan(inside + 0.2);
   });
 });
