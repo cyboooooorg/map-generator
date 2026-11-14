@@ -328,3 +328,36 @@ spots.
   coloured halo (2.4 radii, cloudy, H-alpha red for emission, pillars and
   remnants, O III teal for planetary, blue for reflection) baked into the
   cube wherever it lies on the sphere. The band's glow is warmer and whiter.
+
+### Tuning after the fourth visual check, 2026-11-14
+
+At the planet view's scale a pillars nebula is about 400 px across, and the
+soft oval columns and the single dark lane at the core looked crude.
+
+- **Pillars (the Eagle's family).** `pillarColumns` draws two or three main
+  columns that taper from a wide foot to a narrow, bent, wavering finger
+  tip (`tip` half width 0.035 to 0.06), one or two thin side fingers per
+  column, and one to three small detached globules above each tip.
+  `pillarDistance` is a signed distance to that union with the outline
+  torn by a warp at three scales; `pillarMask` is its sharp-edged
+  opacity (a few texels of softness, a slightly mottled inside) and drives
+  both the texture and the extinction. The texture shades the outline with
+  the direction of the light (up and a little right): a thin white-hot
+  line just inside the edge, a red front around it, an O III teal glow
+  beyond, all strongest where the outline faces the light; compressed
+  bright gas on the lit side; a dim, wispy inside (ridged noise) fading
+  toward the foot; and a brighter background with filaments and grain.
+- **Other kinds, finer detail.** Planetary: knots at two scales with fine
+  filaments. Emission: grain and thin bright filaments on top of the
+  lanes. Remnant: thin extra filaments and grain. Reflection: wispy
+  streaks in the haze. Dark: edge torn at three scales, clumps with holes,
+  a fibre network and a fringe of hair-like wisps, so it is no longer a
+  smooth oval.
+- **The core has no straight lane.** `coreLane` no longer follows the
+  plane. It is a network of domain-warped ridged noise on the sphere (about
+  two rift spacings across the core, widths varying along each lane,
+  side filaments growing only next to a trunk), so several irregular lanes
+  cross the bulge at different angles. Its envelope is the core's own
+  ellipse (a flat-topped fall to zero): the rifts end with the core.
+- Bake (worker, whole sky): R 4.5 about 7 s, R 8.2 about 5 s (9.9 and 7.5
+  Mpx of textures).
