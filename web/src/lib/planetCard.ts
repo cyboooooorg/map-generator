@@ -2,6 +2,11 @@
 // (components/PlanetCard.svelte): where it sits beside its planet, and the
 // planet's place relative to the habitable zone.
 
+import type { Bulk } from './api/types/Bulk';
+import type { PlanetModel } from './api/types/PlanetModel';
+import { formatInt, formatUpTo, withUnit } from './format';
+import { t } from './i18n/index.svelte';
+
 /** Where a planet's mean orbit lies against the habitable zone. */
 export type ZonePlace = { inside: true } | { inside: false; side: 'inner' | 'outer'; gapAu: number };
 
@@ -160,4 +165,42 @@ export function extremes(rows: readonly Readonly<Record<CardMetric, number>>[]):
     });
   }
   return marks;
+}
+
+/** Shares of the surface gases under this are left out of the card. */
+const MIN_GAS_SHARE = 0.01;
+/** Gases the card names, at most, by decreasing partial pressure. */
+const MAX_GASES = 3;
+const GAS_LABELS = { n2: 'N₂', co2: 'CO₂', h2o: 'H₂O', ch4: 'CH₄', nh3: 'NH₃', so2: 'SO₂', o2: 'O₂' } as const;
+
+/**
+ * A body's surface pressure and main gases, e.g. "1.5 bar · N₂ 94 % ·
+ * CH₄ 5 %"; null without a surface or without air.
+ */
+export function atmosphereLine(model: Pick<PlanetModel, 'surface'>): string | null {
+  const gases = model.surface?.gases;
+  if (!gases) return null;
+  const entries = (Object.keys(GAS_LABELS) as (keyof typeof GAS_LABELS)[]).map((gas) => ({ gas, bar: gases[gas] }));
+  const total = entries.reduce((sum, e) => sum + e.bar, 0);
+  if (!(total > 0)) return null;
+  const digits = total < 0.1 ? 3 : total < 10 ? 2 : 0;
+  const main = entries
+    .filter((e) => e.bar / total >= MIN_GAS_SHARE)
+    .sort((a, b) => b.bar - a.bar)
+    .slice(0, MAX_GASES)
+    .map((e) => `${GAS_LABELS[e.gas]} ${withUnit(formatInt(Math.round((100 * e.bar) / total)), '%')}`);
+  return [withUnit(formatUpTo(total, digits), 'bar'), ...main].join(' · ');
+}
+
+/** "ocean under 60 km of ice" for a body with a liquid ocean under its ice shell; null otherwise. */
+export function oceanUnderIce(model: Pick<PlanetModel, 'ice_shell'>): string | null {
+  const shell = model.ice_shell;
+  if (!shell || !(shell.ocean_km > 0)) return null;
+  return t.card.oceanUnderIce({ km: withUnit(formatInt(Math.round(shell.shell_km)), 'km') });
+}
+
+/** A small moon's bulk, e.g. "rock 60 % · ice 30 % · carbon 10 %". */
+export function bulkLine(bulk: Bulk): string {
+  const share = (x: number) => withUnit(formatInt(Math.round(x * 100)), '%');
+  return t.card.bulkValue({ rock: share(bulk.rock), ice: share(bulk.ice), carbon: share(bulk.carbon) });
 }

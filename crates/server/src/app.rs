@@ -475,6 +475,10 @@ async fn archetypes(State(state): State<Shared>) -> Json<Vec<ArchetypeInfo>> {
 
 async fn form(State(state): State<Shared>) -> Json<FormSpec> {
     let spec = |limits, fallback| ParamSpec { limits, fallback };
+    let (moon_archetypes, archetypes): (Vec<String>, Vec<String>) =
+        mapgen::system::archetype_names()
+            .into_iter()
+            .partition(|name| state.catalog.get(name).is_some_and(|a| a.moon.is_some()));
     Json(FormSpec {
         hz_position: spec(request::HZ_POSITION, fallback::HZ_POSITION),
         orbit_au: request::ORBIT_AU,
@@ -496,7 +500,8 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         size_presets: request::SIZE_PRESETS.iter().map(|&(w, h)| [w, h]).collect(),
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
-        archetypes: mapgen::system::archetype_names(),
+        archetypes,
+        moon_archetypes,
         max_planets: mapgen::system::MAX_PLANETS as u32,
     })
 }
@@ -4065,6 +4070,11 @@ mod tests {
         assert!(!earth["inputs"]["mass_earth"].is_null());
         assert!(earth["orbit"].is_object());
         assert!(list.iter().any(|a| a["spec"] == "jupiter-like"));
+        let titan = list.iter().find(|a| a["spec"] == "titan-like").unwrap();
+        assert_eq!(titan["moon"], true);
+        assert_eq!(titan["moon_host"], "saturn-like");
+        assert_eq!(earth["moon"], false);
+        assert!(earth["moon_host"].is_null());
         let (status, _) = call(&app, "GET", "/api/presets", None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
@@ -4103,6 +4113,10 @@ mod tests {
         let form: serde_json::Value = serde_json::from_str(&body).unwrap();
         let names = form["archetypes"].as_array().unwrap();
         assert!(names.iter().any(|n| n == "earth-like"));
+        assert!(!names.iter().any(|n| n == "titan-like"));
+        let moons = form["moon_archetypes"].as_array().unwrap();
+        assert_eq!(moons.len(), 7);
+        assert!(moons.iter().any(|n| n == "titan-like"));
         assert!(form.get("planet_types").is_none());
         assert!(form.get("sea_level").is_none());
         assert!(form.get("land_fraction").is_none());

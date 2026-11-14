@@ -134,6 +134,12 @@ export const en = {
     light: 'Light',
     lightValue: (p: { flux: string; temperature: string }) => `${p.flux}× Earth's · equilibrium ${p.temperature}`,
     surfaceTemperature: 'Surface temperature',
+    atmosphere: 'Atmosphere',
+    regime: 'Tectonics',
+    interior: 'Interior',
+    oceanUnderIce: (p: { km: string }) => `ocean under ${p.km} of ice`,
+    bulk: 'Bulk',
+    bulkValue: (p: { rock: string; ice: string; carbon: string }) => `rock ${p.rock} · ice ${p.ice} · carbon ${p.carbon}`,
     moons: 'Moons',
     rings: 'Rings',
     ringsValue: (p: { kind: 'bright' | 'faint'; inner: string; outer: string; gaps: number }) =>
@@ -532,7 +538,9 @@ export const en = {
     systemSubtype: 'Subtype',
     systemPlanets: 'Planets',
     systemPlanetsDrawn: 'Drawn',
-    systemPlanetsTotal: (p: { count: number; max: number }) => `${p.count} planets (1 to ${p.max})`,
+    systemPlanetsTotal: (p: { count: number; max: number }) => `${p.count} planets and moons (1 to ${p.max})`,
+    systemMoons: 'Moons',
+    systemMoonsHelp: 'A moon asked without its giant brings that giant into the system, which counts as one more planet. Moons are asked here, never as a single world',
     systemPlanetsHelp: 'How many of each archetype: the draw orders them from the star as real systems are, and draws their moons. Drawn: as many as the star and its metallicity make likely',
     vary: (p: { id: string }) => `Vary ${p.id}`,
     variedHelp: (p: { id: string }) => `Starts from every parameter of ${p.id}: change the ones you want.`,
@@ -1276,7 +1284,7 @@ export const en = {
     tooManyPlanets: (p: { asked: number; max: number }) => `${p.asked} planets asked for: a system holds ${p.max} at most.`,
     zoneFull: (p: { type: string; asked: number; fits: number }) =>
       `${p.asked} ${p.type} planets asked for, but their band of distances round this star holds ${p.fits}.`,
-    typeImpossible: (p: { type: string }) => `This star leaves no room for a ${p.type} planet.`,
+    typeImpossible: (p: { type: string }) => `This star leaves no room for a ${p.type} planet or moon.`,
     systemExists: (p: { system: string }) => `System ${p.system} exists already: replace it, delete it or pick another seed.`,
     hotGiantMoons: (p: { count: number }) =>
       `Not that many moons for a giant this close to its star (${p.count} asked for): its Hill sphere is too small, or its star's tides have locked it and its moons spiral in. Pick a farther orbit or fewer moons.`,
