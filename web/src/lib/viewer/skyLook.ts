@@ -21,6 +21,10 @@ export interface SkyLook {
   north: Vec3;
   /** Direction to the galactic centre, unit, system frame. */
   centre: Vec3;
+  /** Angular size of the galactic core (its along-band extent), radians; 0.3 at the Sun's place. */
+  coreSize: number;
+  /** Brightness of the galactic core relative to the Sun's place, `(8.2 / R)²`; 0 for the fixed sky. */
+  coreBrightness: number;
 }
 
 /** The Sun's galactocentric radius, kpc. */
@@ -38,6 +42,12 @@ const SUN_BAND_WIDTH = (7 * Math.PI) / 180;
 /** Angle between today's fixed band and the planet's equator, radians. */
 const FIXED_TILT = (60 * Math.PI) / 180;
 
+/** Largest core brightness and size: very close to the centre the law would blow up. */
+const CORE_BRIGHTNESS_MAX = 4;
+const CORE_SIZE_MAX = 0.9;
+/** The core's angular size at the Sun's place, radians. */
+const SUN_CORE_SIZE = 0.3;
+
 /** Today's sky: seed 7, the band tilted 60 degrees about x, no bulge. */
 export const FIXED_SKY: SkyLook = {
   seed: 7,
@@ -46,6 +56,8 @@ export const FIXED_SKY: SkyLook = {
   bulge: 0,
   north: [0, Math.cos(FIXED_TILT), Math.sin(FIXED_TILT)],
   centre: [1, 0, 0],
+  coreSize: SUN_CORE_SIZE,
+  coreBrightness: 0,
 };
 
 function normalise([x, y, z]: Vec3): Vec3 {
@@ -71,6 +83,9 @@ export function skyLook(place: GalacticPlace | null): SkyLook {
   const bulge = Math.min(1, Math.max(0, Math.exp(-radius / BULGE_SCALE)));
   const above = Math.max(0, Math.abs(z) - SUN_HEIGHT);
   const bandWidth = SUN_BAND_WIDTH / (1 + above / NARROW_HEIGHT);
+  // Distance to the galactic centre, kpc; the core grows and brightens as it shrinks.
+  const toCentre = Math.max(0.5, Math.hypot(x, y, z));
+  const closeness = SUN_RADIUS / toCentre;
   return {
     seed: place.sky_seed,
     brightness,
@@ -78,5 +93,27 @@ export function skyLook(place: GalacticPlace | null): SkyLook {
     bulge,
     north: normalise(place.axes[2]),
     centre: normalise(toSystem(place.axes, normalise([-x, -y, -z]))),
+    coreSize: Math.min(CORE_SIZE_MAX, SUN_CORE_SIZE * closeness),
+    coreBrightness: Math.min(CORE_BRIGHTNESS_MAX, closeness * closeness),
   };
+}
+
+const dot3 = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross3 = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+
+/**
+ * The band's frame in the system frame: `along` (toward the centre, in the
+ * plane), `across` (in the plane, 90 degrees on) and `north`.
+ */
+export function bandFrame(look: SkyLook): { along: Vec3; across: Vec3; north: Vec3 } {
+  const n = look.north;
+  const c = look.centre;
+  const d = dot3(c, n);
+  const flat: Vec3 = [c[0] - n[0] * d, c[1] - n[1] * d, c[2] - n[2] * d];
+  const along = Math.hypot(...flat) > 1e-6 ? normalise(flat) : normalise(cross3(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+  return { along, across: cross3(n, along), north: n };
 }

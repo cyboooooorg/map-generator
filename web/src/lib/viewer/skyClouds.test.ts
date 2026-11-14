@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { bakeSkyClouds, CLOUD_CEILING, dustAt, faceDirection } from './skyClouds';
+import { bakeSkyClouds, CLOUD_CEILING, dustAt, faceDirection, type SkyFaces } from './skyClouds';
 import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 const decode = (byte: number) => {
@@ -53,16 +53,16 @@ describe('faceDirection', () => {
 
 describe('bakeSkyClouds', () => {
   const look: SkyLook = { ...FIXED_SKY, bulge: 0.3 };
-  const baked = bakeSkyClouds(look, SIZE);
+  const baked = bakeSkyClouds(look, 'eye', SIZE);
 
   it('is deterministic and memoised per look', () => {
-    expect(bakeSkyClouds({ ...look }, SIZE)).toBe(baked);
+    expect(bakeSkyClouds({ ...look }, 'eye', SIZE)).toBe(baked);
     expect(baked.faces).toHaveLength(6);
     expect(baked.faces[0]!.length).toBe(SIZE * SIZE * 4);
   });
 
   it('differs between seeds', () => {
-    const other = bakeSkyClouds({ ...look, seed: 99 }, SIZE);
+    const other = bakeSkyClouds({ ...look, seed: 99 }, 'eye', SIZE);
     let diff = 0;
     for (let f = 0; f < 6; f += 1) {
       for (let i = 0; i < baked.faces[f]!.length; i += 1) diff += Math.abs(baked.faces[f]![i]! - other.faces[f]![i]!);
@@ -89,7 +89,7 @@ describe('bakeSkyClouds', () => {
 
   it('bakes a 256 cube quickly', () => {
     const start = performance.now();
-    bakeSkyClouds({ ...look, seed: 12345 }, 256);
+    bakeSkyClouds({ ...look, seed: 12345 }, 'eye', 256);
     const ms = performance.now() - start;
     console.log(`bakeSkyClouds(256): ${ms.toFixed(0)} ms`);
   });
@@ -98,7 +98,7 @@ describe('bakeSkyClouds', () => {
 describe('clouds of an outer system', () => {
   it('stay visible far out in the disc', () => {
     const outer = skyLook({ source: 'Derived', position_kpc: [16, 0, 0], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: 5 } as never);
-    const faces = bakeSkyClouds(outer, SIZE);
+    const faces = bakeSkyClouds(outer, 'eye', SIZE);
     let brightest = 0;
     for (const pixels of faces.faces) {
       for (let i = 0; i < pixels.length; i += 4) brightest = Math.max(brightest, decode(pixels[i]!), decode(pixels[i + 1]!), decode(pixels[i + 2]!));
@@ -132,5 +132,102 @@ describe('dustAt', () => {
     }
     expect(band).toBeGreaterThan(poles);
     expect(band).toBeGreaterThan(0);
+  });
+});
+
+describe('the galactic core and the two exposures', () => {
+  const SIZE_CORE = 128;
+  const sunPlace = (position: [number, number, number], seed = 5) =>
+    skyLook({
+      source: 'Derived',
+      position_kpc: position,
+      axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+      sky_seed: seed,
+    } as never);
+  const sun = sunPlace([8.2, 0, 0.02]);
+  const eye = bakeSkyClouds(sun, 'eye', SIZE_CORE);
+  const photo = bakeSkyClouds(sun, 'photo', SIZE_CORE);
+
+  const dirOf = (face: number, col: number, row: number) =>
+    faceDirection(face, (2 * (col + 0.5)) / SIZE_CORE - 1, (2 * (row + 0.5)) / SIZE_CORE - 1);
+  const frameOf = (look: SkyLook) => {
+    const along = [...look.centre] as Vec3;
+    const d = dot(along, look.north);
+    const a = along.map((v, i) => v - d * look.north[i]!) as Vec3;
+    const l = Math.hypot(...a);
+    const u: Vec3 = [a[0] / l, a[1] / l, a[2] / l];
+    const n = look.north;
+    const across: Vec3 = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+    return { along: u, across };
+  };
+  const meanNear = (faces: SkyFaces, target: Vec3, radius: number) =>
+    meanOf(faces.faces, (f, c, r) => dot(dirOf(f, c, r), target) > Math.cos(radius), SIZE_CORE);
+
+  it('lights the core at least twice as bright as the band 90 degrees away, in both exposures', () => {
+    const { across } = frameOf(sun);
+    for (const baked of [eye, photo]) {
+      const core = meanNear(baked, sun.centre, sun.coreSize);
+      const far = meanNear(baked, across, sun.coreSize);
+      console.log(`core/band ratio ${(core / far).toFixed(2)}`);
+      expect(core).toBeGreaterThanOrEqual(2 * far);
+    }
+  });
+
+  it('is brighter and larger close in than far out', () => {
+    const near = sunPlace([3, 0, 0.02]);
+    const far = sunPlace([14, 0, 0.02]);
+    expect(near.coreSize).toBeGreaterThan(far.coreSize);
+    expect(near.coreBrightness).toBeGreaterThan(far.coreBrightness);
+    expect(near.coreBrightness).toBeCloseTo(4, 9);
+    const peak = (look: SkyLook) => meanNear(bakeSkyClouds(look, 'photo', SIZE_CORE), look.centre, 0.1);
+    expect(peak(near)).toBeGreaterThan(peak(far));
+  });
+
+  it('crosses the core with a dark lane along the plane', () => {
+    for (const baked of [eye, photo]) {
+      const lat = (f: number, c: number, r: number) => Math.asin(dot(dirOf(f, c, r), sun.north));
+      const inside = (f: number, c: number, r: number) => dot(dirOf(f, c, r), sun.centre) > Math.cos(0.4 * sun.coreSize);
+      const deg = Math.PI / 180;
+      const lane = meanOf(baked.faces, (f, c, r) => inside(f, c, r) && Math.abs(lat(f, c, r)) < 0.8 * deg, SIZE_CORE);
+      const above = meanOf(baked.faces, (f, c, r) => inside(f, c, r) && Math.abs(lat(f, c, r) - 3.2 * deg) < 0.8 * deg, SIZE_CORE);
+      const below = meanOf(baked.faces, (f, c, r) => inside(f, c, r) && Math.abs(lat(f, c, r) + 3.2 * deg) < 0.8 * deg, SIZE_CORE);
+      expect(lane).toBeLessThan(above);
+      expect(lane).toBeLessThan(below);
+    }
+  });
+
+  it('keeps the eye below 0.08 and the photo below 0.35, the eye less saturated', () => {
+    const stats = (baked: SkyFaces) => {
+      let brightest = 0;
+      let saturation = 0;
+      let count = 0;
+      for (const pixels of baked.faces) {
+        for (let i = 0; i < pixels.length; i += 4) {
+          const c = [decode(pixels[i]!), decode(pixels[i + 1]!), decode(pixels[i + 2]!)];
+          const hi = Math.max(...c);
+          brightest = Math.max(brightest, hi);
+          if (hi > 0.004) {
+            saturation += (hi - Math.min(...c)) / hi;
+            count += 1;
+          }
+        }
+      }
+      return { brightest, saturation: saturation / count };
+    };
+    const e = stats(eye);
+    const p = stats(photo);
+    expect(e.brightest).toBeLessThanOrEqual(0.08);
+    expect(p.brightest).toBeLessThanOrEqual(0.35);
+    expect(p.brightest).toBeGreaterThan(e.brightest);
+    expect(e.saturation).toBeLessThan(p.saturation);
+  });
+
+  it('is deterministic per look and exposure, and keeps both exposures apart', () => {
+    // Memoised per look and exposure (the cache keeps only a few bakes, so compare fresh ones).
+    const again = bakeSkyClouds({ ...sun }, 'photo', SIZE_CORE);
+    expect(bakeSkyClouds({ ...sun }, 'photo', SIZE_CORE)).toBe(again);
+    expect(again.faces).toEqual(photo.faces);
+    expect(bakeSkyClouds({ ...sun }, 'eye', SIZE_CORE).faces).toEqual(eye.faces);
+    expect(photo.faces).not.toEqual(eye.faces);
   });
 });

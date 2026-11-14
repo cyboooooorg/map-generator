@@ -4,12 +4,17 @@
 // blue reflection patches come from seeded fractal noise with domain
 // warping, kept along the band (a gaussian in latitude about the galactic
 // north). Dust lanes darken the glow; `dustAt` is shared with the star
-// field so the stars behind a lane dim with it. Everything stays far
-// below the band's own brightness: no texel above `CLOUD_CEILING` in
-// linear RGB. The cube is built in the system frame; a view rotates it.
+// field so the stars behind a lane dim with it. The galactic core is an
+// elongated glow (axis ratio 0.6) crossed by a dark lane along the plane.
+//
+// Two renderings share the noise: 'eye' (what the eye sees: no texel above
+// `CLOUD_CEILING` in linear RGB, colours washed out) and 'photo' (a long
+// exposure: brighter, saturated, up to `PHOTO_CEILING`). The cube is built
+// in the system frame; a view rotates it.
 
 import type { Vec3 } from '../skyBodies';
-import type { SkyLook } from './skyLook';
+import { bandFrame, type SkyLook } from './skyLook';
+import { random } from './skyRandom';
 
 /** Six RGBA faces in Three's cube order (+x, -x, +y, -y, +z, -z), sRGB-encoded. */
 export interface SkyFaces {
@@ -19,6 +24,28 @@ export interface SkyFaces {
 
 /** No cloud texel reaches this linear value (a soft ceiling, never attained). */
 export const CLOUD_CEILING = 0.075;
+
+/** How the sky is rendered: as the eye sees it, or as a long exposure shows it. */
+export type SkyExposure = 'eye' | 'photo';
+
+/** Per-exposure gains: soft ceiling, glow and patch gain, core gain, colour saturation (1 = full). */
+interface Exposure {
+  ceiling: number;
+  glow: number;
+  patch: number;
+  core: number;
+  saturation: number;
+}
+
+const EXPOSURES: Record<SkyExposure, Exposure> = {
+  eye: { ceiling: CLOUD_CEILING, glow: 1, patch: 1, core: 5, saturation: 0.45 },
+  photo: { ceiling: 0.3, glow: 3.2, patch: 5, core: 10, saturation: 1 },
+};
+
+/** Peak linear level of the core's glow at the Sun's place, before the exposure gain. */
+const CORE_LEVEL = 0.07;
+/** The core's latitude over its longitude extent. */
+const CORE_AXIS_RATIO = 0.6;
 
 /** Cloud glow spread about the band, in band widths: clouds are broader than the stars. */
 const CLOUD_SPREAD = 2.4;
@@ -70,18 +97,6 @@ export function faceDirection(face: number, s: number, t: number): Vec3 {
   }
   const length = Math.hypot(x, y, z);
   return [x / length, y / length, z / length];
-}
-
-/** Small deterministic generator (mulberry32), uniform in [0, 1). */
-function random(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let z = state;
-    z = Math.imul(z ^ (z >>> 15), z | 1);
-    z ^= z + Math.imul(z ^ (z >>> 7), z | 61);
-    return ((z ^ (z >>> 14)) >>> 0) / 4_294_967_296;
-  };
 }
 
 /** Lattice value noise of one seed. */
@@ -170,18 +185,41 @@ const smoothstep = (a: number, b: number, x: number) => {
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-/** Dust extinction toward a unit direction, 0 (clear) to 1 (opaque; never reached). */
+/** The core's dust lane: a thin dark band along the plane, ragged, fading toward the core's ends. */
+function coreLane(look: SkyLook, dir: Vec3): number {
+  if (look.coreBrightness <= 0) return 0;
+  const frame = bandFrame(look);
+  const x = dot(dir, frame.along);
+  if (x <= 0) return 0;
+  const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, frame.north))));
+  const lon = Math.atan2(dot(dir, frame.across), x);
+  const sigmaLat = 0.1 * look.coreSize;
+  if (Math.abs(lat) > 4 * sigmaLat) return 0;
+  const n = noiseOf(look.seed);
+  const o = n.offsets[2]!;
+  const ragged = 0.55 + 0.9 * fbm(n, dir[0] * 9 + o[0], dir[1] * 9 + o[1], dir[2] * 9 + o[2], 2);
+  const along = Math.exp(-(lon * lon) / (2 * (0.8 * look.coreSize) ** 2));
+  return Math.min(0.8, 0.7 * ragged * along * Math.exp(-(lat * lat) / (2 * sigmaLat * sigmaLat)));
+}
+
+/**
+ * Dust extinction toward a unit direction, 0 (clear) to 1 (opaque; never
+ * reached): the band's lanes, the core's lane, dark nebulae and pillar
+ * silhouettes.
+ */
 export function dustAt(look: SkyLook, dir: Vec3): number {
+  const extra = 1 - (1 - coreLane(look, dir));
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
   const sigma = look.bandWidth * 0.8;
   const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));
-  if (inBand < 0.01) return 0;
+  if (inBand < 0.01) return extra;
   const n = noiseOf(look.seed);
   const o = n.offsets[3]!;
   // Lanes: thresholded noise, stronger toward the centre.
   const lanes = smoothstep(0.5, 0.7, fbm(n, dir[0] * 4 + o[0], dir[1] * 4 + o[1], dir[2] * 4 + o[2], 3));
   const toCentre = Math.max(0, dot(dir, look.centre));
-  return Math.min(1, DUST_MAX * inBand * lanes * (0.6 + 0.4 * toCentre));
+  const band = Math.min(1, DUST_MAX * inBand * lanes * (0.6 + 0.4 * toCentre));
+  return 1 - (1 - band) * (1 - extra);
 }
 
 /** Linear value to an sRGB byte. */
@@ -190,10 +228,16 @@ function encode(linear: number): number {
   return Math.round(255 * Math.min(1, Math.max(0, v)));
 }
 
-function bake(look: SkyLook, size: number): SkyFaces {
+function bake(look: SkyLook, exposure: SkyExposure, size: number): SkyFaces {
+  const ex = EXPOSURES[exposure];
+  const frame = bandFrame(look);
+  const coreOn = look.coreBrightness > 0;
+  const sigmaLon = 0.5 * look.coreSize;
+  const sigmaLat = CORE_AXIS_RATIO * sigmaLon;
   const n = noiseOf(look.seed);
   const sigma = look.bandWidth * CLOUD_SPREAD;
-  const cutoff = 2.8 * sigma; // the glow is under 2% of its peak beyond
+  // The glow is under 2% of its peak beyond (the core's, when there is one, reaches further).
+  const cutoff = Math.max(2.8 * sigma, coreOn ? 3.2 * sigmaLat : 0);
   const [wHa, wO3, wRef] = n.mix;
   const [oa, ob, oc] = n.offsets as [Vec3, Vec3, Vec3, Vec3];
   const level = Math.min(CLOUD_LEVEL_MAX, Math.max(CLOUD_LEVEL_MIN, look.brightness));
@@ -222,18 +266,34 @@ function bake(look: SkyLook, size: number): SkyFaces {
         const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 3));
         const o3 = smoothstep(0.45, 0.7, fbm(n, px * 1.3 + oc[1], py * 1.3 + oc[2], pz * 1.3 + oc[0], 2));
         const strength = level * inBand * (1 + 1.5 * bulge);
-        const glow = GLOW_LEVEL * strength * glowNoise;
-        const patch = PATCH_LEVEL * strength;
+        const glow = GLOW_LEVEL * ex.glow * strength * glowNoise;
+        const patch = PATCH_LEVEL * ex.patch * strength;
         const ha = patch * wHa * emission * (1 - o3);
         const oiii = patch * wO3 * emission * o3;
         const ref = patch * wRef * reflection * 0.7;
+        // The core: an elongated warm glow, mottled, with a brighter nucleus.
+        let coreGlow = 0;
+        if (coreOn) {
+          const along = dot(dir, frame.along);
+          if (along > 0) {
+            const lon = Math.atan2(dot(dir, frame.across), along);
+            const q = (lon / sigmaLon) ** 2 + (lat / sigmaLat) ** 2;
+            const mottle = 0.8 + 0.4 * fbm(n, dir[0] * 7 + oc[0], dir[1] * 7 + oc[1], dir[2] * 7 + oc[2], 3);
+            coreGlow = CORE_LEVEL * ex.core * look.coreBrightness * (Math.exp(-q / 2) + 0.6 * Math.exp(-q * 2)) * mottle;
+          }
+        }
         const clear = 1 - dustAt(look, dir);
-        const r = (glow * 1.0 + ha * 1.0 + oiii * 0.1 + ref * 0.35) * clear;
-        const g = (glow * 0.92 + ha * 0.15 + oiii * 0.8 + ref * 0.5) * clear;
-        const b = (glow * 0.8 + ha * 0.1 + oiii * 0.7 + ref * 1.0) * clear;
-        pixels[at] = encode(CLOUD_CEILING * Math.tanh(r / CLOUD_CEILING));
-        pixels[at + 1] = encode(CLOUD_CEILING * Math.tanh(g / CLOUD_CEILING));
-        pixels[at + 2] = encode(CLOUD_CEILING * Math.tanh(b / CLOUD_CEILING));
+        let r = (glow * 1.0 + ha * 1.0 + oiii * 0.1 + ref * 0.35 + coreGlow * 1.0) * clear;
+        let g = (glow * 0.92 + ha * 0.15 + oiii * 0.8 + ref * 0.5 + coreGlow * 0.82) * clear;
+        let b = (glow * 0.8 + ha * 0.1 + oiii * 0.7 + ref * 1.0 + coreGlow * 0.55) * clear;
+        // Washed-out colours for the eye: mix toward the luminance.
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        r = lum + (r - lum) * ex.saturation;
+        g = lum + (g - lum) * ex.saturation;
+        b = lum + (b - lum) * ex.saturation;
+        pixels[at] = encode(ex.ceiling * Math.tanh(r / ex.ceiling));
+        pixels[at + 1] = encode(ex.ceiling * Math.tanh(g / ex.ceiling));
+        pixels[at + 2] = encode(ex.ceiling * Math.tanh(b / ex.ceiling));
       }
     }
     faces.push(pixels);
@@ -243,16 +303,16 @@ function bake(look: SkyLook, size: number): SkyFaces {
 
 const bakes = new Map<string, SkyFaces>();
 
-/** The look's cloud cube map; the last four looks are kept. */
-export function bakeSkyClouds(look: SkyLook, size = 256): SkyFaces {
-  const key = [size, look.seed, look.brightness, look.bandWidth, look.bulge, ...look.north, ...look.centre].join('|');
+/** The look's cloud cube map in an exposure; the last four are kept. */
+export function bakeSkyClouds(look: SkyLook, exposure: SkyExposure, size = 256): SkyFaces {
+  const key = [exposure, size, look.coreSize, look.coreBrightness, look.seed, look.brightness, look.bandWidth, look.bulge, ...look.north, ...look.centre].join('|');
   const cached = bakes.get(key);
   if (cached) {
     bakes.delete(key);
     bakes.set(key, cached);
     return cached;
   }
-  const faces = bake(look, size);
+  const faces = bake(look, exposure, size);
   bakes.set(key, faces);
   if (bakes.size > 4) bakes.delete(bakes.keys().next().value!);
   return faces;

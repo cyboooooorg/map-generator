@@ -62,3 +62,18 @@ describe('skyLook', () => {
     expect(look.centre[2]).toBeCloseTo(-1, 9);
   });
 });
+
+describe('the galactic core of a look', () => {
+  it('grows and brightens toward the centre, as (8.2 / R)^2', () => {
+    const sun = skyLook(place([8.2, 0, 0]));
+    expect(sun.coreBrightness).toBeCloseTo(1, 9);
+    expect(sun.coreSize).toBeCloseTo(0.3, 9);
+    expect(skyLook(place([14, 0, 0])).coreBrightness).toBeCloseTo((8.2 / 14) ** 2, 9);
+    expect(skyLook(place([3, 0, 0])).coreSize).toBeGreaterThan(sun.coreSize);
+    expect(Number.isFinite(skyLook(place([0, 0, 0])).coreBrightness)).toBe(true);
+  });
+
+  it('has no core in the fixed sky', () => {
+    expect(FIXED_SKY.coreBrightness).toBe(0);
+  });
+});

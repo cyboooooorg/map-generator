@@ -156,7 +156,7 @@ export class SkyBackdrop {
 
     this.cube.visible = clouds;
     if (clouds) {
-      const faces = bakeSkyClouds(look);
+      const faces = bakeSkyClouds(look, 'photo');
       if (faces !== this.faces) {
         this.faces = faces;
         this.texture?.dispose();
