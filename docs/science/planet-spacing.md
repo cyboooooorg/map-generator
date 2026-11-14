@@ -207,7 +207,10 @@ the star outwards:
    heavy as its star would reach.
 4. **Hot Jupiters** keep other planets beyond four times their period.
 5. **The belt zone.** Rocky planets also jump past the first cold giant's
-   belt zone (see [How do asteroid belts form?](asteroid-belts.md)).
+   belt zone (see [How do asteroid belts form?](asteroid-belts.md)). A
+   drawn small planet of 10 Earth masses or more is a giant here: the
+   planet model gives it an ice giant's envelope and classes it one, so it
+   may be that first cold giant.
 6. **Failure.** When a planet is pushed out of its band, the planets asked
    for are drawn again, up to 24 tries, before the request fails with
    `zone_full`. A system left wholly to the draw drops planets of the
