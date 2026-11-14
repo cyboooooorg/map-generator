@@ -191,7 +191,7 @@ fn noise_span_km(p: &WorldParams) -> f32 {
     let mountains = MOUNTAIN_BLEND * scale * crate::craters::ELEVATION_KM;
     if p.look.rules.dry {
         // No sea floor: the rolling plains instead.
-        PLATFORM_KM + DRY_PLAINS_KM * DRY_PLAINS_SPAN * scale + mountains
+        DRY_PLATFORM_KM + DRY_PLAINS_KM * DRY_PLAINS_SPAN * scale + mountains
     } else {
         ABYSS_KM - crate::plates::OLD_FLOOR_KM + crust_of(p).contrast_km() + mountains
     }
@@ -284,10 +284,18 @@ const IMPACT_RELIEF_KM: f32 = 9.0;
 pub(crate) const ICE_RELIEF: f32 = 0.4;
 
 /// Height of the continents' noise above the crust line (see
-/// [`CONTINENTAL_SHARE`]; on a dry world, the edge of its shelf) from which the mountains rise
-/// (over 0.4 more): ranges stand on thick crust. Calibration with
+/// [`CONTINENTAL_SHARE`]) from which a wet world's mountains rise (over
+/// 0.4 more): ranges stand on thick crust. Calibration with
 /// [`MOUNTAIN_BLEND`] on Earth's hypsometry.
 const MOUNTAIN_ONSET: f32 = 0.28;
+/// Height of the continents' noise above a dry world's waterline from
+/// which its mountains rise (over 0.4 more): measured from the waterline,
+/// as it was before the crust floated by its thickness, which dry worlds
+/// do not (their plains stand on [`DRY_PLATFORM_KM`]). Calibration with
+/// [`MOUNTAIN_BLEND`], made on Earth's hypsometry when every world's relief
+/// was measured from its waterline, kept so that the dry worlds'
+/// highlands (`venus-like`, see [`HIGHLANDS`]) do not move.
+const DRY_MOUNTAIN_ONSET: f32 = 0.15;
 
 /// Mountain blend at Earth's gravity: the weight of the ridged mountains
 /// in the elevation. Calibration, no source: with the floating platform
@@ -411,6 +419,13 @@ pub(crate) fn crust_of(p: &WorldParams) -> Crust {
         MARS_CRUST
     }
 }
+
+/// Height of a dry world's platform above its waterline, km: where its
+/// plains stand (see [`DRY_PLAINS_KM`]). The height of the continental
+/// platform above the waterline before the crust floated by its
+/// thickness; a dry world, which no sea ever shaped, keeps it.
+/// Calibration on Earth's hypsometry at the time, no source.
+const DRY_PLATFORM_KM: f32 = 0.5;
 
 /// Rise of the platform inland, km, from its inner edge (the crust's
 /// contrast less this) to the full continental thickness, and its width in
@@ -676,9 +691,11 @@ pub struct Sampler {
     /// The crust the relief floats with (see [`floating`]).
     crust: Crust,
     /// Level of the continents' noise above which the crust is
-    /// continental, which the platform, the mountains and the inland
-    /// plains are measured from: on a wet world, the level that leaves
-    /// [`CONTINENTAL_SHARE`] of its surface above it, whatever its sea; on a dry world, [`CONTINENTAL_SHELF`] below its waterline.
+    /// continental: on a wet world, the level that leaves
+    /// [`CONTINENTAL_SHARE`] of its surface above it, whatever its sea,
+    /// which its platform, mountains and inland plains are measured from;
+    /// on a dry world, [`CONTINENTAL_SHELF`] below its waterline (its
+    /// relief is measured from the waterline itself).
     crust_line: f32,
     /// Level of the continents' noise at the coast, where the floating
     /// crust meets the waterline: the coasts' outline is drawn around it.
@@ -1028,32 +1045,28 @@ impl Sampler {
         } else {
             (coarse, fine)
         };
+        // The level the relief is measured from: a wet world's crust line;
+        // a dry world's waterline, as before its crust floated.
+        let (line, onset) = if self.dry_waterline.is_some() {
+            (self.waterline, DRY_MOUNTAIN_ONSET)
+        } else {
+            (self.crust_line, MOUNTAIN_ONSET)
+        };
         // Crust formed where the plates parted, since the present (or
-        // before it, in the past): ocean floor, smoother than the old one.
+        // before it, in the past): ocean floor, smoother than the old one,
+        // below that level, where the noise makes no mountains.
         let (coarse, fine) = if origin.new_crust {
-            // Below the crust line (on a dry world, its waterline), where
-            // the noise makes no mountains.
-            let line = if self.dry_waterline.is_some() {
-                self.waterline
-            } else {
-                self.crust_line
-            };
             (line - NEW_CRUST_DEPTH, NEW_CRUST_ROUGHNESS * fine)
         } else {
             (coarse, fine)
         };
-        let mountain_weight =
-            ((coarse + fine - self.crust_line - MOUNTAIN_ONSET) * 2.5).clamp(0.0, 1.0);
+        let mountain_weight = ((coarse + fine - line - onset) * 2.5).clamp(0.0, 1.0);
         // Low ground inland keeps a share of the fine octaves: plains and
         // deserts are smooth, coasts keep their outline and mountains their
         // foothills.
         // Away from the coast both ways: inland plains, and abyssal plains
         // on the sea floor (seen on planets whose seas have dried up).
-        let inland = smoothstep(
-            COAST_BAND.0,
-            COAST_BAND.1,
-            (coarse + fine - self.crust_line).abs(),
-        );
+        let inland = smoothstep(COAST_BAND.0, COAST_BAND.1, (coarse + fine - line).abs());
         let roughness = (1.0 - (1.0 - PLAIN_ROUGHNESS) * inland).max(mountain_weight);
         // The crust floats by its thickness: continents as a platform, the
         // ocean floor at the old floor and below (see `floating`), the sea
@@ -1063,7 +1076,7 @@ impl Sampler {
             // No sea ever shaped a dry world: plains on its platform,
             // rolling with the continents' noise.
             waterline
-                + PLATFORM_KM / crate::craters::ELEVATION_KM
+                + DRY_PLATFORM_KM / crate::craters::ELEVATION_KM
                 + (coarse + PLAIN_ROUGHNESS * fine) * DRY_PLAINS_KM * self.relief_scale
                     / crate::craters::ELEVATION_KM
         } else if origin.new_crust {
@@ -3021,6 +3034,59 @@ pub(crate) mod tests {
                 let (plains, high) = hypsometry(&p);
                 assert!(plains > 0.7, "{regime:?} {seed} {gravity}: {plains}");
                 assert!(high > 0.005, "{regime:?} {seed} {gravity}: {high}");
+            }
+        }
+    }
+
+    /// The crust floating by its thickness (part 3c) leaves dry worlds as
+    /// they were: their plains on [`DRY_PLATFORM_KM`] (0.5 km) above their
+    /// waterline, their mountains from 0.15 above it, their inland band
+    /// centred on it.
+    #[test]
+    fn dry_worlds_keep_their_plains_and_relief_datum() {
+        for (name, expected) in [
+            // `Sampler::sample` at the points below on origin/main (e243b4b).
+            (
+                "venus-like",
+                [
+                    -0.215725,
+                    -0.248_503_3,
+                    -0.210_015_6,
+                    -0.217_175_4,
+                    -0.260_295_3,
+                    -0.230_008_3,
+                ],
+            ),
+            (
+                "mercury-like",
+                [
+                    -0.204_925_6,
+                    -0.270_677_6,
+                    -0.191_738_3,
+                    -0.222_719_1,
+                    -0.235_384_9,
+                    -0.279_495_4,
+                ],
+            ),
+        ] {
+            let p = preset_params(name, 1, 256, 128);
+            assert!(p.look.rules.dry, "{name}");
+            // The span of the old formula, with the old 0.5 km platform.
+            let scale = relief_scale(p.gravity_modifier());
+            let span = 0.5
+                + DRY_PLAINS_KM * DRY_PLAINS_SPAN * scale
+                + MOUNTAIN_BLEND * scale * crate::craters::ELEVATION_KM;
+            assert!((noise_span_km(&p) - span).abs() < 1e-4, "{name}");
+            let sampler = Sampler::new(&p);
+            for (&(x, y), e) in [(3, 7), (40, 20), (100, 64), (200, 100), (128, 30), (77, 90)]
+                .iter()
+                .zip(expected)
+            {
+                let got = sampler.sample(x, y).elevation;
+                assert!(
+                    (got - e).abs() < 1e-4,
+                    "{name} at ({x}, {y}): {got} against {e}"
+                );
             }
         }
     }
