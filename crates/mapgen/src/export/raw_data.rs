@@ -55,8 +55,15 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// systems of the earlier formats are refused. Version 18 stores the
 /// planet's `class`, `archetype`, `model` and `look` in `world.json`
 /// instead of its `planet_type` and `preset`, and goes with the fourth
-/// [`crate::system::SYSTEM_FORMAT_VERSION`].
-pub const FORMAT_VERSION: u32 = 18;
+/// [`crate::system::SYSTEM_FORMAT_VERSION`]. Version 19 changes what the
+/// relief of a world means: the transition between simple and complex
+/// craters follows the strength of the crust, the impact flux and the
+/// crater scale follow the orbit (`Geology::impact_ratio` and
+/// `crater_scale` are gone), the crust floats by its thickness with a
+/// crust line, and the wall and rim of a crater stand on the ground. The
+/// stored fields are the same, so [`crate::system::SYSTEM_FORMAT_VERSION`]
+/// stays 4.
+pub const FORMAT_VERSION: u32 = 19;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -64,7 +71,7 @@ pub const FORMAT_VERSION: u32 = 18;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 18;
+pub const MIN_FORMAT_VERSION: u32 = 19;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
