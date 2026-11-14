@@ -361,3 +361,40 @@ soft oval columns and the single dark lane at the core looked crude.
   ellipse (a flat-topped fall to zero): the rifts end with the core.
 - Bake (worker, whole sky): R 4.5 about 7 s, R 8.2 about 5 s (9.9 and 7.5
   Mpx of textures).
+
+### Fixes after the GPU browser check, 2026-11-14
+
+The tuning passes before were judged on software renders. In a real GPU
+browser (Chromium, ANGLE Metal) the nebula patches drew nothing, and the
+user's screenshots showed blocky dark shapes and a stair-stepped cut.
+
+- **Patches face the camera.** `nebulaGeometry` wound its triangles
+  counter-clockwise about right x up, which points outward: seen from the
+  sphere's centre every patch was a back face and was culled. They are now
+  wound the other way, and drawn `DoubleSide` as a guard.
+- **The cloud cube holds only soft structure.** A cube texel is 4 to 7
+  screen pixels at the planet view, so a hard edge there is a staircase.
+  The cube darkens by `cloudDustAt`: the band's and the core's rifts with
+  wide edges and one-octave warps, the core's frequency capped, no fine
+  filament, no dark nebula nor pillar (those are the patches'; `dustAt`
+  keeps the full dust for the stars). The finest octaves of the glow's
+  grain and of the band's patches are gone, and no halo is narrower than
+  4 degrees. The steepest change between two texels is under 0.12 of the
+  exposure's ceiling (0.09 measured; 0.35 to 0.54 before). The cube is
+  256 texels a face again.
+- **Bake length.** Nebula textures are sized for about a texel a screen
+  pixel at the planet view at a pixel ratio of 1 (900 px over 40
+  degrees), in multiples of 32 from 64 to 768, without mipmaps; the
+  largest nebulae are baked first. System A (R 4.5, 50 nebulae): about
+  10 s before, 1.4 s now (cube 0.7 s), measured in vitest.
+- **Upload and redraw.** The backdrop shows the parts that arrived about
+  300 000 texels a frame and asks its view for a render each time: the
+  views draw on demand, and before the sky only appeared at the next
+  interaction, all its textures uploading in one 60 to 130 ms frame.
+- **Reflection nebulae (the Pleiades' family).** One to four bright white
+  stars, the first at the heart, light a patchy sheet of dust in long,
+  slightly bent parallel streaks with dark gaps and thin filaments, fading
+  with the distance from the stars.
+- **Sky switches in every view.** The system and star views have the sky
+  switch and Long exposure in their icon bar, on the one setting the
+  planet view uses (`lib/viewer/skyToggles.ts`).
