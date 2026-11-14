@@ -14,6 +14,7 @@
   import { StarBodyView } from '../lib/viewer/StarBodyView';
   import type { SkyChoice } from '../lib/viewer/skyBackdrop';
   import type { SkyExposure } from '../lib/viewer/skyClouds';
+  import { skyToggles, type SkySetting } from '../lib/viewer/skyToggles';
   import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
@@ -42,6 +43,8 @@
     sky?: SkyChoice;
     /** How its clouds and nebulae are rendered: as the eye sees them or as a long exposure. */
     skyExposure?: SkyExposure;
+    /** The sky's setting, shared with the planet view (Viewer.svelte), for its switches; null shows none. */
+    skySetting?: SkySetting | null;
   }
 
   let {
@@ -55,6 +58,7 @@
     look = FIXED_SKY,
     sky = 'system',
     skyExposure = 'photo',
+    skySetting = null,
   }: Props = $props();
 
   const DAYS_PER_YEAR = 365.25;
@@ -148,6 +152,8 @@
         : []),
       { key: 'filter', label: t.starSurface.filter, help: t.starSurface.filterHelp, icon: 'filter', on: filter, set: (v: boolean) => (filter = v) },
     ],
+    // The sky behind the star: the same switches as the planet view's, on the same setting.
+    skySetting ? skyToggles(skySetting) : [],
   ]);
   const dockPanels = $derived<DockPanel[]>([
     { id: 'star', title: t.starSurface.starSection, icon: 'star', content: starPanel },

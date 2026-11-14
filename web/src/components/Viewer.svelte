@@ -7,6 +7,7 @@
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import { skyToRestore, type SkyChoice } from '../lib/viewer/skyBackdrop';
+  import { skyToggles, type SkySetting } from '../lib/viewer/skyToggles';
   import type { SkyExposure } from '../lib/viewer/skyClouds';
   import { skyLook } from '../lib/viewer/skyLook';
   import ToggleBar, { type SubToggle, type Toggle } from './dock/ToggleBar.svelte';
@@ -1916,44 +1917,21 @@
   /** Whether the host planet has an atmosphere halo, and clouds, to draw in a moon's sky. */
   const hostHasAir = $derived(Boolean(hostLook?.look.halo));
   const hostHasClouds = $derived(Boolean(hostLook?.look.clouds));
-  /**
-   * The sky switch: its main button turns the sky off and back on (to the
-   * choice it had), its three squares pick the system's sky, the fixed one
-   * or none.
-   */
-  function skyToggle(): Toggle {
-    const pick = (choice: SkyChoice) => {
-      sky = choice;
-    };
-    return {
-      key: 'sky',
-      label: t.viewer.sky,
-      help: t.viewer.skyHelp,
-      icon: 'sparkles',
-      on: sky !== 'off',
-      set: (v) => pick(v ? skyBeforeOff : 'off'),
-      subs: [
-        { key: 'system', label: t.viewer.skySystem, icon: 'sparkles', on: sky === 'system', set: () => pick('system') },
-        { key: 'fixed', label: t.viewer.skyFixed, icon: 'star', on: sky === 'fixed', set: () => pick('fixed') },
-        { key: 'off', label: t.viewer.skyOff, icon: 'close', on: sky === 'off', set: () => pick('off') },
-      ],
-    };
-  }
+  /** The sky's switches, here and in the system and star views (StarPane, StarSurfacePane): one setting. */
+  const skySetting = $derived<SkySetting>({
+    sky,
+    exposure: skyExposure,
+    setSky: (choice) => (sky = choice),
+    setExposure: (exposure) => (skyExposure = exposure),
+    restore: () => skyBeforeOff,
+  });
   /** The display switches, as the icon bar groups them: light, surface, sky. */
   const toggleGroups = $derived<Toggle[][]>([
     [
       { key: 'sun', label: t.viewer.sunlight, icon: 'sun', on: sun, set: (v) => (sun = v) },
       { key: 'starLight', label: t.viewer.starLight, help: t.viewer.starLightHelp, icon: 'starlight', on: starLight, set: (v) => (starLight = v) },
       perBody({ key: 'atmosphere', label: t.viewer.atmosphere, icon: 'atmosphere' }, atmosphere, hostAtmosphere, (v) => (atmosphere = v), (v) => (hostAtmosphere = v), !hostHasAir),
-      skyToggle(),
-      {
-        key: 'skyExposure',
-        label: t.viewer.longExposure,
-        help: t.viewer.longExposureHelp,
-        icon: 'sparkles',
-        on: skyExposure === 'photo',
-        set: (v) => (skyExposure = v ? 'photo' : 'eye'),
-      },
+      ...skyToggles(skySetting),
     ],
     [
       ...(giant
@@ -2652,6 +2630,7 @@
       look={ownSkyLook}
       {sky}
       {skyExposure}
+      {skySetting}
     />
   {/if}
   {#if world.subject === 'star' && world.starMode === 'star' && sys}
@@ -2667,6 +2646,7 @@
       look={ownSkyLook}
       {sky}
       {skyExposure}
+      {skySetting}
     />
   {/if}
 

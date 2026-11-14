@@ -29,6 +29,7 @@
   import { currentProfile } from '../lib/viewer/quality';
   import type { SkyChoice } from '../lib/viewer/skyBackdrop';
   import type { SkyExposure } from '../lib/viewer/skyClouds';
+  import { skyToggles, type SkySetting } from '../lib/viewer/skyToggles';
   import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
 
   interface Props {
@@ -136,6 +137,8 @@
     sky?: SkyChoice;
     /** How its clouds and nebulae are rendered: as the eye sees them or as a long exposure. */
     skyExposure?: SkyExposure;
+    /** The sky's setting, shared with the planet view (Viewer.svelte), for its switches; null shows none. */
+    skySetting?: SkySetting | null;
   }
 
   let {
@@ -186,6 +189,7 @@
     look = FIXED_SKY,
     sky = 'system',
     skyExposure = 'photo',
+    skySetting = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -635,7 +639,7 @@
     };
   });
 
-  /** The display switches, as the icon bar groups them: lines, measures, structure. */
+  /** The display switches, as the icon bar groups them: lines, measures, structure, sky. */
   const toggleGroups = $derived<Toggle[][]>([
     [
       { key: 'orbit', label: t.starView.showOrbit, icon: 'orbit', on: orbit, set: (v) => (orbit = v) },
@@ -669,6 +673,8 @@
           { key: 'scale', label: t.starView.realScale, help: t.starView.realScaleHelp, icon: 'scale', on: realScale, set: (v) => (realScale = v) },
         ]
       : [],
+    // The sky behind the system: the same switches as the planet view's, on the same setting.
+    skySetting ? skyToggles(skySetting) : [],
   ]);
   /** The panels of the dock: the star, the planet shown, and the system's planets. */
   const dockPanels = $derived<DockPanel[]>([
