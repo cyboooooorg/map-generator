@@ -4593,6 +4593,35 @@ mod tests {
         }
     }
 
+    /// A Titan keeps few craters: its air screens the small impactors
+    /// (`craters::AIR_FILTER_KM`, its column ten times Earth's) and its
+    /// methane rain wears the rest. Titan shows about 60 craters
+    /// (Neish & Lorenz 2012, doi:10.1016/j.pss.2011.02.016), Callisto's
+    /// surface is saturated: per unit of its system's impact flux, a Titan
+    /// keeps under a tenth of a Callisto's craters of 5 km or more.
+    #[test]
+    fn a_titan_keeps_few_craters() {
+        let per_flux = |moon: &Body| {
+            let p = generation_params(moon);
+            let field = crate::craters::CraterField::new(&p, 5.0);
+            let kept = field
+                .craters
+                .iter()
+                .filter(|c| field.wear(c) >= crate::craters::WORN_OUT)
+                .count() as f64;
+            let radius = f64::from(p.circumference_km) / (2.0 * PI);
+            kept / (4.0 * PI * radius * radius) / crate::impacts::rates(&p).flux
+        };
+        for seed in 1..=3 {
+            let titan = per_flux(&solar_aged_moon("titan-like", seed));
+            let callisto = per_flux(&solar_aged_moon("callisto-like", seed));
+            assert!(
+                titan < 0.1 * callisto,
+                "seed {seed}: Titan {titan}, Callisto {callisto}"
+            );
+        }
+    }
+
     /// A giant its star despins keeps only the light moons (`moons.rs`,
     /// Barnes & O'Brien 2002): an asked moon is never dropped there. The
     /// request places the host where its moon lasts, or fails.

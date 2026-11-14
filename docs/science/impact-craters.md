@@ -218,6 +218,12 @@ ground.
 - **Mars** (0.006 bar): new craters of 3.9 m and more appear at a rate of
   1.65 × 10⁻⁶ per km² per year, and more than half form in clusters
   (Daubar et al. 2013): even that thin air breaks some impactors up.
+- **Titan** (1.5 bar): under its low gravity its air weighs ten times
+  Earth's per square metre. It strongly slows and breaks up impactors
+  well under 1 km across (Artemieva & Lunine 2003); only about 60 craters
+  are known on the whole moon (Neish & Lorenz 2012), its methane rain and
+  dunes wearing and burying the rest. What screens an impactor is the mass
+  of air it must cross, the column, more than the pressure.
 
 ### What we do not know
 
@@ -281,8 +287,11 @@ depends only on the planet and the seed:
 4. **Ages** invert the chronology, so most craters of an old surface are
    very old. A second population, at today's flux (the term $c$), holds the
    craters still to come, up to 1 Ga ahead.
-5. **Air.** No crater below `0.1 km × p^0.75` ($p$ in bar), and fewer up to
-   ten times that: 3 km and 30 km on Venus, 2 m on Mars.
+5. **Air.** No crater below `0.1 km × c^0.75`, and fewer up to ten times
+   that, $c$ the air's column, its surface pressure over its gravity,
+   against Earth's (1 bar under 9.81 m/s²): 3.2 km and 32 km on Venus
+   (a column 100 times Earth's), 0.6 km and 6 km on a Titan (ten times),
+   4 m on Mars.
 6. **Shape.** A radial profile with a transition $D_t$. A planet takes
    it from O'Keefe & Ahrens's $9.0\,Y/(\rho g)$ with the strength and
    density of its crust, read from its model (`generation::crust_kind`):
@@ -535,10 +544,13 @@ more are flooded flat at a date of that window and darkened.
   2.8 km from Pike's law on the Moon at 26 km, which Schenk (2002) gives
   as a depth that begins to fall below the complex-crater trend, applied to
   every complex crater.
-- **The air filter is a fit.** `0.1 km × p^0.75` matches Venus's smallest
-  craters (3 km against 1.5 km observed) and Mars's (2 m against craters of
-  a few metres) roughly. It ignores what the impactor is made of: on Earth
-  iron bodies get through where stony ones of the same size do not.
+- **The air filter is a fit.** `0.1 km × c^0.75` on the column matches
+  Venus's smallest craters (3.2 km against 1.5 km observed) and Mars's
+  (4 m against craters of a few metres) roughly. It ignores what the
+  impactor is made of: on Earth iron bodies get through where stony ones
+  of the same size do not. On Titan it thins craters only up to about
+  6 km, where its air depletes them up to about 20 km (Wood et al. 2010):
+  its methane rain's wear (erosion half Earth's) removes most of the rest.
 - **An ice lid's age follows its heat by a calibration.** A world with an
   ice crust and a stagnant lid keeps `1 / (1 + (F / 10 mW/m²)⁴)` of the
   surface age a rock lid would (70 to 95 % of its system's age), `F` its
@@ -681,6 +693,19 @@ more are flooded flat at a date of that window and darkened.
     [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
     Europa's surface 40 to 90 Ma old; Callisto's and Ganymede's dark
     terrain about 4 Ga.
+28. Neish, C. D. & Lorenz, R. D. 2012, "Titan's global crater
+    population: a new assessment", *Planetary and Space Science* 60,
+    26–33,
+    [doi:10.1016/j.pss.2011.02.016](https://doi.org/10.1016/j.pss.2011.02.016).
+    About 60 craters on Titan.
+29. Artemieva, N. & Lunine, J. 2003, "Cratering on Titan: impact melt,
+    ejecta, and the fate of surface organics", *Icarus* 164 (abstract, as
+    summarised by a search): impactors over 1 km hardly affected by
+    Titan's air, those well under it strongly decelerated and broken up.
+30. Wood, C. A. et al. 2010, "Impact craters on Titan", *Icarus* 206
+    (abstract, as summarised by a search): 24 possible craters under
+    20 km, consistent with an air that destroys most but not all small
+    impactors (Ivanov, Basilevsky & Neukum 1997).
 
 ## See also
 

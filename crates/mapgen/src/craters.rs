@@ -33,7 +33,8 @@
 //! only the sea, on every tectonic regime (plates recycling the sea floor
 //! are not modelled apart).
 //! A thick atmosphere breaks up small impactors: no crater below about
-//! `0.1 km × p^0.75`, fewer below ten times that.
+//! `0.1 km × c^0.75`, `c` its column (pressure over gravity) against
+//! Earth's, fewer below ten times that.
 use crate::biome::Biome;
 use crate::geo::Grid;
 use crate::noise::{smoothstep, stream, stream_seed};
@@ -179,7 +180,7 @@ const WEAR_KM: f64 = 20.0;
 const DIFFUSIVITY_M2_PER_MA: f64 = 5.5;
 const DIFFUSION_SHARE: f64 = 0.0715;
 /// Below this share of its relief left, a worn crater is not drawn.
-const WORN_OUT: f64 = 0.03;
+pub const WORN_OUT: f64 = 0.03;
 /// Share of the previous relief kept inside a new crater.
 const INHERITANCE: f32 = 0.15;
 /// Between these radii (in crater radii) the ground a crater's profile
@@ -210,8 +211,20 @@ const FRESH_EJECTA: f32 = 0.5;
 const FRESH_RAYS: f32 = 0.5;
 /// Ray lengths, in crater radii (Tycho's reach about 35).
 const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
-/// Smallest crater a 1 bar atmosphere lets through, km; it scales as
-/// `p^0.75` (Venus: about 3 km at 92 bar).
+/// Smallest crater the air of Earth lets through, km; it scales as the
+/// air's column `P / g` (its mass per square metre) against Earth's, to
+/// the power 0.75 (Venus, a column about 100 times Earth's: about 3 km).
+/// The column, not the pressure, is what slows and breaks up an impactor:
+/// it is stopped once the air it sweeps outweighs it (the scaling is the
+/// model's assumption, the exponent its calibration on Venus). Titan's
+/// 1.5 bar under 1.35 m/s² weigh ten times Earth's: they shut out craters
+/// under about 0.6 km and thin those under 6 km. Artemieva & Lunine 2003
+/// (*Icarus*, from its abstract) find that Titan's air strongly decelerates
+/// and breaks up impactors well under 1 km, and Wood et al. 2010
+/// (*Icarus*, from its abstract) that its 24 possible craters under 20 km fit
+/// an air that destroys most but not all small impactors (Ivanov,
+/// Basilevsky & Neukum 1997): the deficit reaches wider than this law's,
+/// and Titan's methane rain (`WEAR_GA`) wears away the rest.
 const AIR_FILTER_KM: f64 = 0.1;
 
 /// `N(>D) / N(>1 km)` for a diameter `d` km: Hartmann's piecewise power
@@ -597,6 +610,13 @@ pub(crate) fn transition_km(p: &WorldParams) -> f64 {
     STRENGTH_TRANSITION * strength / (density * gravity) / 1000.0
 }
 
+/// The column of the air of the world `p`, its surface pressure over its
+/// gravity, against Earth's (1 bar under Earth's gravity).
+fn air_column(p: &WorldParams) -> f64 {
+    let gravity = f64::from(p.gravity_modifier()).max(1e-3);
+    f64::from(p.pressure_bar.max(0.0)) / gravity
+}
+
 impl CraterField {
     /// The crater field of the world `p` without any crater yet: what
     /// drawing and finding them needs (see [`Self::near`]).
@@ -665,7 +685,7 @@ impl CraterField {
                 crater_scale,
                 ages: Ages::Future { span_ga: FUTURE_GA },
             },
-            air_km: AIR_FILTER_KM * (p.pressure_bar.max(0.0) as f64).powf(0.75),
+            air_km: AIR_FILTER_KM * air_column(p).powf(0.75),
             rays: p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR,
             locked_since_ga,
             epoch_ga: epoch_ga.max(-FUTURE_GA),
@@ -940,7 +960,7 @@ impl CraterField {
     /// Share of its relief a crater keeps: worn by liquid water for the
     /// time it spent in the wet era (with erosion), and by the slow
     /// diffusion of small impacts since it formed.
-    fn wear(&self, crater: &Crater) -> f64 {
+    pub fn wear(&self, crater: &Crater) -> f64 {
         let radius_m = 500.0 * crater.diameter_km;
         // Diffused since it formed, until the epoch shown.
         let since_ga = (crater.age_ga - self.epoch_ga).max(0.0);
@@ -2100,6 +2120,28 @@ mod tests {
         let (airless, dense) = (venus(0.0), venus(92.0));
         assert!(airless > 1000, "{airless}");
         assert!(dense * 100 < airless, "{dense} of {airless}");
+    }
+
+    /// The air screens impactors by its column, `P / g`: Titan's 1.5 bar
+    /// under 1.35 m/s² weigh ten times Earth's air per square metre, and
+    /// shut out craters six times wider than Earth's; Venus's 92 bar under
+    /// 8.87 m/s² stay near 3 km, and Earth's near its 0.1 km.
+    #[test]
+    fn the_air_screens_by_its_column() {
+        let screen = |pressure_bar: f32, gravity: f32| {
+            CraterField::context(&WorldParams {
+                pressure_bar,
+                gravity: Some(gravity / EARTH_GRAVITY as f32),
+                ..moon(4.0)
+            })
+            .air_km
+        };
+        let earth = screen(1.0, 9.81);
+        assert!((earth - AIR_FILTER_KM).abs() < 1e-6, "{earth}");
+        let titan = screen(1.5, 1.35);
+        assert!((0.5..0.7).contains(&titan), "{titan}");
+        let venus = screen(92.0, 8.87);
+        assert!((2.9..3.4).contains(&venus), "{venus}");
     }
 
     #[test]
