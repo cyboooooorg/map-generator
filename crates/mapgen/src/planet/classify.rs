@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::climate::SurfaceLiquid;
 use super::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, Interior, PlanetInputs, Surface};
+use crate::geology::Regime;
 
 /// The kind of a planet, from its derived quantities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -20,6 +21,9 @@ pub enum PlanetClass {
     HotJupiter,
     HotNeptune,
     LavaWorld,
+    /// A solid surface in the heat-pipe regime (Io; Moore & Webb 2013,
+    /// doi:10.1038/nature12424) that no earlier class of [`classify`] claims.
+    VolcanicWorld,
     RunawayGreenhouse,
     HydrocarbonWorld,
     OceanWorld,
@@ -28,7 +32,7 @@ pub enum PlanetClass {
 impl PlanetClass {
     /// The class as stored: `rocky`, `super-earth`, `ice-world`,
     /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
-    /// `hot-neptune`, `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    /// `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     /// `ocean-world`.
     pub fn key(self) -> &'static str {
         match self {
@@ -41,6 +45,7 @@ impl PlanetClass {
             Self::HotJupiter => "hot-jupiter",
             Self::HotNeptune => "hot-neptune",
             Self::LavaWorld => "lava-world",
+            Self::VolcanicWorld => "volcanic-world",
             Self::RunawayGreenhouse => "runaway-greenhouse",
             Self::HydrocarbonWorld => "hydrocarbon-world",
             Self::OceanWorld => "ocean-world",
@@ -83,7 +88,7 @@ impl PlanetClass {
 /// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
 /// order: the types a planet of a system is stored as. The server and the
 /// web read the same list.
-pub const PLANET_CLASSES: [&str; 12] = [
+pub const PLANET_CLASSES: [&str; 13] = [
     "rocky",
     "super-earth",
     "ice-world",
@@ -93,6 +98,7 @@ pub const PLANET_CLASSES: [&str; 12] = [
     "hot-jupiter",
     "hot-neptune",
     "lava-world",
+    "volcanic-world",
     "runaway-greenhouse",
     "hydrocarbon-world",
     "ocean-world",
@@ -143,14 +149,18 @@ pub const ICE_WORLD_MIN_OCEANS: f64 = 0.01;
 /// 1.25 R⊕, super-Earth-size 1.25 to 2).
 const SUPER_EARTH_MIN_RADIUS: f64 = 1.25;
 
-/// Surface pressure above which a runaway greenhouse or a sea of
-/// hydrocarbons gives a class of its own, bar. Calibration, no source: a
-/// runaway with less than 1 bar has lost its air and is a bare rock
-/// (Mercury, Mars); Titan's 1.5 bar holds its seas. A cold body whose
-/// outgassing barely outruns its star's ultraviolet keeps a trace of
-/// methane over its ice under a thin air
-/// ([`super::atmosphere::methane_photolysis`]), and stays an ice world.
+/// Surface pressure above which a runaway greenhouse gives a class of
+/// its own, bar. Calibration, no source: a runaway with less than 1 bar
+/// has lost its air and is a bare rock (Mercury, Mars).
 const DENSE_AIR_BAR: f64 = 1.0;
+
+/// Surface pressure above which liquid hydrocarbons make a hydrocarbon
+/// world, bar: methane's triple-point pressure (NIST Chemistry WebBook,
+/// 0.1169 ± 0.0006 bar), under which no liquid methane is stable. A cold
+/// body whose outgassing barely outruns its star's ultraviolet keeps a
+/// trace of methane over its ice under a thinner air
+/// ([`super::atmosphere::methane_photolysis`]), and stays an ice world.
+const METHANE_TRIPLE_BAR: f64 = 0.1169;
 
 /// Earth oceans of water kept from which an ocean world drowns all land.
 /// Calibration: Cowan & Abbot 2014, doi:10.1088/0004-637X/781/1/27, find
@@ -170,12 +180,17 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 /// 3. with a `surface` (an enveloped body has none): a lava world (liquid
 ///    lava), a runaway greenhouse (runaway and over
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
-///    more than [`DENSE_AIR_BAR`]), an
+///    more than [`METHANE_TRIPLE_BAR`]), an
 ///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
 /// 4. at least 5 % water and ices, and with a `surface`, at least
 ///    [`ICE_WORLD_MIN_OCEANS`] of them kept there: an ice world (a body
 ///    that lost its ice falls through);
-/// 5. a super-Earth from 1.25 R⊕, rocky below.
+/// 5. a volcanic world: a body that would be rocky or a super-Earth
+///    (no ice world: silicate volcanism is Io's, an icy body's is
+///    cryovolcanism, which the model does not describe) with a solid
+///    surface in the heat-pipe regime (Moore & Webb 2013,
+///    doi:10.1038/nature12424);
+/// 6. a super-Earth from 1.25 R⊕, rocky below.
 ///
 /// The class is read off the model; nothing derives from it.
 pub fn classify(
@@ -206,6 +221,8 @@ pub fn classify(
         && surface.is_none_or(|s| s.water.oceans >= ICE_WORLD_MIN_OCEANS)
     {
         PlanetClass::IceWorld
+    } else if surface.is_some_and(|s| s.regime == Regime::HeatPipe) {
+        PlanetClass::VolcanicWorld
     } else if radius >= SUPER_EARTH_MIN_RADIUS {
         PlanetClass::SuperEarth
     } else {
@@ -220,7 +237,7 @@ fn surface_class(surface: &Surface) -> Option<PlanetClass> {
         Some(PlanetClass::LavaWorld)
     } else if surface.water.runaway && surface.gases.total() > DENSE_AIR_BAR {
         Some(PlanetClass::RunawayGreenhouse)
-    } else if liquid == SurfaceLiquid::Hydrocarbons && surface.gases.total() > DENSE_AIR_BAR {
+    } else if liquid == SurfaceLiquid::Hydrocarbons && surface.gases.total() > METHANE_TRIPLE_BAR {
         Some(PlanetClass::HydrocarbonWorld)
     } else if liquid == SurfaceLiquid::Water && surface.water.oceans >= OCEAN_WORLD_OCEANS {
         Some(PlanetClass::OceanWorld)
@@ -364,6 +381,7 @@ mod tests {
             HotJupiter,
             HotNeptune,
             LavaWorld,
+            VolcanicWorld,
             RunawayGreenhouse,
             HydrocarbonWorld,
             OceanWorld,
@@ -560,7 +578,8 @@ mod tests {
     /// The path of the first number of `model` that is not finite or is
     /// negative, if any. serde_json writes a non-finite `f64` as `null`,
     /// so a `null` counts as one, except where an `Option` is expected
-    /// (`surface`, `None` for an enveloped body).
+    /// (`surface`, `None` for an enveloped body; `ice_shell`, `None`
+    /// without a frozen water layer).
     fn not_finite(model: &crate::planet::PlanetModel) -> Option<String> {
         let json = serde_json::to_value(model).unwrap();
         first_bad(&json, "")
@@ -572,7 +591,9 @@ mod tests {
                 let x = n.as_f64().unwrap();
                 (!(x.is_finite() && x >= 0.0)).then(|| format!("{path}: {x}"))
             }
-            serde_json::Value::Null if path != "/surface" => Some(format!("{path}: null")),
+            serde_json::Value::Null if path != "/surface" && path != "/ice_shell" => {
+                Some(format!("{path}: null"))
+            }
             serde_json::Value::Array(a) => a
                 .iter()
                 .enumerate()

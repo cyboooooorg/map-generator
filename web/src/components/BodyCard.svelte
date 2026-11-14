@@ -16,6 +16,7 @@
   import type { LoadedWorld } from '../lib/world.svelte';
   import { MAX_NAME_CHARS } from '../lib/names';
   import { jobs } from '../lib/jobs.svelte';
+  import { atmosphereLine, bulkLine, oceanUnderIce } from '../lib/planetCard';
   import { resonanceRatio, resonanceTurns } from '../lib/spinResonance';
   import { dustFedBy, dustOf, ringPart, ringsOf } from '../lib/ringMoons';
 
@@ -160,7 +161,7 @@
         <button class="link" onclick={() => startRenaming(body.id)} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
       {/if}
       <small
-        >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model)} · {body.kind === 'moon'
+        >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model, body.kind === 'moon')} · {body.kind === 'moon'
           ? t.card.moonOf({ planet: planet ? nameOf(planet.id, planet.designation) : '' })
           : t.card.planetOf({ star: starName })}</small
       >
@@ -204,6 +205,25 @@
       {#if formatSurfaceTemperature(body.model)}
         <dt>{t.card.surfaceTemperature}</dt>
         <dd>{formatSurfaceTemperature(body.model)}</dd>
+      {/if}
+      {#if body.model}
+        {@const air = atmosphereLine(body.model)}
+        {@const ocean = oceanUnderIce(body.model)}
+        {#if air}
+          <dt>{t.card.atmosphere}</dt>
+          <dd>{air}</dd>
+        {/if}
+        {#if ocean}
+          <dt>{t.card.interior}</dt>
+          <dd>{ocean}</dd>
+        {/if}
+        {#if body.model.surface}
+          <dt>{t.card.regime}</dt>
+          <dd>{t.regimes[body.model.surface.regime]}</dd>
+        {/if}
+      {:else if body.physical.bulk}
+        <dt>{t.card.bulk}</dt>
+        <dd>{bulkLine(body.physical.bulk)}</dd>
       {/if}
       <dt>{t.card.age}</dt>
       <dd>{t.card.ageValue({ age: formatAge(body.params.age_gyr), surface: formatSurfaceAge(body.params.surface_age_ga) })}</dd>

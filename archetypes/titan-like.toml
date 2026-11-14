@@ -1,0 +1,35 @@
+name = "titan-like"
+description = "Titan-like: a large icy moon of a Saturn, under a thick cold air"
+
+[locales.fr]
+name = "Titanienne"
+description = "Une grande lune glacée d'une Saturne, sous un air épais et froid"
+
+# Titan: 1.3452e23 kg = 0.0225 Earth masses (NASA Saturnian satellite
+# fact sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), ±10 %.
+[inputs]
+mass_earth = [0.020, 0.025]
+# Methane its ices carry, as a factor on the formation rule (1 % of the
+# ices): the rule's own amount to twice it, not the log-normal draw that
+# can leave a third of it. Titan's air needs an interior reservoir far
+# larger than its surface holds: its lakes "do not contain enough methane
+# to sustain the atmosphere over geologic time" against photolysis
+# (Lorenz et al. 2008, doi:10.1029/2007GL032118), and episodic outgassing
+# from methane clathrate in its interior resupplies it (Tobie, Lunine &
+# Sotin 2006, doi:10.1038/nature04497). Calibration with Titan as its
+# target: neither paper gives the inventory as a share of the ices.
+ch4 = [1.0, 2.0]
+
+[moon]
+# Grown in Saturn's disk.
+host = "saturn-like"
+origin = "disk"
+# Semi-major axis 1 221 870 km over Saturn's equatorial radius 60 268 km:
+# 20.3 radii (JPL mean orbital elements; NASA Saturn fact sheet).
+semi_major_axis_radii = [18.0, 22.0]
+# 0.0288 (JPL mean orbital elements).
+eccentricity = [0.02, 0.03]
+# Water and ices about half its mass: its 1.88 g/cm³ with its moment of
+# inertia 0.34 (Iess et al. 2010, doi:10.1126/science.1182583).
+ice_fraction = [0.40, 0.50]

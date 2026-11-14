@@ -20,6 +20,20 @@ Two ways to ask for a system:
    mars-like: 1, jupiter-like: 2…`, or
    left to the draw), at most 15 planets (moons not counted). The engine
    orders them the way real systems are ordered and draws their moons.
+   A moon archetype (`titan-like`, `europa-like`, `ganymede-like`,
+   `callisto-like`, `io-like`, `triton-like`, `enceladus-like`) can be
+   asked in the same list: it rides a giant of its host's archetype asked
+   there that can carry it (its disk holds the moon, an icy moon orbits
+   beyond the disk's ice line, the orbit lies outside the Roche limit
+   and inside the stable part of the Hill sphere, and the giant keeps it
+   if its star despins it), or brings one, counted among the 15 planets;
+   a star with no room for that giant refuses the request
+   (`type_impossible`). The moon is drawn once in its archetype's ranges
+   and stored on its giant (`WorldParams::asked_moons`); the giant's
+   other moons are drawn around it. With no star named, such a system
+   takes its host archetype's star (`G2V`); a star named is honoured,
+   and the moon comes out as the model says (round a red dwarf it may
+   lose its air).
 2. **A system around one planet.** A planet fully specified, as the form
    does today (planet type, size, sea level, star, orbit…). The engine
    places it at its orbit and draws the rest of the system around it: how
@@ -52,7 +66,8 @@ round planets. Every body has:
   `ocean-world`, `mini-neptune`, `gas-giant`, …; see
   [Storage](#storage)); the planet a request around one asked for too,
   its archetype (`earth-like`, `mars-like`…, or none) kept beside it for
-  display only; `rocky-moon`, `icy-moon` for small moons;
+  display only; a round moon's class from its own model;
+  `rocky-moon`, `icy-moon` for small moons;
 - its **parent** (the star, or a planet) and its **orbit**: semi-major
   axis, eccentricity, inclination, longitude of the node, argument of
   periapsis, mean anomaly at the system's epoch, period (a moon's orbit
@@ -61,7 +76,8 @@ round planets. Every body has:
   direction);
 - its **physical facts**: mass, radius, density, surface gravity, shape
   (`axes_km`: an irregular moon's axes, or a round one's stretched by its
-  planet's tides);
+  planet's tides; `bulk` for a moon: its shares of rock, ice and carbon
+  by mass, see Moons);
 - its **spin**: rotation period, axial tilt, whether it is locked to its
   parent (and to what), and for a planet whether its star holds it in
   a spin–orbit resonance (`spin_orbit_3_2`, absent when false: three
@@ -108,6 +124,12 @@ The physics of today's draws stays where it is (`star.rs`, `giants.rs`,
 and records their results. What the viewer draws from a seed today (a
 captured moon's spin, a moon's periapsis and node) moves into the
 generator and is stored, so the card, the CLI and the viewer agree.
+
+A round moon's size is its model's, not the one its planet's moon draw
+made: the system keeps it on the planet (`WorldParams::moon_sizes`:
+radius and gravity by moon seed), and `MoonSystem::draw` takes it, so the
+planet's `world.json` and the CLI list the radius, density, gravity and
+apparent size of the moon's body (its lock and migration stay as drawn).
 
 **Determinism.** A system is its request and its seed. Each body's seed
 is drawn from the system's seed and the body's id (`stream_seed`), and
@@ -240,11 +262,64 @@ their crater rates.
 
 Each planet draws its moons as a world does, by `MoonSystem::draw` in
 `moons.rs`: a rocky planet's (impacts, captures, tides, the Hill
-sphere), a giant's regular moons (two to five, about 10⁻⁴ of its mass, a
-1:2:4 resonance, on some ice giants a captured Triton), one recipe for a
+sphere), a giant's regular moons (two to five, 1 to 2.5 × 10⁻⁴ of its
+mass in a chain or in one dominant moon, an ice giant's always a chain
+of 1 to 1.2 × 10⁻⁴, a 1:2:4 resonance, ice beyond a
+line set by the giant's temperature, on some ice giants a captured
+Triton), one recipe for a
 giant of a system and a giant world. A giant's large regular
 moon may be a habitable world: in mode 2 that is the planet asked for; in
 mode 1 a request can ask for it (`moons of giants: earth-like`).
+
+A moon's **bulk composition** (`Moon.bulk`, `Physical.bulk`: shares of
+rock, ice and carbon by mass, summing to 1) is drawn from the moon's
+stream, and its density follows it: rock 3.3, ice 0.93 and carbon
+1.8 g/cm³ mixed by volume, with no porosity or compression (a large
+moon comes out lighter than Ganymede). A moon born where it is warm is
+rock with 0 to 4 % carbon (calibration, no source). Beyond the ice line
+(a cold small planet's, a giant disk's) it is about half ice and half
+rock by mass, 40 to 60 % ice with up to 5 % carbon, as Saturn's
+mid-sized moons (Thomas 2010, doi:10.1016/j.icarus.2010.01.025). A body
+captured beyond the ice line is carbon-rich, 20 to 45 % carbon and 20 to
+40 % ice, as the C-type Phoebe (Johnson & Lunine 2005,
+doi:10.1038/nature03384); one captured inside it, 10 to 30 % carbon and
+no ice. A captured Triton is 15 to 30 % ice and up to 5 % carbon
+(calibration to its 2.06 g/cm³). A ring moon is 80 to 95 % ice (the
+moonlets of Saturn's rings, 0.4 to 0.5 g/cm³, Thomas 2010); its density
+stays the rings' own. `Composition` (the moon's look) is unchanged: it
+still follows the ice line, so a captured outer moon looks icy though
+its ice share is below half. The regular moons beside a world asked
+around a giant draw their bulk from their own seed with the same rule
+(`Bulk::sibling`: cold beyond the giant's snow line, warm inside it);
+their size and density stay the ones the host's draw gave them. A world
+asked for carries no `bulk`.
+
+A **round moon** (pulled round by its own gravity: 600 km across for
+rock, 400 km for ice, so Enceladus is one) goes through the planet model
+as a planet does (`planet::moon::derive_moon_model`, part 4 of #423):
+its mass, its bulk's ice share (its carbon counted with the rock) and
+its birth (`Disk` for a giant's regular moon, `Captured` for a captured
+one, `Impact` for a giant-impact or debris moon) are its inputs
+(`system::moon_formation`), its formation context is its planet's (its
+star's light, XUV and age at the planet's orbit), and its planet's tides
+on its orbit (the planet's mass, the moon's semi-major axis and
+eccentricity) heat it. Its model is stored in `model` and in
+`params.model`, derived from the stream `<moon id>/model`; its `type` is
+the model's class (`rocky`, `ice-world`, `hydrocarbon-world`…), its
+world is a planet's (`planet::interim::params_for` at its own seed, with
+its tilt, its tidal shape and no moons of its own; its day, which its
+wind belts and the swing of its days read, is its body's spin, stored
+as `params.day_hours`: a locked moon turns once per orbit, Titan in
+15.9 days), its preview the
+colours of its base look, and its `physical` facts the formation's mass
+with the model's radius, density and gravity (about 9 % smaller than the
+uncompressed bulk mix gives: 0.86 to 0.96 over 500 systems). A moon too
+small to be round keeps `rocky-moon` or `icy-moon` and no model. Every
+moon's world is marked `params.moon` (`moons::is_moon_world`), whatever
+its type. The round regular moons beside a world asked around a giant
+go through the model too, on the chain's 0.005 eccentricity. Over 500
+drawn systems (`examples/moon_census.rs`): 1 165 round moons, 821 ice
+worlds, 342 rocky and 2 hydrocarbon worlds.
 
 A giant with rings also gets the moons that shape them (`rings.rs`,
 backlog item 18), drawn from the stream `RING_MOONS` so the other moons
@@ -323,7 +398,9 @@ radii each spread a gossamer ring of impact dust from the main rings out
 to their orbit and up to 1.26 times past it (Jupiter's Amalthea and Thebe
 rings, and Thebe's extension); a source farther out wraps its orbit in a
 faint belt from 0.913 to 1.087 times its distance (Uranus's μ ring round
-Mab). On a quarter of giants, the innermost icy regular moon within 12
+Mab). A moon's dust is icy when its bulk is more than half ice or its
+model holds at least 5 % water and ice; otherwise it is dark (rock, or
+carbon as Phoebe's). On a quarter of giants, the innermost icy regular moon within 12
 radii blows out a broad ring of ice grains from 0.75 to 2 times its
 distance (Saturn's E ring round Enceladus): which moon is active is
 drawn, its tidal heating not computed. Each names its source moon.
@@ -375,7 +452,8 @@ axis, orbit and labels:
 - giants with their bands: their palette and band layout come from
   `giant_world::Look`, which is cheap to draw, so a giant sphere already
   looks like its map will;
-- moons grey (rock) or pale (ice), irregular ones with their shape.
+- small moons grey (rock) or pale (ice), irregular ones with their
+  shape; a round moon in the colours of its model's look, as a planet.
 
 The system file stores each body's preview (its colours, or its band
 palette and layout), so the viewer draws it without knowing the archetypes or looks.
@@ -449,11 +527,12 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (4), the request, the seed and the map size. A
+  - `format_version` (5), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
     body's files directly in `bodies/<id>/`, version 2 typed its planets
     by preset and stored no physical model, version 3 kept a preset in
-    each body's world parameters and no model for the planet asked for;
+    each body's world parameters and no model for the planet asked for,
+    version 4 gave no moon a model;
   - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
     age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
     10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
@@ -465,12 +544,14 @@ systems/<system-id>/
     facts, spin, surroundings, preview, `WorldParams`, and `generated`.
     A planet also stores `model`, its physical model (issue #423: what
     it is made of, its interior, heat, surface, air, climate, life and
-    class), derived once when the system is drawn from its orbit, the
+    class, and for a frozen body with a water layer its `ice_shell`:
+    the conductive shell's thickness `shell_km` and the liquid ocean left
+    beneath it `ocean_km`), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
     `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
-    `hot-neptune`, `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     `ocean-world`), its `physical.mass_earth` the model's mass after
     photoevaporation; its world renders, until #424, with the look
     closest to the model (`planet::interim::base_of`), and the model of
@@ -498,8 +579,11 @@ systems/<system-id>/
     insolation and mass, and the model types it. The planet a request
     around one asks for has its model too (`model`, derived from the
     request's inputs, its archetype's ranges and its formation context),
-    its archetype stored beside for display. A moon has no model yet and
-    keeps `rocky-moon` or `icy-moon`;
+    its archetype stored beside for display; a world asked around a
+    giant (`host: giant`) is heated by that giant's tides (its mass, the
+    world's distance and eccentricity around it). A round moon has its
+    model too (see [Moons](#moons)); a small one keeps `rocky-moon` or
+    `icy-moon` and no model;
 
   The server rewrites it (temporary file, then rename) only to set a
   body's `generated` once its directory is complete.
@@ -840,7 +924,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (18 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (20 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message asking to delete it (`mise run clean-systems`) and draw it
   again, and the viewer shows that message instead of requesting them.

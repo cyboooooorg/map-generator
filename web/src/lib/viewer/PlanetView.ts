@@ -91,7 +91,7 @@ import { discBasis, hostStarDetail, hostStarSpriteSize } from './hostStarSurface
 import { StarSurfaceState, starLook, starSurfaceUniforms } from './starSurface';
 import type { Preview } from '../api/types/Preview';
 import { type LoadProgress, readWithProgress } from '../progress';
-import { liftSky, sunDeclinationDeg, type Sky } from '../sky';
+import { hazeVeil, liftSky, sunDeclinationDeg, type Sky } from '../sky';
 import { fullPixelRatio, pixelRatio } from './pixelRatio';
 import {
   altitudeForMapHeight,
@@ -781,6 +781,8 @@ export class PlanetView {
     uTop: { value: 1.04 } as IUniform<number>,
     uBetaR: { value: new Vector3(4.7, 11.4, 27.8) } as IUniform<Vector3>,
     uBetaM: { value: 4.6 } as IUniform<number>,
+    /** Factor on the haze over the ground at the camera's altitude (see hazeVeil). */
+    uHazeVeil: { value: 1 } as IUniform<number>,
     uMieAlbedo: { value: new Vector3(1, 1, 1) } as IUniform<Vector3>,
     uHeightR: { value: 0.009 } as IUniform<number>,
     uHeightM: { value: 0.0043 } as IUniform<number>,
@@ -3477,6 +3479,8 @@ export class PlanetView {
       pass.visible = skyVisible;
     }
     this.atmosphereOpacity.value = this.morph ** 3;
+    // Close in, a haze that hides the ground (Titan's) thins over it.
+    this.sky.uHazeVeil.value = hazeVeil(this.worldSky, this.altitude());
     // Rings belong to the globe, like the atmosphere.
     for (const mesh of this.dustRings) {
       mesh.visible = this.morph > 0.01;

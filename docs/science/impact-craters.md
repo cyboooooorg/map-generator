@@ -194,6 +194,15 @@ planet was resurfaced about 300 million years ago (Strom, Schaber & Dawson
 1994; Schaber et al. 1992 found about 0.5 Ga). Io resurfaces itself "faster
 than comets and asteroids can mark it with large craters" (NASA).
 
+**Icy moons** show the same rule in ice, which flows and melts far more
+readily than rock. Callisto, warmed by little more than its rocks' decay,
+keeps a surface saturated with craters about 4 Ga old; Ganymede's dark
+terrain is as old, its bright grooved terrain about 2 Ga. Europa, kneaded
+by Jupiter's tides, has very few craters: its surface is only 40 to 90
+million years old (Zahnle et al. 2003). Enceladus's south polar terrain,
+where its plumes vent, is nearly free of craters, while its old plains
+elsewhere are cratered.
+
 ### Air screens small impactors
 
 A thick atmosphere slows and breaks up small bodies before they reach the
@@ -209,6 +218,12 @@ ground.
 - **Mars** (0.006 bar): new craters of 3.9 m and more appear at a rate of
   1.65 × 10⁻⁶ per km² per year, and more than half form in clusters
   (Daubar et al. 2013): even that thin air breaks some impactors up.
+- **Titan** (1.5 bar): under its low gravity its air weighs ten times
+  Earth's per square metre. It strongly slows and breaks up impactors
+  well under 1 km across (Artemieva & Lunine 2003); only about 60 craters
+  are known on the whole moon (Neish & Lorenz 2012), its methane rain and
+  dunes wearing and burying the rest. What screens an impactor is the mass
+  of air it must cross, the column, more than the pressure.
 
 ### What we do not know
 
@@ -252,8 +267,10 @@ depends only on the planet and the seed:
 1. **How many.** `crater_density` is the lunar chronology above. The density
    is multiplied by the body's flux against the Moon's, and its craters are
    the Moon's at `D / crater_scale` (`impacts::rates`, see "The flux from
-   the orbit" below). A moon takes its system's impact factor (or its
-   giants', 0.7 to 1.8) and the Moon's crater size.
+   the orbit" below). A moon takes the Moon's crater size, and its
+   planet's impact factor (or its giants', 0.7 to 1.8); a giant's moon
+   takes the comets its giant focuses on it instead ("A giant's moons"
+   below).
 2. **Where and how large.** Diameters are split into octaves
    `[2^k, 2^(k+1)]` km, each with its own grid on a cube projected on the
    sphere. Each cell holds a Poisson number of craters, set by the octave's
@@ -272,8 +289,11 @@ depends only on the planet and the seed:
 4. **Ages** invert the chronology, so most craters of an old surface are
    very old. A second population, at today's flux (the term $c$), holds the
    craters still to come, up to 1 Ga ahead.
-5. **Air.** No crater below `0.1 km × p^0.75` ($p$ in bar), and fewer up to
-   ten times that: 3 km and 30 km on Venus, 2 m on Mars.
+5. **Air.** No crater below `0.1 km × c^0.75`, and fewer up to ten times
+   that, $c$ the air's column, its surface pressure over its gravity,
+   against Earth's (1 bar under 9.81 m/s²): 3.2 km and 32 km on Venus
+   (a column 100 times Earth's), 0.6 km and 6 km on a Titan (ten times),
+   4 m on Mars.
 6. **Shape.** A radial profile with a transition $D_t$. A planet takes
    it from O'Keefe & Ahrens's $9.0\,Y/(\rho g)$ with the strength and
    density of its crust, read from its model (`generation::crust_kind`):
@@ -290,7 +310,8 @@ depends only on the planet and the seed:
      sea floor and a frozen Earth's ground under its ice sheet stay rock.
 
    The strengths are calibrations on those bodies, not measured
-   strengths. A moon has no model yet: it keeps the lunar law
+   strengths. A moon keeps the lunar law, a round one whose model gives
+   it a crust too (the rock strength would put the Moon at 24 km):
    `15 km × 1.62 / g`, times 0.15 when its bulk density is under
    2.5 g/cm³ (ice). Below the transition, a bowl $0.2\,D$ deep. Above it, Pike's
    complex depth law, written in transition diameters,
@@ -371,7 +392,10 @@ after 3 Ga.
 **The flux from the orbit.** [`impacts.rs`](../../crates/mapgen/src/impacts.rs)
 gives a world with a model its flux per unit area and its crater size
 against the Moon's, the reference of the chronology (a body at 1 AU from a
-Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s):
+Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s). A moon, a round
+one with its model included, keeps the Moon's craters at its planet's
+rate ($I$ alone), and a giant's moon at the rate of the comets its giant
+focuses on it (below).
 
 $$\frac{\phi}{\phi_m} = I \cdot B_{20}\!\left(B_6\!\left(\frac{n(a)}{n(1\,\mathrm{AU})}\right) \cdot
 \frac{v_\infty}{v_{\infty,m}} \cdot
@@ -429,6 +453,30 @@ to $C$, never above it.
   $1.5 + 0.66 \tanh((v/v_m - 1.5)/0.66)$: the π-scaling has not been
   tested much beyond the Solar System's impact speeds. The knee and the use
   of Mercury's speed as the ceiling are calibrations.
+
+**A giant's moons.** The impactors of the outer giants' moons are mostly
+ecliptic comets, focused by the giant's gravity, at a rate per unit area
+that falls outward through its moons (Zahnle et al. 2003). A moon of a
+gas or ice giant takes (`impacts::giant_moon_flux`) the heliocentric flux
+at its giant's orbit by the rule above, with the Solar System's impactors
+($I$ = 1, whatever belts the seed drew) and no focusing of its own, times
+the giant's focusing at the moon's distance $a$:
+
+$$\frac{\phi}{\phi_m} = B_{20}\!\left(B_6\!\left(\frac{n(a_p)}{n(1\,\mathrm{AU})}\right)
+\frac{v_\infty}{v_{\infty,m}} \cdot \frac{1}{1 + v_{esc,m}^2/v_{\infty,m}^2}\right)
+\left(1 + \frac{2 G M_p / a}{v_\infty^2}\right)$$
+
+with $a_p$ and $M_p$ the giant's orbit and mass, and $v_\infty$ the
+encounter speed at $a_p$. Around Jupiter it gives Callisto 1.5 times the
+Moon's flux, Ganymede 2.3, Europa 3.3 and Io 5.1: 1.5, 2.3 and 3.4 times
+Callisto's where Zahnle et al.'s rates per unit area give 1.6, 2.6 and 4.0
+(their impact probabilities, as tabulated by Nesvorný et al. 2023, over
+each moon's area). From seed to seed a Callisto's flux moves only with
+its giant's orbit and mass and its own distance (1.4 to 1.6 over seeds 1
+to 5), where the system's drawn impact factor spanned 0.04 to 5.6. Its
+crater density still follows its surface age through the lunar
+chronology: a Callisto of 3.4 Ga keeps about a thirtieth of the craters of
+20 km of one of 4.2 Ga, saturated.
 
 Among the Solar System's impactors ($I$ = 1), the archetypes get:
 
@@ -501,7 +549,17 @@ more are flooded flat at a date of that window and darkened.
   they find 43: the rule's crater sizes stay within 20 % of the targets
   above, but its speeds are not theirs. Mercury, Venus and Earth come out
   10 to 16 % below Le Feuvre & Wieczorek's fluxes. Moons keep the Moon's
-  craters at their system's rate until they get a model (part 4).
+  craters at their planet's rate, a giant's moons at its comets'.
+- **A giant's comets are the asteroids' rule moved out.** Its moons'
+  heliocentric flux is the asteroid rule's at the giant's orbit (its
+  crossers there are the near-Earth population's, its speed the orbital
+  speed's scaling), not a comet population: no source ties the two, and
+  the absolute rate is only as good as that guess (Zahnle et al. give
+  Jupiter's comets to a factor of two each way). The focusing
+  $1 + v_{esc}^2/v_\infty^2$ leaves out the moon's own orbital speed and
+  its leading side, and puts Io at 3.4 times Callisto against Zahnle's 4.
+  A small moon and a ring of a giant would take the same rule; only the
+  round moons are measured.
 - **The deep past of old surfaces lacks its oldest craters.** At most twice
   the kept count is drawn per octave. Where an octave formed more than that
   (craters of 1 km on surfaces older than about 4.2 Ga, sub-km ones at
@@ -522,10 +580,25 @@ more are flooded flat at a date of that window and darkened.
   2.8 km from Pike's law on the Moon at 26 km, which Schenk (2002) gives
   as a depth that begins to fall below the complex-crater trend, applied to
   every complex crater.
-- **The air filter is a fit.** `0.1 km × p^0.75` matches Venus's smallest
-  craters (3 km against 1.5 km observed) and Mars's (2 m against craters of
-  a few metres) roughly. It ignores what the impactor is made of: on Earth
-  iron bodies get through where stony ones of the same size do not.
+- **The air filter is a fit.** `0.1 km × c^0.75` on the column matches
+  Venus's smallest craters (3.2 km against 1.5 km observed) and Mars's
+  (4 m against craters of a few metres) roughly. It ignores what the
+  impactor is made of: on Earth iron bodies get through where stony ones
+  of the same size do not. On Titan it thins craters only up to about
+  6 km, where its air depletes them up to about 20 km (Wood et al. 2010):
+  its methane rain's wear (erosion half Earth's) removes most of the rest.
+- **An ice lid's age follows its heat by a calibration.** A world with an
+  ice crust and a stagnant lid keeps `1 / (1 + (F / 10 mW/m²)⁴)` of the
+  surface age a rock lid would (70 to 95 % of its system's age), `F` its
+  internal heat flux, tidal and radiogenic
+  (`planet::interim::ICE_LID_HALF_FLUX_W_M2`). The law is a choice that
+  puts Callisto (2 to 5 mW/m² in the model) near 4 Ga, Ganymede 2 to 4 Ga
+  and Europa (about 35 mW/m² of tides) under 0.1 Ga; no study gives it.
+  One age stands for the whole surface: Ganymede's two terrains and
+  Enceladus's young south pole (its model's tides give it a quarter of the
+  heat it radiates) are not told apart, Enceladus taking its old plains'
+  age, and Triton, whose surface is young from the heat of its capture,
+  keeps an old one.
 - **Sea floors are cleared by the preset, not by plates.** A crater on the
   floor of a sea that still fills the basins leaves nothing on any world,
   whatever its tectonic regime: the rule reads only the sea, and plate
@@ -651,6 +724,34 @@ more are flooded flat at a date of that window and darkened.
     preliminary results", *Astrophysical Journal* 743, 156,
     [arXiv:1109.6400](https://arxiv.org/abs/1109.6400) (abstract read):
     981 ± 19 near-Earth asteroids larger than 1 km.
+27. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering
+    rates in the outer Solar System", *Icarus* 163, 263–289,
+    [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
+    Europa's surface 40 to 90 Ma old; Callisto's and Ganymede's dark
+    terrain about 4 Ga; the impactors of the giants' moons ecliptic comets
+    focused by the giant, Jupiter struck by 0.005 (+0.006, −0.003) comets
+    of 1.5 km or more a year (abstract).
+28. Neish, C. D. & Lorenz, R. D. 2012, "Titan's global crater
+    population: a new assessment", *Planetary and Space Science* 60,
+    26–33,
+    [doi:10.1016/j.pss.2011.02.016](https://doi.org/10.1016/j.pss.2011.02.016).
+    About 60 craters on Titan.
+29. Artemieva, N. & Lunine, J. 2003, "Cratering on Titan: impact melt,
+    ejecta, and the fate of surface organics", *Icarus* 164 (abstract, as
+    summarised by a search): impactors over 1 km hardly affected by
+    Titan's air, those well under it strongly decelerated and broken up.
+30. Wood, C. A. et al. 2010, "Impact craters on Titan", *Icarus* 206
+    (abstract, as summarised by a search): 24 possible craters under
+    20 km, consistent with an air that destroys most but not all small
+    impactors (Ivanov, Basilevsky & Neukum 1997).
+31. Nesvorný, D., Dones, L., De Prá, M., Womack, M. & Zahnle, K. J. 2023,
+    "Impact rates in the outer Solar System",
+    [arXiv:2307.15670](https://arxiv.org/abs/2307.15670) (read): Tables 1
+    to 3 give Zahnle et al. (2003)'s impact probabilities of the moons of
+    Jupiter, Saturn and Uranus beside their own (Io 1.4 × 10⁻⁴, Europa
+    6.6 × 10⁻⁵, Ganymede 1.2 × 10⁻⁴, Callisto 6.1 × 10⁻⁵; Mimas
+    1.7 × 10⁻⁶, Titan 5.4 × 10⁻⁵), and the rate per unit area of a moon
+    far inside its planet's sphere of influence as $1/(a\,v_\infty^2)$.
 
 ## See also
 

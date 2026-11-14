@@ -17,13 +17,16 @@ pub struct WorldParams {
     pub width: u32,
     pub height: u32,
     pub seed: u32,
-    /// The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`.
+    /// The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`
+    /// for a moon too small to be round.
     pub class: String,
     /// The archetype asked for, for display only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub archetype: Option<String>,
-    /// The planet's model; `None` for a moon (part 4).
+    /// The body's model: a planet's, or a round moon's (see
+    /// `crate::system::moon_formation`); `None` for a moon too small to
+    /// be round.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub model: Option<PlanetModel>,
@@ -85,9 +88,10 @@ pub struct WorldParams {
     #[cfg_attr(feature = "ts", ts(optional))]
     pub given_rings: Option<crate::giant_world::GivenRings>,
     /// The crater rate relative to the Solar System's, as its planetary
-    /// system sets it from its giants and belts (see `crate::belts`);
-    /// absent for every other world, whose rate comes from the giants its
-    /// seed draws.
+    /// system sets it from its giants and belts (see `crate::belts`); for
+    /// a moon of a giant, its flux against the Moon's from the comets the
+    /// giant focuses on it (`crate::impacts::giant_moon_flux`); absent for
+    /// every other world, whose rate comes from the giants its seed draws.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub impact_factor: Option<f32>,
@@ -140,6 +144,49 @@ pub struct WorldParams {
     /// read as [`crate::star::DEFAULT_AGE_GYR`].
     #[serde(default = "crate::star::default_age_gyr")]
     pub age_gyr: f32,
+    /// Whether the world is a moon of a system's planet (see
+    /// [`crate::moons::is_moon_world`]): a small one (`rocky-moon`,
+    /// `icy-moon`) or a round one typed by its model's class. Not set on
+    /// a world asked for as a giant's moon, which keeps its host in
+    /// [`Self::host`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub moon: bool,
+    /// The world's sidereal day, hours, when its system sets it: a moon
+    /// of a system's planet turns as its body's spin says (once per orbit
+    /// when locked to its planet: Titan 15.9 days). Absent for every
+    /// other world, whose day follows from its star's tides, its moons or
+    /// the giant it orbits (see `crate::generation::belts`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub day_hours: Option<f32>,
+    /// Latitude, degrees, poleward of which a hydrocarbon world's surface
+    /// liquid lies: a point nearer the equator is never under it (see
+    /// [`crate::planet::interim::POLAR_LIQUID_LAT_DEG`]). Absent on every
+    /// other world, whose sea follows its relief alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub liquid_poleward_deg: Option<f32>,
+    /// The moons a whole system asked this giant to carry, by archetype
+    /// (a `titan-like` asked with or without its `saturn-like`), drawn
+    /// when the giant was placed: its moon draw makes them first and the
+    /// others around them (see `crate::moons::MoonSystem::draw`). Empty
+    /// on every other world.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::moons::AskedMoon>>", optional)
+    )]
+    pub asked_moons: Vec<crate::moons::AskedMoon>,
+    /// The sizes a system's planet model gave this planet's round moons,
+    /// which its moon draw then takes in place of the drawn ones. Empty on
+    /// every other world.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::moons::MoonSize>>", optional)
+    )]
+    pub moon_sizes: Vec<crate::moons::MoonSize>,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

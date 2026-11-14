@@ -210,7 +210,9 @@ seen on the *Elevation* layer, with the depth contours). Ranges follow the
 boundaries rather than falling at random. On the other regimes, the regime
 only sets how old the surface is, through the craters (see [How do impact
 craters form and fade?](impact-craters.md)): a stagnant-lid world keeps a
-4 Ga surface covered in craters, a heat-pipe world almost none.
+4 Ga surface covered in craters, a heat-pipe world almost none, and an ice
+lid a younger surface the more internal heat it lets out (a tidally heated
+Europa under 0.1 Ga, Callisto about 4 Ga).
 
 The generator can also show a plate world as its plates carried it, up to
 300 million years in the past or the future (`--drift <Ma>` on the command

@@ -31,6 +31,10 @@ co2?: ParamDefault | null,
  */
 n2?: ParamDefault | null, 
 /**
+ * Factor on the CH₄ formation rule (1 typical).
+ */
+ch4?: ParamDefault | null, 
+/**
  * Radiogenic abundance, Earth's = 1.
  */
 radiogenic?: ParamDefault | null, 

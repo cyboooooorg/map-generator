@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './i18n/en';
 import { fr } from './i18n/fr';
+import { className, classLabel } from './i18n/names.svelte';
 import { GIANT_CLASSES, hasFrozenSurface, isGiantType, surfaceTemperatureK } from './planetClass';
 
 // Copied from `PLANET_CLASSES` (crates/mapgen/src/planet/classify.rs); a
@@ -15,6 +16,7 @@ const PLANET_CLASSES = [
   'hot-jupiter',
   'hot-neptune',
   'lava-world',
+  'volcanic-world',
   'runaway-greenhouse',
   'hydrocarbon-world',
   'ocean-world',
@@ -60,5 +62,35 @@ describe('planet classes', () => {
     expect(surfaceTemperatureK(model(0, 'water', 288))).toBe(288);
     expect(surfaceTemperatureK({ surface: null })).toBeNull();
     expect(surfaceTemperatureK(undefined)).toBeNull();
+  });
+
+  it('words a round moon as a moon wherever the planet label says planet', () => {
+    expect(className('rocky')).toBe('Rocky planet');
+    expect(className('rocky', true)).toBe('Rocky moon');
+    expect(className('volcanic-world')).toBe('Volcanic world');
+    expect(className('volcanic-world', true)).toBe('Volcanic moon');
+    expect(className('ice-world', true)).toBe('Icy moon');
+    expect(className('icy-moon', true)).toBe('icy moon');
+    expect(classLabel('rocky', undefined, true)).toBe('Rocky moon');
+    expect(classLabel('rocky', model(0.25, 'none', 215), true)).toBe('Rocky moon · frozen surface');
+    expect(classLabel('rocky')).toBe('Rocky planet');
+  });
+
+  it('keeps the moon wordings in both languages and none that say planet', () => {
+    const en_ = en.viewer.moonBodyTypes as Record<string, string>;
+    const fr_ = fr.viewer.moonBodyTypes as Record<string, string>;
+    expect(Object.keys(fr_).sort()).toEqual(Object.keys(en_).sort());
+    for (const key of Object.keys(en_)) {
+      expect(PLANET_CLASSES, key).toContain(key);
+      expect(en_[key], key).not.toMatch(/planet/i);
+      expect(fr_[key], key).not.toMatch(/plan[èe]te/i);
+    }
+    // Every class has a moon label, none reading as a world.
+    for (const key of PLANET_CLASSES) {
+      expect(en_[key], key).toBeTruthy();
+      expect(fr_[key], key).toBeTruthy();
+      expect(en_[key], key).not.toMatch(/world/i);
+      expect(fr_[key], key).not.toMatch(/monde/i);
+    }
   });
 });

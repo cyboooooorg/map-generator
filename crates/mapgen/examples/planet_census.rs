@@ -28,7 +28,9 @@
 //!    period under 100 days (the radius valley of Fulton et al. 2017
 //!    shows as a dip between 1.5 and 2 R_earth), and the class mix of the
 //!    same planets (super-Earths and sub-Neptunes should be within a
-//!    factor 1.5 of each other, and the close-in ice worlds are watched).
+//!    factor 1.5 of each other, and the close-in ice worlds are watched);
+//! 6. the median and mean surface age of the planets with a surface, by
+//!    class and tectonic regime.
 use std::collections::BTreeMap;
 
 use mapgen::planet::{body_model, interim};
@@ -89,6 +91,8 @@ fn main() {
     let mut enveloped: BTreeMap<&'static str, u32> = BTreeMap::new();
     let mut liquids: BTreeMap<String, u32> = BTreeMap::new();
     let mut regimes: BTreeMap<String, u32> = BTreeMap::new();
+    // (class, regime) -> surface ages, Ga.
+    let mut surface_ages: BTreeMap<(&'static str, String), Vec<f64>> = BTreeMap::new();
     let mut life = 0u32;
     // [by the insolation limit, boiled]: all runaways, then the class.
     let mut runaways = [0u32; 2];
@@ -126,6 +130,10 @@ fn main() {
                     .entry(format!("{:?}", surface.climate.liquid))
                     .or_default() += 1;
                 *regimes.entry(format!("{:?}", surface.regime)).or_default() += 1;
+                surface_ages
+                    .entry((class, format!("{:?}", surface.regime)))
+                    .or_default()
+                    .push(f64::from(body.params.surface_age_ga));
                 life += u32::from(surface.life.arose);
                 hot_and_wet += u32::from(
                     !surface.water.runaway
@@ -235,6 +243,26 @@ fn main() {
     for (regime, n) in &regimes {
         println!("{regime:<20}{:>6.1} %  ({n})", share(*n, with_surface));
     }
+    println!("\nsurface age, Ga, by class and regime (planets with a surface)");
+    let all: Vec<f64> = surface_ages.values().flatten().copied().collect();
+    println!(
+        "{:<20}{:<10}{:>6}{:>8}{:>8}",
+        "class", "regime", "n", "median", "mean"
+    );
+    for ((class, regime), ages) in &mut surface_ages {
+        let mean = ages.iter().sum::<f64>() / ages.len() as f64;
+        println!(
+            "{class:<20}{regime:<10}{:>6}{:>8.3}{mean:>8.3}",
+            ages.len(),
+            median(ages)
+        );
+    }
+    println!(
+        "{:<30}{:>6}{:>16.3}",
+        "all",
+        all.len(),
+        all.iter().sum::<f64>() / all.len().max(1) as f64
+    );
     println!(
         "\nrunaways: {} by the insolation limit, {} boiled; \
          of the runaway-greenhouse class: {} by the limit, {} boiled",

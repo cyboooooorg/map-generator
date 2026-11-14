@@ -33,18 +33,20 @@
 //! once.
 
 use crate::activity::{StarActivity, star_activity};
-use crate::archetype::Archetype;
+use crate::archetype::{Archetype, ParamDefault};
 use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
 use crate::export::Diagnostics;
 use crate::giants::{
     GiantKind, GiantSystem, GiantsMode, HOT_JUPITERS, HOT_PERIOD_DAYS, hill_spacing,
 };
-use crate::moons::{Composition, Moon, MoonSystem, MoonsMode};
+use crate::moons::{AskedMoon, Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
+use crate::planet::heat::ICY_MIN_WATER;
 use crate::planet::interim::{base_of, params_for};
 use crate::planet::mass::{Origin, draw_mass};
-use crate::planet::{Context, PlanetClass, PlanetModel, derive_model, derive_model_with};
+use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
+use crate::planet::{Context, HostTide, PlanetClass, PlanetModel, derive_model, derive_model_with};
 use crate::request::{RequestError, WorldRequest};
 use crate::star::{StarInfo, draw_eccentricity, parse_type};
 use crate::world::WorldParams;
@@ -59,9 +61,12 @@ use std::sync::Arc;
 /// Version 2 keeps each resolution of a body in its own directory (see
 /// [`crate::sizes`]); version 3 stores each planet's physical model
 /// ([`Body::model`]) and types it by its class; version 4 stores each
-/// world's class, archetype, model and look instead of its preset. A system of another
-/// version is refused by [`read_system`], not migrated.
-pub const SYSTEM_FORMAT_VERSION: u32 = 4;
+/// world's class, archetype, model and look instead of its preset;
+/// version 5 gives each round moon its model, its class as its type and
+/// its world as a planet's, and marks every moon's world
+/// ([`WorldParams::moon`]). A system of another version is refused by
+/// [`read_system`], not migrated.
+pub const SYSTEM_FORMAT_VERSION: u32 = 5;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.
@@ -265,6 +270,11 @@ pub struct Physical {
     pub gravity: f64,
     /// An irregular moon's semi-axes, km.
     pub axes_km: Option<[f32; 3]>,
+    /// What a moon is made of, by mass; absent for a planet and for the
+    /// moons that are drawn as worlds (a giant's host chain).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub bulk: Option<crate::moons::Bulk>,
 }
 
 /// How a body turns.
@@ -439,6 +449,8 @@ struct Asked {
     archetype: Arc<Archetype>,
     class: PlanetClass,
     band: (f64, f64),
+    /// The moons asked for by archetype it carries (a giant's).
+    moons: Vec<AskedMoon>,
 }
 
 /// How a slot came to be: drawn from where it formed, with no type,
@@ -776,6 +788,79 @@ fn trial_class(
     .class
 }
 
+/// The star a whole system that names none takes from the moons it asks
+/// for: the `[orbit] star` of the first moon archetype's host archetype
+/// (in name order), when it lives to `age_gyr`; `None` when no moon is
+/// asked, its host names no star, or that star dies younger.
+fn host_star_of(
+    planets: &BTreeMap<String, u32>,
+    age_gyr: Option<f32>,
+    seed: u32,
+) -> Result<Option<f32>, RequestError> {
+    for (name, &count) in planets {
+        let archetype = system_archetype(name)?;
+        let Some(moon) = archetype.moon.as_ref().filter(|_| count > 0) else {
+            continue;
+        };
+        let host = system_archetype(&moon.host)?;
+        let Some(code) = host.orbit.star.as_deref().and_then(|t| parse_type(t).ok()) else {
+            return Ok(None);
+        };
+        return Ok(crate::star::resolve_age_gyr(age_gyr, code, seed)
+            .is_ok()
+            .then_some(code));
+    }
+    Ok(None)
+}
+
+/// The nearest orbit, AU, from `lo` out to `hi`, at which the giant
+/// `asked` carries `moons` round a star of type `star` and age `age_gyr`
+/// ([`crate::moons::carries`], with the lightest and heaviest masses its
+/// archetype gives and the largest eccentricity); `None` when none does,
+/// or when it is no cold giant. Every orbit beyond it carries them too:
+/// the Hill sphere widens, the ice line closes in and the star's tides
+/// weaken outwards.
+fn carrying_orbit(
+    asked: &Asked,
+    moons: &[AskedMoon],
+    lo: f64,
+    hi: f64,
+    star: f32,
+    age_gyr: f32,
+) -> Option<f64> {
+    let kind = match asked.class {
+        PlanetClass::GasGiant => GiantKind::Gas,
+        PlanetClass::IceGiant => GiantKind::Ice,
+        _ => return None,
+    };
+    let ends = |p: ParamDefault| match p {
+        ParamDefault::Fixed(v) => (f64::from(v), f64::from(v)),
+        ParamDefault::Range([lo, hi]) => (f64::from(lo), f64::from(hi)),
+    };
+    let (lightest, heaviest) = ends(asked.archetype.inputs.mass_earth);
+    let eccentricity = asked
+        .archetype
+        .orbit
+        .eccentricity
+        .map_or(0.0, |e| ends(e).1);
+    let mut a = lo;
+    loop {
+        let host = crate::moons::HostSketch {
+            kind,
+            mass_earth: lightest,
+            heaviest_earth: heaviest,
+            star: StarInfo::new(star, a as f32, eccentricity as f32, age_gyr),
+        };
+        if crate::moons::carries(&host, moons) {
+            return Some(a);
+        }
+        if a >= hi {
+            return None;
+        }
+        a = (a * 1.01).min(hi);
+    }
+}
+
 /// The built-in archetype a whole system names a planet by: a file on the
 /// server's disk is not a name to ask a system for.
 fn system_archetype(name: &str) -> Result<Archetype, RequestError> {
@@ -821,9 +906,21 @@ struct Placed {
 fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Placed, RequestError> {
     let seed = whole.seed.unwrap_or_else(|| rng.random());
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
-    let star_code = match &whole.star {
-        Some(text) => parse_type(text).map_err(RequestError::BadStar)?,
-        None => crate::star::draw_type_living(whole.age_gyr, &mut rng),
+    // A star named is honoured, whatever it does to the moons asked. With
+    // none named, a system that asks for a moon by archetype takes the
+    // star its host's archetype names (the first moon's, in name order),
+    // so that the moon forms as its archetype describes it (a Titan
+    // round an old K or an M dwarf can lose its methane or its air);
+    // when it does not live to the age asked, or no moon is asked, the
+    // star is drawn.
+    let host_star = match (&whole.star, &whole.planets) {
+        (None, Some(planets)) => host_star_of(planets, whole.age_gyr, seed)?,
+        _ => None,
+    };
+    let star_code = match (&whole.star, host_star) {
+        (Some(text), _) => parse_type(text).map_err(RequestError::BadStar)?,
+        (None, Some(code)) => code,
+        (None, None) => crate::star::draw_type_living(whole.age_gyr, &mut rng),
     };
     let metallicity = whole
         .metallicity
@@ -843,24 +940,30 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
     let mut preferred: Vec<(Placement, f64, f64)> = Vec::new();
     let asked: Vec<(Placement, f64)> = match &whole.planets {
         Some(planets) => {
-            let total: u32 = planets.values().sum();
-            if total as usize > MAX_PLANETS {
-                return Err(RequestError::TooManyPlanets {
-                    asked: total,
-                    max: MAX_PLANETS as u32,
-                });
-            }
-            let mut list = Vec::new();
+            let mut archetypes = Vec::new();
             for (name, &count) in planets {
                 let archetype = system_archetype(name)?;
-                if count == 0 {
-                    continue;
+                if count > 0 {
+                    archetypes.push((archetype, count));
                 }
-                // Its orbits: those its insolation (or period) range gives
-                // round this star; the star the archetype names is not
-                // read, the system's star rules.
+            }
+            let (moons, planets): (Vec<_>, Vec<_>) =
+                archetypes.into_iter().partition(|(a, _)| a.moon.is_some());
+            let too_many = |asked: usize| RequestError::TooManyPlanets {
+                asked: asked as u32,
+                max: MAX_PLANETS as u32,
+            };
+            let planet_count: u32 = planets.iter().map(|(_, count)| count).sum();
+            if planet_count as usize > MAX_PLANETS {
+                return Err(too_many(planet_count as usize));
+            }
+            // A planet asked for: its orbits, those its insolation (or
+            // period) range gives round this star; the star the archetype
+            // names is not read, the system's star rules. `body_type`
+            // names what was asked when it cannot be.
+            let requested = |archetype: Archetype, body_type: &str| {
                 let impossible = || RequestError::TypeImpossible {
-                    body_type: name.clone(),
+                    body_type: body_type.to_string(),
                 };
                 let (near, far) = archetype
                     .orbit
@@ -884,8 +987,77 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                     archetype: Arc::new(archetype),
                     class,
                     band: (lo, (hi * REQUESTED_REACH).min(OUTER_EDGE_AU)),
+                    moons: Vec::new(),
                 };
-                let room = fits(&asked, star_mass);
+                Ok((asked, lo, hi))
+            };
+            // Each planet asked, with the orbits it may be drawn at.
+            let mut hosts: Vec<(Asked, f64, f64)> = Vec::new();
+            for (archetype, count) in planets {
+                let name = archetype.name.clone();
+                let planet = requested(archetype, &name)?;
+                hosts.extend(std::iter::repeat_n(planet, count as usize));
+            }
+            // Each moon asked rides the first giant of its host's
+            // archetype that can carry it with those it carries already
+            // (a giant asked for, or one made for an earlier moon), drawn
+            // no nearer than where it can; otherwise a giant of its host's
+            // archetype is made for it, or the request fails.
+            for (archetype, count) in &moons {
+                let host_name = &archetype.moon.as_ref().expect("a moon archetype").host;
+                for k in 0..*count {
+                    let mut stream = StdRng::seed_from_u64(u64::from(body_seed(
+                        seed,
+                        &format!("moon/{}/{k}", archetype.name),
+                    )));
+                    let moon = AskedMoon::draw(archetype, &mut stream);
+                    let carrying = |asked: &Asked, lo: f64, hi: f64| {
+                        let mut with = asked.moons.clone();
+                        with.push(moon.clone());
+                        carrying_orbit(asked, &with, lo, hi, star_code, age_gyr)
+                    };
+                    let rides = hosts.iter().enumerate().find_map(|(i, (asked, lo, hi))| {
+                        (asked.archetype.name == *host_name)
+                            .then(|| carrying(asked, *lo, *hi))
+                            .flatten()
+                            .map(|at| (i, at))
+                    });
+                    let (i, at) = match rides {
+                        Some(found) => found,
+                        None => {
+                            let host = system_archetype(host_name)?;
+                            let made = requested(host, &archetype.name)?;
+                            let at = carrying(&made.0, made.1, made.2).ok_or_else(|| {
+                                RequestError::TypeImpossible {
+                                    body_type: archetype.name.clone(),
+                                }
+                            })?;
+                            hosts.push(made);
+                            (hosts.len() - 1, at)
+                        }
+                    };
+                    let (asked, lo, _) = &mut hosts[i];
+                    asked.moons.push(moon);
+                    *lo = at;
+                    asked.band.0 = at;
+                }
+            }
+            // A giant made for a moon counts as a planet.
+            if hosts.len() > MAX_PLANETS {
+                return Err(too_many(hosts.len()));
+            }
+            // As many of each archetype as its band holds.
+            let mut list = Vec::new();
+            for (k, (asked, _, _)) in hosts.iter().enumerate() {
+                let name = &asked.archetype.name;
+                if hosts[..k].iter().any(|(a, _, _)| a.archetype.name == *name) {
+                    continue;
+                }
+                let count = hosts
+                    .iter()
+                    .filter(|(a, _, _)| a.archetype.name == *name)
+                    .count() as u32;
+                let room = fits(asked, star_mass);
                 if count > room {
                     return Err(RequestError::ZoneFull {
                         body_type: name.clone(),
@@ -893,11 +1065,11 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                         fits: room,
                     });
                 }
+            }
+            for (asked, lo, hi) in hosts {
                 let placement = Placement::Requested(asked);
-                for _ in 0..count {
-                    list.push((placement.clone(), log_between(lo, hi, &mut rng)));
-                    preferred.push((placement.clone(), lo, hi));
-                }
+                list.push((placement.clone(), log_between(lo, hi, &mut rng)));
+                preferred.push((placement, lo, hi));
             }
             list
         }
@@ -1328,6 +1500,9 @@ fn assemble(
             && !at_focus
         {
             params.archetype = Some(asked.archetype.name.clone());
+            // The moons asked for by archetype it carries, which its moon
+            // draw makes first.
+            params.asked_moons = asked.moons.clone();
         }
         // Its moons.
         let moons = if giant {
@@ -1392,20 +1567,59 @@ fn assemble(
         });
         let mut gap_moons =
             vec![String::new(); ring_moons.iter().filter(|r| r.gap.is_some()).count()];
-        for (k, ((moon_type, moon_params, orbit, physical, spin), ring)) in
+        // Its moons' formation context: the planet's, its star's light at
+        // its orbit.
+        let moon_context = Context::of(
+            &StarInfo::new(
+                star_code,
+                slot.orbit_au as f32,
+                slot.eccentricity as f32,
+                age_gyr,
+            ),
+            metallicity,
+            ice,
+        );
+        let mut moon_sizes = Vec::new();
+        for (k, ((moon_type, moon_params, orbit, physical, spin, formation), ring)) in
             moons.into_iter().enumerate()
         {
-            let mut moon_params = moon_params;
+            let moon_id = format!("{id}-{}", k + 1);
+            // A round moon: its model, then its class, world and size.
+            let (moon_type, mut moon_params, physical, mut moon_model, look) = match &formation {
+                Some(formation) => {
+                    let (class, params, physical) = round_moon(
+                        seed,
+                        &moon_id,
+                        &bodies[planet_index].params,
+                        &moon_context,
+                        formation,
+                        &moon_params,
+                        &physical,
+                    );
+                    let model = params.model.clone().expect("a round moon's model");
+                    moon_sizes.push(crate::moons::MoonSize {
+                        seed: params.seed,
+                        radius_km: physical.radius_km as f32,
+                        gravity: physical.gravity as f32,
+                    });
+                    let look = base_of(&model).to_string();
+                    (class, params, physical, Some(model), look)
+                }
+                None => (moon_type.clone(), moon_params, physical, None, moon_type),
+            };
             // A moon's seasons follow its planet's orbit around the star.
             moon_params.perihelion_longitude_deg =
                 bodies[planet_index].params.perihelion_longitude_deg;
-            let moon_id = format!("{id}-{}", k + 1);
+            // It turns as its spin says (once per orbit, locked to its
+            // planet), not with Earth's day; the world asked keeps its own.
+            if moon_params.moon {
+                moon_params.day_hours = Some(spin.period_hours as f32);
+            }
             if let Some(gap) = ring.and_then(|r| r.gap) {
                 gap_moons[gap] = moon_id.clone();
             }
             // The world of a request that is a giant's moon keeps the
             // model its resolution derived, at the giant's orbit.
-            let mut moon_model = None;
             if at_focus
                 && let Some(f) = focus
                     .as_ref()
@@ -1419,7 +1633,9 @@ fn assemble(
                 id: moon_id,
                 designation: format!("{planet_designation} {}", roman(k + 1)),
                 kind: BodyKind::Moon,
-                preview: preview_of(&moon_type, &moon_params, star_code),
+                // A round moon in the colours of its base look, as a
+                // planet.
+                preview: preview_of(&look, &moon_params, star_code),
                 body_type: moon_type,
                 parent: Some(id.clone()),
                 orbit,
@@ -1433,6 +1649,8 @@ fn assemble(
                 model: moon_model,
             });
         }
+        // The planet's own moon list agrees with its round moons' bodies.
+        bodies[planet_index].params.moon_sizes = moon_sizes;
         if let Some(rings) = bodies[planet_index]
             .params
             .given_rings
@@ -1450,7 +1668,7 @@ fn assemble(
                 id: m.id.clone(),
                 a_radii: m.orbit.semi_major_axis_km / radius_km,
                 role: m.ring_role,
-                icy: m.body_type == "icy-moon",
+                icy: dust_is_icy(m),
             })
             .collect();
         let seed = bodies[planet_index].params.seed;
@@ -1496,11 +1714,23 @@ fn assemble(
         if body.kind == BodyKind::Planet {
             body.trojans = trojans[rank];
         }
-        body.params.impact_factor = Some(crate::belts::impact_factor(
-            &belts,
-            &tracks,
-            tracks[rank].orbit_au,
-        ));
+        // A giant's moons take the comets its gravity focuses on them,
+        // already against the Moon's flux, not the asteroids of its
+        // system's belts (see `impacts::giant_moon_flux`); a smaller
+        // planet's moons strike at its rate.
+        let track = &tracks[rank];
+        let giant_moon = body.kind == BodyKind::Moon && track.class.sculpts_belts();
+        body.params.impact_factor = Some(if giant_moon {
+            crate::impacts::giant_moon_flux(
+                f64::from(info.mass),
+                f64::from(info.luminosity),
+                track.orbit_au,
+                track.mass_earth,
+                body.orbit.semi_major_axis_km,
+            ) as f32
+        } else {
+            crate::belts::impact_factor(&belts, &tracks, track.orbit_au)
+        });
     }
     System {
         format_version: SYSTEM_FORMAT_VERSION,
@@ -1520,6 +1750,26 @@ fn assemble(
         focus: focus_id,
         belts,
     }
+}
+
+/// Most ice in the bulk of a small moon whose dust is rock or carbon:
+/// one with more (a ring moonlet, most small moons of cold giants) feeds
+/// icy dust, the others (rocky, or carbon-rich as Phoebe) dark dust. A
+/// round moon's dust is icy when its model is an icy body's (at least
+/// [`ICY_MIN_WATER`] of water and ice, the icy tidal response's
+/// threshold). Calibration, no source: half the mass, the middle of a
+/// cold moon's drawn share (`moons::Bulk`).
+const ICY_DUST_MAX_ROCK_ICE: f32 = 0.5;
+
+/// Whether the dust a moon `m` sheds is icy (see
+/// [`ICY_DUST_MAX_ROCK_ICE`]).
+fn dust_is_icy(m: &Body) -> bool {
+    m.physical
+        .bulk
+        .is_some_and(|b| b.ice > ICY_DUST_MAX_ROCK_ICE)
+        || m.model
+            .as_ref()
+            .is_some_and(|model| model.inputs.water_fraction >= ICY_MIN_WATER)
 }
 
 /// The eccentricity the star's tides leave a planet drawn for `slot` round
@@ -1656,6 +1906,7 @@ fn planet_body(
             density,
             gravity,
             axes_km: None,
+            bulk: None,
         },
         spin: Spin {
             period_hours: if locked {
@@ -1686,8 +1937,16 @@ fn planet_body(
 }
 
 /// A moon's body fields: its type, parameters, orbit, physical facts and
-/// spin.
-type MoonParts = (String, WorldParams, Orbit, Physical, Spin);
+/// spin, and how a round one formed (which its model is derived from
+/// once its id is known, see [`round_moon`]).
+type MoonParts = (
+    String,
+    WorldParams,
+    Orbit,
+    Physical,
+    Spin,
+    Option<MoonFormation>,
+);
 
 /// The moons a planet of `planet_mass` Earth masses draws, as a world
 /// does ([`MoonSystem::draw`]): a rocky planet's, or a giant's regular
@@ -1700,13 +1959,41 @@ fn drawn_moons(planet: &WorldParams, planet_mass: f64) -> Vec<MoonParts> {
         .moons
         .iter()
         .map(|moon| {
-            let params = crate::moons::body_params(planet, moon);
+            let mut params = crate::moons::body_params(planet, moon);
+            // A moon asked for by archetype keeps its name.
+            params.archetype = moon.archetype.clone();
             moon_parts(moon, params, planet_mass)
         })
         .collect()
 }
 
-/// The fields of a moon drawn by [`MoonSystem`].
+/// How `moon`, drawn by [`MoonSystem`] around a planet of
+/// `planet_mass_earth` Earth masses, formed: its mass, its bulk's ice
+/// share (its carbonaceous share counted with the rock), its birth from
+/// its origin (a giant's disk, a capture, or an impact's debris), and its
+/// planet's tides on its orbit (its semi-major axis and eccentricity).
+pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
+    use crate::moons::MoonOrigin;
+    MoonFormation {
+        mass_earth: f64::from(moon.mass_ratio) * planet_mass_earth,
+        ice_fraction: f64::from(moon.bulk.ice),
+        birth: match moon.origin {
+            MoonOrigin::Disk => MoonBirth::Disk,
+            MoonOrigin::Captured => MoonBirth::Captured,
+            MoonOrigin::GiantImpact | MoonOrigin::Debris => MoonBirth::Impact,
+        },
+        tide: HostTide {
+            host_kg: planet_mass_earth * EARTH_KG,
+            a_m: f64::from(moon.semi_major_axis_km) * 1000.0,
+            eccentricity: f64::from(moon.eccentricity),
+        },
+    }
+}
+
+/// The fields of a moon drawn by [`MoonSystem`]: a small one's type
+/// (`rocky-moon` or `icy-moon`) and world, with how a round one formed
+/// ([`moon_formation`]), whose model [`round_moon`] then gives it its
+/// class, world and size.
 fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonParts {
     let tilt = params.axial_tilt_deg;
     let body_type = match moon.composition {
@@ -1744,6 +2031,7 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
             gravity: f64::from(moon.gravity),
             // Irregular, or stretched by its planet's tides.
             axes_km: (moon.axes_km[0] > moon.axes_km[2]).then_some(moon.axes_km),
+            bulk: Some(moon.bulk),
         },
         Spin {
             period_hours,
@@ -1753,7 +2041,77 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
             spin_orbit_3_2: false,
             resonance_turns: 0.0,
         },
+        moon.round.then(|| moon_formation(moon, planet_mass_earth)),
     )
+}
+
+/// A round moon through the planet model: the model of the moon `id` of
+/// the system of `seed`, formed as `formation` says around `planet`
+/// (whose formation context, its star's light at its orbit, is
+/// `planet_context`), then its body's type (the model's class), its world
+/// (as a planet's, [`params_for`], at its own seed, tilt and shape, with
+/// no moons of its own) and its physical facts (its formation's mass, the
+/// model's radius and gravity), from the small body's `params` and
+/// `physical` [`moon_parts`] drew.
+fn round_moon(
+    seed: u32,
+    id: &str,
+    planet: &WorldParams,
+    planet_context: &Context,
+    formation: &MoonFormation,
+    params: &WorldParams,
+    physical: &Physical,
+) -> (String, WorldParams, Physical) {
+    // A moon asked for by archetype takes the inputs its archetype sets,
+    // drawn on a stream of its own; a drawn one none.
+    let overrides = match params.archetype.as_deref() {
+        Some(name) => {
+            let archetype = crate::archetype::Archetype::load(name).expect("a built-in archetype");
+            let mut stream =
+                StdRng::seed_from_u64(u64::from(body_seed(seed, &format!("{id}/archetype"))));
+            // Its mass and orbit are its formation's.
+            let _ = archetype.mass(&mut stream);
+            archetype.overrides(&mut stream)
+        }
+        None => crate::planet::InputOverrides::default(),
+    };
+    let model = derive_moon_model(seed, id, planet_context, formation, &overrides);
+    let radius_km = model.interior.radius_earth * EARTH_M / 1000.0;
+    let width = crate::moons::moon_map_width(planet, radius_km as f32);
+    let placed = crate::request::Placed {
+        seed: params.seed,
+        star: planet.star,
+        age_gyr: planet.age_gyr,
+        orbit_au: planet.orbit_au,
+        eccentricity: planet.eccentricity,
+        metallicity: planet.metallicity,
+        axial_tilt_deg: Some(params.axial_tilt_deg),
+        perihelion_longitude_deg: None,
+        drift_ma: 0.0,
+        width,
+        height: width / 2,
+        moons: MoonsMode::None,
+        giants: GiantsMode::None,
+        host: HostMode::None,
+    };
+    let mut world = planet_params(&model, &placed);
+    world.moon = true;
+    world.archetype = params.archetype.clone();
+    // Stretched by its planet's tides as drawn (its shape is in shares of
+    // its mean radius).
+    world.shape = params.shape;
+    let mass_kg = formation.mass_earth * EARTH_KG;
+    let volume = 4.0 / 3.0 * PI * (radius_km * 1000.0).powi(3);
+    let scale = radius_km / physical.radius_km;
+    let physical = Physical {
+        mass_earth: formation.mass_earth,
+        radius_km,
+        density: mass_kg / volume / 1000.0,
+        gravity: model.interior.gravity,
+        axes_km: physical.axes_km.map(|a| a.map(|x| x * scale as f32)),
+        bulk: physical.bulk,
+    };
+    (model.class.key().to_string(), world, physical)
 }
 
 /// The parameters a body's world is generated with: its stored ones, a
@@ -1842,7 +2200,7 @@ fn shape_rings(
         / radius_m;
     let room = moons
         .iter()
-        .map(|(_, _, orbit, physical, _)| {
+        .map(|(_, _, orbit, physical, _, _)| {
             let mu = physical.mass_earth * EARTH_KG / mass_kg;
             orbit.semi_major_axis_km * 1000.0
                 / radius_m
@@ -1966,6 +2324,7 @@ fn ring_moon_parts(
             density: moon.density,
             gravity,
             axes_km: shape.map(|s| s.map(|a| a * moon.radius_km as f32)),
+            bulk: Some(crate::moons::Bulk::ring_moon(moon.seed)),
         },
         Spin {
             period_hours: period_days * 24.0,
@@ -1974,11 +2333,19 @@ fn ring_moon_parts(
             spin_orbit_3_2: false,
             resonance_turns: 0.0,
         },
+        None,
     )
 }
 
+/// Eccentricity of the orbits of the regular moons beside the world a
+/// request asked around a giant: within the forced eccentricities of the
+/// Galilean moons in their resonance (Io 0.004, Europa 0.009, NASA
+/// Jovian satellite fact sheet), as they were stored before.
+const SIBLING_ECCENTRICITY: f64 = 0.005;
+
 /// The moons of the giant a world of a request orbits: the world among
-/// its regular moons, as [`HostGiant`] draws them, nearest first.
+/// its regular moons, as [`HostGiant`] draws them, nearest first; a round
+/// one with how it formed.
 fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts> {
     let giant_kg = f64::from(host.giant.mass_earth) * EARTH_KG;
     let mut moons: Vec<(f64, MoonParts)> = Vec::new();
@@ -2007,6 +2374,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     / 1000.0,
                 gravity: f64::from(world.gravity_modifier()),
                 axes_km: None,
+                bulk: None,
             },
             Spin {
                 period_hours: f64::from(host.period_days) * 24.0,
@@ -2015,6 +2383,8 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                 spin_orbit_3_2: false,
                 resonance_turns: 0.0,
             },
+            // Its model is its request's.
+            None,
         ),
     ));
     for (k, sibling) in host.siblings.iter().enumerate() {
@@ -2023,6 +2393,29 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
             * PI
             * (f64::from(sibling.radius_km) * 1000.0).powi(3)
             * if sibling.icy { 1.9e3 } else { 3.3e3 };
+        // What it is made of, drawn from its seed as a giant's regular
+        // moons' (its size and density stay the ones `HostGiant` drew).
+        let bulk = crate::moons::Bulk::sibling(sibling.icy, params.seed);
+        let composition = if sibling.icy {
+            Composition::Ice
+        } else {
+            Composition::Rock
+        };
+        // A round one goes through the planet model, as a disk moon on
+        // the chain's orbit.
+        let formation =
+            crate::moons::is_round(composition, f64::from(sibling.radius_km)).then(|| {
+                MoonFormation {
+                    mass_earth: mass_kg / EARTH_KG,
+                    ice_fraction: f64::from(bulk.ice),
+                    birth: MoonBirth::Disk,
+                    tide: HostTide {
+                        host_kg: giant_kg,
+                        a_m: f64::from(sibling.distance_km) * 1000.0,
+                        eccentricity: SIBLING_ECCENTRICITY,
+                    },
+                }
+            });
         moons.push((
             f64::from(sibling.distance_km),
             (
@@ -2036,7 +2429,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                 Orbit {
                     semi_major_axis_km: f64::from(sibling.distance_km),
                     semi_major_axis_au: f64::from(sibling.distance_km) / 1.495_978_707e8,
-                    eccentricity: 0.005,
+                    eccentricity: SIBLING_ECCENTRICITY,
                     inclination_deg: 0.0,
                     node_deg: 0.0,
                     periapsis_deg: 0.0,
@@ -2049,6 +2442,7 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     density: if sibling.icy { 1.9 } else { 3.3 },
                     gravity: (G * mass_kg / (f64::from(sibling.radius_km) * 1000.0).powi(2)) / 9.81,
                     axes_km: None,
+                    bulk: Some(bulk),
                 },
                 Spin {
                     period_hours: f64::from(sibling.period_days) * 24.0,
@@ -2057,10 +2451,11 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
                     spin_orbit_3_2: false,
                     resonance_turns: 0.0,
                 },
+                formation,
             ),
         ));
     }
-    let _ = (giant_kg, star);
+    let _ = star;
     moons.sort_by(|a, b| a.0.total_cmp(&b.0));
     moons.into_iter().map(|(_, parts)| parts).collect()
 }
@@ -3051,6 +3446,11 @@ mod tests {
                         locked_to_star: None,
                         ridge: None,
                         resonance_to_star: None,
+                        moon: false,
+                        day_hours: None,
+                        liquid_poleward_deg: None,
+                        asked_moons: Vec::new(),
+                        moon_sizes: Vec::new(),
                         gravity: None,
                         ..body.params.clone()
                     };
@@ -3560,7 +3960,16 @@ mod tests {
                         assert_eq!(body.body_type, model.class.key(), "{}", body.id);
                         assert_eq!(body.physical.mass_earth, model.inputs.mass_earth);
                     }
-                    BodyKind::Moon => assert!(body.model.is_none(), "{}", body.id),
+                    // A small moon has none; a round one has its own,
+                    // typed by its class (see the round moons' test).
+                    BodyKind::Moon => match &body.model {
+                        Some(model) => assert_eq!(body.body_type, model.class.key()),
+                        None => assert!(
+                            ["rocky-moon", "icy-moon"].contains(&body.body_type.as_str()),
+                            "{}",
+                            body.id
+                        ),
+                    },
                 }
             }
         }
@@ -3856,14 +4265,19 @@ mod tests {
                 );
                 assert!(body.kind == BodyKind::Planet || body.trojans.is_none());
             }
-            // A moon strikes at its planet's rate.
+            // A moon strikes at its planet's rate, a giant's at the rate
+            // of the comets the giant focuses on it.
             for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
                 let planet = system
                     .bodies
                     .iter()
                     .find(|b| Some(&b.id) == moon.parent.as_ref())
                     .unwrap();
-                assert_eq!(moon.params.impact_factor, planet.params.impact_factor);
+                if planet.params.giant_mass_earth.is_some() {
+                    assert_ne!(moon.params.impact_factor, planet.params.impact_factor);
+                } else {
+                    assert_eq!(moon.params.impact_factor, planet.params.impact_factor);
+                }
             }
         }
         assert!(inner > 10 && trojans > 10, "{inner} {trojans}");
@@ -3895,6 +4309,537 @@ mod tests {
         // Written back, it stays as it was.
         let back: serde_json::Value = serde_json::to_value(&old).unwrap();
         assert!(back.get("belts").is_none());
+    }
+
+    #[test]
+    fn round_moons_carry_a_model_and_small_ones_none() {
+        let (mut round, mut small) = (0, 0);
+        for seed in 1..=50 {
+            let system = draw(
+                &whole_drawn(seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            for planet in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                let drawn = MoonSystem::draw(&planet.params).map_or_else(Vec::new, |m| m.moons);
+                for body in system
+                    .bodies
+                    .iter()
+                    .filter(|b| b.parent.as_deref() == Some(&planet.id))
+                {
+                    assert!(body.params.moon, "{seed} {}", body.id);
+                    assert!(crate::moons::is_moon_world(&body.params));
+                    // A ring moon is small; a drawn one is round as drawn.
+                    let is_round = body.ring_role.is_none()
+                        && drawn
+                            .iter()
+                            .find(|m| m.seed == body.params.seed)
+                            .expect("a drawn moon")
+                            .round;
+                    assert_eq!(body.model.is_some(), is_round, "{seed} {}", body.id);
+                    if is_round {
+                        round += 1;
+                        assert!(
+                            PLANET_CLASSES.contains(&body.body_type.as_str()),
+                            "{}",
+                            body.body_type
+                        );
+                        let model = body.model.as_ref().unwrap();
+                        assert_eq!(body.params.model.as_ref(), Some(model));
+                        // Derived again from how it formed, through the
+                        // moon's path (not a planet's).
+                        let p = &planet.params;
+                        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
+                        let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
+                        let mass = p.giant_mass_earth.unwrap_or_else(|| p.mass_earth());
+                        let moon = drawn.iter().find(|m| m.seed == body.params.seed).unwrap();
+                        let formation = moon_formation(moon, f64::from(mass));
+                        assert_eq!(
+                            &derive_moon_model(
+                                system.seed,
+                                &body.id,
+                                &context,
+                                &formation,
+                                &crate::planet::InputOverrides::default()
+                            ),
+                            model
+                        );
+                        let radius_km = model.interior.radius_earth * EARTH_M / 1000.0;
+                        assert!((body.physical.radius_km - radius_km).abs() < 1e-6);
+                        assert!((body.physical.gravity - model.interior.gravity).abs() < 1e-6);
+                    } else {
+                        small += 1;
+                        assert!(
+                            ["rocky-moon", "icy-moon"].contains(&body.body_type.as_str()),
+                            "{}",
+                            body.body_type
+                        );
+                    }
+                }
+            }
+        }
+        assert!(round > 0 && small > 0, "{round} round, {small} small");
+    }
+
+    #[test]
+    fn a_locked_round_moon_turns_once_per_orbit() {
+        let (mut checked, mut planets) = (0, 0);
+        for seed in 1..=20 {
+            let system = draw(
+                &whole_drawn(seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            for body in &system.bodies {
+                let day = crate::generation::sidereal_day_hours(&world_params(body));
+                if body.kind == BodyKind::Planet {
+                    // A planet's day is still its own draw.
+                    assert_eq!(body.params.day_hours, None);
+                    planets += 1;
+                } else if body.model.is_some() && body.spin.locked {
+                    let orbit_hours = body.orbit.period_days * 24.0;
+                    assert!(
+                        (day - orbit_hours).abs() < 1e-3 * orbit_hours,
+                        "{}",
+                        body.id
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0 && planets > 0);
+        // A world asked around a giant turns once per orbit around it.
+        let world = WorldRequest {
+            planet: Some("earth-like".into()),
+            seed: Some(8),
+            host: Some(HostMode::Giant),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let system = draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(5)).unwrap();
+        let focus = system.focus.as_deref().unwrap();
+        let moon = system.bodies.iter().find(|b| b.id == focus).unwrap();
+        let day = crate::generation::sidereal_day_hours(&world_params(moon));
+        assert!((day - moon.spin.period_hours).abs() < 1e-3 * day);
+    }
+
+    #[test]
+    fn a_cold_large_moon_can_be_a_hydrocarbon_world() {
+        let found = (1..500).find(|&seed| {
+            let request = SystemRequest::System(WholeSystemRequest {
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
+            system.bodies.iter().any(|b| {
+                b.kind == BodyKind::Moon && b.body_type == PlanetClass::HydrocarbonWorld.key()
+            })
+        });
+        assert!(found.is_some(), "no hydrocarbon moon in seeds 1 to 499");
+    }
+
+    /// The moons of `system` asked for as `archetype`.
+    fn asked_moons<'a>(system: &'a System, archetype: &str) -> Vec<&'a Body> {
+        system
+            .bodies
+            .iter()
+            .filter(|b| {
+                b.kind == BodyKind::Moon && b.params.archetype.as_deref() == Some(archetype)
+            })
+            .collect()
+    }
+
+    /// The planet `moon` orbits.
+    fn parent_of<'a>(system: &'a System, moon: &Body) -> &'a Body {
+        let parent = moon.parent.as_deref().expect("a moon's planet");
+        system.bodies.iter().find(|b| b.id == parent).unwrap()
+    }
+
+    fn whole_round(star: &str, planets: &[(&str, u32)], seed: u32) -> Result<System, RequestError> {
+        let request = match whole(planets, seed) {
+            SystemRequest::System(w) => SystemRequest::System(WholeSystemRequest {
+                star: Some(star.into()),
+                ..w
+            }),
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        draw(&request, &mut StdRng::seed_from_u64(u64::from(seed)))
+    }
+
+    #[test]
+    fn an_asked_titan_comes_with_its_saturn() {
+        let system = requested(1, &[("titan-like", 1)]);
+        let titans = asked_moons(&system, "titan-like");
+        assert_eq!(
+            titans.len(),
+            1,
+            "{:?}",
+            system.bodies.iter().map(|b| &b.id).collect::<Vec<_>>()
+        );
+        let titan = titans[0];
+        assert_eq!(titan.body_type, "hydrocarbon-world", "{:?}", titan.model);
+        let host = parent_of(&system, titan);
+        assert_eq!(host.body_type, "gas-giant");
+        assert_eq!(host.params.archetype.as_deref(), Some("saturn-like"));
+        assert_eq!(planets(&system).len(), 1);
+    }
+
+    #[test]
+    fn an_asked_titan_rides_an_asked_saturn() {
+        let system = requested(2, &[("saturn-like", 1), ("titan-like", 1)]);
+        let giants: Vec<&Body> = system.bodies.iter().filter(|b| giant(b)).collect();
+        assert_eq!(giants.len(), 1);
+        let titans = asked_moons(&system, "titan-like");
+        assert_eq!(titans.len(), 1);
+        assert_eq!(parent_of(&system, titans[0]).id, giants[0].id);
+    }
+
+    #[test]
+    fn neptune_cannot_carry_a_titan() {
+        let system = requested(3, &[("neptune-like", 1), ("titan-like", 1)]);
+        let giants: Vec<&Body> = system.bodies.iter().filter(|b| giant(b)).collect();
+        assert_eq!(giants.len(), 2);
+        let titans = asked_moons(&system, "titan-like");
+        assert_eq!(titans.len(), 1);
+        let host = parent_of(&system, titans[0]);
+        assert_eq!(host.params.archetype.as_deref(), Some("saturn-like"));
+    }
+
+    /// Each moon archetype asked for, over seeds 1 to 10, comes out with
+    /// what the model can give it (see `planet::moon`): Titan a
+    /// hydrocarbon world, Europa an ocean under its ice, Io a dry
+    /// heat-pipe world, Ganymede and Callisto airless, Triton a thin N₂
+    /// air. Enceladus has the size and the model of a round moon; its
+    /// ocean is a known departure (issue #463), as are the oceans of
+    /// Ganymede and Callisto, which follow the radiogenic draw.
+    ///
+    /// Every Titan is a hydrocarbon world: its methane inventory (its
+    /// archetype's `ch4`) outlasts its star's ultraviolet, its nitrogen
+    /// holds the liquid below pure methane's triple point
+    /// (`planet::climate::methane_freezes_k`), and its air (0.8 to 2.9 bar
+    /// over these seeds) is above methane's triple-point pressure.
+    #[test]
+    fn each_moon_archetype_comes_out_as_itself() {
+        use crate::geology::Regime;
+        for seed in 1..=10 {
+            let one = |name: &str| {
+                let system = requested(seed, &[(name, 1)]);
+                let moons = asked_moons(&system, name);
+                assert_eq!(moons.len(), 1, "{name} seed {seed}");
+                let moon = moons[0].clone();
+                let model = moon.model.clone().expect("an asked moon has a model");
+                assert_eq!(moon.body_type, model.class.key(), "{name} seed {seed}");
+                (moon, model)
+            };
+            let surface = |m: &PlanetModel| m.surface.expect("a moon has a surface");
+            let (_, titan) = one("titan-like");
+            assert_eq!(
+                titan.class.key(),
+                "hydrocarbon-world",
+                "seed {seed}: {titan:?}"
+            );
+            let (_, europa) = one("europa-like");
+            let ocean = europa.ice_shell.map_or(0.0, |s| s.ocean_km);
+            assert!(ocean > 0.0, "seed {seed}: {europa:?}");
+            let (_, io) = one("io-like");
+            assert_eq!(surface(&io).regime, Regime::HeatPipe, "seed {seed}: {io:?}");
+            assert_eq!(io.class, PlanetClass::VolcanicWorld, "seed {seed}: {io:?}");
+            assert!(surface(&io).gases.total() < 1e-3, "seed {seed}: {io:?}");
+            for name in ["ganymede-like", "callisto-like"] {
+                let (_, m) = one(name);
+                assert!(
+                    surface(&m).gases.total() < 1e-3,
+                    "{name} seed {seed}: {m:?}"
+                );
+            }
+            let (_, triton) = one("triton-like");
+            let n2 = surface(&triton).gases.n2;
+            assert!(n2 > 0.0 && n2 < 0.01, "seed {seed}: {triton:?}");
+            // Its ocean: issue #463.
+            let (enceladus, _) = one("enceladus-like");
+            let km = enceladus.physical.radius_km;
+            assert!((km / 252.0 - 1.0).abs() < 0.1, "seed {seed}: {km} km");
+            assert!(!matches!(
+                enceladus.body_type.as_str(),
+                "icy-moon" | "rocky-moon"
+            ));
+        }
+    }
+
+    /// The moon `name` asked alone in a system of the Sun's age, seed
+    /// `seed`.
+    fn solar_aged_moon(name: &str, seed: u32) -> Body {
+        let request = match whole(&[(name, 1)], seed) {
+            SystemRequest::System(w) => SystemRequest::System(WholeSystemRequest {
+                age_gyr: Some(4.57),
+                ..w
+            }),
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
+        asked_moons(&system, name)[0].clone()
+    }
+
+    /// The surface of a stagnant ice lid is as young as its heat makes it
+    /// (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), in a system of the
+    /// Sun's age: Callisto's ancient (about 4 Ga), Ganymede's 2 to 4 Ga,
+    /// Europa's under 0.1 Ga (40 to 90 Ma, Zahnle et al. 2003,
+    /// doi:10.1016/S0019-1035(03)00048-4), Io's none (its volcanoes'),
+    /// Enceladus's that of its old cratered plains (its crater-free south
+    /// polar terrain is regional, which one surface age does not tell).
+    #[test]
+    fn an_ice_lid_is_as_young_as_its_heat() {
+        for seed in 1..=3 {
+            let age = |name: &str| solar_aged_moon(name, seed).params.surface_age_ga;
+            let callisto = age("callisto-like");
+            assert!(callisto >= 3.0, "seed {seed}: Callisto {callisto} Ga");
+            let ganymede = age("ganymede-like");
+            assert!(
+                (2.0..=4.4).contains(&ganymede),
+                "seed {seed}: Ganymede {ganymede} Ga"
+            );
+            let europa = age("europa-like");
+            assert!(europa < 0.1, "seed {seed}: Europa {europa} Ga");
+            let io = age("io-like");
+            assert!(io < 0.002, "seed {seed}: Io {io} Ga");
+            let enceladus = age("enceladus-like");
+            assert!(enceladus >= 2.0, "seed {seed}: Enceladus {enceladus} Ga");
+        }
+    }
+
+    /// A Titan keeps few craters: its air screens the small impactors
+    /// (`craters::AIR_FILTER_KM`, its column ten times Earth's) and its
+    /// methane rain wears the rest. Titan shows about 60 craters
+    /// (Neish & Lorenz 2012, doi:10.1016/j.pss.2011.02.016), Callisto's
+    /// surface is saturated: per unit of its system's impact flux, a Titan
+    /// keeps under a tenth of a Callisto's craters of 5 km or more.
+    #[test]
+    fn a_titan_keeps_few_craters() {
+        let per_flux = |moon: &Body| {
+            let p = generation_params(moon);
+            let field = crate::craters::CraterField::new(&p, 5.0);
+            let kept = field
+                .craters
+                .iter()
+                .filter(|c| field.wear(c) >= crate::craters::WORN_OUT)
+                .count() as f64;
+            let radius = f64::from(p.circumference_km) / (2.0 * PI);
+            kept / (4.0 * PI * radius * radius) / crate::impacts::rates(&p).flux
+        };
+        for seed in 1..=3 {
+            let titan = per_flux(&solar_aged_moon("titan-like", seed));
+            let callisto = per_flux(&solar_aged_moon("callisto-like", seed));
+            assert!(
+                titan < 0.1 * callisto,
+                "seed {seed}: Titan {titan}, Callisto {callisto}"
+            );
+        }
+    }
+
+    /// Kept craters of 20 km or more per million km², over the sphere.
+    fn n20(p: &WorldParams) -> f64 {
+        let field = crate::craters::CraterField::new(p, 5.0);
+        let kept = field
+            .craters
+            .iter()
+            .filter(|c| c.diameter_km >= 20.0 && field.wear(c) >= crate::craters::WORN_OUT)
+            .count() as f64;
+        let radius = f64::from(p.circumference_km) / (2.0 * PI);
+        kept / (4.0 * PI * radius * radius) * 1e6
+    }
+
+    /// A giant's moons take the comets it focuses
+    /// (`impacts::giant_moon_flux`), not its system's drawn belts: from
+    /// seed to seed a Callisto's craters change with its giant's orbit
+    /// and mass and its own distance only. Zahnle et al. (2003,
+    /// doi:10.1016/S0019-1035(03)00048-4) give the comets' rate at
+    /// Jupiter as 0.005 (+0.006, −0.003) a year, about a factor of two
+    /// each way: at one surface age, the crater density N20 of seeds 1 to
+    /// 10 stays within that factor. A Callisto as old as its system keeps
+    /// a saturated surface, a Europa almost none.
+    #[test]
+    fn a_giants_moons_are_cratered_by_its_comets() {
+        let mut densities = Vec::new();
+        for seed in 1..=10 {
+            let callisto = solar_aged_moon("callisto-like", seed);
+            let mut p = generation_params(&callisto);
+            let flux = crate::impacts::rates(&p).flux;
+            assert!((1.0..3.0).contains(&flux), "seed {seed}: flux {flux}");
+            if p.surface_age_ga >= 3.9 {
+                let n = n20(&p);
+                assert!(n > 100.0, "seed {seed}: Callisto N20 {n}");
+            }
+            p.surface_age_ga = 4.0;
+            densities.push(n20(&p));
+        }
+        let (lo, hi) = densities
+            .iter()
+            .fold((f64::INFINITY, 0f64), |(lo, hi), &n| (lo.min(n), hi.max(n)));
+        assert!(lo > 0.0 && hi / lo < 2.0, "{densities:?}");
+        for seed in 1..=3 {
+            let europa = generation_params(&solar_aged_moon("europa-like", seed));
+            let n = n20(&europa);
+            assert!(n < 1.0, "seed {seed}: Europa N20 {n}");
+        }
+    }
+
+    /// A giant its star despins keeps only the light moons (`moons.rs`,
+    /// Barnes & O'Brien 2002): an asked moon is never dropped there. The
+    /// request places the host where its moon lasts, or fails.
+    #[test]
+    fn an_asked_moon_outlasts_a_despun_host() {
+        let mut despun = 0;
+        for star in ["M7V", "M8V", "M9V", "M9.5V"] {
+            for seed in 1..=4 {
+                match whole_round(star, &[("io-like", 1)], seed) {
+                    Ok(system) => {
+                        let io = asked_moons(&system, "io-like");
+                        assert_eq!(io.len(), 1, "{star} seed {seed}");
+                        let host = &parent_of(&system, io[0]).params;
+                        let mass = host.giant_mass_earth.expect("a giant");
+                        let at = StarInfo::new(
+                            host.star,
+                            host.orbit_au,
+                            host.eccentricity,
+                            host.age_gyr,
+                        );
+                        let radius = crate::giant_world::radius_earth(host, mass);
+                        if crate::spin::giant_locked(&at, mass, radius) {
+                            despun += 1;
+                        }
+                    }
+                    Err(RequestError::TypeImpossible { body_type }) => {
+                        assert_eq!(body_type, "io-like");
+                    }
+                    Err(other) => panic!("{star} seed {seed}: {other:?}"),
+                }
+            }
+        }
+        // Round the latest dwarfs, a Jupiter in its archetype's light is
+        // despun, and keeps its Io.
+        assert!(despun > 0);
+        // An asked moon the despun giant could not keep is never dropped
+        // from its draw either (`moons::tests`).
+    }
+
+    #[test]
+    fn an_asked_moon_keeps_out_of_the_rings() {
+        for seed in 1..=10 {
+            let system = requested(seed, &[("enceladus-like", 1)]);
+            let moon = asked_moons(&system, "enceladus-like")[0];
+            let host = parent_of(&system, moon);
+            let radius_km = f64::from(host.params.circumference_km) / (2.0 * PI);
+            let a_radii = moon.orbit.semi_major_axis_km / radius_km;
+            // At its archetype's orbit, or pushed out past the rings.
+            assert!(a_radii > 3.89, "seed {seed}: {a_radii}");
+            if let Some(rings) = host
+                .params
+                .given_rings
+                .as_ref()
+                .and_then(|g| g.rings.as_ref())
+            {
+                assert!(
+                    f64::from(rings.outer) < a_radii,
+                    "seed {seed}: rings to {} radii, moon at {a_radii}",
+                    rings.outer
+                );
+            }
+        }
+    }
+
+    /// A Saturn round a late red dwarf, in the light its archetype asks,
+    /// has a Hill sphere too small for a Titan's orbit: the request is
+    /// refused, not drawn without it.
+    #[test]
+    fn a_moon_archetype_its_star_cannot_host_is_refused() {
+        for star in ["M9.5V", "B5V"] {
+            match whole_round(star, &[("titan-like", 1)], 1) {
+                Err(RequestError::TypeImpossible { body_type }) => {
+                    assert_eq!(body_type, "titan-like")
+                }
+                other => panic!(
+                    "{star}: expected type_impossible, got {:?}",
+                    other.map(|s| s.bodies.len())
+                ),
+            }
+        }
+    }
+
+    /// A whole system asking a moon and no star.
+    fn whole_starless(planets: &[(&str, u32)], seed: u32) -> Result<System, RequestError> {
+        let request = match whole(planets, seed) {
+            SystemRequest::System(w) => {
+                SystemRequest::System(WholeSystemRequest { star: None, ..w })
+            }
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        draw(&request, &mut StdRng::seed_from_u64(u64::from(seed)))
+    }
+
+    #[test]
+    fn an_asked_titan_without_a_star_comes_out_a_titan() {
+        for seed in 1..=10 {
+            let system = whole_starless(&[("titan-like", 1)], seed).unwrap();
+            // Its Saturn's star.
+            assert_eq!(system.star.spectral, "G2V", "seed {seed}");
+            let titan = asked_moons(&system, "titan-like")[0];
+            assert_eq!(
+                titan.body_type, "hydrocarbon-world",
+                "seed {seed}: {:?}",
+                titan.model
+            );
+        }
+        // A system asking no moon still draws its star.
+        let drawn: Vec<String> = (1..=10)
+            .filter_map(|seed| whole_starless(&[("earth-like", 1)], seed).ok())
+            .map(|system| system.star.spectral)
+            .collect();
+        assert!(drawn.iter().any(|s| s != "G2V"), "{drawn:?}");
+    }
+
+    #[test]
+    fn an_asked_titan_around_a_red_dwarf_is_allowed() {
+        for seed in 1..=3 {
+            let system = whole_round("M3V", &[("titan-like", 1)], seed).unwrap();
+            assert_eq!(system.star.spectral, "M3V");
+            assert_eq!(asked_moons(&system, "titan-like").len(), 1);
+        }
+    }
+
+    #[test]
+    fn too_many_planets_counts_the_hosts() {
+        assert!(matches!(
+            whole_round("G2V", &[("earth-like", 15), ("titan-like", 1)], 1),
+            Err(RequestError::TooManyPlanets { asked: 16, max: 15 })
+        ));
+    }
+
+    #[test]
+    fn a_lone_giants_moon_feels_its_host_tides() {
+        let world = WorldRequest {
+            planet: Some("earth-like".into()),
+            seed: Some(8),
+            host: Some(HostMode::Giant),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let system = draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(5)).unwrap();
+        let focus = system.focus.as_deref().unwrap();
+        let moon = system.bodies.iter().find(|b| b.id == focus).unwrap();
+        let model = moon.model.as_ref().unwrap();
+        let host = HostGiant::draw(&moon.params).expect("a giant's moon");
+        let expected = crate::planet::tidal_power_w(
+            f64::from(host.giant.mass_earth) * EARTH_KG,
+            model.interior.radius_earth * EARTH_M,
+            f64::from(host.distance_km) * 1000.0,
+            f64::from(host.eccentricity),
+            crate::planet::k2_over_q(model.inputs.envelope_fraction, model.inputs.water_fraction),
+        );
+        assert_eq!(model.heat.tidal_w, expected);
     }
 
     fn whole_drawn(seed: u32) -> SystemRequest {
@@ -4297,6 +5242,35 @@ mod lone_tests {
         .unwrap()
     }
 
+    #[test]
+    fn a_planets_moon_list_agrees_with_its_round_moons_bodies() {
+        let mut checked = 0;
+        for seed in 1..=12 {
+            let system = around("earth-like", seed, None, None);
+            for planet in system.bodies.iter().filter(|b| b.kind != BodyKind::Moon) {
+                let Some(drawn) = MoonSystem::draw(&planet.params) else {
+                    continue;
+                };
+                for moon in &drawn.moons {
+                    let Some(body) = system
+                        .bodies
+                        .iter()
+                        .find(|b| b.kind == BodyKind::Moon && b.params.seed == moon.seed)
+                        .filter(|b| b.model.is_some())
+                    else {
+                        continue;
+                    };
+                    assert!((f64::from(moon.radius_km) - body.physical.radius_km).abs() < 1e-3);
+                    assert!((f64::from(moon.gravity) - body.physical.gravity).abs() < 1e-4);
+                    let density = f64::from(moon.density);
+                    assert!((density - body.physical.density).abs() < 1e-3 * density);
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 3, "{checked}");
+    }
+
     fn planets(system: &System) -> Vec<&Body> {
         system
             .bodies
@@ -4391,16 +5365,24 @@ mod lone_tests {
     /// to the small bodies (it shapes no belt, empties no trojan point,
     /// stirs no impactor). Regenerated on purpose then (the world asked
     /// sits at the archetype's star and light, so the systems around it
-    /// changed); any other change is a regression of a normal system.
-    /// Seeds 1 and 2 regenerated again for issue #432: their
-    /// mini-Neptune `d` is sized from its composition, as its model is
-    /// (seed 1: 4.01 R⊕, was 1.62, and seven moons, was five; seed 2:
-    /// 2.19 R⊕, was 1.56, and six moons, was five).
+    /// changed), and again when part 4 drew a giant's moons from its
+    /// disk's mass, shape and temperature (the moons' rock or ice and
+    /// orbits changed), when a small moon drew its bulk composition (from
+    /// a sub-stream of its own, so only the density that sets its size
+    /// changed), and when round moons went
+    /// through the planet model (typed by their class), and when nitrogen
+    /// kept methane liquid below its triple point (seed 4's `f` became a
+    /// hydrocarbon world), and when a giant's moons took the comets it
+    /// focuses on them (#475: seed 1's `f-*` impact factors); any other
+    /// change is a regression of a normal system. Seeds 1 and 2
+    /// regenerated again for issue #432: their mini-Neptune `d` is sized
+    /// from its composition, as its model is (seed 1: 4.01 R⊕, was 1.62;
+    /// seed 2: 2.19 R⊕, was 1.56), so it keeps more moons.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0003:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0007:0.0822:false d-6:rocky-moon:0.0013:0.0822:false d-7:icy-moon:0.0021:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:rocky-moon:0.0021:0.0350:false f-6:icy-moon:0.0031:0.0350:false f-7:icy-moon:0.0051:0.0350:false f-8:icy-moon:0.0081:0.0350:false f-9:icy-moon:0.0130:0.0350:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
-        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky-moon:0.0006:0.0365:false d-4:rocky-moon:0.0009:0.0365:false d-5:icy-moon:0.0015:0.0365:false d-6:icy-moon:0.0024:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
-        "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:0.9970:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
-        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:0.9925:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky-moon:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:ice-world:13.6131:0.0350:true",
+        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0003:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0007:0.0822:false d-6:rocky:0.0013:0.0822:false d-7:rocky:0.0021:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0033:1.0306:false f-7:ice-world:0.0051:0.7879:false f-8:ice-world:0.0080:0.6381:false f-9:ice-world:0.0129:0.5346:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
+        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0006:0.0365:false d-4:rocky:0.0009:0.0365:false d-5:rocky:0.0014:0.0365:false d-6:rocky:0.0022:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
+        "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:volcanic-world:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:0.9970:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
+        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:0.9925:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:hydrocarbon-world:13.6131:0.0350:true",
     ];
 
     /// A planet of seed 5 at `orbit_au` round a G2V of 4.6 Gyr on a
@@ -4621,5 +5603,64 @@ mod lone_tests {
         assert!(!request.is_alone());
         let out = serde_json::to_string(&request).unwrap();
         assert!(!out.contains("alone"), "{out}");
+    }
+}
+
+#[cfg(test)]
+mod titan_tests {
+    use super::*;
+    use crate::biome::Biome;
+
+    /// The Titan of `{"system":{"planets":{"titan-like":1},"seed":1}}`
+    /// (system mgs-72469-1, moon b-3), generated as its viewer gets it but
+    /// at 256 × 128: its liquid is methane and ethane, dark seas and lakes
+    /// of their own biomes (never frozen water), and lies only poleward of
+    /// [`crate::planet::interim::POLAR_LIQUID_LAT_DEG`], with some there.
+    #[test]
+    fn a_titan_keeps_dark_hydrocarbon_seas_near_its_poles() {
+        let request: SystemRequest =
+            serde_json::from_str(r#"{"system":{"planets":{"titan-like":1},"seed":1}}"#).unwrap();
+        let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+        assert_eq!(system_id(&system), "mgs-72469-1");
+        let moon = system.bodies.iter().find(|b| b.id == "b-3").unwrap();
+        assert_eq!(moon.body_type, "hydrocarbon-world");
+        let mut params = generation_params(moon);
+        assert_eq!(
+            params.liquid_poleward_deg,
+            Some(crate::planet::interim::POLAR_LIQUID_LAT_DEG)
+        );
+        params.width = 256;
+        params.height = 128;
+        let world = crate::generation::generate(&params).world;
+        let half_row = 90.0 / f64::from(world.height);
+        let mask = f64::from(crate::planet::interim::POLAR_LIQUID_LAT_DEG);
+        let (mut polar, mut polar_liquid) = (0usize, 0usize);
+        for y in 0..world.height {
+            let lat = 90.0 - (f64::from(y) + 0.5) * 2.0 * half_row;
+            for x in 0..world.width {
+                let b = world.biomes[(y * world.width + x) as usize];
+                assert!(
+                    !matches!(
+                        b,
+                        Biome::FrozenOcean
+                            | Biome::FrozenLake
+                            | Biome::Ocean
+                            | Biome::DeepOcean
+                            | Biome::Lake
+                            | Biome::SeaIce
+                    ),
+                    "{b:?} at {lat:.1}°"
+                );
+                let liquid = matches!(b, Biome::HydrocarbonSea | Biome::HydrocarbonLake);
+                if lat.abs() + half_row < mask {
+                    assert!(!liquid, "{b:?} at {lat:.1}°, equatorward of {mask}°");
+                } else if lat.abs() - half_row >= mask {
+                    polar += 1;
+                    polar_liquid += usize::from(liquid);
+                }
+            }
+        }
+        let share = polar_liquid as f64 / polar as f64;
+        assert!(share > 0.01, "liquid share poleward of {mask}°: {share}");
     }
 }

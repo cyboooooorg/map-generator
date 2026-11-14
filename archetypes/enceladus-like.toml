@@ -1,0 +1,26 @@
+name = "enceladus-like"
+description = "Enceladus-like: a small bright icy moon of a Saturn"
+
+[locales.fr]
+name = "Encéladienne"
+description = "Une petite lune glacée et brillante d'une Saturne"
+
+# Enceladus: 1.08e20 kg = 1.8e-5 Earth masses (NASA Saturnian satellite
+# fact sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), ±11 %.
+[inputs]
+mass_earth = [1.6e-5, 2.0e-5]
+
+[moon]
+# Grown in Saturn's disk.
+host = "saturn-like"
+origin = "disk"
+# Semi-major axis 238 020 km over Saturn's equatorial radius 60 268 km:
+# 3.95 radii (JPL mean orbital elements; NASA Saturn fact sheet).
+semi_major_axis_radii = [3.9, 4.0]
+# 0.0047, forced by its 2:1 resonance with Dione (JPL mean orbital
+# elements).
+eccentricity = [0.004, 0.005]
+# Water and ices 40 to 55 % of its mass: its 1.61 g/cm³ over a rock core
+# of about 2.4 g/cm³ (Iess et al. 2014, doi:10.1126/science.1250551).
+ice_fraction = [0.40, 0.55]

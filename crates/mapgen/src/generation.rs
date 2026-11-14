@@ -239,8 +239,6 @@ const WET_CRUST_MIN_OCEANS: f64 = 1e-3;
 /// (rock and iron bodies are denser, the Moon 3.34; icy moons 1.8–1.9,
 /// Ganymede and Callisto, NASA), rock otherwise.
 pub(crate) fn crust_kind(p: &WorldParams) -> CrustKind {
-    use crate::planet::classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
-    use crate::planet::climate::SurfaceLiquid;
     let Some(model) = &p.model else {
         let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
         return if radius > 0.0 && 5.513 * p.gravity_modifier() / radius < 2.5 {
@@ -249,6 +247,14 @@ pub(crate) fn crust_kind(p: &WorldParams) -> CrustKind {
             CrustKind::Rock
         };
     };
+    model_crust_kind(model)
+}
+
+/// What the crust of a body of `model` is made of: [`crust_kind`]'s rule
+/// for a world with a model.
+pub(crate) fn model_crust_kind(model: &crate::planet::PlanetModel) -> CrustKind {
+    use crate::planet::classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
+    use crate::planet::climate::SurfaceLiquid;
     let Some(surface) = &model.surface else {
         return CrustKind::Rock;
     };
@@ -722,6 +728,10 @@ pub struct Sampler {
     /// On a dry world (see [`crate::biome::BiomeRules::dry`]), its
     /// waterline, the datum its plains are laid from.
     dry_waterline: Option<f32>,
+    /// On a world with its liquid kept near the poles (see
+    /// [`WorldParams::liquid_poleward_deg`]): the sine of that latitude,
+    /// and the elevation the ground stands at least at below it.
+    dry_band: Option<(f64, f32)>,
     noise_scale: f64,
     coast_octaves: u32,
     coast_noise: Perlin,
@@ -772,9 +782,49 @@ pub struct Sampler {
 /// volcanoes, crater rims), whose summits can still be snow.
 ///
 /// Worlds with plates keep the band above the sea, as do dry worlds and
-/// moons (no model yet, part 4).
+/// small moons (no model).
 fn platform_highlands(p: &WorldParams) -> bool {
     p.model.is_some() && p.look.geology.regime != Regime::Plates && !p.look.rules.dry
+}
+
+/// Height above a world's open water at which the ground of its dry
+/// latitudes stands at least, in elevation units: just over the shore.
+const DRY_BAND_FLOOR: f32 = 0.01;
+
+/// The latitude, degrees, equatorward of which a world has no surface
+/// liquid ([`WorldParams::liquid_poleward_deg`]), and the lowest elevation
+/// its ground there stands at: the open water's level and a little more.
+fn dry_band(p: &WorldParams) -> Option<(f32, f32)> {
+    let lat = p.liquid_poleward_deg?;
+    Some((lat, p.open_waterline() + DRY_BAND_FLOOR))
+}
+
+/// Keeps the dry latitudes of a world whose liquid gathers near the poles
+/// ([`WorldParams::liquid_poleward_deg`]) above its open water, after a
+/// pass (erosion, craters, valleys) that may have dug them under it, and
+/// clears the lakes there. Does nothing on any other world.
+fn keep_band_dry(
+    params: &WorldParams,
+    grid: &Grid,
+    elevation: &mut [f32],
+    lake: Option<&mut [bool]>,
+) {
+    let Some((lat, floor)) = dry_band(params) else {
+        return;
+    };
+    let width = grid.width as usize;
+    let dry = |i: usize| grid.latitude((i / width) as u32).to_degrees().abs() < f64::from(lat);
+    elevation
+        .par_iter_mut()
+        .enumerate()
+        .filter(|(i, _)| dry(*i))
+        .for_each(|(_, e)| *e = e.max(floor));
+    if let Some(lake) = lake {
+        lake.par_iter_mut()
+            .enumerate()
+            .filter(|(i, _)| dry(*i))
+            .for_each(|(_, l)| *l = false);
+    }
 }
 
 impl Sampler {
@@ -820,6 +870,7 @@ impl Sampler {
                 .rules
                 .dry
                 .then_some(p.sea_level + p.look.rules.waterline),
+            dry_band: dry_band(p).map(|(lat, floor)| (f64::from(lat).to_radians().sin(), floor)),
             noise_scale,
             coast_noise: Perlin::new(stream_seed(seed, stream::COAST)),
             plate_seed: stream_seed(seed, stream::PLATES),
@@ -1204,6 +1255,13 @@ impl Sampler {
                 continent + tectonic_uplift + mountain * mountain_weight * self.mountain_blend,
             );
 
+        // Low latitudes of a world whose liquid gathers at the poles: never
+        // under it, whatever the relief (its sea level is -infinity there).
+        let elevation = match self.dry_band {
+            Some((sin_lat, floor)) if map_point[2].abs() < sin_lat => elevation.max(floor),
+            _ => elevation,
+        };
+
         // The thick crust's Airy step, which the highland band ignores on
         // worlds without plates: its height above the thin crust's datum.
         let platform = if self.platform_highlands {
@@ -1572,6 +1630,10 @@ const LAND_TOLERANCE: f64 = 0.003;
 /// found again at each pass. About 0.25 s on an Earth-like world.
 /// Erosion runs later and is not modelled, yet on test worlds the land
 /// share lands within about 0.02 of the target.
+///
+/// With [`WorldParams::liquid_poleward_deg`], the ground nearer the
+/// equator is land at any sea level (the sampler lifts it), so the share
+/// counts it and the sea level found leaves the liquid poleward only.
 pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
     let limits = crate::request::SEA_LEVEL;
     let mut coarse = params.clone();
@@ -1776,10 +1838,19 @@ pub fn belts(params: &WorldParams) -> Belts {
     )
 }
 
-/// The time world `params` takes to turn once, hours: its year if locked
-/// to its star (two thirds of it in the 3:2 resonance, half in 2:1), the
-/// rotation its moons draw, Earth's 24 h for a world without moons.
-fn sidereal_day_hours(params: &WorldParams) -> f64 {
+/// The time world `params` takes to turn once, hours: the day its system
+/// set (a moon of a system's planet, [`WorldParams::day_hours`]); a
+/// giant's moon's orbit around it, which it is locked to; its year if
+/// locked to its star (two thirds of it in the 3:2 resonance, half in
+/// 2:1); the rotation its moons draw; Earth's 24 h for a world without
+/// moons.
+pub(crate) fn sidereal_day_hours(params: &WorldParams) -> f64 {
+    if let Some(day) = params.day_hours {
+        return f64::from(day);
+    }
+    if let Some(host) = crate::exomoon::HostGiant::draw(params) {
+        return f64::from(host.period_days) * 24.0;
+    }
     let star = crate::spin::star_info(params);
     if star.tidally_locked {
         f64::from(star.year_days) * 24.0
@@ -2015,6 +2086,7 @@ pub fn generate_with_progress(
             values,
         });
     }
+    keep_band_dry(params, &grid, &mut elevation, None);
     // Elevation relative to the shifted sea level: what biome selection sees.
     // Computed where needed rather than kept as a layer.
     let relief = |e: f32| relief_above(e, params.sea_level);
@@ -2224,7 +2296,7 @@ pub fn generate_with_progress(
     let mut above: Vec<f32> = elevation.par_iter().map(|e| e - waterline).collect();
     let mut floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
     // Only the flow and the lakes are needed from here on.
-    let (flow_km2, lake) = water.into_flow_and_lakes();
+    let (flow_km2, mut lake) = water.into_flow_and_lakes();
     let delta_plain = delta::plains(&deltas, &river_lines, &grid, &mut above, &mut moisture);
     floodplain
         .par_iter_mut()
@@ -2234,6 +2306,7 @@ pub fn generate_with_progress(
         .par_iter_mut()
         .zip(above)
         .for_each(|(e, a)| *e = a + waterline);
+    keep_band_dry(params, &grid, &mut elevation, Some(&mut lake));
     // Rivers water their floodplain: green strips across dry land.
     moisture
         .par_iter_mut()
@@ -2530,6 +2603,11 @@ pub(crate) mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
+            day_hours: None,
+            liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
+            moon_sizes: Vec::new(),
             gravity: None,
         }
     }
@@ -2786,6 +2864,81 @@ pub(crate) mod tests {
             // The old ramp: a fifth of the land above 4 km.
             assert!(above(&sea, 1.0) > 70.0, "{report}");
         }
+    }
+
+    /// The area share, %, of a world's surface under liquid (open water or
+    /// lake), and the lowest |latitude|, degrees, where there is some.
+    fn liquid_share(w: &World) -> (f64, f32) {
+        let grid = w.params.grid();
+        let (mut liquid, mut total, mut nearest) = (0.0f64, 0.0f64, 90.0f32);
+        for (i, b) in w.biomes.iter().enumerate() {
+            let y = (i / w.width as usize) as u32;
+            let area = grid.latitude(y).cos();
+            total += area;
+            let relief = relief_above(w.elevation[i], w.params.sea_level);
+            if relief < w.params.look.rules.open_water() || *b == Biome::Lake {
+                liquid += area;
+                nearest = nearest.min(grid.latitude(y).to_degrees().abs() as f32);
+            }
+        }
+        (100.0 * liquid / total, nearest)
+    }
+
+    #[test]
+    fn hydrocarbon_liquid_stays_poleward() {
+        let mut p = preset_params("earth-like", 3, 256, 128);
+        p.liquid_poleward_deg = Some(55.0);
+        p.sea_level = sea_level_for_land_fraction(&p, 0.99);
+        let w = generate(&p).world;
+        let (share, nearest) = liquid_share(&w);
+        assert!(nearest >= 54.0, "liquid down to {nearest} degrees");
+        assert!((0.5..2.0).contains(&share), "{share} % under liquid");
+    }
+
+    #[test]
+    fn the_liquid_mask_reaches_the_sampler_and_the_land_search() {
+        let mut p = preset_params("earth-like", 3, 128, 64);
+        p.liquid_poleward_deg = Some(55.0);
+        let sampler = Sampler::new(&p);
+        let grid = p.grid();
+        for y in 0..p.height {
+            if grid.latitude(y).to_degrees().abs() < 55.0 {
+                for x in 0..p.width {
+                    let e = sampler.sample(x, y).elevation;
+                    assert!(
+                        e > p.open_waterline(),
+                        "({x}, {y}) at {e} vs {} {}",
+                        p.open_waterline(),
+                        p.sea_level
+                    );
+                }
+            }
+        }
+        // The same sea level leaves more land with the mask than without.
+        let mut q = p.clone();
+        q.liquid_poleward_deg = None;
+        assert!(sea_level_for_land_fraction(&p, 0.5) > sea_level_for_land_fraction(&q, 0.5));
+    }
+
+    #[test]
+    fn water_worlds_are_unchanged() {
+        // The field absent, the world is the one without the mask: the
+        // golden tests of the water worlds above hold, and a world with
+        // the field None serialises without it.
+        let p = preset_params("earth-like", 3, 64, 32);
+        assert_eq!(p.liquid_poleward_deg, None);
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(!json.contains("liquid_poleward"), "{json}");
+        let a = generate(&p).world;
+        let b = generate(&WorldParams {
+            liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
+            moon_sizes: Vec::new(),
+            ..p
+        })
+        .world;
+        assert_eq!(a.elevation, b.elevation);
+        assert_eq!(a.biomes, b.biomes);
     }
 
     #[test]

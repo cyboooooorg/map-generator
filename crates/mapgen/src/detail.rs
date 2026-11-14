@@ -54,7 +54,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 7;
+pub const RENDER_VERSION: u32 = 9;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -150,6 +150,8 @@ pub struct DetailWorld {
     /// The world's impact craters, to find and draw those smaller than the
     /// base map's.
     craters: CraterField,
+    /// Whether the world's crust is an ice shell (see [`ice_shell`]).
+    ice_shell: bool,
 }
 
 /// Flag of base lake pixels (water above the waterline, not under a drawn
@@ -198,14 +200,14 @@ impl Samples for Lakes<'_> {
 }
 
 /// Share of the height detail each base pixel's surface gets (see
-/// [`roughness`]), sampled bilinearly so it changes smoothly across biome
-/// borders.
-struct Roughness<'a>(&'a [Biome]);
+/// [`roughness`]) on a world whose crust is an ice shell or not, sampled
+/// bilinearly so it changes smoothly across biome borders.
+struct Roughness<'a>(&'a [Biome], bool);
 
 impl Samples for Roughness<'_> {
     #[inline]
     fn value(&self, i: usize) -> f32 {
-        roughness(self.0[i])
+        roughness(self.0[i], self.1)
     }
 }
 
@@ -273,13 +275,27 @@ fn band_limited(
 
 /// Share of the height detail a biome's surface gets: snow, ice and lava
 /// are smooth, sand and ash nearly so; rock and vegetation keep it all.
-fn roughness(biome: Biome) -> f32 {
+/// On a world whose crust is an ice shell (`ice_shell`, Europa, Titan),
+/// its frozen ground is that shell, its bedrock, not a cover of snow or
+/// glacier smoothing a rocky relief: it keeps it all too (the base relief
+/// already holds ice's weakness, see [`crate::generation::relief_share`]).
+/// Sea ice stays smooth.
+fn roughness(biome: Biome, ice_shell: bool) -> f32 {
     match biome {
+        Biome::Snow | Biome::IceCap | Biome::GlacialPlain if ice_shell => 1.0,
         Biome::Snow | Biome::IceCap | Biome::GlacialPlain | Biome::SeaIce => 0.1,
         Biome::Volcano | Biome::LavaField | Biome::MagmaSea => 0.05,
         Biome::Desert | Biome::DustPlain | Biome::Beach | Biome::AshLand => 0.4,
         _ => 1.0,
     }
+}
+
+/// Whether the crust of the world `p` is an ice shell whose frozen ground
+/// is its bedrock (see [`roughness`]): a world with a model (a planet or a
+/// round moon) whose crust is ice ([`crate::generation::icy`]). A small
+/// moon, without a model, keeps the smooth ice of its look.
+fn ice_shell(p: &crate::world::WorldParams) -> bool {
+    p.model.is_some() && crate::generation::icy(p)
 }
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -346,6 +362,7 @@ impl DetailWorld {
         let depths = water_depths_of(&world.params, |i| world.elevation.get(i), &world.biomes);
         Self {
             craters: CraterField::context_at(&world.params, epoch_ga),
+            ice_shell: ice_shell(&world.params),
             flags,
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
@@ -443,7 +460,13 @@ impl DetailWorld {
         let amplitude = DETAIL_AMPLITUDE
             * crate::generation::relief_share(&w.params)
             * (1.0 + MOUNTAIN_BOOST * high)
-            * bilinear(&Roughness(&w.biomes), w.width, w.height, x, y);
+            * bilinear(
+                &Roughness(&w.biomes, self.ice_shell),
+                w.width,
+                w.height,
+                x,
+                y,
+            );
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
         let shore = if dry {
             1.0
@@ -836,6 +859,11 @@ mod tests {
             // Its spin holds at its own orbit only.
             locked_to_star: None,
             resonance_to_star: None,
+            moon: false,
+            day_hours: None,
+            liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
+            moon_sizes: Vec::new(),
             ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
         let world = generate(&params).world;
@@ -1054,6 +1082,155 @@ mod tests {
                 assert_eq!(e >= waterline, base >= waterline, "{lon} {lat} {pixel_km}");
             }
         }
+    }
+
+    /// Relief detail of a world's deepest tiles: the mean east slope of the
+    /// height detail alone (the ground, without the small craters, minus
+    /// the interpolated base elevation) on land tiles away from the coast,
+    /// in encoded normal units.
+    fn relief_detail(d: &DetailWorld) -> f64 {
+        let w = d.world();
+        let waterline = w.params.open_waterline();
+        let (cols, rows) = TileId {
+            z: MAX_LEVEL,
+            x: 0,
+            y: 0,
+        }
+        .grid();
+        let pixel_km = w.params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
+        let side = TILE_SIZE as usize + 2;
+        let base = |tile: TileId, px: f64, py: f64| {
+            let (lon, lat) = tile.lon_lat(px, py);
+            let (x, y) = d.base_xy(lon, lat.clamp(-PI / 2.0, PI / 2.0));
+            bicubic(&w.elevation, w.width, w.height, x, y)
+        };
+        let (mut sum, mut count) = (0.0, 0.0);
+        let tiles = (0..4000u32)
+            .map(|k| TileId {
+                z: MAX_LEVEL,
+                x: (k * 7919) % cols,
+                y: rows / 4 + (k * 104_729) % (rows / 2),
+            })
+            .filter(|&tile| base(tile, 128.0, 128.0) > waterline + COAST_BAND.1)
+            .take(8);
+        for tile in tiles {
+            let (_, ground) = d.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
+            let detail: Vec<f32> = (0..side * side)
+                .map(|i| ground[i] - base(tile, (i % side) as f64 - 1.0, (i / side) as f64 - 1.0))
+                .collect();
+            for y in (1..side - 1).step_by(4) {
+                let (_, lat) = tile.lon_lat(0.0, y as f64 - 1.0);
+                for x in 1..side - 1 {
+                    let n = d.normal(&detail, side, x, y, pixel_km, lat);
+                    sum += f64::from(n[0].abs() * 127.5);
+                    count += 1.0;
+                }
+            }
+        }
+        sum / count
+    }
+
+    /// The ice shell of a round moon is its bedrock, not a smooth cover of
+    /// snow or glacier over it: its deepest tiles carry fine relief as a
+    /// planet's land does, not a tenth of it. (The Titan of
+    /// `{"system":{"planets":{"titan-like":1},"seed":1}}`, moon b-3, at
+    /// 512 × 256, as stored; a small icy moon keeps the smooth ice of its look.)
+    #[test]
+    fn an_ice_shell_keeps_its_relief_detail() {
+        use rand::SeedableRng;
+        let request: crate::system::SystemRequest =
+            serde_json::from_str(r#"{"system":{"planets":{"titan-like":1},"seed":1}}"#).unwrap();
+        let system =
+            crate::system::draw(&request, &mut rand::rngs::StdRng::seed_from_u64(1)).unwrap();
+        let moon = system.bodies.iter().find(|b| b.id == "b-3").unwrap();
+        let mut params = crate::system::generation_params(moon);
+        assert!(ice_shell(&params));
+        (params.width, params.height) = (512, 256);
+        let titan = DetailWorld::new(LoadedWorld::from_world(&generate(&params).world));
+        let (titan, planet) = (relief_detail(&titan), relief_detail(&detail_world()));
+        assert!(titan > 0.5 * planet, "Titan {titan}, planet {planet}");
+
+        let planet = system.bodies.iter().find(|b| b.id == "b").unwrap();
+        let small = crate::moons::small_body_params(
+            &planet.params,
+            crate::moons::Composition::Ice,
+            200.0,
+            7,
+            None,
+        );
+        assert!(crate::generation::icy(&small) && !ice_shell(&small));
+    }
+
+    /// A Europa's ocean lies under its ice shell: its surface is that
+    /// shell, land with the relief and the small craters of its crust,
+    /// not a flat frozen sea, whose tiles its craters dig. (The Europa of
+    /// `{"system":{"planets":{"europa-like":1},"seed":1}}` at 256 × 128.)
+    #[test]
+    fn a_europa_is_an_ice_crust_not_a_frozen_sea() {
+        use rand::SeedableRng;
+        let request: crate::system::SystemRequest =
+            serde_json::from_str(r#"{"system":{"planets":{"europa-like":1},"seed":1}}"#).unwrap();
+        let system =
+            crate::system::draw(&request, &mut rand::rngs::StdRng::seed_from_u64(1)).unwrap();
+        let moon = system
+            .bodies
+            .iter()
+            .find(|b| b.params.archetype.as_deref() == Some("europa-like"))
+            .unwrap();
+        let model = moon.model.as_ref().unwrap();
+        assert!(model.ice_shell.is_some_and(|s| s.ocean_km > 0.0));
+        let mut params = crate::system::generation_params(moon);
+        assert!(ice_shell(&params));
+        (params.width, params.height) = (256, 128);
+        // Its tidal heat keeps its surface young, a few Ma here
+        // (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), with hardly a
+        // crater: aged as a Callisto, so that its tiles have small craters
+        // to dig.
+        assert!(params.surface_age_ga < 0.1, "{}", params.surface_age_ga);
+        params.surface_age_ga = 4.0;
+        let world = generate(&params).world;
+        let grid = params.grid();
+        let (mut land, mut total) = (0.0, 0.0);
+        for (i, biome) in world.biomes.iter().enumerate() {
+            let area = grid.latitude((i / world.width as usize) as u32).cos();
+            total += area;
+            if !biome.is_water() {
+                land += area;
+            }
+        }
+        assert!(land / total > 0.9, "land {}", land / total);
+        // Its relief is a small body's, flattened (`relief_share`, about a
+        // ninth of a planet's): its tiles keep their full detail against
+        // it, not the tenth that smooth ice keeps (see `roughness`).
+        let europa = DetailWorld::new(LoadedWorld::from_world(&world));
+        let share = f64::from(crate::generation::relief_share(&params));
+        let (detail, planet) = (relief_detail(&europa), relief_detail(&detail_world()));
+        assert!(
+            detail > 0.5 * share * planet,
+            "Europa {detail}, planet {planet}, share {share}"
+        );
+        // And the small craters dig its tiles.
+        let (cols, rows) = TileId {
+            z: MAX_LEVEL,
+            x: 0,
+            y: 0,
+        }
+        .grid();
+        let pixel_km = f64::from(params.circumference_km) / f64::from(cols * TILE_SIZE);
+        let side = TILE_SIZE as usize + 2;
+        let dug = (0..16)
+            .filter(|&k| {
+                let tile = TileId {
+                    z: MAX_LEVEL,
+                    x: (k * 7919) % cols,
+                    y: rows / 4 + (k * 104_729) % (rows / 2),
+                };
+                let (cratered, bare) =
+                    europa.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
+                cratered != bare
+            })
+            .count();
+        assert!(dug > 0, "no small crater on 16 tiles");
     }
 
     #[test]

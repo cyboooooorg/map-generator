@@ -49,6 +49,11 @@ max_pixels: number,
  */
 archetypes: Array<string>, 
 /**
+ * The moon archetypes a whole system can be asked for (built-in
+ * names), apart from `archetypes`, which keeps planets and giants.
+ */
+moon_archetypes: Array<string>, 
+/**
  * Most planets a system holds (moons not counted).
  */
 max_planets: number, };

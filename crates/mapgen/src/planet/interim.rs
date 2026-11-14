@@ -127,11 +127,53 @@ const HEAT_PIPE_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.0, 0.001])
 /// allowing for younger lids.
 const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]);
 
+/// Internal heat flux, W/m², under which a stagnant ice lid keeps half the
+/// surface age a rock lid would ([`STAGNANT_SURFACE_AGE_SHARE`]), and the
+/// steepness of the fall past it ([`ICE_LID_EXPONENT`]): the share kept is
+/// `1 / (1 + (F / F½)^n)`. An ice shell resurfaces (convection, diapirs,
+/// cryovolcanism, tectonics) far more readily than rock, ice flowing and
+/// melting within a hundred kelvin of its surface, and the conductive lid
+/// over its warm ice thins as `1 / F` (`ice_shell::conductive_shell_m`).
+/// Calibration on the Galilean moons, no source for the law itself: 10
+/// mW/m² and 4 keep Callisto's surface (about 2 to 5 mW/m² of radiogenic
+/// heat in the model) about 4 Ga old, saturated with craters (Zahnle et
+/// al. 2003, doi:10.1016/S0019-1035(03)00048-4), Ganymede's (its dark
+/// terrain about 4 Ga, its grooved terrain about 2 Ga) 2 to 4 Ga, and
+/// Europa's (35 mW/m² of tidal heat, see `heat::ICY_K2_OVER_Q`) under
+/// 0.1 Ga, near its 40 to 90 Ma (Zahnle et al. 2003; Bierhaus et al.
+/// 2009, *Europa*, University of Arizona Press). A rock lid keeps its
+/// age (Mars and Mercury, about 20 mW/m² today, keep 4 Ga surfaces).
+const ICE_LID_HALF_FLUX_W_M2: f64 = 0.010;
+/// See [`ICE_LID_HALF_FLUX_W_M2`].
+const ICE_LID_EXPONENT: i32 = 4;
+
+/// Share of a rock lid's surface age that a stagnant ice lid pushing out
+/// `flux_w_m2` keeps ([`ICE_LID_HALF_FLUX_W_M2`]).
+fn ice_lid_age_share(flux_w_m2: f64) -> f64 {
+    1.0 / (1.0 + (flux_w_m2 / ICE_LID_HALF_FLUX_W_M2).powi(ICE_LID_EXPONENT))
+}
+
 /// Share of a hydrocarbon world's surface that is dry land: Titan's lakes
 /// and seas cover about 1 % of it (Hayes 2016,
 /// doi:10.1146/annurev-earth-060115-012247; Stofan et al. 2007,
 /// doi:10.1038/nature05438, mapped them). The model does not size them.
 const HYDROCARBON_LAND_FRACTION: f32 = 0.99;
+
+/// Latitude, degrees, poleward of which a hydrocarbon world's surface
+/// liquid lies; the low latitudes are dry ground. Titan's lakes and seas
+/// lie almost all (about 97 % of their area) north of 55 N, its low
+/// latitudes being dune fields (Hayes 2016,
+/// doi:10.1146/annurev-earth-060115-012247; Lorenz et al. 2006,
+/// doi:10.1126/science.1123257): the circulation carries methane
+/// poleward, evaporation beats rain near the equator and liquid gathers
+/// near the poles (Mitchell 2008, doi:10.1029/2007JE003017; Schneider et
+/// al. 2012, doi:10.1038/nature10666).
+///
+/// A calibration with Titan as its target, applied to every hydrocarbon
+/// world, planet or moon (see [`WorldParams::liquid_poleward_deg`]); no
+/// source gives it as a function of the world. The north-south asymmetry
+/// of Titan's lakes (Aharonson et al. 2009) is not modelled.
+pub const POLAR_LIQUID_LAT_DEG: f32 = 55.0;
 
 /// Surface pressure past which the sky yellows toward caustic's, bar, and
 /// the one at which it is wholly caustic's. Calibration, no source: Venus's
@@ -151,12 +193,26 @@ const CAUSTIC_HAZE_COLOUR: [f32; 3] = [0.85, 0.95, 0.45];
 const EARTH_BAR: (f64, f64) = (0.8, 1.25);
 
 /// Methane haze: CH₄ share of the air and surface pressure (bar) over
-/// which it forms, its density and Titan's orange. Calibration, no source:
-/// Titan (5 % CH₄ near the surface, 1.5 bar) has an opaque orange haze.
+/// which it forms, its density and Titan's orange. Calibration, no source
+/// for the thresholds: Titan (5 % CH₄ near the surface, 1.5 bar) has an
+/// opaque orange haze, photochemical organics (tholins) made from its
+/// methane by sunlight high in its air.
+///
+/// Its density and colour are a calibration with Titan's Cassini
+/// true-colour images as their target: from space the haze hides the
+/// surface in visible light and the disc is an even orange-brown, with a
+/// thin bluish layer at the limb (Porco et al. 2005,
+/// doi:10.1038/nature03436). A density over 0.5 is a haze that hides the
+/// ground to the viewer (`web/src/lib/sky.ts`, `hazeDepth`: 0.9 is a
+/// zenith optical depth of about 6.6, Huygens measured several in the
+/// visible, Tomasko et al. 2005, doi:10.1038/nature04126); the colour is
+/// the share of the light it scatters per channel, the rest absorbed: the
+/// haze absorbs blue most (Tomasko et al. 2008,
+/// doi:10.1016/j.pss.2007.11.019), which makes Titan orange.
 const HAZE_CH4_SHARE: f64 = 0.01;
 const HAZE_MIN_BAR: f64 = 0.5;
-const METHANE_HAZE: f32 = 0.7;
-const METHANE_HAZE_COLOUR: [f32; 3] = [0.9, 0.6, 0.3];
+const METHANE_HAZE: f32 = 0.9;
+const METHANE_HAZE_COLOUR: [f32; 3] = [0.95, 0.55, 0.15];
 
 /// Partial pressures over which clouds form, bar. Calibration, no source:
 /// water where its vapour reaches 1e-3 bar (Earth's air holds about
@@ -183,14 +239,33 @@ const LIFELESS: [(Biome, &[Biome]); 4] = [
     (Biome::Tundra, &[Biome::Taiga]),
 ];
 
+/// The liquids of a hydrocarbon world (target, sources), applied after
+/// its base remap: its seas and lakes are methane and ethane, never
+/// frozen water, whatever its `frozen` base look makes of them. Every
+/// open water pixel of such a world is that liquid: its sea level is set
+/// by its share of liquid ([`HYDROCARBON_LAND_FRACTION`]), not by water.
+const HYDROCARBON_LIQUIDS: [(Biome, &[Biome]); 2] = [
+    (
+        Biome::HydrocarbonSea,
+        &[
+            Biome::FrozenOcean,
+            Biome::DeepOcean,
+            Biome::Ocean,
+            Biome::SeaIce,
+        ],
+    ),
+    (Biome::HydrocarbonLake, &[Biome::FrozenLake, Biome::Lake]),
+];
+
 /// The look a planet with a surface renders with: its [`base_of`] look's
 /// rules, palette and remap with what the model derived: no temperature
 /// shift nor greenhouse ([`calibrate`] aims the world at the model's
 /// temperature), the internal heat `(F / σ)^¼` of its heat flux `F` (the
 /// temperature it alone would keep the surface at), its regime, its sky
-/// ([`sky_of`]), and the lifeless remap after the base one when life did
-/// not arise ([`LIFELESS`]). Its orbit comes from the system and its sea
-/// level from its water.
+/// ([`sky_of`]), the hydrocarbon seas and lakes of a world whose liquid is
+/// methane ([`HYDROCARBON_LIQUIDS`]), and the lifeless remap after the
+/// base one when life did not arise ([`LIFELESS`]). Its orbit comes from
+/// the system and its sea level from its water.
 ///
 /// # Panics
 ///
@@ -205,6 +280,9 @@ pub fn look_for(model: &PlanetModel) -> Look {
     look.atmosphere = sky_of(model);
     look.atmosphere.greenhouse = 0.0;
     look.giant = None;
+    if surface.climate.liquid == SurfaceLiquid::Hydrocarbons {
+        look = look.then_remap(&HYDROCARBON_LIQUIDS);
+    }
     if surface.life.arose {
         look
     } else {
@@ -350,7 +428,9 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///     ([`fallback::SURFACE_AGE_GA`]), episodic Venus's
 ///     ([`EPISODIC_SURFACE_AGE_GA`]), heat-pipe Io's
 ///     ([`HEAT_PIPE_SURFACE_AGE_GA`]), a stagnant lid most of the
-///     system's age ([`STAGNANT_SURFACE_AGE_SHARE`]);
+///     system's age ([`STAGNANT_SURFACE_AGE_SHARE`]), an ice lid less the
+///     more heat it lets out ([`ICE_LID_HALF_FLUX_W_M2`]: Europa's is
+///     young, Callisto's old);
 ///   - its gravity, the model's (the star's tides, the moons, the tilt
 ///     they leave it and its tidal flats see the model's mass);
 ///   - its regime, the model's (its look's, see [`look_for`]), not
@@ -406,7 +486,15 @@ pub fn params_for(
         Some(Regime::Plates) | None => fallback::SURFACE_AGE_GA.pick(rng),
         Some(Regime::Episodic) => EPISODIC_SURFACE_AGE_GA.pick(rng),
         Some(Regime::HeatPipe) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),
-        Some(Regime::Stagnant) => placed.age_gyr * STAGNANT_SURFACE_AGE_SHARE.pick(rng),
+        Some(Regime::Stagnant) => {
+            let age = placed.age_gyr * STAGNANT_SURFACE_AGE_SHARE.pick(rng);
+            if crate::generation::model_crust_kind(model) == crate::generation::CrustKind::Ice {
+                let flux = model.heat.flux_w_m2(model.interior.radius_earth);
+                age * ice_lid_age_share(flux) as f32
+            } else {
+                age
+            }
+        }
     };
     let radius_km = (model.interior.radius_earth * crate::exomoon::EARTH_M / 1000.0) as f32;
     let model_circumference = 2.0 * std::f32::consts::PI * radius_km;
@@ -524,6 +612,14 @@ pub fn params_for(
         impact_factor: None,
         locked_to_star: None,
         resonance_to_star: None,
+        moon: false,
+        day_hours: None,
+        asked_moons: Vec::new(),
+        moon_sizes: Vec::new(),
+        // Hydrocarbons gather near the poles, whatever the world.
+        liquid_poleward_deg: surface
+            .is_some_and(|s| s.climate.liquid == SurfaceLiquid::Hydrocarbons)
+            .then_some(POLAR_LIQUID_LAT_DEG),
         ridge: None,
         // A giant's gravity follows from its own mass.
         gravity: (!giant).then_some(model.interior.gravity as f32),
@@ -576,11 +672,15 @@ pub fn params_for(
 /// with a surface, from [`params_for`]'s parameters, in this order (the
 /// warming reads the sea level): its sea level, where its oceans
 /// ([`ocean_depth_m`]) fill the relief ([`sea_level_for_water`]; a
-/// runaway's water is steam, none on the ground; with no water at all the
+/// runaway's water is steam, none on the ground; an ice crust's lies under
+/// its shell, none on the ground either, see `under_shell`; with no water
+/// at all the
 /// world is [`dry`](crate::biome::BiomeRules::dry), its sea level
 /// [`DRY_SEA_LEVEL`](crate::generation::DRY_SEA_LEVEL)), or for a hydrocarbon
 /// world, whose lakes the model does not size, Titan's share of land
-/// ([`HYDROCARBON_LAND_FRACTION`]); then the temperature shift that brings
+/// ([`HYDROCARBON_LAND_FRACTION`]) counted over the whole surface, the
+/// low latitudes (see [`POLAR_LIQUID_LAT_DEG`]) being land whatever the
+/// sea level; then the temperature shift that brings
 /// the world's mean to the model's ([`warming_for`]).
 ///
 /// Both pass over a coarse grid of the relief (about a second in all in
@@ -596,7 +696,8 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
     params.sea_level = if surface.climate.liquid == SurfaceLiquid::Hydrocarbons {
         sea_level_for_land_fraction(params, HYDROCARBON_LAND_FRACTION)
     } else {
-        let oceans = if surface.water.runaway {
+        // A runaway's water is steam; an ice crust's lies under its shell.
+        let oceans = if surface.water.runaway || under_shell(params, model) {
             0.0
         } else {
             surface.water.oceans
@@ -612,6 +713,22 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
         }
     };
     params.look.climate.temperature = warming_for(params, surface.climate.temperature_k);
+}
+
+/// Whether the water of the world `params` of `model` lies under its
+/// surface, an ice shell over it ([`super::IceShell`]): its crust is ice
+/// ([`crate::generation::icy`]: an ice world's share of water, and no
+/// liquid water at its surface) and the model gives it a shell (a frozen
+/// surface over its water layer). That ice is then its crust, the relief
+/// the world draws with its regime's highlands and craters (Europa,
+/// Ganymede, Callisto, Enceladus), not a frozen sea over a rocky floor:
+/// no sea. Water under a shell is no surface ocean, liquid or frozen. A
+/// frozen sea on a rocky planet (a snowball Earth, a cold Mars that kept
+/// its water: under an ice world's share of water, a rock crust) still
+/// fills its basins, and so does liquid water (no shell); hydrocarbons
+/// are sized apart.
+fn under_shell(params: &WorldParams, model: &PlanetModel) -> bool {
+    model.ice_shell.is_some() && crate::generation::icy(params)
 }
 
 /// Temperature of a bare surface under the starlight `equilibrium_k`
@@ -729,6 +846,54 @@ mod tests {
     }
 
     #[test]
+    fn only_hydrocarbon_worlds_keep_their_liquid_near_the_poles() {
+        let params = |name: &str| {
+            params_for(
+                &model_of(name),
+                &earth_placed(1),
+                &mut StdRng::seed_from_u64(1),
+            )
+        };
+        assert_eq!(
+            params("Titan").liquid_poleward_deg,
+            Some(POLAR_LIQUID_LAT_DEG)
+        );
+        for name in ["Earth", "Mars", "Venus"] {
+            assert_eq!(params(name).liquid_poleward_deg, None, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_titan_has_its_lakes_near_the_poles() {
+        let model = model_of("Titan");
+        for seed in [1, 2] {
+            let mut placed = earth_placed(seed);
+            (placed.width, placed.height) = (256, 128);
+            let mut params = params_for(&model, &placed, &mut StdRng::seed_from_u64(seed.into()));
+            calibrate(&mut params, &model);
+            let world = crate::generation::generate(&params).world;
+            let grid = params.grid();
+            let (mut liquid, mut total) = (0.0f64, 0.0f64);
+            for (i, biome) in world.biomes.iter().enumerate() {
+                let y = (i / world.width as usize) as u32;
+                let area = grid.latitude(y).cos();
+                total += area;
+                let relief = world.elevation[i] - params.sea_level;
+                if relief < params.look.rules.open_water() || *biome == crate::biome::Biome::Lake {
+                    liquid += area;
+                    let lat = grid.latitude(y).to_degrees().abs();
+                    assert!(
+                        lat >= f64::from(POLAR_LIQUID_LAT_DEG) - 1.5,
+                        "seed {seed}: {lat}"
+                    );
+                }
+            }
+            let share = 100.0 * liquid / total;
+            assert!((0.3..3.0).contains(&share), "seed {seed}: {share} %");
+        }
+    }
+
+    #[test]
     fn giants_render_as_giants() {
         for (name, base) in [
             ("Jupiter", "gas-giant"),
@@ -790,6 +955,38 @@ mod tests {
         let brightest = sky.rayleigh.iter().copied().fold(0.0_f32, f32::max);
         assert!(brightest <= 1.0, "{:?}", sky.rayleigh);
         assert!(sky.haze >= 0.25, "{}", sky.haze);
+    }
+
+    /// Titan's air (N₂ with 5 % CH₄, 1.5 bar) gets the methane haze, thick
+    /// enough to hide its ground to the viewer (over 0.5, see
+    /// `METHANE_HAZE`), orange (red over green over blue); Earth, Venus
+    /// and Mars stay under that density.
+    #[test]
+    fn titans_haze_is_thick_and_orange() {
+        let sky = sky_of(&model_of("Titan"));
+        assert_eq!(sky.haze, METHANE_HAZE);
+        assert!(sky.haze > 0.5);
+        let [r, g, b] = sky.haze_colour;
+        assert!(r > g && g > 2.0 * b, "{:?}", sky.haze_colour);
+        for name in ["Earth", "Venus", "Mars"] {
+            let haze = sky_of(&model_of(name)).haze;
+            assert!(haze <= 0.5, "{name}: {haze}");
+        }
+    }
+
+    /// A hydrocarbon world's seas and lakes are its own dark liquid, never
+    /// the frozen water of its `frozen` base look; a water world keeps
+    /// its water.
+    #[test]
+    fn titans_seas_are_hydrocarbons() {
+        let titan = look_for(&model_of("Titan"));
+        for b in [Biome::DeepOcean, Biome::Ocean, Biome::SeaIce] {
+            assert_eq!(titan.remap(b), Biome::HydrocarbonSea, "{b:?}");
+        }
+        assert_eq!(titan.remap(Biome::Lake), Biome::HydrocarbonLake);
+        let earth = look_for(&model_of("Earth"));
+        assert_eq!(earth.remap(Biome::Ocean), Biome::Ocean);
+        assert_eq!(earth.remap(Biome::Lake), Biome::Lake);
     }
 
     #[test]

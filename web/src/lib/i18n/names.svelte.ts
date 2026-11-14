@@ -48,15 +48,18 @@ export function archetypeDescription(archetype: { name: string; description?: st
 }
 
 /** The label of a planet's class key (`rocky`, `ice-giant`, `icy-moon`…), the key itself when unknown. */
-export function className(key: string): string {
-  return (t.viewer.bodyTypes as Record<string, string>)[key] ?? key;
+export function className(key: string, moon = false): string {
+  const moons = t.viewer.moonBodyTypes as Record<string, string>;
+  return (moon ? moons[key] : undefined) ?? (t.viewer.bodyTypes as Record<string, string>)[key] ?? key;
 }
 
 /**
  * The label of a world's class with its surface state: `className` and,
  * for a rocky world whose water is frozen at the surface, `frozen
  * surface` after it (`hasFrozenSurface`). The class alone without a model.
+ * A `moon` reads as a moon where the planet's label says planet.
  */
-export function classLabel(key: string, model?: SurfaceModel): string {
-  return hasFrozenSurface(key, model) ? `${className(key)} · ${t.viewer.frozenSurface}` : className(key);
+export function classLabel(key: string, model?: SurfaceModel, moon = false): string {
+  const name = className(key, moon);
+  return hasFrozenSurface(key, model) ? `${name} · ${t.viewer.frozenSurface}` : name;
 }

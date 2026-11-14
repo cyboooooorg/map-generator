@@ -1,0 +1,27 @@
+name = "callisto-like"
+description = "Callisto-like: an old cratered icy moon on a Jupiter's outer orbit"
+
+[locales.fr]
+name = "Callistéenne"
+description = "Une vieille lune glacée criblée de cratères, loin d'une Jupiter"
+
+# Callisto: 1.0759e23 kg = 0.0180 Earth masses (NASA Jovian satellite
+# fact sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), ±10 %.
+[inputs]
+mass_earth = [0.016, 0.020]
+
+[moon]
+# Grown in Jupiter's disk.
+host = "jupiter-like"
+origin = "disk"
+# Semi-major axis 1 882 700 km over Jupiter's equatorial radius 71 492 km:
+# 26.3 radii (JPL mean orbital elements; NASA Jupiter fact sheet).
+semi_major_axis_radii = [25.0, 28.0]
+# 0.0074 (JPL mean orbital elements).
+eccentricity = [0.005, 0.01]
+# Water and ices about half its mass: its 1.83 g/cm³ and moment of
+# inertia 0.355 (Schubert, Anderson, Spohn & McKinnon 2004, Interior
+# composition, structure and dynamics of the Galilean satellites, in
+# Jupiter: the planet, satellites and magnetosphere, Cambridge UP).
+ice_fraction = [0.45, 0.55]

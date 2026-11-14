@@ -14,7 +14,10 @@ export interface Sky {
   betaR: [number, number, number];
   /** Aerosol (Mie) extinction per unit length. */
   betaM: number;
-  /** Share of the aerosol extinction that scatters, per channel (its tint). */
+  /**
+   * Share of the aerosol extinction that scatters, per channel (its tint);
+   * over 1 for a thick haze, whose light scatters many times (see hazeAlbedo).
+   */
   mieAlbedo: [number, number, number];
   /** Scale heights of the gas and of the aerosols. */
   heightR: number;
@@ -27,8 +30,75 @@ export interface Sky {
 const AIRLESS_BAR = 1e-4;
 /** Optical depth of Earth's air at the zenith, blue channel. */
 const EARTH_RAYLEIGH_DEPTH = 0.25;
-/** Optical depth of a haze of density 1 at the zenith. */
+/** Optical depth at the zenith per unit of haze density, up to {@link THICK_HAZE}. */
 const HAZE_DEPTH = 2.0;
+/**
+ * Haze density past which a haze thickens towards an opaque one: every
+ * built-in look but a methane haze stays under it (Earth 0.1, Venus 0.3,
+ * a volcanic world 0.45), so their skies keep the depth of
+ * {@link HAZE_DEPTH} per unit of density.
+ */
+const THICK_HAZE = 0.5;
+/**
+ * Zenith optical depth of a haze of density 1, reached linearly from
+ * {@link THICK_HAZE}. Calibration, target Titan's Cassini true-colour
+ * images, where the haze hides the surface in visible light: its vertical
+ * optical depth is several in the visible (Tomasko et al. 2005,
+ * doi:10.1038/nature04126, Huygens DISR); a methane haze (0.9, the
+ * generator's `METHANE_HAZE`) gets about 6.6, its ground seen through
+ * about 0.1 % of the light.
+ */
+const OPAQUE_HAZE_DEPTH = 8.0;
+
+/**
+ * Zenith optical depth of the aerosols of a haze of density `haze` (the
+ * look's, in [0, 1]): {@link HAZE_DEPTH} per unit up to {@link THICK_HAZE},
+ * then rising to {@link OPAQUE_HAZE_DEPTH} at 1.
+ */
+export function hazeDepth(haze: number): number {
+  if (haze <= THICK_HAZE) return HAZE_DEPTH * haze;
+  const t = Math.min((haze - THICK_HAZE) / (1 - THICK_HAZE), 1);
+  return HAZE_DEPTH * THICK_HAZE + (OPAQUE_HAZE_DEPTH - HAZE_DEPTH * THICK_HAZE) * t;
+}
+
+/**
+ * Share of the light a thick haze scatters that goes on to scatter again
+ * rather than leave, at a haze of density 1 (see {@link hazeAlbedo}).
+ * Calibration, target Titan's Cassini true-colour images: a bright orange
+ * disc, which single scattering alone leaves a dull brown.
+ */
+const RESCATTER = 0.55;
+
+/**
+ * Per-channel share of the aerosol extinction that the viewer's sky
+ * returns, for a haze of density `haze` and colour `colour` (the share
+ * that one scattering keeps): the colour itself up to {@link THICK_HAZE};
+ * beyond, the light scattered many times, `a / (1 − w a)` for a share `w`
+ * that scatters again, rising to {@link RESCATTER} at density 1. The
+ * series favours the channels the haze keeps best, so a thick haze is
+ * both brighter and more saturated than one scattering makes it.
+ */
+export function hazeAlbedo(haze: number, colour: [number, number, number]): [number, number, number] {
+  if (haze <= THICK_HAZE) return colour;
+  const w = RESCATTER * Math.min((haze - THICK_HAZE) / (1 - THICK_HAZE), 1);
+  return colour.map((a) => a / (1 - w * a)) as [number, number, number];
+}
+
+/**
+ * Anisotropy of the aerosols of a haze of density `haze`: 0.76 for a thin
+ * haze, lower as it thickens to 0.4 (thick hazes scatter many times, which
+ * spreads their light almost evenly), then falling to 0 (isotropic) past
+ * {@link THICK_HAZE}. A single-scattering sky cannot otherwise brighten
+ * an opaque haze seen from the sunny side: its many scatterings return
+ * light about evenly, which an isotropic phase stands in for.
+ * Calibration, target Titan's Cassini true-colour images (an evenly lit
+ * orange disc).
+ */
+function hazeAnisotropy(haze: number): number {
+  const g = 0.76 - 0.5 * Math.min(haze / 0.4, 1);
+  if (haze <= THICK_HAZE) return g;
+  return g * (1 - Math.min((haze - THICK_HAZE) / (1 - THICK_HAZE), 1));
+}
 
 /** The sky of a world, or null when it has none. */
 export function skyFromWorld(meta: WorldMetadata): Sky | null {
@@ -49,14 +119,67 @@ export function skyFromWorld(meta: WorldMetadata): Sky | null {
   return {
     top: 1 + thickness,
     betaR,
-    betaM: (HAZE_DEPTH * atmosphere.haze) / heightM,
-    mieAlbedo: atmosphere.haze_colour,
+    betaM: hazeDepth(atmosphere.haze) / heightM,
+    mieAlbedo: hazeAlbedo(atmosphere.haze, atmosphere.haze_colour),
     heightR,
     heightM,
     // Thick hazes scatter many times, which spreads their light almost
     // evenly: a low anisotropy keeps them visible from the sunny side too.
-    g: 0.76 - 0.5 * Math.min(atmosphere.haze / 0.4, 1),
+    g: hazeAnisotropy(atmosphere.haze),
   };
+}
+
+/**
+ * Zenith haze depth over which a haze hides the ground from afar (see
+ * {@link hazeVeil}). Calibration, no source: about 5 % of the light.
+ */
+const HIDING_HAZE_DEPTH = 3.0;
+/**
+ * Camera altitudes (globe radii above the ground) and the haze depths over
+ * the ground there, through which {@link hazeVeil} thins a hiding haze:
+ * whole from {@link HAZE_THICK_ALTITUDE} up (a whole-disc view: the
+ * default view is 2.2 radii up), {@link READ_HAZE_DEPTH} at
+ * {@link HAZE_READ_ALTITUDE} (61 % of the light: the ground reads
+ * clearly), {@link CLOSE_HAZE_DEPTH} at {@link HAZE_CLEAR_ALTITUDE} and
+ * below (78 %). Between them the depth follows a straight line in
+ * log(depth) against log(altitude), so the ground starts to show (8 to
+ * 25 % of its light) about 0.6 radii up. A viewer convention,
+ * calibration, no source.
+ */
+const HAZE_THICK_ALTITUDE = 1.5;
+const HAZE_READ_ALTITUDE = 0.2;
+const HAZE_CLEAR_ALTITUDE = 0.05;
+const READ_HAZE_DEPTH = 0.5;
+const CLOSE_HAZE_DEPTH = 0.25;
+
+/**
+ * Factor on the haze extinction over the ground (the surface pass of the
+ * sky shader, not the limb) at a camera `altitude` in globe radii, so that
+ * the surface of a world whose haze hides it (a zenith depth over
+ * {@link HIDING_HAZE_DEPTH}, a methane haze) can be seen close in: 1
+ * from {@link HAZE_THICK_ALTITUDE} up, where the disc is the haze's,
+ * opaque; down to the factor that leaves {@link READ_HAZE_DEPTH} at
+ * {@link HAZE_READ_ALTITUDE} and {@link CLOSE_HAZE_DEPTH} at
+ * {@link HAZE_CLEAR_ALTITUDE} and below. 1 at every altitude for any
+ * thinner haze (Earth, Mars, Venus). A viewer convention, as Cassini's
+ * near-infrared windows (ISS at 938 nm, VIMS at 5 µm) saw Titan's surface
+ * through a haze that hides it in visible light (Porco et al. 2005,
+ * doi:10.1038/nature03436).
+ */
+export function hazeVeil(sky: Sky, altitude: number): number {
+  const depth = sky.betaM * sky.heightM;
+  if (depth <= HIDING_HAZE_DEPTH || altitude >= HAZE_THICK_ALTITUDE) return 1;
+  const a = Math.max(altitude, HAZE_CLEAR_ALTITUDE);
+  // Log-log interpolation of the depth over the ground between two anchors.
+  const between = (high: number, highDepth: number, low: number, lowDepth: number) => {
+    const t = Math.log(high / a) / Math.log(high / low);
+    return Math.exp(Math.log(highDepth) + t * (Math.log(lowDepth) - Math.log(highDepth)));
+  };
+  const ground =
+    a >= HAZE_READ_ALTITUDE
+      ? between(HAZE_THICK_ALTITUDE, depth, HAZE_READ_ALTITUDE, READ_HAZE_DEPTH)
+      : between(HAZE_READ_ALTITUDE, READ_HAZE_DEPTH, HAZE_CLEAR_ALTITUDE, CLOSE_HAZE_DEPTH);
+  return ground / depth;
 }
 
 /**

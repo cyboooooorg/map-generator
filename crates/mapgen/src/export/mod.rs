@@ -260,7 +260,10 @@ pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
     }
     let depth = depth.max(0.0);
     if let Some(liquid) = Liquid::of(biome) {
-        let depth = if matches!(biome, Biome::Lake | Biome::CausticLake) {
+        let depth = if matches!(
+            biome,
+            Biome::Lake | Biome::CausticLake | Biome::HydrocarbonLake
+        ) {
             depth * LAKE_DEPTH_SCALE
         } else {
             depth
@@ -323,11 +326,28 @@ static ACID: LazyLock<Liquid> = LazyLock::new(|| Liquid {
     absorption: [24.0, 18.0, 40.0],
 });
 
+/// Liquid methane and ethane, darkened by dissolved organics: the bed
+/// shows through only at the very shore, and the liquid is near black
+/// beyond, as Titan's lakes and seas in Cassini's radar and near-infrared
+/// maps (see [`surface_color`]). Its absorption is a calibration, no
+/// source: about three times water's, every channel alike but blue a
+/// little faster, so a shelf reads dark brown, not turquoise.
+static HYDROCARBON: LazyLock<Liquid> = LazyLock::new(|| Liquid {
+    deep: linear_of(surface_color(Biome::HydrocarbonSea)),
+    bed: linear_of(HYDROCARBON_BED),
+    absorption: [60.0, 70.0, 90.0],
+});
+
+/// Colour of the bed of a hydrocarbon lake under a thin layer, sRGB:
+/// a dark organic sediment. Calibration, no source.
+const HYDROCARBON_BED: [u8; 3] = [92, 76, 58];
+
 impl Liquid {
     fn of(biome: Biome) -> Option<&'static Self> {
         match biome {
             Biome::DeepOcean | Biome::Ocean | Biome::Lake => Some(&WATER),
             Biome::DeepAcidSea | Biome::AcidSea | Biome::CausticLake => Some(&ACID),
+            Biome::HydrocarbonSea | Biome::HydrocarbonLake => Some(&HYDROCARBON),
             _ => None,
         }
     }
@@ -884,13 +904,13 @@ mod tests {
     #[test]
     fn moons_are_generated_as_bodies_of_their_own() {
         use crate::export::raw_data::{WorldMetadata, read_metadata};
-        // A small world far from its star, of the first seed that draws it
-        // moons.
+        // An Earth far from its star, of the first seed that draws it a
+        // round moon (which goes through the planet model).
         let (request, resolved, system) = (0..64)
             .find_map(|seed| {
                 let request = crate::request::WorldRequest {
                     seed: Some(seed),
-                    mass_earth: Some(0.02),
+                    mass_earth: Some(1.0),
                     star: Some("G2V".into()),
                     orbit_au: Some(30.0),
                     eccentricity: Some(0.0),
@@ -901,10 +921,10 @@ mod tests {
                 };
                 let resolved = request.resolve(&mut rand::rng()).unwrap();
                 let system = crate::moons::MoonSystem::draw(&resolved.params)
-                    .filter(|s| !s.moons.is_empty())?;
+                    .filter(|s| s.moons.iter().any(|m| m.round))?;
                 Some((request, resolved, system))
             })
-            .expect("a seed with moons");
+            .expect("a seed with a round moon");
         let dir = std::env::temp_dir().join(format!("mapgen-moons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // Generated as bodies of the planet's system, with it.
@@ -924,15 +944,26 @@ mod tests {
             let raw = crate::sizes::size_dir(&dir.join("bodies").join(&id), width, height)
                 .join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
-            assert!(
-                ["icy-moon", "rocky-moon"].contains(&meta.class.as_str()),
-                "{}",
-                meta.class
-            );
+            // A small moon is typed by its rock or ice and keeps its drawn
+            // size; a round one by its model's class, at its model's size.
+            assert!(meta.moon);
+            let (class_ok, radius_km) = if moon.round {
+                (
+                    crate::planet::PLANET_CLASSES.contains(&meta.class.as_str())
+                        && meta.model.is_some(),
+                    body.physical.radius_km as f32,
+                )
+            } else {
+                (
+                    ["icy-moon", "rocky-moon"].contains(&meta.class.as_str()),
+                    moon.radius_km,
+                )
+            };
+            assert!(class_ok, "{}", meta.class);
+            assert!(meta.formation.is_none());
             assert_eq!(meta.seed, moon.seed);
             assert!(
-                (meta.circumference_km / (2.0 * std::f32::consts::PI) - moon.radius_km).abs()
-                    < 0.01
+                (meta.circumference_km / (2.0 * std::f32::consts::PI) - radius_km).abs() < 0.01
             );
             // No moons of its own; an irregular one has a shape layer.
             assert!(meta.moons.is_none());

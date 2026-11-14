@@ -27,6 +27,12 @@ co2: number | null,
  */
 n2: number | null, 
 /**
+ * Factor on the CH₄ formation rule (1 typical): the methane the ices
+ * carry. Left out of a pinned formation (`PlanetModel::formation`),
+ * as before it could be set: a varied world draws its methane again.
+ */
+ch4?: number, 
+/**
  * Radiogenic abundance, Earth's = 1.
  */
 radiogenic: number | null, 

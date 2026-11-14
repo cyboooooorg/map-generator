@@ -246,7 +246,8 @@ pub enum RequestError {
         asked: u32,
         fits: u32,
     },
-    /// A type the star leaves no room for.
+    /// A type the star leaves no room for: a planet's archetype, or a
+    /// moon's whose giant it cannot place where the moon can orbit.
     TypeImpossible { body_type: String },
 }
 
@@ -322,7 +323,11 @@ impl fmt::Display for RequestError {
                  spaced enough to stay stable"
             ),
             RequestError::TypeImpossible { body_type } => {
-                write!(f, "this star leaves no room for a {body_type} planet")
+                write!(
+                    f,
+                    "this star leaves no room for a {body_type} planet, or for the giant a \
+                     {body_type} moon needs"
+                )
             }
         }
     }
@@ -472,6 +477,8 @@ impl WorldRequest {
             envelope_fraction: self.envelope_fraction.or(a.envelope_fraction),
             co2: self.co2.or(a.co2),
             n2: self.n2.or(a.n2),
+            // Not a request's knob: the archetype's alone.
+            ch4: a.ch4,
             radiogenic: self.radiogenic.or(a.radiogenic),
             life: self.life.or(a.life),
         }
@@ -521,6 +528,14 @@ impl WorldRequest {
         rng: &mut impl RngExt,
     ) -> Result<Resolved, RequestError> {
         self.validate()?;
+        // A moon archetype has no orbit of its own round a star: it is
+        // asked for in a whole system, which gives it its giant.
+        if let Some(a) = archetype.as_ref().filter(|a| a.moon.is_some()) {
+            return Err(RequestError::BadArchetype(format!(
+                "{} is a giant's moon: ask for it in a whole system (--system {}=1)",
+                a.name, a.name
+            )));
+        }
         let a = archetype.as_ref();
         let seed = self.seed.unwrap_or_else(|| rng.random());
         let mut stream = seeded(seed, "world/archetype");
@@ -601,6 +616,7 @@ impl WorldRequest {
                 metallicity,
                 mass_earth,
                 overrides: &overrides,
+                tide: None,
             };
             let mut model = at(eccentricity).model();
             // Water set beside an envelope drawn from the mass: together
@@ -675,10 +691,32 @@ impl WorldRequest {
                     model = at(params.eccentricity).model();
                     let forced = Placed {
                         eccentricity: params.eccentricity,
-                        ..placed
+                        ..placed.clone()
                     };
                     params = world(&model, &forced);
                 }
+            }
+            // A giant's moon: its giant's tides heat it. The giant is
+            // drawn from the world (its orbit around it moves out when its
+            // water would run away), so the model and the world are made
+            // again until the giant's orbit stays put.
+            let mut tide = None;
+            for _ in 0..TIDE_ROUNDS {
+                let host = crate::exomoon::HostGiant::draw(&params).map(|h| host_tide(&h));
+                if host == tide {
+                    break;
+                }
+                tide = host;
+                model = World {
+                    tide,
+                    ..at(params.eccentricity)
+                }
+                .model();
+                let tidal = Placed {
+                    eccentricity: params.eccentricity,
+                    ..placed.clone()
+                };
+                params = world(&model, &tidal);
             }
             // Moons asked for need room: a Hill sphere wide enough, and on
             // a planet its star despun, moons light enough to outlast its
@@ -815,17 +853,24 @@ struct World<'a> {
     metallicity: f32,
     mass_earth: f64,
     overrides: &'a InputOverrides,
+    /// The tides of the giant it orbits, when it is a giant's moon.
+    tide: Option<crate::planet::HostTide>,
 }
 
 impl World<'_> {
     /// The model, in the context of its star seen from its orbit, the ice
     /// line of the star (2.7 AU √L, as a system places it) and the
-    /// metallicity, from the seed's stream `world/model`.
+    /// metallicity, with the tides of the giant it orbits when it is a
+    /// giant's moon, from the seed's stream `world/model`.
     fn model(&self) -> PlanetModel {
         let star =
             crate::star::StarInfo::new(self.star, self.orbit_au, self.eccentricity, self.age_gyr);
         let ice_line_au = 2.7 * star.luminosity.sqrt();
         let context = crate::planet::Context::of(&star, self.metallicity, ice_line_au);
+        let context = match self.tide {
+            Some(tide) => context.with_tide(tide),
+            None => context,
+        };
         crate::planet::derive_model_with(
             self.seed,
             "world",
@@ -833,6 +878,21 @@ impl World<'_> {
             self.mass_earth,
             self.overrides,
         )
+    }
+}
+
+/// Rounds of drawing a giant's moon's host from its world and its model
+/// from its host's tides (see [`WorldRequest::resolve_with_archetype`]): the host's
+/// orbit moves at most once (out of a runaway), so two settle it.
+const TIDE_ROUNDS: usize = 4;
+
+/// The tides a giant's moon gets from `host`: its mass, the moon's orbit
+/// around it and that orbit's eccentricity.
+fn host_tide(host: &crate::exomoon::HostGiant) -> crate::planet::HostTide {
+    crate::planet::HostTide {
+        host_kg: f64::from(host.giant.mass_earth) * crate::exomoon::EARTH_KG,
+        a_m: f64::from(host.distance_km) * 1000.0,
+        eccentricity: f64::from(host.eccentricity),
     }
 }
 
@@ -956,6 +1016,20 @@ mod tests {
         // Its star and tilt are the archetype's.
         assert_eq!(p.star, crate::star::SUN);
         assert_eq!(p.axial_tilt_deg, 23.44);
+    }
+
+    #[test]
+    fn a_moon_archetype_is_not_a_world_to_ask_alone() {
+        let request = WorldRequest {
+            planet: Some("titan-like".into()),
+            seed: Some(1),
+            ..Default::default()
+        };
+        let err = request
+            .resolve(&mut StdRng::seed_from_u64(1))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("whole system"), "{err}");
     }
 
     #[test]
@@ -1216,7 +1290,13 @@ mod tests {
         )
         .unwrap();
         let mut checked = 0;
-        for body in &system.bodies {
+        // A planet: a round moon's model comes from how it formed around
+        // its planet, which no request of a world sets.
+        for body in system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == crate::system::BodyKind::Planet)
+        {
             let Some(model) = &body.model else { continue };
             let Some(surface) = model.surface else {
                 continue;

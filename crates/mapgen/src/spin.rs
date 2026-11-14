@@ -474,6 +474,11 @@ mod tests {
             seed,
             locked_to_star: Some(locked),
             resonance_to_star: turns,
+            moon: false,
+            day_hours: None,
+            liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
+            moon_sizes: Vec::new(),
             ..base.clone()
         };
         for seed in 0..50 {

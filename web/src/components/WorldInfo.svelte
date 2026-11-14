@@ -47,7 +47,7 @@
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
   // The archetype asked for, else the class of the planet.
-  const kind = $derived(meta ? (meta.archetype ? archetypeName({ name: meta.archetype }) : classLabel(meta.class, meta.model)) : null);
+  const kind = $derived(meta ? (meta.archetype ? archetypeName({ name: meta.archetype }) : classLabel(meta.class, meta.model, meta.moon || ofMoon)) : null);
   const title = $derived(forcedTitle ?? kind ?? worldId);
 
   async function copy(text: string, what: string): Promise<void> {
