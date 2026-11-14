@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
 import { STAR_COUNTS, starField } from './stars';
-import { FIXED_SKY, type SkyLook } from './skyLook';
+import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 /** FNV-1a over the float bits of a buffer. */
 function hash(a: Float32Array): number {
@@ -87,5 +87,26 @@ describe('starField', () => {
     expect(Math.max(...dark.colours)).toBe(0);
     const half = starField(FIXED_SKY, () => 0.5);
     expect(half.colours[0]).toBeCloseTo(field.colours[0]! * 0.5, 6);
+  });
+});
+
+describe('the sky of an outer system', () => {
+  const outer = skyLook({ source: 'Derived', position_kpc: [16, 0, 0], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: 5 } as never);
+
+  it('keeps a band denser than the rest of the sky', () => {
+    const f = starField(outer);
+    const north = outer.north;
+    const half = outer.bandWidth * 1.5;
+    let inBand = 0;
+    let off = 0;
+    for (let i = 0; i < f.sizes.length; i += 1) {
+      const lat = Math.asin(dot(f.directions, north, i * 3));
+      if (Math.abs(lat) < half) inBand += 1;
+      else off += 1;
+    }
+    // Solid angle of |lat| < half is 4 pi sin(half); the rest of the sphere what remains.
+    const bandArea = 4 * Math.PI * Math.sin(half);
+    expect(inBand / bandArea).toBeGreaterThan(off / (4 * Math.PI - bandArea));
+    expect(f.sizes.length).toBeGreaterThan(STAR_COUNTS.band * 0.4);
   });
 });

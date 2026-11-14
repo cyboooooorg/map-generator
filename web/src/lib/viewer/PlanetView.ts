@@ -160,7 +160,7 @@ import type { FaintRing } from '../ringMoons';
 import type { RingSystem } from '../api/types/RingSystem';
 import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
-import { lookFor, SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
 import { FIXED_SKY, type SkyLook } from './skyLook';
 
 export type ViewMode = 'globe' | 'map';
@@ -632,8 +632,6 @@ export class PlanetView {
   private skyChoice: SkyChoice = 'system';
   /** The system's own look; the fixed choice ignores it. */
   private ownLook: SkyLook = FIXED_SKY;
-  /** The system's axes in this view's frame, or null (a standalone world). */
-  private skyAxes: [SkyVec3, SkyVec3, SkyVec3] | null = null;
   /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
   private skyBodies: {
     mesh: Mesh<PlaneGeometry, ShaderMaterial>;
@@ -1873,14 +1871,16 @@ export class PlanetView {
   /** The sky of the system the view shows (see skyLook); the fixed choice ignores it. */
   setSkyLook(look: SkyLook): void {
     this.ownLook = look;
-    this.backdrop.setLook(lookFor(this.skyChoice, look));
+    this.backdrop.setSky(this.skyChoice, look);
     this.requestRender();
   }
 
   /** Draws the system's own sky, the fixed one, or none around the globe. */
   setSkyChoice(choice: SkyChoice): void {
     this.skyChoice = choice;
-    this.backdrop.setLook(lookFor(choice, this.ownLook));
+    this.backdrop.setSky(choice, this.ownLook);
+    // The fixed sky is tied to the body: it turns with the stars, whatever the axes.
+    if (!this.backdrop.orientedByAxes) this.backdrop.group.rotation.y = this.wrappedTurn();
     this.requestRender();
   }
 
@@ -1890,9 +1890,8 @@ export class PlanetView {
    * (setStarsTurn).
    */
   setSkyAxes(axes: [SkyVec3, SkyVec3, SkyVec3] | null): void {
-    this.skyAxes = axes;
     this.backdrop.setAxes(axes);
-    if (!axes) this.backdrop.group.rotation.y = this.wrappedTurn();
+    if (!this.backdrop.orientedByAxes) this.backdrop.group.rotation.y = this.wrappedTurn();
     this.requestRender();
   }
 
@@ -1912,7 +1911,7 @@ export class PlanetView {
     this.starsTurned = radians;
     const wrapped = radians - 2 * Math.PI * Math.floor(radians / (2 * Math.PI));
     // With the system's axes the sky already turns with the body.
-    if (!this.skyAxes) this.backdrop.group.rotation.y = wrapped;
+    if (!this.backdrop.orientedByAxes) this.backdrop.group.rotation.y = wrapped;
     // The arrow of the sense of rotation is fixed against the stars, not
     // turning with the globe.
     if (this.spinAxis) this.spinAxis.rotation.y = wrapped;

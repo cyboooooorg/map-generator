@@ -62,7 +62,7 @@ import {
 } from './starShaders';
 import { previewTexture } from './previewTexture';
 import type { Preview } from '../api/types/Preview';
-import { lookFor, SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
 import { FIXED_SKY, type SkyLook } from './skyLook';
 import { CoronalLoops } from './coronalLoops';
 import { Eruption, eruptive } from './eruption';
@@ -1634,14 +1634,14 @@ export class StarView {
   /** The sky of the system the view shows (see skyLook); the fixed choice ignores it. */
   setSkyLook(look: SkyLook): void {
     this.ownLook = look;
-    this.backdrop.setLook(lookFor(this.skyChoice, look));
+    this.backdrop.setSky(this.skyChoice, look);
     this.requestRender();
   }
 
   /** Draws the system's own sky, the fixed one, or none. */
   setSkyChoice(choice: SkyChoice): void {
     this.skyChoice = choice;
-    this.backdrop.setLook(lookFor(choice, this.ownLook));
+    this.backdrop.setSky(choice, this.ownLook);
     this.backdrop.group.visible = skyShown(choice);
     this.requestRender();
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
 import { bakeSkyClouds, CLOUD_CEILING, dustAt, faceDirection } from './skyClouds';
-import { FIXED_SKY, type SkyLook } from './skyLook';
+import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 const decode = (byte: number) => {
   const v = byte / 255;
@@ -92,6 +92,19 @@ describe('bakeSkyClouds', () => {
     bakeSkyClouds({ ...look, seed: 12345 }, 256);
     const ms = performance.now() - start;
     console.log(`bakeSkyClouds(256): ${ms.toFixed(0)} ms`);
+  });
+});
+
+describe('clouds of an outer system', () => {
+  it('stay visible far out in the disc', () => {
+    const outer = skyLook({ source: 'Derived', position_kpc: [16, 0, 0], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: 5 } as never);
+    const faces = bakeSkyClouds(outer, SIZE);
+    let brightest = 0;
+    for (const pixels of faces.faces) {
+      for (let i = 0; i < pixels.length; i += 4) brightest = Math.max(brightest, decode(pixels[i]!), decode(pixels[i + 1]!), decode(pixels[i + 2]!));
+    }
+    expect(brightest).toBeGreaterThanOrEqual(0.02);
+    expect(brightest).toBeLessThan(0.08);
   });
 });
 

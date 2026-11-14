@@ -26,6 +26,13 @@ const CLOUD_SPREAD = 2.4;
 const GLOW_LEVEL = 0.028;
 /** Peak linear level of the emission and reflection patches at the Sun's place. */
 const PATCH_LEVEL = 0.045;
+/**
+ * The cloud level follows the look's brightness within these bounds: far out
+ * in the disc the clouds stay visible (a floor of 0.35 of the Sun's place),
+ * and near the centre they do not outshine the stars.
+ */
+const CLOUD_LEVEL_MIN = 0.35;
+const CLOUD_LEVEL_MAX = 1.6;
 /** Dust never blocks more than this fraction of the light behind it. */
 const DUST_MAX = 0.85;
 
@@ -189,7 +196,7 @@ function bake(look: SkyLook, size: number): SkyFaces {
   const cutoff = 2.8 * sigma; // the glow is under 2% of its peak beyond
   const [wHa, wO3, wRef] = n.mix;
   const [oa, ob, oc] = n.offsets as [Vec3, Vec3, Vec3, Vec3];
-  const level = Math.min(1.6, look.brightness);
+  const level = Math.min(CLOUD_LEVEL_MAX, Math.max(CLOUD_LEVEL_MIN, look.brightness));
   const faces: Uint8Array[] = [];
   for (let face = 0; face < 6; face += 1) {
     const pixels = new Uint8Array(size * size * 4);

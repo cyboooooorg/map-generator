@@ -16,7 +16,7 @@
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { GiantInfo } from '../lib/api/types/GiantInfo';
   import type { HostGiant } from '../lib/api/types/HostGiant';
-  import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
+  import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER, STAR_VIEW_SKY_AXES } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { layoutLabels } from '../lib/viewer/labelLayout';
   import type { ScreenAxis } from '../lib/viewer/axes';
@@ -233,6 +233,7 @@
   });
 
   $effect(() => view?.setSkyLook(look));
+  $effect(() => view?.setSkyAxes(STAR_VIEW_SKY_AXES));
   $effect(() => view?.setSkyChoice(sky));
   $effect(() => view?.setStar(star, omega, giantList, selected, activity));
   /** The last day this view reported (see clockDays): any other is a day set from outside. */

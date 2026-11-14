@@ -1,8 +1,9 @@
 import { Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { lookFor, skyShown, SkyBackdrop } from './skyBackdrop';
+import { lookFor, skyShown, skyToRestore, SkyBackdrop } from './skyBackdrop';
 import { FIXED_SKY, skyLook } from './skyLook';
+import * as clouds from './skyClouds';
 import { starField } from './stars';
 
 const options = { hideHostStar: true, renderOrder: -3 };
@@ -25,41 +26,96 @@ describe('SkyBackdrop', () => {
     expect(new Vector3(1, 2, 3).applyMatrix4(backdrop.group.matrix).toArray()).toEqual([1, 2, 3]);
   });
 
+  const cubeOf = (backdrop: SkyBackdrop) =>
+    backdrop.group.children[0] as unknown as {
+      visible: boolean;
+      geometry: { dispose(): void };
+      material: { dispose(): void; uniforms: { uSky: { value: { dispose(): void } | null } } };
+    };
+
+  it('bakes nothing at construction nor while the sky is off', () => {
+    const bake = vi.spyOn(clouds, 'bakeSkyClouds');
+    const backdrop = new SkyBackdrop(options);
+    backdrop.setSky('off', { ...FIXED_SKY, seed: 51 });
+    expect(bake).not.toHaveBeenCalled();
+    expect(cubeOf(backdrop).material.uniforms.uSky.value).toBeNull();
+    expect(backdrop.stars.geometry.getAttribute('position')).toBeUndefined();
+    backdrop.setSky('system', { ...FIXED_SKY, seed: 51 });
+    expect(bake).toHaveBeenCalledTimes(1);
+    bake.mockRestore();
+  });
+
   it('keeps the same texture for an equal look', () => {
     const backdrop = new SkyBackdrop(options);
     const look = { ...FIXED_SKY, seed: 31 };
-    backdrop.setLook(look);
-    const first = backdrop.group.children[0] as unknown as { material: { uniforms: { uSky: { value: unknown } } } };
+    backdrop.setSky('system', look);
+    const first = cubeOf(backdrop);
     const texture = first.material.uniforms.uSky.value;
     expect(texture).not.toBeNull();
-    backdrop.setLook({ ...look });
+    backdrop.setSky('system', { ...look });
     expect(first.material.uniforms.uSky.value).toBe(texture);
-    backdrop.setLook({ ...FIXED_SKY, seed: 32 });
+    backdrop.setSky('system', { ...FIXED_SKY, seed: 32 });
     expect(first.material.uniforms.uSky.value).not.toBe(texture);
   });
 
   it('draws the fixed sky for no place', () => {
     const backdrop = new SkyBackdrop(options);
-    backdrop.setLook(skyLook(null));
+    backdrop.setSky('system', skyLook(null));
     const count = backdrop.stars.geometry.getAttribute('position').count;
     expect(count).toBe(starField(FIXED_SKY).sizes.length);
   });
 
+  it('draws the fixed choice as today: stars only, no dust, not oriented by the axes', () => {
+    const backdrop = new SkyBackdrop(options);
+    const own = { ...FIXED_SKY, seed: 77, bulge: 0.5 };
+    backdrop.setAxes([
+      [0, 0, 1],
+      [1, 0, 0],
+      [0, 1, 0],
+    ]);
+    backdrop.setSky('fixed', own);
+    const today = starField(FIXED_SKY);
+    const attribute = (name: string) => backdrop.stars.geometry.getAttribute(name).array;
+    expect(attribute('position')).toEqual(today.directions);
+    expect(attribute('colour')).toEqual(today.colours);
+    expect(cubeOf(backdrop).visible).toBe(false);
+    expect(backdrop.orientedByAxes).toBe(false);
+    expect(backdrop.group.matrixAutoUpdate).toBe(true);
+    backdrop.setSky('system', own);
+    expect(cubeOf(backdrop).visible).toBe(true);
+    expect(backdrop.orientedByAxes).toBe(true);
+    expect(backdrop.group.matrixAutoUpdate).toBe(false);
+  });
+
+  it('replaces the star geometry rather than its attributes', () => {
+    const backdrop = new SkyBackdrop(options);
+    backdrop.setSky('system', { ...FIXED_SKY, seed: 61 });
+    const old = backdrop.stars.geometry;
+    const disposed = vi.spyOn(old, 'dispose');
+    backdrop.setSky('system', { ...FIXED_SKY, seed: 62 });
+    expect(backdrop.stars.geometry).not.toBe(old);
+    expect(disposed).toHaveBeenCalled();
+  });
+
   it('disposes its geometry, materials and texture', () => {
     const backdrop = new SkyBackdrop(options);
+    backdrop.setSky('system', { ...FIXED_SKY, seed: 41 });
     const starGeometry = vi.spyOn(backdrop.stars.geometry, 'dispose');
     const starMaterial = vi.spyOn(backdrop.stars.material, 'dispose');
-    const cube = backdrop.group.children[0] as unknown as {
-      geometry: { dispose(): void };
-      material: { dispose(): void; uniforms: { uSky: { value: { dispose(): void } } } };
-    };
+    const cube = cubeOf(backdrop);
     const cubeGeometry = vi.spyOn(cube.geometry, 'dispose');
     const cubeMaterial = vi.spyOn(cube.material, 'dispose');
-    const texture = vi.spyOn(cube.material.uniforms.uSky.value, 'dispose');
+    const texture = vi.spyOn(cube.material.uniforms.uSky.value!, 'dispose');
     backdrop.dispose();
     for (const spy of [starGeometry, starMaterial, cubeGeometry, cubeMaterial, texture]) {
       expect(spy).toHaveBeenCalled();
     }
+  });
+
+  it('brings back the choice shown, else the remembered one', () => {
+    expect(skyToRestore('fixed', 'system')).toBe('fixed');
+    expect(skyToRestore('off', 'fixed')).toBe('fixed');
+    expect(skyToRestore('system', 'fixed')).toBe('system');
   });
 
   it('resolves the choice to a look and a visibility', () => {

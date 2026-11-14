@@ -6,7 +6,7 @@
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
-  import type { SkyChoice } from '../lib/viewer/skyBackdrop';
+  import { skyToRestore, type SkyChoice } from '../lib/viewer/skyBackdrop';
   import { skyLook } from '../lib/viewer/skyLook';
   import ToggleBar, { type SubToggle, type Toggle } from './dock/ToggleBar.svelte';
   import AxesGizmo from './AxesGizmo.svelte';
@@ -263,6 +263,10 @@
   let sky = $state<SkyChoice>(parseSky(saved.sky));
   /** The choice a click on the sky switch's main button brings back after it turned the sky off. */
   let skyBeforeOff: SkyChoice = 'system';
+  // Whatever changes the choice (the squares, the B shortcut, a link, a display link) keeps it current.
+  $effect(() => {
+    skyBeforeOff = skyToRestore(sky, untrack(() => skyBeforeOff));
+  });
   let starAnimated = $state(false);
   let starDistances = $state(false);
   let starOrbit = $state(true);
@@ -1912,7 +1916,6 @@
    */
   function skyToggle(): Toggle {
     const pick = (choice: SkyChoice) => {
-      if (choice !== 'off') skyBeforeOff = choice;
       sky = choice;
     };
     return {

@@ -25,6 +25,9 @@ export interface StarField {
 /** Stars spread over the whole sky, and stars along the band, at the Sun's place. */
 export const STAR_COUNTS = { sky: 5500, band: 3000 } as const;
 
+/** The band keeps at least this share of the Sun's place's stars, so far out it still reads as a band. */
+const BAND_FLOOR = 0.4;
+
 /** Stars of the bulge cluster at full strength. */
 export const BULGE_STARS = 1500;
 /** Spread of the bulge cluster around the galactic centre, radians (standard deviation). */
@@ -83,7 +86,7 @@ function frameAbout(axis: Vec3, hint: Vec3): Basis {
 export function starField(look: SkyLook = FIXED_SKY, dust?: (dir: Vec3) => number): StarField {
   const next = random(look.seed);
   const skyCount = Math.round(STAR_COUNTS.sky * Math.sqrt(look.brightness));
-  const bandCount = Math.round(STAR_COUNTS.band * look.brightness);
+  const bandCount = Math.round(STAR_COUNTS.band * Math.max(BAND_FLOOR, look.brightness));
   const bulgeCount = Math.round(BULGE_STARS * look.bulge);
   const count = skyCount + bandCount + bulgeCount;
   const directions = new Float32Array(count * 3);

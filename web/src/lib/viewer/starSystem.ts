@@ -114,9 +114,19 @@ export function orbitDirection(giant: Pick<SystemGiant, 'periapsis_angle' | 'inc
  */
 export function globeTurn(axes: Axes): Axes {
   const [x, y, z] = axes;
-  const toView = (v: Vec3): Vec3 => [v[2], v[1], -v[0]];
-  return [toView([-z[0], -z[1], -z[2]]), toView(y), toView(x)];
+  return [toStarView([-z[0], -z[1], -z[2]]), toStarView(y), toStarView(x)];
 }
+
+/** A direction of placeSystem's frame in the star view's frame (turned a quarter about y). */
+export function toStarView(v: Vec3): Vec3 {
+  return [v[2], v[1], -v[0]];
+}
+
+/**
+ * The system's x, y and z axes (the frame of lib/systemSky) in the star
+ * view's frame, to orient the sky (see SkyBackdrop.setAxes).
+ */
+export const STAR_VIEW_SKY_AXES: [Vec3, Vec3, Vec3] = [toStarView([1, 0, 0]), toStarView([0, 1, 0]), toStarView([0, 0, 1])];
 
 /**
  * A giant's north in the star view's frame after `days`: its spin axis,

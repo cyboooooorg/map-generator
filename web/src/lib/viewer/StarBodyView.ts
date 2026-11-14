@@ -44,7 +44,7 @@ import {
 import { StarSurfaceState, displayedLight, starLook, starSurfaceUniforms } from './starSurface';
 import { STAR_RADIUS } from './starSystem';
 import type { Vec3 } from '../skyBodies';
-import { lookFor, SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
 import { FIXED_SKY, type SkyLook } from './skyLook';
 
 /** Closest and farthest camera, star radii from the centre: close enough for granules, far enough for the corona. */
@@ -316,14 +316,14 @@ export class StarBodyView {
   /** The sky of the system the view shows (see skyLook); the fixed choice ignores it. */
   setSkyLook(look: SkyLook): void {
     this.ownLook = look;
-    this.backdrop.setLook(lookFor(this.skyChoice, look));
+    this.backdrop.setSky(this.skyChoice, look);
     this.requestRender();
   }
 
   /** Draws the system's own sky, the fixed one, or none. */
   setSkyChoice(choice: SkyChoice): void {
     this.skyChoice = choice;
-    this.backdrop.setLook(lookFor(choice, this.ownLook));
+    this.backdrop.setSky(choice, this.ownLook);
     this.backdrop.group.visible = skyShown(choice);
     this.requestRender();
   }
@@ -336,6 +336,7 @@ export class StarBodyView {
 
   dispose(): void {
     this.disposed = true;
+    this.backdrop.dispose();
     this.setAnimated(false);
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;

@@ -37,6 +37,15 @@ export function lookFor(choice: SkyChoice, own: SkyLook): SkyLook {
   return choice === 'fixed' ? FIXED_SKY : own;
 }
 
+/**
+ * The sky a click on the switch's main button brings back after it turned
+ * the sky off: the choice shown now, else the one remembered (the system's
+ * own at first).
+ */
+export function skyToRestore(shown: SkyChoice, remembered: SkyChoice): SkyChoice {
+  return shown !== 'off' ? shown : remembered;
+}
+
 /** Whether `choice` draws a sky at all. */
 export function skyShown(choice: SkyChoice): boolean {
   return choice !== 'off';
@@ -67,6 +76,8 @@ export class SkyBackdrop {
   private texture: CubeTexture | null = null;
   private faces: SkyFaces | null = null;
   private key = '';
+  private choice: SkyChoice = 'off';
+  private axes: [Vec3, Vec3, Vec3] | null = null;
 
   constructor(options: { hideHostStar: boolean; renderOrder: number }) {
     const defines: Record<string, number> = options.hideHostStar ? { HIDE_HOST_STAR: 1 } : {};
@@ -110,38 +121,70 @@ export class SkyBackdrop {
     this.cube.frustumCulled = false;
     this.cube.renderOrder = options.renderOrder - 1;
 
+    // Nothing is baked here: the first look shown builds what it needs.
+    this.cube.visible = false;
     this.group.add(this.cube, this.stars);
-    this.setLook(FIXED_SKY);
   }
 
-  /** Rebuilds the stars and uploads the clouds; an equal look changes nothing. */
-  setLook(look: SkyLook): void {
-    const key = lookKey(look);
-    if (key === this.key) return;
-    this.key = key;
+  /**
+   * Draws the sky of `choice` (the system's own look `own`, today's fixed
+   * one, or none). Work is done lazily: nothing while the choice is 'off',
+   * and clouds only for the system's own sky. The fixed sky is today's
+   * exactly: the stars alone, no dust, not oriented by the system axes.
+   * An equal sky changes nothing.
+   */
+  setSky(choice: SkyChoice, own: SkyLook): void {
+    this.choice = choice;
+    this.applyAxes();
+    if (choice === 'off') return;
+    const look = lookFor(choice, own);
+    const clouds = choice === 'system';
 
-    const field = starField(look, (dir) => dustAt(look, dir));
-    const geometry = this.stars.geometry;
-    geometry.setAttribute('position', new BufferAttribute(field.directions, 3));
-    geometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
-    geometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
+    const key = `${clouds ? 'system' : 'fixed'}|${lookKey(look)}`;
+    if (key !== this.key) {
+      this.key = key;
+      const field = starField(look, clouds ? (dir) => dustAt(look, dir) : undefined);
+      // A new geometry: replacing the attributes of the old one would leave their buffers on the GPU.
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(field.directions, 3));
+      geometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
+      geometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
+      const old = this.stars.geometry;
+      this.stars.geometry = geometry;
+      old.dispose();
+    }
 
-    const faces = bakeSkyClouds(look);
-    if (faces !== this.faces) {
-      this.faces = faces;
-      this.texture?.dispose();
-      this.texture = cubeOf(faces);
-      this.cube.material.uniforms['uSky']!.value = this.texture;
+    this.cube.visible = clouds;
+    if (clouds) {
+      const faces = bakeSkyClouds(look);
+      if (faces !== this.faces) {
+        this.faces = faces;
+        this.texture?.dispose();
+        this.texture = cubeOf(faces);
+        this.cube.material.uniforms['uSky']!.value = this.texture;
+      }
     }
   }
 
   /**
    * The system's x, y and z axes in the view's frame: a system direction d
    * becomes d.x * ax + d.y * ay + d.z * az. Null leaves the group on its
-   * own rotation, which the view may turn.
+   * own rotation, which the view may turn. The fixed sky ignores them: it
+   * stays tied to the body, as it was before the system's own.
    */
   setAxes(axes: [Vec3, Vec3, Vec3] | null): void {
+    this.axes = axes;
+    this.applyAxes();
+  }
+
+  /** Whether the system's axes orient the sky now (not for the fixed sky). */
+  get orientedByAxes(): boolean {
+    return this.axes !== null && this.choice !== 'fixed';
+  }
+
+  private applyAxes(): void {
     const group = this.group;
+    const axes = this.orientedByAxes ? this.axes : null;
     if (axes) {
       group.matrixAutoUpdate = false;
       group.matrix.makeBasis(new Vector3(...axes[0]), new Vector3(...axes[1]), new Vector3(...axes[2]));
