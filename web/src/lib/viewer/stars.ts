@@ -1,10 +1,16 @@
 // The star field behind the globe: fixed points on the sky sphere, so they
 // turn with the planet when the camera orbits it.
 //
-// A fixed seed gives every world the same sky, so two compared worlds with
-// linked cameras show the same stars. Most stars are faint and white; a
-// few are bright, and a band of fainter stars crosses the sky, tilted to
-// the planet's equator like the Milky Way.
+// The sky comes from a `SkyLook`: its seed picks the stars, its north pole
+// orients the band of fainter stars like the Milky Way, its brightness
+// scales how many there are, and its bulge adds a cluster toward the
+// galactic centre. Compared worlds each keep their own sky, even with
+// linked cameras. `FIXED_SKY` is the sky every world had before: seed 7,
+// the band tilted 60 degrees to the planet's equator. Most stars are
+// faint and white; a few are bright.
+
+import type { Vec3 } from '../skyBodies';
+import { FIXED_SKY, type SkyLook } from './skyLook';
 
 /** One buffer per attribute, `count` stars long. */
 export interface StarField {
@@ -16,13 +22,13 @@ export interface StarField {
   sizes: Float32Array;
 }
 
-/** Stars spread over the whole sky, and stars along the band. */
+/** Stars spread over the whole sky, and stars along the band, at the Sun's place. */
 export const STAR_COUNTS = { sky: 5500, band: 3000 } as const;
 
-/** Angle between the band and the planet's equator, radians. */
-const BAND_TILT = (60 * Math.PI) / 180;
-/** Spread of the band around its great circle, radians (standard deviation). */
-const BAND_WIDTH = (7 * Math.PI) / 180;
+/** Stars of the bulge cluster at full strength. */
+export const BULGE_STARS = 1500;
+/** Spread of the bulge cluster around the galactic centre, radians (standard deviation). */
+const BULGE_WIDTH = (25 * Math.PI) / 180;
 
 /** Star colours (linear RGB) and how common they are: cool red dwarfs are many, hot blue stars rare. */
 const PALETTE: readonly { colour: readonly [number, number, number]; weight: number }[] = [
@@ -45,31 +51,76 @@ function random(seed: number): () => number {
   };
 }
 
-/** The star field. The same seed always gives the same stars. */
-export function starField(seed = 7): StarField {
-  const next = random(seed);
-  const count = STAR_COUNTS.sky + STAR_COUNTS.band;
+type Basis = { u: Vec3; w: Vec3 };
+
+const cross = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+
+/** Two unit vectors completing `axis` to a right-handed frame (u, axis, w), u as close to `hint` as possible. */
+function frameAbout(axis: Vec3, hint: Vec3): Basis {
+  const d = hint[0] * axis[0] + hint[1] * axis[1] + hint[2] * axis[2];
+  let u: Vec3 = [hint[0] - d * axis[0], hint[1] - d * axis[1], hint[2] - d * axis[2]];
+  let length = Math.hypot(...u);
+  if (length < 1e-6) {
+    // The hint is along the axis: any perpendicular will do.
+    const other: Vec3 = Math.abs(axis[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const e = other[0] * axis[0] + other[1] * axis[1] + other[2] * axis[2];
+    u = [other[0] - e * axis[0], other[1] - e * axis[1], other[2] - e * axis[2]];
+    length = Math.hypot(...u);
+  }
+  u = [u[0] / length, u[1] / length, u[2] / length];
+  return { u, w: cross(u, axis) };
+}
+
+/**
+ * The star field of a sky. The same look always gives the same stars.
+ * `dust` gives the extinction (0 to 1) toward a unit direction: a star
+ * behind a lane is dimmed by it.
+ */
+export function starField(look: SkyLook = FIXED_SKY, dust?: (dir: Vec3) => number): StarField {
+  const next = random(look.seed);
+  const skyCount = Math.round(STAR_COUNTS.sky * Math.sqrt(look.brightness));
+  const bandCount = Math.round(STAR_COUNTS.band * look.brightness);
+  const bulgeCount = Math.round(BULGE_STARS * look.bulge);
+  const count = skyCount + bandCount + bulgeCount;
   const directions = new Float32Array(count * 3);
   const colours = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
-  const cosTilt = Math.cos(BAND_TILT);
-  const sinTilt = Math.sin(BAND_TILT);
+  // The band's frame: latitude along the north pole, longitude from the centre.
+  const north = look.north;
+  const band = frameAbout(north, look.centre);
+  // The bulge's frame: around the centre.
+  const bulge = frameAbout(look.centre, north);
   for (let i = 0; i < count; i += 1) {
-    const inBand = i >= STAR_COUNTS.sky;
+    const inBand = i >= skyCount;
+    const inBulge = i >= skyCount + bandCount;
     let x: number;
     let y: number;
     let z: number;
-    if (inBand) {
+    if (inBulge) {
+      // A round cluster: angle from the centre from a Rayleigh law, any azimuth.
+      const angle = BULGE_WIDTH * Math.sqrt(-2 * Math.log(1 - next()));
+      const azimuth = next() * 2 * Math.PI;
+      const along = Math.cos(angle);
+      const across = Math.sin(angle);
+      const a = across * Math.cos(azimuth);
+      const b = across * Math.sin(azimuth);
+      x = along * look.centre[0] + a * bulge.u[0] + b * bulge.w[0];
+      y = along * look.centre[1] + a * bulge.u[1] + b * bulge.w[1];
+      z = along * look.centre[2] + a * bulge.u[2] + b * bulge.w[2];
+    } else if (inBand) {
       // Around the band's great circle: latitude from a normal law (Box-Muller).
       const lon = next() * 2 * Math.PI;
-      const lat = BAND_WIDTH * Math.sqrt(-2 * Math.log(1 - next())) * Math.cos(2 * Math.PI * next());
+      const lat = look.bandWidth * Math.sqrt(-2 * Math.log(1 - next())) * Math.cos(2 * Math.PI * next());
       const bx = Math.cos(lat) * Math.cos(lon);
       const by = Math.sin(lat);
       const bz = Math.cos(lat) * Math.sin(lon);
-      // Tilted about the x axis.
-      x = bx;
-      y = by * cosTilt - bz * sinTilt;
-      z = by * sinTilt + bz * cosTilt;
+      x = bx * band.u[0] + by * north[0] + bz * band.w[0];
+      y = bx * band.u[1] + by * north[1] + bz * band.w[1];
+      z = bx * band.u[2] + by * north[2] + bz * band.w[2];
     } else {
       // Uniform on the sphere.
       y = 2 * next() - 1;
@@ -90,7 +141,8 @@ export function starField(seed = 7): StarField {
       }
       pick -= entry.weight;
     }
-    const intensity = (inBand ? 0.18 : 0.25) + 0.75 * brightness;
+    let intensity = (inBand ? 0.18 : 0.25) + 0.75 * brightness;
+    if (dust) intensity *= 1 - dust([x, y, z]);
     colours.set(
       colour.map((c) => c * intensity),
       i * 3,
