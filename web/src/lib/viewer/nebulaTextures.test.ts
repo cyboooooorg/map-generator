@@ -49,20 +49,19 @@ describe('bakeNebula', () => {
     expect(bakeNebula(make('emission'), 'eye').rgba).not.toEqual(a.rgba);
   });
 
-  it('sizes the texture so that a texel is no wider than a screen pixel in the planet view', () => {
-    // The planet view's field of view is 40 degrees; the buffer we plan for is 1800 px high.
-    const pixelDeg = 40 / 1800;
-    for (const deg of [0.3, 0.5, 1, 2, 3, 5, 7]) {
+  it('sizes the texture so that a texel is about a screen pixel in the planet view, at a pixel ratio of 1', () => {
+    // The planet view's field of view is 40 degrees; the canvas we size for is 900 px high.
+    const pixelDeg = 40 / 900;
+    for (const deg of [0.5, 1, 2, 3, 5, 7, 12]) {
       const size = nebulaTextureSize(deg * DEG);
       expect((2 * deg) / size).toBeLessThanOrEqual(pixelDeg + 1e-9);
-      expect(size).toBeGreaterThanOrEqual(128);
-      expect(size).toBeLessThanOrEqual(1024);
+      // Not much finer either, above the smallest size: the bake costs by the texel (within one size step of 32).
+      if (size > 64) expect((2 * deg) / (size - 32)).toBeGreaterThan(pixelDeg);
+      expect(size % 32).toBe(0);
     }
-    expect(nebulaTextureSize(0.3 * DEG)).toBe(128);
-    expect(nebulaTextureSize(2 * DEG)).toBe(256);
-    // Capped: the largest nebulae are slightly magnified rather than costing 4 MB per texel row.
-    expect(nebulaTextureSize(12 * DEG)).toBe(1024);
-    expect(bakeNebula(make('emission', 1, 0.3, 8), 'eye').size).toBe(1024);
+    expect(nebulaTextureSize(0.3 * DEG)).toBe(64);
+    expect(nebulaTextureSize(12 * DEG)).toBe(544);
+    expect(bakeNebula(make('emission', 1, 0.3, 8), 'eye').size).toBe(nebulaTextureSize(8 * DEG));
     const t = bakeNebula(make('planetary', 1, 0.3, 0.5), 'eye');
     expect(t.rgba.length).toBe(t.size * t.size * 4);
   });

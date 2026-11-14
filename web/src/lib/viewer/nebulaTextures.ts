@@ -196,20 +196,23 @@ const SHADERS: Record<Exclude<NebulaKind, 'dark'>, Shader> = { planetary, emissi
 const fade = (rr: number) => 1 - smoothstep(0.74, 0.9, rr);
 
 /**
- * The planet view's default field of view and the tallest drawing buffer
- * we plan for (a 900 px canvas at a pixel ratio of 2): a texel should not be
- * wider than a screen pixel there, or the shapes blur.
+ * The planet view's field of view and the canvas height we size for: a
+ * 900 px tall view at a pixel ratio of 1, so that a texel is about a
+ * screen pixel there (two device pixels on a pixel ratio of 2: the
+ * nebulae are soft enough). Sizing for 1800 px and rounding up to powers
+ * of two baked 10 million texels for a sky near the core (about 6 s).
  */
 const VIEW_FOV_DEG = 40;
-const VIEW_BUFFER_HEIGHT = 1800;
-const MAX_TEXTURE = 1024;
+const VIEW_HEIGHT = 900;
+/** Sizes are multiples of this (WebGL 2 needs no power of two), between the two bounds. */
+const SIZE_STEP = 32;
+const MIN_TEXTURE = 64;
+const MAX_TEXTURE = 768;
 
-/** Texture size by the nebula's angular radius: a power of two with texels no wider than a screen pixel at the planet view's field of view. */
+/** Texture size by the nebula's angular radius: texels about as wide as a screen pixel at the planet view (see VIEW_HEIGHT). */
 export function nebulaTextureSize(radius: number): number {
-  const pixels = ((2 * radius * 180) / Math.PI) * (VIEW_BUFFER_HEIGHT / VIEW_FOV_DEG);
-  let size = 128;
-  while (size < pixels && size < MAX_TEXTURE) size *= 2;
-  return size;
+  const pixels = ((2 * radius * 180) / Math.PI) * (VIEW_HEIGHT / VIEW_FOV_DEG);
+  return Math.min(MAX_TEXTURE, Math.max(MIN_TEXTURE, Math.ceil(pixels / SIZE_STEP) * SIZE_STEP));
 }
 
 const encode = (linear: number): number => {
