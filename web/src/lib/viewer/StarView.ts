@@ -50,6 +50,7 @@ import { StarSurfaceState, starLook, starSurfaceUniforms } from './starSurface';
 import type { Belt } from '../api/types/Belt';
 import { SmallBodiesLayer, type SmallBodiesLabels } from './smallBodiesLayer';
 import { fullPixelRatio } from './pixelRatio';
+import { opaqueContext } from './opaqueContext';
 import { PROFILES, type QualityProfile } from './quality';
 import { axesOnScreen, type ScreenAxis } from './axes';
 import { starsFragment, starsVertex } from './shaders';
@@ -368,8 +369,9 @@ export class StarView {
     private readonly canvas: HTMLCanvasElement,
     readonly quality: QualityProfile = PROFILES.high,
   ) {
-    // Opaque, so that translucent pixels do not show the page behind (see PlanetView).
-    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, alpha: false });
+    // Opaque, so that translucent pixels do not show the page behind (see opaqueContext).
+    const context = opaqueContext(canvas, { antialias: quality.antialias });
+    this.renderer = new WebGLRenderer({ canvas, context, antialias: quality.antialias });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
     this.controls = new OrbitControls(this.camera, canvas);

@@ -134,6 +134,7 @@ import {
 } from './shaders';
 import { advanceDrift, NO_DRIFT } from './cloudDrift';
 import { PREVIEW_EDGES, previewEdgeUniform } from './previewTexture';
+import { opaqueContext } from './opaqueContext';
 import { PROFILES, type QualityProfile } from './quality';
 import {
   BOULDER_M,
@@ -857,9 +858,10 @@ export class PlanetView {
     readonly quality: QualityProfile = PROFILES.high,
   ) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
-    // Opaque: the halo and the overlays write alpha below 1, which an alpha
-    // canvas would blend with the page behind it (the theme's colours).
-    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true, alpha: false });
+    // Opaque (see opaqueContext): the halo and the overlays write alpha
+    // below 1, which an alpha canvas would blend with the page behind it.
+    const context = opaqueContext(canvas, { antialias: quality.antialias, stencil: true });
+    this.renderer = new WebGLRenderer({ canvas, context, antialias: quality.antialias, stencil: true });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
 
