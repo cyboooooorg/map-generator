@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { PHOTO_STAR_DENSITY, STAR_COUNTS, starField } from './stars';
-import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
+import { PHOTO_STAR_DENSITY, SEEDED_STAR_MAX, STAR_COUNTS, seededStarCounts, starField } from './stars';
+import { bandFrame, FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 /** FNV-1a over the float bits of a buffer. */
 function hash(a: Float32Array): number {
@@ -121,5 +121,49 @@ describe('starField density', () => {
     expect(photo / eye).toBeLessThanOrEqual(1.65);
     const bulged: SkyLook = { ...look, bulge: 1 };
     expect(starField(bulged, undefined, PHOTO_STAR_DENSITY).sizes.length - photo).toBe(starField(bulged).sizes.length - eye);
+  });
+});
+
+describe("a system's star field", () => {
+  const sunLook = skyLook({ source: 'Derived', position_kpc: [8.2, 0, 0.02], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: 5 } as never);
+
+  /** Stars in a cone of `radius` radians about a direction. */
+  const inCone = (look: SkyLook, centre: Vec3, radius: number, density = 1) => {
+    const f = starField(look, undefined, density);
+    const cos = Math.cos(radius);
+    let n = 0;
+    for (let i = 0; i < f.sizes.length; i += 1) if (dot(f.directions, centre, i * 3) > cos) n += 1;
+    return n;
+  };
+
+  it('is at least four times denser at the core than 90 degrees along the band, at the Sun\'s place', () => {
+    const { along, across } = bandFrame(sunLook);
+    const radius = (10 * Math.PI) / 180;
+    expect(inCone(sunLook, sunLook.centre, radius)).toBeGreaterThanOrEqual(4 * inCone(sunLook, across, radius));
+    expect(inCone(sunLook, sunLook.centre, radius)).toBeGreaterThanOrEqual(4 * inCone(sunLook, [-along[0], -along[1], -along[2]], radius));
+  });
+
+  it('is denser along the band than off it', () => {
+    const { across } = bandFrame(sunLook);
+    const radius = (8 * Math.PI) / 180;
+    const off: Vec3 = [...sunLook.north];
+    expect(inCone(sunLook, across, radius)).toBeGreaterThan(5 * inCone(sunLook, off, radius));
+  });
+
+  it('keeps the star count within the cap in every exposure, near the centre too', () => {
+    for (const x of [0.6, 2, 4.5, 8.2, 13]) {
+      const look = skyLook({ source: 'Derived', position_kpc: [x, 0, 0.02], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: 5 } as never);
+      for (const density of [1, PHOTO_STAR_DENSITY]) {
+        const counts = seededStarCounts(look, density);
+        expect(counts.sky + counts.band + counts.core + counts.bulge).toBeLessThanOrEqual(SEEDED_STAR_MAX);
+        expect(starField(look, undefined, density).sizes.length).toBe(counts.sky + counts.band + counts.core + counts.bulge);
+      }
+    }
+  });
+
+  it('has more stars in a long exposure, and more of them toward the core as the Sun-to-centre distance falls', () => {
+    expect(starField(sunLook, undefined, PHOTO_STAR_DENSITY).sizes.length).toBeGreaterThan(starField(sunLook).sizes.length);
+    const near = skyLook({ source: 'Derived', position_kpc: [4.5, 0, 0.02], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: 5 } as never);
+    expect(seededStarCounts(near).core).toBeGreaterThan(seededStarCounts(sunLook).core);
   });
 });
