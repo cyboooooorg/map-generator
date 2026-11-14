@@ -12,9 +12,19 @@
  */
 export type BiomeRules = { 
 /**
- * Below this elevation, a pixel is open water.
+ * Below this elevation, a pixel is open water, unless the world is
+ * [`dry`](Self::dry). The relief is built from it either way: the
+ * altitude lines and the lapse rate are measured from it.
  */
 waterline: number, 
+/**
+ * Whether the world has no surface liquid: then no pixel is open
+ * water, whatever its elevation (see [`Self::open_water`]). Set by the
+ * planet model on a world without water at its surface (none kept, or
+ * all of it steam), whose sea level then only sets the datum of its
+ * relief (see `crate::planet::interim::calibrate`).
+ */
+dry?: boolean, 
 /**
  * Below this elevation, open water is deep ocean.
  */

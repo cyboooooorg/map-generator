@@ -969,7 +969,9 @@ mod tests {
         assert_eq!(surface.water.oceans, 0.0);
         let mut params = resolved.params.clone();
         crate::planet::interim::calibrate(&mut params, resolved.model());
-        assert_eq!(params.sea_level, SEA_LEVEL.min);
+        // No water: a dry world, its sea level the datum of its relief.
+        assert!(params.look.rules.dry);
+        assert_eq!(params.sea_level, crate::generation::DRY_SEA_LEVEL);
         // The other inputs stay the archetype's.
         assert_eq!(resolved.model().inputs.core_mass_fraction, 0.325_f32 as f64);
     }

@@ -725,7 +725,9 @@ the world the planet renders (part 3a; issue #424 replaces it):
 - The pressure the world is drawn with is the model's total, clamped to
   the request's limits; the greenhouse of the preset is zero, because the
   temperature is aimed at the model's instead.
-- The sea level is where the model's oceans fill the relief; the
+- The sea level is where the model's oceans fill the relief (on a dry
+  world, with none at its surface, only the datum of its relief: no open
+  water anywhere, `look.rules.dry`); the
   temperature offset (grid offset) is the shift that brings the grid's
   mean to the model's surface temperature. Both are set when the world is
   generated and are only in `world.json`; the drawn parameters of the

@@ -183,11 +183,17 @@ pub(crate) fn relief_share(p: &WorldParams) -> f32 {
 
 /// Span of the noise relief of the world `p`, km: from the old floor
 /// ([`ABYSS_KM`]) to the top of the platform and of the mountains at its
-/// gravity.
+/// gravity; on a dry world, which has no sea floor, from the bottom of its
+/// rolling plains ([`DRY_PLAINS_KM`]).
 fn noise_span_km(p: &WorldParams) -> f32 {
-    ABYSS_KM
-        + PLATFORM_KM
-        + MOUNTAIN_BLEND * relief_scale(p.gravity_modifier()) * crate::craters::ELEVATION_KM
+    let scale = relief_scale(p.gravity_modifier());
+    let mountains = MOUNTAIN_BLEND * scale * crate::craters::ELEVATION_KM;
+    if p.look.rules.dry {
+        // No sea floor: the rolling plains instead.
+        PLATFORM_KM + DRY_PLAINS_KM * DRY_PLAINS_SPAN * scale + mountains
+    } else {
+        ABYSS_KM + PLATFORM_KM + mountains
+    }
 }
 
 /// Whether the world `p` is mostly ice: a bulk density, from its gravity
@@ -360,9 +366,13 @@ const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
 /// percentile is 0.27, its 92nd 0.29), the top of the ramp on about 5 %,
 /// its foot on about 14 %; a seed draws more or fewer. Inside, the
 /// mountains keep their whole weight: the `venus-like` archetype spans
-/// 9 km, `mars-like` 30 km (Mars's dynamic range is about 30 km, Smith et
-/// al. 1999, doi:10.1126/science.284.5419.1495), `mercury-like` 8 km
-/// (Mercury: 9.9 km, Becker et al. 2016, LPSC abstract 2959).
+/// 16 km, 2.6 km below its median to 13 km above it (Venus: about 3 km
+/// below its mean radius to Maxwell's 11 km above), `mars-like` 30 km
+/// (Mars's dynamic range is about 30 km, Smith et al. 1999,
+/// doi:10.1126/science.284.5419.1495). `mercury-like` spans 18 km, about
+/// twice Mercury's 9.9 km (Becker et al. 2016, LPSC abstract 2959): its
+/// craters, 7.7 km deep at most, and its highlands under the impact cap
+/// ([`IMPACT_RELIEF_KM`], calibrated on the Moon).
 struct Highlands {
     frequency: f64,
     octaves: u32,
@@ -465,8 +475,13 @@ pub struct Sampler {
     /// Weight of volcanic arcs in the volcanic zone.
     arc_volcanism: f32,
     sea_level: f32,
-    /// Absolute elevation of the sea surface.
+    /// Absolute elevation of the sea surface, which the continents' shape
+    /// is measured from; on a dry world, the old floor of the range, where
+    /// the whole shape stands above it.
     waterline: f32,
+    /// On a dry world (see [`crate::biome::BiomeRules::dry`]), its
+    /// waterline, the datum its plains are laid from.
+    dry_waterline: Option<f32>,
     noise_scale: f64,
     coast_octaves: u32,
     coast_noise: Perlin,
@@ -520,7 +535,16 @@ impl Sampler {
             coast_octaves: coast_octaves(noise_scale, &grid),
             grid,
             sea_level: p.sea_level,
-            waterline: p.sea_level + p.look.rules.waterline,
+            waterline: if p.look.rules.dry {
+                crate::request::SEA_LEVEL.min + p.look.rules.waterline
+            } else {
+                p.sea_level + p.look.rules.waterline
+            },
+            dry_waterline: p
+                .look
+                .rules
+                .dry
+                .then_some(p.sea_level + p.look.rules.waterline),
             noise_scale,
             coast_noise: Perlin::new(stream_seed(seed, stream::COAST)),
             plate_seed: stream_seed(seed, stream::PLATES),
@@ -782,7 +806,14 @@ impl Sampler {
         // The crust floats: continents as a low platform, the sea floor
         // between its shelf and the old floor (see `floating`). New crust
         // is laid at the old floor already.
-        let continent = if origin.new_crust {
+        let continent = if let Some(waterline) = self.dry_waterline {
+            // No sea ever shaped a dry world: plains on its platform,
+            // rolling with the continents' noise.
+            waterline
+                + PLATFORM_KM / crate::craters::ELEVATION_KM
+                + (coarse + PLAIN_ROUGHNESS * fine) * DRY_PLAINS_KM * self.relief_scale
+                    / crate::craters::ELEVATION_KM
+        } else if origin.new_crust {
             coarse + fine * roughness
         } else {
             floating(coarse + fine * roughness - self.waterline) + self.waterline
@@ -1364,6 +1395,27 @@ pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
     0.5 * (lo + hi)
 }
 
+/// Sea level of a dry world (see [`crate::biome::BiomeRules::dry`]): the
+/// datum of its relief only, set so that its plains, 0.13 below it, stand
+/// within the linear part of the elevation range ([`RANGE_KNEE`]), with
+/// room for basins and craters below them and for mountains above.
+pub const DRY_SEA_LEVEL: f32 = -0.1;
+/// Relief of a dry world's plains, km per unit of the continents' noise
+/// (its coarse octaves and [`PLAIN_ROUGHNESS`] of its fine ones) at
+/// Earth's gravity, scaled as `1/g` ([`relief_scale`]) like everything
+/// that loads the crust. With no sea to level them, the plains of a dry
+/// world roll: Venus's lowlands and upland plains spread its unimodal
+/// hypsometry over about ±1 km, more than 80 % of the surface within 1 km
+/// of the mean radius (Ford & Pettengill 1992, doi:10.1029/92JE01085).
+/// Calibration on the `venus-like` archetype (seed 12345, 2048 × 1024,
+/// with its highlands, see [`HIGHLANDS`]): 3 km puts 79 % of its area
+/// within ±1 km of its median, 2 km 85 %.
+const DRY_PLAINS_KM: f32 = 3.0;
+/// The noise's span over a world's plains, its units: about 1.5 from the
+/// lowest to the highest (measured on `venus-like`: its plains span
+/// about 4.9 km at 3.3 km per unit), for [`noise_span_km`].
+const DRY_PLAINS_SPAN: f32 = 1.5;
+
 /// Bisection passes of [`sea_level_for_water`]: the range of 2 narrows to
 /// 2/2^12, under 0.001 (25 m of relief).
 const WATER_PASSES: usize = 12;
@@ -1582,7 +1634,7 @@ pub fn generate_with_progress(
     erode(
         &mut elevation,
         (width, height),
-        params.sea_level + rules.waterline,
+        params.open_waterline(),
         params.erosion,
         params.seed,
         &thaw,
@@ -1668,7 +1720,7 @@ pub fn generate_with_progress(
     if locked.is_none() && params.pressure_bar >= LIQUID_WATER_BAR {
         let sea: Vec<bool> = elevation
             .par_iter()
-            .map(|&e| relief(e) < rules.waterline)
+            .map(|&e| relief(e) < rules.open_water())
             .collect();
         let cooling = crate::climate::cold_currents(&grid, &belts, &sea);
         raw_temperature
@@ -1689,11 +1741,11 @@ pub fn generate_with_progress(
     // Shores are the land pixels close to open water.
     let open_water: Vec<bool> = elevation
         .par_iter()
-        .map(|&e| relief(e) < rules.waterline)
+        .map(|&e| relief(e) < rules.open_water())
         .collect();
     let height_above_water: Vec<f32> = elevation
         .par_iter()
-        .map(|&e| relief(e) - rules.waterline)
+        .map(|&e| relief(e) - rules.open_water())
         .collect();
     // The distance to the coast runs on one core (a Dijkstra), and only the
     // biomes read it: the moisture pass runs beside it.
@@ -1796,12 +1848,20 @@ pub fn generate_with_progress(
                 .map(|(&m, &t)| {
                     if lava {
                         1.0
+                    } else if rules.dry {
+                        // No liquid at the surface: nothing runs off.
+                        0.0
                     } else {
                         crate::hydrology::runoff_share(m, t)
                     }
                 })
                 .collect();
-            hydrology(&grid, &height_above_water, &runoff, params.seed)
+            let mut water = hydrology(&grid, &height_above_water, &runoff, params.seed);
+            if rules.dry {
+                // Nor does any pool: lava runs through its pits.
+                water.lake.iter_mut().for_each(|l| *l = false);
+            }
+            water
         },
     );
     if let Some(sink) = sink {
@@ -1832,7 +1892,7 @@ pub fn generate_with_progress(
     drop(height_above_water);
     // Valleys and floodplains along the rivers. Carving never creates water,
     // so the coast distance and the drainage stay valid.
-    let waterline = params.sea_level + rules.waterline;
+    let waterline = params.open_waterline();
     let mut above: Vec<f32> = elevation.par_iter().map(|e| e - waterline).collect();
     let mut floodplain = carve::carve(&river_lines, &grid, &water.filled, &water.lake, &mut above);
     // Only the flow and the lakes are needed from here on.
@@ -1872,7 +1932,7 @@ pub fn generate_with_progress(
     let biomes: Vec<Biome> = (0..n)
         .into_par_iter()
         .map(|i| {
-            let land = relief(elevation[i]) >= rules.waterline;
+            let land = relief(elevation[i]) >= rules.open_water();
             let input = BiomeInput {
                 elevation: relief(elevation[i]),
                 moisture: moisture[i],
@@ -2607,18 +2667,51 @@ pub(crate) mod tests {
                 let mut p = WorldParams {
                     width: 256,
                     height: 128,
-                    sea_level: -1.0,
+                    sea_level: DRY_SEA_LEVEL,
                     pressure_bar: 90.0,
                     volcanic_intensity: 0.2,
                     gravity: Some(gravity),
                     ..params(seed, "terran")
                 };
+                p.look.rules.dry = true;
                 p.look.geology.regime = regime;
                 let (plains, high) = hypsometry(&p);
-                assert!(plains > 0.75, "{regime:?} {seed} {gravity}: {plains}");
+                assert!(plains > 0.7, "{regime:?} {seed} {gravity}: {plains}");
                 assert!(high > 0.005, "{regime:?} {seed} {gravity}: {high}");
             }
         }
+    }
+
+    /// A dry world has no sea, whatever its low ground, and its relief
+    /// stands in the linear part of the range: nothing pinned at its floor.
+    #[test]
+    fn a_dry_world_has_no_sea_and_room_for_its_relief() {
+        let mut p = WorldParams {
+            width: 256,
+            height: 128,
+            sea_level: DRY_SEA_LEVEL,
+            pressure_bar: 0.0,
+            gravity: Some(0.4),
+            erosion: 1.0,
+            ..params(3, "terran")
+        };
+        p.look.rules.dry = true;
+        p.look.geology.regime = Regime::Stagnant;
+        let w = generate(&p).world;
+        let water = w.biomes.iter().filter(|b| b.is_water()).count();
+        assert_eq!(water, 0);
+        let mut e = w.elevation.clone();
+        e.sort_by(f32::total_cmp);
+        let (lowest, median) = (e[0], e[e.len() / 2]);
+        assert!(lowest > -RANGE_KNEE, "{lowest}");
+        // Its plains lie below the waterline's altitude lines, not on
+        // them: plains, not highland.
+        assert!(
+            (median - p.sea_level - p.look.rules.highland) < 0.0,
+            "{median}"
+        );
+        // Its low ground lies below the waterline, and is land.
+        assert!(lowest < p.sea_level + p.look.rules.waterline, "{lowest}");
     }
 
     /// An airless world without plates keeps the relief impacts give it,

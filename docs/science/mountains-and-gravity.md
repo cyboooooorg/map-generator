@@ -167,8 +167,11 @@ flowchart LR
    sphere, Venus's share: tesserae cover about 7–8 % of it (Ivanov & Head
    2011), highlands with them about a tenth, plains 70–80 %. Venus's
    hypsometry is unimodal, more than 80 % of it within 1 km of the mean
-   radius (Pettengill et al. 1980; Ford & Pettengill 1992): the
-   `venus-like` archetype gets 91 % within ±1 km of its median.
+   radius (Pettengill et al. 1980; Ford & Pettengill 1992): with the
+   rolling plains of a dry world (3 km of relief per unit of the
+   continents' noise at Earth's gravity, `DRY_PLAINS_KM`, scaled as
+   `1/g`), the `venus-like` archetype gets 79 % within ±1 km of its
+   median.
 3. **Plate boundaries.** The ranges, arcs and trenches that
    [`plates.rs`](../../crates/mapgen/src/plates.rs) raises at plate
    boundaries are given "at Earth's gravity" and multiplied by the same
@@ -270,18 +273,16 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   rock's transition, so its span is 0.75 of rock's, not 0.4. Dead planets
   (`mercury-like`, airless `barren`) have the 9 km cap too, whatever their
   gravity.
-- **Worlds without plates: provinces from noise, a squeezed datum.**
-  Their highland provinces are noise blobs: real ones are tesserae and
-  volcanic rises on Venus, the cratered southern highlands and Tharsis on
-  Mars (two thirds of the planet, not a tenth), impact-shaped terrain on
-  Mercury and the Moon; the same share serves them all. And a dry world's
-  sea level is the lowest the request allows, so its plains sit near the
-  bottom of the elevation range, where `within_range` compresses: the
-  plains stand flat, without Venus's ±1 km of rolling lowlands and
-  uplands (`venus-like` has 91 % within ±1 km of its median where Venus
-  has about 80 %), and the foot of the highlands is squeezed. `mars-like`
-  spans 30 km (Mars: about 30 km, Smith et al. 1999), `mercury-like`
-  7.9 km (Mercury: 9.9 km, Becker et al. 2016).
+- **Worlds without plates: provinces from noise.** Their highland
+  provinces are noise blobs: real ones are tesserae and volcanic rises on
+  Venus, the cratered southern highlands and Tharsis on Mars (two thirds
+  of the planet, not a tenth), impact-shaped terrain on Mercury and the
+  Moon; the same share serves them all. A dry world's rolling plains come
+  from the continents' noise, not from mantle flow. `mars-like` spans
+  30 km (Mars: about 30 km, Smith et al. 1999); `mercury-like` 18 km, about
+  twice Mercury's 9.9 km (Becker et al. 2016): its craters reach 7.7 km
+  below its median and its highlands 10 km above it, under an impact cap
+  calibrated on the Moon, whose relief (about 20 km) is twice Mercury's.
 
 ## Sources
 

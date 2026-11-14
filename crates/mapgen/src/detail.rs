@@ -326,7 +326,7 @@ impl DetailWorld {
             world.params.circumference_km as f64,
         );
         let look = &world.params.look;
-        let waterline = world.params.sea_level + look.rules.waterline;
+        let waterline = world.params.open_waterline();
         let river = look.remap(Biome::River);
         let flags = (0..world.biomes.len())
             .into_par_iter()
@@ -399,11 +399,17 @@ impl DetailWorld {
         let p = sphere(lon, lat, 1.0);
         let radius = w.params.circumference_km as f64 / TAU;
         let waterline = w.params.sea_level + w.params.look.rules.waterline;
+        let dry = w.params.look.rules.dry;
 
         // Near the coast, read the base elevation at a position displaced
         // sideways by every detail octave: the coastline gets capes and bays
         // at each zoom level, and stays one connected line.
-        let coastal = 1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs());
+        // A world without surface liquid has no coast.
+        let coastal = if dry {
+            0.0
+        } else {
+            1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs())
+        };
         let base = if coastal > 0.0 {
             let (mut dx, mut dy) = (0.0, 0.0);
             let (mut wavelength, mut share) = (first, COAST_WARP);
@@ -439,7 +445,11 @@ impl DetailWorld {
             * (1.0 + MOUNTAIN_BOOST * high)
             * bilinear(&Roughness(&w.biomes), w.width, w.height, x, y);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
-        let shore = smoothstep(0.0, SHORE_FADE, above.abs());
+        let shore = if dry {
+            1.0
+        } else {
+            smoothstep(0.0, SHORE_FADE, above.abs())
+        };
         // Floodplains stay flat valley floors.
         let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&w.floodplain, w.width, w.height, x, y);
         base + amplitude * shore * floor * band_limited(&self.noise, p, radius, first, last, gain)
@@ -453,7 +463,7 @@ impl DetailWorld {
     fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f32>, Vec<f32>) {
         let w = &self.world;
         let side = TILE_SIZE as usize + 2;
-        let waterline = w.params.sea_level + w.params.look.rules.waterline;
+        let waterline = w.params.open_waterline();
         let craters = self.crater_relief(tile, pixel_km);
         (0..side * side)
             .into_par_iter()
@@ -570,6 +580,9 @@ impl DetailWorld {
                 let e = surface[(py + 1) * side + px + 1];
                 let relief = (e - w.params.sea_level).clamp(-1.0, 1.0);
                 let above = relief - look.rules.waterline;
+                // Height above open water: `above` but on a dry world, which
+                // has none.
+                let above_sea = relief - look.rules.open_water();
 
                 // Climate at a warped position: irregular biome borders.
                 let p = sphere(lon, lat, 1.0);
@@ -586,14 +599,14 @@ impl DetailWorld {
                 let t = sample(&w.temperature) + temperature(0.0, above, lapse)
                     - temperature(0.0, base_above, lapse);
                 // Lakes: smooth shores from the base lake mask.
-                let lake = sample(&Lakes(&self.flags)) > 0.5 && above >= 0.0;
+                let lake = sample(&Lakes(&self.flags)) > 0.5 && above_sea >= 0.0;
                 let input = BiomeInput {
                     elevation: relief,
                     moisture: sample(&w.moisture),
                     temperature: t,
                     seasonality: w.seasons.at(
                         (cy.max(0.0) as u32).min(w.height - 1),
-                        above >= 0.0,
+                        above_sea >= 0.0,
                         sample(&w.coast_distance_km),
                     ),
                     volcanic_zone: sample(&w.volcanic_zone),
@@ -607,8 +620,8 @@ impl DetailWorld {
                 let (mut colour, normal) = if biome.is_water() {
                     // Seas from the detailed elevation; lakes from the base
                     // depth below their surface.
-                    let depth = if above < 0.0 {
-                        -above
+                    let depth = if above_sea < 0.0 {
+                        -above_sea
                     } else {
                         sample(&self.depths)
                     };

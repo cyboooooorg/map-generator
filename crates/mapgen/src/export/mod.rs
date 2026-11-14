@@ -349,7 +349,7 @@ pub(crate) fn water_depths_of(
 ) -> Vec<f32> {
     let (w, h) = (params.width as usize, params.height as usize);
     let look = &params.look;
-    let waterline = params.sea_level + look.rules.waterline;
+    let waterline = params.open_waterline();
     let river = look.remap(Biome::River);
     let lake = |i: usize| biomes[i].is_water() && biomes[i] != river && elevation(i) >= waterline;
     let mut depth: Vec<f32> = (0..w * h)

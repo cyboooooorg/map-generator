@@ -202,6 +202,13 @@ pub fn rocky_circumference_km(mass_earth: f64) -> f32 {
 }
 
 impl WorldParams {
+    /// The elevation below which a pixel is open water: the sea level plus
+    /// the look's waterline, or below any elevation on a world without
+    /// surface liquid ([`crate::biome::BiomeRules::dry`]).
+    pub fn open_waterline(&self) -> f32 {
+        self.sea_level + self.look.rules.open_water()
+    }
+
     /// Surface gravity relative to Earth's (1.0 = Earth's).
     ///
     /// The body's own when known ([`Self::gravity`]: a moon's, from its
@@ -308,7 +315,7 @@ impl World {
     /// the pixel would have without them.
     pub fn biome_input(&self, i: usize) -> BiomeInput {
         let elevation = (self.elevation[i] - self.params.sea_level).clamp(-1.0, 1.0);
-        let land = elevation >= self.params.look.rules.waterline;
+        let land = elevation >= self.params.look.rules.open_water();
         BiomeInput {
             elevation,
             moisture: self.moisture[i],

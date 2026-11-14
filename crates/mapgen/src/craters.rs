@@ -587,9 +587,10 @@ impl CraterField {
                 1.0
             },
             waterline: p.sea_level + p.look.rules.waterline,
-            sea: [Biome::DeepOcean, Biome::Ocean]
-                .iter()
-                .any(|&b| p.look.remap(b).is_water()),
+            sea: !p.look.rules.dry
+                && [Biome::DeepOcean, Biome::Ocean]
+                    .iter()
+                    .any(|&b| p.look.remap(b).is_water()),
             wet_until_ga: p.look.geology.wet_until_ga(p.pressure_bar) as f64,
             erosion: p.erosion as f64,
             past: Population {

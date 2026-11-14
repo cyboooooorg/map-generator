@@ -571,7 +571,9 @@ pub fn params_for(
 /// with a surface, from [`params_for`]'s parameters, in this order (the
 /// warming reads the sea level): its sea level, where its oceans
 /// ([`ocean_depth_m`]) fill the relief ([`sea_level_for_water`]; a
-/// runaway's water is steam, none on the ground), or for a hydrocarbon
+/// runaway's water is steam, none on the ground; with no water at all the
+/// world is [`dry`](crate::biome::BiomeRules::dry), its sea level
+/// [`DRY_SEA_LEVEL`](crate::generation::DRY_SEA_LEVEL)), or for a hydrocarbon
 /// world, whose lakes the model does not size, Titan's share of land
 /// ([`HYDROCARBON_LAND_FRACTION`]); then the temperature shift that brings
 /// the world's mean to the model's ([`warming_for`]).
@@ -594,7 +596,15 @@ pub fn calibrate(params: &mut WorldParams, model: &PlanetModel) {
         } else {
             surface.water.oceans
         };
-        sea_level_for_water(params, ocean_depth_m(oceans, model.interior.radius_earth))
+        let depth_m = ocean_depth_m(oceans, model.interior.radius_earth);
+        // No water at the surface: no sea, and the sea level only sets the
+        // datum of the relief, where it has room (see `DRY_SEA_LEVEL`).
+        params.look.rules.dry = depth_m <= 0.0;
+        if params.look.rules.dry {
+            crate::generation::DRY_SEA_LEVEL
+        } else {
+            sea_level_for_water(params, depth_m)
+        }
     };
     params.look.climate.temperature = warming_for(params, surface.climate.temperature_k);
 }

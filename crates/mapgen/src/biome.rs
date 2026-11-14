@@ -340,6 +340,11 @@ pub fn biome_name(b: Biome) -> &'static str {
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
+/// The open-water line of a [`dry`](BiomeRules::dry) world: below any
+/// elevation (elevations, and their height above the sea level, stay
+/// within `[-1, 1]` and `[-2, 2]`).
+pub const NO_WATER: f32 = -3.0;
+
 /// Every threshold used by biome selection, in one place.
 ///
 /// Elevations are relative to the shifted sea level (`elevation - sea_level`)
@@ -353,8 +358,18 @@ pub fn biome_name(b: Biome) -> &'static str {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BiomeRules {
     // Altitude bands
-    /// Below this elevation, a pixel is open water.
+    /// Below this elevation, a pixel is open water, unless the world is
+    /// [`dry`](Self::dry). The relief is built from it either way: the
+    /// altitude lines and the lapse rate are measured from it.
     pub waterline: f32,
+    /// Whether the world has no surface liquid: then no pixel is open
+    /// water, whatever its elevation (see [`Self::open_water`]). Set by the
+    /// planet model on a world without water at its surface (none kept, or
+    /// all of it steam), whose sea level then only sets the datum of its
+    /// relief (see `crate::planet::interim::calibrate`).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub dry: bool,
     /// Below this elevation, open water is deep ocean.
     pub deep_ocean: f32,
     /// Below this temperature, the sea surface freezes into pack ice.
@@ -443,6 +458,7 @@ impl Default for BiomeRules {
             // highland from 2 km, snow from 4.5 km, volcanoes from 3 km,
             // ash from 1.5 km.
             waterline: -0.15,
+            dry: false,
             deep_ocean: -0.35,
             sea_ice_temperature: -13.5,
             shore_top: -0.09,
@@ -512,6 +528,13 @@ impl BiomeInput {
 // ── Top-level biome selector ──────────────────────────────────────────────────
 
 impl BiomeRules {
+    /// The elevation (above the sea level) below which a pixel is open
+    /// water: the [`waterline`](Self::waterline), or on a [`dry`](Self::dry)
+    /// world [`NO_WATER`], below any elevation.
+    pub fn open_water(&self) -> f32 {
+        if self.dry { NO_WATER } else { self.waterline }
+    }
+
     /// Selects the biome of a pixel: altitude band, then volcanic override.
     /// Planet looks remap the result afterwards.
     pub fn choose(&self, input: BiomeInput) -> Biome {
@@ -524,7 +547,7 @@ impl BiomeRules {
         let summer = input.summer();
         // Lava overrides water: no lake or river inside a lava field or a
         // volcano, whose rivers start at its edge instead.
-        if (input.lake || input.river) && e >= self.waterline {
+        if (input.lake || input.river) && e >= self.open_water() {
             let dry = self.choose(BiomeInput {
                 lake: false,
                 river: false,
@@ -534,7 +557,7 @@ impl BiomeRules {
                 return dry;
             }
         }
-        let base = if e < self.waterline {
+        let base = if e < self.open_water() {
             self.ocean(e, t)
         } else if input.lake {
             if t < self.sea_ice_temperature {
@@ -688,6 +711,29 @@ impl BiomeRules {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dry_world_has_no_open_water() {
+        let rules = BiomeRules {
+            dry: true,
+            ..BiomeRules::default()
+        };
+        for e in [-1.0, -0.5, rules.waterline - 0.01] {
+            let input = BiomeInput {
+                elevation: e,
+                moisture: 0.0,
+                temperature: 15.0,
+                seasonality: 0.0,
+                volcanic_zone: 0.0,
+                coast_distance_km: 1e6,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            };
+            assert!(!rules.choose(input).is_water(), "{e}");
+            assert!(BiomeRules::default().choose(input).is_water(), "{e}");
+        }
+    }
 
     #[test]
     fn lava_overrides_lakes_and_rivers() {

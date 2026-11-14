@@ -81,7 +81,7 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
                 temperature: temperature[i],
                 seasonality: world.seasons.at(
                     (i / grid.width as usize) as u32,
-                    above(elevation[i]) >= 0.0,
+                    (elevation[i] - p.sea_level).clamp(-1.0, 1.0) >= rules.open_water(),
                     world.coast_distance_km.get(i),
                 ),
                 volcanic_zone: world.volcanic_zone.get(i),
