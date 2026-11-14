@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, tick, untrack, type Snippet } from 'svelte';
   import DriftPanel from './components/DriftPanel.svelte';
   import GenerateForm from './components/GenerateForm.svelte';
   import JobsIndicator from './components/JobsIndicator.svelte';
@@ -8,8 +8,15 @@
   import ThemeSelect from './components/ThemeSelect.svelte';
   import SystemOrrery from './components/SystemOrrery.svelte';
   import Toasts from './components/Toasts.svelte';
-  import WorldInfo from './components/WorldInfo.svelte';
-  import BodyCard from './components/BodyCard.svelte';
+  import AtmosphereCard from './components/body/AtmosphereCard.svelte';
+  import BodyHeader from './components/body/BodyHeader.svelte';
+  import InteriorCard from './components/body/InteriorCard.svelte';
+  import MapCard from './components/body/MapCard.svelte';
+  import MoonsCard from './components/body/MoonsCard.svelte';
+  import OrbitCard from './components/body/OrbitCard.svelte';
+  import SurfaceCard from './components/body/SurfaceCard.svelte';
+  import SystemSummaryCard from './components/body/SystemSummary.svelte';
+  import type { DockCard } from './components/dock/Dock.svelte';
   import PinButton from './components/PinButton.svelte';
   import RenameForm from './components/RenameForm.svelte';
   import SystemList from './components/SystemList.svelte';
@@ -22,7 +29,7 @@
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
   import { bodyTitle, forgetTold, toTell } from './lib/evicted';
-  import { worldCardOwner } from './lib/moons';
+  import { type CardId, cardDockId, cardsFor } from './lib/bodyCards';
   import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
   import { setArchetypeLocales } from './lib/i18n/names.svelte';
@@ -120,6 +127,27 @@
   const summaryOf = (id: string | null) => systems.find((s) => s.id === id) ?? null;
   /** A system's revision: when its file last changed (a body generated, its names). */
   const revision = (id: string | null) => summaryOf(id)?.modified_ms ?? null;
+  /** A star or body renamed: the list shows the new summary. */
+  const renamedSystem = (renamed: SystemSummary) => (systems = systems.map((s) => (s.id === renamed.id ? renamed : s)));
+  /** The body's details, as the themed cards of the viewer's info panel (the legend card is the viewer's own). */
+  const infoCards = $derived.by((): DockCard[] => {
+    if (!primary.system) return [];
+    const snippets: Partial<Record<CardId, Snippet>> = {
+      header: headerCard,
+      orbit: orbitCard,
+      interior: interiorCard,
+      atmosphere: atmosphereCard,
+      surface: surfaceCard,
+      moons: moonsCard,
+      map: mapCard,
+    };
+    const cards: DockCard[] = [{ id: 'info.system', title: t.cards.system, content: systemCard, full: true, detachable: false }];
+    for (const id of cardsFor(primary.shownSystemBody, primary.meta, primary.stats !== null)) {
+      const content = snippets[id];
+      if (content) cards.push({ id: cardDockId(id), title: t.cards[id], content, full: id === 'header', detachable: id !== 'header' });
+    }
+    return cards;
+  });
   /** A system's name in the compare bar: the one given to its star, else its designation. */
   const titleOf = (id: string | null) => {
     const summary = summaryOf(id);
@@ -519,27 +547,43 @@
   }
 </script>
 
-{#snippet info()}
-  {@const cardOwner = primary.system ? worldCardOwner(primary.system.bodies, primary.systemNames, primary.systemBody) : null}
-  {#if primary.system}
-    <BodyCard
-      world={primary}
-      onRenamed={(renamed) => (systems = systems.map((s) => (s.id === renamed.id ? renamed : s)))}
-      onGenerate={generateBody}
-    />
-  {/if}
-  {#if !primary.system || primary.shownSystemBody?.generated}
-    <WorldInfo
-      world={primary}
-      title={cardOwner?.planet ?? null}
-      ofMoon={cardOwner?.ofMoon ?? false}
-      revision={revision(selectedId)}
-      onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id, primary.meta.giant != null)}
-      onReroll={reroll}
-      link={shareLink}
-      onDelete={() => selectedId && removeWorlds([selectedId])}
-    />
-  {/if}
+{#snippet systemCard()}
+  <SystemSummaryCard world={primary} onRenamed={renamedSystem} />
+{/snippet}
+
+{#snippet headerCard()}
+  <BodyHeader world={primary} onRenamed={renamedSystem} onGenerate={generateBody} />
+{/snippet}
+
+{#snippet orbitCard()}
+  <OrbitCard world={primary} />
+{/snippet}
+
+{#snippet interiorCard()}
+  <InteriorCard world={primary} />
+{/snippet}
+
+{#snippet atmosphereCard()}
+  <AtmosphereCard world={primary} />
+{/snippet}
+
+{#snippet surfaceCard()}
+  <SurfaceCard world={primary} />
+{/snippet}
+
+{#snippet moonsCard()}
+  <MoonsCard world={primary} />
+{/snippet}
+
+{#snippet mapCard()}
+  <MapCard
+    world={primary}
+    revision={revision(selectedId)}
+    onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id, primary.meta.giant != null)}
+    onReroll={reroll}
+    link={shareLink}
+    onDelete={() => selectedId && removeWorlds([selectedId])}
+  />
 {/snippet}
 
 {#snippet drift()}
@@ -651,7 +695,7 @@
         revision={revision(selectedId)}
         keyboard={form === null}
         label={compareId ? titleOf(selectedId) : null}
-        {info}
+        {infoCards}
         drift={primary.meta && driftRange(primary.meta) ? drift : undefined}
         onStepWorld={step}
         onDisplayChange={(display) => (mainDisplay = display)}

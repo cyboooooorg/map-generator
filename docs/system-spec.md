@@ -903,20 +903,24 @@ addressed as `<system-id>/<body-id>` everywhere.
   [Generating on demand](#generating-on-demand) and **Cancel**. Its share
   is `(body_step − 1 + step / steps) / bodies`. The job list keeps every
   job, named by system and body.
-- **Property cards.** One card component for every body, fed by its entry
-  in `system.json`, and by its `world.json` and statistics once
-  generated:
-  - the star: today's star section;
-  - a rocky planet: today's world card;
-  - a giant: today's giant rows;
-  - a moon: today's moon panel.
+- **Property cards.** A body's details are split into themed cards, each
+  value in exactly one of them (`web/src/components/body/`, which cards a
+  body gets: `web/src/lib/bodyCards.ts`), in the info panel of the dock:
+  - the system summary (star, planet strip, counts and the system's age,
+    shown nowhere else) and the body's header (name, **Rename**, class,
+    the archetype it resembles, **Generate** while its maps are not made,
+    and for a moon a "↑ host" button that shows the host's card), both
+    full width;
+  - Orbit and light, Interior, Atmosphere and climate, Surface (once the
+    maps exist, rocky worlds), Legend (the layer shown; for biomes each
+    biome's swatch, share and area, hover to highlight, click to keep),
+    Moons and rings, Generated map (seed, reroll, vary, copy, delete,
+    downloads). A giant has its own rows in Interior and Atmosphere.
 
-  A sphere's card gives what the draw fixed (orbit, size, mass, type,
-  temperature, spin) and says that its maps are not made yet. The card
-  follows the body picker, under a short system summary (star, planet
-  strip). **Rename** moves into the card and names any body. The age of
-  the system, drawn per system, shows in the star's summary, and on each
-  body's card with its surface age (capped at the system's).
+  A body not generated yet gives what the draw fixed (orbit, size, mass,
+  type, temperature, spin) and says that its maps are not made yet. The
+  cards follow the body picker, under the system summary. Each card but
+  the header can be detached as a floating card.
 
 ## Removing the old worlds
 
