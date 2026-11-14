@@ -1,0 +1,20 @@
+name = "venus-like"
+description = "Venus-like: a rocky world under a runaway greenhouse"
+
+[locales.fr]
+name = "Vénusienne"
+description = "Un monde rocheux sous un effet de serre galopant"
+
+[inputs]
+mass_earth = [0.73, 0.90]
+core_mass_fraction = 0.31
+envelope_fraction = 0.0
+water_oceans = [0.0, 0.001]
+co2 = 1.0
+n2 = 1.0
+
+[orbit]
+star = "G2V"
+insolation = [1.7, 2.1]
+eccentricity = 0.0068
+axial_tilt = 2.6

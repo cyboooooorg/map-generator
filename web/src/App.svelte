@@ -18,14 +18,14 @@
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { SystemCreated } from './lib/api/types/SystemCreated';
   import type { SystemSummary } from './lib/api/types/SystemSummary';
-  import type { PresetInfo } from './lib/api/types/PresetInfo';
+  import type { ArchetypeInfo } from './lib/api/types/ArchetypeInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
   import { driftRange, driftRequest, formatDrift } from './lib/drift';
   import { bodyTitle, forgetTold, toTell } from './lib/evicted';
   import { worldCardOwner } from './lib/moons';
   import { keepAlone, requestFromWorld, rerollRequest } from './lib/format';
   import { errorText } from './lib/i18n/errors';
-  import { setPresetLocales } from './lib/i18n/names.svelte';
+  import { setArchetypeLocales } from './lib/i18n/names.svelte';
   import { getLocale, t } from './lib/i18n/index.svelte';
   import { jobs, type TrackedJob } from './lib/jobs.svelte';
   import { decodeSystems, decodeView, systemHash, type ViewLink } from './lib/link';
@@ -43,7 +43,7 @@
   const REFRESH_EVERY_MS = 5000;
 
   let systems = $state<SystemSummary[]>([]);
-  let presets = $state<PresetInfo[]>([]);
+  let archetypes = $state<ArchetypeInfo[]>([]);
   let spec = $state<FormSpec | null>(null);
   let selectedId = $state<string | null>(null);
   let compareId = $state<string | null>(null);
@@ -202,14 +202,14 @@
 
   let starting = $state(false);
 
-  /** Loads the presets, the form limits and the worlds; run again by Retry. */
+  /** Loads the archetypes, the form limits and the worlds; run again by Retry. */
   async function start(): Promise<void> {
     fatal = null;
     starting = true;
     try {
       if (!spec) {
-        [presets, spec] = await Promise.all([api.presets(), api.form()]);
-        setPresetLocales(presets);
+        [archetypes, spec] = await Promise.all([api.archetypes(), api.form()]);
+        setArchetypeLocales(archetypes);
         jobs.defaultSize = [spec.default_width, spec.default_height];
       }
       await refresh();
@@ -691,7 +691,7 @@
   <div class="wizard-backdrop">
     <div class="wizard" role="dialog" aria-modal="true" aria-label={form.variedFrom ? t.form.vary({ id: form.variedFrom }) : t.form.newSystem}>
       <GenerateForm
-        {presets}
+        {archetypes}
         {spec}
         initial={form.initial}
         variedFrom={form.variedFrom}

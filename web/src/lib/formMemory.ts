@@ -4,7 +4,7 @@
 import { loadSetting, removeSetting, saveSetting } from './settings';
 import { type MoonChoice, parseMoonChoice } from './moons';
 import { parseStarChoice, type StarChoice } from './starForm';
-import { type GiantChoice, parseGiantChoice } from './giantForm';
+import { type GiantChoice, parseGiantChoice, rememberedGiantChoice } from './giantForm';
 
 /** Most moons a remembered form may ask for (mapgen's MAX_MOON_COUNT). */
 const MAX_MOONS = 6;
@@ -19,20 +19,21 @@ export interface FieldMemory {
 
 /** What the form remembers of its last submission. */
 export interface FormMemory {
-  /** Preset spec. */
+  /** Archetype spec. */
   planet: string;
   randomPlanet: boolean;
   /** `<width>x<height>`. */
   size: string;
-  seaBy: 'level' | 'land';
-  landPercent: number;
-  /** By parameter name; parameters missing here take their defaults. */
+  /** By parameter name; parameters missing here take the archetype's. */
   fields: Record<string, FieldMemory>;
-  /** The star and orbit; null takes the preset's. */
+  /** The star and orbit; null takes the archetype's. */
   star: StarChoice | null;
   /** The moons asked for (`auto`: drawn by the seed). */
   moons: MoonChoice;
-  /** Metallicity, giant neighbours, a giant's moon, a giant's mass; drawn when absent. */
+  /**
+   * Metallicity, giant neighbours, a giant's moon; drawn when absent. Never a
+   * model input: the giant's mass is not kept (see `rememberedGiantChoice`).
+   */
   giant: GiantChoice;
 }
 
@@ -44,12 +45,21 @@ function isField(value: unknown): value is FieldMemory {
   return typeof random === 'boolean' && typeof v === 'number' && Number.isFinite(v);
 }
 
+/** The archetype a remembered form falls back to when its own is no longer offered. */
+export const FALLBACK_ARCHETYPE = 'earth-like';
+
 /**
  * Reads a stored form, keeping only well-formed values: `null` when the
  * essentials (planet, size) are missing, and only the parameters named in
- * `fieldNames` that are well formed.
+ * `fieldNames` that are well formed (the knobs of older forms are dropped).
+ * A planet that is not one of `archetypes` (an old preset name such as
+ * `terran`) becomes `earth-like`.
  */
-export function parseFormMemory(raw: unknown, fieldNames: readonly string[]): FormMemory | null {
+export function parseFormMemory(
+  raw: unknown,
+  fieldNames: readonly string[],
+  archetypes: readonly string[],
+): FormMemory | null {
   if (typeof raw !== 'object' || raw === null) {
     return null;
   }
@@ -66,11 +76,9 @@ export function parseFormMemory(raw: unknown, fieldNames: readonly string[]): Fo
     }
   }
   return {
-    planet: r.planet,
+    planet: archetypes.includes(r.planet) ? r.planet : FALLBACK_ARCHETYPE,
     randomPlanet: r.randomPlanet === true,
     size: r.size,
-    seaBy: r.seaBy === 'land' ? 'land' : 'level',
-    landPercent: typeof r.landPercent === 'number' && Number.isFinite(r.landPercent) ? r.landPercent : 29,
     fields,
     star: parseStarChoice(r.star),
     moons: parseMoonChoice(r.moons, MAX_MOONS),
@@ -79,15 +87,16 @@ export function parseFormMemory(raw: unknown, fieldNames: readonly string[]): Fo
 }
 
 /** The remembered form, or null (nothing stored, or unreadable). */
-export function loadFormMemory(fieldNames: readonly string[]): FormMemory | null {
-  return parseFormMemory(loadSetting<unknown>(KEY, null), fieldNames);
+export function loadFormMemory(fieldNames: readonly string[], archetypes: readonly string[]): FormMemory | null {
+  return parseFormMemory(loadSetting<unknown>(KEY, null), fieldNames, archetypes);
 }
 
+/** Remembers the form, without its model inputs (a giant's mass). */
 export function saveFormMemory(memory: FormMemory): void {
-  saveSetting(KEY, memory);
+  saveSetting(KEY, { ...memory, giant: rememberedGiantChoice(memory.giant) });
 }
 
-/** Forgets the form: the next one starts from the preset defaults. */
+/** Forgets the form: the next one starts from the archetype's values. */
 export function clearFormMemory(): void {
   removeSetting(KEY);
 }

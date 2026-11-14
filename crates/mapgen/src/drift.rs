@@ -47,7 +47,7 @@ impl std::fmt::Display for PreviewError {
 /// Whether the plates of the world `p` can drift: a rocky world with plate
 /// tectonics.
 pub fn has_plates(p: &WorldParams) -> bool {
-    p.giant_mass_earth.is_none() && p.planet.geology.regime == Regime::Plates
+    p.giant_mass_earth.is_none() && p.look.geology.regime == Regime::Plates
 }
 
 /// A rendered preview: `width × height` rows of RGB.
@@ -100,25 +100,20 @@ pub fn preview(params: &WorldParams, drift_ma: f32, width: u32) -> Result<Previe
 mod tests {
     use super::*;
     use crate::moons::MoonsMode;
-    use crate::request::WorldRequest;
 
     fn params(planet: &str) -> WorldParams {
-        WorldRequest {
-            planet: Some(planet.into()),
-            seed: Some(11),
-            sea_level: Some(0.3),
-            // Pinned: a random small or airless draw would lose the plates
-            // of a plate preset (see `crate::geology::regime_of`).
-            circumference_km: Some(40_000.0),
-            pressure_bar: Some(1.0),
-            width: Some(1024),
-            height: Some(512),
-            moons: Some(MoonsMode::None),
-            ..Default::default()
-        }
-        .resolve(&mut rand::rng())
-        .unwrap()
-        .params
+        // Its circumference and pressure pinned: a random small or airless
+        // draw would lose the plates of a plate preset (see
+        // `crate::geology::regime_of`).
+        let mut p = WorldParams {
+            sea_level: 0.3,
+            circumference_km: 40_000.0,
+            pressure_bar: 1.0,
+            moons: MoonsMode::None,
+            ..crate::generation::tests::preset_params(planet, 11, 1024, 512)
+        };
+        p.look.geology.regime = crate::geology::regime_of(&p);
+        p
     }
 
     #[test]

@@ -447,46 +447,49 @@ mod tests {
 
     #[tokio::test]
     async fn keeps_worlds_within_the_budget() {
-        let root = worlds("budget", &[("barren", 1), ("barren", 2), ("barren", 3)]);
-        let one = load(&root.join("barren-1"), None).unwrap().bytes();
+        let root = worlds(
+            "budget",
+            &[("mars-like", 1), ("mars-like", 2), ("mars-like", 3)],
+        );
+        let one = load(&root.join("mars-like-1"), None).unwrap().bytes();
         // Room for two worlds.
         let cache = TileCache::new(2 * one + one / 2);
-        for id in ["barren-1", "barren-2", "barren-3"] {
+        for id in ["mars-like-1", "mars-like-2", "mars-like-3"] {
             cache.world(&root.join(id), id, 1).await.unwrap();
         }
-        assert_eq!(cache.ids(), ["barren-2", "barren-3"]);
+        assert_eq!(cache.ids(), ["mars-like-2", "mars-like-3"]);
         // The last world is kept even beyond the budget.
         let tiny = TileCache::new(1);
-        tiny.world(&root.join("barren-1"), "barren-1", 1)
+        tiny.world(&root.join("mars-like-1"), "mars-like-1", 1)
             .await
             .unwrap();
-        assert_eq!(tiny.ids(), ["barren-1"]);
+        assert_eq!(tiny.ids(), ["mars-like-1"]);
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]
     async fn a_generation_empties_the_cache_and_refuses_loads() {
-        let root = worlds("suspend", &[("barren", 4)]);
-        let dir = root.join("barren-4");
+        let root = worlds("suspend", &[("mars-like", 4)]);
+        let dir = root.join("mars-like-4");
         let cache = TileCache::new(DEFAULT_BUDGET_BYTES);
-        cache.world(&dir, "barren-4", 1).await.unwrap();
+        cache.world(&dir, "mars-like-4", 1).await.unwrap();
         {
             let _guard = cache.suspend().await;
             assert!(cache.ids().is_empty());
             assert!(matches!(
-                cache.world(&dir, "barren-4", 1).await,
+                cache.world(&dir, "mars-like-4", 1).await,
                 Err(TileError::Busy)
             ));
         }
-        cache.world(&dir, "barren-4", 1).await.unwrap();
-        assert_eq!(cache.ids(), ["barren-4"]);
+        cache.world(&dir, "mars-like-4", 1).await.unwrap();
+        assert_eq!(cache.ids(), ["mars-like-4"]);
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[tokio::test]
     async fn estimates_the_size_of_a_world_before_loading_it() {
-        let root = worlds("estimate", &[("terran", 5)]);
-        let dir = root.join("terran-5");
+        let root = worlds("estimate", &[("earth-like", 5)]);
+        let dir = root.join("earth-like-5");
         let world = load(&dir, None).unwrap();
         // River bounds aside (negligible next to the layers on full-size
         // maps), the estimate is exact for the current format.
@@ -497,27 +500,30 @@ mod tests {
 
     #[tokio::test]
     async fn evicts_worlds_before_loading_one() {
-        let root = worlds("room", &[("barren", 5), ("barren", 6), ("barren", 7)]);
-        let one = load(&root.join("barren-5"), None).unwrap().bytes();
+        let root = worlds(
+            "room",
+            &[("mars-like", 5), ("mars-like", 6), ("mars-like", 7)],
+        );
+        let one = load(&root.join("mars-like-5"), None).unwrap().bytes();
         let cache = TileCache::new(2 * one + one / 2);
-        for id in ["barren-5", "barren-6"] {
+        for id in ["mars-like-5", "mars-like-6"] {
             cache.world(&root.join(id), id, 1).await.unwrap();
         }
         // A third world needs room for itself: the oldest goes first.
         let loading = Arc::new(OnceCell::new());
-        cache.make_room(&loading, expected_bytes(&root.join("barren-7")));
-        assert_eq!(cache.ids(), ["barren-6"]);
+        cache.make_room(&loading, expected_bytes(&root.join("mars-like-7")));
+        assert_eq!(cache.ids(), ["mars-like-6"]);
         // A world larger than the budget empties it, and is kept alone.
         cache.make_room(&loading, 3 * one);
         assert!(cache.ids().is_empty());
         let tiny = TileCache::new(1);
-        tiny.world(&root.join("barren-5"), "barren-5", 1)
+        tiny.world(&root.join("mars-like-5"), "mars-like-5", 1)
             .await
             .unwrap();
-        tiny.world(&root.join("barren-6"), "barren-6", 1)
+        tiny.world(&root.join("mars-like-6"), "mars-like-6", 1)
             .await
             .unwrap();
-        assert_eq!(tiny.ids(), ["barren-6"]);
+        assert_eq!(tiny.ids(), ["mars-like-6"]);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -531,7 +537,7 @@ mod tests {
         assert!(waited.is_err(), "the generation started during a load");
         // Requests are refused at once meanwhile.
         assert!(matches!(
-            cache.world(Path::new("nowhere"), "barren-1", 1).await,
+            cache.world(Path::new("nowhere"), "mars-like-1", 1).await,
             Err(TileError::Busy)
         ));
         drop(load);

@@ -6,7 +6,8 @@ import { setLocale } from './i18n/index.svelte';
 const meta = (overrides: Record<string, unknown> = {}) =>
   ({
     format_version: 14,
-    planet_type: 'terran',
+    class: 'rocky',
+    archetype: 'earth-like',
     seed: 7,
     sea_level: 0.3,
     volcanic_intensity: 0.2,
@@ -18,7 +19,7 @@ const meta = (overrides: Record<string, unknown> = {}) =>
     star: { type: 'G2V', orbit_au: 1, eccentricity: 0, metallicity: 0, age_gyr: 8.5 },
     width: 1024,
     height: 512,
-    preset: { geology: { regime: 'plates', wet_until: 0 } },
+    look: { geology: { regime: 'plates', wet_until: 0 } },
     ...overrides,
   }) as unknown as WorldMetadata;
 
@@ -27,7 +28,7 @@ describe('drift', () => {
 
   it('is offered by worlds with plates only', () => {
     expect(driftRange(meta())).toEqual([-300, 300]);
-    expect(driftRange(meta({ preset: { geology: { regime: 'stagnant' } } }))).toBeNull();
+    expect(driftRange(meta({ look: { geology: { regime: 'stagnant' } } }))).toBeNull();
     expect(driftRange(meta({ giant: { mass_earth: 300 } }))).toBeNull();
   });
 
@@ -54,7 +55,7 @@ describe('drift', () => {
   });
 
   it('asks for the same world at another epoch', () => {
-    expect(driftRequest(meta(), -150)).toMatchObject({ planet: 'terran', seed: 7, drift_ma: -150 });
+    expect(driftRequest(meta(), -150)).toMatchObject({ planet: 'earth-like', seed: 7, drift_ma: -150 });
     // The epoch of a planet of a system is another epoch of the same star age.
     expect(driftRequest(meta(), -150).age_gyr).toBe(8.5);
     // The present leaves the epoch out, even from a drifted world.

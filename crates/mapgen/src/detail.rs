@@ -17,7 +17,7 @@
 //! - **Climate**: temperature, moisture and the other biome inputs are read
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
-//! - **Biomes**: the generation's own rules and preset remap, with soft
+//! - **Biomes**: the generation's own rules and look remap, with soft
 //!   borders and the vector rivers drawn at the tile's scale, without
 //!   hillshade: a tile holds its colour above and its relief normals below
 //!   (256 × 512), which the viewer lights.
@@ -325,9 +325,9 @@ impl DetailWorld {
             world.height,
             world.params.circumference_km as f64,
         );
-        let planet = &world.params.planet;
-        let waterline = world.params.sea_level + planet.rules.waterline;
-        let river = planet.remap(Biome::River);
+        let look = &world.params.look;
+        let waterline = world.params.open_waterline();
+        let river = look.remap(Biome::River);
         let flags = (0..world.biomes.len())
             .into_par_iter()
             .map(|i| {
@@ -398,12 +398,18 @@ impl DetailWorld {
         }
         let p = sphere(lon, lat, 1.0);
         let radius = w.params.circumference_km as f64 / TAU;
-        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        let waterline = w.params.sea_level + w.params.look.rules.waterline;
+        let dry = w.params.look.rules.dry;
 
         // Near the coast, read the base elevation at a position displaced
         // sideways by every detail octave: the coastline gets capes and bays
         // at each zoom level, and stays one connected line.
-        let coastal = 1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs());
+        // A world without surface liquid has no coast.
+        let coastal = if dry {
+            0.0
+        } else {
+            1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs())
+        };
         let base = if coastal > 0.0 {
             let (mut dx, mut dy) = (0.0, 0.0);
             let (mut wavelength, mut share) = (first, COAST_WARP);
@@ -439,7 +445,11 @@ impl DetailWorld {
             * (1.0 + MOUNTAIN_BOOST * high)
             * bilinear(&Roughness(&w.biomes), w.width, w.height, x, y);
         let gain = PLAIN_GAIN + (MOUNTAIN_GAIN - PLAIN_GAIN) * high as f64;
-        let shore = smoothstep(0.0, SHORE_FADE, above.abs());
+        let shore = if dry {
+            1.0
+        } else {
+            smoothstep(0.0, SHORE_FADE, above.abs())
+        };
         // Floodplains stay flat valley floors.
         let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&w.floodplain, w.width, w.height, x, y);
         base + amplitude * shore * floor * band_limited(&self.noise, p, radius, first, last, gain)
@@ -453,7 +463,7 @@ impl DetailWorld {
     fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f32>, Vec<f32>) {
         let w = &self.world;
         let side = TILE_SIZE as usize + 2;
-        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        let waterline = w.params.open_waterline();
         let craters = self.crater_relief(tile, pixel_km);
         (0..side * side)
             .into_par_iter()
@@ -546,7 +556,7 @@ impl DetailWorld {
     /// Renders one tile as an RGB image.
     pub fn render_tile(&self, tile: TileId) -> RgbImage {
         let w = &self.world;
-        let planet = &w.params.planet;
+        let look = &w.params.look;
         let (cols, _) = tile.grid();
         let n = TILE_SIZE as usize;
         let pixel_km = w.params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
@@ -555,7 +565,7 @@ impl DetailWorld {
         let (coverage, channel) = self.river_coverage(tile, pixel_km);
         let (elevation, surface) = self.tile_elevation(tile, pixel_km, &channel);
 
-        let river_colour = linear_of(surface_color(planet.remap(Biome::River)));
+        let river_colour = linear_of(surface_color(look.remap(Biome::River)));
         let lapse = w.lapse_rate;
         let warp_km = CLIMATE_WARP_PX * self.base_px_km();
         let radius = w.params.circumference_km as f64 / TAU;
@@ -569,7 +579,10 @@ impl DetailWorld {
                 // the hillshade shows them.
                 let e = surface[(py + 1) * side + px + 1];
                 let relief = (e - w.params.sea_level).clamp(-1.0, 1.0);
-                let above = relief - planet.rules.waterline;
+                let above = relief - look.rules.waterline;
+                // Height above open water: `above` but on a dry world, which
+                // has none.
+                let above_sea = relief - look.rules.open_water();
 
                 // Climate at a warped position: irregular biome borders.
                 let p = sphere(lon, lat, 1.0);
@@ -581,19 +594,19 @@ impl DetailWorld {
                 let (bx, by) = self.base_xy(lon, lat);
                 let (cx, cy) = (bx + wx * CLIMATE_WARP_PX, by + wy * CLIMATE_WARP_PX);
                 let sample = |layer: &dyn Samples| bilinear(layer, w.width, w.height, cx, cy);
-                let base_above = sample(&w.elevation) - w.params.sea_level - planet.rules.waterline;
+                let base_above = sample(&w.elevation) - w.params.sea_level - look.rules.waterline;
                 // Temperature follows the detailed elevation (lapse rate).
                 let t = sample(&w.temperature) + temperature(0.0, above, lapse)
                     - temperature(0.0, base_above, lapse);
                 // Lakes: smooth shores from the base lake mask.
-                let lake = sample(&Lakes(&self.flags)) > 0.5 && above >= 0.0;
+                let lake = sample(&Lakes(&self.flags)) > 0.5 && above_sea >= 0.0;
                 let input = BiomeInput {
                     elevation: relief,
                     moisture: sample(&w.moisture),
                     temperature: t,
                     seasonality: w.seasons.at(
                         (cy.max(0.0) as u32).min(w.height - 1),
-                        above >= 0.0,
+                        above_sea >= 0.0,
                         sample(&w.coast_distance_km),
                     ),
                     volcanic_zone: sample(&w.volcanic_zone),
@@ -602,13 +615,13 @@ impl DetailWorld {
                     river: false,
                     highland_offset: sample(&w.highland_offset),
                 };
-                let dry = planet.rules.choose(input);
-                let biome = planet.remap(dry);
+                let dry = look.rules.choose(input);
+                let biome = look.remap(dry);
                 let (mut colour, normal) = if biome.is_water() {
                     // Seas from the detailed elevation; lakes from the base
                     // depth below their surface.
-                    let depth = if above < 0.0 {
-                        -above
+                    let depth = if above_sea < 0.0 {
+                        -above_sea
                     } else {
                         sample(&self.depths)
                     };
@@ -626,7 +639,7 @@ impl DetailWorld {
                         normal = relief::soften(normal, LAVA_SHADE);
                     }
                     let colour = self.variation.apply(
-                        ecotone_colour_around(planet, input, Some(biome)),
+                        ecotone_colour_around(look, input, Some(biome)),
                         lon,
                         lat,
                     );
@@ -640,7 +653,7 @@ impl DetailWorld {
                     (colour, relief::encode_normal(normal))
                 };
                 let c = coverage[i];
-                if c > 0.0 && !planet.rules.frozen(input) && !biome.is_water() && !dry.is_lava() {
+                if c > 0.0 && !look.rules.frozen(input) && !biome.is_water() && !dry.is_lava() {
                     colour = blend_river(colour, river_colour, c);
                 }
                 (colour.map(|c| c.clamp(0.0, 255.0) as u8), normal)
@@ -800,50 +813,32 @@ impl Stamp {
 mod tests {
     use super::*;
     use crate::generation::generate;
-    use crate::request::WorldRequest;
 
     fn detail_world() -> DetailWorld {
-        let request = WorldRequest {
-            planet: Some("terran".into()),
-            seed: Some(3),
-            sea_level: Some(0.2),
-            volcanic: Some(0.3),
-            circumference_km: Some(40_000.0),
-            axial_tilt_deg: Some(23.44),
-            pressure_bar: Some(1.0),
-            surface_age_ga: Some(0.4),
-            width: Some(512),
-            height: Some(256),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.2,
+            volcanic_intensity: 0.3,
+            circumference_km: 40_000.0,
+            ..crate::generation::tests::preset_params("terran", 3, 512, 256)
         };
-        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        let world = generate(&params).world;
         DetailWorld::new(LoadedWorld::from_world(&world))
     }
 
     /// A small airless, heavily cratered world.
     fn cratered_world() -> DetailWorld {
-        let planet = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/examples/mercury-like.toml"
-        );
-        let request = WorldRequest {
-            planet: Some(planet.into()),
-            seed: Some(5),
-            sea_level: Some(0.15),
-            surface_age_ga: Some(4.0),
-            width: Some(512),
-            height: Some(256),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
+        let planet = "mercury-like";
+        let params = crate::world::WorldParams {
+            sea_level: 0.15,
+            surface_age_ga: 4.0,
+            orbit_au: 1.0,
+            eccentricity: 0.0,
+            // Its spin holds at its own orbit only.
+            locked_to_star: None,
+            resonance_to_star: None,
+            ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
-        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        let world = generate(&params).world;
         DetailWorld::new(LoadedWorld::from_world(&world))
     }
 
@@ -992,7 +987,7 @@ mod tests {
         // Level 0 tiles are 512 × 256 together: the size of this base world.
         let d = detail_world();
         let w = d.world();
-        let planet = &w.params.planet;
+        let look = &w.params.look;
         let (mut same_water, mut total) = (0usize, 0usize);
         for x in 0..2 {
             let img = d.render_tile(TileId { z: 0, x, y: 0 });
@@ -1001,10 +996,9 @@ mod tests {
                     let (lon, lat) = TileId { z: 0, x, y: 0 }.lon_lat(px as f64, py as f64);
                     let (bx, by) = d.base_xy(lon, lat);
                     let i = w.index(bx as u32 % w.width, (by as u32).min(w.height - 1));
-                    let base_water =
-                        w.elevation.get(i) - w.params.sea_level < planet.rules.waterline;
+                    let base_water = w.elevation.get(i) - w.params.sea_level < look.rules.waterline;
                     let tile_water =
-                        d.elevation(lon, lat, 1e9) - w.params.sea_level < planet.rules.waterline;
+                        d.elevation(lon, lat, 1e9) - w.params.sea_level < look.rules.waterline;
                     same_water += usize::from(base_water == tile_water);
                     total += 1;
                     let _ = img.get_pixel(px, py);
@@ -1025,7 +1019,7 @@ mod tests {
         // coast: left out.
         let d = detail_world();
         let w = d.world();
-        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        let waterline = w.params.sea_level + w.params.look.rules.waterline;
         let mut worst = 0.0f32;
         for k in 0..2000 {
             let lon = (k as f64 * 0.731) % TAU;
@@ -1046,7 +1040,7 @@ mod tests {
         // water into land: no islets, no ponds.
         let d = detail_world();
         let w = d.world();
-        let waterline = w.params.sea_level + w.params.planet.rules.waterline;
+        let waterline = w.params.sea_level + w.params.look.rules.waterline;
         for k in 0..5000 {
             let lon = (k as f64 * 0.731) % TAU;
             let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;

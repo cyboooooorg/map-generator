@@ -9,7 +9,7 @@
   import type { SystemPlanet } from '../lib/systemStar';
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import type { StarActivity } from '../lib/api/types/StarActivity';
-  import { formatAge, formatAu, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAge, formatAu, formatCelsius, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import type { Moon } from '../lib/api/types/Moon';
   import type { Giant } from '../lib/api/types/Giant';
@@ -848,6 +848,10 @@
     <dd>{formatYear(star.year_days)}</dd>
     <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
     <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
+    {#if selected !== null && selected >= 0 && planets?.[selected]?.surface_k != null}
+      <dt>{t.starView.surfaceTemperature}</dt>
+      <dd>{formatCelsius(planets[selected]!.surface_k!)}</dd>
+    {/if}
   </dl>
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->

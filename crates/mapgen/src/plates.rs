@@ -1138,7 +1138,7 @@ fn nearest_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::Preset;
+    use crate::look::Look;
 
     fn params(seed: u32) -> WorldParams {
         WorldParams {
@@ -1146,7 +1146,10 @@ mod tests {
             width: 512,
             height: 256,
             seed,
-            planet: Preset::load("terran").unwrap(),
+            class: "rocky".into(),
+            archetype: None,
+            model: None,
+            look: Look::load("terran"),
             sea_level: 0.2,
             volcanic_intensity: 0.5,
             circumference_km: 40_075.0,

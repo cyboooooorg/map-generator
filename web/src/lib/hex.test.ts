@@ -9,7 +9,7 @@ const map = {
   rows: 5,
   hex_width_px: 100,
   hex_size_px: size,
-  source: { width: 800, height: 400, seed: 1, planet_type: 'terran' },
+  source: { width: 800, height: 400, seed: 1, class: 'rocky' },
 } as unknown as HexMap;
 
 describe('locateHex', () => {

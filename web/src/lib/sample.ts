@@ -26,9 +26,9 @@ export interface PointSample {
   highlandOffset: number | null;
 }
 
-/** Elevation of the coastline: the shifted sea level plus the preset waterline. */
+/** Elevation of the coastline: the shifted sea level plus the look's waterline. */
 export function coastline(meta: WorldMetadata): number {
-  return meta.sea_level + meta.preset.rules.waterline;
+  return meta.sea_level + meta.look.rules.waterline;
 }
 
 export function samplePoint(point: LonLat, meta: WorldMetadata, layers: WorldLayers): PointSample {

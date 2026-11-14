@@ -11,7 +11,7 @@ description = "Build the optimized binary"
 run = "cargo build --release"
 
 [tasks.gen]
-description = "Generate a planet and its system into systems/ (pass options after --, e.g. mise run gen -- --planet frozen)"
+description = "Generate a planet and its system into systems/ (pass options after --, e.g. mise run gen -- --planet mars-like)"
 depends = ["build"]
 run = "target/release/map-generator"
 
@@ -67,7 +67,7 @@ dir = "web"
 run = "npm run build"
 
 [tasks."server:dev"]
-description = "Run the web server on http://localhost:3000 (systems/ and presets/ of this checkout)"
+description = "Run the web server on http://localhost:3000 (systems/ and archetypes/ of this checkout)"
 run = "cargo run -p mapgen-server"
 
 [tasks.dev]

@@ -29,7 +29,7 @@
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
 //! context and inputs, [`derive_model`] for a planet of a system as it is
 //! drawn, which stores it on the body ([`body_model`] reads it back).
-//! [`interim::base_of`] maps a model onto today's presets until #424, and
+//! [`interim::base_of`] maps a model onto today's looks until #424, and
 //! [`interim::params_for`] generates its world from what it derived.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
 //! are checked against.
@@ -65,7 +65,7 @@ pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
-pub use inputs::{Context, draw_inputs};
+pub use inputs::{Context, InputOverrides, draw_inputs, draw_inputs_with};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use life::{Life, life, oxygenate};
 pub use mass::{Origin, SMALL_MASS, draw_mass};
@@ -172,6 +172,96 @@ pub struct PlanetModel {
     /// (at least [`escape::MIN_ENVELOPE`] of the mass), which hides it.
     pub surface: Option<Surface>,
     pub class: PlanetClass,
+}
+
+/// The inputs a planet formed with, as a request sets them: what
+/// [`PlanetModel::formation`] gives, and world.json stores beside the
+/// model so that a request (a new seed, another epoch, a variation, the
+/// CLI's "Reproduce with") makes the same planet again.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Formation {
+    /// Mass drawn, Earth masses, before photoevaporation.
+    pub mass_earth: f64,
+    /// Every input set: core share, water in Earth oceans (of the drawn
+    /// mass), envelope share at formation, CO₂ and N₂ factors on their
+    /// formation rule, radiogenic abundance, and whether life arose.
+    pub overrides: InputOverrides,
+}
+
+/// Most steps of one ulp [`exact_preimage`] tries on each side.
+const PREIMAGE_STEPS: usize = 8;
+
+/// A value `x` near `start` that `f` maps back exactly onto `target`
+/// (stepping one ulp at a time on either side), else `start`: a value read
+/// back from the model by division, which the request path multiplies
+/// again, then gives the stored value to the last bit.
+fn exact_preimage(target: f64, start: f64, f: impl Fn(f64) -> f64) -> f64 {
+    if !start.is_finite() || f(start) == target {
+        return start;
+    }
+    let (mut up, mut down) = (start, start);
+    for _ in 0..PREIMAGE_STEPS {
+        up = up.next_up();
+        down = down.next_down();
+        if f(up) == target {
+            return up;
+        }
+        if f(down) == target {
+            return down;
+        }
+    }
+    start
+}
+
+impl PlanetModel {
+    /// The inputs this planet formed with, as a request sets them
+    /// ([`Formation`]): the drawn mass (before photoevaporation); the
+    /// envelope share at formation, `(M e + M₀ − M) / M₀` with `M₀` the
+    /// drawn mass and `M`, `e` what escape left; the water in Earth oceans
+    /// of the drawn mass; the CO₂ and N₂ factors, the stored volatiles over
+    /// the formation rule of the formation shares (1 where the rule is 0);
+    /// the core share, the radiogenic abundance and `life: Some(arose)`.
+    ///
+    /// Set in a request with the same context, they derive the same inputs
+    /// and class whatever the seed; the CH₄, NH₃ and sulphur scatter, which
+    /// no request sets, follows the seed. Values read back by division are
+    /// nudged by an ulp or two so that the request's arithmetic gives the
+    /// stored value exactly.
+    pub fn formation(&self) -> Formation {
+        let i = &self.inputs;
+        let drawn = self.drawn_mass_earth;
+        let envelope = if i.mass_earth == drawn {
+            i.envelope_fraction
+        } else {
+            (i.mass_earth * i.envelope_fraction + drawn - i.mass_earth) / drawn
+        };
+        let per_ocean = OCEAN_KG / (drawn * EARTH_KG);
+        let water_oceans = exact_preimage(i.water_fraction, i.water_fraction / per_ocean, |o| {
+            o * OCEAN_KG / (drawn * EARTH_KG)
+        });
+        let refractory = (1.0 - i.water_fraction - envelope).max(0.0);
+        let rule = inputs::volatile_rule(refractory, i.water_fraction);
+        let factor = |stored: f64, rule: f64| {
+            if rule > 0.0 {
+                exact_preimage(stored, stored / rule, |f| rule * f)
+            } else {
+                1.0
+            }
+        };
+        Formation {
+            mass_earth: drawn,
+            overrides: InputOverrides {
+                core_mass_fraction: Some(i.core_mass_fraction),
+                water_oceans: Some(water_oceans),
+                envelope_fraction: Some(envelope),
+                co2: Some(factor(i.volatiles.co2, rule.co2)),
+                n2: Some(factor(i.volatiles.n2, rule.n2)),
+                radiogenic: Some(i.radiogenic),
+                life: Some(self.surface.is_some_and(|s| s.life.arose)),
+            },
+        }
+    }
 }
 
 /// A bare body's surface: the water it kept, how it loses its heat, its
@@ -338,14 +428,34 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
 /// inputs are drawn from their own stream, seeded by the system's seed and
 /// `<id>/model`, so they depend on no other body and shift no other draw.
 pub fn derive_model(system_seed: u32, id: &str, context: &Context, mass_earth: f64) -> PlanetModel {
+    derive_model_with(
+        system_seed,
+        id,
+        context,
+        mass_earth,
+        &InputOverrides::default(),
+    )
+}
+
+/// [`derive_model`] with some inputs set instead of drawn (`overrides`,
+/// see [`draw_inputs_with`]); the draws are the same.
+pub fn derive_model_with(
+    system_seed: u32,
+    id: &str,
+    context: &Context,
+    mass_earth: f64,
+    overrides: &InputOverrides,
+) -> PlanetModel {
     let seed = body_seed(system_seed, &format!("{id}/model"));
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
-    let inputs = draw_inputs(context, mass_earth, &mut rng);
+    let inputs = draw_inputs_with(context, mass_earth, overrides, &mut rng);
     planet_model(context, inputs)
 }
 
 /// The model a stored system holds for `body`: the one [`derive_model`]
-/// gave its planet when the system was drawn; `None` for a moon (part 4).
+/// gave its planet when the system was drawn, or the one the resolution of
+/// its request gave the world a system was drawn around (a giant's moon
+/// among them); `None` for any other moon (part 4).
 pub fn body_model(_system: &System, body: &Body) -> Option<PlanetModel> {
     body.model.clone()
 }

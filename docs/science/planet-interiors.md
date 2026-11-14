@@ -15,7 +15,7 @@ captures gas). Given the layers, the radius follows from how much each
 material is squeezed by the planet's own weight, plus the thickness of the
 envelope. The model then adds the heat made inside (radioactive decay and
 tides) and reads a class off the result: rocky, super-Earth, ice world,
-mini-Neptune, ice giant, gas giant or hot Jupiter. No class name goes into
+mini-Neptune, ice giant, hot Neptune, gas giant or hot Jupiter. No class name goes into
 the calculation; it only comes out.
 
 ## The science
@@ -174,6 +174,7 @@ wins.
 | --- | --- | --- |
 | Giant: gas giant | at least 10 Earth masses and 5 % gas; at least 50 % of the mass in gas | calibration (parts Jupiter and Saturn from Uranus and Neptune) |
 | Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012 |
+| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016, doi:10.1051/0004-6361/201528065 |
 | Giant: ice giant | a giant with less than 50 % gas | same calibration |
 | Mini-Neptune | at least 0.1 % gas and 1.6 $R_\oplus$ or more | Rogers 2015; the gas share is a calibration |
 | Ice world | at least 5 % water and ices | calibration (Europa about 8 %, Earth 0.02 %) |
@@ -230,8 +231,8 @@ archetypes):
 
 - `base_of` picks the built-in preset whose rules, palette and remap
   render the model, the first rule that holds: a giant class renders as
-  `gas-giant`, `hot-jupiter` or `ice-giant` (a mini-Neptune as an ice
-  giant); a lava world or a heat-pipe regime as `volcanic`; a runaway
+  `gas-giant`, `hot-jupiter` or `ice-giant` (a hot Neptune as a hot
+  Jupiter, its methane gone; a mini-Neptune as an ice giant); a lava world or a heat-pipe regime as `volcanic`; a runaway
   greenhouse as `caustic`; a body whose envelope hides its surface as
   `frozen` for an ice world, `barren` otherwise; liquid hydrocarbons as
   `frozen`; liquid water
@@ -262,7 +263,10 @@ archetypes):
   world is generated, so that the grid's mean matches the model's surface
   temperature (`generation::warming_for`). The sea level is found the
   same way, where the oceans the model keeps fill the relief
-  (`sea_level_for_water`), none for a runaway whose water is steam. Both
+  (`sea_level_for_water`), none for a runaway whose water is steam. A
+  world with no water at its surface is dry: no open water anywhere, its
+  sea level only the datum of its relief (`DRY_SEA_LEVEL`, see
+  [mountains and gravity](mountains-and-gravity.md)). Both
   pass over a coarse grid of the relief (about a second in release), so a
   system's draw leaves them to the generation of the world: the
   parameters stored with the body keep the drawn values, and the

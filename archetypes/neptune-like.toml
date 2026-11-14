@@ -1,0 +1,16 @@
+name = "neptune-like"
+description = "Neptune-like: an ice giant on a far, round orbit"
+
+[locales.fr]
+name = "Neptunienne"
+description = "Une géante de glaces sur une orbite lointaine et ronde"
+
+[inputs]
+mass_earth = [15.5, 19.0]
+envelope_fraction = [0.12, 0.18]
+
+[orbit]
+star = "G2V"
+insolation = [0.0010, 0.0012]
+eccentricity = 0.009
+axial_tilt = 28.3

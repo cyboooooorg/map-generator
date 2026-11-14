@@ -1,10 +1,10 @@
-//! The atmosphere of a planet type: how its sky looks and, from later
+//! The atmosphere of a world: how its sky looks and, from later
 //! steps of the atmosphere work (`docs/analysis/07-atmospheres.md`), how it
 //! shapes the climate and the clouds.
 //!
-//! The surface pressure is a generation parameter (`pressure_bar`), drawn
-//! from the preset's `[defaults]` like the sea level; the rest comes from the
-//! preset's `[atmosphere]` table:
+//! The surface pressure is a generation parameter (`pressure_bar`); the rest
+//! comes from the `[atmosphere]` table of the world's look
+//! ([`crate::look`]):
 //!
 //! ```toml
 //! [atmosphere]
@@ -16,7 +16,7 @@
 //! cloud_cover = 0.0                  # shift of the cloud cover, -1 to 1
 //! ```
 //!
-//! Every field is optional; a preset without the table gets Earth's.
+//! Every field is optional; a look without the table gets Earth's.
 use crate::geo::Grid;
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 pub const AIRLESS_BAR: f32 = 1e-4;
 
 /// Below this surface pressure (bar) no water stays liquid: no rain, no
-/// rivers or lakes, and no hydraulic erosion unless the preset asks for it
+/// rivers or lakes, and no hydraulic erosion unless the look asks for it
 /// (valleys carved when the planet was wetter). Water's triple point is at
 /// 0.006 bar.
 pub const LIQUID_WATER_BAR: f32 = 0.01;

@@ -19,7 +19,7 @@ export const PREVIEW_WIDTH = { coarse: 256, fine: 512 } as const;
 
 /** `[past, future]` in Ma (negative in the past) the world's plates can be shown at, or null without plates. */
 export function driftRange(meta: WorldMetadata): [number, number] | null {
-  if (meta.giant || meta.preset.geology?.regime !== 'plates') return null;
+  if (meta.giant || meta.look.geology?.regime !== 'plates') return null;
   return [-DRIFT_LIMIT_MA, DRIFT_LIMIT_MA];
 }
 

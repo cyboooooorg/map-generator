@@ -3,7 +3,7 @@
 //! | Route                           | Purpose                                           |
 //! |---------------------------------|---------------------------------------------------|
 //! | `GET /healthz`                  | liveness probe                                    |
-//! | `GET /api/presets`              | planet presets the form can offer                 |
+//! | `GET /api/archetypes`           | planet archetypes the form can offer              |
 //! | `GET /api/form`                 | parameter limits, defaults and map sizes          |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
@@ -36,10 +36,10 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted, GeneratorNote,
-    HexRequest, JobInfo, JobStatus, ParamSpec, PendingSize, PresentSize, PresetInfo,
-    RegeneratedBody, SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery,
-    SystemSummary,
+    ApiError, ArchetypeInfo, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted,
+    GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec, PendingSize,
+    PresentSize, RegeneratedBody, SystemCreated, SystemDetail, SystemName, SystemNames,
+    SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -131,7 +131,9 @@ pub struct Config {
     /// The SQLite file of the index (see [`crate::index`]); created, with
     /// its directory, when missing.
     pub db_path: PathBuf,
-    pub presets_dir: PathBuf,
+    /// Extra archetype files (`*.toml`); a missing directory means the
+    /// built-in archetypes only.
+    pub archetypes_dir: PathBuf,
     /// Built front-end (`web/dist`); missing in development, where Vite serves it.
     pub static_dir: PathBuf,
     /// Largest map accepted, in pixels (see [`DEFAULT_MAX_PIXELS`]).
@@ -247,7 +249,7 @@ pub fn router(config: Config) -> Router {
 fn new_state(config: &Config) -> Shared {
     // Exports a killed server left unfinished.
     systems::sweep(&config.systems_dir);
-    let catalog = Catalog::load(&config.presets_dir);
+    let catalog = Catalog::load(&config.archetypes_dir);
     let (index, jobs, next_job) = open_index(config);
     Arc::new(AppState {
         catalog,
@@ -301,7 +303,7 @@ fn routes(state: Shared, config: &Config) -> Router {
         .compress_when(SizeAbove::new(COMPRESS_ABOVE).and(compressible));
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .route("/api/presets", get(presets))
+        .route("/api/archetypes", get(archetypes))
         .route("/api/form", get(form))
         .route("/api/systems", get(list_systems).post(create_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
@@ -467,36 +469,34 @@ fn compressible(_: StatusCode, _: Version, headers: &HeaderMap, _: &Extensions) 
     )
 }
 
-async fn presets(State(state): State<Shared>) -> Json<Vec<PresetInfo>> {
+async fn archetypes(State(state): State<Shared>) -> Json<Vec<ArchetypeInfo>> {
     Json(state.catalog.list())
 }
 
 async fn form(State(state): State<Shared>) -> Json<FormSpec> {
     let spec = |limits, fallback| ParamSpec { limits, fallback };
     Json(FormSpec {
-        sea_level: spec(request::SEA_LEVEL, fallback::SEA_LEVEL),
-        land_fraction: request::LAND_FRACTION,
-        volcanic: spec(request::VOLCANIC, fallback::VOLCANIC),
-        circumference_km: spec(request::CIRCUMFERENCE_KM, fallback::CIRCUMFERENCE_KM),
-        axial_tilt_deg: spec(request::AXIAL_TILT_DEG, fallback::AXIAL_TILT_DEG),
-        erosion: spec(request::EROSION, fallback::EROSION),
-        pressure_bar: spec(request::PRESSURE_BAR, fallback::PRESSURE_BAR),
-        surface_age_ga: spec(request::SURFACE_AGE_GA, fallback::SURFACE_AGE_GA),
         hz_position: spec(request::HZ_POSITION, fallback::HZ_POSITION),
         orbit_au: request::ORBIT_AU,
         eccentricity: request::ECCENTRICITY,
         moon_count: request::MOON_COUNT,
         metallicity: request::METALLICITY,
-        giant_mass: request::GIANT_MASS,
+        inputs: InputLimits {
+            mass_earth: request::MASS_EARTH,
+            core_mass_fraction: request::CORE_MASS_FRACTION,
+            water_oceans: request::WATER_OCEANS,
+            envelope_fraction: request::ENVELOPE_FRACTION,
+            co2: request::VOLATILE_FACTOR,
+            n2: request::VOLATILE_FACTOR,
+            radiogenic: request::RADIOGENIC,
+            axial_tilt_deg: request::AXIAL_TILT_DEG,
+        },
         default_width: fallback::WIDTH,
         default_height: fallback::HEIGHT,
         size_presets: request::SIZE_PRESETS.iter().map(|&(w, h)| [w, h]).collect(),
         max_size: MAX_SIZE,
         max_pixels: state.config.max_pixels,
-        planet_types: mapgen::system::PLANET_TYPES
-            .iter()
-            .map(|t| (*t).to_owned())
-            .collect(),
+        archetypes: mapgen::system::archetype_names(),
         max_planets: mapgen::system::MAX_PLANETS as u32,
     })
 }
@@ -584,22 +584,15 @@ async fn create_system(
     Json(request): Json<mapgen::system::SystemRequest>,
 ) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
     check_system_request(&request)?;
-    // Around a planet: its preset from the catalog only (never a path
-    // chosen by the client), its parameters resolved here, the system drawn
-    // around them.
-    let preset = match &request {
+    // Around a planet: an archetype of the catalog (never a path chosen by
+    // the client), loaded once at startup; a whole system names built-in
+    // archetypes only (`system::draw` refuses the others).
+    let archetype = match &request {
         mapgen::system::SystemRequest::Around(world) => match &world.planet {
-            Some(spec) => Some((
-                state.catalog.resolve(spec).ok_or_else(|| {
-                    Rejection(
-                        bad(format!("unknown planet preset {spec:?}")),
-                        Some(ErrorDetail::UnknownPreset {
-                            preset: spec.clone(),
-                        }),
-                    )
-                })?,
-                spec.clone(),
-            )),
+            Some(spec) => Some(state.catalog.get(spec).cloned().ok_or_else(|| {
+                let e = mapgen::request::RequestError::UnknownArchetype(spec.clone());
+                Rejection(bad(e.to_string()), ErrorDetail::of_request(&e))
+            })?),
             None => None,
         },
         mapgen::system::SystemRequest::System(_) => None,
@@ -609,13 +602,14 @@ async fn create_system(
         let rng = &mut rand::rng();
         match &drawn {
             mapgen::system::SystemRequest::Around(world) => {
-                let resolved = match preset {
-                    Some((preset, spec)) => world.resolve_with_preset(preset, spec, rng)?,
-                    None => world.resolve(rng)?,
-                };
+                let resolved = world.resolve_with_archetype(archetype, rng)?;
                 let ignored = resolved.ignored.iter().map(|f| (*f).to_owned()).collect();
                 Ok((
-                    mapgen::system::draw_around_params(world, resolved.params),
+                    mapgen::system::draw_around_params(
+                        world,
+                        resolved.params.clone(),
+                        resolved.model().clone(),
+                    ),
                     ignored,
                 ))
             }
@@ -2512,7 +2506,7 @@ mod tests {
         Config {
             systems_dir: root.join("systems"),
             db_path: root.join("db").join("mapgen.sqlite"),
-            presets_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets")),
+            archetypes_dir: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../archetypes")),
             static_dir: root.join("static"),
             max_pixels: DEFAULT_MAX_PIXELS,
             tile_cache_bytes: tiles::DEFAULT_BUDGET_BYTES,
@@ -2724,15 +2718,9 @@ mod tests {
         let config = temp_config("epochs");
         let root = config.systems_dir.clone();
         let app = router(config);
-        // A catalog example preset, airless and cratered; a wet terran.
-        let (old, rock) = generated_planet(
-            &app,
-            "examples/mercury-like.toml",
-            3,
-            r#", "surface_age_ga": 4.0, "age_gyr": 6.0"#,
-        )
-        .await;
-        let (wet, sea) = generated_planet(&app, "terran", 4, "").await;
+        // An airless, cratered Mercury; a wet Earth.
+        let (old, rock) = generated_planet(&app, "mercury-like", 3, r#", "age_gyr": 6.0"#).await;
+        let (wet, sea) = generated_planet(&app, "earth-like", 4, "").await;
 
         let png = |uri: String| {
             let app = app.clone();
@@ -2755,8 +2743,9 @@ mod tests {
         .unwrap()
         .into_luma16();
         assert_eq!(now, stored);
-        // Back in time and ahead, the relief changes.
-        for epoch in [3900, -1000] {
+        // Back in time (within the barren look's dry era, from 3.5 Ga)
+        // and ahead, the relief changes.
+        for epoch in [3400, -1000] {
             let (status, then) = png(format!("{base}/{epoch}/elevation.png")).await;
             assert_eq!(status, StatusCode::OK, "{epoch}");
             assert_ne!(
@@ -2807,14 +2796,8 @@ mod tests {
         // Size and air pinned: a random small or thin-air draw would turn
         // the plates into a stagnant lid (see `mapgen::geology::regime_of`)
         // and the route would answer 404.
-        let (plates, planet) = generated_planet(
-            &app,
-            "terran",
-            5,
-            r#", "circumference_km": 40000, "pressure_bar": 1.0"#,
-        )
-        .await;
-        let (dry, rock) = generated_planet(&app, "examples/mercury-like.toml", 6, "").await;
+        let (plates, planet) = generated_planet(&app, "earth-like", 5, "").await;
+        let (dry, rock) = generated_planet(&app, "mercury-like", 6, "").await;
         let get = |uri: String| {
             let app = app.clone();
             async move {
@@ -2869,7 +2852,7 @@ mod tests {
         let config = temp_config("no-diagnostics");
         let root = config.systems_dir.clone();
         let app = router(config);
-        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let (id, planet) = generated_planet(&app, "earth-like", 7, "").await;
         let size = mapgen::sizes::size_dir(&systems::body_dir(&root, &id, &planet), 256, 128);
         assert!(size.join("world.png").is_file());
         assert!(size.join("legend.png").is_file());
@@ -2885,7 +2868,7 @@ mod tests {
         };
         let root = config.systems_dir.clone();
         let app = router(config);
-        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let (id, planet) = generated_planet(&app, "earth-like", 7, "").await;
         let size = mapgen::sizes::size_dir(&systems::body_dir(&root, &id, &planet), 256, 128);
         assert!(size.join("noise_maps").read_dir().unwrap().next().is_some());
         // The SVG stays on request.
@@ -2897,7 +2880,7 @@ mod tests {
         let config = temp_config("svg-export");
         let root = config.systems_dir.clone();
         let app = router(config);
-        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let (id, planet) = generated_planet(&app, "earth-like", 7, "").await;
         let uri = format!("/api/systems/{id}/bodies/{planet}/world.svg");
         let get = |uri: String| {
             let app = app.clone();
@@ -2943,7 +2926,7 @@ mod tests {
         let config = temp_config("sizes");
         let root = config.systems_dir.clone();
         let app = router(config);
-        let (id, planet) = generated_planet(&app, "terran", 7, "").await;
+        let (id, planet) = generated_planet(&app, "earth-like", 7, "").await;
         let system_dir = systems::system_dir(&root, &id);
         let owned = planet.clone();
         tokio::task::spawn_blocking(move || {
@@ -3042,7 +3025,7 @@ mod tests {
             max_pixels: 1024 * 512 - 1,
             ..temp_config("size-jobs-tight")
         };
-        let (id, planet) = generated_planet(&app, "barren", 9, "").await;
+        let (id, planet) = generated_planet(&app, "mars-like", 9, "").await;
         let base = format!("/api/systems/{id}/bodies/{planet}");
         let json = |body: &str| serde_json::from_str::<serde_json::Value>(body).unwrap();
         let sizes = || {
@@ -3177,7 +3160,7 @@ mod tests {
 
         // A server whose limit is below the size asked for.
         let tight = router(tight);
-        let (id, planet) = generated_planet(&tight, "barren", 9, "").await;
+        let (id, planet) = generated_planet(&tight, "mars-like", 9, "").await;
         let post = format!("/api/systems/{id}/bodies/{planet}/sizes/1024x512");
         let (status, body) = call(&tight, "POST", &post, None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
@@ -3190,7 +3173,7 @@ mod tests {
         let config = temp_config(name);
         let state = new_state(&config);
         let app = routes(state.clone(), &config);
-        let (id, planet) = generated_planet(&app, "barren", seed, "").await;
+        let (id, planet) = generated_planet(&app, "mars-like", seed, "").await;
         wait_released(&state).await;
         (config, state, app, id, planet)
     }
@@ -3358,7 +3341,7 @@ mod tests {
         let app = routes(state.clone(), &config);
         let mut bodies = Vec::new();
         for seed in [31, 32, 33, 34] {
-            bodies.push(generated_planet(&app, "barren", seed, "").await);
+            bodies.push(generated_planet(&app, "mars-like", seed, "").await);
             wait_released(&state).await;
         }
         let [(a, a_body), (b, b_body), (c, c_body), (d, d_body)] = &bodies[..] else {
@@ -3448,7 +3431,7 @@ mod tests {
         assert_eq!(generator.version.as_deref(), Some(GENERATOR_VERSION));
 
         // With no displayed size recorded, the original size alone.
-        let (id, planet) = generated_planet(&app, "barren", 42, "").await;
+        let (id, planet) = generated_planet(&app, "mars-like", 42, "").await;
         wait_released(&state).await;
         let base = format!("/api/systems/{id}/bodies/{planet}");
         evict::evict_body(&state, &id, &planet).unwrap();
@@ -3605,10 +3588,10 @@ mod tests {
         let config = temp_config("evict-date");
         let state = new_state(&config);
         let app = routes(state.clone(), &config);
-        let (old, old_body) = generated_planet(&app, "barren", 81, "").await;
+        let (old, old_body) = generated_planet(&app, "mars-like", 81, "").await;
         wait_released(&state).await;
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-        let (new, _) = generated_planet(&app, "barren", 82, "").await;
+        let (new, _) = generated_planet(&app, "mars-like", 82, "").await;
         wait_released(&state).await;
         let order = |list: &str| -> Vec<(String, u64)> {
             json(list)
@@ -3757,7 +3740,7 @@ mod tests {
                 pending
             })
         };
-        let request = r#"{"around": {"planet": "barren", "seed": 95, "width": 256, "height": 128, "moons": "none", "giants": "none"}}"#;
+        let request = r#"{"around": {"planet": "mars-like", "seed": 95, "width": 256, "height": 128, "moons": "none", "giants": "none"}}"#;
         let (status, created) =
             call(&app, "POST", "/api/systems?replace=true", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{created}");
@@ -3784,7 +3767,7 @@ mod tests {
     async fn system_with_a_moon(app: &Router, state: &Shared) -> (String, String, String) {
         for seed in 101..140 {
             let request = format!(
-                r#"{{"around": {{"planet": "terran", "seed": {seed}, "width": 256, "height": 128, "moons": {{"count": 1}}, "giants": "none"}}}}"#
+                r#"{{"around": {{"planet": "earth-like", "seed": {seed}, "width": 256, "height": 128, "moons": {{"count": 1}}, "giants": "none"}}}}"#
             );
             let (status, created) = call(app, "POST", "/api/systems", Some(&request)).await;
             if status != StatusCode::CREATED {
@@ -3931,7 +3914,7 @@ mod tests {
         let app = routes(state.clone(), &config);
         let (id, planet, moon) = system_with_a_moon(&app, &state).await;
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-        let (newer, _) = generated_planet(&app, "barren", 83, "").await;
+        let (newer, _) = generated_planet(&app, "mars-like", 83, "").await;
         wait_released(&state).await;
         let modified = |list: &str, id: &str| -> u64 {
             json(list)
@@ -4024,7 +4007,7 @@ mod tests {
         let config = temp_config("size-orphan");
         let state = new_state(&config);
         let app = routes(state.clone(), &config);
-        let (id, planet) = generated_planet(&app, "barren", 11, "").await;
+        let (id, planet) = generated_planet(&app, "mars-like", 11, "").await;
         let body_dir = systems::body_dir(&config.systems_dir, &id, &planet);
         let events = |job: &str| {
             let (app, uri) = (app.clone(), format!("/api/jobs/{job}/events"));
@@ -4069,12 +4052,62 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lists_built_in_and_example_presets() {
-        let app = router(temp_config("presets"));
-        let (status, body) = call(&app, "GET", "/api/presets", None).await;
+    async fn archetypes_are_listed() {
+        let app = router(temp_config("archetypes"));
+        let (status, body) = call(&app, "GET", "/api/archetypes", None).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body.contains("\"spec\":\"terran\""));
-        assert!(body.contains("\"spec\":\"examples/mars-like.toml\""));
+        let list: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let list = list.as_array().unwrap();
+        let built_in: Vec<_> = list.iter().filter(|a| a["built_in"] == true).collect();
+        assert_eq!(built_in.len(), 13);
+        let earth = list.iter().find(|a| a["spec"] == "earth-like").unwrap();
+        assert!(earth["locales"]["fr"]["name"].is_string());
+        assert!(!earth["inputs"]["mass_earth"].is_null());
+        assert!(earth["orbit"].is_object());
+        assert!(list.iter().any(|a| a["spec"] == "jupiter-like"));
+        let (status, _) = call(&app, "GET", "/api/presets", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn a_missing_archetypes_dir_is_fine() {
+        let mut config = temp_config("no-archetypes");
+        config.archetypes_dir = config.systems_dir.join("nowhere");
+        let app = router(config);
+        let (status, body) = call(&app, "GET", "/api/archetypes", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let list: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap();
+        assert_eq!(list.len(), 13);
+        assert!(list.iter().all(|a| a["built_in"] == true));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_archetype_is_named() {
+        let app = router(temp_config("unknown-archetype"));
+        for body in [
+            r#"{"around": {"planet": "terran"}}"#,
+            r#"{"system": {"planets": {"terran": 1}, "seed": 1, "width": 64, "height": 32}}"#,
+        ] {
+            let (status, text) = call(&app, "POST", "/api/systems", Some(body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            let detail = &serde_json::from_str::<serde_json::Value>(&text).unwrap()["detail"];
+            assert_eq!(detail["code"], "unknown_archetype", "{body}");
+            assert_eq!(detail["archetype"], "terran", "{body}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_form_offers_archetypes() {
+        let app = router(temp_config("form-archetypes"));
+        let (_, body) = call(&app, "GET", "/api/form", None).await;
+        let form: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let names = form["archetypes"].as_array().unwrap();
+        assert!(names.iter().any(|n| n == "earth-like"));
+        assert!(form.get("planet_types").is_none());
+        assert!(form.get("sea_level").is_none());
+        assert!(form.get("land_fraction").is_none());
+        assert!(form["inputs"]["water_oceans"]["max"].is_number());
+        assert!(form["inputs"]["mass_earth"]["min"].is_number());
     }
 
     #[tokio::test]
@@ -4093,7 +4126,8 @@ mod tests {
     async fn rejects_invalid_requests() {
         let app = router(temp_config("invalid"));
         for body in [
-            r#"{"around": {"sea_level": 3.0}}"#,
+            r#"{"around": {"sea_level": 0.3}}"#,
+            r#"{"around": {"mass_earth": 5000}}"#,
             r#"{"around": {"planet": "/etc/passwd.toml"}}"#,
             r#"{"around": {"width": 100000}}"#,
             r#"{"around": {"width": 8192, "height": 8192}}"#,
@@ -4117,20 +4151,18 @@ mod tests {
             let app = app.clone();
             async move { call(&app, "POST", "/api/systems", Some(body)).await }
         };
-        let (status, body) = post(r#"{"around": {"sea_level": 3.0}}"#).await;
+        let (status, body) = post(r#"{"around": {"mass_earth": 5000}}"#).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let out_of_range = detail(&body);
         assert_eq!(out_of_range["code"], "out_of_range");
-        assert_eq!(out_of_range["field"], "sea_level");
+        assert_eq!(out_of_range["field"], "mass_earth");
         assert!(out_of_range["min"].is_number() && out_of_range["max"].is_number());
         let (_, body) = post(r#"{"around": {"width": 100000}}"#).await;
         assert_eq!(detail(&body)["code"], "size_out_of_range");
         let (_, body) = post(r#"{"around": {"planet": "nowhere"}}"#).await;
-        assert_eq!(detail(&body)["code"], "unknown_preset");
-        let (_, body) = post(r#"{"around": {"sea_level": 0.1, "land_fraction": 0.3}}"#).await;
-        assert_eq!(detail(&body)["code"], "sea_level_and_land_fraction");
+        assert_eq!(detail(&body)["code"], "unknown_archetype");
         let (_, body) = post(
-            r#"{"system": {"star": null, "metallicity": null, "planets": {"terran": 16}, "seed": 1, "width": 64, "height": 32}}"#,
+            r#"{"system": {"star": null, "metallicity": null, "planets": {"earth-like": 16}, "seed": 1, "width": 64, "height": 32}}"#,
         )
         .await;
         assert_eq!(detail(&body)["code"], "too_many_planets");
@@ -4144,7 +4176,7 @@ mod tests {
         let config = temp_config("systems");
         let root = config.systems_dir.clone();
         let app = router(config);
-        let request = r#"{"system": {"star": "K1V", "planets": {"barren": 2}, "seed": 3, "width": 64, "height": 32}}"#;
+        let request = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 2}, "seed": 3, "width": 64, "height": 32}}"#;
         let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let created: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -4394,7 +4426,7 @@ mod tests {
         let config = temp_config("restart");
         let db = config.db_path.clone();
         let app = router(config.clone());
-        let request = r#"{"around": {"planet": "barren", "seed": 8, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
+        let request = r#"{"around": {"planet": "mars-like", "seed": 8, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
         let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         wait_job(&app, &body).await;
@@ -4483,7 +4515,7 @@ mod tests {
         let app = router(temp_config("system-paths"));
         for body in [
             r#"{"around": {"planet": "/etc/passwd.toml"}}"#,
-            r#"{"around": {"planet": "../presets/terran.toml"}}"#,
+            r#"{"around": {"planet": "../archetypes/earth-like.toml"}}"#,
             r#"{"around": {"planet": "nowhere"}}"#,
             r#"{"system": {"star": null, "metallicity": null, "planets": {"/etc/x.toml": 1}, "seed": 1, "width": 64, "height": 32}}"#,
         ] {
@@ -4504,7 +4536,7 @@ mod tests {
     #[tokio::test]
     async fn a_system_round_a_planet_generates_that_planet_first() {
         let app = router(temp_config("around"));
-        let request = r#"{"around": {"planet": "barren", "seed": 5, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
+        let request = r#"{"around": {"planet": "mars-like", "seed": 5, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
         let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let created: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -4516,7 +4548,7 @@ mod tests {
     #[tokio::test]
     async fn a_lone_planet_system_is_named_lone_and_listed() {
         let app = router(temp_config("lone"));
-        let request = r#"{"around": {"planet": "barren", "seed": 5, "width": 64, "height": 32, "moons": "none", "alone": true}}"#;
+        let request = r#"{"around": {"planet": "mars-like", "seed": 5, "width": 64, "height": 32, "moons": "none", "alone": true}}"#;
         let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let created: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -4562,7 +4594,7 @@ mod tests {
             .collect()
     }
 
-    const EXPORTED: &str = r#"{"system": {"star": "K1V", "planets": {"barren": 3}, "seed": 3, "width": 64, "height": 32}}"#;
+    const EXPORTED: &str = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 3}, "seed": 3, "width": 64, "height": 32}}"#;
 
     /// Draws `EXPORTED` and generates its planet `b`: the system's id.
     async fn exported_system(app: &Router) -> String {
@@ -4727,8 +4759,7 @@ mod tests {
     async fn the_export_of_a_whole_system_draws_the_same_system_again() {
         let app = router(temp_config("export-whole"));
         // The seed is left to chance: only the export's `create` knows it.
-        let request =
-            r#"{"system": {"star": "K1V", "planets": {"barren": 3}, "width": 64, "height": 32}}"#;
+        let request = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 3}, "width": 64, "height": 32}}"#;
         let (document, before, after) = drawn_again_from_its_export(&app, request).await;
         assert!(document["request"]["system"]["seed"].is_null());
         assert_eq!(document["create"]["system"]["seed"], document["seed"]);
@@ -4755,6 +4786,18 @@ mod tests {
         assert_eq!(after, before);
     }
 
+    /// Removes every `life_draw` of a model from `value`.
+    fn drop_life_draws(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                map.remove("life_draw");
+                map.values_mut().for_each(drop_life_draws);
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(drop_life_draws),
+            _ => {}
+        }
+    }
+
     #[tokio::test]
     async fn the_export_of_a_system_round_a_planet_draws_the_same_system_again() {
         let app = router(temp_config("export-around"));
@@ -4764,8 +4807,8 @@ mod tests {
         // A planet with neighbours and moons, its star left open; then the
         // moon of a giant, round a Sun-like star.
         for request in [
-            r#"{"around": {"planet": "barren", "width": 64, "height": 32, "moons": {"count": 2}}}"#,
-            r#"{"around": {"planet": "terran", "star": "G2V", "width": 64, "height": 32, "host": "giant"}}"#,
+            r#"{"around": {"planet": "mars-like", "width": 64, "height": 32, "moons": {"count": 2}}}"#,
+            r#"{"around": {"planet": "earth-like", "star": "G2V", "width": 64, "height": 32, "host": "giant"}}"#,
         ] {
             let (document, before, after) = drawn_again_from_its_export(&app, request).await;
             assert!(document["request"]["around"]["seed"].is_null());
@@ -4774,10 +4817,13 @@ mod tests {
             assert_eq!(after["system"]["focus"], before["system"]["focus"]);
             assert_eq!(body_seeds(&after), body_seeds(&before), "{request}");
             // The whole draw is the same, not only its seeds (the request
-            // stored is the export's `create`, open fields pinned).
+            // stored is the export's `create`, open fields pinned). The
+            // life draw aside: `create` pins whether life arose, which sets
+            // the draw to 0 or 1 (`PlanetModel::formation`).
             let (mut after, mut before) = (after["system"].clone(), before["system"].clone());
             for system in [&mut after, &mut before] {
                 system["request"] = serde_json::Value::Null;
+                drop_life_draws(system);
             }
             assert_eq!(after, before, "{request}");
         }
@@ -4820,8 +4866,8 @@ mod tests {
         let root = config.systems_dir.clone();
         let app = router(config);
         // The first job holds the queue; the second waits behind it.
-        let first = r#"{"around": {"planet": "barren", "seed": 1, "width": 512, "height": 256, "moons": "none", "giants": "none"}}"#;
-        let small = r#"{"around": {"planet": "barren", "seed": 2, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
+        let first = r#"{"around": {"planet": "mars-like", "seed": 1, "width": 512, "height": 256, "moons": "none", "giants": "none"}}"#;
+        let small = r#"{"around": {"planet": "mars-like", "seed": 2, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
         let (_, body) = call(&app, "POST", "/api/systems", Some(first)).await;
         let first: serde_json::Value = serde_json::from_str(&body).unwrap();
         let (_, body) = call(&app, "POST", "/api/systems", Some(small)).await;

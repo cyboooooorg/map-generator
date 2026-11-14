@@ -1,0 +1,18 @@
+name = "mercury-like"
+description = "Mercury-like: a small iron-rich rock next to its star"
+
+[locales.fr]
+name = "Mercurienne"
+description = "Un petit monde rocheux riche en fer, tout près de son étoile"
+
+[inputs]
+mass_earth = [0.05, 0.06]
+core_mass_fraction = 0.70
+water_oceans = 0.0
+envelope_fraction = 0.0
+
+[orbit]
+star = "G2V"
+insolation = [6.0, 7.3]
+eccentricity = 0.206
+axial_tilt = 0.03

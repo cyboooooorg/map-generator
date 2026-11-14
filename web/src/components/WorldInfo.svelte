@@ -1,9 +1,9 @@
 <script lang="ts">
   import { getLocale, t } from '../lib/i18n/index.svelte';
-  import { biomeName, presetDescription, presetName } from '../lib/i18n/names.svelte';
+  import { archetypeDescription, archetypeName, biomeName, classLabel } from '../lib/i18n/names.svelte';
   import { worldFile } from '../lib/api/client';
   import { downloadRawData, downloadSvg } from '../lib/download';
-  import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
+  import { cliCommand, copyText, formatAgo, formatArea, formatAge, formatAtmosphere, formatAu, formatEccentricity, formatGeology, formatInt, formatNumber, formatOrbit, formatShare, formatStar, formatStarlight, formatSurfaceTemperature, formatUpTo, formatYear, surfaceColour, withUnit } from '../lib/format';
   import { unitTooltip } from '../lib/units';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { toasts } from '../lib/toasts.svelte';
@@ -46,7 +46,9 @@
   const size = $derived(meta ? world.size : null);
   const moons = $derived(moonsOf(meta));
   const TOP_BIOMES = 6;
-  const title = $derived(forcedTitle ?? (meta ? presetName(meta.preset) : worldId));
+  // The archetype asked for, else the class of the planet.
+  const kind = $derived(meta ? (meta.archetype ? archetypeName({ name: meta.archetype }) : classLabel(meta.class, meta.model)) : null);
+  const title = $derived(forcedTitle ?? kind ?? worldId);
 
   async function copy(text: string, what: string): Promise<void> {
     const ok = await copyText(text);
@@ -94,7 +96,7 @@
       <span class="title">
         <strong>{ofMoon ? t.worldInfo.planetHeading({ name: title ?? '' }) : title}</strong>
         <small
-          >{[meta ? presetName(meta.preset) : null, forcedTitle ? null : worldId]
+          >{[kind, forcedTitle ? null : worldId]
             .filter(Boolean)
             .join(' · ')}</small
         >
@@ -102,7 +104,7 @@
     </summary>
 
     {#if meta}
-      <p class="description">{presetDescription(meta.preset)}</p>
+      <p class="description">{meta.archetype ? archetypeDescription({ name: meta.archetype }) : ''}</p>
       <dl>
         <dt>{t.worldInfo.seed}</dt>
         <dd>{meta.seed}</dd>
@@ -200,6 +202,10 @@
           <dd class="unit-help" title={unitTooltip('AU')}>{formatEccentricity(star)}</dd>
           <dt>{t.worldInfo.light}</dt>
           <dd>{formatStarlight(star)}</dd>
+          {#if formatSurfaceTemperature(meta.model)}
+            <dt>{t.worldInfo.surfaceTemperature}</dt>
+            <dd>{formatSurfaceTemperature(meta.model)}</dd>
+          {/if}
           <dt>{t.worldInfo.year}</dt>
           <dd>{formatYear(star.year_days)}</dd>
           <dt>{t.worldInfo.starSize}</dt>

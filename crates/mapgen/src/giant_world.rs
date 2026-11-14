@@ -344,7 +344,7 @@ pub struct GivenRings {
 }
 
 /// A giant's rings, drawn from `rng` with the odds of bright and of
-/// faint rings (its preset's `[giant] rings`): bright ones broad and icy
+/// faint rings (its look's `[giant] rings`): bright ones broad and icy
 /// (Saturn's), faint ones narrow and dusty (Uranus's and Neptune's), or
 /// none.
 pub fn draw_rings(rng: &mut impl RngExt, rings_odds: [f32; 2]) -> Option<RingSystem> {
@@ -585,8 +585,8 @@ pub const HOT_GIANT_K: f32 = 1000.0;
 impl Look {
     /// The look of the giant world `p` of mass `mass_earth`.
     pub fn draw(p: &WorldParams, mass_earth: f32) -> Self {
-        let kind = p.planet.giant.as_ref().map_or(GiantKind::Gas, |g| g.kind);
-        let rings_odds = p.planet.giant.as_ref().map_or([0.0, 0.0], |g| g.rings);
+        let kind = p.look.giant.as_ref().map_or(GiantKind::Gas, |g| g.kind);
+        let rings_odds = p.look.giant.as_ref().map_or([0.0, 0.0], |g| g.rings);
         let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(p.seed, stream::GIANT_LOOK)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
         let equilibrium = star.equilibrium_k;
@@ -1308,7 +1308,7 @@ pub fn info(p: &WorldParams) -> Option<GiantInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::Preset;
+    use crate::look::Look as WorldLook;
 
     fn params(preset: &str, seed: u32, mass: f32, orbit_au: f32) -> WorldParams {
         WorldParams {
@@ -1316,7 +1316,10 @@ mod tests {
             width: 128,
             height: 64,
             seed,
-            planet: Preset::load(preset).unwrap(),
+            class: preset.into(),
+            archetype: None,
+            model: None,
+            look: WorldLook::load(preset),
             sea_level: 0.0,
             volcanic_intensity: 0.0,
             circumference_km: 40_075.0,

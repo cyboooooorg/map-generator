@@ -158,7 +158,20 @@ flowchart LR
    ([`generation.rs`](../../crates/mapgen/src/generation.rs)). The blend is
    $0.45 \times \min(1/g,\ 2)$: 0.45 at Earth's gravity, 0.9 at the cap,
    0.14 at 3.2 g (twice Earth's size). The 0.45 is a calibration on
-   Earth's hypsometry, with the platform below.
+   Earth's hypsometry, with the platform below. Worlds with plates keep
+   half the mountain weight (their other ranges follow the plate
+   boundaries). Worlds without keep it whole, but only in a few highland
+   provinces (`HIGHLANDS`): without plates to stack crust into ranges, a
+   world is plains with its craters, basins and volcanoes. A low-frequency
+   noise ramps the mountains in past its middle on about 9 % of the
+   sphere, Venus's share: tesserae cover about 7–8 % of it (Ivanov & Head
+   2011), highlands with them about a tenth, plains 70–80 %. Venus's
+   hypsometry is unimodal, more than 80 % of it within 1 km of the mean
+   radius (Pettengill et al. 1980; Ford & Pettengill 1992): with the
+   rolling plains of a dry world (3 km of relief per unit of the
+   continents' noise at Earth's gravity, `DRY_PLAINS_KM`, scaled as
+   `1/g`), the `venus-like` archetype gets 79 % within ±1 km of its
+   median.
 3. **Plate boundaries.** The ranges, arcs and trenches that
    [`plates.rs`](../../crates/mapgen/src/plates.rs) raises at plate
    boundaries are given "at Earth's gravity" and multiplied by the same
@@ -184,9 +197,12 @@ flowchart LR
    body's radius: a body of about 230 km in radius or more at Earth's
    gravity, 370 km at the cap, keeps it all. Smaller ones have their relief
    cut to 8 % of their radius. On an airless
-   stagnant body (a moon, a dead world) the span is also capped at 9 km
-   (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one (bulk density
-   under 2.5 g/cm³).
+   body without plates whose lid is stagnant or episodic (a moon, a dead
+   world, an airless world that overturns now and then) the span is also
+   capped at 9 km (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one
+   (bulk density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
+   resurfaces it, and its sinking crust breaks into blocks up to 17 km
+   high (Schenk et al. 2001).
 8. **Craters.** The size above which a crater gets a flat floor and a
    central peak is $15\,\text{km} \times 1.62 / g$ (g in m/s²), the Moon's
    15 km scaled as $1/g$
@@ -247,8 +263,8 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   glacial erosion capping ranges at a snowline.
 - **Small bodies rest on weak numbers.** The 8 % comes from one figure,
   Vesta's mound, in an EGU abstract that is not peer-reviewed. The 9 km cap
-  of airless stagnant bodies is a calibration on the Moon's 13 km span (it
-  gives a Moon-sized moon 15.7 km with its craters), and the 0.4 of ice
+  of airless bodies without plates is a calibration on the Moon's 13 km
+  span (it gives a Moon-sized moon 15.7 km with its craters), and the 0.4 of ice
   extrapolates one crater depth ratio to all relief (1.1 km on Ganymede
   against 2.8 km on the Moon at 26 km across; Schenk 2002, see [How do
   impact craters form and fade?](impact-craters.md)).
@@ -257,6 +273,16 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   rock's transition, so its span is 0.75 of rock's, not 0.4. Dead planets
   (`mercury-like`, airless `barren`) have the 9 km cap too, whatever their
   gravity.
+- **Worlds without plates: provinces from noise.** Their highland
+  provinces are noise blobs: real ones are tesserae and volcanic rises on
+  Venus, the cratered southern highlands and Tharsis on Mars (two thirds
+  of the planet, not a tenth), impact-shaped terrain on Mercury and the
+  Moon; the same share serves them all. A dry world's rolling plains come
+  from the continents' noise, not from mantle flow. `mars-like` spans
+  30 km (Mars: about 30 km, Smith et al. 1999); `mercury-like` 18 km, about
+  twice Mercury's 9.9 km (Becker et al. 2016): its craters reach 7.7 km
+  below its median and its highlands 10 km above it, under an impact cap
+  calibrated on the Moon, whose relief (about 20 km) is twice Mercury's.
 
 ## Sources
 
@@ -300,6 +326,21 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 10. The height of Everest, 8,848.86 m, announced jointly by China and Nepal
     on 8 December 2020, as reported by
     [Al Jazeera](https://www.aljazeera.com/news/2020/12/8/mt-everest-nepal-china-announce-revised-height-at-8848-metres).
+11. Pettengill, G. H., Eliason, E., Ford, P. G. et al. 1980, "Pioneer
+    Venus radar results: altimetry and surface properties", *Journal of
+    Geophysical Research* 85, 8261–8270,
+    [doi:10.1029/JA085iA13p08261](https://doi.org/10.1029/JA085iA13p08261).
+12. Smith, D. E., Zuber, M. T., Solomon, S. C. et al. 1999, "The global
+    topography of Mars and implications for surface evolution", *Science*
+    284, 1495–1503,
+    [doi:10.1126/science.284.5419.1495](https://doi.org/10.1126/science.284.5419.1495).
+13. Becker, K. J., Robinson, M. S., Becker, T. L. et al. 2016, "First
+    global digital elevation model of Mercury", 47th Lunar and Planetary
+    Science Conference, abstract 2959: highest point 4.48 km above the
+    mean radius, lowest 5.38 km below.
+14. Ivanov, M. A. & Head, J. W. 2011, "Global geological map of Venus",
+    *Planetary and Space Science* 59, 1559–1600,
+    [doi:10.1016/j.pss.2011.07.008](https://doi.org/10.1016/j.pss.2011.07.008).
 
 ## See also
 

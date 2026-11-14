@@ -4,27 +4,16 @@ import type { HostMode } from "./HostMode";
 import type { MoonsMode } from "./MoonsMode";
 
 /**
- * A request to generate a world. `None` fields come from the preset when it
- * sets them, otherwise from [`fallback`].
+ * A request to generate a world. `None` fields come from the archetype
+ * when it sets them, otherwise from the formation context or random
+ * draws.
  */
 export type WorldRequest = { 
 /**
- * Built-in preset name or preset file path; `None` picks a random built-in.
+ * Built-in archetype name (`earth-like`) or archetype file path
+ * (`.toml`); `None` draws the planet from its formation context.
  */
-planet?: string, seed?: number, sea_level?: number, 
-/**
- * Share of the surface that is land, by area, in `[0, 1]`: the sea
- * level is computed to match it. Exclusive with `sea_level`.
- */
-land_fraction?: number, volcanic?: number, circumference_km?: number, axial_tilt_deg?: number, erosion?: number, 
-/**
- * Surface pressure in bar.
- */
-pressure_bar?: number, 
-/**
- * Age of the oldest surviving surface, in Ga.
- */
-surface_age_ga?: number, 
+planet?: string, seed?: number, axial_tilt_deg?: number, 
 /**
  * Spectral type of the host star (`G2V`).
  */
@@ -75,10 +64,41 @@ metallicity?: number,
  */
 giants?: GiantsMode, 
 /**
- * Mass of a giant planet (giant presets only), Earth masses, in
- * `[5, 4131]`; drawn in the preset's range when left out.
+ * Mass of the planet, Earth masses, in `[0.01, 4131]`: from the
+ * archetype's range, else drawn like a small planet's.
  */
 mass_earth?: number, 
+/**
+ * Iron share of the refractory (iron and rock) mass, in `[0, 0.9]`
+ * (Earth 0.325, Mercury about 0.7).
+ */
+core_mass_fraction?: number, 
+/**
+ * Water and ices, Earth oceans (1.4e21 kg each), in `[0, 1e6]`.
+ */
+water_oceans?: number, 
+/**
+ * Hydrogen and helium share of the mass at formation, in `[0, 0.999]`.
+ */
+envelope_fraction?: number, 
+/**
+ * Factor on the CO₂ formation rule, in `[0, 100]`: 1 typical (the
+ * rule's scatter draws about 0.5 to 2).
+ */
+co2?: number, 
+/**
+ * Factor on the N₂ formation rule, in `[0, 100]`: 1 typical.
+ */
+n2?: number, 
+/**
+ * Radiogenic abundance at formation, Earth's = 1, in `[0.1, 10]`.
+ */
+radiogenic?: number, 
+/**
+ * `true`: life arises wherever the world allows it; `false`: never;
+ * left out, drawn.
+ */
+life?: boolean, 
 /**
  * `auto` (rarely the moon of a giant, as the seed draws, the default),
  * `giant` (always) or `none`.

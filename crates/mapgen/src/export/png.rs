@@ -107,7 +107,7 @@ pub fn export_legend_png(world: &World, path: &str) -> ImageResult<()> {
     // ── Planet metadata lines (key, value) ───────────────────────────────────
     // Capitalize the planet type name for display.
     let planet_str = {
-        let s = world.params.planet.name.clone();
+        let s = world.params.class.clone();
         let mut chars = s.chars();
         match chars.next() {
             None => String::new(),

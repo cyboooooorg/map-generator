@@ -286,7 +286,7 @@ pub fn draw_belts(star: &StarInfo, ice_au: f64, planets: &[Track], seed: u32) ->
     if outer_roll < outer_odds(star) {
         let last = planets
             .iter()
-            .filter(|p| p.giant() && p.class != PlanetClass::HotJupiter)
+            .filter(|p| p.giant() && !p.class.is_hot_giant())
             .max_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
         let (lo, hi) = match last {
             Some(giant) => (
@@ -358,7 +358,7 @@ pub fn draw_trojans(star_mass: f64, planets: &[Track], seed: u32) -> Vec<Option<
                 PlanetClass::GasGiant => between(1e4, 1e6),
                 PlanetClass::IceGiant if p.orbit_au >= outermost => between(1e4, 1e6),
                 PlanetClass::IceGiant => between(1e3, 1e5),
-                PlanetClass::HotJupiter => between(1.0, 1e3) - 1.0,
+                PlanetClass::HotJupiter | PlanetClass::HotNeptune => between(1.0, 1e3) - 1.0,
                 _ => between(1.0, 101.0) - 1.0,
             }
             .round() as u32;

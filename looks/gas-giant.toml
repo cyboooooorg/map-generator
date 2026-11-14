@@ -1,0 +1,13 @@
+# A cold gas giant like Jupiter or Saturn: no surface, cloud bands of
+# ammonia ice (cream zones, ochre belts), storms and, often, rings.
+
+[giant]                                # see `mapgen::giant_world`
+kind = "gas"
+rings = [0.25, 0.5]                    # odds of bright rings, of faint ones
+
+# A deep, hazy atmosphere.
+[atmosphere]
+rayleigh = [0.55, 0.5, 0.42]             # the gas scatters little blue: the bands keep their colours
+haze = 0.15
+haze_colour = [0.92, 0.86, 0.74]
+clouds = "none"                        # the bands are the clouds

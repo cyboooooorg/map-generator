@@ -4,7 +4,7 @@
   // kept open by its pin (see StarPane.svelte and lib/planetCard.ts).
   import { scale } from 'svelte/transition';
   import type { StarInfo } from '../lib/api/types/StarInfo';
-  import { formatAge, formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../lib/format';
+  import { formatAge, formatAu, formatCelsius, formatInt, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { t } from '../lib/i18n/index.svelte';
   import { type CardBox, type CardMetric, type Extreme, linkEnd, zonePlace } from '../lib/planetCard';
   import type { SystemPlanet } from '../lib/systemStar';
@@ -149,6 +149,10 @@
     <dd>{@render value('gravity', withUnit(formatUpTo(planet.gravity, 2), 'g'))}</dd>
     <dt>{t.planetCard.equilibrium}</dt>
     <dd>{@render value('equilibrium', withUnit(formatInt(Math.round(planet.equilibrium_k - 273.15)), '°C'))}</dd>
+    {#if planet.surface_k !== null}
+      <dt>{t.planetCard.surfaceTemperature}</dt>
+      <dd>{formatCelsius(planet.surface_k)}</dd>
+    {/if}
     <dt>{t.planetCard.zone}</dt>
     <dd>{zone}</dd>
     <dt>{t.planetCard.moons}</dt>

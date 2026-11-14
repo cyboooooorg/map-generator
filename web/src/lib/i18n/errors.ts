@@ -1,7 +1,7 @@
 // Error messages in the active locale: the server's reasons, translated
 // from their code when it sent one, its English text otherwise.
 import { ApiFailure } from '../api/client';
-import { presetName } from './names.svelte';
+import { archetypeName } from './names.svelte';
 import type { ErrorDetail } from '../api/types/ErrorDetail';
 import { formatInt, formatUpTo } from '../format';
 import { t } from './index.svelte';
@@ -14,10 +14,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.outOfRange({ field: field(detail.field), min: formatUpTo(detail.min, 3), max: formatUpTo(detail.max, 3) });
     case 'size_out_of_range':
       return t.errors.sizeOutOfRange({ ...detail, field: field(detail.field) });
-    case 'sea_level_and_land_fraction':
-      return t.errors.seaLevelAndLandFraction;
-    case 'unknown_preset':
-      return t.errors.unknownPreset({ preset: detail.preset });
+    case 'unknown_archetype':
+      return t.errors.unknownArchetype({ archetype: detail.archetype });
     case 'too_many_pixels':
       return t.errors.tooManyPixels({ width: detail.width, height: detail.height, max: formatInt(detail.max_pixels) });
     case 'being_generated':
@@ -34,14 +32,14 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.moonsOfAMoon;
     case 'hot_giant_moons':
       return t.errors.hotGiantMoons({ count: detail.count });
+    case 'water_heavier_than_planet':
+      return t.errors.waterHeavierThanPlanet({ water: formatUpTo(detail.water_oceans, 3), mass: formatUpTo(detail.mass_earth, 3) });
     case 'too_many_planets':
       return t.errors.tooManyPlanets({ asked: detail.asked, max: detail.max });
     case 'zone_full':
-      return t.errors.zoneFull({ type: presetName({ name: detail.body_type }), asked: detail.asked, fits: detail.fits });
+      return t.errors.zoneFull({ type: archetypeName({ name: detail.body_type }), asked: detail.asked, fits: detail.fits });
     case 'type_impossible':
-      return t.errors.typeImpossible({ type: presetName({ name: detail.body_type }) });
-    case 'unknown_type':
-      return t.errors.unknownType({ type: detail.body_type });
+      return t.errors.typeImpossible({ type: archetypeName({ name: detail.body_type }) });
     case 'system_exists':
       return t.errors.systemExists({ system: detail.system });
     case 'size_not_offered':

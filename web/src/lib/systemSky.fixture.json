@@ -111,19 +111,8 @@
     "width": 480,
     "height": 240,
     "seed": 1915371819,
-    "planet": {
-     "name": "terran",
-     "description": "Earth-like, full biome spectrum",
-     "defaults": {
-      "sea_level": null,
-      "land_fraction": null,
-      "volcanic": null,
-      "circumference": null,
-      "axial_tilt": null,
-      "erosion": null,
-      "pressure": null,
-      "surface_age": null
-     },
+    "class": "terran",
+    "look": {
      "climate": {
       "temperature": 0.0,
       "moisture": 0.0,
@@ -174,12 +163,6 @@
      "geology": {
       "regime": "plates",
       "wet_until": 0.0
-     },
-     "star": {
-      "position": [
-       0.05,
-       0.75
-      ]
      },
      "remap": {}
     },
@@ -261,19 +244,8 @@
     "width": 480,
     "height": 240,
     "seed": 1530735286,
-    "planet": {
-     "name": "gas-giant",
-     "description": "Gas giant like Jupiter or Saturn: cloud bands, storms, rings",
-     "defaults": {
-      "sea_level": null,
-      "land_fraction": null,
-      "volcanic": null,
-      "circumference": null,
-      "axial_tilt": null,
-      "erosion": null,
-      "pressure": 0.3,
-      "surface_age": 0.0
-     },
+    "class": "gas-giant",
+    "look": {
      "climate": {
       "temperature": 0.0,
       "moisture": 0.0,
@@ -325,18 +297,8 @@
       "regime": "plates",
       "wet_until": 0.0
      },
-     "star": {
-      "position": [
-       2.6,
-       4.6
-      ]
-     },
      "giant": {
       "kind": "gas",
-      "mass": [
-       30.0,
-       1500.0
-      ],
       "rings": [
        0.25,
        0.5
@@ -412,19 +374,8 @@
     "width": 512,
     "height": 256,
     "seed": 1279727153,
-    "planet": {
-     "name": "icy-moon",
-     "description": "Icy moon: airless, cratered ice",
-     "defaults": {
-      "sea_level": null,
-      "land_fraction": null,
-      "volcanic": null,
-      "circumference": null,
-      "axial_tilt": null,
-      "erosion": 0.0,
-      "pressure": 0.0,
-      "surface_age": 4.0
-     },
+    "class": "icy-moon",
+    "look": {
      "climate": {
       "temperature": 0.0,
       "moisture": -1.0,
@@ -476,7 +427,6 @@
       "regime": "stagnant",
       "wet_until": 4.5
      },
-     "star": {},
      "remap": {
       "IceCap": [
        "DeepOcean",
@@ -584,19 +534,8 @@
     "width": 512,
     "height": 256,
     "seed": 50280052,
-    "planet": {
-     "name": "icy-moon",
-     "description": "Icy moon: airless, cratered ice",
-     "defaults": {
-      "sea_level": null,
-      "land_fraction": null,
-      "volcanic": null,
-      "circumference": null,
-      "axial_tilt": null,
-      "erosion": 0.0,
-      "pressure": 0.0,
-      "surface_age": 4.0
-     },
+    "class": "icy-moon",
+    "look": {
      "climate": {
       "temperature": 0.0,
       "moisture": -1.0,
@@ -648,7 +587,6 @@
       "regime": "stagnant",
       "wet_until": 4.5
      },
-     "star": {},
      "remap": {
       "IceCap": [
        "DeepOcean",

@@ -887,26 +887,15 @@ pub fn shape(lines: &[RiverLine], grid: &Grid, filled: &[f32], seed: u32) -> Vec
 mod tests {
     use super::*;
     use crate::generation::generate;
-    use crate::request::WorldRequest;
 
     fn world(seed: u32) -> crate::world::World {
-        let request = WorldRequest {
-            planet: Some("terran".into()),
-            seed: Some(seed),
-            sea_level: Some(0.2),
-            volcanic: Some(0.3),
-            circumference_km: Some(40_000.0),
-            axial_tilt_deg: Some(23.44),
-            pressure_bar: Some(1.0),
-            surface_age_ga: Some(0.4),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            width: Some(480),
-            height: Some(240),
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.2,
+            volcanic_intensity: 0.3,
+            circumference_km: 40_000.0,
+            ..crate::generation::tests::preset_params("terran", seed, 480, 240)
         };
-        generate(&request.resolve(&mut rand::rng()).unwrap().params).world
+        generate(&params).world
     }
 
     #[test]

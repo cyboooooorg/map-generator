@@ -109,7 +109,7 @@ pub struct HexSource {
     pub width: u32,
     pub height: u32,
     pub seed: u32,
-    pub planet_type: String,
+    pub class: String,
 }
 
 /// One value per hex for each field, row-major: `index = row × columns + col`.
@@ -128,9 +128,9 @@ pub struct HexCells {
     pub river: Vec<bool>,
 }
 
-/// Whether a pixel of biome `biome` (as stored, after the preset's remap)
+/// Whether a pixel of biome `biome` (as stored, after the look's remap)
 /// is a river. Rivers are thin lines that never win a hex; the flow flag
-/// shows them instead. A preset can remap rivers to another biome
+/// shows them instead. A look can remap rivers to another biome
 /// (`AcidRiver`, or `LavaField` on volcanic worlds, which also has pixels of
 /// its own), so those count only under a drawn river (`coverage`, see
 /// [`rivers::coverage`]).
@@ -150,7 +150,7 @@ pub fn resample(world_dir: &Path, columns: u32, river_flow_km2: f32) -> Result<H
         world.height,
         world.params.circumference_km as f64,
     );
-    let river = world.params.planet.remap(Biome::River);
+    let river = world.params.look.remap(Biome::River);
     let map = resample_world(
         &world,
         |i| is_river(world.biomes[i], river, coverage[i]),
@@ -221,7 +221,7 @@ pub fn resample_world(
             width,
             height,
             seed: world.params.seed,
-            planet_type: world.params.planet.name.clone(),
+            class: world.params.class.clone(),
         },
         cells: HexCells {
             order: "row-major: index = row * columns + col".into(),
@@ -343,19 +343,7 @@ mod tests {
     fn resamples_a_generated_world() {
         use crate::export::{ExportOptions, export_world};
         use crate::generation::generate;
-        use crate::request::WorldRequest;
-        let request = WorldRequest {
-            planet: Some("terran".into()),
-            seed: Some(5),
-            width: Some(256),
-            height: Some(128),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
-        };
-        let params = request.resolve(&mut rand::rng()).unwrap().params;
+        let params = crate::generation::tests::preset_params("terran", 5, 256, 128);
         let dir = std::env::temp_dir().join(format!("mapgen-hex-{}", std::process::id()));
         export_world(generate(&params), &dir, ExportOptions::default()).unwrap();
 
@@ -373,21 +361,12 @@ mod tests {
     #[test]
     fn remapped_rivers_never_win_a_hex() {
         use crate::generation::generate;
-        use crate::request::WorldRequest;
         // Caustic worlds store their rivers as AcidRiver.
-        let request = WorldRequest {
-            planet: Some("caustic".into()),
-            seed: Some(4),
-            sea_level: Some(0.1),
-            width: Some(512),
-            height: Some(256),
-            star: Some("G2V".into()),
-            orbit_au: Some(1.0),
-            eccentricity: Some(0.0),
-            perihelion_longitude_deg: None,
-            ..Default::default()
+        let params = crate::world::WorldParams {
+            sea_level: 0.1,
+            ..crate::generation::tests::preset_params("caustic", 4, 512, 256)
         };
-        let world = generate(&request.resolve(&mut rand::rng()).unwrap().params).world;
+        let world = generate(&params).world;
         assert!(world.biomes.contains(&Biome::AcidRiver), "no river to test");
         let world = LoadedWorld::from_world(&world);
         let coverage = rivers::coverage(
@@ -396,7 +375,7 @@ mod tests {
             world.height,
             world.params.circumference_km as f64,
         );
-        let river = world.params.planet.remap(Biome::River);
+        let river = world.params.look.remap(Biome::River);
         // Hexes a few pixels wide: some would be mostly river.
         let map = resample_world(
             &world,

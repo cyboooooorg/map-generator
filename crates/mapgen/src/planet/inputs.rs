@@ -7,8 +7,10 @@
 //! No type name enters here: the inputs follow from the formation
 //! [`Context`] and the mass only.
 use rand::RngExt;
+use serde::{Deserialize, Serialize};
 
-use super::{Exposure, GIANT_MIN_MASS_EARTH, PlanetInputs, Volatiles};
+use super::{Exposure, GIANT_MIN_MASS_EARTH, OCEAN_KG, PlanetInputs, Volatiles};
+use crate::exomoon::EARTH_KG;
 use crate::giants::normal;
 use crate::star::StarInfo;
 
@@ -190,8 +192,39 @@ const VOLATILE_SPREAD_DEX: f64 = 0.3;
 /// Calibration, no source, for 0.15 dex (a factor of 1.4).
 const RADIOGENIC_SPREAD_DEX: f64 = 0.15;
 
+/// Inputs set by an archetype or a request instead of drawn. `None`
+/// keeps the draw. An override replaces its value after the draws, so it
+/// shifts none of the others ([`draw_inputs_with`]).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct InputOverrides {
+    /// Iron share of the refractory mass.
+    pub core_mass_fraction: Option<f64>,
+    /// Water and ices, Earth oceans ([`OCEAN_KG`] each).
+    pub water_oceans: Option<f64>,
+    /// Hydrogen and helium share of the mass.
+    pub envelope_fraction: Option<f64>,
+    /// Factor on the CO₂ formation rule (1 typical).
+    pub co2: Option<f64>,
+    /// Factor on the N₂ formation rule (1 typical).
+    pub n2: Option<f64>,
+    /// Radiogenic abundance, Earth's = 1.
+    pub radiogenic: Option<f64>,
+    /// `Some(true)`: life arises wherever the world allows it;
+    /// `Some(false)`: never.
+    pub life: Option<bool>,
+}
+
 /// Draws a planet's inputs from its formation `context` and its mass
-/// (Earth masses). With `x` the orbit over the ice-line distance:
+/// (Earth masses), none of them set: [`draw_inputs_with`] with no
+/// overrides.
+pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) -> PlanetInputs {
+    draw_inputs_with(context, mass_earth, &InputOverrides::default(), rng)
+}
+
+/// Draws a planet's inputs from its formation `context` and its mass
+/// (Earth masses), then sets those `overrides` name. With `x` the orbit
+/// over the ice-line distance:
 ///
 /// - core share `N(0.325 + 0.15 [Fe/H], 0.05)` within 0.15 to 0.55; inside
 ///   `x = 0.3`, 5 % are stripped by giant impacts to 0.55 to 0.75;
@@ -207,36 +240,60 @@ const RADIOGENIC_SPREAD_DEX: f64 = 0.15;
 /// water share of the whole is that times `1 − envelope`: a wet giant
 /// keeps its rock.
 ///
-/// The draws come in a fixed order and count, whatever the branch taken:
-/// core share (one normal), stripping (two uniforms), water (two
-/// uniforms), migration (one uniform), envelope (three draws), volatiles
-/// (five normals), radiogenic abundance (one normal), life (one uniform,
-/// always last). A later draw (the
-/// mass, in part 3) goes in front of them.
-pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) -> PlanetInputs {
+/// The draws come in a fixed order and count, whatever the branch taken
+/// and whatever the overrides: core share (one normal), stripping (two
+/// uniforms), water (two uniforms), migration (one uniform), envelope
+/// (three draws), volatiles (five normals), radiogenic abundance (one
+/// normal), life (one uniform, always last). A later draw (the mass, in
+/// part 3) goes in front of them.
+///
+/// The overrides apply after the draws. A set water (`water_oceans`, over
+/// the planet's mass) and a set envelope are final before the volatile
+/// rule reads them, so the ice-borne volatiles follow the water the planet
+/// has; a set `co2` or `n2` replaces the log-normal scatter of that gas
+/// and leaves the rule. `life` sets the life draw to 0 (always arises) or
+/// 1 (never).
+pub fn draw_inputs_with(
+    context: &Context,
+    mass_earth: f64,
+    overrides: &InputOverrides,
+    rng: &mut impl RngExt,
+) -> PlanetInputs {
     let x = context.orbit_au / context.ice_line_au;
 
     let cmf = (CMF_MEAN + CMF_PER_DEX * context.metallicity + CMF_SPREAD * normal(rng))
         .clamp(CMF_RANGE.0, CMF_RANGE.1);
     let stripped = rng.random::<f64>() < STRIP_CHANCE;
     let stripped_cmf = rng.random_range(STRIPPED_CMF.0..=STRIPPED_CMF.1);
-    let core_mass_fraction = if x < STRIP_MAX_X && stripped {
+    let drawn_cmf = if x < STRIP_MAX_X && stripped {
         stripped_cmf
     } else {
         cmf
     };
+    let core_mass_fraction = overrides.core_mass_fraction.unwrap_or(drawn_cmf);
 
     let dry = 10f64.powf(rng.random_range(DRY_LOG.0..=DRY_LOG.1));
     let wet = rng.random_range(WET.0..=WET.1);
     let migrated = rng.random::<f64>() < MIGRATED_CHANCE;
     let ice_share = if x >= 1.0 || migrated { wet } else { dry };
 
-    let envelope_fraction = envelope_fraction(mass_earth, rng);
-    let water_fraction = ice_share * (1.0 - envelope_fraction);
-    let refractory = 1.0 - water_fraction - envelope_fraction;
-    let volatiles = volatiles(refractory, water_fraction, rng);
-    let radiogenic = 10f64.powf(RADIOGENIC_SPREAD_DEX * normal(rng));
-    let life_draw = rng.random::<f64>();
+    let drawn_envelope = envelope_fraction(mass_earth, rng);
+    let envelope_fraction = overrides.envelope_fraction.unwrap_or(drawn_envelope);
+    let water_fraction = overrides.water_oceans.map_or_else(
+        || ice_share * (1.0 - envelope_fraction),
+        |oceans| oceans * OCEAN_KG / (mass_earth * EARTH_KG),
+    );
+    let scatter = volatile_scatter(rng);
+    let refractory = (1.0 - water_fraction - envelope_fraction).max(0.0);
+    let volatiles = volatiles(refractory, water_fraction, &scatter, overrides);
+    let drawn_radiogenic = 10f64.powf(RADIOGENIC_SPREAD_DEX * normal(rng));
+    let radiogenic = overrides.radiogenic.unwrap_or(drawn_radiogenic);
+    let drawn_life = rng.random::<f64>();
+    let life_draw = match overrides.life {
+        Some(true) => 0.0,
+        Some(false) => 1.0,
+        None => drawn_life,
+    };
 
     PlanetInputs {
         mass_earth,
@@ -287,29 +344,49 @@ fn envelope_fraction(mass_earth: f64, rng: &mut impl RngExt) -> f64 {
     }
 }
 
+/// The log-normal factors `10^N(0, 0.3)` of the five volatiles, drawn in
+/// the order CO2, N2, S, CH4, NH3. They are drawn before the shares they
+/// scale are final (see [`draw_inputs_with`]).
+struct VolatileScatter {
+    co2: f64,
+    n2: f64,
+    s: f64,
+    ch4: f64,
+    nh3: f64,
+}
+
+fn volatile_scatter(rng: &mut impl RngExt) -> VolatileScatter {
+    let mut ln = || 10f64.powf(VOLATILE_SPREAD_DEX * normal(rng));
+    VolatileScatter {
+        co2: ln(),
+        n2: ln(),
+        s: ln(),
+        ch4: ln(),
+        nh3: ln(),
+    }
+}
+
 /// Volatiles carried by a `refractory` share of rock and iron and a
 /// `water` share of ices, each rule ([`ROCK_CO2`] … [`ICE_NH3`]) scaled by
-/// its own log-normal draw `10^N(0, 0.3)`, drawn in the order CO2, N2, S,
-/// CH4, NH3:
+/// its factor in `scatter`, or by the override of CO2 and N2 when set:
 ///
 /// ```text
 /// co2 = (1e-4 r + 0.05 w) LN    n2 = (2e-6 r + 1e-3 w) LN
 /// s   = 1e-4 r LN               ch4 = 0.01 w LN    nh3 = 0.01 w LN
 /// ```
-fn volatiles(refractory: f64, water: f64, rng: &mut impl RngExt) -> Volatiles {
+fn volatiles(
+    refractory: f64,
+    water: f64,
+    scatter: &VolatileScatter,
+    overrides: &InputOverrides,
+) -> Volatiles {
     let rule = volatile_rule(refractory, water);
-    let mut ln = || 10f64.powf(VOLATILE_SPREAD_DEX * normal(rng));
-    let co2 = rule.co2 * ln();
-    let n2 = rule.n2 * ln();
-    let s = rule.s * ln();
-    let ch4 = rule.ch4 * ln();
-    let nh3 = rule.nh3 * ln();
     Volatiles {
-        co2,
-        n2,
-        ch4,
-        nh3,
-        s,
+        co2: rule.co2 * overrides.co2.unwrap_or(scatter.co2),
+        n2: rule.n2 * overrides.n2.unwrap_or(scatter.n2),
+        ch4: rule.ch4 * scatter.ch4,
+        nh3: rule.nh3 * scatter.nh3,
+        s: rule.s * scatter.s,
     }
 }
 
@@ -351,6 +428,83 @@ mod tests {
             age_gyr: 4.6,
             teff_k: 5772.0,
         }
+    }
+
+    fn earth_context() -> Context {
+        context(0.37, 0.0)
+    }
+
+    fn rng(seed: u64) -> StdRng {
+        StdRng::seed_from_u64(seed)
+    }
+
+    #[test]
+    fn no_override_draws_as_before() {
+        for seed in 0..50 {
+            let c = earth_context();
+            let a = draw_inputs(&c, 1.0, &mut rng(seed));
+            let b = draw_inputs_with(&c, 1.0, &InputOverrides::default(), &mut rng(seed));
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn one_ocean_on_earth_is_earths_water() {
+        let o = InputOverrides {
+            water_oceans: Some(1.0),
+            ..Default::default()
+        };
+        let i = draw_inputs_with(&earth_context(), 1.0, &o, &mut rng(1));
+        assert!(
+            (i.water_fraction - 2.34e-4).abs() < 1e-5,
+            "{}",
+            i.water_fraction
+        );
+    }
+
+    #[test]
+    fn overrides_do_not_shift_the_other_draws() {
+        let o = InputOverrides {
+            co2: Some(3.0),
+            ..Default::default()
+        };
+        let a = draw_inputs(&earth_context(), 1.0, &mut rng(7));
+        let b = draw_inputs_with(&earth_context(), 1.0, &o, &mut rng(7));
+        assert_eq!(
+            (a.radiogenic, a.life_draw, a.volatiles.n2),
+            (b.radiogenic, b.life_draw, b.volatiles.n2)
+        );
+        // The set factor replaces the scatter: CO2 is three times the rule
+        // (the drawn factor of this seed may be above or below 3).
+        let rule = volatile_rule(
+            1.0 - b.water_fraction - b.envelope_fraction,
+            b.water_fraction,
+        );
+        assert!((b.volatiles.co2 - 3.0 * rule.co2).abs() <= 1e-12 * rule.co2);
+    }
+
+    #[test]
+    fn life_forced_or_forbidden() {
+        let with = |life| InputOverrides {
+            life: Some(life),
+            ..Default::default()
+        };
+        let yes = draw_inputs_with(&earth_context(), 1.0, &with(true), &mut rng(3));
+        let no = draw_inputs_with(&earth_context(), 1.0, &with(false), &mut rng(3));
+        assert_eq!((yes.life_draw, no.life_draw), (0.0, 1.0));
+    }
+
+    #[test]
+    fn a_set_water_share_changes_the_ice_borne_volatiles() {
+        // The CO2 and N2 of the ices follow the water the planet has.
+        let o = InputOverrides {
+            water_oceans: Some(500.0),
+            ..Default::default()
+        };
+        let dry = draw_inputs(&earth_context(), 1.0, &mut rng(5));
+        let wet = draw_inputs_with(&earth_context(), 1.0, &o, &mut rng(5));
+        assert!(wet.volatiles.ch4 > 10.0 * dry.volatiles.ch4);
+        assert_eq!(wet.core_mass_fraction, dry.core_mass_fraction);
     }
 
     fn draws(context: &Context, mass_earth: f64, seed: u64) -> Vec<PlanetInputs> {
@@ -466,7 +620,12 @@ mod tests {
     fn ices_carry_their_volatiles() {
         let mut rng = StdRng::seed_from_u64(13);
         for _ in 0..DRAWS {
-            let dry = volatiles(1.0, 0.0, &mut rng);
+            let dry = volatiles(
+                1.0,
+                0.0,
+                &volatile_scatter(&mut rng),
+                &InputOverrides::default(),
+            );
             assert_eq!((dry.ch4, dry.nh3), (0.0, 0.0));
             assert!(dry.co2 > 0.0 && dry.n2 > 0.0 && dry.s > 0.0);
         }

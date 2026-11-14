@@ -6,7 +6,7 @@
 //!    altitude/temperature/moisture → base biome → volcanic override.
 //!
 //! Planet-specific climate shifts and biome remapping live in the planet
-//! presets (see [`crate::preset`]).
+//! looks (see [`crate::look`]).
 use serde::{Deserialize, Serialize};
 
 // ── Biome type ────────────────────────────────────────────────────────────────
@@ -340,21 +340,36 @@ pub fn biome_name(b: Biome) -> &'static str {
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
+/// The open-water line of a [`dry`](BiomeRules::dry) world: below any
+/// elevation (elevations, and their height above the sea level, stay
+/// within `[-1, 1]` and `[-2, 2]`).
+pub const NO_WATER: f32 = -3.0;
+
 /// Every threshold used by biome selection, in one place.
 ///
 /// Elevations are relative to the shifted sea level (`elevation - sea_level`)
 /// in `[-1, 1]`; temperatures in °C (annual means); moisture in `[-1, 1]`; volcanic
 /// zone in `[0, 1]`.
 ///
-/// In a planet preset, the `[rules]` table overrides any of these fields;
+/// In a look, the `[rules]` table overrides any of these fields;
 /// the others keep their default value.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BiomeRules {
     // Altitude bands
-    /// Below this elevation, a pixel is open water.
+    /// Below this elevation, a pixel is open water, unless the world is
+    /// [`dry`](Self::dry). The relief is built from it either way: the
+    /// altitude lines and the lapse rate are measured from it.
     pub waterline: f32,
+    /// Whether the world has no surface liquid: then no pixel is open
+    /// water, whatever its elevation (see [`Self::open_water`]). Set by the
+    /// planet model on a world without water at its surface (none kept, or
+    /// all of it steam), whose sea level then only sets the datum of its
+    /// relief (see `crate::planet::interim::calibrate`).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub dry: bool,
     /// Below this elevation, open water is deep ocean.
     pub deep_ocean: f32,
     /// Below this temperature, the sea surface freezes into pack ice.
@@ -443,6 +458,7 @@ impl Default for BiomeRules {
             // highland from 2 km, snow from 4.5 km, volcanoes from 3 km,
             // ash from 1.5 km.
             waterline: -0.15,
+            dry: false,
             deep_ocean: -0.35,
             sea_ice_temperature: -13.5,
             shore_top: -0.09,
@@ -512,8 +528,15 @@ impl BiomeInput {
 // ── Top-level biome selector ──────────────────────────────────────────────────
 
 impl BiomeRules {
+    /// The elevation (above the sea level) below which a pixel is open
+    /// water: the [`waterline`](Self::waterline), or on a [`dry`](Self::dry)
+    /// world [`NO_WATER`], below any elevation.
+    pub fn open_water(&self) -> f32 {
+        if self.dry { NO_WATER } else { self.waterline }
+    }
+
     /// Selects the biome of a pixel: altitude band, then volcanic override.
-    /// Planet presets remap the result afterwards.
+    /// Planet looks remap the result afterwards.
     pub fn choose(&self, input: BiomeInput) -> Biome {
         let BiomeInput {
             elevation: e,
@@ -524,7 +547,7 @@ impl BiomeRules {
         let summer = input.summer();
         // Lava overrides water: no lake or river inside a lava field or a
         // volcano, whose rivers start at its edge instead.
-        if (input.lake || input.river) && e >= self.waterline {
+        if (input.lake || input.river) && e >= self.open_water() {
             let dry = self.choose(BiomeInput {
                 lake: false,
                 river: false,
@@ -534,7 +557,7 @@ impl BiomeRules {
                 return dry;
             }
         }
-        let base = if e < self.waterline {
+        let base = if e < self.open_water() {
             self.ocean(e, t)
         } else if input.lake {
             if t < self.sea_ice_temperature {
@@ -690,8 +713,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_dry_world_has_no_open_water() {
+        let rules = BiomeRules {
+            dry: true,
+            ..BiomeRules::default()
+        };
+        for e in [-1.0, -0.5, rules.waterline - 0.01] {
+            let input = BiomeInput {
+                elevation: e,
+                moisture: 0.0,
+                temperature: 15.0,
+                seasonality: 0.0,
+                volcanic_zone: 0.0,
+                coast_distance_km: 1e6,
+                lake: false,
+                river: false,
+                highland_offset: 0.0,
+            };
+            assert!(!rules.choose(input).is_water(), "{e}");
+            assert!(BiomeRules::default().choose(input).is_water(), "{e}");
+        }
+    }
+
+    #[test]
     fn lava_overrides_lakes_and_rivers() {
-        let rules = crate::preset::Preset::load("terran").unwrap().rules;
+        let rules = crate::look::Look::load("terran").rules;
         let input = |lake: bool, river: bool, volcanic_zone: f32| BiomeInput {
             elevation: rules.highland + 0.05,
             moisture: 0.2,
@@ -753,7 +799,7 @@ mod tests {
 
     #[test]
     fn cones_rise_out_of_the_lowland() {
-        let rules = crate::preset::Preset::load("terran").unwrap().rules;
+        let rules = crate::look::Look::load("terran").rules;
         let forest = |volcanic_zone: f32| {
             rules.choose(BiomeInput {
                 elevation: -0.12,
@@ -774,10 +820,10 @@ mod tests {
         assert_eq!(forest(0.95), Biome::Volcano);
     }
 
-    use crate::preset::Preset;
+    use crate::look::Look;
 
-    /// Every biome a planet preset can produce, over a coarse grid of inputs.
-    fn reachable(preset: &Preset) -> std::collections::BTreeSet<Biome> {
+    /// Every biome a planet look can produce, over a coarse grid of inputs.
+    fn reachable(look: &Look) -> std::collections::BTreeSet<Biome> {
         let steps = |lo: f32, hi: f32| (0..=20).map(move |i| lo + (hi - lo) * i as f32 / 20.0);
         let mut out = std::collections::BTreeSet::new();
         for e in steps(-1.0, 1.0) {
@@ -796,7 +842,7 @@ mod tests {
                                 river,
                                 highland_offset: 0.0,
                             };
-                            out.insert(preset.remap(preset.rules.choose(input)));
+                            out.insert(look.remap(look.rules.choose(input)));
                         }
                     }
                 }
@@ -908,7 +954,7 @@ mod tests {
 
     #[test]
     fn barren_worlds_have_no_water_or_life() {
-        let biomes = reachable(&Preset::load("barren").unwrap());
+        let biomes = reachable(&Look::load("barren"));
         for b in [
             Biome::Lake,
             Biome::River,
@@ -941,16 +987,11 @@ mod tests {
             ),
             ("barren", &[Biome::RockyWaste, Biome::DustPlain]),
         ];
-        for preset in Preset::built_in() {
-            let biomes = reachable(&preset);
+        for (name, look) in Look::built_in() {
+            let biomes = reachable(&look);
             for (owner, list) in exclusive {
                 for b in list {
-                    assert_eq!(
-                        biomes.contains(b),
-                        owner == preset.name,
-                        "{b:?} on {}",
-                        preset.name
-                    );
+                    assert_eq!(biomes.contains(b), owner == name, "{b:?} on {name}");
                 }
             }
         }

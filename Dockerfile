@@ -1,6 +1,6 @@
 # Planet viewer: the mapgen-server web server, the built front-end and the
 # command-line tools. Built and started by `mise run up` with compose.yaml.
-# Systems and presets are not copied: they are bind-mounted at runtime.
+# Systems and extra archetypes are not copied: they are bind-mounted at runtime.
 
 # ---------------------------------------------------------------------------------------------------- #
 # Rust stage: server and command-line tools
@@ -9,8 +9,9 @@ FROM rust:1.99-slim-trixie AS rust
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
-# Built-in presets are embedded in the binaries at compile time
-COPY presets presets
+# Built-in archetypes and looks are embedded in the binaries at compile time
+COPY archetypes archetypes
+COPY looks looks
 # The commit the image is built from, recorded with every body generated (the
 # build context has no .git, see .dockerignore): `mise run up` passes it
 ARG GIT_SHA=
@@ -49,7 +50,7 @@ COPY --from=web /web/dist /app/web
 ENV MAPGEN_SYSTEMS_DIR=/data/systems \
 	MAPGEN_DB=/data/db/mapgen.sqlite \
 	MALLOC_ARENA_MAX=2 \
-	MAPGEN_PRESETS_DIR=/data/presets \
+	MAPGEN_ARCHETYPES_DIR=/data/archetypes \
 	MAPGEN_STATIC_DIR=/app/web \
 	HOST=0.0.0.0 \
 	PORT=3000

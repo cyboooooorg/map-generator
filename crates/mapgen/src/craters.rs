@@ -386,7 +386,7 @@ pub struct CraterField {
     /// Absolute elevation of the sea surface.
     waterline: f32,
     /// Whether the basins hold a sea today (water, ice-sealed, acid or
-    /// magma: the preset's ocean is still a water biome): craters on its
+    /// magma: the look's ocean is still a water biome): craters on its
     /// floor vanish.
     sea: bool,
     /// End of the wet era, Ga before present.
@@ -553,10 +553,10 @@ impl CraterField {
         // Giants stir the impactors: their mass sets the rate (see
         // `giants::impact_factor`; 1 without giants modelled). A body of a
         // planetary system has its rate from its system's giants and belts.
-        // A preset with its own flux against the Moon's (a Solar System
+        // A look with its own flux against the Moon's (a Solar System
         // look-alike, `[geology] impact_ratio`) already has its giants in
         // it: the drawn ones would count them twice.
-        let impact = if p.planet.geology.impact_ratio != 1.0 {
+        let impact = if p.look.geology.impact_ratio != 1.0 {
             1.0
         } else {
             match p.impact_factor {
@@ -568,8 +568,8 @@ impl CraterField {
         };
         // The body's own flux against the Moon's, where a source gives it
         // (`[geology] impact_ratio`, 1 elsewhere).
-        let raise = locked_raise * impact * f64::from(p.planet.geology.impact_ratio);
-        let crater_scale = f64::from(p.planet.geology.crater_scale);
+        let raise = locked_raise * impact * f64::from(p.look.geology.impact_ratio);
+        let crater_scale = f64::from(p.look.geology.crater_scale);
         let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
         CraterField {
             craters: Vec::new(),
@@ -586,11 +586,12 @@ impl CraterField {
             } else {
                 1.0
             },
-            waterline: p.sea_level + p.planet.rules.waterline,
-            sea: [Biome::DeepOcean, Biome::Ocean]
-                .iter()
-                .any(|&b| p.planet.remap(b).is_water()),
-            wet_until_ga: p.planet.geology.wet_until_ga(p.pressure_bar) as f64,
+            waterline: p.sea_level + p.look.rules.waterline,
+            sea: !p.look.rules.dry
+                && [Biome::DeepOcean, Biome::Ocean]
+                    .iter()
+                    .any(|&b| p.look.remap(b).is_water()),
+            wet_until_ga: p.look.geology.wet_until_ga(p.pressure_bar) as f64,
             erosion: p.erosion as f64,
             past: Population {
                 seed: stream_seed(p.seed, stream::CRATERS),
@@ -669,11 +670,11 @@ impl CraterField {
     }
 
     /// The lava floods of the large basins among `craters` (oldest first),
-    /// formed by the epoch: within the preset's window of maria
+    /// formed by the epoch: within the look's window of maria
     /// (`[geology] maria`), after the basin itself, for a share of the
     /// basins that grows with the volcanism.
     fn floods_of(&self, p: &WorldParams, craters: &[Crater]) -> Vec<Flood> {
-        let Some([start, end]) = p.planet.geology.maria else {
+        let Some([start, end]) = p.look.geology.maria else {
             return Vec::new();
         };
         let (start, end) = (f64::from(start), f64::from(end));
@@ -1700,19 +1701,22 @@ impl Profile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::Preset;
+    use crate::look::Look;
 
-    /// A Moon-sized barren world, without the preset's maria (the tests
+    /// A Moon-sized barren world, without the look's maria (the tests
     /// of floods set them).
     fn moon(surface_age_ga: f32) -> WorldParams {
-        let mut planet = Preset::load("barren").unwrap();
-        planet.geology.maria = None;
+        let mut look = Look::load("barren");
+        look.geology.maria = None;
         WorldParams {
             age_gyr: crate::star::DEFAULT_AGE_GYR,
             width: 512,
             height: 256,
             seed: 11,
-            planet,
+            class: "rocky".into(),
+            archetype: None,
+            model: None,
+            look,
             sea_level: 0.2,
             volcanic_intensity: 0.0,
             circumference_km: 10_917.0,
@@ -1770,16 +1774,8 @@ mod tests {
 
     #[test]
     fn strength_moves_the_transition_from_simple_to_complex() {
-        let load = |name: &str| {
-            crate::preset::Preset::load(&format!(
-                "{}/../../presets/examples/{name}.toml",
-                env!("CARGO_MANIFEST_DIR")
-            ))
-            .unwrap()
-        };
-        let km = |preset: &str, circumference: f32| {
+        let km = |circumference: f32| {
             let mut p = moon(3.5);
-            p.planet = load(preset);
             p.circumference_km = circumference;
             CraterField::context(&p).transition_km
         };
@@ -1788,10 +1784,10 @@ mod tests {
         lunar.circumference_km = 10_917.0;
         assert!((CraterField::context(&lunar).transition_km - 15.0).abs() < 0.1);
         // Mercury: 10 to 12 km (Barnouin et al. 2012).
-        let mercury = km("mercury-like", 15_329.0);
+        let mercury = km(15_329.0);
         assert!((10.0..12.0).contains(&mercury), "{mercury}");
         // Mars: 7 to 8 km.
-        let mars = km("mars-like", 21_300.0);
+        let mars = km(21_300.0);
         assert!((7.0..8.0).contains(&mars), "{mars}");
         // An icy body of Ganymede's size turns complex within a few km.
         let mut ganymede = moon(3.5);
@@ -1823,8 +1819,8 @@ mod tests {
         // has 10^0.191 = 1.55 times the Moon's craters at equal age.
         let field = |ratio: f32, scale: f32| {
             let mut p = moon(3.5);
-            p.planet.geology.impact_ratio = ratio;
-            p.planet.geology.crater_scale = scale;
+            p.look.geology.impact_ratio = ratio;
+            p.look.geology.crater_scale = scale;
             CraterField::context(&p)
         };
         let (moon_field, mars_field) = (field(1.0, 1.0), field(2.6, 0.751));
@@ -1832,12 +1828,6 @@ mod tests {
         let ratio = OctaveFill::new(mars_field.past, octave).formed
             / OctaveFill::new(moon_field.past, octave).formed;
         assert!((ratio - 1.55).abs() < 0.02, "{ratio}");
-        let mars = crate::preset::Preset::load(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/examples/mars-like.toml"
-        ))
-        .unwrap();
-        assert_eq!(mars.geology.impact_ratio, 2.6);
     }
 
     #[test]
@@ -2228,7 +2218,7 @@ mod tests {
     #[test]
     fn lava_floods_large_basins_within_the_window() {
         let mut p = moon(4.0);
-        p.planet.geology.maria = Some([3.9, 3.1]);
+        p.look.geology.maria = Some([3.9, 3.1]);
         p.volcanic_intensity = 1.0;
         let field = CraterField::new(&p, 50.0);
         assert!(!field.floods.is_empty());
@@ -2372,7 +2362,7 @@ mod tests {
         );
         // A moon of a locked planet, stored locked to the star.
         let mut rocky_moon = moon(4.0);
-        rocky_moon.planet.name = "rocky-moon".into();
+        rocky_moon.class = "rocky-moon".into();
         rocky_moon.star = star;
         rocky_moon.orbit_au = hz;
         assert!(CraterField::context(&rocky_moon).locked_since_ga.is_none());
@@ -2517,7 +2507,7 @@ mod tests {
         assert_eq!(changed(&sea, Era::Wet) + changed(&sea, Era::Dry), 0);
         // Barren worlds remap their seas to rock: their basins are cratered.
         assert!(!CraterField::new(&p, 100.0).sea);
-        p.planet = Preset::load("frozen").unwrap();
+        p.look = Look::load("frozen");
         assert!(CraterField::new(&p, 100.0).sea);
     }
 }

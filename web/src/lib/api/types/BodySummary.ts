@@ -9,8 +9,8 @@ export type BodySummary = { id: string, designation: string,
  */
 kind: string, 
 /**
- * Its type: a planet's class (`rocky`, `ocean-world`, …), or a
- * preset name for the planet a request asked for and for a moon.
+ * Its type: a planet's class (`rocky`, `ocean-world`, …), or
+ * `rocky-moon` or `icy-moon` for a moon.
  */
 body_type: string, 
 /**
@@ -34,8 +34,6 @@ orbit_au: number,
 eccentricity: number, periapsis_deg: number, 
 /**
  * A habitable world: a planet with liquid water on its surface, as
- * its model says; a planet with no model (the one a request around a
- * planet asked for) when its preset is `terran` or `earth-like`. A
- * moon never is.
+ * its model says. A moon never is.
  */
 habitable: boolean, };

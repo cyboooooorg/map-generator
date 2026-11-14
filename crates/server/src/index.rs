@@ -70,8 +70,10 @@ pub const UNKNOWN_FORMAT: i64 = 0;
 ///
 /// - 2: systems can be pinned in the main menu;
 /// - 3: the displayed size of each body, the size a job generates;
-/// - 4: systems made by an older generator are flagged `outdated`.
-const SCHEMA_VERSION: i64 = 4;
+/// - 4: systems made by an older generator are flagged `outdated`;
+/// - 5: stored job requests name archetypes and carry model inputs (the
+///   old ones hold the removed knob fields).
+const SCHEMA_VERSION: i64 = 5;
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
 const TOUCH_EVERY: Duration = Duration::from_secs(60);
@@ -1421,7 +1423,7 @@ mod tests {
     use std::path::PathBuf;
 
     const SYSTEM: &str = r#"{
-        "format_version": 3, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 4, "seed": 42, "width": 1024, "height": 512,
         "request": {"system": {"star": null, "metallicity": null, "planets": null, "seed": 42, "width": 1024, "height": 512}},
         "star": {"type": "K1V", "designation": "MGS 48213", "metallicity": 0.0, "ice_line_au": 2.0,
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
@@ -1740,12 +1742,31 @@ mod tests {
     }
 
     #[test]
+    fn an_index_of_schema_4_is_set_aside() {
+        let root = temp_root("schema4");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let db = root.join("mapgen.sqlite");
+        {
+            let index = Index::open(&db).unwrap();
+            index.reconcile(&systems).unwrap();
+        }
+        Connection::open(&db)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 4;")
+            .unwrap();
+        let index = Index::open(&db).unwrap();
+        assert!(index.list_systems().unwrap().is_empty());
+        assert!(!files_with(&root, ".layout-4-").is_empty());
+    }
+
+    #[test]
     fn a_database_of_another_layout_is_set_aside_for_a_new_one() {
         let root = temp_root("layout");
         let systems = root.join("systems");
         tree(&systems, &["mgs-1-1"]);
         let db = root.join("mapgen.sqlite");
-        for old in [2, 5] {
+        for old in [2, 6] {
             {
                 let index = Index::open(&db).unwrap();
                 index.reconcile(&systems).unwrap();
@@ -2038,7 +2059,7 @@ mod tests {
         let root = temp_root("regenerate");
         let systems = root.join("systems");
         let request: mapgen::system::SystemRequest = serde_json::from_str(
-            r#"{"system": {"star": "K1V", "planets": {"barren": 2}, "seed": 3, "width": 64, "height": 32}}"#,
+            r#"{"system": {"star": "K1V", "planets": {"mercury-like": 2}, "seed": 3, "width": 64, "height": 32}}"#,
         )
         .unwrap();
         let system = mapgen::system::draw(&request, &mut rand::rng()).unwrap();

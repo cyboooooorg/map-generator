@@ -2,8 +2,9 @@
 import type { GiantsMode } from "./GiantsMode";
 import type { GivenRings } from "./GivenRings";
 import type { HostMode } from "./HostMode";
+import type { Look } from "./Look";
 import type { MoonsMode } from "./MoonsMode";
-import type { Preset } from "./Preset";
+import type { PlanetModel } from "./PlanetModel";
 
 /**
  * Everything needed to generate a world. The same parameters always produce
@@ -12,9 +13,22 @@ import type { Preset } from "./Preset";
  */
 export type WorldParams = { width: number, height: number, seed: number, 
 /**
- * Planet preset: climate shift, biome rules and biome remapping.
+ * The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`.
  */
-planet: Preset, 
+class: string, 
+/**
+ * The archetype asked for, for display only.
+ */
+archetype?: string, 
+/**
+ * The planet's model; `None` for a moon (part 4).
+ */
+model?: PlanetModel, 
+/**
+ * How the world is drawn until #424 (see [`crate::look`]): climate
+ * shift, biome rules and remapping, sky, geology and giant look.
+ */
+look: Look, 
 /**
  * Elevation bias applied before biome selection.
  * 0.0 = default. Positive → more ocean, negative → more land. Range [-1, 1].
@@ -87,7 +101,7 @@ metallicity: number,
  */
 giants: GiantsMode, 
 /**
- * Mass of a giant planet, Earth masses: `Some` for a giant (its preset
+ * Mass of a giant planet, Earth masses: `Some` for a giant (its look
  * has a `[giant]` table, see `crate::giant_world`), `None` otherwise.
  */
 giant_mass_earth: number | null, 

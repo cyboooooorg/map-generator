@@ -18,6 +18,7 @@ pub enum PlanetClass {
     IceGiant,
     GasGiant,
     HotJupiter,
+    HotNeptune,
     LavaWorld,
     RunawayGreenhouse,
     HydrocarbonWorld,
@@ -27,7 +28,7 @@ pub enum PlanetClass {
 impl PlanetClass {
     /// The class as stored: `rocky`, `super-earth`, `ice-world`,
     /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
-    /// `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    /// `hot-neptune`, `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     /// `ocean-world`.
     pub fn key(self) -> &'static str {
         match self {
@@ -38,6 +39,7 @@ impl PlanetClass {
             Self::IceGiant => "ice-giant",
             Self::GasGiant => "gas-giant",
             Self::HotJupiter => "hot-jupiter",
+            Self::HotNeptune => "hot-neptune",
             Self::LavaWorld => "lava-world",
             Self::RunawayGreenhouse => "runaway-greenhouse",
             Self::HydrocarbonWorld => "hydrocarbon-world",
@@ -46,29 +48,42 @@ impl PlanetClass {
     }
 
     /// Whether the class is a giant: a gas giant, an ice giant, a hot
-    /// Jupiter or a mini-Neptune, whose envelope hides any surface and
+    /// Jupiter, a hot Neptune or a mini-Neptune, whose envelope hides any surface and
     /// whose world is generated as a giant's.
     pub fn is_giant(self) -> bool {
         matches!(
             self,
-            Self::GasGiant | Self::IceGiant | Self::HotJupiter | Self::MiniNeptune
+            Self::GasGiant
+                | Self::IceGiant
+                | Self::HotJupiter
+                | Self::HotNeptune
+                | Self::MiniNeptune
         )
     }
 
+    /// Whether the class is a giant within a few days of its star: a hot
+    /// Jupiter or a hot Neptune.
+    pub fn is_hot_giant(self) -> bool {
+        matches!(self, Self::HotJupiter | Self::HotNeptune)
+    }
+
     /// Whether the class is a giant to the small bodies: a gas giant, an
-    /// ice giant or a hot Jupiter, massive enough to shape belts, empty
+    /// ice giant, a hot Jupiter or a hot Neptune, massive enough to shape belts, empty
     /// trojan points and stir impactors (see `crate::belts`). A
     /// mini-Neptune, a few Earth masses, is not, though its world is a
     /// giant's ([`Self::is_giant`]).
     pub fn sculpts_belts(self) -> bool {
-        matches!(self, Self::GasGiant | Self::IceGiant | Self::HotJupiter)
+        matches!(
+            self,
+            Self::GasGiant | Self::IceGiant | Self::HotJupiter | Self::HotNeptune
+        )
     }
 }
 
 /// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
 /// order: the types a planet of a system is stored as. The server and the
 /// web read the same list.
-pub const PLANET_CLASSES: [&str; 11] = [
+pub const PLANET_CLASSES: [&str; 12] = [
     "rocky",
     "super-earth",
     "ice-world",
@@ -76,6 +91,7 @@ pub const PLANET_CLASSES: [&str; 11] = [
     "ice-giant",
     "gas-giant",
     "hot-jupiter",
+    "hot-neptune",
     "lava-world",
     "runaway-greenhouse",
     "hydrocarbon-world",
@@ -89,10 +105,12 @@ pub const PLANET_CLASSES: [&str; 11] = [
 /// (about 0.1 to 0.2, Helled et al. 2011, doi:10.1088/0004-637X/726/1/15).
 const GAS_GIANT_MIN_ENVELOPE: f64 = 0.5;
 
-/// Longest orbital period of a hot Jupiter, days (Wright et al. 2012,
-/// doi:10.1088/0004-637X/753/2/160: giants within 10 days of their star,
-/// about 1 % of Sun-like stars).
-const HOT_JUPITER_MAX_PERIOD_DAYS: f64 = 10.0;
+/// Longest orbital period of a hot Jupiter or a hot Neptune, days (Wright
+/// et al. 2012, doi:10.1088/0004-637X/753/2/160: giants within 10 days of
+/// their star, about 1 % of Sun-like stars; Neptune-mass planets that
+/// close are rare, the "Neptune desert", Mazeh, Holczer & Faigler 2016,
+/// doi:10.1051/0004-6361/201528065).
+const HOT_GIANT_MAX_PERIOD_DAYS: f64 = 10.0;
 
 /// Least envelope share that makes a planet above the radius valley a
 /// mini-Neptune rather than a bare rock. Calibration, no source: an
@@ -109,6 +127,16 @@ const MINI_NEPTUNE_MIN_RADIUS: f64 = 1.6;
 /// Least share of water and ices of an ice world. Calibration, no source:
 /// Europa (about 8 %) is one, Earth (0.02 %) is not.
 const ICE_WORLD_MIN_WATER: f64 = 0.05;
+
+/// Earth oceans an ice world keeps at its surface, at least, and a cold dry
+/// body keeps to render frozen. A little over twice Mars's water: its polar
+/// deposits and ground ice, about 34 m of global layer (Carr & Head 2015,
+/// doi:10.1002/2014GL062464), are about 0.004 oceans, and Mars is no ice
+/// world. Calibration, no other source: a planet whose bulk is icy but whose surface holds under
+/// 1 % of an ocean has lost its ice to its star (#452) and is a dry rock.
+/// [`super::interim::base_of`] uses the same threshold for the frozen
+/// look.
+pub const ICE_WORLD_MIN_OCEANS: f64 = 0.01;
 
 /// Radius, Earth radii, from which a rocky planet is a super-Earth
 /// (Borucki et al. 2011, doi:10.1088/0004-637X/736/1/19: Earth-size below
@@ -135,8 +163,8 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///
 /// 1. a giant (at least [`GIANT_MIN_MASS_EARTH`] and
 ///    [`GIANT_MIN_ENVELOPE`]): a gas giant from half its mass in hydrogen
-///    and helium, an ice giant below; a gas giant within 10 days of its
-///    star is a hot Jupiter;
+///    and helium, an ice giant below; a giant within 10 days of its star
+///    is a hot Jupiter (a gas giant) or a hot Neptune (an ice giant);
 /// 2. an envelope of at least 0.1 % of the mass and a radius of at least
 ///    1.6 R⊕: a mini-Neptune;
 /// 3. with a `surface` (an enveloped body has none): a lava world (liquid
@@ -144,7 +172,9 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
 ///    more than [`DENSE_AIR_BAR`]), an
 ///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
-/// 4. at least 5 % water and ices: an ice world;
+/// 4. at least 5 % water and ices, and with a `surface`, at least
+///    [`ICE_WORLD_MIN_OCEANS`] of them kept there: an ice world (a body
+///    that lost its ice falls through);
 /// 5. a super-Earth from 1.25 R⊕, rocky below.
 ///
 /// The class is read off the model; nothing derives from it.
@@ -158,8 +188,12 @@ pub fn classify(
     let radius = interior.radius_earth;
     if inputs.mass_earth >= GIANT_MIN_MASS_EARTH && envelope >= GIANT_MIN_ENVELOPE {
         if envelope < GAS_GIANT_MIN_ENVELOPE {
-            PlanetClass::IceGiant
-        } else if period_days <= HOT_JUPITER_MAX_PERIOD_DAYS {
+            if period_days <= HOT_GIANT_MAX_PERIOD_DAYS {
+                PlanetClass::HotNeptune
+            } else {
+                PlanetClass::IceGiant
+            }
+        } else if period_days <= HOT_GIANT_MAX_PERIOD_DAYS {
             PlanetClass::HotJupiter
         } else {
             PlanetClass::GasGiant
@@ -168,7 +202,9 @@ pub fn classify(
         PlanetClass::MiniNeptune
     } else if let Some(class) = surface.and_then(surface_class) {
         class
-    } else if inputs.water_fraction >= ICE_WORLD_MIN_WATER {
+    } else if inputs.water_fraction >= ICE_WORLD_MIN_WATER
+        && surface.is_none_or(|s| s.water.oceans >= ICE_WORLD_MIN_OCEANS)
+    {
         PlanetClass::IceWorld
     } else if radius >= SUPER_EARTH_MIN_RADIUS {
         PlanetClass::SuperEarth
@@ -258,6 +294,35 @@ mod tests {
         }
     }
 
+    /// A bare planet of `mass` M_earth with `water` as its water share, the
+    /// volatiles of the rule without scatter, Earth's core share, at
+    /// `orbit_au` round the Sun.
+    fn model_at(mass: f64, water: f64, orbit_au: f64) -> crate::planet::PlanetModel {
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - water, water),
+            ..reference::inputs(mass, 0.325, water)
+        };
+        planet_model(&sun_at(orbit_au), inputs)
+    }
+
+    #[test]
+    fn a_planet_that_lost_its_water_is_not_an_ice_world() {
+        // The case of #452 (mgs-65793-1225983567 b: 0.22 M_earth, 37 %
+        // water, hot): at 0.6 AU these inputs keep 6e-4 oceans in a thin
+        // air that gives no runaway class, so only the bulk made it an ice
+        // world. (At 0.75 AU the same inputs are a runaway greenhouse.)
+        let model = model_at(0.22, 0.37, 0.6);
+        let s = model.surface.as_ref().unwrap();
+        assert!(s.water.oceans < 0.01, "{s:?}");
+        assert_ne!(model.class, IceWorld);
+    }
+
+    #[test]
+    fn a_cold_icy_planet_stays_an_ice_world() {
+        let model = model_at(0.5, 0.3, 4.0);
+        assert_eq!(model.class, IceWorld);
+    }
+
     #[test]
     fn a_close_gas_giant_is_a_hot_jupiter() {
         let jupiter = inputs_of(reference("Jupiter"));
@@ -265,6 +330,15 @@ mod tests {
         assert_eq!(class_of(jupiter.clone(), 0.05), HotJupiter);
         assert!(sun_at(0.2).period_days() > 10.0);
         assert_eq!(class_of(jupiter, 0.2), GasGiant);
+    }
+
+    #[test]
+    fn a_close_ice_giant_is_a_hot_neptune() {
+        let neptune = with_envelope(12.0, 0.16);
+        assert_eq!(class_of(neptune.clone(), 0.079), HotNeptune);
+        assert_eq!(class_of(neptune, 5.0), IceGiant);
+        assert_eq!(class_of(inputs_of(reference("Uranus")), 19.2), IceGiant);
+        assert_eq!(class_of(inputs_of(reference("Neptune")), 30.1), IceGiant);
     }
 
     #[test]
@@ -288,6 +362,7 @@ mod tests {
             IceGiant,
             GasGiant,
             HotJupiter,
+            HotNeptune,
             LavaWorld,
             RunawayGreenhouse,
             HydrocarbonWorld,
@@ -299,7 +374,10 @@ mod tests {
             let json = serde_json::to_string(&class).unwrap();
             assert_eq!(json, format!("\"{}\"", class.key()));
             assert_eq!(PLANET_CLASSES[i], class.key());
-            let giant = matches!(class, GasGiant | IceGiant | HotJupiter | MiniNeptune);
+            let giant = matches!(
+                class,
+                GasGiant | IceGiant | HotJupiter | HotNeptune | MiniNeptune
+            );
             assert_eq!(class.is_giant(), giant, "{class:?}");
             assert_eq!(
                 class.sculpts_belts(),

@@ -167,6 +167,9 @@ pub mod stream {
     /// The age of a system, or of a lone world's star (see
     /// `crate::star::draw_age_gyr`).
     pub const AGE: u32 = 41;
+    /// The highland provinces of a world without plates (see
+    /// `crate::generation::Sampler`).
+    pub const HIGHLANDS: u32 = 42;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;

@@ -255,9 +255,9 @@ still sculpts the rings from 3.1 R through its resonance.
 - **Giant worlds** (`crates/mapgen/src/giant_world.rs:437–471`, the
   `Look` of a giant world) draw a `RingSystem` from the preset's
   `[giant] rings` odds:
-  - gas giants 25 % bright, 50 % faint (`presets/gas-giant.toml`);
-  - ice giants 0 % bright, 70 % faint (`presets/ice-giant.toml`);
-  - hot Jupiters 0 % bright, 5 % faint (`presets/hot-jupiter.toml`).
+  - gas giants 25 % bright, 50 % faint (`looks/gas-giant.toml`);
+  - ice giants 0 % bright, 70 % faint (`looks/ice-giant.toml`);
+  - hot Jupiters 0 % bright, 5 % faint (`looks/hot-jupiter.toml`).
 
   A bright ring runs from 1.2–1.5 R to 2.1–2.5 R, with 1 to 3 gaps of
   0.015–0.06 R at random places. A faint ring starts at 1.5–1.9 R and is

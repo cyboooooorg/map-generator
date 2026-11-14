@@ -1,0 +1,12 @@
+# An ice giant like Uranus or Neptune: water, ammonia and methane under a
+# thin envelope; methane makes it blue, three broad jets band it.
+
+[giant]                                # see `mapgen::giant_world`
+kind = "ice"
+rings = [0.0, 0.7]                     # narrow, dark rings
+
+[atmosphere]
+rayleigh = [0.3, 0.6, 1.0]             # the gas scatters little blue: the bands keep their colours
+haze = 0.12
+haze_colour = [0.75, 0.88, 0.95]
+clouds = "none"                        # the bands are the clouds

@@ -1,24 +1,8 @@
 # Dead rock: no liquid water, all life extinct; only rock and dust remain.
-name = "barren"
-description = "Dead rock: arid and lifeless, no water"
-
-[locales.fr]
-name = "Stérile"
-description = "Roche morte : aride et sans vie, sans eau"
-
-[star]                                 # host star and orbit (see `mapgen::star`)
-# Drawn like the stars nearby, anywhere: there is no water to care about.
-position = [-1.0, 4.0]
 
 [climate]
 moisture = -0.65
 volcanic = -0.40
-
-[defaults]
-pressure = [0.0, 0.01]                 # surface pressure in bar, drawn in this range
-surface_age = [3.0, 4.2]               # Ga: age of the oldest surviving surface
-# Too thin for liquid water today; water shaped the valleys long ago.
-erosion = 1.0
 
 # At most a trace of gas and dust.
 [atmosphere]

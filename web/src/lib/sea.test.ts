@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { seaIsLiquid } from './sea';
 
-function meta(remap: WorldMetadata['preset']['remap']): WorldMetadata {
+function meta(remap: WorldMetadata['look']['remap'], dry = false): WorldMetadata {
   return {
-    preset: { remap },
+    look: { remap, rules: dry ? { dry } : {} },
     biomes: [
       { id: 1, key: 'Ocean', name: 'Ocean', color: '#1E46C8', water: true },
       { id: 22, key: 'CausticLake', name: 'Caustic Lake', color: '#30A870', water: true },
@@ -21,5 +21,10 @@ describe('seaIsLiquid', () => {
 
   it('drops seas remapped to dry ground', () => {
     expect(seaIsLiquid(meta({ RockyWaste: ['DeepOcean', 'Ocean'] }))).toBe(false);
+  });
+
+  it('has no sea on a dry world', () => {
+    expect(seaIsLiquid(meta({}, true))).toBe(false);
+    expect(seaIsLiquid(meta({ CausticLake: ['Ocean'] }, true))).toBe(false);
   });
 });

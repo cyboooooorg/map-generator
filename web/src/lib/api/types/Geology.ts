@@ -9,7 +9,7 @@ export type Geology = {
  * Tectonic regime. `plates` gives the world tectonic plates whose
  * boundaries shape its relief (`crate::plates`) and, with liquid
  * water, a carbon cycle that steadies its climate; the others shape it
- * through the age of its surface and its craters. A plate preset's
+ * through the age of its surface and its craters. A plate look's
  * world can lose its plates (see [`regime_of`]).
  */
 regime: Regime, 

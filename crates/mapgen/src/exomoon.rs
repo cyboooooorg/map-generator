@@ -186,7 +186,7 @@ impl HostGiant {
         // others, volcanic or dry, may be kneaded like Io): the heating
         // falls as `a^−7.5`, so move it out until it stays under the limit.
         let watery = p.pressure_bar >= crate::atmosphere::LIQUID_WATER_BAR
-            && p.planet.remap(crate::biome::Biome::Ocean) == crate::biome::Biome::Ocean;
+            && p.look.remap(crate::biome::Biome::Ocean) == crate::biome::Biome::Ocean;
         let allowed = (0.8 * RUNAWAY_W_M2 - starlight).max(0.05);
         if watery && flux_at(distance_radii) > allowed {
             distance_radii = (distance_radii * (flux_at(distance_radii) / allowed).powf(1.0 / 7.5))
@@ -274,8 +274,8 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
     } else {
         "gas-giant"
     };
-    let mut planet = crate::preset::Preset::load(kind).expect("giant presets are built in");
-    if let Some(giant) = planet.giant.as_mut() {
+    let mut look = crate::look::Look::load(kind);
+    if let Some(giant) = look.giant.as_mut() {
         giant.kind = if mass_earth < 50.0 {
             GiantKind::Ice
         } else {
@@ -288,7 +288,10 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         width,
         height: width / 2,
         seed,
-        planet,
+        class: kind.to_string(),
+        archetype: None,
+        model: None,
+        look,
         sea_level: 0.0,
         volcanic_intensity: 0.0,
         circumference_km: giant_radius(mass_earth, star.equilibrium_k) * 40_075.0,
@@ -320,7 +323,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preset::Preset;
+    use crate::look::Look;
 
     fn params(seed: u32, host: HostMode, orbit_au: f32) -> WorldParams {
         WorldParams {
@@ -328,7 +331,10 @@ mod tests {
             width: 64,
             height: 32,
             seed,
-            planet: Preset::load("terran").unwrap(),
+            class: "rocky".into(),
+            archetype: None,
+            model: None,
+            look: Look::load("terran"),
             sea_level: 0.0,
             volcanic_intensity: 0.0,
             circumference_km: 40_075.0,
@@ -384,7 +390,7 @@ mod tests {
         let hot = (0..400)
             .filter_map(|s| {
                 let mut p = params(s, HostMode::Giant, 1.0);
-                p.planet = Preset::load("volcanic").unwrap();
+                p.look = crate::look::Look::load("volcanic");
                 HostGiant::draw(&p)
             })
             .filter(|h| h.tidal_flux > 2.0)
@@ -420,7 +426,7 @@ mod tests {
             } else {
                 "rocky-moon"
             };
-            assert_eq!(body.planet.name, preset);
+            assert_eq!(body.class, preset);
         }
         assert_ne!(bodies[0].seed, bodies[1].seed);
         assert_ne!(bodies[0].seed, host.seed);

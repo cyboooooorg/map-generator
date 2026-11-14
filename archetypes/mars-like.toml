@@ -1,0 +1,20 @@
+name = "mars-like"
+description = "Mars-like: a small cold desert under a thin air"
+
+[locales.fr]
+name = "Martienne"
+description = "Un petit désert froid sous un air ténu"
+
+[inputs]
+mass_earth = [0.096, 0.118]
+core_mass_fraction = 0.24
+water_oceans = [0.002, 0.008]
+envelope_fraction = 0.0
+co2 = 0.3
+n2 = 0.3
+
+[orbit]
+star = "G2V"
+insolation = [0.39, 0.47]
+eccentricity = 0.093
+axial_tilt = 25.19

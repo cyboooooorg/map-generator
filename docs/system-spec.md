@@ -16,7 +16,8 @@ wants to see that body.
 Two ways to ask for a system:
 
 1. **A whole system.** The star (a spectral type, or drawn) and a number
-   of planets of each type (`terran: 2, barren: 1, gas-giant: 2…`, or
+   of planets of each built-in archetype (`earth-like: 2,
+   mars-like: 1, jupiter-like: 2…`, or
    left to the draw), at most 15 planets (moons not counted). The engine
    orders them the way real systems are ordered and draws their moons.
 2. **A system around one planet.** A planet fully specified, as the form
@@ -49,10 +50,9 @@ round planets. Every body has:
 - its **kind** (`planet` or `moon`) and **type**: a drawn planet's
   class, from its physical model (`rocky`, `super-earth`, `ice-world`,
   `ocean-world`, `mini-neptune`, `gas-giant`, …; see
-  [Storage](#storage)); the planet a request around one asked for keeps
-  its preset (`terran`, `barren`, `caustic`, `frozen`, `volcanic`,
-  `gas-giant`, `ice-giant`, `hot-jupiter`); `rocky-moon`, `icy-moon` for
-  small moons;
+  [Storage](#storage)); the planet a request around one asked for too,
+  its archetype (`earth-like`, `mars-like`…, or none) kept beside it for
+  display only; `rocky-moon`, `icy-moon` for small moons;
 - its **parent** (the star, or a planet) and its **orbit**: semi-major
   axis, eccentricity, inclination, longitude of the node, argument of
   periapsis, mean anomaly at the system's epoch, period (a moon's orbit
@@ -83,7 +83,7 @@ round planets. Every body has:
 - its full **world parameters** (`WorldParams`): everything its
   generation needs, fixed when the system is drawn. A giant's include
   its rings (`given_rings`), drawn with the system from the stream
-  `RINGS` and its preset's odds, so the star view and the skies have
+  `RINGS` and its look's odds, so the star view and the skies have
   them before its maps exist and its generation keeps them (backlog
   item 18; absent on systems drawn before, whose giants draw their rings
   from their seed when generated);
@@ -129,30 +129,23 @@ them):
 - the **outer edge**: 60 AU, as the giants' draw keeps today, and within
   a stable distance of a companion star if binaries come later.
 
-### Where each type belongs
+### Where each archetype belongs
 
-Each planet type has a band of distances it can sit in and one it prefers
-(as a share of the zones above), from which its place is drawn before
-spacing:
+A planet asked for by archetype sits where its archetype says: at an
+insolation drawn in the archetype's range (`a = sqrt(L / S)`, `S` in
+Earth's, so a `venus-like` planet gets 1.7 to 2.1) or, for a hot Jupiter,
+at a period drawn in its range (Kepler's third law). It keeps that
+orbit unless the spacing pushes it out, up to four times the outer orbit
+of its range. Its mass is drawn in the archetype's range on the system's
+stream, its other inputs (core share, water, life…) and its axial tilt
+on a stream of the body's own (`<id>/archetype`), so that no other body's
+draws shift them. Its mass, orbit and eccentricity still come off the
+system's stream in request order and ids go by rank, so removing a body
+can move the others. The star the archetype names is ignored
+here: the system's star rules.
 
-- `hot-jupiter`: allowed from the inner edge to 0.1 AU, preferred 0.03 to
-  0.07 AU;
-- `caustic`: allowed inside the habitable zone's inner edge, preferred
-  from half that distance to it;
-- `volcanic`: allowed inside the ice line, preferred in the inner part of
-  the habitable zone and inside it;
-- `terran`: allowed in the habitable zone widened by 10 %, preferred in
-  the habitable zone;
-- `barren`: allowed and preferred anywhere inside the ice line;
-- `frozen`: allowed beyond the habitable zone's outer edge, preferred from
-  that edge to twice the ice line;
-- `gas-giant`: allowed beyond half the ice line (or as a hot Jupiter),
-  preferred log-normal around twice the ice line;
-- `ice-giant`: allowed beyond the ice line, preferred log-normal around
-  five times the ice line.
-
-With **quantities per type**, the engine draws a preferred distance for
-each planet asked, then spaces them (below). Types the request leaves to
+With **quantities per archetype**, the engine draws an orbit for each
+planet asked, then spaces them (below). Types the request leaves to
 the draw get occurrence rates by star: rocky planets from the Kepler
 counts (about one to three small planets within 1 AU of a Sun-like star,
 more round M dwarfs; Mulders et al. 2018), giants as `giants.rs` draws
@@ -251,7 +244,7 @@ sphere), a giant's regular moons (two to five, about 10⁻⁴ of its mass, a
 1:2:4 resonance, on some ice giants a captured Triton), one recipe for a
 giant of a system and a giant world. A giant's large regular
 moon may be a habitable world: in mode 2 that is the planet asked for; in
-mode 1 a request can ask for it (`moons of giants: terran`).
+mode 1 a request can ask for it (`moons of giants: earth-like`).
 
 A giant with rings also gets the moons that shape them (`rings.rs`,
 backlog item 18), drawn from the stream `RING_MOONS` so the other moons
@@ -361,9 +354,11 @@ behind it, as the form's errors do today:
 
 - `too_many_planets`: more than 15;
 - `zone_full`: more planets of a type than its band holds at the spacing
-  (`{ "type": "terran", "asked": 6, "fits": 3 }`);
-- `type_impossible`: a type the star leaves no room for (no habitable
-  zone outside the inner edge, a hot Jupiter round a star too faint…);
+  (`{ "type": "earth-like", "asked": 6, "fits": 3 }`);
+- `unknown_archetype`: a name that is not a built-in archetype (the old
+  type names `terran`, `barren`… are refused);
+- `type_impossible`: an archetype the star leaves no room for (its orbits
+  inside the inner edge of the system or beyond its outer one);
 - the planet's own errors in mode 2, as today.
 
 ## Spheres before maps
@@ -373,17 +368,17 @@ body is drawn (the star view, the skies of the other bodies, the planet
 view when it is picked), lit by its star like the others, with its spin
 axis, orbit and labels:
 
-- rocky planets in the colour of their type: `terran` sea blue with green
-  land and white poles, `barren` grey-brown, `caustic` pale yellow under
-  clouds, `frozen` white, `volcanic` dark with a red glow on the night
-  side;
+- rocky planets in the colour of the look their model renders with
+  (`planet::interim::base_of`): `terran` sea blue with green land and
+  white poles, `barren` grey-brown, `caustic` pale yellow under clouds,
+  `frozen` white, `volcanic` dark with a red glow on the night side;
 - giants with their bands: their palette and band layout come from
   `giant_world::Look`, which is cheap to draw, so a giant sphere already
   looks like its map will;
 - moons grey (rock) or pale (ice), irregular ones with their shape.
 
 The system file stores each body's preview (its colours, or its band
-palette and layout), so the viewer draws it without knowing the presets.
+palette and layout), so the viewer draws it without knowing the archetypes or looks.
 A preview's colours are linear RGB (a giant's sRGB palette is converted
 when the preview is made); a giant's `edges` are the latitudes of the
 bands it will be generated with, so the preview sphere shows the same
@@ -454,10 +449,11 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (3), the request, the seed and the map size. A
+  - `format_version` (4), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
     body's files directly in `bodies/<id>/`, version 2 typed its planets
-    by preset and stored no physical model;
+    by preset and stored no physical model, version 3 kept a preset in
+    each body's world parameters and no model for the planet asked for;
   - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
     age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
     10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
@@ -474,9 +470,9 @@ systems/<system-id>/
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
     `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
-    `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
+    `hot-neptune`, `lava-world`, `runaway-greenhouse`, `hydrocarbon-world`,
     `ocean-world`), its `physical.mass_earth` the model's mass after
-    photoevaporation; its world renders, until #424, with the preset
+    photoevaporation; its world renders, until #424, with the look
     closest to the model (`planet::interim::base_of`), and the model of
     a planet with a surface drives the world
     (`planet::interim::params_for`): its size, gravity,
@@ -490,18 +486,19 @@ systems/<system-id>/
     calibrated ones.
     A planet that is no giant whose envelope hides its surface (at least
     0.1 % of its mass, under 1.6 R⊕: the model derives no surface under
-    it) renders with its class's preset, `frozen` for an ice world and
+    it) renders with its class's look, `frozen` for an ice world and
     `barren` otherwise, at the model's radius and gravity, with no ocean
     and a mean temperature aimed at a bare surface's (its equilibrium
-    plus its internal heat, no greenhouse); part 3b of #423 derives the
-    surface under the envelope. About 0.3 % of drawn planets (5 of 1 577
-    over 500 systems).
-    A giant class keeps the giant world of its preset at the model's
-    mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request still
-    asks for planets by preset name: the name places the planet (its
-    band, below), the model types it. The world a request around one
-    asks for keeps its named preset as `type` and has no model until part
-    3b of #423 (its neighbours have theirs). A moon has no model yet and
+    plus its internal heat, no greenhouse); the surface under an
+    envelope is not derived yet (a later part of #423). About 0.3 % of
+    drawn planets (5 of 1 577 over 500 systems).
+    A giant class keeps the giant world of its look at the model's
+    mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request asks for
+    planets by archetype: an archetype places the planet by its own
+    insolation and mass, and the model types it. The planet a request
+    around one asks for has its model too (`model`, derived from the
+    request's inputs, its archetype's ranges and its formation context),
+    its archetype stored beside for display. A moon has no model yet and
     keeps `rocky-moon` or `icy-moon`;
 
   The server rewrites it (temporary file, then rename) only to set a
@@ -568,13 +565,12 @@ addressed as `<system-id>/<body-id>` everywhere.
 - `GET /api/systems`: the systems, most recent first. Each gives its id,
   star, body count per type, the bodies generated, names, map size and
   date, and for each body whether it is a habitable world (`habitable`:
-  a planet whose model keeps liquid water on its surface; the planet a
-  request around one asked for, which has no model, when its preset is
-  `terran` or `earth-like`), which the index stores.
+  a planet whose model keeps liquid water on its surface, the planet a
+  request around one asked for included), which the index stores.
 - `POST /api/systems`: draw a system and queue its first generation.
   The body is a `SystemRequest`:
-  - mode 1, `{"system": {"star": "K1V", "planets": {"terran": 2,
-    "gas-giant": 1}, "seed": 42, "width": 4096, "height": 2048}}`;
+  - mode 1, `{"system": {"star": "K1V", "planets": {"earth-like": 2,
+    "jupiter-like": 1}, "seed": 42, "width": 4096, "height": 2048}}`;
   - mode 2, `{"around": WorldRequest}`, today's request; with
     `"alone": true` in it, a lone planet (see
     [Around one planet](#around-one-planet-mode-2)).
@@ -706,12 +702,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   today since the last local midnight, older; empty ones hidden), sorted
   within each,
   with filter chips (star class from the first letter of the spectral
-  type; a habitable world, i.e. a `terran` planet inside the habitable
-  zone; moons, including those of a giant in the zone, do not count,
-  and a planet is placed by its semi-major axis, so an eccentric orbit
-  that only passes through the zone does not; the types are the built-in
-  preset names `terran` and `earth-like`, a user preset with another
-  name never matches) and a search that matches designations, names and seeds. Three
+  type; a habitable world, i.e. a planet whose model keeps liquid water
+  on its surface, wherever it orbits; moons, including those of a giant,
+  do not count) and a search that matches designations, names and seeds. Three
   views, chosen in the cog's **Display** menu and remembered: cards (an
   orbit strip, the name, the star, a chip per planet type, the moons and
   the date), compact cards (a small orrery on the left) and a table.
@@ -847,7 +840,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (17 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (18 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message asking to delete it (`mise run clean-systems`) and draw it
   again, and the viewer shows that message instead of requesting them.
@@ -899,5 +892,5 @@ the other.
 - Rocky planets' occurrence by star type, and how far to trust Kepler's
   counts outside 1 AU.
 - Whether a system can ask for a habitable moon of a giant in mode 1
-  (`moons of giants: terran`), or only in mode 2.
+  (`moons of giants: earth-like`), or only in mode 2.
 - Binary stars: out of scope here, kept possible by the outer edge.

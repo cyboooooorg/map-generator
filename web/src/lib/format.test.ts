@@ -3,23 +3,36 @@ import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { driftRequest } from './drift';
 import { setLocale } from './i18n/index.svelte';
-import { keepAlone, cliCommand, formatInt, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatAge, formatSurfaceAge, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
+import { keepAlone, cliCommand, formatInt, formatSurfaceTemperature, formatNumber, formatUpTo, formatAgo, formatAtmosphere, formatArea, formatGeology, formatAge, formatSurfaceAge, formatDuration, formatShare, MAX_SEED, randomSeed, requestFromWorld, rerollRequest, surfaceColour } from './format';
 
 const S = '\u202f';
 
 const meta = {
-  planet_type: 'frozen',
+  class: 'rocky',
+  archetype: 'earth-like',
   seed: 2590618090,
-  sea_level: 0.121345,
-  volcanic_intensity: 0.61071,
-  circumference_km: 51823.43,
   axial_tilt_deg: 18.7234,
-  erosion: 1,
   pressure_bar: 0.41237,
   surface_age_ga: 1.23456,
   star: { type: 'M4.5V', orbit_au: 0.0812345, eccentricity: 0.123456, metallicity: 0.1, age_gyr: 8.123456 },
   moons: { planet_day_hours: 24 },
   giants: { count: 0 },
+  model: {
+    inputs: { mass_earth: 1.02, core_mass_fraction: 0.33, water_fraction: 2.5e-4, envelope_fraction: 0, radiogenic: 1.1 },
+    surface: { life: { arose: true } },
+  },
+  formation: {
+    mass_earth: 1.02,
+    overrides: {
+      core_mass_fraction: 0.33,
+      water_oceans: 1.0877571428571429,
+      envelope_fraction: 0,
+      co2: 0.8,
+      n2: 1.25,
+      radiogenic: 1.1,
+      life: true,
+    },
+  },
   width: 1920,
   height: 1080,
 } as unknown as WorldMetadata;
@@ -27,15 +40,17 @@ const meta = {
 describe('format', () => {
   it('rebuilds the request and the command line of a world', () => {
     expect(requestFromWorld(meta)).toEqual({
-      planet: 'frozen',
+      planet: 'earth-like',
       seed: 2590618090,
-      sea_level: 0.1213,
-      volcanic: 0.6107,
-      circumference_km: 51823.4,
+      mass_earth: 1.02,
+      core_mass_fraction: 0.33,
+      water_oceans: 1.0877571428571429,
+      envelope_fraction: 0,
+      co2: 0.8,
+      n2: 1.25,
+      radiogenic: 1.1,
+      life: true,
       axial_tilt_deg: 18.72,
-      erosion: 1,
-      pressure_bar: 0.4124,
-      surface_age_ga: 1.235,
       star: 'M4.5V',
       orbit_au: 0.08123,
       eccentricity: 0.1235,
@@ -45,8 +60,8 @@ describe('format', () => {
       height: 1080,
     });
     expect(cliCommand(meta)).toBe(
-      'mise run gen -- --planet frozen --seed 2590618090 --sea-level 0.1213 --volcanic 0.6107 ' +
-        '--circumference 51823.4 --axial-tilt 18.72 --erosion 1 --pressure 0.4124 --surface-age 1.235 ' +
+      'mise run gen -- --planet earth-like --seed 2590618090 --mass 1.02 --core-fraction 0.33 --water 1.0877571428571429 ' +
+        '--envelope 0 --co2 0.8 --n2 1.25 --radiogenic 1.1 --life yes --axial-tilt 18.72 ' +
         '--star M4.5V --orbit-au 0.08123 --eccentricity 0.1235 --age 8.123456 --metallicity=0.1 --width 1920 --height 1080',
     );
     // An epoch of the plates, and moons turned off, are reproduced too.
@@ -57,13 +72,39 @@ describe('format', () => {
     const counted = { ...drifted, moons: { planet_day_hours: 24, count_asked: 3 } } as unknown as WorldMetadata;
     expect(requestFromWorld(counted).moons).toEqual({ count: 3 });
     expect(cliCommand(counted)).toContain('--moons 3');
-    // A giant has no ground: no volcanism, circumference or erosion asked for.
-    const giant = { ...meta, giant: { mass_earth: 318 } } as unknown as WorldMetadata;
-    expect(requestFromWorld(giant)).not.toHaveProperty('erosion');
-    expect(requestFromWorld(giant)).not.toHaveProperty('circumference_km');
-    expect(requestFromWorld(giant)).not.toHaveProperty('volcanic');
-    expect(cliCommand(giant)).not.toMatch(/--(volcanic|circumference|erosion) /);
-    expect(cliCommand(giant)).toContain('--mass 318');
+    // A moon has no model: nothing of the model is pinned, and no archetype is sent.
+    const moon = { ...meta, archetype: null, model: null, formation: null } as unknown as WorldMetadata;
+    expect(requestFromWorld(moon)).not.toHaveProperty('planet');
+    expect(requestFromWorld(moon)).not.toHaveProperty('mass_earth');
+    expect(cliCommand(moon)).not.toMatch(/--(planet|mass|water|co2|n2|life) /);
+    // Life that did not arise is pinned as never arising.
+    const dead = { ...meta, formation: { ...meta.formation, overrides: { ...meta.formation!.overrides, life: false } } } as unknown as WorldMetadata;
+    expect(requestFromWorld(dead).life).toBe(false);
+    expect(cliCommand(dead)).toContain('--life no');
+  });
+
+  it('requestFromWorld_pins_the_formation_inputs_not_what_escape_left', () => {
+    // A mini-Neptune that photoevaporation thinned: drawn at 8 Earth masses
+    // with 3 % of envelope, it kept 7.9 and 1.8 %. The request asks for
+    // what it formed with, so that escape runs once, not twice.
+    const thinned = {
+      ...meta,
+      archetype: 'mini-neptune',
+      model: {
+        drawn_mass_earth: 8,
+        inputs: { mass_earth: 7.9, core_mass_fraction: 0.3, water_fraction: 0.01, envelope_fraction: 0.018, radiogenic: 0.9 },
+        surface: null,
+      },
+      formation: {
+        mass_earth: 8,
+        overrides: { core_mass_fraction: 0.3, water_oceans: 341.3, envelope_fraction: 0.03, co2: 1.4, n2: 0.7, radiogenic: 0.9, life: false },
+      },
+    } as unknown as WorldMetadata;
+    const request = requestFromWorld(thinned);
+    expect(request).toMatchObject({ mass_earth: 8, envelope_fraction: 0.03, water_oceans: 341.3, co2: 1.4, n2: 0.7, life: false });
+    expect(request).not.toHaveProperty('sea_level');
+    expect(rerollRequest(thinned, 9)).toMatchObject({ seed: 9, mass_earth: 8, envelope_fraction: 0.03 });
+    expect(driftRequest(thinned, -50)).toMatchObject({ drift_ma: -50, mass_earth: 8, co2: 1.4, n2: 0.7 });
   });
 
   it('rerolls a world with a new seed and every other parameter kept', () => {
@@ -76,19 +117,19 @@ describe('format', () => {
   });
 
   it('describes the atmosphere', () => {
-    const preset = { atmosphere: { clouds: 'dust' } };
-    expect(formatAtmosphere({ ...meta, pressure_bar: 0.006, preset } as unknown as WorldMetadata)).toBe(
+    const look = { atmosphere: { clouds: 'dust' } };
+    expect(formatAtmosphere({ ...meta, pressure_bar: 0.006, look } as unknown as WorldMetadata)).toBe(
       '0.0060 bar, dust clouds',
     );
-    expect(formatAtmosphere({ ...meta, pressure_bar: 0, preset } as unknown as WorldMetadata)).toBe('none');
+    expect(formatAtmosphere({ ...meta, pressure_bar: 0, look } as unknown as WorldMetadata)).toBe('none');
   });
 
   it("describes the geology", () => {
-    const preset = { geology: { regime: 'stagnant', wet_until: 3.5 } };
-    expect(formatGeology({ ...meta, surface_age_ga: 3.8, preset } as unknown as WorldMetadata)).toBe(
+    const look = { geology: { regime: 'stagnant', wet_until: 3.5 } };
+    expect(formatGeology({ ...meta, surface_age_ga: 3.8, look } as unknown as WorldMetadata)).toBe(
       'stagnant lid, surface 3.8 billion years (3.8 Ga)',
     );
-    expect(formatGeology({ ...meta, surface_age_ga: 0.02, preset } as unknown as WorldMetadata)).toBe(
+    expect(formatGeology({ ...meta, surface_age_ga: 0.02, look } as unknown as WorldMetadata)).toBe(
       'stagnant lid, surface 20 million years (20 Ma)',
     );
   });
@@ -169,5 +210,14 @@ describe('ages on the cards', () => {
     } finally {
       setLocale('en');
     }
+  });
+});
+
+describe('formatSurfaceTemperature', () => {
+  it('shows the surface temperature in degrees Celsius, nothing without a surface', () => {
+    const model = { surface: { water: { oceans: 1 }, climate: { temperature_k: 288.15, liquid: 'water' } } };
+    expect(formatSurfaceTemperature(model)).toMatch(/^15\s°C$/);
+    expect(formatSurfaceTemperature({ surface: null })).toBeNull();
+    expect(formatSurfaceTemperature(undefined)).toBeNull();
   });
 });

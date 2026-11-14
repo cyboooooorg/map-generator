@@ -231,7 +231,9 @@ with its equilibrium temperature. The form can place a planet by its
 "Habitable zone position" instead of a distance in AU: 0 at the inner
 edge, 1 at the outer edge, Earth at about 0.07.
 
-Each planet type has its own range of positions (in `presets/`):
+Until part 3b of #423 each planet type had its own range of positions
+(in the former `presets/`, now gone: an archetype of `archetypes/` places
+its planet by its own insolation instead):
 
 | Preset | Position | Where |
 | --- | --- | --- |
@@ -241,9 +243,9 @@ Each planet type has its own range of positions (in `presets/`):
 | `volcanic` | −0.5 to 4 | anywhere: its heat is internal |
 | `barren` | −1 to 4 | anywhere: it has no water |
 
-A planetary system places its terran planets between 0.95 times the inner
-edge and 1.05 times the outer edge (`band` in
-[`system.rs`](../../crates/mapgen/src/system.rs)).
+A planetary system placed its terran planets between 0.95 times the inner
+edge and 1.05 times the outer edge (`band` in `system.rs`, removed with the
+presets).
 
 ### How it computes them
 

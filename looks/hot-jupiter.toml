@@ -1,0 +1,13 @@
+# A hot Jupiter: a gas giant a few days from its star, tidally locked,
+# inflated, dark (alkali metals or silicate clouds), its night side
+# glowing when it is hot enough.
+
+[giant]                                # see `mapgen::giant_world`
+kind = "gas"
+rings = [0.0, 0.05]                    # ice rings would boil away
+
+[atmosphere]
+rayleigh = [0.4, 0.38, 0.36]             # the gas scatters little blue: the bands keep their colours
+haze = 0.12
+haze_colour = [0.55, 0.48, 0.44]
+clouds = "none"                        # the bands are the clouds

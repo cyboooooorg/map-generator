@@ -19,7 +19,7 @@
 //! border darker and muddier than both sides.
 use super::colour::{linear_to_srgb, srgb_to_linear};
 use crate::biome::{Biome, BiomeInput, surface_color};
-use crate::preset::Preset;
+use crate::look::Look;
 use crate::world::World;
 use std::sync::LazyLock;
 
@@ -90,24 +90,20 @@ fn nudge(input: BiomeInput, o: [f32; 4]) -> BiomeInput {
 /// Colour of a pixel with soft borders, as sRGB floats in `[0, 255]`.
 /// `input` is the exact biome input of the pixel.
 pub fn ecotone_colour(world: &World, input: BiomeInput) -> [f32; 3] {
-    ecotone_colour_for(&world.params.planet, input)
+    ecotone_colour_for(&world.params.look, input)
 }
 
-/// Like [`ecotone_colour`] for any planet.
-pub fn ecotone_colour_for(planet: &Preset, input: BiomeInput) -> [f32; 3] {
-    ecotone_colour_around(planet, input, None)
+/// Like [`ecotone_colour`] for any look.
+pub fn ecotone_colour_for(look: &Look, input: BiomeInput) -> [f32; 3] {
+    ecotone_colour_around(look, input, None)
 }
 
 /// Like [`ecotone_colour_for`], given the biome the caller already chose
-/// for `input`, `planet.remap(planet.rules.choose(input))`, which is the
+/// for `input`, `look.remap(look.rules.choose(input))`, which is the
 /// centre sample whenever `input` is within the ranges the samples are
 /// clamped to: one choice fewer per pixel, the same colour.
-pub fn ecotone_colour_around(
-    planet: &Preset,
-    input: BiomeInput,
-    chosen: Option<Biome>,
-) -> [f32; 3] {
-    let choose = |o: [f32; 4]| planet.remap(planet.rules.choose(nudge(input, o)));
+pub fn ecotone_colour_around(look: &Look, input: BiomeInput, chosen: Option<Biome>) -> [f32; 3] {
+    let choose = |o: [f32; 4]| look.remap(look.rules.choose(nudge(input, o)));
     let unclamped =
         (-1.0..=1.0).contains(&input.moisture) && (0.0..=1.0).contains(&input.volcanic_zone);
     let centre = match chosen {
@@ -149,8 +145,8 @@ mod tests {
 
     #[test]
     fn borders_blend_and_interiors_stay_flat() {
-        let planet = Preset::load("terran").unwrap();
-        let rules = &planet.rules;
+        let look = Look::load("terran");
+        let rules = &look.rules;
         let input = |highland_offset: f32| BiomeInput {
             // Temperate forest, far from the climate thresholds.
             elevation: 0.05,
@@ -164,23 +160,23 @@ mod tests {
             highland_offset,
         };
         // Right on the highland line: mountain and forest colours mix.
-        let edge = ecotone_colour_for(&planet, input(rules.highland - 0.05));
-        let low = surface_color(planet.remap(rules.choose(input(rules.highland - 0.2))));
-        let high = surface_color(planet.remap(rules.choose(input(rules.highland + 0.2))));
+        let edge = ecotone_colour_for(&look, input(rules.highland - 0.05));
+        let low = surface_color(look.remap(rules.choose(input(rules.highland - 0.2))));
+        let high = surface_color(look.remap(rules.choose(input(rules.highland + 0.2))));
         assert_ne!(edge, low.map(f32::from));
         assert_ne!(edge, high.map(f32::from));
         // Far from it, the exact colour.
         assert_eq!(
-            ecotone_colour_for(&planet, input(rules.highland - 0.2)),
+            ecotone_colour_for(&look, input(rules.highland - 0.2)),
             low.map(f32::from)
         );
         // The centre given by the caller changes nothing.
         for offset in [-0.2, -0.05, 0.0, 0.2] {
             let i = input(rules.highland + offset);
-            let chosen = planet.remap(rules.choose(i));
+            let chosen = look.remap(rules.choose(i));
             assert_eq!(
-                ecotone_colour_around(&planet, i, Some(chosen)),
-                ecotone_colour_for(&planet, i)
+                ecotone_colour_around(&look, i, Some(chosen)),
+                ecotone_colour_for(&look, i)
             );
         }
     }

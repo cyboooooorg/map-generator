@@ -1,23 +1,9 @@
 # Ice world: perpetually frozen. Oceans are sealed under ice and temperate
 # zones become permafrost plains.
-name = "frozen"
-description = "Ice world: perpetually frozen"
-
-[locales.fr]
-name = "Glacée"
-description = "Monde de glace : gelé pour toujours"
-
-[star]                                 # host star and orbit (see `mapgen::star`)
-# Drawn like the stars nearby, beyond the outer edge of the habitable zone: the cold comes from the distance.
-position = [1.0, 1.35]
 
 [climate]
 moisture = 0.15
 volcanic = -0.30
-
-[defaults]
-pressure = [0.3, 1.0]                 # surface pressure in bar, drawn in this range
-surface_age = [0.5, 2.0]               # Ga: age of the oldest surviving surface
 
 # Thin, clean air: a pale sky, sparse water clouds.
 [atmosphere]

@@ -83,7 +83,7 @@ pub struct ExportBody {
     pub name: Option<String>,
     /// `planet` or `moon`.
     pub kind: String,
-    /// Its preset: a planet type, `rocky-moon` or `icy-moon`.
+    /// Its class: a planet's (`rocky`, `ice-giant`…), `rocky-moon` or `icy-moon`.
     #[serde(rename = "type")]
     pub body_type: String,
     /// The planet a moon orbits.
@@ -143,7 +143,7 @@ pub fn create(system: &System) -> SystemRequest {
         .and_then(|id| system.bodies.iter().find(|b| b.id == *id));
     match (&system.request, focus) {
         (SystemRequest::Around(world), Some(body)) => with_seed(
-            &SystemRequest::Around(world.pinned(&body.params, &body.params.planet.name)),
+            &SystemRequest::Around(world.pinned(&body.params, body.model.as_ref())),
             system.seed,
         ),
         (request @ SystemRequest::Around(_), None) => {
@@ -328,7 +328,7 @@ mod tests {
     fn the_seed_is_filled_into_either_kind_of_request() {
         let whole: SystemRequest = serde_json::from_str(r#"{"system": {"star": "K1V"}}"#).unwrap();
         let around: SystemRequest =
-            serde_json::from_str(r#"{"around": {"planet": "barren"}}"#).unwrap();
+            serde_json::from_str(r#"{"around": {"planet": "mars-like"}}"#).unwrap();
         for request in [whole, around] {
             let json = serde_json::to_value(with_seed(&request, 77)).unwrap();
             let inner = json.as_object().unwrap().values().next().unwrap();

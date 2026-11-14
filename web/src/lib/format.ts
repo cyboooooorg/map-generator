@@ -1,11 +1,13 @@
 // Formatting shared by the components, and the requests and commands that
 // reproduce a world.
 import type { BiomeInfo } from './api/types/BiomeInfo';
+import type { Formation } from './api/types/Formation';
 import type { StarInfo } from './api/types/StarInfo';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import type { WorldRequest } from './api/types/WorldRequest';
 import { getLocale, t } from './i18n/index.svelte';
+import { type SurfaceModel, surfaceTemperatureK } from './planetClass';
 
 /** Number formats of the active locale, built once per locale and options. */
 const numberFormats = new Map<string, Intl.NumberFormat>();
@@ -135,24 +137,44 @@ function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
-/** The generation request that reproduces a world exactly. */
+/**
+ * The model inputs a world formed with, as a request sets them: world.json's
+ * `formation` (`PlanetModel::formation` in crates/mapgen), exact. The drawn
+ * mass before photoevaporation and the envelope at formation, so that escape
+ * runs once; the water in Earth oceans; the CO₂ and N₂ factors; the core
+ * share and radiogenic abundance; whether life arose. A moon has none.
+ */
+export function formationRequest(formation: Formation | null | undefined): WorldRequest {
+  if (!formation) {
+    return {};
+  }
+  const o = formation.overrides;
+  const set = <K extends keyof WorldRequest>(key: K, value: WorldRequest[K] | null): WorldRequest =>
+    value === null || value === undefined ? {} : { [key]: value };
+  return {
+    mass_earth: formation.mass_earth,
+    ...set('core_mass_fraction', o.core_mass_fraction),
+    ...set('water_oceans', o.water_oceans),
+    ...set('envelope_fraction', o.envelope_fraction),
+    ...set('co2', o.co2),
+    ...set('n2', o.n2),
+    ...set('radiogenic', o.radiogenic),
+    ...set('life', o.life),
+  };
+}
+
+/**
+ * The generation request that reproduces a world: the archetype it was
+ * asked as, the inputs its planet formed with pinned as overrides
+ * ({@link formationRequest}, so that a new seed, a drift or a variation keeps
+ * the planet), and its orbit and star.
+ */
 export function requestFromWorld(meta: WorldMetadata): WorldRequest {
   return {
-    planet: meta.planet_type,
+    ...(meta.archetype ? { planet: meta.archetype } : {}),
     seed: meta.seed,
-    sea_level: round(meta.sea_level, 4),
-    // A giant has no ground: its volcanism, circumference and erosion are
-    // not asked for (the server ignores them).
-    ...(meta.giant
-      ? {}
-      : {
-          volcanic: round(meta.volcanic_intensity, 4),
-          circumference_km: round(meta.circumference_km, 1),
-          erosion: round(meta.erosion, 2),
-        }),
+    ...formationRequest(meta.formation),
     axial_tilt_deg: round(meta.axial_tilt_deg, 2),
-    pressure_bar: round(meta.pressure_bar, 4),
-    surface_age_ga: round(meta.surface_age_ga, 3),
     star: meta.star.type,
     orbit_au: round(meta.star.orbit_au, 5),
     eccentricity: round(meta.star.eccentricity, 4),
@@ -169,31 +191,32 @@ export function requestFromWorld(meta: WorldMetadata): WorldRequest {
     // The star's metallicity, and giants turned off.
     metallicity: round(meta.star.metallicity, 4),
     ...(meta.giants == null && !meta.giant ? { giants: 'none' as const } : {}),
-    // A giant's moon stays one; a giant keeps its mass.
+    // A giant's moon stays one.
     ...(meta.host ? { host: 'giant' as const } : {}),
-    ...(meta.giant ? { mass_earth: round(meta.giant.mass_earth, 2) } : {}),
     width: meta.width,
     height: meta.height,
   };
 }
 
 /**
- * The command line that regenerates a world with the CLI. A preset read from
- * a file is named by its preset name: pass its path instead if it is not in
+ * The command line that regenerates a world with the CLI. An archetype read
+ * from a file is named by its name: pass its path instead if it is not in
  * the built-in list.
  */
 export function cliCommand(meta: WorldMetadata): string {
   const r = requestFromWorld(meta);
   const args = [
-    `--planet ${r.planet}`,
+    ...(r.planet === undefined ? [] : [`--planet ${r.planet}`]),
     `--seed ${r.seed}`,
-    `--sea-level ${r.sea_level}`,
-    ...(r.volcanic === undefined ? [] : [`--volcanic ${r.volcanic}`]),
-    ...(r.circumference_km === undefined ? [] : [`--circumference ${r.circumference_km}`]),
+    ...(r.mass_earth === undefined ? [] : [`--mass ${r.mass_earth}`]),
+    ...(r.core_mass_fraction === undefined ? [] : [`--core-fraction ${r.core_mass_fraction}`]),
+    ...(r.water_oceans === undefined ? [] : [`--water ${r.water_oceans}`]),
+    ...(r.envelope_fraction === undefined ? [] : [`--envelope ${r.envelope_fraction}`]),
+    ...(r.co2 === undefined ? [] : [`--co2 ${r.co2}`]),
+    ...(r.n2 === undefined ? [] : [`--n2 ${r.n2}`]),
+    ...(r.radiogenic === undefined ? [] : [`--radiogenic ${r.radiogenic}`]),
+    ...(r.life === undefined ? [] : [`--life ${r.life ? 'yes' : 'no'}`]),
     `--axial-tilt ${r.axial_tilt_deg}`,
-    ...(r.erosion === undefined ? [] : [`--erosion ${r.erosion}`]),
-    `--pressure ${r.pressure_bar}`,
-    ...(r.surface_age_ga === undefined ? [] : [`--surface-age ${r.surface_age_ga}`]),
     `--star ${r.star}`,
     `--orbit-au ${r.orbit_au}`,
     `--eccentricity ${r.eccentricity}`,
@@ -203,7 +226,6 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.metallicity === undefined ? [] : [`--metallicity=${r.metallicity}`]),
     ...(r.giants === undefined ? [] : [`--giants ${r.giants}`]),
     ...(r.host === undefined ? [] : [`--host ${r.host}`]),
-    ...(r.mass_earth === undefined ? [] : [`--mass ${r.mass_earth}`]),
     `--width ${r.width}`,
     `--height ${r.height}`,
   ];
@@ -239,7 +261,7 @@ export function formatAtmosphere(meta: WorldMetadata): string {
   }
   const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
   const bar = withUnit(formatNumber(pressure, digits), 'bar');
-  const clouds = meta.preset.atmosphere.clouds;
+  const clouds = meta.look.atmosphere.clouds;
   return clouds === 'none'
     ? t.worldInfo.pressureNoClouds({ pressure: bar })
     : t.worldInfo.pressureClouds({ pressure: bar, clouds: t.clouds[clouds] });
@@ -250,7 +272,7 @@ export function formatAtmosphere(meta: WorldMetadata): string {
  * surface 3.8 billion years", in the active locale.
  */
 export function formatGeology(meta: WorldMetadata): string {
-  const regime = t.regimes[meta.preset.geology.regime];
+  const regime = t.regimes[meta.look.geology.regime];
   return t.worldInfo.geologySurface({ regime, age: formatSurfaceAge(meta.surface_age_ga) });
 }
 
@@ -330,6 +352,21 @@ export function formatStarlight(star: StarInfo): string {
     flux: `${formatUpTo(star.insolation, star.insolation < 0.1 ? 3 : 2)}×`,
     equilibrium: withUnit(formatInt(star.equilibrium_k - 273.15), '°C'),
   });
+}
+
+/**
+ * A body's mean surface temperature from its `model`, as the equilibrium
+ * one is shown (whole °C); null for a body without a surface (a giant, no
+ * model).
+ */
+export function formatSurfaceTemperature(model: SurfaceModel): string | null {
+  const k = surfaceTemperatureK(model);
+  return k === null ? null : formatCelsius(k);
+}
+
+/** A temperature in kelvin as whole °C, as the equilibrium one is shown. */
+export function formatCelsius(k: number): string {
+  return withUnit(formatInt(Math.round(k - 273.15)), '°C');
 }
 
 /** The year: in days under two Earth years, in Earth years above. */

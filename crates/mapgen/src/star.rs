@@ -14,8 +14,7 @@
 //! outer edge (maximum greenhouse), below 0 closer in, above 1 farther
 //! out; the flux varies geometrically with the position, so it extends
 //! smoothly beyond the edges.
-use crate::preset::ParamDefault;
-use crate::request::{ECCENTRICITY, HZ_POSITION, ORBIT_AU};
+use crate::request::ECCENTRICITY;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
@@ -478,89 +477,6 @@ pub fn resolve_age_gyr(
             let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(stream));
             Ok(draw_age_gyr(lifetime, &mut rng))
         }
-    }
-}
-
-/// A preset's `[star]` table:
-///
-/// ```toml
-/// [star]
-/// type = "G2V"                       # left out: drawn with the frequencies of the solar neighbourhood
-/// position = [0.1, 0.9]              # in the habitable zone: 0 inner edge, 1 outer edge
-/// # orbit_au = 1.524                 # or a distance, instead of the position
-/// ```
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
-pub struct StarSpec {
-    /// Spectral type (`G2V`); `None` draws one.
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
-    /// Position in the habitable zone, a fixed value or a range.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub position: Option<ParamDefault>,
-    /// Semi-major axis in AU, instead of the position.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub orbit_au: Option<f32>,
-    /// Eccentricity of the orbit, a value or a range; left out, drawn like
-    /// the planets known (see [`draw_eccentricity`]).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub eccentricity: Option<ParamDefault>,
-    /// Metallicity of the star, `[Fe/H]` in dex; left out, drawn like the
-    /// stars nearby (see `crate::giants`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metallicity: Option<f32>,
-    /// The spin-orbit state the planet is held in, `1:1` (locked), `3:2` or
-    /// `2:1`, instead of the one its seed draws from its eccentricity (see
-    /// `crate::spin::capture`): a preset named after a planet whose state
-    /// is observed pins it (`mercury-like` is `3:2`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resonance: Option<String>,
-}
-
-impl StarSpec {
-    /// Checks the type parses and the orbit is within its limits.
-    pub fn validate(&self) -> Result<(), String> {
-        if let Some(kind) = &self.kind {
-            parse_type(kind).map_err(|e| format!("star.type: {e}"))?;
-        }
-        if self.position.is_some() && self.orbit_au.is_some() {
-            return Err("star: set position or orbit_au, not both".into());
-        }
-        if let Some(position) = self.position {
-            position
-                .check("position", HZ_POSITION.min, HZ_POSITION.max)
-                .map_err(|e| e.replacen("defaults.", "star.", 1))?;
-        }
-        if let Some(e) = self.eccentricity {
-            e.check("eccentricity", ECCENTRICITY.min, ECCENTRICITY.max)
-                .map_err(|e| e.replacen("defaults.", "star.", 1))?;
-        }
-        if let Some(r) = &self.resonance
-            && crate::spin::parse_resonance(r).is_none()
-        {
-            return Err(format!(
-                "star.resonance: `{r}` is not one of \"1:1\", \"3:2\", \"2:1\""
-            ));
-        }
-        if let Some(m) = self.metallicity
-            && !crate::request::METALLICITY.contains(m)
-        {
-            return Err(format!(
-                "star.metallicity: must stay within [{}, {}]",
-                crate::request::METALLICITY.min,
-                crate::request::METALLICITY.max
-            ));
-        }
-        if let Some(au) = self.orbit_au
-            && !ORBIT_AU.contains(au)
-        {
-            return Err(format!(
-                "star.orbit_au: must stay within [{}, {}]",
-                ORBIT_AU.min, ORBIT_AU.max
-            ));
-        }
-        Ok(())
     }
 }
 

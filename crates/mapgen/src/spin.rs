@@ -73,17 +73,6 @@ const RESONANCES: [Resonance; 2] = [
     },
 ];
 
-/// Turns per orbit of the spin-orbit state named `name` in a preset's
-/// `[star] resonance`: `1:1` (locked, 1), `3:2` (1.5) or `2:1` (2).
-pub fn parse_resonance(name: &str) -> Option<f32> {
-    match name {
-        "1:1" => Some(1.0),
-        "3:2" => Some(RESONANCE_TURNS_PER_ORBIT),
-        "2:1" => Some(2.0),
-        _ => None,
-    }
-}
-
 /// A number in `[0, 1)` from `seed` and the `salt` of one draw
 /// (SplitMix64, Steele, Lea & Flood 2014, doi:10.1145/2714064.2660195).
 fn unit_draw(seed: u32, salt: u64) -> f32 {
@@ -473,118 +462,11 @@ mod tests {
     }
 
     #[test]
-    fn the_mercury_like_preset_is_in_the_three_two_resonance_whatever_the_seed() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../presets/examples/mercury-like.toml"
-        );
-        for seed in 0..60 {
-            let request = crate::request::WorldRequest {
-                planet: Some(path.into()),
-                // Not as the moon of a giant, which a seed may draw: a moon
-                // is locked to its planet, never held by the star.
-                host: Some(crate::exomoon::HostMode::None),
-                seed: Some(seed),
-                width: Some(64),
-                height: Some(32),
-                ..Default::default()
-            };
-            let p = request.resolve(&mut rand::rng()).unwrap().params;
-            let star = star_info(&p);
-            // Mercury's observed state, pinned by the preset's
-            // `[star] resonance`, not drawn.
-            assert!(
-                star.spin_orbit_3_2 && !star.tidally_locked,
-                "{seed}: {p:?} {star:?}"
-            );
-            assert_eq!(star.spin_turns, 1.5, "{seed}");
-            assert!((p.eccentricity - 0.2056).abs() < 1e-6);
-            // Planets with moons: their day is the resonance's.
-            if let Some(system) = crate::moons::MoonSystem::draw(&p) {
-                let day = system.planet_day_hours;
-                assert!(
-                    (day * 1.5 / (star.year_days * 24.0) - 1.0).abs() < 1e-4,
-                    "{day}"
-                );
-            }
-        }
-    }
-
-    /// The world of the preset file `source` with `[star] resonance =
-    /// "3:2"` added, resolved with `extra`.
-    fn pinned_world(source: &str, orbit_au: Option<f32>, name: &str) -> crate::world::WorldParams {
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../presets/");
-        let text = std::fs::read_to_string(format!("{root}{source}")).unwrap();
-        let text = if text.contains("resonance =") {
-            text
-        } else if text.contains("[star]") {
-            text.replacen("[star]", "[star]\nresonance = \"3:2\"", 1)
-        } else {
-            format!("{text}\n[star]\nresonance = \"3:2\"\n")
-        };
-        let file = std::env::temp_dir().join(format!("mg-pinned-{name}.toml"));
-        std::fs::write(&file, text).unwrap();
-        let request = crate::request::WorldRequest {
-            planet: Some(file.to_str().unwrap().into()),
-            orbit_au,
-            seed: Some(3),
-            width: Some(64),
-            height: Some(32),
-            ..Default::default()
-        };
-        let params = request.resolve(&mut rand::rng()).unwrap().params;
-        std::fs::remove_file(&file).unwrap();
-        params
-    }
-
-    #[test]
-    fn a_pinned_resonance_holds_only_for_a_despun_rocky_planet() {
-        let mercury = "examples/mercury-like.toml";
-        // At its own orbit: 3:2.
-        let own = pinned_world(mercury, None, "own");
-        assert_eq!(star_info(&own).spin_turns, 1.5);
-        // At 1 AU the Sun's tides have not despun it: the pin is ignored
-        // and the world spins as drawn, free.
-        let far = pinned_world(mercury, Some(1.0), "far");
-        assert!(far.resonance_to_star.is_none() && far.locked_to_star.is_none());
-        let star = star_info(&far);
-        assert!(!despun(&star) && star.spin_turns == 0.0 && !star.tidally_locked);
-        // A giant and a moon world ignore it too.
-        let giant = pinned_world("gas-giant.toml", None, "giant");
-        assert!(giant.resonance_to_star.is_none() && giant.locked_to_star.is_none());
-        let moon = pinned_world("moons/rocky-moon.toml", None, "moon");
-        assert!(moon.resonance_to_star.is_none() && moon.locked_to_star.is_none());
-    }
-
-    #[test]
-    fn a_preset_resonance_is_checked() {
-        let spec = |r: &str| crate::star::StarSpec {
-            resonance: Some(r.into()),
-            ..Default::default()
-        };
-        for ok in ["1:1", "3:2", "2:1"] {
-            assert!(spec(ok).validate().is_ok(), "{ok}");
-        }
-        let err = spec("5:2").validate().unwrap_err();
-        assert!(err.contains("star.resonance"), "{err}");
-        assert!(spec("").validate().is_err());
-    }
-
-    #[test]
     fn a_stored_spin_overrides_the_draw() {
         // An eccentric world stored in the 3:2 resonance keeps it whatever
         // its seed; one stored free is free; one stored locked is locked.
         let red = parse_type("M5V").unwrap();
-        let base = crate::request::WorldRequest {
-            planet: Some("terran".into()),
-            host: Some(crate::exomoon::HostMode::None),
-            width: Some(64),
-            height: Some(32),
-            ..Default::default()
-        }
-        .resolve(&mut rand::rng())
-        .unwrap()
-        .params;
+        let base = crate::generation::tests::params(0, "terran");
         let world = |seed: u32, locked: bool, turns: Option<f32>| crate::world::WorldParams {
             star: red,
             orbit_au: orbit_at(red, 0.5),
@@ -608,7 +490,10 @@ mod tests {
     #[test]
     fn despun_planets_stand_upright_and_lone_locked_ones_turn_on_circles() {
         let red = |seed: u32| crate::request::WorldRequest {
-            planet: Some("terran".into()),
+            mass_earth: Some(1.0),
+            // Not as the moon of a giant, which a seed may draw: a moon is
+            // locked to its planet, never held by the star.
+            host: Some(crate::exomoon::HostMode::None),
             star: Some("M5V".into()),
             hz_position: Some(0.5),
             seed: Some(seed),
@@ -624,7 +509,8 @@ mod tests {
         }
         // Close in, the orbit is circularised: locked.
         let close = crate::request::WorldRequest {
-            planet: Some("barren".into()),
+            mass_earth: Some(0.5),
+            host: Some(crate::exomoon::HostMode::None),
             star: Some("M5V".into()),
             orbit_au: Some(0.015),
             seed: Some(1),
@@ -671,7 +557,7 @@ mod tests {
         // A giant of 0.05 AU round the Sun with e = 0.3 is despun but
         // turns 1.56 times per orbit, not once.
         let mut p = crate::request::WorldRequest {
-            planet: Some("gas-giant".into()),
+            planet: Some("jupiter-like".into()),
             star: Some("G2V".into()),
             orbit_au: Some(0.05),
             eccentricity: Some(0.3),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './i18n/en';
 import { fr } from './i18n/fr';
-import { GIANT_CLASSES, isGiantType } from './planetClass';
+import { GIANT_CLASSES, hasFrozenSurface, isGiantType, surfaceTemperatureK } from './planetClass';
 
 // Copied from `PLANET_CLASSES` (crates/mapgen/src/planet/classify.rs); a
 // server test (app.rs) reads this file and checks the list against it.
@@ -13,6 +13,7 @@ const PLANET_CLASSES = [
   'ice-giant',
   'gas-giant',
   'hot-jupiter',
+  'hot-neptune',
   'lava-world',
   'runaway-greenhouse',
   'hydrocarbon-world',
@@ -27,10 +28,37 @@ describe('planet classes', () => {
     }
   });
 
+  it('words no old type', () => {
+    for (const key of ['terran', 'barren', 'caustic', 'frozen', 'volcanic']) {
+      expect(en.viewer.bodyTypes, key).not.toHaveProperty(key);
+      expect(fr.viewer.bodyTypes, key).not.toHaveProperty(key);
+    }
+  });
+
   it('draws the giants and the mini-Neptune as giants', () => {
-    expect([...GIANT_CLASSES].sort()).toEqual(['gas-giant', 'hot-jupiter', 'ice-giant', 'mini-neptune']);
+    expect([...GIANT_CLASSES].sort()).toEqual(['gas-giant', 'hot-jupiter', 'hot-neptune', 'ice-giant', 'mini-neptune']);
     expect(isGiantType('super-earth')).toBe(false);
     expect(isGiantType('terran')).toBe(false);
   });
 
+  const model = (oceans: number, liquid: string, k: number) => ({ surface: { water: { oceans }, climate: { temperature_k: k, liquid } } });
+
+  it('tells a rocky world whose water is frozen at the surface', () => {
+    expect(hasFrozenSurface('rocky', model(0.25, 'none', 215))).toBe(true);
+    expect(hasFrozenSurface('super-earth', model(0.01, 'none', 272))).toBe(true);
+    expect(hasFrozenSurface('rocky', model(0.005, 'none', 215))).toBe(false);
+    expect(hasFrozenSurface('rocky', model(0.25, 'water', 285))).toBe(false);
+    expect(hasFrozenSurface('rocky', model(0.25, 'none', 280))).toBe(false);
+    expect(hasFrozenSurface('ice-world', model(5, 'none', 100))).toBe(false);
+    expect(hasFrozenSurface('ocean-world', model(20, 'none', 200))).toBe(false);
+    expect(hasFrozenSurface('ice-giant', model(1, 'none', 100))).toBe(false);
+    expect(hasFrozenSurface('rocky', { surface: null })).toBe(false);
+    expect(hasFrozenSurface('rocky', undefined)).toBe(false);
+  });
+
+  it('reads the surface temperature of a model that has a surface', () => {
+    expect(surfaceTemperatureK(model(0, 'water', 288))).toBe(288);
+    expect(surfaceTemperatureK({ surface: null })).toBeNull();
+    expect(surfaceTemperatureK(undefined)).toBeNull();
+  });
 });
