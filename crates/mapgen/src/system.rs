@@ -546,7 +546,9 @@ impl Slot {
     /// since its model draws it an ice giant's envelope (5 to 30 % of its
     /// mass, `planet::inputs`) and classes it one (a hot Neptune within
     /// 10 days of its star, which [`crate::belts::cold_giant`] ignores as
-    /// it does a hot ice giant). `None` for a small planet.
+    /// it does a hot ice giant). Close in, photoevaporation may strip that
+    /// envelope and leave the model another class; a cold slot keeps it.
+    /// `None` for a small planet.
     fn giant_class(&self) -> Option<PlanetClass> {
         match self.placement {
             Placement::Drawn(crate::planet::Origin::Small)
@@ -687,17 +689,7 @@ fn normal(rng: &mut impl RngExt) -> f64 {
 /// ([`Slot::failed`]).
 fn space(slots: &mut Vec<Slot>, star_mass: f64, ice: f64) -> Result<(), Failed> {
     slots.sort_by(|a, b| a.orbit_au.total_cmp(&b.orbit_au));
-    let zone_of = |slots: &[Slot]| {
-        slots
-            .iter()
-            .filter(|s| {
-                s.giant_class()
-                    .is_some_and(|class| crate::belts::cold_giant(class, s.orbit_au, ice))
-            })
-            .map(|s| s.orbit_au)
-            .reduce(f64::min)
-            .map(crate::belts::belt_zone)
-    };
+    let zone_of = |slots: &[Slot]| belt_zone_of(slots, ice);
     let mut zone = zone_of(slots);
     let mut placed = Vec::new();
     for _ in 0..4 {
@@ -718,11 +710,30 @@ fn space(slots: &mut Vec<Slot>, star_mass: f64, ice: f64) -> Result<(), Failed> 
     }
 }
 
+/// The inner belt's zone of the first cold giant among `slots`
+/// (`belts::belt_zone`), with the ice line at `ice` AU; `None` without
+/// one.
+fn belt_zone_of(slots: &[Slot], ice: f64) -> Option<(f64, f64)> {
+    slots
+        .iter()
+        .filter(|s| {
+            s.giant_class()
+                .is_some_and(|class| crate::belts::cold_giant(class, s.orbit_au, ice))
+        })
+        .map(|s| s.orbit_au)
+        .reduce(f64::min)
+        .map(crate::belts::belt_zone)
+}
+
 /// Whether a rocky planet that may move crosses an inner belt's zone.
 fn in_zone(slot: &Slot, zone: Option<(f64, f64)>) -> bool {
+    !slot.fixed && crosses_zone(slot, zone)
+}
+
+/// Whether a rocky planet, fixed or not, crosses an inner belt's zone.
+fn crosses_zone(slot: &Slot, zone: Option<(f64, f64)>) -> bool {
     zone.is_some_and(|(lo, hi)| {
-        !slot.fixed
-            && !slot.is_giant()
+        !slot.is_giant()
             && slot.orbit_au * (1.0 + slot.eccentricity) > lo
             && slot.orbit_au * (1.0 - slot.eccentricity) < hi
     })
@@ -1355,7 +1366,15 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
         };
         let mut trial = slots.clone();
         trial.push(slot.clone());
-        if space(&mut trial, star_mass, ice).is_ok() {
+        // A small slot of an ice giant's mass may become the first cold
+        // giant, its belt's zone over drawn planets kept before it, which
+        // spacing no longer moves: it is dropped then (issue #449).
+        if space(&mut trial, star_mass, ice).is_ok()
+            && !trial.iter().any(|s| {
+                matches!(s.placement, Placement::Drawn(_))
+                    && crosses_zone(s, belt_zone_of(&trial, ice))
+            })
+        {
             slot.fixed = true;
             slots = trial
                 .into_iter()
@@ -4278,6 +4297,10 @@ mod tests {
                 "{orbit_au} AU"
             );
         }
+        // At 0.05 AU the rocky rule would circularise it, a giant's not.
+        let mut small = small_slot(15.0, 0.05);
+        small.eccentricity = 0.2;
+        assert_eq!(tidal_eccentricity(&small, star, 4.6), 0.2);
     }
 
     #[test]
@@ -4308,6 +4331,57 @@ mod tests {
             zones += 1;
             let (lo, hi) = crate::belts::belt_zone(giant_au);
             for p in planets.iter().filter(|b| !giant(b)) {
+                let (a, e) = (p.orbit.semi_major_axis_au, p.orbit.eccentricity);
+                assert!(
+                    a * (1.0 + e) <= lo || a * (1.0 - e) >= hi,
+                    "seed {seed}: {} at {a} in {lo}–{hi}",
+                    p.id
+                );
+            }
+        }
+        assert!(zones > 20, "{zones}");
+    }
+
+    #[test]
+    fn drawn_planets_round_a_world_keep_out_of_the_first_cold_giants_belt_zone() {
+        // Issue #449 with `--draw-only`: the drawn planets are kept one by
+        // one, so a small slot of an ice giant's mass drawn after them
+        // must not put its belt's zone over them.
+        let mut zones = 0;
+        for seed in 0..300 {
+            let world = WorldRequest {
+                planet: Some("earth-like".into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..WorldRequest::default()
+            };
+            let system = draw(
+                &SystemRequest::Around(world),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            let ice = f64::from(system.star.ice_line_au);
+            let focus = system.focus.as_deref();
+            let planets: Vec<&Body> = planets(&system);
+            let Some(giant_au) = planets
+                .iter()
+                .filter(|b| {
+                    b.model.as_ref().is_some_and(|m| {
+                        crate::belts::cold_giant(m.class, b.orbit.semi_major_axis_au, ice)
+                    })
+                })
+                .map(|b| b.orbit.semi_major_axis_au)
+                .reduce(f64::min)
+            else {
+                continue;
+            };
+            zones += 1;
+            let (lo, hi) = crate::belts::belt_zone(giant_au);
+            for p in planets
+                .iter()
+                .filter(|b| !giant(b) && Some(b.id.as_str()) != focus)
+            {
                 let (a, e) = (p.orbit.semi_major_axis_au, p.orbit.eccentricity);
                 assert!(
                     a * (1.0 + e) <= lo || a * (1.0 - e) >= hi,
