@@ -250,9 +250,10 @@ regime.
 depends only on the planet and the seed:
 
 1. **How many.** `crater_density` is the lunar chronology above. The density
-   is multiplied by the giant planets' impact factor (0.7 to 1.8) and, on a
-   preset with its own flux (`mars-like`), by the preset's `impact_ratio`
-   instead of the giants' factor.
+   is multiplied by the body's flux against the Moon's, and its craters are
+   the Moon's at `D / crater_scale` (`impacts::rates`, see "The flux from
+   the orbit" below). A moon takes its system's impact factor (or its
+   giants', 0.7 to 1.8) and the Moon's crater size.
 2. **Where and how large.** Diameters are split into octaves
    `[2^k, 2^(k+1)]` km, each with its own grid on a cube projected on the
    sphere. Each cell holds a Poisson number of craters, set by the octave's
@@ -362,12 +363,61 @@ Moon). A
 crater of 170 m or less is worn out (below 3 % of its relief, `WORN_OUT`)
 after 3 Ga.
 
-**Mars's flux.** `mars-like` sets `[geology] impact_ratio = 2.6` and
-`crater_scale = 0.751`, read on Hartmann's isochron page (2.6 for asteroid
-impactors; Mars's craters against the Moon's for the same impactor, 0.865 ×
-0.868). Its craters of 1.4 to 64 km are 10^0.191 = 1.55 times the Moon's at
-equal age, the page's figure. Because the ratio already holds Mars's giants,
-the drawn giants' factor is not applied on top.
+**The flux from the orbit.** [`impacts.rs`](../../crates/mapgen/src/impacts.rs)
+gives a world with a model its flux per unit area and its crater size
+against the Moon's, the reference of the chronology (a body at 1 AU from a
+Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s):
+
+$$\frac{\phi}{\phi_m} = I \cdot \frac{n(a)}{n(1\,\mathrm{AU})} \cdot
+\frac{v_\infty}{v_{\infty,m}} \cdot
+\frac{1 + v_{esc}^2/v_\infty^2}{1 + v_{esc,m}^2/v_{\infty,m}^2},
+\qquad
+\frac{D}{D_m} = \left(\frac{g}{g_m}\right)^{-\mu/(2+\mu)}
+\left(\frac{v}{v_m}\right)^{2\mu/(2+\mu)}$$
+
+- $I$ is the system's impactors, `belts::impact_factor` (its giants and
+  belts; 1 with Jupiter and the main belt), or the giants drawn for a world
+  alone (`giants::impact_factor`). A lone world without belts or giants
+  keeps the floor of 0.05 × 0.7.
+- $v_\infty$, the impactors' speed far from the body, is Earth's
+  $\sqrt{(1.04 \times 19.7)^2 - 11.2^2}$ = 17.2 km/s (Le Feuvre & Wieczorek
+  2011: the Moon's mean impact speed of 19.7 km/s, and Earth's 1.04 times
+  it, Table 3, without Earth's escape speed), scaled as the orbital speed
+  $\sqrt{G M_\star / a}$. A swarm strikes a body at a rate proportional to
+  that speed, through a cross-section $\pi R^2 (1 + v_{esc}^2/v_\infty^2)$
+  (gravitational focusing).
+- $n(a)$ is the asteroids crossing the orbit: the near-Earth ones
+  everywhere, plus the belt's own (at $2.7\sqrt{L}$ AU, inside the ice line)
+  where their eccentricity reaches the orbit,
+  $n = 1 + N \exp(-(1 - a/a_{belt})^2 / 2\sigma^2)$. $N$ = 1223 is the main
+  belt's (1.2 ± 0.5) × 10⁶ asteroids of 1 km or more (Tedesco & Désert
+  2002) over the 981 ± 19 near-Earth ones (Mainzer et al. 2011). The spread
+  $\sigma$ = 0.125 is a calibration with no source, set on Mars's 2.6.
+- The crater of the same impactor follows π-scaling in the gravity regime
+  (Holsapple 1993), with $\mu$ = 0.55 for wet and rocky targets (0.4 for dry
+  sands and soils) and the impact speed $v = \sqrt{v_\infty^2 + v_{esc}^2}$.
+
+Among the Solar System's impactors ($I$ = 1), the archetypes get:
+
+| World | Flux (rule) | Target | Crater size (rule) | Target |
+|---|---|---|---|---|
+| `mercury-like` | 1.62 | 1.82 | 1.03 | 1.18 |
+| `venus-like` | 1.47 | 1.75 | 0.78 | 0.78 |
+| `earth-like` | 1.42 | 1.58 | 0.73 | 0.69 |
+| `mars-like` | 2.53 | 2.6 | 0.78 | 0.751 |
+
+Mars's targets are Hartmann's isochron page (2.6 for asteroid impactors;
+Mars's craters against the Moon's for the same impactor, 0.865 × 0.868 =
+0.751); with them its craters of 1.4 to 64 km are 10^0.191 = 1.55 times the
+Moon's at equal age, and the rule gives 1.63. The others are Le Feuvre &
+Wieczorek (2011, Table 3): impact rates of 1.82, 1.75 and 1.58 times the
+Moon's, and the crater sizes their impact speeds (2.16, 1.28, 1.04 times the
+Moon's) and gravities (2.2, 5.3, 5.9) give through the same π-scaling. Where
+the two disagree (Mars: 2.76 times the Moon's flux at 0.53 times its speed,
+a crater 0.64 times as wide), Hartmann's values are kept, as before. The
+tests hold each value within 20 %. A world closer to the belt than Mars
+gets many more impactors (about 25 times the Moon's flux at 1.8 AU,
+several hundred times within the belt), as the asteroids of the belt do.
 
 **Epochs.** [`epoch.rs`](../../crates/mapgen/src/epoch.rs) shows the
 surface at another time $t$. The generation keeps the elevation without the
@@ -398,13 +448,18 @@ more are flooded flat at a date of that window and darkened.
 - **No multi-ring basins.** The largest basins, up to the planet's radius,
   are peak-ring craters scaled up. Orientale's rings of scarps are not drawn:
   their onset does not scale as $1/g$ and no rule scales it from the Moon.
-- **The lunar flux on most worlds.** The chronology is the Moon's, scaled by
-  the giant planets' impact factor, by locking (the leading side's excess)
-  and, on `mars-like` only, by Hartmann's ratio. Mercury, Venus and Earth
-  keep the Moon's flux: the ratios of Le Feuvre & Wieczorek (2011) could not
-  be read, and Marchi et al. (2009) give Mercury's production only in
-  figures. Impact rates and speeds that change with the distance to the star
-  are not modelled.
+- **The flux from the orbit is a sketch.** The chronology is the Moon's,
+  scaled by a flux and a crater size drawn from the orbit. The asteroids'
+  supply is one belt at $2.7\sqrt{L}$ AU whose crossers spread as a
+  Rayleigh law of eccentricity, its spread calibrated on Mars, not the
+  drawn belts nor the resonances that feed near-Earth asteroids; comets
+  only enter through the system's impact factor. The encounter speed
+  scales as the orbital speed, which puts Mars's impacts at 14.9 km/s
+  where Le Feuvre & Wieczorek find about 10, and Mercury's at 28 where
+  they find 43: the rule's crater sizes stay within 20 % of the targets
+  above, but its speeds are not theirs. Mercury, Venus and Earth come out
+  10 to 16 % below Le Feuvre & Wieczorek's fluxes. Moons keep the Moon's
+  craters at their system's rate until they get a model (part 4).
 - **The deep past of old surfaces lacks its oldest craters.** At most twice
   the kept count is drawn per octave. Where an octave formed more than that
   (craters of 1 km on surfaces older than about 4.2 Ga, sub-km ones at
@@ -534,6 +589,26 @@ more are flooded flat at a date of that window and darkened.
     NASA Space Science Data Coordinated Archive, [planetary fact
     sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/) (surface
     gravities).
+23. Le Feuvre, M. & Wieczorek, M. A. 2011, "Nonuniform cratering of the
+    Moon and a revised crater chronology of the inner Solar System",
+    *Icarus* 214, 1–20,
+    [doi:10.1016/j.icarus.2011.03.010](https://doi.org/10.1016/j.icarus.2011.03.010).
+    Read in the [HAL copy](https://hal.science/hal-00768797): the Moon's
+    mean impact speed of 19.7 km/s (§ 4.1) and Table 3, impact rate, mean
+    impact speed and gravity against the Moon's.
+24. Holsapple, K. A. & Housen, K. R., "Craters from impacts and
+    explosions", the notes behind Holsapple's cratering calculator (read):
+    the gravity-regime π-scaling and "for wet and rocky targets [µ] is about
+    0.55", after Holsapple, K. A. 1993, "The scaling of impact processes in
+    planetary sciences", *Annual Review of Earth and Planetary Sciences*
+    21, 333–373.
+25. Tedesco, E. F. & Désert, F.-X. 2002, "The Infrared Space Observatory
+    deep asteroid search", *Astronomical Journal* 123, 2070–2082 (abstract
+    read): (1.2 ± 0.5) × 10⁶ main-belt asteroids larger than 1 km.
+26. Mainzer, A. et al. 2011, "NEOWISE observations of near-Earth objects:
+    preliminary results", *Astrophysical Journal* 743, 156,
+    [arXiv:1109.6400](https://arxiv.org/abs/1109.6400) (abstract read):
+    981 ± 19 near-Earth asteroids larger than 1 km.
 
 ## See also
 

@@ -119,26 +119,6 @@ pub struct Geology {
     /// present (the Moon's maria: 3.9 to 3.1), or none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub maria: Option<[f32; 2]>,
-    /// Impactors hitting the body per unit area and time, against the
-    /// Moon: 1 for a world of any other system, whose rate comes from its
-    /// giants and belts. Set for Solar System look-alikes where a source
-    /// gives it (`mars-like`: 2.6, Hartmann's Mars/Moon `R_bolide` for
-    /// asteroids, PSI isochron page).
-    #[serde(default = "one", skip_serializing_if = "is_one")]
-    pub impact_ratio: f32,
-    /// Diameter of the crater the same impactor digs on the body, against
-    /// the Moon (impact speed and gravity): 1 elsewhere; `mars-like`
-    /// 0.751 (Hartmann, as above).
-    #[serde(default = "one", skip_serializing_if = "is_one")]
-    pub crater_scale: f32,
-}
-
-fn one() -> f32 {
-    1.0
-}
-
-fn is_one(v: &f32) -> bool {
-    *v == 1.0
 }
 
 impl Default for Geology {
@@ -148,8 +128,6 @@ impl Default for Geology {
             regime: Regime::Plates,
             wet_until: 0.0,
             maria: None,
-            impact_ratio: 1.0,
-            crater_scale: 1.0,
         }
     }
 }
@@ -163,14 +141,6 @@ impl Geology {
             return Err(format!(
                 "geology.wet_until: must stay within [{min}, {max}]"
             ));
-        }
-        for (name, v) in [
-            ("impact_ratio", self.impact_ratio),
-            ("crater_scale", self.crater_scale),
-        ] {
-            if !(v.is_finite() && (0.1..=10.0).contains(&v)) {
-                return Err(format!("geology.{name}: must stay within [0.1, 10]"));
-            }
         }
         if let Some([start, end]) = self.maria {
             if !within(start) || !within(end) {
@@ -251,7 +221,6 @@ mod tests {
             regime: Regime::Stagnant,
             wet_until: 3.5,
             maria: None,
-            ..Geology::default()
         };
         assert_eq!(mars.wet_until_ga(0.006), 3.5);
         assert_eq!(mars.wet_until_ga(1.0), 0.0);

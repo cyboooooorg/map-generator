@@ -89,8 +89,8 @@ const EJECTA_RADII: f64 = 3.0;
 /// (moons, until part 4) keep this lunar law, with [`ICE_TRANSITION`] on
 /// ice; model worlds take [`transition_km`] from their crust's strength.
 const MOON_TRANSITION_KM: f64 = 15.0;
-const MOON_GRAVITY: f64 = 1.62;
-const EARTH_GRAVITY: f64 = 9.81;
+pub(crate) const MOON_GRAVITY: f64 = 1.62;
+pub(crate) const EARTH_GRAVITY: f64 = 9.81;
 /// How much sooner an icy crust turns complex than rock at the same
 /// gravity. Barnouin et al. 2012 (doi:10.1016/j.icarus.2012.02.029, read
 /// at the source) say the icy Galilean satellites show "small values of
@@ -523,7 +523,7 @@ struct Population {
     /// none for those still to come.
     cap: Option<f64>,
     /// Diameter of the body's craters against the Moon's for the same
-    /// impactors (`[geology] crater_scale`).
+    /// impactors (`impacts::rates`).
     crater_scale: f64,
     ages: Ages,
 }
@@ -613,26 +613,12 @@ impl CraterField {
         } else {
             1.0
         };
-        // Giants stir the impactors: their mass sets the rate (see
-        // `giants::impact_factor`; 1 without giants modelled). A body of a
-        // planetary system has its rate from its system's giants and belts.
-        // A look with its own flux against the Moon's (a Solar System
-        // look-alike, `[geology] impact_ratio`) already has its giants in
-        // it: the drawn ones would count them twice.
-        let impact = if p.look.geology.impact_ratio != 1.0 {
-            1.0
-        } else {
-            match p.impact_factor {
-                Some(factor) => f64::from(factor),
-                None => {
-                    crate::giants::GiantSystem::draw(p).map_or(1.0, |s| f64::from(s.impact_factor))
-                }
-            }
-        };
-        // The body's own flux against the Moon's, where a source gives it
-        // (`[geology] impact_ratio`, 1 elsewhere).
-        let raise = locked_raise * impact * f64::from(p.look.geology.impact_ratio);
-        let crater_scale = f64::from(p.look.geology.crater_scale);
+        // The body's flux and crater size against the Moon's: its system's
+        // impactors, and with a model its orbit and gravity (see
+        // `impacts::rates`).
+        let rates = crate::impacts::rates(p);
+        let raise = locked_raise * rates.flux;
+        let crater_scale = rates.crater_scale;
         CraterField {
             craters: Vec::new(),
             floods: Vec::new(),
@@ -1931,18 +1917,18 @@ mod tests {
     #[test]
     fn a_mars_like_world_has_marss_crater_production() {
         // Hartmann's isochrons: on the shallow branch (1.4–64 km), Mars
-        // has 10^0.191 = 1.55 times the Moon's craters at equal age.
-        let field = |ratio: f32, scale: f32| {
-            let mut p = moon(3.5);
-            p.look.geology.impact_ratio = ratio;
-            p.look.geology.crater_scale = scale;
-            CraterField::context(&p)
-        };
-        let (moon_field, mars_field) = (field(1.0, 1.0), field(2.6, 0.751));
+        // has 10^0.191 = 1.55 times the Moon's craters at equal age. The
+        // flux and crater size come from the orbit (`impacts::rates`),
+        // among the Solar System's impactors; Mars is not locked.
+        let mut mars = crate::generation::tests::preset_params("mars-like", 1, 64, 32);
+        mars.impact_factor = Some(1.0);
+        mars.surface_age_ga = 3.5;
+        let moon_field = CraterField::context(&moon(3.5));
+        let mars_field = CraterField::context(&mars);
         let octave = 3; // 8–16 km
         let ratio = OctaveFill::new(mars_field.past, octave).formed
             / OctaveFill::new(moon_field.past, octave).formed;
-        assert!((ratio - 1.55).abs() < 0.02, "{ratio}");
+        assert!((ratio / 1.55 - 1.0).abs() < 0.2, "{ratio}");
     }
 
     #[test]

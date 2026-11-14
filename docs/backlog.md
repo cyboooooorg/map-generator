@@ -715,16 +715,12 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     (Melosh & Ivanov 1999 for the weak layer, Le Feuvre & Wieczorek
     2011, Marchi et al. 2009) give no rule that scales to other bodies
     or no numbers in text, and each needs a model the app lacks.
-  - The lunar chronology on most worlds (moved to #313): `[geology] impact_ratio` and
-    `crater_scale` carry a body's flux and crater size against the
-    Moon's, set for `mars-like` from Hartmann's isochrons (2.6 and
-    0.751). Mercury, Venus and Earth keep 1: Le Feuvre & Wieczorek 2011
-    (doi:10.1016/j.icarus.2011.03.010) could not be read (paywall, HAL
-    behind a bot wall), and Marchi et al. 2009 give Mercury's production
-    function only in figures. A world of another system keeps the
-    Moon's flux, scaled by its giants and belts and by locking; a
-    general rule would need the flux of impactors and their speeds per
-    orbit (gravitational focusing included).
+  - The lunar chronology on most worlds: done in #313 (part 3c of #423).
+    `[geology] impact_ratio` and `crater_scale` are gone; a world with a
+    model takes its flux and crater size from its orbit
+    (`crates/mapgen/src/impacts.rs`, `docs/science/impact-craters.md`
+    § The flux from the orbit), against Hartmann's Mars and Le Feuvre &
+    Wieczorek 2011's Mercury, Venus and Earth (read in the HAL copy).
 - **Plates:**
   - Slab pull sets the present speed of each plate from its sinking
     edge (2026-11-07), on one pass over the present boundary cells; at

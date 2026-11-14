@@ -31,6 +31,7 @@ pub mod giant_world;
 pub mod giants;
 pub mod hex;
 pub mod hydrology;
+pub mod impacts;
 pub mod look;
 pub mod moons;
 pub mod naming;
