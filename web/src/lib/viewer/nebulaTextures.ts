@@ -9,7 +9,7 @@
 // long exposure with saturated H-alpha reds and O III blue-greens.
 
 import { CLOUD_CEILING, type SkyExposure } from './skyClouds';
-import { darkOpacity, pillarAt, pillarColumns, pillarMask, type Nebula, type NebulaKind } from './skyNebulae';
+import { darkOpacity, pillarColumns, pillarDistance, pillarMask, type Nebula, type NebulaKind } from './skyNebulae';
 import { fbm2, lattice, smoothstep } from './nebulaNoise';
 import { subSeed } from './skyRandom';
 
@@ -46,6 +46,9 @@ const EYE_KIND_GAIN: Record<NebulaKind, number> = {
 
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
+/** Ridged noise in [0, 1]: 1 on thin curves, for wisps and filaments. */
+const ridged = (x: number, y: number, s: number, octaves = 3) => 1 - Math.abs(2 * fbm2(x, y, s, octaves) - 1);
+
 /** A texel's glow: an intensity (about 0 to 1.5) and its colour. */
 interface Texel {
   i: number;
@@ -56,7 +59,8 @@ type Shader = (x: number, y: number, n: Nebula, s: number) => Texel;
 
 /** Planetary: a bold ring (or two lobes) with an O III core and an H-alpha rim, knots, a faint outer halo and a central star. */
 const planetary: Shader = (x, y, n, s) => {
-  const knots = 0.45 + 1.1 * fbm2(x * 6 + 3, y * 6 + 1, s, 3);
+  // Knots at two scales and fine radial-ish filaments, as in the Helix's cometary knots.
+  const knots = (0.45 + 1.1 * fbm2(x * 6 + 3, y * 6 + 1, s, 3)) * (0.65 + 0.7 * ridged(x * 16 + 2, y * 16, s ^ 0x61, 3)) * (0.8 + 0.4 * fbm2(x * 40, y * 40, s ^ 0x62, 2));
   const star = 1.1 * Math.exp(-((x * x + y * y) / (0.03 * 0.03)));
   if (n.tint > 0.6) {
     // Bipolar: two shells joined at a pinched waist, along the vertical.
@@ -104,33 +108,58 @@ const emission: Shader = (x, y, n, s) => {
   // The bays' edges are lit by the stars beyond.
   const edge = 1 + 1.1 * Math.exp(-(((l1 - 0.54) / 0.035) ** 2));
   const hotspot = 0.9 * Math.exp(-(((x - 0.1 * (n.tint - 0.5)) ** 2 + y * y) / 0.05));
-  const i = (glow * edge + hotspot * glow) * lane;
+  // Fine structure: grain and thin bright filaments along the ridges of a second noise.
+  const fine = 0.75 + 0.5 * fbm2(x * 18 + 5, y * 18, s ^ 0x7a, 3) + 0.7 * smoothstep(0.78, 0.95, ridged(x * 9 + 1, y * 9 - 2, s ^ 0x7b, 3));
+  const i = (glow * edge + hotspot * glow) * lane * fine;
   const teal = smoothstep(0.45, 0.7, fbm2(x * 1.4 + 11, y * 1.4, s ^ 0x3b, 3)) * n.tint * 0.7;
   const hot = smoothstep(1.1, 2.2, i);
   return { i, colour: mix(mix(H_ALPHA, O_III, teal), WHITE, hot * 0.5) };
 };
 
-/** Pillars (the Eagle's family): an emission background with fat dark columns, domed tips and bright rims. */
+/** Direction toward the light (the hot stars beyond the top of the texture), normalised. */
+const LIGHT: [number, number] = [0.28, 0.96];
+
+/**
+ * Pillars (the Eagle's family): tapering, bent columns with narrow finger tips
+ * and small globules, a sharp bright rim where the light hits them (the
+ * photo-evaporation front: white-hot on the edge, red and then O III
+ * teal outside it), a dim textured inside, over a bright, filamentary
+ * emission background that is brightest toward the light.
+ */
 const pillars: Shader = (x, y, n, s) => {
   const { glow } = emissionGlow(x * 0.9, y * 0.9, s);
   const columns = pillarColumns(n);
+  const d = pillarDistance(columns, x, y);
   const mask = pillarMask(columns, x, y);
-  const lit = 0.5 + 0.5 * smoothstep(-0.9, 0.6, y);
-  let rim = 0;
-  for (const p of columns) {
-    const at = pillarAt(p, Math.min(y, p.top));
-    if (!at) continue;
-    // Distance to the column's outline: sideways off the shaft, upward off the dome.
-    const dy = Math.max(0, y - p.top);
-    const d = Math.hypot(Math.max(0, Math.abs(x - at.cx) - at.half * 0.85), dy);
-    // The top and the side facing the light are the brightest.
-    const light = 0.55 + 0.45 * smoothstep(-0.3, 0.5, y) + (x > at.cx ? 0.25 : 0);
-    rim = Math.max(rim, Math.exp(-((d / 0.045) ** 2)) * light);
-  }
+  const lit = 0.45 + 0.55 * smoothstep(-0.9, 0.7, y);
   const env = 1 - smoothstep(0.2, 0.9, Math.hypot(x, y) + 0.3 * (fbm2(x * 2, y * 2, s ^ 0x18, 3) - 0.5));
-  const background = (0.2 + 1.15 * glow) * lit * env;
-  const i = (1 - mask) * (background + 1.2 * rim * env);
-  return { i, colour: mix(mix(H_ALPHA, O_III, 0.3 * n.tint), WHITE, Math.min(1, rim * 0.5)) };
+  // Background: fractal glow with filaments and a fine grain on top.
+  const wisps = ridged(x * 7 + 3, y * 7, s ^ 0x41);
+  const grain = fbm2(x * 24, y * 24, s ^ 0x42, 3);
+  const structure = 0.55 + 0.75 * smoothstep(0.45, 0.9, wisps) + 0.5 * (grain - 0.5);
+  let background = (0.12 + 0.8 * glow) * structure * lit * env;
+  let rim = 0;
+  let outer = 0;
+  if (d < 0.2) {
+    // Outline normal by finite differences (the shading uses only the direction).
+    const h = 0.006;
+    const gx = pillarDistance(columns, x + h, y) - pillarDistance(columns, x - h, y);
+    const gy = pillarDistance(columns, x, y + h) - pillarDistance(columns, x, y - h);
+    const gl = Math.hypot(gx, gy) || 1;
+    const facing = Math.min(1, Math.max(0, (gx * LIGHT[0] + gy * LIGHT[1]) / gl));
+    const light = 0.3 + 0.7 * facing;
+    // A thin white-hot line just inside the edge, a red-orange front around it, a fainter teal glow beyond.
+    rim = light * (Math.exp(-(((d + 0.003) / 0.011) ** 2)) + 0.45 * Math.exp(-(((d - 0.012) / 0.03) ** 2)));
+    outer = light * Math.exp(-(Math.max(0, d - 0.02) / 0.06)) * (d > 0 ? 1 : 0);
+    // Compressed gas piles up around the columns on the lit side.
+    background += 0.5 * outer * lit * env;
+  }
+  // Inside the columns: a dim, wispy glow of lighter gas on dark cores, fading to black toward the foot.
+  const body = mask * (0.5 + 0.5 * smoothstep(-0.2, 0.5, y)) * (0.04 + 0.22 * smoothstep(0.55, 0.95, ridged(x * 17 + 2, y * 17, s ^ 0x43, 3)) * (0.3 + 0.7 * grain));
+  const i = (1 - mask) * background + body * env + 1.5 * rim * env;
+  const teal = Math.min(1, 0.15 + 0.45 * smoothstep(-0.2, 0.9, y) + 0.7 * outer) * (0.4 + 0.6 * n.tint);
+  const hot = Math.min(1, rim * 0.9);
+  return { i, colour: mix(mix(H_ALPHA, O_III, teal), WHITE, hot) };
 };
 
 /** Remnant: a thin, broken, filamentary shell with bright arcs, red outside and blue-green inside. */
@@ -142,7 +171,9 @@ const remnant: Shader = (x, y, n, s) => {
   const gaps = smoothstep(0.3, 0.55, fbm2(x * 1.8 + 9, y * 1.8, s ^ 0x4d, 3));
   const shell = Math.exp(-(((d - 0.68) / 0.035) ** 2));
   const inner = 0.6 * Math.exp(-(((d - 0.5) / 0.035) ** 2)) * smoothstep(0.5, 0.75, fbm2(x * 3 + 1, y * 3 + 4, s ^ 0x4e, 3));
-  const i = (shell * (0.25 + 1.3 * filament) * (0.35 + 0.65 * gaps) + inner * filament * 1.4) + 0.1 * Math.exp(-(((d - 0.64) / 0.2) ** 2)) * ridge;
+  const thin = smoothstep(0.78, 0.96, 1 - Math.abs(2 * fbm2(x * 15 + 4, y * 15 + 9, s ^ 0x22, 3) - 1));
+  const grain = 0.7 + 0.6 * fbm2(x * 26, y * 26, s ^ 0x23, 3);
+  const i = (shell * (0.25 + 1.3 * filament + 0.6 * thin) * (0.35 + 0.65 * gaps) + inner * filament * 1.4) * grain + 0.1 * Math.exp(-(((d - 0.64) / 0.2) ** 2)) * ridge * (0.5 + thin);
   const t = smoothstep(0.35, 0.65, (0.68 - d) * 2.2 + 0.5 + (n.tint - 0.5) * 0.4 + 0.5 * (fbm2(x * 2.5 + 2, y * 2.5, s ^ 0x6f, 3) - 0.5));
   return { i, colour: mix(H_ALPHA, O_III, t) };
 };
@@ -150,7 +181,9 @@ const remnant: Shader = (x, y, n, s) => {
 /** Reflection: a blue haze round a bright star with four diffraction spikes. */
 const reflection: Shader = (x, y, n, s) => {
   const rr = Math.hypot(x, y);
-  const haze = Math.exp(-rr * rr * 3.4) * (0.55 + 0.9 * fbm2(x * 3, y * 3, s, 4));
+  // Wispy streaks over the haze.
+  const streaks = 0.5 + 0.8 * ridged(x * 7 + 1, y * 7, s ^ 0x31, 3);
+  const haze = Math.exp(-rr * rr * 3.4) * (0.45 + 0.8 * fbm2(x * 3, y * 3, s, 4)) * streaks * (0.8 + 0.4 * fbm2(x * 30, y * 30, s ^ 0x33, 2));
   const star = 0.9 * Math.exp(-((rr / 0.05) ** 2));
   const spikes = 0.5 * (Math.exp(-((x / 0.008) ** 2)) * Math.exp(-Math.abs(y) * 5) + Math.exp(-((y / 0.008) ** 2)) * Math.exp(-Math.abs(x) * 5));
   const colour = mix(BLUE, [0.55, 0.72, 1], n.tint);

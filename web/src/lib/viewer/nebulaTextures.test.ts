@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bakeNebula, nebulaTextureSize, type NebulaTexture } from './nebulaTextures';
 import type { SkyExposure } from './skyClouds';
-import { pillarAt, pillarColumns, type Nebula, type NebulaKind } from './skyNebulae';
+import { pillarAt, pillarColumns, pillarDistance, type Nebula, type NebulaKind } from './skyNebulae';
 
 const DEG = Math.PI / 180;
 const KINDS: NebulaKind[] = ['planetary', 'emission', 'pillars', 'remnant', 'reflection', 'dark'];
@@ -93,8 +93,10 @@ describe('bakeNebula', () => {
     for (const seed of [1, 2, 3, 4242]) {
       const n = make('pillars', seed, 0.3, 3);
       const t = bakeNebula(n, 'photo');
-      for (const p of pillarColumns(n)) {
-        const at = pillarAt(p, -0.45)!;
+      // The main columns (the fingers are thin and the torn edge shifts them by about their width).
+      for (const p of pillarColumns(n).filter((q) => q.width >= 0.17)) {
+        const at = pillarAt(p, -0.45);
+        if (!at) continue;
         const strip = region(t, (x, y) => Math.abs(x - at.cx) < 0.4 * at.half && Math.abs(y + 0.45) < 0.1);
         const around = region(
           t,
@@ -108,9 +110,33 @@ describe('bakeNebula', () => {
             }),
         );
         if (around.length === 0) continue;
-        expect(mean(t, strip, light(t))).toBeLessThan(0.25 * mean(t, around, light(t)));
+        expect(mean(t, strip, light(t))).toBeLessThan(0.4 * mean(t, around, light(t)));
       }
     }
+  });
+
+  it('lights the rim of a pillar: brighter than the column and than the background just beyond', () => {
+    let lit = 0;
+    let total = 0;
+    for (const seed of [1, 2, 3, 4242]) {
+      const n = make('pillars', seed, 0.3, 3);
+      const t = bakeNebula(n, 'photo');
+      const columns = pillarColumns(n);
+      const main = columns.filter((q) => q.width >= 0.17);
+      for (const p of main) {
+        // Texels at the tip's outline (|distance| < 0.015), further out (0.1 to 0.2) and inside (below -0.05), around the top half of the column.
+        const near = (x: number, y: number) => Math.abs(x - p.x) < 0.25 && y > p.top - 0.25 && y < p.top + 0.1 && Math.hypot(x, y) < 0.7;
+        const edge = region(t, (x, y) => near(x, y) && Math.abs(pillarDistance(columns, x, y)) < 0.015);
+        const beyond = region(t, (x, y) => near(x, y) && pillarDistance(columns, x, y) > 0.1 && pillarDistance(columns, x, y) < 0.2);
+        const inside = region(t, (x, y) => near(x, y) && pillarDistance(columns, x, y) < -0.05);
+        if (edge.length === 0 || beyond.length === 0 || inside.length === 0) continue;
+        total += 1;
+        const e = mean(t, edge, light(t));
+        if (e > 1.3 * mean(t, beyond, light(t)) && e > 3 * mean(t, inside, light(t))) lit += 1;
+      }
+    }
+    expect(total).toBeGreaterThan(5);
+    expect(lit / total).toBeGreaterThanOrEqual(0.8);
   });
 
   it('draws an emission complex with clear dark lanes and a bright glow', () => {

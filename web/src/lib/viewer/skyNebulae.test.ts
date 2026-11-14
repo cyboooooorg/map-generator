@@ -175,7 +175,8 @@ describe('dark nebulae', () => {
         if (wide >= 1.6 * Math.max(1, tall)) elongated += 1;
       }
     }
-    expect(elongated / total).toBeGreaterThan(0.7);
+    // The edge is torn at three scales now, so a few come out rounder.
+    expect(elongated / total).toBeGreaterThan(0.55);
   });
 
   it('have ragged edges: the outline is not a smooth circle', () => {

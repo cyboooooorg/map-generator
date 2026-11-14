@@ -163,34 +163,83 @@ export function nebulaBasis(n: Nebula): { right: Vec3; up: Vec3 } {
   };
 }
 
-/** A dark column of a pillars nebula, in the texture's frame (x right, y up, both in [-1, 1]). */
+/**
+ * A dark column of a pillars nebula, in the texture's frame (x right, y up,
+ * both in [-1, 1]), or (with `blob`) a small detached globule near a tip.
+ */
 export interface Pillar {
   x: number;
   /** Half width at the base. */
   width: number;
-  /** Height of the tip. */
+  /** Height of the tip (of the globule's centre). */
   top: number;
   lean: number;
   phase: number;
+  /** Half width of the finger-like tip. */
+  tip: number;
+  /** Noise seed shared by the columns of a nebula (the ragged edge is drawn once). */
+  seed: number;
+  /** Radius of a globule; unset for a column. */
+  blob?: number;
 }
 
 const pillarCache = new WeakMap<Nebula, Pillar[]>();
 
-/** One to three dark columns, rising from the bottom edge and tapering, drawn from the nebula's seed. */
+/**
+ * Two or three dark columns rising from the bottom edge, tapering to narrow
+ * bent fingers, each with a finger or two beside it and a few small
+ * globules above the tips (the Eagle's evaporating gaseous globules),
+ * drawn from the nebula's seed. The first entries are the main columns.
+ */
 export function pillarColumns(n: Nebula): Pillar[] {
   const hit = pillarCache.get(n);
   if (hit) return hit;
   const next = random(subSeed(n.seed, 'pillars'));
+  const seed = subSeed(n.seed, 'pillar-edge');
   const count = 2 + Math.floor(next() * 2);
   const columns: Pillar[] = [];
   for (let i = 0; i < count; i += 1) {
     columns.push({
-      x: (count === 1 ? 0 : -0.5 + (i / (count - 1)) * 1) * 0.9 + (next() - 0.5) * 0.15,
+      x: (-0.5 + (i / (count - 1)) * 1) * 0.9 + (next() - 0.5) * 0.15,
       width: 0.17 + next() * 0.1,
-      top: -0.2 + next() * 0.6,
-      lean: (next() - 0.5) * 0.3,
+      top: -0.25 + next() * 0.65,
+      lean: (next() - 0.5) * 0.36,
       phase: next() * 6.28,
+      tip: 0.035 + next() * 0.025,
+      seed,
     });
+  }
+  const mains = columns.slice();
+  for (const m of mains) {
+    // Side fingers: thin columns that leave the shaft and end near the tip.
+    const fingers = 1 + Math.floor(next() * 2);
+    for (let k = 0; k < fingers; k += 1) {
+      const side = next() < 0.5 ? -1 : 1;
+      columns.push({
+        x: m.x + side * m.width * (0.55 + next() * 0.3),
+        width: 0.07 + next() * 0.05,
+        top: m.top - 0.12 - next() * 0.3,
+        lean: m.lean + side * (0.04 + next() * 0.1),
+        phase: next() * 6.28,
+        tip: 0.025 + next() * 0.02,
+        seed,
+      });
+    }
+  }
+  for (const m of mains) {
+    const globules = 1 + Math.floor(next() * 3);
+    for (let k = 0; k < globules; k += 1) {
+      columns.push({
+        x: m.x + m.lean + (next() - 0.5) * 0.5,
+        width: 0,
+        top: m.top + 0.05 + next() * 0.3,
+        lean: 0,
+        phase: 0,
+        tip: 0,
+        seed,
+        blob: 0.02 + next() * 0.03,
+      });
+    }
   }
   pillarCache.set(n, columns);
   return columns;
@@ -198,27 +247,50 @@ export function pillarColumns(n: Nebula): Pillar[] {
 
 /** Pillar parameters at height `y`: centre and half width, or null above the tip. */
 export function pillarAt(p: Pillar, y: number): { cx: number; half: number } | null {
+  if (p.blob !== undefined) return null;
   if (y > p.top) return null;
-  const t = Math.max(0, (y + 1) / (p.top + 1));
-  // A knobbly shaft, wide at the foot, with a rounded dome at the tip.
-  const knobs = 1 + 0.12 * Math.sin(7 * y + p.phase);
-  const dome = Math.sqrt(1 - (1 - Math.min(1, (p.top - y) / (0.9 * p.width))) ** 2);
+  const yc = p.top - p.tip;
+  const t = Math.min(1, Math.max(0, (y + 1) / (yc + 1)));
+  // Wide at the foot, then a long taper to a narrow finger, knobbly, bent and wavering.
+  const knobs = 1 + 0.14 * Math.sin(7 * y + p.phase);
   return {
-    cx: p.x + p.lean * t + 0.02 * Math.sin(9 * y + p.phase),
-    half: p.width * (1 - 0.45 * t ** 1.3) * knobs * dome,
+    cx: p.x + p.lean * t * t + 0.025 * Math.sin(9 * y + p.phase) * (0.4 + t),
+    half: p.tip + (p.width - p.tip) * (1 - t) ** 1.25 * knobs,
   };
 }
 
-/** Opacity 0..1 of the columns at a point of the texture's frame, soft-edged. */
-export function pillarMask(columns: Pillar[], x: number, y: number): number {
-  let mask = 0;
-  for (const p of columns) {
-    const at = pillarAt(p, y);
-    if (!at) continue;
-    if (at.half < 1e-4) continue;
-    mask = Math.max(mask, 1 - smoothstep(at.half * 0.8, at.half, Math.abs(x - at.cx)));
+/** Signed distance (about, in texture units) to one column's outline: negative inside. */
+function columnDistance(p: Pillar, x: number, y: number): number {
+  if (p.blob !== undefined) return Math.hypot(x - p.x, (y - p.top) / 0.75) - p.blob;
+  const yc = p.top - p.tip;
+  if (y > yc) {
+    const at = pillarAt(p, yc)!;
+    return Math.hypot(x - at.cx, y - yc) - at.half;
   }
-  return mask;
+  const at = pillarAt(p, y)!;
+  return Math.abs(x - at.cx) - at.half;
+}
+
+/**
+ * Signed distance to the columns (negative inside): the outline is torn by
+ * a warp at three scales, so the edge is ragged and the tips frayed.
+ */
+export function pillarDistance(columns: Pillar[], x: number, y: number): number {
+  if (columns.length === 0) return 1;
+  const s = columns[0]!.seed;
+  const dx = 0.1 * (fbm2(x * 3 + 1, y * 3, s, 2) - 0.5) + 0.05 * (fbm2(x * 9, y * 9 + 4, s ^ 0x5, 3) - 0.5) + 0.02 * (fbm2(x * 28, y * 28, s ^ 0x9, 2) - 0.5);
+  const dy = 0.05 * (fbm2(x * 4, y * 4 + 7, s ^ 0x3, 2) - 0.5) + 0.03 * (fbm2(x * 14 + 3, y * 14, s ^ 0x7, 3) - 0.5);
+  let d = 1;
+  for (const p of columns) d = Math.min(d, columnDistance(p, x + dx, y + dy));
+  return d;
+}
+
+/** Opacity 0..1 of the columns at a point of the texture's frame: a sharp edge, a slightly mottled inside. */
+export function pillarMask(columns: Pillar[], x: number, y: number): number {
+  const d = pillarDistance(columns, x, y);
+  if (d > 0.012) return 0;
+  const edge = 1 - smoothstep(-0.006, 0.012, d);
+  return edge * (0.92 + 0.08 * fbm2(x * 20 + 5, y * 20, columns[0]!.seed ^ 0x77, 3));
 }
 
 /**
@@ -236,12 +308,15 @@ export function darkOpacity(n: Nebula, x: number, y: number): number {
   const u = x + 0.3 * (fbm2(x * 2 + 5, y * 2, s ^ 0x31, 3) - 0.5);
   const v = y - bend + 0.22 * (fbm2(x * 2, y * 2 + 8, s ^ 0x32, 3) - 0.5);
   const body = 1 - smoothstep(0.3, 1, Math.hypot(u / 0.95, v / (0.95 * aspect)));
-  const ragged = fbm2(x * 5 + 2, y * 5 - 1, s, 4) - 0.5;
-  const core = smoothstep(0.18, 0.5, body + 0.55 * ragged);
+  // Ragged edge at three scales, clumps with holes inside, a network of thin fibres and hair-like wisps at the fringe.
+  const ragged = 0.6 * (fbm2(x * 5 + 2, y * 5 - 1, s, 4) - 0.5) + 0.5 * (fbm2(x * 13 + 7, y * 13, s ^ 0x34, 3) - 0.5) + 0.25 * (fbm2(x * 34, y * 34 + 3, s ^ 0x35, 2) - 0.5);
+  const core = smoothstep(0.18, 0.42, body + 0.9 * ragged);
   const ridge = 1 - Math.abs(2 * fbm2(x * 3.2 + 4, y * 3.2 + 1, s ^ 0x33, 3) - 1);
   const tendril = 0.7 * smoothstep(0.78, 0.95, ridge) * (1 - smoothstep(0.1, 0.9, Math.hypot(u / 1.4, v / (1.4 * aspect * 1.6))));
-  const mottle = 0.8 + 0.3 * fbm2(x * 4 + 6, y * 4, s ^ 0x5, 3);
-  return Math.min(1, Math.max(core * mottle, tendril)) * (1 - smoothstep(0.74, 0.9, rr));
+  const fibre = 1 - Math.abs(2 * fbm2(x * 12 + 1, y * 12 + 5, s ^ 0x36, 3) - 1);
+  const fibres = 0.55 * smoothstep(0.8, 0.95, fibre) * (1 - smoothstep(0.2, 1, Math.hypot(u / 1.2, v / (1.2 * aspect * 1.4))));
+  const mottle = 0.55 + 0.5 * fbm2(x * 4 + 6, y * 4, s ^ 0x5, 3) + 0.25 * fbm2(x * 16, y * 16 + 2, s ^ 0x37, 3);
+  return Math.min(1, Math.max(core * Math.min(1, mottle), tendril, fibres)) * (1 - smoothstep(0.74, 0.9, rr));
 }
 
 /** Strongest extinction of a dark nebula or pillar silhouette at its centre. */
