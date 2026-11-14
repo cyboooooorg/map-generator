@@ -374,7 +374,10 @@ mod tests {
             let json = serde_json::to_string(&class).unwrap();
             assert_eq!(json, format!("\"{}\"", class.key()));
             assert_eq!(PLANET_CLASSES[i], class.key());
-            let giant = matches!(class, GasGiant | IceGiant | HotJupiter | HotNeptune | MiniNeptune);
+            let giant = matches!(
+                class,
+                GasGiant | IceGiant | HotJupiter | HotNeptune | MiniNeptune
+            );
             assert_eq!(class.is_giant(), giant, "{class:?}");
             assert_eq!(
                 class.sculpts_belts(),
