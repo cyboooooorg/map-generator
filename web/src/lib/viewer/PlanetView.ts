@@ -857,7 +857,9 @@ export class PlanetView {
     readonly quality: QualityProfile = PROFILES.high,
   ) {
     // The stencil lets detail patches hide the base surface (see TileLayer).
-    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true });
+    // Opaque: the halo and the overlays write alpha below 1, which an alpha
+    // canvas would blend with the page behind it (the theme's colours).
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, stencil: true, alpha: false });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
 
@@ -2832,6 +2834,17 @@ export class PlanetView {
    * The rotation dial round the body shown (see lib/rotationDial), on the
    * globe; null hides it.
    */
+  /**
+   * The theme's colours for the HUD drawn in the scene: the rotation dial's
+   * ring and pointer, and the host's compass (see RotationDial.setColours).
+   */
+  setOverlayColours(colours: { orbit: string; line: string }): void {
+    const dial = { ring: colours.orbit, pointer: colours.line };
+    this.dial.setColours(dial);
+    this.hostDial.setColours(dial);
+    this.requestRender();
+  }
+
   setRotationDial(state: DialState | null): void {
     // Seen edge-on, the ring, the markers and the guides fall on one line:
     // when the dial comes on, a camera within 10° of the equator rises to

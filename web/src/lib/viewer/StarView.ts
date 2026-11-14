@@ -368,7 +368,8 @@ export class StarView {
     private readonly canvas: HTMLCanvasElement,
     readonly quality: QualityProfile = PROFILES.high,
   ) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias });
+    // Opaque, so that translucent pixels do not show the page behind (see PlanetView).
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality.antialias, alpha: false });
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
     this.controls = new OrbitControls(this.camera, canvas);
