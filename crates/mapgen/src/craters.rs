@@ -180,6 +180,10 @@ const DIFFUSION_SHARE: f64 = 0.0715;
 const WORN_OUT: f64 = 0.03;
 /// Share of the previous relief kept inside a new crater.
 const INHERITANCE: f32 = 0.15;
+/// Between these radii (in crater radii) the ground a crater's profile
+/// stands on passes from the site's mean level, under its floor, to the
+/// ground at the pixel, under its rim. Calibration, no source.
+const RIM_GROUND: (f32, f32) = (0.5, 1.0);
 /// Irregularity of the rim outline, as a share of the radius.
 const RIM_JITTER: f64 = 0.06;
 /// Irregularity of the ejecta blanket (lobes), as a share of its thickness.
@@ -1721,7 +1725,13 @@ impl Profile {
             if self.ring > 0.0 {
                 cavity += self.ring * (-((x - 0.5) / 0.07).powi(2)).exp();
             }
-            level + cavity as f32 + INHERITANCE * (old - level)
+            // The floor lies flat at the site's level, but the wall and the
+            // rim stand on the ground they are dug in: on a slope, a rim
+            // measured from the level alone sinks under the uphill ground
+            // and the crater has none there (large craters, whose rim is
+            // low against their radius, most often).
+            let ground = smoothstep(RIM_GROUND.0, RIM_GROUND.1, x as f32);
+            level + cavity as f32 + (old - level) * (ground + INHERITANCE * (1.0 - ground))
         } else {
             0.0
         };
@@ -2610,5 +2620,41 @@ mod tests {
         assert!(!CraterField::new(&p, 100.0).sea);
         p.look = Look::load("frozen");
         assert!(CraterField::new(&p, 100.0).sea);
+    }
+
+    #[test]
+    fn a_large_crater_on_a_slope_keeps_its_rim_all_round() {
+        // A 150 km crater (10 transitions on the Moon) dug on ground
+        // rising 2 degrees: over its radius the ground climbs higher than
+        // its rim (about 1.4 km), so a rim measured from the site's mean
+        // level sank below the ground uphill and the crater had no rim
+        // there. The rim stands above the ground it is dug in all round.
+        let crater = Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km: 150.0,
+            age_ga: 1.0,
+            shape: 3,
+        };
+        let p = Profile::new(&crater, MOON_TRANSITION_KM);
+        let slope = (2.0f64).to_radians().tan();
+        let radius_km = 0.5 * crater.diameter_km;
+        for k in 0..24 {
+            let phi = 2.0 * PI * f64::from(k) / 24.0;
+            let direction = (phi.cos(), phi.sin());
+            let ground =
+                |r: f64| (slope * r * radius_km * direction.0 / f64::from(ELEVATION_KM)) as f32;
+            let at = |r: f64| p.blend(r, direction, ground(r), 0.0, 1.0);
+            let standing = (90..=110)
+                .map(|i| {
+                    let r = f64::from(i) / 100.0;
+                    f64::from(at(r) - ground(r))
+                })
+                .fold(f64::MIN, f64::max);
+            assert!(
+                standing >= 0.5 * p.rim,
+                "azimuth {k}: the rim stands {standing} above the ground, of {}",
+                p.rim
+            );
+        }
     }
 }

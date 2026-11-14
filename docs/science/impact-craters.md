@@ -311,7 +311,12 @@ depends only on the planet and the seed:
    pixels across, full from 12. The floor keeps its depth.
 8. **Superposition.** Craters are drawn oldest first. Inside a crater the
    old relief is replaced (15 % of it kept); outside, ejecta thinning as
-   $(r/R)^{-3}$ out to 3 radii bury it.
+   $(r/R)^{-3}$ out to 3 radii bury it. The floor lies flat at the mean
+   level of the site, but the wall and the rim stand on the ground they
+   are dug in: from half a radius out to the rim, the profile passes from
+   that level to the pixel's own ground. Without it, a large crater on a
+   slope (its rim is low against its radius) lost its rim uphill, where the
+   ground climbs higher than the rim stands.
 9. **Wear.** Each crater keeps a share of its relief: the diffusion of small
    impacts since it formed, and on worlds that had water, an exponential
    wear for the time it spent in the wet era (`[geology] wet_until`).
