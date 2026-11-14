@@ -574,7 +574,8 @@ systems/<system-id>/
     envelope is not derived yet (a later part of #423). About 0.3 % of
     drawn planets (5 of 1 577 over 500 systems).
     A giant class keeps the giant world of its look at the model's
-    mass (a mini-Neptune under 5 M⊕ at 5 M⊕). A request asks for
+    mass and radius (a mini-Neptune's too, however light; its moons
+    drawn for that mass). A request asks for
     planets by archetype: an archetype places the planet by its own
     insolation and mass, and the model types it. The planet a request
     around one asks for has its model too (`model`, derived from the

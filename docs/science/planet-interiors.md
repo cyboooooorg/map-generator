@@ -344,8 +344,8 @@ archetypes):
   surface under the envelope.
 - A giant, and a mini-Neptune rendered as one, takes the giant radius for
   its model's composition (iron, water and gas shares) and light: the
-  interior's radius, at the model's mass. Its map's circumference takes
-  no less than 5 Earth masses (issue #446). A giant world without a model
+  interior's radius, at the model's mass, which its map and its moons
+  take too, however light (issue #446). A giant world without a model
   takes the radius of a giant whose composition is not known.
 - The gravity and the tectonic regime are the model's, and the radius is
   the interior's. The world is resolved at that gravity, so the star's
