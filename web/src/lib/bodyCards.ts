@@ -5,10 +5,18 @@ import type { Body } from './api/types/Body';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { dustFedBy } from './ringMoons';
 
-export type CardId = 'header' | 'orbit' | 'interior' | 'atmosphere' | 'surface' | 'legend' | 'moons' | 'map';
+export const CARD_IDS = ['header', 'orbit', 'interior', 'atmosphere', 'surface', 'legend', 'moons', 'map'] as const;
+export type CardId = (typeof CARD_IDS)[number];
 
 /** The dock id of a card of the info panel. */
 export const cardDockId = (id: CardId): string => `info.${id}`;
+
+/**
+ * Every dock id the info panel and its cards can ever have, offered or not:
+ * the dock keeps a remembered layout for them while the data they wait for
+ * (the system, the maps) loads.
+ */
+export const infoDockIds = (): string[] => ['info', ...CARD_IDS.map(cardDockId)];
 
 /**
  * The cards of `body`, in their order. `meta` is the body's own metadata

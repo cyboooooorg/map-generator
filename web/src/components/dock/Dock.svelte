@@ -44,15 +44,20 @@
     panels: readonly DockPanel[];
     /** The panel open when nothing is remembered. */
     defaultActive?: string | null;
+    /**
+     * Ids that may be offered later (a panel or card that waits for data):
+     * the remembered layout keeps them, and they show once offered.
+     */
+    knownIds?: readonly string[];
   }
 
-  let { kind, panels, defaultActive = null }: Props = $props();
+  let { kind, panels, defaultActive = null, knownIds = [] }: Props = $props();
 
   const ids = $derived(panels.map((p) => p.id));
   const allCards = $derived(panels.flatMap((p) => p.cards ?? []));
   /** Panel and card ids together: both can float. */
   const floatIds = $derived([...ids, ...allCards.map((c) => c.id)]);
-  let layout = $state(untrack(() => loadLayout(kind, floatIds, defaultActive ?? ids[0] ?? null)));
+  let layout = $state(untrack(() => loadLayout(kind, [...floatIds, ...knownIds], defaultActive ?? ids[0] ?? null)));
   $effect(() => saveLayout(kind, $state.snapshot(layout)));
 
   let viewWidth = $state(0);
@@ -158,7 +163,7 @@
       <div class="body" class:wide={docked.wide} role="tabpanel" aria-label={docked.title}>
         <header>
           <h3>{docked.title}</h3>
-          {#if !narrow}
+          {#if !narrow && !docked.cards}
             <button type="button" class="icon-button" title={t.dock.detach} aria-label={t.dock.detach} onclick={() => detach(docked.id)}
               ><Icon name="detach" size={16} /></button
             >
@@ -168,7 +173,8 @@
           >
         </header>
         {#if docked.cards}
-          <div class="content cards">
+          <div class="content cards-box">
+            <div class="cards">
             {#each docked.cards.filter((c) => !floating.includes(c.id)) as card (card.id)}
               <section class="card" class:full={card.full} aria-label={card.title}>
                 <header>
@@ -182,6 +188,7 @@
                 <div class="card-body">{@render card.content()}</div>
               </section>
             {/each}
+            </div>
           </div>
         {:else}
           <div class="content">{@render docked.content?.()}</div>
@@ -299,7 +306,7 @@
     max-height: 100%;
   }
   .body.wide {
-    width: clamp(260px, 50vw, 680px);
+    width: clamp(260px, 50cqw, 680px);
   }
   .narrow .body {
     width: min(380px, calc(100vw - 96px));
@@ -338,14 +345,20 @@
     background: transparent;
     border-color: transparent;
   }
-  .content.cards {
+  .content.cards-box {
     container-type: inline-size;
+    display: block;
+  }
+  .cards {
+    display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 8px;
+    /* A card is as tall as its content, not its row. */
+    align-items: start;
   }
-  /* Two columns from 560 px of body. */
+  /* Two columns from 560 px of the panel's content. */
   @container (max-width: 559px) {
-    .content.cards {
+    .cards {
       grid-template-columns: 1fr;
     }
   }

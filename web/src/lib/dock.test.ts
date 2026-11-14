@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { infoDockIds } from './bodyCards';
 import { clampToView, INFO_PANEL_BOTTOM, INFO_PANEL_TOP, INFO_PANEL_WIDTH, infoPanelAt, loadLayout } from './dock';
 
 const storage = (value: unknown) => {
@@ -29,6 +30,13 @@ describe('dock layout', () => {
   it('keeps a floating card id offered by a panel', () => {
     storage({ active: 'info', folded: false, floating: { 'info.orbit': { x: 10, y: 20 } } });
     expect(loadLayout('star', ['info', 'info.orbit'], 'info').floating).toEqual({ 'info.orbit': { x: 10, y: 20 } });
+  });
+
+  it('keeps the info panel and its floating cards while they are not offered yet', () => {
+    storage({ active: 'info', folded: false, floating: { 'info.legend': { x: 10, y: 20 } } });
+    const layout = loadLayout('star', ['map', ...infoDockIds()], 'map');
+    expect(layout.active).toBe('info');
+    expect(layout.floating).toEqual({ 'info.legend': { x: 10, y: 20 } });
   });
 
   it('drops a floating card no longer offered', () => {

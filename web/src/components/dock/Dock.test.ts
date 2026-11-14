@@ -1,6 +1,7 @@
 import { createRawSnippet } from 'svelte';
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import { t } from '../../lib/i18n/index.svelte';
 import Dock, { type DockCard, type DockPanel } from './Dock.svelte';
 
 const snippet = (text: string) => createRawSnippet(() => ({ render: () => `<p>${text}</p>` }));
@@ -33,6 +34,12 @@ describe('Dock cards', () => {
     const section = (id: string) => out.split('<section').find((s) => s.includes(`Title ${id}`)) ?? '';
     expect(section('info.b')).toMatch(/class="card[^"]*full/);
     expect(section('info.a')).not.toMatch(/class="card[^"]*full/);
+  });
+
+  it('offers no panel-level detach on a panel of cards, but one on a plain panel', () => {
+    const header = (out: string) => out.split('<header')[1]!.split('</header>')[0]!;
+    expect(header(html(panels))).not.toContain(`aria-label="${t.dock.detach}"`);
+    expect(header(html([{ id: 'p', title: 'Plain', icon: 'info', content: snippet('x') }]))).toContain(`aria-label="${t.dock.detach}"`);
   });
 
   it('still renders a plain panel from its content', () => {

@@ -6,6 +6,7 @@
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import Dock, { type DockCard, type DockPanel } from './dock/Dock.svelte';
   import LegendCard, { type Ramp } from './body/LegendCard.svelte';
+  import { infoDockIds } from '../lib/bodyCards';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import { skyToRestore, type SkyChoice } from '../lib/viewer/skyBackdrop';
   import { skyToggles, type SkySetting } from '../lib/viewer/skyToggles';
@@ -2665,7 +2666,7 @@
     <div class="toggles">
       <ToggleBar label={t.viewer.display} groups={toggleGroups} bind:expanded={barExpanded} />
     </div>
-    <Dock kind="planet" panels={dockPanels} defaultActive="map" />
+    <Dock kind="planet" panels={dockPanels} defaultActive="map" knownIds={infoDockIds()} />
     <PlaybackBar
       bind:playing={() => clockPlaying, (v) => setClockPlaying(v)}
       speed={sysSky && orbitPeriod
