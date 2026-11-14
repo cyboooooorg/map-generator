@@ -267,8 +267,10 @@ depends only on the planet and the seed:
 1. **How many.** `crater_density` is the lunar chronology above. The density
    is multiplied by the body's flux against the Moon's, and its craters are
    the Moon's at `D / crater_scale` (`impacts::rates`, see "The flux from
-   the orbit" below). A moon takes its system's impact factor (or its
-   giants', 0.7 to 1.8) and the Moon's crater size.
+   the orbit" below). A moon takes the Moon's crater size, and its
+   planet's impact factor (or its giants', 0.7 to 1.8); a giant's moon
+   takes the comets its giant focuses on it instead ("A giant's moons"
+   below).
 2. **Where and how large.** Diameters are split into octaves
    `[2^k, 2^(k+1)]` km, each with its own grid on a cube projected on the
    sphere. Each cell holds a Poisson number of craters, set by the octave's
@@ -391,9 +393,9 @@ after 3 Ga.
 gives a world with a model its flux per unit area and its crater size
 against the Moon's, the reference of the chronology (a body at 1 AU from a
 Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s). A moon, a round
-one with its model included, keeps the Moon's craters at its system's
-rate ($I$ alone): its impactors are focused by its planet, which this
-rate does not know.
+one with its model included, keeps the Moon's craters at its planet's
+rate ($I$ alone), and a giant's moon at the rate of the comets its giant
+focuses on it (below).
 
 $$\frac{\phi}{\phi_m} = I \cdot B_{20}\!\left(B_6\!\left(\frac{n(a)}{n(1\,\mathrm{AU})}\right) \cdot
 \frac{v_\infty}{v_{\infty,m}} \cdot
@@ -451,6 +453,30 @@ to $C$, never above it.
   $1.5 + 0.66 \tanh((v/v_m - 1.5)/0.66)$: the π-scaling has not been
   tested much beyond the Solar System's impact speeds. The knee and the use
   of Mercury's speed as the ceiling are calibrations.
+
+**A giant's moons.** The impactors of the outer giants' moons are mostly
+ecliptic comets, focused by the giant's gravity, at a rate per unit area
+that falls outward through its moons (Zahnle et al. 2003). A moon of a
+gas or ice giant takes (`impacts::giant_moon_flux`) the heliocentric flux
+at its giant's orbit by the rule above, with the Solar System's impactors
+($I$ = 1, whatever belts the seed drew) and no focusing of its own, times
+the giant's focusing at the moon's distance $a$:
+
+$$\frac{\phi}{\phi_m} = B_{20}\!\left(B_6\!\left(\frac{n(a_p)}{n(1\,\mathrm{AU})}\right)
+\frac{v_\infty}{v_{\infty,m}} \cdot \frac{1}{1 + v_{esc,m}^2/v_{\infty,m}^2}\right)
+\left(1 + \frac{2 G M_p / a}{v_\infty^2}\right)$$
+
+with $a_p$ and $M_p$ the giant's orbit and mass, and $v_\infty$ the
+encounter speed at $a_p$. Around Jupiter it gives Callisto 1.5 times the
+Moon's flux, Ganymede 2.3, Europa 3.3 and Io 5.1: 1.5, 2.3 and 3.4 times
+Callisto's where Zahnle et al.'s rates per unit area give 1.6, 2.6 and 4.0
+(their impact probabilities, as tabulated by Nesvorný et al. 2023, over
+each moon's area). From seed to seed a Callisto's flux moves only with
+its giant's orbit and mass and its own distance (1.4 to 1.6 over seeds 1
+to 5), where the system's drawn impact factor spanned 0.04 to 5.6. Its
+crater density still follows its surface age through the lunar
+chronology: a Callisto of 3.4 Ga keeps about a thirtieth of the craters of
+20 km of one of 4.2 Ga, saturated.
 
 Among the Solar System's impactors ($I$ = 1), the archetypes get:
 
@@ -523,7 +549,17 @@ more are flooded flat at a date of that window and darkened.
   they find 43: the rule's crater sizes stay within 20 % of the targets
   above, but its speeds are not theirs. Mercury, Venus and Earth come out
   10 to 16 % below Le Feuvre & Wieczorek's fluxes. Moons keep the Moon's
-  craters at their system's rate until they get a model (part 4).
+  craters at their planet's rate, a giant's moons at its comets'.
+- **A giant's comets are the asteroids' rule moved out.** Its moons'
+  heliocentric flux is the asteroid rule's at the giant's orbit (its
+  crossers there are the near-Earth population's, its speed the orbital
+  speed's scaling), not a comet population: no source ties the two, and
+  the absolute rate is only as good as that guess (Zahnle et al. give
+  Jupiter's comets to a factor of two each way). The focusing
+  $1 + v_{esc}^2/v_\infty^2$ leaves out the moon's own orbital speed and
+  its leading side, and puts Io at 3.4 times Callisto against Zahnle's 4.
+  A small moon and a ring of a giant would take the same rule; only the
+  round moons are measured.
 - **The deep past of old surfaces lacks its oldest craters.** At most twice
   the kept count is drawn per octave. Where an octave formed more than that
   (craters of 1 km on surfaces older than about 4.2 Ga, sub-km ones at
@@ -692,7 +728,9 @@ more are flooded flat at a date of that window and darkened.
     rates in the outer Solar System", *Icarus* 163, 263–289,
     [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
     Europa's surface 40 to 90 Ma old; Callisto's and Ganymede's dark
-    terrain about 4 Ga.
+    terrain about 4 Ga; the impactors of the giants' moons ecliptic comets
+    focused by the giant, Jupiter struck by 0.005 (+0.006, −0.003) comets
+    of 1.5 km or more a year (abstract).
 28. Neish, C. D. & Lorenz, R. D. 2012, "Titan's global crater
     population: a new assessment", *Planetary and Space Science* 60,
     26–33,
@@ -706,6 +744,14 @@ more are flooded flat at a date of that window and darkened.
     (abstract, as summarised by a search): 24 possible craters under
     20 km, consistent with an air that destroys most but not all small
     impactors (Ivanov, Basilevsky & Neukum 1997).
+31. Nesvorný, D., Dones, L., De Prá, M., Womack, M. & Zahnle, K. J. 2023,
+    "Impact rates in the outer Solar System",
+    [arXiv:2307.15670](https://arxiv.org/abs/2307.15670) (read): Tables 1
+    to 3 give Zahnle et al. (2003)'s impact probabilities of the moons of
+    Jupiter, Saturn and Uranus beside their own (Io 1.4 × 10⁻⁴, Europa
+    6.6 × 10⁻⁵, Ganymede 1.2 × 10⁻⁴, Callisto 6.1 × 10⁻⁵; Mimas
+    1.7 × 10⁻⁶, Titan 5.4 × 10⁻⁵), and the rate per unit area of a moon
+    far inside its planet's sphere of influence as $1/(a\,v_\infty^2)$.
 
 ## See also
 

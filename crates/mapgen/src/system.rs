@@ -1714,11 +1714,23 @@ fn assemble(
         if body.kind == BodyKind::Planet {
             body.trojans = trojans[rank];
         }
-        body.params.impact_factor = Some(crate::belts::impact_factor(
-            &belts,
-            &tracks,
-            tracks[rank].orbit_au,
-        ));
+        // A giant's moons take the comets its gravity focuses on them,
+        // already against the Moon's flux, not the asteroids of its
+        // system's belts (see `impacts::giant_moon_flux`); a smaller
+        // planet's moons strike at its rate.
+        let track = &tracks[rank];
+        let giant_moon = body.kind == BodyKind::Moon && track.class.sculpts_belts();
+        body.params.impact_factor = Some(if giant_moon {
+            crate::impacts::giant_moon_flux(
+                f64::from(info.mass),
+                f64::from(info.luminosity),
+                track.orbit_au,
+                track.mass_earth,
+                body.orbit.semi_major_axis_km,
+            ) as f32
+        } else {
+            crate::belts::impact_factor(&belts, &tracks, track.orbit_au)
+        });
     }
     System {
         format_version: SYSTEM_FORMAT_VERSION,
@@ -4253,14 +4265,19 @@ mod tests {
                 );
                 assert!(body.kind == BodyKind::Planet || body.trojans.is_none());
             }
-            // A moon strikes at its planet's rate.
+            // A moon strikes at its planet's rate, a giant's at the rate
+            // of the comets the giant focuses on it.
             for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
                 let planet = system
                     .bodies
                     .iter()
                     .find(|b| Some(&b.id) == moon.parent.as_ref())
                     .unwrap();
-                assert_eq!(moon.params.impact_factor, planet.params.impact_factor);
+                if planet.params.giant_mass_earth.is_some() {
+                    assert_ne!(moon.params.impact_factor, planet.params.impact_factor);
+                } else {
+                    assert_eq!(moon.params.impact_factor, planet.params.impact_factor);
+                }
             }
         }
         assert!(inner > 10 && trojans > 10, "{inner} {trojans}");
@@ -4619,6 +4636,53 @@ mod tests {
                 titan < 0.1 * callisto,
                 "seed {seed}: Titan {titan}, Callisto {callisto}"
             );
+        }
+    }
+
+    /// Kept craters of 20 km or more per million km², over the sphere.
+    fn n20(p: &WorldParams) -> f64 {
+        let field = crate::craters::CraterField::new(p, 5.0);
+        let kept = field
+            .craters
+            .iter()
+            .filter(|c| c.diameter_km >= 20.0 && field.wear(c) >= crate::craters::WORN_OUT)
+            .count() as f64;
+        let radius = f64::from(p.circumference_km) / (2.0 * PI);
+        kept / (4.0 * PI * radius * radius) * 1e6
+    }
+
+    /// A giant's moons take the comets it focuses
+    /// (`impacts::giant_moon_flux`), not its system's drawn belts: from
+    /// seed to seed a Callisto's craters change with its giant's orbit
+    /// and mass and its own distance only. Zahnle et al. (2003,
+    /// doi:10.1016/S0019-1035(03)00048-4) give the comets' rate at
+    /// Jupiter as 0.005 (+0.006, −0.003) a year, about a factor of two
+    /// each way: at one surface age, the crater density N20 of seeds 1 to
+    /// 10 stays within that factor. A Callisto as old as its system keeps
+    /// a saturated surface, a Europa almost none.
+    #[test]
+    fn a_giants_moons_are_cratered_by_its_comets() {
+        let mut densities = Vec::new();
+        for seed in 1..=10 {
+            let callisto = solar_aged_moon("callisto-like", seed);
+            let mut p = generation_params(&callisto);
+            let flux = crate::impacts::rates(&p).flux;
+            assert!((1.0..3.0).contains(&flux), "seed {seed}: flux {flux}");
+            if p.surface_age_ga >= 3.9 {
+                let n = n20(&p);
+                assert!(n > 100.0, "seed {seed}: Callisto N20 {n}");
+            }
+            p.surface_age_ga = 4.0;
+            densities.push(n20(&p));
+        }
+        let (lo, hi) = densities
+            .iter()
+            .fold((f64::INFINITY, 0f64), |(lo, hi), &n| (lo.min(n), hi.max(n)));
+        assert!(lo > 0.0 && hi / lo < 2.0, "{densities:?}");
+        for seed in 1..=3 {
+            let europa = generation_params(&solar_aged_moon("europa-like", seed));
+            let n = n20(&europa);
+            assert!(n < 1.0, "seed {seed}: Europa N20 {n}");
         }
     }
 
@@ -5308,10 +5372,11 @@ mod lone_tests {
     /// changed), and when round moons went
     /// through the planet model (typed by their class), and when nitrogen
     /// kept methane liquid below its triple point (seed 4's `f` became a
-    /// hydrocarbon world); any other change is a regression of a normal
-    /// system.
+    /// hydrocarbon world), and when a giant's moons took the comets it
+    /// focuses on them (#475: seed 1's `f-*` impact factors); any other
+    /// change is a regression of a normal system.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky:0.0006:0.0822:false d-5:rocky:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:ice-world:0.0019:0.0350:false f-6:ice-world:0.0033:0.0350:false f-7:ice-world:0.0051:0.0350:false f-8:ice-world:0.0080:0.0350:false f-9:ice-world:0.0129:0.0350:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
+        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky:0.0006:0.0822:false d-5:rocky:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0033:1.0306:false f-7:ice-world:0.0051:0.7879:false f-8:ice-world:0.0080:0.6381:false f-9:ice-world:0.0129:0.5346:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
         "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:rocky:0.0005:0.0365:false d-3:rocky:0.0007:0.0365:false d-4:rocky:0.0012:0.0365:false d-5:rocky:0.0018:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
         "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:volcanic-world:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:0.9970:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
         "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:0.9925:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:hydrocarbon-world:13.6131:0.0350:true",

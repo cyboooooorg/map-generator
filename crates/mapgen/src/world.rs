@@ -88,9 +88,10 @@ pub struct WorldParams {
     #[cfg_attr(feature = "ts", ts(optional))]
     pub given_rings: Option<crate::giant_world::GivenRings>,
     /// The crater rate relative to the Solar System's, as its planetary
-    /// system sets it from its giants and belts (see `crate::belts`);
-    /// absent for every other world, whose rate comes from the giants its
-    /// seed draws.
+    /// system sets it from its giants and belts (see `crate::belts`); for
+    /// a moon of a giant, its flux against the Moon's from the comets the
+    /// giant focuses on it (`crate::impacts::giant_moon_flux`); absent for
+    /// every other world, whose rate comes from the giants its seed draws.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub impact_factor: Option<f32>,

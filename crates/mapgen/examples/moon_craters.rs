@@ -16,6 +16,8 @@
 //! Part 4 of the planet model (#423) measured the icy moons' craters with
 //! it before and after making the surface age of a stagnant ice lid follow
 //! its heat flux and the air's screening follow its column.
+//! Issue #475 measured with it the flux (`flux`, against the Moon's) a
+//! giant's moons take from the comets their giant focuses on them.
 use mapgen::craters::{CraterField, WORN_OUT};
 use mapgen::system::{SystemRequest, WholeSystemRequest, draw, generation_params};
 use rand::SeedableRng;

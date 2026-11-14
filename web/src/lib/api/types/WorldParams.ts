@@ -124,9 +124,10 @@ host: HostMode,
 given_rings?: GivenRings, 
 /**
  * The crater rate relative to the Solar System's, as its planetary
- * system sets it from its giants and belts (see `crate::belts`);
- * absent for every other world, whose rate comes from the giants its
- * seed draws.
+ * system sets it from its giants and belts (see `crate::belts`); for
+ * a moon of a giant, its flux against the Moon's from the comets the
+ * giant focuses on it (`crate::impacts::giant_moon_flux`); absent for
+ * every other world, whose rate comes from the giants its seed draws.
  */
 impact_factor?: number, 
 /**

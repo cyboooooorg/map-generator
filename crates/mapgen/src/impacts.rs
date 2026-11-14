@@ -5,10 +5,10 @@
 //! orbit: the impactors of its system (`belts::impact_factor`, the giants
 //! and belts), the asteroids' supply where it orbits, their speed there and
 //! the world's own gravity. A moon (a round one with its model too) and a
-//! world without a model keep the Moon's craters at their system's rate:
-//! a moon's impactors are focused by its planet, which the swarm rate
-//! below does not know. See
-//! `docs/science/impact-craters.md`.
+//! world without a model keep the Moon's craters at their system's rate,
+//! `WorldParams::impact_factor`: their planet's, or for a giant's moons
+//! the comets their giant focuses on them, which the system draw sets from
+//! [`giant_moon_flux`]. See `docs/science/impact-craters.md`.
 //!
 //! Every ratio is against the Moon, which is the reference of the crater
 //! chronology (`craters::crater_density`): a body at 1 AU from a
@@ -140,6 +140,54 @@ fn impactors(p: &WorldParams) -> f64 {
     }
 }
 
+/// Gravitational constant, m³ kg⁻¹ s⁻².
+const G: f64 = 6.674e-11;
+/// Earth's mass, kg.
+const EARTH_KG: f64 = 5.972e24;
+
+/// Impact flux per unit area on a moon of a giant planet against the
+/// Moon's, from the system's star (`star_mass` Suns, `luminosity` Suns),
+/// the giant's orbit (`giant_orbit_au`) and mass (`giant_mass_earth`),
+/// and the moon's distance from it (`moon_a_km`).
+///
+/// The impactors of a giant's moons are mostly ecliptic comets focused by
+/// the giant (Zahnle, Schenk, Levison & Dones 2003, "Cratering rates in
+/// the outer Solar System", Icarus 163, 263–289,
+/// doi:10.1016/S0019-1035(03)00048-4): the flux is the heliocentric one at
+/// the giant's orbit, by the same orbit rule as a planet's ([`rates`]:
+/// the crossers there and their encounter speed `v∞`, with the Solar
+/// System's impactors, not the belts its seed drew), times the giant's
+/// focusing at the moon's distance, `1 + v_esc(a)² / v∞²` with
+/// `v_esc(a) = √(2 G M / a)`. It falls outward through the moons as `1/a`
+/// where the focusing dominates, as Zahnle's rates per unit area do (Io
+/// 4.0, Europa 2.6, Ganymede 1.6 times Callisto's in their table; 3.4,
+/// 2.3, 1.5 here). The moon's own focusing (a few per cent at most) is
+/// left out.
+pub fn giant_moon_flux(
+    star_mass: f64,
+    luminosity: f64,
+    giant_orbit_au: f64,
+    giant_mass_earth: f64,
+    moon_a_km: f64,
+) -> f64 {
+    let star_mass = star_mass.max(1e-3);
+    let orbit_au = giant_orbit_au.max(1e-3);
+    let v_inf = encounter_km_s(star_mass, orbit_au);
+    let moon_inf = encounter_km_s(1.0, 1.0);
+    let moon_esc = escape_km_s(crate::craters::MOON_GRAVITY, MOON_RADIUS_KM);
+    let supply = bounded(
+        crossers(orbit_au / (BELT_AU * luminosity.max(1e-6).sqrt())) / crossers(1.0 / BELT_AU),
+        MOST_CROSSERS,
+    );
+    let heliocentric = bounded(
+        supply * (v_inf / moon_inf) / (1.0 + (moon_esc / moon_inf).powi(2)),
+        MOST_IMPACTS,
+    );
+    let v_esc_km_s =
+        (2.0 * G * giant_mass_earth * EARTH_KG / (moon_a_km.max(1.0) * 1e3)).sqrt() / 1e3;
+    heliocentric * (1.0 + (v_esc_km_s / v_inf).powi(2))
+}
+
 /// Impact flux and crater size of the world `p` against the Moon's.
 ///
 /// With a model, the flux per unit area is the impact rate of a body in a
@@ -151,7 +199,9 @@ fn impactors(p: &WorldParams) -> f64 {
 /// regime), with the impact speed `v = √(v∞² + v_esc²)` against the
 /// Moon's cited [`MOON_IMPACT_KM_S`], bounded by [`FASTEST_IMPACT`].
 /// A moon, or a world without a model: the system's impactors and the
-/// Moon's craters (its planet's focusing is not modelled).
+/// Moon's craters; for a giant's moon, the system's impactors are already
+/// its flux against the Moon's, the comets its giant focuses on it
+/// ([`giant_moon_flux`]).
 pub fn rates(p: &WorldParams) -> ImpactRates {
     let impactors = impactors(p);
     if p.model.is_none() || crate::moons::is_moon_world(p) {
@@ -349,6 +399,51 @@ mod tests {
         assert!(
             (scale / expected - 1.0).abs() < 1e-3,
             "{scale} against {expected}"
+        );
+    }
+
+    /// Impacts per unit area on the Galilean moons, Zahnle et al. (2003)
+    /// as tabulated by Nesvorný et al. (2023, arXiv:2307.15670, Table 1):
+    /// impact probability over the moon's radius squared (NASA fact
+    /// sheet radii), each against Callisto's.
+    #[test]
+    fn a_giants_moons_are_struck_as_zahnles_galilean_moons() {
+        let per_area = |p_imp: f64, radius_km: f64| p_imp / (radius_km * radius_km);
+        let callisto = per_area(6.1e-5, 2410.3);
+        let zahnle = [
+            ("io", per_area(1.4e-4, 1821.6) / callisto, 421_700.0),
+            ("europa", per_area(6.6e-5, 1560.8) / callisto, 671_034.0),
+            ("ganymede", per_area(1.2e-4, 2634.1) / callisto, 1_070_412.0),
+            ("callisto", 1.0, 1_882_709.0),
+        ];
+        // Jupiter: 317.8 Earth masses at 5.204 AU of the Sun.
+        let flux = |a_km: f64| giant_moon_flux(1.0, 1.0, 5.204, 317.8, a_km);
+        let callisto_flux = flux(1_882_709.0);
+        let mut last = f64::INFINITY;
+        for (name, ratio, a_km) in zahnle {
+            let f = flux(a_km);
+            assert!(f < last, "{name}: {f} not below the moon inside it");
+            last = f;
+            let ours = f / callisto_flux;
+            assert!(
+                ours / ratio < 2.0 && ratio / ours < 2.0,
+                "{name}: {ours} against Zahnle's {ratio}"
+            );
+        }
+        // Mimas over Titan, Saturn's moons: 5.3 in Zahnle's table.
+        let saturn = |a_km: f64| giant_moon_flux(1.0, 1.0, 9.58, 95.16, a_km);
+        let ratio = (1.7e-6 / (198.2f64 * 198.2)) / (5.4e-5 / (2574.7f64 * 2574.7));
+        let ours = saturn(185_539.0) / saturn(1_221_870.0);
+        assert!(
+            ours / ratio < 2.0 && ratio / ours < 2.0,
+            "{ours} against {ratio}"
+        );
+        // A giant's moons are struck more than the Moon is at 1 AU (the
+        // focusing beats the slow, sparse comets of 5 AU), and no seed's
+        // belts change it: the arguments hold no drawn factor.
+        assert!(
+            callisto_flux > 1.0 && callisto_flux < 3.0,
+            "{callisto_flux}"
         );
     }
 
