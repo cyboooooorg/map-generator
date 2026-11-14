@@ -246,7 +246,7 @@ export function nebulaDustAt(look: SkyLook, dir: Vec3): number {
     if (c < o.cosRadius) continue;
     if (o.nebula.kind === 'dark') {
       const t = Math.acos(Math.min(1, c)) / o.nebula.radius;
-      clear *= 1 - DARK_OPACITY * (1 - smoothstep(0.45, 0.95, t));
+      clear *= 1 - DARK_OPACITY * (1 - smoothstep(0.4, 0.9, t));
     } else {
       const x = dot(dir, o.right) / c / o.tanRadius;
       const y = dot(dir, o.up) / c / o.tanRadius;
