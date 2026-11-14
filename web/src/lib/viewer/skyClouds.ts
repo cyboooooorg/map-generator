@@ -191,16 +191,19 @@ function coreLane(look: SkyLook, dir: Vec3): number {
   if (look.coreBrightness <= 0) return 0;
   const frame = bandFrame(look);
   const x = dot(dir, frame.along);
-  if (x <= 0) return 0;
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, frame.north))));
   const lon = Math.atan2(dot(dir, frame.across), x);
   const sigmaLat = 0.1 * look.coreSize;
-  if (Math.abs(lat) > 4 * sigmaLat) return 0;
+  // Windowed to zero between 3 and 4 sigma: no step where the lane ends.
+  const window = 1 - smoothstep(3 * sigmaLat, 4 * sigmaLat, Math.abs(lat));
+  if (window <= 0) return 0;
   const n = noiseOf(look.seed);
   const o = n.offsets[2]!;
   const ragged = 0.55 + 0.9 * fbm(n, dir[0] * 9 + o[0], dir[1] * 9 + o[1], dir[2] * 9 + o[2], 2);
   const along = Math.exp(-(lon * lon) / (2 * (0.8 * look.coreSize) ** 2));
-  return Math.min(0.8, 0.7 * ragged * along * Math.exp(-(lat * lat) / (2 * sigmaLat * sigmaLat)));
+  // A soft ceiling at 0.8, not a clamp: no kink at the lane's darkest.
+  const depth = 0.7 * ragged * along * Math.exp(-(lat * lat) / (2 * sigmaLat * sigmaLat)) * window;
+  return 0.8 * Math.tanh(depth / 0.8);
 }
 
 /**
@@ -213,7 +216,8 @@ export function dustAt(look: SkyLook, dir: Vec3): number {
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
   const sigma = look.bandWidth * 0.8;
   const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));
-  if (inBand < 0.01) return extra;
+  // Negligible beyond here (under 1e-4 of the lanes): a cheap exit that leaves no visible step.
+  if (inBand < 1e-4) return extra;
   const n = noiseOf(look.seed);
   const o = n.offsets[3]!;
   // Lanes: thresholded noise, stronger toward the centre.
@@ -229,7 +233,16 @@ function encode(linear: number): number {
   return Math.round(255 * Math.min(1, Math.max(0, v)));
 }
 
-function bake(look: SkyLook, exposure: SkyExposure, size: number): SkyFaces {
+/**
+ * The linear colour of the clouds toward a unit direction, after the soft
+ * ceiling (what `bake` encodes), as a function of the direction alone: no
+ * face, no pixel grid, so it can be sampled along any curve.
+ *
+ * The glow is windowed to zero by a smoothstep between 3 and 4 sigma (the
+ * Gaussian is then under 1% and 0.03% of its peak): a hard cutoff there drew
+ * a straight edge across the views (a step of ~2% of the peak).
+ */
+export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) => Vec3 {
   const ex = EXPOSURES[exposure];
   const frame = bandFrame(look);
   const coreOn = look.coreBrightness > 0;
@@ -237,64 +250,69 @@ function bake(look: SkyLook, exposure: SkyExposure, size: number): SkyFaces {
   const sigmaLat = CORE_AXIS_RATIO * sigmaLon;
   const n = noiseOf(look.seed);
   const sigma = look.bandWidth * CLOUD_SPREAD;
-  // The glow is under 2% of its peak beyond (the core's, when there is one, reaches further).
-  const cutoff = Math.max(2.8 * sigma, coreOn ? 3.2 * sigmaLat : 0);
+  const cutoff = Math.max(4 * sigma, coreOn ? 4.5 * sigmaLat : 0);
   const [wHa, wO3, wRef] = n.mix;
   const [oa, ob, oc] = n.offsets as [Vec3, Vec3, Vec3, Vec3];
   const level = Math.min(CLOUD_LEVEL_MAX, Math.max(CLOUD_LEVEL_MIN, look.brightness));
+  return (dir) => {
+    const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
+    const window = 1 - smoothstep(0.75 * cutoff, cutoff, Math.abs(lat));
+    if (window <= 0) return [0, 0, 0];
+    const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));
+    const toCentre = Math.max(0, dot(dir, look.centre));
+    const bulge = look.bulge * toCentre ** 4;
+    // Domain warping: the patches' coordinates are bent by a slow noise.
+    const wx = fbm(n, dir[0] * 1.6 + oa[0], dir[1] * 1.6 + oa[1], dir[2] * 1.6 + oa[2], 2) - 0.5;
+    const wy = fbm(n, dir[0] * 1.6 + ob[0], dir[1] * 1.6 + ob[1], dir[2] * 1.6 + ob[2], 2) - 0.5;
+    const wz = fbm(n, dir[0] * 1.6 + oc[0], dir[1] * 1.6 + oc[1], dir[2] * 1.6 + oc[2], 2) - 0.5;
+    const px = dir[0] * 3 + 1.5 * wx;
+    const py = dir[1] * 3 + 1.5 * wy;
+    const pz = dir[2] * 3 + 1.5 * wz;
+    const glowNoise = 0.55 + 0.9 * fbm(n, px + oa[0], py + oa[1], pz + oa[2], 3);
+    const emission = smoothstep(0.5, 0.75, fbm(n, px * 1.7 + ob[0], py * 1.7 + ob[1], pz * 1.7 + ob[2], 3));
+    const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 3));
+    const o3 = smoothstep(0.45, 0.7, fbm(n, px * 1.3 + oc[1], py * 1.3 + oc[2], pz * 1.3 + oc[0], 2));
+    const strength = level * inBand * (1 + 1.5 * bulge);
+    const glow = GLOW_LEVEL * ex.glow * strength * glowNoise;
+    const patch = PATCH_LEVEL * ex.patch * strength;
+    const ha = patch * wHa * emission * (1 - o3);
+    const oiii = patch * wO3 * emission * o3;
+    const ref = patch * wRef * reflection * 0.7;
+    // The core: an elongated warm glow, mottled, with a brighter nucleus. Its
+    // longitude is far past its width on the far side: no half-sphere gate.
+    let coreGlow = 0;
+    if (coreOn) {
+      const lon = Math.atan2(dot(dir, frame.across), dot(dir, frame.along));
+      const q = (lon / sigmaLon) ** 2 + (lat / sigmaLat) ** 2;
+      const mottle = 0.8 + 0.4 * fbm(n, dir[0] * 7 + oc[0], dir[1] * 7 + oc[1], dir[2] * 7 + oc[2], 3);
+      coreGlow = CORE_LEVEL * ex.core * look.coreBrightness * (Math.exp(-q / 2) + 0.6 * Math.exp(-q * 2)) * mottle;
+    }
+    const clear = (1 - dustAt(look, dir)) * window;
+    let r = (glow * 1.0 + ha * 1.0 + oiii * 0.1 + ref * 0.35 + coreGlow * 1.0) * clear;
+    let g = (glow * 0.92 + ha * 0.15 + oiii * 0.8 + ref * 0.5 + coreGlow * 0.82) * clear;
+    let b = (glow * 0.8 + ha * 0.1 + oiii * 0.7 + ref * 1.0 + coreGlow * 0.55) * clear;
+    // Washed-out colours for the eye: mix toward the luminance.
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    r = lum + (r - lum) * ex.saturation;
+    g = lum + (g - lum) * ex.saturation;
+    b = lum + (b - lum) * ex.saturation;
+    return [ex.ceiling * Math.tanh(r / ex.ceiling), ex.ceiling * Math.tanh(g / ex.ceiling), ex.ceiling * Math.tanh(b / ex.ceiling)];
+  };
+}
+
+function bake(look: SkyLook, exposure: SkyExposure, size: number): SkyFaces {
+  const sample = cloudSampler(look, exposure);
   const faces: Uint8Array[] = [];
   for (let face = 0; face < 6; face += 1) {
     const pixels = new Uint8Array(size * size * 4);
     for (let row = 0; row < size; row += 1) {
       for (let col = 0; col < size; col += 1) {
         const at = (row * size + col) * 4;
+        const [r, g, b] = sample(faceDirection(face, (2 * (col + 0.5)) / size - 1, (2 * (row + 0.5)) / size - 1));
+        pixels[at] = encode(r);
+        pixels[at + 1] = encode(g);
+        pixels[at + 2] = encode(b);
         pixels[at + 3] = 255;
-        const dir = faceDirection(face, (2 * (col + 0.5)) / size - 1, (2 * (row + 0.5)) / size - 1);
-        const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
-        if (Math.abs(lat) > cutoff) continue;
-        const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));
-        const toCentre = Math.max(0, dot(dir, look.centre));
-        const bulge = look.bulge * toCentre ** 4;
-        // Domain warping: the patches' coordinates are bent by a slow noise.
-        const wx = fbm(n, dir[0] * 1.6 + oa[0], dir[1] * 1.6 + oa[1], dir[2] * 1.6 + oa[2], 2) - 0.5;
-        const wy = fbm(n, dir[0] * 1.6 + ob[0], dir[1] * 1.6 + ob[1], dir[2] * 1.6 + ob[2], 2) - 0.5;
-        const wz = fbm(n, dir[0] * 1.6 + oc[0], dir[1] * 1.6 + oc[1], dir[2] * 1.6 + oc[2], 2) - 0.5;
-        const px = dir[0] * 3 + 1.5 * wx;
-        const py = dir[1] * 3 + 1.5 * wy;
-        const pz = dir[2] * 3 + 1.5 * wz;
-        const glowNoise = 0.55 + 0.9 * fbm(n, px + oa[0], py + oa[1], pz + oa[2], 3);
-        const emission = smoothstep(0.5, 0.75, fbm(n, px * 1.7 + ob[0], py * 1.7 + ob[1], pz * 1.7 + ob[2], 3));
-        const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 3));
-        const o3 = smoothstep(0.45, 0.7, fbm(n, px * 1.3 + oc[1], py * 1.3 + oc[2], pz * 1.3 + oc[0], 2));
-        const strength = level * inBand * (1 + 1.5 * bulge);
-        const glow = GLOW_LEVEL * ex.glow * strength * glowNoise;
-        const patch = PATCH_LEVEL * ex.patch * strength;
-        const ha = patch * wHa * emission * (1 - o3);
-        const oiii = patch * wO3 * emission * o3;
-        const ref = patch * wRef * reflection * 0.7;
-        // The core: an elongated warm glow, mottled, with a brighter nucleus.
-        let coreGlow = 0;
-        if (coreOn) {
-          const along = dot(dir, frame.along);
-          if (along > 0) {
-            const lon = Math.atan2(dot(dir, frame.across), along);
-            const q = (lon / sigmaLon) ** 2 + (lat / sigmaLat) ** 2;
-            const mottle = 0.8 + 0.4 * fbm(n, dir[0] * 7 + oc[0], dir[1] * 7 + oc[1], dir[2] * 7 + oc[2], 3);
-            coreGlow = CORE_LEVEL * ex.core * look.coreBrightness * (Math.exp(-q / 2) + 0.6 * Math.exp(-q * 2)) * mottle;
-          }
-        }
-        const clear = 1 - dustAt(look, dir);
-        let r = (glow * 1.0 + ha * 1.0 + oiii * 0.1 + ref * 0.35 + coreGlow * 1.0) * clear;
-        let g = (glow * 0.92 + ha * 0.15 + oiii * 0.8 + ref * 0.5 + coreGlow * 0.82) * clear;
-        let b = (glow * 0.8 + ha * 0.1 + oiii * 0.7 + ref * 1.0 + coreGlow * 0.55) * clear;
-        // Washed-out colours for the eye: mix toward the luminance.
-        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        r = lum + (r - lum) * ex.saturation;
-        g = lum + (g - lum) * ex.saturation;
-        b = lum + (b - lum) * ex.saturation;
-        pixels[at] = encode(ex.ceiling * Math.tanh(r / ex.ceiling));
-        pixels[at + 1] = encode(ex.ceiling * Math.tanh(g / ex.ceiling));
-        pixels[at + 2] = encode(ex.ceiling * Math.tanh(b / ex.ceiling));
       }
     }
     faces.push(pixels);

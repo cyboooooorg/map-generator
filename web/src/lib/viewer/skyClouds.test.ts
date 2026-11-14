@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { bakeSkyClouds, CLOUD_CEILING, dustAt, faceDirection, type SkyFaces } from './skyClouds';
+import { bakeSkyClouds, CLOUD_CEILING, cloudSampler, dustAt, faceDirection, type SkyExposure, type SkyFaces } from './skyClouds';
 import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 const decode = (byte: number) => {
@@ -229,5 +229,57 @@ describe('the galactic core and the two exposures', () => {
     expect(again.faces).toEqual(photo.faces);
     expect(bakeSkyClouds({ ...sun }, 'eye', SIZE_CORE).faces).toEqual(eye.faces);
     expect(photo.faces).not.toEqual(eye.faces);
+  });
+});
+
+describe('the clouds along a curve', () => {
+  // A straight edge across the views (a step where the glow was cut at 2.8
+  // sigma) must not come back: along great circles that cross the band's
+  // edge and the cube's face edges, the colour and its slope stay continuous.
+  const look: SkyLook = { ...FIXED_SKY, seed: 5, bulge: 0.4, coreSize: 0.3, coreBrightness: 1 };
+  const circles: [Vec3, Vec3][] = [
+    [[1, 0, 0], [0, 1, 0]],
+    [[0, 0, 1], [0.6, 0.8, 0]],
+    [[0.577, 0.577, 0.577], [-0.707, 0.707, 0]],
+    [[0, 1, 0], [0, 0, 1]],
+  ];
+  const STEP = 0.0004;
+
+  for (const exposure of ['eye', 'photo'] as SkyExposure[]) {
+    it(`has no step nor kink in the ${exposure} rendering`, () => {
+      const sample = cloudSampler(look, exposure);
+      let worstStep = 0;
+      let worstKink = 0;
+      for (const [a, b] of circles) {
+        const steps = Math.round((2 * Math.PI) / STEP);
+        let previous: Vec3 | null = null;
+        let previousDelta: Vec3 | null = null;
+        for (let i = 0; i <= steps; i++) {
+          const angle = i * STEP;
+          const dir: Vec3 = [0, 1, 2].map((k) => Math.cos(angle) * a[k]! + Math.sin(angle) * b[k]!) as Vec3;
+          const value = sample(dir);
+          if (previous) {
+            const delta = value.map((v, k) => v - previous![k]!) as Vec3;
+            worstStep = Math.max(worstStep, ...delta.map(Math.abs));
+            if (previousDelta) worstKink = Math.max(worstKink, ...delta.map((d, k) => Math.abs(d - previousDelta![k]!)));
+            previousDelta = delta;
+          }
+          previous = value;
+        }
+      }
+      expect(worstStep).toBeLessThan(2.5e-3);
+      expect(worstKink).toBeLessThan(1.5e-4);
+    });
+  }
+
+  it('matches the baked cube texels', () => {
+    const faces = bakeSkyClouds(look, 'photo');
+    const sample = cloudSampler(look, 'photo');
+    const size = faces.size;
+    const [row, col] = [40, 90];
+    const at = (row * size + col) * 4;
+    const linear = sample(faceDirection(2, (2 * (col + 0.5)) / size - 1, (2 * (row + 0.5)) / size - 1));
+    const encoded = (v: number) => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
+    expect(faces.faces[2]![at]).toBe(encoded(linear[0]));
   });
 });
