@@ -538,6 +538,7 @@ pub fn params_for(
         moon: false,
         day_hours: None,
         asked_moons: Vec::new(),
+        moon_sizes: Vec::new(),
         // Hydrocarbons gather near the poles, whatever the world.
         liquid_poleward_deg: surface
             .is_some_and(|s| s.climate.liquid == SurfaceLiquid::Hydrocarbons)

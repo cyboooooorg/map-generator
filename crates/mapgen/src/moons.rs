@@ -882,9 +882,48 @@ fn lasting_moon_kg_with(
         / (3.0 * k2 * t * r_p.powi(5) * G.sqrt())
 }
 
+/// The size a system's planet model gave a round moon, kept on its planet's
+/// world ([`WorldParams::moon_sizes`]) so that the planet's own moon list
+/// ([`MoonSystem::draw`]) agrees with the moon's body.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct MoonSize {
+    /// The moon's own seed ([`Moon::seed`]), which names it.
+    pub seed: u32,
+    pub radius_km: f32,
+    pub gravity: f32,
+}
+
 impl MoonSystem {
-    /// The moons of world `p`, `None` when its request turned them off.
+    /// The moons of world `p`, `None` when its request turned them off. A
+    /// round moon the system sized through its model takes that size
+    /// ([`WorldParams::moon_sizes`]): its radius, gravity, density and
+    /// apparent size (its lock and migration stay as drawn).
     pub fn draw(p: &WorldParams) -> Option<Self> {
+        let mut system = Self::drawn_by_the_stream(p)?;
+        for moon in &mut system.moons {
+            let Some(size) = p.moon_sizes.iter().find(|s| s.seed == moon.seed) else {
+                continue;
+            };
+            let scale = size.radius_km / moon.radius_km;
+            let r_p = f64::from(p.circumference_km) / (2.0 * PI);
+            let m_p = EARTH_MASS_KG * f64::from(p.mass_earth());
+            let radius_m = f64::from(size.radius_km) * 1000.0;
+            moon.radius_km = size.radius_km;
+            moon.axes_km = moon.axes_km.map(|a| a * scale);
+            moon.gravity = size.gravity;
+            moon.density = (f64::from(moon.mass_ratio) * m_p
+                / (4.0 / 3.0 * PI * radius_m.powi(3))
+                / 1000.0) as f32;
+            moon.angular_diameter_deg = (2.0
+                * (f64::from(size.radius_km) / (f64::from(moon.semi_major_axis_km) - r_p)).atan())
+            .to_degrees() as f32;
+        }
+        Some(system)
+    }
+
+    /// [`Self::draw`] before a system's sizes apply.
+    fn drawn_by_the_stream(p: &WorldParams) -> Option<Self> {
         if p.moons == MoonsMode::None {
             return None;
         }
@@ -1836,6 +1875,7 @@ pub fn small_body_params(
         day_hours: None,
         liquid_poleward_deg: None,
         asked_moons: Vec::new(),
+        moon_sizes: Vec::new(),
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -2020,6 +2060,7 @@ mod tests {
             day_hours: None,
             liquid_poleward_deg: None,
             asked_moons: Vec::new(),
+            moon_sizes: Vec::new(),
             gravity: None,
         }
     }

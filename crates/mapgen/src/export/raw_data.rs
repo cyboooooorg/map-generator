@@ -91,8 +91,8 @@ pub struct WorldMetadata {
     /// included, or `rocky-moon` / `icy-moon` for a moon too small to be
     /// round.
     pub class: String,
-    /// The archetype the planet was asked as, for display only; left out
-    /// for a planet drawn from its context and for a moon.
+    /// The archetype the planet or moon was asked as, for display only;
+    /// left out for a planet or moon drawn from its context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archetype: Option<String>,
     /// The body's model: a planet's or a round moon's; left out for a moon
@@ -120,6 +120,14 @@ pub struct WorldMetadata {
         ts(as = "Option<Vec<crate::moons::AskedMoon>>", optional)
     )]
     pub asked_moons: Vec<crate::moons::AskedMoon>,
+    /// The sizes its system's model gave its round moons (see
+    /// `WorldParams::moon_sizes`); left out otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::moons::MoonSize>>", optional)
+    )]
+    pub moon_sizes: Vec<crate::moons::MoonSize>,
     /// The inputs the planet formed with, as a request sets them
     /// ([`PlanetModel::formation`]): what a request pins to make the same
     /// planet under another seed or epoch. Left out with the model, and
@@ -646,6 +654,7 @@ pub(crate) fn write_raw_data(
         day_hours: world.params.day_hours,
         liquid_poleward_deg: world.params.liquid_poleward_deg,
         asked_moons: world.params.asked_moons.clone(),
+        moon_sizes: world.params.moon_sizes.clone(),
         formation: world
             .params
             .model
@@ -1127,6 +1136,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         day_hours: meta.day_hours,
         liquid_poleward_deg: meta.liquid_poleward_deg,
         asked_moons: meta.asked_moons.clone(),
+        moon_sizes: meta.moon_sizes.clone(),
         // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
@@ -1383,6 +1393,7 @@ mod tests {
             day_hours: None,
             liquid_poleward_deg: None,
             asked_moons: Vec::new(),
+            moon_sizes: Vec::new(),
             gravity: None,
         })
         .world;

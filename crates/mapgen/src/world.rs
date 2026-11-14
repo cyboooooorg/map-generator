@@ -177,6 +177,15 @@ pub struct WorldParams {
         ts(as = "Option<Vec<crate::moons::AskedMoon>>", optional)
     )]
     pub asked_moons: Vec<crate::moons::AskedMoon>,
+    /// The sizes a system's planet model gave this planet's round moons,
+    /// which its moon draw then takes in place of the drawn ones. Empty on
+    /// every other world.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::moons::MoonSize>>", optional)
+    )]
+    pub moon_sizes: Vec<crate::moons::MoonSize>,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

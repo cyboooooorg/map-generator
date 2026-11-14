@@ -7,6 +7,7 @@ import type { GiantSystem } from "./GiantSystem";
 import type { HostGiant } from "./HostGiant";
 import type { Layers } from "./Layers";
 import type { Look } from "./Look";
+import type { MoonSize } from "./MoonSize";
 import type { MoonSystem } from "./MoonSystem";
 import type { PlanetModel } from "./PlanetModel";
 import type { StarInfo } from "./StarInfo";
@@ -22,8 +23,8 @@ export type WorldMetadata = { format_version: number, width: number, height: num
  */
 class: string, 
 /**
- * The archetype the planet was asked as, for display only; left out
- * for a planet drawn from its context and for a moon.
+ * The archetype the planet or moon was asked as, for display only;
+ * left out for a planet or moon drawn from its context.
  */
 archetype?: string | null, 
 /**
@@ -51,6 +52,11 @@ liquid_poleward_deg?: number | null,
  * `WorldParams::asked_moons`); left out otherwise.
  */
 asked_moons?: Array<AskedMoon>, 
+/**
+ * The sizes its system's model gave its round moons (see
+ * `WorldParams::moon_sizes`); left out otherwise.
+ */
+moon_sizes?: Array<MoonSize>, 
 /**
  * The inputs the planet formed with, as a request sets them
  * ([`PlanetModel::formation`]): what a request pins to make the same

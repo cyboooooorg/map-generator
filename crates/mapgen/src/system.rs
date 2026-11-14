@@ -1579,6 +1579,7 @@ fn assemble(
             metallicity,
             ice,
         );
+        let mut moon_sizes = Vec::new();
         for (k, ((moon_type, moon_params, orbit, physical, spin, formation), ring)) in
             moons.into_iter().enumerate()
         {
@@ -1596,6 +1597,11 @@ fn assemble(
                         &physical,
                     );
                     let model = params.model.clone().expect("a round moon's model");
+                    moon_sizes.push(crate::moons::MoonSize {
+                        seed: params.seed,
+                        radius_km: physical.radius_km as f32,
+                        gravity: physical.gravity as f32,
+                    });
                     let look = base_of(&model).to_string();
                     (class, params, physical, Some(model), look)
                 }
@@ -1643,6 +1649,8 @@ fn assemble(
                 model: moon_model,
             });
         }
+        // The planet's own moon list agrees with its round moons' bodies.
+        bodies[planet_index].params.moon_sizes = moon_sizes;
         if let Some(rings) = bodies[planet_index]
             .params
             .given_rings
@@ -3430,6 +3438,7 @@ mod tests {
                         day_hours: None,
                         liquid_poleward_deg: None,
                         asked_moons: Vec::new(),
+                        moon_sizes: Vec::new(),
                         gravity: None,
                         ..body.params.clone()
                     };
@@ -5096,6 +5105,35 @@ mod lone_tests {
             &mut StdRng::seed_from_u64(u64::from(seed)),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn a_planets_moon_list_agrees_with_its_round_moons_bodies() {
+        let mut checked = 0;
+        for seed in 1..=12 {
+            let system = around("earth-like", seed, None, None);
+            for planet in system.bodies.iter().filter(|b| b.kind != BodyKind::Moon) {
+                let Some(drawn) = MoonSystem::draw(&planet.params) else {
+                    continue;
+                };
+                for moon in &drawn.moons {
+                    let Some(body) = system
+                        .bodies
+                        .iter()
+                        .find(|b| b.kind == BodyKind::Moon && b.params.seed == moon.seed)
+                        .filter(|b| b.model.is_some())
+                    else {
+                        continue;
+                    };
+                    assert!((f64::from(moon.radius_km) - body.physical.radius_km).abs() < 1e-3);
+                    assert!((f64::from(moon.gravity) - body.physical.gravity).abs() < 1e-4);
+                    let density = f64::from(moon.density);
+                    assert!((density - body.physical.density).abs() < 1e-3 * density);
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 3, "{checked}");
     }
 
     fn planets(system: &System) -> Vec<&Body> {

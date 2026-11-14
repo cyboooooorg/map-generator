@@ -4,6 +4,7 @@ import type { GiantsMode } from "./GiantsMode";
 import type { GivenRings } from "./GivenRings";
 import type { HostMode } from "./HostMode";
 import type { Look } from "./Look";
+import type { MoonSize } from "./MoonSize";
 import type { MoonsMode } from "./MoonsMode";
 import type { PlanetModel } from "./PlanetModel";
 
@@ -208,4 +209,10 @@ liquid_poleward_deg?: number,
  * others around them (see `crate::moons::MoonSystem::draw`). Empty
  * on every other world.
  */
-asked_moons?: Array<AskedMoon>, };
+asked_moons?: Array<AskedMoon>, 
+/**
+ * The sizes a system's planet model gave this planet's round moons,
+ * which its moon draw then takes in place of the drawn ones. Empty on
+ * every other world.
+ */
+moon_sizes?: Array<MoonSize>, };
