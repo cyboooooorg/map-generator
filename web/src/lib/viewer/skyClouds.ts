@@ -3,9 +3,16 @@
 // The band's glow, emission nebulae (H-alpha red, O III blue-green) and
 // blue reflection patches come from seeded fractal noise with domain
 // warping, kept along the band (a gaussian in latitude about the galactic
-// north). Dust lanes darken the glow; `dustAt` is shared with the star
-// field so the stars behind a lane dim with it. The galactic core is an
-// elongated glow (axis ratio 0.6) crossed by a dark lane along the plane.
+// north). Dust lanes darken the glow. The galactic core is an elongated
+// glow (axis ratio 0.6) crossed by a network of rifts.
+//
+// The cube holds only soft, large-scale structure (`SKY_CUBE_SIZE`, about
+// 0.35 degree a texel, 4 to 7 screen pixels at the planet view): a sharp
+// edge there is a staircase on screen. So the cube darkens by
+// `cloudDustAt`, the rifts with wide edges and no fine filament, and draws
+// no dark nebula nor pillar; the sharp shapes are the nebula patches'.
+// `dustAt`, the full dust (fine rifts, dark nebulae, pillars), dims the
+// stars behind it.
 //
 // Two renderings share the noise: 'eye' (what the eye sees: no texel above
 // `CLOUD_CEILING` in linear RGB, colours washed out) and 'photo' (a long
@@ -98,6 +105,8 @@ const GLOW_LEVEL = 0.028;
 const HALO_LEVEL = 0.03;
 /** A halo reaches this many nebula radii, and its colour weights (H-alpha, O III, reflection) per kind. */
 const HALO_REACH = 2.4;
+/** No halo is narrower than this, radians (4 degrees): the cube holds no detail finer than about a degree. */
+const HALO_MIN_REACH = (4 * Math.PI) / 180;
 const HALO_MIX: Record<NebulaKind, Vec3> = {
   planetary: [0.1, 1, 0.3],
   emission: [1, 0.35, 0.1],
@@ -253,7 +262,7 @@ const ridge = (f: number) => 1 - Math.abs(2 * f - 1);
  * branches do). Nothing in it follows the galactic plane; the envelope
  * only keeps it to the core and falls to zero before its edge.
  */
-function coreLane(look: SkyLook, dir: Vec3): number {
+function coreLane(look: SkyLook, dir: Vec3, soft = false): number {
   if (look.coreBrightness <= 0) return 0;
   const frame = bandFrame(look);
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, frame.north))));
@@ -267,20 +276,28 @@ function coreLane(look: SkyLook, dir: Vec3): number {
   const n = noiseOf(look.seed);
   const o = n.offsets[2]!;
   const p = n.offsets[0]!;
-  // Feature size follows the core: about two rift spacings across it.
-  const f = 1.7 / Math.max(0.12, look.coreSize);
-  const w = (k: number, g: number) => fbm(n, dir[0] * g + p[k % 3]!, dir[1] * g + p[(k + 1) % 3]!, dir[2] * g + p[(k + 2) % 3]!, 2) - 0.5;
+  // Feature size follows the core: about two rift spacings across it. The soft version keeps its lanes a few
+  // degrees wide even round a small, far core: its frequency is capped.
+  const f = Math.min(soft ? 3.5 : Infinity, 1.7 / Math.max(0.12, look.coreSize));
+  // The soft version warps with one octave: the second one tightened the lanes below a degree.
+  const w = (k: number, g: number) => fbm(n, dir[0] * g + p[k % 3]!, dir[1] * g + p[(k + 1) % 3]!, dir[2] * g + p[(k + 2) % 3]!, soft ? 1 : 2) - 0.5;
   const qx = dir[0] * f + 1.6 * w(0, f * 0.8);
   const qy = dir[1] * f + 1.6 * w(1, f * 0.8);
   const qz = dir[2] * f + 1.6 * w(2, f * 0.8);
-  const main = ridge(fbm(n, qx + o[0], qy + o[1], qz + o[2], 3));
+  const main = ridge(fbm(n, qx + o[0], qy + o[1], qz + o[2], soft ? 1 : 3));
+  // The width of a lane varies along it: the threshold moves with a slow noise.
+  const vary = fbm(n, qx * 0.9 + o[2], qy * 0.9 + o[0], qz * 0.9 + o[1], 2);
+  if (soft) {
+    // The cube's version (cloudDustAt): the trunks alone, with wide edges and no fine filament.
+    const trunk = smoothstep(0.4 + 0.1 * vary, 0.97, main);
+    const depth = 0.7 * trunk * (0.55 + 0.45 * vary * 2) * along;
+    return 0.9 * Math.tanh(depth / 0.9);
+  }
   // A second, finer network, warped again: the side filaments.
   const rx = qx * 2.5 + 0.8 * w(3, f * 2.2);
   const ry = qy * 2.5 + 0.8 * w(4, f * 2.2);
   const rz = qz * 2.5 + 0.8 * w(5, f * 2.2);
   const side = ridge(fbm(n, rx + o[1], ry + o[2], rz + o[0], 3));
-  // The width of a lane varies along it: the threshold moves with a slow noise.
-  const vary = fbm(n, qx * 0.9 + o[2], qy * 0.9 + o[0], qz * 0.9 + o[1], 2);
   const trunk = smoothstep(0.86 + 0.07 * vary, 0.985, main);
   const near = smoothstep(0.7, 0.93, main);
   const branch = 0.8 * smoothstep(0.9, 0.98, side) * near;
@@ -296,7 +313,7 @@ function coreLane(look: SkyLook, dir: Vec3): number {
  * branches; a mottled haze fills between. Thick toward the core, thin out
  * at the band's edge.
  */
-function rifts(look: SkyLook, dir: Vec3): number {
+function rifts(look: SkyLook, dir: Vec3, soft = false): number {
   const n = noiseOf(look.seed);
   const o = n.offsets[3]!;
   const p = n.offsets[1]!;
@@ -308,11 +325,17 @@ function rifts(look: SkyLook, dir: Vec3): number {
   const env = Math.exp(-(lat * lat) / (2 * sigma * sigma));
   if (env < 1e-3) return 0;
   // Domain warp: the rifts' coordinates are bent twice, at two scales.
-  const w = (k: number, f: number) => fbm(n, dir[0] * f + p[k % 3]!, dir[1] * f + p[(k + 1) % 3]!, dir[2] * f + p[(k + 2) % 3]!, 2) - 0.5;
+  const w = (k: number, f: number) => fbm(n, dir[0] * f + p[k % 3]!, dir[1] * f + p[(k + 1) % 3]!, dir[2] * f + p[(k + 2) % 3]!, soft ? 1 : 2) - 0.5;
   const qx = dir[0] * 3 + 1.4 * w(0, 1.7);
   const qy = dir[1] * 3 + 1.4 * w(1, 1.7);
   const qz = dir[2] * 3 + 1.4 * w(2, 1.7);
-  const main = ridge(fbm(n, qx + o[0], qy + o[1], qz + o[2], 3));
+  const main = ridge(fbm(n, qx + o[0], qy + o[1], qz + o[2], soft ? 2 : 3));
+  if (soft) {
+    // The cube's version (cloudDustAt): the main rifts with wide edges and a broad haze, no branch nor twig.
+    const trunk = smoothstep(0.6, 0.97, main);
+    const haze = 0.3 * smoothstep(0.45, 0.8, fbm(n, qx * 1.5 + o[1], qy * 1.5 + o[2], qz * 1.5 + o[0], 2));
+    return Math.min(1, Math.max(trunk, haze) * env);
+  }
   const rx = qx * 2.6 + 0.9 * w(3, 4.2);
   const ry = qy * 2.6 + 0.9 * w(4, 4.2);
   const rz = qz * 2.6 + 0.9 * w(5, 4.2);
@@ -337,6 +360,18 @@ export function dustAt(look: SkyLook, dir: Vec3): number {
   const extra = 1 - (1 - nebulaDustAt(look, dir)) * (1 - coreLane(look, dir));
   const band = Math.min(1, DUST_MAX * rifts(look, dir));
   return 1 - (1 - band) * (1 - extra);
+}
+
+/**
+ * The dust the cloud cube draws: the band's rifts and the core's, softened
+ * (wide edges, no filament finer than about a degree), and no dark nebula
+ * nor pillar. The cube is too coarse for sharp edges (they drew staircases
+ * and blocky shapes); the sharp dust is the nebula patches' and, for the
+ * stars behind it, `dustAt`'s.
+ */
+export function cloudDustAt(look: SkyLook, dir: Vec3): number {
+  const band = Math.min(1, DUST_MAX * rifts(look, dir, true));
+  return 1 - (1 - band) * (1 - coreLane(look, dir, true));
 }
 
 /** Linear value to an sRGB byte. */
@@ -369,7 +404,10 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
   const bandNoise = 0.6;
   const halos = skyNebulae(look)
     .filter((nb) => nb.kind !== 'dark')
-    .map((nb) => ({ nb, reach: HALO_REACH * nb.radius, cos: Math.cos(HALO_REACH * nb.radius), mix: HALO_MIX[nb.kind] }));
+    .map((nb) => {
+      const reach = Math.max(HALO_REACH * nb.radius, HALO_MIN_REACH);
+      return { nb, reach, cos: Math.cos(reach), mix: HALO_MIX[nb.kind] };
+    });
   /** The faint coloured haloes round the nebulae, wherever they are on the sphere: linear RGB. */
   const haloAt = (dir: Vec3): Vec3 => {
     let r = 0;
@@ -389,6 +427,11 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
     }
     return [r, g, b];
   };
+  // Washed-out colours for the eye, pushed ones for the long exposure: mix away from or toward the luminance.
+  const saturate = (r: number, g: number, b: number): Vec3 => {
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return [Math.max(0, lum + (r - lum) * ex.saturation), Math.max(0, lum + (g - lum) * ex.saturation), Math.max(0, lum + (b - lum) * ex.saturation)];
+  };
   const squash = (r: number, g: number, b: number): Vec3 => [ex.ceiling * Math.tanh(r / ex.ceiling), ex.ceiling * Math.tanh(g / ex.ceiling), ex.ceiling * Math.tanh(b / ex.ceiling)];
   return (dir) => {
     const halo = haloAt(dir);
@@ -399,7 +442,11 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
         0.25 * (2 * fbm(n, dir[0] * 4 + ob[1], dir[1] * 4 + ob[2], dir[2] * 4 + ob[0], 3) - 1));
     const lat = trueLat + bend;
     const window = 1 - smoothstep(0.75 * cutoff, cutoff, Math.abs(trueLat));
-    if (window <= 0) return squash(halo[0], halo[1], halo[2]);
+    // The haloes are not the band's: the window does not dim them (it did, and they ended on a hard edge where it reached 0).
+    if (window <= 0) {
+      const clear = 1 - cloudDustAt(look, dir);
+      return squash(...saturate(halo[0] * clear, halo[1] * clear, halo[2] * clear));
+    }
     const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));
     const toCentre = Math.max(0, dot(dir, look.centre));
     const bulge = look.bulge * toCentre ** 4;
@@ -412,34 +459,30 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
     const pz = dir[2] * 3 + 1.5 * wz;
     const soft = fbm(n, px + oa[0], py + oa[1], pz + oa[2], 3);
     const glowNoise = (1 - ex.clumps) * (0.55 + 0.9 * soft) + ex.clumps * (0.2 + 1.6 * smoothstep(0.3, 0.7, soft));
-    const emission = smoothstep(ex.emission[0], ex.emission[1], fbm(n, px * 1.7 + ob[0], py * 1.7 + ob[1], pz * 1.7 + ob[2], 5));
-    const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 4));
+    const emission = smoothstep(ex.emission[0], ex.emission[1], fbm(n, px * 1.7 + ob[0], py * 1.7 + ob[1], pz * 1.7 + ob[2], 3));
+    const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 3));
     const o3 = smoothstep(0.45, 0.7, fbm(n, px * 1.3 + oc[1], py * 1.3 + oc[2], pz * 1.3 + oc[0], 2));
     const strength = level * inBand * (1 + 1.5 * bulge);
-    // A fine grain: the glow is unresolved stars, not a smooth wash.
-    const grain = 0.7 + 0.6 * value(n, dir[0] * 110 + oc[2], dir[1] * 110 + oc[0], dir[2] * 110 + oc[1]);
+    // A grain of a degree or two: the glow is unresolved star clouds, not a smooth wash (finer would pixelate in the cube).
+    const grain = 0.8 + 0.4 * value(n, dir[0] * 30 + oc[2], dir[1] * 30 + oc[0], dir[2] * 30 + oc[1]);
     const glow = GLOW_LEVEL * ex.glow * strength * glowNoise * grain;
     const patch = PATCH_LEVEL * BAND_PATCH_SHARE * ex.patch * strength;
     // Inside a patch the light is uneven: bright knots and thinner veils.
-    const detail = 0.35 + 1.3 * fbm(n, px * 6 + oa[1], py * 6 + oa[2], pz * 6 + oa[0], 4);
+    const detail = 0.35 + 1.3 * fbm(n, px * 4 + oa[1], py * 4 + oa[2], pz * 4 + oa[0], 2);
     const ha = patch * wHa * emission * detail * (1 - o3);
     const oiii = patch * wO3 * emission * detail * o3;
     const ref = patch * wRef * reflection * ex.reflection;
-    const clear = (1 - dustAt(look, dir)) * window;
+    const clear = 1 - cloudDustAt(look, dir);
     let r = 0;
     let g = 0;
     let b = 0;
     r += glow * ex.glowColour[0] + ha * ex.haColour[0] + oiii * ex.oiiiColour[0] + ref * ex.refColour[0];
     g += glow * ex.glowColour[1] + ha * ex.haColour[1] + oiii * ex.oiiiColour[1] + ref * ex.refColour[1];
     b += glow * ex.glowColour[2] + ha * ex.haColour[2] + oiii * ex.oiiiColour[2] + ref * ex.refColour[2];
-    r = (r + halo[0]) * clear;
-    g = (g + halo[1]) * clear;
-    b = (b + halo[2]) * clear;
-    // Washed-out colours for the eye, pushed ones for the long exposure: mix away from or toward the luminance.
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    r = Math.max(0, lum + (r - lum) * ex.saturation);
-    g = Math.max(0, lum + (g - lum) * ex.saturation);
-    b = Math.max(0, lum + (b - lum) * ex.saturation);
+    r = (r * window + halo[0]) * clear;
+    g = (g * window + halo[1]) * clear;
+    b = (b * window + halo[2]) * clear;
+    [r, g, b] = saturate(r, g, b);
     if (coreOn) {
       // The core: an elongated warm glow, mottled, with a brighter nucleus. Its longitude is
       // far past its width on the far side: no half-sphere gate. A soft curve (not a clip)
@@ -451,7 +494,7 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
       const raw = CORE_LEVEL * ex.core * look.coreBrightness ** 0.4 * (0.5 * Math.exp(-q / 2) + Math.exp(-1.6 * Math.sqrt(q))) * mottle;
       const peak = CORE_PEAK * ex.ceiling;
       const x = (raw / peak) ** 0.9;
-      const core = ((peak * x) / (1 + x)) * (1 - Math.min(0.95, 1.2 * coreLane(look, dir))) * window;
+      const core = ((peak * x) / (1 + x)) * (1 - Math.min(0.95, 1.2 * coreLane(look, dir, true))) * window;
       r += core * CORE_COLOUR[0];
       g += core * CORE_COLOUR[1];
       b += core * CORE_COLOUR[2];
@@ -480,10 +523,17 @@ function bake(look: SkyLook, exposure: SkyExposure, size: number): SkyFaces {
   return { size, faces };
 }
 
+/**
+ * Texels per cube face: 0.35 degree at a face's centre. The cube holds only
+ * soft structure (nothing finer than about a degree; the sharp shapes are
+ * the nebula patches'), so a finer one would only cost bake time.
+ */
+export const SKY_CUBE_SIZE = 256;
+
 const bakes = new Map<string, SkyFaces>();
 
 /** The look's cloud cube map in an exposure; the last four are kept. */
-export function bakeSkyClouds(look: SkyLook, exposure: SkyExposure, size = 512): SkyFaces {
+export function bakeSkyClouds(look: SkyLook, exposure: SkyExposure, size = SKY_CUBE_SIZE): SkyFaces {
   const key = [exposure, size, look.coreSize, look.coreBrightness, look.seed, look.brightness, look.bandWidth, look.bulge, ...look.north, ...look.centre].join('|');
   const cached = bakes.get(key);
   if (cached) {

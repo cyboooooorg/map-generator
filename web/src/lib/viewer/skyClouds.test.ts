@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { bakeSkyClouds, CLOUD_CEILING, cloudSampler, dustAt, faceDirection, type SkyExposure, type SkyFaces } from './skyClouds';
+import { bakeSkyClouds, CLOUD_CEILING, cloudDustAt, cloudSampler, dustAt, faceDirection, SKY_CUBE_SIZE, type SkyExposure, type SkyFaces } from './skyClouds';
+import { skyNebulae } from './skyNebulae';
 import { bandFrame, FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 const decode = (byte: number) => {
@@ -386,7 +387,7 @@ describe('the core is a warm glow with a lane at every radius', () => {
     // The glow with the rifts divided out: what is tested is the soft curve, not where a rift happens to cross.
     const at = (lon: number) => {
       const d = dirAt(look, lon, 0.5 * look.coreSize);
-      return sum3(sample(d)) / (1 - dustAt(look, d));
+      return sum3(sample(d)) / (1 - cloudDustAt(look, d));
     };
     expect(at(0)).toBeGreaterThan(1.15 * at(look.coreSize * 0.5));
     expect(at(look.coreSize * 0.5)).toBeGreaterThan(1.1 * at(look.coreSize));
@@ -528,5 +529,61 @@ describe('the core has no straight lane', () => {
       const lats = cuts(look, cloudSampler(look, 'photo')).map((c) => c.lat);
       expect(Math.max(...lats) - Math.min(...lats)).toBeGreaterThan(0.08 * look.coreSize);
     }
+  });
+});
+
+describe('the cloud cube holds only soft structure', () => {
+  // A hard edge in the cube is a staircase on screen (a texel is 4 to 7
+  // screen pixels at the planet view): the dark nebulae, the pillars and
+  // the thin rifts drew blocky shapes and a stair-stepped cut. The sharp
+  // shapes belong to the nebula patches.
+  const lookAt = (position_kpc: [number, number, number], seed: number) =>
+    skyLook({ source: 'Derived', position_kpc, axes: [[0.03, 0.99, 0.09], [-0.97, 0, -0.25], [-0.25, -0.1, 0.96]], sky_seed: seed } as never);
+  const ceilings: Record<SkyExposure, number> = { eye: CLOUD_CEILING, photo: 0.3 };
+
+  /** The largest change of a linear channel between two neighbouring texels of a face, over the ceiling. */
+  function steepest(faces: SkyFaces, ceiling: number): number {
+    const n = faces.size;
+    let worst = 0;
+    for (const px of faces.faces) {
+      for (let row = 0; row < n - 1; row++) {
+        for (let col = 0; col < n - 1; col++) {
+          const at = (row * n + col) * 4;
+          for (const next of [at + 4, at + 4 * n]) {
+            for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(decode(px[at + k]!) - decode(px[next + k]!)));
+          }
+        }
+      }
+    }
+    return worst / ceiling;
+  }
+
+  it('is 256 texels a face', () => {
+    expect(SKY_CUBE_SIZE).toBe(256);
+  });
+
+  // 0.12 of the ceiling a texel (0.35 degree) is a full-ceiling change spread over 3 degrees; the
+  // cube before this guard reached 0.35 to 0.54 (rifts, dark nebulae, the haloes cut at the band's edge).
+  it.each([
+    ['close in, system A of the browser check', [4.5, 0.01, -0.14], 2725666414],
+    ["at the Sun's place", [8.2, 0, 0.02], 5],
+    ['far out', [13, 0, 0.02], 9],
+  ] as const)('changes by at most 0.12 of the ceiling between two texels, %s', (_, place, seed) => {
+    const look = lookAt([...place], seed);
+    for (const exposure of ['eye', 'photo'] as SkyExposure[]) {
+      expect(steepest(bakeSkyClouds(look, exposure), ceilings[exposure])).toBeLessThan(0.12);
+    }
+  });
+
+  it('draws no dark nebula: their dust dims the stars, not the cube', () => {
+    const look = lookAt([8.2, 0, 0.02], 5);
+    const dark = skyNebulae(look).filter((n) => n.kind === 'dark');
+    expect(dark.length).toBeGreaterThan(0);
+    let darker = 0;
+    for (const n of dark) {
+      expect(dustAt(look, n.dir)).toBeGreaterThan(cloudDustAt(look, n.dir));
+      if (dustAt(look, n.dir) > cloudDustAt(look, n.dir) + 0.2) darker += 1;
+    }
+    expect(darker).toBeGreaterThan(0);
   });
 });
