@@ -76,13 +76,33 @@ describe('thick hazes', () => {
   });
 
   it("thins Titan's haze over the ground close in", () => {
-    const titan = skyFromWorld(world(1.5, TITAN))!;
-    const seen = (altitude: number) => Math.exp(-titan.betaM * titan.heightM * hazeVeil(titan, altitude));
-    expect(seen(0.05)).toBeGreaterThan(0.4);
-    expect(seen(0.01)).toBeCloseTo(seen(0.05), 12);
-    expect(seen(0.2)).toBeGreaterThan(seen(0.6));
-    expect(seen(0.2)).toBeLessThan(seen(0.05));
+    // Titan's methane haze (0.9) and a thinner hiding haze (0.7, depth 3.8).
+    for (const haze of [0.9, 0.7, 1]) {
+      const titan = skyFromWorld(world(1.5, { ...TITAN, haze }))!;
+      const seen = (altitude: number) => Math.exp(-titan.betaM * titan.heightM * hazeVeil(titan, altitude));
+      // From afar, the disc is the haze's, opaque and orange.
+      for (const altitude of [1.5, 2.2, 10]) {
+        expect(hazeVeil(titan, altitude)).toBe(1);
+        expect(seen(altitude)).toBeLessThan(0.03);
+      }
+      // The ground starts to show by 0.6 radii up…
+      expect(seen(0.6)).toBeGreaterThan(0.08);
+      expect(seen(0.6)).toBeLessThan(0.3);
+      // …and reads clearly by 0.2, then clearer down to 0.05.
+      expect(seen(0.2)).toBeGreaterThanOrEqual(0.5);
+      expect(seen(0.05)).toBeGreaterThan(0.75);
+      expect(seen(0.01)).toBeCloseTo(seen(0.05), 12);
+      // Clearer at every step down, without a jump.
+      let last = 0;
+      for (let altitude = 2; altitude >= 0.05; altitude *= 0.97) {
+        const now = seen(altitude);
+        expect(now).toBeGreaterThanOrEqual(last);
+        expect(now - last).toBeLessThan(0.05);
+        last = now;
+      }
+    }
     // The veil follows the depths, not the shell: lifted, the same.
+    const titan = skyFromWorld(world(1.5, TITAN))!;
     expect(hazeVeil(liftSky(titan, 0.06), 0.1)).toBeCloseTo(hazeVeil(titan, 0.1), 12);
   });
 });

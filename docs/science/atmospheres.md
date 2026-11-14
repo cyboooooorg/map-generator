@@ -328,9 +328,14 @@ depth it maps to and that share are calibrations with Cassini's
 true-colour images of Titan as their target.
 
 Close in, the viewer thins a haze that hides the ground over the ground
-(`hazeVeil`), so the surface can be looked at: from a whole-disc view
-(0.6 radii up and beyond) the disc is the haze's; at 0.05 radii and
-below the ground is seen through a depth of 0.25 (about 78 % of its light).
+(`hazeVeil`), so the surface can be looked at: from 1.5 radii up and
+beyond (the default whole-disc view is 2.2 radii up) the disc is the
+haze's, opaque; the depth over the ground then falls on a straight line
+in log(depth) against log(altitude), so the ground starts to show about
+0.6 radii up (10 to 22 % of its light for hazes of 0.7 to 1), reads
+clearly at 0.2 radii (a depth of 0.5, 61 %) and is seen through a depth
+of 0.25 at 0.05 radii and below (78 %). These altitudes and depths are a
+calibration with no source.
 The limb keeps its whole haze. This is a viewer convention, standing in
 for the near-infrared windows through which Cassini mapped Titan's
 surface (ISS at 938 nm, VIMS at 5 µm); a thinner haze (Earth, Mars,

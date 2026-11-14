@@ -130,40 +130,56 @@ export function skyFromWorld(meta: WorldMetadata): Sky | null {
 }
 
 /**
- * Zenith haze depth over which a haze hides the ground from afar, and the
- * one the ground is seen through close in (see {@link hazeVeil}).
- * Calibration, no source: about 5 % and 78 % of the light.
+ * Zenith haze depth over which a haze hides the ground from afar (see
+ * {@link hazeVeil}). Calibration, no source: about 5 % of the light.
  */
 const HIDING_HAZE_DEPTH = 3.0;
-const CLOSE_HAZE_DEPTH = 0.25;
 /**
- * Camera altitudes (globe radii above the ground) between which the haze
- * over the ground thins (see {@link hazeVeil}): whole from a whole-disc
- * view (the default view is 2.2 radii up) to {@link HAZE_THIN_ALTITUDE},
- * thinnest at {@link HAZE_CLEAR_ALTITUDE} and below, on a logarithmic
- * scale. Calibration, no source.
+ * Camera altitudes (globe radii above the ground) and the haze depths over
+ * the ground there, through which {@link hazeVeil} thins a hiding haze:
+ * whole from {@link HAZE_THICK_ALTITUDE} up (a whole-disc view: the
+ * default view is 2.2 radii up), {@link READ_HAZE_DEPTH} at
+ * {@link HAZE_READ_ALTITUDE} (61 % of the light: the ground reads
+ * clearly), {@link CLOSE_HAZE_DEPTH} at {@link HAZE_CLEAR_ALTITUDE} and
+ * below (78 %). Between them the depth follows a straight line in
+ * log(depth) against log(altitude), so the ground starts to show (8 to
+ * 25 % of its light) about 0.6 radii up. A viewer convention,
+ * calibration, no source.
  */
-const HAZE_THIN_ALTITUDE = 0.6;
+const HAZE_THICK_ALTITUDE = 1.5;
+const HAZE_READ_ALTITUDE = 0.2;
 const HAZE_CLEAR_ALTITUDE = 0.05;
+const READ_HAZE_DEPTH = 0.5;
+const CLOSE_HAZE_DEPTH = 0.25;
 
 /**
  * Factor on the haze extinction over the ground (the surface pass of the
  * sky shader, not the limb) at a camera `altitude` in globe radii, so that
  * the surface of a world whose haze hides it (a zenith depth over
  * {@link HIDING_HAZE_DEPTH}, a methane haze) can be seen close in: 1
- * from afar, where the disc is the haze's, down to the factor that leaves
- * {@link CLOSE_HAZE_DEPTH} close in. 1 at every altitude for any thinner
- * haze (Earth, Mars, Venus). A viewer convention, as Cassini's
+ * from {@link HAZE_THICK_ALTITUDE} up, where the disc is the haze's,
+ * opaque; down to the factor that leaves {@link READ_HAZE_DEPTH} at
+ * {@link HAZE_READ_ALTITUDE} and {@link CLOSE_HAZE_DEPTH} at
+ * {@link HAZE_CLEAR_ALTITUDE} and below. 1 at every altitude for any
+ * thinner haze (Earth, Mars, Venus). A viewer convention, as Cassini's
  * near-infrared windows (ISS at 938 nm, VIMS at 5 µm) saw Titan's surface
  * through a haze that hides it in visible light (Porco et al. 2005,
  * doi:10.1038/nature03436).
  */
 export function hazeVeil(sky: Sky, altitude: number): number {
   const depth = sky.betaM * sky.heightM;
-  if (depth <= HIDING_HAZE_DEPTH) return 1;
-  const t = Math.log(Math.max(altitude, HAZE_CLEAR_ALTITUDE) / HAZE_CLEAR_ALTITUDE) / Math.log(HAZE_THIN_ALTITUDE / HAZE_CLEAR_ALTITUDE);
-  const close = CLOSE_HAZE_DEPTH / depth;
-  return close + (1 - close) * Math.min(t, 1);
+  if (depth <= HIDING_HAZE_DEPTH || altitude >= HAZE_THICK_ALTITUDE) return 1;
+  const a = Math.max(altitude, HAZE_CLEAR_ALTITUDE);
+  // Log-log interpolation of the depth over the ground between two anchors.
+  const between = (high: number, highDepth: number, low: number, lowDepth: number) => {
+    const t = Math.log(high / a) / Math.log(high / low);
+    return Math.exp(Math.log(highDepth) + t * (Math.log(lowDepth) - Math.log(highDepth)));
+  };
+  const ground =
+    a >= HAZE_READ_ALTITUDE
+      ? between(HAZE_THICK_ALTITUDE, depth, HAZE_READ_ALTITUDE, READ_HAZE_DEPTH)
+      : between(HAZE_READ_ALTITUDE, READ_HAZE_DEPTH, HAZE_CLEAR_ALTITUDE, CLOSE_HAZE_DEPTH);
+  return ground / depth;
 }
 
 /**
