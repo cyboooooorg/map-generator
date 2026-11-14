@@ -455,7 +455,11 @@ disk:
   before, or one dominant moon in the chain's outer half with 90 to 97 %
   of the mass (Titan, 96 % of Saturn's). Lighter giants keep a dominant
   moon more often (Sasaki, Stewart & Ida 2010): `1 / (1 + (M / 174 M⊕)²)`,
-  a calibration giving Saturn 77 % and Jupiter 23 %.
+  a calibration giving Saturn 77 % and Jupiter 23 %. Gas giants only: an
+  ice giant's regular moons come from the disk its giant impact raised
+  (Ida et al. 2020), several comparable moons, so it always keeps a chain,
+  with 1 to 1.2 × 10⁻⁴ of its mass (Uranus's five major moons, 1.0 ×
+  10⁻⁴; the width a calibration). Its captured Triton is unchanged.
 - **Rock and ice**: the disk's ice line at `11 (T_eq / 110 K)⁴` giant
   radii (`disk_ice_line_radii`, a calibration: 11 for Jupiter, between
   Europa and Ganymede; 3.5 for Saturn, inside its first moon).
@@ -470,7 +474,10 @@ systems, then 35 in 20 (one system in 25: a minority, as the spec asks);
 around gas giants, moons of 600 to 1200 km fall from 141 to 32 as the mass
 gathers into dominant moons and the disk weighs more; around ice giants
 and mini-Neptunes, rocky moons fall (247 to 145 and 459 to 309) as cold
-giants put their ice line inside the chain.
+giants put their ice line inside the chain. With ice giants on a chain
+of 1 to 1.2 × 10⁻⁴, their icy moons gather at 600 to 1200 km (47 to 183,
+Titania and Oberon's size) instead of 200 to 600 km beside one dominant
+moon; the gas giants' census is unchanged.
 
 ## Sources
 

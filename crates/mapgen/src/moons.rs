@@ -45,6 +45,7 @@
 //!
 //! **Giants.** A giant's regular moons are drawn by [`MoonSystem::draw`]
 //! for a giant world and a giant of a system alike (`of_giant`).
+use crate::giants::GiantKind;
 use crate::noise::{stream, stream_seed};
 use crate::star::StarInfo;
 use crate::world::WorldParams;
@@ -300,8 +301,16 @@ pub enum DiskShape {
 /// about 10⁻⁴ of the planet's mass in moons; the Solar System's giants span
 /// 1.0 × 10⁻⁴ (Uranus's five large moons) to 2.1 × 10⁻⁴ (the Galilean
 /// moons) and 2.5 × 10⁻⁴ (Saturn's). Drawn uniformly in between (the shape
-/// of the distribution: calibration, no source).
+/// of the distribution: calibration, no source). For a gas giant.
 const DISK_MASS_RATIO: (f64, f64) = (1.0e-4, 2.5e-4);
+/// The same for an ice giant, whose regular moons formed in a disk its
+/// giant impact raised, not in an inflow-fed one: Ida et al. 2020
+/// (doi:10.1038/s41550-020-1049-8) grow several moons of comparable mass
+/// from the water-vapour disk of the impact that tilted Uranus, together
+/// near Uranus's 1.0 × 10⁻⁴ (its five major moons, 9.1 × 10²¹ kg). The
+/// width above Uranus is a calibration, no source (Neptune's regular moons
+/// were scattered by Triton, so Uranus is the only measure).
+const ICE_DISK_MASS_RATIO: (f64, f64) = (1.0e-4, 1.2e-4);
 /// A giant's mass, Earth masses, at which its disk is as likely to leave
 /// one dominant moon as a chain, and how steeply the odds change across
 /// it (`1 / (1 + (m / switch)^steepness)` for a dominant moon). A giant
@@ -312,7 +321,8 @@ const DISK_MASS_RATIO: (f64, f64) = (1.0e-4, 2.5e-4);
 /// (doi:10.1088/0004-637X/714/2/1052). The switch and the steepness are a
 /// calibration, no source: the geometric mean of Saturn's and Jupiter's
 /// masses, which gives Saturn a dominant moon 77 % of the time and Jupiter
-/// a chain 77 % of the time.
+/// a chain 77 % of the time. For gas giants only: an ice giant's
+/// impact-generated disk leaves a chain (see [`ICE_DISK_MASS_RATIO`]).
 const DOMINANT_SWITCH_EARTH: f64 = 174.0;
 const DOMINANT_STEEPNESS: f64 = 2.0;
 /// The share of the disk's mass a dominant moon holds (Titan: 96 % of
@@ -340,15 +350,24 @@ const ICE_LINE_REFERENCE_RADII: f64 = 11.0;
 const ICE_LINE_REFERENCE_K: f64 = 110.0;
 const ICE_LINE_POWER: f64 = 4.0;
 
-/// The total mass of a giant's regular moons, as a share of the giant's
-/// (see [`DISK_MASS_RATIO`]).
-fn disk_mass_ratio(rng: &mut Draws) -> f64 {
-    rng.uniform(DISK_MASS_RATIO.0, DISK_MASS_RATIO.1)
+/// The total mass of the regular moons of a giant of `kind`, as a share
+/// of the giant's (see [`DISK_MASS_RATIO`] and [`ICE_DISK_MASS_RATIO`]).
+fn disk_mass_ratio(kind: GiantKind, rng: &mut Draws) -> f64 {
+    let (lo, hi) = match kind {
+        GiantKind::Gas => DISK_MASS_RATIO,
+        GiantKind::Ice => ICE_DISK_MASS_RATIO,
+    };
+    rng.uniform(lo, hi)
 }
 
-/// Whether a giant of `giant_mass_earth` keeps a chain of moons or one
-/// dominant moon (see [`DOMINANT_SWITCH_EARTH`]).
-fn disk_shape(giant_mass_earth: f64, rng: &mut Draws) -> DiskShape {
+/// Whether a giant of `kind` and `giant_mass_earth` keeps a chain of moons
+/// or one dominant moon: an ice giant always a chain (an impact-generated
+/// disk, see [`ICE_DISK_MASS_RATIO`]), a gas giant by its mass (see
+/// [`DOMINANT_SWITCH_EARTH`]). An ice giant draws nothing.
+fn disk_shape(kind: GiantKind, giant_mass_earth: f64, rng: &mut Draws) -> DiskShape {
+    if kind == GiantKind::Ice {
+        return DiskShape::Chain;
+    }
     let dominant =
         1.0 / (1.0 + (giant_mass_earth / DOMINANT_SWITCH_EARTH).powf(DOMINANT_STEEPNESS));
     if rng.next() < dominant {
@@ -943,12 +962,14 @@ impl MoonSystem {
 
     /// The moons of a giant world. Its regular moons grew in its disk and
     /// hold 1 to 2.5 × 10⁻⁴ of its mass together ([`disk_mass_ratio`],
-    /// Canup & Ward 2006), on a resonant chain from 4 to 8 of its radii
+    /// Canup & Ward 2006; an ice giant's impact-generated disk 1 to
+    /// 1.2 × 10⁻⁴, Uranus, Ida et al. 2020), on a resonant chain from 4 to 8 of its radii
     /// outwards (periods doubling, as Io, Europa and Ganymede); two to five
     /// of them, or as many as asked. The disk leaves either a chain of
     /// moons of comparable mass, or one dominant moon in the chain's outer
-    /// half that holds 90 to 97 % of the mass (Titan), the lighter the
-    /// giant the likelier ([`disk_shape`], Sasaki et al. 2010). A moon is
+    /// half that holds 90 to 97 % of the mass (Titan), the lighter the gas
+    /// giant the likelier ([`disk_shape`], Sasaki et al. 2010; an ice giant
+    /// always a chain, as Uranus's). A moon is
     /// rock inside the disk's ice line and ice beyond it, a line that
     /// moves out the warmer the giant is ([`disk_ice_line_radii`]: between
     /// Europa and Ganymede for Jupiter, inside every moon for Saturn and
@@ -979,14 +1000,14 @@ impl MoonSystem {
         };
         let asked = p.moons.count();
         let drawn = 2 + (rng.next() * 4.0) as usize;
-        let captured_triton = look.kind == crate::giants::GiantKind::Ice && rng.next() < 0.35;
+        let captured_triton = look.kind == GiantKind::Ice && rng.next() < 0.35;
         let first = rng.uniform(4.0, 8.0);
         let mut moons: Vec<Moon> = Vec::new();
         let mut shape = None;
         if !look.hot {
             let count = asked.map_or(drawn, usize::from);
-            let disk = disk_mass_ratio(&mut rng);
-            let kind = disk_shape(f64::from(mass_earth), &mut rng);
+            let disk = disk_mass_ratio(look.kind, &mut rng);
+            let kind = disk_shape(look.kind, f64::from(mass_earth), &mut rng);
             shape = Some(kind);
             // A chain's moons share the disk unevenly.
             let weights: Vec<f64> = (0..count).map(|_| rng.uniform(0.3, 1.7)).collect();
@@ -1963,7 +1984,7 @@ mod tests {
     fn disk_mass_stays_within_the_solar_system_range() {
         let mut rng = Draws(7);
         for _ in 0..2000 {
-            let ratio = disk_mass_ratio(&mut rng);
+            let ratio = disk_mass_ratio(GiantKind::Gas, &mut rng);
             assert!((1.0e-4..=2.5e-4).contains(&ratio), "{ratio}");
         }
         // Drawn systems (Jupiters and Saturns, the whole chain within
@@ -1988,7 +2009,7 @@ mod tests {
         let mut rng = Draws(11);
         let share = |rng: &mut Draws, mass: f64| {
             (0..1000)
-                .filter(|_| disk_shape(mass, rng) == DiskShape::Dominant)
+                .filter(|_| disk_shape(GiantKind::Gas, mass, rng) == DiskShape::Dominant)
                 .count() as f64
                 / 1000.0
         };
@@ -2024,6 +2045,39 @@ mod tests {
         let mut hot = gas_giant(1, 300.0, 0.04);
         hot.look = crate::look::Look::load("hot-jupiter");
         assert_eq!(MoonSystem::draw(&hot).unwrap().disk_shape, None);
+    }
+
+    #[test]
+    fn ice_giants_keep_a_chain_of_comparable_moons() {
+        // An impact-generated disk (Ida et al. 2020): several comparable
+        // moons near Uranus's 1e-4, whatever the mass.
+        let mut rng = Draws(5);
+        let chains = (0..1000)
+            .filter(|_| disk_shape(GiantKind::Ice, 14.5, &mut rng) == DiskShape::Chain)
+            .count();
+        assert_eq!(chains, 1000);
+        for _ in 0..1000 {
+            let ratio = disk_mass_ratio(GiantKind::Ice, &mut rng);
+            assert!((1.0e-4..=1.2e-4).contains(&ratio), "{ratio}");
+        }
+        // Drawn Uranuses: a chain, the whole disk in it unless a Triton
+        // was captured.
+        for seed in 0..300 {
+            let mut p = params(seed, 40_075.0);
+            p.look = crate::look::Look::load("ice-giant");
+            p.giant_mass_earth = Some(14.5);
+            p.orbit_au = 19.2;
+            p.circumference_km = crate::giant_world::radius_earth(&p, 14.5) * 40_075.0;
+            let system = MoonSystem::draw(&p).unwrap();
+            assert_eq!(system.disk_shape, Some(DiskShape::Chain), "seed {seed}");
+            if system.moons.iter().all(|m| m.origin == MoonOrigin::Disk) {
+                let total: f64 = system.moons.iter().map(|m| f64::from(m.mass_ratio)).sum();
+                assert!(
+                    (0.99999e-4..=1.20001e-4).contains(&total),
+                    "seed {seed}: {total}"
+                );
+            }
+        }
     }
 
     #[test]
