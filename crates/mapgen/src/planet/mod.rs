@@ -55,6 +55,7 @@ pub mod interim;
 pub mod interior;
 pub mod life;
 pub mod mass;
+pub mod moon;
 pub mod reference;
 pub mod regime;
 pub mod xuv;
@@ -73,6 +74,7 @@ pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_wit
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use life::{Life, life, oxygenate};
 pub use mass::{Origin, SMALL_MASS, draw_mass};
+pub use moon::{MoonBirth, MoonFormation, derive_moon_model};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, steam, water};
 pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
@@ -317,7 +319,8 @@ const AU_M: f64 = 1.495_978_707e11;
 /// class, which feeds back into none of them. A body that keeps an
 /// envelope of [`escape::MIN_ENVELOPE`] or more has no surface; any other
 /// goes on to its [`water`] and [`regime`], its [`core`], its air
-/// ([`outgassed`], [`atmosphere`], [`methane_photolysis`], [`cold_trap`],
+/// ([`outgassed`], [`atmosphere`] (a giant's moon unshielded by its own
+/// dynamo, see `shield`), [`methane_photolysis`], [`cold_trap`],
 /// [`photochemistry`], in that order: the photochemistry reads the cold
 /// trap's air), its
 /// [`climate`] and its [`life`] with the oxygen it makes. A body whose
@@ -331,6 +334,31 @@ const AU_M: f64 = 1.495_978_707e11;
 /// water layer, its internal heat and its surface's climate.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
+}
+
+/// The core whose field shields a body's air from escape: its own, unless
+/// it is a moon of a giant (a host of [`GIANT_MIN_MASS_EARTH`] or more,
+/// `context.tide`), which orbits inside its giant's magnetosphere: the
+/// giant's corotating plasma reaches its upper atmosphere and sputters it
+/// whatever its own dynamo (Io, Europa and Ganymede inside Jupiter's,
+/// Titan at the edge of Saturn's; Kivelson et al. 2004, "Magnetospheric
+/// interactions with satellites", in *Jupiter: The Planet, Satellites
+/// and Magnetosphere*, ch. 21, not checked), so it meets the unshielded
+/// escape of [`atmosphere`]. Calibration, no source, for taking every
+/// giant's magnetosphere as enclosing its moons, and for the giant mass:
+/// it keeps Jupiter's moons airless (Io, to which the core model gives a
+/// dynamo it does not have, would keep about 0.01 bar of N₂) and leaves
+/// the Moon, whose host is the Earth, as a planet.
+fn shield(context: &Context, core: Core) -> Core {
+    let giant_kg = GIANT_MIN_MASS_EARTH * EARTH_KG;
+    if context.tide.is_some_and(|t| t.host_kg >= giant_kg) {
+        Core {
+            dynamo: false,
+            ..core
+        }
+    } else {
+        core
+    }
 }
 
 /// [`planet_model`] and the air it had before the climate (see [`Air`]).
@@ -375,7 +403,13 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
             let r = regime(&inputs, &heat, &interior, &w);
             let k = core(&inputs, &interior, r, context.age_gyr);
             let out = outgassed(&inputs, &w, r, &interior);
-            let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
+            let atm = atmosphere(
+                out,
+                &interior,
+                inputs.mass_earth,
+                &shield(context, k),
+                fluence,
+            );
             // A runaway's water is the steam escape has left in its air.
             let w = if w.runaway {
                 w.keeping(atm.h2o / bar_per_kg)
@@ -597,6 +631,25 @@ mod tests {
     fn moon(name: &str, a_m: f64, eccentricity: f64) -> PlanetModel {
         let inputs = reference::model_inputs(reference(name));
         planet_model(&round_jupiter(a_m, eccentricity), inputs)
+    }
+
+    #[test]
+    fn a_giants_moon_is_unshielded_and_the_moon_is_not() {
+        let core = Core {
+            state: CoreState::Liquid,
+            dynamo: true,
+            field_ut: 1.0,
+        };
+        let around = |host_kg: f64| {
+            reference::sun_at(5.2).with_tide(HostTide {
+                host_kg,
+                a_m: 4.217e8,
+                eccentricity: 0.0041,
+            })
+        };
+        assert!(!shield(&around(JUPITER_KG), core).dynamo);
+        assert_eq!(shield(&around(5.972e24), core), core);
+        assert_eq!(shield(&reference::sun_at(1.0), core), core);
     }
 
     #[test]

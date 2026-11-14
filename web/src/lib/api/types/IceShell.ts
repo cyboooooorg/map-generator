@@ -10,7 +10,8 @@ export type IceShell = {
  */
 shell_km: number, 
 /**
- * Thickness of the liquid ocean under the shell, km; 0 when the
- * shell reaches the bottom of the water layer.
+ * Thickness of the liquid ocean under the shell, km, down to the
+ * bottom of the water layer or to [`HIGH_PRESSURE_ICE_PA`],
+ * whichever comes first; 0 when the shell reaches either.
  */
 ocean_km: number, };

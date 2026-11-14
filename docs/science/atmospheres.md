@@ -314,7 +314,12 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 - **Moons are airless.** Every moon drawn round a planet gets the
   `rocky-moon` or `icy-moon` preset, at 0 bar. Titan, a moon with more air
   than Earth, cannot appear as one; only a world asked for as a giant's moon
-  keeps its own type's air.
+  keeps its own type's air. The physical planet model can now derive a
+  round moon (`planet::derive_moon_model`, see
+  [planet-atmospheres.md](planet-atmospheres.md)): a Titan comes out a
+  hydrocarbon world with about 1.5 bar of N₂ and a few percent of CH₄,
+  Jupiter's moons airless and Triton with a thin N₂ air. Drawn systems do
+  not use it yet (part 4 of #423).
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon

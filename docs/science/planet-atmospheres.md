@@ -371,10 +371,59 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
 
-A shortcoming, outside the targets: Ganymede keeps 0.016 bar of N₂ and
-Callisto, to which the core model gives a weak deep dynamo, 0.047 bar;
-both are airless. Before methane photolysis they also kept 0.15 and
-0.47 bar of CH₄. Moons are not modelled yet (`body_model` skips them).
+As planets round the Sun, the reference moons above have a shortcoming,
+outside the targets: Ganymede keeps 0.016 bar of N₂ and Callisto, to
+which the core model gives a weak deep dynamo, 0.047 bar, where both are
+airless. Before methane photolysis they also kept 0.15 and 0.47 bar of
+CH₄. As moons (below), they come out airless.
+
+**Moons** (`planet::derive_moon_model`). A round moon goes through the
+same chain under its star's light at its planet's orbit (the same XUV
+fluence and shoreline), with two rules of its own:
+
+- *Born warm, no hypervolatiles.* A moon born in its planet's disk keeps
+  the ammonia, methane and nitrogen of its ices only when its planet's
+  equilibrium temperature is under 100 K (`HYPERVOLATILES_MAX_K`). Titan's
+  nitrogen came from ammonia ice of the protosolar disk (Mandt, Mousis,
+  Lunine & Gautier 2014, *ApJ Letters* 788, L24,
+  doi:10.1088/2041-8205/788/2/L24), which Saturn's cold subnebula let its
+  moons keep (Mousis, Gautier & Bockelée-Morvan 2002, *Icarus* 156, 162,
+  doi:10.1006/icar.2001.6782); Jupiter's warmer one did not. Both DOIs
+  were checked against Crossref; the papers were not read beyond their
+  titles and abstracts. The planet's equilibrium temperature stands for
+  its disk's. **Calibration**, no source, for 100 K: it sits between
+  Jupiter (112 K, Ganymede and Callisto airless) and Saturn (83 K, Titan
+  with its N₂), set there so that these moons come out as themselves. A
+  captured moon (a body from beyond the ice line, Triton) keeps these
+  ices; a moon born of an impact, or without ice, draws as a planet. The
+  amounts kept are the planet rule's (1 % of the ice in NH₃ and in CH₄),
+  which give Titan its nitrogen.
+- *Inside a giant's magnetosphere, no shield.* A moon of a giant (a host
+  of 10 M⊕ or more) meets the unshielded escape whatever its own dynamo:
+  the giant's corotating plasma reaches its upper air (Kivelson et al.
+  2004, in *Jupiter: The Planet, Satellites and Magnetosphere*, ch. 21,
+  not checked). **Calibration**, no source, for taking every giant's
+  magnetosphere as enclosing its moons: it leaves Io airless (the core
+  model gives it a dynamo, which the real Io lacks, and with it Io kept
+  about 0.01 bar of N₂). The Moon, whose host is the Earth, keeps the
+  planet rule.
+
+Through `derive_moon_model` (G2V, 4.57 Gyr, seed 1, the moons' real
+masses, ice shares and orbits):
+
+| Moon | Result | Observed |
+|---|---|---|
+| Titan | hydrocarbon world, 1.5 bar, 98 % N₂, 0.038 bar CH₄ | 1.5 bar, about 5 % CH₄ |
+| Ganymede, Callisto | 4e-5 and 9e-6 bar | airless |
+| Io | heat pipe, 1.3e-4 bar | heat pipe, SO₂ of about 1e-9 bar |
+| Europa | 8e-6 bar | airless |
+| Triton | 1.9e-3 bar of N₂ (frost at 47 K) | about 1.4e-5 bar of N₂ |
+| Moon | 1e-12 bar | airless |
+
+Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
+by 0.3 dex), Io's air up to 8e-4 bar. Triton's N₂ is its frost's vapour
+pressure at the equilibrium temperature of 47 K, where Triton's surface,
+brighter, is at 38 K: a hundred times the observed pressure.
 
 ## Climate and surface liquid
 
