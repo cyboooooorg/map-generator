@@ -320,6 +320,20 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
   hydrocarbon world with about 1.5 bar of N₂ and a few percent of CH₄,
   Jupiter's moons airless and Triton with a thin N₂ air. Drawn systems do
   not use it yet (part 4 of #423).
+- **Hydrocarbon lakes sit poleward of a set latitude.** On a world whose
+  surface liquid is methane and ethane, such as a Titan, the app puts the
+  liquid poleward of 55° and keeps the lower latitudes dry
+  (`POLAR_LIQUID_LAT_DEG`, `WorldParams::liquid_poleward_deg`): the sea
+  level is found over that band, so the liquid still covers about 1 % of
+  the surface, and no lake, river mouth or sea forms nearer the equator.
+  Titan's lakes lie almost all (about 97 % of their area) north of 55° N,
+  its low latitudes being dune fields (Hayes 2016 [10]; Lorenz et al. 2006 [11]),
+  because its circulation carries methane poleward (Mitchell 2008 [12];
+  Schneider et al. 2012 [13]). The latitude is a calibration with Titan as its
+  target, applied to every hydrocarbon world; the app does not derive it
+  from the world's circulation, and does not model the north-south
+  asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
+  band is a straight line of latitude.
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon
@@ -384,6 +398,24 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
    moons](https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturniansatfact.html)
    (escape velocities, insolation, pressures, temperatures, compositions,
    atmospheric masses; Titan's mass and radius).
+10. Hayes, A. G. 2016, "The lakes and seas of Titan", *Annual Review of
+    Earth and Planetary Sciences* 44, 57–83,
+    [doi:10.1146/annurev-earth-060115-012247](https://doi.org/10.1146/annurev-earth-060115-012247).
+11. Lorenz, R. D. et al. 2006, "The sand seas of Titan: Cassini RADAR
+    observations of longitudinal dunes", *Science* 312, 724–727,
+    [doi:10.1126/science.1123257](https://doi.org/10.1126/science.1123257).
+12. Mitchell, J. L. 2008, "The drying of Titan's dunes: Titan's methane
+    hydrology and its impact on atmospheric circulation", *Journal of
+    Geophysical Research* 113, E08015,
+    [doi:10.1029/2007JE003017](https://doi.org/10.1029/2007JE003017).
+13. Schneider, T. et al. 2012, "Polar methane accumulation and rainstorms
+    on Titan from simulations of the methane cycle", *Nature* 481,
+    58–61,
+    [doi:10.1038/nature10666](https://doi.org/10.1038/nature10666).
+14. Aharonson, O. et al. 2009, "An asymmetric distribution of lakes on
+    Titan as a possible consequence of orbital forcing", *Nature
+    Geoscience* 2, 851–854,
+    [doi:10.1038/ngeo698](https://doi.org/10.1038/ngeo698).
 
 ## See also
 

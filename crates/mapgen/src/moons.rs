@@ -1602,6 +1602,7 @@ pub fn small_body_params(
         resonance_to_star: None,
         moon: true,
         day_hours: None,
+        liquid_poleward_deg: None,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1783,6 +1784,7 @@ mod tests {
             resonance_to_star: None,
             moon: false,
             day_hours: None,
+            liquid_poleward_deg: None,
             gravity: None,
         }
     }

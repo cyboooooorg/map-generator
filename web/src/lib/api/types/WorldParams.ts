@@ -192,4 +192,11 @@ moon?: boolean,
  * other world, whose day follows from its star's tides, its moons or
  * the giant it orbits (see `crate::generation::belts`).
  */
-day_hours?: number, };
+day_hours?: number, 
+/**
+ * Latitude, degrees, poleward of which a hydrocarbon world's surface
+ * liquid lies: a point nearer the equator is never under it (see
+ * [`crate::planet::interim::POLAR_LIQUID_LAT_DEG`]). Absent on every
+ * other world, whose sea follows its relief alone.
+ */
+liquid_poleward_deg?: number, };

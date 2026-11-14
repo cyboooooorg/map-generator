@@ -1798,6 +1798,7 @@ mod tests {
             resonance_to_star: None,
             moon: false,
             day_hours: None,
+            liquid_poleward_deg: None,
             gravity: None,
         }
     }

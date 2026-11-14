@@ -838,6 +838,7 @@ mod tests {
             resonance_to_star: None,
             moon: false,
             day_hours: None,
+            liquid_poleward_deg: None,
             ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
         let world = generate(&params).world;

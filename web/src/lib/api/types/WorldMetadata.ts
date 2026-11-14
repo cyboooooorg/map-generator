@@ -41,6 +41,11 @@ moon?: boolean,
  */
 day_hours?: number | null, 
 /**
+ * The latitude poleward of which its surface liquid lies (see
+ * `WorldParams::liquid_poleward_deg`); left out otherwise.
+ */
+liquid_poleward_deg?: number | null, 
+/**
  * The inputs the planet formed with, as a request sets them
  * ([`PlanetModel::formation`]): what a request pins to make the same
  * planet under another seed or epoch. Left out with the model, and

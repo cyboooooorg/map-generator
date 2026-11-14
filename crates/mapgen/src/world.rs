@@ -159,6 +159,13 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub day_hours: Option<f32>,
+    /// Latitude, degrees, poleward of which a hydrocarbon world's surface
+    /// liquid lies: a point nearer the equator is never under it (see
+    /// [`crate::planet::interim::POLAR_LIQUID_LAT_DEG`]). Absent on every
+    /// other world, whose sea follows its relief alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub liquid_poleward_deg: Option<f32>,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

@@ -133,6 +133,22 @@ const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]
 /// doi:10.1038/nature05438, mapped them). The model does not size them.
 const HYDROCARBON_LAND_FRACTION: f32 = 0.99;
 
+/// Latitude, degrees, poleward of which a hydrocarbon world's surface
+/// liquid lies; the low latitudes are dry ground. Titan's lakes and seas
+/// lie almost all (about 97 % of their area) north of 55 N, its low
+/// latitudes being dune fields (Hayes 2016,
+/// doi:10.1146/annurev-earth-060115-012247; Lorenz et al. 2006,
+/// doi:10.1126/science.1123257): the circulation carries methane
+/// poleward, evaporation beats rain near the equator and liquid gathers
+/// near the poles (Mitchell 2008, doi:10.1029/2007JE003017; Schneider et
+/// al. 2012, doi:10.1038/nature10666).
+///
+/// A calibration with Titan as its target, applied to every hydrocarbon
+/// world, planet or moon (see [`WorldParams::liquid_poleward_deg`]); no
+/// source gives it as a function of the world. The north-south asymmetry
+/// of Titan's lakes (Aharonson et al. 2009) is not modelled.
+pub const POLAR_LIQUID_LAT_DEG: f32 = 55.0;
+
 /// Surface pressure past which the sky yellows toward caustic's, bar, and
 /// the one at which it is wholly caustic's. Calibration, no source: Venus's
 /// sky (92 bar) is yellow, Earth's (1 bar) blue; from 10 to 100 bar on a
@@ -521,6 +537,10 @@ pub fn params_for(
         resonance_to_star: None,
         moon: false,
         day_hours: None,
+        // Hydrocarbons gather near the poles, whatever the world.
+        liquid_poleward_deg: surface
+            .is_some_and(|s| s.climate.liquid == SurfaceLiquid::Hydrocarbons)
+            .then_some(POLAR_LIQUID_LAT_DEG),
         ridge: None,
         // A giant's gravity follows from its own mass.
         gravity: (!giant).then_some(model.interior.gravity as f32),
@@ -577,7 +597,9 @@ pub fn params_for(
 /// world is [`dry`](crate::biome::BiomeRules::dry), its sea level
 /// [`DRY_SEA_LEVEL`](crate::generation::DRY_SEA_LEVEL)), or for a hydrocarbon
 /// world, whose lakes the model does not size, Titan's share of land
-/// ([`HYDROCARBON_LAND_FRACTION`]); then the temperature shift that brings
+/// ([`HYDROCARBON_LAND_FRACTION`]) counted over the whole surface, the
+/// low latitudes (see [`POLAR_LIQUID_LAT_DEG`]) being land whatever the
+/// sea level; then the temperature shift that brings
 /// the world's mean to the model's ([`warming_for`]).
 ///
 /// Both pass over a coarse grid of the relief (about a second in all in
@@ -723,6 +745,54 @@ mod tests {
             }
         }
         assert_eq!(checked, 24);
+    }
+
+    #[test]
+    fn only_hydrocarbon_worlds_keep_their_liquid_near_the_poles() {
+        let params = |name: &str| {
+            params_for(
+                &model_of(name),
+                &earth_placed(1),
+                &mut StdRng::seed_from_u64(1),
+            )
+        };
+        assert_eq!(
+            params("Titan").liquid_poleward_deg,
+            Some(POLAR_LIQUID_LAT_DEG)
+        );
+        for name in ["Earth", "Mars", "Venus"] {
+            assert_eq!(params(name).liquid_poleward_deg, None, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_titan_has_its_lakes_near_the_poles() {
+        let model = model_of("Titan");
+        for seed in [1, 2] {
+            let mut placed = earth_placed(seed);
+            (placed.width, placed.height) = (256, 128);
+            let mut params = params_for(&model, &placed, &mut StdRng::seed_from_u64(seed.into()));
+            calibrate(&mut params, &model);
+            let world = crate::generation::generate(&params).world;
+            let grid = params.grid();
+            let (mut liquid, mut total) = (0.0f64, 0.0f64);
+            for (i, biome) in world.biomes.iter().enumerate() {
+                let y = (i / world.width as usize) as u32;
+                let area = grid.latitude(y).cos();
+                total += area;
+                let relief = world.elevation[i] - params.sea_level;
+                if relief < params.look.rules.open_water() || *biome == crate::biome::Biome::Lake {
+                    liquid += area;
+                    let lat = grid.latitude(y).to_degrees().abs();
+                    assert!(
+                        lat >= f64::from(POLAR_LIQUID_LAT_DEG) - 1.5,
+                        "seed {seed}: {lat}"
+                    );
+                }
+            }
+            let share = 100.0 * liquid / total;
+            assert!((0.3..3.0).contains(&share), "seed {seed}: {share} %");
+        }
     }
 
     #[test]

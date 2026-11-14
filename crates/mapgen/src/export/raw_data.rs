@@ -108,6 +108,10 @@ pub struct WorldMetadata {
     /// `WorldParams::day_hours`); left out otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub day_hours: Option<f32>,
+    /// The latitude poleward of which its surface liquid lies (see
+    /// `WorldParams::liquid_poleward_deg`); left out otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liquid_poleward_deg: Option<f32>,
     /// The inputs the planet formed with, as a request sets them
     /// ([`PlanetModel::formation`]): what a request pins to make the same
     /// planet under another seed or epoch. Left out with the model, and
@@ -632,6 +636,7 @@ pub(crate) fn write_raw_data(
         model: world.params.model.clone(),
         moon: world.params.moon,
         day_hours: world.params.day_hours,
+        liquid_poleward_deg: world.params.liquid_poleward_deg,
         formation: world
             .params
             .model
@@ -1111,6 +1116,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         resonance_to_star: Some(meta.star.spin_turns),
         moon: meta.moon,
         day_hours: meta.day_hours,
+        liquid_poleward_deg: meta.liquid_poleward_deg,
         // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
@@ -1365,6 +1371,7 @@ mod tests {
             resonance_to_star: None,
             moon: false,
             day_hours: None,
+            liquid_poleward_deg: None,
             gravity: None,
         })
         .world;

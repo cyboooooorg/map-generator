@@ -318,6 +318,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         resonance_to_star: None,
         moon: false,
         day_hours: None,
+        liquid_poleward_deg: None,
         gravity: None,
     }
 }
@@ -362,6 +363,7 @@ mod tests {
             resonance_to_star: None,
             moon: false,
             day_hours: None,
+            liquid_poleward_deg: None,
             gravity: None,
         }
     }

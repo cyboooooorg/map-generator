@@ -476,6 +476,7 @@ mod tests {
             resonance_to_star: turns,
             moon: false,
             day_hours: None,
+            liquid_poleward_deg: None,
             ..base.clone()
         };
         for seed in 0..50 {
