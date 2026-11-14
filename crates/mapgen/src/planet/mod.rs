@@ -352,6 +352,13 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
 }
 
+/// Whether the body orbits a giant (a host of [`GIANT_MIN_MASS_EARTH`] or
+/// more, `context.tide`).
+pub fn moon_of_giant(context: &Context) -> bool {
+    let giant_kg = GIANT_MIN_MASS_EARTH * EARTH_KG;
+    context.tide.is_some_and(|t| t.host_kg >= giant_kg)
+}
+
 /// The core whose field shields a body's air from escape: its own, unless
 /// it is a moon of a giant (a host of [`GIANT_MIN_MASS_EARTH`] or more,
 /// `context.tide`), which orbits inside its giant's magnetosphere: the
@@ -366,8 +373,7 @@ pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
 /// dynamo it does not have, would keep about 0.01 bar of N₂) and leaves
 /// the Moon, whose host is the Earth, as a planet.
 fn shield(context: &Context, core: Core) -> Core {
-    let giant_kg = GIANT_MIN_MASS_EARTH * EARTH_KG;
-    if context.tide.is_some_and(|t| t.host_kg >= giant_kg) {
+    if moon_of_giant(context) {
         Core {
             dynamo: false,
             ..core

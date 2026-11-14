@@ -3,6 +3,7 @@
 // on large maps, and the earlier ones are useful on their own).
 import { t } from './i18n/index.svelte';
 import { api, peeked, sizeName, systemBodyId, worldFile } from './api/client';
+import type { BodyExtras } from './api/types/BodyExtras';
 import type { BodySizes } from './api/types/BodySizes';
 import type { PresentSize } from './api/types/PresentSize';
 import type { System } from './api/types/System';
@@ -72,6 +73,8 @@ export class LoadedWorld {
   systemNames = $state.raw<Record<string, string>>({});
   /** The bodies of the system that lost their files after a while unopened (see evicted.ts). */
   systemEvicted = $state.raw<string[]>([]);
+  /** What the planet model says of each body (cause trees, resemblance), by body id; none from the file alone. */
+  systemExtras = $state.raw<Record<string, BodyExtras>>({});
   systemBody = $state<string | null>(null);
   /**
    * What the viewer shows: the body (`planet`), or the star and its system
@@ -102,6 +105,8 @@ export class LoadedWorld {
   pinnedPlanets = $state<string[]>([]);
   /** The body of the system shown, from its file. */
   shownSystemBody = $derived(this.system?.bodies.find((b) => b.id === this.systemBody) ?? null);
+  /** The extras of the body shown, if the server sent any. */
+  shownExtras = $derived(this.systemExtras[this.systemBody ?? ''] ?? null);
   private systemController: AbortController | null = null;
   /** The layers as loaded, at the present. */
   private present: WorldLayers | null = null;
@@ -133,6 +138,7 @@ export class LoadedWorld {
     this.systemBody = null;
     this.systemNames = {};
     this.systemEvicted = [];
+    this.systemExtras = {};
     this.subject = 'planet';
     this.starMode = 'system';
     this.pinnedPlanets = [];
@@ -169,6 +175,7 @@ export class LoadedWorld {
       this.system = null;
       this.systemNames = {};
       this.systemEvicted = [];
+      this.systemExtras = {};
       this.systemBody = null;
       this.worldMeta = null;
       this.worldStats = null;
@@ -181,11 +188,12 @@ export class LoadedWorld {
     this.systemId = id;
     this.worldId = null;
     (async () => {
-      const { system, names, evicted } = await fetchSystem(id, controller.signal);
+      const { system, names, evicted, extras } = await fetchSystem(id, controller.signal);
       if (controller.signal.aborted) return;
       this.system = system;
       this.systemNames = names;
       this.systemEvicted = evicted;
+      this.systemExtras = extras;
       // `focus` shows the planet the system was drawn around, as a planet.
       if (focus) this.subject = 'planet';
       const wanted = body ?? (focus ? null : again ? this.systemBody : null);
@@ -520,13 +528,23 @@ function displayedSize(sizes: BodySizes): PresentSize | null {
 async function fetchSystem(
   id: string,
   signal: AbortSignal,
-): Promise<{ system: System; names: Record<string, string>; evicted: string[] }> {
+): Promise<{
+  system: System;
+  names: Record<string, string>;
+  evicted: string[];
+  extras: Record<string, BodyExtras>;
+}> {
   const response = await fetch(`/api/systems/${encodeURIComponent(id)}`, { signal, cache: 'no-cache' });
   if (response.ok) {
-    const body = (await response.json()) as { system: System; names?: Record<string, string>; evicted?: string[] };
-    return { system: body.system, names: body.names ?? {}, evicted: body.evicted ?? [] };
+    const body = (await response.json()) as {
+      system: System;
+      names?: Record<string, string>;
+      evicted?: string[];
+      extras?: Record<string, BodyExtras>;
+    };
+    return { system: body.system, names: body.names ?? {}, evicted: body.evicted ?? [], extras: body.extras ?? {} };
   }
   const file = await fetch(`/systems/${encodeURIComponent(id)}/system.json`, { signal, cache: 'no-cache' });
   if (!file.ok) throw new Error(`${file.status} ${file.statusText}`);
-  return { system: (await file.json()) as System, names: {}, evicted: [] };
+  return { system: (await file.json()) as System, names: {}, evicted: [], extras: {} };
 }

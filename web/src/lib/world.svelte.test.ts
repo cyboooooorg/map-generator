@@ -40,6 +40,31 @@ describe('LoadedWorld.loadSystem', () => {
     expect(world.shownSystemBody?.id).toBe('d');
   });
 
+  it('keeps the extras the route sends, and has none from the file alone', async () => {
+    const extras = { 'd-1': { explanation: null, similar: 'titan-like' } };
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.startsWith('/api/')
+        ? { ok: true, json: async () => ({ system: files.a, extras }) }
+        : { ok: true, json: async () => files.a },
+    );
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd-1');
+    await flush();
+    expect(world.systemExtras).toEqual(extras);
+    expect(world.shownExtras?.similar).toBe('titan-like');
+    world.loadSystem('b', 'd');
+    expect(world.systemExtras).toEqual({});
+    expect(world.shownExtras).toBeNull();
+
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.startsWith('/api/') ? { ok: false, status: 404, statusText: 'x' } : { ok: true, json: async () => files.a },
+    );
+    world.loadSystem('c', 'd-1');
+    await flush();
+    expect(world.system?.bodies).toHaveLength(3);
+    expect(world.systemExtras).toEqual({});
+  });
+
   it('keeps the system when it is loaded again', async () => {
     vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
     const world = new LoadedWorld();

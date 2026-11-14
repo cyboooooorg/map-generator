@@ -7,7 +7,7 @@
 //! | `GET /api/form`                 | parameter limits, defaults and map sizes          |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
-//! | `GET /api/systems/{id}`         | a system (`system.json`), the names given and the bodies evicted (`evicted`, see [`evict`]) |
+//! | `GET /api/systems/{id}`         | a system (`system.json`), the names given, the bodies evicted (`evicted`, see [`evict`]) and the cause trees and resemblance of each modelled body (`extras`) |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it or a resolution of a body is being generated) |
 //! | `GET /api/systems/{id}/export`  | a `.zip` of the system: `system.json` (seeds, requests, names, generator versions; see `crate::export`) and the PNGs of its generated bodies |
 //! | `PUT /api/systems/{id}/names`   | name its bodies, the star too (`SystemNames`)      |
@@ -36,10 +36,10 @@
 //! level) when the client accepts it; PNG images are already compressed and
 //! sent as they are.
 use crate::api::{
-    ApiError, ArchetypeInfo, BodySizes, DisplayedSize, ErrorDetail, FormSpec, GenerateStarted,
-    GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec, PendingSize,
-    PresentSize, RegeneratedBody, SystemCreated, SystemDetail, SystemName, SystemNames,
-    SystemQuery, SystemSummary,
+    ApiError, ArchetypeInfo, BodyExtras, BodySizes, DisplayedSize, ErrorDetail, FormSpec,
+    GenerateStarted, GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec,
+    PendingSize, PresentSize, RegeneratedBody, SystemCreated, SystemDetail, SystemName,
+    SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -57,6 +57,7 @@ use axum::{Json, Router};
 use mapgen::detail::{RENDER_VERSION, TileId};
 use mapgen::hex::{self, DEFAULT_RIVER_FLOW_KM2, HexMap};
 use mapgen::request::{self, WorldRequest, fallback};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
@@ -781,10 +782,13 @@ async fn get_system(
     let root = state.config.systems_dir.clone();
     let owned = id.clone();
     let index = state.index.clone();
+    let shared = state.clone();
     tokio::task::spawn_blocking(move || {
         let system = mapgen::system::read_system(&systems::system_dir(&root, &owned))?;
+        let extras = body_extras(&system, &shared.catalog);
         Ok::<_, String>(SystemDetail {
             system,
+            extras,
             names: index.names(&owned).unwrap_or_default(),
             evicted: index.evicted_bodies(&owned).unwrap_or_default(),
         })
@@ -793,6 +797,38 @@ async fn get_system(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map(Json)
     .map_err(|e| unreadable_system(&state.config.systems_dir, &id, &e))
+}
+
+/// The cause trees and the resemblance of every body of `system` that has
+/// a model. A body asked by archetype resembles that archetype; the others
+/// the nearest built-in one.
+fn body_extras(system: &mapgen::system::System, catalog: &Catalog) -> BTreeMap<String, BodyExtras> {
+    let built_in: Vec<&mapgen::archetype::Archetype> = catalog
+        .entries()
+        .filter(|(info, _)| info.built_in)
+        .map(|(_, a)| a)
+        .collect();
+    let mut extras = BTreeMap::new();
+    for body in &system.bodies {
+        let (Some(model), Some(context)) =
+            (&body.model, mapgen::system::body_context(system, body))
+        else {
+            continue;
+        };
+        let similar = body.params.archetype.clone().or_else(|| {
+            let moon_of_giant = mapgen::planet::moon_of_giant(&context);
+            mapgen::archetype::similar(&context, model, moon_of_giant, built_in.iter().copied())
+                .map(str::to_string)
+        });
+        extras.insert(
+            body.id.clone(),
+            BodyExtras {
+                explanation: mapgen::planet::explain(&context, model),
+                similar,
+            },
+        );
+    }
+    extras
 }
 
 /// The failure of a system whose `system.json` could not be read: 404 when
@@ -4557,6 +4593,42 @@ mod tests {
         assert!(created["job_id"].is_string(), "{body}");
         let events = wait_job(&app, &body).await;
         assert!(events.contains("\"status\":\"done\""), "{events}");
+    }
+
+    #[tokio::test]
+    async fn a_system_comes_with_the_cause_trees_and_resemblances_of_its_bodies() {
+        let app = router(temp_config("extras"));
+        let request = r#"{"system": {"planets": {"titan-like": 1, "earth-like": 1}, "seed": 1, "width": 64, "height": 32}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let id = serde_json::from_str::<serde_json::Value>(&body).unwrap()["system_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let (status, body) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let detail: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let extras = detail["extras"].as_object().unwrap();
+        let modelled: Vec<&str> = detail["system"]["bodies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|b| b["model"].is_object())
+            .map(|b| b["id"].as_str().unwrap())
+            .collect();
+        assert!(!modelled.is_empty(), "{body}");
+        assert_eq!(extras.len(), modelled.len(), "{body}");
+        let asked = detail["system"]["bodies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["params"]["archetype"] == "titan-like")
+            .expect("the body asked by archetype");
+        let asked = asked["id"].as_str().unwrap();
+        assert_eq!(extras[asked]["similar"], "titan-like", "{body}");
+        assert!(extras[asked]["explanation"].is_object(), "{body}");
+        let tree = serde_json::to_string(&extras).unwrap();
+        assert!(tree.contains("\"surface_temperature\""), "{tree}");
     }
 
     #[tokio::test]

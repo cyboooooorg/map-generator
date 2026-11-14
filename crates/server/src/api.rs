@@ -408,6 +408,22 @@ pub struct SystemDetail {
     /// generated, like a body never generated, but opening their view
     /// generates them again.
     pub evicted: Vec<String>,
+    /// What the planet model says of each body that has one, by body id:
+    /// the cause trees of its derived values and the archetype it
+    /// resembles.
+    pub extras: BTreeMap<String, BodyExtras>,
+}
+
+/// The planet model's account of one body, for the viewer's cards.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct BodyExtras {
+    /// Why its derived values are what they are; none when the model
+    /// cannot be explained (see `mapgen::planet::explain`).
+    pub explanation: Option<mapgen::planet::Explanation>,
+    /// The built-in archetype it resembles: its own when it was asked by
+    /// archetype, else the nearest one within the threshold.
+    pub similar: Option<String>,
 }
 
 /// The names given to a system's bodies (`PUT /api/systems/{id}/names`):

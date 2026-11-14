@@ -65,6 +65,11 @@ impl Catalog {
             .map(|(_, a)| a)
     }
 
+    /// Every archetype with its catalog entry, built-in ones first.
+    pub fn entries(&self) -> impl Iterator<Item = &(ArchetypeInfo, Archetype)> {
+        self.entries.iter()
+    }
+
     pub fn list(&self) -> Vec<ArchetypeInfo> {
         self.entries.iter().map(|(info, _)| info.clone()).collect()
     }

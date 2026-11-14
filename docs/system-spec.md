@@ -686,7 +686,10 @@ addressed as `<system-id>/<body-id>` everywhere.
   its neighbourhood; in mode 1 there is no job (`job_id` null) until a
   body is opened.
 - `GET /api/systems/{id}`: its `system.json`, with the names given and
-  `evicted`, the bodies that lost their files (see Storage, *Eviction*).
+  `evicted`, the bodies that lost their files (see Storage, *Eviction*),
+  and `extras`, by body id for each body with a model: `explanation`, the
+  cause trees of its derived values, and `similar`, the built-in
+  archetype it resembles (its own when it was asked by archetype).
 - `DELETE /api/systems/{id}`: delete a system; 409 while one of its
   bodies is being generated.
 - `PUT /api/systems/{id}/names`: replace the names given
