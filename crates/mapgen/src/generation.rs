@@ -817,7 +817,7 @@ impl Sampler {
         }
         if p.look.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
-            // edge of the shelf, from the continents' shape alone.
+            // crust line, from the continents' shape alone.
             let continental = |q| sampler.continental(q);
             let map = match frame {
                 Some(frame) if p.drift_ma == 0.0 => {

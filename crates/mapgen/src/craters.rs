@@ -129,7 +129,8 @@ const ROCK_STRENGTH: f64 = 12.5e6;
 /// volatiles" and sedimentary, is weaker. The low end, 1.5, puts Mars at
 /// 7.2 km, within its 7 to 8 km; with the strength the only cause here,
 /// the factor stands for the impact speed too, which they name as a
-/// second one.
+/// second one. Calibration on Mars's transition: the range is sourced,
+/// the choice of its low end and its use for every wet crust are not.
 const WET_ROCK_WEAKENING: f64 = 1.5;
 /// Density of an ice crust, kg/m³: ice Ih at 0 °C, 0.917 g/cm³ (CRC
 /// Handbook of Chemistry and Physics, 61st edition, 1981, F-1, as quoted

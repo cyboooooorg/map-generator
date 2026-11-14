@@ -305,8 +305,18 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   of their own; there is no flexure of the crust under a volcano. The
   thick crust covers 41 % of every wet world, Earth's share: a world's
   mean thickness from its mass and heat, and Mars's larger highlands, are
-  not modelled. Sea floor older than about 18 Ma lies between 4 and
-  6.4 km by the noise, not by its age.
+  not modelled. Sea floor older than about 18 Ma lies at the old floor and
+  below it by the noise, not by its age (about 3.25 to 5.65 km under
+  Earth's ocean, against Parsons & Sclater's 4 to 6.4 km).
+- **The water does not load the sea floor.** Airy's balance here weighs
+  the crust alone: the floor stands at the same height whatever the
+  water above it. Water presses a basin down by about $\rho_w/\rho_m$ of
+  its depth (1.03/3.3, about a third), so a drier world's basins would
+  rebound by that much where the water left them, about 1.4 km under
+  Earth's 4.5 km deep abyssal plains, and a wetter world's sink. The sea
+  of a world with less water than Earth's therefore lies a little lower
+  on its continents than it would, its exposed ocean floors a little
+  deeper.
 - **Erosion ignores gravity.** The droplets of the hydraulic erosion run
   with a fixed `gravity` of 4 (a constant of the droplet method, not the
   planet's); a heavier world is not worn faster or slower. There is no

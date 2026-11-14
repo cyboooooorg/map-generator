@@ -709,7 +709,11 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
     depth-to-diameter only in figures (Schenk 1991 unreadable), so icy
     simple craters keep rock's bowl (`0.2 D`); Earth's 3 to 5 km
     (Melosh & Ivanov 1999) is not reached (2.5 km); no rule gives a
-    crust's strength from composition.
+    crust's strength from composition. The transition from the crust:
+    done in #312 (part 3c of #423), a planet's transition now follows
+    O'Keefe & Ahrens (1993) with its crust's strength and density
+    (`craters::transition_km`, `generation::crust_kind`; see
+    `docs/analysis/08-geology.md` § Outcome (transition from the crust)).
   - Multi-ring basins, crustal thickness, flexure and the other
     chronologies were weighed on 2026-11-08 and stay: the sources
     (Melosh & Ivanov 1999 for the weak layer, Le Feuvre & Wieczorek

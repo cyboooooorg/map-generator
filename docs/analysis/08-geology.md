@@ -552,6 +552,40 @@ goes from 0.95 to 0.83 of land: its little water now lies in its
 lowlands (99.7 % of its sea on thin crust), not as a ring round a raised
 platform. Dry worlds keep their plains. Worlds with seas change.
 
+### Outcome (impact flux and crater size from the orbit, #313, 2026-11-14)
+
+Part 3c of the planet model (#423). `[geology] impact_ratio` and
+`crater_scale` are gone: a world with a model takes its flux and crater
+size from its orbit (`impacts::rates`, see `docs/science/impact-craters.md`
+§ The flux from the orbit). The flux is the rate of a body in a swarm,
+the asteroids crossing its orbit (the near-Earth ones everywhere, the
+belt's own where their eccentricity reaches it) × their encounter speed
+(Earth's 17.2 km/s, Le Feuvre & Wieczorek 2011, scaled as `√(M★/a)`) ×
+its gravitational focusing, against the Moon's, times its system's
+impactors (1 for a lone world, whose context is unknown). The crossers
+are bounded by 6 times the Moon's, the whole orbit's flux by 20; the
+crater follows π-scaling (`μ` = 0.55) with the impact speed against the
+Moon's cited 19.7 km/s, bounded by Mercury's 2.16 times it. Among the
+Solar System's impactors: `mercury-like` 1.55 and 0.98 (Le Feuvre &
+Wieczorek: 1.82 and 1.18), `venus-like` 1.42 and 0.74 (1.75 and 0.78),
+`earth-like` 1.38 and 0.69 (1.58 and 0.69), `mars-like` 2.60 and 0.74
+(Hartmann: 2.6 and 0.751; its 8–16 km craters 1.52 times the Moon's,
+against Hartmann's 1.55). Moons keep the Moon's craters at their
+system's rate until part 4. Worlds with craters change.
+
+### Outcome (crater rims on sloping ground, 2026-11-14)
+
+Found while checking part 3c's craters: a crater's profile was drawn from
+the mean level of its site, so on sloping ground its rim crest sank below
+the ground uphill and the crater had no rim there, large craters most
+(their rim is low against their radius, and they span more relief). The
+floor still lies flat at the site's level; the wall and the rim now stand
+on the ground they are dug in, passing from the one to the other between
+0.5 and 1 crater radius (`craters::RIM_GROUND`, a calibration). A 150 km
+crater on ground rising 2° keeps its rim all round
+(`a_large_crater_on_a_slope_keeps_its_rim_all_round`). Worlds with
+craters change.
+
 ## 6. Time slider
 
 ### What it shows
