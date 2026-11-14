@@ -508,7 +508,8 @@ pub fn derive_model_with(
 /// The model a stored system holds for `body`: the one [`derive_model`]
 /// gave its planet when the system was drawn, or the one the resolution of
 /// its request gave the world a system was drawn around (a giant's moon
-/// among them); `None` for any other moon (part 4).
+/// among them), or the one [`moon::derive_moon_model`] gave a round moon;
+/// `None` for a moon too small to be round.
 pub fn body_model(_system: &System, body: &Body) -> Option<PlanetModel> {
     body.model.clone()
 }
@@ -715,10 +716,11 @@ mod tests {
     }
 
     #[test]
-    fn moons_have_no_model_yet() {
+    fn only_round_moons_have_a_model() {
         let system = drawn();
         for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
-            assert_eq!(body_model(&system, body), None, "{}", body.id);
+            let small = ["rocky-moon", "icy-moon"].contains(&body.body_type.as_str());
+            assert_eq!(body_model(&system, body).is_none(), small, "{}", body.id);
         }
     }
 }

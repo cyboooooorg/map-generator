@@ -17,13 +17,16 @@ pub struct WorldParams {
     pub width: u32,
     pub height: u32,
     pub seed: u32,
-    /// The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`.
+    /// The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`
+    /// for a moon too small to be round.
     pub class: String,
     /// The archetype asked for, for display only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub archetype: Option<String>,
-    /// The planet's model; `None` for a moon (part 4).
+    /// The body's model: a planet's, or a round moon's (see
+    /// `crate::system::moon_formation`); `None` for a moon too small to
+    /// be round.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub model: Option<PlanetModel>,
@@ -140,6 +143,14 @@ pub struct WorldParams {
     /// read as [`crate::star::DEFAULT_AGE_GYR`].
     #[serde(default = "crate::star::default_age_gyr")]
     pub age_gyr: f32,
+    /// Whether the world is a moon of a system's planet (see
+    /// [`crate::moons::is_moon_world`]): a small one (`rocky-moon`,
+    /// `icy-moon`) or a round one typed by its model's class. Not set on
+    /// a world asked for as a giant's moon, which keeps its host in
+    /// [`Self::host`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub moon: bool,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

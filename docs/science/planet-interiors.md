@@ -337,9 +337,11 @@ archetypes):
 - **Envelope grid.** The envelope fit stops at 20 % of the mass: a small
   planet with a 30 % envelope (the model allows up to 30 %) is sized as if
   it had 20 %.
-- **Moons have no model in drawn systems** yet: `derive_moon_model`
-  derives one (see [planet-atmospheres.md](planet-atmospheres.md)), but no
-  drawn moon goes through it.
+- **Round moons of drawn systems** go through `derive_moon_model` (see
+  [planet-atmospheres.md](planet-atmospheres.md) and
+  `docs/system-spec.md`, "Moons"); a moon too small to be round has no
+  model. Their craters keep the lunar law and the Moon's rate (see
+  [impact-craters.md](impact-craters.md)).
 - **The ice shell** is conductive and pure: no convection in its warm
   lower part, no ammonia or salt to lower the melting point (273 K is a
   calibration), and one high-pressure ice threshold (ice V) where ice III

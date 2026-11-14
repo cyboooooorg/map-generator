@@ -1343,6 +1343,7 @@ mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
             gravity: None,
         }
     }

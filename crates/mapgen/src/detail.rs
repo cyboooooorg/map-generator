@@ -836,6 +836,7 @@ mod tests {
             // Its spin holds at its own orbit only.
             locked_to_star: None,
             resonance_to_star: None,
+            moon: false,
             ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
         let world = generate(&params).world;

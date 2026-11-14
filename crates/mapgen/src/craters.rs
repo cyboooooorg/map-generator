@@ -85,9 +85,10 @@ const MIN_PIXELS: f64 = 4.0;
 const EJECTA_RADII: f64 = 3.0;
 /// Simple-to-complex transition on the Moon, km, and the Moon's gravity,
 /// m/s²: the transition scales as `1/g` (Melosh & Ivanov 1999,
-/// doi:10.1146/annurev.earth.27.1.385, read). Worlds without a model
-/// (moons, until part 4) keep this lunar law, with [`ICE_TRANSITION`] on
-/// ice; model worlds take [`transition_km`] from their crust's strength.
+/// doi:10.1146/annurev.earth.27.1.385, read). Moons (a round one with its
+/// model too) and worlds without a model keep this lunar law, with
+/// [`ICE_TRANSITION`] on ice; the other model worlds take
+/// [`transition_km`] from their crust's strength.
 const MOON_TRANSITION_KM: f64 = 15.0;
 pub(crate) const MOON_GRAVITY: f64 = 1.62;
 pub(crate) const EARTH_GRAVITY: f64 = 9.81;
@@ -573,13 +574,14 @@ pub fn base_min_diameter_km(grid: &Grid) -> f64 {
 /// Simple-to-complex transition diameter of the world `p`, km. A world
 /// with a model: `9.0 Y / (ρ g)` (O'Keefe & Ahrens 1993) with the strength
 /// and density of its crust ([`crate::generation::crust_kind`]): dry rock,
-/// rock weakened by volatiles, or ice. Without one (a moon): the lunar law
-/// `15 km × 1.62 / g`, times [`ICE_TRANSITION`] on ice.
+/// rock weakened by volatiles, or ice. A moon, or a world without a model:
+/// the lunar law `15 km × 1.62 / g`, times [`ICE_TRANSITION`] on ice (the
+/// rock strength would put the Moon at 24 km, see [`ROCK_STRENGTH`]).
 pub(crate) fn transition_km(p: &WorldParams) -> f64 {
     use crate::generation::CrustKind;
     let gravity = EARTH_GRAVITY * p.gravity_modifier() as f64;
     let kind = crate::generation::crust_kind(p);
-    if p.model.is_none() {
+    if p.model.is_none() || crate::moons::is_moon_world(p) {
         let ice = if kind == CrustKind::Ice {
             ICE_TRANSITION
         } else {
@@ -1794,6 +1796,7 @@ mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
             gravity: None,
         }
     }
@@ -1874,6 +1877,12 @@ mod tests {
         // The crater field takes the same transition.
         let p = crate::generation::tests::preset_params("mars-like", 1, 64, 32);
         assert_eq!(CraterField::context(&p).transition_km, transition_km(&p));
+        // A round moon, its model and all, keeps the lunar law and the
+        // Moon's craters at its system's rate.
+        let moon = WorldParams { moon: true, ..p };
+        let g = EARTH_GRAVITY * f64::from(moon.gravity_modifier());
+        assert_eq!(transition_km(&moon), MOON_TRANSITION_KM * MOON_GRAVITY / g);
+        assert_eq!(crate::impacts::rates(&moon).crater_scale, 1.0);
     }
 
     #[test]
@@ -2475,6 +2484,7 @@ mod tests {
         // A moon of a locked planet, stored locked to the star.
         let mut rocky_moon = moon(4.0);
         rocky_moon.class = "rocky-moon".into();
+        rocky_moon.moon = true;
         rocky_moon.star = star;
         rocky_moon.orbit_au = hz;
         assert!(CraterField::context(&rocky_moon).locked_since_ga.is_none());

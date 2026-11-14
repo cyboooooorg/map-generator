@@ -13,7 +13,8 @@ import type { PlanetModel } from "./PlanetModel";
  */
 export type WorldParams = { width: number, height: number, seed: number, 
 /**
- * The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`.
+ * The class key (`PlanetClass::key`), or `rocky-moon` / `icy-moon`
+ * for a moon too small to be round.
  */
 class: string, 
 /**
@@ -21,7 +22,9 @@ class: string,
  */
 archetype?: string, 
 /**
- * The planet's model; `None` for a moon (part 4).
+ * The body's model: a planet's, or a round moon's (see
+ * `crate::system::moon_formation`); `None` for a moon too small to
+ * be round.
  */
 model?: PlanetModel, 
 /**
@@ -173,4 +176,12 @@ perihelion_longitude_deg?: number,
  * circular orbit) and how far a giant has cooled. Files without one
  * read as [`crate::star::DEFAULT_AGE_GYR`].
  */
-age_gyr: number, };
+age_gyr: number, 
+/**
+ * Whether the world is a moon of a system's planet (see
+ * [`crate::moons::is_moon_world`]): a small one (`rocky-moon`,
+ * `icy-moon`) or a round one typed by its model's class. Not set on
+ * a world asked for as a giant's moon, which keeps its host in
+ * [`Self::host`].
+ */
+moon?: boolean, };

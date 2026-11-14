@@ -474,6 +474,7 @@ mod tests {
             seed,
             locked_to_star: Some(locked),
             resonance_to_star: turns,
+            moon: false,
             ..base.clone()
         };
         for seed in 0..50 {

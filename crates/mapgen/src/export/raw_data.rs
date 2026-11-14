@@ -62,8 +62,10 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// `crater_scale` are gone), the crust floats by its thickness with a
 /// crust line, and the wall and rim of a crater stand on the ground. The
 /// stored fields are the same, so [`crate::system::SYSTEM_FORMAT_VERSION`]
-/// stays 4.
-pub const FORMAT_VERSION: u32 = 19;
+/// stays 4. Version 20 types a round moon by its model's class, stores
+/// its model, and marks a moon's world (`moon`); it goes with the fifth
+/// [`crate::system::SYSTEM_FORMAT_VERSION`].
+pub const FORMAT_VERSION: u32 = 20;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -71,7 +73,7 @@ pub const FORMAT_VERSION: u32 = 19;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 19;
+pub const MIN_FORMAT_VERSION: u32 = 20;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
@@ -85,19 +87,28 @@ pub struct WorldMetadata {
     pub height: u32,
     pub projection: String,
     pub seed: u32,
-    /// The class key of the world (`rocky`, `ice-giant`…), or `rocky-moon` /
-    /// `icy-moon` for a moon.
+    /// The class key of the world (`rocky`, `ice-giant`…), a round moon's
+    /// included, or `rocky-moon` / `icy-moon` for a moon too small to be
+    /// round.
     pub class: String,
     /// The archetype the planet was asked as, for display only; left out
     /// for a planet drawn from its context and for a moon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archetype: Option<String>,
-    /// The planet's model; left out for a moon (part 4).
+    /// The body's model: a planet's or a round moon's; left out for a moon
+    /// too small to be round.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<PlanetModel>,
+    /// Whether the world is a moon of a system's planet (see
+    /// `WorldParams::moon`); left out otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub moon: bool,
     /// The inputs the planet formed with, as a request sets them
     /// ([`PlanetModel::formation`]): what a request pins to make the same
-    /// planet under another seed or epoch. Left out with the model.
+    /// planet under another seed or epoch. Left out with the model, and
+    /// for a moon, whose model comes from how it formed around its planet
+    /// (`crate::planet::moon::derive_moon_model`), not from a request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formation: Option<Formation>,
     /// The full look the world renders with, so it can be regenerated even
@@ -615,7 +626,13 @@ pub(crate) fn write_raw_data(
         class: world.params.class.clone(),
         archetype: world.params.archetype.clone(),
         model: world.params.model.clone(),
-        formation: world.params.model.as_ref().map(PlanetModel::formation),
+        moon: world.params.moon,
+        formation: world
+            .params
+            .model
+            .as_ref()
+            .filter(|_| !world.params.moon)
+            .map(PlanetModel::formation),
         look: world.params.look.clone(),
         sea_level: world.params.sea_level,
         volcanic_intensity: world.params.volcanic_intensity,
@@ -1087,6 +1104,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         ridge: meta.ridge,
         perihelion_longitude_deg: meta.star.perihelion_longitude_deg,
         resonance_to_star: Some(meta.star.spin_turns),
+        moon: meta.moon,
         // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
@@ -1339,6 +1357,7 @@ mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
             gravity: None,
         })
         .world;

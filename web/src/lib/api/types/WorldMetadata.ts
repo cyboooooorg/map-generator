@@ -15,8 +15,9 @@ import type { StarInfo } from "./StarInfo";
  */
 export type WorldMetadata = { format_version: number, width: number, height: number, projection: string, seed: number, 
 /**
- * The class key of the world (`rocky`, `ice-giant`…), or `rocky-moon` /
- * `icy-moon` for a moon.
+ * The class key of the world (`rocky`, `ice-giant`…), a round moon's
+ * included, or `rocky-moon` / `icy-moon` for a moon too small to be
+ * round.
  */
 class: string, 
 /**
@@ -25,13 +26,21 @@ class: string,
  */
 archetype?: string | null, 
 /**
- * The planet's model; left out for a moon (part 4).
+ * The body's model: a planet's or a round moon's; left out for a moon
+ * too small to be round.
  */
 model?: PlanetModel | null, 
 /**
+ * Whether the world is a moon of a system's planet (see
+ * `WorldParams::moon`); left out otherwise.
+ */
+moon?: boolean, 
+/**
  * The inputs the planet formed with, as a request sets them
  * ([`PlanetModel::formation`]): what a request pins to make the same
- * planet under another seed or epoch. Left out with the model.
+ * planet under another seed or epoch. Left out with the model, and
+ * for a moon, whose model comes from how it formed around its planet
+ * (`crate::planet::moon::derive_moon_model`), not from a request.
  */
 formation?: Formation | null, 
 /**

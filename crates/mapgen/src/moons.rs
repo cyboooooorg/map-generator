@@ -209,6 +209,18 @@ impl Bulk {
         Self::of(ice, carbon)
     }
 
+    /// A regular moon's of a giant a world asked for orbits (an
+    /// [`crate::exomoon::Sibling`]), drawn from its `seed`: [`Self::cold`]
+    /// beyond the giant's snow line (`icy`), [`Self::warm`] inside it.
+    pub fn sibling(icy: bool, seed: u32) -> Self {
+        let mut rng = Draws(u64::from(seed));
+        if icy {
+            Self::cold(&mut rng)
+        } else {
+            Self::warm(&mut rng)
+        }
+    }
+
     /// A ring moon's: mostly ice, as the moonlets of Saturn's rings (Pan
     /// and Atlas, 0.4 to 0.5 g/cm³: Thomas 2010,
     /// doi:10.1016/j.icarus.2010.01.025), drawn from its `seed`. Their
@@ -559,7 +571,7 @@ impl Candidate {
 
 /// Whether a body of `composition` and mean `radius_km` is pulled round by
 /// its own gravity (see [`ROUND_ROCK_KM`]).
-fn is_round(composition: Composition, radius_km: f64) -> bool {
+pub(crate) fn is_round(composition: Composition, radius_km: f64) -> bool {
     2.0 * radius_km >= round_limit_km(composition)
 }
 
@@ -1494,10 +1506,11 @@ pub fn body_params(planet: &WorldParams, moon: &Moon) -> WorldParams {
     params
 }
 
-/// Whether `p` is the world of a moon of a system (the `rocky-moon` or
-/// `icy-moon` class, see [`small_body_params`]).
+/// Whether `p` is the world of a moon of a system's planet
+/// ([`WorldParams::moon`]): a small one of [`small_body_params`], or a
+/// round one, whose class is its model's.
 pub fn is_moon_world(p: &WorldParams) -> bool {
-    matches!(p.class.as_str(), "rocky-moon" | "icy-moon")
+    p.moon
 }
 
 /// Age of the oldest surviving surface of a moon, Ga: impacts since it
@@ -1525,6 +1538,15 @@ fn small_body_density(composition: Composition) -> f64 {
     }
 }
 
+/// The width of the map of a moon of `radius_km` of the world `planet`,
+/// pixels: as many pixels per km as the planet's, at least
+/// [`MOON_MIN_WIDTH`] and at most the planet's width, even.
+pub fn moon_map_width(planet: &WorldParams, radius_km: f32) -> u32 {
+    let ratio = f64::from(radius_km) * 2.0 * PI / f64::from(planet.circumference_km);
+    let widest = planet.width.max(MOON_MIN_WIDTH);
+    ((f64::from(planet.width) * ratio).round() as u32).clamp(MOON_MIN_WIDTH, widest) & !1
+}
+
 /// The parameters of a small airless body near the world `planet`, as a
 /// world of its own: a rocky or icy moon of `radius_km` (its map as wide
 /// as its size makes it on the planet's scale, within limits), its seed,
@@ -1543,10 +1565,7 @@ pub fn small_body_params(
     if radius_km < MARIA_MIN_RADIUS_KM {
         look.geology.maria = None;
     }
-    let ratio = f64::from(radius_km) * 2.0 * PI / f64::from(planet.circumference_km);
-    let widest = planet.width.max(MOON_MIN_WIDTH);
-    let width =
-        ((f64::from(planet.width) * ratio).round() as u32).clamp(MOON_MIN_WIDTH, widest) & !1;
+    let width = moon_map_width(planet, radius_km);
     // A surface is never older than its system.
     let surface_age_ga = moon_surface_age_ga(composition).min(planet.age_gyr);
     WorldParams {
@@ -1581,6 +1600,7 @@ pub fn small_body_params(
         ridge: None,
         perihelion_longitude_deg: None,
         resonance_to_star: None,
+        moon: true,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1760,6 +1780,7 @@ mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
             gravity: None,
         }
     }

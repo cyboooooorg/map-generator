@@ -884,13 +884,13 @@ mod tests {
     #[test]
     fn moons_are_generated_as_bodies_of_their_own() {
         use crate::export::raw_data::{WorldMetadata, read_metadata};
-        // A small world far from its star, of the first seed that draws it
-        // moons.
+        // An Earth far from its star, of the first seed that draws it a
+        // round moon (which goes through the planet model).
         let (request, resolved, system) = (0..64)
             .find_map(|seed| {
                 let request = crate::request::WorldRequest {
                     seed: Some(seed),
-                    mass_earth: Some(0.02),
+                    mass_earth: Some(1.0),
                     star: Some("G2V".into()),
                     orbit_au: Some(30.0),
                     eccentricity: Some(0.0),
@@ -901,10 +901,10 @@ mod tests {
                 };
                 let resolved = request.resolve(&mut rand::rng()).unwrap();
                 let system = crate::moons::MoonSystem::draw(&resolved.params)
-                    .filter(|s| !s.moons.is_empty())?;
+                    .filter(|s| s.moons.iter().any(|m| m.round))?;
                 Some((request, resolved, system))
             })
-            .expect("a seed with moons");
+            .expect("a seed with a round moon");
         let dir = std::env::temp_dir().join(format!("mapgen-moons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         // Generated as bodies of the planet's system, with it.
@@ -924,15 +924,26 @@ mod tests {
             let raw = crate::sizes::size_dir(&dir.join("bodies").join(&id), width, height)
                 .join("raw_data");
             let meta: WorldMetadata = read_metadata(&raw).unwrap();
-            assert!(
-                ["icy-moon", "rocky-moon"].contains(&meta.class.as_str()),
-                "{}",
-                meta.class
-            );
+            // A small moon is typed by its rock or ice and keeps its drawn
+            // size; a round one by its model's class, at its model's size.
+            assert!(meta.moon);
+            let (class_ok, radius_km) = if moon.round {
+                (
+                    crate::planet::PLANET_CLASSES.contains(&meta.class.as_str())
+                        && meta.model.is_some(),
+                    body.physical.radius_km as f32,
+                )
+            } else {
+                (
+                    ["icy-moon", "rocky-moon"].contains(&meta.class.as_str()),
+                    moon.radius_km,
+                )
+            };
+            assert!(class_ok, "{}", meta.class);
+            assert!(meta.formation.is_none());
             assert_eq!(meta.seed, moon.seed);
             assert!(
-                (meta.circumference_km / (2.0 * std::f32::consts::PI) - moon.radius_km).abs()
-                    < 0.01
+                (meta.circumference_km / (2.0 * std::f32::consts::PI) - radius_km).abs() < 0.01
             );
             // No moons of its own; an irregular one has a shape layer.
             assert!(meta.moons.is_none());

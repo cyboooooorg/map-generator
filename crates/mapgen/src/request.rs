@@ -601,6 +601,7 @@ impl WorldRequest {
                 metallicity,
                 mass_earth,
                 overrides: &overrides,
+                tide: None,
             };
             let mut model = at(eccentricity).model();
             // Water set beside an envelope drawn from the mass: together
@@ -675,10 +676,32 @@ impl WorldRequest {
                     model = at(params.eccentricity).model();
                     let forced = Placed {
                         eccentricity: params.eccentricity,
-                        ..placed
+                        ..placed.clone()
                     };
                     params = world(&model, &forced);
                 }
+            }
+            // A giant's moon: its giant's tides heat it. The giant is
+            // drawn from the world (its orbit around it moves out when its
+            // water would run away), so the model and the world are made
+            // again until the giant's orbit stays put.
+            let mut tide = None;
+            for _ in 0..TIDE_ROUNDS {
+                let host = crate::exomoon::HostGiant::draw(&params).map(|h| host_tide(&h));
+                if host == tide {
+                    break;
+                }
+                tide = host;
+                model = World {
+                    tide,
+                    ..at(params.eccentricity)
+                }
+                .model();
+                let tidal = Placed {
+                    eccentricity: params.eccentricity,
+                    ..placed.clone()
+                };
+                params = world(&model, &tidal);
             }
             // Moons asked for need room: a Hill sphere wide enough, and on
             // a planet its star despun, moons light enough to outlast its
@@ -815,17 +838,24 @@ struct World<'a> {
     metallicity: f32,
     mass_earth: f64,
     overrides: &'a InputOverrides,
+    /// The tides of the giant it orbits, when it is a giant's moon.
+    tide: Option<crate::planet::HostTide>,
 }
 
 impl World<'_> {
     /// The model, in the context of its star seen from its orbit, the ice
     /// line of the star (2.7 AU √L, as a system places it) and the
-    /// metallicity, from the seed's stream `world/model`.
+    /// metallicity, with the tides of the giant it orbits when it is a
+    /// giant's moon, from the seed's stream `world/model`.
     fn model(&self) -> PlanetModel {
         let star =
             crate::star::StarInfo::new(self.star, self.orbit_au, self.eccentricity, self.age_gyr);
         let ice_line_au = 2.7 * star.luminosity.sqrt();
         let context = crate::planet::Context::of(&star, self.metallicity, ice_line_au);
+        let context = match self.tide {
+            Some(tide) => context.with_tide(tide),
+            None => context,
+        };
         crate::planet::derive_model_with(
             self.seed,
             "world",
@@ -833,6 +863,21 @@ impl World<'_> {
             self.mass_earth,
             self.overrides,
         )
+    }
+}
+
+/// Rounds of drawing a giant's moon's host from its world and its model
+/// from its host's tides (see [`WorldRequest::resolve_with_archetype`]): the host's
+/// orbit moves at most once (out of a runaway), so two settle it.
+const TIDE_ROUNDS: usize = 4;
+
+/// The tides a giant's moon gets from `host`: its mass, the moon's orbit
+/// around it and that orbit's eccentricity.
+fn host_tide(host: &crate::exomoon::HostGiant) -> crate::planet::HostTide {
+    crate::planet::HostTide {
+        host_kg: f64::from(host.giant.mass_earth) * crate::exomoon::EARTH_KG,
+        a_m: f64::from(host.distance_km) * 1000.0,
+        eccentricity: f64::from(host.eccentricity),
     }
 }
 
@@ -1216,7 +1261,13 @@ mod tests {
         )
         .unwrap();
         let mut checked = 0;
-        for body in &system.bodies {
+        // A planet: a round moon's model comes from how it formed around
+        // its planet, which no request of a world sets.
+        for body in system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == crate::system::BodyKind::Planet)
+        {
             let Some(model) = &body.model else { continue };
             let Some(surface) = model.surface else {
                 continue;

@@ -772,7 +772,7 @@ pub struct Sampler {
 /// volcanoes, crater rims), whose summits can still be snow.
 ///
 /// Worlds with plates keep the band above the sea, as do dry worlds and
-/// moons (no model yet, part 4).
+/// small moons (no model).
 fn platform_highlands(p: &WorldParams) -> bool {
     p.model.is_some() && p.look.geology.regime != Regime::Plates && !p.look.rules.dry
 }
@@ -2530,6 +2530,7 @@ pub(crate) mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
             gravity: None,
         }
     }

@@ -290,7 +290,8 @@ depends only on the planet and the seed:
      sea floor and a frozen Earth's ground under its ice sheet stay rock.
 
    The strengths are calibrations on those bodies, not measured
-   strengths. A moon has no model yet: it keeps the lunar law
+   strengths. A moon keeps the lunar law, a round one whose model gives
+   it a crust too (the rock strength would put the Moon at 24 km):
    `15 km × 1.62 / g`, times 0.15 when its bulk density is under
    2.5 g/cm³ (ice). Below the transition, a bowl $0.2\,D$ deep. Above it, Pike's
    complex depth law, written in transition diameters,
@@ -371,7 +372,10 @@ after 3 Ga.
 **The flux from the orbit.** [`impacts.rs`](../../crates/mapgen/src/impacts.rs)
 gives a world with a model its flux per unit area and its crater size
 against the Moon's, the reference of the chronology (a body at 1 AU from a
-Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s):
+Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s). A moon, a round
+one with its model included, keeps the Moon's craters at its system's
+rate ($I$ alone): its impactors are focused by its planet, which this
+rate does not know.
 
 $$\frac{\phi}{\phi_m} = I \cdot B_{20}\!\left(B_6\!\left(\frac{n(a)}{n(1\,\mathrm{AU})}\right) \cdot
 \frac{v_\infty}{v_{\infty,m}} \cdot

@@ -4,8 +4,10 @@
 //! A world with a model ([`WorldParams::model`]) has its impacts from its
 //! orbit: the impactors of its system (`belts::impact_factor`, the giants
 //! and belts), the asteroids' supply where it orbits, their speed there and
-//! the world's own gravity. A world without one (a moon, until part 4)
-//! keeps the Moon's craters at its system's rate. See
+//! the world's own gravity. A moon (a round one with its model too) and a
+//! world without a model keep the Moon's craters at their system's rate:
+//! a moon's impactors are focused by its planet, which the swarm rate
+//! below does not know. See
 //! `docs/science/impact-craters.md`.
 //!
 //! Every ratio is against the Moon, which is the reference of the crater
@@ -148,11 +150,11 @@ fn impactors(p: &WorldParams) -> f64 {
 /// scales as `g^(−μ/(2+μ)) v^(2μ/(2+μ))` (π-scaling in the gravity
 /// regime), with the impact speed `v = √(v∞² + v_esc²)` against the
 /// Moon's cited [`MOON_IMPACT_KM_S`], bounded by [`FASTEST_IMPACT`].
-/// Without a model (a moon): the system's impactors and the Moon's
-/// craters.
+/// A moon, or a world without a model: the system's impactors and the
+/// Moon's craters (its planet's focusing is not modelled).
 pub fn rates(p: &WorldParams) -> ImpactRates {
     let impactors = impactors(p);
-    if p.model.is_none() {
+    if p.model.is_none() || crate::moons::is_moon_world(p) {
         return ImpactRates {
             flux: impactors,
             crater_scale: 1.0,

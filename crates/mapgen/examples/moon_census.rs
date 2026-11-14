@@ -16,7 +16,10 @@
 //!    the bins named after the Solar System's moons of that size;
 //! 4. how many moons are over 2300 km (Titan, Ganymede) and how many
 //!    systems hold one, then the moons over 1200 km, host and orbit, the
-//!    first 40 of them.
+//!    first 40 of them;
+//! 5. the round moons (those with a model): their class by host type, the
+//!    largest one, and their model's radius over the radius their bulk's
+//!    uncompressed density gave them (`MoonSystem::draw`).
 //!
 //! Part 4 of the planet model (#423) measured the moon draw with it before
 //! and after drawing a giant's moons from its disk's mass, shape and
@@ -55,6 +58,10 @@ fn main() {
     let mut hosts: BTreeMap<String, (u32, u32)> = BTreeMap::new(); // planets, with moons
     let mut giant_teq: BTreeMap<&str, u32> = BTreeMap::new();
     let mut big: Vec<String> = Vec::new();
+    // host group -> round moon's class -> n
+    let mut classes: BTreeMap<String, BTreeMap<String, u32>> = BTreeMap::new();
+    let mut largest_round = (0.0_f64, String::new());
+    let mut radius_ratios: Vec<f64> = Vec::new();
     for seed in 1..=count {
         let req = SystemRequest::System(WholeSystemRequest {
             seed: Some(seed as u32),
@@ -91,8 +98,22 @@ fn main() {
                 };
                 *giant_teq.entry(t).or_default() += 1;
             }
+            let drawn = mapgen::moons::MoonSystem::draw(pp).map_or_else(Vec::new, |s| s.moons);
             for m in moons {
                 let r = m.physical.radius_km;
+                if m.model.is_some() {
+                    if let Some(d) = drawn.iter().find(|d| d.seed == m.params.seed) {
+                        radius_ratios.push(r / f64::from(d.radius_km));
+                    }
+                    *classes
+                        .entry(group.clone())
+                        .or_default()
+                        .entry(m.body_type.clone())
+                        .or_default() += 1;
+                    if r > largest_round.0 {
+                        largest_round = (r, format!("seed {seed} {} ({})", m.id, m.body_type));
+                    }
+                }
                 *hist
                     .entry(group.clone())
                     .or_default()
@@ -138,5 +159,30 @@ fn main() {
     println!("== moons over 1200 km: {}", big.len());
     for l in big.iter().take(40) {
         println!("{l}");
+    }
+    println!("== round moons by host class, moon class");
+    let mut all: BTreeMap<&str, u32> = BTreeMap::new();
+    for (g, h) in &classes {
+        println!("-- {g}");
+        for (c, n) in h {
+            println!("   {c:22} {n}");
+            *all.entry(c).or_default() += n;
+        }
+    }
+    println!("-- all hosts");
+    for (c, n) in &all {
+        println!("   {c:22} {n}");
+    }
+    println!(
+        "== largest round moon: {:.0} km, {}",
+        largest_round.0, largest_round.1
+    );
+    radius_ratios.sort_by(f64::total_cmp);
+    if let (Some(lo), Some(hi)) = (radius_ratios.first(), radius_ratios.last()) {
+        println!(
+            "== round moons' model radius / drawn radius: {lo:.3} to {hi:.3}, median {:.3} ({} moons)",
+            radius_ratios[radius_ratios.len() / 2],
+            radius_ratios.len()
+        );
     }
 }

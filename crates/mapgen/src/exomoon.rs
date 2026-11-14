@@ -316,6 +316,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         ridge: None,
         perihelion_longitude_deg: None,
         resonance_to_star: None,
+        moon: false,
         gravity: None,
     }
 }
@@ -358,6 +359,7 @@ mod tests {
             ridge: None,
             perihelion_longitude_deg: None,
             resonance_to_star: None,
+            moon: false,
             gravity: None,
         }
     }
