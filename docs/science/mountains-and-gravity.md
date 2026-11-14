@@ -210,8 +210,13 @@ flowchart LR
    whatever the resolution), and above it a slope, a shelf and a platform
    thickening inland to the full thick crust. `floating` turns the
    thickness into a height by Airy's balance, above a fixed datum (the old
-   ocean floor), and lets the old floor deepen below the line towards
-   6.4 km (Parsons & Sclater 1977). Worlds with plates take Earth's crust
+   ocean floor), and lets the old floor deepen below the line by up to
+   2.4 km, Parsons & Sclater's (1977) 6.4 km less their 4 km. The datum
+   does not set the depths under the sea, the water's volume does: with
+   Earth's ocean the old floor lies about 3.25 km under the sea on
+   `earth-like` worlds and the abyss reaches about 5.65 km, shallower than
+   Earth's 4 and 6.4 km, since the noise's basins have no ridges or
+   margins to hold part of the water above 4 km. Worlds with plates take Earth's crust
    (41.1 and 7.1 km, 2.83 and 3.3 g/cm³: the continents 4.8 km above the
    old floor), worlds without plates Mars's dichotomy (58 and 32 km, 2.9
    and 3.5 g/cm³: the highlands 4.5 km above the lowlands; `crust_of`).

@@ -346,6 +346,18 @@ const CRUST_GRID: (u32, u32) = (128, 64);
 /// leaves Earth's ocean ([`ocean_depth_m`]) at a sea level near 0.26,
 /// where it sat before the crust floated by its thickness (0.27–0.31),
 /// with room in the range above and below.
+///
+/// The datum does not set the depths under the sea: the water fills the
+/// relief from its volume, so the sea follows any move of the datum. With
+/// Earth's ocean and 41 % of continental crust, the old floor lies about
+/// 3.25 km under the sea on `earth-like` worlds (3.24–3.29 km on seeds 1–3,
+/// 3.25 at 1024 × 512), not Parsons & Sclater's 4 km, and the abyss
+/// reaches about 5.65 km, not 6.4: Earth's ocean, 3.7 km deep on average,
+/// keeps its old floor at 4 km because ridges and margins hold much of it
+/// above that depth, which the noise's basins do not. Putting the old
+/// floor at 4 km here would flatten the abyss (a slower [`ABYSS_NOISE`]
+/// of 1.0 gives 3.9–4.0 km, but 1 % of the sea deeper than 5 km against
+/// 13–16 %).
 const CRUST_DATUM: f32 = -0.02;
 
 /// The crust of a world, as its relief floats on the mantle (Airy
@@ -481,9 +493,10 @@ pub(crate) fn crust_thickness_km(x: f32, crust: &Crust) -> f32 {
 /// noise ([`crust_thickness_km`]): continental crust stands as a platform
 /// (Earth's 4.8 km above the old floor), oceanic crust as the floor of
 /// the basins, with little in between. Below the crust line, the old floor
-/// deepens towards Parsons & Sclater's 6.4 km ([`ABYSS_KM`]) as the noise
-/// falls (the sea floor's age is not modelled, #317); only trenches go
-/// deeper.
+/// deepens by up to Parsons & Sclater's 6.4 km less 4 km ([`ABYSS_KM`],
+/// `plates::OLD_FLOOR_KM`) as the noise falls (the sea floor's age is not
+/// modelled, #317); only trenches go deeper. Under Earth's ocean, that is
+/// from about 3.25 to 5.65 km under the sea (see [`CRUST_DATUM`]).
 ///
 /// The sea does not enter: it fills this relief from its water
 /// ([`sea_level_for_water`]), so a world with less water than Earth's
@@ -547,7 +560,7 @@ fn within_range(e: f32) -> f32 {
 const MAX_NOISE_SCALE: f32 = 8.0;
 /// Depth below the crust line of the crust formed where the plates part,
 /// in continent-shape units; the crust itself is laid at the old floor
-/// ([`CRUST_DATUM`], 4 km under Earth's sea), the swell
+/// ([`CRUST_DATUM`], about 3.25 km under Earth's sea), the swell
 /// of the ridge it formed at standing on it by its age (see
 /// `plates::ridge_swell`). The share of the fine octaves it keeps.
 const NEW_CRUST_DEPTH: f32 = crate::plates::OLD_FLOOR_KM / crate::craters::ELEVATION_KM;
