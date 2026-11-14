@@ -5194,17 +5194,18 @@ mod lone_tests {
     /// sits at the archetype's star and light, so the systems around it
     /// changed), and again when part 4 drew a giant's moons from its
     /// disk's mass, shape and temperature (the moons' rock or ice and
-    /// orbits changed), when a small moon drew its bulk composition (more
-    /// draws, and a density that sets its size), and when round moons went
+    /// orbits changed), when a small moon drew its bulk composition (from
+    /// a sub-stream of its own, so only the density that sets its size
+    /// changed), and when round moons went
     /// through the planet model (typed by their class), and when nitrogen
     /// kept methane liquid below its triple point (seed 4's `f` became a
     /// hydrocarbon world); any other change is a regression of a normal
     /// system.
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky:0.0006:0.0822:false d-5:rocky:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:ice-world:0.0019:0.0350:false f-6:ice-world:0.0033:0.0350:false f-7:ice-world:0.0051:0.0350:false f-8:ice-world:0.0080:0.0350:false f-9:ice-world:0.0129:0.0350:false g:ice-world:13.6776:0.0350:false",
+        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0002:0.0822:false d-3:icy-moon:0.0003:0.0822:false d-4:rocky:0.0006:0.0822:false d-5:rocky:0.0010:0.0822:false e:rocky:0.9802:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:0.0350:false f-2:icy-moon:0.0009:0.0350:false f-3:icy-moon:0.0009:0.0350:false f-4:icy-moon:0.0011:0.0350:false f-5:ice-world:0.0019:0.0350:false f-6:ice-world:0.0033:0.0350:false f-7:ice-world:0.0051:0.0350:false f-8:ice-world:0.0080:0.0350:false f-9:ice-world:0.0129:0.0350:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
         "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:rocky:0.0005:0.0365:false d-3:rocky:0.0007:0.0365:false d-4:rocky:0.0012:0.0365:false d-5:rocky:0.0018:0.0365:false e:rocky:1.0568:0.0365:true f:ice-world:4.9333:0.0365:true",
-        "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true e:rocky:0.9970:0.0350:true f:rocky:2.4861:0.0350:true f-1:rocky-moon:0.0001:0.0350:false",
-        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0001:0.0350:false d:rocky:0.9925:0.0350:true d-1:rocky-moon:0.0014:0.0350:false e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false f:hydrocarbon-world:13.6131:0.0350:true",
+        "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:0.9970:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
+        "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:0.9925:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:hydrocarbon-world:13.6131:0.0350:true",
     ];
 
     /// A planet of seed 5 at `orbit_au` round a G2V of 4.6 Gyr on a

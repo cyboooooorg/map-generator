@@ -689,6 +689,13 @@ impl Draws {
         ((z ^ (z >> 31)) >> 11) as f64 / (1u64 << 53) as f64
     }
 
+    /// A sub-stream keyed by a candidate's own shape draws: its bulk takes
+    /// nothing from the shared stream, so the draws of the moons themselves
+    /// stay what they were.
+    fn keyed(shape: [f64; 2]) -> Self {
+        Draws(shape[0].to_bits() ^ shape[1].to_bits().rotate_left(29) ^ 0xB01C_5EED)
+    }
+
     fn uniform(&mut self, lo: f64, hi: f64) -> f64 {
         lo + (hi - lo) * self.next()
     }
@@ -973,9 +980,9 @@ impl MoonSystem {
             // Small cold worlds are ice and rock, like Charon.
             let icy = cold && size < LARGE_WORLD;
             let bulk = if icy {
-                Bulk::cold(rng)
+                Bulk::cold(&mut Draws::keyed(shape))
             } else {
-                Bulk::warm(rng)
+                Bulk::warm(&mut Draws::keyed(shape))
             };
             Candidate {
                 origin: MoonOrigin::GiantImpact,
@@ -1000,9 +1007,9 @@ impl MoonSystem {
             let (eccentricity, inclination_deg) = (rng.uniform(0.0, 0.02), rng.uniform(0.0, 2.0));
             let shape = [rng.next(), rng.next()];
             let bulk = if cold {
-                Bulk::cold(rng)
+                Bulk::cold(&mut Draws::keyed(shape))
             } else {
-                Bulk::warm(rng)
+                Bulk::warm(&mut Draws::keyed(shape))
             };
             let density = bulk.density();
             Candidate {
@@ -1028,7 +1035,7 @@ impl MoonSystem {
                 rng.uniform(10.0, UNSTABLE_INCLINATION_DEG.0)
             };
             let shape = [rng.next(), rng.next()];
-            let bulk = Bulk::captured(cold, rng);
+            let bulk = Bulk::captured(cold, &mut Draws::keyed(shape));
             let density = bulk.density();
             Candidate {
                 origin: MoonOrigin::Captured,
