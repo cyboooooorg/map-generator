@@ -178,16 +178,63 @@ const remnant: Shader = (x, y, n, s) => {
   return { i, colour: mix(H_ALPHA, O_III, t) };
 };
 
-/** Reflection: a blue haze round a bright star with four diffraction spikes. */
+/** The stars lighting a reflection nebula: (x, y, brightness), the first and brightest at its heart. */
+const starsOf = new WeakMap<Nebula, [number, number, number][]>();
+function reflectionStars(n: Nebula, s: number): [number, number, number][] {
+  const known = starsOf.get(n);
+  if (known) return known;
+  // One to four (the Pleiades' brightest few), by the tint.
+  const count = 1 + Math.floor(n.tint * 3.99);
+  const stars: [number, number, number][] = [[0.04 * (lattice(1, 0, s) - 0.5), 0.04 * (lattice(2, 0, s) - 0.5), 1]];
+  for (let k = 1; k < count; k++) {
+    const a = 2 * Math.PI * lattice(k, 1, s);
+    const r = 0.15 + 0.2 * lattice(k, 2, s);
+    stars.push([r * Math.cos(a), r * Math.sin(a), 0.35 + 0.35 * lattice(k, 3, s)]);
+  }
+  starsOf.set(n, stars);
+  return stars;
+}
+
+/**
+ * Reflection (the Pleiades' family): a sheet of dust lit by a few bright
+ * blue-white stars. The dust lies in long, slightly bent parallel streaks
+ * with dark gaps between them (the striations round Merope); it shows only
+ * where a star lights it, brightest close to each star, so the streaks
+ * fade out with the light. The stars are sharp, white, with diffraction
+ * spikes; the haze is blue.
+ */
 const reflection: Shader = (x, y, n, s) => {
-  const rr = Math.hypot(x, y);
-  // Wispy streaks over the haze.
-  const streaks = 0.5 + 0.8 * ridged(x * 7 + 1, y * 7, s ^ 0x31, 3);
-  const haze = Math.exp(-rr * rr * 3.4) * (0.45 + 0.8 * fbm2(x * 3, y * 3, s, 4)) * streaks * (0.8 + 0.4 * fbm2(x * 30, y * 30, s ^ 0x33, 2));
-  const star = 0.9 * Math.exp(-((rr / 0.05) ** 2));
-  const spikes = 0.5 * (Math.exp(-((x / 0.008) ** 2)) * Math.exp(-Math.abs(y) * 5) + Math.exp(-((y / 0.008) ** 2)) * Math.exp(-Math.abs(x) * 5));
-  const colour = mix(BLUE, [0.55, 0.72, 1], n.tint);
-  return { i: haze * 0.9 + star + spikes, colour: mix(colour, WHITE, Math.min(1, star + spikes + Math.exp(-rr * rr * 30) * 0.5)) };
+  // The streaks' direction, one per nebula.
+  const angle = Math.PI * lattice(0, 9, s);
+  const ca = Math.cos(angle);
+  const sa = Math.sin(angle);
+  const u = x * ca + y * sa;
+  // Across the streaks, bent by a slow noise: they curve a little and are not ruled lines.
+  const v = -x * sa + y * ca + 0.3 * (fbm2(x * 1.4 + 3, y * 1.4, s ^ 0x91, 2) - 0.5);
+  // Stretched noise (slow along, fast across): long streaks with dark gaps, and thin bright filaments in them.
+  const streak = smoothstep(0.4, 0.7, fbm2(u * 1.3 + 7, v * 10, s ^ 0x92, 3));
+  const filament = smoothstep(0.75, 0.97, ridged(u * 1.1 + 2, v * 18, s ^ 0x93, 3));
+  const clump = 0.6 + 0.8 * fbm2(x * 3.5 + 1, y * 3.5, s ^ 0x94, 2);
+  const dust = (0.06 + 0.9 * streak + 0.7 * filament * (0.3 + streak)) * clump;
+  let light = 0;
+  let star = 0;
+  for (const [sx, sy, b] of reflectionStars(n, s)) {
+    const d = Math.hypot(x - sx, y - sy);
+    // The light on the dust falls off with the distance from each star.
+    light += b * (Math.exp(-d / 0.16) + 0.08 * Math.exp(-d / 0.45));
+    const core = b * Math.exp(-((d / 0.022) ** 2));
+    const dx = Math.abs(x - sx);
+    const dy = Math.abs(y - sy);
+    const spikes = b * b * 0.6 * (Math.exp(-((dx / 0.006) ** 2)) * Math.exp(-dy * 7) + Math.exp(-((dy / 0.006) ** 2)) * Math.exp(-dx * 7));
+    star += 2.2 * core + spikes;
+  }
+  // An irregular outline: the dust sheet is patchy, never a disc.
+  const sheet = smoothstep(0.3, 0.65, fbm2(x * 1.8 + 5, y * 1.8 - 2, s ^ 0x95, 3) + 0.35 * (1 - Math.hypot(x, y)));
+  const haze = 0.55 * dust * light * sheet;
+  const blue = mix(BLUE, [0.55, 0.72, 1], n.tint);
+  // White at the stars, blue in the dust (a little paler close to the stars).
+  const white = Math.min(1, star / Math.max(1e-6, star + haze));
+  return { i: haze + star, colour: mix(mix(blue, [0.7, 0.82, 1], Math.min(1, 0.3 * light)), WHITE, white) };
 };
 
 const SHADERS: Record<Exclude<NebulaKind, 'dark'>, Shader> = { planetary, emission, pillars, remnant, reflection };

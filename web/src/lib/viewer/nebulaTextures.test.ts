@@ -238,6 +238,95 @@ describe('bakeNebula', () => {
     }
   });
 
+  describe('reflection nebulae (the Pleiades family)', () => {
+    // A structureless blue blur was the complaint: the dust must show as
+    // streaks lit by a bright star at the heart.
+    const lum = (t: NebulaTexture, row: number, col: number) => {
+      const i = (row * t.size + col) * 4;
+      return 0.2126 * decode(t.rgba[i]!) + 0.7152 * decode(t.rgba[i + 1]!) + 0.0722 * decode(t.rgba[i + 2]!);
+    };
+    /** The haze's annulus about the star, as (row, col) pairs. */
+    const annulus = (t: NebulaTexture, inner = 0.2, outer = 0.6) => {
+      const out: [number, number][] = [];
+      for (let row = 1; row < t.size - 1; row++) {
+        for (let col = 1; col < t.size - 1; col++) {
+          const r = Math.hypot((2 * (col + 0.5)) / t.size - 1, 1 - (2 * (row + 0.5)) / t.size);
+          if (r > inner && r < outer) out.push([row, col]);
+        }
+      }
+      return out;
+    };
+    const samples = [1, 2, 3, 4, 5, 6].map((seed) => bakeNebula(make('reflection', 900 + seed, (seed % 3) / 2.5, 2.5), 'photo'));
+
+    it('puts a bright, white star at its heart', () => {
+      for (const t of samples) {
+        // The brightest texel near the centre: as bright as any (others may be lit stars of the cluster).
+        let best = 0;
+        let heart = 0;
+        let at = 0;
+        for (let i = 0; i < t.size * t.size; i++) {
+          const v = decode(t.rgba[4 * i]!) + decode(t.rgba[4 * i + 1]!) + decode(t.rgba[4 * i + 2]!);
+          best = Math.max(best, v);
+          const x = (2 * ((i % t.size) + 0.5)) / t.size - 1;
+          const y = 1 - (2 * (Math.floor(i / t.size) + 0.5)) / t.size;
+          if (Math.hypot(x, y) < 0.1 && v > heart) [heart, at] = [v, i];
+        }
+        expect(heart).toBeGreaterThanOrEqual(0.98 * best);
+        // White: blue not far over red at the star.
+        expect(decode(t.rgba[4 * at + 2]!) / Math.max(1e-6, decode(t.rgba[4 * at]!))).toBeLessThan(1.4);
+        // Far brighter than the haze round it.
+        const haze = annulus(t).map(([r, c]) => lum(t, r, c));
+        expect(heart / 3).toBeGreaterThan(4 * (haze.reduce((a, b) => a + b, 0) / haze.length));
+      }
+    });
+
+    it('draws the haze in streaks: its gradients share a direction', () => {
+      // Coherence of the structure tensor over the haze: 0 for isotropic noise or a round blur, 1 for parallel lines.
+      let coherent = 0;
+      for (const t of samples) {
+        let xx = 0;
+        let yy = 0;
+        let xy = 0;
+        for (const [r, c] of annulus(t)) {
+          const gx = lum(t, r, c + 1) - lum(t, r, c - 1);
+          const gy = lum(t, r + 1, c) - lum(t, r - 1, c);
+          xx += gx * gx;
+          yy += gy * gy;
+          xy += gx * gy;
+        }
+        const coherence = Math.sqrt((xx - yy) ** 2 + 4 * xy * xy) / (xx + yy);
+        if (coherence > 0.3) coherent += 1;
+      }
+      expect(coherent).toBeGreaterThanOrEqual(5);
+    });
+
+    it('has dark gaps between the streaks, not an even glow', () => {
+      for (const t of samples) {
+        // The haze divided by its mean at each radius: what is left is the structure.
+        const bins = new Map<number, number[]>();
+        const ring = annulus(t);
+        const binOf = ([r, c]: [number, number]) => Math.round(10 * Math.hypot((2 * (c + 0.5)) / t.size - 1, 1 - (2 * (r + 0.5)) / t.size));
+        for (const p of ring) {
+          const b = binOf(p);
+          if (!bins.has(b)) bins.set(b, []);
+          bins.get(b)!.push(lum(t, p[0], p[1]));
+        }
+        const means = new Map([...bins].map(([b, v]) => [b, v.reduce((x, y) => x + y, 0) / v.length]));
+        const ratios = ring.map((p) => lum(t, p[0], p[1]) / Math.max(1e-9, means.get(binOf(p))!));
+        const m = ratios.reduce((x, y) => x + y, 0) / ratios.length;
+        const sd = Math.sqrt(ratios.reduce((x, y) => x + (y - m) ** 2, 0) / ratios.length);
+        expect(sd / m).toBeGreaterThan(0.4);
+      }
+    });
+
+    it('stays blue in the haze', () => {
+      for (const t of samples) {
+        const at = region(t, (x, y) => Math.hypot(x, y) > 0.25 && Math.hypot(x, y) < 0.55);
+        expect(mean(t, at, (i) => decode(t.rgba[i + 2]!))).toBeGreaterThan(1.3 * mean(t, at, (i) => decode(t.rgba[i]!)));
+      }
+    });
+  });
+
   it('logs the bake times', () => {
     const lines: string[] = [];
     for (const [k, deg] of [['planetary', 1], ['emission', 8], ['pillars', 3], ['remnant', 5], ['reflection', 2], ['dark', 3]] as [NebulaKind, number][]) {
