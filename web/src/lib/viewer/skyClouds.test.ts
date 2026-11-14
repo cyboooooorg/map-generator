@@ -183,19 +183,6 @@ describe('the galactic core and the two exposures', () => {
     expect(peak(near)).toBeGreaterThan(peak(far));
   });
 
-  it('crosses the core with a dark lane along the plane', () => {
-    for (const baked of [eye, photo]) {
-      const lat = (f: number, c: number, r: number) => Math.asin(dot(dirOf(f, c, r), sun.north));
-      const inside = (f: number, c: number, r: number) => dot(dirOf(f, c, r), sun.centre) > Math.cos(0.4 * sun.coreSize);
-      const deg = Math.PI / 180;
-      const lane = meanOf(baked.faces, (f, c, r) => inside(f, c, r) && Math.abs(lat(f, c, r)) < 0.8 * deg, SIZE_CORE);
-      const above = meanOf(baked.faces, (f, c, r) => inside(f, c, r) && Math.abs(lat(f, c, r) - 3.2 * deg) < 0.8 * deg, SIZE_CORE);
-      const below = meanOf(baked.faces, (f, c, r) => inside(f, c, r) && Math.abs(lat(f, c, r) + 3.2 * deg) < 0.8 * deg, SIZE_CORE);
-      expect(lane).toBeLessThan(above);
-      expect(lane).toBeLessThan(below);
-    }
-  });
-
   it('keeps the eye below 0.08 and the photo below 0.35, the eye less saturated', () => {
     const stats = (baked: SkyFaces) => {
       let brightest = 0;
@@ -386,12 +373,10 @@ describe('the core is a warm glow with a lane at every radius', () => {
       expect(cg).toBeGreaterThan(cb);
       // The eye washes colours out by design, the long exposure keeps them.
       expect(cr / cb).toBeGreaterThan(exposure === 'eye' ? 1.2 : 1.5);
-      // The lane stays dark against the glow beside it, whatever the brightness (no clipped plateau).
-      const lane = sum3(sample(dirAt(look, 0, 0)));
-      const above = sum3(sample(dirAt(look, 0, 0.075 * look.coreSize * 3)));
-      const below = sum3(sample(dirAt(look, 0, -0.075 * look.coreSize * 3)));
-      expect(lane).toBeLessThan(0.75 * above);
-      expect(lane).toBeLessThan(0.75 * below);
+      // Rifts stay dark against the glow beside them, whatever the brightness (no clipped plateau): on
+      // at least one of the cuts across the core, the darkest point is well below the cut's median.
+      const dips = cuts(look, sample).map((cut) => Math.min(...cut.values) / median(cut.values));
+      expect(Math.min(...dips)).toBeLessThan(0.7);
     }
   });
 
@@ -407,6 +392,45 @@ describe('the core is a warm glow with a lane at every radius', () => {
     expect(at(look.coreSize * 0.5)).toBeGreaterThan(1.1 * at(look.coreSize));
   });
 });
+
+/** Parallel cuts across the core (constant longitude, latitude from -0.5 to +0.5 core sizes), sampled in sky directions. */
+function cuts(look: SkyLook, sample: (dir: Vec3) => Vec3, count = 9) {
+  const d = dot(look.centre, look.north);
+  const a = look.centre.map((v, i) => v - d * look.north[i]!) as Vec3;
+  const l = Math.hypot(...a);
+  const u: Vec3 = [a[0] / l, a[1] / l, a[2] / l];
+  const n = look.north;
+  const w: Vec3 = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+  const dir = (lon: number, lat: number) => [0, 1, 2].map((k) => Math.cos(lat) * (Math.cos(lon) * u[k]! + Math.sin(lon) * w[k]!) + Math.sin(lat) * n[k]!) as Vec3;
+  const out: { values: number[]; darkest: Vec3; lat: number }[] = [];
+  for (let c = 0; c < count; c += 1) {
+    const lon = (-0.4 + (0.8 * c) / (count - 1)) * look.coreSize;
+    const values: number[] = [];
+    let best = Infinity;
+    let darkest = dir(lon, 0);
+    let bestLat = 0;
+    for (let k = -60; k <= 60; k += 1) {
+      const lat = (k / 120) * look.coreSize;
+      const v = sum3(sample(dir(lon, lat)));
+      values.push(v);
+      if (v < best) {
+        best = v;
+        darkest = dir(lon, lat);
+        bestLat = lat;
+      }
+    }
+    out.push({ values, darkest, lat: bestLat });
+  }
+  return out;
+}
+const median = (v: number[]) => [...v].sort((x, y) => x - y)[Math.floor(v.length / 2)]!;
+
+/** Angle from the great circle through two directions to a third. */
+function offCircle(a: Vec3, b: Vec3, p: Vec3): number {
+  const c: Vec3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const l = Math.hypot(...c);
+  return Math.abs(Math.asin(Math.max(-1, Math.min(1, dot(p, c) / l))));
+}
 
 function sum3([r, g, b]: Vec3) {
   return r + g + b;
@@ -468,5 +492,41 @@ describe('the rifts branch', () => {
       if (lanesOf(ring) >= 3) several += 1;
     }
     expect(several).toBeGreaterThanOrEqual(Math.ceil(0.75 * seeds));
+  });
+});
+
+describe('the core has no straight lane', () => {
+  const lookAtR = (r: number, seed: number) =>
+    skyLook({
+      source: 'Derived',
+      position_kpc: [r, 0, 0.02],
+      axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+      sky_seed: seed,
+    } as never);
+
+  it('puts the darkest point of parallel cuts across the core off any one great circle', () => {
+    let wandering = 0;
+    let total = 0;
+    for (const r of [4.5, 8.2]) {
+      for (let seed = 1; seed <= 8; seed += 1) {
+        const look = lookAtR(r, seed);
+        const sample = cloudSampler(look, 'photo');
+        const darkest = cuts(look, sample).map((c) => c.darkest);
+        // The farthest any darkest point lies from the great circle through the first and last ones.
+        const off = Math.max(...darkest.map((p) => offCircle(darkest[0]!, darkest[darkest.length - 1]!, p)));
+        total += 1;
+        if (off > 0.06 * look.coreSize) wandering += 1;
+      }
+    }
+    // A straight lane would keep every offset near zero; the rift network jumps between lanes.
+    expect(wandering / total).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it('varies the latitude of the darkest point from cut to cut, at every seed', () => {
+    for (let seed = 1; seed <= 8; seed += 1) {
+      const look = lookAtR(8.2, seed);
+      const lats = cuts(look, cloudSampler(look, 'photo')).map((c) => c.lat);
+      expect(Math.max(...lats) - Math.min(...lats)).toBeGreaterThan(0.08 * look.coreSize);
+    }
   });
 });

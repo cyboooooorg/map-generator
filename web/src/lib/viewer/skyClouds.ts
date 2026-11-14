@@ -242,38 +242,53 @@ const smoothstep = (a: number, b: number, x: number) => {
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
+/** Ridged noise in [0, 1]: 1 along thin curves where the noise crosses its middle, falling off either side. */
+const ridge = (f: number) => 1 - Math.abs(2 * f - 1);
+
 /**
- * The core's dust lane: not one thin line but a main strand and a second one
- * that wander about the plane with the longitude (the Great Rift forks), both
- * ragged, fading toward the core's ends.
+ * The core's dust: a network of irregular rifts, not a lane along the plane.
+ * Domain-warped ridged noise on the sphere draws several lanes that cross
+ * the bulge at different angles, wander, vary in width and depth and throw
+ * out side filaments that grow only next to them (as the Great Rift's
+ * branches do). Nothing in it follows the galactic plane; the envelope
+ * only keeps it to the core and falls to zero before its edge.
  */
 function coreLane(look: SkyLook, dir: Vec3): number {
   if (look.coreBrightness <= 0) return 0;
   const frame = bandFrame(look);
-  const x = dot(dir, frame.along);
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, frame.north))));
-  const lon = Math.atan2(dot(dir, frame.across), x);
-  const sigmaLat = 0.075 * look.coreSize;
-  // Windowed to zero between 3 and 4 sigma of the widest wander: no step where the lane ends.
-  const reach = sigmaLat * 4.5;
-  const window = 1 - smoothstep(3 * reach, 4 * reach, Math.abs(lat));
-  if (window <= 0) return 0;
+  const lon = Math.atan2(dot(dir, frame.across), dot(dir, frame.along));
+  // The core's own ellipse, a little wider (the rifts reach past the bright part), a flat-topped fall to zero.
+  const sigmaLon = 0.5 * look.coreSize;
+  const sigmaLat = CORE_AXIS_RATIO * sigmaLon;
+  const q = (lon / sigmaLon) ** 2 + (lat / sigmaLat) ** 2;
+  const along = Math.exp(-((q / 5) ** 1.5));
+  if (along < 1e-3) return 0;
   const n = noiseOf(look.seed);
   const o = n.offsets[2]!;
-  const ragged = 0.55 + 0.9 * fbm(n, dir[0] * 9 + o[0], dir[1] * 9 + o[1], dir[2] * 9 + o[2], 2);
-  const wander = (k: number) => 2 * fbm(n, lon * 2.3 + o[k]!, o[(k + 1) % 3]! + k, 0.5, 3) - 1;
-  const along = Math.exp(-(lon * lon) / (2 * (0.9 * look.coreSize) ** 2));
-  const strand = (offset: number, width: number) => Math.exp(-((lat - offset) ** 2) / (2 * (sigmaLat * width) ** 2));
-  const a = strand(sigmaLat * 3.2 * wander(0), 1);
-  const b = 0.8 * strand(sigmaLat * (1.6 + 4 * wander(1)), 0.7);
-  const c = 0.6 * strand(-sigmaLat * (2.2 + 4 * wander(2)), 0.6);
+  const p = n.offsets[0]!;
+  // Feature size follows the core: about two rift spacings across it.
+  const f = 1.7 / Math.max(0.12, look.coreSize);
+  const w = (k: number, g: number) => fbm(n, dir[0] * g + p[k % 3]!, dir[1] * g + p[(k + 1) % 3]!, dir[2] * g + p[(k + 2) % 3]!, 2) - 0.5;
+  const qx = dir[0] * f + 1.6 * w(0, f * 0.8);
+  const qy = dir[1] * f + 1.6 * w(1, f * 0.8);
+  const qz = dir[2] * f + 1.6 * w(2, f * 0.8);
+  const main = ridge(fbm(n, qx + o[0], qy + o[1], qz + o[2], 3));
+  // A second, finer network, warped again: the side filaments.
+  const rx = qx * 2.5 + 0.8 * w(3, f * 2.2);
+  const ry = qy * 2.5 + 0.8 * w(4, f * 2.2);
+  const rz = qz * 2.5 + 0.8 * w(5, f * 2.2);
+  const side = ridge(fbm(n, rx + o[1], ry + o[2], rz + o[0], 3));
+  // The width of a lane varies along it: the threshold moves with a slow noise.
+  const vary = fbm(n, qx * 0.9 + o[2], qy * 0.9 + o[0], qz * 0.9 + o[1], 2);
+  const trunk = smoothstep(0.86 + 0.07 * vary, 0.985, main);
+  const near = smoothstep(0.7, 0.93, main);
+  const branch = 0.8 * smoothstep(0.9, 0.98, side) * near;
+  const ragged = 0.6 + 0.8 * fbm(n, dir[0] * 11 + o[0], dir[1] * 11 + o[1], dir[2] * 11 + o[2], 3);
   // A soft ceiling at 0.8, not a clamp: no kink at the lane's darkest.
-  const depth = 0.8 * ragged * along * Math.max(a, b, c) * window;
+  const depth = 0.75 * ragged * Math.max(trunk * (0.55 + 0.45 * vary * 2), branch) * along;
   return 0.9 * Math.tanh(depth / 0.9);
 }
-
-/** Ridged noise in [0, 1]: 1 along thin curves where the noise crosses its middle, falling off either side. */
-const ridge = (f: number) => 1 - Math.abs(2 * f - 1);
 
 /**
  * The band's rifts: filaments that branch. A warped ridged noise draws the
