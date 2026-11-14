@@ -261,3 +261,31 @@ worlds like the sky choice). The fixed sky stays today's sky in both.
 Calls by the author: long exposure is the default (the user's references
 are photographs); the switch is a separate on/off "Long exposure" toggle
 rather than two more sky choices.
+
+### Tuning after the second visual check, 2026-11-14
+
+Found in a real GPU browser, fixed on the same branch:
+
+- **Sharp, bold nebulae.** A texture's resolution follows the planet view's
+  field of view (40 degrees over a 1800 px buffer, a texel no wider than a
+  screen pixel, a power of two from 128 to 1024). Planetary rings are
+  thicker and brighter with a faint outer arc ring; emission complexes have
+  broad dark bays with lit edges and thin lanes; pillars are fat columns
+  with domed tips and lit rims; remnants are thin bright filamentary
+  shells. Sizes grew for the planetary (0.5 to 3 degrees), pillars (1.5 to
+  5) and dark (1.5 to 7) kinds.
+- **Dark nebulae** are elongated, bent, with warped ragged edges and a few
+  tendrils, and lie along the band; the texture and the star dimming read
+  the same `darkOpacity`.
+- **The core** is a warm yellow-white glow (a cuspy profile, a soft curve
+  rather than a clip, its size growing as the square root of the distance
+  ratio, at most 0.6 rad) with its own dust lane applied after the curve,
+  so the lane shows at every radius.
+- **Long exposure** pushes colour saturation (1.5), uses a dimmer warm
+  dust glow in clumps with dark gaps, deeper H-alpha and O III, fewer
+  reflection patches and sharper emission patches; the naked eye is as
+  before. A long exposure draws 1.6 times the sky and band stars (the
+  fixed sky is the same in both).
+- **The band's edge** is bent by slow and medium noise (about 0.6 and 0.25
+  of the glow's spread), so it is never a smooth great circle. The cloud
+  cube is baked at 512 px.
