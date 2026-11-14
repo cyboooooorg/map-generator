@@ -5466,3 +5466,62 @@ mod lone_tests {
         assert!(!out.contains("alone"), "{out}");
     }
 }
+
+#[cfg(test)]
+mod titan_tests {
+    use super::*;
+    use crate::biome::Biome;
+
+    /// The Titan of `{"system":{"planets":{"titan-like":1},"seed":1}}`
+    /// (system mgs-72469-1, moon b-3), generated as its viewer gets it but
+    /// at 256 × 128: its liquid is methane and ethane, dark seas and lakes
+    /// of their own biomes (never frozen water), and lies only poleward of
+    /// [`crate::planet::interim::POLAR_LIQUID_LAT_DEG`], with some there.
+    #[test]
+    fn a_titan_keeps_dark_hydrocarbon_seas_near_its_poles() {
+        let request: SystemRequest =
+            serde_json::from_str(r#"{"system":{"planets":{"titan-like":1},"seed":1}}"#).unwrap();
+        let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+        assert_eq!(system_id(&system), "mgs-72469-1");
+        let moon = system.bodies.iter().find(|b| b.id == "b-3").unwrap();
+        assert_eq!(moon.body_type, "hydrocarbon-world");
+        let mut params = generation_params(moon);
+        assert_eq!(
+            params.liquid_poleward_deg,
+            Some(crate::planet::interim::POLAR_LIQUID_LAT_DEG)
+        );
+        params.width = 256;
+        params.height = 128;
+        let world = crate::generation::generate(&params).world;
+        let half_row = 90.0 / f64::from(world.height);
+        let mask = f64::from(crate::planet::interim::POLAR_LIQUID_LAT_DEG);
+        let (mut polar, mut polar_liquid) = (0usize, 0usize);
+        for y in 0..world.height {
+            let lat = 90.0 - (f64::from(y) + 0.5) * 2.0 * half_row;
+            for x in 0..world.width {
+                let b = world.biomes[(y * world.width + x) as usize];
+                assert!(
+                    !matches!(
+                        b,
+                        Biome::FrozenOcean
+                            | Biome::FrozenLake
+                            | Biome::Ocean
+                            | Biome::DeepOcean
+                            | Biome::Lake
+                            | Biome::SeaIce
+                    ),
+                    "{b:?} at {lat:.1}°"
+                );
+                let liquid = matches!(b, Biome::HydrocarbonSea | Biome::HydrocarbonLake);
+                if lat.abs() + half_row < mask {
+                    assert!(!liquid, "{b:?} at {lat:.1}°, equatorward of {mask}°");
+                } else if lat.abs() - half_row >= mask {
+                    polar += 1;
+                    polar_liquid += usize::from(liquid);
+                }
+            }
+        }
+        let share = polar_liquid as f64 / polar as f64;
+        assert!(share > 0.01, "liquid share poleward of {mask}°: {share}");
+    }
+}

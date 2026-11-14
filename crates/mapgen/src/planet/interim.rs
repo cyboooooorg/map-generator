@@ -167,12 +167,26 @@ const CAUSTIC_HAZE_COLOUR: [f32; 3] = [0.85, 0.95, 0.45];
 const EARTH_BAR: (f64, f64) = (0.8, 1.25);
 
 /// Methane haze: CH₄ share of the air and surface pressure (bar) over
-/// which it forms, its density and Titan's orange. Calibration, no source:
-/// Titan (5 % CH₄ near the surface, 1.5 bar) has an opaque orange haze.
+/// which it forms, its density and Titan's orange. Calibration, no source
+/// for the thresholds: Titan (5 % CH₄ near the surface, 1.5 bar) has an
+/// opaque orange haze, photochemical organics (tholins) made from its
+/// methane by sunlight high in its air.
+///
+/// Its density and colour are a calibration with Titan's Cassini
+/// true-colour images as their target: from space the haze hides the
+/// surface in visible light and the disc is an even orange-brown, with a
+/// thin bluish layer at the limb (Porco et al. 2005,
+/// doi:10.1038/nature03436). A density over 0.5 is a haze that hides the
+/// ground to the viewer (`web/src/lib/sky.ts`, `hazeDepth`: 0.9 is a
+/// zenith optical depth of about 6.6, Huygens measured several in the
+/// visible, Tomasko et al. 2005, doi:10.1038/nature04126); the colour is
+/// the share of the light it scatters per channel, the rest absorbed: the
+/// haze absorbs blue most (Tomasko et al. 2008,
+/// doi:10.1016/j.pss.2007.11.019), which makes Titan orange.
 const HAZE_CH4_SHARE: f64 = 0.01;
 const HAZE_MIN_BAR: f64 = 0.5;
-const METHANE_HAZE: f32 = 0.7;
-const METHANE_HAZE_COLOUR: [f32; 3] = [0.9, 0.6, 0.3];
+const METHANE_HAZE: f32 = 0.9;
+const METHANE_HAZE_COLOUR: [f32; 3] = [0.95, 0.55, 0.15];
 
 /// Partial pressures over which clouds form, bar. Calibration, no source:
 /// water where its vapour reaches 1e-3 bar (Earth's air holds about
@@ -199,14 +213,33 @@ const LIFELESS: [(Biome, &[Biome]); 4] = [
     (Biome::Tundra, &[Biome::Taiga]),
 ];
 
+/// The liquids of a hydrocarbon world (target, sources), applied after
+/// its base remap: its seas and lakes are methane and ethane, never
+/// frozen water, whatever its `frozen` base look makes of them. Every
+/// open water pixel of such a world is that liquid: its sea level is set
+/// by its share of liquid ([`HYDROCARBON_LAND_FRACTION`]), not by water.
+const HYDROCARBON_LIQUIDS: [(Biome, &[Biome]); 2] = [
+    (
+        Biome::HydrocarbonSea,
+        &[
+            Biome::FrozenOcean,
+            Biome::DeepOcean,
+            Biome::Ocean,
+            Biome::SeaIce,
+        ],
+    ),
+    (Biome::HydrocarbonLake, &[Biome::FrozenLake, Biome::Lake]),
+];
+
 /// The look a planet with a surface renders with: its [`base_of`] look's
 /// rules, palette and remap with what the model derived: no temperature
 /// shift nor greenhouse ([`calibrate`] aims the world at the model's
 /// temperature), the internal heat `(F / σ)^¼` of its heat flux `F` (the
 /// temperature it alone would keep the surface at), its regime, its sky
-/// ([`sky_of`]), and the lifeless remap after the base one when life did
-/// not arise ([`LIFELESS`]). Its orbit comes from the system and its sea
-/// level from its water.
+/// ([`sky_of`]), the hydrocarbon seas and lakes of a world whose liquid is
+/// methane ([`HYDROCARBON_LIQUIDS`]), and the lifeless remap after the
+/// base one when life did not arise ([`LIFELESS`]). Its orbit comes from
+/// the system and its sea level from its water.
 ///
 /// # Panics
 ///
@@ -221,6 +254,9 @@ pub fn look_for(model: &PlanetModel) -> Look {
     look.atmosphere = sky_of(model);
     look.atmosphere.greenhouse = 0.0;
     look.giant = None;
+    if surface.climate.liquid == SurfaceLiquid::Hydrocarbons {
+        look = look.then_remap(&HYDROCARBON_LIQUIDS);
+    }
     if surface.life.arose {
         look
     } else {
@@ -859,6 +895,38 @@ mod tests {
         let brightest = sky.rayleigh.iter().copied().fold(0.0_f32, f32::max);
         assert!(brightest <= 1.0, "{:?}", sky.rayleigh);
         assert!(sky.haze >= 0.25, "{}", sky.haze);
+    }
+
+    /// Titan's air (N₂ with 5 % CH₄, 1.5 bar) gets the methane haze, thick
+    /// enough to hide its ground to the viewer (over 0.5, see
+    /// `METHANE_HAZE`), orange (red over green over blue); Earth, Venus
+    /// and Mars stay under that density.
+    #[test]
+    fn titans_haze_is_thick_and_orange() {
+        let sky = sky_of(&model_of("Titan"));
+        assert_eq!(sky.haze, METHANE_HAZE);
+        assert!(sky.haze > 0.5);
+        let [r, g, b] = sky.haze_colour;
+        assert!(r > g && g > 2.0 * b, "{:?}", sky.haze_colour);
+        for name in ["Earth", "Venus", "Mars"] {
+            let haze = sky_of(&model_of(name)).haze;
+            assert!(haze <= 0.5, "{name}: {haze}");
+        }
+    }
+
+    /// A hydrocarbon world's seas and lakes are its own dark liquid, never
+    /// the frozen water of its `frozen` base look; a water world keeps
+    /// its water.
+    #[test]
+    fn titans_seas_are_hydrocarbons() {
+        let titan = look_for(&model_of("Titan"));
+        for b in [Biome::DeepOcean, Biome::Ocean, Biome::SeaIce] {
+            assert_eq!(titan.remap(b), Biome::HydrocarbonSea, "{b:?}");
+        }
+        assert_eq!(titan.remap(Biome::Lake), Biome::HydrocarbonLake);
+        let earth = look_for(&model_of("Earth"));
+        assert_eq!(earth.remap(Biome::Ocean), Biome::Ocean);
+        assert_eq!(earth.remap(Biome::Lake), Biome::Lake);
     }
 
     #[test]

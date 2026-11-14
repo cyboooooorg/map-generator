@@ -300,6 +300,49 @@ pressure: `0.03 + 0.02 log10(1 + p)` of the radius, and a gas depth that
 goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 ([`sky.ts`](../../web/src/lib/sky.ts)).
 
+The haze's own depth at the zenith is twice its density (0 to 1) up to
+0.5, the density of every look but one: Earth's 0.1, Venus's 0.3, a
+volcanic world's 0.45. Past 0.5 a haze thickens towards an opaque one,
+a depth of 8 at 1 (`hazeDepth`), and scatters more and more evenly
+(its anisotropy falls to 0): only a methane haze gets there.
+
+#### Titan's orange haze
+
+An air of more than 0.5 bar with more than 1 % methane gets a methane
+haze (`planet::interim::sky_of`, `METHANE_HAZE`): the organics sunlight
+makes from the methane high in the air (tholins). Seen from space, Titan
+in true colour is an even orange-brown disc: the haze hides the surface
+in visible light, and only a thin bluish layer shows at the limb (Porco
+et al. 2005 [19]). The Huygens probe measured a haze optical depth of
+several in the visible (Tomasko et al. 2005 [20]), absorbing blue most
+(Tomasko et al. 2008 [21]). The app's methane haze has a density of 0.9,
+a zenith depth of about 6.6 (the ground seen straight down through about
+0.1 % of its light) and scatters 95 % of the red, 55 % of the green and
+15 % of the blue it intercepts, the rest absorbed. A single scattering
+leaves so thick a haze a dull brown, so the viewer counts the light it
+scatters many times: of what each scattering keeps, a share `w` scatters
+again, and a channel returns `a / (1 − w a)` of its single-scattering
+share `a` (`hazeAlbedo`, `w` rising from 0 at a density of 0.5 to 0.55 at
+1), which brightens and saturates the orange. Its density, colour, the
+depth it maps to and that share are calibrations with Cassini's
+true-colour images of Titan as their target.
+
+Close in, the viewer thins a haze that hides the ground over the ground
+(`hazeVeil`), so the surface can be looked at: from a whole-disc view
+(0.6 radii up and beyond) the disc is the haze's; at 0.05 radii and
+below the ground is seen through a depth of 0.25 (about 78 % of its light).
+The limb keeps its whole haze. This is a viewer convention, standing in
+for the near-infrared windows through which Cassini mapped Titan's
+surface (ISS at 938 nm, VIMS at 5 µm); a thinner haze (Earth, Mars,
+Venus) is never thinned.
+
+The liquid of a hydrocarbon world renders as dark seas and lakes of
+methane and ethane (the `HydrocarbonSea` and `HydrocarbonLake` biomes),
+never as the frozen water its `frozen` base look would make of them:
+Titan's lakes and seas are the darkest surfaces of its radar and
+near-infrared maps (Stofan et al. 2007 [22]; Brown et al. 2008 [23]).
+Their near-black brown is a calibration with those maps as its target.
+
 ### Where it departs from the science
 
 - **The pressure does not follow from the world.** The app draws it from
@@ -373,6 +416,15 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 - **Liquid water.** The app cuts water at 0.01 bar, just above water's
   triple point. Real water also boils away if the ground is warmer than
   the boiling point at that pressure; the app does not check it.
+- **Titan's haze is one layer, scattered once.** The viewer's sky has one
+  aerosol, of one colour and one scale height, below the gas's, and
+  scatters the sunlight once. Titan's haze rises to 500 km, above most of
+  its gas, its detached layer is bluer than the main one, and a thick
+  haze scatters many times; the app stands in for it with an opaque
+  orange layer that scatters evenly, its many scatterings a geometric
+  series (see above), so its limb shows the
+  gas's blue only faintly. The surface under the haze is still the
+  `frozen` look's ice, lighter than Titan's dark organic dunes.
 - **The halo is not to scale.** A real atmosphere is a hair's breadth
   round a planet seen whole; the app thickens it to a few percent of the
   radius so it shows, as the study says.
@@ -462,6 +514,22 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 18. Tobie, G., Lunine, J. I. & Sotin, C. 2006, "Episodic outgassing as
     the origin of atmospheric methane on Titan", *Nature* 440, 61–64,
     [doi:10.1038/nature04497](https://doi.org/10.1038/nature04497).
+
+19. Porco, C. C. et al. 2005, "Imaging of Titan from the Cassini
+    spacecraft", *Nature* 434, 159–168,
+    [doi:10.1038/nature03436](https://doi.org/10.1038/nature03436).
+20. Tomasko, M. G. et al. 2005, "Rain, winds and haze during the Huygens
+    probe's descent to Titan's surface", *Nature* 438, 765–778,
+    [doi:10.1038/nature04126](https://doi.org/10.1038/nature04126).
+21. Tomasko, M. G. et al. 2008, "A model of Titan's aerosols based on
+    measurements made inside the atmosphere", *Planetary and Space
+    Science* 56, 669–707,
+    [doi:10.1016/j.pss.2007.11.019](https://doi.org/10.1016/j.pss.2007.11.019).
+22. Stofan, E. R. et al. 2007, "The lakes of Titan", *Nature* 445, 61–64,
+    [doi:10.1038/nature05438](https://doi.org/10.1038/nature05438).
+23. Brown, R. H. et al. 2008, "The identification of liquid ethane in
+    Titan's Ontario Lacus", *Nature* 454, 607–610,
+    [doi:10.1038/nature07100](https://doi.org/10.1038/nature07100).
 
 ## See also
 

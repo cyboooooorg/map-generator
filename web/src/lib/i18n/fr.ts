@@ -286,6 +286,8 @@ export const fr: Messages = {
     GiantBelt: 'Bande sombre (ceinture)',
     GiantStorm: 'Tempête',
     GiantPolar: 'Région polaire',
+    HydrocarbonSea: 'Mer d’hydrocarbures',
+    HydrocarbonLake: 'Lac d’hydrocarbures',
   },
   clouds: {
     water: 'd’eau',

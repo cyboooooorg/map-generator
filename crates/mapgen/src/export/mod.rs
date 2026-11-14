@@ -260,7 +260,10 @@ pub(crate) fn water_colour(biome: Biome, depth: f32) -> [f32; 3] {
     }
     let depth = depth.max(0.0);
     if let Some(liquid) = Liquid::of(biome) {
-        let depth = if matches!(biome, Biome::Lake | Biome::CausticLake) {
+        let depth = if matches!(
+            biome,
+            Biome::Lake | Biome::CausticLake | Biome::HydrocarbonLake
+        ) {
             depth * LAKE_DEPTH_SCALE
         } else {
             depth
@@ -323,11 +326,28 @@ static ACID: LazyLock<Liquid> = LazyLock::new(|| Liquid {
     absorption: [24.0, 18.0, 40.0],
 });
 
+/// Liquid methane and ethane, darkened by dissolved organics: the bed
+/// shows through only at the very shore, and the liquid is near black
+/// beyond, as Titan's lakes and seas in Cassini's radar and near-infrared
+/// maps (see [`surface_color`]). Its absorption is a calibration, no
+/// source: about three times water's, every channel alike but blue a
+/// little faster, so a shelf reads dark brown, not turquoise.
+static HYDROCARBON: LazyLock<Liquid> = LazyLock::new(|| Liquid {
+    deep: linear_of(surface_color(Biome::HydrocarbonSea)),
+    bed: linear_of(HYDROCARBON_BED),
+    absorption: [60.0, 70.0, 90.0],
+});
+
+/// Colour of the bed of a hydrocarbon lake under a thin layer, sRGB:
+/// a dark organic sediment. Calibration, no source.
+const HYDROCARBON_BED: [u8; 3] = [92, 76, 58];
+
 impl Liquid {
     fn of(biome: Biome) -> Option<&'static Self> {
         match biome {
             Biome::DeepOcean | Biome::Ocean | Biome::Lake => Some(&WATER),
             Biome::DeepAcidSea | Biome::AcidSea | Biome::CausticLake => Some(&ACID),
+            Biome::HydrocarbonSea | Biome::HydrocarbonLake => Some(&HYDROCARBON),
             _ => None,
         }
     }
