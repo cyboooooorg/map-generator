@@ -36,6 +36,11 @@ model?: PlanetModel | null,
  */
 moon?: boolean, 
 /**
+ * The sidereal day its system set, hours (see
+ * `WorldParams::day_hours`); left out otherwise.
+ */
+day_hours?: number | null, 
+/**
  * The inputs the planet formed with, as a request sets them
  * ([`PlanetModel::formation`]): what a request pins to make the same
  * planet under another seed or epoch. Left out with the model, and

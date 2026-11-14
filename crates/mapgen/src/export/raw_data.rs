@@ -104,6 +104,10 @@ pub struct WorldMetadata {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub moon: bool,
+    /// The sidereal day its system set, hours (see
+    /// `WorldParams::day_hours`); left out otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub day_hours: Option<f32>,
     /// The inputs the planet formed with, as a request sets them
     /// ([`PlanetModel::formation`]): what a request pins to make the same
     /// planet under another seed or epoch. Left out with the model, and
@@ -627,6 +631,7 @@ pub(crate) fn write_raw_data(
         archetype: world.params.archetype.clone(),
         model: world.params.model.clone(),
         moon: world.params.moon,
+        day_hours: world.params.day_hours,
         formation: world
             .params
             .model
@@ -1105,6 +1110,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         perihelion_longitude_deg: meta.star.perihelion_longitude_deg,
         resonance_to_star: Some(meta.star.spin_turns),
         moon: meta.moon,
+        day_hours: meta.day_hours,
         // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
@@ -1358,6 +1364,7 @@ mod tests {
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             moon: false,
+            day_hours: None,
             gravity: None,
         })
         .world;

@@ -1174,6 +1174,7 @@ mod tests {
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             moon: false,
+            day_hours: None,
             gravity: None,
         }
     }

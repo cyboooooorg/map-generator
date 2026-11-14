@@ -1439,6 +1439,11 @@ fn assemble(
             // A moon's seasons follow its planet's orbit around the star.
             moon_params.perihelion_longitude_deg =
                 bodies[planet_index].params.perihelion_longitude_deg;
+            // It turns as its spin says (once per orbit, locked to its
+            // planet), not with Earth's day; the world asked keeps its own.
+            if moon_params.moon {
+                moon_params.day_hours = Some(spin.period_hours as f32);
+            }
             if let Some(gap) = ring.and_then(|r| r.gap) {
                 gap_moons[gap] = moon_id.clone();
             }
@@ -3247,6 +3252,7 @@ mod tests {
                         ridge: None,
                         resonance_to_star: None,
                         moon: false,
+                        day_hours: None,
                         gravity: None,
                         ..body.params.clone()
                     };
@@ -4170,6 +4176,49 @@ mod tests {
             }
         }
         assert!(round > 0 && small > 0, "{round} round, {small} small");
+    }
+
+    #[test]
+    fn a_locked_round_moon_turns_once_per_orbit() {
+        let (mut checked, mut planets) = (0, 0);
+        for seed in 1..=20 {
+            let system = draw(
+                &whole_drawn(seed),
+                &mut StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .unwrap();
+            for body in &system.bodies {
+                let day = crate::generation::sidereal_day_hours(&world_params(body));
+                if body.kind == BodyKind::Planet {
+                    // A planet's day is still its own draw.
+                    assert_eq!(body.params.day_hours, None);
+                    planets += 1;
+                } else if body.model.is_some() && body.spin.locked {
+                    let orbit_hours = body.orbit.period_days * 24.0;
+                    assert!(
+                        (day - orbit_hours).abs() < 1e-3 * orbit_hours,
+                        "{}",
+                        body.id
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0 && planets > 0);
+        // A world asked around a giant turns once per orbit around it.
+        let world = WorldRequest {
+            planet: Some("earth-like".into()),
+            seed: Some(8),
+            host: Some(HostMode::Giant),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let system = draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(5)).unwrap();
+        let focus = system.focus.as_deref().unwrap();
+        let moon = system.bodies.iter().find(|b| b.id == focus).unwrap();
+        let day = crate::generation::sidereal_day_hours(&world_params(moon));
+        assert!((day - moon.spin.period_hours).abs() < 1e-3 * day);
     }
 
     #[test]

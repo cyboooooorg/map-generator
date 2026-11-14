@@ -287,7 +287,10 @@ eccentricity) heat it. Its model is stored in `model` and in
 `params.model`, derived from the stream `<moon id>/model`; its `type` is
 the model's class (`rocky`, `ice-world`, `hydrocarbon-world`…), its
 world is a planet's (`planet::interim::params_for` at its own seed, with
-its tilt, its tidal shape and no moons of its own), its preview the
+its tilt, its tidal shape and no moons of its own; its day, which its
+wind belts and the swing of its days read, is its body's spin, stored
+as `params.day_hours`: a locked moon turns once per orbit, Titan in
+15.9 days), its preview the
 colours of its base look, and its `physical` facts the formation's mass
 with the model's radius, density and gravity (about 9 % smaller than the
 uncompressed bulk mix gives: 0.86 to 0.96 over 500 systems). A moon too

@@ -837,6 +837,7 @@ mod tests {
             locked_to_star: None,
             resonance_to_star: None,
             moon: false,
+            day_hours: None,
             ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
         let world = generate(&params).world;

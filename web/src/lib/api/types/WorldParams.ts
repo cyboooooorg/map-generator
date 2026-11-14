@@ -184,4 +184,12 @@ age_gyr: number,
  * a world asked for as a giant's moon, which keeps its host in
  * [`Self::host`].
  */
-moon?: boolean, };
+moon?: boolean, 
+/**
+ * The world's sidereal day, hours, when its system sets it: a moon
+ * of a system's planet turns as its body's spin says (once per orbit
+ * when locked to its planet: Titan 15.9 days). Absent for every
+ * other world, whose day follows from its star's tides, its moons or
+ * the giant it orbits (see `crate::generation::belts`).
+ */
+day_hours?: number, };

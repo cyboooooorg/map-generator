@@ -1776,10 +1776,19 @@ pub fn belts(params: &WorldParams) -> Belts {
     )
 }
 
-/// The time world `params` takes to turn once, hours: its year if locked
-/// to its star (two thirds of it in the 3:2 resonance, half in 2:1), the
-/// rotation its moons draw, Earth's 24 h for a world without moons.
-fn sidereal_day_hours(params: &WorldParams) -> f64 {
+/// The time world `params` takes to turn once, hours: the day its system
+/// set (a moon of a system's planet, [`WorldParams::day_hours`]); a
+/// giant's moon's orbit around it, which it is locked to; its year if
+/// locked to its star (two thirds of it in the 3:2 resonance, half in
+/// 2:1); the rotation its moons draw; Earth's 24 h for a world without
+/// moons.
+pub(crate) fn sidereal_day_hours(params: &WorldParams) -> f64 {
+    if let Some(day) = params.day_hours {
+        return f64::from(day);
+    }
+    if let Some(host) = crate::exomoon::HostGiant::draw(params) {
+        return f64::from(host.period_days) * 24.0;
+    }
     let star = crate::spin::star_info(params);
     if star.tidally_locked {
         f64::from(star.year_days) * 24.0
@@ -2531,6 +2540,7 @@ pub(crate) mod tests {
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             moon: false,
+            day_hours: None,
             gravity: None,
         }
     }

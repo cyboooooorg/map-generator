@@ -151,6 +151,14 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub moon: bool,
+    /// The world's sidereal day, hours, when its system sets it: a moon
+    /// of a system's planet turns as its body's spin says (once per orbit
+    /// when locked to its planet: Titan 15.9 days). Absent for every
+    /// other world, whose day follows from its star's tides, its moons or
+    /// the giant it orbits (see `crate::generation::belts`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub day_hours: Option<f32>,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

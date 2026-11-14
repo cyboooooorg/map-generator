@@ -520,6 +520,7 @@ pub fn params_for(
         locked_to_star: None,
         resonance_to_star: None,
         moon: false,
+        day_hours: None,
         ridge: None,
         // A giant's gravity follows from its own mass.
         gravity: (!giant).then_some(model.interior.gravity as f32),

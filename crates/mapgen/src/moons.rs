@@ -1601,6 +1601,7 @@ pub fn small_body_params(
         perihelion_longitude_deg: None,
         resonance_to_star: None,
         moon: true,
+        day_hours: None,
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1781,6 +1782,7 @@ mod tests {
             perihelion_longitude_deg: None,
             resonance_to_star: None,
             moon: false,
+            day_hours: None,
             gravity: None,
         }
     }
