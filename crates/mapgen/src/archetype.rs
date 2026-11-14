@@ -93,7 +93,8 @@
 //! inertia give (sources in each file). They set causes only: a Titan is
 //! a hydrocarbon world because its mass, ice and cold host make one, and
 //! comes out as one only when the model says so.
-use crate::planet::InputOverrides;
+use crate::exomoon::EARTH_KG;
+use crate::planet::{Context, GIANT_MIN_MASS_EARTH, InputOverrides, OCEAN_KG, PlanetModel};
 use crate::request::Limits;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
@@ -635,6 +636,116 @@ pub fn built_in_names() -> Vec<&'static str> {
     BUILT_IN.iter().map(|(name, _)| *name).collect()
 }
 
+/// How far apart, in tolerances, a body and an archetype may be to
+/// resemble each other (see [`similar`]). Calibrated by the tests
+/// `solar_system_archetypes_are_recognised` and
+/// `ordinary_drawn_bodies_are_mostly_unnamed`. Measured with
+/// [`TOLERANCES`]: every built-in archetype names itself in 20 of 20
+/// draws, and 56 of 300 bodies (19 %) of 50 drawn G2V systems get a name.
+const SIMILAR_THRESHOLD: f64 = 1.0;
+
+/// The tolerance of each axis of the distance of [`similar`]: `log10` of
+/// the mass, the core mass fraction, the water mass fraction, `log10` of
+/// the insolation (or of the period). Calibration, no source: tuned with
+/// [`SIMILAR_THRESHOLD`] by the two tests named there (the ranges of the
+/// archetypes count whole, so the tolerance only widens them).
+const TOLERANCES: [f64; 4] = [0.15, 0.1, 0.1, 0.3];
+
+/// The ends of a parameter's range.
+fn ends(p: ParamDefault) -> (f64, f64) {
+    match p {
+        ParamDefault::Fixed(v) => (f64::from(v), f64::from(v)),
+        ParamDefault::Range([lo, hi]) => (f64::from(lo), f64::from(hi.max(lo))),
+    }
+}
+
+/// How far `x` is outside `[lo, hi]`: 0 inside.
+fn gap(x: f64, (lo, hi): (f64, f64)) -> f64 {
+    if x < lo {
+        lo - x
+    } else if x > hi {
+        x - hi
+    } else {
+        0.0
+    }
+}
+
+/// The name of the archetype of `archetypes` a body resembles, if one is
+/// close enough: the distance between them in the archetypes' input space
+/// (`log10` of the mass, the core mass fraction, the water mass fraction,
+/// `log10` of the insolation, or of the period for an archetype that sets
+/// one; each axis over its tolerance, the axes combined by their root
+/// mean square) is at most a threshold, and the nearest archetype wins.
+/// An archetype's range counts as the whole interval (no distance inside
+/// it: a lava world's mass runs from 1 to 5 Earth masses), an input it
+/// leaves out is skipped. A moon archetype has no orbit round a star: its
+/// light is its host archetype's. Moon archetypes are for a giant's moon
+/// only (`moon_of_giant`), planet archetypes for the others; a giant is
+/// compared with giants by mass and insolation only.
+pub fn similar<'a>(
+    context: &Context,
+    model: &PlanetModel,
+    moon_of_giant: bool,
+    archetypes: impl IntoIterator<Item = &'a Archetype>,
+) -> Option<&'a str> {
+    let all: Vec<&'a Archetype> = archetypes.into_iter().collect();
+    let inputs = &model.inputs;
+    let body_giant = inputs.mass_earth >= GIANT_MIN_MASS_EARTH;
+    let log = |ends: (f64, f64)| (ends.0.log10(), ends.1.log10());
+    let mut best: Option<(f64, &'a str)> = None;
+    for &a in &all {
+        if a.moon.is_some() != moon_of_giant {
+            continue;
+        }
+        let (mass_lo, mass_hi) = ends(a.inputs.mass_earth);
+        let giants = body_giant || mass_hi >= GIANT_MIN_MASS_EARTH;
+        let mut axes = vec![(
+            gap(inputs.mass_earth.log10(), log((mass_lo, mass_hi))),
+            TOLERANCES[0],
+        )];
+        if !giants {
+            if let Some(c) = a.inputs.core_mass_fraction {
+                axes.push((gap(inputs.core_mass_fraction, ends(c)), TOLERANCES[1]));
+            }
+            let water = match (&a.moon, a.inputs.water_oceans) {
+                (Some(m), _) => Some(ends(m.ice_fraction)),
+                (None, Some(w)) => {
+                    let (lo, hi) = ends(w);
+                    Some((
+                        lo * OCEAN_KG / (mass_hi * EARTH_KG),
+                        hi * OCEAN_KG / (mass_lo * EARTH_KG),
+                    ))
+                }
+                (None, None) => None,
+            };
+            if let Some(w) = water {
+                axes.push((gap(inputs.water_fraction, w), TOLERANCES[2]));
+            }
+        }
+        let host = a
+            .moon
+            .as_ref()
+            .and_then(|m| all.iter().find(|h| h.name == m.host));
+        let light = host.map_or(a.orbit.insolation, |h| h.orbit.insolation);
+        match (light, a.orbit.period_days) {
+            (Some(s), _) => {
+                axes.push((gap(context.insolation.log10(), log(ends(s))), TOLERANCES[3]))
+            }
+            (None, Some(p)) => {
+                let days = (context.orbit_au.powi(3) / context.star_mass).sqrt() * 365.25;
+                axes.push((gap(days.log10(), log(ends(p))), TOLERANCES[3]));
+            }
+            (None, None) => {}
+        }
+        let distance =
+            (axes.iter().map(|(d, t)| (d / t).powi(2)).sum::<f64>() / axes.len() as f64).sqrt();
+        if distance <= SIMILAR_THRESHOLD && best.is_none_or(|(d, _)| distance < d) {
+            best = Some((distance, a.name.as_str()));
+        }
+    }
+    best.map(|(_, name)| name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -919,5 +1030,82 @@ mass_earth = 5000.0
             let share = gases.co2 / bar;
             assert!(share > 0.9, "seed {seed}: CO2 {share}");
         }
+    }
+
+    /// The context and model of the body of `a` in a whole system of
+    /// seed `seed` that asks for it alone, round a G2V.
+    fn drawn(a: &Archetype, seed: u32) -> (Context, PlanetModel, bool) {
+        use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
+            star: Some("G2V".into()),
+            metallicity: Some(0.0),
+            planets: Some(BTreeMap::from([(a.name.clone(), 1)])),
+            seed: Some(seed),
+            width: Some(64),
+            height: Some(32),
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(0)).unwrap();
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.params.archetype.as_deref() == Some(a.name.as_str()))
+            .unwrap_or_else(|| panic!("{} seed {seed}: no body", a.name));
+        let context = body_context(&system, body).unwrap();
+        let giant_moon = context.tide.is_some_and(|t| {
+            t.host_kg >= crate::planet::GIANT_MIN_MASS_EARTH * crate::exomoon::EARTH_KG
+        });
+        (context, body.model.clone().unwrap(), giant_moon)
+    }
+
+    #[test]
+    fn solar_system_archetypes_are_recognised() {
+        let all = Archetype::built_in();
+        let mut weak = Vec::new();
+        for a in &all {
+            let hits = (1..=20)
+                .filter(|&seed| {
+                    let (context, model, moon) = drawn(a, seed);
+                    similar(&context, &model, moon, &all) == Some(a.name.as_str())
+                })
+                .count();
+            eprintln!("similar {}: {hits}/20", a.name);
+            if hits < 16 {
+                weak.push(format!("{}: {hits}/20", a.name));
+            }
+        }
+        assert!(weak.is_empty(), "named itself in under 16 of 20: {weak:?}");
+    }
+
+    #[test]
+    fn ordinary_drawn_bodies_are_mostly_unnamed() {
+        use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
+        let all = Archetype::built_in();
+        let (mut named, mut total) = (0, 0);
+        for seed in 1..=50 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                age_gyr: None,
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                planets: None,
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(0)).unwrap();
+            for body in &system.bodies {
+                let (Some(model), Some(context)) = (&body.model, body_context(&system, body))
+                else {
+                    continue;
+                };
+                let moon = context.tide.is_some_and(|t| {
+                    t.host_kg >= crate::planet::GIANT_MIN_MASS_EARTH * crate::exomoon::EARTH_KG
+                });
+                total += 1;
+                named += usize::from(similar(&context, model, moon, &all).is_some());
+            }
+        }
+        eprintln!("similar: {named} of {total} bodies named");
+        assert!(named * 10 <= total * 3, "{named} of {total} bodies named");
     }
 }
