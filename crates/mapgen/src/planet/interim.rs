@@ -438,7 +438,8 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 /// - a giant ([`renders_as_giant`]): its giant look at the model's mass
 ///   (no less than the smallest giant's, [`crate::request::GIANT_MASS`]:
 ///   a mini-Neptune renders as an ice giant of that mass), its radius the
-///   giant look's (`giant_radius`: issue #446 tracks the gap), no ground,
+///   giant look's (`giant_radius_of` for the model's composition and
+///   light, the model's own radius at that mass; issue #446), no ground,
 ///   no giant neighbours and nobody's moon;
 /// - a body that is no giant whose envelope hides its surface: its class's
 ///   look ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
@@ -537,7 +538,11 @@ pub fn params_for(
             }
             None if giant => (
                 sea_level,
-                crate::giants::giant_radius(giant_mass, star.equilibrium_k) * 40_075.0,
+                crate::giants::giant_radius_of(
+                    giant_mass,
+                    &crate::giants::GiantComposition::of(&model.inputs),
+                    &super::Exposure::of(&star),
+                ) * 40_075.0,
                 look_pressure,
                 0.0,
                 0.0,

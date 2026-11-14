@@ -47,7 +47,10 @@
 use crate::biome::Biome;
 use crate::generation::{Generated, Stage};
 use crate::giant_clouds::Clouds;
-use crate::giants::{GiantKind, giant_radius, internal_temperature, surface_gravity};
+use crate::giants::{
+    GiantComposition, GiantKind, giant_radius, giant_radius_of, internal_temperature,
+    surface_gravity,
+};
 use crate::noise::{fbm, smoothstep, stream, stream_seed};
 use crate::star::StarInfo;
 use crate::world::{World, WorldParams};
@@ -491,10 +494,26 @@ fn great_spot_site(bands: &[Band], pick: f32) -> (f32, f32) {
     (0.5 * (band.south + band.north), band.north - band.south)
 }
 
-/// Radius of a giant world, Earth radii, from its parameters.
+/// Radius of a giant world, Earth radii, from its parameters (see
+/// [`radius_at`]).
 pub fn radius_earth(p: &WorldParams, mass_earth: f32) -> f32 {
     let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
-    giant_radius(mass_earth, star.equilibrium_k)
+    radius_at(p, &star, mass_earth)
+}
+
+/// Radius of the giant world `p` of `mass_earth` round `star`, Earth
+/// radii: from its planet model's composition and the light it gets
+/// ([`giant_radius_of`]), or, without a model, from its mass and
+/// temperature alone ([`giant_radius`]).
+fn radius_at(p: &WorldParams, star: &StarInfo, mass_earth: f32) -> f32 {
+    match &p.model {
+        Some(model) => giant_radius_of(
+            mass_earth,
+            &GiantComposition::of(&model.inputs),
+            &crate::planet::Exposure::of(star),
+        ),
+        None => giant_radius(mass_earth, star.equilibrium_k),
+    }
 }
 
 /// The colours of a giant of `kind` and `clouds`, varied by `t` and `u` in
@@ -591,7 +610,7 @@ impl Look {
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
         let equilibrium = star.equilibrium_k;
         let hot = equilibrium > HOT_GIANT_K;
-        let radius_earth = giant_radius(mass_earth, equilibrium);
+        let radius_earth = radius_at(p, &star, mass_earth);
         let internal = internal_temperature(kind, mass_earth, star.age_gyr);
         let effective = (equilibrium.powi(4) + internal.powi(4)).powf(0.25);
         let clouds = Clouds::of(effective, surface_gravity(mass_earth, radius_earth));

@@ -303,14 +303,18 @@ Each giant then gets its equilibrium temperature from the light it gets
 at its semi-major axis (255 K × $S^{1/4}$, Earth's albedo), averaged over
 its year as for the world (see [What does an eccentric orbit
 change?](eccentric-orbits.md)). It is a hot giant above 1,000 K. Its
-radius is inflated (`giant_radius`) by the heat its interior gets
+radius is inflated (`gas_giant_radius`, the law `giant_radius` and
+`giant_radius_of` take from 30 Earth masses) by the heat its interior gets
 (`inflation_heat`): the flux times the share of it turned into heat, the
 Gaussian that Thorngren & Fortney (2018, eq. 34) fitted, relative to its
 peak. That heat is greatest near 1,700 K, 0.8 of it at 1,500 K, half at
 2,200 K, 4 % at 1,000 K. A Jupiter mass grows by 0.7 times the heat:
 1.7 times its cold radius at its peak, 1.37 times at 2,200 K. Lighter
 giants grow more, at most 1.9 times. Giants under 30 Earth masses are
-not inflated.
+not inflated; one of known composition (a planet of the model) still
+grows with its light through the `S^0.044` of its envelope (Lopez &
+Fortney 2014, see [planet-interiors.md](planet-interiors.md)), 1.5
+times thicker at 1 000 times Earth's light than at 0.1.
 
 From `crates/mapgen/src/giants.rs`, trimmed:
 
@@ -334,7 +338,7 @@ fn inflation_heat(equilibrium_k: f32) -> f32 {
     (ln_power(flux.max(1e-12).log10()) - ln_power(peak)).exp()
 }
 
-// In `giant_radius`:
+// In `gas_giant_radius`:
 let heat = inflation_heat(equilibrium_k);
 let inflation = (1.0
     + 0.7 * heat * (JUPITER_EARTH_MASSES / m.max(30.0)).powf(0.25))

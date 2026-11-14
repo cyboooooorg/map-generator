@@ -94,16 +94,63 @@ made on).
 **In words.** A heavier planet squeezes its envelope; a thicker envelope
 swells it; more light and a younger age swell it a little. The relation
 holds on the grid it was fitted on (1 to 20 Earth masses, 0.1 to 1000
-times Earth's light, 0.1 to 10 Gyr) and the model clamps to it.
+times Earth's light, 0.1 to 10 Gyr) and the model clamps the mass, the
+light and the age to it. It extrapolates the envelope share beyond the
+grid's 20 % up to the 30 % it draws under 30 Earth masses, so that more
+gas makes a larger planet over every drawn share; a larger share, which
+only a request asks for, is sized as 30 %.
 
 **Orders of magnitude.** 2 % of a 5-Earth-mass core's mass in gas adds about
 0.9 $R_\oplus$, which is why most planets above 1.6 $R_\oplus$ are not
 rocky (Rogers 2015).
 
-For a giant (10 Earth masses or more with at least 5 % gas) the model uses the
-generator's existing giant radius, through Neptune, Saturn and Jupiter
-(Chen & Kipping 2017), inflated when hot (Thorngren & Fortney 2018). The
-solid layers stay inside it, and the envelope fills the rest.
+**Heavy elements.** Their fit is made on envelopes of pure hydrogen and
+helium over rocky cores. A water-rich planet mixes heavy elements into
+its envelope (Uranus and Neptune hold them up to their outer layers:
+Helled et al. 2011; Nettelmann et al. 2013), which makes it denser and
+thinner. The model multiplies the thickness of every envelope, from a
+mini-Neptune's to an ice giant's, by a factor of the water share $w$
+that runs linearly from 1 for a dry planet to $h_N \approx 0.49$ at
+Neptune's 65 %:
+
+```math
+R = R_\mathrm{solid} + R_\mathrm{env} \left(1 - (1 - h_N)\,\frac{w}{65\,\%}\right)
+```
+
+$h_N$ is set so that Neptune's composition (65 % water and ices, 15 %
+gas) at Neptune's mass, light and age gives Neptune's radius: its solid
+layers come out 2.91 $R_\oplus$, the fit's envelope 1.98 (Neptune would
+be 4.89 $R_\oplus$, 27 % too large, and Uranus 22 %), and 0.97 is left.
+
+**In words.** At a fixed composition a Neptune barely grows with its
+mass, because a heavier core squeezes its envelope; more gas or more
+light makes it larger. More water at the same gas share grows the
+solid layers but thins the envelope, and which wins depends on the gas:
+at 1 $S_\oplus$, 60 % water instead of none makes a planet with 2 % gas
+8 % smaller at 1 Earth mass but 12 % larger from 20; with 10 % gas, 25 %
+smaller at 1 Earth mass and 2 % at 20; with 30 % gas, 34 % smaller at 1
+Earth mass and still 7 % at 29.
+
+**Orders of magnitude.** Uranus, with Neptune's composition and 15 % less
+mass, comes out 3.80 $R_\oplus$ (3.98 observed, −4.5 %); Neptune 3.88
+(3.86). A law of the mass alone, $M^{0.59}$ (Chen & Kipping 2017, a fit
+to a population whose gas share grows with the mass), gave Uranus 3.52,
+11.6 % too small. A dry 12-Earth-mass planet with 5 % gas at 100 times
+Earth's light comes out 3.4 $R_\oplus$.
+
+**Giants.** A giant (10 Earth masses or more with at least 5 % gas) takes
+the generator's giant radius. Under 30 Earth masses (where the model's
+gas giants start, with 90 % gas and more) it is the same law as for any
+other planet, so the radius does not jump at 10 Earth masses or at 5 %
+gas. From 30 Earth masses, whatever the composition, and from half its
+mass in gas (a gas giant by its class, which under 30 Earth masses only
+a request makes), it goes through Neptune, Saturn and Jupiter (Chen &
+Kipping 2017) and is inflated when hot (Thorngren & Fortney 2018). The solid layers stay inside it, and the
+envelope fills the rest. A giant whose composition is not known (a
+world's giant neighbours, a giant world without a model) is sized as
+Neptune's composition at the coldest light of the grid up to Neptune's
+mass, then on the law through Neptune, Saturn and Jupiter, which carries
+a gas share growing with the mass.
 
 ### The heat inside
 
@@ -295,6 +342,11 @@ archetypes):
   its world aims at a bare surface's temperature, its equilibrium plus
   its internal heat (`calibrate_enveloped`). Part 3b of #423 derives the
   surface under the envelope.
+- A giant, and a mini-Neptune rendered as one, takes the giant radius for
+  its model's composition (iron, water and gas shares) and light: the
+  interior's radius, at the model's mass. Its map's circumference takes
+  no less than 5 Earth masses (issue #446). A giant world without a model
+  takes the radius of a giant whose composition is not known.
 - The gravity and the tectonic regime are the model's, and the radius is
   the interior's. The world is resolved at that gravity, so the star's
   tides, the moons it draws, the tilt they leave it and its tidal flats
@@ -332,18 +384,34 @@ archetypes):
   ice, the chance of keeping gas, the envelope share per mass, the iron
   and water densities, the $k^{1.5}$ compression of water, and the class
   thresholds that the table marks. Each names the bodies it reproduces.
-- **Uranus is 11.6 % too small.** The envelope of a giant uses the
-  generator's existing giant radius, which gives Uranus 3.52 $R_\oplus$
-  against 3.98 observed. A test for it is ignored until the radius is
-  fixed (issue #432).
+- **Heavy elements in the envelope are a calibration.** The factor of
+  the water share that thins an envelope is linear and set on Neptune
+  alone, and applies to every planet with an envelope. Uranus comes out
+  4.5 % small, since the model gives it Neptune's composition. With
+  10 % gas or more, a wet planet comes out smaller than a dry one of the
+  same mass and gas share (up to a third at 1 Earth mass), where water
+  should make it larger.
+- **The 30 Earth-mass line.** A giant's radius jumps there, from the
+  law of its composition to the law of the gas giants. The drawn
+  compositions jump there too (from at most 30 % gas to at least 90 %),
+  but the law of the gas giants does not read the composition. Cold,
+  the jump is 0.95 to 1.5 times (a dry planet with 5 % gas: 3.5 to
+  5.2 $R_\oplus$). A planet hot enough to be inflated (1 500 to 2 000 K)
+  also starts its inflation there, up to 1.9 times, so it jumps by
+  about 1.5 to 2.5 times; the old law already jumped by about 1.9 times
+  there. A requested body of half its mass in gas or more, a gas giant
+  by its class, takes the gas giants' law under 30 Earth masses too
+  (`M^0.59` below Neptune's mass), so its radius does not fall as its
+  mass crosses the line.
 - **Mini-Neptunes and the radius valley.** Photoevaporation now strips
   close-in envelopes (see [planet-atmospheres.md](planet-atmospheres.md)),
-  and mini-Neptunes fall to 3.6 % of the planets. The census still shows
+  and mini-Neptunes make 18.7 % of the planets (16.3 % of those within
+  100 days; the census of 500 systems). The census still shows
   no dip between 1.5 and 2 $R_\oplus$ (Fulton et al. 2017), because the
   generator draws few planets that large; the doc reports it as measured.
-- **Envelope grid.** The envelope fit stops at 20 % of the mass: a small
-  planet with a 30 % envelope (the model allows up to 30 %) is sized as if
-  it had 20 %.
+- **Envelope grid.** The envelope fit stops at 20 % of the mass; the
+  model extrapolates its `f^0.59` to the 30 % it draws, and sizes a
+  requested envelope of 30 to 50 % as 30 %.
 - **Round moons of drawn systems** go through `derive_moon_model` (see
   [planet-atmospheres.md](planet-atmospheres.md) and
   `docs/system-spec.md`, "Moons"); a moon too small to be round has no
@@ -444,35 +512,40 @@ archetypes):
 20. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-21. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+21. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+    indication for a dichotomy in the interior structure of Uranus and
+    Neptune from the application of modified shape and rotation data",
+    *Planetary and Space Science* 77, 143–151,
+    [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
+22. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-22. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+23. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-23. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+24. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-24. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+25. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-25. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+26. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-26. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+27. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-27. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+28. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-28. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+29. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-29. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+30. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
-30. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+31. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).

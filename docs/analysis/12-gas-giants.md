@@ -130,6 +130,20 @@ mass to about 80 Jupiter masses is about one Jupiter radius. Beyond
 **about 13 Jupiter masses** deuterium fusion starts: the object counts
 as a **brown dwarf**, not a planet (the usual dividing line).
 
+The `M^0.59` slope is that of a population whose gas share grows with
+its mass, not of one planet: at a fixed composition an ice giant barely
+grows with its mass, since a heavier core squeezes its envelope. Uranus,
+15 % lighter than Neptune, is 3 % larger. The generator sizes a giant
+under 30 Earth masses from its composition instead, with the planet
+model's law for any planet: its iron, rock and water layers under the
+envelope of Lopez & Fortney (2014), thinned by the heavy elements of a
+wet planet so that Neptune's composition gives Neptune its radius (see
+[planet-interiors.md](../science/planet-interiors.md)). Uranus with
+Neptune's composition comes out 3.80 Earth radii (3.98 observed); the
+mass law gave 3.52. A giant whose composition is not known takes
+Neptune's up to Neptune's mass, then the law through Neptune, Saturn and
+Jupiter.
+
 Hot giants are larger than that: close to their star, giants above an
 equilibrium temperature of about 1 000 K are **inflated**, up to about
 2 Jupiter radii, a few percent of the starlight they get being turned
@@ -541,6 +555,12 @@ giant 500 to 950 km (Uranus's large moons: 580 to 790 km).
 - Chen & Kipping 2017, "Probabilistic Forecasting of the Masses and
   Radii of Other Worlds", ApJ 834, 17:
   <https://arxiv.org/abs/1603.08614>.
+- Lopez & Fortney 2014, "Understanding the Mass-Radius Relation for
+  Sub-Neptunes: Radius as a Proxy for Composition", ApJ 792, 1:
+  <https://doi.org/10.1088/0004-637X/792/1/1>; Nettelmann et al. 2013,
+  "New indication for a dichotomy in the interior structure of Uranus
+  and Neptune", Planet. Space Sci. 77, 143:
+  <https://doi.org/10.1016/j.pss.2012.06.019>.
 - Spiegel, Burrows & Milsom 2011, "The Deuterium-burning Mass Limit for
   Brown Dwarfs and Giant Planets", ApJ 727, 57.
 - Thorngren & Fortney 2018, "Bayesian Analysis of Hot-Jupiter Radius
