@@ -147,8 +147,9 @@ const CONE_KM: (f64, f64) = (50.0, 120.0);
 /// Height of a cone above the terrain at its vent, in a fully volcanic zone.
 const CONE_HEIGHT: f32 = 0.25;
 
-/// Depth below the waterline down to which the crust counts as
-/// continental (the continental shelf), elevation units.
+/// On a dry world, depth below its waterline down to which the crust
+/// counts as continental, elevation units (a wet world's crust counts from
+/// its crust line, see [`CONTINENTAL_SHARE`]).
 const CONTINENTAL_SHELF: f32 = 0.05;
 /// Share of the noise relief the world `p` keeps, so that its span (from
 /// the old floor to its highest mountains, see [`noise_span_km`]) stays
@@ -181,10 +182,10 @@ pub(crate) fn relief_share(p: &WorldParams) -> f32 {
     (cap / noise_span_km(p)).min(1.0)
 }
 
-/// Span of the noise relief of the world `p`, km: from the old floor
-/// ([`ABYSS_KM`]) to the top of the platform and of the mountains at its
-/// gravity; on a dry world, which has no sea floor, from the bottom of its
-/// rolling plains ([`DRY_PLAINS_KM`]).
+/// Span of the noise relief of the world `p`, km: from the bottom of the
+/// abyss ([`ABYSS_KM`]) to the top of its floating crust ([`crust_of`])
+/// and of the mountains at its gravity; on a dry world, which has no sea
+/// floor, from the bottom of its rolling plains ([`DRY_PLAINS_KM`]).
 fn noise_span_km(p: &WorldParams) -> f32 {
     let scale = relief_scale(p.gravity_modifier());
     let mountains = MOUNTAIN_BLEND * scale * crate::craters::ELEVATION_KM;
@@ -192,7 +193,7 @@ fn noise_span_km(p: &WorldParams) -> f32 {
         // No sea floor: the rolling plains instead.
         PLATFORM_KM + DRY_PLAINS_KM * DRY_PLAINS_SPAN * scale + mountains
     } else {
-        ABYSS_KM + PLATFORM_KM + mountains
+        ABYSS_KM - crate::plates::OLD_FLOOR_KM + crust_of(p).contrast_km() + mountains
     }
 }
 
@@ -282,11 +283,11 @@ const IMPACT_RELIEF_KM: f32 = 9.0;
 /// complex craters take it too (`craters::CraterField`).
 pub(crate) const ICE_RELIEF: f32 = 0.4;
 
-/// Height of the continents' noise above the waterline from which the
-/// mountains rise (over 0.4 more): measured from the waterline, so that a
-/// world with little land does not make most of it mountains.
-/// Calibration with [`MOUNTAIN_BLEND`] on Earth's hypsometry.
-const MOUNTAIN_ONSET: f32 = 0.15;
+/// Height of the continents' noise above the crust line (see
+/// [`CONTINENTAL_SHARE`]; on a dry world, the edge of its shelf) from which the mountains rise
+/// (over 0.4 more): ranges stand on thick crust. Calibration with
+/// [`MOUNTAIN_BLEND`] on Earth's hypsometry.
+const MOUNTAIN_ONSET: f32 = 0.28;
 
 /// Mountain blend at Earth's gravity: the weight of the ridged mountains
 /// in the elevation. Calibration, no source: with the floating platform
@@ -316,65 +317,197 @@ pub(crate) fn relief_scale(gravity: f32) -> f32 {
     (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
 }
 
-/// Height of the continental platform above the waterline, km: where the
-/// continents' crust floats (calibration on Earth's hypsometry, see
-/// [`floating`]).
-const PLATFORM_KM: f32 = 0.5;
-/// Rise of the platform inland, in units of the continents' noise above
-/// the waterline: `1 − 1/e` of its height at this.
-const PLATFORM_RISE: f32 = 0.1;
-/// Depth of the shelf's edge, km, and its width in the continents' noise
-/// below the waterline.
-const SHELF_KM: f32 = 0.2;
-const SHELF_NOISE: f32 = 0.03;
-/// Width of the continental slope in the noise, down to the old floor.
-const SLOPE_NOISE: f32 = 0.1;
+/// Share of a wet world's surface its thick crust covers (continental
+/// crust; highlands without plates): Earth's continental crust covers 41 %
+/// of its surface, 210.4 × 10⁶ km² with the submerged margins (Cogley
+/// 1984, doi:10.1029/RG022i002p00101). The crust line, the level of the
+/// continents' noise between thin crust below it and thick crust above
+/// it, is the one that leaves this share above it ([`Sampler`]'s
+/// `crust_line`): it does not follow the sea (the sea fills the relief
+/// from its water, [`sea_level_for_water`]). A fixed noise level gave
+/// Earth-like worlds 36 to 44 % of continental crust by seed, and their
+/// seas, filled from the same water, then stood 0.5 km apart on their
+/// continents: no calibration kept Earth's hypsometry on every seed.
+const CONTINENTAL_SHARE: f64 = 0.41;
+/// The grid the crust line is measured on: fixed, so that a world's crust
+/// does not depend on its resolution.
+const CRUST_GRID: (u32, u32) = (128, 64);
+/// Elevation of the top of the oceanic crust's column, where the slope
+/// meets the old floor ([`floating`] is measured from it): the datum of a
+/// wet world's relief, which the sea fills. Calibration, no source: it
+/// leaves Earth's ocean ([`ocean_depth_m`]) at a sea level near 0.26,
+/// where it sat before the crust floated by its thickness (0.27–0.31),
+/// with room in the range above and below.
+const CRUST_DATUM: f32 = -0.02;
+
+/// The crust of a world, as its relief floats on the mantle (Airy
+/// isostasy, see [`floating`]): the thickness of its thick crust
+/// (continents, or highlands without plates) and of its thin crust (ocean
+/// floor, or lowlands), km, and the densities of crust and mantle, g/cm³.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Crust {
+    pub continental_km: f32,
+    pub oceanic_km: f32,
+    pub crust_density: f32,
+    pub mantle_density: f32,
+}
+
+impl Crust {
+    /// Height of a column of crust `thickness_km` thick above a column of
+    /// thin crust, km: `(t − t_o)(1 − ρc/ρm)` (Airy 1855,
+    /// doi:10.1098/rstl.1855.0003). Gravity cancels out.
+    pub fn height_km(&self, thickness_km: f32) -> f32 {
+        (thickness_km - self.oceanic_km) * (1.0 - self.crust_density / self.mantle_density)
+    }
+
+    /// Height of the thick crust above the thin, km.
+    pub fn contrast_km(&self) -> f32 {
+        self.height_km(self.continental_km)
+    }
+}
+
+/// Earth's crust, for worlds with plates.
+///
+/// - Continental crust 41.1 km thick, the global mean weighted by the area
+///   of each crustal province (Christensen & Mooney 1995,
+///   doi:10.1029/95JB00259); Cogley (1984, doi:10.1029/RG022i002p00101)
+///   finds 36 km. Of the two, the thicker keeps Earth's hypsometry: a
+///   thinner continent leaves less room in the basins below it.
+/// - Oceanic crust 7.1 km, its igneous section away from fracture zones
+///   and hot spots (White et al. 1992, doi:10.1029/92JB01749).
+/// - Crust 2.83 g/cm³, the mean of Christensen & Mooney's (1995) model of
+///   the continental crust; mantle 3.3 g/cm³, a typical value for the
+///   uppermost mantle (assumed, as in the science page's example).
+///
+/// The continents then stand 4.8 km above the old ocean floor.
+const EARTH_CRUST: Crust = Crust {
+    continental_km: 41.1,
+    oceanic_km: 7.1,
+    crust_density: 2.83,
+    mantle_density: 3.3,
+};
+
+/// Mars's crust, for worlds without plates: no continents, a thick
+/// highland crust and a thin lowland one, the modal thicknesses of Mars's
+/// southern and northern hemispheres, 58 and 32 km, with a mantle
+/// 600 kg/m³ denser than the crust (Neumann et al. 2004,
+/// doi:10.1029/2004JE002262). The crust's 2.9 g/cm³ (basalt) is assumed,
+/// so the mantle 3.5. The highlands stand 4.5 km above the lowlands, the
+/// order of Mars's dichotomy. Calibration on that one body: the thickness
+/// of a stagnant lid's crust from its mass and heat is not modelled.
+const MARS_CRUST: Crust = Crust {
+    continental_km: 58.0,
+    oceanic_km: 32.0,
+    crust_density: 2.9,
+    mantle_density: 3.5,
+};
+
+/// The crust of the world `p`: Earth's with plates ([`EARTH_CRUST`]),
+/// Mars's dichotomy without ([`MARS_CRUST`]). Neither depends on gravity.
+pub(crate) fn crust_of(p: &WorldParams) -> Crust {
+    if p.look.geology.regime == Regime::Plates {
+        EARTH_CRUST
+    } else {
+        MARS_CRUST
+    }
+}
+
+/// Rise of the platform inland, km, from its inner edge (the crust's
+/// contrast less this) to the full continental thickness, and its width in
+/// the continents' noise: `1 − 1/e` of its rise at [`PLATFORM_RISE`].
+const PLATFORM_KM: f32 = 1.45;
+const PLATFORM_RISE: f32 = 0.42;
+/// Depth of the shelf's edge below the platform's inner edge, km, and the
+/// shelf's width in the continents' noise.
+const SHELF_KM: f32 = 0.3;
+const SHELF_NOISE: f32 = 0.06;
+/// Width of the continental slope in the noise, from the old floor (at the
+/// crust line) up to the shelf's edge.
+const SLOPE_NOISE: f32 = 0.03;
 /// Depth of old ocean floor, km: from where Parsons & Sclater's floor is
 /// 18 Ma old (4 km, `plates::OLD_FLOOR_KM`) to their old floor's level,
 /// 6.4 km (Parsons & Sclater 1977, doi:10.1029/JB082i005p00803), reached
-/// as the noise falls further by about [`ABYSS_NOISE`].
+/// as the noise falls further by about [`ABYSS_NOISE`] below the crust
+/// line.
 const ABYSS_KM: f32 = 6.4;
-const ABYSS_NOISE: f32 = 0.35;
+const ABYSS_NOISE: f32 = 0.2;
 
-/// Height (negative: depth) of the crust above the waterline, elevation
-/// units, for the continents' noise `x` units above (below) it.
+/// Thickness of the crust `crust`, km, for the continents' noise `x`
+/// units above (below) the crust line (see [`CONTINENTAL_SHARE`]):
+/// oceanic below the line; above it,
+/// thickening across the continental slope ([`SLOPE_NOISE`]) and the
+/// shelf ([`SHELF_NOISE`]) to the platform's inner edge, then rising
+/// inland by [`PLATFORM_KM`] of height towards the continental thickness.
+pub(crate) fn crust_thickness_km(x: f32, crust: &Crust) -> f32 {
+    let contrast = crust.contrast_km();
+    let rise = (contrast - PLATFORM_KM).max(0.0);
+    let height_km = if x <= 0.0 {
+        0.0
+    } else if x < SLOPE_NOISE {
+        (rise - SHELF_KM) * smoothstep(0.0, 1.0, x / SLOPE_NOISE)
+    } else if x < SLOPE_NOISE + SHELF_NOISE {
+        rise - SHELF_KM + SHELF_KM * (x - SLOPE_NOISE) / SHELF_NOISE
+    } else {
+        let v = x - SLOPE_NOISE - SHELF_NOISE;
+        rise + (contrast - rise) * (1.0 - (-v / PLATFORM_RISE).exp())
+    };
+    crust.oceanic_km + height_km / (1.0 - crust.crust_density / crust.mantle_density)
+}
+
+/// Height of the crust `crust` above the old ocean floor (the top of the
+/// oceanic crust's column, [`CRUST_DATUM`]), elevation units, for the
+/// continents' noise `x` units above (below) the crust line (see
+/// [`CONTINENTAL_SHARE`]).
 ///
 /// The crust floats on the mantle (Airy isostasy, Airy 1855,
-/// doi:10.1098/rstl.1855.0003): continental crust, thick and light,
-/// stands as a platform, oceanic crust as the floor of the basins, with
-/// little in between. The noise, a single smooth field, would make a
-/// ramp from the coast to 5–10 km inland and basins 15 km deep; it is
-/// mapped instead
+/// doi:10.1098/rstl.1855.0003): a column `t` thick stands
+/// `(t − t_o)(1 − ρc/ρm)` above a column of oceanic crust `t_o` thick
+/// ([`Crust::height_km`]), whatever the gravity. The thickness follows the
+/// noise ([`crust_thickness_km`]): continental crust stands as a platform
+/// (Earth's 4.8 km above the old floor), oceanic crust as the floor of
+/// the basins, with little in between. Below the crust line, the old floor
+/// deepens towards Parsons & Sclater's 6.4 km ([`ABYSS_KM`]) as the noise
+/// falls (the sea floor's age is not modelled, #317); only trenches go
+/// deeper.
 ///
-/// - on land, to a platform rising to [`PLATFORM_KM`]: the high ground is
-///   left to the mountains, the plate boundaries and the volcanoes;
-/// - at sea, to a shelf down to [`SHELF_KM`], a slope down to the old
-///   floor at 4 km, and an abyss levelling off towards Parsons & Sclater's
-///   6.4 km; only trenches go deeper.
+/// The sea does not enter: it fills this relief from its water
+/// ([`sea_level_for_water`]), so a world with less water than Earth's
+/// exposes its shelves, then its ocean floors.
 ///
-/// The platform's height, the widths in the noise and the mountains'
-/// weight ([`MOUNTAIN_BLEND`]) are calibrations, no source, on Earth's
-/// hypsometry (ETOPO 2022, NOAA NCEI, doi:10.25921/fd45-gt74; ice
+/// The widths in the noise, the shelf and the platform's rise, and the
+/// mountains' onset and weight ([`MOUNTAIN_ONSET`], [`MOUNTAIN_BLEND`])
+/// are calibrations, no source, on
+/// Earth's hypsometry (ETOPO 2022, NOAA NCEI, doi:10.25921/fd45-gt74; ice
 /// surface): land median about 0.42 km, 56 % of land under 500 m, 10.8 %
 /// above 2 km, 1.8 % above 4 km, 1 % of the sea floor deeper than 6 km.
-/// None depends on gravity: floating crust stands as high under any `g`.
-pub(crate) fn floating(x: f32) -> f32 {
+pub(crate) fn floating(x: f32, crust: &Crust) -> f32 {
     let km = crate::craters::ELEVATION_KM;
-    if x >= 0.0 {
-        return PLATFORM_KM / km * (1.0 - (-x / PLATFORM_RISE).exp());
-    }
-    let u = -x;
     let old_floor = crate::plates::OLD_FLOOR_KM;
-    let depth_km = if u < SHELF_NOISE {
-        SHELF_KM * u / SHELF_NOISE
-    } else if u < SHELF_NOISE + SLOPE_NOISE {
-        let t = smoothstep(0.0, 1.0, (u - SHELF_NOISE) / SLOPE_NOISE);
-        SHELF_KM + (old_floor - SHELF_KM) * t
+    let abyss_km = if x < 0.0 {
+        (ABYSS_KM - old_floor) * (1.0 - (x / ABYSS_NOISE).exp())
     } else {
-        let v = u - SHELF_NOISE - SLOPE_NOISE;
-        old_floor + (ABYSS_KM - old_floor) * (1.0 - (-v / ABYSS_NOISE).exp())
+        0.0
     };
-    -depth_km / km
+    (crust.height_km(crust_thickness_km(x, crust)) - abyss_km) / km
+}
+
+/// Level of the continents' noise at which the floating crust `crust`,
+/// measured from the crust line `line`, meets the waterline `waterline`
+/// (elevation): where the coast lies,
+/// before the mountains, plates and outline move it. Found by bisection
+/// ([`floating`] rises with the noise); beyond the relief's reach, the
+/// nearest end of the searched span.
+fn shore_noise(waterline: f32, crust: &Crust, line: f32) -> f32 {
+    let (mut lo, mut hi) = (line - 2.0, line + 2.0);
+    for _ in 0..32 {
+        let mid = 0.5 * (lo + hi);
+        if floating(mid - line, crust) + CRUST_DATUM < waterline {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
 }
 
 /// Elevation beyond which the relief is compressed into the range
@@ -397,8 +530,9 @@ fn within_range(e: f32) -> f32 {
 /// Largest noise scale (relief features per Earth-sized ones), reached at
 /// about 5 000 km around.
 const MAX_NOISE_SCALE: f32 = 8.0;
-/// Depth of the crust formed where the plates part below the waterline, in
-/// continent-shape units: the generator's old sea floor (4 km), the swell
+/// Depth below the crust line of the crust formed where the plates part,
+/// in continent-shape units; the crust itself is laid at the old floor
+/// ([`CRUST_DATUM`], 4 km under Earth's sea), the swell
 /// of the ridge it formed at standing on it by its age (see
 /// `plates::ridge_swell`). The share of the fine octaves it keeps.
 const NEW_CRUST_DEPTH: f32 = crate::plates::OLD_FLOOR_KM / crate::craters::ELEVATION_KM;
@@ -536,10 +670,19 @@ pub struct Sampler {
     /// Weight of volcanic arcs in the volcanic zone.
     arc_volcanism: f32,
     sea_level: f32,
-    /// Absolute elevation of the sea surface, which the continents' shape
-    /// is measured from; on a dry world, the old floor of the range, where
-    /// the whole shape stands above it.
+    /// Absolute elevation of the sea surface; on a dry world, the old
+    /// floor of the range, where the whole shape stands above it.
     waterline: f32,
+    /// The crust the relief floats with (see [`floating`]).
+    crust: Crust,
+    /// Level of the continents' noise above which the crust is
+    /// continental, which the platform, the mountains and the inland
+    /// plains are measured from: on a wet world, the level that leaves
+    /// [`CONTINENTAL_SHARE`] of its surface above it, whatever its sea; on a dry world, [`CONTINENTAL_SHELF`] below its waterline.
+    crust_line: f32,
+    /// Level of the continents' noise at the coast, where the floating
+    /// crust meets the waterline: the coasts' outline is drawn around it.
+    shore: f32,
     /// On a dry world (see [`crate::biome::BiomeRules::dry`]), its
     /// waterline, the datum its plains are laid from.
     dry_waterline: Option<f32>,
@@ -588,6 +731,14 @@ impl Sampler {
         let noise_scale =
             (EARTH_CIRCUMFERENCE_KM / p.circumference_km.max(1.0)).min(MAX_NOISE_SCALE) as f64;
         let grid = p.grid();
+        let crust = crust_of(p);
+        let (waterline, crust_line, shore) = if p.look.rules.dry {
+            let waterline = crate::request::SEA_LEVEL.min + p.look.rules.waterline;
+            (waterline, waterline - CONTINENTAL_SHELF, waterline)
+        } else {
+            // Set below, from the continents' noise.
+            (p.sea_level + p.look.rules.waterline, 0.0, 0.0)
+        };
         let mut sampler = Self {
             tectonics: None,
             noise_mountains: 1.0,
@@ -596,11 +747,10 @@ impl Sampler {
             coast_octaves: coast_octaves(noise_scale, &grid),
             grid,
             sea_level: p.sea_level,
-            waterline: if p.look.rules.dry {
-                crate::request::SEA_LEVEL.min + p.look.rules.waterline
-            } else {
-                p.sea_level + p.look.rules.waterline
-            },
+            waterline,
+            crust,
+            crust_line,
+            shore,
             dry_waterline: p
                 .look
                 .rules
@@ -631,6 +781,10 @@ impl Sampler {
             highlands: (p.look.geology.regime != crate::geology::Regime::Plates)
                 .then(|| Perlin::new(stream_seed(seed, stream::HIGHLANDS))),
         };
+        if !p.look.rules.dry {
+            sampler.crust_line = sampler.crust_line();
+            sampler.shore = shore_noise(sampler.waterline, &sampler.crust, sampler.crust_line);
+        }
         if p.look.geology.regime == crate::geology::Regime::Plates {
             // The crust of each side of a boundary: continental above the
             // edge of the shelf, from the continents' shape alone.
@@ -659,11 +813,41 @@ impl Sampler {
         smoothstep(HIGHLANDS.edge.0, HIGHLANDS.edge.1, v)
     }
 
-    /// Whether the crust at a unit vector is continental: above the edge of
-    /// the shelf, from the continents' shape alone.
+    /// Whether the crust at a unit vector is continental: above the crust
+    /// line, from the continents' shape alone (not from the sea).
     fn continental(&self, p: [f64; 3]) -> bool {
         let (coarse, fine) = self.continent_shape(p);
-        coarse + fine > self.waterline - CONTINENTAL_SHELF
+        coarse + fine > self.crust_line
+    }
+
+    /// The crust line of a wet world: the level of its continents' noise
+    /// above which [`CONTINENTAL_SHARE`] of its surface lies, by area, on
+    /// the fixed grid [`CRUST_GRID`] (whatever the world's resolution).
+    fn crust_line(&self) -> f32 {
+        let (width, height) = CRUST_GRID;
+        let mut levels: Vec<(f32, f64)> = Vec::with_capacity((width * height) as usize);
+        for y in 0..height {
+            let latitude = PI / 2.0 - (f64::from(y) + 0.5) / f64::from(height) * PI;
+            for x in 0..width {
+                let longitude = (f64::from(x) + 0.5) / f64::from(width) * 2.0 * PI;
+                let (coarse, fine) = self.continent_shape([
+                    latitude.cos() * longitude.cos(),
+                    latitude.sin(),
+                    latitude.cos() * longitude.sin(),
+                ]);
+                levels.push((coarse + fine, latitude.cos()));
+            }
+        }
+        levels.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let total: f64 = levels.iter().map(|l| l.1).sum();
+        let mut above = 0.0;
+        for (level, area) in &levels {
+            above += area;
+            if above >= CONTINENTAL_SHARE * total {
+                return *level;
+            }
+        }
+        levels.last().map_or(0.0, |l| l.0)
     }
 
     /// The continents' shape at a unit vector: its coarse octaves and its
@@ -821,7 +1005,7 @@ impl Sampler {
             - smoothstep(
                 OUTLINE_BAND.0,
                 OUTLINE_BAND.1,
-                (coarse + fine - self.waterline).abs(),
+                (coarse + fine - self.shore).abs(),
             );
         let (coarse, fine) = if coastal > 0.0 {
             let (mut qx, mut qy, mut qz) = (nx, ny, nz);
@@ -847,12 +1031,19 @@ impl Sampler {
         // Crust formed where the plates parted, since the present (or
         // before it, in the past): ocean floor, smoother than the old one.
         let (coarse, fine) = if origin.new_crust {
-            (self.waterline - NEW_CRUST_DEPTH, NEW_CRUST_ROUGHNESS * fine)
+            // Below the crust line (on a dry world, its waterline), where
+            // the noise makes no mountains.
+            let line = if self.dry_waterline.is_some() {
+                self.waterline
+            } else {
+                self.crust_line
+            };
+            (line - NEW_CRUST_DEPTH, NEW_CRUST_ROUGHNESS * fine)
         } else {
             (coarse, fine)
         };
         let mountain_weight =
-            ((coarse + fine - self.waterline - MOUNTAIN_ONSET) * 2.5).clamp(0.0, 1.0);
+            ((coarse + fine - self.crust_line - MOUNTAIN_ONSET) * 2.5).clamp(0.0, 1.0);
         // Low ground inland keeps a share of the fine octaves: plains and
         // deserts are smooth, coasts keep their outline and mountains their
         // foothills.
@@ -861,12 +1052,13 @@ impl Sampler {
         let inland = smoothstep(
             COAST_BAND.0,
             COAST_BAND.1,
-            (coarse + fine - self.waterline).abs(),
+            (coarse + fine - self.crust_line).abs(),
         );
         let roughness = (1.0 - (1.0 - PLAIN_ROUGHNESS) * inland).max(mountain_weight);
-        // The crust floats: continents as a low platform, the sea floor
-        // between its shelf and the old floor (see `floating`). New crust
-        // is laid at the old floor already.
+        // The crust floats by its thickness: continents as a platform, the
+        // ocean floor at the old floor and below (see `floating`), the sea
+        // filling them from its water. New crust is laid at the old floor
+        // already.
         let continent = if let Some(waterline) = self.dry_waterline {
             // No sea ever shaped a dry world: plains on its platform,
             // rolling with the continents' noise.
@@ -875,9 +1067,9 @@ impl Sampler {
                 + (coarse + PLAIN_ROUGHNESS * fine) * DRY_PLAINS_KM * self.relief_scale
                     / crate::craters::ELEVATION_KM
         } else if origin.new_crust {
-            coarse + fine * roughness
+            CRUST_DATUM + fine * roughness
         } else {
-            floating(coarse + fine * roughness - self.waterline) + self.waterline
+            floating(coarse + fine * roughness - self.crust_line, &self.crust) + CRUST_DATUM
         };
 
         // Ridged mountains blended only onto elevated terrain: a main ridge,
@@ -1302,8 +1494,9 @@ const LAND_TOLERANCE: f64 = 0.003;
 ///
 /// The land share falls as the sea level rises: the sea level is found by
 /// regula falsi (the Illinois variant) on the share, sampled on a coarse
-/// grid at each estimate (the floating crust, the coasts and the plates'
-/// crust all follow the waterline, so no single sampling gives it). The
+/// grid at each estimate (the crust floats by its thickness whatever the
+/// sea, but the coasts' outline is drawn around the waterline, so no single
+/// sampling gives it exactly). The
 /// plates themselves are built once ([`crate::plates::PlateFrame`]); only
 /// the crust on their boundaries, and so their relief and slab pull, is
 /// found again at each pass. About 0.25 s on an Earth-like world.
@@ -1401,12 +1594,16 @@ pub fn ocean_depth_m(oceans: f64, radius_earth: f64) -> f64 {
 /// Elevation is in units of [`crate::craters::ELEVATION_KM`] km; the
 /// depth below the waterline is converted to metres with it. The relief
 /// is sampled as in [`sea_level_for_land_fraction`] (same coarse grid,
-/// same plate frame, the crust following the waterline). No water leaves
-/// the lowest sea level; more than the relief holds, the highest.
+/// same plate frame). The crust does not follow the sea (see [`floating`]):
+/// the water fills the ocean basins, then the shelves, and less of it
+/// leaves the basins' floors dry. No water leaves the lowest sea level;
+/// more than the relief holds, the highest.
 ///
-/// Earth's ocean ([`ocean_depth_m`]) over the terran preset leaves 0.23 of
-/// the surface dry on the test grid, against 0.29 on Earth (ETOPO1,
-/// Amante & Eakins 2009): within the tolerance, so no calibration.
+/// Earth's ocean ([`ocean_depth_m`]) over the terran look leaves 0.24 to
+/// 0.35 of the surface dry by seed on the test grid (0.26 for the test's
+/// seed), against 0.29 on Earth (ETOPO1, Amante & Eakins 2009): the
+/// calibration of the floating crust (see [`floating`]) is what puts the
+/// shore near the shelf.
 pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
     let limits = crate::request::SEA_LEVEL;
     let target = depth_m;
@@ -1663,8 +1860,8 @@ pub fn generate_with_progress(
     // shape them.
     let flatten = relief_share(params);
     if flatten < 1.0 {
-        // Towards the waterline, where the floating crust is measured
-        // from: the sea level itself sits above the altitude lines.
+        // Towards the waterline, so that the coasts stay where the sea
+        // left them: the sea level itself sits above the altitude lines.
         let waterline = params.sea_level + look.rules.waterline;
         elevation
             .par_iter_mut()
@@ -2570,21 +2767,106 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_crust_floats_as_a_platform_and_a_bounded_floor() {
-        let km = |x: f32| floating(x) * crate::craters::ELEVATION_KM;
+    fn the_crust_floats_by_its_thickness() {
+        let p = earth_params();
+        let crust = crust_of(&p);
+        let km = |x: f32| floating(x, &crust) * crate::craters::ELEVATION_KM;
+        // Airy: continental crust stands above oceanic crust by
+        // (tc − to)(1 − ρc/ρm), reached inland as the platform rises.
+        let contrast = (crust.continental_km - crust.oceanic_km)
+            * (1.0 - crust.crust_density / crust.mantle_density);
+        assert!(contrast > 3.5 && contrast < 6.0, "{contrast}");
         assert_eq!(km(0.0), 0.0);
-        // The platform levels off at its height, however high the noise.
-        assert!(km(1.0) <= PLATFORM_KM && km(1.0) > 0.99 * PLATFORM_KM);
-        // The shelf, then the old floor between 4 and 6.4 km.
-        assert!((km(-SHELF_NOISE) + SHELF_KM).abs() < 1e-5);
-        assert!((km(-SHELF_NOISE - SLOPE_NOISE) + 4.0).abs() < 1e-4);
-        assert!(km(-2.0) >= -ABYSS_KM && km(-2.0) < -6.3);
+        assert!(km(3.0) <= contrast + 1e-4 && km(3.0) > 0.99 * contrast);
+        // The old floor lies about `plates::OLD_FLOOR_KM` below the shelf
+        // on Earth's crust.
+        let shelf = km(SLOPE_NOISE + SHELF_NOISE);
+        assert!(
+            (shelf - (crate::plates::OLD_FLOOR_KM - SHELF_KM)).abs() < 0.5,
+            "{shelf}"
+        );
+        // The abyss deepens below the old floor towards Parsons &
+        // Sclater's 6.4 km.
+        let abyss = ABYSS_KM - crate::plates::OLD_FLOOR_KM;
+        assert!(km(-2.0) >= -abyss && km(-2.0) < -0.95 * abyss);
         // Monotonic.
         let mut last = f32::MAX;
-        for k in 0..400 {
-            let v = km(1.0 - k as f32 / 200.0);
+        for k in 0..600 {
+            let v = km(3.0 - k as f32 / 120.0);
             assert!(v <= last);
             last = v;
+        }
+        // Gravity does not enter: a crust floats as high under any g.
+        let heavy = WorldParams {
+            circumference_km: 2.0 * EARTH_CIRCUMFERENCE_KM,
+            ..p.clone()
+        };
+        assert_eq!(crust_of(&heavy), crust);
+        // A world without plates takes Mars's dichotomy, its highlands
+        // above its lowlands by a few km.
+        let mut stagnant = p;
+        stagnant.look.geology.regime = Regime::Stagnant;
+        let mars = crust_of(&stagnant);
+        let dichotomy = (mars.continental_km - mars.oceanic_km)
+            * (1.0 - mars.crust_density / mars.mantle_density);
+        assert!((3.5..6.0).contains(&dichotomy), "{dichotomy}");
+    }
+
+    #[test]
+    fn the_crust_line_does_not_move_with_the_sea() {
+        let p = earth_params();
+        let mask = |level: f32| {
+            let sampler = Sampler::new(&WorldParams {
+                sea_level: level,
+                ..p.clone()
+            });
+            let grid = p.grid();
+            (0..grid.height)
+                .flat_map(|y| (0..grid.width).map(move |x| (x, y)))
+                .map(|(x, y)| sampler.continental(grid.unit_vector_at(f64::from(x), f64::from(y))))
+                .collect::<Vec<bool>>()
+        };
+        assert_eq!(mask(0.0), mask(0.4));
+    }
+
+    #[test]
+    fn less_water_exposes_the_basins_too() {
+        // A wet world with little water fills its lowest basins, not a
+        // ring round a raised platform: the land share rises as the water
+        // falls, and land comes out on oceanic crust too.
+        let p = earth_params();
+        let grid = p.grid();
+        let mut last = 0.0;
+        for oceans in [1.0, 0.5, 0.1] {
+            let level = sea_level_for_water(&p, ocean_depth_m(oceans, 1.0));
+            let land = land_share(&p, level);
+            assert!(land > last, "{oceans} oceans: land {land} after {last}");
+            last = land;
+            if oceans == 0.1 {
+                let q = WorldParams {
+                    sea_level: level,
+                    ..p.clone()
+                };
+                let waterline = level + q.look.rules.waterline;
+                let sampler = Sampler::new(&q);
+                let (mut basins, mut total) = (0.0, 0.0);
+                for y in 0..grid.height {
+                    let w = grid.latitude(y).cos();
+                    for x in 0..grid.width {
+                        total += w;
+                        let point = grid.unit_vector_at(f64::from(x), f64::from(y));
+                        if sampler.sample(x, y).elevation > waterline && !sampler.continental(point)
+                        {
+                            basins += w;
+                        }
+                    }
+                }
+                assert!(
+                    basins / total > 0.05,
+                    "land on oceanic crust {}",
+                    basins / total
+                );
+            }
         }
     }
 

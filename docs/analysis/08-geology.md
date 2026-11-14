@@ -518,6 +518,40 @@ from an archetype's name. Moons have no model yet and keep
 strength would put the Moon at 24 km. A frozen Earth keeps a rock crust
 under its ice sheet. Worlds with craters change.
 
+### Outcome (crust thickness and Airy isostasy, #315, 2026-11-14)
+
+Part 3c of the planet model (#423). A wet world's crust now has a
+thickness, and its height follows from Airy's balance
+(`generation::floating`, `crust_thickness_km`, `crust_of`): thin crust
+below a crust line, the level of the continents' noise that leaves 41 %
+of the surface above it (Earth's continental crust, Cogley 1984), and a
+slope, a shelf and a platform thickening inland above it. Worlds with
+plates take Earth's crust (41.1 km continental, Christensen & Mooney
+1995; 7.1 km oceanic, White et al. 1992; 2.83 and 3.3 g/cm³: 4.8 km of
+contrast), worlds without plates Mars's dichotomy (58 and 32 km, Neumann
+et al. 2004: 4.5 km). The relief stands on a fixed datum, the old ocean
+floor; the sea no longer moves the crust, it fills it from its water
+(`sea_level_for_water`), so less water exposes shelves, then basins.
+
+The crust line is a quantile of the noise on a fixed 128 × 64 grid, not a
+fixed noise level as planned: a fixed level gave `earth-like` seeds 36 to
+44 % of continental crust, their seas stood 0.5 km apart on their
+continents, and no calibration kept Earth's hypsometry on seeds 1 to 3
+and the terran test seed together. The grid does not depend on the
+world's resolution (`tests/resolution_invariance.rs` passes).
+
+`earth-like` at 256 × 128, Earth's ocean, before → after (land share,
+land under 500 m, above 2 km, above 4 km, sea floor deeper than 6 km):
+seed 1 0.25 → 0.29, 64 → 65 %, 8.7 → 8.2 %, 2.1 → 2.3 %, 0.9 → 0.9 %;
+seed 2 0.28 → 0.30, 55 → 52 %, 9.2 → 8.7 %, 1.3 → 1.3 %, 0.9 → 0.8 %;
+seed 3 0.29 → 0.32, 70 → 63 %, 6.1 → 6.3 %, 2.7 → 2.9 %, 0.9 → 0.9 %.
+The terran look's test seed keeps 0.26 of land (0.23 before), 16 seeds
+0.24 to 0.35. With half of Earth's ocean the terran world shows 0.40 of
+land, with a tenth 0.64, part of it old ocean floor. `mars-like` (seed 1)
+goes from 0.95 to 0.83 of land: its little water now lies in its
+lowlands (99.7 % of its sea on thin crust), not as a ring round a raised
+platform. Dry worlds keep their plains. Worlds with seas change.
+
 ## 6. Time slider
 
 ### What it shows

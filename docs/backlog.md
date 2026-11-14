@@ -737,11 +737,12 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
   - Isostasy: continents float as a platform and the sea floor is
     bounded between the shelf and Parsons & Sclater's old floor
     (`generation::floating`, 2026-11-07), calibrated on Earth's
-    hypsometry (ETOPO 2022). What remains (moved to #315 and #316): no crustal-thickness field
-    (the platform's height is a calibration rather than Airy's balance
-    of a thickness), no flexure (volcanoes and ranges do not bend the
-    lithosphere into moats), and the platform floats at the waterline,
-    so a sea level lowered on a world exposes platform, not old basins.
+    hypsometry (ETOPO 2022). Since 2026-11-14 (#315, part 3c of #423)
+    the crust has a thickness, Earth's or Mars's, and floats by Airy's
+    balance on a fixed datum; the sea fills it from its water, so less
+    water exposes old basins (see `docs/analysis/08-geology.md`, outcome
+    #315). What remains (#316): no flexure (volcanoes and ranges do not
+    bend the lithosphere into moats).
   - The age of old ocean floor is unknown (moved to #317): floor older than about 18 Ma
     lies between 4 and 6.4 km by the noise (`generation::floating`), not
     by its age. Examined 2026-11-08,

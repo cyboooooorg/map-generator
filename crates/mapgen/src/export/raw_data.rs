@@ -1306,7 +1306,10 @@ mod tests {
             archetype: None,
             model: None,
             look: Look::load("caustic"),
-            sea_level: 0.0,
+            // With seas: the crust floats on a fixed datum (see
+            // `generation::floating`), and at 0 the whole world is land,
+            // its drainage beyond the flow layer's range.
+            sea_level: 0.15,
             volcanic_intensity: 0.5,
             circumference_km: 40_075.0,
             axial_tilt_deg: 23.44,
