@@ -30,7 +30,10 @@ Two ways to ask for a system:
    a star with no room for that giant refuses the request
    (`type_impossible`). The moon is drawn once in its archetype's ranges
    and stored on its giant (`WorldParams::asked_moons`); the giant's
-   other moons are drawn around it.
+   other moons are drawn around it. With no star named, such a system
+   takes its host archetype's star (`G2V`); a star named is honoured,
+   and the moon comes out as the model says (round a red dwarf it may
+   lose its air).
 2. **A system around one planet.** A planet fully specified, as the form
    does today (planet type, size, sea level, star, orbit…). The engine
    places it at its orbit and draws the rest of the system around it: how

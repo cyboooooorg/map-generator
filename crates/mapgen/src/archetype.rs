@@ -37,7 +37,10 @@
 //! A giant's moon has a `[moon]` table instead of `[orbit]`: its host's
 //! archetype places its host, and a whole system asking for the moon
 //! puts it on a giant of that archetype (see `crate::system`). It is not
-//! asked for as a world on its own.
+//! asked for as a world on its own. A system that names no star takes
+//! the star its host's archetype names; a star named is honoured, and the
+//! moon then comes out as the model says: an asked moon around a red
+//! dwarf may lose its air.
 //!
 //! ```toml
 //! [moon]

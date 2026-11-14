@@ -208,7 +208,10 @@ struct Args {
     /// ganymede-like, callisto-like, io-like, triton-like,
     /// enceladus-like) rides a giant of its host's archetype asked in the
     /// same list that can carry it (`saturn-like=1,titan-like=1`: one
-    /// Saturn with its Titan), or brings one, counted among the 15
+    /// Saturn with its Titan), or brings one, counted among the 15.
+    /// Without --star such a system takes its host's star (G2V); a star
+    /// named is honoured, and an asked moon around a red dwarf may lose
+    /// its air
     #[arg(long)]
     system: Option<String>,
 

@@ -788,6 +788,31 @@ fn trial_class(
     .class
 }
 
+/// The star a whole system that names none takes from the moons it asks
+/// for: the `[orbit] star` of the first moon archetype's host archetype
+/// (in name order), when it lives to `age_gyr`; `None` when no moon is
+/// asked, its host names no star, or that star dies younger.
+fn host_star_of(
+    planets: &BTreeMap<String, u32>,
+    age_gyr: Option<f32>,
+    seed: u32,
+) -> Result<Option<f32>, RequestError> {
+    for (name, &count) in planets {
+        let archetype = system_archetype(name)?;
+        let Some(moon) = archetype.moon.as_ref().filter(|_| count > 0) else {
+            continue;
+        };
+        let host = system_archetype(&moon.host)?;
+        let Some(code) = host.orbit.star.as_deref().and_then(|t| parse_type(t).ok()) else {
+            return Ok(None);
+        };
+        return Ok(crate::star::resolve_age_gyr(age_gyr, code, seed)
+            .is_ok()
+            .then_some(code));
+    }
+    Ok(None)
+}
+
 /// The nearest orbit, AU, from `lo` out to `hi`, at which the giant
 /// `asked` carries `moons` round a star of type `star` and age `age_gyr`
 /// ([`crate::moons::carries`], with the lightest and heaviest masses its
@@ -881,9 +906,21 @@ struct Placed {
 fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Placed, RequestError> {
     let seed = whole.seed.unwrap_or_else(|| rng.random());
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
-    let star_code = match &whole.star {
-        Some(text) => parse_type(text).map_err(RequestError::BadStar)?,
-        None => crate::star::draw_type_living(whole.age_gyr, &mut rng),
+    // A star named is honoured, whatever it does to the moons asked. With
+    // none named, a system that asks for a moon by archetype takes the
+    // star its host's archetype names (the first moon's, in name order),
+    // so that the moon forms as its archetype describes it (a Titan
+    // round an old K or an M dwarf can lose its methane or its air);
+    // when it does not live to the age asked, or no moon is asked, the
+    // star is drawn.
+    let host_star = match (&whole.star, &whole.planets) {
+        (None, Some(planets)) => host_star_of(planets, whole.age_gyr, seed)?,
+        _ => None,
+    };
+    let star_code = match (&whole.star, host_star) {
+        (Some(text), _) => parse_type(text).map_err(RequestError::BadStar)?,
+        (None, Some(code)) => code,
+        (None, None) => crate::star::draw_type_living(whole.age_gyr, &mut rng),
     };
     let metallicity = whole
         .metallicity
@@ -4584,6 +4621,47 @@ mod tests {
                     other.map(|s| s.bodies.len())
                 ),
             }
+        }
+    }
+
+    /// A whole system asking a moon and no star.
+    fn whole_starless(planets: &[(&str, u32)], seed: u32) -> Result<System, RequestError> {
+        let request = match whole(planets, seed) {
+            SystemRequest::System(w) => {
+                SystemRequest::System(WholeSystemRequest { star: None, ..w })
+            }
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        draw(&request, &mut StdRng::seed_from_u64(u64::from(seed)))
+    }
+
+    #[test]
+    fn an_asked_titan_without_a_star_comes_out_a_titan() {
+        for seed in 1..=10 {
+            let system = whole_starless(&[("titan-like", 1)], seed).unwrap();
+            // Its Saturn's star.
+            assert_eq!(system.star.spectral, "G2V", "seed {seed}");
+            let titan = asked_moons(&system, "titan-like")[0];
+            assert_eq!(
+                titan.body_type, "hydrocarbon-world",
+                "seed {seed}: {:?}",
+                titan.model
+            );
+        }
+        // A system asking no moon still draws its star.
+        let drawn: Vec<String> = (1..=10)
+            .filter_map(|seed| whole_starless(&[("earth-like", 1)], seed).ok())
+            .map(|system| system.star.spectral)
+            .collect();
+        assert!(drawn.iter().any(|s| s != "G2V"), "{drawn:?}");
+    }
+
+    #[test]
+    fn an_asked_titan_around_a_red_dwarf_is_allowed() {
+        for seed in 1..=3 {
+            let system = whole_round("M3V", &[("titan-like", 1)], seed).unwrap();
+            assert_eq!(system.star.spectral, "M3V");
+            assert_eq!(asked_moons(&system, "titan-like").len(), 1);
         }
     }
 
