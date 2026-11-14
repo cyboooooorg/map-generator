@@ -9,7 +9,8 @@ use super::{Interior, InternalHeat, Material, Surface, SurfaceLiquid};
 use crate::exomoon::{EARTH_KG, EARTH_M, G};
 
 /// The conductivity of water ice times its temperature, W/m: `k = 651 /
-/// T` W m⁻¹ K⁻¹ (Klinger 1980, doi:10.1126/science.209.4453.271), the
+/// T` W m⁻¹ K⁻¹ (Petrenko & Whitworth 1999, *Physics of Ice*, Oxford
+/// University Press; Klinger 1980 gives 567 / T), the
 /// law thermal models of icy satellites' shells use (Hussmann, Sohl &
 /// Spohn 2006, doi:10.1016/j.icarus.2006.06.005).
 pub const ICE_CONDUCTIVITY_W_M: f64 = 651.0;

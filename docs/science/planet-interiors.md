@@ -175,7 +175,8 @@ model, Io round Jupiter (`HostTide`, $e$ = 0.0041) gets $8.5 \times
 A body with a water layer whose surface is frozen (no liquid water on it,
 a mean surface temperature under 273 K) carries its internal heat out
 through an ice shell. The conductivity of ice rises as it gets colder,
-$k = 651/T$ W m⁻¹ K⁻¹ (Klinger 1980), so Fourier's law integrates to a
+$k = 651/T$ W m⁻¹ K⁻¹ (Petrenko & Whitworth 1999; Klinger 1980 gives
+$567/T$), so Fourier's law integrates to a
 shell of thickness
 
 ```math
@@ -408,9 +409,10 @@ archetypes):
     subsurface ocean and the absence of metallic core-driven magnetic
     field", arXiv:2403.01336,
     [arxiv.org/abs/2403.01336](https://arxiv.org/abs/2403.01336).
-13. Klinger, J. 1980, "Influence of a phase transition of ice on the heat
-    and mass balance of comets", *Science* 209, 271–272,
-    [doi:10.1126/science.209.4453.271](https://doi.org/10.1126/science.209.4453.271).
+13. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+    University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
+    Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
+    gives $567/T$).
 14. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
     tidal dissipation in Io and Jupiter from astrometric observations",
     *Nature* 459, 957–959,
@@ -471,10 +473,10 @@ archetypes):
 
 The three DOIs above were checked against the publishers' pages; the
 DOIs of the tidal sources (Howett, Jackson, Kimura, Lainey, Wahr) and of
-the ice shell's (Hussmann, Klinger, and the IAPWS ice papers Feistel &
+the ice shell's (Hussmann, and the IAPWS ice papers Feistel &
 Wagner 2006 and Wagner et al. 2011) against their Crossref records; the
-$651/T$ conductivity is quoted as the ice-shell literature cites Klinger,
-not checked in the paper itself. Of the tidal figures, Jupiter's and Io's $k_2/Q$,
+$651/T$ conductivity is quoted as the ice-shell literature cites Petrenko
+& Whitworth, not checked in the book itself. Of the tidal figures, Jupiter's and Io's $k_2/Q$,
 Saturn's $1.59 \times 10^{-4}$ and Mars's $k_2$ and $Q$ match table 1 of
 Lainey 2016; Saturn's $2.3 \times 10^{-4}$, the planetary $Q$ of
 $10^{6.5}$ of Jackson et al. and Kimura's 10 to 50 mW/m² match their
