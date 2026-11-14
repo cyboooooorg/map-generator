@@ -11,10 +11,17 @@ export function planetsRequest(planets: Record<string, number>, moons: Record<st
 }
 
 /**
- * Giants the asked moons add to the system: one per host archetype that
- * is not asked itself. `hostOf` maps a moon archetype to its host's.
+ * Giants the asked moons add to the system: the server gives each moon its
+ * own host, so one per asked moon whose host archetype is not asked (two
+ * titan-like with no saturn-like add two). A host that is asked is taken to
+ * carry its moons; the server's `too_many_planets` error is the fallback.
+ * `hostOf` maps a moon archetype to its host's.
  */
 export function hostsAdded(moons: Record<string, number>, planets: Record<string, number>, hostOf: Record<string, string>): number {
-  const hosts = new Set(asked(moons).map(([name]) => hostOf[name]).filter((h): h is string => h !== undefined));
-  return [...hosts].filter((host) => (planets[host] ?? 0) <= 0).length;
+  return asked(moons)
+    .filter(([name]) => {
+      const host = hostOf[name];
+      return host !== undefined && (planets[host] ?? 0) <= 0;
+    })
+    .reduce((sum, [, n]) => sum + n, 0);
 }

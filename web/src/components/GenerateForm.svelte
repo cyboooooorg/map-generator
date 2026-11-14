@@ -80,8 +80,8 @@
   /** The built-in giant each moon archetype orbits, as the catalog says. */
   const moonHosts = $derived(Object.fromEntries(archetypes.flatMap((a) => (a.moon_host ? [[a.spec, a.moon_host]] : []))));
   const countOf = (counts: Record<string, number>) => Object.values(counts).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0);
-  /** Planets and moons asked, plus the giants the moons bring along. */
-  const planetTotal = $derived(countOf(planetCounts) + countOf(moonCounts) + hostsAdded(moonCounts, planetCounts, moonHosts));
+  /** Planets asked, plus the giants the moons bring along (the moons themselves are not counted). */
+  const planetTotal = $derived(countOf(planetCounts) + hostsAdded(moonCounts, planetCounts, moonHosts));
   const planetsValid = $derived(planetsDrawn || (planetTotal >= 1 && planetTotal <= spec.max_planets));
   /** The system the server said exists already, which the next submission may replace. */
   let existsId = $state<string | null>(null);

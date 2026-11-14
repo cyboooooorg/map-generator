@@ -508,7 +508,7 @@ export const fr: Messages = {
     systemSubtype: 'Sous-type',
     systemPlanets: 'Planètes',
     systemPlanetsDrawn: 'Tirées',
-    systemPlanetsTotal: (p) => `${p.count} planètes et lunes (de 1 à ${p.max})`,
+    systemPlanetsTotal: (p) => `${p.count} planètes (de 1 à ${p.max})`,
     systemMoons: 'Lunes',
     systemMoonsHelp: `Une lune demandée sans sa géante amène cette géante dans le système, qui compte comme une planète de plus. Les lunes se demandent ici, jamais comme monde isolé`,
     systemPlanetsHelp: `Combien de chaque archétype${S}: le tirage les range depuis l’étoile comme dans les vrais systèmes, et tire leurs lunes. Tirées${S}: autant que l’étoile et sa métallicité le rendent probable`,

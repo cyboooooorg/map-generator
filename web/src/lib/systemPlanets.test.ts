@@ -9,9 +9,20 @@ describe('hostsAdded', () => {
   });
 
   it('a_moon_alone_adds_its_host', () => {
-    expect(hostsAdded({ 'titan-like': 2 }, {}, hostOf)).toBe(1);
+    expect(hostsAdded({ 'titan-like': 1 }, {}, hostOf)).toBe(1);
     expect(hostsAdded({ 'titan-like': 1, 'io-like': 1 }, {}, hostOf)).toBe(2);
     expect(hostsAdded({ 'titan-like': 0 }, {}, hostOf)).toBe(0);
+  });
+
+  it('two_moons_without_their_host_add_two_hosts', () => {
+    expect(hostsAdded({ 'titan-like': 2 }, {}, hostOf)).toBe(2);
+  });
+
+  it('fourteen_earths_a_saturn_and_a_titan_make_fifteen_planets', () => {
+    // The titan rides its asked saturn: only the 15 planets count.
+    const planets = { 'earth-like': 14, 'saturn-like': 1 };
+    const total = 15 + hostsAdded({ 'titan-like': 1 }, planets, hostOf);
+    expect(total).toBe(15);
   });
 });
 

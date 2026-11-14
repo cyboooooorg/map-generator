@@ -538,7 +538,7 @@ export const en = {
     systemSubtype: 'Subtype',
     systemPlanets: 'Planets',
     systemPlanetsDrawn: 'Drawn',
-    systemPlanetsTotal: (p: { count: number; max: number }) => `${p.count} planets and moons (1 to ${p.max})`,
+    systemPlanetsTotal: (p: { count: number; max: number }) => `${p.count} planets (1 to ${p.max})`,
     systemMoons: 'Moons',
     systemMoonsHelp: 'A moon asked without its giant brings that giant into the system, which counts as one more planet. Moons are asked here, never as a single world',
     systemPlanetsHelp: 'How many of each archetype: the draw orders them from the star as real systems are, and draws their moons. Drawn: as many as the star and its metallicity make likely',
