@@ -319,6 +319,7 @@ pub fn host_params(p: &WorldParams, mass_earth: f32, seed: u32) -> WorldParams {
         moon: false,
         day_hours: None,
         liquid_poleward_deg: None,
+        asked_moons: Vec::new(),
         gravity: None,
     }
 }
@@ -364,6 +365,7 @@ mod tests {
             moon: false,
             day_hours: None,
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             gravity: None,
         }
     }

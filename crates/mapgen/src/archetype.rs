@@ -17,7 +17,7 @@
 //! description = "Un petit désert froid"
 //!
 //! [inputs]                            # a fixed value or a [min, max] range
-//! mass_earth = [0.096, 0.118]         # required, Earth masses
+//! mass_earth = [0.096, 0.118]         # required, Earth masses (a moon's: 1e-6 to 0.1)
 //! core_mass_fraction = 0.24           # iron share of the refractory mass
 //! water_oceans = [0.002, 0.008]       # Earth oceans (1.4e21 kg each)
 //! envelope_fraction = 0.0             # hydrogen and helium share of the mass
@@ -31,6 +31,20 @@
 //! insolation = [0.39, 0.47]           # Earth's = 1, or period_days, not both
 //! eccentricity = 0.093
 //! axial_tilt = 25.19                  # degrees
+//! ```
+//!
+//! A giant's moon has a `[moon]` table instead of `[orbit]`: its host's
+//! archetype places its host, and a whole system asking for the moon
+//! puts it on a giant of that archetype (see `crate::system`). It is not
+//! asked for as a world on its own.
+//!
+//! ```toml
+//! [moon]
+//! host = "saturn-like"                # a built-in giant archetype
+//! origin = "disk"                     # grown in its disk, or "captured"
+//! semi_major_axis_radii = [18.0, 22.0]  # in its host's radii
+//! eccentricity = [0.02, 0.03]
+//! ice_fraction = [0.40, 0.50]         # water and ices, share of its mass
 //! ```
 //!
 //! The Solar System archetypes take the masses, core shares and orbits of
@@ -65,6 +79,16 @@
 //! `crate::star::habitable_fluxes`), but past that of a cooler star (1.01
 //! for a K2V, about 0.9 for a red M dwarf), where the ocean runs away.
 //! In a system they take the system's star.
+//!
+//! The moon archetypes (`titan-like`, `europa-like`, `ganymede-like`,
+//! `callisto-like`, `io-like`, `triton-like`, `enceladus-like`) take the
+//! masses of the NASA satellite fact sheets and JPL's satellite physical
+//! parameters with ranges of about ±10 %, the orbits and eccentricities
+//! of JPL's mean orbital elements (semi-major axes over their giant's
+//! equatorial radius), and the ice shares their densities and moments of
+//! inertia give (sources in each file). They set causes only: a Titan is
+//! a hydrocarbon world because its mass, ice and cold host make one, and
+//! comes out as one only when the model says so.
 use crate::planet::InputOverrides;
 use crate::request::Limits;
 use rand::RngExt;
@@ -74,7 +98,7 @@ use std::fmt;
 use std::path::Path;
 
 /// The built-in archetypes, in the order they are listed.
-const BUILT_IN: [(&str, &str); 13] = [
+const BUILT_IN: [(&str, &str); 20] = [
     (
         "mercury-like",
         include_str!("../../../archetypes/mercury-like.toml"),
@@ -127,6 +151,31 @@ const BUILT_IN: [(&str, &str); 13] = [
         "hot-jupiter",
         include_str!("../../../archetypes/hot-jupiter.toml"),
     ),
+    (
+        "titan-like",
+        include_str!("../../../archetypes/titan-like.toml"),
+    ),
+    (
+        "europa-like",
+        include_str!("../../../archetypes/europa-like.toml"),
+    ),
+    (
+        "ganymede-like",
+        include_str!("../../../archetypes/ganymede-like.toml"),
+    ),
+    (
+        "callisto-like",
+        include_str!("../../../archetypes/callisto-like.toml"),
+    ),
+    ("io-like", include_str!("../../../archetypes/io-like.toml")),
+    (
+        "triton-like",
+        include_str!("../../../archetypes/triton-like.toml"),
+    ),
+    (
+        "enceladus-like",
+        include_str!("../../../archetypes/enceladus-like.toml"),
+    ),
 ];
 
 /// Mass of a planet, Earth masses: from the Moon's tenth to 13 Jupiter
@@ -136,6 +185,25 @@ pub const MASS_EARTH: Limits = Limits {
     min: 0.01,
     max: 4131.0,
 };
+/// Mass of a moon asked for by archetype, Earth masses: from a moonlet of
+/// about 70 km (6 × 10¹⁸ kg) to a tenth of Earth's, past Ganymede's 0.025
+/// (NASA). Calibration, no source.
+pub const MOON_MASS_EARTH: Limits = Limits {
+    min: 1.0e-6,
+    max: 0.1,
+};
+/// Semi-major axis of a moon asked for, in its giant's radii: from the
+/// giant's cloud tops to beyond the farthest stable prograde orbit of a
+/// Saturn at Saturn's orbit (a third of its Hill radius, about 360
+/// radii). A host that cannot keep it there refuses it. Calibration, no
+/// source.
+pub const MOON_SEMI_MAJOR_AXIS_RADII: Limits = Limits {
+    min: 1.0,
+    max: 400.0,
+};
+/// Share of a moon's mass in water and ices. Calibration, no source: from
+/// dry Io to a body of ice with a little rock.
+pub const MOON_ICE_FRACTION: Limits = Limits { min: 0.0, max: 0.9 };
 /// Iron share of the refractory mass. Calibration, no source: from no core
 /// to Mercury's 0.70 and beyond.
 pub const CORE_MASS_FRACTION: Limits = Limits { min: 0.0, max: 0.9 };
@@ -326,6 +394,35 @@ impl ArchetypeOrbit {
     }
 }
 
+/// How a moon asked for by archetype came to its giant.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum ArchetypeMoonOrigin {
+    /// Grown in its giant's disk, as the Galilean moons and Titan.
+    Disk,
+    /// A passing body its giant captured, as Triton: only an ice giant
+    /// captures one today.
+    Captured,
+}
+
+/// What makes an archetype a giant's moon (the `[moon]` table): its host
+/// and its orbit round it. The moon's `[inputs]` mass is its own; it has
+/// no `[orbit]`, its host's archetype placing the host.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ArchetypeMoon {
+    /// The built-in giant archetype it orbits (`saturn-like`).
+    pub host: String,
+    /// Semi-major axis, in its host's radii.
+    pub semi_major_axis_radii: ParamDefault,
+    pub eccentricity: ParamDefault,
+    /// Share of its mass in water and ices.
+    pub ice_fraction: ParamDefault,
+    pub origin: ArchetypeMoonOrigin,
+}
+
 /// A named set of model inputs. See the module documentation for the file
 /// format.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -339,6 +436,10 @@ pub struct Archetype {
     pub inputs: ArchetypeInputs,
     #[serde(default)]
     pub orbit: ArchetypeOrbit,
+    /// Set on a giant's moon: its host and its orbit round it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub moon: Option<ArchetypeMoon>,
     /// Translated name and description, by language code (`fr`).
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -389,8 +490,16 @@ impl Archetype {
         if let Some(star) = &o.star {
             crate::star::parse_type(star).map_err(|e| format!("orbit.star: {e}"))?;
         }
+        if let Some(moon) = &self.moon {
+            self.validate_moon(moon)?;
+        }
+        let mass_limits = if self.moon.is_some() {
+            MOON_MASS_EARTH
+        } else {
+            MASS_EARTH
+        };
         let checks = [
-            ("inputs", "mass_earth", Some(i.mass_earth), MASS_EARTH),
+            ("inputs", "mass_earth", Some(i.mass_earth), mass_limits),
             (
                 "inputs",
                 "core_mass_fraction",
@@ -417,6 +526,46 @@ impl Archetype {
                 v.check(field, limits.min, limits.max)
                     .map_err(|e| e.replacen("defaults.", &format!("{table}."), 1))?;
             }
+        }
+        Ok(())
+    }
+
+    /// Checks the `[moon]` table: no `[orbit]` beside it, a host that is a
+    /// built-in giant archetype (not a moon), and its ranges within their
+    /// limits.
+    fn validate_moon(&self, moon: &ArchetypeMoon) -> Result<(), String> {
+        if self.orbit != ArchetypeOrbit::default() {
+            return Err("orbit: a moon has none, its host's archetype places its host".to_string());
+        }
+        let not_a_giant = || {
+            format!(
+                "moon.host: {:?} is not a built-in giant archetype",
+                moon.host
+            )
+        };
+        if moon.host == self.name || !built_in_names().contains(&moon.host.as_str()) {
+            return Err(not_a_giant());
+        }
+        let host = Archetype::load(&moon.host).map_err(|e| e.to_string())?;
+        let lightest = match host.inputs.mass_earth {
+            ParamDefault::Fixed(v) | ParamDefault::Range([v, _]) => f64::from(v),
+        };
+        if host.moon.is_some() || lightest < crate::planet::GIANT_MIN_MASS_EARTH {
+            return Err(not_a_giant());
+        }
+        let checks = [
+            (
+                "semi_major_axis_radii",
+                moon.semi_major_axis_radii,
+                MOON_SEMI_MAJOR_AXIS_RADII,
+            ),
+            ("eccentricity", moon.eccentricity, ECCENTRICITY),
+            ("ice_fraction", moon.ice_fraction, MOON_ICE_FRACTION),
+        ];
+        for (field, value, limits) in checks {
+            value
+                .check(field, limits.min, limits.max)
+                .map_err(|e| e.replacen("defaults.", "moon.", 1))?;
         }
         Ok(())
     }
@@ -510,6 +659,55 @@ mod tests {
         derive_model_with(seed, "planet", &context, mass_earth, &overrides)
     }
 
+    /// The model of the moon archetype `a` drawn from `seed`: its host's
+    /// archetype at the middle of its own orbit round its own star (as
+    /// [`model_of`]), the moon at the middle of its orbit round the
+    /// middle of the host's mass, through [`crate::planet::derive_moon_model`].
+    fn moon_model_of(a: &Archetype, seed: u32) -> PlanetModel {
+        use crate::planet::{HostTide, MoonBirth, MoonFormation, derive_moon_model};
+        let moon = a.moon.as_ref().expect("a moon archetype");
+        let host = Archetype::load(&moon.host).unwrap();
+        let mid = |p: ParamDefault| match p {
+            ParamDefault::Fixed(v) => f64::from(v),
+            ParamDefault::Range([lo, hi]) => f64::from(lo + hi) / 2.0,
+        };
+        let star = crate::star::parse_type(host.orbit.star.as_deref().unwrap()).unwrap();
+        let v = crate::star::values(star);
+        let (near, far) = host
+            .orbit
+            .orbit_range_au(f64::from(v.luminosity), f64::from(v.mass))
+            .unwrap();
+        let orbit_au = (near * far).sqrt() as f32;
+        let info = StarInfo::new(
+            star,
+            orbit_au,
+            mid(host.orbit.eccentricity.unwrap()) as f32,
+            AGE_GYR,
+        );
+        let context = Context::of(&info, 0.0, 2.7 * info.luminosity.sqrt());
+        let host_earth = mid(host.inputs.mass_earth);
+        let radius_km = f64::from(crate::giants::giant_radius(
+            host_earth as f32,
+            info.equilibrium_k,
+        )) * 6371.0;
+        let mut rng = StdRng::seed_from_u64(u64::from(seed));
+        let formation = MoonFormation {
+            mass_earth: a.mass(&mut rng),
+            ice_fraction: f64::from(moon.ice_fraction.pick(&mut rng)),
+            birth: match moon.origin {
+                ArchetypeMoonOrigin::Disk => MoonBirth::Disk,
+                ArchetypeMoonOrigin::Captured => MoonBirth::Captured,
+            },
+            tide: HostTide {
+                host_kg: host_earth * crate::exomoon::EARTH_KG,
+                a_m: f64::from(moon.semi_major_axis_radii.pick(&mut rng)) * radius_km * 1000.0,
+                eccentricity: f64::from(moon.eccentricity.pick(&mut rng)),
+            },
+        };
+        let overrides = a.overrides(&mut rng);
+        derive_moon_model(seed, "p1-1", &context, &formation, &overrides)
+    }
+
     /// The class key each archetype must come out as.
     fn expected(name: &str) -> &'static str {
         match name {
@@ -522,6 +720,14 @@ mod tests {
             "ocean-world" => "ocean-world",
             "lava-world" => "lava-world",
             "hot-jupiter" => "hot-jupiter",
+            // The moons, round their host at its own orbit (see
+            // `moon_model_of`): Titan's liquid methane, the others' ice
+            // over an ocean or none, Io's dry rock. Titan's class is
+            // checked on most seeds, see `titan_like_is_mostly_a_hydrocarbon_world`.
+            "titan-like" => "hydrocarbon-world",
+            "europa-like" | "ganymede-like" | "callisto-like" | "triton-like"
+            | "enceladus-like" => "ice-world",
+            "io-like" => "rocky",
             other => panic!("no expected class for {other}"),
         }
     }
@@ -529,8 +735,15 @@ mod tests {
     #[test]
     fn every_archetype_comes_out_as_its_class() {
         for a in Archetype::built_in() {
+            if a.name == "titan-like" {
+                continue;
+            }
             for seed in 0..20 {
-                let model = model_of(&a, seed);
+                let model = if a.moon.is_some() {
+                    moon_model_of(&a, seed)
+                } else {
+                    model_of(&a, seed)
+                };
                 assert_eq!(
                     model.class.key(),
                     expected(&a.name),
@@ -546,7 +759,66 @@ mod tests {
         for n in built_in_names() {
             Archetype::load(n).unwrap();
         }
-        assert_eq!(built_in_names().len(), 13);
+        assert_eq!(built_in_names().len(), 20);
+    }
+
+    /// Known departure: a Titan whose surface the draw leaves under
+    /// pure methane's triple point (90.7 K) keeps its methane frozen and
+    /// comes out an ice world, where Titan's nitrogen–methane–ethane
+    /// mixtures stay liquid down to about 72 K; the model takes pure
+    /// methane. Its air scatters with the radiogenic and volatile draws
+    /// (0.6 to 6 bar), and with it its greenhouse: 16 seeds of 20 come
+    /// out a hydrocarbon world.
+    #[test]
+    fn titan_like_is_mostly_a_hydrocarbon_world() {
+        let a = Archetype::load("titan-like").unwrap();
+        let mut hydrocarbon = 0;
+        for seed in 0..20 {
+            let m = moon_model_of(&a, seed);
+            if m.class.key() == expected(&a.name) {
+                hydrocarbon += 1;
+            } else {
+                let s = m.surface.expect("a moon has a surface");
+                assert_eq!(m.class.key(), "ice-world", "seed {seed}: {m:?}");
+                assert!(s.climate.temperature_k < 90.7, "seed {seed}: {s:?}");
+            }
+        }
+        assert!(hydrocarbon >= 15, "{hydrocarbon} of 20");
+    }
+
+    #[test]
+    fn a_moon_archetype_names_a_giant_host() {
+        let moon = |host: &str, extra: &str| {
+            format!(
+                "name = \"moonlet\"\n{extra}[inputs]\nmass_earth = 0.01\n[moon]\n\
+                 host = \"{host}\"\nsemi_major_axis_radii = 10.0\neccentricity = 0.0\n\
+                 ice_fraction = 0.4\norigin = \"disk\"\n"
+            )
+        };
+        let a = Archetype::from_toml(&moon("saturn-like", ""), "test").unwrap();
+        assert_eq!(a.moon.as_ref().unwrap().host, "saturn-like");
+        for host in ["earth-like", "titan-like", "nowhere", "moonlet"] {
+            let err = Archetype::from_toml(&moon(host, ""), "test")
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("moon.host"), "{host}: {err}");
+        }
+        // A moon has no orbit of its own.
+        let orbit = moon("saturn-like", "").replace("[moon]", "[orbit]\ninsolation = 0.01\n[moon]");
+        assert!(Archetype::from_toml(&orbit, "test").is_err());
+        // Its mass is a moon's: below a planet's least, within its own.
+        let light = moon("saturn-like", "").replace("mass_earth = 0.01", "mass_earth = 2e-5");
+        assert!(Archetype::from_toml(&light, "test").is_ok());
+        let heavy = moon("saturn-like", "").replace("mass_earth = 0.01", "mass_earth = 0.5");
+        let err = Archetype::from_toml(&heavy, "test")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("inputs.mass_earth"), "{err}");
+        // Every built-in moon names its host.
+        for a in Archetype::built_in().iter().filter(|a| a.moon.is_some()) {
+            let host = Archetype::load(&a.moon.as_ref().unwrap().host).unwrap();
+            assert!(host.moon.is_none(), "{}", a.name);
+        }
     }
 
     #[test]

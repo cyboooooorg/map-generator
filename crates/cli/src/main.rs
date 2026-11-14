@@ -25,12 +25,13 @@ struct Args {
     /// Planet archetype: a built-in name (earth-like, mars-like,
     /// jupiter-like, hot-jupiter… see --list-planets) or a path to a .toml
     /// archetype file. An archetype names a mass, a composition and an
-    /// orbit; the planet's air, water, size and look follow from them
+    /// orbit; the planet's air, water, size and look follow from them.
+    /// A moon archetype (titan-like…) is asked for with --system
     /// [default: none, the planet drawn from where it formed]
     #[arg(long)]
     planet: Option<String>,
 
-    /// List the built-in planet archetypes and exit
+    /// List the built-in planet and moon archetypes and exit
     #[arg(long)]
     list_planets: bool,
 
@@ -203,7 +204,11 @@ struct Args {
     /// (each sits at its archetype's insolation or period, with its mass
     /// and inputs; names: see --list-planets; 15 planets at most), or
     /// `auto` for a drawn system; with --star, --metallicity, --seed and
-    /// the map size
+    /// the map size. A moon archetype (titan-like, europa-like,
+    /// ganymede-like, callisto-like, io-like, triton-like,
+    /// enceladus-like) rides a giant of its host's archetype asked in the
+    /// same list that can carry it (`saturn-like=1,titan-like=1`: one
+    /// Saturn with its Titan), or brings one, counted among the 15
     #[arg(long)]
     system: Option<String>,
 
@@ -437,7 +442,7 @@ fn main() -> ExitCode {
 fn run(args: Args) -> Result<(), Box<dyn Error>> {
     if args.list_planets {
         for archetype in Archetype::built_in() {
-            println!("{:13} {}", archetype.name, archetype.description);
+            println!("{:14} {}", archetype.name, archetype.description);
         }
         return Ok(());
     }

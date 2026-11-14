@@ -370,18 +370,43 @@ and a giant its star has locked only the moons light enough to last
 (`giant_locked`, the same equation with a giant's own $k_2$ and $Q$):
 
 ```rust
-let disk = disk_mass_ratio(&mut rng); // 1e-4 to 2.5e-4
-let kind = disk_shape(f64::from(mass_earth), &mut rng); // Chain or Dominant
+let disk = disk_mass_ratio(look.kind, &mut rng); // 1e-4 to 2.5e-4
+let kind = disk_shape(look.kind, f64::from(mass_earth), &mut rng); // Chain or Dominant
+// Moons asked for by archetype take their share; the drawn ones the rest.
+let disk_kg = (disk * m_g).max(asked_kg / DOMINANT_SHARE.1);
+let rest_kg = disk_kg - asked_kg;
 for k in 0..count {
-    let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
+    let a_radii = base * CHAIN_STEP.powi(k as i32) * rng.uniform(0.95, 1.05);
     // The chain ends at the edge of the stable zone.
     if a_radii * r_g * (1.0 + DOMINANT_MAX_ECCENTRICITY) >= PROGRADE_REACH * hill { break; }
     slots.push(a_radii);
 }
 // ... a dominant moon in the outer half takes 0.9 to 0.97, the rest by weight
-let mass = disk * m_g * share * if captured_triton { 0.02 } else { 1.0 };
+let mass = rest_kg * share * if captured_triton { 0.02 } else { 1.0 };
 let icy = a_radii > disk_ice_line_radii(f64::from(star.equilibrium_k));
 ```
+
+A whole system can ask for a moon by archetype (`titan-like`,
+`europa-like`, `ganymede-like`, `callisto-like`, `io-like`,
+`triton-like`, `enceladus-like`, in `archetypes/`). The moon is drawn once
+in its archetype's ranges and its giant's draw makes it first, at its
+orbit (pushed out of the rings and the Roche limit as the chain is): its
+mass is its share of the disk, the disk holding at least what a dominant
+moon of that mass leaves (a Titan asked of a Saturn whose drawn disk is
+lighter than it), and the drawn moons share the rest, none within half a
+chain step of it or within 8 mutual Hill radii. Holding half the disk or
+more, it is the dominant moon. A captured one (`triton-like`) replaces the
+drawn Triton. A despun giant never drops it: `carries` placed its giant
+only where the draw could have made it and where it lasts, with the
+lightest giant and the nearest orbit its archetype gives: the disk-born
+moons within 2.5 × $10^{-4}$ of the heaviest giant's mass (1.2 × $10^{-4}$
+for an ice giant), a captured one only round an ice giant and within
+3 × $10^{-4}$, an icy one (20 % ice or more, a calibration between Europa's
+6 to 10 % and Ganymede's half) beyond the disk's ice line, every orbit
+outside the Roche limit and within the stable part of the Hill sphere,
+and each kept by a despun giant (the same equation). A Neptune cannot
+carry a Titan (1.3 × $10^{-3}$ of its mass); a Saturn round a late M
+dwarf has no room for one.
 
 A rocky world drawn as the moon of a giant
 ([exomoon.rs](../../crates/mapgen/src/exomoon.rs)) gets siblings on the same

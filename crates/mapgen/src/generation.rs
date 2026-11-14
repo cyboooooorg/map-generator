@@ -2600,6 +2600,7 @@ pub(crate) mod tests {
             moon: false,
             day_hours: None,
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             gravity: None,
         }
     }
@@ -2924,6 +2925,7 @@ pub(crate) mod tests {
         let a = generate(&p).world;
         let b = generate(&WorldParams {
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             ..p
         })
         .world;

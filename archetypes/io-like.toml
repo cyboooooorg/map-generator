@@ -1,0 +1,27 @@
+name = "io-like"
+description = "Io-like: a dry rocky moon close to a Jupiter, heated by its tides"
+
+[locales.fr]
+name = "Ionienne"
+description = "Une lune rocheuse et sèche, proche d'une Jupiter, chauffée par ses marées"
+
+# Io: 8.9319e22 kg = 0.0150 Earth masses (NASA Jovian satellite fact
+# sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), ±7 %.
+[inputs]
+mass_earth = [0.014, 0.016]
+
+[moon]
+# Grown in Jupiter's disk.
+host = "jupiter-like"
+origin = "disk"
+# Semi-major axis 421 800 km over Jupiter's equatorial radius 71 492 km:
+# 5.9 radii (JPL mean orbital elements; NASA Jupiter fact sheet).
+semi_major_axis_radii = [5.8, 6.0]
+# 0.0041, forced by the Laplace resonance (JPL mean orbital elements).
+eccentricity = [0.004, 0.005]
+# No water: its 3.53 g/cm³ is rock and iron (Schubert, Anderson, Spohn &
+# McKinnon 2004, Interior composition, structure and dynamics of the
+# Galilean satellites, in Jupiter: the planet, satellites and
+# magnetosphere, Cambridge UP).
+ice_fraction = 0.0

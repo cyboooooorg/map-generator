@@ -246,7 +246,8 @@ pub enum RequestError {
         asked: u32,
         fits: u32,
     },
-    /// A type the star leaves no room for.
+    /// A type the star leaves no room for: a planet's archetype, or a
+    /// moon's whose giant it cannot place where the moon can orbit.
     TypeImpossible { body_type: String },
 }
 
@@ -322,7 +323,11 @@ impl fmt::Display for RequestError {
                  spaced enough to stay stable"
             ),
             RequestError::TypeImpossible { body_type } => {
-                write!(f, "this star leaves no room for a {body_type} planet")
+                write!(
+                    f,
+                    "this star leaves no room for a {body_type} planet, or for the giant a \
+                     {body_type} moon needs"
+                )
             }
         }
     }
@@ -521,6 +526,14 @@ impl WorldRequest {
         rng: &mut impl RngExt,
     ) -> Result<Resolved, RequestError> {
         self.validate()?;
+        // A moon archetype has no orbit of its own round a star: it is
+        // asked for in a whole system, which gives it its giant.
+        if let Some(a) = archetype.as_ref().filter(|a| a.moon.is_some()) {
+            return Err(RequestError::BadArchetype(format!(
+                "{} is a giant's moon: ask for it in a whole system (--system {}=1)",
+                a.name, a.name
+            )));
+        }
         let a = archetype.as_ref();
         let seed = self.seed.unwrap_or_else(|| rng.random());
         let mut stream = seeded(seed, "world/archetype");
@@ -1001,6 +1014,20 @@ mod tests {
         // Its star and tilt are the archetype's.
         assert_eq!(p.star, crate::star::SUN);
         assert_eq!(p.axial_tilt_deg, 23.44);
+    }
+
+    #[test]
+    fn a_moon_archetype_is_not_a_world_to_ask_alone() {
+        let request = WorldRequest {
+            planet: Some("titan-like".into()),
+            seed: Some(1),
+            ..Default::default()
+        };
+        let err = request
+            .resolve(&mut StdRng::seed_from_u64(1))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("whole system"), "{err}");
     }
 
     #[test]

@@ -166,6 +166,17 @@ pub struct WorldParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub liquid_poleward_deg: Option<f32>,
+    /// The moons a whole system asked this giant to carry, by archetype
+    /// (a `titan-like` asked with or without its `saturn-like`), drawn
+    /// when the giant was placed: its moon draw makes them first and the
+    /// others around them (see `crate::moons::MoonSystem::draw`). Empty
+    /// on every other world.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::moons::AskedMoon>>", optional)
+    )]
+    pub asked_moons: Vec<crate::moons::AskedMoon>,
 }
 
 /// Mass–radius exponent of rocky planets, `M ∝ R^3.7` (Zeng, Sasselov &

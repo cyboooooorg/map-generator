@@ -71,4 +71,9 @@ barycentre_km: number,
 /**
  * Seed of the moon's own surface.
  */
-seed: number, };
+seed: number, 
+/**
+ * The moon archetype it was asked for as ([`AskedMoon`]); `None` for
+ * a moon drawn.
+ */
+archetype?: string, };

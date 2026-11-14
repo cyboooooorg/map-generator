@@ -660,6 +660,7 @@ mod tests {
             moon: false,
             day_hours: None,
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             gravity: None,
         }
     }

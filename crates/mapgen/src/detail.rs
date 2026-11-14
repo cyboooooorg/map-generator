@@ -839,6 +839,7 @@ mod tests {
             moon: false,
             day_hours: None,
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             ..crate::generation::tests::preset_params(planet, 5, 512, 256)
         };
         let world = generate(&params).world;

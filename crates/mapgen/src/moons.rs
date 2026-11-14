@@ -294,6 +294,152 @@ pub struct Moon {
     pub barycentre_km: f32,
     /// Seed of the moon's own surface.
     pub seed: u32,
+    /// The moon archetype it was asked for as ([`AskedMoon`]); `None` for
+    /// a moon drawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub archetype: Option<String>,
+}
+
+/// A moon a whole system asks for by archetype (`titan-like`), drawn once
+/// in the archetype's ranges when its host is placed and kept on its
+/// host giant's world ([`WorldParams::asked_moons`]), so that the host's
+/// moon draw ([`MoonSystem::draw`]) makes it again from the stored world.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct AskedMoon {
+    /// The archetype's name.
+    pub archetype: String,
+    pub mass_earth: f64,
+    /// Semi-major axis, in its giant's radii.
+    pub a_radii: f64,
+    pub eccentricity: f64,
+    /// Share of its mass in water and ices, the rest rock.
+    pub ice_fraction: f64,
+    /// Captured by its giant (Triton), not grown in its disk.
+    pub captured: bool,
+}
+
+impl AskedMoon {
+    /// The moon of `archetype` (one with a `[moon]` table), its ranges
+    /// drawn from `rng` in the order of the table: mass, semi-major axis,
+    /// eccentricity, ice share.
+    pub fn draw(archetype: &crate::archetype::Archetype, rng: &mut impl rand::RngExt) -> Self {
+        let moon = archetype.moon.as_ref().expect("a moon archetype");
+        let mass_earth = archetype.mass(rng);
+        let mut pick = |p: crate::archetype::ParamDefault| f64::from(p.pick(rng));
+        Self {
+            archetype: archetype.name.clone(),
+            mass_earth,
+            a_radii: pick(moon.semi_major_axis_radii),
+            eccentricity: pick(moon.eccentricity),
+            ice_fraction: pick(moon.ice_fraction),
+            captured: moon.origin == crate::archetype::ArchetypeMoonOrigin::Captured,
+        }
+    }
+}
+
+/// Least ice share of an asked moon born in its giant's disk that must
+/// form beyond the disk's ice line ([`disk_ice_line_radii`]). Calibration,
+/// no source: above Europa's 6 to 10 % (rock with a water layer, inside
+/// Jupiter's line), below the 40 % and more of Ganymede, Callisto and
+/// Titan.
+const ICY_ASKED_MIN_ICE: f64 = 0.2;
+
+/// A giant as a whole system places it, before its world exists: what
+/// decides whether it can carry the moons asked for ([`carries`]).
+pub(crate) struct HostSketch {
+    pub kind: GiantKind,
+    /// The lightest mass its archetype gives, Earth masses (the smallest
+    /// Hill sphere, the weakest hold on a despun giant's moons).
+    pub mass_earth: f64,
+    /// The heaviest, Earth masses (the fullest disk).
+    pub heaviest_earth: f64,
+    /// Its star seen from its orbit, with its eccentricity.
+    pub star: StarInfo,
+}
+
+/// Whether a giant `host` can carry the asked `moons`: whether its moon
+/// draw could have made them.
+///
+/// - Its disk holds them: the disk-born ones together within the largest
+///   share of the heaviest host's mass its disk keeps ([`DISK_MASS_RATIO`],
+///   [`ICE_DISK_MASS_RATIO`]); at most one captured, on an ice giant (the
+///   only captured large moons drawn, Triton's path), within the masses
+///   that path draws ([`CAPTURED_MASS_RATIO`]).
+/// - Its disk-born icy ones (at least [`ICY_ASKED_MIN_ICE`]) lie beyond
+///   its disk's ice line, so its host is cold enough for ice.
+/// - Each orbit lies outside the Roche limit, and within the stable part
+///   of the Hill sphere at periapsis, its own eccentricity included
+///   ([`PROGRADE_REACH`], [`RETROGRADE_REACH`]).
+/// - Each lasts when the star has despun the giant ([`lasting_moon_kg_with`]).
+/// - They keep [`SPACING_HILL`] mutual Hill radii apart.
+pub(crate) fn carries(host: &HostSketch, moons: &[AskedMoon]) -> bool {
+    let star = &host.star;
+    let radius_earth = crate::giants::giant_radius(host.mass_earth as f32, star.equilibrium_k);
+    let r_g = f64::from(radius_earth) * EARTH_RADIUS_KM;
+    let m_g = host.mass_earth * EARTH_MASS_KG;
+    let periapsis_km = f64::from(star.periapsis_au.max(1e-4)) * AU_KM;
+    let hill = periapsis_km * (m_g / (3.0 * f64::from(star.mass) * SUN_MASS_KG)).cbrt();
+    let density = m_g / (4.0 / 3.0 * PI * r_g.powi(3)) / 1e12;
+    let roche = giant_moon_floor_radii(density, None);
+    let ice_line = disk_ice_line_radii(f64::from(star.equilibrium_k));
+    let locked = crate::spin::giant_locked(star, host.mass_earth as f32, radius_earth);
+    let disk_max = match host.kind {
+        GiantKind::Gas => DISK_MASS_RATIO.1,
+        GiantKind::Ice => ICE_DISK_MASS_RATIO.1,
+    };
+    let in_disk: f64 = moons
+        .iter()
+        .filter(|m| !m.captured)
+        .map(|m| m.mass_earth)
+        .sum();
+    if in_disk > disk_max * host.heaviest_earth {
+        return false;
+    }
+    let captured: Vec<&AskedMoon> = moons.iter().filter(|m| m.captured).collect();
+    if captured.len() > 1
+        || captured.iter().any(|m| {
+            host.kind != GiantKind::Ice
+                || m.mass_earth > CAPTURED_MASS_RATIO.1 * host.heaviest_earth
+        })
+    {
+        return false;
+    }
+    let each = moons.iter().all(|m| {
+        let reach = if m.captured {
+            RETROGRADE_REACH
+        } else {
+            PROGRADE_REACH
+        };
+        let icy = !m.captured && m.ice_fraction >= ICY_ASKED_MIN_ICE;
+        let lasts = !locked || {
+            let limit = lasting_moon_kg_with(
+                reach,
+                f64::from(star.orbit_au) * AU_KM,
+                f64::from(star.mass) * SUN_MASS_KG,
+                m_g,
+                r_g,
+                f64::from(crate::spin::tidal_age_gyr(star)),
+                crate::spin::GIANT_K2,
+                crate::spin::GIANT_Q,
+            );
+            m.mass_earth * EARTH_MASS_KG <= limit
+        };
+        m.a_radii > roche
+            && m.a_radii * r_g * (1.0 + m.eccentricity) < reach * hill
+            && (!icy || m.a_radii > ice_line)
+            && lasts
+    });
+    let apart = moons.iter().enumerate().all(|(i, a)| {
+        moons[i + 1..].iter().all(|b| {
+            let mutual = ((a.mass_earth + b.mass_earth) / (3.0 * host.mass_earth)).cbrt()
+                * (a.a_radii + b.a_radii)
+                / 2.0;
+            (a.a_radii - b.a_radii).abs() > SPACING_HILL * mutual
+        })
+    });
+    each && apart
 }
 
 /// The moons of a world and what bounds them, as `world.json` stores them.
@@ -507,6 +653,13 @@ pub(crate) fn disk_ice_line_radii(giant_equilibrium_k: f64) -> f64 {
 fn forced_eccentricity(rng: &mut Draws) -> f64 {
     rng.log_uniform(FORCED_ECCENTRICITY.0, FORCED_ECCENTRICITY.1)
 }
+/// The mass of a large moon an ice giant captured, as a share of the
+/// giant's (Triton: 2.1 × 10⁻⁴ of Neptune's, NASA fact sheets), drawn
+/// uniformly. Calibration, no source: about Triton's, a factor of two wide.
+const CAPTURED_MASS_RATIO: (f64, f64) = (1.5e-4, 3e-4);
+/// The ratio of semi-major axes from one moon of a giant's resonant chain
+/// to the next: periods doubling, `2^(2/3)` (Io, Europa, Ganymede).
+const CHAIN_STEP: f64 = 1.587_401;
 /// Inclinations to the planet's orbit between which a moon's orbit is
 /// generally unstable, degrees (Carruba et al. 2002, as summarised by Shen
 /// & Tremaine 2008): captured moons are drawn outside them.
@@ -1075,6 +1228,7 @@ impl MoonSystem {
                         as f32,
                     barycentre_km: barycentre as f32,
                     seed: stream_seed(seed, stream::MOONS).wrapping_add(k as u32 + 1),
+                    archetype: None,
                 }
             })
             .collect();
@@ -1133,8 +1287,13 @@ impl MoonSystem {
             (G * m_g * t * t / (4.0 * PI * PI)).cbrt()
         };
         let asked = p.moons.count();
+        // The moons a whole system asked for by archetype: those of its
+        // disk, and one it captured.
+        let asked_disk: Vec<&AskedMoon> = p.asked_moons.iter().filter(|m| !m.captured).collect();
+        let asked_captured = p.asked_moons.iter().find(|m| m.captured);
         let drawn = 2 + (rng.next() * 4.0) as usize;
-        let captured_triton = look.kind == GiantKind::Ice && rng.next() < 0.35;
+        let captured_triton =
+            (look.kind == GiantKind::Ice && rng.next() < 0.35) || asked_captured.is_some();
         let first = rng.uniform(4.0, 8.0);
         let mut moons: Vec<Moon> = Vec::new();
         let mut shape = None;
@@ -1142,6 +1301,24 @@ impl MoonSystem {
             let count = asked.map_or(drawn, usize::from);
             let disk = disk_mass_ratio(look.kind, &mut rng);
             let kind = disk_shape(look.kind, f64::from(mass_earth), &mut rng);
+            // An asked moon takes its share of the disk, the drawn ones
+            // share the rest: the disk holds at least what a dominant moon
+            // of the asked moons' mass leaves (Titan asked of a Saturn
+            // whose drawn disk is lighter than it).
+            let asked_kg: f64 = asked_disk
+                .iter()
+                .map(|m| m.mass_earth * EARTH_MASS_KG)
+                .sum();
+            let disk_kg = (disk * m_g).max(asked_kg / DOMINANT_SHARE.1);
+            let rest_kg = disk_kg - asked_kg;
+            // Holding half the disk or more, the asked moons are its
+            // dominant one: the drawn ones share the rest as a chain.
+            let asked_dominant = asked_kg >= 0.5 * disk_kg;
+            let kind = if asked_dominant {
+                DiskShape::Dominant
+            } else {
+                kind
+            };
             shape = Some(kind);
             // A chain's moons share the disk unevenly.
             let weights: Vec<f64> = (0..count).map(|_| rng.uniform(0.3, 1.7)).collect();
@@ -1161,13 +1338,15 @@ impl MoonSystem {
             };
             // Triton's orbit, 12 to 16 radii out: the regular moons left
             // keep inside it (1.2 times closer at least).
-            let triton_radii = captured_triton.then(|| rng.uniform(12.0, 16.0));
+            let triton_radii = captured_triton
+                .then(|| rng.uniform(12.0, 16.0))
+                .map(|t| asked_captured.map_or(t, |m| m.a_radii));
             // The chain's orbits, out to the edge of the stable zone (with
             // room for the largest eccentricity a moon of it gets): the
             // moons beyond would not last.
             let mut slots: Vec<f64> = Vec::new();
             for k in 0..count {
-                let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
+                let a_radii = base * CHAIN_STEP.powi(k as i32) * rng.uniform(0.95, 1.05);
                 if a_radii * r_g * (1.0 + DOMINANT_MAX_ECCENTRICITY) >= PROGRADE_REACH * hill
                     || triton_radii.is_some_and(|t| asked.is_none() && a_radii * 1.2 > t)
                 {
@@ -1175,13 +1354,25 @@ impl MoonSystem {
                 }
                 slots.push(a_radii);
             }
+            // An asked moon takes the place on the chain nearest its
+            // orbit: the drawn orbits within half a step of it, or within
+            // `SPACING_HILL` of its mutual Hill radii, are left empty.
+            slots.retain(|&a| {
+                asked_disk.iter().all(|m| {
+                    let mutual =
+                        (m.mass_earth * EARTH_MASS_KG / (3.0 * m_g)).cbrt() * (a + m.a_radii) / 2.0;
+                    (a / m.a_radii).ln().abs() >= CHAIN_STEP.ln() / 2.0
+                        && (a - m.a_radii).abs() > SPACING_HILL * mutual
+                })
+            });
             let weights = &weights[..slots.len()];
             // A dominant moon sits in the chain's outer half (Titan, sixth
             // of Saturn's seven); alone, a moon holds the whole disk.
-            let dominant = (kind == DiskShape::Dominant && slots.len() > 1).then(|| {
-                let half = slots.len() / 2;
-                half + (rng.next() * (slots.len() - half) as f64) as usize
-            });
+            let dominant = (kind == DiskShape::Dominant && !asked_dominant && slots.len() > 1)
+                .then(|| {
+                    let half = slots.len() / 2;
+                    half + (rng.next() * (slots.len() - half) as f64) as usize
+                });
             let shares: Vec<f64> = match dominant {
                 Some(d) => {
                     let held = rng.uniform(DOMINANT_SHARE.0, DOMINANT_SHARE.1);
@@ -1205,7 +1396,7 @@ impl MoonSystem {
                 }
             };
             for (k, (&a_radii, share)) in slots.iter().zip(shares).enumerate() {
-                let mass = disk * m_g * share * if captured_triton { 0.02 } else { 1.0 };
+                let mass = rest_kg * share * if captured_triton { 0.02 } else { 1.0 };
                 let icy = a_radii > ice_line;
                 let bulk = if icy {
                     Bulk::cold(&mut rng)
@@ -1232,13 +1423,44 @@ impl MoonSystem {
                     eccentricity,
                 ));
             }
-            if captured_triton && asked.is_none() {
-                // Triton: 2.4 times its mass in a retrograde orbit at 14 radii.
+            // The asked ones, at their orbits pushed out of the rings and
+            // the Roche limit as the chain is, after the drawn ones.
+            for m in &asked_disk {
+                let a_radii = m.a_radii.max(floor / 0.95);
+                let mut moon = regular_moon(
+                    p,
+                    &mut rng,
+                    m_g,
+                    r_g,
+                    a_radii * r_g,
+                    m.mass_earth * EARTH_MASS_KG,
+                    Bulk::of(m.ice_fraction, 0.0),
+                    a_radii > ice_line,
+                    synchronous,
+                    MoonOrigin::Disk,
+                    0.3,
+                    m.eccentricity,
+                );
+                moon.archetype = Some(m.archetype.clone());
+                moons.push(moon);
+            }
+            if captured_triton && (asked.is_none() || asked_captured.is_some()) {
+                // Triton: 2.4 times its mass in a retrograde orbit at 14
+                // radii; one asked for replaces the draw (made all the
+                // same).
                 let a = triton_radii.unwrap_or(14.0) * r_g;
-                let mass = rng.uniform(1.5e-4, 3e-4) * m_g;
+                let mass = rng.uniform(CAPTURED_MASS_RATIO.0, CAPTURED_MASS_RATIO.1) * m_g;
                 let eccentricity = rng.uniform(0.0, 0.01);
                 let bulk = Bulk::kuiper(&mut rng);
-                let triton = regular_moon(
+                let (mass, eccentricity, bulk) = match asked_captured {
+                    Some(m) => (
+                        m.mass_earth * EARTH_MASS_KG,
+                        m.eccentricity,
+                        Bulk::of(m.ice_fraction, 0.0),
+                    ),
+                    None => (mass, eccentricity, bulk),
+                };
+                let mut triton = regular_moon(
                     p,
                     &mut rng,
                     m_g,
@@ -1253,8 +1475,9 @@ impl MoonSystem {
                     eccentricity,
                 );
                 // Within the retrograde stable zone (its eccentricity at
-                // most 0.01).
-                if a * 1.01 < RETROGRADE_REACH * hill {
+                // most 0.01); one asked for is there (see `carries`).
+                triton.archetype = asked_captured.map(|m| m.archetype.clone());
+                if asked_captured.is_some() || a * 1.01 < RETROGRADE_REACH * hill {
                     moons.push(triton);
                 }
             }
@@ -1284,7 +1507,9 @@ impl MoonSystem {
                     crate::spin::GIANT_K2,
                     crate::spin::GIANT_Q,
                 );
-                f64::from(m.mass_ratio) * m_g <= limit
+                // An asked moon stays: its host was placed where it
+                // lasts (see `carries`).
+                m.archetype.is_some() || f64::from(m.mass_ratio) * m_g <= limit
             });
             for m in &mut moons {
                 m.migration = Migration::Decaying;
@@ -1603,6 +1828,7 @@ pub fn small_body_params(
         moon: true,
         day_hours: None,
         liquid_poleward_deg: None,
+        asked_moons: Vec::new(),
         // G ρ (4/3 π r³) / r², as the moons' cards have it.
         gravity: Some(
             (G * 4.0 / 3.0
@@ -1741,6 +1967,7 @@ fn regular_moon(
         angular_diameter_deg: (2.0 * (radius / (a - r_g)).atan()).to_degrees() as f32,
         barycentre_km: (a * mass / (m_g + mass)) as f32,
         seed,
+        archetype: None,
     }
 }
 
@@ -1785,6 +2012,7 @@ mod tests {
             moon: false,
             day_hours: None,
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             gravity: None,
         }
     }
@@ -1899,6 +2127,7 @@ mod tests {
             angular_diameter_deg: 0.52,
             barycentre_km: 4670.0,
             seed: 0,
+            archetype: None,
         };
         let system = |moons: Vec<Moon>| MoonSystem {
             planet_day_hours: 24.0,
@@ -2630,6 +2859,122 @@ mod tests {
                 assert!(pair[1].semi_major_axis_km / pair[0].semi_major_axis_km > 1.2);
             }
         }
+    }
+
+    fn asked(name: &str) -> AskedMoon {
+        let a = crate::archetype::Archetype::load(name).unwrap();
+        AskedMoon::draw(
+            &a,
+            &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1),
+        )
+    }
+
+    #[test]
+    fn an_asked_moon_is_drawn_first_and_the_others_around_it() {
+        let titan = asked("titan-like");
+        for seed in 0..40 {
+            let mut p = gas_giant(seed, 95.0, 9.5);
+            p.asked_moons = vec![titan.clone()];
+            let system = MoonSystem::draw(&p).unwrap();
+            let ours: Vec<&Moon> = system
+                .moons
+                .iter()
+                .filter(|m| m.archetype.as_deref() == Some("titan-like"))
+                .collect();
+            assert_eq!(ours.len(), 1, "seed {seed}");
+            let m = ours[0];
+            let m_g = 95.0 * EARTH_MASS_KG;
+            assert!((f64::from(m.mass_ratio) * 95.0 / titan.mass_earth - 1.0).abs() < 1e-4);
+            assert!((f64::from(m.semi_major_axis_radii) / titan.a_radii - 1.0).abs() < 1e-4);
+            assert!((f64::from(m.bulk.ice) - titan.ice_fraction).abs() < 1e-6);
+            // It holds the disk: a dominant moon, the others light.
+            assert_eq!(system.disk_shape, Some(DiskShape::Dominant));
+            let rest: f64 = system
+                .moons
+                .iter()
+                .filter(|o| o.archetype.is_none())
+                .map(|o| f64::from(o.mass_ratio) * m_g)
+                .sum();
+            assert!(
+                rest < 0.1 * titan.mass_earth * EARTH_MASS_KG,
+                "seed {seed}: {rest}"
+            );
+            // No drawn moon within half a chain step of it.
+            for o in system.moons.iter().filter(|o| o.archetype.is_none()) {
+                let ratio = f64::from(o.semi_major_axis_radii) / titan.a_radii;
+                assert!(
+                    ratio.ln().abs() >= CHAIN_STEP.ln() / 2.0,
+                    "seed {seed}: {ratio}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_asked_moon_survives_a_despun_giant() {
+        // A Jupiter at 0.12 AU from the Sun, locked by its star, keeps
+        // only moons under 10²² kg: Io (8.9 × 10²² kg) asked is kept.
+        let io = asked("io-like");
+        let mut p = gas_giant(1, 318.0, 0.12);
+        p.asked_moons = vec![io];
+        let system = MoonSystem::draw(&p).unwrap();
+        assert!(
+            system
+                .moons
+                .iter()
+                .any(|m| m.archetype.as_deref() == Some("io-like"))
+        );
+    }
+
+    #[test]
+    fn an_asked_triton_replaces_the_captured_one() {
+        let triton = asked("triton-like");
+        for seed in 0..20 {
+            let mut p = gas_giant(seed, 17.0, 30.0);
+            p.look = crate::look::Look::load("ice-giant");
+            p.circumference_km = crate::giant_world::radius_earth(&p, 17.0) * 40_075.0;
+            p.asked_moons = vec![triton.clone()];
+            let system = MoonSystem::draw(&p).unwrap();
+            let captured: Vec<&Moon> = system
+                .moons
+                .iter()
+                .filter(|m| m.origin == MoonOrigin::Captured && m.inclination_deg > 90.0)
+                .collect();
+            assert_eq!(captured.len(), 1, "seed {seed}");
+            assert_eq!(captured[0].archetype.as_deref(), Some("triton-like"));
+        }
+    }
+
+    #[test]
+    fn a_giant_carries_what_its_draw_could_make() {
+        let sketch = |kind, lightest: f64, heaviest: f64, star: &str, orbit_au: f32| HostSketch {
+            kind,
+            mass_earth: lightest,
+            heaviest_earth: heaviest,
+            star: StarInfo::new(crate::star::parse_type(star).unwrap(), orbit_au, 0.05, 4.6),
+        };
+        let saturn = sketch(GiantKind::Gas, 86.0, 105.0, "G2V", 9.5);
+        let neptune = sketch(GiantKind::Ice, 15.5, 19.0, "G2V", 30.0);
+        let jupiter = sketch(GiantKind::Gas, 286.0, 350.0, "G2V", 5.2);
+        let titan = asked("titan-like");
+        assert!(carries(&saturn, std::slice::from_ref(&titan)));
+        // Over Neptune's disk budget; a Triton only on an ice giant.
+        assert!(!carries(&neptune, std::slice::from_ref(&titan)));
+        assert!(carries(&neptune, &[asked("triton-like")]));
+        assert!(!carries(&saturn, &[asked("triton-like")]));
+        // Two Titans overfill a Saturn's disk.
+        assert!(!carries(&saturn, &[titan.clone(), titan.clone()]));
+        // The four Galilean moons fit one Jupiter.
+        let galilean = ["io-like", "europa-like", "ganymede-like", "callisto-like"].map(asked);
+        assert!(carries(&jupiter, &galilean));
+        // Two moons on one orbit do not.
+        assert!(!carries(&jupiter, &[asked("io-like"), asked("io-like")]));
+        // A Ganymede inside a warm giant's ice line does not form icy.
+        let warm = sketch(GiantKind::Gas, 286.0, 350.0, "G2V", 1.5);
+        assert!(!carries(&warm, &[asked("ganymede-like")]));
+        // A Saturn round a late red dwarf has no room for a Titan.
+        let dwarf = sketch(GiantKind::Gas, 86.0, 105.0, "M9.5V", 0.17);
+        assert!(!carries(&dwarf, &[titan]));
     }
 
     #[test]

@@ -20,6 +20,17 @@ Two ways to ask for a system:
    mars-like: 1, jupiter-like: 2…`, or
    left to the draw), at most 15 planets (moons not counted). The engine
    orders them the way real systems are ordered and draws their moons.
+   A moon archetype (`titan-like`, `europa-like`, `ganymede-like`,
+   `callisto-like`, `io-like`, `triton-like`, `enceladus-like`) can be
+   asked in the same list: it rides a giant of its host's archetype asked
+   there that can carry it (its disk holds the moon, an icy moon orbits
+   beyond the disk's ice line, the orbit lies outside the Roche limit
+   and inside the stable part of the Hill sphere, and the giant keeps it
+   if its star despins it), or brings one, counted among the 15 planets;
+   a star with no room for that giant refuses the request
+   (`type_impossible`). The moon is drawn once in its archetype's ranges
+   and stored on its giant (`WorldParams::asked_moons`); the giant's
+   other moons are drawn around it.
 2. **A system around one planet.** A planet fully specified, as the form
    does today (planet type, size, sea level, star, orbit…). The engine
    places it at its orbit and draws the rest of the system around it: how

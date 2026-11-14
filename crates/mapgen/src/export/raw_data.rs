@@ -112,6 +112,14 @@ pub struct WorldMetadata {
     /// `WorldParams::liquid_poleward_deg`); left out otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub liquid_poleward_deg: Option<f32>,
+    /// The moons its system asked this giant to carry (see
+    /// `WorldParams::asked_moons`); left out otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<Vec<crate::moons::AskedMoon>>", optional)
+    )]
+    pub asked_moons: Vec<crate::moons::AskedMoon>,
     /// The inputs the planet formed with, as a request sets them
     /// ([`PlanetModel::formation`]): what a request pins to make the same
     /// planet under another seed or epoch. Left out with the model, and
@@ -637,6 +645,7 @@ pub(crate) fn write_raw_data(
         moon: world.params.moon,
         day_hours: world.params.day_hours,
         liquid_poleward_deg: world.params.liquid_poleward_deg,
+        asked_moons: world.params.asked_moons.clone(),
         formation: world
             .params
             .model
@@ -1117,6 +1126,7 @@ pub fn load_layers(world_dir: &Path) -> Result<LoadedWorld, String> {
         moon: meta.moon,
         day_hours: meta.day_hours,
         liquid_poleward_deg: meta.liquid_poleward_deg,
+        asked_moons: meta.asked_moons.clone(),
         // The gravity it was generated with, so its epochs and detail tiles
         // draw the craters it was drawn with.
         gravity: Some(meta.gravity_modifier),
@@ -1372,6 +1382,7 @@ mod tests {
             moon: false,
             day_hours: None,
             liquid_poleward_deg: None,
+            asked_moons: Vec::new(),
             gravity: None,
         })
         .world;
