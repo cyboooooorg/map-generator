@@ -125,6 +125,12 @@ and records their results. What the viewer draws from a seed today (a
 captured moon's spin, a moon's periapsis and node) moves into the
 generator and is stored, so the card, the CLI and the viewer agree.
 
+A round moon's size is its model's, not the one its planet's moon draw
+made: the system keeps it on the planet (`WorldParams::moon_sizes`:
+radius and gravity by moon seed), and `MoonSystem::draw` takes it, so the
+planet's `world.json` and the CLI list the radius, density, gravity and
+apparent size of the moon's body (its lock and migration stay as drawn).
+
 **Determinism.** A system is its request and its seed. Each body's seed
 is drawn from the system's seed and the body's id (`stream_seed`), and
 its parameters are fixed in the system file at creation, so a body
@@ -538,7 +544,9 @@ systems/<system-id>/
     facts, spin, surroundings, preview, `WorldParams`, and `generated`.
     A planet also stores `model`, its physical model (issue #423: what
     it is made of, its interior, heat, surface, air, climate, life and
-    class), derived once when the system is drawn from its orbit, the
+    class, and for a frozen body with a water layer its `ice_shell`:
+    the conductive shell's thickness `shell_km` and the liquid ocean left
+    beneath it `ocean_km`), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
