@@ -45,11 +45,19 @@ const BELT_PER_CROSSER: f64 = 1.2e6 / 981.0;
 /// Spread of the belt's eccentricities, as a Rayleigh law's σ: how far
 /// inside the belt its asteroids still cross an orbit. Calibration, no
 /// source: set so that a Mars-like world at 1.5 AU of a Sun-like star
-/// gets Hartmann's 2.6 times the Moon's flux.
-const BELT_ECCENTRICITY: f64 = 0.125;
+/// gets Hartmann's 2.6 times the Moon's flux under [`MOST_CROSSERS`].
+const BELT_ECCENTRICITY: f64 = 0.132;
 /// The asteroid belt of a star of luminosity `L` (Suns) lies just inside
 /// its ice line, at `2.7 √L` AU, as a system places it (`system.rs`).
 const BELT_AU: f64 = 2.7;
+/// Most crossers an orbit gets against the Moon's, as the ceiling of
+/// [`bounded`]. A planet near the belt clears it or is destabilised by it,
+/// so the belt's own asteroids never strike it as they strike each other;
+/// the Mars-crossers that remain give Mars about three times the Moon's
+/// flux (Le Feuvre & Wieczorek 2011, Table 3: 2.76 averaged, 3.20 today).
+/// Calibration, no source: 6, about twice what Mars gets, keeps Mars's 2.6
+/// reachable and no orbit's flux above a few times Mars's.
+const MOST_CROSSERS: f64 = 6.0;
 
 /// Escape speed, km/s, of a body of surface gravity `g` (m/s²) and
 /// radius `radius_km`: `√(2 g R)`.
@@ -78,6 +86,14 @@ fn encounter_km_s(star_mass: f64, orbit_au: f64) -> f64 {
 fn crossers(x: f64) -> f64 {
     let e = 1.0 - x;
     1.0 + BELT_PER_CROSSER * (-e * e / (2.0 * BELT_ECCENTRICITY * BELT_ECCENTRICITY)).exp()
+}
+
+/// The crossers `s` (against the Moon's) bounded smoothly by
+/// [`MOST_CROSSERS`]: `s (1 + S) / (s + S)` with `S` = ceiling − 1, 1 at
+/// the Moon's orbit and rising to the ceiling, never above it.
+fn bounded(s: f64) -> f64 {
+    let span = MOST_CROSSERS - 1.0;
+    s * (1.0 + span) / (s + span)
 }
 
 /// The impactors of the world's system against the Solar System's: its
@@ -119,7 +135,8 @@ pub fn rates(p: &WorldParams) -> ImpactRates {
     let moon_inf = encounter_km_s(1.0, 1.0);
     let moon_esc = escape_km_s(crate::craters::MOON_GRAVITY, MOON_RADIUS_KM);
 
-    let supply = crossers(orbit_au / (BELT_AU * luminosity.sqrt())) / crossers(1.0 / BELT_AU);
+    let supply =
+        bounded(crossers(orbit_au / (BELT_AU * luminosity.sqrt())) / crossers(1.0 / BELT_AU));
     let speed = v_inf / moon_inf;
     let focusing = (1.0 + (v_esc / v_inf).powi(2)) / (1.0 + (moon_esc / moon_inf).powi(2));
     let flux = impactors * supply * speed * focusing;
@@ -187,6 +204,31 @@ mod tests {
                 r.crater_scale
             );
         }
+    }
+
+    #[test]
+    fn no_orbit_gets_more_than_a_few_times_marss_flux() {
+        // Swept from 0.3 to 3 AU around a G2V star among the Solar
+        // System's impactors: the crossers never pass their ceiling, and
+        // the flux, speed and focusing included, stays within 3.5 times
+        // Mars's 2.6, finite and above zero.
+        for name in ["mars-like", "earth-like"] {
+            let mut p = solar(name);
+            p.star = crate::star::parse_type("G2V").unwrap();
+            for k in 0..=270 {
+                p.orbit_au = 0.3 + 0.01 * k as f32;
+                let flux = rates(&p).flux;
+                assert!(
+                    flux.is_finite() && flux > 0.0 && flux < 3.5 * 2.6,
+                    "{name} at {} AU: {flux}",
+                    p.orbit_au
+                );
+            }
+        }
+        for s in [1.0, 10.0, 1e3, 1e9] {
+            assert!(bounded(s) <= MOST_CROSSERS, "{s}");
+        }
+        assert!((bounded(1.0) - 1.0).abs() < 1e-12);
     }
 
     #[test]

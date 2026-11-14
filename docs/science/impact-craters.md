@@ -391,8 +391,14 @@ $$\frac{\phi}{\phi_m} = I \cdot \frac{n(a)}{n(1\,\mathrm{AU})} \cdot
   where their eccentricity reaches the orbit,
   $n = 1 + N \exp(-(1 - a/a_{belt})^2 / 2\sigma^2)$. $N$ = 1223 is the main
   belt's (1.2 ± 0.5) × 10⁶ asteroids of 1 km or more (Tedesco & Désert
-  2002) over the 981 ± 19 near-Earth ones (Mainzer et al. 2011). The spread
-  $\sigma$ = 0.125 is a calibration with no source, set on Mars's 2.6.
+  2002) over the 981 ± 19 near-Earth ones (Mainzer et al. 2011). Against
+  the Moon's, $s = n(a)/n(1\,\mathrm{AU})$ is bounded smoothly by a ceiling
+  $C$ = 6, $s\,C / (s + C - 1)$: a planet near the belt clears it or is
+  destabilised by it, and the Mars-crossers that remain give Mars about
+  three times the Moon's flux (Le Feuvre & Wieczorek: 2.76 averaged, 3.20
+  today). The spread $\sigma$ = 0.132 and the ceiling are calibrations with
+  no source: $\sigma$ is set on Mars's 2.6, the ceiling at about twice
+  what Mars gets, so that no orbit's flux exceeds a few times Mars's.
 - The crater of the same impactor follows π-scaling in the gravity regime
   (Holsapple 1993), with $\mu$ = 0.55 for wet and rocky targets (0.4 for dry
   sands and soils) and the impact speed $v = \sqrt{v_\infty^2 + v_{esc}^2}$.
@@ -401,23 +407,26 @@ Among the Solar System's impactors ($I$ = 1), the archetypes get:
 
 | World | Flux (rule) | Target | Crater size (rule) | Target |
 |---|---|---|---|---|
-| `mercury-like` | 1.62 | 1.82 | 1.03 | 1.18 |
-| `venus-like` | 1.47 | 1.75 | 0.78 | 0.78 |
-| `earth-like` | 1.42 | 1.58 | 0.73 | 0.69 |
-| `mars-like` | 2.53 | 2.6 | 0.78 | 0.751 |
+| `mercury-like` | 1.61 | 1.82 | 1.03 | 1.18 |
+| `venus-like` | 1.46 | 1.75 | 0.78 | 0.78 |
+| `earth-like` | 1.41 | 1.58 | 0.73 | 0.69 |
+| `mars-like` | 2.57 | 2.6 | 0.78 | 0.751 |
 
 Mars's targets are Hartmann's isochron page (2.6 for asteroid impactors;
 Mars's craters against the Moon's for the same impactor, 0.865 × 0.868 =
 0.751); with them its craters of 1.4 to 64 km are 10^0.191 = 1.55 times the
-Moon's at equal age, and the rule gives 1.63. The others are Le Feuvre &
+Moon's at equal age, and the rule gives 1.66. The others are Le Feuvre &
 Wieczorek (2011, Table 3): impact rates of 1.82, 1.75 and 1.58 times the
 Moon's, and the crater sizes their impact speeds (2.16, 1.28, 1.04 times the
 Moon's) and gravities (2.2, 5.3, 5.9) give through the same π-scaling. Where
 the two disagree (Mars: 2.76 times the Moon's flux at 0.53 times its speed,
 a crater 0.64 times as wide), Hartmann's values are kept, as before. The
 tests hold each value within 20 %. A world closer to the belt than Mars
-gets many more impactors (about 25 times the Moon's flux at 1.8 AU,
-several hundred times within the belt), as the asteroids of the belt do.
+gets more impactors, up to the ceiling: from 0.3 to 3 AU around a Sun-like
+star, a Mars-sized world peaks at 4.7 times the Moon's flux (near 2 AU), an
+Earth-sized one, which focuses more, at 7.9 (at 3 AU). Since the flux is
+bounded, so is the population of future craters, which has no saturation
+cap.
 
 **Epochs.** [`epoch.rs`](../../crates/mapgen/src/epoch.rs) shows the
 surface at another time $t$. The generation keeps the elevation without the
@@ -451,7 +460,9 @@ more are flooded flat at a date of that window and darkened.
 - **The flux from the orbit is a sketch.** The chronology is the Moon's,
   scaled by a flux and a crater size drawn from the orbit. The asteroids'
   supply is one belt at $2.7\sqrt{L}$ AU whose crossers spread as a
-  Rayleigh law of eccentricity, its spread calibrated on Mars, not the
+  Rayleigh law of eccentricity, its spread calibrated on Mars and bounded
+  by a calibrated ceiling of six times the Moon's crossers (no source gives
+  the impact rate of a planet between Mars and the belt), not the
   drawn belts nor the resonances that feed near-Earth asteroids; comets
   only enter through the system's impact factor. The encounter speed
   scales as the orbital speed, which puts Mars's impacts at 14.9 km/s
