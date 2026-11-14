@@ -293,9 +293,60 @@ fn water_boils_k(pressure_bar: f64) -> f64 {
     }
 }
 
-/// Triple point of methane, K: the coldest liquid hydrocarbon surface
-/// (NIST Chemistry WebBook, 90.69 K; from memory, not checked).
-const METHANE_TRIPLE_K: f64 = 90.7;
+/// Triple point of methane, K: where pure methane freezes (NIST
+/// Chemistry WebBook, 90.67 ± 0.03 K, average of 25 values).
+const METHANE_TRIPLE_K: f64 = 90.67;
+
+/// Enthalpy of fusion of methane over the gas constant, K: 0.9392 kJ/mol
+/// at 90.67 K (Vogt & Pitzer 1976, as the NIST Chemistry WebBook gives
+/// it) over 8.314 J/(mol·K).
+const METHANE_FUSION_L_OVER_R: f64 = 939.2 / 8.314;
+
+/// Vapour pressure of nitrogen, bar, at `temperature_k`: the Antoine
+/// equation `log10 p = A − B / (T + C)` with the NIST Chemistry WebBook's
+/// coefficients from Edejer & Thodos 1967 (A 3.7362, B 264.651,
+/// C −6.788), fitted from 63.14 to 126 K.
+fn nitrogen_vapour_bar(temperature_k: f64) -> f64 {
+    10f64.powf(3.7362 - 264.651 / (temperature_k - 6.788))
+}
+
+/// Share of nitrogen dissolved in a methane liquid under nitrogen, as a
+/// share of what Raoult's law gives (`p_N₂ / p_sat,N₂(T)`): Thompson,
+/// Zollweg & Gabis 1992 (doi:10.1016/0019-1035(92)90127-S) find from
+/// their N₂ + CH₄ vapour–liquid equilibrium model that "the N₂ content of
+/// condensate is ∼1/2 of that computed from Raoult's law", 16 to 30 % of
+/// Titan's cloud droplets.
+const NITROGEN_RAOULT_SHARE: f64 = 0.5;
+
+/// Most nitrogen in the methane liquid, mole fraction: the top of the
+/// 16 to 30 % Thompson, Zollweg & Gabis 1992 find in Titan's cloud
+/// droplets; beyond it the rule below is not checked.
+const MAX_NITROGEN_IN_LIQUID: f64 = 0.3;
+
+/// The temperature, K, under which the surface liquid of a body whose air
+/// holds `n2_bar` of nitrogen freezes: the methane liquidus lowered by the
+/// nitrogen dissolved in it; pure methane's triple point without
+/// nitrogen.
+///
+/// A simple fit, labelled so. The liquid's nitrogen mole fraction `x` is
+/// half of Raoult's law at the surface's N₂ partial pressure and pure
+/// methane's triple point ([`NITROGEN_RAOULT_SHARE`], Thompson, Zollweg &
+/// Gabis 1992), at most [`MAX_NITROGEN_IN_LIQUID`]; the methane liquidus
+/// is an ideal solution's (the Schröder–van Laar equation,
+/// `ln(1 − x) = −(L_fus / R)(1/T − 1/T_m)`, with methane's enthalpy of
+/// fusion). Titan's 1.45 bar of N₂ gives `x` = 0.19 and a liquid down to
+/// 77.6 K (its surface: 93.7 K); the cap stops the fall at 70.4 K.
+/// Richardson, Hartwig & Leachman 2019
+/// (doi:10.1016/j.ijthermalsci.2018.12.024) measured liquid
+/// methane–ethane–nitrogen mixtures freezing at 71.5 K (13.4 % N₂, 0.29
+/// bar) and 74.0 K (7.9 % N₂, 0.52 bar), "more than 15 K below" pure
+/// methane's triple point; for those nitrogen shares this binary rule,
+/// without the ethane, gives 81.3 and 85.0 K: it errs towards freezing.
+pub fn methane_freezes_k(n2_bar: f64) -> f64 {
+    let x = (NITROGEN_RAOULT_SHARE * n2_bar.max(0.0) / nitrogen_vapour_bar(METHANE_TRIPLE_K))
+        .min(MAX_NITROGEN_IN_LIQUID);
+    1.0 / (1.0 / METHANE_TRIPLE_K - (1.0 - x).ln() / METHANE_FUSION_L_OVER_R)
+}
 
 /// Normal boiling point of ethane, K, at 1 atm (NIST Chemistry WebBook,
 /// 184.6 K; from memory, not checked).
@@ -339,8 +390,10 @@ pub const LAVA_K: f64 = 1400.0;
 /// doi:10.1038/nature12163, for the steam over a magma ocean; not
 /// checked); water between the melting of ice and its boiling point at
 /// the surface pressure, above its triple point pressure, when water is
-/// kept out of a runaway; hydrocarbons between methane's triple point and
-/// ethane's boiling point, with methane in the air; none otherwise.
+/// kept out of a runaway; hydrocarbons between the freezing point of
+/// methane with the nitrogen of the air dissolved in it
+/// ([`methane_freezes_k`]) and ethane's boiling point, with methane in
+/// the air; none otherwise.
 fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
     let pressure = gases.total();
     let water_on_top = water.kept_kg > 0.0;
@@ -354,7 +407,7 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
     {
         SurfaceLiquid::Water
     } else if gases.ch4 > 0.0
-        && temperature_k >= METHANE_TRIPLE_K
+        && temperature_k >= methane_freezes_k(gases.n2)
         && temperature_k < ethane_boils_k(pressure)
     {
         SurfaceLiquid::Hydrocarbons
@@ -582,6 +635,35 @@ mod tests {
             "{titan:?} {g:?}"
         );
         assert_eq!(titan.liquid, SurfaceLiquid::Hydrocarbons, "{titan:?}");
+    }
+
+    #[test]
+    fn nitrogen_keeps_methane_liquid_below_its_triple_point() {
+        // No nitrogen: pure methane.
+        assert_eq!(methane_freezes_k(0.0), METHANE_TRIPLE_K);
+        // Titan's 1.45 bar of N₂: about a fifth of the liquid, down to
+        // about 78 K.
+        let titan = methane_freezes_k(1.45);
+        assert!((76.0..80.0).contains(&titan), "{titan}");
+        // More nitrogen, colder liquid, down to the cap.
+        assert!(methane_freezes_k(0.5) > titan);
+        assert!(methane_freezes_k(10.0) < titan);
+        assert!((methane_freezes_k(100.0) - 70.4).abs() < 0.2);
+        // A Titan at 89 K under 1 bar of N₂ keeps its lakes.
+        let gases = Gases {
+            n2: 1.0,
+            ch4: 0.03,
+            ..Gases::default()
+        };
+        let dry = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        assert_eq!(liquid(89.0, &gases, &dry), SurfaceLiquid::Hydrocarbons);
+        let thin = Gases { n2: 0.0, ..gases };
+        assert_eq!(liquid(89.0, &thin, &dry), SurfaceLiquid::None);
     }
 
     #[test]

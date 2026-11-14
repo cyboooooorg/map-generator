@@ -1,0 +1,27 @@
+name = "ganymede-like"
+description = "Ganymede-like: the largest icy moon of a Jupiter, airless"
+
+[locales.fr]
+name = "Ganymédienne"
+description = "La plus grande lune glacée d'une Jupiter, sans air"
+
+# Ganymede: 1.4819e23 kg = 0.0248 Earth masses (NASA Jovian satellite
+# fact sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), ±10 %.
+[inputs]
+mass_earth = [0.022, 0.027]
+
+[moon]
+# Grown in Jupiter's disk.
+host = "jupiter-like"
+origin = "disk"
+# Semi-major axis 1 070 400 km over Jupiter's equatorial radius 71 492 km:
+# 15.0 radii (JPL mean orbital elements; NASA Jupiter fact sheet).
+semi_major_axis_radii = [14.0, 16.0]
+# 0.0013, forced by the Laplace resonance (JPL mean orbital elements).
+eccentricity = [0.001, 0.002]
+# Water and ices about half its mass: its 1.94 g/cm³ and moment of
+# inertia 0.311 (Schubert, Anderson, Spohn & McKinnon 2004, Interior
+# composition, structure and dynamics of the Galilean satellites, in
+# Jupiter: the planet, satellites and magnetosphere, Cambridge UP).
+ice_fraction = [0.40, 0.50]

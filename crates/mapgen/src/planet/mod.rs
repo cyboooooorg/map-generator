@@ -22,6 +22,8 @@
 //! [`climate::climate`] sets its surface temperature through a grey
 //! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
 //! its surface.
+//! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
+//! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
 //! [`life::oxygenate`] gives the air its oxygen.
 //! [`classify::classify`] reads its [`PlanetClass`], including the surface
@@ -47,11 +49,13 @@ pub mod climate;
 pub mod core;
 pub mod escape;
 pub mod heat;
+pub mod ice_shell;
 pub mod inputs;
 pub mod interim;
 pub mod interior;
 pub mod life;
 pub mod mass;
+pub mod moon;
 pub mod reference;
 pub mod regime;
 pub mod xuv;
@@ -61,14 +65,16 @@ pub use atmosphere::{
     photochemistry,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
-pub use climate::{Climate, SurfaceLiquid, climate, surface_temperature_k};
+pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
-pub use inputs::{Context, InputOverrides, draw_inputs, draw_inputs_with};
+pub use ice_shell::{IceShell, ice_shell};
+pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_with};
 pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
 pub use life::{Life, life, oxygenate};
 pub use mass::{Origin, SMALL_MASS, draw_mass};
+pub use moon::{MoonBirth, MoonFormation, derive_moon_model};
 pub use reference::{ReferenceBody, SOLAR_BODIES, reference};
 pub use regime::{HEAT_PIPE_FLUX_W_M2, OCEAN_KG, Water, regime, steam, water};
 pub use xuv::{EARTH_XUV_FLUENCE_J_M2, xuv_fluence};
@@ -172,6 +178,11 @@ pub struct PlanetModel {
     /// (at least [`escape::MIN_ENVELOPE`] of the mass), which hides it.
     pub surface: Option<Surface>,
     pub class: PlanetClass,
+    /// The ice shell over its water layer and the ocean beneath
+    /// ([`ice_shell::ice_shell`]); `None` without water or a frozen
+    /// surface.
+    #[serde(default)]
+    pub ice_shell: Option<IceShell>,
 }
 
 /// The inputs a planet formed with, as a request sets them: what
@@ -257,6 +268,7 @@ impl PlanetModel {
                 envelope_fraction: Some(envelope),
                 co2: Some(factor(i.volatiles.co2, rule.co2)),
                 n2: Some(factor(i.volatiles.n2, rule.n2)),
+                ch4: None,
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
             },
@@ -300,13 +312,16 @@ const AU_M: f64 = 1.495_978_707e11;
 /// ([`xuv_fluence`]) and the envelope that [`envelope_after_escape`] leaves
 /// it, from which the interior is derived again; its radiogenic heat from its
 /// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
-/// the system's age; its tidal heat from the star at its orbit, with the
+/// the system's age; its tidal heat from the host of `context.tide` on
+/// the body's orbit around it (a moon's planet), else from the star at its
+/// orbit, with the
 /// [`heat::k2_over_q`] of its envelope and water shares (a giant's is
 /// over a thousand times smaller than a rock's); then its [`classify`]
 /// class, which feeds back into none of them. A body that keeps an
 /// envelope of [`escape::MIN_ENVELOPE`] or more has no surface; any other
 /// goes on to its [`water`] and [`regime`], its [`core`], its air
-/// ([`outgassed`], [`atmosphere`], [`methane_photolysis`], [`cold_trap`],
+/// ([`outgassed`], [`atmosphere`] (a giant's moon unshielded by its own
+/// dynamo, see `shield`), [`methane_photolysis`], [`cold_trap`],
 /// [`photochemistry`], in that order: the photochemistry reads the cold
 /// trap's air), its
 /// [`climate`] and its [`life`] with the oxygen it makes. A body whose
@@ -316,9 +331,35 @@ const AU_M: f64 = 1.495_978_707e11;
 /// if its steam holds the surface past the critical point too
 /// ([`climate::past_critical`]). In a runaway the water kept is what the
 /// escape of [`atmosphere`] leaves of the steam in the air, so the
-/// [`Water`] and the air's H₂O agree.
+/// [`Water`] and the air's H₂O agree. Last, its [`ice_shell`] from its
+/// water layer, its internal heat and its surface's climate.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
+}
+
+/// The core whose field shields a body's air from escape: its own, unless
+/// it is a moon of a giant (a host of [`GIANT_MIN_MASS_EARTH`] or more,
+/// `context.tide`), which orbits inside its giant's magnetosphere: the
+/// giant's corotating plasma reaches its upper atmosphere and sputters it
+/// whatever its own dynamo (Io, Europa and Ganymede inside Jupiter's,
+/// Titan at the edge of Saturn's; Kivelson et al. 2004, "Magnetospheric
+/// interactions with satellites", in *Jupiter: The Planet, Satellites
+/// and Magnetosphere*, ch. 21, not checked), so it meets the unshielded
+/// escape of [`atmosphere`]. Calibration, no source, for taking every
+/// giant's magnetosphere as enclosing its moons, and for the giant mass:
+/// it keeps Jupiter's moons airless (Io, to which the core model gives a
+/// dynamo it does not have, would keep about 0.01 bar of N₂) and leaves
+/// the Moon, whose host is the Earth, as a planet.
+fn shield(context: &Context, core: Core) -> Core {
+    let giant_kg = GIANT_MIN_MASS_EARTH * EARTH_KG;
+    if context.tide.is_some_and(|t| t.host_kg >= giant_kg) {
+        Core {
+            dynamo: false,
+            ..core
+        }
+    } else {
+        core
+    }
 }
 
 /// [`planet_model`] and the air it had before the climate (see [`Air`]).
@@ -339,13 +380,18 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         * (1.0 - inputs.water_fraction - inputs.envelope_fraction)
         * (1.0 - inputs.core_mass_fraction)
         * EARTH_KG;
+    let tide = context.tide.unwrap_or(HostTide {
+        host_kg: context.star_mass * SUN_KG,
+        a_m: context.orbit_au * AU_M,
+        eccentricity: context.eccentricity,
+    });
     let heat = InternalHeat {
         radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
         tidal_w: tidal_power_w(
-            context.star_mass * SUN_KG,
+            tide.host_kg,
             interior.radius_earth * EARTH_M,
-            context.orbit_au * AU_M,
-            context.eccentricity,
+            tide.a_m,
+            tide.eccentricity,
             k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
         ),
     };
@@ -358,7 +404,13 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
             let r = regime(&inputs, &heat, &interior, &w);
             let k = core(&inputs, &interior, r, context.age_gyr);
             let out = outgassed(&inputs, &w, r, &interior);
-            let atm = atmosphere(out, &interior, inputs.mass_earth, &k, fluence);
+            let atm = atmosphere(
+                out,
+                &interior,
+                inputs.mass_earth,
+                &shield(context, k),
+                fluence,
+            );
             // A runaway's water is the steam escape has left in its air.
             let w = if w.runaway {
                 w.keeping(atm.h2o / bar_per_kg)
@@ -407,6 +459,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         Some(surface)
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
+    let ice_shell = ice_shell(&interior, &heat, surface.as_ref());
     let model = PlanetModel {
         drawn_mass_earth,
         inputs,
@@ -416,6 +469,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         envelope_lost,
         surface,
         class,
+        ice_shell,
     };
     (model, air)
 }
@@ -455,7 +509,8 @@ pub fn derive_model_with(
 /// The model a stored system holds for `body`: the one [`derive_model`]
 /// gave its planet when the system was drawn, or the one the resolution of
 /// its request gave the world a system was drawn around (a giant's moon
-/// among them); `None` for any other moon (part 4).
+/// among them), or the one [`moon::derive_moon_model`] gave a round moon;
+/// `None` for a moon too small to be round.
 pub fn body_model(_system: &System, body: &Body) -> Option<PlanetModel> {
     body.model.clone()
 }
@@ -561,11 +616,112 @@ mod tests {
         assert_eq!(model.heat.tidal_w, io);
     }
 
+    /// Mass of Jupiter, kg (NASA fact sheet).
+    const JUPITER_KG: f64 = 1.898e27;
+
+    /// The context of a moon of Jupiter on an orbit of semi-major axis
+    /// `a_m` and eccentricity `eccentricity`, Jupiter at 5.2 AU of the Sun.
+    fn round_jupiter(a_m: f64, eccentricity: f64) -> Context {
+        reference::sun_at(5.2).with_tide(HostTide {
+            host_kg: JUPITER_KG,
+            a_m,
+            eccentricity,
+        })
+    }
+
+    /// The model of the reference body `name` round Jupiter.
+    fn moon(name: &str, a_m: f64, eccentricity: f64) -> PlanetModel {
+        let inputs = reference::model_inputs(reference(name));
+        planet_model(&round_jupiter(a_m, eccentricity), inputs)
+    }
+
     #[test]
-    fn moons_have_no_model_yet() {
+    fn a_giants_moon_is_unshielded_and_the_moon_is_not() {
+        let core = Core {
+            state: CoreState::Liquid,
+            dynamo: true,
+            field_ut: 1.0,
+        };
+        let around = |host_kg: f64| {
+            reference::sun_at(5.2).with_tide(HostTide {
+                host_kg,
+                a_m: 4.217e8,
+                eccentricity: 0.0041,
+            })
+        };
+        assert!(!shield(&around(JUPITER_KG), core).dynamo);
+        assert_eq!(shield(&around(5.972e24), core), core);
+        assert_eq!(shield(&reference::sun_at(1.0), core), core);
+    }
+
+    #[test]
+    fn io_heats_by_its_host_giant() {
+        // Io: about 1e14 W observed (Lainey et al. 2009); the Sun's tides
+        // at 5.2 AU on a circular orbit give it none.
+        let io = moon("Io", 4.217e8, 0.0041);
+        assert!(
+            (3e13..3e14).contains(&io.heat.tidal_w),
+            "{}",
+            io.heat.tidal_w
+        );
+    }
+
+    #[test]
+    fn europa_has_a_thin_shell_over_an_ocean() {
+        let europa = moon("Europa", 6.709e8, 0.009);
+        let shell = europa.ice_shell.expect("Europa has an ice shell");
+        assert!((5.0..40.0).contains(&shell.shell_km), "{shell:?}");
+        assert!(shell.ocean_km > 0.0, "{shell:?}");
+    }
+
+    #[test]
+    fn callisto_shell_is_thick() {
+        let callisto = moon("Callisto", 1.883e9, 0.0074);
+        let shell = callisto.ice_shell.expect("Callisto has an ice shell");
+        assert!(shell.shell_km > 100.0, "{shell:?}");
+    }
+
+    #[test]
+    fn earth_has_no_ice_shell() {
+        let earth = planet_model(
+            &reference::sun_at(1.0),
+            reference::model_inputs(reference("Earth")),
+        );
+        assert_eq!(earth.ice_shell, None);
+    }
+
+    #[test]
+    fn a_planet_without_host_tide_is_unchanged() {
+        // `Context::of` leaves the tide to the star: the same model as
+        // with the star given as the host, on the planet's own orbit.
+        let context = sun_at(0.05, 0.2);
+        assert_eq!(context.tide, None);
+        let inputs = reference::model_inputs(reference("Earth"));
+        let model = planet_model(&context, inputs.clone());
+        let star_as_host = context.with_tide(HostTide {
+            host_kg: context.star_mass * SUN_KG,
+            a_m: context.orbit_au * AU_M,
+            eccentricity: context.eccentricity,
+        });
+        assert_eq!(planet_model(&star_as_host, inputs), model);
+        assert!(model.heat.tidal_w > 0.0);
+        // Earth at its own orbit keeps the climate the climate tests pin.
+        let earth = planet_model(
+            &reference::sun_at(1.0),
+            reference::model_inputs(reference("Earth")),
+        );
+        let climate = earth.surface.expect("Earth has a surface").climate;
+        assert!((282.0..=294.0).contains(&climate.temperature_k));
+        assert_eq!(climate.liquid, SurfaceLiquid::Water);
+        assert_eq!(earth.heat.tidal_w, 0.0);
+    }
+
+    #[test]
+    fn only_round_moons_have_a_model() {
         let system = drawn();
         for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
-            assert_eq!(body_model(&system, body), None, "{}", body.id);
+            let small = ["rocky-moon", "icy-moon"].contains(&body.body_type.as_str());
+            assert_eq!(body_model(&system, body).is_none(), small, "{}", body.id);
         }
     }
 }

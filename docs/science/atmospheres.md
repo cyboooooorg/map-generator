@@ -300,6 +300,54 @@ pressure: `0.03 + 0.02 log10(1 + p)` of the radius, and a gas depth that
 goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 ([`sky.ts`](../../web/src/lib/sky.ts)).
 
+The haze's own depth at the zenith is twice its density (0 to 1) up to
+0.5, the density of every look but one: Earth's 0.1, Venus's 0.3, a
+volcanic world's 0.45. Past 0.5 a haze thickens towards an opaque one,
+a depth of 8 at 1 (`hazeDepth`), and scatters more and more evenly
+(its anisotropy falls to 0): only a methane haze gets there.
+
+#### Titan's orange haze
+
+An air of more than 0.5 bar with more than 1 % methane gets a methane
+haze (`planet::interim::sky_of`, `METHANE_HAZE`): the organics sunlight
+makes from the methane high in the air (tholins). Seen from space, Titan
+in true colour is an even orange-brown disc: the haze hides the surface
+in visible light, and only a thin bluish layer shows at the limb (Porco
+et al. 2005 [19]). The Huygens probe measured a haze optical depth of
+several in the visible (Tomasko et al. 2005 [20]), absorbing blue most
+(Tomasko et al. 2008 [21]). The app's methane haze has a density of 0.9,
+a zenith depth of about 6.6 (the ground seen straight down through about
+0.1 % of its light) and scatters 95 % of the red, 55 % of the green and
+15 % of the blue it intercepts, the rest absorbed. A single scattering
+leaves so thick a haze a dull brown, so the viewer counts the light it
+scatters many times: of what each scattering keeps, a share `w` scatters
+again, and a channel returns `a / (1 − w a)` of its single-scattering
+share `a` (`hazeAlbedo`, `w` rising from 0 at a density of 0.5 to 0.55 at
+1), which brightens and saturates the orange. Its density, colour, the
+depth it maps to and that share are calibrations with Cassini's
+true-colour images of Titan as their target.
+
+Close in, the viewer thins a haze that hides the ground over the ground
+(`hazeVeil`), so the surface can be looked at: from 1.5 radii up and
+beyond (the default whole-disc view is 2.2 radii up) the disc is the
+haze's, opaque; the depth over the ground then falls on a straight line
+in log(depth) against log(altitude), so the ground starts to show about
+0.6 radii up (10 to 22 % of its light for hazes of 0.7 to 1), reads
+clearly at 0.2 radii (a depth of 0.5, 61 %) and is seen through a depth
+of 0.25 at 0.05 radii and below (78 %). These altitudes and depths are a
+calibration with no source.
+The limb keeps its whole haze. This is a viewer convention, standing in
+for the near-infrared windows through which Cassini mapped Titan's
+surface (ISS at 938 nm, VIMS at 5 µm); a thinner haze (Earth, Mars,
+Venus) is never thinned.
+
+The liquid of a hydrocarbon world renders as dark seas and lakes of
+methane and ethane (the `HydrocarbonSea` and `HydrocarbonLake` biomes),
+never as the frozen water its `frozen` base look would make of them:
+Titan's lakes and seas are the darkest surfaces of its radar and
+near-infrared maps (Stofan et al. 2007 [22]; Brown et al. 2008 [23]).
+Their near-black brown is a calibration with those maps as its target.
+
 ### Where it departs from the science
 
 - **The pressure does not follow from the world.** The app draws it from
@@ -314,7 +362,57 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 - **Moons are airless.** Every moon drawn round a planet gets the
   `rocky-moon` or `icy-moon` preset, at 0 bar. Titan, a moon with more air
   than Earth, cannot appear as one; only a world asked for as a giant's moon
-  keeps its own type's air.
+  keeps its own type's air. The physical planet model can now derive a
+  round moon (`planet::derive_moon_model`, see
+  [planet-atmospheres.md](planet-atmospheres.md)): a Titan comes out a
+  hydrocarbon world with about 1.5 bar of N₂ and a few percent of CH₄,
+  Jupiter's moons airless and Triton with a thin N₂ air; round moons of
+  drawn systems go through it (part 4 of #423).
+- **Hydrocarbon lakes sit poleward of a set latitude.** On a world whose
+  surface liquid is methane and ethane, such as a Titan, the app puts the
+  liquid poleward of 55° and keeps the lower latitudes dry
+  (`POLAR_LIQUID_LAT_DEG`, `WorldParams::liquid_poleward_deg`): the sea
+  level is found over that band, so the liquid still covers about 1 % of
+  the surface, and no lake, river mouth or sea forms nearer the equator.
+  Titan's lakes lie almost all (about 97 % of their area) north of 55° N,
+  its low latitudes being dune fields (Hayes 2016 [10]; Lorenz et al. 2006 [11]),
+  because its circulation carries methane poleward (Mitchell 2008 [12];
+  Schneider et al. 2012 [13]). The latitude is a calibration with Titan as its
+  target, applied to every hydrocarbon world; the app does not derive it
+  from the world's circulation, and does not model the north-south
+  asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
+  band is a straight line of latitude.
+- **Nitrogen keeps methane liquid, by a simple rule.** Pure methane
+  freezes at 90.67 K, but a sea under a nitrogen air is a mixture: N₂
+  dissolves in liquid methane, and the mixture freezes lower. Thompson,
+  Zollweg & Gabis 1992 [15] find that methane condensing under Titan's air
+  holds 16 to 30 % N₂, about half of what Raoult's law gives, and
+  Richardson, Hartwig & Leachman 2019 [16] measured methane–ethane–nitrogen
+  liquids freezing at 71.5 K (13.4 % N₂) and 74.0 K (7.9 % N₂), more than
+  15 K below the pure ices. The app (`methane_freezes_k`) takes the N₂ in
+  the liquid as half of Raoult's law at the surface's N₂ partial pressure
+  and methane's triple point (nitrogen's vapour pressure from NIST's
+  Antoine fit), at most 30 %, and lowers the freezing point as an ideal
+  solution would (the Schröder–van Laar equation, with methane's enthalpy
+  of fusion, 0.939 kJ/mol): about 78 K under Titan's 1.45 bar of N₂,
+  pure methane's 90.67 K with no nitrogen, never below 70.4 K. It is a
+  simple fit, not the full phase diagram: it leaves the ethane out, which
+  lowers the freezing point further (the binary rule gives 81 and 85 K for
+  Richardson's two liquids), so it errs towards freezing. Liquid methane
+  is stable under any air above its triple-point pressure (0.1169 bar,
+  NIST), from which `planet::classify` names a hydrocarbon world.
+- **Titan's methane is an archetype's cause.** The model draws the methane
+  a body's ices carry as 1 % of them times a log-normal scatter, which can
+  leave a Titan too little to outlast its star's Lyman α. Titan's own
+  air needs an interior reservoir: its lakes cannot sustain the
+  atmosphere against photolysis over geologic time (Lorenz et al. 2008
+  [17]) and episodic outgassing from methane clathrate resupplies it
+  (Tobie, Lunine & Sotin 2006 [18]). `titan-like` sets the factor on the
+  rule to 1 to 2 (`ch4`, as `co2` and `n2`), a calibration with Titan as
+  its target; it sets the cause, the model still decides. Round a
+  Sun-like star every asked Titan is then a hydrocarbon world; round an
+  old K dwarf (8 Gyr) some lose their methane, and round an M dwarf their
+  air, to the star's long-lasting ultraviolet.
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon
@@ -323,6 +421,15 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
 - **Liquid water.** The app cuts water at 0.01 bar, just above water's
   triple point. Real water also boils away if the ground is warmer than
   the boiling point at that pressure; the app does not check it.
+- **Titan's haze is one layer, scattered once.** The viewer's sky has one
+  aerosol, of one colour and one scale height, below the gas's, and
+  scatters the sunlight once. Titan's haze rises to 500 km, above most of
+  its gas, its detached layer is bluer than the main one, and a thick
+  haze scatters many times; the app stands in for it with an opaque
+  orange layer that scatters evenly, its many scatterings a geometric
+  series (see above), so its limb shows the
+  gas's blue only faintly. The surface under the haze is still the
+  `frozen` look's ice, lighter than Titan's dark organic dunes.
 - **The halo is not to scale.** A real atmosphere is a hair's breadth
   round a planet seen whole; the app thickens it to a few percent of the
   radius so it shows, as the study says.
@@ -379,6 +486,55 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
    moons](https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturniansatfact.html)
    (escape velocities, insolation, pressures, temperatures, compositions,
    atmospheric masses; Titan's mass and radius).
+10. Hayes, A. G. 2016, "The lakes and seas of Titan", *Annual Review of
+    Earth and Planetary Sciences* 44, 57–83,
+    [doi:10.1146/annurev-earth-060115-012247](https://doi.org/10.1146/annurev-earth-060115-012247).
+11. Lorenz, R. D. et al. 2006, "The sand seas of Titan: Cassini RADAR
+    observations of longitudinal dunes", *Science* 312, 724–727,
+    [doi:10.1126/science.1123257](https://doi.org/10.1126/science.1123257).
+12. Mitchell, J. L. 2008, "The drying of Titan's dunes: Titan's methane
+    hydrology and its impact on atmospheric circulation", *Journal of
+    Geophysical Research* 113, E08015,
+    [doi:10.1029/2007JE003017](https://doi.org/10.1029/2007JE003017).
+13. Schneider, T. et al. 2012, "Polar methane accumulation and rainstorms
+    on Titan from simulations of the methane cycle", *Nature* 481,
+    58–61,
+    [doi:10.1038/nature10666](https://doi.org/10.1038/nature10666).
+14. Aharonson, O. et al. 2009, "An asymmetric distribution of lakes on
+    Titan as a possible consequence of orbital forcing", *Nature
+    Geoscience* 2, 851–854,
+    [doi:10.1038/ngeo698](https://doi.org/10.1038/ngeo698).
+15. Thompson, W. R., Zollweg, J. A. & Gabis, D. H. 1992, "Vapor-liquid
+    equilibrium thermodynamics of N₂ + CH₄: Model and Titan
+    applications", *Icarus* 97, 187–199,
+    [doi:10.1016/0019-1035(92)90127-S](https://doi.org/10.1016/0019-1035(92)90127-S).
+16. Richardson, I. A., Hartwig, J. W. & Leachman, J. W. 2019,
+    "Experimental effervescence and freezing point depression
+    measurements of nitrogen in liquid methane-ethane mixtures",
+    *International Journal of Thermal Sciences* 137, 534–538,
+    [doi:10.1016/j.ijthermalsci.2018.12.024](https://doi.org/10.1016/j.ijthermalsci.2018.12.024).
+17. Lorenz, R. D. et al. 2008, "Titan's inventory of organic surface
+    materials", *Geophysical Research Letters* 35, L02206,
+    [doi:10.1029/2007GL032118](https://doi.org/10.1029/2007GL032118).
+18. Tobie, G., Lunine, J. I. & Sotin, C. 2006, "Episodic outgassing as
+    the origin of atmospheric methane on Titan", *Nature* 440, 61–64,
+    [doi:10.1038/nature04497](https://doi.org/10.1038/nature04497).
+
+19. Porco, C. C. et al. 2005, "Imaging of Titan from the Cassini
+    spacecraft", *Nature* 434, 159–168,
+    [doi:10.1038/nature03436](https://doi.org/10.1038/nature03436).
+20. Tomasko, M. G. et al. 2005, "Rain, winds and haze during the Huygens
+    probe's descent to Titan's surface", *Nature* 438, 765–778,
+    [doi:10.1038/nature04126](https://doi.org/10.1038/nature04126).
+21. Tomasko, M. G. et al. 2008, "A model of Titan's aerosols based on
+    measurements made inside the atmosphere", *Planetary and Space
+    Science* 56, 669–707,
+    [doi:10.1016/j.pss.2007.11.019](https://doi.org/10.1016/j.pss.2007.11.019).
+22. Stofan, E. R. et al. 2007, "The lakes of Titan", *Nature* 445, 61–64,
+    [doi:10.1038/nature05438](https://doi.org/10.1038/nature05438).
+23. Brown, R. H. et al. 2008, "The identification of liquid ethane in
+    Titan's Ontario Lacus", *Nature* 454, 607–610,
+    [doi:10.1038/nature07100](https://doi.org/10.1038/nature07100).
 
 ## See also
 

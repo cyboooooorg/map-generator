@@ -1,0 +1,27 @@
+name = "triton-like"
+description = "Triton-like: a captured icy moon on a backward orbit round a Neptune"
+
+[locales.fr]
+name = "Tritonienne"
+description = "Une lune glacée capturée, sur une orbite rétrograde autour d'une Neptune"
+
+# Triton: 2.139e22 kg = 0.0036 Earth masses (NASA Neptunian satellite
+# fact sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), within the range.
+[inputs]
+mass_earth = [0.003, 0.004]
+
+[moon]
+# A Kuiper-belt body Neptune captured (Agnor & Hamilton 2006,
+# doi:10.1038/nature04792).
+host = "neptune-like"
+origin = "captured"
+# Semi-major axis 354 759 km over Neptune's equatorial radius 24 764 km:
+# 14.3 radii (JPL mean orbital elements; NASA Neptune fact sheet).
+semi_major_axis_radii = [13.0, 15.0]
+# 0.000016: its orbit is about circular (JPL mean orbital elements).
+eccentricity = [0.0, 0.0001]
+# Water and ices about a quarter to a third of its mass, rock the rest:
+# its 2.06 g/cm³ (McKinnon, Lunine & Banfield 1995, Origin and evolution
+# of Triton, in Neptune and Triton, University of Arizona Press).
+ice_fraction = [0.25, 0.35]

@@ -1509,6 +1509,7 @@ export const atmosphereFragment = /* glsl */ `
   uniform float uTop;
   uniform vec3 uBetaR;
   uniform float uBetaM;
+  uniform float uHazeVeil;    // factor on the haze over the ground (sky.ts hazeVeil)
   uniform vec3 uMieAlbedo;
   uniform float uHeightR;
   uniform float uHeightM;
@@ -1546,6 +1547,8 @@ export const atmosphereFragment = /* glsl */ `
     bool hitsGround = ground.x > 0.0 && ground.x < ground.y;
     float near = max(shell.x, 0.0);
     bool surface = uGround > 0.5;
+    // Close in, a haze that hides the ground thins over it (sky.ts hazeVeil).
+    float betaM = surface ? uBetaM * uHazeVeil : uBetaM;
     // Relief above the unit sphere: the peak stands near the limb point.
     float limb = max(-dot(origin, dir), near);
     float far = hitsGround ? min(shell.y, ground.x) : surface ? min(shell.y, limb) : shell.y;
@@ -1574,7 +1577,7 @@ export const atmosphereFragment = /* glsl */ `
       vec2 factor = texture2D(uSunDepth, at * SUN_DEPTH_SCALE + SUN_DEPTH_OFFSET).rg;
       float sunR = densityR * factor.r;
       float sunM = densityM * factor.g;
-      vec3 attenuation = exp(-(uBetaR * (depthR + sunR) + uBetaM * (depthM + sunM)));
+      vec3 attenuation = exp(-(uBetaR * (depthR + sunR) + betaM * (depthM + sunM)));
       sumR += dR * attenuation;
       sumM += dM * attenuation;
     }
@@ -1583,10 +1586,10 @@ export const atmosphereFragment = /* glsl */ `
     float g2 = uG * uG;
     float phaseM = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) /
       ((2.0 + g2) * pow(1.0 + g2 - 2.0 * uG * mu, 1.5));
-    vec3 light = (sumR * uBetaR * phaseR + sumM * uBetaM * uMieAlbedo * phaseM) * uLightTint;
+    vec3 light = (sumR * uBetaR * phaseR + sumM * betaM * uMieAlbedo * phaseM) * uLightTint;
     // Soft exposure: bright skies saturate instead of clipping.
     vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
-    vec3 transmittance = exp(-(uBetaR * depthR + uBetaM * depthM));
+    vec3 transmittance = exp(-(uBetaR * depthR + betaM * depthM));
     float behind = surface ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;
     gl_FragColor = vec4(colour * uOpacity, mix(1.0, behind, uOpacity));
   }
@@ -1610,6 +1613,7 @@ export const atmosphereHaloFragment = /* glsl */ `
   uniform float uTop;
   uniform vec3 uBetaR;
   uniform float uBetaM;
+  uniform float uHazeVeil;    // factor on the haze over the ground (sky.ts hazeVeil)
   uniform vec3 uMieAlbedo;
   uniform float uHeightR;
   uniform float uHeightM;
@@ -1652,9 +1656,9 @@ export const atmosphereHaloFragment = /* glsl */ `
 
   // Sunlight reaching the point p: none in the planet's shadow, reddened
   // by the column it crossed.
-  vec3 sunlightAt(vec3 p, vec3 sun) {
+  vec3 sunlightAt(vec3 p, vec3 sun, float betaM) {
     float lit = smoothstep(-0.12, 0.08, dot(normalize(p), sun));
-    return exp(-(uBetaR * column(p, sun, uHeightR) + uBetaM * column(p, sun, uHeightM))) * lit;
+    return exp(-(uBetaR * column(p, sun, uHeightR) + betaM * column(p, sun, uHeightM))) * lit;
   }
 
   void main() {
@@ -1667,6 +1671,8 @@ export const atmosphereHaloFragment = /* glsl */ `
     bool hitsGround = ground.x > 0.0 && ground.x < ground.y;
     float near = max(shell.x, 0.0);
     bool surface = uGround > 0.5;
+    // Close in, a haze that hides the ground thins over it (sky.ts hazeVeil).
+    float betaM = surface ? uBetaM * uHazeVeil : uBetaM;
     float limb = max(-dot(origin, dir), near);
     float far = hitsGround ? min(shell.y, ground.x) : surface ? min(shell.y, limb) : shell.y;
     if (far <= near) discard;
@@ -1674,7 +1680,7 @@ export const atmosphereHaloFragment = /* glsl */ `
     float closest = -dot(origin, dir);
     float depthR = segment(origin, dir, near, far, closest, uHeightR);
     float depthM = segment(origin, dir, near, far, closest, uHeightM);
-    vec3 tau = uBetaR * depthR + uBetaM * depthM;
+    vec3 tau = uBetaR * depthR + betaM * depthM;
     vec3 transmittance = exp(-tau);
 
     // The sunlight along the ray: at its densest point (the ground, or the
@@ -1684,7 +1690,7 @@ export const atmosphereHaloFragment = /* glsl */ `
     vec3 p1 = origin + dir * mix(near, far, 0.25);
     vec3 p2 = origin + dir * mix(near, far, 0.75);
     vec3 w = exp(-(vec3(length(p0), length(p1), length(p2)) - 1.0) / uHeightR) * vec3(2.0, 1.0, 1.0);
-    vec3 sunlight = (w.x * sunlightAt(p0, sun) + w.y * sunlightAt(p1, sun) + w.z * sunlightAt(p2, sun)) / max(w.x + w.y + w.z, 1e-6);
+    vec3 sunlight = (w.x * sunlightAt(p0, sun, betaM) + w.y * sunlightAt(p1, sun, betaM) + w.z * sunlightAt(p2, sun, betaM)) / max(w.x + w.y + w.z, 1e-6);
 
     float mu = dot(dir, sun);
     float phaseR = 3.0 / (16.0 * PI) * (1.0 + mu * mu);
@@ -1693,7 +1699,7 @@ export const atmosphereHaloFragment = /* glsl */ `
       ((2.0 + g2) * pow(1.0 + g2 - 2.0 * uG * mu, 1.5));
     // Single scattering in a uniform medium: the light scattered towards
     // the eye is the share of the ray's extinction that scattering makes.
-    vec3 scattering = uBetaR * phaseR * depthR + uBetaM * uMieAlbedo * phaseM * depthM;
+    vec3 scattering = uBetaR * phaseR * depthR + betaM * uMieAlbedo * phaseM * depthM;
     vec3 light = (1.0 - transmittance) * scattering / max(tau, vec3(1e-6)) * sunlight * uLightTint;
     vec3 colour = 1.0 - exp(-EXPOSURE * 4.0 * PI * light);
     float behind = surface ? dot(transmittance, vec3(1.0 / 3.0)) : 1.0;

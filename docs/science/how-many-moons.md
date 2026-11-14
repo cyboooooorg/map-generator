@@ -340,11 +340,28 @@ let stable = |c: &Candidate| {
 A giant draws its moons with `of_giant` in the same file, whether it is a
 giant world or a giant of a planetary system
 ([system.rs](../../crates/mapgen/src/system.rs) calls `MoonSystem::draw`
-for it). Two to five regular moons share $10^{-4}$ of its mass, unevenly,
-on a resonant chain, each orbit $2^{2/3}$ times the last, from 4 to 8
-giant radii outwards: beyond the Roche limit and its rings, and within a
-third of the Hill radius, where the chain stops. Icy beyond 8 to 11 radii
-or round a very cold star, rocky closer in. On 35 % of ice giants
+for it). Two to five regular moons share 1 to 2.5 × $10^{-4}$ of its
+mass (uniform, the Solar System's range, Canup & Ward 2006), on a resonant
+chain, each orbit $2^{2/3}$ times the last, from 4 to 8 giant radii
+outwards: beyond the Roche limit and its rings, and within a third of the
+Hill radius, where the chain stops (room left for an eccentricity of
+0.03). The disk leaves either a chain of moons of comparable mass, or one
+dominant moon, in the chain's outer half, holding 90 to 97 % of the mass
+as Titan does at Saturn. A heavy giant opens a gap in the nebula, cuts its
+disk's inflow and keeps several moons; a light one keeps feeding its disk
+until only its last large moon is left (Sasaki, Stewart & Ida 2010), so
+the odds of a dominant moon are $1/(1 + (M/174\,M_\oplus)^2)$, a
+calibration that gives Saturn one 77 % of the time and Jupiter a chain 77 %
+of the time. An ice giant always keeps a chain, with 1 to 1.2 × $10^{-4}$
+of its mass: its regular moons formed in the disk its giant impact raised,
+which grows several comparable moons (Ida et al. 2020), as Uranus's five
+major moons, 1.0 × $10^{-4}$ of its mass. A moon is icy beyond the disk's ice line, rocky inside it; the
+line moves out with the giant's equilibrium temperature,
+$11\,(T_\mathrm{eq}/110\,\mathrm{K})^4$ giant radii (a calibration: 11
+radii for Jupiter, between Europa and Ganymede, 3.5 for Saturn, inside its
+first moon). Moons on a chain keep a forced eccentricity, log-uniform from
+0.001 to 0.01 (Ganymede 0.0013, Io 0.0041, Europa 0.009, JPL); a dominant
+moon up to 0.03 (Titan 0.0288). On 35 % of ice giants
 (unless a number of moons is asked), a captured retrograde Triton, 1.5 to
 3 times $10^{-4}$ of the giant's mass, orbits 12 to 16 radii out; the
 regular moons then weigh a fiftieth of the usual and keep inside its
@@ -353,17 +370,43 @@ and a giant its star has locked only the moons light enough to last
 (`giant_locked`, the same equation with a giant's own $k_2$ and $Q$):
 
 ```rust
-let first = rng.uniform(4.0, 8.0);
-for (k, w) in weights.iter().enumerate() {
-    let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
-    let a = a_radii * r_g;
+let disk = disk_mass_ratio(look.kind, &mut rng); // 1e-4 to 2.5e-4
+let kind = disk_shape(look.kind, f64::from(mass_earth), &mut rng); // Chain or Dominant
+// Moons asked for by archetype take their share; the drawn ones the rest.
+let disk_kg = (disk * m_g).max(asked_kg / DOMINANT_SHARE.1);
+let rest_kg = disk_kg - asked_kg;
+for k in 0..count {
+    let a_radii = base * CHAIN_STEP.powi(k as i32) * rng.uniform(0.95, 1.05);
     // The chain ends at the edge of the stable zone.
-    if a * 1.01 >= PROGRADE_REACH * hill { break; }
-    let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
-    let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
-    // ...
+    if a_radii * r_g * (1.0 + DOMINANT_MAX_ECCENTRICITY) >= PROGRADE_REACH * hill { break; }
+    slots.push(a_radii);
 }
+// ... a dominant moon in the outer half takes 0.9 to 0.97, the rest by weight
+let mass = rest_kg * share * if captured_triton { 0.02 } else { 1.0 };
+let icy = a_radii > disk_ice_line_radii(f64::from(star.equilibrium_k));
 ```
+
+A whole system can ask for a moon by archetype (`titan-like`,
+`europa-like`, `ganymede-like`, `callisto-like`, `io-like`,
+`triton-like`, `enceladus-like`, in `archetypes/`). The moon is drawn once
+in its archetype's ranges and its giant's draw makes it first, at its
+orbit (pushed out of the rings and the Roche limit as the chain is): its
+mass is its share of the disk, the disk holding at least what a dominant
+moon of that mass leaves (a Titan asked of a Saturn whose drawn disk is
+lighter than it), and the drawn moons share the rest, none within half a
+chain step of it or within 8 mutual Hill radii. Holding half the disk or
+more, it is the dominant moon. A captured one (`triton-like`) replaces the
+drawn Triton. A despun giant never drops it: `carries` placed its giant
+only where the draw could have made it and where it lasts, with the
+lightest giant and the nearest orbit its archetype gives: the disk-born
+moons within 2.5 × $10^{-4}$ of the heaviest giant's mass (1.2 × $10^{-4}$
+for an ice giant), a captured one only round an ice giant and within
+3 × $10^{-4}$, an icy one (20 % ice or more, a calibration between Europa's
+6 to 10 % and Ganymede's half) beyond the disk's ice line, every orbit
+outside the Roche limit and within the stable part of the Hill sphere,
+and each kept by a despun giant (the same equation). A Neptune cannot
+carry a Titan (1.3 × $10^{-3}$ of its mass); a Saturn round a late M
+dwarf has no room for one.
 
 A rocky world drawn as the moon of a giant
 ([exomoon.rs](../../crates/mapgen/src/exomoon.rs)) gets siblings on the same
@@ -406,9 +449,12 @@ chain round it. Ring moons are drawn apart (see
   Pluto-like density would.
 - **An exact chain.** Every giant's moons sit on a 1:2:4… chain, however
   many there are. At Jupiter only Io, Europa and Ganymede do: Callisto's
-  period is 2.33 times Ganymede's (JPL). And the moons' total mass varies
-  from 1.1 to 2.5 × 10⁻⁴ of the planet's (Canup & Ward 2006), where the app
-  keeps exactly 10⁻⁴.
+  period is 2.33 times Ganymede's (JPL).
+- **A temperature for the ice line.** The disk's ice line follows the
+  giant's equilibrium temperature today, a proxy for the nebula it formed
+  in, with a steep power fitted to Jupiter and Saturn alone; the disk's
+  own accretion heating, which sets the line in the models, is not
+  computed.
 - **The Earth-sized moon of a giant.** A rocky world drawn as a giant's moon
   (one in 50, or on request) is far above the $10^{-4}$ scaling: it would
   have to be captured. Its siblings follow the scaling.
@@ -481,6 +527,14 @@ chain round it. Ring moons are drawn apart (see
     masses and a core mass fraction of 0 to 0.4. Earth's fraction, 0.33,
     gives $M = R^{3.7}$, the app's form; the app also uses it below 1 Earth
     mass, out of the range the authors give.
+16. Sasaki, T., Stewart, G. R. & Ida, S. 2010, "Origin of the different
+    architectures of the Jovian and Saturnian satellite systems", *The
+    Astrophysical Journal* 714, 1052,
+    [doi:10.1088/0004-637X/714/2/1052](https://doi.org/10.1088/0004-637X/714/2/1052).
+17. Ida, S., Ueta, S., Sasaki, T. & Ishizawa, Y. 2020, "Uranian satellite
+    formation by evolution of a water vapour disk generated by a giant
+    impact", *Nature Astronomy* 4, 880,
+    [doi:10.1038/s41550-020-1049-8](https://doi.org/10.1038/s41550-020-1049-8).
 
 ## See also
 

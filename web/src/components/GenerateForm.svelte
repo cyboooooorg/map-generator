@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hostsAdded, planetsRequest } from '../lib/systemPlanets';
   import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
   import { archetypeDescription, archetypeName } from '../lib/i18n/names.svelte';
@@ -75,7 +76,12 @@
   let systemSubtype = $state(2);
   let planetsDrawn = $state(true);
   let planetCounts = $state<Record<string, number>>(untrack(() => Object.fromEntries(spec.archetypes.map((name) => [name, name === FALLBACK_ARCHETYPE ? 1 : 0]))));
-  const planetTotal = $derived(Object.values(planetCounts).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0));
+  let moonCounts = $state<Record<string, number>>(untrack(() => Object.fromEntries(spec.moon_archetypes.map((name) => [name, 0]))));
+  /** The built-in giant each moon archetype orbits, as the catalog says. */
+  const moonHosts = $derived(Object.fromEntries(archetypes.flatMap((a) => (a.moon_host ? [[a.spec, a.moon_host]] : []))));
+  const countOf = (counts: Record<string, number>) => Object.values(counts).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0);
+  /** Planets asked, plus the giants the moons bring along (the moons themselves are not counted). */
+  const planetTotal = $derived(countOf(planetCounts) + hostsAdded(moonCounts, planetCounts, moonHosts));
   const planetsValid = $derived(planetsDrawn || (planetTotal >= 1 && planetTotal <= spec.max_planets));
   /** The system the server said exists already, which the next submission may replace. */
   let existsId = $state<string | null>(null);
@@ -144,7 +150,7 @@
   const memory = untrack(() => {
     return initial === null ? loadFormMemory(
       FIELD_NAMES,
-      archetypes.map((a) => a.spec),
+      archetypes.filter((a) => !a.moon).map((a) => a.spec),
     ) : null;
   });
   const memoryArchetype = untrack(() => (memory ? archetypes.find((a) => a.spec === memory.planet) : undefined));
@@ -241,9 +247,7 @@
     return {
       star: systemStarRandom ? null : starType(systemClass, systemSubtype),
       metallicity: giantChoice.metallicityRandom || !Number.isFinite(giantChoice.metallicity) ? null : giantChoice.metallicity,
-      planets: planetsDrawn
-        ? null
-        : Object.fromEntries(Object.entries(planetCounts).filter(([, n]) => Number.isFinite(n) && n > 0)),
+      planets: planetsDrawn ? null : planetsRequest(planetCounts, moonCounts),
       seed: seed.trim() === '' ? null : Number(seed),
       width: width ?? null,
       height: height ?? null,
@@ -281,7 +285,7 @@
         label: t.form.systemPlanets,
         value: planetsDrawn
           ? t.form.systemPlanetsDrawn
-          : Object.entries(planetCounts)
+          : Object.entries({ ...planetCounts, ...moonCounts })
               .filter(([, n]) => Number.isFinite(n) && n > 0)
               .map(([type, n]) => `${n} ${archetypeName({ name: type })}`)
               .join(' · '),
@@ -601,6 +605,18 @@
             {/each}
           </div>
           <p class="help" class:error={!planetsValid}>{t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets })}</p>
+          {#if spec.moon_archetypes.length > 0}
+            <h4>{t.form.systemMoons}</h4>
+            <div class="counts">
+              {#each spec.moon_archetypes as type (type)}
+                <label>
+                  <span>{archetypeName({ name: type })}</span>
+                  <input type="number" min="0" max={spec.max_planets} step="1" bind:value={moonCounts[type]} />
+                </label>
+              {/each}
+            </div>
+            <p class="help">{t.form.systemMoonsHelp}</p>
+          {/if}
         {/if}
         <p class="help">{t.form.systemPlanetsHelp}</p>
       </fieldset>
@@ -608,7 +624,7 @@
   <label class="row">
     <span>{t.form.planet}</span>
     <select value={planet} onchange={(e) => chooseArchetype(e.currentTarget.value)} disabled={randomPlanet}>
-      {#each archetypes as archetype (archetype.spec)}
+      {#each archetypes.filter((a) => !a.moon) as archetype (archetype.spec)}
         <option value={archetype.spec}>{archetypeName(archetype)}{archetype.built_in ? '' : ` (${archetype.spec})`}</option>
       {/each}
     </select>

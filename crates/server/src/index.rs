@@ -73,6 +73,14 @@ pub const UNKNOWN_FORMAT: i64 = 0;
 /// - 4: systems made by an older generator are flagged `outdated`;
 /// - 5: stored job requests name archetypes and carry model inputs (the
 ///   old ones hold the removed knob fields).
+///
+/// Not every change of what the generator writes needs a new layout:
+/// `systems.system_format` records the `format_version` of each
+/// `system.json` read, and at every open `outdated` is recomputed from it
+/// against the running generator's
+/// [`mapgen::system::SYSTEM_FORMAT_VERSION`]. A new system format therefore
+/// keeps the pins, displayed sizes and job history (the column is added to
+/// a file that lacks it, and its systems are read again once to fill it).
 const SCHEMA_VERSION: i64 = 5;
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
@@ -121,7 +129,9 @@ CREATE TABLE systems (
     -- only the index holds it (no file mirrors it)
     pinned_ms         INTEGER,
     -- made by an older generator (system.json of another format)
-    outdated          INTEGER NOT NULL DEFAULT 0
+    outdated          INTEGER NOT NULL DEFAULT 0,
+    -- format_version of the system.json read (outdated is derived from it)
+    system_format     INTEGER
 );
 CREATE TABLE bodies (
     system_id         TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
@@ -261,6 +271,8 @@ pub fn versions_differ(recorded: &str, current: &str) -> bool {
 struct Loaded {
     summary: SystemSummary,
     request: Option<String>,
+    /// `format_version` of the `system.json` read.
+    system_format: Option<i64>,
     /// By body id: its seed, its parameters (JSON), the revision of its
     /// `world.json` when generated.
     details: HashMap<String, BodyDetail>,
@@ -297,6 +309,12 @@ impl Index {
     /// A database of another layout (see [`SCHEMA_VERSION`]) is moved
     /// aside too (`<file>.layout-<version>-<ms>`), with a warning.
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_with_system_format(path, i64::from(mapgen::system::SYSTEM_FORMAT_VERSION))
+    }
+
+    /// [`Index::open`] for a generator whose system format is
+    /// `system_format` (a test seam: the running one is the constant).
+    fn open_with_system_format(path: &Path, system_format: i64) -> Result<Self> {
         if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir)
                 .map_err(|e| IndexError(format!("{}: {e}", dir.display())))?;
@@ -305,7 +323,7 @@ impl Index {
         let mut last = None;
         for _ in 0..4 {
             let before = file_identity(path);
-            let suffix = match Self::open_file(path) {
+            let suffix = match Self::open_file(path, system_format) {
                 Ok(index) => return Ok(index),
                 Err(Opening::Sqlite(e)) if is_not_a_database(&e) => {
                     let suffix = format!(".corrupt-{}", now_ms());
@@ -344,11 +362,11 @@ impl Index {
         Err(last.unwrap_or_else(|| IndexError(format!("{}: cannot be opened", path.display()))))
     }
 
-    fn open_file(path: &Path) -> std::result::Result<Self, Opening> {
-        Self::init(Connection::open(path)?)
+    fn open_file(path: &Path, system_format: i64) -> std::result::Result<Self, Opening> {
+        Self::init(Connection::open(path)?, system_format)
     }
 
-    fn init(conn: Connection) -> std::result::Result<Self, Opening> {
+    fn init(conn: Connection, system_format: i64) -> std::result::Result<Self, Opening> {
         conn.busy_timeout(Duration::from_secs(5))?;
         let journal = choose_journal(&conn)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -356,6 +374,7 @@ impl Index {
         if version != SCHEMA_VERSION {
             create(&conn)?;
         }
+        follow_system_format(&conn, system_format)?;
         Ok(Self {
             journal,
             conn: Mutex::new(conn),
@@ -383,8 +402,10 @@ impl Index {
     pub fn reconcile(&self, root: &Path) -> Result<Reconciled> {
         let known: HashMap<String, (u64, Option<u64>)> = {
             let conn = self.conn();
-            let mut stmt =
-                conn.prepare("SELECT id, modified_ms, names_modified_ms FROM systems")?;
+            let mut stmt = conn.prepare(
+                "SELECT id, modified_ms, names_modified_ms FROM systems
+                 WHERE system_format IS NOT NULL",
+            )?;
             stmt.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
@@ -1096,6 +1117,36 @@ fn create(conn: &Connection) -> std::result::Result<(), Opening> {
     }
 }
 
+/// Brings `systems.outdated` in line with the generator's system format:
+/// a database made before `system_format` existed gets the column (its
+/// rows are read again by [`Index::reconcile`], which fills it), and every
+/// row whose recorded format differs from `system_format` is flagged,
+/// the others are not. Pins, sizes and jobs are not touched.
+fn follow_system_format(conn: &Connection, system_format: i64) -> rusqlite::Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        let has_column = conn
+            .prepare("SELECT 1 FROM pragma_table_info('systems') WHERE name = 'system_format'")?
+            .exists([])?;
+        if !has_column {
+            conn.execute_batch("ALTER TABLE systems ADD COLUMN system_format INTEGER")?;
+        }
+        conn.execute(
+            "UPDATE systems SET outdated = (system_format != ?1)
+             WHERE system_format IS NOT NULL AND outdated != (system_format != ?1)",
+            [system_format],
+        )?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT"),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
 /// What tells one file from another at `path` (device and inode), `None`
 /// when there is none.
 #[cfg(unix)]
@@ -1217,9 +1268,11 @@ fn load(root: &Path, id: &str) -> Option<Loaded> {
     }
     let names = systems::modified_ms(&dir.join(systems::NAMES_FILE))
         .map(|modified| (systems::given_names(root, id), modified));
+    let system_format = systems::format_version(&bytes).map(i64::from);
     Some(Loaded {
         summary,
         request,
+        system_format,
         details,
         names,
     })
@@ -1289,12 +1342,13 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
     };
     tx.execute(
         "INSERT INTO systems (id, seed, width, height, star, designation, light_r, light_g,
-                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms, outdated)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms, outdated, system_format)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          ON CONFLICT(id) DO UPDATE SET
             seed = ?2, width = ?3, height = ?4, star = ?5, designation = ?6, light_r = ?7,
             light_g = ?8, light_b = ?9, hz_inner_au = ?10, hz_outer_au = ?11,
-            modified_ms = ?12, request = ?13, outdated = ?15",
+            modified_ms = ?12, request = ?13, outdated = ?15,
+            system_format = ?16",
         params![
             s.id,
             s.seed,
@@ -1310,7 +1364,8 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             s.modified_ms as i64,
             loaded.request,
             pinned_ms,
-            s.outdated
+            s.outdated,
+            loaded.system_format
         ],
     )?;
     tx.execute("DELETE FROM bodies WHERE system_id = ?1", [&s.id])?;
@@ -1423,7 +1478,7 @@ mod tests {
     use std::path::PathBuf;
 
     const SYSTEM: &str = r#"{
-        "format_version": 4, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 5, "seed": 42, "width": 1024, "height": 512,
         "request": {"system": {"star": null, "metallicity": null, "planets": null, "seed": 42, "width": 1024, "height": 512}},
         "star": {"type": "K1V", "designation": "MGS 48213", "metallicity": 0.0, "ice_line_au": 2.0,
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
@@ -1931,6 +1986,35 @@ mod tests {
     }
 
     #[test]
+    fn outdated_follows_a_new_system_format_without_losing_pins() {
+        let root = temp_root("format-follow");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1", "mgs-1-2"]);
+        let db = root.join("mapgen.sqlite");
+        {
+            let index = Index::open(&db).unwrap();
+            index.reconcile(&systems).unwrap();
+            index.set_pinned("mgs-1-1", true).unwrap();
+            assert!(index.list_systems().unwrap().iter().all(|s| !s.outdated));
+        }
+        // A generator of the next system format opens the same file: no
+        // layout change, no system file changed.
+        let next = i64::from(mapgen::system::SYSTEM_FORMAT_VERSION) + 1;
+        let index = Index::open_with_system_format(&db, next).unwrap();
+        let report = index.reconcile(&systems).unwrap();
+        assert_eq!(report.updated, 0);
+        let listed = index.list_systems().unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().all(|s| s.outdated), "{listed:?}");
+        assert!(index.summary("mgs-1-1").unwrap().unwrap().pinned);
+        drop(index);
+        // The current generator again: the flags follow back.
+        let index = Index::open(&db).unwrap();
+        assert!(index.list_systems().unwrap().iter().all(|s| !s.outdated));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn two_processes_opening_an_old_file_set_it_aside_once() {
         let root = temp_root("layout-race");
         let db = root.join("mapgen.sqlite");
@@ -2182,7 +2266,11 @@ mod tests {
         assert!(root.join("mapgen.sqlite-wal").exists());
         // An in-memory database cannot be WAL: the check fails, and the
         // index still works.
-        let fallback = Index::init(Connection::open_in_memory().unwrap()).unwrap();
+        let fallback = Index::init(
+            Connection::open_in_memory().unwrap(),
+            i64::from(mapgen::system::SYSTEM_FORMAT_VERSION),
+        )
+        .unwrap();
         assert_ne!(fallback.journal_mode(), "wal");
         assert!(fallback.list_systems().unwrap().is_empty());
         assert_eq!(fallback.next_job_id().unwrap(), 1);

@@ -32,6 +32,16 @@ orbit: ArchetypeOrbit,
  */
 giant: boolean, 
 /**
+ * Whether it is a moon archetype: asked in a whole system, never as a
+ * single world.
+ */
+moon: boolean, 
+/**
+ * The built-in giant archetype a moon archetype orbits (`null` for
+ * a planet): the giant a system adds when only the moon is asked.
+ */
+moon_host: string | null, 
+/**
  * Translated name and description, by language code (`fr`).
  */
 locales: { [key in string]: Locale }, };

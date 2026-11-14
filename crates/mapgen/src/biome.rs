@@ -97,11 +97,18 @@ pub enum Biome {
     GiantStorm,
     /// The polar region of a giant: hazes, cyclones, sometimes a hexagon.
     GiantPolar,
+    // ── Appended after id 38 (hydrocarbon worlds) ───────────────────────────
+    /// A sea of liquid methane and ethane, as Titan's Kraken and Ligeia
+    /// Maria; replaces ocean basins on hydrocarbon worlds.
+    HydrocarbonSea,
+    /// A lake of liquid methane and ethane; replaces lakes on hydrocarbon
+    /// worlds.
+    HydrocarbonLake,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 39] = [
+    pub const ALL: [Biome; 41] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -141,6 +148,8 @@ impl Biome {
         Biome::GiantBelt,
         Biome::GiantStorm,
         Biome::GiantPolar,
+        Biome::HydrocarbonSea,
+        Biome::HydrocarbonLake,
     ];
 
     /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
@@ -164,6 +173,8 @@ impl Biome {
                 | Biome::FrozenLake
                 | Biome::Lake
                 | Biome::River
+                | Biome::HydrocarbonSea
+                | Biome::HydrocarbonLake
         )
     }
 
@@ -216,6 +227,15 @@ pub fn surface_color(b: Biome) -> [u8; 3] {
         Biome::GlacialPlain => [214, 224, 232],
         Biome::SeaIce => [200, 214, 226],
         Biome::FrozenLake => [190, 208, 222],
+        // Liquid hydrocarbons: near black with a brown cast, darker than
+        // any ground. Calibration, target Titan's lakes and seas, the
+        // darkest surfaces of its Cassini radar and near-infrared maps
+        // (Stofan et al. 2007, doi:10.1038/nature05438; Ontario Lacus in
+        // VIMS, Brown et al. 2008, doi:10.1038/nature07100): a liquid that
+        // absorbs and a calm, smooth surface that returns no light to the
+        // side.
+        Biome::HydrocarbonSea => [22, 17, 12],
+        Biome::HydrocarbonLake => [30, 24, 17],
         // Giants: a Jovian palette; a giant world's own replaces it.
         Biome::GiantZone => [236, 224, 198],
         Biome::GiantBelt => [174, 124, 84],
@@ -278,6 +298,9 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         Biome::AcidRiver => [64, 196, 136],
         Biome::AcidShore => [214, 220, 150],
         Biome::FrozenLake => [185, 215, 240],
+        // Hydrocarbon liquids: dark browns, apart from water's blues.
+        Biome::HydrocarbonSea => [74, 46, 20],
+        Biome::HydrocarbonLake => [112, 74, 36],
         Biome::GiantZone => [240, 226, 190],
         Biome::GiantBelt => [176, 116, 70],
         Biome::GiantStorm => [204, 84, 52],
@@ -335,6 +358,8 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::GiantBelt => "Belt",
         Biome::GiantStorm => "Storm",
         Biome::GiantPolar => "Polar Region",
+        Biome::HydrocarbonSea => "Hydrocarbon Sea",
+        Biome::HydrocarbonLake => "Hydrocarbon Lake",
     }
 }
 

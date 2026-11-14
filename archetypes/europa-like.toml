@@ -1,0 +1,25 @@
+name = "europa-like"
+description = "Europa-like: a rocky moon of a Jupiter with an ocean under its ice"
+
+[locales.fr]
+name = "Europienne"
+description = "Une lune rocheuse d'une Jupiter, un océan sous sa glace"
+
+# Europa: 4.7998e22 kg = 0.0080 Earth masses (NASA Jovian satellite fact
+# sheet; JPL Solar System Dynamics, planetary satellite physical
+# parameters), ±10 %.
+[inputs]
+mass_earth = [0.007, 0.009]
+
+[moon]
+# Grown in Jupiter's disk.
+host = "jupiter-like"
+origin = "disk"
+# Semi-major axis 671 100 km over Jupiter's equatorial radius 71 492 km:
+# 9.4 radii (JPL mean orbital elements; NASA Jupiter fact sheet).
+semi_major_axis_radii = [9.0, 10.0]
+# 0.009, forced by the Laplace resonance (JPL mean orbital elements).
+eccentricity = [0.008, 0.01]
+# A water layer 80 to 170 km thick over rock, 6 to 10 % of its mass
+# (Anderson et al. 1998, doi:10.1126/science.281.5385.2019).
+ice_fraction = [0.06, 0.10]

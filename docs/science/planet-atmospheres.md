@@ -371,10 +371,59 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
 
-A shortcoming, outside the targets: Ganymede keeps 0.016 bar of N₂ and
-Callisto, to which the core model gives a weak deep dynamo, 0.047 bar;
-both are airless. Before methane photolysis they also kept 0.15 and
-0.47 bar of CH₄. Moons are not modelled yet (`body_model` skips them).
+As planets round the Sun, the reference moons above have a shortcoming,
+outside the targets: Ganymede keeps 0.016 bar of N₂ and Callisto, to
+which the core model gives a weak deep dynamo, 0.047 bar, where both are
+airless. Before methane photolysis they also kept 0.15 and 0.47 bar of
+CH₄. As moons (below), they come out airless.
+
+**Moons** (`planet::derive_moon_model`). A round moon goes through the
+same chain under its star's light at its planet's orbit (the same XUV
+fluence and shoreline), with two rules of its own:
+
+- *Born warm, no hypervolatiles.* A moon born in its planet's disk keeps
+  the ammonia, methane and nitrogen of its ices only when its planet's
+  equilibrium temperature is under 100 K (`HYPERVOLATILES_MAX_K`). Titan's
+  nitrogen came from ammonia ice of the protosolar disk (Mandt, Mousis,
+  Lunine & Gautier 2014, *ApJ Letters* 788, L24,
+  doi:10.1088/2041-8205/788/2/L24), which Saturn's cold subnebula let its
+  moons keep (Mousis, Gautier & Bockelée-Morvan 2002, *Icarus* 156, 162,
+  doi:10.1006/icar.2001.6782); Jupiter's warmer one did not. Both DOIs
+  were checked against Crossref; the papers were not read beyond their
+  titles and abstracts. The planet's equilibrium temperature stands for
+  its disk's. **Calibration**, no source, for 100 K: it sits between
+  Jupiter (112 K, Ganymede and Callisto airless) and Saturn (83 K, Titan
+  with its N₂), set there so that these moons come out as themselves. A
+  captured moon (a body from beyond the ice line, Triton) keeps these
+  ices; a moon born of an impact, or without ice, draws as a planet. The
+  amounts kept are the planet rule's (1 % of the ice in NH₃ and in CH₄),
+  which give Titan its nitrogen.
+- *Inside a giant's magnetosphere, no shield.* A moon of a giant (a host
+  of 10 M⊕ or more) meets the unshielded escape whatever its own dynamo:
+  the giant's corotating plasma reaches its upper air (Kivelson et al.
+  2004, in *Jupiter: The Planet, Satellites and Magnetosphere*, ch. 21,
+  not checked). **Calibration**, no source, for taking every giant's
+  magnetosphere as enclosing its moons: it leaves Io airless (the core
+  model gives it a dynamo, which the real Io lacks, and with it Io kept
+  about 0.01 bar of N₂). The Moon, whose host is the Earth, keeps the
+  planet rule.
+
+Through `derive_moon_model` (G2V, 4.57 Gyr, seed 1, the moons' real
+masses, ice shares and orbits):
+
+| Moon | Result | Observed |
+|---|---|---|
+| Titan | hydrocarbon world, 1.5 bar, 98 % N₂, 0.038 bar CH₄ | 1.5 bar, about 5 % CH₄ |
+| Ganymede, Callisto | 4e-5 and 9e-6 bar | airless |
+| Io | heat pipe, 1.3e-4 bar | heat pipe, SO₂ of about 1e-9 bar |
+| Europa | 8e-6 bar | airless |
+| Triton | 1.9e-3 bar of N₂ (frost at 47 K) | about 1.4e-5 bar of N₂ |
+| Moon | 1e-12 bar | airless |
+
+Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
+by 0.3 dex), Io's air up to 8e-4 bar. Triton's N₂ is its frost's vapour
+pressure at the equilibrium temperature of 47 K, where Triton's surface,
+brighter, is at 38 K: a hundred times the observed pressure.
 
 ## Climate and surface liquid
 
@@ -579,7 +628,10 @@ and pressure, in this order:
   pressure (the same Clausius–Clapeyron, 373 K at 1 atm, capped at the
   critical point), above the triple-point pressure, with water kept out
   of a runaway;
-- `hydrocarbons` between methane's triple point (90.7 K) and ethane's
+- `hydrocarbons` between methane's freezing point, lowered by the
+  nitrogen of the air dissolved in it (`methane_freezes_k`: 90.67 K with
+  no N₂, about 78 K under Titan's 1.45 bar, see
+  [atmospheres.md](atmospheres.md)), and ethane's
   boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
   at 1 atm with 14.7 kJ/mol, capped at its critical 305 K; NIST values
   from memory, not checked), with methane in the air;
@@ -677,22 +729,33 @@ The first rule that holds wins:
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
 | 3 | `lava-world` | surface liquid is lava (at least 1400 K, no water kept) |
 | 4 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
-| 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over 1 bar |
+| 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
 | 6 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
 | 7 | `ice-world` | at least 5 % water and ices |
-| 8 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
+| 8 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
+| 9 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
+
+The `volcanic-world` is Io's class: Moore & Webb 2013
+(doi:10.1038/nature12424) model its resurfacing as heat-pipe tectonics,
+magma rising through the lithosphere's conduits. It takes only a body
+that would otherwise be `rocky` or `super-earth`: silicate volcanism is
+Io's, while an icy tidally heated body (Europa, Enceladus) would at most
+be cryovolcanic, which the model does not describe, so an `ice-world`
+stays one whatever its regime. It also comes after the classes that name
+what covers the surface (magma, a dense greenhouse air, a sea). Its
+interim base look is `volcanic`, as for any heat-pipe body.
 
 Two constants are calibrations. `OCEAN_WORLD_OCEANS` is 10 Earth oceans:
 Cowan & Abbot 2014 (doi:10.1088/0004-637X/781/1/27) study how much water
 drowns all land; ten is a round figure above the few oceans their basins
 hold, not a value from the paper. `DENSE_AIR_BAR` is 1 bar, for the
 runaway greenhouse (Venus has 90 bar; a runaway that lost its air is a
-bare rock) and for the hydrocarbon world. The pressure condition on
-hydrocarbons is a departure from the plain rule "liquid hydrocarbons".
-It was added when the model kept 0.2 and 0.5 bar of methane on
-Ganymede and Callisto, which methane photolysis now removes; it still
-keeps a cold body with a trace of methane over its ice under a thin air
-an ice world. Titan has 2.1 bar in the model.
+bare rock). The hydrocarbon world needs its air above methane's
+triple-point pressure (`METHANE_TRIPLE_BAR`, 0.1169 bar, NIST), under
+which no liquid methane is stable; it took the 1 bar until part 4, when
+Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
+It keeps a cold body with a trace of methane over its ice under a thin
+air an ice world. Titan has 2.1 bar in the model.
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa

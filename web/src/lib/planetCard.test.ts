@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_GAP, TOP_MARGIN, cardBox, extremes, layoutCards, linkEnd, shownCards, zonePlace } from './planetCard';
+import { CARD_GAP, TOP_MARGIN, atmosphereLine, bulkLine, cardBox, extremes, layoutCards, linkEnd, oceanUnderIce, shownCards, zonePlace } from './planetCard';
+import type { PlanetModel } from './api/types/PlanetModel';
+import { setLocale } from './i18n/index.svelte';
 
 describe('zonePlace', () => {
   it('places an orbit inside, short of or beyond the habitable zone', () => {
@@ -115,5 +117,34 @@ describe('extremes', () => {
       { radius: 'max', moons: 'min' },
       { radius: 'min', moons: 'max' },
     ]);
+  });
+});
+
+describe('a body card of the planet model', () => {
+  const model = (ocean_km: number | null, pressure = 1.5) =>
+    ({
+      surface: { gases: { n2: pressure * 0.94, co2: 0, h2o: 0, ch4: pressure * 0.05, nh3: 0, so2: 0, o2: 0 } },
+      ice_shell: ocean_km === null ? null : { shell_km: 60, ocean_km },
+    }) as unknown as PlanetModel;
+
+  it('shows the ocean under the ice', () => {
+    setLocale('en');
+    expect(oceanUnderIce(model(120))).toBe('ocean under 60 km of ice');
+    expect(oceanUnderIce(model(0))).toBeNull();
+    expect(oceanUnderIce(model(null))).toBeNull();
+  });
+
+  it('shows the surface pressure and the main gases', () => {
+    setLocale('en');
+    expect(atmosphereLine(model(null))).toBe('1.48 bar · N₂ 95 % · CH₄ 5 %');
+    expect(atmosphereLine(model(null, 0))).toBeNull();
+  });
+
+  it('shows a small moons bulk', () => {
+    setLocale('en');
+    expect(bulkLine({ rock: 0.6, ice: 0.3, carbon: 0.1 })).toBe('rock 60 % · ice 30 % · carbon 10 %');
+    setLocale('fr');
+    expect(bulkLine({ rock: 0.6, ice: 0.3, carbon: 0.1 })).toContain('roche');
+    setLocale('en');
   });
 });

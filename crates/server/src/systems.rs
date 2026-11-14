@@ -440,6 +440,14 @@ fn outdated_summary(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSum
         .then(|| outdated_stub(id, modified_ms, &meta))
 }
 
+/// The `format_version` of a `system.json`, `None` when it is not a JSON
+/// object carrying one.
+pub fn format_version(json: &[u8]) -> Option<u32> {
+    serde_json::from_slice::<OutdatedMeta>(json)
+        .ok()
+        .map(|m| m.format_version)
+}
+
 /// A summary with no bodies, for a system of another format.
 fn outdated_stub(id: &str, modified_ms: u64, meta: &OutdatedMeta) -> SystemSummary {
     let star = meta.star.as_ref();
@@ -636,7 +644,7 @@ mod tests {
     }
 
     const SYSTEM: &str = r#"{
-        "format_version": 4, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 5, "seed": 42, "width": 1024, "height": 512,
         "star": {"type": "K1V", "designation": "MGS 48213",
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
@@ -699,6 +707,23 @@ mod tests {
             (0.1, 30.0)
         );
         assert!(summarize("x-1", b"not json", 0).is_none());
+    }
+
+    #[test]
+    fn a_format_4_system_is_outdated() {
+        // Made before round moons went through the planet model (part 4 of
+        // #423): listed, flagged outdated, with no bodies.
+        let old = SYSTEM.replace(r#""format_version": 5"#, r#""format_version": 4"#);
+        let s = summarize("mgs-48213-42", old.as_bytes(), 7).unwrap();
+        assert!(s.outdated);
+        assert_eq!((s.seed, s.star.as_str()), (42, "K1V"));
+        assert!(s.bodies.is_empty() && s.planets.is_empty());
+        // Today's format is not.
+        assert!(
+            !summarize("mgs-48213-42", SYSTEM.as_bytes(), 7)
+                .unwrap()
+                .outdated
+        );
     }
 
     #[test]
@@ -794,7 +819,7 @@ mod tests {
 
     #[test]
     fn each_body_has_its_original_size() {
-        let json = r#"{"format_version": 4, "width": 1024, "height": 512, "bodies": [
+        let json = r#"{"format_version": 5, "width": 1024, "height": 512, "bodies": [
             {"id": "c", "params": {"width": 1024, "height": 512}},
             {"id": "c-1", "params": {"width": 512, "height": 256}},
             {"id": "d"}
@@ -816,7 +841,7 @@ mod tests {
         assert!(originals.original_size(&root, "mgs-2-2", "c").is_err());
         // The file rewritten (a system drawn again under its id) is read
         // again, here one of the layout before sizes, which is refused.
-        let old = json.replace(r#""format_version": 4"#, r#""format_version": 1"#);
+        let old = json.replace(r#""format_version": 5"#, r#""format_version": 1"#);
         let error = original_sizes(old.as_bytes()).unwrap_err();
         assert!(error.contains("format version 1"), "{error}");
         // (A length of its own: some file systems stamp in coarse ticks.)

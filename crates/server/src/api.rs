@@ -27,6 +27,12 @@ pub struct ArchetypeInfo {
     /// for the archetype asked alone at seed 0: the form hides those
     /// fields and offers a giant's mass instead.
     pub giant: bool,
+    /// Whether it is a moon archetype: asked in a whole system, never as a
+    /// single world.
+    pub moon: bool,
+    /// The built-in giant archetype a moon archetype orbits (`null` for
+    /// a planet): the giant a system adds when only the moon is asked.
+    pub moon_host: Option<String>,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, Locale>,
 }
@@ -91,6 +97,9 @@ pub struct FormSpec {
     pub max_pixels: u64,
     /// The archetypes a whole system can be asked for (built-in names).
     pub archetypes: Vec<String>,
+    /// The moon archetypes a whole system can be asked for (built-in
+    /// names), apart from `archetypes`, which keeps planets and giants.
+    pub moon_archetypes: Vec<String>,
     /// Most planets a system holds (moons not counted).
     pub max_planets: u32,
 }
