@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
 import { bakeSkyClouds, CLOUD_CEILING, cloudSampler, dustAt, faceDirection, type SkyExposure, type SkyFaces } from './skyClouds';
-import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
+import { bandFrame, FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 const decode = (byte: number) => {
   const v = byte / 255;
@@ -254,11 +254,19 @@ describe('the clouds along a curve', () => {
         const steps = Math.round((2 * Math.PI) / STEP);
         let previous: Vec3 | null = null;
         let previousDelta: Vec3 | null = null;
+        let previousDust = 0;
+        let olderDust = 0;
         for (let i = 0; i <= steps; i++) {
           const angle = i * STEP;
           const dir: Vec3 = [0, 1, 2].map((k) => Math.cos(angle) * a[k]! + Math.sin(angle) * b[k]!) as Vec3;
           const value = sample(dir);
-          if (previous) {
+          // The rifts' finest filaments are a fraction of a degree wide: a step or a kink of the colour inside a rift is the dust's own, so the guard looks at the clear sky (the band's edge, the core's glow).
+          const dust = dustAt(look, dir);
+          const filament = Math.max(dust, previousDust, olderDust) > 0.005;
+          olderDust = previousDust;
+          previousDust = dust;
+          if (previous && filament) previousDelta = null;
+          else if (previous) {
             const delta = value.map((v, k) => v - previous![k]!) as Vec3;
             worstStep = Math.max(worstStep, ...delta.map(Math.abs));
             if (previousDelta) worstKink = Math.max(worstKink, ...delta.map((d, k) => Math.abs(d - previousDelta![k]!)));
@@ -390,7 +398,11 @@ describe('the core is a warm glow with a lane at every radius', () => {
   it('does not saturate: the glow keeps a gradient across the core, at the closest radius', () => {
     const look = lookAtR(4.5);
     const sample = cloudSampler(look, 'photo');
-    const at = (lon: number) => sum3(sample(dirAt(look, lon, 0.15 * look.coreSize)));
+    // The glow with the rifts divided out: what is tested is the soft curve, not where a rift happens to cross.
+    const at = (lon: number) => {
+      const d = dirAt(look, lon, 0.5 * look.coreSize);
+      return sum3(sample(d)) / (1 - dustAt(look, d));
+    };
     expect(at(0)).toBeGreaterThan(1.15 * at(look.coreSize * 0.5));
     expect(at(look.coreSize * 0.5)).toBeGreaterThan(1.1 * at(look.coreSize));
   });
@@ -400,3 +412,61 @@ function sum3([r, g, b]: Vec3) {
   return r + g + b;
 }
 
+
+describe('the rifts branch', () => {
+  const lookAtR = (r: number, seed: number) =>
+    skyLook({ source: 'Derived', position_kpc: [r, 0, 0.02], axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], sky_seed: seed } as never);
+  const dirAt = (look: SkyLook, lon: number, lat: number): Vec3 => {
+    const { along, across, north } = bandFrame(look);
+    return [0, 1, 2].map(
+      (k) => Math.cos(lat) * (Math.cos(lon) * along[k]! + Math.sin(lon) * across[k]!) + Math.sin(lat) * north[k]!,
+    ) as Vec3;
+  };
+  /** Separate dark lanes along a profile: runs above `high` that dip below `low` between them. */
+  const lanesOf = (profile: number[], high = 0.35, low = 0.2) => {
+    let lanes = 0;
+    let inLane = false;
+    for (const v of profile) {
+      if (!inLane && v > high) {
+        lanes += 1;
+        inLane = true;
+      } else if (inLane && v < low) inLane = false;
+    }
+    return lanes;
+  };
+
+  it('has several separate lanes across the band at the core, not one', () => {
+    const DEG = Math.PI / 180;
+    let several = 0;
+    const seeds = 12;
+    for (let seed = 1; seed <= seeds; seed += 1) {
+      const look = lookAtR(8.2, seed * 31);
+      // Latitude profiles at three longitudes about the core, 0.1 degree apart.
+      let best = 0;
+      for (const lon of [-6, 0, 6]) {
+        const profile: number[] = [];
+        for (let lat = -25; lat <= 25; lat += 0.1) profile.push(dustAt(look, dirAt(look, lon * DEG, lat * DEG)));
+        best = Math.max(best, lanesOf(profile));
+      }
+      if (best >= 3) several += 1;
+    }
+    expect(several).toBeGreaterThanOrEqual(Math.ceil(0.75 * seeds));
+  });
+
+  it('gives a ring round the core several separate lanes too', () => {
+    const DEG = Math.PI / 180;
+    let several = 0;
+    const seeds = 12;
+    for (let seed = 1; seed <= seeds; seed += 1) {
+      const look = lookAtR(8.2, seed * 17);
+      const ring: number[] = [];
+      for (let a = 0; a < 360; a += 0.2) {
+        const lon = 12 * Math.cos(a * DEG) * DEG;
+        const lat = 12 * Math.sin(a * DEG) * DEG;
+        ring.push(dustAt(look, dirAt(look, lon, lat)));
+      }
+      if (lanesOf(ring) >= 3) several += 1;
+    }
+    expect(several).toBeGreaterThanOrEqual(Math.ceil(0.75 * seeds));
+  });
+});

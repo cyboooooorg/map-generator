@@ -289,3 +289,42 @@ Found in a real GPU browser, fixed on the same branch:
 - **The band's edge** is bent by slow and medium noise (about 0.6 and 0.25
   of the glow's spread), so it is never a smooth great circle. The cloud
   cube is baked at 512 px.
+
+### Tuning after the third visual check, 2026-11-14
+
+Reference for the look only (not copied): a wide-field Milky Way
+photograph, in which the galaxy is made mainly of stars: countless faint
+ones, a milky glow of unresolved stars, a dense yellowish bulge, thick dark
+rifts with many branching filaments and only a few small pink emission
+spots.
+
+- **Nebulae spread over the sphere.** The band-drawn share is 50 to 80% per
+  kind with a latitude spread of 8 to 20 degrees (standard deviation); the
+  rest is uniform on the sphere (the dark kind keeps 80% within 30 degrees,
+  the others up to 60 to 90). Centres are drawn by dart throwing: two
+  nebulae are at least the sum of their radii plus `NEBULA_MARGIN_DEG`
+  (3 degrees) apart, the later tries ignoring the band. Each kind keeps
+  its own sub-stream; a nebula that finds no room is dropped.
+- **Star density follows the galaxy.** A system's star field
+  (`seededStarCounts`: 6000 sky stars times the root of the brightness, up
+  to 48000 band stars with the brightness clamped to 0.4 to 1.6, 28000
+  core-swarm stars times the root of the core brightness, 6000 bulge
+  stars times the bulge, capped at 150 000 in total, the long exposure's
+  1.6 applying to the sky and the band) has a band thicker on the
+  centre's side with a wider halo, an elongated warm swarm on the core, and
+  dense populations that are fainter and mostly 1 px. The density per
+  steradian at the core is well over four times that 90 degrees along the
+  band at the Sun's place. The fixed sky keeps its old stars unchanged.
+  The glow is lower (the stars carry the band) and has a fine grain
+  (a 0.5 degree value noise) so it reads as unresolved stars.
+- **Branching rifts.** `dustAt` takes its band dust from `rifts`: a warped
+  ridged noise (trunk), finer ridges that grow only beside a trunk (side
+  branches and twigs) and a faint haze, wider in latitude and stronger
+  toward the core. The core's own lane is three strands that wander about
+  the plane and fork instead of one line. Dust dims the glow and the
+  stars behind it.
+- **Colour mostly in round nebulae.** The band's own coloured patches are
+  18% of what they were; instead each non-dark nebula has a faint
+  coloured halo (2.4 radii, cloudy, H-alpha red for emission, pillars and
+  remnants, O III teal for planetary, blue for reflection) baked into the
+  cube wherever it lies on the sphere. The band's glow is warmer and whiter.
