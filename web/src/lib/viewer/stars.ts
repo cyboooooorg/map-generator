@@ -25,6 +25,9 @@ export interface StarField {
 /** Stars spread over the whole sky, and stars along the band, at the Sun's place. */
 export const STAR_COUNTS = { sky: 5500, band: 3000 } as const;
 
+/** A long exposure records more stars: the sky's and the band's counts are scaled by this (the bulge's are not). */
+export const PHOTO_STAR_DENSITY = 1.6;
+
 /** The band keeps at least this share of the Sun's place's stars, so far out it still reads as a band. */
 const BAND_FLOOR = 0.4;
 
@@ -81,12 +84,13 @@ function frameAbout(axis: Vec3, hint: Vec3): Basis {
 /**
  * The star field of a sky. The same look always gives the same stars.
  * `dust` gives the extinction (0 to 1) toward a unit direction: a star
- * behind a lane is dimmed by it.
+ * behind a lane is dimmed by it. `density` scales the sky's and the band's
+ * star counts (1 by default; `PHOTO_STAR_DENSITY` for a long exposure).
  */
-export function starField(look: SkyLook = FIXED_SKY, dust?: (dir: Vec3) => number): StarField {
+export function starField(look: SkyLook = FIXED_SKY, dust?: (dir: Vec3) => number, density = 1): StarField {
   const next = random(look.seed);
-  const skyCount = Math.round(STAR_COUNTS.sky * Math.sqrt(look.brightness));
-  const bandCount = Math.round(STAR_COUNTS.band * Math.max(BAND_FLOOR, look.brightness));
+  const skyCount = Math.round(STAR_COUNTS.sky * Math.sqrt(look.brightness) * density);
+  const bandCount = Math.round(STAR_COUNTS.band * Math.max(BAND_FLOOR, look.brightness) * density);
   const bulgeCount = Math.round(BULGE_STARS * look.bulge);
   const count = skyCount + bandCount + bulgeCount;
   const directions = new Float32Array(count * 3);

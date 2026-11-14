@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../skyBodies';
-import { STAR_COUNTS, starField } from './stars';
+import { PHOTO_STAR_DENSITY, STAR_COUNTS, starField } from './stars';
 import { FIXED_SKY, skyLook, type SkyLook } from './skyLook';
 
 /** FNV-1a over the float bits of a buffer. */
@@ -108,5 +108,18 @@ describe('the sky of an outer system', () => {
     const bandArea = 4 * Math.PI * Math.sin(half);
     expect(inBand / bandArea).toBeGreaterThan(off / (4 * Math.PI - bandArea));
     expect(f.sizes.length).toBeGreaterThan(STAR_COUNTS.band * 0.4);
+  });
+});
+
+describe('starField density', () => {
+  it('draws 1.6 times the sky and band stars for a long exposure, the bulge unchanged', () => {
+    expect(PHOTO_STAR_DENSITY).toBe(1.6);
+    const look: SkyLook = { ...FIXED_SKY, seed: 31, bulge: 0 };
+    const eye = starField(look).sizes.length;
+    const photo = starField(look, undefined, PHOTO_STAR_DENSITY).sizes.length;
+    expect(photo / eye).toBeGreaterThanOrEqual(1.55);
+    expect(photo / eye).toBeLessThanOrEqual(1.65);
+    const bulged: SkyLook = { ...look, bulge: 1 };
+    expect(starField(bulged, undefined, PHOTO_STAR_DENSITY).sizes.length - photo).toBe(starField(bulged).sizes.length - eye);
   });
 });

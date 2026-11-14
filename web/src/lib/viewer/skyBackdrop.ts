@@ -49,7 +49,7 @@ import {
   starsFragment,
   starsVertex,
 } from './shaders';
-import { starField } from './stars';
+import { PHOTO_STAR_DENSITY, starField } from './stars';
 
 /** Which sky a view draws: the system's own, today's fixed one, or none. */
 export type SkyChoice = 'system' | 'fixed' | 'off';
@@ -154,7 +154,7 @@ export class SkyBackdrop {
   private unsubscribe: (() => void) | null = null;
   /** Bumped at every new request: a part carrying an older one is stale. */
   private request = 0;
-  private key = '';
+  private starKey = '';
   private choice: SkyChoice = 'off';
   private axes: [Vec3, Vec3, Vec3] | null = null;
 
@@ -220,7 +220,10 @@ export class SkyBackdrop {
   setExposure(exposure: SkyExposure): void {
     if (exposure === this.exposure) return;
     this.exposure = exposure;
-    if (this.baked) this.bake(this.baked);
+    if (this.baked) {
+      this.buildStars(this.baked, true);
+      this.bake(this.baked);
+    }
   }
 
   /**
@@ -238,19 +241,7 @@ export class SkyBackdrop {
     const look = lookFor(choice, own);
     const clouds = choice === 'system';
 
-    const key = `${clouds ? 'system' : 'fixed'}|${lookKey(look)}`;
-    if (key !== this.key) {
-      this.key = key;
-      const field = starField(look, clouds ? (dir) => dustAt(look, dir) : undefined);
-      // A new geometry: replacing the attributes of the old one would leave their buffers on the GPU.
-      const geometry = new BufferGeometry();
-      geometry.setAttribute('position', new BufferAttribute(field.directions, 3));
-      geometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
-      geometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
-      const old = this.stars.geometry;
-      this.stars.geometry = geometry;
-      old.dispose();
-    }
+    this.buildStars(look, clouds);
 
     if (clouds) {
       const wanted = lookKey(look);
@@ -263,6 +254,26 @@ export class SkyBackdrop {
         this.bake(look);
       }
     }
+  }
+
+  /**
+   * The star points of the look. The system's sky in a long exposure has
+   * more stars than the naked eye sees; the fixed sky is today's in both.
+   */
+  private buildStars(look: SkyLook, clouds: boolean): void {
+    const photo = clouds && look !== FIXED_SKY && this.exposure === 'photo';
+    const key = `${clouds ? 'system' : 'fixed'}|${photo ? 'photo' : 'eye'}|${lookKey(look)}`;
+    if (key === this.starKey) return;
+    this.starKey = key;
+    const field = starField(look, clouds ? (dir) => dustAt(look, dir) : undefined, photo ? PHOTO_STAR_DENSITY : 1);
+    // A new geometry: replacing the attributes of the old one would leave their buffers on the GPU.
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(field.directions, 3));
+    geometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
+    geometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
+    const old = this.stars.geometry;
+    this.stars.geometry = geometry;
+    old.dispose();
   }
 
   /** Asks for the look's parts in the exposure now wanted; the ones of an earlier request are dropped. */

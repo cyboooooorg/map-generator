@@ -7,6 +7,9 @@ import * as clouds from './skyClouds';
 import { skyNebulae } from './skyNebulae';
 import { starField } from './stars';
 
+// Without a worker the bake runs in the test, and a sky is a few seconds of it.
+vi.setConfig({ testTimeout: 30_000 });
+
 const options = { hideHostStar: true, renderOrder: -3 };
 
 describe('SkyBackdrop', () => {
@@ -86,6 +89,24 @@ describe('SkyBackdrop', () => {
     expect(cubeOf(backdrop).visible).toBe(true);
     expect(backdrop.orientedByAxes).toBe(true);
     expect(backdrop.group.matrixAutoUpdate).toBe(false);
+  });
+
+  it('draws more stars in a long exposure than for the naked eye, and the fixed sky the same in both', () => {
+    const count = (backdrop: SkyBackdrop) => backdrop.stars.geometry.getAttribute('position').count;
+    const own = { ...FIXED_SKY, seed: 71 };
+    const backdrop = new SkyBackdrop(options);
+    backdrop.setExposure('eye');
+    backdrop.setSky('system', own);
+    const eye = count(backdrop);
+    backdrop.setExposure('photo');
+    const photo = count(backdrop);
+    expect(photo).toBeGreaterThan(1.5 * eye);
+    backdrop.setExposure('eye');
+    expect(count(backdrop)).toBe(eye);
+    backdrop.setSky('fixed', own);
+    const fixed = count(backdrop);
+    backdrop.setExposure('photo');
+    expect(count(backdrop)).toBe(fixed);
   });
 
   it('replaces the star geometry rather than its attributes', () => {
