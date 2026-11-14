@@ -35,6 +35,24 @@ pub struct Context {
     pub age_gyr: f64,
     /// Effective temperature of the star, K.
     pub teff_k: f64,
+    /// The host whose tides heat the body, when it is not the star: a
+    /// moon's planet. `None` for a planet, whose tides are the star's on
+    /// its orbit.
+    pub tide: Option<HostTide>,
+}
+
+/// The host that raises tides in a body and the body's orbit around it,
+/// for [`super::heat::tidal_power_w`]: a moon's planet and the moon's
+/// orbit.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HostTide {
+    /// Mass of the host, kg.
+    pub host_kg: f64,
+    /// Semi-major axis of the body's orbit around the host, m.
+    pub a_m: f64,
+    /// Eccentricity of that orbit (0 circular): a resonant moon's forced
+    /// one, as Io's.
+    pub eccentricity: f64,
 }
 
 impl Context {
@@ -52,6 +70,17 @@ impl Context {
             equilibrium_k: f64::from(star.equilibrium_k),
             age_gyr: f64::from(star.age_gyr),
             teff_k: f64::from(star.teff_k),
+            tide: None,
+        }
+    }
+
+    /// This context with its tides raised by `tide`'s host instead of the
+    /// star: a moon's, whose planet heats it, under its star's light at
+    /// the planet's orbit.
+    pub fn with_tide(self, tide: HostTide) -> Self {
+        Self {
+            tide: Some(tide),
+            ..self
         }
     }
 
@@ -427,6 +456,7 @@ mod tests {
             equilibrium_k: 255.0 * insolation.powf(0.25),
             age_gyr: 4.6,
             teff_k: 5772.0,
+            tide: None,
         }
     }
 

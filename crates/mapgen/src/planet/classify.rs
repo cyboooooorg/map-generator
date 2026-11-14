@@ -560,7 +560,8 @@ mod tests {
     /// The path of the first number of `model` that is not finite or is
     /// negative, if any. serde_json writes a non-finite `f64` as `null`,
     /// so a `null` counts as one, except where an `Option` is expected
-    /// (`surface`, `None` for an enveloped body).
+    /// (`surface`, `None` for an enveloped body; `ice_shell`, `None`
+    /// without a frozen water layer).
     fn not_finite(model: &crate::planet::PlanetModel) -> Option<String> {
         let json = serde_json::to_value(model).unwrap();
         first_bad(&json, "")
@@ -572,7 +573,9 @@ mod tests {
                 let x = n.as_f64().unwrap();
                 (!(x.is_finite() && x >= 0.0)).then(|| format!("{path}: {x}"))
             }
-            serde_json::Value::Null if path != "/surface" => Some(format!("{path}: null")),
+            serde_json::Value::Null if path != "/surface" && path != "/ice_shell" => {
+                Some(format!("{path}: null"))
+            }
             serde_json::Value::Array(a) => a
                 .iter()
                 .enumerate()
