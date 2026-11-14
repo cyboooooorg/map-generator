@@ -31,8 +31,13 @@ import type { DialBody, DialState } from '../rotationDial';
 
 /** Where the dial sits by default, in radii of the body: clear of its surface and of the spin guides' ring. */
 export const DIAL_RADIUS = 1.25;
-const RING_COLOUR = new Color('#9fd3ff');
-const POINTER_COLOUR = new Color('#ffcc66');
+/**
+ * The ring's and the pointer's colours until the theme's are set (see
+ * setColours): the default theme's overlay-orbit and overlay-line.
+ */
+const RING_COLOUR = new Color('#c8d2e6');
+const POINTER_COLOUR = new Color('#ffe3a8');
+// The markers and arcs of the star, the host and the moons carry meaning: they keep their colours in every theme.
 /** The star's marker and half-circle: a soft gold, not the star's glare. */
 const SUN_COLOUR = new Color('#c9b98a');
 const HOST_COLOUR = new Color('#c89a6a');
@@ -76,6 +81,9 @@ export class RotationDial {
   private readonly half: BufferGeometry;
   private readonly marker: SphereGeometry;
   private readonly materials: { material: LineBasicMaterial | MeshBasicMaterial; weight: number }[] = [];
+  /** The ring's materials and the pointer's, recoloured with the theme (see setColours). */
+  private readonly ringMaterials: LineBasicMaterial[];
+  private readonly pointerMaterial: MeshBasicMaterial;
   private readonly geometries: BufferGeometry[] = [];
   private readonly turn = new Vector3();
   private ringRadius = DIAL_RADIUS;
@@ -116,10 +124,11 @@ export class RotationDial {
       const length = k % 6 === 0 ? LONG_TICK : SHORT_TICK;
       ticks.push(c, 0, s, c * (1 + length), 0, s * (1 + length));
     }
+    this.ringMaterials = [line(RING_COLOUR, 1), line(RING_COLOUR, 0.4), line(RING_COLOUR, 1)];
     this.ring.add(
-      new LineLoop(circle(1), line(RING_COLOUR, 1)),
-      new LineLoop(circle(OUTER), line(RING_COLOUR, 0.4)),
-      new LineSegments(points(ticks), line(RING_COLOUR, 1)),
+      new LineLoop(circle(1), this.ringMaterials[0]!),
+      new LineLoop(circle(OUTER), this.ringMaterials[1]!),
+      new LineSegments(points(ticks), this.ringMaterials[2]!),
     );
 
     // The half-circle from −90° to +90° of height, ticks every 10°, long every 30°.
@@ -146,9 +155,9 @@ export class RotationDial {
     this.quarter = points(up);
 
     // The pointer is built along +y from its foot at the surface, then turned (as bodyGuides' arrows).
-    const pointerMaterial = mesh(POINTER_COLOUR);
-    this.shaft = new Mesh(this.geometry(new CylinderGeometry(POINTER_TUBE, POINTER_TUBE, 1, 12)), pointerMaterial);
-    this.head = new Mesh(this.geometry(new ConeGeometry(POINTER_TUBE * 2.5, HEAD_LENGTH, 16)), pointerMaterial);
+    this.pointerMaterial = mesh(POINTER_COLOUR);
+    this.shaft = new Mesh(this.geometry(new CylinderGeometry(POINTER_TUBE, POINTER_TUBE, 1, 12)), this.pointerMaterial);
+    this.head = new Mesh(this.geometry(new ConeGeometry(POINTER_TUBE * 2.5, HEAD_LENGTH, 16)), this.pointerMaterial);
     this.pointer.add(this.shaft, this.head);
 
     this.marker = this.geometry(new SphereGeometry(1, 16, 12));
@@ -258,6 +267,15 @@ export class RotationDial {
       arc.marker.scale.setScalar(MARKER * radius * (body.host ? 1 : 0.8));
       if (body.host) this.hostPoint = arc.point;
     }
+  }
+
+  /**
+   * The ring's colour (its circles and ticks) and the pointer's, from the
+   * theme (see overlayColours in lib/themes): CSS colours.
+   */
+  setColours(colours: { ring: string; pointer: string }): void {
+    for (const material of this.ringMaterials) material.color.set(colours.ring);
+    this.pointerMaterial.color.set(colours.pointer);
   }
 
   /** Shows or hides it, faded with the globe's morph (opacity = fade³, as bodyGuides). */

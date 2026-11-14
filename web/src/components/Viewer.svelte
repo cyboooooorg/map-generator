@@ -28,6 +28,7 @@
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting, saveSetting } from '../lib/settings';
+  import { onThemeChange, overlayColours } from '../lib/themes';
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
@@ -648,10 +649,15 @@
 
   /** A camera to show (a link's, a linked pane's), kept until the view exists. */
   let pendingCamera: CameraState | null = null;
+  /** Stops recolouring the view's HUD with the theme. */
+  let stopTheme: (() => void) | null = null;
 
   onMount(() => {
     try {
       view = new PlanetView(canvas, currentProfile());
+      const created = view;
+      created.setOverlayColours(overlayColours());
+      stopTheme = onThemeChange(() => created.setOverlayColours(overlayColours()));
       if (pendingCamera) {
         view.setCamera(pendingCamera);
         pendingCamera = null;
@@ -671,6 +677,7 @@
 
   onDestroy(() => {
     display.flush();
+    stopTheme?.();
     view?.dispose();
   });
 

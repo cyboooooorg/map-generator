@@ -51,7 +51,7 @@
     text-shadow: 0 0 3px rgb(0 0 0 / 0.9);
   }
   .number {
-    color: #9fd3ff;
+    color: var(--overlay-orbit, #c8d2e6);
   }
   .height {
     color: #c9b98a;

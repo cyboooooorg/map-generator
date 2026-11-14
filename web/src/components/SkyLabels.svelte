@@ -87,17 +87,20 @@
     inset: 0;
   }
   line {
-    stroke: rgb(200 210 230 / 0.75);
+    stroke: var(--overlay-orbit, #c8d2e6);
+    stroke-opacity: 0.75;
     stroke-width: 1;
   }
   circle {
     fill: none;
-    stroke: rgb(200 210 230 / 0.9);
+    stroke: var(--overlay-orbit, #c8d2e6);
+    stroke-opacity: 0.9;
     stroke-width: 1;
   }
   line.star,
   circle.star {
-    stroke: rgb(255 214 140 / 0.85);
+    stroke: var(--overlay-line, #ffe3a8);
+    stroke-opacity: 0.85;
   }
   .label {
     position: absolute;
@@ -105,17 +108,17 @@
     display: grid;
     padding: 2px 6px;
     border-radius: 4px;
-    background: rgb(5 7 13 / 0.72);
+    background: var(--label-bg, rgb(5 7 13 / 0.72));
     font-size: 0.72rem;
     line-height: 1.25;
     white-space: nowrap;
-    color: #dfe6f2;
+    color: var(--label-text, #dfe6f2);
   }
   .label.left {
     transform: translate(calc(-100% - 4px), -50%);
   }
   .label.star {
-    color: #ffd68c;
+    color: var(--overlay-line, #ffd68c);
   }
   .label span {
     color: var(--muted, #9aa4b8);
