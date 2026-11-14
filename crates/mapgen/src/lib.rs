@@ -23,6 +23,7 @@ pub mod epoch;
 pub mod erosion;
 pub mod exomoon;
 pub mod export;
+pub mod galaxy;
 pub mod generation;
 pub mod geo;
 pub mod geology;

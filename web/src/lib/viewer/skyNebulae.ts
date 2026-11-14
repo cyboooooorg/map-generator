@@ -1,0 +1,368 @@
+// The nebulae of a system's sky: a seeded catalogue of objects, in the
+// families of real nebulae (never copies): planetary (the Helix's family),
+// emission complexes with dark lanes (Carina's), pillars (the Eagle's),
+// supernova remnants, reflection nebulae and dark nebulae.
+//
+// All directions are in the system frame. Each kind draws from its own
+// sub-stream of the sky seed, so adding a kind later reshuffles no other.
+// Dark nebulae and pillar silhouettes also dim what is behind them: see
+// `nebulaDustAt`, which `dustAt` (skyClouds) adds to the band's dust.
+
+import type { Vec3 } from '../skyBodies';
+import { fbm2, smoothstep } from './nebulaNoise';
+import { bandFrame, type SkyLook } from './skyLook';
+import { random, subSeed } from './skyRandom';
+
+export type NebulaKind = 'planetary' | 'emission' | 'pillars' | 'remnant' | 'reflection' | 'dark';
+
+export interface Nebula {
+  kind: NebulaKind;
+  /** Centre, unit, system frame. */
+  dir: Vec3;
+  /** Angular radius, radians: the texture's quad spans plus and minus this around `dir`. */
+  radius: number;
+  /** Orientation about `dir`, radians (see `nebulaBasis`). */
+  roll: number;
+  /** Its own shape seed. */
+  seed: number;
+  /** Colour-mix parameter within the kind, 0 to 1. */
+  tint: number;
+}
+
+interface KindSpec {
+  kind: NebulaKind;
+  /** Count at the Sun's place (inclusive range), scaled with the look's brightness. */
+  count: [number, number];
+  /** Angular radius range, degrees (log-uniform). */
+  size: [number, number];
+  /** Share drawn about the band (the rest is uniform on the sphere). */
+  bandShare: number;
+  /** Latitude spread (standard deviation) of the band-drawn ones, degrees: wide, so the nebulae are not a thin strip. */
+  spreadDeg: number;
+  /** Hard limit of the latitude of the band-drawn ones, degrees. */
+  maxLatitude: number;
+}
+
+const KINDS: KindSpec[] = [
+  { kind: 'planetary', count: [3, 8], size: [0.5, 3], bandShare: 0.5, spreadDeg: 16, maxLatitude: 90 },
+  { kind: 'emission', count: [2, 5], size: [3, 12], bandShare: 0.6, spreadDeg: 14, maxLatitude: 60 },
+  { kind: 'pillars', count: [1, 3], size: [1.5, 5], bandShare: 0.6, spreadDeg: 14, maxLatitude: 60 },
+  { kind: 'remnant', count: [1, 3], size: [2, 8], bandShare: 0.5, spreadDeg: 20, maxLatitude: 90 },
+  { kind: 'reflection', count: [2, 6], size: [0.5, 3], bandShare: 0.6, spreadDeg: 16, maxLatitude: 70 },
+  { kind: 'dark', count: [4, 10], size: [1.5, 7], bandShare: 0.8, spreadDeg: 8, maxLatitude: 30 },
+];
+
+/** Two nebulae's centres are at least the sum of their radii plus this apart, degrees. */
+export const NEBULA_MARGIN_DEG = 3;
+
+/** The size table, degrees, for the tests and the texture resolution. */
+export const NEBULA_SIZE_DEG: Record<NebulaKind, [number, number]> = Object.fromEntries(
+  KINDS.map((k) => [k.kind, k.size]),
+) as Record<NebulaKind, [number, number]>;
+
+const RAD = Math.PI / 180;
+
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const unit = (v: Vec3): Vec3 => {
+  const l = Math.hypot(v[0], v[1], v[2]);
+  return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [1, 0, 0];
+};
+
+function gauss(next: () => number): number {
+  return Math.sqrt(-2 * Math.log(Math.max(1e-9, next()))) * Math.cos(2 * Math.PI * next());
+}
+
+/** The roll that turns the texture's x axis along the band's great circle at the nebula's centre. */
+function alongBandRoll(n: Nebula, north: Vec3): number {
+  const { right, up } = nebulaBasis({ ...n, roll: 0 });
+  const tangent = unit(cross(north, n.dir));
+  return Math.atan2(dot(tangent, up), dot(tangent, right));
+}
+
+function draw(look: SkyLook, spec: KindSpec, placed: Nebula[]): Nebula[] {
+  const next = random(subSeed(look.seed, `nebula:${spec.kind}`));
+  const scale = Math.min(1.8, Math.max(0.5, Math.sqrt(look.brightness)));
+  const [lo, hi] = spec.count;
+  const base = lo + Math.floor(next() * (hi - lo + 1));
+  const count = Math.max(1, Math.round(base * scale));
+  const frame = bandFrame(look);
+  const centreBias = 0.15 + 0.3 * look.bulge;
+  const out: Nebula[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const [smin, smax] = spec.size;
+    const radius = smin * (smax / smin) ** next() * RAD;
+    let nebula: Nebula | null = null;
+    // Dart throwing: a centre too close to a placed nebula is drawn again; the later tries ignore the band.
+    for (let attempt = 0; attempt < 80 && !nebula; attempt += 1) {
+      let dir: Vec3;
+      if (attempt < 40 && next() < spec.bandShare) {
+        const limit = spec.maxLatitude * RAD;
+        const lat = Math.max(-limit, Math.min(limit, gauss(next) * spec.spreadDeg * RAD));
+        const lon = next() < centreBias ? gauss(next) * 0.9 : (next() * 2 - 1) * Math.PI;
+        const cl = Math.cos(lat);
+        dir = [
+          cl * (Math.cos(lon) * frame.along[0] + Math.sin(lon) * frame.across[0]) + Math.sin(lat) * frame.north[0],
+          cl * (Math.cos(lon) * frame.along[1] + Math.sin(lon) * frame.across[1]) + Math.sin(lat) * frame.north[1],
+          cl * (Math.cos(lon) * frame.along[2] + Math.sin(lon) * frame.across[2]) + Math.sin(lat) * frame.north[2],
+        ];
+      } else {
+        const z = next() * 2 - 1;
+        const a = next() * 2 * Math.PI;
+        const r = Math.sqrt(1 - z * z);
+        dir = [r * Math.cos(a), r * Math.sin(a), z];
+      }
+      const centre = unit(dir);
+      const free = [...placed, ...out].every(
+        (o) => Math.acos(Math.max(-1, Math.min(1, dot(centre, o.dir)))) >= o.radius + radius + NEBULA_MARGIN_DEG * RAD,
+      );
+      if (!free) continue;
+      nebula = { kind: spec.kind, dir: centre, radius, roll: next() * 2 * Math.PI, seed: Math.floor(next() * 4_294_967_296) >>> 0, tint: next() };
+    }
+    if (!nebula) continue;
+    // Dark nebulae are elongated and lie along the band: their long axis follows the plane.
+    if (spec.kind === 'dark') nebula.roll = alongBandRoll(nebula, frame.north) + (next() - 0.5) * 0.5;
+    out.push(nebula);
+  }
+  return out;
+}
+
+const byObject = new WeakMap<SkyLook, Nebula[]>();
+const byKey = new Map<string, Nebula[]>();
+
+/** The look's nebulae; memoised per look. */
+export function skyNebulae(look: SkyLook): Nebula[] {
+  const hit = byObject.get(look);
+  if (hit) return hit;
+  const key = [look.seed, look.brightness, look.bandWidth, look.bulge, ...look.north, ...look.centre].join('|');
+  let list = byKey.get(key);
+  if (!list) {
+    list = [];
+    for (const spec of KINDS) list.push(...draw(look, spec, list));
+    if (byKey.size >= 16) byKey.clear();
+    byKey.set(key, list);
+  }
+  byObject.set(look, list);
+  return list;
+}
+
+/** The right and up unit vectors of a nebula's texture on the sky (tangent to the sphere at `dir`, turned by `roll`). */
+export function nebulaBasis(n: Nebula): { right: Vec3; up: Vec3 } {
+  const ref: Vec3 = Math.abs(n.dir[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const right0 = unit(cross(ref, n.dir));
+  const up0 = cross(n.dir, right0);
+  const c = Math.cos(n.roll);
+  const s = Math.sin(n.roll);
+  return {
+    right: [c * right0[0] + s * up0[0], c * right0[1] + s * up0[1], c * right0[2] + s * up0[2]],
+    up: [-s * right0[0] + c * up0[0], -s * right0[1] + c * up0[1], -s * right0[2] + c * up0[2]],
+  };
+}
+
+/**
+ * A dark column of a pillars nebula, in the texture's frame (x right, y up,
+ * both in [-1, 1]), or (with `blob`) a small detached globule near a tip.
+ */
+export interface Pillar {
+  x: number;
+  /** Half width at the base. */
+  width: number;
+  /** Height of the tip (of the globule's centre). */
+  top: number;
+  lean: number;
+  phase: number;
+  /** Half width of the finger-like tip. */
+  tip: number;
+  /** Noise seed shared by the columns of a nebula (the ragged edge is drawn once). */
+  seed: number;
+  /** Radius of a globule; unset for a column. */
+  blob?: number;
+}
+
+const pillarCache = new WeakMap<Nebula, Pillar[]>();
+
+/**
+ * Two or three dark columns rising from the bottom edge, tapering to narrow
+ * bent fingers, each with a finger or two beside it and a few small
+ * globules above the tips (the Eagle's evaporating gaseous globules),
+ * drawn from the nebula's seed. The first entries are the main columns.
+ */
+export function pillarColumns(n: Nebula): Pillar[] {
+  const hit = pillarCache.get(n);
+  if (hit) return hit;
+  const next = random(subSeed(n.seed, 'pillars'));
+  const seed = subSeed(n.seed, 'pillar-edge');
+  const count = 2 + Math.floor(next() * 2);
+  const columns: Pillar[] = [];
+  for (let i = 0; i < count; i += 1) {
+    columns.push({
+      x: (-0.5 + (i / (count - 1)) * 1) * 0.9 + (next() - 0.5) * 0.15,
+      width: 0.17 + next() * 0.1,
+      top: -0.25 + next() * 0.65,
+      lean: (next() - 0.5) * 0.36,
+      phase: next() * 6.28,
+      tip: 0.035 + next() * 0.025,
+      seed,
+    });
+  }
+  const mains = columns.slice();
+  for (const m of mains) {
+    // Side fingers: thin columns that leave the shaft and end near the tip.
+    const fingers = 1 + Math.floor(next() * 2);
+    for (let k = 0; k < fingers; k += 1) {
+      const side = next() < 0.5 ? -1 : 1;
+      columns.push({
+        x: m.x + side * m.width * (0.55 + next() * 0.3),
+        width: 0.07 + next() * 0.05,
+        top: m.top - 0.12 - next() * 0.3,
+        lean: m.lean + side * (0.04 + next() * 0.1),
+        phase: next() * 6.28,
+        tip: 0.025 + next() * 0.02,
+        seed,
+      });
+    }
+  }
+  for (const m of mains) {
+    const globules = 1 + Math.floor(next() * 3);
+    for (let k = 0; k < globules; k += 1) {
+      columns.push({
+        x: m.x + m.lean + (next() - 0.5) * 0.5,
+        width: 0,
+        top: m.top + 0.05 + next() * 0.3,
+        lean: 0,
+        phase: 0,
+        tip: 0,
+        seed,
+        blob: 0.02 + next() * 0.03,
+      });
+    }
+  }
+  pillarCache.set(n, columns);
+  return columns;
+}
+
+/** Pillar parameters at height `y`: centre and half width, or null above the tip. */
+export function pillarAt(p: Pillar, y: number): { cx: number; half: number } | null {
+  if (p.blob !== undefined) return null;
+  if (y > p.top) return null;
+  const yc = p.top - p.tip;
+  const t = Math.min(1, Math.max(0, (y + 1) / (yc + 1)));
+  // Wide at the foot, then a long taper to a narrow finger, knobbly, bent and wavering.
+  const knobs = 1 + 0.14 * Math.sin(7 * y + p.phase);
+  return {
+    cx: p.x + p.lean * t * t + 0.025 * Math.sin(9 * y + p.phase) * (0.4 + t),
+    half: p.tip + (p.width - p.tip) * (1 - t) ** 1.25 * knobs,
+  };
+}
+
+/** Signed distance (about, in texture units) to one column's outline: negative inside. */
+function columnDistance(p: Pillar, x: number, y: number): number {
+  if (p.blob !== undefined) return Math.hypot(x - p.x, (y - p.top) / 0.75) - p.blob;
+  const yc = p.top - p.tip;
+  if (y > yc) {
+    const at = pillarAt(p, yc)!;
+    return Math.hypot(x - at.cx, y - yc) - at.half;
+  }
+  const at = pillarAt(p, y)!;
+  return Math.abs(x - at.cx) - at.half;
+}
+
+/**
+ * Signed distance to the columns (negative inside): the outline is torn by
+ * a warp at three scales, so the edge is ragged and the tips frayed.
+ */
+export function pillarDistance(columns: Pillar[], x: number, y: number): number {
+  if (columns.length === 0) return 1;
+  const s = columns[0]!.seed;
+  const dx = 0.1 * (fbm2(x * 3 + 1, y * 3, s, 2) - 0.5) + 0.05 * (fbm2(x * 9, y * 9 + 4, s ^ 0x5, 3) - 0.5) + 0.02 * (fbm2(x * 28, y * 28, s ^ 0x9, 2) - 0.5);
+  const dy = 0.05 * (fbm2(x * 4, y * 4 + 7, s ^ 0x3, 2) - 0.5) + 0.03 * (fbm2(x * 14 + 3, y * 14, s ^ 0x7, 3) - 0.5);
+  let d = 1;
+  for (const p of columns) d = Math.min(d, columnDistance(p, x + dx, y + dy));
+  return d;
+}
+
+/** Opacity 0..1 of the columns at a point of the texture's frame: a sharp edge, a slightly mottled inside. */
+export function pillarMask(columns: Pillar[], x: number, y: number): number {
+  const d = pillarDistance(columns, x, y);
+  if (d > 0.012) return 0;
+  const edge = 1 - smoothstep(-0.006, 0.012, d);
+  return edge * (0.92 + 0.08 * fbm2(x * 20 + 5, y * 20, columns[0]!.seed ^ 0x77, 3));
+}
+
+/**
+ * Opacity 0..1 of a dark nebula at a point of its texture's frame (x right,
+ * y up, both in [-1, 1]): an elongated, bent patch (long along x) with
+ * warped, ragged edges and a few dark tendrils, zero beyond 0.9 of the half
+ * size. The texture and `nebulaDustAt` both read it.
+ */
+export function darkOpacity(n: Nebula, x: number, y: number): number {
+  const s = subSeed(n.seed, 'texture:dark');
+  const rr = Math.hypot(x, y);
+  if (rr >= 0.9) return 0;
+  const aspect = 0.3 + 0.25 * fbm2(n.tint * 9, 1.5, s, 1);
+  const bend = 0.22 * Math.sin(2.1 * x + n.tint * 6);
+  const u = x + 0.3 * (fbm2(x * 2 + 5, y * 2, s ^ 0x31, 3) - 0.5);
+  const v = y - bend + 0.22 * (fbm2(x * 2, y * 2 + 8, s ^ 0x32, 3) - 0.5);
+  const body = 1 - smoothstep(0.3, 1, Math.hypot(u / 0.95, v / (0.95 * aspect)));
+  // Ragged edge at three scales, clumps with holes inside, a network of thin fibres and hair-like wisps at the fringe.
+  const ragged = 0.6 * (fbm2(x * 5 + 2, y * 5 - 1, s, 4) - 0.5) + 0.5 * (fbm2(x * 13 + 7, y * 13, s ^ 0x34, 3) - 0.5) + 0.25 * (fbm2(x * 34, y * 34 + 3, s ^ 0x35, 2) - 0.5);
+  const core = smoothstep(0.18, 0.42, body + 0.9 * ragged);
+  const ridge = 1 - Math.abs(2 * fbm2(x * 3.2 + 4, y * 3.2 + 1, s ^ 0x33, 3) - 1);
+  const tendril = 0.7 * smoothstep(0.78, 0.95, ridge) * (1 - smoothstep(0.1, 0.9, Math.hypot(u / 1.4, v / (1.4 * aspect * 1.6))));
+  const fibre = 1 - Math.abs(2 * fbm2(x * 12 + 1, y * 12 + 5, s ^ 0x36, 3) - 1);
+  const fibres = 0.55 * smoothstep(0.8, 0.95, fibre) * (1 - smoothstep(0.2, 1, Math.hypot(u / 1.2, v / (1.2 * aspect * 1.4))));
+  const mottle = 0.55 + 0.5 * fbm2(x * 4 + 6, y * 4, s ^ 0x5, 3) + 0.25 * fbm2(x * 16, y * 16 + 2, s ^ 0x37, 3);
+  return Math.min(1, Math.max(core * Math.min(1, mottle), tendril, fibres)) * (1 - smoothstep(0.74, 0.9, rr));
+}
+
+/** Strongest extinction of a dark nebula or pillar silhouette at its centre. */
+const DARK_OPACITY = 0.85;
+const PILLAR_OPACITY = 0.75;
+
+interface Occluder {
+  nebula: Nebula;
+  cosRadius: number;
+  tanRadius: number;
+  right: Vec3;
+  up: Vec3;
+}
+
+const occluderCache = new WeakMap<Nebula[], Occluder[]>();
+
+function occludersOf(look: SkyLook): Occluder[] {
+  const list = skyNebulae(look);
+  let found = occluderCache.get(list);
+  if (!found) {
+    found = list
+      .filter((n) => n.kind === 'dark' || n.kind === 'pillars')
+      .map((nebula) => ({
+        nebula,
+        cosRadius: Math.cos(nebula.radius),
+        tanRadius: Math.tan(nebula.radius),
+        ...nebulaBasis(nebula),
+      }));
+    occluderCache.set(list, found);
+  }
+  return found;
+}
+
+/**
+ * Extinction 0..1 of the dark nebulae and pillar silhouettes toward a unit
+ * direction; the textures draw the same shapes.
+ */
+export function nebulaDustAt(look: SkyLook, dir: Vec3): number {
+  let clear = 1;
+  for (const o of occludersOf(look)) {
+    const c = dot(dir, o.nebula.dir);
+    if (c < o.cosRadius) continue;
+    const x = dot(dir, o.right) / c / o.tanRadius;
+    const y = dot(dir, o.up) / c / o.tanRadius;
+    if (o.nebula.kind === 'dark') clear *= 1 - DARK_OPACITY * darkOpacity(o.nebula, x, y);
+    else clear *= 1 - PILLAR_OPACITY * pillarMask(pillarColumns(o.nebula), x, y);
+  }
+  return 1 - clear;
+}

@@ -15,7 +15,8 @@ export type Shortcut =
         | 'sunlight'
         | 'seasons'
         | 'atmosphere'
-        | 'stars'
+        | 'sky'
+        | 'skyExposure'
         | 'starView'
         | 'moonView'
         | 'clouds'
@@ -51,7 +52,8 @@ const KEYS: Record<string, Simple> = {
   l: 'sunlight',
   s: 'seasons',
   a: 'atmosphere',
-  b: 'stars',
+  b: 'sky',
+  e: 'skyExposure',
   o: 'starView',
   u: 'moonView',
   c: 'clouds',
@@ -114,7 +116,8 @@ export function shortcutHelp(): readonly [string, string][] {
     ['L', t.shortcuts.sunlight],
     ['S', t.shortcuts.seasons],
     ['A', t.shortcuts.atmosphere],
-    ['B', t.shortcuts.stars],
+    ['B', t.shortcuts.sky],
+    ['E', t.shortcuts.skyExposure],
     ['O', t.shortcuts.starView],
     ['U', t.shortcuts.moonView],
     ['C', t.shortcuts.clouds],

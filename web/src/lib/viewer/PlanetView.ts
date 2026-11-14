@@ -127,8 +127,6 @@ import {
   skyOrbitFragment,
   skyOrbitVertex,
   hostStarVertex,
-  starsFragment,
-  starsVertex,
   surfaceFragment,
   surfaceVertex,
 } from './shaders';
@@ -162,7 +160,9 @@ import type { FaintRing } from '../ringMoons';
 import type { RingSystem } from '../api/types/RingSystem';
 import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
-import { starField } from './stars';
+import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import type { SkyExposure } from './skyClouds';
+import { FIXED_SKY, type SkyLook } from './skyLook';
 
 export type ViewMode = 'globe' | 'map';
 
@@ -480,6 +480,8 @@ export class PlanetView {
   private readonly surface: Mesh<PlaneGeometry, ShaderMaterial>;
   private readonly grid: LineSegments<BufferGeometry, ShaderMaterial>;
   /** The star field (see stars.ts). */
+  private readonly backdrop: SkyBackdrop;
+  /** The backdrop's stars: they carry the host star's disc uniforms. */
   private readonly stars: Points<BufferGeometry, ShaderMaterial>;
   /** The host star, drawn with Sunlight at the sun's direction (a square at infinity, see hostStarVertex). */
   private readonly hostStar: Mesh<PlaneGeometry, ShaderMaterial>;
@@ -628,7 +630,9 @@ export class PlanetView {
   private lastDrawn = -Infinity;
   private atmosphereOn = true;
   /** Whether the star field is shown. */
-  private starsOn = true;
+  private skyChoice: SkyChoice = 'system';
+  /** The system's own look; the fixed choice ignores it. */
+  private ownLook: SkyLook = FIXED_SKY;
   /** The other bodies drawn in the sky (see setSkyBodies), with their maps. */
   private skyBodies: {
     mesh: Mesh<PlaneGeometry, ShaderMaterial>;
@@ -867,40 +871,17 @@ export class PlanetView {
     this.renderer.setPixelRatio(fullPixelRatio(window.devicePixelRatio, quality));
     this.scene.background = new Color('#05070d');
 
-    // The stars, behind everything (see starsVertex).
-    const field = starField();
-    const starGeometry = new BufferGeometry();
-    starGeometry.setAttribute('position', new BufferAttribute(field.directions, 3));
-    starGeometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
-    starGeometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
-    this.stars = new Points(
-      starGeometry,
-      new ShaderMaterial({
-        vertexShader: starsVertex,
-        fragmentShader: starsFragment,
-        // The host star's disc hides the stars behind it (see starsVertex).
-        defines: { HIDE_HOST_STAR: 1 },
-        uniforms: {
-          uPixelRatio: { value: 1 },
-          uOpacity: { value: 1 },
-          uHostDir: { value: new Vector3(0, 0, 1) },
-          uHostCos: { value: 2 },
-        },
-        blending: AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    // Directions, not positions: the geometry bounds are meaningless.
-    this.stars.frustumCulled = false;
-    // The sky, farthest first: the star field, the host star, then the
+    // The sky, behind everything: the clouds and the stars (see
+    // SkyBackdrop). The host star's disc hides the stars behind it.
+    this.backdrop = new SkyBackdrop({ hideHostStar: true, renderOrder: -3, requestRender: () => this.requestRender() });
+    this.stars = this.backdrop.stars;
+    // The sky, farthest first: the clouds and the star field, the host star, then the
     // bodies of the system, which hide both (all at infinity, drawn in
     // this order after the surface, which hides them by depth). The star
     // is drawn additively, without depth: the star field drops the points
     // behind its disc (starsVertex), the orbit lines the segments behind
     // it (skyOrbitFragment, uHostOccluder).
-    this.stars.renderOrder = -3;
-    this.scene.add(this.stars);
+    this.scene.add(this.backdrop.group);
 
     // The host star, at the sun's direction (see hostStarVertex): a
     // square whose corners the vertex shader places round it on screen.
@@ -1890,10 +1871,41 @@ export class PlanetView {
     shares.slice(0, value.length).forEach((share, id) => (value[id] = share));
   }
 
-  /** Shows or hides the star field around the globe. */
-  setStars(visible: boolean): void {
+  /** The sky of the system the view shows (see skyLook); the fixed choice ignores it. */
+  setSkyLook(look: SkyLook): void {
+    this.ownLook = look;
+    this.backdrop.setSky(this.skyChoice, look);
     this.requestRender();
-    this.starsOn = visible;
+  }
+
+  /** The sky's rendering: as the eye sees it or as a long exposure shows it. */
+  setSkyExposure(exposure: SkyExposure): void {
+    this.backdrop.setExposure(exposure);
+    this.requestRender();
+  }
+
+  /** Draws the system's own sky, the fixed one, or none around the globe. */
+  setSkyChoice(choice: SkyChoice): void {
+    this.skyChoice = choice;
+    this.backdrop.setSky(choice, this.ownLook);
+    // The fixed sky is tied to the body: it turns with the stars, whatever the axes.
+    if (!this.backdrop.orientedByAxes) this.backdrop.group.rotation.y = this.wrappedTurn();
+    this.requestRender();
+  }
+
+  /**
+   * The system's axes in this view's frame (see systemSky), which orient
+   * the sky; null for a standalone world, whose sky the body's turn moves
+   * (setStarsTurn).
+   */
+  setSkyAxes(axes: [SkyVec3, SkyVec3, SkyVec3] | null): void {
+    this.backdrop.setAxes(axes);
+    if (!this.backdrop.orientedByAxes) this.backdrop.group.rotation.y = this.wrappedTurn();
+    this.requestRender();
+  }
+
+  private wrappedTurn(): number {
+    return this.starsTurned - 2 * Math.PI * Math.floor(this.starsTurned / (2 * Math.PI));
   }
 
   /**
@@ -1907,7 +1919,8 @@ export class PlanetView {
     const delta = radians - this.starsTurned;
     this.starsTurned = radians;
     const wrapped = radians - 2 * Math.PI * Math.floor(radians / (2 * Math.PI));
-    this.stars.rotation.y = wrapped;
+    // With the system's axes the sky already turns with the body.
+    if (!this.backdrop.orientedByAxes) this.backdrop.group.rotation.y = wrapped;
     // The arrow of the sense of rotation is fixed against the stars, not
     // turning with the globe.
     if (this.spinAxis) this.spinAxis.rotation.y = wrapped;
@@ -2289,7 +2302,8 @@ export class PlanetView {
     this.previewGlobe?.geometry.dispose();
     this.previewGlobe?.material.dispose();
     this.spinAxis?.material.dispose();
-    for (const object of [this.surface, this.grid, this.stars, this.hostStar, ...this.atmosphere, this.path]) {
+    this.backdrop.dispose();
+    for (const object of [this.surface, this.grid, this.hostStar, ...this.atmosphere, this.path]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -2766,7 +2780,7 @@ export class PlanetView {
       this.spinAxis = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true }));
       this.spinAxis.frustumCulled = false;
       this.spinAxis.renderOrder = 2;
-      this.spinAxis.rotation.y = this.stars.rotation.y;
+      this.spinAxis.rotation.y = this.wrappedTurn();
       this.scene.add(this.spinAxis);
     }
     this.requestRender();
@@ -3492,7 +3506,7 @@ export class PlanetView {
       this.rings.material.uniforms['uGapPixels']!.value = SKY_BODY_MIN_PX * this.renderer.getPixelRatio();
     }
     // The stars belong to the globe's sky, like the atmosphere.
-    this.stars.visible = this.starsOn && this.morph > 0.01;
+    this.backdrop.group.visible = skyShown(this.skyChoice) && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
     // The axis and the guides start from the farthest of the surface: an
@@ -3540,8 +3554,8 @@ export class PlanetView {
       belts.visible = this.skyBeltsOn && this.morph > 0.01;
       belts.material.uniforms['uOpacity']!.value = 0.3 * this.morph ** 3;
     }
-    this.stars.material.uniforms['uOpacity']!.value = this.morph ** 3;
-    this.stars.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
+    this.backdrop.setOpacity(this.morph ** 3);
+    this.backdrop.setPixelRatio(this.renderer.getPixelRatio());
     const altitude = this.altitude();
     // Clouds fade out as the camera nears the ground, before the detail
     // tiles get sharper than the cloud layer.

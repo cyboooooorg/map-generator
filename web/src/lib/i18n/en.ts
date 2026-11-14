@@ -858,8 +858,15 @@ export const en = {
     starLight: 'Star light',
     starLightHelp:
       "The planet and its sky lit by the colour of their star's light, as an eye used to the Sun would see them; off, a white light",
-    stars: 'Stars',
-    starsHelp: 'Stars around the globe, fixed in space: they turn with the planet when you move the camera',
+    sky: 'Sky',
+    skyHelp:
+      "The sky behind the view: the star field and the faint clouds of gas and dust of the galaxy, fixed in space (they turn with the planet when you move the camera). Its squares pick the system's own sky, drawn from its place in the galaxy and different from one system to the next; the fixed sky, the same for every world; or no sky",
+    skySystem: "System's sky",
+    skyFixed: 'Fixed sky',
+    skyOff: 'No sky',
+    longExposure: 'Long exposure',
+    longExposureHelp:
+      "How the system's sky is rendered: on, as a long-exposure photograph shows it (saturated reds and blue-greens in the nebulae, a bright galactic core); off, as the naked eye sees it (faint, washed-out colours). The fixed sky is the same either way",
     clouds: 'Clouds',
     drift: 'Drift',
     skyLabels: 'Labels',
@@ -951,7 +958,8 @@ export const en = {
     sunlight: 'Sunlight',
     seasons: 'Play / pause the seasons (turns sunlight on)',
     atmosphere: 'Atmosphere',
-    stars: 'Stars',
+    sky: 'Sky: the system’s, the fixed one, none',
+    skyExposure: 'Sky: long exposure or naked eye',
     starView: 'Planet / its star',
     moonView: 'Next body of the system (the world, its moons, or a giant and its moons)',
     clouds: 'Clouds',

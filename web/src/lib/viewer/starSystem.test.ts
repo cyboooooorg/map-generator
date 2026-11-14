@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, realVectorBound, REAL_VECTOR_FLOOR, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, ringBands } from './starSystem';
+import { orbitGaps, markerSizes, MARKER_MIN, systemLogScale, compressedFrom, giantMarkerSize, systemCompressedFrom, meanOrbitalSpeed, moonOrbits, orbitalSpeed, withOrbitDefaults, keplerPosition, orbitDistance, periapsisAngle, STAR_RADIUS, SUN_SYSTEM, systemScale, velocityScale, VELOCITY_MAX_LENGTH, defaultSystemSpeed, gravityScale, starGravity, GRAVITY_MAX_LENGTH, SYSTEM_SPEED_MAX, frostLineAu, hillRadiusAu, hillShownRadius, realVectorBound, REAL_VECTOR_FLOOR, sphereGrid, PLANET_MARKER, RING_MOON_SIZE, ringBands, STAR_VIEW_SKY_AXES, toStarView, globeTurn } from './starSystem';
 
 describe('star view', () => {
   it('lays the system out outside the star, in proportion', () => {
@@ -372,5 +372,25 @@ describe('planetary system scale', () => {
     expect(markerSizes([0.2], [1], [4])[0]).toBeCloseTo(0.125);
     expect(markerSizes([0.2, 0.2], [0.001, 0.001])).toEqual([MARKER_MIN, MARKER_MIN]);
     expect(markerSizes([0.11, 0.11], [3, 6])).toEqual([0.11, 0.11]);
+  });
+});
+
+describe('the sky axes of the star view', () => {
+  it('map a system direction as the view maps placeSystem directions', () => {
+    const d = [0.3, -0.5, 0.8] as const;
+    const [ax, ay, az] = STAR_VIEW_SKY_AXES;
+    const mapped = [0, 1, 2].map((i) => d[0] * ax[i]! + d[1] * ay[i]! + d[2] * az[i]!);
+    expect(mapped).toEqual(toStarView([...d]));
+    // placeSystem's x is the view's -z, its z the view's x (see globeTurn).
+    expect(ax).toEqual([0, 0, -1]);
+    expect(ay.map((v) => v + 0)).toEqual([0, 1, 0]);
+    expect(az.map((v) => v + 0)).toEqual([1, 0, 0]);
+    // A planet's spin axis (y of its axes) lands where globeTurn puts the globe's north.
+    const body: [[number, number, number], [number, number, number], [number, number, number]] = [
+      [1, 0, 0],
+      [0, 0.6, 0.8],
+      [0, -0.8, 0.6],
+    ];
+    expect(globeTurn(body)[1]).toEqual(toStarView(body[1]));
   });
 });

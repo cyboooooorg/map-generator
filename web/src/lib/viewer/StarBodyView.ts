@@ -9,15 +9,12 @@
 // still and not animated: no requestAnimationFrame is left pending.
 import {
   AdditiveBlending,
-  BufferAttribute,
-  BufferGeometry,
   Color,
   Group,
   MOUSE,
   Mesh,
   PerspectiveCamera,
   PlaneGeometry,
-  Points,
   Raycaster,
   Scene,
   ShaderMaterial,
@@ -36,7 +33,6 @@ import { FrameStats } from './frameStats';
 import { animatedPixelRatio, fullPixelRatio } from './pixelRatio';
 import { opaqueContext } from './opaqueContext';
 import { PROFILES, type QualityProfile } from './quality';
-import { starsFragment, starsVertex } from './shaders';
 import {
   glowFragment,
   glowVertex,
@@ -47,7 +43,10 @@ import {
 } from './starShaders';
 import { StarSurfaceState, displayedLight, starLook, starSurfaceUniforms } from './starSurface';
 import { STAR_RADIUS } from './starSystem';
-import { starField } from './stars';
+import type { Vec3 } from '../skyBodies';
+import { SkyBackdrop, skyShown, type SkyChoice } from './skyBackdrop';
+import type { SkyExposure } from './skyClouds';
+import { FIXED_SKY, type SkyLook } from './skyLook';
 
 /** Closest and farthest camera, star radii from the centre: close enough for granules, far enough for the corona. */
 const MIN_DISTANCE = 1.02;
@@ -104,7 +103,10 @@ export class StarBodyView {
   private readonly star: Mesh<SphereGeometry, ShaderMaterial>;
   private readonly surface: StarSurfaceState;
   private readonly glow: Mesh<PlaneGeometry, ShaderMaterial>;
-  private readonly sky: Points<BufferGeometry, ShaderMaterial>;
+  private readonly backdrop: SkyBackdrop;
+  private skyChoice: SkyChoice = 'system';
+  /** The system's own look; the fixed choice ignores it. */
+  private ownLook: SkyLook = FIXED_SKY;
   private readonly arcs = new Group();
   private loops!: CoronalLoops;
   private readonly eruption: Eruption;
@@ -169,25 +171,10 @@ export class StarBodyView {
       if (this.onOpenSystem && this.hitsStar(event.clientX, event.clientY)) this.onOpenSystem();
     });
 
-    const field = starField();
-    const skyGeometry = new BufferGeometry();
-    skyGeometry.setAttribute('position', new BufferAttribute(field.directions, 3));
-    skyGeometry.setAttribute('colour', new BufferAttribute(field.colours, 3));
-    skyGeometry.setAttribute('size', new BufferAttribute(field.sizes, 1));
-    this.sky = new Points(
-      skyGeometry,
-      new ShaderMaterial({
-        vertexShader: starsVertex,
-        fragmentShader: starsFragment,
-        uniforms: { uPixelRatio: { value: this.renderer.getPixelRatio() }, uOpacity: { value: 1 } },
-        blending: AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    this.sky.frustumCulled = false;
-    this.sky.renderOrder = -1;
-    this.scene.add(this.sky);
+    // The sky, behind everything: the clouds and the stars (see SkyBackdrop).
+    this.backdrop = new SkyBackdrop({ hideHostStar: false, renderOrder: -1, requestRender: () => this.requestRender() });
+    this.backdrop.setPixelRatio(this.renderer.getPixelRatio());
+    this.scene.add(this.backdrop.group);
 
     // The photosphere: μ from the world normal and the direction to the
     // camera (starSurfaceFragment), which keeps the limb right this close.
@@ -327,8 +314,36 @@ export class StarBodyView {
     this.requestRender();
   }
 
+  /** The sky of the system the view shows (see skyLook); the fixed choice ignores it. */
+  setSkyLook(look: SkyLook): void {
+    this.ownLook = look;
+    this.backdrop.setSky(this.skyChoice, look);
+    this.requestRender();
+  }
+
+  /** The sky's rendering: as the eye sees it or as a long exposure shows it. */
+  setSkyExposure(exposure: SkyExposure): void {
+    this.backdrop.setExposure(exposure);
+    this.requestRender();
+  }
+
+  /** Draws the system's own sky, the fixed one, or none. */
+  setSkyChoice(choice: SkyChoice): void {
+    this.skyChoice = choice;
+    this.backdrop.setSky(choice, this.ownLook);
+    this.backdrop.group.visible = skyShown(choice);
+    this.requestRender();
+  }
+
+  /** The system's axes in this view's frame, or null for the identity. */
+  setSkyAxes(axes: [Vec3, Vec3, Vec3] | null): void {
+    this.backdrop.setAxes(axes);
+    this.requestRender();
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.backdrop.dispose();
     this.setAnimated(false);
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;
@@ -337,7 +352,7 @@ export class StarBodyView {
     this.loops.dispose();
     this.resizeObserver.disconnect();
     this.controls.dispose();
-    for (const object of [this.star, this.glow, this.sky]) {
+    for (const object of [this.star, this.glow]) {
       object.geometry.dispose();
       object.material.dispose();
     }
@@ -438,7 +453,7 @@ export class StarBodyView {
     this.renderer.setSize(clientWidth, clientHeight, false);
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
-    this.sky.material.uniforms['uPixelRatio']!.value = this.renderer.getPixelRatio();
+    this.backdrop.setPixelRatio(this.renderer.getPixelRatio());
     // Resizing cleared the drawing buffer: the next frame is drawn without
     // waiting for the profile's frame cap, so no blank frame shows.
     this.lastDrawn = -Infinity;

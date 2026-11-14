@@ -158,6 +158,13 @@ pub struct System {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<crate::belts::Belt>>", optional))]
     pub belts: Vec<crate::belts::Belt>,
+    /// Where it sits in the galaxy and how its frame is turned
+    /// ([`crate::galaxy::draw_place`] of the seed and the star's
+    /// metallicity). Absent from systems drawn before it existed:
+    /// [`read_system`] derives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub galaxy: Option<crate::galaxy::GalacticPlace>,
 }
 
 /// The star of a system.
@@ -403,6 +410,14 @@ pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
     // the same as a draw would store.
     if system.star.activity.is_none() {
         system.star.activity = Some(star_activity(&system.star.info, system.seed));
+    }
+    // Likewise its place in the galaxy, from the seed and the stored
+    // metallicity.
+    if system.galaxy.is_none() {
+        system.galaxy = Some(crate::galaxy::draw_place(
+            system.seed,
+            system.star.metallicity,
+        ));
     }
     Ok(system)
 }
@@ -1749,6 +1764,7 @@ fn assemble(
         bodies,
         focus: focus_id,
         belts,
+        galaxy: Some(crate::galaxy::draw_place(seed, metallicity)),
     }
 }
 
@@ -4054,6 +4070,72 @@ mod tests {
                 system.seed
             ))
         );
+    }
+
+    #[test]
+    fn a_drawn_system_has_its_galactic_place() {
+        let whole = draw(
+            &whole(&[("earth-like", 1)], 5),
+            &mut StdRng::seed_from_u64(5),
+        )
+        .unwrap();
+        assert_eq!(
+            whole.galaxy,
+            Some(crate::galaxy::draw_place(
+                whole.seed,
+                whole.star.metallicity
+            ))
+        );
+        let world = WorldRequest {
+            planet: Some("earth-like".into()),
+            seed: Some(77),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let around = draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(5)).unwrap();
+        assert_eq!(
+            around.galaxy,
+            Some(crate::galaxy::draw_place(
+                around.seed,
+                around.star.metallicity
+            ))
+        );
+    }
+
+    #[test]
+    fn a_requested_metallicity_sets_the_place() {
+        let world = WorldRequest {
+            planet: Some("earth-like".into()),
+            seed: Some(77),
+            metallicity: Some(0.3),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let system = draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(5)).unwrap();
+        assert_eq!(
+            system.galaxy,
+            Some(crate::galaxy::draw_place(system.seed, 0.3))
+        );
+    }
+
+    #[test]
+    fn a_system_without_a_place_gets_it_on_read() {
+        let system = draw(
+            &whole(&[("earth-like", 1)], 6),
+            &mut StdRng::seed_from_u64(6),
+        )
+        .unwrap();
+        let mut json = serde_json::to_value(&system).unwrap();
+        json.as_object_mut().unwrap().remove("galaxy").unwrap();
+        let dir = std::env::temp_dir().join(format!("mapgen-legacy-galaxy-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("system.json"), serde_json::to_vec(&json).unwrap()).unwrap();
+        let back = read_system(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(back.galaxy.is_some());
+        assert_eq!(back.galaxy, system.galaxy);
     }
 
     #[test]

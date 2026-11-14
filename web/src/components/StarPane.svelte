@@ -16,7 +16,7 @@
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
   import type { GiantInfo } from '../lib/api/types/GiantInfo';
   import type { HostGiant } from '../lib/api/types/HostGiant';
-  import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER } from '../lib/viewer/starSystem';
+  import { compressedFrom, defaultSystemSpeed, SYSTEM_SPEED_MAX, SYSTEM_SPEED_MIN, systemCompressedFrom, giantMarkerSize, meanOrbitalSpeed, moonOrbits, orbitalSpeed, PLANET_MARKER, STAR_VIEW_SKY_AXES } from '../lib/viewer/starSystem';
   import { t } from '../lib/i18n/index.svelte';
   import { layoutLabels } from '../lib/viewer/labelLayout';
   import type { ScreenAxis } from '../lib/viewer/axes';
@@ -27,6 +27,10 @@
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
   import { currentProfile } from '../lib/viewer/quality';
+  import type { SkyChoice } from '../lib/viewer/skyBackdrop';
+  import type { SkyExposure } from '../lib/viewer/skyClouds';
+  import { skyToggles, type SkySetting } from '../lib/viewer/skyToggles';
+  import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
 
   interface Props {
     star: StarInfo;
@@ -127,6 +131,14 @@
     hidden?: boolean;
     /** Opens the star view (the Star button, a double click on the star); null hides the button. */
     onOpenStar?: (() => void) | null;
+    /** The system's own sky (see lib/viewer/skyLook.ts). */
+    look?: SkyLook;
+    /** Which sky is drawn: the system's own, the fixed one or none. */
+    sky?: SkyChoice;
+    /** How its clouds and nebulae are rendered: as the eye sees them or as a long exposure. */
+    skyExposure?: SkyExposure;
+    /** The sky's setting, shared with the planet view (Viewer.svelte), for its switches; null shows none. */
+    skySetting?: SkySetting | null;
   }
 
   let {
@@ -174,6 +186,10 @@
     clockDays = $bindable(0),
     hidden = false,
     onOpenStar = null,
+    look = FIXED_SKY,
+    sky = 'system',
+    skyExposure = 'photo',
+    skySetting = null,
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -224,6 +240,10 @@
     };
   });
 
+  $effect(() => view?.setSkyLook(look));
+  $effect(() => view?.setSkyAxes(STAR_VIEW_SKY_AXES));
+  $effect(() => view?.setSkyChoice(sky));
+  $effect(() => view?.setSkyExposure(skyExposure));
   $effect(() => view?.setStar(star, omega, giantList, selected, activity));
   /** The last day this view reported (see clockDays): any other is a day set from outside. */
   let reported = Number.NaN;
@@ -619,7 +639,7 @@
     };
   });
 
-  /** The display switches, as the icon bar groups them: lines, measures, structure. */
+  /** The display switches, as the icon bar groups them: lines, measures, structure, sky. */
   const toggleGroups = $derived<Toggle[][]>([
     [
       { key: 'orbit', label: t.starView.showOrbit, icon: 'orbit', on: orbit, set: (v) => (orbit = v) },
@@ -653,6 +673,8 @@
           { key: 'scale', label: t.starView.realScale, help: t.starView.realScaleHelp, icon: 'scale', on: realScale, set: (v) => (realScale = v) },
         ]
       : [],
+    // The sky behind the system: the same switches as the planet view's, on the same setting.
+    skySetting ? skyToggles(skySetting) : [],
   ]);
   /** The panels of the dock: the star, the planet shown, and the system's planets. */
   const dockPanels = $derived<DockPanel[]>([

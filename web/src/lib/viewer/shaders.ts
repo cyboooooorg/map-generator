@@ -811,6 +811,60 @@ export const starsFragment = /* glsl */ `
   }
 `;
 
+// The sky's clouds: a cube around the camera, drawn at the far plane like
+// the stars. The cube map is baked in the system frame (skyClouds.ts) and
+// the box's own vertices are system-frame directions, so the backdrop
+// group's matrix (the system's axes in the view's frame) orients it.
+export const skyBackdropVertex = /* glsl */ `
+  varying vec3 vDir;
+  void main() {
+    vDir = position;
+    vec4 clip = projectionMatrix * vec4(mat3(modelViewMatrix) * position * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+// The faces are sRGB-encoded: the sampler decodes them to linear, and the
+// colour space chunk encodes the result for the canvas.
+export const skyBackdropFragment = /* glsl */ `
+  uniform samplerCube uSky;
+  uniform float uOpacity;
+  varying vec3 vDir;
+  void main() {
+    gl_FragColor = vec4(textureCube(uSky, normalize(vDir)).rgb * uOpacity, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
+// A nebula: a quad tangent to the sky sphere (corners in system-frame
+// directions, see skyBackdrop), drawn at the far plane like the cube. The
+// texture has premultiplied alpha and sRGB colour (nebulaTextures.ts): glows
+// add their colour (blending One, One), dark nebulae darken what is behind
+// (DARKEN: blending Zero, OneMinusSrcAlpha, the alpha is the opacity).
+export const skyNebulaVertex = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vec4 clip = projectionMatrix * vec4(mat3(modelViewMatrix) * position * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+export const skyNebulaFragment = /* glsl */ `
+  uniform sampler2D uMap;
+  uniform float uOpacity;
+  varying vec2 vUv;
+  void main() {
+    vec4 t = texture2D(uMap, vUv);
+  #ifdef DARKEN
+    gl_FragColor = vec4(0.0, 0.0, 0.0, t.a * uOpacity);
+  #else
+    gl_FragColor = vec4(t.rgb * uOpacity, t.a * uOpacity);
+  #endif
+    #include <colorspace_fragment>
+  }
+`;
+
 // The host star: a square at infinity in the sun's direction, like the
 // star field, `uSize` drawing-buffer pixels across. A disk of the star's
 // apparent diameter inside a glow. A quad rather than a point sprite: a

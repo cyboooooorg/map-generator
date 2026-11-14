@@ -2,6 +2,9 @@
 // ("Link display"): what is drawn and how it is lit, not the camera (that is
 // "Link cameras") nor the hex grid (computed per world by the server).
 
+import type { SkyChoice } from './viewer/skyBackdrop';
+import type { SkyExposure } from './viewer/skyClouds';
+
 /** The settings mirrored by "Link display". */
 export interface LinkedDisplay {
   layer: string;
@@ -10,7 +13,10 @@ export interface LinkedDisplay {
   season: number;
   sunLongitude: number;
   atmosphere: boolean;
-  stars: boolean;
+  /** Which sky is drawn; each pane keeps its own system's look of it. */
+  sky: SkyChoice;
+  /** How the system's sky is rendered: as the eye sees it, or as a long exposure shows it. */
+  skyExposure: SkyExposure;
   starLight: boolean;
   clouds: boolean;
   graticule: boolean;
@@ -23,7 +29,8 @@ export const LINKED_KEYS: readonly (keyof LinkedDisplay)[] = [
   'season',
   'sunLongitude',
   'atmosphere',
-  'stars',
+  'sky',
+  'skyExposure',
   'starLight',
   'clouds',
   'graticule',
