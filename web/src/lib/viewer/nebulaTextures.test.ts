@@ -49,11 +49,20 @@ describe('bakeNebula', () => {
     expect(bakeNebula(make('emission'), 'eye').rgba).not.toEqual(a.rgba);
   });
 
-  it('sizes the texture by angular size, between 128 and 512', () => {
+  it('sizes the texture so that a texel is no wider than a screen pixel in the planet view', () => {
+    // The planet view's field of view is 40 degrees; the buffer we plan for is 1800 px high.
+    const pixelDeg = 40 / 1800;
+    for (const deg of [0.3, 0.5, 1, 2, 3, 5, 7]) {
+      const size = nebulaTextureSize(deg * DEG);
+      expect((2 * deg) / size).toBeLessThanOrEqual(pixelDeg + 1e-9);
+      expect(size).toBeGreaterThanOrEqual(128);
+      expect(size).toBeLessThanOrEqual(1024);
+    }
     expect(nebulaTextureSize(0.3 * DEG)).toBe(128);
     expect(nebulaTextureSize(2 * DEG)).toBe(256);
-    expect(nebulaTextureSize(12 * DEG)).toBe(512);
-    expect(bakeNebula(make('emission', 1, 0.3, 8), 'eye').size).toBe(512);
+    // Capped: the largest nebulae are slightly magnified rather than costing 4 MB per texel row.
+    expect(nebulaTextureSize(12 * DEG)).toBe(1024);
+    expect(bakeNebula(make('emission', 1, 0.3, 8), 'eye').size).toBe(1024);
     const t = bakeNebula(make('planetary', 1, 0.3, 0.5), 'eye');
     expect(t.rgba.length).toBe(t.size * t.size * 4);
   });
@@ -102,6 +111,45 @@ describe('bakeNebula', () => {
         expect(mean(t, strip, light(t))).toBeLessThan(0.25 * mean(t, around, light(t)));
       }
     }
+  });
+
+  it('draws an emission complex with clear dark lanes and a bright glow', () => {
+    for (const seed of [1, 2, 3, 4242]) {
+      const t = bakeNebula(make('emission', seed, 0.3, 6), 'photo');
+      const disc = region(t, (x, y) => Math.hypot(x, y) < 0.55).map(light(t));
+      const sorted = [...disc].sort((a, b) => a - b);
+      const bright = sorted[Math.floor(0.9 * sorted.length)]!;
+      const dark = disc.filter((v) => v < 0.15 * bright).length / disc.length;
+      // A real share of the complex is lane, and the glow is much brighter than that.
+      expect(dark).toBeGreaterThan(0.05);
+      expect(dark).toBeLessThan(0.6);
+      expect(bright).toBeGreaterThan(0.1);
+    }
+  });
+
+  it('draws a remnant as a thin shell, far brighter than its inside and its surroundings', () => {
+    const t = bakeNebula(make('remnant', 4242, 0.3, 5), 'photo');
+    const shell = region(t, (x, y) => Math.abs(Math.hypot(x, y) - 0.68) < 0.1);
+    const inside = region(t, (x, y) => Math.hypot(x, y) < 0.3);
+    const outside = region(t, (x, y) => Math.hypot(x, y) > 0.82 && Math.hypot(x, y) < 0.88);
+    expect(mean(t, shell, light(t))).toBeGreaterThan(3 * mean(t, inside, light(t)));
+    expect(mean(t, shell, light(t))).toBeGreaterThan(3 * mean(t, outside, light(t)));
+  });
+
+  it('draws the planetary ring bright against its background, with clear red and blue-green', () => {
+    const t = bakeNebula(make('planetary', 4242, 0.2, 1), 'photo');
+    const ring = region(t, (x, y) => Math.abs(Math.hypot(x, y * 1.1) - 0.5) < 0.07).map(light(t));
+    const peak = Math.max(...ring);
+    expect(peak).toBeGreaterThan(0.25);
+    const outside = region(t, (x, y) => Math.hypot(x, y) > 0.8 && Math.hypot(x, y) < 0.88);
+    expect(mean(t, outside, light(t))).toBeLessThan(0.05 * peak);
+  });
+
+  it('has a long exposure with deeper reds and blue-greens than the sum of its parts', () => {
+    // Pushed saturation: the red rim of a ring is nearly pure red in the long exposure.
+    const t = bakeNebula(make('planetary', 4242, 0.2, 1), 'photo');
+    const rim = region(t, (x, y) => Math.abs(Math.hypot(x, y * 1.1) - 0.58) < 0.04);
+    expect(redShare(t, rim)).toBeGreaterThan(0.6);
   });
 
   it('keeps the eye under the 0.08 ceiling and less saturated than the long exposure', () => {

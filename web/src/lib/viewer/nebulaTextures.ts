@@ -9,7 +9,8 @@
 // long exposure with saturated H-alpha reds and O III blue-greens.
 
 import { CLOUD_CEILING, type SkyExposure } from './skyClouds';
-import { pillarAt, pillarColumns, pillarMask, type Nebula, type NebulaKind } from './skyNebulae';
+import { darkOpacity, pillarAt, pillarColumns, pillarMask, type Nebula, type NebulaKind } from './skyNebulae';
+import { fbm2, lattice, smoothstep } from './nebulaNoise';
 import { subSeed } from './skyRandom';
 
 export interface NebulaTexture {
@@ -24,14 +25,14 @@ type Rgb = [number, number, number];
 
 const H_ALPHA: Rgb = [1, 0.17, 0.2];
 const O_III: Rgb = [0.12, 0.78, 0.82];
-const PINK: Rgb = [1, 0.32, 0.42];
 const BLUE: Rgb = [0.3, 0.5, 1];
 const WHITE: Rgb = [1, 0.95, 0.9];
 
 /** Per-exposure peak linear level of a unit-intensity texel, soft ceiling and colour saturation. */
 const EXPOSURES: Record<SkyExposure, { level: number; ceiling: number; saturation: number; dark: number }> = {
   eye: { level: 0.06, ceiling: CLOUD_CEILING, saturation: 0.45, dark: 0.6 },
-  photo: { level: 0.42, ceiling: 0.3, saturation: 1, dark: 1 },
+  // Over 1: the long exposure pushes the colours past what the sum gives.
+  photo: { level: 0.5, ceiling: 0.3, saturation: 1.45, dark: 1 },
 };
 /** The faint eye shows some kinds better than others. */
 const EYE_KIND_GAIN: Record<NebulaKind, number> = {
@@ -43,53 +44,9 @@ const EYE_KIND_GAIN: Record<NebulaKind, number> = {
   dark: 1,
 };
 
-const smoothstep = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-function lattice(ix: number, iy: number, seed: number): number {
-  let h = Math.imul(ix, 0x27d4eb2d) ^ Math.imul(iy, 0x165667b1) ^ seed;
-  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
-  h ^= h >>> 13;
-  h = Math.imul(h, 0xc2b2ae35);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4_294_967_296;
-}
-
-function value2(x: number, y: number, seed: number): number {
-  const xi = Math.floor(x);
-  const yi = Math.floor(y);
-  const fx = x - xi;
-  const fy = y - yi;
-  const u = fx * fx * (3 - 2 * fx);
-  const v = fy * fy * (3 - 2 * fy);
-  const a = lattice(xi, yi, seed);
-  const b = lattice(xi + 1, yi, seed);
-  const c = lattice(xi, yi + 1, seed);
-  const d = lattice(xi + 1, yi + 1, seed);
-  return a + u * (b - a) + v * (c - a) + u * v * (a - b - c + d);
-}
-
-/** Fractal noise in [0, 1). */
-function fbm2(x: number, y: number, seed: number, octaves = 4): number {
-  let sum = 0;
-  let amp = 0.5;
-  let norm = 0;
-  let fx = x;
-  let fy = y;
-  for (let i = 0; i < octaves; i += 1) {
-    sum += amp * value2(fx, fy, seed + i * 977);
-    norm += amp;
-    amp *= 0.5;
-    fx = fx * 2.03 + 17.1;
-    fy = fy * 2.03 + 9.7;
-  }
-  return sum / norm;
-}
-
-/** A texel's glow: an intensity (about 0 to 1) and its colour; `opacity` for dark nebulae. */
+/** A texel's glow: an intensity (about 0 to 1.5) and its colour. */
 interface Texel {
   i: number;
   colour: Rgb;
@@ -97,108 +54,129 @@ interface Texel {
 
 type Shader = (x: number, y: number, n: Nebula, s: number) => Texel;
 
-/** Planetary: a ring (or two lobes) with an O III core and an H-alpha rim, and a central star. */
+/** Planetary: a bold ring (or two lobes) with an O III core and an H-alpha rim, knots, a faint outer halo and a central star. */
 const planetary: Shader = (x, y, n, s) => {
-  const knots = 0.55 + 0.9 * fbm2(x * 5 + 3, y * 5 + 1, s, 3);
-  const star = 0.9 * Math.exp(-((x * x + y * y) / (0.03 * 0.03)));
+  const knots = 0.45 + 1.1 * fbm2(x * 6 + 3, y * 6 + 1, s, 3);
+  const star = 1.1 * Math.exp(-((x * x + y * y) / (0.03 * 0.03)));
   if (n.tint > 0.6) {
     // Bipolar: two shells joined at a pinched waist, along the vertical.
     let i = 0;
     let rim = 0;
     for (const side of [-1, 1]) {
       const d = Math.hypot(x / (0.3 - 0.04 * n.tint), (y - side * 0.36) / 0.38);
-      const shell = Math.exp(-(((d - 0.9) / 0.17) ** 2)) * knots;
-      i += shell + 0.28 * Math.exp(-d * d * 1.6);
+      const shell = Math.exp(-(((d - 0.9) / 0.2) ** 2)) * knots * 1.3;
+      i += shell + 0.3 * Math.exp(-d * d * 1.6);
       rim = Math.max(rim, smoothstep(0.7, 1.15, d));
     }
     return { i: i + star, colour: mix(star > 0.1 ? WHITE : O_III, H_ALPHA, rim) };
   }
   const rho = 0.5;
-  const thick = 0.095 + 0.04 * lattice(n.seed & 255, 3, s);
+  const thick = 0.1 + 0.04 * lattice(n.seed & 255, 3, s);
   const rr = Math.hypot(x, y * 1.1);
-  const ring = Math.exp(-(((rr - rho) / thick) ** 2)) * knots;
-  const inner = 0.2 * (1 - smoothstep(0.1, rho, rr)) * smoothstep(0.02, 0.1, rr);
-  const halo = 0.13 * Math.exp(-(((rr - rho - 0.17) / 0.12) ** 2)) * (0.5 + fbm2(x * 3, y * 3, s + 5, 3));
-  const rimMix = smoothstep(rho - 0.8 * thick, rho + 0.9 * thick, rr);
-  return { i: ring + inner + halo + star, colour: star > 0.15 ? WHITE : mix(O_III, H_ALPHA, rimMix) };
+  const ring = Math.exp(-(((rr - rho) / thick) ** 2)) * knots * 1.3;
+  const inner = 0.18 * (1 - smoothstep(0.1, rho, rr)) * smoothstep(0.02, 0.1, rr);
+  // A fainter outer ring of broken arcs, as in the Helix.
+  const arcs = 0.3 * Math.exp(-(((rr - rho - 0.2) / 0.06) ** 2)) * smoothstep(0.45, 0.65, fbm2(x * 3 + 8, y * 3, s + 7, 3));
+  const halo = 0.12 * Math.exp(-(((rr - rho - 0.17) / 0.14) ** 2)) * (0.5 + fbm2(x * 3, y * 3, s + 5, 3));
+  const rimMix = smoothstep(rho - 0.7 * thick, rho + 0.9 * thick, rr);
+  return { i: ring + inner + arcs + halo + star, colour: star > 0.15 ? WHITE : mix(O_III, H_ALPHA, rimMix) };
 };
 
-/** Glow of an emission complex at a texel: warped fractal noise under an irregular envelope. */
+/** Warped fractal glow of an emission complex at a texel, under an irregular envelope; `q` is the warp. */
 function emissionGlow(x: number, y: number, s: number): { glow: number; q: number } {
   const q1 = fbm2(x * 1.6 + 3.1, y * 1.6 + 1.7, s ^ 0x51, 3) - 0.5;
   const q2 = fbm2(x * 1.6 + 7.7, y * 1.6 - 4.2, s ^ 0xa3, 3) - 0.5;
-  const f = fbm2(x * 2.4 + 2.6 * q1, y * 2.4 + 2.6 * q2, s, 5);
-  const env = 1 - smoothstep(0.3, 0.9, Math.hypot(x, y) + 0.5 * (fbm2(x * 1.3, y * 1.3, s ^ 0x17, 3) - 0.5));
-  return { glow: smoothstep(0.34, 0.74, f) ** 1.4 * env * (0.55 + 0.7 * fbm2(x * 5, y * 5, s ^ 0x29, 3)), q: q1 + q2 };
+  const f = fbm2(x * 2.2 + 2.6 * q1, y * 2.2 + 2.6 * q2, s, 5);
+  const env = 1 - smoothstep(0.1, 0.9, Math.hypot(x, y) + 0.5 * (fbm2(x * 1.3, y * 1.3, s ^ 0x17, 3) - 0.5));
+  const body = 0.22 + 0.95 * smoothstep(0.32, 0.7, f);
+  return { glow: body * env * (0.7 + 0.5 * fbm2(x * 5, y * 5, s ^ 0x29, 3)), q: q1 + q2 };
 }
 
-/** Emission: a red-pink glow torn by dark lanes, with brighter ionised knots. */
+/** Emission (Carina's family): a bright red-pink complex torn by long dark lanes with lit edges and a hot core. */
 const emission: Shader = (x, y, n, s) => {
   const { glow, q } = emissionGlow(x, y, s);
-  const l = fbm2(x * 2.2 + 4 * q, y * 2.2 - 4 * q, s ^ 0x77, 4);
-  const lane = 1 - 0.95 * Math.exp(-(((l - 0.5) / 0.075) ** 2));
-  const i = glow * lane;
+  const l1 = fbm2(x * 1.1 + 1.6 * q, y * 1.1 - 1.6 * q, s ^ 0x77, 3);
+  const l2 = fbm2(x * 2.6 - 2 * q, y * 2.6 + 2 * q, s ^ 0x78, 3);
+  // Broad dark bays where the low-frequency noise is high, and a few thin lanes.
+  const bay = smoothstep(0.55, 0.63, l1);
+  const d1 = Math.abs(l2 - 0.5);
+  const lane = (1 - 0.94 * bay) * (1 - 0.85 * Math.exp(-((d1 / 0.04) ** 2)) * smoothstep(0.4, 0.55, fbm2(x * 1.2, y * 1.2, s ^ 0x79, 2)));
+  // The bays' edges are lit by the stars beyond.
+  const edge = 1 + 1.1 * Math.exp(-(((l1 - 0.54) / 0.035) ** 2));
+  const hotspot = 0.9 * Math.exp(-(((x - 0.1 * (n.tint - 0.5)) ** 2 + y * y) / 0.05));
+  const i = (glow * edge + hotspot * glow) * lane;
   const teal = smoothstep(0.45, 0.7, fbm2(x * 1.4 + 11, y * 1.4, s ^ 0x3b, 3)) * n.tint * 0.7;
-  const hot = smoothstep(0.55, 1, i);
-  return { i, colour: mix(mix(PINK, O_III, teal), WHITE, hot * 0.45) };
+  const hot = smoothstep(1.1, 2.2, i);
+  return { i, colour: mix(mix(H_ALPHA, O_III, teal), WHITE, hot * 0.5) };
 };
 
-/** Pillars: emission background with dark tapering columns, their rims lit. */
+/** Pillars (the Eagle's family): an emission background with fat dark columns, domed tips and bright rims. */
 const pillars: Shader = (x, y, n, s) => {
   const { glow } = emissionGlow(x * 0.9, y * 0.9, s);
   const columns = pillarColumns(n);
   const mask = pillarMask(columns, x, y);
-  const lit = 0.45 + 0.55 * smoothstep(-0.9, 0.7, y);
+  const lit = 0.5 + 0.5 * smoothstep(-0.9, 0.6, y);
   let rim = 0;
   for (const p of columns) {
     const at = pillarAt(p, Math.min(y, p.top));
     if (!at) continue;
+    // Distance to the column's outline: sideways off the shaft, upward off the dome.
     const dy = Math.max(0, y - p.top);
     const d = Math.hypot(Math.max(0, Math.abs(x - at.cx) - at.half * 0.85), dy);
-    rim = Math.max(rim, Math.exp(-((d / 0.035) ** 2)));
+    // The top and the side facing the light are the brightest.
+    const light = 0.55 + 0.45 * smoothstep(-0.3, 0.5, y) + (x > at.cx ? 0.25 : 0);
+    rim = Math.max(rim, Math.exp(-((d / 0.045) ** 2)) * light);
   }
-  const env = 1 - smoothstep(0.55, 0.9, Math.hypot(x, y));
-  const background = (0.12 + 1.1 * glow) * lit * env;
-  const i = (1 - mask) * (background + 0.75 * rim * (0.6 + 0.4 * lit) * env);
-  return { i, colour: mix(mix(PINK, O_III, 0.25 * n.tint), WHITE, Math.min(1, rim * 0.6)) };
+  const env = 1 - smoothstep(0.2, 0.9, Math.hypot(x, y) + 0.3 * (fbm2(x * 2, y * 2, s ^ 0x18, 3) - 0.5));
+  const background = (0.2 + 1.15 * glow) * lit * env;
+  const i = (1 - mask) * (background + 1.2 * rim * env);
+  return { i, colour: mix(mix(H_ALPHA, O_III, 0.3 * n.tint), WHITE, Math.min(1, rim * 0.5)) };
 };
 
-/** Remnant: a thin, broken, filamentary shell, red and blue-green. */
+/** Remnant: a thin, broken, filamentary shell with bright arcs, red outside and blue-green inside. */
 const remnant: Shader = (x, y, n, s) => {
-  const d = Math.hypot(x, y) + 0.45 * (fbm2(x * 2 + 4, y * 2, s, 3) - 0.5);
-  const shell = Math.exp(-(((d - 0.7) / 0.055) ** 2));
-  const ridge = 1 - Math.abs(2 * fbm2(x * 6 + 9, y * 6 - 3, s ^ 0x21, 4) - 1);
-  const filament = smoothstep(0.55, 0.95, ridge);
-  const gaps = smoothstep(0.25, 0.55, fbm2(x * 1.8 + 9, y * 1.8, s ^ 0x4d, 3));
-  const i = shell * (0.2 + 0.9 * filament) * gaps + 0.07 * Math.exp(-(((d - 0.7) / 0.2) ** 2)) * ridge;
-  const t = smoothstep(0.4, 0.6, fbm2(x * 2.5 + 2, y * 2.5, s ^ 0x6f, 3) + (n.tint - 0.5) * 0.4);
+  const warp = fbm2(x * 2 + 4, y * 2, s, 3) - 0.5;
+  const d = Math.hypot(x, y) + 0.4 * warp;
+  const ridge = 1 - Math.abs(2 * fbm2(x * 7 + 9, y * 7 - 3, s ^ 0x21, 4) - 1);
+  const filament = smoothstep(0.62, 0.97, ridge);
+  const gaps = smoothstep(0.3, 0.55, fbm2(x * 1.8 + 9, y * 1.8, s ^ 0x4d, 3));
+  const shell = Math.exp(-(((d - 0.68) / 0.035) ** 2));
+  const inner = 0.6 * Math.exp(-(((d - 0.5) / 0.035) ** 2)) * smoothstep(0.5, 0.75, fbm2(x * 3 + 1, y * 3 + 4, s ^ 0x4e, 3));
+  const i = (shell * (0.25 + 1.3 * filament) * (0.35 + 0.65 * gaps) + inner * filament * 1.4) + 0.1 * Math.exp(-(((d - 0.64) / 0.2) ** 2)) * ridge;
+  const t = smoothstep(0.35, 0.65, (0.68 - d) * 2.2 + 0.5 + (n.tint - 0.5) * 0.4 + 0.5 * (fbm2(x * 2.5 + 2, y * 2.5, s ^ 0x6f, 3) - 0.5));
   return { i, colour: mix(H_ALPHA, O_III, t) };
 };
 
-/** Reflection: a blue haze round a bright star. */
+/** Reflection: a blue haze round a bright star with four diffraction spikes. */
 const reflection: Shader = (x, y, n, s) => {
   const rr = Math.hypot(x, y);
   const haze = Math.exp(-rr * rr * 3.4) * (0.55 + 0.9 * fbm2(x * 3, y * 3, s, 4));
   const star = 0.9 * Math.exp(-((rr / 0.05) ** 2));
+  const spikes = 0.5 * (Math.exp(-((x / 0.008) ** 2)) * Math.exp(-Math.abs(y) * 5) + Math.exp(-((y / 0.008) ** 2)) * Math.exp(-Math.abs(x) * 5));
   const colour = mix(BLUE, [0.55, 0.72, 1], n.tint);
-  return { i: haze * 0.85 + star, colour: mix(colour, WHITE, Math.min(1, star + Math.exp(-rr * rr * 30) * 0.5)) };
+  return { i: haze * 0.9 + star + spikes, colour: mix(colour, WHITE, Math.min(1, star + spikes + Math.exp(-rr * rr * 30) * 0.5)) };
 };
 
 const SHADERS: Record<Exclude<NebulaKind, 'dark'>, Shader> = { planetary, emission, pillars, remnant, reflection };
 
-/** Opacity 0..1 of a dark nebula at a texel: a soft-edged patch with a mottled density. */
-function darkOpacity(x: number, y: number, s: number): number {
-  const rr = Math.hypot(x, y) + 0.1 * (fbm2(x * 3, y * 3, s, 3) - 0.5);
-  return Math.min(1, (1 - smoothstep(0.4, 0.9, rr)) * (0.9 + 0.3 * fbm2(x * 4 + 6, y * 4, s ^ 0x5, 3)));
-}
-
 /** Where a texture fades to nothing: no texel beyond 0.9 of the half size has any light. */
 const fade = (rr: number) => 1 - smoothstep(0.74, 0.9, rr);
 
-/** Texture size by the nebula's angular radius. */
+/**
+ * The planet view's default field of view and the tallest drawing buffer
+ * we plan for (a 900 px canvas at a pixel ratio of 2): a texel should not be
+ * wider than a screen pixel there, or the shapes blur.
+ */
+const VIEW_FOV_DEG = 40;
+const VIEW_BUFFER_HEIGHT = 1800;
+const MAX_TEXTURE = 1024;
+
+/** Texture size by the nebula's angular radius: a power of two with texels no wider than a screen pixel at the planet view's field of view. */
 export function nebulaTextureSize(radius: number): number {
-  const deg = (radius * 180) / Math.PI;
-  return deg < 1 ? 128 : deg < 4 ? 256 : 512;
+  const pixels = ((2 * radius * 180) / Math.PI) * (VIEW_BUFFER_HEIGHT / VIEW_FOV_DEG);
+  let size = 128;
+  while (size < pixels && size < MAX_TEXTURE) size *= 2;
+  return size;
 }
 
 const encode = (linear: number): number => {
@@ -218,19 +196,19 @@ function bake(n: Nebula, exposure: SkyExposure): NebulaTexture {
     const y = 1 - (2 * (row + 0.5)) / size;
     for (let col = 0; col < size; col += 1) {
       const x = (2 * (col + 0.5)) / size - 1;
-      const w = fade(Math.hypot(x, y));
-      if (w <= 0) continue;
       const at = (row * size + col) * 4;
       if (dark) {
-        rgba[at + 3] = Math.round(255 * ex.dark * w * darkOpacity(x, y, s));
+        rgba[at + 3] = Math.round(255 * ex.dark * darkOpacity(n, x, y));
         continue;
       }
+      const w = fade(Math.hypot(x, y));
+      if (w <= 0) continue;
       const t = shader!(x, y, n, s);
       let [r, g, b] = t.colour.map((c) => c * t.i * w * gain) as Rgb;
       const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      r = lum + (r - lum) * ex.saturation;
-      g = lum + (g - lum) * ex.saturation;
-      b = lum + (b - lum) * ex.saturation;
+      r = Math.max(0, lum + (r - lum) * ex.saturation);
+      g = Math.max(0, lum + (g - lum) * ex.saturation);
+      b = Math.max(0, lum + (b - lum) * ex.saturation);
       const lr = ex.ceiling * Math.tanh(r / ex.ceiling);
       const lg = ex.ceiling * Math.tanh(g / ex.ceiling);
       const lb = ex.ceiling * Math.tanh(b / ex.ceiling);

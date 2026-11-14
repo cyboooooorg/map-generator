@@ -9,6 +9,7 @@
 // `nebulaDustAt`, which `dustAt` (skyClouds) adds to the band's dust.
 
 import type { Vec3 } from '../skyBodies';
+import { fbm2, smoothstep } from './nebulaNoise';
 import { bandFrame, type SkyLook } from './skyLook';
 import { random, subSeed } from './skyRandom';
 
@@ -43,12 +44,12 @@ interface KindSpec {
 }
 
 const KINDS: KindSpec[] = [
-  { kind: 'planetary', count: [3, 8], size: [0.3, 2], bandShare: 0.35, spread: 2, maxLatitude: 90 },
+  { kind: 'planetary', count: [3, 8], size: [0.5, 3], bandShare: 0.35, spread: 2, maxLatitude: 90 },
   { kind: 'emission', count: [2, 5], size: [3, 12], bandShare: 1, spread: 0.8, maxLatitude: 15 },
-  { kind: 'pillars', count: [1, 3], size: [1, 4], bandShare: 1, spread: 0.6, maxLatitude: 15 },
+  { kind: 'pillars', count: [1, 3], size: [1.5, 5], bandShare: 1, spread: 0.6, maxLatitude: 15 },
   { kind: 'remnant', count: [1, 3], size: [2, 8], bandShare: 0.5, spread: 1.5, maxLatitude: 90 },
   { kind: 'reflection', count: [2, 6], size: [0.5, 3], bandShare: 1, spread: 1, maxLatitude: 15 },
-  { kind: 'dark', count: [4, 10], size: [1, 6], bandShare: 1, spread: 0.4, maxLatitude: 8 },
+  { kind: 'dark', count: [4, 10], size: [1.5, 7], bandShare: 1, spread: 0.4, maxLatitude: 8 },
 ];
 
 /** The size table, degrees, for the tests and the texture resolution. */
@@ -68,13 +69,16 @@ const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v[0], v[1], v[2]);
   return l > 0 ? [v[0] / l, v[1] / l, v[2] / l] : [1, 0, 0];
 };
-const smoothstep = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
 
 function gauss(next: () => number): number {
   return Math.sqrt(-2 * Math.log(Math.max(1e-9, next()))) * Math.cos(2 * Math.PI * next());
+}
+
+/** The roll that turns the texture's x axis along the band's great circle at the nebula's centre. */
+function alongBandRoll(n: Nebula, north: Vec3): number {
+  const { right, up } = nebulaBasis({ ...n, roll: 0 });
+  const tangent = unit(cross(north, n.dir));
+  return Math.atan2(dot(tangent, up), dot(tangent, right));
 }
 
 function draw(look: SkyLook, spec: KindSpec): Nebula[] {
@@ -106,14 +110,17 @@ function draw(look: SkyLook, spec: KindSpec): Nebula[] {
     }
     const [smin, smax] = spec.size;
     const radius = smin * (smax / smin) ** next() * RAD;
-    out.push({
+    const nebula: Nebula = {
       kind: spec.kind,
       dir: unit(dir),
       radius,
       roll: next() * 2 * Math.PI,
       seed: Math.floor(next() * 4_294_967_296) >>> 0,
       tint: next(),
-    });
+    };
+    // Dark nebulae are elongated and lie along the band: their long axis follows the plane.
+    if (spec.kind === 'dark') nebula.roll = alongBandRoll(nebula, frame.north) + (next() - 0.5) * 0.5;
+    out.push(nebula);
   }
   return out;
 }
@@ -167,13 +174,13 @@ export function pillarColumns(n: Nebula): Pillar[] {
   const hit = pillarCache.get(n);
   if (hit) return hit;
   const next = random(subSeed(n.seed, 'pillars'));
-  const count = 1 + Math.floor(next() * 3);
+  const count = 2 + Math.floor(next() * 2);
   const columns: Pillar[] = [];
   for (let i = 0; i < count; i += 1) {
     columns.push({
       x: (count === 1 ? 0 : -0.5 + (i / (count - 1)) * 1) * 0.9 + (next() - 0.5) * 0.15,
-      width: 0.11 + next() * 0.09,
-      top: -0.15 + next() * 0.7,
+      width: 0.17 + next() * 0.1,
+      top: -0.2 + next() * 0.6,
       lean: (next() - 0.5) * 0.3,
       phase: next() * 6.28,
     });
@@ -186,9 +193,12 @@ export function pillarColumns(n: Nebula): Pillar[] {
 export function pillarAt(p: Pillar, y: number): { cx: number; half: number } | null {
   if (y > p.top) return null;
   const t = Math.max(0, (y + 1) / (p.top + 1));
+  // A knobbly shaft, wide at the foot, with a rounded dome at the tip.
+  const knobs = 1 + 0.12 * Math.sin(7 * y + p.phase);
+  const dome = Math.sqrt(1 - (1 - Math.min(1, (p.top - y) / (0.9 * p.width))) ** 2);
   return {
     cx: p.x + p.lean * t + 0.02 * Math.sin(9 * y + p.phase),
-    half: p.width * (1 - 0.72 * t ** 1.3),
+    half: p.width * (1 - 0.45 * t ** 1.3) * knobs * dome,
   };
 }
 
@@ -198,14 +208,37 @@ export function pillarMask(columns: Pillar[], x: number, y: number): number {
   for (const p of columns) {
     const at = pillarAt(p, y);
     if (!at) continue;
-    const edge = 1 - smoothstep(at.half * 0.7, at.half, Math.abs(x - at.cx));
-    mask = Math.max(mask, edge * (1 - smoothstep(p.top - 0.06, p.top, y)));
+    if (at.half < 1e-4) continue;
+    mask = Math.max(mask, 1 - smoothstep(at.half * 0.8, at.half, Math.abs(x - at.cx)));
   }
   return mask;
 }
 
+/**
+ * Opacity 0..1 of a dark nebula at a point of its texture's frame (x right,
+ * y up, both in [-1, 1]): an elongated, bent patch (long along x) with
+ * warped, ragged edges and a few dark tendrils, zero beyond 0.9 of the half
+ * size. The texture and `nebulaDustAt` both read it.
+ */
+export function darkOpacity(n: Nebula, x: number, y: number): number {
+  const s = subSeed(n.seed, 'texture:dark');
+  const rr = Math.hypot(x, y);
+  if (rr >= 0.9) return 0;
+  const aspect = 0.3 + 0.25 * fbm2(n.tint * 9, 1.5, s, 1);
+  const bend = 0.22 * Math.sin(2.1 * x + n.tint * 6);
+  const u = x + 0.3 * (fbm2(x * 2 + 5, y * 2, s ^ 0x31, 3) - 0.5);
+  const v = y - bend + 0.22 * (fbm2(x * 2, y * 2 + 8, s ^ 0x32, 3) - 0.5);
+  const body = 1 - smoothstep(0.3, 1, Math.hypot(u / 0.95, v / (0.95 * aspect)));
+  const ragged = fbm2(x * 5 + 2, y * 5 - 1, s, 4) - 0.5;
+  const core = smoothstep(0.18, 0.5, body + 0.55 * ragged);
+  const ridge = 1 - Math.abs(2 * fbm2(x * 3.2 + 4, y * 3.2 + 1, s ^ 0x33, 3) - 1);
+  const tendril = 0.7 * smoothstep(0.78, 0.95, ridge) * (1 - smoothstep(0.1, 0.9, Math.hypot(u / 1.4, v / (1.4 * aspect * 1.6))));
+  const mottle = 0.8 + 0.3 * fbm2(x * 4 + 6, y * 4, s ^ 0x5, 3);
+  return Math.min(1, Math.max(core * mottle, tendril)) * (1 - smoothstep(0.74, 0.9, rr));
+}
+
 /** Strongest extinction of a dark nebula or pillar silhouette at its centre. */
-const DARK_OPACITY = 0.8;
+const DARK_OPACITY = 0.85;
 const PILLAR_OPACITY = 0.75;
 
 interface Occluder {
@@ -244,14 +277,10 @@ export function nebulaDustAt(look: SkyLook, dir: Vec3): number {
   for (const o of occludersOf(look)) {
     const c = dot(dir, o.nebula.dir);
     if (c < o.cosRadius) continue;
-    if (o.nebula.kind === 'dark') {
-      const t = Math.acos(Math.min(1, c)) / o.nebula.radius;
-      clear *= 1 - DARK_OPACITY * (1 - smoothstep(0.4, 0.9, t));
-    } else {
-      const x = dot(dir, o.right) / c / o.tanRadius;
-      const y = dot(dir, o.up) / c / o.tanRadius;
-      clear *= 1 - PILLAR_OPACITY * pillarMask(pillarColumns(o.nebula), x, y);
-    }
+    const x = dot(dir, o.right) / c / o.tanRadius;
+    const y = dot(dir, o.up) / c / o.tanRadius;
+    if (o.nebula.kind === 'dark') clear *= 1 - DARK_OPACITY * darkOpacity(o.nebula, x, y);
+    else clear *= 1 - PILLAR_OPACITY * pillarMask(pillarColumns(o.nebula), x, y);
   }
   return 1 - clear;
 }

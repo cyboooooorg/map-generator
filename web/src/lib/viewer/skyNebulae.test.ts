@@ -7,6 +7,7 @@ import {
   nebulaBasis,
   pillarColumns,
   pillarMask,
+  darkOpacity,
   skyNebulae,
   type NebulaKind,
 } from './skyNebulae';
@@ -118,6 +119,64 @@ describe('skyNebulae', () => {
 
   it('works for the fixed sky', () => {
     expect(skyNebulae(FIXED_SKY).length).toBeGreaterThan(0);
+  });
+});
+
+describe('dark nebulae', () => {
+  const look = lookAt(8.2);
+  const darks = (seed: number) => skyNebulae(lookAt(8.2, seed)).filter((n) => n.kind === 'dark');
+
+  it('are irregular: elongated, not round discs', () => {
+    let elongated = 0;
+    let total = 0;
+    for (let seed = 1; seed <= 20; seed += 1) {
+      for (const n of darks(seed)) {
+        // Extent of the dense part along each axis of the texture.
+        let wide = 0;
+        let tall = 0;
+        for (let k = -45; k <= 45; k += 1) {
+          if (darkOpacity(n, k / 50, 0) > 0.4) wide += 1;
+          if (darkOpacity(n, 0, k / 50) > 0.4) tall += 1;
+        }
+        total += 1;
+        if (wide >= 1.6 * Math.max(1, tall)) elongated += 1;
+      }
+    }
+    expect(elongated / total).toBeGreaterThan(0.7);
+  });
+
+  it('have ragged edges: the outline is not a smooth circle', () => {
+    for (const n of darks(3)) {
+      // The radius of the 0.4 contour along 24 directions varies by more than 25%.
+      const radii: number[] = [];
+      for (let k = 0; k < 24; k += 1) {
+        const a = (k / 24) * 2 * Math.PI;
+        let r = 0;
+        for (let step = 0; step <= 90; step += 1) if (darkOpacity(n, Math.cos(a) * step / 100, Math.sin(a) * step / 100) > 0.4) r = step / 100;
+        radii.push(r);
+      }
+      expect(Math.max(...radii) / Math.max(1e-3, Math.min(...radii.filter((r) => r > 0), 1))).toBeGreaterThan(1.25);
+    }
+  });
+
+  it('lie along the band: their long axis follows the plane', () => {
+    for (let seed = 1; seed <= 10; seed += 1) {
+      const lk = lookAt(8.2, seed);
+      for (const n of skyNebulae(lk).filter((x) => x.kind === 'dark')) {
+        const { right } = nebulaBasis(n);
+        const tangent = [
+          lk.north[1] * n.dir[2] - lk.north[2] * n.dir[1],
+          lk.north[2] * n.dir[0] - lk.north[0] * n.dir[2],
+          lk.north[0] * n.dir[1] - lk.north[1] * n.dir[0],
+        ];
+        const l = Math.hypot(...tangent);
+        if (l < 0.2) continue;
+        const along = Math.abs(dot(right, tangent as Vec3)) / l;
+        // Within the roll's jitter (0.25 rad) of the plane's direction.
+        expect(along).toBeGreaterThan(Math.cos(0.3));
+      }
+    }
+    expect(look.bandWidth).toBeGreaterThan(0);
   });
 });
 
