@@ -204,7 +204,9 @@ them today (metallicity and star mass), a hot Jupiter included: about
 - Rocky planets keep out of the first cold giant's belt zone, 0.40 to
   0.63 of its distance, where the giant stops a planet forming: a planet
   there is pushed past it, and the zone follows the giant as it settles.
-  A planet fixed by the request may stay in it. A request whose planets
+  A planet fixed by the request may stay in it. A drawn small planet of
+  10 M⊕ or more counts as an ice giant there and for the star's tides,
+  as its model classes it (#449). A request whose planets
   cannot all fit draws their distances again in their preferred bands
   before it fails.
 
