@@ -194,6 +194,15 @@ planet was resurfaced about 300 million years ago (Strom, Schaber & Dawson
 1994; Schaber et al. 1992 found about 0.5 Ga). Io resurfaces itself "faster
 than comets and asteroids can mark it with large craters" (NASA).
 
+**Icy moons** show the same rule in ice, which flows and melts far more
+readily than rock. Callisto, warmed by little more than its rocks' decay,
+keeps a surface saturated with craters about 4 Ga old; Ganymede's dark
+terrain is as old, its bright grooved terrain about 2 Ga. Europa, kneaded
+by Jupiter's tides, has very few craters: its surface is only 40 to 90
+million years old (Zahnle et al. 2003). Enceladus's south polar terrain,
+where its plumes vent, is nearly free of craters, while its old plains
+elsewhere are cratered.
+
 ### Air screens small impactors
 
 A thick atmosphere slows and breaks up small bodies before they reach the
@@ -530,6 +539,18 @@ more are flooded flat at a date of that window and darkened.
   craters (3 km against 1.5 km observed) and Mars's (2 m against craters of
   a few metres) roughly. It ignores what the impactor is made of: on Earth
   iron bodies get through where stony ones of the same size do not.
+- **An ice lid's age follows its heat by a calibration.** A world with an
+  ice crust and a stagnant lid keeps `1 / (1 + (F / 10 mW/m²)⁴)` of the
+  surface age a rock lid would (70 to 95 % of its system's age), `F` its
+  internal heat flux, tidal and radiogenic
+  (`planet::interim::ICE_LID_HALF_FLUX_W_M2`). The law is a choice that
+  puts Callisto (2 to 5 mW/m² in the model) near 4 Ga, Ganymede 2 to 4 Ga
+  and Europa (about 35 mW/m² of tides) under 0.1 Ga; no study gives it.
+  One age stands for the whole surface: Ganymede's two terrains and
+  Enceladus's young south pole (its model's tides give it a quarter of the
+  heat it radiates) are not told apart, Enceladus taking its old plains'
+  age, and Triton, whose surface is young from the heat of its capture,
+  keeps an old one.
 - **Sea floors are cleared by the preset, not by plates.** A crater on the
   floor of a sea that still fills the basins leaves nothing on any world,
   whatever its tectonic regime: the rule reads only the sea, and plate
@@ -655,6 +676,11 @@ more are flooded flat at a date of that window and darkened.
     preliminary results", *Astrophysical Journal* 743, 156,
     [arXiv:1109.6400](https://arxiv.org/abs/1109.6400) (abstract read):
     981 ± 19 near-Earth asteroids larger than 1 km.
+27. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering
+    rates in the outer Solar System", *Icarus* 163, 263–289,
+    [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
+    Europa's surface 40 to 90 Ma old; Callisto's and Ganymede's dark
+    terrain about 4 Ga.
 
 ## See also
 

@@ -4552,6 +4552,47 @@ mod tests {
         }
     }
 
+    /// The moon `name` asked alone in a system of the Sun's age, seed
+    /// `seed`.
+    fn solar_aged_moon(name: &str, seed: u32) -> Body {
+        let request = match whole(&[(name, 1)], seed) {
+            SystemRequest::System(w) => SystemRequest::System(WholeSystemRequest {
+                age_gyr: Some(4.57),
+                ..w
+            }),
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
+        asked_moons(&system, name)[0].clone()
+    }
+
+    /// The surface of a stagnant ice lid is as young as its heat makes it
+    /// (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), in a system of the
+    /// Sun's age: Callisto's ancient (about 4 Ga), Ganymede's 2 to 4 Ga,
+    /// Europa's under 0.1 Ga (40 to 90 Ma, Zahnle et al. 2003,
+    /// doi:10.1016/S0019-1035(03)00048-4), Io's none (its volcanoes'),
+    /// Enceladus's that of its old cratered plains (its crater-free south
+    /// polar terrain is regional, which one surface age does not tell).
+    #[test]
+    fn an_ice_lid_is_as_young_as_its_heat() {
+        for seed in 1..=3 {
+            let age = |name: &str| solar_aged_moon(name, seed).params.surface_age_ga;
+            let callisto = age("callisto-like");
+            assert!(callisto >= 3.0, "seed {seed}: Callisto {callisto} Ga");
+            let ganymede = age("ganymede-like");
+            assert!(
+                (2.0..=4.4).contains(&ganymede),
+                "seed {seed}: Ganymede {ganymede} Ga"
+            );
+            let europa = age("europa-like");
+            assert!(europa < 0.1, "seed {seed}: Europa {europa} Ga");
+            let io = age("io-like");
+            assert!(io < 0.002, "seed {seed}: Io {io} Ga");
+            let enceladus = age("enceladus-like");
+            assert!(enceladus >= 2.0, "seed {seed}: Enceladus {enceladus} Ga");
+        }
+    }
+
     /// A giant its star despins keeps only the light moons (`moons.rs`,
     /// Barnes & O'Brien 2002): an asked moon is never dropped there. The
     /// request places the host where its moon lasts, or fails.

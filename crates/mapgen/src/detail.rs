@@ -1163,7 +1163,7 @@ mod tests {
 
     /// A Europa's ocean lies under its ice shell: its surface is that
     /// shell, land with the relief and the small craters of its crust,
-    /// not a flat frozen sea. (The Europa of
+    /// not a flat frozen sea, whose tiles its craters dig. (The Europa of
     /// `{"system":{"planets":{"europa-like":1},"seed":1}}` at 256 × 128.)
     #[test]
     fn a_europa_is_an_ice_crust_not_a_frozen_sea() {
@@ -1182,6 +1182,12 @@ mod tests {
         let mut params = crate::system::generation_params(moon);
         assert!(ice_shell(&params));
         (params.width, params.height) = (256, 128);
+        // Its tidal heat keeps its surface young, a few Ma here
+        // (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), with hardly a
+        // crater: aged as a Callisto, so that its tiles have small craters
+        // to dig.
+        assert!(params.surface_age_ga < 0.1, "{}", params.surface_age_ga);
+        params.surface_age_ga = 4.0;
         let world = generate(&params).world;
         let grid = params.grid();
         let (mut land, mut total) = (0.0, 0.0);

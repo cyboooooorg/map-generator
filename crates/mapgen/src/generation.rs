@@ -239,8 +239,6 @@ const WET_CRUST_MIN_OCEANS: f64 = 1e-3;
 /// (rock and iron bodies are denser, the Moon 3.34; icy moons 1.8–1.9,
 /// Ganymede and Callisto, NASA), rock otherwise.
 pub(crate) fn crust_kind(p: &WorldParams) -> CrustKind {
-    use crate::planet::classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
-    use crate::planet::climate::SurfaceLiquid;
     let Some(model) = &p.model else {
         let radius = p.circumference_km / EARTH_CIRCUMFERENCE_KM;
         return if radius > 0.0 && 5.513 * p.gravity_modifier() / radius < 2.5 {
@@ -249,6 +247,14 @@ pub(crate) fn crust_kind(p: &WorldParams) -> CrustKind {
             CrustKind::Rock
         };
     };
+    model_crust_kind(model)
+}
+
+/// What the crust of a body of `model` is made of: [`crust_kind`]'s rule
+/// for a world with a model.
+pub(crate) fn model_crust_kind(model: &crate::planet::PlanetModel) -> CrustKind {
+    use crate::planet::classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
+    use crate::planet::climate::SurfaceLiquid;
     let Some(surface) = &model.surface else {
         return CrustKind::Rock;
     };
