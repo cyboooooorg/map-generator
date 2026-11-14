@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldRequest } from './api/types/WorldRequest';
-import { keepModelInputs, keepsModelInputs, startsDrawn } from './variedWorld';
+import { isGiantWorld, keepModelInputs, keepsModelInputs, startsDrawn } from './variedWorld';
 
 /** What `requestFromWorld` gives for planet c of a drawn system: no archetype, its inputs pinned. */
 const drawnPlanet: WorldRequest = {
@@ -71,5 +71,27 @@ describe('a varied world', () => {
     const request: WorldRequest = { planet: 'mine/heavy-rock.toml' };
     keepModelInputs(request, mine, 'mine/heavy-rock.toml');
     expect(request.mass_earth).toBe(0.62);
+  });
+});
+
+describe('a giant world in the form', () => {
+  /** What `requestFromWorld` gives for a gas giant of a drawn system: no archetype, its mass pinned. */
+  const drawnGiant: WorldRequest = { seed: 4, mass_earth: 318, envelope_fraction: 0.9, star: 'G2V', orbit_au: 5.2 };
+  const giantArchetype = { spec: 'jupiter-like', giant: true };
+  const rockyArchetype = { spec: 'earth-like', giant: false };
+
+  it('follows the archetype picked', () => {
+    expect(isGiantWorld({ randomPlanet: false, archetype: giantArchetype, initial: null, initialSpec: undefined, variedGiant: false })).toBe(true);
+    expect(isGiantWorld({ randomPlanet: false, archetype: rockyArchetype, initial: null, initialSpec: undefined, variedGiant: false })).toBe(false);
+  });
+
+  it('is a varied giant without archetype while its inputs are kept', () => {
+    expect(isGiantWorld({ randomPlanet: true, archetype: rockyArchetype, initial: drawnGiant, initialSpec: undefined, variedGiant: true })).toBe(true);
+  });
+
+  it('is not a giant once another archetype is picked, or a planet drawn without the varied one', () => {
+    expect(isGiantWorld({ randomPlanet: false, archetype: rockyArchetype, initial: drawnGiant, initialSpec: undefined, variedGiant: true })).toBe(false);
+    expect(isGiantWorld({ randomPlanet: true, archetype: giantArchetype, initial: null, initialSpec: undefined, variedGiant: false })).toBe(false);
+    expect(isGiantWorld({ randomPlanet: true, archetype: undefined, initial: drawnPlanet, initialSpec: undefined, variedGiant: false })).toBe(false);
   });
 });

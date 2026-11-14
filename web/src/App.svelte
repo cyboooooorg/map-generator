@@ -57,6 +57,8 @@
   let form = $state<{
     initial: WorldRequest | null;
     variedFrom: string | null;
+    /** The varied world is a giant (the form shows a giant's fields even without an archetype). */
+    variedGiant: boolean;
     entry: 'around' | 'system' | null;
     atSummary: boolean;
     /** Opened from the Drift panel: the view to restore on the new world's planet once it is made. */
@@ -443,8 +445,13 @@
   }
 
   /** Opens the creation wizard: on an entry of the menu, or on the summary of a varied world. */
-  function openForm(entry: 'around' | 'system' | null, initial: WorldRequest | null = null, variedFrom: string | null = null): void {
-    form = { initial, variedFrom, entry, atSummary: variedFrom !== null };
+  function openForm(
+    entry: 'around' | 'system' | null,
+    initial: WorldRequest | null = null,
+    variedFrom: string | null = null,
+    variedGiant = false,
+  ): void {
+    form = { initial, variedFrom, variedGiant, entry, atSummary: variedFrom !== null };
   }
 
   /** A system drawn: shown at once (its bodies as spheres), its planet's maps following its job. */
@@ -527,7 +534,7 @@
       title={cardOwner?.planet ?? null}
       ofMoon={cardOwner?.ofMoon ?? false}
       revision={revision(selectedId)}
-      onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id)}
+      onVary={() => primary.meta && openForm('around', keepAlone(requestFromWorld(primary.meta), primary.system), primary.id, primary.meta.giant != null)}
       onReroll={reroll}
       link={shareLink}
       onDelete={() => selectedId && removeWorlds([selectedId])}
@@ -545,7 +552,7 @@
         current={primary.meta.drift_ma ?? 0}
         onGenerate={(ma) => {
           if (!primary.meta) return;
-          openForm('around', keepAlone(driftRequest(primary.meta, ma), primary.system), primary.id);
+          openForm('around', keepAlone(driftRequest(primary.meta, ma), primary.system), primary.id, primary.meta.giant != null);
           if (form) form.fromDrift = { view: primaryPane?.viewState() ?? null, epoch: formatDrift(ma) };
         }}
       />
@@ -695,6 +702,7 @@
         {spec}
         initial={form.initial}
         variedFrom={form.variedFrom}
+        variedGiant={form.variedGiant}
         entry={form.entry}
         atSummary={form.atSummary}
         onSubmitted={submitted}
