@@ -21,7 +21,7 @@
   import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
-  import { keepModelInputs, keepsModelInputs, startsDrawn } from '../lib/variedWorld';
+  import { isGiantWorld, keepModelInputs, keepsModelInputs, startsDrawn } from '../lib/variedWorld';
 
   interface Props {
     archetypes: ArchetypeInfo[];
@@ -33,6 +33,8 @@
     initial?: WorldRequest | null;
     /** Id of the world being varied, for the title. */
     variedFrom?: string | null;
+    /** The varied world is a giant: without an archetype, only the world says so. */
+    variedGiant?: boolean;
     /** Called once the server drew the system; the form closes. */
     onSubmitted: (created: SystemCreated, request: WorldRequest | null) => void;
     onCancel: () => void;
@@ -42,7 +44,7 @@
     atSummary?: boolean;
   }
 
-  let { archetypes, spec, initial = null, variedFrom = null, onSubmitted, onCancel, entry = null, atSummary = false }: Props = $props();
+  let { archetypes, spec, initial = null, variedFrom = null, variedGiant = false, onSubmitted, onCancel, entry = null, atSummary = false }: Props = $props();
 
   /**
    * What the form asks for (docs/system-spec.md): a system around the
@@ -129,17 +131,23 @@
 
   /** Lower end of the giant mass slider, Earth masses: a mini-Neptune's (`mini-neptune` starts at 5). */
   const GIANT_SLIDER_MIN = 5;
-  /** Whether an archetype's world takes the giant path, as the server's model derives it. */
-  function isGiantArchetype(archetype: ArchetypeInfo | undefined): boolean {
-    return archetype?.giant === true;
-  }
 
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
-  const start = untrack(() => ({ initial, archetype: findArchetype(initial?.planet) ?? findArchetype(FALLBACK_ARCHETYPE) ?? archetypes[0] }));
+  const start = untrack(() => ({ initial, variedGiant, archetype: findArchetype(initial?.planet) ?? findArchetype(FALLBACK_ARCHETYPE) ?? archetypes[0] }));
   const missingArchetype = start.initial?.planet !== undefined && !findArchetype(start.initial.planet);
   /** The catalog spec of the varied world's archetype (a request sends the spec, world.json the name). */
   const initialSpec = findArchetype(start.initial?.planet)?.spec;
+  /** Whether the varied world, as the form opens on it, takes the giant path (see isGiantWorld). */
+  function startsGiant(): boolean {
+    return isGiantWorld({
+      randomPlanet: startsDrawn(start.initial, false),
+      archetype: start.archetype,
+      initial: start.initial,
+      initialSpec,
+      variedGiant: start.variedGiant,
+    });
+  }
   /** A blank form starts from the last one submitted (an archetype no longer offered becomes earth-like). */
   const memory = untrack(() => {
     return initial === null ? loadFormMemory(
@@ -172,7 +180,7 @@
   let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
   /** Metallicity, giant neighbours, a giant's moon, a giant's mass (see giantForm.ts). */
   let giantChoice = $state<GiantChoice>(
-    untrack(() => memory?.giant ?? initialGiantChoice(start.initial, !randomPlanet && isGiantArchetype(start.archetype))),
+    untrack(() => memory?.giant ?? initialGiantChoice(start.initial, startsGiant())),
   );
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
@@ -189,7 +197,9 @@
 
   const selectedArchetype = $derived(archetypes.find((a) => a.spec === planet));
   /** A giant planet: no ground, so no drift, moons or giant neighbours to set. */
-  const giantWorld = $derived(!randomPlanet && isGiantArchetype(selectedArchetype));
+  const giantWorld = $derived(
+    isGiantWorld({ randomPlanet, archetype: selectedArchetype, initial: start.initial, initialSpec, variedGiant: start.variedGiant }),
+  );
   /** The fields a world of the chosen kind has. */
   const shownFields = FIELD_NAMES;
   const sizes = $derived.by(() => {
@@ -225,7 +235,7 @@
     }
     moons = moonChoiceOf(start.initial?.moons);
     randomPlanet = startsDrawn(start.initial, false);
-    giantChoice = initialGiantChoice(start.initial, !randomPlanet && isGiantArchetype(archetype));
+    giantChoice = initialGiantChoice(start.initial, startsGiant());
     seed = start.initial?.seed !== undefined ? String(start.initial.seed) : '';
     size =
       start.initial?.width && start.initial.height

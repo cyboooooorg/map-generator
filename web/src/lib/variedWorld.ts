@@ -59,3 +59,28 @@ export function keepsModelInputs(
   keepModelInputs(probe, initial, initialSpec);
   return Object.keys(probe).length > (planet === undefined ? 0 : 1);
 }
+
+/** What {@link isGiantWorld} reads of the form. */
+export interface GiantWorldInputs {
+  /** "Drawn from the star" is checked. */
+  randomPlanet: boolean;
+  /** The archetype picked in the list (its `giant`, as the server's model derives it). */
+  archetype: { giant: boolean } | undefined;
+  /** The varied world's request, null for a new world. */
+  initial: WorldRequest | null | undefined;
+  /** The catalog spec of the varied world's archetype (see {@link keepModelInputs}). */
+  initialSpec: string | undefined;
+  /** The varied world is a giant (world.json's `giant`). */
+  variedGiant: boolean;
+}
+
+/**
+ * Whether the form's planet takes the giant path (no drift, moons or giant
+ * neighbours; a giant's mass instead): the archetype picked says so, or,
+ * drawn from the star, the request keeps the inputs of a varied giant, which
+ * has no archetype when it comes from a drawn system.
+ */
+export function isGiantWorld(f: GiantWorldInputs): boolean {
+  if (!f.randomPlanet) return f.archetype?.giant === true;
+  return f.variedGiant && keepsModelInputs(undefined, f.initial, f.initialSpec);
+}
