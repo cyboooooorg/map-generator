@@ -6,8 +6,10 @@
 //! **Frame.** Galactocentric Cartesian, in kpc: the centre at the origin,
 //! +z the galactic north pole, the Sun at `(8.2, 0, 0.02)`. A system sits
 //! at `(R cos φ, R sin φ, z)`. [`GalacticPlace::axes`] gives the galactic
-//! x, y, z axes expressed in the system's frame (the star's equatorial
-//! frame, y its spin axis).
+//! x, y, z axes expressed in the system's frame: the star's equatorial
+//! frame, y its spin axis, z the reference direction of the orbits' nodes
+//! (`node_deg` = 0; a node at `node_deg` lies at `cos * z + sin * x`) and
+//! x = y × z, so (x, y, z) is right-handed.
 //!
 //! **Radius.** The disc's metallicity falls with radius at about
 //! −0.06 dex/kpc (Cepheids, Genovali et al. 2014), so the system's

@@ -107,7 +107,10 @@ The system carries its **place in the galaxy** (`galaxy`, `galaxy.rs`),
 from which the sky seen from its planets is drawn: `source` (`drawn`; a
 catalogue system will say `observed`), `position_kpc` (galactocentric,
 the Sun at `(8.2, 0, 0.02)`), `axes` (the galactic x, y, z axes in the
-system's frame, the star's equatorial frame with y its spin axis) and
+system's frame: the star's equatorial frame, y its spin axis, z the
+reference direction of the orbits' nodes (`node_deg` = 0, a node at
+`node_deg` lies at cos * z + sin * x) and x = y × z, so right-handed; a
+catalogue system fills it the same way) and
 `sky_seed` (the seed of the clouds and stars). The radius inverts the
 disc's metallicity gradient (−0.06 dex/kpc, Genovali et al. 2014) from
 the star's `[Fe/H]` with a 1.67 kpc scatter, clamped to 2 to 16 kpc, so a

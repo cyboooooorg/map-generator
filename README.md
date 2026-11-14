@@ -369,7 +369,7 @@ Each run writes a system into `systems/<id>/` (`<id>`: the star's designation an
 
 ```text
 systems/<id>/
-├── system.json        ← star and its activity, bodies, orbits, previews, parameters
+├── system.json        ← star and its activity, its place in the galaxy (galaxy), bodies, orbits, previews, parameters
 ├── names.json         ← names given in the web app, by body id (optional)
 └── bodies/
     └── c/             ← each body generated, with the layout below
