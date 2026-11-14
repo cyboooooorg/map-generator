@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inScope, localGroup, migrateDisplay, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups } from './switches';
+import { inScope, localGroup, migrateDisplay, nextSky, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups } from './switches';
 
 describe('pressBody', () => {
   it('sets both bodies to the opposite of the body shown', () => {
@@ -166,5 +166,26 @@ describe('migrateDisplay', () => {
 
   it('keeps the defaults when nothing was saved', () => {
     expect(migrateDisplay(null, current)).toEqual(current);
+  });
+});
+
+describe('the sky choice', () => {
+  const current = { sky: 'system', spinAxes: false };
+
+  it('migrates the stars switch: on to the system’s sky, off to none', () => {
+    expect(migrateDisplay({ stars: true }, current)).toMatchObject({ sky: 'system' });
+    expect(migrateDisplay({ stars: false }, current)).toMatchObject({ sky: 'off' });
+  });
+
+  it('keeps a saved choice and falls back to the system’s sky for an unknown one', () => {
+    expect(migrateDisplay({ sky: 'fixed' }, current)).toMatchObject({ sky: 'fixed' });
+    expect(migrateDisplay({ sky: 'galaxy' }, current)).toMatchObject({ sky: 'system' });
+    expect(migrateDisplay({}, current)).toMatchObject({ sky: 'system' });
+  });
+
+  it('cycles system, fixed, none', () => {
+    expect(nextSky('system')).toBe('fixed');
+    expect(nextSky('fixed')).toBe('off');
+    expect(nextSky('off')).toBe('system');
   });
 });

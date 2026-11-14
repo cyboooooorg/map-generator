@@ -794,8 +794,12 @@ export const fr: Messages = {
     starLight: 'Lumière de l’étoile',
     starLightHelp:
       `La planète et son ciel éclairés de la couleur de la lumière de leur étoile, comme les verrait un œil habitué au Soleil${S}; décoché, une lumière blanche`,
-    stars: 'Étoiles',
-    starsHelp: `Étoiles autour du globe, fixes dans l’espace${S}: elles tournent avec la planète quand vous déplacez la caméra`,
+    sky: 'Ciel',
+    skyHelp:
+      `Le ciel derrière la vue${S}: les étoiles et les faibles nuages de gaz et de poussière de la galaxie, fixes dans l’espace (ils tournent avec la planète quand vous déplacez la caméra). Ses carrés choisissent le ciel du système, tiré de sa place dans la galaxie et différent d’un système à l’autre${S}; le ciel fixe, le même pour tous les mondes${S}; ou pas de ciel`,
+    skySystem: 'Ciel du système',
+    skyFixed: 'Ciel fixe',
+    skyOff: 'Pas de ciel',
     clouds: 'Nuages',
     drift: 'Dérive',
     skyLabels: 'Étiquettes',
@@ -884,7 +888,7 @@ export const fr: Messages = {
     sunlight: 'Lumière du soleil',
     seasons: 'Lancer / arrêter les saisons (allume le soleil)',
     atmosphere: 'Atmosphère',
-    stars: 'Étoiles',
+    sky: 'Ciel : du système, fixe, aucun',
     starView: 'Planète / son étoile',
     moonView: 'Astre suivant du système (le monde, ses lunes, ou une géante et ses lunes)',
     clouds: 'Nuages',

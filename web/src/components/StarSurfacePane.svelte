@@ -12,6 +12,8 @@
   import { clampSpeed, cycleJumps, cyclePhase, defaultStarSpeed, STAR_SPEED_MAX, STAR_SPEED_MIN } from '../lib/starClock';
   import { currentProfile } from '../lib/viewer/quality';
   import { StarBodyView } from '../lib/viewer/StarBodyView';
+  import type { SkyChoice } from '../lib/viewer/skyBackdrop';
+  import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
@@ -33,6 +35,10 @@
     filter: boolean;
     /** Back to the system view (the System button, a double click on the star). */
     onOpenSystem: () => void;
+    /** The system's own sky (see lib/viewer/skyLook.ts). */
+    look?: SkyLook;
+    /** Which sky is drawn: the system's own, the fixed one or none. */
+    sky?: SkyChoice;
   }
 
   let {
@@ -43,6 +49,8 @@
     loops = $bindable(),
     filter = $bindable(),
     onOpenSystem,
+    look = FIXED_SKY,
+    sky = 'system',
   }: Props = $props();
 
   const DAYS_PER_YEAR = 365.25;
@@ -80,6 +88,8 @@
     };
   });
 
+  $effect(() => view?.setSkyLook(look));
+  $effect(() => view?.setSkyChoice(sky));
   $effect(() => view?.setStar(star, activity));
   // The day set from outside (on opening, the system view's), after setStar.
   $effect(() => {

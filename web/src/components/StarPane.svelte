@@ -27,6 +27,8 @@
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
   import { currentProfile } from '../lib/viewer/quality';
+  import type { SkyChoice } from '../lib/viewer/skyBackdrop';
+  import { FIXED_SKY, type SkyLook } from '../lib/viewer/skyLook';
 
   interface Props {
     star: StarInfo;
@@ -127,6 +129,10 @@
     hidden?: boolean;
     /** Opens the star view (the Star button, a double click on the star); null hides the button. */
     onOpenStar?: (() => void) | null;
+    /** The system's own sky (see lib/viewer/skyLook.ts). */
+    look?: SkyLook;
+    /** Which sky is drawn: the system's own, the fixed one or none. */
+    sky?: SkyChoice;
   }
 
   let {
@@ -174,6 +180,8 @@
     clockDays = $bindable(0),
     hidden = false,
     onOpenStar = null,
+    look = FIXED_SKY,
+    sky = 'system',
   }: Props = $props();
   // Each giant under its designation (MGS 48213 d), once the summary gives it.
   const giantList = $derived(
@@ -224,6 +232,8 @@
     };
   });
 
+  $effect(() => view?.setSkyLook(look));
+  $effect(() => view?.setSkyChoice(sky));
   $effect(() => view?.setStar(star, omega, giantList, selected, activity));
   /** The last day this view reported (see clockDays): any other is a day set from outside. */
   let reported = Number.NaN;

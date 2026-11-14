@@ -8,6 +8,8 @@
 // bodies, spin axes and arrows) have more parts, one square each (see
 // `Part`).
 
+import type { SkyChoice } from './viewer/skyBackdrop';
+
 /** A switch's state on the body shown (a moon, say) and on its host planet. */
 export interface BodyPair {
   body: boolean;
@@ -145,5 +147,22 @@ export function migrateDisplay<T extends object>(stored: unknown, current: T): T
   for (const [key, from] of copies) {
     if (seen[key] === undefined && typeof seen[from] === 'boolean') out[key] = seen[key] = seen[from];
   }
+  // The stars switch became the three-way sky choice (#429): a boolean
+  // maps to the system's sky or none, anything else to the system's sky.
+  if ('sky' in current) out.sky = parseSky(old.sky ?? old.stars);
   return out as T;
+}
+
+/** The sky choices, in the order the `B` key cycles them. */
+export const SKY_CHOICES: readonly SkyChoice[] = ['system', 'fixed', 'off'];
+
+/** A stored sky choice: a known one as it is, a boolean (the old stars switch) as the system's sky or none, else the system's. */
+export function parseSky(stored: unknown): SkyChoice {
+  if (stored === false) return 'off';
+  return SKY_CHOICES.find((choice) => choice === stored) ?? 'system';
+}
+
+/** The choice after `choice` in the cycle system, fixed, off. */
+export function nextSky(choice: SkyChoice): SkyChoice {
+  return SKY_CHOICES[(SKY_CHOICES.indexOf(choice) + 1) % SKY_CHOICES.length]!;
 }

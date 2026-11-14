@@ -1896,11 +1896,6 @@ export class PlanetView {
     this.requestRender();
   }
 
-  /** @deprecated Use setSkyChoice; kept for callers not yet moved. */
-  setStars(visible: boolean): void {
-    this.setSkyChoice(visible ? 'system' : 'off');
-  }
-
   private wrappedTurn(): number {
     return this.starsTurned - 2 * Math.PI * Math.floor(this.starsTurned / (2 * Math.PI));
   }
