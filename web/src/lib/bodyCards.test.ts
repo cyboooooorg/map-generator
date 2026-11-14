@@ -32,4 +32,11 @@ describe('cardsFor', () => {
     expect(cardsFor(body({ kind: 'moon', parent: 'c' }), meta(), true)).not.toContain('moons');
     expect(cardsFor(body({ kind: 'moon', parent: 'c', ring_role: 'edge' }), meta(), true)).toContain('moons');
   });
+
+  it('gives a moon that feeds a dust ring the moons card, without a ring role', () => {
+    const planet = body({ params: { given_rings: { dust: [{ source: 'c-1' }] } } });
+    const moon = body({ id: 'c-1', kind: 'moon', parent: 'c' });
+    expect(cardsFor(moon, meta(), true, planet)).toContain('moons');
+    expect(cardsFor(moon, meta(), true, null)).not.toContain('moons');
+  });
 });

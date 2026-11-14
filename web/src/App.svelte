@@ -129,6 +129,11 @@
   const revision = (id: string | null) => summaryOf(id)?.modified_ms ?? null;
   /** A star or body renamed: the list shows the new summary. */
   const renamedSystem = (renamed: SystemSummary) => (systems = systems.map((s) => (s.id === renamed.id ? renamed : s)));
+  /** The planet of the moon shown, if it is one. */
+  const hostOf = (w: LoadedWorld) => {
+    const parent = w.shownSystemBody?.parent;
+    return (parent ? w.system?.bodies.find((b) => b.id === parent) : null) ?? null;
+  };
   /** The body's details, as the themed cards of the viewer's info panel (the legend card is the viewer's own). */
   const infoCards = $derived.by((): DockCard[] => {
     if (!primary.system) return [];
@@ -142,7 +147,7 @@
       map: mapCard,
     };
     const cards: DockCard[] = [{ id: 'info.system', title: t.cards.system, content: systemCard, full: true, detachable: false }];
-    for (const id of cardsFor(primary.shownSystemBody, primary.meta, primary.stats !== null)) {
+    for (const id of cardsFor(primary.shownSystemBody, primary.meta, primary.stats !== null, hostOf(primary))) {
       const content = snippets[id];
       if (content) cards.push({ id: cardDockId(id), title: t.cards[id], content, full: id === 'header', detachable: id !== 'header' });
     }
