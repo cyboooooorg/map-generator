@@ -268,6 +268,7 @@ impl PlanetModel {
                 envelope_fraction: Some(envelope),
                 co2: Some(factor(i.volatiles.co2, rule.co2)),
                 n2: Some(factor(i.volatiles.n2, rule.n2)),
+                ch4: None,
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
             },

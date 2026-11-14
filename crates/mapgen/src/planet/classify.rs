@@ -143,14 +143,18 @@ pub const ICE_WORLD_MIN_OCEANS: f64 = 0.01;
 /// 1.25 R⊕, super-Earth-size 1.25 to 2).
 const SUPER_EARTH_MIN_RADIUS: f64 = 1.25;
 
-/// Surface pressure above which a runaway greenhouse or a sea of
-/// hydrocarbons gives a class of its own, bar. Calibration, no source: a
-/// runaway with less than 1 bar has lost its air and is a bare rock
-/// (Mercury, Mars); Titan's 1.5 bar holds its seas. A cold body whose
-/// outgassing barely outruns its star's ultraviolet keeps a trace of
-/// methane over its ice under a thin air
-/// ([`super::atmosphere::methane_photolysis`]), and stays an ice world.
+/// Surface pressure above which a runaway greenhouse gives a class of
+/// its own, bar. Calibration, no source: a runaway with less than 1 bar
+/// has lost its air and is a bare rock (Mercury, Mars).
 const DENSE_AIR_BAR: f64 = 1.0;
+
+/// Surface pressure above which liquid hydrocarbons make a hydrocarbon
+/// world, bar: methane's triple-point pressure (NIST Chemistry WebBook,
+/// 0.1169 ± 0.0006 bar), under which no liquid methane is stable. A cold
+/// body whose outgassing barely outruns its star's ultraviolet keeps a
+/// trace of methane over its ice under a thinner air
+/// ([`super::atmosphere::methane_photolysis`]), and stays an ice world.
+const METHANE_TRIPLE_BAR: f64 = 0.1169;
 
 /// Earth oceans of water kept from which an ocean world drowns all land.
 /// Calibration: Cowan & Abbot 2014, doi:10.1088/0004-637X/781/1/27, find
@@ -170,7 +174,7 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 /// 3. with a `surface` (an enveloped body has none): a lava world (liquid
 ///    lava), a runaway greenhouse (runaway and over
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
-///    more than [`DENSE_AIR_BAR`]), an
+///    more than [`METHANE_TRIPLE_BAR`]), an
 ///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
 /// 4. at least 5 % water and ices, and with a `surface`, at least
 ///    [`ICE_WORLD_MIN_OCEANS`] of them kept there: an ice world (a body
@@ -220,7 +224,7 @@ fn surface_class(surface: &Surface) -> Option<PlanetClass> {
         Some(PlanetClass::LavaWorld)
     } else if surface.water.runaway && surface.gases.total() > DENSE_AIR_BAR {
         Some(PlanetClass::RunawayGreenhouse)
-    } else if liquid == SurfaceLiquid::Hydrocarbons && surface.gases.total() > DENSE_AIR_BAR {
+    } else if liquid == SurfaceLiquid::Hydrocarbons && surface.gases.total() > METHANE_TRIPLE_BAR {
         Some(PlanetClass::HydrocarbonWorld)
     } else if liquid == SurfaceLiquid::Water && surface.water.oceans >= OCEAN_WORLD_OCEANS {
         Some(PlanetClass::OceanWorld)

@@ -10,6 +10,16 @@ description = "Une grande lune glacée d'une Saturne, sous un air épais et froi
 # parameters), ±10 %.
 [inputs]
 mass_earth = [0.020, 0.025]
+# Methane its ices carry, as a factor on the formation rule (1 % of the
+# ices): the rule's own amount to twice it, not the log-normal draw that
+# can leave a third of it. Titan's air needs an interior reservoir far
+# larger than its surface holds: its lakes "do not contain enough methane
+# to sustain the atmosphere over geologic time" against photolysis
+# (Lorenz et al. 2008, doi:10.1029/2007GL032118), and episodic outgassing
+# from methane clathrate in its interior resupplies it (Tobie, Lunine &
+# Sotin 2006, doi:10.1038/nature04497). Calibration with Titan as its
+# target: neither paper gives the inventory as a share of the ices.
+ch4 = [1.0, 2.0]
 
 [moon]
 # Grown in Saturn's disk.

@@ -237,6 +237,12 @@ pub struct InputOverrides {
     pub co2: Option<f64>,
     /// Factor on the N₂ formation rule (1 typical).
     pub n2: Option<f64>,
+    /// Factor on the CH₄ formation rule (1 typical): the methane the ices
+    /// carry. Left out of a pinned formation (`PlanetModel::formation`),
+    /// as before it could be set: a varied world draws its methane again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub ch4: Option<f64>,
     /// Radiogenic abundance, Earth's = 1.
     pub radiogenic: Option<f64>,
     /// `Some(true)`: life arises wherever the world allows it;
@@ -279,8 +285,8 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// The overrides apply after the draws. A set water (`water_oceans`, over
 /// the planet's mass) and a set envelope are final before the volatile
 /// rule reads them, so the ice-borne volatiles follow the water the planet
-/// has; a set `co2` or `n2` replaces the log-normal scatter of that gas
-/// and leaves the rule. `life` sets the life draw to 0 (always arises) or
+/// has; a set `co2`, `n2` or `ch4` replaces the log-normal scatter of
+/// that gas and leaves the rule. `life` sets the life draw to 0 (always arises) or
 /// 1 (never).
 pub fn draw_inputs_with(
     context: &Context,
@@ -397,7 +403,8 @@ fn volatile_scatter(rng: &mut impl RngExt) -> VolatileScatter {
 
 /// Volatiles carried by a `refractory` share of rock and iron and a
 /// `water` share of ices, each rule ([`ROCK_CO2`] … [`ICE_NH3`]) scaled by
-/// its factor in `scatter`, or by the override of CO2 and N2 when set:
+/// its factor in `scatter`, or by the override of CO2, N2 and CH4 when
+/// set:
 ///
 /// ```text
 /// co2 = (1e-4 r + 0.05 w) LN    n2 = (2e-6 r + 1e-3 w) LN
@@ -413,7 +420,7 @@ fn volatiles(
     Volatiles {
         co2: rule.co2 * overrides.co2.unwrap_or(scatter.co2),
         n2: rule.n2 * overrides.n2.unwrap_or(scatter.n2),
-        ch4: rule.ch4 * scatter.ch4,
+        ch4: rule.ch4 * overrides.ch4.unwrap_or(scatter.ch4),
         nh3: rule.nh3 * scatter.nh3,
         s: rule.s * scatter.s,
     }

@@ -477,6 +477,8 @@ impl WorldRequest {
             envelope_fraction: self.envelope_fraction.or(a.envelope_fraction),
             co2: self.co2.or(a.co2),
             n2: self.n2.or(a.n2),
+            // Not a request's knob: the archetype's alone.
+            ch4: a.ch4,
             radiogenic: self.radiogenic.or(a.radiogenic),
             life: self.life.or(a.life),
         }

@@ -729,7 +729,7 @@ The first rule that holds wins:
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
 | 3 | `lava-world` | surface liquid is lava (at least 1400 K, no water kept) |
 | 4 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
-| 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over 1 bar |
+| 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
 | 6 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
 | 7 | `ice-world` | at least 5 % water and ices |
 | 8 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
@@ -739,12 +739,12 @@ Cowan & Abbot 2014 (doi:10.1088/0004-637X/781/1/27) study how much water
 drowns all land; ten is a round figure above the few oceans their basins
 hold, not a value from the paper. `DENSE_AIR_BAR` is 1 bar, for the
 runaway greenhouse (Venus has 90 bar; a runaway that lost its air is a
-bare rock) and for the hydrocarbon world. The pressure condition on
-hydrocarbons is a departure from the plain rule "liquid hydrocarbons".
-It was added when the model kept 0.2 and 0.5 bar of methane on
-Ganymede and Callisto, which methane photolysis now removes; it still
-keeps a cold body with a trace of methane over its ice under a thin air
-an ice world. Titan has 2.1 bar in the model.
+bare rock). The hydrocarbon world needs its air above methane's
+triple-point pressure (`METHANE_TRIPLE_BAR`, 0.1169 bar, NIST), under
+which no liquid methane is stable; it took the 1 bar until part 4, when
+Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
+It keeps a cold body with a trace of methane over its ice under a thin
+air an ice world. Titan has 2.1 bar in the model.
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa

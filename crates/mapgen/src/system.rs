@@ -4453,17 +4453,14 @@ mod tests {
     /// ocean is a known departure (issue #463), as are the oceans of
     /// Ganymede and Callisto, which follow the radiogenic draw.
     ///
-    /// Every Titan keeps liquid hydrocarbons, its nitrogen holding them
-    /// liquid below pure methane's triple point
-    /// (`planet::climate::methane_freezes_k`). Its air scatters with its
-    /// draws (0.8 to 2.9 bar over these seeds): a Titan under the 1 bar
-    /// from which `planet::classify` names a hydrocarbon world (seeds 6
-    /// and 7, 0.81 and 0.97 bar) keeps its lakes and haze but is classed
-    /// an ice world.
+    /// Every Titan is a hydrocarbon world: its methane inventory (its
+    /// archetype's `ch4`) outlasts its star's ultraviolet, its nitrogen
+    /// holds the liquid below pure methane's triple point
+    /// (`planet::climate::methane_freezes_k`), and its air (0.8 to 2.9 bar
+    /// over these seeds) is above methane's triple-point pressure.
     #[test]
     fn each_moon_archetype_comes_out_as_itself() {
         use crate::geology::Regime;
-        let mut hydrocarbon = 0;
         for seed in 1..=10 {
             let one = |name: &str| {
                 let system = requested(seed, &[(name, 1)]);
@@ -4476,21 +4473,11 @@ mod tests {
             };
             let surface = |m: &PlanetModel| m.surface.expect("a moon has a surface");
             let (_, titan) = one("titan-like");
-            let air = surface(&titan).gases.total();
             assert_eq!(
-                surface(&titan).climate.liquid,
-                crate::planet::SurfaceLiquid::Hydrocarbons,
+                titan.class.key(),
+                "hydrocarbon-world",
                 "seed {seed}: {titan:?}"
             );
-            let class = if air > 1.0 {
-                "hydrocarbon-world"
-            } else {
-                "ice-world"
-            };
-            assert_eq!(titan.class.key(), class, "seed {seed}: {titan:?}");
-            if air > 1.0 {
-                hydrocarbon += 1;
-            }
             let (_, europa) = one("europa-like");
             let ocean = europa.ice_shell.map_or(0.0, |s| s.ocean_km);
             assert!(ocean > 0.0, "seed {seed}: {europa:?}");
@@ -4516,7 +4503,6 @@ mod tests {
                 "icy-moon" | "rocky-moon"
             ));
         }
-        assert_eq!(hydrocarbon, 8, "Titans that are hydrocarbon worlds");
     }
 
     /// A giant its star despins keeps only the light moons (`moons.rs`,

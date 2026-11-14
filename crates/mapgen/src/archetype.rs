@@ -23,6 +23,7 @@
 //! envelope_fraction = 0.0             # hydrogen and helium share of the mass
 //! co2 = 1.0                           # factor on the formation rule, 1 typical
 //! n2 = 1.0                            # idem
+//! ch4 = 1.0                           # idem: the methane its ices carry
 //! radiogenic = 1.0                    # Earth's abundance = 1
 //! life = true                         # true: arises where it can; false: never
 //!
@@ -221,7 +222,7 @@ pub const ENVELOPE_FRACTION: Limits = Limits {
     min: 0.0,
     max: 0.999,
 };
-/// Factor on the CO₂ or N₂ formation rule. Calibration, no source: two
+/// Factor on the CO₂, N₂ or CH₄ formation rule. Calibration, no source: two
 /// orders of magnitude either way is more than the draw scatters.
 pub const VOLATILE_FACTOR: Limits = Limits {
     min: 0.0,
@@ -320,6 +321,9 @@ pub struct ArchetypeInputs {
     /// Factor on the N₂ formation rule (1 typical).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub n2: Option<ParamDefault>,
+    /// Factor on the CH₄ formation rule (1 typical).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ch4: Option<ParamDefault>,
     /// Radiogenic abundance, Earth's = 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radiogenic: Option<ParamDefault>,
@@ -515,6 +519,7 @@ impl Archetype {
             ),
             ("inputs", "co2", i.co2, VOLATILE_FACTOR),
             ("inputs", "n2", i.n2, VOLATILE_FACTOR),
+            ("inputs", "ch4", i.ch4, VOLATILE_FACTOR),
             ("inputs", "radiogenic", i.radiogenic, RADIOGENIC),
             ("orbit", "insolation", o.insolation, INSOLATION),
             ("orbit", "period_days", o.period_days, PERIOD_DAYS),
@@ -610,6 +615,7 @@ impl Archetype {
             envelope_fraction: pick(i.envelope_fraction),
             co2: pick(i.co2),
             n2: pick(i.n2),
+            ch4: pick(i.ch4),
             radiogenic: pick(i.radiogenic),
             life: i.life,
         }
@@ -722,8 +728,7 @@ mod tests {
             "hot-jupiter" => "hot-jupiter",
             // The moons, round their host at its own orbit (see
             // `moon_model_of`): Titan's liquid methane, the others' ice
-            // over an ocean or none, Io's dry rock. Titan's class is
-            // checked on most seeds, see `titan_like_is_mostly_a_hydrocarbon_world`.
+            // over an ocean or none, Io's dry rock.
             "titan-like" => "hydrocarbon-world",
             "europa-like" | "ganymede-like" | "callisto-like" | "triton-like"
             | "enceladus-like" => "ice-world",
@@ -735,9 +740,6 @@ mod tests {
     #[test]
     fn every_archetype_comes_out_as_its_class() {
         for a in Archetype::built_in() {
-            if a.name == "titan-like" {
-                continue;
-            }
             for seed in 0..20 {
                 let model = if a.moon.is_some() {
                     moon_model_of(&a, seed)
@@ -762,38 +764,13 @@ mod tests {
         assert_eq!(built_in_names().len(), 20);
     }
 
-    /// Every Titan that keeps methane in its air keeps liquid
-    /// hydrocarbons, its nitrogen holding them liquid below pure methane's
-    /// triple point (`planet::climate::methane_freezes_k`), and is a
-    /// hydrocarbon world when its air passes the 1 bar from which
-    /// `planet::classify` names one. Over seeds 0 to 19, 17 are; seeds 5
-    /// and 10 keep their lakes under 0.61 and 0.57 bar and are classed ice
-    /// worlds; seed 8, drawn with little methane (0.15 % of its mass), has
-    /// lost it all to its star's Lyman α (`atmosphere::methane_photolysis`).
     #[test]
-    fn titan_like_is_mostly_a_hydrocarbon_world() {
+    fn titan_like_is_a_hydrocarbon_world() {
         let a = Archetype::load("titan-like").unwrap();
-        let mut hydrocarbon = 0;
         for seed in 0..20 {
             let m = moon_model_of(&a, seed);
-            let s = m.surface.expect("a moon has a surface");
-            if s.gases.ch4 > 0.0 {
-                assert_eq!(
-                    s.climate.liquid,
-                    crate::planet::SurfaceLiquid::Hydrocarbons,
-                    "seed {seed}: {m:?}"
-                );
-            }
-            if s.climate.liquid == crate::planet::SurfaceLiquid::Hydrocarbons
-                && s.gases.total() > 1.0
-            {
-                assert_eq!(m.class.key(), expected(&a.name), "seed {seed}: {m:?}");
-                hydrocarbon += 1;
-            } else {
-                assert_eq!(m.class.key(), "ice-world", "seed {seed}: {m:?}");
-            }
+            assert_eq!(m.class.key(), expected(&a.name), "seed {seed}: {m:?}");
         }
-        assert_eq!(hydrocarbon, 17, "{hydrocarbon} of 20");
     }
 
     #[test]

@@ -231,12 +231,12 @@ fn main() {
 
 /// Why a cold large moon of `model` (surface pressure `p_bar`, temperature
 /// `t`) is no hydrocarbon world (liquid hydrocarbons under more than
-/// 1 bar, `planet::classify`): its air lost (its own dynamo ignored inside
+/// 0.117 bar, `planet::classify`): its air lost (its own dynamo ignored inside
 /// its giant's magnetosphere, or no field to lose), no methane in its
 /// inputs (a giant-impact moon of a large world is dry rock), its methane
 /// destroyed by its star's Lyman α faster than it outgassed it
 /// (`atmosphere::methane_photolysis`), too cold or too warm for liquid
-/// methane, or air under 1 bar.
+/// methane, or air under methane's triple-point pressure.
 fn why_not_hydrocarbon(model: &mapgen::planet::PlanetModel, p_bar: f64, t: f64) -> &'static str {
     use mapgen::planet::{PlanetClass, SurfaceLiquid};
     let s = model.surface.as_ref().unwrap();
@@ -256,8 +256,8 @@ fn why_not_hydrocarbon(model: &mapgen::planet::PlanetModel, p_bar: f64, t: f64) 
         "air kept, too cold for liquid CH4 (its N2 lowers the 90.7 K)"
     } else if s.climate.liquid != SurfaceLiquid::Hydrocarbons {
         "air kept, too warm for liquid CH4 (ethane boils)"
-    } else if p_bar <= 1.0 {
-        "liquid CH4 but air under DENSE_AIR_BAR (1 bar)"
+    } else if p_bar <= 0.1169 {
+        "liquid CH4 but air under 0.117 bar"
     } else {
         "other (class rule)"
     }

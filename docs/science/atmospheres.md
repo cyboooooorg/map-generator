@@ -350,9 +350,21 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
   pure methane's 90.67 K with no nitrogen, never below 70.4 K. It is a
   simple fit, not the full phase diagram: it leaves the ethane out, which
   lowers the freezing point further (the binary rule gives 81 and 85 K for
-  Richardson's two liquids), so it errs towards freezing. A Titan drawn
-  with a thinner air than Titan's keeps its lakes; under 1 bar it is
-  still classed an ice world (`planet::classify`).
+  Richardson's two liquids), so it errs towards freezing. Liquid methane
+  is stable under any air above its triple-point pressure (0.1169 bar,
+  NIST), from which `planet::classify` names a hydrocarbon world.
+- **Titan's methane is an archetype's cause.** The model draws the methane
+  a body's ices carry as 1 % of them times a log-normal scatter, which can
+  leave a Titan too little to outlast its star's Lyman α. Titan's own
+  air needs an interior reservoir: its lakes cannot sustain the
+  atmosphere against photolysis over geologic time (Lorenz et al. 2008
+  [17]) and episodic outgassing from methane clathrate resupplies it
+  (Tobie, Lunine & Sotin 2006 [18]). `titan-like` sets the factor on the
+  rule to 1 to 2 (`ch4`, as `co2` and `n2`), a calibration with Titan as
+  its target; it sets the cause, the model still decides. Round a
+  Sun-like star every asked Titan is then a hydrocarbon world; round an
+  old K dwarf (8 Gyr) some lose their methane, and round an M dwarf their
+  air, to the star's long-lasting ultraviolet.
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon
@@ -444,6 +456,12 @@ goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
     measurements of nitrogen in liquid methane-ethane mixtures",
     *International Journal of Thermal Sciences* 137, 534–538,
     [doi:10.1016/j.ijthermalsci.2018.12.024](https://doi.org/10.1016/j.ijthermalsci.2018.12.024).
+17. Lorenz, R. D. et al. 2008, "Titan's inventory of organic surface
+    materials", *Geophysical Research Letters* 35, L02206,
+    [doi:10.1029/2007GL032118](https://doi.org/10.1029/2007GL032118).
+18. Tobie, G., Lunine, J. I. & Sotin, C. 2006, "Episodic outgassing as
+    the origin of atmospheric methane on Titan", *Nature* 440, 61–64,
+    [doi:10.1038/nature04497](https://doi.org/10.1038/nature04497).
 
 ## See also
 
