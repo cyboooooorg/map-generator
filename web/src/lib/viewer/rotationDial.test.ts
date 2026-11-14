@@ -1,4 +1,4 @@
-import type { Line } from 'three';
+import { type Line, LineBasicMaterial, type Material, MeshBasicMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
 import { LABEL_OUT, RotationDial } from './rotationDial';
 
@@ -93,6 +93,21 @@ describe('RotationDial', () => {
     }
     expect(heights[0]).toBeCloseTo(2 * Math.sin(0.01), 9);
     expect(heights[1]).toBeCloseTo(-2 * Math.sin(0.01), 9);
+    dial.dispose();
+  });
+
+  it('takes the ring and the pointer from the theme but keeps the star’s colour', () => {
+    const materials: Material[] = [];
+    const dial = new RotationDial((material) => materials.push(material));
+    const hexes = () => materials.map((m) => (m instanceof LineBasicMaterial || m instanceof MeshBasicMaterial ? m.color.getHexString() : ''));
+    const before = hexes();
+    dial.setColours({ ring: '#c46bff', pointer: '#ff7ae6' });
+    const after = hexes();
+    // Three ring materials, the star's two lines and marker, and the pointer.
+    expect(after.filter((h) => h === 'c46bff')).toHaveLength(3);
+    expect(after.filter((h) => h === 'ff7ae6')).toHaveLength(1);
+    const kept = before.filter((h, i) => after[i] === h);
+    expect(kept).toEqual(['c9b98a', 'c9b98a', 'c9b98a']);
     dial.dispose();
   });
 });
