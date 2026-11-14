@@ -1361,12 +1361,40 @@ mod tests {
 
     #[test]
     fn missing_values_are_drawn_within_fallback_ranges() {
-        let resolved = WorldRequest::default().resolve(&mut rand::rng()).unwrap();
-        let p = resolved.params;
-        // 5 to 40°, or 0 to 85° without a moon to steady it.
-        assert!((0.0..=85.0).contains(&p.axial_tilt_deg));
-        assert!(SURFACE_AGE_GA.contains(p.surface_age_ga));
-        assert_eq!((p.width, p.height), (2048, 1024));
+        // Seeded, so that a failure reproduces. 200 seeds draw 41
+        // mini-Neptunes, 16 ice giants and 9 hot Neptunes; the tilt of
+        // seeds 79, 82 and 164 (mini-Neptunes), 151 and 171 (ice giants)
+        // passes 85°.
+        for seed in 0..200 {
+            let resolved = WorldRequest::default()
+                .resolve(&mut StdRng::seed_from_u64(seed))
+                .unwrap();
+            let class = resolved.model().class;
+            let p = resolved.params;
+            let tilt = p.axial_tilt_deg;
+            // The tilt a giant's look draws (`planet::interim`): 0 to 90°
+            // for an ice giant or mini-Neptune, which may lie on its side
+            // like Uranus, 0 to 3° for a hot Jupiter or hot Neptune, whose
+            // tides stand it upright. Otherwise 5 to 40°, or 0 to 85°
+            // without a moon to steady it (`moons::UNSTABLE_TILT_DEG`).
+            let max_tilt = match class {
+                PlanetClass::IceGiant | PlanetClass::MiniNeptune => 90.0,
+                PlanetClass::HotJupiter | PlanetClass::HotNeptune => 3.0,
+                _ => 85.0,
+            };
+            assert!(
+                (0.0..=max_tilt).contains(&tilt),
+                "seed {seed} class {} tilt {tilt}",
+                class.key()
+            );
+            assert!(
+                SURFACE_AGE_GA.contains(p.surface_age_ga),
+                "seed {seed} class {} surface age {}",
+                class.key(),
+                p.surface_age_ga
+            );
+            assert_eq!((p.width, p.height), (2048, 1024), "seed {seed}");
+        }
     }
 
     /// A planet of Earth's mass at 1 AU round the Sun on a circular orbit,
