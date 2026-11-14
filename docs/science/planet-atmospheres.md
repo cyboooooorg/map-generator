@@ -731,18 +731,19 @@ The first rule that holds wins:
 | 4 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
 | 6 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
-| 7 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above |
-| 8 | `ice-world` | at least 5 % water and ices |
+| 7 | `ice-world` | at least 5 % water and ices |
+| 8 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
 | 9 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
 
 The `volcanic-world` is Io's class: Moore & Webb 2013
 (doi:10.1038/nature12424) model its resurfacing as heat-pipe tectonics,
-magma rising through the lithosphere's conduits. It comes after the
-classes that name what covers the surface (magma, a dense greenhouse air,
-a hydrocarbon or water sea), so a heat-pipe body is a volcanic world only
-when nothing else sets it apart, and before the ice world and the rock
-classes so that a tidally heated rock does not read as a plain `rocky`
-body. Its interim base look is `volcanic`, as for any heat-pipe body.
+magma rising through the lithosphere's conduits. It takes only a body
+that would otherwise be `rocky` or `super-earth`: silicate volcanism is
+Io's, while an icy tidally heated body (Europa, Enceladus) would at most
+be cryovolcanic, which the model does not describe, so an `ice-world`
+stays one whatever its regime. It also comes after the classes that name
+what covers the surface (magma, a dense greenhouse air, a sea). Its
+interim base look is `volcanic`, as for any heat-pipe body.
 
 Two constants are calibrations. `OCEAN_WORLD_OCEANS` is 10 Earth oceans:
 Cowan & Abbot 2014 (doi:10.1088/0004-637X/781/1/27) study how much water

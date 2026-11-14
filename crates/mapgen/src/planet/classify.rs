@@ -181,16 +181,16 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///    lava), a runaway greenhouse (runaway and over
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
 ///    more than [`METHANE_TRIPLE_BAR`]), an
-///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]), a
-///    volcanic world (a solid surface in the heat-pipe regime, none of
-///    the above), checked last because the others name what covers the
-///    surface (magma, a dense greenhouse air, a sea) and a volcanic world
-///    is what is left when only the resurfacing sets it apart, as Io's
-///    (Moore & Webb 2013, doi:10.1038/nature12424, heat-pipe tectonics);
+///    ocean world (liquid water and at least [`OCEAN_WORLD_OCEANS`]);
 /// 4. at least 5 % water and ices, and with a `surface`, at least
 ///    [`ICE_WORLD_MIN_OCEANS`] of them kept there: an ice world (a body
 ///    that lost its ice falls through);
-/// 5. a super-Earth from 1.25 R⊕, rocky below.
+/// 5. a volcanic world: a body that would be rocky or a super-Earth
+///    (no ice world: silicate volcanism is Io's, an icy body's is
+///    cryovolcanism, which the model does not describe) with a solid
+///    surface in the heat-pipe regime (Moore & Webb 2013,
+///    doi:10.1038/nature12424);
+/// 6. a super-Earth from 1.25 R⊕, rocky below.
 ///
 /// The class is read off the model; nothing derives from it.
 pub fn classify(
@@ -221,6 +221,8 @@ pub fn classify(
         && surface.is_none_or(|s| s.water.oceans >= ICE_WORLD_MIN_OCEANS)
     {
         PlanetClass::IceWorld
+    } else if surface.is_some_and(|s| s.regime == Regime::HeatPipe) {
+        PlanetClass::VolcanicWorld
     } else if radius >= SUPER_EARTH_MIN_RADIUS {
         PlanetClass::SuperEarth
     } else {
@@ -239,8 +241,6 @@ fn surface_class(surface: &Surface) -> Option<PlanetClass> {
         Some(PlanetClass::HydrocarbonWorld)
     } else if liquid == SurfaceLiquid::Water && surface.water.oceans >= OCEAN_WORLD_OCEANS {
         Some(PlanetClass::OceanWorld)
-    } else if surface.regime == Regime::HeatPipe {
-        Some(PlanetClass::VolcanicWorld)
     } else {
         None
     }

@@ -246,6 +246,26 @@ mod tests {
     }
 
     #[test]
+    fn an_icy_heat_pipe_moon_stays_an_ice_world() {
+        let io = model(
+            5.2,
+            &moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041),
+        );
+        let surface = io.surface.as_ref().expect("Io has a surface");
+        assert_eq!(surface.regime, Regime::HeatPipe);
+        let rocky = crate::planet::classify(&io.inputs, &io.interior, 1.77, Some(surface));
+        assert_eq!(rocky, PlanetClass::VolcanicWorld);
+        // The same body with 30 % water and a ocean kept is icy: an ice
+        // world, whatever its regime.
+        let mut icy = io.inputs.clone();
+        icy.water_fraction = 0.3;
+        let mut wet = surface.clone();
+        wet.water.oceans = 1.0;
+        let class = crate::planet::classify(&icy, &io.interior, 1.77, Some(&wet));
+        assert_eq!(class, PlanetClass::IceWorld);
+    }
+
+    #[test]
     fn io_is_a_volcanic_world() {
         let m = model(
             5.2,
