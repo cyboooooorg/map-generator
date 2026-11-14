@@ -240,8 +240,10 @@ their crater rates.
 
 Each planet draws its moons as a world does, by `MoonSystem::draw` in
 `moons.rs`: a rocky planet's (impacts, captures, tides, the Hill
-sphere), a giant's regular moons (two to five, about 10⁻⁴ of its mass, a
-1:2:4 resonance, on some ice giants a captured Triton), one recipe for a
+sphere), a giant's regular moons (two to five, 1 to 2.5 × 10⁻⁴ of its
+mass in a chain or in one dominant moon, a 1:2:4 resonance, ice beyond a
+line set by the giant's temperature, on some ice giants a captured
+Triton), one recipe for a
 giant of a system and a giant world. A giant's large regular
 moon may be a habitable world: in mode 2 that is the planet asked for; in
 mode 1 a request can ask for it (`moons of giants: earth-like`).

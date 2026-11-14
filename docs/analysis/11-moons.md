@@ -440,6 +440,38 @@ from the science. What changed:
   Elser et al. 2011 give no dependence on the star, so their 1 in 12
   stays the same round every star.
 
+## 10. A giant's disk (2026-11-14, planet model part 4)
+
+The census of 500 drawn systems (`examples/moon_census.rs`) found few
+large moons and never one dominant moon: the regular moons shared a fixed
+10⁻⁴ of the giant's mass with weights of 0.3 to 1.7, and turned to ice at
+a random 8 to 11 radii or below 60 K. `of_giant` now draws them from the
+disk:
+
+- **Mass**: 1 to 2.5 × 10⁻⁴ of the giant's (`disk_mass_ratio`, the Solar
+  System's range, Canup & Ward 2006), all of it in the moons that fit in
+  the stable zone.
+- **Shape** (`DiskShape`, stored in `MoonSystem.disk_shape`): a chain as
+  before, or one dominant moon in the chain's outer half with 90 to 97 %
+  of the mass (Titan, 96 % of Saturn's). Lighter giants keep a dominant
+  moon more often (Sasaki, Stewart & Ida 2010): `1 / (1 + (M / 174 M⊕)²)`,
+  a calibration giving Saturn 77 % and Jupiter 23 %.
+- **Rock and ice**: the disk's ice line at `11 (T_eq / 110 K)⁴` giant
+  radii (`disk_ice_line_radii`, a calibration: 11 for Jupiter, between
+  Europa and Ganymede; 3.5 for Saturn, inside its first moon).
+- **Eccentricity**: moons on the chain keep a forced eccentricity,
+  log-uniform from 0.001 to 0.01 (Ganymede, Io, Europa:
+  `forced_eccentricity`), in place of the free 0 to 0.01; a dominant moon
+  up to 0.03 (Titan). The chain ends where an apoapsis at 0.03 would pass
+  a third of the Hill radius.
+
+Census, 500 systems, before and after: moons over 2300 km, 21 in 12
+systems, then 35 in 20 (one system in 25: a minority, as the spec asks);
+around gas giants, moons of 600 to 1200 km fall from 141 to 32 as the mass
+gathers into dominant moons and the disk weighs more; around ice giants
+and mini-Neptunes, rocky moons fall (247 to 145 and 459 to 309) as cold
+giants put their ice line inside the chain.
+
 ## Sources
 
 - Elser, Stadel, Moore & Morishima 2011, "How common are Earth-Moon

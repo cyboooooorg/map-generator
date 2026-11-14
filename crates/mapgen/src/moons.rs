@@ -203,6 +203,10 @@ pub struct MoonSystem {
     /// (otherwise the seed alone drew them).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub count_asked: Option<u8>,
+    /// How a giant's regular moons share its disk's mass; `None` for a
+    /// world that is no giant, or a hot giant (no disk survives).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disk_shape: Option<DiskShape>,
     /// Nearest first.
     pub moons: Vec<Moon>,
 }
@@ -278,6 +282,94 @@ const ROUND_ICE_KM: f64 = 400.0;
 /// some far moons a real planet could keep, never the reverse.
 const PROGRADE_REACH: f64 = 1.0 / 3.0;
 const RETROGRADE_REACH: f64 = 0.5;
+
+/// How the regular moons of a giant share its disk's mass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum DiskShape {
+    /// Several moons of comparable mass (the Galilean moons).
+    Chain,
+    /// One moon holds nearly all of it (Titan, 96 % of Saturn's).
+    Dominant,
+}
+
+/// The range of a giant's regular moons' total mass, as a share of the
+/// giant's. Canup & Ward 2006 (doi:10.1038/nature04860) find that a
+/// circumplanetary disk fed by inflow and losing moons to the planet keeps
+/// about 10⁻⁴ of the planet's mass in moons; the Solar System's giants span
+/// 1.0 × 10⁻⁴ (Uranus's five large moons) to 2.1 × 10⁻⁴ (the Galilean
+/// moons) and 2.5 × 10⁻⁴ (Saturn's). Drawn uniformly in between (the shape
+/// of the distribution: calibration, no source).
+const DISK_MASS_RATIO: (f64, f64) = (1.0e-4, 2.5e-4);
+/// A giant's mass, Earth masses, at which its disk is as likely to leave
+/// one dominant moon as a chain, and how steeply the odds change across
+/// it (`1 / (1 + (m / switch)^steepness)` for a dominant moon). A giant
+/// massive enough to open a gap in the nebula cuts its disk's inflow early
+/// and keeps the several moons of its last generation (Jupiter); a lighter
+/// one keeps feeding its disk until its moons have fallen in but the last,
+/// largest one (Saturn), per Sasaki, Stewart & Ida 2010
+/// (doi:10.1088/0004-637X/714/2/1052). The switch and the steepness are a
+/// calibration, no source: the geometric mean of Saturn's and Jupiter's
+/// masses, which gives Saturn a dominant moon 77 % of the time and Jupiter
+/// a chain 77 % of the time.
+const DOMINANT_SWITCH_EARTH: f64 = 174.0;
+const DOMINANT_STEEPNESS: f64 = 2.0;
+/// The share of the disk's mass a dominant moon holds (Titan: 96 % of
+/// Saturn's regular moons' mass).
+const DOMINANT_SHARE: (f64, f64) = (0.9, 0.97);
+/// A dominant moon's eccentricity, drawn uniformly up to this (Titan's
+/// 0.0288): it has no neighbour of its size to force or damp it.
+const DOMINANT_MAX_ECCENTRICITY: f64 = 0.03;
+/// The forced eccentricity of a moon on a resonant chain, drawn
+/// log-uniformly: Ganymede 0.0013, Io 0.0041, Europa 0.009 (JPL Solar
+/// System Dynamics mean elements: the Laplace resonance keeps them up
+/// against the tides).
+const FORCED_ECCENTRICITY: (f64, f64) = (0.001, 0.01);
+/// Where a giant's disk turns from rock to ice, in the giant's radii, for
+/// a giant of [`ICE_LINE_REFERENCE_K`], and the power of the equilibrium
+/// temperature it grows with. Calibration, no source: a disk's temperature
+/// follows its giant's surroundings (the nebula at its orbit), so the line
+/// moves out the warmer the giant is; the steep power stands for the
+/// stellar flux (∝ T⁴) on the disk. It reproduces Jupiter (110 K: Io and
+/// Europa, at 5.9 and 9.4 radii, rocky; Ganymede and Callisto, at 15 and
+/// 26, half ice: the line at 11) and Saturn (every regular moon icy: the
+/// line at 3.2 radii at 81 K, 3.5 at the 83 K `StarInfo` gives Saturn's
+/// orbit, inside the chain's first orbit, 3.8 radii at the closest).
+const ICE_LINE_REFERENCE_RADII: f64 = 11.0;
+const ICE_LINE_REFERENCE_K: f64 = 110.0;
+const ICE_LINE_POWER: f64 = 4.0;
+
+/// The total mass of a giant's regular moons, as a share of the giant's
+/// (see [`DISK_MASS_RATIO`]).
+fn disk_mass_ratio(rng: &mut Draws) -> f64 {
+    rng.uniform(DISK_MASS_RATIO.0, DISK_MASS_RATIO.1)
+}
+
+/// Whether a giant of `giant_mass_earth` keeps a chain of moons or one
+/// dominant moon (see [`DOMINANT_SWITCH_EARTH`]).
+fn disk_shape(giant_mass_earth: f64, rng: &mut Draws) -> DiskShape {
+    let dominant =
+        1.0 / (1.0 + (giant_mass_earth / DOMINANT_SWITCH_EARTH).powf(DOMINANT_STEEPNESS));
+    if rng.next() < dominant {
+        DiskShape::Dominant
+    } else {
+        DiskShape::Chain
+    }
+}
+
+/// Where the disk of a giant of equilibrium temperature
+/// `giant_equilibrium_k` turns from rock to ice, in the giant's radii (see
+/// [`ICE_LINE_REFERENCE_RADII`]).
+pub(crate) fn disk_ice_line_radii(giant_equilibrium_k: f64) -> f64 {
+    ICE_LINE_REFERENCE_RADII * (giant_equilibrium_k / ICE_LINE_REFERENCE_K).powf(ICE_LINE_POWER)
+}
+
+/// The forced eccentricity of a moon on a giant's resonant chain (see
+/// [`FORCED_ECCENTRICITY`]).
+fn forced_eccentricity(rng: &mut Draws) -> f64 {
+    rng.log_uniform(FORCED_ECCENTRICITY.0, FORCED_ECCENTRICITY.1)
+}
 /// Inclinations to the planet's orbit between which a moon's orbit is
 /// generally unstable, degrees (Carruba et al. 2002, as summarised by Shen
 /// & Tremaine 2008): captured moons are drawn outside them.
@@ -842,25 +934,36 @@ impl MoonSystem {
                 tide: 0.0,
                 tilt_steadied: false,
                 count_asked: p.moons.count(),
+                disk_shape: None,
                 moons,
             }
             .with_effects(p),
         )
     }
 
-    /// The moons of a giant world: regular moons grown in its disk, about
-    /// 10⁻⁴ of its mass together (Canup & Ward 2006), on a resonant chain
-    /// from 4 to 8 of its radii outwards (periods doubling, as Io, Europa
-    /// and Ganymede), rock close in and ice and rock beyond about 9 radii
-    /// (Europa's and Ganymede's change); two to five of them, or as many as
-    /// asked; on some ice giants a large retrograde moon captured instead
-    /// (Triton, which scattered the regular ones, left closer in). None
+    /// The moons of a giant world. Its regular moons grew in its disk and
+    /// hold 1 to 2.5 × 10⁻⁴ of its mass together ([`disk_mass_ratio`],
+    /// Canup & Ward 2006), on a resonant chain from 4 to 8 of its radii
+    /// outwards (periods doubling, as Io, Europa and Ganymede); two to five
+    /// of them, or as many as asked. The disk leaves either a chain of
+    /// moons of comparable mass, or one dominant moon in the chain's outer
+    /// half that holds 90 to 97 % of the mass (Titan), the lighter the
+    /// giant the likelier ([`disk_shape`], Sasaki et al. 2010). A moon is
+    /// rock inside the disk's ice line and ice beyond it, a line that
+    /// moves out the warmer the giant is ([`disk_ice_line_radii`]: between
+    /// Europa and Ganymede for Jupiter, inside every moon for Saturn and
+    /// colder giants). Moons on the chain keep a forced eccentricity of
+    /// 0.001 to 0.01 ([`forced_eccentricity`]: Ganymede, Io, Europa); a
+    /// dominant moon up to 0.03 (Titan). On some ice giants a large
+    /// retrograde moon is captured instead (Triton, which scattered the
+    /// regular ones, left closer in with a fiftieth of the disk). None
     /// orbits inside the giant's Roche limit or its rings (see
-    /// [`giant_moon_floor_radii`]), and the chain ends at a third of the
-    /// Hill radius (as many as fit, fewer than asked if need be). A hot
-    /// giant keeps none: its Hill sphere is too small and its tides drag
-    /// them in; one its star has locked keeps only the moons light enough
-    /// to outlast the system's age (Barnes & O'Brien 2002).
+    /// [`giant_moon_floor_radii`]), and the chain ends where a moon's
+    /// apoapsis would pass a third of the Hill radius (as many as fit,
+    /// fewer than asked if need be; the disk's mass goes to those that
+    /// fit). A hot giant keeps none: its Hill sphere is too small and its
+    /// tides drag them in; one its star has locked keeps only the moons
+    /// light enough to outlast the system's age (Barnes & O'Brien 2002).
     fn of_giant(p: &WorldParams, mass_earth: f32) -> Self {
         let mut rng = Draws(u64::from(stream_seed(p.seed, stream::MOONS)));
         let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
@@ -879,12 +982,15 @@ impl MoonSystem {
         let captured_triton = look.kind == crate::giants::GiantKind::Ice && rng.next() < 0.35;
         let first = rng.uniform(4.0, 8.0);
         let mut moons: Vec<Moon> = Vec::new();
+        let mut shape = None;
         if !look.hot {
             let count = asked.map_or(drawn, usize::from);
-            // Masses sharing 1e-4 of the giant's, unevenly.
+            let disk = disk_mass_ratio(&mut rng);
+            let kind = disk_shape(f64::from(mass_earth), &mut rng);
+            shape = Some(kind);
+            // A chain's moons share the disk unevenly.
             let weights: Vec<f64> = (0..count).map(|_| rng.uniform(0.3, 1.7)).collect();
-            let total: f64 = weights.iter().sum();
-            let ice_line = rng.uniform(8.0, 11.0);
+            let ice_line = disk_ice_line_radii(f64::from(star.equilibrium_k));
             // A captured giant moon sweeps the outer disk: the regular
             // moons left keep inside it, but outside the Roche limit and
             // the rings (only those chains move: an uncaptured chain
@@ -901,38 +1007,77 @@ impl MoonSystem {
             // Triton's orbit, 12 to 16 radii out: the regular moons left
             // keep inside it (1.2 times closer at least).
             let triton_radii = captured_triton.then(|| rng.uniform(12.0, 16.0));
-            for (k, w) in weights.iter().enumerate() {
+            // The chain's orbits, out to the edge of the stable zone (with
+            // room for the largest eccentricity a moon of it gets): the
+            // moons beyond would not last.
+            let mut slots: Vec<f64> = Vec::new();
+            for k in 0..count {
                 let a_radii = base * 1.587_401f64.powi(k as i32) * rng.uniform(0.95, 1.05);
-                // The chain ends at the edge of the stable zone (with room
-                // for the moon's eccentricity, at most 0.01): the moons
-                // beyond would not last.
-                let a = a_radii * r_g;
-                if a * 1.01 >= PROGRADE_REACH * hill
+                if a_radii * r_g * (1.0 + DOMINANT_MAX_ECCENTRICITY) >= PROGRADE_REACH * hill
                     || triton_radii.is_some_and(|t| asked.is_none() && a_radii * 1.2 > t)
                 {
                     break;
                 }
-                let mass = 1e-4 * m_g * w / total * if captured_triton { 0.02 } else { 1.0 };
-                let icy = a_radii > ice_line || star.equilibrium_k < 60.0;
+                slots.push(a_radii);
+            }
+            let weights = &weights[..slots.len()];
+            // A dominant moon sits in the chain's outer half (Titan, sixth
+            // of Saturn's seven); alone, a moon holds the whole disk.
+            let dominant = (kind == DiskShape::Dominant && slots.len() > 1).then(|| {
+                let half = slots.len() / 2;
+                half + (rng.next() * (slots.len() - half) as f64) as usize
+            });
+            let shares: Vec<f64> = match dominant {
+                Some(d) => {
+                    let held = rng.uniform(DOMINANT_SHARE.0, DOMINANT_SHARE.1);
+                    let rest: f64 = (0..slots.len())
+                        .filter(|&k| k != d)
+                        .map(|k| weights[k])
+                        .sum();
+                    (0..slots.len())
+                        .map(|k| {
+                            if k == d {
+                                held
+                            } else {
+                                (1.0 - held) * weights[k] / rest
+                            }
+                        })
+                        .collect()
+                }
+                None => {
+                    let total: f64 = weights.iter().sum();
+                    weights.iter().map(|w| w / total).collect()
+                }
+            };
+            for (k, (&a_radii, share)) in slots.iter().zip(shares).enumerate() {
+                let mass = disk * m_g * share * if captured_triton { 0.02 } else { 1.0 };
+                let icy = a_radii > ice_line;
                 let density = if icy { 1.9 } else { 3.3 };
+                let eccentricity = if dominant == Some(k) {
+                    rng.uniform(0.0, DOMINANT_MAX_ECCENTRICITY)
+                } else {
+                    forced_eccentricity(&mut rng)
+                };
                 moons.push(regular_moon(
                     p,
                     &mut rng,
                     m_g,
                     r_g,
-                    a,
+                    a_radii * r_g,
                     mass,
                     density,
                     icy,
                     synchronous,
                     MoonOrigin::Disk,
                     0.3,
+                    eccentricity,
                 ));
             }
             if captured_triton && asked.is_none() {
                 // Triton: 2.4 times its mass in a retrograde orbit at 14 radii.
                 let a = triton_radii.unwrap_or(14.0) * r_g;
                 let mass = rng.uniform(1.5e-4, 3e-4) * m_g;
+                let eccentricity = rng.uniform(0.0, 0.01);
                 let triton = regular_moon(
                     p,
                     &mut rng,
@@ -945,8 +1090,10 @@ impl MoonSystem {
                     synchronous,
                     MoonOrigin::Captured,
                     157.0,
+                    eccentricity,
                 );
-                // Within the retrograde stable zone.
+                // Within the retrograde stable zone (its eccentricity at
+                // most 0.01).
                 if a * 1.01 < RETROGRADE_REACH * hill {
                     moons.push(triton);
                 }
@@ -996,6 +1143,7 @@ impl MoonSystem {
             tide: 0.0,
             tilt_steadied: false,
             count_asked: asked,
+            disk_shape: shape,
             moons,
         }
     }
@@ -1354,7 +1502,8 @@ pub fn shape_layer(p: &WorldParams) -> Option<Vec<f32>> {
 }
 
 /// A moon of a giant on a near-circular orbit of semi-major axis `a` km
-/// (inclination `inclination` degrees, retrograde above 90): round from the
+/// (inclination `inclination` degrees, retrograde above 90; eccentricity
+/// `eccentricity`, drawn by the caller): round from the
 /// limits of [`ROUND_ROCK_KM`] and [`ROUND_ICE_KM`], irregular below, and
 /// locked to the giant when its tides have despun it within the system's
 /// age ([`despin_gyr`]).
@@ -1371,6 +1520,7 @@ fn regular_moon(
     synchronous: f64,
     origin: MoonOrigin,
     inclination: f64,
+    eccentricity: f64,
 ) -> Moon {
     let age_gyr = f64::from(crate::spin::tidal_age_gyr(&StarInfo::new(
         p.star,
@@ -1387,7 +1537,6 @@ fn regular_moon(
         Composition::Rock
     };
     let locked = despin_gyr(mass, radius, density, MOON_INERTIA, m_g, a) < age_gyr;
-    let eccentricity = rng.uniform(0.0, 0.01);
     let inclination_deg = (inclination + rng.uniform(-0.3, 0.3)).max(0.0);
     let seed = (rng.next() * f64::from(u32::MAX)) as u32;
     let axes = moon_axes(
@@ -1583,6 +1732,7 @@ mod tests {
             tide: 0.0,
             tilt_steadied: false,
             count_asked: None,
+            disk_shape: None,
             moons,
         };
         let with = PlanetEffects::of(&earth, Some(&system(vec![moon.clone()])));
@@ -1755,17 +1905,24 @@ mod tests {
                 system.moons.len()
             );
             let total: f32 = system.moons.iter().map(|m| m.mass_ratio).sum();
-            assert!((total - 1e-4).abs() < 1e-6, "{total}");
+            assert!((0.99e-4..2.51e-4).contains(&total), "{total}");
             for pair in system.moons.windows(2) {
                 let ratio = pair[1].period_days / pair[0].period_days;
                 assert!((1.6..2.4).contains(&ratio), "{ratio}");
             }
-            // Galilean sizes.
+            // Galilean sizes on a chain (up to 3700 km, two moons sharing
+            // 2.5e-4 of Jupiter's mass 0.85 to 0.15); a dominant moon up
+            // to 3900 km, 97 % of it, beside smaller ones.
+            let largest = system.moons.iter().map(|m| m.radius_km).fold(0.0, f32::max);
+            assert!((1000.0..4000.0).contains(&largest), "{largest}");
+            let smallest = if system.disk_shape == Some(DiskShape::Chain) {
+                300.0
+            } else {
+                200.0
+            };
             assert!(
-                system
-                    .moons
-                    .iter()
-                    .all(|m| (300.0..3500.0).contains(&m.radius_km))
+                system.moons.iter().all(|m| m.radius_km >= smallest),
+                "{system:?}"
             );
             assert!(
                 system
@@ -1790,6 +1947,142 @@ mod tests {
         assert_eq!(asked.moons.len(), 6);
         let hot = MoonSystem::draw(&giant("hot-jupiter", 1, 300.0, 0.04, MoonsMode::Auto)).unwrap();
         assert!(hot.moons.is_empty());
+    }
+
+    /// A gas giant of `mass` Earth masses at `orbit_au` from the Sun.
+    fn gas_giant(seed: u32, mass: f32, orbit_au: f32) -> WorldParams {
+        let mut p = params(seed, 40_075.0);
+        p.look = crate::look::Look::load("gas-giant");
+        p.giant_mass_earth = Some(mass);
+        p.orbit_au = orbit_au;
+        p.circumference_km = crate::giant_world::radius_earth(&p, mass) * 40_075.0;
+        p
+    }
+
+    #[test]
+    fn disk_mass_stays_within_the_solar_system_range() {
+        let mut rng = Draws(7);
+        for _ in 0..2000 {
+            let ratio = disk_mass_ratio(&mut rng);
+            assert!((1.0e-4..=2.5e-4).contains(&ratio), "{ratio}");
+        }
+        // Drawn systems (Jupiters and Saturns, the whole chain within
+        // their Hill spheres) carry the whole disk.
+        for seed in 0..2000 {
+            let (mass, orbit) = if seed % 2 == 0 {
+                (317.8, 5.2)
+            } else {
+                (95.2, 9.5)
+            };
+            let system = MoonSystem::draw(&gas_giant(seed, mass, orbit)).unwrap();
+            let total: f64 = system.moons.iter().map(|m| f64::from(m.mass_ratio)).sum();
+            assert!(
+                (0.99999e-4..=2.50001e-4).contains(&total),
+                "seed {seed}: {total}"
+            );
+        }
+    }
+
+    #[test]
+    fn saturns_get_a_dominant_moon_and_jupiters_a_chain() {
+        let mut rng = Draws(11);
+        let share = |rng: &mut Draws, mass: f64| {
+            (0..1000)
+                .filter(|_| disk_shape(mass, rng) == DiskShape::Dominant)
+                .count() as f64
+                / 1000.0
+        };
+        let saturn = share(&mut rng, 95.2);
+        let jupiter = share(&mut rng, 317.8);
+        assert!(saturn > 0.5 && saturn < 1.0, "{saturn}");
+        assert!(jupiter < 0.5 && jupiter > 0.0, "{jupiter}");
+        // A dominant moon holds 0.9 to 0.97 of the disk, in the outer half
+        // of the chain (Titan: 96 % of Saturn's, sixth of seven).
+        let mut dominant = 0;
+        for seed in 0..300 {
+            let system = MoonSystem::draw(&gas_giant(seed, 95.2, 9.5)).unwrap();
+            if system.disk_shape != Some(DiskShape::Dominant) {
+                assert_eq!(system.disk_shape, Some(DiskShape::Chain));
+                continue;
+            }
+            dominant += 1;
+            let total: f32 = system.moons.iter().map(|m| m.mass_ratio).sum();
+            let (k, big) = system
+                .moons
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.mass_ratio.total_cmp(&b.1.mass_ratio))
+                .unwrap();
+            if system.moons.len() > 1 {
+                let f = big.mass_ratio / total;
+                assert!((0.899..0.971).contains(&f), "seed {seed}: {f}");
+                assert!(k >= system.moons.len() / 2, "seed {seed}: {k}");
+            }
+        }
+        assert!(dominant > 150, "{dominant}");
+        // A hot giant keeps no disk.
+        let mut hot = gas_giant(1, 300.0, 0.04);
+        hot.look = crate::look::Look::load("hot-jupiter");
+        assert_eq!(MoonSystem::draw(&hot).unwrap().disk_shape, None);
+    }
+
+    #[test]
+    fn the_disk_ice_line_sits_between_europa_and_ganymede_for_jupiter() {
+        let jupiter = disk_ice_line_radii(110.0);
+        assert!((9.4..15.0).contains(&jupiter), "{jupiter}");
+        assert!(disk_ice_line_radii(81.0) < 4.0);
+        assert!(disk_ice_line_radii(150.0) > jupiter);
+        // A Jupiter at 5.2 AU: Io and Europa's slots rock, Ganymede's and
+        // beyond ice; a Saturn at 9.5 AU, ice all the way in.
+        for seed in 0..100 {
+            for m in MoonSystem::draw(&gas_giant(seed, 317.8, 5.2))
+                .unwrap()
+                .moons
+            {
+                let r = m.semi_major_axis_radii;
+                if r < 9.4 {
+                    assert_eq!(m.composition, Composition::Rock, "seed {seed}: {r}");
+                } else if r > 15.0 {
+                    assert_eq!(m.composition, Composition::Ice, "seed {seed}: {r}");
+                }
+            }
+            for m in MoonSystem::draw(&gas_giant(seed, 95.2, 9.5)).unwrap().moons {
+                assert_eq!(m.composition, Composition::Ice, "seed {seed}");
+            }
+        }
+    }
+
+    #[test]
+    fn chain_moons_keep_a_forced_eccentricity() {
+        let mut rng = Draws(3);
+        for _ in 0..1000 {
+            let e = forced_eccentricity(&mut rng);
+            assert!((0.001..=0.01).contains(&e), "{e}");
+        }
+        let mut chains = 0;
+        for seed in 0..300 {
+            for mass in [95.2, 317.8] {
+                let system = MoonSystem::draw(&gas_giant(seed, mass, 5.2)).unwrap();
+                let biggest = system
+                    .moons
+                    .iter()
+                    .map(|m| m.mass_ratio)
+                    .fold(0.0, f32::max);
+                for m in &system.moons {
+                    let e = f64::from(m.eccentricity);
+                    if system.disk_shape == Some(DiskShape::Dominant)
+                        && m.mass_ratio == biggest
+                        && system.moons.len() > 1
+                    {
+                        assert!((0.0..=0.03).contains(&e), "seed {seed}: {e}");
+                    } else {
+                        chains += 1;
+                        assert!((0.000_999..=0.010_001).contains(&e), "seed {seed}: {e}");
+                    }
+                }
+            }
+        }
+        assert!(chains > 1000, "{chains}");
     }
 
     #[test]
