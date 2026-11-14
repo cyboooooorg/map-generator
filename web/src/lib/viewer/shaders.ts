@@ -811,6 +811,31 @@ export const starsFragment = /* glsl */ `
   }
 `;
 
+// The sky's clouds: a cube around the camera, drawn at the far plane like
+// the stars. The cube map is baked in the system frame (skyClouds.ts) and
+// the box's own vertices are system-frame directions, so the backdrop
+// group's matrix (the system's axes in the view's frame) orients it.
+export const skyBackdropVertex = /* glsl */ `
+  varying vec3 vDir;
+  void main() {
+    vDir = position;
+    vec4 clip = projectionMatrix * vec4(mat3(modelViewMatrix) * position * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+// The faces are sRGB-encoded: the sampler decodes them to linear, and the
+// colour space chunk encodes the result for the canvas.
+export const skyBackdropFragment = /* glsl */ `
+  uniform samplerCube uSky;
+  uniform float uOpacity;
+  varying vec3 vDir;
+  void main() {
+    gl_FragColor = vec4(textureCube(uSky, normalize(vDir)).rgb * uOpacity, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
 // The host star: a square at infinity in the sun's direction, like the
 // star field, `uSize` drawing-buffer pixels across. A disk of the star's
 // apparent diameter inside a glow. A quad rather than a point sprite: a
