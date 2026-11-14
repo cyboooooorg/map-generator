@@ -7,6 +7,8 @@
   import type { SystemSummary } from '../../lib/api/types/SystemSummary';
   import { jobs } from '../../lib/jobs.svelte';
   import type { LoadedWorld } from '../../lib/world.svelte';
+  import CauseTree from './CauseTree.svelte';
+  import { treeFor } from '../../lib/causes';
   import NameEditor from './NameEditor.svelte';
 
   interface Props {
@@ -26,6 +28,8 @@
   const busy = $derived(jobs.active.some((j) => j.worldId === world.systemId));
   const host = $derived(body?.parent ? (system?.bodies.find((b) => b.id === body.parent) ?? null) : null);
   const starName = $derived(system ? nameOf('star', system.star.designation) : '');
+  const explanation = $derived(world.shownExtras?.explanation ?? null);
+  let classOpen = $state(false);
   const similar = $derived(world.shownExtras?.similar ?? null);
 </script>
 
@@ -44,6 +48,9 @@
           ? t.card.moonOf({ planet: nameOf(host.id, host.designation) })
           : t.card.planetOf({ star: starName })}</small
       >
+      <div class="why">
+        <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} />
+      </div>
       {#if similar}
         <small class="similar">{t.cards.similar({ name: archetypeName({ name: similar }) })}</small>
       {/if}
@@ -71,6 +78,9 @@
   header small {
     flex-basis: 100%;
     color: var(--muted);
+  }
+  .why {
+    flex-basis: 100%;
   }
   .host {
     border: 1px solid var(--border);

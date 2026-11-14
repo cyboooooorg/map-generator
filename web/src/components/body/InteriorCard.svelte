@@ -6,9 +6,17 @@
   import { bulkLine, oceanUnderIce } from '../../lib/planetCard';
   import { formatInt, formatUpTo, withUnit } from '../../lib/format';
   import type { Body } from '../../lib/api/types/Body';
+  import CauseTree from './CauseTree.svelte';
+  import { treeFor } from '../../lib/causes';
+  import type { Quantity } from '../../lib/api/types/Quantity';
   import type { LoadedWorld } from '../../lib/world.svelte';
 
   let { world }: { world: LoadedWorld } = $props();
+
+  const explanation = $derived(world.shownExtras?.explanation ?? null);
+  /** The value whose causes are unfolded: one at a time in a card. */
+  let open = $state<Quantity | null>(null);
+  const toggle = (q: Quantity) => () => (open = open === q ? null : q);
 
   const body = $derived(world.shownSystemBody);
   const meta = $derived(world.meta);
@@ -80,13 +88,17 @@
     {/if}
     {#if model?.surface}
       <dt>{t.card.regime}</dt>
-      <dd>{t.regimes[model.surface.regime]}</dd>
+      <dd>{t.regimes[model.surface.regime]}<CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} /></dd>
+    {/if}
+    {#if model?.surface}
+      <dt>{t.cards.waterKept}</dt>
+      <dd>{withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)}<CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} /></dd>
     {/if}
     {#if core}
       <dt>{t.cards.core}</dt>
       <dd>{t.cards.coreStates[core.state]}</dd>
       <dt>{t.cards.field}</dt>
-      <dd>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}</dd>
+      <dd>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}<CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} /></dd>
     {/if}
     {#if model}
       <dt>{t.cards.heat}</dt>

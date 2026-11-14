@@ -6,9 +6,17 @@
   import { atmosphereLine } from '../../lib/planetCard';
   import { formatAtmosphere, formatInt, formatSurfaceTemperature, withUnit } from '../../lib/format';
   import { unitTooltip } from '../../lib/units';
+  import CauseTree from './CauseTree.svelte';
+  import { treeFor } from '../../lib/causes';
+  import type { Quantity } from '../../lib/api/types/Quantity';
   import type { LoadedWorld } from '../../lib/world.svelte';
 
   let { world }: { world: LoadedWorld } = $props();
+
+  const explanation = $derived(world.shownExtras?.explanation ?? null);
+  /** The value whose causes are unfolded: one at a time in a card. */
+  let open = $state<Quantity | null>(null);
+  const toggle = (q: Quantity) => () => (open = open === q ? null : q);
 
   const body = $derived(world.shownSystemBody);
   const meta = $derived(world.meta);
@@ -46,15 +54,15 @@
     {:else}
       {#if air || meta}
         <dt>{t.cards.pressure}</dt>
-        <dd class="unit-help" title={unitTooltip('bar')}>{air ?? (meta ? formatAtmosphere(meta) : '')}</dd>
+        <dd><span class="unit-help" title={unitTooltip('bar')}>{air ?? (meta ? formatAtmosphere(meta) : '')}</span><CauseTree tree={treeFor(explanation, 'pressure')} open={open === 'pressure'} ontoggle={toggle('pressure')} /></dd>
       {/if}
       {#if temperature}
         <dt>{t.card.surfaceTemperature}</dt>
-        <dd>{temperature}</dd>
+        <dd>{temperature}<CauseTree tree={treeFor(explanation, 'surface_temperature')} open={open === 'surface_temperature'} ontoggle={toggle('surface_temperature')} /></dd>
       {/if}
       {#if surface}
         <dt>{t.cards.liquid}</dt>
-        <dd>{t.cards.liquids[surface.climate.liquid]}</dd>
+        <dd>{t.cards.liquids[surface.climate.liquid]}<CauseTree tree={treeFor(explanation, 'liquid')} open={open === 'liquid'} ontoggle={toggle('liquid')} /></dd>
         <dt>{t.cards.life}</dt>
         <dd>{surface.life.oxygenated ? t.cards.lifeOxygenated : surface.life.arose ? t.cards.lifeArose : t.cards.lifeNone}</dd>
       {/if}

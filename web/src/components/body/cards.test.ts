@@ -143,4 +143,14 @@ describe('themed body cards', () => {
     expect(html.match(/class="value[ "]/g)).toHaveLength(4);
     expect(html.match(/class="value area[ "]/g)).toHaveLength(2);
   });
+
+  it('offers the causes of a derived value only with an explanation, closed', () => {
+    const world = worldOf([earthLike, moon], 'c', earthMeta);
+    expect(renderCard(AtmosphereCard, { world })).not.toContain('aria-expanded');
+    const root = { quantity: 'surface_temperature', value: 288, label: null, input: null, causes: [{ quantity: 'light_received', value: 1, label: null, input: 'insolation', causes: [] }] };
+    world.systemExtras = { c: { explanation: { trees: [root] }, similar: null } } as unknown as typeof world.systemExtras;
+    const html = renderCard(AtmosphereCard, { world });
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('Light received');
+  });
 });

@@ -922,6 +922,14 @@ addressed as `<system-id>/<body-id>` everywhere.
   cards follow the body picker, under the system summary. Each card but
   the header can be detached as a floating card.
 
+  A derived value (class, surface temperature, pressure, surface liquid,
+  regime, magnetic field, water kept) has a **Why?** mark that unfolds its
+  cause tree from the body's explanation (`BodyExtras.explanation`): the
+  values it was computed from, down to the inputs the creation form sets,
+  which are shown in the accent colour and name their form field. The
+  trees are closed by default, one open value per card, and absent
+  without an explanation.
+
 ## Removing the old worlds
 
 No migration, as decided: the worlds made before systems are deleted.

@@ -6,7 +6,9 @@
 
 import type { Biome } from '../api/types/Biome';
 import type { CloudKind } from '../api/types/CloudKind';
+import type { InputField } from '../api/types/InputField';
 import type { Mouth } from '../api/types/Mouth';
+import type { Quantity } from '../api/types/Quantity';
 import type { Regime } from '../api/types/Regime';
 import type { Stage } from '../api/types/Stage';
 import type { Unit } from '../units';
@@ -199,6 +201,7 @@ export const en = {
     heatValue: (p: { radiogenic: string; tidal: string }) => `radioactive ${p.radiogenic} · tidal ${p.tidal}`,
     pressure: 'Pressure and gases',
     liquid: 'Surface liquid',
+    waterKept: 'Water kept',
     liquids: { none: 'none', water: 'water', hydrocarbons: 'hydrocarbons', lava: 'lava' } satisfies Record<string, string>,
     life: 'Life',
     lifeNone: 'none',
@@ -367,6 +370,117 @@ export const en = {
     episodic: 'episodic lid',
     heat_pipe: 'heat pipe',
   } satisfies Record<Regime, string>,
+  /** The cause trees of a body's card: what a derived value comes from. */
+  causes: {
+    /** Opens the causes of a value. */
+    why: 'Why?',
+    whyHelp: 'Show what this value comes from',
+    whyClose: 'Hide what this value comes from',
+    /** A value in a tree: its name and its value. */
+    line: (p: { name: string; value: string }) => `${p.name}: ${p.value}`,
+    /** Marks a value the creation form sets. */
+    inputTitle: (p: { field: string }) => `Set by the "${p.field}" field of the creation form`,
+    /** What each value is, in a tree. */
+    quantities: {
+      surface_temperature: 'Surface temperature',
+      equilibrium_temperature: 'Temperature without air',
+      light_received: 'Light received',
+      greenhouse: 'Greenhouse warming',
+      internal_warming: 'Warming from the inside',
+      heat_flux: 'Heat flux',
+      radiogenic_heat: 'Radiogenic heat',
+      tidal_heat: 'Tidal heat',
+      pressure: 'Pressure',
+      co2: 'CO₂',
+      n2: 'N₂',
+      h2o: 'Water vapour',
+      ch4: 'CH₄',
+      o2: 'O₂',
+      nh3: 'NH₃',
+      so2: 'SO₂',
+      outgassed: 'Outgassed',
+      escape: 'Lost to space',
+      destroyed: 'Destroyed by ultraviolet',
+      frozen_out: 'Frozen out',
+      from_ammonia: 'From ammonia',
+      weathered: 'Drawn out by weathering',
+      liquid: 'Surface liquid',
+      regime: 'Tectonic regime',
+      magnetic_field: 'Magnetic field',
+      core_state: 'Core',
+      core_mass_fraction: 'Core share',
+      class: 'Class',
+      mass: 'Mass',
+      radius: 'Radius',
+      envelope_fraction: 'Envelope share',
+      envelope_lost: 'Envelope lost',
+      water_formed: 'Water at formation',
+      water_kept: 'Water kept',
+      age: 'Age',
+      note: '',
+    } satisfies Record<Quantity, string>,
+    /** The unit of each value; empty when it has none. */
+    units: {
+      surface_temperature: 'K',
+      equilibrium_temperature: 'K',
+      light_received: '× Earth',
+      greenhouse: 'K',
+      internal_warming: 'K',
+      heat_flux: 'W/m²',
+      radiogenic_heat: 'W',
+      tidal_heat: 'W',
+      pressure: 'bar',
+      co2: 'bar',
+      n2: 'bar',
+      h2o: 'bar',
+      ch4: 'bar',
+      o2: 'bar',
+      nh3: 'bar',
+      so2: 'bar',
+      outgassed: 'bar',
+      escape: '',
+      destroyed: 'bar',
+      frozen_out: 'bar',
+      from_ammonia: 'bar',
+      weathered: 'bar',
+      liquid: '',
+      regime: '',
+      magnetic_field: 'µT',
+      core_state: '',
+      core_mass_fraction: '%',
+      class: '',
+      mass: 'M⊕',
+      radius: 'R⊕',
+      envelope_fraction: '%',
+      envelope_lost: '%',
+      water_formed: 'oceans',
+      water_kept: 'oceans',
+      age: 'Gyr',
+      note: '',
+    } satisfies Record<Quantity, string>,
+    /** Conditions a tree states. */
+    notes: {
+      thermostat: 'The carbonate thermostat set the CO₂',
+      life: 'Life made the oxygen',
+      runaway: 'The water ran away: the light received passed the limit',
+      boiled: 'The climate boiled the water away',
+    } as Record<string, string>,
+    /** The request fields, named as the creation form names them. */
+    inputs: {
+      mass_earth: 'Mass',
+      core_mass_fraction: 'Core share',
+      water_oceans: 'Water',
+      envelope_fraction: 'Envelope share',
+      co2: 'CO₂',
+      n2: 'N₂',
+      ch4: 'CH₄',
+      radiogenic: 'Radiogenic abundance',
+      life: 'Life',
+      insolation: 'Light received',
+      eccentricity: 'Eccentricity',
+      age_gyr: 'Age',
+    } satisfies Record<InputField, string>,
+  },
   /** The world card. */
   worldInfo: {
     planetHeading: (p: { name: string }) => `Planet: ${p.name}`,
