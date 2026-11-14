@@ -45,8 +45,9 @@ const BELT_PER_CROSSER: f64 = 1.2e6 / 981.0;
 /// Spread of the belt's eccentricities, as a Rayleigh law's σ: how far
 /// inside the belt its asteroids still cross an orbit. Calibration, no
 /// source: set so that a Mars-like world at 1.5 AU of a Sun-like star
-/// gets Hartmann's 2.6 times the Moon's flux under [`MOST_CROSSERS`].
-const BELT_ECCENTRICITY: f64 = 0.132;
+/// gets Hartmann's 2.6 times the Moon's flux under [`MOST_CROSSERS`]
+/// and [`MOST_IMPACTS`].
+const BELT_ECCENTRICITY: f64 = 0.135;
 /// The asteroid belt of a star of luminosity `L` (Suns) lies just inside
 /// its ice line, at `2.7 √L` AU, as a system places it (`system.rs`).
 const BELT_AU: f64 = 2.7;
@@ -56,8 +57,28 @@ const BELT_AU: f64 = 2.7;
 /// the Mars-crossers that remain give Mars about three times the Moon's
 /// flux (Le Feuvre & Wieczorek 2011, Table 3: 2.76 averaged, 3.20 today).
 /// Calibration, no source: 6, about twice what Mars gets, keeps Mars's 2.6
-/// reachable and no orbit's flux above a few times Mars's.
+/// reachable.
 const MOST_CROSSERS: f64 = 6.0;
+/// Most impacts an orbit gets against the Moon's, the crossers, their
+/// speed and the world's focusing together, as the ceiling of [`bounded`]:
+/// the encounter speed grows as `√(M★ / a)`, without end close to a star
+/// (14 times the Moon's flux at 0.005 AU of the Sun before this ceiling).
+/// Calibration, no source: 20 keeps the Solar System's look-alikes within
+/// a few percent of their unbounded flux (Mercury, Venus and Earth lose
+/// 2–3 %), and the closest orbits under 8 times Mars's.
+const MOST_IMPACTS: f64 = 20.0;
+/// Fastest mean impact a crater is scaled with, against the Moon's
+/// ([`MOON_IMPACT_KM_S`]): Mercury's mean impact speed, 2.16 times the
+/// Moon's (Le Feuvre & Wieczorek 2011, Table 3), the fastest of the
+/// terrestrial planets, as the ceiling of [`bounded_speed`]. Calibration:
+/// the speed's `√(M★ / a)` reaches any value close to a star, and the
+/// π-scaling has not been tested much beyond the speeds of the Solar
+/// System's impacts.
+const FASTEST_IMPACT: f64 = 2.16;
+/// Speed ratio up to which [`bounded_speed`] leaves the impact speed as it
+/// is. Calibration, no source: above every Solar System look-alike's
+/// (Mercury's 1.42), so that none of them moves.
+const SPEED_KNEE: f64 = 1.5;
 
 /// Escape speed, km/s, of a body of surface gravity `g` (m/s²) and
 /// radius `radius_km`: `√(2 g R)`.
@@ -88,12 +109,23 @@ fn crossers(x: f64) -> f64 {
     1.0 + BELT_PER_CROSSER * (-e * e / (2.0 * BELT_ECCENTRICITY * BELT_ECCENTRICITY)).exp()
 }
 
-/// The crossers `s` (against the Moon's) bounded smoothly by
-/// [`MOST_CROSSERS`]: `s (1 + S) / (s + S)` with `S` = ceiling − 1, 1 at
-/// the Moon's orbit and rising to the ceiling, never above it.
-fn bounded(s: f64) -> f64 {
-    let span = MOST_CROSSERS - 1.0;
+/// A ratio `s` against the Moon's bounded smoothly by `ceiling`:
+/// `s (1 + S) / (s + S)` with `S` = ceiling − 1, 1 at the Moon's and
+/// rising to the ceiling, never above it.
+fn bounded(s: f64, ceiling: f64) -> f64 {
+    let span = ceiling - 1.0;
     s * (1.0 + span) / (s + span)
+}
+
+/// An impact speed ratio `s` against the Moon's, unchanged up to
+/// [`SPEED_KNEE`] and bounded smoothly beyond it by [`FASTEST_IMPACT`]
+/// (`tanh`, its slope continuous at the knee).
+fn bounded_speed(s: f64) -> f64 {
+    if s <= SPEED_KNEE {
+        return s;
+    }
+    let room = FASTEST_IMPACT - SPEED_KNEE;
+    SPEED_KNEE + room * ((s - SPEED_KNEE) / room).tanh()
 }
 
 /// The impactors of the world's system against the Solar System's: its
@@ -111,10 +143,13 @@ fn impactors(p: &WorldParams) -> f64 {
 /// With a model, the flux per unit area is the impact rate of a body in a
 /// swarm, crossers × encounter speed × gravitational cross-section
 /// `π R² (1 + v_esc² / v∞²)`, each against the Moon's, times its system's
-/// impactors. The crater of the same impactor scales as
-/// `g^(−μ/(2+μ)) v^(2μ/(2+μ))` (π-scaling in the gravity regime), with
-/// the impact speed `v = √(v∞² + v_esc²)`. Without a model (a moon): the
-/// system's impactors and the Moon's craters.
+/// impactors; the crossers are bounded by [`MOST_CROSSERS`], the whole
+/// orbit's flux by [`MOST_IMPACTS`]. The crater of the same impactor
+/// scales as `g^(−μ/(2+μ)) v^(2μ/(2+μ))` (π-scaling in the gravity
+/// regime), with the impact speed `v = √(v∞² + v_esc²)` against the
+/// Moon's cited [`MOON_IMPACT_KM_S`], bounded by [`FASTEST_IMPACT`].
+/// Without a model (a moon): the system's impactors and the Moon's
+/// craters.
 pub fn rates(p: &WorldParams) -> ImpactRates {
     let impactors = impactors(p);
     if p.model.is_none() {
@@ -135,16 +170,20 @@ pub fn rates(p: &WorldParams) -> ImpactRates {
     let moon_inf = encounter_km_s(1.0, 1.0);
     let moon_esc = escape_km_s(crate::craters::MOON_GRAVITY, MOON_RADIUS_KM);
 
-    let supply =
-        bounded(crossers(orbit_au / (BELT_AU * luminosity.sqrt())) / crossers(1.0 / BELT_AU));
+    let supply = bounded(
+        crossers(orbit_au / (BELT_AU * luminosity.sqrt())) / crossers(1.0 / BELT_AU),
+        MOST_CROSSERS,
+    );
     let speed = v_inf / moon_inf;
     let focusing = (1.0 + (v_esc / v_inf).powi(2)) / (1.0 + (moon_esc / moon_inf).powi(2));
-    let flux = impactors * supply * speed * focusing;
+    let flux = impactors * bounded(supply * speed * focusing, MOST_IMPACTS);
 
+    // Against the Moon's cited speed, not one rebuilt from Earth's
+    // encounter speed (17.3 km/s): Le Feuvre & Wieczorek's Moon and Earth
+    // do not share one v∞.
     let impact = (v_inf.powi(2) + v_esc.powi(2)).sqrt();
-    let moon_impact = (moon_inf.powi(2) + moon_esc.powi(2)).sqrt();
     let crater_scale = (gravity / crate::craters::MOON_GRAVITY).powf(-MU / (2.0 + MU))
-        * (impact / moon_impact).powf(2.0 * MU / (2.0 + MU));
+        * bounded_speed(impact / MOON_IMPACT_KM_S).powf(2.0 * MU / (2.0 + MU));
     ImpactRates { flux, crater_scale }
 }
 
@@ -209,9 +248,8 @@ mod tests {
     #[test]
     fn no_orbit_gets_more_than_a_few_times_marss_flux() {
         // Swept from 0.3 to 3 AU around a G2V star among the Solar
-        // System's impactors: the crossers never pass their ceiling, and
-        // the flux, speed and focusing included, stays within 3.5 times
-        // Mars's 2.6, finite and above zero.
+        // System's impactors: the flux, speed and focusing included, stays
+        // within 3.5 times Mars's 2.6, finite and above zero.
         for name in ["mars-like", "earth-like"] {
             let mut p = solar(name);
             p.star = crate::star::parse_type("G2V").unwrap();
@@ -226,18 +264,90 @@ mod tests {
             }
         }
         for s in [1.0, 10.0, 1e3, 1e9] {
-            assert!(bounded(s) <= MOST_CROSSERS, "{s}");
+            assert!(bounded(s, MOST_IMPACTS) <= MOST_IMPACTS, "{s}");
+            assert!(bounded(s, MOST_CROSSERS) <= MOST_CROSSERS, "{s}");
         }
-        assert!((bounded(1.0) - 1.0).abs() < 1e-12);
+        assert!((bounded(1.0, MOST_IMPACTS) - 1.0).abs() < 1e-12);
     }
 
     #[test]
-    fn a_lone_world_without_impactors_keeps_a_floor() {
-        // No belts, no giants.
-        let mut p = preset("earth-like");
-        p.impact_factor = Some(crate::belts::impact_factor(&[], &[], f64::from(p.orbit_au)));
-        let r = rates(&p);
+    fn no_orbit_or_star_pushes_the_impacts_past_their_ceilings() {
+        // From the closest orbit a request takes to 30 AU, around an M
+        // dwarf, the Sun and an A star: the flux under its ceiling, the
+        // crater under the one the speed's ceiling gives, everywhere.
+        let speed_exponent = 2.0 * MU / (2.0 + MU);
+        for name in ["mercury-like", "earth-like", "mars-like"] {
+            for star in ["M5V", "G2V", "A0V"] {
+                let mut p = solar(name);
+                p.star = crate::star::parse_type(star).unwrap();
+                let gravity = crate::craters::EARTH_GRAVITY * f64::from(p.gravity_modifier());
+                let ceiling = (gravity / crate::craters::MOON_GRAVITY).powf(-MU / (2.0 + MU))
+                    * FASTEST_IMPACT.powf(speed_exponent);
+                let (lo, hi) = (f64::from(crate::request::ORBIT_AU.min).ln(), 30f64.ln());
+                for k in 0..=200 {
+                    p.orbit_au = (lo + (hi - lo) * f64::from(k) / 200.0).exp() as f32;
+                    let r = rates(&p);
+                    let at = format!("{name} around {star} at {} AU", p.orbit_au);
+                    assert!(r.flux.is_finite() && r.flux > 0.0, "{at}: {}", r.flux);
+                    assert!(r.flux <= MOST_IMPACTS, "{at}: flux {}", r.flux);
+                    assert!(
+                        r.crater_scale.is_finite() && r.crater_scale <= ceiling,
+                        "{at}: scale {} over {ceiling}",
+                        r.crater_scale
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_lone_world_takes_the_solar_systems_impactors() {
+        // A planet alone with its star: no belts, no giants, so no
+        // impactors drawn for it. Its unknown context takes the Solar
+        // System's, 1: its flux is its orbit's alone.
+        let request = crate::request::WorldRequest {
+            planet: Some("earth-like".to_string()),
+            seed: Some(3),
+            alone: Some(true),
+            moons: Some(crate::moons::MoonsMode::None),
+            ..Default::default()
+        };
+        let lone = request
+            .resolve(&mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(3))
+            .unwrap()
+            .params;
+        assert!(lone.impact_factor.is_none());
+        assert_eq!(lone.giants, crate::giants::GiantsMode::None);
+        let r = rates(&lone);
+        let orbit = rates(&WorldParams {
+            impact_factor: Some(1.0),
+            ..lone.clone()
+        });
         assert!(r.flux.is_finite() && r.flux > 0.0, "{}", r.flux);
+        assert_eq!(r.flux, orbit.flux);
+    }
+
+    #[test]
+    fn the_moons_cited_impact_speed_is_the_reference() {
+        // Earth's impacts are 1.04 times as fast as the Moon's 19.7 km/s
+        // (Le Feuvre & Wieczorek 2011, Table 3): its crater against the
+        // Moon's takes that ratio, not the one against a Moon rebuilt from
+        // Earth's encounter speed (17.3 km/s).
+        let p = solar("earth-like");
+        let gravity = crate::craters::EARTH_GRAVITY * f64::from(p.gravity_modifier());
+        let radius_km = f64::from(p.circumference_km) / std::f64::consts::TAU;
+        let impact = (encounter_km_s(1.0, f64::from(p.orbit_au)).powi(2)
+            + escape_km_s(gravity, radius_km).powi(2))
+        .sqrt();
+        let expected = pi_scaled(
+            gravity / crate::craters::MOON_GRAVITY,
+            impact / MOON_IMPACT_KM_S,
+        );
+        let scale = rates(&p).crater_scale;
+        assert!(
+            (scale / expected - 1.0).abs() < 1e-3,
+            "{scale} against {expected}"
+        );
     }
 
     #[test]

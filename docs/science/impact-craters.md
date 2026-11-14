@@ -373,17 +373,23 @@ gives a world with a model its flux per unit area and its crater size
 against the Moon's, the reference of the chronology (a body at 1 AU from a
 Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s):
 
-$$\frac{\phi}{\phi_m} = I \cdot \frac{n(a)}{n(1\,\mathrm{AU})} \cdot
+$$\frac{\phi}{\phi_m} = I \cdot B_{20}\!\left(B_6\!\left(\frac{n(a)}{n(1\,\mathrm{AU})}\right) \cdot
 \frac{v_\infty}{v_{\infty,m}} \cdot
-\frac{1 + v_{esc}^2/v_\infty^2}{1 + v_{esc,m}^2/v_{\infty,m}^2},
+\frac{1 + v_{esc}^2/v_\infty^2}{1 + v_{esc,m}^2/v_{\infty,m}^2}\right),
 \qquad
 \frac{D}{D_m} = \left(\frac{g}{g_m}\right)^{-\mu/(2+\mu)}
 \left(\frac{v}{v_m}\right)^{2\mu/(2+\mu)}$$
 
+with $B_C(s) = s\,C / (s + C - 1)$ a smooth ceiling: 1 at the Moon's, rising
+to $C$, never above it.
+
 - $I$ is the system's impactors, `belts::impact_factor` (its giants and
   belts; 1 with Jupiter and the main belt), or the giants drawn for a world
-  alone (`giants::impact_factor`). A lone world without belts or giants
-  keeps the floor of 0.05 × 0.7.
+  alone (`giants::impact_factor`). A lone world (a planet alone with its
+  star, or one asked for without giants) has neither drawn: its unknown
+  context takes the Solar System's impactors, $I$ = 1, and its flux is its
+  orbit's alone. The floor of 0.05 × 0.7 is for a world of a drawn system
+  without belts or giants.
 - $v_\infty$, the impactors' speed far from the body, is Earth's
   $\sqrt{(1.04 \times 19.7)^2 - 11.2^2}$ = 17.2 km/s (Le Feuvre & Wieczorek
   2011: the Moon's mean impact speed of 19.7 km/s, and Earth's 1.04 times
@@ -398,29 +404,45 @@ $$\frac{\phi}{\phi_m} = I \cdot \frac{n(a)}{n(1\,\mathrm{AU})} \cdot
   belt's (1.2 ± 0.5) × 10⁶ asteroids of 1 km or more (Tedesco & Désert
   2002) over the 981 ± 19 near-Earth ones (Mainzer et al. 2011). Against
   the Moon's, $s = n(a)/n(1\,\mathrm{AU})$ is bounded smoothly by a ceiling
-  $C$ = 6, $s\,C / (s + C - 1)$: a planet near the belt clears it or is
-  destabilised by it, and the Mars-crossers that remain give Mars about
-  three times the Moon's flux (Le Feuvre & Wieczorek: 2.76 averaged, 3.20
-  today). The spread $\sigma$ = 0.132 and the ceiling are calibrations with
-  no source: $\sigma$ is set on Mars's 2.6, the ceiling at about twice
-  what Mars gets, so that no orbit's flux exceeds a few times Mars's.
+  of 6, $B_6(s)$: a planet near the belt clears it or is destabilised by
+  it, and the Mars-crossers that remain give Mars about three times the
+  Moon's flux (Le Feuvre & Wieczorek: 2.76 averaged, 3.20 today).
+- The whole orbit's flux, crossers, speed and focusing together, is
+  bounded the same way by a ceiling of 20, $B_{20}$: the speed grows as
+  $\sqrt{M_\star / a}$ without end close to a star (an Earth-sized world
+  at 0.005 AU of the Sun would get about 14 times the Moon's flux, and more
+  around a heavier star). The spread $\sigma$ = 0.135 and both ceilings are
+  calibrations with no source: $\sigma$ is set on Mars's 2.6 under both
+  ceilings, the crossers' ceiling at about twice what Mars gets, the
+  whole flux's so that the Solar System's look-alikes lose only 2 to 3 %
+  of their flux to it.
 - The crater of the same impactor follows π-scaling in the gravity regime
   (Holsapple 1993), with $\mu$ = 0.55 for wet and rocky targets (0.4 for dry
-  sands and soils) and the impact speed $v = \sqrt{v_\infty^2 + v_{esc}^2}$.
+  sands and soils) and the impact speed $v = \sqrt{v_\infty^2 + v_{esc}^2}$
+  against the Moon's cited $v_m$ = 19.7 km/s. The Moon is not rebuilt from
+  the same $v_\infty$: Le Feuvre & Wieczorek's Moon and Earth do not share
+  one (Earth's 17.2 km/s and the Moon's escape speed would give the Moon
+  17.3 km/s), and the cited speed keeps Earth's 1.04. The speed ratio
+  $v/v_m$ is left as it is up to 1.5, above every look-alike's (Mercury's
+  1.42), and bounded smoothly beyond by Mercury's mean impact speed, 2.16
+  times the Moon's (Le Feuvre & Wieczorek, Table 3), as
+  $1.5 + 0.66 \tanh((v/v_m - 1.5)/0.66)$: the π-scaling has not been
+  tested much beyond the Solar System's impact speeds. The knee and the use
+  of Mercury's speed as the ceiling are calibrations.
 
 Among the Solar System's impactors ($I$ = 1), the archetypes get:
 
 | World | Flux (rule) | Target | Crater size (rule) | Target |
 |---|---|---|---|---|
-| `mercury-like` | 1.61 | 1.82 | 1.03 | 1.18 |
-| `venus-like` | 1.46 | 1.75 | 0.78 | 0.78 |
-| `earth-like` | 1.41 | 1.58 | 0.73 | 0.69 |
-| `mars-like` | 2.57 | 2.6 | 0.78 | 0.751 |
+| `mercury-like` | 1.55 | 1.82 | 0.98 | 1.18 |
+| `venus-like` | 1.42 | 1.75 | 0.74 | 0.78 |
+| `earth-like` | 1.38 | 1.58 | 0.69 | 0.69 |
+| `mars-like` | 2.60 | 2.6 | 0.74 | 0.751 |
 
 Mars's targets are Hartmann's isochron page (2.6 for asteroid impactors;
 Mars's craters against the Moon's for the same impactor, 0.865 × 0.868 =
 0.751); with them its craters of 1.4 to 64 km are 10^0.191 = 1.55 times the
-Moon's at equal age, and the rule gives 1.66. The others are Le Feuvre &
+Moon's at equal age, and the rule gives 1.52. The others are Le Feuvre &
 Wieczorek (2011, Table 3): impact rates of 1.82, 1.75 and 1.58 times the
 Moon's, and the crater sizes their impact speeds (2.16, 1.28, 1.04 times the
 Moon's) and gravities (2.2, 5.3, 5.9) give through the same π-scaling. Where
@@ -428,10 +450,14 @@ the two disagree (Mars: 2.76 times the Moon's flux at 0.53 times its speed,
 a crater 0.64 times as wide), Hartmann's values are kept, as before. The
 tests hold each value within 20 %. A world closer to the belt than Mars
 gets more impactors, up to the ceiling: from 0.3 to 3 AU around a Sun-like
-star, a Mars-sized world peaks at 4.7 times the Moon's flux (near 2 AU), an
-Earth-sized one, which focuses more, at 7.9 (at 3 AU). Since the flux is
-bounded, so is the population of future craters, which has no saturation
-cap.
+star, a Mars-sized world peaks at 4.0 times the Moon's flux (near 2 AU), an
+Earth-sized one, which focuses more, at 5.9 (at 3 AU). Closer to the star
+the speed raises the flux and the craters, both bounded: at 0.005 AU, the
+closest orbit a request takes, an Earth-sized world gets 8.4 times the
+Moon's flux around the Sun and 10.3 around an A0V star, never above 20,
+and its craters 0.94 times the Moon's (1.17 for a Mars-sized one) instead
+of growing with the speed. Since the flux is bounded, so is the
+population of future craters, which has no saturation cap.
 
 **Epochs.** [`epoch.rs`](../../crates/mapgen/src/epoch.rs) shows the
 surface at another time $t$. The generation keeps the elevation without the
