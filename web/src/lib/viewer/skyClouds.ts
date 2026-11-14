@@ -36,15 +36,57 @@ interface Exposure {
   patch: number;
   core: number;
   saturation: number;
+  /** Colours (linear RGB weights) of the diffuse glow, H-alpha, O III and reflection light. */
+  glowColour: Vec3;
+  haColour: Vec3;
+  oiiiColour: Vec3;
+  refColour: Vec3;
+  /** Clumpiness of the diffuse glow: 0 is the first version's soft noise, 1 is thresholded clumps with dark gaps. */
+  clumps: number;
+  /** Weight of the reflection patches against the emission ones. */
+  reflection: number;
+  /** Thresholds of the emission patches: a narrow, high window makes few, sharp-edged patches. */
+  emission: [number, number];
 }
 
 const EXPOSURES: Record<SkyExposure, Exposure> = {
-  eye: { ceiling: CLOUD_CEILING, glow: 1, patch: 1, core: 5, saturation: 0.45 },
-  photo: { ceiling: 0.3, glow: 3.2, patch: 5, core: 10, saturation: 1 },
+  eye: {
+    ceiling: CLOUD_CEILING,
+    glow: 1,
+    patch: 1,
+    core: 9,
+    saturation: 0.45,
+    glowColour: [1, 0.92, 0.8],
+    haColour: [1, 0.15, 0.1],
+    oiiiColour: [0.1, 0.8, 0.7],
+    refColour: [0.35, 0.5, 1],
+    clumps: 0,
+    reflection: 0.7,
+    emission: [0.5, 0.75],
+  },
+  // A long exposure: a warm dust glow in clumps with dark gaps, deep H-alpha reds and O III teals, colours pushed past the sum.
+  photo: {
+    ceiling: 0.3,
+    glow: 0.5,
+    patch: 2.2,
+    core: 6,
+    saturation: 1.5,
+    glowColour: [1, 0.68, 0.46],
+    haColour: [1, 0.06, 0.1],
+    oiiiColour: [0.02, 0.85, 0.8],
+    refColour: [0.2, 0.4, 1],
+    clumps: 1,
+    reflection: 0.25,
+    emission: [0.55, 0.8],
+  },
 };
 
-/** Peak linear level of the core's glow at the Sun's place, before the exposure gain. */
+/** Peak linear level of the core's glow at the Sun's place, before the exposure gain and the soft curve. */
 const CORE_LEVEL = 0.07;
+/** The core's colour: a warm yellow-white, an old stellar population. */
+const CORE_COLOUR: Vec3 = [1, 0.72, 0.36];
+/** Where the core's soft curve levels off, as a share of the exposure's ceiling. */
+const CORE_PEAK = 1;
 /** The core's latitude over its longitude extent. */
 const CORE_AXIS_RATIO = 0.6;
 
@@ -60,7 +102,7 @@ const PATCH_LEVEL = 0.045;
  * and near the centre they do not outshine the stars.
  */
 const CLOUD_LEVEL_MIN = 0.35;
-const CLOUD_LEVEL_MAX = 1.6;
+const CLOUD_LEVEL_MAX = 1.3;
 /** Dust never blocks more than this fraction of the light behind it. */
 const DUST_MAX = 0.85;
 
@@ -193,7 +235,7 @@ function coreLane(look: SkyLook, dir: Vec3): number {
   const x = dot(dir, frame.along);
   const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, frame.north))));
   const lon = Math.atan2(dot(dir, frame.across), x);
-  const sigmaLat = 0.1 * look.coreSize;
+  const sigmaLat = 0.075 * look.coreSize;
   // Windowed to zero between 3 and 4 sigma: no step where the lane ends.
   const window = 1 - smoothstep(3 * sigmaLat, 4 * sigmaLat, Math.abs(lat));
   if (window <= 0) return 0;
@@ -202,8 +244,8 @@ function coreLane(look: SkyLook, dir: Vec3): number {
   const ragged = 0.55 + 0.9 * fbm(n, dir[0] * 9 + o[0], dir[1] * 9 + o[1], dir[2] * 9 + o[2], 2);
   const along = Math.exp(-(lon * lon) / (2 * (0.8 * look.coreSize) ** 2));
   // A soft ceiling at 0.8, not a clamp: no kink at the lane's darkest.
-  const depth = 0.7 * ragged * along * Math.exp(-(lat * lat) / (2 * sigmaLat * sigmaLat)) * window;
-  return 0.8 * Math.tanh(depth / 0.8);
+  const depth = 0.8 * ragged * along * Math.exp(-(lat * lat) / (2 * sigmaLat * sigmaLat)) * window;
+  return 0.9 * Math.tanh(depth / 0.9);
 }
 
 /**
@@ -254,9 +296,15 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
   const [wHa, wO3, wRef] = n.mix;
   const [oa, ob, oc] = n.offsets as [Vec3, Vec3, Vec3, Vec3];
   const level = Math.min(CLOUD_LEVEL_MAX, Math.max(CLOUD_LEVEL_MIN, look.brightness));
+  const bandNoise = 0.6;
   return (dir) => {
-    const lat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
-    const window = 1 - smoothstep(0.75 * cutoff, cutoff, Math.abs(lat));
+    const trueLat = Math.asin(Math.max(-1, Math.min(1, dot(dir, look.north))));
+    // The band's edge is never a smooth great circle: its latitude is bent by slow and medium noise.
+    const bend =
+      sigma * (bandNoise * (2 * fbm(n, dir[0] * 1.3 + oc[1], dir[1] * 1.3 + oc[2], dir[2] * 1.3 + oc[0], 3) - 1) +
+        0.25 * (2 * fbm(n, dir[0] * 4 + ob[1], dir[1] * 4 + ob[2], dir[2] * 4 + ob[0], 3) - 1));
+    const lat = trueLat + bend;
+    const window = 1 - smoothstep(0.75 * cutoff, cutoff, Math.abs(trueLat));
     if (window <= 0) return [0, 0, 0];
     const inBand = Math.exp(-(lat * lat) / (2 * sigma * sigma));
     const toCentre = Math.max(0, dot(dir, look.centre));
@@ -268,34 +316,50 @@ export function cloudSampler(look: SkyLook, exposure: SkyExposure): (dir: Vec3) 
     const px = dir[0] * 3 + 1.5 * wx;
     const py = dir[1] * 3 + 1.5 * wy;
     const pz = dir[2] * 3 + 1.5 * wz;
-    const glowNoise = 0.55 + 0.9 * fbm(n, px + oa[0], py + oa[1], pz + oa[2], 3);
-    const emission = smoothstep(0.5, 0.75, fbm(n, px * 1.7 + ob[0], py * 1.7 + ob[1], pz * 1.7 + ob[2], 3));
-    const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 3));
+    const soft = fbm(n, px + oa[0], py + oa[1], pz + oa[2], 3);
+    const glowNoise = (1 - ex.clumps) * (0.55 + 0.9 * soft) + ex.clumps * (0.2 + 1.6 * smoothstep(0.3, 0.7, soft));
+    const emission = smoothstep(ex.emission[0], ex.emission[1], fbm(n, px * 1.7 + ob[0], py * 1.7 + ob[1], pz * 1.7 + ob[2], 5));
+    const reflection = smoothstep(0.52, 0.78, fbm(n, px * 2.1 + oc[0], py * 2.1 + oc[1], pz * 2.1 + oc[2], 4));
     const o3 = smoothstep(0.45, 0.7, fbm(n, px * 1.3 + oc[1], py * 1.3 + oc[2], pz * 1.3 + oc[0], 2));
     const strength = level * inBand * (1 + 1.5 * bulge);
     const glow = GLOW_LEVEL * ex.glow * strength * glowNoise;
     const patch = PATCH_LEVEL * ex.patch * strength;
-    const ha = patch * wHa * emission * (1 - o3);
-    const oiii = patch * wO3 * emission * o3;
-    const ref = patch * wRef * reflection * 0.7;
-    // The core: an elongated warm glow, mottled, with a brighter nucleus. Its
-    // longitude is far past its width on the far side: no half-sphere gate.
-    let coreGlow = 0;
-    if (coreOn) {
-      const lon = Math.atan2(dot(dir, frame.across), dot(dir, frame.along));
-      const q = (lon / sigmaLon) ** 2 + (lat / sigmaLat) ** 2;
-      const mottle = 0.8 + 0.4 * fbm(n, dir[0] * 7 + oc[0], dir[1] * 7 + oc[1], dir[2] * 7 + oc[2], 3);
-      coreGlow = CORE_LEVEL * ex.core * look.coreBrightness * (Math.exp(-q / 2) + 0.6 * Math.exp(-q * 2)) * mottle;
-    }
+    // Inside a patch the light is uneven: bright knots and thinner veils.
+    const detail = 0.35 + 1.3 * fbm(n, px * 6 + oa[1], py * 6 + oa[2], pz * 6 + oa[0], 4);
+    const ha = patch * wHa * emission * detail * (1 - o3);
+    const oiii = patch * wO3 * emission * detail * o3;
+    const ref = patch * wRef * reflection * ex.reflection;
     const clear = (1 - dustAt(look, dir)) * window;
-    let r = (glow * 1.0 + ha * 1.0 + oiii * 0.1 + ref * 0.35 + coreGlow * 1.0) * clear;
-    let g = (glow * 0.92 + ha * 0.15 + oiii * 0.8 + ref * 0.5 + coreGlow * 0.82) * clear;
-    let b = (glow * 0.8 + ha * 0.1 + oiii * 0.7 + ref * 1.0 + coreGlow * 0.55) * clear;
-    // Washed-out colours for the eye: mix toward the luminance.
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    r += glow * ex.glowColour[0] + ha * ex.haColour[0] + oiii * ex.oiiiColour[0] + ref * ex.refColour[0];
+    g += glow * ex.glowColour[1] + ha * ex.haColour[1] + oiii * ex.oiiiColour[1] + ref * ex.refColour[1];
+    b += glow * ex.glowColour[2] + ha * ex.haColour[2] + oiii * ex.oiiiColour[2] + ref * ex.refColour[2];
+    r *= clear;
+    g *= clear;
+    b *= clear;
+    // Washed-out colours for the eye, pushed ones for the long exposure: mix away from or toward the luminance.
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    r = lum + (r - lum) * ex.saturation;
-    g = lum + (g - lum) * ex.saturation;
-    b = lum + (b - lum) * ex.saturation;
+    r = Math.max(0, lum + (r - lum) * ex.saturation);
+    g = Math.max(0, lum + (g - lum) * ex.saturation);
+    b = Math.max(0, lum + (b - lum) * ex.saturation);
+    if (coreOn) {
+      // The core: an elongated warm glow, mottled, with a brighter nucleus. Its longitude is
+      // far past its width on the far side: no half-sphere gate. A soft curve (not a clip)
+      // keeps a gradient to the middle at any brightness, and its own lane darkens it after
+      // the curve, so the lane shows even where the glow is brightest.
+      const lon = Math.atan2(dot(dir, frame.across), dot(dir, frame.along));
+      const q = (lon / sigmaLon) ** 2 + (trueLat / sigmaLat) ** 2;
+      const mottle = 0.8 + 0.4 * fbm(n, dir[0] * 7 + oc[0], dir[1] * 7 + oc[1], dir[2] * 7 + oc[2], 3);
+      const raw = CORE_LEVEL * ex.core * look.coreBrightness ** 0.4 * (0.5 * Math.exp(-q / 2) + Math.exp(-1.6 * Math.sqrt(q))) * mottle;
+      const peak = CORE_PEAK * ex.ceiling;
+      const x = (raw / peak) ** 0.9;
+      const core = ((peak * x) / (1 + x)) * (1 - Math.min(0.95, 1.2 * coreLane(look, dir))) * window;
+      r += core * CORE_COLOUR[0];
+      g += core * CORE_COLOUR[1];
+      b += core * CORE_COLOUR[2];
+    }
     return [ex.ceiling * Math.tanh(r / ex.ceiling), ex.ceiling * Math.tanh(g / ex.ceiling), ex.ceiling * Math.tanh(b / ex.ceiling)];
   };
 }
@@ -323,7 +387,7 @@ function bake(look: SkyLook, exposure: SkyExposure, size: number): SkyFaces {
 const bakes = new Map<string, SkyFaces>();
 
 /** The look's cloud cube map in an exposure; the last four are kept. */
-export function bakeSkyClouds(look: SkyLook, exposure: SkyExposure, size = 256): SkyFaces {
+export function bakeSkyClouds(look: SkyLook, exposure: SkyExposure, size = 512): SkyFaces {
   const key = [exposure, size, look.coreSize, look.coreBrightness, look.seed, look.brightness, look.bandWidth, look.bulge, ...look.north, ...look.centre].join('|');
   const cached = bakes.get(key);
   if (cached) {

@@ -70,6 +70,9 @@ describe('the galactic core of a look', () => {
     expect(sun.coreSize).toBeCloseTo(0.3, 9);
     expect(skyLook(place([14, 0, 0])).coreBrightness).toBeCloseTo((8.2 / 14) ** 2, 9);
     expect(skyLook(place([3, 0, 0])).coreSize).toBeGreaterThan(sun.coreSize);
+    // The size grows slower than the brightness, so a close-in core does not fill the whole sky.
+    expect(skyLook(place([4.5, 0, 0])).coreSize).toBeLessThan(0.3 * (8.2 / 4.5));
+    expect(skyLook(place([0.5, 0, 0])).coreSize).toBeLessThanOrEqual(0.6);
     expect(Number.isFinite(skyLook(place([0, 0, 0])).coreBrightness)).toBe(true);
   });
 

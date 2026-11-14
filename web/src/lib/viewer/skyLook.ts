@@ -44,7 +44,7 @@ const FIXED_TILT = (60 * Math.PI) / 180;
 
 /** Largest core brightness and size: very close to the centre the law would blow up. */
 const CORE_BRIGHTNESS_MAX = 4;
-const CORE_SIZE_MAX = 0.9;
+const CORE_SIZE_MAX = 0.6;
 /** The core's angular size at the Sun's place, radians. */
 const SUN_CORE_SIZE = 0.3;
 
@@ -93,7 +93,7 @@ export function skyLook(place: GalacticPlace | null): SkyLook {
     bulge,
     north: normalise(place.axes[2]),
     centre: normalise(toSystem(place.axes, normalise([-x, -y, -z]))),
-    coreSize: Math.min(CORE_SIZE_MAX, SUN_CORE_SIZE * closeness),
+    coreSize: Math.min(CORE_SIZE_MAX, SUN_CORE_SIZE * Math.sqrt(closeness)),
     coreBrightness: Math.min(CORE_BRIGHTNESS_MAX, closeness * closeness),
   };
 }
