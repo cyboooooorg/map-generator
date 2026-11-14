@@ -4,8 +4,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::climate::SurfaceLiquid;
-use crate::geology::Regime;
 use super::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, Interior, PlanetInputs, Surface};
+use crate::geology::Regime;
 
 /// The kind of a planet, from its derived quantities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

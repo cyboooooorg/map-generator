@@ -4529,11 +4529,7 @@ mod tests {
             assert!(ocean > 0.0, "seed {seed}: {europa:?}");
             let (_, io) = one("io-like");
             assert_eq!(surface(&io).regime, Regime::HeatPipe, "seed {seed}: {io:?}");
-            assert_eq!(
-                io.class,
-                PlanetClass::VolcanicWorld,
-                "seed {seed}: {io:?}"
-            );
+            assert_eq!(io.class, PlanetClass::VolcanicWorld, "seed {seed}: {io:?}");
             assert!(surface(&io).gases.total() < 1e-3, "seed {seed}: {io:?}");
             for name in ["ganymede-like", "callisto-like"] {
                 let (_, m) = one(name);
