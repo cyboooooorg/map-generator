@@ -303,3 +303,121 @@ Svelte 5, Three.js, vitest.
   planet, photo filter unaffected, host disc hides the backdrop. Tune
   Task 3/5 constants from what it reports; re-run their tests.
 - [ ] **Step 4:** Commit tuning `fix(web): tune the sky's clouds and brightness`.
+
+---
+
+## Addendum: galactic core, nebulae, two renderings
+
+Spec: the "Addendum, 2026-11-14" section of the design. Same Global
+Constraints, except the cloud ceiling: 0.08 linear holds for the naked-eye
+rendering only; long exposure may reach 0.35 linear in nebula cores and
+0.25 in the bulge.
+
+### Task 10: Exposure and galactic core
+
+**Files:** `web/src/lib/viewer/skyLook.ts`, `skyClouds.ts` (+ tests)
+
+**Interfaces:**
+- Produces: `export type SkyExposure = 'eye' | 'photo'`;
+  `bakeSkyClouds(look: SkyLook, exposure: SkyExposure, size?: number)`
+  (cache keyed by look and exposure); `dustAt(look, dir)` gains the core's
+  dust lane.
+- Bulge: elongated glow centred on `look.centre`, axis ratio 0.6 along the
+  band, angular radius and brightness from `(8.2 / R)²` (store what is
+  needed in `SkyLook`, e.g. `coreSize`, `coreBrightness`), crossed by a
+  dark lane along the plane.
+
+- [ ] Tests first: at the Sun's place, the core region (within its radius
+  of `centre`) is at least 2× brighter on average than the band 90° away,
+  in both exposures; R = 3 core brighter and larger than R = 14; the lane
+  makes the plane through the core darker than 3° above and below it;
+  'eye' texels ≤ 0.08 linear and mean saturation lower than 'photo';
+  'photo' ≤ 0.35; deterministic per (look, exposure).
+- [ ] Implement, run `npx vitest run`, commit `feat(web): add the galactic core and the long-exposure rendering`.
+
+### Task 11: Nebula catalogue
+
+**Files:** create `web/src/lib/viewer/skyNebulae.ts` (+ test); modify
+`skyClouds.ts` (`dustAt` includes dark nebulae and pillar silhouettes).
+
+**Interfaces:**
+- Produces:
+  ```ts
+  export type NebulaKind = 'planetary' | 'emission' | 'pillars' | 'remnant' | 'reflection' | 'dark';
+  export interface Nebula {
+    kind: NebulaKind;
+    dir: Vec3;          // centre, system frame
+    radius: number;     // angular radius, radians
+    roll: number;       // orientation about dir, radians
+    seed: number;       // its own shape seed
+    tint: number;       // 0..1 colour-mix parameter within the kind
+  }
+  export function skyNebulae(look: SkyLook): Nebula[]; // memoised per look
+  ```
+  Sizes and placement from the spec table; counts per kind drawn from the
+  sky seed, scaled with `look.brightness` (starting point at the Sun:
+  planetary 3–8, emission 2–5, pillars 1–3, remnant 1–3, reflection 2–6,
+  dark 4–10).
+
+- [ ] Tests first: deterministic; two sky seeds give different catalogues
+  (kinds counts or positions); every kind appears in at least 80 % of 200
+  seeds; sizes within the table; emission/pillars/reflection/dark lie
+  within 15° of the band plane, the band-biased kinds closer on average
+  than uniform; more nebulae at R = 3 than R = 14; `dustAt` is higher at
+  a dark nebula's centre than just outside it.
+- [ ] Implement, run tests, commit `feat(web): draw a catalogue of nebulae per sky`.
+
+### Task 12: Nebula textures
+
+**Files:** create `web/src/lib/viewer/nebulaTextures.ts` (+ test)
+
+**Interfaces:**
+- Produces: `bakeNebula(n: Nebula, exposure: SkyExposure): { size: number; rgba: Uint8Array; blend: 'add' | 'darken' }`
+  (size 128–512 by angular size; sRGB bytes; premultiplied alpha), memoised.
+  Per kind: planetary — ring (or bipolar lobes when `tint` > 0.6) with an
+  O III core and H-alpha rim, a central star; emission — fBm glow with
+  domain warping and dark lanes; pillars — emission background with 1–3
+  dark tapering columns with bright rims; remnant — thin filamentary
+  shell; reflection — blue haze round a centre; dark — opaque soft-edged
+  patch (`darken`).
+
+- [ ] Tests first: deterministic; planetary ring: mean of the inner 20 %
+  radius darker than the rim annulus, rim redder than the core in 'photo';
+  pillars: a dark column (a vertical strip far darker than its
+  surroundings); dark kind uses `darken`; 'eye' bytes ≤ the 0.08 linear
+  ceiling and less saturated than 'photo'; edges fade to zero (no visible
+  square border: outer 5 % rows and columns near zero alpha).
+- [ ] Implement, run tests, commit `feat(web): bake nebula textures by kind`.
+
+### Task 13: Draw them and add the switch
+
+**Files:** `web/src/lib/viewer/skyBackdrop.ts`, `shaders.ts`, the three
+views, `web/src/components/Viewer.svelte`, `StarPane.svelte`,
+`StarSurfacePane.svelte`, `web/src/lib/i18n/en.ts`, `fr.ts`,
+`web/src/lib/display.ts`, `web/README.md`.
+
+**Interfaces:**
+- Consumes: Tasks 10-12.
+- Produces: `SkyBackdrop.setExposure(e: SkyExposure)`; each view
+  `setSkyExposure(e)`; display key `skyExposure: SkyExposure`
+  (default `'photo'`), linked display.
+- Nebulae: one mesh per nebula, a patch of the far sphere (drawn at the
+  far plane like the stars), oriented by `dir` and `roll`, render order
+  between the cloud cube and the stars; `add` blending or darkening;
+  hidden with the sky; the fixed sky shows none; disposed with the
+  backdrop; textures baked lazily when the system's sky is shown.
+
+- [ ] Tests first (object inspection, no WebGL): the system sky creates
+  one mesh per nebula; the fixed sky and 'off' create none; changing
+  exposure swaps textures without rebuilding the catalogue; dispose frees
+  every nebula texture; a stored display without `skyExposure` gets
+  `'photo'`.
+- [ ] Wire the "Long exposure" toggle next to the sky switch (i18n
+  « Pose longue » / "Long exposure", help line), a free shortcut if one
+  fits; docs in web/README.md.
+- [ ] `npx vitest run`, `npm run check`, commit `feat(web): draw the nebulae and let the viewer pick the exposure`.
+
+### Task 14: Look again
+
+- [ ] Redeploy develop (warn mapgen1, mapgen3); `viewer-visual-check` on
+  3 systems at about 3, 8 and 14 kpc in both exposures; tune; commit.

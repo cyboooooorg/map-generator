@@ -205,3 +205,59 @@ system around a planet (`WorldRequest::resolve`, request.rs:558):
   seeding, the position's effect on brightness, the band orientation).
 - Documentation: README (system file and viewer sky), `docs/system-spec.md`
   (the new block), the viewer's help text.
+
+## Addendum, 2026-11-14: galactic core, nebulae, two renderings
+
+After a first look on develop, the user found no visible galactic core,
+clouds too alike from one system to the next, and no nebula with a
+recognisable shape (they cited the Helix, Carina and Eagle nebulae). The
+user asked for two renderings with a switch: a realistic one and a
+photographic one.
+
+### Galactic core
+
+A real bulge, not a denser patch of stars: an elongated glow centred on
+`centre`, flattened along the band (axis ratio about 0.6), crossed by a
+dark dust lane along the plane, as Sagittarius seen from Earth. Its
+angular size and brightness follow the distance to the centre (bigger
+and brighter closer in, `(8.2 / R)²` as a starting law), and it stays
+clearly visible from the Sun's distance.
+
+### Nebulae as objects
+
+Each system draws a catalogue of nebulae from its sky seed: families of
+real nebulae, never copies of real ones.
+
+| Kind | Look | Angular size | Where |
+|---|---|---|---|
+| Planetary | ring or bipolar, blue-green core (O III), red rim (H-alpha) — the Helix's family | 0.3–2° | anywhere, mild band bias |
+| Emission complex | red-pink glow torn by dark lanes — Carina's family | 3–12° | in the band |
+| Pillars | dark columns with bright rims against emission — the Eagle's family | 1–4° | in the band |
+| Supernova remnant | filamentary shell, red and blue-green | 2–8° | anywhere, band bias |
+| Reflection | blue haze round a bright star | 0.5–3° | in the band |
+| Dark | black patch on the band, dims the stars behind | 1–6° | on the band |
+
+The count of each kind, the positions, sizes, orientations, shapes and
+colour mixes vary with the seed; more nebulae toward the core (with the
+look's brightness). Each nebula has its own texture, baked at a
+resolution fitting its size, drawn as a patch of the sky sphere fixed in
+the sky (not facing the camera), between the cloud cube and the stars.
+Dark nebulae and pillar silhouettes also dim the stars behind them.
+
+### Two renderings
+
+- **Naked eye** (realistic): what the eye sees — the faint ceiling of
+  the first version, colours mostly washed out, nebulae barely there
+  except the brightest.
+- **Long exposure** (photographic): what an astrophotograph shows —
+  saturated H-alpha reds and O III blue-greens, clear structure, a bright
+  bulge, more stars. Still a backdrop: drawn behind the planet, never in
+  front, and the star view's photo filter (#415) stays unaffected.
+
+A switch next to the sky choice picks the rendering for the system's sky
+in every view (saved with the display settings, linked between compared
+worlds like the sky choice). The fixed sky stays today's sky in both.
+
+Calls by the author: long exposure is the default (the user's references
+are photographs); the switch is a separate on/off "Long exposure" toggle
+rather than two more sky choices.
