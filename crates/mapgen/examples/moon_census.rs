@@ -19,7 +19,10 @@
 //!    first 40 of them;
 //! 5. the round moons (those with a model): their class by host type, the
 //!    largest one, and their model's radius over the radius their bulk's
-//!    uncompressed density gave them (`MoonSystem::draw`).
+//!    uncompressed density gave them (`MoonSystem::draw`);
+//! 6. the round moons over 2000 km in radius around a host under 100 K:
+//!    their surface temperature, pressure, CH₄ share, surface liquid and
+//!    class, and why each that is no hydrocarbon world misses it.
 //!
 //! Part 4 of the planet model (#423) measured the moon draw with it before
 //! and after drawing a giant's moons from its disk's mass, shape and
@@ -62,6 +65,8 @@ fn main() {
     let mut classes: BTreeMap<String, BTreeMap<String, u32>> = BTreeMap::new();
     let mut largest_round = (0.0_f64, String::new());
     let mut radius_ratios: Vec<f64> = Vec::new();
+    // Cold large moons: (line, reason)
+    let mut cold_large: Vec<(String, &'static str)> = Vec::new();
     for seed in 1..=count {
         let req = SystemRequest::System(WholeSystemRequest {
             seed: Some(seed as u32),
@@ -101,9 +106,33 @@ fn main() {
             let drawn = mapgen::moons::MoonSystem::draw(pp).map_or_else(Vec::new, |s| s.moons);
             for m in moons {
                 let r = m.physical.radius_km;
-                if m.model.is_some() {
+                if let Some(model) = &m.model {
                     if let Some(d) = drawn.iter().find(|d| d.seed == m.params.seed) {
                         radius_ratios.push(r / f64::from(d.radius_km));
+                    }
+                    if r > 2000.0 && teq < 100.0 {
+                        let s = model.surface.as_ref().expect("a moon has a surface");
+                        let p_bar = s.gases.total();
+                        let ch4 = if p_bar > 0.0 {
+                            s.gases.ch4 / p_bar
+                        } else {
+                            0.0
+                        };
+                        let t = s.climate.temperature_k;
+                        let reason = why_not_hydrocarbon(model, p_bar, t);
+                        cold_large.push((
+                            format!(
+                                "seed {seed:3} {:5} host {:11} Teq {teq:3.0} K  r {r:4.0} km  T {t:5.1} K  P {p_bar:9.2e} bar  CH4 {:5.1} %  CH4 in {:8.2e}  dynamo {:5}  {:?} -> {}",
+                                m.id,
+                                p.body_type,
+                                100.0 * ch4,
+                                model.inputs.volatiles.ch4,
+                                s.core.dynamo,
+                                s.climate.liquid,
+                                m.body_type
+                            ),
+                            reason,
+                        ));
                     }
                     *classes
                         .entry(group.clone())
@@ -177,6 +206,19 @@ fn main() {
         "== largest round moon: {:.0} km, {}",
         largest_round.0, largest_round.1
     );
+    println!(
+        "== round moons over 2000 km around a host under 100 K: {}",
+        cold_large.len()
+    );
+    let mut reasons: BTreeMap<&str, u32> = BTreeMap::new();
+    for (line, reason) in &cold_large {
+        println!("{line}  [{reason}]");
+        *reasons.entry(reason).or_default() += 1;
+    }
+    println!("-- why");
+    for (reason, n) in &reasons {
+        println!("   {reason:60} {n}");
+    }
     radius_ratios.sort_by(f64::total_cmp);
     if let (Some(lo), Some(hi)) = (radius_ratios.first(), radius_ratios.last()) {
         println!(
@@ -184,5 +226,39 @@ fn main() {
             radius_ratios[radius_ratios.len() / 2],
             radius_ratios.len()
         );
+    }
+}
+
+/// Why a cold large moon of `model` (surface pressure `p_bar`, temperature
+/// `t`) is no hydrocarbon world (liquid hydrocarbons under more than
+/// 1 bar, `planet::classify`): its air lost (its own dynamo ignored inside
+/// its giant's magnetosphere, or no field to lose), no methane in its
+/// inputs (a giant-impact moon of a large world is dry rock), its methane
+/// destroyed by its star's Lyman α faster than it outgassed it
+/// (`atmosphere::methane_photolysis`), too cold or too warm for liquid
+/// methane, or air under 1 bar.
+fn why_not_hydrocarbon(model: &mapgen::planet::PlanetModel, p_bar: f64, t: f64) -> &'static str {
+    use mapgen::planet::{PlanetClass, SurfaceLiquid};
+    let s = model.surface.as_ref().unwrap();
+    if model.class == PlanetClass::HydrocarbonWorld {
+        "is one"
+    } else if model.inputs.volatiles.ch4 <= 0.0 {
+        "no CH4 in its inputs (dry giant-impact moon)"
+    } else if p_bar < 1e-3 {
+        if s.core.dynamo {
+            "no air kept: own dynamo ignored (magnetosphere rule)"
+        } else {
+            "no air kept: escape without a field (shoreline)"
+        }
+    } else if s.gases.ch4 <= 0.0 {
+        "air kept, its CH4 photolysed (Lyman alpha outran outgassing)"
+    } else if t < 90.7 {
+        "air kept, too cold for liquid CH4 (< 90.7 K)"
+    } else if s.climate.liquid != SurfaceLiquid::Hydrocarbons {
+        "air kept, too warm for liquid CH4 (ethane boils)"
+    } else if p_bar <= 1.0 {
+        "liquid CH4 but air under DENSE_AIR_BAR (1 bar)"
+    } else {
+        "other (class rule)"
     }
 }
