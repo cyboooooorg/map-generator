@@ -259,7 +259,7 @@ mod tests {
         // world, whatever its regime.
         let mut icy = io.inputs.clone();
         icy.water_fraction = 0.3;
-        let mut wet = surface.clone();
+        let mut wet = *surface;
         wet.water.oceans = 1.0;
         let class = crate::planet::classify(&icy, &io.interior, 1.77, Some(&wet));
         assert_eq!(class, PlanetClass::IceWorld);
