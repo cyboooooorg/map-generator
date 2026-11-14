@@ -69,7 +69,7 @@ describe('planet classes', () => {
     expect(className('rocky', true)).toBe('Rocky moon');
     expect(className('volcanic-world')).toBe('Volcanic world');
     expect(className('volcanic-world', true)).toBe('Volcanic moon');
-    expect(className('ice-world', true)).toBe('Ice world');
+    expect(className('ice-world', true)).toBe('Icy moon');
     expect(className('icy-moon', true)).toBe('icy moon');
     expect(classLabel('rocky', undefined, true)).toBe('Rocky moon');
     expect(classLabel('rocky', model(0.25, 'none', 215), true)).toBe('Rocky moon · frozen surface');
@@ -85,10 +85,12 @@ describe('planet classes', () => {
       expect(en_[key], key).not.toMatch(/planet/i);
       expect(fr_[key], key).not.toMatch(/plan[èe]te/i);
     }
-    // Every class whose planet label says planet has a moon variant.
+    // Every class has a moon label, none reading as a world.
     for (const key of PLANET_CLASSES) {
-      if (/planet/i.test((en.viewer.bodyTypes as Record<string, string>)[key]!)) expect(en_[key], key).toBeTruthy();
-      if (/plan[èe]te/i.test((fr.viewer.bodyTypes as Record<string, string>)[key]!)) expect(fr_[key], key).toBeTruthy();
+      expect(en_[key], key).toBeTruthy();
+      expect(fr_[key], key).toBeTruthy();
+      expect(en_[key], key).not.toMatch(/world/i);
+      expect(fr_[key], key).not.toMatch(/monde/i);
     }
   });
 });

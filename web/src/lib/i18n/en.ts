@@ -742,7 +742,18 @@ export const en = {
     // The classes a round moon words otherwise than a planet (`classLabel`).
     moonBodyTypes: {
       rocky: 'Rocky moon',
+      'super-earth': 'Super-Earth moon',
+      'ice-world': 'Icy moon',
+      'mini-neptune': 'Mini-Neptune moon',
+      'ice-giant': 'Ice giant moon',
+      'gas-giant': 'Gas giant moon',
+      'hot-jupiter': 'Hot Jupiter moon',
+      'hot-neptune': 'Hot Neptune moon',
+      'lava-world': 'Lava moon',
       'volcanic-world': 'Volcanic moon',
+      'runaway-greenhouse': 'Runaway greenhouse moon',
+      'hydrocarbon-world': 'Hydrocarbon moon',
+      'ocean-world': 'Ocean moon',
     },
     ringMoonTypes: {
       embedded: 'ring moon',

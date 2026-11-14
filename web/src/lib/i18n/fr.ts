@@ -704,7 +704,18 @@ export const fr: Messages = {
     // The classes a round moon words otherwise than a planet (`classLabel`).
     moonBodyTypes: {
       rocky: 'Lune rocheuse',
+      'super-earth': 'Lune super-Terre',
+      'ice-world': 'Lune glacée',
+      'mini-neptune': 'Lune mini-Neptune',
+      'ice-giant': 'Lune de géante glacée',
+      'gas-giant': 'Lune de géante gazeuse',
+      'hot-jupiter': 'Lune de Jupiter chaud',
+      'hot-neptune': 'Lune de Neptune chaud',
+      'lava-world': 'Lune de lave',
       'volcanic-world': 'Lune volcanique',
+      'runaway-greenhouse': 'Lune à effet de serre incontrôlé',
+      'hydrocarbon-world': 'Lune à hydrocarbures',
+      'ocean-world': 'Lune océan',
     },
     ringMoonTypes: {
       embedded: 'lune des anneaux',
