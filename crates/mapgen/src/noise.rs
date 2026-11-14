@@ -170,6 +170,8 @@ pub mod stream {
     /// The highland provinces of a world without plates (see
     /// `crate::generation::Sampler`).
     pub const HIGHLANDS: u32 = 42;
+    /// A system's place in the galaxy (see `crate::galaxy`).
+    pub const GALAXY: u32 = 43;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;
