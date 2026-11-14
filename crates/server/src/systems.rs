@@ -440,6 +440,14 @@ fn outdated_summary(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSum
         .then(|| outdated_stub(id, modified_ms, &meta))
 }
 
+/// The `format_version` of a `system.json`, `None` when it is not a JSON
+/// object carrying one.
+pub fn format_version(json: &[u8]) -> Option<u32> {
+    serde_json::from_slice::<OutdatedMeta>(json)
+        .ok()
+        .map(|m| m.format_version)
+}
+
 /// A summary with no bodies, for a system of another format.
 fn outdated_stub(id: &str, modified_ms: u64, meta: &OutdatedMeta) -> SystemSummary {
     let star = meta.star.as_ref();
