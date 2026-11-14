@@ -2,7 +2,7 @@
 // statistics and rivers, loaded in that order (each step can take a while
 // on large maps, and the earlier ones are useful on their own).
 import { t } from './i18n/index.svelte';
-import { api, peeked, sizeName, systemBodyId, worldFile } from './api/client';
+import { api, sizeName, systemBodyId } from './api/client';
 import type { BodyExtras } from './api/types/BodyExtras';
 import type { BodySizes } from './api/types/BodySizes';
 import type { PresentSize } from './api/types/PresentSize';
@@ -10,7 +10,7 @@ import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { epochFile } from './epochs';
 import { MIN_FORMAT_VERSION } from './formatVersion';
-import { loadEpochLayers, loadLayers, loadPeekedStats, type WorldLayers } from './layers';
+import { loadEpochLayers, loadLayers, type WorldLayers } from './layers';
 import type { LoadProgress } from './progress';
 import { RiverIndex } from './rivers';
 import type { WorldStats } from './stats';
@@ -23,14 +23,6 @@ export class LoadedWorld {
   id = $state<string | null>(null);
   /** The planet of the body shown (itself, or a moon's planet), as an id like `id`. */
   worldId = $state<string | null>(null);
-  /** The world's metadata (its star and moons), whichever body is shown. */
-  worldMeta = $state.raw<WorldMetadata | null>(null);
-  /** The world's biome statistics and rivers, whichever body is shown. */
-  worldStats = $state.raw<WorldStats | null>(null);
-  worldRivers = $state.raw<RiverIndex | null>(null);
-  /** Why the planet's metadata could not be read while one of its moons is shown. */
-  worldError = $state<string | null>(null);
-  private planetController: AbortController | null = null;
   // Raw state: typed arrays and large JSON must not be proxied.
   meta = $state.raw<WorldMetadata | null>(null);
   layers = $state.raw<WorldLayers | null>(null);
@@ -143,10 +135,6 @@ export class LoadedWorld {
     this.starMode = 'system';
     this.pinnedPlanets = [];
     this.worldId = id;
-    this.worldMeta = null;
-    this.worldStats = null;
-    this.worldRivers = null;
-    this.worldError = null;
     this.loadBody(id);
   }
 
@@ -177,9 +165,6 @@ export class LoadedWorld {
       this.systemEvicted = [];
       this.systemExtras = {};
       this.systemBody = null;
-      this.worldMeta = null;
-      this.worldStats = null;
-      this.worldRivers = null;
       this.loadBody(null);
     } else if (starView) {
       this.subject = 'star';
@@ -224,62 +209,13 @@ export class LoadedWorld {
     this.systemBody = body;
     const entry = system.bodies.find((b) => b.id === body);
     const planet = entry?.parent ?? entry?.id ?? null;
-    const previous = this.worldId;
     this.worldId = planet ? systemBodyId(this.systemId, planet) : null;
     if (keep) {
       // Its resolutions may have changed meanwhile (one generated or deleted).
       this.refreshSizes().catch((e: unknown) => console.warn('Could not list the resolutions', e));
       return;
     }
-    const moon = entry !== undefined && planet !== null && entry.id !== planet;
-    // A moon's card is its planet's: kept when the planet is the one shown
-    // already (its biomes and rivers come with its maps), read otherwise.
-    if (!moon || previous !== this.worldId) {
-      this.worldMeta = null;
-      this.worldStats = null;
-      this.worldRivers = null;
-    }
-    this.worldError = null;
-    this.planetController?.abort();
-    this.planetController = null;
-    if (moon && this.worldId) this.loadPlanetMeta(this.worldId);
     this.loadBody(entry?.generated ? systemBodyId(this.systemId, entry.id) : null);
-  }
-
-  /**
-   * Reads the metadata, biome statistics and rivers of the planet `id` of a
-   * moon shown (its card is the planet's), at the resolution displayed. All
-   * peeks: the planet is not the body looked at, so the server does not
-   * count it opened. The card shows the planet's statistics, whichever of
-   * the two was shown first (the moon's own are not on its card).
-   */
-  private loadPlanetMeta(id: string): void {
-    const controller = new AbortController();
-    this.planetController = controller;
-    const { signal } = controller;
-    (async () => {
-      const sizes = await api.sizes(id, signal);
-      const shown = displayedSize(sizes);
-      if (!shown) throw new Error('no resolution on disk');
-      const meta = await api.peekMetadata(id, sizeName(shown.width, shown.height), signal);
-      if (signal.aborted || this.worldId !== id) return;
-      if (meta.format_version < MIN_FORMAT_VERSION) {
-        this.worldError = t.world.outdated({ id });
-        return;
-      }
-      this.worldMeta = meta;
-      const name = sizeName(shown.width, shown.height);
-      const [stats, rivers] = await Promise.all([
-        loadPeekedStats(peeked(worldFile(id, name, `raw_data/${meta.layers.biomes.file}`)), meta, signal),
-        meta.rivers ? api.peekRivers(id, name, meta.rivers, signal) : null,
-      ]);
-      if (signal.aborted || this.worldId !== id) return;
-      this.worldStats = stats;
-      if (rivers) this.worldRivers = new RiverIndex(rivers, meta.circumference_km);
-    })().catch((e: unknown) => {
-      if (signal.aborted || this.worldId !== id) return;
-      this.worldError = t.world.loadFailed({ id, error: String(e) });
-    });
   }
 
   /**
@@ -416,9 +352,6 @@ export class LoadedWorld {
         return;
       }
       this.meta = meta;
-      if (id === this.worldId) {
-        this.worldMeta = meta;
-      }
       const { layers, stats } = await loadLayers(id, size, meta, signal, (progress) => {
         if (current()) this.progress = progress;
       });
@@ -427,18 +360,12 @@ export class LoadedWorld {
       this.present = layers;
       this.layers = layers;
       this.stats = stats;
-      if (id === this.worldId) {
-        this.worldStats = stats;
-      }
       // An epoch asked for before the layers arrived.
       this.showEpoch();
       if (meta.rivers) {
         const file = await api.rivers(id, size, meta.rivers, signal);
         if (!current()) return;
         this.rivers = new RiverIndex(file, meta.circumference_km);
-        if (id === this.worldId) {
-          this.worldRivers = this.rivers;
-        }
       }
     })().catch(async (e: unknown) => {
       if (!current()) return;
