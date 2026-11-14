@@ -33,6 +33,8 @@
 //! drawn, which stores it on the body ([`body_model`] reads it back).
 //! [`interim::base_of`] maps a model onto today's looks until #424, and
 //! [`interim::params_for`] generates its world from what it derived.
+//! [`explain::explain`] unfolds what it derived into cause trees for a
+//! body's card.
 //! [`reference::SOLAR_BODIES`] lists the Solar System bodies the relations
 //! are checked against.
 use serde::{Deserialize, Serialize};
@@ -48,6 +50,7 @@ pub mod classify;
 pub mod climate;
 pub mod core;
 pub mod escape;
+pub mod explain;
 pub mod heat;
 pub mod ice_shell;
 pub mod inputs;
@@ -68,6 +71,7 @@ pub use classify::{PLANET_CLASSES, PlanetClass, classify};
 pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_temperature_k};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
+pub use explain::{Cause, Explanation, InputField, Quantity, explain};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use ice_shell::{IceShell, ice_shell};
 pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_with};
@@ -387,87 +391,29 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         0.0
     };
     let interior = interior(&inputs, &exposure);
-    let silicate_kg = inputs.mass_earth
-        * (1.0 - inputs.water_fraction - inputs.envelope_fraction)
-        * (1.0 - inputs.core_mass_fraction)
-        * EARTH_KG;
-    let tide = context.tide.unwrap_or(HostTide {
-        host_kg: context.star_mass * SUN_KG,
-        a_m: context.orbit_au * AU_M,
-        eccentricity: context.eccentricity,
-    });
-    let heat = InternalHeat {
-        radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
-        tidal_w: tidal_power_w(
-            tide.host_kg,
-            interior.radius_earth * EARTH_M,
-            tide.a_m,
-            tide.eccentricity,
-            k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
-        ),
-    };
+    let heat = internal_heat(context, &inputs, &interior);
     let mut air = None;
     let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
         None
     } else {
-        let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
-        let bare = |w: Water| {
-            let r = regime(&inputs, &heat, &interior, &w);
-            let k = core(&inputs, &interior, r, context.age_gyr);
-            let out = outgassed(&inputs, &w, r, &interior);
-            let atm = atmosphere(
-                out,
-                &interior,
-                inputs.mass_earth,
-                &shield(context, k),
-                fluence,
-            );
-            // A runaway's water is the steam escape has left in its air.
-            let w = if w.runaway {
-                w.keeping(atm.h2o / bar_per_kg)
-            } else {
-                w
-            };
-            let atm = methane_photolysis(atm, context, inputs.mass_earth, &interior);
-            let gases =
-                photochemistry(cold_trap(atm, context.equilibrium_k), context.equilibrium_k);
-            let flux = heat.flux_w_m2(interior.radius_earth);
-            let water_bar = w.kept_kg * bar_per_kg;
-            let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
-            let life = life(&inputs, &climate, context.age_gyr);
-            let surface = Surface {
-                water: w,
-                regime: r,
-                core: k,
-                gases: oxygenate(after, &life),
-                climate,
-                life,
-            };
-            let before = Air {
-                water: w,
-                regime: r,
-                gases,
-            };
-            (surface, before)
-        };
         let w = water(context, &inputs, &interior, fluence);
-        let (mut surface, mut before) = bare(w);
-        if climate::boils(&w, &surface.climate) {
+        let mut steps = bare(context, &inputs, &interior, &heat, fluence, w);
+        if climate::boils(&w, &steps.surface.climate) {
             let boiled = Water {
                 boiled: true,
                 ..steam(&inputs, &interior, fluence)
             };
-            let (hot, air) = bare(boiled);
+            let hot = bare(context, &inputs, &interior, &heat, fluence, boiled);
             // Kept only if the steam holds the surface past the critical
             // point itself: a boil whose steam escape leaves too little
             // to stay hot has no consistent runaway, and the first pass,
             // wet and bounded by its own water, stands.
-            if climate::past_critical(&hot.climate) {
-                (surface, before) = (hot, air);
+            if climate::past_critical(&hot.surface.climate) {
+                steps = hot;
             }
         }
-        air = Some(before);
-        Some(surface)
+        air = Some(steps.before);
+        Some(steps.surface)
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
     let ice_shell = ice_shell(&interior, &heat, surface.as_ref());
@@ -483,6 +429,121 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         ice_shell,
     };
     (model, air)
+}
+
+/// The host whose tides heat a body of `context`: a moon's planet
+/// (`context.tide`), else its star on the body's orbit.
+pub(crate) fn tide_of(context: &Context) -> HostTide {
+    context.tide.unwrap_or(HostTide {
+        host_kg: context.star_mass * SUN_KG,
+        a_m: context.orbit_au * AU_M,
+        eccentricity: context.eccentricity,
+    })
+}
+
+/// The heat a body of `inputs` (after escape) and `interior` makes in
+/// `context` (see [`planet_model`]): radiogenic from its silicate mass,
+/// tidal from [`tide_of`] with the [`heat::k2_over_q`] of its envelope
+/// and water shares.
+pub(crate) fn internal_heat(
+    context: &Context,
+    inputs: &PlanetInputs,
+    interior: &Interior,
+) -> InternalHeat {
+    let silicate_kg = inputs.mass_earth
+        * (1.0 - inputs.water_fraction - inputs.envelope_fraction)
+        * (1.0 - inputs.core_mass_fraction)
+        * EARTH_KG;
+    let tide = tide_of(context);
+    InternalHeat {
+        radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
+        tidal_w: tidal_power_w(
+            tide.host_kg,
+            interior.radius_earth * EARTH_M,
+            tide.a_m,
+            tide.eccentricity,
+            k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
+        ),
+    }
+}
+
+/// Every step of a bare body's chain from the water it starts with (see
+/// [`bare`]).
+pub(crate) struct Bare {
+    pub surface: Surface,
+    /// The air before the climate.
+    pub before: Air,
+    /// What it outgassed, bar ([`outgassed`]).
+    pub outgassed: Gases,
+    /// What escape to space left of it ([`atmosphere`]), bar.
+    pub kept: Gases,
+    /// What the star's ultraviolet left of that methane
+    /// ([`methane_photolysis`]), bar.
+    pub photolysed: Gases,
+    /// What the cold left of that in the air ([`cold_trap`]), bar.
+    pub trapped: Gases,
+    /// The air as the climate left it, before life oxygenated it: the
+    /// air `surface.climate` was solved with.
+    pub climate_gases: Gases,
+}
+
+/// A bare body's surface from the water `w` it starts with (the chain's
+/// first pass, or its boiled steam): its [`regime`] and [`core`], its
+/// air ([`outgassed`], [`atmosphere`] under its [`shield`],
+/// [`methane_photolysis`], [`cold_trap`], [`photochemistry`]), its
+/// [`climate`], its [`life`] and the oxygen it makes. A runaway's water is
+/// the steam escape has left in its air.
+pub(crate) fn bare(
+    context: &Context,
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    heat: &InternalHeat,
+    fluence: f64,
+    w: Water,
+) -> Bare {
+    let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, interior);
+    let r = regime(inputs, heat, interior, &w);
+    let k = core(inputs, interior, r, context.age_gyr);
+    let out = outgassed(inputs, &w, r, interior);
+    let kept = atmosphere(
+        out,
+        interior,
+        inputs.mass_earth,
+        &shield(context, k),
+        fluence,
+    );
+    let w = if w.runaway {
+        w.keeping(kept.h2o / bar_per_kg)
+    } else {
+        w
+    };
+    let photolysed = methane_photolysis(kept, context, inputs.mass_earth, interior);
+    let trapped = cold_trap(photolysed, context.equilibrium_k);
+    let gases = photochemistry(trapped, context.equilibrium_k);
+    let flux = heat.flux_w_m2(interior.radius_earth);
+    let water_bar = w.kept_kg * bar_per_kg;
+    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
+    let life = life(inputs, &climate, context.age_gyr);
+    Bare {
+        surface: Surface {
+            water: w,
+            regime: r,
+            core: k,
+            gases: oxygenate(after, &life),
+            climate,
+            life,
+        },
+        before: Air {
+            water: w,
+            regime: r,
+            gases,
+        },
+        outgassed: out,
+        kept,
+        photolysed,
+        trapped,
+        climate_gases: after,
+    }
 }
 
 /// The model of the planet `id` of the system of `system_seed`, in its

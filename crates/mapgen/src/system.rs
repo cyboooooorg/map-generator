@@ -2051,6 +2051,38 @@ pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
     }
 }
 
+/// The formation context the model of `body` was derived in, rebuilt from
+/// the stored system, for [`crate::planet::explain`]; `None` for a body
+/// without a model, or a moon whose planet is missing.
+///
+/// A planet's (the world a request around one asked included) is its own
+/// star seen from its orbit, with its params' metallicity and the
+/// system's ice line, as [`derive_model`] took it. A round moon's is its
+/// planet's with the tides of its planet ([`moon_formation`], and the
+/// world a request asked as a giant's moon, `request::host_tide`): the
+/// planet's mass (a giant's `giant_mass_earth`, the mass a rocky
+/// planet's world gives otherwise) on the moon's stored orbit.
+pub fn body_context(system: &System, body: &Body) -> Option<Context> {
+    body.model.as_ref()?;
+    let planet = |p: &WorldParams| {
+        let star = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr);
+        Context::of(&star, p.metallicity, system.star.ice_line_au)
+    };
+    match body.kind {
+        BodyKind::Planet => Some(planet(&body.params)),
+        BodyKind::Moon => {
+            let parent = body.parent.as_deref()?;
+            let host = &system.bodies.iter().find(|b| b.id == parent)?.params;
+            let host_earth = host.giant_mass_earth.unwrap_or_else(|| host.mass_earth());
+            Some(planet(host).with_tide(HostTide {
+                host_kg: f64::from(host_earth) * EARTH_KG,
+                a_m: body.orbit.semi_major_axis_km * 1000.0,
+                eccentricity: body.orbit.eccentricity,
+            }))
+        }
+    }
+}
+
 /// The fields of a moon drawn by [`MoonSystem`]: a small one's type
 /// (`rocky-moon` or `icy-moon`) and world, with how a round one formed
 /// ([`moon_formation`]), whose model [`round_moon`] then gives it its
@@ -4063,6 +4095,99 @@ mod tests {
         for (a, b) in system.bodies.iter().zip(&back.bodies) {
             assert_eq!(a.model, b.model, "{}", a.id);
         }
+    }
+
+    /// Every body with a model in `system`: its rebuilt context gives its
+    /// stored tidal heat back, and its cause trees exist. Returns how many
+    /// moons were checked.
+    fn explains_every_model(system: &System) -> usize {
+        use crate::planet::{explain, k2_over_q, tidal_power_w};
+        let mut moons = 0;
+        for body in system.bodies.iter() {
+            let Some(model) = &body.model else {
+                assert!(body_context(system, body).is_none(), "{}", body.id);
+                continue;
+            };
+            let context = body_context(system, body).expect("a body with a model has a context");
+            let tide = crate::planet::tide_of(&context);
+            let i = &model.inputs;
+            let tidal = tidal_power_w(
+                tide.host_kg,
+                model.interior.radius_earth * EARTH_M,
+                tide.a_m,
+                tide.eccentricity,
+                k2_over_q(i.envelope_fraction, i.water_fraction),
+            );
+            let stored = model.heat.tidal_w;
+            assert!(
+                (tidal - stored).abs() <= 1e-9 * stored.abs().max(tidal.abs()),
+                "{}: {tidal} W against {stored} W",
+                body.id
+            );
+            assert!(explain(&context, model).is_some(), "{}", body.id);
+            if body.kind == BodyKind::Moon {
+                moons += 1;
+            }
+        }
+        moons
+    }
+
+    #[test]
+    fn body_context_rebuilds_the_drawn_contexts() {
+        explains_every_model(&drawn_g2v(3));
+        // Round moons of a giant, the Titan asked for among them.
+        let titan = requested(1, &[("titan-like", 1)]);
+        assert!(explains_every_model(&titan) >= 1);
+        // The world a request asked, as a planet and as a giant's moon.
+        let earth = draw(
+            &SystemRequest::Around(WorldRequest {
+                planet: Some("earth-like".into()),
+                seed: Some(4),
+                width: Some(64),
+                height: Some(32),
+                ..WorldRequest::default()
+            }),
+            &mut StdRng::seed_from_u64(4),
+        )
+        .unwrap();
+        explains_every_model(&earth);
+        let moon = draw(
+            &SystemRequest::Around(WorldRequest {
+                planet: Some("earth-like".into()),
+                seed: Some(8),
+                host: Some(HostMode::Giant),
+                width: Some(64),
+                height: Some(32),
+                ..WorldRequest::default()
+            }),
+            &mut StdRng::seed_from_u64(5),
+        )
+        .unwrap();
+        let focus = moon.focus.as_deref().unwrap();
+        let world = moon.bodies.iter().find(|b| b.id == focus).unwrap();
+        assert_eq!(world.kind, BodyKind::Moon);
+        assert!(explains_every_model(&moon) >= 1);
+    }
+
+    #[test]
+    fn explain_refuses_a_model_its_context_does_not_reproduce() {
+        let system = drawn_g2v(3);
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.model.as_ref().is_some_and(|m| m.surface.is_some()))
+            .expect("a bare body");
+        let context = body_context(&system, body).unwrap();
+        let mut model = body.model.clone().unwrap();
+        assert!(crate::planet::explain(&context, &model).is_some());
+        if let Some(s) = model.surface.as_mut() {
+            s.climate.temperature_k += 10.0;
+        }
+        assert_eq!(crate::planet::explain(&context, &model), None);
+        // Nor a tidal heat its context does not give.
+        let mut model = body.model.clone().unwrap();
+        model.heat.tidal_w = model.heat.tidal_w * 2.0 + 1.0;
+        assert_eq!(crate::planet::explain(&context, &model), None);
     }
 
     #[test]
