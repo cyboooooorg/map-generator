@@ -982,8 +982,8 @@ export const fr: Messages = {
       'runaway-greenhouse': 'Serre emballée',
       'hydrocarbon-world': "Monde d'hydrocarbures",
       'ocean-world': 'Monde océan',
-      'rocky-moon': 'lune rocheuse',
-      'icy-moon': 'lune glacée',
+      'rocky-moon': 'Lune rocheuse (petite)',
+      'icy-moon': 'Lune glacée (petite)',
     },
     // The classes a round moon words otherwise than a planet (`classLabel`).
     moonBodyTypes: {
@@ -1002,12 +1002,12 @@ export const fr: Messages = {
       'ocean-world': 'Lune océan',
     },
     ringMoonTypes: {
-      embedded: 'lune des anneaux',
-      resonant: 'lune glacée, en résonance avec les anneaux',
-      edge: 'lune des anneaux',
-      confining: 'lune des anneaux, fixant leur bord',
-      shepherd: 'lune bergère',
-      source: 'petite lune intérieure',
+      embedded: 'Lune des anneaux (petite)',
+      resonant: 'Lune glacée en résonance avec les anneaux (petite)',
+      edge: 'Lune des anneaux (petite)',
+      confining: 'Lune des anneaux fixant leur bord (petite)',
+      shepherd: 'Lune bergère (petite)',
+      source: 'Lune intérieure (petite)',
     },
     spinAxes: 'Axes de rotation',
     spinAxesHelp:
