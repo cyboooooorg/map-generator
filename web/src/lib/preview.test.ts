@@ -15,7 +15,7 @@ const request = (seed: number): SystemRequest => ({ around: { seed } });
 const root = (quantity: 'surface_temperature', value: number): Cause => ({ quantity, value, label: null, input: null, causes: [] });
 const answer = (temperature: number): ResolvedSystem =>
   ({
-    system: { focus: 'p1' },
+    system: { focus: 'p1', seed: 1 },
     extras: { p1: { explanation: { trees: [root('surface_temperature', temperature)] }, similar: null } },
     ignored: [],
   }) as unknown as ResolvedSystem;
@@ -93,6 +93,37 @@ describe('Preview', () => {
     expect(preview.unavailable).toBe(true);
     expect(preview.refusal).toBeNull();
     expect(preview.result).not.toBeNull();
+  });
+
+  it('clears a refusal when the server later fails to answer', async () => {
+    resolve.mockRejectedValueOnce(new ApiFailure(400, 'no', { code: 'out_of_range', field: 'co2', min: 0, max: 100 } as never));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).not.toBeNull();
+    resolve.mockRejectedValueOnce(new ApiFailure(502, 'bad gateway'));
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).toBeNull();
+    expect(preview.unavailable).toBe(true);
+  });
+
+  it('flags nothing on the first answer or a new draw, and counts answers', async () => {
+    resolve.mockResolvedValueOnce(answer(288));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.changed.size).toBe(0);
+    expect(preview.answers).toBe(1);
+    const other = answer(320);
+    other.system.seed = 2;
+    resolve.mockResolvedValueOnce(other);
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.changed.size).toBe(0);
+    resolve.mockResolvedValueOnce({ ...answer(400), system: { ...other.system } });
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.changed.has('surface_temperature')).toBe(true);
+    expect(preview.answers).toBe(3);
   });
 
   it('lists the quantities a change moved', async () => {

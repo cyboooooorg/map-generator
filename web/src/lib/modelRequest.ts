@@ -54,8 +54,8 @@ const OCEAN_KG = 1.4e21;
  * What the seed drew for a lone world, as the request would pin it: the
  * mass it formed with, the water in Earth oceans and the envelope at
  * formation (as `PlanetModel::formation` reads them back), the orbit's
- * eccentricity and the star's age. The volatile factors are not read back
- * (they depend on the formation rule), so they are left out.
+ * eccentricity and the star's age, and the CO₂, N₂ and CH₄ factors the
+ * server read back from the formation rule (`ResolvedSystem.formation`).
  */
 export function drawnValues(result: ResolvedSystem | null): DrawnValues | null {
   const focus = result?.system.focus;
@@ -71,8 +71,24 @@ export function drawnValues(result: ResolvedSystem | null): DrawnValues | null {
     water_oceans: (i.water_fraction * drawn * EARTH_KG) / OCEAN_KG,
     envelope_fraction: envelope,
     radiogenic: i.radiogenic,
+    // The volatile factors depend on the formation rule: the server reads them back.
+    ...(result.formation ? volatileFactors(result.formation.overrides) : {}),
     ...(model.surface ? { life: model.surface.life.arose } : {}),
     eccentricity: body.orbit.eccentricity,
     age_gyr: result.system.star.info.age_gyr,
   };
+}
+
+function volatileFactors(overrides: NonNullable<ResolvedSystem['formation']>['overrides']): DrawnValues {
+  const out: DrawnValues = {};
+  for (const key of ['co2', 'n2', 'ch4'] as const) {
+    const value = overrides[key];
+    if (typeof value === 'number') out[key] = value;
+  }
+  return out;
+}
+
+/** Sets a pinned number; one that is not a number (a cleared box reads NaN) leaves the previous value. */
+export function setPinned(values: ModelValues, key: Exclude<ModelFieldKey, 'life'>, value: number): void {
+  if (Number.isFinite(value)) values[key].value = value;
 }

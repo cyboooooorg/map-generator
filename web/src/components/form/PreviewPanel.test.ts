@@ -25,6 +25,18 @@ describe('PreviewPanel', () => {
     expect(out).not.toContain(t.form.preview.unavailable);
   });
 
+  it('greys the cards while the request is refused, and no button of them submits the form', () => {
+    const preview = new Preview();
+    preview.result = earthLike;
+    expect(html(preview)).not.toContain('stale');
+    preview.refusal = { code: 'out_of_range', field: 'co2', min: 0, max: 100 } as never;
+    expect(html(preview)).toContain('stale');
+    // The panel sits inside the generate form: a button with no type would submit it.
+    const buttons = html(preview).match(/<button\b[^>]*>/g) ?? [];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) expect(button, button).toContain('type="button"');
+  });
+
   it('says so when the preview is unavailable', () => {
     const preview = new Preview();
     preview.unavailable = true;

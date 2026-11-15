@@ -27,6 +27,8 @@ export interface CardSource {
   readonly rivers: RiverIndex | null;
   /** The roots of the cause trees that moved since the previous preview: their lines are highlighted. */
   readonly changed?: ReadonlySet<Quantity>;
+  /** The count of answers behind `changed`: the highlight replays when it grows. */
+  readonly answer?: number;
   /** A preview (the generate form's): nothing to rename or generate, and the links go nowhere. */
   readonly preview?: boolean;
   showSystemBody(body: string | null): void;
@@ -34,7 +36,7 @@ export interface CardSource {
 }
 
 /** The cards' source for the body a resolve asked for (`system.focus`). */
-export function previewSource(result: ResolvedSystem, changed: ReadonlySet<Quantity>): CardSource {
+export function previewSource(result: ResolvedSystem, changed: ReadonlySet<Quantity>, answer = 0): CardSource {
   const focus = result.system.focus;
   return {
     system: result.system,
@@ -48,9 +50,21 @@ export function previewSource(result: ResolvedSystem, changed: ReadonlySet<Quant
     stats: null,
     rivers: null,
     changed,
+    answer,
     preview: true,
     // A preview has one body shown and nothing to open.
     showSystemBody: () => {},
     loadSystem: () => {},
   };
+}
+
+/**
+ * The class that highlights a value the preview just moved: `moved-a` or
+ * `moved-b` by the answer's parity, two names for one animation so that two
+ * answers in a row that move it both replay it (a CSS animation restarts
+ * only when its name changes).
+ */
+export function movedClass(world: Pick<CardSource, 'changed' | 'answer'>, quantity: Quantity): string {
+  if (!world.changed?.has(quantity)) return '';
+  return (world.answer ?? 0) % 2 === 0 ? 'moved-a' : 'moved-b';
 }

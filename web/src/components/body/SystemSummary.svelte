@@ -47,7 +47,7 @@
     <div class="strip" role="group" aria-label={t.card.planets}>
       {#each planets as p (p.id)}
         {@const size = isGiantType(p.type) ? 16 : 11}
-        <button
+        <button type="button"
           class="dot"
           class:current={planetId === p.id}
           class:stub={!p.generated}

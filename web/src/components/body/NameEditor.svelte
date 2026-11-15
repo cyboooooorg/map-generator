@@ -65,7 +65,7 @@
 {:else}
   <strong>{name}</strong>
   {#if !world.preview}
-    <button class="link" onclick={start} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
+    <button type="button" class="link" onclick={start} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
   {/if}
 {/if}
 

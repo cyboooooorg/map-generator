@@ -20,14 +20,15 @@ const archetype = (name: string, mass: number): ArchetypeInfo =>
   ({ spec: `${name}-like`, name: `${name}-like`, description: '', built_in: true, inputs: { mass_earth: mass } }) as unknown as ArchetypeInfo;
 const archetypes = [archetype('earth', 1), archetype('mars', 0.107), archetype('venus', 0.815)];
 
-function html(over: { values?: ModelValues; drawn?: DrawnValues | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; driven?: Quantity[] } = {}): string {
+function html(over: { values?: ModelValues; drawn?: DrawnValues | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; driven?: Quantity[] | ((key: string) => Quantity[]); explained?: boolean } = {}): string {
   return render(ModelFields, {
     props: {
       spec,
       archetypes,
       values: over.values ?? initialModelValues(null),
       drawn: over.drawn ?? null,
-      driven: () => over.driven ?? [],
+      driven: (key: string) => (typeof over.driven === 'function' ? over.driven(key) : (over.driven ?? [])),
+      explained: over.explained ?? false,
       ignored: over.ignored ?? [],
       refusal: over.refusal ?? null,
       open: over.open ?? new Set<string>(),
@@ -54,6 +55,15 @@ describe('ModelFields', () => {
     const out = html({ ignored: ['envelope_fraction'] });
     expect(field(out, 'envelope_fraction')).toContain(t.form.model.notUsed);
     expect(field(out, 'mass_earth')).not.toContain(t.form.model.notUsed);
+  });
+
+  it('says a field no cause tree of the body reads is not used, once a preview exists', () => {
+    const driven = (key: string): Quantity[] => (key === 'water_oceans' ? [] : ['pressure']);
+    const out = html({ driven, explained: true });
+    expect(field(out, 'water_oceans')).toContain(t.form.model.notUsed);
+    expect(field(out, 'mass_earth')).not.toContain(t.form.model.notUsed);
+    // Before any preview nothing is known to be unused.
+    expect(field(html({ driven, explained: false }), 'water_oceans')).not.toContain(t.form.model.notUsed);
   });
 
   it('shows a refusal at its own field only', () => {

@@ -31,7 +31,7 @@
           {#if world.preview}
             <span>{nameOf(moon.id, moon.designation)}</span>
           {:else}
-            <button class="link" onclick={() => world.showSystemBody(moon.id)}>{nameOf(moon.id, moon.designation)}</button>
+            <button type="button" class="link" onclick={() => world.showSystemBody(moon.id)}>{nameOf(moon.id, moon.designation)}</button>
           {/if}
         {:else}
           {t.worldInfo.noMoon}

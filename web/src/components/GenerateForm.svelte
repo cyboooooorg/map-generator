@@ -335,7 +335,7 @@
       }
       for (const key of MODEL_KEYS) {
         const { random, value } = model[key];
-        if (random) continue;
+        if (random || (key !== 'life' && !Number.isFinite(value))) continue;
         const text = t.form.model[key];
         fixed.push({
           label: text.label,
@@ -726,6 +726,7 @@
       drawn={drawn}
       driven={(key) => drivenBy(explanation, key)}
       ignored={preview.result?.ignored ?? []}
+      explained={explanation !== null}
       refusal={preview.refusal}
       open={openGroups}
     />

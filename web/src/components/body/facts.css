@@ -22,11 +22,23 @@
 .facts .unit-help {
   cursor: help;
 }
-/* A value the live preview just changed: a brief highlight. */
-.facts dd.moved {
-  animation: moved 1.5s ease-out;
+/* A value the live preview just changed: a brief highlight. Two names for one
+   animation, so that it replays when the next answer moves the value again. */
+.facts dd.moved-a {
+  animation: moved-a 1.5s ease-out;
 }
-@keyframes moved {
+.facts dd.moved-b {
+  animation: moved-b 1.5s ease-out;
+}
+@keyframes moved-a {
+  from {
+    background: color-mix(in srgb, var(--link) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+@keyframes moved-b {
   from {
     background: color-mix(in srgb, var(--link) 30%, transparent);
   }
@@ -35,7 +47,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .facts dd.moved {
+  .facts dd.moved-a,
+  .facts dd.moved-b {
     animation: none;
   }
 }

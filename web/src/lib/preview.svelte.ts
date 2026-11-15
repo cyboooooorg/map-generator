@@ -22,6 +22,8 @@ export class Preview {
   pending = $state(false);
   /** The roots of the explanation that moved by more than 1 % since the previous answer. */
   changed = $state<ReadonlySet<Quantity>>(new Set());
+  /** How many answers have come: the cards replay their highlight on each. */
+  answers = $state(0);
 
   private timer: ReturnType<typeof setTimeout> | null = null;
   private controller: AbortController | null = null;
@@ -56,7 +58,13 @@ export class Preview {
     try {
       const answer = await api.resolveSystem(request, controller.signal);
       if (id !== this.latest) return;
-      this.changed = changedQuantities(explanationOf(this.result), explanationOf(answer));
+      // Nothing moved on the first answer or a new draw: it is another world.
+      const previous = this.result;
+      this.changed =
+        previous && previous.system.seed === answer.system.seed
+          ? changedQuantities(explanationOf(previous), explanationOf(answer))
+          : new Set();
+      this.answers++;
       this.result = answer;
       this.refusal = null;
       this.unavailable = false;
@@ -66,6 +74,8 @@ export class Preview {
         this.refusal = error.detail;
         this.unavailable = false;
       } else {
+        // Unavailable is not refused: the old refusal is about an older request.
+        this.refusal = null;
         this.unavailable = true;
       }
     }

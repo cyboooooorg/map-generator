@@ -25,7 +25,7 @@
 <li>
   {#if oninput && cause.input !== null}
     {@const input = cause.input}
-    <button class="input" title={field ? t.causes.inputTitle({ field }) : undefined} onclick={() => oninput(input)}
+    <button type="button" class="input" title={field ? t.causes.inputTitle({ field }) : undefined} onclick={() => oninput(input)}
       >{name ? t.causes.line({ name, value: text }) : text}</button
     >
   {:else}

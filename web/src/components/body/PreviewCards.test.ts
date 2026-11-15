@@ -5,7 +5,7 @@ import type { Cause } from '../../lib/api/types/Cause';
 import type { InputField } from '../../lib/api/types/InputField';
 import type { Quantity } from '../../lib/api/types/Quantity';
 import type { ResolvedSystem } from '../../lib/api/types/ResolvedSystem';
-import { previewSource } from '../../lib/cardSource';
+import { movedClass, previewSource } from '../../lib/cardSource';
 import { formatSurfaceTemperature } from '../../lib/format';
 import AtmosphereCard from './AtmosphereCard.svelte';
 import BodyHeader from './BodyHeader.svelte';
@@ -71,8 +71,16 @@ describe('cards from a resolved body', () => {
 
   it('marks the line whose root moved', () => {
     const moved = html(AtmosphereCard, earthLike, new Set<Quantity>(['surface_temperature']));
-    expect(moved).toMatch(/<dd class="moved">15 °C/);
+    expect(moved).toMatch(/<dd class="moved-a">15 °C/);
     expect(html(AtmosphereCard, earthLike)).not.toContain('moved');
+  });
+
+  it('alternates the highlight class per answer so that it replays', () => {
+    const changed = new Set<Quantity>(['pressure']);
+    const a = movedClass({ changed, answer: 4 }, 'pressure');
+    const b = movedClass({ changed, answer: 5 }, 'pressure');
+    expect([a, b]).toEqual(['moved-a', 'moved-b']);
+    expect(movedClass({ changed, answer: 5 }, 'liquid')).toBe('');
   });
 });
 

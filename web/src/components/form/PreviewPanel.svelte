@@ -23,7 +23,7 @@
 
   let { preview, onjump, onreroll }: Props = $props();
 
-  const world = $derived(preview.result ? previewSource(preview.result, preview.changed) : null);
+  const world = $derived(preview.result ? previewSource(preview.result, preview.changed, preview.answers) : null);
   // A preview has no name to give nor maps to queue.
   const never = () => {};
 </script>
@@ -40,7 +40,7 @@
     </span>
   </header>
   {#if world}
-    <div class="cards" class:stale={preview.pending}>
+    <div class="cards" class:stale={preview.pending || preview.refusal !== null}>
       <BodyHeader {world} onRenamed={never} onGenerate={never} oninput={onjump} />
       <OrbitCard {world} />
       <InteriorCard {world} oninput={onjump} />

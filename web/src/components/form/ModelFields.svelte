@@ -3,6 +3,7 @@
   // field is drawn (the value the seed drew is shown, greyed) or pinned (a
   // slider and a number box on its scale, with the Solar System's values to
   // click). Each says what it drives, and what the server refused of it.
+  import { setPinned } from '../../lib/modelRequest';
   import { t } from '../../lib/i18n/index.svelte';
   import { detailText, errorField } from '../../lib/i18n/errors';
   import { formatUpTo } from '../../lib/format';
@@ -24,13 +25,15 @@
     driven: (key: ModelFieldKey) => Quantity[];
     /** The request fields the planet has no use for. */
     ignored: string[];
+    /** Whether a preview answered: the cause trees then say which fields the planet uses. */
+    explained: boolean;
     /** The server's refusal of the form, shown at the field it is about. */
     refusal: ErrorDetail | null;
     /** The ids of the groups that are unfolded. */
     open: Set<string>;
   }
 
-  let { spec, archetypes, values = $bindable(), drawn, driven, ignored, refusal, open }: Props = $props();
+  let { spec, archetypes, values = $bindable(), drawn, driven, ignored, explained, refusal, open }: Props = $props();
 
   const refusedField = $derived(refusal ? errorField(refusal) : null);
   const numeric = (key: Exclude<ModelFieldKey, 'life'>) => values[key].value as number;
@@ -41,8 +44,10 @@
     entry.random = !on;
     if (on) entry.value = drawn?.[key] ?? PIN_DEFAULTS[key];
   }
+  /** A field the planet has no use for: the server said so, or no cause tree of its body reads it. */
+  const isUnused = (key: ModelFieldKey) => ignored.includes(key) || (explained && driven(key).length === 0);
   function setValue(key: Exclude<ModelFieldKey, 'life'>, value: number): void {
-    values[key].value = value;
+    setPinned(values, key, value);
   }
   function shownText(key: Exclude<ModelFieldKey, 'life'>, value: number): string {
     return `${formatUpTo(toShown(key, value), 3)} ${t.form.model[key].unit}`.trim();
@@ -73,7 +78,7 @@
       <p class="help">{t.form.model.groups[group.id].help}</p>
       {#each group.fields as key (key)}
         {@const text = t.form.model[key]}
-        {@const unused = ignored.includes(key)}
+        {@const unused = isUnused(key)}
         {@const entry = values[key]}
         <div class="field" id={`model-${key}`} class:unused class:pinned={!entry.random}>
           <div class="head">

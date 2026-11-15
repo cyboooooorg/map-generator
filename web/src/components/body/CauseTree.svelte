@@ -19,7 +19,7 @@
 </script>
 
 {#if tree && tree.causes.length > 0}
-  <button class="why" aria-expanded={open} title={open ? t.causes.whyClose : t.causes.whyHelp} onclick={ontoggle}
+  <button type="button" class="why" aria-expanded={open} title={open ? t.causes.whyClose : t.causes.whyHelp} onclick={ontoggle}
     ><span aria-hidden="true">{open ? '▾' : '▸'}</span> {t.causes.why}</button
   >
   {#if open}

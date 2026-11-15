@@ -6,7 +6,7 @@
   import { archetypeName, classLabel } from '../../lib/i18n/names.svelte';
   import type { SystemSummary } from '../../lib/api/types/SystemSummary';
   import { jobs } from '../../lib/jobs.svelte';
-  import type { CardSource } from '../../lib/cardSource';
+  import { movedClass, type CardSource } from '../../lib/cardSource';
   import CauseTree from './CauseTree.svelte';
   import type { InputField } from '../../lib/api/types/InputField';
   import { treeFor } from '../../lib/causes';
@@ -34,8 +34,10 @@
   const explanation = $derived(world.shownExtras?.explanation ?? null);
   let classOpen = $state(false);
   // The tree starts closed on every body.
+  // A preview answer is a new object for the same body: only the id counts.
+  const bodyId = $derived(world.systemBody);
   $effect(() => {
-    void world.systemBody;
+    void bodyId;
     classOpen = false;
   });
   const similar = $derived(world.shownExtras?.similar ?? null);
@@ -49,7 +51,7 @@
       {#if host && world.preview}
         <span class="host">{t.cards.host({ name: nameOf(host.id, host.designation) })}</span>
       {:else if host}
-        <button class="host" onclick={() => world.showSystemBody(host.id)} title={t.cards.hostHelp}
+        <button type="button" class="host" onclick={() => world.showSystemBody(host.id)} title={t.cards.hostHelp}
           >{t.cards.host({ name: nameOf(host.id, host.designation) })}</button
         >
       {/if}
@@ -58,7 +60,7 @@
           ? t.card.moonOf({ planet: nameOf(host.id, host.designation) })
           : t.card.planetOf({ star: starName })}</small
       >
-      <div class="why" class:moved={world.changed?.has('class') ?? false}>
+      <div class="why {movedClass(world, 'class')}">
         <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} {oninput} />
       </div>
       {#if similar}
@@ -68,7 +70,7 @@
     {#if !body.generated && !world.preview}
       <p class="muted">{busy ? t.card.generating : world.systemEvicted.includes(body.id) ? t.card.evicted : t.card.notGenerated}</p>
       {#if !busy}
-        <button class="primary" onclick={() => world.systemId && onGenerate(world.systemId, body.id)}>{t.card.generate}</button>
+        <button type="button" class="primary" onclick={() => world.systemId && onGenerate(world.systemId, body.id)}>{t.card.generate}</button>
       {/if}
     {/if}
   </section>
@@ -92,10 +94,22 @@
   .why {
     flex-basis: 100%;
   }
-  .why.moved {
-    animation: moved 1.5s ease-out;
+  /* Two names for one animation: it replays when the name changes. */
+  .why.moved-a {
+    animation: moved-a 1.5s ease-out;
   }
-  @keyframes moved {
+  .why.moved-b {
+    animation: moved-b 1.5s ease-out;
+  }
+  @keyframes moved-a {
+    from {
+      background: color-mix(in srgb, var(--link) 30%, transparent);
+    }
+    to {
+      background: transparent;
+    }
+  }
+  @keyframes moved-b {
     from {
       background: color-mix(in srgb, var(--link) 30%, transparent);
     }
@@ -104,7 +118,8 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .why.moved {
+    .why.moved-a,
+    .why.moved-b {
       animation: none;
     }
   }

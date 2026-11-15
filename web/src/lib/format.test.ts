@@ -97,11 +97,11 @@ describe('format', () => {
       },
       formation: {
         mass_earth: 8,
-        overrides: { core_mass_fraction: 0.3, water_oceans: 341.3, envelope_fraction: 0.03, co2: 1.4, n2: 0.7, radiogenic: 0.9, life: false },
+        overrides: { core_mass_fraction: 0.3, water_oceans: 341.3, envelope_fraction: 0.03, co2: 1.4, n2: 0.7, ch4: 0.6, radiogenic: 0.9, life: false },
       },
     } as unknown as WorldMetadata;
     const request = requestFromWorld(thinned);
-    expect(request).toMatchObject({ mass_earth: 8, envelope_fraction: 0.03, water_oceans: 341.3, co2: 1.4, n2: 0.7, life: false });
+    expect(request).toMatchObject({ mass_earth: 8, envelope_fraction: 0.03, water_oceans: 341.3, co2: 1.4, n2: 0.7, ch4: 0.6, life: false });
     expect(request).not.toHaveProperty('sea_level');
     expect(rerollRequest(thinned, 9)).toMatchObject({ seed: 9, mass_earth: 8, envelope_fraction: 0.03 });
     expect(driftRequest(thinned, -50)).toMatchObject({ drift_ma: -50, mass_earth: 8, co2: 1.4, n2: 0.7 });
