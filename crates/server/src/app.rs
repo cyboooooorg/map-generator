@@ -5823,7 +5823,7 @@ mod tests {
         assert_eq!(value("earth", "mass_earth"), Some(1.0));
         assert_eq!(value("mars", "mass_earth"), Some(0.107));
         assert!(value("titan", "water_oceans").unwrap() > 10.0);
-        assert_eq!(value("earth", "age_gyr"), Some(4.6));
+        assert_eq!(value("earth", "age_gyr"), Some(4.57));
     }
 
     #[tokio::test]

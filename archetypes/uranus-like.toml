@@ -12,6 +12,10 @@ reference = "Uranus"
 [inputs]
 mass_earth = [13.0, 16.0]
 envelope_fraction = [0.12, 0.18]
+# The age of the Solar System, 4.567 Ga by the oldest solids; the
+# planets formed in its first tens of Ma (Bouvier & Wadhwa 2010,
+# doi:10.1038/ngeo941).
+age_gyr = 4.57
 
 [orbit]
 star = "G2V"

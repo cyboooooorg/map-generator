@@ -63,17 +63,26 @@
 //! [`crate::planet::reference::SOLAR_BODIES`] (sources in its module
 //! docs) with ranges of about ±10 % on mass and insolation, the
 //! eccentricities and tilts of NASA's planetary fact sheets
-//! (nssdc.gsfc.nasa.gov/planetary/factsheet; tilts read as seasons).
-//! `mars-like` departs from Mars's reference values on two inputs, so
-//! that it renders as Mars does: its water, 0.002 to 0.008 oceans, about
-//! the 0.004 of its polar deposits and ground ice (Carr & Head 2015, see
-//! `planet::classify::ICE_WORLD_MIN_OCEANS`), stays under the 0.01 that
-//! shows as ice; its CO₂ and N₂ factors, 0.3 (Calibration, no source:
-//! Mars lost most of its early air, which the formation rule does not
-//! model), bring its air to about the fact sheet's 6 mbar at the Sun's
-//! age on the median of the seeds; single worlds spread from about 0.002
-//! to 0.02 bar with the mass (escape takes more from a lighter one) and
-//! the star's age (a young one has lost less).
+//! (nssdc.gsfc.nasa.gov/planetary/factsheet; tilts read as seasons), and
+//! the Solar System's age, 4.57 Gyr (Bouvier & Wadhwa 2010,
+//! doi:10.1038/ngeo941). `earth-like`, `mars-like` and `titan-like` are
+//! faithful: they land in their body's surface pressure on every seed
+//! (Earth 0.7 to 1.3 bar, Mars 4 to 10 mbar, Titan 1.2 to 1.8 bar).
+//! Each pins the fewest inputs that hold it, the measured values first,
+//! then a volatile factor calibrated with the real body as its target
+//! (the comments of each file give the sources):
+//!
+//! - `earth-like`: its mass, light and ocean fixed at 1, and `nh3 = 0.7`,
+//!   the ammonia whose photolysis feeds its N₂;
+//! - `mars-like`: its mass (0.1074) and light (0.431) fixed, whose
+//!   escape sets its air, and `co2 = 0.4`; its water, 0.002 to 0.008
+//!   oceans, about the 0.004 of its polar deposits and ground ice (Carr &
+//!   Head 2015, see `planet::classify::ICE_WORLD_MIN_OCEANS`), stays
+//!   under the 0.01 that shows as ice;
+//! - `titan-like`: its mass fixed (0.0225), and `n2 = 0.8`, the nitrogen
+//!   its ices carry, beside its methane factor.
+//!
+//! `venus-like` holds 60 to 120 bar without a pin.
 //! The exoplanet kinds (`super-earth`, `mini-neptune`, `ocean-world`,
 //! `lava-world`, `hot-jupiter`, `hot-neptune`) name a range typical of the kind:
 //! Calibration, no source. The four small ones keep near-circular orbits
@@ -911,7 +920,10 @@ mod tests {
         let (a, b) = (aged("mars-ish", "4.57"), aged("young", "[1.0, 2.0]"));
         match asked_age_gyr(&[&a, &b], 7) {
             Err(crate::request::RequestError::ArchetypeAges { archetypes }) => {
-                assert_eq!(archetypes, vec!["mars-ish".to_string(), "young".to_string()]);
+                assert_eq!(
+                    archetypes,
+                    vec!["mars-ish".to_string(), "young".to_string()]
+                );
             }
             other => panic!("{other:?}"),
         }
@@ -976,8 +988,14 @@ mod tests {
 
     const AGE_GYR: f32 = 4.6;
 
+    /// The system age `a` asks for, else [`AGE_GYR`].
+    fn age_of(a: &Archetype, seed: u32) -> f32 {
+        asked_age_gyr(&[a], seed).unwrap().unwrap_or(AGE_GYR)
+    }
+
     /// The model of `a` at its own insolation (or period) round its own
-    /// star (a G2V when it names none) of 4.6 Gyr and metallicity 0, drawn
+    /// star (a G2V when it names none) of its own age (else 4.6 Gyr) and
+    /// metallicity 0, drawn
     /// from `seed`. What the archetype leaves out is drawn by the
     /// formation context.
     fn model_of(a: &Archetype, seed: u32) -> PlanetModel {
@@ -992,7 +1010,7 @@ mod tests {
             .orbit_au(f64::from(v.luminosity), f64::from(v.mass), &mut rng)
             .unwrap_or_else(|| panic!("{} has no orbit", a.name)) as f32;
         let eccentricity = a.orbit.eccentricity.map_or(0.0, |e| e.pick(&mut rng));
-        let star = StarInfo::new(host, orbit_au, eccentricity, AGE_GYR);
+        let star = StarInfo::new(host, orbit_au, eccentricity, age_of(a, seed));
         let ice_line_au = 2.7 * star.luminosity.sqrt();
         let context = Context::of(&star, 0.0, ice_line_au);
         let overrides = a.overrides(&mut rng);
@@ -1022,7 +1040,7 @@ mod tests {
             star,
             orbit_au,
             mid(host.orbit.eccentricity.unwrap()) as f32,
-            AGE_GYR,
+            age_of(a, seed),
         );
         let context = Context::of(&info, 0.0, 2.7 * info.luminosity.sqrt());
         let host_earth = mid(host.inputs.mass_earth);
@@ -1187,39 +1205,31 @@ mass_earth = 5000.0
         assert_eq!(o.radiogenic, None);
     }
 
-    /// Known departure: Earth's air is not an input of the model. The
-    /// pressure comes from the N2 rule (set here, `n2 = 1`) plus the
-    /// nitrogen that ammonia photolysis leaves, and the ammonia scatter
-    /// (`10^N(0, 0.3)` of the formation rule) cannot be set by an
-    /// archetype: single seeds come out between 0.5 and 3.6 bar. The test
-    /// checks the ocean and the life per seed, and the pressure on the
-    /// median of the seeds.
+    /// Earth's 1.013 bar, within 0.7 to 1.3 on every seed: the archetype
+    /// pins the mass, the light and the ammonia factor whose photolysis
+    /// feeds the N₂.
     #[test]
     fn earth_like_keeps_its_ocean_and_its_life() {
         let a = Archetype::load("earth-like").unwrap();
-        let mut bars = Vec::new();
         for seed in 0..20 {
             let m = model_of(&a, seed);
             let s = m.surface.expect("a bare world has a surface");
             let oceans = s.water.oceans;
             assert!((0.5..2.0).contains(&oceans), "seed {seed}: {oceans} oceans");
             assert!(s.life.arose, "seed {seed}: {:?}", s.life);
-            bars.push(s.gases.total());
+            let bar = s.gases.total();
+            assert!((0.7..=1.3).contains(&bar), "seed {seed}: {bar} bar");
         }
-        bars.sort_by(f64::total_cmp);
-        let median = (bars[9] + bars[10]) / 2.0;
-        assert!((0.7..1.3).contains(&median), "median {median} bar");
     }
 
     /// Mars keeps about 0.004 oceans of ice (Carr & Head 2015, see
     /// `planet::classify::ICE_WORLD_MIN_OCEANS`), too little to show: the
-    /// barren look, not the frozen one; and 6 mbar of air, which the
-    /// archetype's lowered CO₂ and N₂ factors give on the median of the
-    /// seeds (single seeds spread with the mass, which sets the escape).
+    /// barren look, not the frozen one; and its 4 to 10 mbar of air
+    /// (6.36 mbar on average, seasonal 4 to 9) on every seed, which the
+    /// archetype's pinned mass, light and CO₂ factor give.
     #[test]
     fn mars_like_is_a_barren_desert_under_a_thin_air() {
         let a = Archetype::load("mars-like").unwrap();
-        let mut bars = Vec::new();
         for seed in 0..20 {
             let m = model_of(&a, seed);
             assert_eq!(crate::planet::interim::base_of(&m), "barren", "seed {seed}");
@@ -1229,15 +1239,81 @@ mass_earth = 5000.0
                 "seed {seed}: {} oceans",
                 s.water.oceans
             );
-            bars.push(s.gases.total());
+            let bar = s.gases.total();
+            assert!((0.004..=0.010).contains(&bar), "seed {seed}: {bar} bar");
         }
-        bars.sort_by(f64::total_cmp);
-        let median = (bars[9] + bars[10]) / 2.0;
-        assert!(
-            (0.004..0.012).contains(&median),
-            "median {median} bar: {bars:?}"
-        );
-        assert!(bars[0] > 0.001 && bars[19] < 0.03, "{bars:?}");
+    }
+
+    /// Titan's 1.47 bar (Fulchignoni et al. 2005,
+    /// doi:10.1038/nature04314), within 1.2 to 1.8 on every seed, under a
+    /// few percent of methane.
+    #[test]
+    fn titan_like_has_titan_air() {
+        let a = Archetype::load("titan-like").unwrap();
+        for seed in 0..20 {
+            let m = moon_model_of(&a, seed);
+            assert_eq!(m.class.key(), "hydrocarbon-world", "seed {seed}: {m:?}");
+            let gases = m.surface.expect("a moon has a surface").gases;
+            let bar = gases.total();
+            assert!((1.2..=1.8).contains(&bar), "seed {seed}: {bar} bar");
+            let ch4 = gases.ch4 / bar;
+            assert!((0.01..=0.10).contains(&ch4), "seed {seed}: CH4 {ch4}");
+        }
+    }
+
+    /// The same ranges when a whole system asks for the archetype, round
+    /// the orbit and the age it draws there.
+    #[test]
+    fn faithful_archetypes_hold_in_a_whole_system() {
+        for (name, lo, hi) in [
+            ("earth-like", 0.7, 1.3),
+            ("mars-like", 0.004, 0.010),
+            ("venus-like", 60.0, 120.0),
+            ("titan-like", 1.2, 1.8),
+        ] {
+            let a = Archetype::load(name).unwrap();
+            for seed in 0..20 {
+                let (context, model, _) = drawn(&a, seed);
+                assert!((context.age_gyr - 4.57).abs() < 1e-6, "{name} seed {seed}");
+                let bar = model.surface.expect("a surface").gases.total();
+                assert!((lo..=hi).contains(&bar), "{name} seed {seed}: {bar} bar");
+            }
+        }
+    }
+
+    #[test]
+    fn solar_system_archetypes_carry_the_solar_age() {
+        for name in [
+            "mercury-like",
+            "venus-like",
+            "earth-like",
+            "mars-like",
+            "jupiter-like",
+            "saturn-like",
+            "uranus-like",
+            "neptune-like",
+            "io-like",
+            "europa-like",
+            "ganymede-like",
+            "callisto-like",
+            "titan-like",
+            "enceladus-like",
+            "triton-like",
+        ] {
+            let a = Archetype::load(name).unwrap();
+            assert_eq!(a.inputs.age_gyr, Some(ParamDefault::Fixed(4.57)), "{name}");
+        }
+        for name in [
+            "hot-jupiter",
+            "hot-neptune",
+            "mini-neptune",
+            "super-earth",
+            "ocean-world",
+            "lava-world",
+        ] {
+            let a = Archetype::load(name).unwrap();
+            assert_eq!(a.inputs.age_gyr, None, "{name}");
+        }
     }
 
     #[test]

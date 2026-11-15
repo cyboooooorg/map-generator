@@ -203,16 +203,25 @@ mod tests {
         moon(0.0225, 0.45, MoonBirth::Disk, SATURN_KG, 1.2219e9, 0.0288)
     }
 
+    /// Titan at Saturn's orbit with the `titan-like` archetype's factors:
+    /// its 1.47 bar (Fulchignoni et al. 2005, doi:10.1038/nature04314)
+    /// within 1.2 to 1.8, and a few percent of methane, on every seed.
     #[test]
     fn titan_comes_out_a_hydrocarbon_world() {
-        let m = model(9.54, &titan());
-        let s = m.surface.expect("surface");
-        assert_eq!(m.class, PlanetClass::HydrocarbonWorld, "{m:?}");
-        let p = s.gases.total();
-        assert!((1.0..2.5).contains(&p), "{s:?}");
-        let ch4 = s.gases.ch4 / p;
-        assert!((0.01..0.10).contains(&ch4), "{s:?}");
-        assert!(ocean_km(&m) < 400.0, "{:?}", m.ice_shell);
+        use rand::SeedableRng;
+        let archetype = crate::archetype::Archetype::load("titan-like").unwrap();
+        for seed in 0..20 {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(seed));
+            let overrides = archetype.overrides(&mut rng);
+            let m = derive_moon_model(seed, "p1/m1", &planet_at(9.54), &titan(), &overrides);
+            let s = m.surface.expect("surface");
+            assert_eq!(m.class, PlanetClass::HydrocarbonWorld, "seed {seed}: {m:?}");
+            let p = s.gases.total();
+            assert!((1.2..=1.8).contains(&p), "seed {seed}: {s:?}");
+            let ch4 = s.gases.ch4 / p;
+            assert!((0.01..=0.10).contains(&ch4), "seed {seed}: {s:?}");
+            assert!(ocean_km(&m) < 400.0, "{:?}", m.ice_shell);
+        }
     }
 
     #[test]

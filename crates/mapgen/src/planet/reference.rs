@@ -99,8 +99,10 @@ pub const ECCENTRICITIES: &[(&str, f64)] = &[
     ("Mars", 0.0934),
 ];
 
-/// The age of the Sun, Gyr (the age the reference exposures use).
-pub const SUN_AGE_GYR: f64 = 4.6;
+/// The age of the Solar System, Gyr: 4.567 Ga by the oldest solids
+/// (Bouvier & Wadhwa 2010, doi:10.1038/ngeo941), as the Solar System
+/// archetypes set it.
+pub const SUN_AGE_GYR: f64 = 4.57;
 
 /// The reference bodies a model field is quoted at: the planets, Titan and
 /// the giants that tell its scale.
