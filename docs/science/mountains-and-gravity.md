@@ -249,9 +249,11 @@ flowchart LR
    its sea low and its continents high and flat, no longer reads its
    platforms as mountains (`super-earth`'s plate worlds, seeds 1–4, 6
    and 8 at 256 × 128: 1–17 % of land Mountain or Snow, against 35–69 %
-   measured from the sea), while `earth-like` worlds, their sea above the
-   shelf break, keep their band (6.5–13.5 %, unchanged). Dry worlds and
-   moons keep the band above the sea.
+   measured from the sea). An `earth-like` world whose sea stands above
+   the shelf break keeps its band (seeds 1–4: 6.5–13.5 %, unchanged); a
+   drier or heavier draw, its sea below it, measures it from the shelf
+   break (with 0.8 Earth oceans, seeds 1–3: 5.8–12.8 % against 12–25 %
+   from the sea). Dry worlds and moons keep the band above the sea.
 6. **Range.** Elevations beyond ±0.85 units are compressed with `tanh` into
    $[-1, 1]$ (`within_range`), not clipped, so the tall relief of light
    worlds keeps its summits.

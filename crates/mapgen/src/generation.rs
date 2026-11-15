@@ -884,10 +884,10 @@ enum HighlandDatum {
     /// crust stands above it, its thick crust's Airy step, is taken off,
     /// so a plateau counts as if its crust were thin.
     ThinCrust,
-    /// The higher of its sea and its continental datum ([`CONTINENTAL_DATUM`]
-    /// above the thin crust's): the given elevation units, by which that
-    /// datum stands above its sea (0 when the sea is higher), are taken
-    /// off everywhere.
+    /// The higher of its sea and its continental datum
+    /// ([`continental_datum`] above the thin crust's): the given elevation
+    /// units, by which that datum stands above its sea (0 when the sea is
+    /// higher), are taken off everywhere.
     Continents(f32),
 }
 
@@ -895,9 +895,11 @@ enum HighlandDatum {
 /// ([`CRUST_DATUM`]), elevation units, for the crust `crust`: its shelf
 /// break, where the continental slope meets the shelf ([`SLOPE_NOISE`]
 /// into the continents' noise, see [`crust_thickness_km`]). Earth's crust
-/// puts it 3.09 km above the old floor; `earth-like` worlds, filled with
-/// Earth's ocean, have their sea a little above it, so their band is
-/// measured from the sea as before.
+/// puts it 3.09 km above the old floor. An `earth-like` world whose sea
+/// stands above it (seeds 1-4 at 256 × 128) measures its band from the
+/// sea as before; a drier or heavier draw, its sea below
+/// it, measures it from the shelf break (with 0.8 Earth oceans, seeds 1-3
+/// put it 0.55-0.81 km above their sea).
 fn continental_datum(crust: &Crust) -> f32 {
     floating(SLOPE_NOISE, crust)
 }
@@ -3494,8 +3496,9 @@ pub(crate) mod tests {
     /// the continental datum, not from the sea, so a high platform is not
     /// a mountain range (#459). Measured from the sea, `super-earth`
     /// seeds 1-4, 6 and 8 (plates) had 35-69 % of their land Mountain or
-    /// Snow, 1-17 % now; `earth-like`
-    /// worlds, whose sea stands above the datum, keep 6-14 %.
+    /// Snow, 1-17 % now. `earth-like` seeds 1-3, whose sea stands above
+    /// the datum, keep their 6-14 %; a drier `earth-like` draw measures
+    /// from the shelf break, a bounded shift.
     #[test]
     fn plate_worlds_measure_their_highlands_from_the_continents() {
         for seed in [1u32, 3, 6] {
@@ -3508,6 +3511,35 @@ pub(crate) mod tests {
             let p = preset_params("earth-like", seed, 256, 128);
             let share = highland_share(&generate(&p).world);
             assert!((share - main).abs() < 0.01, "earth-like {seed}: {share}");
+        }
+        // A drier `earth-like` draw (0.8 Earth oceans) has its sea under
+        // the shelf break, 0.55-0.81 km on seeds 1-3: its band is measured
+        // from the shelf break and keeps a mountain share of Earth's order,
+        // 5.8-12.8 % of land, where measured from the sea it was 12-25 %.
+        for seed in [1u32, 2, 3] {
+            let request = crate::request::WorldRequest {
+                planet: Some("earth-like".into()),
+                seed: Some(seed),
+                width: Some(256),
+                height: Some(128),
+                moons: Some(crate::moons::MoonsMode::None),
+                water_oceans: Some(0.8),
+                ..Default::default()
+            };
+            let resolved = request
+                .resolve(
+                    &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed)),
+                )
+                .unwrap();
+            let mut p = resolved.params.clone();
+            crate::planet::interim::calibrate(&mut p, resolved.model());
+            let HighlandDatum::Continents(step) = Sampler::new(&p).highland_datum else {
+                panic!("seed {seed}: not a plate world");
+            };
+            let km = step * crate::craters::ELEVATION_KM;
+            assert!(km > 0.0 && km < 1.0, "seed {seed}: {km} km");
+            let share = highland_share(&generate(&p).world);
+            assert!((0.04..0.15).contains(&share), "seed {seed}: {share}");
         }
     }
 

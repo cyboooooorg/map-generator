@@ -586,7 +586,12 @@ crust's datum. `super-earth` at 256 × 128, seeds 1–4, 6 and 8 (plates),
 Mountain + Snow 34.5 → 1.1, 61.5 → 5.6, 42.0 → 1.1, 40.9 → 17.1,
 69.2 → 6.7, 39.7 → 5.5 % of land; land above 2 km is unchanged (the
 relief does not move). `earth-like` seeds 1–4, whose sea stands above the
-shelf break, keep 12.2, 13.5, 6.5 and 8.5 %, identical.
+shelf break, keep 12.2, 13.5, 6.5 and 8.5 %, identical. A drier or
+heavier `earth-like` draw has its sea below the shelf break and measures
+its band from it: with 0.8 Earth oceans, seeds 1–3 have their sea
+0.55–0.81 km below it and 9.4, 12.8 and 5.8 % of land Mountain or Snow,
+where measured from the sea they had 23.2, 24.9 and 11.9 % (with 0.9
+oceans, 0.14–0.40 km, 10.7, 14.2, 6.3 % against 16.5, 18.1, 7.3 %).
 
 ### Outcome (impact flux and crater size from the orbit, #313, 2026-11-14)
 
