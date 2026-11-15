@@ -233,8 +233,8 @@ pub enum ErrorDetail {
         asked: u32,
         fits: u32,
     },
-    /// The archetype cannot be asked for alone (a giant's moon: ask for it
-    /// in a whole system), or its file is not valid.
+    /// A giant's moon archetype asked for alone: ask for it in a whole
+    /// system, which gives it its giant.
     BadArchetype { archetype: String },
     /// The age asked is not between 0 and the star's main-sequence life.
     BadAge { age_gyr: f32, lifetime_gyr: f32 },
@@ -283,9 +283,12 @@ impl ErrorDetail {
                 water_oceans: *water_oceans,
                 mass_earth: *mass_earth,
             }),
-            RequestError::BadArchetype(archetype) => Some(Self::BadArchetype {
+            RequestError::MoonArchetypeAlone(archetype) => Some(Self::BadArchetype {
                 archetype: archetype.clone(),
             }),
+            // An archetype file that does not load: the catalog serves
+            // names only, so no request reaches it; the text is all there is.
+            RequestError::BadArchetype(_) => None,
             RequestError::BadAge {
                 age_gyr,
                 lifetime_gyr,

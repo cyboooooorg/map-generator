@@ -1391,7 +1391,8 @@ export const fr: Messages = {
     hotGiantMoons: (p) =>
       `Pas autant de lunes pour une géante si près de son étoile (${p.count} demandées)${S}: sa sphère de Hill est trop petite, ou les marées de son étoile l’ont rendue synchrone et ses lunes tombent. Choisissez une orbite plus lointaine ou moins de lunes.`,
     unknownArchetype: (p) => `Aucun archétype de planète ne s’appelle ${p.archetype}.`,
-    badArchetype: `Une lune de géante ne se demande pas seule${S}: demandez-la dans un système entier, qui lui donne sa géante.`,
+    badArchetype: (p) =>
+      `${p.archetype} est une lune de géante, elle ne se demande pas seule${S}: demandez-la dans un système entier, qui lui donne sa géante.`,
     badAge: (p) =>
       `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge ou choisissez une étoile plus longévive.`,
     tooManyPixels: (p) =>

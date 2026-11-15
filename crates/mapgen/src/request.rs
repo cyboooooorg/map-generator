@@ -238,6 +238,9 @@ pub enum RequestError {
     UnknownArchetype(String),
     /// An archetype file that does not load (unreadable or invalid).
     BadArchetype(String),
+    /// A giant's moon archetype asked for alone: it needs its giant, so a
+    /// whole system asks for it.
+    MoonArchetypeAlone(String),
     /// More water than the planet weighs (with its envelope).
     WaterHeavierThanPlanet { water_oceans: f64, mass_earth: f64 },
     /// The age asked is not between 0 and the star's main-sequence life.
@@ -306,6 +309,10 @@ impl fmt::Display for RequestError {
                 crate::archetype::built_in_names().join(", ")
             ),
             RequestError::BadArchetype(e) => write!(f, "planet: {e}"),
+            RequestError::MoonArchetypeAlone(name) => write!(
+                f,
+                "planet: {name} is a giant's moon: ask for it in a whole system (--system {name}=1)"
+            ),
             RequestError::WaterHeavierThanPlanet {
                 water_oceans,
                 mass_earth,
@@ -536,10 +543,7 @@ impl WorldRequest {
         // A moon archetype has no orbit of its own round a star: it is
         // asked for in a whole system, which gives it its giant.
         if let Some(a) = archetype.as_ref().filter(|a| a.moon.is_some()) {
-            return Err(RequestError::BadArchetype(format!(
-                "{} is a giant's moon: ask for it in a whole system (--system {}=1)",
-                a.name, a.name
-            )));
+            return Err(RequestError::MoonArchetypeAlone(a.name.clone()));
         }
         let a = archetype.as_ref();
         let seed = self.seed.unwrap_or_else(|| rng.random());

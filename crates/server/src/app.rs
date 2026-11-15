@@ -5105,6 +5105,9 @@ mod tests {
                 "{code}: the routes disagree"
             );
             assert_eq!(json(&resolved)["detail"]["code"], code, "{resolved}");
+            if code == "bad_archetype" {
+                assert_eq!(json(&resolved)["detail"]["archetype"], "titan-like");
+            }
         }
     }
 

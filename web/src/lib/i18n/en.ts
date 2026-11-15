@@ -1468,7 +1468,8 @@ export const en = {
     hotGiantMoons: (p: { count: number }) =>
       `Not that many moons for a giant this close to its star (${p.count} asked for): its Hill sphere is too small, or its star's tides have locked it and its moons spiral in. Pick a farther orbit or fewer moons.`,
     unknownArchetype: (p: { archetype: string }) => `There is no planet archetype named ${p.archetype}.`,
-    badArchetype: "A giant's moon cannot be asked for alone: ask for it in a whole system, which gives it its giant.",
+    badArchetype: (p: { archetype: string }) =>
+      `${p.archetype} is a giant's moon, so it cannot be asked for alone: ask for it in a whole system, which gives it its giant.`,
     badAge: (p: { age: string; lifetime: string }) =>
       `The star is ${p.age} Gyr old, but it lives ${p.lifetime} Gyr at most: lower the age or pick a longer-lived star.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>

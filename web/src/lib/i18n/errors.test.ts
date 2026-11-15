@@ -25,7 +25,7 @@ describe('error messages', () => {
     expect(detailText({ code: 'bad_age', age_gyr: 12, lifetime_gyr: 3.456 })).toBe(
       'The star is 12 Gyr old, but it lives 3.46 Gyr at most: lower the age or pick a longer-lived star.',
     );
-    expect(detailText({ code: 'bad_archetype', archetype: 'titan-like is a giant\'s moon' })).toMatch(/whole system/);
+    expect(detailText({ code: 'bad_archetype', archetype: 'titan-like' })).toMatch(/Titan.* is a giant's moon.*whole system/i);
     expect(detailText({ code: 'original_size' })).toMatch(/original size/);
     expect(detailText({ code: 'size_not_generated', width: 4096, height: 2048 })).toMatch(/no 4096 × 2048 map/);
   });

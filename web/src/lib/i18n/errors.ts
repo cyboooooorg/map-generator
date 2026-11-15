@@ -17,7 +17,7 @@ export function detailText(detail: ErrorDetail): string {
     case 'unknown_archetype':
       return t.errors.unknownArchetype({ archetype: detail.archetype });
     case 'bad_archetype':
-      return t.errors.badArchetype;
+      return t.errors.badArchetype({ archetype: archetypeName({ name: detail.archetype }) });
     case 'bad_age':
       return t.errors.badAge({ age: formatUpTo(detail.age_gyr, 3), lifetime: formatUpTo(detail.lifetime_gyr, 2) });
     case 'too_many_pixels':
