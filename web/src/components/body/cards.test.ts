@@ -144,6 +144,13 @@ describe('themed body cards', () => {
     expect(html.match(/class="value area[ "]/g)).toHaveLength(2);
   });
 
+  it('shows every biome as a segment of the share bar, sized by its share', () => {
+    const html = renderCard(LegendCard, { ramp: null, stats, colour: () => 'red' });
+    const bar = html.match(/<div class="bar[ "][^]*?<\/div>/)?.[0] ?? '';
+    expect(bar.match(/<span/g)).toHaveLength(stats.shares.length);
+    expect(bar).toContain(`flex-grow: ${stats.shares[0]?.share}`);
+  });
+
   it('offers the causes of a derived value only with an explanation, closed', () => {
     const world = worldOf([earthLike, moon], 'c', earthMeta);
     expect(renderCard(AtmosphereCard, { world })).not.toContain('aria-expanded');

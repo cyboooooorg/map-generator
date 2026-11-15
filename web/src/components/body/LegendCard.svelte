@@ -1,6 +1,6 @@
 <script lang="ts">
   // The legend of the layer shown: a ramp for a quantity, or, for biomes,
-  // each biome's swatch, share and area. A biome's row highlights it on the
+  // a bar of every biome's share, then each biome's swatch, share and area. A biome's row highlights it on the
   // globe (hover) or keeps it highlighted (click).
   import './facts.css';
   import { t } from '../../lib/i18n/index.svelte';
@@ -39,6 +39,15 @@
   <div class="ramp" style:background={ramp.gradient}></div>
   <div class="ends"><span>{ramp.min}</span><span>{ramp.max}</span></div>
 {:else if stats}
+  <div class="bar" aria-hidden="true">
+    {#each stats.shares as entry (entry.biome.id)}
+      <span
+        style:background={colour(entry.biome)}
+        style:flex-grow={entry.share}
+        title={`${biomeName(entry.biome)}: ${formatShare(entry.share)}`}
+      ></span>
+    {/each}
+  </div>
   <ul class="biomes" aria-label={t.viewer.biomeLegend} onpointerleave={() => (hovered = null)}>
     {#each all ? stats.shares : stats.shares.slice(0, TOP_BIOMES) as entry (entry.biome.id)}
       <li>
@@ -78,6 +87,17 @@
     display: flex;
     justify-content: space-between;
     color: var(--muted);
+  }
+  .bar {
+    display: flex;
+    height: 10px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .bar span {
+    flex-basis: 0;
+    min-width: 1px;
   }
   .biomes {
     list-style: none;
