@@ -30,14 +30,14 @@ describe('MarkedSlider', () => {
 });
 
 describe('StarDot', () => {
-  it('fills the disc with the colour of the star’s light', () => {
-    const out = render(StarDot, { props: { light: [1, 0.5, 0.2], label: 'M5V' } }).body;
+  it('fills the disc with the colour it is given', () => {
+    const out = render(StarDot, { props: { colour: '#ff7a4d', label: 'M5V' } }).body;
     expect(out).toContain('aria-label="M5V"');
-    expect(out).toMatch(/background: rgb\(255 \d+ \d+\)/);
+    expect(out).toContain('background: #ff7a4d');
     expect(out).not.toContain('empty');
   });
   it('is an empty ring when no colour is known', () => {
-    const out = render(StarDot, { props: { light: null, label: 'Auto' } }).body;
+    const out = render(StarDot, { props: { colour: null, label: 'Auto' } }).body;
     expect(out).toContain('empty');
   });
 });

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
-import type { FormSpec } from './api/types/FormSpec';
 import type { WorldRequest } from './api/types/WorldRequest';
-import { applyStarChoice, initialStarChoice, parseStarChoice, parseStarType, starLightOf, starType } from './starForm';
+import { applyStarChoice, initialStarChoice, parseStarChoice, parseStarType, starDotColour, starDotColourOf, starType } from './starForm';
 
 const archetype = (orbit: Partial<ArchetypeInfo['orbit']>) => ({ orbit }) as ArchetypeInfo;
 
@@ -53,14 +52,15 @@ describe('star form', () => {
   });
 });
 
-describe('starLightOf', () => {
-  const spec = { star_colours: [{ spectral_type: 'G2V', light: [1, 0.95, 0.9] }, { spectral_type: 'M4.5V', light: [1, 0.6, 0.3] }] } as unknown as Pick<FormSpec, 'star_colours'>;
-  it('reads the light of the chosen type from the server’s colours', () => {
-    expect(starLightOf(spec, 'G', 2)).toEqual([1, 0.95, 0.9]);
-    expect(starLightOf(spec, 'M', 4.5)).toEqual([1, 0.6, 0.3]);
+describe('star dot colours', () => {
+  it('gives each class its conventional colour', () => {
+    expect(starDotColourOf('O', 5)).toBe('#9bb0ff');
+    expect(starDotColourOf('G', 2)).toBe('#fff4a8');
+    expect(starDotColourOf('M', 4.5)).toBe('#ff7a4d');
+    expect(starDotColour('K1V')).toBe('#ffb561');
   });
-  it('has none for a drawn star or an unknown type', () => {
-    expect(starLightOf(spec, '', 2)).toBeNull();
-    expect(starLightOf(spec, 'K', 1)).toBeNull();
+  it('has none for a drawn star or an unknown class', () => {
+    expect(starDotColourOf('', 2)).toBeNull();
+    expect(starDotColour('WD')).toBeNull();
   });
 });

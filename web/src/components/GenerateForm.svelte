@@ -19,7 +19,7 @@
   import { initialFormSize } from '../lib/sizes';
   import { clearFormMemory, FALLBACK_ARCHETYPE, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
-  import { applyStarChoice, initialStarChoice, STAR_CLASSES, starLightOf, starType, type StarChoice } from '../lib/starForm';
+  import { applyStarChoice, initialStarChoice, STAR_CLASSES, starDotColour, starDotColourOf, starType, type StarChoice } from '../lib/starForm';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
@@ -438,9 +438,10 @@
   });
   const drawn = $derived(drawnValues(preview.result));
   /** The light of the star the preview drew (shown for a star left to the draw). */
-  const previewStarLight = $derived(preview.result?.system.star.info.light ?? null);
-  const lightOfStar = $derived(starLightOf(spec, star.klass, star.subtype) ?? (star.klass === '' ? previewStarLight : null));
-  const lightOfSystemStar = $derived(systemStarRandom ? previewStarLight : starLightOf(spec, systemClass, systemSubtype));
+  const previewStarType = $derived(preview.result?.system.star.info.type ?? null);
+  const previewStarColour = $derived(previewStarType === null ? null : starDotColour(previewStarType));
+  const dotOfStar = $derived(starDotColourOf(star.klass, star.subtype) ?? (star.klass === '' ? previewStarColour : null));
+  const dotOfSystemStar = $derived(systemStarRandom ? previewStarColour : starDotColourOf(systemClass, systemSubtype));
   /** The reference mark on the axial tilt slider: Earth's. */
   const tiltMarks = $derived<SliderMark[]>([
     { fraction: EARTH_TILT / 90, label: `${t.form.model.bodies.earth} ${formatUpTo(EARTH_TILT, 1)}°`, earth: true, onpick: () => (fields.axial_tilt_deg.value = EARTH_TILT) },
@@ -574,7 +575,7 @@
             <label class="labelled">
               <span>{t.form.starClass}</span>
               <span class="with-dot">
-                <StarDot light={lightOfSystemStar} label={starType(systemClass, systemSubtype)} />
+                <StarDot colour={dotOfSystemStar} label={starType(systemClass, systemSubtype)} />
                 <select bind:value={systemClass}>
                   {#each STAR_CLASSES as klass (klass)}
                     <option value={klass}>{klass}</option>
@@ -603,7 +604,7 @@
       <label class="labelled">
         <span>{t.form.starClass}</span>
         <span class="with-dot">
-          <StarDot light={lightOfStar} label={star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype)} />
+          <StarDot colour={dotOfStar} label={star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype)} />
           <select bind:value={star.klass} onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}>
             <option value="">{t.form.starAuto}</option>
             {#each STAR_CLASSES as klass (klass)}

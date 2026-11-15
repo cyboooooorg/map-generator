@@ -1,20 +1,18 @@
 <script lang="ts">
-  // A small disc in the colour of a star's light, beside the menu that picks
+  // A small disc in the conventional colour of a star's class, beside the menu that picks
   // it. Without a colour (the star is left to the draw and none is drawn yet)
   // the disc is an empty ring.
-  import { cssColour } from '../../lib/orrery';
-
   interface Props {
-    /** Linear RGB of the star's light, null when there is none to show. */
-    light: [number, number, number] | null;
+    /** CSS colour of the star's spectral class, null when there is none to show. */
+    colour: string | null;
     /** The star's type, for the screen reader. */
     label: string;
   }
 
-  let { light, label }: Props = $props();
+  let { colour, label }: Props = $props();
 </script>
 
-<span class="dot" class:empty={light === null} style:background={light ? cssColour(light) : undefined} role="img" aria-label={label}></span>
+<span class="dot" class:empty={colour === null} style:background={colour ?? undefined} role="img" aria-label={label}></span>
 
 <style>
   .dot {

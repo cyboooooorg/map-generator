@@ -896,8 +896,9 @@ addressed as `<system-id>/<body-id>` everywhere.
   with every preview and with Generate, so Generate makes what was
   previewed. The server's refusals show at their field or above the
   buttons and disable Generate; a whole system gets the same preview
-  from the same answer, as its star (with a dot of its light, which the
-  star menus show too: `star_colours` of `GET /api/form`) and the
+  from the same answer, as its star (with a dot in the conventional
+  colour of its spectral class, which the star menus show too: blue for
+  O to orange-red for M, a web-side constant) and the
   planets it will have, in orbit order, without cause trees.
 
   The wizard remembers its last mode and fields. **Vary…** opens it over

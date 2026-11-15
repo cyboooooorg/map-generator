@@ -4,6 +4,7 @@
   // draws exactly this.
   import { t } from '../../lib/i18n/index.svelte';
   import { classLabel } from '../../lib/i18n/names.svelte';
+  import { starDotColour } from '../../lib/starForm';
   import { formatAge, formatAu, formatStar, formatUpTo } from '../../lib/format';
   import { formatMassWithNote } from '../../lib/massFormat';
   import type { System } from '../../lib/api/types/System';
@@ -21,7 +22,7 @@
   <section aria-label={text.star}>
     <h4>{text.star}</h4>
     <p class="star">
-      <StarDot light={info.light ?? null} label={system.star.type} />
+      <StarDot colour={starDotColour(system.star.type)} label={system.star.type} />
       <strong>{formatStar(info)}</strong>
     </p>
     <p class="muted">{text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}</p>
