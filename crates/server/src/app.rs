@@ -7,6 +7,7 @@
 //! | `GET /api/form`                 | parameter limits, defaults and map sizes          |
 //! | `GET /api/systems`              | drawn systems, most recent first (`SystemSummary`) |
 //! | `POST /api/systems?replace=`    | draw a system (`SystemRequest`); mode `around` queues its planet |
+//! | `POST /api/systems/resolve`     | what `POST /api/systems` would draw for the same request, written nowhere (`ResolvedSystem`: the system, the cause trees of its bodies, the fields ignored; the same 400 refusals) |
 //! | `GET /api/systems/{id}`         | a system (`system.json`), the names given, the bodies evicted (`evicted`, see [`evict`]) and the cause trees and resemblance of each modelled body (`extras`) |
 //! | `DELETE /api/systems/{id}`      | delete a system (409 while it or a resolution of a body is being generated) |
 //! | `GET /api/systems/{id}/export`  | a `.zip` of the system: `system.json` (seeds, requests, names, generator versions; see `crate::export`) and the PNGs of its generated bodies |
@@ -38,8 +39,8 @@
 use crate::api::{
     ApiError, ArchetypeInfo, BodyExtras, BodySizes, DisplayedSize, ErrorDetail, FormSpec,
     GenerateStarted, GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec,
-    PendingSize, PresentSize, RegeneratedBody, SystemCreated, SystemDetail, SystemName,
-    SystemNames, SystemQuery, SystemSummary,
+    PendingSize, PresentSize, RegeneratedBody, ResolvedSystem, SystemCreated, SystemDetail,
+    SystemName, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -307,6 +308,7 @@ fn routes(state: Shared, config: &Config) -> Router {
         .route("/api/archetypes", get(archetypes))
         .route("/api/form", get(form))
         .route("/api/systems", get(list_systems).post(create_system))
+        .route("/api/systems/resolve", post(resolve_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/export", get(export_system))
         .route("/api/systems/{id}/names", put(rename_system))
@@ -493,6 +495,8 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
             envelope_fraction: request::ENVELOPE_FRACTION,
             co2: request::VOLATILE_FACTOR,
             n2: request::VOLATILE_FACTOR,
+            ch4: request::VOLATILE_FACTOR,
+            age_gyr: request::age_gyr_limits(),
             radiogenic: request::RADIOGENIC,
             axial_tilt_deg: request::AXIAL_TILT_DEG,
         },
@@ -582,13 +586,14 @@ async fn list_systems(State(state): State<Shared>) -> Json<Vec<SystemSummary>> {
     )
 }
 
-/// Draws a system and writes its `system.json` (`POST /api/systems`). A
-/// system of the same id is refused with 409 unless the query replaces it.
-async fn create_system(
-    State(state): State<Shared>,
-    Query(query): Query<SystemQuery>,
-    Json(request): Json<mapgen::system::SystemRequest>,
-) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
+/// Resolves a request into the system it draws (and the fields its planet
+/// ignores), as `POST /api/systems` and `POST /api/systems/resolve` do:
+/// both answer the same refusals because both go through here. Writes
+/// nothing.
+async fn resolve_request(
+    state: &Shared,
+    request: mapgen::system::SystemRequest,
+) -> Result<(mapgen::system::System, Vec<String>), Rejection> {
     check_system_request(&request)?;
     // Around a planet: an archetype of the catalog (never a path chosen by
     // the client), loaded once at startup; a whole system names built-in
@@ -603,7 +608,7 @@ async fn create_system(
         },
         mapgen::system::SystemRequest::System(_) => None,
     };
-    let drawn = request.clone();
+    let drawn = request;
     let (system, ignored) = tokio::task::spawn_blocking(move || {
         let rng = &mut rand::rng();
         match &drawn {
@@ -647,6 +652,34 @@ async fn create_system(
             }),
         ));
     }
+    Ok((system, ignored))
+}
+
+/// What `POST /api/systems` would draw for a request, without writing,
+/// holding or queueing anything (`POST /api/systems/resolve`): the form's
+/// live preview and validation. A seeded request resolves to the system
+/// Generate then writes.
+async fn resolve_system(
+    State(state): State<Shared>,
+    Json(request): Json<mapgen::system::SystemRequest>,
+) -> Result<Json<ResolvedSystem>, Rejection> {
+    let (system, ignored) = resolve_request(&state, request).await?;
+    let extras = body_extras(&system, &state.catalog);
+    Ok(Json(ResolvedSystem {
+        system,
+        extras,
+        ignored,
+    }))
+}
+
+/// Draws a system and writes its `system.json` (`POST /api/systems`). A
+/// system of the same id is refused with 409 unless the query replaces it.
+async fn create_system(
+    State(state): State<Shared>,
+    Query(query): Query<SystemQuery>,
+    Json(request): Json<mapgen::system::SystemRequest>,
+) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
+    let (system, ignored) = resolve_request(&state, request.clone()).await?;
     let id = mapgen::system::system_id(&system);
     if !systems::is_valid_system_id(&id) {
         return Err(Failure(
@@ -4158,6 +4191,8 @@ mod tests {
         assert!(form.get("land_fraction").is_none());
         assert!(form["inputs"]["water_oceans"]["max"].is_number());
         assert!(form["inputs"]["mass_earth"]["min"].is_number());
+        assert!(form["inputs"]["ch4"]["max"].is_number());
+        assert!(form["inputs"]["age_gyr"]["max"].as_f64().unwrap() > 100.0);
     }
 
     #[tokio::test]
@@ -5005,5 +5040,123 @@ mod tests {
         let generate = format!("/api/systems/{second_system}/bodies/b/generate");
         let (status, body) = call(&app, "POST", &generate, None).await;
         assert_eq!(status, StatusCode::OK, "{body}");
+    }
+
+    /// The request of each refusal the HTTP layer can produce, with the
+    /// `detail.code` it answers.
+    const REFUSALS: [(&str, &str); 15] = [
+        ("out_of_range", r#"{"around": {"mass_earth": 5000}}"#),
+        ("size_out_of_range", r#"{"around": {"width": 100000}}"#),
+        ("unknown_archetype", r#"{"around": {"planet": "nowhere"}}"#),
+        ("bad_archetype", r#"{"around": {"planet": "titan-like"}}"#),
+        ("bad_age", r#"{"around": {"star": "F0V", "age_gyr": 12.0}}"#),
+        ("unknown_star", r#"{"around": {"star": "Z9"}}"#),
+        (
+            "orbit_and_position",
+            r#"{"around": {"orbit_au": 1.0, "hz_position": 0.5}}"#,
+        ),
+        (
+            "water_heavier_than_planet",
+            r#"{"around": {"mass_earth": 0.1, "water_oceans": 5000.0, "seed": 1, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "too_many_planets",
+            r#"{"system": {"planets": {"earth-like": 16}, "seed": 1, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "zone_full",
+            r#"{"system": {"planets": {"earth-like": 12}, "seed": 1, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "type_impossible",
+            r#"{"system": {"star": "M9.5V", "planets": {"titan-like": 1}, "seed": 1, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "no_room_for_moons",
+            r#"{"around": {"mass_earth": 1.0, "star": "M5V", "orbit_au": 0.006, "eccentricity": 0.0, "moons": {"count": 1}, "seed": 1, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "hot_giant_moons",
+            r#"{"around": {"planet": "hot-jupiter", "star": "G2V", "orbit_au": 0.04, "moons": {"count": 2}, "seed": 2, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "moons_of_a_moon",
+            r#"{"around": {"mass_earth": 1.0, "host": "giant", "moons": {"count": 2}, "seed": 1, "width": 64, "height": 32}}"#,
+        ),
+        (
+            "too_many_pixels",
+            r#"{"around": {"width": 2048, "height": 1024, "seed": 1}}"#,
+        ),
+    ];
+
+    #[tokio::test]
+    async fn resolve_refuses_like_create() {
+        let mut config = temp_config("resolve-refuses");
+        config.max_pixels = 100_000;
+        let app = router(config);
+        for (code, request) in REFUSALS {
+            let (status, resolved) =
+                call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+            let (created_status, created) = call(&app, "POST", "/api/systems", Some(request)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{code}: {resolved}");
+            assert_eq!(
+                (status, &resolved),
+                (created_status, &created),
+                "{code}: the routes disagree"
+            );
+            assert_eq!(json(&resolved)["detail"]["code"], code, "{resolved}");
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_then_create_draw_the_same_system() {
+        let root = temp_config("resolve-same").systems_dir;
+        let app = router(temp_config("resolve-same"));
+        for request in [
+            r#"{"around": {"seed": 11, "planet": "earth-like", "width": 64, "height": 32}}"#,
+            r#"{"system": {"star": "K1V", "planets": {"mercury-like": 2}, "seed": 3, "width": 64, "height": 32}}"#,
+        ] {
+            let (status, resolved) =
+                call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+            assert_eq!(status, StatusCode::OK, "{resolved}");
+            let (status, created) = call(&app, "POST", "/api/systems", Some(request)).await;
+            assert_eq!(status, StatusCode::CREATED, "{created}");
+            let id = json(&created)["system_id"].as_str().unwrap().to_owned();
+            let written: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(root.join(&id).join("system.json")).unwrap())
+                    .unwrap();
+            assert_eq!(json(&resolved)["system"], written, "{request}");
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_writes_nothing() {
+        let app = router(temp_config("resolve-writes-nothing"));
+        let root = temp_config("resolve-writes-nothing").systems_dir;
+        let (_, before) = call(&app, "GET", "/api/systems", None).await;
+        let request =
+            r#"{"around": {"seed": 11, "planet": "earth-like", "width": 64, "height": 32}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let (_, after) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(before, after);
+        let (_, jobs) = call(&app, "GET", "/api/jobs", None).await;
+        assert_eq!(json(&jobs).as_array().unwrap().len(), 0, "{jobs}");
+    }
+
+    #[tokio::test]
+    async fn resolve_sends_trees() {
+        let app = router(temp_config("resolve-trees"));
+        let request =
+            r#"{"around": {"seed": 11, "planet": "earth-like", "width": 64, "height": 32}}"#;
+        let (_, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+        let resolved = json(&body);
+        let focus = resolved["system"]["focus"].as_str().expect("a focus");
+        let trees = resolved["extras"][focus]["explanation"]["trees"]
+            .as_array()
+            .expect("cause trees");
+        assert!(trees.iter().any(|t| t["quantity"] == "surface_temperature"));
+        assert!(resolved["ignored"].as_array().is_some());
     }
 }

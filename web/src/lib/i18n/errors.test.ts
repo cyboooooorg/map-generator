@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiFailure } from '../api/client';
 import { detailText, errorText } from './errors';
+import { setLocale } from './index.svelte';
 
 describe('error messages', () => {
   it('words a detail from its code and values', () => {
@@ -21,8 +22,22 @@ describe('error messages', () => {
     expect(detailText({ code: 'size_not_offered', width: 1000, height: 500 })).toBe(
       '1000 × 500 is not one of the offered map sizes.',
     );
+    expect(detailText({ code: 'bad_age', age_gyr: 12, lifetime_gyr: 3.456 })).toBe(
+      'The star is 12 Gyr old, but it lives 3.46 Gyr at most: lower the age or pick a longer-lived star.',
+    );
+    expect(detailText({ code: 'bad_archetype', archetype: 'titan-like is a giant\'s moon' })).toMatch(/whole system/);
     expect(detailText({ code: 'original_size' })).toMatch(/original size/);
     expect(detailText({ code: 'size_not_generated', width: 4096, height: 2048 })).toMatch(/no 4096 × 2048 map/);
+  });
+
+  it('words the age and archetype refusals in French too', () => {
+    setLocale('fr');
+    try {
+      expect(detailText({ code: 'bad_age', age_gyr: 12, lifetime_gyr: 3.456 })).toMatch(/12 Gyr.*3,46 Gyr/);
+      expect(detailText({ code: 'bad_archetype', archetype: 'titan-like' })).toMatch(/système entier/);
+    } finally {
+      setLocale('en');
+    }
   });
 
   it('falls back to the server text, then to the error itself', () => {

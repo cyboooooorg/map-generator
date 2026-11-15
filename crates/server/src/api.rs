@@ -63,10 +63,16 @@ pub struct InputLimits {
     pub co2: Limits,
     /// Factor on the N₂ formation rule (1 typical).
     pub n2: Limits,
+    /// Factor on the CH₄ formation rule (1 typical).
+    pub ch4: Limits,
     /// Earth's = 1.
     pub radiogenic: Limits,
     /// Degrees.
     pub axial_tilt_deg: Limits,
+    /// Age of the star, Gyr: above 0 (the lower bound is excluded) and
+    /// at most the longest main-sequence life of any star. The star's own
+    /// life is checked when the request is resolved (`bad_age`).
+    pub age_gyr: Limits,
 }
 
 /// Everything the generation form needs to validate its inputs.
@@ -227,6 +233,11 @@ pub enum ErrorDetail {
         asked: u32,
         fits: u32,
     },
+    /// The archetype cannot be asked for alone (a giant's moon: ask for it
+    /// in a whole system), or its file is not valid.
+    BadArchetype { archetype: String },
+    /// The age asked is not between 0 and the star's main-sequence life.
+    BadAge { age_gyr: f32, lifetime_gyr: f32 },
     /// A planet type the star leaves no room for.
     TypeImpossible { body_type: String },
     /// The system exists and the request does not replace it.
@@ -272,9 +283,16 @@ impl ErrorDetail {
                 water_oceans: *water_oceans,
                 mass_earth: *mass_earth,
             }),
-            // The text names the file, or the age and the star's life; no
-            // structured detail.
-            RequestError::BadArchetype(_) | RequestError::BadAge { .. } => None,
+            RequestError::BadArchetype(archetype) => Some(Self::BadArchetype {
+                archetype: archetype.clone(),
+            }),
+            RequestError::BadAge {
+                age_gyr,
+                lifetime_gyr,
+            } => Some(Self::BadAge {
+                age_gyr: *age_gyr,
+                lifetime_gyr: *lifetime_gyr,
+            }),
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
                 max: *max,
@@ -424,6 +442,19 @@ pub struct BodyExtras {
     /// The built-in archetype it resembles: its own when it was asked by
     /// archetype, else the nearest one within the threshold.
     pub similar: Option<String>,
+}
+
+/// What a request would draw (`POST /api/systems/resolve`): the system
+/// `POST /api/systems` writes for it, with what the viewer's cards show.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ResolvedSystem {
+    /// The system drawn; its `focus` is the body asked for.
+    pub system: mapgen::system::System,
+    /// The planet model's account of each body that has one, by body id.
+    pub extras: BTreeMap<String, BodyExtras>,
+    /// Fields of an `around` request its planet has no use for.
+    pub ignored: Vec<String>,
 }
 
 /// The names given to a system's bodies (`PUT /api/systems/{id}/names`):

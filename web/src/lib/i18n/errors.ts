@@ -16,6 +16,10 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.sizeOutOfRange({ ...detail, field: field(detail.field) });
     case 'unknown_archetype':
       return t.errors.unknownArchetype({ archetype: detail.archetype });
+    case 'bad_archetype':
+      return t.errors.badArchetype;
+    case 'bad_age':
+      return t.errors.badAge({ age: formatUpTo(detail.age_gyr, 3), lifetime: formatUpTo(detail.lifetime_gyr, 2) });
     case 'too_many_pixels':
       return t.errors.tooManyPixels({ width: detail.width, height: detail.height, max: formatInt(detail.max_pixels) });
     case 'being_generated':

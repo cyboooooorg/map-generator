@@ -93,6 +93,15 @@ pub const HZ_POSITION: Limits = Limits {
     min: -2.0,
     max: 6.0,
 };
+/// Age of the star, Gyr: above 0 and at most the longest life of any star
+/// ([`crate::star::lifetime_gyr`] of the lightest; the star asked for sets
+/// its own bound, see `BadAge`).
+pub fn age_gyr_limits() -> Limits {
+    Limits {
+        min: 0.0,
+        max: crate::star::lifetime_gyr(0.0),
+    }
+}
 /// Hydraulic erosion strength (droplets per erosion-grid pixel).
 pub const EROSION: Limits = Limits { min: 0.0, max: 5.0 };
 /// Map width and height in pixels.

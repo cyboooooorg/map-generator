@@ -1391,6 +1391,9 @@ export const fr: Messages = {
     hotGiantMoons: (p) =>
       `Pas autant de lunes pour une géante si près de son étoile (${p.count} demandées)${S}: sa sphère de Hill est trop petite, ou les marées de son étoile l’ont rendue synchrone et ses lunes tombent. Choisissez une orbite plus lointaine ou moins de lunes.`,
     unknownArchetype: (p) => `Aucun archétype de planète ne s’appelle ${p.archetype}.`,
+    badArchetype: `Une lune de géante ne se demande pas seule${S}: demandez-la dans un système entier, qui lui donne sa géante.`,
+    badAge: (p) =>
+      `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge ou choisissez une étoile plus longévive.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,
     beingGenerated: (p) => `${p.world} est déjà en cours de génération.`,
@@ -1405,6 +1408,8 @@ export const fr: Messages = {
       envelope_fraction: 'Part de l’enveloppe',
       co2: 'CO₂',
       n2: 'N₂',
+      ch4: 'CH₄',
+      age_gyr: 'Âge',
       radiogenic: 'Abondance radiogénique',
       axial_tilt_deg: 'Inclinaison de l’axe',
       orbit_au: 'Orbite',
