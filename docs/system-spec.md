@@ -714,7 +714,7 @@ addressed as `<system-id>/<body-id>` everywhere.
   the `extras` of each body as `GET /api/systems/{id}` gives them (cause
   trees and resemblance; none for a whole system, which the form only
   validates; an `around` request that sets a planet-model input (mass,
-  core, water, envelope, CO₂, N₂, CH₄, radiogenic heat, life) gets the
+  core, water, envelope, CO₂, N₂, CH₄, NH₃, sulphur, radiogenic heat, life) gets the
   computed `similar`, which may be null, even when it names an
   archetype), the inputs the focus body formed with (`formation`, as
   `PlanetModel::formation` gives them, null for a body with no model:
@@ -883,14 +883,14 @@ addressed as `<system-id>/<body-id>` everywhere.
     choice with a note and adds a line to the summary. **Vary…** keeps
     the flag of the system it varies. The planet step also holds every
     input of the planet model (mass, core, water, envelope, CO₂, N₂, CH₄,
-    radiogenic heat, life, eccentricity, the star's age), each drawn or
+    NH₃, sulphur, radiogenic heat, life, eccentricity, the star's age), each drawn or
     pinned, and a live preview of the planet beside the steps; the form
     sends its seed in the preview and in Generate, and shows the server's
     refusals as they come (see `web/README.md`).
 
   The model fields are folded groups on the planet step (orbit shape
   and the star's age, mass, iron core, water and hydrogen–helium shell,
-  the CO₂, N₂ and CH₄ factors, radioactive heat, life). Each is drawn by
+  the CO₂, N₂, CH₄, NH₃ and sulphur factors, radioactive heat, life). Each is drawn by
   default and shows what the seed drew; **Set it myself** pins it, with
   a slider, a number box and marks (Earth, Mars, Venus, Titan: ticks on
   the track at their value, chips under them, from the Solar System

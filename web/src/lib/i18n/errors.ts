@@ -74,6 +74,7 @@ export function errorField(detail: ErrorDetail): ModelFieldKey | 'planet' | 'sta
     case 'water_heavier_than_planet':
       return 'water_oceans';
     case 'bad_age':
+    case 'archetype_ages':
       return 'age_gyr';
     case 'bad_archetype':
     case 'unknown_archetype':

@@ -5,14 +5,14 @@ import type { InputField } from './api/types/InputField';
 import type { Limits } from './api/types/Limits';
 
 export type ModelFieldKey =
-  | 'mass_earth' | 'core_mass_fraction' | 'water_oceans' | 'envelope_fraction' | 'co2' | 'n2' | 'ch4'
+  | 'mass_earth' | 'core_mass_fraction' | 'water_oceans' | 'envelope_fraction' | 'co2' | 'n2' | 'ch4' | 'nh3' | 's'
   | 'radiogenic' | 'life' | 'eccentricity' | 'age_gyr';
 
 export const MODEL_GROUPS: { id: 'orbit' | 'composition' | 'heat' | 'volatiles' | 'life'; fields: ModelFieldKey[] }[] = [
   { id: 'orbit', fields: ['eccentricity', 'age_gyr'] },
   { id: 'composition', fields: ['mass_earth', 'core_mass_fraction', 'water_oceans', 'envelope_fraction'] },
   { id: 'heat', fields: ['radiogenic'] },
-  { id: 'volatiles', fields: ['co2', 'n2', 'ch4'] },
+  { id: 'volatiles', fields: ['co2', 'n2', 'ch4', 'nh3', 's'] },
   { id: 'life', fields: ['life'] },
 ];
 
@@ -21,7 +21,7 @@ export function fieldOf(input: InputField): ModelFieldKey | 'orbit' {
   return input === 'insolation' ? 'orbit' : input;
 }
 
-const LOG_FIELDS: ReadonlySet<ModelFieldKey> = new Set(['mass_earth', 'water_oceans', 'co2', 'n2', 'ch4', 'radiogenic']);
+const LOG_FIELDS: ReadonlySet<ModelFieldKey> = new Set(['mass_earth', 'water_oceans', 'co2', 'n2', 'ch4', 'nh3', 's', 'radiogenic']);
 
 /** How a slider spans the limits; water's log slider starts at a "none" stop for 0. */
 export function scaleOf(key: ModelFieldKey): 'log' | 'linear' {
@@ -50,6 +50,8 @@ export const REFERENCE_BODIES: Record<Exclude<ModelFieldKey, 'life'>, string[]> 
   co2: ['earth'],
   n2: ['earth'],
   ch4: ['earth'],
+  nh3: ['earth'],
+  s: ['earth'],
   radiogenic: ['earth'],
 };
 

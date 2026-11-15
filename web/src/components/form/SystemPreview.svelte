@@ -11,7 +11,8 @@
   import MassUnits from '../MassUnits.svelte';
   import StarDot from './StarDot.svelte';
 
-  let { system }: { system: System } = $props();
+  /** The archetypes asked that set the system's age (see archetypeAge.ts), named on the star line. */
+  let { system, ageSources = [] }: { system: System; ageSources?: string[] } = $props();
 
   const info = $derived(system.star.info);
   const planets = $derived(system.bodies.filter((b) => b.kind !== 'moon'));
@@ -26,7 +27,7 @@
       <StarDot colour={starDotColour(system.star.type)} label={system.star.type} />
       <strong>{formatStar(info)}</strong>
     </p>
-    <p class="muted">{text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}</p>
+    <p class="muted">{text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}{ageSources.length > 0 ? ` ${text.ageSetBy({ names: ageSources.join(', ') })}` : ''}</p>
   </section>
   <section aria-label={text.planets}>
     <h4>{text.planets}</h4>

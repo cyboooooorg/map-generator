@@ -49,6 +49,7 @@ describe('error messages', () => {
 
 describe('errorField', () => {
   it('names the field a refusal belongs to', () => {
+    expect(errorField({ code: 'archetype_ages', archetypes: ['mars-like'] })).toBe('age_gyr');
     expect(errorField({ code: 'out_of_range', field: 'co2', min: 0, max: 1 })).toBe('co2');
     expect(errorField({ code: 'out_of_range', field: 'hz_position', min: 0, max: 1 })).toBe('orbit');
     expect(errorField({ code: 'out_of_range', field: 'mystery', min: 0, max: 1 })).toBeNull();

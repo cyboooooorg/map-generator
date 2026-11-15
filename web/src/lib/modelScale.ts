@@ -8,7 +8,7 @@ import { type ModelFieldKey, scaleOf } from './modelFields';
 export const SLIDER_STEPS = 1000;
 
 /** Where the log slider of a field that may be 0 starts counting, just above its "none" stop. */
-const LOG_FLOOR: Partial<Record<ModelFieldKey, number>> = { water_oceans: 0.001, co2: 0.01, n2: 0.01, ch4: 0.01 };
+const LOG_FLOOR: Partial<Record<ModelFieldKey, number>> = { water_oceans: 0.001, co2: 0.01, n2: 0.01, ch4: 0.01, nh3: 0.01, s: 0.01 };
 
 /** The age slider stops at the universe's, the number box takes the longest stellar life. */
 const AGE_SLIDER: [number, number] = [0.1, 14];

@@ -27,11 +27,13 @@
     folded?: boolean;
     /** A leaf of a cause tree was pressed: the form field it comes from. */
     onjump?: (field: InputField) => void;
+    /** The archetypes of a whole system that set the star's age, named on its line. */
+    ageSources?: string[];
     /** "New draw": the form picks another seed. */
     onreroll: () => void;
   }
 
-  let { preview, kind = 'around', folded = false, onjump = () => {}, onreroll }: Props = $props();
+  let { preview, kind = 'around', folded = false, onjump = () => {}, ageSources = [], onreroll }: Props = $props();
 
   /** The last answer, when it is of the kind of request shown (a lone world has a focus body, a whole system none). */
   const shown = $derived(preview.result && (kind === 'around') === (preview.result.system.focus !== null) ? preview.result : null);
@@ -72,7 +74,7 @@
             <MoonsCard {world} />
           </div>
         {:else if kind === 'system'}
-          <SystemPreview system={shown.system} />
+          <SystemPreview system={shown.system} {ageSources} />
         {/if}
       </div>
     </div>

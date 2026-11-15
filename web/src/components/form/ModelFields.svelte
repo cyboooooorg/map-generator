@@ -11,7 +11,10 @@
   import type { Quantity } from '../../lib/api/types/Quantity';
   import { limitsOf, marks, MODEL_GROUPS, type ModelFieldKey } from '../../lib/modelFields';
   import { fieldValueText, markName, referencesLabel, referencesLine, referenceValueText } from '../../lib/modelFormat';
-  import { formatKm, formatNumber, formatShare, withUnit } from '../../lib/format';
+  import { formatKm, formatNumber, formatShare, formatUpTo, withUnit } from '../../lib/format';
+  import type { ArchetypeInfo } from '../../lib/api/types/ArchetypeInfo';
+  import { archetypeAge } from '../../lib/archetypeAge';
+  import { archetypeName } from '../../lib/i18n/names.svelte';
   import { waterDepthKm, waterShare } from '../../lib/waterAmount';
   import { massNote } from '../../lib/massFormat';
   import MassUnits from '../MassUnits.svelte';
@@ -36,9 +39,11 @@
     refusal: ErrorDetail | null;
     /** The ids of the groups that are unfolded. */
     open: Set<string>;
+    /** The archetype the lone world is asked as, whose age (if it sets one) the star takes; null for a drawn planet. */
+    ageArchetype?: ArchetypeInfo | null;
   }
 
-  let { spec, values = $bindable(), drawn, radiusEarth = null, driven, ignored, explained, refusal, open }: Props = $props();
+  let { spec, values = $bindable(), drawn, radiusEarth = null, driven, ignored, explained, refusal, open, ageArchetype = null }: Props = $props();
 
   const refusedField = $derived(refusal ? errorField(refusal) : null);
   /** The mass the water is compared with: the one set, else the one the preview drew. */
@@ -61,16 +66,24 @@
     }
     return lines.length > 0 ? lines : null;
   });
+  /** The age (Gyr) the archetype sets, and its name. */
+  const archetypeSetsAge = $derived(ageArchetype ? archetypeAge(ageArchetype) : null);
+  const ageName = $derived(ageArchetype ? archetypeName(ageArchetype) : '');
+  /** A typed age that differs from the archetype's: the air depends on it. */
+  const ageDiffers = $derived(
+    archetypeSetsAge !== null && !values.age_gyr.random && Math.abs((values.age_gyr.value as number) - archetypeSetsAge) > 1e-9,
+  );
   const numeric = (key: Exclude<ModelFieldKey, 'life'>) => values[key].value as number;
 
   /** Pins a field, starting from what the seed drew. */
   function pin(key: ModelFieldKey, on: boolean): void {
     const entry = values[key];
     entry.random = !on;
-    if (on) entry.value = drawn?.[key] ?? PIN_DEFAULTS[key];
+    if (on) entry.value = drawn?.[key] ?? (key === 'age_gyr' && archetypeSetsAge !== null ? archetypeSetsAge : PIN_DEFAULTS[key]);
   }
-  /** A field the planet has no use for: the server said so, or no cause tree of its body reads it. */
-  const isUnused = (key: ModelFieldKey) => ignored.includes(key) || (explained && driven(key).length === 0);
+  /** A field the planet has no use for: the server said so, or no cause tree of its body reads it (NH₃ and S have no tree leaf yet). */
+  const isUnused = (key: ModelFieldKey) =>
+    ignored.includes(key) || (explained && key !== 'nh3' && key !== 's' && driven(key).length === 0);
   function setValue(key: Exclude<ModelFieldKey, 'life'>, value: number): void {
     setPinned(values, key, value);
   }
@@ -185,6 +198,12 @@
             {/if}
           {/if}
           <p class="unit-help"><MassUnits text={text.unitHelp} /></p>
+          {#if key === 'age_gyr' && archetypeSetsAge !== null}
+            <p class="unit-help age-set">{formatUpTo(archetypeSetsAge, 3)} {text.unit} · {t.form.model.ageSetBy({ name: ageName })}</p>
+            {#if ageDiffers}
+              <p class="warning" role="status">{t.form.model.ageWarning({ name: ageName, age: formatUpTo(archetypeSetsAge, 3) })}</p>
+            {/if}
+          {/if}
           {#if key === 'water_oceans' && waterLines}
             <p class="unit-help water-amount">{waterLines.join(' · ')}</p>
           {/if}
@@ -323,6 +342,11 @@
   }
   .error {
     margin: 0;
+    color: var(--danger);
+  }
+  .warning {
+    margin: 0;
+    font-size: 0.85rem;
     color: var(--danger);
   }
   .visually-hidden {
