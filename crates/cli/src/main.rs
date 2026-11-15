@@ -137,7 +137,8 @@ struct Args {
     /// Age of the star, in Gyr, above 0 and at most its main-sequence life
     /// (about 10 Gyr for the Sun): the older it is, the more planets its
     /// tides have locked and the more its giants have cooled. With --system
-    /// the whole system shares it [default: drawn from the seed, between
+    /// the whole system shares it [default: the archetype's age (4.57 Gyr
+    /// for the Solar System archetypes), else drawn from the seed, between
     /// 0.5 and 10 Gyr, or the star's life if shorter; a star drawn at
     /// random is redrawn until it lives that long]
     #[arg(long)]

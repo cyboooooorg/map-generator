@@ -812,7 +812,7 @@ export const en = {
       nh3: {
         label: 'Ammonia',
         term: 'NH₃ factor',
-        drives: 'a greenhouse gas of cold worlds, and the haze it forms under starlight',
+        drives: 'the nitrogen its photolysis leaves in the air (cold worlds keep it frozen)',
         unit: '× typical',
         unitHelp: '1 is what a planet like this normally gets; 0 none, 2 twice as much',
       },
@@ -1636,7 +1636,7 @@ export const en = {
     badArchetype: (p: { archetype: string }) =>
       `${p.archetype} is a giant's moon, so it cannot be asked for alone: ask for it in a whole system, which gives it its giant.`,
     badAge: (p: { age: string; lifetime: string }) =>
-      `The star is ${p.age} Gyr old, but it lives ${p.lifetime} Gyr at most: lower the age or pick a longer-lived star.`,
+      `The star is ${p.age} Gyr old, but it lives ${p.lifetime} Gyr at most: lower the age, or pick a star that lives longer (a Solar System archetype sets the age to 4.57 Gyr).`,
     archetypeAges: (p: { archetypes: string }) =>
       `The planets asked (${p.archetypes}) set system ages that do not overlap: ask for fewer kinds together, or type an age.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>

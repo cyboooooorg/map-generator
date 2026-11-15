@@ -812,7 +812,9 @@ fn gap(x: f64, (lo, hi): (f64, f64)) -> f64 {
 /// leaves out is skipped. A moon archetype has no orbit round a star: its
 /// light is its host archetype's. Moon archetypes are for a giant's moon
 /// only (`moon_of_giant`), planet archetypes for the others; a giant is
-/// compared with giants by mass and insolation only.
+/// compared with giants by mass and insolation only. An archetype pinned
+/// to a single value (earth-like, mars-like, titan-like) only matches
+/// bodies close to that value, so drawn planets get its label less often.
 pub fn similar<'a>(
     context: &Context,
     model: &PlanetModel,

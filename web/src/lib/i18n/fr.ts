@@ -700,7 +700,7 @@ export const fr: Messages = {
       drawn: 'Tiré',
       drawnUnknown: 'tiré au sort',
       ageSetBy: (p) => `fixé par ${p.name}`,
-      ageWarning: (p) => `${p.name} a ${p.age} Ga : un autre âge change son air`,
+      ageWarning: (p) => `${p.name} a ${p.age} Ga${S}: un autre âge change son air`,
       drawnValue: (p) => `Tiré${S}: ${p.value}`,
       waterShare: (p) => `≈ ${p.share} de la masse de la planète`,
       waterDepth: (p) => `≈ ${p.depth} de profondeur si elle couvrait toute la planète`,
@@ -767,7 +767,7 @@ export const fr: Messages = {
       nh3: {
         label: 'Ammoniac',
         term: 'facteur NH₃',
-        drives: 'un gaz à effet de serre des mondes froids, et la brume qu’il forme sous la lumière de l’étoile',
+        drives: 'l’azote que sa photolyse laisse dans l’air (les mondes froids le gardent gelé)',
         unit: '× typique',
         unitHelp: `1 est ce qu’une planète comme celle-ci reçoit d’ordinaire${S}; 0 rien, 2 le double`,
       },
@@ -1555,7 +1555,7 @@ export const fr: Messages = {
     badArchetype: (p) =>
       `${p.archetype} est une lune de géante, elle ne se demande pas seule${S}: demandez-la dans un système entier, qui lui donne sa géante.`,
     badAge: (p) =>
-      `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge ou choisissez une étoile plus longévive.`,
+      `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge, ou choisissez une étoile plus longévive (un archétype du Système solaire fixe l’âge à 4,57 Gyr).`,
     archetypeAges: (p) =>
       `Les planètes demandées (${p.archetypes}) imposent des âges de système qui ne se recoupent pas${S}: demandez moins de types ensemble, ou saisissez un âge.`,
     tooManyPixels: (p) =>

@@ -29,16 +29,16 @@ mise run gen [-- [OPTIONS]]
 All parameters are optional. Any omitted value comes from the planet archetype when it sets one, and is otherwise chosen **randomly** at startup; the planet model derives the rest (its size, air, water, volcanism and look). The options describe a planet: the run draws the planetary system around it (see **systems** below), writes it to `systems/<id>/`, and generates the planet and its neighbourhood (its moons; for a giant's moon, the giant and its other moons). The chosen values are printed, then the bodies of the system, the progress of each body generated, and the exact options needed to regenerate the same planet:
 
 ```text
-Planet → rocky (earth-like) seed=1 mass=1.058 M⊕ radius=1.017 R⊕ gravity≈1.02g core=0.325 water=1.055 oceans envelope=0.0000 life=true (plate tectonics)
-World → circumference=40720 km tilt=23.4° pressure=1.811 bar volcanic=0.50 erosion=1.00 surface_age=0.29 Ga star=G2V age=1.34 Gyr orbit=1.028 AU e=0.017 (0.12 in the habitable zone, 0.97× Earth's light)
-System mgs-72469-1: MGS 72469 (G2V, 1.3 Gyr), 6 planets, 17 moons
+Planet → rocky (earth-like) seed=1 mass=1.000 M⊕ radius=1.002 R⊕ gravity≈1.00g core=0.325 water=1.000 oceans envelope=0.0000 life=true (plate tectonics)
+World → circumference=40106 km tilt=23.4° pressure=1.006 bar volcanic=0.30 erosion=1.00 surface_age=0.29 Ga star=G2V age=4.57 Gyr orbit=1.012 AU e=0.017 (0.09 in the habitable zone, 1.00× Earth's light)
+System mgs-72469-1: MGS 72469 (G2V, 4.6 Gyr), 6 planets, 19 moons
   b     MGS 72469 b              lava-world            0.023 AU  r=4398 km  1686.2 K
   c     MGS 72469 c              runaway-greenhouse    0.207 AU  r=6849 km  561.4 K
 …
-  e     MGS 72469 e              rocky                 1.028 AU  r=6481 km  253.0 K
+  e     MGS 72469 e              rocky                 1.012 AU  r=6383 km  255.0 K
 …
 Generated: e → systems/mgs-72469-1/bodies
-Reproduce with: --planet earth-like --seed 1 --mass 1.057809591293335 --core-fraction 0.32499998807907104 --radiogenic 0.8129892645966238 --water 1.0549330711364746 --envelope 0 --co2 1 --n2 1 --life yes --axial-tilt 23.44 --star G2V --orbit-au 1.027812 --eccentricity 0.017 --metallicity 0.0564731 --age 1.3435488 --perihelion 222.23616 --width 2048 --height 1024
+Reproduce with: --planet earth-like --seed 1 --mass 1 --core-fraction 0.32499998807907104 --radiogenic 0.8129892645966238 --water 1 --envelope 0 --co2 1 --n2 1 --ch4 1.843126052903703 --nh3 0.699999988079071 --s 0.7377755272093565 --life yes --axial-tilt 23.44 --star G2V --orbit-au 1.0115795 --eccentricity 0.017 --metallicity 0.0564731 --age 4.57 --perihelion 222.23616 --width 2048 --height 1024
 ```
 
 ### Options
@@ -71,7 +71,7 @@ Reproduce with: --planet earth-like --seed 1 --mass 1.057809591293335 --core-fra
 | `--hz-position <f32>`   | position of the orbit in the star's habitable zone, `[-2, 6]`: `0` its inner edge, `1` its outer edge                                                                                              | random in `[0.1, 0.9)` unless the archetype places it                               |
 | `--eccentricity <f32>`  | eccentricity of the orbit, `[0, 0.9]`: `0` circular (Earth `0.017`, Mercury `0.206`)                                                                                                               | the archetype's, else drawn like the planets known (`0` if tides circularised it)   |
 | `--perihelion <deg>`    | longitude of the perihelion in degrees from the spring equinox, `[0, 360]` (Earth `283`, Mars `251`); it makes the seasons uneven on eccentric orbits                                              | drawn from the seed                                                                 |
-| `--age <Gyr>`           | age of the star in Gyr, above 0 and at most its main-sequence life (about 10 Gyr for the Sun): an older star has locked more planets and its giants have cooled more; with `--system`, the whole system shares it; a star drawn at random is redrawn until it lives that long | drawn from the seed, between 0.5 and 10 Gyr (the star's life if shorter)            |
+| `--age <Gyr>`           | age of the star in Gyr, above 0 and at most its main-sequence life (about 10 Gyr for the Sun): an older star has locked more planets and its giants have cooled more; with `--system`, the whole system shares it; a star drawn at random is redrawn until it lives that long | the archetype's age (4.57 Gyr for the Solar System archetypes), else drawn from the seed, between 0.5 and 10 Gyr (the star's life if shorter) |
 | `--drift <Ma>`          | epoch of the plates in Ma from the present, `[-300, 300]`, negative in the past; only on worlds with plate tectonics                                                                               | `0`, the present                                                                    |
 | `--moons <mode>`        | `auto` (the moons the seed draws), `none`, or `1`–`6` moons, see **moons** below                                                                                                                   | `auto`                                                                              |
 | `--metallicity <dex>`   | metallicity of the star, `[Fe/H]` in dex, `[-1, 0.5]` (the Sun: `0`), see **giants** below                                                                                                         | drawn like the stars nearby                                                         |

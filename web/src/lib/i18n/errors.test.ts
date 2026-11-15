@@ -23,7 +23,7 @@ describe('error messages', () => {
       '1000 × 500 is not one of the offered map sizes.',
     );
     expect(detailText({ code: 'bad_age', age_gyr: 12, lifetime_gyr: 3.456 })).toBe(
-      'The star is 12 Gyr old, but it lives 3.46 Gyr at most: lower the age or pick a longer-lived star.',
+      'The star is 12 Gyr old, but it lives 3.46 Gyr at most: lower the age, or pick a star that lives longer (a Solar System archetype sets the age to 4.57 Gyr).',
     );
     expect(detailText({ code: 'bad_archetype', archetype: 'titan-like' })).toMatch(/Titan.* is a giant's moon.*whole system/i);
     expect(detailText({ code: 'original_size' })).toMatch(/original size/);
@@ -51,6 +51,8 @@ describe('errorField', () => {
   it('names the field a refusal belongs to', () => {
     expect(errorField({ code: 'archetype_ages', archetypes: ['mars-like'] })).toBe('age_gyr');
     expect(errorField({ code: 'out_of_range', field: 'co2', min: 0, max: 1 })).toBe('co2');
+    expect(errorField({ code: 'out_of_range', field: 'nh3', min: 0, max: 2 })).toBe('nh3');
+    expect(errorField({ code: 'out_of_range', field: 's', min: 0, max: 2 })).toBe('s');
     expect(errorField({ code: 'out_of_range', field: 'hz_position', min: 0, max: 1 })).toBe('orbit');
     expect(errorField({ code: 'out_of_range', field: 'mystery', min: 0, max: 1 })).toBeNull();
     expect(errorField({ code: 'water_heavier_than_planet', water_oceans: 5, mass_earth: 0.1 })).toBe('water_oceans');

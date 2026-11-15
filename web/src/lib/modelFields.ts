@@ -40,7 +40,7 @@ export function referencesOf(key: ModelFieldKey, spec: Pick<FormSpec, 'reference
  * The bodies a field quotes, in order: its slider's chips and its help line
  * use this one list (the numbers come from the server, `FormSpec.references`).
  */
-export const REFERENCE_BODIES: Record<Exclude<ModelFieldKey, 'life'>, string[]> = {
+export const REFERENCE_BODIES: Partial<Record<Exclude<ModelFieldKey, 'life'>, string[]>> = {
   mass_earth: ['titan', 'mars', 'venus', 'earth', 'neptune', 'jupiter'],
   core_mass_fraction: ['earth', 'mercury'],
   water_oceans: ['mars', 'venus', 'earth', 'titan'],
@@ -50,8 +50,6 @@ export const REFERENCE_BODIES: Record<Exclude<ModelFieldKey, 'life'>, string[]> 
   co2: ['earth'],
   n2: ['earth'],
   ch4: ['earth'],
-  nh3: ['earth'],
-  s: ['earth'],
   radiogenic: ['earth'],
 };
 
@@ -69,7 +67,7 @@ export function marks(key: ModelFieldKey, spec: Pick<FormSpec, 'references'>, li
   if (key === 'life') return [];
   const refs = referencesOf(key, spec);
   const out: Mark[] = [];
-  for (const body of REFERENCE_BODIES[key]) {
+  for (const body of REFERENCE_BODIES[key] ?? []) {
     const value = refs.get(body);
     if (value === undefined) continue;
     if (limits && (value < limits.min || value > limits.max)) continue;

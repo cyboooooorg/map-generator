@@ -3728,8 +3728,8 @@ pub(crate) mod tests {
         p.look.geology.regime = Regime::Plates;
         assert_eq!(impact_relief(&p), 1.0);
         // `mercury-like` on an old surface (seed 6: 4.13 Ga of the Solar
-        // System's 4.57), craters included: 19.8 km with the Moon's
-        // relief, 9.2 km now.
+        // System's 4.57), craters included: about 19 km with the Moon's
+        // relief (9.19 km measured now, at 0.49 of it).
         let p = preset_params("mercury-like", 6, 256, 128);
         assert!(p.surface_age_ga > 4.0, "{}", p.surface_age_ga);
         let w = generate(&p).world;

@@ -656,3 +656,21 @@ pub struct DisplayedSize {
     pub width: u32,
     pub height: u32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archetype_ages_map_to_their_detail() {
+        let error = mapgen::request::RequestError::ArchetypeAges {
+            archetypes: vec!["a".into(), "b".into()],
+        };
+        assert_eq!(
+            ErrorDetail::of_request(&error),
+            Some(ErrorDetail::ArchetypeAges {
+                archetypes: vec!["a".into(), "b".into()],
+            })
+        );
+    }
+}

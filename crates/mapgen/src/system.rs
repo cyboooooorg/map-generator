@@ -5234,6 +5234,19 @@ mod tests {
             whole_round("B5V", &[("titan-like", 1)], 1),
             Err(RequestError::BadAge { .. })
         ));
+        // With a young age asked, the B5V reaches the moon's own check.
+        let request = match whole(&[("titan-like", 1)], 1) {
+            SystemRequest::System(w) => SystemRequest::System(WholeSystemRequest {
+                star: Some("B5V".into()),
+                age_gyr: Some(0.05),
+                ..w
+            }),
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        assert!(matches!(
+            draw(&request, &mut StdRng::seed_from_u64(1)),
+            Err(RequestError::TypeImpossible { .. })
+        ));
     }
 
     /// A whole system asking a moon and no star.
@@ -6203,7 +6216,7 @@ mod titan_tests {
                 .unwrap();
             let params = generation_params(moon);
             assert_eq!((params.width, params.height), (512, 256));
-            assert!(params.surface_age_ga > 3.0, "{}", params.surface_age_ga);
+            assert!(params.surface_age_ga > 3.5, "{}", params.surface_age_ga);
             let world = crate::generation::generate(&params).world;
             let grid = params.grid();
             let (mut liquid, mut total) = (0.0f64, 0.0f64);
