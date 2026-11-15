@@ -506,7 +506,11 @@ pub fn radius_earth(p: &WorldParams, mass_earth: f32) -> f32 {
 /// ([`giant_radius_of`]), or, without a model, from its mass and
 /// temperature alone ([`giant_radius`]).
 fn radius_at(p: &WorldParams, star: &StarInfo, mass_earth: f32) -> f32 {
-    let steam = p.look.giant.as_ref().is_some_and(|g| g.kind == GiantKind::Steam);
+    let steam = p
+        .look
+        .giant
+        .as_ref()
+        .is_some_and(|g| g.kind == GiantKind::Steam);
     match &p.model {
         // A steam world's radius is the model's: the steam inflates a
         // rock and iron core that no giant law describes.
@@ -740,7 +744,9 @@ impl Look {
         // Scott & Polvani 2007).
         let equatorial_jet = match (hot, kind) {
             (false, GiantKind::Gas) => rng.random_range(0.9..1.2) * wind as f32,
-            (false, GiantKind::Ice | GiantKind::Steam) if jets > 1 => -rng.random_range(0.9..1.2) * wind as f32,
+            (false, GiantKind::Ice | GiantKind::Steam) if jets > 1 => {
+                -rng.random_range(0.9..1.2) * wind as f32
+            }
             _ => 0.0,
         };
 
@@ -981,7 +987,9 @@ impl Look {
             // Three broad jets, westward at the equator, eastward at high
             // latitudes: the profile of Neptune (see [`ice_shape`]) scaled
             // by the giant's peak wind.
-            GiantKind::Ice | GiantKind::Steam if self.info.jets <= 1 => self.wind * ice_shape(lat) * polar_fade,
+            GiantKind::Ice | GiantKind::Steam if self.info.jets <= 1 => {
+                self.wind * ice_shape(lat) * polar_fade
+            }
             GiantKind::Ice | GiantKind::Steam | GiantKind::Gas => {
                 let jets: f32 = self
                     .jets_at
