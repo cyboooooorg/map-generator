@@ -34,6 +34,7 @@ const system = (bodies: BodySummary[], hz: [number, number] = [0.9, 1.5]): Syste
   modified_ms: 0,
   pinned: false,
   outdated: false,
+  outdated_reason: null,
 });
 
 describe('orbitRadius', () => {

@@ -23,7 +23,7 @@
   } from '../lib/menuCards';
   import { cssColour } from '../lib/orrery';
   import { loadSetting, saveSetting } from '../lib/settings';
-  import { SORTS, sortSystems, systemName as nameOf, type Sort } from '../lib/systemList';
+  import { SORTS, isUnreadable, sortSystems, systemName as nameOf, type Sort } from '../lib/systemList';
   import { tick } from 'svelte';
   import DisplayMenu from './DisplayMenu.svelte';
   import OrbitStrip from './OrbitStrip.svelte';
@@ -38,6 +38,8 @@
     compareId: string | null;
     onSelect: (id: string) => void;
     onDelete: (ids: string[]) => void;
+    /** Regenerate an outdated system. */
+    onRegenerate: (system: SystemSummary) => void;
     onCompare: (a: string, b: string) => void;
     /** A system was renamed or (un)pinned: its new summary. */
     onChanged: (system: SystemSummary) => void;
@@ -45,7 +47,7 @@
     order?: string[];
   }
 
-  let { systems, selectedId, compareId, onSelect, onDelete, onCompare, onChanged, order = $bindable([]) }: Props = $props();
+  let { systems, selectedId, compareId, onSelect, onDelete, onRegenerate, onCompare, onChanged, order = $bindable([]) }: Props = $props();
 
   const saved = loadSetting('systemList', { sort: 'newest' as string });
   let sort = $state<Sort>(SORTS.includes(saved.sort as Sort) ? (saved.sort as Sort) : 'newest');
@@ -255,20 +257,20 @@
                   class:editing={renaming === system.id}
                   title={t.systemList.seedTitle({ seed: system.seed })}
                 >
-                  <td class="narrow">{#if !system.outdated}<span class="pin-cell"><PinButton {system} onChanged={pinChanged} /></span>{/if}</td>
+                  <td class="narrow">{#if !isUnreadable(system)}<span class="pin-cell"><PinButton {system} onChanged={pinChanged} /></span>{/if}</td>
                   {#if renaming === system.id}
                     <td colspan="6"><RenameForm {system} {onChanged} onClose={stopRenaming} bind:dirty /></td>
                   {:else}
                     <td>
-                      {#if system.outdated}
+                      {#if isUnreadable(system)}
                         <span class="name-button">
                           <strong>{nameOf(system)}</strong>
-                          <small>{t.systemList.outdated}</small>
+                          <small>{system.outdated_reason === 'newer_system_format' ? t.systemList.newerFormat : t.systemList.outdated}</small>
                         </span>
                       {:else}
                       <button class="name-button" aria-pressed={selecting ? chosen.includes(system.id) : undefined} onclick={() => open(system.id)}>
                         <strong>{nameOf(system)}</strong>
-                        <small>{nameOf(system) === system.designation ? '' : `${system.designation} · `}{t.systemList.planetsCount({ count: planetCount(system) })}</small>
+                        <small>{nameOf(system) === system.designation ? '' : `${system.designation} · `}{t.systemList.planetsCount({ count: planetCount(system) })}{system.outdated ? ` · ${t.systemList.outdatedWorlds}` : ''}</small>
                       </button>
                       {/if}
                     </td>
@@ -291,6 +293,7 @@
                         onPinned={pinChanged}
                         onRename={() => startRenaming(system.id)}
                         onDelete={() => onDelete([system.id])}
+                        onRegenerate={() => onRegenerate(system)}
                         onToggle={() => toggle(system.id)}
                       />
                     </td>
@@ -317,6 +320,7 @@
                 onRename={() => startRenaming(system.id)}
                 onRenameClose={stopRenaming}
                 onDelete={() => onDelete([system.id])}
+                onRegenerate={() => onRegenerate(system)}
                 onToggle={() => toggle(system.id)}
               />
             </li>

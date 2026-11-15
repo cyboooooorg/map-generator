@@ -344,8 +344,10 @@ Decisions 3 and 4, implemented (issue #328, step 3 of the plan). Code in
   generated file of one body (`bodies/<body>/sizes/*`, originals
   included) and keeps `system.json` (the body marked `generated: false`),
   the index rows, the names and pins, and `bodies/<body>/thumb.png`. It
-  is the one eviction path, whatever the body's age: the "reduce a system"
-  action must call it for every body of a system (see the planet
+  is the one eviction path, whatever the body's age: `POST
+  /api/systems/{id}/regenerate` calls it for the bodies of a system whose
+  worlds are below `MIN_FORMAT_VERSION` (then queues them again), and the
+  "reduce a system" action must call it for every body of a system (see the planet
   resolutions design, *Reduce and #328*; its doc comment says how). The
   sweep calls `evict_body_unopened_since(state, system, body, cutoff)`
   instead, the same eviction behind an age check (next point).

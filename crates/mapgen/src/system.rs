@@ -400,8 +400,8 @@ pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
     if head.format_version != SYSTEM_FORMAT_VERSION {
         return Err(format!(
             "system.json: format version {} is not the supported version \
-             {SYSTEM_FORMAT_VERSION}: the generator does not migrate older systems, delete it \
-             (`mise run clean-systems`) and draw it again",
+             {SYSTEM_FORMAT_VERSION}: the generator does not migrate older systems, regenerate \
+             it with Regenerate on its card in the main menu, or delete it and draw it again",
             head.format_version
         ));
     }

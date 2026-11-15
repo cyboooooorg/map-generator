@@ -35,7 +35,7 @@
 //! default rollback journal. In WAL mode the database is the three files
 //! `mapgen.sqlite`, `-wal` and `-shm`: copy it with the server stopped,
 //! or with `sqlite3 mapgen.sqlite ".backup copy.sqlite"`.
-use crate::api::{BodySummary, JobStatus, SystemSummary};
+use crate::api::{BodySummary, JobStatus, OutdatedReason, SystemSummary};
 use crate::systems::{self, GivenNames};
 use mapgen::request::WorldRequest;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -83,6 +83,10 @@ pub const UNKNOWN_FORMAT: i64 = 0;
 /// [`mapgen::system::SYSTEM_FORMAT_VERSION`]. A new system format therefore
 /// keeps the pins, displayed sizes and job history (the column is added to
 /// a file that lacks it, and its systems are read again once to fill it).
+/// The same goes for `systems.world_format`, the lowest `format_version`
+/// among the generated worlds of a system: `outdated` is also set (as
+/// 2, "worlds") when it is below
+/// [`mapgen::export::raw_data::MIN_FORMAT_VERSION`].
 const SCHEMA_VERSION: i64 = 5;
 /// Least time between two writes of a body's last opened date: a viewer
 /// asks for dozens of tiles a second.
@@ -130,10 +134,14 @@ CREATE TABLE systems (
     -- when the system was pinned in the main menu (ms), NULL if it is not;
     -- only the index holds it (no file mirrors it)
     pinned_ms         INTEGER,
-    -- made by an older generator (system.json of another format)
+    -- made by an older generator: 0 no, 1 system.json of another format,
+    -- 2 a generated world below the oldest supported format
     outdated          INTEGER NOT NULL DEFAULT 0,
     -- format_version of the system.json read (outdated is derived from it)
-    system_format     INTEGER
+    system_format     INTEGER,
+    -- lowest format_version of the generated worlds read (every size of
+    -- every generated body); NO_WORLDS when there is none; NULL until read
+    world_format      INTEGER
 );
 CREATE TABLE bodies (
     system_id         TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
@@ -269,12 +277,18 @@ pub fn versions_differ(recorded: &str, current: &str) -> bool {
     a_version != b_version || a_build.zip(b_build).is_some_and(|(a, b)| a != b)
 }
 
+/// `systems.world_format` of a system with no generated world.
+const NO_WORLDS: i64 = i64::MAX;
+
 /// A system read from the tree, ready to be stored.
 struct Loaded {
     summary: SystemSummary,
     request: Option<String>,
     /// `format_version` of the `system.json` read.
     system_format: Option<i64>,
+    /// Lowest `format_version` of the generated worlds, [`NO_WORLDS`] when
+    /// there is none.
+    world_format: i64,
     /// By body id: its seed, its parameters (JSON), the revision of its
     /// `world.json` when generated.
     details: HashMap<String, BodyDetail>,
@@ -411,7 +425,7 @@ impl Index {
             let conn = self.conn();
             let mut stmt = conn.prepare(
                 "SELECT id, modified_ms, names_modified_ms FROM systems
-                 WHERE system_format IS NOT NULL",
+                 WHERE system_format IS NOT NULL AND world_format IS NOT NULL",
             )?;
             stmt.query_map([], |r| {
                 Ok((
@@ -527,7 +541,13 @@ impl Index {
                     names: BTreeMap::new(),
                     modified_ms: r.get::<_, i64>(11)? as u64,
                     pinned: r.get::<_, Option<i64>>(12)?.is_some(),
-                    outdated: r.get(13)?,
+                    outdated: r.get::<_, i64>(13)? != 0,
+                    outdated_reason: match r.get::<_, i64>(13)? {
+                        0 => None,
+                        2 => Some(OutdatedReason::WorldFormat),
+                        3 => Some(OutdatedReason::NewerSystemFormat),
+                        _ => Some(OutdatedReason::SystemFormat),
+                    },
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -727,6 +747,25 @@ impl Index {
             return Ok(None);
         }
         self.summary(id)
+    }
+
+    /// Gives system `to` the pin of system `from` (its date included),
+    /// none when `from` is not pinned; true when `from` was pinned.
+    pub fn copy_pin(&self, from: &str, to: &str) -> Result<bool> {
+        let conn = self.conn();
+        let pinned: Option<i64> = conn
+            .query_row("SELECT pinned_ms FROM systems WHERE id = ?1", [from], |r| {
+                r.get(0)
+            })
+            .optional()?
+            .flatten();
+        if let Some(ms) = pinned {
+            conn.execute(
+                "UPDATE systems SET pinned_ms = ?2 WHERE id = ?1",
+                params![to, ms],
+            )?;
+        }
+        Ok(pinned.is_some())
     }
 
     // ------------------------------------------------------------------
@@ -1138,10 +1177,26 @@ fn follow_system_format(conn: &Connection, system_format: i64) -> rusqlite::Resu
         if !has_column {
             conn.execute_batch("ALTER TABLE systems ADD COLUMN system_format INTEGER")?;
         }
+        let has_worlds = conn
+            .prepare("SELECT 1 FROM pragma_table_info('systems') WHERE name = 'world_format'")?
+            .exists([])?;
+        if !has_worlds {
+            conn.execute_batch("ALTER TABLE systems ADD COLUMN world_format INTEGER")?;
+        }
+        let code = "CASE WHEN system_format > ?1 THEN 3
+                         WHEN system_format < ?1 THEN 1
+                         WHEN world_format < ?2 THEN 2
+                         ELSE 0 END";
         conn.execute(
-            "UPDATE systems SET outdated = (system_format != ?1)
-             WHERE system_format IS NOT NULL AND outdated != (system_format != ?1)",
-            [system_format],
+            &format!(
+                "UPDATE systems SET outdated = {code}
+                 WHERE system_format IS NOT NULL AND world_format IS NOT NULL
+                   AND outdated != {code}"
+            ),
+            [
+                system_format,
+                i64::from(mapgen::export::raw_data::MIN_FORMAT_VERSION),
+            ],
         )?;
         Ok(())
     })();
@@ -1292,8 +1347,35 @@ fn load(root: &Path, id: &str) -> Option<Loaded> {
     let names = systems::modified_ms(&dir.join(systems::NAMES_FILE))
         .map(|modified| (systems::given_names(root, id), modified));
     let system_format = systems::format_version(&bytes).map(i64::from);
+    // Every resolution of every generated body: the viewer refuses any of
+    // them below the oldest supported format.
+    let lowest = if summary.outdated {
+        NO_WORLDS
+    } else {
+        summary
+            .bodies
+            .iter()
+            .filter(|b| b.generated)
+            .flat_map(|b| {
+                let body_dir = systems::body_dir(root, id, &b.id);
+                mapgen::sizes::sizes_on_disk(&body_dir)
+                    .into_iter()
+                    .filter_map(move |(w, h)| {
+                        world_format(&mapgen::sizes::size_dir(&body_dir, w, h))
+                    })
+            })
+            .map(i64::from)
+            .min()
+            .unwrap_or(NO_WORLDS)
+    };
+    let mut summary = summary;
+    if !summary.outdated && lowest < i64::from(mapgen::export::raw_data::MIN_FORMAT_VERSION) {
+        summary.outdated = true;
+        summary.outdated_reason = Some(OutdatedReason::WorldFormat);
+    }
     Some(Loaded {
         summary,
+        world_format: lowest,
         request,
         system_format,
         details,
@@ -1303,7 +1385,7 @@ fn load(root: &Path, id: &str) -> Option<Loaded> {
 
 /// The `format_version` the `world.json` of a body's resolution (in
 /// `dir`) says.
-fn world_format(dir: &Path) -> Option<u32> {
+pub(crate) fn world_format(dir: &Path) -> Option<u32> {
     #[derive(serde::Deserialize)]
     struct Head {
         format_version: u32,
@@ -1365,13 +1447,14 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
     };
     tx.execute(
         "INSERT INTO systems (id, seed, width, height, star, designation, light_r, light_g,
-                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms, outdated, system_format)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                              light_b, hz_inner_au, hz_outer_au, modified_ms, request, pinned_ms, outdated, system_format,
+                              world_format)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
          ON CONFLICT(id) DO UPDATE SET
             seed = ?2, width = ?3, height = ?4, star = ?5, designation = ?6, light_r = ?7,
             light_g = ?8, light_b = ?9, hz_inner_au = ?10, hz_outer_au = ?11,
             modified_ms = ?12, request = ?13, outdated = ?15,
-            system_format = ?16",
+            system_format = ?16, world_format = ?17",
         params![
             s.id,
             s.seed,
@@ -1387,8 +1470,14 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
             s.modified_ms as i64,
             loaded.request,
             pinned_ms,
-            s.outdated,
-            loaded.system_format
+            match s.outdated_reason {
+                None => 0,
+                Some(OutdatedReason::SystemFormat) => 1,
+                Some(OutdatedReason::WorldFormat) => 2,
+                Some(OutdatedReason::NewerSystemFormat) => 3,
+            },
+            loaded.system_format,
+            loaded.world_format,
         ],
     )?;
     tx.execute("DELETE FROM bodies WHERE system_id = ?1", [&s.id])?;
@@ -2013,6 +2102,20 @@ mod tests {
         let root = temp_root("format-follow");
         let systems = root.join("systems");
         tree(&systems, &["mgs-1-1", "mgs-1-2"]);
+        // Worlds of the oldest supported format: only the system format
+        // is in question here.
+        for id in ["mgs-1-1", "mgs-1-2"] {
+            std::fs::write(
+                systems
+                    .join(id)
+                    .join("bodies/c/sizes/1024x512/raw_data/world.json"),
+                format!(
+                    r#"{{"format_version": {}}}"#,
+                    mapgen::export::raw_data::MIN_FORMAT_VERSION
+                ),
+            )
+            .unwrap();
+        }
         let db = root.join("mapgen.sqlite");
         {
             let index = Index::open(&db).unwrap();
@@ -2031,9 +2134,100 @@ mod tests {
         assert!(listed.iter().all(|s| s.outdated), "{listed:?}");
         assert!(index.summary("mgs-1-1").unwrap().unwrap().pinned);
         drop(index);
+        // A generator older than the files: they are newer, not older.
+        let older = i64::from(mapgen::system::SYSTEM_FORMAT_VERSION) - 1;
+        let index = Index::open_with_system_format(&db, older).unwrap();
+        let listed = index.list_systems().unwrap();
+        assert!(
+            listed
+                .iter()
+                .all(|s| s.outdated_reason == Some(OutdatedReason::NewerSystemFormat)),
+            "{listed:?}"
+        );
+        drop(index);
         // The current generator again: the flags follow back.
         let index = Index::open(&db).unwrap();
         assert!(index.list_systems().unwrap().iter().all(|s| !s.outdated));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn worlds_below_the_oldest_format_flag_the_system() {
+        let root = temp_root("world-format");
+        let systems = root.join("systems");
+        // "c" is generated with a world of format 9, below the oldest.
+        tree(&systems, &["mgs-1-1"]);
+        let db = root.join("mapgen.sqlite");
+        let index = Index::open(&db).unwrap();
+        index.reconcile(&systems).unwrap();
+        let s = index.summary("mgs-1-1").unwrap().unwrap();
+        assert!(s.outdated);
+        assert_eq!(s.outdated_reason, Some(OutdatedReason::WorldFormat));
+        // Made again at the oldest supported format: the flag clears.
+        let min = mapgen::export::raw_data::MIN_FORMAT_VERSION;
+        std::fs::write(
+            systems.join("mgs-1-1/bodies/c/sizes/1024x512/raw_data/world.json"),
+            format!(r#"{{"format_version": {min}}}"#),
+        )
+        .unwrap();
+        index
+            .refresh_system(&systems, "mgs-1-1", Cause::Generated)
+            .unwrap();
+        let s = index.summary("mgs-1-1").unwrap().unwrap();
+        assert!(!s.outdated);
+        assert_eq!(s.outdated_reason, None);
+        // One old resolution among current ones is enough.
+        let extra = systems.join("mgs-1-1/bodies/c/sizes/256x128/raw_data");
+        std::fs::create_dir_all(&extra).unwrap();
+        std::fs::write(extra.join("world.json"), r#"{"format_version": 3}"#).unwrap();
+        index
+            .refresh_system(&systems, "mgs-1-1", Cause::Scan)
+            .unwrap();
+        assert!(index.summary("mgs-1-1").unwrap().unwrap().outdated);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_database_without_world_formats_reads_its_systems_again_once() {
+        let root = temp_root("world-format-legacy");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1"]);
+        let db = root.join("mapgen.sqlite");
+        {
+            let index = Index::open(&db).unwrap();
+            index.reconcile(&systems).unwrap();
+        }
+        // A file written before the column: not flagged, nothing recorded.
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "ALTER TABLE systems DROP COLUMN world_format;
+                 UPDATE systems SET outdated = 0",
+            )
+            .unwrap();
+        }
+        let index = Index::open(&db).unwrap();
+        let report = index.reconcile(&systems).unwrap();
+        assert_eq!(report.added + report.updated, 1);
+        assert!(index.summary("mgs-1-1").unwrap().unwrap().outdated);
+        let again = index.reconcile(&systems).unwrap();
+        assert_eq!(again.added + again.updated, 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_pin_is_copied_with_its_date() {
+        let root = temp_root("copy-pin");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1", "mgs-1-2"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+        assert!(!index.copy_pin("mgs-1-1", "mgs-1-2").unwrap());
+        index.set_pinned("mgs-1-1", true).unwrap();
+        assert!(index.copy_pin("mgs-1-1", "mgs-1-2").unwrap());
+        let from = index.summary("mgs-1-1").unwrap().unwrap();
+        let to = index.summary("mgs-1-2").unwrap().unwrap();
+        assert!(from.pinned && to.pinned);
         std::fs::remove_dir_all(root).unwrap();
     }
 

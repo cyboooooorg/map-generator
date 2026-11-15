@@ -100,6 +100,11 @@ export const en = {
       p.ids.length === 1 ? `Deleted ${p.ids[0]}.` : `Deleted ${p.ids.length} worlds.`,
     undo: 'Undo',
     deleteFailed: (p: { error: string }) => `Could not delete: ${p.error}`,
+    confirmRegenerateSystem: (p: { name: string }) =>
+      `${p.name} was made by an older generator and cannot be opened. Draw it again from its seed? The result is a different system, and the names that no longer fit are lost.`,
+    regenerated: (p: { name: string }) => `${p.name} is regenerated.`,
+    regenerating: (p: { name: string }) => `${p.name}: its outdated worlds are being generated again.`,
+    regenerateFailed: (p: { name: string; error: string }) => `Could not regenerate ${p.name}: ${p.error}`,
     rerollFailed: (p: { error: string }) => `Could not reroll: ${p.error}`,
     versus: 'vs',
     linkCameras: 'Link cameras',
@@ -256,6 +261,13 @@ export const en = {
     habitableLine: 'A world with liquid water',
     habitableShort: 'Liquid water',
     outdated: 'Outdated: made by an older generator',
+    newerFormat: 'Made by a newer generator: update this one to open it',
+    outdatedWorlds: 'Outdated worlds: made by an older generator',
+    regenerate: (p: { name: string }) => `Regenerate ${p.name}`,
+    regenerateHelp: {
+      system_format: 'Draw this system again from its seed (names that no longer fit are lost)',
+      world_format: 'Generate its outdated worlds again (the system and its names are kept)',
+    },
     planetsCount: (p: { count: number }) => `${p.count} ${p.count === 1 ? 'planet' : 'planets'}`,
     moonsCount: (p: { count: number }) => (p.count === 0 ? 'no moons' : `${p.count} ${p.count === 1 ? 'moon' : 'moons'}`),
     columns: { pin: 'Pin', name: 'Name', star: 'Star', planets: 'Planets', moons: 'Moons', created: 'Created', actions: 'Actions' },
@@ -1577,7 +1589,7 @@ export const en = {
   /** Loading of a world. */
   world: {
     outdated: (p: { id: string }) =>
-      `${p.id} was made by an older generator: delete it (\`mise run clean-systems\`) and draw it again`,
+      `${p.id} was made by an older generator: use Regenerate on its card in the main menu to make it again (or delete it and draw it again)`,
     loadFailed: (p: { id: string; error: string }) => `Could not load ${p.id}: ${p.error}`,
   },
   /** Request errors the server explains with a code (see `ErrorDetail`). */
