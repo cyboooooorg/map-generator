@@ -12,9 +12,14 @@
 //! name = "mars-like"                  # lowercase letters and dashes
 //! description = "Mars-like: a small cold desert"
 //!
+//! [reference]                         # optional: the body it stands for
+//! name = "Mars"                       # a proper name, or theoretical = true
+//! # discovered = 1995                 # exoplanets only: year of discovery
+//!
 //! [locales.fr]                        # optional: name and description per language
 //! name = "Martienne"
 //! description = "Un petit désert froid"
+//! reference = "Mars"                  # the reference as French writes it ("la Terre")
 //!
 //! [inputs]                            # a fixed value or a [min, max] range
 //! mass_earth = [0.096, 0.118]         # required, Earth masses (a moon's: 1e-6 to 0.1)
@@ -67,7 +72,7 @@
 //! to 0.02 bar with the mass (escape takes more from a lighter one) and
 //! the star's age (a young one has lost less).
 //! The exoplanet kinds (`super-earth`, `mini-neptune`, `ocean-world`,
-//! `lava-world`, `hot-jupiter`) name a range typical of the kind:
+//! `lava-world`, `hot-jupiter`, `hot-neptune`) name a range typical of the kind:
 //! Calibration, no source. The four small ones keep near-circular orbits
 //! (`eccentricity = [0, 0.05]`), as the tides keep close-in small planets
 //! (Van Eylen et al. 2019, doi:10.3847/1538-3881/aaf22f, fit a mean of
@@ -82,6 +87,9 @@
 //! whose inner edge is at 1.107 (Kopparapu et al. 2014, see
 //! `crate::star::habitable_fluxes`), but past that of a cooler star (1.01
 //! for a K2V, about 0.9 for a red M dwarf), where the ocean runs away.
+//! `hot-neptune` keeps `envelope_fraction` from 0.08: below it
+//! photoevaporation strips about one draw in thirteen down to a
+//! `mini-neptune` (Calibration, no source).
 //! In a system they take the system's star.
 //!
 //! The moon archetypes (`titan-like`, `europa-like`, `ganymede-like`,
@@ -103,7 +111,7 @@ use std::fmt;
 use std::path::Path;
 
 /// The built-in archetypes, in the order they are listed.
-const BUILT_IN: [(&str, &str); 20] = [
+const BUILT_IN: [(&str, &str); 21] = [
     (
         "mercury-like",
         include_str!("../../../archetypes/mercury-like.toml"),
@@ -155,6 +163,10 @@ const BUILT_IN: [(&str, &str); 20] = [
     (
         "hot-jupiter",
         include_str!("../../../archetypes/hot-jupiter.toml"),
+    ),
+    (
+        "hot-neptune",
+        include_str!("../../../archetypes/hot-neptune.toml"),
     ),
     (
         "titan-like",
@@ -300,6 +312,26 @@ impl ParamDefault {
 pub struct Locale {
     pub name: Option<String>,
     pub description: Option<String>,
+    /// How the archetype's reference body reads in this language, with its
+    /// article where the language needs one (`la Terre`).
+    pub reference: Option<String>,
+}
+
+/// The body an archetype stands for (the `[reference]` table): the Solar
+/// System body it takes its numbers from, the first exoplanet found of its
+/// kind, or none because no such planet is known yet. The web app words a
+/// world's "similar to" line from it.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields))]
+pub struct ArchetypeReference {
+    /// Proper name, the same in every language unless a locale overrides it.
+    pub name: Option<String>,
+    /// Year an exoplanet was discovered; left out for a Solar System body.
+    pub discovered: Option<u16>,
+    /// No known planet is of this kind (instead of `name`).
+    #[serde(default)]
+    pub theoretical: bool,
 }
 
 /// The inputs of the planet model an archetype sets (the `[inputs]`
@@ -448,6 +480,10 @@ pub struct Archetype {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub moon: Option<ArchetypeMoon>,
+    /// The body it stands for, when its file says so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub reference: Option<ArchetypeReference>,
     /// Translated name and description, by language code (`fr`).
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -494,6 +530,15 @@ impl Archetype {
         let o = &self.orbit;
         if o.insolation.is_some() && o.period_days.is_some() {
             return Err("orbit: set insolation or period_days, not both".to_string());
+        }
+        if let Some(r) = &self.reference {
+            match (&r.name, r.theoretical) {
+                (Some(_), false) | (None, true) => {}
+                _ => return Err("reference: set name or theoretical = true, not both".to_string()),
+            }
+            if r.discovered.is_some() && r.name.is_none() {
+                return Err("reference: discovered needs a name".to_string());
+            }
         }
         if let Some(star) = &o.star {
             crate::star::parse_type(star).map_err(|e| format!("orbit.star: {e}"))?;
@@ -748,6 +793,48 @@ pub fn similar<'a>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_built_in_archetype_names_its_reference() {
+        for a in Archetype::built_in() {
+            let r = a
+                .reference
+                .unwrap_or_else(|| panic!("{} has no [reference]", a.name));
+            assert!(r.name.is_some() != r.theoretical, "{}", a.name);
+            // An exoplanet carries its year, a Solar System body does not.
+            assert_eq!(
+                r.discovered.is_some(),
+                [
+                    "hot-jupiter",
+                    "hot-neptune",
+                    "super-earth",
+                    "mini-neptune",
+                    "lava-world"
+                ]
+                .contains(&a.name.as_str()),
+                "{}",
+                a.name
+            );
+        }
+        let earth = Archetype::load("earth-like").unwrap();
+        assert_eq!(earth.locales["fr"].reference.as_deref(), Some("la Terre"));
+    }
+
+    #[test]
+    fn a_reference_names_a_body_or_is_theoretical_not_both() {
+        let file = |reference: &str| {
+            Archetype::from_toml(
+                &format!("name = \"x-like\"\n{reference}\n[inputs]\nmass_earth = 1.0\n"),
+                "test",
+            )
+        };
+        assert!(file("").is_ok(), "the table is optional");
+        assert!(file("[reference]\nname = \"Earth\"").is_ok());
+        assert!(file("[reference]\ntheoretical = true").is_ok());
+        assert!(file("[reference]\nname = \"Earth\"\ntheoretical = true").is_err());
+        assert!(file("[reference]").is_err());
+        assert!(file("[reference]\ntheoretical = true\ndiscovered = 2000").is_err());
+    }
+
     use super::*;
     use crate::planet::{Context, PlanetModel, derive_model_with};
     use crate::star::{SUN, StarInfo};
@@ -840,6 +927,7 @@ mod tests {
             "ocean-world" => "ocean-world",
             "lava-world" => "lava-world",
             "hot-jupiter" => "hot-jupiter",
+            "hot-neptune" => "hot-neptune",
             // The moons, round their host at its own orbit (see
             // `moon_model_of`): Titan's liquid methane, the others' ice
             // over an ocean or none, Io's dry rock.
@@ -875,7 +963,7 @@ mod tests {
         for n in built_in_names() {
             Archetype::load(n).unwrap();
         }
-        assert_eq!(built_in_names().len(), 20);
+        assert_eq!(built_in_names().len(), 21);
     }
 
     #[test]

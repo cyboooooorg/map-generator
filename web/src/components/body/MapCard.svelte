@@ -79,22 +79,22 @@
     {/if}
   </dl>
   <div class="actions">
-    <button onclick={reroll} disabled={rerolling} title={t.worldInfo.rerollHelp}>{rerolling ? t.worldInfo.sending : t.worldInfo.reroll}</button>
-    <button onclick={onVary} title={t.worldInfo.varyHelp}>{t.worldInfo.vary}</button>
-    <button onclick={() => copy(cliCommand(meta), t.worldInfo.command)} title={t.worldInfo.copyCommandHelp}>{t.worldInfo.copyCommand}</button>
-    <button onclick={() => copy(link(), t.worldInfo.link)} title={t.worldInfo.copyLinkHelp}>{t.worldInfo.copyLink}</button>
-    <button class="danger" onclick={onDelete}>{t.worldInfo.delete}</button>
+    <button type="button" onclick={reroll} disabled={rerolling} title={t.worldInfo.rerollHelp}>{rerolling ? t.worldInfo.sending : t.worldInfo.reroll}</button>
+    <button type="button" onclick={onVary} title={t.worldInfo.varyHelp}>{t.worldInfo.vary}</button>
+    <button type="button" onclick={() => copy(cliCommand(meta), t.worldInfo.command)} title={t.worldInfo.copyCommandHelp}>{t.worldInfo.copyCommand}</button>
+    <button type="button" onclick={() => copy(link(), t.worldInfo.link)} title={t.worldInfo.copyLinkHelp}>{t.worldInfo.copyLink}</button>
+    <button type="button" class="danger" onclick={onDelete}>{t.worldInfo.delete}</button>
   </div>
   <div class="downloads">
     <span>{t.worldInfo.download}</span>
     {#if id && size}
       <a href={worldFile(id, size, 'world.png', world.revision)} download={`${id}.png`}>{t.worldInfo.mapPng}</a>
       <a href={worldFile(id, size, 'legend.png', world.revision)} download={`${id}-legend.png`}>{t.worldInfo.legend}</a>
-      <button class="link" onclick={exportSvg} disabled={drawingSvg} title={t.worldInfo.exportSvgHelp}
+      <button type="button" class="link" onclick={exportSvg} disabled={drawingSvg} title={t.worldInfo.exportSvgHelp}
         >{drawingSvg ? t.worldInfo.drawingSvg : t.worldInfo.exportSvg}</button
       >
     {/if}
-    <button class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
+    <button type="button" class="link" onclick={zip} disabled={zipping}>{zipping ? t.worldInfo.zipping : t.worldInfo.rawData}</button>
   </div>
 {/if}
 

@@ -93,6 +93,15 @@ pub const HZ_POSITION: Limits = Limits {
     min: -2.0,
     max: 6.0,
 };
+/// Age of the star, Gyr: above 0 and at most the longest life of any star
+/// ([`crate::star::lifetime_gyr`] of the lightest; the star asked for sets
+/// its own bound, see `BadAge`).
+pub fn age_gyr_limits() -> Limits {
+    Limits {
+        min: 0.0,
+        max: crate::star::lifetime_gyr(0.0),
+    }
+}
 /// Hydraulic erosion strength (droplets per erosion-grid pixel).
 pub const EROSION: Limits = Limits { min: 0.0, max: 5.0 };
 /// Map width and height in pixels.
@@ -181,6 +190,9 @@ pub struct WorldRequest {
     pub co2: Option<f64>,
     /// Factor on the N₂ formation rule, in `[0, 100]`: 1 typical.
     pub n2: Option<f64>,
+    /// Factor on the CH₄ formation rule, in `[0, 100]`: 1 typical. Replaces
+    /// the archetype's own when set.
+    pub ch4: Option<f64>,
     /// Radiogenic abundance at formation, Earth's = 1, in `[0.1, 10]`.
     pub radiogenic: Option<f64>,
     /// `true`: life arises wherever the world allows it; `false`: never;
@@ -226,6 +238,9 @@ pub enum RequestError {
     UnknownArchetype(String),
     /// An archetype file that does not load (unreadable or invalid).
     BadArchetype(String),
+    /// A giant's moon archetype asked for alone: it needs its giant, so a
+    /// whole system asks for it.
+    MoonArchetypeAlone(String),
     /// More water than the planet weighs (with its envelope).
     WaterHeavierThanPlanet { water_oceans: f64, mass_earth: f64 },
     /// The age asked is not between 0 and the star's main-sequence life.
@@ -294,6 +309,10 @@ impl fmt::Display for RequestError {
                 crate::archetype::built_in_names().join(", ")
             ),
             RequestError::BadArchetype(e) => write!(f, "planet: {e}"),
+            RequestError::MoonArchetypeAlone(name) => write!(
+                f,
+                "planet: {name} is a giant's moon: ask for it in a whole system (--system {name}=1)"
+            ),
             RequestError::WaterHeavierThanPlanet {
                 water_oceans,
                 mass_earth,
@@ -437,6 +456,7 @@ impl WorldRequest {
             ),
             ("co2", self.co2, VOLATILE_FACTOR),
             ("n2", self.n2, VOLATILE_FACTOR),
+            ("ch4", self.ch4, VOLATILE_FACTOR),
             ("radiogenic", self.radiogenic, RADIOGENIC),
         ] {
             if let Some(v) = value
@@ -470,8 +490,7 @@ impl WorldRequest {
             envelope_fraction: self.envelope_fraction.or(a.envelope_fraction),
             co2: self.co2.or(a.co2),
             n2: self.n2.or(a.n2),
-            // Not a request's knob: the archetype's alone.
-            ch4: a.ch4,
+            ch4: self.ch4.or(a.ch4),
             radiogenic: self.radiogenic.or(a.radiogenic),
             life: self.life.or(a.life),
         }
@@ -524,10 +543,7 @@ impl WorldRequest {
         // A moon archetype has no orbit of its own round a star: it is
         // asked for in a whole system, which gives it its giant.
         if let Some(a) = archetype.as_ref().filter(|a| a.moon.is_some()) {
-            return Err(RequestError::BadArchetype(format!(
-                "{} is a giant's moon: ask for it in a whole system (--system {}=1)",
-                a.name, a.name
-            )));
+            return Err(RequestError::MoonArchetypeAlone(a.name.clone()));
         }
         let a = archetype.as_ref();
         let seed = self.seed.unwrap_or_else(|| rng.random());
@@ -540,12 +556,20 @@ impl WorldRequest {
             .or_else(|| a.and_then(|a| a.orbit.star.as_deref()));
         let star_set = star_kind.is_some();
         let orbit_set = self.orbit_au.is_some() || self.hz_position.is_some();
-        let place = |mut rng: &mut dyn rand::Rng| -> Result<(f32, f32, f32), RequestError> {
-            let rng = &mut rng;
+        // Each draw has its own stream of the seed, and is made whether or
+        // not the request pins its value: nothing shifts another draw, and
+        // the caller's `rng` only draws the seed.
+        let place = |attempt: usize| -> Result<(f32, f32, f32), RequestError> {
+            let drawn_star = crate::star::draw_type_living(
+                self.age_gyr,
+                &mut seeded(seed, &format!("world/star/{attempt}")),
+            );
             let star = match star_kind {
                 Some(kind) => crate::star::parse_type(kind).map_err(RequestError::BadStar)?,
-                None => crate::star::draw_type_living(self.age_gyr, rng),
+                None => drawn_star,
             };
+            let rng = &mut seeded(seed, &format!("world/orbit/{attempt}"));
+            let hz_position = fallback::HZ_POSITION.pick(rng);
             // The age, from its own stream: no other draw shifts.
             let age_gyr = crate::star::resolve_age_gyr(self.age_gyr, star, seed)?;
             let v = crate::star::values(star);
@@ -557,7 +581,7 @@ impl WorldRequest {
                         .orbit_au(f64::from(v.luminosity), f64::from(v.mass), rng)
                 }) {
                     Some(au) => (au as f32).clamp(ORBIT_AU.min, ORBIT_AU.max),
-                    None => crate::star::orbit_at(star, fallback::HZ_POSITION.pick(rng)),
+                    None => crate::star::orbit_at(star, hz_position),
                 },
             };
             Ok((star, age_gyr, orbit_au))
@@ -566,10 +590,8 @@ impl WorldRequest {
         let metallicity = self
             .metallicity
             .unwrap_or_else(|| crate::giants::draw_metallicity(seed));
-        let mass_earth = match self.mass_earth.or(archetype_mass) {
-            Some(mass) => mass,
-            None => crate::planet::draw_mass(Origin::Small, rng),
-        };
+        let drawn_mass = crate::planet::draw_mass(Origin::Small, &mut seeded(seed, "world/mass/0"));
+        let mass_earth = self.mass_earth.or(archetype_mass).unwrap_or(drawn_mass);
         if let Some(water_oceans) = overrides.water_oceans {
             let envelope = overrides.envelope_fraction.unwrap_or(0.0);
             if water_oceans * OCEAN_KG > mass_earth * EARTH_KG * (1.0 - envelope) {
@@ -579,26 +601,31 @@ impl WorldRequest {
                 });
             }
         }
-        let asked_eccentricity = self.eccentricity.or_else(|| {
-            a.and_then(|a| a.orbit.eccentricity)
-                .map(|e| e.pick(&mut stream))
-        });
-        let tilt = self.axial_tilt_deg.or_else(|| {
-            a.and_then(|a| a.orbit.axial_tilt)
-                .map(|t| t.pick(&mut stream))
-        });
+        // The archetype's draws come from the stream whether or not the
+        // request pins them, so that a pin moves no other draw.
+        let archetype_eccentricity = a
+            .and_then(|a| a.orbit.eccentricity)
+            .map(|e| e.pick(&mut stream));
+        let archetype_tilt = a
+            .and_then(|a| a.orbit.axial_tilt)
+            .map(|t| t.pick(&mut stream));
+        let asked_eccentricity = self.eccentricity.or(archetype_eccentricity);
+        let tilt = self.axial_tilt_deg.or(archetype_tilt);
         let moons = self.moons.unwrap_or_default();
         let mut attempts = 0;
         let mut params = loop {
-            let (star, age_gyr, orbit_au) = place(rng)?;
+            let (star, age_gyr, orbit_au) = place(attempts)?;
+            // Both kinds are drawn, in this order, so that a mass pinned
+            // across the giant threshold moves nothing else.
+            let ecc_rng = &mut seeded(seed, &format!("world/eccentricity/{attempts}"));
+            let giant_eccentricity = crate::star::draw_eccentricity(ecc_rng);
+            let small_eccentricity = crate::star::draw_small_eccentricity(false, ecc_rng);
             let eccentricity = match asked_eccentricity {
                 Some(e) => e,
                 // A giant follows Kipping 2013, a small planet alone in
                 // its system Van Eylen et al. 2019.
-                None if mass_earth >= crate::planet::GIANT_MIN_MASS_EARTH => {
-                    crate::star::draw_eccentricity(rng)
-                }
-                None => crate::star::draw_small_eccentricity(false, rng),
+                None if mass_earth >= crate::planet::GIANT_MIN_MASS_EARTH => giant_eccentricity,
+                None => small_eccentricity,
             };
             let at = |e: f32| World {
                 seed,
@@ -808,6 +835,7 @@ impl WorldRequest {
             envelope_fraction: self.envelope_fraction.or(set.envelope_fraction),
             co2: self.co2.or(set.co2),
             n2: self.n2.or(set.n2),
+            ch4: self.ch4.or(set.ch4),
             radiogenic: self.radiogenic.or(set.radiogenic),
             life: self.life.or(set.life),
             host: if giant {
@@ -950,6 +978,119 @@ mod tests {
 
     fn resolve(request: &WorldRequest) -> Result<Resolved, RequestError> {
         request.resolve(&mut StdRng::seed_from_u64(7))
+    }
+
+    #[test]
+    fn a_seeded_world_ignores_the_callers_rng() {
+        let request = WorldRequest {
+            seed: Some(7),
+            ..Default::default()
+        };
+        let a = request
+            .resolve_with_archetype(None, &mut StdRng::seed_from_u64(1))
+            .unwrap();
+        let b = request
+            .resolve_with_archetype(None, &mut StdRng::seed_from_u64(2))
+            .unwrap();
+        assert_eq!(a.params.star, b.params.star);
+        assert_eq!(a.params.orbit_au, b.params.orbit_au);
+        assert_eq!(a.params.eccentricity, b.params.eccentricity);
+        assert_eq!(a.model(), b.model());
+    }
+
+    /// Pins one field of a free world and checks that the others stay.
+    fn assert_pin_moves_only(pin: impl Fn(&mut WorldRequest, &Resolved), kept: &[&str]) {
+        let free = WorldRequest {
+            seed: Some(7),
+            ..Default::default()
+        };
+        let a = resolve(&free).unwrap();
+        let mut pinned = free.clone();
+        pin(&mut pinned, &a);
+        let b = resolve(&pinned).unwrap();
+        // A drawn star in the habitable zone moves the orbit with it
+        // unless the orbit is pinned: the draw itself is what stays.
+        for field in kept {
+            match *field {
+                "star" => assert_eq!(a.params.star, b.params.star),
+                "orbit" => assert_eq!(a.params.orbit_au, b.params.orbit_au),
+                "eccentricity" => assert_eq!(a.params.eccentricity, b.params.eccentricity),
+                "mass" => assert_eq!(a.model().drawn_mass_earth, b.model().drawn_mass_earth),
+                other => panic!("unknown field {other}"),
+            }
+        }
+    }
+
+    #[test]
+    fn pinning_the_mass_moves_nothing_else() {
+        assert_pin_moves_only(
+            |r, _| r.mass_earth = Some(2.0),
+            &["star", "orbit", "eccentricity"],
+        );
+    }
+
+    #[test]
+    fn pinning_the_star_leaves_the_mass_and_eccentricity() {
+        assert_pin_moves_only(
+            |r, _| r.star = Some("K2V".into()),
+            &["mass", "eccentricity"],
+        );
+    }
+
+    #[test]
+    fn pinning_the_orbit_leaves_the_star_mass_and_eccentricity() {
+        assert_pin_moves_only(
+            |r, _| r.orbit_au = Some(1.3),
+            &["star", "mass", "eccentricity"],
+        );
+    }
+
+    #[test]
+    fn pinning_the_eccentricity_leaves_the_star_orbit_and_mass() {
+        assert_pin_moves_only(
+            |r, _| r.eccentricity = Some(0.2),
+            &["star", "orbit", "mass"],
+        );
+    }
+
+    #[test]
+    fn pinning_the_eccentricity_leaves_an_archetypes_ranged_tilt() {
+        let archetype = crate::archetype::Archetype::from_toml(
+            "name = \"wobbly\"\ndescription = \"x\"\n[inputs]\nmass_earth = 1.0\n[orbit]\ninsolation = 1.0\neccentricity = [0.0, 0.05]\naxial_tilt = [5.0, 40.0]\n",
+            "test",
+        )
+        .unwrap();
+        let resolve = |eccentricity| {
+            WorldRequest {
+                seed: Some(7),
+                eccentricity,
+                ..Default::default()
+            }
+            .resolve_with_archetype(Some(archetype.clone()), &mut StdRng::seed_from_u64(1))
+            .unwrap()
+            .params
+        };
+        let (free, pinned) = (resolve(None), resolve(Some(0.03)));
+        assert_ne!(free.axial_tilt_deg, 0.0);
+        assert_eq!(free.axial_tilt_deg, pinned.axial_tilt_deg);
+    }
+
+    #[test]
+    fn a_request_ch4_reaches_the_overrides() {
+        let request = WorldRequest {
+            ch4: Some(3.0),
+            ..Default::default()
+        };
+        let overrides = request.overrides(None, &mut StdRng::seed_from_u64(1));
+        assert_eq!(overrides.ch4, Some(3.0));
+        let bad = WorldRequest {
+            ch4: Some(1000.0),
+            ..Default::default()
+        };
+        assert!(matches!(
+            bad.validate(),
+            Err(RequestError::OutOfRange { field: "ch4", .. })
+        ));
     }
 
     /// Relative tolerance of [`assert_same`]: a value read back from the
@@ -1195,6 +1336,7 @@ mod tests {
             ("envelope", a.envelope_fraction, b.envelope_fraction),
             ("co2", a.volatiles.co2, b.volatiles.co2),
             ("n2", a.volatiles.n2, b.volatiles.n2),
+            ("ch4", a.volatiles.ch4, b.volatiles.ch4),
             ("radiogenic", a.radiogenic, b.radiogenic),
         ] {
             let scale = x.abs().max(y.abs()).max(f64::MIN_POSITIVE);
@@ -1242,7 +1384,7 @@ mod tests {
             drawn.params.clone(),
             drawn.model.clone().unwrap(),
         )];
-        for name in ["mini-neptune", "earth-like"] {
+        for name in ["mini-neptune", "earth-like", "ocean-world"] {
             let resolved = resolve(&named(Some(name), 4)).unwrap();
             let model = resolved.model().clone();
             worlds.push((name.to_string(), resolved.params, model));
@@ -1591,13 +1733,20 @@ mod tests {
         };
         assert!(matches!(resolve(&both), Err(RequestError::MoonsOfAMoon)));
         for seed in 0..300 {
-            let p = resolve(&WorldRequest {
+            let resolved = resolve(&WorldRequest {
                 mass_earth: Some(1.0),
                 moons: Some(crate::moons::MoonsMode::Count(1)),
                 ..named(None, seed)
-            })
-            .unwrap()
-            .params;
+            });
+            // A drawn envelope may make even an Earth mass a hot mini-Neptune
+            // that keeps no moon: an error, not a giant's moon.
+            let Ok(Resolved { params: p, .. }) = resolved else {
+                assert!(matches!(
+                    resolved,
+                    Err(RequestError::HotGiantMoons { count: 1 })
+                ));
+                continue;
+            };
             assert_eq!(p.host, crate::exomoon::HostMode::None);
         }
     }

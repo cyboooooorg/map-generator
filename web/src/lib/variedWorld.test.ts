@@ -95,3 +95,15 @@ describe('a giant world in the form', () => {
     expect(isGiantWorld({ randomPlanet: true, archetype: undefined, initial: drawnPlanet, initialSpec: undefined, variedGiant: false })).toBe(false);
   });
 });
+
+describe('a varied world with the newer inputs', () => {
+  it('keeps_co2_ch4_eccentricity_and_age_gyr', () => {
+    const initial: WorldRequest = { planet: 'earth-like', seed: 3, co2: 0.4, ch4: 2, age_gyr: 6.5, eccentricity: 0.12 };
+    const request: WorldRequest = { planet: 'earth-like' };
+    keepModelInputs(request, initial, 'earth-like');
+    expect(request).toMatchObject({ co2: 0.4, ch4: 2, age_gyr: 6.5, eccentricity: 0.12 });
+    const other: WorldRequest = { planet: 'mars-like' };
+    keepModelInputs(other, initial, 'earth-like');
+    expect(other).toEqual({ planet: 'mars-like' });
+  });
+});

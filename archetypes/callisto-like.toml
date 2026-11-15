@@ -1,9 +1,13 @@
 name = "callisto-like"
 description = "Callisto-like: an old cratered icy moon on a Jupiter's outer orbit"
 
+[reference]
+name = "Callisto"
+
 [locales.fr]
 name = "Callistéenne"
 description = "Une vieille lune glacée criblée de cratères, loin d'une Jupiter"
+reference = "Callisto"
 
 # Callisto: 1.0759e23 kg = 0.0180 Earth masses (NASA Jovian satellite
 # fact sheet; JPL Solar System Dynamics, planetary satellite physical

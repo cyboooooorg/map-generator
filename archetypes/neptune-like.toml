@@ -1,9 +1,13 @@
 name = "neptune-like"
 description = "Neptune-like: an ice giant on a far, round orbit"
 
+[reference]
+name = "Neptune"
+
 [locales.fr]
 name = "Neptunienne"
 description = "Une géante de glaces sur une orbite lointaine et ronde"
+reference = "Neptune"
 
 [inputs]
 mass_earth = [15.5, 19.0]

@@ -1,0 +1,17 @@
+name = "hot-neptune"
+description = "Hot Neptune: an ice giant days from its star"
+
+[reference]
+name = "GJ 436 b"
+discovered = 2004
+
+[locales.fr]
+name = "Neptune chaud"
+description = "Une géante de glaces à quelques jours de son étoile"
+
+[inputs]
+mass_earth = [10.0, 30.0]
+envelope_fraction = [0.08, 0.2]
+
+[orbit]
+period_days = [2.0, 8.0]
