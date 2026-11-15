@@ -844,29 +844,39 @@ fn trial_class(
     .class
 }
 
-/// The star a whole system that names none takes from the moons it asks
-/// for: the `[orbit] star` of the first moon archetype's host archetype
-/// (in name order), when it lives to `age_gyr`; `None` when no moon is
-/// asked, its host names no star, or that star dies younger.
-fn host_star_of(
+/// The star a whole system that names none takes from the archetypes it
+/// asks for: the `[orbit] star` of the first candidate that names one,
+/// when it lives to `age_gyr`. Candidates come in this order, name order
+/// within each group: the host archetype of a moon archetype, then the
+/// planet archetypes that carry `inputs.age_gyr`, then the others. The
+/// star is only that of the first candidate: when it dies younger, or
+/// when no asked archetype names a star, the result is `None` and the
+/// caller draws the star.
+fn asked_star_of(
     planets: &BTreeMap<String, u32>,
     age_gyr: Option<f32>,
     seed: u32,
 ) -> Result<Option<f32>, RequestError> {
+    let mut hosts = Vec::new();
+    let mut aged = Vec::new();
+    let mut others = Vec::new();
     for (name, &count) in planets {
-        let archetype = system_archetype(name)?;
-        let Some(moon) = archetype.moon.as_ref().filter(|_| count > 0) else {
+        if count == 0 {
             continue;
-        };
-        let host = system_archetype(&moon.host)?;
-        let Some(code) = host.orbit.star.as_deref().and_then(|t| parse_type(t).ok()) else {
-            return Ok(None);
-        };
-        return Ok(crate::star::resolve_age_gyr(age_gyr, code, seed)
-            .is_ok()
-            .then_some(code));
+        }
+        let archetype = system_archetype(name)?;
+        match archetype.moon.as_ref() {
+            Some(moon) => hosts.push(system_archetype(&moon.host)?),
+            None if archetype.inputs.age_gyr.is_some() => aged.push(archetype),
+            None => others.push(archetype),
+        }
     }
-    Ok(None)
+    let first = hosts
+        .iter()
+        .chain(&aged)
+        .chain(&others)
+        .find_map(|a| a.orbit.star.as_deref().and_then(|t| parse_type(t).ok()));
+    Ok(first.filter(|&code| crate::star::resolve_age_gyr(age_gyr, code, seed).is_ok()))
 }
 
 /// The nearest orbit, AU, from `lo` out to `hi`, at which the giant
@@ -981,22 +991,24 @@ struct Placed {
 fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Placed, RequestError> {
     let seed = whole.seed.unwrap_or_else(|| rng.random());
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(seed, stream::SYSTEM)));
-    // A star named is honoured, whatever it does to the moons asked. With
-    // none named, a system that asks for a moon by archetype takes the
-    // star its host's archetype names (the first moon's, in name order),
-    // so that the moon forms as its archetype describes it (a Titan
-    // round an old K or an M dwarf can lose its methane or its air);
-    // when it does not live to the age asked, or no moon is asked, the
-    // star is drawn.
+    // A star named is honoured, whatever it does to the planets asked.
+    // With none named, the system takes the star an asked archetype
+    // names (a moon's host first, then the archetypes that carry an
+    // age, then the others; see `asked_star_of`), so that the planet
+    // forms as its archetype describes it: a Mars or an Earth round a
+    // drawn M dwarf loses its air to the star's XUV, a Titan round an
+    // old K or M dwarf can lose its methane. When that star does not
+    // live to the age asked, or no archetype names one, the star is
+    // drawn.
     let age_asked = match whole.age_gyr {
         Some(age) => Some(age),
         None => asked_planets_age(whole.planets.as_ref(), seed)?,
     };
-    let host_star = match (&whole.star, &whole.planets) {
-        (None, Some(planets)) => host_star_of(planets, age_asked, seed)?,
+    let asked_star = match (&whole.star, &whole.planets) {
+        (None, Some(planets)) => asked_star_of(planets, age_asked, seed)?,
         _ => None,
     };
-    let star_code = match (&whole.star, host_star) {
+    let star_code = match (&whole.star, asked_star) {
         (Some(text), _) => parse_type(text).map_err(RequestError::BadStar)?,
         (None, Some(code)) => code,
         (None, None) => crate::star::draw_type_living(age_asked, &mut rng),
@@ -5273,12 +5285,63 @@ mod tests {
                 titan.model
             );
         }
-        // A system asking no moon still draws its star.
+        // A system asking no archetype still draws its star.
         let drawn: Vec<String> = (1..=10)
-            .filter_map(|seed| whole_starless(&[("earth-like", 1)], seed).ok())
+            .filter_map(|seed| whole_starless(&[], seed).ok())
             .map(|system| system.star.spectral)
             .collect();
         assert!(drawn.iter().any(|s| s != "G2V"), "{drawn:?}");
+    }
+
+    /// The surface pressure, bar, of the asked `archetype` planet.
+    fn asked_pressure_bar(system: &System, archetype: &str) -> f64 {
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.params.archetype.as_deref() == Some(archetype))
+            .expect("the asked planet");
+        let model = body.model.as_ref().expect("a model");
+        model.surface.expect("a surface").gases.total()
+    }
+
+    fn assert_brings_its_sun(archetype: &str, bar: std::ops::RangeInclusive<f64>) {
+        for seed in 0..10 {
+            let system = whole_starless(&[(archetype, 1)], seed).unwrap();
+            assert_eq!(system.star.spectral, "G2V", "{archetype} seed {seed}");
+            let p = asked_pressure_bar(&system, archetype);
+            assert!(bar.contains(&p), "{archetype} seed {seed}: {p} bar");
+        }
+    }
+
+    #[test]
+    fn an_asked_mars_brings_its_sun() {
+        assert_brings_its_sun("mars-like", 0.004..=0.010);
+    }
+
+    #[test]
+    fn an_asked_earth_brings_its_sun() {
+        assert_brings_its_sun("earth-like", 0.7..=1.3);
+    }
+
+    #[test]
+    fn an_asked_venus_brings_its_sun() {
+        assert_brings_its_sun("venus-like", 60.0..=120.0);
+    }
+
+    #[test]
+    fn a_named_star_wins_over_the_archetype_star() {
+        for seed in 0..5 {
+            let system = whole_round("K5V", &[("mars-like", 1)], seed).unwrap();
+            assert_eq!(system.star.spectral, "K5V", "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn a_moon_host_star_comes_first() {
+        for seed in 0..5 {
+            let system = whole_starless(&[("titan-like", 1), ("mini-neptune", 1)], seed).unwrap();
+            assert_eq!(system.star.spectral, "G2V", "seed {seed}");
+        }
     }
 
     #[test]

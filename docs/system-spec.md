@@ -31,7 +31,8 @@ Two ways to ask for a system:
    (`type_impossible`). The moon is drawn once in its archetype's ranges
    and stored on its giant (`WorldParams::asked_moons`); the giant's
    other moons are drawn around it. With no star named, such a system
-   takes its host archetype's star (`G2V`); a star named is honoured,
+   takes its host archetype's star (`G2V`), as any asked archetype's
+   `[orbit] star` is taken (below); a star named is honoured,
    and the moon comes out as the model says (round a red dwarf it may
    lose its air).
 2. **A system around one planet.** A planet fully specified, as the form
@@ -181,8 +182,12 @@ stream, its other inputs (core share, water, life…) and its axial tilt
 on a stream of the body's own (`<id>/archetype`), so that no other body's
 draws shift them. Its mass, orbit and eccentricity still come off the
 system's stream in request order and ids go by rank, so removing a body
-can move the others. The star the archetype names is ignored
-here: the system's star rules.
+can move the others. The star the archetype names is taken
+only when the request names none and the star lives to the system age:
+the `[orbit] star` of a moon's host first, then of the planet archetypes
+that carry `inputs.age_gyr`, then of the others, name order within each
+group (`asked_star_of`). A star named in the request always wins; with
+none usable, the star is drawn.
 
 With **quantities per archetype**, the engine draws an orbit for each
 planet asked, then spaces them (below). Types the request leaves to
