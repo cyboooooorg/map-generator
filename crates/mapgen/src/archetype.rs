@@ -72,7 +72,7 @@
 //! to 0.02 bar with the mass (escape takes more from a lighter one) and
 //! the star's age (a young one has lost less).
 //! The exoplanet kinds (`super-earth`, `mini-neptune`, `ocean-world`,
-//! `lava-world`, `hot-jupiter`) name a range typical of the kind:
+//! `lava-world`, `hot-jupiter`, `hot-neptune`) name a range typical of the kind:
 //! Calibration, no source. The four small ones keep near-circular orbits
 //! (`eccentricity = [0, 0.05]`), as the tides keep close-in small planets
 //! (Van Eylen et al. 2019, doi:10.3847/1538-3881/aaf22f, fit a mean of
@@ -87,6 +87,9 @@
 //! whose inner edge is at 1.107 (Kopparapu et al. 2014, see
 //! `crate::star::habitable_fluxes`), but past that of a cooler star (1.01
 //! for a K2V, about 0.9 for a red M dwarf), where the ocean runs away.
+//! `hot-neptune` keeps `envelope_fraction` from 0.08: below it
+//! photoevaporation strips about one draw in thirteen down to a
+//! `mini-neptune` (Calibration, no source).
 //! In a system they take the system's star.
 //!
 //! The moon archetypes (`titan-like`, `europa-like`, `ganymede-like`,
@@ -108,7 +111,7 @@ use std::fmt;
 use std::path::Path;
 
 /// The built-in archetypes, in the order they are listed.
-const BUILT_IN: [(&str, &str); 20] = [
+const BUILT_IN: [(&str, &str); 21] = [
     (
         "mercury-like",
         include_str!("../../../archetypes/mercury-like.toml"),
@@ -160,6 +163,10 @@ const BUILT_IN: [(&str, &str); 20] = [
     (
         "hot-jupiter",
         include_str!("../../../archetypes/hot-jupiter.toml"),
+    ),
+    (
+        "hot-neptune",
+        include_str!("../../../archetypes/hot-neptune.toml"),
     ),
     (
         "titan-like",
@@ -796,8 +803,14 @@ mod tests {
             // An exoplanet carries its year, a Solar System body does not.
             assert_eq!(
                 r.discovered.is_some(),
-                ["hot-jupiter", "super-earth", "mini-neptune", "lava-world"]
-                    .contains(&a.name.as_str()),
+                [
+                    "hot-jupiter",
+                    "hot-neptune",
+                    "super-earth",
+                    "mini-neptune",
+                    "lava-world"
+                ]
+                .contains(&a.name.as_str()),
                 "{}",
                 a.name
             );
@@ -914,6 +927,7 @@ mod tests {
             "ocean-world" => "ocean-world",
             "lava-world" => "lava-world",
             "hot-jupiter" => "hot-jupiter",
+            "hot-neptune" => "hot-neptune",
             // The moons, round their host at its own orbit (see
             // `moon_model_of`): Titan's liquid methane, the others' ice
             // over an ocean or none, Io's dry rock.
@@ -949,7 +963,7 @@ mod tests {
         for n in built_in_names() {
             Archetype::load(n).unwrap();
         }
-        assert_eq!(built_in_names().len(), 20);
+        assert_eq!(built_in_names().len(), 21);
     }
 
     #[test]

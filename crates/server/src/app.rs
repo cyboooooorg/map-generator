@@ -4185,7 +4185,7 @@ mod tests {
         let list: serde_json::Value = serde_json::from_str(&body).unwrap();
         let list = list.as_array().unwrap();
         let built_in: Vec<_> = list.iter().filter(|a| a["built_in"] == true).collect();
-        assert_eq!(built_in.len(), 20);
+        assert_eq!(built_in.len(), 21);
         let earth = list.iter().find(|a| a["spec"] == "earth-like").unwrap();
         assert!(earth["locales"]["fr"]["name"].is_string());
         assert!(!earth["inputs"]["mass_earth"].is_null());
@@ -4208,7 +4208,7 @@ mod tests {
         let (status, body) = call(&app, "GET", "/api/archetypes", None).await;
         assert_eq!(status, StatusCode::OK);
         let list: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap();
-        assert_eq!(list.len(), 20);
+        assert_eq!(list.len(), 21);
         assert!(list.iter().all(|a| a["built_in"] == true));
     }
 
