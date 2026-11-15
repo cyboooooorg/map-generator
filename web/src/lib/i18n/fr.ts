@@ -241,6 +241,7 @@ export const fr: Messages = {
     habitableLine: 'Un monde à l’eau liquide',
     habitableShort: 'Eau liquide',
     outdated: `Obsolète${S}: créé par un générateur plus ancien`,
+    newerFormat: `Créé par un générateur plus récent${S}: mettez celui-ci à jour pour l’ouvrir`,
     outdatedWorlds: `Mondes obsolètes${S}: créés par un générateur plus ancien`,
     regenerate: (p) => `Régénérer ${p.name}`,
     regenerateHelp: {

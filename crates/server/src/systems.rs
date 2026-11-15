@@ -469,7 +469,13 @@ fn outdated_stub(id: &str, modified_ms: u64, meta: &OutdatedMeta) -> SystemSumma
         modified_ms,
         pinned: false,
         outdated: true,
-        outdated_reason: Some(crate::api::OutdatedReason::SystemFormat),
+        outdated_reason: Some(
+            if meta.format_version > mapgen::system::SYSTEM_FORMAT_VERSION {
+                crate::api::OutdatedReason::NewerSystemFormat
+            } else {
+                crate::api::OutdatedReason::SystemFormat
+            },
+        ),
     }
 }
 

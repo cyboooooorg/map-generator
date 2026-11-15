@@ -4,7 +4,7 @@
   import { systemExportUrl } from '../lib/api/client';
   import { t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
-  import { isUnreadable, systemName } from '../lib/systemList';
+  import { canRegenerate, isUnreadable, systemName } from '../lib/systemList';
   import PinButton from './PinButton.svelte';
 
   interface Props {
@@ -44,13 +44,13 @@
     title={t.systemList.exportSystem({ name })}>⤓</a
   >
   {/if}
-  {#if system.outdated}
+  {#if canRegenerate(system)}
     <button
       class="regenerate"
       data-regenerate={system.id}
       onclick={onRegenerate}
       aria-label={t.systemList.regenerate({ name })}
-      title={`${t.systemList.regenerate({ name })}: ${t.systemList.regenerateHelp[system.outdated_reason ?? 'system_format']}`}
+      title={`${t.systemList.regenerate({ name })}: ${t.systemList.regenerateHelp[system.outdated_reason === 'world_format' ? 'world_format' : 'system_format']}`}
       >⟳</button
     >
   {/if}

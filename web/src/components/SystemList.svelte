@@ -265,7 +265,7 @@
                       {#if isUnreadable(system)}
                         <span class="name-button">
                           <strong>{nameOf(system)}</strong>
-                          <small>{t.systemList.outdated}</small>
+                          <small>{system.outdated_reason === 'newer_system_format' ? t.systemList.newerFormat : t.systemList.outdated}</small>
                         </span>
                       {:else}
                       <button class="name-button" aria-pressed={selecting ? chosen.includes(system.id) : undefined} onclick={() => open(system.id)}>

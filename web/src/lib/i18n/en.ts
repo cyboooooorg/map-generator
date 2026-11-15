@@ -261,6 +261,7 @@ export const en = {
     habitableLine: 'A world with liquid water',
     habitableShort: 'Liquid water',
     outdated: 'Outdated: made by an older generator',
+    newerFormat: 'Made by a newer generator: update this one to open it',
     outdatedWorlds: 'Outdated worlds: made by an older generator',
     regenerate: (p: { name: string }) => `Regenerate ${p.name}`,
     regenerateHelp: {

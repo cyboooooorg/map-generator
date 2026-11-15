@@ -4,4 +4,4 @@
  * Why a system is outdated (`SystemSummary::outdated_reason`), which
  * tells what `POST /api/systems/{id}/regenerate` does.
  */
-export type OutdatedReason = "system_format" | "world_format";
+export type OutdatedReason = "system_format" | "world_format" | "newer_system_format";

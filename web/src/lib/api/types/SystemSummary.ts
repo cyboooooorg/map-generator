@@ -55,8 +55,8 @@ modified_ms: number,
 pinned: boolean, 
 /**
  * Made by an older generator: either its `system.json` is not of the
- * current format (it cannot be opened, only listed, deleted or drawn
- * again; the other fields are empty when its file does not give
+ * current format (it cannot be opened, only listed, deleted or, when
+ * it is older, drawn again; the other fields are empty when its file does not give
  * them), or a world it generated is below the oldest supported
  * format (see `outdated_reason`).
  */

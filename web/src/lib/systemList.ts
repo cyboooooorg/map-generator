@@ -11,7 +11,12 @@ export const SYSTEM_NAME_KEY = 'star';
  * A system whose `system.json` is of another format: only listed, deleted or drawn again (it has no
  * bodies to show). One outdated for its worlds only is a whole system, openable.
  */
-export const isUnreadable = (s: Pick<SystemSummary, 'outdated_reason'>): boolean => s.outdated_reason === 'system_format';
+export const isUnreadable = (s: Pick<SystemSummary, 'outdated_reason'>): boolean =>
+  s.outdated_reason === 'system_format' || s.outdated_reason === 'newer_system_format';
+
+/** Whether the Regenerate button is offered: not for a system a newer generator made (it would destroy it). */
+export const canRegenerate = (s: Pick<SystemSummary, 'outdated_reason'>): boolean =>
+  s.outdated_reason === 'system_format' || s.outdated_reason === 'world_format';
 
 /** A system's name: the one given to its star, else its designation. */
 export const systemName = (s: Pick<SystemSummary, 'names' | 'designation'>): string =>

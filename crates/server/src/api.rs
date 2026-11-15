@@ -382,8 +382,8 @@ pub struct SystemSummary {
     /// library lists pinned systems first. Kept in the index only.
     pub pinned: bool,
     /// Made by an older generator: either its `system.json` is not of the
-    /// current format (it cannot be opened, only listed, deleted or drawn
-    /// again; the other fields are empty when its file does not give
+    /// current format (it cannot be opened, only listed, deleted or, when
+    /// it is older, drawn again; the other fields are empty when its file does not give
     /// them), or a world it generated is below the oldest supported
     /// format (see `outdated_reason`).
     pub outdated: bool,
@@ -396,6 +396,10 @@ pub struct SystemSummary {
 #[derive(Clone, Copy, Debug, Serialize, TS, PartialEq, Eq)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the variants name the format that is outdated"
+)]
 pub enum OutdatedReason {
     /// `system.json` is of another format: regenerating draws the system
     /// again from its seed (names that no longer fit are lost).
@@ -404,6 +408,10 @@ pub enum OutdatedReason {
     /// `MIN_FORMAT_VERSION`: regenerating makes those worlds again, the
     /// system and its names are kept.
     WorldFormat,
+    /// `system.json` is of a format newer than this generator's: it
+    /// cannot be opened, only listed and deleted. Regenerating would
+    /// destroy a system a newer generator can read, so it is refused.
+    NewerSystemFormat,
 }
 
 /// Answer to `POST /api/systems/{id}/regenerate`.

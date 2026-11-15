@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SystemSummary } from './api/types/SystemSummary';
-import { isUnreadable, sortSystems, systemName } from './systemList';
+import { canRegenerate, isUnreadable, sortSystems, systemName } from './systemList';
 
 const system = (id: string, seed: number, modified_ms: number, pinned = false, planets = 0): SystemSummary => ({
   id,
@@ -64,7 +64,17 @@ describe('system names', () => {
 describe('isUnreadable', () => {
   it('is true only for a system.json of another format', () => {
     expect(isUnreadable({ outdated_reason: 'system_format' })).toBe(true);
+    expect(isUnreadable({ outdated_reason: 'newer_system_format' })).toBe(true);
     expect(isUnreadable({ outdated_reason: 'world_format' })).toBe(false);
     expect(isUnreadable({ outdated_reason: null })).toBe(false);
+  });
+});
+
+describe('canRegenerate', () => {
+  it('is offered for old formats, never for a newer system', () => {
+    expect(canRegenerate({ outdated_reason: 'system_format' })).toBe(true);
+    expect(canRegenerate({ outdated_reason: 'world_format' })).toBe(true);
+    expect(canRegenerate({ outdated_reason: 'newer_system_format' })).toBe(false);
+    expect(canRegenerate({ outdated_reason: null })).toBe(false);
   });
 });

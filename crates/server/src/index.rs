@@ -545,6 +545,7 @@ impl Index {
                     outdated_reason: match r.get::<_, i64>(13)? {
                         0 => None,
                         2 => Some(OutdatedReason::WorldFormat),
+                        3 => Some(OutdatedReason::NewerSystemFormat),
                         _ => Some(OutdatedReason::SystemFormat),
                     },
                 })
@@ -746,6 +747,25 @@ impl Index {
             return Ok(None);
         }
         self.summary(id)
+    }
+
+    /// Gives system `to` the pin of system `from` (its date included),
+    /// none when `from` is not pinned; true when `from` was pinned.
+    pub fn copy_pin(&self, from: &str, to: &str) -> Result<bool> {
+        let conn = self.conn();
+        let pinned: Option<i64> = conn
+            .query_row("SELECT pinned_ms FROM systems WHERE id = ?1", [from], |r| {
+                r.get(0)
+            })
+            .optional()?
+            .flatten();
+        if let Some(ms) = pinned {
+            conn.execute(
+                "UPDATE systems SET pinned_ms = ?2 WHERE id = ?1",
+                params![to, ms],
+            )?;
+        }
+        Ok(pinned.is_some())
     }
 
     // ------------------------------------------------------------------
@@ -1163,7 +1183,8 @@ fn follow_system_format(conn: &Connection, system_format: i64) -> rusqlite::Resu
         if !has_worlds {
             conn.execute_batch("ALTER TABLE systems ADD COLUMN world_format INTEGER")?;
         }
-        let code = "CASE WHEN system_format != ?1 THEN 1
+        let code = "CASE WHEN system_format > ?1 THEN 3
+                         WHEN system_format < ?1 THEN 1
                          WHEN world_format < ?2 THEN 2
                          ELSE 0 END";
         conn.execute(
@@ -1453,6 +1474,7 @@ fn store(tx: &Transaction, loaded: &Loaded, cause: Cause) -> rusqlite::Result<()
                 None => 0,
                 Some(OutdatedReason::SystemFormat) => 1,
                 Some(OutdatedReason::WorldFormat) => 2,
+                Some(OutdatedReason::NewerSystemFormat) => 3,
             },
             loaded.system_format,
             loaded.world_format,
@@ -2112,6 +2134,17 @@ mod tests {
         assert!(listed.iter().all(|s| s.outdated), "{listed:?}");
         assert!(index.summary("mgs-1-1").unwrap().unwrap().pinned);
         drop(index);
+        // A generator older than the files: they are newer, not older.
+        let older = i64::from(mapgen::system::SYSTEM_FORMAT_VERSION) - 1;
+        let index = Index::open_with_system_format(&db, older).unwrap();
+        let listed = index.list_systems().unwrap();
+        assert!(
+            listed
+                .iter()
+                .all(|s| s.outdated_reason == Some(OutdatedReason::NewerSystemFormat)),
+            "{listed:?}"
+        );
+        drop(index);
         // The current generator again: the flags follow back.
         let index = Index::open(&db).unwrap();
         assert!(index.list_systems().unwrap().iter().all(|s| !s.outdated));
@@ -2179,6 +2212,22 @@ mod tests {
         assert!(index.summary("mgs-1-1").unwrap().unwrap().outdated);
         let again = index.reconcile(&systems).unwrap();
         assert_eq!(again.added + again.updated, 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_pin_is_copied_with_its_date() {
+        let root = temp_root("copy-pin");
+        let systems = root.join("systems");
+        tree(&systems, &["mgs-1-1", "mgs-1-2"]);
+        let index = Index::open(&root.join("mapgen.sqlite")).unwrap();
+        index.reconcile(&systems).unwrap();
+        assert!(!index.copy_pin("mgs-1-1", "mgs-1-2").unwrap());
+        index.set_pinned("mgs-1-1", true).unwrap();
+        assert!(index.copy_pin("mgs-1-1", "mgs-1-2").unwrap());
+        let from = index.summary("mgs-1-1").unwrap().unwrap();
+        let to = index.summary("mgs-1-2").unwrap().unwrap();
+        assert!(from.pinned && to.pinned);
         std::fs::remove_dir_all(root).unwrap();
     }
 

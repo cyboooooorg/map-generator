@@ -90,7 +90,7 @@
             <strong class="name">{name}</strong>
             {#if renamed}<small>{system.designation}</small>{/if}
           </span>
-          <span class="badge">{t.systemList.outdated}</span>
+          <span class="badge">{system.outdated_reason === 'newer_system_format' ? t.systemList.newerFormat : t.systemList.outdated}</span>
         </span>
       </div>
     {:else}

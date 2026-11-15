@@ -1023,19 +1023,23 @@ generator keeps no code to re-derive it.
 
 - A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (21 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
-  with a message asking to delete it (`mise run clean-systems`) and draw it
-  again, and the viewer shows that message instead of requesting them.
+  with a message pointing to the Regenerate button of the system's card in
+  the main menu (or to deleting it and drawing it again), and the viewer
+  shows that message instead of requesting them.
 - A `system.json` that no longer parses (the body rules of systems before
   format 11 carry `shrubland_moisture`, now an unknown field):
   `GET /api/systems/{id}` and the generation of its bodies answer 410 Gone
   with the same message, not 404. Only a missing `system.json` is 404.
 - The server still starts and lists these systems. One whose
   `system.json` is not of the current `SYSTEM_FORMAT_VERSION` carries
-  `outdated: true` and `outdated_reason: "system_format"` in
-  `GET /api/systems` (its id, seed, star and date when they parse, no
-  bodies). The main menu labels it "Outdated: made by an older generator"
-  and offers the delete and regenerate buttons only; the server never
-  deletes it itself.
+  `outdated: true` in `GET /api/systems` (its id, seed, star and date
+  when they parse, no bodies), with `outdated_reason: "system_format"`
+  when the file is older than the generator's format and
+  `"newer_system_format"` when it is newer. The main menu labels the
+  first "Outdated: made by an older generator" and offers the delete and
+  regenerate buttons; the second is labelled "Made by a newer generator"
+  and has the delete button only (a newer generator reads it, so it is
+  never regenerated). The server never deletes any of them itself.
 - A system whose `system.json` is current but whose generated worlds
   (any resolution of any generated body) have a `world.json` below
   `MIN_FORMAT_VERSION` is `outdated: true` with
@@ -1045,8 +1049,10 @@ generator keeps no code to re-derive it.
   system (`systems.world_format`, read again at every refresh) and
   derives the flag from it.
 - `POST /api/systems/{id}/regenerate` makes an outdated system current
-  (404 for an unknown system, 409 when it is not outdated or has a job
-  queued or running, `detail.code` `being_generated` in the second case).
+  (404 for an unknown system, 409 when it is not outdated, is of a newer
+  format than the generator's, or has a job queued or running
+  (`detail.code` `being_generated` in the last case), 422 when an old
+  `system.json` gives no seed).
   It answers `{system_id, removed_id, reason, job_id}`:
   - `world_format`: every generated body with a too-old world is evicted
     (all its resolutions are deleted, see the eviction in
@@ -1054,13 +1060,21 @@ generator keeps no code to re-derive it.
     bodies, one after the other. The system, its names and its other
     bodies are kept; each body comes back at its original size and at the
     resolution it was displayed at; other added resolutions are not made
-    again. `job_id` is the first job.
+    again. `job_id` is the first job. The evictions and the queueing run
+    in a task of their own (a client leaving does not stop them) and what
+    was evicted is queued even if a later eviction failed. The following
+    families are queued by a task in memory: a server restart or a
+    cancelled job stops it, and the bodies left come back when opened.
+    The index is read again first, so a stale flag clears (no job when no
+    world is old any more); deleting a resolution refreshes it too.
   - `system_format`: the system is drawn again with the seed, the map
     size and the star its old file gives (`POST /api/systems` logic,
     `replace` when the id is the same). The result is a different
-    system, and the names that no longer fit are lost. When the new draw
-    has another id, the old system is removed once the new one is
-    stored (`removed_id`) and its pin moves to the new one. `job_id` is
+    system, and the names that no longer fit are lost (the others, the
+    star's included, are kept, also when the id changes). When the new
+    draw has another id, its pin (with its date) is copied first, then
+    the old system is removed once the new one is stored (`removed_id`);
+    a retry finding the new system stored already only finishes that. `job_id` is
     null: bodies are generated when opened.
 
 ## Delivery

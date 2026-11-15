@@ -68,6 +68,13 @@ describe('SystemCard', () => {
     expect(out).toContain('Generate its outdated worlds again');
   });
 
+  it('offers no regenerate button for a system a newer generator made', () => {
+    const out = html(system({ outdated: true, outdated_reason: 'newer_system_format' }));
+    expect(out).toContain('Made by a newer generator');
+    expect(out).toMatch(/class="delete[ "]/);
+    expect(out).not.toContain('data-regenerate');
+  });
+
   it('opens a current system', () => {
     const out = html(system());
     expect(out).toMatch(/<button class="open[ "]/);

@@ -767,8 +767,8 @@ pub fn old_format_error(world_json: &str) -> Option<String> {
     (head.format_version < MIN_FORMAT_VERSION).then(|| {
         format!(
             "world.json: format version {} is older than the oldest supported version \
-             {MIN_FORMAT_VERSION}: the generator no longer re-derives older worlds, delete it \
-             (`mise run clean-systems`) and draw it again",
+             {MIN_FORMAT_VERSION}: the generator no longer re-derives older worlds, use \
+             Regenerate on the system's card in the main menu (or delete it and draw it again)",
             head.format_version
         )
     })
@@ -1504,7 +1504,7 @@ mod tests {
         write_meta(&newer);
         let error = load_world(&world_dir).err().unwrap();
         assert!(
-            error.contains("older") && error.contains("clean-systems"),
+            error.contains("older") && error.contains("Regenerate"),
             "{error}"
         );
         std::fs::remove_dir_all(world_dir).unwrap();
