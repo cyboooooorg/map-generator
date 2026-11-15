@@ -201,7 +201,8 @@ pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64) -> f64 {
 ///
 /// The column runs from the surface, where the vapour is `gases.h2o`
 /// capped at saturation below water's critical point (and at
-/// [`STEAM_MAX_BAR`]), up to [`TOP_SHARE`] of the surface pressure
+/// [`STEAM_MAX_BAR`] in any column, wet or runaway: the non-grey window
+/// it stands for exists in every thick steam column), up to [`TOP_SHARE`] of the surface pressure
 /// (never above [`TOP_BAR`]) on a log grid. Without air the surface
 /// radiates as a black body.
 pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) -> f64 {

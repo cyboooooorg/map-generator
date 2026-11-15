@@ -359,8 +359,8 @@ fn temperature_tree(
     surface: &Surface,
     steps: &Bare,
 ) -> Option<Cause> {
-    let context = &super::climate::absorbing(context, &surface.water);
     let gases = &steps.climate_gases;
+    let context = &super::climate::absorbing(context, &surface.water, gases.h2o);
     let flux = model
         .heat
         .flux_w_m2(surface_interior(context, model).radius_earth);

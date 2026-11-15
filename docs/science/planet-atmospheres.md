@@ -470,10 +470,17 @@ heat flux. The column:
 in a water runaway (by the insolation limit or a boil) that keeps steam
 in its air absorbs under
 the Bond albedo that puts the column's moist plateau (`F_plateau`, about
-287 W/m², the column's OLR over a saturated surface at 380 K) exactly at
-its star's runaway limit `S_rg` (`star::habitable_fluxes`), clamped to
-0 to 0.9: `A_rg = 1 − 4 F_plateau / (S_rg S₀)`, with `S₀` the solar
-constant behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). Kopparapu et al.
+287 W/m², the column's OLR over a saturated surface at 380 K, under the
+stratosphere the surface solves give a body at that limit, skin
+`T_eq / 2^¼` with `T_eq = (F_plateau / σ)^¼`) exactly at its star's
+runaway limit `S_rg` (`star::habitable_fluxes`), clamped to 0 to 0.9:
+`A_rg = 1 − 4 F_plateau / (S_rg S₀)`, with `S₀` the solar constant
+behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). The albedo moves from
+0.3 to `A_rg` with the steam column, `A = 0.3 + (A_rg − 0.3) (1 −
+exp(−p_steam / 1 bar))` (`STEAM_ALBEDO_BAR`, a calibration: the moist
+atmospheres of Kopparapu et al. hold a fraction of a bar to about one
+bar of vapour at the limit), so a thick column takes `A_rg` whole and a
+runaway losing the last of its water comes back to 0.3 without a jump. Kopparapu et al.
 2013 (doi:10.1088/0004-637X/765/2/131) and 2014 place the runaway limit
 where the light a moist atmosphere absorbs, with the albedo its own
 spectrum gives under that star, meets its outgoing limit. With Earth's

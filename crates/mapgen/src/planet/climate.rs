@@ -284,7 +284,11 @@ const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
 ///
 /// This cap is a surrogate: it stands for the non-grey 4 µm window
 /// (Boukrouche et al. 2021; Goldblatt 2015) through which a real hot
-/// steam atmosphere radiates and which the grey column cannot see.
+/// steam atmosphere radiates and which the grey column cannot see. The
+/// window exists in any thick steam column, so the cap holds for every
+/// column the model solves: a runaway's steam, and the vapour of a wet
+/// surface too (capped at its saturation first, it reaches 70 bar only
+/// above about 560 K, near water's critical point).
 pub(super) const STEAM_MAX_BAR: f64 = 70.0;
 
 /// The column totals of the grey optical depths of CO₂, water and
@@ -411,7 +415,13 @@ const RUNAWAY_ALBEDO: (f64, f64) = (0.0, 0.9);
 
 /// The column's own moist plateau, W/m²: the outgoing radiation of
 /// Earth's air over a saturated surface at 380 K (about 287 W/m², the
-/// Simpson–Nakajima limit of the column, see [`H2O_OPACITY`]).
+/// Simpson–Nakajima limit of the column, see [`H2O_OPACITY`]), under the
+/// stratosphere the surface solves give it ([`column::olr_under_skin_w_m2`]):
+/// the skin `T_eq / 2^¼` of a body at its star's runaway limit `S_rg`.
+/// There a runaway absorbs the plateau itself (see [`absorbing`]), so
+/// `T_eq = (F_plateau / σ)^¼` whatever the star: the plateau and its skin
+/// are solved together by a fixed-point iteration (the skin moves the
+/// plateau by under 0.1 W/m², so a few steps settle it).
 pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::LazyLock::new(|| {
     let air = Gases {
         n2: 0.78,
@@ -419,18 +429,45 @@ pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::Lazy
         co2: 4e-4,
         ..Gases::default()
     };
-    column::olr_w_m2(&with_vapour(air, 380.0, f64::INFINITY), 380.0)
+    let moist = with_vapour(air, 380.0, f64::INFINITY);
+    let mut plateau = column::olr_w_m2(&moist, 380.0);
+    for _ in 0..8 {
+        plateau = column::olr_under_skin_w_m2(&moist, 380.0, plateau_skin_k(plateau));
+    }
+    plateau
 });
 
-/// The `context` the climate of a body with `water` absorbs its light
-/// in: as given for a body with no water runaway, and for one in a water
-/// runaway (by the insolation limit or a boil) that keeps steam in its
-/// air under the Bond albedo
-/// `A_rg = 1 − 4 F_plateau / (S_rg S₀)` that makes the column's moist
-/// plateau ([`MOIST_PLATEAU_W_M2`]) bind exactly at the runaway limit
-/// `S_rg` of its star ([`crate::star::habitable_fluxes`]), clamped to
-/// [`RUNAWAY_ALBEDO`]: its equilibrium temperature is the context's
-/// times `((1 − A_rg) / (1 − 0.3))^¼`.
+/// The skin temperature, K, of the surface solves (`T_eq / 2^¼`) for a
+/// body that absorbs `absorbed_w_m2`: `T_eq = (absorbed / σ)^¼`.
+fn plateau_skin_k(absorbed_w_m2: f64) -> f64 {
+    (absorbed_w_m2 / SIGMA).powf(0.25) * 0.5_f64.powf(0.25)
+}
+
+/// Steam column, bar, over which a runaway's Bond albedo moves from
+/// Earth's 0.3 to the moist one `A_rg` (see [`absorbing`]): the e-folding
+/// pressure of the blend `1 − exp(−p / STEAM_ALBEDO_BAR)`, as if the
+/// steam's optical depth in the bands that set the albedo were `p` over
+/// this. Calibration, no source: the moist atmospheres whose spectrum
+/// Kopparapu et al. 2013 take at the runaway limit hold a saturated
+/// surface of some 340 to 380 K, under a fraction of a bar to about one
+/// bar of vapour (`water_saturation_bar`); one bar puts a column of that
+/// order two-thirds of the way to `A_rg`, and a steam world's hundreds of
+/// bar all the way. Below it the steam is too thin to change the light a
+/// body reflects much, and at no water the albedo is Earth's again, with
+/// no jump when the last of it escapes.
+const STEAM_ALBEDO_BAR: f64 = 1.0;
+
+/// The `context` the climate of a body with `water` and `steam_bar` of
+/// steam in its air absorbs its light in: as given for a body with no
+/// water runaway, and for one in a water runaway (by the insolation limit
+/// or a boil) under the Bond albedo blended from Earth's 0.3 to
+/// `A_rg = 1 − 4 F_plateau / (S_rg S₀)` by its steam,
+/// `A = 0.3 + (A_rg − 0.3) (1 − exp(−p_steam / STEAM_ALBEDO_BAR))`
+/// ([`STEAM_ALBEDO_BAR`]). `A_rg` makes the column's moist plateau
+/// ([`MOIST_PLATEAU_W_M2`]) bind exactly at the runaway limit `S_rg` of
+/// its star ([`crate::star::habitable_fluxes`]), clamped to
+/// [`RUNAWAY_ALBEDO`]: a thick steam column's equilibrium temperature is
+/// the context's times `((1 − A_rg) / (1 − 0.3))^¼`.
 ///
 /// Kopparapu et al. 2013 (doi:10.1088/0004-637X/765/2/131) and 2014
 /// (doi:10.1088/2041-8205/787/2/L29) place the runaway limit where the
@@ -442,18 +479,21 @@ pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::Lazy
 /// sit on water's critical point instead of running away. A wet body
 /// keeps Earth's 0.3 (its calibration, Earth, is untouched), and so does
 /// a runaway whose escape took all its water (Mercury, a dry Venus): no
-/// moist atmosphere is left whose albedo the limit describes. The albedo
-/// of the other bodies is #510.
-pub(super) fn absorbing(context: &Context, water: &Water) -> Context {
-    if !(water.runaway && water.kept_kg > 0.0) {
+/// moist atmosphere is left whose albedo the limit describes; the blend
+/// brings a runaway losing its water there continuously. The albedo of
+/// the other bodies is #510.
+pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64) -> Context {
+    let steam = 1.0 - (-steam_bar.max(0.0) / STEAM_ALBEDO_BAR).exp();
+    if !(water.runaway && water.kept_kg > 0.0) || steam <= 0.0 {
         return *context;
     }
     let limit = f64::from(crate::star::habitable_fluxes(context.teff_k as f32).0);
     // `S₀` as `equilibrium_k` takes it: `σ (255 K)⁴ = (1 − 0.3) S₀ / 4`.
     let earth_eq = f64::from(crate::star::equilibrium_k(1.0));
     let solar_constant = 4.0 * SIGMA * earth_eq.powi(4) / (1.0 - EQUILIBRIUM_ALBEDO);
-    let albedo = (1.0 - 4.0 * *MOIST_PLATEAU_W_M2 / (limit * solar_constant))
+    let moist = (1.0 - 4.0 * *MOIST_PLATEAU_W_M2 / (limit * solar_constant))
         .clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1);
+    let albedo = EQUILIBRIUM_ALBEDO + (moist - EQUILIBRIUM_ALBEDO) * steam;
     Context {
         equilibrium_k: context.equilibrium_k
             * ((1.0 - albedo) / (1.0 - EQUILIBRIUM_ALBEDO)).powf(0.25),
@@ -870,7 +910,7 @@ pub fn climate(
     water_bar: f64,
 ) -> (Gases, Climate) {
     let wet = !water.runaway && water.kept_kg > 0.0;
-    let context = &absorbing(context, water);
+    let context = &absorbing(context, water, gases.h2o);
     let (gases, temperature_k, regulated) = if !wet {
         let t = surface_temperature_k(context, &gases, heat_flux_w_m2);
         (gases, t, false)
@@ -1499,7 +1539,7 @@ mod tests {
                     kept_kg: 1e20,
                     oceans: 1e20 / super::super::OCEAN_KG,
                 };
-                let runaway = absorbing(&context, &steam);
+                let runaway = absorbing(&context, &steam, 1e4);
                 let got = absorbed(&runaway) / (ratio * *MOIST_PLATEAU_W_M2);
                 assert!((got - 1.0).abs() < 1e-3, "{kind} {flux}: {got}");
                 let wet = Water {
@@ -1507,10 +1547,88 @@ mod tests {
                     ..steam
                 };
                 let dry = steam.keeping(0.0);
-                assert_eq!(absorbing(&context, &wet), context);
-                assert_eq!(absorbing(&context, &dry), context);
+                assert_eq!(absorbing(&context, &wet, 1e4), context);
+                assert_eq!(absorbing(&context, &dry, 0.0), context);
             }
         }
+    }
+
+    #[test]
+    fn a_runaways_light_follows_its_steam_down_to_none() {
+        // As the kept water (and its steam) goes to zero, the light a
+        // runaway absorbs goes smoothly to Earth's albedo's: no jump when
+        // the last of it escapes, and more steam never absorbs more.
+        let star =
+            crate::star::StarInfo::new(crate::star::parse_type("M9V").unwrap(), 0.02, 0.0, 2.0);
+        let context = Context::of(&star, 0.0, 2.7);
+        let steam = Water {
+            runaway: true,
+            boiled: false,
+            kept_kg: 1e21,
+            oceans: 1e21 / super::super::OCEAN_KG,
+        };
+        // The steam a kept mass weighs, bar (any linear law: here
+        // 1e-18 bar per kg).
+        let t_eq = |kg: f64| absorbing(&context, &steam.keeping(kg), kg * 1e-18).equilibrium_k;
+        let dry = absorbing(&context, &steam.keeping(0.0), 0.0).equilibrium_k;
+        assert_eq!(dry, context.equilibrium_k);
+        let mut last = dry;
+        for kg in [1.0, 1e10, 1e15, 1e17, 1e18, 1e19, 1e20, 1e21] {
+            let t = t_eq(kg);
+            // The moist albedo of an M9V's runaway is under Earth's.
+            assert!(t >= last, "{kg}: {t} < {last}");
+            last = t;
+        }
+        assert!(
+            (t_eq(1.0) - dry).abs() < 1e-9 * dry,
+            "{} vs {dry}",
+            t_eq(1.0)
+        );
+        assert!(
+            (t_eq(1e15) - dry).abs() < 1e-3 * dry,
+            "{} vs {dry}",
+            t_eq(1e15)
+        );
+        // A thick column takes the moist albedo whole.
+        let thick = absorbing(&context, &steam, 1e4).equilibrium_k;
+        assert!((t_eq(1e21) - thick).abs() < 1e-9 * thick);
+    }
+
+    #[test]
+    fn the_runaway_plateau_is_the_solves_moist_branch() {
+        // The plateau `A_rg` is anchored on is the outgoing radiation the
+        // surface solves give a moist column, under the skin of a body at
+        // the runaway limit, to 1 % over the moist branch.
+        let plateau = *MOIST_PLATEAU_W_M2;
+        let skin = plateau_skin_k(plateau);
+        for t in [380.0, 450.0, 550.0, 640.0] {
+            let olr =
+                column::olr_under_skin_w_m2(&with_vapour(earth_air(), t, f64::INFINITY), t, skin);
+            assert!(
+                (olr / plateau - 1.0).abs() < 0.01,
+                "{t} K: {olr} vs {plateau}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_planet_just_past_the_runaway_limit_runs_away_hot() {
+        // An Earth with 1 % of its mass in water (escape leaves it steam)
+        // at 1.01 times its star's runaway limit: its water runs away and
+        // its surface settles well above water's critical point, not on
+        // it.
+        let water = 0.01;
+        let earth = PlanetInputs {
+            volatiles: crate::planet::inputs::volatile_rule(1.0 - water, water),
+            ..crate::planet::reference::inputs(1.0, 0.325, water)
+        };
+        let teff = crate::planet::reference::sun_at(1.0).teff_k;
+        let limit = f64::from(crate::star::habitable_fluxes(teff as f32).0);
+        let orbit = (1.01 * limit).powf(-0.5);
+        let (d, g, c) = climate_at(&earth, orbit);
+        assert!(d.water.runaway, "{:?}", d.water);
+        assert!(d.water.kept_kg > 0.0, "{:?}", d.water);
+        assert!(c.temperature_k > WATER_CRITICAL_K + 100.0, "{c:?} {g:?}");
     }
 
     #[test]
