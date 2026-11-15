@@ -9,13 +9,15 @@
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
   import type { Quantity } from '../../lib/api/types/Quantity';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
 
-  let { world }: { world: LoadedWorld } = $props();
+  let { world }: { world: CardSource } = $props();
 
   const explanation = $derived(world.shownExtras?.explanation ?? null);
   /** The value whose causes are unfolded: one at a time in a card. */
   let open = $state<Quantity | null>(null);
+  /** Whether the preview just moved this value. */
+  const moved = (q: Quantity) => world.changed?.has(q) ?? false;
   const toggle = (q: Quantity) => () => (open = open === q ? null : q);
   // Trees start closed on every body.
   $effect(() => {
@@ -59,15 +61,15 @@
     {:else}
       {#if air || meta}
         <dt>{t.cards.pressure}</dt>
-        <dd><span class="unit-help" title={unitTooltip('bar')}>{air ?? (meta ? formatAtmosphere(meta) : '')}</span><CauseTree tree={treeFor(explanation, 'pressure')} open={open === 'pressure'} ontoggle={toggle('pressure')} /></dd>
+        <dd class:moved={moved('pressure')}><span class="unit-help" title={unitTooltip('bar')}>{air ?? (meta ? formatAtmosphere(meta) : '')}</span><CauseTree tree={treeFor(explanation, 'pressure')} open={open === 'pressure'} ontoggle={toggle('pressure')} /></dd>
       {/if}
       {#if temperature}
         <dt>{t.card.surfaceTemperature}</dt>
-        <dd>{temperature}<CauseTree tree={treeFor(explanation, 'surface_temperature')} open={open === 'surface_temperature'} ontoggle={toggle('surface_temperature')} /></dd>
+        <dd class:moved={moved('surface_temperature')}>{temperature}<CauseTree tree={treeFor(explanation, 'surface_temperature')} open={open === 'surface_temperature'} ontoggle={toggle('surface_temperature')} /></dd>
       {/if}
       {#if surface}
         <dt>{t.cards.liquid}</dt>
-        <dd>{t.cards.liquids[surface.climate.liquid]}<CauseTree tree={treeFor(explanation, 'liquid')} open={open === 'liquid'} ontoggle={toggle('liquid')} /></dd>
+        <dd class:moved={moved('liquid')}>{t.cards.liquids[surface.climate.liquid]}<CauseTree tree={treeFor(explanation, 'liquid')} open={open === 'liquid'} ontoggle={toggle('liquid')} /></dd>
         <dt>{t.cards.life}</dt>
         <dd>{surface.life.oxygenated ? t.cards.lifeOxygenated : surface.life.arose ? t.cards.lifeArose : t.cards.lifeNone}</dd>
       {/if}

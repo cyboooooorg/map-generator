@@ -22,3 +22,20 @@
 .facts .unit-help {
   cursor: help;
 }
+/* A value the live preview just changed: a brief highlight. */
+.facts dd.moved {
+  animation: moved 1.5s ease-out;
+}
+@keyframes moved {
+  from {
+    background: color-mix(in srgb, var(--link) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .facts dd.moved {
+    animation: none;
+  }
+}

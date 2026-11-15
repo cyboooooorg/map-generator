@@ -6,13 +6,13 @@
   import { archetypeName, classLabel } from '../../lib/i18n/names.svelte';
   import type { SystemSummary } from '../../lib/api/types/SystemSummary';
   import { jobs } from '../../lib/jobs.svelte';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
   import NameEditor from './NameEditor.svelte';
 
   interface Props {
-    world: LoadedWorld;
+    world: CardSource;
     onRenamed: (summary: SystemSummary) => void;
     /** Queues the generation of a body and its neighbourhood. */
     onGenerate: (system: string, body: string) => void;
@@ -53,7 +53,7 @@
           ? t.card.moonOf({ planet: nameOf(host.id, host.designation) })
           : t.card.planetOf({ star: starName })}</small
       >
-      <div class="why">
+      <div class="why" class:moved={world.changed?.has('class') ?? false}>
         <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} />
       </div>
       {#if similar}
@@ -86,6 +86,22 @@
   }
   .why {
     flex-basis: 100%;
+  }
+  .why.moved {
+    animation: moved 1.5s ease-out;
+  }
+  @keyframes moved {
+    from {
+      background: color-mix(in srgb, var(--link) 30%, transparent);
+    }
+    to {
+      background: transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .why.moved {
+      animation: none;
+    }
   }
   .host {
     border: 1px solid var(--border);

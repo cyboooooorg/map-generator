@@ -8,13 +8,15 @@
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
   import type { Quantity } from '../../lib/api/types/Quantity';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
 
-  let { world }: { world: LoadedWorld } = $props();
+  let { world }: { world: CardSource } = $props();
 
   const explanation = $derived(world.shownExtras?.explanation ?? null);
   /** The value whose causes are unfolded: one at a time in a card. */
   let open = $state<Quantity | null>(null);
+  /** Whether the preview just moved this value. */
+  const moved = (q: Quantity) => world.changed?.has(q) ?? false;
   const toggle = (q: Quantity) => () => (open = open === q ? null : q);
   // Trees start closed on every body.
   $effect(() => {
@@ -84,17 +86,17 @@
     {/if}
     {#if model?.surface}
       <dt>{t.card.regime}</dt>
-      <dd>{t.regimes[model.surface.regime]}<CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} /></dd>
+      <dd class:moved={moved('regime')}>{t.regimes[model.surface.regime]}<CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} /></dd>
     {/if}
     {#if model?.surface}
       <dt>{t.cards.waterKept}</dt>
-      <dd>{withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)}<CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} /></dd>
+      <dd class:moved={moved('water_kept')}>{withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)}<CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} /></dd>
     {/if}
     {#if core}
       <dt>{t.cards.core}</dt>
       <dd>{t.cards.coreStates[core.state]}</dd>
       <dt>{t.cards.field}</dt>
-      <dd>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}<CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} /></dd>
+      <dd class:moved={moved('magnetic_field')}>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}<CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} /></dd>
     {/if}
     {#if model}
       <dt>{t.cards.heat}</dt>

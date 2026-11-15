@@ -5,9 +5,9 @@
   import { t } from '../../lib/i18n/index.svelte';
   import { formatInt, formatUpTo, withUnit } from '../../lib/format';
   import { dustFedBy, dustOf, ringPart, ringsOf } from '../../lib/ringMoons';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
 
-  let { world }: { world: LoadedWorld } = $props();
+  let { world }: { world: CardSource } = $props();
 
   const system = $derived(world.system);
   const body = $derived(world.shownSystemBody);
