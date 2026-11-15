@@ -601,14 +601,16 @@ impl WorldRequest {
                 });
             }
         }
-        let asked_eccentricity = self.eccentricity.or_else(|| {
-            a.and_then(|a| a.orbit.eccentricity)
-                .map(|e| e.pick(&mut stream))
-        });
-        let tilt = self.axial_tilt_deg.or_else(|| {
-            a.and_then(|a| a.orbit.axial_tilt)
-                .map(|t| t.pick(&mut stream))
-        });
+        // The archetype's draws come from the stream whether or not the
+        // request pins them, so that a pin moves no other draw.
+        let archetype_eccentricity = a
+            .and_then(|a| a.orbit.eccentricity)
+            .map(|e| e.pick(&mut stream));
+        let archetype_tilt = a
+            .and_then(|a| a.orbit.axial_tilt)
+            .map(|t| t.pick(&mut stream));
+        let asked_eccentricity = self.eccentricity.or(archetype_eccentricity);
+        let tilt = self.axial_tilt_deg.or(archetype_tilt);
         let moons = self.moons.unwrap_or_default();
         let mut attempts = 0;
         let mut params = loop {
@@ -1052,6 +1054,28 @@ mod tests {
     }
 
     #[test]
+    fn pinning_the_eccentricity_leaves_an_archetypes_ranged_tilt() {
+        let archetype = crate::archetype::Archetype::from_toml(
+            "name = \"wobbly\"\ndescription = \"x\"\n[inputs]\nmass_earth = 1.0\n[orbit]\ninsolation = 1.0\neccentricity = [0.0, 0.05]\naxial_tilt = [5.0, 40.0]\n",
+            "test",
+        )
+        .unwrap();
+        let resolve = |eccentricity| {
+            WorldRequest {
+                seed: Some(7),
+                eccentricity,
+                ..Default::default()
+            }
+            .resolve_with_archetype(Some(archetype.clone()), &mut StdRng::seed_from_u64(1))
+            .unwrap()
+            .params
+        };
+        let (free, pinned) = (resolve(None), resolve(Some(0.03)));
+        assert_ne!(free.axial_tilt_deg, 0.0);
+        assert_eq!(free.axial_tilt_deg, pinned.axial_tilt_deg);
+    }
+
+    #[test]
     fn a_request_ch4_reaches_the_overrides() {
         let request = WorldRequest {
             ch4: Some(3.0),
@@ -1312,6 +1336,7 @@ mod tests {
             ("envelope", a.envelope_fraction, b.envelope_fraction),
             ("co2", a.volatiles.co2, b.volatiles.co2),
             ("n2", a.volatiles.n2, b.volatiles.n2),
+            ("ch4", a.volatiles.ch4, b.volatiles.ch4),
             ("radiogenic", a.radiogenic, b.radiogenic),
         ] {
             let scale = x.abs().max(y.abs()).max(f64::MIN_POSITIVE);
@@ -1359,7 +1384,7 @@ mod tests {
             drawn.params.clone(),
             drawn.model.clone().unwrap(),
         )];
-        for name in ["mini-neptune", "earth-like"] {
+        for name in ["mini-neptune", "earth-like", "ocean-world"] {
             let resolved = resolve(&named(Some(name), 4)).unwrap();
             let model = resolved.model().clone();
             worlds.push((name.to_string(), resolved.params, model));
