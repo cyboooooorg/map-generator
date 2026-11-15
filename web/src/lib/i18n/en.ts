@@ -528,7 +528,7 @@ export const en = {
     noMoon: 'none',
     moonsValue: (p: { count: number; names: string }) => `${p.count} (${p.names})`,
     giantMass: 'Mass',
-    giantMassHelp: "Jupiter masses (MJ, 318 Earth's) and Earth masses: Saturn 0.3 MJ, Neptune 0.05 MJ; above 13 MJ, a brown dwarf",
+    giantMassHelp: "Jupiter masses (M♃, 318 Earth's) and Earth masses: Saturn 0.3 M♃, Neptune 0.05 M♃; above 13 M♃, a brown dwarf",
     giantMassValue: (p: { jupiter: string; earth: string }) => `${p.jupiter} (${p.earth})`,
     giantRadius: 'Radius · density',
     giantDay: 'Day · flattening',
@@ -712,6 +712,8 @@ export const en = {
     randomPlanet: 'Drawn from the star',
     random: 'random',
     model: {
+      /** What the mass units say when hovered. */
+      massUnits: { earth: 'Earth masses (5.97×10²¹ t)', jupiter: 'Jupiter masses (317.8 Earth masses)' },
       /** The groups of fields, folded until opened. */
       groups: {
         orbit: { title: 'Orbit shape and age', help: 'How elliptical the orbit is, and how old the star it circles.' },

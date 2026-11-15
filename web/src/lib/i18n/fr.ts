@@ -492,7 +492,7 @@ export const fr: Messages = {
     noMoon: 'aucune',
     moonsValue: (p) => `${p.count} (${p.names})`,
     giantMass: 'Masse',
-    giantMassHelp: `Masses de Jupiter (MJ, 318 terrestres) et masses terrestres${S}: Saturne 0,3 MJ, Neptune 0,05 MJ${S}; au-delà de 13 MJ, une naine brune`,
+    giantMassHelp: `Masses de Jupiter (M♃, 318 terrestres) et masses terrestres${S}: Saturne 0,3 M♃, Neptune 0,05 M♃${S}; au-delà de 13 M♃, une naine brune`,
     giantMassValue: (p) => `${p.jupiter} (${p.earth})`,
     giantRadius: 'Rayon · densité',
     giantDay: 'Jour · aplatissement',
@@ -671,6 +671,8 @@ export const fr: Messages = {
     randomPlanet: 'Tirée selon l’étoile',
     random: 'au hasard',
     model: {
+      /** What the mass units say when hovered. */
+      massUnits: { earth: 'masses terrestres (5,97×10²¹ t)', jupiter: 'masses de Jupiter (317,8 masses terrestres)' },
       groups: {
         orbit: { title: 'Forme de l’orbite et âge', help: 'À quel point l’orbite est allongée, et l’âge de l’étoile qu’elle contourne.' },
         composition: { title: 'De quoi elle est faite', help: `Masse, fer, eau et gaz${S}: les ingrédients qui fixent sa taille, sa gravité et son air.` },

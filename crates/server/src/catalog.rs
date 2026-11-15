@@ -153,7 +153,8 @@ mod tests {
                 "uranus-like",
                 "neptune-like",
                 "mini-neptune",
-                "hot-jupiter"
+                "hot-jupiter",
+                "hot-neptune"
             ]
         );
     }

@@ -106,7 +106,7 @@ describe('ModelFields', () => {
   it('shows the drawn value, greyed, on a drawn field', () => {
     const out = html({ drawn: { mass_earth: 1.085, water_oceans: 0.9 } });
     const mass = field(out, 'mass_earth');
-    expect(mass).toContain('Drawn: 1.085 M⊕ (6.48×10²¹ t)');
+    expect(mass.replace(/<!--.*?-->/g, '')).toContain('Drawn: 1.085 <abbr title="Earth masses (5.97×10²¹ t)">M⊕</abbr> (6.48×10²¹ t)');
     expect(mass).not.toContain('type="range"');
     expect(field(out, 'water_oceans')).toContain('Drawn: 0.9 Earth oceans');
   });

@@ -66,7 +66,7 @@
   const mass = $derived(
     jupiters(planet.mass_earth) < 0.3
       ? withUnit(formatUpTo(planet.mass_earth, planet.mass_earth < 10 ? 2 : 0), 'M⊕')
-      : withUnit(formatUpTo(jupiters(planet.mass_earth), 2), 'MJ'),
+      : withUnit(formatUpTo(jupiters(planet.mass_earth), 2), 'M♃'),
   );
   const radius = $derived(withUnit(formatUpTo(planet.radius_km / 6371, planet.radius_km < 63_710 ? 2 : 1), 'R⊕'));
   const speed = $derived(withUnit(formatUpTo(orbitalSpeed(star.mass, planet.orbit_au, distance), 1), 'km/s'));

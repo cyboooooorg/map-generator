@@ -49,7 +49,7 @@
     {#if giant}
       <dd>
         {t.worldInfo.giantMassValue({
-          jupiter: withUnit(formatUpTo(giant.mass_earth / 317.8, 2), 'MJ'),
+          jupiter: withUnit(formatUpTo(giant.mass_earth / 317.8, 2), 'M♃'),
           earth: withUnit(formatInt(giant.mass_earth), 'M⊕'),
         })}
       </dd>

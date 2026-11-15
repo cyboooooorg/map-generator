@@ -8,6 +8,7 @@
   import { formatAge, formatAu, formatStar, formatUpTo } from '../../lib/format';
   import { formatMassWithNote } from '../../lib/massFormat';
   import type { System } from '../../lib/api/types/System';
+  import MassUnits from '../MassUnits.svelte';
   import StarDot from './StarDot.svelte';
 
   let { system }: { system: System } = $props();
@@ -47,7 +48,7 @@
             <tr>
               <th scope="row">{body.designation}</th>
               <td>{classLabel(body.type, body.model)}</td>
-              <td>{formatMassWithNote(body.physical.mass_earth)}</td>
+              <td><MassUnits text={formatMassWithNote(body.physical.mass_earth)} /></td>
               <td>{formatAu(body.orbit.semi_major_axis_au)}</td>
               <td>{moonsOf(body.id)}</td>
             </tr>

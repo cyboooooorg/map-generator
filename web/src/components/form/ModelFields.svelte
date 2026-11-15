@@ -12,6 +12,7 @@
   import { limitsOf, marks, MODEL_GROUPS, type ModelFieldKey } from '../../lib/modelFields';
   import { fieldValueText, markName, referencesLabel, referencesLine, referenceValueText } from '../../lib/modelFormat';
   import { massNote } from '../../lib/massFormat';
+  import MassUnits from '../MassUnits.svelte';
   import MarkedSlider, { type SliderMark } from './MarkedSlider.svelte';
   import { type DrawnValues, type ModelValues, PIN_DEFAULTS, pinnedCount } from '../../lib/modelRequest';
   import { fromPosition, fromShown, SLIDER_STEPS, toPosition, toShown } from '../../lib/modelScale';
@@ -126,7 +127,7 @@
             {#if entry.random}
               <p class="drawn">
                 {#if typeof drawn?.[key] === 'number'}
-                  {t.form.model.drawnValue({ value: fieldValueText(key, drawn[key] as number) })}
+                  <MassUnits text={t.form.model.drawnValue({ value: fieldValueText(key, drawn[key] as number) })} />
                 {:else}
                   {t.form.model.drawn}: {t.form.model.drawnUnknown}
                 {/if}
@@ -152,11 +153,14 @@
                   oninput={(e) => setValue(key, fromShown(key, e.currentTarget.valueAsNumber))}
                   aria-label={`${text.label} (${text.unit})`}
                 />
-                <span class="unit">{text.unit}{#if key === 'mass_earth'}<small> ({massNote(numeric(key))})</small>{/if}</span>
+                <span class="unit"><MassUnits text={text.unit} /></span>
               </div>
+              {#if key === 'mass_earth'}
+                <p class="mass-note"><MassUnits text={`(${massNote(numeric(key))})`} /></p>
+              {/if}
             {/if}
           {/if}
-          <p class="unit-help">{text.unitHelp}</p>
+          <p class="unit-help"><MassUnits text={text.unitHelp} /></p>
           {#if referencesLine(key, spec)}
             <p class="unit-help references">{referencesLine(key, spec)}</p>
           {/if}
@@ -248,18 +252,26 @@
   }
   .slider {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(5em, 7em) auto;
+    grid-template-columns: minmax(0, 1fr) 6.5em 7em;
     gap: 8px;
     align-items: start;
   }
   .slider > input {
     min-width: 0;
     width: 100%;
+    font-variant-numeric: tabular-nums;
+  }
+  .mass-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
   }
   .unit {
     align-self: center;
     color: var(--muted);
     font-size: 0.85rem;
+    overflow-wrap: anywhere;
   }
   .references {
     color: var(--link);

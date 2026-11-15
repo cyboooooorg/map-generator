@@ -19,10 +19,10 @@ export function formatTonnes(earth: number): string {
   return `${formatUpTo(Number(mantissa), 2)}×10${power} t`;
 }
 
-/** What goes in the parentheses after a mass: tonnes, and Jupiter masses from 30 Earth masses (`0,32 MJ`). */
+/** What goes in the parentheses after a mass: tonnes, and Jupiter masses from 30 Earth masses (`0,32 M♃`). */
 export function massNote(earth: number): string {
   const tonnes = formatTonnes(earth);
-  return earth >= JUPITER_FROM_EARTH ? `${tonnes} · ${formatUpTo(earth / EARTH_PER_JUPITER, 2)} MJ` : tonnes;
+  return earth >= JUPITER_FROM_EARTH ? `${tonnes} · ${formatUpTo(earth / EARTH_PER_JUPITER, 2)} M♃` : tonnes;
 }
 
 /** A mass in Earth masses with its note: `1 M⊕ (5,97×10²¹ t)`. */
