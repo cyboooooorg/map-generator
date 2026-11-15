@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { DockCard } from './dock/Dock.svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
   import { t } from '../lib/i18n/index.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -29,8 +30,8 @@
     linkedDisplay?: LinkedDisplay | null;
     /** Whether its display changes are saved as the preferences (the main pane only). */
     persistDisplay?: boolean;
-    /** The body's details, shown as the first panel of the viewer's dock (see Viewer). */
-    info?: Snippet | undefined;
+    /** The body's details as cards, shown as the first panel of the viewer's dock (see Viewer). */
+    infoCards?: DockCard[] | undefined;
     /** The drift slider, shown as a panel of the viewer's dock. */
     drift?: Snippet | undefined;
   }
@@ -45,7 +46,7 @@
     onDisplayChange,
     linkedDisplay = null,
     persistDisplay = true,
-    info,
+    infoCards,
     drift,
   }: Props = $props();
 
@@ -120,7 +121,7 @@
   <Viewer
     bind:this={viewer}
     bind:hexMap
-    {info}
+    {infoCards}
     {drift}
     {world}
     {revision}
@@ -194,8 +195,8 @@
     position: absolute;
     left: 12px;
     bottom: 12px;
-    /* Room for the 240 px legend in the other corner, but never unreadable. */
-    max-width: max(120px, calc(100% - 276px));
+    /* Within the pane, whatever its width. */
+    max-width: calc(100% - 24px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

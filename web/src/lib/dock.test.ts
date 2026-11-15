@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { infoDockIds } from './bodyCards';
 import { clampToView, INFO_PANEL_BOTTOM, INFO_PANEL_TOP, INFO_PANEL_WIDTH, infoPanelAt, loadLayout } from './dock';
 
 const storage = (value: unknown) => {
@@ -24,6 +25,28 @@ describe('dock layout', () => {
     expect(loadLayout('star', ['star'], 'star').active).toBeNull();
     storage({ active: 'planet', folded: false, floating: { planet: { x: 0, y: 0 } } });
     expect(loadLayout('star', ['star', 'planet'], 'star').active).toBe('star');
+  });
+
+  it('keeps a floating card id offered by a panel', () => {
+    storage({ active: 'info', folded: false, floating: { 'info.orbit': { x: 10, y: 20 } } });
+    expect(loadLayout('star', ['info', 'info.orbit'], 'info').floating).toEqual({ 'info.orbit': { x: 10, y: 20 } });
+  });
+
+  it('keeps the info panel and its floating cards while they are not offered yet', () => {
+    storage({ active: 'info', folded: false, floating: { 'info.legend': { x: 10, y: 20 } } });
+    const layout = loadLayout('star', ['map', ...infoDockIds()], 'map');
+    expect(layout.active).toBe('info');
+    expect(layout.floating).toEqual({ 'info.legend': { x: 10, y: 20 } });
+  });
+
+  it('drops a floating card no longer offered', () => {
+    storage({ active: 'info', folded: false, floating: { 'info.orbit': { x: 10, y: 20 } } });
+    expect(loadLayout('star', ['info'], 'info').floating).toEqual({});
+  });
+
+  it('loads a layout stored before cards existed', () => {
+    storage({ active: 'info', folded: true, floating: { map: { x: 1, y: 2 } } });
+    expect(loadLayout('star', ['info', 'map', 'info.orbit'], 'info')).toEqual({ active: 'info', folded: true, floating: { map: { x: 1, y: 2 } } });
   });
 
   it('keeps a floating panel inside the view, its header reachable', () => {

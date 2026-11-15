@@ -2,9 +2,11 @@
   import { errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
   import { nightSources } from '../lib/nightLight';
-  import { biomeName, className } from '../lib/i18n/names.svelte';
+  import { className } from '../lib/i18n/names.svelte';
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
-  import Dock, { type DockPanel } from './dock/Dock.svelte';
+  import Dock, { type DockCard, type DockPanel } from './dock/Dock.svelte';
+  import LegendCard, { type Ramp } from './body/LegendCard.svelte';
+  import { infoDockIds } from '../lib/bodyCards';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import { skyToRestore, type SkyChoice } from '../lib/viewer/skyBackdrop';
   import { skyToggles, type SkySetting } from '../lib/viewer/skyToggles';
@@ -24,14 +26,14 @@
   import { linkedChanges, type LinkedDisplay } from '../lib/display';
   import { downloadJson } from '../lib/download';
   import { reliefScale } from '../lib/relief';
-  import { formatArea, formatInt, formatKm, formatNumber, formatShare, formatUpTo, formatYear, saveBlob, surfaceColour, withUnit } from '../lib/format';
+  import { formatArea, formatInt, formatKm, formatNumber, formatUpTo, formatYear, saveBlob, surfaceColour, withUnit } from '../lib/format';
   import type { LonLat } from '../lib/geo';
   import type { ViewLink } from '../lib/link';
   import type { LoadProgress } from '../lib/progress';
   import { coastline } from '../lib/sample';
   import { seaIsLiquid } from '../lib/sea';
   import { retryWhileBusy } from '../lib/retry';
-  import { debouncedSetting, loadSetting, saveSetting } from '../lib/settings';
+  import { debouncedSetting, loadSetting } from '../lib/settings';
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { UNITS, unitTooltip } from '../lib/units';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
@@ -105,8 +107,8 @@
      * overwrite them with its own.
      */
     persistDisplay?: boolean;
-    /** The body's details (its card and world sheet), shown as the dock's first panel. */
-    info?: Snippet | undefined;
+    /** The body's details as themed cards, shown as the dock's first panel (the legend card is added here). */
+    infoCards?: DockCard[] | undefined;
     /** The drift slider of a world with plates (see DriftPanel), shown as a panel of the dock. */
     drift?: Snippet | undefined;
   }
@@ -127,7 +129,7 @@
     onDisplayChange,
     linkedDisplay = null,
     persistDisplay = true,
-    info,
+    infoCards,
     drift,
   }: Props = $props();
 
@@ -247,7 +249,6 @@
     sunLongitude: 0,
     hexColumns: 64,
     hexRiverLog: DEFAULT_RIVER_LOG,
-    legendOpen: true,
     panelOpen: true,
   });
   /** What was saved, with the switches that split since taking the value of the one they came from. */
@@ -383,74 +384,8 @@
   let wide = $state(wideQuery.matches);
   /** Whether the icon bar shows its names (it widens, and the legend steps right of it). */
   let barExpanded = $state(loadSetting('toggles.expanded', false));
-  /** The legend and panel states chosen on a wide screen, saved as the preferences. */
-  let wideChoice = { legendOpen: saved.legendOpen, panelOpen: saved.panelOpen };
-  let legendOpen = $state(saved.legendOpen && wideQuery.matches);
-  /**
-   * Where the legend card was dragged: its left edge and its bottom edge
-   * from the view's left and bottom, CSS px (it grows upwards as it opens);
-   * null for its usual place. Remembered; a double click puts it back.
-   */
-  let legendAt = $state(loadSetting<{ left: number; bottom: number } | null>('legendAt', null));
-  /** Whether the press on the legend turned into a drag: the click ending it toggles nothing. */
-  let legendDragged = false;
-
-  /**
-   * Drags the legend card with the mouse or a pen, from anywhere on it
-   * (its rows too): a press that moves 5 px is a drag, else a click. A
-   * finger on its list scrolls the list instead.
-   */
-  function dragLegend(event: PointerEvent): void {
-    if (event.button !== 0) return;
-    if (event.pointerType === 'touch' && (event.target as HTMLElement).closest('ul')) return;
-    const card = event.currentTarget as HTMLElement;
-    const view = card.offsetParent as HTMLElement | null;
-    if (!view) return;
-    const rect = card.getBoundingClientRect();
-    const box = view.getBoundingClientRect();
-    const start = { left: rect.left - box.left, bottom: box.bottom - rect.bottom };
-    const from = { x: event.clientX, y: event.clientY };
-    legendDragged = false;
-    const move = (e: PointerEvent) => {
-      const dx = e.clientX - from.x;
-      const dy = e.clientY - from.y;
-      if (!legendDragged) {
-        if (Math.hypot(dx, dy) < 5) return;
-        legendDragged = true;
-      }
-      // Kept inside the view, its title always reachable.
-      legendAt = {
-        left: Math.min(Math.max(start.left + dx, 8), Math.max(8, box.width - rect.width - 8)),
-        bottom: Math.min(Math.max(start.bottom - dy, 8), Math.max(8, box.height - 48)),
-      };
-    };
-    // Followed on the window: the pointer leaves the card before the drag
-    // starts (capturing it would send the click to the card, not its buttons).
-    const end = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-      if (legendDragged) saveSetting('legendAt', legendAt);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-  }
-
-  /** The click that ends a drag of the legend does not reach its buttons. */
-  function legendClick(event: MouseEvent): void {
-    if (!legendDragged) return;
-    legendDragged = false;
-    event.stopPropagation();
-    event.preventDefault();
-  }
-
-  /** A double click on the legend (off its buttons) puts it back in its usual place. */
-  function legendHome(event: MouseEvent): void {
-    if ((event.target as HTMLElement).closest('button')) return;
-    legendAt = null;
-    saveSetting('legendAt', null);
-  }
+  /** The panel state chosen on a wide screen, saved as the preferences. */
+  let wideChoice = { panelOpen: saved.panelOpen };
   let hovered = $state<number | null>(null);
   let pinned = $state<number | null>(null);
   let loading = $state(false);
@@ -463,7 +398,6 @@
   $effect(() => {
     const change = (event: MediaQueryListEvent) => {
       wide = event.matches;
-      legendOpen = wide && wideChoice.legendOpen;
       panelOpen = wide && wideChoice.panelOpen;
     };
     wideQuery.addEventListener('change', change);
@@ -576,7 +510,7 @@
     }
     // Folded for lack of room is not a choice: only wide screens change it.
     if (wide) {
-      wideChoice = { legendOpen, panelOpen };
+      wideChoice = { panelOpen };
     }
     display.save({
       mode,
@@ -2028,9 +1962,38 @@
     // The resolutions of a generated body: chips under the planet.
     ...(sizesShown ? [[{ key: 'sizes', label: t.viewer.sizes, help: t.viewer.sizesHelp, icon: 'resolution' as const, on: sizesOpen, set: (on: boolean) => (sizesOpen = on) }]] : []),
   ]);
+  /** The legend of the layer shown: a ramp for a quantity, null for biomes. */
+  const ramp = $derived.by((): Ramp | null => {
+    if (!dataReady || shown === 'biomes') return null;
+    const windShown = giant !== null && shown === 'moisture';
+    const topsShown = giant !== null && shown === 'elevation';
+    const legend = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown];
+    const range = shown === 'temperature' ? tempRange : null;
+    const wind = giant ? formatInt(Math.max(giant.wind_east, giant.wind_west)) : '';
+    return {
+      title: giant ? layerName(shown) : legend.label,
+      gradient: cssGradient(windShown ? 'wind' : topsShown ? 'cloudTops' : shown),
+      min: windShown ? t.viewer.windEnd({ speed: wind, side: legend.min }) : range ? withUnit(formatInt(range[0]), '°C') : legend.min,
+      max: windShown
+        ? t.viewer.windEnd({ speed: wind, side: legend.max })
+        : range
+          ? withUnit(formatInt(range[1]), '°C')
+          : shown === 'coast' && layers?.extra
+            ? t.viewer.coastCap({ km: formatKm(layers.extra.coastMaxKm) })
+            : legend.max,
+    };
+  });
+  /** The cards App gives the info panel, and the legend among them: before the moons and the map. */
+  const infoCardList = $derived.by((): DockCard[] => {
+    const cards = infoCards ?? [];
+    if (!dataReady) return cards;
+    const legend: DockCard = { id: 'info.legend', title: t.cards.legend, content: legendCard };
+    const at = cards.findIndex((c) => c.id === 'info.moons' || c.id === 'info.map');
+    return at < 0 ? [...cards, legend] : [...cards.slice(0, at), legend, ...cards.slice(at)];
+  });
   /** The panels of the planet's dock. */
   const dockPanels = $derived<DockPanel[]>([
-    ...(info ? [{ id: 'info', title: t.viewer.infoPanel, icon: 'info' as const, content: info }] : []),
+    ...(infoCardList.length > 0 ? [{ id: 'info', title: t.viewer.infoPanel, icon: 'info' as const, cards: infoCardList, wide: true }] : []),
     { id: 'map', title: t.viewer.mapPanel, icon: 'planet', content: mapPanel },
     { id: 'light', title: t.viewer.lightPanel, icon: 'sun', content: lightPanel },
     ...(epochs && epochStops.length > 1 ? [{ id: 'epoch', title: t.epochs.slider, icon: 'clock' as const, content: epochPanel }] : []),
@@ -2357,6 +2320,10 @@
 </script>
 
 <svelte:window onkeydown={handleKey} />
+
+{#snippet legendCard()}
+  <LegendCard {ramp} stats={shown === 'biomes' ? world.stats : null} colour={legendColour} bind:hovered bind:pinned />
+{/snippet}
 
 {#snippet mapPanel()}
   <div class="panel-body">
@@ -2699,7 +2666,7 @@
     <div class="toggles">
       <ToggleBar label={t.viewer.display} groups={toggleGroups} bind:expanded={barExpanded} />
     </div>
-    <Dock kind="planet" panels={dockPanels} defaultActive="map" />
+    <Dock kind="planet" panels={dockPanels} defaultActive="map" knownIds={infoDockIds()} />
     <PlaybackBar
       bind:playing={() => clockPlaying, (v) => setClockPlaying(v)}
       speed={sysSky && orbitPeriod
@@ -2737,65 +2704,6 @@
       </div>
     {/if}
   </div>
-
-  {#if dataReady && shown !== 'biomes'}
-    {@const windShown = giant !== null && shown === 'moisture'}
-    {@const topsShown = giant !== null && shown === 'elevation'}
-    {@const ramp = windShown ? t.legends.wind : topsShown ? t.legends.cloudTops : t.legends[shown]}
-    {@const range = shown === 'temperature' ? tempRange : null}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="legend" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.legend}>
-      <strong>{giant ? layerName(shown) : ramp.label}</strong>
-      <div class="bar" style:background={cssGradient(windShown ? 'wind' : topsShown ? 'cloudTops' : shown)}></div>
-      <div class="ends">
-        <span
-          >{windShown && giant
-            ? t.viewer.windEnd({ speed: formatInt(Math.max(giant.wind_east, giant.wind_west)), side: ramp.min })
-            : range
-              ? withUnit(formatInt(range[0]), '°C')
-              : ramp.min}</span
-        >
-        <span
-          >{windShown && giant
-            ? t.viewer.windEnd({ speed: formatInt(Math.max(giant.wind_east, giant.wind_west)), side: ramp.max })
-            : range
-              ? withUnit(formatInt(range[1]), '°C')
-              : shown === 'coast' && layers?.extra
-                ? t.viewer.coastCap({ km: formatKm(layers.extra.coastMaxKm) })
-                : ramp.max}</span
-        >
-      </div>
-    </div>
-  {:else if shown === 'biomes' && world.stats}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="legend biomes" class:bar-wide={barExpanded} role="region" onpointerdown={dragLegend} onclickcapture={legendClick} ondblclick={legendHome} title={t.viewer.legendDrag} style:left={legendAt ? `clamp(8px, ${legendAt.left}px, calc(100% - 248px))` : null} style:bottom={legendAt ? `clamp(8px, ${legendAt.bottom}px, calc(100% - 48px))` : null} aria-label={t.viewer.biomeLegend}>
-      <button class="legend-title" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen}>
-        <strong>{t.viewer.biomes}</strong>
-        <small class="muted">{legendOpen ? t.viewer.legendHide : t.viewer.legendShow({ count: world.stats.shares.length })}</small>
-      </button>
-      {#if legendOpen}
-        <ul onpointerleave={() => (hovered = null)}>
-          {#each world.stats.shares as entry (entry.biome.id)}
-            <li>
-              <button
-                class:pinned={pinned === entry.biome.id}
-                onpointerenter={() => (hovered = entry.biome.id)}
-                onfocus={() => (hovered = entry.biome.id)}
-                onblur={() => (hovered = null)}
-                onclick={() => (pinned = pinned === entry.biome.id ? null : entry.biome.id)}
-                aria-pressed={pinned === entry.biome.id}
-                title={t.viewer.highlightHelp}
-              >
-                <span class="swatch" style:background={legendColour(entry.biome)}></span>
-                <span class="name">{biomeName(entry.biome)}</span>
-                <span class="value">{formatShare(entry.share)}</span>
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </div>
-  {/if}
 
   {/if}
   {#if showHelp}
@@ -3066,99 +2974,6 @@
   .value {
     font-variant-numeric: tabular-nums;
     color: var(--muted);
-  }
-  .legend {
-    position: absolute;
-    /* Bottom left, above the playback bar and right of the icon bar (12 px
-       from the edge, 40 px wide), so that a long biome list never covers
-       it; the dock holds the right. */
-    left: 80px;
-    bottom: 76px;
-    width: 240px;
-    /* Under the toolbar, whatever the list: it scrolls inside (see ul). */
-    max-height: calc(100% - 172px);
-    overflow: hidden;
-    /* Framed as the theme frames panels (see app.css and lib/themes.ts). */
-    background: var(--frame-deco), var(--panel);
-    clip-path: var(--frame-clip);
-    box-shadow: var(--glow);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    display: grid;
-    gap: 4px;
-    /* Dragged from anywhere on it (see dragLegend): no text selection. */
-    cursor: grab;
-    user-select: none;
-    touch-action: none;
-  }
-  .legend.biomes {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-  /* The icon bar showing its names is wider: the legend steps right of it. */
-  .legend.bar-wide {
-    left: 208px;
-  }
-  .legend ul {
-    touch-action: pan-y;
-  }  /* The playback bar wraps to two lines on narrow views. */
-  @media (max-width: 720px) {
-    .legend {
-      bottom: 132px;
-    }
-  }
-
-  .legend-title {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    border: none;
-    background: none;
-    padding: 0;
-  }
-  .legend ul {
-    touch-action: pan-y;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
-    /* Twelve biomes or so, then a scroll: the view stays visible. */
-    max-height: min(35vh, 300px);
-  }
-  .legend li button {
-    display: grid;
-    grid-template-columns: 14px minmax(0, 1fr) auto;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    border: 1px solid transparent;
-    background: none;
-    padding: 2px 4px;
-    text-align: left;
-  }
-  .legend li button.pinned {
-    border-color: var(--accent);
-  }
-  .swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    border: 1px solid var(--border);
-  }
-  .name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .bar {
-    height: 10px;
-    border-radius: 3px;
-  }
-  .ends {
-    display: flex;
-    justify-content: space-between;
-    color: var(--muted);
-    font-size: 0.8rem;
   }
   .help {
     position: absolute;

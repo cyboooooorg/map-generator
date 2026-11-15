@@ -383,3 +383,13 @@ export function formatYear(days: number): string {
 export function surfaceColour(biome: Pick<BiomeInfo, 'color' | 'surface_color'>): string {
   return biome.surface_color || biome.color;
 }
+
+/**
+ * A mass given in Earth masses, as the cards write it: Earth masses, lunar
+ * masses below 0.01 and Jupiter masses from 30, two decimals at most.
+ */
+export function formatMassEarth(earth: number): string {
+  if (earth >= 30) return withUnit(formatUpTo(earth / 317.8, 2), 'MJ');
+  if (earth < 0.01) return withUnit(formatUpTo(earth * 81.3, 2), t.card.lunarMasses);
+  return withUnit(formatUpTo(earth, 2), 'M⊕');
+}

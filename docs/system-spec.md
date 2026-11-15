@@ -686,7 +686,10 @@ addressed as `<system-id>/<body-id>` everywhere.
   its neighbourhood; in mode 1 there is no job (`job_id` null) until a
   body is opened.
 - `GET /api/systems/{id}`: its `system.json`, with the names given and
-  `evicted`, the bodies that lost their files (see Storage, *Eviction*).
+  `evicted`, the bodies that lost their files (see Storage, *Eviction*),
+  and `extras`, by body id for each body with a model: `explanation`, the
+  cause trees of its derived values, and `similar`, the built-in
+  archetype it resembles (its own when it was asked by archetype).
 - `DELETE /api/systems/{id}`: delete a system; 409 while one of its
   bodies is being generated.
 - `PUT /api/systems/{id}/names`: replace the names given
@@ -900,20 +903,32 @@ addressed as `<system-id>/<body-id>` everywhere.
   [Generating on demand](#generating-on-demand) and **Cancel**. Its share
   is `(body_step − 1 + step / steps) / bodies`. The job list keeps every
   job, named by system and body.
-- **Property cards.** One card component for every body, fed by its entry
-  in `system.json`, and by its `world.json` and statistics once
-  generated:
-  - the star: today's star section;
-  - a rocky planet: today's world card;
-  - a giant: today's giant rows;
-  - a moon: today's moon panel.
+- **Property cards.** A body's details are split into themed cards, each
+  value in exactly one of them (`web/src/components/body/`, which cards a
+  body gets: `web/src/lib/bodyCards.ts`), in the info panel of the dock:
+  - the system summary (star, planet strip, counts and the system's age,
+    shown nowhere else) and the body's header (name, **Rename**, class,
+    the archetype it resembles, **Generate** while its maps are not made,
+    and for a moon a "↑ host" button that shows the host's card), both
+    full width;
+  - Orbit and light, Interior, Atmosphere and climate, Surface (once the
+    maps exist, rocky worlds), Legend (the layer shown; for biomes each
+    biome's swatch, share and area, hover to highlight, click to keep),
+    Moons and rings, Generated map (seed, reroll, vary, copy, delete,
+    downloads). A giant has its own rows in Interior and Atmosphere.
 
-  A sphere's card gives what the draw fixed (orbit, size, mass, type,
-  temperature, spin) and says that its maps are not made yet. The card
-  follows the body picker, under a short system summary (star, planet
-  strip). **Rename** moves into the card and names any body. The age of
-  the system, drawn per system, shows in the star's summary, and on each
-  body's card with its surface age (capped at the system's).
+  A body not generated yet gives what the draw fixed (orbit, size, mass,
+  type, temperature, spin) and says that its maps are not made yet. The
+  cards follow the body picker, under the system summary. Each card but
+  the header can be detached as a floating card.
+
+  A derived value (class, surface temperature, pressure, surface liquid,
+  regime, magnetic field, water kept) has a **Why?** mark that unfolds its
+  cause tree from the body's explanation (`BodyExtras.explanation`): the
+  values it was computed from, down to the inputs the creation form sets,
+  which are shown in the accent colour and name their form field. The
+  trees are closed by default, one open value per card, and absent
+  without an explanation.
 
 ## Removing the old worlds
 
