@@ -23,7 +23,7 @@ networks:
 services:
   # ---------------------------------------------------------------------------------------------------- #
   # Planet viewer
-  # Reads and writes the worlds, systems and index (db/) of this checkout; reads its archetypes (built-in ones are embedded).
+  # Reads and writes the systems and index (db/) of this checkout; reads its archetypes (built-in ones are embedded).
   # ---------------------------------------------------------------------------------------------------- #
   planets:
     build:

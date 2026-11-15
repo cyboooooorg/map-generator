@@ -19,7 +19,7 @@ GIT_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
 export GIT_SHA
 
 # Bind mount sources: create them as the host user, not as root by Docker
-mkdir -p worlds systems db
+mkdir -p systems db
 
 docker compose up -d --build --wait --remove-orphans
 
