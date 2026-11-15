@@ -21,7 +21,8 @@
 //! `format_version` is newer than [`FORMAT_VERSION`] or older than
 //! [`MIN_FORMAT_VERSION`], or whose layers do not have the size
 //! `world.json` announces. The generator keeps no code to re-derive a world
-//! of an older format: delete it (`mise run clean-systems`) and draw it again.
+//! of an older format: regenerate it from the main menu (Regenerate on its
+//! system's card), or delete it and draw it again.
 use crate::biome::{biome_color, surface_color};
 use crate::climate::TEMPERATURE_RANGE;
 use crate::generation::COAST_DISTANCE_CAP_KM;
@@ -77,8 +78,8 @@ pub const FORMAT_VERSION: u32 = 21;
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
 /// scale, biomes without seasons, a linear moisture, layers computed on
 /// load, a hillshade baked into the surface instead of relief normals):
-/// they are refused with a message suggesting `mise run
-/// clean-systems`.
+/// they are refused with a message pointing to the main menu's Regenerate
+/// button.
 pub const MIN_FORMAT_VERSION: u32 = 21;
 
 /// Range of the shape layer: the radius as a share of the mean one.

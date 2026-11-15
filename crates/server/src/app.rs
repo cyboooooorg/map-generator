@@ -950,8 +950,8 @@ fn unreadable_system(root: &Path, id: &str, error: &str) -> Failure {
     Failure(
         StatusCode::GONE,
         format!(
-            "system {id} was made by an older generator or is damaged ({error}): delete it \
-             (`mise run clean-systems`) and draw it again"
+            "system {id} was made by an older generator or is damaged ({error}): regenerate it \
+             with Regenerate on its card in the main menu, or delete it and draw it again"
         ),
     )
 }
@@ -1932,7 +1932,7 @@ async fn checked_epoch(
             StatusCode::NOT_FOUND,
             format!(
                 "world {id} offers no other epoch: it has liquid water, no craters, \
-                 or was made by an older generator (delete it with `mise run clean-systems`)"
+                 or was made by an older generator (regenerate it from its card in the main menu)"
             ),
         ));
     };
@@ -3058,7 +3058,7 @@ mod tests {
         .unwrap();
         let (status, body) = call(&app, "GET", "/api/systems/mgs-1-1", None).await;
         assert_eq!(status, StatusCode::GONE, "{body}");
-        assert!(body.contains("clean-systems"), "{body}");
+        assert!(body.contains("Regenerate"), "{body}");
         let (status, body) = call(
             &app,
             "GET",
@@ -3067,7 +3067,7 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::GONE, "{body}");
-        assert!(body.contains("clean-systems"), "{body}");
+        assert!(body.contains("Regenerate"), "{body}");
         // No such system stays a 404.
         let (status, _) = call(&app, "GET", "/api/systems/mgs-2-2", None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -3151,7 +3151,7 @@ mod tests {
         let app = router(config);
         let (status, body) = call(&app, "GET", "/api/systems/mgs-7-7", None).await;
         assert_eq!(status, StatusCode::GONE, "{body}");
-        assert!(body.contains("clean-systems"), "{body}");
+        assert!(body.contains("Regenerate"), "{body}");
     }
 
     /// Marks the original world of `body` as made by an older generator
