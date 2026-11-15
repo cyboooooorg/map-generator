@@ -2,6 +2,7 @@
 // from (the server's `explain`), worded for the reader.
 import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
+import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
 import { formatCelsius, formatMassEarth, formatNumber, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
@@ -57,4 +58,26 @@ export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): st
   const unit = t.causes.units[cause.quantity === 'escape' ? unitOf : cause.quantity];
   const text = percent ? formatNumber(Math.round(cause.value * 100)) : significant(cause.value);
   return unit ? withUnit(text, percent ? '%' : unit) : text;
+}
+
+/** Whether a cause or one below it comes from the request's `field`. */
+function hasInput(cause: Cause, field: InputField): boolean {
+  return cause.input === field || cause.causes.some((below) => hasInput(below, field));
+}
+
+/** The roots whose tree has a leaf set by `field`, in tree order. */
+export function drivenBy(explanation: Explanation | null, field: InputField): Quantity[] {
+  return (explanation?.trees ?? []).filter((tree) => hasInput(tree, field)).map((tree) => tree.quantity);
+}
+
+/** The roots whose value moved by more than 1 % (relative), appeared or vanished. */
+export function changedQuantities(prev: Explanation | null, next: Explanation | null): Set<Quantity> {
+  const changed = new Set<Quantity>();
+  for (const tree of next?.trees ?? []) {
+    const before = treeFor(prev, tree.quantity);
+    if (before === null || before.label !== tree.label) changed.add(tree.quantity);
+    else if (Math.abs(tree.value - before.value) > 0.01 * Math.max(Math.abs(before.value), Math.abs(tree.value))) changed.add(tree.quantity);
+  }
+  for (const tree of prev?.trees ?? []) if (treeFor(next, tree.quantity) === null) changed.add(tree.quantity);
+  return changed;
 }

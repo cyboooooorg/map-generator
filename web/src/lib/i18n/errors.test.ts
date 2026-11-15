@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiFailure } from '../api/client';
-import { detailText, errorText } from './errors';
+import { detailText, errorField, errorText } from './errors';
 import { setLocale } from './index.svelte';
 
 describe('error messages', () => {
@@ -44,5 +44,24 @@ describe('error messages', () => {
     expect(errorText(new ApiFailure(500, 'disk full'))).toBe('disk full');
     expect(errorText(new ApiFailure(409, 'x', { code: 'system_exists', system: 'mgs-1-2' }))).toMatch(/^System mgs-1-2 exists/);
     expect(errorText(new Error('boom'))).toBe('Error: boom');
+  });
+});
+
+describe('errorField', () => {
+  it('names the field a refusal belongs to', () => {
+    expect(errorField({ code: 'out_of_range', field: 'co2', min: 0, max: 1 })).toBe('co2');
+    expect(errorField({ code: 'out_of_range', field: 'hz_position', min: 0, max: 1 })).toBe('orbit');
+    expect(errorField({ code: 'out_of_range', field: 'mystery', min: 0, max: 1 })).toBeNull();
+    expect(errorField({ code: 'water_heavier_than_planet', water_oceans: 5, mass_earth: 0.1 })).toBe('water_oceans');
+    expect(errorField({ code: 'bad_age', age_gyr: 12, lifetime_gyr: 3 })).toBe('age_gyr');
+    expect(errorField({ code: 'bad_archetype', archetype: 'x' })).toBe('planet');
+    expect(errorField({ code: 'unknown_archetype', archetype: 'x' })).toBe('planet');
+    expect(errorField({ code: 'orbit_and_position' })).toBe('orbit');
+    expect(errorField({ code: 'too_many_planets', asked: 9, max: 8 })).toBe('planets');
+    expect(errorField({ code: 'zone_full', body_type: 'x', asked: 2, fits: 1 })).toBe('planets');
+    expect(errorField({ code: 'type_impossible', body_type: 'x' })).toBe('planets');
+    expect(errorField({ code: 'size_out_of_range', field: 'width', value: 1, min: 2, max: 3 })).toBe('size');
+    expect(errorField({ code: 'too_many_pixels', width: 1, height: 1, max_pixels: 1 })).toBe('size');
+    expect(errorField({ code: 'busy' })).toBeNull();
   });
 });
