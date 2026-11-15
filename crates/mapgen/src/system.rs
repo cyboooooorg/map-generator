@@ -1859,7 +1859,7 @@ fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
 
 /// The world parameters of a placed planet from its `model`, placed as
 /// `placed` says: [`params_for`], its own draws from its seed.
-fn planet_params(model: &PlanetModel, placed: &crate::request::Placed) -> WorldParams {
+pub(crate) fn planet_params(model: &PlanetModel, placed: &crate::request::Placed) -> WorldParams {
     let mut rng = StdRng::seed_from_u64(u64::from(placed.seed));
     params_for(model, placed, &mut rng)
 }
@@ -6074,5 +6074,43 @@ mod titan_tests {
         }
         let share = polar_liquid as f64 / polar as f64;
         assert!(share > 0.01, "liquid share poleward of {mask}°: {share}");
+    }
+
+    /// The Titans of the `titan-like` systems of seeds 5 and 12, whose
+    /// surfaces keep their system's 4.6 Ga of craters, generated at the
+    /// size their viewer gets (512 × 256): about 1 % of their surface is
+    /// liquid, the share their sea level is calibrated for
+    /// (`HYDROCARBON_LAND_FRACTION`). Issue #482: none was drawn, the sea
+    /// level search sampling the relief without its craters, which fill
+    /// the polar lows the search had flooded.
+    #[test]
+    fn an_old_cratered_titan_keeps_about_a_percent_of_liquid() {
+        for seed in [5, 12] {
+            let request: SystemRequest = serde_json::from_str(&format!(
+                r#"{{"system":{{"planets":{{"titan-like":1}},"seed":{seed}}}}}"#
+            ))
+            .unwrap();
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            let moon = system
+                .bodies
+                .iter()
+                .find(|b| b.body_type == "hydrocarbon-world")
+                .unwrap();
+            let params = generation_params(moon);
+            assert_eq!((params.width, params.height), (512, 256));
+            assert!(params.surface_age_ga > 4.0, "{}", params.surface_age_ga);
+            let world = crate::generation::generate(&params).world;
+            let grid = params.grid();
+            let (mut liquid, mut total) = (0.0f64, 0.0f64);
+            for (i, b) in world.biomes.iter().enumerate() {
+                let area = grid.latitude((i / world.width as usize) as u32).cos();
+                total += area;
+                if matches!(b, Biome::HydrocarbonSea | Biome::HydrocarbonLake) {
+                    liquid += area;
+                }
+            }
+            let share = 100.0 * liquid / total;
+            assert!((0.5..2.0).contains(&share), "seed {seed}: {share} %");
+        }
     }
 }

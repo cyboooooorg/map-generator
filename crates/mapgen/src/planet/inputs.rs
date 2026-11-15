@@ -120,7 +120,7 @@ const CMF_SPREAD: f64 = 0.05;
 
 /// Bounds of the core share of a planet not stripped by giant impacts.
 /// Calibration, no source.
-const CMF_RANGE: (f64, f64) = (0.15, 0.55);
+pub(crate) const CMF_RANGE: (f64, f64) = (0.15, 0.55);
 
 /// Closest orbits, as a share of the ice-line distance, where giant
 /// impacts strip mantles, and how often they do. Calibration, no source:

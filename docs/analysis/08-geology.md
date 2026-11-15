@@ -175,6 +175,15 @@ well-established laws.
   (Fassett & Thomson 2014): about 120 m of smoothing in 3 Ga, which
   only matters for craters below about a kilometre. Larger craters
   are degraded mostly by younger craters and their ejecta.
+- **Basins on heavier airless bodies:** Mercury spans 9.85 km (Becker et
+  al. 2016, LPSC 47, abstract 2959), less than the Moon, its basins
+  filled by volcanic plains (Barnouin et al. 2012,
+  doi:10.1016/j.icarus.2012.02.029) and their long-wavelength relief
+  relaxed faster under its stronger gravity. The app keeps
+  `(g_a / g)^1.2` of the Moon's impact relief and of the basins' relief
+  on such bodies, `g` held between a Moon analogue's (`g_a` = 0.207 g,
+  a Moon-mass body at the largest unstripped core share the planet model
+  draws) and Mercury's (`generation::impact_relief`, #457).
 - **Worlds with water:** rain and rivers erase small craters within
   millions of years and fill large ones with sediment (Mars kept its
   Noachian craters, but worn).
@@ -551,6 +560,38 @@ land, with a tenth 0.64, part of it old ocean floor. `mars-like` (seed 1)
 goes from 0.95 to 0.83 of land: its little water now lies in its
 lowlands (99.7 % of its sea on thin crust), not as a ring round a raised
 platform. Dry worlds keep their plains. Worlds with seas change.
+
+### Outcome (highland share without plates, #458, 2026-11-15)
+
+The crust line of a wet world without plates leaves Mars's share of its
+surface on thick crust, 58 % (the northern lowlands cover about 42 %,
+Marinova, Aharonson & Asphaug 2008, doi:10.1038/nature07070), not
+Earth's 41 % of continental crust (`Crust::thick_share`). Every regime
+without plates takes it, as it takes Mars's crust; dry worlds keep their
+plains. `mars-like` at 256 × 128, seeds 1–6, thick crust 41 → 58 %, span
+20.5 → 24.2, 19.1 → 22.0, 9.7 → 13.6, 20.4 → 23.3, 16.0 → 17.7,
+16.6 → 18.0 km, Mountain + Snow 14.8 → 12.8, 10.8 → 8.7, 16.1 → 13.7,
+37.7 → 38.5, 32.3 → 31.6, 28.5 → 27.5 % of land. Small rocky moons
+(no model, not dry) take it too: a Moon-sized one spans 12.7–14.7 km
+(12.3–14.0 before).
+
+### Outcome (highland band of plate worlds, #459, 2026-11-15)
+
+On a wet plate world with a planet model the highland band (Mountain,
+Snow) is measured from the higher of its sea and its continental datum,
+the shelf break of its floating crust (3.09 km above the old floor with
+Earth's crust), not from the sea alone (`generation::highland_datum`).
+Part 3c had done the same for worlds without plates with the thin
+crust's datum. `super-earth` at 256 × 128, seeds 1–4, 6 and 8 (plates),
+Mountain + Snow 34.5 → 1.1, 61.5 → 5.6, 42.0 → 1.1, 40.9 → 17.1,
+69.2 → 6.7, 39.7 → 5.5 % of land; land above 2 km is unchanged (the
+relief does not move). `earth-like` seeds 1–4, whose sea stands above the
+shelf break, keep 12.2, 13.5, 6.5 and 8.5 %, identical. A drier or
+heavier `earth-like` draw has its sea below the shelf break and measures
+its band from it: with 0.8 Earth oceans, seeds 1–3 have their sea
+0.55–0.81 km below it and 9.4, 12.8 and 5.8 % of land Mountain or Snow,
+where measured from the sea they had 23.2, 24.9 and 11.9 % (with 0.9
+oceans, 0.14–0.40 km, 10.7, 14.2, 6.3 % against 16.5, 18.1, 7.3 %).
 
 ### Outcome (impact flux and crater size from the orbit, #313, 2026-11-14)
 

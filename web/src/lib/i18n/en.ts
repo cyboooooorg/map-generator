@@ -586,6 +586,7 @@ export const en = {
     geologySurface: (p: { regime: string; age: string }) => `${p.regime}, surface ${p.age}`,
     surface: 'Surface',
     landWater: 'Land / water',
+    landLiquid: (p: { liquid: string }) => `Land / ${p.liquid}`,
     rivers: 'Rivers',
     generated: 'Generated',
     showFewer: 'Show fewer',

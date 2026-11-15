@@ -64,10 +64,16 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// stored fields are the same, so [`crate::system::SYSTEM_FORMAT_VERSION`]
 /// stays 4. Version 20 types a round moon by its model's class, stores
 /// its model, and marks a moon's world (`moon`); it goes with the fifth
-/// [`crate::system::SYSTEM_FORMAT_VERSION`]. Version 22 draws a steam
-/// world (class `steam-world`, #492) as a grey cloud deck of the model's
-/// radius, with a giant look of kind `steam`; the stored fields are the
-/// same.
+/// [`crate::system::SYSTEM_FORMAT_VERSION`]. Version 21 changes the relief
+/// and the biomes: an airless world without plates heavier than the Moon
+/// keeps a share of the impact relief and of its basins'
+/// (`generation::impact_relief`), a wet world without plates has Mars's
+/// share of highland crust, and a plate world measures its highland band
+/// from its continental datum. The stored fields are the same, so
+/// [`crate::system::SYSTEM_FORMAT_VERSION`] stays 5. Version 22 draws a
+/// steam world (class `steam-world`, #492) as a grey cloud deck of the
+/// model's radius, with a giant look of kind `steam`; the stored fields
+/// are the same.
 pub const FORMAT_VERSION: u32 = 22;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with

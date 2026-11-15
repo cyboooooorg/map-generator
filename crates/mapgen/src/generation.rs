@@ -76,9 +76,8 @@ pub struct Sample {
     /// adds it after the hydraulic erosion, which would wear the young
     /// cones down to their base.
     pub cone_relief: f32,
-    /// Height of the thick crust's Airy step the highland band ignores,
-    /// elevation units (see [`platform_highlands`]): 0 where the band is
-    /// an altitude above the sea.
+    /// Height the highland band ignores, elevation units (see
+    /// [`highland_datum`]): 0 where the band is an altitude above the sea.
     pub platform: f32,
 }
 
@@ -165,9 +164,9 @@ const CONTINENTAL_SHELF: f32 = 0.05;
 ///   Vesta carry relief of tens of km whatever their size, a larger share
 ///   of their radius the smaller they are, up to Vesta's 8 %;
 /// - on an airless body with a stagnant lid (a moon, a dead world), the
-///   relief impacts give it, [`IMPACT_RELIEF_KM`]: there neither plates
-///   nor volcanism build ranges near the `1/g` ceiling. Ice holds
-///   [`ICE_RELIEF`] of rock's.
+///   relief impacts give it, [`IMPACT_RELIEF_KM`] times its share at its
+///   gravity ([`impact_relief`]): there neither plates nor volcanism build
+///   ranges near the `1/g` ceiling. Ice holds [`ICE_RELIEF`] of rock's.
 /// - on an airless body whose lid overturns now and then (episodic, like
 ///   Venus's), the same: between overturns its lid is a stagnant one, and
 ///   without air nothing else shapes it. A heat-pipe body (Io) is left
@@ -180,13 +179,96 @@ const CONTINENTAL_SHELF: f32 = 0.05;
 pub(crate) fn relief_share(p: &WorldParams) -> f32 {
     let radius_km = p.circumference_km / (2.0 * std::f32::consts::PI);
     let mut cap = SMALL_BODY_RELIEF * radius_km;
-    let impact_shaped = matches!(p.look.geology.regime, Regime::Stagnant | Regime::Episodic);
-    if impact_shaped && p.pressure_bar <= AIRLESS_BAR {
+    if impact_shaped(p) {
         let ice = if icy(p) { ICE_RELIEF } else { 1.0 };
-        cap = cap.min(IMPACT_RELIEF_KM * ice);
+        cap = cap.min(IMPACT_RELIEF_KM * ice * impact_relief(p));
     }
     (cap / noise_span_km(p)).min(1.0)
 }
+
+/// Whether the relief of the world `p` is the one impacts give it: an
+/// airless body with a stagnant lid or one that overturns now and then
+/// (see [`relief_share`]).
+pub(crate) fn impact_shaped(p: &WorldParams) -> bool {
+    matches!(p.look.geology.regime, Regime::Stagnant | Regime::Episodic)
+        && p.pressure_bar <= AIRLESS_BAR
+}
+
+/// Share of the Moon's impact relief an airless body without plates (see
+/// [`impact_shaped`]) keeps at its gravity `g` (Earth's = 1):
+/// `(g_moon / g)^IMPACT_RELIEF_EXPONENT`, with `g` held between a Moon
+/// analogue's ([`moon_analogue_gravity`]) and Mercury's; 1 on any other
+/// world. It scales the noise relief's cap ([`IMPACT_RELIEF_KM`]) and the
+/// relief of the basins (`craters::CraterField`).
+///
+/// What such a body keeps is what its impacts dug and piled, less what
+/// modified it since: volcanic plains filling its basins (on Mercury, the
+/// loss of depth of complex craters "appears to be primarily caused by
+/// in-filling", Barnouin et al. 2012, doi:10.1016/j.icarus.2012.02.029,
+/// read), and the viscous relaxation of its long-wavelength relief, which
+/// goes faster under a stronger gravity (a relaxation time
+/// `4πη / (ρ g λ)` on a viscous half-space, Turcotte & Schubert 2002,
+/// Geodynamics, 2nd ed., § 6.10, not read here). The lunar basins already
+/// lose depth against the complex craters' law as their size grows,
+/// "most likely a consequence of ... the increasing influence of gravity
+/// with diameter" (Williams & Zuber 1998, doi:10.1006/icar.1997.5856,
+/// abstract read).
+///
+/// Mercury, at 2.3 times the Moon's gravity, spans 9.85 km, from −5.38 km
+/// in Rachmaninoff to +4.48 km on basin massifs (Becker et al. 2016, LPSC
+/// 47, abstract 2959, read: its DEM at 2 km per pixel), less than the
+/// Moon's 13 km ([`IMPACT_RELIEF_KM`]). The exponent is fitted on that
+/// one pair: `mercury-like` worlds whose surface is 4 Ga old or more
+/// (seeds 4-8 and 12345 at 256 × 128) span 9.6-11.3 km with it,
+/// 19.7-22.7 km with the Moon's relief.
+///
+/// Outside the two bodies no data calibrates it: lighter bodies (icy
+/// moons, the real Moon's 0.165 g) keep the Moon's relief, heavier ones
+/// Mercury's share. A heavier airless dry world (a 0.58 Earth-mass
+/// `mercury-like` draw at 0.91 g) keeps 3.5-5.2 km of relief, where `1/g`
+/// from the Moon would leave its noise 1.6 km.
+pub(crate) fn impact_relief(p: &WorldParams) -> f32 {
+    if !impact_shaped(p) {
+        return 1.0;
+    }
+    let moon = moon_analogue_gravity();
+    let mercury = (MERCURY_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
+    (moon / p.gravity_modifier().clamp(moon, mercury)).powf(IMPACT_RELIEF_EXPONENT)
+}
+
+/// Surface gravity of a Moon analogue as the planet model draws it, Earth's
+/// = 1: a dry, airless body of the Moon's mass (0.0123 Earth masses,
+/// [`crate::planet::reference::SOLAR_BODIES`]) with the largest core share
+/// a planet not stripped by giant impacts draws
+/// ([`crate::planet::inputs::CMF_RANGE`]), through
+/// [`crate::planet::interior::solid_interior`]: 0.207 g. The model gives
+/// a Moon-mass moon an Earth-like core share (the real Moon's is about
+/// 0.02), so it is denser than the Moon (0.165 g): taking the upper end of
+/// the drawn shares, every Moon-mass rocky moon the model draws keeps the
+/// relief [`IMPACT_RELIEF_KM`] is calibrated on, whatever its core.
+fn moon_analogue_gravity() -> f32 {
+    use crate::planet::inputs::CMF_RANGE;
+    let mass_earth = crate::planet::reference::SOLAR_BODIES
+        .iter()
+        .find(|b| b.name == "Moon")
+        .map_or(0.0123, |b| b.mass_earth);
+    let inputs = crate::planet::PlanetInputs {
+        mass_earth,
+        core_mass_fraction: CMF_RANGE.1,
+        water_fraction: 0.0,
+        envelope_fraction: 0.0,
+        volatiles: crate::planet::Volatiles::default(),
+        radiogenic: 1.0,
+        life_draw: 1.0,
+    };
+    crate::planet::interior::solid_interior(&inputs).gravity as f32
+}
+
+/// Exponent of [`impact_relief`]'s fall with gravity, fitted on Mercury
+/// against a Moon analogue (see there).
+const IMPACT_RELIEF_EXPONENT: f32 = 1.2;
+/// Mercury's surface gravity, m/s² (NASA Mercury fact sheet: 3.70).
+const MERCURY_GRAVITY: f64 = 3.70;
 
 /// Span of the noise relief of the world `p`, km: from the bottom of the
 /// abyss ([`ABYSS_KM`]) to the top of its floating crust ([`crust_of`])
@@ -282,10 +364,11 @@ pub(crate) fn icy(p: &WorldParams) -> bool {
 /// central mound in Rheasilvia, about 22 km high (Yingst et al. 2012, EGU
 /// abstract, approximate) on a mean radius of about 262 km (NASA): 8 %.
 const SMALL_BODY_RELIEF: f32 = 0.08;
-/// Span of the noise relief of an airless body with a stagnant lid, km,
-/// so that a Moon-sized rocky moon spans about the Moon's 13 km (NASA fact
-/// sheet, as the mountains article gives it) with its craters.
-/// Calibration on that one body.
+/// Span of the noise relief of an airless body with a stagnant lid at the
+/// Moon's gravity, km, so that a Moon-sized rocky moon spans about the
+/// Moon's 13 km (NASA fact sheet, as the mountains article gives it) with
+/// its craters. Calibration on that one body; heavier bodies keep a share
+/// of it ([`impact_relief`], calibrated on Mercury).
 const IMPACT_RELIEF_KM: f32 = 9.0;
 /// Relief ice holds against rock: complex craters on Ganymede are about
 /// 1.1 km deep at 26 km (Schenk 2002, doi:10.1038/417419a, read in the
@@ -337,8 +420,9 @@ pub(crate) fn relief_scale(gravity: f32) -> f32 {
     (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
 }
 
-/// Share of a wet world's surface its thick crust covers (continental
-/// crust; highlands without plates): Earth's continental crust covers 41 %
+/// Share of a wet world's surface with plates its thick crust covers
+/// (continental crust; highlands without plates, [`MARS_HIGHLAND_SHARE`]):
+/// Earth's continental crust covers 41 %
 /// of its surface, 210.4 × 10⁶ km² with the submerged margins (Cogley
 /// 1984, doi:10.1029/RG022i002p00101). The crust line, the level of the
 /// continents' noise between thin crust below it and thick crust above
@@ -375,13 +459,16 @@ const CRUST_DATUM: f32 = -0.02;
 /// The crust of a world, as its relief floats on the mantle (Airy
 /// isostasy, see [`floating`]): the thickness of its thick crust
 /// (continents, or highlands without plates) and of its thin crust (ocean
-/// floor, or lowlands), km, and the densities of crust and mantle, g/cm³.
+/// floor, or lowlands), km, the densities of crust and mantle, g/cm³, and
+/// the share of a wet world's surface its thick crust covers (see
+/// [`CONTINENTAL_SHARE`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Crust {
     pub continental_km: f32,
     pub oceanic_km: f32,
     pub crust_density: f32,
     pub mantle_density: f32,
+    pub thick_share: f64,
 }
 
 impl Crust {
@@ -411,12 +498,15 @@ impl Crust {
 ///   the continental crust; mantle 3.3 g/cm³, a typical value for the
 ///   uppermost mantle (assumed, as in the science page's example).
 ///
+/// - Continental crust on [`CONTINENTAL_SHARE`] of the surface.
+///
 /// The continents then stand 4.8 km above the old ocean floor.
 const EARTH_CRUST: Crust = Crust {
     continental_km: 41.1,
     oceanic_km: 7.1,
     crust_density: 2.83,
     mantle_density: 3.3,
+    thick_share: CONTINENTAL_SHARE,
 };
 
 /// Mars's crust, for worlds without plates: no continents, a thick
@@ -425,14 +515,36 @@ const EARTH_CRUST: Crust = Crust {
 /// 600 kg/m³ denser than the crust (Neumann et al. 2004,
 /// doi:10.1029/2004JE002262). The crust's 2.9 g/cm³ (basalt) is assumed,
 /// so the mantle 3.5. The highlands stand 4.5 km above the lowlands, the
-/// order of Mars's dichotomy. Calibration on that one body: the thickness
-/// of a stagnant lid's crust from its mass and heat is not modelled.
+/// order of Mars's dichotomy. The highland crust covers
+/// [`MARS_HIGHLAND_SHARE`] of the surface. Calibration on that one body:
+/// the thickness of a stagnant lid's crust from its mass and heat, and how
+/// much of it is thick, are not modelled.
 const MARS_CRUST: Crust = Crust {
     continental_km: 58.0,
     oceanic_km: 32.0,
     crust_density: 2.9,
     mantle_density: 3.5,
+    thick_share: MARS_HIGHLAND_SHARE,
 };
+
+/// Share of Mars's surface its southern highlands cover: the northern
+/// lowlands cover about 42 % of it (Marinova, Aharonson & Asphaug 2008,
+/// doi:10.1038/nature07070, abstract read; Nature's summary of that
+/// issue gives the highlands "about 60%"). The thick crust of a wet world
+/// without plates covers that share of its surface, as Earth's
+/// continental crust covers [`CONTINENTAL_SHARE`] of Earth's: with
+/// Earth's 41 %, a `mars-like` world had too little highland and its
+/// small sea filled a larger basin than Mars's northern lowlands.
+///
+/// Every regime without plates takes it, as it takes Mars's crust
+/// ([`crust_of`]): an episodic lid is a stagnant one between overturns,
+/// and no source gives the thick crust's share of a heat-pipe world.
+/// Small moons without a model, whose crust floats too, take it as well
+/// (a Moon-sized rocky moon spans 12.7-14.7 km on seeds 1, 2 and 7 at
+/// 256 × 128, 12.3-14.0 km with Earth's share). Dry
+/// worlds (`venus-like`, `mercury-like`) do not float their crust: their
+/// plains stand on [`DRY_PLATFORM_KM`].
+const MARS_HIGHLAND_SHARE: f64 = 0.58;
 
 /// The crust of the world `p`: Earth's with plates ([`EARTH_CRUST`]),
 /// Mars's dichotomy without ([`MARS_CRUST`]). Neither depends on gravity.
@@ -604,10 +716,10 @@ const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
 /// 16 km, 2.6 km below its median to 13 km above it (Venus: about 3 km
 /// below its mean radius to Maxwell's 11 km above), `mars-like` 30 km
 /// (Mars's dynamic range is about 30 km, Smith et al. 1999,
-/// doi:10.1126/science.284.5419.1495). `mercury-like` spans 18 km, about
-/// twice Mercury's 9.9 km (Becker et al. 2016, LPSC abstract 2959): its
-/// craters, 7.7 km deep at most, and its highlands under the impact cap
-/// ([`IMPACT_RELIEF_KM`], calibrated on the Moon).
+/// doi:10.1126/science.284.5419.1495). `mercury-like` spans about
+/// Mercury's 9.9 km (Becker et al. 2016, LPSC abstract 2959) on its old
+/// surfaces, less on young ones: its basins and its highlands under the
+/// impact cap ([`IMPACT_RELIEF_KM`] times [`impact_relief`]).
 struct Highlands {
     frequency: f64,
     octaves: u32,
@@ -716,8 +828,8 @@ pub struct Sampler {
     /// The crust the relief floats with (see [`floating`]).
     crust: Crust,
     /// Level of the continents' noise above which the crust is
-    /// continental: on a wet world, the level that leaves
-    /// [`CONTINENTAL_SHARE`] of its surface above it, whatever its sea,
+    /// continental: on a wet world, the level that leaves its crust's
+    /// thick share of its surface above it, whatever its sea,
     /// which its platform, mountains and inland plains are measured from;
     /// on a dry world, [`CONTINENTAL_SHELF`] below its waterline (its
     /// relief is measured from the waterline itself).
@@ -757,34 +869,79 @@ pub struct Sampler {
     /// The highland provinces of a world without plates, outside which
     /// the noise mountains vanish (see [`HIGHLANDS`]); `None` with plates.
     highlands: Option<Perlin>,
-    /// Whether the highland band ignores the thick crust's Airy step
-    /// (see [`platform_highlands`]).
-    platform_highlands: bool,
+    /// What the highland band is measured from (see [`highland_datum`]).
+    highland_datum: HighlandDatum,
 }
 
-/// Whether the highland band of the world `p` (the biomes mountain and
-/// snow, [`crate::biome::BiomeRules::highland`]) ignores the Airy step of
-/// its thick crust: the height its floating crust stands above the thin
-/// crust's datum ([`CRUST_DATUM`], see [`floating`]) is taken off the
-/// elevation the band reads, so a plateau counts as if its crust were
-/// thin. On a world without plates whose crust floats (not a dry world,
-/// whose plains stand on [`DRY_PLATFORM_KM`] from its waterline), with a
-/// planet model.
+/// What the highland band of a world (the biomes mountain and snow,
+/// [`crate::biome::BiomeRules::highland`]) is measured from, in the
+/// elevation its biomes read (see [`highland_datum`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum HighlandDatum {
+    /// Its sea.
+    Sea,
+    /// The thin crust's datum ([`CRUST_DATUM`]): the height its floating
+    /// crust stands above it, its thick crust's Airy step, is taken off,
+    /// so a plateau counts as if its crust were thin.
+    ThinCrust,
+    /// The higher of its sea and its continental datum
+    /// ([`continental_datum`] above the thin crust's): the given elevation
+    /// units, by which that datum stands above its sea (0 when the sea is
+    /// higher), are taken off everywhere.
+    Continents(f32),
+}
+
+/// Height of the continental datum above the thin crust's
+/// ([`CRUST_DATUM`]), elevation units, for the crust `crust`: its shelf
+/// break, where the continental slope meets the shelf ([`SLOPE_NOISE`]
+/// into the continents' noise, see [`crust_thickness_km`]). Earth's crust
+/// puts it 3.09 km above the old floor. An `earth-like` world whose sea
+/// stands above it (seeds 1-4 at 256 × 128) measures its band from the
+/// sea as before; a drier or heavier draw, its sea below
+/// it, measures it from the shelf break (with 0.8 Earth oceans, seeds 1-3
+/// put it 0.55-0.81 km above their sea).
+fn continental_datum(crust: &Crust) -> f32 {
+    floating(SLOPE_NOISE, crust)
+}
+
+/// What the highland band of the world `p` is measured from, its sea
+/// standing at `waterline` (see [`HighlandDatum`]), on a wet world with a
+/// planet model (dry worlds, whose plains stand on [`DRY_PLATFORM_KM`]
+/// from their waterline, and small moons without a model keep their
+/// sea):
 ///
-/// Such a world's thick crust is a highland province of Mars's dichotomy
-/// ([`MARS_CRUST`]): a plateau 4.5 km above its lowlands, kilometres
-/// above a sea filled from little water, but flat. Mars's southern
-/// highlands are cratered plains, not mountains. Measured from the sea,
-/// the band turned the whole plateau into mountains (`mars-like`: 41 % of
-/// its surface, against 9 % before the crust floated); without the step,
-/// 11-16 % on seeds 1-3. A choice, no source: the band ignores the
-/// buoyancy of the crust, not the relief built on it (mountains,
-/// volcanoes, crater rims), whose summits can still be snow.
+/// - without plates, the thin crust's datum. Such a world's thick crust
+///   is a highland province of Mars's dichotomy ([`MARS_CRUST`]): a
+///   plateau 4.5 km above its lowlands, kilometres above a sea filled
+///   from little water, but flat. Mars's southern highlands are cratered
+///   plains, not mountains. Measured from the sea, the band turned the
+///   whole plateau into mountains (`mars-like`: 41 % of its surface,
+///   against 9 % before the crust floated); without the step, 11-16 % on
+///   seeds 1-3. The band ignores the buoyancy of the crust, not the
+///   relief built on it (mountains, volcanoes, crater rims), whose summits
+///   can still be snow.
+/// - with plates, the higher of its sea and its continental datum
+///   ([`continental_datum`]). A world with little water has its sea low
+///   and its continents standing kilometres above it, as high flat
+///   platforms: measured from the sea, 35-69 % of the land of
+///   `super-earth`'s plate worlds (seeds 1-4, 6 and 8) was Mountain or Snow,
+///   against 6-14 % on `earth-like` worlds. Measured from the shelf break
+///   the band reads the ranges, plate boundaries and volcanoes built on
+///   the continents, as on Earth, whose sea stands near it. A plate
+///   world's continents keep their platform and their rise inland: only
+///   the sea's fall below the shelf break is taken off, uniformly.
 ///
-/// Worlds with plates keep the band above the sea, as do dry worlds and
-/// small moons (no model).
-fn platform_highlands(p: &WorldParams) -> bool {
-    p.model.is_some() && p.look.geology.regime != Regime::Plates && !p.look.rules.dry
+/// Both are choices, no source: the band is an altitude line for the
+/// biomes, and how high a world's land stands above a low sea does not
+/// make it mountainous.
+fn highland_datum(p: &WorldParams, crust: &Crust, waterline: f32) -> HighlandDatum {
+    if p.model.is_none() || p.look.rules.dry {
+        HighlandDatum::Sea
+    } else if p.look.geology.regime != Regime::Plates {
+        HighlandDatum::ThinCrust
+    } else {
+        HighlandDatum::Continents((CRUST_DATUM + continental_datum(crust) - waterline).max(0.0))
+    }
 }
 
 /// Height above a world's open water at which the ground of its dry
@@ -895,8 +1052,9 @@ impl Sampler {
             highland_noise: Perlin::new(stream_seed(seed, stream::HIGHLAND)),
             highlands: (p.look.geology.regime != crate::geology::Regime::Plates)
                 .then(|| Perlin::new(stream_seed(seed, stream::HIGHLANDS))),
-            platform_highlands: platform_highlands(p),
+            highland_datum: HighlandDatum::Sea,
         };
+        sampler.highland_datum = highland_datum(p, &sampler.crust, sampler.waterline);
         if !p.look.rules.dry {
             sampler.crust_line = sampler.crust_line();
             sampler.shore = shore_noise(sampler.waterline, &sampler.crust, sampler.crust_line);
@@ -937,8 +1095,10 @@ impl Sampler {
     }
 
     /// The crust line of a wet world: the level of its continents' noise
-    /// above which [`CONTINENTAL_SHARE`] of its surface lies, by area, on
-    /// the fixed grid [`CRUST_GRID`] (whatever the world's resolution).
+    /// above which its crust's thick share ([`Crust::thick_share`]:
+    /// [`CONTINENTAL_SHARE`] with plates, [`MARS_HIGHLAND_SHARE`] without)
+    /// of its surface lies, by area, on the fixed grid [`CRUST_GRID`]
+    /// (whatever the world's resolution).
     fn crust_line(&self) -> f32 {
         let (width, height) = CRUST_GRID;
         let mut levels: Vec<(f32, f64)> = Vec::with_capacity((width * height) as usize);
@@ -959,7 +1119,7 @@ impl Sampler {
         let mut above = 0.0;
         for (level, area) in &levels {
             above += area;
-            if above >= CONTINENTAL_SHARE * total {
+            if above >= self.crust.thick_share * total {
                 return *level;
             }
         }
@@ -1262,12 +1422,14 @@ impl Sampler {
             _ => elevation,
         };
 
-        // The thick crust's Airy step, which the highland band ignores on
-        // worlds without plates: its height above the thin crust's datum.
-        let platform = if self.platform_highlands {
-            (continent - CRUST_DATUM).max(0.0)
-        } else {
-            0.0
+        // What the highland band ignores: on worlds without plates the
+        // thick crust's Airy step, its height above the thin crust's
+        // datum; on worlds with plates the continental datum's height
+        // above a low sea.
+        let platform = match self.highland_datum {
+            HighlandDatum::Sea => 0.0,
+            HighlandDatum::ThinCrust => (continent - CRUST_DATUM).max(0.0),
+            HighlandDatum::Continents(step) => step,
         };
 
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
@@ -1617,6 +1779,45 @@ const LAND_GRID: (u32, u32) = (256, 128);
 const LAND_PASSES: usize = 16;
 const LAND_TOLERANCE: f64 = 0.003;
 
+/// The relief of the world `p` on its grid as [`generate`] leaves it to
+/// its biomes, the hydraulic erosion left out: the noise relief (its
+/// plates taken from `frame` when given), flattened on a small body
+/// ([`relief_share`]), the craters of the wet era, the volcanic cones,
+/// the craters of the dry era and the lava floods, then the dry band
+/// lifted again ([`keep_band_dry`]). The craters are those the grid
+/// resolves ([`base_min_diameter_km`]).
+fn cratered_relief(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -> Vec<f32> {
+    let grid = p.grid();
+    let w = grid.width as usize;
+    let sampler = Sampler::with_frame(p, frame);
+    let (mut elevation, cones): (Vec<f32>, Vec<f32>) = (0..grid.height as usize)
+        .into_par_iter()
+        .flat_map_iter(|y| {
+            let sampler = &sampler;
+            (0..w).map(move |x| {
+                let s = sampler.sample(x as u32, y as u32);
+                (s.elevation - s.cone_relief, s.cone_relief)
+            })
+        })
+        .unzip();
+    let flatten = relief_share(p);
+    if flatten < 1.0 {
+        let waterline = p.sea_level + p.look.rules.waterline;
+        elevation
+            .par_iter_mut()
+            .for_each(|e| *e = waterline + (*e - waterline) * flatten);
+    }
+    let craters = CraterField::new(p, base_min_diameter_km(&grid));
+    craters.apply(&mut elevation, &grid, Era::Wet);
+    elevation
+        .par_iter_mut()
+        .zip(&cones)
+        .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
+    craters.apply(&mut elevation, &grid, Era::Dry);
+    keep_band_dry(p, &grid, &mut elevation, None);
+    elevation
+}
+
 /// The sea level that leaves `fraction` of the planet's surface (by area,
 /// in `[0, 1]`) above the waterline, for the other parameters of `params`.
 ///
@@ -1628,8 +1829,16 @@ const LAND_TOLERANCE: f64 = 0.003;
 /// plates themselves are built once ([`crate::plates::PlateFrame`]); only
 /// the crust on their boundaries, and so their relief and slab pull, is
 /// found again at each pass. About 0.25 s on an Earth-like world.
-/// Erosion runs later and is not modelled, yet on test worlds the land
-/// share lands within about 0.02 of the target.
+///
+/// The relief sampled is the one the biomes see ([`cratered_relief`]),
+/// its craters included: a sea that fills a small share of the surface
+/// lies in the deepest lows, which an old surface's craters fill or dig
+/// (on the `titan-like` moons of systems 5 and 12, 4.6 Ga surfaces, the
+/// 1 % of liquid a search without the craters found left none on the
+/// world, issue #482). The craters are drawn again at each pass, since
+/// those on the sea floor leave nothing ([`CraterField`]). Erosion runs
+/// later and is not modelled, yet on test worlds the land share lands
+/// within about 0.02 of the target.
 ///
 /// With [`WorldParams::liquid_poleward_deg`], the ground nearer the
 /// equator is land at any sea level (the sampler lifts it), so the share
@@ -1653,16 +1862,11 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
             ..coarse.clone()
         };
         let waterline = level + p.look.rules.waterline;
-        let sampler = Sampler::with_frame(&p, frame.as_ref());
-        let land: f64 = (0..grid.height)
-            .into_par_iter()
-            .map(|y| {
-                let w = weights[y as usize];
-                (0..grid.width)
-                    .filter(|&x| sampler.sample(x, y).elevation > waterline)
-                    .count() as f64
-                    * w
-            })
+        let elevation = cratered_relief(&p, frame.as_ref());
+        let land: f64 = elevation
+            .chunks(grid.width as usize)
+            .zip(&weights)
+            .map(|(row, w)| row.iter().filter(|&&e| e > waterline).count() as f64 * w)
             .sum();
         land / total - target
     };
@@ -3054,6 +3258,41 @@ pub(crate) mod tests {
         assert_eq!(mask(0.0), mask(0.4));
     }
 
+    /// Area share of the thick crust of the world `p` (above its crust
+    /// line), on its own grid.
+    fn thick_share(p: &WorldParams) -> f64 {
+        let sampler = Sampler::new(p);
+        let grid = p.grid();
+        let (mut thick, mut total) = (0.0, 0.0);
+        for y in 0..grid.height {
+            let a = grid.latitude(y).cos();
+            for x in 0..grid.width {
+                total += a;
+                if sampler.continental(grid.unit_vector_at(f64::from(x), f64::from(y))) {
+                    thick += a;
+                }
+            }
+        }
+        thick / total
+    }
+
+    /// A wet world without plates has Mars's share of highland crust, not
+    /// Earth's share of continental crust (#458); a world with plates
+    /// keeps Earth's.
+    #[test]
+    fn worlds_without_plates_have_marss_highland_share() {
+        for seed in [1u32, 2, 3] {
+            let mars = preset_params("mars-like", seed, 256, 128);
+            assert_eq!(mars.look.geology.regime, Regime::Stagnant);
+            assert!(!mars.look.rules.dry);
+            let share = thick_share(&mars);
+            assert!((0.55..0.61).contains(&share), "mars-like {seed}: {share}");
+            let earth = preset_params("earth-like", seed, 256, 128);
+            let share = thick_share(&earth);
+            assert!((0.39..0.43).contains(&share), "earth-like {seed}: {share}");
+        }
+    }
+
     #[test]
     fn less_water_exposes_the_basins_too() {
         // A wet world with little water fills its lowest basins, not a
@@ -3253,7 +3492,7 @@ pub(crate) mod tests {
     #[test]
     fn plateaus_without_plates_are_not_mountains() {
         // The highland band ignores the Airy step of the thick crust on
-        // worlds without plates (`platform_highlands`). Measured from the
+        // worlds without plates (`highland_datum`). Measured from the
         // sea, `mars-like`'s whole highland crust was mountain: 41 % of the
         // sphere on seeds 1-3. Main, before the crust floated, gave about
         // 9 % (9.2, 9.1, 7.2 %); ignoring the step gives 14.8, 10.8 and
@@ -3274,6 +3513,75 @@ pub(crate) mod tests {
             }
             let share = high / total;
             assert!((0.02..0.20).contains(&share), "seed {seed}: {share}");
+        }
+    }
+
+    /// Area share of the land of `w` in the highland band (Mountain or
+    /// Snow).
+    fn highland_share(w: &World) -> f64 {
+        let grid = w.params.grid();
+        let (mut land, mut high) = (0.0f64, 0.0f64);
+        for (i, b) in w.biomes.iter().enumerate() {
+            let a = grid.latitude((i / w.width as usize) as u32).cos();
+            if !b.is_water() {
+                land += a;
+                if matches!(b, Biome::Mountain | Biome::Snow) {
+                    high += a;
+                }
+            }
+        }
+        high / land
+    }
+
+    /// A plate world with little water has a low sea and continents
+    /// standing kilometres above it: its highland band is measured from
+    /// the continental datum, not from the sea, so a high platform is not
+    /// a mountain range (#459). Measured from the sea, `super-earth`
+    /// seeds 1-4, 6 and 8 (plates) had 35-69 % of their land Mountain or
+    /// Snow, 1-17 % now. `earth-like` seeds 1-3, whose sea stands above
+    /// the datum, keep their 6-14 %; a drier `earth-like` draw measures
+    /// from the shelf break, a bounded shift.
+    #[test]
+    fn plate_worlds_measure_their_highlands_from_the_continents() {
+        for seed in [1u32, 3, 6] {
+            let p = preset_params("super-earth", seed, 256, 128);
+            assert_eq!(p.look.geology.regime, Regime::Plates, "seed {seed}");
+            let share = highland_share(&generate(&p).world);
+            assert!(share < 0.2, "super-earth {seed}: {share}");
+        }
+        for (seed, main) in [(1u32, 0.122), (2, 0.135), (3, 0.065)] {
+            let p = preset_params("earth-like", seed, 256, 128);
+            let share = highland_share(&generate(&p).world);
+            assert!((share - main).abs() < 0.01, "earth-like {seed}: {share}");
+        }
+        // A drier `earth-like` draw (0.8 Earth oceans) has its sea under
+        // the shelf break, 0.55-0.81 km on seeds 1-3: its band is measured
+        // from the shelf break and keeps a mountain share of Earth's order,
+        // 5.8-12.8 % of land, where measured from the sea it was 12-25 %.
+        for seed in [1u32, 2, 3] {
+            let request = crate::request::WorldRequest {
+                planet: Some("earth-like".into()),
+                seed: Some(seed),
+                width: Some(256),
+                height: Some(128),
+                moons: Some(crate::moons::MoonsMode::None),
+                water_oceans: Some(0.8),
+                ..Default::default()
+            };
+            let resolved = request
+                .resolve(
+                    &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(u64::from(seed)),
+                )
+                .unwrap();
+            let mut p = resolved.params.clone();
+            crate::planet::interim::calibrate(&mut p, resolved.model());
+            let HighlandDatum::Continents(step) = Sampler::new(&p).highland_datum else {
+                panic!("seed {seed}: not a plate world");
+            };
+            let km = step * crate::craters::ELEVATION_KM;
+            assert!(km > 0.0 && km < 1.0, "seed {seed}: {km} km");
+            let share = highland_share(&generate(&p).world);
+            assert!((0.04..0.15).contains(&share), "seed {seed}: {share}");
         }
     }
 
@@ -3375,7 +3683,8 @@ pub(crate) mod tests {
         for regime in [Regime::Stagnant, Regime::Episodic] {
             p.look.geology.regime = regime;
             let span = relief_share(&p) * noise_span_km(&p);
-            assert!((span - IMPACT_RELIEF_KM).abs() < 1e-3, "{regime:?} {span}");
+            let cap = IMPACT_RELIEF_KM * impact_relief(&p);
+            assert!((span - cap).abs() < 1e-3, "{regime:?} {span}");
         }
         p.look.geology.regime = Regime::HeatPipe;
         assert_eq!(relief_share(&p), 1.0);
@@ -3383,6 +3692,121 @@ pub(crate) mod tests {
         p.look.geology.regime = Regime::Episodic;
         p.pressure_bar = 90.0;
         assert_eq!(relief_share(&p), 1.0);
+    }
+
+    /// An airless body without plates keeps less of the Moon's impact
+    /// relief the heavier it is: Mercury's old surface spans about its
+    /// 9.85 km (Becker et al. 2016), not twice that (#457).
+    #[test]
+    fn mercury_keeps_less_impact_relief_than_the_moon() {
+        // A Moon the planet model draws keeps the whole relief (see
+        // `drawn_moons_keep_the_moons_impact_relief`), and so does any body
+        // up to the Moon analogue's gravity.
+        let moon = drawn_moon(1).gravity_modifier();
+        let mut p = WorldParams {
+            pressure_bar: 0.0,
+            gravity: Some(moon),
+            ..params(0, "terran")
+        };
+        p.look.geology.regime = Regime::Stagnant;
+        assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
+        p.gravity = Some(moon_analogue_gravity());
+        assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
+        // Lighter: the Moon's; Mercury's: about half; heavier: Mercury's.
+        p.gravity = Some(0.13);
+        assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
+        p.gravity = Some((MERCURY_GRAVITY / crate::craters::EARTH_GRAVITY) as f32);
+        let mercury = impact_relief(&p);
+        assert!((0.45..0.55).contains(&mercury), "{mercury}");
+        p.gravity = Some(0.9);
+        assert_eq!(impact_relief(&p), mercury);
+        // With air, or with plates, the whole relief.
+        p.pressure_bar = 0.01;
+        assert_eq!(impact_relief(&p), 1.0);
+        p.pressure_bar = 0.0;
+        p.look.geology.regime = Regime::Plates;
+        assert_eq!(impact_relief(&p), 1.0);
+        // `mercury-like` on a 4.6 Ga surface, craters included: 19.8 km
+        // with the Moon's relief, 9.9 km now.
+        let p = preset_params("mercury-like", 4, 256, 128);
+        assert!(p.surface_age_ga > 4.0, "{}", p.surface_age_ga);
+        let w = generate(&p).world;
+        let (lo, hi) = w
+            .elevation
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
+        let span = (hi - lo) * crate::craters::ELEVATION_KM;
+        assert!((8.0..12.5).contains(&span), "{span}");
+    }
+
+    /// A Moon drawn through the planet model, its world as a system makes
+    /// a round moon's: the Moon's mass, rocky, born of an impact on an
+    /// Earth round the Sun, its core share drawn from `seed`.
+    fn drawn_moon(seed: u32) -> WorldParams {
+        use crate::planet::HostTide;
+        use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
+        let star = crate::star::StarInfo::new(crate::star::SUN, 1.0, 0.0, 4.57);
+        let context = crate::planet::inputs::Context::of(&star, 0.0, 2.7);
+        let formation = MoonFormation {
+            mass_earth: 0.0123,
+            ice_fraction: 0.0,
+            birth: MoonBirth::Impact,
+            tide: HostTide {
+                host_kg: 5.972e24,
+                a_m: 3.844e8,
+                eccentricity: 0.0549,
+            },
+        };
+        let model = derive_moon_model(
+            seed,
+            "p3/m1",
+            &context,
+            &formation,
+            &crate::planet::InputOverrides::default(),
+        );
+        let placed = crate::request::Placed {
+            seed,
+            star: crate::star::SUN,
+            age_gyr: 4.57,
+            orbit_au: 1.0,
+            eccentricity: 0.0167,
+            metallicity: 0.0,
+            axial_tilt_deg: Some(6.68),
+            perihelion_longitude_deg: None,
+            drift_ma: 0.0,
+            width: 256,
+            height: 128,
+            moons: crate::moons::MoonsMode::None,
+            giants: crate::giants::GiantsMode::None,
+            host: crate::exomoon::HostMode::None,
+        };
+        let mut p = crate::system::planet_params(&model, &placed);
+        p.moon = true;
+        p
+    }
+
+    /// Moons drawn with the Moon's mass are the body the impact relief is
+    /// calibrated on: they keep all of it, whatever core share the model
+    /// drew for them, and span about the Moon's 13 km with their craters.
+    #[test]
+    fn drawn_moons_keep_the_moons_impact_relief() {
+        for seed in [1u32, 2, 3, 4] {
+            let p = drawn_moon(seed);
+            assert!(impact_shaped(&p), "seed {seed}: {}", p.pressure_bar);
+            let g = p.gravity_modifier();
+            assert_eq!(impact_relief(&p), 1.0, "seed {seed}: g {g}");
+        }
+        // As before the law: 9.6, 8.3, 10.6 and 13.7 km on seeds 1-4 at
+        // 256 × 128.
+        for seed in [1u32, 4] {
+            let w = generate(&drawn_moon(seed)).world;
+            let (lo, hi) = w
+                .elevation
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
+            let span = (hi - lo) * crate::craters::ELEVATION_KM;
+            assert!((8.0..18.0).contains(&span), "seed {seed}: {span}");
+        }
     }
 
     #[test]
