@@ -272,7 +272,7 @@ Bodies are named after the IAU's conventions for exoplanets (`mapgen::naming`). 
       "type": "rocky", "parent": null, "seed": 1441805244,
       "request": { "...": "the body's WorldParams, as system.json stores them" },
       "generated": true,
-      "made_with": { "version": "0.1.0", "format_version": 20 },
+      "made_with": { "version": "0.1.0", "format_version": 21 },
       "files": ["bodies/b/thumb.png", "bodies/b/sizes/2048x1024/world.png", "bodies/b/sizes/2048x1024/legend.png"]
     }
   ]
