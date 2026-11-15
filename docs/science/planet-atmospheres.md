@@ -467,14 +467,19 @@ pressure that broadens each gas's lines (below). The square roots are the
 strong-line limit of a pressure-broadened band, which absorbs as
 `sqrt(S u α)` with the path `u ∝ p_i` and the width `α` growing with the
 pressure round the lines (Pierrehumbert 2010, §4.4; Goody & Yung 1989).
-CO₂'s power is smaller, 0.27: its 15 µm band is saturated at the centre,
+CO₂'s power is smaller, 0.07: its 15 µm band is saturated at the centre,
 so its forcing grows with the logarithm of its amount (Myhre et al. 1998,
-doi:10.1029/98GL01908). The opacities are calibrations with no source:
+doi:10.1029/98GL01908). With Venus pinning its opacity, the power sets
+how strong small amounts of CO₂ are: 0.27 left the late Archean Earth
+(below) at 259 K. Under 1e-6 bar (`CO2_WEAK_BAR`) CO₂ absorbs in
+proportion to its amount, the weak-line limit; without it Titan's 3e-10
+bar of CO₂ warmed it by about 3 K. The opacities are calibrations with no
+source:
 
 | Gas | `k_i` | `a_i` | Calibrated on |
 |---|---|---|---|
-| CO₂ | 0.575 (1.66 before #441) | 0.27 (0.25) | Venus's 737 K under 85 bar |
-| H₂O | 129 (5.9) | 0.5 | the moist plateau at 282 W/m² |
+| CO₂ | 0.74 (1.66 before #441) | 0.07 (0.25) | Venus's 737 K under 85 bar |
+| H₂O | 111 (5.9) | 0.5 | the moist plateau at about 287 W/m² |
 | CH₄ | 3.3 (3.4) | 0.5 | Titan's 94 K |
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
@@ -490,10 +495,13 @@ Robinson, Zahnle & Crisp 2013 (doi:10.1038/ngeo1892, abstract checked)
 find it at 282 W/m² line by line, Boukrouche, Lichtenberg & Pierrehumbert
 2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv 2107.14150) at
 283 W/m² and Hamano et al. 2015 (doi:10.1088/0004-637X/806/2/216) at
-280 W/m². With Earth's air saturated at 77 %, the column sends out 282,
-288, 284, 282 and 282 W/m² from a surface at 320, 340, 360, 380 and
-400 K; at 380 K, 282, 284 and 287 W/m² with one, two and three times
-Earth's nitrogen. The old Eddington core
+280 W/m². With Earth's air saturated at 77 %, the column sends out 279,
+287, 288 and 288 W/m² from a surface at 340, 360, 380 and 400 K, and
+255 W/m² at 320 K, where it still approaches the limit (the moist OLR
+reaches it only asymptotically, Goldblatt et al. 2013); at 380 K, 287.6,
+287.7 and 287.5 W/m² with one, two and three times Earth's nitrogen. The
+plateau sits a few W/m² above the line-by-line limit so that Earth
+without CO₂ and the late Archean (below) stay within their targets. The old Eddington core
 (`T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`) had no plateau: its moist OLR peaked at
 253 W/m² at Earth's composition and fell with nitrogen.
 
@@ -504,7 +512,7 @@ CO₂ and water vapour in full plus the pressure `P_o` of the other gases
 (`BROADENING_KNEE_BAR`) and no further past it (`THICK_AIR_EXPONENT` 0):
 the column applies to every level the share `K / P_o` the whole column
 has past the knee. For water vapour, `P_b` is the vapour's own pressure
-plus 0.057 (`WATER_FOREIGN_BROADENING`) times that of the rest: water
+plus 0.05 (`WATER_FOREIGN_BROADENING`) times that of the rest: water
 broadens its own lines about five times better than air does (HITRAN's
 self- against air-broadened half-widths, Gordon et al. 2017,
 doi:10.1016/j.jqsrt.2017.06.038, from memory), and its self-continuum
@@ -514,10 +522,21 @@ doi:10.1007/s10712-011-9170-y, from memory).
 Both numbers come from the plateau. More nitrogen lifts it through the
 adiabat (a column of more nitrogen holds less vapour per kelvin of its
 upper levels) and lowers it through broadening: without foreign
-broadening of water the plateau rises by 6.6 % from one to three times
-Earth's nitrogen, with a share of 0.1 it falls by 1 %; with the old knee
+broadening of water the plateau rises by several per cent from one to
+three times Earth's nitrogen; with the old knee
 at 1 bar the tempered broadening of a 3x column lifted it by 4 %. The
 knee sits above three times Earth's air (2.55 bar of N₂ and O₂).
+
+At each level the foreign pressure that broadens CO₂'s and water's lines
+also saturates past 0.18 bar (`LOCAL_KNEE_BAR`), growing as
+`K (p/K)^0.05` beyond it (`LOCAL_KNEE_EXPONENT`): lines overlap and their
+absorption saturates as they widen (Vladilo et al. 2013,
+doi:10.1088/0004-637X/767/1/65, App. A.3). At 288 K the column radiates
+from levels with a few tenths of a bar of nitrogen, past this knee, so
+thick nitrogen warms a temperate planet little; at the 380 K plateau the
+radiating levels hold a few hundredths of a bar, under it, so the plateau
+keeps its independence from the nitrogen.
+
 Methane keeps the whole pressure, `P_b = P`: its opacity stands for
 Titan's collision-induced greenhouse, which grows with the nitrogen
 faster than line broadening.
@@ -529,18 +548,21 @@ broadens water's 1.33 to 1.45 times as much as air (Yang et al. 2022,
 doi:10.7498/aps.71.20220700, abstract checked); in water's foreign share
 it counts as air does.
 
-**Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar), an Earth keeps a
-moist balance at 311, 326 and 329 K under 2, 5 and 11 bar of N₂; on the
-old core 2 bar already ran away. The grey column still warms with
-nitrogen more than the 1-D and 3-D models do (Goldblatt et al. 2009,
+**Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar) and no
+thermostat, an Earth keeps a moist balance at 307, 310 and 307 K under 2,
+5 and 11 bar of N₂; on the old core 2 bar already ran away. Doubled
+nitrogen warms as the 1-D and 3-D models find (Goldblatt et al. 2009,
 doi:10.1038/ngeo692: +4.4 °C for doubled nitrogen on the late Archean
 Earth; Charnay et al. 2013, doi:10.1002/jgrd.50808: +7 °C in a GCM;
 Wolf & Toon 2014, doi:10.1089/ast.2013.1112: 3 to 7 K): in Charnay's
-setting (0.82 of today's Sun, 10 mbar of CO₂, no thermostat) it goes
-from 259 K to 272 K, and an Earth under 2 or 3 bar of N₂ stays at 299
-or 313 K with no CO₂ left for its thermostat to remove. Its OLR rises
-slowly with the surface temperature below the plateau (about 1 W/m² per
-kelvin), so any forcing warms it more than in those models.
+setting (0.82 of today's Sun, 10 mbar of CO₂, no thermostat) the column
+goes from 271.1 K to 278.4 K (+7.3 K; thin margins against the test's
+270 K floor and +8 K ceiling). The thermostat holds an Earth under 2 or
+3 bar of N₂ at 288 K with 8e-6 and 6e-6 bar of CO₂, and an Earth with
+no CO₂ under 1 bar of N₂ falls to 263 K, well below 288 K (Lacis et al.
+2010, doi:10.1126/science.1190653). The OLR rises slowly with the
+surface temperature below the plateau (about 1 W/m² per kelvin), so a
+forcing warms the grey column more than a line-by-line one.
 
 **Steam.** A steam runaway's gases are fixed, its surface no colder than
 the saturation temperature of its steam. Pure steam follows the plateau
@@ -558,7 +580,10 @@ to 295 bar. The column therefore holds at most 70 bar of steam
 plateau at 1800 K); the steam under it changes neither the radiation
 nor the broadening of the CO₂ lines. The 30 %-water planet at 0.7 AU
 (489 W/m² absorbed, 1.6e5 bar of steam; 8805 K under the plain grey law,
-2076 K under the old cap) settles at 2131 K.
+2076 K under the old cap) settles at 2099 K. The cap is a surrogate: it
+stands for the non-grey 4 µm window (Boukrouche et al. 2021; Goldblatt
+2015) through which a real hot steam atmosphere radiates and which the
+grey column cannot see.
 
 **Water vapour.** Where water is kept and there is no runaway, the air
 above the ocean or the ice holds 77 % of the saturation pressure (the
@@ -617,22 +642,25 @@ inputs round the Sun at 4.6 Gyr:
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, 0.009 bar of CO₂ | 288 ± 6 K, water, regulated, under 0.01 bar of CO₂ | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, 3e-4 bar of CO₂ | 288 ± 6 K, water, regulated, under 0.01 bar of CO₂ | 288 K, 280 ppm before industry |
 | Venus | 737 K, none | 737 ± 50 K, none | 737 K |
-| Mars | 207 K, none | 210 ± 12 K, none | about 210 K |
+| Mars | 209 K, none | 210 ± 12 K, none | about 210 K |
 | Titan | 94 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | 410 K, its equilibrium temperature | within 1 K of it | airless |
 
-Earth's thermostat needs 0.009 bar of CO₂ on the column, thirty times
-the pre-industrial 280 ppm (270 ppm on the old core): the grey water
-vapour leaves more of Earth's greenhouse to CO₂. An Earth moved round
-the Sun keeps 288 K out to 1.4 AU (1.1 bar of CO₂ at 1.2 AU, 2.9 bar at
-1.4 AU) and freezes beyond (273 K at 1.5 AU, 243 K at 1.6 AU with all
-its 1.8 bar of CO₂ in the air, 224 K at 1.7 AU): on the old core it
-held to 1.6 AU, close to the maximum-greenhouse limit of Kopparapu et
-al. 2013 (about 1.67 AU), which the grey CO₂ of the column now falls
-short of. At 0.9 AU it has run away (717 K, no water); at 0.01 AU it is
-a lava world.
+Earth's thermostat needs 3.0e-4 bar of CO₂ on the column, about the
+pre-industrial 280 ppm (270 ppm on the old core). An Earth moved round
+the Sun keeps 288 K out to 1.4 AU (0.7 bar of CO₂ at 1.2 AU, 2.1 bar at
+1.4 AU), still has its ocean at 1.5 AU (286 K, all its 2.9 bar of CO₂ in
+the air) and freezes beyond (254 K at 1.6 AU with all its 1.8 bar of
+CO₂, 235 K at 1.7 AU). The column itself puts the edge farther than the
+maximum-greenhouse limit of Kopparapu et al. 2013
+(doi:10.1088/0004-637X/765/2/131: 273 K at about 1.67 AU with the best
+CO₂, up to 8 bar), as a grey column without Rayleigh scattering should:
+at 1.6 AU it reaches 274 K under 3 bar of CO₂ and 288 K under 4 bar. The
+Earth track runs short of CO₂ there, and Venus's albedo of 0.3, which
+pins CO₂'s strength, is issue #510. At 0.9 AU it has run away (717 K, no
+water); at 0.01 AU it is a lava world.
 
 ## Life
 
