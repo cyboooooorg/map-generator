@@ -80,10 +80,24 @@ describe('planet classes', () => {
     expect(className('volcanic-world')).toBe('Volcanic world');
     expect(className('volcanic-world', true)).toBe('Volcanic moon');
     expect(className('ice-world', true)).toBe('Icy moon');
-    expect(className('icy-moon', true)).toBe('icy moon');
+    expect(className('icy-moon', true)).toBe('Icy moon (small)');
     expect(classLabel('rocky', undefined, true)).toBe('Rocky moon');
     expect(classLabel('rocky', model(0.25, 'none', 215), true)).toBe('Rocky moon · frozen surface');
     expect(classLabel('rocky')).toBe('Rocky planet');
+  });
+
+  it('capitalizes every moon label and marks only the small moons', () => {
+    const small = ['rocky-moon', 'icy-moon'];
+    for (const [lang, word] of [
+      [en, 'small'],
+      [fr, 'petite'],
+    ] as const) {
+      const smallLabel = new RegExp(`^[A-Z].* \\(${word}\\)$`);
+      const types = lang.viewer.bodyTypes as Record<string, string>;
+      for (const key of small) expect(types[key], key).toMatch(smallLabel);
+      for (const label of Object.values(lang.viewer.ringMoonTypes)) expect(label).toMatch(smallLabel);
+      for (const label of Object.values(lang.viewer.moonBodyTypes as Record<string, string>)) expect(label).toMatch(/^[A-Z][^()]*$/);
+    }
   });
 
   it('keeps the moon wordings in both languages and none that say planet', () => {

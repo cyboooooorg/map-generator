@@ -1036,8 +1036,8 @@ export const en = {
       'hydrocarbon-world': 'Hydrocarbon world',
       'ocean-world': 'Ocean world',
       'steam-world': 'Steam world',
-      'rocky-moon': 'rocky moon',
-      'icy-moon': 'icy moon',
+      'rocky-moon': 'Rocky moon (small)',
+      'icy-moon': 'Icy moon (small)',
     },
     // The classes a round moon words otherwise than a planet (`classLabel`).
     moonBodyTypes: {
@@ -1057,12 +1057,12 @@ export const en = {
       'steam-world': 'Steam moon',
     },
     ringMoonTypes: {
-      embedded: 'ring moon',
-      resonant: 'icy moon, resonant with the rings',
-      edge: 'ring moon',
-      confining: 'ring moon, setting the rings’ edge',
-      shepherd: 'shepherd moon',
-      source: 'small inner moon',
+      embedded: 'Ring moon (small)',
+      resonant: 'Icy moon resonant with the rings (small)',
+      edge: 'Ring moon (small)',
+      confining: 'Ring moon setting the rings’ edge (small)',
+      shepherd: 'Shepherd moon (small)',
+      source: 'Inner moon (small)',
     },
     spinAxes: 'Spin axes',
     spinAxesHelp:

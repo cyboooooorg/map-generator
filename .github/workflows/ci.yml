@@ -8,20 +8,44 @@ on:
 permissions:
   contents: read
 
+# Lint, tests and front-end run as separate jobs, side by side. Each Rust job
+# keeps its own rust-cache entry (the key includes the job id): clippy and the
+# test profile build different artifacts anyway.
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
       - uses: Swatinem/rust-cache@v2
+        with:
+          # rust-cache keys on Cargo.lock and the members' Cargo.toml, not the
+          # root one: without this, a profile change there keeps restoring a
+          # stale target/ that never gets saved again (full match).
+          key: ${{ hashFiles('Cargo.toml') }}
       - name: Lint
         run: mise run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # See the lint job.
+          key: ${{ hashFiles('Cargo.toml') }}
       - name: Test
         run: mise run test
       - name: Generated TypeScript types are committed
         # `cargo test` regenerates web/src/lib/api/types from the Rust API types.
         run: git diff --exit-code -- web/src/lib/api/types
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
       - name: Front-end checks
         run: mise run web:check
       - name: Front-end build
