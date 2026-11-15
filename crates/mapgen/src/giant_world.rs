@@ -873,7 +873,10 @@ impl Look {
             let r: f32 = rng.random();
             let style = match (hot, kind) {
                 (true, _) => PoleStyle::Haze,
-                (_, GiantKind::Ice | GiantKind::Steam) => {
+                // A steam world's poles stay a plain grey haze: the
+                // cyclones' bluish, filamented look is an ice giant's.
+                (_, GiantKind::Steam) => PoleStyle::Haze,
+                (_, GiantKind::Ice) => {
                     if r < 0.3 {
                         PoleStyle::Cyclones
                     } else {
@@ -1190,7 +1193,12 @@ fn polar_look(
         PoleStyle::Haze => {
             // A bright cap of haze over the pole.
             let cap = 1.0 - smoothstep(6.0, 18.0, colat);
-            colour = mix(colour, [0.97, 0.98, 1.0], 0.3 * cap);
+            let white = if look.info.kind == GiantKind::Steam {
+                [0.97; 3]
+            } else {
+                [0.97, 0.98, 1.0]
+            };
+            colour = mix(colour, white, 0.3 * cap);
         }
         PoleStyle::Hexagon => {
             // The jet's six straight sides, at about 78° (12° from the pole).
@@ -1386,6 +1394,20 @@ mod tests {
                         - c.iter().cloned().fold(f32::MAX, f32::min);
                     assert!(spread < 0.04, "{class} {c:?}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn steam_colour_map_has_no_hue_down_to_the_poles() {
+        // The poles once drew an ice giant's bluish, filamented cyclone.
+        for seed in 0..24 {
+            let mut p = params("steam-world", seed, 8.0, 0.5);
+            (p.width, p.height) = (256, 128);
+            let world = generate(&p, &|_| {}).world;
+            for (i, c) in world.surface.iter().enumerate() {
+                let spread = c.iter().max().unwrap() - c.iter().min().unwrap();
+                assert!(spread <= 6, "seed {seed} pixel {i}: {c:?}");
             }
         }
     }
