@@ -24,6 +24,7 @@
   import { api } from './lib/api/client';
   import type { FormSpec } from './lib/api/types/FormSpec';
   import type { SystemCreated } from './lib/api/types/SystemCreated';
+  import { isUnreadable, systemName } from './lib/systemList';
   import type { SystemSummary } from './lib/api/types/SystemSummary';
   import type { ArchetypeInfo } from './lib/api/types/ArchetypeInfo';
   import type { WorldRequest } from './lib/api/types/WorldRequest';
@@ -530,6 +531,29 @@
     }
   }
 
+  /**
+   * Regenerates an outdated system from its card: its old worlds are generated again, or, when its
+   * file is of another format (a different system, names lost), it is drawn again from its seed.
+   */
+  async function regenerateSystem(system: SystemSummary): Promise<void> {
+    const name = systemName(system);
+    if (isUnreadable(system) && !confirm(t.app.confirmRegenerateSystem({ name }))) {
+      return;
+    }
+    try {
+      const done = await api.regenerateSystem(system.id);
+      if (done.job_id) {
+        jobs.track(done.job_id, done.system_id, {}, { status: 'queued' }, true);
+        toasts.show(t.app.regenerating({ name }));
+      } else {
+        toasts.show(t.app.regenerated({ name: titleOf(done.system_id) ?? name }));
+      }
+    } catch (e) {
+      toasts.error(t.app.regenerateFailed({ name, error: errorText(e) }));
+    }
+    await refresh();
+  }
+
   /** Queues the selected world again with a new random seed. */
   async function reroll(): Promise<void> {
     if (!primary.meta) {
@@ -650,6 +674,7 @@
         bind:order={listOrder}
         onSelect={select}
         onDelete={removeWorlds}
+        onRegenerate={regenerateSystem}
         onCompare={compare}
         onChanged={changed}
       />

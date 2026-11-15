@@ -381,10 +381,46 @@ pub struct SystemSummary {
     /// Pinned in the main menu (`PUT`/`DELETE /api/systems/{id}/pin`): the
     /// library lists pinned systems first. Kept in the index only.
     pub pinned: bool,
-    /// Made by an older generator: its `system.json` is not of the
-    /// current format, so it cannot be opened, only listed and deleted
-    /// (the other fields are empty when its file does not give them).
+    /// Made by an older generator: either its `system.json` is not of the
+    /// current format (it cannot be opened, only listed, deleted or drawn
+    /// again; the other fields are empty when its file does not give
+    /// them), or a world it generated is below the oldest supported
+    /// format (see `outdated_reason`).
     pub outdated: bool,
+    /// Why the system is `outdated`, `None` when it is not.
+    pub outdated_reason: Option<OutdatedReason>,
+}
+
+/// Why a system is outdated (`SystemSummary::outdated_reason`), which
+/// tells what `POST /api/systems/{id}/regenerate` does.
+#[derive(Clone, Copy, Debug, Serialize, TS, PartialEq, Eq)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum OutdatedReason {
+    /// `system.json` is of another format: regenerating draws the system
+    /// again from its seed (names that no longer fit are lost).
+    SystemFormat,
+    /// `system.json` is current but a generated world is older than
+    /// `MIN_FORMAT_VERSION`: regenerating makes those worlds again, the
+    /// system and its names are kept.
+    WorldFormat,
+}
+
+/// Answer to `POST /api/systems/{id}/regenerate`.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct SystemRegenerated {
+    /// The system to show afterwards: `id`, or the new id when the draw
+    /// from the same seed named it differently.
+    pub system_id: String,
+    /// The system that was removed because the new draw has another id.
+    pub removed_id: Option<String>,
+    /// What was outdated, hence what was done.
+    pub reason: OutdatedReason,
+    /// The job making the worlds again (`world_format`); none for a
+    /// system drawn again (`system_format`), whose bodies are generated
+    /// when opened.
+    pub job_id: Option<String>,
 }
 
 /// A body of a system, as its summary lists it.

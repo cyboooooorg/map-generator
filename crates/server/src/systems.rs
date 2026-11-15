@@ -428,6 +428,7 @@ pub fn summarize(id: &str, json: &[u8], modified_ms: u64) -> Option<SystemSummar
         modified_ms,
         pinned: false,
         outdated: false,
+        outdated_reason: None,
     })
 }
 
@@ -468,6 +469,7 @@ fn outdated_stub(id: &str, modified_ms: u64, meta: &OutdatedMeta) -> SystemSumma
         modified_ms,
         pinned: false,
         outdated: true,
+        outdated_reason: Some(crate::api::OutdatedReason::SystemFormat),
     }
 }
 

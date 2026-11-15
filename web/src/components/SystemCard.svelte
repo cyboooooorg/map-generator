@@ -10,7 +10,7 @@
   import { archetypeName } from '../lib/i18n/names.svelte';
   import { hasHabitableWorld, starLetter } from '../lib/menuCards';
   import { cssColour } from '../lib/orrery';
-  import { systemName as nameOf } from '../lib/systemList';
+  import { isUnreadable, systemName as nameOf } from '../lib/systemList';
   import OrbitStrip from './OrbitStrip.svelte';
   import RenameForm from './RenameForm.svelte';
   import SystemActions from './SystemActions.svelte';
@@ -30,6 +30,7 @@
     onRename: () => void;
     onRenameClose: () => void;
     onDelete: () => void;
+    onRegenerate: () => void;
     onToggle: () => void;
   }
 
@@ -46,6 +47,7 @@
     onRename,
     onRenameClose,
     onDelete,
+    onRegenerate,
     onToggle,
   }: Props = $props();
 
@@ -66,13 +68,14 @@
       colour: cssColour(system.bodies.find((b) => b.kind === 'planet' && b.body_type === type)?.colour ?? [0.5, 0.5, 0.5]),
     })),
   );
+  const unreadable = $derived(isUnreadable(system));
   const ago = $derived(formatAgo(system.modified_ms));
   const when = $derived(new Date(system.modified_ms).toLocaleString(getLocale()));
   const meta = $derived(`${t.systemList.moonsCount({ count: system.moons })} · ${ago}`);
 </script>
 
 <article class="card" class:compact class:editing={renaming} title={t.systemList.seedTitle({ seed: system.seed })}>
-  {#if renaming && !system.outdated}
+  {#if renaming && !unreadable}
     {#if compact}
       <SystemOrrery {system} width={ORRERY} height={ORRERY} radius={10} scale="log" />
     {:else}
@@ -80,7 +83,7 @@
     {/if}
     <div class="body"><RenameForm {system} {onChanged} onClose={onRenameClose} bind:dirty /></div>
   {:else}
-    {#if system.outdated}
+    {#if unreadable}
       <div class="open outdated">
         <span class="body">
           <span class="head">
@@ -116,12 +119,15 @@
         {#if habitable}
           <span class="habitable">● {compact ? t.systemList.habitableShort : t.systemList.habitableLine}</span>
         {/if}
+        {#if system.outdated}
+          <span class="badge">{t.systemList.outdatedWorlds}</span>
+        {/if}
       </span>
     </button>
     {/if}
     <span class="foot">
       <small class="meta" title={when}>{meta}</small>
-      <SystemActions {system} {selecting} {chosen} {onChanged} {onPinned} {onRename} {onDelete} {onToggle} />
+      <SystemActions {system} {selecting} {chosen} {onChanged} {onPinned} {onRename} {onDelete} {onRegenerate} {onToggle} />
     </span>
   {/if}
 </article>

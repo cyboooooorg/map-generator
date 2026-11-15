@@ -106,10 +106,6 @@ impl std::fmt::Display for EvictError {
 /// Opening such a body again queues its generation, at its displayed
 /// resolution when one is recorded (`queue_body`, then the follow-up of
 /// `start_job`), else at its original one.
-#[allow(
-    dead_code,
-    reason = "the entry point of the future reduce-a-system action; the sweep checks the age first"
-)]
 pub fn evict_body(state: &AppState, system: &str, body: &str) -> Result<Evicted, EvictError> {
     evict(state, system, body, None)
 }

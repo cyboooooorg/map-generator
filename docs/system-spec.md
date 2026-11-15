@@ -736,6 +736,8 @@ addressed as `<system-id>/<body-id>` everywhere.
   unpin a system in the main menu (idempotent, 404 for an unknown
   system). Both answer its summary, whose `pinned` flag `GET /api/systems`
   also gives. The pin lives in the index only.
+- `POST /api/systems/{id}/regenerate`: draw an outdated system again or
+  generate its outdated worlds again (see "outdated" below).
 - `GET /api/systems/{id}/export`: the system as `<id>.zip` (400 for an
   invalid id, 404 for an unknown system, 410 for one an older generator
   made). It holds `<id>/system.json`, a document with a `schema` field
@@ -1029,10 +1031,37 @@ generator keeps no code to re-derive it.
   with the same message, not 404. Only a missing `system.json` is 404.
 - The server still starts and lists these systems. One whose
   `system.json` is not of the current `SYSTEM_FORMAT_VERSION` carries
-  `outdated: true` in `GET /api/systems` (its id, seed, star and date when
-  they parse, no bodies). The main menu labels it "Outdated: made by an
-  older generator" and offers only the delete button; the server never
+  `outdated: true` and `outdated_reason: "system_format"` in
+  `GET /api/systems` (its id, seed, star and date when they parse, no
+  bodies). The main menu labels it "Outdated: made by an older generator"
+  and offers the delete and regenerate buttons only; the server never
   deletes it itself.
+- A system whose `system.json` is current but whose generated worlds
+  (any resolution of any generated body) have a `world.json` below
+  `MIN_FORMAT_VERSION` is `outdated: true` with
+  `outdated_reason: "world_format"`. It stays a whole system, openable
+  (the viewer shows the 410 message), and the menu adds the regenerate
+  button to its card. The index records the lowest world format of each
+  system (`systems.world_format`, read again at every refresh) and
+  derives the flag from it.
+- `POST /api/systems/{id}/regenerate` makes an outdated system current
+  (404 for an unknown system, 409 when it is not outdated or has a job
+  queued or running, `detail.code` `being_generated` in the second case).
+  It answers `{system_id, removed_id, reason, job_id}`:
+  - `world_format`: every generated body with a too-old world is evicted
+    (all its resolutions are deleted, see the eviction in
+    `docs/analysis/15-storage.md`) and queued again, a job per family of
+    bodies, one after the other. The system, its names and its other
+    bodies are kept; each body comes back at its original size and at the
+    resolution it was displayed at; other added resolutions are not made
+    again. `job_id` is the first job.
+  - `system_format`: the system is drawn again with the seed, the map
+    size and the star its old file gives (`POST /api/systems` logic,
+    `replace` when the id is the same). The result is a different
+    system, and the names that no longer fit are lost. When the new draw
+    has another id, the old system is removed once the new one is
+    stored (`removed_id`) and its pin moves to the new one. `job_id` is
+    null: bodies are generated when opened.
 
 ## Delivery
 

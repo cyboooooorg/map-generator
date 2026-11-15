@@ -51,6 +51,7 @@ const system = (extra: Partial<SystemSummary> = {}): SystemSummary => ({
   modified_ms: 0,
   pinned: false,
   outdated: false,
+  outdated_reason: null,
   ...extra,
 });
 

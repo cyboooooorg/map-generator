@@ -10,6 +10,7 @@ import type { GenerateStarted } from './types/GenerateStarted';
 import type { ResolvedSystem } from './types/ResolvedSystem';
 import type { SystemCreated } from './types/SystemCreated';
 import type { SystemName } from './types/SystemName';
+import type { SystemRegenerated } from './types/SystemRegenerated';
 import type { SystemQuery } from './types/SystemQuery';
 import type { SystemRequest } from './types/SystemRequest';
 import type { SystemSummary } from './types/SystemSummary';
@@ -126,6 +127,12 @@ export const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: name.trim() === '' ? null : name.trim() } satisfies SystemName),
     }),
+  /**
+   * Makes an outdated system current: its old worlds are generated again (`world_format`, `job_id` is the
+   * first job) or it is drawn again from its seed (`system_format`, possibly under another id).
+   */
+  regenerateSystem: (id: string) =>
+    call<SystemRegenerated>(`/api/systems/${encodeURIComponent(id)}/regenerate`, { method: 'POST' }),
   /** Pins a system in the main menu, or unpins it; answers its summary. */
   pinSystem: (id: string, pinned: boolean) =>
     call<SystemSummary>(`/api/systems/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' }),

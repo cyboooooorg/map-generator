@@ -38,9 +38,10 @@
 //! sent as they are.
 use crate::api::{
     ApiError, ArchetypeInfo, BodyExtras, BodySizes, DisplayedSize, ErrorDetail, FormSpec,
-    GenerateStarted, GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec,
-    PendingSize, PresentSize, ReferenceValue, RegeneratedBody, ResolvedSystem, SystemCreated,
-    SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
+    GenerateStarted, GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, OutdatedReason,
+    ParamSpec, PendingSize, PresentSize, ReferenceValue, RegeneratedBody, ResolvedSystem,
+    SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery, SystemRegenerated,
+    SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -311,6 +312,7 @@ fn routes(state: Shared, config: &Config) -> Router {
         .route("/api/systems/resolve", post(resolve_system))
         .route("/api/systems/{id}", get(get_system).delete(delete_system))
         .route("/api/systems/{id}/export", get(export_system))
+        .route("/api/systems/{id}/regenerate", post(regenerate_system))
         .route("/api/systems/{id}/names", put(rename_system))
         .route("/api/systems/{id}/name", put(name_system))
         .route("/api/systems/{id}/bodies/{body}/name", put(name_body))
@@ -704,14 +706,18 @@ async fn resolve_system(
     Ok(Json(resolved))
 }
 
-/// Draws a system and writes its `system.json` (`POST /api/systems`). A
-/// system of the same id is refused with 409 unless the query replaces it.
-async fn create_system(
-    State(state): State<Shared>,
-    Query(query): Query<SystemQuery>,
-    Json(request): Json<mapgen::system::SystemRequest>,
-) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
-    let (system, ignored) = resolve_request(&state, request.clone()).await?;
+/// Writes a drawn `system` under its id and reads it into the index;
+/// answers the id. A system of the same id is refused with 409 unless
+/// `replace` (it then keeps the names that still fit one of its bodies).
+/// The system is held until its files are in place: nothing else touches
+/// the directory meanwhile (a job, a deletion, an eviction), unless the
+/// caller holds it already (`held`).
+async fn store_system(
+    state: &Shared,
+    system: mapgen::system::System,
+    replace: bool,
+    held: Option<&str>,
+) -> Result<String, Rejection> {
     let id = mapgen::system::system_id(&system);
     if !systems::is_valid_system_id(&id) {
         return Err(Failure(
@@ -720,17 +726,19 @@ async fn create_system(
         )
         .into());
     }
-    let replace = query.replace.unwrap_or(false);
-    // Held until the files are in place: nothing else touches the system
-    // directory meanwhile (a job, a deletion, an eviction).
-    let Some(hold) = hold_system(&state, &id) else {
-        return Err(Rejection(
-            Failure(
-                StatusCode::CONFLICT,
-                format!("system {id} is being generated"),
-            ),
-            Some(ErrorDetail::BeingGenerated { world: id }),
-        ));
+    let hold = if held == Some(id.as_str()) {
+        None
+    } else {
+        let Some(hold) = hold_system(state, &id) else {
+            return Err(Rejection(
+                Failure(
+                    StatusCode::CONFLICT,
+                    format!("system {id} is being generated"),
+                ),
+                Some(ErrorDetail::BeingGenerated { world: id }),
+            ));
+        };
+        Some(hold)
     };
     let root = state.config.systems_dir.clone();
     let target = systems::system_dir(&root, &id);
@@ -779,8 +787,20 @@ async fn create_system(
     .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     state.tiles.forget(&format!("systems/{id}"));
     state.originals.forget(&id);
-    // The first job claims the system's key itself.
     drop(hold);
+    Ok(id)
+}
+
+/// Draws a system and writes its `system.json` (`POST /api/systems`). A
+/// system of the same id is refused with 409 unless the query replaces it.
+async fn create_system(
+    State(state): State<Shared>,
+    Query(query): Query<SystemQuery>,
+    Json(request): Json<mapgen::system::SystemRequest>,
+) -> Result<(StatusCode, Json<SystemCreated>), Rejection> {
+    let (system, ignored) = resolve_request(&state, request.clone()).await?;
+    let replace = query.replace.unwrap_or(false);
+    let id = store_system(&state, system, replace, None).await?;
     let job_id = match &request {
         mapgen::system::SystemRequest::Around(_) => first_body_job(&state, &id).await?,
         mapgen::system::SystemRequest::System(_) => None,
@@ -947,16 +967,23 @@ async fn delete_system(
             format!("system {id} is being generated: cancel its job first"),
         ));
     };
-    let dir = systems::system_dir(&state.config.systems_dir, &id);
+    remove_system_files(&state, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Removes the directory and the index rows of system `id`, 404 when there
+/// is none. The caller holds the system ([`hold_system`]).
+async fn remove_system_files(state: &Shared, id: &str) -> Result<(), Failure> {
+    let dir = systems::system_dir(&state.config.systems_dir, id);
     if !dir.is_dir() {
         return Err(Failure(StatusCode::NOT_FOUND, format!("no system {id}")));
     }
     let forgotten = state.tiles.forget(&format!("systems/{id}"));
-    state.originals.forget(&id);
+    state.originals.forget(id);
     tokio::fs::remove_dir_all(&dir)
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let (index, owned) = (state.index.clone(), id.clone());
+    let (index, owned) = (state.index.clone(), id.to_string());
     tokio::task::spawn_blocking(move || index.remove_system(&owned))
         .await
         .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
@@ -964,7 +991,204 @@ async fn delete_system(
     if forgotten {
         let _ = tokio::task::spawn_blocking(memory::release).await;
     }
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
+}
+
+/// Makes an outdated system current (`POST /api/systems/{id}/regenerate`),
+/// by the reason it is outdated (`SystemSummary::outdated_reason`):
+///
+/// - `world_format`: the bodies with a world below the oldest supported
+///   format lose their files (evicted) and are generated again, a job per
+///   family of bodies, one after the other; the system, its names and
+///   its other bodies are kept. The job answered is the first one.
+/// - `system_format`: the system is drawn again from the seed, the map
+///   size and the star its old `system.json` gave; the result is another
+///   system whose names that no longer fit are lost. When the new draw has
+///   another id the old system is removed once the new one is stored
+///   (its pin moves to the new one).
+///
+/// 409 when the system is not outdated or has a job queued or running.
+async fn regenerate_system(
+    State(state): State<Shared>,
+    UrlPath(id): UrlPath<String>,
+) -> Result<Json<SystemRegenerated>, Rejection> {
+    if !systems::is_valid_system_id(&id) {
+        return Err(Failure(StatusCode::BAD_REQUEST, "invalid system id".into()).into());
+    }
+    let (index, owned) = (state.index.clone(), id.clone());
+    let summary = tokio::task::spawn_blocking(move || index.summary(&owned))
+        .await
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| Failure(StatusCode::NOT_FOUND, format!("no system {id}")))?;
+    let busy = |id: &str| {
+        Rejection(
+            Failure(
+                StatusCode::CONFLICT,
+                format!("system {id} is being generated: cancel its job first"),
+            ),
+            Some(ErrorDetail::BeingGenerated {
+                world: id.to_string(),
+            }),
+        )
+    };
+    match summary.outdated_reason {
+        None => Err(Failure(StatusCode::CONFLICT, format!("system {id} is not outdated")).into()),
+        Some(OutdatedReason::WorldFormat) => {
+            if system_is_pending(&state.pending.lock().expect("pending lock"), &id) {
+                return Err(busy(&id));
+            }
+            let job_id = regenerate_old_worlds(&state, &id).await?;
+            Ok(Json(SystemRegenerated {
+                system_id: id,
+                removed_id: None,
+                reason: OutdatedReason::WorldFormat,
+                job_id,
+            }))
+        }
+        Some(OutdatedReason::SystemFormat) => {
+            let Some(_hold) = hold_system(&state, &id) else {
+                return Err(busy(&id));
+            };
+            let positive = |v: u32| (v > 0).then_some(v);
+            let request =
+                mapgen::system::SystemRequest::System(mapgen::system::WholeSystemRequest {
+                    star: (!summary.star.is_empty()).then(|| summary.star.clone()),
+                    seed: Some(summary.seed),
+                    width: positive(summary.width),
+                    height: positive(summary.height),
+                    ..Default::default()
+                });
+            let (system, _) = resolve_request(&state, request).await?;
+            let new_id = mapgen::system::system_id(&system);
+            let same = new_id == id;
+            store_system(&state, system, same, Some(&id)).await?;
+            if !same {
+                remove_system_files(&state, &id).await?;
+                if summary.pinned {
+                    let (index, pinned) = (state.index.clone(), new_id.clone());
+                    tokio::task::spawn_blocking(move || index.set_pinned(&pinned, true))
+                        .await
+                        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+                        .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                }
+            }
+            Ok(Json(SystemRegenerated {
+                system_id: new_id,
+                removed_id: (!same).then_some(id),
+                reason: OutdatedReason::SystemFormat,
+                job_id: None,
+            }))
+        }
+    }
+}
+
+/// Evicts the generated bodies of system `id` that have a world below
+/// [`mapgen::export::raw_data::MIN_FORMAT_VERSION`] (at any resolution) and
+/// queues their generation again: the bodies come back at their original
+/// size, and at the resolution they were displayed at (see
+/// [`regenerate_displayed_size`]). Answers the first job; the next
+/// families follow it one by one.
+async fn regenerate_old_worlds(state: &Shared, id: &str) -> Result<Option<String>, Rejection> {
+    let (task_state, system) = (state.clone(), id.to_string());
+    let evicted = tokio::task::spawn_blocking(move || -> Result<Vec<String>, Rejection> {
+        let root = &task_state.config.systems_dir;
+        let file = mapgen::system::read_system(&systems::system_dir(root, &system))
+            .map_err(|e| unreadable_system(root, &system, &e))?;
+        let mut evicted = Vec::new();
+        for body in file.bodies.iter().filter(|b| b.generated) {
+            let dir = systems::body_dir(root, &system, &body.id);
+            let old = mapgen::sizes::sizes_on_disk(&dir)
+                .into_iter()
+                .any(|(w, h)| {
+                    crate::index::world_format(&mapgen::sizes::size_dir(&dir, w, h))
+                        .is_some_and(|f| f < mapgen::export::raw_data::MIN_FORMAT_VERSION)
+                });
+            if !old {
+                continue;
+            }
+            match evict::evict_body(&task_state, &system, &body.id) {
+                Ok(_) => evicted.push(body.id.clone()),
+                Err(evict::EvictError::Pending) => {
+                    return Err(Rejection(
+                        Failure(
+                            StatusCode::CONFLICT,
+                            format!("system {system} is being generated: cancel its job first"),
+                        ),
+                        Some(ErrorDetail::BeingGenerated {
+                            world: system.clone(),
+                        }),
+                    ));
+                }
+                Err(e) => {
+                    return Err(Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into());
+                }
+            }
+        }
+        Ok(evicted)
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
+    let Some(first) = evicted.first() else {
+        return Ok(None);
+    };
+    let job = queue_body(state, id, first).await?;
+    if let Some(job) = job.clone()
+        && evicted.len() > 1
+    {
+        let (state, system) = (state.clone(), id.to_string());
+        tokio::spawn(async move { regenerate_next_families(state, system, evicted, job).await });
+    }
+    Ok(job)
+}
+
+/// After `job` (the generation of the first family of `bodies`), queues
+/// the bodies still not generated, family after family, until they all
+/// are or a job does not end well.
+async fn regenerate_next_families(state: Shared, id: String, bodies: Vec<String>, mut job: String) {
+    loop {
+        let status = state
+            .jobs
+            .lock()
+            .expect("jobs lock")
+            .get(&job)
+            .map(|j| j.status.clone());
+        let Some(mut status) = status else { return };
+        let done = match status.wait_for(|s| s.is_finished()).await {
+            Ok(s) => matches!(&*s, JobStatus::Done { .. }),
+            Err(_) => false,
+        };
+        if !done {
+            return;
+        }
+        // The job frees its key just after announcing its end.
+        for _ in 0..500 {
+            if !system_is_pending(&state.pending.lock().expect("pending lock"), &id) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let dir = systems::system_dir(&state.config.systems_dir, &id);
+        let Ok(Ok(file)) =
+            tokio::task::spawn_blocking(move || mapgen::system::read_system(&dir)).await
+        else {
+            return;
+        };
+        let Some(next) = bodies
+            .iter()
+            .find(|b| file.bodies.iter().any(|f| &f.id == *b && !f.generated))
+        else {
+            return;
+        };
+        match queue_body(&state, &id, next).await {
+            Ok(Some(next_job)) => job = next_job,
+            Ok(None) => return,
+            Err(Rejection(Failure(_, error), _)) => {
+                tracing::warn!("{id}/{next} not generated again: {error}");
+                return;
+            }
+        }
+    }
 }
 
 /// Exports a system (`GET /api/systems/{id}/export`): a `.zip` named after
@@ -2837,6 +3061,114 @@ mod tests {
         let (status, body) = call(&app, "GET", "/api/systems/mgs-7-7", None).await;
         assert_eq!(status, StatusCode::GONE, "{body}");
         assert!(body.contains("clean-systems"), "{body}");
+    }
+
+    /// Marks the original world of `body` as made by an older generator
+    /// (`world.json` says format 10), and reads the system again.
+    fn age_world(state: &AppState, id: &str, body: &str) {
+        let root = &state.config.systems_dir;
+        let dir = systems::body_dir(root, id, body);
+        let original = mapgen::sizes::sizes_on_disk(&dir)[0];
+        let file = mapgen::sizes::size_dir(&dir, original.0, original.1)
+            .join("raw_data")
+            .join("world.json");
+        let mut meta: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+        meta["format_version"] = 10.into();
+        std::fs::write(&file, serde_json::to_vec(&meta).unwrap()).unwrap();
+        state.index.refresh_system(root, id, Cause::Scan).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_system_with_old_worlds_is_flagged_and_regenerated_in_place() {
+        let (config, state, app, id, planet) = evictable("regen-worlds", 31).await;
+        let base = format!("/api/systems/{id}");
+        let named = format!("{base}/bodies/{planet}/name");
+        let (status, _) = call(&app, "PUT", &named, Some(r#"{"name": "Gaia"}"#)).await;
+        assert_eq!(status, StatusCode::OK);
+        // Current: nothing to regenerate.
+        let (status, body) = call(&app, "POST", &format!("{base}/regenerate"), None).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+
+        age_world(&state, &id, &planet);
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let listed = &json(&list)[0];
+        assert_eq!(listed["id"], id.as_str());
+        assert_eq!(listed["outdated"], true);
+        assert_eq!(listed["outdated_reason"], "world_format");
+
+        let (status, body) = call(&app, "POST", &format!("{base}/regenerate"), None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let answer = json(&body);
+        assert_eq!(answer["system_id"], id.as_str());
+        assert_eq!(answer["reason"], "world_format");
+        assert!(answer["removed_id"].is_null());
+        assert!(answer["job_id"].is_string(), "{body}");
+        let events = wait_job(&app, &body).await;
+        assert!(events.contains("\"status\":\"done\""), "{events}");
+        wait_released(&state).await;
+
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let listed = &json(&list)[0];
+        assert_eq!(listed["outdated"], false, "{list}");
+        assert!(listed["outdated_reason"].is_null());
+        assert_eq!(listed["names"][&planet], "Gaia", "names are kept");
+        let dir = systems::body_dir(&config.systems_dir, &id, &planet);
+        let original = mapgen::sizes::sizes_on_disk(&dir)[0];
+        let world = mapgen::sizes::size_dir(&dir, original.0, original.1)
+            .join("raw_data")
+            .join("world.json");
+        let meta: serde_json::Value = json(&std::fs::read_to_string(world).unwrap());
+        assert!(
+            meta["format_version"].as_u64().unwrap()
+                >= u64::from(mapgen::export::raw_data::MIN_FORMAT_VERSION)
+        );
+    }
+
+    #[tokio::test]
+    async fn regenerating_waits_for_the_systems_running_job() {
+        let (_config, state, app, id, planet) = evictable("regen-busy", 32).await;
+        age_world(&state, &id, &planet);
+        state.pending.lock().unwrap().push(pending_system(&id));
+        let (status, body) =
+            call(&app, "POST", &format!("/api/systems/{id}/regenerate"), None).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(json(&body)["detail"]["code"], "being_generated");
+        let (status, _) = call(&app, "POST", "/api/systems/mgs-9-9/regenerate", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        state.pending.lock().unwrap().clear();
+    }
+
+    #[tokio::test]
+    async fn a_system_of_an_old_format_is_drawn_again_from_its_seed() {
+        let config = temp_config("regen-system");
+        let root = config.systems_dir.clone();
+        write_outdated_system(&root, "mgs-7-7");
+        let app = router(config);
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        assert_eq!(json(&list)[0]["outdated_reason"], "system_format");
+        let (status, body) = call(&app, "POST", "/api/systems/mgs-7-7/regenerate", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let answer = json(&body);
+        assert_eq!(answer["reason"], "system_format");
+        let new_id = answer["system_id"].as_str().unwrap().to_string();
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list = json(&list);
+        let list = list.as_array().unwrap();
+        assert_eq!(list.len(), 1, "the old system is gone: {list:?}");
+        assert_eq!(list[0]["id"], new_id.as_str());
+        assert_eq!(list[0]["outdated"], false);
+        assert_eq!(list[0]["seed"], 7);
+        assert_eq!(list[0]["width"], 64);
+        assert_eq!(list[0]["height"], 32);
+        assert_eq!(list[0]["star"], "G2V");
+        if new_id == "mgs-7-7" {
+            assert!(answer["removed_id"].is_null());
+        } else {
+            assert_eq!(answer["removed_id"], "mgs-7-7");
+            assert!(!root.join("mgs-7-7").exists());
+        }
+        assert!(root.join(&new_id).join("system.json").is_file());
     }
 
     #[tokio::test]

@@ -7,6 +7,12 @@ export const SORTS: Sort[] = ['newest', 'oldest', 'planets', 'seed'];
 /** The body id a system is named by: its star (the server's `STAR`). */
 export const SYSTEM_NAME_KEY = 'star';
 
+/**
+ * A system whose `system.json` is of another format: only listed, deleted or drawn again (it has no
+ * bodies to show). One outdated for its worlds only is a whole system, openable.
+ */
+export const isUnreadable = (s: Pick<SystemSummary, 'outdated_reason'>): boolean => s.outdated_reason === 'system_format';
+
 /** A system's name: the one given to its star, else its designation. */
 export const systemName = (s: Pick<SystemSummary, 'names' | 'designation'>): string =>
   s.names[SYSTEM_NAME_KEY] ?? s.designation;
