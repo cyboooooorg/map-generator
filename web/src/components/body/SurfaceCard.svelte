@@ -13,6 +13,12 @@
   const meta = $derived(world.meta);
   const stats = $derived(world.stats);
   const rivers = $derived(world.rivers);
+  // The share counts every liquid biome (`Biome::is_water`): name the
+  // model's liquid when it is not water, so methane seas are not "water".
+  const liquid = $derived(body?.model?.surface?.climate.liquid ?? null);
+  const landLabel = $derived(
+    liquid === 'hydrocarbons' || liquid === 'lava' ? t.worldInfo.landLiquid({ liquid: t.cards.liquids[liquid] }) : t.worldInfo.landWater,
+  );
 </script>
 
 {#if body}
@@ -30,7 +36,7 @@
     {#if stats}
       <dt>{t.worldInfo.surface}</dt>
       <dd>{formatArea(stats.surfaceKm2)}</dd>
-      <dt>{t.worldInfo.landWater}</dt>
+      <dt>{landLabel}</dt>
       <dd>{formatShare(stats.land)} / {formatShare(stats.water)}</dd>
     {/if}
     {#if rivers}

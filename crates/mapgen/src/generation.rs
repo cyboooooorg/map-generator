@@ -1617,6 +1617,45 @@ const LAND_GRID: (u32, u32) = (256, 128);
 const LAND_PASSES: usize = 16;
 const LAND_TOLERANCE: f64 = 0.003;
 
+/// The relief of the world `p` on its grid as [`generate`] leaves it to
+/// its biomes, the hydraulic erosion left out: the noise relief (its
+/// plates taken from `frame` when given), flattened on a small body
+/// ([`relief_share`]), the craters of the wet era, the volcanic cones,
+/// the craters of the dry era and the lava floods, then the dry band
+/// lifted again ([`keep_band_dry`]). The craters are those the grid
+/// resolves ([`base_min_diameter_km`]).
+fn cratered_relief(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -> Vec<f32> {
+    let grid = p.grid();
+    let w = grid.width as usize;
+    let sampler = Sampler::with_frame(p, frame);
+    let (mut elevation, cones): (Vec<f32>, Vec<f32>) = (0..grid.height as usize)
+        .into_par_iter()
+        .flat_map_iter(|y| {
+            let sampler = &sampler;
+            (0..w).map(move |x| {
+                let s = sampler.sample(x as u32, y as u32);
+                (s.elevation - s.cone_relief, s.cone_relief)
+            })
+        })
+        .unzip();
+    let flatten = relief_share(p);
+    if flatten < 1.0 {
+        let waterline = p.sea_level + p.look.rules.waterline;
+        elevation
+            .par_iter_mut()
+            .for_each(|e| *e = waterline + (*e - waterline) * flatten);
+    }
+    let craters = CraterField::new(p, base_min_diameter_km(&grid));
+    craters.apply(&mut elevation, &grid, Era::Wet);
+    elevation
+        .par_iter_mut()
+        .zip(&cones)
+        .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
+    craters.apply(&mut elevation, &grid, Era::Dry);
+    keep_band_dry(p, &grid, &mut elevation, None);
+    elevation
+}
+
 /// The sea level that leaves `fraction` of the planet's surface (by area,
 /// in `[0, 1]`) above the waterline, for the other parameters of `params`.
 ///
@@ -1628,8 +1667,16 @@ const LAND_TOLERANCE: f64 = 0.003;
 /// plates themselves are built once ([`crate::plates::PlateFrame`]); only
 /// the crust on their boundaries, and so their relief and slab pull, is
 /// found again at each pass. About 0.25 s on an Earth-like world.
-/// Erosion runs later and is not modelled, yet on test worlds the land
-/// share lands within about 0.02 of the target.
+///
+/// The relief sampled is the one the biomes see ([`cratered_relief`]),
+/// its craters included: a sea that fills a small share of the surface
+/// lies in the deepest lows, which an old surface's craters fill or dig
+/// (on the `titan-like` moons of systems 5 and 12, 4.6 Ga surfaces, the
+/// 1 % of liquid a search without the craters found left none on the
+/// world, issue #482). The craters are drawn again at each pass, since
+/// those on the sea floor leave nothing ([`CraterField`]). Erosion runs
+/// later and is not modelled, yet on test worlds the land share lands
+/// within about 0.02 of the target.
 ///
 /// With [`WorldParams::liquid_poleward_deg`], the ground nearer the
 /// equator is land at any sea level (the sampler lifts it), so the share
@@ -1653,16 +1700,11 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
             ..coarse.clone()
         };
         let waterline = level + p.look.rules.waterline;
-        let sampler = Sampler::with_frame(&p, frame.as_ref());
-        let land: f64 = (0..grid.height)
-            .into_par_iter()
-            .map(|y| {
-                let w = weights[y as usize];
-                (0..grid.width)
-                    .filter(|&x| sampler.sample(x, y).elevation > waterline)
-                    .count() as f64
-                    * w
-            })
+        let elevation = cratered_relief(&p, frame.as_ref());
+        let land: f64 = elevation
+            .chunks(grid.width as usize)
+            .zip(&weights)
+            .map(|(row, w)| row.iter().filter(|&&e| e > waterline).count() as f64 * w)
             .sum();
         land / total - target
     };
