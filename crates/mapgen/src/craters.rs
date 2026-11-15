@@ -20,8 +20,8 @@
 //! diameter that scales as `1/g` (15 km on the Moon) they get a flat floor
 //! and a central peak, with Pike's complex depth law, then a peak ring
 //! from about 9 transition diameters (Baker et al. 2011). On an airless
-//! body without plates heavier than the Moon, basins keep less of their
-//! relief (`generation::impact_relief`: Mercury about half).
+//! body without plates heavier than a Moon analogue, basins keep less of
+//! their relief (`generation::impact_relief`: Mercury about half).
 //! A raised rim and an ejecta blanket thinning as `(r/R)⁻³` surround them;
 //! rims and ejecta are irregular.
 //!
@@ -443,7 +443,7 @@ pub struct CraterField {
     /// `generation::ICE_RELIEF`).
     complex_depth: f64,
     /// Share of their relief basins keep against the Moon's: less on an
-    /// airless body without plates heavier than the Moon (see
+    /// airless body without plates heavier than a Moon analogue (see
     /// `generation::impact_relief`), 1 elsewhere.
     basin_relief: f64,
     /// Absolute elevation of the sea surface.

@@ -1856,7 +1856,7 @@ fn tidal_eccentricity(slot: &Slot, star: f32, age_gyr: f32) -> f64 {
 
 /// The world parameters of a placed planet from its `model`, placed as
 /// `placed` says: [`params_for`], its own draws from its seed.
-fn planet_params(model: &PlanetModel, placed: &crate::request::Placed) -> WorldParams {
+pub(crate) fn planet_params(model: &PlanetModel, placed: &crate::request::Placed) -> WorldParams {
     let mut rng = StdRng::seed_from_u64(u64::from(placed.seed));
     params_for(model, placed, &mut rng)
 }

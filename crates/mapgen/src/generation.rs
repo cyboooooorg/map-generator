@@ -196,10 +196,10 @@ pub(crate) fn impact_shaped(p: &WorldParams) -> bool {
 
 /// Share of the Moon's impact relief an airless body without plates (see
 /// [`impact_shaped`]) keeps at its gravity `g` (Earth's = 1):
-/// `(g_moon / g)^IMPACT_RELIEF_EXPONENT`, with `g` held between the Moon's
-/// and Mercury's; 1 on any other world. It scales the noise relief's cap
-/// ([`IMPACT_RELIEF_KM`]) and the relief of the basins
-/// (`craters::CraterField`).
+/// `(g_moon / g)^IMPACT_RELIEF_EXPONENT`, with `g` held between a Moon
+/// analogue's ([`moon_analogue_gravity`]) and Mercury's; 1 on any other
+/// world. It scales the noise relief's cap ([`IMPACT_RELIEF_KM`]) and the
+/// relief of the basins (`craters::CraterField`).
 ///
 /// What such a body keeps is what its impacts dug and piled, less what
 /// modified it since: volcanic plains filling its basins (on Mercury, the
@@ -217,28 +217,56 @@ pub(crate) fn impact_shaped(p: &WorldParams) -> bool {
 /// Mercury, at 2.3 times the Moon's gravity, spans 9.85 km, from −5.38 km
 /// in Rachmaninoff to +4.48 km on basin massifs (Becker et al. 2016, LPSC
 /// 47, abstract 2959, read: its DEM at 2 km per pixel), less than the
-/// Moon's 13 km ([`IMPACT_RELIEF_KM`]). The exponent is fitted on that one pair: `mercury-like`
-/// worlds whose surface is 4 Ga old or more (seeds 4-8 and 12345 at
-/// 256 × 128) span 9.8-11.5 km with it, 19.7-22.7 km with the Moon's
-/// relief; with `1/g` (exponent 1) 8.6-10.1 km.
+/// Moon's 13 km ([`IMPACT_RELIEF_KM`]). The exponent is fitted on that
+/// one pair: `mercury-like` worlds whose surface is 4 Ga old or more
+/// (seeds 4-8 and 12345 at 256 × 128) span 9.6-11.3 km with it,
+/// 19.7-22.7 km with the Moon's relief.
 ///
 /// Outside the two bodies no data calibrates it: lighter bodies (icy
-/// moons) keep the Moon's relief, heavier ones Mercury's share. A heavier
-/// airless dry world (a 0.58 Earth-mass `mercury-like` draw at 0.91 g)
-/// keeps 3.6-5.2 km of relief, where `1/g` would leave its noise 1.6 km.
+/// moons, the real Moon's 0.165 g) keep the Moon's relief, heavier ones
+/// Mercury's share. A heavier airless dry world (a 0.58 Earth-mass
+/// `mercury-like` draw at 0.91 g) keeps 3.5-5.2 km of relief, where `1/g`
+/// from the Moon would leave its noise 1.6 km.
 pub(crate) fn impact_relief(p: &WorldParams) -> f32 {
     if !impact_shaped(p) {
         return 1.0;
     }
-    let moon = (crate::craters::MOON_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
+    let moon = moon_analogue_gravity();
     let mercury = (MERCURY_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
     (moon / p.gravity_modifier().clamp(moon, mercury)).powf(IMPACT_RELIEF_EXPONENT)
 }
 
+/// Surface gravity of a Moon analogue as the planet model draws it, Earth's
+/// = 1: a dry, airless body of the Moon's mass (0.0123 Earth masses,
+/// [`crate::planet::reference::SOLAR_BODIES`]) with the largest core share
+/// a planet not stripped by giant impacts draws
+/// ([`crate::planet::inputs::CMF_RANGE`]), through
+/// [`crate::planet::interior::solid_interior`]: 0.207 g. The model gives
+/// a Moon-mass moon an Earth-like core share (the real Moon's is about
+/// 0.02), so it is denser than the Moon (0.165 g): taking the upper end of
+/// the drawn shares, every Moon-mass rocky moon the model draws keeps the
+/// relief [`IMPACT_RELIEF_KM`] is calibrated on, whatever its core.
+fn moon_analogue_gravity() -> f32 {
+    use crate::planet::inputs::CMF_RANGE;
+    let mass_earth = crate::planet::reference::SOLAR_BODIES
+        .iter()
+        .find(|b| b.name == "Moon")
+        .map_or(0.0123, |b| b.mass_earth);
+    let inputs = crate::planet::PlanetInputs {
+        mass_earth,
+        core_mass_fraction: CMF_RANGE.1,
+        water_fraction: 0.0,
+        envelope_fraction: 0.0,
+        volatiles: crate::planet::Volatiles::default(),
+        radiogenic: 1.0,
+        life_draw: 1.0,
+    };
+    crate::planet::interior::solid_interior(&inputs).gravity as f32
+}
+
 /// Exponent of [`impact_relief`]'s fall with gravity, fitted on Mercury
-/// against the Moon (see there): softer than the `1/g` of what loads the
-/// crust ([`relief_scale`]).
-const IMPACT_RELIEF_EXPONENT: f32 = 0.85;
+/// against a Moon analogue (see there).
+const IMPACT_RELIEF_EXPONENT: f32 = 1.2;
 /// Mercury's surface gravity, m/s² (NASA Mercury fact sheet: 3.70).
 const MERCURY_GRAVITY: f64 = 3.70;
 
@@ -3597,13 +3625,18 @@ pub(crate) mod tests {
     /// 9.85 km (Becker et al. 2016), not twice that (#457).
     #[test]
     fn mercury_keeps_less_impact_relief_than_the_moon() {
-        let moon = (crate::craters::MOON_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
+        // A Moon the planet model draws keeps the whole relief (see
+        // `drawn_moons_keep_the_moons_impact_relief`), and so does any body
+        // up to the Moon analogue's gravity.
+        let moon = drawn_moon(1).gravity_modifier();
         let mut p = WorldParams {
             pressure_bar: 0.0,
             gravity: Some(moon),
             ..params(0, "terran")
         };
         p.look.geology.regime = Regime::Stagnant;
+        assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
+        p.gravity = Some(moon_analogue_gravity());
         assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
         // Lighter: the Moon's; Mercury's: about half; heavier: Mercury's.
         p.gravity = Some(0.13);
@@ -3620,7 +3653,7 @@ pub(crate) mod tests {
         p.look.geology.regime = Regime::Plates;
         assert_eq!(impact_relief(&p), 1.0);
         // `mercury-like` on a 4.6 Ga surface, craters included: 19.8 km
-        // with the Moon's relief, 10.0 km now.
+        // with the Moon's relief, 9.9 km now.
         let p = preset_params("mercury-like", 4, 256, 128);
         assert!(p.surface_age_ga > 4.0, "{}", p.surface_age_ga);
         let w = generate(&p).world;
@@ -3630,6 +3663,76 @@ pub(crate) mod tests {
             .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
         let span = (hi - lo) * crate::craters::ELEVATION_KM;
         assert!((8.0..12.5).contains(&span), "{span}");
+    }
+
+    /// A Moon drawn through the planet model, its world as a system makes
+    /// a round moon's: the Moon's mass, rocky, born of an impact on an
+    /// Earth round the Sun, its core share drawn from `seed`.
+    fn drawn_moon(seed: u32) -> WorldParams {
+        use crate::planet::HostTide;
+        use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
+        let star = crate::star::StarInfo::new(crate::star::SUN, 1.0, 0.0, 4.57);
+        let context = crate::planet::inputs::Context::of(&star, 0.0, 2.7);
+        let formation = MoonFormation {
+            mass_earth: 0.0123,
+            ice_fraction: 0.0,
+            birth: MoonBirth::Impact,
+            tide: HostTide {
+                host_kg: 5.972e24,
+                a_m: 3.844e8,
+                eccentricity: 0.0549,
+            },
+        };
+        let model = derive_moon_model(
+            seed,
+            "p3/m1",
+            &context,
+            &formation,
+            &crate::planet::InputOverrides::default(),
+        );
+        let placed = crate::request::Placed {
+            seed,
+            star: crate::star::SUN,
+            age_gyr: 4.57,
+            orbit_au: 1.0,
+            eccentricity: 0.0167,
+            metallicity: 0.0,
+            axial_tilt_deg: Some(6.68),
+            perihelion_longitude_deg: None,
+            drift_ma: 0.0,
+            width: 256,
+            height: 128,
+            moons: crate::moons::MoonsMode::None,
+            giants: crate::giants::GiantsMode::None,
+            host: crate::exomoon::HostMode::None,
+        };
+        let mut p = crate::system::planet_params(&model, &placed);
+        p.moon = true;
+        p
+    }
+
+    /// Moons drawn with the Moon's mass are the body the impact relief is
+    /// calibrated on: they keep all of it, whatever core share the model
+    /// drew for them, and span about the Moon's 13 km with their craters.
+    #[test]
+    fn drawn_moons_keep_the_moons_impact_relief() {
+        for seed in [1u32, 2, 3, 4] {
+            let p = drawn_moon(seed);
+            assert!(impact_shaped(&p), "seed {seed}: {}", p.pressure_bar);
+            let g = p.gravity_modifier();
+            assert_eq!(impact_relief(&p), 1.0, "seed {seed}: g {g}");
+        }
+        // As before the law: 9.6, 8.3, 10.6 and 13.7 km on seeds 1-4 at
+        // 256 × 128.
+        for seed in [1u32, 4] {
+            let w = generate(&drawn_moon(seed)).world;
+            let (lo, hi) = w
+                .elevation
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
+            let span = (hi - lo) * crate::craters::ELEVATION_KM;
+            assert!((8.0..18.0).contains(&span), "seed {seed}: {span}");
+        }
     }
 
     #[test]

@@ -180,9 +180,10 @@ well-established laws.
   filled by volcanic plains (Barnouin et al. 2012,
   doi:10.1016/j.icarus.2012.02.029) and their long-wavelength relief
   relaxed faster under its stronger gravity. The app keeps
-  `(g_Moon / g)^0.85` of the Moon's impact relief and of the basins'
-  relief on such bodies, `g` held between the Moon's and Mercury's
-  (`generation::impact_relief`, #457).
+  `(g_a / g)^1.2` of the Moon's impact relief and of the basins' relief
+  on such bodies, `g` held between a Moon analogue's (`g_a` = 0.207 g,
+  a Moon-mass body at the largest unstripped core share the planet model
+  draws) and Mercury's (`generation::impact_relief`, #457).
 - **Worlds with water:** rain and rivers erase small craters within
   millions of years and fill large ones with sediment (Mars kept its
   Noachian craters, but worn).

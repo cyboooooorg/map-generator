@@ -262,18 +262,23 @@ flowchart LR
    cut to 8 % of their radius. On an airless
    body without plates whose lid is stagnant or episodic (a moon, a dead
    world, an airless world that overturns now and then) the span is also
-   capped at 9 km at the Moon's gravity (`IMPACT_RELIEF_KM`), and at 0.4
+   capped at 9 km at a Moon analogue's gravity (`IMPACT_RELIEF_KM`), and at 0.4
    of that on an icy one (an ice world's crust, `generation::crust_kind`;
    for a moon, a bulk density under 2.5 g/cm³). A heavier such body keeps
-   $(g_\text{Moon}/g)^{0.85}$ of it (`impact_relief`), $g$ held between
-   the Moon's and Mercury's: Mercury about half. Its basins (from the
+   $(g_a/g)^{1.2}$ of it (`impact_relief`), $g$ held between a Moon
+   analogue's and Mercury's: Mercury about half. The analogue,
+   $g_a = 0.207$ g, is a dry body of the Moon's mass at the largest core
+   share the planet model draws for a body not stripped by giant impacts
+   (0.55, `moon_analogue_gravity`): the model gives Moon-mass moons an
+   Earth-like core, denser than the Moon's (0.165 g), and every one it
+   draws keeps the whole relief. Its basins (from the
    protobasins on) keep the same share of their depth, rim, peaks and
    rings: volcanic plains fill them (Barnouin et al. 2012 find Mercury's
    complex craters shallower the more degraded, mostly from infilling) and
    their long-wavelength relief relaxes faster under a stronger gravity,
    while fresh complex craters keep Pike's depths. The exponent is fitted
    on Mercury's 9.85 km (Becker et al. 2016): `mercury-like` on a surface
-   4 Ga old or more spans 9.8–11.5 km at 256 × 128 (19.7–22.7 km with the
+   4 Ga old or more spans 9.6–11.3 km at 256 × 128 (19.7–22.7 km with the
    Moon's relief), and a heavier airless dry world keeps Mercury's share
    rather than the `1/g` that would flatten it. A heat-pipe body (Io) is
    not capped: lava resurfaces it, and its sinking crust breaks into

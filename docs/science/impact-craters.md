@@ -326,7 +326,7 @@ depends only on the planet and the seed:
    207/15 = 13.8 (peak-ring basins), the Moon's onsets of Baker et al. (2011)
    over its 15 km transition. A rim of $0.036\,D$ and ejecta thinning as
    $(r/R)^{-3}$ surround it, with irregular outlines. On an airless body
-   without plates heavier than the Moon, basins keep only the share of
+   without plates heavier than a Moon analogue, basins keep only the share of
    their relief its impact cap keeps (Mercury about half, see [Why are mountains
    lower on heavier planets?](mountains-and-gravity.md), small bodies).
 7. **Small craters.** The rim and ejecta of a crater only a few pixels wide
