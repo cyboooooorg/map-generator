@@ -44,6 +44,15 @@ describe('planet classes', () => {
     expect(isGiantType('terran')).toBe(false);
   });
 
+  it('draws a steam world through the giant path but sizes it as a rocky planet', () => {
+    expect(isGiantType('steam-world')).toBe(false);
+    expect(en.viewer.bodyTypes['steam-world']).toBe('Steam world');
+    expect(fr.viewer.bodyTypes['steam-world']).toBe('Monde de vapeur');
+    expect(en.cards.materials.Steam).toBe('steam');
+    expect(fr.cards.materials.Steam).toBe('vapeur supercritique');
+    expect(className('steam-world', true)).toBe('Steam moon');
+  });
+
   const model = (oceans: number, liquid: string, k: number) => ({ surface: { water: { oceans }, climate: { temperature_k: k, liquid } } });
 
   it('tells a rocky world whose water is frozen at the surface', () => {

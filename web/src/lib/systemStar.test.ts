@@ -99,4 +99,10 @@ describe('ringsKind', () => {
     const mini = { ...system, bodies: system.bodies.map((x) => (x.id === 'c' ? { ...x, type: 'mini-neptune' } : x)) };
     expect(systemStarView(mini, c).giants.giants[1]!.kind).toBe('ice');
   });
+
+  it('draws a steam world as an ice sphere', () => {
+    const c = system.bodies.find((x) => x.id === 'c')!;
+    const steam = { ...system, bodies: system.bodies.map((x) => (x.id === 'c' ? { ...x, type: 'steam-world' } : x)) };
+    expect(systemStarView(steam, c).giants.giants[1]!.kind).toBe('ice');
+  });
 });

@@ -175,7 +175,7 @@ export const fr: Messages = {
     radius: 'Rayon',
     density: 'Densité',
     layers: 'Couches',
-    materials: { Iron: 'fer', Rock: 'roche', Water: 'eau', Envelope: 'enveloppe gazeuse', Steam: 'vapeur' },
+    materials: { Iron: 'fer', Rock: 'roche', Water: 'eau', Envelope: 'enveloppe gazeuse', Steam: 'vapeur supercritique' },
     core: 'Noyau',
     coreStates: { none: 'aucun', liquid: 'liquide', frozen: 'figé' },
     field: 'Champ magnétique',
