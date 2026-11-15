@@ -2,7 +2,6 @@
 // a resolved body (the generate form's live preview, which has no map files).
 import type { Body } from './api/types/Body';
 import type { BodyExtras } from './api/types/BodyExtras';
-import type { Quantity } from './api/types/Quantity';
 import type { ResolvedSystem } from './api/types/ResolvedSystem';
 import type { System } from './api/types/System';
 import type { WorldMetadata } from './api/types/WorldMetadata';
@@ -25,10 +24,6 @@ export interface CardSource {
   readonly meta: WorldMetadata | null;
   readonly stats: WorldStats | null;
   readonly rivers: RiverIndex | null;
-  /** The roots of the cause trees that moved since the previous preview: their lines are highlighted. */
-  readonly changed?: ReadonlySet<Quantity>;
-  /** The count of answers behind `changed`: the highlight replays when it grows. */
-  readonly answer?: number;
   /** A preview (the generate form's): nothing to rename or generate, and the links go nowhere. */
   readonly preview?: boolean;
   showSystemBody(body: string | null): void;
@@ -36,7 +31,7 @@ export interface CardSource {
 }
 
 /** The cards' source for the body a resolve asked for (`system.focus`). */
-export function previewSource(result: ResolvedSystem, changed: ReadonlySet<Quantity>, answer = 0): CardSource {
+export function previewSource(result: ResolvedSystem): CardSource {
   const focus = result.system.focus;
   return {
     system: result.system,
@@ -49,22 +44,9 @@ export function previewSource(result: ResolvedSystem, changed: ReadonlySet<Quant
     meta: null,
     stats: null,
     rivers: null,
-    changed,
-    answer,
     preview: true,
     // A preview has one body shown and nothing to open.
     showSystemBody: () => {},
     loadSystem: () => {},
   };
-}
-
-/**
- * The class that highlights a value the preview just moved: `moved-a` or
- * `moved-b` by the answer's parity, two names for one animation so that two
- * answers in a row that move it both replay it (a CSS animation restarts
- * only when its name changes).
- */
-export function movedClass(world: Pick<CardSource, 'changed' | 'answer'>, quantity: Quantity): string {
-  if (!world.changed?.has(quantity)) return '';
-  return (world.answer ?? 0) % 2 === 0 ? 'moved-a' : 'moved-b';
 }

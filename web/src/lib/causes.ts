@@ -69,15 +69,3 @@ function hasInput(cause: Cause, field: InputField): boolean {
 export function drivenBy(explanation: Explanation | null, field: InputField): Quantity[] {
   return (explanation?.trees ?? []).filter((tree) => hasInput(tree, field)).map((tree) => tree.quantity);
 }
-
-/** The roots whose value moved by more than 1 % (relative), appeared or vanished. */
-export function changedQuantities(prev: Explanation | null, next: Explanation | null): Set<Quantity> {
-  const changed = new Set<Quantity>();
-  for (const tree of next?.trees ?? []) {
-    const before = treeFor(prev, tree.quantity);
-    if (before === null || before.label !== tree.label) changed.add(tree.quantity);
-    else if (Math.abs(tree.value - before.value) > 0.01 * Math.max(Math.abs(before.value), Math.abs(tree.value))) changed.add(tree.quantity);
-  }
-  for (const tree of prev?.trees ?? []) if (treeFor(next, tree.quantity) === null) changed.add(tree.quantity);
-  return changed;
-}

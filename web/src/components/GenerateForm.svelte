@@ -19,7 +19,7 @@
   import { initialFormSize } from '../lib/sizes';
   import { clearFormMemory, FALLBACK_ARCHETYPE, loadFormMemory, saveFormMemory } from '../lib/formMemory';
   import { jobs } from '../lib/jobs.svelte';
-  import { applyStarChoice, initialStarChoice, STAR_CLASSES, starType, type StarChoice } from '../lib/starForm';
+  import { applyStarChoice, initialStarChoice, STAR_CLASSES, starLightOf, starType, type StarChoice } from '../lib/starForm';
   import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
@@ -28,10 +28,12 @@
   import { drivenBy } from '../lib/causes';
   import { fieldOf, MODEL_GROUPS, type ModelFieldKey } from '../lib/modelFields';
   import { drawnValues, initialModelValues, MODEL_KEYS, type ModelValues, modelRequest } from '../lib/modelRequest';
-  import { toShown } from '../lib/modelScale';
+  import { fieldValueText } from '../lib/modelFormat';
   import { Preview } from '../lib/preview.svelte';
   import ModelFields from './form/ModelFields.svelte';
+  import MarkedSlider, { type SliderMark } from './form/MarkedSlider.svelte';
   import PreviewPanel from './form/PreviewPanel.svelte';
+  import StarDot from './form/StarDot.svelte';
 
   interface Props {
     archetypes: ArchetypeInfo[];
@@ -336,10 +338,9 @@
       for (const key of MODEL_KEYS) {
         const { random, value } = model[key];
         if (random || (key !== 'life' && !Number.isFinite(value))) continue;
-        const text = t.form.model[key];
         fixed.push({
-          label: text.label,
-          value: key === 'life' ? (value ? t.form.model.lifeWith : t.form.model.lifeWithout) : `${formatUpTo(toShown(key, value as number), 3)} ${text.unit}`.trim(),
+          label: t.form.model[key].label,
+          value: key === 'life' ? (value ? t.form.model.lifeWith : t.form.model.lifeWithout) : fieldValueText(key, value as number),
         });
       }
       if (!giantWorld && giantChoice.host !== 'giant' && moons !== 'auto') {
@@ -425,11 +426,24 @@
   const preview = new Preview();
   onDestroy(() => preview.dispose());
   $effect(() => {
-    if (!seedValid || (mode === 'system' && !planetsValid)) return;
+    // A request the form already knows is invalid is not asked: whatever
+    // refusal or answer is on its way is about an older request.
+    if (!seedValid || (mode === 'system' && !planetsValid)) {
+      untrack(() => preview.settle());
+      return;
+    }
     const asked: SystemRequest = mode === 'around' ? { around: buildRequest() } : { system: buildSystemRequest() };
     untrack(() => preview.request(asked));
   });
   const drawn = $derived(drawnValues(preview.result));
+  /** The light of the star the preview drew (shown for a star left to the draw). */
+  const previewStarLight = $derived(preview.result?.system.star.info.light ?? null);
+  const lightOfStar = $derived(starLightOf(spec, star.klass, star.subtype) ?? (star.klass === '' ? previewStarLight : null));
+  const lightOfSystemStar = $derived(systemStarRandom ? previewStarLight : starLightOf(spec, systemClass, systemSubtype));
+  /** The reference mark on the axial tilt slider: Earth's. */
+  const tiltMarks = $derived<SliderMark[]>([
+    { fraction: EARTH_TILT / 90, label: `${t.form.model.bodies.earth} ${formatUpTo(EARTH_TILT, 1)}°`, earth: true, onpick: () => (fields.axial_tilt_deg.value = EARTH_TILT) },
+  ]);
   const explanation = $derived(preview.result?.extras[preview.result.system.focus ?? '']?.explanation ?? null);
   const isModelField = (field: ReturnType<typeof errorField>): field is ModelFieldKey => field !== null && (MODEL_KEYS as string[]).includes(field);
   const refusalField = $derived(preview.refusal ? errorField(preview.refusal) : null);
@@ -503,7 +517,7 @@
 </script>
 
 <div class="wrap" bind:clientWidth={width}>
-<form onsubmit={submit} class:compact={!(wide && mode === 'around')}>
+<form onsubmit={submit} class:compact={!wide}>
   <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newSystem}</h2>
   <ol class="steps" aria-label={t.form.stepsLabel}>
     {#each STEPS as s, i (s)}
@@ -523,7 +537,7 @@
     <p class="error">{t.form.missingArchetype({ archetype: start.initial?.planet ?? '' })}</p>
   {/if}
 
-  <div class="body" class:split={wide && mode === 'around'}>
+  <div class="body" class:split={wide}>
   <div class="main">
   {#if step === 'kind'}
     {#if !variedFrom}
@@ -558,11 +572,14 @@
           <div class="star">
             <label class="labelled">
               <span>{t.form.starClass}</span>
-              <select bind:value={systemClass}>
-                {#each STAR_CLASSES as klass (klass)}
-                  <option value={klass}>{klass}</option>
-                {/each}
-              </select>
+              <span class="with-dot">
+                <StarDot light={lightOfSystemStar} label={starType(systemClass, systemSubtype)} />
+                <select bind:value={systemClass}>
+                  {#each STAR_CLASSES as klass (klass)}
+                    <option value={klass}>{klass}</option>
+                  {/each}
+                </select>
+              </span>
             </label>
             <label class="labelled">
               <span>{t.form.starSubtype}</span>
@@ -584,12 +601,15 @@
     <div class="star">
       <label class="labelled">
         <span>{t.form.starClass}</span>
-        <select bind:value={star.klass} onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}>
-          <option value="">{t.form.starAuto}</option>
-          {#each STAR_CLASSES as klass (klass)}
-            <option value={klass}>{klass}</option>
-          {/each}
-        </select>
+        <span class="with-dot">
+          <StarDot light={lightOfStar} label={star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype)} />
+          <select bind:value={star.klass} onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}>
+            <option value="">{t.form.starAuto}</option>
+            {#each STAR_CLASSES as klass (klass)}
+              <option value={klass}>{klass}</option>
+            {/each}
+          </select>
+        </span>
       </label>
       <label class="labelled">
         <span>{t.form.starSubtype}</span>
@@ -704,12 +724,15 @@
       </legend>
       {#if !fields[field].random}
         <div class="slider">
-          <input
-            type="range"
+          <MarkedSlider
             min={info.slider[0]}
             max={info.slider[1]}
             step={info.step}
-            bind:value={fields[field].value}
+            value={fields[field].value}
+            label={fieldText(field).label}
+            oninput={(value) => (fields[field].value = value)}
+            marks={tiltMarks}
+            marksLabel={`${t.form.model.references}. ${t.form.model.markHelp}`}
           />
           <input type="number" min={limits.min} max={limits.max} step="any" bind:value={fields[field].value} />
         </div>
@@ -721,7 +744,6 @@
   {#if mode === 'around'}
     <ModelFields
       {spec}
-      {archetypes}
       bind:values={model}
       drawn={drawn}
       driven={(key) => drivenBy(explanation, key)}
@@ -759,7 +781,7 @@
   {/if}
     {/if}
   {:else if step === 'advanced'}
-    <details class="advanced">
+    <details class="advanced" open>
       <summary>{t.form.advanced}</summary>
       <div class="advanced-body">
       <fieldset>
@@ -871,15 +893,13 @@
   {/if}
 
   </div>
-  {#if mode === 'around'}
-    {#if wide}
-      <aside class="side"><PreviewPanel {preview} onjump={jump} onreroll={reroll} /></aside>
-    {:else}
-      <details class="fold">
-        <summary>{t.form.preview.summary}</summary>
-        <PreviewPanel {preview} onjump={jump} onreroll={reroll} />
-      </details>
-    {/if}
+  {#if wide}
+    <aside class="side"><PreviewPanel {preview} kind={mode} onjump={jump} onreroll={reroll} /></aside>
+  {:else}
+    <details class="fold">
+      <summary>{t.form.preview.summary}</summary>
+      <PreviewPanel {preview} kind={mode} folded onjump={jump} onreroll={reroll} />
+    </details>
   {/if}
   </div>
 
@@ -1115,6 +1135,11 @@
     display: grid;
     gap: 2px;
   }
+  .with-dot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
   .labelled > span:first-child {
     color: var(--muted);
     font-size: 0.85rem;
@@ -1129,7 +1154,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(5em, 7em);
     gap: 8px;
-    align-items: center;
+    align-items: start;
   }
   .help {
     margin: 2px 0 0;

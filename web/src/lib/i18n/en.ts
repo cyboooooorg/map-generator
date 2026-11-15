@@ -727,8 +727,12 @@ export const en = {
       drawnValue: (p: { value: string }) => `Drawn: ${p.value}`,
       driveLabel: 'Drives',
       notUsed: 'Not used by this planet: this value changes nothing here.',
-      marksLabel: 'Solar System references (click to set)',
-      marks: { earth: 'Earth', mars: 'Mars', venus: 'Venus', titan: 'Titan' },
+      /** The line of Solar System values under a field, and the label of the chips that set them. */
+      references: 'Reference values',
+      referencesMass: 'Reference masses',
+      markHelp: 'Click to set this value',
+      /** The Solar System bodies the references name. */
+      bodies: { earth: 'Earth', mars: 'Mars', venus: 'Venus', titan: 'Titan', mercury: 'Mercury', neptune: 'Neptune', jupiter: 'Jupiter' },
       lifeLabel: 'Life',
       lifeDrawn: 'As drawn',
       lifeWith: 'With life',
@@ -739,14 +743,14 @@ export const en = {
         term: 'mass',
         drives: 'its size, gravity, how much air it holds and whether it keeps a thick envelope',
         unit: 'M⊕',
-        unitHelp: 'Earth masses: Mars 0.11, Earth 1, Neptune 17, Jupiter 318',
+        unitHelp: 'In Earth masses (M⊕), with the same mass in tonnes beside it',
       },
       core_mass_fraction: {
         label: 'Iron core',
         term: 'core mass fraction',
         drives: 'its density and size, its magnetic field and its inner heat',
         unit: '%',
-        unitHelp: 'Share of the rock-and-iron mass that is iron: Earth 33 %, Mercury about 70 %',
+        unitHelp: 'Share of the rock-and-iron mass that is iron',
       },
       water_oceans: {
         label: 'Water',
@@ -760,7 +764,7 @@ export const en = {
         term: 'envelope fraction',
         drives: 'a thick gas shell turns a planet into a mini-Neptune or a giant',
         unit: '%',
-        unitHelp: 'Share of the mass at formation: rocky planets hold almost none, giants 90 % and more',
+        unitHelp: 'Share of the mass at formation: rocky planets hold almost none, giants most of it',
       },
       co2: {
         label: 'Carbon dioxide',
@@ -802,14 +806,14 @@ export const en = {
         term: 'eccentricity',
         drives: 'the seasons: how much the light received swings over the year',
         unit: '',
-        unitHelp: '0 is a circle. Venus 0.007, Earth 0.017, Mars 0.09, Mercury 0.21',
+        unitHelp: '0 is a circle: the higher, the more stretched the orbit',
       },
       age_gyr: {
         label: 'Age of the star',
         term: 'age',
         drives: 'the inner heat left, the air lost to space, and how far tides have locked the spin',
         unit: 'Gyr',
-        unitHelp: 'Billions of years: the Sun is 4.6. It cannot exceed the life of the star, which depends on its type',
+        unitHelp: 'Billions of years. It cannot exceed the life of the star, which depends on its type',
       },
     },
     preview: {
@@ -822,6 +826,20 @@ export const en = {
       updating: 'Updating…',
       unavailable: 'Preview unavailable: the server did not answer. Generate still works.',
       waiting: 'Preparing the preview…',
+      mismatch: 'Does not match the current request',
+      mismatchUnavailable: 'Last answer, kept while the server does not answer',
+      /** The preview of a whole system: its star and the planets it will have. */
+      system: {
+        star: 'Star',
+        starLine: (p: { age: string; metallicity: string }) => `age ${p.age} · [Fe/H] ${p.metallicity}`,
+        planets: 'Planets it will have',
+        none: 'No planet',
+        name: 'Planet',
+        class: 'Class',
+        mass: 'Mass',
+        orbit: 'Orbit',
+        moons: 'Moons',
+      },
     },
     fields: {
       axial_tilt_deg: { label: 'Axial tilt (°)', help: 'Earth: 23.4°' },

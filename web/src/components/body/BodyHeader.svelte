@@ -6,7 +6,7 @@
   import { archetypeName, classLabel } from '../../lib/i18n/names.svelte';
   import type { SystemSummary } from '../../lib/api/types/SystemSummary';
   import { jobs } from '../../lib/jobs.svelte';
-  import { movedClass, type CardSource } from '../../lib/cardSource';
+  import type { CardSource } from '../../lib/cardSource';
   import CauseTree from './CauseTree.svelte';
   import type { InputField } from '../../lib/api/types/InputField';
   import { treeFor } from '../../lib/causes';
@@ -55,16 +55,17 @@
           >{t.cards.host({ name: nameOf(host.id, host.designation) })}</button
         >
       {/if}
-      <small
-        >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model, body.kind === 'moon')} · {host
-          ? t.card.moonOf({ planet: nameOf(host.id, host.designation) })
-          : t.card.planetOf({ star: starName })}</small
-      >
-      <div class="why {movedClass(world, 'class')}">
+      <!-- The class and the "Why?" of its tree are one line: the mark has a value to explain. -->
+      <div class="kind" data-line="class">
+        <small
+          >{title === body.designation ? '' : `${body.designation} · `}{classLabel(body.type, body.model, body.kind === 'moon')} · {host
+            ? t.card.moonOf({ planet: nameOf(host.id, host.designation) })
+            : t.card.planetOf({ star: starName })}</small
+        >
         <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} {oninput} />
       </div>
       {#if similar}
-        <small class="similar">{t.cards.similar({ name: archetypeName({ name: similar }) })}</small>
+        <small class="similar" data-line="similar">{t.cards.similar({ name: archetypeName({ name: similar }) })}</small>
       {/if}
     </header>
     {#if !body.generated && !world.preview}
@@ -91,37 +92,11 @@
     flex-basis: 100%;
     color: var(--muted);
   }
-  .why {
+  .kind {
     flex-basis: 100%;
   }
-  /* Two names for one animation: it replays when the name changes. */
-  .why.moved-a {
-    animation: moved-a 1.5s ease-out;
-  }
-  .why.moved-b {
-    animation: moved-b 1.5s ease-out;
-  }
-  @keyframes moved-a {
-    from {
-      background: color-mix(in srgb, var(--link) 30%, transparent);
-    }
-    to {
-      background: transparent;
-    }
-  }
-  @keyframes moved-b {
-    from {
-      background: color-mix(in srgb, var(--link) 30%, transparent);
-    }
-    to {
-      background: transparent;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .why.moved-a,
-    .why.moved-b {
-      animation: none;
-    }
+  .kind small {
+    flex-basis: auto;
   }
   .host {
     border: 1px solid var(--border);

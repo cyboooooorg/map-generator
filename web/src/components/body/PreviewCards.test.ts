@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { Component } from 'svelte';
 import type { Cause } from '../../lib/api/types/Cause';
 import type { InputField } from '../../lib/api/types/InputField';
-import type { Quantity } from '../../lib/api/types/Quantity';
 import type { ResolvedSystem } from '../../lib/api/types/ResolvedSystem';
-import { movedClass, previewSource } from '../../lib/cardSource';
+import { previewSource } from '../../lib/cardSource';
 import { formatSurfaceTemperature } from '../../lib/format';
 import AtmosphereCard from './AtmosphereCard.svelte';
 import BodyHeader from './BodyHeader.svelte';
@@ -22,7 +21,6 @@ const earthLike = earth as unknown as ResolvedSystem;
 const hotJupiter = jupiter as unknown as ResolvedSystem;
 const miniNeptune = neptune as unknown as ResolvedSystem;
 
-const none = new Set<Quantity>();
 const cards: [string, Component<any>][] = [
   ['header', BodyHeader],
   ['orbit', OrbitCard],
@@ -31,13 +29,13 @@ const cards: [string, Component<any>][] = [
   ['surface', SurfaceCard],
   ['moons', MoonsCard],
 ];
-const html = (card: Component<any>, result: ResolvedSystem, changed = none) =>
-  render(card, { props: { world: previewSource(result, changed), onRenamed: () => {}, onGenerate: () => {} } }).body;
+const html = (card: Component<any>, result: ResolvedSystem) =>
+  render(card, { props: { world: previewSource(result), onRenamed: () => {}, onGenerate: () => {} } }).body;
 const count = (text: string, part: string) => text.split(part).length - 1;
 
 describe('cards from a resolved body', () => {
   it('previewSource is the focus body with its extras and no map files', () => {
-    const source = previewSource(earthLike, none);
+    const source = previewSource(earthLike);
     expect(source.shownSystemBody?.id).toBe(earthLike.system.focus);
     expect(source.shownExtras).toBe(earthLike.extras[earthLike.system.focus!]);
     expect([source.meta, source.stats, source.rivers]).toEqual([null, null, null]);
@@ -54,7 +52,7 @@ describe('cards from a resolved body', () => {
   }
 
   it('shows the surface temperature of an Earth-like once, in the atmosphere card', () => {
-    const model = previewSource(earthLike, none).shownSystemBody!.model!;
+    const model = previewSource(earthLike).shownSystemBody!.model!;
     const temperature = formatSurfaceTemperature(model)!;
     const out = cards.map(([, card]) => html(card, earthLike));
     expect(out.map((o) => count(o, temperature))).toEqual([0, 0, 0, 1, 0, 0]);
@@ -67,20 +65,6 @@ describe('cards from a resolved body', () => {
       expect(out).not.toContain('Surface temperature');
       expect(out).not.toContain('Why?');
     }
-  });
-
-  it('marks the line whose root moved', () => {
-    const moved = html(AtmosphereCard, earthLike, new Set<Quantity>(['surface_temperature']));
-    expect(moved).toMatch(/<dd class="moved-a">15 °C/);
-    expect(html(AtmosphereCard, earthLike)).not.toContain('moved');
-  });
-
-  it('alternates the highlight class per answer so that it replays', () => {
-    const changed = new Set<Quantity>(['pressure']);
-    const a = movedClass({ changed, answer: 4 }, 'pressure');
-    const b = movedClass({ changed, answer: 5 }, 'pressure');
-    expect([a, b]).toEqual(['moved-a', 'moved-b']);
-    expect(movedClass({ changed, answer: 5 }, 'liquid')).toBe('');
   });
 });
 

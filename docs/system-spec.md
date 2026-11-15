@@ -881,16 +881,24 @@ addressed as `<system-id>/<body-id>` everywhere.
   and the star's age, mass, iron core, water and hydrogen–helium shell,
   the CO₂, N₂ and CH₄ factors, radioactive heat, life). Each is drawn by
   default and shows what the seed drew; **Set it myself** pins it, with
-  a slider, a number box and marks (Earth, Mars, Venus, Titan). Limits
+  a slider, a number box and marks (Earth, Mars, Venus, Titan: ticks on
+  the track at their value, chips under them, from the Solar System
+  values of `GET /api/form`'s `references`, also quoted in the field's
+  help line; a mass is also given in tonnes, and from 30 Earth masses in
+  Jupiter masses). Limits
   come from `GET /api/form` (`inputs`, including `ch4` and `age_gyr`).
   Beside the steps (under **Preview** on narrow screens) the preview
   shows the cards of what `POST /api/systems/resolve` answers 300 ms
-  after the last change, and a leaf of a **Why?** tree jumps to the
-  field that sets it. The seed is drawn when the form opens and sent
+  after the last change, each line whose text changed flashing, and a
+  leaf of a **Why?** tree jumps to the field that sets it. While the
+  request is refused or the server silent, the last answer stays greyed
+  under a notice that it does not match the request. The seed is drawn when the form opens and sent
   with every preview and with Generate, so Generate makes what was
   previewed. The server's refusals show at their field or above the
-  buttons and disable Generate; a whole system gets the same live
-  validation, without the preview.
+  buttons and disable Generate; a whole system gets the same preview
+  from the same answer, as its star (with a dot of its light, which the
+  star menus show too: `star_colours` of `GET /api/form`) and the
+  planets it will have, in orbit order, without cause trees.
 
   The wizard remembers its last mode and fields. **Vary…** opens it over
   the viewer, on its summary.

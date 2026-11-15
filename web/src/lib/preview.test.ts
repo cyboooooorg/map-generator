@@ -107,32 +107,45 @@ describe('Preview', () => {
     expect(preview.unavailable).toBe(true);
   });
 
-  it('flags nothing on the first answer or a new draw, and counts answers', async () => {
+  it('continues a world only when the seed stays, and counts answers', async () => {
     resolve.mockResolvedValueOnce(answer(288));
     preview.request(request(1));
     await vi.advanceTimersByTimeAsync(300);
-    expect(preview.changed.size).toBe(0);
+    expect(preview.continued).toBe(false);
     expect(preview.answers).toBe(1);
     const other = answer(320);
     other.system.seed = 2;
     resolve.mockResolvedValueOnce(other);
     preview.request(request(2));
     await vi.advanceTimersByTimeAsync(300);
-    expect(preview.changed.size).toBe(0);
+    expect(preview.continued).toBe(false);
     resolve.mockResolvedValueOnce({ ...answer(400), system: { ...other.system } });
     preview.request(request(2));
     await vi.advanceTimersByTimeAsync(300);
-    expect(preview.changed.has('surface_temperature')).toBe(true);
+    expect(preview.continued).toBe(true);
     expect(preview.answers).toBe(3);
   });
 
-  it('lists the quantities a change moved', async () => {
-    resolve.mockResolvedValueOnce(answer(288));
+  it('settles: forgets a stale refusal, cancels the wait and drops the answer in flight', async () => {
+    resolve.mockRejectedValueOnce(new ApiFailure(400, 'no', { code: 'too_many_planets', asked: 99, max: 15 } as never));
     preview.request(request(1));
     await vi.advanceTimersByTimeAsync(300);
-    resolve.mockResolvedValueOnce(answer(320));
+    expect(preview.refusal).not.toBeNull();
+    // The request becomes locally valid, is asked, and is invalid again before the answer.
+    let refuse!: (error: unknown) => void;
+    resolve.mockReturnValueOnce(new Promise((_, reject) => (refuse = reject)));
     preview.request(request(2));
     await vi.advanceTimersByTimeAsync(300);
-    expect(preview.changed.has('surface_temperature')).toBe(true);
+    preview.settle();
+    refuse(new ApiFailure(400, 'no', { code: 'too_many_planets', asked: 99, max: 15 } as never));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).toBeNull();
+    expect(preview.pending).toBe(false);
+    expect(preview.unavailable).toBe(false);
+    // A request still waiting for its debounce is dropped too.
+    preview.request(request(3));
+    preview.settle();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(resolve).toHaveBeenCalledTimes(2);
   });
 });

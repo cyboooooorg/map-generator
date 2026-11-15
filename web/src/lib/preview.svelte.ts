@@ -3,10 +3,8 @@
 // validates the form, so the form never disagrees with Generate.
 import { api, ApiFailure } from './api/client';
 import type { ErrorDetail } from './api/types/ErrorDetail';
-import type { Quantity } from './api/types/Quantity';
 import type { ResolvedSystem } from './api/types/ResolvedSystem';
 import type { SystemRequest } from './api/types/SystemRequest';
-import { changedQuantities } from './causes';
 
 /** Quiet time after the last change before the server is asked, ms. */
 export const PREVIEW_DEBOUNCE_MS = 300;
@@ -20,8 +18,8 @@ export class Preview {
   unavailable = $state(false);
   /** A request waits for its debounce or its answer. */
   pending = $state(false);
-  /** The roots of the explanation that moved by more than 1 % since the previous answer. */
-  changed = $state<ReadonlySet<Quantity>>(new Set());
+  /** The last answer is about the same world as the one before it (same seed): its changed lines are worth a highlight. */
+  continued = $state(false);
   /** How many answers have come: the cards replay their highlight on each. */
   answers = $state(0);
 
@@ -42,6 +40,17 @@ export class Preview {
     }, PREVIEW_DEBOUNCE_MS);
   }
 
+  /**
+   * The request is not worth asking (the form already knows it is invalid):
+   * cancels what is waiting or in flight and forgets the refusals and the
+   * outage, which were about an older request. The last answer stays.
+   */
+  settle(): void {
+    this.dispose();
+    this.refusal = null;
+    this.unavailable = false;
+  }
+
   /** Cancels what is waiting or in flight. */
   dispose(): void {
     this.latest++;
@@ -58,12 +67,8 @@ export class Preview {
     try {
       const answer = await api.resolveSystem(request, controller.signal);
       if (id !== this.latest) return;
-      // Nothing moved on the first answer or a new draw: it is another world.
-      const previous = this.result;
-      this.changed =
-        previous && previous.system.seed === answer.system.seed
-          ? changedQuantities(explanationOf(previous), explanationOf(answer))
-          : new Set();
+      // The first answer and a new draw are another world: nothing "moved".
+      this.continued = this.result !== null && this.result.system.seed === answer.system.seed;
       this.answers++;
       this.result = answer;
       this.refusal = null;
@@ -84,9 +89,4 @@ export class Preview {
       this.controller = null;
     }
   }
-}
-
-function explanationOf(result: ResolvedSystem | null) {
-  const focus = result?.system.focus;
-  return (focus ? result?.extras[focus]?.explanation : null) ?? null;
 }

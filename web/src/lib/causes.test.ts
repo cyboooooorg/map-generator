@@ -3,7 +3,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
-import { changedQuantities, drivenBy, formatCause, treeFor } from './causes';
+import { drivenBy, formatCause, treeFor } from './causes';
 import { formatMassEarth, formatSurfaceTemperature, formatUpTo, withUnit } from './format';
 import { setLocale, t } from './i18n/index.svelte';
 
@@ -95,17 +95,5 @@ describe('drivenBy', () => {
     expect(drivenBy(explanation, 'co2')).toEqual(['surface_temperature', 'pressure']);
     expect(drivenBy(explanation, 'life')).toEqual([]);
     expect(drivenBy(null, 'co2')).toEqual([]);
-  });
-});
-
-describe('changedQuantities', () => {
-  const of = (temperature: number, extra: Cause[] = []): Explanation => ({ trees: [node('surface_temperature', temperature), ...extra] });
-  it('ignores a 0.5 % move and reports a 2 % move', () => {
-    expect([...changedQuantities(of(100), of(100.5))]).toEqual([]);
-    expect([...changedQuantities(of(100), of(102))]).toEqual(['surface_temperature']);
-  });
-  it('reports a root that appeared or vanished', () => {
-    expect([...changedQuantities(of(100), of(100, [node('pressure', 1)]))]).toEqual(['pressure']);
-    expect([...changedQuantities(of(100, [node('pressure', 1)]), of(100))]).toEqual(['pressure']);
   });
 });

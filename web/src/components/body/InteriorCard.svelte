@@ -8,7 +8,7 @@
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
   import type { Quantity } from '../../lib/api/types/Quantity';
-  import { movedClass, type CardSource } from '../../lib/cardSource';
+  import type { CardSource } from '../../lib/cardSource';
   import type { InputField } from '../../lib/api/types/InputField';
 
   let { world, oninput }: { world: CardSource; oninput?: ((field: InputField) => void) | undefined } = $props();
@@ -16,8 +16,6 @@
   const explanation = $derived(world.shownExtras?.explanation ?? null);
   /** The value whose causes are unfolded: one at a time in a card. */
   let open = $state<Quantity | null>(null);
-  /** The highlight class of a value the preview just moved. */
-  const moved = (q: Quantity) => movedClass(world, q);
   const toggle = (q: Quantity) => () => (open = open === q ? null : q);
   // Trees start closed on every body.
   // A preview answer is a new object for the same body: only the id counts.
@@ -89,17 +87,17 @@
     {/if}
     {#if model?.surface}
       <dt>{t.card.regime}</dt>
-      <dd class={moved('regime')}>{t.regimes[model.surface.regime]}<CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} {oninput} /></dd>
+      <dd>{t.regimes[model.surface.regime]}<CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} {oninput} /></dd>
     {/if}
     {#if model?.surface}
       <dt>{t.cards.waterKept}</dt>
-      <dd class={moved('water_kept')}>{withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)}<CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} {oninput} /></dd>
+      <dd>{withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)}<CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} {oninput} /></dd>
     {/if}
     {#if core}
       <dt>{t.cards.core}</dt>
       <dd>{t.cards.coreStates[core.state]}</dd>
       <dt>{t.cards.field}</dt>
-      <dd class={moved('magnetic_field')}>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}<CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} {oninput} /></dd>
+      <dd>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}<CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} {oninput} /></dd>
     {/if}
     {#if model}
       <dt>{t.cards.heat}</dt>
