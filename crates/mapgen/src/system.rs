@@ -95,6 +95,10 @@ pub fn archetype_names() -> Vec<String> {
 }
 
 /// What a system is drawn from.
+// A request is built once per draw and moved, never stored in bulk: the
+// size gap between the variants costs nothing, and boxing would only
+// complicate every caller.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
