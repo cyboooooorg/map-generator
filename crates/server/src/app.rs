@@ -39,8 +39,8 @@
 use crate::api::{
     ApiError, ArchetypeInfo, BodyExtras, BodySizes, DisplayedSize, ErrorDetail, FormSpec,
     GenerateStarted, GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec,
-    PendingSize, PresentSize, ReferenceValue, RegeneratedBody, ResolvedSystem, SystemCreated,
-    SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
+    PendingSize, PresentSize, ReferenceValue, RegeneratedBody, ResolvedSystem, StarColour,
+    SystemCreated, SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -516,7 +516,26 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
                 value: r.value,
             })
             .collect(),
+        star_colours: star_colours(),
     })
+}
+
+/// The light of each main-sequence spectral type (O3 to M9.5, by half
+/// subtypes), as the viewer draws a star.
+fn star_colours() -> Vec<StarColour> {
+    let range = mapgen::star::TYPE_RANGE;
+    // A type's code is its class (O 0 … M 6) times ten plus its subtype.
+    (0..140)
+        .map(|half| half as f32 / 2.0)
+        .filter(|code| (range.0..=range.1).contains(code))
+        .map(|code| {
+            let teff = mapgen::star::StarInfo::new(code, 1.0, 0.0, 4.6).teff_k;
+            StarColour {
+                spectral_type: mapgen::star::type_name(code),
+                light: mapgen::star::light_colour(teff),
+            }
+        })
+        .collect()
 }
 
 /// A failure the client can fix.
@@ -5253,6 +5272,26 @@ mod tests {
         assert_eq!(value("mars", "mass_earth"), Some(0.107));
         assert!(value("titan", "water_oceans").unwrap() > 10.0);
         assert_eq!(value("earth", "age_gyr"), Some(4.6));
+    }
+
+    #[tokio::test]
+    async fn the_form_sends_the_colour_of_each_star_type() {
+        let app = router(temp_config("form-star-colours"));
+        let (_, body) = call(&app, "GET", "/api/form", None).await;
+        let colours = json(&body)["star_colours"].as_array().unwrap().clone();
+        let light = |t: &str| {
+            colours
+                .iter()
+                .find(|c| c["spectral_type"] == t)
+                .map(|c| c["light"].clone())
+        };
+        assert_eq!(colours.len(), 140 - 6, "O3V to M9.5V by half subtypes");
+        assert!(light("O2V").is_none() && light("O3V").is_some() && light("M9.5V").is_some());
+        // A red dwarf's light is orange, a hot star's blue (the viewer's `light_colour`).
+        let m = light("M5V").unwrap();
+        let a = light("A0V").unwrap();
+        assert!(m[0].as_f64() > m[2].as_f64());
+        assert!(a[2].as_f64() > a[0].as_f64());
     }
 
     #[tokio::test]

@@ -88,6 +88,17 @@ pub struct ReferenceValue {
     pub value: f64,
 }
 
+/// The colour of a main-sequence star's light, for the form's star menu.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct StarColour {
+    /// Spectral type, to a tenth of a subtype (`G2V`, `M4.5V`).
+    pub spectral_type: String,
+    /// Linear RGB of its light, as the viewer draws it
+    /// (`star::light_colour` of its temperature).
+    pub light: [f32; 3],
+}
+
 /// Everything the generation form needs to validate its inputs.
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
@@ -124,6 +135,8 @@ pub struct FormSpec {
     /// The Solar System's values of the model fields: the form's reference
     /// marks and the numbers of its help text.
     pub references: Vec<ReferenceValue>,
+    /// The colour of every spectral type the form offers (O3V to M9.5V).
+    pub star_colours: Vec<StarColour>,
 }
 
 /// State of a generation job, streamed as server-sent events.

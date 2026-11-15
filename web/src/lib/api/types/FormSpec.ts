@@ -3,6 +3,7 @@ import type { InputLimits } from "./InputLimits";
 import type { Limits } from "./Limits";
 import type { ParamSpec } from "./ParamSpec";
 import type { ReferenceValue } from "./ReferenceValue";
+import type { StarColour } from "./StarColour";
 
 /**
  * Everything the generation form needs to validate its inputs.
@@ -62,4 +63,8 @@ max_planets: number,
  * The Solar System's values of the model fields: the form's reference
  * marks and the numbers of its help text.
  */
-references: Array<ReferenceValue>, };
+references: Array<ReferenceValue>, 
+/**
+ * The colour of every spectral type the form offers (O3V to M9.5V).
+ */
+star_colours: Array<StarColour>, };
