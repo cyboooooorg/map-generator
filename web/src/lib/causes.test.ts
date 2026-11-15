@@ -3,7 +3,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
-import { formatCause, treeFor } from './causes';
+import { drivenBy, formatCause, treeFor } from './causes';
 import { formatMassEarth, formatSurfaceTemperature, formatUpTo, withUnit } from './format';
 import { setLocale, t } from './i18n/index.svelte';
 
@@ -81,4 +81,19 @@ describe('the cause catalog', () => {
       setLocale('en');
     });
   }
+});
+
+describe('drivenBy', () => {
+  const explanation: Explanation = {
+    trees: [
+      node('surface_temperature', 288, { causes: [node('greenhouse', 33, { causes: [node('co2', 1, { input: 'co2' })] })] }),
+      node('pressure', 1, { causes: [node('co2', 1, { input: 'co2' })] }),
+      node('magnetic_field', 1, { causes: [node('mass', 1, { input: 'mass_earth' })] }),
+    ],
+  };
+  it('lists the roots holding a leaf of the field, in tree order', () => {
+    expect(drivenBy(explanation, 'co2')).toEqual(['surface_temperature', 'pressure']);
+    expect(drivenBy(explanation, 'life')).toEqual([]);
+    expect(drivenBy(null, 'co2')).toEqual([]);
+  });
 });

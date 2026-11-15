@@ -31,10 +31,20 @@ co2: Limits,
  */
 n2: Limits, 
 /**
+ * Factor on the CH₄ formation rule (1 typical).
+ */
+ch4: Limits, 
+/**
  * Earth's = 1.
  */
 radiogenic: Limits, 
 /**
  * Degrees.
  */
-axial_tilt_deg: Limits, };
+axial_tilt_deg: Limits, 
+/**
+ * Age of the star, Gyr: above 0 (the lower bound is excluded) and
+ * at most the longest main-sequence life of any star. The star's own
+ * life is checked when the request is resolved (`bad_age`).
+ */
+age_gyr: Limits, };

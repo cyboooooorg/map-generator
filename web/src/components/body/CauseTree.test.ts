@@ -27,4 +27,10 @@ describe('CauseTree', () => {
     expect(out).toContain('Greenhouse warming');
     expect(out.match(/\binput\b/g)?.length).toBe(1);
   });
+  it('has buttons that never submit a form around the tree', () => {
+    const out = render(CauseTree, { props: { tree, open: true, ontoggle: () => {}, oninput: () => {} } }).body;
+    const buttons = out.match(/<button\b[^>]*>/g) ?? [];
+    expect(buttons.length).toBeGreaterThan(1);
+    for (const button of buttons) expect(button, button).toContain('type="button"');
+  });
 });

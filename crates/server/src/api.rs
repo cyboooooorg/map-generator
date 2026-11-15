@@ -1,6 +1,8 @@
 //! Types exchanged with the web front-end. `cargo test` regenerates their
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
-use mapgen::archetype::{ArchetypeInputs, ArchetypeOrbit, Locale, ParamDefault};
+use mapgen::archetype::{
+    ArchetypeInputs, ArchetypeOrbit, ArchetypeReference, Locale, ParamDefault,
+};
 use mapgen::generation::Stage;
 use mapgen::request::{Limits, WorldRequest};
 use serde::{Deserialize, Serialize};
@@ -33,6 +35,8 @@ pub struct ArchetypeInfo {
     /// The built-in giant archetype a moon archetype orbits (`null` for
     /// a planet): the giant a system adds when only the moon is asked.
     pub moon_host: Option<String>,
+    /// The body it stands for (`null` for a file that names none).
+    pub reference: Option<ArchetypeReference>,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, Locale>,
 }
@@ -63,10 +67,29 @@ pub struct InputLimits {
     pub co2: Limits,
     /// Factor on the N₂ formation rule (1 typical).
     pub n2: Limits,
+    /// Factor on the CH₄ formation rule (1 typical).
+    pub ch4: Limits,
     /// Earth's = 1.
     pub radiogenic: Limits,
     /// Degrees.
     pub axial_tilt_deg: Limits,
+    /// Age of the star, Gyr: above 0 (the lower bound is excluded) and
+    /// at most the longest main-sequence life of any star. The star's own
+    /// life is checked when the request is resolved (`bad_age`).
+    pub age_gyr: Limits,
+}
+
+/// A Solar System value of a request field: what the form draws its
+/// reference marks at, and quotes in its help.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ReferenceValue {
+    /// Lower-case name of the body (`earth`, `mars`, `titan`).
+    pub body: String,
+    /// The request field (`mass_earth`, `eccentricity`).
+    pub field: String,
+    /// The value, in the request's own units.
+    pub value: f64,
 }
 
 /// Everything the generation form needs to validate its inputs.
@@ -102,6 +125,9 @@ pub struct FormSpec {
     pub moon_archetypes: Vec<String>,
     /// Most planets a system holds (moons not counted).
     pub max_planets: u32,
+    /// The Solar System's values of the model fields: the form's reference
+    /// marks and the numbers of its help text.
+    pub references: Vec<ReferenceValue>,
 }
 
 /// State of a generation job, streamed as server-sent events.
@@ -227,6 +253,11 @@ pub enum ErrorDetail {
         asked: u32,
         fits: u32,
     },
+    /// A giant's moon archetype asked for alone: ask for it in a whole
+    /// system, which gives it its giant.
+    BadArchetype { archetype: String },
+    /// The age asked is not between 0 and the star's main-sequence life.
+    BadAge { age_gyr: f32, lifetime_gyr: f32 },
     /// A planet type the star leaves no room for.
     TypeImpossible { body_type: String },
     /// The system exists and the request does not replace it.
@@ -272,9 +303,19 @@ impl ErrorDetail {
                 water_oceans: *water_oceans,
                 mass_earth: *mass_earth,
             }),
-            // The text names the file, or the age and the star's life; no
-            // structured detail.
-            RequestError::BadArchetype(_) | RequestError::BadAge { .. } => None,
+            RequestError::MoonArchetypeAlone(archetype) => Some(Self::BadArchetype {
+                archetype: archetype.clone(),
+            }),
+            // An archetype file that does not load: the catalog serves
+            // names only, so no request reaches it; the text is all there is.
+            RequestError::BadArchetype(_) => None,
+            RequestError::BadAge {
+                age_gyr,
+                lifetime_gyr,
+            } => Some(Self::BadAge {
+                age_gyr: *age_gyr,
+                lifetime_gyr: *lifetime_gyr,
+            }),
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
                 max: *max,
@@ -424,6 +465,23 @@ pub struct BodyExtras {
     /// The built-in archetype it resembles: its own when it was asked by
     /// archetype, else the nearest one within the threshold.
     pub similar: Option<String>,
+}
+
+/// What a request would draw (`POST /api/systems/resolve`): the system
+/// `POST /api/systems` writes for it, with what the viewer's cards show.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ResolvedSystem {
+    /// The system drawn; its `focus` is the body asked for.
+    pub system: mapgen::system::System,
+    /// The planet model's account of each body that has one, by body id.
+    pub extras: BTreeMap<String, BodyExtras>,
+    /// The inputs the focus body formed with, as a request sets them
+    /// (`PlanetModel::formation`): what the form shows for a field left
+    /// random. `None` when the focus has no model.
+    pub formation: Option<mapgen::planet::Formation>,
+    /// Fields of an `around` request its planet has no use for.
+    pub ignored: Vec<String>,
 }
 
 /// The names given to a system's bodies (`PUT /api/systems/{id}/names`):

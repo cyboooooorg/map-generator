@@ -7,6 +7,7 @@ import type { BodySizes } from './types/BodySizes';
 import type { DisplayedSize } from './types/DisplayedSize';
 import type { FormSpec } from './types/FormSpec';
 import type { GenerateStarted } from './types/GenerateStarted';
+import type { ResolvedSystem } from './types/ResolvedSystem';
 import type { SystemCreated } from './types/SystemCreated';
 import type { SystemName } from './types/SystemName';
 import type { SystemQuery } from './types/SystemQuery';
@@ -101,6 +102,14 @@ export const api = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
+    }),
+  /** What a request would draw, without writing it: the live preview and validation of the form. */
+  resolveSystem: (request: SystemRequest, signal?: AbortSignal) =>
+    call<ResolvedSystem>('/api/systems/resolve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+      ...(signal ? { signal } : {}),
     }),
   deleteSystem: (id: string) => call<void>(`/api/systems/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Names the system itself (the name of its star), keeping its bodies' names; empty brings the designation back. */

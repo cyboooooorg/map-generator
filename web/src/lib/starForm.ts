@@ -145,3 +145,31 @@ export function parseStarChoice(raw: unknown): StarChoice | null {
     eccentricity: finite(r.eccentricity) ? r.eccentricity : 0.1,
   };
 }
+
+/**
+ * The conventional colour of each spectral class (the blue of an O star, the
+ * orange of a K): what the form's star dot shows. The viewer draws a star in
+ * the physical colour of its light instead (`star::light_colour`).
+ */
+export const STAR_CLASS_COLOURS: Record<(typeof STAR_CLASSES)[number], string> = {
+  O: '#9bb0ff',
+  B: '#aabfff',
+  A: '#cad7ff',
+  F: '#f8f7ff',
+  G: '#fff4a8',
+  K: '#ffb561',
+  M: '#ff7a4d',
+};
+
+/**
+ * The dot colour (CSS) of a spectral type such as `G2V`, from its class, or
+ * null for a type of no known class.
+ */
+export function starDotColour(type: string): string | null {
+  return STAR_CLASS_COLOURS[type.charAt(0) as keyof typeof STAR_CLASS_COLOURS] ?? null;
+}
+
+/** The dot colour of the star a class and subtype make, null for a class left to the draw. */
+export function starDotColourOf(klass: string, subtype: number): string | null {
+  return klass === '' ? null : starDotColour(starType(klass, subtype));
+}

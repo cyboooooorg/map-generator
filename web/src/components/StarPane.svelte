@@ -365,7 +365,7 @@
     t.starView.giantLine({
       name: g.name,
       kind: g.kindLabel ?? (g.hot ? t.starView.hotGiant : (t.starView.giantKinds[g.kind] ?? '')),
-      mass: jupiters(g.mass_earth) < 0.3 ? withUnit(formatUpTo(g.mass_earth, g.mass_earth < 10 ? 2 : 0), 'M⊕') : withUnit(formatUpTo(jupiters(g.mass_earth), 2), 'MJ'),
+      mass: jupiters(g.mass_earth) < 0.3 ? withUnit(formatUpTo(g.mass_earth, g.mass_earth < 10 ? 2 : 0), 'M⊕') : withUnit(formatUpTo(jupiters(g.mass_earth), 2), 'M♃'),
       orbit: formatAu(g.orbit_au),
       year: formatYear(g.year_days),
     });

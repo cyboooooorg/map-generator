@@ -6,9 +6,9 @@
   import { formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../../lib/format';
   import { unitTooltip } from '../../lib/units';
   import { resonanceRatio, resonanceTurns } from '../../lib/spinResonance';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
 
-  let { world }: { world: LoadedWorld } = $props();
+  let { world }: { world: CardSource } = $props();
 
   const body = $derived(world.shownSystemBody);
   const meta = $derived(world.meta);

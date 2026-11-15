@@ -904,7 +904,8 @@
     background: color-mix(in srgb, var(--bg) 70%, transparent);
   }
   .wizard {
-    width: min(720px, 100%);
+    /* Wide enough for the form's live preview beside its steps (see GenerateForm). */
+    width: min(1240px, 100%);
     max-height: 100%;
     overflow-y: auto;
     padding: 16px 18px 0;

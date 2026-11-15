@@ -7,10 +7,10 @@
   import { toasts } from '../../lib/toasts.svelte';
   import { MAX_NAME_CHARS } from '../../lib/names';
   import type { SystemSummary } from '../../lib/api/types/SystemSummary';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
 
   interface Props {
-    world: LoadedWorld;
+    world: CardSource;
     /** The body's id, or `star` for the star. */
     id: string;
     designation: string;
@@ -64,7 +64,9 @@
   </form>
 {:else}
   <strong>{name}</strong>
-  <button class="link" onclick={start} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
+  {#if !world.preview}
+    <button type="button" class="link" onclick={start} title={t.worldInfo.renameHelp}>{t.worldInfo.rename}</button>
+  {/if}
 {/if}
 
 <style>

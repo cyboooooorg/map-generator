@@ -2986,13 +2986,15 @@ pub(crate) mod tests {
     #[test]
     fn earth_like_worlds_are_dry_where_earth_is_dry() {
         // Köppen's arid climates B cover 30.2 % of Earth's land (Peel et al.
-        // 2007), the tropical ones 19.0 %. Four seeds together, as the
-        // calibration was made.
+        // 2007), the tropical ones 19.0 %. Twelve seeds together: a world's
+        // star, orbit and eccentricity come from its seed alone (part 5b),
+        // and the first four of them scatter wider than the mean (12 seeds:
+        // 31.6 % arid, 16.1 % tropical).
         let earth = "earth-like";
         let (mut land, mut arid, mut tropical) = (0.0f64, 0.0f64, 0.0f64);
         // Mean rain of the 0-10° belt and of the 20-35° belts, mm.
         let mut belt = [(0.0f64, 0.0f64); 2];
-        for seed in [1u32, 2, 3, 4] {
+        for seed in 1u32..=12 {
             let p = preset_params(earth, seed, 512, 256);
             let w = generate(&p).world;
             let grid = p.grid();

@@ -1,6 +1,9 @@
 name = "ocean-world"
 description = "Ocean world: deep water covers the whole surface"
 
+[reference]
+theoretical = true
+
 [locales.fr]
 name = "Monde océan"
 description = "Une eau profonde recouvre toute la surface"

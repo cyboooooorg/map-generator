@@ -1,9 +1,13 @@
 name = "europa-like"
 description = "Europa-like: a rocky moon of a Jupiter with an ocean under its ice"
 
+[reference]
+name = "Europa"
+
 [locales.fr]
 name = "Europienne"
 description = "Une lune rocheuse d'une Jupiter, un océan sous sa glace"
+reference = "Europe"
 
 # Europa: 4.7998e22 kg = 0.0080 Earth masses (NASA Jovian satellite fact
 # sheet; JPL Solar System Dynamics, planetary satellite physical

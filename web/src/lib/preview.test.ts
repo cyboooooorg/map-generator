@@ -1,0 +1,160 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api, ApiFailure } from './api/client';
+import type { Cause } from './api/types/Cause';
+import type { ResolvedSystem } from './api/types/ResolvedSystem';
+import type { SystemRequest } from './api/types/SystemRequest';
+import { Preview } from './preview.svelte';
+
+vi.mock('./api/client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./api/client')>();
+  return { ...original, api: { resolveSystem: vi.fn() } };
+});
+
+const resolve = vi.mocked(api.resolveSystem);
+const request = (seed: number): SystemRequest => ({ around: { seed } });
+const root = (quantity: 'surface_temperature', value: number): Cause => ({ quantity, value, label: null, input: null, causes: [] });
+const answer = (temperature: number): ResolvedSystem =>
+  ({
+    system: { focus: 'p1', seed: 1 },
+    extras: { p1: { explanation: { trees: [root('surface_temperature', temperature)] }, similar: null } },
+    ignored: [],
+  }) as unknown as ResolvedSystem;
+
+describe('Preview', () => {
+  let preview: Preview;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resolve.mockReset();
+    preview = new Preview();
+  });
+  afterEach(() => {
+    preview.dispose();
+    vi.useRealTimers();
+  });
+
+  it('makes one call for three requests within the debounce', async () => {
+    resolve.mockResolvedValue(answer(288));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(100);
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(100);
+    preview.request(request(3));
+    expect(preview.pending).toBe(true);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(resolve.mock.calls[0]![0]).toEqual(request(3));
+    expect(preview.result).not.toBeNull();
+    expect(preview.pending).toBe(false);
+  });
+
+  it('drops the answer of an older request', async () => {
+    let first!: (value: ResolvedSystem) => void;
+    resolve.mockImplementationOnce(() => new Promise((r) => (first = r)));
+    resolve.mockResolvedValueOnce(answer(300));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.result?.extras.p1?.explanation?.trees[0]?.value).toBe(300);
+    first(answer(100));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(preview.result?.extras.p1?.explanation?.trees[0]?.value).toBe(300);
+  });
+
+  it('aborts the call in flight when a new request comes', async () => {
+    resolve.mockImplementation(() => new Promise(() => {}));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    const signal = resolve.mock.calls[0]![1]!;
+    preview.request(request(2));
+    expect(signal.aborted).toBe(true);
+  });
+
+  it('sets the refusal of a 400 with a detail, then clears it on success', async () => {
+    const detail = { code: 'bad_age', age_gyr: 12, lifetime_gyr: 3 } as const;
+    resolve.mockRejectedValueOnce(new ApiFailure(400, 'bad age', detail));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).toEqual(detail);
+    expect(preview.unavailable).toBe(false);
+    resolve.mockResolvedValueOnce(answer(288));
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).toBeNull();
+  });
+
+  it('is unavailable on a 500 and keeps the last result', async () => {
+    resolve.mockResolvedValueOnce(answer(288));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    resolve.mockRejectedValueOnce(new ApiFailure(500, 'boom'));
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.unavailable).toBe(true);
+    expect(preview.refusal).toBeNull();
+    expect(preview.result).not.toBeNull();
+  });
+
+  it('clears a refusal when the server later fails to answer', async () => {
+    resolve.mockRejectedValueOnce(new ApiFailure(400, 'no', { code: 'out_of_range', field: 'co2', min: 0, max: 100 } as never));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).not.toBeNull();
+    resolve.mockRejectedValueOnce(new ApiFailure(502, 'bad gateway'));
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).toBeNull();
+    expect(preview.unavailable).toBe(true);
+  });
+
+  it('continues a world only when the seed stays, and counts answers', async () => {
+    resolve.mockResolvedValueOnce(answer(288));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.continued).toBe(false);
+    expect(preview.answers).toBe(1);
+    const other = answer(320);
+    other.system.seed = 2;
+    resolve.mockResolvedValueOnce(other);
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.continued).toBe(false);
+    resolve.mockResolvedValueOnce({ ...answer(400), system: { ...other.system } });
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.continued).toBe(true);
+    expect(preview.answers).toBe(3);
+  });
+
+  it('settles with the form’s own reason, and asking again clears it', async () => {
+    preview.settle('64 planets (1 to 15)');
+    expect(preview.invalid).toBe('64 planets (1 to 15)');
+    preview.request(request(1));
+    expect(preview.invalid).toBeNull();
+    preview.settle();
+    expect(preview.invalid).toBeNull();
+  });
+
+  it('settles: forgets a stale refusal, cancels the wait and drops the answer in flight', async () => {
+    resolve.mockRejectedValueOnce(new ApiFailure(400, 'no', { code: 'too_many_planets', asked: 99, max: 15 } as never));
+    preview.request(request(1));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).not.toBeNull();
+    // The request becomes locally valid, is asked, and is invalid again before the answer.
+    let refuse!: (error: unknown) => void;
+    resolve.mockReturnValueOnce(new Promise((_, reject) => (refuse = reject)));
+    preview.request(request(2));
+    await vi.advanceTimersByTimeAsync(300);
+    preview.settle();
+    refuse(new ApiFailure(400, 'no', { code: 'too_many_planets', asked: 99, max: 15 } as never));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(preview.refusal).toBeNull();
+    expect(preview.pending).toBe(false);
+    expect(preview.unavailable).toBe(false);
+    // A request still waiting for its debounce is dropped too.
+    preview.request(request(3));
+    preview.settle();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+});

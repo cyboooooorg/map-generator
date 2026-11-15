@@ -5,6 +5,7 @@ import { archetypeName } from './names.svelte';
 import type { ErrorDetail } from '../api/types/ErrorDetail';
 import { formatInt, formatUpTo } from '../format';
 import { t } from './index.svelte';
+import type { ModelFieldKey } from '../modelFields';
 
 /** The message of a server error detail. */
 export function detailText(detail: ErrorDetail): string {
@@ -16,6 +17,10 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.sizeOutOfRange({ ...detail, field: field(detail.field) });
     case 'unknown_archetype':
       return t.errors.unknownArchetype({ archetype: detail.archetype });
+    case 'bad_archetype':
+      return t.errors.badArchetype({ archetype: archetypeName({ name: detail.archetype }) });
+    case 'bad_age':
+      return t.errors.badAge({ age: formatUpTo(detail.age_gyr, 3), lifetime: formatUpTo(detail.lifetime_gyr, 2) });
     case 'too_many_pixels':
       return t.errors.tooManyPixels({ width: detail.width, height: detail.height, max: formatInt(detail.max_pixels) });
     case 'being_generated':
@@ -58,3 +63,42 @@ export function errorText(error: unknown): string {
   }
   return String(error);
 }
+
+/** The form field a refusal belongs to: a model field, or the step it is shown on. */
+export function errorField(detail: ErrorDetail): ModelFieldKey | 'planet' | 'star' | 'orbit' | 'planets' | 'size' | null {
+  switch (detail.code) {
+    case 'out_of_range':
+      return OUT_OF_RANGE_FIELDS[detail.field] ?? null;
+    case 'water_heavier_than_planet':
+      return 'water_oceans';
+    case 'bad_age':
+      return 'age_gyr';
+    case 'bad_archetype':
+    case 'unknown_archetype':
+      return 'planet';
+    case 'unknown_star':
+      return 'star';
+    case 'orbit_and_position':
+      return 'orbit';
+    case 'too_many_planets':
+    case 'zone_full':
+    case 'type_impossible':
+      return 'planets';
+    case 'size_out_of_range':
+    case 'too_many_pixels':
+    case 'size_not_offered':
+    case 'original_size':
+    case 'size_not_generated':
+      return 'size';
+    default:
+      return null;
+  }
+}
+
+/** What `out_of_range.field` names, by form field. */
+const OUT_OF_RANGE_FIELDS: Record<string, ModelFieldKey | 'orbit' | 'planets' | 'star'> = {
+  mass_earth: 'mass_earth', core_mass_fraction: 'core_mass_fraction', water_oceans: 'water_oceans',
+  envelope_fraction: 'envelope_fraction', co2: 'co2', n2: 'n2', ch4: 'ch4', radiogenic: 'radiogenic',
+  eccentricity: 'eccentricity', age_gyr: 'age_gyr', hz_position: 'orbit', orbit_au: 'orbit',
+  moon_count: 'planets', metallicity: 'star',
+};

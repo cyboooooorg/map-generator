@@ -1,6 +1,10 @@
 name = "hot-jupiter"
 description = "Hot Jupiter: a giant days from its star"
 
+[reference]
+name = "51 Pegasi b"
+discovered = 1995
+
 [locales.fr]
 name = "Jupiter chaud"
 description = "Une géante à quelques jours de son étoile"

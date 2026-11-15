@@ -141,7 +141,7 @@ function round(value: number, digits: number): number {
  * The model inputs a world formed with, as a request sets them: world.json's
  * `formation` (`PlanetModel::formation` in crates/mapgen), exact. The drawn
  * mass before photoevaporation and the envelope at formation, so that escape
- * runs once; the water in Earth oceans; the CO₂ and N₂ factors; the core
+ * runs once; the water in Earth oceans; the CO₂, N₂ and CH₄ factors; the core
  * share and radiogenic abundance; whether life arose. A moon has none.
  */
 export function formationRequest(formation: Formation | null | undefined): WorldRequest {
@@ -158,6 +158,7 @@ export function formationRequest(formation: Formation | null | undefined): World
     ...set('envelope_fraction', o.envelope_fraction),
     ...set('co2', o.co2),
     ...set('n2', o.n2),
+    ...set('ch4', o.ch4),
     ...set('radiogenic', o.radiogenic),
     ...set('life', o.life),
   };
@@ -214,6 +215,7 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.envelope_fraction === undefined ? [] : [`--envelope ${r.envelope_fraction}`]),
     ...(r.co2 === undefined ? [] : [`--co2 ${r.co2}`]),
     ...(r.n2 === undefined ? [] : [`--n2 ${r.n2}`]),
+    ...(r.ch4 === undefined ? [] : [`--ch4 ${r.ch4}`]),
     ...(r.radiogenic === undefined ? [] : [`--radiogenic ${r.radiogenic}`]),
     ...(r.life === undefined ? [] : [`--life ${r.life ? 'yes' : 'no'}`]),
     `--axial-tilt ${r.axial_tilt_deg}`,
@@ -389,7 +391,7 @@ export function surfaceColour(biome: Pick<BiomeInfo, 'color' | 'surface_color'>)
  * masses below 0.01 and Jupiter masses from 30, two decimals at most.
  */
 export function formatMassEarth(earth: number): string {
-  if (earth >= 30) return withUnit(formatUpTo(earth / 317.8, 2), 'MJ');
+  if (earth >= 30) return withUnit(formatUpTo(earth / 317.8, 2), 'M♃');
   if (earth < 0.01) return withUnit(formatUpTo(earth * 81.3, 2), t.card.lunarMasses);
   return withUnit(formatUpTo(earth, 2), 'M⊕');
 }
