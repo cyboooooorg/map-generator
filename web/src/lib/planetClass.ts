@@ -30,7 +30,10 @@ const FREEZING_K = 273.15;
 
 /** The part of a planet's model the surface helpers read. */
 export type SurfaceModel = {
-  surface?: { water: { oceans: number }; climate: { temperature_k: number; liquid: string } } | null;
+  surface?: {
+    water: { oceans: number; runaway?: boolean };
+    climate: { temperature_k: number; liquid: string; equilibrium_k?: number };
+  } | null;
 } | null | undefined;
 
 /**
@@ -50,4 +53,15 @@ export function hasFrozenSurface(cls: string, model: SurfaceModel): boolean {
 /** The mean surface temperature of a model, K; null for a body without a surface (a giant, no model). */
 export function surfaceTemperatureK(model: SurfaceModel): number | null {
   return model?.surface?.climate.temperature_k ?? null;
+}
+
+/**
+ * The equilibrium temperature of a body, K: its model's when its water ran
+ * away (the steam absorbs under the runaway albedo, so the climate used a
+ * different one than `surroundings_k`, the star's with Earth's albedo),
+ * `surroundings_k` for every other body.
+ */
+export function equilibriumK(model: SurfaceModel, surroundings_k: number): number {
+  const surface = model?.surface;
+  return surface?.water.runaway && surface.climate.equilibrium_k !== undefined ? surface.climate.equilibrium_k : surroundings_k;
 }

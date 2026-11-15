@@ -30,6 +30,10 @@ pub enum SurfaceLiquid {
 pub struct Climate {
     /// Mean surface temperature, K.
     pub temperature_k: f64,
+    /// The equilibrium temperature the climate used, K: the context's,
+    /// lowered by the runaway albedo of [`absorbing`] on a steam world
+    /// or any other water runaway.
+    pub equilibrium_k: f64,
     pub liquid: SurfaceLiquid,
     /// The carbonate thermostat holds the temperature at
     /// [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
@@ -925,6 +929,7 @@ pub fn climate(
         gases,
         Climate {
             temperature_k,
+            equilibrium_k: context.equilibrium_k,
             liquid,
             regulated,
         },

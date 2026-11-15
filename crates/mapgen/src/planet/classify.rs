@@ -659,6 +659,13 @@ mod tests {
         assert!(surface.gases.h2o > 1e5, "{surface:?}");
         // Past the moist plateau, not held at water's critical point.
         assert!(surface.climate.temperature_k > 1000.0, "{surface:?}");
+        // The equilibrium temperature it kept is the one under the runaway
+        // albedo, which absorbs more than Earth's 0.3 does (about 252 K at
+        // its 0.95 S⊕).
+        assert!(
+            (258.0..280.0).contains(&surface.climate.equilibrium_k),
+            "{surface:?}"
+        );
         let top = model.interior.layers.last().unwrap();
         assert_eq!(top.material, crate::planet::Material::Steam);
         // Larger than the same body with its water condensed, and than

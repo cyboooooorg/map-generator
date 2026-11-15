@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { en } from './i18n/en';
 import { fr } from './i18n/fr';
 import { className, classLabel } from './i18n/names.svelte';
-import { GIANT_CLASSES, hasFrozenSurface, isGiantType, surfaceTemperatureK } from './planetClass';
+import { GIANT_CLASSES, equilibriumK, hasFrozenSurface, isGiantType, surfaceTemperatureK } from './planetClass';
 
 // Copied from `PLANET_CLASSES` (crates/mapgen/src/planet/classify.rs); a
 // server test (app.rs) reads this file and checks the list against it.
@@ -72,6 +72,14 @@ describe('planet classes', () => {
     expect(surfaceTemperatureK(model(0, 'water', 288))).toBe(288);
     expect(surfaceTemperatureK({ surface: null })).toBeNull();
     expect(surfaceTemperatureK(undefined)).toBeNull();
+  });
+
+  it('shows the equilibrium temperature of a water runaway, the star value for the others', () => {
+    const climate = { temperature_k: 1700, liquid: 'none', equilibrium_k: 268 };
+    expect(equilibriumK({ surface: { water: { oceans: 2000, runaway: true }, climate } }, 252)).toBe(268);
+    expect(equilibriumK({ surface: { water: { oceans: 1, runaway: false }, climate } }, 252)).toBe(252);
+    expect(equilibriumK({ surface: null }, 252)).toBe(252);
+    expect(equilibriumK(undefined, 252)).toBe(252);
   });
 
   it('words a round moon as a moon wherever the planet label says planet', () => {
