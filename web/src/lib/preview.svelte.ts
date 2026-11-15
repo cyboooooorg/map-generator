@@ -14,6 +14,8 @@ export class Preview {
   result = $state<ResolvedSystem | null>(null);
   /** Why the server refused the last request, null when it did not. */
   refusal = $state<ErrorDetail | null>(null);
+  /** Why the form itself refuses the request without asking (a planet count out of range), null when it does not. */
+  invalid = $state<string | null>(null);
   /** The server could not answer (not a refusal of the request). */
   unavailable = $state(false);
   /** A request waits for its debounce or its answer. */
@@ -30,6 +32,7 @@ export class Preview {
   /** Asks for `next` once no other request comes within the debounce; older answers are dropped. */
   request(next: SystemRequest): void {
     const id = ++this.latest;
+    this.invalid = null;
     this.pending = true;
     this.controller?.abort();
     this.controller = null;
@@ -43,10 +46,12 @@ export class Preview {
   /**
    * The request is not worth asking (the form already knows it is invalid):
    * cancels what is waiting or in flight and forgets the refusals and the
-   * outage, which were about an older request. The last answer stays.
+   * outage, which were about an older request. The last answer stays, and
+   * `reason` (the form's own words) says why it no longer matches.
    */
-  settle(): void {
+  settle(reason: string | null = null): void {
     this.dispose();
+    this.invalid = reason;
     this.refusal = null;
     this.unavailable = false;
   }

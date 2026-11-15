@@ -19,7 +19,7 @@
   // the track), each chip centred under its tick and stacked on a lower row
   // when it would overlap the one before. Every slider of the form with marks
   // is this one, so their ticks and thumbs agree whatever the browser.
-  import { chipWidth, placeChips, THUMB_PX, tickLeft } from '../../lib/sliderMarks';
+  import { chipWidth, placeChips, ROW_GAP_PX, THUMB_PX, tickLeft } from '../../lib/sliderMarks';
 
   interface Props {
     min: number;
@@ -37,11 +37,15 @@
   let { min, max, step, value, label, oninput, marks = [], marksLabel = '' }: Props = $props();
 
   let track = $state(0);
-  const widths = $derived(marks.map((m) => Math.max(chipWidth(m.label), m.note ? chipWidth(m.note) : 0)));
+  /** The chips' own sizes once drawn (px): centring and overlap use what the browser laid out, the estimate only until then. */
+  let measured = $state<number[]>([]);
+  let heights = $state<number[]>([]);
+  const widths = $derived(marks.map((m, i) => measured[i] || Math.max(chipWidth(m.label), m.note ? chipWidth(m.note) : 0)));
   const placed = $derived(placeChips(marks.map((m, i) => ({ fraction: m.fraction, width: widths[i]! })), track));
   const rows = $derived(placed.reduce((most, p) => Math.max(most, p.row + 1), 0));
-  /** Height of a chip row, px (one line, or two with a note). */
-  const rowHeight = $derived(marks.some((m) => m.note) ? 40 : 22);
+  /** Height of a chip row, px: the tallest chip and a little air (estimated until drawn). */
+  const tallest = $derived(Math.max(0, ...heights.slice(0, marks.length)));
+  const rowHeight = $derived(tallest > 0 ? tallest + ROW_GAP_PX : marks.some((m) => m.note) ? 34 : 20);
 </script>
 
 <div class="rail" style:--thumb={`${THUMB_PX}px`} bind:clientWidth={track}>
@@ -55,10 +59,15 @@
     <div class="chips" role="group" aria-label={marksLabel} style:height={`${rows * rowHeight}px`}>
       {#each marks as mark, i (mark.label)}
         {@const at = placed[i]!}
+        {#if track > 0 && at.led}
+          <span class="leader" class:earth={mark.earth} style:left={`${at.centre}px`} style:height={`${at.row * rowHeight + 2}px`}></span>
+        {/if}
         <button
           type="button"
           class="chip"
           class:earth={mark.earth}
+          bind:clientWidth={measured[i]}
+          bind:clientHeight={heights[i]}
           title={marksLabel}
           style:top={`${at.row * rowHeight}px`}
           style:left={track > 0 ? `${at.left}px` : tickLeft(mark.fraction)}
@@ -149,6 +158,21 @@
     white-space: nowrap;
     border-radius: 10px;
     color: var(--muted);
+    /* Hides a leader line that runs behind it. */
+    background: var(--panel-solid, transparent);
+    z-index: 1;
+  }
+  /* Joins a chip held at an end of the slider, or on a lower row, to its tick. */
+  .leader {
+    position: absolute;
+    top: -2px;
+    width: 1px;
+    margin-left: -0.5px;
+    background: var(--muted);
+    opacity: 0.6;
+  }
+  .leader.earth {
+    background: var(--link);
   }
   .chip small {
     font-size: 0.7rem;

@@ -126,6 +126,15 @@ describe('Preview', () => {
     expect(preview.answers).toBe(3);
   });
 
+  it('settles with the form’s own reason, and asking again clears it', async () => {
+    preview.settle('64 planets (1 to 15)');
+    expect(preview.invalid).toBe('64 planets (1 to 15)');
+    preview.request(request(1));
+    expect(preview.invalid).toBeNull();
+    preview.settle();
+    expect(preview.invalid).toBeNull();
+  });
+
   it('settles: forgets a stale refusal, cancels the wait and drops the answer in flight', async () => {
     resolve.mockRejectedValueOnce(new ApiFailure(400, 'no', { code: 'too_many_planets', asked: 99, max: 15 } as never));
     preview.request(request(1));

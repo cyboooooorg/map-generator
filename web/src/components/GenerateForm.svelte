@@ -429,7 +429,8 @@
     // A request the form already knows is invalid is not asked: whatever
     // refusal or answer is on its way is about an older request.
     if (!seedValid || (mode === 'system' && !planetsValid)) {
-      untrack(() => preview.settle());
+      const reason = !seedValid ? t.form.seedInvalid({ max: formatInt(MAX_SEED) }) : t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets });
+      untrack(() => preview.settle(reason));
       return;
     }
     const asked: SystemRequest = mode === 'around' ? { around: buildRequest() } : { system: buildSystemRequest() };

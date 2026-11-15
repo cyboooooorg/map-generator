@@ -88,8 +88,9 @@ describe('ModelFields', () => {
   it('draws the ticks and the chips from the server’s values for every field with marks', () => {
     const cmf = field(html({ values: initialModelValues({ core_mass_fraction: 0.5 }) }), 'core_mass_fraction');
     expect(cmf).toContain(`${t.form.model.bodies.earth} 32.5 %`);
-    expect(cmf.match(/class="tick[ "]/g)).toHaveLength(1);
-    // The server sent nothing for Mars: no Mars chip, nothing from an archetype.
+    expect(cmf).toContain(`${t.form.model.bodies.mercury} 70 %`);
+    expect(cmf.match(/class="tick[ "]/g)).toHaveLength(2);
+    // The field does not quote Mars: no Mars chip, nothing from an archetype.
     expect(cmf).not.toContain(t.form.model.bodies.mars);
   });
 
@@ -97,6 +98,8 @@ describe('ModelFields', () => {
     const out = html({ values: initialModelValues({ mass_earth: 2 }) });
     const line = field(out, 'mass_earth').match(/<p class="unit-help references[^"]*">([^<]*)<\/p>/)![1]!;
     expect(line).toBe('Reference masses: Mars 0.107 · Earth 1 · Neptune 17.15 · Jupiter 317.8');
+    // The chips quote the same bodies as the line.
+    for (const body of ['mars', 'earth', 'neptune', 'jupiter'] as const) expect(field(out, 'mass_earth')).toContain(`${t.form.model.bodies[body]} `);
     expect(field(out, 'core_mass_fraction')).toContain('Reference values: Earth 32.5 % · Mercury 70 %');
   });
 

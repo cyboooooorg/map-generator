@@ -4,7 +4,7 @@ import type { FormSpec } from './api/types/FormSpec';
 import { formatUpTo } from './format';
 import { t } from './i18n/index.svelte';
 import { formatMassWithNote } from './massFormat';
-import { HELP_BODIES, type ModelFieldKey, referencesOf } from './modelFields';
+import { REFERENCE_BODIES, type ModelFieldKey, referencesOf } from './modelFields';
 import { toShown } from './modelScale';
 
 type NumericKey = Exclude<ModelFieldKey, 'life'>;
@@ -43,8 +43,7 @@ export function referencesLabel(key: ModelFieldKey): string {
  */
 export function referencesLine(key: ModelFieldKey, spec: Pick<FormSpec, 'references'>): string | null {
   if (key === 'life') return null;
-  const wanted = HELP_BODIES[key];
-  if (!wanted) return null;
+  const wanted = REFERENCE_BODIES[key];
   const refs = referencesOf(key, spec);
   const items = wanted.flatMap((body) => {
     const value = refs.get(body);

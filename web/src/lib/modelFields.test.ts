@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FormSpec } from './api/types/FormSpec';
 import type { InputField } from './api/types/InputField';
-import { fieldOf, marks, referencesOf, scaleOf } from './modelFields';
+import { fieldOf, marks, REFERENCE_BODIES, referencesOf, scaleOf } from './modelFields';
 
 const FIELDS: Record<InputField, true> = {
   mass_earth: true, core_mass_fraction: true, water_oceans: true, envelope_fraction: true, co2: true, n2: true, ch4: true,
@@ -11,7 +11,7 @@ const ref = (body: string, field: string, value: number) => ({ body, field, valu
 const spec = {
   references: [
     ref('earth', 'mass_earth', 1), ref('mars', 'mass_earth', 0.107), ref('venus', 'mass_earth', 0.815), ref('titan', 'mass_earth', 0.0225),
-    ref('jupiter', 'mass_earth', 317.8),
+    ref('neptune', 'mass_earth', 17.15), ref('jupiter', 'mass_earth', 317.8),
     ref('earth', 'water_oceans', 1), ref('mars', 'water_oceans', 0), ref('venus', 'water_oceans', 0),
     ref('earth', 'ch4', 1),
   ],
@@ -31,18 +31,23 @@ describe('modelFields', () => {
     expect(referencesOf('mass_earth', spec).get('jupiter')).toBe(317.8);
     expect(referencesOf('life', spec).size).toBe(0);
   });
-  it('marks the four bodies at the values the server sends, never at an archetype’s mean', () => {
+  it('marks the six mass bodies at the values the server sends, never at an archetype’s mean', () => {
     const found = marks('mass_earth', spec);
-    expect(found.map((m) => [m.bodies[0], m.value])).toEqual([['earth', 1], ['mars', 0.107], ['venus', 0.815], ['titan', 0.0225]]);
+    expect(found.map((m) => [m.bodies[0], m.value])).toEqual([
+      ['titan', 0.0225], ['mars', 0.107], ['venus', 0.815], ['earth', 1], ['neptune', 17.15], ['jupiter', 317.8],
+    ]);
   });
-  it('skips a body the server has no value for, and the giants', () => {
+  it('quotes the same bodies on the chips and in the help', () => {
+    expect(REFERENCE_BODIES.mass_earth).toEqual(['titan', 'mars', 'venus', 'earth', 'neptune', 'jupiter']);
+  });
+  it('skips a body the server has no value for', () => {
     expect(marks('ch4', spec).map((m) => m.bodies)).toEqual([['earth']]);
   });
   it('groups the bodies that sit at one value', () => {
-    expect(marks('water_oceans', spec).map((m) => m.bodies)).toEqual([['earth'], ['mars', 'venus']]);
+    expect(marks('water_oceans', spec).map((m) => m.bodies)).toEqual([['mars', 'venus'], ['earth']]);
   });
   it('drops a mark outside the limits', () => {
     const found = marks('mass_earth', spec, { min: 0.05, max: 10 });
-    expect(found.map((m) => m.bodies[0])).toEqual(['earth', 'mars', 'venus']);
+    expect(found.map((m) => m.bodies[0])).toEqual(['mars', 'venus', 'earth']);
   });
 });

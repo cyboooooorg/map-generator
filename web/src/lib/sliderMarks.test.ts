@@ -10,13 +10,31 @@ describe('sliderMarks', () => {
 
   it('centres a chip under its tick', () => {
     const [chip] = placeChips([{ fraction: 0.5, width: 40 }], 300);
-    expect(chip).toEqual({ left: 150 - 20, row: 0 });
+    expect(chip).toEqual({ left: 150 - 20, centre: 150, row: 0, led: false });
   });
 
   it('keeps a chip inside the slider at either end', () => {
     const [first, last] = placeChips([{ fraction: 0, width: 60 }, { fraction: 1, width: 60 }], 300);
     expect(first!.left).toBe(0);
     expect(last!.left).toBe(240);
+  });
+
+  it('measures the centre from the thumb’s travel, and joins a held or lowered chip to its tick', () => {
+    const [edge, mid, under] = placeChips([{ fraction: 0, width: 60 }, { fraction: 0.5, width: 60 }, { fraction: 0.52, width: 60 }], 300);
+    expect(edge).toMatchObject({ left: 0, centre: 8, led: true });
+    expect(mid).toMatchObject({ left: 150 - 30, centre: 150, row: 0, led: false });
+    expect(under).toMatchObject({ row: 1, led: true });
+  });
+
+  it('puts chips of known widths exactly under their ticks, and uses the fewest rows', () => {
+    const track = 400;
+    const items = [{ fraction: 0.2, width: 50 }, { fraction: 0.5, width: 70 }, { fraction: 0.8, width: 50 }];
+    const out = placeChips(items, track);
+    out.forEach((p, i) => expect(p.left + items[i]!.width / 2).toBeCloseTo(p.centre, 6));
+    expect(out.map((p) => p.row)).toEqual([0, 0, 0]);
+    // A chip's own width decides the overlap: 70 + 70 do not fit in 60 px, 40 + 40 do.
+    expect(placeChips([{ fraction: 0.5, width: 70 }, { fraction: 0.5 + 60 / 384, width: 70 }], track).map((p) => p.row)).toEqual([0, 1]);
+    expect(placeChips([{ fraction: 0.5, width: 40 }, { fraction: 0.5 + 60 / 384, width: 40 }], track).map((p) => p.row)).toEqual([0, 0]);
   });
 
   it('stacks a chip that would overlap on the next row, and reuses a free row', () => {

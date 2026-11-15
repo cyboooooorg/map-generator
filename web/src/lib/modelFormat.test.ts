@@ -6,7 +6,9 @@ import { fieldValueText, referencesLabel, referencesLine } from './modelFormat';
 const ref = (body: string, field: string, value: number) => ({ body, field, value });
 const spec = {
   references: [
-    ref('mars', 'mass_earth', 0.107), ref('earth', 'mass_earth', 1), ref('neptune', 'mass_earth', 17.15), ref('jupiter', 'mass_earth', 317.8),
+    ref('titan', 'mass_earth', 0.0225), ref('mars', 'mass_earth', 0.107), ref('venus', 'mass_earth', 0.815), ref('earth', 'mass_earth', 1),
+    ref('neptune', 'mass_earth', 17.15), ref('jupiter', 'mass_earth', 317.8),
+    ref('earth', 'co2', 1),
     ref('earth', 'core_mass_fraction', 0.325), ref('mercury', 'core_mass_fraction', 0.7),
     ref('earth', 'age_gyr', 4.6),
   ],
@@ -20,13 +22,14 @@ describe('modelFormat', () => {
   });
 
   it('quotes the references from the server’s values, under the reference-masses label for the mass', () => {
-    expect(referencesLine('mass_earth', spec)).toBe('Reference masses: Mars 0.107 · Earth 1 · Neptune 17.15 · Jupiter 317.8');
+    expect(referencesLine('mass_earth', spec)).toBe('Reference masses: Titan 0.023 · Mars 0.107 · Venus 0.815 · Earth 1 · Neptune 17.15 · Jupiter 317.8');
     expect(referencesLine('core_mass_fraction', spec)).toBe('Reference values: Earth 32.5 % · Mercury 70 %');
     expect(referencesLine('age_gyr', spec)).toBe('Reference values: Earth 4.6 Gyr');
+    expect(referencesLine('co2', spec)).toBe('Reference values: Earth 1');
   });
 
   it('says nothing for a field the server has no value for, or life', () => {
-    expect(referencesLine('co2', spec)).toBeNull();
+    expect(referencesLine('ch4', spec)).toBeNull();
     expect(referencesLine('life', spec)).toBeNull();
   });
 

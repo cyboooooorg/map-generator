@@ -57,6 +57,25 @@ describe('PreviewPanel', () => {
     expect(html(preview)).toContain(t.form.preview.mismatchUnavailable);
   });
 
+  it('puts the notice above the greyed content, in the flow, not over it', () => {
+    const preview = new Preview();
+    preview.result = earthLike;
+    preview.refusal = { code: 'out_of_range', field: 'co2', min: 0, max: 100 } as never;
+    const out = html(preview);
+    expect(out.indexOf('class="notice')).toBeGreaterThan(-1);
+    expect(out.indexOf('class="notice')).toBeLessThan(out.indexOf('class="stage'));
+  });
+
+  it('marks a request the form itself refuses, with its own reason, and the system preview too', () => {
+    const preview = new Preview();
+    preview.result = systemResult;
+    preview.settle('64 planets (1 to 15)');
+    const out = render(PreviewPanel, { props: { preview, kind: 'system', onjump: () => {}, onreroll: () => {} } }).body;
+    expect(out).toContain(t.form.preview.mismatch);
+    expect(out).toContain('64 planets (1 to 15)');
+    expect(out).toMatch(/class="content[^"]*mismatch[^"]*"[^>]*inert/);
+  });
+
   it('keeps no title of its own when folded under the Preview summary', () => {
     const preview = new Preview();
     preview.result = earthLike;

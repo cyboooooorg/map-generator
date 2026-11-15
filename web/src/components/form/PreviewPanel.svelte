@@ -37,7 +37,7 @@
   const shown = $derived(preview.result && (kind === 'around') === (preview.result.system.focus !== null) ? preview.result : null);
   const world = $derived(shown && kind === 'around' ? previewSource(shown) : null);
   /** What is shown is not the current request: it was refused, or the server did not answer. */
-  const mismatch = $derived(preview.refusal !== null || preview.unavailable);
+  const mismatch = $derived(preview.refusal !== null || preview.unavailable || preview.invalid !== null);
   // A preview has no name to give nor maps to queue.
   const never = () => {};
 </script>
@@ -54,13 +54,13 @@
     </span>
   </header>
   {#if shown}
+    {#if mismatch}
+      <div class="notice">
+        <strong>{t.form.preview.mismatch}</strong>
+        <span>{preview.invalid ?? (preview.refusal ? detailText(preview.refusal) : t.form.preview.mismatchUnavailable)}</span>
+      </div>
+    {/if}
     <div class="stage">
-      {#if mismatch}
-        <div class="notice">
-          <strong>{t.form.preview.mismatch}</strong>
-          <span>{preview.refusal ? detailText(preview.refusal) : t.form.preview.mismatchUnavailable}</span>
-        </div>
-      {/if}
       <div class="content" class:stale={preview.pending && !mismatch} class:mismatch inert={mismatch}>
         {#if world}
           <div class="cards" use:flashLines={{ answers: preview.answers, continued: preview.continued }}>
@@ -130,12 +130,8 @@
     user-select: none;
   }
   .notice {
-    position: absolute;
-    inset: 0 0 auto 0;
-    z-index: 1;
     display: grid;
     gap: 2px;
-    margin: 8px;
     padding: 8px 10px;
     border: 1px solid var(--danger);
     border-radius: 8px;
