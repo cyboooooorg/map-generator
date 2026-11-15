@@ -121,6 +121,23 @@ against.
 - **Drift and pinned requests**: `pinned()` already writes the resolved
   age, so a drifted world keeps it.
 
+### Archetype star
+
+Added after the coherence check. A whole system that named no star drew
+one, mostly M dwarfs, whose early XUV stripped the asked Earth to 0.19 bar
+and the asked Mars to 1e-5 bar. The user chose that an asked planet
+archetype brings its `[orbit] star`, as moon archetypes already bring
+their host's star (`host_star_of`).
+
+- **No star named**: the system takes the `[orbit] star` of an asked
+  archetype, if that star lives to the system age.
+- **Several archetypes with a star**: a moon's host comes first (today's
+  rule), then the archetypes that carry an age, then the others. Within
+  each group, name order decides. *My call.*
+- **A star named in the request**: it always wins.
+- **The star dies before the system age, or no asked archetype names a
+  star**: the star is drawn as today.
+
 ### Faithful archetypes
 
 For each Solar System archetype, pin what the spread needs. The values are
