@@ -34,7 +34,10 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 ///    as an ice giant); a steam world: `steam-world`, a grey cloud deck
 ///    (a planet drawn with the giants' deck renderer, see
 ///    [`renders_as_giant`]);
-/// 2. a lava world or a heat-pipe regime: `volcanic`;
+/// 2. a lava world, a lava liquid, or a heat-pipe regime without liquid
+///    water: `volcanic` (a heat-pipe body under a water ocean takes rule 5:
+///    the ocean covers its volcanism, which the world's volcanic intensity
+///    keeps visible);
 /// 3. a runaway greenhouse: `caustic` (the Venus look; the spec names
 ///    barren or volcanic, caustic is closer to Venus and exists);
 /// 4. liquid hydrocarbons: `frozen`;
@@ -62,7 +65,7 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
     let liquid = surface.map_or(SurfaceLiquid::None, |s| s.climate.liquid);
     if model.class == PlanetClass::LavaWorld
         || liquid == SurfaceLiquid::Lava
-        || surface.is_some_and(|s| s.regime == Regime::HeatPipe)
+        || (liquid != SurfaceLiquid::Water && surface.is_some_and(|s| s.regime == Regime::HeatPipe))
     {
         return "volcanic";
     }
@@ -828,6 +831,28 @@ mod tests {
         for (name, base) in expect {
             assert_eq!(base_of(&model_of(name)), base, "{name}");
         }
+    }
+
+    #[test]
+    fn a_heat_pipe_ocean_world_renders_as_water() {
+        // Earth's model under strong tidal heating (mgs-81447-3145862552 b:
+        // a super-Earth with 2390 Earth oceans at 287 K in the heat-pipe
+        // regime): the ocean covers the volcanism, it is not a lava look.
+        let mut ocean = model_of("Earth");
+        ocean.surface.as_mut().unwrap().regime = Regime::HeatPipe;
+        assert_eq!(
+            ocean.surface.as_ref().unwrap().climate.liquid,
+            SurfaceLiquid::Water
+        );
+        assert_eq!(base_of(&ocean), "terran");
+        // Io-like: a heat pipe without surface water stays volcanic.
+        let mut io = model_of("Mars");
+        io.surface.as_mut().unwrap().regime = Regime::HeatPipe;
+        assert_eq!(base_of(&io), "volcanic");
+        // A water liquid never overrides a lava world.
+        let mut lava = model_of("Earth");
+        lava.class = PlanetClass::LavaWorld;
+        assert_eq!(base_of(&lava), "volcanic");
     }
 
     #[test]
