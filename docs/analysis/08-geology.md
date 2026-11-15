@@ -560,6 +560,19 @@ goes from 0.95 to 0.83 of land: its little water now lies in its
 lowlands (99.7 % of its sea on thin crust), not as a ring round a raised
 platform. Dry worlds keep their plains. Worlds with seas change.
 
+### Outcome (highland share without plates, #458, 2026-11-15)
+
+The crust line of a wet world without plates leaves Mars's share of its
+surface on thick crust, 58 % (the northern lowlands cover about 42 %,
+Marinova, Aharonson & Asphaug 2008, doi:10.1038/nature07070), not
+Earth's 41 % of continental crust (`Crust::thick_share`). Every regime
+without plates takes it, as it takes Mars's crust; dry worlds keep their
+plains. `mars-like` at 256 × 128, seeds 1–6, thick crust 41 → 58 %, span
+20.5 → 24.2, 19.1 → 22.0, 9.7 → 13.6, 20.4 → 23.3, 16.0 → 17.7,
+16.6 → 18.0 km, Mountain + Snow 14.8 → 12.8, 10.8 → 8.7, 16.1 → 13.7,
+37.7 → 38.7, 32.3 → 31.6, 28.5 → 27.5 % of land. A wet heat-pipe
+`super-earth` (seed 2) goes from 39 to 56 % of land.
+
 ### Outcome (impact flux and crater size from the orbit, #313, 2026-11-14)
 
 Part 3c of the planet model (#423). `[geology] impact_ratio` and

@@ -206,8 +206,11 @@ flowchart LR
 5. **Floating crust.** The continents and the sea floor are not scaled.
    A wet world's crust has a thickness, read from the continents' noise
    (`crust_thickness_km`): thin crust below a crust line, the level that
-   leaves 41 % of the surface above it (Cogley's share, on a fixed grid
-   whatever the resolution), and above it a slope, a shelf and a platform
+   leaves the thick crust's share of the surface above it (on a fixed grid
+   whatever the resolution): 41 % with plates (Cogley's share of
+   continental crust), 58 % without (Mars's southern highlands, its
+   northern lowlands covering about 42 %, Marinova et al. 2008), and
+   above it a slope, a shelf and a platform
    thickening inland to the full thick crust. `floating` turns the
    thickness into a height by Airy's balance, above a fixed datum (the old
    ocean floor), and lets the old floor deepen below the line by up to
@@ -324,9 +327,10 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   (slope, shelf, the platform's rise) fitted on Earth's hypsometry. The
   ranges, plate boundaries and volcanoes are added on top, without a root
   of their own; there is no flexure of the crust under a volcano. The
-  thick crust covers 41 % of every wet world, Earth's share: a world's
-  mean thickness from its mass and heat, and Mars's larger highlands, are
-  not modelled. Sea floor older than about 18 Ma lies at the old floor and
+  thick crust covers 41 % of every wet world with plates, Earth's share,
+  and 58 % of every wet world without, Mars's (an episodic or heat-pipe
+  world takes it too, no source giving theirs): a world's mean thickness
+  and its thick share from its mass and heat are not modelled. Sea floor older than about 18 Ma lies at the old floor and
   below it by the noise, not by its age (about 3.25 to 5.65 km under
   Earth's ocean, against Parsons & Sclater's 4 to 6.4 km).
 - **The water does not load the sea floor.** Airy's balance here weighs
@@ -357,9 +361,10 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   heavier than Mercury is known, so heavier ones keep Mercury's share.
 - **Worlds without plates: provinces from noise.** Their highland
   provinces are noise blobs: real ones are tesserae and volcanic rises on
-  Venus, the cratered southern highlands and Tharsis on Mars (two thirds
-  of the planet, not a tenth), impact-shaped terrain on Mercury and the
-  Moon; the same share serves them all. A dry world's rolling plains come
+  Venus, the cratered southern highlands and Tharsis on Mars (58 % of the
+  planet, not a tenth), impact-shaped terrain on Mercury and the Moon; the
+  same share serves them all. On a wet world the thick crust beneath them
+  does cover Mars's 58 % (see Floating crust). A dry world's rolling plains come
   from the continents' noise, not from mantle flow. `mars-like` spans
   30 km (Mars: about 30 km, Smith et al. 1999); `mercury-like` about
   Mercury's 9.9 km (Becker et al. 2016) on its old surfaces (4 to 4.5 km
@@ -450,6 +455,11 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
     (abstract read): lunar basins are shallower than the complex craters'
     law, most likely from "the increasing influence of gravity with
     diameter".
+21. Marinova, M. M., Aharonson, O. & Asphaug, E. 2008, "Mega-impact
+    formation of the Mars hemispheric dichotomy", *Nature* 453,
+    1216–1219,
+    [doi:10.1038/nature07070](https://doi.org/10.1038/nature07070)
+    (abstract read): the northern lowlands "cover ∼42% of the surface".
 
 ## See also
 

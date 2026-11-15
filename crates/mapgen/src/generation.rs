@@ -393,8 +393,9 @@ pub(crate) fn relief_scale(gravity: f32) -> f32 {
     (1.0 / gravity.max(1e-3)).min(MAX_RELIEF_SCALE)
 }
 
-/// Share of a wet world's surface its thick crust covers (continental
-/// crust; highlands without plates): Earth's continental crust covers 41 %
+/// Share of a wet world's surface with plates its thick crust covers
+/// (continental crust; highlands without plates, [`MARS_HIGHLAND_SHARE`]):
+/// Earth's continental crust covers 41 %
 /// of its surface, 210.4 × 10⁶ km² with the submerged margins (Cogley
 /// 1984, doi:10.1029/RG022i002p00101). The crust line, the level of the
 /// continents' noise between thin crust below it and thick crust above
@@ -431,13 +432,16 @@ const CRUST_DATUM: f32 = -0.02;
 /// The crust of a world, as its relief floats on the mantle (Airy
 /// isostasy, see [`floating`]): the thickness of its thick crust
 /// (continents, or highlands without plates) and of its thin crust (ocean
-/// floor, or lowlands), km, and the densities of crust and mantle, g/cm³.
+/// floor, or lowlands), km, the densities of crust and mantle, g/cm³, and
+/// the share of a wet world's surface its thick crust covers (see
+/// [`CONTINENTAL_SHARE`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Crust {
     pub continental_km: f32,
     pub oceanic_km: f32,
     pub crust_density: f32,
     pub mantle_density: f32,
+    pub thick_share: f64,
 }
 
 impl Crust {
@@ -467,12 +471,15 @@ impl Crust {
 ///   the continental crust; mantle 3.3 g/cm³, a typical value for the
 ///   uppermost mantle (assumed, as in the science page's example).
 ///
+/// - Continental crust on [`CONTINENTAL_SHARE`] of the surface.
+///
 /// The continents then stand 4.8 km above the old ocean floor.
 const EARTH_CRUST: Crust = Crust {
     continental_km: 41.1,
     oceanic_km: 7.1,
     crust_density: 2.83,
     mantle_density: 3.3,
+    thick_share: CONTINENTAL_SHARE,
 };
 
 /// Mars's crust, for worlds without plates: no continents, a thick
@@ -481,14 +488,33 @@ const EARTH_CRUST: Crust = Crust {
 /// 600 kg/m³ denser than the crust (Neumann et al. 2004,
 /// doi:10.1029/2004JE002262). The crust's 2.9 g/cm³ (basalt) is assumed,
 /// so the mantle 3.5. The highlands stand 4.5 km above the lowlands, the
-/// order of Mars's dichotomy. Calibration on that one body: the thickness
-/// of a stagnant lid's crust from its mass and heat is not modelled.
+/// order of Mars's dichotomy. The highland crust covers
+/// [`MARS_HIGHLAND_SHARE`] of the surface. Calibration on that one body:
+/// the thickness of a stagnant lid's crust from its mass and heat, and how
+/// much of it is thick, are not modelled.
 const MARS_CRUST: Crust = Crust {
     continental_km: 58.0,
     oceanic_km: 32.0,
     crust_density: 2.9,
     mantle_density: 3.5,
+    thick_share: MARS_HIGHLAND_SHARE,
 };
+
+/// Share of Mars's surface its southern highlands cover: the northern
+/// lowlands cover about 42 % of it (Marinova, Aharonson & Asphaug 2008,
+/// doi:10.1038/nature07070, abstract read; Nature's summary of that
+/// issue gives the highlands "about 60%"). The thick crust of a wet world
+/// without plates covers that share of its surface, as Earth's
+/// continental crust covers [`CONTINENTAL_SHARE`] of Earth's: with
+/// Earth's 41 %, a `mars-like` world had too little highland and its
+/// small sea filled a larger basin than Mars's northern lowlands.
+///
+/// Every regime without plates takes it, as it takes Mars's crust
+/// ([`crust_of`]): an episodic lid is a stagnant one between overturns,
+/// and no source gives the thick crust's share of a heat-pipe world. Dry
+/// worlds (`venus-like`, `mercury-like`) do not float their crust: their
+/// plains stand on [`DRY_PLATFORM_KM`].
+const MARS_HIGHLAND_SHARE: f64 = 0.58;
 
 /// The crust of the world `p`: Earth's with plates ([`EARTH_CRUST`]),
 /// Mars's dichotomy without ([`MARS_CRUST`]). Neither depends on gravity.
@@ -772,8 +798,8 @@ pub struct Sampler {
     /// The crust the relief floats with (see [`floating`]).
     crust: Crust,
     /// Level of the continents' noise above which the crust is
-    /// continental: on a wet world, the level that leaves
-    /// [`CONTINENTAL_SHARE`] of its surface above it, whatever its sea,
+    /// continental: on a wet world, the level that leaves its crust's
+    /// thick share of its surface above it, whatever its sea,
     /// which its platform, mountains and inland plains are measured from;
     /// on a dry world, [`CONTINENTAL_SHELF`] below its waterline (its
     /// relief is measured from the waterline itself).
@@ -993,8 +1019,10 @@ impl Sampler {
     }
 
     /// The crust line of a wet world: the level of its continents' noise
-    /// above which [`CONTINENTAL_SHARE`] of its surface lies, by area, on
-    /// the fixed grid [`CRUST_GRID`] (whatever the world's resolution).
+    /// above which its crust's thick share ([`Crust::thick_share`]:
+    /// [`CONTINENTAL_SHARE`] with plates, [`MARS_HIGHLAND_SHARE`] without)
+    /// of its surface lies, by area, on the fixed grid [`CRUST_GRID`]
+    /// (whatever the world's resolution).
     fn crust_line(&self) -> f32 {
         let (width, height) = CRUST_GRID;
         let mut levels: Vec<(f32, f64)> = Vec::with_capacity((width * height) as usize);
@@ -1015,7 +1043,7 @@ impl Sampler {
         let mut above = 0.0;
         for (level, area) in &levels {
             above += area;
-            if above >= CONTINENTAL_SHARE * total {
+            if above >= self.crust.thick_share * total {
                 return *level;
             }
         }
@@ -3106,6 +3134,41 @@ pub(crate) mod tests {
                 .collect::<Vec<bool>>()
         };
         assert_eq!(mask(0.0), mask(0.4));
+    }
+
+    /// Area share of the thick crust of the world `p` (above its crust
+    /// line), on its own grid.
+    fn thick_share(p: &WorldParams) -> f64 {
+        let sampler = Sampler::new(p);
+        let grid = p.grid();
+        let (mut thick, mut total) = (0.0, 0.0);
+        for y in 0..grid.height {
+            let a = grid.latitude(y).cos();
+            for x in 0..grid.width {
+                total += a;
+                if sampler.continental(grid.unit_vector_at(f64::from(x), f64::from(y))) {
+                    thick += a;
+                }
+            }
+        }
+        thick / total
+    }
+
+    /// A wet world without plates has Mars's share of highland crust, not
+    /// Earth's share of continental crust (#458); a world with plates
+    /// keeps Earth's.
+    #[test]
+    fn worlds_without_plates_have_marss_highland_share() {
+        for seed in [1u32, 2, 3] {
+            let mars = preset_params("mars-like", seed, 256, 128);
+            assert_eq!(mars.look.geology.regime, Regime::Stagnant);
+            assert!(!mars.look.rules.dry);
+            let share = thick_share(&mars);
+            assert!((0.55..0.61).contains(&share), "mars-like {seed}: {share}");
+            let earth = preset_params("earth-like", seed, 256, 128);
+            let share = thick_share(&earth);
+            assert!((0.39..0.43).contains(&share), "earth-like {seed}: {share}");
+        }
     }
 
     #[test]
