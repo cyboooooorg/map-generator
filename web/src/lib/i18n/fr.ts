@@ -700,6 +700,8 @@ export const fr: Messages = {
       drawn: 'Tiré',
       drawnUnknown: 'tiré au sort',
       drawnValue: (p) => `Tiré${S}: ${p.value}`,
+      waterShare: (p) => `≈ ${p.share} de la masse de la planète`,
+      waterDepth: (p) => `≈ ${p.depth} de profondeur si elle couvrait toute la planète`,
       driveLabel: 'Détermine',
       notUsed: `Inutilisé par cette planète${S}: cette valeur ne change rien ici.`,
       references: 'Valeurs de référence',

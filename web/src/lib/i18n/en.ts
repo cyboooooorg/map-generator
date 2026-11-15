@@ -743,6 +743,8 @@ export const en = {
       drawn: 'Drawn',
       drawnUnknown: 'drawn by the seed',
       drawnValue: (p: { value: string }) => `Drawn: ${p.value}`,
+      waterShare: (p: { share: string }) => `≈ ${p.share} of the planet’s mass`,
+      waterDepth: (p: { depth: string }) => `≈ ${p.depth} deep if spread over the whole planet`,
       driveLabel: 'Drives',
       notUsed: 'Not used by this planet: this value changes nothing here.',
       /** The line of Solar System values under a field, and the label of the chips that set them. */
