@@ -82,6 +82,12 @@ doi:10.3847/1538-4357/ac1345: to about 1050 K at 10 bar). The grey model is
 not expected to match that point exactly; the builder reports how close it
 gets.
 
+Acceptance (my call): the four Solar System ranges and Earth's regulation
+by the thermostat (under 0.01 bar CO2) are hard limits; the plateau must
+land at 282 W/m2 within 5 % and vary under 2 % between 1x and 3x Earth's
+N2. If one set of grey constants cannot meet both, stop and report to the
+main session rather than widening the ranges.
+
 The ad hoc devices that stood in for the limit (`STEAM_MAX_TAU`,
 `STEAM_MAX_BAR`, `STEAM_BREAKDOWN_K` and their tests) go if the column
 model makes them unnecessary; their tests are replaced by tests of the
@@ -115,9 +121,9 @@ plateau and of the breakdown.
   times the critical pressure (221 bar) on a surface past 647 K. A planet
   in wet equilibrium is never a steam world (my call; hycean worlds, #500,
   are hydrogen over liquid water and reuse only the water-share part).
-  In `classify`, `steam-world` is tested before `mini-neptune` is
-  impossible anyway (it has no H/He envelope above the threshold) and
-  before `runaway-greenhouse`. The builder confirms
+  In `classify`, `steam-world` is tested before `runaway-greenhouse`
+  (a steam world has no H/He envelope, so the mini-Neptune rule does not
+  reach it). The builder confirms
   or adjusts the factor from the census and states it in the code; the same
   water threshold is reused later by #500.
 - **Radius.** The steam envelope is added to the radius with the
