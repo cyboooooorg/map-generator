@@ -456,6 +456,10 @@ pub struct ResolvedSystem {
     pub system: mapgen::system::System,
     /// The planet model's account of each body that has one, by body id.
     pub extras: BTreeMap<String, BodyExtras>,
+    /// The inputs the focus body formed with, as a request sets them
+    /// (`PlanetModel::formation`): what the form shows for a field left
+    /// random. `None` when the focus has no model.
+    pub formation: Option<mapgen::planet::Formation>,
     /// Fields of an `around` request its planet has no use for.
     pub ignored: Vec<String>,
 }

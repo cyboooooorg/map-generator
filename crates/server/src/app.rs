@@ -663,13 +663,33 @@ async fn resolve_system(
     State(state): State<Shared>,
     Json(request): Json<mapgen::system::SystemRequest>,
 ) -> Result<Json<ResolvedSystem>, Rejection> {
+    let lone = matches!(request, mapgen::system::SystemRequest::Around(_));
     let (system, ignored) = resolve_request(&state, request).await?;
-    let extras = body_extras(&system, &state.catalog);
-    Ok(Json(ResolvedSystem {
-        system,
-        extras,
-        ignored,
-    }))
+    let shared = state.clone();
+    // The cause trees walk the catalog: off the async runtime, as for a
+    // stored system. A whole system gets none (the form validates it only).
+    let resolved = tokio::task::spawn_blocking(move || {
+        let extras = if lone {
+            body_extras(&system, &shared.catalog)
+        } else {
+            BTreeMap::new()
+        };
+        let formation = system
+            .bodies
+            .iter()
+            .find(|b| Some(&b.id) == system.focus.as_ref())
+            .and_then(|b| b.model.as_ref())
+            .map(|m| m.formation());
+        ResolvedSystem {
+            system,
+            extras,
+            formation,
+            ignored,
+        }
+    })
+    .await
+    .map_err(|e| Failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(resolved))
 }
 
 /// Draws a system and writes its `system.json` (`POST /api/systems`). A
@@ -5161,5 +5181,23 @@ mod tests {
             .expect("cause trees");
         assert!(trees.iter().any(|t| t["quantity"] == "surface_temperature"));
         assert!(resolved["ignored"].as_array().is_some());
+    }
+
+    #[tokio::test]
+    async fn resolve_sends_the_focus_formation() {
+        let app = router(temp_config("resolve-formation"));
+        let request =
+            r#"{"around": {"seed": 11, "planet": "ocean-world", "width": 64, "height": 32}}"#;
+        let (_, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+        let resolved = json(&body);
+        let formation = &resolved["formation"]["overrides"];
+        for key in ["co2", "n2", "ch4"] {
+            assert!(formation[key].is_number(), "{key}: {formation}");
+        }
+        // A whole system has no cause trees and no focus formation.
+        let request = r#"{"system": {"star": "K1V", "planets": {"mercury-like": 1}, "seed": 3, "width": 64, "height": 32}}"#;
+        let (status, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(json(&body)["extras"].as_object().unwrap().is_empty());
     }
 }

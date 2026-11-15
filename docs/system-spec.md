@@ -701,10 +701,13 @@ addressed as `<system-id>/<body-id>` everywhere.
   body is opened.
 - `POST /api/systems/resolve`: what `POST /api/systems` would draw for
   the same body, written nowhere. It answers 200 with `{system, extras,
-  ignored}`: the system (its `focus` is the body asked for), the
-  `extras` of each body as `GET /api/systems/{id}` gives them (cause
-  trees and resemblance) and the fields an `around` request's planet
-  has no use for. A request the engine cannot meet is refused with the
+  formation, ignored}`: the system (its `focus` is the body asked for),
+  the `extras` of each body as `GET /api/systems/{id}` gives them (cause
+  trees and resemblance; none for a whole system, which the form only
+  validates), the inputs the focus body formed with (`formation`, as
+  `PlanetModel::formation` gives them, null for a body with no model:
+  what the form shows for a field left drawn) and the fields an
+  `around` request's planet has no use for. A request the engine cannot meet is refused with the
   same 400 and `detail` as `POST /api/systems` (see [Errors](#errors)).
   It holds no id, queues no job and takes no lock, so the form calls it
   on every change for its live preview and validation. A request with a
