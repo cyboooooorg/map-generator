@@ -1022,6 +1022,7 @@ export const en = {
       'runaway-greenhouse': 'Runaway greenhouse',
       'hydrocarbon-world': 'Hydrocarbon world',
       'ocean-world': 'Ocean world',
+      'steam-world': 'Steam world',
       'rocky-moon': 'rocky moon',
       'icy-moon': 'icy moon',
     },
@@ -1040,6 +1041,7 @@ export const en = {
       'runaway-greenhouse': 'Runaway greenhouse moon',
       'hydrocarbon-world': 'Hydrocarbon moon',
       'ocean-world': 'Ocean moon',
+      'steam-world': 'Steam moon',
     },
     ringMoonTypes: {
       embedded: 'ring moon',

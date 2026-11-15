@@ -969,6 +969,7 @@ export const fr: Messages = {
       'runaway-greenhouse': 'Serre emballée',
       'hydrocarbon-world': "Monde d'hydrocarbures",
       'ocean-world': 'Monde océan',
+      'steam-world': 'Monde de vapeur',
       'rocky-moon': 'lune rocheuse',
       'icy-moon': 'lune glacée',
     },
@@ -987,6 +988,7 @@ export const fr: Messages = {
       'runaway-greenhouse': 'Lune à effet de serre incontrôlé',
       'hydrocarbon-world': 'Lune à hydrocarbures',
       'ocean-world': 'Lune océan',
+      'steam-world': 'Lune de vapeur',
     },
     ringMoonTypes: {
       embedded: 'lune des anneaux',

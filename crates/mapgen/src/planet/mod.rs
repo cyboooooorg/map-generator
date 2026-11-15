@@ -76,7 +76,9 @@ pub use explain::{Cause, Explanation, InputField, Quantity, explain};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use ice_shell::{IceShell, ice_shell};
 pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_with};
-pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
+pub use interior::{
+    GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior, steam_interior,
+};
 pub use life::{Life, life, oxygenate};
 pub use mass::{Origin, SMALL_MASS, draw_mass};
 pub use moon::{MoonBirth, MoonFormation, derive_moon_model};
@@ -123,6 +125,10 @@ pub enum Material {
     Rock,
     Water,
     Envelope,
+    /// Water above its critical point over the rock of a steam world: a
+    /// supercritical envelope with no liquid–gas boundary
+    /// ([`climate::hides_surface`], [`interior::steam_interior`]).
+    Steam,
 }
 
 /// One shell of a planet, from the outer radius of the layer below.
@@ -446,6 +452,15 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         }
         air = Some(steps.before);
         Some(steps.surface)
+    };
+    // A deep supercritical steam column hides the surface and inflates
+    // the planet (#492): its interior is derived again with the steam on
+    // top, once, without re-running the climate under the new gravity.
+    let interior = match &surface {
+        Some(s) if climate::hides_surface(s) => {
+            steam_interior(&interior, inputs.mass_earth, s.water.kept_kg, &exposure)
+        }
+        _ => interior,
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
     let ice_shell = ice_shell(&interior, &heat, surface.as_ref());

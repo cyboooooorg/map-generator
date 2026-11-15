@@ -64,9 +64,12 @@ use std::sync::Arc;
 /// world's class, archetype, model and look instead of its preset;
 /// version 5 gives each round moon its model, its class as its type and
 /// its world as a planet's, and marks every moon's world
-/// ([`WorldParams::moon`]). A system of another version is refused by
+/// ([`WorldParams::moon`]); version 6 comes with the climate pass (the
+/// radiative-convective column, boiling at the moist limit) and types a
+/// runaway under a deep steam column as a `steam-world`, its radius
+/// raised by the steam (#492). A system of another version is refused by
 /// [`read_system`], not migrated.
-pub const SYSTEM_FORMAT_VERSION: u32 = 5;
+pub const SYSTEM_FORMAT_VERSION: u32 = 6;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.

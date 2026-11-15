@@ -21,7 +21,11 @@
 //!    ocean (`Water::boiled`), all of them and the runaway-greenhouse
 //!    class alone, how many boils left water that condensed again into
 //!    an ocean, and how many wet planets stay past 647 K (none should:
-//!    a wet surface with no balance boils), and how many
+//!    a wet surface with no balance boils), the runaways by decade of
+//!    their steam column (bar), steam worlds apart, with the median
+//!    surface temperature of each decade (the steam-world line,
+//!    `planet::climate::STEAM_WORLD_MIN_BAR`, should cut through a thin
+//!    band), and how many
 //!    planets that are no giant (nor mini-Neptune) keep an envelope that
 //!    hides their surface, by class (they render with their class's
 //!    preset, see `planet::interim::base_of`);
@@ -99,6 +103,10 @@ fn main() {
     let mut runaways = [0u32; 2];
     let mut runaway_class = [0u32; 2];
     let mut hot_and_wet = 0u32;
+    // Runaways by decade of steam column, bar (`< 1` first, `>= 1e5`
+    // last): [other classes, steam worlds], and their temperatures.
+    let mut steam_columns = [[0u32; 2]; 7];
+    let mut steam_temperatures: [Vec<f64>; 7] = Default::default();
     let mut recondensed = 0u32;
     let mut oxygenated = 0u32;
     let mut close_in = [0u32; 20];
@@ -144,6 +152,11 @@ fn main() {
                 );
                 recondensed += u32::from(!surface.water.runaway && surface.water.boiled);
                 if surface.water.runaway {
+                    let decade = (surface.gases.h2o.max(1e-30).log10().floor() + 1.0)
+                        .clamp(0.0, 6.0) as usize;
+                    let steam_world = model.class == mapgen::planet::PlanetClass::SteamWorld;
+                    steam_columns[decade][usize::from(steam_world)] += 1;
+                    steam_temperatures[decade].push(surface.climate.temperature_k);
                     let source = usize::from(surface.water.boiled);
                     runaways[source] += 1;
                     if model.class == mapgen::planet::PlanetClass::RunawayGreenhouse {
@@ -273,6 +286,21 @@ fn main() {
     );
     println!("boils whose leftover water condensed again: {recondensed}");
     println!("wet, not in runaway and past 647 K: {hot_and_wet}");
+    println!(
+        "runaways by steam column (other classes / steam worlds, median K), \
+         steam-world line {} bar:",
+        mapgen::planet::climate::STEAM_WORLD_MIN_BAR
+    );
+    let decades = [
+        "<1", "1-10", "10-1e2", "1e2-1e3", "1e3-1e4", "1e4-1e5", ">=1e5",
+    ];
+    for (i, label) in decades.iter().enumerate() {
+        let [other, steam] = steam_columns[i];
+        println!(
+            "  {label:>8} bar: {other:>4} / {steam:>4}  {:.0} K",
+            median(&mut steam_temperatures[i])
+        );
+    }
     println!(
         "\nlife: {:.1} % of planets with a surface ({life}), {:.1} % oxygenated ({oxygenated})",
         share(life, with_surface),

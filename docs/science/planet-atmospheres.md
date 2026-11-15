@@ -466,6 +466,24 @@ heat flux. The column:
 τ_i = k_i (p_i / 1 bar)^a_i (P_b,i / 1 bar)^½        (a uniform column)
 ```
 
+**Albedo of a water runaway** (`climate::absorbing`, issue #492). A body
+in a water runaway (by the insolation limit or a boil) that keeps steam
+in its air absorbs under
+the Bond albedo that puts the column's moist plateau (`F_plateau`, about
+287 W/m², the column's OLR over a saturated surface at 380 K) exactly at
+its star's runaway limit `S_rg` (`star::habitable_fluxes`), clamped to
+0 to 0.9: `A_rg = 1 − 4 F_plateau / (S_rg S₀)`, with `S₀` the solar
+constant behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). Kopparapu et al.
+2013 (doi:10.1088/0004-637X/765/2/131) and 2014 place the runaway limit
+where the light a moist atmosphere absorbs, with the albedo its own
+spectrum gives under that star, meets its outgoing limit. With Earth's
+0.3, a planet round a red star that runs away by that limit
+(0.91 S⊕ for an M9V) would absorb under the plateau and sit on water's
+critical point. With `A_rg` (0.08 for an M9V, 0.24 for the Sun) it
+balances past the plateau. Wet bodies keep 0.3, so Earth's calibration
+does not move. So does a runaway whose escape took all its water
+(Mercury, Venus), which has no moist air left. Albedo in general is issue #510.
+
 `p_i` are the partial pressures of CO₂, H₂O and CH₄ and `P_b,i` the
 pressure that broadens each gas's lines (below). The square roots are the
 strong-line limit of a pressure-broadened band, which absorbs as
@@ -738,13 +756,48 @@ The first rule that holds wins:
 |---|---|---|
 | 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
-| 3 | `lava-world` | surface liquid is lava (at least 1400 K, no water kept) |
-| 4 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
-| 5 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
-| 6 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
-| 7 | `ice-world` | at least 5 % water and ices |
-| 8 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
-| 9 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
+| 3 | `steam-world` | in water runaway, at least 2206 bar of steam (ten times water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
+| 4 | `lava-world` | surface liquid is lava (at least 1400 K, no water kept) |
+| 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
+| 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
+| 7 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
+| 8 | `ice-world` | at least 5 % water and ices |
+| 9 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
+| 10 | `super-earth`, `rocky` | radius of at least 1.25 R⊕, rocky below |
+
+A `steam-world` (issue #492) is a runaway whose water stands as a deep
+supercritical column over the rock. Above water's critical point there
+is no liquid–gas boundary, so no surface shows, lava or rock. The line
+of ten times the critical pressure (`STEAM_WORLD_MIN_BAR`) is a
+calibration: in the census no runaway holds between 1e3 and 1e5 bar of
+steam, so it cuts through an empty band. A wet planet is never one.
+Once the surface is known, the chain derives the interior again
+(`interior::steam_interior`): the water layer gives way to a `Steam`
+layer of the water kept, on top of the iron and rock. Its thickness
+comes from Turbet et al. 2020 (A&A 638, A41, arXiv:1911.08878): Eq. 2
+in the form of their Appendix C, for an isothermal envelope in
+hydrostatic balance. The printed Eq. 2 has `RT/(Mg)` upside down.
+
+```text
+1/z = M g / (R T ln(P_surf / P_transit)) − 1/R_core
+P_surf = f/(1−f) g² / (4πG),  P_transit = 0.1 Pa
+```
+
+The core is the iron and rock, and `f` is the steam's share of core and
+steam. `T` comes from their Eq. 3 and Table 2, a polynomial in
+`log₁₀ f`, `log₁₀ g` and `log₁₀ S`, with its inputs clamped:
+
+- `S` to 1 to 30 S⊕;
+- `g` to 0.2 to 6 g⊕;
+- the share to the shares whose steam weighs 27 bar to 270 kbar, the
+  structures the fit was made on (§2.1).
+
+§2.2 calls Eq. 3 valid only up to 27 kbar, but clamped there it puts a
+steam world below its condensed twin. The paper's own example comes back
+1.17 R⊕ (a 0.3 M⊕ silicate core with 5 % water; "around 1.2 R⊕").
+Density and gravity count the whole mass. The climate is not solved
+again under the new gravity, and the cause trees replay the surface on
+the interior from before the steam.
 
 The `volcanic-world` is Io's class: Moore & Webb 2013
 (doi:10.1038/nature12424) model its resurfacing as heat-pipe tectonics,
@@ -767,6 +820,10 @@ which no liquid methane is stable; it took the 1 bar until part 4, when
 Titans drawn with 0.6 to 1 bar kept lakes but were classed ice worlds.
 It keeps a cold body with a trace of methane over its ice under a thin
 air an ice world. Titan has 2.1 bar in the model.
+
+The case of issue #492 (4.78 M⊕, 12 % water, an M9V star at 0.018 AU)
+is a `steam-world`: 4.1e5 bar of steam over a surface at 1679 K, and
+1.700 R⊕ (1.641 with its water condensed).
 
 The Solar System classifies as itself: Venus `runaway-greenhouse`, Earth
 and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa

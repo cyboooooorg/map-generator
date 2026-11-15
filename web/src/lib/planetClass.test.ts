@@ -20,6 +20,7 @@ const PLANET_CLASSES = [
   'runaway-greenhouse',
   'hydrocarbon-world',
   'ocean-world',
+  'steam-world',
 ];
 
 describe('planet classes', () => {

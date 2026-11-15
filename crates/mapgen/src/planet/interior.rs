@@ -200,6 +200,199 @@ pub(crate) fn envelope_thickness(
     lopez_fortney_thickness(mass_earth, envelope, exposure.insolation, exposure.age_gyr) * factor
 }
 
+/// Coefficients of the fit of the isothermal temperature of a runaway
+/// steam envelope, Turbet et al. 2020 (A&A 638, A41,
+/// doi:10.1051/0004-6361/201937151, arXiv:1911.08878), their Table 2:
+/// `α₁…α₆` centre and scale the inputs, `β₁…β₁₀` weigh the terms of
+/// their Eq. 3 ([`steam_temperature_k`]).
+const TURBET_ALPHA: [f64; 6] = [-3.550, 1.310, 1.099, 4.683e-1, 7.664e-1, 4.224e-1];
+const TURBET_BETA: [f64; 10] = [
+    2.846, 1.555e-1, 8.777e-2, 6.045e-2, 1.143e-2, 1.736e-2, 1.859e-2, 4.314e-2, 3.393e-2,
+    -1.034e-2,
+];
+
+/// Pressure of the transit radius over a steam envelope, Pa: about
+/// 0.1 Pa over the whole grid of Turbet et al. 2020 (§2.2).
+const TURBET_TRANSIT_PA: f64 = 0.1;
+
+/// Range of the fit of Turbet et al. 2020: irradiation 1 to 30 S⊕ and
+/// surface gravity 0.2 to 6 g⊕ (§2.2, where Eq. 3 is "valid"), and the
+/// steam pressures of the atmospheric structures the fit was made on,
+/// 27 bar to 270 kbar (§2.1; in Pa here). §2.2 states Eq. 3 valid to
+/// 27 kbar only, but clamped there it takes a steam world's envelope
+/// below the same water condensed (the #492 body at 1.61 R⊕ against
+/// 1.64), against the paper's own finding; up to the simulated 270 kbar
+/// the polynomial is still on its grid.
+const TURBET_INSOLATION: (f64, f64) = (1.0, 30.0);
+const TURBET_GRAVITY_EARTH: (f64, f64) = (0.2, 6.0);
+const TURBET_STEAM_PA: (f64, f64) = (2.7e6, 2.7e10);
+
+/// Standard gravity, m/s² (CGPM 1901), the `g⊕` of Turbet et al.'s range.
+const EARTH_GRAVITY_M_S2: f64 = 9.806_65;
+
+/// Molar gas constant, J/(mol·K) (CODATA 2018, exact), and the molar mass
+/// of water, kg/mol (18.015 g/mol).
+const GAS_CONSTANT: f64 = 8.314_462_618;
+const WATER_MOLAR_KG: f64 = 18.015e-3;
+
+/// Temperature of the isothermal steam envelope of a runaway water-rich
+/// planet above its photosphere, K: Eq. 3 and Table 2 of Turbet et al.
+/// 2020 (doi:10.1051/0004-6361/201937151), `log₁₀ T = β₁ + β₂x + β₃y +
+/// β₄z + β₅xy + β₆y² + β₇x³ + β₈x²y + β₉xy² + β₁₀y⁴` with `x = (log₁₀ f −
+/// α₁)/α₂` of the water mass fraction `f`, `y = (log₁₀ g − α₃)/α₄` of the
+/// gravity at the core in m/s², `z = (log₁₀ S − α₅)/α₆` of the
+/// irradiation in S⊕.
+///
+/// The fit is a polynomial: outside its grid it runs off (its `x³`
+/// term grows fast with the water share). Its inputs are clamped to the
+/// grid ([`TURBET_STEAM_PA`]): `S` to 1–30 S⊕, `g` to 0.2–6 g⊕, and the
+/// water share to the shares whose steam weighs 27 bar to 270 kbar at
+/// that gravity (`P = f/(1−f) g²/(4πG)`, their Eq. 2). A steam world
+/// deeper than that takes the temperature of the grid's deepest steam.
+fn steam_temperature_k(water_share: f64, core_gravity_m_s2: f64, insolation: f64) -> f64 {
+    let g = core_gravity_m_s2.clamp(
+        TURBET_GRAVITY_EARTH.0 * EARTH_GRAVITY_M_S2,
+        TURBET_GRAVITY_EARTH.1 * EARTH_GRAVITY_M_S2,
+    );
+    // Water share at which the steam weighs `p` at gravity `g`.
+    let share_at = |p: f64| {
+        let ratio = p * 4.0 * std::f64::consts::PI * crate::exomoon::G / (g * g);
+        ratio / (1.0 + ratio)
+    };
+    let f = water_share.clamp(share_at(TURBET_STEAM_PA.0), share_at(TURBET_STEAM_PA.1));
+    let s = insolation.clamp(TURBET_INSOLATION.0, TURBET_INSOLATION.1);
+    let [a1, a2, a3, a4, a5, a6] = TURBET_ALPHA;
+    let b = TURBET_BETA;
+    let x = (f.log10() - a1) / a2;
+    let y = (g.log10() - a3) / a4;
+    let z = (s.log10() - a5) / a6;
+    let log_t = b[0]
+        + b[1] * x
+        + b[2] * y
+        + b[3] * z
+        + b[4] * x * y
+        + b[5] * y * y
+        + b[6] * x.powi(3)
+        + b[7] * x * x * y
+        + b[8] * x * y * y
+        + b[9] * y.powi(4);
+    10f64.powf(log_t)
+}
+
+/// Thickness of the steam envelope of a runaway water-rich planet, Earth
+/// radii, up to its transit radius, on a core of `core_mass_earth` and
+/// `core_radius_earth` holding `steam_earth` of water as steam, under
+/// `insolation` S⊕.
+///
+/// Turbet et al. 2020 (doi:10.1051/0004-6361/201937151, arXiv:1911.08878),
+/// their Eq. 2 in the form of their Appendix C (an isothermal envelope in
+/// hydrostatic balance under a gravity falling as `1/r²`; the printed
+/// Eq. 2 has `RT/(Mg)` upside down, which Appendix C settles):
+/// `1/z = M g / (R T ln(P_surf / P_transit)) − 1/R_core`, with `P_surf =
+/// f/(1−f) g²/(4πG)` the weight of the steam, `f` the water mass
+/// fraction, `g` the gravity at the core, `M` the molar mass of water,
+/// `P_transit` about 0.1 Pa ([`TURBET_TRANSIT_PA`]) and `T` of their
+/// Eq. 3 ([`steam_temperature_k`], clamped to its grid). Eq. 2 itself is
+/// hydrostatics and takes the planet's own share, gravity and radius
+/// unclamped.
+///
+/// An envelope so hot or so light that `1/z` reaches 0 is not bound in
+/// this isothermal form (the paper warns it does not hold for inflated
+/// atmospheres); the thickness is capped at the core's radius, which no
+/// steam world of the census approaches. Calibration, no source.
+fn turbet_thickness(
+    core_mass_earth: f64,
+    core_radius_earth: f64,
+    steam_earth: f64,
+    insolation: f64,
+) -> f64 {
+    use crate::exomoon::{EARTH_KG, EARTH_M, G};
+    if steam_earth <= 0.0 || core_mass_earth <= 0.0 || core_radius_earth <= 0.0 {
+        return 0.0;
+    }
+    let share = steam_earth / (core_mass_earth + steam_earth);
+    let core_m = core_radius_earth * EARTH_M;
+    let g = G * core_mass_earth * EARTH_KG / (core_m * core_m);
+    let surface_pa = share / (1.0 - share) * g * g / (4.0 * std::f64::consts::PI * G);
+    let depth = (surface_pa / TURBET_TRANSIT_PA).ln();
+    if depth <= 0.0 {
+        return 0.0;
+    }
+    let t = steam_temperature_k(share, g, insolation);
+    let inverse = WATER_MOLAR_KG * g / (GAS_CONSTANT * t * depth) - 1.0 / core_m;
+    let cap = core_m;
+    let z = if inverse * cap <= 1.0 {
+        cap
+    } else {
+        1.0 / inverse
+    };
+    z / EARTH_M
+}
+
+/// The interior of a steam world (#492): the `solid` layers with their
+/// water turned to a supercritical steam envelope of `steam_kg` on top of
+/// the rock, the radius raised by its thickness ([`turbet_thickness`],
+/// after Turbet et al. 2020, doi:10.1051/0004-6361/201937151, for the
+/// refractory layers as the core, the steam's share of core and steam as
+/// the water fraction, and the `exposure`'s insolation), the density and
+/// gravity of the whole `mass_earth` at that radius.
+///
+/// The water layer of `solid` (the drawn water, condensed) gives way to
+/// the steam, which is the water the runaway kept: what escape took is
+/// gone. Any layer above the water (a trace of hydrogen) moves out by the
+/// change of radius. Without steam, the `solid` interior as it is.
+pub fn steam_interior(
+    solid: &Interior,
+    mass_earth: f64,
+    steam_kg: f64,
+    exposure: &Exposure,
+) -> Interior {
+    let steam_earth = steam_kg / crate::exomoon::EARTH_KG;
+    if steam_earth <= 0.0 {
+        return solid.clone();
+    }
+    let water = solid
+        .layers
+        .iter()
+        .position(|l| l.material == Material::Water);
+    let below = water.unwrap_or_else(|| {
+        solid
+            .layers
+            .iter()
+            .position(|l| l.material == Material::Envelope)
+            .unwrap_or(solid.layers.len())
+    });
+    let core = &solid.layers[..below];
+    let core_mass: f64 = core.iter().map(|l| l.mass_earth).sum();
+    let core_radius = core.last().map_or(0.0, |l| l.outer_radius_earth);
+    let top_before = if below == 0 {
+        0.0
+    } else {
+        solid.layers[water.unwrap_or(below - 1)].outer_radius_earth
+    };
+    let steam_radius =
+        core_radius + turbet_thickness(core_mass, core_radius, steam_earth, exposure.insolation);
+    let shift = steam_radius - top_before;
+    let mut layers = core.to_vec();
+    layers.push(Layer {
+        material: Material::Steam,
+        mass_earth: steam_earth,
+        outer_radius_earth: steam_radius,
+    });
+    let above = water.map_or(below, |w| w + 1);
+    layers.extend(solid.layers[above..].iter().map(|l| Layer {
+        outer_radius_earth: l.outer_radius_earth + shift,
+        ..*l
+    }));
+    let radius_earth = layers.last().map_or(0.0, |l| l.outer_radius_earth);
+    Interior {
+        layers,
+        radius_earth,
+        density: EARTH_DENSITY * mass_earth / radius_earth.powi(3),
+        gravity: mass_earth / radius_earth.powi(2),
+    }
+}
+
 /// The layers of a planet with its hydrogen and helium envelope, its
 /// radius, bulk density and surface gravity, under its star's `exposure`.
 ///
@@ -252,6 +445,7 @@ pub fn interior(inputs: &PlanetInputs, exposure: &Exposure) -> Interior {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exomoon::EARTH_KG;
     use crate::planet::Exposure;
     use crate::planet::reference::{exposure_at, inputs, inputs_of, reference, with_envelope};
 
@@ -535,6 +729,44 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn steam_inflates_the_radius_with_the_water_share() {
+        // A 5 M⊕ rock with Earth's core under 10 S⊕: no steam leaves the
+        // solid as it is, more steam makes a larger planet, and the steam
+        // is the outer layer holding its mass.
+        let solid = solid_interior(&inputs(5.0, 0.325, 0.0));
+        let exposure = lit(10.0);
+        assert_eq!(steam_interior(&solid, 5.0, 0.0, &exposure), solid);
+        let mut last = solid.radius_earth;
+        for share in [1e-5, 1e-4, 1e-3, 0.01, 0.05, 0.1, 0.2] {
+            let steam_earth = 5.0 * share / (1.0 - share);
+            let mass = 5.0 + steam_earth;
+            let steamy = steam_interior(&solid, mass, steam_earth * EARTH_KG, &exposure);
+            let r = steamy.radius_earth;
+            assert!(r.is_finite() && r > last, "{share}: {r} after {last}");
+            last = r;
+            let top = steamy.layers.last().unwrap();
+            assert_eq!(top.material, Material::Steam);
+            assert!((top.mass_earth - steam_earth).abs() < 1e-9 * mass);
+            assert_eq!(top.outer_radius_earth, r);
+            assert!((steamy.gravity - mass / (r * r)).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn steam_replaces_the_condensed_water_layer() {
+        // The water layer of the solid interior turns into the steam: the
+        // envelope sits on the rock, not on a condensed ocean.
+        let solid = solid_interior(&inputs(4.78, 0.25, 0.12));
+        let water = solid.layers.last().unwrap();
+        assert_eq!(water.material, Material::Water);
+        let steamy = steam_interior(&solid, 4.78, water.mass_earth * EARTH_KG, &lit(5.0));
+        let materials: Vec<Material> = steamy.layers.iter().map(|l| l.material).collect();
+        assert_eq!(materials, [Material::Iron, Material::Rock, Material::Steam]);
+        let mass: f64 = steamy.layers.iter().map(|l| l.mass_earth).sum();
+        assert!((mass - 4.78).abs() < 1e-9, "{mass}");
     }
 
     #[test]

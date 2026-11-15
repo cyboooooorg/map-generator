@@ -27,13 +27,18 @@ pub enum PlanetClass {
     RunawayGreenhouse,
     HydrocarbonWorld,
     OceanWorld,
+    /// A runaway whose water is a deep supercritical column hiding its
+    /// surface ([`super::climate::hides_surface`]): a world of steam over
+    /// rock, inflated by it, with no hydrogen and helium envelope (#492;
+    /// Turbet et al. 2020, doi:10.1051/0004-6361/201937151).
+    SteamWorld,
 }
 
 impl PlanetClass {
     /// The class as stored: `rocky`, `super-earth`, `ice-world`,
     /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
     /// `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
-    /// `ocean-world`.
+    /// `ocean-world`, `steam-world`.
     pub fn key(self) -> &'static str {
         match self {
             Self::Rocky => "rocky",
@@ -49,6 +54,7 @@ impl PlanetClass {
             Self::RunawayGreenhouse => "runaway-greenhouse",
             Self::HydrocarbonWorld => "hydrocarbon-world",
             Self::OceanWorld => "ocean-world",
+            Self::SteamWorld => "steam-world",
         }
     }
 
@@ -88,7 +94,7 @@ impl PlanetClass {
 /// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
 /// order: the types a planet of a system is stored as. The server and the
 /// web read the same list.
-pub const PLANET_CLASSES: [&str; 13] = [
+pub const PLANET_CLASSES: [&str; 14] = [
     "rocky",
     "super-earth",
     "ice-world",
@@ -102,6 +108,7 @@ pub const PLANET_CLASSES: [&str; 13] = [
     "runaway-greenhouse",
     "hydrocarbon-world",
     "ocean-world",
+    "steam-world",
 ];
 
 /// Least hydrogen and helium share of a gas giant; a giant with less is an
@@ -177,7 +184,10 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///    is a hot Jupiter (a gas giant) or a hot Neptune (an ice giant);
 /// 2. an envelope of at least 0.1 % of the mass and a radius of at least
 ///    1.6 R⊕: a mini-Neptune;
-/// 3. with a `surface` (an enveloped body has none): a lava world (liquid
+/// 3. with a `surface` (an enveloped body has none): a steam world (a
+///    deep supercritical steam column hides the surface, see
+///    [`super::climate::hides_surface`]; tested first, since no lava or
+///    rock shows under it), a lava world (liquid
 ///    lava), a runaway greenhouse (runaway and over
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
 ///    more than [`METHANE_TRIPLE_BAR`]), an
@@ -233,7 +243,9 @@ pub fn classify(
 /// The class a surface gives, if it gives one (see [`classify`]).
 fn surface_class(surface: &Surface) -> Option<PlanetClass> {
     let liquid = surface.climate.liquid;
-    if liquid == SurfaceLiquid::Lava {
+    if super::climate::hides_surface(surface) {
+        Some(PlanetClass::SteamWorld)
+    } else if liquid == SurfaceLiquid::Lava {
         Some(PlanetClass::LavaWorld)
     } else if surface.water.runaway && surface.gases.total() > DENSE_AIR_BAR {
         Some(PlanetClass::RunawayGreenhouse)
@@ -385,6 +397,7 @@ mod tests {
             RunawayGreenhouse,
             HydrocarbonWorld,
             OceanWorld,
+            SteamWorld,
         ]
         .into_iter()
         .enumerate()
@@ -407,6 +420,7 @@ mod tests {
         assert_eq!(HotJupiter.key(), "hot-jupiter");
         assert_eq!(RunawayGreenhouse.key(), "runaway-greenhouse");
         assert_eq!(HydrocarbonWorld.key(), "hydrocarbon-world");
+        assert_eq!(SteamWorld.key(), "steam-world");
     }
 
     #[test]
@@ -616,6 +630,93 @@ mod tests {
         assert!(surface.water.kept_kg < 1e-3 * all, "{surface:?}");
         assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
         assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    /// The model of the case of #492 (system mgs-81447-3145862552, body
+    /// b): 4.78 M⊕ of iron 1.06, rock 3.16 and water 0.56 M⊕ (12 %), the
+    /// volatiles of the rule without scatter, round an M9V star at
+    /// 0.018 AU.
+    fn the_492_super_earth() -> crate::planet::PlanetModel {
+        let (iron, rock, water) = (1.06, 3.16, 0.56);
+        let mass = iron + rock + water;
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            ..reference::inputs(mass, iron / (iron + rock), water / mass)
+        };
+        let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
+        planet_model(&Context::of(&star, 0.0, 0.1), inputs)
+    }
+
+    #[test]
+    fn the_492_super_earth_is_a_steam_world() {
+        // Its water runs away under the insolation and stays a deep
+        // supercritical column, hundreds of thousands of bar: the surface
+        // is hidden and the steam inflates the radius (1.64 R⊕ with the
+        // water condensed).
+        let model = the_492_super_earth();
+        let surface = model.surface.expect("a bare body has a surface");
+        assert_eq!(model.class, SteamWorld, "{surface:?}");
+        assert!(surface.gases.h2o > 1e5, "{surface:?}");
+        // Past the moist plateau, not held at water's critical point.
+        assert!(surface.climate.temperature_k > 1000.0, "{surface:?}");
+        let top = model.interior.layers.last().unwrap();
+        assert_eq!(top.material, crate::planet::Material::Steam);
+        // Larger than the same body with its water condensed, and than
+        // the Turbet et al. fit clamped to its narrower Eq. 3 range
+        // (27 kbar), which gave 1.61 R⊕.
+        let condensed = crate::planet::solid_interior(&model.inputs).radius_earth;
+        assert!((1.6..1.7).contains(&condensed), "{condensed}");
+        let radius = model.interior.radius_earth;
+        println!(
+            "#492 b: {:.0} K, {:.0} bar of steam, {radius:.3} R⊕ ({condensed:.3} \
+             condensed), {:.2} g/cm³, {:.2} g⊕",
+            surface.climate.temperature_k,
+            surface.gases.h2o,
+            model.interior.density,
+            model.interior.gravity
+        );
+        assert!(radius > condensed, "{radius} vs {condensed}");
+        assert!(radius > 1.61, "{:?}", model.interior);
+        assert!(!SteamWorld.is_giant());
+    }
+
+    #[test]
+    fn thin_steam_over_rock_stays_a_runaway_greenhouse() {
+        // 1 M⊕ with 0.01 % of water (about 115 bar if all of it were
+        // steam) at 0.7 AU round the Sun, inside the runaway limit of the
+        // insolation: the steam column is far under ten times the
+        // critical pressure, the rock stays visible.
+        let model = model_at(1.0, 1.0e-4, 0.7);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(surface.water.runaway, "{surface:?}");
+        assert!(
+            !crate::planet::climate::hides_surface(&surface),
+            "{surface:?}"
+        );
+        assert_eq!(model.class, RunawayGreenhouse, "{surface:?}");
+        assert!(
+            model
+                .interior
+                .layers
+                .iter()
+                .all(|l| l.material != crate::planet::Material::Steam)
+        );
+    }
+
+    #[test]
+    fn a_hot_icy_moon_is_no_steam_world_without_a_deep_column() {
+        // Europa's make (8 % water) at 0.5 AU round the Sun: its ice runs
+        // away, but a body that small holds too thin a steam column (all
+        // its water would weigh about 1300 bar) to hide its surface.
+        for orbit_au in [0.3, 0.5, 0.7] {
+            let europa = model_inputs(reference("Europa"));
+            let model = planet_model(&sun_at(orbit_au), europa);
+            let surface = model.surface.expect("a bare body has a surface");
+            assert!(surface.water.runaway, "{orbit_au}: {surface:?}");
+            let hidden = crate::planet::climate::hides_surface(&surface);
+            assert_eq!(model.class == SteamWorld, hidden, "{orbit_au}: {surface:?}");
+            assert_ne!(model.class, SteamWorld, "{orbit_au}: {surface:?}");
+        }
     }
 
     #[test]

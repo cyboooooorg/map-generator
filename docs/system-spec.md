@@ -561,7 +561,7 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (5), the request, the seed and the map size. A
+  - `format_version` (6), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
     body's files directly in `bodies/<id>/`, version 2 typed its planets
     by preset and stored no physical model, version 3 kept a preset in
@@ -586,7 +586,7 @@ systems/<system-id>/
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
     `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
     `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
-    `ocean-world`), its `physical.mass_earth` the model's mass after
+    `ocean-world`, `steam-world`), its `physical.mass_earth` the model's mass after
     photoevaporation; its world renders, until #424, with the look
     closest to the model (`planet::interim::base_of`), and the model of
     a planet with a surface drives the world
