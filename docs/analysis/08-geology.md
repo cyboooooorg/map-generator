@@ -570,8 +570,9 @@ without plates takes it, as it takes Mars's crust; dry worlds keep their
 plains. `mars-like` at 256 × 128, seeds 1–6, thick crust 41 → 58 %, span
 20.5 → 24.2, 19.1 → 22.0, 9.7 → 13.6, 20.4 → 23.3, 16.0 → 17.7,
 16.6 → 18.0 km, Mountain + Snow 14.8 → 12.8, 10.8 → 8.7, 16.1 → 13.7,
-37.7 → 38.7, 32.3 → 31.6, 28.5 → 27.5 % of land. A wet heat-pipe
-`super-earth` (seed 2) goes from 39 to 56 % of land.
+37.7 → 38.5, 32.3 → 31.6, 28.5 → 27.5 % of land. Small rocky moons
+(no model, not dry) take it too: a Moon-sized one spans 12.7–14.7 km
+(12.3–14.0 before).
 
 ### Outcome (highland band of plate worlds, #459, 2026-11-15)
 
@@ -580,9 +581,9 @@ Snow) is measured from the higher of its sea and its continental datum,
 the shelf break of its floating crust (3.09 km above the old floor with
 Earth's crust), not from the sea alone (`generation::highland_datum`).
 Part 3c had done the same for worlds without plates with the thin
-crust's datum. `super-earth` at 256 × 128, seeds 1 and 3–7 (plates),
-Mountain + Snow 34.6 → 1.1, 42.6 → 1.1, 40.9 → 17.1, 44.9 → 4.5,
-69.1 → 6.7, 57.8 → 0.2 % of land; land above 2 km is unchanged (the
+crust's datum. `super-earth` at 256 × 128, seeds 1–4, 6 and 8 (plates),
+Mountain + Snow 34.5 → 1.1, 61.5 → 5.6, 42.0 → 1.1, 40.9 → 17.1,
+69.2 → 6.7, 39.7 → 5.5 % of land; land above 2 km is unchanged (the
 relief does not move). `earth-like` seeds 1–4, whose sea stands above the
 shelf break, keep 12.2, 13.5, 6.5 and 8.5 %, identical.
 

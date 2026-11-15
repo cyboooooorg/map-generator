@@ -510,7 +510,10 @@ const MARS_CRUST: Crust = Crust {
 ///
 /// Every regime without plates takes it, as it takes Mars's crust
 /// ([`crust_of`]): an episodic lid is a stagnant one between overturns,
-/// and no source gives the thick crust's share of a heat-pipe world. Dry
+/// and no source gives the thick crust's share of a heat-pipe world.
+/// Small moons without a model, whose crust floats too, take it as well
+/// (a Moon-sized rocky moon spans 12.7-14.7 km on seeds 1, 2 and 7 at
+/// 256 × 128, 12.3-14.0 km with Earth's share). Dry
 /// worlds (`venus-like`, `mercury-like`) do not float their crust: their
 /// plains stand on [`DRY_PLATFORM_KM`].
 const MARS_HIGHLAND_SHARE: f64 = 0.58;
@@ -890,8 +893,8 @@ fn continental_datum(crust: &Crust) -> f32 {
 /// - with plates, the higher of its sea and its continental datum
 ///   ([`continental_datum`]). A world with little water has its sea low
 ///   and its continents standing kilometres above it, as high flat
-///   platforms: measured from the sea, 34-69 % of the land of
-///   `super-earth`'s plate worlds (seeds 1 and 3-7) was Mountain or Snow,
+///   platforms: measured from the sea, 35-69 % of the land of
+///   `super-earth`'s plate worlds (seeds 1-4, 6 and 8) was Mountain or Snow,
 ///   against 6-14 % on `earth-like` worlds. Measured from the shelf break
 ///   the band reads the ranges, plate boundaries and volcanoes built on
 ///   the continents, as on Earth, whose sea stands near it. A plate
@@ -3461,8 +3464,9 @@ pub(crate) mod tests {
     /// A plate world with little water has a low sea and continents
     /// standing kilometres above it: its highland band is measured from
     /// the continental datum, not from the sea, so a high platform is not
-    /// a mountain range (#459). On main, `super-earth` seeds 1 and 3-7
-    /// (plates) had 35-69 % of their land Mountain or Snow; `earth-like`
+    /// a mountain range (#459). Measured from the sea, `super-earth`
+    /// seeds 1-4, 6 and 8 (plates) had 35-69 % of their land Mountain or
+    /// Snow, 1-17 % now; `earth-like`
     /// worlds, whose sea stands above the datum, keep 6-14 %.
     #[test]
     fn plate_worlds_measure_their_highlands_from_the_continents() {

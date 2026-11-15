@@ -247,8 +247,8 @@ flowchart LR
    higher of the sea and the continental datum, the shelf break (3.09 km
    above the old floor with Earth's crust): a world with little water,
    its sea low and its continents high and flat, no longer reads its
-   platforms as mountains (`super-earth`'s plate worlds, seeds 1 and 3–7
-   at 256 × 128: 0.2–17 % of land Mountain or Snow, against 35–69 %
+   platforms as mountains (`super-earth`'s plate worlds, seeds 1–4, 6
+   and 8 at 256 × 128: 1–17 % of land Mountain or Snow, against 35–69 %
    measured from the sea), while `earth-like` worlds, their sea above the
    shelf break, keep their band (6.5–13.5 %, unchanged). Dry worlds and
    moons keep the band above the sea.
