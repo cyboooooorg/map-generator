@@ -573,6 +573,19 @@ plains. `mars-like` at 256 × 128, seeds 1–6, thick crust 41 → 58 %, span
 37.7 → 38.7, 32.3 → 31.6, 28.5 → 27.5 % of land. A wet heat-pipe
 `super-earth` (seed 2) goes from 39 to 56 % of land.
 
+### Outcome (highland band of plate worlds, #459, 2026-11-15)
+
+On a wet plate world with a planet model the highland band (Mountain,
+Snow) is measured from the higher of its sea and its continental datum,
+the shelf break of its floating crust (3.09 km above the old floor with
+Earth's crust), not from the sea alone (`generation::highland_datum`).
+Part 3c had done the same for worlds without plates with the thin
+crust's datum. `super-earth` at 256 × 128, seeds 1 and 3–7 (plates),
+Mountain + Snow 34.6 → 1.1, 42.6 → 1.1, 40.9 → 17.1, 44.9 → 4.5,
+69.1 → 6.7, 57.8 → 0.2 % of land; land above 2 km is unchanged (the
+relief does not move). `earth-like` seeds 1–4, whose sea stands above the
+shelf break, keep 12.2, 13.5, 6.5 and 8.5 %, identical.
+
 ### Outcome (impact flux and crater size from the orbit, #313, 2026-11-14)
 
 Part 3c of the planet model (#423). `[geology] impact_ratio` and

@@ -236,15 +236,22 @@ flowchart LR
    above 2 km and 1.3–2.9 % above 4 km. A dry world keeps its rolling
    plains, laid from its datum. The biomes' highland band (mountain and
    snow, 2 km above the waterline) ignores the Airy step on worlds without
-   plates (`platform_highlands`): the height of the thick crust above the
+   plates (`highland_datum`): the height of the thick crust above the
    datum is taken off the elevation it reads, so a highland plateau counts
    as if its crust were thin, and only the relief built on it (mountains,
    volcanoes, crater rims) reaches the band. A choice, no source: Mars's
    southern highlands are cratered plains, not mountains. Measured from
    the sea, the whole plateau of `mars-like` was mountain (41 % of the
    sphere, seeds 1–3, against about 9 % before the crust floated); without
-   the step, 11–16 %. Worlds with plates, dry worlds and moons keep the
-   band above the sea.
+   the step, 11–16 %. On worlds with plates the band stands above the
+   higher of the sea and the continental datum, the shelf break (3.09 km
+   above the old floor with Earth's crust): a world with little water,
+   its sea low and its continents high and flat, no longer reads its
+   platforms as mountains (`super-earth`'s plate worlds, seeds 1 and 3–7
+   at 256 × 128: 0.2–17 % of land Mountain or Snow, against 35–69 %
+   measured from the sea), while `earth-like` worlds, their sea above the
+   shelf break, keep their band (6.5–13.5 %, unchanged). Dry worlds and
+   moons keep the band above the sea.
 6. **Range.** Elevations beyond ±0.85 units are compressed with `tanh` into
    $[-1, 1]$ (`within_range`), not clipped, so the tall relief of light
    worlds keeps its summits.

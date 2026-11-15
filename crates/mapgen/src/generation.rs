@@ -76,9 +76,8 @@ pub struct Sample {
     /// adds it after the hydraulic erosion, which would wear the young
     /// cones down to their base.
     pub cone_relief: f32,
-    /// Height of the thick crust's Airy step the highland band ignores,
-    /// elevation units (see [`platform_highlands`]): 0 where the band is
-    /// an altitude above the sea.
+    /// Height the highland band ignores, elevation units (see
+    /// [`highland_datum`]): 0 where the band is an altitude above the sea.
     pub platform: f32,
 }
 
@@ -839,34 +838,77 @@ pub struct Sampler {
     /// The highland provinces of a world without plates, outside which
     /// the noise mountains vanish (see [`HIGHLANDS`]); `None` with plates.
     highlands: Option<Perlin>,
-    /// Whether the highland band ignores the thick crust's Airy step
-    /// (see [`platform_highlands`]).
-    platform_highlands: bool,
+    /// What the highland band is measured from (see [`highland_datum`]).
+    highland_datum: HighlandDatum,
 }
 
-/// Whether the highland band of the world `p` (the biomes mountain and
-/// snow, [`crate::biome::BiomeRules::highland`]) ignores the Airy step of
-/// its thick crust: the height its floating crust stands above the thin
-/// crust's datum ([`CRUST_DATUM`], see [`floating`]) is taken off the
-/// elevation the band reads, so a plateau counts as if its crust were
-/// thin. On a world without plates whose crust floats (not a dry world,
-/// whose plains stand on [`DRY_PLATFORM_KM`] from its waterline), with a
-/// planet model.
+/// What the highland band of a world (the biomes mountain and snow,
+/// [`crate::biome::BiomeRules::highland`]) is measured from, in the
+/// elevation its biomes read (see [`highland_datum`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum HighlandDatum {
+    /// Its sea.
+    Sea,
+    /// The thin crust's datum ([`CRUST_DATUM`]): the height its floating
+    /// crust stands above it, its thick crust's Airy step, is taken off,
+    /// so a plateau counts as if its crust were thin.
+    ThinCrust,
+    /// The higher of its sea and its continental datum ([`CONTINENTAL_DATUM`]
+    /// above the thin crust's): the given elevation units, by which that
+    /// datum stands above its sea (0 when the sea is higher), are taken
+    /// off everywhere.
+    Continents(f32),
+}
+
+/// Height of the continental datum above the thin crust's
+/// ([`CRUST_DATUM`]), elevation units, for the crust `crust`: its shelf
+/// break, where the continental slope meets the shelf ([`SLOPE_NOISE`]
+/// into the continents' noise, see [`crust_thickness_km`]). Earth's crust
+/// puts it 3.09 km above the old floor; `earth-like` worlds, filled with
+/// Earth's ocean, have their sea a little above it, so their band is
+/// measured from the sea as before.
+fn continental_datum(crust: &Crust) -> f32 {
+    floating(SLOPE_NOISE, crust)
+}
+
+/// What the highland band of the world `p` is measured from, its sea
+/// standing at `waterline` (see [`HighlandDatum`]), on a wet world with a
+/// planet model (dry worlds, whose plains stand on [`DRY_PLATFORM_KM`]
+/// from their waterline, and small moons without a model keep their
+/// sea):
 ///
-/// Such a world's thick crust is a highland province of Mars's dichotomy
-/// ([`MARS_CRUST`]): a plateau 4.5 km above its lowlands, kilometres
-/// above a sea filled from little water, but flat. Mars's southern
-/// highlands are cratered plains, not mountains. Measured from the sea,
-/// the band turned the whole plateau into mountains (`mars-like`: 41 % of
-/// its surface, against 9 % before the crust floated); without the step,
-/// 11-16 % on seeds 1-3. A choice, no source: the band ignores the
-/// buoyancy of the crust, not the relief built on it (mountains,
-/// volcanoes, crater rims), whose summits can still be snow.
+/// - without plates, the thin crust's datum. Such a world's thick crust
+///   is a highland province of Mars's dichotomy ([`MARS_CRUST`]): a
+///   plateau 4.5 km above its lowlands, kilometres above a sea filled
+///   from little water, but flat. Mars's southern highlands are cratered
+///   plains, not mountains. Measured from the sea, the band turned the
+///   whole plateau into mountains (`mars-like`: 41 % of its surface,
+///   against 9 % before the crust floated); without the step, 11-16 % on
+///   seeds 1-3. The band ignores the buoyancy of the crust, not the
+///   relief built on it (mountains, volcanoes, crater rims), whose summits
+///   can still be snow.
+/// - with plates, the higher of its sea and its continental datum
+///   ([`continental_datum`]). A world with little water has its sea low
+///   and its continents standing kilometres above it, as high flat
+///   platforms: measured from the sea, 34-69 % of the land of
+///   `super-earth`'s plate worlds (seeds 1 and 3-7) was Mountain or Snow,
+///   against 6-14 % on `earth-like` worlds. Measured from the shelf break
+///   the band reads the ranges, plate boundaries and volcanoes built on
+///   the continents, as on Earth, whose sea stands near it. A plate
+///   world's continents keep their platform and their rise inland: only
+///   the sea's fall below the shelf break is taken off, uniformly.
 ///
-/// Worlds with plates keep the band above the sea, as do dry worlds and
-/// small moons (no model).
-fn platform_highlands(p: &WorldParams) -> bool {
-    p.model.is_some() && p.look.geology.regime != Regime::Plates && !p.look.rules.dry
+/// Both are choices, no source: the band is an altitude line for the
+/// biomes, and how high a world's land stands above a low sea does not
+/// make it mountainous.
+fn highland_datum(p: &WorldParams, crust: &Crust, waterline: f32) -> HighlandDatum {
+    if p.model.is_none() || p.look.rules.dry {
+        HighlandDatum::Sea
+    } else if p.look.geology.regime != Regime::Plates {
+        HighlandDatum::ThinCrust
+    } else {
+        HighlandDatum::Continents((CRUST_DATUM + continental_datum(crust) - waterline).max(0.0))
+    }
 }
 
 /// Height above a world's open water at which the ground of its dry
@@ -977,8 +1019,9 @@ impl Sampler {
             highland_noise: Perlin::new(stream_seed(seed, stream::HIGHLAND)),
             highlands: (p.look.geology.regime != crate::geology::Regime::Plates)
                 .then(|| Perlin::new(stream_seed(seed, stream::HIGHLANDS))),
-            platform_highlands: platform_highlands(p),
+            highland_datum: HighlandDatum::Sea,
         };
+        sampler.highland_datum = highland_datum(p, &sampler.crust, sampler.waterline);
         if !p.look.rules.dry {
             sampler.crust_line = sampler.crust_line();
             sampler.shore = shore_noise(sampler.waterline, &sampler.crust, sampler.crust_line);
@@ -1346,12 +1389,14 @@ impl Sampler {
             _ => elevation,
         };
 
-        // The thick crust's Airy step, which the highland band ignores on
-        // worlds without plates: its height above the thin crust's datum.
-        let platform = if self.platform_highlands {
-            (continent - CRUST_DATUM).max(0.0)
-        } else {
-            0.0
+        // What the highland band ignores: on worlds without plates the
+        // thick crust's Airy step, its height above the thin crust's
+        // datum; on worlds with plates the continental datum's height
+        // above a low sea.
+        let platform = match self.highland_datum {
+            HighlandDatum::Sea => 0.0,
+            HighlandDatum::ThinCrust => (continent - CRUST_DATUM).max(0.0),
+            HighlandDatum::Continents(step) => step,
         };
 
         // Positive sea_level raises the waterline (more ocean); negative lowers it.
@@ -3370,7 +3415,7 @@ pub(crate) mod tests {
     #[test]
     fn plateaus_without_plates_are_not_mountains() {
         // The highland band ignores the Airy step of the thick crust on
-        // worlds without plates (`platform_highlands`). Measured from the
+        // worlds without plates (`highland_datum`). Measured from the
         // sea, `mars-like`'s whole highland crust was mountain: 41 % of the
         // sphere on seeds 1-3. Main, before the crust floated, gave about
         // 9 % (9.2, 9.1, 7.2 %); ignoring the step gives 14.8, 10.8 and
@@ -3391,6 +3436,44 @@ pub(crate) mod tests {
             }
             let share = high / total;
             assert!((0.02..0.20).contains(&share), "seed {seed}: {share}");
+        }
+    }
+
+    /// Area share of the land of `w` in the highland band (Mountain or
+    /// Snow).
+    fn highland_share(w: &World) -> f64 {
+        let grid = w.params.grid();
+        let (mut land, mut high) = (0.0f64, 0.0f64);
+        for (i, b) in w.biomes.iter().enumerate() {
+            let a = grid.latitude((i / w.width as usize) as u32).cos();
+            if !b.is_water() {
+                land += a;
+                if matches!(b, Biome::Mountain | Biome::Snow) {
+                    high += a;
+                }
+            }
+        }
+        high / land
+    }
+
+    /// A plate world with little water has a low sea and continents
+    /// standing kilometres above it: its highland band is measured from
+    /// the continental datum, not from the sea, so a high platform is not
+    /// a mountain range (#459). On main, `super-earth` seeds 1 and 3-7
+    /// (plates) had 35-69 % of their land Mountain or Snow; `earth-like`
+    /// worlds, whose sea stands above the datum, keep 6-14 %.
+    #[test]
+    fn plate_worlds_measure_their_highlands_from_the_continents() {
+        for seed in [1u32, 3, 6] {
+            let p = preset_params("super-earth", seed, 256, 128);
+            assert_eq!(p.look.geology.regime, Regime::Plates, "seed {seed}");
+            let share = highland_share(&generate(&p).world);
+            assert!(share < 0.2, "super-earth {seed}: {share}");
+        }
+        for (seed, main) in [(1u32, 0.122), (2, 0.135), (3, 0.065)] {
+            let p = preset_params("earth-like", seed, 256, 128);
+            let share = highland_share(&generate(&p).world);
+            assert!((share - main).abs() < 0.01, "earth-like {seed}: {share}");
         }
     }
 
