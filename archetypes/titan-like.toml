@@ -24,6 +24,9 @@ mass_earth = [0.020, 0.025]
 # Sotin 2006, doi:10.1038/nature04497). Calibration with Titan as its
 # target: neither paper gives the inventory as a share of the ices.
 ch4 = [1.0, 2.0]
+# The age of the Solar System (Bouvier & Wadhwa 2010,
+# doi:10.1038/ngeo941).
+age_gyr = 4.57
 
 [moon]
 # Grown in Saturn's disk.

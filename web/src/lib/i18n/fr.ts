@@ -1539,6 +1539,8 @@ export const fr: Messages = {
       `${p.archetype} est une lune de géante, elle ne se demande pas seule${S}: demandez-la dans un système entier, qui lui donne sa géante.`,
     badAge: (p) =>
       `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge ou choisissez une étoile plus longévive.`,
+    archetypeAges: (p) =>
+      `Les planètes demandées (${p.archetypes}) imposent des âges de système qui ne se recoupent pas${S}: demandez moins de types ensemble, ou saisissez un âge.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,
     beingGenerated: (p) => `${p.world} est déjà en cours de génération.`,

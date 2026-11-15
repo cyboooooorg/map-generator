@@ -1620,6 +1620,8 @@ export const en = {
       `${p.archetype} is a giant's moon, so it cannot be asked for alone: ask for it in a whole system, which gives it its giant.`,
     badAge: (p: { age: string; lifetime: string }) =>
       `The star is ${p.age} Gyr old, but it lives ${p.lifetime} Gyr at most: lower the age or pick a longer-lived star.`,
+    archetypeAges: (p: { archetypes: string }) =>
+      `The planets asked (${p.archetypes}) set system ages that do not overlap: ask for fewer kinds together, or type an age.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,
     beingGenerated: (p: { world: string }) => `${p.world} is being generated already.`,

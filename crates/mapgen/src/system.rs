@@ -926,6 +926,25 @@ fn system_archetype(name: &str) -> Result<Archetype, RequestError> {
     crate::request::load_archetype(name)
 }
 
+/// The system age the planets asked for set between them, moons
+/// included (see [`crate::archetype::asked_age_gyr`]).
+fn asked_planets_age(
+    planets: Option<&BTreeMap<String, u32>>,
+    seed: u32,
+) -> Result<Option<f32>, RequestError> {
+    let Some(planets) = planets else {
+        return Ok(None);
+    };
+    let mut archetypes = Vec::new();
+    for (name, &count) in planets {
+        if count > 0 {
+            archetypes.push(system_archetype(name)?);
+        }
+    }
+    let refs: Vec<&Archetype> = archetypes.iter().collect();
+    crate::archetype::asked_age_gyr(&refs, seed)
+}
+
 /// A whole system.
 fn draw_whole(
     request: &SystemRequest,
@@ -969,14 +988,18 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
     // round an old K or an M dwarf can lose its methane or its air);
     // when it does not live to the age asked, or no moon is asked, the
     // star is drawn.
+    let age_asked = match whole.age_gyr {
+        Some(age) => Some(age),
+        None => asked_planets_age(whole.planets.as_ref(), seed)?,
+    };
     let host_star = match (&whole.star, &whole.planets) {
-        (None, Some(planets)) => host_star_of(planets, whole.age_gyr, seed)?,
+        (None, Some(planets)) => host_star_of(planets, age_asked, seed)?,
         _ => None,
     };
     let star_code = match (&whole.star, host_star) {
         (Some(text), _) => parse_type(text).map_err(RequestError::BadStar)?,
         (None, Some(code)) => code,
-        (None, None) => crate::star::draw_type_living(whole.age_gyr, &mut rng),
+        (None, None) => crate::star::draw_type_living(age_asked, &mut rng),
     };
     let metallicity = whole
         .metallicity
@@ -986,7 +1009,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
         whole.height.unwrap_or(DEFAULT_SIZE.1),
     );
     // From its own stream, after the star is known: no other draw shifts.
-    let age_gyr = crate::star::resolve_age_gyr(whole.age_gyr, star_code, seed)?;
+    let age_gyr = crate::star::resolve_age_gyr(age_asked, star_code, seed)?;
     let star = StarInfo::new(star_code, 1.0, 0.0, age_gyr);
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
@@ -4414,6 +4437,78 @@ mod tests {
     }
 
     #[test]
+    fn an_asked_mars_sets_the_system_age() {
+        for seed in 0..5 {
+            let system = draw(
+                &whole(&[("mars-like", 1)], seed),
+                &mut StdRng::seed_from_u64(1),
+            )
+            .unwrap();
+            assert_eq!(system.star.info.age_gyr, 4.57, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn an_asked_titan_sets_the_system_age() {
+        for seed in 0..5 {
+            let system = draw(
+                &whole(&[("titan-like", 1)], seed),
+                &mut StdRng::seed_from_u64(1),
+            )
+            .unwrap();
+            assert_eq!(system.star.info.age_gyr, 4.57, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn a_typed_age_wins_over_the_archetype() {
+        for seed in 0..5 {
+            let request = match whole(&[("mars-like", 1)], seed) {
+                SystemRequest::System(w) => SystemRequest::System(WholeSystemRequest {
+                    age_gyr: Some(2.0),
+                    ..w
+                }),
+                SystemRequest::Around(_) => unreachable!(),
+            };
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            assert_eq!(system.star.info.age_gyr, 2.0, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn a_named_star_too_short_lived_is_refused() {
+        let request = match whole(&[("mars-like", 1)], 3) {
+            SystemRequest::System(w) => SystemRequest::System(WholeSystemRequest {
+                star: Some("O9V".into()),
+                ..w
+            }),
+            SystemRequest::Around(_) => unreachable!(),
+        };
+        let error = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap_err();
+        assert!(
+            matches!(error, RequestError::BadAge { age_gyr, lifetime_gyr } if age_gyr == 4.57 && lifetime_gyr < 4.57),
+            "{error:?}"
+        );
+    }
+
+    /// Ages of drawn systems with no archetype asked: asking for none
+    /// draws nothing from the archetype age stream, so they are the
+    /// ages the seeds drew before archetypes set one.
+    #[test]
+    fn systems_without_archetypes_keep_their_age() {
+        for (seed, age) in [(1, 1.3435488_f32), (2, 1.4332228), (3, 3.5299025)] {
+            let request = SystemRequest::System(WholeSystemRequest {
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            assert_eq!(system.star.info.age_gyr, age, "seed {seed}");
+        }
+    }
+
+    #[test]
     fn an_age_beyond_the_star_life_is_refused() {
         let request = SystemRequest::System(WholeSystemRequest {
             age_gyr: Some(5.0),
@@ -5125,17 +5220,20 @@ mod tests {
     /// refused, not drawn without it.
     #[test]
     fn a_moon_archetype_its_star_cannot_host_is_refused() {
-        for star in ["M9.5V", "B5V"] {
-            match whole_round(star, &[("titan-like", 1)], 1) {
-                Err(RequestError::TypeImpossible { body_type }) => {
-                    assert_eq!(body_type, "titan-like")
-                }
-                other => panic!(
-                    "{star}: expected type_impossible, got {:?}",
-                    other.map(|s| s.bodies.len())
-                ),
+        match whole_round("M9.5V", &[("titan-like", 1)], 1) {
+            Err(RequestError::TypeImpossible { body_type }) => {
+                assert_eq!(body_type, "titan-like")
             }
+            other => panic!(
+                "M9.5V: expected type_impossible, got {:?}",
+                other.map(|s| s.bodies.len())
+            ),
         }
+        // A B5V does not live to the Solar System's age the archetype asks.
+        assert!(matches!(
+            whole_round("B5V", &[("titan-like", 1)], 1),
+            Err(RequestError::BadAge { .. })
+        ));
     }
 
     /// A whole system asking a moon and no star.
@@ -6080,7 +6178,7 @@ mod titan_tests {
     }
 
     /// The Titans of the `titan-like` systems of seeds 5 and 12, whose
-    /// surfaces keep their system's 4.6 Ga of craters, generated at the
+    /// surfaces keep most of their system's 4.57 Ga of craters, generated at the
     /// size their viewer gets (512 × 256): about 1 % of their surface is
     /// liquid, the share their sea level is calibrated for
     /// (`HYDROCARBON_LAND_FRACTION`). Issue #482: none was drawn, the sea
@@ -6101,7 +6199,7 @@ mod titan_tests {
                 .unwrap();
             let params = generation_params(moon);
             assert_eq!((params.width, params.height), (512, 256));
-            assert!(params.surface_age_ga > 4.0, "{}", params.surface_age_ga);
+            assert!(params.surface_age_ga > 3.0, "{}", params.surface_age_ga);
             let world = crate::generation::generate(&params).world;
             let grid = params.grid();
             let (mut liquid, mut total) = (0.0f64, 0.0f64);

@@ -32,6 +32,7 @@
 //! nh3 = 1.0                           # idem: the ammonia its ices carry
 //! s = 1.0                             # idem: the sulphur its rock carries
 //! radiogenic = 1.0                    # Earth's abundance = 1
+//! age_gyr = 4.57                      # age of the system, Gyr; a typed age wins
 //! life = true                         # true: arises where it can; false: never
 //!
 //! [orbit]
@@ -291,6 +292,14 @@ impl ParamDefault {
         }
     }
 
+    /// The lowest and highest values (a fixed value is both).
+    pub(crate) fn bounds(self) -> (f32, f32) {
+        match self {
+            ParamDefault::Fixed(v) => (v, v),
+            ParamDefault::Range([lo, hi]) => (lo, hi),
+        }
+    }
+
     pub(crate) fn check(self, field: &str, min: f32, max: f32) -> Result<(), String> {
         let (lo, hi) = match self {
             ParamDefault::Fixed(v) => (v, v),
@@ -374,6 +383,11 @@ pub struct ArchetypeInputs {
     /// `true`: life arises wherever the world allows it; `false`: never.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub life: Option<bool>,
+    /// Age of the system the archetype is asked in, Gyr: the star's, when
+    /// the request types none. Within `(0, star::lifetime_gyr(0.0)]`; a
+    /// star that lives shorter refuses it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub age_gyr: Option<ParamDefault>,
 }
 
 /// Where an archetype sits (the `[orbit]` table): by its light or by its
@@ -559,6 +573,18 @@ impl Archetype {
         } else {
             MASS_EARTH
         };
+        if let Some(age) = i.age_gyr {
+            let longest = crate::star::lifetime_gyr(0.0);
+            let (lo, hi) = age.bounds();
+            if lo > hi {
+                return Err(format!("inputs.age_gyr: range [{lo}, {hi}] is reversed"));
+            }
+            if !(lo > 0.0 && hi <= longest) {
+                return Err(format!(
+                    "inputs.age_gyr: must stay within (0, {longest}] (the longest main-sequence life)"
+                ));
+            }
+        }
         let checks = [
             ("inputs", "mass_earth", Some(i.mass_earth), mass_limits),
             (
@@ -682,10 +708,49 @@ impl Archetype {
         }
     }
 
+    /// The ages the archetype sets for its system, Gyr (`Fixed(x)` is
+    /// `[x, x]`); `None` when it sets none.
+    pub fn age_range(&self) -> Option<(f32, f32)> {
+        self.inputs.age_gyr.map(ParamDefault::bounds)
+    }
+
     /// The mass drawn in the archetype's range, Earth masses.
     pub fn mass(&self, rng: &mut impl RngExt) -> f64 {
         f64::from(self.inputs.mass_earth.pick(rng))
     }
+}
+
+/// The age the archetypes asked together set for their system, Gyr: the
+/// intersection of their age ranges, a value drawn in it from the
+/// [`ARCHETYPE_AGE`](crate::noise::stream::ARCHETYPE_AGE) stream of
+/// `seed` (a fixed age draws nothing). `None` when none sets an age;
+/// [`RequestError::ArchetypeAges`] when the ranges do not meet.
+pub fn asked_age_gyr(
+    archetypes: &[&Archetype],
+    seed: u32,
+) -> Result<Option<f32>, crate::request::RequestError> {
+    use rand::SeedableRng;
+    let aged: Vec<(&Archetype, (f32, f32))> = archetypes
+        .iter()
+        .filter_map(|a| a.age_range().map(|r| (*a, r)))
+        .collect();
+    if aged.is_empty() {
+        return Ok(None);
+    }
+    let lo = aged.iter().map(|(_, r)| r.0).fold(f32::MIN, f32::max);
+    let hi = aged.iter().map(|(_, r)| r.1).fold(f32::MAX, f32::min);
+    if lo > hi {
+        let mut names: Vec<String> = aged.iter().map(|(a, _)| a.name.clone()).collect();
+        names.sort();
+        names.dedup();
+        return Err(crate::request::RequestError::ArchetypeAges { archetypes: names });
+    }
+    if lo == hi {
+        return Ok(Some(lo));
+    }
+    let stream = crate::noise::stream_seed(seed, crate::noise::stream::ARCHETYPE_AGE);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(stream));
+    Ok(Some(rng.random_range(lo..hi)))
 }
 
 /// Names of the built-in archetypes.
@@ -805,6 +870,62 @@ pub fn similar<'a>(
 
 #[cfg(test)]
 mod tests {
+    fn aged(name: &str, age: &str) -> Archetype {
+        let text = format!("name = \"{name}\"\n[inputs]\nmass_earth = 1.0\nage_gyr = {age}\n");
+        Archetype::from_toml(&text, "test").unwrap()
+    }
+
+    fn unaged(name: &str) -> Archetype {
+        let text = format!("name = \"{name}\"\n[inputs]\nmass_earth = 1.0\n");
+        Archetype::from_toml(&text, "test").unwrap()
+    }
+
+    #[test]
+    fn no_age_asked_gives_none() {
+        let (a, b) = (unaged("a"), unaged("b"));
+        assert_eq!(asked_age_gyr(&[&a, &b], 7).unwrap(), None);
+        assert_eq!(asked_age_gyr(&[], 7).unwrap(), None);
+    }
+
+    #[test]
+    fn fixed_ages_agree() {
+        let (a, b) = (aged("a", "4.57"), aged("b", "4.57"));
+        assert_eq!(asked_age_gyr(&[&a, &b], 7).unwrap(), Some(4.57));
+        // An archetype with no age does not disturb it.
+        let c = unaged("c");
+        assert_eq!(asked_age_gyr(&[&a, &c], 7).unwrap(), Some(4.57));
+    }
+
+    #[test]
+    fn ranges_intersect() {
+        let (a, b) = (aged("a", "[3.0, 5.0]"), aged("b", "[4.0, 6.0]"));
+        for seed in 0..20 {
+            let age = asked_age_gyr(&[&a, &b], seed).unwrap().unwrap();
+            assert!((4.0..=5.0).contains(&age), "{age}");
+            assert_eq!(asked_age_gyr(&[&a, &b], seed).unwrap(), Some(age));
+        }
+    }
+
+    #[test]
+    fn disjoint_ages_are_refused() {
+        let (a, b) = (aged("mars-ish", "4.57"), aged("young", "[1.0, 2.0]"));
+        match asked_age_gyr(&[&a, &b], 7) {
+            Err(crate::request::RequestError::ArchetypeAges { archetypes }) => {
+                assert_eq!(archetypes, vec!["mars-ish".to_string(), "young".to_string()]);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_age_out_of_the_stars_lives_is_refused_at_load() {
+        for age in ["0.0", "1e5", "[2.0, 1.0]"] {
+            let text = format!("name = \"x\"\n[inputs]\nmass_earth = 1.0\nage_gyr = {age}\n");
+            let err = Archetype::from_toml(&text, "test").unwrap_err().to_string();
+            assert!(err.contains("inputs.age_gyr"), "{age}: {err}");
+        }
+    }
+
     #[test]
     fn every_built_in_archetype_names_its_reference() {
         for a in Archetype::built_in() {

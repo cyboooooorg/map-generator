@@ -21,6 +21,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.badArchetype({ archetype: archetypeName({ name: detail.archetype }) });
     case 'bad_age':
       return t.errors.badAge({ age: formatUpTo(detail.age_gyr, 3), lifetime: formatUpTo(detail.lifetime_gyr, 2) });
+    case 'archetype_ages':
+      return t.errors.archetypeAges({ archetypes: detail.archetypes.map((name) => archetypeName({ name })).join(', ') });
     case 'too_many_pixels':
       return t.errors.tooManyPixels({ width: detail.width, height: detail.height, max: formatInt(detail.max_pixels) });
     case 'being_generated':

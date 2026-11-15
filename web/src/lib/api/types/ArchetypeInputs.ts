@@ -49,4 +49,10 @@ radiogenic?: ParamDefault | null,
 /**
  * `true`: life arises wherever the world allows it; `false`: never.
  */
-life?: boolean | null, };
+life?: boolean | null, 
+/**
+ * Age of the system the archetype is asked in, Gyr: the star's, when
+ * the request types none. Within `(0, star::lifetime_gyr(0.0)]`; a
+ * star that lives shorter refuses it.
+ */
+age_gyr?: ParamDefault | null, };

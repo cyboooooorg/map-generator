@@ -251,6 +251,9 @@ pub enum RequestError {
     WaterHeavierThanPlanet { water_oceans: f64, mass_earth: f64 },
     /// The age asked is not between 0 and the star's main-sequence life.
     BadAge { age_gyr: f32, lifetime_gyr: f32 },
+    /// Archetypes asked together set ages that do not overlap (`archetypes`
+    /// are those that set one).
+    ArchetypeAges { archetypes: Vec<String> },
     /// More planets than a system holds.
     TooManyPlanets { asked: u32, max: u32 },
     /// More planets of a type than its band of distances holds at the
@@ -308,6 +311,12 @@ impl fmt::Display for RequestError {
                 f,
                 "age_gyr is {age_gyr}, it must be above 0 and at most {lifetime_gyr:.2}, the \
                  main-sequence life of this star"
+            ),
+            RequestError::ArchetypeAges { archetypes } => write!(
+                f,
+                "the planets asked ({}) set system ages that do not overlap: ask for fewer \
+                 kinds together, or type an age_gyr",
+                archetypes.join(", ")
             ),
             RequestError::UnknownArchetype(name) => write!(
                 f,
@@ -557,6 +566,11 @@ impl WorldRequest {
         }
         let a = archetype.as_ref();
         let seed = self.seed.unwrap_or_else(|| rng.random());
+        // The age the archetype sets, unless the request types one.
+        let age_asked = match self.age_gyr {
+            Some(age) => Some(age),
+            None => crate::archetype::asked_age_gyr(&a.into_iter().collect::<Vec<_>>(), seed)?,
+        };
         let mut stream = seeded(seed, "world/archetype");
         let archetype_mass = a.map(|a| a.mass(&mut stream));
         let overrides = self.overrides(a, &mut stream);
@@ -571,7 +585,7 @@ impl WorldRequest {
         // the caller's `rng` only draws the seed.
         let place = |attempt: usize| -> Result<(f32, f32, f32), RequestError> {
             let drawn_star = crate::star::draw_type_living(
-                self.age_gyr,
+                age_asked,
                 &mut seeded(seed, &format!("world/star/{attempt}")),
             );
             let star = match star_kind {
@@ -581,7 +595,7 @@ impl WorldRequest {
             let rng = &mut seeded(seed, &format!("world/orbit/{attempt}"));
             let hz_position = fallback::HZ_POSITION.pick(rng);
             // The age, from its own stream: no other draw shifts.
-            let age_gyr = crate::star::resolve_age_gyr(self.age_gyr, star, seed)?;
+            let age_gyr = crate::star::resolve_age_gyr(age_asked, star, seed)?;
             let v = crate::star::values(star);
             let orbit_au = match (self.orbit_au, self.hz_position) {
                 (Some(au), _) => au,
@@ -992,6 +1006,29 @@ mod tests {
 
     fn resolve(request: &WorldRequest) -> Result<Resolved, RequestError> {
         request.resolve(&mut StdRng::seed_from_u64(7))
+    }
+
+    #[test]
+    fn a_lone_mars_takes_its_archetype_age() {
+        let resolved = resolve(&named(Some("mars-like"), 4)).unwrap();
+        assert_eq!(resolved.params.age_gyr, 4.57);
+    }
+
+    #[test]
+    fn a_typed_lone_age_wins() {
+        let request = WorldRequest {
+            age_gyr: Some(3.0),
+            ..named(Some("mars-like"), 4)
+        };
+        assert_eq!(resolve(&request).unwrap().params.age_gyr, 3.0);
+    }
+
+    #[test]
+    fn a_pinned_lone_world_keeps_its_age() {
+        let request = named(Some("mars-like"), 4);
+        let resolved = resolve(&request).unwrap();
+        let pinned = request.pinned(&resolved.params, None);
+        assert_eq!(pinned.age_gyr, Some(4.57));
     }
 
     #[test]

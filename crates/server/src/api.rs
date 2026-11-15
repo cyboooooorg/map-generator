@@ -262,6 +262,8 @@ pub enum ErrorDetail {
     BadArchetype { archetype: String },
     /// The age asked is not between 0 and the star's main-sequence life.
     BadAge { age_gyr: f32, lifetime_gyr: f32 },
+    /// The archetypes asked together set system ages that do not overlap.
+    ArchetypeAges { archetypes: Vec<String> },
     /// A planet type the star leaves no room for.
     TypeImpossible { body_type: String },
     /// The system exists and the request does not replace it.
@@ -319,6 +321,9 @@ impl ErrorDetail {
             } => Some(Self::BadAge {
                 age_gyr: *age_gyr,
                 lifetime_gyr: *lifetime_gyr,
+            }),
+            RequestError::ArchetypeAges { archetypes } => Some(Self::ArchetypeAges {
+                archetypes: archetypes.clone(),
             }),
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
