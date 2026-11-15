@@ -107,7 +107,9 @@ metallicity: number,
 giants: GiantsMode, 
 /**
  * Mass of a giant planet, Earth masses: `Some` for a giant (its look
- * has a `[giant]` table, see `crate::giant_world`), `None` otherwise.
+ * has a `[giant]` table, see `crate::giant_world`), `None` otherwise,
+ * a steam world's too: it is a planet, drawn with a giant's cloud
+ * deck only (see [`Self::renders_as_deck`]).
  */
 giant_mass_earth: number | null, 
 /**

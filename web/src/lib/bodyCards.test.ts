@@ -28,6 +28,11 @@ describe('cardsFor', () => {
     expect(cards).not.toContain('surface');
   });
 
+  it("gives a steam world its model's air and moons, but no surface under its deck", () => {
+    const cards = cardsFor(body(), meta({ cloud_deck: { kind: 'steam' } }), true);
+    expect(cards).toEqual(['header', 'orbit', 'interior', 'atmosphere', 'legend', 'moons', 'map']);
+  });
+
   it('gives a moon the moons card only for a part in rings', () => {
     expect(cardsFor(body({ kind: 'moon', parent: 'c' }), meta(), true)).not.toContain('moons');
     expect(cardsFor(body({ kind: 'moon', parent: 'c', ring_role: 'edge' }), meta(), true)).toContain('moons');

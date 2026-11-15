@@ -3,4 +3,4 @@
 /**
  * What a layer of a planet is made of.
  */
-export type Material = "Iron" | "Rock" | "Water" | "Envelope";
+export type Material = "Iron" | "Rock" | "Water" | "Envelope" | "Steam";

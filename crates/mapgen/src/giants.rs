@@ -124,6 +124,9 @@ pub enum GiantKind {
     Gas,
     /// Water, ammonia and methane under a thin envelope (Uranus, Neptune).
     Ice,
+    /// Deep supercritical steam over a rock and iron core: a steam world,
+    /// a grey cloud deck with an ice giant's dynamics (issue #492).
+    Steam,
 }
 
 /// The rings of a giant.
@@ -456,7 +459,7 @@ const ICE_INTERNAL_K: f32 = 40.0;
 ///
 /// An ice giant keeps [`ICE_INTERNAL_K`].
 pub fn internal_temperature(kind: GiantKind, mass_earth: f32, age_gyr: f32) -> f32 {
-    if kind == GiantKind::Ice {
+    if matches!(kind, GiantKind::Ice | GiantKind::Steam) {
         return ICE_INTERNAL_K;
     }
     let jupiter = (JUPITER_INTERNAL_FLUX / STEFAN_BOLTZMANN).powf(0.25) as f32;
@@ -604,7 +607,7 @@ impl GiantSystem {
                     (lo + rng.random::<f64>() * (hi - lo)).powf(1.0 / GAS_MASS_SLOPE)
                         * f64::from(JUPITER_EARTH_MASSES)
                 }
-                GiantKind::Ice => {
+                GiantKind::Ice | GiantKind::Steam => {
                     (ICE_MASS.0.ln() + rng.random::<f64>() * (ICE_MASS.1 / ICE_MASS.0).ln()).exp()
                 }
             };
@@ -714,7 +717,7 @@ fn describe(
     let [bright, faint] = match (hot, kind) {
         (true, _) => [0.0, 0.05],
         (false, GiantKind::Gas) => [0.25, 0.5],
-        (false, GiantKind::Ice) => [0.0, 0.7],
+        (false, GiantKind::Ice | GiantKind::Steam) => [0.0, 0.7],
     };
     let rings = match rng.random::<f32>() {
         r if r < bright => Rings::Bright,

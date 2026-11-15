@@ -27,7 +27,7 @@
   import type { InputField } from '../lib/api/types/InputField';
   import { drivenBy } from '../lib/causes';
   import { fieldOf, MODEL_GROUPS, type ModelFieldKey } from '../lib/modelFields';
-  import { drawnValues, initialModelValues, MODEL_KEYS, type ModelValues, modelRequest } from '../lib/modelRequest';
+  import { drawnValues, initialModelValues, MODEL_KEYS, type ModelValues, modelRequest, previewRadiusEarth } from '../lib/modelRequest';
   import { fieldValueText } from '../lib/modelFormat';
   import { Preview } from '../lib/preview.svelte';
   import ModelFields from './form/ModelFields.svelte';
@@ -748,6 +748,7 @@
       {spec}
       bind:values={model}
       drawn={drawn}
+      radiusEarth={previewRadiusEarth(preview.result)}
       driven={(key) => drivenBy(explanation, key)}
       ignored={preview.result?.ignored ?? []}
       explained={explanation !== null}

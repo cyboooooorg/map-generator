@@ -20,12 +20,13 @@ const spec = {
     radiogenic: { min: 0.1, max: 10 }, axial_tilt_deg: { min: 0, max: 90 }, age_gyr: { min: 0, max: 1e4 },
   },
 } as unknown as FormSpec;
-function html(over: { values?: ModelValues; drawn?: DrawnValues | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; driven?: Quantity[] | ((key: string) => Quantity[]); explained?: boolean } = {}): string {
+function html(over: { values?: ModelValues; drawn?: DrawnValues | null; radiusEarth?: number | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; driven?: Quantity[] | ((key: string) => Quantity[]); explained?: boolean } = {}): string {
   return render(ModelFields, {
     props: {
       spec,
       values: over.values ?? initialModelValues(null),
       drawn: over.drawn ?? null,
+      radiusEarth: over.radiusEarth ?? null,
       driven: (key: string) => (typeof over.driven === 'function' ? over.driven(key) : (over.driven ?? [])),
       explained: over.explained ?? false,
       ignored: over.ignored ?? [],
@@ -43,6 +44,16 @@ const field = (out: string, key: string) => {
 };
 
 describe('ModelFields', () => {
+  it('says the share of the mass and the depth of a set amount of water', () => {
+    const values = initialModelValues({ mass_earth: 4.78, water_oceans: 2390 });
+    const out = field(html({ values, radiusEarth: 1.6 }), 'water_oceans');
+    expect(out).toContain(t.form.model.waterShare({ share: '12\u00a0%' }).replace('\u00a0', ' '));
+    expect(out).toContain('km deep');
+    // Without a preview radius only the share shows; a drawn water shows nothing.
+    expect(field(html({ values }), 'water_oceans')).not.toContain('deep');
+    expect(field(html({ values: initialModelValues(null), radiusEarth: 1 }), 'water_oceans')).not.toContain('of the planet');
+  });
+
   it('folds every group by default and opens the ones asked', () => {
     const out = html();
     expect(out.match(/<details/g)).toHaveLength(5);

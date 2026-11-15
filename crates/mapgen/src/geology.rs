@@ -59,7 +59,7 @@ pub const PLATES_MIN_MASS_EARTH: f32 = 0.3;
 /// switching there would cut its carbon cycle at a hard edge.
 pub fn regime_of(p: &WorldParams) -> Regime {
     let preset = p.look.geology.regime;
-    if preset != Regime::Plates || p.giant_mass_earth.is_some() {
+    if preset != Regime::Plates || p.renders_as_deck() {
         return preset;
     }
     if p.pressure_bar < LIQUID_WATER_BAR || p.mass_earth() < PLATES_MIN_MASS_EARTH {

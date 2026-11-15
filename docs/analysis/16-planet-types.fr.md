@@ -50,9 +50,9 @@ Autres occurrences contrôlées : Petigura 2013 trouve 11 ± 4 % d'étoiles de t
 
 ## Ce que le générateur ne produit pas encore
 
-Les 13 classes du générateur sont dans `crates/mapgen/src/planet/classify.rs` (`PlanetClass`). Les types manquants ont été déposés comme issues du backlog le 2026-11-15, et l'utilisateur a validé cet ordre, à la suite de la piste science (#423) après son étape 5b (#487) :
+Les 14 classes du générateur sont dans `crates/mapgen/src/planet/classify.rs` (`PlanetClass`). Les types manquants ont été déposés comme issues du backlog le 2026-11-15, et l'utilisateur a validé cet ordre, à la suite de la piste science (#423) après son étape 5b (#487) :
 
-1. Avec la passe climat : #492 mondes de vapeur, et des étiquettes sur le modèle existant : #498 super-Mercure, #499 états climatiques eyeball / boule de neige / désert, #501 Jupiters tièdes et ultra-chauds.
+1. Avec la passe climat : #492 mondes de vapeur (fait : classe `steam-world`, un emballement de l'eau sous plus de dix fois la pression critique de l'eau en vapeur, dessiné comme un pont de nuages gris), et des étiquettes sur le modèle existant : #498 super-Mercure, #499 états climatiques eyeball / boule de neige / désert, #501 Jupiters tièdes et ultra-chauds.
 2. Une étape de distribution qui change les tirages de systèmes (nécessite une hausse de `FORMAT_VERSION`) : #494 planètes à ultra-courte période (les périodes sont tirées à partir de 1 j), #495 super-puffs (gonflement seulement au-dessus de 30 masses terrestres), #496 planètes naines (plancher de masse à 0,05 masse terrestre), #497 planètes chthoniennes.
 3. #500 mondes Hycean (nécessitent l'effet de serre H2 induit par collisions au-dessus d'un océan).
 4. Hors piste : #502 planètes errantes, #503 inclinaisons mutuelles / orbites rétrogrades / obliquité stellaire, #504 systèmes jeunes avec disque, #505 compositions théoriques (carbone, sans noyau, hélium).

@@ -31,8 +31,13 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 ///
 /// 1. a giant class: `gas-giant`, `hot-jupiter` or `ice-giant` (a hot
 ///    Neptune renders as a hot Jupiter, its methane gone; a mini-Neptune
-///    as an ice giant);
-/// 2. a lava world or a heat-pipe regime: `volcanic`;
+///    as an ice giant); a steam world: `steam-world`, a grey cloud deck
+///    (a planet drawn with the giants' deck renderer, see
+///    [`renders_as_giant`]);
+/// 2. a lava world, a lava liquid, or a heat-pipe regime without liquid
+///    water: `volcanic` (a heat-pipe body under a water ocean takes rule 5:
+///    the ocean covers its volcanism, which the world's volcanic intensity
+///    keeps visible);
 /// 3. a runaway greenhouse: `caustic` (the Venus look; the spec names
 ///    barren or volcanic, caustic is closer to Venus and exists);
 /// 4. liquid hydrocarbons: `frozen`;
@@ -53,13 +58,14 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
         PlanetClass::GasGiant => return "gas-giant",
         PlanetClass::HotJupiter | PlanetClass::HotNeptune => return "hot-jupiter",
         PlanetClass::IceGiant | PlanetClass::MiniNeptune => return "ice-giant",
+        PlanetClass::SteamWorld => return "steam-world",
         _ => {}
     }
     let surface = model.surface.as_ref();
     let liquid = surface.map_or(SurfaceLiquid::None, |s| s.climate.liquid);
     if model.class == PlanetClass::LavaWorld
         || liquid == SurfaceLiquid::Lava
-        || surface.is_some_and(|s| s.regime == Regime::HeatPipe)
+        || (liquid != SurfaceLiquid::Water && surface.is_some_and(|s| s.regime == Regime::HeatPipe))
     {
         return "volcanic";
     }
@@ -295,7 +301,7 @@ pub fn look_for(model: &PlanetModel) -> Look {
 /// tilt and erosion, each a value or a range, `None` for the generator's
 /// [`fallback`]. Calibration, no source: the values the presets drew
 /// from, which keep Venus's air dense, a frozen world's thin, a giant's
-/// sky thin above its cloud tops and the tilts of the ice giants
+/// (and a steam world's) sky thin above its cloud tops and the tilts of the ice giants
 /// and hot Jupiters (tides have righted a hot one's; Uranus lies on its
 /// side, 97.8° or 82° spinning backwards).
 #[derive(Default)]
@@ -341,6 +347,10 @@ fn draws_of(base: &str) -> LookDraws {
         "gas-giant" => giant(None),
         "hot-jupiter" => giant(Some(Range([0.0, 3.0]))),
         "ice-giant" => giant(Some(Range([0.0, 90.0]))),
+        // A steam world shows its cloud deck as a giant does (a thin sky
+        // above the cloud tops, no surface age: no ground is seen), but
+        // it is a planet: its tilt is drawn as a planet's.
+        "steam-world" => giant(None),
         _ => LookDraws::default(),
     }
 }
@@ -404,9 +414,14 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
 
 /// Whether the world of `model` renders as a giant's: its [`base_of`]
 /// look is a giant's (a gas giant, a hot Jupiter, an ice giant or a
-/// mini-Neptune).
+/// mini-Neptune) or a steam world's grey cloud deck. Only the look: a
+/// steam world is a planet ([`PlanetClass::is_giant`] is false), whose
+/// moons, tides, spin, neighbours and cards are a planet's.
 pub fn renders_as_giant(model: &PlanetModel) -> bool {
-    matches!(base_of(model), "gas-giant" | "hot-jupiter" | "ice-giant")
+    matches!(
+        base_of(model),
+        "gas-giant" | "hot-jupiter" | "ice-giant" | "steam-world"
+    )
 }
 
 /// The world parameters of a planet from its `model`, placed as `placed`
@@ -435,11 +450,16 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///     they leave it and its tidal flats see the model's mass);
 ///   - its regime, the model's (its look's, see [`look_for`]), not
 ///     [`crate::geology::regime_of`]'s;
-/// - a giant ([`renders_as_giant`]): its giant look at the model's mass,
-///   a mini-Neptune's too, however light (issue #446), its radius the
-///   giant look's (`giant_radius_of` for the model's composition and
+/// - a giant ([`PlanetClass::is_giant`]): its giant look at the model's
+///   mass, a mini-Neptune's too, however light (issue #446), its radius
+///   the giant look's (`giant_radius_of` for the model's composition and
 ///   light, the model's own radius), no ground, no giant neighbours and
 ///   nobody's moon;
+/// - a steam world: the `steam-world` look, a giant's cloud deck at the
+///   model's radius (no ground, a giant's thin render sky and no surface
+///   age), but a planet otherwise: no `giant_mass_earth`, the model's
+///   gravity, a planet's tilt draw, moons, tides and spin, its giant
+///   neighbours and host as asked;
 /// - a body that is no giant whose envelope hides its surface: its class's
 ///   look ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
 ///   the model's radius and gravity, with no ocean and no temperature
@@ -464,8 +484,11 @@ pub fn params_for(
 ) -> WorldParams {
     use crate::request::{PRESSURE_BAR, SEA_LEVEL, SURFACE_AGE_GA, VOLCANIC};
     let base = base_of(model);
-    let giant = renders_as_giant(model);
-    let surface = model.surface.as_ref().filter(|_| !giant);
+    // Drawn as a cloud deck (a giant or a steam world), and a giant: a
+    // steam world is a planet, only its look is a giant's deck.
+    let deck = renders_as_giant(model);
+    let giant = model.class.is_giant();
+    let surface = model.surface.as_ref().filter(|_| !deck);
     let mut look = match surface {
         Some(_) => look_for(model),
         None => Look::load(base),
@@ -537,13 +560,19 @@ pub fn params_for(
                     regime_age,
                 )
             }
-            None if giant => (
+            None if deck => (
                 sea_level,
-                crate::giants::giant_radius_of(
-                    giant_mass,
-                    &crate::giants::GiantComposition::of(&model.inputs),
-                    &super::Exposure::of(&star),
-                ) * 40_075.0,
+                // A steam world keeps the model's radius, the steam's
+                // inflation included, not a giant law's.
+                if model.class == PlanetClass::SteamWorld {
+                    model_circumference
+                } else {
+                    crate::giants::giant_radius_of(
+                        giant_mass,
+                        &crate::giants::GiantComposition::of(&model.inputs),
+                        &super::Exposure::of(&star),
+                    ) * 40_075.0
+                },
                 look_pressure,
                 0.0,
                 0.0,
@@ -622,7 +651,8 @@ pub fn params_for(
             .is_some_and(|s| s.climate.liquid == SurfaceLiquid::Hydrocarbons)
             .then_some(POLAR_LIQUID_LAT_DEG),
         ridge: None,
-        // A giant's gravity follows from its own mass.
+        // A giant's gravity follows from its own mass (a steam world's is its
+        // model's, a planet's).
         gravity: (!giant).then_some(model.interior.gravity as f32),
         age_gyr: placed.age_gyr,
         // Drawn from its own stream: the other draws keep their values.
@@ -804,6 +834,28 @@ mod tests {
     }
 
     #[test]
+    fn a_heat_pipe_ocean_world_renders_as_water() {
+        // Earth's model under strong tidal heating (mgs-81447-3145862552 b:
+        // a super-Earth with 2390 Earth oceans at 287 K in the heat-pipe
+        // regime): the ocean covers the volcanism, it is not a lava look.
+        let mut ocean = model_of("Earth");
+        ocean.surface.as_mut().unwrap().regime = Regime::HeatPipe;
+        assert_eq!(
+            ocean.surface.as_ref().unwrap().climate.liquid,
+            SurfaceLiquid::Water
+        );
+        assert_eq!(base_of(&ocean), "terran");
+        // Io-like: a heat pipe without surface water stays volcanic.
+        let mut io = model_of("Mars");
+        io.surface.as_mut().unwrap().regime = Regime::HeatPipe;
+        assert_eq!(base_of(&io), "volcanic");
+        // A water liquid never overrides a lava world.
+        let mut lava = model_of("Earth");
+        lava.class = PlanetClass::LavaWorld;
+        assert_eq!(base_of(&lava), "volcanic");
+    }
+
+    #[test]
     fn a_cold_rock_with_ice_renders_frozen() {
         // Mars's model with 0.4 Earth oceans of water kept at its surface
         // (a cold M-dwarf planet of the coherence check, mgs-65436-108 b),
@@ -892,6 +944,102 @@ mod tests {
             let share = 100.0 * liquid / total;
             assert!((0.3..3.0).contains(&share), "seed {seed}: {share} %");
         }
+    }
+
+    /// The steam world of #492: 1679 K, 409 942 bar of steam, 1.700 R⊕
+    /// at 0.018 AU of an M9V.
+    fn steam_model() -> PlanetModel {
+        use crate::planet::inputs::volatile_rule;
+        use crate::planet::{Context, reference};
+        use crate::star::{DEFAULT_AGE_GYR, StarInfo, parse_type};
+        let (iron, rock, water) = (1.06, 3.16, 0.56);
+        let mass = iron + rock + water;
+        let inputs = crate::planet::PlanetInputs {
+            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            ..reference::inputs(mass, iron / (iron + rock), water / mass)
+        };
+        let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
+        planet_model(&Context::of(&star, 0.0, 0.1), inputs)
+    }
+
+    #[test]
+    fn a_steam_world_renders_as_grey_clouds() {
+        use crate::star::parse_type;
+        let model = steam_model();
+        assert_eq!(model.class, PlanetClass::SteamWorld);
+        assert_eq!(base_of(&model), "steam-world");
+        assert!(renders_as_giant(&model));
+        let mut placed = earth_placed(1);
+        placed.star = parse_type("M9V").unwrap();
+        placed.orbit_au = 0.018;
+        placed.eccentricity = 0.0;
+        let params = params_for(&model, &placed, &mut StdRng::seed_from_u64(1));
+        let radius_km = model.interior.radius_earth * crate::exomoon::EARTH_M / 1000.0;
+        let expect = 2.0 * std::f64::consts::PI * radius_km;
+        assert!(
+            (f64::from(params.circumference_km) - expect).abs() < 1e-3 * expect,
+            "{} vs {expect}",
+            params.circumference_km
+        );
+        assert_eq!(params.class, "steam-world");
+        let stored = params.model.as_ref().unwrap();
+        assert!(stored.surface.as_ref().unwrap().gases.total() > 1e5);
+        assert!(params.look.giant.is_some());
+        // Drawn as a deck, but a planet: no giant mass, its model's
+        // gravity, a giant's thin render sky, no surface age.
+        assert!(params.is_steam_world() && params.renders_as_deck());
+        assert_eq!(params.giant_mass_earth, None);
+        assert_eq!(
+            params.deck_mass_earth(),
+            Some(model.inputs.mass_earth as f32)
+        );
+        assert_eq!(params.gravity, Some(model.interior.gravity as f32));
+        assert_eq!(params.pressure_bar, 0.3);
+        assert_eq!(params.surface_age_ga, crate::request::SURFACE_AGE_GA.min);
+        // `world.json` tells no giant, only the deck it is drawn with.
+        assert!(crate::giant_world::info(&params).is_none());
+        let deck = crate::giant_world::deck(&params).expect("a cloud deck");
+        assert_eq!(deck.kind, crate::giants::GiantKind::Steam);
+        assert_eq!(
+            deck.rotation_hours,
+            crate::generation::sidereal_day_hours(&params) as f32
+        );
+    }
+
+    #[test]
+    fn a_steam_world_keeps_a_planets_moons_spin_and_neighbours() {
+        // The steam world of #492 placed round the Sun at 1 AU (its moons
+        // and spin are free there): its moons, spin and tides are those of
+        // a rocky planet of its mass, radius and gravity, its neighbours
+        // and host as asked.
+        let model = steam_model();
+        let mut with_moons = 0;
+        for seed in 1..=200 {
+            let mut placed = earth_placed(seed);
+            placed.giants = crate::giants::GiantsMode::Auto;
+            placed.host = crate::exomoon::HostMode::Auto;
+            let params = params_for(&model, &placed, &mut StdRng::seed_from_u64(u64::from(seed)));
+            assert_eq!(params.giants, crate::giants::GiantsMode::Auto);
+            assert_eq!(params.host, crate::exomoon::HostMode::Auto);
+            let mut rocky = params.clone();
+            // The same world without its deck: a rocky planet.
+            rocky.look.giant = None;
+            assert!(!rocky.renders_as_deck());
+            let moons = crate::moons::MoonSystem::draw(&params);
+            assert_eq!(moons, crate::moons::MoonSystem::draw(&rocky), "seed {seed}");
+            assert_eq!(
+                crate::spin::star_info(&params),
+                crate::spin::star_info(&rocky),
+                "seed {seed}"
+            );
+            assert_eq!(
+                crate::generation::sidereal_day_hours(&params),
+                crate::generation::sidereal_day_hours(&rocky),
+                "seed {seed}"
+            );
+            with_moons += usize::from(moons.is_some_and(|m| !m.moons.is_empty()));
+        }
+        assert!(with_moons > 0, "no seed drew moons");
     }
 
     #[test]

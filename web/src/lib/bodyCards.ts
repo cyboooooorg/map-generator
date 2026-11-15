@@ -4,6 +4,7 @@
 import type { Body } from './api/types/Body';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { dustFedBy } from './ringMoons';
+import { cloudDeckOf } from './planetClass';
 
 export const CARD_IDS = ['header', 'orbit', 'interior', 'atmosphere', 'surface', 'legend', 'moons', 'map'] as const;
 export type CardId = (typeof CARD_IDS)[number];
@@ -27,10 +28,12 @@ export function cardsFor(body: Body | null, meta: WorldMetadata | null, hasStats
   if (!body) return [];
   const giant = meta?.giant != null;
   const cards: CardId[] = ['header', 'orbit', 'interior'];
-  // A giant's air is known from its maps; a rocky body's from its model.
+  // A giant's air is known from its maps; a rocky body's (a steam world's
+  // too) from its model.
   if (giant || body.model?.surface) cards.push('atmosphere');
-  // Land, water and rivers are measured on the maps of a rocky world.
-  if (meta && !giant && hasStats) cards.push('surface');
+  // Land, water and rivers are measured on the maps of a rocky world: a
+  // steam world shows its cloud deck, no ground (nor a surface age).
+  if (meta && !cloudDeckOf(meta) && hasStats) cards.push('surface');
   if (meta) cards.push('legend');
   if (body.kind === 'planet' || body.ring_role || body.params.ridge || dustFedBy(body, planet)) cards.push('moons');
   if (meta) cards.push('map');

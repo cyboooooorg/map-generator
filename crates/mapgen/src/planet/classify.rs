@@ -27,13 +27,18 @@ pub enum PlanetClass {
     RunawayGreenhouse,
     HydrocarbonWorld,
     OceanWorld,
+    /// A runaway whose water is a deep supercritical column hiding its
+    /// surface ([`super::climate::hides_surface`]): a world of steam over
+    /// rock, inflated by it, with no hydrogen and helium envelope (#492;
+    /// Turbet et al. 2020, doi:10.1051/0004-6361/201937151).
+    SteamWorld,
 }
 
 impl PlanetClass {
     /// The class as stored: `rocky`, `super-earth`, `ice-world`,
     /// `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
     /// `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
-    /// `ocean-world`.
+    /// `ocean-world`, `steam-world`.
     pub fn key(self) -> &'static str {
         match self {
             Self::Rocky => "rocky",
@@ -49,6 +54,7 @@ impl PlanetClass {
             Self::RunawayGreenhouse => "runaway-greenhouse",
             Self::HydrocarbonWorld => "hydrocarbon-world",
             Self::OceanWorld => "ocean-world",
+            Self::SteamWorld => "steam-world",
         }
     }
 
@@ -88,7 +94,7 @@ impl PlanetClass {
 /// The keys of every [`PlanetClass`] ([`PlanetClass::key`]), in declaration
 /// order: the types a planet of a system is stored as. The server and the
 /// web read the same list.
-pub const PLANET_CLASSES: [&str; 13] = [
+pub const PLANET_CLASSES: [&str; 14] = [
     "rocky",
     "super-earth",
     "ice-world",
@@ -102,6 +108,7 @@ pub const PLANET_CLASSES: [&str; 13] = [
     "runaway-greenhouse",
     "hydrocarbon-world",
     "ocean-world",
+    "steam-world",
 ];
 
 /// Least hydrogen and helium share of a gas giant; a giant with less is an
@@ -177,7 +184,10 @@ pub const OCEAN_WORLD_OCEANS: f64 = 10.0;
 ///    is a hot Jupiter (a gas giant) or a hot Neptune (an ice giant);
 /// 2. an envelope of at least 0.1 % of the mass and a radius of at least
 ///    1.6 R⊕: a mini-Neptune;
-/// 3. with a `surface` (an enveloped body has none): a lava world (liquid
+/// 3. with a `surface` (an enveloped body has none): a steam world (a
+///    deep supercritical steam column hides the surface, see
+///    [`super::climate::hides_surface`]; tested first, since no lava or
+///    rock shows under it), a lava world (liquid
 ///    lava), a runaway greenhouse (runaway and over
 ///    [`DENSE_AIR_BAR`]), a hydrocarbon world (liquid hydrocarbons under
 ///    more than [`METHANE_TRIPLE_BAR`]), an
@@ -233,7 +243,9 @@ pub fn classify(
 /// The class a surface gives, if it gives one (see [`classify`]).
 fn surface_class(surface: &Surface) -> Option<PlanetClass> {
     let liquid = surface.climate.liquid;
-    if liquid == SurfaceLiquid::Lava {
+    if super::climate::hides_surface(surface) {
+        Some(PlanetClass::SteamWorld)
+    } else if liquid == SurfaceLiquid::Lava {
         Some(PlanetClass::LavaWorld)
     } else if surface.water.runaway && surface.gases.total() > DENSE_AIR_BAR {
         Some(PlanetClass::RunawayGreenhouse)
@@ -385,6 +397,7 @@ mod tests {
             RunawayGreenhouse,
             HydrocarbonWorld,
             OceanWorld,
+            SteamWorld,
         ]
         .into_iter()
         .enumerate()
@@ -407,6 +420,7 @@ mod tests {
         assert_eq!(HotJupiter.key(), "hot-jupiter");
         assert_eq!(RunawayGreenhouse.key(), "runaway-greenhouse");
         assert_eq!(HydrocarbonWorld.key(), "hydrocarbon-world");
+        assert_eq!(SteamWorld.key(), "steam-world");
     }
 
     #[test]
@@ -426,10 +440,13 @@ mod tests {
     }
 
     #[test]
-    fn a_water_topped_body_past_the_critical_point_is_a_steam_runaway() {
+    fn a_water_topped_body_under_thick_nitrogen_keeps_its_ocean() {
         // 1 Earth mass, 1 % water (some 40 oceans) at 1 AU, below the
-        // runaway limit of the insolation: the 20 bar of nitrogen its ice
-        // brings carries the vapour feedback past 647 K.
+        // runaway limit of the insolation, under the 20 bar of nitrogen
+        // its ice brings. The old grey core carried its vapour feedback
+        // past 647 K and boiled it (issue #441); the moist limit does not
+        // depend on the nitrogen, and the column keeps the ocean warm but
+        // liquid.
         let inputs = PlanetInputs {
             water_fraction: 0.01,
             volatiles: crate::planet::inputs::volatile_rule(0.99, 0.01),
@@ -437,62 +454,22 @@ mod tests {
         };
         let model = planet_model(&sun_at(1.0), inputs);
         let surface = model.surface.expect("a bare body has a surface");
-        assert!(surface.water.kept_kg > 0.0, "{surface:?}");
-        assert!(surface.water.runaway, "{surface:?}");
-        assert!(surface.water.boiled, "{surface:?}");
-        assert!(surface.climate.temperature_k >= 647.0, "{surface:?}");
-        assert_ne!(surface.climate.liquid, SurfaceLiquid::Lava, "{surface:?}");
-        assert_ne!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
-        assert_ne!(surface.regime, crate::geology::Regime::Plates);
-        assert_eq!(model.class, RunawayGreenhouse);
-    }
-
-    #[test]
-    fn a_trace_of_water_does_not_boil_a_temperate_planet() {
-        // 0.2 M⊕ at 1.2 AU with 1e-9 of water (2.6e-4 bar if all of it
-        // were vapour) and the volatiles of 1 % of ice. Its vapour is
-        // bounded by the water it has, so it cannot carry the surface past
-        // 647 K. Before the vapour was capped, the first pass put hundreds
-        // of bar of steam in its air, boiled, and the planet came out a
-        // runaway greenhouse at 296 K.
-        let inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01),
-            ..reference::inputs(0.2, 0.325, 1.0e-9)
-        };
-        let model = planet_model(&sun_at(1.2), inputs);
-        let surface = model.surface.expect("a bare body has a surface");
-        assert!(!surface.water.runaway, "{surface:?}");
-        assert_ne!(model.class, RunawayGreenhouse);
-        assert!(surface.climate.temperature_k < 400.0, "{surface:?}");
-    }
-
-    #[test]
-    fn a_boil_whose_steam_cools_is_not_kept() {
-        // 0.2 M⊕ at 1.5 AU with 0.1 % of water (0.85 Earth oceans). Its
-        // vapour feedback carries the first pass past 647 K, but its steam
-        // escapes to nothing and the dry re-run sits at 293 K: the boil is
-        // not self-consistent, so the first pass stands, not a runaway
-        // greenhouse at room temperature.
-        let inputs = PlanetInputs {
-            volatiles: volatile_rule(0.999, 1.0e-3),
-            ..reference::inputs(0.2, 0.325, 1.0e-3)
-        };
-        let all = inputs.water_fraction * inputs.mass_earth * crate::exomoon::EARTH_KG;
-        let model = planet_model(&sun_at(1.5), inputs);
-        let surface = model.surface.expect("a bare body has a surface");
+        assert!(surface.gases.n2 > 10.0, "{surface:?}");
         assert!(!surface.water.runaway, "{surface:?}");
         assert!(!surface.water.boiled, "{surface:?}");
-        assert_eq!(surface.water.kept_kg, all, "{surface:?}");
+        assert!(surface.climate.temperature_k < 330.0, "{surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
         assert_ne!(model.class, RunawayGreenhouse);
     }
 
     #[test]
     fn a_runaway_keeps_in_its_air_the_water_it_keeps() {
-        // 0.2 M⊕ with 5 % and 1 % of water at 1.0 and 1.2 AU: every kg of
-        // water a runaway keeps is steam in its air, none of it neither
-        // vapour nor liquid.
+        // 0.2 M⊕ with 5 % of water at 0.8 and 0.9 AU, inside the runaway
+        // limit of the insolation: every kg of water a runaway keeps is
+        // steam in its air, none of it neither vapour nor liquid. (At 1.0
+        // and 1.2 AU the old grey core boiled them, issue #441.)
         let mut runaways = 0;
-        for (water, orbit_au) in [(0.05, 1.0), (0.01, 1.2)] {
+        for (water, orbit_au) in [(0.05, 0.8), (0.05, 0.9)] {
             let inputs = PlanetInputs {
                 volatiles: volatile_rule(1.0 - water, water),
                 ..reference::inputs(0.2, 0.325, water)
@@ -515,6 +492,238 @@ mod tests {
             );
         }
         assert!(runaways > 0);
+    }
+
+    #[test]
+    fn a_trace_of_water_does_not_boil_a_temperate_planet() {
+        // 0.2 M⊕ at 1.2 AU with 1e-9 of water (2.6e-4 bar if all of it
+        // were vapour) and the volatiles of 1 % of ice. Its vapour is
+        // bounded by the water it has, so it cannot hold its outgoing
+        // radiation at the moist limit. Before the vapour was capped, the
+        // first pass put hundreds of bar of steam in its air, boiled, and
+        // the planet came out a runaway greenhouse at 296 K.
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01),
+            ..reference::inputs(0.2, 0.325, 1.0e-9)
+        };
+        let model = planet_model(&sun_at(1.2), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+        assert!(surface.climate.temperature_k < 400.0, "{surface:?}");
+    }
+
+    #[test]
+    fn a_cool_small_planet_does_not_boil() {
+        // 0.2 M⊕ at 1.5 AU with 0.1 % of water (0.85 Earth oceans). The
+        // old grey core carried its vapour feedback past 647 K, then
+        // refused the boil because its steam escaped to nothing and the
+        // dry re-run sat at 293 K. With a moist limit its light (some
+        // 107 W/m²) is far under the plateau: a wet balance exists, it
+        // does not boil and keeps all its water.
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(0.999, 1.0e-3),
+            ..reference::inputs(0.2, 0.325, 1.0e-3)
+        };
+        let all = inputs.water_fraction * inputs.mass_earth * crate::exomoon::EARTH_KG;
+        let model = planet_model(&sun_at(1.5), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert!(!surface.water.boiled, "{surface:?}");
+        assert_eq!(surface.water.kept_kg, all, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    /// The context of a body round an F0V star (about 7200 K, the hot end
+    /// of Kopparapu et al.'s fit) that gives it `flux` S⊕, on a circular
+    /// orbit, at 2 Gyr (on its main sequence).
+    fn f0v_at(flux: f64) -> Context {
+        let kind = parse_type("F0V").unwrap();
+        let luminosity = StarInfo::new(kind, 1.0, 0.0, 2.0).luminosity;
+        let orbit_au = (f64::from(luminosity) / flux).sqrt();
+        let context = Context::of(&StarInfo::new(kind, orbit_au as f32, 0.0, 2.0), 0.0, 5.0);
+        assert!((context.insolation - flux).abs() < 1e-3 * flux);
+        context
+    }
+
+    /// Flux, S⊕, inside the runaway limit of the insolation of an F0V star
+    /// (1.296 S⊕ at its 7220 K) whose absorbed light (297 W/m² at Bond
+    /// albedo 0.3) exceeds the moist plateau (about 287 W/m²): an
+    /// Earth-like wet planet there has no wet balance and boils.
+    const F0V_BOILING_FLUX: f64 = 1.24;
+
+    #[test]
+    fn a_boil_that_escapes_all_its_water_ends_dry() {
+        // The case of #442 (census planet 458 c: 0.906 S⊕ round its star,
+        // 1.05 bar of N₂, 93 bar of CO₂ outgassed, 282 bar of vapour). Under
+        // the column core 458 c's inputs no longer boil (a Sun-like 1 M⊕
+        // heat-pipe planet at 0.906 S⊕ with 93 bar of CO₂ balances at
+        // 499 K, its ocean liquid), so the case is rebuilt where the moist
+        // limit makes a boil: the Earth at 1.24 S⊕ round an F0V star,
+        // inside its runaway limit, 0.03 % of water (342 bar if all of it
+        // were vapour), the rule's N₂ (1.03 bar in the first pass) and CO₂
+        // set to 65 and 93 bar in the dry air. Its steam escapes to
+        // nothing; the dry air sits at about 630 K and 680 K, under and
+        // over water's critical point: in both the end state is the dry
+        // runaway (the old rule refused the boil whose dry re-run sat
+        // under 647 K and kept the wet first pass).
+        for co2 in [6.0e-5, 8.6e-5] {
+            let inputs = PlanetInputs {
+                water_fraction: 3.0e-4,
+                volatiles: crate::planet::Volatiles {
+                    co2,
+                    ..volatile_rule(1.0 - 3.0e-4, 3.0e-4)
+                },
+                ..model_inputs(reference("Earth"))
+            };
+            let model = planet_model(&f0v_at(F0V_BOILING_FLUX), inputs);
+            let surface = model.surface.expect("a bare body has a surface");
+            assert!(surface.water.runaway, "{co2}: {surface:?}");
+            assert!(surface.water.boiled, "{co2}: {surface:?}");
+            assert_eq!(surface.water.kept_kg, 0.0, "{co2}: {surface:?}");
+            assert_eq!(surface.gases.h2o, 0.0, "{co2}: {surface:?}");
+            assert_ne!(
+                surface.climate.liquid,
+                SurfaceLiquid::Water,
+                "{co2}: {surface:?}"
+            );
+            assert_ne!(surface.regime, crate::geology::Regime::Plates);
+            assert_eq!(model.class, RunawayGreenhouse, "{co2}: {surface:?}");
+        }
+    }
+
+    #[test]
+    fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
+        // The Earth at 1.24 S⊕ round an F0V star (see F0V_BOILING_FLUX)
+        // with the volatiles of 0.1 % of ice and just enough water that
+        // the steam pass's energy-limited escape leaves 0.03 bar of it
+        // (some 1.6e17 kg): its first pass boils (2.4 bar of N₂, no wet
+        // balance), but so little vapour cannot hold the outgoing
+        // radiation at the moist limit, so the leftover recondenses into
+        // a small ocean near 306 K. (With 0.1 bar left the balance is at
+        // 404 K, over the boiling point, all of it vapour; from about
+        // 1 bar there is none and the steam runaway stands.)
+        let context = f0v_at(F0V_BOILING_FLUX);
+        let mut inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - 1.0e-3, 1.0e-3),
+            ..model_inputs(reference("Earth"))
+        };
+        let left_bar = 0.03;
+        let mass_kg = inputs.mass_earth * crate::exomoon::EARTH_KG;
+        let fluence = crate::planet::xuv_fluence(&context);
+        for _ in 0..3 {
+            // The water the steam pass loses (9 kg per kg of hydrogen,
+            // see `regime::steam`) plus `left_bar` of it; the interior
+            // barely moves with the water share, so three rounds settle it.
+            let interior = crate::planet::interior(&inputs, &context.exposure());
+            let lost =
+                9.0 * crate::planet::energy_limited_loss_kg(&interior, inputs.mass_earth, fluence);
+            let bar_per_kg = crate::planet::atmosphere::bar_per_kg(inputs.mass_earth, &interior);
+            inputs.water_fraction = (lost + left_bar / bar_per_kg) / mass_kg;
+        }
+        let all = inputs.water_fraction * mass_kg;
+        let model = planet_model(&context, inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert!(surface.water.boiled, "{surface:?}");
+        assert!(surface.water.kept_kg > 0.0, "{surface:?}");
+        assert!(surface.water.kept_kg < 1e-3 * all, "{surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    /// The model of the case of #492 (system mgs-81447-3145862552, body
+    /// b): 4.78 M⊕ of iron 1.06, rock 3.16 and water 0.56 M⊕ (12 %), the
+    /// volatiles of the rule without scatter, round an M9V star at
+    /// 0.018 AU.
+    fn the_492_super_earth() -> crate::planet::PlanetModel {
+        let (iron, rock, water) = (1.06, 3.16, 0.56);
+        let mass = iron + rock + water;
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            ..reference::inputs(mass, iron / (iron + rock), water / mass)
+        };
+        let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
+        planet_model(&Context::of(&star, 0.0, 0.1), inputs)
+    }
+
+    #[test]
+    fn the_492_super_earth_is_a_steam_world() {
+        // Its water runs away under the insolation and stays a deep
+        // supercritical column, hundreds of thousands of bar: the surface
+        // is hidden and the steam inflates the radius (1.64 R⊕ with the
+        // water condensed).
+        let model = the_492_super_earth();
+        let surface = model.surface.expect("a bare body has a surface");
+        assert_eq!(model.class, SteamWorld, "{surface:?}");
+        assert!(surface.gases.h2o > 1e5, "{surface:?}");
+        // Past the moist plateau, not held at water's critical point.
+        assert!(surface.climate.temperature_k > 1000.0, "{surface:?}");
+        // The equilibrium temperature it kept is the one under the runaway
+        // albedo, which absorbs more than Earth's 0.3 does (about 252 K at
+        // its 0.95 S⊕).
+        assert!(
+            (258.0..280.0).contains(&surface.climate.equilibrium_k),
+            "{surface:?}"
+        );
+        let top = model.interior.layers.last().unwrap();
+        assert_eq!(top.material, crate::planet::Material::Steam);
+        // Larger than the same body with its water condensed, and than
+        // the Turbet et al. fit clamped to its narrower Eq. 3 range
+        // (27 kbar), which gave 1.61 R⊕.
+        let condensed = crate::planet::solid_interior(&model.inputs).radius_earth;
+        assert!((1.6..1.7).contains(&condensed), "{condensed}");
+        let radius = model.interior.radius_earth;
+        println!(
+            "#492 b: {:.0} K, {:.0} bar of steam, {radius:.3} R⊕ ({condensed:.3} \
+             condensed), {:.2} g/cm³, {:.2} g⊕",
+            surface.climate.temperature_k,
+            surface.gases.h2o,
+            model.interior.density,
+            model.interior.gravity
+        );
+        assert!(radius > condensed, "{radius} vs {condensed}");
+        assert!(radius > 1.61, "{:?}", model.interior);
+        assert!(!SteamWorld.is_giant());
+    }
+
+    #[test]
+    fn thin_steam_over_rock_stays_a_runaway_greenhouse() {
+        // 1 M⊕ with 0.01 % of water (about 115 bar if all of it were
+        // steam) at 0.7 AU round the Sun, inside the runaway limit of the
+        // insolation: the steam column is far under ten times the
+        // critical pressure, the rock stays visible.
+        let model = model_at(1.0, 1.0e-4, 0.7);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(surface.water.runaway, "{surface:?}");
+        assert!(
+            !crate::planet::climate::hides_surface(&surface),
+            "{surface:?}"
+        );
+        assert_eq!(model.class, RunawayGreenhouse, "{surface:?}");
+        assert!(
+            model
+                .interior
+                .layers
+                .iter()
+                .all(|l| l.material != crate::planet::Material::Steam)
+        );
+    }
+
+    #[test]
+    fn a_hot_icy_moon_is_no_steam_world_without_a_deep_column() {
+        // Europa's make (8 % water) at 0.5 AU round the Sun: its ice runs
+        // away, but a body that small holds too thin a steam column (all
+        // its water would weigh about 1300 bar) to hide its surface.
+        for orbit_au in [0.3, 0.5, 0.7] {
+            let europa = model_inputs(reference("Europa"));
+            let model = planet_model(&sun_at(orbit_au), europa);
+            let surface = model.surface.expect("a bare body has a surface");
+            assert!(surface.water.runaway, "{orbit_au}: {surface:?}");
+            let hidden = crate::planet::climate::hides_surface(&surface);
+            assert_eq!(model.class == SteamWorld, hidden, "{orbit_au}: {surface:?}");
+            assert_ne!(model.class, SteamWorld, "{orbit_au}: {surface:?}");
+        }
     }
 
     #[test]

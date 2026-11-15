@@ -69,6 +69,7 @@
   } from '../lib/viewer/PlanetView';
   import { currentProfile } from '../lib/viewer/quality';
   import { giantStorms } from '../lib/giantStorms';
+  import { cloudDeckOf } from '../lib/planetClass';
   import { RING_ROCK_SCALES, ringRocks } from '../lib/ringRocks';
   import type { Layer } from '../lib/viewer/shaders';
   import type { LoadedWorld } from '../lib/world.svelte';
@@ -456,8 +457,8 @@
   const epochShown = $derived(epochPreview ?? epoch);
   const layers = $derived(world.layers);
   const dataReady = $derived(layers !== null);
-  /** A giant planet: cloud bands, no ground (see GiantInfo). */
-  const giant = $derived(meta?.giant ?? null);
+  /** A giant planet, or a steam world under its deck: cloud bands, no ground (see GiantInfo, cloudDeckOf). */
+  const giant = $derived(cloudDeckOf(meta));
   /**
    * The °C range of the temperature colours, for the globe, its detail tiles
    * and the legend alike: a giant's cloud tops', else the world's own when it

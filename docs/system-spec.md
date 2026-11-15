@@ -561,7 +561,7 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (5), the request, the seed and the map size. A
+  - `format_version` (6), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
     body's files directly in `bodies/<id>/`, version 2 typed its planets
     by preset and stored no physical model, version 3 kept a preset in
@@ -586,7 +586,7 @@ systems/<system-id>/
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
     `mini-neptune`, `ice-giant`, `gas-giant`, `hot-jupiter`,
     `hot-neptune`, `lava-world`, `volcanic-world`, `runaway-greenhouse`, `hydrocarbon-world`,
-    `ocean-world`), its `physical.mass_earth` the model's mass after
+    `ocean-world`, `steam-world`), its `physical.mass_earth` the model's mass after
     photoevaporation; its world renders, until #424, with the look
     closest to the model (`planet::interim::base_of`), and the model of
     a planet with a surface drives the world
@@ -609,7 +609,16 @@ systems/<system-id>/
     drawn planets (5 of 1 577 over 500 systems).
     A giant class keeps the giant world of its look at the model's
     mass and radius (a mini-Neptune's too, however light; its moons
-    drawn for that mass). A request asks for
+    drawn for that mass). A steam world (a water runaway whose steam
+    hides its surface, #492) renders with the giants' deck renderer
+    only: the `steam-world` look, grey bands at the model's radius, no
+    ground, a giant's nominal sky pressure and no surface age
+    (`WorldParams::renders_as_deck`). It is a planet otherwise: its
+    `params` carry no `giant_mass_earth` and the model's gravity, and
+    its moons, tides, spin, tilt, giant neighbours and host are drawn as
+    a rocky planet's of its mass and radius; its `world.json` stores
+    its deck under `cloud_deck`, not `giant`, so its cards read its
+    model. A request asks for
     planets by archetype: an archetype places the planet by its own
     insolation and mass, and the model types it. The planet a request
     around one asks for has its model too (`model`, derived from the
@@ -1021,7 +1030,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (21 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (22 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message pointing to the Regenerate button of the system's card in
   the main menu (or to deleting it and drawing it again), and the viewer

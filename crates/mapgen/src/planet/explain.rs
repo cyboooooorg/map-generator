@@ -198,7 +198,7 @@ impl Cause {
 }
 
 /// Most a recomposed surface temperature may differ from the stored one,
-/// K: the water-vapour feedback converges to 1e-3 K (see
+/// K: the surface temperatures are solved to 1e-2 K (see
 /// [`super::climate::climate`]), the rest is exact.
 const TEMPERATURE_TOLERANCE_K: f64 = 0.5;
 
@@ -212,16 +212,18 @@ const HEAT_TOLERANCE: f64 = 1e-6;
 /// The internal heat is recomputed ([`super::internal_heat`]) and must be
 /// the stored one within [`HEAT_TOLERANCE`]. A bare body's surface steps
 /// are run again from the water the chain started them with (its first
-/// pass, or the boiled steam it kept, see [`super::planet_model`]), which
+/// pass, the boiled steam it kept, or the water left after a boil that
+/// condensed again, see [`super::planet_model`]), which
 /// gives what it outgassed, what escape left and the air its climate was
 /// solved with (the stored air is after life's oxygen). The surface
-/// temperature is decomposed with [`surface_temperature_k`],
-/// `T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`: its equilibrium temperature (no air, no
-/// heat), the greenhouse (with air, minus that) and the internal warming
+/// temperature is decomposed with [`surface_temperature_k`] (the balance
+/// of a radiative–convective column, [`super::column`]): its equilibrium
+/// temperature (no air, no heat), the greenhouse (with air, minus that)
+/// and the internal warming
 /// (with air and heat, minus with air only), whose sum must be the stored
 /// temperature within [`TEMPERATURE_TOLERANCE_K`].
 pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
-    let heat = internal_heat(context, &model.inputs, &model.interior);
+    let heat = internal_heat(context, &model.inputs, &surface_interior(context, model));
     let close = |a: f64, b: f64| (a - b).abs() <= HEAT_TOLERANCE * a.abs().max(b.abs());
     if !close(heat.tidal_w, model.heat.tidal_w)
         || !close(heat.radiogenic_w, model.heat.radiogenic_w)
@@ -241,16 +243,36 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
     Some(Explanation { trees })
 }
 
+/// The interior the chain ran the heat and the surface steps on: the
+/// model's, except a steam world's, whose interior was derived again
+/// with its steam afterwards ([`super::steam_interior`]).
+fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
+    if model
+        .interior
+        .layers
+        .iter()
+        .any(|l| l.material == super::Material::Steam)
+    {
+        super::interior(&model.inputs, &context.exposure())
+    } else {
+        model.interior.clone()
+    }
+}
+
 /// The surface steps of `model` run again (see [`bare`]), from the water
 /// the chain started the kept pass with: the boiled steam when `surface`
-/// boiled, else the water of its first pass.
+/// boiled and stayed a runaway, its own water when the water left after
+/// the boil condensed again, else the water of its first pass.
 fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
-    let (i, interior, fluence) = (&model.inputs, &model.interior, model.xuv_fluence);
-    let start = if surface.water.boiled {
+    let interior = &surface_interior(context, model);
+    let (i, fluence) = (&model.inputs, model.xuv_fluence);
+    let start = if surface.water.boiled && surface.water.runaway {
         Water {
             boiled: true,
             ..steam(i, interior, fluence)
         }
+    } else if surface.water.boiled {
+        surface.water
     } else {
         water(context, i, interior, fluence)
     };
@@ -285,7 +307,9 @@ fn heat_flux(context: &Context, model: &PlanetModel) -> Cause {
     };
     Cause::of(
         Quantity::HeatFlux,
-        model.heat.flux_w_m2(model.interior.radius_earth),
+        model
+            .heat
+            .flux_w_m2(surface_interior(context, model).radius_earth),
     )
     .because(vec![
         Cause::of(Quantity::RadiogenicHeat, model.heat.radiogenic_w).set_by(InputField::Radiogenic),
@@ -336,7 +360,10 @@ fn temperature_tree(
     steps: &Bare,
 ) -> Option<Cause> {
     let gases = &steps.climate_gases;
-    let flux = model.heat.flux_w_m2(model.interior.radius_earth);
+    let context = &super::climate::absorbing(context, &surface.water, gases.h2o);
+    let flux = model
+        .heat
+        .flux_w_m2(surface_interior(context, model).radius_earth);
     let bare_k = surface_temperature_k(context, &Gases::default(), 0.0);
     let air_k = surface_temperature_k(context, gases, 0.0);
     let full_k = surface_temperature_k(context, gases, flux);

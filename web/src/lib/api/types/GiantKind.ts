@@ -3,4 +3,4 @@
 /**
  * What a giant is mostly made of.
  */
-export type GiantKind = "gas" | "ice";
+export type GiantKind = "gas" | "ice" | "steam";

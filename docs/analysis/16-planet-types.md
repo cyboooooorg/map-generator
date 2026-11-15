@@ -52,9 +52,9 @@ Other checked occurrences: Petigura 2013 finds 11 ± 4 % of Sun-like stars with 
 
 ## What the generator does not produce yet
 
-The generator's 13 classes are in `crates/mapgen/src/planet/classify.rs` (`PlanetClass`). Missing types were filed as backlog issues on 2026-11-15, and the user validated this order, to follow the science track (#423) after its step 5b (#487):
+The generator's 14 classes are in `crates/mapgen/src/planet/classify.rs` (`PlanetClass`). Missing types were filed as backlog issues on 2026-11-15, and the user validated this order, to follow the science track (#423) after its step 5b (#487):
 
-1. With the climate pass: #492 steam worlds, and labels on the existing model: #498 super-Mercury, #499 eyeball / snowball / desert climate states, #501 warm and ultra-hot Jupiters.
+1. With the climate pass: #492 steam worlds (done: class `steam-world`, a water runaway under more than ten times water's critical pressure of steam, drawn as a grey cloud deck), and labels on the existing model: #498 super-Mercury, #499 eyeball / snowball / desert climate states, #501 warm and ultra-hot Jupiters.
 2. A distribution step that changes system draws (needs a `FORMAT_VERSION` bump): #494 ultra-short-period planets (periods are drawn from 1 d), #495 super-puffs (inflation only above 30 Earth masses), #496 dwarf planets (mass floor 0.05 Earth masses), #497 chthonian planets.
 3. #500 Hycean worlds (needs H2 collision-induced greenhouse over an ocean).
 4. Outside the track: #502 rogue planets, #503 mutual inclinations / retrograde orbits / stellar obliquity, #504 young systems with a disk, #505 theoretical compositions (carbon, coreless, helium).

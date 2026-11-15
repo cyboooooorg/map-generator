@@ -11,6 +11,8 @@
   import type { Quantity } from '../../lib/api/types/Quantity';
   import { limitsOf, marks, MODEL_GROUPS, type ModelFieldKey } from '../../lib/modelFields';
   import { fieldValueText, markName, referencesLabel, referencesLine, referenceValueText } from '../../lib/modelFormat';
+  import { formatKm, formatNumber, formatShare, withUnit } from '../../lib/format';
+  import { waterDepthKm, waterShare } from '../../lib/waterAmount';
   import { massNote } from '../../lib/massFormat';
   import MassUnits from '../MassUnits.svelte';
   import MarkedSlider, { type SliderMark } from './MarkedSlider.svelte';
@@ -22,6 +24,8 @@
     values: ModelValues;
     /** What the seed drew, from the preview; null before the first answer. */
     drawn: DrawnValues | null;
+    /** The radius (Earth radii) of the planet the preview drew; null before an answer. */
+    radiusEarth?: number | null;
     /** The values of the body a field sets (the preview's trees). */
     driven: (key: ModelFieldKey) => Quantity[];
     /** The request fields the planet has no use for. */
@@ -34,9 +38,29 @@
     open: Set<string>;
   }
 
-  let { spec, values = $bindable(), drawn, driven, ignored, explained, refusal, open }: Props = $props();
+  let { spec, values = $bindable(), drawn, radiusEarth = null, driven, ignored, explained, refusal, open }: Props = $props();
 
   const refusedField = $derived(refusal ? errorField(refusal) : null);
+  /** The mass the water is compared with: the one set, else the one the preview drew. */
+  const planetMass = $derived(
+    !values.mass_earth.random ? (values.mass_earth.value as number) : typeof drawn?.mass_earth === 'number' ? drawn.mass_earth : null,
+  );
+  /** The two lines under a set amount of water; none when the planet's mass or radius is not known. */
+  const waterLines = $derived.by(() => {
+    const entry = values.water_oceans;
+    if (entry.random) return null;
+    const oceans = entry.value as number;
+    const lines: string[] = [];
+    if (planetMass !== null && planetMass > 0) {
+      lines.push(t.form.model.waterShare({ share: formatShare(waterShare(oceans, planetMass)) }));
+    }
+    if (radiusEarth !== null && radiusEarth > 0) {
+      const km = waterDepthKm(oceans, radiusEarth);
+      const depth = km < 1 ? withUnit(formatNumber(km * 1000, km < 0.01 ? 1 : 0), 'm') : formatKm(km);
+      lines.push(t.form.model.waterDepth({ depth }));
+    }
+    return lines.length > 0 ? lines : null;
+  });
   const numeric = (key: Exclude<ModelFieldKey, 'life'>) => values[key].value as number;
 
   /** Pins a field, starting from what the seed drew. */
@@ -161,6 +185,9 @@
             {/if}
           {/if}
           <p class="unit-help"><MassUnits text={text.unitHelp} /></p>
+          {#if key === 'water_oceans' && waterLines}
+            <p class="unit-help water-amount">{waterLines.join(' · ')}</p>
+          {/if}
           {#if referencesLine(key, spec)}
             <p class="unit-help references">{referencesLine(key, spec)}</p>
           {/if}

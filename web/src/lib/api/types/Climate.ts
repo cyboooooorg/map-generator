@@ -8,7 +8,13 @@ export type Climate = {
 /**
  * Mean surface temperature, K.
  */
-temperature_k: number, liquid: SurfaceLiquid, 
+temperature_k: number, 
+/**
+ * The equilibrium temperature the climate used, K: the context's,
+ * lowered by the runaway albedo of [`absorbing`] on a steam world
+ * or any other water runaway.
+ */
+equilibrium_k: number, liquid: SurfaceLiquid, 
 /**
  * The carbonate thermostat holds the temperature at
  * [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.

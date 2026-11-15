@@ -3,6 +3,7 @@
 // the ones left to it, read back from the preview.
 import type { ResolvedSystem } from './api/types/ResolvedSystem';
 import type { WorldRequest } from './api/types/WorldRequest';
+import { EARTH_MASS_KG, OCEAN_KG } from './waterAmount';
 import { MODEL_GROUPS, type ModelFieldKey } from './modelFields';
 
 /** A field is drawn (`random`) or pinned at `value`; `life` pins a boolean, the others a number. */
@@ -47,8 +48,7 @@ export function pinnedCount(values: ModelValues, keys: readonly ModelFieldKey[])
   return keys.filter((key) => !values[key].random).length;
 }
 
-const EARTH_KG = 5.972e24;
-const OCEAN_KG = 1.4e21;
+const EARTH_KG = EARTH_MASS_KG;
 
 /**
  * What the seed drew for a lone world, as the request would pin it: the
@@ -91,4 +91,11 @@ function volatileFactors(overrides: NonNullable<ResolvedSystem['formation']>['ov
 /** Sets a pinned number; one that is not a number (a cleared box reads NaN) leaves the previous value. */
 export function setPinned(values: ModelValues, key: Exclude<ModelFieldKey, 'life'>, value: number): void {
   if (Number.isFinite(value)) values[key].value = value;
+}
+
+/** The radius (Earth radii) of the planet the preview drew, or null before an answer. */
+export function previewRadiusEarth(result: ResolvedSystem | null): number | null {
+  const focus = result?.system.focus;
+  const body = focus ? result?.system.bodies.find((b) => b.id === focus) : undefined;
+  return body?.model?.interior.radius_earth ?? null;
 }

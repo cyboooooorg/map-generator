@@ -159,7 +159,7 @@ fn eddy_speed(
     let beta = 2.0 * omega / radius_m;
     let (u0, f0, b0) = match kind {
         GiantKind::Gas => (JUPITER_WIND, JUPITER_FLUX, JUPITER_BETA),
-        GiantKind::Ice => (ICE_WIND, ICE_FLUX, ICE_BETA),
+        GiantKind::Ice | GiantKind::Steam => (ICE_WIND, ICE_FLUX, ICE_BETA),
     };
     (u0 * (flux / f0).powf(0.4) * (beta / b0).powf(-0.2)).clamp(20.0, 3000.0)
 }
@@ -200,7 +200,7 @@ fn peak_wind(
             let flux = 5.670_374e-8 * f64::from(internal_k).powi(4);
             GAS_ROSSBY * (JUPITER_INTERNAL_FLUX / flux).powf(ROSSBY_EXPONENT) * reach
         }
-        GiantKind::Ice => ICE_ROSSBY * reach,
+        GiantKind::Ice | GiantKind::Steam => ICE_ROSSBY * reach,
     };
     let ceiling = MAX_MACH * sound_speed(f64::from(effective_k));
     law.max(irradiated).min(ceiling).clamp(20.0, 3000.0)
@@ -506,7 +506,11 @@ pub fn radius_earth(p: &WorldParams, mass_earth: f32) -> f32 {
 /// ([`giant_radius_of`]), or, without a model, from its mass and
 /// temperature alone ([`giant_radius`]).
 fn radius_at(p: &WorldParams, star: &StarInfo, mass_earth: f32) -> f32 {
+    let steam = p.is_steam_world();
     match &p.model {
+        // A steam world's radius is the model's: the steam inflates a
+        // rock and iron core that no giant law describes.
+        Some(model) if steam => model.interior.radius_earth as f32,
         Some(model) => giant_radius_of(
             mass_earth,
             &GiantComposition::of(&model.inputs),
@@ -535,6 +539,14 @@ fn palette(kind: GiantKind, clouds: Clouds, t: f32, u: f32) -> Palette {
     }
 }
 
+/// Shades of a steam world's cloud deck: light grey zones, mid grey belts,
+/// near-white storms and poles, no hue (the design of the climate pass,
+/// lot 1: "as if it were only clouds"). Every channel is equal.
+const STEAM_ZONE: f32 = 0.78;
+const STEAM_BELT: f32 = 0.62;
+const STEAM_STORM: f32 = 0.94;
+const STEAM_POLAR: f32 = 0.9;
+
 /// The colours of a giant of `kind` and cloud `class`, varied by `t` and
 /// `u` in `[0, 1]`: Jupiter's cream and ochre to Saturn's pale gold, cyan
 /// to deep blue ice giants (methane absorbing the red, a tinge of it left
@@ -543,6 +555,17 @@ fn palette(kind: GiantKind, clouds: Clouds, t: f32, u: f32) -> Palette {
 /// albedo of about 0.5 against 0.03 for class IV (Sudarsky et al. 2000).
 fn class_palette(kind: GiantKind, class: u8, t: f32, u: f32) -> Palette {
     let mix = |a: [f32; 3], b: [f32; 3], f: f32| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * f);
+    if kind == GiantKind::Steam {
+        // A low-contrast grey, whatever the class of the deck: the belts
+        // still blend toward the zones by `u`.
+        let grey = |v: f32| [v; 3];
+        return Palette {
+            zone: grey(STEAM_ZONE + 0.04 * (t - 0.5)),
+            belt: mix(grey(STEAM_BELT), grey(STEAM_ZONE), 0.45 * u),
+            storm: grey(STEAM_STORM),
+            polar: grey(STEAM_POLAR),
+        };
+    }
     let (zone, belt, storm, polar) = match (kind, class) {
         (GiantKind::Ice, 1) => (
             mix([0.72, 0.89, 0.92], [0.5, 0.66, 0.93], t),
@@ -622,12 +645,17 @@ impl Look {
         // once a year.
         // On an eccentric orbit a fluid giant turns at the pseudo-synchronous
         // rate (Hut 1981), not once a year.
-        let rotation_hours = if hot || crate::spin::giant_locked(&star, mass_earth, radius_earth) {
+        // A steam world is a planet under its deck: it turns as one (its
+        // moons, its star's tides on a rock of its mass and radius, see
+        // `crate::generation::sidereal_day_hours`).
+        let rotation_hours = if kind == GiantKind::Steam {
+            crate::generation::sidereal_day_hours(p) as f32
+        } else if hot || crate::spin::giant_locked(&star, mass_earth, radius_earth) {
             star.year_days * 24.0 / crate::spin::pseudo_synchronous_turns(p.eccentricity)
         } else {
             match kind {
                 GiantKind::Gas => rng.random_range(9.0..12.0),
-                GiantKind::Ice => rng.random_range(14.0..19.0),
+                GiantKind::Ice | GiantKind::Steam => rng.random_range(14.0..19.0),
             }
         };
         let omega = 2.0 * PI / (f64::from(rotation_hours) * 3600.0);
@@ -644,14 +672,14 @@ impl Look {
         // regions: an equatorial zone, then belts and zones in turn.
         let polar = match kind {
             GiantKind::Gas => rng.random_range(58.0..70.0),
-            GiantKind::Ice => rng.random_range(62.0..74.0),
+            GiantKind::Ice | GiantKind::Steam => rng.random_range(62.0..74.0),
         };
         let equator = if hot {
             rng.random_range(18.0..30.0)
         } else {
             match kind {
                 GiantKind::Gas => rng.random_range(6.0..11.0),
-                GiantKind::Ice => rng.random_range(18.0..28.0),
+                GiantKind::Ice | GiantKind::Steam => rng.random_range(18.0..28.0),
             }
         };
         let mut bands = vec![Band {
@@ -717,7 +745,9 @@ impl Look {
         // Scott & Polvani 2007).
         let equatorial_jet = match (hot, kind) {
             (false, GiantKind::Gas) => rng.random_range(0.9..1.2) * wind as f32,
-            (false, GiantKind::Ice) if jets > 1 => -rng.random_range(0.9..1.2) * wind as f32,
+            (false, GiantKind::Ice | GiantKind::Steam) if jets > 1 => {
+                -rng.random_range(0.9..1.2) * wind as f32
+            }
             _ => 0.0,
         };
 
@@ -762,7 +792,7 @@ impl Look {
                         });
                     }
                 }
-                GiantKind::Ice => {
+                GiantKind::Ice | GiantKind::Steam => {
                     if rng.random::<f32>() < 0.5 {
                         great_spot = true;
                         let size = rng.random_range(0.6..1.2);
@@ -843,6 +873,9 @@ impl Look {
             let r: f32 = rng.random();
             let style = match (hot, kind) {
                 (true, _) => PoleStyle::Haze,
+                // A steam world's poles stay a plain grey haze: the
+                // cyclones' bluish, filamented look is an ice giant's.
+                (_, GiantKind::Steam) => PoleStyle::Haze,
                 (_, GiantKind::Ice) => {
                     if r < 0.3 {
                         PoleStyle::Cyclones
@@ -958,8 +991,10 @@ impl Look {
             // Three broad jets, westward at the equator, eastward at high
             // latitudes: the profile of Neptune (see [`ice_shape`]) scaled
             // by the giant's peak wind.
-            GiantKind::Ice if self.info.jets <= 1 => self.wind * ice_shape(lat) * polar_fade,
-            GiantKind::Ice | GiantKind::Gas => {
+            GiantKind::Ice | GiantKind::Steam if self.info.jets <= 1 => {
+                self.wind * ice_shape(lat) * polar_fade
+            }
+            GiantKind::Ice | GiantKind::Steam | GiantKind::Gas => {
                 let jets: f32 = self
                     .jets_at
                     .iter()
@@ -1158,7 +1193,12 @@ fn polar_look(
         PoleStyle::Haze => {
             // A bright cap of haze over the pole.
             let cap = 1.0 - smoothstep(6.0, 18.0, colat);
-            colour = mix(colour, [0.97, 0.98, 1.0], 0.3 * cap);
+            let white = if look.info.kind == GiantKind::Steam {
+                [0.97; 3]
+            } else {
+                [0.97, 0.98, 1.0]
+            };
+            colour = mix(colour, white, 0.3 * cap);
         }
         PoleStyle::Hexagon => {
             // The jet's six straight sides, at about 78° (12° from the pole).
@@ -1242,9 +1282,11 @@ fn polar_look(
     (colour, storm, lift)
 }
 
-/// Generates the giant world `p`: its cloud bands as the layers of a world.
+/// Generates the giant world `p`, or the steam world under its cloud deck
+/// (see [`WorldParams::renders_as_deck`]): its cloud bands as the layers
+/// of a world.
 pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
-    let mass = p.giant_mass_earth.unwrap_or(317.8);
+    let mass = p.deck_mass_earth().unwrap_or(317.8);
     let look = Look::draw(p, mass);
     progress(Stage::Noise);
     let (w, h) = (p.width, p.height);
@@ -1302,12 +1344,13 @@ pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
     }
 }
 
-/// The colours of the band biomes of the giant world `p`, sRGB bytes, for
-/// its `world.json` biome table; `None` for a rocky world. The storm colour
+/// The colours of the band biomes of the giant world `p` (or of a steam
+/// world's deck), sRGB bytes, for its `world.json` biome table; `None` for
+/// a world with ground. The storm colour
 /// is that of the giant's largest storm ([`Look::storm_colour`]), so the
 /// legend shows what is drawn.
 pub fn biome_colours(p: &WorldParams) -> Option<[(Biome, [u8; 3]); 4]> {
-    let mass = p.giant_mass_earth?;
+    let mass = p.deck_mass_earth()?;
     let look = Look::draw(p, mass);
     let palette = look.info.palette;
     let byte = |c: [f32; 3]| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
@@ -1319,15 +1362,55 @@ pub fn biome_colours(p: &WorldParams) -> Option<[(Biome, [u8; 3]); 4]> {
     ])
 }
 
-/// What a giant world is, for `world.json`; `None` for a rocky world.
+/// What a giant world is, for `world.json`; `None` for any other world,
+/// a steam world too (a planet: see [`deck`]).
 pub fn info(p: &WorldParams) -> Option<GiantInfo> {
     p.giant_mass_earth.map(|mass| Look::draw(p, mass).info)
+}
+
+/// The cloud deck a steam world is drawn with, for `world.json` (under
+/// `cloud_deck`): what the viewer needs to draw its bands, winds and
+/// storms. Its day is the planet's. `None` for any other world, a giant
+/// too (see [`info`]).
+pub fn deck(p: &WorldParams) -> Option<GiantInfo> {
+    if p.giant_mass_earth.is_some() {
+        return None;
+    }
+    p.deck_mass_earth().map(|mass| Look::draw(p, mass).info)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::look::Look as WorldLook;
+
+    #[test]
+    fn steam_palette_is_grey() {
+        for class in 1..=5u8 {
+            for (t, u) in [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)] {
+                let p = class_palette(GiantKind::Steam, class, t, u);
+                for c in [p.zone, p.belt, p.storm, p.polar] {
+                    let spread = c.iter().cloned().fold(f32::MIN, f32::max)
+                        - c.iter().cloned().fold(f32::MAX, f32::min);
+                    assert!(spread < 0.04, "{class} {c:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn steam_colour_map_has_no_hue_down_to_the_poles() {
+        // The poles once drew an ice giant's bluish, filamented cyclone.
+        for seed in 0..24 {
+            let mut p = params("steam-world", seed, 8.0, 0.5);
+            (p.width, p.height) = (256, 128);
+            let world = generate(&p, &|_| {}).world;
+            for (i, c) in world.surface.iter().enumerate() {
+                let spread = c.iter().max().unwrap() - c.iter().min().unwrap();
+                assert!(spread <= 6, "seed {seed} pixel {i}: {c:?}");
+            }
+        }
+    }
 
     fn params(preset: &str, seed: u32, mass: f32, orbit_au: f32) -> WorldParams {
         WorldParams {

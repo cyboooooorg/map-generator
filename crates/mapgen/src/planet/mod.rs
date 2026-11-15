@@ -20,8 +20,8 @@
 //! it outgasses, what escape leaves, what its star's ultraviolet destroys
 //! and what its cold freezes out.
 //! [`climate::climate`] sets its surface temperature through a grey
-//! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
-//! its surface.
+//! radiative–convective column (`column`) and the carbonate thermostat,
+//! and the [`SurfaceLiquid`] on its surface.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
 //! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
@@ -48,6 +48,7 @@ use crate::system::{Body, System, body_seed};
 pub mod atmosphere;
 pub mod classify;
 pub mod climate;
+pub(crate) mod column;
 pub mod core;
 pub mod escape;
 pub mod explain;
@@ -75,7 +76,9 @@ pub use explain::{Cause, Explanation, InputField, Quantity, explain};
 pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
 pub use ice_shell::{IceShell, ice_shell};
 pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_with};
-pub use interior::{GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior};
+pub use interior::{
+    GIANT_MIN_ENVELOPE, GIANT_MIN_MASS_EARTH, interior, solid_interior, steam_interior,
+};
 pub use life::{Life, life, oxygenate};
 pub use mass::{Origin, SMALL_MASS, draw_mass};
 pub use moon::{MoonBirth, MoonFormation, derive_moon_model};
@@ -122,6 +125,10 @@ pub enum Material {
     Rock,
     Water,
     Envelope,
+    /// Water above its critical point over the rock of a steam world: a
+    /// supercritical envelope with no liquid–gas boundary
+    /// ([`climate::hides_surface`], [`interior::steam_interior`]).
+    Steam,
 }
 
 /// One shell of a planet, from the outer radius of the layer below.
@@ -339,13 +346,17 @@ const AU_M: f64 = 1.495_978_707e11;
 /// dynamo, see `shield`), [`methane_photolysis`], [`cold_trap`],
 /// [`photochemistry`], in that order: the photochemistry reads the cold
 /// trap's air), its
-/// [`climate`] and its [`life`] with the oxygen it makes. A body whose
-/// climate carries its water past the critical point
-/// ([`climate::boils`]) has run away: it goes through those steps again
-/// from its [`steam`], flagged `boiled`, and keeps that second pass only
-/// if its steam holds the surface past the critical point too
-/// ([`climate::past_critical`]). In a runaway the water kept is what the
-/// escape of [`atmosphere`] leaves of the steam in the air, so the
+/// [`climate`] and its [`life`] with the oxygen it makes. A wet body
+/// with no wet balance ([`climate::boils`]: its absorbed light and heat
+/// exceed the moist limit) has run away, in one pass with no loop: it
+/// goes through those steps again from its [`steam`], flagged `boiled`,
+/// whose energy-limited escape leaves it some water or none; if that
+/// leftover has a wet balance of its own, it condenses again and a third
+/// run with it as an ocean (`boiled`, no runaway) is kept, else the
+/// steam run is (Kasting 1988, doi:10.1016/0019-1035(88)90116-9, not
+/// checked, for the moist runaway; there is no temperature condition).
+/// In a runaway the water kept is what the escape of [`atmosphere`]
+/// leaves of the steam in the air, so the
 /// [`Water`] and the air's H₂O agree. Last, its [`ice_shell`] from its
 /// water layer, its internal heat and its surface's climate.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
@@ -403,23 +414,53 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         None
     } else {
         let w = water(context, &inputs, &interior, fluence);
+        let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
+        let flux = heat.flux_w_m2(interior.radius_earth);
+        // A thermostat that reached its temperature found a wet balance:
+        // only the others need the moist-limit test.
+        let boils = |steps: &Bare| {
+            let water = &steps.surface.water;
+            !steps.surface.climate.regulated
+                && climate::boils(
+                    context,
+                    &steps.climate_gases,
+                    water,
+                    flux,
+                    water.kept_kg * bar_per_kg,
+                )
+        };
         let mut steps = bare(context, &inputs, &interior, &heat, fluence, w);
-        if climate::boils(&w, &steps.surface.climate) {
+        if boils(&steps) {
             let boiled = Water {
                 boiled: true,
                 ..steam(&inputs, &interior, fluence)
             };
-            let hot = bare(context, &inputs, &interior, &heat, fluence, boiled);
-            // Kept only if the steam holds the surface past the critical
-            // point itself: a boil whose steam escape leaves too little
-            // to stay hot has no consistent runaway, and the first pass,
-            // wet and bounded by its own water, stands.
-            if climate::past_critical(&hot.surface.climate) {
-                steps = hot;
+            steps = bare(context, &inputs, &interior, &heat, fluence, boiled);
+            let left = steps.surface.water;
+            if left.kept_kg > 0.0 {
+                // The water escape left, condensed again: kept if it has a
+                // wet balance of its own, else the steam stands.
+                let condensed = Water {
+                    runaway: false,
+                    ..left
+                };
+                let wet = bare(context, &inputs, &interior, &heat, fluence, condensed);
+                if !boils(&wet) {
+                    steps = wet;
+                }
             }
         }
         air = Some(steps.before);
         Some(steps.surface)
+    };
+    // A deep supercritical steam column hides the surface and inflates
+    // the planet (#492): its interior is derived again with the steam on
+    // top, once, without re-running the climate under the new gravity.
+    let interior = match &surface {
+        Some(s) if climate::hides_surface(s) => {
+            steam_interior(&interior, inputs.mass_earth, s.water.kept_kg, &exposure)
+        }
+        _ => interior,
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
     let ice_shell = ice_shell(&interior, &heat, surface.as_ref());

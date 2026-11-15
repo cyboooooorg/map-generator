@@ -200,7 +200,7 @@ export const en = {
     radius: 'Radius',
     density: 'Density',
     layers: 'Layers',
-    materials: { Iron: 'iron', Rock: 'rock', Water: 'water', Envelope: 'gas envelope' } satisfies Record<string, string>,
+    materials: { Iron: 'iron', Rock: 'rock', Water: 'water', Envelope: 'gas envelope', Steam: 'steam' } satisfies Record<string, string>,
     core: 'Core',
     coreStates: { none: 'none', liquid: 'liquid', frozen: 'frozen' } satisfies Record<string, string>,
     field: 'Magnetic field',
@@ -743,6 +743,8 @@ export const en = {
       drawn: 'Drawn',
       drawnUnknown: 'drawn by the seed',
       drawnValue: (p: { value: string }) => `Drawn: ${p.value}`,
+      waterShare: (p: { share: string }) => `≈ ${p.share} of the planet’s mass`,
+      waterDepth: (p: { depth: string }) => `≈ ${p.depth} deep if spread over the whole planet`,
       driveLabel: 'Drives',
       notUsed: 'Not used by this planet: this value changes nothing here.',
       /** The line of Solar System values under a field, and the label of the chips that set them. */
@@ -1035,6 +1037,7 @@ export const en = {
       'runaway-greenhouse': 'Runaway greenhouse',
       'hydrocarbon-world': 'Hydrocarbon world',
       'ocean-world': 'Ocean world',
+      'steam-world': 'Steam world',
       'rocky-moon': 'Rocky moon (small)',
       'icy-moon': 'Icy moon (small)',
     },
@@ -1053,6 +1056,7 @@ export const en = {
       'runaway-greenhouse': 'Runaway greenhouse moon',
       'hydrocarbon-world': 'Hydrocarbon moon',
       'ocean-world': 'Ocean moon',
+      'steam-world': 'Steam moon',
     },
     ringMoonTypes: {
       embedded: 'Ring moon (small)',

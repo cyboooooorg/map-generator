@@ -6,6 +6,7 @@
   import { formatAu, formatInt, formatUpTo, formatYear, withUnit } from '../../lib/format';
   import { unitTooltip } from '../../lib/units';
   import { resonanceRatio, resonanceTurns } from '../../lib/spinResonance';
+  import { equilibriumK } from '../../lib/planetClass';
   import type { CardSource } from '../../lib/cardSource';
 
   let { world }: { world: CardSource } = $props();
@@ -39,7 +40,7 @@
     <dd>
       {t.card.lightValue({
         flux: formatUpTo(body.surroundings.flux_earth, body.surroundings.flux_earth < 0.1 ? 3 : 2),
-        temperature: withUnit(formatInt(Math.round(body.surroundings.equilibrium_k - 273.15)), '°C'),
+        temperature: withUnit(formatInt(Math.round(equilibriumK(body.model, body.surroundings.equilibrium_k) - 273.15)), '°C'),
       })}
     </dd>
     {#if star}
