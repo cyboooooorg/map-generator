@@ -28,10 +28,19 @@ co2: number | null,
 n2: number | null, 
 /**
  * Factor on the CH₄ formation rule (1 typical): the methane the ices
- * carry. Left out of a pinned formation (`PlanetModel::formation`),
- * as before it could be set: a varied world draws its methane again.
+ * carry.
  */
 ch4?: number, 
+/**
+ * Factor on the NH₃ formation rule (1 typical): the ammonia the ices
+ * carry.
+ */
+nh3?: number, 
+/**
+ * Factor on the sulphur formation rule (1 typical): the sulphur the
+ * rock carries.
+ */
+s?: number, 
 /**
  * Radiogenic abundance, Earth's = 1.
  */

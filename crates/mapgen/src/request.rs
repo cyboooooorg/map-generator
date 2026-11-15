@@ -193,6 +193,12 @@ pub struct WorldRequest {
     /// Factor on the CH₄ formation rule, in `[0, 100]`: 1 typical. Replaces
     /// the archetype's own when set.
     pub ch4: Option<f64>,
+    /// Factor on the NH₃ formation rule, in `[0, 100]`: 1 typical. Replaces
+    /// the archetype's own when set.
+    pub nh3: Option<f64>,
+    /// Factor on the sulphur formation rule, in `[0, 100]`: 1 typical.
+    /// Replaces the archetype's own when set.
+    pub s: Option<f64>,
     /// Radiogenic abundance at formation, Earth's = 1, in `[0.1, 10]`.
     pub radiogenic: Option<f64>,
     /// `true`: life arises wherever the world allows it; `false`: never;
@@ -457,6 +463,8 @@ impl WorldRequest {
             ("co2", self.co2, VOLATILE_FACTOR),
             ("n2", self.n2, VOLATILE_FACTOR),
             ("ch4", self.ch4, VOLATILE_FACTOR),
+            ("nh3", self.nh3, VOLATILE_FACTOR),
+            ("s", self.s, VOLATILE_FACTOR),
             ("radiogenic", self.radiogenic, RADIOGENIC),
         ] {
             if let Some(v) = value
@@ -491,6 +499,8 @@ impl WorldRequest {
             co2: self.co2.or(a.co2),
             n2: self.n2.or(a.n2),
             ch4: self.ch4.or(a.ch4),
+            nh3: self.nh3.or(a.nh3),
+            s: self.s.or(a.s),
             radiogenic: self.radiogenic.or(a.radiogenic),
             life: self.life.or(a.life),
         }
@@ -837,6 +847,8 @@ impl WorldRequest {
             co2: self.co2.or(set.co2),
             n2: self.n2.or(set.n2),
             ch4: self.ch4.or(set.ch4),
+            nh3: self.nh3.or(set.nh3),
+            s: self.s.or(set.s),
             radiogenic: self.radiogenic.or(set.radiogenic),
             life: self.life.or(set.life),
             host: if giant {
@@ -1095,6 +1107,38 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn a_request_nh3_and_s_reach_the_overrides() {
+        let request = WorldRequest {
+            nh3: Some(3.0),
+            s: Some(0.4),
+            ..Default::default()
+        };
+        let overrides = request.overrides(None, &mut StdRng::seed_from_u64(1));
+        assert_eq!((overrides.nh3, overrides.s), (Some(3.0), Some(0.4)));
+        for (field, bad) in [
+            (
+                "nh3",
+                WorldRequest {
+                    nh3: Some(1000.0),
+                    ..Default::default()
+                },
+            ),
+            (
+                "s",
+                WorldRequest {
+                    s: Some(1000.0),
+                    ..Default::default()
+                },
+            ),
+        ] {
+            assert!(
+                matches!(bad.validate(), Err(RequestError::OutOfRange { field: f, .. }) if f == field),
+                "{field}"
+            );
+        }
+    }
+
     /// Relative tolerance of [`assert_same`]: a value read back from the
     /// model (water in oceans, a volatile factor, the envelope before
     /// escape) and multiplied again may land an ulp or two away.
@@ -1339,6 +1383,8 @@ mod tests {
             ("co2", a.volatiles.co2, b.volatiles.co2),
             ("n2", a.volatiles.n2, b.volatiles.n2),
             ("ch4", a.volatiles.ch4, b.volatiles.ch4),
+            ("nh3", a.volatiles.nh3, b.volatiles.nh3),
+            ("s", a.volatiles.s, b.volatiles.s),
             ("radiogenic", a.radiogenic, b.radiogenic),
         ] {
             let scale = x.abs().max(y.abs()).max(f64::MIN_POSITIVE);
@@ -1406,11 +1452,9 @@ mod tests {
     /// A planet of a system drifted to another epoch is asked for as a
     /// world of its own, whose inputs come from its own seed's stream, not
     /// its system's: pinned, its formation inputs keep its class and its
-    /// CO₂ to the bit. Known departure: the NH₃ and sulphur scatter
-    /// (`10^N(0, 0.3)` of their rules), which no request sets, follow the
-    /// world's stream, so the nitrogen that ammonia photolysis leaves and
-    /// the SO₂ move (by about 20 % of the N₂ on planet c here), and the
-    /// pressure with them.
+    /// CO₂ to the bit. The NH₃ and sulphur factors are pinned too
+    /// (`a_drifted_planet_keeps_its_n2`), so the nitrogen that ammonia
+    /// photolysis leaves and the SO₂ stay.
     #[test]
     fn a_drifted_system_planet_keeps_its_air() {
         let system = crate::system::draw(
@@ -1454,6 +1498,52 @@ mod tests {
                 (0.5..2.0).contains(&ratio),
                 "{what}: {air:?} vs {:?}",
                 surface.gases
+            );
+            checked += 1;
+        }
+        assert!(checked > 0);
+    }
+
+    /// The #453 case: planet c of system seed 2, drifted, keeps its N2
+    /// now that the NH3 and S factors are part of its formation.
+    #[test]
+    fn a_drifted_planet_keeps_its_n2() {
+        let system = crate::system::draw(
+            &crate::system::SystemRequest::System(crate::system::WholeSystemRequest {
+                age_gyr: None,
+                star: Some("G2V".into()),
+                metallicity: Some(0.0),
+                planets: None,
+                seed: Some(2),
+                width: Some(64),
+                height: Some(32),
+            }),
+            &mut StdRng::seed_from_u64(2),
+        )
+        .unwrap();
+        let mut checked = 0;
+        for body in system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == crate::system::BodyKind::Planet)
+        {
+            let Some(model) = &body.model else { continue };
+            let Some(surface) = model.surface else {
+                continue;
+            };
+            let formation = model.formation().overrides;
+            assert!(formation.nh3.is_some() && formation.s.is_some());
+            let request = WorldRequest {
+                drift_ma: Some(-100.0),
+                ..from_world(&body.params, model, body.params.seed)
+            };
+            let again = request.resolve(&mut StdRng::seed_from_u64(3)).unwrap();
+            let air = again.model().surface.expect("a surface").gases;
+            let (a, b) = (air.n2, surface.gases.n2);
+            assert!(
+                (a - b).abs() <= 0.02 * b.max(f64::MIN_POSITIVE),
+                "{}: N2 {a} vs {b}",
+                body.id
             );
             checked += 1;
         }

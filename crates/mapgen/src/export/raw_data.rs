@@ -75,8 +75,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// steam world (class `steam-world`, #492) as a grey cloud deck of the
 /// model's radius, with a giant look of kind `steam`, and adds
 /// `cloud_deck`, the deck it is drawn with (a steam world is a planet: no
-/// `giant`).
-pub const FORMAT_VERSION: u32 = 22;
+/// `giant`). Version 23 stores the NH₃ and S factors of a formation, and
+/// archetypes may set them.
+pub const FORMAT_VERSION: u32 = 23;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -84,7 +85,7 @@ pub const FORMAT_VERSION: u32 = 22;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message pointing to the main menu's Regenerate
 /// button.
-pub const MIN_FORMAT_VERSION: u32 = 22;
+pub const MIN_FORMAT_VERSION: u32 = 23;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);

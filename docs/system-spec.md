@@ -897,7 +897,7 @@ addressed as `<system-id>/<body-id>` everywhere.
   values of `GET /api/form`'s `references`, also quoted in the field's
   help line; a mass is also given in tonnes, and from 30 Earth masses in
   Jupiter masses). Limits
-  come from `GET /api/form` (`inputs`, including `ch4` and `age_gyr`).
+  come from `GET /api/form` (`inputs`, including `ch4`, `nh3`, `s` and `age_gyr`).
   Beside the steps (under **Preview** on narrow screens) the preview
   shows the cards of what `POST /api/systems/resolve` answers 300 ms
   after the last change, each line whose text changed flashing, and a

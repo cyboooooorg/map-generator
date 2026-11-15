@@ -35,6 +35,14 @@ n2?: ParamDefault | null,
  */
 ch4?: ParamDefault | null, 
 /**
+ * Factor on the NH₃ formation rule (1 typical).
+ */
+nh3?: ParamDefault | null, 
+/**
+ * Factor on the sulphur formation rule (1 typical).
+ */
+s?: ParamDefault | null, 
+/**
  * Radiogenic abundance, Earth's = 1.
  */
 radiogenic?: ParamDefault | null, 

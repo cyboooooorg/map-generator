@@ -96,6 +96,16 @@ n2?: number,
  */
 ch4?: number, 
 /**
+ * Factor on the NH₃ formation rule, in `[0, 100]`: 1 typical. Replaces
+ * the archetype's own when set.
+ */
+nh3?: number, 
+/**
+ * Factor on the sulphur formation rule, in `[0, 100]`: 1 typical.
+ * Replaces the archetype's own when set.
+ */
+s?: number, 
+/**
  * Radiogenic abundance at formation, Earth's = 1, in `[0.1, 10]`.
  */
 radiogenic?: number, 

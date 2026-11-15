@@ -29,6 +29,8 @@
 //! co2 = 1.0                           # factor on the formation rule, 1 typical
 //! n2 = 1.0                            # idem
 //! ch4 = 1.0                           # idem: the methane its ices carry
+//! nh3 = 1.0                           # idem: the ammonia its ices carry
+//! s = 1.0                             # idem: the sulphur its rock carries
 //! radiogenic = 1.0                    # Earth's abundance = 1
 //! life = true                         # true: arises where it can; false: never
 //!
@@ -360,6 +362,12 @@ pub struct ArchetypeInputs {
     /// Factor on the CH₄ formation rule (1 typical).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ch4: Option<ParamDefault>,
+    /// Factor on the NH₃ formation rule (1 typical).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nh3: Option<ParamDefault>,
+    /// Factor on the sulphur formation rule (1 typical).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub s: Option<ParamDefault>,
     /// Radiogenic abundance, Earth's = 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radiogenic: Option<ParamDefault>,
@@ -569,6 +577,8 @@ impl Archetype {
             ("inputs", "co2", i.co2, VOLATILE_FACTOR),
             ("inputs", "n2", i.n2, VOLATILE_FACTOR),
             ("inputs", "ch4", i.ch4, VOLATILE_FACTOR),
+            ("inputs", "nh3", i.nh3, VOLATILE_FACTOR),
+            ("inputs", "s", i.s, VOLATILE_FACTOR),
             ("inputs", "radiogenic", i.radiogenic, RADIOGENIC),
             ("orbit", "insolation", o.insolation, INSOLATION),
             ("orbit", "period_days", o.period_days, PERIOD_DAYS),
@@ -665,6 +675,8 @@ impl Archetype {
             co2: pick(i.co2),
             n2: pick(i.n2),
             ch4: pick(i.ch4),
+            nh3: pick(i.nh3),
+            s: pick(i.s),
             radiogenic: pick(i.radiogenic),
             life: i.life,
         }

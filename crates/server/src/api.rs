@@ -69,6 +69,10 @@ pub struct InputLimits {
     pub n2: Limits,
     /// Factor on the CH₄ formation rule (1 typical).
     pub ch4: Limits,
+    /// Factor on the NH₃ formation rule (1 typical).
+    pub nh3: Limits,
+    /// Factor on the sulphur formation rule (1 typical).
+    pub s: Limits,
     /// Earth's = 1.
     pub radiogenic: Limits,
     /// Degrees.

@@ -74,6 +74,16 @@ struct Args {
     #[arg(long, value_parser = parse_in64(request::VOLATILE_FACTOR))]
     ch4: Option<f64>,
 
+    /// NH₃ as a factor on the formation rule, in [0, 100]: 1 typical, 0
+    /// none [default: the archetype's, else drawn about 1]
+    #[arg(long, value_parser = parse_in64(request::VOLATILE_FACTOR))]
+    nh3: Option<f64>,
+
+    /// Sulphur as a factor on the formation rule, in [0, 100]: 1 typical,
+    /// 0 none [default: the archetype's, else drawn about 1]
+    #[arg(long, value_parser = parse_in64(request::VOLATILE_FACTOR))]
+    s: Option<f64>,
+
     /// Radiogenic abundance at formation, Earth's = 1, in [0.1, 10]: more
     /// internal heat, more volcanism [default: the archetype's, else drawn
     /// about 1]
@@ -501,6 +511,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         co2: args.co2,
         n2: args.n2,
         ch4: args.ch4,
+        nh3: args.nh3,
+        s: args.s,
         radiogenic: args.radiogenic,
         life: args.life,
         host: args.host,
@@ -671,6 +683,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         ("--co2", pinned.co2),
         ("--n2", pinned.n2),
         ("--ch4", pinned.ch4),
+        ("--nh3", pinned.nh3),
+        ("--s", pinned.s),
     ] {
         if let Some(value) = value {
             reproduce.push(format!("{flag} {value}"));

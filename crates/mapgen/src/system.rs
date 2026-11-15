@@ -68,8 +68,10 @@ use std::sync::Arc;
 /// radiative-convective column, boiling at the moist limit) and types a
 /// runaway under a deep steam column as a `steam-world`, its radius
 /// raised by the steam (#492). A system of another version is refused by
-/// [`read_system`], not migrated.
-pub const SYSTEM_FORMAT_VERSION: u32 = 6;
+/// [`read_system`], not migrated. Version 7 stores the NH₃ and S factors
+/// of a formation ([`crate::planet::inputs::InputOverrides`]), so that a
+/// drifted planet keeps its nitrogen (#453).
+pub const SYSTEM_FORMAT_VERSION: u32 = 7;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.
