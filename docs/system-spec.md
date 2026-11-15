@@ -444,6 +444,15 @@ System's, as for any world with `giants = none`. The normal path
 (`alone` absent or false) is unchanged, and requests and stored systems
 without the field load as before.
 
+**Drawing from the seed.** A lone world (`around`) with a `seed` is drawn
+from that seed only: the star, the orbit, the mass and the eccentricity
+each come from their own stream of the seed, and are drawn whether or
+not the request pins them. Pinning one therefore moves none of the
+others: a mass pinned keeps the star, the orbit and the eccentricity the
+seed drew, and the preview of a form that pins fields one by one stays
+the world that **Generate** makes. The caller's random generator draws
+the seed only, and only when the request has none.
+
 ### Errors
 
 A request the engine cannot meet answers with a code and the numbers
@@ -456,6 +465,11 @@ behind it, as the form's errors do today:
   type names `terran`, `barren`… are refused);
 - `type_impossible`: an archetype the star leaves no room for (its orbits
   inside the inner edge of the system or beyond its outer one);
+- `bad_archetype`: a giant's moon archetype asked for alone, which needs
+  its giant (`{ "archetype": "titan-like" }`): ask for it in a whole
+  system;
+- `bad_age`: a star age that is not above 0 and at most the star's
+  main-sequence life (`{ "age_gyr": 12.0, "lifetime_gyr": 9.5 }`);
 - the planet's own errors in mode 2, as today.
 
 ## Spheres before maps
@@ -685,6 +699,16 @@ addressed as `<system-id>/<body-id>` everywhere.
   the spheres at once. In mode 2 the job generates the planet asked and
   its neighbourhood; in mode 1 there is no job (`job_id` null) until a
   body is opened.
+- `POST /api/systems/resolve`: what `POST /api/systems` would draw for
+  the same body, written nowhere. It answers 200 with `{system, extras,
+  ignored}`: the system (its `focus` is the body asked for), the
+  `extras` of each body as `GET /api/systems/{id}` gives them (cause
+  trees and resemblance) and the fields an `around` request's planet
+  has no use for. A request the engine cannot meet is refused with the
+  same 400 and `detail` as `POST /api/systems` (see [Errors](#errors)).
+  It holds no id, queues no job and takes no lock, so the form calls it
+  on every change for its live preview and validation. A request with a
+  `seed` resolves to the system `POST /api/systems` then writes.
 - `GET /api/systems/{id}`: its `system.json`, with the names given and
   `evicted`, the bodies that lost their files (see Storage, *Eviction*),
   and `extras`, by body id for each body with a model: `explanation`, the
@@ -846,6 +870,21 @@ addressed as `<system-id>/<body-id>` everywhere.
     pinned, and a live preview of the planet beside the steps; the form
     sends its seed in the preview and in Generate, and shows the server's
     refusals as they come (see `web/README.md`).
+
+  The model fields are folded groups on the planet step (orbit shape
+  and the star's age, mass, iron core, water and hydrogen–helium shell,
+  the CO₂, N₂ and CH₄ factors, radioactive heat, life). Each is drawn by
+  default and shows what the seed drew; **Set it myself** pins it, with
+  a slider, a number box and marks (Earth, Mars, Venus, Titan). Limits
+  come from `GET /api/form` (`inputs`, including `ch4` and `age_gyr`).
+  Beside the steps (under **Preview** on narrow screens) the preview
+  shows the cards of what `POST /api/systems/resolve` answers 300 ms
+  after the last change, and a leaf of a **Why?** tree jumps to the
+  field that sets it. The seed is drawn when the form opens and sent
+  with every preview and with Generate, so Generate makes what was
+  previewed. The server's refusals show at their field or above the
+  buttons and disable Generate; a whole system gets the same live
+  validation, without the preview.
 
   The wizard remembers its last mode and fields. **Vary…** opens it over
   the viewer, on its summary.
