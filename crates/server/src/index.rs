@@ -17,7 +17,9 @@
 //! migration step. The database itself has a layout version
 //! (`PRAGMA user_version`): a file of another layout, older or newer, is
 //! renamed `<file>.layout-<version>-<ms>` (with its `-wal` and `-shm`) and
-//! a new database is made, with a warning. What only the index holds
+//! a new database is made, with a warning. Opening and setting aside
+//! hold an exclusive lock on `<file>.lock`, so that two servers opening
+//! the same old file never rename each other's new WAL. What only the index holds
 //! (pins, last opened dates, displayed sizes, job history) is not rebuilt
 //! from the tree. Names are written to `names.json` too, so that the
 //! tree stays self-sufficient for now.
@@ -319,7 +321,12 @@ impl Index {
             std::fs::create_dir_all(dir)
                 .map_err(|e| IndexError(format!("{}: {e}", dir.display())))?;
         }
-        // A few turns: another process may be setting the same file aside.
+        // Opening may set the file aside (three renames: the database, its
+        // WAL, its shared memory) and make a new one: another process doing
+        // the same at once could rename the new database's WAL away and
+        // leave a malformed file. One opener at a time, across processes.
+        let _opening = lock_opening(path)?;
+        // A few turns: another process may hold the file busy.
         let mut last = None;
         for _ in 0..4 {
             let before = file_identity(path);
@@ -1200,6 +1207,22 @@ fn try_wal(conn: &Connection) -> std::result::Result<(), String> {
         return Err(format!("wrote 42, read {back}"));
     }
     Ok(())
+}
+
+/// Takes the exclusive lock on `<file>.lock`, held while the database is
+/// opened and possibly set aside; released when the returned file drops.
+fn lock_opening(path: &Path) -> Result<std::fs::File> {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".lock");
+    let e = |e: std::io::Error| IndexError(format!("{}: {e}", Path::new(&name).display()));
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&name)
+        .map_err(e)?;
+    file.lock().map_err(e)?;
+    Ok(file)
 }
 
 /// Renames the database file and its WAL and shared memory files to

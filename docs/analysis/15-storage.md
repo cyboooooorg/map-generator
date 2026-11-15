@@ -308,6 +308,10 @@ What was built, and where it departs from the plan above:
   files.
 - **Corrupt file:** a file that is not a database is kept aside as
   `mapgen.sqlite.corrupt-<ms>` and rebuilt from the tree.
+- **Concurrent opens:** opening, and setting a file aside, hold an
+  exclusive lock on `mapgen.sqlite.lock` (issue #484). Without it, two
+  servers opening the same old file could rename each other's new WAL
+  away and leave a malformed database.
 
 ## Step done: world.svg and noise_maps on request
 
