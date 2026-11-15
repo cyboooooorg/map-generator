@@ -19,7 +19,9 @@
 //! **Shape.** Simple craters are bowls about `D/5` deep; above a transition
 //! diameter that scales as `1/g` (15 km on the Moon) they get a flat floor
 //! and a central peak, with Pike's complex depth law, then a peak ring
-//! from about 9 transition diameters (Baker et al. 2011).
+//! from about 9 transition diameters (Baker et al. 2011). On an airless
+//! body without plates heavier than a Moon analogue, basins keep less of
+//! their relief (`generation::impact_relief`: Mercury about half).
 //! A raised rim and an ejecta blanket thinning as `(r/R)⁻³` surround them;
 //! rims and ejecta are irregular.
 //!
@@ -440,6 +442,10 @@ pub struct CraterField {
     /// Depth of complex craters against the rocky law: less on ice (see
     /// `generation::ICE_RELIEF`).
     complex_depth: f64,
+    /// Share of their relief basins keep against the Moon's: less on an
+    /// airless body without plates heavier than a Moon analogue (see
+    /// `generation::impact_relief`), 1 elsewhere.
+    basin_relief: f64,
     /// Absolute elevation of the sea surface.
     waterline: f32,
     /// Whether the basins hold a sea today (water, ice-sealed, acid or
@@ -656,6 +662,7 @@ impl CraterField {
             } else {
                 1.0
             },
+            basin_relief: f64::from(crate::generation::impact_relief(p)),
             waterline: p.sea_level + p.look.rules.waterline,
             sea: !p.look.rules.dry
                 && [Biome::DeepOcean, Biome::Ocean]
@@ -1045,6 +1052,7 @@ impl CraterField {
                         crater,
                         self.transition_km,
                         self.complex_depth,
+                        self.basin_relief,
                         window.dlon / radius,
                     ),
                     wear: wear as f32 * gain(crater),
@@ -1402,6 +1410,7 @@ impl CraterField {
             crater,
             self.transition_km,
             self.complex_depth,
+            self.basin_relief,
             2.0 * PI / px.w as f64 / radius,
         );
         let reach = self.reach(crater);
@@ -1645,13 +1654,20 @@ struct Profile {
 impl Profile {
     #[cfg(test)]
     fn new(crater: &Crater, transition_km: f64) -> Self {
-        Self::shaped(crater, transition_km, 1.0, 0.0)
+        Self::shaped(crater, transition_km, 1.0, 1.0, 0.0)
     }
 
     /// The profile of `crater` above a transition of `transition_km`, its
-    /// complex depth times `complex_depth` (less on ice), drawn on pixels
-    /// `pixel` crater radii wide (0: infinitely fine).
-    fn shaped(crater: &Crater, transition_km: f64, complex_depth: f64, pixel: f64) -> Self {
+    /// complex depth times `complex_depth` (less on ice), a basin's whole
+    /// relief times `basin_relief`, drawn on pixels `pixel` crater radii
+    /// wide (0: infinitely fine).
+    fn shaped(
+        crater: &Crater,
+        transition_km: f64,
+        complex_depth: f64,
+        basin_relief: f64,
+        pixel: f64,
+    ) -> Self {
         let d = crater.diameter_km;
         let t = transition_km;
         let units = f64::from(ELEVATION_KM);
@@ -1688,6 +1704,11 @@ impl Profile {
             PEAK_RING_TRANSITIONS as f32,
             (d / t) as f32,
         ));
+        // Basins keep `basin_relief` of their depth, rim, peaks and rings
+        // (see `generation::impact_relief`), from the protobasins on:
+        // fresh complex craters keep Pike's depths on Mercury too
+        // (Barnouin et al. 2012).
+        let units = units / (1.0 + ring * (basin_relief - 1.0));
         let mut rng = Rng(crater.shape);
         let mut harmonics = || {
             [(); 4].map(|_| {
@@ -1952,8 +1973,14 @@ mod tests {
             age_ga: 1.0,
             shape: 0,
         };
-        let ice = Profile::shaped(&crater, 2.5, f64::from(crate::generation::ICE_RELIEF), 0.0);
-        let rock = Profile::shaped(&crater, 2.5, 1.0, 0.0);
+        let ice = Profile::shaped(
+            &crater,
+            2.5,
+            f64::from(crate::generation::ICE_RELIEF),
+            1.0,
+            0.0,
+        );
+        let rock = Profile::shaped(&crater, 2.5, 1.0, 1.0, 0.0);
         assert_eq!(ice.depth, rock.depth);
         assert!((ice.depth - 0.2 / f64::from(ELEVATION_KM)).abs() < 1e-9);
     }
@@ -2181,7 +2208,7 @@ mod tests {
         };
         let full = Profile::new(&crater, MOON_TRANSITION_KM).rim;
         for pixels in [4.0, 6.0, 8.0, 12.0] {
-            let p = Profile::shaped(&crater, MOON_TRANSITION_KM, 1.0, 2.0 / pixels);
+            let p = Profile::shaped(&crater, MOON_TRANSITION_KM, 1.0, 1.0, 2.0 / pixels);
             let crest = |offset: f64| {
                 (-40..=40)
                     .map(|i| {
@@ -2228,6 +2255,31 @@ mod tests {
         assert_eq!(Profile::new(&crater(8.0), MOON_TRANSITION_KM).floor, 0.0);
         let t_earth = MOON_TRANSITION_KM * MOON_GRAVITY / EARTH_GRAVITY;
         assert!(Profile::new(&crater(8.0), t_earth).floor > 0.0);
+    }
+
+    /// A share of the basins' relief (`generation::impact_relief`) lowers
+    /// the basins, from the protobasins on, not the complex craters.
+    #[test]
+    fn basins_keep_their_share_of_relief_and_craters_their_depth() {
+        let crater = |diameter_km| Crater {
+            centre: [1.0, 0.0, 0.0],
+            diameter_km,
+            age_ga: 1.0,
+            shape: 3,
+        };
+        let t = MOON_TRANSITION_KM;
+        let complex = |share| Profile::shaped(&crater(100.0), t, 1.0, share, 0.0);
+        assert_eq!(complex(0.5).depth, complex(1.0).depth);
+        assert_eq!(complex(0.5).rim, complex(1.0).rim);
+        let basin = |share| Profile::shaped(&crater(400.0), t, 1.0, share, 0.0);
+        let (half, whole) = (basin(0.5), basin(1.0));
+        for (a, b) in [
+            (half.depth, whole.depth),
+            (half.rim, whole.rim),
+            (half.ring, whole.ring),
+        ] {
+            assert!((a - 0.5 * b).abs() < 1e-9, "{a} {b}");
+        }
     }
 
     #[test]

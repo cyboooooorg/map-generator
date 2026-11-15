@@ -64,8 +64,14 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// stored fields are the same, so [`crate::system::SYSTEM_FORMAT_VERSION`]
 /// stays 4. Version 20 types a round moon by its model's class, stores
 /// its model, and marks a moon's world (`moon`); it goes with the fifth
-/// [`crate::system::SYSTEM_FORMAT_VERSION`].
-pub const FORMAT_VERSION: u32 = 20;
+/// [`crate::system::SYSTEM_FORMAT_VERSION`]. Version 21 changes the relief
+/// and the biomes: an airless world without plates heavier than the Moon
+/// keeps a share of the impact relief and of its basins'
+/// (`generation::impact_relief`), a wet world without plates has Mars's
+/// share of highland crust, and a plate world measures its highland band
+/// from its continental datum. The stored fields are the same, so
+/// [`crate::system::SYSTEM_FORMAT_VERSION`] stays 5.
+pub const FORMAT_VERSION: u32 = 21;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -73,7 +79,7 @@ pub const FORMAT_VERSION: u32 = 20;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 20;
+pub const MIN_FORMAT_VERSION: u32 = 21;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
