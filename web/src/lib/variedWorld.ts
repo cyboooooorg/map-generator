@@ -12,6 +12,8 @@ export const MODEL_INPUTS = [
   'co2',
   'n2',
   'ch4',
+  'nh3',
+  's',
   'radiogenic',
   'life',
   'eccentricity',

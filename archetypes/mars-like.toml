@@ -9,16 +9,28 @@ name = "Martienne"
 description = "Un petit désert froid sous un air ténu"
 reference = "Mars"
 
+# Mars: 6.4171e23 kg = 0.1074 Earth masses (NASA Mars fact sheet), fixed:
+# the air the model leaves Mars at 4.57 Ga hangs on its mass, and a drawn
+# mass spread it over a factor of four.
 [inputs]
-mass_earth = [0.096, 0.118]
+mass_earth = 0.1074
 core_mass_fraction = 0.24
 water_oceans = [0.002, 0.008]
 envelope_fraction = 0.0
-co2 = 0.3
+# Carbon dioxide its rock carries, as a factor on the formation rule.
+# Calibration with Mars's 6.36 mbar mean surface pressure as its target
+# (NASA Mars fact sheet): the air comes out in proportion to it.
+co2 = 0.4
 n2 = 0.3
+# The age of the Solar System, 4.567 Ga by the oldest solids; the
+# planets formed in its first tens of Ma (Bouvier & Wadhwa 2010,
+# doi:10.1038/ngeo941).
+age_gyr = 4.57
 
 [orbit]
 star = "G2V"
-insolation = [0.39, 0.47]
+# 586.2 W/m2 over Earth's 1361.0 W/m2 (NASA Mars fact sheet), fixed:
+# the air spread with the drawn light as much as with the mass.
+insolation = 0.431
 eccentricity = 0.093
 axial_tilt = 25.19

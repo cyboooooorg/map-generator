@@ -699,6 +699,8 @@ export const fr: Messages = {
       setHelp: `Désactivé${S}: le tirage (ou l’archétype) décide, et la valeur tirée s’affiche. Activé${S}: vous choisissez, et rien d’autre ne change.`,
       drawn: 'Tiré',
       drawnUnknown: 'tiré au sort',
+      ageSetBy: (p) => `fixé par ${p.name}`,
+      ageWarning: (p) => `${p.name} a ${p.age} Ga${S}: un autre âge change son air`,
       drawnValue: (p) => `Tiré${S}: ${p.value}`,
       waterShare: (p) => `≈ ${p.share} de la masse de la planète`,
       waterDepth: (p) => `≈ ${p.depth} de profondeur si elle couvrait toute la planète`,
@@ -762,6 +764,20 @@ export const fr: Messages = {
         unit: '× typique',
         unitHelp: `1 est ce qu’une planète comme celle-ci reçoit d’ordinaire${S}; 0 rien, 2 le double`,
       },
+      nh3: {
+        label: 'Ammoniac',
+        term: 'facteur NH₃',
+        drives: 'l’azote que sa photolyse laisse dans l’air (les mondes froids le gardent gelé)',
+        unit: '× typique',
+        unitHelp: `1 est ce qu’une planète comme celle-ci reçoit d’ordinaire${S}; 0 rien, 2 le double`,
+      },
+      s: {
+        label: 'Soufre',
+        term: 'facteur soufre',
+        drives: 'les gaz soufrés et les nuages de l’air, que les volcans alimentent',
+        unit: '× typique',
+        unitHelp: `1 est ce qu’une planète comme celle-ci reçoit d’ordinaire${S}; 0 rien, 2 le double`,
+      },
       radiogenic: {
         label: 'Chaleur radioactive',
         term: 'abondance radiogénique',
@@ -806,6 +822,7 @@ export const fr: Messages = {
       system: {
         star: 'Étoile',
         starLine: (p) => `âge ${p.age} · [Fe/H] ${p.metallicity}`,
+        ageSetBy: (p) => `(fixé par ${p.names})`,
         planets: 'Planètes qu’il aura',
         none: 'Aucune planète',
         name: 'Planète',
@@ -1538,7 +1555,9 @@ export const fr: Messages = {
     badArchetype: (p) =>
       `${p.archetype} est une lune de géante, elle ne se demande pas seule${S}: demandez-la dans un système entier, qui lui donne sa géante.`,
     badAge: (p) =>
-      `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge ou choisissez une étoile plus longévive.`,
+      `L’étoile a ${p.age} Gyr, mais elle ne vit que ${p.lifetime} Gyr au plus${S}: baissez l’âge, ou choisissez une étoile plus longévive (un archétype du Système solaire fixe l’âge à 4,57 Gyr).`,
+    archetypeAges: (p) =>
+      `Les planètes demandées (${p.archetypes}) imposent des âges de système qui ne se recoupent pas${S}: demandez moins de types ensemble, ou saisissez un âge.`,
     tooManyPixels: (p) =>
       `${p.width} × ${p.height} est trop grand pour ce serveur, qui accepte au plus ${p.max} pixels.`,
     beingGenerated: (p) => `${p.world} est déjà en cours de génération.`,
@@ -1554,6 +1573,8 @@ export const fr: Messages = {
       co2: 'CO₂',
       n2: 'N₂',
       ch4: 'CH₄',
+      nh3: 'NH₃',
+      s: 'Soufre',
       age_gyr: 'Âge',
       radiogenic: 'Abondance radiogénique',
       axial_tilt_deg: 'Inclinaison de l’axe',

@@ -742,6 +742,8 @@ export const en = {
       setHelp: 'Off: the seed (or the archetype) decides, and the value drawn is shown. On: you choose, and nothing else changes.',
       drawn: 'Drawn',
       drawnUnknown: 'drawn by the seed',
+      ageSetBy: (p: { name: string }) => `set by ${p.name}`,
+      ageWarning: (p: { name: string; age: string }) => `${p.name} is ${p.age} Gyr old: another age changes its air`,
       drawnValue: (p: { value: string }) => `Drawn: ${p.value}`,
       waterShare: (p: { share: string }) => `≈ ${p.share} of the planet’s mass`,
       waterDepth: (p: { depth: string }) => `≈ ${p.depth} deep if spread over the whole planet`,
@@ -807,6 +809,20 @@ export const en = {
         unit: '× typical',
         unitHelp: '1 is what a planet like this normally gets; 0 none, 2 twice as much',
       },
+      nh3: {
+        label: 'Ammonia',
+        term: 'NH₃ factor',
+        drives: 'the nitrogen its photolysis leaves in the air (cold worlds keep it frozen)',
+        unit: '× typical',
+        unitHelp: '1 is what a planet like this normally gets; 0 none, 2 twice as much',
+      },
+      s: {
+        label: 'Sulphur',
+        term: 'sulphur factor',
+        drives: 'the sulphur gases and clouds of the air, which volcanoes feed',
+        unit: '× typical',
+        unitHelp: '1 is what a planet like this normally gets; 0 none, 2 twice as much',
+      },
       radiogenic: {
         label: 'Radioactive heat',
         term: 'radiogenic abundance',
@@ -852,6 +868,7 @@ export const en = {
       system: {
         star: 'Star',
         starLine: (p: { age: string; metallicity: string }) => `age ${p.age} · [Fe/H] ${p.metallicity}`,
+        ageSetBy: (p: { names: string }) => `(set by ${p.names})`,
         planets: 'Planets it will have',
         none: 'No planet',
         name: 'Planet',
@@ -1619,7 +1636,9 @@ export const en = {
     badArchetype: (p: { archetype: string }) =>
       `${p.archetype} is a giant's moon, so it cannot be asked for alone: ask for it in a whole system, which gives it its giant.`,
     badAge: (p: { age: string; lifetime: string }) =>
-      `The star is ${p.age} Gyr old, but it lives ${p.lifetime} Gyr at most: lower the age or pick a longer-lived star.`,
+      `The star is ${p.age} Gyr old, but it lives ${p.lifetime} Gyr at most: lower the age, or pick a star that lives longer (a Solar System archetype sets the age to 4.57 Gyr).`,
+    archetypeAges: (p: { archetypes: string }) =>
+      `The planets asked (${p.archetypes}) set system ages that do not overlap: ask for fewer kinds together, or type an age.`,
     tooManyPixels: (p: { width: number; height: number; max: string }) =>
       `${p.width} × ${p.height} is too large for this server, which accepts up to ${p.max} pixels.`,
     beingGenerated: (p: { world: string }) => `${p.world} is being generated already.`,
@@ -1638,6 +1657,8 @@ export const en = {
       co2: 'CO₂',
       n2: 'N₂',
       ch4: 'CH₄',
+      nh3: 'NH₃',
+      s: 'Sulphur',
       age_gyr: 'Age',
       radiogenic: 'Radiogenic abundance',
       axial_tilt_deg: 'Axial tilt',

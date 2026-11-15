@@ -1,4 +1,5 @@
 import { render } from 'svelte/server';
+import type { ArchetypeInfo } from '../../lib/api/types/ArchetypeInfo';
 import { describe, expect, it } from 'vitest';
 import type { ErrorDetail } from '../../lib/api/types/ErrorDetail';
 import type { FormSpec } from '../../lib/api/types/FormSpec';
@@ -16,11 +17,11 @@ const spec = {
   ],
   inputs: {
     mass_earth: { min: 0.01, max: 4131 }, core_mass_fraction: { min: 0, max: 0.9 }, water_oceans: { min: 0, max: 1e6 },
-    envelope_fraction: { min: 0, max: 0.999 }, co2: { min: 0, max: 100 }, n2: { min: 0, max: 100 }, ch4: { min: 0, max: 100 },
+    envelope_fraction: { min: 0, max: 0.999 }, co2: { min: 0, max: 100 }, n2: { min: 0, max: 100 }, ch4: { min: 0, max: 100 }, nh3: { min: 0, max: 100 }, s: { min: 0, max: 100 },
     radiogenic: { min: 0.1, max: 10 }, axial_tilt_deg: { min: 0, max: 90 }, age_gyr: { min: 0, max: 1e4 },
   },
 } as unknown as FormSpec;
-function html(over: { values?: ModelValues; drawn?: DrawnValues | null; radiusEarth?: number | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; driven?: Quantity[] | ((key: string) => Quantity[]); explained?: boolean } = {}): string {
+function html(over: { values?: ModelValues; drawn?: DrawnValues | null; radiusEarth?: number | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; ageArchetype?: ArchetypeInfo | null; driven?: Quantity[] | ((key: string) => Quantity[]); explained?: boolean } = {}): string {
   return render(ModelFields, {
     props: {
       spec,
@@ -32,6 +33,7 @@ function html(over: { values?: ModelValues; drawn?: DrawnValues | null; radiusEa
       ignored: over.ignored ?? [],
       refusal: over.refusal ?? null,
       open: over.open ?? new Set<string>(),
+      ageArchetype: over.ageArchetype ?? null,
     },
   }).body;
 }
@@ -42,6 +44,40 @@ const field = (out: string, key: string) => {
   const next = out.indexOf('id="model-', start + 1);
   return out.slice(start, next === -1 ? undefined : next);
 };
+
+const mars = { spec: 'mars-like', name: 'mars-like', locales: {}, inputs: { mass_earth: 0.107, age_gyr: 4.57 } } as unknown as ArchetypeInfo;
+const jupiter = { spec: 'hot-jupiter', name: 'hot-jupiter', locales: {}, inputs: { mass_earth: 300 } } as unknown as ArchetypeInfo;
+
+describe('ModelFields age and volatiles', () => {
+  it('offers the NH3 and sulphur factors in the volatiles group', () => {
+    const out = html();
+    const group = out.slice(out.indexOf('data-group="volatiles"'), out.indexOf('data-group="life"'));
+    expect(group).toContain('id="model-nh3"');
+    expect(group).toContain('id="model-s"');
+    expect(group.indexOf('id="model-ch4"')).toBeLessThan(group.indexOf('id="model-nh3"'));
+  });
+
+  it('shows the age an archetype sets, and who sets it', () => {
+    const out = field(html({ ageArchetype: mars }), 'age_gyr');
+    expect(out).toContain('4.57');
+    expect(out).toContain(t.form.model.ageSetBy({ name: 'mars-like' }));
+    expect(out).not.toContain(t.form.model.ageWarning({ name: 'mars-like', age: '4.57' }));
+  });
+
+  it('warns when another age is typed', () => {
+    const values = initialModelValues({ age_gyr: 2 });
+    const out = field(html({ values, ageArchetype: mars }), 'age_gyr');
+    expect(out).toContain(t.form.model.ageWarning({ name: 'mars-like', age: '4.57' }));
+  });
+
+  it('says nothing for an archetype that sets no age, or none', () => {
+    for (const ageArchetype of [jupiter, null]) {
+      const out = field(html({ values: initialModelValues({ age_gyr: 2 }), ageArchetype }), 'age_gyr');
+      expect(out).not.toContain(t.form.model.ageSetBy({ name: 'hot-jupiter' }));
+      expect(out).not.toContain('Gyr old');
+    }
+  });
+});
 
 describe('ModelFields', () => {
   it('says the share of the mass and the depth of a set amount of water', () => {

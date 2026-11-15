@@ -35,6 +35,14 @@ n2: Limits,
  */
 ch4: Limits, 
 /**
+ * Factor on the NH₃ formation rule (1 typical).
+ */
+nh3: Limits, 
+/**
+ * Factor on the sulphur formation rule (1 typical).
+ */
+s: Limits, 
+/**
  * Earth's = 1.
  */
 radiogenic: Limits, 

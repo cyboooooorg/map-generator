@@ -35,10 +35,24 @@ n2?: ParamDefault | null,
  */
 ch4?: ParamDefault | null, 
 /**
+ * Factor on the NH₃ formation rule (1 typical).
+ */
+nh3?: ParamDefault | null, 
+/**
+ * Factor on the sulphur formation rule (1 typical).
+ */
+s?: ParamDefault | null, 
+/**
  * Radiogenic abundance, Earth's = 1.
  */
 radiogenic?: ParamDefault | null, 
 /**
  * `true`: life arises wherever the world allows it; `false`: never.
  */
-life?: boolean | null, };
+life?: boolean | null, 
+/**
+ * Age of the system the archetype is asked in, Gyr: the star's, when
+ * the request types none. Within `(0, star::lifetime_gyr(0.0)]`; a
+ * star that lives shorter refuses it.
+ */
+age_gyr?: ParamDefault | null, };

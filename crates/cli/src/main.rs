@@ -74,6 +74,16 @@ struct Args {
     #[arg(long, value_parser = parse_in64(request::VOLATILE_FACTOR))]
     ch4: Option<f64>,
 
+    /// NH₃ as a factor on the formation rule, in [0, 100]: 1 typical, 0
+    /// none [default: the archetype's, else drawn about 1]
+    #[arg(long, value_parser = parse_in64(request::VOLATILE_FACTOR))]
+    nh3: Option<f64>,
+
+    /// Sulphur as a factor on the formation rule, in [0, 100]: 1 typical,
+    /// 0 none [default: the archetype's, else drawn about 1]
+    #[arg(long, value_parser = parse_in64(request::VOLATILE_FACTOR))]
+    s: Option<f64>,
+
     /// Radiogenic abundance at formation, Earth's = 1, in [0.1, 10]: more
     /// internal heat, more volcanism [default: the archetype's, else drawn
     /// about 1]
@@ -127,7 +137,8 @@ struct Args {
     /// Age of the star, in Gyr, above 0 and at most its main-sequence life
     /// (about 10 Gyr for the Sun): the older it is, the more planets its
     /// tides have locked and the more its giants have cooled. With --system
-    /// the whole system shares it [default: drawn from the seed, between
+    /// the whole system shares it [default: the archetype's age (4.57 Gyr
+    /// for the Solar System archetypes), else drawn from the seed, between
     /// 0.5 and 10 Gyr, or the star's life if shorter; a star drawn at
     /// random is redrawn until it lives that long]
     #[arg(long)]
@@ -501,6 +512,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         co2: args.co2,
         n2: args.n2,
         ch4: args.ch4,
+        nh3: args.nh3,
+        s: args.s,
         radiogenic: args.radiogenic,
         life: args.life,
         host: args.host,
@@ -671,6 +684,8 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         ("--co2", pinned.co2),
         ("--n2", pinned.n2),
         ("--ch4", pinned.ch4),
+        ("--nh3", pinned.nh3),
+        ("--s", pinned.s),
     ] {
         if let Some(value) = value {
             reproduce.push(format!("{flag} {value}"));

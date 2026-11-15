@@ -11,9 +11,10 @@ reference = "Titan"
 
 # Titan: 1.3452e23 kg = 0.0225 Earth masses (NASA Saturnian satellite
 # fact sheet; JPL Solar System Dynamics, planetary satellite physical
-# parameters), ±10 %.
+# parameters), fixed: the weight of its air hangs on it, and a ±10 %
+# drawn mass spread its air over a factor of 1.5.
 [inputs]
-mass_earth = [0.020, 0.025]
+mass_earth = 0.0225
 # Methane its ices carry, as a factor on the formation rule (1 % of the
 # ices): the rule's own amount to twice it, not the log-normal draw that
 # can leave a third of it. Titan's air needs an interior reservoir far
@@ -24,6 +25,15 @@ mass_earth = [0.020, 0.025]
 # Sotin 2006, doi:10.1038/nature04497). Calibration with Titan as its
 # target: neither paper gives the inventory as a share of the ices.
 ch4 = [1.0, 2.0]
+# Nitrogen its ices carry, as a factor on the formation rule (0.1 % of
+# the ices), instead of the log-normal draw that left single seeds
+# between 0.6 and 6.3 bar. Calibration with Titan's 1.47 bar at the
+# surface as its target (Fulchignoni et al. 2005,
+# doi:10.1038/nature04314): its primordial nitrogen is not measured.
+n2 = 0.8
+# The age of the Solar System (Bouvier & Wadhwa 2010,
+# doi:10.1038/ngeo941).
+age_gyr = 4.57
 
 [moon]
 # Grown in Saturn's disk.

@@ -175,6 +175,9 @@ pub mod stream {
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;
+    /// The age drawn in the ages several asked archetypes agree on (see
+    /// `crate::archetype::asked_age_gyr`).
+    pub const ARCHETYPE_AGE: u32 = 65;
 }
 
 /// The seed of one noise stream (see [`stream`]) of the world `seed`.

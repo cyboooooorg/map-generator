@@ -43,7 +43,7 @@ export function referencesLabel(key: ModelFieldKey): string {
  */
 export function referencesLine(key: ModelFieldKey, spec: Pick<FormSpec, 'references'>): string | null {
   if (key === 'life') return null;
-  const wanted = REFERENCE_BODIES[key];
+  const wanted = REFERENCE_BODIES[key] ?? [];
   const refs = referencesOf(key, spec);
   const items = wanted.flatMap((body) => {
     const value = refs.get(body);

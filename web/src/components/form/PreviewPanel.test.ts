@@ -105,6 +105,15 @@ describe('PreviewPanel', () => {
     expect(lone).toContain(t.form.preview.waiting);
   });
 
+  it('names the archetypes that set the age on the star line', () => {
+    const preview = new Preview();
+    preview.result = systemResult;
+    const out = render(PreviewPanel, { props: { preview, kind: 'system', ageSources: ['Martienne', 'Titanienne'], onreroll: () => {} } }).body;
+    expect(out).toContain(t.form.preview.system.ageSetBy({ names: 'Martienne, Titanienne' }));
+    const none = render(PreviewPanel, { props: { preview, kind: 'system', onreroll: () => {} } }).body;
+    expect(none).not.toContain(t.form.preview.system.ageSetBy({ names: '' }));
+  });
+
   it('says so when the preview is unavailable', () => {
     const preview = new Preview();
     preview.unavailable = true;

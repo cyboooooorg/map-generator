@@ -31,7 +31,8 @@ Two ways to ask for a system:
    (`type_impossible`). The moon is drawn once in its archetype's ranges
    and stored on its giant (`WorldParams::asked_moons`); the giant's
    other moons are drawn around it. With no star named, such a system
-   takes its host archetype's star (`G2V`); a star named is honoured,
+   takes its host archetype's star (`G2V`), as any asked archetype's
+   `[orbit] star` is taken (below); a star named is honoured,
    and the moon comes out as the model says (round a red dwarf it may
    lose its air).
 2. **A system around one planet.** A planet fully specified, as the form
@@ -181,8 +182,12 @@ stream, its other inputs (core share, water, life…) and its axial tilt
 on a stream of the body's own (`<id>/archetype`), so that no other body's
 draws shift them. Its mass, orbit and eccentricity still come off the
 system's stream in request order and ids go by rank, so removing a body
-can move the others. The star the archetype names is ignored
-here: the system's star rules.
+can move the others. The star the archetype names is taken
+only when the request names none and the star lives to the system age:
+the `[orbit] star` of a moon's host first, then of the planet archetypes
+that carry `inputs.age_gyr`, then of the others, name order within each
+group (`asked_star_of`). A star named in the request always wins; with
+none usable, the star is drawn.
 
 With **quantities per archetype**, the engine draws an orbit for each
 planet asked, then spaces them (below). Types the request leaves to
@@ -714,7 +719,7 @@ addressed as `<system-id>/<body-id>` everywhere.
   the `extras` of each body as `GET /api/systems/{id}` gives them (cause
   trees and resemblance; none for a whole system, which the form only
   validates; an `around` request that sets a planet-model input (mass,
-  core, water, envelope, CO₂, N₂, CH₄, radiogenic heat, life) gets the
+  core, water, envelope, CO₂, N₂, CH₄, NH₃, sulphur, radiogenic heat, life) gets the
   computed `similar`, which may be null, even when it names an
   archetype), the inputs the focus body formed with (`formation`, as
   `PlanetModel::formation` gives them, null for a body with no model:
@@ -883,21 +888,21 @@ addressed as `<system-id>/<body-id>` everywhere.
     choice with a note and adds a line to the summary. **Vary…** keeps
     the flag of the system it varies. The planet step also holds every
     input of the planet model (mass, core, water, envelope, CO₂, N₂, CH₄,
-    radiogenic heat, life, eccentricity, the star's age), each drawn or
+    NH₃, sulphur, radiogenic heat, life, eccentricity, the star's age), each drawn or
     pinned, and a live preview of the planet beside the steps; the form
     sends its seed in the preview and in Generate, and shows the server's
     refusals as they come (see `web/README.md`).
 
   The model fields are folded groups on the planet step (orbit shape
   and the star's age, mass, iron core, water and hydrogen–helium shell,
-  the CO₂, N₂ and CH₄ factors, radioactive heat, life). Each is drawn by
+  the CO₂, N₂, CH₄, NH₃ and sulphur factors, radioactive heat, life). Each is drawn by
   default and shows what the seed drew; **Set it myself** pins it, with
   a slider, a number box and marks (Earth, Mars, Venus, Titan: ticks on
   the track at their value, chips under them, from the Solar System
   values of `GET /api/form`'s `references`, also quoted in the field's
   help line; a mass is also given in tonnes, and from 30 Earth masses in
   Jupiter masses). Limits
-  come from `GET /api/form` (`inputs`, including `ch4` and `age_gyr`).
+  come from `GET /api/form` (`inputs`, including `ch4`, `nh3`, `s` and `age_gyr`).
   Beside the steps (under **Preview** on narrow screens) the preview
   shows the cards of what `POST /api/systems/resolve` answers 300 ms
   after the last change, each line whose text changed flashing, and a

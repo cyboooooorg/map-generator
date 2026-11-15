@@ -69,6 +69,10 @@ pub struct InputLimits {
     pub n2: Limits,
     /// Factor on the CH₄ formation rule (1 typical).
     pub ch4: Limits,
+    /// Factor on the NH₃ formation rule (1 typical).
+    pub nh3: Limits,
+    /// Factor on the sulphur formation rule (1 typical).
+    pub s: Limits,
     /// Earth's = 1.
     pub radiogenic: Limits,
     /// Degrees.
@@ -258,6 +262,8 @@ pub enum ErrorDetail {
     BadArchetype { archetype: String },
     /// The age asked is not between 0 and the star's main-sequence life.
     BadAge { age_gyr: f32, lifetime_gyr: f32 },
+    /// The archetypes asked together set system ages that do not overlap.
+    ArchetypeAges { archetypes: Vec<String> },
     /// A planet type the star leaves no room for.
     TypeImpossible { body_type: String },
     /// The system exists and the request does not replace it.
@@ -315,6 +321,9 @@ impl ErrorDetail {
             } => Some(Self::BadAge {
                 age_gyr: *age_gyr,
                 lifetime_gyr: *lifetime_gyr,
+            }),
+            RequestError::ArchetypeAges { archetypes } => Some(Self::ArchetypeAges {
+                archetypes: archetypes.clone(),
             }),
             RequestError::TooManyPlanets { asked, max } => Some(Self::TooManyPlanets {
                 asked: *asked,
@@ -646,4 +655,22 @@ pub struct PendingSize {
 pub struct DisplayedSize {
     pub width: u32,
     pub height: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archetype_ages_map_to_their_detail() {
+        let error = mapgen::request::RequestError::ArchetypeAges {
+            archetypes: vec!["a".into(), "b".into()],
+        };
+        assert_eq!(
+            ErrorDetail::of_request(&error),
+            Some(ErrorDetail::ArchetypeAges {
+                archetypes: vec!["a".into(), "b".into()],
+            })
+        );
+    }
 }

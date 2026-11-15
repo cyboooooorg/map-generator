@@ -238,11 +238,20 @@ pub struct InputOverrides {
     /// Factor on the N₂ formation rule (1 typical).
     pub n2: Option<f64>,
     /// Factor on the CH₄ formation rule (1 typical): the methane the ices
-    /// carry. Left out of a pinned formation (`PlanetModel::formation`),
-    /// as before it could be set: a varied world draws its methane again.
+    /// carry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub ch4: Option<f64>,
+    /// Factor on the NH₃ formation rule (1 typical): the ammonia the ices
+    /// carry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub nh3: Option<f64>,
+    /// Factor on the sulphur formation rule (1 typical): the sulphur the
+    /// rock carries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub s: Option<f64>,
     /// Radiogenic abundance, Earth's = 1.
     pub radiogenic: Option<f64>,
     /// `Some(true)`: life arises wherever the world allows it;
@@ -285,7 +294,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// The overrides apply after the draws. A set water (`water_oceans`, over
 /// the planet's mass) and a set envelope are final before the volatile
 /// rule reads them, so the ice-borne volatiles follow the water the planet
-/// has; a set `co2`, `n2` or `ch4` replaces the log-normal scatter of
+/// has; a set `co2`, `n2`, `ch4`, `nh3` or `s` replaces the log-normal scatter of
 /// that gas and leaves the rule. `life` sets the life draw to 0 (always arises) or
 /// 1 (never).
 pub fn draw_inputs_with(
@@ -403,7 +412,7 @@ fn volatile_scatter(rng: &mut impl RngExt) -> VolatileScatter {
 
 /// Volatiles carried by a `refractory` share of rock and iron and a
 /// `water` share of ices, each rule ([`ROCK_CO2`] … [`ICE_NH3`]) scaled by
-/// its factor in `scatter`, or by the override of CO2, N2 and CH4 when
+/// its factor in `scatter`, or by the override of that volatile when
 /// set:
 ///
 /// ```text
@@ -421,8 +430,8 @@ fn volatiles(
         co2: rule.co2 * overrides.co2.unwrap_or(scatter.co2),
         n2: rule.n2 * overrides.n2.unwrap_or(scatter.n2),
         ch4: rule.ch4 * overrides.ch4.unwrap_or(scatter.ch4),
-        nh3: rule.nh3 * scatter.nh3,
-        s: rule.s * scatter.s,
+        nh3: rule.nh3 * overrides.nh3.unwrap_or(scatter.nh3),
+        s: rule.s * overrides.s.unwrap_or(scatter.s),
     }
 }
 
@@ -518,6 +527,53 @@ mod tests {
             b.water_fraction,
         );
         assert!((b.volatiles.co2 - 3.0 * rule.co2).abs() <= 1e-12 * rule.co2);
+    }
+
+    #[test]
+    fn nh3_and_s_overrides_replace_the_scatter() {
+        let o = InputOverrides {
+            nh3: Some(2.0),
+            s: Some(0.5),
+            ..Default::default()
+        };
+        let i = draw_inputs_with(&earth_context(), 1.0, &o, &mut rng(7));
+        let rule = volatile_rule(
+            1.0 - i.water_fraction - i.envelope_fraction,
+            i.water_fraction,
+        );
+        assert!((i.volatiles.nh3 - 2.0 * rule.nh3).abs() <= 1e-12 * rule.nh3);
+        assert!((i.volatiles.s - 0.5 * rule.s).abs() <= 1e-12 * rule.s);
+    }
+
+    #[test]
+    fn nh3_and_s_overrides_shift_no_other_draw() {
+        let o = InputOverrides {
+            nh3: Some(2.0),
+            s: Some(0.5),
+            ..Default::default()
+        };
+        for seed in 0..20 {
+            let a = draw_inputs(&earth_context(), 1.0, &mut rng(seed));
+            let b = draw_inputs_with(&earth_context(), 1.0, &o, &mut rng(seed));
+            assert_eq!(
+                (
+                    a.radiogenic,
+                    a.life_draw,
+                    a.core_mass_fraction,
+                    a.water_fraction
+                ),
+                (
+                    b.radiogenic,
+                    b.life_draw,
+                    b.core_mass_fraction,
+                    b.water_fraction
+                )
+            );
+            assert_eq!(
+                (a.volatiles.co2, a.volatiles.n2, a.volatiles.ch4),
+                (b.volatiles.co2, b.volatiles.n2, b.volatiles.ch4)
+            );
+        }
     }
 
     #[test]

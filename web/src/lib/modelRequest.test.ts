@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ResolvedSystem } from './api/types/ResolvedSystem';
 import earth from '../components/body/fixtures/earth-like.json';
-import { drawnValues, initialModelValues, MODEL_KEYS, modelRequest, pinnedCount, setPinned } from './modelRequest';
+import { drawnValues, keepAge, initialModelValues, MODEL_KEYS, modelRequest, pinnedCount, setPinned } from './modelRequest';
 
 describe('modelRequest', () => {
   it('sends pinned fields only, life as a boolean or nothing', () => {
@@ -33,7 +33,7 @@ describe('modelRequest', () => {
   it('starts pinned on what a request sets', () => {
     const values = initialModelValues({ ch4: 0.5, age_gyr: 2, life: true, eccentricity: 0.1 });
     expect(modelRequest(values)).toEqual({ ch4: 0.5, age_gyr: 2, life: true, eccentricity: 0.1 });
-    expect(MODEL_KEYS).toHaveLength(11);
+    expect(MODEL_KEYS).toHaveLength(13);
   });
 });
 
@@ -63,5 +63,19 @@ describe('drawnValues', () => {
   });
   it('has nothing without a preview', () => {
     expect(drawnValues(null)).toBeNull();
+  });
+
+  it('keeps a typed age when another archetype is picked, and a drawn one drawn', () => {
+    const typed = initialModelValues({ age_gyr: 2 });
+    const next = keepAge(initialModelValues({ planet: 'hot-jupiter' }), typed);
+    expect(next.age_gyr).toEqual({ random: false, value: 2 });
+    const drawn = keepAge(initialModelValues({ planet: 'hot-jupiter' }), initialModelValues(null));
+    expect(drawn.age_gyr.random).toBe(true);
+  });
+
+  it('pins the NH3 and sulphur factors like the other volatiles', () => {
+    const values = initialModelValues({ nh3: 2, s: 0.5 });
+    expect(modelRequest(values)).toEqual({ nh3: 2, s: 0.5 });
+    expect(MODEL_KEYS).toContain('nh3');
   });
 });

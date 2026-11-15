@@ -159,6 +159,8 @@ export function formationRequest(formation: Formation | null | undefined): World
     ...set('co2', o.co2),
     ...set('n2', o.n2),
     ...set('ch4', o.ch4),
+    ...set('nh3', o.nh3),
+    ...set('s', o.s),
     ...set('radiogenic', o.radiogenic),
     ...set('life', o.life),
   };
@@ -216,6 +218,8 @@ export function cliCommand(meta: WorldMetadata): string {
     ...(r.co2 === undefined ? [] : [`--co2 ${r.co2}`]),
     ...(r.n2 === undefined ? [] : [`--n2 ${r.n2}`]),
     ...(r.ch4 === undefined ? [] : [`--ch4 ${r.ch4}`]),
+    ...(r.nh3 === undefined ? [] : [`--nh3 ${r.nh3}`]),
+    ...(r.s === undefined ? [] : [`--s ${r.s}`]),
     ...(r.radiogenic === undefined ? [] : [`--radiogenic ${r.radiogenic}`]),
     ...(r.life === undefined ? [] : [`--life ${r.life ? 'yes' : 'no'}`]),
     `--axial-tilt ${r.axial_tilt_deg}`,

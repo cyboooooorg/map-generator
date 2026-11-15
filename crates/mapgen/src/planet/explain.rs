@@ -552,6 +552,8 @@ mod tests {
             co2: Some(1.0),
             n2: Some(1.0),
             ch4: None,
+            nh3: None,
+            s: None,
             radiogenic: None,
             life: Some(true),
         };

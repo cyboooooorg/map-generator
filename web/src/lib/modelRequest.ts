@@ -16,7 +16,7 @@ export const MODEL_KEYS: ModelFieldKey[] = MODEL_GROUPS.flatMap((g) => g.fields)
 
 /** What a field takes when pinned before a preview has said what was drawn. */
 export const PIN_DEFAULTS: Record<ModelFieldKey, number | boolean> = {
-  mass_earth: 1, core_mass_fraction: 0.325, water_oceans: 1, envelope_fraction: 0, co2: 1, n2: 1, ch4: 1,
+  mass_earth: 1, core_mass_fraction: 0.325, water_oceans: 1, envelope_fraction: 0, co2: 1, n2: 1, ch4: 1, nh3: 1, s: 1,
   radiogenic: 1, life: true, eccentricity: 0.017, age_gyr: 4.6,
 };
 
@@ -28,6 +28,15 @@ export function initialModelValues(from: WorldRequest | null): ModelValues {
     values[key] = given === undefined ? { random: true, value: PIN_DEFAULTS[key] } : { random: false, value: given };
   }
   return values;
+}
+
+/**
+ * `next` (the values of a newly picked archetype) with the age the user
+ * typed in `previous` kept: an age typed always wins over an archetype's.
+ */
+export function keepAge(next: ModelValues, previous: ModelValues): ModelValues {
+  if (!previous.age_gyr.random) next.age_gyr = { ...previous.age_gyr };
+  return next;
 }
 
 /** The pinned fields as request members: numbers that are numbers, `life` as a boolean. */
@@ -54,7 +63,7 @@ const EARTH_KG = EARTH_MASS_KG;
  * What the seed drew for a lone world, as the request would pin it: the
  * mass it formed with, the water in Earth oceans and the envelope at
  * formation (as `PlanetModel::formation` reads them back), the orbit's
- * eccentricity and the star's age, and the CO₂, N₂ and CH₄ factors the
+ * eccentricity and the star's age, and the CO₂, N₂, CH₄, NH₃ and sulphur factors the
  * server read back from the formation rule (`ResolvedSystem.formation`).
  */
 export function drawnValues(result: ResolvedSystem | null): DrawnValues | null {
@@ -81,7 +90,7 @@ export function drawnValues(result: ResolvedSystem | null): DrawnValues | null {
 
 function volatileFactors(overrides: NonNullable<ResolvedSystem['formation']>['overrides']): DrawnValues {
   const out: DrawnValues = {};
-  for (const key of ['co2', 'n2', 'ch4'] as const) {
+  for (const key of ['co2', 'n2', 'ch4', 'nh3', 's'] as const) {
     const value = overrides[key];
     if (typeof value === 'number') out[key] = value;
   }

@@ -498,6 +498,8 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
             co2: request::VOLATILE_FACTOR,
             n2: request::VOLATILE_FACTOR,
             ch4: request::VOLATILE_FACTOR,
+            nh3: request::VOLATILE_FACTOR,
+            s: request::VOLATILE_FACTOR,
             age_gyr: request::age_gyr_limits(),
             radiogenic: request::RADIOGENIC,
             axial_tilt_deg: request::AXIAL_TILT_DEG,
@@ -898,6 +900,8 @@ fn pins_model_input(world: &mapgen::request::WorldRequest) -> bool {
         || world.co2.is_some()
         || world.n2.is_some()
         || world.ch4.is_some()
+        || world.nh3.is_some()
+        || world.s.is_some()
         || world.radiogenic.is_some()
         || world.life.is_some()
 }
@@ -4809,6 +4813,8 @@ mod tests {
         assert!(form["inputs"]["water_oceans"]["max"].is_number());
         assert!(form["inputs"]["mass_earth"]["min"].is_number());
         assert!(form["inputs"]["ch4"]["max"].is_number());
+        assert!(form["inputs"]["nh3"]["max"].is_number());
+        assert!(form["inputs"]["s"]["max"].is_number());
         assert!(form["inputs"]["age_gyr"]["max"].as_f64().unwrap() > 100.0);
     }
 
@@ -5817,7 +5823,7 @@ mod tests {
         assert_eq!(value("earth", "mass_earth"), Some(1.0));
         assert_eq!(value("mars", "mass_earth"), Some(0.107));
         assert!(value("titan", "water_oceans").unwrap() > 10.0);
-        assert_eq!(value("earth", "age_gyr"), Some(4.6));
+        assert_eq!(value("earth", "age_gyr"), Some(4.57));
     }
 
     #[tokio::test]
@@ -5828,7 +5834,7 @@ mod tests {
         let (_, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
         let resolved = json(&body);
         let formation = &resolved["formation"]["overrides"];
-        for key in ["co2", "n2", "ch4"] {
+        for key in ["co2", "n2", "ch4", "nh3", "s"] {
             assert!(formation[key].is_number(), "{key}: {formation}");
         }
         // A whole system has no cause trees and no focus formation.

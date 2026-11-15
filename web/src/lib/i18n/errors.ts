@@ -21,6 +21,8 @@ export function detailText(detail: ErrorDetail): string {
       return t.errors.badArchetype({ archetype: archetypeName({ name: detail.archetype }) });
     case 'bad_age':
       return t.errors.badAge({ age: formatUpTo(detail.age_gyr, 3), lifetime: formatUpTo(detail.lifetime_gyr, 2) });
+    case 'archetype_ages':
+      return t.errors.archetypeAges({ archetypes: detail.archetypes.map((name) => archetypeName({ name })).join(', ') });
     case 'too_many_pixels':
       return t.errors.tooManyPixels({ width: detail.width, height: detail.height, max: formatInt(detail.max_pixels) });
     case 'being_generated':
@@ -72,6 +74,7 @@ export function errorField(detail: ErrorDetail): ModelFieldKey | 'planet' | 'sta
     case 'water_heavier_than_planet':
       return 'water_oceans';
     case 'bad_age':
+    case 'archetype_ages':
       return 'age_gyr';
     case 'bad_archetype':
     case 'unknown_archetype':
@@ -98,7 +101,7 @@ export function errorField(detail: ErrorDetail): ModelFieldKey | 'planet' | 'sta
 /** What `out_of_range.field` names, by form field. */
 const OUT_OF_RANGE_FIELDS: Record<string, ModelFieldKey | 'orbit' | 'planets' | 'star'> = {
   mass_earth: 'mass_earth', core_mass_fraction: 'core_mass_fraction', water_oceans: 'water_oceans',
-  envelope_fraction: 'envelope_fraction', co2: 'co2', n2: 'n2', ch4: 'ch4', radiogenic: 'radiogenic',
+  envelope_fraction: 'envelope_fraction', co2: 'co2', n2: 'n2', ch4: 'ch4', radiogenic: 'radiogenic', nh3: 'nh3', s: 's',
   eccentricity: 'eccentricity', age_gyr: 'age_gyr', hz_position: 'orbit', orbit_au: 'orbit',
   moon_count: 'planets', metallicity: 'star',
 };

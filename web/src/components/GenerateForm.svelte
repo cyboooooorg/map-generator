@@ -27,7 +27,8 @@
   import type { InputField } from '../lib/api/types/InputField';
   import { drivenBy } from '../lib/causes';
   import { fieldOf, MODEL_GROUPS, type ModelFieldKey } from '../lib/modelFields';
-  import { drawnValues, initialModelValues, MODEL_KEYS, type ModelValues, modelRequest, previewRadiusEarth } from '../lib/modelRequest';
+  import { ageSources as ageSourcesOf } from '../lib/archetypeAge';
+  import { drawnValues, initialModelValues, keepAge, MODEL_KEYS, type ModelValues, modelRequest, previewRadiusEarth } from '../lib/modelRequest';
   import { fieldValueText } from '../lib/modelFormat';
   import { Preview } from '../lib/preview.svelte';
   import ModelFields from './form/ModelFields.svelte';
@@ -96,6 +97,8 @@
   /** Planets asked, plus the giants the moons bring along (the moons themselves are not counted). */
   const planetTotal = $derived(countOf(planetCounts) + hostsAdded(moonCounts, planetCounts, moonHosts));
   const planetsValid = $derived(planetsDrawn || (planetTotal >= 1 && planetTotal <= spec.max_planets));
+  /** The archetypes of the whole system asked that set the star's age, named in its preview. */
+  const ageSources = $derived(planetsDrawn ? [] : ageSourcesOf(archetypes, { ...planetCounts, ...moonCounts }));
   /** The system the server said exists already, which the next submission may replace. */
   let existsId = $state<string | null>(null);
 
@@ -237,7 +240,7 @@
     const archetype = archetypes.find((a) => a.spec === archetypeSpec);
     fields = initialState(archetype, null);
     star = initialStarChoice(archetype, null, spec.hz_position.fallback);
-    model = modelFor(archetypeSpec);
+    model = keepAge(modelFor(archetypeSpec), model);
   }
 
   /**
@@ -749,11 +752,12 @@
       bind:values={model}
       drawn={drawn}
       radiusEarth={previewRadiusEarth(preview.result)}
-      driven={(key) => drivenBy(explanation, key)}
+      driven={(key) => (key === 'nh3' || key === 's' ? [] : drivenBy(explanation, key))}
       ignored={preview.result?.ignored ?? []}
       explained={explanation !== null}
       refusal={preview.refusal}
       open={openGroups}
+      ageArchetype={randomPlanet ? null : (selectedArchetype ?? null)}
     />
   {/if}
 
@@ -897,11 +901,11 @@
 
   </div>
   {#if wide}
-    <aside class="side"><PreviewPanel {preview} kind={mode} onjump={jump} onreroll={reroll} /></aside>
+    <aside class="side"><PreviewPanel {preview} kind={mode} {ageSources} onjump={jump} onreroll={reroll} /></aside>
   {:else}
     <details class="fold">
       <summary>{t.form.preview.summary}</summary>
-      <PreviewPanel {preview} kind={mode} folded onjump={jump} onreroll={reroll} />
+      <PreviewPanel {preview} kind={mode} folded {ageSources} onjump={jump} onreroll={reroll} />
     </details>
   {/if}
   </div>
