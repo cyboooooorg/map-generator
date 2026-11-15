@@ -212,7 +212,8 @@ const HEAT_TOLERANCE: f64 = 1e-6;
 /// The internal heat is recomputed ([`super::internal_heat`]) and must be
 /// the stored one within [`HEAT_TOLERANCE`]. A bare body's surface steps
 /// are run again from the water the chain started them with (its first
-/// pass, or the boiled steam it kept, see [`super::planet_model`]), which
+/// pass, the boiled steam it kept, or the water left after a boil that
+/// condensed again, see [`super::planet_model`]), which
 /// gives what it outgassed, what escape left and the air its climate was
 /// solved with (the stored air is after life's oxygen). The surface
 /// temperature is decomposed with [`surface_temperature_k`] (the balance
@@ -244,14 +245,17 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
 
 /// The surface steps of `model` run again (see [`bare`]), from the water
 /// the chain started the kept pass with: the boiled steam when `surface`
-/// boiled, else the water of its first pass.
+/// boiled and stayed a runaway, its own water when the water left after
+/// the boil condensed again, else the water of its first pass.
 fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
     let (i, interior, fluence) = (&model.inputs, &model.interior, model.xuv_fluence);
-    let start = if surface.water.boiled {
+    let start = if surface.water.boiled && surface.water.runaway {
         Water {
             boiled: true,
             ..steam(i, interior, fluence)
         }
+    } else if surface.water.boiled {
+        surface.water
     } else {
         water(context, i, interior, fluence)
     };

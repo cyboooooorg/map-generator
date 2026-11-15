@@ -98,12 +98,16 @@ the hydrogen escapes at the energy-limited rate of the previous section
 (Owen & Wu 2017), 9 kg of water for each kg of hydrogen:
 `kept = max(0, water - 9 H lost)` (`regime::steam`). Without a runaway
 the planet keeps its water. `oceans` counts it in units of 1.4e21 kg.
-The climate can find a runaway this limit misses: when the vapour
-feedback carries a wet surface past water's critical point (647 K,
-`climate::boils`), the ocean is steam and the chain derives the body
-again from `regime::steam` (see [the chain](#the-chain-and-the-surface-classes)).
-`Water::boiled` records that a runaway came from such a boil rather than
-from the insolation limit. In a runaway all the water kept is steam in
+The climate can find a runaway this limit misses: when a wet surface
+has no balance under the moist limit (its absorbed light and internal
+heat exceed what its moist column sends out, `climate::boils`), the
+ocean is steam and the chain derives the body again from
+`regime::steam`; the water its escape leaves condenses again only if it
+has a wet balance of its own (see
+[the chain](#the-chain-and-the-surface-classes)). `Water::boiled`
+records such a boil rather than the insolation limit: with `runaway`,
+the steam or dry air that stands; without, the leftover that condensed
+again. In a runaway all the water kept is steam in
 the air: `Water::kept_kg` is what escape to space leaves of it, and the
 air's H₂O is that water's weight.
 
@@ -598,8 +602,9 @@ are solved together (`wet_balance`): the coldest surface temperature
 whose column, its vapour at that temperature, sends out what the surface
 absorbs, scanned up from the black-body temperature in steps of at most
 3 % to the critical point. With none, the absorbed light and heat exceed
-the moist limit and the water runs away (the chain then boils the
-ocean). A runaway's steam is already in the gases and is kept as it is.
+the moist limit and the water runs away: the climate then puts all the
+body's water in the air at the temperature of `surface_temperature_k`,
+a placeholder the chain replaces when it boils the ocean. A runaway's steam is already in the gases and is kept as it is.
 
 **Carbonate thermostat.** On a planet with plates and water, weathering
 draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
@@ -710,16 +715,18 @@ mass), the water kept and the runaway check, the tectonic regime, the
 core and dynamo, the air (`outgassed`, `atmosphere`,
 `methane_photolysis`, `cold_trap`, then `photochemistry`, which reads
 the cold trap's air), the climate and
-surface liquid, and life with the oxygen it makes. If that climate
-carries a wet surface past water's critical point (`climate::boils`),
-the body has run away after all: the steps from the regime on run once
-more from its steam (`regime::steam`, the water left after escape, in
-the air), flagged `boiled`, so that a body never keeps a liquid ocean
-above 647 K. That second pass is kept only if its steam holds the
-surface at or past 647 K too (`climate::past_critical`): a boil whose
-steam escapes until the dry re-run is cool has no self-consistent
-runaway, and the first pass stands, its vapour bounded by its own
-water. A body
+surface liquid, and life with the oxygen it makes. If a wet surface
+has no wet balance (`climate::boils`: its absorbed light and internal
+heat exceed the moist limit; Goldblatt et al. 2013,
+doi:10.1038/ngeo1892), the body has run away after all, in one pass
+with no loop: the steps from the regime on run once more from its
+steam (`regime::steam`, the water left after energy-limited escape, in
+the air), flagged `boiled`. If escape leaves water and that leftover has
+a wet balance of its own (too little vapour to hold the moist limit),
+it condenses again and a third run keeps it as an ocean (`boiled`, no
+runaway); otherwise the steam run stands, dry when escape took all the
+water. There is no temperature condition, so a boil whose dry air is
+under 647 K still ends dry (issue #442). A body
 that keeps an envelope has no surface: `PlanetModel.surface` is `None`.
 Otherwise the `Surface` holds the water, regime, core, final gases,
 climate and life, and `classify` reads the class off it. Nothing derives
@@ -767,9 +774,14 @@ and Mars `rocky`, Titan `hydrocarbon-world`, Ganymede and Europa
 part 1. A 1 M⊕ planet of 30 % water at
 1 AU, with the volatiles `draw_inputs` gives its rock and ice (no
 scatter), is an `ocean-world` at 288 K under 0.4 bar. With 1 % water
-(about 40 oceans) at 1 AU, the 20 bar of nitrogen its ice brings carry
-the vapour feedback past 647 K (past about 11 bar of N₂, see the
-broadening above): it is a `runaway-greenhouse`, never a lava world. The model is
+(about 40 oceans) at 1 AU, under the 20 bar of nitrogen its ice brings,
+it keeps its ocean under 330 K: the moist limit does not depend on the
+nitrogen. The Earth with 0.03 % of water round an F0V star at 1.24 S⊕
+(inside that star's runaway limit of 1.30 S⊕, but 297 W/m² absorbed,
+over the plateau) boils, its steam escapes to nothing and it ends a dry
+`runaway-greenhouse` (630 K under 65 bar of CO₂, 680 K under 93 bar);
+with just enough water that 0.03 bar survives escape, that leftover
+condenses again into a small ocean at 306 K. The model is
 finite and non-negative on mass 0.01 and 20 M⊕, insolation 1e-3 and 1e4,
 age 0.5 and 13 Gyr, M5V and A0V stars.
 

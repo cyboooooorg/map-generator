@@ -481,6 +481,144 @@ mod tests {
     }
 
     #[test]
+    fn a_trace_of_water_does_not_boil_a_temperate_planet() {
+        // 0.2 M⊕ at 1.2 AU with 1e-9 of water (2.6e-4 bar if all of it
+        // were vapour) and the volatiles of 1 % of ice. Its vapour is
+        // bounded by the water it has, so it cannot hold its outgoing
+        // radiation at the moist limit. Before the vapour was capped, the
+        // first pass put hundreds of bar of steam in its air, boiled, and
+        // the planet came out a runaway greenhouse at 296 K.
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01),
+            ..reference::inputs(0.2, 0.325, 1.0e-9)
+        };
+        let model = planet_model(&sun_at(1.2), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+        assert!(surface.climate.temperature_k < 400.0, "{surface:?}");
+    }
+
+    #[test]
+    fn a_cool_small_planet_does_not_boil() {
+        // 0.2 M⊕ at 1.5 AU with 0.1 % of water (0.85 Earth oceans). The
+        // old grey core carried its vapour feedback past 647 K, then
+        // refused the boil because its steam escaped to nothing and the
+        // dry re-run sat at 293 K. With a moist limit its light (some
+        // 107 W/m²) is far under the plateau: a wet balance exists, it
+        // does not boil and keeps all its water.
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(0.999, 1.0e-3),
+            ..reference::inputs(0.2, 0.325, 1.0e-3)
+        };
+        let all = inputs.water_fraction * inputs.mass_earth * crate::exomoon::EARTH_KG;
+        let model = planet_model(&sun_at(1.5), inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert!(!surface.water.boiled, "{surface:?}");
+        assert_eq!(surface.water.kept_kg, all, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    /// The context of a body round an F0V star (about 7200 K, the hot end
+    /// of Kopparapu et al.'s fit) that gives it `flux` S⊕, on a circular
+    /// orbit, at 2 Gyr (on its main sequence).
+    fn f0v_at(flux: f64) -> Context {
+        let kind = parse_type("F0V").unwrap();
+        let luminosity = StarInfo::new(kind, 1.0, 0.0, 2.0).luminosity;
+        let orbit_au = (f64::from(luminosity) / flux).sqrt();
+        let context = Context::of(&StarInfo::new(kind, orbit_au as f32, 0.0, 2.0), 0.0, 5.0);
+        assert!((context.insolation - flux).abs() < 1e-3 * flux);
+        context
+    }
+
+    /// Flux, S⊕, inside the runaway limit of the insolation of an F0V star
+    /// (1.296 S⊕ at its 7220 K) whose absorbed light (297 W/m² at Bond
+    /// albedo 0.3) exceeds the moist plateau (about 287 W/m²): an
+    /// Earth-like wet planet there has no wet balance and boils.
+    const F0V_BOILING_FLUX: f64 = 1.24;
+
+    #[test]
+    fn a_boil_that_escapes_all_its_water_ends_dry() {
+        // The case of #442 (census planet 458 c: 0.906 S⊕ round its star,
+        // 1.05 bar of N₂, 93 bar of CO₂ outgassed, 282 bar of vapour). Under
+        // the column core 458 c's inputs no longer boil (a Sun-like 1 M⊕
+        // heat-pipe planet at 0.906 S⊕ with 93 bar of CO₂ balances at
+        // 499 K, its ocean liquid), so the case is rebuilt where the moist
+        // limit makes a boil: the Earth at 1.24 S⊕ round an F0V star,
+        // inside its runaway limit, 0.03 % of water (342 bar if all of it
+        // were vapour), the rule's N₂ (1.03 bar in the first pass) and CO₂
+        // set to 65 and 93 bar in the dry air. Its steam escapes to
+        // nothing; the dry air sits at about 630 K and 680 K, under and
+        // over water's critical point: in both the end state is the dry
+        // runaway (the old rule refused the boil whose dry re-run sat
+        // under 647 K and kept the wet first pass).
+        for co2 in [6.0e-5, 8.6e-5] {
+            let inputs = PlanetInputs {
+                water_fraction: 3.0e-4,
+                volatiles: crate::planet::Volatiles {
+                    co2,
+                    ..volatile_rule(1.0 - 3.0e-4, 3.0e-4)
+                },
+                ..model_inputs(reference("Earth"))
+            };
+            let model = planet_model(&f0v_at(F0V_BOILING_FLUX), inputs);
+            let surface = model.surface.expect("a bare body has a surface");
+            assert!(surface.water.runaway, "{co2}: {surface:?}");
+            assert!(surface.water.boiled, "{co2}: {surface:?}");
+            assert_eq!(surface.water.kept_kg, 0.0, "{co2}: {surface:?}");
+            assert_eq!(surface.gases.h2o, 0.0, "{co2}: {surface:?}");
+            assert_ne!(
+                surface.climate.liquid,
+                SurfaceLiquid::Water,
+                "{co2}: {surface:?}"
+            );
+            assert_ne!(surface.regime, crate::geology::Regime::Plates);
+            assert_eq!(model.class, RunawayGreenhouse, "{co2}: {surface:?}");
+        }
+    }
+
+    #[test]
+    fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
+        // The Earth at 1.24 S⊕ round an F0V star (see F0V_BOILING_FLUX)
+        // with the volatiles of 0.1 % of ice and just enough water that
+        // the steam pass's energy-limited escape leaves 0.03 bar of it
+        // (some 1.6e17 kg): its first pass boils (2.4 bar of N₂, no wet
+        // balance), but so little vapour cannot hold the outgoing
+        // radiation at the moist limit, so the leftover recondenses into
+        // a small ocean near 306 K. (With 0.1 bar left the balance is at
+        // 404 K, over the boiling point, all of it vapour; from about
+        // 1 bar there is none and the steam runaway stands.)
+        let context = f0v_at(F0V_BOILING_FLUX);
+        let mut inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - 1.0e-3, 1.0e-3),
+            ..model_inputs(reference("Earth"))
+        };
+        let left_bar = 0.03;
+        let mass_kg = inputs.mass_earth * crate::exomoon::EARTH_KG;
+        let fluence = crate::planet::xuv_fluence(&context);
+        for _ in 0..3 {
+            // The water the steam pass loses (9 kg per kg of hydrogen,
+            // see `regime::steam`) plus `left_bar` of it; the interior
+            // barely moves with the water share, so three rounds settle it.
+            let interior = crate::planet::interior(&inputs, &context.exposure());
+            let lost =
+                9.0 * crate::planet::energy_limited_loss_kg(&interior, inputs.mass_earth, fluence);
+            let bar_per_kg = crate::planet::atmosphere::bar_per_kg(inputs.mass_earth, &interior);
+            inputs.water_fraction = (lost + left_bar / bar_per_kg) / mass_kg;
+        }
+        let all = inputs.water_fraction * mass_kg;
+        let model = planet_model(&context, inputs);
+        let surface = model.surface.expect("a bare body has a surface");
+        assert!(!surface.water.runaway, "{surface:?}");
+        assert!(surface.water.boiled, "{surface:?}");
+        assert!(surface.water.kept_kg > 0.0, "{surface:?}");
+        assert!(surface.water.kept_kg < 1e-3 * all, "{surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
+        assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    #[test]
     fn enveloped_bodies_have_no_surface() {
         let context = sun_at(30.1);
         let neptune = planet_model(&context, inputs_of(reference("Neptune")));

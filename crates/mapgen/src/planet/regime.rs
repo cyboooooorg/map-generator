@@ -38,9 +38,12 @@ pub struct Water {
     /// The water ran away: the insolation exceeds the runaway greenhouse
     /// limit, or the climate boiled the ocean (`boiled`).
     pub runaway: bool,
-    /// The runaway came from the climate carrying a wet surface past
-    /// water's critical point ([`super::climate::boils`]), not from the
-    /// insolation limit. Always `false` without a runaway.
+    /// The climate boiled the ocean: the wet surface had no balance under
+    /// the moist limit ([`super::climate::boils`]), not the insolation
+    /// limit. With `runaway`, the steam (or the dry air) its escape left;
+    /// without, the water that escape left had a wet balance and
+    /// condensed again (see [`super::planet_model`]). Always `false` for
+    /// a body that did not boil.
     pub boiled: bool,
     /// Water kept, kg. In a runaway, all of it is steam in the air.
     pub kept_kg: f64,
@@ -68,9 +71,10 @@ impl Water {
 /// doi:10.1088/2041-8205/787/2/L29, the fit for 1 M-earth; their mass
 /// correction is not applied, not checked); then the water is
 /// [`steam`]'s. Without a runaway the cold trap keeps the water. The
-/// climate can still find a runaway the limit missed (a wet surface
-/// carried past water's critical point, see
-/// [`super::climate::boils`]); the chain then takes [`steam`].
+/// climate can still find a runaway the limit missed (a wet surface with
+/// no balance under the moist limit, see [`super::climate::boils`]); the
+/// chain then takes [`steam`], and keeps the water its escape leaves as
+/// an ocean only if that water has a wet balance.
 pub fn water(
     context: &Context,
     inputs: &PlanetInputs,

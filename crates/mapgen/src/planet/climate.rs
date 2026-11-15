@@ -618,25 +618,33 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
     }
 }
 
-/// Whether the climate of a body that keeps its water out of a runaway
-/// has carried its surface past water's critical point: its vapour
-/// feedback has run away where the insolation limit of
-/// [`super::regime::water`] did not see it (the moist runaway of a wet
-/// planet under a thick air; Kasting 1988, doi:10.1016/0019-1035(88)90116-9,
-/// not checked). Its ocean is then steam: the chain derives the body
-/// again with [`super::regime::steam`], and keeps that runaway only if
-/// the steam is still [`past_critical`]. The vapour that carries it there
-/// is bounded by the water the body has (see [`climate`]), so a trace of
-/// water cannot boil.
-pub fn boils(water: &Water, climate: &Climate) -> bool {
-    !water.runaway && water.kept_kg > 0.0 && past_critical(climate)
-}
-
-/// Whether `climate` holds its surface at or past water's critical point
-/// (647.096 K), where no liquid water exists: the test the chain puts to
-/// a boiled body's steam (see [`boils`]).
-pub fn past_critical(climate: &Climate) -> bool {
-    climate.temperature_k >= WATER_CRITICAL_K
+/// Whether a body that keeps its water out of a runaway boils it: with
+/// the air `gases` its climate solved the wet surface with (its CO₂ as
+/// the thermostat left it; its water vapour is set by the balance), no
+/// wet balance exists ([`wet_balance`] is `None`): the light it absorbs
+/// plus its internal heat exceed what its moist column can send out, the
+/// moist runaway of a wet planet the insolation limit of
+/// [`super::regime::water`] did not see (Kasting 1988,
+/// doi:10.1016/0019-1035(88)90116-9, not checked; Goldblatt et al. 2013,
+/// doi:10.1038/ngeo1892, abstract checked: a runaway once the absorbed
+/// flux exceeds the moist limit). Its ocean is then steam: the
+/// chain derives the body again with [`super::regime::steam`] and its
+/// energy-limited escape, and keeps the water that escape leaves as an
+/// ocean only if that leftover has a wet balance itself (see
+/// [`super::planet_model`]). There is no temperature condition. The
+/// vapour is bounded by the body's `water_bar` (see [`with_vapour`]), so
+/// a trace of water cannot hold its outgoing radiation at the moist limit
+/// and does not boil.
+pub fn boils(
+    context: &Context,
+    gases: &Gases,
+    water: &Water,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+) -> bool {
+    !water.runaway
+        && water.kept_kg > 0.0
+        && wet_balance(context, *gases, heat_flux_w_m2, water_bar).is_none()
 }
 
 /// `gases` with the water vapour an ocean or ice keeps at
@@ -722,9 +730,9 @@ fn wet_balance(
 
 /// Temperature, K, and gases of a surface whose water vapour follows its
 /// temperature: the coldest balance of [`wet_balance`]. Without one (a
-/// moist runaway), the vapour of a surface at water's critical point
-/// (bounded by the body's `water_bar`) and the temperature it gives:
-/// the chain then boils the ocean (see [`boils`]).
+/// moist runaway), all of the body's water as vapour (`water_bar`) and
+/// the temperature [`surface_temperature_k`] gives it: a placeholder the
+/// chain replaces, since the body boils (see [`boils`]).
 fn wet_climate(
     context: &Context,
     gases: Gases,
@@ -732,8 +740,14 @@ fn wet_climate(
     water_bar: f64,
 ) -> (Gases, f64) {
     wet_balance(context, gases, heat_flux_w_m2, water_bar).unwrap_or_else(|| {
-        let hot = with_vapour(gases, WATER_CRITICAL_K, water_bar);
-        (hot, surface_temperature_k(context, &hot, heat_flux_w_m2))
+        let steam = Gases {
+            h2o: water_bar.max(0.0),
+            ..gases
+        };
+        (
+            steam,
+            surface_temperature_k(context, &steam, heat_flux_w_m2),
+        )
     })
 }
 
@@ -1037,12 +1051,19 @@ mod tests {
             oceans: 0.0,
         };
         assert_eq!(liquid(2000.0, &air, &dry), SurfaceLiquid::Lava);
-        // A wet surface past the critical point boils; a runaway's does not
-        // boil again.
-        let hot = Climate {
-            temperature_k: 700.0,
-            liquid: SurfaceLiquid::None,
-            regulated: false,
+    }
+
+    #[test]
+    fn a_wet_surface_past_the_moist_limit_boils() {
+        // Earth's air and an ocean (some 280 bar if all of it were
+        // vapour). At 0.9 AU the Sun gives 1.23 S⊕, 295 W/m² absorbed,
+        // over the moist plateau: no wet balance, it boils. At 1 AU
+        // (240 W/m²) it balances. A runaway does not boil again, and a
+        // trace of water (1e-4 bar) cannot hold the moist limit.
+        let air = Gases {
+            n2: 0.78,
+            co2: 4e-4,
+            ..Gases::default()
         };
         let ocean = Water {
             runaway: false,
@@ -1050,22 +1071,20 @@ mod tests {
             kept_kg: 1.4e21,
             oceans: 1.0,
         };
-        assert!(boils(&ocean, &hot));
-        assert!(!boils(
-            &Water {
-                runaway: true,
-                boiled: false,
-                ..ocean
-            },
-            &hot
-        ));
-        assert!(!boils(
-            &ocean,
-            &Climate {
-                temperature_k: 600.0,
-                ..hot
-            }
-        ));
+        let close = crate::planet::reference::sun_at(0.9);
+        let earth = crate::planet::reference::sun_at(1.0);
+        assert!(boils(&close, &air, &ocean, 0.09, 280.0));
+        assert!(!boils(&earth, &air, &ocean, 0.09, 280.0));
+        let runaway = Water {
+            runaway: true,
+            ..ocean
+        };
+        assert!(!boils(&close, &air, &runaway, 0.09, 280.0));
+        assert!(!boils(&close, &air, &ocean.keeping(5e17), 0.09, 1e-4));
+        // Without a balance, the climate puts all the water in the air
+        // (a placeholder the chain replaces).
+        let (g, _) = climate(&close, air, &ocean, Regime::Stagnant, 0.09, 280.0);
+        assert_eq!(g.h2o, 280.0, "{g:?}");
     }
 
     #[test]

@@ -19,8 +19,9 @@
 //!    tectonic regime mix, over the planets that have a surface, and how
 //!    many runaways came from the insolation limit or from boiling their
 //!    ocean (`Water::boiled`), all of them and the runaway-greenhouse
-//!    class alone, and how many wet planets stay past 647 K (a boil whose
-//!    steam would have cooled, so the first pass stands), and how many
+//!    class alone, how many boils left water that condensed again into
+//!    an ocean, and how many wet planets stay past 647 K (none should:
+//!    a wet surface with no balance boils), and how many
 //!    planets that are no giant (nor mini-Neptune) keep an envelope that
 //!    hides their surface, by class (they render with their class's
 //!    preset, see `planet::interim::base_of`);
@@ -98,6 +99,7 @@ fn main() {
     let mut runaways = [0u32; 2];
     let mut runaway_class = [0u32; 2];
     let mut hot_and_wet = 0u32;
+    let mut recondensed = 0u32;
     let mut oxygenated = 0u32;
     let mut close_in = [0u32; 20];
     let mut close_in_total = 0u32;
@@ -140,6 +142,7 @@ fn main() {
                         && surface.water.kept_kg > 0.0
                         && surface.climate.temperature_k >= 647.096,
                 );
+                recondensed += u32::from(!surface.water.runaway && surface.water.boiled);
                 if surface.water.runaway {
                     let source = usize::from(surface.water.boiled);
                     runaways[source] += 1;
@@ -268,7 +271,8 @@ fn main() {
          of the runaway-greenhouse class: {} by the limit, {} boiled",
         runaways[0], runaways[1], runaway_class[0], runaway_class[1]
     );
-    println!("wet, not in runaway and past 647 K (a boil not kept): {hot_and_wet}");
+    println!("boils whose leftover water condensed again: {recondensed}");
+    println!("wet, not in runaway and past 647 K: {hot_and_wet}");
     println!(
         "\nlife: {:.1} % of planets with a surface ({life}), {:.1} % oxygenated ({oxygenated})",
         share(life, with_surface),
