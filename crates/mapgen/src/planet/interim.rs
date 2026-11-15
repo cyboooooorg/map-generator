@@ -53,6 +53,7 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
         PlanetClass::GasGiant => return "gas-giant",
         PlanetClass::HotJupiter | PlanetClass::HotNeptune => return "hot-jupiter",
         PlanetClass::IceGiant | PlanetClass::MiniNeptune => return "ice-giant",
+        PlanetClass::SteamWorld => return "steam-world",
         _ => {}
     }
     let surface = model.surface.as_ref();
@@ -404,9 +405,12 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
 
 /// Whether the world of `model` renders as a giant's: its [`base_of`]
 /// look is a giant's (a gas giant, a hot Jupiter, an ice giant or a
-/// mini-Neptune).
+/// mini-Neptune) or a steam world's grey cloud deck.
 pub fn renders_as_giant(model: &PlanetModel) -> bool {
-    matches!(base_of(model), "gas-giant" | "hot-jupiter" | "ice-giant")
+    matches!(
+        base_of(model),
+        "gas-giant" | "hot-jupiter" | "ice-giant" | "steam-world"
+    )
 }
 
 /// The world parameters of a planet from its `model`, placed as `placed`
@@ -438,7 +442,8 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 /// - a giant ([`renders_as_giant`]): its giant look at the model's mass,
 ///   a mini-Neptune's too, however light (issue #446), its radius the
 ///   giant look's (`giant_radius_of` for the model's composition and
-///   light, the model's own radius), no ground, no giant neighbours and
+///   light, the model's own radius; a steam world's radius is always the
+///   model's), no ground, no giant neighbours and
 ///   nobody's moon;
 /// - a body that is no giant whose envelope hides its surface: its class's
 ///   look ([`base_of`]: `frozen` for an ice world, `barren` otherwise) at
@@ -539,11 +544,17 @@ pub fn params_for(
             }
             None if giant => (
                 sea_level,
-                crate::giants::giant_radius_of(
-                    giant_mass,
-                    &crate::giants::GiantComposition::of(&model.inputs),
-                    &super::Exposure::of(&star),
-                ) * 40_075.0,
+                // A steam world keeps the model's radius, the steam's
+                // inflation included, not a giant law's.
+                if model.class == PlanetClass::SteamWorld {
+                    model_circumference
+                } else {
+                    crate::giants::giant_radius_of(
+                        giant_mass,
+                        &crate::giants::GiantComposition::of(&model.inputs),
+                        &super::Exposure::of(&star),
+                    ) * 40_075.0
+                },
                 look_pressure,
                 0.0,
                 0.0,
@@ -892,6 +903,41 @@ mod tests {
             let share = 100.0 * liquid / total;
             assert!((0.3..3.0).contains(&share), "seed {seed}: {share} %");
         }
+    }
+
+    #[test]
+    fn a_steam_world_renders_as_grey_clouds() {
+        use crate::planet::inputs::volatile_rule;
+        use crate::planet::{Context, reference};
+        use crate::star::{DEFAULT_AGE_GYR, StarInfo, parse_type};
+        // The case of #492: 1679 K, 409 942 bar of steam, 1.700 R⊕.
+        let (iron, rock, water) = (1.06, 3.16, 0.56);
+        let mass = iron + rock + water;
+        let inputs = crate::planet::PlanetInputs {
+            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            ..reference::inputs(mass, iron / (iron + rock), water / mass)
+        };
+        let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
+        let model = planet_model(&Context::of(&star, 0.0, 0.1), inputs);
+        assert_eq!(model.class, PlanetClass::SteamWorld);
+        assert_eq!(base_of(&model), "steam-world");
+        assert!(renders_as_giant(&model));
+        let mut placed = earth_placed(1);
+        placed.star = parse_type("M9V").unwrap();
+        placed.orbit_au = 0.018;
+        placed.eccentricity = 0.0;
+        let params = params_for(&model, &placed, &mut StdRng::seed_from_u64(1));
+        let radius_km = model.interior.radius_earth * crate::exomoon::EARTH_M / 1000.0;
+        let expect = 2.0 * std::f64::consts::PI * radius_km;
+        assert!(
+            (f64::from(params.circumference_km) - expect).abs() < 1e-3 * expect,
+            "{} vs {expect}",
+            params.circumference_km
+        );
+        assert_eq!(params.class, "steam-world");
+        let stored = params.model.as_ref().unwrap();
+        assert!(stored.surface.as_ref().unwrap().gases.total() > 1e5);
+        assert!(params.look.giant.is_some());
     }
 
     #[test]

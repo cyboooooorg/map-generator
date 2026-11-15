@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 /// The built-in looks of planets, by name.
-const BUILT_IN: [(&str, &str); 8] = [
+const BUILT_IN: [(&str, &str); 9] = [
     ("terran", include_str!("../../../looks/terran.toml")),
     ("volcanic", include_str!("../../../looks/volcanic.toml")),
     ("frozen", include_str!("../../../looks/frozen.toml")),
@@ -46,6 +46,10 @@ const BUILT_IN: [(&str, &str); 8] = [
     (
         "hot-jupiter",
         include_str!("../../../looks/hot-jupiter.toml"),
+    ),
+    (
+        "steam-world",
+        include_str!("../../../looks/steam-world.toml"),
     ),
 ];
 
@@ -294,7 +298,7 @@ mod tests {
     #[test]
     fn built_in_looks_load() {
         let looks = Look::built_in();
-        assert_eq!(looks.len(), 8);
+        assert_eq!(looks.len(), 9);
         assert!(looks[..5].iter().all(|(_, l)| l.giant.is_none()));
         assert!(looks[5..].iter().all(|(_, l)| l.giant.is_some()));
         for composition in [Composition::Rock, Composition::Ice] {

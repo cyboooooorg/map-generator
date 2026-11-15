@@ -740,6 +740,7 @@ fn giants_summary(system: &GiantSystem, metallicity: f32) -> String {
                     match g.kind {
                         GiantKind::Gas => "gas giant",
                         GiantKind::Ice => "ice giant",
+                        GiantKind::Steam => "steam world",
                     },
                     g.mass_earth / JUPITER_EARTH_MASSES,
                     g.orbit_au,

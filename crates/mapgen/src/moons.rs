@@ -387,7 +387,7 @@ pub(crate) fn carries(host: &HostSketch, moons: &[AskedMoon]) -> bool {
     let locked = crate::spin::giant_locked(star, host.mass_earth as f32, radius_earth);
     let disk_max = match host.kind {
         GiantKind::Gas => DISK_MASS_RATIO.1,
-        GiantKind::Ice => ICE_DISK_MASS_RATIO.1,
+        GiantKind::Ice | GiantKind::Steam => ICE_DISK_MASS_RATIO.1,
     };
     let in_disk: f64 = moons
         .iter()
@@ -619,7 +619,7 @@ const ICE_LINE_POWER: f64 = 4.0;
 fn disk_mass_ratio(kind: GiantKind, rng: &mut Draws) -> f64 {
     let (lo, hi) = match kind {
         GiantKind::Gas => DISK_MASS_RATIO,
-        GiantKind::Ice => ICE_DISK_MASS_RATIO,
+        GiantKind::Ice | GiantKind::Steam => ICE_DISK_MASS_RATIO,
     };
     rng.uniform(lo, hi)
 }

@@ -1019,7 +1019,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (20 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (22 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message asking to delete it (`mise run clean-systems`) and draw it
   again, and the viewer shows that message instead of requesting them.

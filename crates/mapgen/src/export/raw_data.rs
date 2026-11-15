@@ -64,8 +64,11 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// stored fields are the same, so [`crate::system::SYSTEM_FORMAT_VERSION`]
 /// stays 4. Version 20 types a round moon by its model's class, stores
 /// its model, and marks a moon's world (`moon`); it goes with the fifth
-/// [`crate::system::SYSTEM_FORMAT_VERSION`].
-pub const FORMAT_VERSION: u32 = 20;
+/// [`crate::system::SYSTEM_FORMAT_VERSION`]. Version 22 draws a steam
+/// world (class `steam-world`, #492) as a grey cloud deck of the model's
+/// radius, with a giant look of kind `steam`; the stored fields are the
+/// same.
+pub const FORMAT_VERSION: u32 = 22;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -73,7 +76,7 @@ pub const FORMAT_VERSION: u32 = 20;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message suggesting `mise run
 /// clean-systems`.
-pub const MIN_FORMAT_VERSION: u32 = 20;
+pub const MIN_FORMAT_VERSION: u32 = 22;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
