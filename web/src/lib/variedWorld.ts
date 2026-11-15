@@ -11,8 +11,11 @@ export const MODEL_INPUTS = [
   'envelope_fraction',
   'co2',
   'n2',
+  'ch4',
   'radiogenic',
   'life',
+  'eccentricity',
+  'age_gyr',
 ] as const satisfies readonly (keyof WorldRequest)[];
 
 /**

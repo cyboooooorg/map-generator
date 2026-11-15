@@ -1,9 +1,13 @@
 name = "triton-like"
 description = "Triton-like: a captured icy moon on a backward orbit round a Neptune"
 
+[reference]
+name = "Triton"
+
 [locales.fr]
 name = "Tritonienne"
 description = "Une lune glacée capturée, sur une orbite rétrograde autour d'une Neptune"
+reference = "Triton"
 
 # Triton: 2.139e22 kg = 0.0036 Earth masses (NASA Neptunian satellite
 # fact sheet; JPL Solar System Dynamics, planetary satellite physical

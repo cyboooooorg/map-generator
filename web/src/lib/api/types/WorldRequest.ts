@@ -91,6 +91,11 @@ co2?: number,
  */
 n2?: number, 
 /**
+ * Factor on the CH₄ formation rule, in `[0, 100]`: 1 typical. Replaces
+ * the archetype's own when set.
+ */
+ch4?: number, 
+/**
  * Radiogenic abundance at formation, Earth's = 1, in `[0.1, 10]`.
  */
 radiogenic?: number, 

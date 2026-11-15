@@ -51,7 +51,7 @@
   <ul class="biomes" aria-label={t.viewer.biomeLegend} onpointerleave={() => (hovered = null)}>
     {#each all ? stats.shares : stats.shares.slice(0, TOP_BIOMES) as entry (entry.biome.id)}
       <li>
-        <button
+        <button type="button"
           class:pinned={pinned === entry.biome.id}
           onpointerenter={() => (hovered = entry.biome.id)}
           onfocus={() => (hovered = entry.biome.id)}
@@ -69,7 +69,7 @@
     {/each}
   </ul>
   {#if stats.shares.length > TOP_BIOMES}
-    <button class="more" onclick={() => (all = !all)}>
+    <button type="button" class="more" onclick={() => (all = !all)}>
       {all ? t.worldInfo.showFewer : t.worldInfo.showAll({ count: stats.shares.length })}
     </button>
   {/if}

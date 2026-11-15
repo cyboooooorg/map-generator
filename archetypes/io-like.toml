@@ -1,9 +1,13 @@
 name = "io-like"
 description = "Io-like: a dry rocky moon close to a Jupiter, heated by its tides"
 
+[reference]
+name = "Io"
+
 [locales.fr]
 name = "Ionienne"
 description = "Une lune rocheuse et sèche, proche d'une Jupiter, chauffée par ses marées"
+reference = "Io"
 
 # Io: 8.9319e22 kg = 0.0150 Earth masses (NASA Jovian satellite fact
 # sheet; JPL Solar System Dynamics, planetary satellite physical

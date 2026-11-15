@@ -1,9 +1,13 @@
 name = "mercury-like"
 description = "Mercury-like: a small iron-rich rock next to its star"
 
+[reference]
+name = "Mercury"
+
 [locales.fr]
 name = "Mercurienne"
 description = "Un petit monde rocheux riche en fer, tout près de son étoile"
+reference = "Mercure"
 
 [inputs]
 mass_earth = [0.05, 0.06]

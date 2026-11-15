@@ -125,7 +125,7 @@ describe('themed body cards', () => {
 
   it('gives a moon a button to its host, named, and none to a planet', () => {
     const header = (shown: string) => renderCard(BodyHeader, { world: worldOf([earthLike, moon], shown, null), onRenamed: NOOP, onGenerate: NOOP });
-    expect(header('c-1')).toMatch(/<button class="host[ "][^>]*>↑ Gaia<\/button>/);
+    expect(header('c-1')).toMatch(/<button type="button" class="host[ "][^>]*>↑ Gaia<\/button>/);
     expect(header('c')).not.toMatch(/class="host[ "]/);
   });
 

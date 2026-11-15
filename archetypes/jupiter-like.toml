@@ -1,9 +1,13 @@
 name = "jupiter-like"
 description = "Jupiter-like: a gas giant beyond the ice line"
 
+[reference]
+name = "Jupiter"
+
 [locales.fr]
 name = "Jovienne"
 description = "Une géante gazeuse au-delà de la ligne des glaces"
+reference = "Jupiter"
 
 [inputs]
 mass_earth = [286.0, 350.0]

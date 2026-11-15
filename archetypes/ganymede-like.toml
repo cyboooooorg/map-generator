@@ -1,9 +1,13 @@
 name = "ganymede-like"
 description = "Ganymede-like: the largest icy moon of a Jupiter, airless"
 
+[reference]
+name = "Ganymede"
+
 [locales.fr]
 name = "Ganymédienne"
 description = "La plus grande lune glacée d'une Jupiter, sans air"
+reference = "Ganymède"
 
 # Ganymede: 1.4819e23 kg = 0.0248 Earth masses (NASA Jovian satellite
 # fact sheet; JPL Solar System Dynamics, planetary satellite physical

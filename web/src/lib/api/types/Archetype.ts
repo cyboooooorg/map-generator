@@ -2,6 +2,7 @@
 import type { ArchetypeInputs } from "./ArchetypeInputs";
 import type { ArchetypeMoon } from "./ArchetypeMoon";
 import type { ArchetypeOrbit } from "./ArchetypeOrbit";
+import type { ArchetypeReference } from "./ArchetypeReference";
 
 /**
  * A named set of model inputs. See the module documentation for the file
@@ -15,4 +16,8 @@ name: string, description: string, inputs: ArchetypeInputs, orbit: ArchetypeOrbi
 /**
  * Set on a giant's moon: its host and its orbit round it.
  */
-moon?: ArchetypeMoon, };
+moon?: ArchetypeMoon, 
+/**
+ * The body it stands for, when its file says so.
+ */
+reference?: ArchetypeReference, };

@@ -1,6 +1,10 @@
 name = "super-earth"
 description = "Super-Earth: a rocky world several times Earth's mass"
 
+[reference]
+name = "Gliese 876 d"
+discovered = 2005
+
 [locales.fr]
 name = "Super-Terre"
 description = "Un monde rocheux de plusieurs masses terrestres"

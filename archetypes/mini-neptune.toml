@@ -1,6 +1,10 @@
 name = "mini-neptune"
 description = "Mini-Neptune: a small world under a thick hydrogen envelope"
 
+[reference]
+name = "GJ 1214 b"
+discovered = 2009
+
 [locales.fr]
 name = "Mini-Neptune"
 description = "Un petit monde sous une épaisse enveloppe d'hydrogène"

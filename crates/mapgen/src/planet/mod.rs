@@ -245,13 +245,13 @@ impl PlanetModel {
     /// ([`Formation`]): the drawn mass (before photoevaporation); the
     /// envelope share at formation, `(M e + M₀ − M) / M₀` with `M₀` the
     /// drawn mass and `M`, `e` what escape left; the water in Earth oceans
-    /// of the drawn mass; the CO₂ and N₂ factors, the stored volatiles over
+    /// of the drawn mass; the CO₂, N₂ and CH₄ factors, the stored volatiles over
     /// the formation rule of the formation shares (1 where the rule is 0);
     /// the core share, the radiogenic abundance and `life: Some(arose)`.
     ///
     /// Set in a request with the same context, they derive the same inputs
-    /// and class whatever the seed; the CH₄, NH₃ and sulphur scatter, which
-    /// no request sets, follows the seed. Values read back by division are
+    /// and class whatever the seed; the NH₃ and sulphur scatter, which no
+    /// request sets, follows the seed. Values read back by division are
     /// nudged by an ulp or two so that the request's arithmetic gives the
     /// stored value exactly.
     pub fn formation(&self) -> Formation {
@@ -283,7 +283,7 @@ impl PlanetModel {
                 envelope_fraction: Some(envelope),
                 co2: Some(factor(i.volatiles.co2, rule.co2)),
                 n2: Some(factor(i.volatiles.n2, rule.n2)),
-                ch4: None,
+                ch4: Some(factor(i.volatiles.ch4, rule.ch4)),
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
             },

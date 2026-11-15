@@ -5,9 +5,9 @@
   import { t } from '../../lib/i18n/index.svelte';
   import { formatInt, formatUpTo, withUnit } from '../../lib/format';
   import { dustFedBy, dustOf, ringPart, ringsOf } from '../../lib/ringMoons';
-  import type { LoadedWorld } from '../../lib/world.svelte';
+  import type { CardSource } from '../../lib/cardSource';
 
-  let { world }: { world: LoadedWorld } = $props();
+  let { world }: { world: CardSource } = $props();
 
   const system = $derived(world.system);
   const body = $derived(world.shownSystemBody);
@@ -28,7 +28,11 @@
       <dt title={t.worldInfo.moonsHelp}>{t.card.moons}</dt>
       <dd class="moons">
         {#each family as moon (moon.id)}
-          <button class="link" onclick={() => world.showSystemBody(moon.id)}>{nameOf(moon.id, moon.designation)}</button>
+          {#if world.preview}
+            <span>{nameOf(moon.id, moon.designation)}</span>
+          {:else}
+            <button type="button" class="link" onclick={() => world.showSystemBody(moon.id)}>{nameOf(moon.id, moon.designation)}</button>
+          {/if}
         {:else}
           {t.worldInfo.noMoon}
         {/each}

@@ -22,3 +22,36 @@
 .facts .unit-help {
   cursor: help;
 }
+/* A line the live preview just changed (see `flashLines`): a brief highlight.
+   Two names for one animation, so that it replays when the next answer moves
+   the line again. */
+.facts dd[data-flash='a'],
+[data-line][data-flash='a'] {
+  animation: flash-a 1.5s ease-out;
+}
+.facts dd[data-flash='b'],
+[data-line][data-flash='b'] {
+  animation: flash-b 1.5s ease-out;
+}
+@keyframes flash-a {
+  from {
+    background: color-mix(in srgb, var(--link) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+@keyframes flash-b {
+  from {
+    background: color-mix(in srgb, var(--link) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .facts dd[data-flash],
+  [data-line][data-flash] {
+    animation: none;
+  }
+}

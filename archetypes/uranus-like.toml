@@ -1,9 +1,13 @@
 name = "uranus-like"
 description = "Uranus-like: an ice giant on its side"
 
+[reference]
+name = "Uranus"
+
 [locales.fr]
 name = "Uranienne"
 description = "Une géante de glaces couchée sur le côté"
+reference = "Uranus"
 
 [inputs]
 mass_earth = [13.0, 16.0]
