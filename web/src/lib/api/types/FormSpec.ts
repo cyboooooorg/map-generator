@@ -2,6 +2,7 @@
 import type { InputLimits } from "./InputLimits";
 import type { Limits } from "./Limits";
 import type { ParamSpec } from "./ParamSpec";
+import type { ReferenceValue } from "./ReferenceValue";
 
 /**
  * Everything the generation form needs to validate its inputs.
@@ -56,4 +57,9 @@ moon_archetypes: Array<string>,
 /**
  * Most planets a system holds (moons not counted).
  */
-max_planets: number, };
+max_planets: number, 
+/**
+ * The Solar System's values of the model fields: the form's reference
+ * marks and the numbers of its help text.
+ */
+references: Array<ReferenceValue>, };

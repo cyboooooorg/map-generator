@@ -75,6 +75,19 @@ pub struct InputLimits {
     pub age_gyr: Limits,
 }
 
+/// A Solar System value of a request field: what the form draws its
+/// reference marks at, and quotes in its help.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ReferenceValue {
+    /// Lower-case name of the body (`earth`, `mars`, `titan`).
+    pub body: String,
+    /// The request field (`mass_earth`, `eccentricity`).
+    pub field: String,
+    /// The value, in the request's own units.
+    pub value: f64,
+}
+
 /// Everything the generation form needs to validate its inputs.
 #[derive(Clone, Debug, Serialize, TS)]
 #[ts(export)]
@@ -108,6 +121,9 @@ pub struct FormSpec {
     pub moon_archetypes: Vec<String>,
     /// Most planets a system holds (moons not counted).
     pub max_planets: u32,
+    /// The Solar System's values of the model fields: the form's reference
+    /// marks and the numbers of its help text.
+    pub references: Vec<ReferenceValue>,
 }
 
 /// State of a generation job, streamed as server-sent events.

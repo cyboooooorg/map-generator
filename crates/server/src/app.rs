@@ -39,8 +39,8 @@
 use crate::api::{
     ApiError, ArchetypeInfo, BodyExtras, BodySizes, DisplayedSize, ErrorDetail, FormSpec,
     GenerateStarted, GeneratorNote, HexRequest, InputLimits, JobInfo, JobStatus, ParamSpec,
-    PendingSize, PresentSize, RegeneratedBody, ResolvedSystem, SystemCreated, SystemDetail,
-    SystemName, SystemNames, SystemQuery, SystemSummary,
+    PendingSize, PresentSize, ReferenceValue, RegeneratedBody, ResolvedSystem, SystemCreated,
+    SystemDetail, SystemName, SystemNames, SystemQuery, SystemSummary,
 };
 use crate::catalog::Catalog;
 use crate::index::{Cause, GENERATOR_FORMAT, GENERATOR_VERSION, Index};
@@ -508,6 +508,14 @@ async fn form(State(state): State<Shared>) -> Json<FormSpec> {
         archetypes,
         moon_archetypes,
         max_planets: mapgen::system::MAX_PLANETS as u32,
+        references: mapgen::planet::reference::field_references()
+            .into_iter()
+            .map(|r| ReferenceValue {
+                body: r.body,
+                field: r.field.to_owned(),
+                value: r.value,
+            })
+            .collect(),
     })
 }
 
@@ -664,13 +672,17 @@ async fn resolve_system(
     Json(request): Json<mapgen::system::SystemRequest>,
 ) -> Result<Json<ResolvedSystem>, Rejection> {
     let lone = matches!(request, mapgen::system::SystemRequest::Around(_));
+    let pinned = match &request {
+        mapgen::system::SystemRequest::Around(world) => pins_model_input(world),
+        mapgen::system::SystemRequest::System(_) => false,
+    };
     let (system, ignored) = resolve_request(&state, request).await?;
     let shared = state.clone();
     // The cause trees walk the catalog: off the async runtime, as for a
     // stored system. A whole system gets none (the form validates it only).
     let resolved = tokio::task::spawn_blocking(move || {
         let extras = if lone {
-            body_extras(&system, &shared.catalog)
+            body_extras(&system, &shared.catalog, pinned)
         } else {
             BTreeMap::new()
         };
@@ -838,7 +850,7 @@ async fn get_system(
     let shared = state.clone();
     tokio::task::spawn_blocking(move || {
         let system = mapgen::system::read_system(&systems::system_dir(&root, &owned))?;
-        let extras = body_extras(&system, &shared.catalog);
+        let extras = body_extras(&system, &shared.catalog, false);
         Ok::<_, String>(SystemDetail {
             system,
             extras,
@@ -852,10 +864,29 @@ async fn get_system(
     .map_err(|e| unreadable_system(&state.config.systems_dir, &id, &e))
 }
 
+/// Whether a request sets an input of the planet model: the archetype it
+/// names then no longer describes the planet it draws.
+fn pins_model_input(world: &mapgen::request::WorldRequest) -> bool {
+    world.mass_earth.is_some()
+        || world.core_mass_fraction.is_some()
+        || world.water_oceans.is_some()
+        || world.envelope_fraction.is_some()
+        || world.co2.is_some()
+        || world.n2.is_some()
+        || world.ch4.is_some()
+        || world.radiogenic.is_some()
+        || world.life.is_some()
+}
+
 /// The cause trees and the resemblance of every body of `system` that has
-/// a model. A body asked by archetype resembles that archetype; the others
-/// the nearest built-in one.
-fn body_extras(system: &mapgen::system::System, catalog: &Catalog) -> BTreeMap<String, BodyExtras> {
+/// a model. A body asked by archetype resembles that archetype, unless its
+/// request pinned a model input (`pinned`): then, like the others, the
+/// nearest built-in one, if any is close enough.
+fn body_extras(
+    system: &mapgen::system::System,
+    catalog: &Catalog,
+    pinned: bool,
+) -> BTreeMap<String, BodyExtras> {
     let built_in: Vec<&mapgen::archetype::Archetype> = catalog
         .entries()
         .filter(|(info, _)| info.built_in)
@@ -868,7 +899,8 @@ fn body_extras(system: &mapgen::system::System, catalog: &Catalog) -> BTreeMap<S
         else {
             continue;
         };
-        let similar = body.params.archetype.clone().or_else(|| {
+        let asked = body.params.archetype.clone().filter(|_| !pinned);
+        let similar = asked.or_else(|| {
             let moon_of_giant = mapgen::planet::moon_of_giant(&context);
             mapgen::archetype::similar(&context, model, moon_of_giant, built_in.iter().copied())
                 .map(str::to_string)
@@ -5181,6 +5213,46 @@ mod tests {
             .expect("cause trees");
         assert!(trees.iter().any(|t| t["quantity"] == "surface_temperature"));
         assert!(resolved["ignored"].as_array().is_some());
+    }
+
+    #[tokio::test]
+    async fn resolve_resembles_the_asked_archetype_until_a_model_input_is_pinned() {
+        let app = router(temp_config("resolve-similar"));
+        let app = &app;
+        let similar = |body: String| async move {
+            let (status, text) = call(app, "POST", "/api/systems/resolve", Some(&body)).await;
+            assert_eq!(status, StatusCode::OK, "{text}");
+            let resolved = json(&text);
+            let focus = resolved["system"]["focus"].as_str().unwrap().to_owned();
+            resolved["extras"][focus]["similar"].clone()
+        };
+        let asked = similar(
+            r#"{"around": {"seed": 11, "planet": "earth-like", "width": 64, "height": 32}}"#.into(),
+        )
+        .await;
+        assert_eq!(asked, "earth-like");
+        // A planet shrunk to Mars's mass no longer resembles Earth.
+        let pinned = similar(
+            r#"{"around": {"seed": 11, "planet": "earth-like", "mass_earth": 0.107, "width": 64, "height": 32}}"#.into(),
+        )
+        .await;
+        assert_ne!(pinned, "earth-like", "{pinned}");
+    }
+
+    #[tokio::test]
+    async fn the_form_sends_the_solar_system_references() {
+        let app = router(temp_config("form-references"));
+        let (_, body) = call(&app, "GET", "/api/form", None).await;
+        let refs = json(&body)["references"].as_array().unwrap().clone();
+        let value = |b: &str, f: &str| {
+            refs.iter()
+                .find(|r| r["body"] == b && r["field"] == f)
+                .map(|r| r["value"].as_f64().unwrap())
+        };
+        assert_eq!(value("earth", "mass_earth"), Some(1.0));
+        assert_eq!(value("mars", "mass_earth"), Some(0.107));
+        assert!(value("titan", "water_oceans").unwrap() > 10.0);
+        assert_eq!(value("earth", "age_gyr"), Some(4.6));
     }
 
     #[tokio::test]

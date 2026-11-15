@@ -704,7 +704,10 @@ addressed as `<system-id>/<body-id>` everywhere.
   formation, ignored}`: the system (its `focus` is the body asked for),
   the `extras` of each body as `GET /api/systems/{id}` gives them (cause
   trees and resemblance; none for a whole system, which the form only
-  validates), the inputs the focus body formed with (`formation`, as
+  validates; an `around` request that sets a planet-model input (mass,
+  core, water, envelope, CO₂, N₂, CH₄, radiogenic heat, life) gets the
+  computed `similar`, which may be null, even when it names an
+  archetype), the inputs the focus body formed with (`formation`, as
   `PlanetModel::formation` gives them, null for a body with no model:
   what the form shows for a field left drawn) and the fields an
   `around` request's planet has no use for. A request the engine cannot meet is refused with the

@@ -84,6 +84,70 @@ pub const SOLAR_BODIES: &[ReferenceBody] = &[
     body("Neptune", 17.15, 0.30, 0.65, 0.15, 30.1, 3.86),
 ];
 
+impl ReferenceBody {
+    /// The water it holds, Earth oceans (1.4×10²¹ kg each).
+    pub fn water_oceans(&self) -> f64 {
+        self.water_fraction * self.mass_earth * crate::exomoon::EARTH_KG / super::OCEAN_KG
+    }
+}
+
+/// Orbital eccentricities of the planets (NASA planetary fact sheets).
+pub const ECCENTRICITIES: &[(&str, f64)] = &[
+    ("Mercury", 0.2056),
+    ("Venus", 0.0068),
+    ("Earth", 0.0167),
+    ("Mars", 0.0934),
+];
+
+/// The age of the Sun, Gyr (the age the reference exposures use).
+pub const SUN_AGE_GYR: f64 = 4.6;
+
+/// The reference bodies a model field is quoted at: the planets, Titan and
+/// the giants that tell its scale.
+pub const QUOTED: &[&str] = &[
+    "Mercury", "Venus", "Earth", "Mars", "Titan", "Neptune", "Jupiter",
+];
+
+/// One Solar System value of a request field, as the form quotes it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldReference {
+    /// Lower-case name of the body (`earth`).
+    pub body: String,
+    /// The request field (`mass_earth`).
+    pub field: &'static str,
+    /// The value, in the request's own units.
+    pub value: f64,
+}
+
+/// The Solar System values of the request fields they exist for (mass,
+/// iron core, water, envelope, eccentricity, age), and Earth's 1 on the
+/// factors that are relative to it (CO₂, N₂, CH₄, radiogenic heat).
+pub fn field_references() -> Vec<FieldReference> {
+    let mut out = Vec::new();
+    let mut push = |name: &str, field: &'static str, value: f64| {
+        out.push(FieldReference {
+            body: name.to_lowercase(),
+            field,
+            value,
+        })
+    };
+    for name in QUOTED {
+        let b = reference(name);
+        push(name, "mass_earth", b.mass_earth);
+        push(name, "core_mass_fraction", b.core_mass_fraction);
+        push(name, "water_oceans", b.water_oceans());
+        push(name, "envelope_fraction", b.envelope_fraction);
+    }
+    for (name, e) in ECCENTRICITIES {
+        push(name, "eccentricity", *e);
+    }
+    push("Earth", "age_gyr", SUN_AGE_GYR);
+    for field in ["co2", "n2", "ch4", "radiogenic"] {
+        push("Earth", field, 1.0);
+    }
+    out
+}
+
 /// The reference body called `name`.
 ///
 /// # Panics
@@ -220,6 +284,20 @@ mod tests {
         for b in SOLAR_BODIES {
             assert_eq!(reference(b.name), b);
         }
+    }
+
+    #[test]
+    fn the_form_quotes_earth_at_one_ocean() {
+        let refs = field_references();
+        let earth = |field: &str| {
+            refs.iter()
+                .find(|r| r.body == "earth" && r.field == field)
+                .map(|r| r.value)
+        };
+        assert!((earth("water_oceans").unwrap() - 1.0).abs() < 0.05);
+        assert_eq!(earth("mass_earth"), Some(1.0));
+        assert_eq!(earth("eccentricity"), Some(0.0167));
+        assert!(refs.iter().all(|r| r.body == r.body.to_lowercase()));
     }
 
     #[test]
