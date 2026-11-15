@@ -175,6 +175,14 @@ well-established laws.
   (Fassett & Thomson 2014): about 120 m of smoothing in 3 Ga, which
   only matters for craters below about a kilometre. Larger craters
   are degraded mostly by younger craters and their ejecta.
+- **Basins on heavier airless bodies:** Mercury spans 9.85 km (Becker et
+  al. 2016, LPSC 47, abstract 2959), less than the Moon, its basins
+  filled by volcanic plains (Barnouin et al. 2012,
+  doi:10.1016/j.icarus.2012.02.029) and their long-wavelength relief
+  relaxed faster under its stronger gravity. The app keeps
+  `(g_Moon / g)^0.85` of the Moon's impact relief and of the basins'
+  relief on such bodies, `g` held between the Moon's and Mercury's
+  (`generation::impact_relief`, #457).
 - **Worlds with water:** rain and rivers erase small craters within
   millions of years and fill large ones with sediment (Mars kept its
   Noachian craters, but worn).

@@ -165,9 +165,9 @@ const CONTINENTAL_SHELF: f32 = 0.05;
 ///   Vesta carry relief of tens of km whatever their size, a larger share
 ///   of their radius the smaller they are, up to Vesta's 8 %;
 /// - on an airless body with a stagnant lid (a moon, a dead world), the
-///   relief impacts give it, [`IMPACT_RELIEF_KM`]: there neither plates
-///   nor volcanism build ranges near the `1/g` ceiling. Ice holds
-///   [`ICE_RELIEF`] of rock's.
+///   relief impacts give it, [`IMPACT_RELIEF_KM`] times its share at its
+///   gravity ([`impact_relief`]): there neither plates nor volcanism build
+///   ranges near the `1/g` ceiling. Ice holds [`ICE_RELIEF`] of rock's.
 /// - on an airless body whose lid overturns now and then (episodic, like
 ///   Venus's), the same: between overturns its lid is a stagnant one, and
 ///   without air nothing else shapes it. A heat-pipe body (Io) is left
@@ -180,13 +180,68 @@ const CONTINENTAL_SHELF: f32 = 0.05;
 pub(crate) fn relief_share(p: &WorldParams) -> f32 {
     let radius_km = p.circumference_km / (2.0 * std::f32::consts::PI);
     let mut cap = SMALL_BODY_RELIEF * radius_km;
-    let impact_shaped = matches!(p.look.geology.regime, Regime::Stagnant | Regime::Episodic);
-    if impact_shaped && p.pressure_bar <= AIRLESS_BAR {
+    if impact_shaped(p) {
         let ice = if icy(p) { ICE_RELIEF } else { 1.0 };
-        cap = cap.min(IMPACT_RELIEF_KM * ice);
+        cap = cap.min(IMPACT_RELIEF_KM * ice * impact_relief(p));
     }
     (cap / noise_span_km(p)).min(1.0)
 }
+
+/// Whether the relief of the world `p` is the one impacts give it: an
+/// airless body with a stagnant lid or one that overturns now and then
+/// (see [`relief_share`]).
+pub(crate) fn impact_shaped(p: &WorldParams) -> bool {
+    matches!(p.look.geology.regime, Regime::Stagnant | Regime::Episodic)
+        && p.pressure_bar <= AIRLESS_BAR
+}
+
+/// Share of the Moon's impact relief an airless body without plates (see
+/// [`impact_shaped`]) keeps at its gravity `g` (Earth's = 1):
+/// `(g_moon / g)^IMPACT_RELIEF_EXPONENT`, with `g` held between the Moon's
+/// and Mercury's; 1 on any other world. It scales the noise relief's cap
+/// ([`IMPACT_RELIEF_KM`]) and the relief of the basins
+/// (`craters::CraterField`).
+///
+/// What such a body keeps is what its impacts dug and piled, less what
+/// modified it since: volcanic plains filling its basins (on Mercury, the
+/// loss of depth of complex craters "appears to be primarily caused by
+/// in-filling", Barnouin et al. 2012, doi:10.1016/j.icarus.2012.02.029,
+/// read), and the viscous relaxation of its long-wavelength relief, which
+/// goes faster under a stronger gravity (a relaxation time
+/// `4πη / (ρ g λ)` on a viscous half-space, Turcotte & Schubert 2002,
+/// Geodynamics, 2nd ed., § 6.10, not read here). The lunar basins already
+/// lose depth against the complex craters' law as their size grows,
+/// "most likely a consequence of ... the increasing influence of gravity
+/// with diameter" (Williams & Zuber 1998, doi:10.1006/icar.1997.5856,
+/// abstract read).
+///
+/// Mercury, at 2.3 times the Moon's gravity, spans 9.85 km, from −5.38 km
+/// in Rachmaninoff to +4.48 km on basin massifs (Becker et al. 2016, LPSC
+/// 47, abstract 2959, read: its DEM at 2 km per pixel), less than the
+/// Moon's 13 km ([`IMPACT_RELIEF_KM`]). The exponent is fitted on that one pair: `mercury-like`
+/// worlds whose surface is 4 Ga old or more (seeds 4-8 and 12345 at
+/// 256 × 128) span 9.8-11.5 km with it, 19.7-22.7 km with the Moon's
+/// relief; with `1/g` (exponent 1) 8.6-10.1 km.
+///
+/// Outside the two bodies no data calibrates it: lighter bodies (icy
+/// moons) keep the Moon's relief, heavier ones Mercury's share. A heavier
+/// airless dry world (a 0.58 Earth-mass `mercury-like` draw at 0.91 g)
+/// keeps 3.6-5.2 km of relief, where `1/g` would leave its noise 1.6 km.
+pub(crate) fn impact_relief(p: &WorldParams) -> f32 {
+    if !impact_shaped(p) {
+        return 1.0;
+    }
+    let moon = (crate::craters::MOON_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
+    let mercury = (MERCURY_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
+    (moon / p.gravity_modifier().clamp(moon, mercury)).powf(IMPACT_RELIEF_EXPONENT)
+}
+
+/// Exponent of [`impact_relief`]'s fall with gravity, fitted on Mercury
+/// against the Moon (see there): softer than the `1/g` of what loads the
+/// crust ([`relief_scale`]).
+const IMPACT_RELIEF_EXPONENT: f32 = 0.85;
+/// Mercury's surface gravity, m/s² (NASA Mercury fact sheet: 3.70).
+const MERCURY_GRAVITY: f64 = 3.70;
 
 /// Span of the noise relief of the world `p`, km: from the bottom of the
 /// abyss ([`ABYSS_KM`]) to the top of its floating crust ([`crust_of`])
@@ -282,10 +337,11 @@ pub(crate) fn icy(p: &WorldParams) -> bool {
 /// central mound in Rheasilvia, about 22 km high (Yingst et al. 2012, EGU
 /// abstract, approximate) on a mean radius of about 262 km (NASA): 8 %.
 const SMALL_BODY_RELIEF: f32 = 0.08;
-/// Span of the noise relief of an airless body with a stagnant lid, km,
-/// so that a Moon-sized rocky moon spans about the Moon's 13 km (NASA fact
-/// sheet, as the mountains article gives it) with its craters.
-/// Calibration on that one body.
+/// Span of the noise relief of an airless body with a stagnant lid at the
+/// Moon's gravity, km, so that a Moon-sized rocky moon spans about the
+/// Moon's 13 km (NASA fact sheet, as the mountains article gives it) with
+/// its craters. Calibration on that one body; heavier bodies keep a share
+/// of it ([`impact_relief`], calibrated on Mercury).
 const IMPACT_RELIEF_KM: f32 = 9.0;
 /// Relief ice holds against rock: complex craters on Ganymede are about
 /// 1.1 km deep at 26 km (Schenk 2002, doi:10.1038/417419a, read in the
@@ -604,10 +660,10 @@ const NOISE_MOUNTAINS_WITH_PLATES: f32 = 0.5;
 /// 16 km, 2.6 km below its median to 13 km above it (Venus: about 3 km
 /// below its mean radius to Maxwell's 11 km above), `mars-like` 30 km
 /// (Mars's dynamic range is about 30 km, Smith et al. 1999,
-/// doi:10.1126/science.284.5419.1495). `mercury-like` spans 18 km, about
-/// twice Mercury's 9.9 km (Becker et al. 2016, LPSC abstract 2959): its
-/// craters, 7.7 km deep at most, and its highlands under the impact cap
-/// ([`IMPACT_RELIEF_KM`], calibrated on the Moon).
+/// doi:10.1126/science.284.5419.1495). `mercury-like` spans about
+/// Mercury's 9.9 km (Becker et al. 2016, LPSC abstract 2959) on its old
+/// surfaces, less on young ones: its basins and its highlands under the
+/// impact cap ([`IMPACT_RELIEF_KM`] times [`impact_relief`]).
 struct Highlands {
     frequency: f64,
     octaves: u32,
@@ -3373,7 +3429,8 @@ pub(crate) mod tests {
         for regime in [Regime::Stagnant, Regime::Episodic] {
             p.look.geology.regime = regime;
             let span = relief_share(&p) * noise_span_km(&p);
-            assert!((span - IMPACT_RELIEF_KM).abs() < 1e-3, "{regime:?} {span}");
+            let cap = IMPACT_RELIEF_KM * impact_relief(&p);
+            assert!((span - cap).abs() < 1e-3, "{regime:?} {span}");
         }
         p.look.geology.regime = Regime::HeatPipe;
         assert_eq!(relief_share(&p), 1.0);
@@ -3381,6 +3438,46 @@ pub(crate) mod tests {
         p.look.geology.regime = Regime::Episodic;
         p.pressure_bar = 90.0;
         assert_eq!(relief_share(&p), 1.0);
+    }
+
+    /// An airless body without plates keeps less of the Moon's impact
+    /// relief the heavier it is: Mercury's old surface spans about its
+    /// 9.85 km (Becker et al. 2016), not twice that (#457).
+    #[test]
+    fn mercury_keeps_less_impact_relief_than_the_moon() {
+        let moon = (crate::craters::MOON_GRAVITY / crate::craters::EARTH_GRAVITY) as f32;
+        let mut p = WorldParams {
+            pressure_bar: 0.0,
+            gravity: Some(moon),
+            ..params(0, "terran")
+        };
+        p.look.geology.regime = Regime::Stagnant;
+        assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
+        // Lighter: the Moon's; Mercury's: about half; heavier: Mercury's.
+        p.gravity = Some(0.13);
+        assert!((impact_relief(&p) - 1.0).abs() < 1e-6);
+        p.gravity = Some((MERCURY_GRAVITY / crate::craters::EARTH_GRAVITY) as f32);
+        let mercury = impact_relief(&p);
+        assert!((0.45..0.55).contains(&mercury), "{mercury}");
+        p.gravity = Some(0.9);
+        assert_eq!(impact_relief(&p), mercury);
+        // With air, or with plates, the whole relief.
+        p.pressure_bar = 0.01;
+        assert_eq!(impact_relief(&p), 1.0);
+        p.pressure_bar = 0.0;
+        p.look.geology.regime = Regime::Plates;
+        assert_eq!(impact_relief(&p), 1.0);
+        // `mercury-like` on a 4.6 Ga surface, craters included: 19.8 km
+        // with the Moon's relief, 10.0 km now.
+        let p = preset_params("mercury-like", 4, 256, 128);
+        assert!(p.surface_age_ga > 4.0, "{}", p.surface_age_ga);
+        let w = generate(&p).world;
+        let (lo, hi) = w
+            .elevation
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(a, b), &e| (a.min(e), b.max(e)));
+        let span = (hi - lo) * crate::craters::ELEVATION_KM;
+        assert!((8.0..12.5).contains(&span), "{span}");
     }
 
     #[test]

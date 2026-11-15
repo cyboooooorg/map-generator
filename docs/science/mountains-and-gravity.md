@@ -252,11 +252,22 @@ flowchart LR
    cut to 8 % of their radius. On an airless
    body without plates whose lid is stagnant or episodic (a moon, a dead
    world, an airless world that overturns now and then) the span is also
-   capped at 9 km (`IMPACT_RELIEF_KM`), and at 0.4 of that on an icy one
-   (an ice world's crust, `generation::crust_kind`; for a moon, a bulk
-   density under 2.5 g/cm³). A heat-pipe body (Io) is not: lava
-   resurfaces it, and its sinking crust breaks into blocks up to 17 km
-   high (Schenk et al. 2001).
+   capped at 9 km at the Moon's gravity (`IMPACT_RELIEF_KM`), and at 0.4
+   of that on an icy one (an ice world's crust, `generation::crust_kind`;
+   for a moon, a bulk density under 2.5 g/cm³). A heavier such body keeps
+   $(g_\text{Moon}/g)^{0.85}$ of it (`impact_relief`), $g$ held between
+   the Moon's and Mercury's: Mercury about half. Its basins (from the
+   protobasins on) keep the same share of their depth, rim, peaks and
+   rings: volcanic plains fill them (Barnouin et al. 2012 find Mercury's
+   complex craters shallower the more degraded, mostly from infilling) and
+   their long-wavelength relief relaxes faster under a stronger gravity,
+   while fresh complex craters keep Pike's depths. The exponent is fitted
+   on Mercury's 9.85 km (Becker et al. 2016): `mercury-like` on a surface
+   4 Ga old or more spans 9.8–11.5 km at 256 × 128 (19.7–22.7 km with the
+   Moon's relief), and a heavier airless dry world keeps Mercury's share
+   rather than the `1/g` that would flatten it. A heat-pipe body (Io) is
+   not capped: lava resurfaces it, and its sinking crust breaks into
+   blocks up to 17 km high (Schenk et al. 2001).
 8. **Craters.** The size above which a crater gets a flat floor and a
    central peak is $9.0\,Y/(\rho g)$ (O'Keefe & Ahrens 1993) on a planet,
    with the strength $Y$ and density $\rho$ of its crust (dry rock, wet
@@ -340,19 +351,20 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   impact craters form and fade?](impact-craters.md)).
   A Vesta-sized airless moon is therefore capped at 9 km where Vesta's mound
   alone is 22 km. An icy moon's simple craters are still rock's bowls under
-  rock's transition, so its span is 0.75 of rock's, not 0.4. Dead planets
-  (`mercury-like`, airless `barren`) have the 9 km cap too, whatever their
-  gravity.
+  rock's transition, so its span is 0.75 of rock's, not 0.4. The cap's fall
+  with gravity is fitted on one pair, the Moon and Mercury, and stands for
+  infilling and relaxation together; no airless body without plates
+  heavier than Mercury is known, so heavier ones keep Mercury's share.
 - **Worlds without plates: provinces from noise.** Their highland
   provinces are noise blobs: real ones are tesserae and volcanic rises on
   Venus, the cratered southern highlands and Tharsis on Mars (two thirds
   of the planet, not a tenth), impact-shaped terrain on Mercury and the
   Moon; the same share serves them all. A dry world's rolling plains come
   from the continents' noise, not from mantle flow. `mars-like` spans
-  30 km (Mars: about 30 km, Smith et al. 1999); `mercury-like` 18 km, about
-  twice Mercury's 9.9 km (Becker et al. 2016): its craters reach 7.7 km
-  below its median and its highlands 10 km above it, under an impact cap
-  calibrated on the Moon, whose relief (about 20 km) is twice Mercury's.
+  30 km (Mars: about 30 km, Smith et al. 1999); `mercury-like` about
+  Mercury's 9.9 km (Becker et al. 2016) on its old surfaces (4 to 4.5 km
+  below its datum to 5 to 7 km above it; Mercury −5.4 to +4.5 km), less
+  on the young surfaces some seeds draw.
 
 ## Sources
 
@@ -426,6 +438,18 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
     structure of Mars from gravity and topography", *Journal of
     Geophysical Research* 109, E08002,
     [doi:10.1029/2004JE002262](https://doi.org/10.1029/2004JE002262).
+19. Barnouin, O. S., Zuber, M. T., Smith, D. E. et al. 2012, "The
+    morphology of craters on Mercury: Results from MESSENGER flybys",
+    *Icarus* 219, 414–427,
+    [doi:10.1016/j.icarus.2012.02.029](https://doi.org/10.1016/j.icarus.2012.02.029)
+    (read): fresh simple and complex craters agree with Pike's (1988)
+    depths; degraded ones are shallower, "primarily caused by in-filling".
+20. Williams, K. K. & Zuber, M. T. 1998, "Measurement and analysis of
+    lunar basin depths from Clementine altimetry", *Icarus* 131, 107–122,
+    [doi:10.1006/icar.1997.5856](https://doi.org/10.1006/icar.1997.5856)
+    (abstract read): lunar basins are shallower than the complex craters'
+    law, most likely from "the increasing influence of gravity with
+    diameter".
 
 ## See also
 

@@ -325,7 +325,10 @@ depends only on the planet and the seed:
    replaces it from 137/15 = 9.1 transitions (protobasins) to
    207/15 = 13.8 (peak-ring basins), the Moon's onsets of Baker et al. (2011)
    over its 15 km transition. A rim of $0.036\,D$ and ejecta thinning as
-   $(r/R)^{-3}$ surround it, with irregular outlines.
+   $(r/R)^{-3}$ surround it, with irregular outlines. On an airless body
+   without plates heavier than the Moon, basins keep only the share of
+   their relief its impact cap keeps (Mercury about half, see [Why are mountains
+   lower on heavier planets?](mountains-and-gravity.md), small bodies).
 7. **Small craters.** The rim and ejecta of a crater only a few pixels wide
    would be caught or missed by chance by the pixel under the crest, a ring
    of dots. They fade in with the crater's size in pixels: nothing at 4
