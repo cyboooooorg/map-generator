@@ -548,6 +548,7 @@ export const fr: Messages = {
     geologySurface: (p) => `${p.regime}, surface de ${p.age}`,
     surface: 'Surface',
     landWater: 'Terres / eaux',
+    landLiquid: (p: { liquid: string }) => `Terres / ${p.liquid}`,
     rivers: 'Rivières',
     generated: 'Généré',
     showFewer: 'Afficher moins',
