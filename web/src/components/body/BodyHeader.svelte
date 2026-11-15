@@ -3,7 +3,7 @@
   // archetype it resembles, a button to its host for a moon, and whether its
   // maps exist.
   import { t } from '../../lib/i18n/index.svelte';
-  import { archetypeName, classLabel } from '../../lib/i18n/names.svelte';
+  import { classLabel, similarLine } from '../../lib/i18n/names.svelte';
   import type { SystemSummary } from '../../lib/api/types/SystemSummary';
   import { jobs } from '../../lib/jobs.svelte';
   import type { CardSource } from '../../lib/cardSource';
@@ -40,7 +40,7 @@
     void bodyId;
     classOpen = false;
   });
-  const similar = $derived(world.shownExtras?.similar ?? null);
+  const similar = $derived(world.shownExtras?.similar ? similarLine(world.shownExtras.similar) : null);
 </script>
 
 {#if system && body}
@@ -65,7 +65,7 @@
         <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} {oninput} />
       </div>
       {#if similar}
-        <small class="similar" data-line="similar">{t.cards.similar({ name: archetypeName({ name: similar }) })}</small>
+        <small class="similar" data-line="similar" title={similar.hint}>{similar.text}</small>
       {/if}
     </header>
     {#if !body.generated && !world.preview}

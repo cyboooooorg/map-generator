@@ -86,6 +86,7 @@ fn info(a: &Archetype, spec: &str, built_in: bool) -> ArchetypeInfo {
         giant: renders_as_giant(a),
         moon: a.moon.is_some(),
         moon_host: a.moon.as_ref().map(|m| m.host.clone()),
+        reference: a.reference.clone(),
         locales: a.locales.clone(),
     }
 }

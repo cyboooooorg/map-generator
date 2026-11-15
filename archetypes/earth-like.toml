@@ -1,9 +1,13 @@
 name = "earth-like"
 description = "Earth-like: oceans, a thin air and life, in the habitable zone"
 
+[reference]
+name = "Earth"
+
 [locales.fr]
 name = "Terrestre"
 description = "Des océans, un air mince et la vie, dans la zone habitable"
+reference = "la Terre"
 
 [inputs]
 mass_earth = [0.9, 1.1]

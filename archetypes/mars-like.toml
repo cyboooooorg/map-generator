@@ -1,9 +1,13 @@
 name = "mars-like"
 description = "Mars-like: a small cold desert under a thin air"
 
+[reference]
+name = "Mars"
+
 [locales.fr]
 name = "Martienne"
 description = "Un petit désert froid sous un air ténu"
+reference = "Mars"
 
 [inputs]
 mass_earth = [0.096, 0.118]

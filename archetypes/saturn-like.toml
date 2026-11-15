@@ -1,9 +1,13 @@
 name = "saturn-like"
 description = "Saturn-like: a lighter gas giant, far out"
 
+[reference]
+name = "Saturn"
+
 [locales.fr]
 name = "Saturnienne"
 description = "Une géante gazeuse plus légère, loin de son étoile"
+reference = "Saturne"
 
 [inputs]
 mass_earth = [86.0, 105.0]

@@ -4,4 +4,9 @@
  * The name and description of a preset or an archetype in one language.
  * Either may be left out: the English one is shown instead.
  */
-export type Locale = { name?: string, description?: string, };
+export type Locale = { name?: string, description?: string, 
+/**
+ * How the archetype's reference body reads in this language, with its
+ * article where the language needs one (`la Terre`).
+ */
+reference?: string, };

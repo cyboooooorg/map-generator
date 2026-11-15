@@ -1,9 +1,13 @@
 name = "titan-like"
 description = "Titan-like: a large icy moon of a Saturn, under a thick cold air"
 
+[reference]
+name = "Titan"
+
 [locales.fr]
 name = "Titanienne"
 description = "Une grande lune glacée d'une Saturne, sous un air épais et froid"
+reference = "Titan"
 
 # Titan: 1.3452e23 kg = 0.0225 Earth masses (NASA Saturnian satellite
 # fact sheet; JPL Solar System Dynamics, planetary satellite physical

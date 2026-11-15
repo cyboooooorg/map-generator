@@ -1,6 +1,8 @@
 //! Types exchanged with the web front-end. `cargo test` regenerates their
 //! TypeScript definitions in `web/src/lib/api/types/` (see `.cargo/config.toml`).
-use mapgen::archetype::{ArchetypeInputs, ArchetypeOrbit, Locale, ParamDefault};
+use mapgen::archetype::{
+    ArchetypeInputs, ArchetypeOrbit, ArchetypeReference, Locale, ParamDefault,
+};
 use mapgen::generation::Stage;
 use mapgen::request::{Limits, WorldRequest};
 use serde::{Deserialize, Serialize};
@@ -33,6 +35,8 @@ pub struct ArchetypeInfo {
     /// The built-in giant archetype a moon archetype orbits (`null` for
     /// a planet): the giant a system adds when only the moon is asked.
     pub moon_host: Option<String>,
+    /// The body it stands for (`null` for a file that names none).
+    pub reference: Option<ArchetypeReference>,
     /// Translated name and description, by language code (`fr`).
     pub locales: BTreeMap<String, Locale>,
 }

@@ -1,9 +1,13 @@
 name = "enceladus-like"
 description = "Enceladus-like: a small bright icy moon of a Saturn"
 
+[reference]
+name = "Enceladus"
+
 [locales.fr]
 name = "Encéladienne"
 description = "Une petite lune glacée et brillante d'une Saturne"
+reference = "Encelade"
 
 # Enceladus: 1.08e20 kg = 1.8e-5 Earth masses (NASA Saturnian satellite
 # fact sheet; JPL Solar System Dynamics, planetary satellite physical
