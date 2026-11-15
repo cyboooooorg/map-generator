@@ -30,6 +30,7 @@ describe('drift', () => {
     expect(driftRange(meta())).toEqual([-300, 300]);
     expect(driftRange(meta({ look: { geology: { regime: 'stagnant' } } }))).toBeNull();
     expect(driftRange(meta({ giant: { mass_earth: 300 } }))).toBeNull();
+    expect(driftRange(meta({ cloud_deck: { kind: 'steam' } }))).toBeNull();
   });
 
   it('snaps to the slider stops', () => {

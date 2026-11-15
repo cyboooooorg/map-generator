@@ -9,6 +9,7 @@
 import type { Preview } from './api/types/Preview';
 import type { RingSystem } from './api/types/RingSystem';
 import type { WorldMetadata } from './api/types/WorldMetadata';
+import { cloudDeckOf } from './planetClass';
 import { cloudTint, skyFromWorld, type Sky } from './sky';
 
 export type Vec3 = [number, number, number];
@@ -100,9 +101,10 @@ export type PlanetLook = Pick<SkyBody, 'clouds' | 'cloudTint' | 'halo' | 'axialT
 export function planetLook(meta: WorldMetadata, url: (file: string) => string): PlanetLook {
   const file = meta.layers.clouds?.file;
   return {
-    // A giant has no sky to scatter (its pressure is nominal): the halo's
-    // limb mix and darkening would wash its bands out.
-    halo: meta.giant ? null : halo(skyFromWorld(meta)),
+    // A giant has no sky to scatter (its pressure is nominal), nor a steam
+    // world's deck: the halo's limb mix and darkening would wash its bands
+    // out.
+    halo: cloudDeckOf(meta) ? null : halo(skyFromWorld(meta)),
     clouds: file ? url(file) : null,
     cloudTint: cloudTint(meta),
   };

@@ -45,9 +45,9 @@ impl std::fmt::Display for PreviewError {
 }
 
 /// Whether the plates of the world `p` can drift: a rocky world with plate
-/// tectonics.
+/// tectonics (not a giant, nor a steam world under its cloud deck).
 pub fn has_plates(p: &WorldParams) -> bool {
-    p.giant_mass_earth.is_none() && p.look.geology.regime == Regime::Plates
+    !p.renders_as_deck() && p.look.geology.regime == Regime::Plates
 }
 
 /// A rendered preview: `width × height` rows of RGB.

@@ -660,7 +660,8 @@ impl WorldRequest {
             } else {
                 eccentricity
             };
-            let giant = crate::planet::interim::renders_as_giant(&model);
+            // A steam world is a planet: it may orbit a giant.
+            let giant = model.class.is_giant();
             let mut host = if giant {
                 crate::exomoon::HostMode::None
             } else {
@@ -919,12 +920,13 @@ fn host_tide(host: &crate::exomoon::HostGiant) -> crate::planet::HostTide {
 
 /// Whether the star's tides have circularised the orbit of `model` (on
 /// `at`'s circular orbit): a giant with a giant's tides, any other body with
-/// a rock's, each at the model's mass and radius.
+/// a rock's (a steam world too: it is a planet), each at the model's mass
+/// and radius.
 fn circularised(at: &World<'_>, model: &PlanetModel) -> bool {
     let star = crate::star::StarInfo::new(at.star, at.orbit_au, 0.0, at.age_gyr);
     let mass = model.inputs.mass_earth as f32;
     let radius = model.interior.radius_earth as f32;
-    if crate::planet::interim::renders_as_giant(model) {
+    if model.class.is_giant() {
         crate::spin::giant_circularised(&star, mass, radius)
     } else {
         crate::spin::rocky_circularised(&star, mass, radius)

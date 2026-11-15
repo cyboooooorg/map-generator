@@ -1,3 +1,6 @@
+import type { GiantInfo } from './api/types/GiantInfo';
+import type { WorldMetadata } from './api/types/WorldMetadata';
+
 /**
  * The classes drawn through the giant path: the giants (hot Neptune included) and the
  * mini-Neptune, whose radius is the giant look's (issue #446). The
@@ -8,6 +11,16 @@ export const GIANT_CLASSES: ReadonlySet<string> = new Set(['gas-giant', 'ice-gia
 
 /** Whether a body type (a class key or a preset name) is drawn as a giant. */
 export const isGiantType = (type: string): boolean => GIANT_CLASSES.has(type);
+
+/**
+ * The banded cloud deck a world is drawn with: a giant's (`giant`), or a
+ * steam world's (`cloud_deck`: a planet whose steam hides its surface,
+ * drawn with a giant's bands only); null for a world with ground. The
+ * views draw the deck; the cards read `giant` alone, so a steam world's
+ * show its model, as a planet's do.
+ */
+export const cloudDeckOf = (meta: Pick<WorldMetadata, 'giant' | 'cloud_deck'> | null | undefined): GiantInfo | null =>
+  meta?.giant ?? meta?.cloud_deck ?? null;
 
 /** Earth oceans kept at the surface from which a body counts as holding ice (`ICE_WORLD_MIN_OCEANS`, classify.rs). */
 export const ICE_WORLD_MIN_OCEANS = 0.01;

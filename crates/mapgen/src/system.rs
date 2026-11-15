@@ -2224,7 +2224,8 @@ pub fn world_params(body: &Body) -> WorldParams {
 }
 
 /// The parameters a body's world is generated with: [`world_params`],
-/// and for a planet whose model gives it a surface (no giant) the sea
+/// and for a planet whose model gives it a surface (no giant, no steam
+/// world under its cloud deck) the sea
 /// level its water fills and the warming toward its model's temperature
 /// ([`crate::planet::interim::calibrate`]); for one that is no giant
 /// whose envelope hides its surface, the warming toward its bare
@@ -2235,7 +2236,7 @@ pub fn generation_params(body: &Body) -> WorldParams {
     let mut params = world_params(body);
     if let Some(model) = &body.model
         && !model.class.is_giant()
-        && params.giant_mass_earth.is_none()
+        && !params.renders_as_deck()
     {
         if model.surface.is_some() {
             crate::planet::interim::calibrate(&mut params, model);

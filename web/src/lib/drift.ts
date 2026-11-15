@@ -6,6 +6,7 @@
 
 import { bodyApi } from './api/client';
 import type { WorldMetadata } from './api/types/WorldMetadata';
+import { cloudDeckOf } from './planetClass';
 import type { WorldRequest } from './api/types/WorldRequest';
 import { formatEpoch } from './epochs';
 import { requestFromWorld } from './format';
@@ -19,7 +20,7 @@ export const PREVIEW_WIDTH = { coarse: 256, fine: 512 } as const;
 
 /** `[past, future]` in Ma (negative in the past) the world's plates can be shown at, or null without plates. */
 export function driftRange(meta: WorldMetadata): [number, number] | null {
-  if (meta.giant || meta.look.geology?.regime !== 'plates') return null;
+  if (cloudDeckOf(meta) || meta.look.geology?.regime !== 'plates') return null;
   return [-DRIFT_LIMIT_MA, DRIFT_LIMIT_MA];
 }
 

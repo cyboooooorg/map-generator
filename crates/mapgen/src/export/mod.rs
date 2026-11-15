@@ -902,6 +902,49 @@ mod tests {
     }
 
     #[test]
+    fn a_steam_worlds_world_json_tells_its_deck_not_a_giant() {
+        use crate::export::raw_data::{load_layers, read_metadata};
+        // The steam world of #492: a planet whose steam hides its surface,
+        // drawn as a grey cloud deck.
+        let request = crate::request::WorldRequest {
+            planet: Some("super-earth".into()),
+            seed: Some(3_145_862_552),
+            water_oceans: Some(2390.0),
+            orbit_au: Some(0.0178),
+            width: Some(128),
+            height: Some(64),
+            ..Default::default()
+        };
+        let resolved = request.resolve(&mut rand::rng()).unwrap();
+        let params = resolved.params;
+        assert_eq!(params.class, "steam-world");
+        let dir = exported(&params, "steam-deck");
+        let raw = dir.join("raw_data");
+        let meta: super::raw_data::WorldMetadata = read_metadata(&raw).unwrap();
+        // No giant info: its cards read its model, a planet's.
+        assert!(meta.giant.is_none());
+        let deck = meta.cloud_deck.as_ref().expect("its cloud deck");
+        assert_eq!(deck.kind, crate::giants::GiantKind::Steam);
+        assert!(
+            meta.model
+                .as_ref()
+                .unwrap()
+                .surface
+                .as_ref()
+                .unwrap()
+                .gases
+                .total()
+                > 1e5
+        );
+        // Reloaded, it is still drawn as its deck, and still no giant.
+        let loaded = load_layers(&dir).unwrap();
+        assert!(loaded.params.renders_as_deck());
+        assert_eq!(loaded.params.giant_mass_earth, None);
+        assert!(crate::giant_world::deck(&loaded.params).is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn moons_are_generated_as_bodies_of_their_own() {
         use crate::export::raw_data::{WorldMetadata, read_metadata};
         // An Earth far from its star, of the first seed that draws it a

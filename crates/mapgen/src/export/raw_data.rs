@@ -73,8 +73,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// from its continental datum. The stored fields are the same, so
 /// [`crate::system::SYSTEM_FORMAT_VERSION`] stays 5. Version 22 draws a
 /// steam world (class `steam-world`, #492) as a grey cloud deck of the
-/// model's radius, with a giant look of kind `steam`; the stored fields
-/// are the same.
+/// model's radius, with a giant look of kind `steam`, and adds
+/// `cloud_deck`, the deck it is drawn with (a steam world is a planet: no
+/// `giant`).
 pub const FORMAT_VERSION: u32 = 22;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
@@ -180,6 +181,12 @@ pub struct WorldMetadata {
     /// rings); left out for a rocky world.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub giant: Option<crate::giant_world::GiantInfo>,
+    /// The cloud deck a steam world is drawn with (its bands, winds,
+    /// storms; its day is the planet's): a steam world is a planet, so its
+    /// cards read its model, not this (`crate::giant_world::deck`). Left
+    /// out for every other world.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_deck: Option<crate::giant_world::GiantInfo>,
     /// The giant the world orbits, as a moon of it (its own body in the system);
     /// left out for a world orbiting its star.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -689,6 +696,7 @@ pub(crate) fn write_raw_data(
         moons: crate::moons::MoonSystem::draw(&world.params),
         giants: crate::giants::GiantSystem::draw(&world.params),
         giant: crate::giant_world::info(&world.params),
+        cloud_deck: crate::giant_world::deck(&world.params),
         host: crate::exomoon::HostGiant::draw(&world.params),
         shape: world.params.shape,
         ridge: world.params.ridge,

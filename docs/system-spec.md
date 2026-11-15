@@ -609,7 +609,16 @@ systems/<system-id>/
     drawn planets (5 of 1 577 over 500 systems).
     A giant class keeps the giant world of its look at the model's
     mass and radius (a mini-Neptune's too, however light; its moons
-    drawn for that mass). A request asks for
+    drawn for that mass). A steam world (a water runaway whose steam
+    hides its surface, #492) renders with the giants' deck renderer
+    only: the `steam-world` look, grey bands at the model's radius, no
+    ground, a giant's nominal sky pressure and no surface age
+    (`WorldParams::renders_as_deck`). It is a planet otherwise: its
+    `params` carry no `giant_mass_earth` and the model's gravity, and
+    its moons, tides, spin, tilt, giant neighbours and host are drawn as
+    a rocky planet's of its mass and radius; its `world.json` stores
+    its deck under `cloud_deck`, not `giant`, so its cards read its
+    model. A request asks for
     planets by archetype: an archetype places the planet by its own
     insolation and mass, and the model types it. The planet a request
     around one asks for has its model too (`model`, derived from the

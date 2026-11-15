@@ -75,7 +75,9 @@ pub struct WorldParams {
     /// `crate::giants`).
     pub giants: crate::giants::GiantsMode,
     /// Mass of a giant planet, Earth masses: `Some` for a giant (its look
-    /// has a `[giant]` table, see `crate::giant_world`), `None` otherwise.
+    /// has a `[giant]` table, see `crate::giant_world`), `None` otherwise,
+    /// a steam world's too: it is a planet, drawn with a giant's cloud
+    /// deck only (see [`Self::renders_as_deck`]).
     pub giant_mass_earth: Option<f32>,
     /// Whether the world is the moon of a giant planet (see
     /// `crate::exomoon`): as its seed draws, always, or never.
@@ -249,6 +251,36 @@ pub fn rocky_circumference_km(mass_earth: f64) -> f32 {
 }
 
 impl WorldParams {
+    /// Whether the world is a steam world: a planet whose deep steam
+    /// envelope hides its surface (issue #492), drawn as a grey cloud deck
+    /// (its look's `[giant]` table of kind `steam`). It is no giant: its
+    /// moons, tides, spin, neighbours and cards are a planet's.
+    pub fn is_steam_world(&self) -> bool {
+        self.look
+            .giant
+            .as_ref()
+            .is_some_and(|g| g.kind == crate::giants::GiantKind::Steam)
+    }
+
+    /// Whether the world is drawn as a banded cloud deck with no ground
+    /// (`crate::giant_world`): a giant, or a steam world.
+    pub fn renders_as_deck(&self) -> bool {
+        self.giant_mass_earth.is_some() || self.is_steam_world()
+    }
+
+    /// The mass the cloud deck of the world is drawn at, Earth masses: a
+    /// giant's, a steam world's model's (else its own, see
+    /// [`Self::mass_earth`]); `None` for a world with ground.
+    pub fn deck_mass_earth(&self) -> Option<f32> {
+        self.giant_mass_earth.or_else(|| {
+            self.is_steam_world().then(|| {
+                self.model
+                    .as_ref()
+                    .map_or_else(|| self.mass_earth(), |m| m.inputs.mass_earth as f32)
+            })
+        })
+    }
+
     /// The elevation below which a pixel is open water: the sea level plus
     /// the look's waterline, or below any elevation on a world without
     /// surface liquid ([`crate::biome::BiomeRules::dry`]).

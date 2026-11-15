@@ -109,7 +109,53 @@ const giantMeta = {
   },
 } as unknown as WorldMetadata;
 
+// The steam world of #492: a planet under 409 942 bar of steam, drawn
+// with a giant's grey cloud deck (`cloud_deck`), no `giant`.
+const steamSurface = {
+  ...surface,
+  gases: { n2: 30, o2: 0, co2: 200, ch4: 0, h2o: 409942, h2: 0, he: 0, nh3: 0, so2: 0 },
+  climate: { temperature_k: 1679, liquid: 'none', regulated: false },
+  life: { arose: false, oxygenated: false },
+  regime: 'stagnant',
+  water: { runaway: true, boiled: true, kept_kg: 2e23, oceans: 150 },
+};
+const steamBody = body({
+  type: 'steam-world',
+  physical: { radius_km: 10835, mass_earth: 4.78, density: 3.4, gravity: 1.65 },
+  model: {
+    ...model,
+    class: 'steam-world',
+    surface: steamSurface,
+    interior: { layers: [{ material: 'Iron', mass_earth: 1.06 }, { material: 'Rock', mass_earth: 3.16 }, { material: 'Steam', mass_earth: 0.56 }] },
+  },
+});
+const steamMeta = {
+  ...earthMeta,
+  class: 'steam-world',
+  pressure_bar: 0.3,
+  cloud_deck: { ...(giantMeta.giant as object), kind: 'steam', class: 4, effective_k: 40, mass_earth: 4.78, radius_earth: 1.7 },
+} as unknown as WorldMetadata;
+
 describe('themed body cards', () => {
+  it("shows a steam world's model, not its cloud deck, as a planet's", () => {
+    const world = worldOf([steamBody], 'c', steamMeta);
+    const air = renderCard(AtmosphereCard, { world });
+    // The model's pressure (its gases' sum) and temperature, not the deck's
+    // render pressure, clouds or spot.
+    expect(air).toContain('410,172 bar');
+    expect(air).not.toContain('0.3 bar');
+    expect(air).toContain('1,406 °C');
+    expect(labels(air)).not.toContain('Clouds');
+    expect(air).not.toContain('spot');
+    // Earth units and its steam layer, no Jupiter units or flattening.
+    const interior = renderCard(InteriorCard, { world });
+    expect(interior).toContain('steam');
+    expect(interior).not.toContain('M♃');
+    expect(interior).not.toContain('RJ');
+    expect(labels(interior)).not.toContain('Flattening');
+  });
+
+
   it('shows a label once among the cards of an Earth-like planet, a moon and a giant', () => {
     const cases = [
       worldOf([earthLike, moon], 'c', earthMeta),

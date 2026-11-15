@@ -2065,7 +2065,7 @@ async fn body_tile(
     if world.is_giant() {
         return Err(Failure(
             StatusCode::NOT_FOUND,
-            "a giant planet has no ground to detail: no detail tiles".into(),
+            "a giant planet or a steam world has no ground to detail: no detail tiles".into(),
         ));
     }
     // Wait for a turn here, not on a blocking thread: a request the viewer

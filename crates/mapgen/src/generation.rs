@@ -2117,8 +2117,9 @@ pub fn generate_with_progress(
     options: GenerateOptions,
     progress: impl Fn(Stage),
 ) -> Generated {
-    // A giant has no ground: its cloud bands have a pipeline of their own.
-    if params.giant_mass_earth.is_some() {
+    // A giant has no ground, nor a steam world under its deck: their cloud
+    // bands have a pipeline of their own.
+    if params.renders_as_deck() {
         return crate::giant_world::generate(params, &progress);
     }
     let (width, height) = (params.width, params.height);

@@ -71,6 +71,9 @@ describe('planetLook of a giant', () => {
     const look = planetLook(giant, (f) => f);
     expect(look.halo).toBeNull();
     expect(look.clouds).toBeNull();
+    // Nor a steam world, drawn as its cloud deck.
+    const steam = { ...giant, giant: null, cloud_deck: {} };
+    expect(planetLook(steam as unknown as WorldMetadata, (f) => f).halo).toBeNull();
   });
 });
 

@@ -506,11 +506,7 @@ pub fn radius_earth(p: &WorldParams, mass_earth: f32) -> f32 {
 /// ([`giant_radius_of`]), or, without a model, from its mass and
 /// temperature alone ([`giant_radius`]).
 fn radius_at(p: &WorldParams, star: &StarInfo, mass_earth: f32) -> f32 {
-    let steam = p
-        .look
-        .giant
-        .as_ref()
-        .is_some_and(|g| g.kind == GiantKind::Steam);
+    let steam = p.is_steam_world();
     match &p.model {
         // A steam world's radius is the model's: the steam inflates a
         // rock and iron core that no giant law describes.
@@ -649,7 +645,12 @@ impl Look {
         // once a year.
         // On an eccentric orbit a fluid giant turns at the pseudo-synchronous
         // rate (Hut 1981), not once a year.
-        let rotation_hours = if hot || crate::spin::giant_locked(&star, mass_earth, radius_earth) {
+        // A steam world is a planet under its deck: it turns as one (its
+        // moons, its star's tides on a rock of its mass and radius, see
+        // `crate::generation::sidereal_day_hours`).
+        let rotation_hours = if kind == GiantKind::Steam {
+            crate::generation::sidereal_day_hours(p) as f32
+        } else if hot || crate::spin::giant_locked(&star, mass_earth, radius_earth) {
             star.year_days * 24.0 / crate::spin::pseudo_synchronous_turns(p.eccentricity)
         } else {
             match kind {
@@ -1273,9 +1274,11 @@ fn polar_look(
     (colour, storm, lift)
 }
 
-/// Generates the giant world `p`: its cloud bands as the layers of a world.
+/// Generates the giant world `p`, or the steam world under its cloud deck
+/// (see [`WorldParams::renders_as_deck`]): its cloud bands as the layers
+/// of a world.
 pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
-    let mass = p.giant_mass_earth.unwrap_or(317.8);
+    let mass = p.deck_mass_earth().unwrap_or(317.8);
     let look = Look::draw(p, mass);
     progress(Stage::Noise);
     let (w, h) = (p.width, p.height);
@@ -1333,12 +1336,13 @@ pub fn generate(p: &WorldParams, progress: &dyn Fn(Stage)) -> Generated {
     }
 }
 
-/// The colours of the band biomes of the giant world `p`, sRGB bytes, for
-/// its `world.json` biome table; `None` for a rocky world. The storm colour
+/// The colours of the band biomes of the giant world `p` (or of a steam
+/// world's deck), sRGB bytes, for its `world.json` biome table; `None` for
+/// a world with ground. The storm colour
 /// is that of the giant's largest storm ([`Look::storm_colour`]), so the
 /// legend shows what is drawn.
 pub fn biome_colours(p: &WorldParams) -> Option<[(Biome, [u8; 3]); 4]> {
-    let mass = p.giant_mass_earth?;
+    let mass = p.deck_mass_earth()?;
     let look = Look::draw(p, mass);
     let palette = look.info.palette;
     let byte = |c: [f32; 3]| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
@@ -1350,9 +1354,21 @@ pub fn biome_colours(p: &WorldParams) -> Option<[(Biome, [u8; 3]); 4]> {
     ])
 }
 
-/// What a giant world is, for `world.json`; `None` for a rocky world.
+/// What a giant world is, for `world.json`; `None` for any other world,
+/// a steam world too (a planet: see [`deck`]).
 pub fn info(p: &WorldParams) -> Option<GiantInfo> {
     p.giant_mass_earth.map(|mass| Look::draw(p, mass).info)
+}
+
+/// The cloud deck a steam world is drawn with, for `world.json` (under
+/// `cloud_deck`): what the viewer needs to draw its bands, winds and
+/// storms. Its day is the planet's. `None` for any other world, a giant
+/// too (see [`info`]).
+pub fn deck(p: &WorldParams) -> Option<GiantInfo> {
+    if p.giant_mass_earth.is_some() {
+        return None;
+    }
+    p.deck_mass_earth().map(|mass| Look::draw(p, mass).info)
 }
 
 #[cfg(test)]

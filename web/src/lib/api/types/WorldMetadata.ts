@@ -108,6 +108,13 @@ giants?: GiantSystem | null,
  */
 giant?: GiantInfo | null, 
 /**
+ * The cloud deck a steam world is drawn with (its bands, winds,
+ * storms; its day is the planet's): a steam world is a planet, so its
+ * cards read its model, not this (`crate::giant_world::deck`). Left
+ * out for every other world.
+ */
+cloud_deck?: GiantInfo | null, 
+/**
  * The giant the world orbits, as a moon of it (its own body in the system);
  * left out for a world orbiting its star.
  */

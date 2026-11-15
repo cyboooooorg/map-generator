@@ -304,10 +304,10 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 }
 
 impl DetailWorld {
-    /// Whether the world is a giant planet: cloud bands, no ground to
-    /// detail (it has no detail tiles).
+    /// Whether the world is a giant planet or a steam world: cloud bands,
+    /// no ground to detail (it has no detail tiles).
     pub fn is_giant(&self) -> bool {
-        self.world.params.giant_mass_earth.is_some()
+        self.world.params.renders_as_deck()
     }
 
     pub fn new(world: LoadedWorld) -> Self {
