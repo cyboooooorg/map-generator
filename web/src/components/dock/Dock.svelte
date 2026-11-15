@@ -353,8 +353,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 8px;
-    /* A card is as tall as its content, not its row. */
-    align-items: start;
+    /* Cards of one row share its height; their content stays at the top. */
   }
   /* Two columns from 560 px of the panel's content. */
   @container (max-width: 559px) {
@@ -366,6 +365,8 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
   .card.full {
     grid-column: 1 / -1;
@@ -382,9 +383,12 @@
     color: var(--muted);
   }
   .card-body {
+    flex: 1;
     padding: 8px 10px;
     display: grid;
     gap: 6px;
+    /* The rows keep their height when the card is taller than its content. */
+    align-content: start;
   }
   .content {
     overflow-y: auto;
