@@ -8,6 +8,7 @@
   import { jobs } from '../../lib/jobs.svelte';
   import type { CardSource } from '../../lib/cardSource';
   import CauseTree from './CauseTree.svelte';
+  import type { InputField } from '../../lib/api/types/InputField';
   import { treeFor } from '../../lib/causes';
   import NameEditor from './NameEditor.svelte';
 
@@ -16,9 +17,11 @@
     onRenamed: (summary: SystemSummary) => void;
     /** Queues the generation of a body and its neighbourhood. */
     onGenerate: (system: string, body: string) => void;
+    /** Makes the input leaves of the class tree buttons (the generate form's preview). */
+    oninput?: ((field: InputField) => void) | undefined;
   }
 
-  let { world, onRenamed, onGenerate }: Props = $props();
+  let { world, onRenamed, onGenerate, oninput }: Props = $props();
 
   const system = $derived(world.system);
   const body = $derived(world.shownSystemBody);
@@ -43,7 +46,9 @@
   <section class="header" aria-label={t.card.body}>
     <header>
       <NameEditor {world} id={body.id} designation={body.designation} name={title} {onRenamed} />
-      {#if host}
+      {#if host && world.preview}
+        <span class="host">{t.cards.host({ name: nameOf(host.id, host.designation) })}</span>
+      {:else if host}
         <button class="host" onclick={() => world.showSystemBody(host.id)} title={t.cards.hostHelp}
           >{t.cards.host({ name: nameOf(host.id, host.designation) })}</button
         >
@@ -54,13 +59,13 @@
           : t.card.planetOf({ star: starName })}</small
       >
       <div class="why" class:moved={world.changed?.has('class') ?? false}>
-        <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} />
+        <CauseTree tree={treeFor(explanation, 'class')} open={classOpen} ontoggle={() => (classOpen = !classOpen)} {oninput} />
       </div>
       {#if similar}
         <small class="similar">{t.cards.similar({ name: archetypeName({ name: similar }) })}</small>
       {/if}
     </header>
-    {#if !body.generated}
+    {#if !body.generated && !world.preview}
       <p class="muted">{busy ? t.card.generating : world.systemEvicted.includes(body.id) ? t.card.evicted : t.card.notGenerated}</p>
       {#if !busy}
         <button class="primary" onclick={() => world.systemId && onGenerate(world.systemId, body.id)}>{t.card.generate}</button>

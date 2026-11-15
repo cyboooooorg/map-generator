@@ -1,9 +1,10 @@
 <script lang="ts">
   import { hostsAdded, planetsRequest } from '../lib/systemPlanets';
-  import { errorText } from '../lib/i18n/errors';
+  import { detailText, errorField, errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
   import { archetypeDescription, archetypeName } from '../lib/i18n/names.svelte';
-  import { untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { api } from '../lib/api/client';
   import type { FormSpec } from '../lib/api/types/FormSpec';
   import type { SystemCreated } from '../lib/api/types/SystemCreated';
@@ -22,7 +23,15 @@
   import { loadSetting, saveSetting } from '../lib/settings';
   import { type MoonChoice, moonChoiceOf, moonsRequest } from '../lib/moons';
   import { applyGiantChoice, type GiantChoice, initialGiantChoice } from '../lib/giantForm';
-  import { isGiantWorld, keepModelInputs, keepsModelInputs, startsDrawn } from '../lib/variedWorld';
+  import { isGiantWorld, keepModelInputs, startsDrawn } from '../lib/variedWorld';
+  import type { InputField } from '../lib/api/types/InputField';
+  import { drivenBy } from '../lib/causes';
+  import { fieldOf, MODEL_GROUPS, type ModelFieldKey } from '../lib/modelFields';
+  import { drawnValues, initialModelValues, MODEL_KEYS, type ModelValues, modelRequest } from '../lib/modelRequest';
+  import { toShown } from '../lib/modelScale';
+  import { Preview } from '../lib/preview.svelte';
+  import ModelFields from './form/ModelFields.svelte';
+  import PreviewPanel from './form/PreviewPanel.svelte';
 
   interface Props {
     archetypes: ArchetypeInfo[];
@@ -135,25 +144,12 @@
     return name === undefined ? undefined : archetypes.find((a) => a.spec === name || a.name === name);
   }
 
-  /** Lower end of the giant mass slider, Earth masses: a mini-Neptune's (`mini-neptune` starts at 5). */
-  const GIANT_SLIDER_MIN = 5;
-
   // The form starts from the props as they are when it opens; later prop
   // changes must not reset what the user typed, hence untrack.
   const start = untrack(() => ({ initial, variedGiant, archetype: findArchetype(initial?.planet) ?? findArchetype(FALLBACK_ARCHETYPE) ?? archetypes[0] }));
   const missingArchetype = start.initial?.planet !== undefined && !findArchetype(start.initial.planet);
   /** The catalog spec of the varied world's archetype (a request sends the spec, world.json the name). */
   const initialSpec = findArchetype(start.initial?.planet)?.spec;
-  /** Whether the varied world, as the form opens on it, takes the giant path (see isGiantWorld). */
-  function startsGiant(): boolean {
-    return isGiantWorld({
-      randomPlanet: startsDrawn(start.initial, false),
-      archetype: start.archetype,
-      initial: start.initial,
-      initialSpec,
-      variedGiant: start.variedGiant,
-    });
-  }
   /** A blank form starts from the last one submitted (an archetype no longer offered becomes earth-like). */
   const memory = untrack(() => {
     return initial === null ? loadFormMemory(
@@ -166,6 +162,8 @@
   /** A varied world asked as no archetype starts on "drawn from the star", its inputs kept (see variedWorld.ts). */
   let randomPlanet = $state(startsDrawn(start.initial, memory?.randomPlanet));
   let seed = $state(start.initial?.seed !== undefined ? String(start.initial.seed) : '');
+  /** The seed the form draws when it opens and the seed field is empty: the preview and Generate both use it. */
+  let drawnSeed = $state(randomSeed());
   let size = $state(
     untrack(() =>
       initialFormSize(
@@ -184,10 +182,23 @@
   );
   /** The moons asked for: drawn by the seed, none, or a number. */
   let moons = $state<MoonChoice>(untrack(() => memory?.moons ?? moonChoiceOf(start.initial?.moons)));
-  /** Metallicity, giant neighbours, a giant's moon, a giant's mass (see giantForm.ts). */
+  /** Metallicity, giant neighbours, a giant's moon (see giantForm.ts); a giant's mass is a model field. */
   let giantChoice = $state<GiantChoice>(
-    untrack(() => memory?.giant ?? initialGiantChoice(start.initial, startsGiant())),
+    untrack(() => memory?.giant ?? initialGiantChoice(start.initial)),
   );
+  /**
+   * The planet model's inputs, each drawn or pinned. They start from the
+   * varied world's (see variedWorld.ts), never from the form memory: a
+   * remembered mass would turn the next archetype into another planet.
+   */
+  const modelFor = (planetSpec: string | undefined): ModelValues => {
+    const probe: WorldRequest = planetSpec === undefined ? {} : { planet: planetSpec };
+    keepModelInputs(probe, start.initial, initialSpec);
+    return initialModelValues(probe);
+  };
+  let model = $state<ModelValues>(untrack(() => modelFor(startsDrawn(start.initial, memory?.randomPlanet) ? undefined : (memoryArchetype?.spec ?? start.archetype?.spec))));
+  /** The groups of model fields that are unfolded. */
+  const openGroups = new SvelteSet<string>();
   /** The star and the orbit (see starForm.ts). */
   let star = $state<StarChoice>(
     untrack(() => memory?.star ?? initialStarChoice(start.archetype, start.initial, spec.hz_position.fallback)),
@@ -224,6 +235,7 @@
     const archetype = archetypes.find((a) => a.spec === archetypeSpec);
     fields = initialState(archetype, null);
     star = initialStarChoice(archetype, null, spec.hz_position.fallback);
+    model = modelFor(archetypeSpec);
   }
 
   /**
@@ -241,7 +253,8 @@
     }
     moons = moonChoiceOf(start.initial?.moons);
     randomPlanet = startsDrawn(start.initial, false);
-    giantChoice = initialGiantChoice(start.initial, startsGiant());
+    model = modelFor(randomPlanet ? undefined : planet);
+    giantChoice = initialGiantChoice(start.initial);
     seed = start.initial?.seed !== undefined ? String(start.initial.seed) : '';
     size =
       start.initial?.width && start.initial.height
@@ -251,6 +264,10 @@
     error = null;
   }
 
+  const seedValid = $derived(seed.trim() === '' || (/^\d+$/.test(seed.trim()) && Number(seed) <= MAX_SEED));
+  /** The seed a request carries: the one typed, else the one drawn when the form opened. */
+  const requestSeed = $derived(seed.trim() === '' ? drawnSeed : Number(seed));
+
   /** The request of a whole system. */
   function buildSystemRequest(): WholeSystemRequest {
     const [width, height] = size.split('x').map(Number);
@@ -258,7 +275,7 @@
       star: systemStarRandom ? null : starType(systemClass, systemSubtype),
       metallicity: giantChoice.metallicityRandom || !Number.isFinite(giantChoice.metallicity) ? null : giantChoice.metallicity,
       planets: planetsDrawn ? null : planetsRequest(planetCounts, moonCounts),
-      seed: seed.trim() === '' ? null : Number(seed),
+      seed: requestSeed,
       width: width ?? null,
       height: height ?? null,
     };
@@ -302,9 +319,6 @@
       });
     } else {
       lines.push({ label: t.form.planet, value: randomPlanet ? random : selectedArchetype ? archetypeName(selectedArchetype) : planet });
-      if (variedFrom && keepsModelInputs(randomPlanet ? undefined : planet, start.initial, initialSpec)) {
-        lines.push({ label: t.form.modelInputs, value: t.form.modelInputsKept({ id: variedFrom }) });
-      }
       lines.push({ label: t.form.star, value: star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype) });
       // Each parameter fixed, with its value; the others are drawn.
       const fixed: { label: string; value: string }[] = [];
@@ -319,11 +333,18 @@
             : { label: t.form.orbitAu, value: formatUpTo(star.au, 3) },
         );
       }
-      if (!star.eccentricityRandom) fixed.push({ label: t.form.eccentricity, value: formatUpTo(star.eccentricity, 3) });
+      for (const key of MODEL_KEYS) {
+        const { random, value } = model[key];
+        if (random) continue;
+        const text = t.form.model[key];
+        fixed.push({
+          label: text.label,
+          value: key === 'life' ? (value ? t.form.model.lifeWith : t.form.model.lifeWithout) : `${formatUpTo(toShown(key, value as number), 3)} ${text.unit}`.trim(),
+        });
+      }
       if (!giantWorld && giantChoice.host !== 'giant' && moons !== 'auto') {
         fixed.push({ label: t.form.moons, value: moons === 'none' ? t.form.moonsNone : t.form.moonsCount({ count: moons }) });
       }
-      if (giantWorld && !giantChoice.massRandom) fixed.push({ label: t.form.giantMass, value: formatInt(giantChoice.mass) });
       if (giantChoice.alone) fixed.push({ label: t.form.aloneSummary, value: t.form.aloneNone });
       if (!giantWorld && !giantChoice.alone && giantChoice.giants === 'none') fixed.push({ label: t.form.giants, value: t.form.giantsNone });
       if (!giantWorld && giantChoice.host !== 'auto') {
@@ -335,15 +356,13 @@
       label: t.form.metallicity,
       value: giantChoice.metallicityRandom ? random : formatUpTo(giantChoice.metallicity, 2),
     });
-    lines.push({ label: t.form.seed, value: seed.trim() === '' ? random : seed.trim() });
+    lines.push({ label: t.form.seed, value: seedValid ? String(requestSeed) : seed.trim() });
     lines.push({ label: t.form.size, value: size.replace('x', ' × ') });
     return lines;
   });
 
   /** The epoch of the plates a varied world was shown at (the drift slider), kept as it is: the form has no field for it. */
   const driftMa = start.initial?.drift_ma ?? 0;
-  /** The age of the star of a varied world. */
-  const startAge = start.initial?.age_gyr;
 
   function buildRequest(): WorldRequest {
     const [width, height] = size.split('x').map(Number);
@@ -354,9 +373,7 @@
     if (!randomPlanet) {
       request.planet = planet;
     }
-    if (seed.trim() !== '') {
-      request.seed = Number(seed);
-    }
+    request.seed = requestSeed;
     if (width && height) {
       request.width = width;
       request.height = height;
@@ -366,20 +383,16 @@
         request[field] = fields[field].value;
       }
     }
-    applyStarChoice(request, star);
-    // A varied world keeps the age of its star (the form has no field for it),
-    // unless the star was changed: the old age might outlive the new one.
-    if (startAge !== undefined && request.star === start.initial?.star) {
-      request.age_gyr = startAge;
-    }
+    // The eccentricity is a model field.
+    applyStarChoice(request, { ...star, eccentricityRandom: true });
     const asked = moonsRequest(moons);
     // A giant's moon keeps no moons of its own (its Hill sphere is too small).
     if (asked !== undefined && !giantWorld && giantChoice.host !== 'giant') {
       request.moons = asked;
     }
     applyGiantChoice(request, giantChoice, giantWorld);
-    // The varied world's inputs, while its planet is still the one asked for.
-    keepModelInputs(request, start.initial, initialSpec);
+    // A giant's mass is the model's mass field.
+    Object.assign(request, modelRequest(model));
     return request;
   }
 
@@ -399,14 +412,65 @@
   const targetId = $derived(existsId);
   // Another request is another system: ask again whether to replace it.
   $effect(() => {
-    void [mode, seed, planet, randomPlanet];
+    void [mode, seed, drawnSeed, planet, randomPlanet];
     untrack(() => {
       existsId = null;
       replace = false;
     });
   });
 
-  const seedValid = $derived(seed.trim() === '' || (/^\d+$/.test(seed.trim()) && Number(seed) <= MAX_SEED));
+
+  // The live preview and validation: the request, as Generate would send it,
+  // goes to the server a moment after the last change (see preview.svelte.ts).
+  const preview = new Preview();
+  onDestroy(() => preview.dispose());
+  $effect(() => {
+    if (!seedValid || (mode === 'system' && !planetsValid)) return;
+    const asked: SystemRequest = mode === 'around' ? { around: buildRequest() } : { system: buildSystemRequest() };
+    untrack(() => preview.request(asked));
+  });
+  const drawn = $derived(drawnValues(preview.result));
+  const explanation = $derived(preview.result?.extras[preview.result.system.focus ?? '']?.explanation ?? null);
+  const isModelField = (field: ReturnType<typeof errorField>): field is ModelFieldKey => field !== null && (MODEL_KEYS as string[]).includes(field);
+  const refusalField = $derived(preview.refusal ? errorField(preview.refusal) : null);
+  const refusalText = $derived(preview.refusal ? detailText(preview.refusal) : null);
+  /** The refusal shows at its field when that field is on screen: a model field on the planets step. */
+  const refusalAtField = $derived(mode === 'around' && step === 'planets' && isModelField(refusalField));
+  // A refusal of a field in a folded group opens the group.
+  $effect(() => {
+    if (!isModelField(refusalField)) return;
+    const group = MODEL_GROUPS.find((g) => g.fields.includes(refusalField));
+    if (group) openGroups.add(group.id);
+  });
+
+  /** "New draw": another seed, in the field when it holds one, else the drawn one. */
+  function reroll(): void {
+    if (seed.trim() === '') drawnSeed = randomSeed();
+    else seed = String(randomSeed());
+  }
+
+  /** A leaf of a cause tree was pressed: go to the field that sets it and focus it. */
+  async function jump(input: InputField): Promise<void> {
+    const field = fieldOf(input);
+    if (field === 'orbit') {
+      go('star');
+      await tick();
+      document.getElementById('orbit-by')?.focus();
+      return;
+    }
+    go('planets');
+    const group = MODEL_GROUPS.find((g) => g.fields.includes(field));
+    if (group) openGroups.add(group.id);
+    await tick();
+    const row = document.getElementById(`model-${field}`);
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row?.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
+  }
+
+  /** Whether the form is wide enough to hold the preview beside the steps. */
+  const WIDE_PX = 900;
+  let width = $state(0);
+  const wide = $derived(width >= WIDE_PX);
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -438,7 +502,8 @@
   }
 </script>
 
-<form onsubmit={submit}>
+<div class="wrap" bind:clientWidth={width}>
+<form onsubmit={submit} class:compact={!(wide && mode === 'around')}>
   <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newSystem}</h2>
   <ol class="steps" aria-label={t.form.stepsLabel}>
     {#each STEPS as s, i (s)}
@@ -458,6 +523,8 @@
     <p class="error">{t.form.missingArchetype({ archetype: start.initial?.planet ?? '' })}</p>
   {/if}
 
+  <div class="body" class:split={wide && mode === 'around'}>
+  <div class="main">
   {#if step === 'kind'}
     {#if !variedFrom}
       <div class="kinds" role="group" aria-label={t.form.mode}>
@@ -537,7 +604,7 @@
   </fieldset>
   <fieldset>
     <legend>
-      <select class="mode" bind:value={star.orbitBy} aria-label={t.form.orbitBy}>
+      <select class="mode" id="orbit-by" bind:value={star.orbitBy} aria-label={t.form.orbitBy}>
         <option value="position">{t.form.orbitPosition}</option>
         <option value="au">{t.form.orbitAu}</option>
       </select>
@@ -570,29 +637,6 @@
       </div>
     {/if}
     <p class="help">{star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp}</p>
-  </fieldset>
-  <fieldset>
-    <legend>
-      {t.form.eccentricity}
-      <label class="check inline">
-        <input type="checkbox" bind:checked={star.eccentricityRandom} />
-        {t.form.random}
-      </label>
-    </legend>
-    {#if !star.eccentricityRandom}
-      <div class="slider">
-        <input type="range" min={0} max={0.9} step={0.005} bind:value={star.eccentricity} />
-        <input
-          type="number"
-          min={spec.eccentricity.min}
-          max={spec.eccentricity.max}
-          step="any"
-          bind:value={star.eccentricity}
-          aria-label={t.form.eccentricity}
-        />
-      </div>
-    {/if}
-    <p class="help">{t.form.eccentricityHelp}</p>
   </fieldset>
     {/if}
   {:else if step === 'planets'}
@@ -674,6 +718,19 @@
     </fieldset>
   {/each}
 
+  {#if mode === 'around'}
+    <ModelFields
+      {spec}
+      {archetypes}
+      bind:values={model}
+      drawn={drawn}
+      driven={(key) => drivenBy(explanation, key)}
+      ignored={preview.result?.ignored ?? []}
+      refusal={preview.refusal}
+      open={openGroups}
+    />
+  {/if}
+
   {#if !giantWorld && giantChoice.host === 'giant'}
     <p class="help">{t.form.moonsOfAMoon}</p>
   {:else if !giantWorld}
@@ -727,33 +784,7 @@
         {/if}
         <p class="help">{t.form.metallicityHelp}</p>
       </fieldset>
-      {#if giantWorld && mode === 'around'}
-        <fieldset>
-          <legend>
-            {t.form.giantMass}
-            <label class="check inline">
-              <input type="checkbox" bind:checked={giantChoice.massRandom} />
-              {t.form.random}
-            </label>
-          </legend>
-          {#if !giantChoice.massRandom}
-            <div class="slider">
-              <!-- Logarithmic: from a small ice giant to 13 Jupiter masses. -->
-              <input
-                type="range"
-                min={Math.log10(Math.max(GIANT_SLIDER_MIN, spec.inputs.mass_earth.min))}
-                max={Math.log10(spec.inputs.mass_earth.max)}
-                step={0.01}
-                value={Math.log10(giantChoice.mass)}
-                oninput={(e) => (giantChoice.mass = Math.round(10 ** Number(e.currentTarget.value)))}
-                aria-label={t.form.giantMass}
-              />
-              <input type="number" min={Math.max(GIANT_SLIDER_MIN, spec.inputs.mass_earth.min)} max={spec.inputs.mass_earth.max} step="any" bind:value={giantChoice.mass} />
-            </div>
-          {/if}
-          <p class="help">{t.form.giantMassHelp}</p>
-        </fieldset>
-      {:else if mode === 'around'}
+      {#if !giantWorld && mode === 'around'}
         <fieldset>
           <legend>{t.form.giants}</legend>
           {#if giantChoice.alone}
@@ -838,11 +869,27 @@
 
   {/if}
 
+  </div>
+  {#if mode === 'around'}
+    {#if wide}
+      <aside class="side"><PreviewPanel {preview} onjump={jump} onreroll={reroll} /></aside>
+    {:else}
+      <details class="fold">
+        <summary>{t.form.preview.summary}</summary>
+        <PreviewPanel {preview} onjump={jump} onreroll={reroll} />
+      </details>
+    {/if}
+  {/if}
+  </div>
+
   <!-- Sticks to the bottom of the wizard, so that the buttons stay in view
        while a step scrolls. -->
   <div class="footer">
     {#if error}
       <p class="error">{error}</p>
+    {/if}
+    {#if refusalText && !refusalAtField}
+      <p class="error" role="alert">{refusalText}</p>
     {/if}
     {#if step === 'summary'}
       <p class="help">{t.form.background}</p>
@@ -858,13 +905,14 @@
       {#if step !== 'summary'}
         <button type="button" class="primary" disabled={!stepValid(step)} onclick={() => go(STEPS[stepIndex + 1]!)}>{t.form.next}</button>
       {:else}
-        <button type="submit" class="primary" disabled={submitting || !seedValid || !planetsValid || (conflict && !replace)}>
+        <button type="submit" class="primary" disabled={submitting || !seedValid || !planetsValid || preview.refusal !== null || (conflict && !replace)}>
           {submitting ? t.form.sending : t.form.generate}
         </button>
       {/if}
     </div>
   </div>
 </form>
+</div>
 
 <style>
   /* Every track uses minmax(0, …) and every box min-width: 0 so that the
@@ -874,6 +922,43 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
+  }
+  form.compact {
+    max-width: 720px;
+    margin-inline: auto;
+  }
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-content: start;
+  }
+  /* From 900 px of form width the preview sits right of the steps. */
+  .body.split {
+    grid-template-columns: minmax(0, 680px) minmax(0, 1fr);
+    gap: 20px;
+  }
+  .side {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .fold {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px 8px;
+  }
+  .fold > summary {
+    cursor: pointer;
+    font-weight: 600;
   }
   .steps {
     display: flex;

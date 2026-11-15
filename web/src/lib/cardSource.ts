@@ -27,6 +27,8 @@ export interface CardSource {
   readonly rivers: RiverIndex | null;
   /** The roots of the cause trees that moved since the previous preview: their lines are highlighted. */
   readonly changed?: ReadonlySet<Quantity>;
+  /** A preview (the generate form's): nothing to rename or generate, and the links go nowhere. */
+  readonly preview?: boolean;
   showSystemBody(body: string | null): void;
   loadSystem(id: string): void;
 }
@@ -46,6 +48,7 @@ export function previewSource(result: ResolvedSystem, changed: ReadonlySet<Quant
     stats: null,
     rivers: null,
     changed,
+    preview: true,
     // A preview has one body shown and nothing to open.
     showSystemBody: () => {},
     loadSystem: () => {},

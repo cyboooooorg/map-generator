@@ -28,7 +28,11 @@
       <dt title={t.worldInfo.moonsHelp}>{t.card.moons}</dt>
       <dd class="moons">
         {#each family as moon (moon.id)}
-          <button class="link" onclick={() => world.showSystemBody(moon.id)}>{nameOf(moon.id, moon.designation)}</button>
+          {#if world.preview}
+            <span>{nameOf(moon.id, moon.designation)}</span>
+          {:else}
+            <button class="link" onclick={() => world.showSystemBody(moon.id)}>{nameOf(moon.id, moon.designation)}</button>
+          {/if}
         {:else}
           {t.worldInfo.noMoon}
         {/each}

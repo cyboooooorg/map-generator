@@ -840,7 +840,12 @@ addressed as `<system-id>/<body-id>` everywhere.
     **Lone planet (no other planets in its system)** checkbox on the
     planet step: it sends `alone: true`, replaces the giant-planets
     choice with a note and adds a line to the summary. **Vary…** keeps
-    the flag of the system it varies.
+    the flag of the system it varies. The planet step also holds every
+    input of the planet model (mass, core, water, envelope, CO₂, N₂, CH₄,
+    radiogenic heat, life, eccentricity, the star's age), each drawn or
+    pinned, and a live preview of the planet beside the steps; the form
+    sends its seed in the preview and in Generate, and shows the server's
+    refusals as they come (see `web/README.md`).
 
   The wizard remembers its last mode and fields. **Vary…** opens it over
   the viewer, on its summary.
