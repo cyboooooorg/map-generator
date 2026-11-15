@@ -84,6 +84,11 @@ export const fr: Messages = {
     deleted: (p) => (p.ids.length === 1 ? `${p.ids[0]} supprimé.` : `${p.ids.length} mondes supprimés.`),
     undo: 'Annuler',
     deleteFailed: (p) => `Suppression impossible${S}: ${p.error}`,
+    confirmRegenerateSystem: (p) =>
+      `${p.name} a été créé par un générateur plus ancien et ne peut pas être ouvert. Le redessiner depuis sa graine${S}? Le résultat est un autre système, et les noms qui ne correspondent plus sont perdus.`,
+    regenerated: (p) => `${p.name} est régénéré.`,
+    regenerating: (p) => `${p.name}${S}: ses mondes obsolètes sont regénérés.`,
+    regenerateFailed: (p) => `Impossible de régénérer ${p.name}${S}: ${p.error}`,
     rerollFailed: (p) => `Impossible de regénérer${S}: ${p.error}`,
     versus: 'contre',
     linkCameras: 'Lier les caméras',
@@ -236,6 +241,13 @@ export const fr: Messages = {
     habitableLine: 'Un monde à l’eau liquide',
     habitableShort: 'Eau liquide',
     outdated: `Obsolète${S}: créé par un générateur plus ancien`,
+    newerFormat: `Créé par un générateur plus récent${S}: mettez celui-ci à jour pour l’ouvrir`,
+    outdatedWorlds: `Mondes obsolètes${S}: créés par un générateur plus ancien`,
+    regenerate: (p) => `Régénérer ${p.name}`,
+    regenerateHelp: {
+      system_format: 'Redessiner ce système depuis sa graine (les noms qui ne correspondent plus sont perdus)',
+      world_format: 'Régénérer ses mondes obsolètes (le système et ses noms sont conservés)',
+    },
     planetsCount: (p) => `${p.count} ${p.count > 1 ? 'planètes' : 'planète'}`,
     moonsCount: (p) => (p.count === 0 ? 'aucune lune' : `${p.count} ${p.count > 1 ? 'lunes' : 'lune'}`),
     columns: { pin: 'Épingle', name: 'Nom', star: 'Étoile', planets: 'Planètes', moons: 'Lunes', created: 'Créé', actions: 'Actions' },
@@ -1500,7 +1512,7 @@ export const fr: Messages = {
   },
   world: {
     outdated: (p) =>
-      `${p.id} a été fait par un ancien générateur${S}: supprimez-le (\`mise run clean-systems\`) et générez-le à nouveau`,
+      `${p.id} a été fait par un ancien générateur${S}: utilisez Régénérer sur sa carte dans le menu principal pour le refaire (ou supprimez-le et générez-le à nouveau)`,
     loadFailed: (p) => `Impossible de charger ${p.id}${S}: ${p.error}`,
   },
   errors: {

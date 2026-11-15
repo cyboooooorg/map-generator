@@ -4,7 +4,7 @@
   import { systemExportUrl } from '../lib/api/client';
   import { t } from '../lib/i18n/index.svelte';
   import type { SystemSummary } from '../lib/api/types/SystemSummary';
-  import { systemName } from '../lib/systemList';
+  import { canRegenerate, isUnreadable, systemName } from '../lib/systemList';
   import PinButton from './PinButton.svelte';
 
   interface Props {
@@ -18,18 +18,20 @@
     onPinned?: ((system: SystemSummary) => void) | undefined;
     onRename: () => void;
     onDelete: () => void;
+    /** Regenerate an outdated system (the button shows only for one). */
+    onRegenerate: () => void;
     onToggle: () => void;
   }
 
-  let { system, showPin = true, selecting, chosen, onChanged, onPinned, onRename, onDelete, onToggle }: Props = $props();
+  let { system, showPin = true, selecting, chosen, onChanged, onPinned, onRename, onDelete, onRegenerate, onToggle }: Props = $props();
   const name = $derived(systemName(system));
 </script>
 
 <span class="actions">
-  {#if showPin && !system.outdated}
+  {#if showPin && !isUnreadable(system)}
     <PinButton {system} onChanged={onPinned ?? onChanged} />
   {/if}
-  {#if !system.outdated}
+  {#if !isUnreadable(system)}
   <button class="rename-button" data-rename={system.id} onclick={onRename} aria-label={t.systemList.rename({ name })} title={t.systemList.rename({ name })}
     >✎</button
   >
@@ -41,6 +43,16 @@
     aria-label={t.systemList.exportSystem({ name })}
     title={t.systemList.exportSystem({ name })}>⤓</a
   >
+  {/if}
+  {#if canRegenerate(system)}
+    <button
+      class="regenerate"
+      data-regenerate={system.id}
+      onclick={onRegenerate}
+      aria-label={t.systemList.regenerate({ name })}
+      title={`${t.systemList.regenerate({ name })}: ${t.systemList.regenerateHelp[system.outdated_reason === 'world_format' ? 'world_format' : 'system_format']}`}
+      >⟳</button
+    >
   {/if}
   {#if selecting}
     <input class="choose" type="checkbox" checked={chosen} onchange={onToggle} aria-label={t.worldList.selectOne({ id: name })} />
@@ -87,6 +99,9 @@
     color: var(--text);
   }
   .actions :global(button.pin.on) {
+    color: var(--accent);
+  }
+  .regenerate:hover {
     color: var(--accent);
   }
   .delete:hover {

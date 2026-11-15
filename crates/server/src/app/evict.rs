@@ -8,8 +8,10 @@
 //! opens it. See `docs/analysis/15-storage.md` ("Step done: evicting bodies").
 //!
 //! - [`evict_body`] is the one function that evicts a body, whatever its
-//!   age: the "reduce a system" action calls it for every body of the
-//!   system, one call each. The scheduled sweep ([`sweep_unopened`]) calls
+//!   age: the "regenerate" action of a system with worlds below the oldest
+//!   supported format calls it for each of those bodies
+//!   (`regenerate_old_worlds`), and the future "reduce a system" action
+//!   will call it for every body, one call each. The scheduled sweep ([`sweep_unopened`]) calls
 //!   [`evict_body_unopened_since`] instead, the same eviction preceded by
 //!   an age check made under the lock (a body opened after the sweep
 //!   listed it survives).
@@ -106,10 +108,6 @@ impl std::fmt::Display for EvictError {
 /// Opening such a body again queues its generation, at its displayed
 /// resolution when one is recorded (`queue_body`, then the follow-up of
 /// `start_job`), else at its original one.
-#[allow(
-    dead_code,
-    reason = "the entry point of the future reduce-a-system action; the sweep checks the age first"
-)]
 pub fn evict_body(state: &AppState, system: &str, body: &str) -> Result<Evicted, EvictError> {
     evict(state, system, body, None)
 }
