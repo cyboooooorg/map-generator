@@ -880,203 +880,192 @@ the world the planet renders (part 3a; issue #424 replaces it):
 Measured, not tuned: `cargo run --release -p mapgen --example planet_census
 -- 500` draws systems of seeds 1 to 500 and derives every planet through
 `body_model`. The medians of temperature and pressure are over the
-planets with a surface (`NaN` for the classes that have none). Run after
-the fixes of the steam review and the source check: the vapour capped at
-the water a body has, a boil kept only if its steam stays past 647 K, a
-runaway's water all in its air, the XUV saturation time anchored on
-Jackson et al. and Johnstone et al., the heat-pipe threshold at 1 W/m²
-and the seafloor power 4.1, then again after methane photolysis (issue
-#439), after the broadening by thick air was tempered (issue #440) and
-after the steam was capped at the Simpson–Nakajima limit (issue #438,
-the output unchanged), and after CO₂ and water vapour were counted in
-full in each other's broadening. The census also counts the runaways by their source
-(`Water::boiled`) and the wet planets left past 647 K because their boil
-was not kept.
-
-The `body_type` against derived class table below is the part 2 output; the
-census no longer prints it, since a planet's `body_type` is now its class
-(it prints the base presets the worlds render with instead).
+planets with a surface (`NaN` for the classes that have none). The output
+below is the one of the climate pass, lot 1 (issues #441, #442 and #492):
+the radiative–convective column with its moist plateau, the runaway
+decided by that plateau, and the steam worlds. The census counts the
+runaways by their source (`Water::boiled`) and by decade of their steam
+column, with the steam worlds apart, and the wet planets left past 647 K
+because their boil was not kept.
 
 ```text
-500 systems, 1677 planets
+500 systems, 1552 planets
 
-body_type against derived class (planets)
-body_type              gas-giant         hot-jupiter   hydrocarbon-world           ice-giant           ice-world          lava-world        mini-neptune         ocean-world               rocky  runaway-greenhouse         super-earth   total
-barren                         0                   0                   0                   0                  38                  14                   0                   0                 335                  22                   1     410
-caustic                        0                   0                   0                   0                   8                   0                   1                   0                  56                  30                   0      95
-frozen                         0                   0                  16                   0                 699                   0                  57                   0                   2                   0                   0     774
-gas-giant                     41                   0                   0                   0                   0                   0                   0                   0                   0                   0                   0      41
-hot-jupiter                    0                   1                   0                   0                   0                   0                   0                   0                   0                   0                   0       1
-ice-giant                     28                   0                   0                  56                   0                   0                   0                   0                   0                   0                   0      84
-terran                         0                   0                   0                   0                  14                   0                   9                   9                 124                   5                  13     174
-volcanic                       0                   0                   0                   0                   6                   3                   0                   0                  79                  10                   0      98
+base preset of the worlds (planets)
+barren           293   18.9 %
+caustic           53    3.4 %
+frozen           567   36.5 %
+gas-giant         65    4.2 %
+hot-jupiter       45    2.9 %
+ice-giant        453   29.2 %
+steam-world        2    0.1 %
+terran            27    1.7 %
+volcanic          47    3.0 %
 
 planets per radius bin (Fulton et al. 2017 bins, R_earth)
-    <1    55.9 %  (937)
- 1-1.5    30.6 %  (514)
- 1.5-2     3.8 %  (63)
-   2-3     2.3 %  (38)
-   3-4     1.9 %  (32)
-   4-6     2.4 %  (41)
-  6-10     1.9 %  (32)
- 10-22     1.2 %  (20)
+    <1    40.9 %  (635)
+ 1-1.5    19.3 %  (300)
+ 1.5-2     6.3 %  (98)
+   2-3    12.6 %  (196)
+   3-4     7.6 %  (118)
+   4-6    10.0 %  (155)
+  6-10     2.1 %  (33)
+ 10-22     1.1 %  (17)
    >22     0.0 %  (0)
 
 medians per class
 class               planets  age Gyr  mass M⊕    a AU    CMF    water  envelope     T K      P bar
-gas-giant                69     4.90   47.361   2.172  0.332   0.0283    0.9000     NaN        NaN
-hot-jupiter               1     6.33  191.055   0.024  0.382   0.0000    0.9447     NaN        NaN
-hydrocarbon-world        16     4.49    0.107   3.125  0.317   0.3555    0.0000     107      4.240
-ice-giant                56     5.35   17.247   2.028  0.313   0.2924    0.1614     NaN        NaN
-ice-world               765     5.57    0.418   0.405  0.309   0.3448    0.0000      90      0.046
-lava-world               17     3.18    0.428   0.026  0.303   0.0006    0.0000    1593      0.000
-mini-neptune             67     5.82    2.129   0.352  0.312   0.3407    0.0082     NaN        NaN
-ocean-world               9     4.45    1.310   0.137  0.324   0.3040    0.0000     288      1.906
-rocky                   596     5.31    0.474   0.047  0.312   0.0005    0.0000     336      0.000
-runaway-greenhouse       67     4.39    1.053   0.141  0.310   0.0008    0.0000     719     55.258
-super-earth              14     5.07    1.679   0.151  0.269   0.0008    0.0018     233      2.082
+gas-giant                65     4.39   48.726   2.165  0.325   0.0267    0.9000     NaN        NaN
+hot-jupiter               2     8.72  225.725   0.036  0.432   0.0000    0.9289     NaN        NaN
+hot-neptune              43     5.28   13.503   0.030  0.286   0.0007    0.1791     NaN        NaN
+hydrocarbon-world         8     2.10    0.125   1.736  0.316   0.2609    0.0000      84      3.440
+ice-giant               160     5.63   14.366   0.700  0.300   0.2496    0.1805     NaN        NaN
+ice-world               448     5.51    0.389   0.369  0.311   0.3465    0.0000      91      0.056
+lava-world               18     2.25    2.828   0.041  0.299   0.0006    0.0000    1708      0.000
+mini-neptune            293     5.26    5.298   0.315  0.307   0.2427    0.0193     NaN        NaN
+ocean-world               6     2.99    1.841   0.136  0.324   0.0019    0.0000     288     14.595
+rocky                   397     5.41    0.282   0.048  0.310   0.0005    0.0000     322      0.000
+runaway-greenhouse       60     5.63    1.574   0.144  0.320   0.0006    0.0000     842     49.685
+steam-world               2     6.60    3.189   0.134  0.492   0.4052    0.0000    2032 623182.205
+super-earth              29     4.60    2.756   0.042  0.304   0.0006    0.0000     620      0.109
+volcanic-world           21     3.74    0.194   0.059  0.327   0.0009    0.0000     425      0.000
 
-class mix (1677 planets)
-ice-world             45.6 %  (765)
-rocky                 35.5 %  (596)
-gas-giant              4.1 %  (69)
-mini-neptune           4.0 %  (67)
-runaway-greenhouse     4.0 %  (67)
-ice-giant              3.3 %  (56)
-lava-world             1.0 %  (17)
-hydrocarbon-world      1.0 %  (16)
-super-earth            0.8 %  (14)
-ocean-world            0.5 %  (9)
-hot-jupiter            0.1 %  (1)
+class mix (1552 planets)
+ice-world             28.9 %  (448)
+rocky                 25.6 %  (397)
+mini-neptune          18.9 %  (293)
+ice-giant             10.3 %  (160)
+gas-giant              4.2 %  (65)
+runaway-greenhouse     3.9 %  (60)
+hot-neptune            2.8 %  (43)
+super-earth            1.9 %  (29)
+volcanic-world         1.4 %  (21)
+lava-world             1.2 %  (18)
+hydrocarbon-world      0.5 %  (8)
+ocean-world            0.4 %  (6)
+hot-jupiter            0.1 %  (2)
+steam-world            0.1 %  (2)
 
-planets with a surface: 1467
+planets with a surface: 983
+no giant, surface hidden by an envelope: 6 (0.4 %)
+  ice-world              2
+  super-earth            4
 
-surface liquid (1467 planets with a surface)
-Hydrocarbons           1.1 %  (16)
-Lava                   1.2 %  (17)
-None                  92.6 %  (1359)
-Water                  5.1 %  (75)
+surface liquid (983 planets with a surface)
+Hydrocarbons           0.8 %  (8)
+Lava                   1.8 %  (18)
+None                  94.4 %  (928)
+Water                  3.0 %  (29)
 
-tectonic regime (1467 planets with a surface)
-Episodic              20.5 %  (301)
-HeatPipe               3.5 %  (51)
-Plates                40.4 %  (593)
-Stagnant              35.6 %  (522)
+tectonic regime (983 planets with a surface)
+Episodic              21.3 %  (209)
+HeatPipe               3.2 %  (31)
+Plates                34.1 %  (335)
+Stagnant              41.5 %  (408)
 
-runaways: 531 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 67 by the limit, 0 boiled
-wet, not in runaway and past 647 K (a boil not kept): 1
+surface age, Ga, by class and regime (planets with a surface)
+class               regime         n  median    mean
+hydrocarbon-world   Stagnant       8   0.269   1.167
+ice-world           Plates       258   0.403   0.407
+ice-world           Stagnant     188   3.375   2.697
+lava-world          Episodic      12   0.471   0.492
+lava-world          HeatPipe       2   0.001   0.001
+lava-world          Stagnant       4   4.126   3.353
+ocean-world         HeatPipe       1   0.000   0.000
+ocean-world         Plates         4   0.376   0.378
+ocean-world         Stagnant       1   1.022   1.022
+rocky               Episodic     127   0.540   0.541
+rocky               Plates        63   0.376   0.379
+rocky               Stagnant     207   4.574   3.629
+runaway-greenhouse  Episodic      53   0.521   0.520
+runaway-greenhouse  HeatPipe       7   0.001   0.001
+steam-world         Episodic       2   0.370   0.370
+super-earth         Episodic      15   0.605   0.592
+super-earth         Plates        10   0.504   0.450
+volcanic-world      HeatPipe      21   0.000   0.000
+all                              983           1.555
 
-life: 1.8 % of planets with a surface (26), 1.5 % oxygenated (22)
+runaways: 383 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 60 by the limit, 0 boiled
+boils whose leftover water condensed again: 0
+wet, not in runaway and past 647 K: 0
+runaways by steam column (other classes / steam worlds, median K), steam-world line 2206.3999999999996 bar:
+        <1 bar:  374 /    0  500 K
+      1-10 bar:    3 /    0  1368 K
+    10-1e2 bar:    3 /    0  2617 K
+   1e2-1e3 bar:    1 /    0  1605 K
+   1e3-1e4 bar:    0 /    0  NaN K
+   1e4-1e5 bar:    0 /    0  NaN K
+     >=1e5 bar:    0 /    2  2032 K
 
-radius histogram, period under 100 days (867 planets)
+life: 1.1 % of planets with a surface (11), 0.7 % oxygenated (7)
+
+radius histogram, period under 100 days (818 planets)
  0.00-0.25      0.0 %  (0)
- 0.25-0.50     10.4 %  (90)
- 0.50-0.75     20.2 %  (175)
- 0.75-1.00     36.8 %  (319)
- 1.00-1.25     22.6 %  (196)
- 1.25-1.50      5.7 %  (49)
- 1.50-1.75      1.4 %  (12)
- 1.75-2.00      0.7 %  (6)
- 2.00-2.25      0.6 %  (5)
- 2.25-2.50      0.5 %  (4)
- 2.50-2.75      0.1 %  (1)
- 2.75-3.00      0.1 %  (1)
- 3.00-3.25      0.1 %  (1)
- 3.25-3.50      0.0 %  (0)
- 3.50-3.75      0.1 %  (1)
- 3.75-4.00      0.0 %  (0)
- 4.00-4.25      0.0 %  (0)
- 4.25-4.50      0.0 %  (0)
- 4.50-4.75      0.0 %  (0)
- 4.75-5.00 +    0.8 %  (7)
+ 0.25-0.50      7.6 %  (62)
+ 0.50-0.75     21.8 %  (178)
+ 0.75-1.00     19.3 %  (158)
+ 1.00-1.25     13.2 %  (108)
+ 1.25-1.50      7.0 %  (57)
+ 1.50-1.75      3.4 %  (28)
+ 1.75-2.00      2.0 %  (16)
+ 2.00-2.25      2.8 %  (23)
+ 2.25-2.50      2.7 %  (22)
+ 2.50-2.75      3.5 %  (29)
+ 2.75-3.00      1.1 %  (9)
+ 3.00-3.25      0.9 %  (7)
+ 3.25-3.50      2.0 %  (16)
+ 3.50-3.75      1.6 %  (13)
+ 3.75-4.00      1.5 %  (12)
+ 4.00-4.25      0.9 %  (7)
+ 4.25-4.50      1.3 %  (11)
+ 4.50-4.75      1.3 %  (11)
+ 4.75-5.00 +    6.2 %  (51)
+
+classes, period under 100 days (818 planets)
+gas-giant              0.9 %  (7)
+hot-jupiter            0.2 %  (2)
+hot-neptune            5.3 %  (43)
+ice-giant              5.7 %  (47)
+ice-world             14.2 %  (116)
+lava-world             2.2 %  (18)
+mini-neptune          16.0 %  (131)
+ocean-world            0.6 %  (5)
+rocky                 42.9 %  (351)
+runaway-greenhouse     6.2 %  (51)
+steam-world            0.2 %  (2)
+super-earth            2.9 %  (24)
+volcanic-world         2.6 %  (21)
 ```
 
 What it shows, plainly:
 
-- **Radius valley.** No dip appears between 1.5 and 2 R⊕ (Fulton et al.
-  2017, doi:10.3847/1538-3881/aa80eb). Among the 867 planets with a
-  period under 100 days the histogram falls steadily from 1.0 R⊕ upward:
-  22.6 % in 1.00-1.25, 5.7 % in 1.25-1.50, 1.4 % and 0.7 % in the two
-  bins of the valley, then a thin tail. There is no peak at 1.25-1.5 and
-  no second peak at 2-3 R⊕ for a valley to separate. The generator draws
-  few planets above 1.5 R⊕ at all (13 % of all planets), most of them
-  beyond 100 days, so photoevaporation has no population of sub-Neptunes
-  to carve a gap in. The model was not tuned to produce one. With the
-  XUV fluence of Ribas et al. and the anchored saturation time, 18
-  close-in planets lie in 1.50-2.00 R⊕ (13 before Ribas et al., 17
-  before the saturation time was anchored).
-- **Mini-Neptunes** are 4.0 % of the planets (67), against the
-  over-representation of part 1 (see [planet-interiors.md](planet-interiors.md)).
-  The `frozen` type holds 57 of them; escape strips the ones close in.
-- **Lava worlds** are 1.0 % (17): dry rocks (median water 6e-4 of the
-  mass) at a median 0.026 AU, airless, at 1593 K. Before the fixes, 46
-  lava worlds had a median water share of 0.32: migrated water worlds
-  whose outgassed ices had run their climate past 1400 K under a water
-  layer. A body with water on top is never a lava world now.
-- **Hydrocarbon worlds** are 1.0 % (16), all `frozen`: small icy bodies
-  (median 0.11 M⊕, water 0.36) far from their stars (median 3.1 AU) under
-  a median 4.2 bar. Before methane photolysis there were 85 (5.1 %), at
-  a median 0.64 AU round dim stars: the ultraviolet of a red dwarf, close
-  in and saturated for gigayears, now destroys their methane faster than
-  they outgas it, and they are ice worlds. Ten of the sixteen are
-  Titans (82 to 88 K at equilibrium, a few hundredths of a bar of
-  methane, 94 to 113 K). The other six keep 0.5 to 18 bar of
-  methane in their air (their equilibrium
-  temperature, 91 to 107 K, is above methane's triple point, so the cold
-  trap holds none back), which warms four of them to 225 to 255 K
-  (within 1 K of their temperatures before issue #440: methane keeps the
-  broadening by the whole air, and their CO₂ and vapour are traces).
-- **Ocean worlds** are 0.5 % (9), down from 33: 26 of those were small
-  icy bodies (median 0.2 M⊕) at 90 to 150 K at equilibrium, warmed to
-  280 to 440 K by their methane (up to 70 bar of it). Photolysis leaves 20 of them
-  ice worlds and 6 hydrocarbon worlds. Tempering the broadening by thick
-  air (issue #440) made two ocean worlds, a former boiled runaway with
-  17 bar of N₂ and a rock frozen at 228 K under 20 bar of N₂, both now
-  held at 288 K by their thermostat, and froze one (275 K to 273 K under
-  1.65 bar of CO₂), which counting its CO₂ in full in the broadening of
-  water's lines thawed again (275 K, with life).
-- **Runaway greenhouses** are 4.0 % (67), all dry rocks over the
-  runaway limit of the insolation (median water 8e-4, 55 bar, 719 K).
-  Of the 531 runaways among the planets with a surface, all come from
-  the limit; most of them have kept under 1 bar of air and are rocks.
-  Before methane photolysis 15 had boiled their ocean, 13 of them icy
-  bodies whose methane greenhouse carried them there; they are ice
-  worlds now. The last two boiled with 2.9 and 17 bar of nitrogen in
-  their first pass, whose broadening carried their vapour away; with it
-  tempered (issue #440) their thermostats hold them at 288 K, a `rocky`
-  planet and an `ocean-world`. The dense CO₂ runaways with several bar
-  of N₂ cooled by up to 37 K. Capping the steam at the Simpson–Nakajima
-  limit (issue #438) moved five steam runaways round red dwarfs, under
-  550 to 2.7e5 bar of steam, and no class: they fell from 8554, 7328,
-  6302, 2617 and 2209 K to 1760, 1835, 1714, 1711 and 2134 K (counting
-  their steam in the broadening of their CO₂ up to the cap's column
-  added 1 to 9 K). The runaway class now spans 322 to 2134 K (median
-  719 K, unchanged). One
-  wet planet stays past 647 K out of a runaway (two before #440): its
-  boil was not kept, because its steam escaped until the dry re-run was
-  cool (458 c: 93 bar of CO₂ and 282 bar of vapour at 1549 K in its
-  first pass, 1488 K while its CO₂ and vapour were tempered as each
-  other's broadeners, all its water lost and 618 K in the steam pass). The cap does not
-  touch it: 282 bar of vapour is under it. The other, under 8.5 bar of
-  N₂, is now a wet `rocky` planet at 301 K, with life.
-- **Tectonic regimes**: heat pipes rose from 2.7 % (39) to 3.5 % (51)
-  with the threshold lowered from 2 to 1 W/m². The two planets that
-  stopped boiling (#440) moved from episodic to plates.
-- **Surface liquid** over the 1467 planets with a surface: no liquid for
-  92.6 %, hydrocarbons 1.1 % (14.6 % before methane photolysis), water
-  5.1 % (6.7 %), lava 1.2 %. Issue #440 moved eight planets across the
-  water line, four each way, and left the count at 73: four gained an
-  ocean (the two former boils, the boil not kept and the frozen rock
-  under 20 bar of N₂), four cold ones under 1.8 to 3.1 bar of CO₂ and
-  N₂ froze (from 273 to 277 K down to 263 to 273 K). Counting CO₂ and
-  water in full in each other's broadening thawed two of them again
-  (201 b at 275 K and 446 b at 277 K, under 0.19 and 0.79 bar of N₂),
-  bringing the count to 75; the other two, under 1.45 and 1.93 bar of
-  N₂, stay frozen at 268 and 265 K (273 and 276 K before #440), their
-  nitrogen past 1 bar still tempered.
-- **Life** arises on 1.8 % of the planets with a surface (26), 1.5 %
-  with oxygen (22); 1.8 % and 1.6 % before issue #440, which froze two
-  inhabited planets and brought one back from 1073 K, and 1.7 % and
-  1.4 % before CO₂ and water were counted in full in each other's
-  broadening, which thawed one of the two (201 b); 2.4 % and 2.0 % before methane
-  photolysis (nine of the icy ocean worlds warmed by methane had life).
+- **Steam worlds** are 0.1 % of the planets (2 of 1552), both far over
+  100 000 bar of steam (median 2032 K at the surface, 623 182 bar). They
+  are the only runaways above 1e5 bar; the 381 other runaways hold
+  under 1e4 bar (374 of them under 1 bar of steam) and stay
+  `runaway-greenhouse` or another class.
+- **Runaway greenhouses** are 3.9 % (60), all by the insolation limit
+  (none boiled): median 842 K under 49.7 bar. A boil whose water
+  condensed again once the planet was dry is counted apart (none here),
+  and no wet planet is left past 647 K out of a runaway.
+- **Radius valley.** With the close-in planets (818 with a period under
+  100 days) the histogram now dips at 1.50-2.00 R⊕ (3.4 % and 2.0 %)
+  between the rocky peak at 0.5-1.0 R⊕ and a second hump at 2.0-3.0 R⊕
+  (2.8, 2.7 and 3.5 % in the bins from 2.00 to 2.75), and 39.8 % of all
+  planets are above 1.5 R⊕. The model was not tuned to produce a valley.
+- **Mini-Neptunes** are 18.9 % (293) and hot Neptunes 2.8 % (43): the
+  class mix counts the envelope classes the radius histogram reads.
+- **Lava worlds** are 1.2 % (18), airless dry rocks at a median 1708 K,
+  and volcanic worlds 1.4 % (21), all in the heat-pipe regime.
+- **Hydrocarbon worlds** are 0.5 % (8), small icy bodies (median
+  0.125 M⊕) far from their stars (median 1.7 AU) under 3.4 bar at 84 K.
+- **Ocean worlds** are 0.4 % (6), held at 288 K by their thermostat under
+  a median 14.6 bar.
+- **Surfaces hidden by an envelope**: 6 planets that are no giant (0.4 %),
+  2 ice worlds and 4 super-Earths.
+- **Tectonic regimes** over the 983 planets with a surface: plates
+  34.1 %, stagnant lid 41.5 %, episodic 21.3 %, heat pipe 3.2 %.
+- **Surface liquid**: none for 94.4 %, water 3.0 % (29), lava 1.8 % and
+  hydrocarbons 0.8 %.
+- **Life** arises on 1.1 % of the planets with a surface (11), 0.7 %
+  with oxygen (7).
