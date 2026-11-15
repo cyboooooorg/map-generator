@@ -198,7 +198,7 @@ impl Cause {
 }
 
 /// Most a recomposed surface temperature may differ from the stored one,
-/// K: the water-vapour feedback converges to 1e-3 K (see
+/// K: the surface temperatures are solved to 1e-2 K (see
 /// [`super::climate::climate`]), the rest is exact.
 const TEMPERATURE_TOLERANCE_K: f64 = 0.5;
 
@@ -215,9 +215,10 @@ const HEAT_TOLERANCE: f64 = 1e-6;
 /// pass, or the boiled steam it kept, see [`super::planet_model`]), which
 /// gives what it outgassed, what escape left and the air its climate was
 /// solved with (the stored air is after life's oxygen). The surface
-/// temperature is decomposed with [`surface_temperature_k`],
-/// `T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`: its equilibrium temperature (no air, no
-/// heat), the greenhouse (with air, minus that) and the internal warming
+/// temperature is decomposed with [`surface_temperature_k`] (the balance
+/// of a radiative–convective column, [`super::column`]): its equilibrium
+/// temperature (no air, no heat), the greenhouse (with air, minus that)
+/// and the internal warming
 /// (with air and heat, minus with air only), whose sum must be the stored
 /// temperature within [`TEMPERATURE_TOLERANCE_K`].
 pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {

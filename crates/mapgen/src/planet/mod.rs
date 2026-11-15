@@ -20,8 +20,8 @@
 //! it outgasses, what escape leaves, what its star's ultraviolet destroys
 //! and what its cold freezes out.
 //! [`climate::climate`] sets its surface temperature through a grey
-//! greenhouse and the carbonate thermostat, and the [`SurfaceLiquid`] on
-//! its surface.
+//! radiative–convective column (`column`) and the carbonate thermostat,
+//! and the [`SurfaceLiquid`] on its surface.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
 //! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
@@ -48,6 +48,7 @@ use crate::system::{Body, System, body_seed};
 pub mod atmosphere;
 pub mod classify;
 pub mod climate;
+pub(crate) mod column;
 pub mod core;
 pub mod escape;
 pub mod explain;

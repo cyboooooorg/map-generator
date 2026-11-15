@@ -426,10 +426,13 @@ mod tests {
     }
 
     #[test]
-    fn a_water_topped_body_past_the_critical_point_is_a_steam_runaway() {
+    fn a_water_topped_body_under_thick_nitrogen_keeps_its_ocean() {
         // 1 Earth mass, 1 % water (some 40 oceans) at 1 AU, below the
-        // runaway limit of the insolation: the 20 bar of nitrogen its ice
-        // brings carries the vapour feedback past 647 K.
+        // runaway limit of the insolation, under the 20 bar of nitrogen
+        // its ice brings. The old grey core carried its vapour feedback
+        // past 647 K and boiled it (issue #441); the moist limit does not
+        // depend on the nitrogen, and the column keeps the ocean warm but
+        // liquid.
         let inputs = PlanetInputs {
             water_fraction: 0.01,
             volatiles: crate::planet::inputs::volatile_rule(0.99, 0.01),
@@ -437,62 +440,22 @@ mod tests {
         };
         let model = planet_model(&sun_at(1.0), inputs);
         let surface = model.surface.expect("a bare body has a surface");
-        assert!(surface.water.kept_kg > 0.0, "{surface:?}");
-        assert!(surface.water.runaway, "{surface:?}");
-        assert!(surface.water.boiled, "{surface:?}");
-        assert!(surface.climate.temperature_k >= 647.0, "{surface:?}");
-        assert_ne!(surface.climate.liquid, SurfaceLiquid::Lava, "{surface:?}");
-        assert_ne!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
-        assert_ne!(surface.regime, crate::geology::Regime::Plates);
-        assert_eq!(model.class, RunawayGreenhouse);
-    }
-
-    #[test]
-    fn a_trace_of_water_does_not_boil_a_temperate_planet() {
-        // 0.2 M⊕ at 1.2 AU with 1e-9 of water (2.6e-4 bar if all of it
-        // were vapour) and the volatiles of 1 % of ice. Its vapour is
-        // bounded by the water it has, so it cannot carry the surface past
-        // 647 K. Before the vapour was capped, the first pass put hundreds
-        // of bar of steam in its air, boiled, and the planet came out a
-        // runaway greenhouse at 296 K.
-        let inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01),
-            ..reference::inputs(0.2, 0.325, 1.0e-9)
-        };
-        let model = planet_model(&sun_at(1.2), inputs);
-        let surface = model.surface.expect("a bare body has a surface");
-        assert!(!surface.water.runaway, "{surface:?}");
-        assert_ne!(model.class, RunawayGreenhouse);
-        assert!(surface.climate.temperature_k < 400.0, "{surface:?}");
-    }
-
-    #[test]
-    fn a_boil_whose_steam_cools_is_not_kept() {
-        // 0.2 M⊕ at 1.5 AU with 0.1 % of water (0.85 Earth oceans). Its
-        // vapour feedback carries the first pass past 647 K, but its steam
-        // escapes to nothing and the dry re-run sits at 293 K: the boil is
-        // not self-consistent, so the first pass stands, not a runaway
-        // greenhouse at room temperature.
-        let inputs = PlanetInputs {
-            volatiles: volatile_rule(0.999, 1.0e-3),
-            ..reference::inputs(0.2, 0.325, 1.0e-3)
-        };
-        let all = inputs.water_fraction * inputs.mass_earth * crate::exomoon::EARTH_KG;
-        let model = planet_model(&sun_at(1.5), inputs);
-        let surface = model.surface.expect("a bare body has a surface");
+        assert!(surface.gases.n2 > 10.0, "{surface:?}");
         assert!(!surface.water.runaway, "{surface:?}");
         assert!(!surface.water.boiled, "{surface:?}");
-        assert_eq!(surface.water.kept_kg, all, "{surface:?}");
+        assert!(surface.climate.temperature_k < 330.0, "{surface:?}");
+        assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
         assert_ne!(model.class, RunawayGreenhouse);
     }
 
     #[test]
     fn a_runaway_keeps_in_its_air_the_water_it_keeps() {
-        // 0.2 M⊕ with 5 % and 1 % of water at 1.0 and 1.2 AU: every kg of
-        // water a runaway keeps is steam in its air, none of it neither
-        // vapour nor liquid.
+        // 0.2 M⊕ with 5 % of water at 0.8 and 0.9 AU, inside the runaway
+        // limit of the insolation: every kg of water a runaway keeps is
+        // steam in its air, none of it neither vapour nor liquid. (At 1.0
+        // and 1.2 AU the old grey core boiled them, issue #441.)
         let mut runaways = 0;
-        for (water, orbit_au) in [(0.05, 1.0), (0.01, 1.2)] {
+        for (water, orbit_au) in [(0.05, 0.8), (0.05, 0.9)] {
             let inputs = PlanetInputs {
                 volatiles: volatile_rule(1.0 - water, water),
                 ..reference::inputs(0.2, 0.325, water)

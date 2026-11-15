@@ -434,157 +434,131 @@ holds the temperature (`Climate::regulated`). It takes the gases after
 `photochemistry` and returns them with the CO₂ the thermostat leaves and
 the water vapour the climate sets.
 
-**Grey greenhouse** (`surface_temperature_k`). A grey atmosphere in
-radiative equilibrium, in the Eddington approximation (Pierrehumbert
-2010, *Principles of Planetary Climate*, §4.6), warmed from below by the
-internal heat flux `q`:
+**Radiative–convective grey column** (`surface_temperature_k`,
+`planet::column`, issue #441). The surface temperature is the one at
+which the outgoing longwave radiation (OLR) of a grey column over the
+surface balances what it absorbs, `σ T_eq⁴ + q`, with `T_eq` the
+context's equilibrium temperature (Bond albedo 0.3) and `q` the internal
+heat flux. The column:
+
+- runs from the surface up a log-pressure grid (20 levels per decade,
+  to a thousandth of the surface pressure and at least to 1e-4 bar);
+- follows the dry adiabat of its mixture until its water vapour
+  saturates, then the moist pseudo-adiabat (Pierrehumbert 2010,
+  *Principles of Planetary Climate*, §2.7, eq. 2.33); past water's
+  critical point the vapour is a gas like the others. The heat
+  capacities are NIST's at 298 K, the steam's from the NIST Shomate
+  equation (it grows from 34 to 52 J/(mol·K) between 300 and 2000 K);
+- stops cooling at the skin temperature `T_eq / 2^¼`, a stratosphere
+  where the vapour keeps the mixing ratio of its cold trap;
+- integrates the grey optical depth from the top down with the per-gas
+  laws below, written per unit `ln p` so that a uniform column gives back
+  their totals (`τ_i ∝ p^(a_i + ½)`, so `dτ_i / d ln p = (a_i + ½) τ_i`);
+- sends out the grey two-stream integral of `σ T⁴` over it with the
+  diffusivity factor 3/2 (the transmission falls to `1/e` at `τ` = 2/3,
+  the Eddington emission level), plus the surface's `σ T_s⁴ e^(−3τ_s/2)`.
 
 ```text
-T⁴ = T_eq⁴ (1 + ¾ τ) + q / σ
-τ  = Σ k_i (p_i / 1 bar)^a_i (P_b,i / 1 bar)^½
+τ_i = k_i (p_i / 1 bar)^a_i (P_b,i / 1 bar)^½        (a uniform column)
 ```
 
-`T_eq` is the context's equilibrium temperature (Bond albedo 0.3), `p_i`
-the partial pressures of CO₂, H₂O and CH₄ and `P_b,i` the pressure that
-broadens each gas's lines (below). The square roots are the strong-line
-limit of a pressure-broadened band, which absorbs as `sqrt(S u α)` with
-the path `u ∝ p_i` and the width `α` growing with the pressure round
-the lines (Pierrehumbert 2010, §4.4; Goody & Yung 1989). CO₂'s
-power is smaller, 0.25: its 15 µm band is saturated at the centre, so its
-forcing grows with the logarithm of its amount (Myhre et al. 1998,
-doi:10.1029/98GL01908), and the small power stands in for it across the
-six decades between Earth and Venus. The opacities are calibrations with
-no source:
+`p_i` are the partial pressures of CO₂, H₂O and CH₄ and `P_b,i` the
+pressure that broadens each gas's lines (below). The square roots are the
+strong-line limit of a pressure-broadened band, which absorbs as
+`sqrt(S u α)` with the path `u ∝ p_i` and the width `α` growing with the
+pressure round the lines (Pierrehumbert 2010, §4.4; Goody & Yung 1989).
+CO₂'s power is smaller, 0.27: its 15 µm band is saturated at the centre,
+so its forcing grows with the logarithm of its amount (Myhre et al. 1998,
+doi:10.1029/98GL01908). The opacities are calibrations with no source:
 
 | Gas | `k_i` | `a_i` | Calibrated on |
 |---|---|---|---|
-| CO₂ | 1.66 | 0.25 | Venus's 737 K under 85 bar |
-| H₂O | 5.9 | 0.5 | Earth: the thermostat leaves about 280 ppm of CO₂ |
-| CH₄ | 3.4 | 0.5 | Titan's 94 K |
+| CO₂ | 0.575 (1.66 before #441) | 0.27 (0.25) | Venus's 737 K under 85 bar |
+| H₂O | 129 (5.9) | 0.5 | the moist plateau at 282 W/m² |
+| CH₄ | 3.3 (3.4) | 0.5 | Titan's 94 K |
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
 CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
 doi:10.1126/science.11538492, not checked); the methane opacity carries
 all of it here.
 
-**Broadening by the rest of the air** (`broadening_bar`, issue #440).
-For CO₂ and water vapour, `P_b` is the pressure of CO₂ and water vapour
-in full plus the pressure `P_o` of the other gases (N₂, O₂, CH₄, the
-rest), in proportion up to 1 bar (`BROADENING_KNEE_BAR`) and as its 0.2
-power past it (`THICK_AIR_EXPONENT`):
+**The moist plateau.** On a saturated column the levels that radiate to
+space sit on water's saturation curve whatever the surface temperature,
+so the OLR flattens: the Simpson–Nakajima limit (Nakajima, Hayashi & Abe
+1992, doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2). Goldblatt,
+Robinson, Zahnle & Crisp 2013 (doi:10.1038/ngeo1892, abstract checked)
+find it at 282 W/m² line by line, Boukrouche, Lichtenberg & Pierrehumbert
+2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv 2107.14150) at
+283 W/m² and Hamano et al. 2015 (doi:10.1088/0004-637X/806/2/216) at
+280 W/m². With Earth's air saturated at 77 %, the column sends out 282,
+288, 284, 282 and 282 W/m² from a surface at 320, 340, 360, 380 and
+400 K; at 380 K, 282, 284 and 287 W/m² with one, two and three times
+Earth's nitrogen. The old Eddington core
+(`T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`) had no plateau: its moist OLR peaked at
+253 W/m² at Earth's composition and fell with nitrogen.
 
-```text
-P_b = p_CO2 + p_H2O + P_o                    for P_o ≤ 1 bar
-P_b = p_CO2 + p_H2O + 1 bar · (P_o / 1 bar)^0.2   past it
-```
+**Broadening** (`broadening_bar`, `water_broadening_bar`,
+`foreign_share`, issues #440 and #441). For CO₂, `P_b` is the pressure of
+CO₂ and water vapour in full plus the pressure `P_o` of the other gases
+(N₂, O₂, CH₄, the rest), in proportion up to 2.6 bar of them
+(`BROADENING_KNEE_BAR`) and no further past it (`THICK_AIR_EXPONENT` 0):
+the column applies to every level the share `K / P_o` the whole column
+has past the knee. For water vapour, `P_b` is the vapour's own pressure
+plus 0.057 (`WATER_FOREIGN_BROADENING`) times that of the rest: water
+broadens its own lines about five times better than air does (HITRAN's
+self- against air-broadened half-widths, Gordon et al. 2017,
+doi:10.1016/j.jqsrt.2017.06.038, from memory), and its self-continuum
+dominates the windows of a moist air (Shine, Ptashnik & Rädel 2012,
+doi:10.1007/s10712-011-9170-y, from memory).
 
-Below 1 bar of other gases this is the whole pressure, so Earth (0.90
-bar of other gases in the climate step), Mars and the pure CO₂ of Venus
-keep the calibration of the table, as does a steam atmosphere, whose
-water broadens its own lines. Past 1 bar, the other gases' share of an
-opacity grows as `P_o^0.1` instead of `P_o^0.5`.
-
-CO₂ and water vapour count in full for each other, not only for
-themselves. Water broadens CO₂'s lines much more than N₂ and O₂ do (Tan,
-Kochanov, Rothman & Gordon 2019, doi:10.1029/2019JD030929, abstract
-checked), and CO₂ broadens water's 1.33 to 1.45 times as much as air
-(Yang et al. 2022, doi:10.7498/aps.71.20220700, abstract checked; Brown,
-Humphrey & Gamache 2007, doi:10.1016/j.jms.2007.07.010, in the far
-infrared, not checked). They count at par with N₂ under the knee, not
-above it, so that the opacities keep their calibration. The
-doubled-nitrogen calibration below holds 10 mbar of CO₂ and cannot constrain the
-case where CO₂ is water's main broadener; tempering the CO₂ there too,
-as the first version of this rule did, cut an Earth at 1.6 AU (1.8 bar
-of CO₂ over 0.89 bar of N₂) from 287.8 K to 281 K and moved in the cold
-edge of the habitable zone that Kopparapu et al. 2013
-(doi:10.1088/0004-637X/765/2/131) put at about 1.67 AU with CO₂–H₂O
-atmospheres. With the plain square
-root, nitrogen alone ran an Earth away: at 1 AU, with 2 bar of N₂, the
-thermostat ran out of CO₂ to remove and the vapour feedback carried the
-surface to 1490 K (issue #440). The 0.2 is calibrated on the warming
-of doubled nitrogen. Goldblatt et al. 2009 (doi:10.1038/ngeo692,
-abstract checked) find 4.4 °C for twice the present nitrogen on the late
-Archean Earth (1-D radiative–convective model), Charnay et al. 2013
-(doi:10.1002/jgrd.50808, §5.2 read in arXiv 1310.4286) +7 °C in a GCM
-for the air going from 1 to 2 bar at 2.5 Ga with 10 mbar of CO₂ and
-2 mbar of CH₄, and Wolf & Toon 2014 (doi:10.1089/ast.2013.1112,
-abstract checked) 3 to 7 K for plausible nitrogen inventories. In
-Charnay's setting without methane (the Sun at 0.82 of its light, 10
-mbar of CO₂, no thermostat) the model goes from 280.6 K to 285.6 K
-(+5.0 K) at 2 bar and to 289.4 K at 3 bar; the powers 0.1 and 0.3 give
-about +3 K and +8.5 K. The real rise is milder than the strong-line law
-because lines overlap and saturate (Vladilo et al. 2013,
-doi:10.1088/0004-637X/767/1/65, appendix A.3, checked).
-
+Both numbers come from the plateau. More nitrogen lifts it through the
+adiabat (a column of more nitrogen holds less vapour per kelvin of its
+upper levels) and lowers it through broadening: without foreign
+broadening of water the plateau rises by 6.6 % from one to three times
+Earth's nitrogen, with a share of 0.1 it falls by 1 %; with the old knee
+at 1 bar the tempered broadening of a 3x column lifted it by 4 %. The
+knee sits above three times Earth's air (2.55 bar of N₂ and O₂).
 Methane keeps the whole pressure, `P_b = P`: its opacity stands for
 Titan's collision-induced greenhouse, which grows with the nitrogen
-faster than line broadening, not slower. Titan's calibration is
-therefore unchanged, and so is Earth's (`H2O_OPACITY`), whose other
-gases stay under 1 bar.
+faster than line broadening.
 
-Earth at 1 AU now keeps 288 K under its thermostat with 2, 3, 5 and
-10 bar of N₂ (the CO₂ it leaves falls from 270 ppm of a bar to 23, 7,
-0.7 and a trace); past about 11 bar its vapour still runs away once the
-thermostat has no CO₂ left to remove. That remainder is the grey
-model's own moist limit: at Earth's composition the outgoing radiation
-peaks at 253 W/m² (Goldblatt et al. 2013, doi:10.1038/ngeo1892, find
-282 W/m² line by line), barely above the 240 W/m² Earth absorbs, and
-the peak still falls with nitrogen (239 W/m² at twice Earth's N₂, 211
-with the plain square root), whereas the limit of a real moist
-atmosphere is set by the water vapour alone (Nakajima, Hayashi & Abe
-1992, doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2, abstract
-checked). Issue #438 bounded the steam side of that limit (below); this
-moist side stays as it is.
+CO₂ and water vapour count in full for each other's lines: water
+broadens CO₂'s much more than N₂ and O₂ do (Tan, Kochanov, Rothman &
+Gordon 2019, doi:10.1029/2019JD030929, abstract checked), and CO₂
+broadens water's 1.33 to 1.45 times as much as air (Yang et al. 2022,
+doi:10.7498/aps.71.20220700, abstract checked); in water's foreign share
+it counts as air does.
 
-**Steam: the Simpson–Nakajima limit** (`STEAM_MAX_TAU`, issue #438). A
-thick steam atmosphere sends out a fixed flux whatever its surface
-temperature: its emission comes from a level pinned to water's
-saturation curve. Goldblatt, Robinson, Zahnle & Crisp 2013
-(doi:10.1038/ngeo1892, abstract checked) find this limit at 282 W/m²
-(`SIMPSON_NAKAJIMA_W_M2`) line by line; Boukrouche, Lichtenberg &
-Pierrehumbert 2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv
-2107.14150) find 283 W/m² and Hamano et al. 2015
-(doi:10.1088/0004-637X/806/2/216, read in arXiv 1505.03552) 280 W/m².
-The plateau ends when the dry adiabat reaches the emitting levels:
-Boukrouche et al. find it flat from 300 to 1800 K under 260 bar of steam
-(to 1050 K under 10 bar), its end reaching a constant of about 1800 K
-(`STEAM_BREAKDOWN_K`) as the steam thickens to 295 bar, and the radiation
-rising almost exponentially past it; Goldblatt 2015
-(doi:10.1089/ast.2014.1268, read in arXiv 1503.04835) puts the rise past
-1500 K, through the 4 µm window.
+**Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar), an Earth keeps a
+moist balance at 311, 326 and 329 K under 2, 5 and 11 bar of N₂; on the
+old core 2 bar already ran away. The grey column still warms with
+nitrogen more than the 1-D and 3-D models do (Goldblatt et al. 2009,
+doi:10.1038/ngeo692: +4.4 °C for doubled nitrogen on the late Archean
+Earth; Charnay et al. 2013, doi:10.1002/jgrd.50808: +7 °C in a GCM;
+Wolf & Toon 2014, doi:10.1089/ast.2013.1112: 3 to 7 K): in Charnay's
+setting (0.82 of today's Sun, 10 mbar of CO₂, no thermostat) it goes
+from 259 K to 272 K, and an Earth under 2 or 3 bar of N₂ stays at 299
+or 313 K with no CO₂ left for its thermostat to remove. Its OLR rises
+slowly with the surface temperature below the plateau (about 1 W/m² per
+kelvin), so any forcing warms it more than in those models.
 
-The grey law has no such plateau: the opacity of pure steam grows as its
-pressure, `5.9 p`, so the outgoing radiation at a given surface
-temperature falls without bound as the column thickens, and a 1 M⊕
-planet of 30 % water at 0.7 AU came out at 8805 K under 1.6e5 bar of
-steam. The model now caps the water's optical depth at the one with which
-steam alone sends out the limit from a surface at 1800 K:
-
-```text
-τ_H2O ≤ (4/3) (σ T_b⁴ / F_SN − 1) ≈ 2813      T_b = 1800 K, F_SN = 282 W/m²
-```
-
-Pure steam thick enough to reach the cap then sends out `F_SN (T / T_b)⁴`
-from a surface at `T`, whatever its column: no more than the limit up to
-the breakdown, rising past it as from a fixed emitting column (the `T⁴`
-rise is slower than the near-exponential one Boukrouche et al. find, so
-the hot state is an upper estimate); thinner steam sends out more. A pure steam runaway absorbing `A`
-settles at `T_b (A / F_SN)^¼` plus its other gases' greenhouse: the
-30 %-water planet at 0.7 AU (489 W/m² absorbed) now sits at 2076 K,
-2085 K with a third of the water and 57 bar of CO₂. The cap binds past
-about 480 bar of steam (2813 / 5.9, `STEAM_MAX_BAR`), and the steam
-counts in the broadening of the CO₂ lines up to that column only: the
-outgoing radiation comes from levels above it, so the deeper steam no
-more broadens CO₂'s lines there than it adds to water's own opacity.
-Counted whole, the 1.6e5 bar of the 30 %-water planet gave its 6 bar of
-CO₂ an optical depth of about a thousand and put it at 2235 K (2274 K
-with a third of the water). Thinner steam keeps the grey law,
-which emits more than the limit at the breakdown, so its hot state stays
-cooler than Boukrouche et al. find (10 bar of grey steam sends out the
-limit from about 680 K, not 1050 K). The wet climate never reaches the
-cap: its vapour, 77 % of saturation capped at the critical point, is at
-most about 283 bar. The Solar System is unchanged: none of its bodies
-holds that much steam.
+**Steam.** A steam runaway's gases are fixed, its surface no colder than
+the saturation temperature of its steam. Pure steam follows the plateau
+too: 10 bar of it send out 282 W/m² from 700 to 1000 K and leave the
+plateau at about 1290 K, where the dry adiabat from the surface reaches
+the emitting levels (Boukrouche et al. 2021 find about 1050 K under
+10 bar, Goldblatt 2015, doi:10.1089/ast.2014.1268, a rise past 1500 K
+through the 4 µm window; the old grey law sent out the limit from about
+680 K). A grey column has no window, so a deeper steam column leaves the
+plateau ever later (about 2600 K under 300 bar, 20 000 K under the
+1.6e5 bar of a 30 %-water Earth), where Boukrouche et al. find the end
+of the plateau reaching a constant of about 1800 K as the steam thickens
+to 295 bar. The column therefore holds at most 70 bar of steam
+(`STEAM_MAX_BAR`, calibrated so that a thick steam column leaves the
+plateau at 1800 K); the steam under it changes neither the radiation
+nor the broadening of the CO₂ lines. The 30 %-water planet at 0.7 AU
+(489 W/m² absorbed, 1.6e5 bar of steam; 8805 K under the plain grey law,
+2076 K under the old cap) settles at 2131 K.
 
 **Water vapour.** Where water is kept and there is no runaway, the air
 above the ocean or the ice holds 77 % of the saturation pressure (the
@@ -595,24 +569,25 @@ saturation is Clausius–Clapeyron from water's triple point (273.16 K,
 critical point (647 K), and never more than the body's whole water
 would weigh as vapour (`m_water g / (4π R²)`): a trace of water cannot
 put a hundred bar of steam in the air. The temperature and the vapour
-are solved together by iterating from the dry temperature, which climbs
-to the coldest balance. A runaway's steam is already in the gases and is
-kept as it is.
+are solved together (`wet_balance`): the coldest surface temperature
+whose column, its vapour at that temperature, sends out what the surface
+absorbs, scanned up from the black-body temperature in steps of at most
+3 % to the critical point. With none, the absorbed light and heat exceed
+the moist limit and the water runs away (the chain then boils the
+ocean). A runaway's steam is already in the gases and is kept as it is.
 
 **Carbonate thermostat.** On a planet with plates and water, weathering
 draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
 Hays & Kasting 1981, doi:10.1029/JC086iC10p09776). The model sets the CO₂
-by bisection between none and all that is outgassed (never more) so that
-the surface is at `THERMOSTAT_K`, 288 K (a calibration on Earth), the
-vapour taken at that temperature. If all the CO₂ is not enough, it all
-stays in the air and the planet is colder: below 273 K its water freezes
-(weathering stops, so the CO₂ accumulates). If no CO₂ at all is still too
-warm, the planet is hotter. Only a temperature reached is `regulated`.
-The CO₂ the thermostat can use is what the cold trap left: past about
-1.6 AU from the Sun, CO₂ frosts out at the equilibrium temperature and
-an Earth falls short, close to the maximum-greenhouse limit of the
-habitable zone (Kopparapu et al. 2013, about 1.67 AU). The grid's
-`carbon_cycle` is unchanged; part 3 aligns them.
+between none and all that is outgassed (never more) so that a surface at
+`THERMOSTAT_K`, 288 K (a calibration on Earth), the vapour taken at that
+temperature, sends out what it absorbs (solved in `ln CO₂`). If all the
+CO₂ is not enough, it all stays in the air and the planet is colder:
+below 273 K its water freezes (weathering stops, so the CO₂
+accumulates). If no CO₂ at all is still too warm, the planet is hotter.
+Only a temperature reached is `regulated`. The CO₂ the thermostat can
+use is what the cold trap left. The grid's `carbon_cycle` is unchanged;
+part 3 aligns them.
 
 **Surface liquid**, from the phase diagrams at the surface temperature
 and pressure, in this order:
@@ -642,21 +617,22 @@ inputs round the Sun at 4.6 Gyr:
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, 270 ppm CO₂ | 288 ± 6 K, water, regulated | 288 K, 280 ppm before industry |
-| Venus | 735 K, none | 737 ± 50 K, none | 737 K |
-| Mars | 209 K, none | 210 ± 12 K, none | about 210 K |
+| Earth | 288 K, water, regulated, 0.009 bar of CO₂ | 288 ± 6 K, water, regulated, under 0.01 bar of CO₂ | 288 K, 280 ppm before industry |
+| Venus | 737 K, none | 737 ± 50 K, none | 737 K |
+| Mars | 207 K, none | 210 ± 12 K, none | about 210 K |
 | Titan | 94 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | 410 K, its equilibrium temperature | within 1 K of it | airless |
 
-An Earth moved round the Sun keeps 288 K out to 1.5 AU (0.17 bar of CO₂
-at 1.2 AU, 0.8 bar at 1.4 AU, 1.2 bar at 1.5 AU), is just short at
-1.6 AU (287.8 K, all its 1.8 bar of CO₂ in the air, its water liquid)
-and freezes beyond (258 K at 1.7 AU, 234 K at 1.8 AU), close to the
-maximum-greenhouse limit of Kopparapu et al. 2013 (about 1.67 AU). Its
-N₂ stays under 1 bar, so the tempering of thick air leaves this track as
-it was before issue #440; counting CO₂ as an ordinary foreign gas of
-water had put it at 281 K at 1.6 AU. At 0.9 AU it has run away (702 K, no water); at
-0.01 AU it is a lava world.
+Earth's thermostat needs 0.009 bar of CO₂ on the column, thirty times
+the pre-industrial 280 ppm (270 ppm on the old core): the grey water
+vapour leaves more of Earth's greenhouse to CO₂. An Earth moved round
+the Sun keeps 288 K out to 1.4 AU (1.1 bar of CO₂ at 1.2 AU, 2.9 bar at
+1.4 AU) and freezes beyond (273 K at 1.5 AU, 243 K at 1.6 AU with all
+its 1.8 bar of CO₂ in the air, 224 K at 1.7 AU): on the old core it
+held to 1.6 AU, close to the maximum-greenhouse limit of Kopparapu et
+al. 2013 (about 1.67 AU), which the grey CO₂ of the column now falls
+short of. At 0.9 AU it has run away (717 K, no water); at 0.01 AU it is
+a lava world.
 
 ## Life
 
