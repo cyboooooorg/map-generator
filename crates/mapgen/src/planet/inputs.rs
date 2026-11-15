@@ -556,8 +556,18 @@ mod tests {
             let a = draw_inputs(&earth_context(), 1.0, &mut rng(seed));
             let b = draw_inputs_with(&earth_context(), 1.0, &o, &mut rng(seed));
             assert_eq!(
-                (a.radiogenic, a.life_draw, a.core_mass_fraction, a.water_fraction),
-                (b.radiogenic, b.life_draw, b.core_mass_fraction, b.water_fraction)
+                (
+                    a.radiogenic,
+                    a.life_draw,
+                    a.core_mass_fraction,
+                    a.water_fraction
+                ),
+                (
+                    b.radiogenic,
+                    b.life_draw,
+                    b.core_mass_fraction,
+                    b.water_fraction
+                )
             );
             assert_eq!(
                 (a.volatiles.co2, a.volatiles.n2, a.volatiles.ch4),
