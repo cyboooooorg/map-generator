@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
+import type { FormSpec } from './api/types/FormSpec';
 import type { InputField } from './api/types/InputField';
-import { fieldOf, marks, scaleOf } from './modelFields';
+import { fieldOf, marks, referencesOf, scaleOf } from './modelFields';
 
 const FIELDS: Record<InputField, true> = {
   mass_earth: true, core_mass_fraction: true, water_oceans: true, envelope_fraction: true, co2: true, n2: true, ch4: true,
   radiogenic: true, life: true, insolation: true, eccentricity: true, age_gyr: true,
 };
-const archetype = (spec: string, inputs: ArchetypeInfo['inputs']): ArchetypeInfo =>
-  ({ spec, name: spec, description: '', built_in: true, inputs }) as unknown as ArchetypeInfo;
-const archetypes = [
-  archetype('earth-like', { mass_earth: [0.9, 1.1], co2: 1 }),
-  archetype('mars-like', { mass_earth: [0.096, 0.118], co2: 0.3 }),
-  archetype('titan-like', { mass_earth: [0.02, 0.025], ch4: [1, 2] }),
-];
+const ref = (body: string, field: string, value: number) => ({ body, field, value });
+const spec = {
+  references: [
+    ref('earth', 'mass_earth', 1), ref('mars', 'mass_earth', 0.107), ref('venus', 'mass_earth', 0.815), ref('titan', 'mass_earth', 0.0225),
+    ref('jupiter', 'mass_earth', 317.8),
+    ref('earth', 'water_oceans', 1), ref('mars', 'water_oceans', 0), ref('venus', 'water_oceans', 0),
+    ref('earth', 'ch4', 1),
+  ],
+} as unknown as Pick<FormSpec, 'references'>;
 
 describe('modelFields', () => {
   it('places every input field', () => {
@@ -25,16 +27,22 @@ describe('modelFields', () => {
     expect(scaleOf('mass_earth')).toBe('log');
     expect(scaleOf('eccentricity')).toBe('linear');
   });
-  it('marks Earth at 1 and Mars at about 0.107 on the mass', () => {
-    const found = marks('mass_earth', archetypes);
-    expect(found.find((m) => m.body === 'earth')!.value).toBeCloseTo(1, 1);
-    expect(found.find((m) => m.body === 'mars')!.value).toBeCloseTo(0.107, 2);
+  it('reads the references of a field by body', () => {
+    expect(referencesOf('mass_earth', spec).get('jupiter')).toBe(317.8);
+    expect(referencesOf('life', spec).size).toBe(0);
   });
-  it('skips a body that does not set the field', () => {
-    expect(marks('ch4', archetypes).map((m) => m.body)).toEqual(['titan']);
+  it('marks the four bodies at the values the server sends, never at an archetype’s mean', () => {
+    const found = marks('mass_earth', spec);
+    expect(found.map((m) => [m.bodies[0], m.value])).toEqual([['earth', 1], ['mars', 0.107], ['venus', 0.815], ['titan', 0.0225]]);
+  });
+  it('skips a body the server has no value for, and the giants', () => {
+    expect(marks('ch4', spec).map((m) => m.bodies)).toEqual([['earth']]);
+  });
+  it('groups the bodies that sit at one value', () => {
+    expect(marks('water_oceans', spec).map((m) => m.bodies)).toEqual([['earth'], ['mars', 'venus']]);
   });
   it('drops a mark outside the limits', () => {
-    const found = marks('mass_earth', archetypes, { min: 0.05, max: 10 });
-    expect(found.map((m) => m.body)).toEqual(['earth', 'mars']);
+    const found = marks('mass_earth', spec, { min: 0.05, max: 10 });
+    expect(found.map((m) => m.bodies[0])).toEqual(['earth', 'mars', 'venus']);
   });
 });

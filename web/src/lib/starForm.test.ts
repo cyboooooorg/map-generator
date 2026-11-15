@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
+import type { FormSpec } from './api/types/FormSpec';
 import type { WorldRequest } from './api/types/WorldRequest';
-import { applyStarChoice, initialStarChoice, parseStarChoice, parseStarType, starType } from './starForm';
+import { applyStarChoice, initialStarChoice, parseStarChoice, parseStarType, starLightOf, starType } from './starForm';
 
 const archetype = (orbit: Partial<ArchetypeInfo['orbit']>) => ({ orbit }) as ArchetypeInfo;
 
@@ -49,5 +50,17 @@ describe('star form', () => {
   it('refuses malformed remembered choices', () => {
     expect(parseStarChoice({ klass: 'Q', subtype: 1 })).toBeNull();
     expect(parseStarChoice(null)).toBeNull();
+  });
+});
+
+describe('starLightOf', () => {
+  const spec = { star_colours: [{ spectral_type: 'G2V', light: [1, 0.95, 0.9] }, { spectral_type: 'M4.5V', light: [1, 0.6, 0.3] }] } as unknown as Pick<FormSpec, 'star_colours'>;
+  it('reads the light of the chosen type from the server’s colours', () => {
+    expect(starLightOf(spec, 'G', 2)).toEqual([1, 0.95, 0.9]);
+    expect(starLightOf(spec, 'M', 4.5)).toEqual([1, 0.6, 0.3]);
+  });
+  it('has none for a drawn star or an unknown type', () => {
+    expect(starLightOf(spec, '', 2)).toBeNull();
+    expect(starLightOf(spec, 'K', 1)).toBeNull();
   });
 });

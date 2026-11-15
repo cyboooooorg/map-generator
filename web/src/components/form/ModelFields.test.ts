@@ -1,6 +1,5 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import type { ArchetypeInfo } from '../../lib/api/types/ArchetypeInfo';
 import type { ErrorDetail } from '../../lib/api/types/ErrorDetail';
 import type { FormSpec } from '../../lib/api/types/FormSpec';
 import type { Quantity } from '../../lib/api/types/Quantity';
@@ -10,21 +9,21 @@ import ModelFields from './ModelFields.svelte';
 
 const spec = {
   eccentricity: { min: 0, max: 0.9 },
+  references: [
+    { body: 'earth', field: 'mass_earth', value: 1 }, { body: 'mars', field: 'mass_earth', value: 0.107 },
+    { body: 'neptune', field: 'mass_earth', value: 17.15 }, { body: 'jupiter', field: 'mass_earth', value: 317.8 },
+    { body: 'earth', field: 'core_mass_fraction', value: 0.325 }, { body: 'mercury', field: 'core_mass_fraction', value: 0.7 },
+  ],
   inputs: {
     mass_earth: { min: 0.01, max: 4131 }, core_mass_fraction: { min: 0, max: 0.9 }, water_oceans: { min: 0, max: 1e6 },
     envelope_fraction: { min: 0, max: 0.999 }, co2: { min: 0, max: 100 }, n2: { min: 0, max: 100 }, ch4: { min: 0, max: 100 },
     radiogenic: { min: 0.1, max: 10 }, axial_tilt_deg: { min: 0, max: 90 }, age_gyr: { min: 0, max: 1e4 },
   },
 } as unknown as FormSpec;
-const archetype = (name: string, mass: number): ArchetypeInfo =>
-  ({ spec: `${name}-like`, name: `${name}-like`, description: '', built_in: true, inputs: { mass_earth: mass } }) as unknown as ArchetypeInfo;
-const archetypes = [archetype('earth', 1), archetype('mars', 0.107), archetype('venus', 0.815)];
-
 function html(over: { values?: ModelValues; drawn?: DrawnValues | null; ignored?: string[]; refusal?: ErrorDetail | null; open?: Set<string>; driven?: Quantity[] | ((key: string) => Quantity[]); explained?: boolean } = {}): string {
   return render(ModelFields, {
     props: {
       spec,
-      archetypes,
       values: over.values ?? initialModelValues(null),
       drawn: over.drawn ?? null,
       driven: (key: string) => (typeof over.driven === 'function' ? over.driven(key) : (over.driven ?? [])),
@@ -78,15 +77,33 @@ describe('ModelFields', () => {
     const values = initialModelValues({ mass_earth: 2 });
     const mass = field(html({ values }), 'mass_earth');
     expect(mass).toContain('type="range"');
-    expect(mass).toMatch(/class="marks[ "]/);
-    expect(mass).toContain(`${t.form.model.marks.earth} 1`);
-    expect(mass).toContain(`${t.form.model.marks.mars} 0.107`);
+    expect(mass).toContain(`aria-label="${t.form.model.referencesMass}.`);
+    expect(mass).toContain(`${t.form.model.bodies.earth} 1`);
+    expect(mass).toContain(`${t.form.model.bodies.mars} 0.107`);
+    // A mass is also said in tonnes, on the chips and beside the unit.
+    expect(mass).toContain('(5.97×10²¹ t)');
+    expect(mass).toContain('(6.39×10²⁰ t)');
+  });
+
+  it('draws the ticks and the chips from the server’s values for every field with marks', () => {
+    const cmf = field(html({ values: initialModelValues({ core_mass_fraction: 0.5 }) }), 'core_mass_fraction');
+    expect(cmf).toContain(`${t.form.model.bodies.earth} 32.5 %`);
+    expect(cmf.match(/class="tick[ "]/g)).toHaveLength(1);
+    // The server sent nothing for Mars: no Mars chip, nothing from an archetype.
+    expect(cmf).not.toContain(t.form.model.bodies.mars);
+  });
+
+  it('quotes the same reference values in the help line as on the chips', () => {
+    const out = html({ values: initialModelValues({ mass_earth: 2 }) });
+    const line = field(out, 'mass_earth').match(/<p class="unit-help references[^"]*">([^<]*)<\/p>/)![1]!;
+    expect(line).toBe('Reference masses: Mars 0.107 · Earth 1 · Neptune 17.15 · Jupiter 317.8');
+    expect(field(out, 'core_mass_fraction')).toContain('Reference values: Earth 32.5 % · Mercury 70 %');
   });
 
   it('shows the drawn value, greyed, on a drawn field', () => {
     const out = html({ drawn: { mass_earth: 1.085, water_oceans: 0.9 } });
     const mass = field(out, 'mass_earth');
-    expect(mass).toContain('Drawn: 1.085');
+    expect(mass).toContain('Drawn: 1.085 M⊕ (6.48×10²¹ t)');
     expect(mass).not.toContain('type="range"');
     expect(field(out, 'water_oceans')).toContain('Drawn: 0.9 Earth oceans');
   });

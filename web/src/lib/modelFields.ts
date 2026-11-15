@@ -1,10 +1,8 @@
 // The planet-model inputs the generate form offers for a lone world: their
 // groups, scales, limits and the Solar System marks on their sliders.
-import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
 import type { FormSpec } from './api/types/FormSpec';
 import type { InputField } from './api/types/InputField';
 import type { Limits } from './api/types/Limits';
-import type { ParamDefault } from './api/types/ParamDefault';
 
 export type ModelFieldKey =
   | 'mass_earth' | 'core_mass_fraction' | 'water_oceans' | 'envelope_fraction' | 'co2' | 'n2' | 'ch4'
@@ -30,35 +28,49 @@ export function scaleOf(key: ModelFieldKey): 'log' | 'linear' {
   return LOG_FIELDS.has(key) ? 'log' : 'linear';
 }
 
-export type Mark = { body: 'earth' | 'mars' | 'venus' | 'titan'; value: number };
+/** The Solar System bodies a field names, chips and ticks included (the server sends the values). */
+export type MarkBody = 'earth' | 'mars' | 'venus' | 'titan';
+const MARK_BODIES: MarkBody[] = ['earth', 'mars', 'venus', 'titan'];
 
-const MARK_BODIES: [Mark['body'], string][] = [
-  ['earth', 'earth-like'], ['mars', 'mars-like'], ['venus', 'venus-like'], ['titan', 'titan-like'],
-];
+/** A reference mark: the bodies that sit at one value of a field (Mars and Venus both hold no water). */
+export type Mark = { bodies: MarkBody[]; value: number };
+
+/** The Solar System values of a field, by body (lower-case name, as the server sends them). */
+export function referencesOf(key: ModelFieldKey, spec: Pick<FormSpec, 'references'>): Map<string, number> {
+  return new Map(spec.references.filter((r) => r.field === key).map((r) => [r.body, r.value]));
+}
+
+/** The bodies whose values the help text of a field quotes, in order (the numbers come from the server). */
+export const HELP_BODIES: Partial<Record<ModelFieldKey, string[]>> = {
+  mass_earth: ['mars', 'earth', 'neptune', 'jupiter'],
+  core_mass_fraction: ['earth', 'mercury'],
+  water_oceans: ['mars', 'earth', 'titan'],
+  envelope_fraction: ['earth', 'neptune', 'jupiter'],
+  eccentricity: ['venus', 'earth', 'mars', 'mercury'],
+  age_gyr: ['earth'],
+};
 
 /** The limits of a field, undefined for the checkbox. */
 export function limitsOf(key: Exclude<ModelFieldKey, 'life'>, spec: FormSpec): Limits {
   return key === 'eccentricity' ? spec.eccentricity : spec.inputs[key];
 }
 
-function centre(value: ParamDefault, log: boolean): number {
-  if (typeof value === 'number') return value;
-  const [lo, hi] = value;
-  // A geometric mean needs positive bounds (Venus's water starts at 0).
-  return log && lo > 0 && hi > 0 ? Math.sqrt(lo * hi) : (lo + hi) / 2;
-}
-
-/** Where the built-in Earth, Mars, Venus and Titan archetypes sit on a field, those in its limits only. */
-export function marks(key: ModelFieldKey, archetypes: ArchetypeInfo[], limits?: Limits): Mark[] {
-  if (key === 'life' || key === 'eccentricity' || key === 'age_gyr') return [];
+/**
+ * Where Earth, Mars, Venus and Titan sit on a field (the real Solar System
+ * values the server sends, `FormSpec.references`), those in its limits only;
+ * bodies at the same value share one mark.
+ */
+export function marks(key: ModelFieldKey, spec: Pick<FormSpec, 'references'>, limits?: Limits): Mark[] {
+  if (key === 'life') return [];
+  const refs = referencesOf(key, spec);
   const out: Mark[] = [];
-  for (const [body, spec] of MARK_BODIES) {
-    const info = archetypes.find((a) => a.built_in && a.spec === spec);
-    const set = info?.inputs[key];
-    if (set === undefined || set === null) continue;
-    const value = centre(set, scaleOf(key) === 'log');
+  for (const body of MARK_BODIES) {
+    const value = refs.get(body);
+    if (value === undefined) continue;
     if (limits && (value < limits.min || value > limits.max)) continue;
-    out.push({ body, value });
+    const same = out.find((m) => m.value === value);
+    if (same) same.bodies.push(body);
+    else out.push({ bodies: [body], value });
   }
   return out;
 }

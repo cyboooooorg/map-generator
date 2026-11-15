@@ -3,6 +3,7 @@
 // fallback) and how it goes into a request.
 import type { ParamDefault } from './api/types/ParamDefault';
 import type { ArchetypeInfo } from './api/types/ArchetypeInfo';
+import type { FormSpec } from './api/types/FormSpec';
 import type { WorldRequest } from './api/types/WorldRequest';
 
 /** Spectral classes, hottest first (main-sequence dwarfs, O3V to M9.5V). */
@@ -144,4 +145,15 @@ export function parseStarChoice(raw: unknown): StarChoice | null {
     eccentricityRandom: typeof r.eccentricityRandom === 'boolean' ? r.eccentricityRandom : true,
     eccentricity: finite(r.eccentricity) ? r.eccentricity : 0.1,
   };
+}
+
+/**
+ * The colour of the light of the star a class and subtype make, linear RGB as
+ * the viewer draws stars (the server computes it, `FormSpec.star_colours`),
+ * or null for a class left to the draw.
+ */
+export function starLightOf(spec: Pick<FormSpec, 'star_colours'>, klass: string, subtype: number): [number, number, number] | null {
+  if (klass === '') return null;
+  const type = starType(klass, subtype);
+  return spec.star_colours.find((c) => c.spectral_type === type)?.light ?? null;
 }

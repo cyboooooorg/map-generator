@@ -6,18 +6,18 @@
   import { setPinned } from '../../lib/modelRequest';
   import { t } from '../../lib/i18n/index.svelte';
   import { detailText, errorField } from '../../lib/i18n/errors';
-  import { formatUpTo } from '../../lib/format';
-  import type { ArchetypeInfo } from '../../lib/api/types/ArchetypeInfo';
   import type { ErrorDetail } from '../../lib/api/types/ErrorDetail';
   import type { FormSpec } from '../../lib/api/types/FormSpec';
   import type { Quantity } from '../../lib/api/types/Quantity';
   import { limitsOf, marks, MODEL_GROUPS, type ModelFieldKey } from '../../lib/modelFields';
+  import { fieldValueText, markName, referencesLabel, referencesLine, referenceValueText } from '../../lib/modelFormat';
+  import { massNote } from '../../lib/massFormat';
+  import MarkedSlider, { type SliderMark } from './MarkedSlider.svelte';
   import { type DrawnValues, type ModelValues, PIN_DEFAULTS, pinnedCount } from '../../lib/modelRequest';
   import { fromPosition, fromShown, SLIDER_STEPS, toPosition, toShown } from '../../lib/modelScale';
 
   interface Props {
     spec: FormSpec;
-    archetypes: ArchetypeInfo[];
     values: ModelValues;
     /** What the seed drew, from the preview; null before the first answer. */
     drawn: DrawnValues | null;
@@ -33,7 +33,7 @@
     open: Set<string>;
   }
 
-  let { spec, archetypes, values = $bindable(), drawn, driven, ignored, explained, refusal, open }: Props = $props();
+  let { spec, values = $bindable(), drawn, driven, ignored, explained, refusal, open }: Props = $props();
 
   const refusedField = $derived(refusal ? errorField(refusal) : null);
   const numeric = (key: Exclude<ModelFieldKey, 'life'>) => values[key].value as number;
@@ -49,8 +49,15 @@
   function setValue(key: Exclude<ModelFieldKey, 'life'>, value: number): void {
     setPinned(values, key, value);
   }
-  function shownText(key: Exclude<ModelFieldKey, 'life'>, value: number): string {
-    return `${formatUpTo(toShown(key, value), 3)} ${t.form.model[key].unit}`.trim();
+  /** The reference marks of a slider: a tick and a chip each, from the server's Solar System values. */
+  function sliderMarks(key: Exclude<ModelFieldKey, 'life'>, limits: ReturnType<typeof limitsOf>): SliderMark[] {
+    return marks(key, spec, limits).map((mark) => ({
+      fraction: toPosition(key, mark.value, limits) / SLIDER_STEPS,
+      label: `${markName(mark.bodies)} ${referenceValueText(key, mark.value)}`,
+      ...(key === 'mass_earth' ? { note: `(${massNote(mark.value)})` } : {}),
+      ...(mark.bodies.includes('earth') ? { earth: true } : {}),
+      onpick: () => setValue(key, mark.value),
+    }));
   }
   const driveText = (key: ModelFieldKey) => {
     const roots = driven(key);
@@ -119,21 +126,22 @@
             {#if entry.random}
               <p class="drawn">
                 {#if typeof drawn?.[key] === 'number'}
-                  {t.form.model.drawnValue({ value: shownText(key, drawn[key] as number) })}
+                  {t.form.model.drawnValue({ value: fieldValueText(key, drawn[key] as number) })}
                 {:else}
                   {t.form.model.drawn}: {t.form.model.drawnUnknown}
                 {/if}
               </p>
             {:else}
               <div class="slider">
-                <input
-                  type="range"
-                  min="0"
+                <MarkedSlider
+                  min={0}
                   max={SLIDER_STEPS}
-                  step="1"
+                  step={1}
                   value={toPosition(key, numeric(key), limits)}
-                  oninput={(e) => setValue(key, fromPosition(key, Number(e.currentTarget.value), limits))}
-                  aria-label={text.label}
+                  label={text.label}
+                  oninput={(position) => setValue(key, fromPosition(key, position, limits))}
+                  marks={sliderMarks(key, limits)}
+                  marksLabel={`${referencesLabel(key)}. ${t.form.model.markHelp}`}
                 />
                 <input
                   type="number"
@@ -144,28 +152,14 @@
                   oninput={(e) => setValue(key, fromShown(key, e.currentTarget.valueAsNumber))}
                   aria-label={`${text.label} (${text.unit})`}
                 />
-                <span class="unit">{text.unit}</span>
+                <span class="unit">{text.unit}{#if key === 'mass_earth'}<small> ({massNote(numeric(key))})</small>{/if}</span>
               </div>
-              {@const found = marks(key, archetypes, limits)}
-              {#if found.length > 0}
-                <div class="marks" aria-label={t.form.model.marksLabel}>
-                  <div class="track" aria-hidden="true">
-                    {#each found as mark (mark.body)}
-                      <span class="tick {mark.body}" style:left={`${(toPosition(key, mark.value, limits) / SLIDER_STEPS) * 100}%`}></span>
-                    {/each}
-                  </div>
-                  <div class="chips">
-                    {#each found as mark (mark.body)}
-                      <button type="button" class="chip" onclick={() => setValue(key, mark.value)} title={t.form.model.marksLabel}
-                        >{t.form.model.marks[mark.body]} {formatUpTo(toShown(key, mark.value), 3)}</button
-                      >
-                    {/each}
-                  </div>
-                </div>
-              {/if}
             {/if}
           {/if}
           <p class="unit-help">{text.unitHelp}</p>
+          {#if referencesLine(key, spec)}
+            <p class="unit-help references">{referencesLine(key, spec)}</p>
+          {/if}
           {#if refusal && refusedField === key}
             <p class="error" role="alert">{detailText(refusal)}</p>
           {/if}
@@ -256,48 +250,18 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(5em, 7em) auto;
     gap: 8px;
-    align-items: center;
+    align-items: start;
   }
   .slider > input {
     min-width: 0;
     width: 100%;
   }
   .unit {
+    align-self: center;
     color: var(--muted);
     font-size: 0.85rem;
   }
-  .marks {
-    display: grid;
-    gap: 4px;
-  }
-  .track {
-    position: relative;
-    height: 6px;
-    margin: 0 8px;
-  }
-  .tick {
-    position: absolute;
-    top: 0;
-    width: 2px;
-    height: 6px;
-    background: var(--muted);
-    transform: translateX(-1px);
-  }
-  .tick.earth {
-    background: var(--link);
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .chip {
-    padding: 0 8px;
-    font-size: 0.8rem;
-    border-radius: 10px;
-    color: var(--muted);
-  }
-  .chip:hover {
+  .references {
     color: var(--link);
   }
   .life {
