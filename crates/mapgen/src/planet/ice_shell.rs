@@ -4,7 +4,8 @@
 //! where the tides heat it most; a shell thick enough convects under a
 //! stagnant lid, and when convection carries out more heat than comes in,
 //! the ocean freezes until the ammonia it concentrates stops it, or
-//! entirely. The water below the shell's base stays liquid down to where
+//! entirely. The shell's base melts colder under its pressure and the
+//! ammonia of the ocean; the water below it stays liquid down to where
 //! the pressure turns it to high-pressure ice.
 use serde::{Deserialize, Serialize};
 
@@ -20,10 +21,12 @@ use crate::exomoon::{EARTH_KG, EARTH_M, G};
 /// Spohn 2006, doi:10.1016/j.icarus.2006.06.005).
 pub const ICE_CONDUCTIVITY_W_M: f64 = 651.0;
 
-/// Melting point of pure water ice, K: the temperature at the base of a
-/// shell over an ocean without ammonia, and [`liquidus_k`] at none.
-/// Calibration, no source, for 273 rather than 273.15. Salts, which
-/// would lower it, are left out.
+/// Melting point of pure water ice at low pressure, K: [`liquidus_k`]
+/// at no ammonia, the reference of its lowering, and the surface
+/// temperature at which a body's ice no longer counts as frozen.
+/// Calibration, no source, for 273 rather than 273.15 (the base of a
+/// shell melts on [`ice_melting_k`], 273.16 K at no pressure). Salts,
+/// which would lower it, are left out.
 pub const MELT_K: f64 = 273.0;
 
 /// Ammonia mass fraction of the H₂O–NH₃ eutectic, about a third
@@ -124,15 +127,62 @@ const GRAIN_SIZE_M: f64 = 0.03;
 const ONSET_COEFFICIENT: f64 = 20.9;
 
 /// Coefficient of the heat flux of stagnant-lid convection in a Newtonian
-/// fluid (Solomatov & Moresi 2000, doi:10.1029/2000JE001245, about 0.53),
-/// in [`convective_flux_w_m2`].
+/// fluid (Solomatov & Moresi 2000, doi:10.1029/2000JB900197, about 0.53,
+/// not checked), in [`convective_flux_w_m2`].
 const CONVECTIVE_COEFFICIENT: f64 = 0.53;
 
 /// Temperature drop across the rheological sublayer at the base of a
-/// stagnant lid, in units of `R T_i² / Q` (Solomatov & Moresi 2000,
-/// doi:10.1029/2000JE001245, about 2.4 for a Newtonian fluid, not
-/// checked): the lid conducts down to `T_i − 2.4 R T_i² / Q`.
-const RHEOLOGICAL_DROP: f64 = 2.4;
+/// stagnant lid, in units of `R T_i² / Q`: "estimates typically give
+/// a_rh ≈ 2" (Foley & Bercovici 2014, arXiv:1410.7652, citing Solomatov
+/// & Moresi 2000, doi:10.1029/2000JB900197, and Korenaga 2009): the lid
+/// conducts down to `T_i − 2 R T_i² / Q`.
+const RHEOLOGICAL_DROP: f64 = 2.0;
+
+/// Ice Ih–liquid melting curve of the IAPWS (Wagner, Riethmann, Feistel &
+/// Harvey 2011, doi:10.1063/1.3657937): `p / p_t = 1 + Σ aᵢ (1 − θ^bᵢ)`,
+/// `θ = T / 273.16 K`, `p_t` = 611.657 Pa, with these `(aᵢ, bᵢ)`. It
+/// runs from 273.16 K at the triple point down to the ice Ih–III–liquid
+/// triple point, [`ICE_III_TRIPLE`].
+const MELTING_IH: [(f64, f64); 3] = [
+    (0.119_539_337e7, 0.3e1),
+    (0.808_183_159e5, 0.2575e2),
+    (0.333_826_860e4, 0.10375e3),
+];
+
+/// The ice Ih–III–liquid triple point, (K, Pa) (Wagner et al. 2011,
+/// doi:10.1063/1.3657937): 251.165 K, 208.566 MPa. Deeper, the base of the
+/// shell is ice III, whose melting curve is
+/// `p / p_t = 1 − 0.299948 (1 − θ⁶⁰)` from it, `θ = T / 251.165 K`, up to
+/// 256.164 K at [`HIGH_PRESSURE_ICE_PA`].
+const ICE_III_TRIPLE: (f64, f64) = (251.165, 208.566e6);
+
+/// Pressure, Pa, at the centre of a body under which its rock core
+/// stays unconsolidated, a porous pile of fragments that water flows
+/// through and its tides heat (Roberts 2015,
+/// doi:10.1016/j.icarus.2015.05.033; Choblet et al. 2017,
+/// doi:10.1038/s41550-017-0289-8, with 20 to 30 % porosity at Enceladus).
+/// Calibration, no source for the value: it lies between the centre of
+/// an asked Enceladus (92 to 108 MPa in the model, whose iron core
+/// concentrates its mass; about 35 MPa for a uniform rock core) and those
+/// of Europa, Ganymede, Titan and Callisto (6 to 13 GPa), where the pores
+/// close.
+const UNCONSOLIDATED_CORE_PA: f64 = 300e6;
+
+/// Angular radius, degrees, of the polar caps over which the hydrothermal
+/// plumes of an unconsolidated core rise ([`core_plume_pattern`]): about
+/// the size of Enceladus's tiger-stripe region, four fractures 130 km
+/// long and 35 km apart (Porco et al. 2006, doi:10.1126/science.1123013),
+/// some 140 km across on a 252 km moon. Calibration on Enceladus.
+const PLUME_CAP_DEG: f64 = 16.0;
+
+/// Share of the tidal heat of an unconsolidated core that its plumes
+/// carry to the polar caps ([`PLUME_CAP_DEG`]), the rest reaching the
+/// shell evenly (Choblet et al. 2017, doi:10.1038/s41550-017-0289-8:
+/// hot spots of 1 to 5 GW, chiefly at the poles). Calibration on Čadek
+/// et al. 2016 (doi:10.1002/2016GL068634): the shell under 5 km at the
+/// south pole over a mean of 18 to 22 km, a quarter of it or less; at
+/// 0.14 the asked Enceladus's polar shell is 0.23 of its mean.
+const PLUME_SHARE: f64 = 0.14;
 
 /// Latitude bands, from the equator to a pole at equal area, over which
 /// [`ice_shell`] averages the shell thickness.
@@ -176,9 +226,10 @@ pub struct IceShell {
     /// before it existed.
     #[serde(default)]
     pub polar_shell_km: f64,
-    /// Temperature at the base of the shell, K: the [`liquidus_k`] of the
-    /// ocean's ammonia, concentrated as the ocean froze; 0 in a model
-    /// stored before it existed.
+    /// Temperature at the base of the shell, K: the melting point of ice
+    /// at the base's pressure ([`ice_melting_k`]) lowered by the ocean's
+    /// ammonia, concentrated as the ocean froze ([`liquidus_k`]); 0 in a
+    /// model stored before it existed.
     #[serde(default)]
     pub liquidus_k: f64,
 }
@@ -244,10 +295,49 @@ pub fn tidal_pattern(mu: f64) -> f64 {
 /// source, for the factor 2). Grain-boundary diffusion, which matters only
 /// under a millimetre, is left out. About 3·10¹⁷ Pa s at 273 K.
 pub fn ice_viscosity_pa_s(temperature_k: f64) -> f64 {
-    let diffusion =
-        ICE_DIFFUSION_M2_S * (-ICE_ACTIVATION_J_MOL / (GAS_CONSTANT * temperature_k)).exp();
-    GAS_CONSTANT * temperature_k * GRAIN_SIZE_M * GRAIN_SIZE_M
-        / (84.0 * ICE_MOLAR_VOLUME_M3 * diffusion)
+    Ice::SHELL.viscosity_pa_s(temperature_k)
+}
+
+/// Ice of a given grain size, whose viscosity sets how it convects.
+#[derive(Clone, Copy, Debug)]
+struct Ice {
+    /// Grain size, m.
+    grain_m: f64,
+}
+
+impl Ice {
+    /// The ice of a shell, its grains [`GRAIN_SIZE_M`].
+    const SHELL: Self = Self {
+        grain_m: GRAIN_SIZE_M,
+    };
+
+    /// See [`ice_viscosity_pa_s`].
+    fn viscosity_pa_s(self, temperature_k: f64) -> f64 {
+        let diffusion =
+            ICE_DIFFUSION_M2_S * (-ICE_ACTIVATION_J_MOL / (GAS_CONSTANT * temperature_k)).exp();
+        GAS_CONSTANT * temperature_k * self.grain_m * self.grain_m
+            / (84.0 * ICE_MOLAR_VOLUME_M3 * diffusion)
+    }
+
+    /// See [`convects`].
+    fn convects(self, shell_m: f64, base_k: f64, surface_k: f64, gravity: f64) -> bool {
+        let drop = base_k - surface_k;
+        if !(shell_m > 0.0 && drop > 0.0) {
+            return false;
+        }
+        let rayleigh = ICE_DENSITY * gravity * ICE_EXPANSIVITY * drop * shell_m.powi(3)
+            / (diffusivity_m2_s(base_k) * self.viscosity_pa_s(base_k));
+        let theta = drop / rheological_k(base_k);
+        rayleigh >= ONSET_COEFFICIENT * theta.powi(4)
+    }
+
+    /// See [`convective_flux_w_m2`].
+    fn convective_flux_w_m2(self, base_k: f64, gravity: f64) -> f64 {
+        let k = ICE_CONDUCTIVITY_W_M / base_k;
+        let buoyancy = ICE_DENSITY * gravity * ICE_EXPANSIVITY
+            / (diffusivity_m2_s(base_k) * self.viscosity_pa_s(base_k));
+        CONVECTIVE_COEFFICIENT * k * rheological_k(base_k).powf(4.0 / 3.0) * buoyancy.cbrt()
+    }
 }
 
 /// Thermal diffusivity of ice at `temperature_k`, m²/s: its conductivity
@@ -270,14 +360,7 @@ fn rheological_k(base_k: f64) -> f64 {
 /// Barr & McKinnon 2007, doi:10.1029/2006JE002781). With 30 mm grains a
 /// Ganymede's shell convects from about 280 km, an Enceladus's never.
 pub fn convects(shell_m: f64, base_k: f64, surface_k: f64, gravity: f64) -> bool {
-    let drop = base_k - surface_k;
-    if !(shell_m > 0.0 && drop > 0.0) {
-        return false;
-    }
-    let rayleigh = ICE_DENSITY * gravity * ICE_EXPANSIVITY * drop * shell_m.powi(3)
-        / (diffusivity_m2_s(base_k) * ice_viscosity_pa_s(base_k));
-    let theta = drop / rheological_k(base_k);
-    rayleigh >= ONSET_COEFFICIENT * theta.powi(4)
+    Ice::SHELL.convects(shell_m, base_k, surface_k, gravity)
 }
 
 /// Heat flux, W/m², that a convecting ice shell over an ocean at `base_k`
@@ -291,26 +374,136 @@ pub fn convects(shell_m: f64, base_k: f64, surface_k: f64, gravity: f64) -> bool
 /// slightly colder interior of the convecting layer, which overestimates
 /// it a little.
 pub fn convective_flux_w_m2(base_k: f64, gravity: f64) -> f64 {
-    let k = ICE_CONDUCTIVITY_W_M / base_k;
-    let buoyancy = ICE_DENSITY * gravity * ICE_EXPANSIVITY
-        / (diffusivity_m2_s(base_k) * ice_viscosity_pa_s(base_k));
-    CONVECTIVE_COEFFICIENT * k * rheological_k(base_k).powf(4.0 / 3.0) * buoyancy.cbrt()
+    Ice::SHELL.convective_flux_w_m2(base_k, gravity)
 }
 
-/// The ammonia mass fraction, kg/kg, whose [`liquidus_k`] is
-/// `temperature_k`, from 0 (at 273 K or warmer) to [`NH3_EUTECTIC`] (at
-/// the eutectic or colder): the inverse of the liquidus, by bisection.
-fn nh3_at_liquidus(temperature_k: f64) -> f64 {
-    let (mut lo, mut hi) = (0.0, NH3_EUTECTIC);
+/// Melting temperature, K, of ice under `pressure_pa`: on the ice Ih
+/// curve [`MELTING_IH`] down to [`ICE_III_TRIPLE`], then on the ice III
+/// curve up to [`HIGH_PRESSURE_ICE_PA`], held there beyond (Wagner et al.
+/// 2011, doi:10.1063/1.3657937). Inverted by bisection. 273.16 K at no
+/// pressure, about 263 K at 100 MPa, 251.165 K at 208.566 MPa.
+pub fn ice_melting_k(pressure_pa: f64) -> f64 {
+    let (t3, p3) = ICE_III_TRIPLE;
+    let p = pressure_pa.clamp(0.0, HIGH_PRESSURE_ICE_PA);
+    let (melting, mut lo, mut hi): (&dyn Fn(f64) -> f64, f64, f64) = if p <= p3 {
+        (
+            &|t: f64| {
+                let theta = t / 273.16;
+                611.657
+                    * (1.0
+                        + MELTING_IH
+                            .iter()
+                            .map(|(a, b)| a * (1.0 - theta.powf(*b)))
+                            .sum::<f64>())
+            },
+            t3,
+            273.16,
+        )
+    } else {
+        (
+            &|t: f64| p3 * (1.0 - 0.299_948 * (1.0 - (t / t3).powi(60))),
+            t3,
+            256.164,
+        )
+    };
+    // The Ih curve's pressure falls as the temperature rises, ice III's
+    // rises.
+    let falls = p <= p3;
     for _ in 0..60 {
         let mid = 0.5 * (lo + hi);
-        if liquidus_k(mid) > temperature_k {
+        if (melting(mid) > p) == falls {
             lo = mid;
         } else {
             hi = mid;
         }
     }
     0.5 * (lo + hi)
+}
+
+/// Pressure, Pa, at the centre of a body of `interior`: `∫ ρ g dr` from
+/// its surface down, each layer of uniform density, `g = G M(<r) / r²`.
+pub fn central_pressure_pa(interior: &Interior) -> f64 {
+    const STEPS: usize = 2000;
+    let mut inner = 0.0_f64;
+    let mut below = 0.0;
+    let mut shells = Vec::new();
+    for l in &interior.layers {
+        let outer = l.outer_radius_earth * EARTH_M;
+        let kg = l.mass_earth * EARTH_KG;
+        let volume = 4.0 / 3.0 * PI * (outer.powi(3) - inner.powi(3));
+        if volume > 0.0 {
+            shells.push((inner, outer, kg / volume, below));
+        }
+        below += kg;
+        inner = outer;
+    }
+    let mut pressure = 0.0;
+    for &(inner, outer, density, below) in &shells {
+        let dr = (outer - inner) / STEPS as f64;
+        for i in 0..STEPS {
+            let r = inner + (i as f64 + 0.5) * dr;
+            let mass = below + density * 4.0 / 3.0 * PI * (r.powi(3) - inner.powi(3));
+            pressure += density * G * mass / (r * r) * dr;
+        }
+    }
+    pressure
+}
+
+/// How the tidal heat reaches an ice shell over an ocean, by latitude.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TidalHeating {
+    /// Dissipated in the shell, in the thin-shell pattern of
+    /// [`tidal_pattern`].
+    Shell,
+    /// Dissipated in an unconsolidated core and carried up by its
+    /// hydrothermal plumes ([`core_plume_pattern`]).
+    CorePlumes,
+}
+
+impl TidalHeating {
+    /// The tidal heating of a body of `interior`: [`Self::CorePlumes`]
+    /// when its centre is under [`UNCONSOLIDATED_CORE_PA`].
+    fn of(interior: &Interior) -> Self {
+        if central_pressure_pa(interior) < UNCONSOLIDATED_CORE_PA {
+            Self::CorePlumes
+        } else {
+            Self::Shell
+        }
+    }
+
+    /// The tidal heat, relative to its mean, as `(area share, factor)`
+    /// pairs over the surface (shares summing to 1, factors averaging
+    /// to 1), and its factor at the poles.
+    fn pattern(self) -> (Vec<(f64, f64)>, f64) {
+        match self {
+            Self::Shell => {
+                let bands = (0..BANDS)
+                    .map(|i| {
+                        let mu = (i as f64 + 0.5) / BANDS as f64;
+                        (1.0 / BANDS as f64, tidal_pattern(mu))
+                    })
+                    .collect();
+                (bands, tidal_pattern(1.0))
+            }
+            Self::CorePlumes => {
+                let (cap, inside, outside) = core_plume_pattern();
+                (vec![(cap, inside), (1.0 - cap, outside)], inside)
+            }
+        }
+    }
+}
+
+/// The tidal heat of an unconsolidated core reaching the base of the ice
+/// shell: Choblet et al. 2017 (doi:10.1038/s41550-017-0289-8) find that
+/// the tides of Enceladus's porous core heat the water flowing through it
+/// most at the poles, where it rises in hot plumes and thins the ice
+/// above. [`PLUME_SHARE`] of it goes into polar caps of
+/// [`PLUME_CAP_DEG`], the rest evenly. Returns the caps' share of the
+/// surface and the heat factor inside and outside them (averaging to 1).
+fn core_plume_pattern() -> (f64, f64, f64) {
+    let cap = 1.0 - PLUME_CAP_DEG.to_radians().cos();
+    let outside = 1.0 - PLUME_SHARE;
+    (cap, outside + PLUME_SHARE / cap, outside)
 }
 
 /// Depth, m, under the surface of a body of `interior` at which the
@@ -382,7 +575,7 @@ impl Water<'_> {
     /// Ammonia mass fraction of the ocean under a shell `shell_m` thick:
     /// the ice excludes ammonia as it freezes, so all of the layer's
     /// ammonia is in the liquid left (Grasset & Sotin 1996,
-    /// doi:10.1006/icar.1996.0141, for Titan's ocean, not checked), up
+    /// doi:10.1006/icar.1996.0144, for Titan's ocean, not checked), up
     /// to the eutectic; the eutectic when no ocean is left, 0 without
     /// ammonia.
     fn ocean_nh3(&self, shell_m: f64) -> f64 {
@@ -399,19 +592,39 @@ impl Water<'_> {
         (self.nh3 * self.layer_kg / ocean_kg).min(NH3_EUTECTIC)
     }
 
-    /// The shallowest shell, m, whose ocean holds `nh3` of ammonia
-    /// ([`Self::ocean_nh3`] grows with the shell), by bisection.
-    fn shell_holding(&self, nh3: f64) -> f64 {
-        let (mut lo, mut hi) = (0.0, self.layer_m);
-        for _ in 0..50 {
-            let mid = 0.5 * (lo + hi);
-            if self.ocean_nh3(mid) < nh3 {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        hi
+    /// Pressure, Pa, at the base of a shell `shell_m` thick: the weight
+    /// of its ice under the gravity of the layers below and of the ice.
+    fn base_pa(&self, shell_m: f64) -> f64 {
+        let layer = &self.interior.layers[self.index];
+        let radius = self.radius_m;
+        let inner = radius - self.layer_m;
+        let below_kg: f64 = self.interior.layers[..self.index]
+            .iter()
+            .map(|l| l.mass_earth * EARTH_KG)
+            .sum();
+        let layer_kg = layer.mass_earth * EARTH_KG;
+        let volume = radius.powi(3) - inner.powi(3);
+        let depth = shell_m.clamp(0.0, self.layer_m);
+        let steps = (depth / DEPTH_STEP_M).ceil().max(1.0);
+        let dz = depth / steps;
+        (0..steps as usize)
+            .map(|i| {
+                let r = radius - (i as f64 + 0.5) * dz;
+                let mass = below_kg + layer_kg * (r.powi(3) - inner.powi(3)) / volume;
+                ICE_DENSITY * G * mass / (r * r) * dz
+            })
+            .sum()
+    }
+
+    /// Temperature, K, at the base of a shell `shell_m` thick: the
+    /// melting point of ice at its pressure ([`ice_melting_k`]) lowered by
+    /// the ammonia of the ocean beneath ([`Self::ocean_nh3`]) as much as
+    /// at no pressure, `MELT_K − liquidus_k(X)`. Adding the two lowerings
+    /// is an approximation, no source: Leliwa-Kopystyński et al. 2002
+    /// (doi:10.1006/icar.2001.6762) measured the water–ammonia liquidus
+    /// up to 300 MPa (not checked here).
+    fn base_k(&self, shell_m: f64) -> f64 {
+        ice_melting_k(self.base_pa(shell_m)) - (MELT_K - liquidus_k(self.ocean_nh3(shell_m)))
     }
 }
 
@@ -423,32 +636,35 @@ impl Water<'_> {
 /// surface is not frozen.
 ///
 /// - **Conduction.** The shell is in equilibrium with all of the
-///   internal heat, from below and from the tides in the ice alike (all
-///   of it leaves through the surface): latitude by latitude
-///   ([`BANDS`]), a conductive shell in a sphere ([`spherical_shell_m`])
-///   carries out the radiogenic and secular flux, spread evenly, plus
-///   the tidal flux in the pattern of a thin shell over an ocean
-///   ([`tidal_pattern`], peaking at the poles). Every watt of tidal heat
-///   is spread in that pattern, whether it is dissipated in the shell
-///   or below it: Beuthe 2019 (doi:10.1016/j.icarus.2019.05.035) finds
-///   that Enceladus's shell dissipates too little with standard ice
-///   rheology and its core the rest, and a solid core's eccentricity
-///   tide also peaks at the poles (Beuthe 2013), where Choblet et al.
-///   2017 (doi:10.1038/s41550-017-0289-8) focus its heat. The pattern
-///   matters only as far as the tides make the heat; without an ocean
-///   the heat is spread evenly. `shell_km` is the mean over the
-///   surface, `polar_shell_km` the shell at the poles.
-/// - **Ammonia.** The shell's base is at the [`liquidus_k`] of the ocean,
-///   whose ammonia concentrates as it freezes ([`Water::ocean_nh3`]): a
-///   thicker shell leaves a smaller, richer, colder ocean and a thinner
-///   shell, so shell and ocean are solved together by bisection.
+///   internal heat, from below and from the tides alike (all of it
+///   leaves through the surface): latitude by latitude, a conductive
+///   shell in a sphere ([`spherical_shell_m`]) carries out the
+///   radiogenic and secular flux, spread evenly, plus the tidal flux in
+///   the pattern of where it is made ([`TidalHeating`]). A body whose
+///   centre is under [`UNCONSOLIDATED_CORE_PA`] keeps a porous core, which
+///   its tides heat and whose hydrothermal plumes carry the heat to polar
+///   caps ([`core_plume_pattern`], Choblet et al. 2017,
+///   doi:10.1038/s41550-017-0289-8; Beuthe 2019,
+///   doi:10.1016/j.icarus.2019.05.035, finds Enceladus's shell
+///   dissipates too little with standard ice rheology, its core the
+///   rest). Any other body's tides heat its shell in the thin-shell
+///   pattern of [`tidal_pattern`] ([`BANDS`] bands). The pattern matters
+///   only as far as the tides make the heat; without an ocean the heat
+///   is spread evenly. `shell_km` is the mean over the surface,
+///   `polar_shell_km` the shell at the poles.
+/// - **Melting point.** The shell's base is at the melting point of ice
+///   at its pressure ([`ice_melting_k`]), lowered by the ammonia of the
+///   ocean, which concentrates as it freezes ([`Water::base_k`]): a
+///   thicker shell has a deeper base and leaves a smaller, richer ocean,
+///   both colder, which thins it, so shell and ocean are solved together
+///   by bisection.
 /// - **Convection.** A shell that reaches the onset of stagnant-lid
 ///   convection ([`convects`]) carries [`convective_flux_w_m2`] up into
 ///   its lid whatever its thickness. If that is more than the internal
-///   heat supplies, the ocean freezes: down to where its concentrated
-///   ammonia lowers the liquidus enough that convection carries just the
-///   heat supplied, or entirely (no ammonia, or more than the eutectic
-///   would need), the shell then reaching the ocean's floor. The lid
+///   heat supplies, the ocean freezes: down to where its deeper base and
+///   its concentrated ammonia make the base cold enough that convection
+///   carries just the heat supplied, or entirely, the shell then reaching
+///   the ocean's floor. The lid
 ///   conducts the heat from the surface down to [`RHEOLOGICAL_DROP`]
 ///   under the base's temperature. A convecting shell is not thinned at
 ///   the poles.
@@ -458,11 +674,11 @@ impl Water<'_> {
 /// [`HIGH_PRESSURE_ICE_PA`] (`ocean_floor_m`), whichever is shallower; a
 /// shell whose base lies at or beyond it leaves no ocean.
 ///
-/// Left out: salts in the liquidus, and the pressure's lowering of the
-/// melting point; the surface temperature's fall towards the poles
-/// (it would thicken the polar shell); the lateral flow of the ice that
-/// evens out the shell, and the concentration of a shell's dissipation
-/// where it is thinner (Beuthe 2019), which work against each other.
+/// Left out: salts in the liquidus; the surface temperature's fall
+/// towards the poles (it would thicken the polar shell); the lateral
+/// flow of the ice that evens out the shell, and the concentration of a
+/// shell's dissipation where it is thinner (Beuthe 2019), which work
+/// against each other; one pole rather than both.
 pub fn ice_shell(
     interior: &Interior,
     heat: &InternalHeat,
@@ -473,17 +689,24 @@ pub fn ice_shell(
     if climate.liquid == SurfaceLiquid::Water || climate.temperature_k >= MELT_K {
         return None;
     }
-    frozen_shell(interior, heat, climate.temperature_k, nh3_ice_fraction)
+    frozen_shell(
+        interior,
+        heat,
+        climate.temperature_k,
+        nh3_ice_fraction,
+        Ice::SHELL,
+    )
 }
 
 /// The [`ice_shell`] of a body of `interior` making `heat` under a frozen
 /// surface at `surface_k`, its ice carrying `nh3_ice_fraction` of
-/// ammonia; `None` without a water layer.
+/// ammonia, of `ice`; `None` without a water layer.
 fn frozen_shell(
     interior: &Interior,
     heat: &InternalHeat,
     surface_k: f64,
     nh3_ice_fraction: f64,
+    ice: Ice,
 ) -> Option<IceShell> {
     let index = interior
         .layers
@@ -507,35 +730,30 @@ fn frozen_shell(
     let flux = heat.flux_w_m2(interior.radius_earth);
     let tidal = flux * heat.tidal_w / heat.total_w().max(f64::MIN_POSITIVE);
     let even = flux - tidal;
-    let column = |base_k: f64, mu: f64| {
-        spherical_shell_m(
-            radius_m,
-            base_k,
-            surface_k,
-            even + tidal * tidal_pattern(mu),
-        )
+    let (pattern, polar_factor) = TidalHeating::of(interior).pattern();
+    let column = |base_k: f64, factor: f64| {
+        spherical_shell_m(radius_m, base_k, surface_k, even + tidal * factor)
     };
     // The mean shell over the surface for a base at `base_k`: thinned at
     // the poles over an ocean, even without.
     let mean_shell = |base_k: f64, ocean: bool| {
         let shell = if ocean {
-            (0..BANDS)
-                .map(|i| column(base_k, (i as f64 + 0.5) / BANDS as f64))
+            pattern
+                .iter()
+                .map(|&(share, factor)| share * column(base_k, factor))
                 .sum::<f64>()
-                / BANDS as f64
         } else {
             spherical_shell_m(radius_m, base_k, surface_k, flux)
         };
         shell.min(water.layer_m)
     };
-    // The shell its own ocean's liquidus sustains: the excess falls as
-    // the shell thickens, so its root is found by bisection, from the
-    // side where it is not positive (a shell that would fill the layer
-    // fills it, with no sliver of ocean left).
-    let excess = |shell_m: f64| {
-        let base_k = liquidus_k(water.ocean_nh3(shell_m));
-        mean_shell(base_k, water.ocean_m(shell_m) > 0.0) - shell_m
-    };
+    // The shell its own base sustains (its pressure and its ocean's
+    // ammonia set the base's melting point): the excess falls as the
+    // shell thickens, so its root is found by bisection, from the side
+    // where it is not positive (a shell that would fill the layer fills
+    // it, with no sliver of ocean left).
+    let excess =
+        |shell_m: f64| mean_shell(water.base_k(shell_m), water.ocean_m(shell_m) > 0.0) - shell_m;
     let (mut lo, mut hi) = (0.0, water.layer_m);
     for _ in 0..50 {
         let mid = 0.5 * (lo + hi);
@@ -546,29 +764,29 @@ fn frozen_shell(
         }
     }
     let mut shell_m = hi;
-    let mut base_k = liquidus_k(water.ocean_nh3(shell_m));
-    let convecting = convects(shell_m, base_k, surface_k, gravity);
-    if convecting && convective_flux_w_m2(base_k, gravity) > flux {
+    let convecting = ice.convects(shell_m, water.base_k(shell_m), surface_k, gravity);
+    let sheds = |shell_m: f64| ice.convective_flux_w_m2(water.base_k(shell_m), gravity) > flux;
+    if convecting && sheds(shell_m) {
         // Convection carries out more than comes in: the ocean freezes
-        // until its liquidus brings the convective flux down to the
-        // supply, or entirely.
-        let eutectic_k = liquidus_k(NH3_EUTECTIC);
-        if water.nh3 > 0.0 && convective_flux_w_m2(eutectic_k, gravity) <= flux {
-            let (mut cold, mut warm) = (eutectic_k, base_k);
+        // until its base, deeper and richer in ammonia, is cold enough
+        // that convection carries just the supply, or entirely.
+        let floor_m = water.floor_m(water.layer_m);
+        if sheds(floor_m) {
+            shell_m = floor_m;
+        } else {
+            let (mut thin, mut thick) = (shell_m, floor_m);
             for _ in 0..50 {
-                let mid = 0.5 * (cold + warm);
-                if convective_flux_w_m2(mid, gravity) > flux {
-                    warm = mid;
+                let mid = 0.5 * (thin + thick);
+                if sheds(mid) {
+                    thin = mid;
                 } else {
-                    cold = mid;
+                    thick = mid;
                 }
             }
-            shell_m = water.shell_holding(nh3_at_liquidus(0.5 * (cold + warm)));
-        } else {
-            shell_m = water.floor_m(water.layer_m);
+            shell_m = thick;
         }
-        base_k = liquidus_k(water.ocean_nh3(shell_m));
     }
+    let base_k = water.base_k(shell_m);
     let ocean_m = water.ocean_m(shell_m);
     let lid_m = if convecting {
         let lid_base_k = base_k - RHEOLOGICAL_DROP * rheological_k(base_k);
@@ -577,7 +795,7 @@ fn frozen_shell(
         shell_m
     };
     let polar_m = if !convecting && ocean_m > 0.0 {
-        column(base_k, 1.0).min(shell_m)
+        column(base_k, polar_factor).min(shell_m)
     } else {
         shell_m
     };
@@ -681,12 +899,13 @@ mod tests {
         }
     }
 
-    /// A ball of ice 1500 km across over a rock core of 300 km, at
-    /// 0.42 m/s²: thick enough a shell to convect, light enough that its
-    /// ocean reaches far down before ice V.
-    fn ice_ball() -> Interior {
-        layered(5.68e-5, 300.0 / 6371.0, 2.345e-3, 1500.0 / 6371.0)
+    /// A Ganymede: 2605 km, its water layer from 1704 km.
+    fn ganymede() -> Interior {
+        layered(0.01364, 0.2675, 0.01116, 0.4089)
     }
+
+    /// Ice of 1 mm grains, about 10¹⁴ Pa s at its melting point.
+    const FINE: Ice = Ice { grain_m: 1e-3 };
 
     #[test]
     fn a_five_kilometre_shell_does_not_convect() {
@@ -713,36 +932,31 @@ mod tests {
 
     #[test]
     fn a_frozen_ocean_is_zero_not_negative() {
-        // Some 0.8 mW/m²: a conductive shell of about 600 km would leave
-        // an ocean above ice V, but it convects and carries out more than
-        // that, so without ammonia the whole ocean freezes.
-        let ball = ice_ball();
-        let shell = frozen_shell(&ball, &heat(2.26e10, 0.0), 80.0, 0.0).unwrap();
+        // A Ganymede under 3 mW/m² keeps an ocean under a conductive shell
+        // of 30 mm grains; with 1 mm grains its shell convects, carries
+        // out more than that, and without ammonia its whole ocean freezes.
+        let area = 4.0 * PI * (0.4089 * EARTH_M).powi(2);
+        let supply = heat(3e-3 * area, 0.0);
+        let coarse = frozen_shell(&ganymede(), &supply, 85.0, 0.0, Ice::SHELL).unwrap();
+        assert!(!coarse.convecting && coarse.ocean_km > 0.0, "{coarse:?}");
+        let shell = frozen_shell(&ganymede(), &supply, 85.0, 0.0, FINE).unwrap();
         assert!(shell.convecting, "{shell:?}");
         assert_eq!(shell.ocean_km, 0.0, "{shell:?}");
-        assert!(
-            shell.shell_km > 600.0 && shell.shell_km.is_finite(),
-            "{shell:?}"
-        );
+        assert!(shell.shell_km > coarse.shell_km && shell.shell_km.is_finite());
         assert!(
             shell.lid_km > 0.0 && shell.lid_km < shell.shell_km,
             "{shell:?}"
         );
         assert_eq!(shell.polar_shell_km, shell.shell_km);
-        assert_eq!(shell.liquidus_k, MELT_K);
-        // With 1 % of ammonia in its ice, it freezes only until the
-        // ammonia left in a thin ocean makes the ice too stiff to carry
-        // out more than comes in.
-        let wet = frozen_shell(&ball, &heat(2.26e10, 0.0), 80.0, 0.01).unwrap();
+        // With 0.3 % of ammonia in its ice, it freezes only until the
+        // ammonia left in a smaller ocean makes the ice at its base too
+        // stiff to carry out more than comes in.
+        let wet = frozen_shell(&ganymede(), &supply, 85.0, 0.003, FINE).unwrap();
         assert!(wet.convecting, "{wet:?}");
-        assert!(
-            wet.ocean_km > 0.0 && wet.shell_km < shell.shell_km,
-            "{wet:?}"
-        );
-        assert!(wet.liquidus_k < MELT_K - 5.0, "{wet:?}");
-        let flux = 2.26e10 / (4.0 * PI * 1.5e6_f64.powi(2));
-        let carried = convective_flux_w_m2(wet.liquidus_k, 0.425);
-        assert!((carried / flux - 1.0).abs() < 0.05, "{carried} {flux}");
+        assert!(wet.ocean_km > 0.0, "{wet:?}");
+        let gravity = 1.43;
+        let carried = FINE.convective_flux_w_m2(wet.liquidus_k, gravity);
+        assert!((carried / 3e-3 - 1.0).abs() < 0.1, "{carried}");
     }
 
     /// Ammonia concentrated in a shrinking ocean lowers its liquidus and
@@ -753,9 +967,9 @@ mod tests {
         // A Titan: its 230 km water layer over a rock core, 3 mW/m².
         let titan = layered(0.0177, 0.35, 0.0034, 0.389);
         let area = 4.0 * PI * (0.389 * EARTH_M).powi(2);
-        let dry = frozen_shell(&titan, &heat(2.2e-3 * area, 0.0), 93.0, 0.0).unwrap();
+        let dry = frozen_shell(&titan, &heat(2.2e-3 * area, 0.0), 93.0, 0.0, Ice::SHELL).unwrap();
         assert_eq!(dry.ocean_km, 0.0, "{dry:?}");
-        let wet = frozen_shell(&titan, &heat(2.2e-3 * area, 0.0), 93.0, 0.005).unwrap();
+        let wet = frozen_shell(&titan, &heat(2.2e-3 * area, 0.0), 93.0, 0.005, Ice::SHELL).unwrap();
         assert!(wet.ocean_km > 0.0 && wet.shell_km < dry.shell_km, "{wet:?}");
         assert!(wet.liquidus_k < 260.0 && wet.liquidus_k >= liquidus_k(NH3_EUTECTIC));
         assert!(!wet.convecting, "{wet:?}");
@@ -777,8 +991,8 @@ mod tests {
         // An Enceladus heated by its tides alone: thinner at the poles,
         // thicker on average than a shell under even heating.
         let enceladus = layered(8.6e-6, 0.0229, 8.4e-6, 0.0366);
-        let even = frozen_shell(&enceladus, &heat(12.5e9, 0.0), 86.0, 0.0).unwrap();
-        let tidal = frozen_shell(&enceladus, &heat(12.5e9, 1.0), 86.0, 0.0).unwrap();
+        let even = frozen_shell(&enceladus, &heat(12.5e9, 0.0), 86.0, 0.0, Ice::SHELL).unwrap();
+        let tidal = frozen_shell(&enceladus, &heat(12.5e9, 1.0), 86.0, 0.0, Ice::SHELL).unwrap();
         assert!(tidal.ocean_km > 0.0, "{tidal:?}");
         assert!((even.polar_shell_km / even.shell_km - 1.0).abs() < 1e-9);
         assert!(tidal.polar_shell_km < 0.6 * tidal.shell_km, "{tidal:?}");
@@ -799,5 +1013,46 @@ mod tests {
         assert!((europa / plane - 1.0).abs() < 0.02, "{europa} {plane}");
         assert_eq!(spherical_shell_m(250e3, MELT_K, 86.0, 0.0), 250e3);
         assert_eq!(spherical_shell_m(250e3, 200.0, 250.0, 0.01), 0.0);
+    }
+
+    /// The IAPWS melting curves: 273.16 K at no pressure, falling along
+    /// ice Ih to its triple point with ice III (251.165 K, 208.566 MPa),
+    /// rising along ice III to 256.164 K at 350.1 MPa.
+    #[test]
+    fn ice_melts_colder_under_pressure() {
+        assert!((ice_melting_k(0.0) - 273.16).abs() < 0.01);
+        assert!((ice_melting_k(208.566e6) - 251.165).abs() < 0.05);
+        assert!((ice_melting_k(350.1e6) - 256.164).abs() < 0.05);
+        let at_100 = ice_melting_k(100e6);
+        assert!((262.0..264.5).contains(&at_100), "{at_100}");
+        let mut last = ice_melting_k(0.0);
+        for i in 1..=208 {
+            let t = ice_melting_k(f64::from(i) * 1e6);
+            assert!(t < last, "{i} MPa: {t}");
+            last = t;
+        }
+        assert!(ice_melting_k(300e6) > ice_melting_k(250e6));
+        assert_eq!(ice_melting_k(1e9), ice_melting_k(350.1e6));
+    }
+
+    /// An Enceladus keeps an unconsolidated core, its centre under some
+    /// tens of MPa; a Europa's centre, at several GPa, has none.
+    #[test]
+    fn only_a_small_moon_keeps_an_unconsolidated_core() {
+        let enceladus = layered(8.6e-6, 0.0229, 8.4e-6, 0.0366);
+        let p = central_pressure_pa(&enceladus);
+        assert!((20e6..100e6).contains(&p), "{p}");
+        assert_eq!(TidalHeating::of(&enceladus), TidalHeating::CorePlumes);
+        let europa = layered(0.00736, 0.2177, 0.00064, 0.2361);
+        assert!(central_pressure_pa(&europa) > 2e9);
+        assert_eq!(TidalHeating::of(&europa), TidalHeating::Shell);
+        // Both patterns spread all of the heat: their factors average 1.
+        for heating in [TidalHeating::Shell, TidalHeating::CorePlumes] {
+            let (pattern, pole) = heating.pattern();
+            let shares: f64 = pattern.iter().map(|(a, _)| a).sum();
+            let mean: f64 = pattern.iter().map(|(a, w)| a * w).sum();
+            assert!((shares - 1.0).abs() < 1e-9 && (mean - 1.0).abs() < 1e-3);
+            assert!(pole > 1.5, "{heating:?}: {pole}");
+        }
     }
 }

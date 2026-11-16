@@ -35,8 +35,9 @@ lid_km: number,
  */
 polar_shell_km: number, 
 /**
- * Temperature at the base of the shell, K: the [`liquidus_k`] of the
- * ocean's ammonia, concentrated as the ocean froze; 0 in a model
- * stored before it existed.
+ * Temperature at the base of the shell, K: the melting point of ice
+ * at the base's pressure ([`ice_melting_k`]) lowered by the ocean's
+ * ammonia, concentrated as the ocean froze ([`liquidus_k`]); 0 in a
+ * model stored before it existed.
  */
 liquidus_k: number, };

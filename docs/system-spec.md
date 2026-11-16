@@ -593,7 +593,8 @@ systems/<system-id>/
     the shell's mean thickness `shell_km`, the liquid ocean left
     beneath it `ocean_km`, whether the shell convects (`convecting`),
     its conductive lid `lid_km`, its thickness at the poles
-    `polar_shell_km` and the ocean's melting point `liquidus_k` (false
+    `polar_shell_km` and the temperature at its base `liquidus_k`, ice's
+    melting point under its pressure lowered by the ocean's ammonia (false
     and 0 in a model stored before they existed); its `moment_of_inertia`, the factor
     `C / (M R²)` of its layers, whose `interior` holds a `RockIce` layer
     of rock and ice still mixed between the rock and the water of a moon

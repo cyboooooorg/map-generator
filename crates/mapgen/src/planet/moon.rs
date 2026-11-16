@@ -14,8 +14,8 @@
 //! Known departures: the shells of Ganymede and Titan, heated by their
 //! rock and their tides alone, can come out thicker than interior models
 //! give, so a Ganymede may keep no ocean on a low radiogenic draw, and
-//! Enceladus's shell is thinned at its poles by about half, not to the 5
-//! km observed (see [`super::ice_shell::ice_shell`]).
+//! Enceladus's mean shell is thicker than observed (see
+//! [`super::ice_shell::ice_shell`]).
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
