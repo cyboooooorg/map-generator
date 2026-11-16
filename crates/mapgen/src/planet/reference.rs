@@ -285,6 +285,7 @@ pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived 
         regime: air.regime,
         carbon: super::climate::CarbonCycle {
             inventory_bar: air.carbon_bar,
+            frozen_bar: air.frozen_co2_bar,
             snowball_draw: inputs.snowball_draw,
         },
     }

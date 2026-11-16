@@ -348,9 +348,17 @@ the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
 0.125 bar, 6.3 kJ/mol; values from the NIST WebBook from memory, not
 checked). This freezes Titan's CO₂ and NH₃. Above the triple point the
 gas stays; whether it rains out depends on the surface temperature,
-which the climate sets. Water is left to the climate, and so is methane
-(issue #443): its greenhouse moves the surface temperature it condenses
-at, so the climate condenses it at the temperature it solves for.
+which the climate sets. Water is left to the climate, and so are methane
+(issue #443) and nitrogen (issue #464): their air moves the surface
+temperature they condense at, so the climate condenses them at the
+temperature it solves for (`condense`; nitrogen over its own ice, with
+activity 1, its liquid above 63.15 K up to its critical point,
+126.19 K). The CO₂ the cold trap froze out stays on the ground as a
+frost wherever the surface is cold enough to keep it (below CO₂'s
+triple point, beyond what the air can take back at the surface's
+sublimation pressure), and the frosts of N₂, CH₄ and CO₂ brighten the
+body's Bond albedo (`albedo::cover`: 0.75, covering the share
+`frost / 0.02 bar` of the disc).
 
 **Photochemistry** (`photochemistry`, after the cold trap, on what is
 still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
@@ -421,15 +429,24 @@ masses, ice shares and orbits):
 |---|---|---|
 | Titan | hydrocarbon world, 93.5 K, 1.43 bar, 94 % N₂, 0.083 bar CH₄ (5.8 %) | 93.7 K, 1.47 bar, 5.7 % CH₄ |
 | Ganymede, Callisto | 4e-5 and 9e-6 bar | airless |
-| Io | heat pipe, 1.3e-4 bar | heat pipe, SO₂ of about 1e-9 bar |
+| Io | heat pipe, 1.3e-4 bar, 108 K, Bond albedo 0.56 under 0.013 bar of CO₂ frost | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
 | Europa | 8e-6 bar | airless |
-| Triton | 1.9e-3 bar of N₂ (frost at 47 K) | about 1.4e-5 bar of N₂ |
+| Triton | 1.9e-5 bar of N₂ over its frost at 36.4 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
 | Moon | 1e-12 bar | airless |
 
 Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
 by 0.3 dex), Io's air up to 8e-4 bar. Triton's N₂ is its frost's vapour
-pressure at the equilibrium temperature of 47 K, where Triton's surface,
-brighter, is at 38 K: a hundred times the observed pressure.
+pressure at its surface temperature, which the frost's own albedo sets
+(issue #464; before, the cold trap held it at the equilibrium
+temperature under the reference albedo 0.3, 47 K, and kept 1.9e-3 bar).
+Its 36.4 K is 1.6 K under the observed 38 K, which the grey climate
+reaches with N₂ ice's emissivity of 1; the model's N₂ sublimation curve
+(6.3 kJ/mol from the triple point) gives 1.4e-5 bar at 35.9 K, where the
+observed pair puts it near 37.5 K, so the two departures cancel in the
+pressure. A lower emissivity of N₂ ice (about 0.6 to 0.8) would warm it
+to about 38 K but, with this curve, triple its air: both would have to
+change together. The `triton-like` archetype ranges from 35.3 to 36.9 K
+and 0.94e-5 to 2.4e-5 bar of N₂ over seeds 1 to 10.
 
 ## Climate and surface liquid
 

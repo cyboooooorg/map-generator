@@ -2,7 +2,8 @@
 //! (climate pass lot 2b, issue #510).
 //!
 //! [`cover`] splits the disc into open ocean, bare land, water ice and
-//! snow, frosts and water clouds, as planet-wide fractions (the model is
+//! snow, frosts of N₂, CH₄ and CO₂ and water clouds, as planet-wide
+//! fractions (the model is
 //! zero-dimensional); [`bond_albedo`] stacks them under the Rayleigh
 //! scattering of the air's column, a methane haze and, when there is one,
 //! a sulphuric acid deck. [`super::climate::climate`] solves the albedo
@@ -26,7 +27,7 @@ pub struct Cover {
     pub ocean: f64,
     pub land: f64,
     pub ice: f64,
-    /// N₂, CH₄ or CO₂ frost (not derived yet: 0, issue #464).
+    /// N₂, CH₄ or CO₂ frost ([`FROST_LAYER_BAR`], issue #464).
     pub frost: f64,
     pub cloud: f64,
 }
@@ -68,10 +69,30 @@ const SHIELD_BAR: f64 = 1.0e-4;
 /// sea ice from the snow.
 const ICE_ALBEDO: f64 = 0.6;
 
-/// Albedo of the frosts of nitrogen, methane and carbon dioxide: 0.8, as
-/// bright as fresh snow (Triton's Bond albedo is about 0.75, Hillier et
-/// al. 1990, from memory, not checked).
-const FROST_ALBEDO: f64 = 0.8;
+/// Albedo of the frosts of nitrogen, methane and carbon dioxide: 0.75.
+/// Calibration on the two bodies covered in them: Triton's Bond albedo,
+/// about 0.75 (Voyager 2; Hillier et al. 1990,
+/// doi:10.1126/science.250.4979.419, from memory, not checked), and
+/// Pluto's, 0.72 ± 0.07 (New Horizons; Buratti et al. 2017,
+/// doi:10.1016/j.icarus.2016.07.012, from memory, not checked); within
+/// the spec's "high", brighter than the model's water ice and snow
+/// ([`ICE_ALBEDO`]), which mixes in sea ice.
+const FROST_ALBEDO: f64 = 0.75;
+
+/// Frost, bar of the body's own surface pressure, that covers a body's
+/// whole disc; less covers the share `frost / FROST_LAYER_BAR` of it:
+/// a frost gathers into deposits in its cold traps (poles, basins,
+/// shadows) and is spread no thinner, as [`ICE_SHEET_KM`] does for water
+/// ice. 0.02 bar: about 0.7 m of CO₂ frost on Io's gravity, or 2.5 m of
+/// N₂ frost on Triton's. Calibration on the moons, no source: the
+/// model's Io freezes 0.013 bar of CO₂ out of its air (the real one's
+/// frost is SO₂, which the model keeps far less of), which covers about
+/// two-thirds of its disc and gives it a Bond albedo of 0.56 (0.63
+/// observed, Simonelli & Veverka 1988, from memory, not checked; its
+/// frost-free ground is shielded regolith); Triton's 0.36 bar of N₂
+/// frost covers all of it with any value under that; Europa's trace of
+/// CO₂ frost (2e-4 bar) leaves it to its water ice.
+const FROST_LAYER_BAR: f64 = 0.02;
 
 /// Annual mean temperature, K, under which a surface keeps ice or snow:
 /// −5 °C. Calibration: Budyko 1969 (doi:10.3402/tellusa.v21i5.10109)
@@ -267,16 +288,19 @@ fn ice_line_share(temperature_k: f64) -> f64 {
 }
 
 /// What covers a body at `temperature_k` under `gases` with `water`
-/// ([`Cover`]).
+/// and `frost_bar` of N₂, CH₄ and CO₂ frost on its ground ([`Cover`]).
 ///
 /// - Its water, out of a runaway, is open ocean ([`ocean_fraction`] of
 ///   its oceans) where the surface is warmer than the ice line and ice or
 ///   snow where it is colder ([`ice_line_share`]), the ice limited by
 ///   sheets the water can make ([`ICE_SHEET_KM`]).
 /// - The rest is bare land.
+/// - Its frost lies over the ocean's ice and the land, covering the share
+///   `frost_bar / FROST_LAYER_BAR` of the disc ([`FROST_LAYER_BAR`]), all
+///   of it from that amount on.
 /// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`]):
 ///   none in a dry or airless sky.
-pub fn cover(temperature_k: f64, gases: &Gases, water: &Water) -> Cover {
+pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> Cover {
     let wet = !water.runaway && water.kept_kg > 0.0;
     let (sea, ice) = if wet {
         let reach = (water.oceans.max(0.0) * OCEAN_LAYER_KM / ICE_SHEET_KM).min(1.0);
@@ -287,8 +311,9 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water) -> Cover {
     } else {
         (0.0, 0.0)
     };
-    let ocean = sea * (1.0 - ice);
-    let frost = 0.0;
+    let frost = (frost_bar.max(0.0) / FROST_LAYER_BAR).min(1.0);
+    let ocean = sea * (1.0 - ice) * (1.0 - frost);
+    let ice = ice * (1.0 - frost);
     let land = (1.0 - ocean - ice - frost).max(0.0);
     let cloud = 1.0 - (-gases.h2o.max(0.0) / CLOUD_H2O_BAR).exp();
     Cover {
@@ -390,7 +415,7 @@ mod tests {
         let airless = Gases::default();
         assert!(airless.total() < 1e-6);
         for t in [100.0, 250.0, 440.0, 700.0] {
-            let c = cover(t, &airless, &dry);
+            let c = cover(t, &airless, &dry, 0.0);
             assert_eq!(c.ocean, 0.0, "{t}: {c:?}");
             assert_eq!(c.cloud, 0.0, "{t}: {c:?}");
             assert_eq!(c.ice, 0.0, "{t}: {c:?}");
@@ -413,17 +438,17 @@ mod tests {
         let mut last = f64::INFINITY;
         for i in 0..=100 {
             let t = 200.0 + f64::from(i);
-            let ice = cover(t, &air, &water).ice;
+            let ice = cover(t, &air, &water, 0.0).ice;
             assert!(ice <= last, "{t}: {ice} > {last}");
             last = ice;
         }
-        let earth = cover(288.0, &air, &water).ice;
+        let earth = cover(288.0, &air, &water, 0.0).ice;
         assert!((0.06..=0.14).contains(&earth), "{earth}");
         for t in [200.0, 230.0, 240.0, 250.0] {
-            let ice = cover(t, &air, &water).ice;
+            let ice = cover(t, &air, &water, 0.0).ice;
             assert!(ice > 0.999, "{t}: {ice}");
         }
-        assert_eq!(cover(300.0, &air, &water).ice, 0.0);
+        assert_eq!(cover(300.0, &air, &water, 0.0).ice, 0.0);
     }
 
     #[test]
@@ -439,11 +464,41 @@ mod tests {
             kept_kg: 0.005 * super::super::OCEAN_KG,
             ..earth_water()
         };
-        let caps = cover(210.0, &air, &mars);
+        let caps = cover(210.0, &air, &mars, 0.0);
         assert!(caps.ice > 0.0 && caps.ice < 0.02, "{caps:?}");
         let a = bond_albedo(&caps, &air, false);
         assert!((0.2..=0.3).contains(&a), "{a}");
-        assert_eq!(cover(210.0, &air, &earth_water()).ice, 1.0);
+        assert_eq!(cover(210.0, &air, &earth_water(), 0.0).ice, 1.0);
+    }
+
+    #[test]
+    fn frost_brightens_a_body_in_proportion_to_its_amount() {
+        // Issue #464: a frost covers `frost / FROST_LAYER_BAR` of the
+        // disc over the land and the ice, and all of it from there on.
+        let dry = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        let thin = Gases {
+            n2: 1.4e-5,
+            ..Gases::default()
+        };
+        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, frost), &thin, false);
+        let half = cover(40.0, &thin, &dry, FROST_LAYER_BAR / 2.0);
+        assert!((half.frost - 0.5).abs() < 1e-12, "{half:?}");
+        assert!((half.land - 0.5).abs() < 1e-12, "{half:?}");
+        assert!(a(0.0) < a(FROST_LAYER_BAR / 2.0));
+        assert!(a(FROST_LAYER_BAR / 2.0) < a(FROST_LAYER_BAR));
+        assert_eq!(a(FROST_LAYER_BAR), a(10.0));
+        assert!((a(10.0) - FROST_ALBEDO).abs() < 0.01, "{}", a(10.0));
+        // Over ice, the frost takes its share from the ice.
+        let icy = cover(40.0, &thin, &earth_water(), FROST_LAYER_BAR / 4.0);
+        assert!(
+            (icy.ice - 0.75).abs() < 1e-12 && icy.ocean == 0.0,
+            "{icy:?}"
+        );
     }
 
     #[test]

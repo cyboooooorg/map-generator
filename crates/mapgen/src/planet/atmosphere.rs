@@ -9,8 +9,8 @@
 //! [`cold_trap`] freezes out what the equilibrium temperature cannot hold
 //! as gas, and [`photochemistry`] turns ammonia into nitrogen and
 //! oxidises warm methane. The carbonate thermostat (climate) and oxygen
-//! (life) come after; the climate condenses methane at its surface
-//! temperature ([`condense`]).
+//! (life) come after; the climate condenses methane and nitrogen at its
+//! surface temperature ([`condense`]).
 use std::f64::consts::PI;
 
 use serde::{Deserialize, Serialize};
@@ -336,6 +336,11 @@ const CH4_PER_LYMAN_ALPHA_PHOTON: f64 = 13.9;
 /// Universal gas constant, J/(mol·K).
 const R_GAS: f64 = 8.314;
 
+/// Triple point of nitrogen, K: under it, the nitrogen a surface
+/// condenses is a frost (NIST Chemistry WebBook, 63.15 K; from memory,
+/// not checked).
+pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.15;
+
 /// A gas's triple point (K, bar) and its enthalpy of sublimation
 /// (J/mol). Values from memory (NIST Chemistry WebBook), not checked:
 /// CO₂ 216.6 K and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm
@@ -364,7 +369,7 @@ const CH4_FROST: Frost = Frost {
     sublimation_j_mol: 9_100.0,
 };
 const N2_FROST: Frost = Frost {
-    triple_k: 63.15,
+    triple_k: NITROGEN_TRIPLE_K,
     triple_bar: 0.125,
     sublimation_j_mol: 6_300.0,
 };
@@ -436,16 +441,32 @@ impl Condensable {
 pub(crate) const SEA_METHANE_SHARE: f64 = 0.5;
 
 /// The gases that condense on the surface inside the climate
-/// ([`condense`]): methane over a sea of methane, nitrogen and ethane
-/// ([`SEA_METHANE_SHARE`]). Normal boiling point 111.67 K and critical
-/// point 190.56 K (NIST Chemistry WebBook; from memory, not checked).
-const CONDENSING: [Condensable; 1] = [Condensable {
-    frost: CH4_FROST,
-    boils_k: 111.67,
-    critical_k: 190.56,
-    activity: SEA_METHANE_SHARE,
-    of: |g| &mut g.ch4,
-}];
+/// ([`condense`]):
+///
+/// - methane over a sea of methane, nitrogen and ethane
+///   ([`SEA_METHANE_SHARE`]), normal boiling point 111.67 K and critical
+///   point 190.56 K;
+/// - nitrogen over its own ice (activity 1: a pure frost, which Triton's
+///   N₂ air sits in equilibrium with; issue #464), normal boiling point
+///   77.36 K and critical point 126.19 K.
+///
+/// Points from the NIST Chemistry WebBook (from memory, not checked).
+const CONDENSING: [Condensable; 2] = [
+    Condensable {
+        frost: CH4_FROST,
+        boils_k: 111.67,
+        critical_k: 190.56,
+        activity: SEA_METHANE_SHARE,
+        of: |g| &mut g.ch4,
+    },
+    Condensable {
+        frost: N2_FROST,
+        boils_k: 77.36,
+        critical_k: 126.19,
+        activity: 1.0,
+        of: |g| &mut g.n2,
+    },
+];
 
 /// Saturation vapour pressure of pure methane at `temperature_k`, bar:
 /// over its ice below its triple point (90.7 K, 0.117 bar), over its
@@ -456,7 +477,8 @@ pub(crate) fn methane_saturation_bar(temperature_k: f64) -> f64 {
 }
 
 /// The air and the condensate of `gases` (bar) on a surface at
-/// `surface_k`: each gas that condenses there ([`CONDENSING`]: methane)
+/// `surface_k`: each gas that condenses there ([`CONDENSING`]: methane
+/// and nitrogen)
 /// keeps in the air at most its activity times its saturation pressure
 /// at the surface temperature, and the rest lies on the ground, as a
 /// liquid or a frost. Returns `(air, condensate)`; `air + condensate` is
@@ -575,13 +597,14 @@ pub fn methane_photolysis(
 /// Above the triple point the gas stays: whether it rains out as a liquid
 /// depends on the surface temperature, which the climate sets. Water is
 /// the climate's too (a runaway's steam sits on a planet far hotter than
-/// its equilibrium temperature), and so is methane, whose greenhouse
-/// moves the surface temperature it condenses at ([`condense`]).
+/// its equilibrium temperature), and so are methane and nitrogen, whose
+/// air moves the surface temperature they condense at ([`condense`]):
+/// Triton's N₂ is the vapour of its frost at its surface temperature,
+/// which the frost's albedo lowers (issue #464).
 pub fn cold_trap(gases: Gases, equilibrium_k: f64) -> Gases {
     Gases {
         co2: CO2_FROST.cap(gases.co2, equilibrium_k),
         nh3: NH3_FROST.cap(gases.nh3, equilibrium_k),
-        n2: N2_FROST.cap(gases.n2, equilibrium_k),
         ..gases
     }
 }

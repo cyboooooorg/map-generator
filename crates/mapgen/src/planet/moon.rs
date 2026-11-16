@@ -297,14 +297,47 @@ mod tests {
         assert!(ocean_km(&m) > 0.0, "{m:?}");
     }
 
+    /// Triton's nitrogen frost brightens it and its air is the vapour of
+    /// that frost: 38 K and 1.4e-5 bar of N₂ at Voyager 2's flyby (Tyler
+    /// et al. 1989, doi:10.1126/science.246.4936.1466), a Bond albedo of
+    /// about 0.75 (spec goal 6, issue #464).
     #[test]
     fn triton_keeps_a_thin_nitrogen_air() {
         let m = model(
             30.07,
             &moon(0.00359, 0.3, MoonBirth::Captured, NEPTUNE_KG, 3.548e8, 0.0),
         );
-        let n2 = m.surface.expect("surface").gases.n2;
-        assert!((1e-6..1e-2).contains(&n2), "{m:?}");
+        let s = m.surface.expect("surface");
+        let (t, n2, a) = (s.climate.temperature_k, s.gases.n2, s.climate.bond_albedo);
+        println!("Triton: {t:.2} K, N2 {n2:.3e} bar, Bond albedo {a:.3}");
+        assert!((35.0..=41.0).contains(&t), "{s:?}");
+        assert!((1e-5..=3e-5).contains(&n2), "{s:?}");
+        assert!(a >= 0.6, "{s:?}");
+    }
+
+    /// A moon's albedo comes from its own cover, not its planet's
+    /// (Review Focus 4): Titan under its haze (0.27, Li et al. 2011), an
+    /// airless icy Europa (0.68, Buratti & Veverka 1983) and Io under its
+    /// frosts (0.63, Simonelli & Veverka 1988; all from memory, not
+    /// checked), round one star.
+    #[test]
+    fn a_moon_uses_its_own_cover() {
+        let titan = model(9.54, &titan());
+        let europa = model(
+            5.2,
+            &moon(0.008, 0.08, MoonBirth::Disk, JUPITER_KG, 6.709e8, 0.009),
+        );
+        let io = model(
+            5.2,
+            &moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041),
+        );
+        let albedo = |m: &PlanetModel| m.surface.expect("surface").climate.bond_albedo;
+        let (t, e, i) = (albedo(&titan), albedo(&europa), albedo(&io));
+        println!("Bond albedo: Titan {t:.3}, Europa {e:.3}, Io {i:.3}");
+        assert!((0.2..=0.35).contains(&t), "Titan {t}: {titan:?}");
+        assert!((0.5..=0.75).contains(&e), "Europa {e}: {europa:?}");
+        assert!((0.4..=0.7).contains(&i), "Io {i}: {io:?}");
+        assert!(t != e && e != i && t != i, "{t} {e} {i}");
     }
 
     #[test]

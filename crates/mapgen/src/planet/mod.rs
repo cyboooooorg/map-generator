@@ -356,6 +356,9 @@ pub(crate) struct Air {
     /// CO₂ outgassed before escape, bar: the carbon inventory of the
     /// climate ([`climate::CarbonCycle`]).
     pub carbon_bar: f64,
+    /// CO₂ the cold trap froze onto the ground, bar
+    /// ([`climate::CarbonCycle::frozen_bar`]).
+    pub frozen_co2_bar: f64,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -573,7 +576,7 @@ pub(crate) struct Bare {
     pub climate_gases: Gases,
     /// What the climate condensed on the ground at its surface
     /// temperature ([`atmosphere::condense`]: the methane over its seas
-    /// or frosts), bar.
+    /// or frosts, the nitrogen of its frosts), bar.
     pub condensed: Gases,
 }
 
@@ -614,6 +617,7 @@ pub(crate) fn bare(
     let water_bar = w.kept_kg * bar_per_kg;
     let carbon = climate::CarbonCycle {
         inventory_bar: out.co2,
+        frozen_bar: photolysed.co2 - trapped.co2,
         snowball_draw: inputs.snowball_draw,
     };
     let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
@@ -634,6 +638,7 @@ pub(crate) fn bare(
             regime: r,
             gases,
             carbon_bar: out.co2,
+            frozen_co2_bar: photolysed.co2 - trapped.co2,
         },
         outgassed: out,
         kept,

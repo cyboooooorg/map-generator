@@ -986,13 +986,19 @@ pub(super) fn wet_temperature_k(
 }
 
 /// What a body's carbon cycle gives its climate beyond its air: the
-/// carbon it holds and the draw of its snowball state.
+/// carbon it holds, the CO₂ frost on its ground and the draw of its
+/// snowball state.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CarbonCycle {
     /// CO₂ the body has outgassed, bar, before escape to space and the
     /// cold trap: the carbon inventory weathering and volcanoes trade
     /// with the air ([`super::atmosphere::outgassed`]).
     pub inventory_bar: f64,
+    /// CO₂ the cold trap froze out of the air onto the ground before the
+    /// climate, bar ([`super::atmosphere::cold_trap`]): a frost where the
+    /// surface is cold enough to keep it ([`Body::frost_bar`]), which
+    /// brightens the body (Io's in the model).
+    pub frozen_bar: f64,
     /// Uniform in `[0, 1]` ([`super::PlanetInputs::snowball_draw`]): a
     /// body with both a temperate and a frozen state is a snowball when
     /// it is below [`snowball_chance`].
@@ -1004,7 +1010,7 @@ pub struct CarbonCycle {
 ///
 /// The albedo and the temperature are solved together as a fixed point
 /// ([`settle`]): the temperature sets what covers the body
-/// ([`super::albedo::cover`]: ice, ocean, clouds) and whether a
+/// ([`super::albedo::cover`]: ice, ocean, frosts, clouds) and whether a
 /// sulphuric deck forms, those set the Bond albedo
 /// ([`super::albedo::bond_albedo`]), and the albedo the light the climate
 /// absorbs ([`Context::with_albedo`]). Under each albedo:
@@ -1038,10 +1044,11 @@ pub struct CarbonCycle {
 ///   hotter. Only a temperature reached is `regulated`.
 ///
 /// Under each albedo too, the gases that condense on the surface
-/// ([`condense`]: methane) keep in the air only the vapour of their
-/// condensate at the surface temperature, solved together with it (see
-/// [`under_albedo`]); the rest lies on the ground, where [`liquid`] sees
-/// it. Methane's greenhouse counts only the methane its tropopause lets
+/// ([`condense`]: methane and nitrogen) keep in the air only the vapour
+/// of their condensate at the surface temperature, solved together with
+/// it (see [`under_albedo`]); the rest lies on the ground, where
+/// [`liquid`] sees it and, frozen, brightens the body
+/// ([`Body::frost_bar`]). Methane's greenhouse counts only the methane its tropopause lets
 /// through and saturates ([`methane_depth`]), so that a cold body under
 /// tens of bar of methane stays cold and condenses most of it (issue
 /// #443).
@@ -1084,7 +1091,7 @@ pub fn climate(
         regime,
         heat_flux_w_m2,
         water_bar,
-        carbon.inventory_bar,
+        &carbon,
     );
     let branches = branches(&body);
     let Some(frozen) = &branches.frozen else {
@@ -1176,6 +1183,9 @@ struct Body<'a> {
     /// in for the upper troposphere; see [`climate`]), and never less
     /// than the air already holds.
     most_co2: f64,
+    /// CO₂ the cold trap froze onto the ground, bar
+    /// ([`CarbonCycle::frozen_bar`]).
+    frozen_co2: f64,
     co2: Option<f64>,
     /// The CO₂ of the maximum greenhouse, once found.
     greenhouse: std::cell::OnceCell<f64>,
@@ -1189,7 +1199,7 @@ impl<'a> Body<'a> {
         regime: Regime,
         heat_flux_w_m2: f64,
         water_bar: f64,
-        inventory_bar: f64,
+        carbon: &CarbonCycle,
     ) -> Self {
         let condenses = super::atmosphere::co2_frost_bar(context.equilibrium_k);
         Body {
@@ -1199,7 +1209,8 @@ impl<'a> Body<'a> {
             regime,
             heat_flux_w_m2,
             water_bar,
-            most_co2: inventory_bar.min(condenses).max(gases.co2).max(0.0),
+            most_co2: carbon.inventory_bar.min(condenses).max(gases.co2).max(0.0),
+            frozen_co2: carbon.frozen_bar.max(0.0),
             co2: None,
             greenhouse: std::cell::OnceCell::new(),
         }
@@ -1208,6 +1219,42 @@ impl<'a> Body<'a> {
     /// Whether the body keeps water out of a runaway.
     fn wet(&self) -> bool {
         !self.water.runaway && self.water.kept_kg > 0.0
+    }
+
+    /// Frost on the ground of the body at `temperature_k` under `air`,
+    /// bar: the nitrogen it condenses there ([`condense`]) under
+    /// nitrogen's triple point, the methane it condenses under methane's
+    /// freezing point ([`methane_freezes_k`]; above it, a sea), and the
+    /// CO₂ the cold trap froze out ([`CarbonCycle::frozen_bar`]) that the
+    /// surface keeps frozen: what the air, at most CO₂'s sublimation
+    /// pressure there, cannot take back (none above CO₂'s triple point).
+    fn frost_bar(&self, temperature_k: f64, air: &Gases) -> f64 {
+        use super::atmosphere::{NITROGEN_TRIPLE_K, co2_frost_bar};
+        let condensate = condense(self.gases, temperature_k).1;
+        let n2 = if temperature_k < NITROGEN_TRIPLE_K {
+            condensate.n2
+        } else {
+            0.0
+        };
+        let ch4 = if temperature_k < methane_freezes_k(air.n2) {
+            condensate.ch4
+        } else {
+            0.0
+        };
+        let sublimes = (co2_frost_bar(temperature_k) - air.co2.max(0.0)).max(0.0);
+        let co2 = (self.frozen_co2 - sublimes).max(0.0);
+        n2 + ch4 + co2
+    }
+
+    /// [`derived_albedo`] of the body at `temperature_k` under `air`,
+    /// with its frost there ([`Body::frost_bar`]).
+    fn albedo_at(&self, temperature_k: f64, air: &Gases) -> f64 {
+        derived_albedo(
+            temperature_k,
+            air,
+            self.water,
+            self.frost_bar(temperature_k, air),
+        )
     }
 
     /// The frozen branch with `co2` bar of CO₂ in the air: the fixed point
@@ -1219,7 +1266,7 @@ impl<'a> Body<'a> {
             greenhouse: std::cell::OnceCell::new(),
             ..*self
         };
-        let start = derived_albedo(ICE_COVERED_K, &body.gases, body.water);
+        let start = body.albedo_at(ICE_COVERED_K, &body.gases);
         settle(&body, start)
     }
 }
@@ -1381,16 +1428,17 @@ fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
 /// being saturated ([`methane_depth`]).
 const CONDENSE_ITERATIONS: usize = 100;
 
-/// The Bond albedo of `water` and `gases` at `temperature_k`: its
-/// [`cover`], with a sulphuric deck where [`sulphuric_deck`] makes one.
+/// The Bond albedo of `water` and `gases` at `temperature_k` with
+/// `frost_bar` of frost on the ground: its [`cover`], with a sulphuric
+/// deck where [`sulphuric_deck`] makes one.
 /// A body that keeps water out of a runaway washes its SO₂ out, liquid
 /// or not at that temperature (a frozen one is too cold for a deck
 /// anyway, and one with no wet balance boils: its steam is the
 /// chain's next pass, not a deck).
-fn derived_albedo(temperature_k: f64, gases: &Gases, water: &Water) -> f64 {
+fn derived_albedo(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> f64 {
     let wet = !water.runaway && water.kept_kg > 0.0;
     let deck = sulphuric_deck(temperature_k, gases, wet);
-    bond_albedo(&cover(temperature_k, gases, water), gases, deck)
+    bond_albedo(&cover(temperature_k, gases, water, frost_bar), gases, deck)
 }
 
 /// The albedo the fixed point of `body` starts from warm: the cover of
@@ -1399,7 +1447,7 @@ fn derived_albedo(temperature_k: f64, gases: &Gases, water: &Water) -> f64 {
 /// warmest climate.
 fn warm_start(body: &Body) -> f64 {
     let (gases, t, _, _) = under_albedo(body, REFERENCE_ALBEDO);
-    derived_albedo(t.max(super::albedo::ICE_FREE_K), &gases, body.water)
+    body.albedo_at(t.max(super::albedo::ICE_FREE_K), &gases)
 }
 
 /// The fixed point of the albedo and the climate of `body` from the
@@ -1417,7 +1465,7 @@ fn settle(body: &Body, start: f64) -> (Gases, Climate) {
     let mut pass = under_albedo(body, albedo);
     for _ in 0..ALBEDO_ITERATIONS {
         let t = pass.1;
-        let derived = derived_albedo(t, &pass.0, body.water);
+        let derived = body.albedo_at(t, &pass.0);
         // Settled when the temperature has stopped moving and the albedo
         // it derives would not move the light by more either (a
         // thermostat holds the temperature whatever the albedo).
@@ -1534,7 +1582,7 @@ fn maximum_greenhouse(body: &Body) -> f64 {
             co2: ln_co2.exp(),
             ..at_target
         };
-        let albedo = derived_albedo(THERMOSTAT_K, &gases, body.water);
+        let albedo = body.albedo_at(THERMOSTAT_K, &gases);
         let t_eq = body.context.with_albedo(albedo).equilibrium_k.max(0.0);
         let skin = t_eq * 0.5_f64.powf(0.25);
         SIGMA * t_eq.powi(4) - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin)
@@ -1590,6 +1638,7 @@ mod tests {
     fn temperate(inventory_bar: f64) -> CarbonCycle {
         CarbonCycle {
             inventory_bar,
+            frozen_bar: 0.0,
             snowball_draw: 1.0,
         }
     }
@@ -2181,7 +2230,7 @@ mod tests {
             d.regime,
             d.heat_flux_w_m2,
             d.water_bar,
-            d.carbon.inventory_bar,
+            &d.carbon,
         );
         let b = branches(&body);
         match &b.frozen {
