@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { DUST_SCALE_HEIGHT } from './dustPhase';
 import {
   createGrains,
+  GRAIN_GAIN_MAX,
+  GRAIN_SHINE_MIN,
   grainCount,
+  grainLight,
   grainShine,
+  HALO_ALPHA,
+  HALO_LOOK,
   HALO_INNER,
   HALO_OUTER,
   HALO_POLE_HALF_ANGLE,
@@ -102,20 +107,47 @@ describe('dust grains', () => {
 
   it('gives each grain a shine in range and scales the counts with quality', () => {
     const s = grainShine(1000, 2);
-    expect(Math.min(...s)).toBeGreaterThanOrEqual(0.3);
+    expect(Math.min(...s)).toBeGreaterThanOrEqual(GRAIN_SHINE_MIN);
     expect(Math.max(...s)).toBeLessThanOrEqual(1);
     expect(grainCount(2500, 1)).toBe(2500);
     expect(grainCount(2500, 0.4)).toBe(1000);
     expect(grainCount(10, 0)).toBe(1);
   });
 
-  it('draws additive points with the floored phase gain', () => {
+  it('keeps grains bright front-lit and only a few times brighter back-lit', () => {
+    // Light in all: opacity times the dot's area.
+    const total = (cos: number, shine: number, alpha?: number) => {
+      const { opacity, sizeScale } = grainLight(cos, shine, alpha);
+      return opacity * sizeScale ** 2;
+    };
+    // Front-lit (cosScatter −1) as at 90°, even the faintest grain well seen.
+    expect(total(-1, 1)).toBeCloseTo(total(0, 1));
+    expect(grainLight(-1, GRAIN_SHINE_MIN).opacity).toBeGreaterThan(0.5);
+    // Back-lit: opaque, widened, and 3 to 5 times the front-lit light, never more than the cap.
+    const back = grainLight(1, 1);
+    expect(back.opacity).toBe(1);
+    expect(back.sizeScale).toBeGreaterThan(1.5);
+    const ratio = total(1, 1) / total(-1, 1);
+    expect(ratio).toBeGreaterThanOrEqual(3);
+    expect(ratio).toBeLessThanOrEqual(GRAIN_GAIN_MAX + 1e-9);
+    for (let c = -1; c <= 1; c += 0.05) expect(total(c, 0.7)).toBeLessThanOrEqual(GRAIN_GAIN_MAX * 0.95 * 0.7 + 1e-9);
+    // The halo's softer dots, fainter at 90°.
+    expect(grainLight(0, 1, HALO_ALPHA).opacity).toBeLessThan(grainLight(0, 1).opacity);
+  });
+
+  it('draws additive points with the clamped phase gain, the halo with its own look', () => {
     const u = { uSunDir: { value: null }, uLightMode: { value: 1 } };
     const points = createGrains(ringGrains(E_RING, 10, 1), grainShine(10, 1), [1, 1, 1], false, u);
     expect(points.geometry.getAttribute('position').count).toBe(10);
     expect(points.material.depthWrite).toBe(false);
     expect(points.material.uniforms['uSunDir']).toBe(u.uSunDir);
-    expect(points.material.vertexShader).toContain('max(uFloor, dustGain(');
+    expect(points.material.vertexShader).toContain(
+      'clamp(dustGain(-dot(uSunDir, normalize(cameraPosition - p))), uFloor, uGainMax)',
+    );
+    expect(points.material.uniforms['uGainMax']!.value).toBe(GRAIN_GAIN_MAX);
+    const halo = createGrains(haloGrains(10, 1, null), grainShine(10, 1), [1, 1, 1], false, u, HALO_LOOK);
+    expect(halo.material.uniforms['uAlpha']!.value).toBe(HALO_LOOK.alpha);
+    expect(halo.material.uniforms['uMinPx']!.value).toBeGreaterThan(points.material.uniforms['uMinPx']!.value);
     expect(points.material.fragmentShader).toContain('#include <colorspace_fragment>');
   });
 });

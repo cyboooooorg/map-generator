@@ -3,10 +3,15 @@ import {
   createJets,
   fracturePoints,
   JET_APEX_SHARE,
+  JET_GLOW_OPACITY,
   JET_HEIGHT_RADII,
+  JET_OPACITY,
   JET_TOP_HALF_WIDTH,
   jetFragment,
+  jetSideLight,
   jetSources,
+  jetVertex,
+  jetWeights,
   JETS_PER_FRACTURE,
   meanderKm,
 } from './jets';
@@ -100,5 +105,26 @@ describe('jets', () => {
     expect(jetFragment).toContain('vec4(vec3(0.92, 0.96, 1.0), a)');
     expect(jetFragment).toContain('#include <colorspace_fragment>');
     expect(jetFragment).not.toMatch(/\* a, a\)/);
+  });
+  it('turns into a round glow, of the same light, seen end-on', () => {
+    const geometry = createJets({ uSunDir: { value: null }, uLightMode: { value: 0 } }).geometry;
+    // Two quads per jet: the trapezoid and the glow.
+    expect(geometry.getIndex()!.count).toBe(12);
+    // The glow, a disc of the top half-width falling as (1 − ρ)², holds the trapezoid's light.
+    const side = JET_OPACITY * JET_HEIGHT_RADII * JET_TOP_HALF_WIDTH * jetSideLight();
+    expect(JET_GLOW_OPACITY * (Math.PI / 6) * JET_TOP_HALF_WIDTH ** 2).toBeCloseTo(side, 12);
+    // No degenerate side vector straight down the axis.
+    expect(jetVertex).toContain('length(c) > 1e-4 ? normalize(c) : camRight');
+    // Side-on all trapezoid, end-on all glow; the light seen (the
+    // trapezoid's shortened by the slant) stays near the same throughout.
+    expect(jetWeights(0)).toEqual({ side: 1, glow: 0 });
+    expect(jetWeights(1).glow).toBe(1);
+    expect(jetWeights(1).side).toBe(0);
+    for (let e = 0; e <= 1.0001; e += 0.01) {
+      const { side: s, glow } = jetWeights(Math.min(e, 1));
+      const seen = s * Math.sqrt(1 - Math.min(e, 1) ** 2) + glow;
+      expect(seen).toBeGreaterThan(0.95);
+      expect(seen).toBeLessThan(1.05);
+    }
   });
 });

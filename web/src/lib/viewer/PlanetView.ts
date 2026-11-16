@@ -10,6 +10,7 @@ import {
   grainCount,
   grainShine,
   HALO_GRAINS,
+  HALO_LOOK,
   haloGrains,
   MOON_CLOUD_GRAINS,
   moonCloudGrains,
@@ -1412,8 +1413,9 @@ export class PlanetView {
    * Sparkling grains along the dust rings of the giant shown that a moon
    * feeds (see lib/viewer/dustGrains.ts), by their profile, and a cloud
    * round each feeding moon trailing along its orbit; `source` is that
-   * moon's index in setSkyBodies' order (-1: no cloud). Brighter back-lit,
-   * but never under a floor, so they show at any phase. None clears them.
+   * moon's index in setSkyBodies' order (-1: no cloud). Never dimmer than
+   * at 90° of scattering, so they show at any phase, and at most a few
+   * times brighter back-lit (see grainLight). None clears them.
    */
   setDustGrains(rings: readonly (FaintRing & { source: number })[]): void {
     const key = JSON.stringify(rings.map((r) => [r.inner, r.outer, r.peak, r.colour, r.source]));
@@ -1462,7 +1464,14 @@ export class PlanetView {
       const n = grainCount(HALO_GRAINS, this.quality.dustGrains);
       const pole = halo.south === null ? null : ([0, halo.south ? -1 : 1, 0] as const);
       // Ice grains: near white, as the jets.
-      this.dustHalo = createGrains(haloGrains(n, 501, pole), grainShine(n, 601), [0.92, 0.96, 1], false, this.u);
+      this.dustHalo = createGrains(
+        haloGrains(n, 501, pole),
+        grainShine(n, 601),
+        [0.92, 0.96, 1],
+        false,
+        this.u,
+        HALO_LOOK,
+      );
       this.scene.add(this.dustHalo);
     }
     this.requestRender();

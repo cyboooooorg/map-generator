@@ -3,8 +3,9 @@
 // profile), a cloud round the feeding moon trailing along its orbit (in
 // the giant's close-up), and a halo round a moon that vents or feeds a
 // ring (in its own close-up). The smooth ring sheet stays realistic (only
-// bright back-lit, see dustPhase.ts); the grains keep the same forward
-// scattering but never fall under a floor, so they show side- and front-lit.
+// bright back-lit, see dustPhase.ts); the grains follow the same forward
+// scattering squeezed between a floor and a cap (see grainLight), so they
+// show front- and side-lit and only brighten a few times back-lit.
 import {
   AdditiveBlending,
   BufferAttribute,
@@ -18,7 +19,7 @@ import {
 } from 'three';
 import type { Vec3 } from '../geo';
 import type { FaintRing } from '../ringMoons';
-import { DUST_SCALE_HEIGHT, dustPhaseGlsl } from './dustPhase';
+import { DUST_SCALE_HEIGHT, dustGain, dustPhaseGlsl } from './dustPhase';
 import { random } from './skyRandom';
 
 /** Grains along one dust ring, at full quality (look calibration). */
@@ -28,7 +29,7 @@ export const RING_GRAINS = 2500;
 export const MOON_CLOUD_GRAINS = 1500;
 
 /** Grains in the halo round a venting or ring-feeding moon in its close-up, at full quality (look calibration). */
-export const HALO_GRAINS = 2000;
+export const HALO_GRAINS = 4000;
 
 /**
  * Share of the cloud's grains packed close round the moon, the others
@@ -53,31 +54,96 @@ export const MOON_TRAIL_SIGMA = 0.025;
 export const HALO_INNER = 1.05;
 export const HALO_OUTER = 3;
 
-/** Scale, in the moon's radii, of the halo's exponential fall over its surface (look calibration). */
-export const HALO_SCALE = 0.45;
+/**
+ * Scale, in the moon's radii, of the halo's exponential fall over its
+ * surface (look calibration): most grains hug the surface, so the halo
+ * reads as dust round the moon rather than stars behind it.
+ */
+export const HALO_SCALE = 0.25;
 
 /** Share of the halo's grains over the venting pole, when known (look calibration). */
-export const HALO_POLE_SHARE = 0.45;
+export const HALO_POLE_SHARE = 0.55;
 
 /** Half-angle, radians, of the cone over the venting pole the polar grains fill (look calibration). */
 export const HALO_POLE_HALF_ANGLE = (35 * Math.PI) / 180;
 
 /**
  * Floor under the grains' forward-scattering gain (look calibration): a
- * grain is never dimmer than this share of its 90° brightness, so the
- * grains stay seen front- and side-lit where the smooth ring vanishes.
+ * grain is never dimmer than at 90° of scattering, so the grains stay
+ * seen front- and side-lit where the smooth ring vanishes.
  */
-export const GRAIN_PHASE_FLOOR = 0.6;
+export const GRAIN_PHASE_FLOOR = 1;
 
-/** A grain's opacity at 90° of scattering, before its own shine (look calibration). */
-export const GRAIN_ALPHA = 0.6;
+/**
+ * Cap on the grains' forward-scattering gain (look calibration): back-lit
+ * they shine at most this many times their 90° light, not the smooth
+ * sheet's tens of times (`DUST_GAIN_MAX`), so they sparkle without washing
+ * the frame.
+ */
+export const GRAIN_GAIN_MAX = 4;
+
+/**
+ * A grain's opacity at 90° of scattering and full shine (look
+ * calibration): with `GRAIN_SHINE_MIN` and the soft dot's core, a grain at
+ * the floor reads at a luminance of about 120 or more on its pixel or two.
+ */
+export const GRAIN_ALPHA = 0.95;
+
+/** Least shine of a grain, of 1 for the brightest (look calibration): few faint ones, never lost. */
+export const GRAIN_SHINE_MIN = 0.55;
 
 /** A grain's size, in the drawn body's radii, before the pixel floor and cap (look calibration). */
 export const GRAIN_WORLD_SIZE = 0.008;
 
-/** Least and most a grain is drawn across, CSS pixels: fine sparkles at any distance (look calibration). */
-export const GRAIN_MIN_PX = 1.5;
+/**
+ * Least and most a ring grain is drawn across, CSS pixels, before light
+ * past full opacity widens it (see grainLight): fine sparkles at any
+ * distance (look calibration).
+ */
+export const GRAIN_MIN_PX = 2;
 export const GRAIN_MAX_PX = 3;
+
+/**
+ * Least and most a halo grain is drawn across, CSS pixels (look
+ * calibration): slightly larger soft dots than the ring's, so the halo
+ * reads as dust round the moon, not as stars.
+ */
+export const HALO_MIN_PX = 2.5;
+export const HALO_MAX_PX = 4;
+
+/**
+ * A halo grain's opacity at 90° of scattering and full shine (look
+ * calibration): under the ring grains', so the denser halo stays a haze of
+ * dots and the jets show through it.
+ */
+export const HALO_ALPHA = 0.6;
+
+/**
+ * Inner edge of a grain's soft dot, as a share of its size (look
+ * calibration): a flat core out to it, then a smooth fall to the rim. The
+ * halo's softer dots start falling sooner.
+ */
+export const GRAIN_CORE = 0.3;
+export const HALO_CORE = 0.1;
+
+/**
+ * The light of a grain at `cosScatter` (1 back-lit), with its `shine` and
+ * `alpha` at 90° (`GRAIN_ALPHA`, `HALO_ALPHA`): its opacity, and how much
+ * its size grows. The phase gain (dustGain) is held between
+ * `GRAIN_PHASE_FLOOR` and `GRAIN_GAIN_MAX`; light past full opacity widens
+ * the dot instead (area grows with it), so a back-lit grain is up to
+ * `GRAIN_GAIN_MAX` times brighter in all without saturating. Twin of the
+ * grain shader's code.
+ */
+export function grainLight(
+  cosScatter: number,
+  shine: number,
+  alpha = GRAIN_ALPHA,
+): { opacity: number; sizeScale: number } {
+  const gain = Math.min(Math.max(dustGain(cosScatter), GRAIN_PHASE_FLOOR), GRAIN_GAIN_MAX);
+  const light = alpha * shine * gain;
+  return { opacity: Math.min(light, 1), sizeScale: Math.sqrt(Math.max(light, 1)) };
+}
 
 /** A standard normal deviate (Box-Muller) from `rand`. */
 function gauss(rand: () => number): number {
@@ -192,11 +258,11 @@ export function haloGrains(count: number, seed: number, pole: Vec3 | null): Floa
   return out;
 }
 
-/** Each grain's own shine, from 0.3 to 1 (most of them faint, a few bright): sparkle, not a haze. */
+/** Each grain's own shine, from `GRAIN_SHINE_MIN` to 1 (most of them fainter, a few bright): sparkle, not a haze. */
 export function grainShine(count: number, seed: number): Float32Array {
   const rand = random(seed);
   const out = new Float32Array(count);
-  for (let i = 0; i < count; i += 1) out[i] = 0.3 + 0.7 * rand() ** 2;
+  for (let i = 0; i < count; i += 1) out[i] = GRAIN_SHINE_MIN + (1 - GRAIN_SHINE_MIN) * rand() ** 2;
   return out;
 }
 
@@ -226,6 +292,7 @@ const grainVertex = /* glsl */ `
   uniform float uLightMode;
   uniform float uAlpha;
   uniform float uFloor;
+  uniform float uGainMax;
   uniform float uFade;
   uniform float uWorldSize;
   uniform float uPxScale;
@@ -244,15 +311,18 @@ const grainVertex = /* glsl */ `
     }
     float gain = 1.0;
     if (uLightMode > 0.5) {
-      gain = max(uFloor, dustGain(-dot(uSunDir, normalize(cameraPosition - p))));
+      // cosScatter is 1 back-lit; the gain held between floor and cap (grainLight).
+      gain = clamp(dustGain(-dot(uSunDir, normalize(cameraPosition - p))), uFloor, uGainMax);
       // Nothing to scatter in the shadow of the body drawn (radius 1 at the origin).
       float b = dot(p, uSunDir);
       if (b < 0.0 && dot(p, p) - b * b < 1.0) gain = 0.0;
     }
-    vAlpha = clamp(uAlpha * aShine * gain * uFade, 0.0, 1.0);
+    // Light past full opacity widens the dot instead (its area grows with it).
+    float light = uAlpha * aShine * gain;
+    vAlpha = clamp(light, 0.0, 1.0) * uFade;
     vec4 view = viewMatrix * vec4(p, 1.0);
     float px = uWorldSize * uPxScale / max(-view.z, 1e-6);
-    gl_PointSize = clamp(px, uMinPx, uMaxPx) * mix(0.7, 1.0, aShine) * uPixelRatio;
+    gl_PointSize = clamp(px, uMinPx, uMaxPx) * sqrt(max(light, 1.0)) * uPixelRatio;
     gl_Position = projectionMatrix * view;
     gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
   }
@@ -260,11 +330,12 @@ const grainVertex = /* glsl */ `
 
 export const grainFragment = /* glsl */ `
   uniform vec3 uColour;
+  uniform float uCore;
   varying float vAlpha;
   void main() {
-    // A soft round dot.
+    // A soft round dot: flat out to uCore of its size, then falling to the rim.
     vec2 d = gl_PointCoord - 0.5;
-    float fall = 1.0 - smoothstep(0.15, 0.5, length(d));
+    float fall = 1.0 - smoothstep(uCore, 0.5, length(d));
     if (fall <= 0.0 || vAlpha <= 0.0) discard;
     gl_FragColor = vec4(uColour, vAlpha * fall);
     #include <colorspace_fragment>
@@ -274,10 +345,25 @@ export const grainFragment = /* glsl */ `
 /** Points of dust grains (see createGrains). */
 export type GrainPoints = Points<BufferGeometry, ShaderMaterial>;
 
+/** How a set of grains is drawn: the ring's fine sparkles, or the halo's softer, larger dots. */
+export interface GrainLook {
+  alpha: number;
+  minPx: number;
+  maxPx: number;
+  core: number;
+}
+
+/** The ring and moon cloud grains' look. */
+export const RING_LOOK: GrainLook = { alpha: GRAIN_ALPHA, minPx: GRAIN_MIN_PX, maxPx: GRAIN_MAX_PX, core: GRAIN_CORE };
+
+/** The halo grains' look, round a moon in its close-up. */
+export const HALO_LOOK: GrainLook = { alpha: HALO_ALPHA, minPx: HALO_MIN_PX, maxPx: HALO_MAX_PX, core: HALO_CORE };
+
 /**
  * Points for the grains at `positions` (xyz, or orbit offsets when
  * `orbit`), with their `shine`, in the sRGB `colour`, sharing the view's
- * sun uniforms. Additive, behind the body drawn (depth tested, not written).
+ * sun uniforms, drawn with `look`. Additive, behind the body drawn (depth
+ * tested, not written).
  */
 export function createGrains(
   positions: Float32Array,
@@ -285,6 +371,7 @@ export function createGrains(
   colour: readonly [number, number, number],
   orbit: boolean,
   uniforms: { uSunDir: IUniform; uLightMode: IUniform },
+  look: GrainLook = RING_LOOK,
 ): GrainPoints {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
@@ -297,14 +384,16 @@ export function createGrains(
       uMoon: { value: new Vector3() },
       uSunDir: uniforms.uSunDir,
       uLightMode: uniforms.uLightMode,
-      uAlpha: { value: GRAIN_ALPHA },
+      uAlpha: { value: look.alpha },
       uFloor: { value: GRAIN_PHASE_FLOOR },
+      uGainMax: { value: GRAIN_GAIN_MAX },
       uFade: { value: 1 },
       uWorldSize: { value: GRAIN_WORLD_SIZE },
       uPxScale: { value: 500 },
       uPixelRatio: { value: 1 },
-      uMinPx: { value: GRAIN_MIN_PX },
-      uMaxPx: { value: GRAIN_MAX_PX },
+      uMinPx: { value: look.minPx },
+      uMaxPx: { value: look.maxPx },
+      uCore: { value: look.core },
       uColour: { value: new Color().setRGB(...colour, SRGBColorSpace) },
     },
     transparent: true,

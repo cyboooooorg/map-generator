@@ -1,7 +1,8 @@
 // Jets rising from a moon's geyser fractures in its close-up (the tiger
 // stripes of Enceladus): one camera-facing cone per source, its apex on
-// the surface along each fracture, widening with height. The plume in a
-// moon's sky is plume.ts.
+// the surface along each fracture, widening with height. Seen down its
+// axis, a cone turns into a round glow brightest at the vent (see
+// jetVertex). The plume in a moon's sky is plume.ts.
 import {
   AdditiveBlending,
   Float32BufferAttribute,
@@ -49,6 +50,60 @@ export const JET_CORE_SHARE = 0.25;
  * constant): `JET_OPACITY / JET_CORE_SHARE`, about 0.16, at the vent.
  */
 export const JET_OPACITY = 0.04;
+
+/**
+ * How end-on a jet is seen, |cos| of the angle between its axis and the
+ * view, over which it turns from the side-on trapezoid into the end-on
+ * glow (look constant): side-on below the first, a glow past the second.
+ */
+export const JET_END_ON_FROM = 0.75;
+export const JET_END_ON_TO = 0.97;
+
+/**
+ * Least sine of the angle between a jet's axis and the view by which its
+ * side-on trapezoid is brightened (look constant): the gas is thin, so a
+ * jet seen at a slant packs the same light into a shorter shape; this
+ * keeps that boost finite as the trapezoid fades out.
+ */
+export const JET_MIN_SLANT = 0.25;
+
+/**
+ * The light of one jet's side-on trapezoid at full brightness per unit
+ * area, in its top half-widths times its heights: the integral of the
+ * fragment's side and height profiles (with `JET_APEX_SHARE` and
+ * `JET_CORE_SHARE`) over the trapezoid.
+ */
+export function jetSideLight(steps = 2000): number {
+  let sum = 0;
+  for (let i = 0; i < steps; i += 1) {
+    const y = (i + 0.5) / steps;
+    const share = JET_APEX_SHARE + (1 - JET_APEX_SHARE) * y;
+    // Across: the side profile 1 − smoothstep integrates to `share` (of the top half-width, on both sides).
+    sum += (share * Math.pow(1 - y, 1.5)) / Math.max(share, JET_CORE_SHARE);
+  }
+  return sum / steps;
+}
+
+/**
+ * Brightness per unit area at the centre of a jet's end-on glow, a disc
+ * of the top half-width falling as (1 − ρ)² (π/6 of its radius squared in
+ * all), so that it holds the same light as the side-on trapezoid.
+ */
+export const JET_GLOW_OPACITY =
+  (JET_OPACITY * JET_HEIGHT_RADII * JET_TOP_HALF_WIDTH * jetSideLight()) / ((Math.PI / 6) * JET_TOP_HALF_WIDTH ** 2);
+
+/**
+ * The weights of a jet's side-on trapezoid and end-on glow when seen
+ * `endOn` (|cos| of the angle between its axis and the view): the glow
+ * fades in from `JET_END_ON_FROM` to `JET_END_ON_TO`, the trapezoid out,
+ * brightened by 1 / sin of that angle (at least `JET_MIN_SLANT`) as it
+ * shortens. Twin of jetVertex.
+ */
+export function jetWeights(endOn: number): { side: number; glow: number } {
+  const t = Math.min(Math.max((endOn - JET_END_ON_FROM) / (JET_END_ON_TO - JET_END_ON_FROM), 0), 1);
+  const glow = t * t * (3 - 2 * t);
+  return { side: (1 - glow) / Math.max(Math.sqrt(1 - endOn * endOn), JET_MIN_SLANT), glow };
+}
 
 /** Golden angle, radians: steps the phases of `meanderKm` from one fracture to the next. */
 const GOLDEN_ANGLE = 2.399963229728653;
@@ -137,25 +192,51 @@ export function jetSources(g: Geysers, radiusKm: number): LonLat[] {
   );
 }
 
-const jetVertex = /* glsl */ `
+// Two quads per jet, position.z telling them apart: the side-on
+// trapezoid (0) and the end-on glow (1), weighted by how end-on the jet is
+// seen so that its light stays about the same at any angle.
+export const jetVertex = /* glsl */ `
   attribute vec3 aBase;
   varying vec2 vUv;
   varying vec3 vBase;
   varying vec3 vWorld;
+  varying float vGlow;
+  varying float vWeight;
   uniform float uHeight;
   uniform float uWidth;
   uniform float uApex;
+  uniform float uEndOnFrom;
+  uniform float uEndOnTo;
+  uniform float uMinSlant;
   void main() {
     vec3 up = normalize(aBase);
-    vec3 toEye = cameraPosition - aBase;
-    vec3 right = normalize(cross(up, toEye));
-    // A trapezoid from the foot (y 0) to the top (y 1), x from -1 to 1 of
-    // its width there: uApex of the top width at the foot, all of it at
-    // the top. vUv.x is the offset in top widths, linear across the
-    // trapezoid; the fragment divides it by the local width.
-    float share = mix(uApex, 1.0, position.y);
-    vec3 world = aBase + right * (position.x * share * uWidth) + up * (position.y * uHeight);
-    vUv = vec2(position.x * share, position.y);
+    vec3 toEye = normalize(cameraPosition - aBase);
+    float endOn = abs(dot(up, toEye));
+    float glow = smoothstep(uEndOnFrom, uEndOnTo, endOn);
+    vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+    vec3 camUp = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+    vec3 world;
+    if (position.z < 0.5) {
+      // A trapezoid from the foot (y 0) to the top (y 1), x from -1 to 1
+      // of its width there: uApex of the top width at the foot, all of it
+      // at the top. vUv.x is the offset in top widths, linear across the
+      // trapezoid; the fragment divides it by the local width. Brighter
+      // as it shortens at a slant (thin gas), fading out end-on.
+      vec3 c = cross(up, toEye);
+      vec3 right = length(c) > 1e-4 ? normalize(c) : camRight;
+      float share = mix(uApex, 1.0, position.y);
+      world = aBase + right * (position.x * share * uWidth) + up * (position.y * uHeight);
+      vUv = vec2(position.x * share, position.y);
+      vWeight = (1.0 - glow) / max(sqrt(1.0 - endOn * endOn), uMinSlant);
+      vGlow = 0.0;
+    } else {
+      // A disc of the top half-width facing the camera, centred half-way
+      // up the jet (over the vent when seen end-on, clear of the ground).
+      vUv = vec2(position.x, 2.0 * position.y - 1.0);
+      world = aBase + up * (0.5 * uHeight) + (camRight * vUv.x + camUp * vUv.y) * uWidth;
+      vWeight = glow;
+      vGlow = 1.0;
+    }
     vBase = aBase;
     vWorld = world;
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
@@ -168,16 +249,28 @@ export const jetFragment = /* glsl */ `
   uniform float uOpacity;
   uniform float uApex;
   uniform float uCore;
+  uniform float uGlowOpacity;
   varying vec2 vUv;
   varying vec3 vBase;
   varying vec3 vWorld;
+  varying float vGlow;
+  varying float vWeight;
   ${dustPhaseGlsl}
   void main() {
-    // A cone: soft at its sides, its gas spread over its width (denser
-    // towards the vent, down to the core share) and fading with height.
-    float share = mix(uApex, 1.0, vUv.y);
-    float side = 1.0 - smoothstep(0.0, 1.0, abs(vUv.x) / share);
-    float top = pow(1.0 - vUv.y, 1.5) / max(share, uCore);
+    float body;
+    if (vGlow > 0.5) {
+      // End-on: a round glow brightest at the vent, falling to the rim.
+      float rho = length(vUv);
+      if (rho >= 1.0) discard;
+      body = uGlowOpacity * (1.0 - rho) * (1.0 - rho);
+    } else {
+      // A cone: soft at its sides, its gas spread over its width (denser
+      // towards the vent, down to the core share) and fading with height.
+      float share = mix(uApex, 1.0, vUv.y);
+      float side = 1.0 - smoothstep(0.0, 1.0, abs(vUv.x) / share);
+      float top = pow(1.0 - vUv.y, 1.5) / max(share, uCore);
+      body = uOpacity * side * top;
+    }
     float gain = 1.0;
     if (uLightMode > 0.5) {
       vec3 toEye = normalize(cameraPosition - vBase);
@@ -186,20 +279,24 @@ export const jetFragment = /* glsl */ `
       float b = dot(vWorld, uSunDir);
       if (b < 0.0 && dot(vWorld, vWorld) - b * b < 1.0) gain = 0.0;
     }
-    float a = clamp(uOpacity * gain * side * top, 0.0, 1.0);
+    float a = clamp(body * vWeight * gain, 0.0, 1.0);
     gl_FragColor = vec4(vec3(0.92, 0.96, 1.0), a);
     #include <colorspace_fragment>
   }
 `;
 
-/** The mesh of jets: instanced cones at the `aBase` positions (see `placeJets`). */
+/** The mesh of jets: instanced cones, with their end-on glows, at the `aBase` positions (see `placeJets`). */
 export type JetMesh = Mesh<InstancedBufferGeometry, ShaderMaterial>;
 
 /** A jets mesh sharing the view's sun uniforms; empty until `placeJets`. */
 export function createJets(uniforms: { uSunDir: IUniform; uLightMode: IUniform }): JetMesh {
   const geometry = new InstancedBufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 1, 1, 0, -1, 1, 0], 3));
-  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  // The trapezoid (z 0) and the glow (z 1), each a quad of x −1 to 1, y 0 to 1.
+  geometry.setAttribute(
+    'position',
+    new Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 1, 1, 0, -1, 1, 0, -1, 0, 1, 1, 0, 1, 1, 1, 1, -1, 1, 1], 3),
+  );
+  geometry.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
   geometry.instanceCount = 0;
   const material = new ShaderMaterial({
     vertexShader: jetVertex,
@@ -210,6 +307,10 @@ export function createJets(uniforms: { uSunDir: IUniform; uLightMode: IUniform }
       uApex: { value: JET_APEX_SHARE },
       uCore: { value: JET_CORE_SHARE },
       uOpacity: { value: JET_OPACITY },
+      uGlowOpacity: { value: JET_GLOW_OPACITY },
+      uEndOnFrom: { value: JET_END_ON_FROM },
+      uEndOnTo: { value: JET_END_ON_TO },
+      uMinSlant: { value: JET_MIN_SLANT },
       uSunDir: uniforms.uSunDir,
       uLightMode: uniforms.uLightMode,
     },
