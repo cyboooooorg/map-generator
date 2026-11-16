@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createJets,
   CURTAIN_WIDTH,
+  fractureActivity,
+  FRACTURE_ACTIVITY_MAX,
+  FRACTURE_ACTIVITY_MIN,
   fracturePoints,
   fracturePointsAt,
   JET_APEX_SHARE,
@@ -11,8 +14,12 @@ import {
   JET_HEIGHT_MAX,
   JET_HEIGHT_MIN,
   JET_HEIGHT_RADII,
+  JET_HALF_ANGLE_DEG,
+  JET_LIGHT_MAX,
   JET_LIGHT_PER_FRACTURE,
   JET_OPACITY,
+  JET_OPENING_MAX_DEG,
+  JET_OPENING_MIN_DEG,
   JET_TILT_MAX_DEG,
   JET_TOP_HALF_WIDTH,
   jetAxis,
@@ -26,6 +33,7 @@ import {
   JETS_MAX,
   JETS_MIN,
   meanderKm,
+  strikeAngle,
 } from './jets';
 
 /** Angle, radians, between two points given in latitude and longitude. */
@@ -71,16 +79,23 @@ describe('jets', () => {
       const sideways = -Math.asin(Math.cos(p.lat) * Math.sin(p.lon)) * 100;
       expect(sideways).toBeCloseTo(meanderKm(0, along, 100), 6);
     });
-    expect(jetSources({ south: false, fractures: [f, f] }, 100)).toHaveLength(
-      jetLayout(f, 0).length + jetLayout(f, 1).length,
+    const g = { south: false, fractures: [f, f] };
+    const [a0, a1] = fractureActivity(g);
+    const share = (a: number) => (2 * a) / (a0! + a1!);
+    expect(jetSources(g, 100)).toHaveLength(
+      jetLayout(f, 0, a0, share(a0!)).length + jetLayout(f, 1, a1, share(a1!)).length,
     );
   });
   it('skips a zero-length fracture, the others keeping their index', () => {
     const none = { lat_deg: -85, lon_deg: 0, azimuth_deg: 0, length_km: 0 };
     const some = { lat_deg: -85, lon_deg: 0, azimuth_deg: 0, length_km: 50 };
-    const sources = jetSources({ south: true, fractures: [none, some] }, 252.1);
-    const layout = jetLayout(some, 1);
-    expect(sources.map(({ site, ...shape }) => shape)).toEqual(layout);
+    const g = { south: true, fractures: [none, some] };
+    const sources = jetSources(g, 252.1);
+    // The only live fracture is the most active one, with all the light.
+    expect(fractureActivity(g)).toEqual([0, 1]);
+    const layout = jetLayout(some, 1, 1, 1);
+    const drop = ({ tiltAzimuth: _, ...rest }: { tiltAzimuth: number }) => rest;
+    expect(sources.map(({ site: _, ...shape }) => drop(shape))).toEqual(layout.map(drop));
     expect(sources[0]!.site).toEqual(fracturePointsAt(some, 1, 252.1, [layout[0]!.along])[0]);
   });
   it('matches its Rust twin meander_km', () => {
@@ -153,7 +168,7 @@ describe('jets', () => {
   it('keeps every jet within its bounds and the light of the fracture', () => {
     for (let index = 0; index < 40; index += 1) {
       const f = { lat_deg: -80 + index * 0.1, lon_deg: index * 9, azimuth_deg: 20 * index, length_km: 130 };
-      const layout = jetLayout(f, index);
+      const layout = jetLayout(f, index, (index % 10) / 9);
       const jets = layout.filter((j) => !j.curtain);
       expect(jets.length).toBeGreaterThanOrEqual(JETS_MIN);
       expect(jets.length).toBeLessThanOrEqual(JETS_MAX);
@@ -166,11 +181,18 @@ describe('jets', () => {
         expect(j.brightness).toBeLessThanOrEqual(1);
         expect(j.tilt).toBeGreaterThanOrEqual(0);
         expect(j.tilt).toBeLessThanOrEqual((JET_TILT_MAX_DEG * Math.PI) / 180 + 1e-12);
+        // A cone of its own opening.
+        const tanRatio = (deg: number) =>
+          Math.tan((deg * Math.PI) / 180) / Math.tan((JET_HALF_ANGLE_DEG * Math.PI) / 180);
+        expect(j.width / j.height).toBeGreaterThanOrEqual(tanRatio(JET_OPENING_MIN_DEG) - 1e-9);
+        expect(j.width / j.height).toBeLessThanOrEqual(tanRatio(JET_OPENING_MAX_DEG) + 1e-9);
+        expect(j.light).toBeLessThanOrEqual(JET_LIGHT_MAX);
       }
-      // Sorted along, the light shared to that of the jets drawn before.
+      // Sorted along, the light at most that of the jets drawn before (the
+      // cap drops some; the body's is checked below).
       layout.forEach((j, i) => i > 0 && expect(j.along).toBeGreaterThanOrEqual(layout[i - 1]!.along));
       const light = layout.reduce((sum, j) => sum + j.light * j.height * j.width, 0);
-      expect(light).toBeCloseTo(JET_LIGHT_PER_FRACTURE, 9);
+      expect(light).toBeLessThanOrEqual(JET_LIGHT_PER_FRACTURE + 1e-9);
     }
   });
   it('spaces the jets unevenly, in groups and gaps, with varied counts and looks', () => {
@@ -190,6 +212,73 @@ describe('jets', () => {
     }
     expect(irregular).toBeGreaterThan(0.8 * n);
     expect(counts.size).toBeGreaterThan(5);
+  });
+  it('vents along a few active stretches, a few tall jets over many short ones', () => {
+    let quiet = 0;
+    let short = 0;
+    let all = 0;
+    let alongStrike = 0;
+    const n = 40;
+    for (let index = 0; index < n; index += 1) {
+      const f = { lat_deg: -80, lon_deg: index * 9, azimuth_deg: 90, length_km: 130 };
+      const jets = jetLayout(f, index).filter((j) => !j.curtain);
+      // A long quiet stretch between active ones (or past the last).
+      const alongs = [-0.5, ...jets.map((j) => j.along), 0.5];
+      const gaps = alongs.slice(1).map((a, i) => a - alongs[i]!);
+      if (Math.max(...gaps) > 0.2) quiet += 1;
+      for (const j of jets) {
+        all += 1;
+        if (j.height < 0.5) short += 1;
+        // Leaning ahead or behind along the strike, within 45°.
+        if (Math.abs(Math.cos(j.tiltAzimuth)) > Math.SQRT1_2) alongStrike += 1;
+      }
+    }
+    expect(quiet).toBeGreaterThan(0.8 * n);
+    expect(short / all).toBeGreaterThan(0.5);
+    expect(alongStrike / all).toBeGreaterThan(0.8);
+  });
+  it('makes one fracture far more active than the others, keeping the light of the body', () => {
+    for (let k = 0; k < 20; k += 1) {
+      const fractures = [0, 1, 2, 3].map((i) => ({
+        lat_deg: -82 + i * 2,
+        lon_deg: 20 * i + 7 * k,
+        azimuth_deg: 60 + k,
+        length_km: 130,
+      }));
+      const g = { south: true, fractures };
+      const activity = fractureActivity(g);
+      expect(fractureActivity(g)).toEqual(activity);
+      expect(activity.filter((a) => a === 1)).toHaveLength(1);
+      for (const a of activity.filter((a) => a !== 1)) {
+        expect(a).toBeGreaterThanOrEqual(FRACTURE_ACTIVITY_MIN);
+        expect(a).toBeLessThanOrEqual(FRACTURE_ACTIVITY_MAX);
+      }
+      const hot = activity.indexOf(1);
+      const counts = fractures.map((f, i) => jetLayout(f, i, activity[i]).filter((j) => !j.curtain).length);
+      expect(Math.max(...counts)).toBe(counts[hot]);
+      expect(Math.min(...counts)).toBeLessThan(0.6 * counts[hot]!);
+      const sources = jetSources(g, 252.1);
+      const light = sources.reduce((sum, j) => sum + j.light * j.height * j.width, 0);
+      expect(light).toBeLessThanOrEqual(4 * JET_LIGHT_PER_FRACTURE + 1e-9);
+      expect(light).toBeGreaterThan(0.6 * 4 * JET_LIGHT_PER_FRACTURE);
+    }
+  });
+  it("turns a jet's lean from the fracture's strike to east and north", () => {
+    // Along the meridian, northwards: the strike points north (π/2).
+    const site = { lat: 0.1, lon: 0.3 };
+    expect(strikeAngle(site, { lat: 0.09, lon: 0.3 }, { lat: 0.11, lon: 0.3 })).toBeCloseTo(Math.PI / 2, 9);
+    // Eastwards: 0, across the seam too.
+    expect(
+      strikeAngle({ lat: 0, lon: Math.PI }, { lat: 0, lon: Math.PI - 0.01 }, { lat: 0, lon: -Math.PI + 0.01 }),
+    ).toBeCloseTo(0, 9);
+    const f = { lat_deg: -80, lon_deg: 30, azimuth_deg: 90, length_km: 130 };
+    const g = { south: true, fractures: [f] };
+    const layout = jetLayout(f, 0, 1, 1);
+    const sources = jetSources(g, 252.1);
+    sources.forEach((s, i) => {
+      const [back, ahead] = fracturePointsAt(f, 0, 252.1, [s.along - 0.005, s.along + 0.005]);
+      expect(s.tiltAzimuth).toBeCloseTo(strikeAngle(s.site, back!, ahead!) + layout[i]!.tiltAzimuth, 9);
+    });
   });
   it('tilts a jet off the vertical by its tilt', () => {
     const base = new Vector3(0.3, -0.9, 0.2);

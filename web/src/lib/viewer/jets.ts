@@ -1,9 +1,11 @@
 // Jets rising from a moon's geyser fractures in its close-up (the tiger
 // stripes of Enceladus): one camera-facing cone per source, its apex on
 // the surface along each fracture, widening with height. The sources are
-// scattered irregularly, in groups and gaps, each with its own height,
-// brightness and tilt, with a few faint broad curtains between them (see
-// jetLayout). Seen down its axis, a cone turns into a round glow
+// scattered irregularly: one fracture far more active than the others,
+// each venting along a few short stretches with long quiet ones between,
+// its jets each with their own height (a few tall, many short), opening,
+// brightness and tilt (leaning mostly along the fracture), with a few
+// faint broad curtains (see jetLayout and fractureActivity). Seen down its axis, a cone turns into a round glow
 // brightest at the vent (see jetVertex). The plume in a moon's sky is
 // plume.ts.
 import {
@@ -23,40 +25,78 @@ import { dustPhaseGlsl } from './dustPhase';
 import { random, subSeed } from './skyRandom';
 
 /**
- * Least and most jets along one fracture: about a hundred over
- * Enceladus's four stripes, in irregular groups (Porco et al. 2014,
- * doi:10.1088/0004-6256/148/3/45).
+ * Least and most jets along one fracture, from the quietest to the most
+ * active: about a hundred over Enceladus's four stripes, unevenly shared
+ * (Porco et al. 2014, doi:10.1088/0004-6256/148/3/45, find Baghdad and
+ * Damascus Sulci far more active than Alexandria and Cairo).
  */
-export const JETS_MIN = 12;
-export const JETS_MAX = 30;
+export const JETS_MIN = 3;
+export const JETS_MAX = 40;
 
 /**
- * The light of the jets of one fracture, in jets of full height, width
- * and brightness (look constant): what the 24 identical jets drawn before
- * held, shared out among the irregular ones (see jetLayout).
+ * The light of the jets of one fracture on average, in jets of full
+ * height, width and brightness (look constant): what the 24 identical jets
+ * drawn before held, shared out among the fractures by their activity
+ * (see fractureActivity) and among their jets (see jetLayout).
  */
 export const JET_LIGHT_PER_FRACTURE = 24;
 
-/** Least and most groups the jets of a fracture gather in (look constant). */
-export const JET_GROUPS_MIN = 2;
-export const JET_GROUPS_MAX = 5;
+/**
+ * Activity of the quieter fractures of a body, of 1 for the most active
+ * one, which every body with geysers has (look constants): drawn between
+ * these, most of them near the least.
+ */
+export const FRACTURE_ACTIVITY_MIN = 0.1;
+export const FRACTURE_ACTIVITY_MAX = 0.5;
 
-/** Least and most spread of a group along its fracture, sigma in its lengths (look constant). */
-export const JET_GROUP_SIGMA_MIN = 0.015;
-export const JET_GROUP_SIGMA_MAX = 0.05;
+/**
+ * Least and most active stretches along a fracture, the jets of each
+ * gathered in it, the fracture quiet between them (look constants).
+ */
+export const JET_SEGMENTS_MIN = 2;
+export const JET_SEGMENTS_MAX = 4;
 
-/** Share of the jets standing alone, anywhere along the fracture, not in a group (look constant). */
-export const JET_LONE_SHARE = 0.25;
+/** Least and most half-length of an active stretch, in its fracture's lengths (look constants). */
+export const JET_SEGMENT_HALF_MIN = 0.02;
+export const JET_SEGMENT_HALF_MAX = 0.08;
 
-/** Least and most height of a jet, in `JET_HEIGHT_RADII` (look constant). */
-export const JET_HEIGHT_MIN = 0.4;
-export const JET_HEIGHT_MAX = 1.3;
+/** Share of the jets standing alone, anywhere along the fracture, outside its active stretches (look constant). */
+export const JET_LONE_SHARE = 0.06;
 
-/** Least brightness of a jet, of 1 for the brightest (look constant). */
-export const JET_BRIGHTNESS_MIN = 0.3;
+/**
+ * Least and most height of a jet, in `JET_HEIGHT_RADII`, and the skew of
+ * its draw (look constants): the height is the least plus the range times
+ * a uniform draw to this power, so a few jets stand tall over many short
+ * ones.
+ */
+export const JET_HEIGHT_MIN = 0.15;
+export const JET_HEIGHT_MAX = 1.5;
+export const JET_HEIGHT_SKEW = 2.5;
 
-/** Most tilt of a jet off the vertical, degrees, in any direction (look constant). */
-export const JET_TILT_MAX_DEG = 15;
+/** Least and most opening half-angle of a jet, degrees (Porco et al. 2014: roughly 5 to 20°). */
+export const JET_OPENING_MIN_DEG = 5;
+export const JET_OPENING_MAX_DEG = 20;
+
+/** Least brightness of a jet, of 1 for the brightest, and the skew of its draw (look constants): most of them faint. */
+export const JET_BRIGHTNESS_MIN = 0.1;
+export const JET_BRIGHTNESS_SKEW = 2;
+
+/** Most tilt of a jet off the vertical, degrees (look constant). */
+export const JET_TILT_MAX_DEG = 25;
+
+/**
+ * Sigma, degrees, of the direction a jet leans in round the fracture's
+ * strike, ahead or behind along it (look constant): most jets lean in the
+ * fracture's plane, as the fissure's walls channel them.
+ */
+export const JET_TILT_SPREAD_DEG = 20;
+
+/**
+ * Most brightness per unit area of a jet, in `JET_OPACITY` (look
+ * constant): the light of a fracture with few small jets is not packed
+ * into blinding ones (its excess is dropped).
+ */
+export const JET_LIGHT_MAX = 3;
 
 /**
  * Faint broad curtains of the fracture's diffuse emission between the
@@ -74,9 +114,10 @@ export const CURTAIN_BRIGHTNESS = 0.2;
 export const JET_HEIGHT_RADII = 0.3;
 
 /**
- * Opening half-angle of a jet, degrees: each jet is a cone with its apex
- * on the vent, opening by roughly 10 to 20° (Porco et al. 2014,
- * doi:10.1088/0004-6256/148/3/45).
+ * Opening half-angle of a jet of full width, degrees: each jet is a cone
+ * with its apex on the vent, opening by roughly 5 to 20° (Porco et al.
+ * 2014, doi:10.1088/0004-6256/148/3/45; each jet's own between
+ * `JET_OPENING_MIN_DEG` and `JET_OPENING_MAX_DEG`).
  */
 export const JET_HALF_ANGLE_DEG = 15;
 
@@ -255,7 +296,12 @@ export interface JetShape {
   brightness: number;
   /** Brightness per unit area drawn, in `JET_OPACITY`: the brightness, scaled to the fracture's light. */
   light: number;
-  /** Tilt off the vertical, radians, and its direction, radians from east towards north. */
+  /**
+   * Tilt off the vertical, radians, and its direction, radians: from the
+   * fracture's strike (towards its positive end) to the left of it in a
+   * layout (see jetLayout), from east towards north in a source (see
+   * jetSources).
+   */
   tilt: number;
   tiltAzimuth: number;
   /** A faint broad curtain rather than a jet. */
@@ -275,49 +321,67 @@ function gauss(rand: () => number): number {
 
 /**
  * The jets of the fracture number `index`, seeded by it and its place
- * (the same fracture always gets the same jets): `JETS_MIN` to
- * `JETS_MAX` of them, most in `JET_GROUPS_MIN` to `JET_GROUPS_MAX` groups
- * along it, some alone (`JET_LONE_SHARE`), each with its own height,
- * brightness and tilt; and a few curtains. Sorted along the fracture.
- * Their light (brightness x height x width) adds up to
- * `JET_LIGHT_PER_FRACTURE` full jets.
+ * (the same fracture always gets the same jets), at `activity` (1 for the
+ * body's most active fracture, see fractureActivity) and with `share` of
+ * `JET_LIGHT_PER_FRACTURE`: from `JETS_MIN` to `JETS_MAX` of them with the
+ * activity, gathered in `JET_SEGMENTS_MIN` to `JET_SEGMENTS_MAX` short
+ * active stretches with quiet ones between (a few, `JET_LONE_SHARE`,
+ * alone anywhere); each with its own height (a few tall, many short),
+ * opening, brightness (most faint) and tilt (mostly along the fracture);
+ * and a few curtains. Sorted along the fracture. Their light (brightness
+ * per unit area x height x width) adds up to that share, but for what
+ * `JET_LIGHT_MAX` drops.
  */
-export function jetLayout(f: Fracture, index: number): JetShape[] {
+export function jetLayout(f: Fracture, index: number, activity = 1, share = 1): JetShape[] {
   const rand = random(subSeed(index, `${f.lat_deg},${f.lon_deg},${f.azimuth_deg},${f.length_km}`));
   const between = (lo: number, hi: number) => lo + (hi - lo) * rand();
-  const count = JETS_MIN + Math.floor(rand() * (JETS_MAX - JETS_MIN + 1));
-  const groups = Array.from(
-    { length: JET_GROUPS_MIN + Math.floor(rand() * (JET_GROUPS_MAX - JET_GROUPS_MIN + 1)) },
-    () => ({
-      centre: between(-0.42, 0.42),
-      sigma: between(JET_GROUP_SIGMA_MIN, JET_GROUP_SIGMA_MAX),
-    }),
+  const spread = (JETS_MAX - JETS_MIN) * activity * between(0.75, 1.25);
+  const count = Math.min(Math.max(Math.round(JETS_MIN + spread), JETS_MIN), JETS_MAX);
+  const segments = Array.from(
+    { length: JET_SEGMENTS_MIN + Math.floor(rand() * (JET_SEGMENTS_MAX - JET_SEGMENTS_MIN + 1)) },
+    () => ({ centre: between(-0.4, 0.4), half: between(JET_SEGMENT_HALF_MIN, JET_SEGMENT_HALF_MAX), weight: rand() }),
   );
+  // Some stretches far busier than others.
+  const weights = segments.map((g) => 0.2 + g.weight ** 2);
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  const pick = () => {
+    let w = rand() * weightSum;
+    for (let g = 0; g < segments.length; g += 1) {
+      w -= weights[g]!;
+      if (w <= 0) return segments[g]!;
+    }
+    return segments[segments.length - 1]!;
+  };
+  const refTan = Math.tan((JET_HALF_ANGLE_DEG * Math.PI) / 180);
   const jets: JetShape[] = [];
   for (let i = 0; i < count; i += 1) {
     let along: number;
     if (rand() < JET_LONE_SHARE) along = between(-0.48, 0.48);
     else {
-      const g = groups[Math.floor(rand() * groups.length)]!;
-      along = g.centre + g.sigma * gauss(rand);
+      const g = pick();
+      along = g.centre + g.half * (2 * rand() - 1);
     }
+    const height = JET_HEIGHT_MIN + (JET_HEIGHT_MAX - JET_HEIGHT_MIN) * rand() ** JET_HEIGHT_SKEW;
+    const opening = (between(JET_OPENING_MIN_DEG, JET_OPENING_MAX_DEG) * Math.PI) / 180;
+    // Mostly along the strike, ahead or behind.
+    const lean = (rand() < 0.5 ? 0 : Math.PI) + ((JET_TILT_SPREAD_DEG * Math.PI) / 180) * gauss(rand);
     jets.push({
       along: Math.min(Math.max(along, -0.48), 0.48),
-      height: between(JET_HEIGHT_MIN, JET_HEIGHT_MAX),
-      width: 1,
-      // Most of them faint, a few bright.
-      brightness: JET_BRIGHTNESS_MIN + (1 - JET_BRIGHTNESS_MIN) * rand() ** 1.5,
+      height,
+      // A cone: its top half-width grows with its height.
+      width: (height * Math.tan(opening)) / refTan,
+      brightness: JET_BRIGHTNESS_MIN + (1 - JET_BRIGHTNESS_MIN) * rand() ** JET_BRIGHTNESS_SKEW,
       light: 0,
       // Uniform over the cap of the most tilt.
       tilt: Math.acos(1 - rand() * (1 - Math.cos((JET_TILT_MAX_DEG * Math.PI) / 180))),
-      tiltAzimuth: between(0, 2 * Math.PI),
+      tiltAzimuth: lean,
       curtain: false,
     });
   }
   const curtains = CURTAINS_MIN + Math.floor(rand() * (CURTAINS_MAX - CURTAINS_MIN + 1));
   for (let i = 0; i < curtains; i += 1) {
     jets.push({
-      along: between(-0.4, 0.4),
+      along: pick().centre,
       height: CURTAIN_HEIGHT,
       width: CURTAIN_WIDTH,
       brightness: CURTAIN_BRIGHTNESS,
@@ -328,25 +392,68 @@ export function jetLayout(f: Fracture, index: number): JetShape[] {
     });
   }
   const total = jets.reduce((sum, j) => sum + j.brightness * j.height * j.width, 0);
-  for (const j of jets) j.light = (j.brightness * JET_LIGHT_PER_FRACTURE) / total;
+  for (const j of jets) j.light = Math.min((j.brightness * JET_LIGHT_PER_FRACTURE * share) / total, JET_LIGHT_MAX);
   return jets.sort((a, b) => a.along - b.along);
 }
 
-/** Where the jets of a body stand, and their shapes (see jetLayout). */
+/**
+ * The activity of each fracture of `g` (by its index, 0 for a zero-length
+ * one), seeded by them all: 1 for one drawn among them, the most active,
+ * the others between `FRACTURE_ACTIVITY_MIN` and `FRACTURE_ACTIVITY_MAX`,
+ * most near the least.
+ */
+export function fractureActivity(g: Geysers): number[] {
+  const label = g.fractures.map((f) => `${f.lat_deg},${f.lon_deg},${f.azimuth_deg},${f.length_km}`).join(';');
+  const rand = random(subSeed(g.fractures.length, label));
+  const live = g.fractures.flatMap((f, i) => (f.length_km > 0 ? [i] : []));
+  const hot = live[Math.floor(rand() * live.length)];
+  return g.fractures.map((f, i) => {
+    const quiet = FRACTURE_ACTIVITY_MIN + (FRACTURE_ACTIVITY_MAX - FRACTURE_ACTIVITY_MIN) * rand() ** 2;
+    if (f.length_km <= 0) return 0;
+    return i === hot ? 1 : quiet;
+  });
+}
+
+/**
+ * Where the jets of a body stand, and their shapes (see jetLayout): each
+ * fracture with its activity (see fractureActivity) and the body's light
+ * (`JET_LIGHT_PER_FRACTURE` per fracture) shared out by it; their tilt
+ * turned from the fracture's strike where they stand to east and north.
+ */
 export function jetSources(g: Geysers, radiusKm: number): JetSource[] {
   // A zero-length fracture draws no stripe, so it has no jets either; the
   // others keep their index in the list for their meander and their seed.
+  const activity = fractureActivity(g);
+  const live = activity.filter((a) => a > 0);
+  const sum = live.reduce((a, b) => a + b, 0);
   return g.fractures.flatMap((f, index) => {
     if (f.length_km <= 0) return [];
-    const shapes = jetLayout(f, index);
-    const sites = fracturePointsAt(
+    const shapes = jetLayout(f, index, activity[index]!, (live.length * activity[index]!) / sum);
+    const step = 0.005;
+    const points = fracturePointsAt(
       f,
       index,
       radiusKm,
-      shapes.map((j) => j.along),
+      shapes.flatMap((j) => [j.along, j.along - step, j.along + step]),
     );
-    return shapes.map((j, i) => ({ ...j, site: sites[i]! }));
+    return shapes.map((j, i) => {
+      const [site, back, ahead] = [points[3 * i]!, points[3 * i + 1]!, points[3 * i + 2]!];
+      return { ...j, tiltAzimuth: strikeAngle(site, back, ahead) + j.tiltAzimuth, site };
+    });
   });
+}
+
+/**
+ * The direction of the line from `back` to `ahead` (points either side of
+ * `site`), radians from east towards north at `site`, in the frame of
+ * fracturePointsAt (z the pole). The viewer turns the body with its own
+ * axes, which keep east and north.
+ */
+export function strikeAngle(site: LonLat, back: LonLat, ahead: LonLat): number {
+  const dLon = Math.atan2(Math.sin(ahead.lon - back.lon), Math.cos(ahead.lon - back.lon));
+  const east = dLon * Math.cos(site.lat);
+  const north = ahead.lat - back.lat;
+  return Math.atan2(north, east);
 }
 
 // Two quads per jet, position.z telling them apart: the side-on
