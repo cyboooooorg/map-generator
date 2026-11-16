@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Body } from './api/types/Body';
-import { dustFedBy, dustOf, innerRingOf, ringPart, ringsOf } from './ringMoons';
+import { dustFedBy, dustOf, innerRingOf, ringPart, ringsOf, SKY_DUST_MAX, skyDustUniforms } from './ringMoons';
 
 const body = (over: Record<string, unknown>): Body =>
   ({
@@ -69,5 +69,25 @@ describe('innerRingOf', () => {
   it('has none for rings without one, or a body without rings', () => {
     expect(innerRingOf(rings())).toEqual([]);
     expect(innerRingOf(body({}))).toEqual([]);
+  });
+});
+
+describe('skyDustUniforms', () => {
+  it('keeps the rings that matter most and pads the rest', () => {
+    const six = Array.from({ length: 6 }, (_, i) => ({ inner: i, peak: i + 0.5, outer: i + 1, opacity: 0.01 * (i + 1), colour: [1, 1, 1] as [number, number, number] }));
+    const u = skyDustUniforms(six);
+    expect(u.count).toBe(SKY_DUST_MAX);
+    expect(Array.from(u.opacity)).toEqual(expect.arrayContaining([0.06, 0.05, 0.04, 0.03].map(Math.fround)));
+    expect(u.radii.length).toBe(3 * SKY_DUST_MAX);
+    expect(skyDustUniforms([]).count).toBe(0);
+  });
+
+  it('packs edges and peak, and converts the colour to linear', () => {
+    const u = skyDustUniforms([{ inner: 3, peak: 4, outer: 6, opacity: 0.2, colour: [1, 0.5, 0] }]);
+    expect(Array.from(u.radii.slice(0, 3))).toEqual([3, 4, 6]);
+    expect(u.colour[0]).toBeCloseTo(1, 5);
+    expect(u.colour[1]).toBeCloseTo(0.214, 3);
+    expect(u.colour[2]).toBe(0);
+    expect(Array.from(u.radii.slice(3))).toEqual(new Array(9).fill(0));
   });
 });

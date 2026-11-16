@@ -174,6 +174,27 @@ export const skyRingDensityGlsl = /* glsl */ `
   // A faint ring inside the bright ones (the D ring): inner and outer edge,
   // opacity; zero opacity for none.
   uniform vec3 uRingFaint;
+  // The host's dust rings (the plume ring, the E ring...): up to 4, each
+  // inner edge, peak, outer edge in the giant's radii (zero-padded).
+  uniform vec3 uDustRadii[4];
+  uniform float uDustOpacity[4];
+  uniform vec3 uDustColour[4];   // linear
+  uniform float uDustCount;
+  // The face-on opacity of the dust at r (the same triangular profile as
+  // dustRingFragment) in .w, and its opacity-weighted colour in .rgb.
+  vec4 dustDensity(float r) {
+    vec4 sum = vec4(0.0);
+    for (int k = 0; k < 4; k++) {
+      if (float(k) >= uDustCount) break;
+      vec3 e = uDustRadii[k];
+      if (r < e.x || r > e.z) continue;
+      float side = r < e.y ? (e.y - r) / max(e.y - e.x, 1e-4) : (r - e.y) / max(e.z - e.y, 1e-4);
+      float d = uDustOpacity[k] * (1.0 - smoothstep(0.0, 1.0, side));
+      sum += vec4(uDustColour[k] * d, d);
+    }
+    if (sum.w > 0.0) sum.rgb /= sum.w;
+    return sum;
+  }
   float ringDensity(float r) {
     if (uRingOuter <= 0.0 || r < uRingInner || r > uRingOuter) {
       float inside = (r - uRingFaint.x) / max(uRingFaint.y - uRingFaint.x, 1e-4);
@@ -229,6 +250,7 @@ export const skyRingFragment = /* glsl */ `
   uniform float uPixelAngle;
   ${skyRingDensityGlsl}
   ${ringletsGlsl}
+  ${dustPhaseGlsl}
   varying vec3 vRay;
   // Most a sheet of them seen nearly edge on hides (see main).
   const float GRAZING_OPACITY = 0.55;
@@ -254,7 +276,7 @@ export const skyRingFragment = /* glsl */ `
   }
 
   void main() {
-    if (uRingOuter <= 0.0) discard;
+    if (uRingOuter <= 0.0 && uDustCount <= 0.0) discard;
     vec3 ray = normalize(vRay);
     // Where the ray meets the giant, if it does (hiding what lies behind).
     float b = dot(ray, uCentre);
@@ -313,6 +335,26 @@ export const skyRingFragment = /* glsl */ `
           colour = vec4(ringLight(p, mu, d), seen);
           depth = depthOf(t * ray);
         }
+        // Dust, thin, in the same plane: its light thickens along a slant
+        // view (opacity over mu, mu kept off zero so that a camera in the
+        // band, nearly in the plane, stays finite), brightest back-lit,
+        // none of that in the giant's shadow. Drawn under the main rings.
+        if (uDustCount > 0.0) {
+          vec4 dust = dustDensity(rp);
+          if (dust.w > 0.0) {
+            float sb = dot(p, uSunDir);
+            bool shadowed = sb < 0.0 && length(p - sb * uSunDir) < uRadius;
+            float gain = shadowed ? 1.0 : dustGain(clamp(dot(uSunDir, ray), -1.0, 1.0));
+            float dustSeen = min(1.0 - exp(-dust.w * gain / max(abs(g), 0.05)), 0.9);
+            vec3 tint = dust.rgb * (shadowed ? 0.08 : 1.0);
+            if (dustSeen > 0.002) {
+              float rings = seen > 0.002 ? colour.a : 0.0;
+              float total = rings + dustSeen * (1.0 - rings);
+              colour = vec4((colour.rgb * rings + tint * dustSeen * (1.0 - rings)) / total, total);
+              if (seen <= 0.002) depth = depthOf(t * ray);
+            }
+          }
+        }
       }
     }
     // Nearly edge on: the ray's path along their plane, from where the
@@ -320,7 +362,7 @@ export const skyRingFragment = /* glsl */ `
     // the view, about a pixel wide.
     vec3 along = ray - g * uNormal;
     float alongLength = length(along);
-    if (alongLength > 1e-6) {
+    if (uRingOuter > 0.0 && alongLength > 1e-6) {
       along /= alongLength;
       vec3 foot = camera - height * uNormal;
       float outer = uRingOuter * uRadius;

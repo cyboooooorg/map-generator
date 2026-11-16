@@ -1474,6 +1474,11 @@
     const given = parent.params.given_rings;
     return given ? given.rings : (meta?.host?.giant.rings ?? null);
   });
+  /** The host's dust rings (plume ring, E ring...) in a moon's sky, the camera inside them included (the D ring is part of hostRings). */
+  const hostDust = $derived.by(() => {
+    const parent = sysBody?.parent ? sys?.bodies.find((b) => b.id === sysBody.parent) : null;
+    return parent ? dustOf(parent) : [];
+  });
   /** Whether this view draws the rocks of the rings round a ring moon (high quality only). */
   const drawsRingRocks = currentProfile().ringRocks;
   /** The ring moon shown's rocks at the system's time, while they are asked for. */
@@ -1542,7 +1547,7 @@
     };
     const bodies = (sysSky?.bodies ?? []).map((body, k) =>
       sysSky?.ids[k] === parent
-        ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
+        ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings, dust: hostDust }
         : { ...body, show: otherShow },
     );
     view?.setSkyBodies(bodies);

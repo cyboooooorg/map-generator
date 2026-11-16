@@ -19,6 +19,43 @@ export function dustOf(body: Body): DustRing[] {
 /** What the giant's view draws of a faint ring: a dust ring's edges, peak, opacity and colour. */
 export type FaintRing = Pick<DustRing, 'inner' | 'outer' | 'peak' | 'opacity' | 'colour'>;
 
+/** Most dust rings a moon's sky draws (the sky ring shader's array size). */
+export const SKY_DUST_MAX = 4;
+
+/** The dust rings of a host as the sky ring shader takes them (see skyRingDensityGlsl). */
+export interface SkyDustUniforms {
+  /** Inner edge, peak and outer edge of each ring, in the host's radii: 3 per ring. */
+  radii: Float32Array;
+  /** Face-on opacity of each ring. */
+  opacity: Float32Array;
+  /** Linear colour of each ring: 3 per ring. */
+  colour: Float32Array;
+  /** How many rings are filled in. */
+  count: number;
+}
+
+function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+/**
+ * Packs the `SKY_DUST_MAX` dust rings of highest `opacity x (outer - inner)`
+ * (the ones that show most) for the sky ring shader, zero-padded; colours
+ * go from sRGB (the data) to linear.
+ */
+export function skyDustUniforms(rings: readonly FaintRing[]): SkyDustUniforms {
+  const kept = [...rings].sort((a, b) => b.opacity * (b.outer - b.inner) - a.opacity * (a.outer - a.inner)).slice(0, SKY_DUST_MAX);
+  const radii = new Float32Array(3 * SKY_DUST_MAX);
+  const opacity = new Float32Array(SKY_DUST_MAX);
+  const colour = new Float32Array(3 * SKY_DUST_MAX);
+  kept.forEach((ring, k) => {
+    radii.set([ring.inner, ring.peak, ring.outer], 3 * k);
+    opacity[k] = ring.opacity;
+    colour.set(ring.colour.map(srgbToLinear), 3 * k);
+  });
+  return { radii, opacity, colour, count: kept.length };
+}
+
 /** Colour of a D-like ring: grey-brown dust (sRGB). */
 const INNER_RING_COLOUR: [number, number, number] = [0.55, 0.5, 0.45];
 

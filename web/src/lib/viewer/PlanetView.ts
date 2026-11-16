@@ -156,7 +156,7 @@ import {
   ringRockVertex,
 } from './ringRockShaders';
 import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
-import type { FaintRing } from '../ringMoons';
+import { type FaintRing, SKY_DUST_MAX, skyDustUniforms } from '../ringMoons';
 import type { RingSystem } from '../api/types/RingSystem';
 import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
@@ -3302,8 +3302,10 @@ export class PlanetView {
    */
   private drawSkyRings(entry: (typeof this.skyBodies)[number], place: { direction: Vector3; half: number }): void {
     const { body, mesh } = entry;
-    const rings = body.show?.rings === false ? null : (body.rings ?? null);
-    if (!rings) {
+    const shown = body.show?.rings !== false;
+    const rings = shown ? (body.rings ?? null) : null;
+    const dust = shown ? (body.dust ?? []) : [];
+    if (!rings && dust.length === 0) {
       if (entry.rings) entry.rings.visible = false;
       return;
     }
@@ -3334,6 +3336,10 @@ export class PlanetView {
             uRingSeed: { value: 0 },
             uPixelAngle: { value: 0 },
             uRingFaint: { value: new Vector3() },
+            uDustRadii: { value: Array.from({ length: SKY_DUST_MAX }, () => new Vector3()) },
+            uDustOpacity: { value: new Array<number>(SKY_DUST_MAX).fill(0) },
+            uDustColour: { value: Array.from({ length: SKY_DUST_MAX }, () => new Vector3()) },
+            uDustCount: { value: 0 },
           },
           transparent: true,
           depthWrite: false,
@@ -3350,6 +3356,7 @@ export class PlanetView {
     ring.renderOrder = mesh.renderOrder + 0.1;
     const u = ring.material.uniforms;
     setRingUniforms(u, rings, ringGapLeast(this.skySmallest, place.half));
+    setDustUniforms(u, dust);
     u['uRingSeed']!.value = body.ringSeed ?? 0;
     u['uPixelAngle']!.value = this.skyPixelAngle;
     // Its centre and radius from the camera: from its place when it has
@@ -3362,7 +3369,7 @@ export class PlanetView {
       u['uRadius']!.value = 1;
     }
     (u['uNormal']!.value as Vector3).set(...(body.axes ?? IDENTITY_AXES)[1]);
-    (u['uColour']!.value as Color).setRGB(...rings.colour, SRGBColorSpace);
+    (u['uColour']!.value as Color).setRGB(...(rings?.colour ?? [1, 1, 1]), SRGBColorSpace);
     u['uFade']!.value = mesh.material.uniforms['uOpacity']!.value as number;
   }
 
@@ -3884,6 +3891,15 @@ function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null, 
   const faint = rings?.d_ring;
   (u['uRingFaint']!.value as Vector3).set(faint?.inner ?? 0, faint?.outer ?? 0, faint?.opacity ?? 0);
   (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
+}
+
+/** Sets a sky body's dust ring uniforms (see skyRingDensityGlsl) from its dust rings; none clears them. */
+function setDustUniforms(u: Record<string, IUniform>, dust: readonly FaintRing[]): void {
+  const packed = skyDustUniforms(dust);
+  (u['uDustRadii']!.value as Vector3[]).forEach((v, k) => v.fromArray(packed.radii, 3 * k));
+  (u['uDustColour']!.value as Vector3[]).forEach((v, k) => v.fromArray(packed.colour, 3 * k));
+  u['uDustOpacity']!.value = Array.from(packed.opacity);
+  u['uDustCount']!.value = packed.count;
 }
 
 /**
