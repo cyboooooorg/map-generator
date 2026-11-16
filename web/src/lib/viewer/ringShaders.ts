@@ -1,5 +1,5 @@
 import { DUST_MARCH_STEPS, DUST_SCALE_HEIGHT, dustPhaseGlsl } from './dustPhase';
-// The rings of a giant planet: a inPlane annulus in its equatorial plane, its
+// The rings of a giant planet: a flat annulus in its equatorial plane, its
 // opacity varying with the radius (ringlets, gaps), lit by the sun and
 // darkened where the planet shadows it.
 
