@@ -115,6 +115,8 @@ export const surfaceVertex = /* glsl */ `
   // longitudes: the value of a pole, shared by every vertex of its row.
   // Each reading its own column raised the pole into a star of spikes.
   const int POLE_TAPS = 16;
+  // Texels of uShape from a pole to the ring its slope is fitted to.
+  const float POLE_RING = 2.0;
   float rowMean(sampler2D t, float v, float lod) {
     float sum = 0.0;
     for (int i = 0; i < POLE_TAPS; i++) {
@@ -156,7 +158,9 @@ export const surfaceVertex = /* glsl */ `
     vec2 g = uTileRect.xy + uv * uTileRect.zw;
     vUv = g;
     vLocalUv = uv;
-    bool pole = abs(g.y - 0.5) > 0.5 - 1e-6;
+    // Only on the closed globe: until then the pole row is a line or a
+    // circle, its vertices apart, and the morph stays as it was.
+    bool pole = uMorph > 0.999 && abs(g.y - 0.5) > 0.5 - 1e-6;
     vPole = pole ? 1.0 : 0.0;
     float lon = g.x * 2.0 * PI;
     float lat = (g.y - 0.5) * PI;
@@ -174,9 +178,24 @@ export const surfaceVertex = /* glsl */ `
     // by the shape's slopes (relief and lighting follow it).
     float radius = 1.0;
     if (uHasShape > 0.5 && pole) {
-      // One radius for the whole pole row, and no tilt: its slopes would
-      // point a different way at each vertex of the same point.
-      radius = mix(1.0, rowMean(uShape, 1.0 - g.y, 0.0), uMorph);
+      // One radius and one normal for the whole pole row (its own columns'
+      // slopes would point a different way at each vertex of the same
+      // point): the row's mean, tilted by the slope fitted to the ring
+      // POLE_RING texels away, as the vertices round it are.
+      float v0 = 1.0 - g.y;
+      radius = rowMean(uShape, v0, 0.0);
+      float ringV = v0 + (v0 < 0.5 ? 1.0 : -1.0) * POLE_RING * uShapeTexel.y;
+      float span = POLE_RING * PI * uShapeTexel.y;
+      vec3 slope = vec3(0.0);
+      for (int i = 0; i < POLE_TAPS; i++) {
+        float at = (float(i) + 0.5) / float(POLE_TAPS);
+        float ring = textureLod(uShape, vec2(at, ringV), 0.0).r;
+        slope += (ring - radius) / span * vec3(sin(at * 2.0 * PI), 0.0, cos(at * 2.0 * PI));
+      }
+      slope *= 2.0 / float(POLE_TAPS);
+      vec3 tilted = normalize(sphere - slope / radius);
+      normal = normalize(mix(outward, tilted, uMorph));
+      radius = mix(1.0, radius, uMorph);
     } else if (uHasShape > 0.5) {
       radius = shapeAt(g);
       vec2 dx = vec2(uShapeTexel.x, 0.0);
@@ -196,10 +215,9 @@ export const surfaceVertex = /* glsl */ `
     if (uHasData > 0.5) {
       float lod = max(0.0, log2(uTileRect.z / (uTexel.x * uMeshSegments)));
       float elevation = textureLod(uData, vec2(g.x, 1.0 - g.y), lod).r;
-      // On the globe, the pole row is one point: one height (the flat map,
-      // where the row is a line, keeps its columns).
+      // On the globe, the pole row is one point: one height.
       if (pole) {
-        elevation = mix(elevation, rowMean(uData, 1.0 - g.y, lod), uMorph);
+        elevation = rowMean(uData, 1.0 - g.y, lod);
       }
       float above = elevation - uCoast;
       if (uLiquidSea > 0.5) {
@@ -322,43 +340,55 @@ export const surfaceFragment = /* glsl */ `
   // fan out with vUv sheared across them (a starburst) and its
   // derivatives meaningless: there (atPole) the position comes from the
   // pixel's own direction (globeUv in globeUv.ts is its CPU twin), the
-  // maps read with explicit derivatives that stay continuous across the
-  // seam (Tarini 2012, "Cylindrical and toroidal parameterizations
-  // without vertex seams", Journal of Graphics Tools 16(3)).
+  // maps read with derivatives taken from the direction's, which stay
+  // continuous across the seam.
   bool atPole;
   vec2 mapUv;
   vec2 mapGx;
   vec2 mapGy;
 
   void locate() {
+    // Derivatives in uniform control flow, for every pixel; the rest only
+    // in the fan (vPole is set on the closed globe only: the flat map's
+    // pole rows are lines, the morph's circles).
+    vec3 sx = dFdx(vSphere);
+    vec3 sy = dFdy(vSphere);
     mapUv = vUv;
     mapGx = vec2(0.0);
     mapGy = vec2(0.0);
-    atPole = false;
-    // The flat map has no fan (its pole rows are lines); nor has the
-    // morph until it closes on the globe.
-    if (uMorph > 0.999) {
+    atPole = vPole > 0.0;
+    if (atPole) {
       vec3 dir = normalize(vSphere);
       float turn = atan(dir.x, dir.z) / (2.0 * PI);
-      // Two longitudes, one wrapping at the seam (u = 0), one opposite:
-      // the derivatives come from the one that does not wrap here.
-      float uA = fract(turn);
-      float uB = fract(turn + 0.5) - 0.5;
+      float u = fract(turn);
       float v = asin(clamp(dir.y, -1.0, 1.0)) / PI + 0.5;
-      bool seamA = fwidth(uA) > fwidth(uB);
-      mapGx = vec2(seamA ? dFdx(uB) : dFdx(uA), dFdx(v));
-      mapGy = vec2(seamA ? dFdy(uB) : dFdy(uA), dFdy(v));
-      atPole = vPole > 0.0;
       // u on the side of the seam the mesh's own vUv is on.
-      mapUv = atPole ? vec2(uA + floor(vUv.x - uA + 0.5), v) : vUv;
+      mapUv = vec2(u + floor(vUv.x - u + 0.5), v);
+      // The derivatives of u = atan(x, z) / 2π and v = asin(y) / π + 0.5
+      // from those of the direction: continuous across the seam, where u
+      // itself jumps by a turn (as Tarini 2012, "Cylindrical and toroidal
+      // parameterizations without vertex seams", Journal of Graphics
+      // Tools 16(3), does with a second longitude).
+      float across = max(dir.x * dir.x + dir.z * dir.z, 1e-12);
+      float ring = max(sqrt(across), 1e-6);
+      mapGx = vec2((dir.z * sx.x - dir.x * sx.z) / (2.0 * PI * across), sx.y / (PI * ring));
+      mapGy = vec2((dir.z * sy.x - dir.x * sy.z) / (2.0 * PI * across), sy.y / (PI * ring));
     }
   }
 
   // Texture t read at at, a position that moves with mapUv by flip per
-  // unit (1 or −1 per axis, scaled for a tile): as before away from the
-  // poles, with mapUv's derivatives at them.
+  // unit (1 or −1 per axis, scaled for a tile): with at's own derivatives
+  // away from the poles, mapUv's at them. Always textureGrad, its
+  // derivatives taken before the choice, so that no implicit derivative
+  // sits in a branch that differs between pixels.
   vec4 mapRead(sampler2D t, vec2 at, vec2 flip) {
-    return atPole ? textureGrad(t, at, mapGx * flip, mapGy * flip) : texture2D(t, at);
+    vec2 gx = dFdx(at);
+    vec2 gy = dFdy(at);
+    if (atPole) {
+      gx = mapGx * flip;
+      gy = mapGy * flip;
+    }
+    return textureGrad(t, at, gx, gy);
   }
 
   ${glslRamp('elevation')}

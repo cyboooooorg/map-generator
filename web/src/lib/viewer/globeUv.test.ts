@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { globeUv, seamSafeStep, unwrapNear } from './globeUv';
+import { globeUv, globeUvStep, unwrapNear } from './globeUv';
 
 // The surface vertex shader's sphere point of map position (u, v).
 const sphere = (u: number, v: number): [number, number, number] => {
@@ -8,51 +8,52 @@ const sphere = (u: number, v: number): [number, number, number] => {
   return [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
 };
 
+// The step of (u, v) from map position a to b, by the direction's change
+// taken at their middle.
+const step = (a: [number, number], b: [number, number]) => {
+  const p = sphere(...a);
+  const q = sphere(...b);
+  const m = sphere((a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+  return globeUvStep(...m, q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+};
+
 describe('globeUv', () => {
   it('inverts the vertex shader across the map', () => {
     for (let i = 0; i < 40; i++) {
       for (let j = 1; j < 20; j++) {
-        const u = i / 40;
-        const v = j / 20;
-        const at = globeUv(...sphere(u, v));
-        expect(at.u).toBeCloseTo(u, 9);
-        expect(at.v).toBeCloseTo(v, 9);
-        expect(fractDiff(at.uOpposite, u)).toBeCloseTo(0, 9);
+        const at = globeUv(...sphere(i / 40, j / 20));
+        expect(at.u).toBeCloseTo(i / 40, 9);
+        expect(at.v).toBeCloseTo(j / 20, 9);
       }
     }
   });
 
-  it('reads the poles at v = 0 and 1 whatever the length', () => {
-    expect(globeUv(0, 3, 0).v).toBe(1);
-    expect(globeUv(0, -0.2, 0).v).toBe(0);
+  it('keeps u below 1 just west of the seam', () => {
+    const at = globeUv(-1e-20, 0, 1);
+    expect(at.u).toBeGreaterThanOrEqual(0);
+    expect(at.u).toBeLessThan(1);
   });
 
-  it('gives a seam-safe step across the seam and near the pole', () => {
-    for (const v of [0.5, 0.99, 0.9999]) {
-      const a = globeUv(...sphere(-1e-4, v));
-      const b = globeUv(...sphere(1e-4, v));
-      // u wraps by a whole turn, the opposite longitude does not.
-      expect(Math.abs(b.u - a.u)).toBeGreaterThan(0.99);
-      expect(seamSafeStep(b.u - a.u, b.uOpposite - a.uOpposite)).toBeCloseTo(2e-4, 9);
+  it('reads the poles at v = 0 and 1', () => {
+    expect(globeUv(0, 1, 0).v).toBe(1);
+    expect(globeUv(0, -1, 0).v).toBe(0);
+  });
+});
+
+describe('globeUvStep', () => {
+  it('matches the change of u and v, across the seam too', () => {
+    for (const v of [0.5, 0.8, 0.99, 0.9999]) {
+      // Across the seam u jumps by a whole turn; the step does not.
+      const [du, dv] = step([-1e-5, v], [1e-5, v + 1e-7]);
+      expect(du).toBeCloseTo(2e-5, 9);
+      expect(dv / 1e-7).toBeCloseTo(1, 2);
     }
-    // Opposite the seam, u is the continuous one.
-    const a = globeUv(...sphere(0.5 - 1e-4, 0.999));
-    const b = globeUv(...sphere(0.5 + 1e-4, 0.999));
-    expect(seamSafeStep(b.u - a.u, b.uOpposite - a.uOpposite)).toBeCloseTo(2e-4, 9);
   });
 
-  it('turns all the way round a pole in a small circle', () => {
-    // Round a tiny circle about the north pole, u runs through a full turn
-    // and stays continuous step by step with the seam-safe derivative.
+  it('adds up to one turn round a small circle about a pole', () => {
     let total = 0;
-    let previous = globeUv(...sphere(0, 0.99999));
-    for (let k = 1; k <= 64; k++) {
-      const next = globeUv(...sphere(k / 64, 0.99999));
-      total += seamSafeStep(next.u - previous.u, next.uOpposite - previous.uOpposite);
-      expect(next.v).toBeCloseTo(0.99999, 9);
-      previous = next;
-    }
-    expect(total).toBeCloseTo(1, 9);
+    for (let k = 0; k < 256; k++) total += step([k / 256, 0.99999], [(k + 1) / 256, 0.99999])[0];
+    expect(total).toBeCloseTo(1, 4);
   });
 });
 
@@ -63,9 +64,3 @@ describe('unwrapNear', () => {
     expect(unwrapNear(0.4, 0.45)).toBe(0.4);
   });
 });
-
-// The difference of two longitudes in turns, wrapped to [−0.5, 0.5).
-function fractDiff(a: number, b: number): number {
-  const d = a - b;
-  return d - Math.floor(d + 0.5);
-}
