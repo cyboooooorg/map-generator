@@ -42,7 +42,7 @@
   import { clockDays, seasonOfYearDay, yearDayAt } from '../lib/seasonClock';
   import { temperatureRange } from '../lib/temperatureRange';
   import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
-  import { dustOf, innerRingOf } from '../lib/ringMoons';
+  import { dustFedBy, dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { localGroup, migrateDisplay, nextSky, parseExposure, parseSky, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups, type ScopePair } from '../lib/switches';
   import { bodyTitle, forgetTold, remadeToasts } from '../lib/evicted';
@@ -832,6 +832,22 @@
   $effect(() => view?.setJets(meta?.model?.geysers ?? null, meta ? meta.circumference_km / (2 * Math.PI) : 0));
   // The dust rings its system drew for the giant shown.
   $effect(() => view?.setDustRings(giant && sysBody ? [...dustOf(sysBody), ...innerRingOf(sysBody)] : []));
+  // Sparkling grains along those a moon feeds, and round that moon where it
+  // stands in the sky: its index in systemSky's order (the system's bodies
+  // but the one shown), which setSkyBodies keeps.
+  $effect(() => {
+    const others = sys && sysBody ? sys.bodies.filter((b) => b.id !== sysBody.id) : [];
+    view?.setDustGrains(
+      giant && sysBody ? dustOf(sysBody).map((d) => ({ ...d, source: others.findIndex((b) => b.id === d.source) })) : [],
+    );
+  });
+  // A halo of grains round a moon that vents or feeds a dust ring, in its
+  // close-up, denser over its venting pole.
+  $effect(() => {
+    const geysers = meta?.model?.geysers ?? null;
+    const feeds = !!sysBody && !!sysPlanet && sysBody.id !== sysPlanet.id && dustFedBy(sysBody, sysPlanet) !== null;
+    view?.setDustHalo(geysers || feeds ? { south: geysers ? geysers.south : null } : null);
+  });
   $effect(() => {
     // No detail while the slider moves: the reduced preview shows through.
     // A giant has no ground to detail.
