@@ -289,7 +289,8 @@ Each planet draws its moons as a world does, by `MoonSystem::draw` in
 `moons.rs`: a rocky planet's (impacts, captures, tides, the Hill
 sphere), a giant's regular moons (two to five, 1 to 2.5 × 10⁻⁴ of its
 mass in a chain or in one dominant moon, an ice giant's always a chain
-of 1 to 1.2 × 10⁻⁴, a 1:2:4 resonance, ice beyond a
+of 1 to 1.2 × 10⁻⁴, near a 1:2:4 chain whose neighbours are placed
+at the 2:1 when their tides captured them (`resonance::capture`), ice beyond a
 line set by the giant's temperature, on some ice giants a captured
 Triton), one recipe for a
 giant of a system and a giant world. A giant's large regular
@@ -328,7 +329,14 @@ one, `Impact` for a giant-impact or debris moon) are its inputs
 (`system::moon_formation`), its formation context is its planet's (its
 star's light, XUV and age at the planet's orbit), and its planet's tides
 on its orbit (the planet's mass, the moon's semi-major axis and
-eccentricity) heat it. Its model is stored in `model` and in
+eccentricity) heat it; a round moon in a resonant chain with its round
+neighbours (periods 2:1 within 1 %, where the draw placed the
+neighbours its planet's tides drove into resonance) takes instead the chain's
+equilibrium heat, set by the planet's dissipation under resonance
+locking (`planet::resonance`, see
+[planet-interiors.md](science/planet-interiors.md), "Moons in
+resonance"), which `system::body_context` rebuilds from the stored
+moons. Its model is stored in `model` and in
 `params.model`, derived from the stream `<moon id>/model`; its `type` is
 the model's class (`rocky`, `ice-world`, `hydrocarbon-world`…), its
 world is a planet's (`planet::interim::params_for` at its own seed, with
@@ -423,12 +431,11 @@ radii each spread a gossamer ring of impact dust from the main rings out
 to their orbit and up to 1.26 times past it (Jupiter's Amalthea and Thebe
 rings, and Thebe's extension); a source farther out wraps its orbit in a
 faint belt from 0.913 to 1.087 times its distance (Uranus's μ ring round
-Mab). A moon's dust is icy when its bulk is more than half ice or its
-model holds at least 5 % water and ice; otherwise it is dark (rock, or
-carbon as Phoebe's). On a quarter of giants, the innermost icy regular moon within 12
-radii blows out a broad ring of ice grains from 0.75 to 2 times its
-distance (Saturn's E ring round Enceladus): which moon is active is
-drawn, its tidal heating not computed. Each names its source moon.
+Mab). The innermost moon within 12 radii whose model vents geysers
+(`PlanetModel.geysers`, `planet::geysers`) blows out a broad ring of ice
+grains from 0.75 to 2 times its distance (Saturn's E ring round
+Enceladus); there are no odds, and a giant without such a moon has no
+plume ring. Each names its source moon.
 Systems have no irregular moons, so no ring like Phoebe's.
 
 ### Around one planet (mode 2)
@@ -584,12 +591,21 @@ systems/<system-id>/
     A planet also stores `model`, its physical model (issue #423: what
     it is made of, its interior, heat, surface, air, climate, life and
     class, and for a frozen body with a water layer its `ice_shell`:
-    the conductive shell's thickness `shell_km` and the liquid ocean left
-    beneath it `ocean_km`; its heat adds a `secular_w` term to the
+    the shell's mean thickness `shell_km`, the liquid ocean left
+    beneath it `ocean_km`, whether the shell convects (`convecting`),
+    its conductive lid `lid_km`, its thickness at the poles
+    `polar_shell_km` and the temperature at its base `liquidus_k`, ice's
+    melting point under its pressure lowered by the ocean's ammonia (false
+    and 0 in a model stored before they existed); its `moment_of_inertia`, the factor
+    `C / (M R²)` of its layers, whose `interior` holds a `RockIce` layer
+    of rock and ice still mixed between the rock and the water of a moon
+    whose ice did not all separate from its rock (0 for a model stored
+    before it existed); its heat adds a `secular_w` term to the
     radiogenic and tidal ones, its climate stores the `bond_albedo` it
     was solved with and whether the planet is a `snowball`, drawn from
     the formation's `snowball_draw`; since format 8 of the system and 24
-    of the world), derived once when the system is drawn from its orbit, the
+    of the world; format 9 of the system adds lot 3's resonant heat,
+    moment of inertia, convective shell and geysers), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
@@ -634,7 +650,8 @@ systems/<system-id>/
     request's inputs, its archetype's ranges and its formation context),
     its archetype stored beside for display; a world asked around a
     giant (`host: giant`) is heated by that giant's tides (its mass, the
-    world's distance and eccentricity around it). A round moon has its
+    world's distance and eccentricity around it), or by its resonant
+    chain with the giant's round regular moons. A round moon has its
     model too (see [Moons](#moons)); a small one keeps `rocky-moon` or
     `icy-moon` and no model;
 

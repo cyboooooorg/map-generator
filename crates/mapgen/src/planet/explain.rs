@@ -135,6 +135,19 @@ pub enum Quantity {
     WaterKept,
     /// Age of the system, Gyr.
     Age,
+    /// Thickness of the ice shell, km (its mean over the surface).
+    ShellThickness,
+    /// Depth of the liquid ocean under the shell, km.
+    OceanDepth,
+    /// Thickness of the ice shell at the poles, km.
+    PolarShell,
+    /// Moment of inertia factor `C / (M R²)`.
+    MomentOfInertia,
+    /// Equilibrium tidal heat of a moon locked in a 2:1 resonance, W.
+    ResonantHeat,
+    /// The host's tidal dissipation `k₂/Q`, locked on its innermost
+    /// round moon (resonance locking).
+    HostDissipation,
     /// A condition, in `label`: `thermostat` (the carbonate thermostat
     /// set the CO₂), `life` (its oxygen), `runaway` or `boiled` (the
     /// water ran away by the insolation limit, or the climate boiled it),
@@ -142,7 +155,10 @@ pub enum Quantity {
     /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
     /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
     /// outgas it faster than weathering draws it down) and `methane_trap`
-    /// (the cold keeps methane out of the air).
+    /// (the cold keeps methane out of the air), `convecting` (the ice
+    /// shell convects under a stagnant lid), `ammonia` (ammonia lowers
+    /// the ocean's freezing point) and `geysers` (the thin polar shell
+    /// cracks through and vents).
     Note,
 }
 
@@ -253,20 +269,28 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
         trees.push(field_tree(context, model, surface));
         trees.push(water_tree(model, surface));
     }
+    trees.extend(ocean_tree(context, model));
+    trees.extend(polar_tree(context, model));
+    if model.ice_shell.is_some() || context.tide.is_some() {
+        trees.push(Cause::of(
+            Quantity::MomentOfInertia,
+            model.moment_of_inertia,
+        ));
+    }
     Some(Explanation { trees })
 }
 
 /// The interior the chain ran the heat and the surface steps on: the
 /// model's, except a steam world's, whose interior was derived again
 /// with its steam afterwards ([`super::steam_interior`]).
-fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
+pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
     if model
         .interior
         .layers
         .iter()
         .any(|l| l.material == super::Material::Steam)
     {
-        super::interior(&model.inputs, &context.exposure())
+        super::body_interior(context, &model.inputs)
     } else {
         model.interior.clone()
     }
@@ -309,15 +333,89 @@ fn water_kept(surface: &Surface) -> Cause {
     Cause::of(Quantity::WaterKept, surface.water.oceans).set_by(InputField::WaterOceans)
 }
 
-fn heat_flux(context: &Context, model: &PlanetModel) -> Cause {
+/// The tidal heat: a moon in a 2:1 resonance whose pair pumps more than
+/// its own tide dissipates ([`super::resonance::todays_heat_w`]) gets it
+/// from the host's dissipation, its locked `k₂/Q`, and the age (the
+/// pair's orbits are the system's); else the orbit's eccentricity sets
+/// it, as the form's field when the orbit is the planet's round the star.
+fn tidal_heat(context: &Context, model: &PlanetModel) -> Cause {
     let tidal = Cause::of(Quantity::TidalHeat, model.heat.tidal_w);
+    if let Some(resonance) = context.tide.and_then(|t| t.resonance)
+        && resonant(context, model)
+    {
+        return tidal.because(vec![
+            Cause::of(Quantity::ResonantHeat, resonance.heat_w).because(vec![
+                Cause::of(Quantity::HostDissipation, resonance.host_k2_over_q),
+                Cause::of(Quantity::Age, context.age_gyr).set_by(InputField::AgeGyr),
+            ]),
+        ]);
+    }
     // The form's eccentricity is the orbit round the star: a moon's
     // tides come from its planet.
-    let tidal = if context.tide.is_none() {
+    if context.tide.is_none() {
         tidal.set_by(InputField::Eccentricity)
     } else {
         tidal
+    }
+}
+
+/// Whether the body's tidal heat is its resonance's: the heat of its
+/// pair is more than its own tide makes.
+fn resonant(context: &Context, model: &PlanetModel) -> bool {
+    let Some(resonant_w) = context.tide.and_then(|t| t.resonance).map(|r| r.heat_w) else {
+        return false;
     };
+    let tide = super::tide_of(context);
+    let own_w = super::heat::tidal_power_w(
+        tide.host_kg,
+        surface_interior(context, model).radius_earth * crate::exomoon::EARTH_M,
+        tide.a_m,
+        tide.eccentricity,
+        super::heat::k2_over_q(model.inputs.envelope_fraction, model.inputs.water_fraction),
+    );
+    resonant_w > own_w
+}
+
+/// The ocean under the ice, from its shell and the heat flux that sets
+/// the shell; `None` for a body without an ocean under ice. A convecting
+/// shell and an ocean whose ammonia lowers its freezing point say so.
+fn ocean_tree(context: &Context, model: &PlanetModel) -> Option<Cause> {
+    let shell = model.ice_shell.filter(|s| s.ocean_km > 0.0)?;
+    let flux = Cause::of(
+        Quantity::HeatFlux,
+        model
+            .heat
+            .flux_w_m2(surface_interior(context, model).radius_earth),
+    );
+    let mut causes = vec![flux];
+    if shell.convecting {
+        causes.push(Cause::note("convecting"));
+    }
+    if model.inputs.volatiles.nh3 > 0.0 {
+        causes.push(Cause::note("ammonia"));
+    }
+    Some(
+        Cause::of(Quantity::OceanDepth, shell.ocean_km).because(vec![
+            Cause::of(Quantity::ShellThickness, shell.shell_km).because(causes),
+        ]),
+    )
+}
+
+/// The shell at the poles, thinned by the tides, with the heat of those
+/// tides; the geysers it vents through when it cracks. `None` unless the
+/// poles are thinner than the mean.
+fn polar_tree(context: &Context, model: &PlanetModel) -> Option<Cause> {
+    let shell = model
+        .ice_shell
+        .filter(|s| s.ocean_km > 0.0 && s.polar_shell_km > 0.0 && s.polar_shell_km < s.shell_km)?;
+    let mut causes = vec![tidal_heat(context, model)];
+    if model.geysers.is_some() {
+        causes.push(Cause::note("geysers"));
+    }
+    Some(Cause::of(Quantity::PolarShell, shell.polar_shell_km).because(causes))
+}
+
+fn heat_flux(context: &Context, model: &PlanetModel) -> Cause {
     Cause::of(
         Quantity::HeatFlux,
         model
@@ -326,7 +424,7 @@ fn heat_flux(context: &Context, model: &PlanetModel) -> Cause {
     )
     .because(vec![
         Cause::of(Quantity::RadiogenicHeat, model.heat.radiogenic_w).set_by(InputField::Radiogenic),
-        tidal,
+        tidal_heat(context, model),
         Cause::of(Quantity::SecularHeat, model.heat.secular_w),
     ])
 }
@@ -653,6 +751,50 @@ mod tests {
         for c in &c.causes {
             inputs_named(c, out);
         }
+    }
+
+    #[test]
+    fn explain_has_an_ocean_tree_for_europa() {
+        let (context, model) = solar("Europa");
+        let shell = model.ice_shell.expect("Europa has an ice shell");
+        assert!(shell.ocean_km > 0.0, "{shell:?}");
+        let e = explain(&context, &model).expect("explained");
+        let ocean = root(&e, Quantity::OceanDepth);
+        assert!((ocean.value - shell.ocean_km).abs() < 1e-9);
+        let thick = find(ocean, Quantity::ShellThickness).expect("the shell sets the ocean");
+        assert!(find(thick, Quantity::HeatFlux).is_some(), "{ocean:#?}");
+        let inertia = root(&e, Quantity::MomentOfInertia);
+        assert_eq!(inertia.value, model.moment_of_inertia);
+        for tree in &e.trees {
+            assert!(depth(tree) <= 3, "{:?}: {tree:#?}", tree.quantity);
+        }
+    }
+
+    #[test]
+    fn a_resonant_moon_says_where_its_tidal_heat_comes_from() {
+        let (context, model) = solar("Europa");
+        let context = context.with_tide(crate::planet::HostTide {
+            host_kg: 1.898e27,
+            a_m: 6.709e8,
+            eccentricity: 0.0,
+            resonance: Some(crate::planet::resonance::Resonance {
+                heat_w: 1e15,
+                host_k2_over_q: 8.5e-6,
+            }),
+        });
+        let model = planet_model(&context, model.inputs);
+        let e = explain(&context, &model).expect("explained");
+        let resonant = e
+            .trees
+            .iter()
+            .find_map(|t| find(t, Quantity::ResonantHeat))
+            .expect("the tidal heat comes from the resonance");
+        assert_eq!(resonant.value, 1e15);
+        // The host's locked k2/Q, as a value (#533).
+        let host = find(resonant, Quantity::HostDissipation).expect("the host's dissipation");
+        assert_eq!(host.value, 8.5e-6);
+        assert_eq!(host.label, None);
+        assert!(find(resonant, Quantity::Age).is_some());
     }
 
     #[test]

@@ -11,9 +11,10 @@
 //! the planet's: the XUV fluence and the equilibrium temperature at the
 //! planet's orbit.
 //!
-//! Known departures (issue #463): Enceladus has no ocean (the icy `k₂/Q`
-//! gives it a quarter of the tidal heat it radiates), and the oceans of
-//! Ganymede, Titan and Callisto depend on the radiogenic draw (see
+//! Known departures: the shells of Ganymede and Titan, heated by their
+//! rock and their tides alone, can come out thicker than interior models
+//! give, so a Ganymede may keep no ocean on a low radiogenic draw, and
+//! Enceladus's mean shell is thicker than observed (see
 //! [`super::ice_shell::ice_shell`]).
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -93,7 +94,9 @@ pub fn keeps_hypervolatiles(birth: MoonBirth, planet_equilibrium_k: f64) -> bool
 /// when it does not [`keep_hypervolatiles`](keeps_hypervolatiles); its
 /// rock's N₂, and its CO₂, stay. The amounts it keeps are the planet
 /// rule's (1 % of the ice in NH₃ and in CH₄, 0.1 % in N₂), which give
-/// Titan its 1.5 bar or so of N₂ and a few percent of CH₄.
+/// Titan its 1.5 bar or so of N₂ and a few percent of CH₄. Its geysers,
+/// if its shell cracks through, are drawn on their own stream
+/// (`super::vent`).
 pub fn derive_moon_model(
     system_seed: u32,
     id: &str,
@@ -115,7 +118,7 @@ pub fn derive_moon_model(
     } else {
         without_hypervolatiles(inputs)
     };
-    planet_model(&context, inputs)
+    super::vent(planet_model(&context, inputs), system_seed, id)
 }
 
 /// `inputs` without the N₂, NH₃ and CH₄ its ices carry: the N₂ keeps the
@@ -175,6 +178,7 @@ mod tests {
                 host_kg,
                 a_m,
                 eccentricity,
+                resonance: None,
             },
         }
     }
@@ -359,9 +363,8 @@ mod tests {
 
     #[test]
     fn enceladus_is_its_size() {
-        // Its ocean is a known departure (issue #463): the icy k₂/Q gives
-        // it a quarter of the tidal heat it radiates, and the conductive
-        // shell takes the whole water layer.
+        // Its ocean needs the heat of its resonance with Dione, which a
+        // lone moon has not: see `system::tests::enceladus_shell_and_ocean`.
         let m = model(
             9.54,
             &moon(1.8e-5, 0.5, MoonBirth::Disk, SATURN_KG, 2.3802e8, 0.0047),
@@ -404,5 +407,32 @@ mod tests {
         );
         assert!(keeps_hypervolatiles(MoonBirth::Disk, 83.0));
         assert!(!keeps_hypervolatiles(MoonBirth::Disk, 112.0));
+    }
+
+    /// A moon stripped of its hypervolatiles holds no ammonia, so its ice
+    /// melts at 273 K; one without water has no shell; neither gives a
+    /// NaN (Review Focus 3 of the lot 3 plan).
+    #[test]
+    fn a_body_without_ammonia_melts_at_273() {
+        use super::super::ice_shell::liquidus_k;
+        let o = InputOverrides::default();
+        let ganymede = moon(0.0248, 0.45, MoonBirth::Disk, JUPITER_KG, 1.0704e9, 0.0013);
+        let stripped = derive_moon_model(1, "p1/m1", &planet_at(5.2), &ganymede, &o);
+        assert_eq!(stripped.inputs.volatiles.nh3, 0.0);
+        let nh3_of_ice = stripped.inputs.volatiles.nh3 / stripped.inputs.water_fraction;
+        assert_eq!(liquidus_k(nh3_of_ice), 273.0);
+        let shell = stripped.ice_shell.expect("an icy moon has a shell");
+        assert!(
+            shell.shell_km.is_finite() && shell.ocean_km.is_finite(),
+            "{shell:?}"
+        );
+        assert!(stripped.moment_of_inertia.is_finite(), "{stripped:?}");
+        let io = model(
+            5.2,
+            &moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041),
+        );
+        assert_eq!(io.ice_shell, None);
+        assert!(io.moment_of_inertia.is_finite(), "{io:?}");
+        assert!(!liquidus_k(f64::NAN).is_nan());
     }
 }

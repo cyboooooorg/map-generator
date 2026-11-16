@@ -9,7 +9,9 @@ export type InternalHeat = {
  */
 radiogenic_w: number, 
 /**
- * From a host's tides ([`tidal_power_w`]); 0 without one.
+ * From a host's tides ([`tidal_power_w`], or the equilibrium heat of
+ * a moon in a resonant chain when larger, [`super::resonance`]); 0
+ * without one.
  */
 tidal_w: number, 
 /**

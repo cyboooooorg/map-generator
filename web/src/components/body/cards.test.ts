@@ -182,6 +182,28 @@ describe('themed body cards', () => {
     expect(labels(renderCard(InteriorCard, { world }))).not.toContain('Host');
   });
 
+  it('shows the ocean, the moment of inertia and the geysers of an icy moon', () => {
+    const enceladus = body({
+      id: 'c-1', kind: 'moon', type: 'ice-moon', parent: 'c',
+      model: {
+        ...model,
+        heat: { radiogenic_w: 1e9, tidal_w: 3e11, secular_w: 0 },
+        ice_shell: { shell_km: 25, ocean_km: 30, convecting: false, lid_km: 25, polar_shell_km: 5, liquidus_k: 270 },
+        geysers: { south: true, fractures: [] },
+        moment_of_inertia: 0.335,
+      },
+    });
+    const html = renderCard(InteriorCard, { world: worldOf([earthLike, enceladus], 'c-1', null) });
+    expect(html).toContain('ocean of 30 km under 25 km of ice (conductive)');
+    expect(html).toContain('0.335 — differentiated');
+    expect(html).toContain('active at the south pole');
+    expect(labels(html)).toContain('Tidal heat');
+    // Earth has none of them.
+    const earth = renderCard(InteriorCard, { world: worldOf([earthLike], 'c', null) });
+    expect(earth).not.toContain('Geysers');
+    expect(earth).not.toContain('Moment of inertia');
+  });
+
   it('lists a share and an area per biome in the legend card', () => {
     const html = renderCard(LegendCard, { ramp: null, stats, colour: () => 'red' });
     expect(html).toContain('Ocean');

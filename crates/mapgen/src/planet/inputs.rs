@@ -35,6 +35,8 @@ pub struct Context {
     pub age_gyr: f64,
     /// Effective temperature of the star, K.
     pub teff_k: f64,
+    /// Bolometric luminosity of the star, L☉.
+    pub luminosity: f64,
     /// The host whose tides heat the body, when it is not the star: a
     /// moon's planet. `None` for a planet, whose tides are the star's on
     /// its orbit.
@@ -43,7 +45,8 @@ pub struct Context {
 
 /// The host that raises tides in a body and the body's orbit around it,
 /// for [`super::heat::tidal_power_w`]: a moon's planet and the moon's
-/// orbit.
+/// orbit, and the heat the moon gets when it is locked in a resonance
+/// with its neighbours ([`super::resonance::resonant_heat`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HostTide {
     /// Mass of the host, kg.
@@ -53,6 +56,14 @@ pub struct HostTide {
     /// Eccentricity of that orbit (0 circular): a resonant moon's forced
     /// one, as Io's.
     pub eccentricity: f64,
+    /// The resonance a moon of a resonant chain is locked in: its
+    /// equilibrium tidal heat, set by its host's dissipation and its
+    /// pair's orbits, and that dissipation, the host's locked `k₂/Q`
+    /// ([`super::resonance::resonant_heat`]); the moon dissipates the
+    /// larger of that heat and its own tide
+    /// ([`super::resonance::todays_heat_w`]). `None` for a body in no
+    /// chain, or whose pair pumps nothing.
+    pub resonance: Option<super::resonance::Resonance>,
 }
 
 impl Context {
@@ -70,6 +81,7 @@ impl Context {
             equilibrium_k: f64::from(star.equilibrium_k),
             age_gyr: f64::from(star.age_gyr),
             teff_k: f64::from(star.teff_k),
+            luminosity: f64::from(star.luminosity),
             tide: None,
         }
     }
@@ -514,6 +526,7 @@ mod tests {
             equilibrium_k: 255.0 * insolation.powf(0.25),
             age_gyr: 4.6,
             teff_k: 5772.0,
+            luminosity: 1.0,
             tide: None,
         }
     }

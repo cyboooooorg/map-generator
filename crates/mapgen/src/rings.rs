@@ -39,9 +39,9 @@
 //!   moons beyond them, and a little past it, of the dust impacts knock
 //!   off them (Jupiter's Amalthea and Thebe rings, Burns et al. 1999); a
 //!   faint belt round a small moon farther out (Uranus's μ ring round
-//!   Mab); and round an icy regular moon close in a broad ring of the ice
-//!   its geysers blow out (Saturn's E ring round Enceladus). Which icy
-//!   moon is active is drawn: its tidal heating is not computed.
+//!   Mab); and round the innermost moon close in whose model vents
+//!   geysers ([`crate::planet::geysers`]) a broad ring of the ice they
+//!   blow out (Saturn's E ring round Enceladus).
 //!
 //! Everything comes from a stream of its own, so a system's other bodies
 //! keep their draws. A giant whose regular moons would not fit (a hot one,
@@ -734,7 +734,9 @@ pub struct DustSource {
     pub a_radii: f64,
     /// Its part in the rings, none for a regular moon.
     pub role: Option<RingRole>,
-    pub icy: bool,
+    /// Whether it vents geysers (its model's
+    /// [`crate::planet::Geysers`]).
+    pub geysers: bool,
 }
 
 /// Odds of a gossamer ring from a small moon beyond the main rings.
@@ -755,9 +757,8 @@ const GOSSAMER_FAR: f64 = 3.3;
 /// fact sheet; de Pater, Hammel, Gibbard & Showalter 2006,
 /// doi:10.1126/science.1125110).
 const BELT_SPAN: (f64, f64) = (0.913, 1.087);
-/// Odds of an active icy moon, and how far out it may be, in the giant's
-/// radii (Enceladus: 3.95).
-const PLUME_ODDS: f64 = 0.25;
+/// How far out a moon with geysers feeds a plume ring, in the giant's
+/// radii (Enceladus: 3.95; calibration, no source).
 const PLUME_REACH: f64 = 12.0;
 /// The span of a plume ring as shares of its moon's distance (the E ring:
 /// about 3 to 8 radii round Enceladus at 3.95).
@@ -818,15 +819,14 @@ pub fn dust_rings(rings: Option<&RingSystem>, moons: &[DustSource], seed: u32) -
             });
         }
     }
-    // A plume ring round the innermost icy regular moon close in, with
-    // drawn odds: no tidal heating is computed.
-    let active = rng.random::<f64>() < PLUME_ODDS;
+    // A plume ring round the innermost moon with geysers close in: one
+    // ring, as Saturn's E ring is Enceladus's alone.
     let opacity = rng.random_range(0.01..0.025);
     let geyser = moons
         .iter()
-        .filter(|m| m.role.is_none() && m.icy && m.a_radii < PLUME_REACH)
+        .filter(|m| m.geysers && m.a_radii < PLUME_REACH)
         .min_by(|a, b| a.a_radii.total_cmp(&b.a_radii));
-    if let (true, Some(moon)) = (active, geyser) {
+    if let Some(moon) = geyser {
         out.push(DustRing {
             kind: DustKind::Plume,
             inner: (moon.a_radii * PLUME_SPAN.0) as f32,
@@ -1225,19 +1225,21 @@ mod tests {
 
     #[test]
     fn dust_rings_follow_their_moons() {
-        let moon = |id: &str, a: f64, role: Option<RingRole>, icy: bool| DustSource {
+        let moon = |id: &str, a: f64, role: Option<RingRole>, geysers: bool| DustSource {
             id: id.to_string(),
             a_radii: a,
             role,
-            icy,
+            geysers,
         };
         let moons = [
-            moon("c-1", 2.2, Some(RingRole::Embedded), true),
-            moon("c-2", 2.5, Some(RingRole::Edge), true),
-            moon("c-3", 2.9, Some(RingRole::Edge), true),
-            moon("c-4", 3.1, Some(RingRole::Edge), true),
-            moon("c-5", 7.0, None, true),
-            moon("c-6", 11.0, None, true),
+            moon("c-1", 2.2, Some(RingRole::Embedded), false),
+            moon("c-2", 2.5, Some(RingRole::Edge), false),
+            moon("c-3", 2.9, Some(RingRole::Edge), false),
+            moon("c-4", 3.1, Some(RingRole::Edge), false),
+            moon("c-5", 5.0, None, false),
+            moon("c-6", 7.0, None, true),
+            moon("c-7", 11.0, None, true),
+            moon("c-8", 13.0, None, true),
         ];
         let rings = bright();
         let (mut gossamer, mut plumes, mut past) = (0, 0, 0);
@@ -1261,7 +1263,8 @@ mod tests {
                     }
                     DustKind::Plume => {
                         plumes += 1;
-                        assert_eq!(ring.source, "c-5");
+                        // The innermost moon with geysers.
+                        assert_eq!(ring.source, "c-6");
                         assert!(
                             (ring.inner - 5.25).abs() < 1e-4 && (ring.outer - 14.0).abs() < 1e-4
                         );
@@ -1271,14 +1274,19 @@ mod tests {
         }
         assert!((560..720).contains(&gossamer), "{gossamer}");
         assert!(past > gossamer / 3, "{past}");
-        assert!((60..140).contains(&plumes), "{plumes}");
+        // Always one: geysers feed it, no odds.
+        assert_eq!(plumes, 400);
+        // None from a moon with geysers past the reach.
+        let far = [moon("f-1", 13.0, None, true)];
+        assert!((0..100).all(|seed| dust_rings(None, &far, seed).is_empty()));
         // Shepherds make none.
         let shepherds = [
-            moon("e-1", 1.85, Some(RingRole::Shepherd), true),
-            moon("e-2", 2.02, Some(RingRole::Shepherd), true),
+            moon("e-1", 1.85, Some(RingRole::Shepherd), false),
+            moon("e-2", 2.02, Some(RingRole::Shepherd), false),
         ];
         assert!((0..100).all(|seed| dust_rings(Some(&rings), &shepherds, seed).is_empty()));
-        // No main rings, no small moons: no gossamer ring; a rocky moon has no geysers.
+        // No main rings, no small moons: no gossamer ring; a moon without
+        // geysers (a rocky one) no plume ring.
         let rocky = [moon("d-1", 6.0, None, false)];
         assert!((0..100).all(|seed| dust_rings(None, &rocky, seed).is_empty()));
     }
@@ -1289,7 +1297,7 @@ mod tests {
             id: id.to_string(),
             a_radii: a,
             role: Some(RingRole::Source),
-            icy: true,
+            geysers: false,
         };
         // Amalthea and Thebe beyond Jupiter's faint main ring; Mab far out.
         let moons = [moon("e-1", 2.54), moon("e-2", 3.10), moon("e-3", 3.82)];

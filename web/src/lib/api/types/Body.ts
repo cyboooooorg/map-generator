@@ -55,6 +55,12 @@ trojans?: Trojans,
  */
 ring_role?: RingRole, 
 /**
+ * Whether a moon grew in its planet's circumplanetary disk (the
+ * Galilean moons), as opposed to captured or born of an impact: only
+ * such moons, on prograde orbits, form resonant chains ([`chain_member`]).
+ */
+disk_born?: boolean, 
+/**
  * A planet's physical model, as [`derive_model`] gave it when the
  * system was drawn, or as the resolution of its request gave the world
  * a system is drawn around (a giant's moon included); none for any

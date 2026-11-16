@@ -14,20 +14,20 @@ fn a_world_of_an_older_format_is_refused_with_the_way_out() {
     assert!(error.contains("Regenerate"), "{error}");
 }
 
-/// A system stored before lot 2b (format 7: no `bond_albedo`, `snowball` or
-/// `secular_w` in its bodies) is refused on its version, without trying to
+/// A system stored before lot 3 (format 8: no resonant heat, moment of
+/// inertia, shell or geysers in its models) is refused on its version, without trying to
 /// parse the bodies, and with the way out.
 #[test]
-fn a_system_of_format_7_is_outdated_without_panicking() {
+fn a_system_of_format_8_is_outdated_without_panicking() {
     let dir = std::env::temp_dir().join(format!("mapgen-old-system-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("system.json"),
-        r#"{"format_version": 7, "seed": 1, "bodies": [{"id": "a", "model": {"climate": {}}}]}"#,
+        r#"{"format_version": 8, "seed": 1, "bodies": [{"id": "a", "model": {"climate": {}}}]}"#,
     )
     .unwrap();
     let error = mapgen::system::read_system(&dir).expect_err("refused");
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(error.contains("format version 7"), "{error}");
+    assert!(error.contains("format version 8"), "{error}");
     assert!(error.contains("Regenerate"), "{error}");
 }

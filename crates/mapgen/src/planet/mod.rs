@@ -8,7 +8,11 @@
 //! and the mass; [`interior::solid_interior`]
 //! derives the iron, rock and water layers, and [`interior::interior`] adds
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
-//! the radius, the bulk density and the surface gravity.
+//! the radius, the bulk density and the surface gravity;
+//! [`differentiation::partly_differentiated`] leaves an icy moon whose ice
+//! did not all separate from its rock a mixed rock-and-ice layer, and
+//! [`differentiation::moment_of_inertia`] reads its moment of inertia off
+//! the layers.
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
 //! ([`heat::radiogenic_w`]), tidal ([`heat::tidal_power_w`], with the
 //! response [`heat::k2_over_q`] of a rocky, icy or enveloped body) and
@@ -29,7 +33,9 @@
 //! ([`climate::snowball_chance`]); a cold planet's CO₂ builds up from its
 //! volcanoes up to its carbon inventory.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
-//! conductive ice shell its internal heat sustains and the ocean beneath.
+//! ice shell its internal heat sustains, conductive or convecting, thinned
+//! at the poles by the tides, and the ocean beneath, its melting point
+//! lowered by the ammonia its ice carries.
 //! [`life::life`] decides whether life arose where water lasted, and
 //! [`life::oxygenate`] gives the air its oxygen, and
 //! [`atmosphere::wash_out`] takes the SO₂ out of a wet or oxidising air.
@@ -58,8 +64,10 @@ pub mod classify;
 pub mod climate;
 pub(crate) mod column;
 pub mod core;
+pub mod differentiation;
 pub mod escape;
 pub mod explain;
+pub mod geysers;
 pub mod heat;
 pub mod ice_shell;
 pub mod inputs;
@@ -70,6 +78,7 @@ pub mod mass;
 pub mod moon;
 pub mod reference;
 pub mod regime;
+pub mod resonance;
 pub mod xuv;
 
 pub use atmosphere::{
@@ -84,6 +93,7 @@ pub use climate::{
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use explain::{Cause, Explanation, InputField, Quantity, explain};
+pub use geysers::{Fracture, Geysers, geysers};
 pub use heat::{
     EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, secular_w, tidal_power_w,
 };
@@ -143,6 +153,9 @@ pub struct PlanetInputs {
 pub enum Material {
     Iron,
     Rock,
+    /// Rock and ice still mixed, under the water of a moon whose ice did
+    /// not all separate from its rock ([`differentiation`]).
+    RockIce,
     Water,
     Envelope,
     /// Water above its critical point over the rock of a steam world: a
@@ -225,6 +238,18 @@ pub struct PlanetModel {
     /// surface.
     #[serde(default)]
     pub ice_shell: Option<IceShell>,
+    /// The geysers its ice shell vents through, if it cracks through at a
+    /// pole ([`geysers::geysers`]), drawn by [`derive_model`] and
+    /// [`moon::derive_moon_model`] from the body's seed; `None` from
+    /// [`planet_model`] alone, which has no seed, and in a model stored
+    /// before they existed.
+    #[serde(default)]
+    pub geysers: Option<Geysers>,
+    /// Moment of inertia factor `C / (M R²)` of its layers
+    /// ([`differentiation::moment_of_inertia`]); 0 in a model stored
+    /// before it existed.
+    #[serde(default)]
+    pub moment_of_inertia: f64,
 }
 
 /// The inputs a planet formed with, as a request sets them: what
@@ -364,7 +389,8 @@ const SUN_KG: f64 = 1.988_5e30;
 const AU_M: f64 = 1.495_978_707e11;
 
 /// The model of a planet of `inputs` in its formation `context`: its
-/// [`interior`] under the star's exposure; the XUV fluence of its star
+/// [`interior`] under the star's exposure (a moon's partly
+/// differentiated, see [`body_interior`]); the XUV fluence of its star
 /// ([`xuv_fluence`]) and the envelope that [`envelope_after_escape`] leaves
 /// it, from which the interior is derived again; its radiogenic heat from its
 /// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
@@ -392,7 +418,14 @@ const AU_M: f64 = 1.495_978_707e11;
 /// In a runaway the water kept is what the escape of [`atmosphere`]
 /// leaves of the steam in the air, so the
 /// [`Water`] and the air's H₂O agree. Last, its [`ice_shell`] from its
-/// water layer, its internal heat and its surface's climate.
+/// water layer, its internal heat, its surface's climate and the ammonia
+/// per kilogram of its ice (its `nh3` over its water share), and the
+/// moment of inertia of its layers.
+///
+/// It leaves `geysers` at `None`: their pole is drawn from the body's
+/// seed, which only [`derive_model`], [`derive_model_with`] and
+/// [`moon::derive_moon_model`] know ([`vent`]); a model that needs its
+/// geysers goes through those.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
 }
@@ -441,7 +474,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     } else {
         0.0
     };
-    let interior = interior(&inputs, &exposure);
+    let interior = body_interior(context, &inputs);
     let heat = internal_heat(context, &inputs, &interior);
     let mut air = None;
     let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
@@ -498,7 +531,13 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         _ => interior,
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
-    let ice_shell = ice_shell(&interior, &heat, surface.as_ref());
+    let nh3_ice = if inputs.water_fraction > 0.0 {
+        inputs.volatiles.nh3 / inputs.water_fraction
+    } else {
+        0.0
+    };
+    let ice_shell = ice_shell(&interior, &heat, surface.as_ref(), nh3_ice);
+    let moment_of_inertia = differentiation::moment_of_inertia(&interior);
     let model = PlanetModel {
         drawn_mass_earth,
         inputs,
@@ -509,8 +548,30 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         surface,
         class,
         ice_shell,
+        geysers: None,
+        moment_of_inertia,
     };
     (model, air)
+}
+
+/// The layers of a body of `inputs` (after escape) in its formation
+/// `context`: its [`interior`] under the star's exposure, with only the
+/// [`differentiation::share_in`] of its ice separated from its rock
+/// ([`differentiation::partly_differentiated`]; all of it for a planet),
+/// and for a moon (the tides of a host other than its star in `context`)
+/// the core and water of a moon ([`differentiation::moon_core`]).
+pub fn body_interior(context: &Context, inputs: &PlanetInputs) -> Interior {
+    let full = interior(inputs, &context.exposure());
+    let share = differentiation::share_in(context, inputs, &full);
+    let layered = differentiation::partly_differentiated(&full, share);
+    let moon = context
+        .tide
+        .is_some_and(|t| t.host_kg < context.star_mass * SUN_KG);
+    if moon {
+        differentiation::moon_core(&layered)
+    } else {
+        layered
+    }
 }
 
 /// The host whose tides heat a body of `context`: a moon's planet
@@ -520,13 +581,16 @@ pub(crate) fn tide_of(context: &Context) -> HostTide {
         host_kg: context.star_mass * SUN_KG,
         a_m: context.orbit_au * AU_M,
         eccentricity: context.eccentricity,
+        resonance: None,
     })
 }
 
 /// The heat a body of `inputs` (after escape) and `interior` makes in
 /// `context` (see [`planet_model`]): radiogenic and secular cooling from
-/// its silicate mass and age, tidal from [`tide_of`] with the
-/// [`heat::k2_over_q`] of its envelope and water shares.
+/// its silicate mass and age, tidal from [`tide_of`]: its own tide with
+/// the [`heat::k2_over_q`] of its envelope and water shares, or the
+/// resonant heat of a moon in a chain ([`HostTide::resonance`]) when
+/// that is larger ([`resonance::todays_heat_w`]).
 pub(crate) fn internal_heat(
     context: &Context,
     inputs: &PlanetInputs,
@@ -540,12 +604,15 @@ pub(crate) fn internal_heat(
     InternalHeat {
         radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
         secular_w: secular_w(silicate_kg, context.age_gyr),
-        tidal_w: tidal_power_w(
-            tide.host_kg,
-            interior.radius_earth * EARTH_M,
-            tide.a_m,
-            tide.eccentricity,
-            k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
+        tidal_w: resonance::todays_heat_w(
+            tidal_power_w(
+                tide.host_kg,
+                interior.radius_earth * EARTH_M,
+                tide.a_m,
+                tide.eccentricity,
+                k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
+            ),
+            tide.resonance.map(|r| r.heat_w),
         ),
     }
 }
@@ -651,7 +718,8 @@ pub(crate) fn bare(
 /// Its context is its own star seen from its orbit (its star, orbit,
 /// eccentricity and age), its system's metallicity and ice line. Its
 /// inputs are drawn from their own stream, seeded by the system's seed and
-/// `<id>/model`, so they depend on no other body and shift no other draw.
+/// `<id>/model`, so they depend on no other body and shift no other draw;
+/// its geysers, if its shell cracks through, on `<id>/geysers` ([`vent`]).
 pub fn derive_model(system_seed: u32, id: &str, context: &Context, mass_earth: f64) -> PlanetModel {
     derive_model_with(
         system_seed,
@@ -674,7 +742,19 @@ pub fn derive_model_with(
     let seed = body_seed(system_seed, &format!("{id}/model"));
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
     let inputs = draw_inputs_with(context, mass_earth, overrides, &mut rng);
-    planet_model(context, inputs)
+    vent(planet_model(context, inputs), system_seed, id)
+}
+
+/// `model` with its [`geysers`], the pole and the fractures' strike drawn
+/// on the stream of its own `<id>/geysers` of the system of
+/// `system_seed`, so that they shift no other draw.
+pub(crate) fn vent(model: PlanetModel, system_seed: u32, id: &str) -> PlanetModel {
+    let seed = body_seed(system_seed, &format!("{id}/geysers"));
+    let geysers = model
+        .ice_shell
+        .as_ref()
+        .and_then(|shell| geysers::geysers(&model.interior, shell, &model.heat, seed));
+    PlanetModel { geysers, ..model }
 }
 
 /// The model a stored system holds for `body`: the one [`derive_model`]
@@ -801,6 +881,7 @@ mod tests {
             host_kg: JUPITER_KG,
             a_m,
             eccentricity,
+            resonance: None,
         })
     }
 
@@ -822,6 +903,7 @@ mod tests {
                 host_kg,
                 a_m: 4.217e8,
                 eccentricity: 0.0041,
+                resonance: None,
             })
         };
         assert!(!shield(&around(JUPITER_KG), core).dynamo);
@@ -898,6 +980,7 @@ mod tests {
             host_kg: context.star_mass * SUN_KG,
             a_m: context.orbit_au * AU_M,
             eccentricity: context.eccentricity,
+            resonance: None,
         });
         assert_eq!(planet_model(&star_as_host, inputs), model);
         assert!(model.heat.tidal_w > 0.0);

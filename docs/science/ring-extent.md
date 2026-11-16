@@ -178,7 +178,8 @@ densest along their source moon's orbit:
   moons beyond them, bright rings or faint.
 - **A faint belt** round a small moon farther out, like the μ ring round
   Mab.
-- **A plume ring** round an icy regular moon close in, like the E ring.
+- **A plume ring** round a moon close in that vents geysers, like the E
+  ring round Enceladus.
 
 The source moon's card says what it feeds.
 
@@ -242,10 +243,12 @@ dust rings from the giant's moons:
 2. **A belt:** a source beyond 3.3 radii keeps its dust round its orbit,
    from 0.913 to 1.087 times its distance, with the same odds, bluish
    (the μ ring: 17,000 km wide round 97,700 km, NASA).
-3. **A plume ring:** with odds of 25 %, the innermost icy regular moon
-   within 12 radii feeds a ring from 0.75 to 2 times its distance (the E
-   ring spans 0.76 to 2.02 times Enceladus's). The moon is drawn: its
-   tidal heating is not computed.
+3. **A plume ring:** the innermost moon within 12 radii whose model
+   vents geysers (its ice shell cracks through at a pole, see
+   [the ice shell](planet-interiors.md#the-ice-shell-and-the-ocean-beneath))
+   feeds a ring from 0.75 to 2 times its distance (the E ring spans 0.76
+   to 2.02 times Enceladus's). There are no odds: an asked Enceladus
+   always feeds one, and a giant with no such moon has none.
 
 The resonance and the outer edge, trimmed (from
 `crates/mapgen/src/rings.rs`):
@@ -296,10 +299,10 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
   outward of Kepler's instead of 650. Past the globe's flattening cap
   (0.12), $J_2$ takes the uncapped $0.7\,q$ and keeps rising with the
   spin.
-- **The plume moon is not chosen by its heat.** The code draws the active
-  icy moon, innermost within 12 radii, with odds of 25 %. A real
-  criterion, a resonance that forces an eccentricity and so heats the
-  moon, is in [`docs/backlog.md`](../backlog.md), item 18.
+- **One plume ring per giant.** Only the innermost moon with geysers
+  within 12 radii feeds one; a second moon with geysers farther out
+  feeds none. The reach of 12 radii is a calibration, not a physical
+  limit.
 - **No Phoebe ring.** Captured far moons feed no dust ring: systems have
   no irregular moons.
 - **Little inner-edge physics.** A bright ring's inner edge is drawn

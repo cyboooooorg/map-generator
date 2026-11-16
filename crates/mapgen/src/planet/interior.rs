@@ -462,6 +462,9 @@ mod tests {
             ("Ganymede", 0.05),
             ("Callisto", 0.05),
             ("Titan", 0.05),
+            // Its ice is ice Ih, lighter than the high-pressure ices
+            // `WATER_DENSITY` mixes in: 0.0368 R⊕ against 0.0395.
+            ("Enceladus", 0.08),
         ];
         for (name, tol) in tolerance {
             let body = reference(name);
