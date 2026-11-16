@@ -80,6 +80,8 @@ export interface SkyBody {
   rings?: RingSystem | null;
   /** Its faint dust rings (the plume ring, the E ring), drawn with its rings, brightest back-lit. */
   dust?: readonly FaintRing[];
+  /** Its geysers, when it vents a plume over a pole (`south`: the south one), brightest back-lit. */
+  plume?: { south: boolean };
   /** The seed of its rings' ringlets (`ringSeed`), so that they look in the sky as in its own view. */
   ringSeed?: number;
   /**

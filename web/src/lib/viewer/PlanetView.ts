@@ -84,6 +84,7 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
+import { plumeAlpha, plumeFrame } from './plume';
 import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
@@ -115,6 +116,8 @@ import {
   type Layer,
   lineFragment,
   hostStarFragment,
+  plumeFragment,
+  plumeVertex,
   skyBodyFragment,
   skyBodyVertex,
   previewGlobeFragment,
@@ -640,6 +643,8 @@ export class PlanetView {
     maps: Texture[];
     /** Its rings, drawn over the sky (see skyRingFragment), once it has some. */
     rings: Mesh<BufferGeometry, ShaderMaterial> | null;
+    /** Its geyser plume, once it has one (see drawPlume). */
+    plume?: Mesh<PlaneGeometry, ShaderMaterial>;
   }[] = [];
   /** The orbits of the bodies in the sky (see setSkyOrbits), null until some are given. */
   private skyOrbits: LineSegments<BufferGeometry, ShaderMaterial> | null = null;
@@ -2957,8 +2962,8 @@ export class PlanetView {
   };
 
   private disposeSkyBodies(): void {
-    for (const { mesh, maps, rings } of this.skyBodies) {
-      for (const m of rings ? [mesh, rings] : [mesh]) {
+    for (const { mesh, maps, rings, plume } of this.skyBodies) {
+      for (const m of [mesh, ...(rings ? [rings] : []), ...(plume ? [plume] : [])]) {
         this.scene.remove(m);
         m.geometry.dispose();
         m.material.dispose();
@@ -3217,7 +3222,10 @@ export class PlanetView {
     for (const entry of this.skyBodies) {
       const { mesh, body } = entry;
       mesh.visible = visible;
-      if (!visible) continue;
+      if (!visible) {
+        if (entry.plume) entry.plume.visible = false;
+        continue;
+      }
       // In front of the body shown: drawn after it, over it; else with the
       // sky, behind it.
       const front = this.inFront(body);
@@ -3262,6 +3270,7 @@ export class PlanetView {
       u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, axis ? SPIN_AXIS_LENGTH + 0.1 : arrow ? 1.7 : 1);
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
+      this.drawPlume(entry);
     }
     // The bodies the orbit lines pass behind and in front of.
     const c = this.camera.position;
@@ -3293,6 +3302,77 @@ export class PlanetView {
       }
       guides.update(false, false, on, this.morph);
     });
+  }
+
+  /**
+   * The plume of a geyser moon (`SkyBody.plume`): a fan on the screen-plane
+   * projection of its venting pole, from the disc as drawn (its few-pixel
+   * floor included), brightest when back-lit. Shrinks as the pole points at
+   * the eye, hidden with the body.
+   */
+  private drawPlume(entry: (typeof this.skyBodies)[number]): void {
+    const { body, mesh } = entry;
+    const on = !!body.plume && mesh.visible && body.show?.rings !== false;
+    if (!on && !entry.plume) return;
+    if (!entry.plume) {
+      entry.plume = new Mesh(
+        new PlaneGeometry(1, 1),
+        new ShaderMaterial({
+          vertexShader: plumeVertex,
+          fragmentShader: plumeFragment,
+          uniforms: {
+            uDir: { value: new Vector3() },
+            uRight: { value: new Vector3() },
+            uUp: { value: new Vector3() },
+            uHalf: { value: 0.01 },
+            uBase: { value: new Vector2() },
+            uAxis: { value: new Vector2(0, 1) },
+            uLength: { value: 0 },
+            uSpread: { value: 0 },
+            // Ice grains: near white.
+            uColor: { value: new Vector3(0.9, 0.95, 1) },
+            uAlpha: { value: 0 },
+            uOpacity: { value: 1 },
+          },
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      entry.plume.frustumCulled = false;
+      this.scene.add(entry.plume);
+    }
+    const plume = entry.plume;
+    plume.visible = on;
+    if (!on || !body.plume) return;
+    const u = plume.material.uniforms;
+    const disc = mesh.material.uniforms;
+    const uHalf = disc['uHalf']!.value as number;
+    const dir = disc['uDir']!.value as Vector3;
+    const right = disc['uRight']!.value as Vector3;
+    const up = disc['uUp']!.value as Vector3;
+    (u['uDir']!.value as Vector3).copy(dir);
+    (u['uRight']!.value as Vector3).copy(right);
+    (u['uUp']!.value as Vector3).copy(up);
+    u['uHalf']!.value = uHalf;
+    // The disc is drawn with half-size 1 in its own units (uHalf across),
+    // so the plume is placed in disc radii: height in them is
+    // PLUME_HEIGHT_RADII (drawnHalf = 1).
+    const frame = plumeFrame(body.axes ?? IDENTITY_AXES, body.plume.south, 1);
+    const pole = new Vector3(...frame.up);
+    const px = pole.dot(right);
+    const py = pole.dot(up);
+    const shown = Math.hypot(px, py);
+    // Seen from above the pole, the plume points at the eye: it shortens.
+    const axis = shown > 1e-4 ? [px / shown, py / shown] : [0, 1];
+    (u['uBase']!.value as Vector2).set(px, py);
+    (u['uAxis']!.value as Vector2).set(axis[0]!, axis[1]!);
+    u['uLength']!.value = frame.height * shown;
+    u['uSpread']!.value = 0.5 * frame.height * Math.max(shown, 0.3);
+    // The sun's direction stands in for the phase when the body has none.
+    u['uAlpha']!.value = plumeAlpha(body.phaseCos ?? -(this.u.uSunDir.value as Vector3).dot(dir));
+    u['uOpacity']!.value = disc['uOpacity']!.value;
+    plume.renderOrder = mesh.renderOrder + 0.5;
+    plume.material.depthTest = mesh.material.depthTest;
   }
 
   /**

@@ -1050,6 +1050,47 @@ export const skyBodyVertex = /* glsl */ `
   }
 `;
 
+// The plume of a geyser moon, a fan on the sky from the venting pole: a
+// quad on the plane of the moon's disc (same frame as skyBodyVertex),
+// `uBase` the foot of the plume and `uAxis` its direction on the disc (in
+// disc radii, the disc's centre at 0), `uLength` its length and `uSpread`
+// the half-width of the quad at the top, all in disc radii.
+export const plumeVertex = /* glsl */ `
+  uniform vec3 uDir;
+  uniform vec3 uRight;
+  uniform vec3 uUp;
+  uniform float uHalf;
+  uniform vec2 uBase;
+  uniform vec2 uAxis;
+  uniform float uLength;
+  uniform float uSpread;
+  varying vec2 vF;
+  void main() {
+    // t along the plume (0 at its foot), s across it (-1 to 1).
+    float t = position.y + 0.5;
+    float s = position.x * 2.0;
+    vF = vec2(t, s);
+    vec2 p = uBase + uAxis * (t * uLength) + vec2(-uAxis.y, uAxis.x) * (s * uSpread * (0.15 + 0.85 * t));
+    vec3 d = uDir + (p.x * uRight + p.y * uUp) * uHalf;
+    vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * d * 10.0, 1.0);
+    gl_Position = clip.xyww;
+  }
+`;
+
+export const plumeFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uAlpha;
+  uniform float uOpacity;
+  varying vec2 vF;
+  void main() {
+    float along = pow(max(1.0 - vF.x, 0.0), 1.5);
+    float across = 1.0 - smoothstep(0.0, 1.0, abs(vF.y));
+    float a = uAlpha * along * across * uOpacity;
+    gl_FragColor = vec4(uColor, a);
+    #include <colorspace_fragment>
+  }
+`;
+
 // The body as a lit sphere: its visible hemisphere faces the viewer, its
 // day side the sun (phases), mapped with its surface when it has one, its
 // clouds over it, and its atmosphere: brighter towards the limb on the
