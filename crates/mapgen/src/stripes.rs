@@ -23,7 +23,8 @@ const RIDGE_HEIGHT_KM: f64 = 0.1;
 /// still sees most of the depth.
 const FLAT_SHARE: f64 = 0.7;
 /// Share of a fracture's length over which the stripe tapers to nothing
-/// at each end.
+/// at each end. Look constant: no measured profile; it only keeps the
+/// ends from looking cut off.
 const END_TAPER: f64 = 0.1;
 /// Narrowest the trough is drawn, in rows of the grid (`Grid::dy_km`): a
 /// trough narrower than a pixel would fall between the pixel centres of
@@ -113,6 +114,12 @@ fn for_each_near(
         .fold(0.0, f64::max)
         + reach_km / radius_km
         + std::f64::consts::PI / f64::from(grid.height);
+    // Each fracture's centre, strike and normal, once for all the pixels.
+    let frames: Vec<_> = geysers
+        .fractures
+        .iter()
+        .filter_map(|f| f.frame(radius_km))
+        .collect();
     let w = grid.width as usize;
     values
         .par_chunks_mut(w)
@@ -124,8 +131,8 @@ fn for_each_near(
         .for_each(|(y, row)| {
             for (x, value) in row.iter_mut().enumerate() {
                 let v = grid.unit_vector_at(x as f64, y as f64);
-                for fracture in &geysers.fractures {
-                    if let Some((across, along)) = fracture.offset_km(v, radius_km)
+                for fracture in &frames {
+                    if let Some((across, along)) = fracture.offset_km(v)
                         && across.abs() <= reach_km
                     {
                         *value = (*value + f(across, along)).clamp(-1.0, 1.0);

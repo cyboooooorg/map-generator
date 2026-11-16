@@ -157,17 +157,48 @@ impl Fracture {
     /// beyond the ends, when `|across_km|` is over [`FRACTURE_SPACING_KM`]
     /// or when the fracture has no length.
     pub fn offset_km(&self, p: [f64; 3], radius_km: f64) -> Option<(f64, f64)> {
+        self.frame(radius_km)?.offset_km(p)
+    }
+
+    /// Its centre, strike and normal on a body of `radius_km`, worked out
+    /// once for many [`FractureFrame::offset_km`] calls; `None` when it has
+    /// no length.
+    pub fn frame(&self, radius_km: f64) -> Option<FractureFrame> {
         let span = f64::from(self.length_km) / radius_km;
         if span <= 0.0 {
             return None;
         }
         let (c, d) = (self.centre(), self.strike());
-        let n = normalize(cross(c, d));
-        let across_km = dot(p, n).clamp(-1.0, 1.0).asin() * radius_km;
+        Some(FractureFrame {
+            c,
+            d,
+            n: normalize(cross(c, d)),
+            span,
+            radius_km,
+        })
+    }
+}
+
+/// A [`Fracture`]'s frame on a body, for the per-pixel loop of the stripes:
+/// the trigonometry of its centre, strike and normal is done once.
+#[derive(Clone, Copy, Debug)]
+pub struct FractureFrame {
+    c: [f64; 3],
+    d: [f64; 3],
+    n: [f64; 3],
+    /// Its length in radians.
+    span: f64,
+    radius_km: f64,
+}
+
+impl FractureFrame {
+    /// Same as [`Fracture::offset_km`].
+    pub fn offset_km(&self, p: [f64; 3]) -> Option<(f64, f64)> {
+        let across_km = dot(p, self.n).clamp(-1.0, 1.0).asin() * self.radius_km;
         if across_km.abs() > FRACTURE_SPACING_KM {
             return None;
         }
-        let along = dot(p, d).atan2(dot(p, c)) / span;
+        let along = dot(p, self.d).atan2(dot(p, self.c)) / self.span;
         (along.abs() <= 0.5).then_some((across_km, along))
     }
 }

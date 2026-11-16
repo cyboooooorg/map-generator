@@ -86,10 +86,10 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// new quantities for them. Worlds of version 23 would show Venus, Mars,
 /// Titan and Triton with the old temperatures and clouds, so they are
 /// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8. Version
-/// 25 cuts the fractures of a moon's geysers into its world, troughs
+/// 25 cuts the fractures of a body's geysers into its world, troughs
 /// between ridges as Enceladus's tiger stripes, darker than the plains,
 /// and erases the craters of the young terrain around them
-/// ([`crate::stripes`], `CraterField`). Only such a moon's world changes,
+/// ([`crate::stripes`], `CraterField`). Only such a body's world changes,
 /// so worlds of version 24 still load (it keeps its craters and has no
 /// stripes until it is regenerated); the stored fields are the same and
 /// [`crate::system::SYSTEM_FORMAT_VERSION`] stays as it is.
@@ -1364,7 +1364,7 @@ mod tests {
         std::fs::remove_dir_all(&world_dir).unwrap();
     }
 
-    /// Worlds of format 24 lack only the tiger stripes of a moon with
+    /// Worlds of format 24 lack only the tiger stripes of a body with
     /// geysers (format 25): they still load.
     #[test]
     fn format_24_world_still_loads() {
