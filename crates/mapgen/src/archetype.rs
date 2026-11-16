@@ -1210,7 +1210,7 @@ mass_earth = 5000.0
         assert!((0.8..1.2).contains(&o.water_oceans.unwrap()));
         assert_eq!(o.life, Some(true));
         assert_eq!(o.co2, Some(1.0));
-        assert_eq!(o.radiogenic, None);
+        assert_eq!(o.radiogenic, Some(1.0));
     }
 
     /// Earth's 1.013 bar, within 0.7 to 1.3 on every seed: the archetype
@@ -1227,6 +1227,19 @@ mass_earth = 5000.0
             assert!(s.life.arose, "seed {seed}: {:?}", s.life);
             let bar = s.gases.total();
             assert!((0.7..=1.3).contains(&bar), "seed {seed}: {bar} bar");
+        }
+    }
+
+    /// Earth's internal heat flux, 0.087 to 0.092 W/m² (Davies & Davies
+    /// 2010, the reference Earth's range), on every seed: the archetype
+    /// pins Earth's radiogenic abundance as well as its mass and age.
+    #[test]
+    fn earth_like_has_earths_heat_flux() {
+        let a = Archetype::load("earth-like").unwrap();
+        for seed in 0..20 {
+            let m = model_of(&a, seed);
+            let flux = m.heat.flux_w_m2(m.interior.radius_earth);
+            assert!((0.087..=0.092).contains(&flux), "seed {seed}: {flux} W/m²");
         }
     }
 

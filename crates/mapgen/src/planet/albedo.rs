@@ -171,7 +171,7 @@ const CLOUD_ALBEDO: f64 = 0.19;
 /// Albedo of a sulphuric acid deck, which hides all below it: Venus's
 /// Bond albedo, 0.76 (Haus et al. 2016, doi:10.1016/j.icarus.2015.11.011,
 /// from memory, not checked). Its only body.
-const DECK_ALBEDO: f64 = 0.76;
+pub(crate) const DECK_ALBEDO: f64 = 0.76;
 
 /// Least SO₂, bar, that makes a sulphuric deck. The look reads it too
 /// (`interim::sky_of` asks [`sulphuric_deck`]), so that the albedo and
@@ -183,6 +183,16 @@ pub(crate) const DECK_SO2_BAR: f64 = 1.0e-3;
 /// cloud levels over a 737 K surface); a frozen world's SO₂ makes none.
 /// Calibration, no source: the melting point of ice.
 const DECK_MIN_K: f64 = 273.15;
+
+/// Warming, K, over which a sulphuric deck grows from none at
+/// [`DECK_MIN_K`] to whole: 40 K. Calibration, no source: a deck that
+/// appeared whole at one temperature would leave the albedo's fixed
+/// point no balance between a warm clear sky and a cold decked one (the
+/// deck's 0.76 against a bare ground's 0.2 to 0.3 moves the surface by
+/// some 60 K); spread over 40 K, the deck moves the temperature it
+/// derives by less than the step it takes, so that the damped fixed
+/// point of `climate::settle` converges. Venus's 737 K is far past it.
+const DECK_ONSET_K: f64 = 40.0;
 
 /// Methane, bar, at which a methane haze reaches `1 − 1/e` of its
 /// strength. Calibration, no source: Titan's 1.5 to 5 % of 1.5 bar (0.02
@@ -329,18 +339,17 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -
     }
 }
 
-/// Whether the air of a body at `temperature_k` makes a sulphuric acid
-/// deck: its SO₂, as the washing out leaves it over the surface's liquid
-/// ([`super::atmosphere::wash_out`]: none over liquid water), reaches
-/// [`DECK_SO2_BAR`], in a warm air ([`DECK_MIN_K`]).
-pub(crate) fn sulphuric_deck(temperature_k: f64, gases: &Gases, liquid_water: bool) -> bool {
-    use super::climate::SurfaceLiquid;
-    let liquid = if liquid_water {
-        SurfaceLiquid::Water
-    } else {
-        SurfaceLiquid::None
-    };
-    temperature_k >= DECK_MIN_K && super::atmosphere::wash_out(*gases, liquid).so2 >= DECK_SO2_BAR
+/// Share of the disc, 0 to 1, that a sulphuric acid deck covers on a
+/// body at `temperature_k` whose air holds `so2_bar` of SO₂ after the
+/// washing out ([`super::atmosphere::wash_out`]; the caller washes, once:
+/// the climate before the albedo, the model before it stores the air).
+/// None under [`DECK_SO2_BAR`] or [`DECK_MIN_K`]; past them it grows
+/// linearly over [`DECK_ONSET_K`].
+pub(crate) fn sulphuric_deck(temperature_k: f64, so2_bar: f64) -> f64 {
+    if so2_bar < DECK_SO2_BAR {
+        return 0.0;
+    }
+    ((temperature_k - DECK_MIN_K) / DECK_ONSET_K).clamp(0.0, 1.0)
 }
 
 /// Strength of a methane haze in `gases`, 0 to 1 ([`HAZE_CH4_BAR`],
@@ -359,7 +368,8 @@ fn haze(gases: &Gases) -> f64 {
 }
 
 /// The Bond albedo of a body with `cover` under `gases`, with a
-/// sulphuric acid deck when `deck`.
+/// sulphuric acid deck over the share `deck` of its disc
+/// ([`sulphuric_deck`]).
 ///
 /// The surface mixes its covers' albedos (ocean [`OCEAN_ALBEDO`], land
 /// from [`REGOLITH_ALBEDO`] when airless to [`SOIL_ALBEDO`] under an air,
@@ -369,9 +379,10 @@ fn haze(gases: &Gases) -> f64 {
 /// band by band: what caps CO₂'s warming at the maximum greenhouse,
 /// Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131), and a methane
 /// haze over all ([`HAZE_ALBEDO`], [`HAZE_ABSORPTION`]). A deck hides
-/// everything below it ([`DECK_ALBEDO`]).
-pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: bool) -> f64 {
-    if deck {
+/// everything below it ([`DECK_ALBEDO`]) where it lies.
+pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64) -> f64 {
+    let deck = deck.clamp(0.0, 1.0);
+    if deck >= 1.0 {
         return DECK_ALBEDO;
     }
     let shield = 1.0 - (-gases.total().max(0.0) / SHIELD_BAR).exp();
@@ -385,13 +396,14 @@ pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: bool) -> f64 {
     let tau = rayleigh_550(gases);
     let h = haze(gases);
     let (hr, ht) = (h * HAZE_ALBEDO, 1.0 - h * (HAZE_ALBEDO + HAZE_ABSORPTION));
-    SPECTRUM
+    let below: f64 = SPECTRUM
         .iter()
         .map(|&(scale, weight)| {
             let r = rayleigh_reflectance(tau * scale);
             weight * over(hr, ht, over(r, 1.0 - r, clouded))
         })
-        .sum()
+        .sum();
+    deck * DECK_ALBEDO + (1.0 - deck) * below
 }
 
 #[cfg(test)]
@@ -424,7 +436,7 @@ mod tests {
             assert_eq!(c.cloud, 0.0, "{t}: {c:?}");
             assert_eq!(c.ice, 0.0, "{t}: {c:?}");
             assert_eq!(c.land, 1.0, "{t}: {c:?}");
-            let a = bond_albedo(&c, &airless, false);
+            let a = bond_albedo(&c, &airless, 0.0);
             assert!((0.06..=0.14).contains(&a), "{t}: {a}");
         }
     }
@@ -470,7 +482,7 @@ mod tests {
         };
         let caps = cover(210.0, &air, &mars, 0.0);
         assert!(caps.ice > 0.0 && caps.ice < 0.02, "{caps:?}");
-        let a = bond_albedo(&caps, &air, false);
+        let a = bond_albedo(&caps, &air, 0.0);
         assert!((0.2..=0.3).contains(&a), "{a}");
         assert_eq!(cover(210.0, &air, &earth_water(), 0.0).ice, 1.0);
     }
@@ -489,7 +501,7 @@ mod tests {
             n2: 1.4e-5,
             ..Gases::default()
         };
-        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, frost), &thin, false);
+        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, frost), &thin, 0.0);
         let half = cover(40.0, &thin, &dry, FROST_LAYER_BAR / 2.0);
         assert!((half.frost - 0.5).abs() < 1e-12, "{half:?}");
         assert!((half.land - 0.5).abs() < 1e-12, "{half:?}");
@@ -531,7 +543,7 @@ mod tests {
                     co2,
                     ..Gases::default()
                 },
-                false,
+                0.0,
             )
         };
         let (thin, eight, ninety) = (a(1e-3), a(8.0), a(90.0));

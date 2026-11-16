@@ -125,22 +125,16 @@ pub struct PlanetInputs {
     pub volatiles: Volatiles,
     /// Radiogenic abundance at formation, relative to Earth's (1.0).
     pub radiogenic: f64,
-    /// Uniform in `[0, 1)`, drawn last: life arises where it is below
-    /// [`life::LIFE_CHANCE`] (and the world allows it).
+    /// Uniform in `[0, 1)`, drawn just before `snowball_draw`: life
+    /// arises where it is below [`life::LIFE_CHANCE`] (and the world
+    /// allows it).
     pub life_draw: f64,
-    /// Uniform in `[0, 1)`, drawn after `life_draw`: a planet whose climate
-    /// has both a temperate and a frozen state is a snowball where it is
-    /// below [`climate::snowball_chance`] (see [`climate::climate`]). 1
+    /// Uniform in `[0, 1)`, drawn last, after `life_draw`: a planet whose
+    /// climate has both a temperate and a frozen state is frozen where it
+    /// is below [`climate::snowball_chance`] (see [`climate::climate`]). 1
     /// keeps the temperate state, 0 takes the frozen one wherever it
-    /// exists. Models stored before it read as 1.
-    #[serde(default = "temperate_draw")]
+    /// exists.
     pub snowball_draw: f64,
-}
-
-/// The `snowball_draw` of a model stored before the draw existed: the
-/// temperate state.
-fn temperate_draw() -> f64 {
-    1.0
 }
 
 /// What a layer of a planet is made of.
@@ -623,7 +617,9 @@ pub(crate) fn bare(
     let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
     let condensed = atmosphere::condense(gases, climate.temperature_k).1;
     let life = life(inputs, &climate, context.age_gyr);
-    let surface_gases = wash_out(oxygenate(after, &life), climate.liquid);
+    // Washed as the albedo washed it ([`climate::washed`]), so that the
+    // look's deck is the albedo's.
+    let surface_gases = climate::washed(oxygenate(after, &life), &w);
     Bare {
         surface: Surface {
             water: w,

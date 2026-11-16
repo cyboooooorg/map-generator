@@ -206,8 +206,9 @@ export function cloudTint(meta: WorldMetadata): [number, number, number] {
   switch (meta.look.atmosphere?.clouds) {
     case 'sulfuric':
       // Pale cream-yellow: Venus's deck, about (0.93, 0.89, 0.76) in sRGB,
-      // linear here (Pérez-Hoyos et al. 2018, doi:10.1016/j.icarus.2017.12.034,
-      // and the Mariner 10 / MESSENGER true-colour composites; from memory, check).
+      // linear here (Pérez-Hoyos et al. 2018, JGR Planets 123, 145,
+      // doi:10.1002/2017JE005406, and the Mariner 10 / MESSENGER true-colour
+      // composites; from memory, check).
       return [0.85, 0.77, 0.54];
     case 'dust':
       return [0.62, 0.38, 0.2];

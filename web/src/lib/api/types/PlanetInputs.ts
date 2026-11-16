@@ -26,15 +26,16 @@ envelope_fraction: number, volatiles: Volatiles,
  */
 radiogenic: number, 
 /**
- * Uniform in `[0, 1)`, drawn last: life arises where it is below
- * [`life::LIFE_CHANCE`] (and the world allows it).
+ * Uniform in `[0, 1)`, drawn just before `snowball_draw`: life
+ * arises where it is below [`life::LIFE_CHANCE`] (and the world
+ * allows it).
  */
 life_draw: number, 
 /**
- * Uniform in `[0, 1)`, drawn after `life_draw`: a planet whose climate
- * has both a temperate and a frozen state is a snowball where it is
- * below [`climate::snowball_chance`] (see [`climate::climate`]). 1
+ * Uniform in `[0, 1)`, drawn last, after `life_draw`: a planet whose
+ * climate has both a temperate and a frozen state is frozen where it
+ * is below [`climate::snowball_chance`] (see [`climate::climate`]). 1
  * keeps the temperate state, 0 takes the frozen one wherever it
- * exists. Models stored before it read as 1.
+ * exists.
  */
 snowball_draw: number, };

@@ -34,6 +34,11 @@ n2 = 1.0
 # 1.013 bar of air as its target (US Standard Atmosphere 1976): Earth's
 # primordial ammonia is not a measured quantity.
 nh3 = 0.7
+# Earth's own radiogenic abundance (U, Th, K at formation): the unit
+# itself. Fixed, so that its heat flux is Earth's 0.087 to 0.092 W/m2
+# (Davies & Davies 2010, doi:10.5194/se-1-5-2010), not a drawn
+# abundance's.
+radiogenic = 1.0
 # The age of the Solar System, 4.567 Ga by the oldest solids; the
 # planets formed in its first tens of Ma (Bouvier & Wadhwa 2010,
 # doi:10.1038/ngeo941).

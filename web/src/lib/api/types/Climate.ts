@@ -31,6 +31,7 @@ regulated: boolean,
  * and it was drawn frozen over, its CO₂ building up from its
  * volcanoes towards the thaw ([`climate`], [`snowball_chance`]).
  * A body with no temperate state (past the outer edge of the
- * habitable zone) is frozen but not a snowball.
+ * habitable zone), or whose frozen state no CO₂ it can hold thaws,
+ * is frozen but not a snowball.
  */
 snowball: boolean, };

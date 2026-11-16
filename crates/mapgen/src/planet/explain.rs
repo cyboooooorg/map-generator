@@ -603,8 +603,8 @@ mod tests {
 
     /// Earth: the context of `reference::sun_at(1.0)`, the inputs the
     /// `earth-like` archetype sets (one Earth mass, CMF 0.325, an ocean,
-    /// no envelope, CO₂ and N₂ on their rule, life, no snowball), the rest
-    /// drawn.
+    /// no envelope, CO₂ and N₂ on their rule, Earth's radiogenic
+    /// abundance, life, no snowball), the rest drawn.
     fn earth() -> (Context, PlanetModel) {
         earth_at(1.0, false)
     }
@@ -621,7 +621,7 @@ mod tests {
             ch4: None,
             nh3: None,
             s: None,
-            radiogenic: None,
+            radiogenic: Some(1.0),
             life: Some(true),
             snowball: Some(snowball),
         };
@@ -724,7 +724,19 @@ mod tests {
 
     #[test]
     fn a_planet_past_the_outer_edge_says_it_is_frozen_for_good() {
-        let (context, model) = earth_at(1.65, false);
+        let (context, model) = earth_at(1.8, false);
+        let c = model.surface.as_ref().unwrap().climate;
+        assert!(!c.snowball && c.liquid != SurfaceLiquid::Water, "{c:?}");
+        let e = explain(&context, &model).expect("explained");
+        let t = root(&e, Quantity::SurfaceTemperature);
+        assert!(has_note(t, "frozen") && !has_note(t, "snowball"), "{t:#?}");
+    }
+
+    #[test]
+    fn a_frozen_state_no_co2_thaws_says_frozen_for_good() {
+        // Drawn frozen where no CO₂ the planet can hold thaws it: frozen
+        // for good, not a snowball waiting for its thaw.
+        let (context, model) = earth_at(1.6, true);
         let c = model.surface.as_ref().unwrap().climate;
         assert!(!c.snowball && c.liquid != SurfaceLiquid::Water, "{c:?}");
         let e = explain(&context, &model).expect("explained");
@@ -757,7 +769,8 @@ mod tests {
             earth(),
             earth_at(1.0, true),
             earth_at(1.6, false),
-            earth_at(1.65, false),
+            earth_at(1.8, false),
+            earth_at(1.6, true),
             solar("Venus"),
             solar("Mars"),
             solar("Titan"),

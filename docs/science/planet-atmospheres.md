@@ -463,8 +463,11 @@ the water vapour the climate sets.
 `planet::column`, issue #441). The surface temperature is the one at
 which the outgoing longwave radiation (OLR) of a grey column over the
 surface balances what it absorbs, `σ T_eq⁴ + q`, with `T_eq` the
-context's equilibrium temperature (Bond albedo 0.3) and `q` the internal
-heat flux. The column:
+equilibrium temperature under the body's derived Bond albedo
+(`planet::albedo`, issue #510: its oceans, land, ice, frost, clouds,
+Rayleigh scattering, methane haze and sulphuric deck, solved with the
+temperature as a fixed point) and `q` the internal heat flux. The
+column:
 
 - runs from the surface up a log-pressure grid (20 levels per decade,
   to a thousandth of the surface pressure and at least to 1e-4 bar);
@@ -497,38 +500,41 @@ stratosphere the surface solves give a body at that limit, skin
 runaway limit `S_rg` (`star::habitable_fluxes`), clamped to 0 to 0.9:
 `A_rg = 1 − 4 F_plateau / (S_rg S₀)`, with `S₀` the solar constant
 behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). The albedo moves from
-0.3 to `A_rg` with the steam column, `A = 0.3 + (A_rg − 0.3) (1 −
-exp(−p_steam / 1 bar))` (`STEAM_ALBEDO_BAR`, a calibration: the moist
-atmospheres of Kopparapu et al. hold a fraction of a bar to about one
-bar of vapour at the limit), so a thick column takes `A_rg` whole and a
-runaway losing the last of its water comes back to 0.3 without a jump. Kopparapu et al.
+the body's derived albedo `A_d` to `A_rg` with the steam column,
+`A = A_d + (A_rg − A_d) (1 − exp(−p_steam / 1 bar))` (`STEAM_ALBEDO_BAR`,
+a calibration: the moist atmospheres of Kopparapu et al. hold a fraction
+of a bar to about one bar of vapour at the limit), so a thick column
+takes `A_rg` whole and a runaway losing the last of its water comes back
+to its derived albedo without a jump. Kopparapu et al.
 2013 (doi:10.1088/0004-637X/765/2/131) and 2014 place the runaway limit
 where the light a moist atmosphere absorbs, with the albedo its own
 spectrum gives under that star, meets its outgoing limit. With Earth's
 0.3, a planet round a red star that runs away by that limit
 (0.91 S⊕ for an M9V) would absorb under the plateau and sit on water's
 critical point. With `A_rg` (0.08 for an M9V, 0.24 for the Sun) it
-balances past the plateau. Wet bodies keep 0.3, so Earth's calibration
-does not move. So does a runaway whose escape took all its water
-(Mercury, Venus), which has no moist air left. Albedo in general is issue #510.
+balances past the plateau. Wet bodies keep their derived albedo (Earth's
+about 0.3), and so does a runaway whose escape took all its water
+(Mercury, Venus), which has no moist air left.
 
 `p_i` are the partial pressures of CO₂, H₂O and CH₄ and `P_b,i` the
 pressure that broadens each gas's lines (below). The square roots are the
 strong-line limit of a pressure-broadened band, which absorbs as
 `sqrt(S u α)` with the path `u ∝ p_i` and the width `α` growing with the
 pressure round the lines (Pierrehumbert 2010, §4.4; Goody & Yung 1989).
-CO₂'s power is smaller, 0.07: its 15 µm band is saturated at the centre,
+CO₂'s power is smaller, 0.19: its 15 µm band is saturated at the centre,
 so its forcing grows with the logarithm of its amount (Myhre et al. 1998,
-doi:10.1029/98GL01908). With Venus pinning its opacity, the power sets
-how strong small amounts of CO₂ are: 0.27 left the late Archean Earth
-(below) at 259 K. Under 1e-6 bar (`CO2_WEAK_BAR`) CO₂ absorbs in
+doi:10.1029/98GL01908). With Venus pinning its opacity (737 K under 85
+bar at its derived Bond albedo 0.76, its sulphuric deck's), the power
+sets how strong small amounts of CO₂ are: the late Archean Earth (below)
+must stay above 270 K and warm by 3 to 8 K when its nitrogen doubles;
+0.19 gives 272 K and +7.0 K (0.27 left it at 259 K, 0.25 at 268 K). Under 1e-6 bar (`CO2_WEAK_BAR`) CO₂ absorbs in
 proportion to its amount, the weak-line limit; without it Titan's 3e-10
 bar of CO₂ warmed it by about 3 K. The opacities are calibrations with no
 source:
 
 | Gas | `k_i` | `a_i` | Calibrated on |
 |---|---|---|---|
-| CO₂ | 0.74 (1.66 before #441) | 0.07 (0.25) | Venus's 737 K under 85 bar |
+| CO₂ | 1.45 (0.74 under the fixed albedo 0.3, 1.66 before #441) | 0.19 (0.07, 0.25 before #441) | Venus's 737 K under 85 bar at its Bond albedo 0.76, and the late Archean Earth |
 | H₂O | 111 (5.9) | 0.5 | the moist plateau at about 287 W/m² |
 | CH₄ | 6.0 (3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K |
 
@@ -701,15 +707,17 @@ a placeholder the chain replaces when it boils the ocean. A runaway's steam is a
 **Carbonate thermostat.** On a planet with plates and water, weathering
 draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
 Hays & Kasting 1981, doi:10.1029/JC086iC10p09776). The model sets the CO₂
-between none and all that is outgassed (never more) so that a surface at
-`THERMOSTAT_K`, 288 K (a calibration on Earth), the vapour taken at that
-temperature, sends out what it absorbs (solved in `ln CO₂`). If all the
-CO₂ is not enough, it all stays in the air and the planet is colder:
-below 273 K its water freezes (weathering stops, so the CO₂
-accumulates). If no CO₂ at all is still too warm, the planet is hotter.
-Only a temperature reached is `regulated`. The CO₂ the thermostat can
-use is what the cold trap left. The grid's `carbon_cycle` is unchanged;
-part 3 aligns them.
+so that a surface at `THERMOSTAT_K`, 288 K (a calibration on Earth), the
+vapour taken at that temperature, sends out what it absorbs (solved in
+`ln CO₂`). It can build the CO₂ up past what the air held before the
+climate (what escape and the cold trap left of it), since weathering
+slows and the volcanoes keep giving: up to the planet's carbon inventory
+(all it outgassed, `CarbonCycle::inventory_bar`), capped where CO₂ frosts
+out at its equilibrium temperature (`co2_frost_bar`). If that most is
+not enough, the planet keeps the CO₂ of its maximum greenhouse and is
+colder: below 273 K its water freezes. If no CO₂ at all is still too
+warm, the planet is hotter. Only a temperature reached is `regulated`.
+The grid's `carbon_cycle` is unchanged; part 3 aligns them.
 
 **Bond albedo** (`albedo::cover`, `albedo::bond_albedo`, issue #510). The
 albedo is no longer Earth's 0.3 for everyone: it follows what covers the
@@ -723,8 +731,13 @@ contrast of an Earth-like planet, `ice_line_share`), frosts of N₂, CH₄ and
 CO₂ (0.75, the share `frost / 0.02 bar` of the disc), under a water cloud
 cover that grows with the vapour (`1 - exp(-p_H₂O / 1.15e-2 bar)`, Earth's
 0.67 at its 1.26e-2 bar, each cloud 0.19), Rayleigh scattering of the air's
-column, a methane haze and, from 1e-3 bar of SO₂ in a surface above 273 K,
-a sulphuric acid deck that hides all below it (0.76). Each constant is
+column, a methane haze and, from 1e-3 bar of SO₂ (what the washing out
+leaves) in a surface above 273 K, a sulphuric acid deck that hides all
+below it (0.76), over a share of the disc that grows linearly from none
+at 273 K to all of it at 313 K (`DECK_ONSET_K`, a calibration: a deck
+whole at one temperature left the fixed point no balance between a warm
+clear sky and a cold decked one). The model stores the air washed as the
+albedo washed it, and the look draws the same deck over the same share. Each constant is
 calibrated on several bodies at once and carries its source (several are
 from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
 0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64 and Triton 0.75.
@@ -743,7 +756,10 @@ formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
 `d / (d + 0.8 bar × v / v⊕)`: the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (0.8 bar gives Earth, which spent about a tenth of its history frozen, a
-chance of 0.1). So snowballs are rare near S = 1, likelier towards the
+chance of 0.1). Where no CO₂ within the planet's inventory and its frost
+cap thaws it (the chance is then 1, from about 1.6 AU for an Earth-like
+planet round the Sun), the frozen state is for good: the planet is
+frozen but not a snowball, and its card says so (the `frozen` note). So snowballs are rare near S = 1, likelier towards the
 outer edge of the habitable zone and on planets that outgas little, and
 `--snowball yes|no` pins the state. A snowball is drawn with the `frozen`
 look and keeps its relief and coastlines; no sulphuric cloud forms in its

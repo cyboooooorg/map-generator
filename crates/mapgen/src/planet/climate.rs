@@ -48,8 +48,8 @@ pub struct Climate {
     /// and it was drawn frozen over, its CO₂ building up from its
     /// volcanoes towards the thaw ([`climate`], [`snowball_chance`]).
     /// A body with no temperate state (past the outer edge of the
-    /// habitable zone) is frozen but not a snowball.
-    #[serde(default)]
+    /// habitable zone), or whose frozen state no CO₂ it can hold thaws,
+    /// is frozen but not a snowball.
     pub snowball: bool,
 }
 
@@ -1071,7 +1071,9 @@ pub struct CarbonCycle {
 /// frozen. Its CO₂ is then the amount built up so far, half way
 /// ([`SNOWBALL_BUILT_UP`]) from the CO₂ it froze with to the CO₂ that
 /// thaws it: one CO₂ per state, so that pinning the state alone
-/// ([`super::PlanetModel::formation`]) gives the same planet again.
+/// ([`super::PlanetModel::formation`]) gives the same planet again. When
+/// no CO₂ within what the body can hold thaws it (the chance is then 1),
+/// the frozen state is for good: not a [`Climate::snowball`].
 ///
 /// The liquid follows from the temperature and pressure (see
 /// [`LAVA_K`] and the phase diagrams of water and hydrocarbons).
@@ -1104,7 +1106,9 @@ pub fn climate(
     let built_up =
         frozen.froze_bar + SNOWBALL_BUILT_UP * (frozen.still_frozen_bar - frozen.froze_bar);
     let (gases, climate) = body.frozen_at(built_up);
-    let snowball = frozen_over(&climate);
+    // A frozen state that no CO₂ the body can hold thaws is frozen for
+    // good, not a snowball awaiting its thaw.
+    let snowball = frozen_over(&climate) && frozen.thaw_bar.is_finite();
     (
         gases,
         Climate {
@@ -1429,16 +1433,33 @@ fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
 const CONDENSE_ITERATIONS: usize = 100;
 
 /// The Bond albedo of `water` and `gases` at `temperature_k` with
-/// `frost_bar` of frost on the ground: its [`cover`], with a sulphuric
-/// deck where [`sulphuric_deck`] makes one.
-/// A body that keeps water out of a runaway washes its SO₂ out, liquid
-/// or not at that temperature (a frozen one is too cold for a deck
-/// anyway, and one with no wet balance boils: its steam is the
-/// chain's next pass, not a deck).
-fn derived_albedo(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> f64 {
-    let wet = water.is_wet();
-    let deck = sulphuric_deck(temperature_k, gases, wet);
+/// `frost_bar` of frost on the ground: its [`cover`], with the sulphuric
+/// deck [`sulphuric_deck`] makes of the SO₂ the washing out leaves
+/// ([`washed`]).
+pub(crate) fn derived_albedo(
+    temperature_k: f64,
+    gases: &Gases,
+    water: &Water,
+    frost_bar: f64,
+) -> f64 {
+    let deck = sulphuric_deck(temperature_k, washed(*gases, water).so2);
     bond_albedo(&cover(temperature_k, gases, water, frost_bar), gases, deck)
+}
+
+/// `gases` after the washing out of their SO₂
+/// ([`super::atmosphere::wash_out`]) on a body with `water`: as over
+/// liquid water when the body keeps water out of a runaway, liquid or not
+/// at its temperature (a frozen one is too cold for a deck anyway, and
+/// one with no wet balance boils: its steam is the chain's next pass, not
+/// a deck). The albedo washes with it and the model stores its air washed
+/// with it, so that the look's deck is the albedo's.
+pub(crate) fn washed(gases: Gases, water: &Water) -> Gases {
+    let liquid = if water.is_wet() {
+        SurfaceLiquid::Water
+    } else {
+        SurfaceLiquid::None
+    };
+    super::atmosphere::wash_out(gases, liquid)
 }
 
 /// The albedo the fixed point of `body` starts from warm: the cover of
@@ -2245,18 +2266,18 @@ mod tests {
         // The outer edge of the Sun's habitable zone, the maximum
         // greenhouse, is about 1.67 AU (Kopparapu et al. 2013, *ApJ* 765,
         // 131, doi:10.1088/0004-637X/765/2/131): an Earth on its temperate
-        // branch builds up its CO₂ and keeps liquid water to 1.65 AU, and
+        // branch builds up its CO₂ and keeps liquid water to 1.6 AU, and
         // freezes beyond the edge. Colder the farther, with no step but
         // the edge.
         let earth = earth_drawn(1.0);
         let mut last = f64::INFINITY;
-        for au in [1.0, 1.4, 1.6, 1.65, 1.8, 2.5] {
+        for au in [1.0, 1.4, 1.6, 1.8, 2.5] {
             let (_, g, c) = climate_at(&earth, au);
             println!(
                 "{au} AU: {:.1} K, A {:.3}, CO₂ {:.3e} bar, {:?}, regulated {}",
                 c.temperature_k, c.bond_albedo, g.co2, c.liquid, c.regulated
             );
-            if au <= 1.65 {
+            if au <= 1.6 {
                 assert!(c.temperature_k >= 273.0, "{au} AU: {c:?} {g:?}");
                 assert_eq!(c.liquid, SurfaceLiquid::Water, "{au} AU: {c:?}");
             } else {
@@ -2314,6 +2335,86 @@ mod tests {
         assert!(c.snowball, "{c:?}");
         assert!(frozen.co2 > warm.co2, "{frozen:?} {warm:?}");
         assert!(frozen.co2 <= d.carbon.inventory_bar, "{frozen:?}");
+    }
+
+    #[test]
+    fn a_frozen_state_no_co2_thaws_is_no_snowball() {
+        // Drawn frozen where no CO₂ within the inventory and what does not
+        // frost out thaws it: it stays frozen for good, so it is no
+        // snowball (whose card promises a thaw).
+        let earth = earth_drawn(0.0);
+        let d = derive_at(&earth, 1.6);
+        let body = Body::new(
+            &d.context,
+            d.gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+            &d.carbon,
+        );
+        let frozen = branches(&body).frozen.expect("bistable at 1.6 AU");
+        assert!(frozen.thaw_bar.is_infinite(), "{}", frozen.thaw_bar);
+        let (_, _, c) = climate_at(&earth, 1.6);
+        assert!(frozen_over(&c), "{c:?}");
+        assert!(!c.snowball, "{c:?}");
+        // Where the CO₂ thaws it, a frozen draw is a snowball.
+        let (_, _, c) = climate_at(&earth, 1.2);
+        assert!(c.snowball, "{c:?}");
+    }
+
+    #[test]
+    fn a_dry_acid_air_settles_through_the_deck_onset() {
+        // A dry air rich in SO₂ makes a sulphuric deck once warm: its
+        // albedo climbs from the bare ground's to the deck's as it warms,
+        // which must leave a fixed point the albedo settles on (a step
+        // would swing between a warm deckless and a cold decked climate).
+        let d = derive_at(&model_inputs(reference("Mars")), 1.0);
+        let dry = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        let air = Gases {
+            n2: 3.0,
+            co2: 0.05,
+            so2: 0.02,
+            ..Gases::default()
+        };
+        let mut near = 0;
+        for i in 0..=60 {
+            let au = 0.8 + 0.02 * f64::from(i);
+            let context = super::super::reference::sun_at(au);
+            let body = Body::new(
+                &context,
+                air,
+                &dry,
+                d.regime,
+                d.heat_flux_w_m2,
+                0.0,
+                &temperate(air.co2),
+            );
+            let (g, c) = climate(
+                &context,
+                air,
+                &dry,
+                d.regime,
+                d.heat_flux_w_m2,
+                0.0,
+                temperate(air.co2),
+            );
+            if (263.0..=330.0).contains(&c.temperature_k) {
+                near += 1;
+            }
+            let derived = body.albedo_at(c.temperature_k, &g);
+            let t_eq = |a: f64| context.with_albedo(a).equilibrium_k;
+            assert!(
+                (t_eq(derived) - t_eq(c.bond_albedo)).abs() < 0.1,
+                "{au} AU: {c:?}, derived albedo {derived}"
+            );
+        }
+        assert!(near >= 3, "too few orbits near the onset: {near}");
     }
 
     #[test]
