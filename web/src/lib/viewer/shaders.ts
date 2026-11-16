@@ -107,6 +107,21 @@ export const surfaceVertex = /* glsl */ `
   varying vec3 vEast;
   varying vec3 vNorth;
   varying vec3 vWorld;
+  // 1 on a vertex of a pole row (the whole row is that one point on the
+  // globe), 0 elsewhere: above 0 in the triangles that fan round a pole.
+  varying float vPole;
+
+  // The mean of row v (1 − map v) of t at mip level lod, over POLE_TAPS
+  // longitudes: the value of a pole, shared by every vertex of its row.
+  // Each reading its own column raised the pole into a star of spikes.
+  const int POLE_TAPS = 16;
+  float rowMean(sampler2D t, float v, float lod) {
+    float sum = 0.0;
+    for (int i = 0; i < POLE_TAPS; i++) {
+      sum += textureLod(t, vec2((float(i) + 0.5) / float(POLE_TAPS), v), lod).r;
+    }
+    return sum / float(POLE_TAPS);
+  }
 
   // The map point (x, y) rolled onto a sphere of radius 1 / uMorph that
   // touches the map along the meridian x = uMorphX and bulges towards +z,
@@ -141,6 +156,8 @@ export const surfaceVertex = /* glsl */ `
     vec2 g = uTileRect.xy + uv * uTileRect.zw;
     vUv = g;
     vLocalUv = uv;
+    bool pole = abs(g.y - 0.5) > 0.5 - 1e-6;
+    vPole = pole ? 1.0 : 0.0;
     float lon = g.x * 2.0 * PI;
     float lat = (g.y - 0.5) * PI;
     vec3 sphere = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
@@ -156,7 +173,11 @@ export const surfaceVertex = /* glsl */ `
     // An irregular body: the sphere scaled by its shape, the normal tilted
     // by the shape's slopes (relief and lighting follow it).
     float radius = 1.0;
-    if (uHasShape > 0.5) {
+    if (uHasShape > 0.5 && pole) {
+      // One radius for the whole pole row, and no tilt: its slopes would
+      // point a different way at each vertex of the same point.
+      radius = mix(1.0, rowMean(uShape, 1.0 - g.y, 0.0), uMorph);
+    } else if (uHasShape > 0.5) {
       radius = shapeAt(g);
       vec2 dx = vec2(uShapeTexel.x, 0.0);
       vec2 dy = vec2(0.0, uShapeTexel.y);
@@ -174,7 +195,13 @@ export const surfaceVertex = /* glsl */ `
     float height = 0.0;
     if (uHasData > 0.5) {
       float lod = max(0.0, log2(uTileRect.z / (uTexel.x * uMeshSegments)));
-      float above = textureLod(uData, vec2(g.x, 1.0 - g.y), lod).r - uCoast;
+      float elevation = textureLod(uData, vec2(g.x, 1.0 - g.y), lod).r;
+      // On the globe, the pole row is one point: one height (the flat map,
+      // where the row is a line, keeps its columns).
+      if (pole) {
+        elevation = mix(elevation, rowMean(uData, 1.0 - g.y, lod), uMorph);
+      }
+      float above = elevation - uCoast;
       if (uLiquidSea > 0.5) {
         above = max(above, 0.0);
       }
@@ -285,6 +312,54 @@ export const surfaceFragment = /* glsl */ `
   varying vec3 vEast;
   varying vec3 vNorth;
   varying vec3 vWorld;
+  varying float vPole;
+  uniform vec4 uTileRect;      // part of the planet this mesh covers (u0, v0, du, dv)
+
+  // Where the pixel lies on the map (uv, v north) and the screen
+  // derivatives of that position, set by locate(). Away from the poles,
+  // vUv as interpolated across the mesh. On the globe, the pole row is
+  // one point carrying every u from 0 to 1, so the triangles round a pole
+  // fan out with vUv sheared across them (a starburst) and its
+  // derivatives meaningless: there (atPole) the position comes from the
+  // pixel's own direction (globeUv in globeUv.ts is its CPU twin), the
+  // maps read with explicit derivatives that stay continuous across the
+  // seam (Tarini 2012, "Cylindrical and toroidal parameterizations
+  // without vertex seams", Journal of Graphics Tools 16(3)).
+  bool atPole;
+  vec2 mapUv;
+  vec2 mapGx;
+  vec2 mapGy;
+
+  void locate() {
+    mapUv = vUv;
+    mapGx = vec2(0.0);
+    mapGy = vec2(0.0);
+    atPole = false;
+    // The flat map has no fan (its pole rows are lines); nor has the
+    // morph until it closes on the globe.
+    if (uMorph > 0.999) {
+      vec3 dir = normalize(vSphere);
+      float turn = atan(dir.x, dir.z) / (2.0 * PI);
+      // Two longitudes, one wrapping at the seam (u = 0), one opposite:
+      // the derivatives come from the one that does not wrap here.
+      float uA = fract(turn);
+      float uB = fract(turn + 0.5) - 0.5;
+      float v = asin(clamp(dir.y, -1.0, 1.0)) / PI + 0.5;
+      bool seamA = fwidth(uA) > fwidth(uB);
+      mapGx = vec2(seamA ? dFdx(uB) : dFdx(uA), dFdx(v));
+      mapGy = vec2(seamA ? dFdy(uB) : dFdy(uA), dFdy(v));
+      atPole = vPole > 0.0;
+      // u on the side of the seam the mesh's own vUv is on.
+      mapUv = atPole ? vec2(uA + floor(vUv.x - uA + 0.5), v) : vUv;
+    }
+  }
+
+  // Texture t read at at, a position that moves with mapUv by flip per
+  // unit (1 or −1 per axis, scaled for a tile): as before away from the
+  // poles, with mapUv's derivatives at them.
+  vec4 mapRead(sampler2D t, vec2 at, vec2 flip) {
+    return atPole ? textureGrad(t, at, mapGx * flip, mapGy * flip) : texture2D(t, at);
+  }
 
   ${glslRamp('elevation')}
   ${glslRamp('temperature')}
@@ -331,6 +406,10 @@ export const surfaceFragment = /* glsl */ `
   vec3 giantColour(vec2 uv) {
     vec2 gx = dFdx(uv);
     vec2 gy = dFdy(uv);
+    if (atPole) {
+      gx = mapGx;
+      gy = mapGy;
+    }
     vec2 band = vec2(uv.x - uBandTime * bandWind(uv.y) / ${BAND_PERIOD_S.toFixed(1)}, uv.y);
     for (int k = 0; k < ${MAX_STORMS}; k++) {
       if (float(k) >= uStormCount) break;
@@ -409,8 +488,8 @@ export const surfaceFragment = /* glsl */ `
   // reads on light and dark ground, ice and clouds alike.
   vec3 referenceLine(vec3 colour, float lat, vec3 lineColour) {
     float v = (lat + 90.0) / 180.0;
-    float pixels = abs(vUv.y - v) / max(fwidth(vUv.y), 1e-7);
-    float dash = step(0.4, fract(vUv.x * REFERENCE_DASHES));
+    float pixels = abs(mapUv.y - v) / max(fwidth(mapUv.y), 1e-7);
+    float dash = step(0.4, fract(mapUv.x * REFERENCE_DASHES));
     float core = 1.0 - smoothstep(0.5 * REFERENCE_WIDTH - 0.5, 0.5 * REFERENCE_WIDTH + 0.5, pixels);
     float edge = 1.0 - smoothstep(
       0.5 * REFERENCE_WIDTH + REFERENCE_EDGE - 0.5,
@@ -457,7 +536,7 @@ export const surfaceFragment = /* glsl */ `
   }
 
   vec3 hexColour(vec3 base) {
-    vec2 p = vec2(vUv.x * uMapSize.x, (1.0 - vUv.y) * uMapSize.y);
+    vec2 p = vec2(mapUv.x * uMapSize.x, (1.0 - mapUv.y) * uMapSize.y);
     vec2 cell = hexLocate(p);
     vec4 hex = texture2D(uHex, (cell + 0.5) / uHexGrid.xy);
     float size = uHexGrid.w;
@@ -532,7 +611,10 @@ export const surfaceFragment = /* glsl */ `
   }
 
   void main() {
-    vec4 data = dataAt(vUv);
+    locate();
+    // Map rows run north to south: v flipped.
+    const vec2 FLIP_V = vec2(1.0, -1.0);
+    vec4 data = mapRead(uData, vec2(mapUv.x, 1.0 - mapUv.y), FLIP_V);
     float aboveCoast = data.r - uCoast;
     bool hasData = uHasData > 0.5;
     bool water = hasData && uLiquidSea > 0.5 && aboveCoast < 0.0;
@@ -540,10 +622,18 @@ export const surfaceFragment = /* glsl */ `
     // The surface colours (detail tile or base map), sampled once: they are
     // the biome layer, and tell lava and magma apart on every layer (below).
     // Detail tiles are drawn on the biome layer only.
-    vec2 tileUv = uTexRect.xy + vec2(vLocalUv.x, 1.0 - vLocalUv.y) * uTexRect.zw;
+    vec2 local = vLocalUv;
+    if (atPole) {
+      // Measured from the patch's middle, so that no seam falls in it.
+      float across = mapUv.x - (uTileRect.x + 0.5 * uTileRect.z);
+      across -= floor(across + 0.5);
+      local = vec2(across / uTileRect.z + 0.5, (mapUv.y - uTileRect.y) / uTileRect.w);
+    }
+    vec2 tileUv = uTexRect.xy + vec2(local.x, 1.0 - local.y) * uTexRect.zw;
+    vec2 tileFlip = vec2(uTexRect.z / uTileRect.z, -uTexRect.w / uTileRect.w);
     vec3 surface = uTileOn > 0.5
-      ? texture2D(uTile, tileUv).rgb
-      : uGiant > 0.5 ? giantColour(vUv) : texture2D(uMap, vUv).rgb;
+      ? mapRead(uTile, tileUv, tileFlip).rgb
+      : uGiant > 0.5 ? giantColour(mapUv) : mapRead(uMap, mapUv, vec2(1.0)).rgb;
     vec3 colour;
     if (uTileOn > 0.5 || uLayer == 0 || !hasData) {
       colour = surface;
@@ -562,7 +652,7 @@ export const surfaceFragment = /* glsl */ `
     } else if (uHasExtra < 0.5) {
       colour = surface;
     } else {
-      vec4 extra = texture2D(uExtra, vec2(vUv.x, 1.0 - vUv.y));
+      vec4 extra = mapRead(uExtra, vec2(mapUv.x, 1.0 - mapUv.y), FLIP_V);
       if (uLayer == 5) {
         colour = toLinear(ramp_volcanic(extra.r));
       } else if (uLayer == 6) {
@@ -578,7 +668,7 @@ export const surfaceFragment = /* glsl */ `
     // dark tint is a third as bright as the colour it replaces, since
     // such leaves absorb the whole visible range; the gold keeps it.
     if ((uVegShift.x > 0.0 || uVegShift.y > 0.0) && uHasBiomes > 0.5 && (uTileOn > 0.5 || uLayer == 0)) {
-      float id = floor(texture2D(uBiomes, vec2(vUv.x, 1.0 - vUv.y)).r * 255.0 + 0.5);
+      float id = floor(mapRead(uBiomes, vec2(mapUv.x, 1.0 - mapUv.y), FLIP_V).r * 255.0 + 0.5);
       float plants = uVegetation[int(min(id, 63.0))];
       if (plants > 0.0) {
         float lum = dot(colour, vec3(0.2126, 0.7152, 0.0722));
@@ -593,7 +683,7 @@ export const surfaceFragment = /* glsl */ `
     }
     // One biome highlighted (legend hover): the others fade to dim grey.
     if (uHighlight >= 0.0 && uHasBiomes > 0.5) {
-      float id = floor(texture2D(uBiomes, vec2(vUv.x, 1.0 - vUv.y)).r * 255.0 + 0.5);
+      float id = floor(mapRead(uBiomes, vec2(mapUv.x, 1.0 - mapUv.y), FLIP_V).r * 255.0 + 0.5);
       if (abs(id - uHighlight) > 0.5) {
         float grey = dot(colour, vec3(0.2126, 0.7152, 0.0722));
         colour = mix(vec3(grey), colour, 0.15) * 0.3;
@@ -654,22 +744,34 @@ export const surfaceFragment = /* glsl */ `
     // surface is drawn in, on every layer. Water and giants are flat.
     vec3 tangent = vec3(0.0, 0.0, 1.0);
     if (uGiant < 0.5 && !water) {
-      vec3 encoded = uTileOn > 0.5 ? texture2D(uTileNormal, tileUv).rgb : texture2D(uNormalMap, vUv).rgb;
+      vec3 encoded = uTileOn > 0.5 ? mapRead(uTileNormal, tileUv, tileFlip).rgb : mapRead(uNormalMap, mapUv, vec2(1.0)).rgb;
       tangent = normalize(encoded * 2.0 - 1.0);
     }
-    vec3 normal = normalize(tangent.x * vEast + tangent.y * vNorth + tangent.z * vNormal);
+    // The tangent frame: interpolated away from the poles; round them,
+    // where it turns a full circle across a few pixels, rebuilt from the
+    // pixel's own normal (the globe's axis is y, the morph turning it
+    // round y only).
+    vec3 east = vEast;
+    vec3 north = vNorth;
+    if (atPole) {
+      vec3 up = normalize(vNormal);
+      vec3 across = cross(vec3(0.0, 1.0, 0.0), up);
+      east = across / max(length(across), 1e-6);
+      north = cross(up, east);
+    }
+    vec3 normal = normalize(tangent.x * east + tangent.y * north + tangent.z * vNormal);
 
     // The light in the same tangent frame: the sun in the sphere's own
     // frame (on the globe and the map alike, as day and night), the
     // headlight in the frame drawn on screen. The relief is lit relative
     // to flat ground under the same light.
-    float lonAt = vUv.x * 2.0 * PI;
-    float latAt = (vUv.y - 0.5) * PI;
+    float lonAt = mapUv.x * 2.0 * PI;
+    float latAt = (mapUv.y - 0.5) * PI;
     vec3 sphereEast = vec3(cos(lonAt), 0.0, -sin(lonAt));
     vec3 sphereNorth = vec3(-sin(latAt) * sin(lonAt), cos(latAt), -sin(latAt) * cos(lonAt));
     vec3 lightT = uLightMode == 1
       ? vec3(dot(uSunDir, sphereEast), dot(uSunDir, sphereNorth), dot(uSunDir, normalize(vSphere)))
-      : vec3(dot(uLightDir, vEast), dot(uLightDir, vNorth), dot(uLightDir, normalize(vNormal)));
+      : vec3(dot(uLightDir, east), dot(uLightDir, north), dot(uLightDir, normalize(vNormal)));
     // (The same small term added to both sides keeps flat ground at
     // exactly 1, even where the light grazes it.)
     float relief = clamp((max(dot(tangent, lightT), 0.0) + 0.04) / (max(lightT.z, 0.0) + 0.04), RELIEF_SHADOW, RELIEF_HIGHLIGHT);
@@ -706,12 +808,12 @@ export const surfaceFragment = /* glsl */ `
     if (uCloudsOn > 0.0) {
       // Opacity of the cover: thin clouds are translucent veils, only
       // thick ones hide the ground.
-      vec2 cloudUv = vec2(vUv.x - uCloudShift, 1.0 - vUv.y);
-      cover = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv).r) * 0.85 * uCloudsOn;
+      vec2 cloudUv = vec2(mapUv.x - uCloudShift, 1.0 - mapUv.y);
+      cover = smoothstep(0.3, 1.0, mapRead(uClouds, cloudUv, FLIP_V).r) * 0.85 * uCloudsOn;
       if (uCloudShadows > 0.5) {
-        float lat = (vUv.y - 0.5) * PI;
-        vec2 towardsLight = vec2(dot(light, vEast) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, vNorth) / PI);
-        float shadow = smoothstep(0.3, 1.0, texture2D(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph).r) * uCloudsOn;
+        float lat = (mapUv.y - 0.5) * PI;
+        vec2 towardsLight = vec2(dot(light, east) / max(cos(lat), 0.1) / (2.0 * PI), dot(light, north) / PI);
+        float shadow = smoothstep(0.3, 1.0, mapRead(uClouds, cloudUv + vec2(1.0, -1.0) * towardsLight * 0.004 * uMorph, FLIP_V).r) * uCloudsOn;
         colour *= 1.0 - 0.45 * shadow;
       }
     }
