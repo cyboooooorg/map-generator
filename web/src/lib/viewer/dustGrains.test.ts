@@ -1,4 +1,4 @@
-import { NormalBlending } from 'three';
+import { Matrix3, NormalBlending, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DUST_RING_GAIN_MAX } from './dustPhase';
 import {
@@ -17,10 +17,12 @@ import {
   HALO_OUTER,
   HALO_POLE_HALF_ANGLE,
   haloGrains,
+  hostAxesMatrix,
   MOON_CLOUD_GRAINS,
   MOON_CORE_SIGMA,
   MOON_TRAIL_RAD,
   moonCloudGrains,
+  toHostFrame,
 } from './dustGrains';
 
 describe('dust halo grains', () => {
@@ -147,5 +149,41 @@ describe('moon cloud grains', () => {
     expect(points.material.uniforms['uOrbit']!.value).toBe(1);
     expect(points.material.uniforms['uLevel']!.value).toBe(CLOUD_LEVEL);
     expect(points.material.fragmentShader).toContain('uColour * uLevel');
+  });
+});
+
+describe("the moon cloud in the giant's frame", () => {
+  // A giant at (10, 0, 0), radius 4, tipped: its spin axis along the scene's x.
+  const axes: [[number, number, number], [number, number, number], [number, number, number]] = [
+    [0, -1, 0],
+    [1, 0, 0],
+    [0, 0, 1],
+  ];
+  it("is the identity in the giant's own view", () => {
+    const identity: typeof axes = [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ];
+    expect(toHostFrame([3, 0.5, -2], [0, 0, 0], 1, identity)).toEqual([3, 0.5, -2]);
+  });
+  it("takes a moon into the giant's radii and axes, and the shader takes it back", () => {
+    const moon: [number, number, number] = [10, 0, 16];
+    const local = toHostFrame(moon, [10, 0, 0], 4, axes);
+    expect(local[0]).toBeCloseTo(0, 9);
+    expect(local[1]).toBeCloseTo(0, 9);
+    expect(local[2]).toBeCloseTo(4, 9);
+    // uHostCentre + uHostScale * uHostAxes * p, as the grain shader does.
+    const back = new Vector3(...local)
+      .applyMatrix3(new Matrix3().set(...hostAxesMatrix(axes)))
+      .multiplyScalar(4)
+      .add(new Vector3(10, 0, 0));
+    expect(back.toArray().map((v) => Math.round(v * 1e9) / 1e9)).toEqual(moon);
+    const off = toHostFrame([14, 2, 0], [10, 0, 0], 4, axes);
+    const again = new Vector3(...off)
+      .applyMatrix3(new Matrix3().set(...hostAxesMatrix(axes)))
+      .multiplyScalar(4)
+      .add(new Vector3(10, 0, 0));
+    expect(again.toArray().map((v) => Math.round(v * 1e9) / 1e9)).toEqual([14, 2, 0]);
   });
 });

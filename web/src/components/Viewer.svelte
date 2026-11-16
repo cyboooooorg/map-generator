@@ -832,13 +832,22 @@
   $effect(() => view?.setJets(meta?.model?.geysers ?? null, meta ? meta.circumference_km / (2 * Math.PI) : 0));
   // The dust rings its system drew for the giant shown.
   $effect(() => view?.setDustRings(giant && sysBody ? [...dustOf(sysBody), ...innerRingOf(sysBody)] : []));
-  // A sparse cloud of grains round each moon feeding one, where it stands in
-  // the sky: its index in systemSky's order (the system's bodies but the
-  // one shown), which setSkyBodies keeps.
+  // A sparse cloud of grains round each moon feeding a dust ring of the
+  // giant shown or of the host in a moon's sky, drawn alike in both: the
+  // giant and the moon by their index in systemSky's order (the system's
+  // bodies but the one shown), which setSkyBodies keeps, null for the body
+  // shown (in the feeding moon's own sky the cloud surrounds it).
   $effect(() => {
     const others = sys && sysBody ? sys.bodies.filter((b) => b.id !== sysBody.id) : [];
+    const own = !!sysBody && sysPlanet?.id === sysBody.id;
+    const host = own ? null : others.findIndex((b) => b.id === sysPlanet?.id);
+    const rings = sysPlanet && (own ? giant : host !== null && host >= 0) ? dustOf(sysPlanet) : [];
     view?.setDustClouds(
-      giant && sysBody ? dustOf(sysBody).map((d) => ({ colour: d.colour, source: others.findIndex((b) => b.id === d.source) })) : [],
+      rings.flatMap((d) => {
+        const source = d.source === sysBody?.id ? null : others.findIndex((b) => b.id === d.source);
+        return source === -1 ? [] : [{ colour: d.colour, source }];
+      }),
+      host,
     );
   });
   // A halo of grains round a moon that vents or feeds a dust ring, in its

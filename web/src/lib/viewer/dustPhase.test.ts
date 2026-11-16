@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   cosScatter,
+  DUST_ALPHA_MAX,
   DUST_G,
   DUST_RING_FLOOR,
   DUST_RING_GAIN_MAX,
+  dustAlpha,
   dustGain,
   dustPhaseGlsl,
   dustRingGain,
@@ -37,5 +39,18 @@ describe('dust ring gain', () => {
       expect(dustRingGain(c)).toBeGreaterThanOrEqual(last);
       last = dustRingGain(c);
     }
+  });
+});
+
+describe('dust ring opacity', () => {
+  it('follows a thin column and tends to its cap along a long one', () => {
+    expect(dustAlpha(0)).toBe(0);
+    expect(dustAlpha(0.02)).toBeCloseTo(0.02, 3);
+    expect(dustAlpha(100)).toBeCloseTo(DUST_ALPHA_MAX, 6);
+    expect(dustAlpha(1)).toBeLessThan(DUST_ALPHA_MAX);
+    expect(dustAlpha(0.2)).toBeGreaterThan(dustAlpha(0.1));
+  });
+  it('has the same cap in its GLSL twin', () => {
+    expect(dustPhaseGlsl).toContain(DUST_ALPHA_MAX.toFixed(3));
   });
 });

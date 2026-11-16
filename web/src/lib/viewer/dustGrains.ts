@@ -2,15 +2,16 @@
 // scattering (see dustRingGain), so they show front- and side-lit and only
 // brighten a little back-lit: the halo round a moon that vents or feeds a
 // dust ring, in its own close-up, hugging the surface and denser over the
-// venting pole; and, in the giant's close-up, a sparse cloud round the
-// moon feeding a dust ring, thinning along its orbit ahead and behind it.
-// (The dust ring itself carries the main rings' grain, see
-// dustRingFragment.)
+// venting pole; and a sparse cloud round the moon feeding a dust ring,
+// thinning along its orbit ahead and behind it, the same in the giant's
+// close-up and in its moons' sky. (The dust ring itself carries the main
+// rings' grain, see dustRingFragment.)
 import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
   Color,
+  Matrix3,
   NormalBlending,
   Points,
   ShaderMaterial,
@@ -27,7 +28,7 @@ export const HALO_GRAINS = 9000;
 
 /**
  * Grains in the cloud round the moon feeding a dust ring, in the giant's
- * close-up, at full quality (look calibration): a few hundred, a soft
+ * close-up and its moons' sky, at full quality (look calibration): a few hundred, a soft
  * concentration round the moon, not a field of dots over the ring.
  */
 export const MOON_CLOUD_GRAINS = 320;
@@ -64,6 +65,14 @@ export const CLOUD_ALPHA = 0.65;
  * so however many overlap, the pixel tends to this and never saturates.
  */
 export const CLOUD_LEVEL = 0.75;
+
+/**
+ * Radius, in the drawn body's radii, within which the moon cloud is not
+ * drawn (look calibration): in the feeding moon's own sky the cloud
+ * surrounds it, and its halo (`HALO_INNER` out) stands in for the grains
+ * at its surface.
+ */
+export const CLOUD_SKIP = 1.1;
 
 /** Least and most a cloud grain is drawn across, CSS pixels (look calibration). */
 export const CLOUD_MIN_PX = 1;
@@ -216,6 +225,30 @@ export function grainCount(count: number, share: number): number {
   return Math.max(1, Math.round(count * share));
 }
 
+/** A giant's axes (its x, spin axis, z, in the scene's frame), as a `Matrix3.set` row-major list taking its frame to the scene's. */
+export function hostAxesMatrix(
+  axes: readonly [Vec3, Vec3, Vec3],
+): [number, number, number, number, number, number, number, number, number] {
+  const [x, y, z] = axes;
+  return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
+}
+
+/**
+ * `point` (scene units) in the frame of a giant at `centre` of radius
+ * `scale` (scene units) with `axes`: its radii, its spin axis y. Where the
+ * grain shader takes the feeding moon (`uMoon`); undone there by
+ * `uHostCentre + uHostScale * uHostAxes * p`.
+ */
+export function toHostFrame(
+  point: readonly [number, number, number],
+  centre: readonly [number, number, number],
+  scale: number,
+  axes: readonly [Vec3, Vec3, Vec3],
+): Vec3 {
+  const d: Vec3 = [(point[0] - centre[0]) / scale, (point[1] - centre[1]) / scale, (point[2] - centre[2]) / scale];
+  return axes.map((a) => a[0] * d[0] + a[1] * d[1] + a[2] * d[2]) as unknown as Vec3;
+}
+
 function cross(a: Vec3, b: Vec3): Vec3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
@@ -227,13 +260,21 @@ function normalise(v: Vec3): Vec3 {
 
 // The grains: `position` holds each one's place (uOrbit 0), or its offset
 // from the moon along its orbit (uOrbit 1, see moonCloudGrains), placed
-// round uMoon (the orbit taken as a circle in the giant's equatorial plane,
-// xz). Depth held at the far plane like the dust rings', so the globe
-// still hides them.
+// round uMoon in the giant's frame (its radii, its spin axis y, the orbit
+// taken as a circle in its equatorial plane, xz), then into the scene by
+// the giant's centre, radius and axes there (uHost*): the same cloud in
+// the giant's close-up (identity) and in its moons' sky. There, none
+// within uSkip of the body shown (radius 1 at the origin): round the
+// feeding moon in its own sky, its halo stands in for them. Depth held at
+// the far plane like the dust rings', so the bodies still hide them.
 const grainVertex = /* glsl */ `
   attribute float aShine;
   uniform float uOrbit;
   uniform vec3 uMoon;
+  uniform vec3 uHostCentre;
+  uniform float uHostScale;
+  uniform mat3 uHostAxes;
+  uniform float uSkip;
   uniform vec3 uSunDir;
   uniform float uLightMode;
   uniform float uAlpha;
@@ -247,25 +288,39 @@ const grainVertex = /* glsl */ `
   ${dustPhaseGlsl}
   void main() {
     vec3 p = position;
+    // Its shadow: the giant's round a cloud, the moon's round its halo.
+    vec3 caster = vec3(0.0);
+    float casterRadius = 1.0;
+    float size = uWorldSize;
     if (uOrbit > 0.5) {
       float a = length(uMoon.xz);
       float angle = atan(uMoon.z, uMoon.x) + position.x;
       float r = a * (1.0 + position.y);
-      p = vec3(r * cos(angle), uMoon.y + a * position.z, r * sin(angle));
+      p = uHostCentre + uHostScale * (uHostAxes * vec3(r * cos(angle), uMoon.y + a * position.z, r * sin(angle)));
+      caster = uHostCentre;
+      casterRadius = uHostScale;
+      size *= uHostScale;
+      if (length(p) < uSkip) {
+        gl_PointSize = 0.0;
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        vAlpha = 0.0;
+        return;
+      }
     }
     float gain = 1.0;
     if (uLightMode > 0.5) {
       // cosScatter is 1 back-lit; the gain held between floor and cap (grainLight).
       gain = dustRingGain(-dot(uSunDir, normalize(cameraPosition - p)));
-      // Nothing to scatter in the shadow of the body drawn (radius 1 at the origin).
-      float b = dot(p, uSunDir);
-      if (b < 0.0 && dot(p, p) - b * b < 1.0) gain = 0.0;
+      // Nothing to scatter in the shadow.
+      vec3 c = p - caster;
+      float b = dot(c, uSunDir);
+      if (b < 0.0 && dot(c, c) - b * b < casterRadius * casterRadius) gain = 0.0;
     }
     // Light past full opacity widens the dot instead (its area grows with it).
     float light = uAlpha * aShine * gain;
     vAlpha = clamp(light, 0.0, 1.0) * uFade;
     vec4 view = viewMatrix * vec4(p, 1.0);
-    float px = uWorldSize * uPxScale / max(-view.z, 1e-6);
+    float px = size * uPxScale / max(-view.z, 1e-6);
     gl_PointSize = clamp(px, uMinPx, uMaxPx) * sqrt(max(light, 1.0)) * uPixelRatio;
     gl_Position = projectionMatrix * view;
     gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
@@ -314,7 +369,7 @@ export const HALO_LOOK: GrainLook = {
   additive: true,
 };
 
-/** The moon cloud's look, in the giant's close-up. */
+/** The moon cloud's look, in the giant's close-up and its moons' sky. */
 export const CLOUD_LOOK: GrainLook = {
   alpha: CLOUD_ALPHA,
   minPx: CLOUD_MIN_PX,
@@ -326,7 +381,8 @@ export const CLOUD_LOOK: GrainLook = {
 
 /**
  * Points for the grains at `positions` (xyz, or offsets along the orbit
- * of the moon at uniform `uMoon` when `orbit`, see moonCloudGrains), with
+ * of the moon at uniform `uMoon` when `orbit`, see moonCloudGrains, in the
+ * frame of the giant at uniforms `uHostCentre`, `uHostScale`, `uHostAxes`), with
  * their `shine`, in the sRGB `colour`, sharing the view's sun uniforms,
  * drawn with `look`. Behind the body drawn (depth tested, not written).
  */
@@ -347,6 +403,10 @@ export function createGrains(
     uniforms: {
       uOrbit: { value: orbit ? 1 : 0 },
       uMoon: { value: new Vector3() },
+      uHostCentre: { value: new Vector3() },
+      uHostScale: { value: 1 },
+      uHostAxes: { value: new Matrix3() },
+      uSkip: { value: CLOUD_SKIP },
       uSunDir: uniforms.uSunDir,
       uLightMode: uniforms.uLightMode,
       uAlpha: { value: look.alpha },

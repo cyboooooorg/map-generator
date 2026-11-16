@@ -10,8 +10,11 @@ import { DUST_MARCH_STEPS, DUST_SCALE_HEIGHT, dustPhaseGlsl } from './dustPhase'
 export const ringletsGlsl = /* glsl */ `
   uniform float uRingSeed;
 
+  float ringHashSeeded(float x, float seed) {
+    return fract(sin(x * 127.1 + seed * 311.7) * 43758.5453);
+  }
   float ringHash(float x) {
-    return fract(sin(x * 127.1 + uRingSeed * 311.7) * 43758.5453);
+    return ringHashSeeded(x, uRingSeed);
   }
 
   // How far a scale of noise fades to its mean when a pixel spans x of its
@@ -23,23 +26,28 @@ export const ringletsGlsl = /* glsl */ `
   }
 
   // The ringlets' scaling of the opacity at radius r (the giant's radii),
-  // for a pixel spanning w of them (0: exact). Each scale of the noise
-  // fades towards its mean as its cells shrink under two pixels (see
-  // ringletFade), so that rings seen from afar do not alias into a shimmer.
-  float ringlets(float r, float w) {
+  // for a pixel spanning w of them (0: exact), under seed. Each scale of
+  // the noise fades towards its mean as its cells shrink under two pixels
+  // (see ringletFade), so that rings seen from afar do not alias into a
+  // shimmer.
+  float ringletsSeeded(float r, float w, float seed) {
     float x = r * 180.0;
     float i = floor(x);
     float f = fract(x);
     f = f * f * (3.0 - 2.0 * f);
-    float fine = mix(ringHash(i), ringHash(i + 1.0), f);
+    float fine = mix(ringHashSeeded(i, seed), ringHashSeeded(i + 1.0, seed), f);
     fine = mix(fine, 0.5, ringletFade(w * 180.0));
     float y = r * 23.0;
     float j = floor(y);
     float g = fract(y);
     g = g * g * (3.0 - 2.0 * g);
-    float broad = mix(ringHash(j + 50.0), ringHash(j + 51.0), g);
+    float broad = mix(ringHashSeeded(j + 50.0, seed), ringHashSeeded(j + 51.0, seed), g);
     broad = mix(broad, 0.5, ringletFade(w * 23.0));
     return 0.35 + 0.4 * broad + 0.25 * fine;
+  }
+  // The giant's own ringlets (seed uRingSeed).
+  float ringlets(float r, float w) {
+    return ringletsSeeded(r, w, uRingSeed);
   }
 `;
 
@@ -104,66 +112,6 @@ export const ringFragment = /* glsl */ `
   }
 `;
 
-// A dust ring reaches far beyond the camera's far plane, which only bounds
-// the globe's depth: its depth is held at that plane instead of being cut
-// there (the globe, nearer, still hides it).
-export const dustRingVertex = /* glsl */ `
-  varying vec3 vLocal;
-  varying vec3 vWorld;
-  void main() {
-    vLocal = position;
-    vec4 world = modelMatrix * vec4(position, 1.0);
-    vWorld = world.xyz;
-    gl_Position = projectionMatrix * viewMatrix * world;
-    gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
-  }
-`;
-
-// A faint dust ring (crates/mapgen/src/rings.rs, `DustRing`): densest
-// along its source moon's orbit and fading to its edges, with the main
-// rings' grain (ringlets, faded where a pixel spans them, under its own
-// seed), so that it reads as a faint ring, not a smooth haze; lit by the
-// sun and shadowed by the planet as the main rings are, with the tamed
-// forward scattering of dustRingGain (at most half as bright again
-// back-lit, so that it never washes the frame).
-export const dustRingFragment = /* glsl */ `
-  uniform vec3 uColour;
-  uniform float uInner;
-  uniform float uOuter;
-  uniform float uPeak;         // the source moon's orbit, planet radii
-  uniform float uOpacity;      // where densest
-  uniform int uLightMode;
-  uniform vec3 uSunDir;
-  uniform float uFade;
-  varying vec3 vLocal;
-  varying vec3 vWorld;
-  ${ringletsGlsl}
-  ${dustPhaseGlsl}
-
-  void main() {
-    float r = length(vLocal.xy);
-    // Taken before the discard: fwidth needs every pixel of a quad.
-    float footprint = fwidth(r);
-    if (r < uInner || r > uOuter) discard;
-    // Falling off from the peak towards each edge.
-    float side = r < uPeak ? (uPeak - r) / max(uPeak - uInner, 1e-4) : (r - uPeak) / max(uOuter - uPeak, 1e-4);
-    float density = uOpacity * (1.0 - smoothstep(0.0, 1.0, side)) * ringlets(r, footprint);
-    if (density < 0.001) discard;
-    float light = 1.0;
-    float gain = 1.0;
-    if (uLightMode == 1) {
-      vec3 p = vWorld;
-      float b = dot(p, uSunDir);
-      float c = dot(p, p) - 1.0;
-      light = (b < 0.0 && b * b - c > 0.0) ? 0.08 : 1.0;
-      // Ice grains scatter forward: brighter back-lit, none in the shadow.
-      if (light > 0.5) gain = dustRingGain(-dot(uSunDir, normalize(cameraPosition - p)));
-    }
-    gl_FragColor = vec4(uColour * light, min(density * gain * DUST_RING_BOOST * uFade, 1.0));
-    #include <colorspace_fragment>
-  }
-`;
-
 // The opacity of a giant's rings at `r` (its radii), seen straight down:
 // thinner towards both edges, none in their gaps. For the rings of a body
 // of the sky, and the shadow they cast on its disk.
@@ -181,27 +129,6 @@ export const skyRingDensityGlsl = /* glsl */ `
   // A faint ring inside the bright ones (the D ring): inner and outer edge,
   // opacity; zero opacity for none.
   uniform vec3 uRingFaint;
-  // The host's dust rings (the plume ring, the E ring...): up to 4, each
-  // inner edge, peak, outer edge in the giant's radii (zero-padded).
-  uniform vec3 uDustRadii[4];
-  uniform float uDustOpacity[4];
-  uniform vec3 uDustColour[4];   // linear
-  uniform float uDustCount;
-  // The face-on opacity of the dust at r (the same triangular profile as
-  // dustRingFragment) in .w, and its opacity-weighted colour in .rgb.
-  vec4 dustDensity(float r) {
-    vec4 sum = vec4(0.0);
-    for (int k = 0; k < 4; k++) {
-      if (float(k) >= uDustCount) break;
-      vec3 e = uDustRadii[k];
-      if (r < e.x || r > e.z) continue;
-      float side = r < e.y ? (e.y - r) / max(e.y - e.x, 1e-4) : (r - e.y) / max(e.z - e.y, 1e-4);
-      float d = uDustOpacity[k] * (1.0 - smoothstep(0.0, 1.0, side));
-      sum += vec4(uDustColour[k] * d, d);
-    }
-    if (sum.w > 0.0) sum.rgb /= sum.w;
-    return sum;
-  }
   float ringDensity(float r) {
     if (uRingOuter <= 0.0 || r < uRingInner || r > uRingOuter) {
       float inside = (r - uRingFaint.x) / max(uRingFaint.y - uRingFaint.x, 1e-4);
@@ -257,9 +184,6 @@ export const skyRingFragment = /* glsl */ `
   uniform float uPixelAngle;
   ${skyRingDensityGlsl}
   ${ringletsGlsl}
-  ${dustPhaseGlsl}
-  const float DUST_H = ${DUST_SCALE_HEIGHT.toFixed(4)};
-  const int DUST_STEPS = ${DUST_MARCH_STEPS};
   varying vec3 vRay;
   // Most a sheet of them seen nearly edge on hides (see main).
   const float GRAZING_OPACITY = 0.55;
@@ -285,7 +209,7 @@ export const skyRingFragment = /* glsl */ `
   }
 
   void main() {
-    if (uRingOuter <= 0.0 && uDustCount <= 0.0) discard;
+    if (uRingOuter <= 0.0) discard;
     vec3 ray = normalize(vRay);
     // Where the ray meets the giant, if it does (hiding what lies behind).
     float b = dot(ray, uCentre);
@@ -423,82 +347,167 @@ export const skyRingFragment = /* glsl */ `
         }
       }
     }
-    // Dust: thin but thick enough to see edge on. Its density is a Gaussian
-    // of the height over the plane (sigma DUST_SCALE_HEIGHT x r), marched
-    // along the ray through the slab of 3 sigma and the outer radius, in the
-    // giant's radii, with the tamed back-lit gain of the giant's own view
-    // (dustRingGain) but not its look boost (DUST_RING_BOOST): seen from a
-    // moon in the ring, along its plane, the column is long enough to show,
-    // and boosted it veils the whole sky. Finite from inside the ring and
-    // in its plane (see dustColumn in lib/ringMoons.ts). Composited with
-    // the rings, not over them.
-    if (uDustCount > 0.0) {
-      float rMax = 0.0;
-      for (int k = 0; k < 4; k++) {
-        if (float(k) < uDustCount) rMax = max(rMax, uDustRadii[k].z);
-      }
-      vec3 o = camera / uRadius;
-      float yo = height / uRadius;
-      float slab = 3.0 * DUST_H * rMax;
-      float t0 = 0.0;
-      float t1 = min(hit / uRadius, 1e4);
-      bool crosses = true;
-      if (abs(g) > 1e-6) {
-        float ta = (-slab - yo) / g;
-        float tb = (slab - yo) / g;
-        t0 = max(t0, min(ta, tb));
-        t1 = min(t1, max(ta, tb));
-      } else if (abs(yo) >= slab) {
-        crosses = false;
-      }
-      vec3 inPlane = o - yo * uNormal;
-      vec3 flatRay = ray - g * uNormal;
-      float qa = dot(flatRay, flatRay);
-      float qb = dot(inPlane, flatRay);
-      float qc = dot(inPlane, inPlane) - rMax * rMax;
-      if (qa < 1e-12) {
-        if (qc > 0.0) crosses = false;
-      } else {
-        float qd = qb * qb - qa * qc;
-        if (qd < 0.0) crosses = false;
-        else {
-          t0 = max(t0, (-qb - sqrt(qd)) / qa);
-          t1 = min(t1, (-qb + sqrt(qd)) / qa);
-        }
-      }
-      if (crosses && t1 > t0) {
-        float ds = (t1 - t0) / float(DUST_STEPS);
-        float gain = dustRingGain(clamp(dot(uSunDir, ray), -1.0, 1.0));
-        float tau = 0.0;
-        float tw = 0.0;
-        vec3 tint = vec3(0.0);
-        for (int k = 0; k < DUST_STEPS; k++) {
-          float t = t0 + (float(k) + 0.5) * ds;
-          vec3 q = o + t * ray;
-          float y = dot(q, uNormal);
-          float r = length(q - y * uNormal);
-          vec4 dust = dustDensity(r);
-          if (dust.w <= 0.0) continue;
-          float h = DUST_H * r;
-          float sb = dot(q, uSunDir);
-          bool shadowed = sb < 0.0 && length(q - sb * uSunDir) < 1.0;
-          float w = dust.w * exp(-0.5 * y * y / (h * h)) / (h * 2.5066283) * ds * (shadowed ? 1.0 : gain);
-          tau += w;
-          tw += w * t;
-          tint += w * dust.rgb * (shadowed ? 0.08 : 1.0);
-        }
-        float dustSeen = min(1.0 - exp(-tau), 1.0);
-        if (dustSeen > 0.002) {
-          float rings = colour.a > 0.002 ? colour.a : 0.0;
-          float total = rings + dustSeen * (1.0 - rings);
-          colour = vec4((colour.rgb * rings + tint / tau * dustSeen * (1.0 - rings)) / total, total);
-          if (dustSeen > rings) depth = depthOf(tw / tau * uRadius * ray);
-        }
-      }
-    }
     if (colour.a <= 0.002) discard;
     gl_FragDepth = depth;
     gl_FragColor = vec4(colour.rgb, colour.a * uFade);
+    #include <colorspace_fragment>
+  }
+`;
+
+// A giant's faint dust rings (crates/mapgen/src/rings.rs, `DustRing`),
+// the same in its own close-up and in the sky of its moons: drawn over the
+// whole screen (vertex: skyRingVertex), each pixel's ray marched through
+// them, from outside them as from inside, as from a moon in their plane.
+// Their density at radius r (the giant's radii) and height y over its
+// equatorial plane is each ring's face-on opacity, times its profile
+// (densest along its source moon's orbit, falling off to its edges),
+// spread over a Gaussian of the height of sigma DUST_SCALE_HEIGHT x r
+// (twin: dustColumn in lib/ringMoons.ts); each ring's column carries the
+// main rings' grain under its own seed (ringlets at the radius the column
+// is centred on, faded where a pixel spans them). The column, raised by the look boost
+// DUST_RING_BOOST and the tamed forward scattering of dustRingGain (at
+// most half as bright again back-lit), is shown as an opacity that tends
+// to DUST_ALPHA_MAX (dustAlpha): a long column along their plane never
+// veils the sky. Dark in the giant's shadow; the giant hides them behind
+// it, and each pixel takes the depth of the dust it shows, so that the
+// rings pass in front of the giant and of the moons in them, and behind.
+export const dustRingFragment = /* glsl */ `
+  uniform vec3 uCentre;        // the giant's centre, from the camera (scene units)
+  uniform float uRadius;       // the giant's radius (scene units)
+  uniform vec3 uNormal;        // its spin axis: the rings' plane's normal
+  uniform vec3 uSunDir;
+  uniform int uLightMode;      // 0 = headlight, 1 = sun
+  uniform float uFade;
+  uniform mat4 uProjection;
+  // The angle one drawn pixel spans, radians (the ringlets' footprint).
+  uniform float uPixelAngle;
+  // Up to 4 dust rings: inner edge, peak, outer edge (the giant's radii),
+  // face-on opacity, linear colour, ringlet seed (dustRingSeed).
+  uniform vec3 uDustRadii[4];
+  uniform float uDustOpacity[4];
+  uniform vec3 uDustColour[4];
+  uniform float uDustSeed[4];
+  uniform float uDustCount;
+  varying vec3 vRay;
+  ${ringletsGlsl}
+  ${dustPhaseGlsl}
+  const float DUST_H = ${DUST_SCALE_HEIGHT.toFixed(4)};
+  const int DUST_STEPS = ${DUST_MARCH_STEPS};
+
+  float depthOf(vec3 offset) {
+    vec4 clip = uProjection * vec4(mat3(viewMatrix) * offset, 1.0);
+    return clamp(0.5 * clip.z / clip.w + 0.5, 0.0, 1.0);
+  }
+
+  // The face-on opacity of dust ring k at r, without its ringlets.
+  float dustProfile(int k, float r) {
+    vec3 e = uDustRadii[k];
+    if (r < e.x || r > e.z) return 0.0;
+    float side = r < e.y ? (e.y - r) / max(e.y - e.x, 1e-4) : (r - e.y) / max(e.z - e.y, 1e-4);
+    return uDustOpacity[k] * (1.0 - smoothstep(0.0, 1.0, side));
+  }
+
+  void main() {
+    if (uDustCount <= 0.0) discard;
+    float rMin = 1e6;
+    float rMax = 0.0;
+    for (int k = 0; k < 4; k++) {
+      if (float(k) >= uDustCount) break;
+      rMin = min(rMin, uDustRadii[k].x);
+      rMax = max(rMax, uDustRadii[k].z);
+    }
+    vec3 ray = normalize(vRay);
+    // In the giant's radii, from its centre.
+    vec3 o = -uCentre / uRadius;
+    // Up to the giant, which hides what lies behind it.
+    float bq = -dot(ray, o);
+    float disc = bq * bq - dot(o, o) + 1.0;
+    float t0 = 0.0;
+    float t1 = disc > 0.0 && bq > 0.0 ? bq - sqrt(disc) : 1e6;
+    float yo = dot(o, uNormal);
+    float g = dot(ray, uNormal);
+    vec3 oPlane = o - yo * uNormal;
+    vec3 flatRay = ray - g * uNormal;
+    // Through the slab of 3 sigma round the plane, sigma taken at about
+    // where the ray crosses it (the steps then resolve the Gaussian seen
+    // from afar as from close by)...
+    if (abs(g) > 1e-6) {
+      float rc = length(oPlane - yo / g * flatRay);
+      float slab = 3.0 * DUST_H * clamp(1.5 * rc, 0.5 * (rMin + rMax), rMax);
+      float ta = (-slab - yo) / g;
+      float tb = (slab - yo) / g;
+      t0 = max(t0, min(ta, tb));
+      t1 = min(t1, max(ta, tb));
+    } else if (abs(yo) >= 3.0 * DUST_H * rMax) {
+      discard;
+    }
+    // ...and within the outer edge.
+    float qa = dot(flatRay, flatRay);
+    float qb = dot(oPlane, flatRay);
+    float qc = dot(oPlane, oPlane) - rMax * rMax;
+    if (qa < 1e-12) {
+      if (qc > 0.0) discard;
+    } else {
+      float qd = qb * qb - qa * qc;
+      if (qd < 0.0) discard;
+      t0 = max(t0, (-qb - sqrt(qd)) / qa);
+      t1 = min(t1, (-qb + sqrt(qd)) / qa);
+    }
+    if (t1 <= t0) discard;
+    float ds = (t1 - t0) / float(DUST_STEPS);
+    // cosScatter: 1 back-lit.
+    float gain = uLightMode == 1 ? dustRingGain(clamp(dot(uSunDir, ray), -1.0, 1.0)) : 1.0;
+    // Each ring's lit column (x), its share in the giant's shadow (y), and
+    // its column-weighted radius and distance (z, w: sums).
+    vec4 col[4];
+    for (int k = 0; k < 4; k++) col[k] = vec4(0.0);
+    for (int i = 0; i < DUST_STEPS; i++) {
+      float t = t0 + (float(i) + 0.5) * ds;
+      vec3 q = o + t * ray;
+      float y = dot(q, uNormal);
+      float r = length(q - y * uNormal);
+      if (r < rMin || r > rMax) continue;
+      float h = DUST_H * r;
+      float vertical = exp(-0.5 * y * y / (h * h)) / (h * 2.5066283) * ds;
+      bool shadowed = false;
+      if (uLightMode == 1) {
+        float sb = dot(q, uSunDir);
+        shadowed = sb < 0.0 && dot(q, q) - sb * sb < 1.0;
+      }
+      for (int k = 0; k < 4; k++) {
+        if (float(k) >= uDustCount) break;
+        float d = dustProfile(k, r) * vertical;
+        if (d <= 0.0) continue;
+        col[k] += vec4(shadowed ? 0.0 : d, shadowed ? d : 0.0, d * r, d * t);
+      }
+    }
+    // The grain: each ring's ringlets at the radius its column is centred
+    // on, faded where a pixel spans them there (seen slant, as a flat ring
+    // would be). Taken over the whole column rather than step by step: the
+    // slab, a few ringlets thick, would blur them to a plain sheet seen
+    // from anywhere but face on.
+    float tau = 0.0;
+    float tw = 0.0;
+    vec3 tint = vec3(0.0);
+    for (int k = 0; k < 4; k++) {
+      if (float(k) >= uDustCount) break;
+      float sum = col[k].x + col[k].y;
+      if (sum <= 0.0) continue;
+      float rk = col[k].z / sum;
+      float tk = col[k].w / sum;
+      float w = tk * uPixelAngle / max(abs(g), 0.02);
+      float grain = DUST_RING_BOOST * ringletsSeeded(rk, w, uDustSeed[k]);
+      float lit = grain * col[k].x * gain;
+      float dark = grain * col[k].y;
+      tau += lit + dark;
+      tw += (lit + dark) * tk;
+      tint += uDustColour[k] * (lit + 0.08 * dark);
+    }
+    if (tau <= 0.0) discard;
+    float alpha = dustAlpha(tau);
+    if (alpha < 0.002) discard;
+    gl_FragDepth = depthOf(tw / tau * uRadius * ray);
+    gl_FragColor = vec4(tint / tau, alpha * uFade);
     #include <colorspace_fragment>
   }
 `;

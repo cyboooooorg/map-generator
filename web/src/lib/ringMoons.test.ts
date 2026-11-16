@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Body } from './api/types/Body';
-import { dustFedBy, dustOf, innerRingOf, ringPart, ringsOf, SKY_DUST_MAX, dustColumn, skyDustUniforms } from './ringMoons';
+import { dustRingSeed } from './skyBodies';
+import {
+  dustFedBy,
+  dustOf,
+  innerRingOf,
+  ringPart,
+  ringsOf,
+  DUST_RING_MAX,
+  dustColumn,
+  dustRingUniforms,
+} from './ringMoons';
 
 const body = (over: Record<string, unknown>): Body =>
   ({
@@ -58,7 +68,13 @@ describe('dustFedBy', () => {
 
 describe('innerRingOf', () => {
   const rings = (d_ring?: unknown) =>
-    body({ params: { given_rings: { rings: { inner: 1.24, outer: 2.27, gaps: [], opacity: 0.8, colour: [1, 1, 1], bright: true, d_ring } } } });
+    body({
+      params: {
+        given_rings: {
+          rings: { inner: 1.24, outer: 2.27, gaps: [], opacity: 0.8, colour: [1, 1, 1], bright: true, d_ring },
+        },
+      },
+    });
 
   it('draws a D-like ring as a smooth dust ring peaking in its middle', () => {
     const [d] = innerRingOf(rings({ inner: 1.12, outer: 1.24, opacity: 0.03 }));
@@ -72,23 +88,35 @@ describe('innerRingOf', () => {
   });
 });
 
-describe('skyDustUniforms', () => {
+describe('dustRingUniforms', () => {
   it('keeps the rings that matter most and pads the rest', () => {
-    const six = Array.from({ length: 6 }, (_, i) => ({ inner: i, peak: i + 0.5, outer: i + 1, opacity: 0.01 * (i + 1), colour: [1, 1, 1] as [number, number, number] }));
-    const u = skyDustUniforms(six);
-    expect(u.count).toBe(SKY_DUST_MAX);
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      inner: i,
+      peak: i + 0.5,
+      outer: i + 1,
+      opacity: 0.01 * (i + 1),
+      colour: [1, 1, 1] as [number, number, number],
+    }));
+    const u = dustRingUniforms(six);
+    expect(u.count).toBe(DUST_RING_MAX);
     expect(Array.from(u.opacity)).toEqual(expect.arrayContaining([0.06, 0.05, 0.04, 0.03].map(Math.fround)));
-    expect(u.radii.length).toBe(3 * SKY_DUST_MAX);
-    expect(skyDustUniforms([]).count).toBe(0);
+    expect(u.radii.length).toBe(3 * DUST_RING_MAX);
+    expect(dustRingUniforms([]).count).toBe(0);
   });
 
   it('packs edges and peak, and converts the colour to linear', () => {
-    const u = skyDustUniforms([{ inner: 3, peak: 4, outer: 6, opacity: 0.2, colour: [1, 0.5, 0] }]);
+    const u = dustRingUniforms([{ inner: 3, peak: 4, outer: 6, opacity: 0.2, colour: [1, 0.5, 0] }]);
     expect(Array.from(u.radii.slice(0, 3))).toEqual([3, 4, 6]);
     expect(u.colour[0]).toBeCloseTo(1, 5);
     expect(u.colour[1]).toBeCloseTo(0.214, 3);
     expect(u.colour[2]).toBe(0);
     expect(Array.from(u.radii.slice(3))).toEqual(new Array(9).fill(0));
+  });
+
+  it("seeds each ring's ringlets from its peak", () => {
+    const u = dustRingUniforms([{ inner: 3, peak: 4, outer: 6, opacity: 0.2, colour: [1, 1, 1] }]);
+    expect(u.seed[0]).toBeCloseTo(dustRingSeed(4), 5);
+    expect(u.seed[1]).toBe(0);
   });
 });
 
@@ -105,6 +133,14 @@ describe('dustColumn', () => {
     const up = dustColumn([4, 0, 0], [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0], ring);
     expect(up).toBeLessThan(inPlane);
     expect(up).toBeGreaterThan(0);
+  });
+  it('resolves the vertical Gaussian seen slant from afar, as from the giant', () => {
+    // From 10 radii at 8 degrees over the plane, through the peak: the
+    // column is the face-on one over the sine of the elevation.
+    const e = (8 * Math.PI) / 180;
+    const dir: [number, number, number] = [-Math.cos(e), -Math.sin(e), 0];
+    const eye: [number, number, number] = [5 + 10 * Math.cos(e), 10 * Math.sin(e), 0];
+    expect(dustColumn(eye, dir, ring) * Math.sin(e)).toBeCloseTo(0.1, 1);
   });
   it('is zero for a ray that misses the ring radially', () => {
     expect(dustColumn([10, 0, 0], [0, 0, 1], ring)).toBe(0);

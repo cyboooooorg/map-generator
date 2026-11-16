@@ -12,8 +12,10 @@ import {
   grainShine,
   HALO_GRAINS,
   haloGrains,
+  hostAxesMatrix,
   MOON_CLOUD_GRAINS,
   moonCloudGrains,
+  toHostFrame,
   type GrainPoints,
 } from './dustGrains';
 import {
@@ -98,7 +100,7 @@ import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
 import { PLUME_MIN_SPREAD_PX, plumeAlpha, plumeFrame } from './plume';
-import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, dustRingSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
 import { discBasis, hostStarDetail, hostStarSpriteSize } from './hostStarSurface';
@@ -171,8 +173,8 @@ import {
   ringRockFragment,
   ringRockVertex,
 } from './ringRockShaders';
-import { dustRingFragment, dustRingVertex, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
-import { type FaintRing, SKY_DUST_MAX, skyDustUniforms } from '../ringMoons';
+import { dustRingFragment, ringFragment, ringVertex, skyRingFragment, skyRingVertex } from './ringShaders';
+import { type FaintRing, DUST_RING_MAX, dustRingUniforms } from '../ringMoons';
 import type { RingSystem } from '../api/types/RingSystem';
 import { type GiantStorm, MAX_STORMS, greatSpotIndex } from '../giantStorms';
 import type { GiantInfo } from '../api/types/GiantInfo';
@@ -656,6 +658,8 @@ export class PlanetView {
     maps: Texture[];
     /** Its rings, drawn over the sky (see skyRingFragment), once it has some. */
     rings: Mesh<BufferGeometry, ShaderMaterial> | null;
+    /** Its dust rings, as the giant's own view draws them (see dustRingFragment), once it has some. */
+    dust?: Mesh<BufferGeometry, ShaderMaterial>;
     /** Its geyser plume, once it has one (see drawPlume). */
     plume?: Mesh<PlaneGeometry, ShaderMaterial>;
   }[] = [];
@@ -770,18 +774,22 @@ export class PlanetView {
   private cloudDriftAt: number | null = null;
   /** The rings of the giant shown, if any. */
   private rings: Mesh<RingGeometry, ShaderMaterial> | null = null;
-  /** The faint dust rings its moons feed (see setDustRings). */
-  private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
+  /** The faint dust rings its moons feed (see setDustRings), and the outermost one's edge. */
+  private dustRings: Mesh<BufferGeometry, ShaderMaterial> | null = null;
+  private dustReach = 0;
   /** The jets of the geysers of the moon shown, with the sources they stand on (see setJets). */
   private jets: JetMesh | null = null;
   private jetSites: JetSource[] = [];
   /**
    * The clouds of grains round the moons feeding the dust rings of the
-   * giant shown (`source`: the moon's index in setSkyBodies' order; see
-   * setDustClouds), with the key they were built for.
+   * giant shown or of the host in the sky (`source`: the moon's index in
+   * setSkyBodies' order, null for the body shown; see setDustClouds), with
+   * the key they were built for.
    */
-  private dustClouds: { points: GrainPoints; source: number }[] = [];
+  private dustClouds: { points: GrainPoints; source: number | null }[] = [];
   private dustCloudsKey = '';
+  /** The giant the moon clouds go round: its index in setSkyBodies' order, null for the body shown. */
+  private dustCloudHost: number | null = null;
   /** The grains round the moon shown, in its close-up (see setDustHalo), with their key. */
   private dustHalo: GrainPoints | null = null;
   private dustHaloKey = '';
@@ -1367,57 +1375,95 @@ export class PlanetView {
 
   /**
    * The dust rings of the giant shown, as its planetary system drew them
-   * (`DustRing` in crates/mapgen/src/rings.rs): broad and faint, with the
-   * main rings' grain under their own seed, in its equatorial plane like
-   * the main rings; none clears them.
+   * (`DustRing` in crates/mapgen/src/rings.rs): broad, faint and a little
+   * thick, with the main rings' grain under their own seed, round its
+   * equatorial plane; drawn as its moons' sky draws them (see
+   * createDustRings). None clears them.
    */
   setDustRings(rings: readonly FaintRing[]): void {
-    for (const mesh of this.dustRings) {
-      this.scene.remove(mesh);
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+    if (rings.length === 0) {
+      if (this.dustRings) this.dustRings.visible = false;
+      this.dustReach = 0;
+      this.requestRender();
+      return;
     }
-    this.dustRings = rings.map((ring) => {
-      const mesh = new Mesh(
-        new RingGeometry(ring.inner, ring.outer, 256, 8),
-        new ShaderMaterial({
-          vertexShader: dustRingVertex,
-          fragmentShader: dustRingFragment,
-          uniforms: {
-            uColour: { value: new Color().setRGB(...ring.colour, SRGBColorSpace) },
-            uInner: { value: ring.inner },
-            uOuter: { value: ring.outer },
-            uPeak: { value: ring.peak },
-            uOpacity: { value: ring.opacity },
-            uRingSeed: { value: dustRingSeed(ring.peak) },
-            uLightMode: this.u.uLightMode,
-            uSunDir: this.u.uSunDir,
-            uFade: { value: 1 },
-          },
-          transparent: true,
-          depthWrite: false,
-          side: DoubleSide,
-        }),
-      );
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.frustumCulled = false;
+    if (!this.dustRings) {
+      this.dustRings = this.createDustRings();
       // Behind the main rings where they overlap.
-      mesh.renderOrder = 0;
-      this.scene.add(mesh);
-      return mesh;
-    });
+      this.dustRings.renderOrder = 0;
+    }
+    setDustUniforms(this.dustRings.material.uniforms, rings);
+    this.dustReach = Math.max(...rings.map((r) => r.outer));
     this.requestRender();
   }
 
   /**
-   * A sparse cloud of grains round each moon feeding a dust ring of the
-   * giant shown, thinning along its orbit ahead and behind it (see
-   * moonCloudGrains), in the ring's colour; `source` is that moon's index
-   * in setSkyBodies' order (-1: not in the sky, no cloud). None clears them.
+   * A giant's dust rings over the whole screen (see dustRingFragment): the
+   * same for the giant shown and for the giant in a moon's sky, placed each
+   * frame by placeDustRings.
    */
-  setDustClouds(rings: readonly { colour: readonly [number, number, number]; source: number }[]): void {
-    const fed = rings.filter((r) => r.source >= 0);
-    const key = JSON.stringify(fed.map((r) => [r.colour, r.source]));
+  private createDustRings(): Mesh<BufferGeometry, ShaderMaterial> {
+    const geometry = new BufferGeometry();
+    // One triangle covering the screen (see skyRingVertex).
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+    const mesh = new Mesh(
+      geometry,
+      new ShaderMaterial({
+        vertexShader: skyRingVertex,
+        fragmentShader: dustRingFragment,
+        uniforms: {
+          uProjectionInverse: { value: this.camera.projectionMatrixInverse },
+          uProjection: { value: this.camera.projectionMatrix },
+          uCentre: { value: new Vector3() },
+          uRadius: { value: 1 },
+          uNormal: { value: new Vector3(0, 1, 0) },
+          uSunDir: this.u.uSunDir,
+          uLightMode: this.u.uLightMode,
+          uFade: { value: 1 },
+          uPixelAngle: { value: 0 },
+          uRingSeed: { value: 0 },
+          uDustRadii: { value: Array.from({ length: DUST_RING_MAX }, () => new Vector3()) },
+          uDustOpacity: { value: new Array<number>(DUST_RING_MAX).fill(0) },
+          uDustColour: { value: Array.from({ length: DUST_RING_MAX }, () => new Vector3()) },
+          uDustSeed: { value: new Array<number>(DUST_RING_MAX).fill(0) },
+          uDustCount: { value: 0 },
+        },
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    this.scene.add(mesh);
+    return mesh;
+  }
+
+  /**
+   * Places a giant's dust rings (see createDustRings) for this frame: its
+   * centre from the camera, its radius and spin axis, in scene units, and
+   * the angle a drawn pixel spans.
+   */
+  private placeDustRings(mesh: Mesh<BufferGeometry, ShaderMaterial>, centre: Vector3, radius: number, axis: Vector3, fade: number): void {
+    const u = mesh.material.uniforms;
+    (u['uCentre']!.value as Vector3).copy(centre);
+    u['uRadius']!.value = radius;
+    (u['uNormal']!.value as Vector3).copy(axis);
+    u['uFade']!.value = fade;
+    u['uPixelAngle']!.value = (this.camera.fov * Math.PI) / 180 / Math.max(this.renderer.domElement.height, 1);
+  }
+
+  /**
+   * A sparse cloud of grains round each moon feeding a dust ring of a
+   * giant, thinning along its orbit ahead and behind it (see
+   * moonCloudGrains), in the ring's colour, drawn alike in the giant's
+   * close-up and in its moons' sky: `host` is the giant's index in
+   * setSkyBodies' order (null: the giant is the body shown), each
+   * `source` the feeding moon's (null: the moon is the body shown, the
+   * cloud round the camera's body). None clears them.
+   */
+  setDustClouds(rings: readonly { colour: readonly [number, number, number]; source: number | null }[], host: number | null = null): void {
+    this.dustCloudHost = host;
+    const key = JSON.stringify(rings.map((r) => [r.colour, r.source]));
     if (key === this.dustCloudsKey) return;
     this.dustCloudsKey = key;
     for (const { points } of this.dustClouds) {
@@ -1426,7 +1472,7 @@ export class PlanetView {
       points.material.dispose();
     }
     const n = grainCount(MOON_CLOUD_GRAINS, this.quality.dustGrains);
-    this.dustClouds = fed.map((r, k) => {
+    this.dustClouds = rings.map((r, k) => {
       const points = createGrains(moonCloudGrains(n, 301 + k), grainShine(n, 401 + k), r.colour, this.u, CLOUD_LOOK, true);
       this.scene.add(points);
       return { points, source: r.source };
@@ -1473,10 +1519,25 @@ export class PlanetView {
       u['uPixelRatio']!.value = ratio;
     };
     if (this.dustHalo) show(this.dustHalo, visible);
+    // The giant the clouds go round, in the scene: the body shown, or the
+    // host of the sky where it is drawn with its rings.
+    const host = this.dustCloudHost === null ? null : this.skyBodies[this.dustCloudHost];
+    const hostBody = host?.body;
+    const hostShown = host
+      ? host.mesh.visible && hostBody?.show?.rings !== false && !!hostBody?.position && hostBody.radius !== undefined
+      : true;
+    const centre = new Vector3(...(hostBody?.position ?? [0, 0, 0]));
+    const scale = hostBody?.radius ?? 1;
+    const axes = hostBody?.axes ?? IDENTITY_AXES;
     for (const { points, source } of this.dustClouds) {
-      const position = this.skyBodies[source]?.body.position;
-      show(points, visible && !!position);
-      if (position) (points.material.uniforms['uMoon']!.value as Vector3).set(...position);
+      const position = source === null ? ([0, 0, 0] as const) : this.skyBodies[source]?.body.position;
+      show(points, visible && hostShown && !!position);
+      if (!position || !points.visible) continue;
+      const u = points.material.uniforms;
+      (u['uHostCentre']!.value as Vector3).copy(centre);
+      u['uHostScale']!.value = scale;
+      (u['uHostAxes']!.value as Matrix3).set(...hostAxesMatrix(axes));
+      (u['uMoon']!.value as Vector3).set(...toHostFrame(position, [centre.x, centre.y, centre.z], scale, axes));
     }
   }
 
@@ -2447,10 +2508,8 @@ export class PlanetView {
     this.ringRocks?.material.dispose();
     this.ringGrains?.geometry.dispose();
     this.ringGrains?.material.dispose();
-    for (const mesh of this.dustRings) {
-      mesh.geometry.dispose();
-      mesh.material.dispose();
-    }
+    this.dustRings?.geometry.dispose();
+    this.dustRings?.material.dispose();
     this.jets?.geometry.dispose();
     this.jets?.material.dispose();
     for (const points of [this.dustHalo, ...this.dustClouds.map((c) => c.points)]) {
@@ -3097,8 +3156,8 @@ export class PlanetView {
   };
 
   private disposeSkyBodies(): void {
-    for (const { mesh, maps, rings, plume } of this.skyBodies) {
-      for (const m of [mesh, ...(rings ? [rings] : []), ...(plume ? [plume] : [])]) {
+    for (const { mesh, maps, rings, dust, plume } of this.skyBodies) {
+      for (const m of [mesh, ...(rings ? [rings] : []), ...(dust ? [dust] : []), ...(plume ? [plume] : [])]) {
         this.scene.remove(m);
         m.geometry.dispose();
         m.material.dispose();
@@ -3405,6 +3464,7 @@ export class PlanetView {
       u['uGrow']!.value = Math.max(1 + 3 * height, tiny ? 3 : 1, axis ? SPIN_AXIS_LENGTH + 0.1 : arrow ? 1.7 : 1);
       setRingUniforms(u, body.rings ?? null, ringGapLeast(smallest, place.half));
       this.drawSkyRings(entry, place);
+      this.drawSkyDust(entry, place);
       this.drawPlume(entry);
     }
     // The bodies the orbit lines pass behind and in front of.
@@ -3521,8 +3581,7 @@ export class PlanetView {
     const { body, mesh } = entry;
     const shown = body.show?.rings !== false;
     const rings = shown ? (body.rings ?? null) : null;
-    const dust = shown ? (body.dust ?? []) : [];
-    if (!rings && dust.length === 0) {
+    if (!rings) {
       if (entry.rings) entry.rings.visible = false;
       return;
     }
@@ -3553,10 +3612,6 @@ export class PlanetView {
             uRingSeed: { value: 0 },
             uPixelAngle: { value: 0 },
             uRingFaint: { value: new Vector3() },
-            uDustRadii: { value: Array.from({ length: SKY_DUST_MAX }, () => new Vector3()) },
-            uDustOpacity: { value: new Array<number>(SKY_DUST_MAX).fill(0) },
-            uDustColour: { value: Array.from({ length: SKY_DUST_MAX }, () => new Vector3()) },
-            uDustCount: { value: 0 },
           },
           transparent: true,
           depthWrite: false,
@@ -3573,7 +3628,6 @@ export class PlanetView {
     ring.renderOrder = mesh.renderOrder + 0.1;
     const u = ring.material.uniforms;
     setRingUniforms(u, rings, ringGapLeast(this.skySmallest, place.half));
-    setDustUniforms(u, dust);
     u['uRingSeed']!.value = body.ringSeed ?? 0;
     u['uPixelAngle']!.value = this.skyPixelAngle;
     // Its centre and radius from the camera: from its place when it has
@@ -3586,8 +3640,38 @@ export class PlanetView {
       u['uRadius']!.value = 1;
     }
     (u['uNormal']!.value as Vector3).set(...(body.axes ?? IDENTITY_AXES)[1]);
-    (u['uColour']!.value as Color).setRGB(...(rings?.colour ?? [1, 1, 1]), SRGBColorSpace);
+    (u['uColour']!.value as Color).setRGB(...rings.colour, SRGBColorSpace);
     u['uFade']!.value = mesh.material.uniforms['uOpacity']!.value as number;
+  }
+
+  /**
+   * A body of the sky's dust rings, if it has any: drawn as the giant's own
+   * view draws them (see createDustRings), placed at its centre with its
+   * axes, after its disk and before its bright rings.
+   */
+  private drawSkyDust(entry: (typeof this.skyBodies)[number], place: { direction: Vector3; half: number }): void {
+    const { body, mesh } = entry;
+    const dust = body.show?.rings !== false ? (body.dust ?? []) : [];
+    if (dust.length === 0) {
+      if (entry.dust) entry.dust.visible = false;
+      return;
+    }
+    entry.dust ??= this.createDustRings();
+    const ring = entry.dust;
+    ring.visible = mesh.visible;
+    ring.renderOrder = mesh.renderOrder + 0.05;
+    setDustUniforms(ring.material.uniforms, dust);
+    // Its centre and radius from the camera, as for its rings (drawSkyRings).
+    const centre = new Vector3();
+    let radius = 1;
+    if (body.position && body.radius !== undefined) {
+      centre.set(...body.position).sub(this.camera.position);
+      radius = body.radius;
+    } else {
+      centre.copy(place.direction).multiplyScalar(1 / Math.max(Math.sin(place.half), 1e-9));
+    }
+    const axis = new Vector3(...(body.axes ?? IDENTITY_AXES)[1]);
+    this.placeDustRings(ring, centre, radius, axis, mesh.material.uniforms['uOpacity']!.value as number);
   }
 
   /** The body shown drawn from its preview (see setPreviewBody), null until one is. */
@@ -3721,9 +3805,10 @@ export class PlanetView {
     this.sky.uHazeVeil.value = hazeVeil(this.worldSky, this.altitude());
     // Rings and jets belong to the globe, like the atmosphere.
     if (this.jets) this.jets.visible = this.morph > 0.99 && this.jetSites.length > 0;
-    for (const mesh of this.dustRings) {
-      mesh.visible = this.morph > 0.01;
-      mesh.material.uniforms['uFade']!.value = this.morph ** 3;
+    if (this.dustRings) {
+      // The giant shown at the origin, its spin axis up (as its rings).
+      this.dustRings.visible = this.dustReach > 0 && this.morph > 0.01;
+      this.placeDustRings(this.dustRings, this.camera.position.clone().negate(), 1, new Vector3(0, 1, 0), this.morph ** 3);
     }
     if (this.rings) {
       this.rings.visible = this.morph > 0.01;
@@ -3835,9 +3920,8 @@ export class PlanetView {
   /** Height of the camera above the surface (globe) or the map plane. */
   /** The radius of the outermost ring drawn, bright or dust, in radii of the body (0: none). */
   private ringReach(): number {
-    let reach = this.rings ? this.u.uRingOuter.value : 0;
-    for (const mesh of this.dustRings) reach = Math.max(reach, mesh.material.uniforms['uOuter']!.value as number);
-    return reach;
+    const reach = this.rings ? this.u.uRingOuter.value : 0;
+    return Math.max(reach, this.dustReach);
   }
 
   private altitude(): number {
@@ -4112,12 +4196,13 @@ function setRingUniforms(u: Record<string, IUniform>, rings: RingSystem | null, 
   (u['uRingGaps']!.value as Vector2[]).forEach((gap, k) => gap.set(...(rings?.gaps[k] ?? [0, 0])));
 }
 
-/** Sets a sky body's dust ring uniforms (see skyRingDensityGlsl) from its dust rings; none clears them. */
+/** Sets a giant's dust ring uniforms (see dustRingFragment) from its dust rings. */
 function setDustUniforms(u: Record<string, IUniform>, dust: readonly FaintRing[]): void {
-  const packed = skyDustUniforms(dust);
+  const packed = dustRingUniforms(dust);
   (u['uDustRadii']!.value as Vector3[]).forEach((v, k) => v.fromArray(packed.radii, 3 * k));
   (u['uDustColour']!.value as Vector3[]).forEach((v, k) => v.fromArray(packed.colour, 3 * k));
   u['uDustOpacity']!.value = Array.from(packed.opacity);
+  u['uDustSeed']!.value = Array.from(packed.seed);
   u['uDustCount']!.value = packed.count;
 }
 

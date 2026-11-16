@@ -17,7 +17,7 @@ export const DUST_G = 0.7;
  */
 export const DUST_SCALE_HEIGHT = 0.02;
 
-/** Samples along a view ray through a dust ring (sky shader and `dustColumn`). */
+/** Samples along a view ray through a dust ring (dust ring shader and `dustColumn`). */
 export const DUST_MARCH_STEPS = 24;
 
 /** Cap on the gain over the 90° brightness, keeping the exact back-lit direction finite. */
@@ -42,15 +42,32 @@ export const DUST_RING_FLOOR = 1;
 export const DUST_RING_GAIN_MAX = 1.5;
 
 /**
- * Look boost of a dust ring's opacity in the giant's close-up (look
- * calibration): seen through face-on, a true E ring (face-on optical depth
- * of a few percent here, far less in nature) is invisible but back-lit;
- * boosted so that it reads as a faint grained ring at 90° of scattering,
- * and with `DUST_RING_GAIN_MAX` only a little brighter back-lit, never a
- * wash over the frame. Not in a moon's sky, where the long column along
- * the ring plane shows it already (a boost there veils the whole sky).
+ * Look boost of a dust ring's column (look calibration), the same in the
+ * giant's close-up and in its moons' sky: seen through, a true E ring
+ * (face-on optical depth of a few percent here, far less in nature) is
+ * invisible but back-lit; boosted so that it reads as a faint grained
+ * ring at 90° of scattering, and with `DUST_RING_GAIN_MAX` only a little
+ * brighter back-lit, never a wash over the frame (`DUST_ALPHA_MAX` holds
+ * the long column along its plane).
  */
-export const DUST_RING_BOOST = 6;
+export const DUST_RING_BOOST = 2;
+
+/**
+ * Most opacity a dust ring's column reaches (look calibration): its
+ * opacity tends to it however long the column (`dustAlpha`), so that seen
+ * along its plane, from a moon inside it, it veils the sky at most this
+ * much.
+ */
+export const DUST_ALPHA_MAX = 0.5;
+
+/**
+ * The opacity a dust ring's boosted column `tau` is drawn with: `tau`
+ * while thin, tending to `DUST_ALPHA_MAX` as it thickens. Twin of the
+ * dust ring shader's (dustPhaseGlsl).
+ */
+export function dustAlpha(tau: number): number {
+  return DUST_ALPHA_MAX * (1 - Math.exp(-Math.max(tau, 0) / DUST_ALPHA_MAX));
+}
 
 function hg(cosTheta: number, g: number): number {
   const d = 1 + g * g - 2 * g * cosTheta;
@@ -83,7 +100,7 @@ export function cosScatter(sunDir: Vec3, toEye: Vec3): number {
   return -(sunDir[0] * toEye[0] + sunDir[1] * toEye[1] + sunDir[2] * toEye[2]);
 }
 
-/** GLSL twins of `dustGain` and `dustRingGain`, with the same constants, for the dust shaders. */
+/** GLSL twins of `dustGain`, `dustRingGain` and `dustAlpha`, with the same constants, for the dust shaders. */
 export const dustPhaseGlsl = /* glsl */ `
   float dustGain(float cosScatter) {
     const float g = ${DUST_G.toFixed(2)};
@@ -95,5 +112,9 @@ export const dustPhaseGlsl = /* glsl */ `
   const float DUST_RING_BOOST = ${DUST_RING_BOOST.toFixed(1)};
   float dustRingGain(float cosScatter) {
     return clamp(dustGain(cosScatter), ${DUST_RING_FLOOR.toFixed(1)}, ${DUST_RING_GAIN_MAX.toFixed(1)});
+  }
+  float dustAlpha(float tau) {
+    const float alphaMax = ${DUST_ALPHA_MAX.toFixed(3)};
+    return alphaMax * (1.0 - exp(-max(tau, 0.0) / alphaMax));
   }
 `;
