@@ -371,7 +371,7 @@ $2.3 \times 10^{-4}$ measured (Lainey et al. 2012): Saturn's 20-fold
 stronger dissipation comes out of its moon's closer orbit and smaller
 mass, with no value of its own. Enceladus and Dione under Saturn's
 measured $k_2/Q$ dissipate 14 GW, all of it in Enceladus, of the
-15.8 GW it radiates (Howett et al. 2011); an asked Enceladus gets 12 to
+15.8 GW it radiates (Howett et al. 2011); an asked Enceladus gets 11 to
 16 GW over ten seeds. In the Laplace chain the Io–Europa pair gives Io
 $1.8 \times 10^{13}$ W, under its own tide's $9 \times 10^{13}$, which
 stands (an asked Io: 62 to 143 TW, a heat-pipe world); Europa keeps its
@@ -535,7 +535,7 @@ faster than it comes and freezes its ocean, unless ammonia stops it.
 
 **Orders of magnitude** (asked moons, seeds 1 to 20). Europa (8 % water,
 its tides from its resonances) gets a shell of 12 to 27 km, 6 to 16 km
-at the poles, over an ocean of 62 to 131 km. Enceladus, 12 to 17 GW
+at the poles, over an ocean of 62 to 131 km. Enceladus, 11 to 17 GW
 from its resonance with Dione, gets 31.7 to 40.6 km of ice, 7 to 10 km at
 the poles, over 44 to 67 km of ocean. Ganymede, heated mostly by its
 rock, gets 128 to 227 km of ice and 33 to 124 km of ocean above ice V;
