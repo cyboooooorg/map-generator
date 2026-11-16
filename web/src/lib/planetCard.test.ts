@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_GAP, TOP_MARGIN, atmosphereLine, bulkLine, cardBox, extremes, layoutCards, linkEnd, oceanUnderIce, shownCards, zonePlace } from './planetCard';
+import { CARD_GAP, TOP_MARGIN, atmosphereLine, bulkLine, cardBox, extremes, layoutCards, geysersLine, linkEnd, momentOfInertiaLine, oceanUnderIce, tidalHeatLine, shownCards, zonePlace } from './planetCard';
+import type { Explanation } from './api/types/Explanation';
 import type { PlanetModel } from './api/types/PlanetModel';
 import { setLocale } from './i18n/index.svelte';
 
@@ -121,17 +122,59 @@ describe('extremes', () => {
 });
 
 describe('a body card of the planet model', () => {
-  const model = (ocean_km: number | null, pressure = 1.5) =>
+  const model = (ocean_km: number | null, pressure = 1.5, convecting = false) =>
     ({
       surface: { gases: { n2: pressure * 0.94, co2: 0, h2o: 0, ch4: pressure * 0.05, nh3: 0, so2: 0, o2: 0 } },
-      ice_shell: ocean_km === null ? null : { shell_km: 60, ocean_km },
+      ice_shell: ocean_km === null ? null : { shell_km: 60, ocean_km, convecting },
     }) as unknown as PlanetModel;
 
   it('shows the ocean under the ice', () => {
     setLocale('en');
-    expect(oceanUnderIce(model(120))).toBe('ocean under 60 km of ice');
+    expect(oceanUnderIce(model(120))).toBe('ocean of 120 km under 60 km of ice (conductive)');
+    expect(oceanUnderIce(model(120, 1.5, true))).toBe('ocean of 120 km under 60 km of ice (convective)');
     expect(oceanUnderIce(model(0))).toBeNull();
     expect(oceanUnderIce(model(null))).toBeNull();
+  });
+
+  it('words the ocean line in French', () => {
+    setLocale('fr');
+    expect(oceanUnderIce(model(120))).toMatch(/^océan de 120.km sous 60.km de glace \(conductive\)$/);
+    setLocale('en');
+  });
+
+  it('shows the tidal heat, and the resonance when it sets it', () => {
+    setLocale('en');
+    const heat = { heat: { tidal_w: 3e12 } } as unknown as PlanetModel;
+    const resonance = { trees: [{ quantity: 'heat_flux', value: 0, label: null, input: null, causes: [{ quantity: 'tidal_heat', value: 3e12, label: null, input: null, causes: [{ quantity: 'resonant_heat', value: 3e12, label: null, input: null, causes: [] }] }] }] } as Explanation;
+    expect(tidalHeatLine(heat, { trees: [] })).toMatch(/^3\s?TW$/);
+    expect(tidalHeatLine(heat, resonance)).toMatch(/^3\s?TW \(2:1 resonance\)$/);
+    expect(tidalHeatLine({ heat: { tidal_w: 0 } } as unknown as PlanetModel, null)).toBeNull();
+    setLocale('fr');
+    expect(tidalHeatLine(heat, resonance)).toContain('résonance 2:1');
+    setLocale('en');
+  });
+
+  it('shows the moment of inertia of a moon or an ice-shelled body only', () => {
+    setLocale('en');
+    const m = (c: number, shell: boolean) => ({ moment_of_inertia: c, ice_shell: shell ? { shell_km: 1, ocean_km: 1 } : null }) as unknown as PlanetModel;
+    expect(momentOfInertiaLine(m(0.31, true), false)).toBe('0.31 — differentiated');
+    expect(momentOfInertiaLine(m(0.355, false), true)).toBe('0.355 — partially differentiated');
+    expect(momentOfInertiaLine(m(0.354, false), false)).toBeNull();
+    expect(momentOfInertiaLine(m(0, true), true)).toBeNull();
+    setLocale('fr');
+    expect(momentOfInertiaLine(m(0.31, true), false)).toBe('0,31 — différencié');
+    setLocale('en');
+  });
+
+  it('shows the geysers with their pole, only when there are some', () => {
+    setLocale('en');
+    const g = (south: boolean) => ({ geysers: { south, fractures: [] } }) as unknown as PlanetModel;
+    expect(geysersLine(g(true))).toBe('active at the south pole');
+    expect(geysersLine(g(false))).toBe('active at the north pole');
+    expect(geysersLine({ geysers: null } as unknown as PlanetModel)).toBeNull();
+    setLocale('fr');
+    expect(geysersLine(g(true))).toBe('actifs au pôle sud');
+    setLocale('en');
   });
 
   it('shows the surface pressure and the main gases', () => {

@@ -15,7 +15,8 @@ const QUANTITIES: Record<Quantity, true> = {
   heat_flux: true, radiogenic_heat: true, tidal_heat: true, secular_heat: true, bond_albedo: true, pressure: true, co2: true, n2: true, h2o: true, ch4: true, o2: true,
   nh3: true, so2: true, outgassed: true, escape: true, destroyed: true, frozen_out: true, from_ammonia: true, weathered: true,
   liquid: true, regime: true, magnetic_field: true, core_state: true, core_mass_fraction: true, class: true, mass: true,
-  radius: true, envelope_fraction: true, envelope_lost: true, water_formed: true, water_kept: true, age: true, note: true,
+  radius: true, envelope_fraction: true, envelope_lost: true, water_formed: true, water_kept: true, age: true, shell_thickness: true, ocean_depth: true, polar_shell: true,
+  moment_of_inertia: true, resonant_heat: true, host_dissipation: true, note: true,
 };
 const INPUTS: Record<InputField, true> = {
   mass_earth: true, core_mass_fraction: true, water_oceans: true, envelope_fraction: true, co2: true, n2: true, ch4: true,

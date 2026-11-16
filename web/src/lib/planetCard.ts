@@ -3,7 +3,10 @@
 // planet's place relative to the habitable zone.
 
 import type { Bulk } from './api/types/Bulk';
+import type { Cause } from './api/types/Cause';
+import type { Explanation } from './api/types/Explanation';
 import type { PlanetModel } from './api/types/PlanetModel';
+import type { Quantity } from './api/types/Quantity';
 import { formatInt, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 
@@ -192,11 +195,48 @@ export function atmosphereLine(model: Pick<PlanetModel, 'surface'>): string | nu
   return [withUnit(formatUpTo(total, digits), 'bar'), ...main].join(' · ');
 }
 
-/** "ocean under 60 km of ice" for a body with a liquid ocean under its ice shell; null otherwise. */
+/** "ocean of 120 km under 60 km of ice (conductive)" for a body with a liquid ocean under its ice shell; null otherwise. */
 export function oceanUnderIce(model: Pick<PlanetModel, 'ice_shell'>): string | null {
   const shell = model.ice_shell;
   if (!shell || !(shell.ocean_km > 0)) return null;
-  return t.card.oceanUnderIce({ km: withUnit(formatInt(Math.round(shell.shell_km)), 'km') });
+  return t.card.oceanUnderIce({
+    ocean: withUnit(formatInt(Math.round(shell.ocean_km)), 'km'),
+    shell: withUnit(formatInt(Math.round(shell.shell_km)), 'km'),
+    convective: shell.convecting === true,
+  });
+}
+
+/** Whether a cause or one below it is of `quantity`. */
+function has(cause: Cause, quantity: Quantity): boolean {
+  return cause.quantity === quantity || cause.causes.some((below) => has(below, quantity));
+}
+
+/** The tidal heat in W, with its resonance when the heat of a 2:1 pair sets it; null without tides. */
+export function tidalHeatLine(model: Pick<PlanetModel, 'heat'>, explanation: Explanation | null): string | null {
+  if (!(model.heat.tidal_w > 0)) return null;
+  const resonant = (explanation?.trees ?? []).some((tree) => has(tree, 'resonant_heat'));
+  return t.card.tidalHeatValue({ heat: withUnit(formatUpTo(model.heat.tidal_w / 1e12, 2), 'TW'), resonant });
+}
+
+/** Below this `C / (M R²)` a body is not fully differentiated (a uniform sphere is 0.4, Earth is 0.33). */
+const DIFFERENTIATED_BELOW = 0.33;
+
+/**
+ * "0.331 — differentiated" for a body with an ice shell or a moon (uniform layers
+ * overestimate a large rocky planet's, Earth's 0.354 against 0.331 measured); null
+ * for the others and for a model stored without it.
+ */
+export function momentOfInertiaLine(model: Pick<PlanetModel, 'moment_of_inertia' | 'ice_shell'>, moon: boolean): string | null {
+  if (!(model.moment_of_inertia > 0) || !(moon || model.ice_shell)) return null;
+  return t.card.momentOfInertiaValue({
+    value: formatUpTo(model.moment_of_inertia, 3),
+    differentiated: model.moment_of_inertia <= DIFFERENTIATED_BELOW,
+  });
+}
+
+/** "active at the south pole" for a body whose ocean vents; null otherwise. */
+export function geysersLine(model: Pick<PlanetModel, 'geysers'>): string | null {
+  return model.geysers ? t.card.geysersValue({ south: model.geysers.south }) : null;
 }
 
 /** A small moon's bulk, e.g. "rock 60 % · ice 30 % · carbon 10 %". */
