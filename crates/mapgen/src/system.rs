@@ -5379,6 +5379,19 @@ mod tests {
             let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
             let vents_of = |b: &Body| b.model.as_ref().is_some_and(|m| m.geysers.is_some());
             vents += system.bodies.iter().filter(|b| vents_of(b)).count();
+            // Hot bodies with a shell thin everywhere included, none stores
+            // more than the cap.
+            for g in system
+                .bodies
+                .iter()
+                .filter_map(|b| b.model.as_ref()?.geysers.as_ref())
+            {
+                let n = g.fractures.len();
+                assert!(
+                    (1..=crate::planet::geysers::MAX_FRACTURES).contains(&n),
+                    "seed {seed}: {n}"
+                );
+            }
             for host in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
                 let rings = plume_rings(host);
                 let radius_km = host.physical.radius_km;

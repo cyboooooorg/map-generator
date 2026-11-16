@@ -30,6 +30,13 @@ const CRACK_OVERBURDEN_PA: f64 = 2.6e6;
 /// 35 km apart (Porco et al. 2006, doi:10.1126/science.1123013).
 pub const FRACTURE_SPACING_KM: f64 = 35.0;
 
+/// Most fractures stored: a region that would hold more at
+/// [`FRACTURE_SPACING_KM`] gets this many, spaced wider to fill it, their
+/// lengths still from edge to edge. A storage and rendering limit, not
+/// physics: the surface map and the viewer draw each fracture, and a hot
+/// body with a thin shell would otherwise store over a hundred.
+pub const MAX_FRACTURES: usize = 12;
+
 /// Widest the fractured region gets around its pole, degrees of
 /// colatitude: the fractures stay in the polar region the tides thin
 /// most, and the gnomonic plane they are laid out in does not stretch
@@ -102,8 +109,9 @@ pub struct Fracture {
 ///   fractures about 130 km long, 35 km apart). They are straight lines
 ///   of the gnomonic projection centred on the pole, so great circles on
 ///   the body; their count and lengths scale with the region (an asked
-///   Enceladus gets four, about 100 and 140 km long). Their strike is
-///   drawn from the seed.
+///   Enceladus gets four, about 100 and 140 km long), at most
+///   [`MAX_FRACTURES`], spaced wider when the region would hold more.
+///   Their strike is drawn from the seed.
 pub fn geysers(
     interior: &Interior,
     shell: &IceShell,
@@ -152,7 +160,13 @@ fn fractures(radius_km: f64, region_deg: f64, south: bool, strike_deg: f64) -> V
     // is the longitude: the fractures run along `u` (towards the meridian
     // `strike_deg`), offset along `v` (towards `strike_deg + 90`).
     let edge_km = radius_km * region_deg.to_radians().tan();
-    let count = ((2.0 * edge_km / FRACTURE_SPACING_KM).round() as usize).max(1);
+    let wanted = ((2.0 * edge_km / FRACTURE_SPACING_KM).round() as usize).max(1);
+    let count = wanted.min(MAX_FRACTURES);
+    let spacing_km = if wanted > MAX_FRACTURES {
+        2.0 * edge_km / MAX_FRACTURES as f64
+    } else {
+        FRACTURE_SPACING_KM
+    };
     let sign = if south { -1.0 } else { 1.0 };
     let (su, cu) = strike_deg.to_radians().sin_cos();
     let (u, v) = ([cu, su], [-su, cu]);
@@ -163,7 +177,7 @@ fn fractures(radius_km: f64, region_deg: f64, south: bool, strike_deg: f64) -> V
     };
     (0..count)
         .map(|i| {
-            let offset = (i as f64 - (count as f64 - 1.0) / 2.0) * FRACTURE_SPACING_KM;
+            let offset = (i as f64 - (count as f64 - 1.0) / 2.0) * spacing_km;
             let half = (edge_km * edge_km - offset * offset).max(0.0).sqrt();
             let at = |along: f64| point(offset * v[0] + along * u[0], offset * v[1] + along * u[1]);
             let (a, b) = (at(-half), at(half));
@@ -224,6 +238,26 @@ mod tests {
         assert_eq!(f[1].lat_deg, 90.0);
         assert_eq!((f[1].lon_deg, f[1].azimuth_deg), (170.0, 0.0));
         assert!((f[2].lon_deg - -100.0).abs() < 1e-3, "{f:?}");
+    }
+
+    /// A hot body with a shell thin everywhere vents over the whole 30°
+    /// cap: 5000 km in radius, it would hold 165 fractures 35 km apart; it
+    /// stores twelve, spread across the cap, still from edge to edge.
+    #[test]
+    fn a_wide_region_stores_at_most_twelve_fractures_across_it() {
+        let radius = 5000.0;
+        let f = fractures(radius, MAX_REGION_DEG, false, 0.0);
+        assert_eq!(f.len(), MAX_FRACTURES, "{f:?}");
+        // The outermost reach most of the way to the cap's edge.
+        let edge = radius * MAX_REGION_DEG.to_radians().tan();
+        let outer = radius * (90.0 - f64::from(f[0].lat_deg)).to_radians().tan();
+        assert!(outer > 0.85 * edge && outer < edge, "{outer} of {edge}");
+        // The middle ones run nearly the whole cap across.
+        let middle = f64::from(f[5].length_km);
+        assert!(
+            middle > 0.95 * 2.0 * radius * MAX_REGION_DEG.to_radians(),
+            "{middle}"
+        );
     }
 
     #[test]

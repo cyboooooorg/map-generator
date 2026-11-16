@@ -559,7 +559,8 @@ thin both poles alike; Enceladus vents from its south pole alone, so the
 body's seed picks one. Its fractures fill the cap round that pole where
 the shell still passes, up to 30° from it: parallel, 35 km apart and
 from one edge of the cap to the other, as Enceladus's four "tiger
-stripes", about 130 km long and 35 km apart (Porco et al. 2006). They
+stripes", about 130 km long and 35 km apart (Porco et al. 2006); at
+most 12 are stored, spaced wider to fill a larger cap. They
 are stored on the model (`PlanetModel.geysers`: the pole, and each
 fracture's centre, strike and length) so that the surface map and the
 viewer draw them at the same place, and the innermost moon with geysers
@@ -761,7 +762,9 @@ archetypes):
   that opens the cracks, and the fractures' own spacing, are not
   computed. A drawn moon or planet whose shell is under a kilometre
   everywhere (heated by its tides near melting) vents over the whole
-  30° cap, through a hundred fractures or more.
+  30° cap. The model stores at most 12 fractures, spaced wider than
+  35 km when the cap would hold more: a storage and rendering limit (the
+  map and the viewer draw each one), not physics.
 - **Resonances are read from the periods, not evolved.** Neighbouring
   moons 1.8 to 2.2 times apart in period are taken as locked in a 2:1
   resonance, in equilibrium, with no check that the resonance could

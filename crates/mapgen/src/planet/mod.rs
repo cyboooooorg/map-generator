@@ -421,6 +421,11 @@ const AU_M: f64 = 1.495_978_707e11;
 /// water layer, its internal heat, its surface's climate and the ammonia
 /// per kilogram of its ice (its `nh3` over its water share), and the
 /// moment of inertia of its layers.
+///
+/// It leaves `geysers` at `None`: their pole is drawn from the body's
+/// seed, which only [`derive_model`], [`derive_model_with`] and
+/// [`moon::derive_moon_model`] know ([`vent`]); a model that needs its
+/// geysers goes through those.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
 }
