@@ -3,4 +3,4 @@
 /**
  * What a [`Cause`] holds, with its unit.
  */
-export type Quantity = "surface_temperature" | "equilibrium_temperature" | "light_received" | "greenhouse" | "internal_warming" | "heat_flux" | "radiogenic_heat" | "tidal_heat" | "secular_heat" | "pressure" | "co2" | "n2" | "h2o" | "ch4" | "o2" | "nh3" | "so2" | "outgassed" | "escape" | "destroyed" | "frozen_out" | "from_ammonia" | "weathered" | "liquid" | "regime" | "magnetic_field" | "core_state" | "core_mass_fraction" | "class" | "mass" | "radius" | "envelope_fraction" | "envelope_lost" | "water_formed" | "water_kept" | "age" | "note";
+export type Quantity = "surface_temperature" | "equilibrium_temperature" | "light_received" | "greenhouse" | "internal_warming" | "heat_flux" | "radiogenic_heat" | "tidal_heat" | "secular_heat" | "bond_albedo" | "pressure" | "co2" | "n2" | "h2o" | "ch4" | "o2" | "nh3" | "so2" | "outgassed" | "escape" | "destroyed" | "frozen_out" | "from_ammonia" | "weathered" | "liquid" | "regime" | "magnetic_field" | "core_state" | "core_mass_fraction" | "class" | "mass" | "radius" | "envelope_fraction" | "envelope_lost" | "water_formed" | "water_kept" | "age" | "note";

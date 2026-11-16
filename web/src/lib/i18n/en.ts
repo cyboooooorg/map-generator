@@ -407,6 +407,7 @@ export const en = {
       radiogenic_heat: 'Radiogenic heat',
       tidal_heat: 'Tidal heat',
       secular_heat: 'Secular cooling',
+      bond_albedo: 'Share of the light reflected',
       pressure: 'Pressure',
       co2: 'CO₂',
       n2: 'N₂',
@@ -447,6 +448,7 @@ export const en = {
       radiogenic_heat: 'W',
       tidal_heat: 'W',
       secular_heat: 'W',
+      bond_albedo: '',
       pressure: 'bar',
       co2: 'bar',
       n2: 'bar',
@@ -482,6 +484,10 @@ export const en = {
       life: 'Life made the oxygen',
       runaway: 'The water ran away: the light received passed the limit',
       boiled: 'The climate boiled the water away',
+      snowball: 'A snowball: bright ice reflects the starlight and keeps the world frozen, until the CO₂ its volcanoes keep outgassing, no longer drawn down by weathering under the ice, builds up enough greenhouse to thaw it',
+      frozen: 'Frozen for good: bright ice reflects the starlight, and no amount of CO₂ can thaw it at this distance',
+      co2_build_up: 'The CO₂ built up to the most the greenhouse can use: the thermostat cannot reach its temperature at this distance',
+      methane_trap: 'The cold traps the methane: it condenses out of the air, so the air keeps only the vapour of a sea',
     } as Record<string, string>,
     /** The request fields, named as the creation form names them. */
     inputs: {

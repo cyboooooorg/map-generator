@@ -1116,7 +1116,7 @@ pub fn climate(
 
 /// Whether `climate` is frozen over: no liquid water and a surface under
 /// the melting point of ice.
-fn frozen_over(climate: &Climate) -> bool {
+pub(super) fn frozen_over(climate: &Climate) -> bool {
     climate.liquid != SurfaceLiquid::Water && climate.temperature_k < ICE_MELTS_K
 }
 

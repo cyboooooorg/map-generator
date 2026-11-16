@@ -12,12 +12,13 @@
 //! owns their wording.
 use serde::Serialize;
 
-use super::climate::wet_temperature_k;
+use super::climate::{frozen_over, wet_temperature_k};
 use super::{
-    Bare, Context, Gases, OCEAN_KG, PlanetModel, Surface, Water, bare, internal_heat, steam,
-    surface_temperature_k, water,
+    Bare, Context, Gases, OCEAN_KG, PlanetModel, Surface, SurfaceLiquid, Water, bare,
+    internal_heat, steam, surface_temperature_k, water,
 };
 use crate::exomoon::EARTH_KG;
+use crate::geology::Regime;
 
 /// The values a body's card unfolds, one tree each.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -42,7 +43,8 @@ pub struct Cause {
     /// The key of a value that is not a number: a class
     /// (`PlanetClass::key`, `mini-neptune`), a regime (`plates`), a
     /// liquid (`water`), a core state (`liquid`), or a note's key
-    /// (`thermostat`, `life`, `runaway`, `boiled`).
+    /// (`thermostat`, `life`, `runaway`, `boiled`, `snowball`, `frozen`,
+    /// `co2_build_up`, `methane_trap`).
     pub label: Option<String>,
     /// The request's field this value comes from, when a request sets it.
     pub input: Option<InputField>,
@@ -73,6 +75,8 @@ pub enum Quantity {
     TidalHeat,
     /// Secular cooling of the mantle and core, W.
     SecularHeat,
+    /// Bond albedo: the share of the starlight the body reflects, 0 to 1.
+    BondAlbedo,
     /// Surface pressure, bar.
     Pressure,
     /// CO₂ partial pressure, bar.
@@ -133,7 +137,12 @@ pub enum Quantity {
     Age,
     /// A condition, in `label`: `thermostat` (the carbonate thermostat
     /// set the CO₂), `life` (its oxygen), `runaway` or `boiled` (the
-    /// water ran away by the insolation limit, or the climate boiled it).
+    /// water ran away by the insolation limit, or the climate boiled it),
+    /// `snowball` (frozen over by the ice–albedo feedback until volcanic
+    /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
+    /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
+    /// outgas it faster than weathering draws it down) and `methane_trap`
+    /// (the cold keeps methane out of the air).
     Note,
 }
 
@@ -391,23 +400,48 @@ fn temperature_tree(
         return None;
     }
     let co2 = Cause::of(Quantity::Co2, gases.co2).set_by(InputField::Co2);
-    let co2 = if surface.climate.regulated {
+    let climate = &surface.climate;
+    let co2 = if climate.regulated {
         co2.because(vec![Cause::note("thermostat")])
+    } else if climate.liquid == SurfaceLiquid::Water
+        && surface.regime == Regime::Plates
+        && !surface.water.runaway
+    {
+        // Plates and liquid water but no thermostat: the CO₂ is at the
+        // most the volcanoes leave, and the greenhouse at its maximum.
+        co2.because(vec![Cause::note("co2_build_up")])
     } else {
         co2
+    };
+    let ch4 = Cause::of(Quantity::Ch4, gases.ch4).set_by(InputField::Ch4);
+    let ch4 = if steps.condensed.ch4 > 0.0 {
+        ch4.because(vec![Cause::note("methane_trap")])
+    } else {
+        ch4
+    };
+    // Bright ice sets the albedo of a frozen world, and what ends it.
+    let frozen = frozen_over(climate) && surface.water.oceans > 0.0;
+    let albedo = Cause::of(Quantity::BondAlbedo, climate.bond_albedo);
+    let albedo = if climate.snowball {
+        albedo.because(vec![Cause::note("snowball")])
+    } else if frozen {
+        albedo.because(vec![Cause::note("frozen")])
+    } else {
+        albedo
     };
     let absorbers = [
         (gases.n2 > 0.0).then(|| Cause::of(Quantity::N2, gases.n2).set_by(InputField::N2)),
         (gases.co2 > 0.0).then_some(co2),
         (gases.h2o > 0.0)
             .then(|| Cause::of(Quantity::H2o, gases.h2o).set_by(InputField::WaterOceans)),
-        (gases.ch4 > 0.0).then(|| Cause::of(Quantity::Ch4, gases.ch4).set_by(InputField::Ch4)),
+        (gases.ch4 > 0.0).then_some(ch4),
     ];
     Some(
         Cause::of(Quantity::SurfaceTemperature, stored).because(vec![
             Cause::of(Quantity::EquilibriumTemperature, bare_k).because(vec![
                 Cause::of(Quantity::LightReceived, context.insolation)
                     .set_by(InputField::Insolation),
+                albedo,
             ]),
             Cause::of(Quantity::Greenhouse, air_k - bare_k)
                 .because(absorbers.into_iter().flatten().collect()),
@@ -569,7 +603,12 @@ mod tests {
     /// no envelope, CO₂ and N₂ on their rule, life, no snowball), the rest
     /// drawn.
     fn earth() -> (Context, PlanetModel) {
-        let context = sun_at(1.0);
+        earth_at(1.0, false)
+    }
+
+    /// An Earth-like body `au` from the Sun, a snowball when asked.
+    fn earth_at(au: f64, snowball: bool) -> (Context, PlanetModel) {
+        let context = sun_at(au);
         let overrides = InputOverrides {
             core_mass_fraction: Some(0.325),
             water_oceans: Some(1.0),
@@ -581,7 +620,7 @@ mod tests {
             s: None,
             radiogenic: None,
             life: Some(true),
-            snowball: Some(false),
+            snowball: Some(snowball),
         };
         let inputs = draw_inputs_with(&context, 1.0, &overrides, &mut StdRng::seed_from_u64(1));
         let model = planet_model(&context, inputs);
@@ -629,9 +668,87 @@ mod tests {
         );
     }
 
+    /// The first cause of `quantity` anywhere under `c`.
+    fn find(c: &Cause, quantity: Quantity) -> Option<&Cause> {
+        if c.quantity == quantity {
+            return Some(c);
+        }
+        c.causes.iter().find_map(|c| find(c, quantity))
+    }
+
+    /// Whether a note of `key` stands anywhere under `c`.
+    fn has_note(c: &Cause, key: &str) -> bool {
+        (c.quantity == Quantity::Note && c.label.as_deref() == Some(key))
+            || c.causes.iter().any(|c| has_note(c, key))
+    }
+
+    #[test]
+    fn the_temperature_tree_shows_the_bond_albedo() {
+        let (context, model) = earth();
+        let e = explain(&context, &model).expect("explained");
+        let t = root(&e, Quantity::SurfaceTemperature);
+        let albedo = find(t, Quantity::BondAlbedo).expect("a BondAlbedo cause");
+        assert_eq!(albedo.value, model.surface.unwrap().climate.bond_albedo);
+        assert!(!has_note(t, "snowball"));
+    }
+
+    #[test]
+    fn a_snowball_says_why_it_froze() {
+        let (context, model) = earth_at(1.0, true);
+        let s = model.surface.as_ref().unwrap();
+        assert!(s.climate.snowball, "{:?}", s.climate);
+        let e = explain(&context, &model).expect("explained");
+        assert!(has_note(root(&e, Quantity::SurfaceTemperature), "snowball"));
+    }
+
+    #[test]
+    fn a_planet_at_its_maximum_greenhouse_says_its_co2_builds_up() {
+        let (context, model) = earth_at(1.6, false);
+        let c = model.surface.as_ref().unwrap().climate;
+        assert!(!c.regulated && c.liquid == SurfaceLiquid::Water, "{c:?}");
+        let e = explain(&context, &model).expect("explained");
+        assert!(has_note(
+            root(&e, Quantity::SurfaceTemperature),
+            "co2_build_up"
+        ));
+        let (context, model) = earth();
+        let e = explain(&context, &model).unwrap();
+        assert!(!has_note(
+            root(&e, Quantity::SurfaceTemperature),
+            "co2_build_up"
+        ));
+    }
+
+    #[test]
+    fn a_planet_past_the_outer_edge_says_it_is_frozen_for_good() {
+        let (context, model) = earth_at(1.65, false);
+        let c = model.surface.as_ref().unwrap().climate;
+        assert!(!c.snowball && c.liquid != SurfaceLiquid::Water, "{c:?}");
+        let e = explain(&context, &model).expect("explained");
+        let t = root(&e, Quantity::SurfaceTemperature);
+        assert!(has_note(t, "frozen") && !has_note(t, "snowball"), "{t:#?}");
+    }
+
+    #[test]
+    fn titan_says_its_methane_is_cold_trapped() {
+        let (context, model) = solar("Titan");
+        let e = explain(&context, &model).expect("explained");
+        let t = root(&e, Quantity::SurfaceTemperature);
+        let ch4 = find(t, Quantity::Ch4).expect("methane in the greenhouse");
+        assert!(has_note(ch4, "methane_trap"), "{t:#?}");
+    }
+
     #[test]
     fn trees_are_at_most_three_levels_deep() {
-        let bodies = [earth(), solar("Venus"), solar("Mars"), solar("Titan")];
+        let bodies = [
+            earth(),
+            earth_at(1.0, true),
+            earth_at(1.6, false),
+            earth_at(1.65, false),
+            solar("Venus"),
+            solar("Mars"),
+            solar("Titan"),
+        ];
         for (context, model) in &bodies {
             let e = explain(context, model).expect("a Solar System body is explained");
             assert_eq!(e.trees[0].quantity, Quantity::Class);
