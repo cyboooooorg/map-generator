@@ -42,7 +42,6 @@ use crate::giants::{
 use crate::moons::{AskedMoon, Composition, Moon, MoonSystem, MoonsMode};
 use crate::naming::{planet_letter, roman, star_name};
 use crate::noise::{stream, stream_seed};
-use crate::planet::heat::ICY_MIN_WATER;
 use crate::planet::interim::{base_of, params_for};
 use crate::planet::mass::{Origin, draw_mass};
 use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
@@ -1824,7 +1823,7 @@ fn assemble(
                 id: m.id.clone(),
                 a_radii: m.orbit.semi_major_axis_km / radius_km,
                 role: m.ring_role,
-                icy: dust_is_icy(m),
+                geysers: m.model.as_ref().is_some_and(|x| x.geysers.is_some()),
             })
             .collect();
         let seed = bodies[planet_index].params.seed;
@@ -1907,26 +1906,6 @@ fn assemble(
         belts,
         galaxy: Some(crate::galaxy::draw_place(seed, metallicity)),
     }
-}
-
-/// Most ice in the bulk of a small moon whose dust is rock or carbon:
-/// one with more (a ring moonlet, most small moons of cold giants) feeds
-/// icy dust, the others (rocky, or carbon-rich as Phoebe) dark dust. A
-/// round moon's dust is icy when its model is an icy body's (at least
-/// [`ICY_MIN_WATER`] of water and ice, the icy tidal response's
-/// threshold). Calibration, no source: half the mass, the middle of a
-/// cold moon's drawn share (`moons::Bulk`).
-const ICY_DUST_MAX_ROCK_ICE: f32 = 0.5;
-
-/// Whether the dust a moon `m` sheds is icy (see
-/// [`ICY_DUST_MAX_ROCK_ICE`]).
-fn dust_is_icy(m: &Body) -> bool {
-    m.physical
-        .bulk
-        .is_some_and(|b| b.ice > ICY_DUST_MAX_ROCK_ICE)
-        || m.model
-            .as_ref()
-            .is_some_and(|model| model.inputs.water_fraction >= ICY_MIN_WATER)
 }
 
 /// The eccentricity the star's tides leave a planet drawn for `slot` round
@@ -5302,6 +5281,128 @@ mod tests {
             assert!(s.polar_shell_km < 10.0, "seed {seed}: {s:?}");
             assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
         }
+    }
+
+    /// The plume rings round the planet `host`.
+    fn plume_rings(host: &Body) -> Vec<&crate::rings::DustRing> {
+        host.params
+            .given_rings
+            .iter()
+            .flat_map(|g| &g.dust)
+            .filter(|d| d.kind == crate::rings::DustKind::Plume)
+            .collect()
+    }
+
+    /// Enceladus vents on every seed, near one pole, through three to six
+    /// fractures (its tiger stripes, Porco et al. 2006,
+    /// doi:10.1126/science.1123013), and feeds its giant's plume ring.
+    #[test]
+    fn enceladus_always_vents() {
+        let mut south = 0;
+        for seed in 1..=10 {
+            let system = requested(seed, &[("enceladus-like", 1)]);
+            let moon = asked_moons(&system, "enceladus-like")[0];
+            let geysers = moon
+                .model
+                .as_ref()
+                .unwrap()
+                .geysers
+                .as_ref()
+                .unwrap_or_else(|| panic!("seed {seed}: no geysers"));
+            let count = geysers.fractures.len();
+            assert!((3..=6).contains(&count), "seed {seed}: {geysers:?}");
+            for f in &geysers.fractures {
+                assert!(f.lat_deg.abs() >= 60.0, "seed {seed}: {f:?}");
+                assert_eq!(f.lat_deg < 0.0, geysers.south, "seed {seed}: {f:?}");
+                assert!((20.0..200.0).contains(&f.length_km), "seed {seed}: {f:?}");
+            }
+            south += usize::from(geysers.south);
+            let rings = plume_rings(parent_of(&system, moon));
+            assert_eq!(rings.len(), 1, "seed {seed}");
+            assert_eq!(rings[0].source, moon.id, "seed {seed}");
+        }
+        // The seed picks the pole.
+        assert!((1..10).contains(&south), "{south} south of 10");
+    }
+
+    /// Ganymede, Titan and Callisto never vent: their shells are far too
+    /// thick to crack through.
+    #[test]
+    fn big_moons_never_vent() {
+        for name in ["ganymede-like", "titan-like", "callisto-like"] {
+            for seed in 1..=10 {
+                let system = requested(seed, &[(name, 1)]);
+                let moon = asked_moons(&system, name)[0];
+                let model = moon.model.as_ref().unwrap();
+                assert_eq!(model.geysers, None, "{name} seed {seed}");
+            }
+        }
+    }
+
+    /// Europa vents or not as its polar shell gives; the census prints the
+    /// share.
+    #[test]
+    fn europa_may_vent() {
+        let vents = (1..=10)
+            .filter(|&seed| {
+                let system = requested(seed, &[("europa-like", 1)]);
+                let moon = asked_moons(&system, "europa-like")[0];
+                moon.model.as_ref().unwrap().geysers.is_some()
+            })
+            .count();
+        println!("europa-like vents on {vents} of seeds 1 to 10");
+    }
+
+    #[test]
+    fn a_rocky_moon_has_no_geysers() {
+        for seed in 1..=10 {
+            let system = requested(seed, &[("io-like", 1)]);
+            let moon = asked_moons(&system, "io-like")[0];
+            assert_eq!(moon.model.as_ref().unwrap().geysers, None, "seed {seed}");
+        }
+    }
+
+    /// Over drawn systems, a plume ring's source always has geysers, and a
+    /// giant with a moon with geysers close in has one plume ring, from
+    /// the innermost of them.
+    #[test]
+    fn plume_rings_follow_geysers() {
+        let (mut fed, mut vents) = (0, 0);
+        for seed in 1..=500 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                metallicity: Some(0.0),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(u64::from(seed))).unwrap();
+            let vents_of = |b: &Body| b.model.as_ref().is_some_and(|m| m.geysers.is_some());
+            vents += system.bodies.iter().filter(|b| vents_of(b)).count();
+            for host in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                let rings = plume_rings(host);
+                let radius_km = host.physical.radius_km;
+                let innermost = system
+                    .bodies
+                    .iter()
+                    .filter(|m| m.parent.as_deref() == Some(host.id.as_str()) && vents_of(m))
+                    .filter(|m| m.orbit.semi_major_axis_km / radius_km < 12.0)
+                    .min_by(|a, b| {
+                        a.orbit
+                            .semi_major_axis_km
+                            .total_cmp(&b.orbit.semi_major_axis_km)
+                    });
+                match (innermost, host.params.given_rings.is_some()) {
+                    (Some(moon), true) => {
+                        assert_eq!(rings.len(), 1, "seed {seed} {}", host.id);
+                        assert_eq!(rings[0].source, moon.id, "seed {seed}");
+                        fed += 1;
+                    }
+                    _ => assert!(rings.is_empty(), "seed {seed} {}", host.id),
+                }
+            }
+        }
+        println!("{vents} moons with geysers, {fed} plume rings in 500 systems");
     }
 
     /// Europa: a shell of about 10 to 30 km over an ocean of 60 to 150 km

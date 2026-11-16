@@ -804,7 +804,9 @@ mod tests {
                 let x = n.as_f64().unwrap();
                 (!(x.is_finite() && x >= 0.0)).then(|| format!("{path}: {x}"))
             }
-            serde_json::Value::Null if path != "/surface" && path != "/ice_shell" => {
+            serde_json::Value::Null
+                if path != "/surface" && path != "/ice_shell" && path != "/geysers" =>
+            {
                 Some(format!("{path}: null"))
             }
             serde_json::Value::Array(a) => a

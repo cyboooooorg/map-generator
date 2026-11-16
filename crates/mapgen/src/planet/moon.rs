@@ -94,7 +94,9 @@ pub fn keeps_hypervolatiles(birth: MoonBirth, planet_equilibrium_k: f64) -> bool
 /// when it does not [`keep_hypervolatiles`](keeps_hypervolatiles); its
 /// rock's N₂, and its CO₂, stay. The amounts it keeps are the planet
 /// rule's (1 % of the ice in NH₃ and in CH₄, 0.1 % in N₂), which give
-/// Titan its 1.5 bar or so of N₂ and a few percent of CH₄.
+/// Titan its 1.5 bar or so of N₂ and a few percent of CH₄. Its geysers,
+/// if its shell cracks through, are drawn on their own stream
+/// (`super::vent`).
 pub fn derive_moon_model(
     system_seed: u32,
     id: &str,
@@ -116,7 +118,7 @@ pub fn derive_moon_model(
     } else {
         without_hypervolatiles(inputs)
     };
-    planet_model(&context, inputs)
+    super::vent(planet_model(&context, inputs), system_seed, id)
 }
 
 /// `inputs` without the N₂, NH₃ and CH₄ its ices carry: the N₂ keeps the

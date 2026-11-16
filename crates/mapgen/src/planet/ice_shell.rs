@@ -73,7 +73,7 @@ pub const HIGH_PRESSURE_ICE_PA: f64 = 350.1e6;
 /// Density of the ice shell, kg/m³: ice Ih near its melting point
 /// (Feistel & Wagner 2006, doi:10.1063/1.2183324, about 917 kg/m³ at
 /// 273 K and 1 bar; the shell's compression and cooling are neglected).
-const ICE_DENSITY: f64 = 917.0;
+pub(super) const ICE_DENSITY: f64 = 917.0;
 
 /// Thermal expansivity of ice Ih near its melting point, 1/K (Feistel &
 /// Wagner 2006, doi:10.1063/1.2183324, about 1.6e-4 at 273 K and 1 bar).
@@ -506,6 +506,52 @@ fn core_plume_pattern() -> (f64, f64, f64) {
     let cap = 1.0 - PLUME_CAP_DEG.to_radians().cos();
     let outside = 1.0 - PLUME_SHARE;
     (cap, outside + PLUME_SHARE / cap, outside)
+}
+
+/// Thickness, m, of the ice shell `shell` of a body of `interior` making
+/// `heat` at the colatitude `colatitude_deg` (from either pole), as
+/// [`ice_shell`] solved it: the conductive column under the flux that
+/// reaches it there ([`TidalHeating`]), with the shell's base at the same
+/// temperature everywhere. It is found from the polar column: with the
+/// plane thickness `d₀ = c ln(T_b / T_s) / q` of [`conductive_shell_m`],
+/// `d₀ q` is the same at every latitude, and the spherical thickness of
+/// [`spherical_shell_m`] is `R d₀ / (R + d₀)`. The mean thickness
+/// everywhere for a shell that convects or has no ocean, which the tides
+/// do not thin.
+pub(super) fn shell_at_m(
+    interior: &Interior,
+    shell: &IceShell,
+    heat: &InternalHeat,
+    colatitude_deg: f64,
+) -> f64 {
+    let mean_m = shell.shell_km * 1e3;
+    if shell.convecting || shell.ocean_km <= 0.0 {
+        return mean_m;
+    }
+    let radius_m = interior.radius_earth * EARTH_M;
+    let flux = heat.flux_w_m2(interior.radius_earth);
+    let tidal = flux * heat.tidal_w / heat.total_w().max(f64::MIN_POSITIVE);
+    let even = flux - tidal;
+    let heating = TidalHeating::of(interior);
+    let (_, polar_factor) = heating.pattern();
+    let factor = match heating {
+        TidalHeating::Shell => tidal_pattern(colatitude_deg.to_radians().cos()),
+        TidalHeating::CorePlumes => {
+            let (_, inside, outside) = core_plume_pattern();
+            if colatitude_deg <= PLUME_CAP_DEG {
+                inside
+            } else {
+                outside
+            }
+        }
+    };
+    let polar_m = shell.polar_shell_km * 1e3;
+    if polar_m >= radius_m {
+        return polar_m;
+    }
+    let plane_polar = radius_m * polar_m / (radius_m - polar_m);
+    let plane = plane_polar * (even + tidal * polar_factor) / (even + tidal * factor);
+    radius_m * plane / (radius_m + plane)
 }
 
 /// Depth, m, under the surface of a body of `interior` at which the

@@ -429,12 +429,11 @@ radii each spread a gossamer ring of impact dust from the main rings out
 to their orbit and up to 1.26 times past it (Jupiter's Amalthea and Thebe
 rings, and Thebe's extension); a source farther out wraps its orbit in a
 faint belt from 0.913 to 1.087 times its distance (Uranus's μ ring round
-Mab). A moon's dust is icy when its bulk is more than half ice or its
-model holds at least 5 % water and ice; otherwise it is dark (rock, or
-carbon as Phoebe's). On a quarter of giants, the innermost icy regular moon within 12
-radii blows out a broad ring of ice grains from 0.75 to 2 times its
-distance (Saturn's E ring round Enceladus): which moon is active is
-drawn, its tidal heating not computed. Each names its source moon.
+Mab). The innermost moon within 12 radii whose model vents geysers
+(`PlanetModel.geysers`, `planet::geysers`) blows out a broad ring of ice
+grains from 0.75 to 2 times its distance (Saturn's E ring round
+Enceladus); there are no odds, and a giant without such a moon has no
+plume ring. Each names its source moon.
 Systems have no irregular moons, so no ring like Phoebe's.
 
 ### Around one planet (mode 2)

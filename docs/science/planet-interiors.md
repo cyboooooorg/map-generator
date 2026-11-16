@@ -544,6 +544,35 @@ the chondritic radiogenic abundance of the solar nebula, 0.9 to 1.1
 times the Earth's (Lodders 2003), not the 0.15 dex drawn across stellar
 systems.
 
+**Geysers.** A shell over an ocean cracks through where it is thin
+enough: Rudolph & Manga (2009) model cracks opened by 1 to 3 MPa of
+tension against the weight of the ice that closes them, and find that
+they cross Europa's shell only when it is under about 2.5 km, and
+Enceladus's under about 25 km. The weight at the base of both limits,
+$\rho\,g\,h$, is about the same, 3.0 and 2.6 MPa: a body vents when the
+shell at a pole is under 2.6 MPa of ice (a calibration on the lower of
+the two). The tension itself, from the ocean pressurised as it freezes
+(Manga & Wang 2007) or from the tides, is not computed. The body must
+also have an ocean, a shell that does not convect, and tides that make
+at least half of its heat and thin the shell at the poles. The tides
+thin both poles alike; Enceladus vents from its south pole alone, so the
+body's seed picks one. Its fractures fill the cap round that pole where
+the shell still passes, up to 30° from it: parallel, 35 km apart and
+from one edge of the cap to the other, as Enceladus's four "tiger
+stripes", about 130 km long and 35 km apart (Porco et al. 2006). They
+are stored on the model (`PlanetModel.geysers`: the pole, and each
+fracture's centre, strike and length) so that the surface map and the
+viewer draw them at the same place, and the innermost moon with geysers
+close to its giant feeds its plume ring (see
+[ring-extent.md](ring-extent.md)).
+
+Over seeds 1 to 20, every asked Enceladus vents (a polar shell of 7 to
+10 km, at most 1 MPa of ice under its 0.11 m/s², over a cap of 16°: four
+fractures); Europa's polar shell, 6 to 16 km under 1.3 m/s², never
+cracks through, nor do Ganymede's, Titan's or Callisto's. Across 300
+drawn systems, 11 % of the icy moons and 3 % of the icy planets vent,
+every moon among them in a chain of period ratio close to 2:1.
+
 ### Classes
 
 The class is read off the result, in this order; the first rule that holds
@@ -726,6 +755,13 @@ archetypes):
   has no source. Enceladus's mean shell, 32 to 41 km over seeds 1 to 20,
   is thicker than the 18 to 22 km of Čadek et al. (2016): its 11 to
   17 GW cannot hold a thinner one.
+- **Geysers crack by weight alone.** Whether a shell cracks through is
+  read from the weight of the ice at its base against a threshold
+  calibrated on the two limits of Rudolph & Manga (2009); the tension
+  that opens the cracks, and the fractures' own spacing, are not
+  computed. A drawn moon or planet whose shell is under a kilometre
+  everywhere (heated by its tides near melting) vents over the whole
+  30° cap, through a hundred fractures or more.
 - **Resonances are read from the periods, not evolved.** Neighbouring
   moons 1.8 to 2.2 times apart in period are taken as locked in a 2:1
   resonance, in equilibrium, with no check that the resonance could
@@ -888,78 +924,85 @@ archetypes):
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-37. Marty, B. 2012, "The origins and concentrations of water, carbon,
+37. Manga, M. & Wang, C.-Y. 2007, "Pressurized oceans and the eruption of
+    liquid water on Europa and Enceladus", *Geophysical Research Letters*
+    34, L07202,
+    [doi:10.1029/2007GL029297](https://doi.org/10.1029/2007GL029297).
+38. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-38. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+39. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-39. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
+40. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
     188, 535–539,
     [doi:10.1016/j.icarus.2007.03.001](https://doi.org/10.1016/j.icarus.2007.03.001).
-40. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+41. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
     indication for a dichotomy in the interior structure of Uranus and
     Neptune from the application of modified shape and rotation data",
     *Planetary and Space Science* 77, 143–151,
     [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
-41. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
+42. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
     the inner solar system in relation to the lunar reference system",
     *Space Science Reviews* 96, 55–86,
     [doi:10.1023/A:1011989004263](https://doi.org/10.1023/A:1011989004263).
-42. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+43. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-43. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+44. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
     University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
     Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
     gives $567/T$).
-44. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
+45. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
     Mars", *Geophysical Research Letters* 45, 12198–12209,
     [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
-45. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+46. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-46. Porco, C. C. et al. 2006, "Cassini observes the active south pole of
+47. Porco, C. C. et al. 2006, "Cassini observes the active south pole of
     Enceladus", *Science* 311, 1393–1401,
     [doi:10.1126/science.1123013](https://doi.org/10.1126/science.1123013).
-47. Roberts, J. H. 2015, "The fluffy core of Enceladus", *Icarus* 258,
+48. Roberts, J. H. 2015, "The fluffy core of Enceladus", *Icarus* 258,
     54–66,
     [doi:10.1016/j.icarus.2015.05.033](https://doi.org/10.1016/j.icarus.2015.05.033).
-48. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+49. Rudolph, M. L. & Manga, M. 2009, "Fracture penetration in planetary
+    ice shells", *Icarus* 199, 536–541,
+    [doi:10.1016/j.icarus.2009.01.015](https://doi.org/10.1016/j.icarus.2009.01.015).
+50. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-49. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
+51. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
     "Interior composition, structure and dynamics of the Galilean
     satellites", in *Jupiter: The Planet, Satellites and Magnetosphere*,
     Cambridge University Press, 281–306.
-50. Solomatov, V. S. & Moresi, L.-N. 2000, "Scaling of time-dependent
+52. Solomatov, V. S. & Moresi, L.-N. 2000, "Scaling of time-dependent
     stagnant lid convection: application to small-scale convection on
     Earth and other terrestrial planets", *Journal of Geophysical
     Research* 105, 21795–21817,
     [doi:10.1029/2000JB900197](https://doi.org/10.1029/2000JB900197).
-51. Solomatov, V. S. 1995, "Scaling of temperature- and stress-dependent
+53. Solomatov, V. S. 1995, "Scaling of temperature- and stress-dependent
     viscosity convection", *Physics of Fluids* 7, 266–274,
     [doi:10.1063/1.868624](https://doi.org/10.1063/1.868624).
-52. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+54. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-53. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+55. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-54. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+56. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-55. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+57. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-56. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+58. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-57. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
+59. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
     in the outer Solar System", *Icarus* 163, 263–289,
     [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
-58. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+60. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
@@ -976,13 +1019,16 @@ archetypes):
     abstracts; Howett's 15.8 GW and Wahr's $k_2$ of 0.25 were not checked in
     the papers themselves. The resonance sources (Fuller, Luan & Quataert
     2016; Meyer & Wisdom 2007; Lainey et al. 2020) are cited for their method, from their
-    abstracts; their DOIs and page ranges were not checked. Of the
+    abstracts; their DOIs and page ranges were not checked. Rudolph &
+    Manga's limits (2.5 km for Europa, 25 km for Enceladus, under 1 to
+    3 MPa of tension) match their abstract; Manga & Wang 2007 is cited for
+    its mechanism, its DOI and pages not checked. Of the
     figures quoted from papers, Marty's 1000 to 3000 ppm of water and up to
     500 ppm of carbon match the abstract; his 2 ppm of nitrogen (the abstract
     only says nitrogen is depleted by about an order of magnitude) and the
     "5 of 22 rocky planets" of Adibekyan et al. 2021 (22 comes from press
     reports of the paper) were not checked in the papers themselves.
-59. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+61. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).

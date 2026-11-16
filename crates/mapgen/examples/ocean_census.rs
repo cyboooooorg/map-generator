@@ -8,8 +8,10 @@
 //! (seeds 1 to `SEEDS`), then for the icy moons and icy planets of
 //! `SYSTEMS` drawn systems (seeds 1 to `SYSTEMS`), the min, median and max
 //! of every column of [`COLUMNS`] (the share of the bodies, for a yes-or-no
-//! column); then the plume rings of the drawn systems. A column whose
-//! field the model does not hold yet prints `-`.
+//! column); then the plume rings of the drawn systems and each body with
+//! geysers, with the period ratio to its nearest moons in and out and its
+//! eccentricity. A column whose field the model does not hold yet prints
+//! `-`.
 //!
 //! Climate pass lot 3 (part A) measured the oceans with it before and
 //! after deriving the shell from the heat flux, the tides and the polar
@@ -76,7 +78,7 @@ const COLUMNS: [Column; 7] = [
     },
     Column {
         name: "geyser share",
-        read: |_| None,
+        read: |m| Some(f64::from(u8::from(m.geysers.is_some()))),
         share: true,
     },
 ];
@@ -192,4 +194,44 @@ fn main() {
         .filter(|d| d.kind == DustKind::Plume)
         .count();
     println!("\nplume rings in {systems} systems: {plumes}");
+    println!("\nbodies with geysers (period ratio to the next moon in and out, e):");
+    for system in &drawn {
+        for b in system.bodies.iter().filter(vents) {
+            let siblings: Vec<&Body> = system
+                .bodies
+                .iter()
+                .filter(|o| o.kind == BodyKind::Moon && o.parent.is_some() && o.parent == b.parent)
+                .collect();
+            let ratio = |outward: bool| {
+                siblings
+                    .iter()
+                    .filter(|o| (o.orbit.period_days > b.orbit.period_days) == outward)
+                    .filter(|o| o.id != b.id)
+                    .map(|o| o.orbit.period_days / b.orbit.period_days)
+                    .min_by(|x, y| (x - 1.0).abs().total_cmp(&(y - 1.0).abs()))
+                    .map_or("-".into(), |r| format!("{r:.3}"))
+            };
+            let model = b.model.as_ref().expect("a body with geysers has a model");
+            let shell = model.ice_shell.expect("a body with geysers has a shell");
+            let fractures = model.geysers.as_ref().map_or(0, |g| g.fractures.len());
+            println!(
+                "  seed {:>3} {:<6} {:?} r {:.0} km, polar shell {:.1} km, tidal {}, \
+                 {fractures} fractures, ratio in {} out {}, e {:.4}",
+                system.seed,
+                b.id,
+                b.kind,
+                b.physical.radius_km,
+                shell.polar_shell_km,
+                num(model.heat.tidal_w),
+                ratio(false),
+                ratio(true),
+                b.orbit.eccentricity,
+            );
+        }
+    }
+}
+
+/// Whether a body vents geysers.
+fn vents(b: &&Body) -> bool {
+    b.model.as_ref().is_some_and(|m| m.geysers.is_some())
 }

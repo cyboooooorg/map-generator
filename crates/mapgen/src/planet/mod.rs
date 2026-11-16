@@ -67,6 +67,7 @@ pub mod core;
 pub mod differentiation;
 pub mod escape;
 pub mod explain;
+pub mod geysers;
 pub mod heat;
 pub mod ice_shell;
 pub mod inputs;
@@ -92,6 +93,7 @@ pub use climate::{
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use explain::{Cause, Explanation, InputField, Quantity, explain};
+pub use geysers::{Fracture, Geysers, geysers};
 pub use heat::{
     EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, secular_w, tidal_power_w,
 };
@@ -236,6 +238,13 @@ pub struct PlanetModel {
     /// surface.
     #[serde(default)]
     pub ice_shell: Option<IceShell>,
+    /// The geysers its ice shell vents through, if it cracks through at a
+    /// pole ([`geysers::geysers`]), drawn by [`derive_model`] and
+    /// [`moon::derive_moon_model`] from the body's seed; `None` from
+    /// [`planet_model`] alone, which has no seed, and in a model stored
+    /// before they existed.
+    #[serde(default)]
+    pub geysers: Option<Geysers>,
     /// Moment of inertia factor `C / (M R²)` of its layers
     /// ([`differentiation::moment_of_inertia`]); 0 in a model stored
     /// before it existed.
@@ -534,6 +543,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         surface,
         class,
         ice_shell,
+        geysers: None,
         moment_of_inertia,
     };
     (model, air)
@@ -693,7 +703,8 @@ pub(crate) fn bare(
 /// Its context is its own star seen from its orbit (its star, orbit,
 /// eccentricity and age), its system's metallicity and ice line. Its
 /// inputs are drawn from their own stream, seeded by the system's seed and
-/// `<id>/model`, so they depend on no other body and shift no other draw.
+/// `<id>/model`, so they depend on no other body and shift no other draw;
+/// its geysers, if its shell cracks through, on `<id>/geysers` ([`vent`]).
 pub fn derive_model(system_seed: u32, id: &str, context: &Context, mass_earth: f64) -> PlanetModel {
     derive_model_with(
         system_seed,
@@ -716,7 +727,19 @@ pub fn derive_model_with(
     let seed = body_seed(system_seed, &format!("{id}/model"));
     let mut rng = StdRng::seed_from_u64(u64::from(seed));
     let inputs = draw_inputs_with(context, mass_earth, overrides, &mut rng);
-    planet_model(context, inputs)
+    vent(planet_model(context, inputs), system_seed, id)
+}
+
+/// `model` with its [`geysers`], the pole and the fractures' strike drawn
+/// on the stream of its own `<id>/geysers` of the system of
+/// `system_seed`, so that they shift no other draw.
+pub(crate) fn vent(model: PlanetModel, system_seed: u32, id: &str) -> PlanetModel {
+    let seed = body_seed(system_seed, &format!("{id}/geysers"));
+    let geysers = model
+        .ice_shell
+        .as_ref()
+        .and_then(|shell| geysers::geysers(&model.interior, shell, &model.heat, seed));
+    PlanetModel { geysers, ..model }
 }
 
 /// The model a stored system holds for `body`: the one [`derive_model`]
