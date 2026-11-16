@@ -58,7 +58,7 @@ describe('dust halo grains', () => {
     expect(grainCount(10, 0)).toBe(1);
   });
 
-  it('keeps grains seen front-lit and only a few times brighter back-lit', () => {
+  it('keeps grains seen front-lit and only a little brighter back-lit', () => {
     // Light in all: opacity times the dot's area.
     const total = (cos: number, shine: number) => {
       const { opacity, sizeScale } = grainLight(cos, shine);
@@ -67,11 +67,10 @@ describe('dust halo grains', () => {
     // Front-lit (cosScatter −1) as at 90°.
     expect(total(-1, 1)).toBeCloseTo(total(0, 1));
     expect(grainLight(-1, GRAIN_SHINE_MIN).opacity).toBeGreaterThan(0.3);
-    // Back-lit: opaque, widened, the dust rings' cap times the front-lit light.
-    const back = grainLight(1, 1);
-    expect(back.opacity).toBe(1);
-    expect(back.sizeScale).toBeGreaterThan(1.5);
+    // Back-lit: the dust rings' cap times the front-lit light, widened past full opacity.
     expect(total(1, 1) / total(-1, 1)).toBeCloseTo(DUST_RING_GAIN_MAX);
+    expect(grainLight(1, 1, 1).opacity).toBe(1);
+    expect(grainLight(1, 1, 1).sizeScale).toBeCloseTo(Math.sqrt(DUST_RING_GAIN_MAX));
     for (let c = -1; c <= 1; c += 0.05) {
       expect(total(c, 0.7)).toBeLessThanOrEqual(DUST_RING_GAIN_MAX * HALO_ALPHA * 0.7 + 1e-9);
     }

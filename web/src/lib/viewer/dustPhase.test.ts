@@ -25,11 +25,11 @@ describe('dust phase function', () => {
 });
 
 describe('dust ring gain', () => {
-  it('stays seen front-lit and only brightens a few times back-lit', () => {
+  it('stays seen front-lit and only brightens a little back-lit', () => {
     expect(dustRingGain(-1)).toBe(DUST_RING_FLOOR);
     expect(dustRingGain(0)).toBeCloseTo(1, 6);
     expect(dustRingGain(1)).toBe(DUST_RING_GAIN_MAX);
-    expect(dustRingGain(1) / dustRingGain(0)).toBeLessThanOrEqual(5);
+    expect(dustRingGain(1) / dustRingGain(0)).toBeLessThanOrEqual(2);
   });
   it('never falls as the light comes round behind', () => {
     let last = 0;

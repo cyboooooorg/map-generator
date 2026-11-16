@@ -124,7 +124,8 @@ export const dustRingVertex = /* glsl */ `
 // rings' grain (ringlets, faded where a pixel spans them, under its own
 // seed), so that it reads as a faint ring, not a smooth haze; lit by the
 // sun and shadowed by the planet as the main rings are, with the tamed
-// forward scattering of dustRingGain (a few times brighter back-lit).
+// forward scattering of dustRingGain (at most half as bright again
+// back-lit, so that it never washes the frame).
 export const dustRingFragment = /* glsl */ `
   uniform vec3 uColour;
   uniform float uInner;

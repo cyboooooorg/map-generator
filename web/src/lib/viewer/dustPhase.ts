@@ -31,21 +31,24 @@ export const DUST_GAIN_MAX = 80;
 export const DUST_RING_FLOOR = 1;
 
 /**
- * Cap on the dust rings' and halo's phase gain (look calibration): back-lit
- * they shine at most this many times their 90° light, not the true tens of
- * times (`DUST_GAIN_MAX`), which washed half the frame of a giant's
- * close-up. The plume and the jets keep the full gain.
+ * Cap on the dust rings', the halo's and the moon cloud's phase gain (look
+ * calibration): back-lit they shine at most this many times their 90°
+ * light, not the true tens of times (`DUST_GAIN_MAX`). At 4 the boosted E
+ * ring still washed a giant's back-lit close-up in a pale sheet (19,000
+ * pixels over a luminance of 100 in Saturn's); at 1.5 it stays a faint
+ * textured band back-lit, barely brighter than front-lit. The same in a
+ * moon's sky. The plume and the jets keep the full gain.
  */
-export const DUST_RING_GAIN_MAX = 4;
+export const DUST_RING_GAIN_MAX = 1.5;
 
 /**
  * Look boost of a dust ring's opacity in the giant's close-up (look
  * calibration): seen through face-on, a true E ring (face-on optical depth
  * of a few percent here, far less in nature) is invisible but back-lit;
  * boosted so that it reads as a faint grained ring at 90° of scattering,
- * and with `DUST_RING_GAIN_MAX` a few times brighter back-lit, not washing
- * the frame. Not in a moon's sky, where the long column along the ring
- * plane shows it already (a boost there veils the whole sky).
+ * and with `DUST_RING_GAIN_MAX` only a little brighter back-lit, never a
+ * wash over the frame. Not in a moon's sky, where the long column along
+ * the ring plane shows it already (a boost there veils the whole sky).
  */
 export const DUST_RING_BOOST = 6;
 

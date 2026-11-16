@@ -1,8 +1,8 @@
 // The halo of dust grains round a moon that vents or feeds a dust ring, in
 // its own close-up: fine soft dots hugging the surface, denser over the
 // venting pole, with the dust rings' tamed forward scattering (see
-// dustRingGain), so they show front- and side-lit and only brighten a few
-// times back-lit. (In the giant's close-up the dust rings carry the main
+// dustRingGain), so they show front- and side-lit and only brighten a
+// little back-lit. (In the giant's close-up the dust rings carry the main
 // rings' grain instead, see dustRingFragment.)
 import {
   AdditiveBlending,
