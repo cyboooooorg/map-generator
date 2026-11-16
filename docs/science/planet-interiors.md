@@ -308,10 +308,15 @@ every body took before, it got 60 times that starlight. Through the
 model, Io round Jupiter (`HostTide`, $e$ = 0.0041) gets $8.5 \times
 10^{13}$ W, 2.1 W/m², and loses it through a heat pipe.
 
-**Moons in resonance.** Neighbouring moons whose periods are about 2:1
-apart (a ratio between 1.8 and 2.2) form a chain, as Io, Europa and
-Ganymede, or Enceladus and Dione (`planet::resonance`). The host's tides
-push each moon outward with a torque
+**Moons in resonance.** Neighbouring moons locked in a 2:1 resonance
+form a chain, as Io, Europa and Ganymede, or Enceladus and Dione
+(`planet::resonance`). A locked pair sits at the commensurability, off
+it only by the precession of the pericentres the resonance forces and
+by its libration (Io–Europa 2.007, Europa–Ganymede 2.015,
+Enceladus–Dione 1.997): the chains are the runs of neighbours whose
+period ratio lies within 1 % of 2. A pair merely near it is not locked:
+Dione and Rhea, at 1.67, are not. The host's tides push each moon
+outward with a torque
 
 ```math
 T_i = \frac{3}{2}\,\frac{k_2}{Q}\bigg|_h\,\frac{G m_i^2 R_h^5}{a_i^6}
@@ -362,7 +367,34 @@ too small to be round take no part, nor do captured or retrograde ones,
 which keep the heat of their own tide and do not set the host's `k₂/Q`); the
 world a request asks around a giant forms one with the giant's round
 regular moons, spaced 1:2 around it. A moon asked by archetype brings
-its partners at 2:1 (see the archetypes' `[moon.resonance]`).
+its partners at 2:1 (see the archetypes' `[moon.resonance]`), and an
+asked moon near another's partner orbit is placed on it (Io, Europa and
+Ganymede asked together make the Laplace chain).
+
+**Which drawn moons are locked.** A giant draws its regular moons near
+a 2:1 chain, each orbit 5 % either way of its step; that scatter is not
+a resonance. The draw decides which neighbours the host's tides drove
+into one (`resonance::capture`): each moon migrates out at
+$\dot a / a = 2T/L$, which goes as $m\,a^{-13/2}$, so a pair converges
+when the inner moon migrates faster than the outer one. A convergent
+pair meeting a first-order resonance slowly, at the small eccentricities
+of regular moons, is captured (Goldreich 1965; Peale 1976; Murray &
+Dermott 1999, §8.12); a divergent one never is. Its period ratio falls
+by $\tfrac{3}{2}\,\Delta(\dot a/a)$ times the age: a pair formed wide of
+2 by less than that reaches it and locks; one formed inside 2 moves away
+from it. The locked moons then migrate together, at $2\sum T / \sum L$,
+and may catch the next one out, as Io drove Europa and the two Ganymede
+into the Laplace resonance (Yoder 1979). A captured moon is moved onto
+the commensurability (period exactly twice its inner neighbour's), one
+left free just out of the 1 % band, so that the stored orbits say which
+pairs are locked. Over 300 drawn systems, 227 of the 353 neighbouring
+pairs of round disk-born moons are locked (64 %; 322, 91 %, when any
+pair 1.8 to 2.2 apart counted): inner pairs converge fast and lock in
+cascade, outer ones too slowly to close a gap of a few percent. The
+heavy neighbour drawn just outside a Dione-mass partner is captured all
+the same (the partner, locked with its Enceladus, still migrates fast
+enough); a chain drawn near 2:1 at every step locks more often than the
+Solar System's moons, most of whose neighbours are not near a 2:1.
 
 **Orders of magnitude.** At 4.57 Gyr, locking gives Jupiter (with Io)
 $8.5 \times 10^{-6}$, against the $1.1 \times 10^{-5}$ measured (Lainey et
@@ -769,13 +801,16 @@ archetypes):
   30° cap. The model stores at most 12 fractures, spaced wider than
   35 km when the cap would hold more: a storage and rendering limit (the
   map and the viewer draw each one), not physics.
-- **Resonances are read from the periods, not evolved.** Neighbouring
-  moons 1.8 to 2.2 times apart in period are taken as locked in a 2:1
-  resonance, in equilibrium, with no check that the resonance could
-  have been reached or held; other first-order resonances are not
-  looked for. Each pair's heat goes wholly to its inner moon, and a
-  moon dissipates the larger of that and its own tide at its drawn
-  eccentricity, rather than an eccentricity evolved to equilibrium.
+- **Resonances are captured on today's migration rates.** Whether a
+  drawn pair locks is judged from the rates its tides give today over
+  the whole age, a rough measure of a history the model does not
+  evolve, and only 2:1 resonances are looked for (not Mimas–Tethys's
+  4:2 or Titan–Hyperion's 4:3). A drawn chain sits near 2:1 at every
+  step, closer than the Solar System's spacing, so its neighbours lock
+  more often than real moons'. Each pair's heat goes wholly to its
+  inner moon, and a moon dissipates the larger of that and its own
+  tide at its drawn eccentricity, rather than an eccentricity evolved
+  to equilibrium.
   The host's $k_2/Q$ comes from its innermost round moon alone, with a
   migration time of exactly the system's age, capped at
   $3 \times 10^{-3}$, the strongest dissipation measured in a giant
@@ -835,181 +870,193 @@ archetypes):
    [doi:10.1016/j.icarus.2019.05.035](https://doi.org/10.1016/j.icarus.2019.05.035).
 9. Borucki, W. J. et al. 2011, *The Astrophysical Journal* 736, 19,
    [doi:10.1088/0004-637X/736/1/19](https://doi.org/10.1088/0004-637X/736/1/19).
-10. Čadek, O. et al. 2016, "Enceladus's internal ocean and ice shell
+10. Goldreich, P. 1965, "An explanation of the frequent occurrence of
+    commensurable mean motions in the Solar System", *Monthly Notices of the
+    Royal Astronomical Society* 130, 159–181,
+    [doi:10.1093/mnras/130.3.159](https://doi.org/10.1093/mnras/130.3.159).
+11. Murray, C. D. & Dermott, S. F. 1999, *Solar System Dynamics*, Cambridge
+    University Press (ch. 8, resonant capture; not checked).
+12. Peale, S. J. 1976, "Orbital resonances in the Solar System", *Annual
+    Review of Astronomy and Astrophysics* 14, 215–246,
+    [doi:10.1146/annurev.aa.14.090176.001243](https://doi.org/10.1146/annurev.aa.14.090176.001243).
+13. Yoder, C. F. 1979, "How tidal heating in Io drives the Galilean orbital
+    resonance locks", *Nature* 279, 767–770,
+    [doi:10.1038/279767a0](https://doi.org/10.1038/279767a0).
+14. Čadek, O. et al. 2016, "Enceladus's internal ocean and ice shell
     constrained from Cassini gravity, shape, and libration data",
     *Geophysical Research Letters* 43, 5653–5660,
     [doi:10.1002/2016GL068634](https://doi.org/10.1002/2016GL068634).
-11. Chen, J. & Kipping, D. 2017, "Probabilistic forecasting of the masses and
+15. Chen, J. & Kipping, D. 2017, "Probabilistic forecasting of the masses and
     radii of other worlds", *The Astrophysical Journal* 834, 17,
     [doi:10.3847/1538-4357/834/1/17](https://doi.org/10.3847/1538-4357/834/1/17).
-12. Choblet, G. et al. 2017, "Powering prolonged hydrothermal activity
+16. Choblet, G. et al. 2017, "Powering prolonged hydrothermal activity
     inside Enceladus", *Nature Astronomy* 1, 841–847,
     [doi:10.1038/s41550-017-0289-8](https://doi.org/10.1038/s41550-017-0289-8).
-13. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
+17. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
     *Solid Earth* 1, 5–24,
     [doi:10.5194/se-1-5-2010](https://doi.org/10.5194/se-1-5-2010).
-14. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
+18. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 35, 1021–1047,
     [doi:10.1063/1.2183324](https://doi.org/10.1063/1.2183324).
-15. Foley, B. J. & Bercovici, D. 2014, "Scaling laws for convection with
+19. Foley, B. J. & Bercovici, D. 2014, "Scaling laws for convection with
     temperature-dependent viscosity and grain-damage",
     [arXiv:1410.7652](https://arxiv.org/abs/1410.7652).
-16. Fuller, J., Luan, J. & Quataert, E. 2016, "Resonance locking as the
+20. Fuller, J., Luan, J. & Quataert, E. 2016, "Resonance locking as the
     source of rapid tidal migration in the Jupiter and Saturn moon
     systems", *Monthly Notices of the Royal Astronomical Society* 458,
     3867–3879,
     [doi:10.1093/mnras/stw609](https://doi.org/10.1093/mnras/stw609).
-17. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
+21. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
     the radius distribution of small planets", *The Astronomical Journal*
     154, 109,
     [doi:10.3847/1538-3881/aa80eb](https://doi.org/10.3847/1538-3881/aa80eb).
-18. Goldsby, D. L. & Kohlstedt, D. L. 2001, "Superplastic deformation of
+22. Goldsby, D. L. & Kohlstedt, D. L. 2001, "Superplastic deformation of
     ice: experimental observations", *Journal of Geophysical Research*
     106, 11017–11030,
     [doi:10.1029/2000JB900336](https://doi.org/10.1029/2000JB900336).
-19. Grasset, O. & Sotin, C. 1996, "The cooling rate of a liquid shell in
+23. Grasset, O. & Sotin, C. 1996, "The cooling rate of a liquid shell in
     Titan's interior", *Icarus* 123, 101–112,
     [doi:10.1006/icar.1996.0144](https://doi.org/10.1006/icar.1996.0144).
-20. Guillot, T. 2005, "The interiors of giant planets: models and
+24. Guillot, T. 2005, "The interiors of giant planets: models and
     outstanding questions", *Annual Review of Earth and Planetary
     Sciences* 33, 493–530,
     [doi:10.1146/annurev.earth.33.092203.122639](https://doi.org/10.1146/annurev.earth.33.092203.122639).
-21. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
+25. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
     [doi:10.1088/0004-637X/726/1/15](https://doi.org/10.1088/0004-637X/726/1/15).
-22. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
+26. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
     Earth and its petrological expression", *Earth and Planetary Science
     Letters* 292, 79–88,
     [doi:10.1016/j.epsl.2010.01.022](https://doi.org/10.1016/j.epsl.2010.01.022).
-23. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
+27. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
     heat flow from Enceladus' south polar region measured using 10–600
     cm⁻¹ Cassini/CIRS data", *Journal of Geophysical Research* 116, E03003,
     [doi:10.1029/2010JE003718](https://doi.org/10.1029/2010JE003718).
-24. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
+28. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
     interiors of medium-sized outer planet satellites and large
     trans-neptunian objects", *Icarus* 185, 258–273,
     [doi:10.1016/j.icarus.2006.06.005](https://doi.org/10.1016/j.icarus.2006.06.005).
-25. Iess, L. et al. 2010, "Gravity field, shape, and moment of inertia of
+29. Iess, L. et al. 2010, "Gravity field, shape, and moment of inertia of
     Titan", *Science* 327, 1367–1369,
     [doi:10.1126/science.1182583](https://doi.org/10.1126/science.1182583).
-26. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
+30. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
     close-in extrasolar planets", *The Astrophysical Journal* 678,
     1396–1406, [doi:10.1086/529187](https://doi.org/10.1086/529187).
-27. Kimura, J. 2024, "Europa's structural conditions for the existence of
+31. Kimura, J. 2024, "Europa's structural conditions for the existence of
     subsurface ocean and the absence of metallic core-driven magnetic
     field", arXiv:2403.01336,
     [arxiv.org/abs/2403.01336](https://arxiv.org/abs/2403.01336).
-28. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
+32. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
     Earth's mantle", *Reviews of Geophysics* 46, RG2007,
     [doi:10.1029/2007RG000241](https://doi.org/10.1029/2007RG000241).
-29. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
+33. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
     data", *Celestial Mechanics and Dynamical Astronomy* 126, 145–156
     (table 1),
     [doi:10.1007/s10569-016-9695-y](https://doi.org/10.1007/s10569-016-9695-y).
-30. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
+34. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
     constraints on Enceladus' thermal state from astrometry", *The
     Astrophysical Journal* 752, 14,
     [doi:10.1088/0004-637X/752/1/14](https://doi.org/10.1088/0004-637X/752/1/14).
-31. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
+35. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
     by the rapid orbital expansion of Titan", *Nature Astronomy* 4,
     1053–1058,
     [doi:10.1038/s41550-020-1120-5](https://doi.org/10.1038/s41550-020-1120-5).
-32. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
+36. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
     tidal dissipation in Io and Jupiter from astrometric observations",
     *Nature* 459, 957–959,
     [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
-33. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
+37. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
     [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
-34. Leliwa-Kopystyński, J., Maruyama, M. & Nakajima, T. 2002, "The
+38. Leliwa-Kopystyński, J., Maruyama, M. & Nakajima, T. 2002, "The
     water–ammonia phase diagram up to 300 MPa: application to icy
     satellites", *Icarus* 159, 518–528,
     [doi:10.1006/icar.2002.6932](https://doi.org/10.1006/icar.2002.6932).
-35. Lodders, K. 2003, "Solar System abundances and condensation
+39. Lodders, K. 2003, "Solar System abundances and condensation
     temperatures of the elements", *The Astrophysical Journal* 591,
     1220–1247,
     [doi:10.1086/375492](https://doi.org/10.1086/375492).
-36. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
+40. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-37. Manga, M. & Wang, C.-Y. 2007, "Pressurized oceans and the eruption of
+41. Manga, M. & Wang, C.-Y. 2007, "Pressurized oceans and the eruption of
     liquid water on Europa and Enceladus", *Geophysical Research Letters*
     34, L07202,
     [doi:10.1029/2007GL029297](https://doi.org/10.1029/2007GL029297).
-38. Marty, B. 2012, "The origins and concentrations of water, carbon,
+42. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-39. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+43. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-40. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
+44. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
     188, 535–539,
     [doi:10.1016/j.icarus.2007.03.001](https://doi.org/10.1016/j.icarus.2007.03.001).
-41. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+45. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
     indication for a dichotomy in the interior structure of Uranus and
     Neptune from the application of modified shape and rotation data",
     *Planetary and Space Science* 77, 143–151,
     [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
-42. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
+46. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
     the inner solar system in relation to the lunar reference system",
     *Space Science Reviews* 96, 55–86,
     [doi:10.1023/A:1011989004263](https://doi.org/10.1023/A:1011989004263).
-43. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+47. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-44. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+48. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
     University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
     Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
     gives $567/T$).
-45. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
+49. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
     Mars", *Geophysical Research Letters* 45, 12198–12209,
     [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
-46. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+50. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-47. Porco, C. C. et al. 2006, "Cassini observes the active south pole of
+51. Porco, C. C. et al. 2006, "Cassini observes the active south pole of
     Enceladus", *Science* 311, 1393–1401,
     [doi:10.1126/science.1123013](https://doi.org/10.1126/science.1123013).
-48. Roberts, J. H. 2015, "The fluffy core of Enceladus", *Icarus* 258,
+52. Roberts, J. H. 2015, "The fluffy core of Enceladus", *Icarus* 258,
     54–66,
     [doi:10.1016/j.icarus.2015.05.033](https://doi.org/10.1016/j.icarus.2015.05.033).
-49. Rudolph, M. L. & Manga, M. 2009, "Fracture penetration in planetary
+53. Rudolph, M. L. & Manga, M. 2009, "Fracture penetration in planetary
     ice shells", *Icarus* 199, 536–541,
     [doi:10.1016/j.icarus.2008.10.010](https://doi.org/10.1016/j.icarus.2008.10.010).
-50. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+54. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-51. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
+55. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
     "Interior composition, structure and dynamics of the Galilean
     satellites", in *Jupiter: The Planet, Satellites and Magnetosphere*,
     Cambridge University Press, 281–306.
-52. Solomatov, V. S. & Moresi, L.-N. 2000, "Scaling of time-dependent
+56. Solomatov, V. S. & Moresi, L.-N. 2000, "Scaling of time-dependent
     stagnant lid convection: application to small-scale convection on
     Earth and other terrestrial planets", *Journal of Geophysical
     Research* 105, 21795–21817,
     [doi:10.1029/2000JB900197](https://doi.org/10.1029/2000JB900197).
-53. Solomatov, V. S. 1995, "Scaling of temperature- and stress-dependent
+57. Solomatov, V. S. 1995, "Scaling of temperature- and stress-dependent
     viscosity convection", *Physics of Fluids* 7, 266–274,
     [doi:10.1063/1.868624](https://doi.org/10.1063/1.868624).
-54. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+58. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-55. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+59. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-56. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+60. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-57. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+61. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-58. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+62. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-59. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
+63. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
     in the outer Solar System", *Icarus* 163, 263–289,
     [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
-60. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+64. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
@@ -1035,7 +1082,7 @@ archetypes):
     only says nitrogen is depleted by about an order of magnitude) and the
     "5 of 22 rocky planets" of Adibekyan et al. 2021 (22 comes from press
     reports of the paper) were not checked in the papers themselves.
-61. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+65. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).

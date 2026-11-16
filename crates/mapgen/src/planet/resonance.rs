@@ -1,8 +1,10 @@
 //! Moons in mean-motion resonance and the heat their host's tides pump
 //! into them (spec "Climate pass lot 3", part A, tidal heating).
 //!
-//! The regular moons of a giant form chains, each period about twice the
-//! last ([`chains`]), as Io, Europa and Ganymede, or Enceladus and Dione.
+//! The regular moons of a giant form chains, each period twice the last
+//! ([`chains`]), as Io, Europa and Ganymede, or Enceladus and Dione: the
+//! neighbours whose orbits converged on the commensurability as the
+//! host's tides pushed them out ([`capture`]).
 //! The host's tides push the inner moon outward; the resonance hands
 //! part of that push to the outer ones and holds their eccentricities
 //! up, and the moons' own tides turn the difference into heat. In
@@ -20,11 +22,22 @@ use std::ops::Range;
 
 use crate::exomoon::G;
 
-/// Neighbouring period ratio, outer over inner, of two moons in a 2:1
-/// resonance (open interval): 2 within the ±5 % jitter in semi-major
-/// axis of the chain `crate::moons` draws (its `CHAIN_STEP`, whose
-/// periods double).
-pub const RESONANCE_BAND: (f64, f64) = (1.8, 2.2);
+/// Neighbouring period ratio, outer over inner, of two moons locked in a
+/// 2:1 resonance (open interval): within 1 % of 2. Locked moons sit at
+/// the commensurability, off it only by the precession of their
+/// pericentres the resonance forces and by their libration: Io–Europa
+/// 2.007, Europa–Ganymede 2.015, Enceladus–Dione 1.997 (JPL mean
+/// orbital elements); a libration of a first-order resonance spans
+/// about 1e-3 of the semi-major axis at these masses and
+/// eccentricities (Murray & Dermott 1999, *Solar System Dynamics*,
+/// §8.6, not checked). A pair further off is not in resonance: Dione
+/// and Rhea, at 1.67, are not. The moons [`capture`] places in a
+/// resonance sit at 2.
+pub const RESONANCE_BAND: (f64, f64) = (1.98, 2.02);
+
+/// Ratio of the semi-major axes of two moons at the 2:1
+/// commensurability, outer over inner: `2^(2/3)` (Kepler's third law).
+pub const COMMENSURATE_A_RATIO: f64 = 1.587_401_051_968_199_4;
 
 /// Time the inner moon of a chain takes to migrate outward, `a/ȧ`, in
 /// ages of its system, under resonance locking (Fuller, Luan & Quataert
@@ -87,10 +100,116 @@ fn angular_momentum(moon: &Orbiter) -> f64 {
     moon.mass_kg * mean_motion(moon) * moon.a_m * moon.a_m
 }
 
+/// Rate, 1/s, at which the tide `moon` raises on a host of `host_kg` and
+/// radius `host_radius_m` responding with `host_k2_over_q` pushes its
+/// orbit out, `ȧ/a = 2T/L` ([`torque`], with `L = m √(G M a)`): it goes
+/// as `m a^(-13/2)`, so a light or distant moon migrates slowly.
+fn migration_rate(host_kg: f64, host_radius_m: f64, host_k2_over_q: f64, moon: &Orbiter) -> f64 {
+    let momentum = moon.mass_kg * (G * host_kg * moon.a_m).sqrt();
+    2.0 * torque(host_radius_m, host_k2_over_q, moon) / momentum
+}
+
+/// Which neighbouring pairs of a host's disk-born `moons` (nearest
+/// first, at the orbits they formed on) the host's tides drove into a
+/// 2:1 resonance over `age_gyr`, around a host of `host_kg` and radius
+/// `host_radius_m`, with each captured outer moon moved onto the
+/// commensurability: one flag per pair, `true` when its two moons are
+/// locked.
+///
+/// Tides push each moon out at its own rate ([`migration_rate`], under
+/// the host's locked [`host_k2_over_q`] on the innermost moon, as
+/// [`resonant_heat`]). A pair is captured only when its orbits
+/// converge, the inner moon migrating out faster than the outer one, and
+/// reach the commensurability: a convergent pair meeting a first-order
+/// resonance slowly, at the small eccentricities of regular moons, is
+/// captured (Goldreich 1965, doi:10.1093/mnras/130.3.159; Peale 1976,
+/// doi:10.1146/annurev.aa.14.090176.001243; Murray & Dermott 1999,
+/// *Solar System Dynamics*, §8.12, not checked), a divergent one never.
+/// The period ratio of the pair falls by `(3/2) Δ(ȧ/a)` times the age:
+/// a pair formed wide of 2 by less than that reaches it; one formed
+/// inside 2 (Dione and Rhea, at 1.67) moves away from it. The locked
+/// moons then migrate together, at `2 ΣT / ΣL`, and may catch the next
+/// one out: Io drove Europa, and the two Ganymede, into the Laplace
+/// resonance (Yoder 1979, doi:10.1038/279767a0). Today's rates stand for
+/// the whole age, a rough measure.
+///
+/// A moon `placed` (asked by archetype, or a partner placed with one) is
+/// not moved: its pair is locked when it already sits in
+/// [`RESONANCE_BAND`]. A moon not placed that is captured is moved to
+/// [`COMMENSURATE_A_RATIO`] of its inner neighbour (period twice its),
+/// and one not captured that lies in the band is moved just out of it,
+/// so that the orbits say which pairs are locked ([`chains`]).
+pub fn capture(
+    host_kg: f64,
+    host_radius_m: f64,
+    age_gyr: f64,
+    moons: &mut [Orbiter],
+    placed: &[bool],
+) -> Vec<bool> {
+    let Some(innermost) = moons.first() else {
+        return Vec::new();
+    };
+    let k2q = host_k2_over_q(host_kg, host_radius_m, innermost, age_gyr);
+    let age_s = age_gyr * GYR_S;
+    let rate = |m: &Orbiter| migration_rate(host_kg, host_radius_m, k2q, m);
+    let momentum = |m: &Orbiter| m.mass_kg * (G * host_kg * m.a_m).sqrt();
+    // The torque and angular momentum of the locked group the next moon
+    // out meets.
+    let mut group = (
+        rate(innermost) * momentum(innermost) / 2.0,
+        momentum(innermost),
+    );
+    let mut locked = Vec::with_capacity(moons.len().saturating_sub(1));
+    for i in 0..moons.len().saturating_sub(1) {
+        let inner = moons[i];
+        let outer = &mut moons[i + 1];
+        let ratio = outer.period_s / inner.period_s;
+        let in_band = RESONANCE_BAND.0 < ratio && ratio < RESONANCE_BAND.1;
+        let captured = if placed[i + 1] {
+            in_band
+        } else {
+            let closing = 1.5 * (2.0 * group.0 / group.1 - rate(outer)) * age_s;
+            closing > 0.0 && ratio > RESONANCE_BAND.0 && (ratio / 2.0).ln() <= closing
+        };
+        if !placed[i + 1] {
+            let to = if captured {
+                Some(2.0)
+            } else if in_band {
+                // Just out of the band, on the side it lies.
+                Some(if ratio >= 2.0 {
+                    RESONANCE_BAND.1 * 1.005
+                } else {
+                    RESONANCE_BAND.0 / 1.005
+                })
+            } else {
+                None
+            };
+            if let Some(to) = to {
+                let a_ratio = if captured {
+                    COMMENSURATE_A_RATIO
+                } else {
+                    f64::powf(to, 2.0 / 3.0)
+                };
+                outer.a_m = inner.a_m * a_ratio;
+                outer.period_s = inner.period_s * to;
+            }
+        }
+        let (torque, l) = (rate(outer) * momentum(outer) / 2.0, momentum(outer));
+        group = if captured {
+            (group.0 + torque, group.1 + l)
+        } else {
+            (torque, l)
+        };
+        locked.push(captured);
+    }
+    locked
+}
+
 /// The chains among moons of periods `periods_s`, sorted by distance from
 /// their host: the runs of consecutive moons whose neighbouring period
-/// ratio lies in [`RESONANCE_BAND`], as index ranges into `periods_s`. A
-/// moon without such a neighbour is in none (runs of one are left out).
+/// ratio lies in [`RESONANCE_BAND`] (placed there by [`capture`] or by
+/// their archetype), as index ranges into `periods_s`. A moon without
+/// such a neighbour is in none (runs of one are left out).
 pub fn chains(periods_s: &[f64]) -> Vec<Range<usize>> {
     let locked = |i: usize| {
         let ratio = periods_s[i + 1] / periods_s[i];
@@ -354,7 +473,115 @@ mod tests {
         assert_eq!(chains(&[1.0, 2.0, 4.0, 16.0]), vec![0..3]);
         assert_eq!(chains(&[1.0, 4.0]), Vec::<std::ops::Range<usize>>::new());
         // Two runs, and a lone moon between them.
-        assert_eq!(chains(&[1.0, 2.1, 8.0, 30.0, 59.0]), vec![0..2, 3..5]);
+        assert_eq!(chains(&[1.0, 2.01, 8.0, 30.0, 59.9]), vec![0..2, 3..5]);
+        // Near 2 is not at it: Dione and Rhea, and a pair 10 % wide.
+        assert_eq!(chains(&[1.0, 1.67]), Vec::<std::ops::Range<usize>>::new());
+        assert_eq!(chains(&[1.0, 2.2]), Vec::<std::ops::Range<usize>>::new());
+    }
+
+    /// `moon` moved out to a period `ratio` times `inner`'s.
+    fn at_ratio(inner: &Orbiter, moon: Orbiter, ratio: f64) -> Orbiter {
+        Orbiter {
+            a_m: inner.a_m * ratio.powf(2.0 / 3.0),
+            period_s: inner.period_s * ratio,
+            ..moon
+        }
+    }
+
+    #[test]
+    fn a_convergent_pair_formed_wide_of_two_is_captured_at_it() {
+        // Io pushes out faster than Europa: formed 8 % wide, the pair
+        // closes on the 2:1 and locks there.
+        let mut moons = [io(), at_ratio(&io(), europa(), 2.16)];
+        let locked = capture(JUPITER_KG, JUPITER_R_M, 4.57, &mut moons, &[false, false]);
+        assert_eq!(locked, vec![true]);
+        assert!((moons[1].period_s / moons[0].period_s - 2.0).abs() < 1e-12);
+        assert!((moons[1].a_m / moons[0].a_m - COMMENSURATE_A_RATIO).abs() < 1e-12);
+        assert_eq!(chains(&moons.map(|m| m.period_s)), vec![0..2]);
+    }
+
+    #[test]
+    fn a_pair_formed_inside_two_is_never_captured() {
+        // Dione and Rhea: converging, but already inside the 2:1.
+        for ratio in [1.67, 1.9] {
+            let mut moons = [io(), at_ratio(&io(), europa(), ratio)];
+            let locked = capture(JUPITER_KG, JUPITER_R_M, 4.57, &mut moons, &[false, false]);
+            assert_eq!(locked, vec![false], "{ratio}");
+            assert!((moons[1].period_s / moons[0].period_s - ratio).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn a_divergent_pair_is_not_captured_and_leaves_the_band() {
+        // A light inner moon under a heavy outer one: they part.
+        let heavy = Orbiter {
+            mass_kg: 1e23,
+            ..dione()
+        };
+        let mut moons = [enceladus(), at_ratio(&enceladus(), heavy, 2.005)];
+        let locked = capture(SATURN_KG, SATURN_R_M, 4.57, &mut moons, &[false, false]);
+        assert_eq!(locked, vec![false]);
+        let ratio = moons[1].period_s / moons[0].period_s;
+        assert!(ratio >= RESONANCE_BAND.1, "{ratio}");
+        assert!(ratio < 2.04, "{ratio}");
+    }
+
+    #[test]
+    fn a_far_pair_migrates_too_slowly_to_close_a_wide_gap() {
+        // Two Ganymedes far out, 8 % wide: the host's tides hardly move
+        // them.
+        let inner = Orbiter {
+            a_m: 3.0 * ganymede().a_m,
+            period_s: 3f64.powf(1.5) * ganymede().period_s,
+            ..ganymede()
+        };
+        let lighter = Orbiter {
+            mass_kg: 0.5 * ganymede().mass_kg,
+            ..ganymede()
+        };
+        let mut moons = [io(), inner, at_ratio(&inner, lighter, 2.16)];
+        let locked = capture(
+            JUPITER_KG,
+            JUPITER_R_M,
+            4.57,
+            &mut moons,
+            &[true, true, false],
+        );
+        assert!(!locked[1], "{locked:?}");
+    }
+
+    #[test]
+    fn io_drives_europa_and_ganymede_into_the_laplace_chain() {
+        // Each formed 5 % wide of its 2:1: Io catches Europa, and the
+        // pair Ganymede (Yoder 1979).
+        let europa = at_ratio(&io(), europa(), 2.1);
+        let ganymede = at_ratio(&europa, ganymede(), 2.1);
+        let mut moons = [io(), europa, ganymede];
+        let locked = capture(
+            JUPITER_KG,
+            JUPITER_R_M,
+            4.57,
+            &mut moons,
+            &[false, false, false],
+        );
+        assert_eq!(locked, vec![true, true]);
+        assert_eq!(chains(&moons.map(|m| m.period_s)), vec![0..3]);
+    }
+
+    #[test]
+    fn a_placed_moon_stays_and_is_locked_only_at_the_commensurability() {
+        let wide = at_ratio(&io(), europa(), 2.1);
+        let mut moons = [io(), wide];
+        assert_eq!(
+            capture(JUPITER_KG, JUPITER_R_M, 4.57, &mut moons, &[true, true]),
+            vec![false]
+        );
+        assert_eq!(moons[1], wide);
+        let mut moons = [io(), at_ratio(&io(), europa(), 2.0)];
+        assert_eq!(
+            capture(JUPITER_KG, JUPITER_R_M, 4.57, &mut moons, &[true, true]),
+            vec![true]
+        );
     }
 
     #[test]

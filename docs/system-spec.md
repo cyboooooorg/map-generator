@@ -289,7 +289,8 @@ Each planet draws its moons as a world does, by `MoonSystem::draw` in
 `moons.rs`: a rocky planet's (impacts, captures, tides, the Hill
 sphere), a giant's regular moons (two to five, 1 to 2.5 × 10⁻⁴ of its
 mass in a chain or in one dominant moon, an ice giant's always a chain
-of 1 to 1.2 × 10⁻⁴, a 1:2:4 resonance, ice beyond a
+of 1 to 1.2 × 10⁻⁴, near a 1:2:4 chain whose neighbours are placed
+at the 2:1 when their tides captured them (`resonance::capture`), ice beyond a
 line set by the giant's temperature, on some ice giants a captured
 Triton), one recipe for a
 giant of a system and a giant world. A giant's large regular
@@ -329,7 +330,8 @@ one, `Impact` for a giant-impact or debris moon) are its inputs
 star's light, XUV and age at the planet's orbit), and its planet's tides
 on its orbit (the planet's mass, the moon's semi-major axis and
 eccentricity) heat it; a round moon in a resonant chain with its round
-neighbours (periods 1.8 to 2.2 times apart) takes instead the chain's
+neighbours (periods 2:1 within 1 %, where the draw placed the
+neighbours its planet's tides drove into resonance) takes instead the chain's
 equilibrium heat, set by the planet's dissipation under resonance
 locking (`planet::resonance`, see
 [planet-interiors.md](science/planet-interiors.md), "Moons in

@@ -10,8 +10,10 @@
 //! of every column of [`COLUMNS`] (the share of the bodies, for a yes-or-no
 //! column); then the plume rings of the drawn systems and each body with
 //! geysers, with the period ratio to its nearest moons in and out and its
-//! eccentricity. A column whose field the model does not hold yet prints
-//! `-`.
+//! eccentricity; then the share of the neighbouring pairs of round
+//! disk-born moons of the drawn systems locked in a 2:1 resonance (period
+//! ratio in `RESONANCE_BAND`) and the drawn moons with the most tidal
+//! heat. A column whose field the model does not hold yet prints `-`.
 //!
 //! Climate pass lot 3 (part A) measured the oceans with it before and
 //! after deriving the shell from the heat flux, the tides and the polar
@@ -194,6 +196,7 @@ fn main() {
         .filter(|d| d.kind == DustKind::Plume)
         .count();
     println!("\nplume rings in {systems} systems: {plumes}");
+    resonances(&drawn);
     println!("\nbodies with geysers (period ratio to the next moon in and out, e):");
     for system in &drawn {
         for b in system.bodies.iter().filter(vents) {
@@ -228,6 +231,62 @@ fn main() {
                 b.orbit.eccentricity,
             );
         }
+    }
+}
+
+/// The neighbouring pairs of round, disk-born, prograde moons of the
+/// `drawn` systems (each planet's, nearest first), and how many of them
+/// lie in `RESONANCE_BAND`; then the five drawn moons with the most tidal
+/// heat, with their flux.
+fn resonances(drawn: &[System]) {
+    use mapgen::planet::resonance::RESONANCE_BAND;
+    let (mut pairs, mut locked) = (0, 0);
+    let mut heated: Vec<(f64, f64, u32, &str)> = Vec::new();
+    for system in drawn {
+        let mut parents: Vec<&str> = system
+            .bodies
+            .iter()
+            .filter(|b| b.kind == BodyKind::Moon)
+            .filter_map(|b| b.parent.as_deref())
+            .collect();
+        parents.dedup();
+        for parent in parents {
+            let mut chain: Vec<&Body> = system
+                .bodies
+                .iter()
+                .filter(|b| b.kind == BodyKind::Moon && b.parent.as_deref() == Some(parent))
+                .filter(|b| b.model.is_some() && b.disk_born && b.orbit.inclination_deg < 90.0)
+                .collect();
+            chain.sort_by(|a, b| a.orbit.period_days.total_cmp(&b.orbit.period_days));
+            for w in chain.windows(2) {
+                let ratio = w[1].orbit.period_days / w[0].orbit.period_days;
+                pairs += 1;
+                locked += usize::from(RESONANCE_BAND.0 < ratio && ratio < RESONANCE_BAND.1);
+            }
+            for b in chain {
+                let tidal = b.model.as_ref().map_or(0.0, |m| m.heat.tidal_w);
+                let r = b.physical.radius_km * 1000.0;
+                heated.push((
+                    tidal,
+                    tidal / (4.0 * std::f64::consts::PI * r * r),
+                    system.seed,
+                    &b.id,
+                ));
+            }
+        }
+    }
+    println!(
+        "\nneighbouring round disk-born moons in 2:1 resonance: {locked} of {pairs} pairs ({:.0} %)",
+        100.0 * locked as f64 / pairs.max(1) as f64
+    );
+    heated.sort_by(|a, b| b.0.total_cmp(&a.0));
+    println!("most tidally heated drawn moons:");
+    for (w, flux, seed, id) in heated.iter().take(5) {
+        println!(
+            "  seed {seed:>3} {id:<6} {} W, {} W/m²",
+            num(*w),
+            num(*flux)
+        );
     }
 }
 

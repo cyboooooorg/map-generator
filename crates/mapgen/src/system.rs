@@ -5237,6 +5237,30 @@ mod tests {
         }
     }
 
+    /// Io, Europa and Ganymede asked together ride one giant as the
+    /// Laplace chain: each at the 2:1 of the one inside it.
+    #[test]
+    fn the_galilean_moons_asked_together_are_the_laplace_chain() {
+        use crate::planet::resonance::RESONANCE_BAND;
+        for seed in 1..=5 {
+            let system = requested(
+                seed,
+                &[("io-like", 1), ("europa-like", 1), ("ganymede-like", 1)],
+            );
+            let moons: Vec<&Body> = ["io-like", "europa-like", "ganymede-like"]
+                .map(|a| asked_moons(&system, a)[0])
+                .into();
+            assert!(moons.iter().all(|m| m.parent == moons[0].parent));
+            for pair in moons.windows(2) {
+                let ratio = pair[1].orbit.period_days / pair[0].orbit.period_days;
+                assert!(
+                    RESONANCE_BAND.0 < ratio && ratio < RESONANCE_BAND.1,
+                    "seed {seed}: {ratio}"
+                );
+            }
+        }
+    }
+
     /// An asked Enceladus, in 2:1 resonance with its Dione-mass partner,
     /// dissipates 5 to 30 GW, around the 15.8 GW it radiates (Howett et
     /// al. 2011, doi:10.1029/2010JE003718).
@@ -6656,9 +6680,11 @@ mod lone_tests {
     /// albedo was derived from the body's cover (climate pass lot 2b):
     /// seed 4's `f`, at 13.6 AU under its ice's albedo, cools from 73 to
     /// 68 K and freezes its methane (an ice world, was a hydrocarbon
-    /// world).
+    /// world). Again when a giant's tides decide which drawn moons lock
+    /// in resonance and place them at the 2:1 (seed 1's `f-6` to `f-9`
+    /// a little further out, under fewer impacts).
     const MAIN_SIGNATURES: [&str; 4] = [
-        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0006:0.0822:false d-6:rocky:0.0012:0.0822:false d-7:rocky:0.0020:0.0822:false e:rocky:1.0116:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0033:1.0306:false f-7:ice-world:0.0051:0.7879:false f-8:ice-world:0.0080:0.6381:false f-9:ice-world:0.0129:0.5346:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
+        "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0006:0.0822:false d-6:rocky:0.0012:0.0822:false d-7:rocky:0.0020:0.0822:false e:rocky:1.0116:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0031:1.0702:false f-7:ice-world:0.0049:0.8102:false f-8:ice-world:0.0077:0.6464:false f-9:ice-world:0.0123:0.5432:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
         "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0005:0.0365:false d-4:rocky:0.0008:0.0365:false d-5:rocky:0.0013:0.0365:false d-6:rocky:0.0020:0.0365:false e:rocky:1.0116:0.0365:true f:ice-world:4.9333:0.0365:true",
         "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:1.0116:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
         "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:1.0116:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:ice-world:13.6131:0.0350:true",
