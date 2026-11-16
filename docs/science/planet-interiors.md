@@ -627,6 +627,20 @@ viewer draw them at the same place, and the innermost moon with geysers
 close to its giant feeds its plume ring (see
 [ring-extent.md](ring-extent.md)).
 
+The surface map cuts each fracture into the ice (`stripes.rs`): a
+trough about 500 m deep and 2 km wide between two ridges about 100 m
+high, as the tiger stripes' profile (Porco et al. 2006), tapering to
+nothing over the last tenth of its length at each end and darker than
+the plains (an albedo shift of −0.25, a look constant: the stripes read
+darker than the plains in Cassini's clear-filter images). Narrower than
+1.5 pixels of the base map, the trough is drawn that wide and
+shallower, keeping the area of its cross-section, so that the map
+keeps it. The fractures resurface the cap round their pole, twice as
+far from it as their farthest end and at most 40° (Enceladus's young
+south polar terrain, bounded near 55° S, reaches about 35° from its
+pole): no crater centred there is kept, on the base map, the detail
+tiles and at every epoch.
+
 Over seeds 1 to 20, every asked Enceladus vents (a polar shell of 7 to
 10 km, at most 1 MPa of ice under its 0.11 m/s², over a cap of 16°: four
 fractures); Europa's polar shell, 6 to 16 km under 1.3 m/s², never
@@ -828,6 +842,11 @@ archetypes):
   30° cap. The model stores at most 12 fractures, spaced wider than
   35 km when the cap would hold more: a storage and rendering limit (the
   map and the viewer draw each one), not physics.
+- **Young terrain without craters.** The cap the fractures resurface
+  keeps no crater at all, where Enceladus's south polar terrain keeps a
+  few small ones (Porco et al. 2006); its size, twice the fractures'
+  reach, is a calibration on that one body. The stripes' profile is the
+  same on every body, whatever its gravity or shell.
 - **Resonances are captured on today's migration rates.** Whether a
   drawn pair locks is judged from the rates its tides give today over
   the whole age, a rough measure of a history the model does not

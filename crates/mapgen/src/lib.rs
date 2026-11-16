@@ -45,5 +45,6 @@ pub mod rivers;
 pub mod sizes;
 pub mod spin;
 pub mod star;
+pub mod stripes;
 pub mod system;
 pub mod world;
