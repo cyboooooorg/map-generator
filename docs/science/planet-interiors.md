@@ -619,8 +619,9 @@ thin both poles alike; Enceladus vents from its south pole alone, so the
 body's seed picks one. Its fractures fill the cap round that pole where
 the shell still passes, up to 30° from it, as Enceladus's four "tiger
 stripes", about 130 km long and 35 km apart (Porco et al. 2006), and
-the body's seed lays them out so that no two moons vent alike: gaps
-drawn from 25 to 45 km (35 km on average) across a common strike, each
+the body's seed lays them out so that no two moons vent alike: a mean
+spacing drawn once per body from 25 to 45 km (35 km on average), each
+gap within 20 % of it and in that range, across a common strike, each
 fracture turned by up to 15° off it, 60 to 100 % of its edge-to-edge
 chord long and shifted along it by up to 15 % of the chord, and on a
 third of the bodies a short branch, a third to a half of its parent's
@@ -650,7 +651,7 @@ tiles and at every epoch.
 
 Over seeds 1 to 20, every asked Enceladus vents (a polar shell of 7 to
 10 km, at most 1 MPa of ice under its 0.11 m/s², over a cap of 16°:
-three to five fractures, mostly four); Europa's polar shell, 6 to 16 km under 1.3 m/s², never
+three to six fractures, four or five on most seeds); Europa's polar shell, 6 to 16 km under 1.3 m/s², never
 cracks through, nor do Ganymede's, Titan's or Callisto's. Across 300
 drawn systems, 11 % of the icy moons and 3 % of the icy planets vent;
 the moons among them are close-in, most of them in a 2:1 chain (some

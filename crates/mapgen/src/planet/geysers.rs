@@ -28,7 +28,8 @@ const CRACK_OVERBURDEN_PA: f64 = 2.6e6;
 
 /// Mean spacing of the fractures, km: Enceladus's tiger stripes are
 /// about 35 km apart (Porco et al. 2006, doi:10.1126/science.1123013).
-/// Each gap is drawn from [`MIN_GAP_KM`] to [`MAX_GAP_KM`] around it.
+/// Each body's mean is drawn from [`MIN_GAP_KM`] to [`MAX_GAP_KM`]
+/// around it.
 pub const FRACTURE_SPACING_KM: f64 = 35.0;
 
 /// Most fractures stored, a branch included: a region that would hold
@@ -335,8 +336,10 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
 /// - **Fractures.** Roughly parallel across the region, as the tiger
 ///   stripes (Porco et al. 2006, doi:10.1126/science.1123013: four
 ///   fractures about 130 km long, 35 km apart), and different from one
-///   body to the next ([`fractures`]): gaps drawn from [`MIN_GAP_KM`] to
-///   [`MAX_GAP_KM`] across a common strike drawn from the seed, each
+///   body to the next ([`fractures`]): a mean spacing drawn from
+///   [`MIN_GAP_KM`] to [`MAX_GAP_KM`], each gap within 20 % of it and
+///   in that range,
+///   across a common strike drawn from the seed, each
 ///   fracture turned off it by up to 15°, 60 to 100 % of its
 ///   edge-to-edge chord long and shifted along it by up to 15 % of the
 ///   chord, and on a third of the bodies a short branch splaying off
@@ -344,7 +347,7 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
 ///   projection centred on the pole, so great circles on the body, inside
 ///   the region and [`MIN_CLEARANCE_KM`] apart with their meanders; their
 ///   count scales with the region (an asked Enceladus gets three to
-///   five), at most [`MAX_FRACTURES`], spaced wider when the region
+///   six), at most [`MAX_FRACTURES`], spaced wider when the region
 ///   would hold more.
 pub fn geysers(
     interior: &Interior,
@@ -391,7 +394,8 @@ pub fn geysers(
 /// meridian `strike_deg`, the rest of their layout drawn from `rng` (see
 /// [`geysers`]).
 ///
-/// Each try draws the gaps, then each fracture's strike, length and
+/// The body's mean spacing is drawn once, from [`MIN_GAP_KM`] to
+/// [`MAX_GAP_KM`]; each try draws the gaps, then each fracture's strike, length and
 /// shift; a try whose drawn lines (meanders included) come closer than
 /// [`MIN_CLEARANCE_KM`] is drawn again, its strikes jittered less, the
 /// last one not at all. If no try passes, the one whose lines keep
@@ -409,10 +413,11 @@ fn fractures(
         sign: if south { -1.0 } else { 1.0 },
         edge_km: radius_km * region_deg.to_radians().tan(),
     };
+    let spacing_km = rng.random_range(MIN_GAP_KM..=MAX_GAP_KM);
     let mut best: Option<(f64, Vec<Fracture>)> = None;
     for attempt in 0..LAYOUT_TRIES {
         let jitter = 1.0 - attempt as f64 / (LAYOUT_TRIES - 1) as f64;
-        let mut layout = main_fractures(&plane, strike_deg, jitter, rng);
+        let mut layout = main_fractures(&plane, strike_deg, spacing_km, jitter, rng);
         let clearance = min_clearance_km(&layout, radius_km, None);
         if clearance >= MIN_CLEARANCE_KM {
             let parent = add_branch(&mut layout, radius_km, region_deg, south, rng);
@@ -425,14 +430,20 @@ fn fractures(
     (best.map(|(_, layout)| layout).unwrap_or_default(), None)
 }
 
-/// Least gap, km, between neighbouring fractures where they cross the
+/// Least mean spacing, km, of a body's fractures where they cross the
 /// common strike: Enceladus's tiger stripes are about 35 km apart
 /// ([`FRACTURE_SPACING_KM`], Porco et al. 2006,
-/// doi:10.1126/science.1123013); each gap is drawn evenly from this to
-/// [`MAX_GAP_KM`], about that mean. Calibration around the one body.
+/// doi:10.1126/science.1123013); each body's mean is drawn evenly from
+/// this to [`MAX_GAP_KM`], about that, once, so that bodies differ in
+/// count, and each gap within [`GAP_JITTER`] of it, kept from this to
+/// [`MAX_GAP_KM`] (narrower gaps let the meanders touch). Calibration
+/// around the one body.
 pub const MIN_GAP_KM: f64 = 25.0;
-/// Widest gap, km (see [`MIN_GAP_KM`]).
+/// Widest mean spacing, km (see [`MIN_GAP_KM`]).
 pub const MAX_GAP_KM: f64 = 45.0;
+/// Largest share by which a gap departs from its body's mean spacing.
+/// Look calibration.
+const GAP_JITTER: f64 = 0.2;
 /// Largest turn, degrees, of a fracture's strike from the common one:
 /// the tiger stripes are roughly, not exactly, parallel (Porco et al.
 /// 2006). Look calibration.
@@ -485,9 +496,9 @@ impl PolarPlane {
     }
 }
 
-/// The main fractures of one layout: gaps drawn between [`MIN_GAP_KM`]
-/// and [`MAX_GAP_KM`] across the strike `strike_deg` while they fit in the
-/// region's width less [`MIN_GAP_KM`] (at most [`MAX_FRACTURES`], spread to
+/// The main fractures of one layout: gaps drawn within [`GAP_JITTER`] of
+/// `spacing_km` (and from [`MIN_GAP_KM`] to [`MAX_GAP_KM`]) across the strike `strike_deg` while they fit in the
+/// region's width less half [`MIN_GAP_KM`] (at most [`MAX_FRACTURES`], spread to
 /// fill the region when it would hold more), the set shifted at random in
 /// what is left; each fracture's strike turned by up to `jitter` times
 /// [`MAX_STRIKE_JITTER_DEG`], its length a share of its edge-to-edge chord
@@ -495,16 +506,18 @@ impl PolarPlane {
 fn main_fractures(
     plane: &PolarPlane,
     strike_deg: f64,
+    spacing_km: f64,
     jitter: f64,
     rng: &mut StdRng,
 ) -> Vec<Fracture> {
     let edge = plane.edge_km;
-    let span = (2.0 * edge - MIN_GAP_KM).max(0.0);
+    let span = (2.0 * edge - MIN_GAP_KM / 2.0).max(0.0);
     let mut gaps: Vec<f64> = Vec::new();
     let mut total = 0.0;
     let mut capped = false;
     loop {
-        let gap = rng.random_range(MIN_GAP_KM..MAX_GAP_KM);
+        let gap = (spacing_km * rng.random_range(1.0 - GAP_JITTER..=1.0 + GAP_JITTER))
+            .clamp(MIN_GAP_KM, MAX_GAP_KM);
         if total + gap > span {
             break;
         }
@@ -899,12 +912,12 @@ mod tests {
         (deg - strike_deg + 90.0).rem_euclid(180.0) - 90.0
     }
 
-    /// An asked Enceladus's fractures, over 300 seeds: three to five main
-    /// ones (six with a branch), each turned by at most 15° off the common
+    /// An asked Enceladus's fractures, over 300 seeds: three to six main
+    /// ones, each turned by at most 15° off the common
     /// strike, all inside the 16° cap, their drawn lines at least
     /// [`MIN_CLEARANCE_KM`] apart (a branch and its parent aside), all in
     /// the young terrain; a branch on about a third of the bodies, and
-    /// every count from three to five met.
+    /// every count from three to six met, none on most seeds.
     #[test]
     fn enceladus_fractures_vary_from_one_seed_to_the_next() {
         let (r, region, strike) = (252.1, 16.0, 30.0);
@@ -914,7 +927,7 @@ mod tests {
         for seed in 0..300 {
             let (f, parent) = draw(r, region, strike, seed);
             let mains = f.len() - usize::from(parent.is_some());
-            assert!((3..=5).contains(&mains), "seed {seed}: {f:?}");
+            assert!((3..=6).contains(&mains), "seed {seed}: {f:?}");
             counts[mains] += 1;
             branches += usize::from(parent.is_some());
             for x in &f {
@@ -961,12 +974,10 @@ mod tests {
         }
         println!(
             "main counts {:?}, branches {branches}/300, turned {turned}/300",
-            &counts[3..=5]
+            &counts[3..=6]
         );
-        assert!(
-            counts[3] > 0 && counts[4] > 0 && counts[5] > 0,
-            "{counts:?}"
-        );
+        assert!(counts[3..=6].iter().all(|&c| c > 0), "{counts:?}");
+        assert!(counts.iter().all(|&c| c < 180), "{counts:?}");
         assert!((60..=140).contains(&branches), "{branches}");
         assert!(turned > 240, "{turned}");
     }
