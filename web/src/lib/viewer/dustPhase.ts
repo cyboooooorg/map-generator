@@ -8,6 +8,18 @@ import type { Vec3 } from '../geo';
  */
 export const DUST_G = 0.7;
 
+/**
+ * Scale height of a dust ring, as a fraction of the radius: its density
+ * falls as a Gaussian of the height over the ring plane with this sigma
+ * (look-level value; Hedman et al. 2012, Icarus 217, "The three-dimensional
+ * structure of Saturn's E ring", find the E ring a few thousand km thick
+ * near Enceladus's orbit, thickening outward).
+ */
+export const DUST_SCALE_HEIGHT = 0.02;
+
+/** Samples along a view ray through a dust ring (sky shader and `dustColumn`). */
+export const DUST_MARCH_STEPS = 24;
+
 /** Cap on the gain over the 90° brightness, keeping the exact back-lit direction finite. */
 export const DUST_GAIN_MAX = 80;
 

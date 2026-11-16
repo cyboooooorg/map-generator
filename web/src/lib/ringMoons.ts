@@ -5,6 +5,8 @@ import type { Body } from './api/types/Body';
 import type { DustRing } from './api/types/DustRing';
 import type { RingRole } from './api/types/RingRole';
 import type { RingSystem } from './api/types/RingSystem';
+import type { Vec3 } from './geo';
+import { DUST_MARCH_STEPS, DUST_SCALE_HEIGHT } from './viewer/dustPhase';
 
 /** The rings the system drew for `body`, if a giant with rings. */
 export function ringsOf(body: Body): RingSystem | null {
@@ -86,4 +88,55 @@ export function ringPart(moon: Body, planet: Body | null): RingPart | null {
     role: moon.ring_role,
     gapKm: gap && planet ? gap[1] * planet.physical.radius_km : null,
   };
+}
+
+/**
+ * The optical depth of a dust ring along a view ray (host radii, y up the
+ * ring's axis): the ring's density is its face-on `opacity` times its
+ * triangular radial profile, spread over a Gaussian of the height with
+ * sigma `DUST_SCALE_HEIGHT x r` and normalised so that a vertical crossing
+ * gives the face-on value. Marched over the part of the ray inside the
+ * slab of 3 sigma and the ring's outer radius, `DUST_MARCH_STEPS` midpoint
+ * samples, as the sky ring shader does; up to `tMax` along `dir` (unit).
+ * Finite with the eye in the ring plane, inside the ring or outside.
+ */
+export function dustColumn(eye: Vec3, dir: Vec3, ring: FaintRing, tMax = Infinity): number {
+  const slab = 3 * DUST_SCALE_HEIGHT * ring.outer;
+  let t0 = 0;
+  let t1 = tMax;
+  if (Math.abs(dir[1]) > 1e-6) {
+    const a = (-slab - eye[1]) / dir[1];
+    const b = (slab - eye[1]) / dir[1];
+    t0 = Math.max(t0, Math.min(a, b));
+    t1 = Math.min(t1, Math.max(a, b));
+  } else if (Math.abs(eye[1]) >= slab) return 0;
+  const a = dir[0] * dir[0] + dir[2] * dir[2];
+  const b = eye[0] * dir[0] + eye[2] * dir[2];
+  const c = eye[0] * eye[0] + eye[2] * eye[2] - ring.outer * ring.outer;
+  if (a < 1e-12) {
+    if (c > 0) return 0;
+  } else {
+    const disc = b * b - a * c;
+    if (disc < 0) return 0;
+    const root = Math.sqrt(disc);
+    t0 = Math.max(t0, (-b - root) / a);
+    t1 = Math.min(t1, (-b + root) / a);
+  }
+  if (!(t1 > t0)) return 0;
+  const ds = (t1 - t0) / DUST_MARCH_STEPS;
+  let column = 0;
+  for (let k = 0; k < DUST_MARCH_STEPS; k += 1) {
+    const t = t0 + (k + 0.5) * ds;
+    const x = eye[0] + t * dir[0];
+    const y = eye[1] + t * dir[1];
+    const z = eye[2] + t * dir[2];
+    const r = Math.hypot(x, z);
+    if (r < ring.inner || r > ring.outer) continue;
+    const side = r < ring.peak ? (ring.peak - r) / Math.max(ring.peak - ring.inner, 1e-4) : (r - ring.peak) / Math.max(ring.outer - ring.peak, 1e-4);
+    const x01 = Math.min(Math.max(side, 0), 1);
+    const profile = ring.opacity * (1 - x01 * x01 * (3 - 2 * x01));
+    const h = DUST_SCALE_HEIGHT * r;
+    column += (profile * Math.exp(-0.5 * (y / h) ** 2) / (h * Math.sqrt(2 * Math.PI))) * ds;
+  }
+  return column;
 }

@@ -1,5 +1,5 @@
-import { dustPhaseGlsl } from './dustPhase';
-// The rings of a giant planet: a flat annulus in its equatorial plane, its
+import { DUST_MARCH_STEPS, DUST_SCALE_HEIGHT, dustPhaseGlsl } from './dustPhase';
+// The rings of a giant planet: a inPlane annulus in its equatorial plane, its
 // opacity varying with the radius (ringlets, gaps), lit by the sun and
 // darkened where the planet shadows it.
 
@@ -251,6 +251,8 @@ export const skyRingFragment = /* glsl */ `
   ${skyRingDensityGlsl}
   ${ringletsGlsl}
   ${dustPhaseGlsl}
+  const float DUST_H = ${DUST_SCALE_HEIGHT.toFixed(4)};
+  const int DUST_STEPS = ${DUST_MARCH_STEPS};
   varying vec3 vRay;
   // Most a sheet of them seen nearly edge on hides (see main).
   const float GRAZING_OPACITY = 0.55;
@@ -335,26 +337,6 @@ export const skyRingFragment = /* glsl */ `
           colour = vec4(ringLight(p, mu, d), seen);
           depth = depthOf(t * ray);
         }
-        // Dust, thin, in the same plane: its light thickens along a slant
-        // view (opacity over mu, mu kept off zero so that a camera in the
-        // band, nearly in the plane, stays finite), brightest back-lit,
-        // none of that in the giant's shadow. Drawn under the main rings.
-        if (uDustCount > 0.0) {
-          vec4 dust = dustDensity(rp);
-          if (dust.w > 0.0) {
-            float sb = dot(p, uSunDir);
-            bool shadowed = sb < 0.0 && length(p - sb * uSunDir) < uRadius;
-            float gain = shadowed ? 1.0 : dustGain(clamp(dot(uSunDir, ray), -1.0, 1.0));
-            float dustSeen = min(1.0 - exp(-dust.w * gain / max(abs(g), 0.05)), 0.9);
-            vec3 tint = dust.rgb * (shadowed ? 0.08 : 1.0);
-            if (dustSeen > 0.002) {
-              float rings = seen > 0.002 ? colour.a : 0.0;
-              float total = rings + dustSeen * (1.0 - rings);
-              colour = vec4((colour.rgb * rings + tint * dustSeen * (1.0 - rings)) / total, total);
-              if (seen <= 0.002) depth = depthOf(t * ray);
-            }
-          }
-        }
       }
     }
     // Nearly edge on: the ray's path along their plane, from where the
@@ -431,6 +413,76 @@ export const skyRingFragment = /* glsl */ `
         if (a > colour.a) {
           colour = vec4(ringLight(p, abs(g), uRingOpacity), a);
           depth = depthOf(p - camera);
+        }
+      }
+    }
+    // Dust: thin but thick enough to see edge on. Its density is a Gaussian
+    // of the height over the plane (sigma DUST_SCALE_HEIGHT x r), marched
+    // along the ray through the slab of 3 sigma and the outer radius, in the
+    // giant's radii, with the back-lit gain; finite from inside the ring
+    // and in its plane (see dustColumn in lib/ringMoons.ts). Composited
+    // with the rings, not over them.
+    if (uDustCount > 0.0) {
+      float rMax = 0.0;
+      for (int k = 0; k < 4; k++) {
+        if (float(k) < uDustCount) rMax = max(rMax, uDustRadii[k].z);
+      }
+      vec3 o = camera / uRadius;
+      float yo = height / uRadius;
+      float slab = 3.0 * DUST_H * rMax;
+      float t0 = 0.0;
+      float t1 = min(hit / uRadius, 1e4);
+      bool crosses = true;
+      if (abs(g) > 1e-6) {
+        float ta = (-slab - yo) / g;
+        float tb = (slab - yo) / g;
+        t0 = max(t0, min(ta, tb));
+        t1 = min(t1, max(ta, tb));
+      } else if (abs(yo) >= slab) {
+        crosses = false;
+      }
+      vec3 inPlane = o - yo * uNormal;
+      vec3 flatRay = ray - g * uNormal;
+      float qa = dot(flatRay, flatRay);
+      float qb = dot(inPlane, flatRay);
+      float qc = dot(inPlane, inPlane) - rMax * rMax;
+      if (qa < 1e-12) {
+        if (qc > 0.0) crosses = false;
+      } else {
+        float qd = qb * qb - qa * qc;
+        if (qd < 0.0) crosses = false;
+        else {
+          t0 = max(t0, (-qb - sqrt(qd)) / qa);
+          t1 = min(t1, (-qb + sqrt(qd)) / qa);
+        }
+      }
+      if (crosses && t1 > t0) {
+        float ds = (t1 - t0) / float(DUST_STEPS);
+        float gain = dustGain(clamp(dot(uSunDir, ray), -1.0, 1.0));
+        float tau = 0.0;
+        float tw = 0.0;
+        vec3 tint = vec3(0.0);
+        for (int k = 0; k < DUST_STEPS; k++) {
+          float t = t0 + (float(k) + 0.5) * ds;
+          vec3 q = o + t * ray;
+          float y = dot(q, uNormal);
+          float r = length(q - y * uNormal);
+          vec4 dust = dustDensity(r);
+          if (dust.w <= 0.0) continue;
+          float h = DUST_H * r;
+          float sb = dot(q, uSunDir);
+          bool shadowed = sb < 0.0 && length(q - sb * uSunDir) < 1.0;
+          float w = dust.w * exp(-0.5 * y * y / (h * h)) / (h * 2.5066283) * ds * (shadowed ? 1.0 : gain);
+          tau += w;
+          tw += w * t;
+          tint += w * dust.rgb * (shadowed ? 0.08 : 1.0);
+        }
+        float dustSeen = min(1.0 - exp(-tau), 1.0);
+        if (dustSeen > 0.002) {
+          float rings = colour.a > 0.002 ? colour.a : 0.0;
+          float total = rings + dustSeen * (1.0 - rings);
+          colour = vec4((colour.rgb * rings + tint / tau * dustSeen * (1.0 - rings)) / total, total);
+          if (dustSeen > rings) depth = depthOf(tw / tau * uRadius * ray);
         }
       }
     }

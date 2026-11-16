@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Body } from './api/types/Body';
-import { dustFedBy, dustOf, innerRingOf, ringPart, ringsOf, SKY_DUST_MAX, skyDustUniforms } from './ringMoons';
+import { dustFedBy, dustOf, innerRingOf, ringPart, ringsOf, SKY_DUST_MAX, dustColumn, skyDustUniforms } from './ringMoons';
 
 const body = (over: Record<string, unknown>): Body =>
   ({
@@ -89,5 +89,24 @@ describe('skyDustUniforms', () => {
     expect(u.colour[1]).toBeCloseTo(0.214, 3);
     expect(u.colour[2]).toBe(0);
     expect(Array.from(u.radii.slice(3))).toEqual(new Array(9).fill(0));
+  });
+});
+
+describe('dustColumn', () => {
+  const ring = { inner: 3, peak: 5, outer: 8, opacity: 0.1, colour: [1, 1, 1] as [number, number, number] };
+  it('gives the face-on opacity to a vertical ray at the peak', () => {
+    expect(dustColumn([5, -1, 0], [0, 1, 0], ring)).toBeCloseTo(0.1, 2);
+    expect(Math.abs(dustColumn([5, -1, 0], [0, 1, 0], ring) / 0.1 - 1)).toBeLessThan(0.05);
+  });
+  it('is finite and thicker than face-on along the plane from inside', () => {
+    const inPlane = dustColumn([4, 0, 0], [1, 0, 0], ring);
+    expect(Number.isFinite(inPlane)).toBe(true);
+    expect(inPlane).toBeGreaterThan(0.1);
+    const up = dustColumn([4, 0, 0], [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0], ring);
+    expect(up).toBeLessThan(inPlane);
+    expect(up).toBeGreaterThan(0);
+  });
+  it('is zero for a ray that misses the ring radially', () => {
+    expect(dustColumn([10, 0, 0], [0, 0, 1], ring)).toBe(0);
   });
 });
