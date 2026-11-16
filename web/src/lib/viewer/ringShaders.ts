@@ -1,3 +1,4 @@
+import { dustPhaseGlsl } from './dustPhase';
 // The rings of a giant planet: a flat annulus in its equatorial plane, its
 // opacity varying with the radius (ringlets, gaps), lit by the sun and
 // darkened where the planet shadows it.
@@ -132,6 +133,7 @@ export const dustRingFragment = /* glsl */ `
   uniform float uFade;
   varying vec3 vLocal;
   varying vec3 vWorld;
+  ${dustPhaseGlsl}
 
   void main() {
     float r = length(vLocal.xy);
@@ -141,13 +143,16 @@ export const dustRingFragment = /* glsl */ `
     float density = uOpacity * (1.0 - smoothstep(0.0, 1.0, side));
     if (density < 0.001) discard;
     float light = 1.0;
+    float gain = 1.0;
     if (uLightMode == 1) {
       vec3 p = vWorld;
       float b = dot(p, uSunDir);
       float c = dot(p, p) - 1.0;
       light = (b < 0.0 && b * b - c > 0.0) ? 0.08 : 1.0;
+      // Ice grains scatter forward: brighter back-lit, none in the shadow.
+      if (light > 0.5) gain = dustGain(-dot(uSunDir, normalize(cameraPosition - p)));
     }
-    gl_FragColor = vec4(uColour * light, density * uFade);
+    gl_FragColor = vec4(uColour * light, min(density * gain * uFade, 1.0));
     #include <colorspace_fragment>
   }
 `;
