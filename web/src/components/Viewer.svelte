@@ -832,6 +832,15 @@
   $effect(() => view?.setJets(meta?.model?.geysers ?? null, meta ? meta.circumference_km / (2 * Math.PI) : 0));
   // The dust rings its system drew for the giant shown.
   $effect(() => view?.setDustRings(giant && sysBody ? [...dustOf(sysBody), ...innerRingOf(sysBody)] : []));
+  // A sparse cloud of grains round each moon feeding one, where it stands in
+  // the sky: its index in systemSky's order (the system's bodies but the
+  // one shown), which setSkyBodies keeps.
+  $effect(() => {
+    const others = sys && sysBody ? sys.bodies.filter((b) => b.id !== sysBody.id) : [];
+    view?.setDustClouds(
+      giant && sysBody ? dustOf(sysBody).map((d) => ({ colour: d.colour, source: others.findIndex((b) => b.id === d.source) })) : [],
+    );
+  });
   // A halo of grains round a moon that vents or feeds a dust ring, in its
   // close-up, denser over its venting pole.
   $effect(() => {

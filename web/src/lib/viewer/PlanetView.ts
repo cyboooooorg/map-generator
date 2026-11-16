@@ -5,7 +5,17 @@
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import { axesOnScreen, type ScreenAxis } from './axes';
 import { createJets, jetSources, placeJets, type JetMesh, type JetSource } from './jets';
-import { createGrains, grainCount, grainShine, HALO_GRAINS, haloGrains, type GrainPoints } from './dustGrains';
+import {
+  CLOUD_LOOK,
+  createGrains,
+  grainCount,
+  grainShine,
+  HALO_GRAINS,
+  haloGrains,
+  MOON_CLOUD_GRAINS,
+  moonCloudGrains,
+  type GrainPoints,
+} from './dustGrains';
 import {
   AddEquation,
   AdditiveBlending,
@@ -765,6 +775,13 @@ export class PlanetView {
   /** The jets of the geysers of the moon shown, with the sources they stand on (see setJets). */
   private jets: JetMesh | null = null;
   private jetSites: JetSource[] = [];
+  /**
+   * The clouds of grains round the moons feeding the dust rings of the
+   * giant shown (`source`: the moon's index in setSkyBodies' order; see
+   * setDustClouds), with the key they were built for.
+   */
+  private dustClouds: { points: GrainPoints; source: number }[] = [];
+  private dustCloudsKey = '';
   /** The grains round the moon shown, in its close-up (see setDustHalo), with their key. */
   private dustHalo: GrainPoints | null = null;
   private dustHaloKey = '';
@@ -1393,6 +1410,31 @@ export class PlanetView {
   }
 
   /**
+   * A sparse cloud of grains round each moon feeding a dust ring of the
+   * giant shown, thinning along its orbit ahead and behind it (see
+   * moonCloudGrains), in the ring's colour; `source` is that moon's index
+   * in setSkyBodies' order (-1: not in the sky, no cloud). None clears them.
+   */
+  setDustClouds(rings: readonly { colour: readonly [number, number, number]; source: number }[]): void {
+    const fed = rings.filter((r) => r.source >= 0);
+    const key = JSON.stringify(fed.map((r) => [r.colour, r.source]));
+    if (key === this.dustCloudsKey) return;
+    this.dustCloudsKey = key;
+    for (const { points } of this.dustClouds) {
+      this.scene.remove(points);
+      points.geometry.dispose();
+      points.material.dispose();
+    }
+    const n = grainCount(MOON_CLOUD_GRAINS, this.quality.dustGrains);
+    this.dustClouds = fed.map((r, k) => {
+      const points = createGrains(moonCloudGrains(n, 301 + k), grainShine(n, 401 + k), r.colour, this.u, CLOUD_LOOK, true);
+      this.scene.add(points);
+      return { points, source: r.source };
+    });
+    this.requestRender();
+  }
+
+  /**
    * A halo of grains round the moon shown, in its close-up (a moon that
    * vents or feeds a dust ring), denser over its venting pole when `south`
    * says which (null: none known); null clears it.
@@ -1417,16 +1459,25 @@ export class PlanetView {
     this.requestRender();
   }
 
-  /** Shows the dust halo this frame, at the camera's pixel scale. */
-  private drawDustHalo(): void {
-    const points = this.dustHalo;
-    if (!points) return;
-    points.visible = this.morph > 0.01;
-    if (!points.visible) return;
-    const u = points.material.uniforms;
-    u['uFade']!.value = this.morph ** 3;
-    u['uPxScale']!.value = this.canvas.clientHeight / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
-    u['uPixelRatio']!.value = this.renderer.getPixelRatio();
+  /** Shows the dust halo and the moon clouds this frame, round their moons where they are now, at the camera's pixel scale. */
+  private drawDustGrains(): void {
+    const visible = this.morph > 0.01;
+    const pxScale = this.canvas.clientHeight / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    const ratio = this.renderer.getPixelRatio();
+    const show = (points: GrainPoints, on: boolean) => {
+      points.visible = on;
+      if (!on) return;
+      const u = points.material.uniforms;
+      u['uFade']!.value = this.morph ** 3;
+      u['uPxScale']!.value = pxScale;
+      u['uPixelRatio']!.value = ratio;
+    };
+    if (this.dustHalo) show(this.dustHalo, visible);
+    for (const { points, source } of this.dustClouds) {
+      const position = this.skyBodies[source]?.body.position;
+      show(points, visible && !!position);
+      if (position) (points.material.uniforms['uMoon']!.value as Vector3).set(...position);
+    }
   }
 
   /**
@@ -2402,8 +2453,10 @@ export class PlanetView {
     }
     this.jets?.geometry.dispose();
     this.jets?.material.dispose();
-    this.dustHalo?.geometry.dispose();
-    this.dustHalo?.material.dispose();
+    for (const points of [this.dustHalo, ...this.dustClouds.map((c) => c.points)]) {
+      points?.geometry.dispose();
+      points?.material.dispose();
+    }
     this.renderer.dispose();
     // Free the WebGL context now: browsers cap live contexts (about 16), and
     // compare panes come and go.
@@ -3681,7 +3734,7 @@ export class PlanetView {
     this.backdrop.group.visible = skyShown(this.skyChoice) && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
-    this.drawDustHalo();
+    this.drawDustGrains();
     // The axis and the guides start from the farthest of the surface: an
     // irregular moon's longest semi-axis, with its relief as displayed.
     const relief = this.shared.uHasData.value > 0.5 ? this.peakAbove * this.reliefLift() : 0;

@@ -1,6 +1,11 @@
+import { NormalBlending } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DUST_RING_GAIN_MAX } from './dustPhase';
 import {
+  CLOUD_ALPHA,
+  CLOUD_LEVEL,
+  CLOUD_LOOK,
+  CLOUD_MAX_PX,
   createGrains,
   GRAIN_SHINE_MIN,
   grainCount,
@@ -12,6 +17,10 @@ import {
   HALO_OUTER,
   HALO_POLE_HALF_ANGLE,
   haloGrains,
+  MOON_CLOUD_GRAINS,
+  MOON_CORE_SIGMA,
+  MOON_TRAIL_RAD,
+  moonCloudGrains,
 } from './dustGrains';
 
 describe('dust halo grains', () => {
@@ -87,5 +96,56 @@ describe('dust halo grains', () => {
     expect(points.material.uniforms['uMaxPx']!.value).toBe(HALO_MAX_PX);
     expect(HALO_MAX_PX).toBeLessThanOrEqual(2);
     expect(points.material.fragmentShader).toContain('#include <colorspace_fragment>');
+  });
+});
+
+describe('moon cloud grains', () => {
+  it('is deterministic for a seed and changes with it', () => {
+    expect(moonCloudGrains(100, 3)).toEqual(moonCloudGrains(100, 3));
+    expect(moonCloudGrains(100, 3)).not.toEqual(moonCloudGrains(100, 4));
+  });
+
+  it('packs round the moon and thins smoothly along the orbit, ahead and behind', () => {
+    const n = 20000;
+    const g = moonCloudGrains(n, 11);
+    expect(g).toHaveLength(3 * n);
+    const bins = [0, 0, 0, 0];
+    let ahead = 0;
+    let near = 0;
+    let wide = 0;
+    for (let i = 0; i < n; i += 1) {
+      const [along, radial, up] = [g[3 * i]!, g[3 * i + 1]!, g[3 * i + 2]!];
+      const a = Math.abs(along);
+      if (a < 3 * MOON_CORE_SIGMA) near += 1;
+      if (along > 3 * MOON_CORE_SIGMA) ahead += 1;
+      if (a < 4 * MOON_TRAIL_RAD) bins[Math.floor(a / MOON_TRAIL_RAD)]! += 1;
+      if (Math.abs(radial) > 0.2 || Math.abs(up) > 0.2) wide += 1;
+    }
+    // Dense at the moon, as many ahead as behind, then falling about e
+    // times per scale (past the first, which holds the core too).
+    expect(near / n).toBeGreaterThan(0.4);
+    expect(Math.abs(ahead / (n - near) - 0.5)).toBeLessThan(0.03);
+    expect(bins[0]!).toBeGreaterThan(3 * bins[1]!);
+    for (let k = 2; k < 4; k += 1) {
+      expect(bins[k]! / bins[k - 1]!).toBeGreaterThan(0.25);
+      expect(bins[k]! / bins[k - 1]!).toBeLessThan(0.5);
+    }
+    // Close to the orbit.
+    expect(wide / n).toBeLessThan(0.01);
+  });
+
+  it('draws a few hundred fine dots that blend and never saturate', () => {
+    expect(MOON_CLOUD_GRAINS).toBeLessThanOrEqual(500);
+    expect(CLOUD_MAX_PX).toBeLessThanOrEqual(1.5);
+    // Back-lit the brightest grain stays under full opacity (no widening),
+    // and however many overlap a pixel tends to CLOUD_LEVEL of the colour.
+    expect(grainLight(1, 1, CLOUD_ALPHA).opacity).toBeLessThan(1);
+    expect(CLOUD_LEVEL).toBeLessThan(0.9);
+    const u = { uSunDir: { value: null }, uLightMode: { value: 1 } };
+    const points = createGrains(moonCloudGrains(10, 1), grainShine(10, 1), [1, 1, 1], u, CLOUD_LOOK, true);
+    expect(points.material.blending).toBe(NormalBlending);
+    expect(points.material.uniforms['uOrbit']!.value).toBe(1);
+    expect(points.material.uniforms['uLevel']!.value).toBe(CLOUD_LEVEL);
+    expect(points.material.fragmentShader).toContain('uColour * uLevel');
   });
 });
