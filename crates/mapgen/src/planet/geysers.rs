@@ -86,6 +86,154 @@ pub struct Fracture {
     pub length_km: f32,
 }
 
+/// How far the young terrain around the geysers' pole reaches, as a
+/// multiple of the fractures' farthest end from the pole: Enceladus's
+/// tiger stripes fill a cap of about 16° and its young south polar
+/// terrain, bounded by a ring of cliffs and folds near 55° S, about 35°
+/// (Porco et al. 2006, doi:10.1126/science.1123013). Calibration on that
+/// one body.
+pub const YOUNG_CAP_FACTOR: f64 = 2.0;
+
+/// Widest the young terrain around the geysers' pole gets, degrees from
+/// the pole: Enceladus's south polar terrain reaches about 35° from its
+/// pole (bounded near 55° S, Porco et al. 2006,
+/// doi:10.1126/science.1123013); this bounds a body whose fractures fill
+/// a wider cap. Calibration, a little beyond Enceladus's.
+pub const YOUNG_CAP_MAX_DEG: f64 = 40.0;
+
+/// The point of the unit sphere at `lat_deg` north and `lon_deg` east, in
+/// the frame of [`crate::geo::Grid::unit_vector_at`]: `[cos lat cos lon,
+/// cos lat sin lon, sin lat]`.
+pub fn unit_at(lat_deg: f64, lon_deg: f64) -> [f64; 3] {
+    let (sl, cl) = lat_deg.to_radians().sin_cos();
+    let (so, co) = lon_deg.to_radians().sin_cos();
+    [cl * co, cl * so, sl]
+}
+
+impl Fracture {
+    /// Its centre, on the unit sphere (see [`unit_at`]).
+    fn centre(&self) -> [f64; 3] {
+        unit_at(f64::from(self.lat_deg), f64::from(self.lon_deg))
+    }
+
+    /// The unit tangent at its centre along its strike `azimuth_deg`,
+    /// clockwise from north (east = north × up). At a pole, north is the
+    /// direction of the meridian `lon_deg`.
+    fn strike(&self) -> [f64; 3] {
+        let c = self.centre();
+        let (lat, lon) = (
+            f64::from(self.lat_deg).to_radians(),
+            f64::from(self.lon_deg).to_radians(),
+        );
+        let north = if self.lat_deg.abs() >= 90.0 {
+            [lon.cos(), lon.sin(), 0.0]
+        } else {
+            [-lat.sin() * lon.cos(), -lat.sin() * lon.sin(), lat.cos()]
+        };
+        let east = cross(north, c);
+        let (sa, ca) = f64::from(self.azimuth_deg).to_radians().sin_cos();
+        normalize(add(scale(north, ca), scale(east, sa)))
+    }
+
+    /// Its two ends on the unit sphere of a body of `radius_km`: half its
+    /// length from its centre along its strike, then along the opposite
+    /// strike, on the great circle through them.
+    pub fn ends(&self, radius_km: f64) -> ([f64; 3], [f64; 3]) {
+        let (c, d) = (self.centre(), self.strike());
+        let half = f64::from(self.length_km) / 2.0 / radius_km;
+        let (s, k) = half.sin_cos();
+        (
+            add(scale(c, k), scale(d, -s)),
+            add(scale(c, k), scale(d, s)),
+        )
+    }
+
+    /// Where the unit vector `p` lies relative to it on a body of
+    /// `radius_km`: `(across_km, along)`, its signed distance, km, from the
+    /// fracture's great circle (positive on the side of the normal
+    /// centre × strike), and the position of its projection on that circle
+    /// from the centre, in lengths of the fracture (−0.5 and 0.5 at the
+    /// ends, positive towards the strike). `None` when the projection falls
+    /// beyond the ends, when `|across_km|` is over [`FRACTURE_SPACING_KM`]
+    /// or when the fracture has no length.
+    pub fn offset_km(&self, p: [f64; 3], radius_km: f64) -> Option<(f64, f64)> {
+        let span = f64::from(self.length_km) / radius_km;
+        if span <= 0.0 {
+            return None;
+        }
+        let (c, d) = (self.centre(), self.strike());
+        let n = normalize(cross(c, d));
+        let across_km = dot(p, n).clamp(-1.0, 1.0).asin() * radius_km;
+        if across_km.abs() > FRACTURE_SPACING_KM {
+            return None;
+        }
+        let along = dot(p, d).atan2(dot(p, c)) / span;
+        (along.abs() <= 0.5).then_some((across_km, along))
+    }
+}
+
+/// The young terrain around the geysers' pole: the cap their fractures
+/// resurface, as Enceladus's south polar terrain, where craters are few.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct YoungTerrain {
+    /// The pole the geysers vent from, on the unit sphere (see
+    /// [`unit_at`]).
+    pub pole: [f64; 3],
+    /// Its angular radius around the pole, radians.
+    pub cap_rad: f64,
+}
+
+impl YoungTerrain {
+    /// The young terrain of `geysers` on a body of `radius_km`:
+    /// [`YOUNG_CAP_FACTOR`] times the angle from the pole to the
+    /// fractures' farthest end, at most [`YOUNG_CAP_MAX_DEG`].
+    pub fn of(geysers: &Geysers, radius_km: f64) -> YoungTerrain {
+        let pole = unit_at(if geysers.south { -90.0 } else { 90.0 }, 0.0);
+        let farthest = geysers
+            .fractures
+            .iter()
+            .flat_map(|f| {
+                let (a, b) = f.ends(radius_km);
+                [a, b]
+            })
+            .map(|e| dot(pole, e).clamp(-1.0, 1.0).acos())
+            .fold(0.0, f64::max);
+        YoungTerrain {
+            pole,
+            cap_rad: (YOUNG_CAP_FACTOR * farthest).min(YOUNG_CAP_MAX_DEG.to_radians()),
+        }
+    }
+
+    /// Whether the unit vector `p` lies in it.
+    pub fn covers(&self, p: [f64; 3]) -> bool {
+        dot(self.pole, p) >= self.cap_rad.cos()
+    }
+}
+
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn scale(a: [f64; 3], k: f64) -> [f64; 3] {
+    [a[0] * k, a[1] * k, a[2] * k]
+}
+
+fn normalize(a: [f64; 3]) -> [f64; 3] {
+    scale(a, 1.0 / dot(a, a).sqrt())
+}
+
 /// The geysers of a body of `interior` making `heat` under the ice shell
 /// `shell`, the pole and the fractures' strike drawn from `seed` (a
 /// stream of their own); `None` when its shell does not crack through.
@@ -258,6 +406,114 @@ mod tests {
             middle > 0.95 * 2.0 * radius * MAX_REGION_DEG.to_radians(),
             "{middle}"
         );
+    }
+
+    /// Angle, radians, between two unit vectors.
+    fn angle(a: [f64; 3], b: [f64; 3]) -> f64 {
+        dot(a, b).clamp(-1.0, 1.0).acos()
+    }
+
+    /// Whether the unit vector `e` lies at longitude `lon` degrees, modulo 360.
+    fn lon_close(e: [f64; 3], lon: f64) -> bool {
+        let d = (e[1].atan2(e[0]).to_degrees() - lon).rem_euclid(360.0);
+        d < 1e-6 || d > 360.0 - 1e-6
+    }
+
+    /// The fractures of an asked Enceladus: a 16° cap around its south pole.
+    fn enceladus_geysers() -> Geysers {
+        Geysers {
+            south: true,
+            fractures: fractures(252.1, 16.0, true, 30.0),
+        }
+    }
+
+    #[test]
+    fn ends_are_half_a_length_from_the_centre() {
+        let f = Fracture {
+            lat_deg: -80.0,
+            lon_deg: 30.0,
+            azimuth_deg: 90.0,
+            length_km: 130.0,
+        };
+        let r = 252.1;
+        let (a, b) = f.ends(r);
+        let c = unit_at(-80.0, 30.0);
+        for e in [a, b] {
+            assert!((angle(c, e) * r - 65.0).abs() < 0.1);
+        }
+    }
+
+    #[test]
+    fn offset_is_zero_on_the_fracture_and_spacing_away_beside_it() {
+        // the centre is on it; a point 10 km across the strike is 10 km off
+        let f = Fracture {
+            lat_deg: -80.0,
+            lon_deg: 30.0,
+            azimuth_deg: 90.0,
+            length_km: 130.0,
+        };
+        let r = 252.1;
+        let (across, along) = f.offset_km(unit_at(-80.0, 30.0), r).unwrap();
+        assert!(across.abs() < 1e-6 && along.abs() < 1e-6);
+        let north = unit_at(-80.0 + (10.0 / r).to_degrees(), 30.0);
+        assert!((f.offset_km(north, r).unwrap().0.abs() - 10.0).abs() < 0.05);
+        assert!(f.offset_km(unit_at(-80.0, 30.0 + 90.0), r).is_none());
+    }
+
+    #[test]
+    fn segment_through_the_pole() {
+        let f = Fracture {
+            lat_deg: -90.0,
+            lon_deg: 45.0,
+            azimuth_deg: 0.0,
+            length_km: 130.0,
+        };
+        let r = 252.1;
+        let (a, b) = f.ends(r);
+        // runs along the 45°/225° meridians
+        for (e, lon) in [(a, 45.0_f64), (b, 225.0)] {
+            assert!(lon_close(e, lon) || lon_close(e, lon - 180.0));
+        }
+        assert!(f.offset_km(unit_at(-89.0, 45.0), r).unwrap().0.abs() < 0.05);
+    }
+
+    #[test]
+    fn segment_across_the_seam() {
+        let f = Fracture {
+            lat_deg: -82.0,
+            lon_deg: 179.0,
+            azimuth_deg: 90.0,
+            length_km: 130.0,
+        };
+        let r = 252.1;
+        for lon in [178.0, -179.5] {
+            assert!(f.offset_km(unit_at(-82.0, lon), r).is_some());
+        }
+    }
+
+    /// The stored fractures run from edge to edge of their cap: their ends
+    /// on the sphere are those of the gnomonic layout, 16° from the pole.
+    #[test]
+    fn ends_of_drawn_fractures_lie_on_the_region_edge() {
+        let pole = unit_at(-90.0, 0.0);
+        for strike in [30.0, -170.0] {
+            for f in fractures(252.1, 16.0, true, strike) {
+                let (a, b) = f.ends(252.1);
+                for e in [a, b] {
+                    let deg = angle(pole, e).to_degrees();
+                    assert!((deg - 16.0).abs() < 0.01, "{f:?} {deg}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn young_terrain_of_enceladus_reaches_about_55_south() {
+        // the fractures part A draws for an Enceladus-like moon
+        let g = enceladus_geysers();
+        let y = YoungTerrain::of(&g, 252.1);
+        assert!((25.0..=40.0).contains(&y.cap_rad.to_degrees()));
+        assert!(y.covers(unit_at(-75.0, 0.0)) && !y.covers(unit_at(-45.0, 0.0)));
     }
 
     #[test]
