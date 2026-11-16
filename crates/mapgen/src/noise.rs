@@ -14,13 +14,34 @@ pub const EARTH_CIRCUMFERENCE_KM: f32 = 40_075.0;
 ///
 /// Returns a normalised value in roughly `[-1.0, 1.0]`.
 pub fn fbm(noise: &Perlin, x: f64, y: f64, z: f64, octaves: u32) -> f32 {
+    fbm_weighted(noise, x, y, z, octaves, |_| 1.0)
+}
+
+/// Like [`fbm`], each octave weighted by `weight` of its frequency
+/// (relative to the first octave's: 1, 2, 4…), in `[0, 1]`: 1 keeps it,
+/// 0 drops it (and skips it). The sum is still normalised by every
+/// octave's full amplitude, so that dropping the finest octaves smooths
+/// the field without scaling up the coarser ones: a low-pass filter, for
+/// a map whose pixels cannot resolve them (see
+/// `generation::Sampler::resolved`).
+pub fn fbm_weighted(
+    noise: &Perlin,
+    x: f64,
+    y: f64,
+    z: f64,
+    octaves: u32,
+    weight: impl Fn(f64) -> f64,
+) -> f32 {
     let mut value = 0.0f64;
     let mut amplitude = 1.0f64;
     let mut frequency = 1.0f64;
     let mut max_value = 0.0f64;
 
     for _ in 0..octaves {
-        value += noise.get([x * frequency, y * frequency, z * frequency]) * amplitude;
+        let w = weight(frequency);
+        if w > 0.0 {
+            value += noise.get([x * frequency, y * frequency, z * frequency]) * amplitude * w;
+        }
         max_value += amplitude;
         amplitude *= 0.5;
         frequency *= 2.0;
