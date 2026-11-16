@@ -54,7 +54,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 9;
+pub const RENDER_VERSION: u32 = 11;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -225,19 +225,43 @@ fn bilinear(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y:
     top * (1.0 - fy) + bottom * fy
 }
 
-/// Bicubic (uniform cubic B-spline) sample of a base layer: its slope and
-/// its curvature are continuous, so the relief lit from the tiles' normals
-/// shows no crease along base pixel edges (Catmull-Rom's curvature jumped
-/// there, a washboard on every slope). It smooths the samples slightly
-/// rather than passing through them: a base pixel's own value moves by at
-/// most a third of its difference with the mean of its neighbours.
+/// [`bicubic64`] in single precision.
+#[cfg(test)]
 fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f32 {
+    bicubic64(layer, width, height, x, y) as f32
+}
+
+/// Bicubic (uniform cubic B-spline) sample of a base layer, in double
+/// precision: its slope and its curvature are continuous, so the relief
+/// lit from the tiles' normals shows no crease along base pixel edges
+/// (Catmull-Rom's curvature jumped there, a washboard on every slope). It
+/// smooths the samples slightly rather than passing through them: a base
+/// pixel's own value moves by at most a third of its difference with the
+/// mean of its neighbours.
+///
+/// Rows beyond a pole are those as far on its other side, half a turn
+/// round (the sphere continues through the pole), rather than the polar
+/// row repeated: the interpolated field stays smooth through the pole,
+/// where the polar row repeated held each column's value up to it, a cone
+/// of slopes that grew without end towards it. In double precision, a
+/// tile's pixels near a pole (metres apart along their parallel at the
+/// deepest level) keep the differences their slopes are read from.
+fn bicubic64(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f64 {
     let (w, h) = (width as i64, height as i64);
-    let (x, y) = (x - 0.5, (y - 0.5).clamp(0.0, (h - 1) as f64));
+    let (x, y) = (x - 0.5, y - 0.5);
     let (x0, y0) = (x.floor() as i64, y.floor() as i64);
-    let (fx, fy) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
-    let at = |xx: i64, yy: i64| layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize);
-    let cubic = |p: [f32; 4], t: f32| {
+    let (fx, fy) = (x - x0 as f64, y - y0 as f64);
+    let at = |xx: i64, yy: i64| {
+        let (xx, yy) = if yy < 0 {
+            (xx + w / 2, -1 - yy)
+        } else if yy >= h {
+            (xx + w / 2, 2 * h - 1 - yy)
+        } else {
+            (xx, yy)
+        };
+        f64::from(layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize))
+    };
+    let cubic = |p: [f64; 4], t: f64| {
         let (t2, t3, u) = (t * t, t * t * t, 1.0 - t);
         (u * u * u * p[0]
             + (3.0 * t3 - 6.0 * t2 + 4.0) * p[1]
@@ -245,7 +269,7 @@ fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: 
             + t3 * p[3])
             / 6.0
     };
-    let rows: [f32; 4] = std::array::from_fn(|j| {
+    let rows: [f64; 4] = std::array::from_fn(|j| {
         let yy = y0 - 1 + j as i64;
         cubic(std::array::from_fn(|i| at(x0 - 1 + i as i64, yy)), fx)
     });
@@ -261,7 +285,7 @@ fn band_limited(
     first_km: f64,
     last_km: f64,
     gain: f64,
-) -> f32 {
+) -> f64 {
     let mut sum = 0.0;
     let (mut wavelength, mut amplitude) = (first_km, 1.0);
     while wavelength >= last_km {
@@ -270,7 +294,7 @@ fn band_limited(
         wavelength /= 2.0;
         amplitude *= gain;
     }
-    sum as f32
+    sum
 }
 
 /// Share of the height detail a biome's surface gets: snow, ice and lava
@@ -403,15 +427,23 @@ impl DetailWorld {
         self.world.params.circumference_km as f64 / self.world.width as f64
     }
 
-    /// Detailed elevation at a point, for a tile whose pixels are `pixel_km`.
+    /// [`Self::elevation64`] in single precision.
+    #[cfg(test)]
     fn elevation(&self, lon: f64, lat: f64, pixel_km: f64) -> f32 {
+        self.elevation64(lon, lat, pixel_km) as f32
+    }
+
+    /// Detailed elevation at a point, for a tile whose pixels are
+    /// `pixel_km`, in double precision (see [`bicubic64`]).
+    fn elevation64(&self, lon: f64, lat: f64, pixel_km: f64) -> f64 {
         let w = &self.world;
         let (x, y) = self.base_xy(lon, lat);
-        let base = bicubic(&w.elevation, w.width, w.height, x, y);
+        let base64 = bicubic64(&w.elevation, w.width, w.height, x, y);
+        let base = base64 as f32;
         let first = 2.0 * self.base_px_km();
         let last = FINEST_PX * pixel_km;
         if last > first {
-            return base;
+            return base64;
         }
         let p = sphere(lon, lat, 1.0);
         let radius = w.params.circumference_km as f64 / TAU;
@@ -427,7 +459,7 @@ impl DetailWorld {
         } else {
             1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs())
         };
-        let base = if coastal > 0.0 {
+        let base64 = if coastal > 0.0 {
             let (mut dx, mut dy) = (0.0, 0.0);
             let (mut wavelength, mut share) = (first, COAST_WARP);
             let mut k = 0.0;
@@ -446,10 +478,11 @@ impl DetailWorld {
                 share *= COAST_WARP_DECAY;
                 k += 7.3;
             }
-            bicubic(&w.elevation, w.width, w.height, x + dx, y + dy)
+            bicubic64(&w.elevation, w.width, w.height, x + dx, y + dy)
         } else {
-            base
+            base64
         };
+        let base = base64 as f32;
 
         // Height detail: calmer on plains (and at every zoom), stronger and
         // 1/f on high ground, none at the waterline.
@@ -475,7 +508,9 @@ impl DetailWorld {
         };
         // Floodplains stay flat valley floors.
         let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&w.floodplain, w.width, w.height, x, y);
-        base + amplitude * shore * floor * band_limited(&self.noise, p, radius, first, last, gain)
+        base64
+            + f64::from(amplitude * shore * floor)
+                * band_limited(&self.noise, p, radius, first, last, gain)
     }
 
     /// Elevation of a tile with a one-pixel border, for slopes (row-major,
@@ -483,7 +518,9 @@ impl DetailWorld {
     /// small for the base map, and the rivers' channels (`channel`, same
     /// layout). Also the same without those craters, which biomes follow: a
     /// small crater changes the relief, not the ground it is dug into.
-    fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f32>, Vec<f32>) {
+    /// The first in double precision, for the slopes near the poles (see
+    /// [`bicubic64`]).
+    fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f64>, Vec<f32>) {
         let w = &self.world;
         let side = TILE_SIZE as usize + 2;
         let waterline = w.params.open_waterline();
@@ -493,24 +530,31 @@ impl DetailWorld {
             .map(|i| {
                 let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
                 let (lon, lat) = tile.lon_lat(px, py);
-                let ground = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km);
+                // A border pixel beyond a pole lies on its other side.
+                let (lon, lat) = if lat.abs() > PI / 2.0 {
+                    (lon + PI, lat.signum() * PI - lat)
+                } else {
+                    (lon, lat)
+                };
+                let ground = self.elevation64(lon, lat, pixel_km);
+                let waterline = f64::from(waterline);
                 let e = match &craters {
                     // Craters never dig the land below the sea.
                     Some(relief) if ground >= waterline => {
-                        (ground + relief[i]).max(waterline + 1e-6)
+                        (ground + f64::from(relief[i])).max(waterline + 1e-6)
                     }
-                    Some(relief) => ground + relief[i],
+                    Some(relief) => ground + f64::from(relief[i]),
                     None => ground,
                 };
                 // The river's channel and banks, never below the sea.
-                let channelled = |e: f32| {
+                let channelled = |e: f64| {
                     if e >= waterline {
-                        (e - channel[i]).max(waterline + 1e-6)
+                        (e - f64::from(channel[i])).max(waterline + 1e-6)
                     } else {
                         e
                     }
                 };
-                (channelled(e), channelled(ground))
+                (channelled(e), channelled(ground) as f32)
             })
             .unzip()
     }
@@ -693,21 +737,28 @@ impl DetailWorld {
     /// map's exaggeration, from the tile's elevation with its one-pixel
     /// border: neighbouring tiles share their edge pixels, so their normals
     /// meet without a seam.
+    ///
+    /// The run towards the east is the pixel's true width on its parallel,
+    /// down to the pixels next to the poles (whose centres lie half a pixel
+    /// from them), as on the base map (see [`relief::slopes`]): a floor at
+    /// 0.05 of the equator's shrank the slopes along the parallels within
+    /// 2.9 degrees of the poles, a cone in the light. In double precision:
+    /// at the deepest level, those pixels are metres apart.
     fn normal(
         &self,
-        elevation: &[f32],
+        elevation: &[f64],
         side: usize,
         x: usize,
         y: usize,
         pixel_km: f64,
         lat: f64,
     ) -> [f32; 3] {
-        let relief = relief_km(self.world().params.circumference_km);
+        let relief = f64::from(relief_km(self.world().params.circumference_km));
         let at = |x: usize, y: usize| elevation[y * side + x] * relief;
-        let dx_km = (pixel_km * lat.cos().max(0.05)) as f32;
+        let dx_km = pixel_km * lat.cos();
         let dz_east = (at(x + 1, y) - at(x - 1, y)) / (2.0 * dx_km);
-        let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km as f32);
-        relief::normal_of(dz_east, dz_north)
+        let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km);
+        relief::normal_of(dz_east as f32, dz_north as f32)
     }
 
     /// Anti-aliased coverage of the rivers on a tile, drawn with the base
@@ -919,6 +970,79 @@ mod tests {
         assert!((at - 4.0 / 9.0).abs() < 1e-5, "{at}");
     }
 
+    /// The interpolated base continues through a pole: a plane through the
+    /// centre (`x`, the unit vector's first component), sampled at the base
+    /// pixels, is read back near the pole within a hundredth of a row's
+    /// rise. Repeating the polar row held each column's value up to the
+    /// pole (an error of half a row's rise there), a cone whose slopes grew
+    /// without end towards it.
+    #[test]
+    fn the_interpolated_base_continues_through_the_poles() {
+        let (w, h) = (64u32, 32u32);
+        let grid = crate::geo::Grid {
+            width: w,
+            height: h,
+            circumference_km: 40_000.0,
+        };
+        let plane: Vec<f32> = (0..w * h)
+            .map(|i| grid.unit_vector_at(f64::from(i % w), f64::from(i / w))[0] as f32)
+            .collect();
+        let row = PI / f64::from(h);
+        let mut worst = 0.0f64;
+        for k in 0..200 {
+            let lon = f64::from(k) * 0.173 % TAU;
+            // Within a row of either pole.
+            let colat = f64::from(k % 20) / 20.0 * row;
+            for lat in [PI / 2.0 - colat, colat - PI / 2.0] {
+                let (x, y) = (lon / TAU * f64::from(w), (0.5 - lat / PI) * f64::from(h));
+                let want = lat.cos() * lon.cos();
+                worst = worst.max((bicubic64(&plane, w, h, x, y) - want).abs() / row);
+            }
+        }
+        assert!(worst < 0.01, "{worst} of a row's rise");
+    }
+
+    /// A tile's normals keep the slopes of the ground up to the pole: on a
+    /// plane through the centre, at the deepest level, the slope towards
+    /// the east of the polar tile's pixels is the plane's. With the east-
+    /// west run floored at 0.05 of the equator's (2.9 degrees) and the
+    /// elevation in single precision, it was off by the whole slope.
+    #[test]
+    fn tile_normals_keep_a_planes_slopes_up_to_the_pole() {
+        let d = detail_world();
+        let radius = f64::from(d.world().params.circumference_km) / TAU;
+        let relief = f64::from(relief_km(d.world().params.circumference_km));
+        // At longitude 90 degrees, where the plane rises along the parallels.
+        let tile = TileId {
+            z: MAX_LEVEL,
+            x: 1 << (MAX_LEVEL - 1),
+            y: 0,
+        };
+        let (cols, _) = tile.grid();
+        let pixel_km = d.world().params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
+        let side = TILE_SIZE as usize + 2;
+        // A gentle tilt (a slope of 0.2 at the exaggeration), on ground
+        // standing at 0.3 as land does.
+        let a = 0.2 * radius / relief;
+        let elevation: Vec<f64> = (0..side * side)
+            .map(|i| {
+                let (lon, lat) = tile.lon_lat((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
+                0.3 + a * lat.cos() * lon.cos()
+            })
+            .collect();
+        let mut worst = 0.0f64;
+        for y in 1..40 {
+            for x in (1..side - 1).step_by(5) {
+                let (lon, lat) = tile.lon_lat(x as f64 - 1.0, y as f64 - 1.0);
+                let n = d.normal(&elevation, side, x, y, pixel_km, lat);
+                let east = -f64::from(n[0]) / f64::from(n[2]);
+                let want = relief * a * -lon.sin() / radius;
+                worst = worst.max((east - want).abs() / 0.2);
+            }
+        }
+        assert!(worst < 0.01, "{worst}");
+    }
+
     /// The curvature of the interpolated base is continuous across the base
     /// pixels: a jump there shows as a crease at every base pixel in the
     /// lit relief of a tile (a washboard on every slope).
@@ -1115,8 +1239,12 @@ mod tests {
             .take(8);
         for tile in tiles {
             let (_, ground) = d.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
-            let detail: Vec<f32> = (0..side * side)
-                .map(|i| ground[i] - base(tile, (i % side) as f64 - 1.0, (i / side) as f64 - 1.0))
+            let detail: Vec<f64> = (0..side * side)
+                .map(|i| {
+                    f64::from(
+                        ground[i] - base(tile, (i % side) as f64 - 1.0, (i / side) as f64 - 1.0),
+                    )
+                })
                 .collect();
             for y in (1..side - 1).step_by(4) {
                 let (_, lat) = tile.lon_lat(0.0, y as f64 - 1.0);
@@ -1227,7 +1355,7 @@ mod tests {
                 };
                 let (cratered, bare) =
                     europa.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
-                cratered != bare
+                cratered.iter().zip(&bare).any(|(&c, &b)| c as f32 != b)
             })
             .count();
         assert!(dug > 0, "no small crater on 16 tiles");
