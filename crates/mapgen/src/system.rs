@@ -5535,17 +5535,18 @@ mod tests {
     }
 
     /// The tiger stripes are cut where the model stored them: at the
-    /// centre of each fracture, the ground lies lower than half the
-    /// spacing away on either side, by more than 0.2 km.
+    /// centre of each fracture, moved sideways by its meander, the ground
+    /// lies lower than half the spacing away on either side, by more than
+    /// 0.2 km.
     #[test]
     fn enceladus_world_has_its_stripes_at_the_stored_fractures() {
-        use crate::planet::geysers::{FRACTURE_SPACING_KM, unit_at};
+        use crate::planet::geysers::{FRACTURE_SPACING_KM, meander_km, unit_at};
         let (params, world) = enceladus_world(true);
         let grid = params.grid();
         let radius_km = body_radius_km(params);
         let off = FRACTURE_SPACING_KM / 2.0 / radius_km;
-        for f in &geysers_of(params).fractures {
-            let c = unit_at(f64::from(f.lat_deg), f64::from(f.lon_deg));
+        for (index, f) in geysers_of(params).fractures.iter().enumerate() {
+            let centre = unit_at(f64::from(f.lat_deg), f64::from(f.lon_deg));
             let (a, b) = f.ends(radius_km);
             let n = [
                 a[1] * b[2] - a[2] * b[1],
@@ -5553,6 +5554,10 @@ mod tests {
                 a[0] * b[1] - a[1] * b[0],
             ];
             let norm = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+            // The centre of the drawn line: off the great circle by the
+            // meander, along its normal.
+            let m = meander_km(index, 0.0, f64::from(f.length_km)) / radius_km;
+            let c: [f64; 3] = std::array::from_fn(|i| centre[i] * m.cos() + n[i] / norm * m.sin());
             let side = |s: f64| -> [f64; 3] {
                 std::array::from_fn(|i| c[i] * off.cos() + s * n[i] / norm * off.sin())
             };

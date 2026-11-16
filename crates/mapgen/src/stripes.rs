@@ -3,7 +3,7 @@
 //! stripes (Porco et al. 2006, doi:10.1126/science.1123013), darker than
 //! the plains around them.
 use crate::geo::Grid;
-use crate::planet::geysers::unit_at;
+use crate::planet::geysers::{MAX_MEANDER_KM, meander_km, unit_at};
 use crate::world::WorldParams;
 use rayon::prelude::*;
 
@@ -83,7 +83,9 @@ fn drawn_width_km(grid: &Grid) -> f64 {
 
 /// Adds `f(across_km, along)` to the value of every pixel of `grid` near one
 /// of the fractures of the geysers of `p` (none without geysers): within
-/// `reach_km` of its line and between its ends. Only the rows of the
+/// `reach_km` of its line and between its ends. The line bends off the
+/// fracture's great circle by [`meander_km`], and `across_km` is measured
+/// from it. Only the rows of the
 /// polar cap the fractures lie in are visited; values stay in [−1, 1].
 fn for_each_near(
     grid: &Grid,
@@ -112,14 +114,17 @@ fn for_each_near(
                 .acos()
         })
         .fold(0.0, f64::max)
-        + reach_km / radius_km
+        + (reach_km + MAX_MEANDER_KM) / radius_km
         + std::f64::consts::PI / f64::from(grid.height);
-    // Each fracture's centre, strike and normal, once for all the pixels.
+    // Each fracture's centre, strike and normal, once for all the pixels,
+    // with its index (zero-length ones counted) and length for its meander.
     let frames: Vec<_> = geysers
         .fractures
         .iter()
-        .filter_map(|f| f.frame(radius_km))
+        .enumerate()
+        .filter_map(|(i, f)| Some((i, f64::from(f.length_km), f.frame(radius_km)?)))
         .collect();
+    let max_across_km = reach_km + MAX_MEANDER_KM;
     let w = grid.width as usize;
     values
         .par_chunks_mut(w)
@@ -131,10 +136,12 @@ fn for_each_near(
         .for_each(|(y, row)| {
             for (x, value) in row.iter_mut().enumerate() {
                 let v = grid.unit_vector_at(x as f64, y as f64);
-                for fracture in &frames {
-                    if let Some((across, along)) = fracture.offset_km(v)
-                        && across.abs() <= reach_km
-                    {
+                for (index, length_km, frame) in &frames {
+                    let Some((across, along)) = frame.offset_within_km(v, max_across_km) else {
+                        continue;
+                    };
+                    let across = across - meander_km(*index, along, *length_km);
+                    if across.abs() <= reach_km {
                         *value = (*value + f(across, along)).clamp(-1.0, 1.0);
                     }
                 }

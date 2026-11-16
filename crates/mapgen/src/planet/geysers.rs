@@ -194,13 +194,66 @@ pub struct FractureFrame {
 impl FractureFrame {
     /// Same as [`Fracture::offset_km`].
     pub fn offset_km(&self, p: [f64; 3]) -> Option<(f64, f64)> {
+        self.offset_within_km(p, FRACTURE_SPACING_KM)
+    }
+
+    /// [`FractureFrame::offset_km`] with `max_across_km` in place of
+    /// [`FRACTURE_SPACING_KM`]: `None` when `|across_km|` is over it.
+    pub fn offset_within_km(&self, p: [f64; 3], max_across_km: f64) -> Option<(f64, f64)> {
         let across_km = dot(p, self.n).clamp(-1.0, 1.0).asin() * self.radius_km;
-        if across_km.abs() > FRACTURE_SPACING_KM {
+        if across_km.abs() > max_across_km {
             return None;
         }
         let along = dot(p, self.d).atan2(dot(p, self.c)) / self.span;
         (along.abs() <= 0.5).then_some((across_km, along))
     }
+}
+
+/// Golden angle, radians: steps the phases of [`meander_km`] from one
+/// fracture to the next so that no two neighbours bend alike.
+const GOLDEN_ANGLE: f64 = 2.399963229728653;
+
+/// Largest `|meander_km|`, km: the sum of the bounds of its wave (5 km),
+/// bow (4 km) and hooks (8 km).
+pub const MAX_MEANDER_KM: f64 = 17.0;
+
+// Each line keeps to its side of the midline with its neighbours.
+const _: () = assert!(MAX_MEANDER_KM < FRACTURE_SPACING_KM / 2.0);
+
+/// Signed sideways offset, km, of the drawn centre line of the fracture
+/// number `index` (its position in [`Geysers::fractures`], zero-length
+/// ones included) from its great circle, at `along` its length from its
+/// centre (−0.5 and 0.5 at its ends), positive on the side of the normal
+/// centre × strike (see [`Fracture::offset_km`]).
+///
+/// Look calibration, no source: the stored fractures are straight and
+/// parallel, while Enceladus's tiger stripes are roughly parallel but
+/// wavy, slightly bowed, with hooked ends. The sum of
+/// - a wave of two sines, at most 6 % of the length and 5 km;
+/// - a bow over the whole fracture, at most 5 % of the length and 4 km,
+///   its sign and size varying from one fracture to the next so that
+///   neighbours are not parallel;
+/// - a hook over the last 12 % of the length at each end, at most 8 % of
+///   the length and 8 km, curling to opposite sides at the two ends and
+///   alternating from one fracture to the next.
+///
+/// The bounds keep stripes [`FRACTURE_SPACING_KM`] apart from touching
+/// (at most [`MAX_MEANDER_KM`] each). The viewer's jets follow the same
+/// line: `meanderKm` in web/src/lib/viewer/jets.ts is its twin.
+pub fn meander_km(index: usize, along: f64, length_km: f64) -> f64 {
+    use std::f64::consts::TAU;
+    let k = index as f64;
+    let amp = (0.06 * length_km).min(5.0);
+    let wave = amp
+        * (0.65 * (TAU * 0.9 * along + k * GOLDEN_ANGLE).sin()
+            + 0.35 * (TAU * 2.1 * along + 1.7 + k * GOLDEN_ANGLE * 1.3).sin());
+    let bow =
+        (0.05 * length_km).min(4.0) * (k * GOLDEN_ANGLE * 0.7).cos() * (1.0 - 4.0 * along * along);
+    let u = (along.abs() - 0.38).max(0.0) / 0.12;
+    let end = if along > 0.0 { 1.0 } else { -1.0 };
+    let parity = if index.is_multiple_of(2) { 1.0 } else { -1.0 };
+    let hook = (0.08 * length_km).min(8.0) * u * u * end * parity;
+    wave + bow + hook
 }
 
 /// The young terrain around the geysers' pole: the cap their fractures
@@ -545,6 +598,46 @@ mod tests {
         let y = YoungTerrain::of(&g, 252.1);
         assert!((25.0..=40.0).contains(&y.cap_rad.to_degrees()));
         assert!(y.covers(unit_at(-75.0, 0.0)) && !y.covers(unit_at(-45.0, 0.0)));
+    }
+
+    /// The twin of `meanderKm` in web/src/lib/viewer/jets.ts: the same
+    /// values are pinned in jets.test.ts.
+    #[test]
+    fn meander_matches_its_viewer_twin() {
+        for (index, along, length, want) in [
+            (0, 0.0, 130.0, 5.73541341829182),
+            (1, 0.25, 130.0, -0.6613252465646292),
+            (2, -0.45, 130.0, 0.6434323178558201),
+            (3, 0.5, 130.0, -11.46808168745059),
+            (5, -0.1, 40.0, -2.635000805293958),
+            (11, 0.49, 3000.0, -10.857832404480899),
+        ] {
+            let got = meander_km(index, along, length);
+            assert!((got - want).abs() < 1e-9, "{index} {along} {length}: {got}");
+        }
+    }
+
+    /// The meander stays within [`MAX_MEANDER_KM`], is zero without
+    /// length, and bends neighbours differently.
+    #[test]
+    fn meander_is_bounded_and_differs_between_neighbours() {
+        for index in 0..MAX_FRACTURES {
+            assert_eq!(meander_km(index, 0.3, 0.0), 0.0);
+            for length in [10.0, 130.0, 5000.0] {
+                for i in 0..=100 {
+                    let along = -0.5 + f64::from(i) / 100.0;
+                    let m = meander_km(index, along, length);
+                    assert!(m.abs() <= MAX_MEANDER_KM, "{index} {along} {length}: {m}");
+                }
+            }
+        }
+        let diff = (0..=20)
+            .map(|i| {
+                let along = -0.5 + f64::from(i) / 20.0;
+                (meander_km(1, along, 130.0) - meander_km(2, along, 130.0)).abs()
+            })
+            .fold(0.0, f64::max);
+        assert!(diff > 2.0, "{diff}");
     }
 
     #[test]

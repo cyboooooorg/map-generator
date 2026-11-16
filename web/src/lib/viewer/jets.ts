@@ -28,13 +28,40 @@ export const JET_WIDTH_SHARE = 0.06;
 /** Brightness of a jet seen at 90° of scattering, before the phase gain (look constant). */
 export const JET_OPACITY = 0.18;
 
+/** Golden angle, radians: steps the phases of `meanderKm` from one fracture to the next. */
+const GOLDEN_ANGLE = 2.399963229728653;
+
 /**
- * `n` points evenly along a fracture, its ends excluded. Same great circle
- * as `Fracture::ends` in crates/mapgen/src/planet/geysers.rs, computed in
- * that frame (z the pole, longitude 0 on x) and returned as latitude and
- * longitude in radians, which the viewer uses with its own axes.
+ * Signed sideways offset, km, of the drawn centre line of the fracture
+ * number `index` (its position in `Geysers.fractures`, zero-length ones
+ * included) from its great circle, at `along` its length from its centre
+ * (−0.5 and 0.5 at its ends), positive on the side of centre × strike.
+ * Twin of `meander_km` in crates/mapgen/src/planet/geysers.rs, which
+ * explains the look calibration (a wave, a bow, hooked ends); keep both
+ * in step (the same values are pinned in both tests).
  */
-export function fracturePoints(f: Fracture, radiusKm: number, n: number): LonLat[] {
+export function meanderKm(index: number, along: number, lengthKm: number): number {
+  const k = index;
+  const amp = Math.min(5, 0.06 * lengthKm);
+  const wave =
+    amp *
+    (0.65 * Math.sin(2 * Math.PI * 0.9 * along + k * GOLDEN_ANGLE) +
+      0.35 * Math.sin(2 * Math.PI * 2.1 * along + 1.7 + k * GOLDEN_ANGLE * 1.3));
+  const bow = Math.min(4, 0.05 * lengthKm) * Math.cos(k * GOLDEN_ANGLE * 0.7) * (1 - 4 * along * along);
+  const u = Math.max(0, Math.abs(along) - 0.38) / 0.12;
+  const hook = Math.min(8, 0.08 * lengthKm) * u * u * (along > 0 ? 1 : -1) * (index % 2 === 0 ? 1 : -1);
+  return wave + bow + hook;
+}
+
+/**
+ * `n` points evenly along the fracture number `index` of its body, its
+ * ends excluded. Same great circle as `Fracture::ends` in
+ * crates/mapgen/src/planet/geysers.rs, each point moved sideways by
+ * `meanderKm` as the stripes are, computed in that frame (z the pole,
+ * longitude 0 on x) and returned as latitude and longitude in radians,
+ * which the viewer uses with its own axes.
+ */
+export function fracturePoints(f: Fracture, index: number, radiusKm: number, n: number): LonLat[] {
   const lat = (f.lat_deg * Math.PI) / 180;
   const lon = (f.lon_deg * Math.PI) / 180;
   const centre = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)] as const;
@@ -52,23 +79,40 @@ export function fracturePoints(f: Fracture, radiusKm: number, n: number): LonLat
   const raw = [0, 1, 2].map((i) => north[i]! * Math.cos(az) + east[i]! * Math.sin(az));
   const norm = Math.hypot(raw[0]!, raw[1]!, raw[2]!);
   const strike = raw.map((v) => v / norm);
+  // The normal centre × strike, which `meanderKm` is positive towards.
+  const normal = [
+    centre[1] * strike[2]! - centre[2] * strike[1]!,
+    centre[2] * strike[0]! - centre[0] * strike[2]!,
+    centre[0] * strike[1]! - centre[1] * strike[0]!,
+  ];
   const span = f.length_km / radiusKm;
   const points: LonLat[] = [];
   for (let i = 0; i < n; i += 1) {
-    const t = (-0.5 + (i + 0.5) / n) * span;
+    const along = -0.5 + (i + 0.5) / n;
+    const t = along * span;
     const [c, s] = [Math.cos(t), Math.sin(t)];
-    const x = centre[0] * c + strike[0]! * s;
-    const y = centre[1] * c + strike[1]! * s;
-    const z = centre[2] * c + strike[2]! * s;
-    points.push({ lat: Math.asin(Math.max(-1, Math.min(1, z))), lon: Math.atan2(y, x) });
+    // Rotate the point on the great circle towards the normal (which
+    // stays perpendicular to it) by the meander's angle.
+    const m = meanderKm(index, along, f.length_km) / radiusKm;
+    const [cm, sm] = [Math.cos(m), Math.sin(m)];
+    const p = [0, 1, 2].map((j) => (centre[j]! * c + strike[j]! * s) * cm + normal[j]! * sm);
+    const r = Math.hypot(p[0]!, p[1]!, p[2]!);
+    const [x, y, z] = [p[0]! / r, p[1]! / r, p[2]! / r];
+    points.push({
+      lat: Math.asin(Math.max(-1, Math.min(1, z))),
+      lon: Math.atan2(y, x),
+    });
   }
   return points;
 }
 
 /** Where the jets of a body stand: `JETS_PER_FRACTURE` along each fracture. */
 export function jetSources(g: Geysers, radiusKm: number): LonLat[] {
-  // A zero-length fracture draws no stripe, so it has no jets either.
-  return g.fractures.filter((f) => f.length_km > 0).flatMap((f) => fracturePoints(f, radiusKm, JETS_PER_FRACTURE));
+  // A zero-length fracture draws no stripe, so it has no jets either; the
+  // others keep their index in the list for their meander.
+  return g.fractures.flatMap((f, index) =>
+    f.length_km > 0 ? fracturePoints(f, index, radiusKm, JETS_PER_FRACTURE) : [],
+  );
 }
 
 const jetVertex = /* glsl */ `
