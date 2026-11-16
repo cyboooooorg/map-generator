@@ -22,4 +22,11 @@ ice_fraction: number,
 /**
  * Captured by its giant (Triton), not grown in its disk.
  */
-captured: boolean, };
+captured: boolean, 
+/**
+ * Mass of the moon in 2:1 resonance outward of it, over its giant's
+ * mass ([`crate::archetype::ArchetypeResonance`]); none when its
+ * archetype names no partner. The partner is a regular moon of the
+ * disk, made with the chain ([`AskedMoon::partner`]).
+ */
+partner_mass_ratio?: number, };

@@ -497,6 +497,21 @@ pub struct ArchetypeMoon {
     /// Share of its mass in water and ices.
     pub ice_fraction: ParamDefault,
     pub origin: ArchetypeMoonOrigin,
+    /// The moon it is in a 2:1 resonance with, when its archetype is
+    /// defined by one (Enceladus and Dione).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub resonance: Option<ArchetypeResonance>,
+}
+
+/// The resonance partner of a moon archetype (`[moon.resonance]`): a
+/// regular moon of its host, one 2:1 step outward on the chain.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ArchetypeResonance {
+    /// The partner's mass over its host's mass.
+    pub partner_mass_ratio: ParamDefault,
 }
 
 /// A named set of model inputs. See the module documentation for the file
@@ -669,6 +684,12 @@ impl Archetype {
         for (field, value, limits) in checks {
             value
                 .check(field, limits.min, limits.max)
+                .map_err(|e| e.replacen("defaults.", "moon.", 1))?;
+        }
+        if let Some(resonance) = &moon.resonance {
+            resonance
+                .partner_mass_ratio
+                .check("resonance.partner_mass_ratio", f32::MIN_POSITIVE, 1e-3)
                 .map_err(|e| e.replacen("defaults.", "moon.", 1))?;
         }
         Ok(())
@@ -1133,6 +1154,24 @@ mod tests {
             let m = moon_model_of(&a, seed);
             assert_eq!(m.class.key(), expected(&a.name), "seed {seed}: {m:?}");
         }
+    }
+
+    #[test]
+    fn moon_resonance_parses_and_defaults() {
+        let enceladus = Archetype::load("enceladus-like").unwrap();
+        let partner = enceladus.moon.unwrap().resonance.expect("a resonance");
+        assert_eq!(
+            partner.partner_mass_ratio,
+            ParamDefault::Range([1.85e-6, 2.0e-6])
+        );
+        assert!(
+            Archetype::load("titan-like")
+                .unwrap()
+                .moon
+                .unwrap()
+                .resonance
+                .is_none()
+        );
     }
 
     #[test]

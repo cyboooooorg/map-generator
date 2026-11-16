@@ -318,6 +318,13 @@ pub struct AskedMoon {
     pub ice_fraction: f64,
     /// Captured by its giant (Triton), not grown in its disk.
     pub captured: bool,
+    /// Mass of the moon in 2:1 resonance outward of it, over its giant's
+    /// mass ([`crate::archetype::ArchetypeResonance`]); none when its
+    /// archetype names no partner. The partner is a regular moon of the
+    /// disk, made with the chain ([`AskedMoon::partner`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub partner_mass_ratio: Option<f32>,
 }
 
 impl AskedMoon {
@@ -335,7 +342,47 @@ impl AskedMoon {
             eccentricity: pick(moon.eccentricity),
             ice_fraction: pick(moon.ice_fraction),
             captured: moon.origin == crate::archetype::ArchetypeMoonOrigin::Captured,
+            // Drawn last, so a moon without a partner draws as before.
+            partner_mass_ratio: moon
+                .resonance
+                .as_ref()
+                .map(|r| pick(r.partner_mass_ratio) as f32),
         }
+    }
+
+    /// The orbit of the partner this moon is in resonance with, in its
+    /// giant's radii: one chain step outward ([`CHAIN_STEP`], periods
+    /// doubling), from `a_radii` (this moon's, once pushed out of the
+    /// giant's rings and Roche limit).
+    fn partner_radii(a_radii: f64) -> f64 {
+        a_radii * CHAIN_STEP
+    }
+
+    /// The partners of the disk-born `moons` asked, as moons asked for
+    /// would be for the checks of [`carries`] (the largest eccentricity a
+    /// chain moon is forced to; nothing icy asked of their place), on a
+    /// giant of `giant_earth` Earth masses. A moon asked within half a
+    /// chain step of a partner's orbit is that partner: none is added.
+    fn partners(moons: &[&AskedMoon], giant_earth: f64) -> Vec<AskedMoon> {
+        moons
+            .iter()
+            .filter_map(|m| {
+                let ratio = f64::from(m.partner_mass_ratio?);
+                let a_radii = Self::partner_radii(m.a_radii);
+                let taken = moons
+                    .iter()
+                    .any(|o| (o.a_radii / a_radii).ln().abs() < CHAIN_STEP.ln() / 2.0);
+                (!taken).then(|| AskedMoon {
+                    archetype: m.archetype.clone(),
+                    mass_earth: ratio * giant_earth,
+                    a_radii,
+                    eccentricity: FORCED_ECCENTRICITY.1,
+                    ice_fraction: 0.0,
+                    captured: false,
+                    partner_mass_ratio: None,
+                })
+            })
+            .collect()
     }
 }
 
@@ -389,14 +436,21 @@ pub(crate) fn carries(host: &HostSketch, moons: &[AskedMoon]) -> bool {
         GiantKind::Gas => DISK_MASS_RATIO.1,
         GiantKind::Ice | GiantKind::Steam => ICE_DISK_MASS_RATIO.1,
     };
-    let in_disk: f64 = moons
-        .iter()
-        .filter(|m| !m.captured)
-        .map(|m| m.mass_earth)
-        .sum();
+    // The partners a moon asked brings ride the same disk and stay
+    // within the same limits: the lightest giant's for their lasting,
+    // the heaviest's for their mass in the disk.
+    let disk: Vec<&AskedMoon> = moons.iter().filter(|m| !m.captured).collect();
+    let partners = AskedMoon::partners(&disk, host.mass_earth);
+    let in_disk: f64 = disk.iter().map(|m| m.mass_earth).sum::<f64>()
+        + AskedMoon::partners(&disk, host.heaviest_earth)
+            .iter()
+            .map(|m| m.mass_earth)
+            .sum::<f64>();
     if in_disk > disk_max * host.heaviest_earth {
         return false;
     }
+    let moons: Vec<AskedMoon> = moons.iter().cloned().chain(partners).collect();
+    let moons = &moons[..];
     let captured: Vec<&AskedMoon> = moons.iter().filter(|m| m.captured).collect();
     if captured.len() > 1
         || captured.iter().any(|m| {
@@ -1343,6 +1397,7 @@ impl MoonSystem {
         let first = rng.uniform(4.0, 8.0);
         let mut moons: Vec<Moon> = Vec::new();
         let mut shape = None;
+        let mut resonance_partners: Vec<Moon> = Vec::new();
         if !look.hot {
             let count = asked.map_or(drawn, usize::from);
             let disk = disk_mass_ratio(look.kind, &mut rng);
@@ -1351,9 +1406,13 @@ impl MoonSystem {
             // share the rest: the disk holds at least what a dominant moon
             // of the asked moons' mass leaves (Titan asked of a Saturn
             // whose drawn disk is lighter than it).
+            // The partners the asked moons bring (in resonance with them,
+            // one chain step outward) come out of the same disk.
+            let partners = AskedMoon::partners(&asked_disk, f64::from(mass_earth));
             let asked_kg: f64 = asked_disk
                 .iter()
                 .map(|m| m.mass_earth * EARTH_MASS_KG)
+                .chain(partners.iter().map(|m| m.mass_earth * EARTH_MASS_KG))
                 .sum();
             let disk_kg = (disk * m_g).max(asked_kg / DOMINANT_SHARE.1);
             let rest_kg = disk_kg - asked_kg;
@@ -1404,7 +1463,7 @@ impl MoonSystem {
             // orbit: the drawn orbits within half a step of it, or within
             // `SPACING_HILL` of its mutual Hill radii, are left empty.
             slots.retain(|&a| {
-                asked_disk.iter().all(|m| {
+                asked_disk.iter().copied().chain(&partners).all(|m| {
                     let mutual =
                         (m.mass_earth * EARTH_MASS_KG / (3.0 * m_g)).cbrt() * (a + m.a_radii) / 2.0;
                     (a / m.a_radii).ln().abs() >= CHAIN_STEP.ln() / 2.0
@@ -1490,6 +1549,34 @@ impl MoonSystem {
                 moon.archetype = Some(m.archetype.clone());
                 moons.push(moon);
             }
+            // Their partners, one chain step out from where the asked
+            // moons now orbit, made as the chain's moons are. They carry
+            // no archetype: the passes below that drop a moon do not
+            // keep them by it, so they are added after those.
+            for partner in &partners {
+                let a_radii = partner.a_radii.max(AskedMoon::partner_radii(floor / 0.95));
+                let icy = a_radii > ice_line;
+                let bulk = if icy {
+                    Bulk::cold(&mut rng)
+                } else {
+                    Bulk::warm(&mut rng)
+                };
+                let eccentricity = forced_eccentricity(&mut rng);
+                resonance_partners.push(regular_moon(
+                    p,
+                    &mut rng,
+                    m_g,
+                    r_g,
+                    a_radii * r_g,
+                    partner.mass_earth * EARTH_MASS_KG,
+                    bulk,
+                    icy,
+                    synchronous,
+                    MoonOrigin::Disk,
+                    0.3,
+                    eccentricity,
+                ));
+            }
             if captured_triton && (asked.is_none() || asked_captured.is_some()) {
                 // Triton: 2.4 times its mass in a retrograde orbit at 14
                 // radii; one asked for replaces the draw (made all the
@@ -1557,10 +1644,12 @@ impl MoonSystem {
                 // lasts (see `carries`).
                 m.archetype.is_some() || f64::from(m.mass_ratio) * m_g <= limit
             });
+            moons.append(&mut resonance_partners);
             for m in &mut moons {
                 m.migration = Migration::Decaying;
             }
         }
+        moons.append(&mut resonance_partners);
         moons.sort_by(|a, b| a.semi_major_axis_km.total_cmp(&b.semi_major_axis_km));
         for (k, moon) in moons.iter_mut().enumerate() {
             moon.name = crate::naming::roman(k + 1);

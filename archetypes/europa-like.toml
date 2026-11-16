@@ -31,3 +31,9 @@ eccentricity = [0.008, 0.01]
 # A water layer 80 to 170 km thick over rock, 6 to 10 % of its mass
 # (Anderson et al. 1998, doi:10.1126/science.281.5385.2019).
 ice_fraction = [0.06, 0.10]
+
+[moon.resonance]
+# Ganymede, in 2:1 resonance with it: 1.4819e23 kg over Jupiter's
+# 1.8982e27 kg is 7.80e-5 (JPL planetary satellite physical parameters;
+# NASA Jupiter fact sheet), within ±4 %.
+partner_mass_ratio = [7.5e-5, 8.1e-5]

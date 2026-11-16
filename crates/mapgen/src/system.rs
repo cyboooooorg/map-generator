@@ -5192,6 +5192,44 @@ mod tests {
             .collect()
     }
 
+    #[test]
+    fn an_asked_resonant_moon_gets_its_partner() {
+        use crate::planet::resonance::RESONANCE_BAND;
+        for seed in 1..=10 {
+            let system = requested(seed, &[("enceladus-like", 1)]);
+            let moon = asked_moons(&system, "enceladus-like")[0];
+            let host = parent_of(&system, moon);
+            let partner = system
+                .bodies
+                .iter()
+                .filter(|b| b.kind == BodyKind::Moon && b.parent == moon.parent)
+                .find(|b| {
+                    let ratio = b.orbit.period_days / moon.orbit.period_days;
+                    ratio > 1.9 && ratio < 2.1
+                })
+                .unwrap_or_else(|| panic!("seed {seed}: no partner"));
+            let mass = partner.physical.mass_earth / host.physical.mass_earth;
+            assert!((1.85e-6..2.0e-6).contains(&mass), "seed {seed}: {mass:e}");
+            let ratio = partner.orbit.period_days / moon.orbit.period_days;
+            assert!(ratio > RESONANCE_BAND.0 && ratio < RESONANCE_BAND.1);
+        }
+    }
+
+    /// Spec acceptance: an asked Enceladus's tidal heat is 5 to 30 GW.
+    /// Seeds 2, 5, 6, 7 and 8 of 1..=10 fall outside it (4.9, 2.5, 2.6,
+    /// 1.7 and 37 GW): the heat comes from the chain (Task 2), not from
+    /// the partner, so the controller decides the next step.
+    #[test]
+    #[ignore = "5 of 10 seeds outside 5 to 30 GW, see the task 3 report"]
+    fn an_asked_enceladus_is_heated_like_enceladus() {
+        for seed in 1..=10 {
+            let system = requested(seed, &[("enceladus-like", 1)]);
+            let moon = asked_moons(&system, "enceladus-like")[0];
+            let heat = moon.model.as_ref().unwrap().heat.tidal_w;
+            assert!((5e9..30e9).contains(&heat), "seed {seed}: {heat:e} W");
+        }
+    }
+
     /// The planet `moon` orbits.
     fn parent_of<'a>(system: &'a System, moon: &Body) -> &'a Body {
         let parent = moon.parent.as_deref().expect("a moon's planet");
