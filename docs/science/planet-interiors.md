@@ -279,8 +279,10 @@ $a/\dot a = t$, which gives
 \frac{k_2}{Q}\bigg|_h = \frac{n a^8}{3\,t\,G m R_h^5}
 ```
 
-for the inner moon's $m$, $a$ and $n$. A moon in no chain keeps its own
-tide. The round moons of a drawn planet form chains among themselves
+for the inner moon's $m$, $a$ and $n$, at most the $3 \times 10^{-3}$
+measured for Saturn at Titan's frequency (Lainey et al. 2020). A moon in
+no chain keeps its own tide, as do the moons of a chain that gives no
+heat. The round moons of a drawn planet form chains among themselves
 (the moons too small to be round take no part); the world a request asks
 around a giant forms one with the giant's round regular moons, spaced
 1:2 around it.
@@ -521,11 +523,16 @@ archetypes):
   resonance, in equilibrium, with no check that the resonance could
   have been reached or held; other first-order resonances are not
   looked for. The host's $k_2/Q$ comes from the inner moon of each chain
-  alone, with a migration time of exactly the system's age, and is not
-  bounded: a distant inner moon asks a dissipation no real giant has.
-  The sum over more than two moons generalises Meyer & Wisdom's pair.
-  When the outer moons outweigh the inner ones, the sum is negative and
-  the chain gets no heat, not even its moons' own tides. The giant's
+  alone, with a migration time of exactly the system's age, capped at
+  $3 \times 10^{-3}$, the strongest dissipation measured in a giant
+  (Saturn's at Titan's frequency, Lainey et al. 2020), which a light or
+  distant inner moon would otherwise exceed. The heat still grows with
+  the inner moon's mass: round a ten-Jupiter giant, a chain of moons
+  larger than Ganymede dissipates up to about $10^{16}$ W. The sum over
+  more than two moons generalises Meyer & Wisdom's pair. When the outer
+  moons outweigh the inner ones, or every orbit is circular, the sum
+  gives no heat: the resonance then pumps no eccentricity, and the
+  chain's moons keep their own tides. The giant's
   regular moons beside the world of a request share the heat with the
   $k_2/Q$ of their composition (icy or rocky) and their drawn radius,
   not their model's.
@@ -603,63 +610,67 @@ archetypes):
     constraints on Enceladus' thermal state from astrometry", *The
     Astrophysical Journal* 752, 14,
     [doi:10.1088/0004-637X/752/1/14](https://doi.org/10.1088/0004-637X/752/1/14).
-20. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
+20. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
+    by the rapid orbital expansion of Titan", *Nature Astronomy* 4,
+    1053–1058,
+    [doi:10.1038/s41550-020-1120-5](https://doi.org/10.1038/s41550-020-1120-5).
+21. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
     [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
-21. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
+22. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-22. Marty, B. 2012, "The origins and concentrations of water, carbon,
+23. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-23. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+24. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-24. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
+25. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
     188, 535–539,
     [doi:10.1016/j.icarus.2007.03.001](https://doi.org/10.1016/j.icarus.2007.03.001).
-25. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+26. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
     indication for a dichotomy in the interior structure of Uranus and
     Neptune from the application of modified shape and rotation data",
     *Planetary and Space Science* 77, 143–151,
     [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
-26. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+27. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-27. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+28. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
     University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
     Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
     gives $567/T$).
-28. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
+29. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
     Mars", *Geophysical Research Letters* 45, 12198–12209,
     [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
-29. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+30. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-30. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+31. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-31. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+32. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-32. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+33. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-33. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+34. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-34. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+35. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-35. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+36. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-36. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+37. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
-37. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+38. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
@@ -675,7 +686,7 @@ Lainey 2016; Saturn's $2.3 \times 10^{-4}$, the planetary $Q$ of
 $10^{6.5}$ of Jackson et al. and Kimura's 10 to 50 mW/m² match their
 abstracts; Howett's 15.8 GW and Wahr's $k_2$ of 0.25 were not checked in
 the papers themselves. The resonance sources (Fuller, Luan & Quataert
-2016; Meyer & Wisdom 2007) are cited for their method, from their
+2016; Meyer & Wisdom 2007; Lainey et al. 2020) are cited for their method, from their
 abstracts; their DOIs and page ranges were not checked. Of the
 figures quoted from papers, Marty's 1000 to 3000 ppm of water and up to
 500 ppm of carbon match the abstract; his 2 ppm of nitrogen (the abstract

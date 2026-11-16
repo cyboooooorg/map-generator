@@ -37,6 +37,14 @@ pub const RESONANCE_BAND: (f64, f64) = (1.8, 2.2);
 /// doi:10.1088/0004-637X/752/1/14), at the Solar System's 4.57 Gyr.
 pub const MIGRATION_AGES: f64 = 1.0;
 
+/// Most a host's locked `k₂/Q` may reach: the strongest dissipation
+/// measured in a giant, Saturn's at Titan's tidal frequency, `Q` about
+/// 124 with `k₂` about 0.38 (Lainey et al. 2020, *Nature Astronomy*,
+/// doi:10.1038/s41550-020-1120-5), so `k₂/Q` about 3e-3. Locking on a
+/// light or distant inner moon would otherwise ask a dissipation no
+/// giant has been seen to reach.
+pub const MAX_HOST_K2_OVER_Q: f64 = 3e-3;
+
 /// Seconds in a gigayear (Julian years).
 const GYR_S: f64 = 1e9 * 365.25 * 86_400.0;
 
@@ -113,12 +121,13 @@ pub fn chains(periods_s: &[f64]) -> Vec<Range<usize>> {
 /// 4.57 Gyr, Jupiter with Io gets 8.5e-6 (measured 1.1e-5, Lainey et al.
 /// 2009, doi:10.1038/nature08108), Saturn with Enceladus 2.2e-4
 /// (measured 2.3e-4, Lainey et al. 2012,
-/// doi:10.1088/0004-637X/752/1/14).
+/// doi:10.1088/0004-637X/752/1/14). At most [`MAX_HOST_K2_OVER_Q`].
 pub fn host_k2_over_q(host_kg: f64, host_radius_m: f64, inner: &Orbiter, age_gyr: f64) -> f64 {
     let migration_s = MIGRATION_AGES * age_gyr * GYR_S;
     let momentum = inner.mass_kg * (G * host_kg * inner.a_m).sqrt();
     // The torque that makes ȧ/a = 1/t, over the torque of a unit k₂/Q.
-    momentum / (2.0 * migration_s) / torque(host_radius_m, 1.0, inner)
+    let locked = momentum / (2.0 * migration_s) / torque(host_radius_m, 1.0, inner);
+    locked.min(MAX_HOST_K2_OVER_Q)
 }
 
 /// The heat, W, each moon of `chain` (moons locked together in
@@ -176,7 +185,10 @@ pub fn equilibrium_heat_w(
 /// old: for each of its [`chains`], the equilibrium heat
 /// ([`equilibrium_heat_w`]) under the host's locked dissipation
 /// ([`host_k2_over_q`] with the chain's inner moon). `None` for a moon
-/// in no chain, which keeps the heat of its own tide.
+/// in no chain, and for every moon of a chain whose equilibrium heat is
+/// none (the outer moons outweigh the inner one, or every orbit is
+/// circular): the resonance then pumps no eccentricity, and each keeps
+/// the heat of its own tide, the floor of its dissipation.
 pub fn resonant_heat(
     host_kg: f64,
     host_radius_m: f64,
@@ -192,6 +204,9 @@ pub fn resonant_heat(
             continue;
         }
         let shares = equilibrium_heat_w(host_kg, host_radius_m, k2q, members);
+        if shares.iter().sum::<f64>() <= 0.0 {
+            continue;
+        }
         for (slot, w) in heat[chain].iter_mut().zip(shares) {
             *slot = Some(w);
         }
@@ -326,6 +341,40 @@ mod tests {
             .map(|o| mean_motion(o) * torque(SATURN_R_M, k2q, o))
             .sum();
         assert!(heat < 1e-6 * n_t, "{heat} W against {n_t}");
+    }
+
+    #[test]
+    fn a_chain_without_net_heat_keeps_own_tides() {
+        // A light inner moon under a heavy outer one: the pair migrates
+        // at the outer moon's pace, faster than the inner one is pushed.
+        let heavy = Orbiter {
+            mass_kg: 1e23,
+            ..dione()
+        };
+        let total: f64 = equilibrium_heat_w(SATURN_KG, SATURN_R_M, 2.3e-4, &[enceladus(), heavy])
+            .iter()
+            .sum();
+        assert_eq!(total, 0.0);
+        assert_eq!(
+            resonant_heat(SATURN_KG, SATURN_R_M, 4.57, &[enceladus(), heavy]),
+            vec![None, None]
+        );
+    }
+
+    #[test]
+    fn a_light_distant_inner_moon_hits_the_dissipation_cap() {
+        // A 100 km moonlet at 40 Jupiter radii would ask a k2/Q above 1.
+        let moonlet = Orbiter {
+            mass_kg: 1e19,
+            a_m: 40.0 * JUPITER_R_M,
+            ..io()
+        };
+        assert_eq!(
+            host_k2_over_q(JUPITER_KG, JUPITER_R_M, &moonlet, 4.57),
+            MAX_HOST_K2_OVER_Q
+        );
+        // Io stays under it.
+        assert!(host_k2_over_q(JUPITER_KG, JUPITER_R_M, &io(), 4.57) < MAX_HOST_K2_OVER_Q);
     }
 
     #[test]
