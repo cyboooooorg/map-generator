@@ -26,7 +26,7 @@ fn a_system_of_format_7_is_outdated_without_panicking() {
         r#"{"format_version": 7, "seed": 1, "bodies": [{"id": "a", "model": {"climate": {}}}]}"#,
     )
     .unwrap();
-    let error = mapgen::system::read_system(&dir).err().expect("refused");
+    let error = mapgen::system::read_system(&dir).expect_err("refused");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(error.contains("format version 7"), "{error}");
     assert!(error.contains("Regenerate"), "{error}");
