@@ -207,8 +207,8 @@ pub fn todays_heat_w(own_w: f64, resonant_w: Option<f64>) -> f64 {
 /// first) around a host of `host_kg` and radius `host_radius_m`, `age_gyr`
 /// old: for each of its [`chains`], the equilibrium heat of each pair
 /// ([`equilibrium_heat_w`]) under the host's locked dissipation
-/// ([`host_k2_over_q`] with the chain's inner moon, whose frequency the
-/// host's measured `k₂/Q` is taken at: Io's for Jupiter, Lainey et al.
+/// ([`host_k2_over_q`] with the host's innermost round moon, whose
+/// frequency the host's measured `k₂/Q` is taken at: Io's for Jupiter, Lainey et al.
 /// 2009, doi:10.1038/nature08108; Enceladus's and its neighbours' for
 /// Saturn, Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14). `None`
 /// for a moon in no chain, the outermost of a chain, and a moon whose

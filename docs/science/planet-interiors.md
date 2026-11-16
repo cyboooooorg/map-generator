@@ -356,8 +356,10 @@ for Saturn at Titan's frequency (Lainey et al. 2020). One value per host,
 taken at its innermost round moon's frequency as the measured ones are
 (Jupiter's at Io's, Lainey et al. 2009; Saturn's from its inner moons,
 Lainey et al. 2012), so that a moon of the chain does not set the
-dissipation that heats it. The round moons of a drawn planet form chains
-among themselves (the moons too small to be round take no part); the
+dissipation that heats it. The round moons of a drawn planet that grew
+in its disk, on prograde orbits, form chains among themselves (the moons
+too small to be round take no part, nor do captured or retrograde ones,
+which keep the heat of their own tide and do not set the host's `k₂/Q`); the
 world a request asks around a giant forms one with the giant's round
 regular moons, spaced 1:2 around it. A moon asked by archetype brings
 its partners at 2:1 (see the archetypes' `[moon.resonance]`).
@@ -533,8 +535,8 @@ faster than it comes and freezes its ocean, unless ammonia stops it.
 
 **Orders of magnitude** (asked moons, seeds 1 to 20). Europa (8 % water,
 its tides from its resonances) gets a shell of 12 to 27 km, 6 to 16 km
-at the poles, over an ocean of 62 to 131 km. Enceladus, 11 to 17 GW
-from its resonance with Dione, gets 32 to 41 km of ice, 7 to 10 km at
+at the poles, over an ocean of 62 to 131 km. Enceladus, 12 to 17 GW
+from its resonance with Dione, gets 31.7 to 40.6 km of ice, 7 to 10 km at
 the poles, over 44 to 67 km of ocean. Ganymede, heated mostly by its
 rock, gets 128 to 227 km of ice and 33 to 124 km of ocean above ice V;
 Titan, with its ammonia, 135 to 174 km over 58 to 109 km; Callisto,
@@ -571,8 +573,9 @@ Over seeds 1 to 20, every asked Enceladus vents (a polar shell of 7 to
 10 km, at most 1 MPa of ice under its 0.11 m/s², over a cap of 16°: four
 fractures); Europa's polar shell, 6 to 16 km under 1.3 m/s², never
 cracks through, nor do Ganymede's, Titan's or Callisto's. Across 300
-drawn systems, 11 % of the icy moons and 3 % of the icy planets vent,
-every moon among them in a chain of period ratio close to 2:1.
+drawn systems, 11 % of the icy moons and 3 % of the icy planets vent;
+the moons among them are close-in, most of them in a 2:1 chain (some
+vent on their own tide).
 
 ### Classes
 
@@ -753,9 +756,10 @@ archetypes):
   the shell at both poles alike, where Enceladus's south pole is thinner
   than its north. Their share and caps are calibrated on Enceladus
   alone, and the threshold of 300 MPa that keeps a core unconsolidated
-  has no source. Enceladus's mean shell, 32 to 41 km over seeds 1 to 20,
-  is thicker than the 18 to 22 km of Čadek et al. (2016): its 11 to
-  17 GW cannot hold a thinner one.
+  has no source. Enceladus's mean shell, 31.7 to 40.6 km over seeds 1 to
+  20, is about twice the 18 to 22 km observed (Čadek et al. 2016): the
+  model's heat for it (12 to 17 GW) gives a conductive mean shell
+  thicker than the observed one.
 - **Geysers crack by weight alone.** Whether a shell cracks through is
   read from the weight of the ice at its base against a threshold
   calibrated on the two limits of Rudolph & Manga (2009); the tension
@@ -918,7 +922,7 @@ archetypes):
 34. Leliwa-Kopystyński, J., Maruyama, M. & Nakajima, T. 2002, "The
     water–ammonia phase diagram up to 300 MPa: application to icy
     satellites", *Icarus* 159, 518–528,
-    [doi:10.1006/icar.2001.6762](https://doi.org/10.1006/icar.2001.6762).
+    [doi:10.1006/icar.2002.6932](https://doi.org/10.1006/icar.2002.6932).
 35. Lodders, K. 2003, "Solar System abundances and condensation
     temperatures of the elements", *The Astrophysical Journal* 591,
     1220–1247,
@@ -971,7 +975,7 @@ archetypes):
     [doi:10.1016/j.icarus.2015.05.033](https://doi.org/10.1016/j.icarus.2015.05.033).
 49. Rudolph, M. L. & Manga, M. 2009, "Fracture penetration in planetary
     ice shells", *Icarus* 199, 536–541,
-    [doi:10.1016/j.icarus.2009.01.015](https://doi.org/10.1016/j.icarus.2009.01.015).
+    [doi:10.1016/j.icarus.2008.10.010](https://doi.org/10.1016/j.icarus.2008.10.010).
 50. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).

@@ -27,7 +27,7 @@ captured: boolean,
  * Mass of the moon in 2:1 resonance outward of it, over its giant's
  * mass ([`crate::archetype::ArchetypeResonance`]); none when its
  * archetype names no partner. The partner is a regular moon of the
- * disk, made with the chain ([`AskedMoon::partner`]).
+ * disk, made with the chain ([`AskedMoon::partners`]).
  */
 partner_mass_ratio?: number, 
 /**

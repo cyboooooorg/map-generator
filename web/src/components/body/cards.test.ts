@@ -195,7 +195,7 @@ describe('themed body cards', () => {
     });
     const html = renderCard(InteriorCard, { world: worldOf([earthLike, enceladus], 'c-1', null) });
     expect(html).toContain('ocean of 30 km under 25 km of ice (conductive)');
-    expect(html).toContain('0.335 — partially differentiated');
+    expect(html).toContain('0.335 — differentiated');
     expect(html).toContain('active at the south pole');
     expect(labels(html)).toContain('Tidal heat');
     // Earth has none of them.

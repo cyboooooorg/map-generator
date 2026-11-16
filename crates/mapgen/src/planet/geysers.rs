@@ -14,7 +14,7 @@ use crate::exomoon::{EARTH_KG, EARTH_M, G};
 
 /// Hydrostatic pressure, Pa, at the base of an ice shell above which
 /// fractures no longer crack it through to the ocean: Rudolph & Manga
-/// 2009 (doi:10.1016/j.icarus.2009.01.015) model cracks opened by 1 to
+/// 2009 (doi:10.1016/j.icarus.2008.10.010) model cracks opened by 1 to
 /// 3 MPa of tension against the overburden that closes them, and find
 /// that they cross Europa's shell only when it is under about 2.5 km, and
 /// Enceladus's when it is under about 25 km. The overburden `ρ g h` of
@@ -97,7 +97,7 @@ pub struct Fracture {
 ///   the pole that fractures cross it: the hydrostatic pressure
 ///   at its base, `ρ g h` with [`ICE_DENSITY`] and the surface gravity, is
 ///   at most [`CRACK_OVERBURDEN_PA`] (Rudolph & Manga 2009,
-///   doi:10.1016/j.icarus.2009.01.015).
+///   doi:10.1016/j.icarus.2008.10.010).
 /// - **Pole.** The tides thin both poles alike; Enceladus vents from its
 ///   south pole only, so the seed picks one.
 /// - **Region.** The fractures fill the cap around the pole where the

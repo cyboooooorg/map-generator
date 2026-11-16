@@ -256,6 +256,11 @@ pub struct Body {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub ring_role: Option<crate::rings::RingRole>,
+    /// Whether a moon grew in its planet's circumplanetary disk (the
+    /// Galilean moons), as opposed to captured or born of an impact: only
+    /// such moons, on prograde orbits, form resonant chains ([`chain_member`]).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disk_born: bool,
     /// A planet's physical model, as [`derive_model`] gave it when the
     /// system was drawn, or as the resolution of its request gave the world
     /// a system is drawn around (a giant's moon included); none for any
@@ -1709,7 +1714,16 @@ fn assemble(
             .collect();
         if !lone {
             let round: Vec<usize> = (0..moons.len())
-                .filter(|&k| moon_models[k].is_some())
+                .filter(|&k| {
+                    let ((_, _, orbit, _, _, formation), _) = &moons[k];
+                    moon_models[k].is_some()
+                        && chain_member(
+                            formation
+                                .as_ref()
+                                .is_some_and(|f| f.birth == MoonBirth::Disk),
+                            orbit,
+                        )
+                })
                 .collect();
             let parts: Vec<(&Orbit, &PlanetModel)> = round
                 .iter()
@@ -1804,6 +1818,9 @@ fn assemble(
                 generated: false,
                 trojans: None,
                 ring_role: ring.map(|r| r.role),
+                disk_born: formation
+                    .as_ref()
+                    .is_some_and(|f| f.birth == MoonBirth::Disk),
                 model: moon_model,
             });
         }
@@ -2065,6 +2082,7 @@ fn planet_body(
         generated: false,
         trojans: None,
         ring_role: None,
+        disk_born: false,
         model,
     };
     // The sky the viewer draws puts the planet on its node line (the spring
@@ -2222,6 +2240,17 @@ fn chain_heat(
     )
 }
 
+/// Whether a moon takes part in its planet's resonant chains and sets the
+/// host's locked `k₂/Q`: only moons grown together in the planet's disk,
+/// on prograde orbits, migrate in step into a resonance (the Galilean
+/// chain, Lainey et al. 2009, doi:10.1038/nature08108). A captured moon
+/// arrives with no such history, and one on a retrograde orbit cannot
+/// meet the prograde ones in a commensurability: it keeps the heat of
+/// its own tide.
+fn chain_member(disk_born: bool, orbit: &Orbit) -> bool {
+    disk_born && orbit.inclination_deg < 90.0
+}
+
 /// The resonant heat of the moon `body` of the stored planet `host`
 /// (whose formation context is `context`), rebuilt as generation set it:
 /// for the giant of the world a request asked as its moon, its
@@ -2254,7 +2283,12 @@ fn stored_chain_heat(system: &System, host: &Body, context: &Context, body: &Bod
     let mut moons: Vec<&Body> = system
         .bodies
         .iter()
-        .filter(|b| b.kind == BodyKind::Moon && b.parent.as_deref() == parent && b.model.is_some())
+        .filter(|b| {
+            b.kind == BodyKind::Moon
+                && b.parent.as_deref() == parent
+                && b.model.is_some()
+                && chain_member(b.disk_born, &b.orbit)
+        })
         .collect();
     moons.sort_by(|a, b| {
         a.orbit
@@ -5602,7 +5636,7 @@ mod tests {
     /// doi:10.1016/S0019-1035(03)00048-4), Io's none (its volcanoes'),
     /// Enceladus's, heated by its resonance with Dione, between its
     /// ridged plains (under 0.1 Ga) and its cratered plains (1 to 2 Ga;
-    /// Kirchoff & Schenk 2009, doi:10.1016/j.icarus.2008.12.034), younger
+    /// Kirchoff & Schenk 2009, doi:10.1016/j.icarus.2009.03.034), younger
     /// than Ganymede's and Callisto's.
     #[test]
     fn an_ice_lid_is_as_young_as_its_heat() {
@@ -5971,6 +6005,34 @@ mod tests {
                 moon.id
             );
         }
+    }
+
+    #[test]
+    fn a_captured_moon_gets_no_resonant_heat() {
+        // Seed 1: a chain of disk-born, prograde moons.
+        let mut system = draw(&whole_drawn(1), &mut StdRng::seed_from_u64(1)).unwrap();
+        let chain = chain_moons(&system);
+        assert!(!chain.is_empty());
+        assert!(
+            chain
+                .iter()
+                .all(|m| m.disk_born && m.orbit.inclination_deg < 90.0)
+        );
+        let prograde = chain[0].orbit.clone();
+        // The same moons, captured: no chain is left, so they keep the heat
+        // of their own tides.
+        for body in &mut system.bodies {
+            body.disk_born = false;
+        }
+        assert!(chain_moons(&system).is_empty());
+        // A disk-born moon on a retrograde orbit is out of the chain too.
+        let orbit = |inclination_deg| Orbit {
+            inclination_deg,
+            ..prograde.clone()
+        };
+        assert!(chain_member(true, &orbit(10.0)));
+        assert!(!chain_member(true, &orbit(120.0)));
+        assert!(!chain_member(false, &orbit(10.0)));
     }
 
     #[test]

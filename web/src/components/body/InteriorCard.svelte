@@ -3,7 +3,7 @@
   // its core and magnetic field, its tectonics and internal heat.
   import './facts.css';
   import { t } from '../../lib/i18n/index.svelte';
-  import { bulkLine, geysersLine, momentOfInertiaLine, oceanUnderIce, tidalHeatLine } from '../../lib/planetCard';
+  import { bulkLine, formatPower, geysersLine, momentOfInertiaLine, oceanUnderIce, tidalHeatLine } from '../../lib/planetCard';
   import { formatInt, formatMassEarth, formatUpTo, withUnit } from '../../lib/format';
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
@@ -43,7 +43,7 @@
   const tidal = $derived(model ? tidalHeatLine(model, explanation) : null);
   const inertia = $derived(model ? momentOfInertiaLine(model, body?.kind === 'moon') : null);
   const geysers = $derived(model ? geysersLine(model) : null);
-  const teraWatts = (w: number) => withUnit(formatUpTo(w / 1e12, 2), 'TW');
+  const power = (w: number) => (w > 0 ? formatPower(w) : withUnit('0', 'TW'));
 </script>
 
 {#if body}
@@ -104,11 +104,11 @@
     {/if}
     {#if model}
       <dt>{t.cards.heat}</dt>
-      <dd>{t.cards.heatValue({ radiogenic: teraWatts(model.heat.radiogenic_w), tidal: teraWatts(model.heat.tidal_w), secular: teraWatts(model.heat.secular_w) })}</dd>
+      <dd>{t.cards.heatValue({ radiogenic: power(model.heat.radiogenic_w), tidal: power(model.heat.tidal_w), secular: power(model.heat.secular_w) })}</dd>
     {/if}
     {#if tidal && (body?.kind === 'moon' || model?.ice_shell)}
       <dt>{t.card.tidalHeat}</dt>
-      <dd>{tidal}<CauseTree tree={treeFor(explanation, 'polar_shell')} open={open === 'polar_shell'} ontoggle={toggle('polar_shell')} {oninput} /></dd>
+      <dd>{tidal}<CauseTree tree={treeFor(explanation, 'heat_flux')} open={open === 'heat_flux'} ontoggle={toggle('heat_flux')} {oninput} /></dd>
     {/if}
     {#if inertia}
       <dt>{t.card.momentOfInertia}</dt>

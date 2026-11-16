@@ -133,7 +133,7 @@ Model: opus.
   - `pub fn differentiated_share(mass_earth: f64, radius_earth: f64, impact_flux: f64, age_gyr: f64) -> f64` (0..1), the share of the ice that separated from the rock. Cite Barr & Canup 2008, doi:10.1016/j.icarus.2008.07.004 (impact heating during late bombardment). Any calibrated threshold is named and calibrated on Ganymede versus Callisto.
   - `Material::RockIce`: the undifferentiated mixture, between the rock and the water layers.
   - `pub fn moment_of_inertia(interior: &Interior) -> f64` (C/MR²), stored in a new field `PlanetModel.moment_of_inertia: f64`.
-  - `pub fn liquidus_k(nh3_mass_fraction: f64) -> f64` in `ice_shell.rs`. It follows the H2O–NH3 liquidus at low pressure (cite e.g. Leliwa-Kopystyński et al. 2002, doi:10.1006/icar.2001.6762), down to the eutectic of 176 K at about 0.33. The ocean's NH3 fraction is the body's NH3 (`Volatiles.nh3`, as a share of the ice) over the liquid mass, so it rises as the shell thickens. Solve for it with the shell.
+  - `pub fn liquidus_k(nh3_mass_fraction: f64) -> f64` in `ice_shell.rs`. It follows the H2O–NH3 liquidus at low pressure (cite e.g. Leliwa-Kopystyński et al. 2002, doi:10.1006/icar.2002.6932), down to the eutectic of 176 K at about 0.33. The ocean's NH3 fraction is the body's NH3 (`Volatiles.nh3`, as a share of the ice) over the liquid mass, so it rises as the shell thickens. Solve for it with the shell.
   - `SOLAR_BODIES` gains `body("Enceladus", 1.81e-5, 0.0, 0.40, 0.0, 9.58, 0.0395)`, and the reference test list gains its name.
 
 - [ ] **Step 1: Failing tests.**
@@ -194,7 +194,7 @@ Model: opus.
   - `#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)] pub struct Geysers { pub south: bool, pub fractures: Vec<Fracture> }` (ts-rs).
   - `pub struct Fracture { pub lat_deg: f32, pub lon_deg: f32, pub azimuth_deg: f32, pub length_km: f32 }`: the fracture's centre, its strike and its length.
   - `PlanetModel.geysers: Option<Geysers>`.
-  - `pub fn geysers(shell: &IceShell, heat: &InternalHeat, radius_km: f64, gravity: f64, seed: u32) -> Option<Geysers>`. The cited cracking criterion is left to the implementer: a tidal or ocean-pressurisation stress against the tensile strength of ice through the polar shell (Manga & Wang 2007, doi:10.1029/2007GL029297, or Rudolph & Manga 2009, doi:10.1016/j.icarus.2009.01.015). The pole comes from the seed. The fractures are parallel, about 35 km apart, about 130 km long, and fill the region where the shell passes the criterion (Porco et al. 2006, doi:10.1126/science.1123013). They scale with that region's size.
+  - `pub fn geysers(shell: &IceShell, heat: &InternalHeat, radius_km: f64, gravity: f64, seed: u32) -> Option<Geysers>`. The cited cracking criterion is left to the implementer: a tidal or ocean-pressurisation stress against the tensile strength of ice through the polar shell (Manga & Wang 2007, doi:10.1029/2007GL029297, or Rudolph & Manga 2009, doi:10.1016/j.icarus.2008.10.010). The pole comes from the seed. The fractures are parallel, about 35 km apart, about 130 km long, and fill the region where the shell passes the criterion (Porco et al. 2006, doi:10.1126/science.1123013). They scale with that region's size.
   - `DustSource.icy` becomes `DustSource.geysers: bool`. `dust_rings` picks the innermost source with geysers within `PLUME_REACH`. `PLUME_ODDS` is removed.
 
 - [ ] **Step 1: Failing tests.**

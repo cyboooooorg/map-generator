@@ -154,11 +154,37 @@ describe('a body card of the planet model', () => {
     setLocale('en');
   });
 
+  it('writes the tidal heat with an SI prefix', () => {
+    setLocale('en');
+    const w = (tidal_w: number) => ({ heat: { tidal_w } }) as unknown as PlanetModel;
+    expect(tidalHeatLine(w(1.4e10), null)).toMatch(/^14\s?GW$/);
+    expect(tidalHeatLine(w(9.5e7), null)).toMatch(/^95\s?MW$/);
+    expect(tidalHeatLine(w(1.05e14), null)).toMatch(/^105\s?TW$/);
+  });
+
+  it('shows a near-zero shell as under 0.1 km', () => {
+    setLocale('en');
+    const m = { ice_shell: { shell_km: 0.03, ocean_km: 5, convecting: false } } as unknown as PlanetModel;
+    expect(oceanUnderIce(m)).toBe('ocean of 5 km under < 0.1 km of ice (conductive)');
+    setLocale('fr');
+    expect(oceanUnderIce(m)).toMatch(/sous < 0,1.km de glace/);
+    setLocale('en');
+  });
+
   it('shows the moment of inertia of a moon or an ice-shelled body only', () => {
     setLocale('en');
-    const m = (c: number, shell: boolean) => ({ moment_of_inertia: c, ice_shell: shell ? { shell_km: 1, ocean_km: 1 } : null }) as unknown as PlanetModel;
+    const m = (c: number, shell: boolean, mixed = c > 0.33) =>
+      ({
+        moment_of_inertia: c,
+        ice_shell: shell ? { shell_km: 1, ocean_km: 1 } : null,
+        interior: { layers: [{ material: 'Rock' }, ...(mixed ? [{ material: 'RockIce' }] : [])] },
+      }) as unknown as PlanetModel;
     expect(momentOfInertiaLine(m(0.31, true), false)).toBe('0.31 — differentiated');
     expect(momentOfInertiaLine(m(0.355, false), true)).toBe('0.355 — partially differentiated');
+    // Io: C/MR² about 0.35 yet no rock-ice mix left, so it is differentiated.
+    expect(momentOfInertiaLine(m(0.35, false, false), true)).toBe('0.35 — differentiated');
+    // Europa: rock below, the ice shell is its own layer.
+    expect(momentOfInertiaLine(m(0.346, true, false), true)).toBe('0.346 — differentiated');
     expect(momentOfInertiaLine(m(0.354, false), false)).toBeNull();
     expect(momentOfInertiaLine(m(0, true), true)).toBeNull();
     setLocale('fr');

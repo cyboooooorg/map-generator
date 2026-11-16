@@ -31,7 +31,7 @@ pub const MELT_K: f64 = 273.0;
 
 /// Ammonia mass fraction of the H₂O–NH₃ eutectic, about a third
 /// (Leliwa-Kopystyński, Maruyama & Nakajima 2002,
-/// doi:10.1006/icar.2001.6762, about 0.32 to 0.33): a liquid richer in
+/// doi:10.1006/icar.2002.6932, about 0.32 to 0.33): a liquid richer in
 /// ammonia than this freezes no colder, so [`liquidus_k`] holds there.
 pub const NH3_EUTECTIC: f64 = 0.33;
 
@@ -44,7 +44,7 @@ const LIQUIDUS_NH3: [f64; 5] = [-53.07, -1651.4, 11842.0, -46269.0, 56695.0];
 /// water-rich branch of the H₂O–NH₃ liquidus at low pressure, [`MELT_K`]
 /// plus `Σ aₙ Xⁿ` for `n` from 1 to 5 with the coefficients
 /// [`LIQUIDUS_NH3`], the fit of Leliwa-Kopystyński, Maruyama & Nakajima
-/// 2002 (doi:10.1006/icar.2001.6762) to the measured phase diagram (the
+/// 2002 (doi:10.1006/icar.2002.6932) to the measured phase diagram (the
 /// coefficients as later thermal models of icy satellites quote them,
 /// not checked against the paper's table; the pressure's own lowering of
 /// the melting point is left out). It falls from
@@ -369,7 +369,7 @@ pub fn convects(shell_m: f64, base_k: f64, surface_k: f64, gravity: f64) -> bool
 /// carries up into its stagnant lid under `gravity` m/s²:
 /// `q = 0.53 k (R T² / Q)^(4/3) (ρ g α / (κ η))^(1/3)`
 /// ([`CONVECTIVE_COEFFICIENT`]), independent of the shell's thickness
-/// (Solomatov & Moresi 2000, doi:10.1029/2000JE001245, for a Newtonian
+/// (Solomatov & Moresi 2000, doi:10.1029/2000JB900197, for a Newtonian
 /// fluid; Barr & McKinnon 2007, doi:10.1029/2006JE002781, for ice
 /// shells), with the conductivity, the diffusivity and the viscosity
 /// taken at the melting point of the ocean (`base_k`) rather than at the
@@ -669,7 +669,7 @@ impl Water<'_> {
     /// the ammonia of the ocean beneath ([`Self::ocean_nh3`]) as much as
     /// at no pressure, `MELT_K − liquidus_k(X)`. Adding the two lowerings
     /// is an approximation, no source: Leliwa-Kopystyński et al. 2002
-    /// (doi:10.1006/icar.2001.6762) measured the water–ammonia liquidus
+    /// (doi:10.1006/icar.2002.6932) measured the water–ammonia liquidus
     /// up to 300 MPa (not checked here). Never colder than the eutectic
     /// ([`NH3_EUTECTIC`]): no liquid is left below it.
     fn base_k(&self, shell_m: f64) -> f64 {
