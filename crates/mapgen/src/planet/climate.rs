@@ -883,6 +883,18 @@ fn wet_climate(
     })
 }
 
+/// Temperature, K, of a surface whose water vapour follows its
+/// temperature, as [`climate`] solves it without the thermostat (see
+/// [`wet_climate`]); the vapour of `gases` is replaced.
+pub(super) fn wet_temperature_k(
+    context: &Context,
+    gases: &Gases,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+) -> f64 {
+    wet_climate(context, *gases, heat_flux_w_m2, water_bar).1
+}
+
 /// The climate of a body and its gases once the climate has set its CO₂
 /// and water vapour.
 ///

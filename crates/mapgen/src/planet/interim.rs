@@ -97,7 +97,10 @@ const SIGMA: f64 = 5.670_374_419e-8;
 
 /// Earth's mean surface heat flux, W/m²: 44 TW over its surface (Pollack,
 /// Hurter & Johnson 1993, doi:10.1029/93RG01249, 87 mW/m²). The flux at
-/// which a world is as volcanic as the scale's middle.
+/// which a world is as volcanic as the scale's middle. It is the whole
+/// flux, radiogenic heat and secular cooling ([`super::secular_w`]),
+/// as the model's [`super::InternalHeat::flux_w_m2`] is: Earth's model
+/// gives about 0.090 W/m², a volcanism of about 0.5.
 const EARTH_HEAT_FLUX_W_M2: f64 = 0.087;
 
 /// Volcanism of a world with Earth's heat flux, on the `[0, 1]` scale of
@@ -1174,6 +1177,12 @@ mod tests {
             params.pressure_bar
         );
         assert_eq!(params.look.geology.regime, Regime::Plates);
+        // Earth's 0.087-0.092 W/m² through `EARTH_VOLCANIC √(F / 0.087)`.
+        assert!(
+            (0.45..=0.55).contains(&params.volcanic_intensity),
+            "{}",
+            params.volcanic_intensity
+        );
         // land share and mean temperature checked by Tasks 3 and 4
     }
 }

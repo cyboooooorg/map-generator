@@ -101,7 +101,7 @@
     {/if}
     {#if model}
       <dt>{t.cards.heat}</dt>
-      <dd>{t.cards.heatValue({ radiogenic: teraWatts(model.heat.radiogenic_w), tidal: teraWatts(model.heat.tidal_w) })}</dd>
+      <dd>{t.cards.heatValue({ radiogenic: teraWatts(model.heat.radiogenic_w), tidal: teraWatts(model.heat.tidal_w), secular: teraWatts(model.heat.secular_w) })}</dd>
     {/if}
     {#if giant}
       <dt>{t.cards.flattening}</dt>

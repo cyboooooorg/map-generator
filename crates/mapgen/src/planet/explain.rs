@@ -12,6 +12,7 @@
 //! owns their wording.
 use serde::Serialize;
 
+use super::climate::wet_temperature_k;
 use super::{
     Bare, Context, Gases, OCEAN_KG, PlanetModel, Surface, Water, bare, internal_heat, steam,
     surface_temperature_k, water,
@@ -70,6 +71,8 @@ pub enum Quantity {
     RadiogenicHeat,
     /// Tidal heat, W.
     TidalHeat,
+    /// Secular cooling of the mantle and core, W.
+    SecularHeat,
     /// Surface pressure, bar.
     Pressure,
     /// CO₂ partial pressure, bar.
@@ -227,6 +230,7 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
     let close = |a: f64, b: f64| (a - b).abs() <= HEAT_TOLERANCE * a.abs().max(b.abs());
     if !close(heat.tidal_w, model.heat.tidal_w)
         || !close(heat.radiogenic_w, model.heat.radiogenic_w)
+        || !close(heat.secular_w, model.heat.secular_w)
     {
         return None;
     }
@@ -314,6 +318,7 @@ fn heat_flux(context: &Context, model: &PlanetModel) -> Cause {
     .because(vec![
         Cause::of(Quantity::RadiogenicHeat, model.heat.radiogenic_w).set_by(InputField::Radiogenic),
         tidal,
+        Cause::of(Quantity::SecularHeat, model.heat.secular_w),
     ])
 }
 
@@ -366,7 +371,20 @@ fn temperature_tree(
         .flux_w_m2(surface_interior(context, model).radius_earth);
     let bare_k = surface_temperature_k(context, &Gases::default(), 0.0);
     let air_k = surface_temperature_k(context, gases, 0.0);
-    let full_k = surface_temperature_k(context, gases, flux);
+    // Water whose vapour followed the temperature was solved with it: its
+    // balance is recomputed the same way, since the column with the
+    // vapour held fixed can balance at another temperature (it jumps
+    // where the vapour starts to condense in it).
+    let wet = !surface.water.runaway && surface.water.kept_kg > 0.0;
+    let full_k = if wet && !surface.climate.regulated {
+        let bar_per_kg = super::atmosphere::bar_per_kg(
+            model.inputs.mass_earth,
+            &surface_interior(context, model),
+        );
+        wet_temperature_k(context, gases, flux, surface.water.kept_kg * bar_per_kg)
+    } else {
+        surface_temperature_k(context, gases, flux)
+    };
     let stored = surface.climate.temperature_k;
     if (full_k - stored).abs() > TEMPERATURE_TOLERANCE_K {
         return None;

@@ -143,7 +143,7 @@ pub fn regime(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planet::heat::{EARTH_SILICATE_KG, radiogenic_w};
+    use crate::planet::heat::{EARTH_SILICATE_KG, radiogenic_w, secular_w};
     use crate::planet::interior::interior;
     use crate::planet::reference::{exposure_at, inputs, inputs_of, reference};
     use crate::planet::xuv::xuv_fluence;
@@ -165,9 +165,11 @@ mod tests {
         let int = interior(inputs, &exposure_at(orbit_au));
         let w = water(&c, inputs, &int, xuv_fluence(&c));
         let silicate = inputs.mass_earth * (1.0 - inputs.water_fraction) * 5.972e24;
+        let silicate = silicate.min(EARTH_SILICATE_KG * 10.0);
         let heat = InternalHeat {
-            radiogenic_w: radiogenic_w(silicate.min(EARTH_SILICATE_KG * 10.0), 1.0, 4.6),
+            radiogenic_w: radiogenic_w(silicate, 1.0, 4.6),
             tidal_w,
+            secular_w: secular_w(silicate, 4.6),
         };
         (w, regime(inputs, &heat, &int, &w))
     }

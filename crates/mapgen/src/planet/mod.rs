@@ -10,8 +10,9 @@
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
 //! the radius, the bulk density and the surface gravity.
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
-//! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`], with the
-//! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
+//! ([`heat::radiogenic_w`]), tidal ([`heat::tidal_power_w`], with the
+//! response [`heat::k2_over_q`] of a rocky, icy or enveloped body) and
+//! the secular cooling of its mantle and core ([`heat::secular_w`]).
 //! [`core::core`] derives whether its iron core is liquid and drives a
 //! dynamo, and the field at its surface.
 //! [`atmosphere::outgassed`], [`atmosphere::atmosphere`],
@@ -73,7 +74,9 @@ pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_te
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use explain::{Cause, Explanation, InputField, Quantity, explain};
-pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
+pub use heat::{
+    EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, secular_w, tidal_power_w,
+};
 pub use ice_shell::{IceShell, ice_shell};
 pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_with};
 pub use interior::{
@@ -491,9 +494,9 @@ pub(crate) fn tide_of(context: &Context) -> HostTide {
 }
 
 /// The heat a body of `inputs` (after escape) and `interior` makes in
-/// `context` (see [`planet_model`]): radiogenic from its silicate mass,
-/// tidal from [`tide_of`] with the [`heat::k2_over_q`] of its envelope
-/// and water shares.
+/// `context` (see [`planet_model`]): radiogenic and secular cooling from
+/// its silicate mass and age, tidal from [`tide_of`] with the
+/// [`heat::k2_over_q`] of its envelope and water shares.
 pub(crate) fn internal_heat(
     context: &Context,
     inputs: &PlanetInputs,
@@ -506,6 +509,7 @@ pub(crate) fn internal_heat(
     let tide = tide_of(context);
     InternalHeat {
         radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
+        secular_w: secular_w(silicate_kg, context.age_gyr),
         tidal_w: tidal_power_w(
             tide.host_kg,
             interior.radius_earth * EARTH_M,
@@ -809,6 +813,27 @@ mod tests {
             reference::model_inputs(reference("Earth")),
         );
         assert_eq!(earth.ice_shell, None);
+    }
+
+    #[test]
+    fn earth_and_mars_lose_their_measured_heat() {
+        // Earth: 47 ± 2 TW (Davies & Davies 2010), 0.087 to 0.092 W/m²
+        // (Pollack, Hurter & Johnson 1993; Davies & Davies 2010). Mars:
+        // about 0.019 to 0.025 W/m² from the thermal histories that fit
+        // its crust (Plesa et al. 2018), a range kept wider for the
+        // spread of those models.
+        let flux = |name: &str| {
+            let body = reference(name);
+            let model = planet_model(
+                &reference::sun_at(body.orbit_au),
+                reference::model_inputs(body),
+            );
+            model.heat.flux_w_m2(model.interior.radius_earth)
+        };
+        let earth = flux("Earth");
+        assert!((0.087..=0.092).contains(&earth), "Earth {earth}");
+        let mars = flux("Mars");
+        assert!((0.015..=0.030).contains(&mars), "Mars {mars}");
     }
 
     #[test]

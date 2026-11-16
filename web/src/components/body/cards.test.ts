@@ -26,7 +26,7 @@ const surface = {
 const model = {
   surface,
   interior: { layers: [{ material: 'Iron', mass_earth: 0.3 }, { material: 'Rock', mass_earth: 0.7 }] },
-  heat: { radiogenic_w: 2e13, tidal_w: 0 },
+  heat: { radiogenic_w: 2e13, tidal_w: 0, secular_w: 2.6e13 },
   ice_shell: null,
 };
 const body = (over: Record<string, unknown>): Body =>

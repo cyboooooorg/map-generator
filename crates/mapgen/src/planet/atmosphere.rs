@@ -462,7 +462,7 @@ mod tests {
     use crate::atmosphere::AIRLESS_BAR;
     use crate::exomoon::EARTH_KG;
     use crate::planet::core::core;
-    use crate::planet::heat::{InternalHeat, radiogenic_w};
+    use crate::planet::heat::{InternalHeat, radiogenic_w, secular_w};
     use crate::planet::interior::interior;
     use crate::planet::reference::{exposure_at, model_inputs, reference};
     use crate::planet::regime::{regime, water};
@@ -497,6 +497,7 @@ mod tests {
         let heat = InternalHeat {
             radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, NOW),
             tidal_w: 0.0,
+            secular_w: secular_w(silicate, NOW),
         };
         let r = regime(inputs, &heat, &int, &w);
         let k = core(inputs, &int, r, NOW);
@@ -589,6 +590,7 @@ mod tests {
         let heat = InternalHeat {
             radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, NOW),
             tidal_w: 0.0,
+            secular_w: secular_w(silicate, NOW),
         };
         let r = regime(&inputs, &heat, &int, &w);
         let k = core(&inputs, &int, r, NOW);
