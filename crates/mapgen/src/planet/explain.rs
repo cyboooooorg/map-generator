@@ -420,7 +420,10 @@ fn temperature_tree(
         ch4
     };
     // Bright ice sets the albedo of a frozen world, and what ends it.
-    let frozen = frozen_over(climate) && surface.water.oceans > 0.0;
+    // Only a body with plates could have built CO₂ up to a thaw: without
+    // them (Mars, Titan) the cold has another cause.
+    let frozen =
+        frozen_over(climate) && surface.water.oceans > 0.0 && surface.regime == Regime::Plates;
     let albedo = Cause::of(Quantity::BondAlbedo, climate.bond_albedo);
     let albedo = if climate.snowball {
         albedo.because(vec![Cause::note("snowball")])
@@ -727,6 +730,16 @@ mod tests {
         let e = explain(&context, &model).expect("explained");
         let t = root(&e, Quantity::SurfaceTemperature);
         assert!(has_note(t, "frozen") && !has_note(t, "snowball"), "{t:#?}");
+    }
+
+    #[test]
+    fn mars_and_titan_are_not_frozen_for_good() {
+        for name in ["Mars", "Titan"] {
+            let (context, model) = solar(name);
+            let e = explain(&context, &model).expect("explained");
+            let t = root(&e, Quantity::SurfaceTemperature);
+            assert!(!has_note(t, "frozen"), "{name}: {t:#?}");
+        }
     }
 
     #[test]
