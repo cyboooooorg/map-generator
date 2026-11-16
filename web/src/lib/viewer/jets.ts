@@ -1,6 +1,7 @@
 // Jets rising from a moon's geyser fractures in its close-up (the tiger
-// stripes of Enceladus): one camera-facing column per source, standing on
-// the surface along each fracture. The plume in a moon's sky is plume.ts.
+// stripes of Enceladus): one camera-facing cone per source, its apex on
+// the surface along each fracture, widening with height. The plume in a
+// moon's sky is plume.ts.
 import {
   AdditiveBlending,
   Float32BufferAttribute,
@@ -22,11 +23,32 @@ export const JETS_PER_FRACTURE = 24;
 /** Height of a jet in the body's radii (look constant). */
 export const JET_HEIGHT_RADII = 0.3;
 
-/** Width of a jet at its foot, as a share of its height (look constant). */
-export const JET_WIDTH_SHARE = 0.06;
+/**
+ * Opening half-angle of a jet, degrees: each jet is a cone with its apex
+ * on the vent, opening by roughly 10 to 20° (Porco et al. 2014,
+ * doi:10.1088/0004-6256/148/3/45).
+ */
+export const JET_HALF_ANGLE_DEG = 15;
 
-/** Brightness of a jet seen at 90° of scattering, before the phase gain (look constant). */
-export const JET_OPACITY = 0.18;
+/** Half-width of a jet at its top, in the body's radii. */
+export const JET_TOP_HALF_WIDTH = JET_HEIGHT_RADII * Math.tan((JET_HALF_ANGLE_DEG * Math.PI) / 180);
+
+/** Width of a jet at its foot, as a share of its top width: a point-like vent (look constant). */
+export const JET_APEX_SHARE = 0.05;
+
+/**
+ * Share of the top width under which a jet's brightness per unit area
+ * stops rising towards the vent (look constant): the gas thins as the
+ * cone widens, but a vent brighter than this would read as a hot spot.
+ */
+export const JET_CORE_SHARE = 0.25;
+
+/**
+ * Brightness per unit area of a jet at its full width, seen at 90° of
+ * scattering, before the phase gain and its fade with height (look
+ * constant): `JET_OPACITY / JET_CORE_SHARE`, about 0.16, at the vent.
+ */
+export const JET_OPACITY = 0.04;
 
 /** Golden angle, radians: steps the phases of `meanderKm` from one fracture to the next. */
 const GOLDEN_ANGLE = 2.399963229728653;
@@ -122,13 +144,18 @@ const jetVertex = /* glsl */ `
   varying vec3 vWorld;
   uniform float uHeight;
   uniform float uWidth;
+  uniform float uApex;
   void main() {
     vec3 up = normalize(aBase);
     vec3 toEye = cameraPosition - aBase;
     vec3 right = normalize(cross(up, toEye));
-    // The quad runs from the foot (y 0) to the top (y 1), x from -1 to 1.
-    vec3 world = aBase + right * (position.x * uWidth) + up * (position.y * uHeight);
-    vUv = vec2(position.x, position.y);
+    // A trapezoid from the foot (y 0) to the top (y 1), x from -1 to 1 of
+    // its width there: uApex of the top width at the foot, all of it at
+    // the top. vUv.x is the offset in top widths, linear across the
+    // trapezoid; the fragment divides it by the local width.
+    float share = mix(uApex, 1.0, position.y);
+    vec3 world = aBase + right * (position.x * share * uWidth) + up * (position.y * uHeight);
+    vUv = vec2(position.x * share, position.y);
     vBase = aBase;
     vWorld = world;
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
@@ -139,15 +166,18 @@ export const jetFragment = /* glsl */ `
   uniform vec3 uSunDir;
   uniform float uLightMode;
   uniform float uOpacity;
+  uniform float uApex;
+  uniform float uCore;
   varying vec2 vUv;
   varying vec3 vBase;
   varying vec3 vWorld;
   ${dustPhaseGlsl}
   void main() {
-    // Narrower and fainter with height, soft at the sides and the top.
-    float width = mix(1.0, 0.35, vUv.y);
-    float side = 1.0 - smoothstep(0.0, 1.0, abs(vUv.x) / width);
-    float top = pow(1.0 - vUv.y, 1.5);
+    // A cone: soft at its sides, its gas spread over its width (denser
+    // towards the vent, down to the core share) and fading with height.
+    float share = mix(uApex, 1.0, vUv.y);
+    float side = 1.0 - smoothstep(0.0, 1.0, abs(vUv.x) / share);
+    float top = pow(1.0 - vUv.y, 1.5) / max(share, uCore);
     float gain = 1.0;
     if (uLightMode > 0.5) {
       vec3 toEye = normalize(cameraPosition - vBase);
@@ -162,7 +192,7 @@ export const jetFragment = /* glsl */ `
   }
 `;
 
-/** The mesh of jets: instanced columns at the `aBase` positions (see `placeJets`). */
+/** The mesh of jets: instanced cones at the `aBase` positions (see `placeJets`). */
 export type JetMesh = Mesh<InstancedBufferGeometry, ShaderMaterial>;
 
 /** A jets mesh sharing the view's sun uniforms; empty until `placeJets`. */
@@ -176,7 +206,9 @@ export function createJets(uniforms: { uSunDir: IUniform; uLightMode: IUniform }
     fragmentShader: jetFragment,
     uniforms: {
       uHeight: { value: JET_HEIGHT_RADII },
-      uWidth: { value: JET_HEIGHT_RADII * JET_WIDTH_SHARE },
+      uWidth: { value: JET_TOP_HALF_WIDTH },
+      uApex: { value: JET_APEX_SHARE },
+      uCore: { value: JET_CORE_SHARE },
       uOpacity: { value: JET_OPACITY },
       uSunDir: uniforms.uSunDir,
       uLightMode: uniforms.uLightMode,

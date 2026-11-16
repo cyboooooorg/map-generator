@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { fracturePoints, jetFragment, jetSources, JETS_PER_FRACTURE, meanderKm } from './jets';
+import {
+  createJets,
+  fracturePoints,
+  JET_APEX_SHARE,
+  JET_HEIGHT_RADII,
+  JET_TOP_HALF_WIDTH,
+  jetFragment,
+  jetSources,
+  JETS_PER_FRACTURE,
+  meanderKm,
+} from './jets';
 
 /** Angle, radians, between two points given in latitude and longitude. */
 function angle(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
@@ -71,6 +81,20 @@ describe('jets', () => {
     const [a, b] = [fracturePoints(f, 1, 252.1, 24), fracturePoints(f, 2, 252.1, 24)];
     const most = Math.max(...a.map((p, i) => angle(p, b[i]!) * 252.1));
     expect(most).toBeGreaterThan(2);
+  });
+  it('opens each jet into a cone from a point-like vent', () => {
+    const { uWidth, uApex, uHeight } = createJets({
+      uSunDir: { value: null },
+      uLightMode: { value: 0 },
+    }).material.uniforms;
+    expect(uHeight!.value).toBe(JET_HEIGHT_RADII);
+    // 15° of half-angle: the top half-width is tan 15° of the height.
+    expect(uWidth!.value / uHeight!.value).toBeCloseTo(Math.tan(Math.PI / 12), 9);
+    expect(uWidth!.value).toBe(JET_TOP_HALF_WIDTH);
+    expect(uApex!.value).toBe(JET_APEX_SHARE);
+    expect(JET_APEX_SHARE).toBeLessThan(0.1);
+    // Soft sides relative to the local width, which widens with height.
+    expect(jetFragment).toContain('abs(vUv.x) / share');
   });
   it('outputs a straight colour with its alpha, colour-space encoded', () => {
     expect(jetFragment).toContain('vec4(vec3(0.92, 0.96, 1.0), a)');
