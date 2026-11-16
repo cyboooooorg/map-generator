@@ -1497,7 +1497,11 @@ mod tests {
     fn water_world_at(water_fraction: f64, orbit_au: f64) -> crate::planet::Surface {
         let inputs = PlanetInputs {
             water_fraction,
-            volatiles: crate::planet::inputs::volatile_rule(1.0 - water_fraction, water_fraction),
+            volatiles: crate::planet::inputs::volatile_rule(
+                1.0 - water_fraction,
+                water_fraction,
+                0.325,
+            ),
             ..crate::planet::reference::inputs(1.0, 0.325, 0.0)
         };
         let model =
@@ -1636,7 +1640,7 @@ mod tests {
         // it.
         let water = 0.01;
         let earth = PlanetInputs {
-            volatiles: crate::planet::inputs::volatile_rule(1.0 - water, water),
+            volatiles: crate::planet::inputs::volatile_rule(1.0 - water, water, 0.325),
             ..crate::planet::reference::inputs(1.0, 0.325, water)
         };
         let teff = crate::planet::reference::sun_at(1.0).teff_k;

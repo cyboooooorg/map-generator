@@ -185,7 +185,11 @@ pub(crate) fn inputs_of(body: &ReferenceBody) -> super::PlanetInputs {
 pub(crate) fn model_inputs(body: &ReferenceBody) -> super::PlanetInputs {
     let refractory = 1.0 - body.water_fraction - body.envelope_fraction;
     super::PlanetInputs {
-        volatiles: super::inputs::volatile_rule(refractory, body.water_fraction),
+        volatiles: super::inputs::volatile_rule(
+            refractory,
+            body.water_fraction,
+            body.core_mass_fraction,
+        ),
         ..inputs_of(body)
     }
 }

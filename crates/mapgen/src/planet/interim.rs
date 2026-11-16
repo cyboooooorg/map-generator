@@ -958,7 +958,7 @@ mod tests {
         let (iron, rock, water) = (1.06, 3.16, 0.56);
         let mass = iron + rock + water;
         let inputs = crate::planet::PlanetInputs {
-            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            volatiles: volatile_rule(1.0 - water / mass, water / mass, iron / (iron + rock)),
             ..reference::inputs(mass, iron / (iron + rock), water / mass)
         };
         let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);

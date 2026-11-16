@@ -153,7 +153,7 @@ mod tests {
         close(i.volatiles.n2, 1.1407820714593542e-6);
         close(i.volatiles.ch4, 1.0841261800592375e-6);
         close(i.volatiles.nh3, 1.2976472772934134e-6);
-        close(i.volatiles.s, 0.00013041927131499377);
+        close(i.volatiles.s, 0.00023521512678664652);
         close(i.radiogenic, 0.6204511799069944);
         // The life draw is a plain uniform: exact.
         assert_eq!(i.life_draw, 0.7870037668293781);

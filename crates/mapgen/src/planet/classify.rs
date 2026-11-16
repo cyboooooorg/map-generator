@@ -328,7 +328,7 @@ mod tests {
     /// `orbit_au` round the Sun.
     fn model_at(mass: f64, water: f64, orbit_au: f64) -> crate::planet::PlanetModel {
         let inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - water, water),
+            volatiles: volatile_rule(1.0 - water, water, 0.325),
             ..reference::inputs(mass, 0.325, water)
         };
         planet_model(&sun_at(orbit_au), inputs)
@@ -430,7 +430,7 @@ mod tests {
         // their scatter: the ocean keeps most of them out of the air.
         let inputs = PlanetInputs {
             water_fraction: 0.3,
-            volatiles: crate::planet::inputs::volatile_rule(0.7, 0.3),
+            volatiles: crate::planet::inputs::volatile_rule(0.7, 0.3, 0.325),
             ..reference::inputs(1.0, 0.325, 0.0)
         };
         let model = planet_model(&sun_at(1.0), inputs);
@@ -449,7 +449,7 @@ mod tests {
         // liquid.
         let inputs = PlanetInputs {
             water_fraction: 0.01,
-            volatiles: crate::planet::inputs::volatile_rule(0.99, 0.01),
+            volatiles: crate::planet::inputs::volatile_rule(0.99, 0.01, 0.325),
             ..reference::inputs(1.0, 0.325, 0.0)
         };
         let model = planet_model(&sun_at(1.0), inputs);
@@ -471,7 +471,7 @@ mod tests {
         let mut runaways = 0;
         for (water, orbit_au) in [(0.05, 0.8), (0.05, 0.9)] {
             let inputs = PlanetInputs {
-                volatiles: volatile_rule(1.0 - water, water),
+                volatiles: volatile_rule(1.0 - water, water, 0.325),
                 ..reference::inputs(0.2, 0.325, water)
             };
             let model = planet_model(&sun_at(orbit_au), inputs);
@@ -503,7 +503,7 @@ mod tests {
         // first pass put hundreds of bar of steam in its air, boiled, and
         // the planet came out a runaway greenhouse at 296 K.
         let inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01),
+            volatiles: volatile_rule(1.0 - 1.0e-9, 0.01, 0.325),
             ..reference::inputs(0.2, 0.325, 1.0e-9)
         };
         let model = planet_model(&sun_at(1.2), inputs);
@@ -522,7 +522,7 @@ mod tests {
         // 107 W/m²) is far under the plateau: a wet balance exists, it
         // does not boil and keeps all its water.
         let inputs = PlanetInputs {
-            volatiles: volatile_rule(0.999, 1.0e-3),
+            volatiles: volatile_rule(0.999, 1.0e-3, 0.325),
             ..reference::inputs(0.2, 0.325, 1.0e-3)
         };
         let all = inputs.water_fraction * inputs.mass_earth * crate::exomoon::EARTH_KG;
@@ -572,7 +572,7 @@ mod tests {
                 water_fraction: 3.0e-4,
                 volatiles: crate::planet::Volatiles {
                     co2,
-                    ..volatile_rule(1.0 - 3.0e-4, 3.0e-4)
+                    ..volatile_rule(1.0 - 3.0e-4, 3.0e-4, 0.325)
                 },
                 ..model_inputs(reference("Earth"))
             };
@@ -605,7 +605,7 @@ mod tests {
         // 1 bar there is none and the steam runaway stands.)
         let context = f0v_at(F0V_BOILING_FLUX);
         let mut inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - 1.0e-3, 1.0e-3),
+            volatiles: volatile_rule(1.0 - 1.0e-3, 1.0e-3, 0.325),
             ..model_inputs(reference("Earth"))
         };
         let left_bar = 0.03;
@@ -640,7 +640,7 @@ mod tests {
         let (iron, rock, water) = (1.06, 3.16, 0.56);
         let mass = iron + rock + water;
         let inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            volatiles: volatile_rule(1.0 - water / mass, water / mass, 0.325),
             ..reference::inputs(mass, iron / (iron + rock), water / mass)
         };
         let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
@@ -754,6 +754,7 @@ mod tests {
                                 volatiles: crate::planet::inputs::volatile_rule(
                                     0.88 - envelope,
                                     0.1,
+                                    0.325,
                                 ),
                                 ..reference::inputs(mass, 0.325, 0.1)
                             };

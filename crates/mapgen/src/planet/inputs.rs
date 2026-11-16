@@ -197,10 +197,14 @@ const GIANT_CORE_MAX_SHARE: f64 = 0.1;
 /// 56, gives up to 500 ppm in the silicate Earth) and Earth about 2e-6 of
 /// nitrogen (about 2 ppm: not checked in Marty 2012, whose abstract says
 /// nitrogen is depleted by about an order of magnitude against water).
-/// Sulphur at 1e-4: calibration, no source.
 const ROCK_CO2: f64 = 1e-4;
 const ROCK_N2: f64 = 2e-6;
-const ROCK_S: f64 = 1e-4;
+
+/// Sulphur per kilogram of silicate (mantle and crust): about 250 ppm in
+/// the bulk silicate Earth (McDonough 2003, Treatise on Geochemistry
+/// 2.15, 547; the core holds the rest). It applies to the silicate share
+/// of a body, `refractory * (1 - core_mass_fraction)`.
+const ROCK_S: f64 = 2.5e-4;
 
 /// Volatiles per kilogram of ice. CO2 at 5 %, CH4 and NH3 at 1 %: within
 /// the ranges comets show relative to water (Mumma & Charnley 2011,
@@ -329,7 +333,13 @@ pub fn draw_inputs_with(
     );
     let scatter = volatile_scatter(rng);
     let refractory = (1.0 - water_fraction - envelope_fraction).max(0.0);
-    let volatiles = volatiles(refractory, water_fraction, &scatter, overrides);
+    let volatiles = volatiles(
+        refractory,
+        water_fraction,
+        core_mass_fraction,
+        &scatter,
+        overrides,
+    );
     let drawn_radiogenic = 10f64.powf(RADIOGENIC_SPREAD_DEX * normal(rng));
     let radiogenic = overrides.radiogenic.unwrap_or(drawn_radiogenic);
     let drawn_life = rng.random::<f64>();
@@ -417,15 +427,16 @@ fn volatile_scatter(rng: &mut impl RngExt) -> VolatileScatter {
 ///
 /// ```text
 /// co2 = (1e-4 r + 0.05 w) LN    n2 = (2e-6 r + 1e-3 w) LN
-/// s   = 1e-4 r LN               ch4 = 0.01 w LN    nh3 = 0.01 w LN
+/// s   = 2.5e-4 r (1 - cmf) LN   ch4 = 0.01 w LN    nh3 = 0.01 w LN
 /// ```
 fn volatiles(
     refractory: f64,
     water: f64,
+    core_mass_fraction: f64,
     scatter: &VolatileScatter,
     overrides: &InputOverrides,
 ) -> Volatiles {
-    let rule = volatile_rule(refractory, water);
+    let rule = volatile_rule(refractory, water, core_mass_fraction);
     Volatiles {
         co2: rule.co2 * overrides.co2.unwrap_or(scatter.co2),
         n2: rule.n2 * overrides.n2.unwrap_or(scatter.n2),
@@ -437,14 +448,15 @@ fn volatiles(
 
 /// The volatiles of [`volatiles`] without their scatter: what a
 /// `refractory` share of rock and iron and a `water` share of ices carry
-/// by the rule alone.
-pub(crate) fn volatile_rule(refractory: f64, water: f64) -> Volatiles {
+/// by the rule alone. The sulphur comes from the silicate only: the
+/// share of the rock and iron that is not core.
+pub(crate) fn volatile_rule(refractory: f64, water: f64, core_mass_fraction: f64) -> Volatiles {
     Volatiles {
         co2: ROCK_CO2 * refractory + ICE_CO2 * water,
         n2: ROCK_N2 * refractory + ICE_N2 * water,
         ch4: ICE_CH4 * water,
         nh3: ICE_NH3 * water,
-        s: ROCK_S * refractory,
+        s: ROCK_S * refractory * (1.0 - core_mass_fraction),
     }
 }
 
@@ -525,8 +537,16 @@ mod tests {
         let rule = volatile_rule(
             1.0 - b.water_fraction - b.envelope_fraction,
             b.water_fraction,
+            b.core_mass_fraction,
         );
         assert!((b.volatiles.co2 - 3.0 * rule.co2).abs() <= 1e-12 * rule.co2);
+    }
+
+    #[test]
+    fn volatile_rule_takes_sulphur_from_the_silicate() {
+        let rule = volatile_rule(0.9, 0.1, 0.325);
+        assert!((rule.s - ROCK_S * 0.9 * (1.0 - 0.325)).abs() < 1e-18);
+        assert_eq!(volatile_rule(0.9, 0.1, 0.0).s, ROCK_S * 0.9);
     }
 
     #[test]
@@ -540,6 +560,7 @@ mod tests {
         let rule = volatile_rule(
             1.0 - i.water_fraction - i.envelope_fraction,
             i.water_fraction,
+            i.core_mass_fraction,
         );
         assert!((i.volatiles.nh3 - 2.0 * rule.nh3).abs() <= 1e-12 * rule.nh3);
         assert!((i.volatiles.s - 0.5 * rule.s).abs() <= 1e-12 * rule.s);
@@ -716,6 +737,7 @@ mod tests {
             let dry = volatiles(
                 1.0,
                 0.0,
+                0.325,
                 &volatile_scatter(&mut rng),
                 &InputOverrides::default(),
             );

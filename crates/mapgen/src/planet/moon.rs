@@ -123,8 +123,8 @@ pub fn derive_moon_model(
 /// ice-borne, go.
 fn without_hypervolatiles(inputs: PlanetInputs) -> PlanetInputs {
     let refractory = (1.0 - inputs.water_fraction - inputs.envelope_fraction).max(0.0);
-    let rule = volatile_rule(refractory, inputs.water_fraction);
-    let rock = volatile_rule(refractory, 0.0);
+    let rule = volatile_rule(refractory, inputs.water_fraction, inputs.core_mass_fraction);
+    let rock = volatile_rule(refractory, 0.0, inputs.core_mass_fraction);
     let n2 = if rule.n2 > 0.0 {
         inputs.volatiles.n2 * rock.n2 / rule.n2
     } else {

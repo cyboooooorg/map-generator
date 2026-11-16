@@ -14,6 +14,7 @@ use std::f64::consts::PI;
 
 use serde::{Deserialize, Serialize};
 
+use super::climate::SurfaceLiquid;
 use super::{Core, Interior, PlanetInputs, Water};
 use crate::exomoon::{EARTH_KG, EARTH_M, G};
 use crate::geology::Regime;
@@ -100,9 +101,25 @@ const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
 /// Share of the outgassed sulphur that stays in the air as SO₂: the rest
 /// ends in sulphides and sulphates at the surface (on Venus SO₂ is
 /// buffered by its reaction with the crust, Fegley & Prinn 1989, Nature
-/// 337, 55; not checked). Calibration, no source: Venus's SO₂ of about
-/// 150 ppm (value from memory).
-const SULPHUR_IN_AIR: f64 = 1.0e-4;
+/// 337, 55; not checked). Calibration on Venus's SO₂ of about
+/// 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
+const SULPHUR_IN_AIR: f64 = 5.0e-5;
+
+/// Free oxygen, bar, from which an air washes its SO2 out as it does over
+/// liquid water: oxygen and the radicals it makes oxidise SO2 to sulphate.
+/// A hundredth of a bar, about a twentieth of Earth's: the oxidation is
+/// fast long before the air is Earth's. Calibration, no source.
+const OXIDISING_O2_BAR: f64 = 0.01;
+
+/// Share of its SO2 an air keeps over liquid water or with free oxygen:
+/// the lifetime of SO2 there, about a day and a half (oxidation in cloud
+/// water and by OH, Seinfeld & Pandis 2016, Atmospheric Chemistry and
+/// Physics, ch. 6: 1 to 2 days in the lower troposphere), over its
+/// lifetime in a dry, oxygen-free air, where only the crust takes it: about
+/// 1 Myr (Venus's air would lose its SO2 to the crust in a few Myr
+/// without resupply, Fegley & Prinn 1989, Nature 337, 55; value from
+/// memory, not checked). 1.5 days over 1 Myr is `4e-9`.
+const WET_SO2_SHARE: f64 = 4.0e-9;
 
 /// Escape velocity, km/s, at which the cosmic shoreline crosses Earth's
 /// XUV fluence. Zahnle & Catling 2017 (ApJ 843, 122,
@@ -222,6 +239,38 @@ pub fn outgassed(
         o2: 0.0,
     }
 }
+
+/// `gases` after the washing of SO2 out of a wet or oxidising air: with
+/// liquid water at the surface or `o2` of [`OXIDISING_O2_BAR`] or more,
+/// the SO2 falls to [`WET_SO2_SHARE`] of what the volcanoes gave; a dry,
+/// oxygen-poor air keeps it in proportion to its pressure below
+/// [`DRY_COLUMN_BAR`] (monotonic: the thinner the air, the less it keeps). Sulphuric acid clouds are not made here: the
+/// sky follows the SO2 left, whatever the liquid.
+pub fn wash_out(gases: Gases, liquid: SurfaceLiquid) -> Gases {
+    if liquid == SurfaceLiquid::Water || gases.o2 >= OXIDISING_O2_BAR {
+        Gases {
+            so2: gases.so2 * WET_SO2_SHARE,
+            ..gases
+        }
+    } else {
+        Gases {
+            so2: gases.so2 * (gases.total() / DRY_COLUMN_BAR).min(1.0),
+            ..gases
+        }
+    }
+}
+
+/// Column of air, bar, from which a dry, oxygen-free air keeps all its
+/// SO2 for the dry lifetime of [`WET_SO2_SHARE`]. The dry sink is
+/// photochemical: UV-made oxidants (O, OH from photolysed CO2 and H2O)
+/// destroy SO2 at a rate per unit area that does not grow with the
+/// column, so the lifetime scales with the column mass that shields and
+/// dilutes it. Venus's 92 bar keeps SO2 for about 1 Myr, Mars's 0.006 bar
+/// for about a century or less (Krasnopolsky 2005, Icarus: Mars SO2 upper
+/// limit and lifetime of about 2 yr; Fegley & Prinn 1989; both from
+/// memory, check). Calibrated on Venus and Mars together: 10 bar leaves
+/// Venus at its 150 ppm and Mars's SO2 far under its 0.3 ppb limit.
+const DRY_COLUMN_BAR: f64 = 10.0;
 
 /// The share of its air a body keeps against escape to space: the cosmic
 /// shoreline of Zahnle & Catling 2017 (doi:10.3847/1538-4357/aa7846).
@@ -511,6 +560,50 @@ mod tests {
     fn air_of(name: &str) -> Gases {
         let b = reference(name);
         air(&model_inputs(b), b.orbit_au)
+    }
+
+    /// The surface air of the reference body `name` after the whole chain.
+    fn surface_air(name: &str) -> Gases {
+        let b = reference(name);
+        let model = crate::planet::planet_model(
+            &crate::planet::reference::sun_at(b.orbit_au),
+            model_inputs(b),
+        );
+        model.surface.expect("a surface").gases
+    }
+
+    #[test]
+    fn earths_air_keeps_no_sulphur_dioxide() {
+        let g = surface_air("Earth");
+        assert!(g.so2 < 1e-6, "{g:?}");
+    }
+
+    #[test]
+    fn venus_keeps_its_sulphur_dioxide() {
+        // About 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
+        let g = surface_air("Venus");
+        assert!((0.008..=0.02).contains(&g.so2), "{g:?}");
+    }
+
+    #[test]
+    fn mars_keeps_little_sulphur_dioxide() {
+        // Upper limit about 0.3 ppb (Encrenaz et al. 2011).
+        let g = surface_air("Mars");
+        assert!(g.so2 < 1e-6, "{g:?}");
+    }
+
+    #[test]
+    fn a_wet_or_oxidising_air_loses_its_sulphur_dioxide() {
+        let dry = Gases {
+            so2: 1.0,
+            ..Gases::default()
+        };
+        assert_eq!(wash_out(dry, SurfaceLiquid::None).so2, 1.0 / DRY_COLUMN_BAR);
+        let thick = Gases { co2: 90.0, ..dry };
+        assert_eq!(wash_out(thick, SurfaceLiquid::None).so2, 1.0);
+        assert_eq!(wash_out(dry, SurfaceLiquid::Water).so2, WET_SO2_SHARE);
+        let oxygen = Gases { o2: 0.2, ..dry };
+        assert_eq!(wash_out(oxygen, SurfaceLiquid::None).so2, WET_SO2_SHARE);
     }
 
     #[test]

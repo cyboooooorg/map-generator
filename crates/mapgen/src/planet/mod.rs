@@ -26,7 +26,8 @@
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
 //! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
-//! [`life::oxygenate`] gives the air its oxygen.
+//! [`life::oxygenate`] gives the air its oxygen, and
+//! [`atmosphere::wash_out`] takes the SO₂ out of a wet or oxidising air.
 //! [`classify::classify`] reads its [`PlanetClass`], including the surface
 //! classes, off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
@@ -67,7 +68,7 @@ pub mod xuv;
 
 pub use atmosphere::{
     Gases, atmosphere, cold_trap, escape_velocity_km_s, methane_photolysis, outgassed,
-    photochemistry,
+    photochemistry, wash_out,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
 pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_temperature_k};
@@ -277,7 +278,7 @@ impl PlanetModel {
             o * OCEAN_KG / (drawn * EARTH_KG)
         });
         let refractory = (1.0 - i.water_fraction - envelope).max(0.0);
-        let rule = inputs::volatile_rule(refractory, i.water_fraction);
+        let rule = inputs::volatile_rule(refractory, i.water_fraction, i.core_mass_fraction);
         let factor = |stored: f64, rule: f64| {
             if rule > 0.0 {
                 exact_preimage(stored, stored / rule, |f| rule * f)
@@ -577,12 +578,13 @@ pub(crate) fn bare(
     let water_bar = w.kept_kg * bar_per_kg;
     let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
     let life = life(inputs, &climate, context.age_gyr);
+    let surface_gases = wash_out(oxygenate(after, &life), climate.liquid);
     Bare {
         surface: Surface {
             water: w,
             regime: r,
             core: k,
-            gases: oxygenate(after, &life),
+            gases: surface_gases,
             climate,
             life,
         },
