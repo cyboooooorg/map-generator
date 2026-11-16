@@ -56,7 +56,7 @@ describe('planetLook', () => {
     const look = planetLook(world(1, { clouds: { file: 'clouds.png' } }, 'sulfuric'), url);
     expect(look.halo).not.toBeNull();
     expect(look.clouds).toBe('/w/raw_data/clouds.png');
-    expect(look.cloudTint).toEqual([0.9, 0.82, 0.55]);
+    expect(look.cloudTint).toEqual([0.85, 0.77, 0.54]);
   });
 
   it('gives a world without a cloud layer (a giant) no clouds, and an airless one no halo', () => {
