@@ -400,7 +400,12 @@ Their near-black brown is a calibration with those maps as its target.
   lowers the freezing point further (the binary rule gives 81 and 85 K for
   Richardson's two liquids), so it errs towards freezing. Liquid methane
   is stable under any air above its triple-point pressure (0.1169 bar,
-  NIST), from which `planet::classify` names a hydrocarbon world.
+  NIST), from which `planet::classify` names a hydrocarbon world. A lake
+  needs enough methane to condense, the vapour of a Titan sea at the
+  surface temperature (half of pure methane's saturation, Raoult's law);
+  the climate condenses the rest of a body's methane onto its ground and
+  its air keeps that vapour, about 5 % of Titan's (issue #443, see
+  [planet-atmospheres.md](planet-atmospheres.md)).
 - **Titan's methane is an archetype's cause.** The model draws the methane
   a body's ices carry as 1 % of them times a log-normal scatter, which can
   leave a Titan too little to outlast its star's Lyman α. Titan's own

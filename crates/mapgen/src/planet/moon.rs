@@ -145,7 +145,7 @@ fn without_hypervolatiles(inputs: PlanetInputs) -> PlanetInputs {
 mod tests {
     use super::*;
     use crate::geology::Regime;
-    use crate::planet::PlanetClass;
+    use crate::planet::{PlanetClass, SurfaceLiquid};
     use crate::star::{StarInfo, parse_type};
 
     const SATURN_KG: f64 = 5.683e26;
@@ -204,8 +204,10 @@ mod tests {
     }
 
     /// Titan at Saturn's orbit with the `titan-like` archetype's factors:
-    /// its 1.47 bar (Fulchignoni et al. 2005, doi:10.1038/nature04314)
-    /// within 1.2 to 1.8, and a few percent of methane, on every seed.
+    /// its 93.7 K within 90 to 97, its 1.47 bar (Fulchignoni et al. 2005,
+    /// doi:10.1038/nature04314) within 1.3 to 1.6, and 3 to 6 % of
+    /// methane near its surface (5.7 %, Niemann et al. 2005,
+    /// doi:10.1038/nature04122), on every seed.
     #[test]
     fn titan_comes_out_a_hydrocarbon_world() {
         use rand::SeedableRng;
@@ -216,10 +218,13 @@ mod tests {
             let m = derive_moon_model(seed, "p1/m1", &planet_at(9.54), &titan(), &overrides);
             let s = m.surface.expect("surface");
             assert_eq!(m.class, PlanetClass::HydrocarbonWorld, "seed {seed}: {m:?}");
+            let t = s.climate.temperature_k;
+            assert!((90.0..=97.0).contains(&t), "seed {seed}: {s:?}");
+            assert_eq!(s.climate.liquid, SurfaceLiquid::Hydrocarbons, "{s:?}");
             let p = s.gases.total();
-            assert!((1.2..=1.8).contains(&p), "seed {seed}: {s:?}");
+            assert!((1.3..=1.6).contains(&p), "seed {seed}: {s:?}");
             let ch4 = s.gases.ch4 / p;
-            assert!((0.01..=0.10).contains(&ch4), "seed {seed}: {s:?}");
+            assert!((0.03..=0.06).contains(&ch4), "seed {seed}: {s:?}");
             assert!(ocean_km(&m) < 400.0, "{:?}", m.ice_shell);
         }
     }

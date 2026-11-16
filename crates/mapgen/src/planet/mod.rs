@@ -78,8 +78,8 @@ pub use atmosphere::{
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
 pub use climate::{
-    CarbonCycle, Climate, SurfaceLiquid, climate, methane_freezes_k, snowball_chance,
-    surface_temperature_k,
+    CarbonCycle, Climate, SurfaceLiquid, climate, methane_freezes_k, methane_sea_vapour_bar,
+    snowball_chance, surface_temperature_k,
 };
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
@@ -571,6 +571,10 @@ pub(crate) struct Bare {
     /// The air as the climate left it, before life oxygenated it: the
     /// air `surface.climate` was solved with.
     pub climate_gases: Gases,
+    /// What the climate condensed on the ground at its surface
+    /// temperature ([`atmosphere::condense`]: the methane over its seas
+    /// or frosts), bar.
+    pub condensed: Gases,
 }
 
 /// A bare body's surface from the water `w` it starts with (the chain's
@@ -613,6 +617,7 @@ pub(crate) fn bare(
         snowball_draw: inputs.snowball_draw,
     };
     let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
+    let condensed = atmosphere::condense(gases, climate.temperature_k).1;
     let life = life(inputs, &climate, context.age_gyr);
     let surface_gases = wash_out(oxygenate(after, &life), climate.liquid);
     Bare {
@@ -635,6 +640,7 @@ pub(crate) fn bare(
         photolysed,
         trapped,
         climate_gases: after,
+        condensed,
     }
 }
 

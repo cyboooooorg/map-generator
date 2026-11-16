@@ -90,11 +90,41 @@ const MAX_LEVELS: usize = 320;
 const TOP_SHARE: f64 = 1e-3;
 const TOP_BAR: f64 = 1e-4;
 
+/// Pressure, bar, of the tropopause of a thick atmosphere, where its
+/// air is coldest: about 0.1 bar on every thick atmosphere of the Solar
+/// System (Earth, Titan, Jupiter, Saturn, Uranus, Neptune), which
+/// Robinson & Catling 2014 (*Nature Geosci.* 7, 12, doi:10.1038/ngeo2020;
+/// abstract checked) explain by the infrared opacity of the air above it
+/// and the shortwave opacity of the air below. In a thinner air the
+/// whole column is above it.
+const TROPOPAUSE_BAR: f64 = 0.1;
+
+/// The methane, bar at the surface, that radiates in a column of `gases`
+/// under a stratosphere at `skin_k`: methane is cold-trapped where the
+/// air is coldest, at the tropopause ([`TROPOPAUSE_BAR`]) at about the
+/// skin temperature, so that its mixing ratio above it is at most the
+/// saturation pressure of pure methane there over the tropopause's
+/// pressure ([`super::atmosphere::methane_saturation_bar`]); the methane
+/// that radiates to space at the column's emitting levels is that of
+/// the air above. Without a stratosphere (`skin_k` 0) all of it.
+fn radiating_methane_bar(gases: &Gases, pressure_bar: f64, skin_k: f64) -> f64 {
+    let ch4 = gases.ch4.max(0.0);
+    if skin_k <= 0.0 || ch4 <= 0.0 {
+        return ch4;
+    }
+    let tropopause = TROPOPAUSE_BAR.min(pressure_bar);
+    let share = super::atmosphere::methane_saturation_bar(skin_k) / tropopause;
+    ch4.min(share * pressure_bar)
+}
+
 /// The gases of a column without their water, as mole fractions and the
 /// molar heat capacity of the mixture.
 struct DryAir {
     /// Partial pressures, bar, at the surface (no water).
     gases: Gases,
+    /// The methane among them that radiates, bar at the surface
+    /// ([`radiating_methane_bar`]).
+    radiating_ch4: f64,
     /// Their sum, bar.
     pressure: f64,
     /// Molar heat capacity of the mixture, J/(mol·K).
@@ -102,7 +132,7 @@ struct DryAir {
 }
 
 impl DryAir {
-    fn of(gases: &Gases) -> Self {
+    fn of(gases: &Gases, skin_k: f64) -> Self {
         let g = Gases {
             n2: gases.n2.max(0.0),
             co2: gases.co2.max(0.0),
@@ -125,14 +155,16 @@ impl DryAir {
             N2_CP
         };
         Self {
+            radiating_ch4: radiating_methane_bar(&g, pressure, skin_k),
             gases: g,
             pressure,
             cp,
         }
     }
 
-    /// The gases at a level where the dry air has `dry_bar` and the
-    /// vapour `vapour_bar`.
+    /// The gases that radiate at a level where the dry air has `dry_bar`
+    /// and the vapour `vapour_bar`: the methane cold-trapped at the
+    /// tropopause (see [`radiating_methane_bar`]) is left out.
     fn at(&self, dry_bar: f64, vapour_bar: f64) -> Gases {
         let share = if self.pressure > 0.0 {
             dry_bar / self.pressure
@@ -143,7 +175,7 @@ impl DryAir {
             n2: self.gases.n2 * share,
             co2: self.gases.co2 * share,
             h2o: vapour_bar,
-            ch4: self.gases.ch4 * share,
+            ch4: self.radiating_ch4 * share,
             nh3: self.gases.nh3 * share,
             so2: self.gases.so2 * share,
             o2: self.gases.o2 * share,
@@ -208,7 +240,7 @@ pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64) -> f64 {
 pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) -> f64 {
     let surface_k = surface_k.max(1.0);
     let black = SIGMA * surface_k.powi(4);
-    let air = DryAir::of(gases);
+    let air = DryAir::of(gases, skin_k);
     let steam = if gases.h2o > 0.0 {
         gases.h2o.min(STEAM_MAX_BAR)
     } else {

@@ -9,7 +9,8 @@
 //! [`cold_trap`] freezes out what the equilibrium temperature cannot hold
 //! as gas, and [`photochemistry`] turns ammonia into nitrogen and
 //! oxidises warm methane. The carbonate thermostat (climate) and oxygen
-//! (life) come after.
+//! (life) come after; the climate condenses methane at its surface
+//! temperature ([`condense`]).
 use std::f64::consts::PI;
 
 use serde::{Deserialize, Serialize};
@@ -382,6 +383,118 @@ impl Frost {
     }
 }
 
+/// One standard atmosphere, bar.
+const ATM_BAR: f64 = 1.013_25;
+
+/// A volatile that condenses on a body's surface at the surface
+/// temperature, inside the climate's fixed point ([`condense`]): its
+/// [`Frost`] below its triple point, its liquid's vapour pressure above,
+/// and none of it condensed past its critical point.
+struct Condensable {
+    frost: Frost,
+    /// Normal boiling point, K, at one atmosphere.
+    boils_k: f64,
+    /// Critical temperature, K: above it no liquid exists.
+    critical_k: f64,
+    /// Share of the pure gas's saturation pressure that the air over its
+    /// condensate holds (Raoult's law: the gas's mole fraction in the
+    /// condensate), 1 for a pure condensate.
+    activity: f64,
+    /// The gas's partial pressure in a [`Gases`].
+    of: fn(&mut Gases) -> &mut f64,
+}
+
+impl Condensable {
+    /// Saturation vapour pressure of the pure gas at `temperature_k`,
+    /// bar: the sublimation curve of its [`Frost`] below its triple point;
+    /// above it, Clausius–Clapeyron with the mean latent heat that joins
+    /// the triple point to the normal boiling point (both from the NIST
+    /// Chemistry WebBook); infinite at and past the critical point, where
+    /// the gas does not condense.
+    fn saturation_bar(&self, temperature_k: f64) -> f64 {
+        let f = &self.frost;
+        if temperature_k < f.triple_k {
+            return f.cap(f64::INFINITY, temperature_k);
+        }
+        if temperature_k >= self.critical_k {
+            return f64::INFINITY;
+        }
+        let l_over_r = (ATM_BAR / f.triple_bar).ln() / (1.0 / f.triple_k - 1.0 / self.boils_k);
+        f.triple_bar * (l_over_r * (1.0 / f.triple_k - 1.0 / temperature_k)).exp()
+    }
+}
+
+/// Mole fraction of methane in a Titan sea: about a half, the rest
+/// nitrogen and ethane (Glein & Shock 2013, doi:10.1016/j.gca.2013.03.030,
+/// and Tan, Kargel & Marion 2013, doi:10.1016/j.icarus.2012.10.032, find
+/// 0.5 to 0.7 for its seas; from the plan, not checked). By Raoult's law
+/// the air over such a sea holds this share of pure methane's saturation
+/// pressure ([`condense`]). The low end, because Titan's air near its
+/// surface holds 45 to 50 % of pure methane's saturation (Niemann et al.
+/// 2005, doi:10.1038/nature04122; from memory, not checked), and its
+/// seas hold that air.
+pub(crate) const SEA_METHANE_SHARE: f64 = 0.5;
+
+/// The gases that condense on the surface inside the climate
+/// ([`condense`]): methane over a sea of methane, nitrogen and ethane
+/// ([`SEA_METHANE_SHARE`]). Normal boiling point 111.67 K and critical
+/// point 190.56 K (NIST Chemistry WebBook; from memory, not checked).
+const CONDENSING: [Condensable; 1] = [Condensable {
+    frost: CH4_FROST,
+    boils_k: 111.67,
+    critical_k: 190.56,
+    activity: SEA_METHANE_SHARE,
+    of: |g| &mut g.ch4,
+}];
+
+/// Saturation vapour pressure of pure methane at `temperature_k`, bar:
+/// over its ice below its triple point (90.7 K, 0.117 bar), over its
+/// liquid above, up to its critical point (190.56 K), past which it is
+/// infinite: methane does not condense there.
+pub(crate) fn methane_saturation_bar(temperature_k: f64) -> f64 {
+    CONDENSING[0].saturation_bar(temperature_k)
+}
+
+/// The air and the condensate of `gases` (bar) on a surface at
+/// `surface_k`: each gas that condenses there ([`CONDENSING`]: methane)
+/// keeps in the air at most its activity times its saturation pressure
+/// at the surface temperature, and the rest lies on the ground, as a
+/// liquid or a frost. Returns `(air, condensate)`; `air + condensate` is
+/// `gases`.
+///
+/// The climate applies it inside its fixed point, at the surface
+/// temperature it solves for (see [`super::climate::climate`]): unlike
+/// the [`cold_trap`] at the equilibrium temperature, which the climate
+/// cannot move, how much of a condensing gas is in the air sets the
+/// greenhouse that sets the temperature.
+pub(crate) fn condense(gases: Gases, surface_k: f64) -> (Gases, Gases) {
+    let mut air = gases;
+    let mut condensate = Gases::default();
+    for gas in &CONDENSING {
+        let kept = (gas.of)(&mut air);
+        let most = gas.activity * gas.saturation_bar(surface_k);
+        if *kept > most {
+            *(gas.of)(&mut condensate) = *kept - most;
+            *kept = most;
+        }
+    }
+    (air, condensate)
+}
+
+/// `air` with each gas that condenses on the surface ([`condense`]) set
+/// to what its `inventory` (bar, in the air and on the ground) leaves in
+/// the air at `surface_k`: the air a climate solved with a temperature
+/// close to `surface_k`, made to agree with it exactly.
+pub(crate) fn condensed_air(air: Gases, inventory: &Gases, surface_k: f64) -> Gases {
+    let (kept, _) = condense(*inventory, surface_k);
+    let mut air = air;
+    for gas in &CONDENSING {
+        let mut kept = kept;
+        *(gas.of)(&mut air) = *(gas.of)(&mut kept);
+    }
+    air
+}
+
 /// Partial pressure of CO₂, bar, at which it frosts out at
 /// `temperature_k` (its sublimation curve below its triple point,
 /// [`Frost`]); unbounded above the triple point, where it does not
@@ -458,16 +571,16 @@ pub fn methane_photolysis(
 /// A gas whose triple point lies above the body's `equilibrium_k` cannot
 /// stay liquid there: it frosts onto the surface until its partial
 /// pressure falls to its sublimation pressure (Clausius–Clapeyron from
-/// the triple point, see [`Frost`]). This freezes Titan's CO₂ and NH₃ and
-/// most of its CH₄. Above the triple point the gas stays: whether it
-/// rains out as a liquid depends on the surface temperature, which the
-/// climate sets. Water is the climate's too (a runaway's steam sits on a
-/// planet far hotter than its equilibrium temperature).
+/// the triple point, see [`Frost`]). This freezes Titan's CO₂ and NH₃.
+/// Above the triple point the gas stays: whether it rains out as a liquid
+/// depends on the surface temperature, which the climate sets. Water is
+/// the climate's too (a runaway's steam sits on a planet far hotter than
+/// its equilibrium temperature), and so is methane, whose greenhouse
+/// moves the surface temperature it condenses at ([`condense`]).
 pub fn cold_trap(gases: Gases, equilibrium_k: f64) -> Gases {
     Gases {
         co2: CO2_FROST.cap(gases.co2, equilibrium_k),
         nh3: NH3_FROST.cap(gases.nh3, equilibrium_k),
-        ch4: CH4_FROST.cap(gases.ch4, equilibrium_k),
         n2: N2_FROST.cap(gases.n2, equilibrium_k),
         ..gases
     }
@@ -709,10 +822,11 @@ mod tests {
     #[test]
     fn titans_outgassing_outruns_its_photolysis() {
         // Titan keeps a stock of methane on its ground, from which the
-        // cold trap leaves its air a few hundredths of a bar.
+        // climate's condensation leaves its air a few hundredths of a bar.
         let (outgassed, left) = methane_budget("Titan");
         assert!(left > 1.0 && left < outgassed, "{outgassed} {left}");
-        assert!(air_of("Titan").ch4 < left);
+        let air = surface_air("Titan");
+        assert!(air.ch4 > 0.01 && air.ch4 < 0.2, "{air:?}");
     }
 
     #[test]
@@ -771,7 +885,8 @@ mod tests {
 
     #[test]
     fn titan_keeps_a_thick_nitrogen_atmosphere() {
-        let g = air_of("Titan");
+        // After the climate: most of its methane condenses on the ground.
+        let g = surface_air("Titan");
         assert!((0.5..=5.0).contains(&g.total()), "{g:?}");
         assert!(g.n2 / g.total() > 0.5, "{g:?}");
     }

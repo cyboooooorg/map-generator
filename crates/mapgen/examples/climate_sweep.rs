@@ -212,7 +212,8 @@ fn main() {
                     let s = m.surface.as_ref().unwrap();
                     let sky = interim::sky_of(&m);
                     println!(
-                        "{arch} seed {seed}: T {:.0} P {:.3e} n2 {:.3e} ch4 {:.3e} co2 {:.1e} liquid {:?} class {} base {} haze {:.2} clouds {:?}",
+                        "{arch} seed {seed}: Teq {:.1} T {:.1} P {:.3e} n2 {:.3e} ch4 {:.3e} co2 {:.1e} liquid {:?} class {} base {} haze {:.2} clouds {:?}",
+                        s.climate.equilibrium_k,
                         s.climate.temperature_k,
                         s.gases.total(),
                         s.gases.n2,

@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::albedo::{REFERENCE_ALBEDO, bond_albedo, cover, sulphuric_deck};
+use super::atmosphere::{SEA_METHANE_SHARE, condense, condensed_air, methane_saturation_bar};
 use super::{Context, Gases, Water, column};
 use crate::geology::Regime;
 
@@ -133,16 +134,67 @@ fn co2_amount(co2: f64) -> f64 {
 const H2O_OPACITY: f64 = 111.0;
 
 /// Grey opacity of methane at 1 bar in 1 bar of air, with
-/// [`LINE_EXPONENT`]. Calibration, no source: Titan's 94 K under its
-/// 1.5 % of methane in 1.5 bar (2.1 bar in the model), on the column of
-/// [`super::column`] (3.4 on the old Eddington core, issue #441).
-/// Titan's real greenhouse is mostly collision-induced (N₂–N₂, N₂–CH₄,
-/// N₂–H₂; McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492,
-/// not checked), and its haze cools it by about 9 K; this opacity carries
-/// all of it. That is why it keeps the square root of the whole air's
-/// pressure (see [`optical_depth_at`]): collision-induced absorption
-/// grows with the nitrogen faster than line broadening does, not slower.
-const CH4_OPACITY: f64 = 3.3;
+/// [`LINE_EXPONENT`]. Calibration, no source: Titan's 93.7 K
+/// (Fulchignoni et al. 2005, doi:10.1038/nature04314), which `titan-like`
+/// at Saturn's orbit reaches (93.3 to 93.8 K over seeds 0 to 19) under
+/// the vapour of its seas, on the column of [`super::column`] (3.3 before
+/// its saturation, issue #443; 3.4 on the old Eddington core, issue
+/// #441). Titan's real greenhouse is mostly collision-induced (N₂–N₂,
+/// N₂–CH₄, N₂–H₂; McKay, Pollack & Courtin 1991,
+/// doi:10.1126/science.11538492, not checked), and its haze cools it by
+/// about 9 K; this opacity carries all of it. That is why it keeps the
+/// square root of the air's pressure (see [`methane_depth`]):
+/// collision-induced absorption grows with the nitrogen faster than line
+/// broadening does, not slower.
+///
+/// It applies to the methane that radiates, the methane cold-trapped at
+/// the tropopause left out (see [`super::column`]), and saturates past
+/// [`CH4_SATURATION_BAR`] (see [`methane_depth`]).
+const CH4_OPACITY: f64 = 6.0;
+
+/// Methane, bar, past which its greenhouse saturates ([`methane_depth`]):
+/// the amount `u` its opacity counts grows as `p / (1 + p / s)`, `p` the
+/// methane, so that it never exceeds this. Past it the law is not
+/// extrapolated: the grey opacity stands for collision-induced bands
+/// whose centres are already opaque at Titan's amounts (McKay, Pollack &
+/// Courtin 1991, doi:10.1126/science.11538492, not checked), so that more
+/// methane only widens their wings, as the logarithmic forcing of a
+/// saturated band (Pierrehumbert 2010, §4.4); a body at 90 to 120 K
+/// radiates at 25 to 60 µm, where methane has no strong band of its own.
+///
+/// Calibration, no source, together with [`CH4_OPACITY`], on three
+/// constraints at once: Titan's 93.7 K; Titan's warming from 1 to 10 bar
+/// of methane under a third of its warming from 0.01 to 0.1 bar (0.6 K
+/// against 2.6 K; 0.05 bar gave 2.9 K against 4.2 K); and seed 182's
+/// planet d (an equilibrium temperature of 114 K under 4.4 bar of N₂ and
+/// 26 bar of methane) under 150 K (149 K; 157 K with 0.05 bar). Titan's
+/// own radiating methane, some 0.05 bar, is past it: its greenhouse is
+/// already saturated. Without it, the `sqrt(p_CH₄ P)` law stretched
+/// 500-fold past Titan put that planet at 351 K (issue #443).
+const CH4_SATURATION_BAR: f64 = 0.01;
+
+/// Grey optical depth of the methane of a uniform air of `gases` (bar)
+/// down to its surface, and its rate per `ln p`.
+///
+/// `k (u B)^½`: [`CH4_OPACITY`], the amount `u = p / (1 + p / s)` that
+/// saturates at [`CH4_SATURATION_BAR`] `s`, and the pressure `B` of the
+/// air that collides with it, the whole air with its methane counted as
+/// `u` (methane past its saturation adds no absorber, nor a partner). In
+/// a uniform air every partial pressure grows as `p`, so the rate is
+/// `½ (d ln u / d ln p + d ln B / d ln p)` times the depth.
+fn methane_depth(gases: &Gases) -> (f64, f64) {
+    let ch4 = gases.ch4.max(0.0);
+    if ch4 <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let others = (gases.total() - ch4).max(0.0);
+    let growth = 1.0 / (1.0 + ch4 / CH4_SATURATION_BAR);
+    let u = ch4 * growth;
+    let b = others + u;
+    let depth = CH4_OPACITY * (u * b).sqrt();
+    let rate = 0.5 * (growth + (others + u * growth) / b);
+    (depth, rate * depth)
+}
 
 /// Power of a partial pressure, and of the broadening pressure, in a
 /// gas's opacity: the strong-line (square-root) limit, where a pressure-
@@ -322,15 +374,14 @@ pub(super) const STEAM_MAX_BAR: f64 = 70.0;
 /// lines by `share` of their pressure: each absorber's
 /// `k_i (p_i / 1 bar)^a_i (P_b / 1 bar)^½`, the last factor the pressure
 /// broadening of its lines (see [`LINE_EXPONENT`]). For CO₂ `P_b` is
-/// [`broadening_bar`], for water [`water_broadening_bar`]; for methane
-/// it is the whole pressure, since its opacity stands for Titan's
-/// collision-induced greenhouse (see [`CH4_OPACITY`]).
+/// [`broadening_bar`], for water [`water_broadening_bar`]; methane's
+/// saturates and its `P_b` is the whole air, since its opacity stands for
+/// Titan's collision-induced greenhouse (see [`methane_depth`]).
 fn depths(gases: &Gases, share: f64) -> [f64; 3] {
     // `LINE_EXPONENT` is ½: square roots, the column's hot path.
     const { assert!(LINE_EXPONENT == 0.5) };
     let co2 = gases.co2.max(0.0);
     let h2o = gases.h2o.max(0.0);
-    let ch4 = gases.ch4.max(0.0);
     [
         if co2 > 0.0 {
             CO2_OPACITY * co2_amount(co2) * broadening_bar(gases, share).max(0.0).sqrt()
@@ -338,7 +389,7 @@ fn depths(gases: &Gases, share: f64) -> [f64; 3] {
             0.0
         },
         H2O_OPACITY * (h2o * water_broadening_bar(gases, share).max(0.0)).sqrt(),
-        CH4_OPACITY * (ch4 * gases.total().max(0.0)).sqrt(),
+        methane_depth(gases).0,
     ]
 }
 
@@ -352,16 +403,17 @@ pub(super) fn optical_depth_at(gases: &Gases, share: f64) -> f64 {
 /// Grey optical depth per unit `ln p` at a level whose partial pressures
 /// are `gases`: the derivative of [`optical_depth_at`] through a uniform
 /// air, whose partial pressures all grow as `p`, so that a column of
-/// constant composition integrates back to its totals. Each depth goes as
-/// `p^(a_i + ½)`, so its rate per `ln p` is `(a_i + ½)` times itself.
+/// constant composition integrates back to its totals. Each depth of CO₂
+/// and water goes as `p^(a_i + ½)`, so its rate per `ln p` is `(a_i + ½)`
+/// times itself; methane's saturates ([`methane_depth`]).
 /// Past [`LOCAL_KNEE_BAR`] of foreign gases the broadening grows slower
 /// and this rate overstates the derivative a little; the calibrations
 /// are made with it.
 pub(super) fn opacity_per_ln_p(gases: &Gases, share: f64) -> f64 {
-    let [co2, h2o, ch4] = depths(gases, share);
+    let [co2, h2o, _] = depths(gases, share);
     (co2_power(gases.co2.max(0.0)) + LINE_EXPONENT) * co2
         + (LINE_EXPONENT + LINE_EXPONENT) * h2o
-        + (LINE_EXPONENT + LINE_EXPONENT) * ch4
+        + methane_depth(gases).1
 }
 
 /// Grey infrared optical depth of a uniform column of `gases` (bar)
@@ -737,8 +789,9 @@ fn ethane_boils_k(pressure_bar: f64) -> f64 {
 /// paper).
 pub const LAVA_K: f64 = 1400.0;
 
-/// The liquid at a surface at `temperature_k` under `gases`, from the
-/// phase diagrams: lava above [`LAVA_K`], on a body that has kept no
+/// The liquid at a surface at `temperature_k` under `gases`, with
+/// `condensate` (bar) on its ground ([`condense`]), from the phase
+/// diagrams: lava above [`LAVA_K`], on a body that has kept no
 /// water (with water on top, its steam or supercritical fluid covers the
 /// rock: no lava, no liquid, Hamano, Abe & Genda 2013,
 /// doi:10.1038/nature12163, for the steam over a magma ocean; not
@@ -746,9 +799,9 @@ pub const LAVA_K: f64 = 1400.0;
 /// the surface pressure, above its triple point pressure, when water is
 /// kept out of a runaway; hydrocarbons between the freezing point of
 /// methane with the nitrogen of the air dissolved in it
-/// ([`methane_freezes_k`]) and ethane's boiling point, with methane in
-/// the air; none otherwise.
-fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
+/// ([`methane_freezes_k`]) and ethane's boiling point, where there is
+/// enough methane to condense ([`methane_condenses`]); none otherwise.
+fn liquid(temperature_k: f64, gases: &Gases, water: &Water, condensate: &Gases) -> SurfaceLiquid {
     let pressure = gases.total();
     let water_on_top = water.kept_kg > 0.0;
     if temperature_k >= LAVA_K && !water_on_top {
@@ -760,7 +813,7 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
         && temperature_k < water_boils_k(pressure)
     {
         SurfaceLiquid::Water
-    } else if gases.ch4 > 0.0
+    } else if (condensate.ch4 > 0.0 || methane_condenses(gases.ch4, temperature_k))
         && temperature_k >= methane_freezes_k(gases.n2)
         && temperature_k < ethane_boils_k(pressure)
     {
@@ -768,6 +821,23 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water) -> SurfaceLiquid {
     } else {
         SurfaceLiquid::None
     }
+}
+
+/// Whether `methane_bar` of methane in the air condenses on a surface at `temperature_k`: it reaches the vapour
+/// pressure of a Titan sea there, [`SEA_METHANE_SHARE`] of pure
+/// methane's saturation ([`methane_saturation_bar`], Raoult's law). A
+/// trace of methane stays a gas and makes no lake; past methane's
+/// critical point none condenses.
+fn methane_condenses(methane_bar: f64, temperature_k: f64) -> bool {
+    methane_bar > 0.0 && methane_bar >= methane_sea_vapour_bar(temperature_k)
+}
+
+/// The methane, bar, in the air over a Titan sea at `temperature_k`:
+/// [`SEA_METHANE_SHARE`] of pure methane's saturation pressure
+/// (Raoult's law). A body needs that much methane for a hydrocarbon
+/// liquid; infinite past methane's critical point (190.56 K).
+pub fn methane_sea_vapour_bar(temperature_k: f64) -> f64 {
+    SEA_METHANE_SHARE * methane_saturation_bar(temperature_k)
 }
 
 /// Whether a body that keeps its water out of a runaway boils it: with
@@ -966,6 +1036,15 @@ pub struct CarbonCycle {
 ///   CO₂ of its warmest climate, the maximum greenhouse
 ///   ([`maximum_greenhouse`]); if none is still too warm, the planet is
 ///   hotter. Only a temperature reached is `regulated`.
+///
+/// Under each albedo too, the gases that condense on the surface
+/// ([`condense`]: methane) keep in the air only the vapour of their
+/// condensate at the surface temperature, solved together with it (see
+/// [`under_albedo`]); the rest lies on the ground, where [`liquid`] sees
+/// it. Methane's greenhouse counts only the methane its tropopause lets
+/// through and saturates ([`methane_depth`]), so that a cold body under
+/// tens of bar of methane stays cold and condenses most of it (issue
+/// #443).
 ///
 /// A body that keeps water has two branches ([`branches`]):
 ///
@@ -1247,17 +1326,60 @@ const ALBEDO_DAMPING: f64 = 0.5;
 fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
     let context = absorbing(body.context, body.water, body.gases.h2o, albedo);
     let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
-    let (gases, t, regulated) = if !body.wet() {
-        let t = surface_temperature_k(&context, &body.gases, flux);
-        (body.gases, t, false)
-    } else if body.regime == Regime::Plates && body.co2.is_none() {
-        thermostat(body, &context)
-    } else {
-        let (g, t) = wet_climate(&context, body.gases, flux, water_bar);
-        (g, t, false)
+    let solve = |air: Gases| {
+        if !body.wet() {
+            let t = surface_temperature_k(&context, &air, flux);
+            (air, t, false)
+        } else if body.regime == Regime::Plates && body.co2.is_none() {
+            if air == body.gases {
+                thermostat(body, &context)
+            } else {
+                let condensed = Body {
+                    gases: air,
+                    greenhouse: std::cell::OnceCell::new(),
+                    ..*body
+                };
+                thermostat(&condensed, &context)
+            }
+        } else {
+            let (g, t) = wet_climate(&context, air, flux, water_bar);
+            (g, t, false)
+        }
     };
-    (gases, t, regulated, context)
+    // The gases that condense on the surface ([`condense`]) keep in the
+    // air what its temperature allows, and the temperature follows from
+    // that air: from the black body's, the coldest surface, each step
+    // solves the climate with the air the last temperature leaves, which
+    // rises towards the coldest balance (more air, more greenhouse). Most
+    // bodies condense nothing at their black body's temperature, and
+    // nothing at a warmer one either: one step.
+    let absorbed = SIGMA * context.equilibrium_k.max(0.0).powi(4) + flux.max(0.0);
+    let mut t = (absorbed / SIGMA).powf(0.25);
+    let mut air = condense(body.gases, t).0;
+    let mut pass = solve(air);
+    if air == body.gases {
+        return (pass.0, pass.1, pass.2, context);
+    }
+    for _ in 0..CONDENSE_ITERATIONS {
+        if (pass.1 - t).abs() < TOLERANCE_K {
+            break;
+        }
+        t = pass.1;
+        let next = condense(body.gases, t).0;
+        if next == air {
+            break;
+        }
+        air = next;
+        pass = solve(air);
+    }
+    let gases = condensed_air(pass.0, &body.gases, pass.1);
+    (gases, pass.1, pass.2, context)
 }
+
+/// Most steps of the condensation's fixed point in [`under_albedo`]:
+/// far more than the few it takes, the greenhouse of what condenses
+/// being saturated ([`methane_depth`]).
+const CONDENSE_ITERATIONS: usize = 100;
 
 /// The Bond albedo of `water` and `gases` at `temperature_k`: its
 /// [`cover`], with a sulphuric deck where [`sulphuric_deck`] makes one.
@@ -1308,7 +1430,8 @@ fn settle(body: &Body, start: f64) -> (Gases, Climate) {
         pass = under_albedo(body, albedo);
     }
     let (gases, temperature_k, regulated, context) = pass;
-    let liquid = liquid(temperature_k, &gases, body.water);
+    let condensate = condense(body.gases, temperature_k).1;
+    let liquid = liquid(temperature_k, &gases, body.water, &condensate);
     (
         gases,
         Climate {
@@ -1580,6 +1703,108 @@ mod tests {
         assert!((c.equilibrium_k - expected).abs() < 1e-9, "{c:?}");
     }
 
+    /// Seed 182's planet d in the census (issue #443): a stagnant-lid
+    /// water world at 10.5 AU from an F star, its equilibrium temperature
+    /// 114 K, under 4.4 bar of N₂ and 26 bar of methane.
+    fn cold_methane_world() -> (Context, Gases, Water) {
+        let context = Context {
+            star_mass: 1.41,
+            metallicity: -0.34,
+            orbit_au: 10.5,
+            eccentricity: 0.02,
+            ice_line_au: 5.67,
+            insolation: 0.0401,
+            equilibrium_k: 114.07,
+            age_gyr: 1.457,
+            teff_k: 6710.0,
+            tide: None,
+        };
+        let gases = Gases {
+            n2: 4.379,
+            co2: 1.14e-5,
+            ch4: 26.26,
+            so2: 2.4e-4,
+            ..Gases::default()
+        };
+        let water = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 1.29e23,
+            oceans: 92.2,
+        };
+        (context, gases, water)
+    }
+
+    #[test]
+    fn a_methane_greenhouse_cannot_warm_a_cold_world() {
+        let (context, gases, water) = cold_methane_world();
+        let (air, c) = climate(
+            &context,
+            gases,
+            &water,
+            Regime::Stagnant,
+            0.0283,
+            19_065.0,
+            temperate(160.9),
+        );
+        assert!(c.temperature_k < 150.0, "{c:?} {air:?}");
+        assert_ne!(c.liquid, SurfaceLiquid::Water, "{c:?}");
+        // Most of its methane condenses on the ground.
+        assert!(air.ch4 < 0.5 * gases.ch4, "{air:?}");
+    }
+
+    #[test]
+    fn methane_greenhouse_saturates() {
+        let (d, _, titan) = climate_of("Titan");
+        let context = d.context.with_albedo(titan.bond_albedo);
+        let t = |ch4: f64| {
+            let gases = Gases {
+                n2: 1.45,
+                ch4,
+                ..Gases::default()
+            };
+            surface_temperature_k(&context, &gases, 0.0)
+        };
+        let trace = t(0.1) - t(0.01);
+        let thick = t(10.0) - t(1.0);
+        assert!(trace > 0.0, "{trace}");
+        assert!(thick < trace / 3.0, "{thick} K against {trace} K");
+    }
+
+    #[test]
+    fn a_trace_of_methane_makes_no_lake() {
+        let dry = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        let none = Gases::default();
+        let trace = Gases {
+            n2: 1.5,
+            ch4: 0.003,
+            ..Gases::default()
+        };
+        assert_ne!(
+            liquid(94.0, &trace, &dry, &none),
+            SurfaceLiquid::Hydrocarbons
+        );
+        // Titan's air holds the vapour of its seas.
+        let titan = Gases {
+            n2: 1.45,
+            ch4: methane_sea_vapour_bar(94.0),
+            ..Gases::default()
+        };
+        assert!(
+            (0.03..0.06).contains(&(titan.ch4 / titan.total())),
+            "{titan:?}"
+        );
+        assert_eq!(
+            liquid(94.0, &titan, &dry, &none),
+            SurfaceLiquid::Hydrocarbons
+        );
+    }
+
     #[test]
     fn nitrogen_keeps_methane_liquid_below_its_triple_point() {
         // No nitrogen: pure methane.
@@ -1595,7 +1820,11 @@ mod tests {
         // A Titan at 89 K under 1 bar of N₂ keeps its lakes.
         let gases = Gases {
             n2: 1.0,
-            ch4: 0.03,
+            ch4: methane_sea_vapour_bar(89.0),
+            ..Gases::default()
+        };
+        let seas = Gases {
+            ch4: 1.0,
             ..Gases::default()
         };
         let dry = Water {
@@ -1604,9 +1833,12 @@ mod tests {
             kept_kg: 0.0,
             oceans: 0.0,
         };
-        assert_eq!(liquid(89.0, &gases, &dry), SurfaceLiquid::Hydrocarbons);
+        assert_eq!(
+            liquid(89.0, &gases, &dry, &seas),
+            SurfaceLiquid::Hydrocarbons
+        );
         let thin = Gases { n2: 0.0, ..gases };
-        assert_eq!(liquid(89.0, &thin, &dry), SurfaceLiquid::None);
+        assert_eq!(liquid(89.0, &thin, &dry, &seas), SurfaceLiquid::None);
     }
 
     #[test]
@@ -1693,7 +1925,11 @@ mod tests {
                 oceans: 1.0,
             };
             for t in [700.0, 2000.0, 5000.0] {
-                assert_eq!(liquid(t, &air, &wet), SurfaceLiquid::None, "{t} {wet:?}");
+                assert_eq!(
+                    liquid(t, &air, &wet, &Gases::default()),
+                    SurfaceLiquid::None,
+                    "{t} {wet:?}"
+                );
             }
         }
         let dry = Water {
@@ -1702,7 +1938,10 @@ mod tests {
             kept_kg: 0.0,
             oceans: 0.0,
         };
-        assert_eq!(liquid(2000.0, &air, &dry), SurfaceLiquid::Lava);
+        assert_eq!(
+            liquid(2000.0, &air, &dry, &Gases::default()),
+            SurfaceLiquid::Lava
+        );
     }
 
     #[test]

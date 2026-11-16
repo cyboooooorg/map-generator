@@ -329,8 +329,9 @@ analytic, through the band integral of `xuv.rs`. This is Titan's
 resupply: Tobie et al. explain its methane by outgassing from its
 interior, in episodes where the model spreads it evenly. Titan outgasses
 20.6 bar of methane in the model and keeps 6.3 bar of it on its ground
-(the supply overtakes the destruction at about 1.2 Gyr), from which the
-cold trap leaves 0.035 bar in its air. Ganymede and Callisto get 3.4
+(the supply overtakes the destruction at about 1.2 Gyr), of which the
+climate leaves 0.11 bar in its air, the vapour of its seas (see
+**Methane** under the climate below). Ganymede and Callisto get 3.4
 times Titan's light per unit area and outgas 0.15 and 0.47 bar: the
 destruction outruns them at every age and they keep none. Destroyed
 methane is gone: its hydrogen escapes and its carbon ends in heavier
@@ -345,10 +346,11 @@ pressure falls to its sublimation pressure, by Clausius–Clapeyron from
 the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
 0.0606 bar, 29 kJ/mol; CH₄ 90.7 K, 0.117 bar, 9.1 kJ/mol; N₂ 63.15 K,
 0.125 bar, 6.3 kJ/mol; values from the NIST WebBook from memory, not
-checked). This freezes Titan's CO₂ and NH₃ and most of its CH₄. Above
-the triple point the gas stays; whether it rains out depends on the
-surface temperature, which the climate sets. Water is left to the
-climate.
+checked). This freezes Titan's CO₂ and NH₃. Above the triple point the
+gas stays; whether it rains out depends on the surface temperature,
+which the climate sets. Water is left to the climate, and so is methane
+(issue #443): its greenhouse moves the surface temperature it condenses
+at, so the climate condenses it at the temperature it solves for.
 
 **Photochemistry** (`photochemistry`, after the cold trap, on what is
 still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
@@ -371,7 +373,7 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
 | Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.78 bar N₂ |
 | Mars | 0.014 bar | 0.002 to 0.05 bar | 0.006 bar |
-| Titan | 2.1 bar, 98 % N₂, 0.035 bar CH₄ | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
+| Titan | 2.2 bar, 95 % N₂, 0.11 bar CH₄ after the climate (6.3 bar before it condenses) | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
 
@@ -417,7 +419,7 @@ masses, ice shares and orbits):
 
 | Moon | Result | Observed |
 |---|---|---|
-| Titan | hydrocarbon world, 1.5 bar, 98 % N₂, 0.038 bar CH₄ | 1.5 bar, about 5 % CH₄ |
+| Titan | hydrocarbon world, 93.5 K, 1.43 bar, 94 % N₂, 0.083 bar CH₄ (5.8 %) | 93.7 K, 1.47 bar, 5.7 % CH₄ |
 | Ganymede, Callisto | 4e-5 and 9e-6 bar | airless |
 | Io | heat pipe, 1.3e-4 bar | heat pipe, SO₂ of about 1e-9 bar |
 | Europa | 8e-6 bar | airless |
@@ -509,12 +511,57 @@ source:
 |---|---|---|---|
 | CO₂ | 0.74 (1.66 before #441) | 0.07 (0.25) | Venus's 737 K under 85 bar |
 | H₂O | 111 (5.9) | 0.5 | the moist plateau at about 287 W/m² |
-| CH₄ | 3.3 (3.4) | 0.5 | Titan's 94 K |
+| CH₄ | 6.0 (3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K |
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
 CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
 doi:10.1126/science.11538492, not checked); the methane opacity carries
 all of it here.
+
+**Methane** (issue #443). The `sqrt(p_CH₄ P)` law, calibrated on Titan,
+was stretched 500-fold past it: a planet at an equilibrium temperature of
+114 K under 26 bar of methane (seed 182, planet d) came out at 351 K with
+liquid water. Three rules bound it:
+
+- *Condensation at the surface.* Inside the climate's fixed point
+  (`atmosphere::condense`, applied at each step to the temperature the
+  last one found, from the black body's up to the coldest balance), the
+  air keeps at most the vapour of a Titan sea, `x p_sat(T_s)`: `p_sat`
+  the saturation pressure of pure methane
+  (`atmosphere::methane_saturation_bar`: over its ice below its triple
+  point, 90.7 K and 0.117 bar, over its liquid above with the mean latent
+  heat joining the triple point to its normal boiling point, 111.67 K,
+  and none past its critical point, 190.56 K) and `x` = 0.5 the methane
+  share of a sea of methane, nitrogen and ethane (`SEA_METHANE_SHARE`,
+  Raoult's law; Glein & Shock 2013 and Tan, Kargel & Marion 2013 find
+  0.5 to 0.7, and Titan's near-surface air holds 45 to 50 % of pure
+  methane's saturation, Niemann et al. 2005). The rest lies on the
+  ground. The mechanism is general over the gases listed in
+  `atmosphere::CONDENSING`.
+- *Cold trap at the tropopause.* The methane that radiates in the column
+  (`column::radiating_methane_bar`) has at most the mixing ratio that
+  pure methane's saturation pressure at the skin temperature `T_eq / 2^¼`
+  allows at a 0.1 bar tropopause (`TROPOPAUSE_BAR`: the common tropopause
+  of thick atmospheres, Robinson & Catling 2014, doi:10.1038/ngeo2020):
+  Titan's skin at 70 K lets about 3 % through.
+- *Saturation.* The amount the opacity counts is
+  `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
+  it collides with counts the methane as `u`:
+  `τ = 6.0 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
+  at their centres, and more methane only widens their wings (the
+  logarithmic forcing of a saturated band, Pierrehumbert 2010, §4.4); a
+  body at 90 to 120 K radiates at 25 to 60 µm, where methane has no
+  strong band of its own. With it, raising Titan's methane from 1 to
+  10 bar warms it by 0.6 K where 0.01 to 0.1 bar warms it by 2.6 K.
+
+Titan at Saturn's orbit (`titan-like`, seeds 0 to 19) comes out at 93.3
+to 93.8 K, 1.38 to 1.49 bar and 5.8 % methane; seed 182's planet d at
+149 K, with 5.2 of its 26 bar of methane in its air and the rest in its
+seas. The near-infrared absorption of methane, which heats the upper air
+and cools the surface (the anti-greenhouse), is not added: on Titan it is
+part of the 9 K its haze takes, which the Titan-calibrated opacity
+already carries, and it would only cool the thick methane worlds
+further.
 
 **The moist plateau.** On a saturated column the levels that radiate to
 space sit on water's saturation curve whatever the surface temperature,
@@ -566,9 +613,10 @@ thick nitrogen warms a temperate planet little; at the 380 K plateau the
 radiating levels hold a few hundredths of a bar, under it, so the plateau
 keeps its independence from the nitrogen.
 
-Methane keeps the whole pressure, `P_b = P`: its opacity stands for
-Titan's collision-induced greenhouse, which grows with the nitrogen
-faster than line broadening.
+Methane keeps the whole pressure, its own counted as the saturated
+amount `u` (see **Methane** above): its opacity stands for Titan's
+collision-induced greenhouse, which grows with the nitrogen faster than
+line broadening.
 
 CO₂ and water vapour count in full for each other's lines: water
 broadens CO₂'s much more than N₂ and O₂ do (Tan, Kochanov, Rothman &
@@ -664,7 +712,11 @@ and pressure, in this order:
   [atmospheres.md](atmospheres.md)), and ethane's
   boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
   at 1 atm with 14.7 kJ/mol, capped at its critical 305 K; NIST values
-  from memory, not checked), with methane in the air;
+  from memory, not checked), where there is enough methane to condense:
+  the air's methane reaches the vapour of a Titan sea at the surface
+  temperature, half of pure methane's saturation pressure
+  (`methane_sea_vapour_bar`), so that a trace of methane makes no lake
+  and none forms past methane's critical point (190.56 K);
 - `none` otherwise.
 
 Calibration targets, through the whole chain from the reference bodies'
@@ -675,7 +727,7 @@ inputs round the Sun at 4.6 Gyr:
 | Earth | 288 K, water, regulated, 3e-4 bar of CO₂ | 288 ± 6 K, water, regulated, under 0.01 bar of CO₂ | 288 K, 280 ppm before industry |
 | Venus | 737 K, none | 737 ± 50 K, none | 737 K |
 | Mars | 209 K, none | 210 ± 12 K, none | about 210 K |
-| Titan | 94 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Titan | 96 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | 410 K, its equilibrium temperature | within 1 K of it | airless |
 
 Earth's thermostat needs 3.0e-4 bar of CO₂ on the column, about the

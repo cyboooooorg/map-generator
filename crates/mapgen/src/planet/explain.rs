@@ -420,7 +420,8 @@ fn temperature_tree(
 /// Each gas of the air (as stored, after life) from its source and what
 /// took from it, each step of the chain in its order: what was outgassed
 /// under the regime, what escape took, what the ultraviolet destroyed
-/// (or, for N₂, made from ammonia), what the cold froze out, and the CO₂
+/// (or, for N₂, made from ammonia), what the cold froze out (before the
+/// climate, or condensed by it at the surface temperature), and the CO₂
 /// the weathering drew down; the water vapour from the water kept and
 /// the temperature (or, in a runaway, the steam and its escape); the
 /// oxygen from life.
@@ -438,13 +439,17 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
         let (kept, photolysed, trapped) =
             (of(&steps.kept), of(&steps.photolysed), of(&steps.trapped));
         let before = of(&steps.before.gases);
+        let condensed = of(&steps.condensed);
         let destroyed = (kept - photolysed) + (trapped - before).max(0.0);
         let steps = [
             (Quantity::Escape, of(&steps.outgassed) - kept),
             (Quantity::Destroyed, destroyed),
-            (Quantity::FrozenOut, photolysed - trapped),
+            (Quantity::FrozenOut, photolysed - trapped + condensed),
             (Quantity::FromAmmonia, (before - trapped).max(0.0)),
-            (Quantity::Weathered, before - of(&steps.climate_gases)),
+            (
+                Quantity::Weathered,
+                before - condensed - of(&steps.climate_gases),
+            ),
         ];
         let mut causes = vec![outgassed];
         causes.extend(

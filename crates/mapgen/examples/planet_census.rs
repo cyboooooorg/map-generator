@@ -39,7 +39,13 @@
 //! 7. the snowballs (`Climate::snowball`: drawn frozen over though their
 //!    climate also has a temperate state) and the planets with liquid
 //!    water, by band of insolation (Earth's = 1): snowballs should be
-//!    rarer near 1 than towards the outer edge of the habitable zone.
+//!    rarer near 1 than towards the outer edge of the habitable zone;
+//! 8. the methane worlds (issue #443): how many planets with an
+//!    equilibrium temperature under 150 K keep methane in their air while
+//!    their surface is above 273 K (none should: methane's greenhouse
+//!    saturates and the excess condenses), and how many hydrocarbon
+//!    liquids lie under less methane than a Titan sea's vapour at their
+//!    surface temperature (`planet::methane_sea_vapour_bar`; none should).
 use std::collections::BTreeMap;
 
 use mapgen::planet::{SurfaceLiquid, body_model, interim};
@@ -129,6 +135,10 @@ fn main() {
     let mut close_in_class: BTreeMap<&'static str, u32> = BTreeMap::new();
     // By insolation band: [snowballs, with liquid water].
     let mut snowballs = [[0u32; 2]; LIGHT_BANDS.len()];
+    // Methane worlds: [cold and warmed past 273 K, hydrocarbon liquids,
+    // of those under too little methane to condense].
+    let mut methane = [0u32; 3];
+    let mut least_lake_ch4 = f64::INFINITY;
 
     for seed in 1..=count {
         let request = SystemRequest::System(WholeSystemRequest {
@@ -189,6 +199,18 @@ fn main() {
                     .unwrap_or(LIGHT_BANDS.len() - 1);
                 snowballs[band][0] += u32::from(surface.climate.snowball);
                 snowballs[band][1] += u32::from(surface.climate.liquid == SurfaceLiquid::Water);
+                let climate = &surface.climate;
+                methane[0] += u32::from(
+                    surface.gases.ch4 > 0.0
+                        && climate.equilibrium_k < 150.0
+                        && climate.temperature_k > 273.0,
+                );
+                if climate.liquid == SurfaceLiquid::Hydrocarbons {
+                    methane[1] += 1;
+                    least_lake_ch4 = least_lake_ch4.min(surface.gases.ch4);
+                    let sea = mapgen::planet::methane_sea_vapour_bar(climate.temperature_k);
+                    methane[2] += u32::from(surface.gases.ch4 < sea * (1.0 - 1e-9));
+                }
             }
             if body.orbit.period_days < 100.0 {
                 close_in_total += 1;
@@ -336,6 +358,13 @@ fn main() {
     for (&(_, label), [snow, wet]) in LIGHT_BANDS.iter().zip(snowballs) {
         println!("  S {label:>8}: {snow:>4} / {wet:>4}");
     }
+
+    println!(
+        "\nmethane: {} planets under 150 K of equilibrium warmed past 273 K with methane; \
+         {} hydrocarbon liquids (least CH4 {least_lake_ch4:.4} bar), {} under too little \
+         methane to condense",
+        methane[0], methane[1], methane[2]
+    );
 
     println!("\nradius histogram, period under 100 days ({close_in_total} planets)");
     for (i, n) in close_in.iter().enumerate() {
