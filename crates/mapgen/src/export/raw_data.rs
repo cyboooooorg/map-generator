@@ -85,8 +85,14 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// methane cloud is its own kind (`CloudKind::Methane`) and the card has
 /// new quantities for them. Worlds of version 23 would show Venus, Mars,
 /// Titan and Triton with the old temperatures and clouds, so they are
-/// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8.
-pub const FORMAT_VERSION: u32 = 24;
+/// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8. Version
+/// 26 draws only the noise octaves the grid resolves
+/// (`generation::Sampler::resolved`: no detail finer than two rows, which
+/// drew rays converging on the poles) and gives the relief normals the
+/// pixel's true east-west width up to the poles: the same seed gives a
+/// slightly different world (its sea level, relief, climate and biomes);
+/// the stored fields are the same.
+pub const FORMAT_VERSION: u32 = 26;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
