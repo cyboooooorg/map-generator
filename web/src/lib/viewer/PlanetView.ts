@@ -4,7 +4,7 @@
 // measured paths, picking and hovering, screenshots and camera sharing.
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import { axesOnScreen, type ScreenAxis } from './axes';
-import { createJets, jetSources, placeJets, type JetMesh } from './jets';
+import { createJets, jetSources, placeJets, type JetMesh, type JetSource } from './jets';
 import { createGrains, grainCount, grainShine, HALO_GRAINS, haloGrains, type GrainPoints } from './dustGrains';
 import {
   AddEquation,
@@ -764,7 +764,7 @@ export class PlanetView {
   private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
   /** The jets of the geysers of the moon shown, with the sources they stand on (see setJets). */
   private jets: JetMesh | null = null;
-  private jetSites: LonLat[] = [];
+  private jetSites: JetSource[] = [];
   /** The grains round the moon shown, in its close-up (see setDustHalo), with their key. */
   private dustHalo: GrainPoints | null = null;
   private dustHaloKey = '';
@@ -1340,11 +1340,11 @@ export class PlanetView {
   /** Stand the jets on the surface as drawn now (shape and relief included). */
   private placeJets(): void {
     if (!this.jets) return;
-    const bases = this.jetSites.map((site) => {
+    const bases = this.jetSites.map(({ site }) => {
       const direction = new Vector3(...lonLatToSphere(site));
       return direction.multiplyScalar(this.surfaceRadiusAt(direction));
     });
-    placeJets(this.jets, bases);
+    placeJets(this.jets, bases, this.jetSites);
     this.requestRender();
   }
 
