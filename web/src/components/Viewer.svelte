@@ -828,6 +828,9 @@
     view?.setGiantStorms(stormId !== undefined && layers ? giantStorms(layers.biomes, layers.width, layers.height, stormId) : []);
   });
   // The dust rings its system drew for the giant shown.
+  // The jets over the geyser fractures of the moon shown, in the world's own
+  // radius (its circumference), so they fall on the stripes the map holds.
+  $effect(() => view?.setJets(meta?.model?.geysers ?? null, meta ? meta.circumference_km / (2 * Math.PI) : 0));
   $effect(() => view?.setDustRings(giant && sysBody ? [...dustOf(sysBody), ...innerRingOf(sysBody)] : []));
   $effect(() => {
     // No detail while the slider moves: the reduced preview shows through.

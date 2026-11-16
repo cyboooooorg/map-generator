@@ -4,6 +4,7 @@
 // measured paths, picking and hovering, screenshots and camera sharing.
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import { axesOnScreen, type ScreenAxis } from './axes';
+import { createJets, jetSources, placeJets, type JetMesh } from './jets';
 import {
   AddEquation,
   AdditiveBlending,
@@ -68,6 +69,7 @@ import { DIAL_RADIUS, RotationDial } from './rotationDial';
 import { sphereGrid } from './starSystem';
 import { hiddenByShape, hiddenBySkyDisc } from './occlusion';
 import type { DialState } from '../rotationDial';
+import type { Geysers } from '../api/types/Geysers';
 import type { HexMap } from '../api/types/HexMap';
 import {
   greatCircleArc,
@@ -759,6 +761,9 @@ export class PlanetView {
   private rings: Mesh<RingGeometry, ShaderMaterial> | null = null;
   /** The faint dust rings its moons feed (see setDustRings). */
   private dustRings: Mesh<RingGeometry, ShaderMaterial>[] = [];
+  /** The jets of the geysers of the moon shown, with the sources they stand on (see setJets). */
+  private jets: JetMesh | null = null;
+  private jetSites: LonLat[] = [];
   /**
    * The body's shape as setShape loaded it, for the guides drawn out of its
    * surface: its radii (row 0 north), the most it reaches within 15°
@@ -1158,6 +1163,7 @@ export class PlanetView {
     this.shared.uShape.value.dispose();
     this.shared.uShape.value = emptyTexture();
     this.shapeRadii = null;
+    this.placeJets();
     this.requestRender();
     if (!shape) {
       return;
@@ -1197,6 +1203,7 @@ export class PlanetView {
     this.shared.uShapeTexel.value.set(1 / image.width, 1 / image.height);
     this.shared.uHasShape.value = 1;
     this.shapeRadii = { radii, width: image.width, height: image.height, poles, largest };
+    this.placeJets();
     this.requestRender();
   }
 
@@ -1309,6 +1316,31 @@ export class PlanetView {
       this.rings.renderOrder = 1;
       this.scene.add(this.rings);
     }
+    this.requestRender();
+  }
+
+  /**
+   * The jets over the geyser fractures of the moon shown, in its close-up:
+   * `radiusKm` is the body's mean radius, which sets where the fractures
+   * (in km) fall. None without geysers. Hidden unless the globe is shown.
+   */
+  setJets(geysers: Geysers | null, radiusKm: number): void {
+    this.jetSites = geysers && radiusKm > 0 ? jetSources(geysers, radiusKm) : [];
+    if (this.jetSites.length > 0 && !this.jets) {
+      this.jets = createJets(this.u);
+      this.scene.add(this.jets);
+    }
+    this.placeJets();
+  }
+
+  /** Stand the jets on the surface as drawn now (shape and relief included). */
+  private placeJets(): void {
+    if (!this.jets) return;
+    const bases = this.jetSites.map((site) => {
+      const direction = new Vector3(...lonLatToSphere(site));
+      return direction.multiplyScalar(this.surfaceRadiusAt(direction));
+    });
+    placeJets(this.jets, bases);
     this.requestRender();
   }
 
@@ -1684,6 +1716,7 @@ export class PlanetView {
       this.shared.uHasData.value = 0;
       this.peakAbove = 0;
       this.heights = null;
+      this.placeJets();
       return;
     }
     // Its highest point over the coastline, in elevation units, for the
@@ -1724,6 +1757,7 @@ export class PlanetView {
     const texture = halfFloatTexture(surface.data, surface.width, surface.height, factor > 1, this.halfFloatMipmaps());
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
+    this.placeJets();
     this.shared.uCoast.value = coast;
     this.shared.uReliefScale.value = reliefScale;
     this.applySky();
@@ -2322,6 +2356,8 @@ export class PlanetView {
       mesh.geometry.dispose();
       mesh.material.dispose();
     }
+    this.jets?.geometry.dispose();
+    this.jets?.material.dispose();
     this.renderer.dispose();
     // Free the WebGL context now: browsers cap live contexts (about 16), and
     // compare panes come and go.
@@ -3582,7 +3618,8 @@ export class PlanetView {
     this.atmosphereOpacity.value = this.morph ** 3;
     // Close in, a haze that hides the ground (Titan's) thins over it.
     this.sky.uHazeVeil.value = hazeVeil(this.worldSky, this.altitude());
-    // Rings belong to the globe, like the atmosphere.
+    // Rings and jets belong to the globe, like the atmosphere.
+    if (this.jets) this.jets.visible = this.morph > 0.99 && this.jetSites.length > 0;
     for (const mesh of this.dustRings) {
       mesh.visible = this.morph > 0.01;
       mesh.material.uniforms['uFade']!.value = this.morph ** 3;
