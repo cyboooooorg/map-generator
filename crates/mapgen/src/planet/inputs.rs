@@ -84,6 +84,20 @@ impl Context {
         }
     }
 
+    /// This context under a Bond albedo of `albedo` instead of the
+    /// [`super::albedo::REFERENCE_ALBEDO`] the star module assumes: its
+    /// equilibrium temperature times
+    /// `((1 − albedo) / (1 − REFERENCE_ALBEDO))^¼`, the light absorbed
+    /// going as `1 − albedo`.
+    pub fn with_albedo(self, albedo: f64) -> Context {
+        let reference = super::albedo::REFERENCE_ALBEDO;
+        Self {
+            equilibrium_k: self.equilibrium_k
+                * ((1.0 - albedo).max(0.0) / (1.0 - reference)).powf(0.25),
+            ..self
+        }
+    }
+
     /// What the star gives the planet, which sizes its envelope.
     pub fn exposure(&self) -> Exposure {
         Exposure {

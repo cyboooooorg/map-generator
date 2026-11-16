@@ -10,6 +10,7 @@
 //! the phase diagrams of water, hydrocarbons and basalt.
 use serde::{Deserialize, Serialize};
 
+use super::albedo::{REFERENCE_ALBEDO, bond_albedo, cover, sulphuric_deck};
 use super::{Context, Gases, Water, column};
 use crate::geology::Regime;
 
@@ -30,10 +31,14 @@ pub enum SurfaceLiquid {
 pub struct Climate {
     /// Mean surface temperature, K.
     pub temperature_k: f64,
-    /// The equilibrium temperature the climate used, K: the context's,
-    /// lowered by the runaway albedo of [`absorbing`] on a steam world
-    /// or any other water runaway.
+    /// The equilibrium temperature the climate used, K: the context's
+    /// under [`Climate::bond_albedo`] ([`Context::with_albedo`]).
     pub equilibrium_k: f64,
+    /// Bond albedo the climate absorbed its light under: derived from
+    /// what covers the body ([`super::albedo`]) together with its
+    /// temperature, and blended towards the moist albedo of [`absorbing`]
+    /// in a water runaway.
+    pub bond_albedo: f64,
     pub liquid: SurfaceLiquid,
     /// The carbonate thermostat holds the temperature at
     /// [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
@@ -46,11 +51,14 @@ const SIGMA: f64 = 5.670_374_419e-8;
 /// Grey opacity of CO₂ at 1 bar of CO₂ in 1 bar of air: its optical
 /// depth through a uniform column (see [`optical_depth_at`]).
 /// Calibration, no source, on the column of [`super::column`]: Venus's
-/// 737 K under its 85 bar of CO₂ (with [`CO2_EXPONENT`]). It leaves Mars
-/// within two kelvin of its equilibrium temperature. (1.66 on the old
-/// Eddington core, 0.575 on the column with the old exponent 0.27, issue
-/// #441.)
-const CO2_OPACITY: f64 = 0.74;
+/// 737 K under its 85 bar of CO₂ at its real Bond albedo, 0.76, which the
+/// derived albedo gives its sulphuric deck (739 K in the model; issue
+/// #510), together with the late Archean Earth of [`CO2_EXPONENT`]. It
+/// leaves Mars within two kelvin of its equilibrium temperature. (0.74
+/// with the exponent 0.07 under the fixed albedo 0.3, which left Venus at
+/// 565 K under 0.76; 1.66 on the old Eddington core, 0.575 on the column
+/// with the old exponent 0.27, issue #441.)
+const CO2_OPACITY: f64 = 1.45;
 
 /// Power of the CO₂ partial pressure in its opacity. Calibration, no
 /// source: CO₂'s 15 µm band is saturated at its centre, so its forcing
@@ -59,12 +67,19 @@ const CO2_OPACITY: f64 = 0.74;
 /// stands in for that logarithm across the six decades from Earth's
 /// 3e-4 bar to Venus's 85 bar.
 ///
-/// Calibration on the column of issue #441 (0.27 before): with Venus's
-/// 737 K pinning [`CO2_OPACITY`], the late Archean Earth (0.82 of today's
-/// Sun, 10 mbar of CO₂ in 1 bar of N₂) must stay above 270 K (Charnay et
-/// al. 2013, see [`THICK_AIR_EXPONENT`]); 0.27 left it at 259 K. A lower
-/// power makes small amounts of CO₂ stronger against Venus's 85 bar.
-const CO2_EXPONENT: f64 = 0.07;
+/// Calibration on the column of issue #441, with [`CO2_OPACITY`], on
+/// Venus's 737 K at its Bond albedo 0.76 and the late Archean Earth (0.82
+/// of today's Sun, 10 mbar of CO₂ in 1 bar of N₂, Earth's albedo), which
+/// must stay above 270 K and warm by 3 to 8 K when its nitrogen doubles
+/// (Charnay et al. 2013, see [`THICK_AIR_EXPONENT`]): 0.19 gives it
+/// 272 K and +7.0 K. A lower power makes small amounts of CO₂ stronger
+/// against Venus's 85 bar and the Archean's nitrogen warming larger
+/// (0.13: +11.5 K); a higher one the reverse (0.25: 268 K). Under the
+/// fixed albedo 0.3, 0.07 held Venus at 737 K (0.27 before issue #441,
+/// which left the Archean at 259 K). Modern Earth's thermostat then
+/// leaves a few mbar of CO₂ (the real one, 0.28 mbar): the grey column's
+/// trace CO₂ is weaker than the real band.
+const CO2_EXPONENT: f64 = 0.19;
 
 /// Partial pressure of CO₂, bar, below which its opacity falls in
 /// proportion to its amount instead of as [`CO2_EXPONENT`]: the weak-line
@@ -409,10 +424,6 @@ fn bracket(mut excess: impl FnMut(f64) -> f64, absorbed: f64, start: Point) -> (
     }
 }
 
-/// Bond albedo behind the context's equilibrium temperature: Earth's,
-/// 0.3, which [`crate::star::equilibrium_k`] assumes (255 K at 1 S⊕).
-const EQUILIBRIUM_ALBEDO: f64 = 0.3;
-
 /// Least and greatest Bond albedo of a body in a water runaway
 /// ([`absorbing`]).
 const RUNAWAY_ALBEDO: (f64, f64) = (0.0, 0.9);
@@ -448,7 +459,7 @@ fn plateau_skin_k(absorbed_w_m2: f64) -> f64 {
 }
 
 /// Steam column, bar, over which a runaway's Bond albedo moves from
-/// Earth's 0.3 to the moist one `A_rg` (see [`absorbing`]): the e-folding
+/// its derived one to the moist one `A_rg` (see [`absorbing`]): the e-folding
 /// pressure of the blend `1 − exp(−p / STEAM_ALBEDO_BAR)`, as if the
 /// steam's optical depth in the bands that set the albedo were `p` over
 /// this. Calibration, no source: the moist atmospheres whose spectrum
@@ -457,21 +468,21 @@ fn plateau_skin_k(absorbed_w_m2: f64) -> f64 {
 /// bar of vapour (`water_saturation_bar`); one bar puts a column of that
 /// order two-thirds of the way to `A_rg`, and a steam world's hundreds of
 /// bar all the way. Below it the steam is too thin to change the light a
-/// body reflects much, and at no water the albedo is Earth's again, with
-/// no jump when the last of it escapes.
+/// body reflects much, and at no water the albedo is the derived one
+/// again, with no jump when the last of it escapes.
 const STEAM_ALBEDO_BAR: f64 = 1.0;
 
-/// The `context` the climate of a body with `water` and `steam_bar` of
-/// steam in its air absorbs its light in: as given for a body with no
-/// water runaway, and for one in a water runaway (by the insolation limit
-/// or a boil) under the Bond albedo blended from Earth's 0.3 to
+/// The Bond albedo the climate of a body with `water` and `steam_bar`
+/// of steam in its air absorbs its light under, given its derived
+/// `albedo` ([`super::albedo::bond_albedo`]): that albedo for a body with
+/// no water runaway, and for one in a water runaway (by the insolation
+/// limit or a boil) the blend from it to
 /// `A_rg = 1 − 4 F_plateau / (S_rg S₀)` by its steam,
-/// `A = 0.3 + (A_rg − 0.3) (1 − exp(−p_steam / STEAM_ALBEDO_BAR))`
+/// `A = albedo + (A_rg − albedo) (1 − exp(−p_steam / STEAM_ALBEDO_BAR))`
 /// ([`STEAM_ALBEDO_BAR`]). `A_rg` makes the column's moist plateau
 /// ([`MOIST_PLATEAU_W_M2`]) bind exactly at the runaway limit `S_rg` of
 /// its star ([`crate::star::habitable_fluxes`]), clamped to
-/// [`RUNAWAY_ALBEDO`]: a thick steam column's equilibrium temperature is
-/// the context's times `((1 − A_rg) / (1 − 0.3))^¼`.
+/// [`RUNAWAY_ALBEDO`].
 ///
 /// Kopparapu et al. 2013 (doi:10.1088/0004-637X/765/2/131) and 2014
 /// (doi:10.1088/2041-8205/787/2/L29) place the runaway limit where the
@@ -481,28 +492,29 @@ const STEAM_ALBEDO_BAR: f64 = 1.0;
 /// absorb less than its plateau at that flux round a red star (an M9V
 /// planet at its 0.91 S⊕ limit takes 0.7 × 0.91 S₀ / 4 = 218 W/m²) and
 /// sit on water's critical point instead of running away. A wet body
-/// keeps Earth's 0.3 (its calibration, Earth, is untouched), and so does
-/// a runaway whose escape took all its water (Mercury, a dry Venus): no
-/// moist atmosphere is left whose albedo the limit describes; the blend
-/// brings a runaway losing its water there continuously. The albedo of
-/// the other bodies is #510.
-pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64) -> Context {
+/// keeps its derived albedo, and so does a runaway whose escape took all
+/// its water (Mercury, a dry Venus): no moist atmosphere is left whose
+/// albedo the limit describes; the blend brings a runaway losing its
+/// water there continuously.
+pub(super) fn runaway_albedo(context: &Context, water: &Water, steam_bar: f64, albedo: f64) -> f64 {
     let steam = 1.0 - (-steam_bar.max(0.0) / STEAM_ALBEDO_BAR).exp();
     if !(water.runaway && water.kept_kg > 0.0) || steam <= 0.0 {
-        return *context;
+        return albedo;
     }
     let limit = f64::from(crate::star::habitable_fluxes(context.teff_k as f32).0);
     // `S₀` as `equilibrium_k` takes it: `σ (255 K)⁴ = (1 − 0.3) S₀ / 4`.
     let earth_eq = f64::from(crate::star::equilibrium_k(1.0));
-    let solar_constant = 4.0 * SIGMA * earth_eq.powi(4) / (1.0 - EQUILIBRIUM_ALBEDO);
+    let solar_constant = 4.0 * SIGMA * earth_eq.powi(4) / (1.0 - REFERENCE_ALBEDO);
     let moist = (1.0 - 4.0 * *MOIST_PLATEAU_W_M2 / (limit * solar_constant))
         .clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1);
-    let albedo = EQUILIBRIUM_ALBEDO + (moist - EQUILIBRIUM_ALBEDO) * steam;
-    Context {
-        equilibrium_k: context.equilibrium_k
-            * ((1.0 - albedo) / (1.0 - EQUILIBRIUM_ALBEDO)).powf(0.25),
-        ..*context
-    }
+    albedo + (moist - albedo) * steam
+}
+
+/// The `context` the climate of a body with `water` and `steam_bar` of
+/// steam absorbs its light in, under its derived `albedo`: the context
+/// under the [`runaway_albedo`] ([`Context::with_albedo`]).
+pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo: f64) -> Context {
+    context.with_albedo(runaway_albedo(context, water, steam_bar, albedo))
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
@@ -511,7 +523,8 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64) -> Con
 /// The temperature at which the outgoing radiation of the
 /// radiative–convective column of [`super::column`] balances what the
 /// surface absorbs, `σ T_eq⁴`, with `T_eq` the context's equilibrium
-/// temperature (Bond albedo 0.3), plus the internal heat; the column's
+/// temperature (under the Bond albedo it was given, see
+/// [`Context::with_albedo`]), plus the internal heat; the column's
 /// stratosphere sits at the skin temperature `T_eq / 2^¼` of a grey
 /// atmosphere (Pierrehumbert 2010, §4.3; from memory, not checked). Its opacities are calibrated on Venus, Earth, Titan and
 /// the moist plateau; a steam atmosphere sends out the Simpson–Nakajima
@@ -896,7 +909,16 @@ pub(super) fn wet_temperature_k(
 }
 
 /// The climate of a body and its gases once the climate has set its CO₂
-/// and water vapour.
+/// and water vapour, and its Bond albedo with them.
+///
+/// The albedo and the temperature are solved together as a fixed point
+/// ([`settle`]): the temperature sets what covers the body
+/// ([`super::albedo::cover`]: ice, ocean, clouds) and whether a
+/// sulphuric deck forms, those set the Bond albedo
+/// ([`super::albedo::bond_albedo`]), and the albedo the light the climate
+/// absorbs ([`Context::with_albedo`]). It starts warm, from a body with
+/// no ice, and settles on the warmest climate the ice–albedo feedback
+/// allows. Under each albedo:
 ///
 /// - In a runaway greenhouse, or without water, the gases are as given
 ///   (a runaway's steam is already in them) and the temperature is
@@ -925,23 +947,117 @@ pub fn climate(
     heat_flux_w_m2: f64,
     water_bar: f64,
 ) -> (Gases, Climate) {
-    let wet = !water.runaway && water.kept_kg > 0.0;
-    let context = &absorbing(context, water, gases.h2o);
-    let (gases, temperature_k, regulated) = if !wet {
-        let t = surface_temperature_k(context, &gases, heat_flux_w_m2);
-        (gases, t, false)
-    } else if regime == Regime::Plates {
-        thermostat(context, gases, heat_flux_w_m2, water_bar)
+    let body = Body {
+        context,
+        gases,
+        water,
+        regime,
+        heat_flux_w_m2,
+        water_bar,
+    };
+    settle(&body, warm_start(&body))
+}
+
+/// What [`climate`] solves for: the body's context, its air before the
+/// climate, its water, its regime, its internal heat flux (W/m²) and the
+/// bar its water would weigh as vapour.
+struct Body<'a> {
+    context: &'a Context,
+    gases: Gases,
+    water: &'a Water,
+    regime: Regime,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+}
+
+/// Most steps of the albedo's fixed point ([`settle`]): far more than
+/// the ten or so it takes to settle, even from no ice to a snowball.
+const ALBEDO_ITERATIONS: usize = 200;
+
+/// The temperature step, K, under which the albedo's fixed point has
+/// settled ([`settle`]).
+const ALBEDO_TOLERANCE_K: f64 = 0.1;
+
+/// Share of the way from the albedo used to the albedo derived that each
+/// step of [`settle`] goes: damping, so that a climate on the edge of
+/// the ice–albedo feedback does not swing between a frozen and an
+/// ice-free cover.
+const ALBEDO_DAMPING: f64 = 0.5;
+
+/// The climate of `body` under the derived Bond albedo `albedo`, before
+/// the runaway blend ([`absorbing`]): its gases, its temperature, whether
+/// the thermostat holds it, and the context it absorbed its light in.
+fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
+    let wet = !body.water.runaway && body.water.kept_kg > 0.0;
+    let context = absorbing(body.context, body.water, body.gases.h2o, albedo);
+    let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
+    let (gases, t, regulated) = if !wet {
+        let t = surface_temperature_k(&context, &body.gases, flux);
+        (body.gases, t, false)
+    } else if body.regime == Regime::Plates {
+        thermostat(&context, body.gases, flux, water_bar)
     } else {
-        let (g, t) = wet_climate(context, gases, heat_flux_w_m2, water_bar);
+        let (g, t) = wet_climate(&context, body.gases, flux, water_bar);
         (g, t, false)
     };
-    let liquid = liquid(temperature_k, &gases, water);
+    (gases, t, regulated, context)
+}
+
+/// The Bond albedo of `water` and `gases` at `temperature_k`: its
+/// [`cover`], with a sulphuric deck where [`sulphuric_deck`] makes one.
+/// A body that keeps water out of a runaway washes its SO₂ out, liquid
+/// or not at that temperature (a frozen one is too cold for a deck
+/// anyway, and one with no wet balance boils: its steam is the
+/// chain's next pass, not a deck).
+fn derived_albedo(temperature_k: f64, gases: &Gases, water: &Water) -> f64 {
+    let wet = !water.runaway && water.kept_kg > 0.0;
+    let deck = sulphuric_deck(temperature_k, gases, wet);
+    bond_albedo(&cover(temperature_k, gases, water), gases, deck)
+}
+
+/// The albedo the fixed point of `body` starts from warm: the cover of
+/// the climate under [`REFERENCE_ALBEDO`], at least as warm as a body
+/// with no ice ([`super::albedo::ICE_FREE_K`]), so that it settles on the
+/// warmest climate.
+fn warm_start(body: &Body) -> f64 {
+    let (gases, t, _, _) = under_albedo(body, REFERENCE_ALBEDO);
+    derived_albedo(t.max(super::albedo::ICE_FREE_K), &gases, body.water)
+}
+
+/// The fixed point of the albedo and the climate of `body` from the
+/// derived albedo `start`: each step solves the climate under the albedo
+/// ([`under_albedo`]) and moves the albedo [`ALBEDO_DAMPING`] of the way
+/// to the one its temperature derives, until the temperature moves less
+/// than [`ALBEDO_TOLERANCE_K`] and the derived albedo would move the
+/// equilibrium temperature less than that too. The climate keeps the albedo it was
+/// solved under, so that it reproduces.
+fn settle(body: &Body, start: f64) -> (Gases, Climate) {
+    let equilibrium_k = |albedo: f64| body.context.with_albedo(albedo).equilibrium_k;
+    let mut albedo = start;
+    let mut last = f64::NAN;
+    let mut pass = under_albedo(body, albedo);
+    for _ in 0..ALBEDO_ITERATIONS {
+        let t = pass.1;
+        let derived = derived_albedo(t, &pass.0, body.water);
+        // Settled when the temperature has stopped moving and the albedo
+        // it derives would not move the light by more either (a
+        // thermostat holds the temperature whatever the albedo).
+        let residual_k = (equilibrium_k(derived) - equilibrium_k(albedo)).abs();
+        if (t - last).abs() < ALBEDO_TOLERANCE_K && residual_k < ALBEDO_TOLERANCE_K {
+            break;
+        }
+        last = t;
+        albedo += ALBEDO_DAMPING * (derived - albedo);
+        pass = under_albedo(body, albedo);
+    }
+    let (gases, temperature_k, regulated, context) = pass;
+    let liquid = liquid(temperature_k, &gases, body.water);
     (
         gases,
         Climate {
             temperature_k,
             equilibrium_k: context.equilibrium_k,
+            bond_albedo: runaway_albedo(body.context, body.water, body.gases.h2o, albedo),
             liquid,
             regulated,
         },
@@ -1079,6 +1195,75 @@ mod tests {
     }
 
     #[test]
+    fn the_solar_system_has_its_albedos() {
+        let albedo = |name: &str| {
+            let (_, g, c) = climate_of(name);
+            println!(
+                "{name}: Bond {:.3}, {:.1} K, {:.3e} bar",
+                c.bond_albedo,
+                c.temperature_k,
+                g.total()
+            );
+            c.bond_albedo
+        };
+        let earth = albedo("Earth");
+        assert!((0.28..=0.32).contains(&earth), "Earth {earth}");
+        let venus = albedo("Venus");
+        assert!((0.70..=0.80).contains(&venus), "Venus {venus}");
+        let mars = albedo("Mars");
+        assert!((0.20..=0.30).contains(&mars), "Mars {mars}");
+        let mercury = albedo("Mercury");
+        assert!((0.06..=0.14).contains(&mercury), "Mercury {mercury}");
+        // Titan's and the icy moons' albedos are the frosts' (Task 6 of
+        // the lot): shown, not checked here.
+        albedo("Titan");
+        albedo("Europa");
+        // The equilibrium temperature the climate used is the context's
+        // under that albedo.
+        let (d, _, c) = climate_of("Venus");
+        let expected = d.context.with_albedo(c.bond_albedo).equilibrium_k;
+        assert!((c.equilibrium_k - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_runaway_blends_from_the_derived_albedo() {
+        // Review Focus 2: a runaway's albedo moves from its derived one
+        // (here a sulphuric deck's) to the moist `A_rg` with its steam,
+        // with no jump where the last of the steam goes: the equilibrium
+        // just inside the runaway (a trace of steam) and just outside it
+        // (none) differ by under 2 K.
+        let context = crate::planet::reference::sun_at(0.72);
+        let steam = Water {
+            runaway: true,
+            boiled: false,
+            kept_kg: 1e20,
+            oceans: 1e20 / super::super::OCEAN_KG,
+        };
+        let deck = 0.76;
+        let t_eq = |water: &Water, bar: f64| absorbing(&context, water, bar, deck).equilibrium_k;
+        let dry = t_eq(&steam.keeping(0.0), 0.0);
+        assert_eq!(dry, context.with_albedo(deck).equilibrium_k);
+        let trace = t_eq(&steam.keeping(1e15), 1e-3);
+        assert!((trace - dry).abs() < 2.0, "{trace} vs {dry}");
+        // A thick column takes the moist albedo whole, whatever it
+        // started from.
+        let thick = runaway_albedo(&context, &steam, 1e4, deck);
+        let from_earth = runaway_albedo(&context, &steam, 1e4, REFERENCE_ALBEDO);
+        assert!((thick - from_earth).abs() < 1e-9, "{thick} vs {from_earth}");
+        // Through the whole climate: the stored albedo of a runaway with
+        // steam is the blend, and it reproduces its equilibrium.
+        let water = 0.01;
+        let earth = PlanetInputs {
+            volatiles: crate::planet::inputs::volatile_rule(1.0 - water, water, 0.325),
+            ..crate::planet::reference::inputs(1.0, 0.325, water)
+        };
+        let (d, g, c) = climate_at(&earth, 0.9);
+        assert!(d.water.runaway && g.h2o > 1.0, "{:?} {g:?}", d.water);
+        let expected = d.context.with_albedo(c.bond_albedo).equilibrium_k;
+        assert!((c.equilibrium_k - expected).abs() < 1e-9, "{c:?}");
+    }
+
+    #[test]
     fn nitrogen_keeps_methane_liquid_below_its_triple_point() {
         // No nitrogen: pure methane.
         assert_eq!(methane_freezes_k(0.0), METHANE_TRIPLE_K);
@@ -1109,8 +1294,9 @@ mod tests {
 
     #[test]
     fn an_airless_body_sits_at_its_equilibrium_temperature() {
+        // Its equilibrium temperature under its own (regolith) albedo.
         let (d, g, mercury) = climate_of("Mercury");
-        let t_eq = d.context.equilibrium_k;
+        let t_eq = d.context.with_albedo(mercury.bond_albedo).equilibrium_k;
         assert!(d.heat_flux_w_m2 < 1.0, "{}", d.heat_flux_w_m2);
         assert!(
             (mercury.temperature_k - t_eq).abs() < 1.0,
@@ -1304,9 +1490,9 @@ mod tests {
         // doi:10.1007/BF00151270, 0.82 of today's light), 10 mbar of CO₂, the air from 1 to 2 bar
         // of N₂: +7 K in their GCM, +4 to 5 K in the 1-D model of
         // Goldblatt et al. 2009 (doi:10.1038/ngeo692). Their CO₂ held
-        // fixed, no thermostat. The column of issue #441 gives about 271 K
-        // and +7.4 K: thin margins, 1 K over the floor and 0.6 K under the
-        // ceiling.
+        // fixed, no thermostat, and Earth's albedo (0.3): this checks the
+        // column's greenhouse, so the ice–albedo feedback of the derived
+        // albedo is left out (the wet balance under the given light).
         let d = derive_at(&model_inputs(reference("Earth")), 1.0);
         let faint = Context {
             equilibrium_k: d.context.equilibrium_k * 0.82_f64.powf(0.25),
@@ -1322,18 +1508,17 @@ mod tests {
             o2: 0.0,
         };
         let temperature = |gases: Gases| {
-            let (g, c) = climate(
-                &faint,
+            (
                 gases,
-                &d.water,
-                Regime::Stagnant,
-                d.heat_flux_w_m2,
-                d.water_bar,
-            );
-            (g, c.temperature_k)
+                wet_temperature_k(&faint, &gases, d.heat_flux_w_m2, d.water_bar),
+            )
         };
         let (g1, t1) = temperature(air(0.99));
         let (g2, t2) = temperature(air(1.99));
+        println!(
+            "late Archean: {t1:.1} K, +{:.1} K with twice the N₂",
+            t2 - t1
+        );
         assert!((270.0..=290.0).contains(&t1), "{t1} {g1:?}");
         let warming = t2 - t1;
         assert!((3.0..=8.0).contains(&warming), "{t1} -> {t2}: {g2:?}");
@@ -1415,12 +1600,10 @@ mod tests {
         // The maximum greenhouse of Kopparapu et al. 2013 (*ApJ* 765, 131,
         // doi:10.1088/0004-637X/765/2/131): the cold edge of the habitable
         // zone, about 1.67 AU around the Sun, is where the best amount of
-        // CO₂ (scanned up to 8 bar) just holds the surface at 273 K. The
-        // grey column has no Rayleigh scattering, so its edge lies farther:
-        // an Earth at 1.6 AU reaches 273 K at some CO₂ up to 8 bar. The
-        // Earth track's own 1.8 bar there leave it frozen at about 254 K:
-        // its CO₂ inventory and Venus's albedo, which pins CO₂'s strength,
-        // are issue #510.
+        // CO₂ (scanned up to 8 bar) just holds the surface at 273 K, the
+        // Rayleigh scattering of the thick CO₂ (in the derived albedo)
+        // capping its warming: an Earth at 1.6 AU reaches 273 K at some
+        // CO₂ up to 8 bar.
         let d = derive_at(&model_inputs(reference("Earth")), 1.6);
         let warmest = (1..=16)
             .map(|i| {
@@ -1560,7 +1743,7 @@ mod tests {
                     kept_kg: 1e20,
                     oceans: 1e20 / super::super::OCEAN_KG,
                 };
-                let runaway = absorbing(&context, &steam, 1e4);
+                let runaway = absorbing(&context, &steam, 1e4, REFERENCE_ALBEDO);
                 let got = absorbed(&runaway) / (ratio * *MOIST_PLATEAU_W_M2);
                 assert!((got - 1.0).abs() < 1e-3, "{kind} {flux}: {got}");
                 let wet = Water {
@@ -1568,8 +1751,8 @@ mod tests {
                     ..steam
                 };
                 let dry = steam.keeping(0.0);
-                assert_eq!(absorbing(&context, &wet, 1e4), context);
-                assert_eq!(absorbing(&context, &dry, 0.0), context);
+                assert_eq!(absorbing(&context, &wet, 1e4, REFERENCE_ALBEDO), context);
+                assert_eq!(absorbing(&context, &dry, 0.0, REFERENCE_ALBEDO), context);
             }
         }
     }
@@ -1590,8 +1773,10 @@ mod tests {
         };
         // The steam a kept mass weighs, bar (any linear law: here
         // 1e-18 bar per kg).
-        let t_eq = |kg: f64| absorbing(&context, &steam.keeping(kg), kg * 1e-18).equilibrium_k;
-        let dry = absorbing(&context, &steam.keeping(0.0), 0.0).equilibrium_k;
+        let t_eq = |kg: f64| {
+            absorbing(&context, &steam.keeping(kg), kg * 1e-18, REFERENCE_ALBEDO).equilibrium_k
+        };
+        let dry = absorbing(&context, &steam.keeping(0.0), 0.0, REFERENCE_ALBEDO).equilibrium_k;
         assert_eq!(dry, context.equilibrium_k);
         let mut last = dry;
         for kg in [1.0, 1e10, 1e15, 1e17, 1e18, 1e19, 1e20, 1e21] {
@@ -1611,7 +1796,7 @@ mod tests {
             t_eq(1e15)
         );
         // A thick column takes the moist albedo whole.
-        let thick = absorbing(&context, &steam, 1e4).equilibrium_k;
+        let thick = absorbing(&context, &steam, 1e4, REFERENCE_ALBEDO).equilibrium_k;
         assert!((t_eq(1e21) - thick).abs() < 1e-9 * thick);
     }
 

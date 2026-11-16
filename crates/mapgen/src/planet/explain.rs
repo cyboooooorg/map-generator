@@ -365,7 +365,8 @@ fn temperature_tree(
     steps: &Bare,
 ) -> Option<Cause> {
     let gases = &steps.climate_gases;
-    let context = &super::climate::absorbing(context, &surface.water, gases.h2o);
+    // The climate's light, under the Bond albedo it settled on.
+    let context = &context.with_albedo(surface.climate.bond_albedo);
     let flux = model
         .heat
         .flux_w_m2(surface_interior(context, model).radius_earth);

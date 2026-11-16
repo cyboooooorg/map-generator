@@ -22,7 +22,9 @@
 //! and what its cold freezes out.
 //! [`climate::climate`] sets its surface temperature through a grey
 //! radiative–convective column (`column`) and the carbonate thermostat,
-//! and the [`SurfaceLiquid`] on its surface.
+//! under the Bond albedo [`albedo::bond_albedo`] derives from what covers
+//! it ([`albedo::cover`]), the two solved together, and the
+//! [`SurfaceLiquid`] on its surface.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
 //! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
@@ -47,6 +49,7 @@ use rand::rngs::StdRng;
 use crate::exomoon::{EARTH_KG, EARTH_M};
 use crate::system::{Body, System, body_seed};
 
+pub mod albedo;
 pub mod atmosphere;
 pub mod classify;
 pub mod climate;
@@ -423,12 +426,13 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
         let flux = heat.flux_w_m2(interior.radius_earth);
         // A thermostat that reached its temperature found a wet balance:
-        // only the others need the moist-limit test.
+        // only the others need the moist-limit test, under the Bond albedo
+        // their climate settled on.
         let boils = |steps: &Bare| {
             let water = &steps.surface.water;
             !steps.surface.climate.regulated
                 && climate::boils(
-                    context,
+                    &context.with_albedo(steps.surface.climate.bond_albedo),
                     &steps.climate_gases,
                     water,
                     flux,

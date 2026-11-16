@@ -547,10 +547,13 @@ mod tests {
     }
 
     /// Flux, S⊕, inside the runaway limit of the insolation of an F0V star
-    /// (1.296 S⊕ at its 7220 K) whose absorbed light (297 W/m² at Bond
-    /// albedo 0.3) exceeds the moist plateau (about 287 W/m²): an
-    /// Earth-like wet planet there has no wet balance and boils.
-    const F0V_BOILING_FLUX: f64 = 1.24;
+    /// (1.296 S⊕ at its 7220 K) whose absorbed light (about 307 W/m² at
+    /// the Bond albedo of an ice-free ocean world, about 0.3) exceeds the
+    /// moist plateau (about 284 W/m²): an Earth-like wet planet there has
+    /// no wet balance and boils. (1.24 S⊕ under the fixed albedo 0.3;
+    /// the derived albedo of a planet with ice caps lets one at 1.24 S⊕
+    /// keep its ocean.)
+    const F0V_BOILING_FLUX: f64 = 1.28;
 
     #[test]
     fn a_boil_that_escapes_all_its_water_ends_dry() {
@@ -594,13 +597,13 @@ mod tests {
 
     #[test]
     fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
-        // The Earth at 1.24 S⊕ round an F0V star (see F0V_BOILING_FLUX)
+        // The Earth at 1.28 S⊕ round an F0V star (see F0V_BOILING_FLUX)
         // with the volatiles of 0.1 % of ice and just enough water that
         // the steam pass's energy-limited escape leaves 0.03 bar of it
         // (some 1.6e17 kg): its first pass boils (2.4 bar of N₂, no wet
         // balance), but so little vapour cannot hold the outgoing
         // radiation at the moist limit, so the leftover recondenses into
-        // a small ocean near 306 K. (With 0.1 bar left the balance is at
+        // a small ocean. (Under the fixed albedo 0.3, with 0.1 bar left the balance was at
         // 404 K, over the boiling point, all of it vapour; from about
         // 1 bar there is none and the steam runaway stands.)
         let context = f0v_at(F0V_BOILING_FLUX);
