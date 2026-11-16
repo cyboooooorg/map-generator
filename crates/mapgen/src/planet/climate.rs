@@ -954,8 +954,14 @@ pub struct CarbonCycle {
 ///   so its CO₂ builds up past what the air held before the climate
 ///   (Kasting et al. 1993, doi:10.1006/icar.1993.1010; issue #510), up
 ///   to the carbon inventory (`carbon.inventory_bar`) and at most what
-///   does not frost out where the body is coldest (its equilibrium
-///   temperature, the cold trap of [`super::atmosphere::cold_trap`]).
+///   does not frost out at the cold trap's temperature
+///   ([`super::atmosphere::cold_trap`]): the equilibrium temperature
+///   under the reference albedo 0.3 (`context.equilibrium_k`), standing
+///   in for the upper troposphere where CO₂ condenses. That cap, not
+///   Rayleigh scattering, sets the outer edge of the habitable zone
+///   here: without it, the column's CO₂ greenhouse outgrows its
+///   scattering (406 K at 1.6 AU round the Sun with Earth's 44.7 bar of
+///   carbon), so there is no maximum greenhouse within the inventory.
 ///   If no CO₂ in that range reaches the thermostat, the planet takes the
 ///   CO₂ of its warmest climate, the maximum greenhouse
 ///   ([`maximum_greenhouse`]); if none is still too warm, the planet is
@@ -976,9 +982,10 @@ pub struct CarbonCycle {
 /// When both exist (the ice–albedo feedback makes the body bistable), it
 /// is a snowball when `carbon.snowball_draw` is below
 /// [`snowball_chance`]: the share of its history such a planet spends
-/// frozen. Its CO₂ is then the amount built up so far, the fraction
-/// `draw / chance` of the way from the CO₂ it froze with to the CO₂ that
-/// thaws it, so that a seed gives one state and one CO₂.
+/// frozen. Its CO₂ is then the amount built up so far, half way
+/// ([`SNOWBALL_BUILT_UP`]) from the CO₂ it froze with to the CO₂ that
+/// thaws it: one CO₂ per state, so that pinning the state alone
+/// ([`super::PlanetModel::formation`]) gives the same planet again.
 ///
 /// The liquid follows from the temperature and pressure (see
 /// [`LAVA_K`] and the phase diagrams of water and hydrocarbons).
@@ -1008,8 +1015,8 @@ pub fn climate(
     if carbon.snowball_draw >= chance {
         return branches.warm;
     }
-    let share = (carbon.snowball_draw / chance).clamp(0.0, 1.0);
-    let built_up = frozen.froze_bar + share * (frozen.still_frozen_bar - frozen.froze_bar);
+    let built_up =
+        frozen.froze_bar + SNOWBALL_BUILT_UP * (frozen.still_frozen_bar - frozen.froze_bar);
     let (gases, climate) = body.frozen_at(built_up);
     let snowball = frozen_over(&climate);
     (
@@ -1026,6 +1033,13 @@ pub fn climate(
 fn frozen_over(climate: &Climate) -> bool {
     climate.liquid != SurfaceLiquid::Water && climate.temperature_k < ICE_MELTS_K
 }
+
+/// Share of the way from the CO₂ a snowball froze with to the CO₂ that
+/// thaws it that a snowball holds ([`climate`]): a half, the mean of a
+/// build-up at a steady rate seen at a uniform time. Not drawn, so that a
+/// snowball pinned by its state alone (`InputOverrides::snowball`, which
+/// sets the draw to 0) holds the CO₂ it was drawn with.
+const SNOWBALL_BUILT_UP: f64 = 0.5;
 
 /// The share of its history a planet whose climate has both a temperate
 /// and a frozen state spends frozen: a snowball lasts until volcanoes
@@ -1078,8 +1092,10 @@ struct Body<'a> {
     heat_flux_w_m2: f64,
     water_bar: f64,
     /// The most CO₂ the air can hold, bar: the carbon inventory, at most
-    /// what does not frost out at the equilibrium temperature, and never
-    /// less than the air already holds.
+    /// what does not frost out at the cold trap's temperature (the
+    /// equilibrium temperature under the reference albedo 0.3, standing
+    /// in for the upper troposphere; see [`climate`]), and never less
+    /// than the air already holds.
     most_co2: f64,
     co2: Option<f64>,
     /// The CO₂ of the maximum greenhouse, once found.
@@ -1999,11 +2015,14 @@ mod tests {
         let (g, c) = with(temperate(0.5));
         assert!(g.co2 <= 0.5, "{g:?}");
         assert!(!c.regulated, "{c:?}");
-        // A snowball builds its CO₂ up past what it froze with.
+        // A snowball builds its CO₂ up past what it froze with, the same
+        // whatever draw made it one.
         let earth = earth_drawn(1.0);
         let (_, warm, _) = climate_at(&earth, 1.2);
         let half = 0.5 * chance_at(&earth, 1.2);
         let (_, frozen, c) = climate_at(&earth_drawn(half), 1.2);
+        let (_, pinned, _) = climate_at(&earth_drawn(0.0), 1.2);
+        assert_eq!(frozen, pinned);
         assert!(c.snowball, "{c:?}");
         assert!(frozen.co2 > warm.co2, "{frozen:?} {warm:?}");
         assert!(frozen.co2 <= d.carbon.inventory_bar, "{frozen:?}");

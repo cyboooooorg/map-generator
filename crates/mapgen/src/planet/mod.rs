@@ -280,7 +280,9 @@ impl PlanetModel {
     /// drawn mass and `M`, `e` what escape left; the water in Earth oceans
     /// of the drawn mass; the CO₂, N₂, CH₄, NH₃ and sulphur factors, the stored volatiles over
     /// the formation rule of the formation shares (1 where the rule is 0);
-    /// the core share, the radiogenic abundance and `life: Some(arose)`.
+    /// the core share, the radiogenic abundance, `life: Some(arose)` and
+    /// `snowball: Some(frozen)` (a pinned snowball replays the CO₂ it
+    /// froze with, not the amount its draw had built up).
     ///
     /// Set in a request with the same context, they derive the same inputs
     /// and class whatever the seed: the scatter of every volatile is
@@ -321,10 +323,10 @@ impl PlanetModel {
                 s: Some(factor(i.volatiles.s, rule.s)),
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
-                // Not pinned: a snowball's CO₂ is where its draw caught
-                // the build-up, which a yes or no cannot give again; the
-                // seed's own draw gives the same state.
-                snowball: None,
+                // The state, not the draw: a pinned snowball replays its
+                // CO₂ from where it froze (the draw at 0), not from where
+                // its draw caught the build-up.
+                snowball: Some(self.surface.is_some_and(|s| s.climate.snowball)),
             },
         }
     }

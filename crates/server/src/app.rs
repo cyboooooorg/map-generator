@@ -5530,14 +5530,16 @@ mod tests {
         assert_eq!(after, before);
     }
 
-    /// Removes every `life_draw` of a model from `value`.
-    fn drop_life_draws(value: &mut serde_json::Value) {
+    /// Removes every `life_draw` and `snowball_draw` of a model from
+    /// `value`.
+    fn drop_pinned_draws(value: &mut serde_json::Value) {
         match value {
             serde_json::Value::Object(map) => {
                 map.remove("life_draw");
-                map.values_mut().for_each(drop_life_draws);
+                map.remove("snowball_draw");
+                map.values_mut().for_each(drop_pinned_draws);
             }
-            serde_json::Value::Array(items) => items.iter_mut().for_each(drop_life_draws),
+            serde_json::Value::Array(items) => items.iter_mut().for_each(drop_pinned_draws),
             _ => {}
         }
     }
@@ -5562,12 +5564,13 @@ mod tests {
             assert_eq!(body_seeds(&after), body_seeds(&before), "{request}");
             // The whole draw is the same, not only its seeds (the request
             // stored is the export's `create`, open fields pinned). The
-            // life draw aside: `create` pins whether life arose, which sets
-            // the draw to 0 or 1 (`PlanetModel::formation`).
+            // life and snowball draws aside: `create` pins whether life
+            // arose and whether it is a snowball, which sets each draw to
+            // 0 or 1 (`PlanetModel::formation`).
             let (mut after, mut before) = (after["system"].clone(), before["system"].clone());
             for system in [&mut after, &mut before] {
                 system["request"] = serde_json::Value::Null;
-                drop_life_draws(system);
+                drop_pinned_draws(system);
             }
             assert_eq!(after, before, "{request}");
         }
