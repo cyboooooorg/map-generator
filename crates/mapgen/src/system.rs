@@ -75,8 +75,11 @@ use std::sync::Arc;
 /// interior's `secular_w`, the climate's `bond_albedo` and `snowball`,
 /// the formation's `snowball_draw`, the `Methane` cloud kind and the new
 /// card quantities, so a system of version 7 does not parse as today's
-/// and is refused on its version, like every older one.
-pub const SYSTEM_FORMAT_VERSION: u32 = 8;
+/// and is refused on its version, like every older one. Version 9 comes
+/// with lot 3 of the climate pass: the moons' resonant heat, the moment
+/// of inertia of a differentiated body, the convective ice shell and the
+/// geysers of a thin polar shell.
+pub const SYSTEM_FORMAT_VERSION: u32 = 9;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.

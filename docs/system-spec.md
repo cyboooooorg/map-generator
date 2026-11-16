@@ -602,7 +602,8 @@ systems/<system-id>/
     radiogenic and tidal ones, its climate stores the `bond_albedo` it
     was solved with and whether the planet is a `snowball`, drawn from
     the formation's `snowball_draw`; since format 8 of the system and 24
-    of the world), derived once when the system is drawn from its orbit, the
+    of the world; format 9 of the system adds lot 3's resonant heat,
+    moment of inertia, convective shell and geysers), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
