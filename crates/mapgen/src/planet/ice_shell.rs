@@ -161,11 +161,13 @@ const ICE_III_TRIPLE: (f64, f64) = (251.165, 208.566e6);
 /// through and its tides heat (Roberts 2015,
 /// doi:10.1016/j.icarus.2015.05.033; Choblet et al. 2017,
 /// doi:10.1038/s41550-017-0289-8, with 20 to 30 % porosity at Enceladus).
-/// Calibration, no source for the value: it lies between the centre of
-/// an asked Enceladus (92 to 108 MPa in the model, whose iron core
-/// concentrates its mass; about 35 MPa for a uniform rock core) and those
-/// of Europa, Ganymede, Titan and Callisto (6 to 13 GPa), where the pores
-/// close.
+/// A calibrated separation, not a measured threshold: an asked
+/// Enceladus's centre lies at 92 to 108 MPa in the model (its iron core
+/// concentrates its mass; about 35 MPa for a uniform rock core), the next
+/// bodies, Europa, Ganymede, Titan and Callisto, at 6 to 13 GPa, so any
+/// value in between classifies them alike. Rock's porosity closes under
+/// compaction at pressures of the order of 10² MPa (uncited here), which
+/// 300 MPa stands for.
 const UNCONSOLIDATED_CORE_PA: f64 = 300e6;
 
 /// Angular radius, degrees, of the polar caps over which the hydrothermal
@@ -622,9 +624,12 @@ impl Water<'_> {
     /// at no pressure, `MELT_K − liquidus_k(X)`. Adding the two lowerings
     /// is an approximation, no source: Leliwa-Kopystyński et al. 2002
     /// (doi:10.1006/icar.2001.6762) measured the water–ammonia liquidus
-    /// up to 300 MPa (not checked here).
+    /// up to 300 MPa (not checked here). Never colder than the eutectic
+    /// ([`NH3_EUTECTIC`]): no liquid is left below it.
     fn base_k(&self, shell_m: f64) -> f64 {
-        ice_melting_k(self.base_pa(shell_m)) - (MELT_K - liquidus_k(self.ocean_nh3(shell_m)))
+        let lowered =
+            ice_melting_k(self.base_pa(shell_m)) - (MELT_K - liquidus_k(self.ocean_nh3(shell_m)));
+        lowered.max(liquidus_k(NH3_EUTECTIC))
     }
 }
 
@@ -1054,5 +1059,22 @@ mod tests {
             assert!((shares - 1.0).abs() < 1e-9 && (mean - 1.0).abs() < 1e-3);
             assert!(pole > 1.5, "{heating:?}: {pole}");
         }
+    }
+
+    /// A Ganymede whose ice holds 5 % of ammonia freezes its ocean to the
+    /// eutectic under pressure: its base, the melting point under some
+    /// 200 MPa lowered by the eutectic's 97 K, would be about 157 K, but
+    /// no liquid is left under the eutectic.
+    #[test]
+    fn the_base_is_never_colder_than_the_eutectic() {
+        let area = 4.0 * PI * (0.4089 * EARTH_M).powi(2);
+        let shell = frozen_shell(&ganymede(), &heat(3e-3 * area, 0.0), 85.0, 0.05, FINE).unwrap();
+        let eutectic = liquidus_k(NH3_EUTECTIC);
+        assert!(shell.liquidus_k >= eutectic, "{shell:?}");
+        assert!(shell.liquidus_k < eutectic + 1.0, "{shell:?}");
+        assert!(
+            shell.ocean_km >= 0.0 && shell.shell_km.is_finite(),
+            "{shell:?}"
+        );
     }
 }

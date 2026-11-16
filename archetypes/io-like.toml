@@ -14,6 +14,12 @@ reference = "Io"
 # parameters), ±7 %.
 [inputs]
 mass_earth = [0.014, 0.016]
+# Its rock's U, Th and K, Earth's abundance = 1: the Solar System's
+# bodies formed from one nebula of chondritic composition (Lodders 2003,
+# doi:10.1086/375492), so the scatter of the draw (0.15 dex, a spread
+# across stellar systems) does not apply; within 10 % of the Earth's
+# unit, a calibration for the moon's own rock.
+radiogenic = [0.9, 1.1]
 # The age of the Solar System, 4.567 Ga by the oldest solids; the
 # planets formed in its first tens of Ma (Bouvier & Wadhwa 2010,
 # doi:10.1038/ngeo941).
