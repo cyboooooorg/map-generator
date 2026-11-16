@@ -5390,7 +5390,8 @@ mod tests {
             for f in &geysers.fractures {
                 assert!(f.lat_deg.abs() >= 60.0, "seed {seed}: {f:?}");
                 assert_eq!(f.lat_deg < 0.0, geysers.south, "seed {seed}: {f:?}");
-                assert!((20.0..200.0).contains(&f.length_km), "seed {seed}: {f:?}");
+                // A branch is a third to a half of its parent.
+                assert!((10.0..200.0).contains(&f.length_km), "seed {seed}: {f:?}");
             }
             south += usize::from(geysers.south);
             let rings = plume_rings(parent_of(&system, moon));
