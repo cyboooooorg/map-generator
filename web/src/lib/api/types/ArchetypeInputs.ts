@@ -51,6 +51,11 @@ radiogenic?: ParamDefault | null,
  */
 life?: boolean | null, 
 /**
+ * `true`: a snowball wherever the climate has a frozen state beside
+ * the temperate one; `false`: never (the temperate state).
+ */
+snowball?: boolean | null, 
+/**
  * Age of the system the archetype is asked in, Gyr: the star's, when
  * the request types none. Within `(0, star::lifetime_gyr(0.0)]`; a
  * star that lives shorter refuses it.

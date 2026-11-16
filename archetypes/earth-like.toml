@@ -20,6 +20,12 @@ core_mass_fraction = 0.325
 water_oceans = 1.0
 envelope_fraction = 0.0
 life = true
+# The Earth today is temperate, though its climate also has a frozen
+# state at 1 AU (it was a snowball some 717 to 635 Ma ago, Hoffman et
+# al. 2017, doi:10.1126/sciadv.1600983): an asked Earth stays on the
+# temperate branch, as the other Solar System archetypes take the state
+# of their body. Drawn planets have no such pin.
+snowball = false
 co2 = 1.0
 n2 = 1.0
 # Ammonia its ices carry, as a factor on the formation rule (1 % of the

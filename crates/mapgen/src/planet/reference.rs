@@ -174,6 +174,7 @@ pub(crate) fn inputs_of(body: &ReferenceBody) -> super::PlanetInputs {
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
         life_draw: 0.0,
+        snowball_draw: 1.0,
     }
 }
 
@@ -210,6 +211,7 @@ pub(crate) fn inputs(
         volatiles: super::Volatiles::default(),
         radiogenic: 1.0,
         life_draw: 0.0,
+        snowball_draw: 1.0,
     }
 }
 
@@ -246,6 +248,9 @@ pub(crate) struct Derived {
     pub heat_flux_w_m2: f64,
     /// What all the water kept would weigh as vapour, bar.
     pub water_bar: f64,
+    /// The carbon cycle of the climate: the CO₂ outgassed before escape
+    /// and the snowball draw of `inputs`.
+    pub carbon: super::climate::CarbonCycle,
 }
 
 /// The Sun's context at `orbit_au`, 4.6 Gyr, with the insolation of
@@ -278,6 +283,10 @@ pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived 
         gases: air.gases,
         water: air.water,
         regime: air.regime,
+        carbon: super::climate::CarbonCycle {
+            inventory_bar: air.carbon_bar,
+            snowball_draw: inputs.snowball_draw,
+        },
     }
 }
 

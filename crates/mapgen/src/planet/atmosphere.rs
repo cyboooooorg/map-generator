@@ -382,6 +382,14 @@ impl Frost {
     }
 }
 
+/// Partial pressure of CO₂, bar, at which it frosts out at
+/// `temperature_k` (its sublimation curve below its triple point,
+/// [`Frost`]); unbounded above the triple point, where it does not
+/// freeze.
+pub(super) fn co2_frost_bar(temperature_k: f64) -> f64 {
+    CO2_FROST.cap(f64::INFINITY, temperature_k)
+}
+
 /// Methane the star's ultraviolet destroys on a body, bar per Gyr, per
 /// unit of the Lyman α share of the star's light
 /// ([`super::xuv::LYMAN_ALPHA`]): `Y · S₀ I / 4 / E_γ` photons per m² and

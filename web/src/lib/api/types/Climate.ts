@@ -25,4 +25,12 @@ bond_albedo: number, liquid: SurfaceLiquid,
  * The carbonate thermostat holds the temperature at
  * [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
  */
-regulated: boolean, };
+regulated: boolean, 
+/**
+ * The body is a snowball: its climate also has a temperate state,
+ * and it was drawn frozen over, its CO₂ building up from its
+ * volcanoes towards the thaw ([`climate`], [`snowball_chance`]).
+ * A body with no temperate state (past the outer edge of the
+ * habitable zone) is frozen but not a snowball.
+ */
+snowball: boolean, };

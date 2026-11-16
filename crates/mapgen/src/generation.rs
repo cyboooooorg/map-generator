@@ -260,6 +260,7 @@ fn moon_analogue_gravity() -> f32 {
         volatiles: crate::planet::Volatiles::default(),
         radiogenic: 1.0,
         life_draw: 1.0,
+        snowball_draw: 1.0,
     };
     crate::planet::interior::solid_interior(&inputs).gravity as f32
 }

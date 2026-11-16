@@ -93,6 +93,12 @@ const ICE_LINE_CONTRAST_K: f64 = 42.0;
 /// ([`ice_line_share`]): its poles reach the ice line, `T_mean − 2/3 ΔT`.
 pub(crate) const ICE_FREE_K: f64 = ICE_LINE_K + 2.0 / 3.0 * ICE_LINE_CONTRAST_K;
 
+/// Mean surface temperature, K, at and under which a body's water is all
+/// ice ([`ice_line_share`]): its equator reaches the ice line,
+/// `T_mean + 1/3 ΔT`. The frozen branch of the climate starts there
+/// ([`super::climate::climate`]).
+pub(crate) const ICE_COVERED_K: f64 = ICE_LINE_K - ICE_LINE_CONTRAST_K / 3.0;
+
 /// Mean thickness, km, of the ice sheets a body's water ice gathers
 /// into where it is cold: 1.5 km (Antarctica's averages about 2 km,
 /// Greenland's 1.7 km, Fretwell et al. 2013, doi:10.5194/tc-7-375-2013;

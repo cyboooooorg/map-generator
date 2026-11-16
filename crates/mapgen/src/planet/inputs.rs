@@ -275,6 +275,12 @@ pub struct InputOverrides {
     /// `Some(true)`: life arises wherever the world allows it;
     /// `Some(false)`: never.
     pub life: Option<bool>,
+    /// `Some(true)`: the planet is a snowball wherever its climate has a
+    /// frozen state beside the temperate one; `Some(false)`: never, it
+    /// keeps the temperate state (an asked `earth-like`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub snowball: Option<bool>,
 }
 
 /// Draws a planet's inputs from its formation `context` and its mass
@@ -296,7 +302,9 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// - envelope by [`envelope_fraction`];
 /// - volatiles by [`volatiles`];
 /// - radiogenic abundance `10^N(0, 0.15)` of Earth's;
-/// - the life draw `U(0, 1)`, read by [`life`](super::life::life).
+/// - the life draw `U(0, 1)`, read by [`life`](super::life::life);
+/// - the snowball draw `U(0, 1)`, read by
+///   [`climate`](super::climate::climate).
 ///
 /// The ice share is of the mass that is not hydrogen and helium, so the
 /// water share of the whole is that times `1 − envelope`: a wet giant
@@ -306,7 +314,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// and whatever the overrides: core share (one normal), stripping (two
 /// uniforms), water (two uniforms), migration (one uniform), envelope
 /// (three draws), volatiles (five normals), radiogenic abundance (one
-/// normal), life (one uniform, always last). A later draw (the mass, in
+/// normal), life (one uniform), snowball (one uniform, always last). A later draw (the mass, in
 /// part 3) goes in front of them.
 ///
 /// The overrides apply after the draws. A set water (`water_oceans`, over
@@ -314,7 +322,8 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// rule reads them, so the ice-borne volatiles follow the water the planet
 /// has; a set `co2`, `n2`, `ch4`, `nh3` or `s` replaces the log-normal scatter of
 /// that gas and leaves the rule. `life` sets the life draw to 0 (always arises) or
-/// 1 (never).
+/// 1 (never); `snowball` sets the snowball draw to 0 (frozen wherever a
+/// frozen state exists) or 1 (never).
 pub fn draw_inputs_with(
     context: &Context,
     mass_earth: f64,
@@ -362,6 +371,12 @@ pub fn draw_inputs_with(
         Some(false) => 1.0,
         None => drawn_life,
     };
+    let drawn_snowball = rng.random::<f64>();
+    let snowball_draw = match overrides.snowball {
+        Some(true) => 0.0,
+        Some(false) => 1.0,
+        None => drawn_snowball,
+    };
 
     PlanetInputs {
         mass_earth,
@@ -371,6 +386,7 @@ pub fn draw_inputs_with(
         volatiles,
         radiogenic,
         life_draw,
+        snowball_draw,
     }
 }
 
@@ -620,6 +636,26 @@ mod tests {
         let yes = draw_inputs_with(&earth_context(), 1.0, &with(true), &mut rng(3));
         let no = draw_inputs_with(&earth_context(), 1.0, &with(false), &mut rng(3));
         assert_eq!((yes.life_draw, no.life_draw), (0.0, 1.0));
+    }
+
+    #[test]
+    fn snowball_forced_or_forbidden_shifts_no_other_draw() {
+        let with = |snowball| InputOverrides {
+            snowball: Some(snowball),
+            ..Default::default()
+        };
+        let drawn = draw_inputs(&earth_context(), 1.0, &mut rng(3));
+        let yes = draw_inputs_with(&earth_context(), 1.0, &with(true), &mut rng(3));
+        let no = draw_inputs_with(&earth_context(), 1.0, &with(false), &mut rng(3));
+        assert_eq!((yes.snowball_draw, no.snowball_draw), (0.0, 1.0));
+        assert!((0.0..1.0).contains(&drawn.snowball_draw));
+        assert_eq!(
+            PlanetInputs {
+                snowball_draw: drawn.snowball_draw,
+                ..yes
+            },
+            drawn
+        );
     }
 
     #[test]

@@ -561,7 +561,8 @@ mod tests {
 
     /// Earth: the context of `reference::sun_at(1.0)`, the inputs the
     /// `earth-like` archetype sets (one Earth mass, CMF 0.325, an ocean,
-    /// no envelope, CO₂ and N₂ on their rule, life), the rest drawn.
+    /// no envelope, CO₂ and N₂ on their rule, life, no snowball), the rest
+    /// drawn.
     fn earth() -> (Context, PlanetModel) {
         let context = sun_at(1.0);
         let overrides = InputOverrides {
@@ -575,6 +576,7 @@ mod tests {
             s: None,
             radiogenic: None,
             life: Some(true),
+            snowball: Some(false),
         };
         let inputs = draw_inputs_with(&context, 1.0, &overrides, &mut StdRng::seed_from_u64(1));
         let model = planet_model(&context, inputs);

@@ -43,6 +43,13 @@ pub struct Climate {
     /// The carbonate thermostat holds the temperature at
     /// [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
     pub regulated: bool,
+    /// The body is a snowball: its climate also has a temperate state,
+    /// and it was drawn frozen over, its CO₂ building up from its
+    /// volcanoes towards the thaw ([`climate`], [`snowball_chance`]).
+    /// A body with no temperate state (past the outer edge of the
+    /// habitable zone) is frozen but not a snowball.
+    #[serde(default)]
+    pub snowball: bool,
 }
 
 /// Stefan–Boltzmann constant, W/(m²·K⁴) (CODATA 2018, exact).
@@ -908,6 +915,20 @@ pub(super) fn wet_temperature_k(
     wet_climate(context, *gases, heat_flux_w_m2, water_bar).1
 }
 
+/// What a body's carbon cycle gives its climate beyond its air: the
+/// carbon it holds and the draw of its snowball state.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CarbonCycle {
+    /// CO₂ the body has outgassed, bar, before escape to space and the
+    /// cold trap: the carbon inventory weathering and volcanoes trade
+    /// with the air ([`super::atmosphere::outgassed`]).
+    pub inventory_bar: f64,
+    /// Uniform in `[0, 1]` ([`super::PlanetInputs::snowball_draw`]): a
+    /// body with both a temperate and a frozen state is a snowball when
+    /// it is below [`snowball_chance`].
+    pub snowball_draw: f64,
+}
+
 /// The climate of a body and its gases once the climate has set its CO₂
 /// and water vapour, and its Bond albedo with them.
 ///
@@ -916,9 +937,7 @@ pub(super) fn wet_temperature_k(
 /// ([`super::albedo::cover`]: ice, ocean, clouds) and whether a
 /// sulphuric deck forms, those set the Bond albedo
 /// ([`super::albedo::bond_albedo`]), and the albedo the light the climate
-/// absorbs ([`Context::with_albedo`]). It starts warm, from a body with
-/// no ice, and settles on the warmest climate the ice–albedo feedback
-/// allows. Under each albedo:
+/// absorbs ([`Context::with_albedo`]). Under each albedo:
 ///
 /// - In a runaway greenhouse, or without water, the gases are as given
 ///   (a runaway's steam is already in them) and the temperature is
@@ -929,13 +948,37 @@ pub(super) fn wet_temperature_k(
 ///   saturation, never more than the `water_bar` all of the body's water
 ///   would weigh as vapour), solved together with it.
 /// - With plates as well, the carbonate thermostat (Walker, Hays & Kasting
-///   1981, doi:10.1029/JC086iC10p09776) sets the CO₂ between none and
-///   all that is outgassed (`gases.co2`, never more) so that the
+///   1981, doi:10.1029/JC086iC10p09776) sets the CO₂ so that the
 ///   temperature is [`THERMOSTAT_K`], the vapour taken at that
-///   temperature. If all the CO₂ is not enough, it stays in the air and
-///   the planet is colder (weathering stops on a frozen planet, so the
-///   CO₂ accumulates); if none is still too warm, the planet is hotter.
-///   Only a temperature reached is `regulated`.
+///   temperature. Weathering slows on a cold planet while volcanoes go on,
+///   so its CO₂ builds up past what the air held before the climate
+///   (Kasting et al. 1993, doi:10.1006/icar.1993.1010; issue #510), up
+///   to the carbon inventory (`carbon.inventory_bar`) and at most what
+///   does not frost out where the body is coldest (its equilibrium
+///   temperature, the cold trap of [`super::atmosphere::cold_trap`]).
+///   If no CO₂ in that range reaches the thermostat, the planet takes the
+///   CO₂ of its warmest climate, the maximum greenhouse
+///   ([`maximum_greenhouse`]); if none is still too warm, the planet is
+///   hotter. Only a temperature reached is `regulated`.
+///
+/// A body that keeps water has two branches ([`branches`]):
+///
+/// - the temperate one, started warm from a body with no ice: the
+///   climate a young planet cools into from its hot start. Where it boils,
+///   the body boils (a temperate state it could reach from an icy start
+///   is not the one it formed into);
+/// - where that one keeps liquid water, the frozen one, started from a
+///   body covered in ice, with the CO₂ the temperate one held when it
+///   froze: weathering stops under the ice, and volcanic CO₂ builds up
+///   until it thaws the planet (Hoffman et al. 2017,
+///   doi:10.1126/sciadv.1600983).
+///
+/// When both exist (the ice–albedo feedback makes the body bistable), it
+/// is a snowball when `carbon.snowball_draw` is below
+/// [`snowball_chance`]: the share of its history such a planet spends
+/// frozen. Its CO₂ is then the amount built up so far, the fraction
+/// `draw / chance` of the way from the CO₂ it froze with to the CO₂ that
+/// thaws it, so that a seed gives one state and one CO₂.
 ///
 /// The liquid follows from the temperature and pressure (see
 /// [`LAVA_K`] and the phase diagrams of water and hydrocarbons).
@@ -946,21 +989,87 @@ pub fn climate(
     regime: Regime,
     heat_flux_w_m2: f64,
     water_bar: f64,
+    carbon: CarbonCycle,
 ) -> (Gases, Climate) {
-    let body = Body {
+    let body = Body::new(
         context,
         gases,
         water,
         regime,
         heat_flux_w_m2,
         water_bar,
+        carbon.inventory_bar,
+    );
+    let branches = branches(&body);
+    let Some(frozen) = &branches.frozen else {
+        return branches.warm;
     };
-    settle(&body, warm_start(&body))
+    let chance = frozen.chance(&body);
+    if carbon.snowball_draw >= chance {
+        return branches.warm;
+    }
+    let share = (carbon.snowball_draw / chance).clamp(0.0, 1.0);
+    let built_up = frozen.froze_bar + share * (frozen.still_frozen_bar - frozen.froze_bar);
+    let (gases, climate) = body.frozen_at(built_up);
+    let snowball = frozen_over(&climate);
+    (
+        gases,
+        Climate {
+            snowball,
+            ..climate
+        },
+    )
 }
+
+/// Whether `climate` is frozen over: no liquid water and a surface under
+/// the melting point of ice.
+fn frozen_over(climate: &Climate) -> bool {
+    climate.liquid != SurfaceLiquid::Water && climate.temperature_k < ICE_MELTS_K
+}
+
+/// The share of its history a planet whose climate has both a temperate
+/// and a frozen state spends frozen: a snowball lasts until volcanoes
+/// have given it the `thaw_bar` of CO₂ (bar) that melts it, at the rate
+/// of its volcanism ([`super::interim::volcanism`] of `heat_flux_w_m2`
+/// and `regime`, against Earth's), and the temperate phase between two
+/// snowballs lasts as long as Earth's volcanism takes to give
+/// [`SNOWBALL_WARM_BAR`]:
+///
+/// ```text
+/// chance = t_frozen / (t_frozen + t_warm) = d / (d + B · v / v⊕)
+/// ```
+///
+/// with `d` the CO₂ to thaw, `B` [`SNOWBALL_WARM_BAR`] and `v / v⊕` the
+/// volcanism against Earth's. Rare near Earth's orbit, where a little
+/// CO₂ thaws the ice; likelier towards the outer edge of the habitable
+/// zone, where more is needed, and on a planet that outgasses little (a
+/// stagnant lid, a low heat flux); 1 when the CO₂ cannot thaw it
+/// (`thaw_bar` infinite) or nothing outgasses.
+pub fn snowball_chance(thaw_bar: f64, heat_flux_w_m2: f64, regime: Regime) -> f64 {
+    let earth = super::interim::volcanism(super::interim::EARTH_HEAT_FLUX_W_M2, Regime::Plates);
+    let rate = super::interim::volcanism(heat_flux_w_m2, regime) / earth;
+    if !thaw_bar.is_finite() || rate <= 0.0 {
+        return 1.0;
+    }
+    let d = thaw_bar.max(0.0);
+    d / (d + SNOWBALL_WARM_BAR * rate)
+}
+
+/// CO₂, bar, that Earth's volcanism gives the air over one temperate
+/// phase between two snowballs ([`snowball_chance`]). Calibration on
+/// Earth, the only planet whose snowballs are known: it spent about a
+/// tenth of its history in snowball states (the Sturtian and Marinoan
+/// glaciations, some 70 Myr, and the Palaeoproterozoic ones; Hoffman et
+/// al. 2017, doi:10.1126/sciadv.1600983, from memory, not checked), and
+/// the model's Earth at 1 AU needs about 0.09 bar of CO₂ more to thaw
+/// than it froze with, so 0.8 bar gives it a chance of 0.1.
+const SNOWBALL_WARM_BAR: f64 = 0.8;
 
 /// What [`climate`] solves for: the body's context, its air before the
 /// climate, its water, its regime, its internal heat flux (W/m²) and the
-/// bar its water would weigh as vapour.
+/// bar its water would weigh as vapour; the most CO₂ its carbon cycle can
+/// put in the air; and the CO₂ the frozen branch holds (`None`: the
+/// thermostat's, or the air's).
 struct Body<'a> {
     context: &'a Context,
     gases: Gases,
@@ -968,6 +1077,138 @@ struct Body<'a> {
     regime: Regime,
     heat_flux_w_m2: f64,
     water_bar: f64,
+    /// The most CO₂ the air can hold, bar: the carbon inventory, at most
+    /// what does not frost out at the equilibrium temperature, and never
+    /// less than the air already holds.
+    most_co2: f64,
+    co2: Option<f64>,
+    /// The CO₂ of the maximum greenhouse, once found.
+    greenhouse: std::cell::OnceCell<f64>,
+}
+
+impl<'a> Body<'a> {
+    fn new(
+        context: &'a Context,
+        gases: Gases,
+        water: &'a Water,
+        regime: Regime,
+        heat_flux_w_m2: f64,
+        water_bar: f64,
+        inventory_bar: f64,
+    ) -> Self {
+        let condenses = super::atmosphere::co2_frost_bar(context.equilibrium_k);
+        Body {
+            context,
+            gases,
+            water,
+            regime,
+            heat_flux_w_m2,
+            water_bar,
+            most_co2: inventory_bar.min(condenses).max(gases.co2).max(0.0),
+            co2: None,
+            greenhouse: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// Whether the body keeps water out of a runaway.
+    fn wet(&self) -> bool {
+        !self.water.runaway && self.water.kept_kg > 0.0
+    }
+
+    /// The frozen branch with `co2` bar of CO₂ in the air: the fixed point
+    /// started from a body covered in ice ([`ICE_COVERED_K`]).
+    fn frozen_at(&self, co2: f64) -> (Gases, Climate) {
+        let body = Body {
+            co2: Some(co2),
+            gases: Gases { co2, ..self.gases },
+            greenhouse: std::cell::OnceCell::new(),
+            ..*self
+        };
+        let start = derived_albedo(ICE_COVERED_K, &body.gases, body.water);
+        settle(&body, start)
+    }
+}
+
+/// Mean surface temperature, K, at and under which a body's water is
+/// all ice ([`super::albedo::cover`]): where the frozen branch starts.
+const ICE_COVERED_K: f64 = super::albedo::ICE_COVERED_K;
+
+/// Bisection steps of the CO₂ that thaws a snowball ([`branches`]), in
+/// `ln CO₂`: 2⁻¹² of the range, under a thousandth of the CO₂ for a range
+/// of a few decades.
+const THAW_STEPS: usize = 12;
+
+/// The branches of a body's climate ([`climate`]).
+struct Branches {
+    /// The temperate branch (or the only one).
+    warm: (Gases, Climate),
+    /// The frozen branch, where the body is bistable.
+    frozen: Option<FrozenBranch>,
+}
+
+/// A frozen branch beside a temperate one.
+struct FrozenBranch {
+    /// CO₂ the temperate branch held when it froze, bar.
+    froze_bar: f64,
+    /// The most CO₂ known to leave the body frozen, bar: just under the
+    /// thaw, or all the air can hold when that never thaws it.
+    still_frozen_bar: f64,
+    /// The least CO₂ known to thaw it, bar; infinite when none does.
+    thaw_bar: f64,
+}
+
+impl FrozenBranch {
+    /// [`snowball_chance`] for this branch of `body`.
+    fn chance(&self, body: &Body) -> f64 {
+        snowball_chance(
+            self.thaw_bar - self.froze_bar,
+            body.heat_flux_w_m2,
+            body.regime,
+        )
+    }
+}
+
+/// The temperate branch of `body` and, where it keeps liquid water and
+/// the same CO₂ also leaves the body frozen from an icy start, the frozen
+/// one with the CO₂ that thaws it.
+fn branches(body: &Body) -> Branches {
+    let warm = settle(body, warm_start(body));
+    if !body.wet() || warm.1.liquid != SurfaceLiquid::Water {
+        return Branches { warm, frozen: None };
+    }
+    let froze_bar = warm.0.co2;
+    let thawed = |co2: f64| !frozen_over(&body.frozen_at(co2).1);
+    if thawed(froze_bar) {
+        return Branches { warm, frozen: None };
+    }
+    let most = body.most_co2;
+    let frozen = if most <= froze_bar || !thawed(most) {
+        FrozenBranch {
+            froze_bar,
+            still_frozen_bar: most.max(froze_bar),
+            thaw_bar: f64::INFINITY,
+        }
+    } else {
+        // Frozen at `low`, thawed at `high`: bisect in `ln CO₂`.
+        let (mut low, mut high) = (froze_bar.max(most * 1e-12), most);
+        for _ in 0..THAW_STEPS {
+            let mid = (low * high).sqrt();
+            if thawed(mid) {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        FrozenBranch {
+            froze_bar,
+            still_frozen_bar: low,
+            thaw_bar: high,
+        }
+    };
+    Branches {
+        warm,
+        frozen: Some(frozen),
+    }
 }
 
 /// Most steps of the albedo's fixed point ([`settle`]): far more than
@@ -988,14 +1229,13 @@ const ALBEDO_DAMPING: f64 = 0.5;
 /// the runaway blend ([`absorbing`]): its gases, its temperature, whether
 /// the thermostat holds it, and the context it absorbed its light in.
 fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
-    let wet = !body.water.runaway && body.water.kept_kg > 0.0;
     let context = absorbing(body.context, body.water, body.gases.h2o, albedo);
     let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
-    let (gases, t, regulated) = if !wet {
+    let (gases, t, regulated) = if !body.wet() {
         let t = surface_temperature_k(&context, &body.gases, flux);
         (body.gases, t, false)
-    } else if body.regime == Regime::Plates {
-        thermostat(&context, body.gases, flux, water_bar)
+    } else if body.regime == Regime::Plates && body.co2.is_none() {
+        thermostat(body, &context)
     } else {
         let (g, t) = wet_climate(&context, body.gases, flux, water_bar);
         (g, t, false)
@@ -1030,7 +1270,8 @@ fn warm_start(body: &Body) -> f64 {
 /// to the one its temperature derives, until the temperature moves less
 /// than [`ALBEDO_TOLERANCE_K`] and the derived albedo would move the
 /// equilibrium temperature less than that too. The climate keeps the albedo it was
-/// solved under, so that it reproduces.
+/// solved under, so that it reproduces. It is not a snowball: [`climate`]
+/// marks the frozen branch it draws.
 fn settle(body: &Body, start: f64) -> (Gases, Climate) {
     let equilibrium_k = |albedo: f64| body.context.with_albedo(albedo).equilibrium_k;
     let mut albedo = start;
@@ -1060,20 +1301,19 @@ fn settle(body: &Body, start: f64) -> (Gases, Climate) {
             bond_albedo: runaway_albedo(body.context, body.water, body.gases.h2o, albedo),
             liquid,
             regulated,
+            snowball: false,
         },
     )
 }
 
-/// The carbonate thermostat: the CO₂ in `[0, gases.co2]` that puts the
-/// surface at [`THERMOSTAT_K`], solved in `ln CO₂` (see [`climate`]). Returns
-/// the gases, the temperature and whether it was reached.
-fn thermostat(
-    context: &Context,
-    gases: Gases,
-    heat_flux_w_m2: f64,
-    water_bar: f64,
-) -> (Gases, f64, bool) {
-    let outgassed = gases.co2.max(0.0);
+/// The carbonate thermostat of `body` under the light of `context`: the
+/// CO₂ in `[0, most_co2]` that puts the surface at [`THERMOSTAT_K`],
+/// solved in `ln CO₂` (see [`climate`]). Returns the gases, the
+/// temperature and whether it was reached. Short of the thermostat with
+/// all the CO₂ the air can hold, it takes the [`maximum_greenhouse`].
+fn thermostat(body: &Body, context: &Context) -> (Gases, f64, bool) {
+    let (gases, heat_flux_w_m2, water_bar) = (body.gases, body.heat_flux_w_m2, body.water_bar);
+    let most = body.most_co2;
     let at_target = with_vapour(gases, THERMOSTAT_K, water_bar);
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = SIGMA * t_eq.powi(4) + heat_flux_w_m2.max(0.0);
@@ -1083,17 +1323,10 @@ fn thermostat(
     // outgoing radiation rises with the surface temperature).
     let olr_at =
         |co2: f64| column::olr_under_skin_w_m2(&Gases { co2, ..at_target }, THERMOSTAT_K, skin);
-    let all = absorbed - olr_at(outgassed);
+    let all = absorbed - olr_at(most);
     if all <= 0.0 {
-        let (g, t) = wet_climate(
-            context,
-            Gases {
-                co2: outgassed,
-                ..gases
-            },
-            heat_flux_w_m2,
-            water_bar,
-        );
+        let co2 = *body.greenhouse.get_or_init(|| maximum_greenhouse(body));
+        let (g, t) = wet_climate(context, Gases { co2, ..gases }, heat_flux_w_m2, water_bar);
         return (g, t, false);
     }
     if olr_at(0.0) < absorbed {
@@ -1106,10 +1339,10 @@ fn thermostat(
         return (g, t, false);
     }
     // The CO₂ at which a surface at `THERMOSTAT_K` balances, solved in
-    // `ln CO₂` from a trace (2⁻⁶⁰ of the outgassed CO₂, the resolution
-    // of the bisection it replaces) up to all of it.
+    // `ln CO₂` from a trace (2⁻⁶⁰ of the most, the resolution of the
+    // bisection it replaces) up to all of it.
     let deficit = |ln_co2: f64| absorbed - olr_at(ln_co2.exp());
-    let floor = outgassed * 2f64.powi(-60);
+    let floor = most * 2f64.powi(-60);
     let low = Point {
         x: floor.ln(),
         f: deficit(floor.ln()),
@@ -1118,7 +1351,7 @@ fn thermostat(
         floor
     } else {
         let top = Point {
-            x: outgassed.ln(),
+            x: most.ln(),
             f: all,
         };
         solve(deficit, low, top, 1e-9).exp()
@@ -1132,6 +1365,65 @@ fn thermostat(
         surface_temperature_k(context, &regulated, heat_flux_w_m2),
         true,
     )
+}
+
+/// Decades of CO₂ under the most the air can hold that
+/// [`maximum_greenhouse`] searches.
+const GREENHOUSE_DECADES: f64 = 4.0;
+
+/// Golden-section steps of [`maximum_greenhouse`]: 0.618⁴⁰ of its range,
+/// some 1e-8 decades.
+const GREENHOUSE_STEPS: usize = 40;
+
+/// The CO₂, bar, of the warmest climate of `body` within its
+/// `most_co2` (Kasting et al. 1993, doi:10.1006/icar.1993.1010, the
+/// maximum greenhouse): the amount at which a surface at
+/// [`THERMOSTAT_K`] gains most, the light it absorbs under the albedo
+/// that CO₂ derives (its Rayleigh scattering) against what its column
+/// sends out. Golden-section search in `ln CO₂` over
+/// [`GREENHOUSE_DECADES`] under the most; with the column of
+/// [`super::column`] the CO₂'s greenhouse outgrows its scattering, so it
+/// is the most the air can hold in practice.
+fn maximum_greenhouse(body: &Body) -> f64 {
+    let most = body.most_co2;
+    if most <= 0.0 {
+        return 0.0;
+    }
+    let at_target = with_vapour(body.gases, THERMOSTAT_K, body.water_bar);
+    let gain = |ln_co2: f64| {
+        let gases = Gases {
+            co2: ln_co2.exp(),
+            ..at_target
+        };
+        let albedo = derived_albedo(THERMOSTAT_K, &gases, body.water);
+        let t_eq = body.context.with_albedo(albedo).equilibrium_k.max(0.0);
+        let skin = t_eq * 0.5_f64.powf(0.25);
+        SIGMA * t_eq.powi(4) - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin)
+    };
+    let ratio = (5f64.sqrt() - 1.0) / 2.0;
+    let (mut a, mut b) = (most.ln() - GREENHOUSE_DECADES * 10f64.ln(), most.ln());
+    let (mut c, mut d) = (b - ratio * (b - a), a + ratio * (b - a));
+    let (mut fc, mut fd) = (gain(c), gain(d));
+    for _ in 0..GREENHOUSE_STEPS {
+        if fc < fd {
+            a = c;
+            (c, fc) = (d, fd);
+            d = a + ratio * (b - a);
+            fd = gain(d);
+        } else {
+            b = d;
+            (d, fd) = (c, fc);
+            c = b - ratio * (b - a);
+            fc = gain(c);
+        }
+    }
+    // The end of the range when the gain still grows there.
+    let best = if gain(most.ln()) >= fc.max(fd) {
+        most.ln()
+    } else {
+        (a + b) / 2.0
+    };
+    best.exp().min(most)
 }
 
 #[cfg(test)]
@@ -1150,8 +1442,17 @@ mod tests {
             d.regime,
             d.heat_flux_w_m2,
             d.water_bar,
+            d.carbon,
         );
         (d, g, c)
+    }
+
+    /// A carbon cycle of `inventory_bar` that keeps the temperate state.
+    fn temperate(inventory_bar: f64) -> CarbonCycle {
+        CarbonCycle {
+            inventory_bar,
+            snowball_draw: 1.0,
+        }
     }
 
     /// The climate of the reference body `name`.
@@ -1337,6 +1638,7 @@ mod tests {
             d.regime,
             d.heat_flux_w_m2,
             d.water_bar,
+            temperate(scarce.co2),
         );
         assert!(g.co2 <= scarce.co2, "{g:?}");
         assert!(!c.regulated, "{c:?}");
@@ -1417,7 +1719,15 @@ mod tests {
         assert!(!boils(&close, &air, &ocean.keeping(5e17), 0.09, 1e-4));
         // Without a balance, the climate puts all the water in the air
         // (a placeholder the chain replaces).
-        let (g, _) = climate(&close, air, &ocean, Regime::Stagnant, 0.09, 280.0);
+        let (g, _) = climate(
+            &close,
+            air,
+            &ocean,
+            Regime::Stagnant,
+            0.09,
+            280.0,
+            temperate(air.co2),
+        );
         assert_eq!(g.h2o, 280.0, "{g:?}");
     }
 
@@ -1462,6 +1772,7 @@ mod tests {
             d.regime,
             d.heat_flux_w_m2,
             d.water_bar,
+            d.carbon,
         )
     }
 
@@ -1595,34 +1906,162 @@ mod tests {
         assert!((optical_depth(&nitrogen) / expected - 1.0).abs() < 1e-12);
     }
 
+    /// Earth's inputs with the snowball draw `draw`.
+    fn earth_drawn(draw: f64) -> PlanetInputs {
+        PlanetInputs {
+            snowball_draw: draw,
+            ..model_inputs(reference("Earth"))
+        }
+    }
+
+    /// The chance that `inputs` at `orbit_au` round the Sun are drawn a
+    /// snowball: [`snowball_chance`] of their frozen branch, 0 with no
+    /// frozen branch beside a temperate one, 1 with no temperate one.
+    fn chance_at(inputs: &PlanetInputs, orbit_au: f64) -> f64 {
+        let d = derive_at(inputs, orbit_au);
+        let body = Body::new(
+            &d.context,
+            d.gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+            d.carbon.inventory_bar,
+        );
+        let b = branches(&body);
+        match &b.frozen {
+            Some(frozen) => frozen.chance(&body),
+            None if b.warm.1.liquid == SurfaceLiquid::Water => 0.0,
+            None => 1.0,
+        }
+    }
+
     #[test]
-    fn an_earth_at_1_6_au_thaws_under_its_best_co2() {
-        // The maximum greenhouse of Kopparapu et al. 2013 (*ApJ* 765, 131,
-        // doi:10.1088/0004-637X/765/2/131): the cold edge of the habitable
-        // zone, about 1.67 AU around the Sun, is where the best amount of
-        // CO₂ (scanned up to 8 bar) just holds the surface at 273 K, the
-        // Rayleigh scattering of the thick CO₂ (in the derived albedo)
-        // capping its warming: an Earth at 1.6 AU reaches 273 K at some
-        // CO₂ up to 8 bar.
-        let d = derive_at(&model_inputs(reference("Earth")), 1.6);
-        let warmest = (1..=16)
-            .map(|i| {
-                let gases = Gases {
-                    co2: 0.5 * f64::from(i),
-                    ..d.gases
-                };
-                let (_, c) = climate(
-                    &d.context,
-                    gases,
-                    &d.water,
-                    Regime::Stagnant,
-                    d.heat_flux_w_m2,
-                    d.water_bar,
-                );
-                c.temperature_k
-            })
-            .fold(f64::NEG_INFINITY, f64::max);
-        assert!(warmest >= 273.0, "{warmest} {:?}", d.gases);
+    fn an_earth_track_planet_stays_temperate_to_the_maximum_greenhouse() {
+        // The outer edge of the Sun's habitable zone, the maximum
+        // greenhouse, is about 1.67 AU (Kopparapu et al. 2013, *ApJ* 765,
+        // 131, doi:10.1088/0004-637X/765/2/131): an Earth on its temperate
+        // branch builds up its CO₂ and keeps liquid water to 1.65 AU, and
+        // freezes beyond the edge. Colder the farther, with no step but
+        // the edge.
+        let earth = earth_drawn(1.0);
+        let mut last = f64::INFINITY;
+        for au in [1.0, 1.4, 1.6, 1.65, 1.8, 2.5] {
+            let (_, g, c) = climate_at(&earth, au);
+            println!(
+                "{au} AU: {:.1} K, A {:.3}, CO₂ {:.3e} bar, {:?}, regulated {}",
+                c.temperature_k, c.bond_albedo, g.co2, c.liquid, c.regulated
+            );
+            if au <= 1.65 {
+                assert!(c.temperature_k >= 273.0, "{au} AU: {c:?} {g:?}");
+                assert_eq!(c.liquid, SurfaceLiquid::Water, "{au} AU: {c:?}");
+            } else {
+                assert!(c.temperature_k < 273.0, "{au} AU: {c:?} {g:?}");
+            }
+            assert!(!c.snowball, "{au} AU: {c:?}");
+            assert!(
+                c.temperature_k <= last + 0.05,
+                "{au} AU: {c:?} after {last}"
+            );
+            last = c.temperature_k;
+        }
+    }
+
+    #[test]
+    fn co2_builds_up_past_the_outgassed_snapshot() {
+        // At 1.6 AU, an air that holds a tenth of a bar of CO₂ before the
+        // climate (what escape and the cold trap left of it): weathering
+        // slows and volcanoes give it more, up to the thermostat, within
+        // the carbon inventory and what does not frost out.
+        let d = derive_at(&earth_drawn(1.0), 1.6);
+        let snapshot = Gases {
+            co2: 0.1,
+            ..d.gases
+        };
+        let with = |carbon: CarbonCycle| {
+            climate(
+                &d.context,
+                snapshot,
+                &d.water,
+                d.regime,
+                d.heat_flux_w_m2,
+                d.water_bar,
+                carbon,
+            )
+        };
+        let (g, c) = with(d.carbon);
+        assert!(g.co2 > snapshot.co2, "{g:?}");
+        assert!(g.co2 <= d.carbon.inventory_bar, "{g:?} {:?}", d.carbon);
+        let frost = super::super::atmosphere::co2_frost_bar(d.context.equilibrium_k);
+        assert!(g.co2 <= frost, "{g:?} {frost}");
+        assert!(c.regulated, "{c:?}");
+        // A smaller inventory stops it short of the thermostat.
+        let (g, c) = with(temperate(0.5));
+        assert!(g.co2 <= 0.5, "{g:?}");
+        assert!(!c.regulated, "{c:?}");
+        // A snowball builds its CO₂ up past what it froze with.
+        let earth = earth_drawn(1.0);
+        let (_, warm, _) = climate_at(&earth, 1.2);
+        let half = 0.5 * chance_at(&earth, 1.2);
+        let (_, frozen, c) = climate_at(&earth_drawn(half), 1.2);
+        assert!(c.snowball, "{c:?}");
+        assert!(frozen.co2 > warm.co2, "{frozen:?} {warm:?}");
+        assert!(frozen.co2 <= d.carbon.inventory_bar, "{frozen:?}");
+    }
+
+    #[test]
+    fn far_planets_only_freeze() {
+        // Review Focus 3: with no temperate state, the snowball draw
+        // changes nothing in the surface.
+        for au in [5.0, 10.0] {
+            let surface = |draw: f64| {
+                crate::planet::planet_model(
+                    &crate::planet::reference::sun_at(au),
+                    earth_drawn(draw),
+                )
+                .surface
+                .expect("a bare world has a surface")
+            };
+            let (cold, warm) = (surface(0.0), surface(1.0));
+            assert_eq!(cold.gases, warm.gases, "{au} AU");
+            assert_eq!(cold.climate, warm.climate, "{au} AU");
+            assert!(!cold.climate.snowball, "{au} AU");
+        }
+    }
+
+    #[test]
+    fn snowballs_are_rare_near_earth_and_common_near_the_edge() {
+        // Earth spent about a tenth of its history in snowball states
+        // (Hoffman et al. 2017, doi:10.1126/sciadv.1600983).
+        let earth = earth_drawn(1.0);
+        let near = chance_at(&earth, 1.0);
+        println!(
+            "chance at 1.0 AU {near:.3}, 1.2 AU {:.3}, 1.4 AU {:.3}",
+            chance_at(&earth, 1.2),
+            chance_at(&earth, 1.4)
+        );
+        assert!((0.03..=0.15).contains(&near), "{near}");
+        let far = chance_at(&earth, 1.5);
+        assert!(far > near, "{far} vs {near}");
+        assert_eq!(chance_at(&earth, 1.8), 1.0);
+        // Less outgassing, longer snowballs.
+        let d = derive_at(&earth, 1.0);
+        let plates = snowball_chance(0.05, d.heat_flux_w_m2, Regime::Plates);
+        let lid = snowball_chance(0.05, d.heat_flux_w_m2, Regime::Stagnant);
+        assert!(lid > plates, "{lid} vs {plates}");
+        assert_eq!(
+            snowball_chance(f64::INFINITY, d.heat_flux_w_m2, Regime::Plates),
+            1.0
+        );
+    }
+
+    #[test]
+    fn a_snowball_keeps_its_ocean_frozen() {
+        let (_, g, c) = climate_at(&earth_drawn(0.0), 1.2);
+        assert!(c.snowball, "{c:?} {g:?}");
+        assert_eq!(c.liquid, SurfaceLiquid::None, "{c:?}");
+        assert!(c.bond_albedo > 0.5, "{c:?}");
+        assert!(c.temperature_k < 260.0, "{c:?}");
     }
 
     #[test]

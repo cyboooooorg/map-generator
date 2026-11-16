@@ -49,4 +49,10 @@ radiogenic: number | null,
  * `Some(true)`: life arises wherever the world allows it;
  * `Some(false)`: never.
  */
-life: boolean | null, };
+life: boolean | null, 
+/**
+ * `Some(true)`: the planet is a snowball wherever its climate has a
+ * frozen state beside the temperate one; `Some(false)`: never, it
+ * keeps the temperate state (an asked `earth-like`).
+ */
+snowball?: boolean, };

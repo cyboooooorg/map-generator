@@ -204,6 +204,11 @@ pub struct WorldRequest {
     /// `true`: life arises wherever the world allows it; `false`: never;
     /// left out, drawn.
     pub life: Option<bool>,
+    /// `true`: the planet is a snowball wherever its climate has a frozen
+    /// state beside the temperate one; `false`: never; left out, the
+    /// archetype's, else drawn (see [`crate::planet::climate::climate`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snowball: Option<bool>,
     /// `auto` (rarely the moon of a giant, as the seed draws, the default),
     /// `giant` (always) or `none`.
     pub host: Option<crate::exomoon::HostMode>,
@@ -512,6 +517,7 @@ impl WorldRequest {
             s: self.s.or(a.s),
             radiogenic: self.radiogenic.or(a.radiogenic),
             life: self.life.or(a.life),
+            snowball: self.snowball.or(a.snowball),
         }
     }
 
@@ -865,6 +871,7 @@ impl WorldRequest {
             s: self.s.or(set.s),
             radiogenic: self.radiogenic.or(set.radiogenic),
             life: self.life.or(set.life),
+            snowball: self.snowball.or(set.snowball),
             host: if giant {
                 self.host
             } else {

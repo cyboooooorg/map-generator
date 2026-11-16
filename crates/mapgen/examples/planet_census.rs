@@ -35,13 +35,28 @@
 //!    same planets (super-Earths and sub-Neptunes should be within a
 //!    factor 1.5 of each other, and the close-in ice worlds are watched);
 //! 6. the median and mean surface age of the planets with a surface, by
-//!    class and tectonic regime.
+//!    class and tectonic regime;
+//! 7. the snowballs (`Climate::snowball`: drawn frozen over though their
+//!    climate also has a temperate state) and the planets with liquid
+//!    water, by band of insolation (Earth's = 1): snowballs should be
+//!    rarer near 1 than towards the outer edge of the habitable zone.
 use std::collections::BTreeMap;
 
-use mapgen::planet::{body_model, interim};
+use mapgen::planet::{SurfaceLiquid, body_model, interim};
+use mapgen::star::StarInfo;
 use mapgen::system::{BodyKind, SystemRequest, WholeSystemRequest, draw};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+
+/// Insolation bands of item 7, Earth's = 1: lower edge and label.
+const LIGHT_BANDS: [(f64, &str); 6] = [
+    (1.1, ">1.1"),
+    (0.9, "0.9-1.1"),
+    (0.7, "0.7-0.9"),
+    (0.5, "0.5-0.7"),
+    (0.36, "0.36-0.5"),
+    (0.0, "<0.36"),
+];
 
 /// Radius bins of Fulton et al. 2017, Earth radii: lower edge and label.
 const BINS: [(f64, &str); 9] = [
@@ -112,6 +127,8 @@ fn main() {
     let mut close_in = [0u32; 20];
     let mut close_in_total = 0u32;
     let mut close_in_class: BTreeMap<&'static str, u32> = BTreeMap::new();
+    // By insolation band: [snowballs, with liquid water].
+    let mut snowballs = [[0u32; 2]; LIGHT_BANDS.len()];
 
     for seed in 1..=count {
         let request = SystemRequest::System(WholeSystemRequest {
@@ -164,6 +181,14 @@ fn main() {
                     }
                 }
                 oxygenated += u32::from(surface.life.oxygenated);
+                let p = &body.params;
+                let light = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr).insolation;
+                let band = LIGHT_BANDS
+                    .iter()
+                    .position(|&(low, _)| f64::from(light) >= low)
+                    .unwrap_or(LIGHT_BANDS.len() - 1);
+                snowballs[band][0] += u32::from(surface.climate.snowball);
+                snowballs[band][1] += u32::from(surface.climate.liquid == SurfaceLiquid::Water);
             }
             if body.orbit.period_days < 100.0 {
                 close_in_total += 1;
@@ -306,6 +331,11 @@ fn main() {
         share(life, with_surface),
         share(oxygenated, with_surface)
     );
+
+    println!("\nsnowballs / planets with liquid water, by insolation (Earth's = 1)");
+    for (&(_, label), [snow, wet]) in LIGHT_BANDS.iter().zip(snowballs) {
+        println!("  S {label:>8}: {snow:>4} / {wet:>4}");
+    }
 
     println!("\nradius histogram, period under 100 days ({close_in_total} planets)");
     for (i, n) in close_in.iter().enumerate() {

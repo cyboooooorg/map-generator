@@ -14,8 +14,8 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 /// An insolation bin of the census: label, bounds and its plate planets
-/// (temperature, liquid water, frozen, CO2).
-type Bin<'a> = (&'a str, f64, f64, Vec<(f64, bool, bool, f64)>);
+/// (temperature, liquid water, frozen, CO2, snowball).
+type Bin<'a> = (&'a str, f64, f64, Vec<(f64, bool, bool, f64, bool)>);
 
 fn med(v: &mut [f64]) -> f64 {
     if v.is_empty() {
@@ -60,6 +60,7 @@ struct Row {
     cover: f64,
     sky_green: f64,
     regulated: bool,
+    snowball: bool,
 }
 
 fn row(model: &PlanetModel, volc: f64, s: f64) -> Option<Row> {
@@ -87,12 +88,16 @@ fn row(model: &PlanetModel, volc: f64, s: f64) -> Option<Row> {
         cover: f64::from(sky.cloud_cover),
         sky_green: f64::from(sky.greenhouse),
         regulated: surf.climate.regulated,
+        snowball: surf.climate.snowball,
     })
 }
 
-fn lone(arch: &str, au: f32, seed: u32) -> Option<Row> {
+/// A lone planet of `arch` at `au`; `snowball` overrides its snowball
+/// pin (`Some(true)`: the frozen branch wherever it exists).
+fn lone(arch: &str, au: f32, seed: u32, snowball: Option<bool>) -> Option<Row> {
     let req = WorldRequest {
         planet: Some(arch.into()),
+        snowball,
         seed: Some(seed),
         star: Some("G2V".into()),
         orbit_au: Some(au),
@@ -131,7 +136,7 @@ fn summarize(label: &str, rows: &[Row]) {
     let (p, pl, ph) = m(&|r| r.p);
     let gs: Vec<f64> = (0..7).map(|i| m(&|r| r.g[i]).0).collect();
     println!(
-        "{label:<22} Teq {:.0} A {:.2} S {:.2} | T {t:.0} [{tl:.0}-{th:.0}] P {p:.3} [{pl:.3}-{ph:.3}] | co2 {:.3e} n2 {:.3e} h2o {:.2e} ch4 {:.2e} so2 {:.2e} nh3 {:.1e} o2 {:.2e} | outCO2 {:.2e} reg {} | flux {:.3} volc {:.2} | {} | {} | base {} cloud {} haze {:.2} cover {:.2} gh {:.1} | {}",
+        "{label:<29} Teq {:.0} A {:.2} S {:.2} | T {t:.0} [{tl:.0}-{th:.0}] P {p:.3} [{pl:.3}-{ph:.3}] | co2 {:.3e} n2 {:.3e} h2o {:.2e} ch4 {:.2e} so2 {:.2e} nh3 {:.1e} o2 {:.2e} | outCO2 {:.2e} reg {} | flux {:.3} volc {:.2} | {} | {} | base {} cloud {} haze {:.2} cover {:.2} gh {:.1} | {}",
         m(&|r| r.teq).0,
         m(&|r| r.albedo).0,
         m(&|r| r.s).0,
@@ -173,8 +178,16 @@ fn main() {
             cases.push(("mars-like", a));
         }
         for (arch, au) in cases {
-            let rows: Vec<Row> = (1..=5).filter_map(|s| lone(arch, au, s)).collect();
+            let rows: Vec<Row> = (1..=5).filter_map(|s| lone(arch, au, s, None)).collect();
             summarize(&format!("{arch} {au}"), &rows);
+            // The frozen branch, where the climate also has one.
+            let frozen: Vec<Row> = (1..=5)
+                .filter_map(|s| lone(arch, au, s, Some(true)))
+                .filter(|r| r.snowball)
+                .collect();
+            if !frozen.is_empty() {
+                summarize(&format!("  frozen {arch} {au}"), &frozen);
+            }
         }
     }
     if all || which == "moons" {
@@ -267,6 +280,7 @@ fn main() {
                                 s.climate.liquid == SurfaceLiquid::Water,
                                 s.climate.temperature_k < 273.15,
                                 s.gases.co2,
+                                s.climate.snowball,
                             ));
                         }
                     }
@@ -284,8 +298,9 @@ fn main() {
             let mut c: Vec<f64> = v.iter().map(|x| x.3).collect();
             let w = v.iter().filter(|x| x.1).count();
             let f = v.iter().filter(|x| x.2).count();
+            let snowballs = v.iter().filter(|x| x.4).count();
             println!(
-                "S {label:<9} n {n:>4} medT {:.0} liquidWater {:.0}% frozen(<273K) {:.0}% medCO2 {:.2e} bar",
+                "S {label:<9} n {n:>4} medT {:.0} liquidWater {:.0}% frozen(<273K) {:.0}% snowball {snowballs} medCO2 {:.2e} bar",
                 med(&mut t),
                 100.0 * w as f64 / n.max(1) as f64,
                 100.0 * f as f64 / n.max(1) as f64,

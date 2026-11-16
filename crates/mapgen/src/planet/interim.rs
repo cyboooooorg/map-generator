@@ -101,12 +101,32 @@ const SIGMA: f64 = 5.670_374_419e-8;
 /// flux, radiogenic heat and secular cooling ([`super::secular_w`]),
 /// as the model's [`super::InternalHeat::flux_w_m2`] is: Earth's model
 /// gives about 0.090 W/m², a volcanism of about 0.5.
-const EARTH_HEAT_FLUX_W_M2: f64 = 0.087;
+pub(super) const EARTH_HEAT_FLUX_W_M2: f64 = 0.087;
 
 /// Volcanism of a world with Earth's heat flux, on the `[0, 1]` scale of
 /// [`crate::request::VOLCANIC`]. Calibration, no source: the middle of
 /// the range worlds draw from ([`fallback::VOLCANIC`]).
-const EARTH_VOLCANIC: f64 = 0.5;
+pub(super) const EARTH_VOLCANIC: f64 = 0.5;
+
+/// Volcanism of a body with the internal heat flux `flux_w_m2` in
+/// `regime`, before the world's range clamps it: `0.5 √(F / 0.087 W/m²)`
+/// ([`EARTH_VOLCANIC`], [`EARTH_HEAT_FLUX_W_M2`]), 1 in the heat-pipe
+/// regime, halved under a stagnant lid. The climate reads it too, as the
+/// rate at which volcanoes give a snowball its CO₂
+/// ([`super::climate::snowball_chance`]).
+pub(super) fn volcanism(flux_w_m2: f64, regime: Regime) -> f64 {
+    match regime {
+        Regime::HeatPipe => 1.0,
+        regime => {
+            let v = EARTH_VOLCANIC * (flux_w_m2.max(0.0) / EARTH_HEAT_FLUX_W_M2).sqrt();
+            if regime == Regime::Stagnant {
+                0.5 * v
+            } else {
+                v
+            }
+        }
+    }
+}
 
 /// Surface pressure under which water and hydrocarbons carve less, bar:
 /// [`crate::atmosphere::LIQUID_WATER_BAR`], under which the generator
@@ -543,17 +563,7 @@ pub fn params_for(
                     _ => 0.0,
                 };
                 let erosion = wet * (pressure / ERODING_BAR).min(1.0) as f32;
-                let volcanic = match surface.regime {
-                    Regime::HeatPipe => 1.0,
-                    regime => {
-                        let v = EARTH_VOLCANIC * (flux / EARTH_HEAT_FLUX_W_M2).sqrt();
-                        if regime == Regime::Stagnant {
-                            0.5 * v
-                        } else {
-                            v
-                        }
-                    }
-                };
+                let volcanic = volcanism(flux, surface.regime);
                 (
                     sea_level,
                     model_circumference,

@@ -34,6 +34,7 @@
 //! radiogenic = 1.0                    # Earth's abundance = 1
 //! age_gyr = 4.57                      # age of the system, Gyr; a typed age wins
 //! life = true                         # true: arises where it can; false: never
+//! snowball = false                    # true: frozen where it can; false: never
 //!
 //! [orbit]
 //! star = "G2V"                        # spectral type, used when asked alone
@@ -392,6 +393,10 @@ pub struct ArchetypeInputs {
     /// `true`: life arises wherever the world allows it; `false`: never.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub life: Option<bool>,
+    /// `true`: a snowball wherever the climate has a frozen state beside
+    /// the temperate one; `false`: never (the temperate state).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snowball: Option<bool>,
     /// Age of the system the archetype is asked in, Gyr: the star's, when
     /// the request types none. Within `(0, star::lifetime_gyr(0.0)]`; a
     /// star that lives shorter refuses it.
@@ -714,6 +719,7 @@ impl Archetype {
             s: pick(i.s),
             radiogenic: pick(i.radiogenic),
             life: i.life,
+            snowball: i.snowball,
         }
     }
 
@@ -1221,6 +1227,19 @@ mass_earth = 5000.0
             assert!(s.life.arose, "seed {seed}: {:?}", s.life);
             let bar = s.gases.total();
             assert!((0.7..=1.3).contains(&bar), "seed {seed}: {bar} bar");
+        }
+    }
+
+    /// An asked Earth is the Earth of today, never a snowball, though its
+    /// climate has a frozen state at 1 AU (`snowball = false`).
+    #[test]
+    fn earth_like_never_snowballs() {
+        let a = Archetype::load("earth-like").unwrap();
+        for seed in 1..=20 {
+            let m = model_of(&a, seed);
+            let s = m.surface.expect("a bare world has a surface");
+            assert!(!s.climate.snowball, "seed {seed}: {:?}", s.climate);
+            assert_eq!(m.inputs.snowball_draw, 1.0, "seed {seed}");
         }
     }
 

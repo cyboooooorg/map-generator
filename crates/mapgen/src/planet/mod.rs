@@ -24,7 +24,10 @@
 //! radiative–convective column (`column`) and the carbonate thermostat,
 //! under the Bond albedo [`albedo::bond_albedo`] derives from what covers
 //! it ([`albedo::cover`]), the two solved together, and the
-//! [`SurfaceLiquid`] on its surface.
+//! [`SurfaceLiquid`] on its surface. Where the ice–albedo feedback gives
+//! it both a temperate and a frozen state, its snowball draw picks one
+//! ([`climate::snowball_chance`]); a cold planet's CO₂ builds up from its
+//! volcanoes up to its carbon inventory.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
 //! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
@@ -74,7 +77,10 @@ pub use atmosphere::{
     photochemistry, wash_out,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
-pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_temperature_k};
+pub use climate::{
+    CarbonCycle, Climate, SurfaceLiquid, climate, methane_freezes_k, snowball_chance,
+    surface_temperature_k,
+};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use explain::{Cause, Explanation, InputField, Quantity, explain};
@@ -122,6 +128,19 @@ pub struct PlanetInputs {
     /// Uniform in `[0, 1)`, drawn last: life arises where it is below
     /// [`life::LIFE_CHANCE`] (and the world allows it).
     pub life_draw: f64,
+    /// Uniform in `[0, 1)`, drawn after `life_draw`: a planet whose climate
+    /// has both a temperate and a frozen state is a snowball where it is
+    /// below [`climate::snowball_chance`] (see [`climate::climate`]). 1
+    /// keeps the temperate state, 0 takes the frozen one wherever it
+    /// exists. Models stored before it read as 1.
+    #[serde(default = "temperate_draw")]
+    pub snowball_draw: f64,
+}
+
+/// The `snowball_draw` of a model stored before the draw existed: the
+/// temperate state.
+fn temperate_draw() -> f64 {
+    1.0
 }
 
 /// What a layer of a planet is made of.
@@ -302,6 +321,10 @@ impl PlanetModel {
                 s: Some(factor(i.volatiles.s, rule.s)),
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
+                // Not pinned: a snowball's CO₂ is where its draw caught
+                // the build-up, which a yes or no cannot give again; the
+                // seed's own draw gives the same state.
+                snowball: None,
             },
         }
     }
@@ -328,6 +351,9 @@ pub(crate) struct Air {
     pub water: Water,
     pub regime: crate::geology::Regime,
     pub gases: Gases,
+    /// CO₂ outgassed before escape, bar: the carbon inventory of the
+    /// climate ([`climate::CarbonCycle`]).
+    pub carbon_bar: f64,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -580,7 +606,11 @@ pub(crate) fn bare(
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
     let water_bar = w.kept_kg * bar_per_kg;
-    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
+    let carbon = climate::CarbonCycle {
+        inventory_bar: out.co2,
+        snowball_draw: inputs.snowball_draw,
+    };
+    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
     let life = life(inputs, &climate, context.age_gyr);
     let surface_gases = wash_out(oxygenate(after, &life), climate.liquid);
     Bare {
@@ -596,6 +626,7 @@ pub(crate) fn bare(
             water: w,
             regime: r,
             gases,
+            carbon_bar: out.co2,
         },
         outgassed: out,
         kept,
@@ -688,6 +719,10 @@ mod tests {
                 "{}",
                 body.id
             );
+            // The snowball draw is drawn, after the life draw.
+            let draw = model.inputs.snowball_draw;
+            assert!((0.0..1.0).contains(&draw), "{}: {draw}", body.id);
+            assert_ne!(draw, model.inputs.life_draw, "{}", body.id);
             // Photoevaporation can only lower the mass, by the envelope lost.
             let lost = model.drawn_mass_earth - model.inputs.mass_earth;
             assert!(lost >= 0.0, "{}", body.id);
