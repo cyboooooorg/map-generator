@@ -266,7 +266,7 @@ pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super:
         .iter()
         .any(|l| l.material == super::Material::Steam)
     {
-        super::interior(&model.inputs, &context.exposure())
+        super::body_interior(context, &model.inputs)
     } else {
         model.interior.clone()
     }

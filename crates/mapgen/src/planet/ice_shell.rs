@@ -16,10 +16,43 @@ use crate::exomoon::{EARTH_KG, EARTH_M, G};
 pub const ICE_CONDUCTIVITY_W_M: f64 = 651.0;
 
 /// Temperature at the base of the shell, where the ocean begins, K: the
-/// melting point of pure water ice. Calibration, no source: ammonia or
-/// salts would lower it and thin the shell, which the model does not
-/// carry.
+/// melting point of pure water ice, and [`liquidus_k`] without ammonia.
+/// Calibration, no source, for 273 rather than 273.15. The shell is still
+/// solved at this temperature: the ammonia of the ocean (its
+/// [`liquidus_k`]) and salts would lower it and thin the shell.
 pub const MELT_K: f64 = 273.0;
+
+/// Ammonia mass fraction of the H₂O–NH₃ eutectic, about a third
+/// (Leliwa-Kopystyński, Maruyama & Nakajima 2002,
+/// doi:10.1006/icar.2001.6762, about 0.32 to 0.33): a liquid richer in
+/// ammonia than this freezes no colder, so [`liquidus_k`] holds there.
+pub const NH3_EUTECTIC: f64 = 0.33;
+
+/// Coefficients of the liquidus of [`liquidus_k`], K per power of the
+/// ammonia mass fraction, from the first.
+const LIQUIDUS_NH3: [f64; 5] = [-53.07, -1651.4, 11842.0, -46269.0, 56695.0];
+
+/// Temperature, K, at which ice melts into an ocean holding
+/// `nh3_mass_fraction` of ammonia (kg of NH₃ per kg of liquid): the
+/// water-rich branch of the H₂O–NH₃ liquidus at low pressure, [`MELT_K`]
+/// plus `Σ aₙ Xⁿ` for `n` from 1 to 5 with the coefficients
+/// [`LIQUIDUS_NH3`], the fit of Leliwa-Kopystyński, Maruyama & Nakajima
+/// 2002 (doi:10.1006/icar.2001.6762) to the measured phase diagram (the
+/// coefficients as later thermal models of icy satellites quote them,
+/// not checked against the paper's table; the pressure's own lowering of
+/// the melting point is left out). It falls from
+/// 273 K for pure water through about 259 K at 10 % to about 175 K at
+/// the eutectic ([`NH3_EUTECTIC`], 176 K measured), where the fraction
+/// is held. A fraction under 0 or not a number counts as pure water.
+pub fn liquidus_k(nh3_mass_fraction: f64) -> f64 {
+    let x = if nh3_mass_fraction.is_nan() {
+        0.0
+    } else {
+        nh3_mass_fraction.clamp(0.0, NH3_EUTECTIC)
+    };
+    let depression = LIQUIDUS_NH3.iter().rev().fold(0.0, |acc, a| (acc + a) * x);
+    MELT_K + depression
+}
 
 /// Pressure, Pa, at which the ocean ends on high-pressure ice: the ice
 /// III–ice V–liquid triple point, 350.1 MPa (256.164 K), of the IAPWS
@@ -151,6 +184,24 @@ pub fn ice_shell(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The H₂O–NH₃ liquidus at low pressure runs from pure water's 273 K
+    /// down to the eutectic, about 176 K at a third of ammonia
+    /// (Leliwa-Kopystyński et al. 2002).
+    #[test]
+    fn liquidus_runs_from_pure_water_to_the_eutectic() {
+        assert_eq!(liquidus_k(0.0), 273.0);
+        let eutectic = liquidus_k(0.33);
+        assert!((eutectic - 176.0).abs() <= 3.0, "{eutectic}");
+        let tenth = liquidus_k(0.10);
+        assert!((250.0..265.0).contains(&tenth), "{tenth}");
+        let mut last = liquidus_k(0.0);
+        for i in 1..=330 {
+            let t = liquidus_k(f64::from(i) / 1000.0);
+            assert!(t < last, "{i}: {t} after {last}");
+            last = t;
+        }
+    }
 
     #[test]
     fn a_europa_shell_is_ten_to_twenty_kilometres() {

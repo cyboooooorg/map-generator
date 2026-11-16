@@ -39,4 +39,10 @@ surface: Surface | null, class: PlanetClass,
  * ([`ice_shell::ice_shell`]); `None` without water or a frozen
  * surface.
  */
-ice_shell: IceShell | null, };
+ice_shell: IceShell | null, 
+/**
+ * Moment of inertia factor `C / (M R²)` of its layers
+ * ([`differentiation::moment_of_inertia`]); 0 in a model stored
+ * before it existed.
+ */
+moment_of_inertia: number, };

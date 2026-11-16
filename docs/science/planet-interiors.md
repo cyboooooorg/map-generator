@@ -152,6 +152,67 @@ Neptune's composition at the coldest light of the grid up to Neptune's
 mass, then on the law through Neptune, Saturn and Jupiter, which carries
 a gas share growing with the mass.
 
+**Partly differentiated moons.** A planet is fully differentiated: iron
+core, rock mantle, water on top. An icy moon may not be. Callisto's
+moment of inertia, 0.355 (Anderson et al. 2001), and Titan's, 0.34
+(Iess et al. 2010), are too high for a rock core under clean ice;
+Ganymede's, 0.311 (Schubert et al. 2004), is that of a fully
+differentiated body. Only a share $s$ of a moon's ice has separated from
+its rock: the iron and rock layers keep the share $s$ of their mass, the
+water layer the share $s$ of its own, and the rest, rock and ice in the
+proportions of the whole, is a mixed rock-and-ice layer between them.
+Each part keeps its volume, so the radius, the density and the gravity
+do not change, and neither does the radiogenic heat, which comes from
+the rock wherever it lies.
+
+Two heats set $s$, after Barr & Canup. While it grew, a moon kept a
+share $h$ of its accretion energy, $\tfrac{3}{5} G M / R$ per unit mass,
+which melted that much ice (Barr & Canup 2008 find that Callisto and
+Titan stayed partly differentiated only if they grew slowly enough to
+radiate most of it):
+
+```math
+s = \min\left(1,\ \frac{h\,\tfrac{3}{5}\,G M / R}{L_\mathrm{ice}}\right)
+```
+
+with $L_\mathrm{ice}$ = 333.6 kJ/kg the latent heat of ice (Feistel &
+Wagner 2006) and $h$ = 0.057, a calibration on Callisto and Titan.
+Then the impacts of the late bombardment: a moon that received enough
+impact energy per unit of its mass differentiates completely, since the
+melt lets the rock sink and the rock's gravitational energy melts the
+rest (Barr & Canup 2010, who explain the Ganymede–Callisto dichotomy
+this way). That energy is counted against the Moon's: the impact flux at
+the moon's orbit against the Moon's (the comets its giant focuses, as
+for its craters, Zahnle et al. 2003), times its area over its mass
+against the Moon's, times the share of the bombardment its system has
+had at its age (the lunar chronology of Neukum et al. 2001, read from
+the system's formation). From 2.26 times the Moon's, a calibration
+between Callisto and Ganymede, $s$ = 1. A planet, and a body without
+water, keeps $s$ = 1.
+
+**In words.** A large moon kept more of the heat it grew with, so
+more of its ice melted and let its rock sink; a moon deep in its giant's
+well, or a small one, took enough impacts per kilogram to finish the
+job.
+
+**Orders of magnitude.** The asked moons of seeds 1 to 10: Callisto
+takes 1.8 to 2.05 times the Moon's impact energy per kilogram, Ganymede
+2.5 to 2.9, Europa 3.6 to 4.4, Enceladus over 40, Titan about 1.1.
+Ganymede, Europa and Enceladus differentiate fully; Callisto keeps
+$s \approx 0.3$ and comes out at a moment of inertia of 0.353 to 0.359,
+Titan $s \approx 0.37$ and 0.342 to 0.351.
+
+**The moment of inertia.** The model stores the factor $C / (M R^2)$ of
+its layers, each of uniform density:
+
+```math
+\frac{C}{M R^2} = \frac{2}{5\,M R^2} \sum_i m_i \frac{r_i^5 - r_{i-1}^5}{r_i^3 - r_{i-1}^3}
+```
+
+0.4 for a uniform sphere, less the more the mass sits at the centre.
+Within each layer the compression is left out, so a large planet comes
+out high (Earth 0.354 against 0.3307 measured), and a giant more so.
+
 ### The heat inside
 
 **Radiogenic.** Uranium-238 and -235, thorium-232 and potassium-40 decay
@@ -352,6 +413,25 @@ gets a shell of 16 km over an ocean of about 100 km, whose floor at about
 310 MPa, and 24 km of ocean above ice V; with less radiogenic heat its
 shell reaches 350 MPa and it has none.
 
+The shell and its ocean sit on the water layer only: under a partly
+differentiated moon's, the mixed rock-and-ice layer is the floor.
+
+**Ammonia.** Ammonia dissolved in the ocean lowers the temperature at
+which it freezes, along the liquidus of the water–ammonia phase diagram
+at low pressure (Leliwa-Kopystyński et al. 2002), a fit in the ammonia
+mass fraction $X$ of the liquid:
+
+```math
+T_\mathrm{liq} = 273 - 53.07\,X - 1651.4\,X^2 + 11842\,X^3 - 46269\,X^4 + 56695\,X^5
+```
+
+from 273 K for pure water through about 259 K at 10 % to about 175 K at
+the eutectic, a third of ammonia (176 K measured), below which no liquid
+is left. The ice carries 1 % of ammonia when the moon kept its
+hypervolatiles, none when a warm disk stripped them. The shell is still
+solved at 273 K: the ocean's ammonia, which concentrates as the shell
+thickens, enters it with the convective shell.
+
 ### Classes
 
 The class is read off the result, in this order; the first rule that holds
@@ -394,6 +474,7 @@ minus the envelope, so that a wet giant keeps its rock.
 Sources: [mod.rs](../../crates/mapgen/src/planet/mod.rs),
 [inputs.rs](../../crates/mapgen/src/planet/inputs.rs),
 [interior.rs](../../crates/mapgen/src/planet/interior.rs),
+[differentiation.rs](../../crates/mapgen/src/planet/differentiation.rs),
 [heat.rs](../../crates/mapgen/src/planet/heat.rs),
 [classify.rs](../../crates/mapgen/src/planet/classify.rs).
 
@@ -554,6 +635,15 @@ archetypes):
   moons beside the world of a request take their pair's heat with the
   $k_2/Q$ of their composition (icy or rocky) and their drawn radius,
   not their model's.
+- **Differentiation** follows the two arguments of Barr & Canup in
+  their simplest form, not their models: the accretion heat kept is one
+  share for every moon, and the impacts count their number, not their
+  speed, which is higher deep in a giant's well (Barr & Canup find
+  Ganymede receives about 3.5 times Callisto's impact energy; the model
+  gives about 1.3). Titan comes out more differentiated than Callisto
+  through its mass alone. Fully differentiated into uniform layers, a
+  Ganymede with little ice comes out at a moment of inertia as low as
+  0.295.
 - **Tides** use one $k_2/Q$ per kind of body, not one per planet: a cold
   rocky planet takes Io's, which is partly molten (Mars's is about
   $1.7 \times 10^{-3}$, Lainey 2016), and every enveloped planet takes
@@ -565,152 +655,182 @@ archetypes):
 1. Adibekyan, V. et al. 2021, "A compositional link between rocky exoplanets
    and their host stars", *Science* 374, 330–332,
    [doi:10.1126/science.abg8794](https://doi.org/10.1126/science.abg8794).
-2. Arevalo, R., McDonough, W. F. & Luong, M. 2009, "The K/U ratio of the
+2. Anderson, J. D., Jacobson, R. A., McElrath, T. P., Moore, W. B.,
+   Schubert, G. & Thomas, P. C. 2001, "Shape, mean radius, gravity field,
+   and interior structure of Callisto", *Icarus* 153, 157–161,
+   [doi:10.1006/icar.2001.6664](https://doi.org/10.1006/icar.2001.6664).
+3. Arevalo, R., McDonough, W. F. & Luong, M. 2009, "The K/U ratio of the
    silicate Earth", *Earth and Planetary Science Letters* 278, 361–369,
    [doi:10.1016/j.epsl.2008.12.023](https://doi.org/10.1016/j.epsl.2008.12.023).
-3. Borucki, W. J. et al. 2011, *The Astrophysical Journal* 736, 19,
+4. Barr, A. C. & Canup, R. M. 2008, "Constraints on gas giant satellite
+   formation from the interior states of partially differentiated
+   satellites", *Icarus* 198, 163–177,
+   [doi:10.1016/j.icarus.2008.07.004](https://doi.org/10.1016/j.icarus.2008.07.004).
+5. Barr, A. C. & Canup, R. M. 2010, "Origin of the Ganymede–Callisto
+   dichotomy by impacts during the late heavy bombardment", *Nature
+   Geoscience* 3, 164–167,
+   [doi:10.1038/ngeo746](https://doi.org/10.1038/ngeo746).
+6. Borucki, W. J. et al. 2011, *The Astrophysical Journal* 736, 19,
    [doi:10.1088/0004-637X/736/1/19](https://doi.org/10.1088/0004-637X/736/1/19).
-4. Chen, J. & Kipping, D. 2017, "Probabilistic forecasting of the masses and
+7. Chen, J. & Kipping, D. 2017, "Probabilistic forecasting of the masses and
    radii of other worlds", *The Astrophysical Journal* 834, 17,
    [doi:10.3847/1538-4357/834/1/17](https://doi.org/10.3847/1538-4357/834/1/17).
-5. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
+8. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
    *Solid Earth* 1, 5–24,
    [doi:10.5194/se-1-5-2010](https://doi.org/10.5194/se-1-5-2010).
-6. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
+9. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
    Ih", *Journal of Physical and Chemical Reference Data* 35, 1021–1047,
    [doi:10.1063/1.2183324](https://doi.org/10.1063/1.2183324).
-7. Fuller, J., Luan, J. & Quataert, E. 2016, "Resonance locking as the
-   source of rapid tidal migration in the Jupiter and Saturn moon
-   systems", *Monthly Notices of the Royal Astronomical Society* 458,
-   3867–3879,
-   [doi:10.1093/mnras/stw609](https://doi.org/10.1093/mnras/stw609).
-8. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
-   the radius distribution of small planets", *The Astronomical Journal*
-   154, 109,
-   [doi:10.3847/1538-3881/aa80eb](https://doi.org/10.3847/1538-3881/aa80eb).
-9. Guillot, T. 2005, "The interiors of giant planets: models and
-   outstanding questions", *Annual Review of Earth and Planetary
-   Sciences* 33, 493–530,
-   [doi:10.1146/annurev.earth.33.092203.122639](https://doi.org/10.1146/annurev.earth.33.092203.122639).
-10. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
+10. Fuller, J., Luan, J. & Quataert, E. 2016, "Resonance locking as the
+    source of rapid tidal migration in the Jupiter and Saturn moon
+    systems", *Monthly Notices of the Royal Astronomical Society* 458,
+    3867–3879,
+    [doi:10.1093/mnras/stw609](https://doi.org/10.1093/mnras/stw609).
+11. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
+    the radius distribution of small planets", *The Astronomical Journal*
+    154, 109,
+    [doi:10.3847/1538-3881/aa80eb](https://doi.org/10.3847/1538-3881/aa80eb).
+12. Guillot, T. 2005, "The interiors of giant planets: models and
+    outstanding questions", *Annual Review of Earth and Planetary
+    Sciences* 33, 493–530,
+    [doi:10.1146/annurev.earth.33.092203.122639](https://doi.org/10.1146/annurev.earth.33.092203.122639).
+13. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
     [doi:10.1088/0004-637X/726/1/15](https://doi.org/10.1088/0004-637X/726/1/15).
-11. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
+14. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
     Earth and its petrological expression", *Earth and Planetary Science
     Letters* 292, 79–88,
     [doi:10.1016/j.epsl.2010.01.022](https://doi.org/10.1016/j.epsl.2010.01.022).
-12. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
+15. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
     heat flow from Enceladus' south polar region measured using 10–600
     cm⁻¹ Cassini/CIRS data", *Journal of Geophysical Research* 116, E03003,
     [doi:10.1029/2010JE003718](https://doi.org/10.1029/2010JE003718).
-13. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
+16. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
     interiors of medium-sized outer planet satellites and large
     trans-neptunian objects", *Icarus* 185, 258–273,
     [doi:10.1016/j.icarus.2006.06.005](https://doi.org/10.1016/j.icarus.2006.06.005).
-14. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
+17. Iess, L. et al. 2010, "Gravity field, shape, and moment of inertia of
+    Titan", *Science* 327, 1367–1369,
+    [doi:10.1126/science.1182583](https://doi.org/10.1126/science.1182583).
+18. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
     close-in extrasolar planets", *The Astrophysical Journal* 678,
     1396–1406, [doi:10.1086/529187](https://doi.org/10.1086/529187).
-15. Kimura, J. 2024, "Europa's structural conditions for the existence of
+19. Kimura, J. 2024, "Europa's structural conditions for the existence of
     subsurface ocean and the absence of metallic core-driven magnetic
     field", arXiv:2403.01336,
     [arxiv.org/abs/2403.01336](https://arxiv.org/abs/2403.01336).
-16. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
+20. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
     Earth's mantle", *Reviews of Geophysics* 46, RG2007,
     [doi:10.1029/2007RG000241](https://doi.org/10.1029/2007RG000241).
-17. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
+21. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
     tidal dissipation in Io and Jupiter from astrometric observations",
     *Nature* 459, 957–959,
     [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
-18. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
-    data", *Celestial Mechanics and Dynamical Astronomy* 126, 145–156
-    (table 1),
-    [doi:10.1007/s10569-016-9695-y](https://doi.org/10.1007/s10569-016-9695-y).
-19. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
+22. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
     constraints on Enceladus' thermal state from astrometry", *The
     Astrophysical Journal* 752, 14,
     [doi:10.1088/0004-637X/752/1/14](https://doi.org/10.1088/0004-637X/752/1/14).
-20. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
+23. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
+    data", *Celestial Mechanics and Dynamical Astronomy* 126, 145–156
+    (table 1),
+    [doi:10.1007/s10569-016-9695-y](https://doi.org/10.1007/s10569-016-9695-y).
+24. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
     by the rapid orbital expansion of Titan", *Nature Astronomy* 4,
     1053–1058,
     [doi:10.1038/s41550-020-1120-5](https://doi.org/10.1038/s41550-020-1120-5).
-21. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
+25. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
     [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
-22. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
+26. Leliwa-Kopystyński, J., Maruyama, M. & Nakajima, T. 2002, "The
+    water–ammonia phase diagram up to 300 MPa: application to icy
+    satellites", *Icarus* 159, 518–528,
+    [doi:10.1006/icar.2001.6762](https://doi.org/10.1006/icar.2001.6762).
+27. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-23. Marty, B. 2012, "The origins and concentrations of water, carbon,
+28. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-24. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+29. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-25. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
+30. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
     188, 535–539,
     [doi:10.1016/j.icarus.2007.03.001](https://doi.org/10.1016/j.icarus.2007.03.001).
-26. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+31. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
     indication for a dichotomy in the interior structure of Uranus and
     Neptune from the application of modified shape and rotation data",
     *Planetary and Space Science* 77, 143–151,
     [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
-27. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+32. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
+    the inner solar system in relation to the lunar reference system",
+    *Space Science Reviews* 96, 55–86,
+    [doi:10.1023/A:1011989004263](https://doi.org/10.1023/A:1011989004263).
+33. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-28. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+34. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
     University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
     Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
     gives $567/T$).
-29. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
+35. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
     Mars", *Geophysical Research Letters* 45, 12198–12209,
     [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
-30. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+36. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-31. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+37. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-32. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+38. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
+    "Interior composition, structure and dynamics of the Galilean
+    satellites", in *Jupiter: The Planet, Satellites and Magnetosphere*,
+    Cambridge University Press, 281–306.
+39. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-33. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+40. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-34. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+41. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-35. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+42. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-36. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+43. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-37. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+44. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
+    in the outer Solar System", *Icarus* 163, 263–289,
+    [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
+45. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
-38. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+46. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
-
-The three DOIs above were checked against the publishers' pages; the
-DOIs of the tidal sources (Howett, Jackson, Kimura, Lainey, Wahr) and of
-the ice shell's (Hussmann, and the IAPWS ice papers Feistel &
-Wagner 2006 and Wagner et al. 2011) against their Crossref records; the
-$651/T$ conductivity is quoted as the ice-shell literature cites Petrenko
-& Whitworth, not checked in the book itself. Of the tidal figures, Jupiter's and Io's $k_2/Q$,
-Saturn's $1.59 \times 10^{-4}$ and Mars's $k_2$ and $Q$ match table 1 of
-Lainey 2016; Saturn's $2.3 \times 10^{-4}$, the planetary $Q$ of
-$10^{6.5}$ of Jackson et al. and Kimura's 10 to 50 mW/m² match their
-abstracts; Howett's 15.8 GW and Wahr's $k_2$ of 0.25 were not checked in
-the papers themselves. The resonance sources (Fuller, Luan & Quataert
-2016; Meyer & Wisdom 2007; Lainey et al. 2020) are cited for their method, from their
-abstracts; their DOIs and page ranges were not checked. Of the
-figures quoted from papers, Marty's 1000 to 3000 ppm of water and up to
-500 ppm of carbon match the abstract; his 2 ppm of nitrogen (the abstract
-only says nitrogen is depleted by about an order of magnitude) and the
-"5 of 22 rocky planets" of Adibekyan et al. 2021 (22 comes from press
-reports of the paper) were not checked in the papers themselves.
+    
+    The three DOIs above were checked against the publishers' pages; the
+    DOIs of the tidal sources (Howett, Jackson, Kimura, Lainey, Wahr) and of
+    the ice shell's (Hussmann, and the IAPWS ice papers Feistel &
+    Wagner 2006 and Wagner et al. 2011) against their Crossref records; the
+    $651/T$ conductivity is quoted as the ice-shell literature cites Petrenko
+    & Whitworth, not checked in the book itself. Of the tidal figures, Jupiter's and Io's $k_2/Q$,
+    Saturn's $1.59 \times 10^{-4}$ and Mars's $k_2$ and $Q$ match table 1 of
+    Lainey 2016; Saturn's $2.3 \times 10^{-4}$, the planetary $Q$ of
+    $10^{6.5}$ of Jackson et al. and Kimura's 10 to 50 mW/m² match their
+    abstracts; Howett's 15.8 GW and Wahr's $k_2$ of 0.25 were not checked in
+    the papers themselves. The resonance sources (Fuller, Luan & Quataert
+    2016; Meyer & Wisdom 2007; Lainey et al. 2020) are cited for their method, from their
+    abstracts; their DOIs and page ranges were not checked. Of the
+    figures quoted from papers, Marty's 1000 to 3000 ppm of water and up to
+    500 ppm of carbon match the abstract; his 2 ppm of nitrogen (the abstract
+    only says nitrogen is depleted by about an order of magnitude) and the
+    "5 of 22 rocky planets" of Adibekyan et al. 2021 (22 comes from press
+    reports of the paper) were not checked in the papers themselves.
 
 ## See also
 

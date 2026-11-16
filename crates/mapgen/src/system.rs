@@ -5251,6 +5251,36 @@ mod tests {
         }
     }
 
+    /// Asked moons come out as differentiated as their bodies: Ganymede
+    /// fully (moment of inertia 0.311, Schubert et al. 2004, *Jupiter*,
+    /// ch. 13), Callisto partly (0.355, Anderson et al. 2001,
+    /// doi:10.1006/icar.2001.6664), Titan partly (0.34, Iess et al. 2010,
+    /// doi:10.1126/science.1182583), Europa a rocky body with an iron core
+    /// under a thin water layer (0.346, Anderson et al. 1998,
+    /// doi:10.1126/science.281.5385.2019). Ganymede's band reaches down to
+    /// 0.29: fully differentiated into uniform layers, the Ganymede of
+    /// seed 10 (42 % ice) comes out 0.295, the others 0.302 to 0.310.
+    #[test]
+    fn ganymede_is_differentiated_and_callisto_is_not() {
+        let bands = [
+            ("ganymede-like", 0.29, 0.32),
+            ("callisto-like", 0.34, 0.37),
+            ("titan-like", 0.33, 0.36),
+            ("europa-like", 0.0, 0.35),
+        ];
+        for (name, low, high) in bands {
+            for seed in 1..=10 {
+                let system = requested(seed, &[(name, 1)]);
+                let moon = asked_moons(&system, name)[0];
+                let moi = moon.model.as_ref().unwrap().moment_of_inertia;
+                assert!(
+                    (low..=high).contains(&moi),
+                    "{name} seed {seed}: C/MR² {moi}"
+                );
+            }
+        }
+    }
+
     /// The planet `moon` orbits.
     fn parent_of<'a>(system: &'a System, moon: &Body) -> &'a Body {
         let parent = moon.parent.as_deref().expect("a moon's planet");

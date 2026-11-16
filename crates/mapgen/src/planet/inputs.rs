@@ -35,6 +35,8 @@ pub struct Context {
     pub age_gyr: f64,
     /// Effective temperature of the star, K.
     pub teff_k: f64,
+    /// Bolometric luminosity of the star, L☉.
+    pub luminosity: f64,
     /// The host whose tides heat the body, when it is not the star: a
     /// moon's planet. `None` for a planet, whose tides are the star's on
     /// its orbit.
@@ -78,6 +80,7 @@ impl Context {
             equilibrium_k: f64::from(star.equilibrium_k),
             age_gyr: f64::from(star.age_gyr),
             teff_k: f64::from(star.teff_k),
+            luminosity: f64::from(star.luminosity),
             tide: None,
         }
     }
@@ -522,6 +525,7 @@ mod tests {
             equilibrium_k: 255.0 * insolation.powf(0.25),
             age_gyr: 4.6,
             teff_k: 5772.0,
+            luminosity: 1.0,
             tide: None,
         }
     }

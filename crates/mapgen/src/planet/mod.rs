@@ -8,7 +8,11 @@
 //! and the mass; [`interior::solid_interior`]
 //! derives the iron, rock and water layers, and [`interior::interior`] adds
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
-//! the radius, the bulk density and the surface gravity.
+//! the radius, the bulk density and the surface gravity;
+//! [`differentiation::partly_differentiated`] leaves an icy moon whose ice
+//! did not all separate from its rock a mixed rock-and-ice layer, and
+//! [`differentiation::moment_of_inertia`] reads its moment of inertia off
+//! the layers.
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
 //! ([`heat::radiogenic_w`]), tidal ([`heat::tidal_power_w`], with the
 //! response [`heat::k2_over_q`] of a rocky, icy or enveloped body) and
@@ -58,6 +62,7 @@ pub mod classify;
 pub mod climate;
 pub(crate) mod column;
 pub mod core;
+pub mod differentiation;
 pub mod escape;
 pub mod explain;
 pub mod heat;
@@ -144,6 +149,9 @@ pub struct PlanetInputs {
 pub enum Material {
     Iron,
     Rock,
+    /// Rock and ice still mixed, under the water of a moon whose ice did
+    /// not all separate from its rock ([`differentiation`]).
+    RockIce,
     Water,
     Envelope,
     /// Water above its critical point over the rock of a steam world: a
@@ -226,6 +234,11 @@ pub struct PlanetModel {
     /// surface.
     #[serde(default)]
     pub ice_shell: Option<IceShell>,
+    /// Moment of inertia factor `C / (M R²)` of its layers
+    /// ([`differentiation::moment_of_inertia`]); 0 in a model stored
+    /// before it existed.
+    #[serde(default)]
+    pub moment_of_inertia: f64,
 }
 
 /// The inputs a planet formed with, as a request sets them: what
@@ -365,7 +378,8 @@ const SUN_KG: f64 = 1.988_5e30;
 const AU_M: f64 = 1.495_978_707e11;
 
 /// The model of a planet of `inputs` in its formation `context`: its
-/// [`interior`] under the star's exposure; the XUV fluence of its star
+/// [`interior`] under the star's exposure (a moon's partly
+/// differentiated, see [`body_interior`]); the XUV fluence of its star
 /// ([`xuv_fluence`]) and the envelope that [`envelope_after_escape`] leaves
 /// it, from which the interior is derived again; its radiogenic heat from its
 /// silicate mass, `M (1 − water − envelope) (1 − CMF)`, its abundance and
@@ -393,7 +407,8 @@ const AU_M: f64 = 1.495_978_707e11;
 /// In a runaway the water kept is what the escape of [`atmosphere`]
 /// leaves of the steam in the air, so the
 /// [`Water`] and the air's H₂O agree. Last, its [`ice_shell`] from its
-/// water layer, its internal heat and its surface's climate.
+/// water layer, its internal heat and its surface's climate, and the
+/// moment of inertia of its layers.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
 }
@@ -442,7 +457,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     } else {
         0.0
     };
-    let interior = interior(&inputs, &exposure);
+    let interior = body_interior(context, &inputs);
     let heat = internal_heat(context, &inputs, &interior);
     let mut air = None;
     let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
@@ -500,6 +515,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
     let ice_shell = ice_shell(&interior, &heat, surface.as_ref());
+    let moment_of_inertia = differentiation::moment_of_inertia(&interior);
     let model = PlanetModel {
         drawn_mass_earth,
         inputs,
@@ -510,8 +526,19 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         surface,
         class,
         ice_shell,
+        moment_of_inertia,
     };
     (model, air)
+}
+
+/// The layers of a body of `inputs` (after escape) in its formation
+/// `context`: its [`interior`] under the star's exposure, with only the
+/// [`differentiation::share_in`] of its ice separated from its rock
+/// ([`differentiation::partly_differentiated`]; all of it for a planet).
+pub fn body_interior(context: &Context, inputs: &PlanetInputs) -> Interior {
+    let full = interior(inputs, &context.exposure());
+    let share = differentiation::share_in(context, inputs, &full);
+    differentiation::partly_differentiated(&full, share)
 }
 
 /// The host whose tides heat a body of `context`: a moon's planet

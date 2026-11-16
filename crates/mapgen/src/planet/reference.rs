@@ -22,6 +22,9 @@
 //!   8 %, Ganymede and Callisto close to half ice); Schubert et al. 2004
 //!   (*Jupiter*, ch. 13).
 //! - Titan: about 45 % ice (Iess et al. 2010, doi:10.1126/science.1182583).
+//! - Enceladus: 1.08e20 kg, mean radius 252.1 km; about 40 % ice over a
+//!   rock core of about 2.4 g/cm³, no iron core resolved (Iess et al.
+//!   2014, doi:10.1126/science.1250551).
 //! - Giants: envelope and ice shares of Guillot 2005
 //!   (doi:10.1146/annurev.earth.33.092203.122639) and Helled et al. 2011
 //!   (doi:10.1088/0004-637X/726/1/15), rounded. Their radii come from
@@ -78,6 +81,7 @@ pub const SOLAR_BODIES: &[ReferenceBody] = &[
     body("Ganymede", 0.0248, 0.30, 0.45, 0.0, 5.2, 0.413),
     body("Callisto", 0.0180, 0.20, 0.50, 0.0, 5.2, 0.378),
     body("Titan", 0.0225, 0.20, 0.45, 0.0, 9.58, 0.404),
+    body("Enceladus", 1.81e-5, 0.0, 0.40, 0.0, 9.58, 0.0395),
     body("Jupiter", 317.8, 0.30, 0.0, 0.95, 5.2, 10.97),
     body("Saturn", 95.16, 0.30, 0.0, 0.85, 9.58, 9.14),
     body("Uranus", 14.54, 0.30, 0.65, 0.15, 19.2, 3.98),
@@ -300,6 +304,12 @@ mod tests {
         for b in SOLAR_BODIES {
             assert_eq!(reference(b.name), b);
         }
+    }
+
+    #[test]
+    fn enceladus_is_a_reference_body() {
+        let enceladus = reference("Enceladus");
+        assert_eq!(enceladus.water_fraction, 0.40);
     }
 
     #[test]

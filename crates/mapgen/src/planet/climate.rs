@@ -1787,6 +1787,7 @@ mod tests {
             equilibrium_k: 114.07,
             age_gyr: 1.457,
             teff_k: 6710.0,
+            luminosity: 4.4,
             tide: None,
         };
         let gases = Gases {

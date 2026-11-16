@@ -406,4 +406,31 @@ mod tests {
         assert!(keeps_hypervolatiles(MoonBirth::Disk, 83.0));
         assert!(!keeps_hypervolatiles(MoonBirth::Disk, 112.0));
     }
+
+    /// A moon stripped of its hypervolatiles holds no ammonia, so its ice
+    /// melts at 273 K; one without water has no shell; neither gives a
+    /// NaN (Review Focus 3 of the lot 3 plan).
+    #[test]
+    fn a_body_without_ammonia_melts_at_273() {
+        use super::super::ice_shell::liquidus_k;
+        let o = InputOverrides::default();
+        let ganymede = moon(0.0248, 0.45, MoonBirth::Disk, JUPITER_KG, 1.0704e9, 0.0013);
+        let stripped = derive_moon_model(1, "p1/m1", &planet_at(5.2), &ganymede, &o);
+        assert_eq!(stripped.inputs.volatiles.nh3, 0.0);
+        let nh3_of_ice = stripped.inputs.volatiles.nh3 / stripped.inputs.water_fraction;
+        assert_eq!(liquidus_k(nh3_of_ice), 273.0);
+        let shell = stripped.ice_shell.expect("an icy moon has a shell");
+        assert!(
+            shell.shell_km.is_finite() && shell.ocean_km.is_finite(),
+            "{shell:?}"
+        );
+        assert!(stripped.moment_of_inertia.is_finite(), "{stripped:?}");
+        let io = model(
+            5.2,
+            &moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041),
+        );
+        assert_eq!(io.ice_shell, None);
+        assert!(io.moment_of_inertia.is_finite(), "{io:?}");
+        assert!(!liquidus_k(f64::NAN).is_nan());
+    }
 }

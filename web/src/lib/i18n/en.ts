@@ -200,7 +200,7 @@ export const en = {
     radius: 'Radius',
     density: 'Density',
     layers: 'Layers',
-    materials: { Iron: 'iron', Rock: 'rock', Water: 'water', Envelope: 'gas envelope', Steam: 'steam' } satisfies Record<string, string>,
+    materials: { Iron: 'iron', Rock: 'rock', RockIce: 'rock and ice', Water: 'water', Envelope: 'gas envelope', Steam: 'steam' } satisfies Record<string, string>,
     core: 'Core',
     coreStates: { none: 'none', liquid: 'liquid', frozen: 'frozen' } satisfies Record<string, string>,
     field: 'Magnetic field',

@@ -59,7 +59,7 @@ const COLUMNS: [Column; 7] = [
     },
     Column {
         name: "moment of inertia",
-        read: |_| None,
+        read: |m| Some(m.moment_of_inertia),
     },
     Column {
         name: "convecting share",

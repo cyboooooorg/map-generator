@@ -591,7 +591,11 @@ systems/<system-id>/
     it is made of, its interior, heat, surface, air, climate, life and
     class, and for a frozen body with a water layer its `ice_shell`:
     the conductive shell's thickness `shell_km` and the liquid ocean left
-    beneath it `ocean_km`; its heat adds a `secular_w` term to the
+    beneath it `ocean_km`; its `moment_of_inertia`, the factor
+    `C / (M R²)` of its layers, whose `interior` holds a `RockIce` layer
+    of rock and ice still mixed between the rock and the water of a moon
+    whose ice did not all separate from its rock (0 for a model stored
+    before it existed); its heat adds a `secular_w` term to the
     radiogenic and tidal ones, its climate stores the `bond_albedo` it
     was solved with and whether the planet is a `snowball`, drawn from
     the formation's `snowball_draw`; since format 8 of the system and 24
