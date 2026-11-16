@@ -11,10 +11,11 @@
 //! the planet's: the XUV fluence and the equilibrium temperature at the
 //! planet's orbit.
 //!
-//! Known departures (issue #463): Enceladus has no ocean (the icy `k₂/Q`
-//! gives it a quarter of the tidal heat it radiates), and the oceans of
-//! Ganymede, Titan and Callisto depend on the radiogenic draw (see
-//! [`super::ice_shell::ice_shell`]).
+//! Known departures: the shells of Ganymede and Titan, heated by their
+//! rock and their tides alone, can come out thicker than interior models
+//! give, so a Ganymede may keep no ocean on a low radiogenic draw, and
+//! Enceladus's shell is thinned at its poles by about half, not to the 5
+//! km observed (see [`super::ice_shell::ice_shell`]).
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
@@ -360,9 +361,8 @@ mod tests {
 
     #[test]
     fn enceladus_is_its_size() {
-        // Its ocean is a known departure (issue #463): the icy k₂/Q gives
-        // it a quarter of the tidal heat it radiates, and the conductive
-        // shell takes the whole water layer.
+        // Its ocean needs the heat of its resonance with Dione, which a
+        // lone moon has not: see `system::tests::enceladus_shell_and_ocean`.
         let m = model(
             9.54,
             &moon(1.8e-5, 0.5, MoonBirth::Disk, SATURN_KG, 2.3802e8, 0.0047),

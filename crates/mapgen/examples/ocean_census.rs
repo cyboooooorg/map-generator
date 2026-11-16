@@ -7,8 +7,9 @@
 //! Prints, for each icy moon archetype asked alone in a whole system
 //! (seeds 1 to `SEEDS`), then for the icy moons and icy planets of
 //! `SYSTEMS` drawn systems (seeds 1 to `SYSTEMS`), the min, median and max
-//! of every column of [`COLUMNS`]; then the plume rings of the drawn
-//! systems. A column whose field the model does not hold yet prints `-`.
+//! of every column of [`COLUMNS`] (the share of the bodies, for a yes-or-no
+//! column); then the plume rings of the drawn systems. A column whose
+//! field the model does not hold yet prints `-`.
 //!
 //! Climate pass lot 3 (part A) measured the oceans with it before and
 //! after deriving the shell from the heat flux, the tides and the polar
@@ -32,10 +33,12 @@ const ARCHETYPES: [&str; 6] = [
 ];
 
 /// A column of the tables: its name and what it reads off a body's model,
-/// `None` where the model does not hold it (printed `-`).
+/// `None` where the model does not hold it (printed `-`). A `share`
+/// column reads 1 for yes and 0 for no, and prints the share of yes.
 struct Column {
     name: &'static str,
     read: fn(&PlanetModel) -> Option<f64>,
+    share: bool,
 }
 
 /// Every column, in print order. Add a field of the model here and the
@@ -44,30 +47,37 @@ const COLUMNS: [Column; 7] = [
     Column {
         name: "shell km",
         read: |m| m.ice_shell.map(|s| s.shell_km),
+        share: false,
     },
     Column {
         name: "polar shell km",
-        read: |_| None,
+        read: |m| m.ice_shell.map(|s| s.polar_shell_km),
+        share: false,
     },
     Column {
         name: "ocean km",
         read: |m| m.ice_shell.map(|s| s.ocean_km),
+        share: false,
     },
     Column {
         name: "tidal W",
         read: |m| Some(m.heat.tidal_w),
+        share: false,
     },
     Column {
         name: "moment of inertia",
         read: |m| Some(m.moment_of_inertia),
+        share: false,
     },
     Column {
         name: "convecting share",
-        read: |_| None,
+        read: |m| m.ice_shell.map(|s| f64::from(u8::from(s.convecting))),
+        share: true,
     },
     Column {
         name: "geyser share",
         read: |_| None,
+        share: true,
     },
 ];
 
@@ -99,6 +109,19 @@ fn spread(mut v: Vec<f64>) -> String {
     format!("{} / {} / {}", num(v[0]), num(med), num(v[n - 1]))
 }
 
+/// The share of yes (1) among the values, `-` when there are none.
+fn share(v: &[f64]) -> String {
+    if v.is_empty() {
+        return "-".into();
+    }
+    let yes = v.iter().filter(|&&x| x > 0.5).count();
+    format!(
+        "{yes} of {} ({:.0} %)",
+        v.len(),
+        100.0 * yes as f64 / v.len() as f64
+    )
+}
+
 fn num(x: f64) -> String {
     if x != 0.0 && (x.abs() >= 1e5 || x.abs() < 1e-2) {
         format!("{x:.3e}")
@@ -115,7 +138,12 @@ fn table(title: &str, bodies: &[&Body]) {
             .iter()
             .filter_map(|b| b.model.as_ref().and_then(c.read))
             .collect();
-        println!("  {:<18} {}", c.name, spread(values));
+        let shown = if c.share {
+            share(&values)
+        } else {
+            spread(values)
+        };
+        println!("  {:<18} {shown}", c.name);
     }
 }
 

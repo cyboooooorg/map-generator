@@ -590,8 +590,11 @@ systems/<system-id>/
     A planet also stores `model`, its physical model (issue #423: what
     it is made of, its interior, heat, surface, air, climate, life and
     class, and for a frozen body with a water layer its `ice_shell`:
-    the conductive shell's thickness `shell_km` and the liquid ocean left
-    beneath it `ocean_km`; its `moment_of_inertia`, the factor
+    the shell's mean thickness `shell_km`, the liquid ocean left
+    beneath it `ocean_km`, whether the shell convects (`convecting`),
+    its conductive lid `lid_km`, its thickness at the poles
+    `polar_shell_km` and the ocean's melting point `liquidus_k` (false
+    and 0 in a model stored before they existed); its `moment_of_inertia`, the factor
     `C / (M R²)` of its layers, whose `interior` holds a `RockIce` layer
     of rock and ice still mixed between the rock and the water of a moon
     whose ice did not all separate from its rock (0 for a model stored

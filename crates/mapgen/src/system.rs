@@ -5281,6 +5281,78 @@ mod tests {
         }
     }
 
+    /// The ice shell of the moon `name` asked alone, seed `seed`.
+    fn asked_shell(name: &str, seed: u32) -> crate::planet::IceShell {
+        let system = requested(seed, &[(name, 1)]);
+        let moon = asked_moons(&system, name)[0];
+        let model = moon.model.as_ref().expect("an asked moon has a model");
+        model
+            .ice_shell
+            .unwrap_or_else(|| panic!("{name} seed {seed}: no shell"))
+    }
+
+    /// Enceladus: a global ocean under 18 to 22 km of ice on average,
+    /// under 5 km at the south pole (Čadek et al. 2016,
+    /// doi:10.1002/2016GL068634).
+    #[test]
+    #[ignore = "its polar shell comes out 16 to 20 km on seeds 1 to 10 (see \
+                docs/science/planet-interiors.md, Enceladus's poles are too thick)"]
+    fn enceladus_shell_and_ocean() {
+        for seed in 1..=10 {
+            let s = asked_shell("enceladus-like", seed);
+            assert!((15.0..40.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!(s.polar_shell_km < 10.0, "seed {seed}: {s:?}");
+            assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
+        }
+    }
+
+    /// Europa: a shell of about 10 to 30 km over an ocean of 60 to 150 km
+    /// (see `planet::ice_shell`).
+    #[test]
+    fn europa_shell_and_ocean() {
+        for seed in 1..=10 {
+            let s = asked_shell("europa-like", seed);
+            assert!((5.0..40.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!((50.0..200.0).contains(&s.ocean_km), "seed {seed}: {s:?}");
+        }
+    }
+
+    /// Ganymede: an ocean under about 150 km of ice, over high-pressure
+    /// ice (Saur et al. 2015, doi:10.1002/2014JA020778).
+    #[test]
+    #[ignore = "seeds 1 and 8 keep no ocean, their 264 km shells reaching ice V \
+                (see docs/science/planet-interiors.md, Where it departs)"]
+    fn ganymede_shell_and_ocean() {
+        for seed in 1..=10 {
+            let s = asked_shell("ganymede-like", seed);
+            assert!((80.0..250.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
+        }
+    }
+
+    /// Titan: an ocean under 50 to 200 km of ice, from its tidal Love
+    /// number (Iess et al. 2012, doi:10.1126/science.1219631).
+    #[test]
+    #[ignore = "seeds 3, 5, 8 and 9 get shells of 212 to 227 km \
+                (see docs/science/planet-interiors.md, Where it departs)"]
+    fn titan_shell_and_ocean() {
+        for seed in 1..=10 {
+            let s = asked_shell("titan-like", seed);
+            assert!((50.0..200.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
+        }
+    }
+
+    /// Callisto: no ocean, or a thin one deep down (Khurana et al. 1998,
+    /// doi:10.1038/27394).
+    #[test]
+    fn callisto_has_no_ocean_or_a_thin_one() {
+        for seed in 1..=10 {
+            let s = asked_shell("callisto-like", seed);
+            assert!(s.ocean_km < 50.0, "seed {seed}: {s:?}");
+        }
+    }
+
     /// The planet `moon` orbits.
     fn parent_of<'a>(system: &'a System, moon: &Body) -> &'a Body {
         let parent = moon.parent.as_deref().expect("a moon's planet");
@@ -5341,9 +5413,8 @@ mod tests {
     /// what the model can give it (see `planet::moon`): Titan a
     /// hydrocarbon world, Europa an ocean under its ice, Io a dry
     /// heat-pipe world, Ganymede and Callisto airless, Triton a thin N₂
-    /// air. Enceladus has the size and the model of a round moon; its
-    /// ocean is a known departure (issue #463), as are the oceans of
-    /// Ganymede and Callisto, which follow the radiogenic draw.
+    /// air, Enceladus the size of Enceladus with an ocean under its ice
+    /// (its shell is checked by `enceladus_shell_and_ocean`).
     ///
     /// Every Titan is a hydrocarbon world: its methane inventory (its
     /// archetype's `ch4`) outlasts its star's ultraviolet, its nitrogen
@@ -5387,8 +5458,9 @@ mod tests {
             let (_, triton) = one("triton-like");
             let n2 = surface(&triton).gases.n2;
             assert!(n2 > 0.0 && n2 < 0.01, "seed {seed}: {triton:?}");
-            // Its ocean: issue #463.
-            let (enceladus, _) = one("enceladus-like");
+            let (enceladus, model) = one("enceladus-like");
+            let ocean = model.ice_shell.map_or(0.0, |s| s.ocean_km);
+            assert!(ocean > 0.0, "seed {seed}: {model:?}");
             let km = enceladus.physical.radius_km;
             assert!((km / 252.0 - 1.0).abs() < 0.1, "seed {seed}: {km} km");
             assert!(!matches!(

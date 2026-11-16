@@ -33,7 +33,9 @@
 //! ([`climate::snowball_chance`]); a cold planet's CO₂ builds up from its
 //! volcanoes up to its carbon inventory.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
-//! conductive ice shell its internal heat sustains and the ocean beneath.
+//! ice shell its internal heat sustains, conductive or convecting, thinned
+//! at the poles by the tides, and the ocean beneath, its melting point
+//! lowered by the ammonia its ice carries.
 //! [`life::life`] decides whether life arose where water lasted, and
 //! [`life::oxygenate`] gives the air its oxygen, and
 //! [`atmosphere::wash_out`] takes the SO₂ out of a wet or oxidising air.
@@ -407,7 +409,8 @@ const AU_M: f64 = 1.495_978_707e11;
 /// In a runaway the water kept is what the escape of [`atmosphere`]
 /// leaves of the steam in the air, so the
 /// [`Water`] and the air's H₂O agree. Last, its [`ice_shell`] from its
-/// water layer, its internal heat and its surface's climate, and the
+/// water layer, its internal heat, its surface's climate and the ammonia
+/// per kilogram of its ice (its `nh3` over its water share), and the
 /// moment of inertia of its layers.
 pub fn planet_model(context: &Context, inputs: PlanetInputs) -> PlanetModel {
     chain(context, inputs).0
@@ -514,7 +517,12 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         _ => interior,
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
-    let ice_shell = ice_shell(&interior, &heat, surface.as_ref());
+    let nh3_ice = if inputs.water_fraction > 0.0 {
+        inputs.volatiles.nh3 / inputs.water_fraction
+    } else {
+        0.0
+    };
+    let ice_shell = ice_shell(&interior, &heat, surface.as_ref(), nh3_ice);
     let moment_of_inertia = differentiation::moment_of_inertia(&interior);
     let model = PlanetModel {
         drawn_mass_earth,
