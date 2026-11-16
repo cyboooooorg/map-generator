@@ -349,6 +349,7 @@ export const fr: Messages = {
     water: 'd’eau',
     sulfuric: 'd’acide sulfurique',
     dust: 'de poussière',
+    methane: 'de méthane',
     none: 'aucun',
   },
   regimes: {

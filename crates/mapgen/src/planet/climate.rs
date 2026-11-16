@@ -1436,7 +1436,7 @@ const CONDENSE_ITERATIONS: usize = 100;
 /// anyway, and one with no wet balance boils: its steam is the
 /// chain's next pass, not a deck).
 fn derived_albedo(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> f64 {
-    let wet = !water.runaway && water.kept_kg > 0.0;
+    let wet = water.is_wet();
     let deck = sulphuric_deck(temperature_k, gases, wet);
     bond_albedo(&cover(temperature_k, gases, water, frost_bar), gases, deck)
 }

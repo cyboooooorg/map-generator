@@ -52,6 +52,14 @@ pub struct Water {
 }
 
 impl Water {
+    /// The water keeps a wet balance: out of a runaway, with some left.
+    /// Whether its surface is liquid is the climate's call; this is what
+    /// the washing out of SO₂ and the cover of ocean and ice read
+    /// ([`super::albedo::cover`], [`super::albedo::sulphuric_deck`]).
+    pub(crate) fn is_wet(&self) -> bool {
+        !self.runaway && self.kept_kg > 0.0
+    }
+
     /// The same water with `kept_kg` left: what escape to space leaves of
     /// a runaway's steam.
     pub(crate) fn keeping(self, kept_kg: f64) -> Self {

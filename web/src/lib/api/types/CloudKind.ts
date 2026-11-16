@@ -3,4 +3,4 @@
 /**
  * What clouds are made of, which sets where they form and how they look.
  */
-export type CloudKind = "water" | "sulfuric" | "dust" | "none";
+export type CloudKind = "water" | "sulfuric" | "dust" | "methane" | "none";

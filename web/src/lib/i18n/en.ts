@@ -376,6 +376,7 @@ export const en = {
     water: 'water',
     sulfuric: 'sulfuric',
     dust: 'dust',
+    methane: 'methane',
     none: 'none',
   } satisfies Record<CloudKind, string>,
   /** Tectonic regimes. */

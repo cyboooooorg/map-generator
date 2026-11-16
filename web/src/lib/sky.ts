@@ -201,13 +201,15 @@ export function liftSky(sky: Sky, lift: number): Sky {
   };
 }
 
-/** Linear colour of a world's clouds: white water, pale yellow sulfuric acid, ochre dust. */
+/** Linear colour of a world's clouds: white water, pale yellow sulfuric acid, ochre dust, pale grey-orange methane (under Titan's haze). */
 export function cloudTint(meta: WorldMetadata): [number, number, number] {
   switch (meta.look.atmosphere?.clouds) {
     case 'sulfuric':
       return [0.9, 0.82, 0.55];
     case 'dust':
       return [0.62, 0.38, 0.2];
+    case 'methane':
+      return [0.78, 0.7, 0.58];
     default:
       return [0.95, 0.95, 0.95];
   }

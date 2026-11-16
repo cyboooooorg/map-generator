@@ -153,6 +153,10 @@ const EARTH_OCEAN_FRACTION: f64 = 0.71;
 /// runaway limit.
 const CLOUD_H2O_BAR: f64 = 1.15e-2;
 
+/// Earth's cloud cover, `0.67`, the one [`CLOUD_H2O_BAR`] is calibrated
+/// on: the look draws it as no shift of the cover.
+pub(crate) const EARTH_CLOUD_COVER: f64 = 0.67;
+
 /// Albedo of a water cloud layer, as the reflectance of the cloud cover's
 /// share of the disc: 0.19. Calibration on Earth's Bond albedo, 0.30
 /// (CERES; Stephens et al. 2015, doi:10.1002/2014RG000449), with its
@@ -169,9 +173,9 @@ const CLOUD_ALBEDO: f64 = 0.19;
 /// from memory, not checked). Its only body.
 const DECK_ALBEDO: f64 = 0.76;
 
-/// Least SO₂, bar, that makes a sulphuric deck: the
-/// look's threshold for sulphuric clouds (`interim::SULFURIC_MIN_BAR`), so
-/// that the albedo and the look agree.
+/// Least SO₂, bar, that makes a sulphuric deck. The look reads it too
+/// (`interim::sky_of` asks [`sulphuric_deck`]), so that the albedo and
+/// the look agree.
 pub(crate) const DECK_SO2_BAR: f64 = 1.0e-3;
 
 /// Least surface temperature, K, at which a sulphuric deck forms: the
@@ -301,7 +305,7 @@ fn ice_line_share(temperature_k: f64) -> f64 {
 /// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`]):
 ///   none in a dry or airless sky.
 pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> Cover {
-    let wet = !water.runaway && water.kept_kg > 0.0;
+    let wet = water.is_wet();
     let (sea, ice) = if wet {
         let reach = (water.oceans.max(0.0) * OCEAN_LAYER_KM / ICE_SHEET_KM).min(1.0);
         (

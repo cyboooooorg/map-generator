@@ -4,6 +4,7 @@
 //! alone draws a planet.
 use rand::RngExt;
 
+use super::albedo::{EARTH_CLOUD_COVER, cover, sulphuric_deck};
 use super::classify::ICE_WORLD_MIN_OCEANS;
 use super::{PlanetClass, PlanetModel, SurfaceLiquid};
 use crate::archetype::ParamDefault;
@@ -245,11 +246,11 @@ const METHANE_HAZE_COLOUR: [f32; 3] = [0.95, 0.55, 0.15];
 
 /// Partial pressures over which clouds form, bar. Calibration, no source:
 /// water where its vapour reaches 1e-3 bar (Earth's air holds about
-/// 1e-2); sulfuric acid where SO₂ reaches 1e-3 bar (the model gives Venus
-/// 1.7e-2 bar, Mars 3e-6). The model's Venus keeps no water vapour (its
-/// runaway lost it; the real one has 30 ppm), so the acid deck does not
-/// ask for any.
-const SULFURIC_MIN_BAR: f64 = 1.0e-3;
+/// 1e-2). The sulphuric deck is the albedo's
+/// ([`super::albedo::sulphuric_deck`], 1e-3 bar of SO₂ in a warm air: the
+/// model gives Venus 1.7e-2 bar, Mars 3e-6). The model's Venus keeps no
+/// water vapour (its runaway lost it; the real one has 30 ppm), so the
+/// acid deck does not ask for any.
 const WATER_CLOUD_MIN_BAR: f64 = 1.0e-3;
 
 /// Surface pressure under which a dry air lifts dust clouds, bar.
@@ -387,10 +388,13 @@ fn draws_of(base: &str) -> LookDraws {
 /// a Venus reads pale yellow. No haze under [`AIRLESS_BAR`]. A methane
 /// haze of Titan's orange where CH₄ is over 1 % of an air thicker than
 /// 0.5 bar. Clouds, the first that holds: none under [`AIRLESS_BAR`];
-/// water where water or hydrocarbons are liquid or water vapour reaches
-/// [`WATER_CLOUD_MIN_BAR`] (methane clouds render as water ones, no other
-/// kind exists); sulfuric where SO₂ reaches [`SULFURIC_MIN_BAR`]; dust on
-/// a dry air under [`DUST_MAX_BAR`]; otherwise none.
+/// sulfuric where the albedo makes a deck ([`sulphuric_deck`]: SO₂ in a
+/// warm air; a frozen world's makes none, and an air over liquid water
+/// washes its SO₂ out); methane where hydrocarbons are liquid (methane
+/// condensed into seas, [`super::climate`]); water where water is liquid or its vapour reaches
+/// [`WATER_CLOUD_MIN_BAR`]; dust on a dry air under [`DUST_MAX_BAR`];
+/// otherwise none. The cover follows the albedo's: a water cloud cover
+/// ([`cover`]) relative to Earth's, a sulphuric deck total.
 ///
 /// # Panics
 ///
@@ -417,20 +421,37 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
         sky.haze = METHANE_HAZE;
         sky.haze_colour = METHANE_HAZE_COLOUR;
     }
-    let wet = matches!(
-        surface.climate.liquid,
-        SurfaceLiquid::Water | SurfaceLiquid::Hydrocarbons
-    );
+    let hydrocarbons = surface.climate.liquid == SurfaceLiquid::Hydrocarbons;
+    let deck = sulphuric_deck(surface.climate.temperature_k, gases, surface.water.is_wet());
     sky.clouds = if pressure < AIRLESS_BAR as f64 {
         CloudKind::None
-    } else if wet || gases.h2o >= WATER_CLOUD_MIN_BAR {
-        CloudKind::Water
-    } else if gases.so2 >= SULFURIC_MIN_BAR {
+    } else if deck {
         CloudKind::Sulfuric
+    } else if hydrocarbons {
+        CloudKind::Methane
+    } else if surface.climate.liquid == SurfaceLiquid::Water || gases.h2o >= WATER_CLOUD_MIN_BAR {
+        CloudKind::Water
     } else if pressure < DUST_MAX_BAR {
         CloudKind::Dust
     } else {
         CloudKind::None
+    };
+    sky.cloud_cover = match sky.clouds {
+        // The deck is total.
+        CloudKind::Sulfuric => 1.0,
+        // Water clouds follow the vapour (the albedo's cover), Earth's
+        // two-thirds the zero of the scale, none -1, overcast 1.
+        CloudKind::Water => {
+            let cloud = cover(surface.climate.temperature_k, gases, &surface.water, 0.0).cloud;
+            let earth = EARTH_CLOUD_COVER;
+            let shift = if cloud < earth {
+                (cloud - earth) / earth
+            } else {
+                (cloud - earth) / (1.0 - earth)
+            };
+            shift.clamp(-1.0, 1.0) as f32
+        }
+        _ => 0.0,
     };
     sky
 }
@@ -1108,7 +1129,65 @@ mod tests {
 
     #[test]
     fn earths_sky_is_earths() {
-        assert_eq!(sky_of(&model_of("Earth")), Atmosphere::default());
+        let sky = sky_of(&model_of("Earth"));
+        assert!(sky.cloud_cover.abs() < 0.05, "{}", sky.cloud_cover);
+        assert_eq!(
+            Atmosphere {
+                cloud_cover: 0.0,
+                ..sky
+            },
+            Atmosphere::default()
+        );
+    }
+
+    /// Earth's inputs at `au` round the Sun with the snowball draw
+    /// `draw` (0: a snowball wherever the climate has a temperate state).
+    fn earth_model_at(au: f64, draw: f64) -> PlanetModel {
+        let inputs = crate::planet::PlanetInputs {
+            snowball_draw: draw,
+            ..model_inputs(reference("Earth"))
+        };
+        planet_model(&sun_at(au), inputs)
+    }
+
+    #[test]
+    fn titans_clouds_are_methane() {
+        assert_eq!(sky_of(&model_of("Titan")).clouds, CloudKind::Methane);
+    }
+
+    #[test]
+    fn a_frozen_earth_has_no_acid_cloud() {
+        for draw in [0.0, 1.0] {
+            let model = earth_model_at(1.8, draw);
+            assert_ne!(sky_of(&model).clouds, CloudKind::Sulfuric, "{draw}");
+        }
+    }
+
+    /// A snowball and a frozen water world past the outer edge render the
+    /// same: the frozen base, a frozen ocean and the relief of the land.
+    #[test]
+    fn a_snowball_renders_frozen() {
+        use crate::biome::Biome;
+        for (au, draw) in [(1.2, 0.0), (2.0, 1.0)] {
+            let model = earth_model_at(au, draw);
+            assert_eq!(base_of(&model), "frozen", "{au} AU");
+            let mut placed = earth_placed(1);
+            (placed.width, placed.height, placed.orbit_au) = (256, 128, au as f32);
+            let mut params = params_for(&model, &placed, &mut StdRng::seed_from_u64(1));
+            calibrate(&mut params, &model);
+            let world = crate::generation::generate(&params).world;
+            let has = |wanted: &[Biome]| world.biomes.iter().any(|b| wanted.contains(b));
+            assert!(has(&[Biome::FrozenOcean]), "{au} AU: no frozen ocean");
+            assert!(
+                has(&[
+                    Biome::Mountain,
+                    Biome::Snow,
+                    Biome::IceCap,
+                    Biome::GlacialPlain
+                ]),
+                "{au} AU: no frozen land"
+            );
+        }
     }
 
     #[test]
@@ -1153,7 +1232,9 @@ mod tests {
 
     #[test]
     fn venus_has_a_sulfuric_deck_and_mars_dust() {
-        assert_eq!(sky_of(&model_of("Venus")).clouds, CloudKind::Sulfuric);
+        let venus = sky_of(&model_of("Venus"));
+        assert_eq!(venus.clouds, CloudKind::Sulfuric);
+        assert!(venus.cloud_cover > 0.5, "{}", venus.cloud_cover);
         assert_eq!(sky_of(&model_of("Mars")).clouds, CloudKind::Dust);
     }
 
