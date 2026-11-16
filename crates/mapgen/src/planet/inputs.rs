@@ -84,6 +84,20 @@ impl Context {
         }
     }
 
+    /// This context under a Bond albedo of `albedo` instead of the
+    /// [`super::albedo::REFERENCE_ALBEDO`] the star module assumes: its
+    /// equilibrium temperature times
+    /// `((1 − albedo) / (1 − REFERENCE_ALBEDO))^¼`, the light absorbed
+    /// going as `1 − albedo`.
+    pub fn with_albedo(self, albedo: f64) -> Context {
+        let reference = super::albedo::REFERENCE_ALBEDO;
+        Self {
+            equilibrium_k: self.equilibrium_k
+                * ((1.0 - albedo).max(0.0) / (1.0 - reference)).powf(0.25),
+            ..self
+        }
+    }
+
     /// What the star gives the planet, which sizes its envelope.
     pub fn exposure(&self) -> Exposure {
         Exposure {
@@ -197,10 +211,14 @@ const GIANT_CORE_MAX_SHARE: f64 = 0.1;
 /// 56, gives up to 500 ppm in the silicate Earth) and Earth about 2e-6 of
 /// nitrogen (about 2 ppm: not checked in Marty 2012, whose abstract says
 /// nitrogen is depleted by about an order of magnitude against water).
-/// Sulphur at 1e-4: calibration, no source.
 const ROCK_CO2: f64 = 1e-4;
 const ROCK_N2: f64 = 2e-6;
-const ROCK_S: f64 = 1e-4;
+
+/// Sulphur per kilogram of silicate (mantle and crust): about 250 ppm in
+/// the bulk silicate Earth (McDonough 2003, Treatise on Geochemistry
+/// 2.15, 547; the core holds the rest). It applies to the silicate share
+/// of a body, `refractory * (1 - core_mass_fraction)`.
+const ROCK_S: f64 = 2.5e-4;
 
 /// Volatiles per kilogram of ice. CO2 at 5 %, CH4 and NH3 at 1 %: within
 /// the ranges comets show relative to water (Mumma & Charnley 2011,
@@ -257,6 +275,12 @@ pub struct InputOverrides {
     /// `Some(true)`: life arises wherever the world allows it;
     /// `Some(false)`: never.
     pub life: Option<bool>,
+    /// `Some(true)`: the planet is a snowball wherever its climate has a
+    /// frozen state beside the temperate one; `Some(false)`: never, it
+    /// keeps the temperate state (an asked `earth-like`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub snowball: Option<bool>,
 }
 
 /// Draws a planet's inputs from its formation `context` and its mass
@@ -278,7 +302,9 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// - envelope by [`envelope_fraction`];
 /// - volatiles by [`volatiles`];
 /// - radiogenic abundance `10^N(0, 0.15)` of Earth's;
-/// - the life draw `U(0, 1)`, read by [`life`](super::life::life).
+/// - the life draw `U(0, 1)`, read by [`life`](super::life::life);
+/// - the snowball draw `U(0, 1)`, read by
+///   [`climate`](super::climate::climate).
 ///
 /// The ice share is of the mass that is not hydrogen and helium, so the
 /// water share of the whole is that times `1 − envelope`: a wet giant
@@ -288,7 +314,7 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// and whatever the overrides: core share (one normal), stripping (two
 /// uniforms), water (two uniforms), migration (one uniform), envelope
 /// (three draws), volatiles (five normals), radiogenic abundance (one
-/// normal), life (one uniform, always last). A later draw (the mass, in
+/// normal), life (one uniform), snowball (one uniform, always last). A later draw (the mass, in
 /// part 3) goes in front of them.
 ///
 /// The overrides apply after the draws. A set water (`water_oceans`, over
@@ -296,7 +322,8 @@ pub fn draw_inputs(context: &Context, mass_earth: f64, rng: &mut impl RngExt) ->
 /// rule reads them, so the ice-borne volatiles follow the water the planet
 /// has; a set `co2`, `n2`, `ch4`, `nh3` or `s` replaces the log-normal scatter of
 /// that gas and leaves the rule. `life` sets the life draw to 0 (always arises) or
-/// 1 (never).
+/// 1 (never); `snowball` sets the snowball draw to 0 (frozen wherever a
+/// frozen state exists) or 1 (never).
 pub fn draw_inputs_with(
     context: &Context,
     mass_earth: f64,
@@ -329,7 +356,13 @@ pub fn draw_inputs_with(
     );
     let scatter = volatile_scatter(rng);
     let refractory = (1.0 - water_fraction - envelope_fraction).max(0.0);
-    let volatiles = volatiles(refractory, water_fraction, &scatter, overrides);
+    let volatiles = volatiles(
+        refractory,
+        water_fraction,
+        core_mass_fraction,
+        &scatter,
+        overrides,
+    );
     let drawn_radiogenic = 10f64.powf(RADIOGENIC_SPREAD_DEX * normal(rng));
     let radiogenic = overrides.radiogenic.unwrap_or(drawn_radiogenic);
     let drawn_life = rng.random::<f64>();
@@ -337,6 +370,12 @@ pub fn draw_inputs_with(
         Some(true) => 0.0,
         Some(false) => 1.0,
         None => drawn_life,
+    };
+    let drawn_snowball = rng.random::<f64>();
+    let snowball_draw = match overrides.snowball {
+        Some(true) => 0.0,
+        Some(false) => 1.0,
+        None => drawn_snowball,
     };
 
     PlanetInputs {
@@ -347,6 +386,7 @@ pub fn draw_inputs_with(
         volatiles,
         radiogenic,
         life_draw,
+        snowball_draw,
     }
 }
 
@@ -417,15 +457,16 @@ fn volatile_scatter(rng: &mut impl RngExt) -> VolatileScatter {
 ///
 /// ```text
 /// co2 = (1e-4 r + 0.05 w) LN    n2 = (2e-6 r + 1e-3 w) LN
-/// s   = 1e-4 r LN               ch4 = 0.01 w LN    nh3 = 0.01 w LN
+/// s   = 2.5e-4 r (1 - cmf) LN   ch4 = 0.01 w LN    nh3 = 0.01 w LN
 /// ```
 fn volatiles(
     refractory: f64,
     water: f64,
+    core_mass_fraction: f64,
     scatter: &VolatileScatter,
     overrides: &InputOverrides,
 ) -> Volatiles {
-    let rule = volatile_rule(refractory, water);
+    let rule = volatile_rule(refractory, water, core_mass_fraction);
     Volatiles {
         co2: rule.co2 * overrides.co2.unwrap_or(scatter.co2),
         n2: rule.n2 * overrides.n2.unwrap_or(scatter.n2),
@@ -437,14 +478,15 @@ fn volatiles(
 
 /// The volatiles of [`volatiles`] without their scatter: what a
 /// `refractory` share of rock and iron and a `water` share of ices carry
-/// by the rule alone.
-pub(crate) fn volatile_rule(refractory: f64, water: f64) -> Volatiles {
+/// by the rule alone. The sulphur comes from the silicate only: the
+/// share of the rock and iron that is not core.
+pub(crate) fn volatile_rule(refractory: f64, water: f64, core_mass_fraction: f64) -> Volatiles {
     Volatiles {
         co2: ROCK_CO2 * refractory + ICE_CO2 * water,
         n2: ROCK_N2 * refractory + ICE_N2 * water,
         ch4: ICE_CH4 * water,
         nh3: ICE_NH3 * water,
-        s: ROCK_S * refractory,
+        s: ROCK_S * refractory * (1.0 - core_mass_fraction),
     }
 }
 
@@ -525,8 +567,16 @@ mod tests {
         let rule = volatile_rule(
             1.0 - b.water_fraction - b.envelope_fraction,
             b.water_fraction,
+            b.core_mass_fraction,
         );
         assert!((b.volatiles.co2 - 3.0 * rule.co2).abs() <= 1e-12 * rule.co2);
+    }
+
+    #[test]
+    fn volatile_rule_takes_sulphur_from_the_silicate() {
+        let rule = volatile_rule(0.9, 0.1, 0.325);
+        assert!((rule.s - ROCK_S * 0.9 * (1.0 - 0.325)).abs() < 1e-18);
+        assert_eq!(volatile_rule(0.9, 0.1, 0.0).s, ROCK_S * 0.9);
     }
 
     #[test]
@@ -540,6 +590,7 @@ mod tests {
         let rule = volatile_rule(
             1.0 - i.water_fraction - i.envelope_fraction,
             i.water_fraction,
+            i.core_mass_fraction,
         );
         assert!((i.volatiles.nh3 - 2.0 * rule.nh3).abs() <= 1e-12 * rule.nh3);
         assert!((i.volatiles.s - 0.5 * rule.s).abs() <= 1e-12 * rule.s);
@@ -585,6 +636,26 @@ mod tests {
         let yes = draw_inputs_with(&earth_context(), 1.0, &with(true), &mut rng(3));
         let no = draw_inputs_with(&earth_context(), 1.0, &with(false), &mut rng(3));
         assert_eq!((yes.life_draw, no.life_draw), (0.0, 1.0));
+    }
+
+    #[test]
+    fn snowball_forced_or_forbidden_shifts_no_other_draw() {
+        let with = |snowball| InputOverrides {
+            snowball: Some(snowball),
+            ..Default::default()
+        };
+        let drawn = draw_inputs(&earth_context(), 1.0, &mut rng(3));
+        let yes = draw_inputs_with(&earth_context(), 1.0, &with(true), &mut rng(3));
+        let no = draw_inputs_with(&earth_context(), 1.0, &with(false), &mut rng(3));
+        assert_eq!((yes.snowball_draw, no.snowball_draw), (0.0, 1.0));
+        assert!((0.0..1.0).contains(&drawn.snowball_draw));
+        assert_eq!(
+            PlanetInputs {
+                snowball_draw: drawn.snowball_draw,
+                ..yes
+            },
+            drawn
+        );
     }
 
     #[test]
@@ -716,6 +787,7 @@ mod tests {
             let dry = volatiles(
                 1.0,
                 0.0,
+                0.325,
                 &volatile_scatter(&mut rng),
                 &InputOverrides::default(),
             );

@@ -12,7 +12,7 @@ const node = (quantity: Quantity, value: number, over: Partial<Cause> = {}): Cau
 /** Every code the server sends: a new Rust code fails the type check until it is listed here. */
 const QUANTITIES: Record<Quantity, true> = {
   surface_temperature: true, equilibrium_temperature: true, light_received: true, greenhouse: true, internal_warming: true,
-  heat_flux: true, radiogenic_heat: true, tidal_heat: true, pressure: true, co2: true, n2: true, h2o: true, ch4: true, o2: true,
+  heat_flux: true, radiogenic_heat: true, tidal_heat: true, secular_heat: true, bond_albedo: true, pressure: true, co2: true, n2: true, h2o: true, ch4: true, o2: true,
   nh3: true, so2: true, outgassed: true, escape: true, destroyed: true, frozen_out: true, from_ammonia: true, weathered: true,
   liquid: true, regime: true, magnetic_field: true, core_state: true, core_mass_fraction: true, class: true, mass: true,
   radius: true, envelope_fraction: true, envelope_lost: true, water_formed: true, water_kept: true, age: true, note: true,
@@ -78,6 +78,15 @@ describe('the cause catalog', () => {
         if (q !== 'note') expect(t.causes.quantities[q], q).not.toBe('');
       }
       for (const f of Object.keys(INPUTS) as InputField[]) expect(t.causes.inputs[f], f).toBeTruthy();
+      setLocale('en');
+    });
+    it(`words every note the server sends in ${locale}`, () => {
+      setLocale(locale);
+      for (const key of ['thermostat', 'life', 'runaway', 'boiled', 'snowball', 'frozen', 'co2_build_up', 'methane_trap']) {
+        expect(t.causes.notes[key], key).toBeTruthy();
+        expect(formatCause(node('note', 0, { label: key })), key).toBe(t.causes.notes[key]);
+      }
+      expect(formatCause(node('bond_albedo', 0.306))).toBe(locale === 'en' ? '0.306' : '0,306');
       setLocale('en');
     });
   }

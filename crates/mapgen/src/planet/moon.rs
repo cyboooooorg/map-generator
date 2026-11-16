@@ -123,8 +123,8 @@ pub fn derive_moon_model(
 /// ice-borne, go.
 fn without_hypervolatiles(inputs: PlanetInputs) -> PlanetInputs {
     let refractory = (1.0 - inputs.water_fraction - inputs.envelope_fraction).max(0.0);
-    let rule = volatile_rule(refractory, inputs.water_fraction);
-    let rock = volatile_rule(refractory, 0.0);
+    let rule = volatile_rule(refractory, inputs.water_fraction, inputs.core_mass_fraction);
+    let rock = volatile_rule(refractory, 0.0, inputs.core_mass_fraction);
     let n2 = if rule.n2 > 0.0 {
         inputs.volatiles.n2 * rock.n2 / rule.n2
     } else {
@@ -145,7 +145,7 @@ fn without_hypervolatiles(inputs: PlanetInputs) -> PlanetInputs {
 mod tests {
     use super::*;
     use crate::geology::Regime;
-    use crate::planet::PlanetClass;
+    use crate::planet::{PlanetClass, SurfaceLiquid};
     use crate::star::{StarInfo, parse_type};
 
     const SATURN_KG: f64 = 5.683e26;
@@ -204,8 +204,10 @@ mod tests {
     }
 
     /// Titan at Saturn's orbit with the `titan-like` archetype's factors:
-    /// its 1.47 bar (Fulchignoni et al. 2005, doi:10.1038/nature04314)
-    /// within 1.2 to 1.8, and a few percent of methane, on every seed.
+    /// its 93.7 K within 90 to 97, its 1.47 bar (Fulchignoni et al. 2005,
+    /// doi:10.1038/nature04314) within 1.3 to 1.6, and 3 to 6 % of
+    /// methane near its surface (5.7 %, Niemann et al. 2005,
+    /// doi:10.1038/nature04122), on every seed.
     #[test]
     fn titan_comes_out_a_hydrocarbon_world() {
         use rand::SeedableRng;
@@ -216,10 +218,13 @@ mod tests {
             let m = derive_moon_model(seed, "p1/m1", &planet_at(9.54), &titan(), &overrides);
             let s = m.surface.expect("surface");
             assert_eq!(m.class, PlanetClass::HydrocarbonWorld, "seed {seed}: {m:?}");
+            let t = s.climate.temperature_k;
+            assert!((90.0..=97.0).contains(&t), "seed {seed}: {s:?}");
+            assert_eq!(s.climate.liquid, SurfaceLiquid::Hydrocarbons, "{s:?}");
             let p = s.gases.total();
-            assert!((1.2..=1.8).contains(&p), "seed {seed}: {s:?}");
+            assert!((1.3..=1.6).contains(&p), "seed {seed}: {s:?}");
             let ch4 = s.gases.ch4 / p;
-            assert!((0.01..=0.10).contains(&ch4), "seed {seed}: {s:?}");
+            assert!((0.03..=0.06).contains(&ch4), "seed {seed}: {s:?}");
             assert!(ocean_km(&m) < 400.0, "{:?}", m.ice_shell);
         }
     }
@@ -292,14 +297,47 @@ mod tests {
         assert!(ocean_km(&m) > 0.0, "{m:?}");
     }
 
+    /// Triton's nitrogen frost brightens it and its air is the vapour of
+    /// that frost: 38 K and 1.4e-5 bar of N₂ at Voyager 2's flyby (Tyler
+    /// et al. 1989, doi:10.1126/science.246.4936.1466), a Bond albedo of
+    /// about 0.75 (spec goal 6, issue #464).
     #[test]
     fn triton_keeps_a_thin_nitrogen_air() {
         let m = model(
             30.07,
             &moon(0.00359, 0.3, MoonBirth::Captured, NEPTUNE_KG, 3.548e8, 0.0),
         );
-        let n2 = m.surface.expect("surface").gases.n2;
-        assert!((1e-6..1e-2).contains(&n2), "{m:?}");
+        let s = m.surface.expect("surface");
+        let (t, n2, a) = (s.climate.temperature_k, s.gases.n2, s.climate.bond_albedo);
+        println!("Triton: {t:.2} K, N2 {n2:.3e} bar, Bond albedo {a:.3}");
+        assert!((35.0..=41.0).contains(&t), "{s:?}");
+        assert!((1e-5..=3e-5).contains(&n2), "{s:?}");
+        assert!(a >= 0.6, "{s:?}");
+    }
+
+    /// A moon's albedo comes from its own cover, not its planet's
+    /// (Review Focus 4): Titan under its haze (0.27, Li et al. 2011), an
+    /// airless icy Europa (0.68, Buratti & Veverka 1983) and Io under its
+    /// frosts (0.63, Simonelli & Veverka 1988; all from memory, not
+    /// checked), round one star.
+    #[test]
+    fn a_moon_uses_its_own_cover() {
+        let titan = model(9.54, &titan());
+        let europa = model(
+            5.2,
+            &moon(0.008, 0.08, MoonBirth::Disk, JUPITER_KG, 6.709e8, 0.009),
+        );
+        let io = model(
+            5.2,
+            &moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041),
+        );
+        let albedo = |m: &PlanetModel| m.surface.expect("surface").climate.bond_albedo;
+        let (t, e, i) = (albedo(&titan), albedo(&europa), albedo(&io));
+        println!("Bond albedo: Titan {t:.3}, Europa {e:.3}, Io {i:.3}");
+        assert!((0.2..=0.35).contains(&t), "Titan {t}: {titan:?}");
+        assert!((0.5..=0.75).contains(&e), "Europa {e}: {europa:?}");
+        assert!((0.4..=0.7).contains(&i), "Io {i}: {io:?}");
+        assert!(t != e && e != i && t != i, "{t} {e} {i}");
     }
 
     #[test]

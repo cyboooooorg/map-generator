@@ -4,6 +4,7 @@
 //! alone draws a planet.
 use rand::RngExt;
 
+use super::albedo::{EARTH_CLOUD_COVER, cover, sulphuric_deck};
 use super::classify::ICE_WORLD_MIN_OCEANS;
 use super::{PlanetClass, PlanetModel, SurfaceLiquid};
 use crate::archetype::ParamDefault;
@@ -97,13 +98,36 @@ const SIGMA: f64 = 5.670_374_419e-8;
 
 /// Earth's mean surface heat flux, W/m²: 44 TW over its surface (Pollack,
 /// Hurter & Johnson 1993, doi:10.1029/93RG01249, 87 mW/m²). The flux at
-/// which a world is as volcanic as the scale's middle.
-const EARTH_HEAT_FLUX_W_M2: f64 = 0.087;
+/// which a world is as volcanic as the scale's middle. It is the whole
+/// flux, radiogenic heat and secular cooling ([`super::secular_w`]),
+/// as the model's [`super::InternalHeat::flux_w_m2`] is: Earth's model
+/// gives about 0.090 W/m², a volcanism of about 0.5.
+pub(super) const EARTH_HEAT_FLUX_W_M2: f64 = 0.087;
 
 /// Volcanism of a world with Earth's heat flux, on the `[0, 1]` scale of
 /// [`crate::request::VOLCANIC`]. Calibration, no source: the middle of
 /// the range worlds draw from ([`fallback::VOLCANIC`]).
-const EARTH_VOLCANIC: f64 = 0.5;
+pub(super) const EARTH_VOLCANIC: f64 = 0.5;
+
+/// Volcanism of a body with the internal heat flux `flux_w_m2` in
+/// `regime`, before the world's range clamps it: `0.5 √(F / 0.087 W/m²)`
+/// ([`EARTH_VOLCANIC`], [`EARTH_HEAT_FLUX_W_M2`]), 1 in the heat-pipe
+/// regime, halved under a stagnant lid. The climate reads it too, as the
+/// rate at which volcanoes give a snowball its CO₂
+/// ([`super::climate::snowball_chance`]).
+pub(super) fn volcanism(flux_w_m2: f64, regime: Regime) -> f64 {
+    match regime {
+        Regime::HeatPipe => 1.0,
+        regime => {
+            let v = EARTH_VOLCANIC * (flux_w_m2.max(0.0) / EARTH_HEAT_FLUX_W_M2).sqrt();
+            if regime == Regime::Stagnant {
+                0.5 * v
+            } else {
+                v
+            }
+        }
+    }
+}
 
 /// Surface pressure under which water and hydrocarbons carve less, bar:
 /// [`crate::atmosphere::LIQUID_WATER_BAR`], under which the generator
@@ -192,7 +216,12 @@ const CAUSTIC_RAYLEIGH: [f32; 3] = [0.4, 0.55, 0.25];
 
 /// Haze density and colour of caustic's sky (`looks/caustic.toml`).
 const CAUSTIC_HAZE: f32 = 0.3;
-const CAUSTIC_HAZE_COLOUR: [f32; 3] = [0.85, 0.95, 0.45];
+/// Pale cream-yellow: Venus in visible light, about (0.93, 0.89, 0.76) in
+/// sRGB, (0.85, 0.77, 0.54) in the linear light the viewer's sky takes
+/// (its deck reflects blue less than red, Bond albedo 0.76; Pérez-Hoyos et
+/// al. 2018, JGR Planets 123, 145, doi:10.1002/2017JE005406, and the
+/// Mariner 10 and MESSENGER true-colour composites; from memory, check).
+const CAUSTIC_HAZE_COLOUR: [f32; 3] = [0.85, 0.77, 0.54];
 
 /// Pressure (bar) within which the sky is Earth's, a tenth either way:
 /// Earth's air renders as Earth's. Calibration, no source.
@@ -222,11 +251,11 @@ const METHANE_HAZE_COLOUR: [f32; 3] = [0.95, 0.55, 0.15];
 
 /// Partial pressures over which clouds form, bar. Calibration, no source:
 /// water where its vapour reaches 1e-3 bar (Earth's air holds about
-/// 1e-2); sulfuric acid where SO₂ reaches 1e-3 bar (the model gives Venus
-/// 1.7e-2 bar, Mars 3e-6). The model's Venus keeps no water vapour (its
-/// runaway lost it; the real one has 30 ppm), so the acid deck does not
-/// ask for any.
-const SULFURIC_MIN_BAR: f64 = 1.0e-3;
+/// 1e-2). The sulphuric deck is the albedo's
+/// ([`super::albedo::sulphuric_deck`], 1e-3 bar of SO₂ in a warm air: the
+/// model gives Venus 1.7e-2 bar, Mars 3e-6). The model's Venus keeps no
+/// water vapour (its runaway lost it; the real one has 30 ppm), so the
+/// acid deck does not ask for any.
 const WATER_CLOUD_MIN_BAR: f64 = 1.0e-3;
 
 /// Surface pressure under which a dry air lifts dust clouds, bar.
@@ -364,10 +393,15 @@ fn draws_of(base: &str) -> LookDraws {
 /// a Venus reads pale yellow. No haze under [`AIRLESS_BAR`]. A methane
 /// haze of Titan's orange where CH₄ is over 1 % of an air thicker than
 /// 0.5 bar. Clouds, the first that holds: none under [`AIRLESS_BAR`];
-/// water where water or hydrocarbons are liquid or water vapour reaches
-/// [`WATER_CLOUD_MIN_BAR`] (methane clouds render as water ones, no other
-/// kind exists); sulfuric where SO₂ reaches [`SULFURIC_MIN_BAR`]; dust on
-/// a dry air under [`DUST_MAX_BAR`]; otherwise none.
+/// sulfuric where the albedo makes a deck ([`sulphuric_deck`] of the
+/// stored SO₂, washed out as the albedo washed it: SO₂ in a warm air; a
+/// frozen world's makes none, and a wet body's air has washed it out);
+/// methane where hydrocarbons are liquid (methane condensed into seas,
+/// [`super::climate`]); water where water is liquid or its vapour
+/// reaches [`WATER_CLOUD_MIN_BAR`]; dust on a dry air under
+/// [`DUST_MAX_BAR`]; otherwise none. The cover follows the albedo's,
+/// relative to Earth's: a water cloud cover ([`cover`]) or the deck's
+/// share of the disc, total once the deck is whole.
 ///
 /// # Panics
 ///
@@ -394,20 +428,43 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
         sky.haze = METHANE_HAZE;
         sky.haze_colour = METHANE_HAZE_COLOUR;
     }
-    let wet = matches!(
-        surface.climate.liquid,
-        SurfaceLiquid::Water | SurfaceLiquid::Hydrocarbons
-    );
+    let hydrocarbons = surface.climate.liquid == SurfaceLiquid::Hydrocarbons;
+    // The stored air is washed already (`climate::washed`), as the
+    // albedo saw it.
+    let deck = sulphuric_deck(surface.climate.temperature_k, gases.so2);
     sky.clouds = if pressure < AIRLESS_BAR as f64 {
         CloudKind::None
-    } else if wet || gases.h2o >= WATER_CLOUD_MIN_BAR {
-        CloudKind::Water
-    } else if gases.so2 >= SULFURIC_MIN_BAR {
+    } else if deck > 0.0 {
         CloudKind::Sulfuric
+    } else if hydrocarbons {
+        CloudKind::Methane
+    } else if surface.climate.liquid == SurfaceLiquid::Water || gases.h2o >= WATER_CLOUD_MIN_BAR {
+        CloudKind::Water
     } else if pressure < DUST_MAX_BAR {
         CloudKind::Dust
     } else {
         CloudKind::None
+    };
+    // A cover of the disc on the look's scale: Earth's two-thirds the
+    // zero, none -1, overcast 1.
+    let shift = |cloud: f64| {
+        let earth = EARTH_CLOUD_COVER;
+        let shift = if cloud < earth {
+            (cloud - earth) / earth
+        } else {
+            (cloud - earth) / (1.0 - earth)
+        };
+        shift.clamp(-1.0, 1.0) as f32
+    };
+    sky.cloud_cover = match sky.clouds {
+        // The deck covers what the albedo's does: all of the disc once
+        // whole.
+        CloudKind::Sulfuric => shift(deck),
+        // Water clouds follow the vapour (the albedo's cover).
+        CloudKind::Water => {
+            shift(cover(surface.climate.temperature_k, gases, &surface.water, 0.0).cloud)
+        }
+        _ => 0.0,
     };
     sky
 }
@@ -540,17 +597,7 @@ pub fn params_for(
                     _ => 0.0,
                 };
                 let erosion = wet * (pressure / ERODING_BAR).min(1.0) as f32;
-                let volcanic = match surface.regime {
-                    Regime::HeatPipe => 1.0,
-                    regime => {
-                        let v = EARTH_VOLCANIC * (flux / EARTH_HEAT_FLUX_W_M2).sqrt();
-                        if regime == Regime::Stagnant {
-                            0.5 * v
-                        } else {
-                            v
-                        }
-                    }
-                };
+                let volcanic = volcanism(flux, surface.regime);
                 (
                     sea_level,
                     model_circumference,
@@ -955,7 +1002,7 @@ mod tests {
         let (iron, rock, water) = (1.06, 3.16, 0.56);
         let mass = iron + rock + water;
         let inputs = crate::planet::PlanetInputs {
-            volatiles: volatile_rule(1.0 - water / mass, water / mass),
+            volatiles: volatile_rule(1.0 - water / mass, water / mass, iron / (iron + rock)),
             ..reference::inputs(mass, iron / (iron + rock), water / mass)
         };
         let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
@@ -1095,7 +1142,65 @@ mod tests {
 
     #[test]
     fn earths_sky_is_earths() {
-        assert_eq!(sky_of(&model_of("Earth")), Atmosphere::default());
+        let sky = sky_of(&model_of("Earth"));
+        assert!(sky.cloud_cover.abs() < 0.05, "{}", sky.cloud_cover);
+        assert_eq!(
+            Atmosphere {
+                cloud_cover: 0.0,
+                ..sky
+            },
+            Atmosphere::default()
+        );
+    }
+
+    /// Earth's inputs at `au` round the Sun with the snowball draw
+    /// `draw` (0: a snowball wherever the climate has a temperate state).
+    fn earth_model_at(au: f64, draw: f64) -> PlanetModel {
+        let inputs = crate::planet::PlanetInputs {
+            snowball_draw: draw,
+            ..model_inputs(reference("Earth"))
+        };
+        planet_model(&sun_at(au), inputs)
+    }
+
+    #[test]
+    fn titans_clouds_are_methane() {
+        assert_eq!(sky_of(&model_of("Titan")).clouds, CloudKind::Methane);
+    }
+
+    #[test]
+    fn a_frozen_earth_has_no_acid_cloud() {
+        for draw in [0.0, 1.0] {
+            let model = earth_model_at(1.8, draw);
+            assert_ne!(sky_of(&model).clouds, CloudKind::Sulfuric, "{draw}");
+        }
+    }
+
+    /// A snowball and a frozen water world past the outer edge render the
+    /// same: the frozen base, a frozen ocean and the relief of the land.
+    #[test]
+    fn a_snowball_renders_frozen() {
+        use crate::biome::Biome;
+        for (au, draw) in [(1.2, 0.0), (2.0, 1.0)] {
+            let model = earth_model_at(au, draw);
+            assert_eq!(base_of(&model), "frozen", "{au} AU");
+            let mut placed = earth_placed(1);
+            (placed.width, placed.height, placed.orbit_au) = (256, 128, au as f32);
+            let mut params = params_for(&model, &placed, &mut StdRng::seed_from_u64(1));
+            calibrate(&mut params, &model);
+            let world = crate::generation::generate(&params).world;
+            let has = |wanted: &[Biome]| world.biomes.iter().any(|b| wanted.contains(b));
+            assert!(has(&[Biome::FrozenOcean]), "{au} AU: no frozen ocean");
+            assert!(
+                has(&[
+                    Biome::Mountain,
+                    Biome::Snow,
+                    Biome::IceCap,
+                    Biome::GlacialPlain
+                ]),
+                "{au} AU: no frozen land"
+            );
+        }
     }
 
     #[test]
@@ -1140,8 +1245,40 @@ mod tests {
 
     #[test]
     fn venus_has_a_sulfuric_deck_and_mars_dust() {
-        assert_eq!(sky_of(&model_of("Venus")).clouds, CloudKind::Sulfuric);
+        let venus = sky_of(&model_of("Venus"));
+        assert_eq!(venus.clouds, CloudKind::Sulfuric);
+        assert!(venus.cloud_cover > 0.5, "{}", venus.cloud_cover);
         assert_eq!(sky_of(&model_of("Mars")).clouds, CloudKind::Dust);
+    }
+
+    /// The look draws a sulphuric deck where the albedo has one: a dry
+    /// warm air of 5 bar whose SO₂, washed once (what the model stores),
+    /// is over the deck's threshold or under it.
+    #[test]
+    fn the_look_and_the_albedo_see_the_same_deck() {
+        use super::super::Gases;
+        use super::super::albedo::DECK_ALBEDO;
+        use super::super::atmosphere::wash_out;
+        use super::super::climate::derived_albedo;
+        let mut model = model_of("Venus");
+        for so2 in [1.5e-3, 3.0e-3] {
+            let surface = model.surface.as_mut().unwrap();
+            assert!(!surface.water.is_wet());
+            surface.climate.temperature_k = 400.0;
+            surface.climate.liquid = SurfaceLiquid::None;
+            let air = Gases {
+                n2: 5.0,
+                so2,
+                ..Gases::default()
+            };
+            let albedo = derived_albedo(400.0, &air, &surface.water, 0.0);
+            surface.gases = wash_out(air, SurfaceLiquid::None);
+            let sky = sky_of(&model);
+            let albedo_deck = albedo == DECK_ALBEDO;
+            let sky_deck = sky.clouds == CloudKind::Sulfuric && sky.cloud_cover == 1.0;
+            assert_eq!(albedo_deck, sky_deck, "{so2}: {albedo} {sky:?}");
+            assert_eq!(albedo_deck, so2 > 2.0e-3, "{so2}: {albedo}");
+        }
     }
 
     #[test]
@@ -1174,6 +1311,12 @@ mod tests {
             params.pressure_bar
         );
         assert_eq!(params.look.geology.regime, Regime::Plates);
+        // Earth's 0.087-0.092 W/m² through `EARTH_VOLCANIC √(F / 0.087)`.
+        assert!(
+            (0.45..=0.55).contains(&params.volcanic_intensity),
+            "{}",
+            params.volcanic_intensity
+        );
         // land share and mean temperature checked by Tasks 3 and 4
     }
 }

@@ -95,6 +95,13 @@ struct Args {
     #[arg(long, value_parser = parse_yes_no)]
     life: Option<bool>,
 
+    /// Snowball: `yes`, the planet is frozen over wherever its climate has
+    /// a frozen state beside the temperate one; `no`, never [default: the
+    /// archetype's, else drawn, likelier the colder and the less volcanic
+    /// the planet]
+    #[arg(long, value_parser = parse_yes_no)]
+    snowball: Option<bool>,
+
     /// Axial tilt in degrees, in [0, 90] [default: the archetype's, else
     /// random in 5..40, or 0..85 on a planet without a large moon to steady
     /// it]
@@ -516,6 +523,7 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
         s: args.s,
         radiogenic: args.radiogenic,
         life: args.life,
+        snowball: args.snowball,
         host: args.host,
         alone: args.alone.then_some(true),
         width: Some(args.width),
@@ -693,6 +701,12 @@ fn run(args: Args) -> Result<(), Box<dyn Error>> {
     }
     if let Some(life) = pinned.life {
         reproduce.push(format!("--life {}", if life { "yes" } else { "no" }));
+    }
+    if let Some(snowball) = pinned.snowball {
+        reproduce.push(format!(
+            "--snowball {}",
+            if snowball { "yes" } else { "no" }
+        ));
     }
     reproduce.extend([
         format!("--axial-tilt {}", set(pinned.axial_tilt_deg)),

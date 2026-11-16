@@ -115,6 +115,12 @@ radiogenic?: number,
  */
 life?: boolean, 
 /**
+ * `true`: the planet is a snowball wherever its climate has a frozen
+ * state beside the temperate one; `false`: never; left out, the
+ * archetype's, else drawn (see [`crate::planet::climate::climate`]).
+ */
+snowball?: boolean, 
+/**
  * `auto` (rarely the moon of a giant, as the seed draws, the default),
  * `giant` (always) or `none`.
  */

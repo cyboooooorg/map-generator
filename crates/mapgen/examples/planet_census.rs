@@ -35,13 +35,34 @@
 //!    same planets (super-Earths and sub-Neptunes should be within a
 //!    factor 1.5 of each other, and the close-in ice worlds are watched);
 //! 6. the median and mean surface age of the planets with a surface, by
-//!    class and tectonic regime.
+//!    class and tectonic regime;
+//! 7. the snowballs (`Climate::snowball`: drawn frozen over though their
+//!    climate also has a temperate state) and the planets with liquid
+//!    water, by band of insolation (Earth's = 1): snowballs should be
+//!    rarer near 1 than towards the outer edge of the habitable zone;
+//! 8. the methane worlds (issue #443): how many planets with an
+//!    equilibrium temperature under 150 K keep methane in their air while
+//!    their surface is above 273 K (none should: methane's greenhouse
+//!    saturates and the excess condenses), and how many hydrocarbon
+//!    liquids lie under less methane than a Titan sea's vapour at their
+//!    surface temperature (`planet::methane_sea_vapour_bar`; none should).
 use std::collections::BTreeMap;
 
-use mapgen::planet::{body_model, interim};
+use mapgen::planet::{SurfaceLiquid, body_model, interim};
+use mapgen::star::StarInfo;
 use mapgen::system::{BodyKind, SystemRequest, WholeSystemRequest, draw};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+
+/// Insolation bands of item 7, Earth's = 1: lower edge and label.
+const LIGHT_BANDS: [(f64, &str); 6] = [
+    (1.1, ">1.1"),
+    (0.9, "0.9-1.1"),
+    (0.7, "0.7-0.9"),
+    (0.5, "0.5-0.7"),
+    (0.36, "0.36-0.5"),
+    (0.0, "<0.36"),
+];
 
 /// Radius bins of Fulton et al. 2017, Earth radii: lower edge and label.
 const BINS: [(f64, &str); 9] = [
@@ -112,6 +133,12 @@ fn main() {
     let mut close_in = [0u32; 20];
     let mut close_in_total = 0u32;
     let mut close_in_class: BTreeMap<&'static str, u32> = BTreeMap::new();
+    // By insolation band: [snowballs, with liquid water].
+    let mut snowballs = [[0u32; 2]; LIGHT_BANDS.len()];
+    // Methane worlds: [cold and warmed past 273 K, hydrocarbon liquids,
+    // of those under too little methane to condense].
+    let mut methane = [0u32; 3];
+    let mut least_lake_ch4 = f64::INFINITY;
 
     for seed in 1..=count {
         let request = SystemRequest::System(WholeSystemRequest {
@@ -164,6 +191,26 @@ fn main() {
                     }
                 }
                 oxygenated += u32::from(surface.life.oxygenated);
+                let p = &body.params;
+                let light = StarInfo::new(p.star, p.orbit_au, p.eccentricity, p.age_gyr).insolation;
+                let band = LIGHT_BANDS
+                    .iter()
+                    .position(|&(low, _)| f64::from(light) >= low)
+                    .unwrap_or(LIGHT_BANDS.len() - 1);
+                snowballs[band][0] += u32::from(surface.climate.snowball);
+                snowballs[band][1] += u32::from(surface.climate.liquid == SurfaceLiquid::Water);
+                let climate = &surface.climate;
+                methane[0] += u32::from(
+                    surface.gases.ch4 > 0.0
+                        && climate.equilibrium_k < 150.0
+                        && climate.temperature_k > 273.0,
+                );
+                if climate.liquid == SurfaceLiquid::Hydrocarbons {
+                    methane[1] += 1;
+                    least_lake_ch4 = least_lake_ch4.min(surface.gases.ch4);
+                    let sea = mapgen::planet::methane_sea_vapour_bar(climate.temperature_k);
+                    methane[2] += u32::from(surface.gases.ch4 < sea * (1.0 - 1e-9));
+                }
             }
             if body.orbit.period_days < 100.0 {
                 close_in_total += 1;
@@ -305,6 +352,18 @@ fn main() {
         "\nlife: {:.1} % of planets with a surface ({life}), {:.1} % oxygenated ({oxygenated})",
         share(life, with_surface),
         share(oxygenated, with_surface)
+    );
+
+    println!("\nsnowballs / planets with liquid water, by insolation (Earth's = 1)");
+    for (&(_, label), [snow, wet]) in LIGHT_BANDS.iter().zip(snowballs) {
+        println!("  S {label:>8}: {snow:>4} / {wet:>4}");
+    }
+
+    println!(
+        "\nmethane: {} planets under 150 K of equilibrium warmed past 273 K with methane; \
+         {} hydrocarbon liquids (least CH4 {least_lake_ch4:.4} bar), {} under too little \
+         methane to condense",
+        methane[0], methane[1], methane[2]
     );
 
     println!("\nradius histogram, period under 100 days ({close_in_total} planets)");

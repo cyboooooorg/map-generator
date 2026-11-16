@@ -10,13 +10,28 @@ export type Climate = {
  */
 temperature_k: number, 
 /**
- * The equilibrium temperature the climate used, K: the context's,
- * lowered by the runaway albedo of [`absorbing`] on a steam world
- * or any other water runaway.
+ * The equilibrium temperature the climate used, K: the context's
+ * under [`Climate::bond_albedo`] ([`Context::with_albedo`]).
  */
-equilibrium_k: number, liquid: SurfaceLiquid, 
+equilibrium_k: number, 
+/**
+ * Bond albedo the climate absorbed its light under: derived from
+ * what covers the body ([`super::albedo`]) together with its
+ * temperature, and blended towards the moist albedo of [`absorbing`]
+ * in a water runaway.
+ */
+bond_albedo: number, liquid: SurfaceLiquid, 
 /**
  * The carbonate thermostat holds the temperature at
  * [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
  */
-regulated: boolean, };
+regulated: boolean, 
+/**
+ * The body is a snowball: its climate also has a temperate state,
+ * and it was drawn frozen over, its CO₂ building up from its
+ * volcanoes towards the thaw ([`climate`], [`snowball_chance`]).
+ * A body with no temperate state (past the outer edge of the
+ * habitable zone), or whose frozen state no CO₂ it can hold thaws,
+ * is frozen but not a snowball.
+ */
+snowball: boolean, };

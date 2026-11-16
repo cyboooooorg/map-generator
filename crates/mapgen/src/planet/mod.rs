@@ -10,8 +10,9 @@
 //! the hydrogen and helium envelope under the star's [`Exposure`], giving
 //! the radius, the bulk density and the surface gravity.
 //! [`heat::InternalHeat`] holds the heat it makes inside: radiogenic
-//! ([`heat::radiogenic_w`]) and tidal ([`heat::tidal_power_w`], with the
-//! response [`heat::k2_over_q`] of a rocky, icy or enveloped body).
+//! ([`heat::radiogenic_w`]), tidal ([`heat::tidal_power_w`], with the
+//! response [`heat::k2_over_q`] of a rocky, icy or enveloped body) and
+//! the secular cooling of its mantle and core ([`heat::secular_w`]).
 //! [`core::core`] derives whether its iron core is liquid and drives a
 //! dynamo, and the field at its surface.
 //! [`atmosphere::outgassed`], [`atmosphere::atmosphere`],
@@ -21,11 +22,17 @@
 //! and what its cold freezes out.
 //! [`climate::climate`] sets its surface temperature through a grey
 //! radiative–convective column (`column`) and the carbonate thermostat,
-//! and the [`SurfaceLiquid`] on its surface.
+//! under the Bond albedo [`albedo::bond_albedo`] derives from what covers
+//! it ([`albedo::cover`]), the two solved together, and the
+//! [`SurfaceLiquid`] on its surface. Where the ice–albedo feedback gives
+//! it both a temperate and a frozen state, its snowball draw picks one
+//! ([`climate::snowball_chance`]); a cold planet's CO₂ builds up from its
+//! volcanoes up to its carbon inventory.
 //! [`ice_shell::ice_shell`] gives a frozen body with a water layer the
 //! conductive ice shell its internal heat sustains and the ocean beneath.
 //! [`life::life`] decides whether life arose where water lasted, and
-//! [`life::oxygenate`] gives the air its oxygen.
+//! [`life::oxygenate`] gives the air its oxygen, and
+//! [`atmosphere::wash_out`] takes the SO₂ out of a wet or oxidising air.
 //! [`classify::classify`] reads its [`PlanetClass`], including the surface
 //! classes, off the result, and
 //! [`PlanetModel`] holds it all: [`planet_model`] derives it from a
@@ -45,6 +52,7 @@ use rand::rngs::StdRng;
 use crate::exomoon::{EARTH_KG, EARTH_M};
 use crate::system::{Body, System, body_seed};
 
+pub mod albedo;
 pub mod atmosphere;
 pub mod classify;
 pub mod climate;
@@ -66,14 +74,19 @@ pub mod xuv;
 
 pub use atmosphere::{
     Gases, atmosphere, cold_trap, escape_velocity_km_s, methane_photolysis, outgassed,
-    photochemistry,
+    photochemistry, wash_out,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
-pub use climate::{Climate, SurfaceLiquid, climate, methane_freezes_k, surface_temperature_k};
+pub use climate::{
+    CarbonCycle, Climate, SurfaceLiquid, climate, methane_freezes_k, methane_sea_vapour_bar,
+    snowball_chance, surface_temperature_k,
+};
 pub use core::{Core, CoreState, core};
 pub use escape::{energy_limited_loss_kg, envelope_after_escape};
 pub use explain::{Cause, Explanation, InputField, Quantity, explain};
-pub use heat::{EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, tidal_power_w};
+pub use heat::{
+    EARTH_SILICATE_KG, InternalHeat, k2_over_q, radiogenic_w, secular_w, tidal_power_w,
+};
 pub use ice_shell::{IceShell, ice_shell};
 pub use inputs::{Context, HostTide, InputOverrides, draw_inputs, draw_inputs_with};
 pub use interior::{
@@ -112,9 +125,16 @@ pub struct PlanetInputs {
     pub volatiles: Volatiles,
     /// Radiogenic abundance at formation, relative to Earth's (1.0).
     pub radiogenic: f64,
-    /// Uniform in `[0, 1)`, drawn last: life arises where it is below
-    /// [`life::LIFE_CHANCE`] (and the world allows it).
+    /// Uniform in `[0, 1)`, drawn just before `snowball_draw`: life
+    /// arises where it is below [`life::LIFE_CHANCE`] (and the world
+    /// allows it).
     pub life_draw: f64,
+    /// Uniform in `[0, 1)`, drawn last, after `life_draw`: a planet whose
+    /// climate has both a temperate and a frozen state is frozen where it
+    /// is below [`climate::snowball_chance`] (see [`climate::climate`]). 1
+    /// keeps the temperate state, 0 takes the frozen one wherever it
+    /// exists.
+    pub snowball_draw: f64,
 }
 
 /// What a layer of a planet is made of.
@@ -254,7 +274,9 @@ impl PlanetModel {
     /// drawn mass and `M`, `e` what escape left; the water in Earth oceans
     /// of the drawn mass; the CO₂, N₂, CH₄, NH₃ and sulphur factors, the stored volatiles over
     /// the formation rule of the formation shares (1 where the rule is 0);
-    /// the core share, the radiogenic abundance and `life: Some(arose)`.
+    /// the core share, the radiogenic abundance, `life: Some(arose)` and
+    /// `snowball: Some(frozen)` (a pinned snowball replays the CO₂ it
+    /// froze with, not the amount its draw had built up).
     ///
     /// Set in a request with the same context, they derive the same inputs
     /// and class whatever the seed: the scatter of every volatile is
@@ -274,7 +296,7 @@ impl PlanetModel {
             o * OCEAN_KG / (drawn * EARTH_KG)
         });
         let refractory = (1.0 - i.water_fraction - envelope).max(0.0);
-        let rule = inputs::volatile_rule(refractory, i.water_fraction);
+        let rule = inputs::volatile_rule(refractory, i.water_fraction, i.core_mass_fraction);
         let factor = |stored: f64, rule: f64| {
             if rule > 0.0 {
                 exact_preimage(stored, stored / rule, |f| rule * f)
@@ -295,6 +317,10 @@ impl PlanetModel {
                 s: Some(factor(i.volatiles.s, rule.s)),
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
+                // The state, not the draw: a pinned snowball replays its
+                // CO₂ from where it froze (the draw at 0), not from where
+                // its draw caught the build-up.
+                snowball: Some(self.surface.is_some_and(|s| s.climate.snowball)),
             },
         }
     }
@@ -321,6 +347,12 @@ pub(crate) struct Air {
     pub water: Water,
     pub regime: crate::geology::Regime,
     pub gases: Gases,
+    /// CO₂ outgassed before escape, bar: the carbon inventory of the
+    /// climate ([`climate::CarbonCycle`]).
+    pub carbon_bar: f64,
+    /// CO₂ the cold trap froze onto the ground, bar
+    /// ([`climate::CarbonCycle::frozen_bar`]).
+    pub frozen_co2_bar: f64,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -419,12 +451,13 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
         let flux = heat.flux_w_m2(interior.radius_earth);
         // A thermostat that reached its temperature found a wet balance:
-        // only the others need the moist-limit test.
+        // only the others need the moist-limit test, under the Bond albedo
+        // their climate settled on.
         let boils = |steps: &Bare| {
             let water = &steps.surface.water;
             !steps.surface.climate.regulated
                 && climate::boils(
-                    context,
+                    &context.with_albedo(steps.surface.climate.bond_albedo),
                     &steps.climate_gases,
                     water,
                     flux,
@@ -491,9 +524,9 @@ pub(crate) fn tide_of(context: &Context) -> HostTide {
 }
 
 /// The heat a body of `inputs` (after escape) and `interior` makes in
-/// `context` (see [`planet_model`]): radiogenic from its silicate mass,
-/// tidal from [`tide_of`] with the [`heat::k2_over_q`] of its envelope
-/// and water shares.
+/// `context` (see [`planet_model`]): radiogenic and secular cooling from
+/// its silicate mass and age, tidal from [`tide_of`] with the
+/// [`heat::k2_over_q`] of its envelope and water shares.
 pub(crate) fn internal_heat(
     context: &Context,
     inputs: &PlanetInputs,
@@ -506,6 +539,7 @@ pub(crate) fn internal_heat(
     let tide = tide_of(context);
     InternalHeat {
         radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
+        secular_w: secular_w(silicate_kg, context.age_gyr),
         tidal_w: tidal_power_w(
             tide.host_kg,
             interior.radius_earth * EARTH_M,
@@ -534,6 +568,10 @@ pub(crate) struct Bare {
     /// The air as the climate left it, before life oxygenated it: the
     /// air `surface.climate` was solved with.
     pub climate_gases: Gases,
+    /// What the climate condensed on the ground at its surface
+    /// temperature ([`atmosphere::condense`]: the methane over its seas
+    /// or frosts, the nitrogen of its frosts), bar.
+    pub condensed: Gases,
 }
 
 /// A bare body's surface from the water `w` it starts with (the chain's
@@ -571,14 +609,23 @@ pub(crate) fn bare(
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
     let water_bar = w.kept_kg * bar_per_kg;
-    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar);
+    let carbon = climate::CarbonCycle {
+        inventory_bar: out.co2,
+        frozen_bar: photolysed.co2 - trapped.co2,
+        snowball_draw: inputs.snowball_draw,
+    };
+    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
+    let condensed = atmosphere::condense(gases, climate.temperature_k).1;
     let life = life(inputs, &climate, context.age_gyr);
+    // Washed as the albedo washed it ([`climate::washed`]), so that the
+    // look's deck is the albedo's.
+    let surface_gases = climate::washed(oxygenate(after, &life), &w);
     Bare {
         surface: Surface {
             water: w,
             regime: r,
             core: k,
-            gases: oxygenate(after, &life),
+            gases: surface_gases,
             climate,
             life,
         },
@@ -586,12 +633,15 @@ pub(crate) fn bare(
             water: w,
             regime: r,
             gases,
+            carbon_bar: out.co2,
+            frozen_co2_bar: photolysed.co2 - trapped.co2,
         },
         outgassed: out,
         kept,
         photolysed,
         trapped,
         climate_gases: after,
+        condensed,
     }
 }
 
@@ -678,6 +728,10 @@ mod tests {
                 "{}",
                 body.id
             );
+            // The snowball draw is drawn, after the life draw.
+            let draw = model.inputs.snowball_draw;
+            assert!((0.0..1.0).contains(&draw), "{}: {draw}", body.id);
+            assert_ne!(draw, model.inputs.life_draw, "{}", body.id);
             // Photoevaporation can only lower the mass, by the envelope lost.
             let lost = model.drawn_mass_earth - model.inputs.mass_earth;
             assert!(lost >= 0.0, "{}", body.id);
@@ -809,6 +863,27 @@ mod tests {
             reference::model_inputs(reference("Earth")),
         );
         assert_eq!(earth.ice_shell, None);
+    }
+
+    #[test]
+    fn earth_and_mars_lose_their_measured_heat() {
+        // Earth: 47 ± 2 TW (Davies & Davies 2010), 0.087 to 0.092 W/m²
+        // (Pollack, Hurter & Johnson 1993; Davies & Davies 2010). Mars:
+        // about 0.019 to 0.025 W/m² from the thermal histories that fit
+        // its crust (Plesa et al. 2018), a range kept wider for the
+        // spread of those models.
+        let flux = |name: &str| {
+            let body = reference(name);
+            let model = planet_model(
+                &reference::sun_at(body.orbit_au),
+                reference::model_inputs(body),
+            );
+            model.heat.flux_w_m2(model.interior.radius_earth)
+        };
+        let earth = flux("Earth");
+        assert!((0.087..=0.092).contains(&earth), "Earth {earth}");
+        let mars = flux("Mars");
+        assert!((0.015..=0.030).contains(&mars), "Mars {mars}");
     }
 
     #[test]

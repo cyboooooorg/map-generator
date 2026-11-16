@@ -12,7 +12,7 @@
 //! haze = 0.1                         # aerosol density, 0 (clear) to 1 (opaque)
 //! haze_colour = [1.0, 1.0, 1.0]      # aerosol tint
 //! greenhouse = 0.0                   # added to temperature, °C
-//! clouds = "water"                   # water | sulfuric | dust | none
+//! clouds = "water"                   # water | sulfuric | dust | methane | none
 //! cloud_cover = 0.0                  # shift of the cloud cover, -1 to 1
 //! ```
 //!
@@ -68,6 +68,8 @@ pub enum CloudKind {
     Sulfuric,
     /// Dust lifted by the wind: low, patchy, with regional storms.
     Dust,
+    /// Methane droplets: sparse, pale clouds under the haze (Titan's).
+    Methane,
     /// No clouds.
     None,
 }

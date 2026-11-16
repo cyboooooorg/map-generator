@@ -13,6 +13,10 @@ mass_earth = [1.0, 3.0]
 water_oceans = [300.0, 2000.0]
 envelope_fraction = 0.0
 co2 = 1.0
+# An asked ocean world is an ocean: in the habitable zone its climate
+# also has a frozen state, which would make it an ice world, so it keeps
+# the temperate state. Drawn water worlds may be snowballs.
+snowball = false
 
 [orbit]
 star = "G2V"

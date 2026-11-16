@@ -11,4 +11,8 @@ radiogenic_w: number,
 /**
  * From a host's tides ([`tidal_power_w`]); 0 without one.
  */
-tidal_w: number, };
+tidal_w: number, 
+/**
+ * From the cooling of its mantle and core ([`secular_w`]).
+ */
+secular_w: number, };

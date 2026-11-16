@@ -204,6 +204,11 @@ pub struct WorldRequest {
     /// `true`: life arises wherever the world allows it; `false`: never;
     /// left out, drawn.
     pub life: Option<bool>,
+    /// `true`: the planet is a snowball wherever its climate has a frozen
+    /// state beside the temperate one; `false`: never; left out, the
+    /// archetype's, else drawn (see [`crate::planet::climate::climate`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snowball: Option<bool>,
     /// `auto` (rarely the moon of a giant, as the seed draws, the default),
     /// `giant` (always) or `none`.
     pub host: Option<crate::exomoon::HostMode>,
@@ -512,6 +517,7 @@ impl WorldRequest {
             s: self.s.or(a.s),
             radiogenic: self.radiogenic.or(a.radiogenic),
             life: self.life.or(a.life),
+            snowball: self.snowball.or(a.snowball),
         }
     }
 
@@ -814,8 +820,8 @@ impl WorldRequest {
      *
      * The archetype stays as asked; the model's formation inputs
      * ([`PlanetModel::formation`]: the drawn mass, core share, water,
-     * envelope at formation, CO₂ and N₂ factors, radiogenic abundance and
-     * whether life arose) are pinned where the request left them open, so
+     * envelope at formation, CO₂ and N₂ factors, radiogenic abundance,
+     * whether life arose and whether it is a snowball) are pinned where the request left them open, so
      * that the planet stays the same under another seed or epoch too. A
      * position in the habitable zone asked for stays, the orbit it gave
      * stays open. A giant gets no giant neighbours or host pinned:
@@ -865,6 +871,7 @@ impl WorldRequest {
             s: self.s.or(set.s),
             radiogenic: self.radiogenic.or(set.radiogenic),
             life: self.life.or(set.life),
+            snowball: self.snowball.or(set.snowball),
             host: if giant {
                 self.host
             } else {
@@ -1182,8 +1189,9 @@ mod tests {
     const SAME: f64 = 1e-9;
 
     /// Asserts that `a` and `b` serialize alike, numbers within [`SAME`]
-    /// of each other, the life draw left out (a pinned `life` sets it to 0
-    /// or 1, which arises or not as the drawn value did).
+    /// of each other, the life and snowball draws left out (a pinned
+    /// `life` or `snowball` sets its draw to 0 or 1, which gives the state
+    /// the drawn value did).
     fn assert_same(a: &impl Serialize, b: &impl Serialize, what: &str) {
         fn walk(a: &serde_json::Value, b: &serde_json::Value, path: &str, what: &str) {
             use serde_json::Value;
@@ -1195,7 +1203,10 @@ mod tests {
                 }
                 (Value::Object(x), Value::Object(y)) => {
                     let keys: std::collections::BTreeSet<_> = x.keys().chain(y.keys()).collect();
-                    for k in keys.into_iter().filter(|k| *k != "life_draw") {
+                    for k in keys
+                        .into_iter()
+                        .filter(|k| *k != "life_draw" && *k != "snowball_draw")
+                    {
                         let (Some(xv), Some(yv)) = (x.get(k), y.get(k)) else {
                             panic!("{path}.{k} on one side only ({what})");
                         };
@@ -1442,6 +1453,31 @@ mod tests {
             ..WorldRequest::default()
         }
         .pinned(params, Some(model))
+    }
+
+    #[test]
+    fn a_replayed_formation_keeps_its_snowball_state() {
+        // An Earth at 1.2 AU has both a temperate and a frozen state:
+        // its formation pins the one it is in, and replayed through the
+        // request path under other seeds it comes out in it again.
+        for state in [true, false] {
+            let request = WorldRequest {
+                orbit_au: Some(1.2),
+                snowball: Some(state),
+                ..named(Some("earth-like"), 4)
+            };
+            let resolved = resolve(&request).unwrap();
+            let model = resolved.model();
+            let snowball = |m: &PlanetModel| m.surface.is_some_and(|s| s.climate.snowball);
+            assert_eq!(snowball(model), state);
+            assert_eq!(model.formation().overrides.snowball, Some(state));
+            for seed in [77, 1234] {
+                let again = from_world(&resolved.params, model, seed)
+                    .resolve(&mut StdRng::seed_from_u64(9))
+                    .unwrap();
+                assert_eq!(snowball(again.model()), state, "{state} seed {seed}");
+            }
+        }
     }
 
     #[test]

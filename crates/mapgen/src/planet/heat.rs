@@ -2,8 +2,9 @@
 //! decay of its radioactive isotopes, from its silicate mass, its
 //! abundance at formation and its age ([`radiogenic_w`]), and the tides a
 //! host raises in it on an eccentric orbit ([`tidal_power_w`]), with the
-//! response of a rocky, icy or enveloped body ([`k2_over_q`]).
-//! [`InternalHeat`] holds both and the mean flux they push through the
+//! response of a rocky, icy or enveloped body ([`k2_over_q`]), and the
+//! cooling of its mantle and core ([`secular_w`]). [`InternalHeat`]
+//! holds the three and the mean flux they push through the
 //! surface.
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +59,43 @@ pub fn radiogenic_w(silicate_kg: f64, abundance: f64, age_gyr: f64) -> f64 {
             share * scale * (std::f64::consts::LN_2 / half_life * (EARTH_AGE_GYR - age_gyr)).exp()
         })
         .sum()
+}
+
+/// Earth's present secular cooling, W: the heat its mantle and core lose
+/// as they cool, the 47 ± 2 TW it loses through its surface (Davies &
+/// Davies 2010, doi:10.5194/se-1-5-2010) less the [`EARTH_RADIOGENIC_W`]
+/// of its silicates, 26 ± 3 TW, a Urey ratio of 0.43 (Korenaga 2008,
+/// doi:10.1029/2007RG000241, 0.3 to 0.5).
+const EARTH_SECULAR_W: f64 = 26e12;
+
+/// E-folding time of Earth's secular cooling, Gyr. Calibration on Earth
+/// and Mars together. Earth's mantle cools by about 100 K/Gyr today and
+/// cooled no faster before: 150 to 250 K since 3 Ga (Herzberg, Condie &
+/// Korenaga 2010, doi:10.1016/j.epsl.2010.01.022; Korenaga 2008), so its
+/// secular loss decays over a time longer than its age. Scaled by
+/// [`secular_w`]'s `R²`, 10 Gyr gives Mars about 0.8 TW over its 2.4 TW
+/// of radiogenic heat, 0.022 W/m² in all, within the 0.019 to 0.025 of
+/// its thermal histories (Plesa et al. 2018, doi:10.1029/2018GL080728).
+const SECULAR_COOLING_GYR: f64 = 10.0;
+
+/// Secular cooling, W, of a body with `silicate_kg` of silicates,
+/// `age_gyr` after its formation: the heat its interior loses as it
+/// cools, beyond what it makes ([`radiogenic_w`]). Earth's
+/// [`EARTH_SECULAR_W`] scaled by the heat a body holds (its silicate
+/// mass `M`) and decaying with age over a cooling time `τ` that grows as
+/// the square of its size, the time heat takes to leave a body by
+/// conduction (`R²/κ`, Turcotte & Schubert 2014, ch. 4), `R²` taken as
+/// `(M/M⊕)^(2/3)`: `S⊕ (M/M⊕) exp(4.567/τ⊕ − t/τ)`, `τ = τ⊕
+/// (M/M⊕)^(2/3)`, `τ⊕` [`SECULAR_COOLING_GYR`]. All bodies hold the same
+/// heat per kilogram at formation; smaller ones lose it sooner, so an
+/// old Mars or Moon keeps little.
+pub fn secular_w(silicate_kg: f64, age_gyr: f64) -> f64 {
+    if silicate_kg <= 0.0 {
+        return 0.0;
+    }
+    let mass = silicate_kg / EARTH_SILICATE_KG;
+    let tau = SECULAR_COOLING_GYR * mass.powf(2.0 / 3.0);
+    EARTH_SECULAR_W * mass * (EARTH_AGE_GYR / SECULAR_COOLING_GYR - age_gyr / tau).exp()
 }
 
 /// Tidal heating, W, of a satellite of radius `radius_m` on an orbit of
@@ -153,12 +191,14 @@ pub struct InternalHeat {
     pub radiogenic_w: f64,
     /// From a host's tides ([`tidal_power_w`]); 0 without one.
     pub tidal_w: f64,
+    /// From the cooling of its mantle and core ([`secular_w`]).
+    pub secular_w: f64,
 }
 
 impl InternalHeat {
     /// Total internal heat, W.
     pub fn total_w(&self) -> f64 {
-        self.radiogenic_w + self.tidal_w
+        self.radiogenic_w + self.tidal_w + self.secular_w
     }
 
     /// Mean flux through the surface, W/m², for a radius in Earth radii.
@@ -257,15 +297,35 @@ mod tests {
     }
 
     #[test]
+    fn earth_loses_forty_six_terawatts_today() {
+        // Davies & Davies 2010: 47 ± 2 TW; Urey ratio 0.3-0.5 (Korenaga 2008).
+        let r = radiogenic_w(EARTH_SILICATE_KG, 1.0, EARTH_AGE_GYR);
+        let s = secular_w(EARTH_SILICATE_KG, EARTH_AGE_GYR);
+        let total = r + s;
+        assert!((44e12..=47e12).contains(&total), "{total}");
+        assert!((0.3..=0.5).contains(&(r / total)));
+    }
+
+    #[test]
+    fn secular_cooling_fades_with_age_and_size() {
+        let s = |kg, age| secular_w(kg, age);
+        assert!(s(EARTH_SILICATE_KG, 2.0) > s(EARTH_SILICATE_KG, 4.567));
+        assert!(s(EARTH_SILICATE_KG, 9.0) < s(EARTH_SILICATE_KG, 4.567));
+        // Mars's silicate is about a tenth of Earth's.
+        assert!(s(0.1 * EARTH_SILICATE_KG, 4.567) < 0.15 * s(EARTH_SILICATE_KG, 4.567));
+    }
+
+    #[test]
     fn heat_adds_up_and_spreads_over_the_surface() {
         let heat = InternalHeat {
             radiogenic_w: 20e12,
             tidal_w: 1e12,
+            secular_w: 26e12,
         };
-        assert_eq!(heat.total_w(), 21e12);
-        // 21 TW over Earth's 5.10e14 m²: 0.041 W/m².
+        assert_eq!(heat.total_w(), 47e12);
+        // 47 TW over Earth's 5.10e14 m²: 0.092 W/m².
         let flux = heat.flux_w_m2(1.0);
-        assert!((flux / 0.0412 - 1.0).abs() < 0.01, "{flux}");
+        assert!((flux / 0.0921 - 1.0).abs() < 0.01, "{flux}");
         assert!((heat.flux_w_m2(2.0) / flux - 0.25).abs() < 1e-12);
     }
 }

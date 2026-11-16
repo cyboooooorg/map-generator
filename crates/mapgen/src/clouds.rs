@@ -10,6 +10,7 @@
 //! - **sulfuric**: a high deck in zonal bands, nearly total at the top of the
 //!   cover range (Venus);
 //! - **dust**: low and patchy, with a few regional storms;
+//! - **methane**: sparse, pale and patchy, a few streaks (Titan's);
 //! - **none**: no clouds.
 //!
 //! The texture is a noise stretched east-west, as winds draw clouds into
@@ -67,12 +68,14 @@ pub fn clouds(input: &CloudInput) -> Vec<f32> {
                     let band = input.belts.band(lat);
                     water(&perlin, unit, lat, frequency, rain, band, shift)
                 }
-                CloudKind::Sulfuric | CloudKind::Dust => {
+                CloudKind::Sulfuric | CloudKind::Dust | CloudKind::Methane => {
                     // The squeeze fades out towards the poles, where
                     // east-west has no meaning and it would fold the whole
                     // cap into one value.
                     let stretch = if input.kind == CloudKind::Sulfuric {
                         6.0
+                    } else if input.kind == CloudKind::Methane {
+                        3.0
                     } else {
                         1.5
                     };
@@ -86,6 +89,10 @@ pub fn clouds(input: &CloudInput) -> Vec<f32> {
                     );
                     if input.kind == CloudKind::Sulfuric {
                         smoothstep(-0.3, 0.6, 0.2 + 0.7 * shift + n)
+                    } else if input.kind == CloudKind::Methane {
+                        // Sparse: only the crests of the noise, at most
+                        // half an overcast.
+                        0.5 * smoothstep(0.25, 0.7, 0.05 + 0.5 * shift + 1.2 * n)
                     } else {
                         0.8 * smoothstep(0.15, 0.6, 0.05 + 0.5 * shift + 1.4 * n)
                     }
@@ -188,6 +195,16 @@ mod tests {
         assert!(mean(&water_wet) > mean(&water_dry) + 0.1);
         let venus = clouds(&input(CloudKind::Sulfuric, 1.0, &dry));
         assert!(mean(&venus) > 0.9, "Venus cover {}", mean(&venus));
+    }
+
+    #[test]
+    fn methane_clouds_are_sparser_and_paler_than_water_ones() {
+        let n = 128 * 64;
+        let dry = vec![0.0; n];
+        let methane = clouds(&input(CloudKind::Methane, 0.0, &dry));
+        let water = clouds(&input(CloudKind::Water, 0.0, &dry));
+        assert!(methane.iter().all(|c| (0.0..=0.5).contains(c)));
+        assert!(mean(&methane) < 0.5 * mean(&water), "{}", mean(&methane));
     }
 
     #[test]

@@ -174,6 +174,36 @@ short half-lives dominate early.
 **Orders of magnitude.** Earth formed with about five times its present
 radiogenic heat.
 
+**Secular cooling.** A planet also loses the heat it was born with: its
+mantle and core cool. Earth loses about 47 TW through its surface
+(Davies & Davies 2010), so some 26 TW beyond its radiogenic 20, a Urey
+ratio (radiogenic over total) of 0.43, within the 0.3 to 0.5 of Korenaga
+(2008). The model scales Earth's 26 TW by the silicate mass, which holds
+the heat, and lets it decay with age over a cooling time that grows as
+the square of the body's size, the time heat takes to leave it by
+conduction (Turcotte & Schubert 2014, chapter 4):
+
+```math
+S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\, e^{4.567/\tau_\oplus - t/\tau},
+\qquad \tau = \tau_\oplus \left(\frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\right)^{2/3}
+```
+
+with $S_\oplus$ = 26 TW and $\tau_\oplus$ = 10 Gyr, a calibration on Earth
+and Mars together: Earth's mantle cooled no faster in the past than its
+100 K/Gyr today (150 to 250 K since 3 Ga, Herzberg, Condie & Korenaga
+2010), so its loss decays slowly, and Mars, with an eighth of Earth's
+silicate, keeps about 0.8 TW over its 2.4 TW of radiogenic heat, 0.022
+W/m² in all, within the 0.019 to 0.025 of its thermal histories (Plesa et
+al. 2018).
+
+**In words.** Every body holds the same heat per kilogram when it forms;
+a small one loses it sooner, so an old Mars or Moon keeps little and a
+super-Earth keeps more than its share.
+
+**Orders of magnitude.** Earth's model loses 46 TW, 0.090 W/m², and its
+volcanism, which follows the square root of the whole flux, is the
+scale's middle, 0.5.
+
 **Tidal.** A host raises tides in a planet on an eccentric orbit, and
 friction turns them into heat (Peale, Cassen & Reynolds 1979):
 
@@ -230,8 +260,8 @@ shell of thickness
 d = \frac{651\,\ln(T_\mathrm{melt} / T_s)}{q}
 ```
 
-with $T_s$ the surface temperature, $q$ the internal heat flux (radiogenic
-and tidal) and $T_\mathrm{melt}$ = 273 K at the base (Hussmann, Sohl &
+with $T_s$ the surface temperature, $q$ the internal heat flux (radiogenic,
+tidal and secular) and $T_\mathrm{melt}$ = 273 K at the base (Hussmann, Sohl &
 Spohn 2006). Below the shell the water stays liquid: an ocean, down to the
 floor of the water layer or to the depth where the hydrostatic pressure
 reaches 350.1 MPa, whichever comes first. That pressure is the ice III,
@@ -455,97 +485,110 @@ archetypes):
 4. Chen, J. & Kipping, D. 2017, "Probabilistic forecasting of the masses and
    radii of other worlds", *The Astrophysical Journal* 834, 17,
    [doi:10.3847/1538-4357/834/1/17](https://doi.org/10.3847/1538-4357/834/1/17).
-5. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
+5. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
+   *Solid Earth* 1, 5–24,
+   [doi:10.5194/se-1-5-2010](https://doi.org/10.5194/se-1-5-2010).
+6. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
    Ih", *Journal of Physical and Chemical Reference Data* 35, 1021–1047,
    [doi:10.1063/1.2183324](https://doi.org/10.1063/1.2183324).
-6. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
+7. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
    the radius distribution of small planets", *The Astronomical Journal*
    154, 109,
    [doi:10.3847/1538-3881/aa80eb](https://doi.org/10.3847/1538-3881/aa80eb).
-7. Guillot, T. 2005, "The interiors of giant planets: models and
+8. Guillot, T. 2005, "The interiors of giant planets: models and
    outstanding questions", *Annual Review of Earth and Planetary
    Sciences* 33, 493–530,
    [doi:10.1146/annurev.earth.33.092203.122639](https://doi.org/10.1146/annurev.earth.33.092203.122639).
-8. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
+9. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
    [doi:10.1088/0004-637X/726/1/15](https://doi.org/10.1088/0004-637X/726/1/15).
-9. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
-   heat flow from Enceladus' south polar region measured using 10–600
-   cm⁻¹ Cassini/CIRS data", *Journal of Geophysical Research* 116, E03003,
-   [doi:10.1029/2010JE003718](https://doi.org/10.1029/2010JE003718).
-10. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
+10. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
+    Earth and its petrological expression", *Earth and Planetary Science
+    Letters* 292, 79–88,
+    [doi:10.1016/j.epsl.2010.01.022](https://doi.org/10.1016/j.epsl.2010.01.022).
+11. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
+    heat flow from Enceladus' south polar region measured using 10–600
+    cm⁻¹ Cassini/CIRS data", *Journal of Geophysical Research* 116, E03003,
+    [doi:10.1029/2010JE003718](https://doi.org/10.1029/2010JE003718).
+12. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
     interiors of medium-sized outer planet satellites and large
     trans-neptunian objects", *Icarus* 185, 258–273,
     [doi:10.1016/j.icarus.2006.06.005](https://doi.org/10.1016/j.icarus.2006.06.005).
-11. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
+13. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
     close-in extrasolar planets", *The Astrophysical Journal* 678,
     1396–1406, [doi:10.1086/529187](https://doi.org/10.1086/529187).
-12. Kimura, J. 2024, "Europa's structural conditions for the existence of
+14. Kimura, J. 2024, "Europa's structural conditions for the existence of
     subsurface ocean and the absence of metallic core-driven magnetic
     field", arXiv:2403.01336,
     [arxiv.org/abs/2403.01336](https://arxiv.org/abs/2403.01336).
-13. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
-    University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
-    Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
-    gives $567/T$).
-14. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
+15. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
+    Earth's mantle", *Reviews of Geophysics* 46, RG2007,
+    [doi:10.1029/2007RG000241](https://doi.org/10.1029/2007RG000241).
+16. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
     tidal dissipation in Io and Jupiter from astrometric observations",
     *Nature* 459, 957–959,
     [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
-15. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
+17. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
     data", *Celestial Mechanics and Dynamical Astronomy* 126, 145–156
     (table 1),
     [doi:10.1007/s10569-016-9695-y](https://doi.org/10.1007/s10569-016-9695-y).
-16. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
+18. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
     constraints on Enceladus' thermal state from astrometry", *The
     Astrophysical Journal* 752, 14,
     [doi:10.1088/0004-637X/752/1/14](https://doi.org/10.1088/0004-637X/752/1/14).
-17. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
+19. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
     [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
-18. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
+20. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-19. Marty, B. 2012, "The origins and concentrations of water, carbon,
+21. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-20. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+22. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-21. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+23. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
     indication for a dichotomy in the interior structure of Uranus and
     Neptune from the application of modified shape and rotation data",
     *Planetary and Space Science* 77, 143–151,
     [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
-22. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+24. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-23. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+25. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+    University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
+    Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
+    gives $567/T$).
+26. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
+    Mars", *Geophysical Research Letters* 45, 12198–12209,
+    [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
+27. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-24. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+28. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-25. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+29. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-26. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+30. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-27. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+31. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-28. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+32. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-29. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+33. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-30. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+34. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
-31. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+35. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).

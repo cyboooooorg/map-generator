@@ -298,6 +298,7 @@ impl GiantComposition {
             volatiles: crate::planet::Volatiles::default(),
             radiogenic: 1.0,
             life_draw: 0.0,
+            snowball_draw: 1.0,
         }
     }
 }

@@ -15,7 +15,8 @@ value: number,
  * The key of a value that is not a number: a class
  * (`PlanetClass::key`, `mini-neptune`), a regime (`plates`), a
  * liquid (`water`), a core state (`liquid`), or a note's key
- * (`thermostat`, `life`, `runaway`, `boiled`).
+ * (`thermostat`, `life`, `runaway`, `boiled`, `snowball`, `frozen`,
+ * `co2_build_up`, `methane_trap`).
  */
 label: string | null, 
 /**

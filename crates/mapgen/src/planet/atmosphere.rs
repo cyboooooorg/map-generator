@@ -9,11 +9,13 @@
 //! [`cold_trap`] freezes out what the equilibrium temperature cannot hold
 //! as gas, and [`photochemistry`] turns ammonia into nitrogen and
 //! oxidises warm methane. The carbonate thermostat (climate) and oxygen
-//! (life) come after.
+//! (life) come after; the climate condenses methane and nitrogen at its
+//! surface temperature ([`condense`]).
 use std::f64::consts::PI;
 
 use serde::{Deserialize, Serialize};
 
+use super::climate::SurfaceLiquid;
 use super::{Core, Interior, PlanetInputs, Water};
 use crate::exomoon::{EARTH_KG, EARTH_M, G};
 use crate::geology::Regime;
@@ -100,9 +102,26 @@ const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
 /// Share of the outgassed sulphur that stays in the air as SO₂: the rest
 /// ends in sulphides and sulphates at the surface (on Venus SO₂ is
 /// buffered by its reaction with the crust, Fegley & Prinn 1989, Nature
-/// 337, 55; not checked). Calibration, no source: Venus's SO₂ of about
-/// 150 ppm (value from memory).
-const SULPHUR_IN_AIR: f64 = 1.0e-4;
+/// 337, 55, doi:10.1038/337055a0: reference checked, not the share).
+/// Calibration on Venus's SO₂ of about
+/// 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
+const SULPHUR_IN_AIR: f64 = 5.0e-5;
+
+/// Free oxygen, bar, from which an air washes its SO2 out as it does over
+/// liquid water: oxygen and the radicals it makes oxidise SO2 to sulphate.
+/// A hundredth of a bar, about a twentieth of Earth's: the oxidation is
+/// fast long before the air is Earth's. Calibration, no source.
+const OXIDISING_O2_BAR: f64 = 0.01;
+
+/// Share of its SO2 an air keeps over liquid water or with free oxygen:
+/// the lifetime of SO2 there, about a day and a half (oxidation in cloud
+/// water and by OH, Seinfeld & Pandis 2016, Atmospheric Chemistry and
+/// Physics, ch. 6: 1 to 2 days in the lower troposphere), over its
+/// lifetime in a dry, oxygen-free air, where only the crust takes it: about
+/// 1 Myr (Venus's air would lose its SO2 to the crust in a few Myr
+/// without resupply, Fegley & Prinn 1989, Nature 337, 55; value from
+/// memory, not checked). 1.5 days over 1 Myr is `4e-9`.
+const WET_SO2_SHARE: f64 = 4.0e-9;
 
 /// Escape velocity, km/s, at which the cosmic shoreline crosses Earth's
 /// XUV fluence. Zahnle & Catling 2017 (ApJ 843, 122,
@@ -223,6 +242,39 @@ pub fn outgassed(
     }
 }
 
+/// `gases` after the washing of SO2 out of a wet or oxidising air: with
+/// liquid water at the surface or `o2` of [`OXIDISING_O2_BAR`] or more,
+/// the SO2 falls to [`WET_SO2_SHARE`] of what the volcanoes gave; a dry,
+/// oxygen-poor air keeps it in proportion to its pressure below
+/// [`DRY_COLUMN_BAR`] (monotonic: the thinner the air, the less it keeps). Sulphuric acid clouds are not made here: the
+/// sky follows the SO2 left, whatever the liquid.
+pub fn wash_out(gases: Gases, liquid: SurfaceLiquid) -> Gases {
+    if liquid == SurfaceLiquid::Water || gases.o2 >= OXIDISING_O2_BAR {
+        Gases {
+            so2: gases.so2 * WET_SO2_SHARE,
+            ..gases
+        }
+    } else {
+        Gases {
+            so2: gases.so2 * (gases.total() / DRY_COLUMN_BAR).min(1.0),
+            ..gases
+        }
+    }
+}
+
+/// Column of air, bar, from which a dry, oxygen-free air keeps all its
+/// SO2 for the dry lifetime of [`WET_SO2_SHARE`]. The dry sink is
+/// photochemical: UV-made oxidants (O, OH from photolysed CO2 and H2O)
+/// destroy SO2 at a rate per unit area that does not grow with the
+/// column, so the lifetime scales with the column mass that shields and
+/// dilutes it. Venus's 92 bar keeps SO2 for about 1 Myr, Mars's 0.006 bar
+/// for about a century or less (Krasnopolsky 2012, Icarus 217, 144,
+/// doi:10.1016/j.icarus.2011.10.019: Mars SO2 upper limit; the lifetime of
+/// about 2 yr and Fegley & Prinn 1989, Nature 337, 55, for Venus: from
+/// memory, check). Calibrated on Venus and Mars together: 10 bar leaves
+/// Venus at its 150 ppm and Mars's SO2 far under its 0.3 ppb limit.
+const DRY_COLUMN_BAR: f64 = 10.0;
+
 /// The share of its air a body keeps against escape to space: the cosmic
 /// shoreline of Zahnle & Catling 2017 (doi:10.3847/1538-4357/aa7846).
 ///
@@ -286,6 +338,11 @@ const CH4_PER_LYMAN_ALPHA_PHOTON: f64 = 13.9;
 /// Universal gas constant, J/(mol·K).
 const R_GAS: f64 = 8.314;
 
+/// Triple point of nitrogen, K: under it, the nitrogen a surface
+/// condenses is a frost (NIST Chemistry WebBook, 63.15 K; from memory,
+/// not checked).
+pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.15;
+
 /// A gas's triple point (K, bar) and its enthalpy of sublimation
 /// (J/mol). Values from memory (NIST Chemistry WebBook), not checked:
 /// CO₂ 216.6 K and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm
@@ -314,7 +371,7 @@ const CH4_FROST: Frost = Frost {
     sublimation_j_mol: 9_100.0,
 };
 const N2_FROST: Frost = Frost {
-    triple_k: 63.15,
+    triple_k: NITROGEN_TRIPLE_K,
     triple_bar: 0.125,
     sublimation_j_mol: 6_300.0,
 };
@@ -331,6 +388,143 @@ impl Frost {
             -self.sublimation_j_mol / R_GAS * (1.0 / temperature_k.max(1.0) - 1.0 / self.triple_k);
         partial_bar.min(self.triple_bar * exponent.exp())
     }
+}
+
+/// One standard atmosphere, bar.
+const ATM_BAR: f64 = 1.013_25;
+
+/// A volatile that condenses on a body's surface at the surface
+/// temperature, inside the climate's fixed point ([`condense`]): its
+/// [`Frost`] below its triple point, its liquid's vapour pressure above,
+/// and none of it condensed past its critical point.
+struct Condensable {
+    frost: Frost,
+    /// Normal boiling point, K, at one atmosphere.
+    boils_k: f64,
+    /// Critical temperature, K: above it no liquid exists.
+    critical_k: f64,
+    /// Share of the pure gas's saturation pressure that the air over its
+    /// condensate holds (Raoult's law: the gas's mole fraction in the
+    /// condensate), 1 for a pure condensate.
+    activity: f64,
+    /// The gas's partial pressure in a [`Gases`].
+    of: fn(&mut Gases) -> &mut f64,
+}
+
+impl Condensable {
+    /// Saturation vapour pressure of the pure gas at `temperature_k`,
+    /// bar: the sublimation curve of its [`Frost`] below its triple point;
+    /// above it, Clausius–Clapeyron with the mean latent heat that joins
+    /// the triple point to the normal boiling point (both from the NIST
+    /// Chemistry WebBook); infinite at and past the critical point, where
+    /// the gas does not condense.
+    fn saturation_bar(&self, temperature_k: f64) -> f64 {
+        let f = &self.frost;
+        if temperature_k < f.triple_k {
+            return f.cap(f64::INFINITY, temperature_k);
+        }
+        if temperature_k >= self.critical_k {
+            return f64::INFINITY;
+        }
+        let l_over_r = (ATM_BAR / f.triple_bar).ln() / (1.0 / f.triple_k - 1.0 / self.boils_k);
+        f.triple_bar * (l_over_r * (1.0 / f.triple_k - 1.0 / temperature_k)).exp()
+    }
+}
+
+/// Mole fraction of methane in a Titan sea: about a half, the rest
+/// nitrogen and ethane (Glein & Shock 2013, doi:10.1016/j.gca.2013.03.030,
+/// and Tan, Kargel & Marion 2013, doi:10.1016/j.icarus.2012.10.032, find
+/// 0.5 to 0.7 for its seas; from the plan, not checked). By Raoult's law
+/// the air over such a sea holds this share of pure methane's saturation
+/// pressure ([`condense`]). The low end, because Titan's air near its
+/// surface holds 45 to 50 % of pure methane's saturation (Niemann et al.
+/// 2005, doi:10.1038/nature04122; from memory, not checked), and its
+/// seas hold that air.
+pub(crate) const SEA_METHANE_SHARE: f64 = 0.5;
+
+/// The gases that condense on the surface inside the climate
+/// ([`condense`]):
+///
+/// - methane over a sea of methane, nitrogen and ethane
+///   ([`SEA_METHANE_SHARE`]), normal boiling point 111.67 K and critical
+///   point 190.56 K;
+/// - nitrogen over its own ice (activity 1: a pure frost, which Triton's
+///   N₂ air sits in equilibrium with; issue #464), normal boiling point
+///   77.36 K and critical point 126.19 K.
+///
+/// Points from the NIST Chemistry WebBook (from memory, not checked).
+const CONDENSING: [Condensable; 2] = [
+    Condensable {
+        frost: CH4_FROST,
+        boils_k: 111.67,
+        critical_k: 190.56,
+        activity: SEA_METHANE_SHARE,
+        of: |g| &mut g.ch4,
+    },
+    Condensable {
+        frost: N2_FROST,
+        boils_k: 77.36,
+        critical_k: 126.19,
+        activity: 1.0,
+        of: |g| &mut g.n2,
+    },
+];
+
+/// Saturation vapour pressure of pure methane at `temperature_k`, bar:
+/// over its ice below its triple point (90.7 K, 0.117 bar), over its
+/// liquid above, up to its critical point (190.56 K), past which it is
+/// infinite: methane does not condense there.
+pub(crate) fn methane_saturation_bar(temperature_k: f64) -> f64 {
+    CONDENSING[0].saturation_bar(temperature_k)
+}
+
+/// The air and the condensate of `gases` (bar) on a surface at
+/// `surface_k`: each gas that condenses there ([`CONDENSING`]: methane
+/// and nitrogen)
+/// keeps in the air at most its activity times its saturation pressure
+/// at the surface temperature, and the rest lies on the ground, as a
+/// liquid or a frost. Returns `(air, condensate)`; `air + condensate` is
+/// `gases`.
+///
+/// The climate applies it inside its fixed point, at the surface
+/// temperature it solves for (see [`super::climate::climate`]): unlike
+/// the [`cold_trap`] at the equilibrium temperature, which the climate
+/// cannot move, how much of a condensing gas is in the air sets the
+/// greenhouse that sets the temperature.
+pub(crate) fn condense(gases: Gases, surface_k: f64) -> (Gases, Gases) {
+    let mut air = gases;
+    let mut condensate = Gases::default();
+    for gas in &CONDENSING {
+        let kept = (gas.of)(&mut air);
+        let most = gas.activity * gas.saturation_bar(surface_k);
+        if *kept > most {
+            *(gas.of)(&mut condensate) = *kept - most;
+            *kept = most;
+        }
+    }
+    (air, condensate)
+}
+
+/// `air` with each gas that condenses on the surface ([`condense`]) set
+/// to what its `inventory` (bar, in the air and on the ground) leaves in
+/// the air at `surface_k`: the air a climate solved with a temperature
+/// close to `surface_k`, made to agree with it exactly.
+pub(crate) fn condensed_air(air: Gases, inventory: &Gases, surface_k: f64) -> Gases {
+    let (kept, _) = condense(*inventory, surface_k);
+    let mut air = air;
+    for gas in &CONDENSING {
+        let mut kept = kept;
+        *(gas.of)(&mut air) = *(gas.of)(&mut kept);
+    }
+    air
+}
+
+/// Partial pressure of CO₂, bar, at which it frosts out at
+/// `temperature_k` (its sublimation curve below its triple point,
+/// [`Frost`]); unbounded above the triple point, where it does not
+/// freeze.
+pub(super) fn co2_frost_bar(temperature_k: f64) -> f64 {
+    CO2_FROST.cap(f64::INFINITY, temperature_k)
 }
 
 /// Methane the star's ultraviolet destroys on a body, bar per Gyr, per
@@ -401,17 +595,18 @@ pub fn methane_photolysis(
 /// A gas whose triple point lies above the body's `equilibrium_k` cannot
 /// stay liquid there: it frosts onto the surface until its partial
 /// pressure falls to its sublimation pressure (Clausius–Clapeyron from
-/// the triple point, see [`Frost`]). This freezes Titan's CO₂ and NH₃ and
-/// most of its CH₄. Above the triple point the gas stays: whether it
-/// rains out as a liquid depends on the surface temperature, which the
-/// climate sets. Water is the climate's too (a runaway's steam sits on a
-/// planet far hotter than its equilibrium temperature).
+/// the triple point, see [`Frost`]). This freezes Titan's CO₂ and NH₃.
+/// Above the triple point the gas stays: whether it rains out as a liquid
+/// depends on the surface temperature, which the climate sets. Water is
+/// the climate's too (a runaway's steam sits on a planet far hotter than
+/// its equilibrium temperature), and so are methane and nitrogen, whose
+/// air moves the surface temperature they condense at ([`condense`]):
+/// Triton's N₂ is the vapour of its frost at its surface temperature,
+/// which the frost's albedo lowers (issue #464).
 pub fn cold_trap(gases: Gases, equilibrium_k: f64) -> Gases {
     Gases {
         co2: CO2_FROST.cap(gases.co2, equilibrium_k),
         nh3: NH3_FROST.cap(gases.nh3, equilibrium_k),
-        ch4: CH4_FROST.cap(gases.ch4, equilibrium_k),
-        n2: N2_FROST.cap(gases.n2, equilibrium_k),
         ..gases
     }
 }
@@ -462,7 +657,7 @@ mod tests {
     use crate::atmosphere::AIRLESS_BAR;
     use crate::exomoon::EARTH_KG;
     use crate::planet::core::core;
-    use crate::planet::heat::{InternalHeat, radiogenic_w};
+    use crate::planet::heat::{InternalHeat, radiogenic_w, secular_w};
     use crate::planet::interior::interior;
     use crate::planet::reference::{exposure_at, model_inputs, reference};
     use crate::planet::regime::{regime, water};
@@ -497,6 +692,7 @@ mod tests {
         let heat = InternalHeat {
             radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, NOW),
             tidal_w: 0.0,
+            secular_w: secular_w(silicate, NOW),
         };
         let r = regime(inputs, &heat, &int, &w);
         let k = core(inputs, &int, r, NOW);
@@ -510,6 +706,50 @@ mod tests {
     fn air_of(name: &str) -> Gases {
         let b = reference(name);
         air(&model_inputs(b), b.orbit_au)
+    }
+
+    /// The surface air of the reference body `name` after the whole chain.
+    fn surface_air(name: &str) -> Gases {
+        let b = reference(name);
+        let model = crate::planet::planet_model(
+            &crate::planet::reference::sun_at(b.orbit_au),
+            model_inputs(b),
+        );
+        model.surface.expect("a surface").gases
+    }
+
+    #[test]
+    fn earths_air_keeps_no_sulphur_dioxide() {
+        let g = surface_air("Earth");
+        assert!(g.so2 < 1e-6, "{g:?}");
+    }
+
+    #[test]
+    fn venus_keeps_its_sulphur_dioxide() {
+        // About 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
+        let g = surface_air("Venus");
+        assert!((0.008..=0.02).contains(&g.so2), "{g:?}");
+    }
+
+    #[test]
+    fn mars_keeps_little_sulphur_dioxide() {
+        // Upper limit about 0.3 ppb (Encrenaz et al. 2011).
+        let g = surface_air("Mars");
+        assert!(g.so2 < 1e-6, "{g:?}");
+    }
+
+    #[test]
+    fn a_wet_or_oxidising_air_loses_its_sulphur_dioxide() {
+        let dry = Gases {
+            so2: 1.0,
+            ..Gases::default()
+        };
+        assert_eq!(wash_out(dry, SurfaceLiquid::None).so2, 1.0 / DRY_COLUMN_BAR);
+        let thick = Gases { co2: 90.0, ..dry };
+        assert_eq!(wash_out(thick, SurfaceLiquid::None).so2, 1.0);
+        assert_eq!(wash_out(dry, SurfaceLiquid::Water).so2, WET_SO2_SHARE);
+        let oxygen = Gases { o2: 0.2, ..dry };
+        assert_eq!(wash_out(oxygen, SurfaceLiquid::None).so2, WET_SO2_SHARE);
     }
 
     #[test]
@@ -589,6 +829,7 @@ mod tests {
         let heat = InternalHeat {
             radiogenic_w: radiogenic_w(silicate, inputs.radiogenic, NOW),
             tidal_w: 0.0,
+            secular_w: secular_w(silicate, NOW),
         };
         let r = regime(&inputs, &heat, &int, &w);
         let k = core(&inputs, &int, r, NOW);
@@ -606,10 +847,11 @@ mod tests {
     #[test]
     fn titans_outgassing_outruns_its_photolysis() {
         // Titan keeps a stock of methane on its ground, from which the
-        // cold trap leaves its air a few hundredths of a bar.
+        // climate's condensation leaves its air a few hundredths of a bar.
         let (outgassed, left) = methane_budget("Titan");
         assert!(left > 1.0 && left < outgassed, "{outgassed} {left}");
-        assert!(air_of("Titan").ch4 < left);
+        let air = surface_air("Titan");
+        assert!(air.ch4 > 0.01 && air.ch4 < 0.2, "{air:?}");
     }
 
     #[test]
@@ -668,7 +910,8 @@ mod tests {
 
     #[test]
     fn titan_keeps_a_thick_nitrogen_atmosphere() {
-        let g = air_of("Titan");
+        // After the climate: most of its methane condenses on the ground.
+        let g = surface_air("Titan");
         assert!((0.5..=5.0).contains(&g.total()), "{g:?}");
         assert!(g.n2 / g.total() > 0.5, "{g:?}");
     }
