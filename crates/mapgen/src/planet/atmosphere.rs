@@ -102,7 +102,8 @@ const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
 /// Share of the outgassed sulphur that stays in the air as SO₂: the rest
 /// ends in sulphides and sulphates at the surface (on Venus SO₂ is
 /// buffered by its reaction with the crust, Fegley & Prinn 1989, Nature
-/// 337, 55; not checked). Calibration on Venus's SO₂ of about
+/// 337, 55, doi:10.1038/337055a0: reference checked, not the share).
+/// Calibration on Venus's SO₂ of about
 /// 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
 const SULPHUR_IN_AIR: f64 = 5.0e-5;
 
@@ -267,8 +268,9 @@ pub fn wash_out(gases: Gases, liquid: SurfaceLiquid) -> Gases {
 /// destroy SO2 at a rate per unit area that does not grow with the
 /// column, so the lifetime scales with the column mass that shields and
 /// dilutes it. Venus's 92 bar keeps SO2 for about 1 Myr, Mars's 0.006 bar
-/// for about a century or less (Krasnopolsky 2005, Icarus: Mars SO2 upper
-/// limit and lifetime of about 2 yr; Fegley & Prinn 1989; both from
+/// for about a century or less (Krasnopolsky 2012, Icarus 217, 144,
+/// doi:10.1016/j.icarus.2011.10.019: Mars SO2 upper limit; the lifetime of
+/// about 2 yr and Fegley & Prinn 1989, Nature 337, 55, for Venus: from
 /// memory, check). Calibrated on Venus and Mars together: 10 bar leaves
 /// Venus at its 150 ppm and Mars's SO2 far under its 0.3 ppb limit.
 const DRY_COLUMN_BAR: f64 = 10.0;

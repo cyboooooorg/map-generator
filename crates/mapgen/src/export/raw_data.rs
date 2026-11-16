@@ -76,8 +76,17 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// model's radius, with a giant look of kind `steam`, and adds
 /// `cloud_deck`, the deck it is drawn with (a steam world is a planet: no
 /// `giant`). Version 23 stores the NH₃ and S factors of a formation, and
-/// archetypes may set them.
-pub const FORMAT_VERSION: u32 = 23;
+/// archetypes may set them. Version 24 comes with the second lot of the
+/// climate pass (#423): the interior's heat carries a secular term
+/// (`InternalHeat::secular_w`, so that a younger or heavier body is
+/// hotter inside), the Bond albedo follows the body's cover
+/// (`Climate::bond_albedo`), a cold planet may freeze into a snowball
+/// (`Climate::snowball`, drawn from `PlanetInputs::snowball_draw`), a
+/// methane cloud is its own kind (`CloudKind::Methane`) and the card has
+/// new quantities for them. Worlds of version 23 would show Venus, Mars,
+/// Titan and Triton with the old temperatures and clouds, so they are
+/// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8.
+pub const FORMAT_VERSION: u32 = 24;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -85,7 +94,7 @@ pub const FORMAT_VERSION: u32 = 23;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message pointing to the main menu's Regenerate
 /// button.
-pub const MIN_FORMAT_VERSION: u32 = 23;
+pub const MIN_FORMAT_VERSION: u32 = 24;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);

@@ -70,8 +70,13 @@ use std::sync::Arc;
 /// raised by the steam (#492). A system of another version is refused by
 /// [`read_system`], not migrated. Version 7 stores the NH₃ and S factors
 /// of a formation ([`crate::planet::inputs::InputOverrides`]), so that a
-/// drifted planet keeps its nitrogen (#453).
-pub const SYSTEM_FORMAT_VERSION: u32 = 7;
+/// drifted planet keeps its nitrogen (#453). Version 8 comes with the
+/// second lot of the climate pass (#423): the stored models carry the
+/// interior's `secular_w`, the climate's `bond_albedo` and `snowball`,
+/// the formation's `snowball_draw`, the `Methane` cloud kind and the new
+/// card quantities, so a system of version 7 does not parse as today's
+/// and is refused on its version, like every older one.
+pub const SYSTEM_FORMAT_VERSION: u32 = 8;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.

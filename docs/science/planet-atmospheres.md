@@ -257,9 +257,11 @@ shutoff, not a half point. A shutoff there (tried with
 ocean world: its air would have to come from the volatiles dissolved in
 its ocean, which the model does not carry.
 
-Sulphur comes up as SO₂, of which 1e-4 stays in the air (the rest ends in
+Sulphur comes up as SO₂, of which 5e-5 stays in the air (the rest ends in
 the crust; Venus's SO₂ is buffered by its surface, Fegley & Prinn 1989,
-not checked; calibrated on Venus's 150 ppm). Water is vapour only in a
+doi:10.1038/337055a0, the share not checked; calibrated on Venus's
+150 ppm, and washed out of a wet or oxygen-rich air, see **Sulphur and
+SO₂** below). Water is vapour only in a
 runaway greenhouse, and then all that the runaway left
 (`Water::kept_kg`); otherwise it is an ocean or ice, and the climate sets
 its vapour. The escape of the cosmic shoreline (below) takes the same
@@ -708,6 +710,57 @@ accumulates). If no CO₂ at all is still too warm, the planet is hotter.
 Only a temperature reached is `regulated`. The CO₂ the thermostat can
 use is what the cold trap left. The grid's `carbon_cycle` is unchanged;
 part 3 aligns them.
+
+**Bond albedo** (`albedo::cover`, `albedo::bond_albedo`, issue #510). The
+albedo is no longer Earth's 0.3 for everyone: it follows what covers the
+disc, and the climate and the albedo are solved together as a fixed point
+(`Context::with_albedo` turns an albedo into the equilibrium temperature
+the column absorbs at). The disc is split, planet-wide, into open ocean
+(0.06), bare land (0.25 under an air, the regolith's 0.11 on an airless
+body, shielded from space weathering by `1 - exp(-p / 1e-4 bar)`), water
+ice and snow (0.6, from the ice line at -5 °C and the equator-to-pole
+contrast of an Earth-like planet, `ice_line_share`), frosts of N₂, CH₄ and
+CO₂ (0.75, the share `frost / 0.02 bar` of the disc), under a water cloud
+cover that grows with the vapour (`1 - exp(-p_H₂O / 1.15e-2 bar)`, Earth's
+0.67 at its 1.26e-2 bar, each cloud 0.19), Rayleigh scattering of the air's
+column, a methane haze and, from 1e-3 bar of SO₂ in a surface above 273 K,
+a sulphuric acid deck that hides all below it (0.76). Each constant is
+calibrated on several bodies at once and carries its source (several are
+from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
+0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64 and Triton 0.75.
+
+**Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
+that keeps water has two climates when the ice-albedo feedback makes it
+bistable: the temperate one, started from a warm planet with no ice, and
+the frozen one, started from a body covered in ice with the CO₂ the
+temperate one held when it froze. Weathering stops under the ice, so
+volcanic CO₂ builds up in the frozen air until it thaws the planet (the
+snowball Earth of Hoffman et al. 2017, doi:10.1126/sciadv.1600983); the
+frozen branch's CO₂ is the amount that would be there, half way
+(`SNOWBALL_BUILT_UP`) from the CO₂ it froze with to the CO₂ that thaws it.
+Where both exist the planet is a snowball (`Climate::snowball`) when its
+formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
+`d / (d + 0.8 bar × v / v⊕)`: the share of its history it spends frozen,
+with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
+(0.8 bar gives Earth, which spent about a tenth of its history frozen, a
+chance of 0.1). So snowballs are rare near S = 1, likelier towards the
+outer edge of the habitable zone and on planets that outgas little, and
+`--snowball yes|no` pins the state. A snowball is drawn with the `frozen`
+look and keeps its relief and coastlines; no sulphuric cloud forms in its
+cold air. On the sweep of an Earth-like planet round the Sun the warm
+branch runs from the runaway at about 0.95 AU to 1.6 AU (288 K, the
+thermostat's, with 1.6 bar of CO₂ at 1.6 AU) and ends near 1.67 AU, beyond
+which the frozen branch is the only one (187 K at 1.8 AU).
+
+**Sulphur and SO₂.** Outgassed sulphur stays in the air as SO₂ only in
+share `SULPHUR_IN_AIR` (5e-5); over liquid water or with free oxygen above
+0.01 bar it is washed out to sulphate in about a day and a half
+(`WET_SO2_SHARE`, 4e-9 of the dry lifetime), and in a dry, oxygen-free air
+its lifetime grows with the column (`DRY_COLUMN_BAR`, 10 bar). That gives
+Earth under 1e-6 bar of SO₂ (2e-11), Venus about 1e-2 bar (150 ppm of
+92 bar) and Mars under its 0.3 ppb limit. The constants are calibrated on
+Venus and Mars together; the lifetimes are from memory and marked as such
+in `atmosphere.rs`.
 
 **Surface liquid**, from the phase diagrams at the surface temperature
 and pressure, in this order:

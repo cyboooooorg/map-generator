@@ -5,7 +5,7 @@
 temperature = 4.5
 moisture = 0.55
 
-# A dense, corrosive haze tints the sky yellow-green; acid clouds.
+# A dense, corrosive haze tints the sky pale cream; acid clouds.
 [atmosphere]
 rayleigh = [0.4, 0.55, 0.25]           # sky colour of the gas and its absorbers
 haze = 0.3

@@ -585,7 +585,11 @@ systems/<system-id>/
     it is made of, its interior, heat, surface, air, climate, life and
     class, and for a frozen body with a water layer its `ice_shell`:
     the conductive shell's thickness `shell_km` and the liquid ocean left
-    beneath it `ocean_km`), derived once when the system is drawn from its orbit, the
+    beneath it `ocean_km`; its heat adds a `secular_w` term to the
+    radiogenic and tidal ones, its climate stores the `bond_albedo` it
+    was solved with and whether the planet is a `snowball`, drawn from
+    the formation's `snowball_draw`; since format 8 of the system and 24
+    of the world), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,
@@ -1035,7 +1039,7 @@ No migration, as decided: the worlds made before systems are deleted.
 The same rule holds for a system written by an older generator: the
 generator keeps no code to re-derive it.
 
-- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (22 at
+- A body whose `raw_data/world.json` is below `MIN_FORMAT_VERSION` (24 at
   the time of writing): its tiles, epochs and hex grids answer 410 Gone
   with a message pointing to the Regenerate button of the system's card in
   the main menu (or to deleting it and drawing it again), and the viewer

@@ -562,7 +562,7 @@ archetypes):
     gives $567/T$).
 26. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
     Mars", *Geophysical Research Letters* 45, 12198–12209,
-    [doi:10.1029/2018GL077869](https://doi.org/10.1029/2018GL077869).
+    [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
 27. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).

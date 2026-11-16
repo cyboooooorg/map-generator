@@ -1,9 +1,18 @@
 //! Measures the climate model on lone planets at forced orbits, asked
-//! moons and drawn systems (throwaway, not committed).
+//! moons and drawn systems. It prints the acceptance numbers of the
+//! climate pass (Earth, Venus and Mars, the Earth-like distance sweep with
+//! its warm and frozen branches, Titan and Triton, the methane worlds and
+//! the snowballs of 500 drawn systems by insolation).
 //!
 //! ```text
-//! cargo run --release -p mapgen --example climate_sweep
+//! cargo run --release -p mapgen --example climate_sweep [sweep|moons|all]
 //! ```
+//!
+//! `sweep` is section 1 (distance sweep, Solar System bodies), `moons`
+//! section 3 (seeds 1 to 10 of `titan-like` and `triton-like`); with no
+//! argument or `all` every section runs, which takes a few minutes. The
+//! planet census (`planet_census 500`) prints the class mix and the same
+//! snowball and methane checks.
 use std::collections::BTreeMap;
 
 use mapgen::planet::{self, PlanetModel, SurfaceLiquid, interim, outgassed};

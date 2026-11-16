@@ -218,7 +218,7 @@ const CAUSTIC_RAYLEIGH: [f32; 3] = [0.4, 0.55, 0.25];
 const CAUSTIC_HAZE: f32 = 0.3;
 /// Pale cream-yellow: Venus in visible light, about (0.93, 0.89, 0.76) in
 /// sRGB (its deck reflects blue less than red, Bond albedo 0.76; Pérez-Hoyos
-/// et al. 2018, doi:10.1016/j.icarus.2017.12.034 and the Mariner 10 and
+/// et al. 2018, JGR Planets 123, 145, doi:10.1002/2017JE005406, and the Mariner 10 and
 /// MESSENGER true-colour composites; from memory, check).
 const CAUSTIC_HAZE_COLOUR: [f32; 3] = [0.93, 0.89, 0.76];
 

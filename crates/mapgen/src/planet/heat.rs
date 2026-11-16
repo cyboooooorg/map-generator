@@ -75,7 +75,7 @@ const EARTH_SECULAR_W: f64 = 26e12;
 /// secular loss decays over a time longer than its age. Scaled by
 /// [`secular_w`]'s `R²`, 10 Gyr gives Mars about 0.8 TW over its 2.4 TW
 /// of radiogenic heat, 0.022 W/m² in all, within the 0.019 to 0.025 of
-/// its thermal histories (Plesa et al. 2018, doi:10.1029/2018GL077869).
+/// its thermal histories (Plesa et al. 2018, doi:10.1029/2018GL080728).
 const SECULAR_COOLING_GYR: f64 = 10.0;
 
 /// Secular cooling, W, of a body with `silicate_kg` of silicates,
