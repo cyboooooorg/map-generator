@@ -45,7 +45,7 @@ use crate::noise::{stream, stream_seed};
 use crate::planet::interim::{base_of, params_for};
 use crate::planet::mass::{Origin, draw_mass};
 use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
-use crate::planet::resonance::{Orbiter, resonant_heat};
+use crate::planet::resonance::{Orbiter, Resonance, resonant_heat};
 use crate::planet::{Context, HostTide, PlanetClass, PlanetModel, derive_model, derive_model_with};
 use crate::request::{RequestError, WorldRequest};
 use crate::star::{StarInfo, draw_eccentricity, parse_type};
@@ -1742,7 +1742,7 @@ fn assemble(
                 let Some(heat) = heat else {
                     continue;
                 };
-                formation.tide.resonant_heat_w = Some(heat);
+                formation.tide.resonance = Some(heat);
                 moon_models[k] = Some(round_moon_model(
                     seed,
                     &moon_id(k),
@@ -2145,7 +2145,7 @@ pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
             a_m: f64::from(moon.semi_major_axis_km) * 1000.0,
             eccentricity: f64::from(moon.eccentricity),
             // Set once its neighbours are known (see `chain_heat`).
-            resonant_heat_w: None,
+            resonance: None,
         },
     }
 }
@@ -2174,12 +2174,12 @@ pub fn body_context(system: &System, body: &Body) -> Option<Context> {
             let parent = body.parent.as_deref()?;
             let host = system.bodies.iter().find(|b| b.id == parent)?;
             let context = planet(&host.params);
-            let resonant_heat_w = stored_chain_heat(system, host, &context, body);
+            let resonance = stored_chain_heat(system, host, &context, body);
             Some(context.with_tide(HostTide {
                 host_kg: host_kg(&host.params),
                 a_m: body.orbit.semi_major_axis_km * 1000.0,
                 eccentricity: body.orbit.eccentricity,
-                resonant_heat_w,
+                resonance,
             }))
         }
     }
@@ -2227,7 +2227,7 @@ fn chain_heat(
     host: &Body,
     context: &Context,
     moons: &[(&Orbit, &PlanetModel)],
-) -> Vec<Option<f64>> {
+) -> Vec<Option<Resonance>> {
     let orbiters: Vec<Orbiter> = moons
         .iter()
         .map(|(orbit, model)| chain_orbiter(context, model, orbit))
@@ -2256,7 +2256,12 @@ fn chain_member(disk_born: bool, orbit: &Orbit) -> bool {
 /// for the giant of the world a request asked as its moon, its
 /// [`lone_chain_heat`]; otherwise the [`chain_heat`] of the planet's
 /// moons with a model, nearest first.
-fn stored_chain_heat(system: &System, host: &Body, context: &Context, body: &Body) -> Option<f64> {
+fn stored_chain_heat(
+    system: &System,
+    host: &Body,
+    context: &Context,
+    body: &Body,
+) -> Option<Resonance> {
     let parent = Some(host.id.as_str());
     let focus = system
         .focus
@@ -2683,7 +2688,7 @@ pub(crate) fn lone_chain_heat(
     host: &HostGiant,
     age_gyr: f64,
     world: Orbiter,
-) -> (Option<f64>, Vec<Option<f64>>) {
+) -> (Option<Resonance>, Vec<Option<Resonance>>) {
     use crate::planet::heat::{ICY_K2_OVER_Q, ROCKY_K2_OVER_Q};
     // Each member and the sibling it is (`None` for the world).
     let mut members: Vec<(Orbiter, Option<usize>)> = vec![(world, None)];
@@ -2822,7 +2827,7 @@ fn host_chain(
                 host_kg: giant_kg,
                 a_m: f64::from(sibling.distance_km) * 1000.0,
                 eccentricity: SIBLING_ECCENTRICITY,
-                resonant_heat_w: sibling_heat[k],
+                resonance: sibling_heat[k],
             },
         });
         moons.push((
@@ -4423,7 +4428,7 @@ mod tests {
             tide.eccentricity,
             k2_over_q(i.envelope_fraction, i.water_fraction),
         );
-        crate::planet::resonance::todays_heat_w(own, tide.resonant_heat_w)
+        crate::planet::resonance::todays_heat_w(own, tide.resonance.map(|r| r.heat_w))
     }
 
     /// Every body with a model in `system`: its rebuilt context gives its
@@ -5113,9 +5118,9 @@ mod tests {
                         let moon = drawn.iter().find(|m| m.seed == body.params.seed).unwrap();
                         let mut formation = moon_formation(moon, f64::from(mass));
                         // With the heat of its resonant chain, if any.
-                        formation.tide.resonant_heat_w = body_context(&system, body)
+                        formation.tide.resonance = body_context(&system, body)
                             .and_then(|c| c.tide)
-                            .and_then(|t| t.resonant_heat_w);
+                            .and_then(|t| t.resonance);
                         assert_eq!(
                             &derive_moon_model(
                                 system.seed,
@@ -6000,7 +6005,7 @@ mod tests {
         );
         assert_eq!(
             model.heat.tidal_w,
-            crate::planet::resonance::todays_heat_w(own, chain)
+            crate::planet::resonance::todays_heat_w(own, chain.map(|r| r.heat_w))
         );
     }
 
@@ -6012,7 +6017,7 @@ mod tests {
             .filter(|b| {
                 body_context(system, b)
                     .and_then(|c| c.tide)
-                    .is_some_and(|t| t.resonant_heat_w.is_some())
+                    .is_some_and(|t| t.resonance.is_some())
             })
             .collect()
     }
@@ -6026,7 +6031,7 @@ mod tests {
         for moon in chain {
             let context = body_context(&system, moon).unwrap();
             let model = moon.model.as_ref().unwrap();
-            assert!(context.tide.unwrap().resonant_heat_w.is_some());
+            assert!(context.tide.unwrap().resonance.is_some());
             assert_eq!(
                 model.heat.tidal_w,
                 todays_tide_w(&context, model),
@@ -6132,7 +6137,8 @@ mod tests {
             chain_orbiter(&body_context(&system, world).unwrap(), model, &world.orbit),
         );
         let heat = heat.expect("the world is in its siblings' chain");
-        assert!(heat > 0.0);
+        assert!(heat.heat_w > 0.0);
+        assert!(heat.host_k2_over_q > 0.0);
         let context = body_context(&system, world).unwrap();
         assert_eq!(model.heat.tidal_w, todays_tide_w(&context, model));
         // Its round siblings too, through their own models: the inner

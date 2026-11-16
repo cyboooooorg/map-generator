@@ -3758,7 +3758,7 @@ pub(crate) mod tests {
                 host_kg: 5.972e24,
                 a_m: 3.844e8,
                 eccentricity: 0.0549,
-                resonant_heat_w: None,
+                resonance: None,
             },
         };
         let model = derive_moon_model(

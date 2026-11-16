@@ -23,7 +23,6 @@ function keyLabel(quantity: Quantity, key: string): string {
     liquid: t.cards.liquids as Record<string, string>,
     core_state: t.cards.coreStates as Record<string, string>,
     note: t.causes.notes,
-    host_dissipation: t.causes.notes,
   };
   if (quantity === 'class') return className(key);
   return tables[quantity]?.[key] ?? key;

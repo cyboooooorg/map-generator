@@ -448,7 +448,7 @@ export const en = {
       polar_shell: 'Ice shell at the poles',
       moment_of_inertia: 'Moment of inertia',
       resonant_heat: 'Heat of the resonance',
-      host_dissipation: 'Dissipation in the host',
+      host_dissipation: 'Dissipation in the host, k₂/Q (resonance locking)',
       note: '',
     } satisfies Record<Quantity, string>,
     /** The unit of each value; empty when it has none. */
@@ -510,7 +510,6 @@ export const en = {
       convecting: 'The shell convects under a stagnant lid, which carries the heat out faster than conduction',
       ammonia: 'The ammonia of the ocean lowers its freezing point, so the shell is thinner and the ocean deeper',
       geysers: 'Tides thin the shell at the pole until fractures cross it: the ocean vents as geysers',
-      locked: 'The host dissipates its tides at the rate that makes its innermost round moon recede over the age of the system (resonance locking)',
       methane_trap: 'The cold traps the methane: it condenses out of the air, so the air keeps only the vapour of a sea',
     } as Record<string, string>,
     /** The request fields, named as the creation form names them. */

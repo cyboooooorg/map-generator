@@ -322,6 +322,17 @@ pub fn todays_heat_w(own_w: f64, resonant_w: Option<f64>) -> f64 {
     resonant_w.map_or(own_w, |r| own_w.max(r))
 }
 
+/// The resonance a moon is locked in, as its heat sees it
+/// ([`resonant_heat`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Resonance {
+    /// Equilibrium heat of its pair, W ([`pair_heat_w`]).
+    pub heat_w: f64,
+    /// Its host's tidal response `k₂/Q`, locked on the host's innermost
+    /// round moon ([`host_k2_over_q`]), that the heat follows from.
+    pub host_k2_over_q: f64,
+}
+
 /// The resonant heat, W, of each of `moons` (a host's moons nearest
 /// first) around a host of `host_kg` and radius `host_radius_m`, `age_gyr`
 /// old: for each of its [`chains`], the equilibrium heat of each pair
@@ -332,13 +343,14 @@ pub fn todays_heat_w(own_w: f64, resonant_w: Option<f64>) -> f64 {
 /// Saturn, Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14). `None`
 /// for a moon in no chain, the outermost of a chain, and a moon whose
 /// pair pumps nothing: it keeps the heat of its own tide. A moon's heat
-/// today is the larger of the two ([`todays_heat_w`]).
+/// today is the larger of the two ([`todays_heat_w`]). Each heat comes
+/// with the host's `k₂/Q` it was derived under.
 pub fn resonant_heat(
     host_kg: f64,
     host_radius_m: f64,
     age_gyr: f64,
     moons: &[Orbiter],
-) -> Vec<Option<f64>> {
+) -> Vec<Option<Resonance>> {
     let mut heat = vec![None; moons.len()];
     let periods: Vec<f64> = moons.iter().map(|m| m.period_s).collect();
     let Some(innermost) = moons.first() else {
@@ -352,7 +364,10 @@ pub fn resonant_heat(
         let members = &moons[chain.clone()];
         let pairs = equilibrium_heat_w(host_kg, host_radius_m, k2q, members);
         for (slot, w) in heat[chain].iter_mut().zip(pairs) {
-            *slot = (w > 0.0).then_some(w);
+            *slot = (w > 0.0).then_some(Resonance {
+                heat_w: w,
+                host_k2_over_q: k2q,
+            });
         }
     }
     heat
@@ -460,7 +475,7 @@ mod tests {
                     m.eccentricity,
                     m.k2_over_q,
                 );
-                todays_heat_w(own, *r)
+                todays_heat_w(own, r.map(|r| r.heat_w))
             })
             .collect();
         let total: f64 = heat.iter().sum();

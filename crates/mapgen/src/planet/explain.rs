@@ -146,7 +146,7 @@ pub enum Quantity {
     /// Equilibrium tidal heat of a moon locked in a 2:1 resonance, W.
     ResonantHeat,
     /// The host's tidal dissipation `k₂/Q`, locked on its innermost
-    /// round moon (label: `locked`).
+    /// round moon (resonance locking).
     HostDissipation,
     /// A condition, in `label`: `thermostat` (the carbonate thermostat
     /// set the CO₂), `life` (its oxygen), `runaway` or `boiled` (the
@@ -335,22 +335,20 @@ fn water_kept(surface: &Surface) -> Cause {
 
 /// The tidal heat: a moon in a 2:1 resonance whose pair pumps more than
 /// its own tide dissipates ([`super::resonance::todays_heat_w`]) gets it
-/// from the host's dissipation and the age (the pair's orbits are the
-/// system's); else the orbit's eccentricity sets it, as the form's field
-/// when the orbit is the planet's round the star.
+/// from the host's dissipation, its locked `k₂/Q`, and the age (the
+/// pair's orbits are the system's); else the orbit's eccentricity sets
+/// it, as the form's field when the orbit is the planet's round the star.
 fn tidal_heat(context: &Context, model: &PlanetModel) -> Cause {
     let tidal = Cause::of(Quantity::TidalHeat, model.heat.tidal_w);
-    if resonant(context, model) {
-        let resonant_w = context.tide.and_then(|t| t.resonant_heat_w).unwrap_or(0.0);
-        return tidal.because(vec![Cause::of(Quantity::ResonantHeat, resonant_w).because(
-            vec![
-                Cause {
-                    label: Some("locked".to_owned()),
-                    ..Cause::of(Quantity::HostDissipation, 0.0)
-                },
+    if let Some(resonance) = context.tide.and_then(|t| t.resonance)
+        && resonant(context, model)
+    {
+        return tidal.because(vec![
+            Cause::of(Quantity::ResonantHeat, resonance.heat_w).because(vec![
+                Cause::of(Quantity::HostDissipation, resonance.host_k2_over_q),
                 Cause::of(Quantity::Age, context.age_gyr).set_by(InputField::AgeGyr),
-            ],
-        )]);
+            ]),
+        ]);
     }
     // The form's eccentricity is the orbit round the star: a moon's
     // tides come from its planet.
@@ -364,7 +362,7 @@ fn tidal_heat(context: &Context, model: &PlanetModel) -> Cause {
 /// Whether the body's tidal heat is its resonance's: the heat of its
 /// pair is more than its own tide makes.
 fn resonant(context: &Context, model: &PlanetModel) -> bool {
-    let Some(resonant_w) = context.tide.and_then(|t| t.resonant_heat_w) else {
+    let Some(resonant_w) = context.tide.and_then(|t| t.resonance).map(|r| r.heat_w) else {
         return false;
     };
     let tide = super::tide_of(context);
@@ -779,7 +777,10 @@ mod tests {
             host_kg: 1.898e27,
             a_m: 6.709e8,
             eccentricity: 0.0,
-            resonant_heat_w: Some(1e15),
+            resonance: Some(crate::planet::resonance::Resonance {
+                heat_w: 1e15,
+                host_k2_over_q: 8.5e-6,
+            }),
         });
         let model = planet_model(&context, model.inputs);
         let e = explain(&context, &model).expect("explained");
@@ -789,7 +790,10 @@ mod tests {
             .find_map(|t| find(t, Quantity::ResonantHeat))
             .expect("the tidal heat comes from the resonance");
         assert_eq!(resonant.value, 1e15);
-        assert!(find(resonant, Quantity::HostDissipation).is_some());
+        // The host's locked k2/Q, as a value (#533).
+        let host = find(resonant, Quantity::HostDissipation).expect("the host's dissipation");
+        assert_eq!(host.value, 8.5e-6);
+        assert_eq!(host.label, None);
         assert!(find(resonant, Quantity::Age).is_some());
     }
 

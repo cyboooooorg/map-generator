@@ -975,13 +975,12 @@ fn host_tide(
             * crate::exomoon::EARTH_M,
         k2_over_q: crate::planet::k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
     };
-    let (resonant_heat_w, _) =
-        crate::system::lone_chain_heat(host, f64::from(params.age_gyr), world);
+    let (resonance, _) = crate::system::lone_chain_heat(host, f64::from(params.age_gyr), world);
     crate::planet::HostTide {
         host_kg: f64::from(host.giant.mass_earth) * crate::exomoon::EARTH_KG,
         a_m,
         eccentricity,
-        resonant_heat_w,
+        resonance,
     }
 }
 

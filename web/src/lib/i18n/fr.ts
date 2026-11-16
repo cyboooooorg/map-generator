@@ -413,7 +413,7 @@ export const fr: Messages = {
       polar_shell: 'Croûte de glace aux pôles',
       moment_of_inertia: 'Moment d’inertie',
       resonant_heat: 'Chaleur de la résonance',
-      host_dissipation: 'Dissipation dans l’astre hôte',
+      host_dissipation: 'Dissipation dans l’astre hôte, k₂/Q (verrouillage par résonance)',
       note: '',
     },
     units: {
@@ -473,7 +473,6 @@ export const fr: Messages = {
       convecting: 'La croûte convecte sous un couvercle immobile, qui évacue la chaleur plus vite que la conduction',
       ammonia: 'L’ammoniac de l’océan abaisse son point de congélation : la croûte est plus mince et l’océan plus profond',
       geysers: 'Les marées amincissent la croûte au pôle jusqu’à ce que des fractures la traversent : l’océan jaillit en geysers',
-      locked: 'L’astre hôte dissipe ses marées au rythme qui éloigne sa plus proche lune ronde en un âge du système (verrouillage par résonance)',
       methane_trap: 'Le froid piège le méthane : il se condense hors de l’air, qui ne garde que la vapeur d’une mer',
     },
     inputs: {
