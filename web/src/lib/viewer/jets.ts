@@ -67,13 +67,15 @@ export function fracturePoints(f: Fracture, radiusKm: number, n: number): LonLat
 
 /** Where the jets of a body stand: `JETS_PER_FRACTURE` along each fracture. */
 export function jetSources(g: Geysers, radiusKm: number): LonLat[] {
-  return g.fractures.flatMap((f) => fracturePoints(f, radiusKm, JETS_PER_FRACTURE));
+  // A zero-length fracture draws no stripe, so it has no jets either.
+  return g.fractures.filter((f) => f.length_km > 0).flatMap((f) => fracturePoints(f, radiusKm, JETS_PER_FRACTURE));
 }
 
 const jetVertex = /* glsl */ `
   attribute vec3 aBase;
   varying vec2 vUv;
   varying vec3 vBase;
+  varying vec3 vWorld;
   uniform float uHeight;
   uniform float uWidth;
   void main() {
@@ -84,16 +86,18 @@ const jetVertex = /* glsl */ `
     vec3 world = aBase + right * (position.x * uWidth) + up * (position.y * uHeight);
     vUv = vec2(position.x, position.y);
     vBase = aBase;
+    vWorld = world;
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   }
 `;
 
-const jetFragment = /* glsl */ `
+export const jetFragment = /* glsl */ `
   uniform vec3 uSunDir;
   uniform float uLightMode;
   uniform float uOpacity;
   varying vec2 vUv;
   varying vec3 vBase;
+  varying vec3 vWorld;
   ${dustPhaseGlsl}
   void main() {
     // Narrower and fainter with height, soft at the sides and the top.
@@ -104,9 +108,13 @@ const jetFragment = /* glsl */ `
     if (uLightMode > 0.5) {
       vec3 toEye = normalize(cameraPosition - vBase);
       gain = dustGain(-dot(uSunDir, toEye));
+      // Nothing to scatter in the planet's shadow (same test as the dust rings).
+      float b = dot(vWorld, uSunDir);
+      if (b < 0.0 && dot(vWorld, vWorld) - b * b < 1.0) gain = 0.0;
     }
     float a = clamp(uOpacity * gain * side * top, 0.0, 1.0);
-    gl_FragColor = vec4(vec3(0.92, 0.96, 1.0) * a, a);
+    gl_FragColor = vec4(vec3(0.92, 0.96, 1.0), a);
+    #include <colorspace_fragment>
   }
 `;
 
@@ -144,6 +152,9 @@ export function createJets(uniforms: { uSunDir: IUniform; uLightMode: IUniform }
 export function placeJets(mesh: JetMesh, bases: readonly Vector3[]): void {
   const data = new Float32Array(bases.length * 3);
   bases.forEach((b, i) => b.toArray(data, i * 3));
+  // Free the GL buffers: replacing the attribute alone leaves the old one
+  // allocated (three re-uploads what the next frame needs).
+  mesh.geometry.dispose();
   mesh.geometry.setAttribute('aBase', new InstancedBufferAttribute(data, 3));
   mesh.geometry.instanceCount = bases.length;
 }

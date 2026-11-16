@@ -1051,6 +1051,8 @@ export const skyBodyVertex = /* glsl */ `
 `;
 
 // The plume of a geyser moon, a fan on the sky from the venting pole: a
+// (across = (ay, -ax) so that x then y wind counter-clockwise like the disc,
+// or back-face culling removes the quad; see plumeAcross in plume.ts)
 // quad on the plane of the moon's disc (same frame as skyBodyVertex),
 // `uBase` the foot of the plume and `uAxis` its direction on the disc (in
 // disc radii, the disc's centre at 0), `uLength` its length and `uSpread`
@@ -1070,7 +1072,7 @@ export const plumeVertex = /* glsl */ `
     float t = position.y + 0.5;
     float s = position.x * 2.0;
     vF = vec2(t, s);
-    vec2 p = uBase + uAxis * (t * uLength) + vec2(-uAxis.y, uAxis.x) * (s * uSpread * (0.15 + 0.85 * t));
+    vec2 p = uBase + uAxis * (t * uLength) + vec2(uAxis.y, -uAxis.x) * (s * uSpread * (0.15 + 0.85 * t));
     vec3 d = uDir + (p.x * uRight + p.y * uUp) * uHalf;
     vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * d * 10.0, 1.0);
     gl_Position = clip.xyww;

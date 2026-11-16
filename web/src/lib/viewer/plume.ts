@@ -31,3 +31,12 @@ export function plumeFrame(axes: readonly [Vec3, Vec3, Vec3] | readonly [readonl
 export function plumeAlpha(phaseCos: number): number {
   return Math.min(1, PLUME_ALPHA * dustGain(-phaseCos));
 }
+
+/**
+ * The direction across a plume whose axis on the disc is `axis`, as the
+ * plume shader uses it: with x across and y along, (across, axis) has the
+ * same handedness as the disc's (right, up), so the quad is front-facing.
+ */
+export function plumeAcross(axis: readonly [number, number]): [number, number] {
+  return [axis[1], -axis[0]];
+}

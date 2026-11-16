@@ -1757,9 +1757,9 @@ export class PlanetView {
     const texture = halfFloatTexture(surface.data, surface.width, surface.height, factor > 1, this.halfFloatMipmaps());
     this.shared.uData.value = texture;
     this.shared.uHasData.value = 1;
-    this.placeJets();
     this.shared.uCoast.value = coast;
     this.shared.uReliefScale.value = reliefScale;
+    this.placeJets();
     this.applySky();
     this.shared.uLiquidSea.value = liquidSea ? 1 : 0;
     this.u.uTexel.value.set(1 / surface.width, 1 / surface.height);
@@ -1807,6 +1807,7 @@ export class PlanetView {
   setRelief(relief: number): void {
     this.requestRender();
     this.shared.uRelief.value = relief;
+    this.placeJets();
     this.applySky();
   }
 

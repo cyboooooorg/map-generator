@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fracturePoints, jetSources, JETS_PER_FRACTURE } from './jets';
+import { fracturePoints, jetFragment, jetSources, JETS_PER_FRACTURE } from './jets';
 
 describe('jets', () => {
   it('puts the jets on the fracture, between its ends', () => {
@@ -25,5 +25,15 @@ describe('jets', () => {
     expect(pts[0]!.lat).toBeCloseTo(-0.45, 6);
     expect(pts[9]!.lat).toBeCloseTo(0.45, 6);
     expect(jetSources({ south: false, fractures: [f, f] }, 100)).toHaveLength(2 * JETS_PER_FRACTURE);
+  });
+  it('skips a zero-length fracture', () => {
+    const none = { lat_deg: -85, lon_deg: 0, azimuth_deg: 0, length_km: 0 };
+    const some = { lat_deg: -85, lon_deg: 0, azimuth_deg: 0, length_km: 50 };
+    expect(jetSources({ south: true, fractures: [none, some] }, 252.1)).toHaveLength(JETS_PER_FRACTURE);
+  });
+  it('outputs a straight colour with its alpha, colour-space encoded', () => {
+    expect(jetFragment).toContain('vec4(vec3(0.92, 0.96, 1.0), a)');
+    expect(jetFragment).toContain('#include <colorspace_fragment>');
+    expect(jetFragment).not.toMatch(/\* a, a\)/);
   });
 });
