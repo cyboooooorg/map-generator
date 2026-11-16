@@ -119,9 +119,12 @@ export const dustRingVertex = /* glsl */ `
   }
 `;
 
-// A faint dust ring (crates/mapgen/src/rings.rs, `DustRing`): smooth, with
-// no ringlets, densest along its source moon's orbit and fading to its
-// edges; lit by the sun and shadowed by the planet as the main rings are.
+// A faint dust ring (crates/mapgen/src/rings.rs, `DustRing`): densest
+// along its source moon's orbit and fading to its edges, with the main
+// rings' grain (ringlets, faded where a pixel spans them, under its own
+// seed), so that it reads as a faint ring, not a smooth haze; lit by the
+// sun and shadowed by the planet as the main rings are, with the tamed
+// forward scattering of dustRingGain (a few times brighter back-lit).
 export const dustRingFragment = /* glsl */ `
   uniform vec3 uColour;
   uniform float uInner;
@@ -133,14 +136,17 @@ export const dustRingFragment = /* glsl */ `
   uniform float uFade;
   varying vec3 vLocal;
   varying vec3 vWorld;
+  ${ringletsGlsl}
   ${dustPhaseGlsl}
 
   void main() {
     float r = length(vLocal.xy);
+    // Taken before the discard: fwidth needs every pixel of a quad.
+    float footprint = fwidth(r);
     if (r < uInner || r > uOuter) discard;
     // Falling off from the peak towards each edge.
     float side = r < uPeak ? (uPeak - r) / max(uPeak - uInner, 1e-4) : (r - uPeak) / max(uOuter - uPeak, 1e-4);
-    float density = uOpacity * (1.0 - smoothstep(0.0, 1.0, side));
+    float density = uOpacity * (1.0 - smoothstep(0.0, 1.0, side)) * ringlets(r, footprint);
     if (density < 0.001) discard;
     float light = 1.0;
     float gain = 1.0;
@@ -150,9 +156,9 @@ export const dustRingFragment = /* glsl */ `
       float c = dot(p, p) - 1.0;
       light = (b < 0.0 && b * b - c > 0.0) ? 0.08 : 1.0;
       // Ice grains scatter forward: brighter back-lit, none in the shadow.
-      if (light > 0.5) gain = dustGain(-dot(uSunDir, normalize(cameraPosition - p)));
+      if (light > 0.5) gain = dustRingGain(-dot(uSunDir, normalize(cameraPosition - p)));
     }
-    gl_FragColor = vec4(uColour * light, min(density * gain * uFade, 1.0));
+    gl_FragColor = vec4(uColour * light, min(density * gain * DUST_RING_BOOST * uFade, 1.0));
     #include <colorspace_fragment>
   }
 `;
@@ -419,9 +425,12 @@ export const skyRingFragment = /* glsl */ `
     // Dust: thin but thick enough to see edge on. Its density is a Gaussian
     // of the height over the plane (sigma DUST_SCALE_HEIGHT x r), marched
     // along the ray through the slab of 3 sigma and the outer radius, in the
-    // giant's radii, with the back-lit gain; finite from inside the ring
-    // and in its plane (see dustColumn in lib/ringMoons.ts). Composited
-    // with the rings, not over them.
+    // giant's radii, with the tamed back-lit gain of the giant's own view
+    // (dustRingGain) but not its look boost (DUST_RING_BOOST): seen from a
+    // moon in the ring, along its plane, the column is long enough to show,
+    // and boosted it veils the whole sky. Finite from inside the ring and
+    // in its plane (see dustColumn in lib/ringMoons.ts). Composited with
+    // the rings, not over them.
     if (uDustCount > 0.0) {
       float rMax = 0.0;
       for (int k = 0; k < 4; k++) {
@@ -458,7 +467,7 @@ export const skyRingFragment = /* glsl */ `
       }
       if (crosses && t1 > t0) {
         float ds = (t1 - t0) / float(DUST_STEPS);
-        float gain = dustGain(clamp(dot(uSunDir, ray), -1.0, 1.0));
+        float gain = dustRingGain(clamp(dot(uSunDir, ray), -1.0, 1.0));
         float tau = 0.0;
         float tw = 0.0;
         vec3 tint = vec3(0.0);

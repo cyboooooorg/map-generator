@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldMetadata } from './api/types/WorldMetadata';
 import { skyFromWorld } from './sky';
-import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, planetLook, ringSeed, skyOccluders } from './skyBodies';
+import { eclipse, halo, inFrontOfGlobe, pickShadowCasters, planetLook, ringSeed, dustRingSeed, skyOccluders } from './skyBodies';
 
 describe('eclipses', () => {
   it('darkens the ground in the umbra, less in the penumbra, not elsewhere', () => {
@@ -140,5 +140,15 @@ describe('ringSeed', () => {
       expect(ringSeed(m)).toBeGreaterThanOrEqual(0);
       expect(ringSeed(m)).toBeLessThan(13);
     }
+  });
+});
+
+describe('dustRingSeed', () => {
+  it('is outside the giants\' seeds and differs between rings', () => {
+    for (const peak of [1.5, 3.95, 4.2, 8]) {
+      expect(dustRingSeed(peak)).toBeGreaterThanOrEqual(13);
+      expect(dustRingSeed(peak)).toBeLessThan(20);
+    }
+    expect(dustRingSeed(3.95)).not.toBeCloseTo(dustRingSeed(1.5), 3);
   });
 });

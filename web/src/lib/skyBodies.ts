@@ -25,11 +25,18 @@ export const IDENTITY_AXES: Axes = [
   [0, 0, 1],
 ];
 
-
-
 /** The seed of a giant's ringlets, from its mass (Earth masses): its own view and its moons' skies draw the same ones. */
 export function ringSeed(massEarth: number): number {
   return (massEarth * 7.31) % 13;
+}
+
+/**
+ * The seed of a dust ring's ringlets, from the radius of its peak (the
+ * giant's radii), within [13, 20): never a giant's `ringSeed`, so that it
+ * does not copy the main rings' pattern.
+ */
+export function dustRingSeed(peak: number): number {
+  return 13 + ((peak * 3.97) % 7);
 }
 
 /** URLs of a body's surface maps: its colour (without hillshade) and its relief normals. */

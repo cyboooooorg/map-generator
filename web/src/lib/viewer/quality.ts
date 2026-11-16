@@ -57,7 +57,7 @@ export interface QualityProfile {
    * orbits play: more, the smoother a line passing near the camera.
    */
   orbitSamples: number;
-  /** Share of the dust grains drawn along dust rings and round their moons (see dustGrains.ts). */
+  /** Share of the dust grains drawn in the halo round a venting moon (see dustGrains.ts). */
   dustGrains: number;
 }
 

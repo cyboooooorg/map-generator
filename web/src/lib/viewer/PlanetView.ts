@@ -5,19 +5,7 @@
 // Coordinate conventions are documented in ../geo.ts, shaders in ./shaders.ts.
 import { axesOnScreen, type ScreenAxis } from './axes';
 import { createJets, jetSources, placeJets, type JetMesh } from './jets';
-import {
-  createGrains,
-  grainCount,
-  grainShine,
-  HALO_GRAINS,
-  HALO_LOOK,
-  haloGrains,
-  MOON_CLOUD_GRAINS,
-  moonCloudGrains,
-  RING_GRAINS,
-  ringGrains,
-  type GrainPoints,
-} from './dustGrains';
+import { createGrains, grainCount, grainShine, HALO_GRAINS, haloGrains, type GrainPoints } from './dustGrains';
 import {
   AddEquation,
   AdditiveBlending,
@@ -100,7 +88,7 @@ import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
 import { PLUME_MIN_SPREAD_PX, plumeAlpha, plumeFrame } from './plume';
-import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
+import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, dustRingSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
 import { discBasis, hostStarDetail, hostStarSpriteSize } from './hostStarSurface';
@@ -777,13 +765,6 @@ export class PlanetView {
   /** The jets of the geysers of the moon shown, with the sources they stand on (see setJets). */
   private jets: JetMesh | null = null;
   private jetSites: LonLat[] = [];
-  /**
-   * The grains along the dust rings a moon feeds, and the cloud round that
-   * moon (`source`: its index in setSkyBodies' order, -1 when not in the
-   * sky; see setDustGrains), with the key they were built for.
-   */
-  private dustGrains: { ring: GrainPoints; cloud: GrainPoints | null; source: number }[] = [];
-  private dustGrainsKey = '';
   /** The grains round the moon shown, in its close-up (see setDustHalo), with their key. */
   private dustHalo: GrainPoints | null = null;
   private dustHaloKey = '';
@@ -1369,8 +1350,9 @@ export class PlanetView {
 
   /**
    * The dust rings of the giant shown, as its planetary system drew them
-   * (`DustRing` in crates/mapgen/src/rings.rs): broad, smooth and faint, in
-   * its equatorial plane like the main rings; none clears them.
+   * (`DustRing` in crates/mapgen/src/rings.rs): broad and faint, with the
+   * main rings' grain under their own seed, in its equatorial plane like
+   * the main rings; none clears them.
    */
   setDustRings(rings: readonly FaintRing[]): void {
     for (const mesh of this.dustRings) {
@@ -1390,6 +1372,7 @@ export class PlanetView {
             uOuter: { value: ring.outer },
             uPeak: { value: ring.peak },
             uOpacity: { value: ring.opacity },
+            uRingSeed: { value: dustRingSeed(ring.peak) },
             uLightMode: this.u.uLightMode,
             uSunDir: this.u.uSunDir,
             uFade: { value: 1 },
@@ -1405,42 +1388,6 @@ export class PlanetView {
       mesh.renderOrder = 0;
       this.scene.add(mesh);
       return mesh;
-    });
-    this.requestRender();
-  }
-
-  /**
-   * Sparkling grains along the dust rings of the giant shown that a moon
-   * feeds (see lib/viewer/dustGrains.ts), by their profile, and a cloud
-   * round each feeding moon trailing along its orbit; `source` is that
-   * moon's index in setSkyBodies' order (-1: no cloud). Never dimmer than
-   * at 90° of scattering, so they show at any phase, and at most a few
-   * times brighter back-lit (see grainLight). None clears them.
-   */
-  setDustGrains(rings: readonly (FaintRing & { source: number })[]): void {
-    const key = JSON.stringify(rings.map((r) => [r.inner, r.outer, r.peak, r.colour, r.source]));
-    if (key === this.dustGrainsKey) return;
-    this.dustGrainsKey = key;
-    for (const { ring, cloud } of this.dustGrains) {
-      for (const points of [ring, cloud]) {
-        if (!points) continue;
-        this.scene.remove(points);
-        points.geometry.dispose();
-        points.material.dispose();
-      }
-    }
-    const share = this.quality.dustGrains;
-    this.dustGrains = rings.map((r, k) => {
-      const n = grainCount(RING_GRAINS, share);
-      const ring = createGrains(ringGrains(r, n, 101 + k), grainShine(n, 201 + k), r.colour, false, this.u);
-      this.scene.add(ring);
-      let cloud: GrainPoints | null = null;
-      if (r.source >= 0) {
-        const m = grainCount(MOON_CLOUD_GRAINS, share);
-        cloud = createGrains(moonCloudGrains(m, 301 + k), grainShine(m, 401 + k), r.colour, true, this.u);
-        this.scene.add(cloud);
-      }
-      return { ring, cloud, source: r.source };
     });
     this.requestRender();
   }
@@ -1464,40 +1411,22 @@ export class PlanetView {
       const n = grainCount(HALO_GRAINS, this.quality.dustGrains);
       const pole = halo.south === null ? null : ([0, halo.south ? -1 : 1, 0] as const);
       // Ice grains: near white, as the jets.
-      this.dustHalo = createGrains(
-        haloGrains(n, 501, pole),
-        grainShine(n, 601),
-        [0.92, 0.96, 1],
-        false,
-        this.u,
-        HALO_LOOK,
-      );
+      this.dustHalo = createGrains(haloGrains(n, 501, pole), grainShine(n, 601), [0.92, 0.96, 1], this.u);
       this.scene.add(this.dustHalo);
     }
     this.requestRender();
   }
 
-  /** Shows the dust grains this frame, round their moons where they are now, at the camera's pixel scale. */
-  private drawDustGrains(): void {
-    const visible = this.morph > 0.01;
-    const pxScale = this.canvas.clientHeight / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
-    const ratio = this.renderer.getPixelRatio();
-    const show = (points: GrainPoints, on: boolean) => {
-      points.visible = on;
-      if (!on) return;
-      const u = points.material.uniforms;
-      u['uFade']!.value = this.morph ** 3;
-      u['uPxScale']!.value = pxScale;
-      u['uPixelRatio']!.value = ratio;
-    };
-    for (const { ring, cloud, source } of this.dustGrains) {
-      show(ring, visible);
-      if (!cloud) continue;
-      const position = this.skyBodies[source]?.body.position;
-      show(cloud, visible && !!position);
-      if (position) (cloud.material.uniforms['uMoon']!.value as Vector3).set(...position);
-    }
-    if (this.dustHalo) show(this.dustHalo, visible);
+  /** Shows the dust halo this frame, at the camera's pixel scale. */
+  private drawDustHalo(): void {
+    const points = this.dustHalo;
+    if (!points) return;
+    points.visible = this.morph > 0.01;
+    if (!points.visible) return;
+    const u = points.material.uniforms;
+    u['uFade']!.value = this.morph ** 3;
+    u['uPxScale']!.value = this.canvas.clientHeight / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    u['uPixelRatio']!.value = this.renderer.getPixelRatio();
   }
 
   /**
@@ -2473,10 +2402,8 @@ export class PlanetView {
     }
     this.jets?.geometry.dispose();
     this.jets?.material.dispose();
-    for (const points of [...this.dustGrains.flatMap(({ ring, cloud }) => [ring, cloud]), this.dustHalo]) {
-      points?.geometry.dispose();
-      points?.material.dispose();
-    }
+    this.dustHalo?.geometry.dispose();
+    this.dustHalo?.material.dispose();
     this.renderer.dispose();
     // Free the WebGL context now: browsers cap live contexts (about 16), and
     // compare panes come and go.
@@ -3754,7 +3681,7 @@ export class PlanetView {
     this.backdrop.group.visible = skyShown(this.skyChoice) && this.morph > 0.01;
     this.drawHostStar();
     this.drawSkyBodies();
-    this.drawDustGrains();
+    this.drawDustHalo();
     // The axis and the guides start from the farthest of the surface: an
     // irregular moon's longest semi-axis, with its relief as displayed.
     const relief = this.shared.uHasData.value > 0.5 ? this.peakAbove * this.reliefLift() : 0;
