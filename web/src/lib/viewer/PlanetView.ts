@@ -86,7 +86,7 @@ import {
 import { type Grey8, loadGrey8, type WorldLayers } from '../layers';
 import { decodePng } from '../layers/png';
 import { MAX_NIGHT_SOURCES, NIGHT_CEILING, NIGHT_FLOOR, NIGHT_RATIO_MAX, NIGHT_RATIO_MIN, STARLIGHT_RATIO, type NightSource } from '../nightLight';
-import { plumeAlpha, plumeFrame } from './plume';
+import { PLUME_MIN_SPREAD_PX, plumeAlpha, plumeFrame } from './plume';
 import { IDENTITY_AXES, inFrontOfGlobe, MAX_CASTERS, ringSeed, type ShadowCaster, type SkyBody, skyOccluders, type Vec3 as SkyVec3 } from '../skyBodies';
 import type { StarActivity } from '../api/types/StarActivity';
 import type { StarInfo } from '../api/types/StarInfo';
@@ -3391,10 +3391,12 @@ export class PlanetView {
     (u['uRight']!.value as Vector3).copy(right);
     (u['uUp']!.value as Vector3).copy(up);
     u['uHalf']!.value = uHalf;
-    // The disc is drawn with half-size 1 in its own units (uHalf across),
-    // so the plume is placed in disc radii: height in them is
-    // PLUME_HEIGHT_RADII (drawnHalf = 1).
-    const frame = plumeFrame(body.axes ?? IDENTITY_AXES, body.plume.south, 1);
+    // The plume is placed in disc radii (the disc is uHalf across), with
+    // a floor of its own in CSS pixels: the disc's half-size in them sets
+    // the scale.
+    const halfPx = Math.max(uHalf / (this.skyPixelAngle * this.renderer.getPixelRatio()), 1e-3);
+    const frame = plumeFrame(body.axes ?? IDENTITY_AXES, body.plume.south, halfPx);
+    const height = frame.height / halfPx;
     const pole = new Vector3(...frame.up);
     const px = pole.dot(right);
     const py = pole.dot(up);
@@ -3403,8 +3405,8 @@ export class PlanetView {
     const axis = shown > 1e-4 ? [px / shown, py / shown] : [0, 1];
     (u['uBase']!.value as Vector2).set(px, py);
     (u['uAxis']!.value as Vector2).set(axis[0]!, axis[1]!);
-    u['uLength']!.value = frame.height * shown;
-    u['uSpread']!.value = 0.5 * frame.height * Math.max(shown, 0.3);
+    u['uLength']!.value = height * shown;
+    u['uSpread']!.value = Math.max(0.5 * height * Math.max(shown, 0.3), PLUME_MIN_SPREAD_PX / halfPx);
     // The sun's direction stands in for the phase when the body has none.
     u['uAlpha']!.value = plumeAlpha(body.phaseCos ?? -(this.u.uSunDir.value as Vector3).dot(dir));
     u['uOpacity']!.value = disc['uOpacity']!.value;

@@ -8,19 +8,29 @@ import { dustGain } from './dustPhase';
  */
 export const PLUME_HEIGHT_RADII = 1.5;
 
+/**
+ * Shortest plume, in CSS pixels, like the floor of the disc (look constant:
+ * the shortest plume an eye picks out next to a 5 px disc).
+ */
+export const PLUME_MIN_PX = 10;
+
+/** Half-width of the top of the plume at least, in CSS pixels (look constant: keeps the fan from being a sliver). */
+export const PLUME_MIN_SPREAD_PX = 2.5;
+
 /** Opacity of the plume at 90° of scattering (look constant); back-lit it grows with `dustGain`. */
-export const PLUME_ALPHA = 0.12;
+export const PLUME_ALPHA = 0.35;
 
 /**
  * Where a plume stands: `up` along the spin axis of the moon (`axes[1]`, its
  * north pole, negated for a south pole) and its `height` in the units of
- * the disc, from `drawnHalf`, the half-size the moon is actually drawn at
- * (a small moon's few-pixel floor included).
+ * `drawnHalf`, the half-size the moon is actually drawn at (a small moon's
+ * few-pixel floor included), never under `PLUME_MIN_PX`: pass `drawnHalf`
+ * in CSS pixels to get the floor, or 1 to get radii.
  */
-export function plumeFrame(axes: readonly [Vec3, Vec3, Vec3] | readonly [readonly number[], readonly number[], readonly number[]], south: boolean, drawnHalf: number): { up: Vec3; height: number } {
+export function plumeFrame(axes: readonly [Vec3, Vec3, Vec3] | readonly [readonly number[], readonly number[], readonly number[]], south: boolean, drawnHalf: number, minHeight = PLUME_MIN_PX): { up: Vec3; height: number } {
   const [x = 0, y = 0, z = 0] = axes[1];
   const s = south ? -1 : 1;
-  return { up: [s * x, s * y, s * z], height: PLUME_HEIGHT_RADII * drawnHalf };
+  return { up: [s * x, s * y, s * z], height: Math.max(PLUME_HEIGHT_RADII * drawnHalf, minHeight) };
 }
 
 /**
