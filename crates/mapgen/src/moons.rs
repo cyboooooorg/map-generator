@@ -325,6 +325,11 @@ pub struct AskedMoon {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub partner_mass_ratio: Option<f32>,
+    /// Mass of the moon in 2:1 resonance inward of it, over its giant's
+    /// mass, when its archetype names one (Io for Europa).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub inner_partner_mass_ratio: Option<f32>,
 }
 
 impl AskedMoon {
@@ -347,15 +352,27 @@ impl AskedMoon {
                 .resonance
                 .as_ref()
                 .map(|r| pick(r.partner_mass_ratio) as f32),
+            inner_partner_mass_ratio: moon
+                .resonance
+                .as_ref()
+                .and_then(|r| r.inner_partner_mass_ratio)
+                .map(|r| pick(r) as f32),
         }
     }
 
-    /// The orbit of the partner this moon is in resonance with, in its
-    /// giant's radii: one chain step outward ([`CHAIN_STEP`], periods
-    /// doubling), from `a_radii` (this moon's, once pushed out of the
-    /// giant's rings and Roche limit).
-    fn partner_radii(a_radii: f64) -> f64 {
-        a_radii * CHAIN_STEP
+    /// The orbits of the partners this moon is in resonance with, in its
+    /// giant's radii, with their masses over the giant's: one chain step
+    /// outward ([`CHAIN_STEP`], periods doubling) and, when its archetype
+    /// names one, one step inward, from `a_radii` (this moon's, once
+    /// pushed out of the giant's rings and Roche limit).
+    fn partner_orbits(&self) -> impl Iterator<Item = (f64, f64, bool)> + '_ {
+        let outer = self
+            .partner_mass_ratio
+            .map(|r| (self.a_radii * CHAIN_STEP, f64::from(r), false));
+        let inner = self
+            .inner_partner_mass_ratio
+            .map(|r| (self.a_radii / CHAIN_STEP, f64::from(r), true));
+        outer.into_iter().chain(inner)
     }
 
     /// The partners of the disk-born `moons` asked, as moons asked for
@@ -364,25 +381,41 @@ impl AskedMoon {
     /// giant of `giant_earth` Earth masses. A moon asked within half a
     /// chain step of a partner's orbit is that partner: none is added.
     fn partners(moons: &[&AskedMoon], giant_earth: f64) -> Vec<AskedMoon> {
-        moons
-            .iter()
-            .filter_map(|m| {
-                let ratio = f64::from(m.partner_mass_ratio?);
-                let a_radii = Self::partner_radii(m.a_radii);
-                let taken = moons
-                    .iter()
-                    .any(|o| (o.a_radii / a_radii).ln().abs() < CHAIN_STEP.ln() / 2.0);
-                (!taken).then(|| AskedMoon {
-                    archetype: m.archetype.clone(),
-                    mass_earth: ratio * giant_earth,
-                    a_radii,
-                    eccentricity: FORCED_ECCENTRICITY.1,
-                    ice_fraction: 0.0,
-                    captured: false,
-                    partner_mass_ratio: None,
-                })
-            })
+        Self::sided_partners(moons, giant_earth)
+            .into_iter()
+            .map(|(p, _)| p)
             .collect()
+    }
+
+    /// [`AskedMoon::partners`], each with whether it lies inward of the
+    /// moon that brings it.
+    fn sided_partners(moons: &[&AskedMoon], giant_earth: f64) -> Vec<(AskedMoon, bool)> {
+        let near = |a: f64, b: f64| (a / b).ln().abs() < CHAIN_STEP.ln() / 2.0;
+        let mut partners: Vec<(AskedMoon, bool)> = Vec::new();
+        for m in moons {
+            for (a_radii, ratio, inner) in m.partner_orbits() {
+                // A moon asked there, or a partner another brought, is it.
+                if moons.iter().any(|o| near(o.a_radii, a_radii))
+                    || partners.iter().any(|(p, _)| near(p.a_radii, a_radii))
+                {
+                    continue;
+                }
+                partners.push((
+                    AskedMoon {
+                        archetype: m.archetype.clone(),
+                        mass_earth: ratio * giant_earth,
+                        a_radii,
+                        eccentricity: FORCED_ECCENTRICITY.1,
+                        ice_fraction: 0.0,
+                        captured: false,
+                        partner_mass_ratio: None,
+                        inner_partner_mass_ratio: None,
+                    },
+                    inner,
+                ));
+            }
+        }
+        partners
     }
 }
 
@@ -1408,7 +1441,8 @@ impl MoonSystem {
             // whose drawn disk is lighter than it).
             // The partners the asked moons bring (in resonance with them,
             // one chain step outward) come out of the same disk.
-            let partners = AskedMoon::partners(&asked_disk, f64::from(mass_earth));
+            let sided = AskedMoon::sided_partners(&asked_disk, f64::from(mass_earth));
+            let partners: Vec<AskedMoon> = sided.iter().map(|(p, _)| p.clone()).collect();
             let asked_kg: f64 = asked_disk
                 .iter()
                 .map(|m| m.mass_earth * EARTH_MASS_KG)
@@ -1549,12 +1583,21 @@ impl MoonSystem {
                 moon.archetype = Some(m.archetype.clone());
                 moons.push(moon);
             }
-            // Their partners, one chain step out from where the asked
-            // moons now orbit, made as the chain's moons are. They carry
-            // no archetype: the passes below that drop a moon do not
-            // keep them by it, so they are added after those.
-            for partner in &partners {
-                let a_radii = partner.a_radii.max(AskedMoon::partner_radii(floor / 0.95));
+            // Their partners, one chain step out (or in) from where the
+            // asked moons now orbit, made as the chain's moons are. They
+            // carry no archetype: the passes below that drop a moon do not
+            // keep them by it, so they are added after those. An inner
+            // partner that would fall inside the floor (the Roche limit or
+            // the rings) is left out.
+            for (partner, inner) in &sided {
+                let a_radii = if *inner {
+                    if partner.a_radii < floor / 0.95 {
+                        continue;
+                    }
+                    partner.a_radii
+                } else {
+                    partner.a_radii.max(floor / 0.95 * CHAIN_STEP)
+                };
                 let icy = a_radii > ice_line;
                 let bulk = if icy {
                     Bulk::cold(&mut rng)

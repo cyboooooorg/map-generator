@@ -256,36 +256,50 @@ push each moon outward with a torque
 T_i = \frac{3}{2}\,\frac{k_2}{Q}\bigg|_h\,\frac{G m_i^2 R_h^5}{a_i^6}
 ```
 
-and the resonance makes the chain migrate as one, at the mean motion
-$\bar n = \sum n_i L_i / \sum L_i$ weighted by the orbits' angular
-momenta $L_i = m_i n_i a_i^2$. What the torques pump into the orbits and
-the orbits do not keep is dissipated in the moons, held eccentric by the
-resonance (Meyer & Wisdom 2007, for a pair; the sum over N moons is the
-model's generalisation):
+and the resonance locks each pair of neighbours together: they migrate
+as one, at the mean motion $\bar n = \sum n_i L_i / \sum L_i$ weighted by
+their orbits' angular momenta $L_i = m_i n_i a_i^2$. What the torques
+pump into the two orbits and the orbits do not keep is dissipated by the
+eccentricity the resonance forces (Meyer & Wisdom 2007):
 
 ```math
-\dot E = \sum_i n_i T_i - \bar n \sum_i T_i \;\ge 0
+\dot E = \sum_{i \in \text{pair}} n_i T_i - \bar n \sum_{i \in \text{pair}} T_i \;\ge 0
 ```
 
-The heat is shared among the chain's moons in proportion to their own
-tidal heat at their eccentricities, and stands for it: in equilibrium it
-is set by the host and the orbits, not by the moon's own $k_2/Q$. The
-host's $k_2/Q$ is not one value per planet but follows from resonance
-locking (Fuller, Luan & Quataert 2016): the host dissipates so that the
-chain's inner moon migrates outward over the system's age,
+Each pair's heat goes to its inner moon, as Meyer & Wisdom put all of
+the Enceladus–Dione pair's heat in Enceladus: the inner moon, closer to
+the host, carries the larger forced tide (Io over Europa). The pair, not
+the whole chain, so that a moon's heat depends on its own orbit and its
+outer neighbour's, not on the drawn moons further out or on any drawn
+eccentricity. The outermost moon of a chain, and a moon whose pair pumps
+nothing (the outer moon pushed out faster than the inner one), get none.
+
+A moon's heat today is the larger of that equilibrium and its own tide
+at its drawn eccentricity: the eccentricity is drawn, not evolved, and a
+moon dissipating more than the equilibrium is caught on its way down,
+as Io dissipates faster than its resonance resupplies (Lainey et al.
+2009), while one dissipating less would have its eccentricity pumped up
+until it reaches the equilibrium.
+
+The host's $k_2/Q$ is not one value per planet but follows from
+resonance locking (Fuller, Luan & Quataert 2016): the host dissipates so
+that its innermost round moon migrates outward over the system's age,
 $a/\dot a = t$, which gives
 
 ```math
 \frac{k_2}{Q}\bigg|_h = \frac{n a^8}{3\,t\,G m R_h^5}
 ```
 
-for the inner moon's $m$, $a$ and $n$, at most the $3 \times 10^{-3}$
-measured for Saturn at Titan's frequency (Lainey et al. 2020). A moon in
-no chain keeps its own tide, as do the moons of a chain that gives no
-heat. The round moons of a drawn planet form chains among themselves
-(the moons too small to be round take no part); the world a request asks
-around a giant forms one with the giant's round regular moons, spaced
-1:2 around it.
+for that moon's $m$, $a$ and $n$, at most the $3 \times 10^{-3}$ measured
+for Saturn at Titan's frequency (Lainey et al. 2020). One value per host,
+taken at its innermost round moon's frequency as the measured ones are
+(Jupiter's at Io's, Lainey et al. 2009; Saturn's from its inner moons,
+Lainey et al. 2012), so that a moon of the chain does not set the
+dissipation that heats it. The round moons of a drawn planet form chains
+among themselves (the moons too small to be round take no part); the
+world a request asks around a giant forms one with the giant's round
+regular moons, spaced 1:2 around it. A moon asked by archetype brings
+its partners at 2:1 (see the archetypes' `[moon.resonance]`).
 
 **Orders of magnitude.** At 4.57 Gyr, locking gives Jupiter (with Io)
 $8.5 \times 10^{-6}$, against the $1.1 \times 10^{-5}$ measured (Lainey et
@@ -293,9 +307,12 @@ al. 2009), and Saturn (with Enceladus) $2.2 \times 10^{-4}$, against the
 $2.3 \times 10^{-4}$ measured (Lainey et al. 2012): Saturn's 20-fold
 stronger dissipation comes out of its moon's closer orbit and smaller
 mass, with no value of its own. Enceladus and Dione under Saturn's
-measured $k_2/Q$ dissipate 14 GW, 10 GW of it in Enceladus, of the
-15.8 GW it radiates (Howett et al. 2011). The Laplace chain dissipates
-$5 \times 10^{13}$ W, 99 % of it in Io.
+measured $k_2/Q$ dissipate 14 GW, all of it in Enceladus, of the
+15.8 GW it radiates (Howett et al. 2011); an asked Enceladus gets 12 to
+16 GW over ten seeds. In the Laplace chain the Io–Europa pair gives Io
+$1.8 \times 10^{13}$ W, under its own tide's $9 \times 10^{13}$, which
+stands (an asked Io: 62 to 143 TW, a heat-pipe world); Europa keeps its
+own tide (an asked Europa: 27 to 52 mW/m²).
 
 ### The ice shell and the ocean beneath
 
@@ -522,18 +539,19 @@ archetypes):
   moons 1.8 to 2.2 times apart in period are taken as locked in a 2:1
   resonance, in equilibrium, with no check that the resonance could
   have been reached or held; other first-order resonances are not
-  looked for. The host's $k_2/Q$ comes from the inner moon of each chain
-  alone, with a migration time of exactly the system's age, capped at
+  looked for. Each pair's heat goes wholly to its inner moon, and a
+  moon dissipates the larger of that and its own tide at its drawn
+  eccentricity, rather than an eccentricity evolved to equilibrium.
+  The host's $k_2/Q$ comes from its innermost round moon alone, with a
+  migration time of exactly the system's age, capped at
   $3 \times 10^{-3}$, the strongest dissipation measured in a giant
-  (Saturn's at Titan's frequency, Lainey et al. 2020), which a light or
-  distant inner moon would otherwise exceed. The heat still grows with
-  the inner moon's mass: round a ten-Jupiter giant, a chain of moons
-  larger than Ganymede dissipates up to about $10^{16}$ W. The sum over
-  more than two moons generalises Meyer & Wisdom's pair. When the outer
-  moons outweigh the inner ones, or every orbit is circular, the sum
-  gives no heat: the resonance then pumps no eccentricity, and the
-  chain's moons keep their own tides. The giant's
-  regular moons beside the world of a request share the heat with the
+  (Saturn's at Titan's frequency, Lainey et al. 2020): a light or
+  distant innermost moon gives its host a strong dissipation, and a
+  moon that is itself the innermost sets the dissipation that heats it
+  (an asked Europa brings Io inside it for that reason). The heat
+  grows with the moons' masses: round a ten-Jupiter giant, a lone
+  world's chain dissipates up to about $10^{15}$ W. The giant's regular
+  moons beside the world of a request take their pair's heat with the
   $k_2/Q$ of their composition (icy or rocky) and their drawn radius,
   not their model's.
 - **Tides** use one $k_2/Q$ per kind of body, not one per planet: a cold

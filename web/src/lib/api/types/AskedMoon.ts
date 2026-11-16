@@ -29,4 +29,9 @@ captured: boolean,
  * archetype names no partner. The partner is a regular moon of the
  * disk, made with the chain ([`AskedMoon::partner`]).
  */
-partner_mass_ratio?: number, };
+partner_mass_ratio?: number, 
+/**
+ * Mass of the moon in 2:1 resonance inward of it, over its giant's
+ * mass, when its archetype names one (Io for Europa).
+ */
+inner_partner_mass_ratio?: number, };

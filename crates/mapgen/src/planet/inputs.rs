@@ -54,10 +54,12 @@ pub struct HostTide {
     /// Eccentricity of that orbit (0 circular): a resonant moon's forced
     /// one, as Io's.
     pub eccentricity: f64,
-    /// Tidal heat, W, of a moon in a resonant chain, set in equilibrium by
-    /// its host's dissipation and the chain's orbits
-    /// ([`super::resonance::resonant_heat`]); it stands for the heat of
-    /// its own tide. `None` for a body in no chain.
+    /// Equilibrium tidal heat, W, of a moon in a resonant chain, set by
+    /// its host's dissipation and its pair's orbits
+    /// ([`super::resonance::resonant_heat`]); the moon dissipates the
+    /// larger of this and its own tide
+    /// ([`super::resonance::todays_heat_w`]). `None` for a body in no
+    /// chain, or whose pair pumps nothing.
     pub resonant_heat_w: Option<f64>,
 }
 

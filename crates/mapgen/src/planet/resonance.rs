@@ -8,7 +8,8 @@
 //! up, and the moons' own tides turn the difference into heat. In
 //! equilibrium that heat is set by the host's dissipation and the
 //! orbits, not by the moons' own `k₂/Q` (Meyer & Wisdom 2007,
-//! doi:10.1016/j.icarus.2007.03.001; [`equilibrium_heat_w`]). The host's
+//! doi:10.1016/j.icarus.2007.03.001; [`equilibrium_heat_w`]); a moon's
+//! heat today is the larger of that and its own tide ([`todays_heat_w`]). The host's
 //! dissipation comes from resonance locking (Fuller, Luan & Quataert
 //! 2016, doi:10.1093/mnras/stw609; [`host_k2_over_q`]), which gives
 //! Saturn its 20-fold larger `k₂/Q` than Jupiter's without a value per
@@ -18,8 +19,6 @@ use std::f64::consts::PI;
 use std::ops::Range;
 
 use crate::exomoon::G;
-
-use super::heat::tidal_power_w;
 
 /// Neighbouring period ratio, outer over inner, of two moons in a 2:1
 /// resonance (open interval): 2 within the ±5 % jitter in semi-major
@@ -130,65 +129,91 @@ pub fn host_k2_over_q(host_kg: f64, host_radius_m: f64, inner: &Orbiter, age_gyr
     locked.min(MAX_HOST_K2_OVER_Q)
 }
 
-/// The heat, W, each moon of `chain` (moons locked together in
-/// resonance, nearest first) gets in equilibrium from the tides of a host
-/// of `host_kg` and radius `host_radius_m` responding with
-/// `host_k2_over_q`. The host's torques `Tᵢ` ([`torque`]) feed the
-/// orbits energy `Σ nᵢTᵢ`; locked together, the moons migrate as one, at
-/// the mean motion `n̄ = Σ nᵢLᵢ / Σ Lᵢ` weighted by their angular
-/// momenta `Lᵢ = mᵢ nᵢ aᵢ²`, whose orbits take `n̄ ΣTᵢ`; the rest is
-/// dissipated in the moons: `Σ nᵢTᵢ − n̄ ΣTᵢ`, at least 0 (Meyer &
-/// Wisdom 2007, doi:10.1016/j.icarus.2007.03.001, for a pair; their sum
-/// generalised to N moons, the builder's form). The total is shared in
-/// proportion to each moon's own tidal heat at its eccentricity
-/// ([`tidal_power_w`]); a chain of circular orbits shares none.
+/// Equilibrium tidal heat, W, of the pair `inner`–`outer` locked in a
+/// resonance round a host of radius `host_radius_m` responding with
+/// `host_k2_over_q` (Meyer & Wisdom 2007,
+/// doi:10.1016/j.icarus.2007.03.001): the host's torques `Tᵢ`
+/// ([`torque`]) feed the orbits energy `Σ nᵢTᵢ`; locked together, the
+/// pair migrates as one at the mean motion `n̄ = Σ nᵢLᵢ / Σ Lᵢ` weighted
+/// by the angular momenta `Lᵢ = mᵢ nᵢ aᵢ²`, whose orbits take `n̄ ΣTᵢ`;
+/// the rest, `Σ nᵢTᵢ − n̄ ΣTᵢ`, is dissipated by the eccentricity the
+/// resonance forces. At least 0: when the outer moon is pushed out
+/// faster than the inner one, the pair would part, and nothing is
+/// pumped.
+pub fn pair_heat_w(
+    host_radius_m: f64,
+    host_k2_over_q: f64,
+    inner: &Orbiter,
+    outer: &Orbiter,
+) -> f64 {
+    let pair = [inner, outer];
+    let torques = pair.map(|m| torque(host_radius_m, host_k2_over_q, m));
+    let pumped: f64 = pair
+        .iter()
+        .zip(&torques)
+        .map(|(m, t)| mean_motion(m) * t)
+        .sum();
+    let momentum: f64 = pair.iter().map(|m| angular_momentum(m)).sum();
+    let mean_n = pair
+        .iter()
+        .map(|m| mean_motion(m) * angular_momentum(m))
+        .sum::<f64>()
+        / momentum;
+    (pumped - mean_n * torques.iter().sum::<f64>()).max(0.0)
+}
+
+/// The equilibrium heat, W, each moon of `chain` (moons locked together
+/// in resonance, nearest first) gets from the tides of a host of radius
+/// `host_radius_m` responding with `host_k2_over_q`: each adjacent pair
+/// ([`pair_heat_w`]) heats its inner moon, the outermost moon none.
+///
+/// The pair, not the whole chain, so that a moon's heat depends on its
+/// own orbit and its outer neighbour's, not on the drawn moons further
+/// out; the inner moon, as Meyer & Wisdom 2007
+/// (doi:10.1016/j.icarus.2007.03.001) put all of the Enceladus–Dione
+/// pair's heat in Enceladus: the inner moon, closer to the host, carries
+/// the larger forced eccentricity and tide (Io over Europa, Enceladus
+/// over Dione), and the share does not hinge on drawn eccentricities.
+/// `host_kg` is unused by the pair heat and kept for symmetry with
+/// [`host_k2_over_q`].
 pub fn equilibrium_heat_w(
     host_kg: f64,
     host_radius_m: f64,
     host_k2_over_q: f64,
     chain: &[Orbiter],
 ) -> Vec<f64> {
-    let torques: Vec<f64> = chain
-        .iter()
-        .map(|m| torque(host_radius_m, host_k2_over_q, m))
-        .collect();
-    let pumped: f64 = chain
-        .iter()
-        .zip(&torques)
-        .map(|(m, t)| mean_motion(m) * t)
-        .sum();
-    let momentum: f64 = chain.iter().map(angular_momentum).sum();
-    let mean_n = chain
-        .iter()
-        .map(|m| mean_motion(m) * angular_momentum(m))
-        .sum::<f64>()
-        / momentum;
-    let total = (pumped - mean_n * torques.iter().sum::<f64>()).max(0.0);
-    let own: Vec<f64> = chain
-        .iter()
-        .map(|m| tidal_power_w(host_kg, m.radius_m, m.a_m, m.eccentricity, m.k2_over_q))
-        .collect();
-    let own_total: f64 = own.iter().sum();
-    own.iter()
-        .map(|w| {
-            if own_total > 0.0 {
-                total * w / own_total
-            } else {
-                0.0
-            }
+    let _ = host_kg;
+    (0..chain.len())
+        .map(|i| match chain.get(i + 1) {
+            Some(outer) => pair_heat_w(host_radius_m, host_k2_over_q, &chain[i], outer),
+            None => 0.0,
         })
         .collect()
 }
 
+/// A moon's tidal heat today, W, from the heat of its own tide at its
+/// drawn eccentricity (`own_w`, [`super::heat::tidal_power_w`]) and the equilibrium
+/// heat of its resonance (`resonant_w`, [`resonant_heat`]): the larger.
+/// The eccentricity is drawn, not evolved: a moon dissipating more than
+/// the equilibrium is caught on its way down, as Io dissipates faster
+/// than its resonance resupplies (Lainey et al. 2009,
+/// doi:10.1038/nature08108); one dissipating less would have its
+/// eccentricity pumped up until it reaches the equilibrium.
+pub fn todays_heat_w(own_w: f64, resonant_w: Option<f64>) -> f64 {
+    resonant_w.map_or(own_w, |r| own_w.max(r))
+}
+
 /// The resonant heat, W, of each of `moons` (a host's moons nearest
 /// first) around a host of `host_kg` and radius `host_radius_m`, `age_gyr`
-/// old: for each of its [`chains`], the equilibrium heat
+/// old: for each of its [`chains`], the equilibrium heat of each pair
 /// ([`equilibrium_heat_w`]) under the host's locked dissipation
-/// ([`host_k2_over_q`] with the chain's inner moon). `None` for a moon
-/// in no chain, and for every moon of a chain whose equilibrium heat is
-/// none (the outer moons outweigh the inner one, or every orbit is
-/// circular): the resonance then pumps no eccentricity, and each keeps
-/// the heat of its own tide, the floor of its dissipation.
+/// ([`host_k2_over_q`] with the chain's inner moon, whose frequency the
+/// host's measured `k₂/Q` is taken at: Io's for Jupiter, Lainey et al.
+/// 2009, doi:10.1038/nature08108; Enceladus's and its neighbours' for
+/// Saturn, Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14). `None`
+/// for a moon in no chain, the outermost of a chain, and a moon whose
+/// pair pumps nothing: it keeps the heat of its own tide. A moon's heat
+/// today is the larger of the two ([`todays_heat_w`]).
 pub fn resonant_heat(
     host_kg: f64,
     host_radius_m: f64,
@@ -197,18 +222,18 @@ pub fn resonant_heat(
 ) -> Vec<Option<f64>> {
     let mut heat = vec![None; moons.len()];
     let periods: Vec<f64> = moons.iter().map(|m| m.period_s).collect();
+    let Some(innermost) = moons.first() else {
+        return heat;
+    };
+    let k2q = host_k2_over_q(host_kg, host_radius_m, innermost, age_gyr);
+    if !k2q.is_finite() {
+        return heat;
+    }
     for chain in chains(&periods) {
         let members = &moons[chain.clone()];
-        let k2q = host_k2_over_q(host_kg, host_radius_m, &members[0], age_gyr);
-        if !k2q.is_finite() {
-            continue;
-        }
-        let shares = equilibrium_heat_w(host_kg, host_radius_m, k2q, members);
-        if shares.iter().sum::<f64>() <= 0.0 {
-            continue;
-        }
-        for (slot, w) in heat[chain].iter_mut().zip(shares) {
-            *slot = Some(w);
+        let pairs = equilibrium_heat_w(host_kg, host_radius_m, k2q, members);
+        for (slot, w) in heat[chain].iter_mut().zip(pairs) {
+            *slot = (w > 0.0).then_some(w);
         }
     }
     heat
@@ -302,8 +327,23 @@ mod tests {
 
     #[test]
     fn the_laplace_chain_heats_io_most() {
-        let k2q = host_k2_over_q(JUPITER_KG, JUPITER_R_M, &io(), 4.57);
-        let heat = equilibrium_heat_w(JUPITER_KG, JUPITER_R_M, k2q, &[io(), europa(), ganymede()]);
+        // Today's heat: each moon's own tide or its pair's equilibrium.
+        let moons = [io(), europa(), ganymede()];
+        let resonant = resonant_heat(JUPITER_KG, JUPITER_R_M, 4.57, &moons);
+        let heat: Vec<f64> = moons
+            .iter()
+            .zip(&resonant)
+            .map(|(m, r)| {
+                let own = crate::planet::heat::tidal_power_w(
+                    JUPITER_KG,
+                    m.radius_m,
+                    m.a_m,
+                    m.eccentricity,
+                    m.k2_over_q,
+                );
+                todays_heat_w(own, *r)
+            })
+            .collect();
         let total: f64 = heat.iter().sum();
         assert!((2e13..2e14).contains(&total), "{heat:?}");
         assert!(heat[0] > 0.8 * total, "{heat:?}");
@@ -380,7 +420,8 @@ mod tests {
     #[test]
     fn only_chain_members_get_a_resonant_heat() {
         let heat = resonant_heat(SATURN_KG, SATURN_R_M, 4.57, &[enceladus(), dione()]);
-        assert!(heat.iter().all(Option::is_some), "{heat:?}");
+        // The pair heats its inner moon; Dione keeps its own tide.
+        assert!(heat[0].is_some() && heat[1].is_none(), "{heat:?}");
         assert_eq!(
             resonant_heat(SATURN_KG, SATURN_R_M, 4.57, &[enceladus()]),
             vec![None]

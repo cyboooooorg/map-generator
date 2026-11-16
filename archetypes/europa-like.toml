@@ -37,3 +37,7 @@ ice_fraction = [0.06, 0.10]
 # 1.8982e27 kg is 7.80e-5 (JPL planetary satellite physical parameters;
 # NASA Jupiter fact sheet), within ±4 %.
 partner_mass_ratio = [7.5e-5, 8.1e-5]
+# Io, in 2:1 resonance inside it: 8.93e22 kg over Jupiter's 1.898e27 kg
+# is 4.70e-5 (JPL planetary satellite physical parameters; NASA Jupiter
+# fact sheet), within ±2 %.
+inner_partner_mass_ratio = [4.6e-5, 4.8e-5]

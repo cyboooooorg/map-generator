@@ -2,11 +2,17 @@
 import type { ParamDefault } from "./ParamDefault";
 
 /**
- * The resonance partner of a moon archetype (`[moon.resonance]`): a
- * regular moon of its host, one 2:1 step outward on the chain.
+ * The resonance partners of a moon archetype (`[moon.resonance]`):
+ * regular moons of its host, one 2:1 step outward on the chain, and
+ * optionally one step inward (Io inside Europa).
  */
 export type ArchetypeResonance = { 
 /**
- * The partner's mass over its host's mass.
+ * The outer partner's mass over its host's mass.
  */
-partner_mass_ratio: ParamDefault, };
+partner_mass_ratio: ParamDefault, 
+/**
+ * The inner partner's mass over its host's mass, when the moon has
+ * one in 2:1 resonance inside it too.
+ */
+inner_partner_mass_ratio?: ParamDefault, };

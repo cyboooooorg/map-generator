@@ -4394,12 +4394,28 @@ mod tests {
         }
     }
 
+    /// The tidal heat `model` should hold in `context`: its own tide, or
+    /// its chain's resonant heat when larger.
+    fn todays_tide_w(context: &Context, model: &PlanetModel) -> f64 {
+        use crate::planet::{k2_over_q, tidal_power_w};
+        let tide = crate::planet::tide_of(context);
+        let i = &model.inputs;
+        let own = tidal_power_w(
+            tide.host_kg,
+            model.interior.radius_earth * EARTH_M,
+            tide.a_m,
+            tide.eccentricity,
+            k2_over_q(i.envelope_fraction, i.water_fraction),
+        );
+        crate::planet::resonance::todays_heat_w(own, tide.resonant_heat_w)
+    }
+
     /// Every body with a model in `system`: its rebuilt context gives its
     /// stored tidal heat back (its chain's resonant heat, or its own
     /// tide's), and its cause trees exist. Returns how many moons were
     /// checked.
     fn explains_every_model(system: &System) -> usize {
-        use crate::planet::{explain, k2_over_q, tidal_power_w};
+        use crate::planet::explain;
         let mut moons = 0;
         for body in system.bodies.iter() {
             let Some(model) = &body.model else {
@@ -4407,17 +4423,7 @@ mod tests {
                 continue;
             };
             let context = body_context(system, body).expect("a body with a model has a context");
-            let tide = crate::planet::tide_of(&context);
-            let i = &model.inputs;
-            let tidal = tide.resonant_heat_w.unwrap_or_else(|| {
-                tidal_power_w(
-                    tide.host_kg,
-                    model.interior.radius_earth * EARTH_M,
-                    tide.a_m,
-                    tide.eccentricity,
-                    k2_over_q(i.envelope_fraction, i.water_fraction),
-                )
-            });
+            let tidal = todays_tide_w(&context, model);
             let stored = model.heat.tidal_w;
             assert!(
                 (tidal - stored).abs() <= 1e-9 * stored.abs().max(tidal.abs()),
@@ -5215,18 +5221,33 @@ mod tests {
         }
     }
 
-    /// Spec acceptance: an asked Enceladus's tidal heat is 5 to 30 GW.
-    /// Seeds 2, 5, 6, 7 and 8 of 1..=10 fall outside it (4.9, 2.5, 2.6,
-    /// 1.7 and 37 GW): the heat comes from the chain (Task 2), not from
-    /// the partner, so the controller decides the next step.
+    /// An asked Enceladus, in 2:1 resonance with its Dione-mass partner,
+    /// dissipates 5 to 30 GW, around the 15.8 GW it radiates (Howett et
+    /// al. 2011, doi:10.1029/2010JE003718).
     #[test]
-    #[ignore = "5 of 10 seeds outside 5 to 30 GW, see the task 3 report"]
     fn an_asked_enceladus_is_heated_like_enceladus() {
         for seed in 1..=10 {
             let system = requested(seed, &[("enceladus-like", 1)]);
             let moon = asked_moons(&system, "enceladus-like")[0];
             let heat = moon.model.as_ref().unwrap().heat.tidal_w;
             assert!((5e9..30e9).contains(&heat), "seed {seed}: {heat:e} W");
+        }
+    }
+
+    /// An asked Europa, between its Io-mass partner inside it and its
+    /// Ganymede-mass one beyond it, both at 2:1, gives out 10 to 100
+    /// mW/m² of tidal heat: the 10 to 50 mW/m² that thermal models of its
+    /// shell consider (Kimura 2024, arXiv:2403.01336), up to the flux of a
+    /// thin shell (its shell thickness is the binding check).
+    #[test]
+    fn an_asked_europa_is_heated_like_europa() {
+        for seed in 1..=10 {
+            let system = requested(seed, &[("europa-like", 1)]);
+            let moon = asked_moons(&system, "europa-like")[0];
+            let model = moon.model.as_ref().unwrap();
+            let r = model.interior.radius_earth * EARTH_M;
+            let flux = model.heat.tidal_w / (4.0 * PI * r * r);
+            assert!((0.01..0.1).contains(&flux), "seed {seed}: {flux} W/m²");
         }
     }
 
@@ -5366,8 +5387,10 @@ mod tests {
     /// Sun's age: Callisto's ancient (about 4 Ga), Ganymede's 2 to 4 Ga,
     /// Europa's under 0.1 Ga (40 to 90 Ma, Zahnle et al. 2003,
     /// doi:10.1016/S0019-1035(03)00048-4), Io's none (its volcanoes'),
-    /// Enceladus's that of its old cratered plains (its crater-free south
-    /// polar terrain is regional, which one surface age does not tell).
+    /// Enceladus's, heated by its resonance with Dione, between its
+    /// ridged plains (under 0.1 Ga) and its cratered plains (1 to 2 Ga;
+    /// Kirchoff & Schenk 2009, doi:10.1016/j.icarus.2008.12.034), younger
+    /// than Ganymede's and Callisto's.
     #[test]
     fn an_ice_lid_is_as_young_as_its_heat() {
         for seed in 1..=3 {
@@ -5384,7 +5407,10 @@ mod tests {
             let io = age("io-like");
             assert!(io < 0.002, "seed {seed}: Io {io} Ga");
             let enceladus = age("enceladus-like");
-            assert!(enceladus >= 2.0, "seed {seed}: Enceladus {enceladus} Ga");
+            assert!(
+                (0.05..=2.0).contains(&enceladus) && enceladus < ganymede && enceladus < callisto,
+                "seed {seed}: Enceladus {enceladus} Ga"
+            );
         }
     }
 
@@ -5691,7 +5717,10 @@ mod tests {
             f64::from(moon.params.age_gyr),
             chain_orbiter(&context, model, &moon.orbit),
         );
-        assert_eq!(model.heat.tidal_w, chain.unwrap_or(own));
+        assert_eq!(
+            model.heat.tidal_w,
+            crate::planet::resonance::todays_heat_w(own, chain)
+        );
     }
 
     /// The moons of `system` its rebuilt contexts put in a resonant chain.
@@ -5712,12 +5741,17 @@ mod tests {
         // Seed 1: a giant with two of its drawn moons in a 2:1 chain.
         let system = draw(&whole_drawn(1), &mut StdRng::seed_from_u64(1)).unwrap();
         let chain = chain_moons(&system);
-        assert!(chain.len() >= 2, "{}", chain.len());
+        assert!(!chain.is_empty());
         for moon in chain {
             let context = body_context(&system, moon).unwrap();
             let model = moon.model.as_ref().unwrap();
-            let heat = context.tide.unwrap().resonant_heat_w.unwrap();
-            assert_eq!(model.heat.tidal_w, heat, "{}", moon.id);
+            assert!(context.tide.unwrap().resonant_heat_w.is_some());
+            assert_eq!(
+                model.heat.tidal_w,
+                todays_tide_w(&context, model),
+                "{}",
+                moon.id
+            );
             assert!(
                 crate::planet::explain(&context, model).is_some(),
                 "{}",
@@ -5790,26 +5824,12 @@ mod tests {
         );
         let heat = heat.expect("the world is in its siblings' chain");
         assert!(heat > 0.0);
-        assert_eq!(model.heat.tidal_w, heat);
-        // Its round siblings too, through their own models.
-        assert!(siblings.iter().all(Option::is_some), "{siblings:?}");
-        let mut round = 0;
-        for body in system
-            .bodies
-            .iter()
-            .filter(|b| b.parent == world.parent && b.id != world.id && b.model.is_some())
-        {
-            let context = body_context(&system, body).unwrap();
-            let resonant = context.tide.unwrap().resonant_heat_w.expect("in the chain");
-            assert_eq!(
-                body.model.as_ref().unwrap().heat.tidal_w,
-                resonant,
-                "{}",
-                body.id
-            );
-            round += 1;
-        }
-        assert_eq!(round, siblings.len());
+        let context = body_context(&system, world).unwrap();
+        assert_eq!(model.heat.tidal_w, todays_tide_w(&context, model));
+        // Its round siblings too, through their own models: the inner
+        // one heated by its pair with the world.
+        assert!(siblings.iter().any(Option::is_some), "{siblings:?}");
+        explains_every_model(&system);
     }
 
     fn whole_drawn(seed: u32) -> SystemRequest {
