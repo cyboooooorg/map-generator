@@ -35,9 +35,10 @@ semi_major_axis_radii = [3.9, 4.0]
 # 0.0047, forced by its 2:1 resonance with Dione (JPL mean orbital
 # elements).
 eccentricity = [0.004, 0.005]
-# Water and ices 40 to 55 % of its mass: its 1.61 g/cm³ over a rock core
-# of about 2.4 g/cm³ (Iess et al. 2014, doi:10.1126/science.1250551).
-ice_fraction = [0.40, 0.55]
+# Water and ices about 35 % of its mass: its 1.61 g/cm³ is a rock core
+# of about 2.4 g/cm³ under water and ice of 0.95 to 1.0 (Iess et al.
+# 2014, doi:10.1126/science.1250551), 32 to 36 % by mass balance.
+ice_fraction = [0.32, 0.37]
 
 [moon.resonance]
 # Dione, in 2:1 resonance with it: 1.095e21 kg over Saturn's 5.683e26 kg

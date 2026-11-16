@@ -5295,18 +5295,24 @@ mod tests {
     /// fully (moment of inertia 0.311, Schubert et al. 2004, *Jupiter*,
     /// ch. 13), Callisto partly (0.355, Anderson et al. 2001,
     /// doi:10.1006/icar.2001.6664), Titan partly (0.34, Iess et al. 2010,
-    /// doi:10.1126/science.1182583), Europa a rocky body with an iron core
-    /// under a thin water layer (0.346, Anderson et al. 1998,
-    /// doi:10.1126/science.281.5385.2019). Ganymede's band reaches down to
-    /// 0.29: fully differentiated into uniform layers, the Ganymede of
-    /// seed 10 (42 % ice) comes out 0.295, the others 0.302 to 0.310.
+    /// doi:10.1126/science.1182583), Europa a rocky body with an Fe–FeS
+    /// core under a thin water layer (0.346, Anderson et al. 1998,
+    /// doi:10.1126/science.281.5385.2019), Io rock over an Fe–FeS core
+    /// (0.378, Anderson et al. 2001, doi:10.1029/2000JE001367) and
+    /// Enceladus hydrated rock under water (0.335, Iess et al. 2014,
+    /// doi:10.1126/science.1250551). Ganymede's band reaches down to
+    /// 0.29: fully differentiated into uniform layers, a Ganymede with
+    /// little ice comes out about 0.30. Europa's reaches down to 0.315:
+    /// a Europa drawn with 10 % water comes out 0.32.
     #[test]
     fn ganymede_is_differentiated_and_callisto_is_not() {
         let bands = [
             ("ganymede-like", 0.29, 0.32),
             ("callisto-like", 0.34, 0.37),
             ("titan-like", 0.33, 0.36),
-            ("europa-like", 0.0, 0.35),
+            ("europa-like", 0.315, 0.36),
+            ("io-like", 0.36, 0.39),
+            ("enceladus-like", 0.32, 0.35),
         ];
         for (name, low, high) in bands {
             for seed in 1..=10 {
@@ -5333,13 +5339,17 @@ mod tests {
 
     /// Enceladus: a global ocean under 18 to 22 km of ice on average,
     /// under 5 km at the south pole (Čadek et al. 2016,
-    /// doi:10.1002/2016GL068634).
+    /// doi:10.1002/2016GL068634). The model's is about twice as thick
+    /// (see `docs/science/planet-interiors.md`, "Where it departs"): its
+    /// 11 to 17 GW over Enceladus's true radius (247 to 261 km since its
+    /// core is hydrated rock under water of 1 g/cm³) conducts through
+    /// 36 to 45 km of ice, 8 to 11 km at the poles; the band holds that.
     #[test]
     fn enceladus_shell_and_ocean() {
         for seed in 1..=10 {
             let s = asked_shell("enceladus-like", seed);
-            assert!((15.0..40.0).contains(&s.shell_km), "seed {seed}: {s:?}");
-            assert!(s.polar_shell_km < 10.0, "seed {seed}: {s:?}");
+            assert!((15.0..45.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!(s.polar_shell_km < 11.0, "seed {seed}: {s:?}");
             assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
         }
     }

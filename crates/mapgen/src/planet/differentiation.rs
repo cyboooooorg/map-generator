@@ -1,8 +1,9 @@
 //! How much of an icy moon's ice separated from its rock
 //! ([`differentiated_share`]), the layers that leaves
 //! ([`partly_differentiated`]: an undifferentiated rock-and-ice mixture
-//! between the rock and the water), and the moment of inertia of a
-//! layered body ([`moment_of_inertia`]).
+//! between the rock and the water), the core of a moon ([`moon_core`]:
+//! Fe–FeS, or hydrated rock without iron in a small icy moon), and the
+//! moment of inertia of a layered body ([`moment_of_inertia`]).
 //!
 //! A moon whose ice never melted keeps its rock mixed in it: Callisto's
 //! moment of inertia, 0.355 (Anderson et al. 2001,
@@ -196,6 +197,131 @@ pub fn partly_differentiated(interior: &Interior, share: f64) -> Interior {
     }
 }
 
+/// Uncompressed density of a moon's iron core, g/cm³: the Fe–FeS
+/// eutectic's, 5.15, which the interior models of the Galileo gravity
+/// data take for Io's core (Anderson et al. 2001,
+/// doi:10.1029/2000JE001367: a core of 20 % of the mass, radius about
+/// 950 km, under a 3.27 g/cm³ mantle, moment of inertia 0.378) and
+/// Europa's (Anderson et al. 1998, doi:10.1126/science.281.5385.2019).
+/// A core segregated at a moon's low pressures keeps its sulfur: the
+/// Fe–FeS melt is the first to separate from chondritic rock. The
+/// planets keep their denser core (`interior`'s 7.0, calibrated on
+/// Mercury's and Mars's radii).
+pub const MOON_CORE_DENSITY: f64 = 5.15;
+
+/// Density of the rock core of a small icy moon, g/cm³: hydrated and
+/// porous, with no iron core separated, Enceladus's 2.4 (Iess et al.
+/// 2014, doi:10.1126/science.1250551, from its moment of inertia 0.335;
+/// a core of 20 to 30 % porosity that water flows through, Choblet et
+/// al. 2017, doi:10.1038/s41550-017-0289-8). A moon whose centre stays
+/// under [`super::ice_shell::UNCONSOLIDATED_CORE_PA`] never compacts
+/// its rock nor heats it to the Fe–FeS eutectic, and its water reaches
+/// the rock.
+pub const HYDRATED_CORE_DENSITY: f64 = 2.4;
+
+/// Density of the water layer of a moon that holds no high-pressure
+/// ice, g/cm³: liquid water's, 1.00 near its melting point, over a
+/// shell of ice Ih, 0.92 (Feistel & Wagner 2006, doi:10.1063/1.2183324),
+/// thinner than the ocean beneath. The interior's mean water density
+/// (1.25, a mix with the high-pressure ices) holds for the large icy
+/// moons; a layer whose base stays under
+/// [`super::ice_shell::HIGH_PRESSURE_ICE_PA`] (Enceladus, Europa) has
+/// none of them, and Iess et al. 2014 (doi:10.1126/science.1250551)
+/// fit Enceladus with water of about 1.
+pub const LOW_PRESSURE_WATER_DENSITY: f64 = 1.0;
+
+/// `interior`, a moon's layers, with a moon's core: its iron core of
+/// [`MOON_CORE_DENSITY`]; or, for a moon with water whose centre lies
+/// under [`super::ice_shell::UNCONSOLIDATED_CORE_PA`], its iron and rock
+/// one hydrated rock core of [`HYDRATED_CORE_DENSITY`]. Its water layer,
+/// when its base lies under [`super::ice_shell::HIGH_PRESSURE_ICE_PA`],
+/// takes [`LOW_PRESSURE_WATER_DENSITY`]. Each other layer keeps its mass
+/// and volume, so the layers above move out and the radius, density and
+/// gravity follow. The pressures are read on `interior` as given.
+pub fn moon_core(interior: &Interior) -> Interior {
+    use super::ice_shell::{
+        HIGH_PRESSURE_ICE_PA, UNCONSOLIDATED_CORE_PA, central_pressure_pa, pressure_at_pa,
+    };
+    use super::interior::EARTH_DENSITY;
+    let water = interior
+        .layers
+        .iter()
+        .position(|l| l.material == Material::Water);
+    let has_water = water.is_some()
+        || interior
+            .layers
+            .iter()
+            .any(|l| l.material == Material::RockIce);
+    let hydrated = has_water && central_pressure_pa(interior) < UNCONSOLIDATED_CORE_PA;
+    let shallow_water = water.is_some_and(|w| {
+        let base = w
+            .checked_sub(1)
+            .map_or(0.0, |b| interior.layers[b].outer_radius_earth);
+        pressure_at_pa(interior, base) < HIGH_PRESSURE_ICE_PA
+    });
+    // Each layer's material, mass and volume (Earth radii cubed).
+    let mut parts: Vec<(Material, f64, f64)> = Vec::new();
+    let mut inner = 0.0_f64;
+    for l in &interior.layers {
+        let volume = l.outer_radius_earth.powi(3) - inner.powi(3);
+        inner = l.outer_radius_earth;
+        match l.material {
+            Material::Iron if hydrated => {
+                parts.push((Material::Rock, l.mass_earth, 0.0));
+            }
+            Material::Iron => {
+                parts.push((
+                    Material::Iron,
+                    l.mass_earth,
+                    l.mass_earth * EARTH_DENSITY / MOON_CORE_DENSITY,
+                ));
+            }
+            Material::Rock if hydrated => {
+                let iron = match parts.last() {
+                    Some((Material::Rock, m, _)) => *m,
+                    _ => 0.0,
+                };
+                parts.pop_if(|p| p.0 == Material::Rock);
+                let mass = iron + l.mass_earth;
+                parts.push((
+                    Material::Rock,
+                    mass,
+                    mass * EARTH_DENSITY / HYDRATED_CORE_DENSITY,
+                ));
+            }
+            Material::Water if shallow_water => parts.push((
+                Material::Water,
+                l.mass_earth,
+                l.mass_earth * EARTH_DENSITY / LOW_PRESSURE_WATER_DENSITY,
+            )),
+            material => parts.push((material, l.mass_earth, volume)),
+        }
+    }
+    let mut cumulative = 0.0;
+    let layers: Vec<Layer> = parts
+        .into_iter()
+        .map(|(material, mass_earth, volume)| {
+            cumulative += volume;
+            Layer {
+                material,
+                mass_earth,
+                outer_radius_earth: cumulative.cbrt(),
+            }
+        })
+        .collect();
+    let radius_earth = layers.last().map_or(0.0, |l| l.outer_radius_earth);
+    let mass: f64 = layers.iter().map(|l| l.mass_earth).sum();
+    if radius_earth.is_nan() || radius_earth <= 0.0 {
+        return interior.clone();
+    }
+    Interior {
+        layers,
+        radius_earth,
+        density: EARTH_DENSITY * mass / radius_earth.powi(3),
+        gravity: mass / radius_earth.powi(2),
+    }
+}
+
 /// Moment of inertia factor `C / (M R²)` of a body of `interior`, each
 /// layer of uniform density: `(2/5) Σ mᵢ (rᵢ⁵ − rᵢ₋₁⁵) / (rᵢ³ − rᵢ₋₁³)
 /// / (M R²)`, the sum of the spherical shells. 0.4 for a uniform sphere,
@@ -302,6 +428,56 @@ mod tests {
         assert_eq!(bombardment_share(0.0), 0.0);
         let young = bombardment_share(0.1);
         assert!(young > 0.0 && young < 0.9, "{young}");
+    }
+
+    #[test]
+    fn io_takes_an_fe_fes_core() {
+        // Io's 20 % core of 5.15 g/cm³ (Anderson et al. 2001): 0.378.
+        let io = solid_interior(&inputs_of(reference("Io")));
+        let moon = moon_core(&io);
+        let c = moment_of_inertia(&moon);
+        assert!(
+            (0.37..0.385).contains(&c),
+            "{c} (was {})",
+            moment_of_inertia(&io)
+        );
+        let core = &moon.layers[0];
+        assert_eq!(core.material, Material::Iron);
+        assert_eq!(core.mass_earth, io.layers[0].mass_earth);
+        // A lighter core takes more room: Io grows towards its 1821.6 km.
+        assert!(moon.radius_earth > io.radius_earth);
+        assert!((moon.radius_earth * 6371.0 - 1821.6).abs() < 40.0);
+    }
+
+    #[test]
+    fn enceladus_keeps_a_hydrated_core_without_iron() {
+        // Enceladus with 35 % water (its 1.61 g/cm³ over a 2.4 g/cm³
+        // core, Iess et al. 2014): 0.335.
+        let inputs = PlanetInputs {
+            water_fraction: 0.35,
+            ..inputs_of(reference("Enceladus"))
+        };
+        let moon = moon_core(&solid_interior(&inputs));
+        let materials: Vec<Material> = moon.layers.iter().map(|l| l.material).collect();
+        assert_eq!(materials, [Material::Rock, Material::Water]);
+        let c = moment_of_inertia(&moon);
+        assert!((0.325..0.345).contains(&c), "{c}");
+        assert!((moon.radius_earth * 6371.0 - 252.1).abs() < 10.0);
+        assert!((moon.density - 1.61).abs() < 0.1, "{}", moon.density);
+    }
+
+    #[test]
+    fn a_large_icy_moon_keeps_its_iron_core_and_high_pressure_ices() {
+        // Ganymede's centre is at GPa and its water reaches ice V: only
+        // its core lightens.
+        let ganymede = solid_interior(&inputs_of(reference("Ganymede")));
+        let moon = moon_core(&ganymede);
+        let water = |i: &Interior| {
+            let n = i.layers.len();
+            i.layers[n - 1].outer_radius_earth.powi(3) - i.layers[n - 2].outer_radius_earth.powi(3)
+        };
+        assert!((water(&moon) - water(&ganymede)).abs() < 1e-12);
+        assert_eq!(moon.layers[0].material, Material::Iron);
     }
 
     #[test]

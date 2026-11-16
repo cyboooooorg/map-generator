@@ -162,13 +162,14 @@ const ICE_III_TRIPLE: (f64, f64) = (251.165, 208.566e6);
 /// doi:10.1016/j.icarus.2015.05.033; Choblet et al. 2017,
 /// doi:10.1038/s41550-017-0289-8, with 20 to 30 % porosity at Enceladus).
 /// A calibrated separation, not a measured threshold: an asked
-/// Enceladus's centre lies at 92 to 108 MPa in the model (its iron core
-/// concentrates its mass; about 35 MPa for a uniform rock core), the next
+/// Enceladus's centre lies at 92 to 108 MPa in the planet model's layers
+/// (its iron core concentrating its mass; about 35 MPa once
+/// [`super::differentiation::moon_core`] hydrates its core), the next
 /// bodies, Europa, Ganymede, Titan and Callisto, at 6 to 13 GPa, so any
 /// value in between classifies them alike. Rock's porosity closes under
 /// compaction at pressures of the order of 10² MPa (uncited here), which
 /// 300 MPa stands for.
-const UNCONSOLIDATED_CORE_PA: f64 = 300e6;
+pub(crate) const UNCONSOLIDATED_CORE_PA: f64 = 300e6;
 
 /// Angular radius, degrees, of the polar caps over which the hydrothermal
 /// plumes of an unconsolidated core rise ([`core_plume_pattern`]): about
@@ -425,7 +426,15 @@ pub fn ice_melting_k(pressure_pa: f64) -> f64 {
 /// Pressure, Pa, at the centre of a body of `interior`: `∫ ρ g dr` from
 /// its surface down, each layer of uniform density, `g = G M(<r) / r²`.
 pub fn central_pressure_pa(interior: &Interior) -> f64 {
+    pressure_at_pa(interior, 0.0)
+}
+
+/// Pressure, Pa, at `radius_earth` (Earth radii) inside a body of
+/// `interior`: `∫ ρ g dr` from its surface down to it, each layer of
+/// uniform density, `g = G M(<r) / r²`.
+pub fn pressure_at_pa(interior: &Interior, radius_earth: f64) -> f64 {
     const STEPS: usize = 2000;
+    let floor = radius_earth * EARTH_M;
     let mut inner = 0.0_f64;
     let mut below = 0.0;
     let mut shells = Vec::new();
@@ -441,9 +450,13 @@ pub fn central_pressure_pa(interior: &Interior) -> f64 {
     }
     let mut pressure = 0.0;
     for &(inner, outer, density, below) in &shells {
-        let dr = (outer - inner) / STEPS as f64;
+        if outer <= floor {
+            continue;
+        }
+        let from = inner.max(floor);
+        let dr = (outer - from) / STEPS as f64;
         for i in 0..STEPS {
-            let r = inner + (i as f64 + 0.5) * dr;
+            let r = from + (i as f64 + 0.5) * dr;
             let mass = below + density * 4.0 / 3.0 * PI * (r.powi(3) - inner.powi(3));
             pressure += density * G * mass / (r * r) * dr;
         }

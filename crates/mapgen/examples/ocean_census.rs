@@ -130,7 +130,7 @@ fn num(x: f64) -> String {
     if x != 0.0 && (x.abs() >= 1e5 || x.abs() < 1e-2) {
         format!("{x:.3e}")
     } else {
-        format!("{x:.2}")
+        format!("{x:.3}")
     }
 }
 

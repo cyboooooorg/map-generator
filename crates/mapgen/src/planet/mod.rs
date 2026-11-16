@@ -557,11 +557,21 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
 /// The layers of a body of `inputs` (after escape) in its formation
 /// `context`: its [`interior`] under the star's exposure, with only the
 /// [`differentiation::share_in`] of its ice separated from its rock
-/// ([`differentiation::partly_differentiated`]; all of it for a planet).
+/// ([`differentiation::partly_differentiated`]; all of it for a planet),
+/// and for a moon (the tides of a host other than its star in `context`)
+/// the core and water of a moon ([`differentiation::moon_core`]).
 pub fn body_interior(context: &Context, inputs: &PlanetInputs) -> Interior {
     let full = interior(inputs, &context.exposure());
     let share = differentiation::share_in(context, inputs, &full);
-    differentiation::partly_differentiated(&full, share)
+    let layered = differentiation::partly_differentiated(&full, share);
+    let moon = context
+        .tide
+        .is_some_and(|t| t.host_kg < context.star_mass * SUN_KG);
+    if moon {
+        differentiation::moon_core(&layered)
+    } else {
+        layered
+    }
 }
 
 /// The host whose tides heat a body of `context`: a moon's planet
