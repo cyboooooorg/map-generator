@@ -753,7 +753,9 @@ impl WorldRequest {
             // again until the giant's orbit stays put.
             let mut tide = None;
             for _ in 0..TIDE_ROUNDS {
-                let host = crate::exomoon::HostGiant::draw(&params).map(|h| host_tide(&h));
+                let context = at(params.eccentricity).context();
+                let host = crate::exomoon::HostGiant::draw(&params)
+                    .map(|h| host_tide(&h, &params, &context, &model));
                 if host == tide {
                     break;
                 }
@@ -918,10 +920,7 @@ impl World<'_> {
     /// metallicity, with the tides of the giant it orbits when it is a
     /// giant's moon, from the seed's stream `world/model`.
     fn model(&self) -> PlanetModel {
-        let star =
-            crate::star::StarInfo::new(self.star, self.orbit_au, self.eccentricity, self.age_gyr);
-        let ice_line_au = 2.7 * star.luminosity.sqrt();
-        let context = crate::planet::Context::of(&star, self.metallicity, ice_line_au);
+        let context = self.context();
         let context = match self.tide {
             Some(tide) => context.with_tide(tide),
             None => context,
@@ -936,18 +935,53 @@ impl World<'_> {
     }
 }
 
+impl World<'_> {
+    /// The context of its star seen from its orbit, without the tides of
+    /// a giant: the ice line of the star (2.7 AU √L, as a system places
+    /// it) and the metallicity.
+    fn context(&self) -> crate::planet::Context {
+        let star =
+            crate::star::StarInfo::new(self.star, self.orbit_au, self.eccentricity, self.age_gyr);
+        let ice_line_au = 2.7 * star.luminosity.sqrt();
+        crate::planet::Context::of(&star, self.metallicity, ice_line_au)
+    }
+}
+
 /// Rounds of drawing a giant's moon's host from its world and its model
 /// from its host's tides (see [`WorldRequest::resolve_with_archetype`]): the host's
 /// orbit moves at most once (out of a runaway), so two settle it.
 const TIDE_ROUNDS: usize = 4;
 
-/// The tides a giant's moon gets from `host`: its mass, the moon's orbit
-/// around it and that orbit's eccentricity.
-fn host_tide(host: &crate::exomoon::HostGiant) -> crate::planet::HostTide {
+/// The tides a giant's moon of world `params` and model `model` (derived
+/// in `context`, without them) gets from `host`: its mass, the moon's
+/// orbit around it and that orbit's eccentricity, and the resonant heat
+/// of its chain with the giant's other regular moons
+/// ([`crate::system::lone_chain_heat`]), as its system rebuilds it.
+fn host_tide(
+    host: &crate::exomoon::HostGiant,
+    params: &WorldParams,
+    context: &crate::planet::Context,
+    model: &PlanetModel,
+) -> crate::planet::HostTide {
+    let a_m = f64::from(host.distance_km) * 1000.0;
+    let eccentricity = f64::from(host.eccentricity);
+    let inputs = &model.inputs;
+    let world = crate::planet::resonance::Orbiter {
+        mass_kg: inputs.mass_earth * crate::exomoon::EARTH_KG,
+        a_m,
+        period_s: f64::from(host.period_days) * 86_400.0,
+        eccentricity,
+        radius_m: crate::planet::explain::surface_interior(context, model).radius_earth
+            * crate::exomoon::EARTH_M,
+        k2_over_q: crate::planet::k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
+    };
+    let (resonant_heat_w, _) =
+        crate::system::lone_chain_heat(host, f64::from(params.age_gyr), world);
     crate::planet::HostTide {
         host_kg: f64::from(host.giant.mass_earth) * crate::exomoon::EARTH_KG,
-        a_m: f64::from(host.distance_km) * 1000.0,
-        eccentricity: f64::from(host.eccentricity),
+        a_m,
+        eccentricity,
+        resonant_heat_w,
     }
 }
 

@@ -136,7 +136,9 @@ pub const ROCKY_K2_OVER_Q: f64 = 0.015;
 /// and Enceladus about 3.7 GW, a quarter of the 15.8 ± 3.1 GW it radiates
 /// (Howett et al. 2011, doi:10.1029/2010JE003718) and that the
 /// equilibrium of its orbit can supply given Saturn's strong measured
-/// dissipation (Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14).
+/// dissipation (Lainey et al. 2012, doi:10.1088/0004-637X/752/1/14). A
+/// moon in a resonant chain gets that equilibrium heat instead
+/// ([`super::resonance`]); this response then only shares it out.
 pub const ICY_K2_OVER_Q: f64 = 2.5e-3;
 
 /// Tidal response `k₂/Q` of a body wrapped in hydrogen and helium:
@@ -189,7 +191,8 @@ pub fn k2_over_q(envelope_fraction: f64, water_fraction: f64) -> f64 {
 pub struct InternalHeat {
     /// From the decay of U, Th and K ([`radiogenic_w`]).
     pub radiogenic_w: f64,
-    /// From a host's tides ([`tidal_power_w`]); 0 without one.
+    /// From a host's tides ([`tidal_power_w`], or the equilibrium heat of
+    /// a moon in a resonant chain, [`super::resonance`]); 0 without one.
     pub tidal_w: f64,
     /// From the cooling of its mantle and core ([`secular_w`]).
     pub secular_w: f64,
@@ -288,7 +291,10 @@ mod tests {
             "Europa {europa} W, {flux} W/m²"
         );
         // Enceladus: Saturn 5.683e26 kg, R 2.521e5 m, a 2.3802e8 m,
-        // e 0.0047: a few GW, under the 15.8 GW observed.
+        // e 0.0047: its own tide gives a few GW, under the 15.8 GW
+        // observed; in its 2:1 resonance with Dione, the equilibrium heat
+        // of `super::resonance` supplies the rest (about 10 GW of a 14 GW
+        // total, see `enceladus_and_dione_heat_as_observed` there).
         let enceladus = tidal_power_w(5.683e26, 2.521e5, 2.3802e8, 0.0047, ICY_K2_OVER_Q);
         assert!(
             (2e9..15.8e9).contains(&enceladus),

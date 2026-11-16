@@ -43,7 +43,8 @@ pub struct Context {
 
 /// The host that raises tides in a body and the body's orbit around it,
 /// for [`super::heat::tidal_power_w`]: a moon's planet and the moon's
-/// orbit.
+/// orbit, and the heat the moon gets when it is locked in a resonance
+/// with its neighbours ([`super::resonance::resonant_heat`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HostTide {
     /// Mass of the host, kg.
@@ -53,6 +54,11 @@ pub struct HostTide {
     /// Eccentricity of that orbit (0 circular): a resonant moon's forced
     /// one, as Io's.
     pub eccentricity: f64,
+    /// Tidal heat, W, of a moon in a resonant chain, set in equilibrium by
+    /// its host's dissipation and the chain's orbits
+    /// ([`super::resonance::resonant_heat`]); it stands for the heat of
+    /// its own tide. `None` for a body in no chain.
+    pub resonant_heat_w: Option<f64>,
 }
 
 impl Context {

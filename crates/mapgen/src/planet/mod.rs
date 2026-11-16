@@ -70,6 +70,7 @@ pub mod mass;
 pub mod moon;
 pub mod reference;
 pub mod regime;
+pub mod resonance;
 pub mod xuv;
 
 pub use atmosphere::{
@@ -520,13 +521,15 @@ pub(crate) fn tide_of(context: &Context) -> HostTide {
         host_kg: context.star_mass * SUN_KG,
         a_m: context.orbit_au * AU_M,
         eccentricity: context.eccentricity,
+        resonant_heat_w: None,
     })
 }
 
 /// The heat a body of `inputs` (after escape) and `interior` makes in
 /// `context` (see [`planet_model`]): radiogenic and secular cooling from
-/// its silicate mass and age, tidal from [`tide_of`] with the
-/// [`heat::k2_over_q`] of its envelope and water shares.
+/// its silicate mass and age, tidal from [`tide_of`]: the resonant heat
+/// of a moon in a chain ([`HostTide::resonant_heat_w`]), else its own
+/// tide with the [`heat::k2_over_q`] of its envelope and water shares.
 pub(crate) fn internal_heat(
     context: &Context,
     inputs: &PlanetInputs,
@@ -540,13 +543,15 @@ pub(crate) fn internal_heat(
     InternalHeat {
         radiogenic_w: radiogenic_w(silicate_kg, inputs.radiogenic, context.age_gyr),
         secular_w: secular_w(silicate_kg, context.age_gyr),
-        tidal_w: tidal_power_w(
-            tide.host_kg,
-            interior.radius_earth * EARTH_M,
-            tide.a_m,
-            tide.eccentricity,
-            k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
-        ),
+        tidal_w: tide.resonant_heat_w.unwrap_or_else(|| {
+            tidal_power_w(
+                tide.host_kg,
+                interior.radius_earth * EARTH_M,
+                tide.a_m,
+                tide.eccentricity,
+                k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
+            )
+        }),
     }
 }
 
@@ -801,6 +806,7 @@ mod tests {
             host_kg: JUPITER_KG,
             a_m,
             eccentricity,
+            resonant_heat_w: None,
         })
     }
 
@@ -822,6 +828,7 @@ mod tests {
                 host_kg,
                 a_m: 4.217e8,
                 eccentricity: 0.0041,
+                resonant_heat_w: None,
             })
         };
         assert!(!shield(&around(JUPITER_KG), core).dynamo);
@@ -898,6 +905,7 @@ mod tests {
             host_kg: context.star_mass * SUN_KG,
             a_m: context.orbit_au * AU_M,
             eccentricity: context.eccentricity,
+            resonant_heat_w: None,
         });
         assert_eq!(planet_model(&star_as_host, inputs), model);
         assert!(model.heat.tidal_w > 0.0);

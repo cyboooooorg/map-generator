@@ -175,6 +175,7 @@ mod tests {
                 host_kg,
                 a_m,
                 eccentricity,
+                resonant_heat_w: None,
             },
         }
     }

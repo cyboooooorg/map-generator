@@ -328,7 +328,13 @@ one, `Impact` for a giant-impact or debris moon) are its inputs
 (`system::moon_formation`), its formation context is its planet's (its
 star's light, XUV and age at the planet's orbit), and its planet's tides
 on its orbit (the planet's mass, the moon's semi-major axis and
-eccentricity) heat it. Its model is stored in `model` and in
+eccentricity) heat it; a round moon in a resonant chain with its round
+neighbours (periods 1.8 to 2.2 times apart) takes instead the chain's
+equilibrium heat, set by the planet's dissipation under resonance
+locking (`planet::resonance`, see
+[planet-interiors.md](science/planet-interiors.md), "Moons in
+resonance"), which `system::body_context` rebuilds from the stored
+moons. Its model is stored in `model` and in
 `params.model`, derived from the stream `<moon id>/model`; its `type` is
 the model's class (`rocky`, `ice-world`, `hydrocarbon-world`…), its
 world is a planet's (`planet::interim::params_for` at its own seed, with
@@ -634,7 +640,8 @@ systems/<system-id>/
     request's inputs, its archetype's ranges and its formation context),
     its archetype stored beside for display; a world asked around a
     giant (`host: giant`) is heated by that giant's tides (its mass, the
-    world's distance and eccentricity around it). A round moon has its
+    world's distance and eccentricity around it), or by its resonant
+    chain with the giant's round regular moons. A round moon has its
     model too (see [Moons](#moons)); a small one keeps `rocky-moon` or
     `icy-moon` and no model;
 

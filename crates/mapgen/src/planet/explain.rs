@@ -259,7 +259,7 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
 /// The interior the chain ran the heat and the surface steps on: the
 /// model's, except a steam world's, whose interior was derived again
 /// with its steam afterwards ([`super::steam_interior`]).
-fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
+pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
     if model
         .interior
         .layers

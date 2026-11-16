@@ -46,6 +46,7 @@ use crate::planet::heat::ICY_MIN_WATER;
 use crate::planet::interim::{base_of, params_for};
 use crate::planet::mass::{Origin, draw_mass};
 use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
+use crate::planet::resonance::{Orbiter, resonant_heat};
 use crate::planet::{Context, HostTide, PlanetClass, PlanetModel, derive_model, derive_model_with};
 use crate::request::{RequestError, WorldRequest};
 use crate::star::{StarInfo, draw_eccentricity, parse_type};
@@ -1612,7 +1613,21 @@ fn assemble(
             // draw makes first.
             params.asked_moons = asked.moons.clone();
         }
-        // Its moons.
+        // Its moons' formation context: the planet's, its star's light at
+        // its orbit.
+        let moon_context = Context::of(
+            &StarInfo::new(
+                star_code,
+                slot.orbit_au as f32,
+                slot.eccentricity as f32,
+                age_gyr,
+            ),
+            metallicity,
+            ice,
+        );
+        // Its moons; the giant of a world of the request has its chain's
+        // resonant heat set already (see `host_chain`).
+        let mut lone = false;
         let moons = if giant {
             match (&focus, at_focus) {
                 // The giant a world of the request orbits: the world among
@@ -1620,11 +1635,14 @@ fn assemble(
                 (
                     Some(Focus {
                         params: world,
+                        model: world_model,
                         host: Some(host),
-                        ..
                     }),
                     true,
-                ) => host_chain(host, world, star_code),
+                ) => {
+                    lone = true;
+                    host_chain(host, world, world_model, &moon_context, star_code)
+                }
                 // The mass the moons were drawn with.
                 _ => drawn_moons(
                     &params,
@@ -1675,31 +1693,61 @@ fn assemble(
         });
         let mut gap_moons =
             vec![String::new(); ring_moons.iter().filter(|r| r.gap.is_some()).count()];
-        // Its moons' formation context: the planet's, its star's light at
-        // its orbit.
-        let moon_context = Context::of(
-            &StarInfo::new(
-                star_code,
-                slot.orbit_au as f32,
-                slot.eccentricity as f32,
-                age_gyr,
-            ),
-            metallicity,
-            ice,
-        );
+        let moon_id = |k: usize| format!("{id}-{}", k + 1);
+        // The round moons' models, then those of the moons locked in a
+        // resonant chain again with its heat.
+        let mut moon_models: Vec<Option<PlanetModel>> = moons
+            .iter()
+            .enumerate()
+            .map(|(k, ((_, params, _, _, _, formation), _))| {
+                formation
+                    .as_ref()
+                    .map(|f| round_moon_model(seed, &moon_id(k), &moon_context, f, params))
+            })
+            .collect();
+        if !lone {
+            let round: Vec<usize> = (0..moons.len())
+                .filter(|&k| moon_models[k].is_some())
+                .collect();
+            let parts: Vec<(&Orbit, &PlanetModel)> = round
+                .iter()
+                .map(|&k| {
+                    (
+                        &moons[k].0.2,
+                        moon_models[k].as_ref().expect("a round moon"),
+                    )
+                })
+                .collect();
+            let heat = chain_heat(&bodies[planet_index], &moon_context, &parts);
+            for (&k, heat) in round.iter().zip(heat) {
+                let ((_, params, _, _, _, Some(formation)), _) = &mut moons[k] else {
+                    continue;
+                };
+                let Some(heat) = heat else {
+                    continue;
+                };
+                formation.tide.resonant_heat_w = Some(heat);
+                moon_models[k] = Some(round_moon_model(
+                    seed,
+                    &moon_id(k),
+                    &moon_context,
+                    formation,
+                    params,
+                ));
+            }
+        }
         let mut moon_sizes = Vec::new();
         for (k, ((moon_type, moon_params, orbit, physical, spin, formation), ring)) in
             moons.into_iter().enumerate()
         {
-            let moon_id = format!("{id}-{}", k + 1);
+            let moon_id = moon_id(k);
             // A round moon: its model, then its class, world and size.
             let (moon_type, mut moon_params, physical, mut moon_model, look) = match &formation {
                 Some(formation) => {
+                    let model = moon_models[k].take().expect("a round moon's model");
                     let (class, params, physical) = round_moon(
-                        seed,
-                        &moon_id,
+                        &model,
                         &bodies[planet_index].params,
-                        &moon_context,
                         formation,
                         &moon_params,
                         &physical,
@@ -2096,6 +2144,8 @@ pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
             host_kg: planet_mass_earth * EARTH_KG,
             a_m: f64::from(moon.semi_major_axis_km) * 1000.0,
             eccentricity: f64::from(moon.eccentricity),
+            // Set once its neighbours are known (see `chain_heat`).
+            resonant_heat_w: None,
         },
     }
 }
@@ -2110,7 +2160,8 @@ pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
 /// planet's with the tides of its planet ([`moon_formation`], and the
 /// world a request asked as a giant's moon, `request::host_tide`): the
 /// planet's mass (a giant's `giant_mass_earth`, the mass a rocky
-/// planet's world gives otherwise) on the moon's stored orbit.
+/// planet's world gives otherwise) on the moon's stored orbit, and the
+/// resonant heat its chain gives it ([`stored_chain_heat`]).
 pub fn body_context(system: &System, body: &Body) -> Option<Context> {
     body.model.as_ref()?;
     let planet = |p: &WorldParams| {
@@ -2121,15 +2172,119 @@ pub fn body_context(system: &System, body: &Body) -> Option<Context> {
         BodyKind::Planet => Some(planet(&body.params)),
         BodyKind::Moon => {
             let parent = body.parent.as_deref()?;
-            let host = &system.bodies.iter().find(|b| b.id == parent)?.params;
-            let host_earth = host.giant_mass_earth.unwrap_or_else(|| host.mass_earth());
-            Some(planet(host).with_tide(HostTide {
-                host_kg: f64::from(host_earth) * EARTH_KG,
+            let host = system.bodies.iter().find(|b| b.id == parent)?;
+            let context = planet(&host.params);
+            let resonant_heat_w = stored_chain_heat(system, host, &context, body);
+            Some(context.with_tide(HostTide {
+                host_kg: host_kg(&host.params),
                 a_m: body.orbit.semi_major_axis_km * 1000.0,
                 eccentricity: body.orbit.eccentricity,
+                resonant_heat_w,
             }))
         }
     }
+}
+
+/// Mass, kg, of the planet of `params` as its moons' tides see it: a
+/// giant's `giant_mass_earth`, the mass a rocky planet's world gives
+/// otherwise.
+fn host_kg(params: &WorldParams) -> f64 {
+    f64::from(
+        params
+            .giant_mass_earth
+            .unwrap_or_else(|| params.mass_earth()),
+    ) * EARTH_KG
+}
+
+/// A round moon of model `model`, derived in `context`, on `orbit`, as
+/// its chain sees it ([`crate::planet::resonance::Orbiter`]): its mass,
+/// its orbit, and the radius and `k₂/Q` its own tide was computed with
+/// (the interior the model's heat was run on, see
+/// [`crate::planet::explain`]).
+fn chain_orbiter(context: &Context, model: &PlanetModel, orbit: &Orbit) -> Orbiter {
+    let inputs = &model.inputs;
+    let interior = crate::planet::explain::surface_interior(context, model);
+    Orbiter {
+        mass_kg: inputs.mass_earth * EARTH_KG,
+        a_m: orbit.semi_major_axis_km * 1000.0,
+        period_s: orbit.period_days * DAY_S,
+        eccentricity: orbit.eccentricity,
+        radius_m: interior.radius_earth * EARTH_M,
+        k2_over_q: crate::planet::k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
+    }
+}
+
+/// Seconds in a day.
+const DAY_S: f64 = 86_400.0;
+
+/// The resonant heat of each of a planet's round moons, `(orbit,
+/// model)` nearest first, whose models were derived in `context`
+/// without one: [`resonant_heat`] around the planet `host` (its mass as
+/// [`host_kg`], its radius and its age). The moons without a model
+/// (small and ring moons) take no part: a moonlet does not break a
+/// chain.
+fn chain_heat(
+    host: &Body,
+    context: &Context,
+    moons: &[(&Orbit, &PlanetModel)],
+) -> Vec<Option<f64>> {
+    let orbiters: Vec<Orbiter> = moons
+        .iter()
+        .map(|(orbit, model)| chain_orbiter(context, model, orbit))
+        .collect();
+    resonant_heat(
+        host_kg(&host.params),
+        host.physical.radius_km * 1000.0,
+        f64::from(host.params.age_gyr),
+        &orbiters,
+    )
+}
+
+/// The resonant heat of the moon `body` of the stored planet `host`
+/// (whose formation context is `context`), rebuilt as generation set it:
+/// for the giant of the world a request asked as its moon, its
+/// [`lone_chain_heat`]; otherwise the [`chain_heat`] of the planet's
+/// moons with a model, nearest first.
+fn stored_chain_heat(system: &System, host: &Body, context: &Context, body: &Body) -> Option<f64> {
+    let parent = Some(host.id.as_str());
+    let focus = system
+        .focus
+        .as_deref()
+        .and_then(|f| system.bodies.iter().find(|b| b.id == f))
+        .filter(|f| f.kind == BodyKind::Moon && f.parent.as_deref() == parent);
+    if let Some(world) = focus {
+        let lone = HostGiant::draw(&world.params)?;
+        let world_model = world.model.as_ref()?;
+        let (heat, siblings) = lone_chain_heat(
+            &lone,
+            f64::from(world.params.age_gyr),
+            chain_orbiter(context, world_model, &world.orbit),
+        );
+        if body.id == world.id {
+            return heat;
+        }
+        let k = lone
+            .siblings
+            .iter()
+            .position(|s| f64::from(s.distance_km) == body.orbit.semi_major_axis_km)?;
+        return siblings[k];
+    }
+    let mut moons: Vec<&Body> = system
+        .bodies
+        .iter()
+        .filter(|b| b.kind == BodyKind::Moon && b.parent.as_deref() == parent && b.model.is_some())
+        .collect();
+    moons.sort_by(|a, b| {
+        a.orbit
+            .semi_major_axis_km
+            .total_cmp(&b.orbit.semi_major_axis_km)
+    });
+    let at = moons.iter().position(|b| b.id == body.id)?;
+    let parts: Vec<(&Orbit, &PlanetModel)> = moons
+        .iter()
+        .map(|b| (&b.orbit, b.model.as_ref().expect("filtered on its model")))
+        .collect();
+    chain_heat(host, context, &parts)[at]
 }
 
 /// The fields of a moon drawn by [`MoonSystem`]: a small one's type
@@ -2187,23 +2342,17 @@ fn moon_parts(moon: &Moon, params: WorldParams, planet_mass_earth: f64) -> MoonP
     )
 }
 
-/// A round moon through the planet model: the model of the moon `id` of
-/// the system of `seed`, formed as `formation` says around `planet`
-/// (whose formation context, its star's light at its orbit, is
-/// `planet_context`), then its body's type (the model's class), its world
-/// (as a planet's, [`params_for`], at its own seed, tilt and shape, with
-/// no moons of its own) and its physical facts (its formation's mass, the
-/// model's radius and gravity), from the small body's `params` and
-/// `physical` [`moon_parts`] drew.
-fn round_moon(
+/// The model of the round moon `id` of the system of `seed`, formed as
+/// `formation` says around a planet whose formation context (its star's
+/// light at its orbit) is `planet_context`: an archetype moon (its
+/// small body's `params` name it) with the inputs its archetype sets.
+fn round_moon_model(
     seed: u32,
     id: &str,
-    planet: &WorldParams,
     planet_context: &Context,
     formation: &MoonFormation,
     params: &WorldParams,
-    physical: &Physical,
-) -> (String, WorldParams, Physical) {
+) -> PlanetModel {
     // A moon asked for by archetype takes the inputs its archetype sets,
     // drawn on a stream of its own; a drawn one none.
     let overrides = match params.archetype.as_deref() {
@@ -2217,7 +2366,22 @@ fn round_moon(
         }
         None => crate::planet::InputOverrides::default(),
     };
-    let model = derive_moon_model(seed, id, planet_context, formation, &overrides);
+    derive_moon_model(seed, id, planet_context, formation, &overrides)
+}
+
+/// A round moon of `model` ([`round_moon_model`]), formed as `formation`
+/// says around `planet`: its body's type (the model's class), its world
+/// (as a planet's, [`params_for`], at its own seed, tilt and shape, with
+/// no moons of its own) and its physical facts (its formation's mass, the
+/// model's radius and gravity), from the small body's `params` and
+/// `physical` [`moon_parts`] drew.
+fn round_moon(
+    model: &PlanetModel,
+    planet: &WorldParams,
+    formation: &MoonFormation,
+    params: &WorldParams,
+    physical: &Physical,
+) -> (String, WorldParams, Physical) {
     let radius_km = model.interior.radius_earth * EARTH_M / 1000.0;
     let width = crate::moons::moon_map_width(planet, radius_km as f32);
     let placed = crate::request::Placed {
@@ -2236,7 +2400,7 @@ fn round_moon(
         giants: GiantsMode::None,
         host: HostMode::None,
     };
-    let mut world = planet_params(&model, &placed);
+    let mut world = planet_params(model, &placed);
     world.moon = true;
     world.archetype = params.archetype.clone();
     // Stretched by its planet's tides as drawn (its shape is in shares of
@@ -2489,29 +2653,122 @@ fn ring_moon_parts(
 /// Jovian satellite fact sheet), as they were stored before.
 const SIBLING_ECCENTRICITY: f64 = 0.005;
 
+/// The resonant heat of the world a request asked around the giant
+/// `host` (its chain's [`Orbiter`] `world`, `age_gyr` old) and of each of
+/// the giant's other regular moons ([`HostGiant::siblings`], in their
+/// order): [`resonant_heat`] around the giant (its mass as the request's
+/// tides take it, its radius) over the world and its round siblings,
+/// nearest first. A sibling's [`Orbiter`] is what [`host_chain`] makes
+/// it: its radius, its mass from it and its density, its orbit, and the
+/// `k₂/Q` of its composition (icy or rocky,
+/// [`crate::planet::heat::k2_over_q`]), since the request that needs it
+/// has no model of it.
+pub(crate) fn lone_chain_heat(
+    host: &HostGiant,
+    age_gyr: f64,
+    world: Orbiter,
+) -> (Option<f64>, Vec<Option<f64>>) {
+    use crate::planet::heat::{ICY_K2_OVER_Q, ROCKY_K2_OVER_Q};
+    // Each member and the sibling it is (`None` for the world).
+    let mut members: Vec<(Orbiter, Option<usize>)> = vec![(world, None)];
+    for (k, sibling) in host.siblings.iter().enumerate() {
+        if !sibling_is_round(sibling) {
+            continue;
+        }
+        let orbiter = Orbiter {
+            mass_kg: sibling_mass_kg(sibling),
+            a_m: f64::from(sibling.distance_km) * 1000.0,
+            period_s: f64::from(sibling.period_days) * DAY_S,
+            eccentricity: SIBLING_ECCENTRICITY,
+            radius_m: f64::from(sibling.radius_km) * 1000.0,
+            k2_over_q: if sibling.icy {
+                ICY_K2_OVER_Q
+            } else {
+                ROCKY_K2_OVER_Q
+            },
+        };
+        members.push((orbiter, Some(k)));
+    }
+    members.sort_by(|a, b| a.0.a_m.total_cmp(&b.0.a_m));
+    let orbiters: Vec<Orbiter> = members.iter().map(|m| m.0).collect();
+    let heat = resonant_heat(
+        f64::from(host.giant.mass_earth) * EARTH_KG,
+        f64::from(host.giant.radius_earth) * EARTH_M,
+        age_gyr,
+        &orbiters,
+    );
+    let mut world_heat = None;
+    let mut siblings = vec![None; host.siblings.len()];
+    for ((_, sibling), heat) in members.iter().zip(heat) {
+        match sibling {
+            Some(k) => siblings[*k] = heat,
+            None => world_heat = heat,
+        }
+    }
+    (world_heat, siblings)
+}
+
+/// The composition of a sibling of [`HostGiant`]: ice and rock, or rock.
+fn sibling_composition(sibling: &crate::exomoon::Sibling) -> Composition {
+    if sibling.icy {
+        Composition::Ice
+    } else {
+        Composition::Rock
+    }
+}
+
+/// Whether a sibling of [`HostGiant`] is round, and so goes through the
+/// planet model ([`crate::moons::is_round`]).
+fn sibling_is_round(sibling: &crate::exomoon::Sibling) -> bool {
+    crate::moons::is_round(sibling_composition(sibling), f64::from(sibling.radius_km))
+}
+
+/// Mass, kg, of a sibling of [`HostGiant`]: its radius and the density of
+/// its composition (1.9 g/cm³ for ice and rock, 3.3 for rock).
+fn sibling_mass_kg(sibling: &crate::exomoon::Sibling) -> f64 {
+    4.0 / 3.0
+        * PI
+        * (f64::from(sibling.radius_km) * 1000.0).powi(3)
+        * if sibling.icy { 1.9e3 } else { 3.3e3 }
+}
+
 /// The moons of the giant a world of a request orbits: the world among
 /// its regular moons, as [`HostGiant`] draws them, nearest first; a round
-/// one with how it formed.
-fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts> {
+/// one with how it formed, and the resonant heat its chain with the
+/// world gives it ([`lone_chain_heat`], the world's model `world_model`
+/// derived in `context`).
+fn host_chain(
+    host: &HostGiant,
+    world: &WorldParams,
+    world_model: &PlanetModel,
+    context: &Context,
+    star: f32,
+) -> Vec<MoonParts> {
     let giant_kg = f64::from(host.giant.mass_earth) * EARTH_KG;
     let mut moons: Vec<(f64, MoonParts)> = Vec::new();
     let world_radius = f64::from(world.circumference_km) / (2.0 * PI);
     let world_mass = f64::from(world.mass_earth());
+    let world_orbit = Orbit {
+        semi_major_axis_km: f64::from(host.distance_km),
+        semi_major_axis_au: f64::from(host.distance_km) / 1.495_978_707e8,
+        eccentricity: f64::from(host.eccentricity),
+        inclination_deg: 0.0,
+        node_deg: 0.0,
+        periapsis_deg: 0.0,
+        mean_anomaly_deg: 0.0,
+        period_days: f64::from(host.period_days),
+    };
+    let (_, sibling_heat) = lone_chain_heat(
+        host,
+        f64::from(world.age_gyr),
+        chain_orbiter(context, world_model, &world_orbit),
+    );
     moons.push((
         f64::from(host.distance_km),
         (
             world.class.clone(),
             world.clone(),
-            Orbit {
-                semi_major_axis_km: f64::from(host.distance_km),
-                semi_major_axis_au: f64::from(host.distance_km) / 1.495_978_707e8,
-                eccentricity: f64::from(host.eccentricity),
-                inclination_deg: 0.0,
-                node_deg: 0.0,
-                periapsis_deg: 0.0,
-                mean_anomaly_deg: 0.0,
-                period_days: f64::from(host.period_days),
-            },
+            world_orbit,
             Physical {
                 mass_earth: world_mass,
                 radius_km: world_radius,
@@ -2535,33 +2792,23 @@ fn host_chain(host: &HostGiant, world: &WorldParams, star: f32) -> Vec<MoonParts
     ));
     for (k, sibling) in host.siblings.iter().enumerate() {
         let params = crate::exomoon::sibling_params(world, host, k);
-        let mass_kg = 4.0 / 3.0
-            * PI
-            * (f64::from(sibling.radius_km) * 1000.0).powi(3)
-            * if sibling.icy { 1.9e3 } else { 3.3e3 };
+        let mass_kg = sibling_mass_kg(sibling);
         // What it is made of, drawn from its seed as a giant's regular
         // moons' (its size and density stay the ones `HostGiant` drew).
         let bulk = crate::moons::Bulk::sibling(sibling.icy, params.seed);
-        let composition = if sibling.icy {
-            Composition::Ice
-        } else {
-            Composition::Rock
-        };
         // A round one goes through the planet model, as a disk moon on
         // the chain's orbit.
-        let formation =
-            crate::moons::is_round(composition, f64::from(sibling.radius_km)).then(|| {
-                MoonFormation {
-                    mass_earth: mass_kg / EARTH_KG,
-                    ice_fraction: f64::from(bulk.ice),
-                    birth: MoonBirth::Disk,
-                    tide: HostTide {
-                        host_kg: giant_kg,
-                        a_m: f64::from(sibling.distance_km) * 1000.0,
-                        eccentricity: SIBLING_ECCENTRICITY,
-                    },
-                }
-            });
+        let formation = sibling_is_round(sibling).then(|| MoonFormation {
+            mass_earth: mass_kg / EARTH_KG,
+            ice_fraction: f64::from(bulk.ice),
+            birth: MoonBirth::Disk,
+            tide: HostTide {
+                host_kg: giant_kg,
+                a_m: f64::from(sibling.distance_km) * 1000.0,
+                eccentricity: SIBLING_ECCENTRICITY,
+                resonant_heat_w: sibling_heat[k],
+            },
+        });
         moons.push((
             f64::from(sibling.distance_km),
             (
@@ -4148,8 +4395,9 @@ mod tests {
     }
 
     /// Every body with a model in `system`: its rebuilt context gives its
-    /// stored tidal heat back, and its cause trees exist. Returns how many
-    /// moons were checked.
+    /// stored tidal heat back (its chain's resonant heat, or its own
+    /// tide's), and its cause trees exist. Returns how many moons were
+    /// checked.
     fn explains_every_model(system: &System) -> usize {
         use crate::planet::{explain, k2_over_q, tidal_power_w};
         let mut moons = 0;
@@ -4161,13 +4409,15 @@ mod tests {
             let context = body_context(system, body).expect("a body with a model has a context");
             let tide = crate::planet::tide_of(&context);
             let i = &model.inputs;
-            let tidal = tidal_power_w(
-                tide.host_kg,
-                model.interior.radius_earth * EARTH_M,
-                tide.a_m,
-                tide.eccentricity,
-                k2_over_q(i.envelope_fraction, i.water_fraction),
-            );
+            let tidal = tide.resonant_heat_w.unwrap_or_else(|| {
+                tidal_power_w(
+                    tide.host_kg,
+                    model.interior.radius_earth * EARTH_M,
+                    tide.a_m,
+                    tide.eccentricity,
+                    k2_over_q(i.envelope_fraction, i.water_fraction),
+                )
+            });
             let stored = model.heat.tidal_w;
             assert!(
                 (tidal - stored).abs() <= 1e-9 * stored.abs().max(tidal.abs()),
@@ -4839,7 +5089,11 @@ mod tests {
                         let context = Context::of(&star, p.metallicity, system.star.ice_line_au);
                         let mass = p.giant_mass_earth.unwrap_or_else(|| p.mass_earth());
                         let moon = drawn.iter().find(|m| m.seed == body.params.seed).unwrap();
-                        let formation = moon_formation(moon, f64::from(mass));
+                        let mut formation = moon_formation(moon, f64::from(mass));
+                        // With the heat of its resonant chain, if any.
+                        formation.tide.resonant_heat_w = body_context(&system, body)
+                            .and_then(|c| c.tide)
+                            .and_then(|t| t.resonant_heat_w);
                         assert_eq!(
                             &derive_moon_model(
                                 system.seed,
@@ -5385,14 +5639,139 @@ mod tests {
         let moon = system.bodies.iter().find(|b| b.id == focus).unwrap();
         let model = moon.model.as_ref().unwrap();
         let host = HostGiant::draw(&moon.params).expect("a giant's moon");
-        let expected = crate::planet::tidal_power_w(
+        // Its chain's heat when it is in one, its own tide's otherwise.
+        let own = crate::planet::tidal_power_w(
             f64::from(host.giant.mass_earth) * EARTH_KG,
             model.interior.radius_earth * EARTH_M,
             f64::from(host.distance_km) * 1000.0,
             f64::from(host.eccentricity),
             crate::planet::k2_over_q(model.inputs.envelope_fraction, model.inputs.water_fraction),
         );
-        assert_eq!(model.heat.tidal_w, expected);
+        let context = body_context(&system, moon).unwrap();
+        let (chain, _) = lone_chain_heat(
+            &host,
+            f64::from(moon.params.age_gyr),
+            chain_orbiter(&context, model, &moon.orbit),
+        );
+        assert_eq!(model.heat.tidal_w, chain.unwrap_or(own));
+    }
+
+    /// The moons of `system` its rebuilt contexts put in a resonant chain.
+    fn chain_moons(system: &System) -> Vec<&Body> {
+        system
+            .bodies
+            .iter()
+            .filter(|b| {
+                body_context(system, b)
+                    .and_then(|c| c.tide)
+                    .is_some_and(|t| t.resonant_heat_w.is_some())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn explain_agrees_on_a_resonant_moon() {
+        // Seed 1: a giant with two of its drawn moons in a 2:1 chain.
+        let system = draw(&whole_drawn(1), &mut StdRng::seed_from_u64(1)).unwrap();
+        let chain = chain_moons(&system);
+        assert!(chain.len() >= 2, "{}", chain.len());
+        for moon in chain {
+            let context = body_context(&system, moon).unwrap();
+            let model = moon.model.as_ref().unwrap();
+            let heat = context.tide.unwrap().resonant_heat_w.unwrap();
+            assert_eq!(model.heat.tidal_w, heat, "{}", moon.id);
+            assert!(
+                crate::planet::explain(&context, model).is_some(),
+                "{}",
+                moon.id
+            );
+        }
+    }
+
+    #[test]
+    fn a_moon_without_a_neighbour_keeps_its_own_tide() {
+        use crate::planet::resonance::{Orbiter, resonant_heat};
+        let moon = Orbiter {
+            mass_kg: 1e22,
+            a_m: 4e8,
+            period_s: 2.0 * 86_400.0,
+            eccentricity: 0.004,
+            radius_m: 1.5e6,
+            k2_over_q: crate::planet::heat::ICY_K2_OVER_Q,
+        };
+        let (giant_kg, giant_radius_m) = (1.9e27, 7.1e7);
+        assert_eq!(
+            resonant_heat(giant_kg, giant_radius_m, 4.57, &[moon]),
+            vec![None]
+        );
+        // Periods four times apart: no first-order resonance.
+        let outer = Orbiter {
+            a_m: moon.a_m * 4f64.powf(2.0 / 3.0),
+            period_s: moon.period_s * 4.0,
+            ..moon
+        };
+        assert_eq!(
+            resonant_heat(giant_kg, giant_radius_m, 4.57, &[moon, outer]),
+            vec![None, None]
+        );
+    }
+
+    /// The world a request asked around a giant, its regular moons spaced
+    /// in a 1:2 chain around it: the world `seed` asks for, its model and
+    /// its giant.
+    fn lone_world(seed: u32) -> (System, String) {
+        let world = WorldRequest {
+            planet: Some("earth-like".into()),
+            seed: Some(seed),
+            host: Some(HostMode::Giant),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let system = draw(
+            &SystemRequest::Around(world),
+            &mut StdRng::seed_from_u64(u64::from(seed)),
+        )
+        .unwrap();
+        let focus = system.focus.clone().unwrap();
+        (system, focus)
+    }
+
+    #[test]
+    fn lone_world_siblings_are_in_resonance() {
+        // Seed 1: the world between two round siblings, each period twice
+        // the last.
+        let (system, focus) = lone_world(1);
+        let world = system.bodies.iter().find(|b| b.id == focus).unwrap();
+        let model = world.model.as_ref().unwrap();
+        let host = HostGiant::draw(&world.params).expect("a giant's moon");
+        let (heat, siblings) = lone_chain_heat(
+            &host,
+            f64::from(world.params.age_gyr),
+            chain_orbiter(&body_context(&system, world).unwrap(), model, &world.orbit),
+        );
+        let heat = heat.expect("the world is in its siblings' chain");
+        assert!(heat > 0.0);
+        assert_eq!(model.heat.tidal_w, heat);
+        // Its round siblings too, through their own models.
+        assert!(siblings.iter().all(Option::is_some), "{siblings:?}");
+        let mut round = 0;
+        for body in system
+            .bodies
+            .iter()
+            .filter(|b| b.parent == world.parent && b.id != world.id && b.model.is_some())
+        {
+            let context = body_context(&system, body).unwrap();
+            let resonant = context.tide.unwrap().resonant_heat_w.expect("in the chain");
+            assert_eq!(
+                body.model.as_ref().unwrap().heat.tidal_w,
+                resonant,
+                "{}",
+                body.id
+            );
+            round += 1;
+        }
+        assert_eq!(round, siblings.len());
     }
 
     fn whole_drawn(seed: u32) -> SystemRequest {

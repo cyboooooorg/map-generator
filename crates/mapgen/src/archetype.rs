@@ -1068,6 +1068,7 @@ mod tests {
                 host_kg: host_earth * crate::exomoon::EARTH_KG,
                 a_m: f64::from(moon.semi_major_axis_radii.pick(&mut rng)) * radius_km * 1000.0,
                 eccentricity: f64::from(moon.eccentricity.pick(&mut rng)),
+                resonant_heat_w: None,
             },
         };
         let overrides = a.overrides(&mut rng);
