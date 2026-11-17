@@ -5,7 +5,8 @@ whose orbits lie far beyond the giants' reach, and decide how systems
 draw them (#331), how the star view shows them and whether they get
 cards and maps.
 
-**Status (2026-11-17): study written, choices of section 6 open.** The
+**Status (2026-11-17): study written; choices 1, 2 and 4 of section 6
+decided by the user, 3 and 5 open.** The
 draw (#331) waits for the dwarf-planet class (#496), in the
 distribution step of the roadmap (#427).
 
@@ -195,6 +196,8 @@ system.detached: {
 - **Bodies drawn one by one:** the largest 1 to 6, the largest from 300
   to 1500 km (log-uniform), the next ones following a steep size
   distribution, down to about 200 km. The rest stays in `mass_earth`.
+  The system creation form gets a field for this count (empty: drawn
+  from 1 to 6).
 - **Orbits,** scaled by the outermost giant `a_g` (30 AU for Neptune) and
   by the star's mass `M` (in M☉):
   - perihelion `q` from 1.65 to 2.7 `a_g` (50 to 80 AU for the Sun);
@@ -210,10 +213,14 @@ system.detached: {
 ### Viewers
 
 - **Star view.**
-  - A toggle "Detached objects", off by default. When on, the drawn
-    bodies appear on their ellipses, with the code the planets' orbits
-    already use (`orbitDistance`, star at a focus), and the view widens
-    its scale to their aphelia. Off, the system keeps today's frame.
+  - The drawn bodies appear on their ellipses, with the code the
+    planets' orbits already use (`orbitDistance`, star at a focus).
+    Their orbits follow the existing "Orbits" toggle
+    (`StarView.setOrbitVisible`), like every other orbit: no switch of
+    their own. Their markers show with the planets'.
+  - The system keeps today's frame, set by the planets: the detached
+    orbits run out beyond it on the logarithmic scale, and the camera's
+    zoom range grows to take in their aphelia.
   - The population is not drawn as a cloud: it would be invisible
     points spread over thousands of AU. The card states its mass.
   - On the logarithmic scale, perihelion and aphelion stay readable
@@ -230,13 +237,14 @@ system.detached: {
 
 ## 6. Choices for the user
 
-1. **Frequency:** half of the systems with a scattered disk (proposal),
-   all of them, or a rate set from a drawn birth-cluster density?
-2. **How many bodies drawn:** the largest 1 to 6 (proposal), or more,
-   down to 100 km?
+1. **Frequency:** half of the systems with a scattered disk. _Decided
+   (2026-11-17)._
+2. **How many bodies drawn:** the largest 1 to 6, with a field in the
+   creation form to set the count. _Decided (2026-11-17)._
 3. **Distant planet:** leave Planet-9-like planets out (proposal), or
    draw one sometimes, with the orbits it aligns?
-4. **Star view:** toggle off by default (proposal), or always shown?
+4. **Star view:** their orbits under the existing "Orbits" toggle, with
+   every other orbit. _Decided (2026-11-17)._
 5. **Cards and maps:** cards for every drawn body and maps later through
    #496 (proposal), or maps from the start?
 
