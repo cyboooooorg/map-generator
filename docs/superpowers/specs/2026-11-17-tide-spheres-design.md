@@ -163,12 +163,13 @@ where a value is given:
   each `Option<f64>`.
 - The server adds it at read time, as a map of its own next to the
   existing read-time `extras`: `tides: BTreeMap<String, TideZones>`
-  keyed by body id, on both `SystemDetail` (`GET /api/systems/{id}`,
-  `crates/server/src/api.rs:488`) and `ResolvedSystem` (`POST
-  /api/systems/resolve`, `api.rs:518`). Not on `BodyExtras`:
+  keyed by body id, on `SystemDetail` (`GET /api/systems/{id}`,
+  `crates/server/src/api.rs:488`). Not on `BodyExtras`:
   `body_extras` (`crates/server/src/app.rs:909`) skips the bodies
   without a model, and small moons, which have none, need their spheres.
-  Every body with a host or a primary gets an entry.
+  Every body with a host or a primary gets an entry. (Decided while
+  planning: `ResolvedSystem` stays as it is, since only the form's
+  preview reads it and it draws no spheres.)
 - `cargo test` regenerates `web/src/lib/api/types`; CI checks they are
   committed.
 
@@ -194,15 +195,18 @@ where a value is given:
   is shown only when its sphere exists. With a single sphere available,
   `parted` already collapses to a plain toggle.
 - Saved settings: the saved `hillSphere` key (`Viewer.svelte:205, :541`)
-  becomes one key per sphere; an old saved `hillSphere: true` turns the
-  Hill square on.
+  stays the Hill square's, so a saved choice carries over; the other
+  squares get keys of their own.
 - i18n in `web/src/lib/i18n/en.ts` and `fr.ts`.
 
 ## Left to the builder
 
 - Where the Rust function lives and how it is split.
-- The typical satellite's Roche density for a planet shown (see above).
-- Whether the star view's Hill circles (`hillRadiusAu`,
+- The typical satellite's Roche density for a planet shown: decided
+  while planning, a fixed 3.0 g/cm³.
+- Decided while planning: the star view's Hill circles stay in
+  TypeScript for now (a backlog issue). Its giants are not keyed by body
+  id. Originally left open: whether the star view's Hill circles (`hillRadiusAu`,
   `web/src/lib/viewer/starSystem.ts:391`, called at `StarView.ts:1209`)
   also read the server's Hill radius. Prefer it, in the spirit of the
   user's request, if the star view's giants can be matched to body ids
