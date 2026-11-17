@@ -98,6 +98,9 @@ pub fn loaded_at(world: LoadedWorld, base: &[f32], epoch_ga: f64) -> LoadedWorld
     let pixel_km = f64::from(grid.circumference_km) / f64::from(grid.width);
     let mut albedo = CraterField::new_at(p, RAY_MIN_PIXELS * pixel_km, epoch_ga).albedo(&grid);
     darken_maria(&mut albedo, &mare);
+    // The fractures of the geysers, at every epoch (their relief is in
+    // `base`).
+    crate::stripes::stripe_albedo(&mut albedo, &grid, p);
     LoadedWorld {
         elevation: Layer16::quantise(&elevation, ELEVATION),
         temperature: Layer16::quantise(&temperature, TEMPERATURE),

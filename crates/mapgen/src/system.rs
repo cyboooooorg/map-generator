@@ -5390,7 +5390,8 @@ mod tests {
             for f in &geysers.fractures {
                 assert!(f.lat_deg.abs() >= 60.0, "seed {seed}: {f:?}");
                 assert_eq!(f.lat_deg < 0.0, geysers.south, "seed {seed}: {f:?}");
-                assert!((20.0..200.0).contains(&f.length_km), "seed {seed}: {f:?}");
+                // A branch is a third to a half of its parent.
+                assert!((10.0..200.0).contains(&f.length_km), "seed {seed}: {f:?}");
             }
             south += usize::from(geysers.south);
             let rings = plume_rings(parent_of(&system, moon));
@@ -5492,6 +5493,186 @@ mod tests {
             }
         }
         println!("{vents} moons with geysers, {fed} plume rings in 500 systems");
+    }
+
+    /// The Enceladus of seed 1 at 1024 × 512, its params and its world,
+    /// with its geysers (`vents`) or with them taken off its model.
+    fn enceladus_world(vents: bool) -> &'static (WorldParams, crate::world::World) {
+        use std::sync::OnceLock;
+        static WORLDS: [OnceLock<(WorldParams, crate::world::World)>; 2] =
+            [OnceLock::new(), OnceLock::new()];
+        WORLDS[usize::from(vents)].get_or_init(|| {
+            let system = requested(1, &[("enceladus-like", 1)]);
+            let moon = asked_moons(&system, "enceladus-like")[0];
+            let mut params = generation_params(moon);
+            (params.width, params.height) = (1024, 512);
+            assert!(params.model.as_ref().unwrap().geysers.is_some());
+            if !vents {
+                params.model.as_mut().unwrap().geysers = None;
+            }
+            let world = crate::generation::generate(&params).world;
+            (params, world)
+        })
+    }
+
+    fn geysers_of(params: &WorldParams) -> &crate::planet::geysers::Geysers {
+        params.model.as_ref().unwrap().geysers.as_ref().unwrap()
+    }
+
+    fn body_radius_km(params: &WorldParams) -> f64 {
+        f64::from(params.circumference_km) / (2.0 * PI)
+    }
+
+    /// The index of the pixel of a grid nearest the unit vector `v`.
+    fn pixel_at(grid: &crate::geo::Grid, v: [f64; 3]) -> usize {
+        let (w, h) = (f64::from(grid.width), f64::from(grid.height));
+        let lat = v[2].clamp(-1.0, 1.0).asin();
+        let lon = v[1].atan2(v[0]).rem_euclid(2.0 * PI);
+        let y = ((PI / 2.0 - lat) / PI * h - 0.5)
+            .round()
+            .clamp(0.0, h - 1.0);
+        let x = (lon / (2.0 * PI) * w - 0.5).round().rem_euclid(w);
+        y as usize * grid.width as usize + x as usize
+    }
+
+    /// The tiger stripes are cut where the model stored them: at the
+    /// centre of each fracture, moved sideways by its meander, the ground
+    /// lies lower than half the spacing away on either side, by more than
+    /// 0.2 km.
+    #[test]
+    fn enceladus_world_has_its_stripes_at_the_stored_fractures() {
+        use crate::planet::geysers::{FRACTURE_SPACING_KM, meander_km, unit_at};
+        let (params, world) = enceladus_world(true);
+        let grid = params.grid();
+        let radius_km = body_radius_km(params);
+        let off = FRACTURE_SPACING_KM / 2.0 / radius_km;
+        for (index, f) in geysers_of(params).fractures.iter().enumerate() {
+            let centre = unit_at(f64::from(f.lat_deg), f64::from(f.lon_deg));
+            let (a, b) = f.ends(radius_km);
+            let n = [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0],
+            ];
+            let norm = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+            // The centre of the drawn line: off the great circle by the
+            // meander, along its normal.
+            let m = meander_km(index, 0.0, f64::from(f.length_km)) / radius_km;
+            let c: [f64; 3] = std::array::from_fn(|i| centre[i] * m.cos() + n[i] / norm * m.sin());
+            let side = |s: f64| -> [f64; 3] {
+                std::array::from_fn(|i| c[i] * off.cos() + s * n[i] / norm * off.sin())
+            };
+            let at = |v: [f64; 3]| world.elevation[pixel_at(&grid, v)];
+            let mean = 0.5 * (at(side(1.0)) + at(side(-1.0)));
+            let depth_km = (mean - at(c)) * crate::craters::ELEVATION_KM;
+            assert!(depth_km > 0.2, "{f:?}: {depth_km} km");
+            println!("{f:?}: {depth_km:.2} km deep");
+        }
+    }
+
+    /// The fractures resurface their pole: no crater of the world is
+    /// centred in the young terrain, while the same cap round the other
+    /// pole holds some.
+    #[test]
+    fn the_young_terrain_has_no_craters() {
+        use crate::craters::{CraterField, base_min_diameter_km};
+        use crate::planet::geysers::YoungTerrain;
+        let (params, _) = enceladus_world(true);
+        let young = YoungTerrain::of(geysers_of(params), body_radius_km(params));
+        let other = YoungTerrain {
+            pole: young.pole.map(|x| -x),
+            ..young
+        };
+        let field = CraterField::new(params, base_min_diameter_km(&params.grid()));
+        let inside = |cap: &YoungTerrain| {
+            field
+                .craters
+                .iter()
+                .filter(|c| cap.covers(c.centre))
+                .count()
+        };
+        assert_eq!(inside(&young), 0);
+        assert!(inside(&other) > 0, "{young:?}");
+    }
+
+    /// The detail tiles find the craters they draw with
+    /// [`crate::craters::CraterField::near`]: it drops those of the young
+    /// terrain too.
+    #[test]
+    fn tiles_drop_the_same_craters() {
+        use crate::craters::CraterField;
+        use crate::planet::geysers::YoungTerrain;
+        let (params, _) = enceladus_world(true);
+        let (bare, _) = enceladus_world(false);
+        let young = YoungTerrain::of(geysers_of(params), body_radius_km(params));
+        let near = |p: &WorldParams| {
+            CraterField::context_at(p, 0.0)
+                .near(young.pole, young.cap_rad / 4.0, 1.0, 50.0)
+                .into_iter()
+                .filter(|c| young.covers(c.centre))
+                .count()
+        };
+        assert_eq!(near(params), 0);
+        assert!(near(bare) > 0);
+    }
+
+    /// The stripes and the craters they erase change the world only in
+    /// the young terrain and within the reach of the erased craters'
+    /// ejecta and rays; a moon without geysers is left as it was.
+    #[test]
+    fn fractures_only_touch_the_young_terrain() {
+        use crate::craters::{CraterField, RAY_MIN_PIXELS};
+        use crate::planet::geysers::YoungTerrain;
+        let (params, world) = enceladus_world(true);
+        let (bare, bare_world) = enceladus_world(false);
+        let grid = params.grid();
+        let radius_km = body_radius_km(params);
+        let young = YoungTerrain::of(geysers_of(params), radius_km);
+        // The craters the young terrain erases, down to the rays' size,
+        // and the cap each one's ejecta and rays reach.
+        let pixel_km = f64::from(grid.circumference_km) / f64::from(grid.width);
+        let field = CraterField::new(bare, RAY_MIN_PIXELS * pixel_km);
+        let erased: Vec<([f64; 3], f64)> = field
+            .craters
+            .iter()
+            .filter(|c| young.covers(c.centre))
+            .map(|c| {
+                let rays = crate::craters::RAY_LENGTH.1 * 0.5 * c.diameter_km / radius_km;
+                (c.centre, field.reach(c).max(rays))
+            })
+            .collect();
+        let (mut outside, mut changed) = (0, 0);
+        for y in 0..grid.height {
+            for x in 0..grid.width {
+                let v = grid.unit_vector_at(f64::from(x), f64::from(y));
+                let reached = young.covers(v)
+                    || erased
+                        .iter()
+                        .any(|(c, reach)| c[0] * v[0] + c[1] * v[1] + c[2] * v[2] >= reach.cos());
+                let i = (y * grid.width + x) as usize;
+                if reached {
+                    changed += usize::from(world.elevation[i] != bare_world.elevation[i]);
+                    continue;
+                }
+                outside += 1;
+                assert_eq!(world.elevation[i], bare_world.elevation[i], "{x}, {y}");
+                assert_eq!(world.albedo[i], bare_world.albedo[i], "{x}, {y}");
+            }
+        }
+        assert!(outside > 0 && changed > 0, "{outside} {changed}");
+        println!("{outside} pixels unchanged outside, {changed} changed inside");
+
+        // A moon without geysers: no stripes, no crater erased.
+        let system = requested(1, &[("io-like", 1)]);
+        let moon = asked_moons(&system, "io-like")[0];
+        let mut params = generation_params(moon);
+        (params.width, params.height) = (128, 64);
+        assert_eq!(params.model.as_ref().unwrap().geysers, None);
+        let world = crate::generation::generate(&params).world;
+        let (mut elevation, mut albedo) = (world.elevation.clone(), world.albedo.clone());
+        crate::stripes::apply_stripes(&mut elevation, &params.grid(), &params);
+        crate::stripes::stripe_albedo(&mut albedo, &params.grid(), &params);
+        assert_eq!((elevation, albedo), (world.elevation, world.albedo));
     }
 
     /// Europa: a shell of about 10 to 30 km over an ocean of 60 to 150 km

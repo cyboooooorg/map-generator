@@ -259,6 +259,7 @@ export function systemSky(
       axes: [local(bx), local(by), local(bz)],
       axialTiltDeg: body.spin.axial_tilt_deg,
       ringSeed: ringSeed(body.physical.mass_earth),
+      ...(body.model?.geysers ? { plume: { south: body.model.geysers.south } } : {}),
       // The star is at the origin: its light at that body, and its phase from here.
       phaseCos: dot(unit(scale(there.centre, -1)), unit(sub(here.centre, there.centre))),
       insolation: (Math.hypot(...here.centre) / Math.max(Math.hypot(...there.centre), 1)) ** 2,

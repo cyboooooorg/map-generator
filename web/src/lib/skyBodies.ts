@@ -6,6 +6,7 @@
 // Directions are in the frame of the body shown, as the viewer's sphere is
 // (`[cos lat sin lon, sin lat, cos lat cos lon]`, y along the spin axis);
 // positions and radii are in radii of that body.
+import type { FaintRing } from './ringMoons';
 import type { Preview } from './api/types/Preview';
 import type { RingSystem } from './api/types/RingSystem';
 import type { WorldMetadata } from './api/types/WorldMetadata';
@@ -24,11 +25,18 @@ export const IDENTITY_AXES: Axes = [
   [0, 0, 1],
 ];
 
-
-
 /** The seed of a giant's ringlets, from its mass (Earth masses): its own view and its moons' skies draw the same ones. */
 export function ringSeed(massEarth: number): number {
   return (massEarth * 7.31) % 13;
+}
+
+/**
+ * The seed of a dust ring's ringlets, from the radius of its peak (the
+ * giant's radii), within [13, 20): never a giant's `ringSeed`, so that it
+ * does not copy the main rings' pattern.
+ */
+export function dustRingSeed(peak: number): number {
+  return 13 + ((peak * 3.97) % 7);
 }
 
 /** URLs of a body's surface maps: its colour (without hillshade) and its relief normals. */
@@ -77,6 +85,10 @@ export interface SkyBody {
    * radii), with the shadow they cast on it; none for a body without.
    */
   rings?: RingSystem | null;
+  /** Its faint dust rings (the plume ring, the E ring), drawn with its rings, brightest back-lit. */
+  dust?: readonly FaintRing[];
+  /** Its geysers, when it vents a plume over a pole (`south`: the south one), brightest back-lit. */
+  plume?: { south: boolean };
   /** The seed of its rings' ringlets (`ringSeed`), so that they look in the sky as in its own view. */
   ringSeed?: number;
   /**
