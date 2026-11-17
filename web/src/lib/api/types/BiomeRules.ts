@@ -140,4 +140,13 @@ ash_zone: number,
  * to 1: the flanks and vent of a cone rising out of the lowland. Above
  * the background of a volcanic province, so only the cones reach it.
  */
-vent_zone: number, };
+vent_zone: number, 
+/**
+ * Whether the world's volcanism is cryovolcanism: its crust is an ice
+ * shell over water (set by the planet model, see
+ * `crate::planet::interim::cryovolcanic`), so its volcanic zones are
+ * drawn as erupted water frozen into fresh ice
+ * ([`Biome::FreshIceFlow`], [`Biome::CryovolcanicPlain`]), never as
+ * lava or ash (see [`BiomeRules::choose`]).
+ */
+cryovolcanic?: boolean, };

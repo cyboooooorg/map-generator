@@ -635,6 +635,37 @@ drawn systems, 11 % of the icy moons and 3 % of the icy planets vent;
 the moons among them are close-in, most of them in a 2:1 chain (some
 vent on their own tide).
 
+**Cryovolcanism.** The regime is the rock's, read off the heat flux
+alone: a moon whose tides push out more than Io's 1 W/m² is a heat pipe
+whether or not ice and water lie over its rock. But silicate magma,
+2,700 to 3,000 kg/m³, is about three times as dense as ice and cannot
+rise through a water layer and its shell; what erupts on an icy body is
+water, brine or an ammonia–water melt from the ocean or from melt in the
+shell, which freezes at the surface (Kargel 1995; Fagents 2003). Liquid
+water is denser than the ice it crosses, so it does not build cones as
+lava does: it floods the lows into smooth plains, as the smooth lanes of
+Ganymede's bright terrain, troughs flooded by water-ice lavas (Schenk et
+al. 2001), Europa's smooth plains (Fagents 2003) and Triton's walled
+plains (Croft et al. 1995); fresh flows and vents stand out where it
+erupts most, as Enceladus's south polar terrain, the youngest and
+brightest ground of the moon (Porco et al. 2006; its Bond albedo is
+0.81, Howett et al. 2010). So a body whose crust is an ice shell (an ice
+world's share of water, no liquid water at its surface, and a shell the
+model derives) has no lava, ash or magma sea on its map in any regime:
+its volcanic zones are fresh ice. Where the zone is strongest it draws
+`FreshIceFlow`, the brightest ground of the palette; in the lows around
+it `CryovolcanicPlain`, smooth and a little greyer; its highland keeps
+its ridges. A heat-pipe one does not take the `volcanic` look: its
+volcanic zones spread over its lowlands as an Io's do and its flows
+cover the cores of its provinces, about 15 % of the surface, the plains
+most of the rest, under an Io's young surface. The tides stated in issue
+#550 (a Titan-sized moon of 55 % ices, 5.0e14 W, 5.6 W/m²) give such a
+body: before, its map was the `volcanic` look throughout (magma seas,
+scorched waste, lava); now, at 256 × 128, about 15 % flows, 71 % plains
+and none of the silicate biomes. A frozen sea over a rocky crust (a
+snowball Earth) is no ice shell crust: its volcanoes stand on rock and
+stay lava.
+
 ### Classes
 
 The class is read off the result, in this order; the first rule that holds
@@ -703,7 +734,10 @@ archetypes):
 - `base_of` picks the built-in preset whose rules, palette and remap
   render the model, the first rule that holds: a giant class renders as
   `gas-giant`, `hot-jupiter` or `ice-giant` (a hot Neptune as a hot
-  Jupiter, its methane gone; a mini-Neptune as an ice giant); a lava world or a heat-pipe regime as `volcanic`; a runaway
+  Jupiter, its methane gone; a mini-Neptune as an ice giant); a lava
+  world or a heat-pipe regime as `volcanic`, unless its crust is an ice
+  shell (see **Cryovolcanism** above: it takes the rules that follow, and
+  its volcanic zones are drawn as fresh ice); a runaway
   greenhouse as `caustic`; a body whose envelope hides its surface as
   `frozen` for an ice world, `barren` otherwise; liquid hydrocarbons as
   `frozen`; liquid water
@@ -864,6 +898,18 @@ archetypes):
   $1.7 \times 10^{-3}$, Lainey 2016), and every enveloped planet takes
   Jupiter's, from a mini-Neptune to a hot Jupiter. They neglect the
   planet's own mass.
+- **Cryovolcanism** is drawn on the volcanic zones of the silicate
+  volcanism, their noise, provinces and cones, with fresh ice in place of
+  lava: no eruption rate, reservoir or cryomagma composition is computed,
+  and where it erupts is not tied to where the shell is thinnest or to
+  the geysers' fractures. The cones still raise the relief, as
+  cryovolcanic domes do (Ahuna Mons on Ceres, about 4 km high, Ruesch et
+  al. 2016), but water would more often fill lows than build them. The
+  vent threshold of a heat-pipe icy body (0.55, flows over about 15 % of
+  the surface) and the colours of the two biomes are calibrations, no
+  source, on Enceladus's active south polar terrain (about a tenth of the
+  moon) and its brightness. A shell frozen to its floor, with no ocean,
+  is drawn as cryovolcanic too, from melt in the shell.
 
 ## Sources
 
@@ -927,174 +973,197 @@ archetypes):
 18. Choblet, G. et al. 2017, "Powering prolonged hydrothermal activity
     inside Enceladus", *Nature Astronomy* 1, 841–847,
     [doi:10.1038/s41550-017-0289-8](https://doi.org/10.1038/s41550-017-0289-8).
-19. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
+19. Croft, S. K., Kargel, J. S., Kirk, R. L., Moore, J. M., Schenk, P. M.
+    & Strom, R. G. 1995, "The geology of Triton", in *Neptune and Triton*,
+    ed. D. P. Cruikshank, University of Arizona Press, 879–947 (not
+    checked beyond its title).
+20. Davies, J. H. & Davies, D. R. 2010, "Earth's surface heat flux",
     *Solid Earth* 1, 5–24,
     [doi:10.5194/se-1-5-2010](https://doi.org/10.5194/se-1-5-2010).
-20. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
+21. Fagents, S. A. 2003, "Considerations for effusive cryovolcanism on
+    Europa: the post-Galileo perspective", *Journal of Geophysical
+    Research: Planets* 108, 5139,
+    [doi:10.1029/2003JE002128](https://doi.org/10.1029/2003JE002128).
+22. Feistel, R. & Wagner, W. 2006, "A new equation of state for H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 35, 1021–1047,
     [doi:10.1063/1.2183324](https://doi.org/10.1063/1.2183324).
-21. Foley, B. J. & Bercovici, D. 2014, "Scaling laws for convection with
+23. Foley, B. J. & Bercovici, D. 2014, "Scaling laws for convection with
     temperature-dependent viscosity and grain-damage",
     [arXiv:1410.7652](https://arxiv.org/abs/1410.7652).
-22. Fuller, J., Luan, J. & Quataert, E. 2016, "Resonance locking as the
+24. Fuller, J., Luan, J. & Quataert, E. 2016, "Resonance locking as the
     source of rapid tidal migration in the Jupiter and Saturn moon
     systems", *Monthly Notices of the Royal Astronomical Society* 458,
     3867–3879,
     [doi:10.1093/mnras/stw609](https://doi.org/10.1093/mnras/stw609).
-23. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
+25. Fulton, B. J. et al. 2017, "The California-Kepler Survey. III. A gap in
     the radius distribution of small planets", *The Astronomical Journal*
     154, 109,
     [doi:10.3847/1538-3881/aa80eb](https://doi.org/10.3847/1538-3881/aa80eb).
-24. Goldsby, D. L. & Kohlstedt, D. L. 2001, "Superplastic deformation of
+26. Goldsby, D. L. & Kohlstedt, D. L. 2001, "Superplastic deformation of
     ice: experimental observations", *Journal of Geophysical Research*
     106, 11017–11030,
     [doi:10.1029/2000JB900336](https://doi.org/10.1029/2000JB900336).
-25. Grasset, O. & Sotin, C. 1996, "The cooling rate of a liquid shell in
+27. Grasset, O. & Sotin, C. 1996, "The cooling rate of a liquid shell in
     Titan's interior", *Icarus* 123, 101–112,
     [doi:10.1006/icar.1996.0144](https://doi.org/10.1006/icar.1996.0144).
-26. Guillot, T. 2005, "The interiors of giant planets: models and
+28. Guillot, T. 2005, "The interiors of giant planets: models and
     outstanding questions", *Annual Review of Earth and Planetary
     Sciences* 33, 493–530,
     [doi:10.1146/annurev.earth.33.092203.122639](https://doi.org/10.1146/annurev.earth.33.092203.122639).
-27. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
+29. Helled, R. et al. 2011, *The Astrophysical Journal* 726, 15,
     [doi:10.1088/0004-637X/726/1/15](https://doi.org/10.1088/0004-637X/726/1/15).
-28. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
+30. Herzberg, C., Condie, K. & Korenaga, J. 2010, "Thermal history of the
     Earth and its petrological expression", *Earth and Planetary Science
     Letters* 292, 79–88,
     [doi:10.1016/j.epsl.2010.01.022](https://doi.org/10.1016/j.epsl.2010.01.022).
-29. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
+31. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2010, "Thermal
+    inertia and bolometric Bond albedo values for Mimas, Enceladus, Tethys,
+    Dione, Rhea and Iapetus as derived from Cassini/CIRS measurements",
+    *Icarus* 206, 573–593,
+    [doi:10.1016/j.icarus.2009.07.016](https://doi.org/10.1016/j.icarus.2009.07.016).
+32. Howett, C. J. A., Spencer, J. R., Pearl, J. & Segura, M. 2011, "High
     heat flow from Enceladus' south polar region measured using 10–600
     cm⁻¹ Cassini/CIRS data", *Journal of Geophysical Research* 116, E03003,
     [doi:10.1029/2010JE003718](https://doi.org/10.1029/2010JE003718).
-30. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
+33. Hussmann, H., Sohl, F. & Spohn, T. 2006, "Subsurface oceans and deep
     interiors of medium-sized outer planet satellites and large
     trans-neptunian objects", *Icarus* 185, 258–273,
     [doi:10.1016/j.icarus.2006.06.005](https://doi.org/10.1016/j.icarus.2006.06.005).
-31. Iess, L. et al. 2010, "Gravity field, shape, and moment of inertia of
+34. Iess, L. et al. 2010, "Gravity field, shape, and moment of inertia of
     Titan", *Science* 327, 1367–1369,
     [doi:10.1126/science.1182583](https://doi.org/10.1126/science.1182583).
-32. Iess, L. et al. 2014, "The gravity field and interior structure of
+35. Iess, L. et al. 2014, "The gravity field and interior structure of
     Enceladus", *Science* 344, 78–80,
     [doi:10.1126/science.1250551](https://doi.org/10.1126/science.1250551).
-33. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
+36. Jackson, B., Greenberg, R. & Barnes, R. 2008, "Tidal evolution of
     close-in extrasolar planets", *The Astrophysical Journal* 678,
     1396–1406, [doi:10.1086/529187](https://doi.org/10.1086/529187).
-34. Kimura, J. 2024, "Europa's structural conditions for the existence of
+37. Kargel, J. S. 1995, "Cryovolcanism on the icy satellites", *Earth, Moon,
+    and Planets* 67, 101–113,
+    [doi:10.1007/BF00613296](https://doi.org/10.1007/BF00613296).
+38. Kimura, J. 2024, "Europa's structural conditions for the existence of
     subsurface ocean and the absence of metallic core-driven magnetic
     field", arXiv:2403.01336,
     [arxiv.org/abs/2403.01336](https://arxiv.org/abs/2403.01336).
-35. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
+39. Korenaga, J. 2008, "Urey ratio and the structure and evolution of
     Earth's mantle", *Reviews of Geophysics* 46, RG2007,
     [doi:10.1029/2007RG000241](https://doi.org/10.1029/2007RG000241).
-36. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
+40. Lainey, V. 2016, "Quantification of tidal parameters from Solar System
     data", *Celestial Mechanics and Dynamical Astronomy* 126, 145–156
     (table 1),
     [doi:10.1007/s10569-016-9695-y](https://doi.org/10.1007/s10569-016-9695-y).
-37. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
+41. Lainey, V. et al. 2012, "Strong tidal dissipation in Saturn and
     constraints on Enceladus' thermal state from astrometry", *The
     Astrophysical Journal* 752, 14,
     [doi:10.1088/0004-637X/752/1/14](https://doi.org/10.1088/0004-637X/752/1/14).
-38. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
+42. Lainey, V. et al. 2020, "Resonance locking in giant planets indicated
     by the rapid orbital expansion of Titan", *Nature Astronomy* 4,
     1053–1058,
     [doi:10.1038/s41550-020-1120-5](https://doi.org/10.1038/s41550-020-1120-5).
-39. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
+43. Lainey, V., Arlot, J.-E., Karatekin, Ö. & Van Hoolst, T. 2009, "Strong
     tidal dissipation in Io and Jupiter from astrometric observations",
     *Nature* 459, 957–959,
     [doi:10.1038/nature08108](https://doi.org/10.1038/nature08108).
-40. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
+44. Lee, E. J. & Chiang, E. 2016, *The Astrophysical Journal* 817, 90,
     [doi:10.3847/0004-637X/817/2/90](https://doi.org/10.3847/0004-637X/817/2/90).
-41. Leliwa-Kopystyński, J., Maruyama, M. & Nakajima, T. 2002, "The
+45. Leliwa-Kopystyński, J., Maruyama, M. & Nakajima, T. 2002, "The
     water–ammonia phase diagram up to 300 MPa: application to icy
     satellites", *Icarus* 159, 518–528,
     [doi:10.1006/icar.2002.6932](https://doi.org/10.1006/icar.2002.6932).
-42. Lodders, K. 2003, "Solar System abundances and condensation
+46. Lodders, K. 2003, "Solar System abundances and condensation
     temperatures of the elements", *The Astrophysical Journal* 591,
     1220–1247,
     [doi:10.1086/375492](https://doi.org/10.1086/375492).
-43. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
+47. Lopez, E. D. & Fortney, J. J. 2014, "Understanding the mass-radius
     relation for sub-Neptunes: radius as a proxy for composition", *The
     Astrophysical Journal* 792, 1,
     [doi:10.1088/0004-637X/792/1/1](https://doi.org/10.1088/0004-637X/792/1/1).
-44. Manga, M. & Wang, C.-Y. 2007, "Pressurized oceans and the eruption of
+48. Manga, M. & Wang, C.-Y. 2007, "Pressurized oceans and the eruption of
     liquid water on Europa and Enceladus", *Geophysical Research Letters*
     34, L07202,
     [doi:10.1029/2007GL029297](https://doi.org/10.1029/2007GL029297).
-45. Marty, B. 2012, "The origins and concentrations of water, carbon,
+49. Marty, B. 2012, "The origins and concentrations of water, carbon,
     nitrogen and noble gases on Earth", *Earth and Planetary Science
     Letters* 313–314, 56–66,
     [doi:10.1016/j.epsl.2011.10.040](https://doi.org/10.1016/j.epsl.2011.10.040).
-46. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
+50. McDonough, W. F. & Sun, S.-s. 1995, "The composition of the Earth",
     *Chemical Geology* 120, 223–253,
     [doi:10.1016/0009-2541(94)00140-4](https://doi.org/10.1016/0009-2541(94)00140-4).
-47. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
+51. Meyer, J. & Wisdom, J. 2007, "Tidal heating in Enceladus", *Icarus*
     188, 535–539,
     [doi:10.1016/j.icarus.2007.03.001](https://doi.org/10.1016/j.icarus.2007.03.001).
-48. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
+52. Nettelmann, N., Helled, R., Fortney, J. J. & Redmer, R. 2013, "New
     indication for a dichotomy in the interior structure of Uranus and
     Neptune from the application of modified shape and rotation data",
     *Planetary and Space Science* 77, 143–151,
     [doi:10.1016/j.pss.2012.06.019](https://doi.org/10.1016/j.pss.2012.06.019).
-49. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
+53. Neukum, G., Ivanov, B. A. & Hartmann, W. K. 2001, "Cratering records in
     the inner solar system in relation to the lunar reference system",
     *Space Science Reviews* 96, 55–86,
     [doi:10.1023/A:1011989004263](https://doi.org/10.1023/A:1011989004263).
-50. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
+54. Peale, S. J., Cassen, P. & Reynolds, R. T. 1979, "Melting of Io by tidal
     dissipation", *Science* 203, 892–894,
     [doi:10.1126/science.203.4383.892](https://doi.org/10.1126/science.203.4383.892).
-51. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
+55. Petrenko, V. F. & Whitworth, R. W. 1999, *Physics of Ice*, Oxford
     University Press, ISBN 978-0-19-851894-6 (thermal conductivity of ice
     Ih, $k = 651/T$ W m⁻¹ K⁻¹; Klinger 1980, *Science* 209, 271–272,
     gives $567/T$).
-52. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
+56. Plesa, A.-C. et al. 2018, "The thermal state and interior structure of
     Mars", *Geophysical Research Letters* 45, 12198–12209,
     [doi:10.1029/2018GL080728](https://doi.org/10.1029/2018GL080728).
-53. Pollack, J. B. et al. 1996, "Formation of the giant planets by
+57. Pollack, J. B. et al. 1996, "Formation of the giant planets by
     concurrent accretion of solids and gas", *Icarus* 124, 62–85,
     [doi:10.1006/icar.1996.0190](https://doi.org/10.1006/icar.1996.0190).
-54. Porco, C. C. et al. 2006, "Cassini observes the active south pole of
+58. Porco, C. C. et al. 2006, "Cassini observes the active south pole of
     Enceladus", *Science* 311, 1393–1401,
     [doi:10.1126/science.1123013](https://doi.org/10.1126/science.1123013).
-55. Roberts, J. H. 2015, "The fluffy core of Enceladus", *Icarus* 258,
+59. Roberts, J. H. 2015, "The fluffy core of Enceladus", *Icarus* 258,
     54–66,
     [doi:10.1016/j.icarus.2015.05.033](https://doi.org/10.1016/j.icarus.2015.05.033).
-56. Rudolph, M. L. & Manga, M. 2009, "Fracture penetration in planetary
+60. Rudolph, M. L. & Manga, M. 2009, "Fracture penetration in planetary
     ice shells", *Icarus* 199, 536–541,
     [doi:10.1016/j.icarus.2008.10.010](https://doi.org/10.1016/j.icarus.2008.10.010).
-57. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
+61. Rogers, L. A. 2015, "Most 1.6 Earth-radius planets are not rocky", *The
     Astrophysical Journal* 801, 41,
     [doi:10.1088/0004-637X/801/1/41](https://doi.org/10.1088/0004-637X/801/1/41).
-58. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
+62. Ruesch, O. et al. 2016, "Cryovolcanism on Ceres", *Science* 353,
+    aaf4286,
+    [doi:10.1126/science.aaf4286](https://doi.org/10.1126/science.aaf4286).
+63. Schenk, P. M., McKinnon, W. B., Gwynn, D. & Moore, J. M. 2001, "Flooding
+    of Ganymede's bright terrains by low-viscosity water-ice lavas",
+    *Nature* 410, 57–60,
+    [doi:10.1038/35059018](https://doi.org/10.1038/35059018).
+64. Schubert, G., Anderson, J. D., Spohn, T. & McKinnon, W. B. 2004,
     "Interior composition, structure and dynamics of the Galilean
     satellites", in *Jupiter: The Planet, Satellites and Magnetosphere*,
     Cambridge University Press, 281–306.
-59. Solomatov, V. S. & Moresi, L.-N. 2000, "Scaling of time-dependent
+65. Solomatov, V. S. & Moresi, L.-N. 2000, "Scaling of time-dependent
     stagnant lid convection: application to small-scale convection on
     Earth and other terrestrial planets", *Journal of Geophysical
     Research* 105, 21795–21817,
     [doi:10.1029/2000JB900197](https://doi.org/10.1029/2000JB900197).
-60. Solomatov, V. S. 1995, "Scaling of temperature- and stress-dependent
+66. Solomatov, V. S. 1995, "Scaling of temperature- and stress-dependent
     viscosity convection", *Physics of Fluids* 7, 266–274,
     [doi:10.1063/1.868624](https://doi.org/10.1063/1.868624).
-61. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
+67. Thorngren, D. & Fortney, J. J. 2018, "Bayesian analysis of hot-Jupiter
     radius anomalies", *The Astronomical Journal* 155, 214,
     [doi:10.3847/1538-3881/aaba13](https://doi.org/10.3847/1538-3881/aaba13).
-62. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
+68. Turcotte, D. L. & Schubert, G. 2014, *Geodynamics*, 3rd ed., Cambridge
     University Press (table 4.2).
-63. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
+69. Wagner, W., Riethmann, T., Feistel, R. & Harvey, A. H. 2011, "New
     equations for the sublimation pressure and melting pressure of H₂O ice
     Ih", *Journal of Physical and Chemical Reference Data* 40, 043103,
     [doi:10.1063/1.3657937](https://doi.org/10.1063/1.3657937).
-64. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
+70. Wahr, J. M., Zuber, M. T., Smith, D. E. & Lunine, J. I. 2006, "Tides on
     Europa, and the thickness of Europa's icy shell", *Journal of
     Geophysical Research* 111, E12005,
     [doi:10.1029/2006JE002729](https://doi.org/10.1029/2006JE002729).
-65. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
+71. Wright, J. T. et al. 2012, *The Astrophysical Journal* 753, 160,
     [doi:10.1088/0004-637X/753/2/160](https://doi.org/10.1088/0004-637X/753/2/160).
-66. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
+72. Zahnle, K., Schenk, P., Levison, H. & Dones, L. 2003, "Cratering rates
     in the outer Solar System", *Icarus* 163, 263–289,
     [doi:10.1016/S0019-1035(03)00048-4](https://doi.org/10.1016/S0019-1035(03)00048-4).
-67. Zeng, L. et al. 2019, "Growth model interpretation of planet size
+73. Zeng, L. et al. 2019, "Growth model interpretation of planet size
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
@@ -1124,7 +1193,7 @@ archetypes):
     and 2001 (Io) and Iess et al. 2014 were checked against their
     Crossref records; their figures (Io's 20 % core of 5.15 g/cm³,
     Enceladus's 2.4 g/cm³ core) are quoted as the literature cites them.
-68. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
+74. Zeng, L., Sasselov, D. D. & Jacobsen, S. B. 2016, "Mass-radius
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).

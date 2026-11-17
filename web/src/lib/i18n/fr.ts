@@ -350,6 +350,8 @@ export const fr: Messages = {
     GiantPolar: 'Région polaire',
     HydrocarbonSea: 'Mer d’hydrocarbures',
     HydrocarbonLake: 'Lac d’hydrocarbures',
+    FreshIceFlow: 'Coulée de glace fraîche',
+    CryovolcanicPlain: 'Plaine cryovolcanique',
   },
   clouds: {
     water: 'd’eau',

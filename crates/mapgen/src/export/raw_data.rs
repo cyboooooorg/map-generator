@@ -85,8 +85,15 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// methane cloud is its own kind (`CloudKind::Methane`) and the card has
 /// new quantities for them. Worlds of version 23 would show Venus, Mars,
 /// Titan and Triton with the old temperatures and clouds, so they are
-/// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8.
-pub const FORMAT_VERSION: u32 = 24;
+/// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8. Version
+/// 27 draws the volcanism of a body whose crust is an ice shell as
+/// cryovolcanism (#550): no lava, ash or magma on its ice, but fresh ice
+/// flows and cryovolcanic plains (biomes 41 and 42, `FreshIceFlow` and
+/// `CryovolcanicPlain`) under the look's new `rules.cryovolcanic`; a hot
+/// one in the heat-pipe regime no longer takes the `volcanic` look.
+/// Worlds of the earlier versions would keep the lava, so they are
+/// refused.
+pub const FORMAT_VERSION: u32 = 27;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -94,7 +101,7 @@ pub const FORMAT_VERSION: u32 = 24;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message pointing to the main menu's Regenerate
 /// button.
-pub const MIN_FORMAT_VERSION: u32 = 24;
+pub const MIN_FORMAT_VERSION: u32 = 27;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);

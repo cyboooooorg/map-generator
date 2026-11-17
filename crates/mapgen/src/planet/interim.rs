@@ -38,7 +38,8 @@ const FROZEN_MIN_WATER: f64 = 0.05;
 /// 2. a lava world, a lava liquid, or a heat-pipe regime without liquid
 ///    water: `volcanic` (a heat-pipe body under a water ocean takes rule 5:
 ///    the ocean covers its volcanism, which the world's volcanic intensity
-///    keeps visible);
+///    keeps visible; one whose crust is an ice shell, [`cryovolcanic`],
+///    takes the rules below: no lava crosses its shell);
 /// 3. a runaway greenhouse: `caustic` (the Venus look; the spec names
 ///    barren or volcanic, caustic is closer to Venus and exists);
 /// 4. liquid hydrocarbons: `frozen`;
@@ -66,7 +67,9 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
     let liquid = surface.map_or(SurfaceLiquid::None, |s| s.climate.liquid);
     if model.class == PlanetClass::LavaWorld
         || liquid == SurfaceLiquid::Lava
-        || (liquid != SurfaceLiquid::Water && surface.is_some_and(|s| s.regime == Regime::HeatPipe))
+        || (liquid != SurfaceLiquid::Water
+            && surface.is_some_and(|s| s.regime == Regime::HeatPipe)
+            && !cryovolcanic(model))
     {
         return "volcanic";
     }
@@ -91,6 +94,24 @@ pub fn base_of(model: &PlanetModel) -> &'static str {
         }
         _ => "barren",
     }
+}
+
+/// Whether the volcanism of `model`'s surface is cryovolcanism: its
+/// crust is an ice shell (`crate::generation::model_crust_kind` is
+/// ice, and the model derives its [`super::IceShell`]) over its rock.
+/// Its rock may be in any regime, the heat pipe of a tidally heated one
+/// included (`super::regime::regime` reads the heat flux alone), but no
+/// silicate magma reaches its surface: about three times as dense as ice,
+/// it cannot rise through the water layer and its shell, and what erupts
+/// is water from the ocean or from melt in the shell, frozen into fresh
+/// ice (Kargel 1995, doi:10.1007/BF00613296; Fagents 2003,
+/// doi:10.1029/2003JE002128). Its look draws its volcanic zones as such
+/// ([`crate::biome::BiomeRules::cryovolcanic`], see [`look_for`]). A
+/// frozen ocean over a rocky crust (a snowball Earth) is no ice shell
+/// crust: its volcanoes stand on rock.
+pub fn cryovolcanic(model: &PlanetModel) -> bool {
+    model.ice_shell.is_some()
+        && crate::generation::model_crust_kind(model) == crate::generation::CrustKind::Ice
 }
 
 /// Stefan–Boltzmann constant, W/(m²·K⁴) (CODATA 2018, exact).
@@ -302,6 +323,14 @@ const HYDROCARBON_LIQUIDS: [(Biome, &[Biome]); 2] = [
 /// base one when life did not arise ([`LIFELESS`]). Its orbit comes from
 /// the system and its sea level from its water.
 ///
+/// A [`cryovolcanic`] body draws its volcanic zones as fresh ice
+/// ([`crate::biome::BiomeRules::cryovolcanic`]); in the heat-pipe regime
+/// its zones spread as an Io's do, with the `volcanic` look's shift
+/// ([`IO_LIKE`]): water erupts and floods its lows as fast as lava
+/// resurfaces Io (its surface is as young, [`HEAT_PIPE_SURFACE_AGE_GA`]),
+/// and fresh flows cover the cores of its volcanic provinces
+/// ([`CRYOVOLCANIC_VENT_ZONE`]).
+///
 /// # Panics
 ///
 /// When `model` has no surface (a giant).
@@ -312,6 +341,13 @@ pub fn look_for(model: &PlanetModel) -> Look {
     let flux = model.heat.flux_w_m2(model.interior.radius_earth);
     look.climate.internal_heat = (flux / SIGMA).powf(0.25) as f32;
     look.geology.regime = surface.regime;
+    if cryovolcanic(model) {
+        look.rules.cryovolcanic = true;
+        if surface.regime == Regime::HeatPipe {
+            look.climate.volcanic = Look::load(IO_LIKE).climate.volcanic;
+            look.rules.vent_zone = CRYOVOLCANIC_VENT_ZONE;
+        }
+    }
     look.atmosphere = sky_of(model);
     look.atmosphere.greenhouse = 0.0;
     look.giant = None;
@@ -324,6 +360,24 @@ pub fn look_for(model: &PlanetModel) -> Look {
         look.then_remap(&LIFELESS)
     }
 }
+
+/// The look whose volcanic shift a [`cryovolcanic`] body in the heat-pipe
+/// regime takes ([`look_for`]): Io's, `volcanic`, whose shift (0.5)
+/// turns every lowland into a volcanic zone.
+const IO_LIKE: &str = "volcanic";
+
+/// Volcanic zone past which a [`cryovolcanic`] body in the heat-pipe
+/// regime draws fresh ice flows ([`crate::biome::BiomeRules::vent_zone`]),
+/// with [`IO_LIKE`]'s shift of 0.5: the cones of its volcanic provinces
+/// and their cores, where their background zone (the province's strength
+/// times `generation::VOLCANIC_BACKGROUND`, 0.12) passes 0.05, about
+/// 15 % of the surface at a volcanic intensity of 1 (14 to 15 % on the
+/// hot icy moons of the tests at 256 × 128). Calibration,
+/// no source for the value: between Enceladus, whose active south polar
+/// terrain is about a tenth of its surface (Porco et al. 2006,
+/// doi:10.1126/science.1123013), and an Io, resurfaced everywhere; Io's
+/// own 0.9 leaves the flows to the cones' summits, a few pixels.
+const CRYOVOLCANIC_VENT_ZONE: f32 = 0.55;
 
 /// What a built-in look draws when the model leaves it open (the
 /// `[defaults]` of the former preset files): its pressure, surface age,
@@ -1318,5 +1372,160 @@ mod tests {
             params.volcanic_intensity
         );
         // land share and mean temperature checked by Tasks 3 and 4
+    }
+
+    /// A moon of `mass_earth` with `ice_fraction` of ices, born in its
+    /// giant's disk, on an orbit of `a_m` and `eccentricity` around a host
+    /// of `host_kg`, its giant at `orbit_au` round a G2V star.
+    fn icy_moon(
+        orbit_au: f32,
+        mass_earth: f64,
+        ice_fraction: f64,
+        host_kg: f64,
+        a_m: f64,
+        eccentricity: f64,
+    ) -> PlanetModel {
+        use crate::planet::inputs::{Context, HostTide, InputOverrides};
+        use crate::planet::moon::{MoonBirth, MoonFormation, derive_moon_model};
+        let star = crate::star::StarInfo::new(crate::star::SUN, orbit_au, 0.0, 4.57);
+        let formation = MoonFormation {
+            mass_earth,
+            ice_fraction,
+            birth: MoonBirth::Disk,
+            tide: HostTide {
+                host_kg,
+                a_m,
+                eccentricity,
+                resonance: None,
+            },
+        };
+        derive_moon_model(
+            1,
+            "p1/m1",
+            &Context::of(&star, 0.0, 2.7),
+            &formation,
+            &InputOverrides::default(),
+        )
+    }
+
+    /// The moon e VII of mgs-84157-2691483901 (#550): Titan's size (2,673
+    /// km), 55 % ices, 5e14 W of tidal heat from a Saturn-mass giant
+    /// (6.2e26 kg) at 391,000 km, e = 0.027: 5.6 W/m², twice Io's flux,
+    /// under a 24 bar N₂–CH₄ air with hydrocarbon lakes.
+    fn hot_titan() -> PlanetModel {
+        icy_moon(9.7, 0.023_85, 0.5516, 6.22e26, 3.914e8, 0.0272)
+    }
+
+    /// Europa (Jupiter, 671,000 km, 8 % ices) on an orbit five times as
+    /// eccentric (0.05): 3e13 W of tides, over 1 W/m².
+    fn hot_europa() -> PlanetModel {
+        icy_moon(5.2, 0.008, 0.08, 1.898e27, 6.709e8, 0.05)
+    }
+
+    /// Enceladus (Saturn, 238,000 km, 40 % ices) on an orbit of e = 0.1.
+    fn hot_enceladus() -> PlanetModel {
+        icy_moon(9.54, 1.81e-5, 0.4, 5.683e26, 2.38e8, 0.1)
+    }
+
+    fn io() -> PlanetModel {
+        icy_moon(5.2, 0.015, 0.0, 1.898e27, 4.217e8, 0.0041)
+    }
+
+    /// The generated world of `model`, a moon round the Sun at `orbit_au`.
+    fn moon_world(model: &PlanetModel, orbit_au: f32, seed: u32) -> crate::world::World {
+        let mut placed = earth_placed(seed);
+        (placed.width, placed.height, placed.orbit_au) = (256, 128, orbit_au);
+        placed.eccentricity = 0.05;
+        placed.moons = crate::moons::MoonsMode::None;
+        let mut params = params_for(model, &placed, &mut StdRng::seed_from_u64(seed.into()));
+        calibrate(&mut params, model);
+        crate::generation::generate(&params).world
+    }
+
+    /// Silicate volcanism: magma at the surface.
+    const SILICATE: [Biome; 5] = [
+        Biome::Volcano,
+        Biome::LavaField,
+        Biome::AshLand,
+        Biome::MagmaSea,
+        Biome::ScorchedWaste,
+    ];
+
+    /// An icy moon whose tides put it in the heat-pipe regime keeps that
+    /// regime (its rock's), but its ice shell over an ocean takes no
+    /// silicate magma: its volcanism is cryovolcanism (#550).
+    #[test]
+    fn a_hot_icy_ocean_moon_erupts_ice_not_lava() {
+        for (name, model, au) in [
+            ("hot Titan (e VII)", hot_titan(), 9.7),
+            ("hot Europa", hot_europa(), 5.2),
+            ("hot Enceladus", hot_enceladus(), 9.54),
+        ] {
+            let surface = model.surface.as_ref().unwrap();
+            assert_eq!(surface.regime, Regime::HeatPipe, "{name}");
+            let shell = model.ice_shell.expect("an ice shell");
+            assert!(shell.ocean_km > 0.0, "{name}: {shell:?}");
+            assert_ne!(base_of(&model), "volcanic", "{name}");
+            let world = moon_world(&model, au, 1);
+            let count = |wanted: Biome| world.biomes.iter().filter(|&&b| b == wanted).count();
+            let lava: usize = SILICATE.iter().map(|&b| count(b)).sum();
+            let (flows, plains) = (count(Biome::FreshIceFlow), count(Biome::CryovolcanicPlain));
+            eprintln!(
+                "{name}: {lava} silicate, {flows} fresh ice flow, {plains} cryovolcanic plain of {}",
+                world.biomes.len()
+            );
+            assert_eq!(lava, 0, "{name}: {lava} silicate volcanic pixels");
+            assert!(flows > 0, "{name}: no fresh ice flow");
+            assert!(plains > 0, "{name}: no cryovolcanic plain");
+            // Young: an Io's surface age.
+            assert!(world.params.surface_age_ga < 0.01, "{name}");
+        }
+    }
+
+    /// An icy ocean moon outside the heat pipe (Europa, its 35 mW/m² in
+    /// the stagnant regime) draws no silicate volcano either, whatever
+    /// volcanism its world is given: its zones are fresh ice.
+    #[test]
+    fn a_stagnant_icy_ocean_moon_has_no_silicate_volcano() {
+        let model = icy_moon(5.2, 0.008, 0.08, 1.898e27, 6.709e8, 0.009);
+        assert_eq!(model.surface.as_ref().unwrap().regime, Regime::Stagnant);
+        assert!(cryovolcanic(&model));
+        let look = look_for(&model);
+        assert!(look.rules.cryovolcanic);
+        let mut placed = earth_placed(1);
+        (placed.width, placed.height, placed.orbit_au) = (256, 128, 5.2);
+        placed.moons = crate::moons::MoonsMode::None;
+        let mut params = params_for(&model, &placed, &mut StdRng::seed_from_u64(1));
+        calibrate(&mut params, &model);
+        params.volcanic_intensity = 1.0;
+        let world = crate::generation::generate(&params).world;
+        let lava = world.biomes.iter().filter(|b| SILICATE.contains(b)).count();
+        assert_eq!(lava, 0, "{lava} silicate volcanic pixels");
+        assert!(world.biomes.contains(&Biome::FreshIceFlow));
+    }
+
+    /// Rock under a frozen sea (a snowball Earth) keeps its volcanoes:
+    /// only an ice shell crust is cryovolcanic.
+    #[test]
+    fn only_an_ice_shell_crust_is_cryovolcanic() {
+        assert!(!cryovolcanic(&earth_model_at(2.0, 1.0)));
+        assert!(!cryovolcanic(&io()));
+        assert!(!cryovolcanic(&model_of("Earth")));
+        assert!(cryovolcanic(&hot_titan()));
+        assert!(!look_for(&io()).rules.cryovolcanic);
+    }
+
+    /// Io, a heat pipe of rock with no ice, keeps its lava.
+    #[test]
+    fn io_keeps_its_lava() {
+        let model = io();
+        assert_eq!(base_of(&model), "volcanic");
+        let world = moon_world(&model, 5.2, 1);
+        let lava = world
+            .biomes
+            .iter()
+            .filter(|b| matches!(b, Biome::Volcano | Biome::LavaField))
+            .count();
+        assert!(lava > 0, "Io has no lava");
     }
 }

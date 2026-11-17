@@ -275,6 +275,9 @@ fn band_limited(
 
 /// Share of the height detail a biome's surface gets: snow, ice and lava
 /// are smooth, sand and ash nearly so; rock and vegetation keep it all.
+/// Cryovolcanic ice is smooth on an ice shell too: its flows as lava's,
+/// its plains, lows flooded by water that froze, nearly so (Ganymede's
+/// smooth bright lanes, Schenk et al. 2001, doi:10.1038/35059018).
 /// On a world whose crust is an ice shell (`ice_shell`, Europa, Titan),
 /// its frozen ground is that shell, its bedrock, not a cover of snow or
 /// glacier smoothing a rocky relief: it keeps it all too (the base relief
@@ -284,7 +287,8 @@ fn roughness(biome: Biome, ice_shell: bool) -> f32 {
     match biome {
         Biome::Snow | Biome::IceCap | Biome::GlacialPlain if ice_shell => 1.0,
         Biome::Snow | Biome::IceCap | Biome::GlacialPlain | Biome::SeaIce => 0.1,
-        Biome::Volcano | Biome::LavaField | Biome::MagmaSea => 0.05,
+        Biome::Volcano | Biome::LavaField | Biome::MagmaSea | Biome::FreshIceFlow => 0.05,
+        Biome::CryovolcanicPlain => 0.2,
         Biome::Desert | Biome::DustPlain | Biome::Beach | Biome::AshLand => 0.4,
         _ => 1.0,
     }
