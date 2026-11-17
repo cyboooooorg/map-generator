@@ -659,7 +659,7 @@ pub(crate) struct Bare {
 /// ([`mass::draw_mass`]), at the deuterium-burning line. A heavier host is
 /// a star raising its own planet's tides (`context.tide` set to the star),
 /// not a giant with a plasma.
-const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * 317.8;
+const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * crate::giants::JUPITER_EARTH_MASSES as f64;
 
 /// What [`non_thermal_loss`] reads of a body of `inputs` and `interior`
 /// in `context`: its gravity and radius, its star's distance and its age,

@@ -339,12 +339,14 @@ f = U (2x + U) / (x + U)²          share fast enough to escape
   (`PLASMA_DISTANCE_EXPONENT`), and grows with the giant's mass as `M³`
   (`PLASMA_MASS_EXPONENT`, **calibration**, no source: Jupiter's dipole
   is about 20 times Saturn's for 3.3 times its mass; the cube keeps Titan
-  and Triton losing a few percent of their N₂ while Callisto loses all
-  its CO₂). The giant's radius is `giants::giant_radius` of its mass and
+  losing at most 7 % of its N₂ over its age and Triton at most 4 % while
+  Callisto loses all its CO₂; with a square, Triton, round a giant 18.5
+  times lighter than Jupiter, would lose up to about 80 % of its N₂ and
+  Titan up to 23 %). The giant's radius is `giants::giant_radius` of its mass and
   equilibrium temperature. The flux is capped at Io's loss, the largest
   known, about one tonne per second over its 4.2e7 km², 2.2e14 SO₂
   m⁻² s⁻¹ (Thomas et al. 2004, *Jupiter*, ch. 23; from memory, not
-  checked; `PLASMA_LOSS_MAX`): the power law would give Io sixty times
+  checked; `PLASMA_LOSS_MAX`): the power law would give Io about 170 times
   that, and the moons a few radii from a giant of ten Jupiter masses
   millions of times, while the plasma a giant's moons load is limited by
   what they supply and what its rotation carries.
@@ -375,6 +377,17 @@ the step comes before the cold trap, a frost of an exhausted gas is gone
 too: Ganymede and Callisto no longer have the CO₂ frost that brightened
 them (`Body::frost_bar` reads what the cold trap froze out of what is
 left), and the carbon cycle's inventory is what is left of their CO₂.
+
+A moon of a giant meets its giant's plasma in two places. The
+shoreline already takes it as unshielded (*Moons* below: its own dynamo
+ignored, the star's XUV counted twice as for a body without a field),
+a bulk escape driven by the star's light that does not see the plasma's
+own energy, the moon's distance or the giant's mass. This step adds
+that energy: the plasma's sputtering and its sweeping of photo-ions.
+They share a cause, not a process; whatever they overlap is absorbed by
+the calibration of `PLASMA_LOSS_AT_CALLISTO`, made on the air the
+unshielded shoreline leaves, and the thick airs to keep (Titan, Triton)
+do not change.
 
 Outside a giant's magnetosphere the step takes nothing: the stellar
 wind's pick-up of photo-ions is already in the shoreline, which Zahnle &

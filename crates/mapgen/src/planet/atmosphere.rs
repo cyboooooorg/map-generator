@@ -369,7 +369,7 @@ const EXOBASE_COLUMN_M2: f64 = 2.5e18;
 /// archetype's richest draws) must be gone within its age, since Carlson
 /// 1999 (see [`EXOSPHERE_BAR`]) sees only an exosphere, which
 /// photo-ionisation and Jupiter's field sweep away in a few years and
-/// which needs a steady supply. The value is about ten times the water
+/// which needs a steady supply. The value is about fifty times the water
 /// ice Jupiter's ions sputter there: they bring Callisto about 2e8 keV
 /// cm⁻² s⁻¹ (Cooper et al. 2001, Icarus 149, 133,
 /// doi:10.1006/icar.2000.6498, through a secondary table, not checked),
@@ -377,8 +377,9 @@ const EXOBASE_COLUMN_M2: f64 = 2.5e18;
 /// its 6e10 keV cm⁻² s⁻¹; Johnson et al. 2004, "Radiation effects on the
 /// surfaces of the Galilean satellites", in *Jupiter: The Planet,
 /// Satellites and Magnetosphere*, ch. 20; from memory, not checked):
-/// 2e11 m⁻² s⁻¹. A frost of CO₂ or N₂, bound less than water ice,
-/// sputters several times more per ion.
+/// 2e11 m⁻² s⁻¹, fifty times less. A frost of CO₂ or N₂, bound less
+/// than water ice, sputters several times more per ion; the rest of the
+/// factor is the calibration's uncertainty.
 const PLASMA_LOSS_AT_CALLISTO: f64 = 1.0e13;
 
 /// Exponent of the moon's distance (giant radii) in the plasma's loss:
@@ -390,10 +391,13 @@ const PLASMA_DISTANCE_EXPONENT: f64 = 5.5;
 
 /// Exponent of the giant's mass in the plasma's loss. Calibration, no
 /// source: a heavier giant has a stronger field and a denser plasma
-/// (Jupiter's dipole is about 20 times Saturn's for 3.3 times its mass);
-/// 2 keeps Titan (Saturn, 20.3 radii) and Triton (Neptune, 14.3 radii)
-/// losing a few percent of their N₂ over their age while Callisto loses
-/// all its CO₂.
+/// (Jupiter's dipole is about 20 times Saturn's for 3.3 times its mass).
+/// The cube keeps Titan (Saturn, 20.3 radii) losing at most 7 % of its N₂
+/// over its age and Triton (Neptune, 12.4 to 15 radii) at most 4 %, while
+/// Callisto loses all its CO₂ (`archetype_census`, seeds 1 to 40). With 2,
+/// Triton, whose giant is 18.5 times lighter than Jupiter, would lose up
+/// to about 80 % of its N₂ and its frost (and Titan up to 23 %): too
+/// close to the line for a body that keeps its air.
 const PLASMA_MASS_EXPONENT: f64 = 3.0;
 
 /// The most molecules per m² and per second a giant's plasma removes
@@ -401,7 +405,7 @@ const PLASMA_MASS_EXPONENT: f64 = 3.0;
 /// over its 4.2e7 km² (Thomas et al. 2004, "The Io neutral clouds and
 /// plasma torus", in *Jupiter: The Planet, Satellites and
 /// Magnetosphere*, ch. 23; from memory, not checked), 2.2e14 SO₂ m⁻²
-/// s⁻¹. The power law of [`plasma_flux`] would give Io sixty times that,
+/// s⁻¹. The power law of [`plasma_flux`] would give Io about 170 times that,
 /// and a moon a few radii from a giant of ten Jupiter masses millions of
 /// times: the plasma a giant's moons load is limited by what they
 /// supply and what its rotation can carry, which the law does not see.
@@ -409,7 +413,7 @@ const PLASMA_LOSS_MAX: f64 = 2.2e14;
 
 /// Jupiter's mass, Earth masses, and Callisto's orbit, Jupiter radii: the
 /// place of [`PLASMA_LOSS_AT_CALLISTO`].
-const JUPITER_MASS_EARTH: f64 = 317.8;
+const JUPITER_MASS_EARTH: f64 = crate::giants::JUPITER_EARTH_MASSES as f64;
 const CALLISTO_RADII: f64 = 26.3;
 
 /// Binding energy of water ice, eV: the energy scale of the molecules
@@ -501,6 +505,17 @@ fn plasma_flux(host: &HostPlasma) -> f64 {
 /// it had. An air that outlasts its loss keeps all of it: the loss is
 /// then a share of a large column, and the bulk escape is the
 /// shoreline's.
+///
+/// A moon of a giant also meets the shoreline without its own field
+/// (`planet::shield`): the giant's plasma reaching
+/// its upper air lets the star's XUV and wind strip it as an unmagnetised
+/// body's, a bulk escape scaled from the star's light by a fixed factor
+/// of 2 that does not see the plasma's own energy, its distance or its
+/// giant's mass. This step adds that energy, the sputtering and the
+/// sweeping of photo-ions. The two overlap in cause (the plasma) but not
+/// in process; any overlap is absorbed by the calibration of
+/// [`PLASMA_LOSS_AT_CALLISTO`], made on the air the unshielded shoreline
+/// leaves, and the thick airs it must keep (Titan, Triton) do not change.
 ///
 /// Outside a giant's magnetosphere nothing is lost here: the stellar
 /// wind's pick-up of photo-ions is already in the shoreline, which Zahnle
