@@ -51,6 +51,10 @@ pub struct MoonFormation {
     pub birth: MoonBirth,
     /// Its planet and its orbit around it, whose tides heat it.
     pub tide: HostTide,
+    /// For a drawn moon its planet's tides captured into a 2:1 resonance,
+    /// the share of the system's age since then
+    /// ([`super::resonance::Captures`]); `None` otherwise.
+    pub capture_age_share: Option<f64>,
 }
 
 /// Equilibrium temperature of the planet, K, under which the moons born
@@ -180,6 +184,7 @@ mod tests {
                 eccentricity,
                 resonance: None,
             },
+            capture_age_share: None,
         }
     }
 

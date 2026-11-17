@@ -413,15 +413,18 @@ and may catch the next one out, as Io drove Europa and the two Ganymede
 into the Laplace resonance (Yoder 1979). A captured moon is moved onto
 the commensurability (period exactly twice its inner neighbour's), one
 left free just out of the 1 % band, so that the stored orbits say which
-pairs are locked. A moon asked by archetype is not moved, and is locked
-only on the sides its archetype names a partner (`[moon.resonance]`,
-`resonance::Placement`): Ganymede, which names Europa inside it, with no
-drawn moon outside it, and Callisto, which names none, with no
-neighbour; an asked moon in the band of a neighbour it names none with
-is moved just out of it, as the real Callisto turns 2.33 times
-Ganymede's period. Every moon of a chain but its innermost was captured
-into it, and its passage into the resonance left a tidal episode on its
-surface (see [impact-craters.md](impact-craters.md), "A past tidal
+pairs are locked. A moon asked by archetype is never moved, and is
+locked only on the sides its archetype names a partner on
+(`[moon.resonance]`, `resonance::Placement`): the drawn moons keep out
+of the 2:1 band on its other sides instead, a drawn moon left
+uncaptured where its capture would put it there and moved just out of
+it when it lies in it. Ganymede, which names Europa and Io inside it,
+locks with no drawn moon outside it, and Callisto, which names none,
+with no neighbour, as the real Callisto turns 2.33 times Ganymede's
+period. The share of the age since a drawn moon's capture is kept
+(`Captures::age_share`): a moon of a chain of three or more, not its
+innermost, went through Laplace-like resonances, whose tidal episode it
+dates (see [impact-craters.md](impact-craters.md), "A past tidal
 episode renews part of a resonant moon"). Over 300 drawn systems, 227 of the 353 neighbouring
 pairs of round disk-born moons are locked (64 %; 322, 91 %, when any
 pair 1.8 to 2.2 apart counted): inner pairs converge fast and lock in

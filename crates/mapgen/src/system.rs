@@ -261,6 +261,13 @@ pub struct Body {
     /// such moons, on prograde orbits, form resonant chains ([`chain_member`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub disk_born: bool,
+    /// For a drawn moon its planet's tides captured into a 2:1 resonance,
+    /// the share of the system's age since then
+    /// ([`crate::planet::resonance::Captures`]), which dates its tidal
+    /// episode ([`crate::planet::surface_age::tidal_episode`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub capture_age_share: Option<f64>,
     /// A planet's physical model, as [`derive_model`] gave it when the
     /// system was drawn, or as the resolution of its request gave the world
     /// a system is drawn around (a giant's moon included); none for any
@@ -1742,7 +1749,10 @@ fn assemble(
                 let Some(heat) = heat else {
                     continue;
                 };
-                formation.tide.resonance = Some(heat);
+                formation.tide.resonance = Some(Resonance {
+                    capture_age_share: formation.capture_age_share,
+                    ..heat
+                });
                 moon_models[k] = Some(round_moon_model(
                     seed,
                     &moon_id(k),
@@ -1821,6 +1831,7 @@ fn assemble(
                 disk_born: formation
                     .as_ref()
                     .is_some_and(|f| f.birth == MoonBirth::Disk),
+                capture_age_share: formation.as_ref().and_then(|f| f.capture_age_share),
                 model: moon_model,
             });
         }
@@ -2083,6 +2094,7 @@ fn planet_body(
         trojans: None,
         ring_role: None,
         disk_born: false,
+        capture_age_share: None,
         model,
     };
     // The sky the viewer draws puts the planet on its node line (the spring
@@ -2147,6 +2159,7 @@ pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
             // Set once its neighbours are known (see `chain_heat`).
             resonance: None,
         },
+        capture_age_share: moon.capture_age_share.map(f64::from),
     }
 }
 
@@ -2305,7 +2318,10 @@ fn stored_chain_heat(
         .iter()
         .map(|b| (&b.orbit, b.model.as_ref().expect("filtered on its model")))
         .collect();
-    chain_heat(host, context, &parts)[at]
+    chain_heat(host, context, &parts)[at].map(|heat| Resonance {
+        capture_age_share: body.capture_age_share,
+        ..heat
+    })
 }
 
 /// The fields of a moon drawn by [`MoonSystem`]: a small one's type
@@ -2829,6 +2845,7 @@ fn host_chain(
                 eccentricity: SIBLING_ECCENTRICITY,
                 resonance: sibling_heat[k],
             },
+            capture_age_share: None,
         });
         moons.push((
             f64::from(sibling.distance_km),
@@ -5869,12 +5886,12 @@ mod tests {
             assert!(callisto >= 3.0, "seed {seed}: Callisto {callisto} Ga");
             // Ganymede's map shows its main unit, the grooved terrain a
             // past tidal episode renewed (Showman & Malhotra 1997,
-            // doi:10.1006/icar.1996.5669): 1.7 Ga at 4.57 Ga, about the
-            // 2 Ga crater counts give it (Zahnle et al. 2003), under the
-            // stagnant lid's 0.7 to 0.95 scatter.
+            // doi:10.1006/icar.1996.5669): 2.0 Ga at 4.57 Ga, calibrated
+            // on the 2 Ga crater counts give it (Zahnle et al. 2003),
+            // under the stagnant lid's 0.7 to 0.95 scatter.
             let ganymede = age("ganymede-like");
             assert!(
-                (1.1..=1.7).contains(&ganymede),
+                (1.4..=1.95).contains(&ganymede),
                 "seed {seed}: Ganymede {ganymede} Ga"
             );
             let europa = age("europa-like");

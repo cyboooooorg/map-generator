@@ -76,4 +76,10 @@ seed: number,
  * The moon archetype it was asked for as ([`AskedMoon`]); `None` for
  * a moon drawn.
  */
-archetype?: string, };
+archetype?: string, 
+/**
+ * For a drawn moon its giant's tides captured into a 2:1 resonance,
+ * the share of its system's age since then
+ * ([`crate::planet::resonance::Captures`]); `None` otherwise.
+ */
+capture_age_share?: number, };

@@ -13,7 +13,6 @@ use super::climate::SurfaceLiquid;
 use super::heat::{ICY_K2_OVER_Q, InternalHeat, tidal_power_w};
 use super::inputs::HostTide;
 use super::interim::{EPISODIC_SURFACE_AGE_GA, ERODING_BAR, HEAT_PIPE_SURFACE_AGE_GA};
-use super::resonance::{COMMENSURATE_A_RATIO, MIGRATION_AGES};
 use super::{Gases, PlanetModel};
 use crate::archetype::ParamDefault;
 use crate::exomoon::EARTH_M;
@@ -155,13 +154,14 @@ fn one(age_gyr: f64, renewal: Renewal) -> Terrain {
     }
 }
 
-/// Eccentricity a moon's passage into a resonance pumps it to: Ganymede's
-/// through the Laplace-like resonances that precede the Laplace one,
-/// about 0.07, tidal heating several hundred times today's (Showman &
-/// Malhotra 1997, Icarus 127, 93, doi:10.1006/icar.1996.5669, abstract).
-/// The tide at that eccentricity is far above what keeps an ice lid's
-/// surface (Ganymede about 0.3 W/m² with [`super::heat::ICY_K2_OVER_Q`]),
-/// so the share it renews is [`TIDAL_EPISODE_SHARE`]'s.
+/// Eccentricity a moon's passage through Laplace-like resonances pumps
+/// it to: Ganymede's, through the three-body resonances that precede the
+/// Laplace one, about 0.07, tidal heating several hundred times today's
+/// (Showman & Malhotra 1997, Icarus 127, 93, doi:10.1006/icar.1996.5669,
+/// abstract). The tide at that eccentricity on its present orbit is far
+/// above what keeps an ice lid's surface (Ganymede about 0.3 W/m² with
+/// [`super::heat::ICY_K2_OVER_Q`]), so the share it renews is
+/// [`TIDAL_EPISODE_SHARE`]'s.
 pub const TIDAL_EPISODE_ECCENTRICITY: f64 = 0.07;
 
 /// Most of a surface a tidal episode renews: Ganymede's light terrain,
@@ -173,38 +173,46 @@ pub const TIDAL_EPISODE_ECCENTRICITY: f64 = 0.07;
 /// 2004 in *Jupiter*, Cambridge UP, not checked).
 pub const TIDAL_EPISODE_SHARE: f64 = 0.65;
 
+/// Share of the system's age since the tidal episode of a placed moon
+/// (asked by archetype, or a partner placed with one), whose formation
+/// orbit, and so its capture, the draw does not know. Calibration on
+/// Ganymede, no law: 0.44 of 4.57 Ga is 2.0 Ga, the age crater counts
+/// give its grooved terrain (Zahnle et al. 2003,
+/// doi:10.1016/S0019-1035(03)00048-4, their model A; the value as
+/// [`ICE_LID_HALF_FLUX_W_M2`] cites it, not checked again). A drawn moon
+/// is dated by its capture ([`super::resonance::Captures::age_share`]).
+pub const TIDAL_EPISODE_AGE_SHARE: f64 = 0.44;
+
 /// Least share of the surface an episode's unit covers: a smaller patch
 /// is not a unit. Calibration, no source.
 pub const TIDAL_EPISODE_MIN_SHARE: f64 = 0.01;
 
 /// The unit a past tidal episode left on a moon of `tide`'s host, of
 /// radius `radius_earth`, in a system `age_gyr` old, whose surface is
-/// otherwise `base_age_gyr` old; `None` for a moon its chain did not
-/// capture ([`super::resonance::Resonance::captured`]: the innermost of
-/// a chain, a moon in none, a body that is no moon) and for one whose
-/// surface renews faster than the episode is old (Io's, Europa's).
+/// otherwise `base_age_gyr` old; `None` for a moon that went through no
+/// Laplace-like resonance ([`super::resonance::Resonance::laplace_like`])
+/// and for one whose surface renews faster than the episode is old (Io's,
+/// Europa's).
 ///
-/// - **Which moons**: every moon of a resonant chain but its innermost:
-///   the chain met it as its inner neighbour migrated out, and the
-///   passage into the resonance pumped its eccentricity to
-///   [`TIDAL_EPISODE_ECCENTRICITY`] (Showman & Malhotra 1997,
-///   doi:10.1006/icar.1996.5669, for Ganymede's grooved terrain).
-/// - **When**: under resonance locking the chain migrates on `a/ȧ` =
-///   [`MIGRATION_AGES`] times its age (the clock of
-///   [`super::resonance::host_k2_over_q`]), so `a ∝ t^(1/MIGRATION_AGES)`;
-///   the moon joined it over the chain's last step of migration, the
-///   [`COMMENSURATE_A_RATIO`] its disk spaced it at
-///   (`crate::moons::CHAIN_STEP`), at `t · ratio^(−MIGRATION_AGES)`:
-///   `age_gyr (1 − 2^(−2/3))`, 0.37 of the age ago, 1.7 Ga for Ganymede.
-///   Calibration of the step on the clock, no source: crater counts give
-///   Ganymede's grooved terrain about 2 Ga (Zahnle et al. 2003,
-///   doi:10.1016/S0019-1035(03)00048-4, their model A).
+/// - **Which moons**: a moon of a resonant chain of three or more, not
+///   its innermost: the chain captured it after its inner moons had
+///   locked, through Laplace-like three-body resonances that pumped its
+///   eccentricity to [`TIDAL_EPISODE_ECCENTRICITY`] (Showman & Malhotra
+///   1997, doi:10.1006/icar.1996.5669, for Ganymede's grooved terrain).
+///   That is the source's scope: a moon locked in a 2:1 pair alone gets
+///   no episode (an outer moon's forced eccentricity in a pair is small,
+///   Dione's about 0.002).
+/// - **When**: for a drawn moon, at its capture, the share of the age
+///   since then that [`super::resonance::capture`] found under its
+///   constant migration rates; for a placed moon, whose capture the draw
+///   does not know, [`TIDAL_EPISODE_AGE_SHARE`] of the age ago, a
+///   calibration on Ganymede.
 /// - **How much**: [`TIDAL_EPISODE_SHARE`] times the share an ice lid
 ///   heated by the episode's tide would renew (`1 −`
 ///   [`ice_lid_age_share`] of its flux: the tide ([`tidal_power_w`],
-///   [`super::heat::ICY_K2_OVER_Q`]) at the pumped eccentricity, one
-///   chain step nearer its host, over its surface), so that a small or
-///   distant moon, barely heated, keeps its surface.
+///   [`super::heat::ICY_K2_OVER_Q`]) at the pumped eccentricity on its
+///   present orbit, over its surface), so that a small or distant moon,
+///   barely heated, keeps its surface.
 pub fn tidal_episode(
     tide: Option<&HostTide>,
     radius_earth: f64,
@@ -212,10 +220,11 @@ pub fn tidal_episode(
     base_age_gyr: f64,
 ) -> Option<TerrainUnit> {
     let tide = tide?;
-    if !tide.resonance.is_some_and(|r| r.captured) {
-        return None;
-    }
-    let age = age_gyr * (1.0 - COMMENSURATE_A_RATIO.powf(-MIGRATION_AGES));
+    let resonance = tide.resonance.filter(|r| r.laplace_like)?;
+    let age = age_gyr
+        * resonance
+            .capture_age_share
+            .unwrap_or(TIDAL_EPISODE_AGE_SHARE);
     if age >= base_age_gyr {
         return None;
     }
@@ -223,7 +232,7 @@ pub fn tidal_episode(
     let power = tidal_power_w(
         tide.host_kg,
         radius_m,
-        tide.a_m / COMMENSURATE_A_RATIO,
+        tide.a_m,
         TIDAL_EPISODE_ECCENTRICITY,
         ICY_K2_OVER_Q,
     );

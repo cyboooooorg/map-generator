@@ -1389,6 +1389,7 @@ mod tests {
                 eccentricity,
                 resonance: None,
             },
+            capture_age_share: None,
         };
         derive_moon_model(
             1,

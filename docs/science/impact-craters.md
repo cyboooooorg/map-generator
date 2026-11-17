@@ -602,46 +602,53 @@ more are flooded flat at a date of that window and darkened.
   heat it radiates) is not told apart, Enceladus taking its old plains'
   age (Triton's young surface is the volatile-ice unit below).
 - **A past tidal episode renews part of a resonant moon (Ganymede).**
-  Every round moon of a resonant chain but its innermost was captured
-  into it as its inner neighbour migrated out, and its passage into the
-  resonance pumped its eccentricity for a while: Ganymede's to about
-  0.07 through the Laplace-like resonances that precede the Laplace one,
-  tidal heating several hundred times today's, enough to resurface its
-  grooved terrain (Showman & Malhotra 1997, Icarus 127, 93,
-  doi:10.1006/icar.1996.5669; `TIDAL_EPISODE_ECCENTRICITY`). Over an ice
-  crust it leaves a `TidalEpisode` terrain unit
+  A moon of a resonant chain of three or more, not its innermost, was
+  captured into it after its inner moons had locked, through Laplace-like
+  three-body resonances that pumped its eccentricity for a while:
+  Ganymede's to about 0.07, tidal heating several hundred times today's,
+  enough to resurface its grooved terrain (Showman & Malhotra 1997,
+  Icarus 127, 93, doi:10.1006/icar.1996.5669;
+  `TIDAL_EPISODE_ECCENTRICITY`). That is the source's scope: a moon
+  locked in a 2:1 pair alone gets no episode (an outer moon's forced
+  eccentricity in a pair is small, Dione's about 0.002). Over an ice
+  crust the episode leaves a `TidalEpisode` terrain unit
   (`planet::surface_age::tidal_episode`, the same in `icy_estimate`
   before the climate and in `terrain` after it):
-  - **when**: under resonance locking the chain migrates on `a/ȧ` = the
-    system's age (`resonance::MIGRATION_AGES`, the clock of the host's
-    `k₂/Q`), so `a ∝ t`; the moon joined it over the chain's last step
-    of migration, a factor `2^(2/3)` in `a` (the spacing the disk draws
-    its moons at), `1 − 2^(−2/3)` = 0.37 of the age ago: 1.7 Ga at
-    4.57 Ga. A calibration of the step, no source: crater counts give
-    Ganymede's grooved terrain about 2 Ga (Zahnle et al. 2003, model A);
+  - **when**: a drawn moon at its capture. `resonance::capture` closes
+    its pair's period ratio at a constant rate over the age, so a pair
+    formed `ln(ratio/2)` wide of the 2:1 is captured after that share of
+    the closing; the rest of the age is the episode's age
+    (`Captures::age_share`, stored on the moon as `capture_age_share`).
+    A placed moon (asked by archetype, or its partner), whose formation
+    orbit the draw does not know, takes `TIDAL_EPISODE_AGE_SHARE` = 0.44
+    of the age: a calibration on Ganymede, 2.0 Ga at 4.57 Ga, the age
+    crater counts give its grooved terrain (Zahnle et al. 2003, model A,
+    not checked again);
   - **how much**: `TIDAL_EPISODE_SHARE` = 65 % (Ganymede's light
     terrain, its dark terrain about 35 %, Patterson et al. 2010, Icarus
     207, 845, doi:10.1016/j.icarus.2009.11.035; a calibration, no law
     says why the episode stopped short) times the share an ice lid would
     renew at the episode's flux (`1 − 1 / (1 + (F / 10 mW/m²)⁴)`, the
-    tide at e = 0.07 one chain step nearer its host, `ICY_K2_OVER_Q`).
+    tide at e = 0.07 on the moon's present orbit, `ICY_K2_OVER_Q`).
     Ganymede's episode heats it about 0.3 W/m², so the share is 65 %;
     a small or distant moon, barely heated, keeps more of its surface,
     and a patch under 1 % (`TIDAL_EPISODE_MIN_SHARE`) is no unit;
   - **who keeps it**: a moon whose surface renews faster than the
     episode is old keeps one unit (Io's heat pipe, Europa's young lid);
-    the innermost moon of a chain, and a moon in none (Callisto), has
-    no episode.
-  The map shows the main unit: Ganymede's grooved terrain, 1.7 Ga under
-  the stagnant lid's 0.7 to 0.95 scatter, 1.2 to 1.6 Ga, where it showed
-  2 to 4.4 Ga before; its dark terrain keeps its ice lid's 4.5 Ga as the
-  second unit. In the archetype census (seeds 1 to 40) every Ganymede
-  has the two units, every Callisto one, and Europa and Io are
-  unchanged. Over 300 drawn systems (`ocean_census 20 300`), 146 of the
-  449 drawn icy moons carry an episode (33 %), renewing 3 to 65 % of
-  their surface (median 65 %): drawn chains lock 64 % of their
-  neighbouring pairs, more than the Solar System's moons (see
-  [planet-interiors.md](planet-interiors.md)).
+    the innermost moon of a chain, a moon of a pair alone, and a moon in
+    no chain (Callisto) have no episode.
+  `ganymede-like` names Europa inside it and Io inside Europa
+  (`[moon.resonance]`), so it is the outermost moon of a three-moon
+  chain. The map shows the main unit: Ganymede's grooved terrain, 2.0 Ga
+  under the stagnant lid's 0.7 to 0.95 scatter, about 1.4 to 1.9 Ga,
+  where it showed 2 to 4.4 Ga before; its dark terrain keeps its ice
+  lid's 4.4 to 4.5 Ga as the second unit. In the archetype census
+  (seeds 1 to 40) every Ganymede has the two units, every Callisto one,
+  and Europa and Io are unchanged. Over 300 drawn systems
+  (`ocean_census 20 300`), 58 of the 449 drawn icy moons carry an
+  episode (13 %), renewing 1 to 65 % of their surface (median 64 %),
+  1.1 to 9.3 Ga ago (median 4.1 Ga): most drawn chains close early, a
+  few percent wide of their 2:1.
 - **A liquid cycle renews a stagnant lid's surface (Titan).** A world in
   the stagnant regime with air of 0.01 bar or more over liquid water or
   hydrocarbons gets one `LiquidCycle` terrain unit

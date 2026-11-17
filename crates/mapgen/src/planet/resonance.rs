@@ -114,7 +114,8 @@ fn migration_rate(host_kg: f64, host_radius_m: f64, host_k2_over_q: f64, moon: &
 /// 2:1 resonance over `age_gyr`, around a host of `host_kg` and radius
 /// `host_radius_m`, with each captured outer moon moved onto the
 /// commensurability: one flag per pair, `true` when its two moons are
-/// locked.
+/// locked, and for each drawn moon captured the share of the age since
+/// its capture ([`Captures`]).
 ///
 /// Tides push each moon out at its own rate ([`migration_rate`], under
 /// the host's locked [`host_k2_over_q`] on the innermost moon, as
@@ -126,20 +127,22 @@ fn migration_rate(host_kg: f64, host_radius_m: f64, host_k2_over_q: f64, moon: &
 /// doi:10.1146/annurev.aa.14.090176.001243; Murray & Dermott 1999,
 /// *Solar System Dynamics*, §8.12, not checked), a divergent one never.
 /// The period ratio of the pair falls by `(3/2) Δ(ȧ/a)` times the age:
-/// a pair formed wide of 2 by less than that reaches it; one formed
-/// inside 2 (Dione and Rhea, at 1.67) moves away from it. The locked
-/// moons then migrate together, at `2 ΣT / ΣL`, and may catch the next
-/// one out: Io drove Europa, and the two Ganymede, into the Laplace
-/// resonance (Yoder 1979, doi:10.1038/279767a0). Today's rates stand for
-/// the whole age, a rough measure.
+/// a pair formed wide of 2 by less than that reaches it, after the share
+/// `ln(ratio/2)` of that closing; one formed inside 2 (Dione and Rhea,
+/// at 1.67) moves away from it. The locked moons then migrate together,
+/// at `2 ΣT / ΣL`, and may catch the next one out: Io drove Europa, and
+/// the two Ganymede, into the Laplace resonance (Yoder 1979,
+/// doi:10.1038/279767a0). Today's rates stand for the whole age, a rough
+/// measure.
 ///
-/// A moon placed ([`Placement`]: asked by archetype, or a partner placed
-/// with one) is not moved: its pair is locked when it already sits in
-/// [`RESONANCE_BAND`]. An asked moon is locked only on the sides its
-/// archetype names a partner: Callisto, outside the Laplace chain, and
-/// Ganymede, its outermost moon, are locked with no drawn moon outside
-/// them, and an asked moon in the band of a neighbour it names none with
-/// is moved just out of it. A drawn moon that is captured is moved to
+/// Placed moons ([`Placement`]: asked by archetype, or a partner placed
+/// with one) are never moved: a pair of them is locked when it already
+/// sits in [`RESONANCE_BAND`]. An asked moon is locked only on the sides
+/// its archetype names a partner on: Callisto, outside the Laplace chain,
+/// and Ganymede, its outermost moon, lock with no drawn moon outside
+/// them. The drawn moons keep out of the band of such a side instead: a
+/// drawn moon is not captured where that would put it in it, and one in
+/// it is moved just out of it. A drawn moon that is captured is moved to
 /// [`COMMENSURATE_A_RATIO`] of its inner neighbour (period twice its),
 /// and one not captured that lies in the band is moved just out of it,
 /// so that the orbits say which pairs are locked ([`chains`]).
@@ -149,9 +152,32 @@ pub fn capture(
     age_gyr: f64,
     moons: &mut [Orbiter],
     placed: &[Placement],
-) -> Vec<bool> {
+) -> Captures {
+    let in_band = |ratio: f64| RESONANCE_BAND.0 < ratio && ratio < RESONANCE_BAND.1;
+    // Just out of the band, on the side `ratio` lies.
+    let out_of_band = |ratio: f64| {
+        if ratio >= 2.0 {
+            RESONANCE_BAND.1 * 1.005
+        } else {
+            RESONANCE_BAND.0 / 1.005
+        }
+    };
+    // A drawn innermost moon in the band of an asked one outside it that
+    // names no partner inside: moved just out of it.
+    if let ([first, second, ..], [Placement::Drawn, next, ..]) = (&mut *moons, placed)
+        && !next.inward()
+        && in_band(second.period_s / first.period_s)
+    {
+        let to = out_of_band(second.period_s / first.period_s);
+        first.a_m = second.a_m / to.powf(2.0 / 3.0);
+        first.period_s = second.period_s / to;
+    }
+    let mut age_share = vec![None; moons.len()];
     let Some(innermost) = moons.first() else {
-        return Vec::new();
+        return Captures {
+            locked: Vec::new(),
+            age_share,
+        };
     };
     let k2q = host_k2_over_q(host_kg, host_radius_m, innermost, age_gyr);
     let age_s = age_gyr * GYR_S;
@@ -166,28 +192,52 @@ pub fn capture(
     let mut locked = Vec::with_capacity(moons.len().saturating_sub(1));
     for i in 0..moons.len().saturating_sub(1) {
         let inner = moons[i];
+        // The period of an asked moon outside the outer one that names no
+        // partner inside: the outer one keeps out of its band.
+        let shunned = moons
+            .get(i + 2)
+            .filter(|_| !placed[i + 2].inward())
+            .map(|m| m.period_s);
         let outer = &mut moons[i + 1];
         let ratio = outer.period_s / inner.period_s;
-        let in_band = RESONANCE_BAND.0 < ratio && ratio < RESONANCE_BAND.1;
         let barred = !placed[i].outward() || !placed[i + 1].inward();
-        let captured = if barred {
+        let mut captured = if barred {
             false
         } else if placed[i + 1] != Placement::Drawn {
-            in_band
+            in_band(ratio)
         } else {
             let closing = 1.5 * (2.0 * group.0 / group.1 - rate(outer)) * age_s;
-            closing > 0.0 && ratio > RESONANCE_BAND.0 && (ratio / 2.0).ln() <= closing
+            let reached =
+                closing > 0.0 && ratio > RESONANCE_BAND.0 && (ratio / 2.0).ln() <= closing;
+            if reached {
+                // Captured after the share ln(ratio/2) / closing of the age.
+                age_share[i + 1] = Some(1.0 - ((ratio / 2.0).ln() / closing).clamp(0.0, 1.0));
+            }
+            reached
         };
-        if placed[i + 1] == Placement::Drawn || barred {
+        if placed[i + 1] == Placement::Drawn {
+            let shunned_band =
+                |to: f64| shunned.is_some_and(|p| in_band(p / (inner.period_s * to)));
+            if captured && shunned_band(2.0) {
+                captured = false;
+                age_share[i + 1] = None;
+            }
             let to = if captured {
                 Some(2.0)
-            } else if in_band {
-                // Just out of the band, on the side it lies.
-                Some(if ratio >= 2.0 {
-                    RESONANCE_BAND.1 * 1.005
-                } else {
-                    RESONANCE_BAND.0 / 1.005
-                })
+            } else if shunned.is_none() {
+                in_band(ratio).then(|| out_of_band(ratio))
+            } else if in_band(ratio) || shunned_band(ratio) {
+                // The nearest ratio out of both bands.
+                let p = shunned.expect("a shunned moon") / inner.period_s;
+                [
+                    RESONANCE_BAND.1 * 1.005,
+                    RESONANCE_BAND.0 / 1.005,
+                    p / (RESONANCE_BAND.0 / 1.005),
+                    p / (RESONANCE_BAND.1 * 1.005),
+                ]
+                .into_iter()
+                .filter(|&to| !in_band(to) && !shunned_band(to))
+                .min_by(|a, b| (a / ratio).ln().abs().total_cmp(&(b / ratio).ln().abs()))
             } else {
                 None
             };
@@ -209,7 +259,19 @@ pub fn capture(
         };
         locked.push(captured);
     }
-    locked
+    Captures { locked, age_share }
+}
+
+/// What [`capture`] found.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Captures {
+    /// One flag per neighbouring pair, `true` when its two moons are
+    /// locked.
+    pub locked: Vec<bool>,
+    /// For each moon, the share of the age since the chain captured it:
+    /// a drawn moon captured, `None` for the others (placed, or not
+    /// captured).
+    pub age_share: Vec<Option<f64>>,
 }
 
 /// How a moon enters [`capture`].
@@ -377,13 +439,18 @@ pub struct Resonance {
     /// Its host's tidal response `k₂/Q`, locked on the host's innermost
     /// round moon ([`host_k2_over_q`]), that the heat follows from.
     pub host_k2_over_q: f64,
-    /// Whether the chain captured it: every moon of a chain but its
-    /// innermost, which its inner neighbour's outward migration met
-    /// ([`capture`]). Its passage into the resonance pumped its
-    /// eccentricity for a while (Showman & Malhotra 1997,
+    /// Whether it went through Laplace-like resonances: a moon of a chain
+    /// of three or more, not its innermost, the chain captured after its
+    /// inner moons had locked. Their passage pumps its eccentricity for a
+    /// while: Ganymede's to about 0.07 (Showman & Malhotra 1997,
     /// doi:10.1006/icar.1996.5669), the tidal episode of
-    /// [`super::surface_age::tidal_episode`].
-    pub captured: bool,
+    /// [`super::surface_age::tidal_episode`]. A chain of placed moons
+    /// counts as captured: an archetype stands for a past capture.
+    pub laplace_like: bool,
+    /// Share of the system's age since the chain captured it, when the
+    /// draw computed it (a drawn moon, [`Captures::age_share`]); `None`
+    /// for a placed one.
+    pub capture_age_share: Option<f64>,
 }
 
 /// The resonant heat, W, of each of `moons` (a host's moons nearest
@@ -398,8 +465,9 @@ pub struct Resonance {
 /// outermost moon of a chain, and a moon whose pair pumps nothing, get a
 /// heat of 0, so they too keep their own tide's. A moon's heat today is
 /// the larger of the two ([`todays_heat_w`]). Each heat comes with the
-/// host's `k₂/Q` it was derived under, and whether the chain captured
-/// the moon ([`Resonance::captured`]).
+/// host's `k₂/Q` it was derived under, and whether the moon went
+/// through Laplace-like resonances ([`Resonance::laplace_like`]); when
+/// the chain captured it is the caller's to add.
 pub fn resonant_heat(
     host_kg: f64,
     host_radius_m: f64,
@@ -418,11 +486,13 @@ pub fn resonant_heat(
     for chain in chains(&periods) {
         let members = &moons[chain.clone()];
         let pairs = equilibrium_heat_w(host_kg, host_radius_m, k2q, members);
+        let laplace = chain.len() >= 3;
         for ((k, slot), w) in heat[chain].iter_mut().enumerate().zip(pairs) {
             *slot = Some(Resonance {
                 heat_w: w.max(0.0),
                 host_k2_over_q: k2q,
-                captured: k > 0,
+                laplace_like: laplace && k > 0,
+                capture_age_share: None,
             });
         }
     }
@@ -570,7 +640,8 @@ mod tests {
             4.57,
             &mut moons,
             &[Placement::Drawn; 2],
-        );
+        )
+        .locked;
         assert_eq!(locked, vec![true]);
         assert!((moons[1].period_s / moons[0].period_s - 2.0).abs() < 1e-12);
         assert!((moons[1].a_m / moons[0].a_m - COMMENSURATE_A_RATIO).abs() < 1e-12);
@@ -588,7 +659,8 @@ mod tests {
                 4.57,
                 &mut moons,
                 &[Placement::Drawn; 2],
-            );
+            )
+            .locked;
             assert_eq!(locked, vec![false], "{ratio}");
             assert!((moons[1].period_s / moons[0].period_s - ratio).abs() < 1e-12);
         }
@@ -608,7 +680,8 @@ mod tests {
             4.57,
             &mut moons,
             &[Placement::Drawn; 2],
-        );
+        )
+        .locked;
         assert_eq!(locked, vec![false]);
         let ratio = moons[1].period_s / moons[0].period_s;
         assert!(ratio >= RESONANCE_BAND.1, "{ratio}");
@@ -635,7 +708,8 @@ mod tests {
             4.57,
             &mut moons,
             &[Placement::Partner, Placement::Partner, Placement::Drawn],
-        );
+        )
+        .locked;
         assert!(!locked[1], "{locked:?}");
     }
 
@@ -652,7 +726,8 @@ mod tests {
             4.57,
             &mut moons,
             &[Placement::Drawn; 3],
-        );
+        )
+        .locked;
         assert_eq!(locked, vec![true, true]);
         assert_eq!(chains(&moons.map(|m| m.period_s)), vec![0..3]);
     }
@@ -668,7 +743,8 @@ mod tests {
                 4.57,
                 &mut moons,
                 &[Placement::Partner; 2]
-            ),
+            )
+            .locked,
             vec![false]
         );
         assert_eq!(moons[1], wide);
@@ -680,7 +756,8 @@ mod tests {
                 4.57,
                 &mut moons,
                 &[Placement::Partner; 2]
-            ),
+            )
+            .locked,
             vec![true]
         );
     }
@@ -709,7 +786,8 @@ mod tests {
                 asked,
                 Placement::Drawn,
             ],
-        );
+        )
+        .locked;
         assert_eq!(locked, vec![true, true, false]);
         assert_eq!(moons[3], outer);
         // Drawn there, the same moon would have been captured.
@@ -725,10 +803,12 @@ mod tests {
                 Placement::Partner,
                 Placement::Drawn,
             ],
-        );
+        )
+        .locked;
         assert_eq!(locked, vec![true, true, true]);
-        // Callisto asked with no partner, in the band of a drawn moon
-        // inside it: moved just out of it, the drawn moon kept.
+        // Callisto asked with no partner, outside a drawn moon that Io
+        // would capture into Callisto's band: the drawn moon is left out
+        // of both bands, Callisto where it was asked.
         let inner = at_ratio(&io(), europa(), 2.0);
         let callisto = at_ratio(&inner, ganymede(), 2.005);
         let mut moons = [io(), inner, callisto];
@@ -742,12 +822,63 @@ mod tests {
             4.57,
             &mut moons,
             &[Placement::Drawn, Placement::Drawn, alone],
+        )
+        .locked;
+        assert_eq!(locked, vec![false, false]);
+        assert_eq!(moons[2], callisto);
+        let periods = moons.map(|m| m.period_s);
+        assert!(chains(&periods).is_empty(), "{periods:?}");
+    }
+
+    #[test]
+    fn a_drawn_moon_keeps_out_of_an_asked_moons_unnamed_side() {
+        // Io asked with Europa outside it and none inside, a drawn moon
+        // inside it in its band: the drawn moon moves, Io and its pair
+        // with Europa stay.
+        let asked = Placement::Asked {
+            inward: false,
+            outward: true,
+        };
+        let drawn = Orbiter {
+            a_m: io().a_m / 2.005f64.powf(2.0 / 3.0),
+            period_s: io().period_s / 2.005,
+            mass_kg: 1e21,
+            ..io()
+        };
+        let europa = at_ratio(&io(), europa(), 2.0);
+        let mut moons = [drawn, io(), europa];
+        let captures = capture(
+            JUPITER_KG,
+            JUPITER_R_M,
+            4.57,
+            &mut moons,
+            &[Placement::Drawn, asked, Placement::Partner],
         );
-        assert_eq!(locked, vec![true, false]);
-        assert_eq!(moons[1], inner);
-        let ratio = moons[2].period_s / moons[1].period_s;
+        assert_eq!(captures.locked, vec![false, true]);
+        assert_eq!(moons[1], io());
+        assert_eq!(moons[2], europa);
+        let ratio = moons[1].period_s / moons[0].period_s;
         assert!((RESONANCE_BAND.1..2.04).contains(&ratio), "{ratio}");
-        assert_eq!(chains(&moons.map(|m| m.period_s)), vec![0..2]);
+    }
+
+    #[test]
+    fn a_drawn_capture_says_when_it_happened() {
+        // Formed wide of 2:1, captured part of the way through the age:
+        // the wider, the later.
+        let share = |ratio: f64| {
+            let mut moons = [io(), at_ratio(&io(), europa(), ratio)];
+            capture(
+                JUPITER_KG,
+                JUPITER_R_M,
+                4.57,
+                &mut moons,
+                &[Placement::Drawn; 2],
+            )
+            .age_share[1]
+                .expect("captured")
+        };
+        let (close, wide) = (share(2.03), share(2.16));
+        assert!(0.0 < wide && wide < close && close < 1.0, "{close} {wide}");
     }
 
     #[test]
@@ -814,11 +945,16 @@ mod tests {
     #[test]
     fn only_chain_members_get_a_resonant_heat() {
         let heat = resonant_heat(SATURN_KG, SATURN_R_M, 4.57, &[enceladus(), dione()]);
-        // The pair heats its inner moon; Dione keeps its own tide, but
-        // the chain captured it, not Enceladus.
+        // The pair heats its inner moon; Dione keeps its own tide. A
+        // pair is no Laplace-like chain.
         let (inner, outer) = (heat[0].unwrap(), heat[1].unwrap());
-        assert!(inner.heat_w > 0.0 && !inner.captured, "{heat:?}");
-        assert!(outer.heat_w == 0.0 && outer.captured, "{heat:?}");
+        assert!(inner.heat_w > 0.0 && !inner.laplace_like, "{heat:?}");
+        assert!(outer.heat_w == 0.0 && !outer.laplace_like, "{heat:?}");
+        // Io, Europa and Ganymede: the outer two passed Laplace-like
+        // resonances.
+        let laplace = resonant_heat(JUPITER_KG, JUPITER_R_M, 4.57, &[io(), europa(), ganymede()]);
+        let flags: Vec<bool> = laplace.iter().map(|r| r.unwrap().laplace_like).collect();
+        assert_eq!(flags, vec![false, true, true]);
         assert_eq!(
             resonant_heat(SATURN_KG, SATURN_R_M, 4.57, &[enceladus()]),
             vec![None]

@@ -506,7 +506,8 @@ pub struct ArchetypeMoon {
 
 /// The resonance partners of a moon archetype (`[moon.resonance]`):
 /// regular moons of its host, one 2:1 step outward on the chain, one
-/// step inward (Io inside Europa), or both.
+/// step inward (Io inside Europa), or both, and a second step inward
+/// (Io and Europa inside Ganymede).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -522,6 +523,12 @@ pub struct ArchetypeResonance {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub inner_partner_mass_ratio: Option<ParamDefault>,
+    /// The mass over its host's mass of the moon in 2:1 resonance inside
+    /// its inner partner, two chain steps in (Io for Ganymede, the
+    /// outermost of a three-moon chain); needs an inner partner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub second_inner_partner_mass_ratio: Option<ParamDefault>,
 }
 
 /// A named set of model inputs. See the module documentation for the file
@@ -705,6 +712,21 @@ impl Archetype {
             if let Some(outer) = resonance.partner_mass_ratio {
                 outer
                     .check("resonance.partner_mass_ratio", f32::MIN_POSITIVE, 1e-3)
+                    .map_err(|e| e.replacen("defaults.", "moon.", 1))?;
+            }
+            if let Some(second) = resonance.second_inner_partner_mass_ratio {
+                if resonance.inner_partner_mass_ratio.is_none() {
+                    return Err(
+                        "moon.resonance.second_inner_partner_mass_ratio needs an inner partner"
+                            .to_string(),
+                    );
+                }
+                second
+                    .check(
+                        "resonance.second_inner_partner_mass_ratio",
+                        f32::MIN_POSITIVE,
+                        1e-3,
+                    )
                     .map_err(|e| e.replacen("defaults.", "moon.", 1))?;
             }
             if let Some(inner) = resonance.inner_partner_mass_ratio {
@@ -1116,6 +1138,7 @@ mod tests {
                 eccentricity: f64::from(moon.eccentricity.pick(&mut rng)),
                 resonance: None,
             },
+            capture_age_share: None,
         };
         let overrides = a.overrides(&mut rng);
         derive_moon_model(seed, "p1-1", &context, &formation, &overrides)
@@ -1196,13 +1219,17 @@ mod tests {
             partners.inner_partner_mass_ratio,
             Some(ParamDefault::Range([4.6e-5, 4.8e-5]))
         );
-        // Ganymede: only Europa, inside it.
+        // Ganymede: Europa inside it, and Io inside Europa.
         let ganymede = Archetype::load("ganymede-like").unwrap();
         let inner = ganymede.moon.unwrap().resonance.expect("a resonance");
         assert_eq!(inner.partner_mass_ratio, None);
         assert_eq!(
             inner.inner_partner_mass_ratio,
             Some(ParamDefault::Range([2.4e-5, 2.6e-5]))
+        );
+        assert_eq!(
+            inner.second_inner_partner_mass_ratio,
+            Some(ParamDefault::Range([4.6e-5, 4.8e-5]))
         );
         assert!(
             Archetype::load("titan-like")

@@ -47,7 +47,7 @@ struct Column {
 
 /// Every column, in print order. Add a field of the model here and the
 /// tables show it.
-const COLUMNS: [Column; 9] = [
+const COLUMNS: [Column; 10] = [
     Column {
         name: "shell km",
         read: |m| m.ice_shell.map(|s| s.shell_km),
@@ -91,6 +91,11 @@ const COLUMNS: [Column; 9] = [
     Column {
         name: "episode renewed",
         read: |m| episode(m).map(|u| u.share),
+        share: false,
+    },
+    Column {
+        name: "episode Ga",
+        read: |m| episode(m).map(|u| u.age_gyr),
         share: false,
     },
 ];

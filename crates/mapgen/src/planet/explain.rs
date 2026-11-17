@@ -823,7 +823,8 @@ mod tests {
             resonance: Some(crate::planet::resonance::Resonance {
                 heat_w: 1e15,
                 host_k2_over_q: 8.5e-6,
-                captured: true,
+                laplace_like: true,
+                capture_age_share: None,
             }),
         });
         let model = planet_model(&context, model.inputs);
