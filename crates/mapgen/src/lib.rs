@@ -47,4 +47,5 @@ pub mod spin;
 pub mod star;
 pub mod stripes;
 pub mod system;
+pub mod tides;
 pub mod world;

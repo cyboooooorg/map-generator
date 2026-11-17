@@ -924,7 +924,7 @@ const TIDAL_Q: f64 = 100.0;
 const MAX_K2: f64 = 0.3;
 const FIRST_DAY_S: f64 = 12.0 * 3600.0;
 const PLANET_INERTIA: f64 = 0.33;
-const MOON_INERTIA: f64 = 0.4;
+pub(crate) const MOON_INERTIA: f64 = 0.4;
 const GYR_S: f64 = 3.156e16;
 
 /// Tidal Love number of a solid body of `mass_kg`, `radius_km` and
