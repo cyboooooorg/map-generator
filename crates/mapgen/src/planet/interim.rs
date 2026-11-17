@@ -1485,6 +1485,14 @@ mod tests {
     /// An icy ocean moon outside the heat pipe (Europa, its 35 mW/m² in
     /// the stagnant regime) draws no silicate volcano either, whatever
     /// volcanism its world is given: its zones are fresh ice.
+    ///
+    /// Its `frozen` look lowers the volcanic zone by 0.3, so that even at
+    /// full intensity only the core of a cone in a full province passes
+    /// the vent threshold: a pixel or none on a small map, by the seed's
+    /// luck (#549's band-limited octaves took the last one of seed 1).
+    /// The world is drawn a second time without that shift, so that its
+    /// zones reach the vents whatever the seed, and every pixel of the
+    /// ladder is checked.
     #[test]
     fn a_stagnant_icy_ocean_moon_has_no_silicate_volcano() {
         let model = icy_moon(5.2, 0.008, 0.08, 1.898e27, 6.709e8, 0.009);
@@ -1498,10 +1506,22 @@ mod tests {
         let mut params = params_for(&model, &placed, &mut StdRng::seed_from_u64(1));
         calibrate(&mut params, &model);
         params.volcanic_intensity = 1.0;
-        let world = crate::generation::generate(&params).world;
-        let lava = world.biomes.iter().filter(|b| SILICATE.contains(b)).count();
-        assert_eq!(lava, 0, "{lava} silicate volcanic pixels");
-        assert!(world.biomes.contains(&Biome::FreshIceFlow));
+        for shift in [params.look.climate.volcanic, 0.0] {
+            params.look.climate.volcanic = shift;
+            let world = crate::generation::generate(&params).world;
+            let lava = world.biomes.iter().filter(|b| SILICATE.contains(b)).count();
+            assert_eq!(lava, 0, "shift {shift}: {lava} silicate volcanic pixels");
+            let mut vents = 0;
+            for (&biome, &vz) in world.biomes.iter().zip(&world.volcanic_zone) {
+                if vz > look.rules.vent_zone && !biome.is_water() {
+                    assert_eq!(biome, Biome::FreshIceFlow, "shift {shift}: zone {vz}");
+                    vents += 1;
+                }
+            }
+            if shift == 0.0 {
+                assert!(vents > 0, "no volcanic zone reaches the vents");
+            }
+        }
     }
 
     /// Rock under a frozen sea (a snowball Earth) keeps its volcanoes:
