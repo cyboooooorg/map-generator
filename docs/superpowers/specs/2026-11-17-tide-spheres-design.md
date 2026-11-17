@@ -102,8 +102,8 @@ eccentricity, composition).
   of the Hill sphere is the host's own `parent` if any, else the star
   (`star.info.mass`).
 - A sphere is hidden, and its square too, when its radius is absent
-  (heating on a circular orbit, `e` below about `1e-4`) or not larger
-  than the host's radius.
+  (heating on a circular orbit, `e` below about `1e-4`), not larger
+  than the host's radius, or not smaller than the Hill sphere's.
 
 ## Physics
 

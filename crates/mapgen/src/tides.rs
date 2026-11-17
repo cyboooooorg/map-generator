@@ -151,7 +151,8 @@ pub fn roche_km(host_radius_km: f64, host_density: f64, density: f64) -> f64 {
 ///   satellite: Roche for rock ([`TYPICAL_DENSITY`]), locking for the Moon,
 ///   and no heating sphere (no eccentricity).
 ///
-/// A sphere not finite or not larger than the host is dropped (`None`).
+/// A sphere not finite, not larger than the host, or not smaller than the
+/// host's Hill sphere is dropped (`None`).
 pub fn tide_zones(system: &System, body_id: &str) -> Option<TideZones> {
     let body = find(system, body_id)?;
     match body.parent.as_deref() {
@@ -206,9 +207,10 @@ fn host_hill_km(system: &System, host: &Body) -> f64 {
     )
 }
 
-/// `radius`, when it is finite and reaches beyond `host`.
-fn outside(host: &Body, radius: f64) -> Option<f64> {
-    (radius.is_finite() && radius > host.physical.radius_km).then_some(radius)
+/// `radius`, when it is finite and lies between the host's surface and
+/// its Hill sphere `hill`: a satellite cannot orbit beyond the latter.
+fn within(host: &Body, hill: f64, radius: f64) -> Option<f64> {
+    (radius.is_finite() && radius > host.physical.radius_km && radius < hill).then_some(radius)
 }
 
 /// The spheres of `moon` round `host`.
@@ -239,17 +241,20 @@ fn satellite_zones(system: &System, moon: &Body, host: &Body) -> Option<TideZone
         k2_over_q,
         radiogenic_w,
     );
+    let hill = host_hill_km(system, host);
     Some(TideZones {
         host: host.id.clone(),
         satellite: Some(moon.id.clone()),
-        hill_km: host_hill_km(system, host),
-        locking_km: outside(
+        hill_km: hill,
+        locking_km: within(
             host,
+            hill,
             locking_km(mass_kg, p.radius_km, p.density, host_kg, age),
         ),
-        heating_km: heating.and_then(|r| outside(host, r)),
-        roche_km: outside(
+        heating_km: heating.and_then(|r| within(host, hill, r)),
+        roche_km: within(
             host,
+            hill,
             roche_km(host.physical.radius_km, host.physical.density, p.density),
         ),
     })
@@ -258,12 +263,14 @@ fn satellite_zones(system: &System, moon: &Body, host: &Body) -> Option<TideZone
 /// The spheres of a typical satellite round the moonless `planet`.
 fn typical_zones(system: &System, planet: &Body) -> TideZones {
     let host_kg = planet.physical.mass_earth * EARTH_KG;
+    let hill = host_hill_km(system, planet);
     TideZones {
         host: planet.id.clone(),
         satellite: None,
-        hill_km: host_hill_km(system, planet),
-        locking_km: outside(
+        hill_km: hill,
+        locking_km: within(
             planet,
+            hill,
             locking_km(
                 MOON_KG,
                 MOON_RADIUS_KM,
@@ -273,8 +280,9 @@ fn typical_zones(system: &System, planet: &Body) -> TideZones {
             ),
         ),
         heating_km: None,
-        roche_km: outside(
+        roche_km: within(
             planet,
+            hill,
             roche_km(
                 planet.physical.radius_km,
                 planet.physical.density,
@@ -403,7 +411,7 @@ mod tests {
                     .into_iter()
                     .flatten()
                 {
-                    assert!(x.is_finite() && x > r, "{zones:?}");
+                    assert!(x.is_finite() && x > r && x < zones.hill_km, "{zones:?}");
                 }
                 if let (Some(lock), Some(roche)) = (zones.locking_km, zones.roche_km) {
                     assert!(roche < lock, "{zones:?}");
@@ -459,6 +467,19 @@ mod tests {
             (None, None, None),
             "{zones:?}"
         );
+    }
+
+    #[test]
+    fn spheres_beyond_the_hill_sphere_are_dropped() {
+        let system = drawn(1..=1).remove(0);
+        let host = &system.bodies[0];
+        let r = host.physical.radius_km;
+        // A Moon-like satellite's locking radius against a close-in
+        // planet's Hill sphere.
+        assert_eq!(within(host, 1.28e5, 9.2e5), None);
+        assert_eq!(within(host, 1.28e5, 1.28e5), None);
+        assert_eq!(within(host, 1.28e5, 1.0e5), Some(1.0e5));
+        assert_eq!(within(host, 1.28e5, r * 0.5), None);
     }
 
     #[test]
