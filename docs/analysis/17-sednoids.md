@@ -5,8 +5,8 @@ whose orbits lie far beyond the giants' reach, and decide how systems
 draw them (#331), how the star view shows them and whether they get
 cards and maps.
 
-**Status (2026-11-17): study written; choices 1, 2 and 4 of section 6
-decided by the user, 3 and 5 open.** The
+**Status (2026-11-17): study written, every choice of section 6
+decided by the user.** The
 draw (#331) waits for the dwarf-planet class (#496), in the
 distribution step of the roadmap (#427).
 
@@ -203,10 +203,23 @@ system.detached: {
   - perihelion `q` from 1.65 to 2.7 `a_g` (50 to 80 AU for the Sun);
   - semi-major axis `a` log-uniform from 150 to 1500 AU times `M^(1/3)`,
     and at least 2 `q`;
-  - inclination 5° to 30°; node and argument of perihelion uniform (no
-    clustering, since we draw no distant planet);
+  - inclination 5° to 30°; node and argument of perihelion uniform,
+    unless the system has a distant planet (below);
   - mean anomaly uniform: most bodies sit far out, near aphelion, as in
     reality.
+- **Distant planet.** One system with Sednoids in ten also gets a
+  distant planet, the Planet 9 of Batygin et al. (2019):
+  - 5 to 10 M⊕, `a` from 400 to 800 AU times `M^(1/3)`, `e` 0.2 to 0.5,
+    `i` 15° to 25°. It is a planet like the others, a `Body` with its
+    class, card and map, drawn on the same stream as the Sednoids: its
+    slot lies beyond `OUTER_EDGE_AU` (60 AU), which bounds the ordinary
+    slots only;
+  - it aligns the Sednoids as its secular pull does: their perihelia
+    point opposite its own (longitude of perihelion its own plus 180°,
+    within ±40°), and their orbital planes cluster round its plane
+    (node within ±30° of its node);
+  - without it, orientations stay uniform, as the birth cluster leaves
+    them.
 - **Surfaces:** albedo 0.15 to 0.35, colour from red to ultra-red.
 - **Impacts:** none; they never cross the planets' orbits.
 
@@ -230,9 +243,14 @@ system.detached: {
   period), size, albedo, colour, current distance, and a line on the
   scenario ("perihelion lifted by the birth cluster"). Bodies above about
   400 km are dwarf planets and take that class from #496.
-- **Maps.** Not in #331. A map needs the small-body world model that
-  #496 decides (icy dwarf planets: relief, ices, colours). Once #496
-  can generate a dwarf planet, large Sednoids reuse it.
+- **Maps.** Through #496, not in #331. Moons already show that a small
+  body can have a map: every moon is a `Body` with its world
+  parameters, the planets' mass floor applies only to planet slots. A
+  round moon gets a full model from an archetype (`round_moon_model`),
+  a small one the classes `icy-moon` or `rocky-moon`, its drawn size
+  and a triaxial shape layer (`shape.png`). #496 makes dwarf planets
+  bodies of the same kind round the star; the Sednoids then take its
+  path, round above about 400 km, irregular below.
 - **Planet view.** Nothing: they are invisible from any planet.
 
 ## 6. Choices for the user
@@ -241,12 +259,13 @@ system.detached: {
    (2026-11-17)._
 2. **How many bodies drawn:** the largest 1 to 6, with a field in the
    creation form to set the count. _Decided (2026-11-17)._
-3. **Distant planet:** leave Planet-9-like planets out (proposal), or
-   draw one sometimes, with the orbits it aligns?
+3. **Distant planet:** one system with Sednoids in ten gets one, and
+   it aligns their orbits as its secular pull does. _Decided
+   (2026-11-17)._
 4. **Star view:** their orbits under the existing "Orbits" toggle, with
    every other orbit. _Decided (2026-11-17)._
-5. **Cards and maps:** cards for every drawn body and maps later through
-   #496 (proposal), or maps from the start?
+5. **Cards and maps:** a card for every drawn body; maps through #496.
+   _Decided (2026-11-17)._
 
 ## Sources
 
