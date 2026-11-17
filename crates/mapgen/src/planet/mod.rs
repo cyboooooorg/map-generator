@@ -571,7 +571,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         ),
         _ => Gases::default(),
     };
-    model.terrain = surface_age::terrain(&model, context.age_gyr, &frost);
+    model.terrain = surface_age::terrain(&model, context.age_gyr, &frost, context.tide.as_ref());
     (model, air)
 }
 

@@ -598,12 +598,15 @@ pub fn params_for(
     let look_age = pick(d.surface_age, fallback::SURFACE_AGE_GA, rng);
     let main = match model.terrain.main() {
         Some(unit) => *unit,
-        None => {
-            *super::surface_age::terrain(model, f64::from(placed.age_gyr), &super::Gases::default())
-                .units
-                .first()
-                .expect("a terrain has a unit")
-        }
+        None => *super::surface_age::terrain(
+            model,
+            f64::from(placed.age_gyr),
+            &super::Gases::default(),
+            None,
+        )
+        .units
+        .first()
+        .expect("a terrain has a unit"),
     };
     let regime_age = match (main.renewal, surface.map(|s| s.regime)) {
         (Renewal::LiquidCycle, _) => {

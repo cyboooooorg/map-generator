@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 
 use super::albedo::cover;
 use super::climate::SurfaceLiquid;
-use super::heat::InternalHeat;
+use super::heat::{ICY_K2_OVER_Q, InternalHeat, tidal_power_w};
 use super::inputs::HostTide;
 use super::interim::{EPISODIC_SURFACE_AGE_GA, ERODING_BAR, HEAT_PIPE_SURFACE_AGE_GA};
+use super::resonance::{COMMENSURATE_A_RATIO, MIGRATION_AGES};
 use super::{Gases, PlanetModel};
 use crate::archetype::ParamDefault;
+use crate::exomoon::EARTH_M;
 use crate::geology::Regime;
 use crate::request::fallback;
 
@@ -153,32 +155,135 @@ fn one(age_gyr: f64, renewal: Renewal) -> Terrain {
     }
 }
 
+/// Eccentricity a moon's passage into a resonance pumps it to: Ganymede's
+/// through the Laplace-like resonances that precede the Laplace one,
+/// about 0.07, tidal heating several hundred times today's (Showman &
+/// Malhotra 1997, Icarus 127, 93, doi:10.1006/icar.1996.5669, abstract).
+/// The tide at that eccentricity is far above what keeps an ice lid's
+/// surface (Ganymede about 0.3 W/m² with [`super::heat::ICY_K2_OVER_Q`]),
+/// so the share it renews is [`TIDAL_EPISODE_SHARE`]'s.
+pub const TIDAL_EPISODE_ECCENTRICITY: f64 = 0.07;
+
+/// Most of a surface a tidal episode renews: Ganymede's light terrain,
+/// grooved and smooth, about 65 % of it, its dark terrain about 35 %
+/// (Patterson et al. 2010, Icarus 207, 845,
+/// doi:10.1016/j.icarus.2009.11.035; USGS map SIM 3237). Calibration on
+/// Ganymede: no law says why the episode stopped short of the whole
+/// surface (its tectonics broke the shell along bands, Pappalardo et al.
+/// 2004 in *Jupiter*, Cambridge UP, not checked).
+pub const TIDAL_EPISODE_SHARE: f64 = 0.65;
+
+/// Least share of the surface an episode's unit covers: a smaller patch
+/// is not a unit. Calibration, no source.
+pub const TIDAL_EPISODE_MIN_SHARE: f64 = 0.01;
+
+/// The unit a past tidal episode left on a moon of `tide`'s host, of
+/// radius `radius_earth`, in a system `age_gyr` old, whose surface is
+/// otherwise `base_age_gyr` old; `None` for a moon its chain did not
+/// capture ([`super::resonance::Resonance::captured`]: the innermost of
+/// a chain, a moon in none, a body that is no moon) and for one whose
+/// surface renews faster than the episode is old (Io's, Europa's).
+///
+/// - **Which moons**: every moon of a resonant chain but its innermost:
+///   the chain met it as its inner neighbour migrated out, and the
+///   passage into the resonance pumped its eccentricity to
+///   [`TIDAL_EPISODE_ECCENTRICITY`] (Showman & Malhotra 1997,
+///   doi:10.1006/icar.1996.5669, for Ganymede's grooved terrain).
+/// - **When**: under resonance locking the chain migrates on `a/ȧ` =
+///   [`MIGRATION_AGES`] times its age (the clock of
+///   [`super::resonance::host_k2_over_q`]), so `a ∝ t^(1/MIGRATION_AGES)`;
+///   the moon joined it over the chain's last step of migration, the
+///   [`COMMENSURATE_A_RATIO`] its disk spaced it at
+///   (`crate::moons::CHAIN_STEP`), at `t · ratio^(−MIGRATION_AGES)`:
+///   `age_gyr (1 − 2^(−2/3))`, 0.37 of the age ago, 1.7 Ga for Ganymede.
+///   Calibration of the step on the clock, no source: crater counts give
+///   Ganymede's grooved terrain about 2 Ga (Zahnle et al. 2003,
+///   doi:10.1016/S0019-1035(03)00048-4, their model A).
+/// - **How much**: [`TIDAL_EPISODE_SHARE`] times the share an ice lid
+///   heated by the episode's tide would renew (`1 −`
+///   [`ice_lid_age_share`] of its flux: the tide ([`tidal_power_w`],
+///   [`super::heat::ICY_K2_OVER_Q`]) at the pumped eccentricity, one
+///   chain step nearer its host, over its surface), so that a small or
+///   distant moon, barely heated, keeps its surface.
+pub fn tidal_episode(
+    tide: Option<&HostTide>,
+    radius_earth: f64,
+    age_gyr: f64,
+    base_age_gyr: f64,
+) -> Option<TerrainUnit> {
+    let tide = tide?;
+    if !tide.resonance.is_some_and(|r| r.captured) {
+        return None;
+    }
+    let age = age_gyr * (1.0 - COMMENSURATE_A_RATIO.powf(-MIGRATION_AGES));
+    if age >= base_age_gyr {
+        return None;
+    }
+    let radius_m = radius_earth * EARTH_M;
+    let power = tidal_power_w(
+        tide.host_kg,
+        radius_m,
+        tide.a_m / COMMENSURATE_A_RATIO,
+        TIDAL_EPISODE_ECCENTRICITY,
+        ICY_K2_OVER_Q,
+    );
+    let flux = power / (4.0 * std::f64::consts::PI * radius_m * radius_m);
+    let share = TIDAL_EPISODE_SHARE * (1.0 - ice_lid_age_share(flux));
+    (share >= TIDAL_EPISODE_MIN_SHARE).then_some(TerrainUnit {
+        age_gyr: age,
+        share,
+        renewal: Renewal::TidalEpisode,
+    })
+}
+
 /// Before the climate: the units an ice crust gets from its heat and its
-/// resonance history alone (an ice lid, else the formation age; the tidal
-/// episode of `tide` joins them later).
+/// resonance history alone: an ice lid ([`ice_lid_age_share`]), part of
+/// it renewed by the past tidal episode of `tide` ([`tidal_episode`]).
+/// [`terrain`] gives an ice crust the same units.
 pub fn icy_estimate(
     heat: &InternalHeat,
     radius_earth: f64,
     age_gyr: f64,
-    _tide: Option<&HostTide>,
+    tide: Option<&HostTide>,
 ) -> Terrain {
     let flux = heat.flux_w_m2(radius_earth);
-    one(age_gyr * ice_lid_age_share(flux), Renewal::IceLid)
+    let lid = age_gyr * ice_lid_age_share(flux);
+    let Some(episode) = tidal_episode(tide, radius_earth, age_gyr, lid) else {
+        return one(lid, Renewal::IceLid);
+    };
+    let mut units = vec![
+        episode,
+        TerrainUnit {
+            age_gyr: lid,
+            share: 1.0 - episode.share,
+            renewal: Renewal::IceLid,
+        },
+    ];
+    units.sort_by(|a, b| b.share.total_cmp(&a.share));
+    Terrain { units }
 }
 
 /// After the climate: every unit of the body, in a system `age_gyr` Ga
 /// old, with `frost` (bar, gas by gas, [`super::climate::frost`]) on its
-/// ground. A liquid cycle's unit ([`liquid_cycle_age_gyr`]), else the
-/// mean of the regime's range, or for a stagnant lid the system's age,
-/// shortened over an ice crust by [`ice_lid_age_share`]. A body whose air
+/// ground, under the tides of `tide` (a moon's host, see
+/// [`super::Context::tide`]). A liquid cycle's unit
+/// ([`liquid_cycle_age_gyr`]), else the mean of the regime's range, or
+/// for a stagnant lid the system's age, shortened over an ice crust by
+/// [`ice_lid_age_share`] and partly renewed by a past tidal episode
+/// ([`icy_estimate`]). A body whose air
 /// is in vapour equilibrium with a nitrogen or methane frost (carbon
 /// monoxide is not a gas of the model) also gets a
 /// [`Renewal::VolatileIce`] unit of the share of its disc that frost
 /// covers ([`super::albedo::cover`]); the other unit keeps the rest. The
 /// SO₂ frost of a volcanic body is not mobile ice: a heat pipe renews
 /// faster.
-pub fn terrain(model: &PlanetModel, age_gyr: f64, frost: &Gases) -> Terrain {
-    let base = base_terrain(model, age_gyr);
+pub fn terrain(
+    model: &PlanetModel,
+    age_gyr: f64,
+    frost: &Gases,
+    tide: Option<&HostTide>,
+) -> Terrain {
+    let base = base_terrain(model, age_gyr, tide);
     let Some(surface) = model.surface.as_ref() else {
         return base;
     };
@@ -213,8 +318,8 @@ pub fn terrain(model: &PlanetModel, age_gyr: f64, frost: &Gases) -> Terrain {
     Terrain { units }
 }
 
-/// The unit of the surface under the mobile ice, if any.
-fn base_terrain(model: &PlanetModel, age_gyr: f64) -> Terrain {
+/// The units of the surface under the mobile ice, if any.
+fn base_terrain(model: &PlanetModel, age_gyr: f64, tide: Option<&HostTide>) -> Terrain {
     let regime = model.surface.as_ref().map(|s| s.regime);
     if let (Some(surface), Some(regime)) = (model.surface.as_ref(), regime)
         && regime == Regime::Stagnant
@@ -229,7 +334,7 @@ fn base_terrain(model: &PlanetModel, age_gyr: f64) -> Terrain {
         Some(Regime::HeatPipe) => one(midpoint(HEAT_PIPE_SURFACE_AGE_GA), Renewal::HeatPipe),
         Some(Regime::Stagnant) => {
             if crate::generation::model_crust_kind(model) == crate::generation::CrustKind::Ice {
-                icy_estimate(&model.heat, model.interior.radius_earth, age_gyr, None)
+                icy_estimate(&model.heat, model.interior.radius_earth, age_gyr, tide)
             } else {
                 one(age_gyr, Renewal::Formation)
             }
@@ -343,6 +448,56 @@ mod tests {
     }
 
     #[test]
+    fn ganymede_has_grooved_terrain() {
+        for seed in 1..=40 {
+            let p = params_of("ganymede-like", seed).expect("drawn");
+            let t = &p.model.as_ref().expect("a model").terrain;
+            assert_eq!(t.units.len(), 2, "seed {seed}: {t:?}");
+            let renewed = t
+                .units
+                .iter()
+                .find(|u| u.renewal == Renewal::TidalEpisode)
+                .unwrap_or_else(|| panic!("seed {seed}: {t:?}"));
+            let old = t
+                .units
+                .iter()
+                .find(|u| u.renewal != Renewal::TidalEpisode)
+                .unwrap();
+            assert!((0.4..=0.8).contains(&renewed.share), "seed {seed}: {t:?}");
+            assert!(renewed.age_gyr < old.age_gyr, "seed {seed}: {t:?}");
+            assert!(old.age_gyr >= 3.0, "seed {seed}: {t:?}");
+            let sum: f64 = t.units.iter().map(|u| u.share).sum();
+            assert!((sum - 1.0).abs() < 1e-12, "seed {seed}: {t:?}");
+        }
+    }
+
+    #[test]
+    fn callisto_has_one_old_unit() {
+        for seed in 1..=40 {
+            let p = params_of("callisto-like", seed).expect("drawn");
+            let t = &p.model.as_ref().expect("a model").terrain;
+            assert_eq!(t.units.len(), 1, "seed {seed}: {t:?}");
+            assert!(t.units[0].age_gyr >= 3.0, "seed {seed}: {t:?}");
+        }
+    }
+
+    #[test]
+    fn europa_and_io_stay_young() {
+        for (arch, renewal, under) in [
+            ("europa-like", Renewal::IceLid, 0.3),
+            ("io-like", Renewal::HeatPipe, 0.002),
+        ] {
+            for seed in 1..=40 {
+                let p = params_of(arch, seed).expect("drawn");
+                let t = &p.model.as_ref().expect("a model").terrain;
+                assert_eq!(t.units.len(), 1, "{arch} seed {seed}: {t:?}");
+                assert_eq!(t.units[0].renewal, renewal, "{arch} seed {seed}");
+                assert!(t.units[0].age_gyr < under, "{arch} seed {seed}: {t:?}");
+            }
+        }
+    }
+
+    #[test]
     fn mars_and_mercury_stay_old() {
         for arch in ["mars-like", "mercury-like"] {
             for seed in 1..=40 {
@@ -368,6 +523,7 @@ mod tests {
         assert_eq!(fixture.len(), 210);
         let mut drifted = vec![];
         let mut skipped_volatile = 0;
+        let mut skipped_episode = 0;
         for (arch, seed, bits) in fixture {
             let p = params_of(&arch, seed).expect("drawn");
             let now = p.surface_age_ga.to_bits();
@@ -383,13 +539,20 @@ mod tests {
             // A liquid cycle renews the surface on purpose (#491): the
             // Titan-like rows move to 0.2-1 Ga, see `titan_is_young`.
             // So does mobile ice: the triton-like rows move under 0.1
-            // Ga, see `triton_is_young`.
+            // Ga, see `triton_is_young`. And a past tidal episode: the
+            // ganymede-like rows' main unit is now their grooved terrain,
+            // see `ganymede_has_grooved_terrain`.
             let main = p.model.as_ref().and_then(|m| m.terrain.main().copied());
             match main.map(|u| u.renewal) {
                 Some(Renewal::LiquidCycle) => continue,
                 Some(Renewal::VolatileIce) => {
                     assert!(arch.starts_with("triton-like"), "{arch} {seed}");
                     skipped_volatile += 1;
+                    continue;
+                }
+                Some(Renewal::TidalEpisode) => {
+                    assert!(arch.starts_with("ganymede-like"), "{arch} {seed}");
+                    skipped_episode += 1;
                     continue;
                 }
                 _ => {}
@@ -400,5 +563,6 @@ mod tests {
         }
         assert!(drifted.is_empty(), "{drifted:#?}");
         assert!(skipped_volatile > 0, "no triton-like row was skipped");
+        assert!(skipped_episode > 0, "no ganymede-like row was skipped");
     }
 }

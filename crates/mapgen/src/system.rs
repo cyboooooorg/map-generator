@@ -5867,9 +5867,14 @@ mod tests {
             let age = |name: &str| solar_aged_moon(name, seed).params.surface_age_ga;
             let callisto = age("callisto-like");
             assert!(callisto >= 3.0, "seed {seed}: Callisto {callisto} Ga");
+            // Ganymede's map shows its main unit, the grooved terrain a
+            // past tidal episode renewed (Showman & Malhotra 1997,
+            // doi:10.1006/icar.1996.5669): 1.7 Ga at 4.57 Ga, about the
+            // 2 Ga crater counts give it (Zahnle et al. 2003), under the
+            // stagnant lid's 0.7 to 0.95 scatter.
             let ganymede = age("ganymede-like");
             assert!(
-                (2.0..=4.4).contains(&ganymede),
+                (1.1..=1.7).contains(&ganymede),
                 "seed {seed}: Ganymede {ganymede} Ga"
             );
             let europa = age("europa-like");

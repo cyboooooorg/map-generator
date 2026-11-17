@@ -47,6 +47,7 @@
 //! for a giant world and a giant of a system alike (`of_giant`).
 use crate::giants::GiantKind;
 use crate::noise::{stream, stream_seed};
+use crate::planet::resonance::Placement;
 use crate::star::StarInfo;
 use crate::world::WorldParams;
 use serde::{Deserialize, Serialize};
@@ -351,7 +352,8 @@ impl AskedMoon {
             partner_mass_ratio: moon
                 .resonance
                 .as_ref()
-                .map(|r| pick(r.partner_mass_ratio) as f32),
+                .and_then(|r| r.partner_mass_ratio)
+                .map(|r| pick(r) as f32),
             inner_partner_mass_ratio: moon
                 .resonance
                 .as_ref()
@@ -1589,17 +1591,23 @@ impl MoonSystem {
                     }
                 })
                 .collect();
-            let slots = captured_slots(
+            let (slots, fixed_moved) = captured_slots(
                 p,
                 (m_g, r_g),
                 &slots,
                 &masses,
-                asked_disk.iter().map(|m| (m.a_radii, m.mass_earth)).chain(
-                    sided
-                        .iter()
-                        .zip(&partner_orbits)
-                        .filter_map(|((m, _), a)| a.map(|a| (a, m.mass_earth))),
-                ),
+                asked_disk
+                    .iter()
+                    .map(|m| {
+                        let asked = Placement::Asked {
+                            inward: m.inner_partner_mass_ratio.is_some(),
+                            outward: m.partner_mass_ratio.is_some(),
+                        };
+                        (m.a_radii, m.mass_earth, asked)
+                    })
+                    .chain(sided.iter().zip(&partner_orbits).filter_map(|((m, _), a)| {
+                        a.map(|a| (a, m.mass_earth, Placement::Partner))
+                    })),
             );
             for (k, (&a_radii, &mass)) in slots.iter().zip(&masses).enumerate() {
                 let icy = a_radii > ice_line;
@@ -1630,8 +1638,8 @@ impl MoonSystem {
             }
             // The asked ones, at their orbits pushed out of the rings and
             // the Roche limit as the chain is, after the drawn ones.
-            for m in &asked_disk {
-                let a_radii = m.a_radii.max(floor / 0.95);
+            for (m, moved) in asked_disk.iter().zip(&fixed_moved) {
+                let a_radii = moved.unwrap_or(m.a_radii).max(floor / 0.95);
                 let mut moon = regular_moon(
                     p,
                     &mut rng,
@@ -1652,10 +1660,12 @@ impl MoonSystem {
             // Their partners, at their orbits, made as the chain's moons
             // are. They carry no archetype: the passes below that drop a
             // moon do not keep them by it, so they are added after those.
+            let mut partner_moved = fixed_moved[asked_disk.len()..].iter();
             for ((partner, _), a_radii) in sided.iter().zip(&partner_orbits) {
                 let Some(a_radii) = *a_radii else {
                     continue;
                 };
+                let a_radii = partner_moved.next().copied().flatten().unwrap_or(a_radii);
                 let icy = a_radii > ice_line;
                 let bulk = if icy {
                     Bulk::cold(&mut rng)
@@ -1790,17 +1800,21 @@ const RING_CLEARANCE_RADII: f64 = 0.3;
 /// giant's tides have driven its moons into resonance
 /// ([`crate::planet::resonance::capture`]): the drawn moons, of `masses`
 /// kg, among the `fixed` ones (the asked moons and their partners, at
-/// their orbits in radii, of their masses in Earth masses), round a giant
+/// their orbits in radii, of their masses in Earth masses, with how each
+/// is placed), round a giant
 /// of `m_g` kg and radius `r_g` km, `p.age_gyr` old. A drawn moon the
 /// pair inside it captured sits at the commensurability, one left free
-/// out of [`crate::planet::resonance::RESONANCE_BAND`].
+/// out of [`crate::planet::resonance::RESONANCE_BAND`]. With them, the
+/// orbit of each fixed moon (in their order) that was moved out of a
+/// resonance its archetype names no partner in, `None` for one left in
+/// place.
 fn captured_slots(
     p: &WorldParams,
     (m_g, r_g): (f64, f64),
     slots: &[f64],
     masses: &[f64],
-    fixed: impl Iterator<Item = (f64, f64)>,
-) -> Vec<f64> {
+    fixed: impl Iterator<Item = (f64, f64, Placement)>,
+) -> (Vec<f64>, Vec<Option<f64>>) {
     use crate::planet::resonance::{Orbiter, capture};
     let radius_m = r_g * 1000.0;
     let orbiter = |a_radii: f64, mass_kg: f64| {
@@ -1814,25 +1828,33 @@ fn captured_slots(
             k2_over_q: 0.0,
         }
     };
-    // Each moon, with the slot it is (`None` for a fixed one).
-    let mut moons: Vec<(Orbiter, Option<usize>)> = slots
+    // Each moon, how it is placed, and the slot it is: a drawn one's, or
+    // a fixed one's (its index among them).
+    let mut moons: Vec<(Orbiter, Placement, Result<usize, usize>)> = slots
         .iter()
         .zip(masses)
         .enumerate()
-        .map(|(k, (&a, &m))| (orbiter(a, m), Some(k)))
-        .chain(fixed.map(|(a, m)| (orbiter(a, m * EARTH_MASS_KG), None)))
+        .map(|(k, (&a, &m))| (orbiter(a, m), Placement::Drawn, Ok(k)))
+        .chain(
+            fixed
+                .enumerate()
+                .map(|(j, (a, m, placed))| (orbiter(a, m * EARTH_MASS_KG), placed, Err(j))),
+        )
         .collect();
     moons.sort_by(|a, b| a.0.a_m.total_cmp(&b.0.a_m));
-    let placed: Vec<bool> = moons.iter().map(|(_, k)| k.is_none()).collect();
-    let mut orbiters: Vec<Orbiter> = moons.iter().map(|(o, _)| *o).collect();
+    let placed: Vec<Placement> = moons.iter().map(|(_, p, _)| *p).collect();
+    let mut orbiters: Vec<Orbiter> = moons.iter().map(|(o, _, _)| *o).collect();
     capture(m_g, radius_m, f64::from(p.age_gyr), &mut orbiters, &placed);
     let mut out = slots.to_vec();
-    for (o, (_, k)) in orbiters.iter().zip(&moons) {
-        if let Some(k) = k {
-            out[*k] = o.a_m / radius_m;
+    let mut fixed_moved = vec![None; moons.len() - slots.len()];
+    for (o, (before, _, k)) in orbiters.iter().zip(&moons) {
+        match k {
+            Ok(k) => out[*k] = o.a_m / radius_m,
+            Err(j) if o.a_m != before.a_m => fixed_moved[*j] = Some(o.a_m / radius_m),
+            Err(_) => {}
         }
     }
-    out
+    (out, fixed_moved)
 }
 
 /// The closest a giant's regular moon may orbit, in the giant's radii:
@@ -3184,6 +3206,7 @@ mod tests {
     #[test]
     fn an_asked_moon_is_drawn_first_and_the_others_around_it() {
         let titan = asked("titan-like");
+        let mut nudged = 0;
         for seed in 0..40 {
             let mut p = gas_giant(seed, 95.0, 9.5);
             p.asked_moons = vec![titan.clone()];
@@ -3197,7 +3220,11 @@ mod tests {
             let m = ours[0];
             let m_g = 95.0 * EARTH_MASS_KG;
             assert!((f64::from(m.mass_ratio) * 95.0 / titan.mass_earth - 1.0).abs() < 1e-4);
-            assert!((f64::from(m.semi_major_axis_radii) / titan.a_radii - 1.0).abs() < 1e-4);
+            // On its orbit, or nudged just out of the 2:1 band of a drawn
+            // neighbour, since it names no partner (at most 2 % in `a`).
+            let moved = (f64::from(m.semi_major_axis_radii) / titan.a_radii - 1.0).abs();
+            assert!(moved < 0.02, "seed {seed}: {moved}");
+            nudged += usize::from(moved >= 1e-4);
             assert!((f64::from(m.bulk.ice) - titan.ice_fraction).abs() < 1e-6);
             // It holds the disk: a dominant moon, the others light.
             assert_eq!(system.disk_shape, Some(DiskShape::Dominant));
@@ -3220,6 +3247,7 @@ mod tests {
                 );
             }
         }
+        assert!(nudged < 10, "{nudged} of 40 nudged");
     }
 
     #[test]
