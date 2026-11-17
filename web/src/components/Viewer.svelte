@@ -1891,11 +1891,12 @@
     if (!tides || km === null) return '';
     const name = (id: string) => world.systemNames[id] ?? sys?.bodies.find((b) => b.id === id)?.designation ?? id;
     const host = sys?.bodies.find((b) => b.id === tides.host);
+    const radii = km / Math.max(host?.physical.radius_km ?? 1, 1e-6);
     return help({
       host: name(tides.host),
       body: tides.satellite ? name(tides.satellite) : null,
       radius: withUnit(formatInt(km), 'km'),
-      radii: formatInt(km / Math.max(host?.physical.radius_km ?? 1, 1e-6)),
+      radii: radii < 10 ? formatUpTo(radii, 1) : formatInt(radii),
     });
   }
   /** Whether the sky has bodies other than the host planet: the spin switches' third square. */

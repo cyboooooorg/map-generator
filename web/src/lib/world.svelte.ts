@@ -136,7 +136,7 @@ export class LoadedWorld {
     this.systemNames = {};
     this.systemEvicted = [];
     this.systemExtras = {};
-    this.systemTides = {};
+      this.systemTides = {};
     this.subject = 'planet';
     this.starMode = 'system';
     this.pinnedPlanets = [];
@@ -170,7 +170,7 @@ export class LoadedWorld {
       this.systemNames = {};
       this.systemEvicted = [];
       this.systemExtras = {};
-    this.systemTides = {};
+      this.systemTides = {};
       this.systemBody = null;
       this.loadBody(null);
     } else if (starView) {
