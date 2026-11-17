@@ -657,7 +657,7 @@ pub(crate) struct Bare {
     pub condensed: Gases,
     /// Frost on the ground at the climate's surface temperature, bar, gas
     /// by gas ([`climate::frost`]).
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub frost: Gases,
 }
 
@@ -705,9 +705,11 @@ pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interio
 /// air ([`outgassed`], [`atmosphere`] under its [`shield`], [`non_thermal_loss`],
 /// [`methane_photolysis`], [`cold_trap`], [`photochemistry`]), its
 /// [`climate`] (with the SO₂ frost a heat pipe's volcanoes lay,
-/// [`atmosphere::volcanic_so2_frost_bar`], whose vapour joins the air
-/// after it, [`atmosphere::frost_so2_air`]), its [`life`] and the oxygen
-/// it makes. A runaway's water is
+/// [`atmosphere::volcanic_so2_frost_bar`], whose dayside vapour,
+/// [`atmosphere::volcanic_so2_vapour`], joins the air after it while it is
+/// a trace, [`atmosphere::TRACE_SO2_BAR`], and before it otherwise, the
+/// climate then solved again; none on a dayside above SO₂'s triple
+/// point), its [`life`] and the oxygen it makes. A runaway's water is
 /// the steam escape has left in its air.
 pub(crate) fn bare(
     context: &Context,
@@ -742,7 +744,7 @@ pub(crate) fn bare(
     let water_bar = w.kept_kg * bar_per_kg;
     // A heat pipe's volcanoes lay SO₂ frost, which the climate sees in
     // its albedo and whose vapour is the air's SO₂.
-    let so2_frost_bar = if r == crate::geology::Regime::HeatPipe {
+    let volcanic_bar = if r == crate::geology::Regime::HeatPipe {
         let supply = atmosphere::volcanic_so2_supply(heat, inputs);
         atmosphere::volcanic_so2_frost_bar(supply, &loss, bar_per_kg)
     } else {
@@ -750,30 +752,72 @@ pub(crate) fn bare(
     };
     // CO₂ the plasma exhausted is gone from the rocks' reach too: no
     // carbon cycle brings it back.
-    let carbon = climate::CarbonCycle {
+    let carbon = |so2_frost_bar: f64| climate::CarbonCycle {
         inventory_bar: if lost.co2 > 0.0 { kept.co2 } else { out.co2 },
         frozen_bar: photolysed.co2 - trapped.co2,
         so2_frost_bar,
         snowball_draw: inputs.snowball_draw,
     };
-    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
+    let (mut gases, mut so2_frost_bar) = (gases, volcanic_bar);
+    let (mut after, mut climate) = self::climate(
+        context,
+        gases,
+        &w,
+        r,
+        flux,
+        water_bar,
+        carbon(so2_frost_bar),
+    );
+    // The frost's vapour on the dayside: a trace joins the air after the
+    // climate; more goes into the air before it, out of the frost, and
+    // through the climate and the washing out as any SO₂ does. A dayside
+    // above SO₂'s triple point holds no frost: the body keeps the SO₂ its
+    // outgassing gave it.
+    let mut trace = 0.0;
+    if volcanic_bar > 0.0 {
+        let added = match atmosphere::volcanic_so2_vapour(volcanic_bar, climate.equilibrium_k) {
+            None => {
+                so2_frost_bar = 0.0;
+                Some(0.0)
+            }
+            Some(vapour) if vapour > atmosphere::TRACE_SO2_BAR => Some(vapour),
+            Some(vapour) => {
+                trace = vapour;
+                None
+            }
+        };
+        if let Some(vapour) = added {
+            gases.so2 += vapour;
+            so2_frost_bar = (so2_frost_bar - vapour).max(0.0);
+            (after, climate) = self::climate(
+                context,
+                gases,
+                &w,
+                r,
+                flux,
+                water_bar,
+                carbon(so2_frost_bar),
+            );
+        }
+    }
     let condensed = atmosphere::condense(gases, climate.temperature_k).1;
+    let life = life(inputs, &climate, context.age_gyr);
+    // Washed as the albedo washed it ([`climate::washed`]), so that the
+    // look's deck is the albedo's; then the trace of the volcanic frost's
+    // vapour.
+    let washed = climate::washed(oxygenate(after, &life), &w);
+    #[cfg(test)]
     let frost = climate::frost(
         &gases,
-        carbon.frozen_bar,
+        photolysed.co2 - trapped.co2,
         so2_frost_bar,
         climate.temperature_k,
         &after,
     );
-    let life = life(inputs, &climate, context.age_gyr);
-    // Washed as the albedo washed it ([`climate::washed`]), so that the
-    // look's deck is the albedo's; then the vapour of the volcanic frost,
-    // which the frost resupplies faster than anything takes it.
-    let surface_gases = atmosphere::frost_so2_air(
-        climate::washed(oxygenate(after, &life), &w),
-        frost.so2,
-        climate.equilibrium_k,
-    );
+    let surface_gases = Gases {
+        so2: washed.so2.max(trace),
+        ..washed
+    };
     Bare {
         surface: Surface {
             water: w,
@@ -798,6 +842,7 @@ pub(crate) fn bare(
         trapped,
         climate_gases: after,
         condensed,
+        #[cfg(test)]
         frost,
     }
 }

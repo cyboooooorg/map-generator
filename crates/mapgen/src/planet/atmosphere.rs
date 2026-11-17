@@ -811,13 +811,15 @@ const MAGMA_HEAT_J_KG: f64 = 2.1e6;
 /// erupts (`heat.tidal_w` over [`MAGMA_HEAT_J_KG`]) times the sulphur of
 /// its silicate (`inputs.volatiles.s` over the silicate share, that is
 /// [`super::inputs`]'s 250 ppm of rock), all of it degassed as SO₂
-/// ([`SO2_PER_S`]) into the vacuum or thin air of the vent. Only the
-/// tidal heat: a heat pipe fed by tides (Io) erupts it as fast as it
-/// comes, while radiogenic and secular heat leave by conduction in the
-/// other regimes; [`super::bare`] reads it for heat pipes only. About
-/// 1.7e4 kg/s for the model's Io (8.6e13 W of tides); its torus takes
-/// about 300 kg/s of it ([`so2_loss_kg_s`], at most [`PLASMA_LOSS_MAX`]),
-/// the rest falls back as frost.
+/// ([`SO2_PER_S`]) into the vacuum or thin air of the vent.
+/// [`super::bare`] reads it for heat pipes only. A scope limit: in a heat
+/// pipe all of the internal heat leaves through its vents, radiogenic and
+/// secular heat too, but only the tidal heat is counted here, so a heat
+/// pipe driven by its own young heat (a hot young planet) gets no
+/// volcanic SO₂ from this rule. About 1.7e4 kg/s for the model's Io
+/// (8.6e13 W of tides); its torus takes about 300 kg/s of it
+/// ([`so2_loss_kg_s`], at most [`PLASMA_LOSS_MAX`]), the rest falls back
+/// as frost.
 pub fn volcanic_so2_supply(heat: &super::InternalHeat, inputs: &PlanetInputs) -> f64 {
     let silicate = (1.0 - inputs.water_fraction - inputs.envelope_fraction)
         * (1.0 - inputs.core_mass_fraction);
@@ -828,21 +830,22 @@ pub fn volcanic_so2_supply(heat: &super::InternalHeat, inputs: &PlanetInputs) ->
     magma * inputs.volatiles.s.max(0.0) / silicate * SO2_PER_S
 }
 
-/// Time a heat-pipe body's SO₂ frost stays on its surface before fresh
-/// lava and plume deposits bury it, s: 150 000 years. Calibration on Io,
-/// no source: SO₂ frost covers most of Io's surface (Douté et al. 2001,
-/// Icarus 149, 107, doi:10.1006/icar.2000.6513; from memory, not
-/// checked), and this residence covers at least 80 % of the disc with
-/// frost on every draw of the `io-like` archetype, whose sulphur scatters
-/// by a factor of 20 (7.9e3 to 1.5e5 kg/s of SO₂ on seeds 1 to 40,
-/// 0.017 to 0.33 bar of frost against [`super::albedo`]'s layer of
-/// 0.02 bar). A shorter residence leaves its low-sulphur draws half
+/// Time over which a heat pipe's volcanic SO₂ accumulates as frost, s:
+/// 150 000 years. Not a measured burial time: the frost sublimes and
+/// condenses again each day and so stays on top of the lava and plume
+/// deposits that bury Io's surface at about a centimetre a year (from
+/// memory, not checked). It is the knob that, with
+/// [`super::albedo`]'s frost layer of 0.02 bar (itself calibrated on
+/// Io's old CO₂ frost), sets the share of the disc the frost covers.
+/// Calibration on Io, no source: SO₂ frost covers most of Io's surface
+/// (Douté et al. 2001, Icarus 149, 107, doi:10.1006/icar.2000.6513; from
+/// memory, not checked), and 150 kyr covers at least 80 % of the disc on
+/// every draw of the `io-like` archetype, whose sulphur scatters by a
+/// factor of 20 (7.9e3 to 1.5e5 kg/s of SO₂ on seeds 1 to 40, 0.017 to
+/// 0.33 bar of frost). A shorter one leaves its low-sulphur draws half
 /// bare, dark and too warm: their dayside frost then breathes more than
-/// 1e-8 bar. Not measured: Io's
-/// resurfacing, of the order of a centimetre a year (from memory, not
-/// checked), would bury a metre-thick deposit in about a century, but
-/// the frost sublimes and condenses again each day and so stays on top
-/// of what buries it.
+/// 1e-8 bar. On a warmer heat pipe, the share of it the dayside cannot
+/// keep frozen is in the air instead ([`volcanic_so2_vapour`]).
 const SO2_FROST_RESIDENCE_S: f64 = 150_000.0 * 3.155_76e7;
 
 /// SO₂ frost, bar, a body's volcanoes keep on its ground: what of their
@@ -880,26 +883,40 @@ fn so2_loss_kg_s(body: &LossContext) -> f64 {
 /// is at 106 to 117 K (Giles et al. 2024, arXiv:2405.19253; checked).
 const DAYSIDE_FACTOR: f64 = 1.189_207_115;
 
-/// `gases` with the SO₂ air a body's volcanic frost holds: the vapour of
-/// `so2_frost_bar` of frost ([`SO2_FROST`]) at the temperature of its
-/// dayside ([`DAYSIDE_FACTOR`] times `equilibrium_k`), at most the frost
-/// itself, where that is more than the air holds already. Io's dayside
-/// column, 1e16 to 2e17 cm⁻² (about 1 to 10 nbar), is that equilibrium
-/// (Giles et al. 2024, arXiv:2405.19253; checked).
+/// SO₂ partial pressure, bar, under which a volcanic frost's vapour is
+/// added to the air after the climate ([`volcanic_so2_vapour`],
+/// [`super::bare`]): 1e-7 bar. It is ten thousand times under the
+/// sulphuric deck's 1e-3 bar ([`super::albedo`]) and a thousandth of the
+/// 1e-4 bar that shields a surface from space weathering, and the climate
+/// gives SO₂ no greenhouse: under it the SO₂ moves neither the albedo nor
+/// the temperature, so solving the climate without it changes nothing.
+/// Io's 1e-9 bar lies well under it. A warmer frost breathes more and its
+/// vapour goes through the climate and the washing out instead.
+pub const TRACE_SO2_BAR: f64 = 1.0e-7;
+
+/// SO₂ air, bar, a body's volcanic frost of `so2_frost_bar` holds: its
+/// vapour ([`SO2_FROST`]) at the mean temperature of its dayside
+/// ([`DAYSIDE_FACTOR`] times `equilibrium_k`), at most the frost itself.
+/// Io's dayside column, 1e16 to 2e17 cm⁻² (about 1 to 10 nbar), is that
+/// equilibrium (Giles et al. 2024, arXiv:2405.19253; checked). `None`
+/// when that dayside is at or above SO₂'s triple point: the frost does
+/// not hold there, and the body keeps no volcanic frost or air beyond the
+/// SO₂ its outgassing already gives it ([`outgassed`], which counts the
+/// same sulphur over the body's age).
 ///
-/// It enters after the climate and the washing out ([`wash_out`]): the
-/// frost resupplies it within hours, faster than the plasma takes it
-/// ([`non_thermal_loss`], whose loss [`volcanic_so2_frost_bar`] already
-/// counts), and a nanobar weighs nothing in the climate.
-pub fn frost_so2_air(gases: Gases, so2_frost_bar: f64, equilibrium_k: f64) -> Gases {
-    if so2_frost_bar <= 0.0 {
-        return gases;
+/// The frost resupplies the air within hours, faster than the plasma
+/// takes it ([`non_thermal_loss`], whose rate [`volcanic_so2_frost_bar`]
+/// has already taken out of the supply), so it does not go through that
+/// step. Under [`TRACE_SO2_BAR`] it joins the air after the climate and
+/// the washing out ([`wash_out`], whose dry rule would scale a nanobar air
+/// by its own pressure over 10 bar); above it, before them. Below the
+/// triple point it is at most SO₂'s triple-point pressure, 0.0167 bar.
+pub fn volcanic_so2_vapour(so2_frost_bar: f64, equilibrium_k: f64) -> Option<f64> {
+    let dayside_k = equilibrium_k * DAYSIDE_FACTOR;
+    if dayside_k >= SO2_FROST.triple_k {
+        return None;
     }
-    let vapour = SO2_FROST.cap(so2_frost_bar, equilibrium_k * DAYSIDE_FACTOR);
-    Gases {
-        so2: gases.so2.max(vapour),
-        ..gases
-    }
+    Some(SO2_FROST.cap(so2_frost_bar.max(0.0), dayside_k))
 }
 
 /// Methane the star's ultraviolet destroys on a body, bar per Gyr, per
@@ -1174,10 +1191,17 @@ mod tests {
         assert_eq!(volcanic_so2_frost_bar(0.5 * loss, &io, bar_per_kg), 0.0);
         assert!(volcanic_so2_frost_bar(1.000_001 * loss, &io, bar_per_kg) < 1e-9);
         assert!(volcanic_so2_frost_bar(50.0 * loss, &io, bar_per_kg) > 0.02);
-        let none = Gases::default();
-        assert_eq!(frost_so2_air(none, 0.0, 95.0), none);
-        let so2 = frost_so2_air(none, 0.05, 95.0).so2;
+        assert_eq!(volcanic_so2_vapour(0.0, 95.0), Some(0.0));
+        let so2 = volcanic_so2_vapour(0.05, 95.0).expect("a frost");
         assert!((1e-10..=1e-8).contains(&so2), "{so2:e}");
+        // Warmer, more than a trace, at most the triple point's pressure;
+        // above SO₂'s triple point on the dayside, no frost holds.
+        let warm = volcanic_so2_vapour(0.05, 150.0).expect("a frost");
+        assert!(
+            warm > TRACE_SO2_BAR && warm <= SO2_FROST.triple_bar,
+            "{warm:e}"
+        );
+        assert_eq!(volcanic_so2_vapour(0.05, 180.0), None);
     }
 
     #[test]

@@ -294,12 +294,12 @@ mod tests {
     /// (Giles et al. 2024, arXiv:2405.19253, from 22 years of IRTF/TEXES
     /// spectra), far above the N₂ and CO₂ the plasma left it. On every
     /// seed its air is 1e-10 to 1e-8 bar of SO₂, more than its N₂ and CO₂,
-    /// and the frost on its ground is SO₂.
+    /// the frost on its ground is SO₂, and its Bond albedo is within 0.4
+    /// to 0.7 (0.63 observed, Simonelli & Veverka 1988, from memory).
     #[test]
     fn io_breathes_so2() {
         use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
         use std::collections::BTreeMap;
-        let mut albedo = Vec::new();
         for seed in 1..=40 {
             let request = SystemRequest::System(WholeSystemRequest {
                 planets: Some(BTreeMap::from([("io-like".to_string(), 1)])),
@@ -328,13 +328,62 @@ mod tests {
                 frost.so2 > frost.total() - frost.so2,
                 "seed {seed}: {frost:?}"
             );
-            albedo.push(s.climate.bond_albedo);
+            let a = s.climate.bond_albedo;
+            assert!((0.4..=0.7).contains(&a), "seed {seed}: albedo {a}");
         }
-        albedo.sort_by(f64::total_cmp);
-        println!(
-            "Io Bond albedo: {:.3} / {:.3} / {:.3}",
-            albedo[0], albedo[20], albedo[39]
-        );
+    }
+
+    /// A heat pipe warmer than Io keeps its volcanic SO₂ within the
+    /// chain. Io round a Jupiter at 2.5 AU: its dayside frost, under SO₂'s
+    /// triple point, breathes far more than a trace, which goes into the
+    /// air before the climate, so that air and frost together hold the
+    /// whole supply and the stored air, washed out as any SO₂ is, holds at
+    /// most that. Io round a Jupiter at 1 AU and an Io round an Earth-mass
+    /// host at 1 AU (no giant's plasma): their dayside is above the triple
+    /// point, so they keep no volcanic frost and no volcanic air, only the
+    /// SO₂ of their outgassing, finite and small.
+    #[test]
+    fn a_warm_heat_pipe_keeps_its_volcanic_so2() {
+        use crate::planet::atmosphere::{
+            SO2_FROST, TRACE_SO2_BAR, bar_per_kg, volcanic_so2_frost_bar, volcanic_so2_supply,
+        };
+        let io = moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041);
+        let near_earth = moon(0.015, 0.0, MoonBirth::Disk, EARTH_HOST_KG, 5.0e7, 0.02);
+        for (orbit, f, frost) in [
+            (2.5, &io, true),
+            (1.0, &io, false),
+            (1.0, &near_earth, false),
+        ] {
+            let m = model(orbit, f);
+            let s = m.surface.expect("surface");
+            assert_eq!(s.regime, Regime::HeatPipe, "{orbit} AU: {s:?}");
+            let context = planet_at(orbit).with_tide(f.tide);
+            let steps = crate::planet::explain::replay(&context, &m, &s);
+            let loss = crate::planet::loss_context(&context, &m.inputs, &m.interior);
+            let supply = volcanic_so2_supply(&m.heat, &m.inputs);
+            let inventory =
+                volcanic_so2_frost_bar(supply, &loss, bar_per_kg(m.inputs.mass_earth, &m.interior));
+            assert!(inventory > 0.0, "{orbit} AU: {supply}");
+            let vapour = steps.before.gases.so2 - steps.trapped.so2;
+            let so2 = s.gases.so2;
+            assert!(so2.is_finite() && so2 >= 0.0, "{orbit} AU: {s:?}");
+            assert!(so2 <= steps.before.gases.so2, "{orbit} AU: {s:?}");
+            if frost {
+                let held = vapour + steps.before.so2_frost_bar;
+                assert!(
+                    (TRACE_SO2_BAR..=SO2_FROST.triple_bar).contains(&vapour),
+                    "{orbit} AU: {vapour:e}"
+                );
+                assert!(
+                    (held / inventory - 1.0).abs() < 1e-9,
+                    "{orbit} AU: {held:e} of {inventory:e}"
+                );
+            } else {
+                assert_eq!(vapour, 0.0, "{orbit} AU");
+                assert_eq!(steps.before.so2_frost_bar, 0.0, "{orbit} AU");
+                assert!(so2 < SO2_FROST.triple_bar, "{orbit} AU: {s:?}");
+            }
+        }
     }
 
     /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its

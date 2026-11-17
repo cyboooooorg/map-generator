@@ -408,7 +408,7 @@ no class changes, and the thick airs of drawn moons (up to 36 bar round
 giants of 4 to 12 Jupiter masses) stay.
 
 **Volcanic SO₂** (`volcanic_so2_supply`, `volcanic_so2_frost_bar`,
-`frost_so2_air`; issue #525). A heat-pipe body erupts the heat its
+`volcanic_so2_vapour`; issue #525). A heat-pipe body erupts the heat its
 tides give it as magma, and the magma degasses its sulphur as SO₂,
 which falls back as frost and breathes a thin air over it. Io's air is
 that: a dayside column of 1e16 to 2e17 cm⁻² of SO₂ (about 1 to 10
@@ -432,27 +432,29 @@ air    = P_SO₂(2^(1/4) · T_eq)                 at most the frost
   2.1e6 J/kg: about 5e7 kg/s for Io's 1e14 W. Its sulphur is the
   silicate's (`s_sil`, the 250 ppm of `ROCK_S` times the body's
   scatter), all degassed as SO₂ (64 for 32) into the vent's vacuum.
-  Only the tidal heat counts, and only in a heat pipe: radiogenic and
-  secular heat leave by conduction in the other regimes, whose air keeps
-  the outgassed SO₂ of `outgassed` (Venus unchanged). The model's Io
-  gives about 1.7e4 kg/s.
+  Only in a heat pipe: the other regimes keep the outgassed SO₂ of
+  `outgassed` (Venus unchanged). And only the tidal heat, a scope limit:
+  in a heat pipe all of the internal heat leaves through the vents, but
+  a heat pipe driven by its own young heat (a hot young planet) gets no
+  volcanic SO₂ from this rule. The model's Io gives about 1.7e4 kg/s.
 - *Loss.* The non-thermal loss takes SO₂ at the rate per m² of the
   step above, photo-ions and escaping sputtered molecules, over the
   whole surface (`so2_loss_kg_s`): about 300 kg/s on Io, the order of the
   tonne per second its torus is fed. A supply under it keeps no frost
   and no air of its own; the frost starts from nothing at that line.
-- *Frost.* What the loss leaves lies on the ground for
-  `SO2_FROST_RESIDENCE_S`, 150 000 years, before lava and plume
-  deposits bury it. **Calibration** on Io, no source: SO₂ frost covers
-  most of Io (Douté et al. 2001, *Icarus* 149, 107; from memory, not
-  checked), and this residence covers at least 80 % of the disc on
-  every draw of `io-like`, whose sulphur scatters by a factor of 20
-  (7.9e3 to 1.5e5 kg/s, 0.017 to 0.33 bar of frost against the frost
-  layer of 0.02 bar); a shorter one leaves its low-sulphur draws half
-  bare, dark and warm enough to breathe more than 1e-8 bar. Io's
-  resurfacing, of the order of a centimetre a year (from memory, not
-  checked), would bury a metre of deposit in a century, but the frost
-  sublimes and condenses again each day and so stays on top. The climate
+- *Frost.* What the loss leaves accumulates as frost over
+  `SO2_FROST_RESIDENCE_S`, 150 000 years. That is not a measured burial
+  time (the frost sublimes and condenses again each day and so stays on
+  top of the lava and plume deposits that bury Io's surface at about a
+  centimetre a year, from memory, not checked): with the frost layer of
+  0.02 bar (itself calibrated on Io's old CO₂ frost), it is what sets
+  the share of the disc the frost covers. **Calibration** on Io, no
+  source: SO₂ frost covers most of Io (Douté et al. 2001, *Icarus* 149,
+  107; from memory, not checked), and 150 kyr covers at least 80 % of
+  the disc on every draw of `io-like`, whose sulphur scatters by a
+  factor of 20 (7.9e3 to 1.5e5 kg/s, 0.017 to 0.33 bar of frost); a
+  shorter one leaves its low-sulphur draws half bare, dark and warm
+  enough to breathe more than 1e-8 bar. The climate
   reads it as a frost (`climate::frost`, where the surface keeps it under
   SO₂'s sublimation pressure), with its own albedo, `SO2_FROST_ALBEDO`
   = 0.63, **calibration** on Io's Bond albedo (Simonelli & Veverka
@@ -473,11 +475,27 @@ air    = P_SO₂(2^(1/4) · T_eq)                 at most the frost
   `2^(1/4)` times the equilibrium temperature under the body's Bond
   albedo (`DAYSIDE_FACTOR`: the starlight over the dayside only; a heat
   pipe's internal heat leaves through its vents and lava, not through
-  the cold lid under the frost). It enters after the climate and the
-  washing out: the frost resupplies it within hours, faster than any
-  sink, and a nanobar weighs nothing in the climate. It does not go
-  through the non-thermal loss, whose rate is already taken out of the
-  supply.
+  the cold lid under the frost), at most the frost. The frost resupplies
+  it within hours, so it does not go through the non-thermal loss,
+  whose rate is already taken out of the supply. Under `TRACE_SO2_BAR`,
+  1e-7 bar (ten thousand times under the sulphuric deck's 1e-3 bar, a
+  thousandth of the 1e-4 bar that shields a surface, and SO₂ has no
+  greenhouse in the climate), it moves neither the albedo nor the
+  temperature: it joins the stored air after the climate and the
+  washing out, whose dry rule would otherwise scale a nanobar air by its
+  own pressure over 10 bar. Above it, on a warmer heat pipe, the vapour
+  leaves the frost and goes into the air before the climate, which is
+  solved again with it, and the washing out treats it as any SO₂: the
+  stored deck is the albedo's, and air and frost together hold the
+  whole supply. Below the triple point the vapour is at most its
+  pressure, 0.0167 bar. A dayside at or above SO₂'s triple point holds
+  no frost: such a body keeps no volcanic frost or air beyond the SO₂
+  its outgassing gives it (`outgassed`, which counts the same sulphur
+  over its age), so a lava world's tides add no SO₂. Io round a Jupiter
+  at 2.5 AU breathes 1.7e-4 bar off 0.037 bar of frost and keeps 3e-9
+  bar once washed; at 1 AU, or round an Earth-mass host at 1 AU with
+  no plasma, its dayside is above the triple point and it keeps only
+  its outgassed trace.
 
 Over seeds 1 to 40 of `archetype_census`, `io-like` breathes 2.4e-10 to
 5.5e-9 bar of SO₂ (median 8.9e-10), against 1.8e-14 to 1.1e-12 of N₂

@@ -104,7 +104,7 @@ const FROST_LAYER_BAR: f64 = 0.02;
 /// not checked). Calibration on Io: darker than [`FROST_ALBEDO`], since
 /// Io's frost lies mixed with its sulphur and silicate deposits. With it
 /// the frost's dayside lies at Io's 106 to 117 K
-/// ([`super::atmosphere::frost_so2_air`]); under [`FROST_ALBEDO`] it would
+/// ([`super::atmosphere::volcanic_so2_vapour`]); under [`FROST_ALBEDO`] it would
 /// lie near 103 K, and its vapour at 4e-11 bar, under Io's nanobar.
 const SO2_FROST_ALBEDO: f64 = 0.63;
 
