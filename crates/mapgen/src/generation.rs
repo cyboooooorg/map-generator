@@ -1922,7 +1922,8 @@ const LAND_TOLERANCE: f64 = 0.003;
 /// its biomes, the hydraulic erosion left out: the noise relief (its
 /// plates taken from `frame` when given), flattened on a small body
 /// ([`relief_share`]), the craters of the wet era, the volcanic cones,
-/// the craters of the dry era and the lava floods, then the dry band
+/// the fractures of the geysers ([`crate::stripes::apply_stripes`]), the
+/// craters of the dry era and the lava floods, then the dry band
 /// lifted again ([`keep_band_dry`]). The craters are those the grid
 /// resolves ([`base_min_diameter_km`]). The noise is band-limited for a
 /// map whose rows are `row_km` km (the world's: see
@@ -1958,6 +1959,7 @@ fn cratered_relief(
         .par_iter_mut()
         .zip(&cones)
         .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
+    crate::stripes::apply_stripes(&mut elevation, &grid, p);
     craters.apply(&mut elevation, &grid, Era::Dry);
     keep_band_dry(p, &grid, &mut elevation, None);
     elevation
@@ -2408,6 +2410,9 @@ pub fn generate_with_progress(
         .zip(&cones)
         .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
     drop(cones);
+    // The fractures of the geysers, as young as the cones: kept in the
+    // elevation without the young craters, which the epochs draw on.
+    crate::stripes::apply_stripes(&mut elevation, &grid, params);
     // The young craters' height change, kept to export the elevation
     // without them (the surface the time slider draws them on).
     let mut young_craters = elevation.clone();
@@ -2418,6 +2423,8 @@ pub fn generate_with_progress(
     let pixel_km = f64::from(grid.circumference_km) / f64::from(width);
     let mut albedo = CraterField::new(params, RAY_MIN_PIXELS * pixel_km).albedo(&grid);
     darken_maria(&mut albedo, &mare);
+    // The fractures of the geysers, darker than the plains.
+    crate::stripes::stripe_albedo(&mut albedo, &grid, params);
     young_craters
         .par_iter_mut()
         .zip(&elevation)

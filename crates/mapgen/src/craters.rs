@@ -40,6 +40,7 @@
 use crate::biome::Biome;
 use crate::geo::Grid;
 use crate::noise::{smoothstep, stream, stream_seed};
+use crate::planet::geysers::YoungTerrain;
 use crate::world::WorldParams;
 use rayon::prelude::*;
 use std::f64::consts::PI;
@@ -212,7 +213,7 @@ const FRESH_FLOOR: f32 = 0.25;
 const FRESH_EJECTA: f32 = 0.5;
 const FRESH_RAYS: f32 = 0.5;
 /// Ray lengths, in crater radii (Tycho's reach about 35).
-const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
+pub(crate) const RAY_LENGTH: (f64, f64) = (8.0, 30.0);
 /// Smallest crater the air of Earth lets through, km; it scales as the
 /// air's column `P / g` (its mass per square metre) against Earth's, to
 /// the power 0.75 (Venus, a column about 100 times Earth's: about 3 km).
@@ -470,6 +471,10 @@ pub struct CraterField {
     /// The epoch shown, Ga before present (negative in the future): only
     /// the craters formed by then exist, worn for the time since.
     epoch_ga: f64,
+    /// The young terrain the fractures of the world's geysers resurface
+    /// (see [`crate::planet::geysers::YoungTerrain`]): no crater centred
+    /// in it is kept, at any epoch, as on Enceladus's south polar terrain.
+    young: Option<YoungTerrain>,
 }
 
 /// Lava flooding the floor of a large basin (a lunar mare): the floor is
@@ -696,6 +701,11 @@ impl CraterField {
             rays: p.pressure_bar < crate::atmosphere::LIQUID_WATER_BAR,
             locked_since_ga,
             epoch_ga: epoch_ga.max(-FUTURE_GA),
+            young: p
+                .model
+                .as_ref()
+                .and_then(|m| m.geysers.as_ref())
+                .map(|g| YoungTerrain::of(g, radius_km)),
         }
     }
 
@@ -711,6 +721,12 @@ impl CraterField {
     /// Whether a crater has formed by the epoch.
     fn formed(&self, crater: &Crater) -> bool {
         crater.age_ga >= self.epoch_ga
+    }
+
+    /// Whether a crater has formed by the epoch and lies outside the young
+    /// terrain: those [`Self::new_at`] and [`Self::near`] keep.
+    fn kept(&self, crater: &Crater) -> bool {
+        self.formed(crater) && !self.young.is_some_and(|y| y.covers(crater.centre))
     }
 
     /// Every crater of the world `p` of `min_diameter_km` or more that has
@@ -735,7 +751,7 @@ impl CraterField {
                         (0..cells)
                             .flat_map(move |j| field.cell_craters(population, octave, face, i, j))
                     })
-                    .filter(|c| c.diameter_km >= min_diameter_km && field.formed(c))
+                    .filter(|c| c.diameter_km >= min_diameter_km && field.kept(c))
                     .collect();
                 craters.extend(found);
             }
@@ -832,7 +848,7 @@ impl CraterField {
             found.extend(
                 keys.into_iter()
                     .flat_map(|(face, i, j)| self.cell_craters(population, octave, face, i, j))
-                    .filter(|c| (min_km..max_km).contains(&c.diameter_km) && self.formed(c))
+                    .filter(|c| (min_km..max_km).contains(&c.diameter_km) && self.kept(c))
                     .filter(|c| {
                         let reach = self.reach(c);
                         let dot = c.centre[0] * centre[0]
@@ -1165,7 +1181,7 @@ impl CraterField {
 
     /// Angular reach of a crater's ejecta, radians: no pixel farther from
     /// its centre changes.
-    fn reach(&self, crater: &Crater) -> f64 {
+    pub(crate) fn reach(&self, crater: &Crater) -> f64 {
         EJECTA_RADII * (1.0 + 2.0 * RIM_JITTER) * 0.5 * crater.diameter_km / self.radius_km
     }
 

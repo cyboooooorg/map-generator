@@ -86,7 +86,14 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// new quantities for them. Worlds of version 23 would show Venus, Mars,
 /// Titan and Triton with the old temperatures and clouds, so they are
 /// refused; [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 8. Version
-/// 26 draws only the noise octaves the grid resolves
+/// 25 cuts the fractures of a body's geysers into its world, troughs
+/// between ridges as Enceladus's tiger stripes, darker than the plains,
+/// and erases the craters of the young terrain around them
+/// ([`crate::stripes`], `CraterField`). Only such a body's world changes,
+/// so worlds of version 24 still load (it keeps its craters and has no
+/// stripes until it is regenerated); the stored fields are the same and
+/// [`crate::system::SYSTEM_FORMAT_VERSION`] stays as it is.
+/// Version 26 draws only the noise octaves the grid resolves
 /// (`generation::Sampler::resolved`: no detail finer than two rows, which
 /// drew rays converging on the poles) and gives the relief normals the
 /// pixel's true east-west width up to the poles: the same seed gives a
@@ -1361,6 +1368,22 @@ mod tests {
         assert!(json.get("preset").is_none());
         assert!(json.get("planet_type").is_none());
         std::fs::remove_dir_all(&world_dir).unwrap();
+    }
+
+    /// Worlds of format 24 lack only the tiger stripes of a body with
+    /// geysers (format 25): they still load.
+    #[test]
+    fn format_24_world_still_loads() {
+        const { assert!(MIN_FORMAT_VERSION <= 24 && FORMAT_VERSION > 24) };
+        let (_, world_dir) = exported_earth("format-24");
+        let path = world_dir.join("raw_data/world.json");
+        let mut json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        json["format_version"] = 24.into();
+        std::fs::write(&path, json.to_string()).unwrap();
+        let loaded = load_layers(&world_dir);
+        std::fs::remove_dir_all(&world_dir).unwrap();
+        assert!(loaded.is_ok(), "{:?}", loaded.err());
     }
 
     #[test]

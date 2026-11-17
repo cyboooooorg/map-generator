@@ -42,7 +42,7 @@
   import { clockDays, seasonOfYearDay, yearDayAt } from '../lib/seasonClock';
   import { temperatureRange } from '../lib/temperatureRange';
   import { cloudTint, namedSeason, skyFromWorld, sunDeclinationDeg } from '../lib/sky';
-  import { dustOf, innerRingOf } from '../lib/ringMoons';
+  import { dustFedBy, dustOf, innerRingOf } from '../lib/ringMoons';
   import { planetLook, type PlanetLook, type SkyBodyShow } from '../lib/skyBodies';
   import { localGroup, migrateDisplay, nextSky, parseExposure, parseSky, partsOn, pressBody, pressParts, pressScope, scopeOn, skyGroups, type ScopePair } from '../lib/switches';
   import { bodyTitle, forgetTold, remadeToasts } from '../lib/evicted';
@@ -827,8 +827,36 @@
     const stormId = giant && meta ? meta.biomes.find((b) => b.key === 'GiantStorm')?.id : undefined;
     view?.setGiantStorms(stormId !== undefined && layers ? giantStorms(layers.biomes, layers.width, layers.height, stormId) : []);
   });
+  // The jets over the geyser fractures of the moon shown, in the world's own
+  // radius (its circumference), so they fall on the stripes the map holds.
+  $effect(() => view?.setJets(meta?.model?.geysers ?? null, meta ? meta.circumference_km / (2 * Math.PI) : 0));
   // The dust rings its system drew for the giant shown.
   $effect(() => view?.setDustRings(giant && sysBody ? [...dustOf(sysBody), ...innerRingOf(sysBody)] : []));
+  // A sparse cloud of grains round each moon feeding a dust ring of the
+  // giant shown or of the host in a moon's sky, drawn alike in both: the
+  // giant and the moon by their index in systemSky's order (the system's
+  // bodies but the one shown), which setSkyBodies keeps, null for the body
+  // shown (in the feeding moon's own sky the cloud surrounds it).
+  $effect(() => {
+    const others = sys && sysBody ? sys.bodies.filter((b) => b.id !== sysBody.id) : [];
+    const own = !!sysBody && sysPlanet?.id === sysBody.id;
+    const host = own ? null : others.findIndex((b) => b.id === sysPlanet?.id);
+    const rings = sysPlanet && (own ? giant : host !== null && host >= 0) ? dustOf(sysPlanet) : [];
+    view?.setDustClouds(
+      rings.flatMap((d) => {
+        const source = d.source === sysBody?.id ? null : others.findIndex((b) => b.id === d.source);
+        return source === -1 ? [] : [{ colour: d.colour, source }];
+      }),
+      host,
+    );
+  });
+  // A halo of grains round a moon that vents or feeds a dust ring, in its
+  // close-up, denser over its venting pole.
+  $effect(() => {
+    const geysers = meta?.model?.geysers ?? null;
+    const feeds = !!sysBody && !!sysPlanet && sysBody.id !== sysPlanet.id && dustFedBy(sysBody, sysPlanet) !== null;
+    view?.setDustHalo(geysers || feeds ? { south: geysers ? geysers.south : null } : null);
+  });
   $effect(() => {
     // No detail while the slider moves: the reduced preview shows through.
     // A giant has no ground to detail.
@@ -1474,6 +1502,11 @@
     const given = parent.params.given_rings;
     return given ? given.rings : (meta?.host?.giant.rings ?? null);
   });
+  /** The host's dust rings (plume ring, E ring...) in a moon's sky, the camera inside them included (the D ring is part of hostRings). */
+  const hostDust = $derived.by(() => {
+    const parent = sysBody?.parent ? sys?.bodies.find((b) => b.id === sysBody.parent) : null;
+    return parent ? dustOf(parent) : [];
+  });
   /** Whether this view draws the rocks of the rings round a ring moon (high quality only). */
   const drawsRingRocks = currentProfile().ringRocks;
   /** The ring moon shown's rocks at the system's time, while they are asked for. */
@@ -1542,7 +1575,7 @@
     };
     const bodies = (sysSky?.bodies ?? []).map((body, k) =>
       sysSky?.ids[k] === parent
-        ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings }
+        ? { ...body, ...(hostLook?.id === parent && hostLook.system === world.systemId ? hostLook.look : {}), show: hostShow, axialTiltDeg: planetTilt, rings: hostRings, dust: hostDust }
         : { ...body, show: otherShow },
     );
     view?.setSkyBodies(bodies);
