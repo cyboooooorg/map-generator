@@ -786,9 +786,12 @@ impl DetailWorld {
     fn tile_stripes(&self, tile: TileId, pixel_km: f64) -> Option<Vec<(f32, f32)>> {
         let (stripes, _) = self.stripes.as_ref()?;
         let side = TILE_SIZE as usize + 2;
+        // Not clamped: a point beyond a pole (a border pixel, or a
+        // pixel's footprint on the polar row) lies on its other side, as
+        // `tile_elevation` reads the ground there.
         let at = |x: f64, y: f64| {
             let (lon, lat) = tile.lon_lat(x, y);
-            sphere(lon, lat.clamp(-PI / 2.0, PI / 2.0), 1.0)
+            sphere(lon, lat, 1.0)
         };
         let angle = |a: [f64; 3], b: [f64; 3]| {
             (a[0] * b[0] + a[1] * b[1] + a[2] * b[2])
