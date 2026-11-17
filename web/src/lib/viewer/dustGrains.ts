@@ -16,6 +16,7 @@ import {
   Points,
   ShaderMaterial,
   SRGBColorSpace,
+  Vector2,
   Vector3,
   type IUniform,
 } from 'three';
@@ -77,6 +78,17 @@ export const CLOUD_SKIP = 1.1;
 /** Least and most a cloud grain is drawn across, CSS pixels (look calibration). */
 export const CLOUD_MIN_PX = 1;
 export const CLOUD_MAX_PX = 1.5;
+
+/**
+ * Size of a cloud grain, CSS pixels, once its giant looks small (look
+ * calibration): seen from afar, as from a moon zoomed out, the grains
+ * grow from `CLOUD_MIN_PX`..`CLOUD_MAX_PX` to this, so that the cloud
+ * still stands out of the stars. Full below `CLOUD_FAR_HOST_PX` of the
+ * giant's apparent radius, none above `CLOUD_NEAR_HOST_PX`.
+ */
+export const CLOUD_FAR_PX = 2.5;
+export const CLOUD_FAR_HOST_PX = 100;
+export const CLOUD_NEAR_HOST_PX = 400;
 
 /** The halo's inner and outer radii, in the moon's radii (look calibration). */
 export const HALO_INNER = 1.05;
@@ -284,6 +296,8 @@ const grainVertex = /* glsl */ `
   uniform float uPixelRatio;
   uniform float uMinPx;
   uniform float uMaxPx;
+  uniform float uFarPx;
+  uniform vec2 uFarHostPx;
   varying float vAlpha;
   ${dustPhaseGlsl}
   void main() {
@@ -292,7 +306,14 @@ const grainVertex = /* glsl */ `
     vec3 caster = vec3(0.0);
     float casterRadius = 1.0;
     float size = uWorldSize;
+    float minPx = uMinPx;
+    float maxPx = uMaxPx;
     if (uOrbit > 0.5) {
+      // Larger dots while the giant looks small (CLOUD_FAR_PX).
+      float hostPx = uHostScale * uPxScale / max(length(cameraPosition - uHostCentre), 1e-6);
+      float far = 1.0 - smoothstep(uFarHostPx.x, uFarHostPx.y, hostPx);
+      minPx = mix(uMinPx, uFarPx, far);
+      maxPx = mix(uMaxPx, uFarPx, far);
       float a = length(uMoon.xz);
       float angle = atan(uMoon.z, uMoon.x) + position.x;
       float r = a * (1.0 + position.y);
@@ -321,7 +342,7 @@ const grainVertex = /* glsl */ `
     vAlpha = clamp(light, 0.0, 1.0) * uFade;
     vec4 view = viewMatrix * vec4(p, 1.0);
     float px = size * uPxScale / max(-view.z, 1e-6);
-    gl_PointSize = clamp(px, uMinPx, uMaxPx) * sqrt(max(light, 1.0)) * uPixelRatio;
+    gl_PointSize = clamp(px, minPx, maxPx) * sqrt(max(light, 1.0)) * uPixelRatio;
     gl_Position = projectionMatrix * view;
     gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
   }
@@ -416,6 +437,8 @@ export function createGrains(
       uPixelRatio: { value: 1 },
       uMinPx: { value: look.minPx },
       uMaxPx: { value: look.maxPx },
+      uFarPx: { value: CLOUD_FAR_PX },
+      uFarHostPx: { value: new Vector2(CLOUD_FAR_HOST_PX, CLOUD_NEAR_HOST_PX) },
       uCore: { value: look.core },
       uLevel: { value: look.level },
       uColour: { value: new Color().setRGB(...colour, SRGBColorSpace) },

@@ -5,7 +5,10 @@ import {
   CLOUD_ALPHA,
   CLOUD_LEVEL,
   CLOUD_LOOK,
+  CLOUD_FAR_HOST_PX,
+  CLOUD_FAR_PX,
   CLOUD_MAX_PX,
+  CLOUD_NEAR_HOST_PX,
   createGrains,
   GRAIN_SHINE_MIN,
   grainCount,
@@ -139,6 +142,10 @@ describe('moon cloud grains', () => {
   it('draws a few hundred fine dots that blend and never saturate', () => {
     expect(MOON_CLOUD_GRAINS).toBeLessThanOrEqual(500);
     expect(CLOUD_MAX_PX).toBeLessThanOrEqual(1.5);
+    // Larger only while the giant looks small, as from a moon zoomed out.
+    expect(CLOUD_FAR_PX).toBeGreaterThan(CLOUD_MAX_PX);
+    expect(CLOUD_FAR_PX).toBeLessThanOrEqual(2.5);
+    expect(CLOUD_FAR_HOST_PX).toBeLessThan(CLOUD_NEAR_HOST_PX);
     // Back-lit the brightest grain stays under full opacity (no widening),
     // and however many overlap a pixel tends to CLOUD_LEVEL of the colour.
     expect(grainLight(1, 1, CLOUD_ALPHA).opacity).toBeLessThan(1);
