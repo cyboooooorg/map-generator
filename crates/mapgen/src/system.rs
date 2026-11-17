@@ -5850,7 +5850,7 @@ mod tests {
     }
 
     /// The surface of a stagnant ice lid is as young as its heat makes it
-    /// (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), in a system of the
+    /// (`planet::surface_age::ICE_LID_HALF_FLUX_W_M2`), in a system of the
     /// Sun's age: Callisto's ancient (about 4 Ga), Ganymede's 2 to 4 Ga,
     /// Europa's under 0.1 Ga (40 to 90 Ma, Zahnle et al. 2003,
     /// doi:10.1016/S0019-1035(03)00048-4), Io's none (its volcanoes'),

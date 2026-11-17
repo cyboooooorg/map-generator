@@ -79,6 +79,7 @@ pub mod moon;
 pub mod reference;
 pub mod regime;
 pub mod resonance;
+pub mod surface_age;
 pub mod xuv;
 
 pub use atmosphere::{
@@ -250,6 +251,10 @@ pub struct PlanetModel {
     /// before it existed.
     #[serde(default)]
     pub moment_of_inertia: f64,
+    /// The parts of its surface and their ages ([`surface_age::terrain`]);
+    /// empty in a model stored before it existed.
+    #[serde(default)]
+    pub terrain: surface_age::Terrain,
 }
 
 /// The inputs a planet formed with, as a request sets them: what
@@ -538,7 +543,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     };
     let ice_shell = ice_shell(&interior, &heat, surface.as_ref(), nh3_ice);
     let moment_of_inertia = differentiation::moment_of_inertia(&interior);
-    let model = PlanetModel {
+    let mut model = PlanetModel {
         drawn_mass_earth,
         inputs,
         interior,
@@ -550,7 +555,9 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         ice_shell,
         geysers: None,
         moment_of_inertia,
+        terrain: surface_age::Terrain::default(),
     };
+    model.terrain = surface_age::terrain(&model, context.age_gyr);
     (model, air)
 }
 

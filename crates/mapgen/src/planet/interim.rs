@@ -164,45 +164,19 @@ const HYDROCARBON_EROSION: f32 = 0.5;
 /// 0.3 to 0.8 Ga from its craters (Strom, Schaber & Dawson 1994,
 /// *JGR* 99, about 0.3 Ga; McKinnon et al. 1997, *Venus II*, about
 /// 0.75 Ga).
-const EPISODIC_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.3, 0.8]);
+pub(super) const EPISODIC_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.3, 0.8]);
 
 /// Age of the surface of a world in the heat-pipe regime, Ga: Io's, which
 /// shows no impact crater, so that its volcanoes resurface it faster than
 /// craters form; younger than about a million years (Johnson et al. 1979,
 /// *Nature* 280: about 1 cm of lava a year).
-const HEAT_PIPE_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.0, 0.001]);
+pub(super) const HEAT_PIPE_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.0, 0.001]);
 
 /// Share of the system's age a stagnant lid's surface keeps, a range:
 /// Mars's oldest terrains are about 4.1 Ga old and Mercury's about 4.0
 /// (Fassett 2016, *JGR Planets* 121), 0.7 to 0.95 of 4.57 Ga
 /// allowing for younger lids.
-const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]);
-
-/// Internal heat flux, W/m², under which a stagnant ice lid keeps half the
-/// surface age a rock lid would ([`STAGNANT_SURFACE_AGE_SHARE`]), and the
-/// steepness of the fall past it ([`ICE_LID_EXPONENT`]): the share kept is
-/// `1 / (1 + (F / F½)^n)`. An ice shell resurfaces (convection, diapirs,
-/// cryovolcanism, tectonics) far more readily than rock, ice flowing and
-/// melting within a hundred kelvin of its surface, and the conductive lid
-/// over its warm ice thins as `1 / F` (`ice_shell::conductive_shell_m`).
-/// Calibration on the Galilean moons, no source for the law itself: 10
-/// mW/m² and 4 keep Callisto's surface (about 2 to 5 mW/m² of radiogenic
-/// heat in the model) about 4 Ga old, saturated with craters (Zahnle et
-/// al. 2003, doi:10.1016/S0019-1035(03)00048-4), Ganymede's (its dark
-/// terrain about 4 Ga, its grooved terrain about 2 Ga) 2 to 4 Ga, and
-/// Europa's (35 mW/m² of tidal heat, see `heat::ICY_K2_OVER_Q`) under
-/// 0.1 Ga, near its 40 to 90 Ma (Zahnle et al. 2003; Bierhaus et al.
-/// 2009, *Europa*, University of Arizona Press). A rock lid keeps its
-/// age (Mars and Mercury, about 20 mW/m² today, keep 4 Ga surfaces).
-const ICE_LID_HALF_FLUX_W_M2: f64 = 0.010;
-/// See [`ICE_LID_HALF_FLUX_W_M2`].
-const ICE_LID_EXPONENT: i32 = 4;
-
-/// Share of a rock lid's surface age that a stagnant ice lid pushing out
-/// `flux_w_m2` keeps ([`ICE_LID_HALF_FLUX_W_M2`]).
-fn ice_lid_age_share(flux_w_m2: f64) -> f64 {
-    1.0 / (1.0 + (flux_w_m2 / ICE_LID_HALF_FLUX_W_M2).powi(ICE_LID_EXPONENT))
-}
+pub(super) const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]);
 
 /// Share of a hydrocarbon world's surface that is dry land: Titan's lakes
 /// and seas cover about 1 % of it (Hayes 2016,
@@ -555,7 +529,7 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///     ([`EPISODIC_SURFACE_AGE_GA`]), heat-pipe Io's
 ///     ([`HEAT_PIPE_SURFACE_AGE_GA`]), a stagnant lid most of the
 ///     system's age ([`STAGNANT_SURFACE_AGE_SHARE`]), an ice lid less the
-///     more heat it lets out ([`ICE_LID_HALF_FLUX_W_M2`]: Europa's is
+///     more heat it lets out ([`super::surface_age::ICE_LID_HALF_FLUX_W_M2`]: Europa's is
 ///     young, Callisto's old);
 ///   - its gravity, the model's (the star's tides, the moons, the tilt
 ///     they leave it and its tidal flats see the model's mass);
@@ -620,13 +594,14 @@ pub fn params_for(
         Some(Regime::Episodic) => EPISODIC_SURFACE_AGE_GA.pick(rng),
         Some(Regime::HeatPipe) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),
         Some(Regime::Stagnant) => {
-            let age = placed.age_gyr * STAGNANT_SURFACE_AGE_SHARE.pick(rng);
-            if crate::generation::model_crust_kind(model) == crate::generation::CrustKind::Ice {
-                let flux = model.heat.flux_w_m2(model.interior.radius_earth);
-                age * ice_lid_age_share(flux) as f32
-            } else {
-                age
-            }
+            let main = match model.terrain.main() {
+                Some(unit) => *unit,
+                None => *super::surface_age::terrain(model, f64::from(placed.age_gyr))
+                    .units
+                    .first()
+                    .expect("a terrain has a unit"),
+            };
+            main.age_gyr as f32 * STAGNANT_SURFACE_AGE_SHARE.pick(rng)
         }
     };
     let radius_km = (model.interior.radius_earth * crate::exomoon::EARTH_M / 1000.0) as f32;

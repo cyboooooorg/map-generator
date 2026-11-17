@@ -6,7 +6,7 @@
 //! ```
 //!
 //! Each row prints the body's class, surface temperature, air (total and
-//! main gases), surface liquid, surface age and crater rate, mass, radius,
+//! main gases), surface liquid, surface age and crater rate, terrain units (renewal, age, share), mass, radius,
 //! tidal heat and, for icy bodies, the ice shell and the geysers.
 use std::collections::BTreeMap;
 
@@ -89,6 +89,20 @@ fn main() {
                 p.impact_factor.unwrap_or(f32::NAN),
                 m.heat.tidal_w,
             );
+            let units: Vec<String> = m
+                .terrain
+                .units
+                .iter()
+                .map(|u| {
+                    format!(
+                        "{:?} {:.3} Ga {:.0} %",
+                        u.renewal,
+                        u.age_gyr,
+                        u.share * 100.0
+                    )
+                })
+                .collect();
+            line += &format!(" | units [{}]", units.join(", "));
             if let Some(s) = m.surface.as_ref() {
                 let g = &s.gases;
                 line += &format!(
