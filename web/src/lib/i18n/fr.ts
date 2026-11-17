@@ -196,7 +196,7 @@ export const fr: Messages = {
     pressure: 'Pression et gaz',
     liquid: 'Liquide en surface',
     waterKept: 'Eau conservée',
-    liquids: { none: 'aucun', water: 'eau', hydrocarbons: 'hydrocarbures', lava: 'lave' },
+    liquids: { none: 'aucun', water: 'eau', hydrocarbons: 'hydrocarbures', nitrogen: 'azote', lava: 'lave' },
     life: 'Vie',
     lifeNone: 'aucune',
     lifeArose: 'microbienne',

@@ -570,16 +570,31 @@ understate the destruction round red dwarfs, if anything).
 body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
 the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
-0.0606 bar, 29 kJ/mol; CH₄ 90.7 K, 0.117 bar, 9.1 kJ/mol; N₂ 63.15 K,
-0.125 bar, 6.3 kJ/mol; values from the NIST WebBook from memory, not
-checked). This freezes Titan's CO₂ and NH₃. Above the triple point the
+0.0606 bar, 29 kJ/mol; CH₄ 90.7 K, 0.117 bar, 9.1 kJ/mol; values from
+the NIST WebBook from memory, not checked). N₂'s curve is measured
+(issue #529): triple point 63.14 K and 0.1253 bar (Angus, de Reuck et
+al. 1979 and Jacobsen, Stewart et al. 1986, through the NIST WebBook,
+checked), and below it the polynomial fits `ln p = Σ Aᵢ / Tⁱ` of Fray &
+Schmitt 2009 (*Planet. Space Sci.* 57, 2053,
+doi:10.1016/j.pss.2009.09.011), as Lisse et al. 2021 (*Icarus* 356,
+114072, doi:10.1016/j.icarus.2020.114072, supplementary Table 2)
+reproduce them (`N2_ALPHA_FIT`, `N2_BETA_FIT`): β-N₂ from the triple
+point down to the α–β transition at 35.61 K (Scott 1976, from memory),
+α-N₂ below. The phase of each fit is read off its values (the β fit
+gives 0.1215 bar at the triple point, the α fit 0.317 bar), the paper
+itself not read. Each fit is pinned to the curve above it (the β fit to
+NIST's triple point, 3 % higher; the α fit to the β curve at the
+transition, 2.6 % apart), and under 10 K, where the α polynomial turns
+over, the curve goes on with its slope there. It gives 1.4e-5 bar at
+37.2 K: Triton's N₂ ice, at 37 to 38 K, is β-N₂. This freezes Titan's
+CO₂ and NH₃. Above the triple point the
 gas stays; whether it rains out depends on the surface temperature,
 which the climate sets. Water is left to the climate, and so are methane
 (issue #443) and nitrogen (issue #464): their air moves the surface
 temperature they condense at, so the climate condenses them at the
 temperature it solves for (`condense`; nitrogen over its own ice, with
-activity 1, its liquid above 63.15 K up to its critical point,
-126.19 K). The CO₂ the cold trap froze out stays on the ground as a
+activity 1, its liquid above 63.14 K up to its critical point,
+126.19 K, through its normal boiling point, 77.34 K). The CO₂ the cold trap froze out stays on the ground as a
 frost wherever the surface is cold enough to keep it (below CO₂'s
 triple point, beyond what the air can take back at the surface's
 sublimation pressure), and the frosts of N₂, CH₄ and CO₂ brighten the
@@ -658,7 +673,7 @@ masses, ice shares and orbits):
 | Ganymede, Callisto | exospheres of 3e-12 bar (CO₂), 97.9 K, Bond albedo 0.60 | exospheres of 1e-12 (O₂) and 7.5e-12 bar (CO₂) |
 | Io | heat pipe, 9.3e-10 bar of SO₂ over its SO₂ frost (N₂ and CO₂ an exosphere of 3e-12 bar), 105.2 K, Bond albedo 0.63 | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
 | Europa | exosphere of 3e-12 bar (CO₂), 98.0 K | exosphere of about 1e-12 bar (O₂) |
-| Triton | 1.9e-5 bar of N₂ over its frost at 36.4 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
+| Triton | 1.7e-5 bar of N₂ over its frost at 37.5 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
 | Moon | 1e-12 bar | airless |
 
 Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
@@ -667,21 +682,28 @@ plasma torus exhausts them, see *Non-thermal loss*); its air is the
 SO₂ of its volcanic frost (see *Volcanic SO₂*). Triton's N₂ is its frost's vapour
 pressure at its surface temperature, which the frost's own albedo sets
 (issue #464; before, the cold trap held it at the equilibrium
-temperature under the reference albedo 0.3, 47 K, and kept 1.9e-3 bar).
-Its 36.4 K is 1.6 K under the observed 38 K, which the grey climate
-reaches with N₂ ice's emissivity of 1; the model's N₂ sublimation curve
-(6.3 kJ/mol from the triple point) gives 1.4e-5 bar at 35.9 K, where the
-observed pair puts it near 37.5 K, so the two departures cancel in the
-pressure. A lower emissivity of N₂ ice (about 0.6 to 0.8) would warm it
-to about 38 K but, with this curve, triple its air: both would have to
-change together. The `triton-like` archetype ranges from 35.3 to 36.9 K
-and 0.94e-5 to 2.4e-5 bar of N₂ over seeds 1 to 10.
+temperature under the reference albedo 0.3, 47 K, and kept 1.9e-3 bar),
+and its emissivity (`N2_ICE_EMISSIVITY`, see *Climate and surface
+liquid*). The curve and the emissivity were set together (issue #529):
+Fray & Schmitt's β-N₂ curve puts the observed 14 µbar at 37.2 K, within
+a kelvin of the observed 38 K, and the emissivity 0.89 centres the
+`triton-like` archetype between them: 37.2 to 37.6 K and 1.40e-5 to
+1.77e-5 bar of N₂ over seeds 1 to 40 (median 37.4 K and 1.57e-5 bar).
+Before, with N₂ ice a black body and the curve 6.3 kJ/mol from memory,
+it ranged from 35.4 to 37.0 K and 1.04e-5 to 2.52e-5 bar. That range
+also needed the light of its Neptune narrowed: the N₂ vapour about
+doubles every kelvin, and the `neptune-like` archetype drew ±9 % of
+insolation (0.0010 to 0.0012 of the Earth's), ±0.75 K on Triton, which
+no emissivity fits into 1e-5 to 2e-5 bar. It now draws what Neptune
+itself receives over its orbit, 0.00109 to 0.00113 (perihelion 29.80
+and aphelion 30.34 AU).
 
 ## Climate and surface liquid
 
 `planet::climate` (called by `planet_model`) gives the mean
 surface temperature, the liquid on the surface (`SurfaceLiquid`: `none`,
-`water`, `hydrocarbons` or `lava`) and whether the carbonate thermostat
+`water`, `hydrocarbons`, `nitrogen` or `lava`), the emissivity its
+surface radiated with (`Climate::emissivity`) and whether the carbonate thermostat
 holds the temperature (`Climate::regulated`). It takes the gases after
 `photochemistry` and returns them with the CO₂ the thermostat leaves and
 the water vapour the climate sets.
@@ -971,6 +993,25 @@ from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
 0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64, Triton 0.75 and
 Io 0.63.
 
+**Emissivity** (`climate::emissivity`, `N2_ICE_EMISSIVITY`, issue #529).
+The surface radiates as a black body except under nitrogen frost, which
+radiates with an emissivity of 0.89 over the share of the disc its own
+amount covers (`frost / 0.02 bar` of N₂ alone: the most volatile frost
+condenses last and lies over the others, as Triton's N₂ lies over its
+CO₂). A grey surface sends out `ε σ T⁴`: `surface_temperature_k` and the
+wet balance take the column's outgoing radiation times `ε`, as through a
+transparent air, which holds over a nitrogen frost (its vapour is at
+most 0.125 bar). The emissivity is solved in the same fixed point as the
+albedo, damped the same way, and stored with the climate so that it
+reproduces (worlds stored before it read 1). 0.89 is a calibration on
+Triton (above); Stansberry, Pisano & Yelle 1996 (*Planet. Space Sci.*
+44, 945, doi:10.1016/0032-0633(96)00001-3, abstract checked) compute
+0.85 for β-N₂ of 1 cm grains and 0.40 for 1 mm grains (α-N₂ 0.30 and
+0.11), and Bertrand et al. 2022 (*Icarus* 373, 114764) model Triton
+with 0.8: the calibration sits just above the coarse-grained end, a
+lower value warming the model's Triton, under its frost albedo of 0.75,
+past 38 K. One value serves α- and β-N₂.
+
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
 bistable: the temperate one, started from a warm planet with no ice, and
@@ -1021,17 +1062,32 @@ and pressure, in this order:
   pressure (the same Clausius–Clapeyron, 373 K at 1 atm, capped at the
   critical point), above the triple-point pressure, with water kept out
   of a runaway;
-- `hydrocarbons` between methane's freezing point, lowered by the
-  nitrogen of the air dissolved in it (`methane_freezes_k`: 90.67 K with
-  no N₂, about 78 K under Titan's 1.45 bar, see
-  [atmospheres.md](atmospheres.md)), and ethane's
+- `hydrocarbons` between the freezing point of the sea
+  (`sea_freezes_k`) and ethane's
   boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
   at 1 atm with 14.7 kJ/mol, capped at its critical 305 K; NIST values
   from memory, not checked), where there is enough methane to condense:
   the air's methane reaches the vapour of a Titan sea at the surface
   temperature, half of pure methane's saturation pressure
   (`methane_sea_vapour_bar`), so that a trace of methane makes no lake
-  and none forms past methane's critical point (190.56 K);
+  and none forms past methane's critical point (190.56 K). The sea
+  freezes at methane's freezing point lowered by the nitrogen of the air
+  dissolved in it (`methane_freezes_k`: 90.67 K with no N₂, about 78 K
+  under Titan's 1.45 bar, see [atmospheres.md](atmospheres.md)); where
+  nitrogen itself condenses (`condense`), the air holds pure nitrogen's
+  saturation and the sea it condenses into is nitrogen-rich, liquid down
+  to nitrogen's triple point, 63.14 K, where its methane freezes with it
+  (issue #524). That is a simple rule: an ideal solution would stay
+  liquid colder (the Schröder–van Laar equations meet at about 48 K and
+  two-thirds nitrogen, with nitrogen's enthalpy of fusion, 0.72 kJ/mol,
+  from memory), but N₂ and CH₄ freeze into solid solutions an ideal
+  liquidus does not describe (not checked), so the rule errs towards
+  freezing;
+- `nitrogen` where nitrogen condenses above its triple point (63.14 K)
+  with no methane liquid: under its boiling point at its partial
+  pressure and its critical point, 126.19 K (`condense`); under its
+  triple point it is a frost (`climate::frost`). The look draws no
+  nitrogen sea: the map of such a body is its icy surface;
 - `none` otherwise.
 
 Calibration targets, through the whole chain from the reference bodies'

@@ -219,7 +219,7 @@ export const en = {
     pressure: 'Pressure and gases',
     liquid: 'Surface liquid',
     waterKept: 'Water kept',
-    liquids: { none: 'none', water: 'water', hydrocarbons: 'hydrocarbons', lava: 'lava' } satisfies Record<string, string>,
+    liquids: { none: 'none', water: 'water', hydrocarbons: 'hydrocarbons', nitrogen: 'nitrogen', lava: 'lava' } satisfies Record<string, string>,
     life: 'Life',
     lifeNone: 'none',
     lifeArose: 'microbial',

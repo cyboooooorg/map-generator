@@ -315,6 +315,13 @@ fn ice_line_share(temperature_k: f64) -> f64 {
     1.0 - x2.clamp(0.0, 1.0).sqrt()
 }
 
+/// Share of a body's disc, 0 to 1, that `frost` (bar, gas by gas, all
+/// together) covers: `frost / FROST_LAYER_BAR`, all of it from that
+/// amount on ([`FROST_LAYER_BAR`]).
+pub(crate) fn frost_cover(frost: &Gases) -> f64 {
+    (frost.total().max(0.0) / FROST_LAYER_BAR).min(1.0)
+}
+
 /// What covers a body at `temperature_k` under `gases` with `water`
 /// and `frost` (bar, gas by gas) of N₂, CH₄, CO₂ and SO₂ frost on its
 /// ground ([`Cover`]).
@@ -347,7 +354,7 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost: &Gases) ->
     } else {
         0.0
     };
-    let frost = (frost_bar.max(0.0) / FROST_LAYER_BAR).min(1.0);
+    let frost = frost_cover(frost);
     let ocean = sea * (1.0 - ice) * (1.0 - frost);
     let ice = ice * (1.0 - frost);
     let land = (1.0 - ocean - ice - frost).max(0.0);

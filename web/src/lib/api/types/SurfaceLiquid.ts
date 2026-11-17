@@ -2,5 +2,10 @@
 
 /**
  * The liquid that covers part of a surface, if any.
+ *
+ * `Hydrocarbons` is methane with the nitrogen and ethane it dissolves,
+ * a nitrogen-rich liquid where nitrogen itself condenses into it;
+ * `Nitrogen` is condensed nitrogen with no methane liquid (see
+ * [`liquid`]).
  */
-export type SurfaceLiquid = "none" | "water" | "hydrocarbons" | "lava";
+export type SurfaceLiquid = "none" | "water" | "hydrocarbons" | "nitrogen" | "lava";

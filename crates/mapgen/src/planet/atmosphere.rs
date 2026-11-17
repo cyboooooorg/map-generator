@@ -583,39 +583,48 @@ const CH4_PER_LYMAN_ALPHA_PHOTON: f64 = 13.9;
 const R_GAS: f64 = 8.314;
 
 /// Triple point of nitrogen, K: under it, the nitrogen a surface
-/// condenses is a frost (NIST Chemistry WebBook, 63.15 K; from memory,
-/// not checked).
-pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.15;
+/// condenses is a frost, above it a liquid (Jacobsen, Stewart et al.
+/// 1986 and Angus, de Reuck et al. 1979, 63.14 K, through the NIST
+/// Chemistry WebBook; checked there).
+pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.14;
 
-/// A gas's triple point (K, bar) and its enthalpy of sublimation
-/// (J/mol). Values from memory (NIST Chemistry WebBook), not checked:
-/// CO₂ 216.6 K and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm
-/// sublimation at 194.7 K); NH₃ 195.4 K and 0.0606 bar, 29 kJ/mol; CH₄
-/// 90.7 K and 0.117 bar, 9.1 kJ/mol; N₂ 63.15 K and 0.125 bar,
-/// 6.3 kJ/mol. SO₂'s is [`SO2_FROST`].
+/// A gas's triple point (K, bar) and its sublimation curve below it.
+/// Values from memory (NIST Chemistry WebBook), not checked: CO₂ 216.6 K
+/// and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm sublimation at
+/// 194.7 K); NH₃ 195.4 K and 0.0606 bar, 29 kJ/mol; CH₄ 90.7 K and
+/// 0.117 bar, 9.1 kJ/mol. SO₂'s is [`SO2_FROST`], N₂'s [`N2_FROST`].
 pub struct Frost {
     /// Temperature of the triple point, K.
     pub triple_k: f64,
     /// Pressure of the triple point, bar.
     pub triple_bar: f64,
-    /// Enthalpy of sublimation, J/mol.
-    pub sublimation_j_mol: f64,
+    /// The sublimation curve from the triple point down.
+    pub sublimation: Sublimation,
+}
+
+/// How a [`Frost`]'s sublimation pressure falls below its triple point.
+pub enum Sublimation {
+    /// Clausius–Clapeyron from the triple point with this enthalpy of
+    /// sublimation, J/mol, held constant.
+    Enthalpy(f64),
+    /// A measured curve: `ln(p / p_triple)` at the temperature, K.
+    Fit(fn(f64) -> f64),
 }
 
 const CO2_FROST: Frost = Frost {
     triple_k: 216.6,
     triple_bar: 5.185,
-    sublimation_j_mol: 26_100.0,
+    sublimation: Sublimation::Enthalpy(26_100.0),
 };
 const NH3_FROST: Frost = Frost {
     triple_k: 195.4,
     triple_bar: 0.0606,
-    sublimation_j_mol: 29_000.0,
+    sublimation: Sublimation::Enthalpy(29_000.0),
 };
 const CH4_FROST: Frost = Frost {
     triple_k: 90.7,
     triple_bar: 0.117,
-    sublimation_j_mol: 9_100.0,
+    sublimation: Sublimation::Enthalpy(9_100.0),
 };
 /// SO₂: triple point 197.64 K and 0.0167 bar (Giauque & Stephenson 1938,
 /// J. Am. Chem. Soc. 60, 1389, through the NIST Chemistry WebBook;
@@ -631,24 +640,95 @@ const CH4_FROST: Frost = Frost {
 pub const SO2_FROST: Frost = Frost {
     triple_k: 197.64,
     triple_bar: 0.0167,
-    sublimation_j_mol: 4510.0 * R_GAS,
+    sublimation: Sublimation::Enthalpy(4510.0 * R_GAS),
 };
+
+/// N₂: triple point [`NITROGEN_TRIPLE_K`] and 0.1253 bar (Angus, de
+/// Reuck et al. 1979, through the NIST Chemistry WebBook; checked
+/// there), and the sublimation curve of Fray & Schmitt 2009
+/// ([`nitrogen_sublimation`]).
 const N2_FROST: Frost = Frost {
     triple_k: NITROGEN_TRIPLE_K,
-    triple_bar: 0.125,
-    sublimation_j_mol: 6_300.0,
+    triple_bar: 0.1253,
+    sublimation: Sublimation::Fit(nitrogen_sublimation),
 };
+
+/// Fray & Schmitt 2009 (Planet. Space Sci. 57, 2053,
+/// doi:10.1016/j.pss.2009.09.011), their Table 2 fits of N₂'s
+/// sublimation pressure, `ln(p / 1 bar) = Σ Aᵢ / Tⁱ`, as Lisse et al.
+/// 2021 (Icarus 356, 114072, doi:10.1016/j.icarus.2020.114072,
+/// supplementary Table 2; checked there) reproduce them: `N2-1` for
+/// cubic α-N₂, `N2-2` for hexagonal β-N₂. The phases are read off the
+/// curves (the paper itself was not read): `N2-2` gives 0.1215 bar at the
+/// triple point, `N2-1` 0.317 bar; the two meet within 3 % at the α–β
+/// transition, [`NITROGEN_ALPHA_BETA_K`].
+const N2_ALPHA_FIT: [f64; 6] = [12.40, -807.4, -3926.0, 62_970.0, -463_300.0, 1_325_000.0];
+/// See [`N2_ALPHA_FIT`].
+const N2_BETA_FIT: [f64; 5] = [8.514, -458.4, -19_870.0, 480_000.0, -4_524_000.0];
+
+/// The α–β transition of solid nitrogen at low pressure, K: 35.61 K
+/// (Scott 1976, Phys. Rep. 27, 89; from memory, not checked). Triton's
+/// and Pluto's N₂ ice, at 37 to 40 K, is β-N₂.
+const NITROGEN_ALPHA_BETA_K: f64 = 35.61;
+
+/// The coldest temperature, K, at which [`N2_ALPHA_FIT`] is read: the
+/// polynomial still falls with the temperature there (it turns over
+/// under about 6 K); colder, its curve goes on with its slope at this
+/// temperature (a constant enthalpy, about 7.4 kJ/mol). Under 1e-33 bar
+/// either way.
+const NITROGEN_FIT_FLOOR_K: f64 = 10.0;
+
+/// `Σ Aᵢ xⁱ` and its derivative in `x`, at `x` = `1 / T`.
+fn fit_at(coefficients: &[f64], x: f64) -> (f64, f64) {
+    coefficients
+        .iter()
+        .rev()
+        .fold((0.0, 0.0), |(value, slope), &a| {
+            (value * x + a, slope * x + value)
+        })
+}
+
+/// `ln(p / p_triple)` of N₂ ice at `temperature_k`, under its triple
+/// point: Fray & Schmitt's β-N₂ curve ([`N2_BETA_FIT`]) down to the α–β
+/// transition, their α-N₂ curve ([`N2_ALPHA_FIT`]) below it. Each is
+/// pinned to the curve above it, the β curve to the triple point of
+/// [`N2_FROST`] (it falls 3 % short of 0.1253 bar there) and the α curve
+/// to the β curve at the transition (2.6 % apart), so that the curve is
+/// continuous; within those few percent, the fits as published. At 37.5 K,
+/// 1.68e-5 bar; Triton's 14 µbar (Tyler et al. 1989) sits at 37.2 K.
+fn nitrogen_sublimation(temperature_k: f64) -> f64 {
+    let ln = |fit: &[f64], t: f64| fit_at(fit, 1.0 / t).0;
+    let beta = |t: f64| ln(&N2_BETA_FIT, t) - ln(&N2_BETA_FIT, NITROGEN_TRIPLE_K);
+    let t = temperature_k.max(1.0);
+    if t >= NITROGEN_ALPHA_BETA_K {
+        return beta(t);
+    }
+    let alpha = |t: f64| {
+        ln(&N2_ALPHA_FIT, t) - ln(&N2_ALPHA_FIT, NITROGEN_ALPHA_BETA_K)
+            + beta(NITROGEN_ALPHA_BETA_K)
+    };
+    if t >= NITROGEN_FIT_FLOOR_K {
+        return alpha(t);
+    }
+    let floor = 1.0 / NITROGEN_FIT_FLOOR_K;
+    let slope = fit_at(&N2_ALPHA_FIT, floor).1;
+    alpha(NITROGEN_FIT_FLOOR_K) + slope * (1.0 / t - floor)
+}
 
 impl Frost {
     /// The partial pressure the gas keeps at `temperature_k`: below its
-    /// triple point, at most its sublimation pressure (Clausius–Clapeyron
+    /// triple point, at most its sublimation pressure ([`Sublimation`]
     /// from the triple point); at or above it, all of it.
     fn cap(&self, partial_bar: f64, temperature_k: f64) -> f64 {
         if temperature_k >= self.triple_k {
             return partial_bar;
         }
-        let exponent =
-            -self.sublimation_j_mol / R_GAS * (1.0 / temperature_k.max(1.0) - 1.0 / self.triple_k);
+        let exponent = match self.sublimation {
+            Sublimation::Enthalpy(j_mol) => {
+                -j_mol / R_GAS * (1.0 / temperature_k.max(1.0) - 1.0 / self.triple_k)
+            }
+            Sublimation::Fit(curve) => curve(temperature_k),
+        };
         partial_bar.min(self.triple_bar * exponent.exp())
     }
 }
@@ -711,11 +791,14 @@ pub(crate) const SEA_METHANE_SHARE: f64 = 0.5;
 /// - methane over a sea of methane, nitrogen and ethane
 ///   ([`SEA_METHANE_SHARE`]), normal boiling point 111.67 K and critical
 ///   point 190.56 K;
-/// - nitrogen over its own ice (activity 1: a pure frost, which Triton's
-///   N₂ air sits in equilibrium with; issue #464), normal boiling point
-///   77.36 K and critical point 126.19 K.
+/// - nitrogen over its own ice or liquid (activity 1: a pure frost,
+///   which Triton's N₂ air sits in equilibrium with, issue #464; a
+///   condensed liquid is nitrogen-rich, issue #524), normal boiling
+///   point 77.34 K and critical point 126.19 K (Jacobsen, Stewart et al.
+///   1986, through the NIST Chemistry WebBook; checked there).
 ///
-/// Points from the NIST Chemistry WebBook (from memory, not checked).
+/// Methane's points from the NIST Chemistry WebBook (from memory, not
+/// checked).
 const CONDENSING: [Condensable; 2] = [
     Condensable {
         frost: CH4_FROST,
@@ -726,7 +809,7 @@ const CONDENSING: [Condensable; 2] = [
     },
     Condensable {
         frost: N2_FROST,
-        boils_k: 77.36,
+        boils_k: 77.34,
         critical_k: 126.19,
         activity: 1.0,
         of: |g| &mut g.n2,
@@ -1127,6 +1210,32 @@ mod tests {
     fn earths_air_keeps_no_sulphur_dioxide() {
         let g = surface_air("Earth");
         assert!(g.so2 < 1e-6, "{g:?}");
+    }
+
+    /// N₂ ice's sublimation curve is Fray & Schmitt's (issue #529):
+    /// NIST's triple point, Triton's 14 µbar at 37.2 K (β-N₂), continuous
+    /// across the α–β transition and falling with the temperature down
+    /// past the fit's floor.
+    #[test]
+    fn nitrogen_frost_follows_fray_and_schmitt() {
+        let p = |t: f64| N2_FROST.cap(f64::INFINITY, t);
+        assert!((p(NITROGEN_TRIPLE_K - 1e-9) - 0.1253).abs() < 1e-6);
+        // The β fit as published, 3 % low at the triple point, pinned there.
+        let beta = (fit_at(&N2_BETA_FIT, 1.0 / 37.2).0).exp() * 0.1253 / 0.1215;
+        assert!((p(37.2) / beta - 1.0).abs() < 0.01, "{} {beta}", p(37.2));
+        assert!((p(37.2) - 1.4e-5).abs() < 0.05e-5, "{}", p(37.2));
+        let at = NITROGEN_ALPHA_BETA_K;
+        assert!((p(at - 1e-9) / p(at) - 1.0).abs() < 1e-6);
+        let mut last = p(NITROGEN_TRIPLE_K - 1e-9);
+        for tenth in (20..631).rev() {
+            let now = p(f64::from(tenth) / 10.0);
+            assert!(
+                now < last && now > 0.0,
+                "{} K: {now}",
+                f64::from(tenth) / 10.0
+            );
+            last = now;
+        }
     }
 
     #[test]

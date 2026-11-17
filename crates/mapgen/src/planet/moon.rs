@@ -532,6 +532,23 @@ mod tests {
         assert!(a >= 0.6, "{s:?}");
     }
 
+    /// Triton at 38 K (37-39) under 1.4e-5 bar of N₂ (1e-5 to 2e-5) on
+    /// every seed of its archetype (spec goal 6, issue #529): its air is
+    /// the vapour of its β-N₂ frost (Fray & Schmitt 2009, through
+    /// [`super::super::atmosphere`]), at the temperature that frost's
+    /// emissivity gives it.
+    #[test]
+    fn triton_is_38_kelvin() {
+        for seed in 1..=40 {
+            let m = archetype_moon("triton-like", seed);
+            let s = m.surface.expect("surface");
+            let (t, n2) = (s.climate.temperature_k, s.gases.n2);
+            assert!((37.0..=39.0).contains(&t), "seed {seed}: {t} K {s:?}");
+            assert!((1e-5..=2e-5).contains(&n2), "seed {seed}: {n2:e} bar {s:?}");
+            assert!(s.climate.bond_albedo >= 0.6, "seed {seed}: {s:?}");
+        }
+    }
+
     /// A moon's albedo comes from its own cover, not its planet's
     /// (Review Focus 4): Titan under its haze (0.27, Li et al. 2011), an
     /// airless icy Europa (0.68, Buratti & Veverka 1983) and Io under its

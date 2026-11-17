@@ -479,8 +479,12 @@ fn temperature_tree(
     let flux = model
         .heat
         .flux_w_m2(surface_interior(context, model).radius_earth);
-    let bare_k = surface_temperature_k(context, &Gases::default(), 0.0);
-    let air_k = surface_temperature_k(context, gases, 0.0);
+    // The surface radiates with the emissivity the climate settled on
+    // (below 1 under nitrogen frost): the equilibrium temperature here is
+    // the surface's, `T_eq ε^-¼`.
+    let emissivity = surface.climate.emissivity;
+    let bare_k = surface_temperature_k(context, &Gases::default(), 0.0, emissivity);
+    let air_k = surface_temperature_k(context, gases, 0.0, emissivity);
     // Water whose vapour followed the temperature was solved with it: its
     // balance is recomputed the same way, since the column with the
     // vapour held fixed can balance at another temperature (it jumps
@@ -491,9 +495,15 @@ fn temperature_tree(
             model.inputs.mass_earth,
             &surface_interior(context, model),
         );
-        wet_temperature_k(context, gases, flux, surface.water.kept_kg * bar_per_kg)
+        wet_temperature_k(
+            context,
+            gases,
+            flux,
+            surface.water.kept_kg * bar_per_kg,
+            emissivity,
+        )
     } else {
-        surface_temperature_k(context, gases, flux)
+        surface_temperature_k(context, gases, flux, emissivity)
     };
     let stored = surface.climate.temperature_k;
     if (full_k - stored).abs() > TEMPERATURE_TOLERANCE_K {

@@ -398,7 +398,12 @@ Their near-black brown is a calibration with those maps as its target.
   pure methane's 90.67 K with no nitrogen, never below 70.4 K. It is a
   simple fit, not the full phase diagram: it leaves the ethane out, which
   lowers the freezing point further (the binary rule gives 81 and 85 K for
-  Richardson's two liquids), so it errs towards freezing. Liquid methane
+  Richardson's two liquids), so it errs towards freezing. Where nitrogen
+  itself condenses (below about 84 K under 2 bar of it), the sea is
+  nitrogen-rich and stays liquid down to nitrogen's triple point,
+  63.14 K (`sea_freezes_k`, issue #524); nitrogen condensed with no
+  methane is a sea of its own (`nitrogen`), and below its triple point
+  a frost. Liquid methane
   is stable under any air above its triple-point pressure (0.1169 bar,
   NIST), from which `planet::classify` names a hydrocarbon world. A lake
   needs enough methane to condense, the vapour of a Titan sea at the

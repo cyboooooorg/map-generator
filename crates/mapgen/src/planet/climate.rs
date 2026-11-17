@@ -11,11 +11,18 @@
 use serde::{Deserialize, Serialize};
 
 use super::albedo::{REFERENCE_ALBEDO, bond_albedo, cover, sulphuric_deck};
-use super::atmosphere::{SEA_METHANE_SHARE, condense, condensed_air, methane_saturation_bar};
+use super::atmosphere::{
+    NITROGEN_TRIPLE_K, SEA_METHANE_SHARE, condense, condensed_air, methane_saturation_bar,
+};
 use super::{Context, Gases, Water, column};
 use crate::geology::Regime;
 
 /// The liquid that covers part of a surface, if any.
+///
+/// `Hydrocarbons` is methane with the nitrogen and ethane it dissolves,
+/// a nitrogen-rich liquid where nitrogen itself condenses into it;
+/// `Nitrogen` is condensed nitrogen with no methane liquid (see
+/// [`liquid`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -23,6 +30,7 @@ pub enum SurfaceLiquid {
     None,
     Water,
     Hydrocarbons,
+    Nitrogen,
     Lava,
 }
 
@@ -41,6 +49,12 @@ pub struct Climate {
     /// in a water runaway.
     pub bond_albedo: f64,
     pub liquid: SurfaceLiquid,
+    /// Emissivity the surface radiated under ([`emissivity`]): 1 but
+    /// where nitrogen frost covers it. Like the Bond albedo, the one the
+    /// climate was solved under, so that it reproduces. 1 in the worlds
+    /// stored before it.
+    #[serde(default = "black_body")]
+    pub emissivity: f64,
     /// The carbonate thermostat holds the temperature at
     /// [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
     pub regulated: bool,
@@ -55,6 +69,50 @@ pub struct Climate {
 
 /// Stefan–Boltzmann constant, W/(m²·K⁴) (CODATA 2018, exact).
 const SIGMA: f64 = 5.670_374_419e-8;
+
+/// The emissivity of a black body, which the surfaces of the worlds
+/// stored before [`Climate::emissivity`] radiated as.
+fn black_body() -> f64 {
+    1.0
+}
+
+/// Bolometric emissivity of nitrogen ice: 0.89. Calibration on Triton:
+/// with Fray & Schmitt's sublimation curve ([`super::atmosphere`]) and
+/// the model's frost albedo, it puts the triton-like archetype's surface
+/// at 37.2 to 37.6 K under 1.4e-5 to 1.8e-5 bar of N₂ (seeds 1-40,
+/// median 37.4 K and 1.57e-5 bar), against 38 K and the 14 µbar Voyager 2
+/// measured (Tyler et al. 1989, doi:10.1126/science.246.4936.1466): the
+/// curve gives 14 µbar at 37.2 K, so the two observations fit together
+/// within a kelvin, and the calibration centres the archetype between
+/// them. Its N₂ ice is β-N₂, whose
+/// emissivity Stansberry, Pisano & Yelle 1996 (Planet. Space Sci. 44,
+/// 945, doi:10.1016/0032-0633(96)00001-3; abstract checked) compute at
+/// 0.85 for 1 cm grains and 0.40 for 1 mm grains (α-N₂, under 35.6 K,
+/// 0.30 and 0.11); Bertrand et al. 2022 (Icarus 373, 114764,
+/// arXiv:2110.11992) model Triton with 0.8 and quote Hillier et al.
+/// 1991's 0.46 ± 0.16 from Voyager (both read in an excerpt of the
+/// former, not checked in full). The
+/// calibration sits just above the coarse-grained end of that range: a
+/// lower emissivity would warm the model's Triton, under its frost
+/// albedo of 0.75, past 38 K. One value for α- and β-N₂.
+pub const N2_ICE_EMISSIVITY: f64 = 0.89;
+
+/// Emissivity of a surface with `frost` (bar, gas by gas) on its ground:
+/// [`N2_ICE_EMISSIVITY`] over the share of its disc that its nitrogen
+/// frost covers, as a frost of its own ([`super::albedo::frost_cover`]),
+/// 1 elsewhere: rock, water ice and the other frosts radiate close to a
+/// black body (water ice about 0.97, from memory). Nitrogen, the most
+/// volatile of the frosts, condenses last and lies over the others (the
+/// CO₂ the cold trap froze out lies under Triton's N₂ as its bedrock
+/// does).
+pub fn emissivity(frost: &Gases) -> f64 {
+    let nitrogen = Gases {
+        n2: frost.n2.max(0.0),
+        ..Gases::default()
+    };
+    let share = super::albedo::frost_cover(&nitrogen);
+    1.0 - (1.0 - N2_ICE_EMISSIVITY) * share
+}
 
 /// Grey opacity of CO₂ at 1 bar of CO₂ in 1 bar of air: its optical
 /// depth through a uniform column (see [`optical_depth_at`]).
@@ -577,7 +635,8 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
-/// star's light, plus its internal `heat_flux_w_m2`.
+/// star's light, plus its internal `heat_flux_w_m2`, whose surface
+/// radiates with `emissivity` (1 for a black body; see [`emissivity`]).
 ///
 /// The temperature at which the outgoing radiation of the
 /// radiative–convective column of [`super::column`] balances what the
@@ -589,15 +648,26 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// the moist plateau; a steam atmosphere sends out the Simpson–Nakajima
 /// limit until its surface passes about 1800 K. Without air, the surface
 /// sits at `T_eq` warmed by its internal heat alone.
-pub fn surface_temperature_k(context: &Context, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
+///
+/// A grey surface (`emissivity` under 1) sends out `ε σ T⁴`: the column's
+/// outgoing radiation is taken times `ε`, as through a transparent air.
+/// Only nitrogen frost is grey here, and the air over it is thin: under
+/// nitrogen's triple point its vapour is at most 0.125 bar.
+pub fn surface_temperature_k(
+    context: &Context,
+    gases: &Gases,
+    heat_flux_w_m2: f64,
+    emissivity: f64,
+) -> f64 {
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = SIGMA * t_eq.powi(4) + heat_flux_w_m2.max(0.0);
-    let bare = (absorbed / SIGMA).powf(0.25);
+    let e = emissivity.clamp(0.01, 1.0);
+    let bare = (absorbed / (e * SIGMA)).powf(0.25);
     if gases.total() <= 0.0 || bare <= 0.0 {
         return bare;
     }
     let skin = t_eq * 0.5_f64.powf(0.25);
-    let excess = |t: f64| column::olr_under_skin_w_m2(gases, t, skin) - absorbed;
+    let excess = |t: f64| e * column::olr_under_skin_w_m2(gases, t, skin) - absorbed;
     // The column radiates no more than its surface, so `bare` is a lower
     // bound; and the vapour in `gases` would condense on a surface colder
     // than its saturation temperature (a runaway's steam is all in its
@@ -798,9 +868,14 @@ pub const LAVA_K: f64 = 1400.0;
 /// checked); water between the melting of ice and its boiling point at
 /// the surface pressure, above its triple point pressure, when water is
 /// kept out of a runaway; hydrocarbons between the freezing point of
-/// methane with the nitrogen of the air dissolved in it
-/// ([`methane_freezes_k`]) and ethane's boiling point, where there is
-/// enough methane to condense ([`methane_condenses`]); none otherwise.
+/// the sea ([`sea_freezes_k`]: methane with the nitrogen of the air
+/// dissolved in it, or nitrogen's triple point where nitrogen condenses
+/// into it) and ethane's boiling point, where there is enough methane to
+/// condense ([`methane_condenses`]); nitrogen where nitrogen condenses
+/// above its triple point without a methane liquid (it is condensed only
+/// under its boiling point at its partial pressure and its critical
+/// point, [`condense`]; under its triple point it is a frost,
+/// [`frost`]); none otherwise.
 fn liquid(temperature_k: f64, gases: &Gases, water: &Water, condensate: &Gases) -> SurfaceLiquid {
     let pressure = gases.total();
     let water_on_top = water.kept_kg > 0.0;
@@ -814,12 +889,37 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water, condensate: &Gases) 
     {
         SurfaceLiquid::Water
     } else if (condensate.ch4 > 0.0 || methane_condenses(gases.ch4, temperature_k))
-        && temperature_k >= methane_freezes_k(gases.n2)
+        && temperature_k >= sea_freezes_k(gases.n2, condensate)
         && temperature_k < ethane_boils_k(pressure)
     {
         SurfaceLiquid::Hydrocarbons
+    } else if condensate.n2 > 0.0 && temperature_k >= NITROGEN_TRIPLE_K {
+        SurfaceLiquid::Nitrogen
     } else {
         SurfaceLiquid::None
+    }
+}
+
+/// The temperature, K, under which the hydrocarbon sea of a body whose
+/// air holds `air_n2_bar` of nitrogen, with `condensate` (bar) on its
+/// ground ([`condense`]), freezes. Where nitrogen itself condenses, the
+/// air holds pure nitrogen's saturation pressure, so the liquid it
+/// condenses into is nitrogen with methane dissolved in it: it stays
+/// liquid down to nitrogen's triple point ([`NITROGEN_TRIPLE_K`]), where
+/// pure nitrogen freezes. A simple rule, labelled so: an ideal solution
+/// would stay liquid colder still (the Schröder–van Laar equations with
+/// methane's enthalpy of fusion and nitrogen's, 0.72 kJ/mol from memory,
+/// meet at about 48 K and two-thirds nitrogen), but N₂ and CH₄ freeze
+/// into solid solutions that an ideal liquidus does not describe (not
+/// checked), so the rule stops at the triple point and errs towards
+/// freezing, as [`methane_freezes_k`] does. Otherwise the methane
+/// liquidus with the nitrogen the air dissolves in it
+/// ([`methane_freezes_k`]). Issue #524.
+fn sea_freezes_k(air_n2_bar: f64, condensate: &Gases) -> f64 {
+    if condensate.n2 > 0.0 {
+        NITROGEN_TRIPLE_K
+    } else {
+        methane_freezes_k(air_n2_bar)
     }
 }
 
@@ -866,7 +966,7 @@ pub fn boils(
 ) -> bool {
     !water.runaway
         && water.kept_kg > 0.0
-        && wet_balance(context, *gases, heat_flux_w_m2, water_bar).is_none()
+        && wet_balance(context, *gases, heat_flux_w_m2, water_bar, 1.0).is_none()
 }
 
 /// `gases` with the water vapour an ocean or ice keeps at
@@ -911,17 +1011,21 @@ fn wet_balance(
     gases: Gases,
     heat_flux_w_m2: f64,
     water_bar: f64,
+    emissivity: f64,
 ) -> Option<(Gases, f64)> {
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = SIGMA * t_eq.powi(4) + heat_flux_w_m2.max(0.0);
     let skin = t_eq * 0.5_f64.powf(0.25);
-    let excess =
-        |t: f64| column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin) - absorbed;
-    // No surface colder than a black body balances; the vapour only
+    // A grey surface as in `surface_temperature_k`.
+    let e = emissivity.clamp(0.01, 1.0);
+    let excess = |t: f64| {
+        e * column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin) - absorbed
+    };
+    // No surface colder than a grey body balances; the vapour only
     // lowers the outgoing radiation, so none colder than the dry
-    // temperature either, and the scan from the black body finds the
+    // temperature either, and the scan from the grey body finds the
     // same first balance.
-    let bare = (absorbed / SIGMA).powf(0.25);
+    let bare = (absorbed / (e * SIGMA)).powf(0.25);
     if bare >= WATER_CRITICAL_K {
         return None;
     }
@@ -960,29 +1064,32 @@ fn wet_climate(
     gases: Gases,
     heat_flux_w_m2: f64,
     water_bar: f64,
+    emissivity: f64,
 ) -> (Gases, f64) {
-    wet_balance(context, gases, heat_flux_w_m2, water_bar).unwrap_or_else(|| {
+    wet_balance(context, gases, heat_flux_w_m2, water_bar, emissivity).unwrap_or_else(|| {
         let steam = Gases {
             h2o: water_bar.max(0.0),
             ..gases
         };
         (
             steam,
-            surface_temperature_k(context, &steam, heat_flux_w_m2),
+            surface_temperature_k(context, &steam, heat_flux_w_m2, emissivity),
         )
     })
 }
 
 /// Temperature, K, of a surface whose water vapour follows its
 /// temperature, as [`climate`] solves it without the thermostat (see
-/// [`wet_climate`]); the vapour of `gases` is replaced.
+/// [`wet_climate`]); the vapour of `gases` is replaced. The surface
+/// radiates with `emissivity` ([`surface_temperature_k`]).
 pub(super) fn wet_temperature_k(
     context: &Context,
     gases: &Gases,
     heat_flux_w_m2: f64,
     water_bar: f64,
+    emissivity: f64,
 ) -> f64 {
-    wet_climate(context, *gases, heat_flux_w_m2, water_bar).1
+    wet_climate(context, *gases, heat_flux_w_m2, water_bar, emissivity).1
 }
 
 /// What a body's carbon cycle gives its climate beyond its air: the
@@ -1258,6 +1365,12 @@ impl<'a> Body<'a> {
         )
     }
 
+    /// [`emissivity`] of the body at `temperature_k` under `air`, with
+    /// its frost there ([`Body::frost`]).
+    fn emissivity_at(&self, temperature_k: f64, air: &Gases) -> f64 {
+        emissivity(&self.frost(temperature_k, air))
+    }
+
     /// The frozen branch with `co2` bar of CO₂ in the air: the fixed point
     /// started from a body covered in ice ([`ICE_COVERED_K`]).
     fn frozen_at(&self, co2: f64) -> (Gases, Climate) {
@@ -1267,7 +1380,10 @@ impl<'a> Body<'a> {
             greenhouse: std::cell::OnceCell::new(),
             ..*self
         };
-        let start = body.albedo_at(ICE_COVERED_K, &body.gases);
+        let start = (
+            body.albedo_at(ICE_COVERED_K, &body.gases),
+            body.emissivity_at(ICE_COVERED_K, &body.gases),
+        );
         settle(&body, start)
     }
 }
@@ -1276,8 +1392,9 @@ impl<'a> Body<'a> {
 /// gas by gas, from its air before the climate (`gases`):
 ///
 /// - the nitrogen it condenses there ([`condense`]) under nitrogen's
-///   triple point, and the methane it condenses under methane's freezing
-///   point ([`methane_freezes_k`]; above it, a sea);
+///   triple point (above it, a liquid), and the methane it condenses
+///   under the freezing point of its sea ([`sea_freezes_k`]; above it, a
+///   sea);
 /// - the CO₂ the cold trap froze out (`frozen_co2`,
 ///   [`CarbonCycle::frozen_bar`]) that the surface keeps frozen: what the
 ///   air, at most CO₂'s sublimation pressure there, cannot take back (none
@@ -1292,14 +1409,14 @@ pub(crate) fn frost(
     temperature_k: f64,
     air: &Gases,
 ) -> Gases {
-    use super::atmosphere::{NITROGEN_TRIPLE_K, co2_frost_bar, so2_frost_bar};
+    use super::atmosphere::{co2_frost_bar, so2_frost_bar};
     let condensate = condense(*gases, temperature_k).1;
     let n2 = if temperature_k < NITROGEN_TRIPLE_K {
         condensate.n2
     } else {
         0.0
     };
-    let ch4 = if temperature_k < methane_freezes_k(air.n2) {
+    let ch4 = if temperature_k < sea_freezes_k(air.n2, &condensate) {
         condensate.ch4
     } else {
         0.0
@@ -1413,28 +1530,29 @@ const ALBEDO_TOLERANCE_K: f64 = 0.1;
 const ALBEDO_DAMPING: f64 = 0.5;
 
 /// The climate of `body` under the derived Bond albedo `albedo`, before
-/// the runaway blend ([`absorbing`]): its gases, its temperature, whether
-/// the thermostat holds it, and the context it absorbed its light in.
-fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
+/// the runaway blend ([`absorbing`]), its surface radiating with
+/// `emissivity`: its gases, its temperature, whether the thermostat holds
+/// it, and the context it absorbed its light in.
+fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> (Gases, f64, bool, Context) {
     let context = absorbing(body.context, body.water, body.gases.h2o, albedo);
     let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
     let solve = |air: Gases| {
         if !body.wet() {
-            let t = surface_temperature_k(&context, &air, flux);
+            let t = surface_temperature_k(&context, &air, flux, emissivity);
             (air, t, false)
         } else if body.regime == Regime::Plates && body.co2.is_none() {
             if air == body.gases {
-                thermostat(body, &context)
+                thermostat(body, &context, emissivity)
             } else {
                 let condensed = Body {
                     gases: air,
                     greenhouse: std::cell::OnceCell::new(),
                     ..*body
                 };
-                thermostat(&condensed, &context)
+                thermostat(&condensed, &context, emissivity)
             }
         } else {
-            let (g, t) = wet_climate(&context, air, flux, water_bar);
+            let (g, t) = wet_climate(&context, air, flux, water_bar, emissivity);
             (g, t, false)
         }
     };
@@ -1446,7 +1564,7 @@ fn under_albedo(body: &Body, albedo: f64) -> (Gases, f64, bool, Context) {
     // bodies condense nothing at their black body's temperature, and
     // nothing at a warmer one either: one step.
     let absorbed = SIGMA * context.equilibrium_k.max(0.0).powi(4) + flux.max(0.0);
-    let mut t = (absorbed / SIGMA).powf(0.25);
+    let mut t = (absorbed / (emissivity.clamp(0.01, 1.0) * SIGMA)).powf(0.25);
     let mut air = condense(body.gases, t).0;
     let mut pass = solve(air);
     if air == body.gases {
@@ -1503,41 +1621,51 @@ pub(crate) fn washed(gases: Gases, water: &Water) -> Gases {
     super::atmosphere::wash_out(gases, liquid)
 }
 
-/// The albedo the fixed point of `body` starts from warm: the cover of
-/// the climate under [`REFERENCE_ALBEDO`], at least as warm as a body
-/// with no ice ([`super::albedo::ICE_FREE_K`]), so that it settles on the
-/// warmest climate.
-fn warm_start(body: &Body) -> f64 {
-    let (gases, t, _, _) = under_albedo(body, REFERENCE_ALBEDO);
-    body.albedo_at(t.max(super::albedo::ICE_FREE_K), &gases)
+/// The albedo and emissivity the fixed point of `body` starts from warm:
+/// those of the cover of the climate under [`REFERENCE_ALBEDO`], at least
+/// as warm as a body with no ice ([`super::albedo::ICE_FREE_K`]), so that
+/// it settles on the warmest climate.
+fn warm_start(body: &Body) -> (f64, f64) {
+    let (gases, t, _, _) = under_albedo(body, REFERENCE_ALBEDO, 1.0);
+    let warm = t.max(super::albedo::ICE_FREE_K);
+    (
+        body.albedo_at(warm, &gases),
+        body.emissivity_at(warm, &gases),
+    )
 }
 
-/// The fixed point of the albedo and the climate of `body` from the
-/// derived albedo `start`: each step solves the climate under the albedo
-/// ([`under_albedo`]) and moves the albedo [`ALBEDO_DAMPING`] of the way
-/// to the one its temperature derives, until the temperature moves less
-/// than [`ALBEDO_TOLERANCE_K`] and the derived albedo would move the
-/// equilibrium temperature less than that too. The climate keeps the albedo it was
-/// solved under, so that it reproduces. It is not a snowball: [`climate`]
-/// marks the frozen branch it draws.
-fn settle(body: &Body, start: f64) -> (Gases, Climate) {
-    let equilibrium_k = |albedo: f64| body.context.with_albedo(albedo).equilibrium_k;
-    let mut albedo = start;
+/// The fixed point of the albedo, the emissivity and the climate of
+/// `body` from the derived albedo and emissivity `start`: each step
+/// solves the climate under them ([`under_albedo`]) and moves each
+/// [`ALBEDO_DAMPING`] of the way to the one its temperature derives,
+/// until the temperature moves less than [`ALBEDO_TOLERANCE_K`] and the
+/// derived albedo and emissivity would move the surface's radiative
+/// equilibrium (`T_eq ε^-¼`) less than that too. The climate keeps the
+/// albedo and emissivity it was solved under, so that it reproduces. It
+/// is not a snowball: [`climate`] marks the frozen branch it draws.
+fn settle(body: &Body, start: (f64, f64)) -> (Gases, Climate) {
+    let radiative_k = |albedo: f64, emissivity: f64| {
+        body.context.with_albedo(albedo).equilibrium_k / emissivity.clamp(0.01, 1.0).powf(0.25)
+    };
+    let (mut albedo, mut emissivity) = start;
     let mut last = f64::NAN;
-    let mut pass = under_albedo(body, albedo);
+    let mut pass = under_albedo(body, albedo, emissivity);
     for _ in 0..ALBEDO_ITERATIONS {
         let t = pass.1;
         let derived = body.albedo_at(t, &pass.0);
+        let derived_emissivity = body.emissivity_at(t, &pass.0);
         // Settled when the temperature has stopped moving and the albedo
         // it derives would not move the light by more either (a
         // thermostat holds the temperature whatever the albedo).
-        let residual_k = (equilibrium_k(derived) - equilibrium_k(albedo)).abs();
+        let residual_k =
+            (radiative_k(derived, derived_emissivity) - radiative_k(albedo, emissivity)).abs();
         if (t - last).abs() < ALBEDO_TOLERANCE_K && residual_k < ALBEDO_TOLERANCE_K {
             break;
         }
         last = t;
         albedo += ALBEDO_DAMPING * (derived - albedo);
-        pass = under_albedo(body, albedo);
+        emissivity += ALBEDO_DAMPING * (derived_emissivity - emissivity);
+        pass = under_albedo(body, albedo, emissivity);
     }
     let (gases, temperature_k, regulated, context) = pass;
     let condensate = condense(body.gases, temperature_k).1;
@@ -1549,6 +1677,7 @@ fn settle(body: &Body, start: f64) -> (Gases, Climate) {
             equilibrium_k: context.equilibrium_k,
             bond_albedo: runaway_albedo(body.context, body.water, body.gases.h2o, albedo),
             liquid,
+            emissivity,
             regulated,
             snowball: false,
         },
@@ -1560,7 +1689,10 @@ fn settle(body: &Body, start: f64) -> (Gases, Climate) {
 /// solved in `ln CO₂` (see [`climate`]). Returns the gases, the
 /// temperature and whether it was reached. Short of the thermostat with
 /// all the CO₂ the air can hold, it takes the [`maximum_greenhouse`].
-fn thermostat(body: &Body, context: &Context) -> (Gases, f64, bool) {
+/// The surface radiates with `emissivity` ([`surface_temperature_k`]):
+/// 1 wherever the thermostat holds, far above where nitrogen frosts, but
+/// not on a cold body with plates that it cannot reach.
+fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, bool) {
     let (gases, heat_flux_w_m2, water_bar) = (body.gases, body.heat_flux_w_m2, body.water_bar);
     let most = body.most_co2;
     let at_target = with_vapour(gases, THERMOSTAT_K, water_bar);
@@ -1570,12 +1702,19 @@ fn thermostat(body: &Body, context: &Context) -> (Gases, f64, bool) {
     // With `co2` in the air the surface is warmer than the thermostat
     // when, at `THERMOSTAT_K`, it sends out less than it absorbs (the
     // outgoing radiation rises with the surface temperature).
+    let e = emissivity.clamp(0.01, 1.0);
     let olr_at =
-        |co2: f64| column::olr_under_skin_w_m2(&Gases { co2, ..at_target }, THERMOSTAT_K, skin);
+        |co2: f64| e * column::olr_under_skin_w_m2(&Gases { co2, ..at_target }, THERMOSTAT_K, skin);
     let all = absorbed - olr_at(most);
     if all <= 0.0 {
         let co2 = *body.greenhouse.get_or_init(|| maximum_greenhouse(body));
-        let (g, t) = wet_climate(context, Gases { co2, ..gases }, heat_flux_w_m2, water_bar);
+        let (g, t) = wet_climate(
+            context,
+            Gases { co2, ..gases },
+            heat_flux_w_m2,
+            water_bar,
+            emissivity,
+        );
         return (g, t, false);
     }
     if olr_at(0.0) < absorbed {
@@ -1584,6 +1723,7 @@ fn thermostat(body: &Body, context: &Context) -> (Gases, f64, bool) {
             Gases { co2: 0.0, ..gases },
             heat_flux_w_m2,
             water_bar,
+            emissivity,
         );
         return (g, t, false);
     }
@@ -1611,7 +1751,7 @@ fn thermostat(body: &Body, context: &Context) -> (Gases, f64, bool) {
     };
     (
         regulated,
-        surface_temperature_k(context, &regulated, heat_flux_w_m2),
+        surface_temperature_k(context, &regulated, heat_flux_w_m2, emissivity),
         true,
     )
 }
@@ -1876,7 +2016,7 @@ mod tests {
                 ch4,
                 ..Gases::default()
             };
-            surface_temperature_k(&context, &gases, 0.0)
+            surface_temperature_k(&context, &gases, 0.0, 1.0)
         };
         let trace = t(0.1) - t(0.01);
         let thick = t(10.0) - t(1.0);
@@ -1952,6 +2092,86 @@ mod tests {
         );
         let thin = Gases { n2: 0.0, ..gases };
         assert_eq!(liquid(89.0, &thin, &dry, &seas), SurfaceLiquid::None);
+    }
+
+    /// Nitrogen alone, condensed above its triple point and under its
+    /// boiling point: a sea of liquid nitrogen (issue #524).
+    #[test]
+    fn a_pure_nitrogen_sea_is_nitrogen() {
+        let dry = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        let gases = Gases {
+            n2: 0.5,
+            ..Gases::default()
+        };
+        let (air, condensate) = condense(gases, 70.0);
+        assert!(condensate.n2 > 0.0, "{condensate:?}");
+        assert_eq!(
+            liquid(70.0, &air, &dry, &condensate),
+            SurfaceLiquid::Nitrogen
+        );
+        // Under its triple point the same nitrogen is a frost, no liquid.
+        let (air, condensate) = condense(gases, 60.0);
+        assert!(condensate.n2 > 0.0, "{condensate:?}");
+        assert_eq!(liquid(60.0, &air, &dry, &condensate), SurfaceLiquid::None);
+        let frost = frost(&gases, 0.0, 0.0, 60.0, &air);
+        assert!(frost.n2 > 0.0, "{frost:?}");
+    }
+
+    /// Nitrogen that condenses into a methane sea makes the sea
+    /// nitrogen-rich, liquid down to nitrogen's triple point: below the
+    /// methane liquidus of [`methane_freezes_k`], the sea is still liquid
+    /// and its methane no frost (issue #524).
+    #[test]
+    fn condensed_nitrogen_keeps_the_sea_liquid() {
+        let dry = Water {
+            runaway: false,
+            boiled: false,
+            kept_kg: 0.0,
+            oceans: 0.0,
+        };
+        let gases = Gases {
+            n2: 5.0,
+            ch4: 8.0,
+            ..Gases::default()
+        };
+        let t = 70.0;
+        let (air, condensate) = condense(gases, t);
+        assert!(
+            condensate.n2 > 0.0 && condensate.ch4 > 0.0,
+            "{condensate:?}"
+        );
+        assert!(t < methane_freezes_k(air.n2), "{air:?}");
+        assert_eq!(
+            liquid(t, &air, &dry, &condensate),
+            SurfaceLiquid::Hydrocarbons
+        );
+        let frost = frost(&gases, 0.0, 0.0, t, &air);
+        assert_eq!(frost.ch4 + frost.n2, 0.0, "{frost:?}");
+    }
+
+    /// A frost of nitrogen radiates as β-N₂ ice: a body under it settles
+    /// warmer than a black body at the same light, by `ε^-¼`.
+    #[test]
+    fn nitrogen_frost_radiates_less_than_a_black_body() {
+        let frost = Gases {
+            n2: 1.0,
+            ..Gases::default()
+        };
+        assert_eq!(emissivity(&Gases::default()), 1.0);
+        assert!((emissivity(&frost) - N2_ICE_EMISSIVITY).abs() < 1e-12);
+        let c = crate::planet::reference::sun_at(30.0);
+        let black = surface_temperature_k(&c, &Gases::default(), 0.0, 1.0);
+        let grey = surface_temperature_k(&c, &Gases::default(), 0.0, N2_ICE_EMISSIVITY);
+        let ratio = grey / black;
+        assert!(
+            (ratio - N2_ICE_EMISSIVITY.powf(-0.25)).abs() < 1e-9,
+            "{black} {grey}"
+        );
     }
 
     #[test]
@@ -2108,16 +2328,16 @@ mod tests {
             ..Gases::default()
         };
         let thick = Gases { co2: 1.0, ..thin };
-        let t_thin = surface_temperature_k(&c, &thin, 0.0);
-        let t_thick = surface_temperature_k(&c, &thick, 0.0);
+        let t_thin = surface_temperature_k(&c, &thin, 0.0, 1.0);
+        let t_thick = surface_temperature_k(&c, &thick, 0.0, 1.0);
         assert!(
             t_thin > c.equilibrium_k && t_thick > t_thin,
             "{t_thin} {t_thick}"
         );
         // Internal heat warms an airless surface.
-        let bare = surface_temperature_k(&c, &Gases::default(), 0.0);
+        let bare = surface_temperature_k(&c, &Gases::default(), 0.0, 1.0);
         assert!((bare - c.equilibrium_k).abs() < 1e-9);
-        assert!(surface_temperature_k(&c, &Gases::default(), 100.0) > bare);
+        assert!(surface_temperature_k(&c, &Gases::default(), 100.0, 1.0) > bare);
     }
 
     /// The model Earth at 1 AU with `n2_bar` of nitrogen in its air and
@@ -2189,7 +2409,7 @@ mod tests {
         let temperature = |gases: Gases| {
             (
                 gases,
-                wet_temperature_k(&faint, &gases, d.heat_flux_w_m2, d.water_bar),
+                wet_temperature_k(&faint, &gases, d.heat_flux_w_m2, d.water_bar, 1.0),
             )
         };
         let (g1, t1) = temperature(air(0.99));
@@ -2778,7 +2998,7 @@ mod tests {
                 h2o: 0.0,
                 ..d.gases
             };
-            let (g, t) = wet_balance(&d.context, gases, d.heat_flux_w_m2, d.water_bar)
+            let (g, t) = wet_balance(&d.context, gases, d.heat_flux_w_m2, d.water_bar, 1.0)
                 .unwrap_or_else(|| panic!("{n2} bar of N₂ runs away"));
             println!("{n2} bar of N₂: {t:.1} K");
             assert!(t < 330.0, "{n2} bar: {t} K {g:?}");
