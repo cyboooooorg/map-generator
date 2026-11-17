@@ -898,7 +898,8 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 
 ## 23. Extreme trans-Neptunian objects (Sednoids)
 
-- **Status:** todo (study first; moved to #330 and #331)
+- **Status:** study written in `docs/analysis/17-sednoids.md` (#330); the
+  draw (#331) waits for the dwarf-planet class (#496)
 - **Problem:** a system's small bodies stop at the belts and the scattered
   disk (item 17). Bodies like Sedna, 2012 VP113 and Leleākūhonua, on very
   eccentric orbits whose perihelia lie far beyond the giants' reach
