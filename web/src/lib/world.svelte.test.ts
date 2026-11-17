@@ -57,6 +57,33 @@ describe('LoadedWorld.loadSystem', () => {
     expect(world.systemExtras).toEqual({});
   });
 
+  it('keeps the tides the route sends', async () => {
+    const tides = {
+      'd-1': { host: 'd', satellite: 'd-1', hill_km: 1e6, locking_km: 5e5, heating_km: null, roche_km: 2e4 },
+    };
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.startsWith('/api/')
+        ? { ok: true, json: async () => ({ system: files.a, tides }) }
+        : { ok: true, json: async () => files.a },
+    );
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd-1');
+    await flush();
+    expect(world.systemTides).toEqual(tides);
+    expect(world.shownTides).toEqual(tides['d-1']);
+  });
+
+  it('has no tides from the file alone', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.startsWith('/api/') ? { ok: false, status: 404, statusText: 'x' } : { ok: true, json: async () => files.a },
+    );
+    const world = new LoadedWorld();
+    world.loadSystem('a', 'd-1');
+    await flush();
+    expect(world.systemTides).toEqual({});
+    expect(world.shownTides).toBeNull();
+  });
+
   it('keeps the system when it is loaded again', async () => {
     vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
     const world = new LoadedWorld();

@@ -55,7 +55,7 @@
   import DialLabels from './DialLabels.svelte';
   import { bodyFileName } from '../lib/moons';
   import type { Moon } from '../lib/api/types/Moon';
-  import { hillReach, hillSphere, skyMotions, smallBodiesSky, systemReach, systemSky, type SkyMotion } from '../lib/systemSky';
+  import { hillReach, skyMotions, smallBodiesSky, systemReach, systemSky, type SkyMotion } from '../lib/systemSky';
   import { dialFigureText, formatDialAngle, hostCompass as hostCompassOf, rotationDial } from '../lib/rotationDial';
   import { systemStarView } from '../lib/systemStar';
   import { SUN_SYSTEM, withOrbitDefaults } from '../lib/viewer/starSystem';
@@ -65,6 +65,7 @@
     PlanetView,
     SUN_STAR,
     vegetationShift,
+    type TideSphere,
     type ViewMode,
   } from '../lib/viewer/PlanetView';
   import { currentProfile } from '../lib/viewer/quality';
@@ -203,6 +204,9 @@
     orbitLines: false,
     orbitLinesLocal: false,
     hillSphere: false,
+    tideLocking: false,
+    tideHeating: false,
+    tideRoche: false,
     // The small bodies marked in the sky: the trojans of the body's planet,
     // the other planets' trojans, and the belts (one switch, a square each).
     trojansOwn: false,
@@ -328,6 +332,9 @@
   let orbitLinesLocal = $state(saved.orbitLinesLocal);
   /** The Hill sphere of the body shown (its host planet's from a moon) drawn in the sky. */
   let hillOn = $state(saved.hillSphere);
+  let tideLockingOn = $state(saved.tideLocking);
+  let tideHeatingOn = $state(saved.tideHeating);
+  let tideRocheOn = $state(saved.tideRoche);
   let trojansOwn = $state(saved.trojansOwn);
   let trojansOther = $state(saved.trojansOther);
   let skyBelts = $state(saved.skyBelts);
@@ -539,6 +546,9 @@
       orbitLines,
       orbitLinesLocal,
       hillSphere: hillOn,
+      tideLocking: tideLockingOn,
+      tideHeating: tideHeatingOn,
+      tideRoche: tideRocheOn,
       trojansOwn,
       trojansOther,
       skyBelts,
@@ -1588,17 +1598,28 @@
     (sysSky?.orbitBodies ?? []).flatMap((o, i) => ((o.local ? orbitScope.local : orbitScope.stellar) ? [i] : [])),
   );
   const skyOrbitLoops = $derived(sysSky ? orbitKept.map((i) => sysSky.orbits[i]!) : []);
-  // The Hill sphere: the body's own, or its host planet's from a moon (round
-  // the planet as it stands in the moon's sky).
-  const hill = $derived(sys && sysBody ? hillSphere(sys, sysBody.id) : null);
-  const hillDrawn = $derived.by(() => {
-    const k = hill && sysBody?.parent && sysSky ? sysSky.ids.indexOf(hill.id) : -1;
-    const centre: [number, number, number] | null = !hill ? null : k >= 0 ? (sysSky?.bodies[k]?.position ?? null) : sysBody?.parent ? null : [0, 0, 0];
-    return hillOn && hill && sysBody && centre ? { centre, radius: hill.radiusKm / Math.max(sysBody.physical.radius_km, 1e-6) } : null;
+  // The tide spheres, outside in (Hill, locking, heating, Roche), centred on
+  // the host of the tides: the planet as it stands in the moon's sky, or the
+  // star's frame origin for a planet's own. Their radii come from the
+  // server (`mapgen::tides`), in km: only divided by the body's radius here.
+  const tides = $derived(world.shownTides);
+  const tideSpheres = $derived.by((): TideSphere[] => {
+    if (!tides || !sysBody) return [];
+    const k = sysBody.parent && sysSky ? sysSky.ids.indexOf(tides.host) : -1;
+    const centre: [number, number, number] | null = k >= 0 ? (sysSky?.bodies[k]?.position ?? null) : sysBody.parent ? null : [0, 0, 0];
+    if (!centre) return [];
+    const radius = Math.max(sysBody.physical.radius_km, 1e-6);
+    const wanted: [boolean, number | null, readonly [number, number, number]][] = [
+      [hillOn, tides.hill_km, [0.55, 0.85, 0.8]],
+      [tideLockingOn, tides.locking_km, [0.45, 0.6, 1.0]],
+      [tideHeatingOn, tides.heating_km, [1.0, 0.6, 0.25]],
+      [tideRocheOn, tides.roche_km, [1.0, 0.35, 0.3]],
+    ];
+    return wanted.flatMap(([on, km, colour]) => (on && km !== null ? [{ centre, radius: km / radius, colour }] : []));
   });
-  $effect(() => view?.setHillSphere(hillDrawn));
-  // With the Hill sphere on, the camera may go out to see it whole.
-  $effect(() => view?.setGlobeReach(Math.max(reach ?? 0, hillDrawn ? hillReach(hillDrawn.centre, hillDrawn.radius) : 0)));
+  $effect(() => view?.setTideSpheres(tideSpheres));
+  // With a sphere on, the camera may go out to see it whole.
+  $effect(() => view?.setGlobeReach(Math.max(reach ?? 0, ...tideSpheres.map((s) => hillReach(s.centre, s.radius)))));
   // The body shown's own orbit dashed: the body slides along it.
   $effect(() => view?.setSkyOrbits(skyOrbitLoops, orbitKept.map((k) => k === sysSky?.ownOrbit)));
   // A moon goes round its orbit 2^speed times every ORBIT_SECONDS while
@@ -1865,6 +1886,18 @@
       subs: shown.map(({ shown: _, ...p }) => ({ ...p, key: `${base.key}-${p.key}` })),
     };
   }
+  /** The help of a tide sphere of `km`: its radius in km and in host radii, the host and the satellite named. */
+  function tideHelp(help: (p: { host: string; body: string | null; radius: string; radii: string }) => string, km: number | null): string {
+    if (!tides || km === null) return '';
+    const name = (id: string) => world.systemNames[id] ?? sys?.bodies.find((b) => b.id === id)?.designation ?? id;
+    const host = sys?.bodies.find((b) => b.id === tides.host);
+    return help({
+      host: name(tides.host),
+      body: tides.satellite ? name(tides.satellite) : null,
+      radius: withUnit(formatInt(km), 'km'),
+      radii: formatInt(km / Math.max(host?.physical.radius_km ?? 1, 1e-6)),
+    });
+  }
   /** Whether the sky has bodies other than the host planet: the spin switches' third square. */
   const hasOtherSkyBodies = $derived((sysSky?.ids ?? []).some((id) => id !== skyIds.host));
   /** Whether the body's own planet has trojans, and whether the other planets do. */
@@ -1937,20 +1970,18 @@
             }),
           ]
         : []),
-      ...(hill && sysBody
+      ...(tides && sysBody
         ? [
-            {
-              key: 'hill',
-              label: t.viewer.hillSphere,
-              help: t.viewer.hillSphereHelp({
-                host: world.systemNames[hill.id] ?? sys?.bodies.find((b) => b.id === hill.id)?.designation ?? hill.id,
-                radius: withUnit(formatInt(hill.radiusKm), 'km'),
-                radii: formatInt(hill.radiusInHostRadii),
-              }),
-              icon: 'orbit' as const,
-              on: hillOn,
-              set: (v: boolean) => (hillOn = v),
-            },
+            parted(
+              { key: 'tides', label: t.viewer.tides, help: t.viewer.tidesHelp, icon: 'zone' },
+              [
+                { key: 'hill', label: t.viewer.hillSphere, help: tideHelp(t.viewer.hillSphereHelp, tides.hill_km), icon: 'orbit', on: hillOn, set: (v) => (hillOn = v), shown: true },
+                { key: 'locking', label: t.viewer.tideLocking, help: tideHelp(t.viewer.tideLockingHelp, tides.locking_km), icon: 'clock', on: tideLockingOn, set: (v) => (tideLockingOn = v), shown: tides.locking_km !== null },
+                { key: 'heating', label: t.viewer.tideHeating, help: tideHelp(t.viewer.tideHeatingHelp, tides.heating_km), icon: 'sun', on: tideHeatingOn, set: (v) => (tideHeatingOn = v), shown: tides.heating_km !== null },
+                { key: 'roche', label: t.viewer.tideRoche, help: tideHelp(t.viewer.tideRocheHelp, tides.roche_km), icon: 'belt', on: tideRocheOn, set: (v) => (tideRocheOn = v), shown: tides.roche_km !== null },
+              ],
+              false,
+            ),
           ]
         : []),
       ...(sys && ((sys.belts?.length ?? 0) > 0 || sys.bodies.some((b) => b.trojans))

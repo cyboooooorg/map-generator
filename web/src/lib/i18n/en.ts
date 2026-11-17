@@ -1045,6 +1045,18 @@ export const en = {
     hillSphere: 'Hill sphere',
     hillSphereHelp: (p: { host: string; radius: string; radii: string }) =>
       `Draws the Hill sphere of ${p.host}, the bound of its moons' orbits (on the globe, from a moon: its host planet's): ${p.radius}, ${p.radii} planet radii`,
+    tides: 'Tides',
+    tidesHelp:
+      "Draws the nested regimes of the host's tides on the body shown, in the sky (on the globe), outermost first: the Hill sphere, the sphere within which tides have despun the body, the one within which tidal heat beats radioactive heat, and the Roche limit. Their squares: one for each",
+    tideLocking: 'Tidal locking',
+    tideLockingHelp: (p: { host: string; body: string | null; radius: string; radii: string }) =>
+      `Draws the tidal locking sphere of ${p.host}: within it, its tides have despun ${p.body ?? 'a Moon-like satellite'} over the system's age (${p.radius}, ${p.radii} planet radii)`,
+    tideHeating: 'Tidal heating',
+    tideHeatingHelp: (p: { host: string; body: string | null; radius: string; radii: string }) =>
+      `Draws the tidal heating sphere of ${p.host}: within it, the tidal heat of ${p.body ?? 'a rocky satellite'} exceeds its radioactive heat (${p.radius}, ${p.radii} planet radii)`,
+    tideRoche: 'Roche limit',
+    tideRocheHelp: (p: { host: string; body: string | null; radius: string; radii: string }) =>
+      `Draws the Roche limit of ${p.host}: within it, a fluid body as dense as ${p.body ?? 'a rocky satellite'} is torn apart (${p.radius}, ${p.radii} planet radii)`,
     orbitLinesHelp: 'Draws the orbits of the moons in the sky (on the globe), seen from the body shown',
     smallBodies: 'Small bodies',
     smallBodiesHelp:

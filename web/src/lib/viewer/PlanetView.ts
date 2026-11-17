@@ -488,6 +488,13 @@ export function giantTemperatureRange(info: Pick<GiantInfo, 'effective_k' | 'hot
   return info.hot ? [info.effective_k * 0.65 - 273.15, info.effective_k * 1.35 - 273.15] : [t - 25, t + 25];
 }
 
+/** A tide sphere to draw: `radius` in radii of the body shown, `centre` in its frame. */
+export interface TideSphere {
+  centre: Vec3;
+  radius: number;
+  colour: readonly [number, number, number];
+}
+
 export class PlanetView {
   private readonly renderer: WebGLRenderer;
   /** Frame-time probe (`?frames=1`); a plain draw call otherwise. */
@@ -710,12 +717,13 @@ export class PlanetView {
   /** Whether the body shown's pull and velocity arrows are drawn (see setVectors). */
   private vectorsOn = false;
   /**
-   * The Hill sphere drawn round a body of the sky (see setHillSphere): a
-   * grid and a faint limb shell on a unit sphere, placed and scaled to it,
-   * its depth held at the far plane (see farGuide), null until first asked.
+   * The tide spheres drawn round a body of the sky (see setTideSpheres): a
+   * pool of grid and faint limb shell pairs on unit spheres, placed and
+   * scaled to them, their depth held at the far plane (see farGuide). The
+   * pool grows with the list and its extra pairs are hidden.
    */
-  private hill: { grid: LineSegments<BufferGeometry, LineBasicMaterial>; shell: Mesh<SphereGeometry, ShaderMaterial> } | null = null;
-  private hillSphereOn: { centre: Vec3; radius: number } | null = null;
+  private tidePool: { grid: LineSegments<BufferGeometry, LineBasicMaterial>; shell: Mesh<SphereGeometry, ShaderMaterial> }[] = [];
+  private tideSpheresOn: readonly TideSphere[] = [];
   private spinAxesOn = false;
   /** The rotation dial round the body shown (see setRotationDial), and its state; null hides it. */
   private readonly dial = new RotationDial();
@@ -2476,10 +2484,12 @@ export class PlanetView {
     this.u.uBiomes.value.dispose();
     this.sky.uSunDepth.value.dispose();
     this.disposeSkyBodies();
-    this.hill?.grid.geometry.dispose();
-    this.hill?.grid.material.dispose();
-    this.hill?.shell.geometry.dispose();
-    this.hill?.shell.material.dispose();
+    for (const pair of this.tidePool) {
+      pair.grid.geometry.dispose();
+      pair.grid.material.dispose();
+      pair.shell.geometry.dispose();
+      pair.shell.material.dispose();
+    }
     this.skyOrbits?.geometry.dispose();
     this.skyOrbits?.material.dispose();
     this.skyOrbitsOver?.material.dispose();
@@ -2840,18 +2850,22 @@ export class PlanetView {
   }
 
   /**
-   * Draws a Hill sphere in the sky (on the globe): a grid and a faint shell
-   * that lights towards its limb, centred on `sphere.centre` and `radius`
-   * in radii of the body shown, in its frame. The camera is usually inside
-   * it (a body's moons orbit well within), so the grid carries it; its
-   * depth is held at the far plane, so the globe hides it. Null hides it.
+   * Draws tide spheres in the sky (on the globe), outermost first: for each,
+   * a grid and a faint shell that lights towards its limb, centred on
+   * `centre` with `radius` in radii of the body shown, in its frame, in
+   * `colour`. The camera is usually inside them (a body's moons orbit well
+   * within), so the grids carry them; their depth is held at the far plane,
+   * so the globe hides them. An empty list hides them.
    */
-  setHillSphere(sphere: { centre: Vec3; radius: number } | null): void {
-    this.hillSphereOn = sphere;
-    if (sphere && !this.hill) {
+  setTideSpheres(spheres: readonly TideSphere[]): void {
+    this.tideSpheresOn = spheres;
+    while (this.tidePool.length < spheres.length) {
+      // The outermost sphere keeps the dense grid; the nested ones are
+      // half as dense so that four of them stay readable.
+      const inner = this.tidePool.length > 0;
       const geometry = new BufferGeometry();
-      geometry.setAttribute('position', new Float32BufferAttribute(sphereGrid(1, 96, 15).flat(), 3));
-      const grid = new LineSegments(geometry, new LineBasicMaterial({ color: new Color(0.55, 0.85, 0.8), transparent: true, depthWrite: false }));
+      geometry.setAttribute('position', new Float32BufferAttribute((inner ? sphereGrid(1, 48, 30) : sphereGrid(1, 96, 15)).flat(), 3));
+      const grid = new LineSegments(geometry, new LineBasicMaterial({ color: new Color(1, 1, 1), transparent: true, depthWrite: false }));
       farGuide(grid.material, { uHostCentre: { value: new Vector3() }, uHostRadius: { value: 0 } }, this.skyOccluders);
       const shell = new Mesh(
         new SphereGeometry(1, 64, 32),
@@ -2865,13 +2879,13 @@ export class PlanetView {
               gl_Position.z = min(gl_Position.z, gl_Position.w * 0.99999);
             }`,
           fragmentShader: `${skyHiddenChunk}
-            uniform float uOpacity; varying vec3 vNormal; varying vec3 vWorld;
+            uniform float uOpacity; uniform vec3 uColour; varying vec3 vNormal; varying vec3 vWorld;
             void main() {
               if (skyHidden(vWorld)) discard;
               float rim = 1.0 - abs(dot(normalize(vNormal), normalize(cameraPosition - vWorld)));
-              gl_FragColor = vec4(0.55, 0.85, 0.8, uOpacity * (0.04 + 0.5 * pow(rim, 4.0)));
+              gl_FragColor = vec4(uColour, uOpacity * (0.04 + 0.5 * pow(rim, 4.0)));
             }`,
-          uniforms: { uOpacity: { value: 0 }, ...this.skyOccluders },
+          uniforms: { uOpacity: { value: 0 }, uColour: { value: new Vector3(1, 1, 1) }, ...this.skyOccluders },
           transparent: true,
           depthWrite: false,
           side: DoubleSide,
@@ -2880,9 +2894,10 @@ export class PlanetView {
       for (const object of [grid, shell]) {
         object.frustumCulled = false;
         object.renderOrder = -0.25;
+        object.visible = false;
         this.scene.add(object);
       }
-      this.hill = { grid, shell };
+      this.tidePool.push({ grid, shell });
     }
     this.requestRender();
   }
@@ -3848,17 +3863,21 @@ export class PlanetView {
       orbits.material.uniforms['uOpacity']!.value = 0.45 * this.morph ** 3;
       orbits.material.uniforms['uScreenPx']!.value = this.renderer.domElement.height;
     }
-    if (this.hill) {
-      const sphere = this.hillSphereOn;
-      for (const object of [this.hill.grid, this.hill.shell]) {
-        object.visible = sphere !== null && this.morph > 0.01;
+    for (const [i, pair] of this.tidePool.entries()) {
+      const sphere = this.tideSpheresOn[i];
+      for (const object of [pair.grid, pair.shell]) {
+        object.visible = sphere !== undefined && this.morph > 0.01;
         if (sphere) {
           object.position.set(...sphere.centre);
           object.scale.setScalar(sphere.radius);
         }
       }
-      this.hill.grid.material.opacity = 0.3 * this.morph ** 3;
-      this.hill.shell.material.uniforms['uOpacity']!.value = this.morph ** 3;
+      if (sphere) {
+        pair.grid.material.color.setRGB(...sphere.colour);
+        (pair.shell.material.uniforms['uColour']!.value as Vector3).set(...sphere.colour);
+      }
+      pair.grid.material.opacity = 0.3 * this.morph ** 3;
+      pair.shell.material.uniforms['uOpacity']!.value = this.morph ** 3;
     }
     for (const belts of [this.skyBelts, this.skyBeltsOver, this.skyBeltsNear]) {
       if (!belts) continue;
