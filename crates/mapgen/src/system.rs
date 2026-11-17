@@ -7206,14 +7206,14 @@ mod titan_tests {
     }
 
     /// The Titans of the `titan-like` systems of seeds 5 and 12, whose
-    /// surfaces keep most of their system's 4.57 Ga of craters, generated at the
+    /// surfaces are renewed by their liquid cycle (0.2 to 1 Ga), generated at the
     /// size their viewer gets (512 × 256): about 1 % of their surface is
     /// liquid, the share their sea level is calibrated for
     /// (`HYDROCARBON_LAND_FRACTION`). Issue #482: none was drawn, the sea
     /// level search sampling the relief without its craters, which fill
     /// the polar lows the search had flooded.
     #[test]
-    fn an_old_cratered_titan_keeps_about_a_percent_of_liquid() {
+    fn a_young_titan_keeps_about_a_percent_of_liquid() {
         for seed in [5, 12] {
             let request: SystemRequest = serde_json::from_str(&format!(
                 r#"{{"system":{{"planets":{{"titan-like":1}},"seed":{seed}}}}}"#
@@ -7227,7 +7227,11 @@ mod titan_tests {
                 .unwrap();
             let params = generation_params(moon);
             assert_eq!((params.width, params.height), (512, 256));
-            assert!(params.surface_age_ga > 3.5, "{}", params.surface_age_ga);
+            assert!(
+                (0.2..=1.0).contains(&params.surface_age_ga),
+                "{}",
+                params.surface_age_ga
+            );
             let world = crate::generation::generate(&params).world;
             let grid = params.grid();
             let (mut liquid, mut total) = (0.0f64, 0.0f64);

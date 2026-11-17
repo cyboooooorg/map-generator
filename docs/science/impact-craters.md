@@ -602,6 +602,18 @@ more are flooded flat at a date of that window and darkened.
   heat it radiates) are not told apart, Enceladus taking its old plains'
   age, and Triton, whose surface is young from the heat of its capture,
   keeps an old one.
+- **A liquid cycle renews a stagnant lid's surface (Titan).** A world in
+  the stagnant regime with air of 0.01 bar or more over liquid water or
+  hydrocarbons gets one `LiquidCycle` terrain unit
+  (`planet::surface_age::liquid_cycle_age_gyr`), 0.2 to 1 Ga old instead
+  of 70 to 95 % of its system's age: Titan keeps about 60 craters, a
+  crater retention age of 0.2 to 1 Ga (Neish & Lorenz 2012,
+  doi:10.1016/j.pss.2011.02.016; `LIQUID_CYCLE_RETENTION_GYR` = 1 Ga,
+  scattered by `LIQUID_CYCLE_AGE_SHARE` = 0.2 to 1). The age is 1 Ga from
+  0.1 bar up and rises with the log of the pressure to the system's age
+  at 0.01 bar, so that it is continuous in pressure (a choice, no source
+  for the interpolation). Plate, episodic and heat-pipe regimes keep
+  their own, faster, ages; Mars and Mercury (no liquid) stay old.
 - **Sea floors are cleared by the preset, not by plates.** A crater on the
   floor of a sea that still fills the basins leaves nothing on any world,
   whatever its tectonic regime: the rule reads only the sea, and plate

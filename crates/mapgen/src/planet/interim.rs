@@ -6,6 +6,7 @@ use rand::RngExt;
 
 use super::albedo::{EARTH_CLOUD_COVER, cover, sulphuric_deck};
 use super::classify::ICE_WORLD_MIN_OCEANS;
+use super::surface_age::Renewal;
 use super::{PlanetClass, PlanetModel, SurfaceLiquid};
 use crate::archetype::ParamDefault;
 use crate::atmosphere::{AIRLESS_BAR, Atmosphere, CloudKind};
@@ -153,7 +154,7 @@ pub(super) fn volcanism(flux_w_m2: f64, regime: Regime) -> f64 {
 /// Surface pressure under which water and hydrocarbons carve less, bar:
 /// [`crate::atmosphere::LIQUID_WATER_BAR`], under which the generator
 /// keeps no liquid. The erosion scales as `min(1, P / 0.01)`.
-const ERODING_BAR: f64 = crate::atmosphere::LIQUID_WATER_BAR as f64;
+pub(super) const ERODING_BAR: f64 = crate::atmosphere::LIQUID_WATER_BAR as f64;
 
 /// Erosion of a world with liquid hydrocarbons against one with liquid
 /// water. Calibration, no source: Titan's river networks are fewer and
@@ -589,20 +590,21 @@ pub fn params_for(
     let look_erosion = pick(d.erosion, fallback::EROSION, rng);
     let look_pressure = pick(d.pressure, fallback::PRESSURE_BAR, rng);
     let look_age = pick(d.surface_age, fallback::SURFACE_AGE_GA, rng);
-    let regime_age = match surface.map(|s| s.regime) {
-        Some(Regime::Plates) | None => fallback::SURFACE_AGE_GA.pick(rng),
-        Some(Regime::Episodic) => EPISODIC_SURFACE_AGE_GA.pick(rng),
-        Some(Regime::HeatPipe) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),
-        Some(Regime::Stagnant) => {
-            let main = match model.terrain.main() {
-                Some(unit) => *unit,
-                None => *super::surface_age::terrain(model, f64::from(placed.age_gyr))
-                    .units
-                    .first()
-                    .expect("a terrain has a unit"),
-            };
-            main.age_gyr as f32 * STAGNANT_SURFACE_AGE_SHARE.pick(rng)
+    let main = match model.terrain.main() {
+        Some(unit) => *unit,
+        None => *super::surface_age::terrain(model, f64::from(placed.age_gyr))
+            .units
+            .first()
+            .expect("a terrain has a unit"),
+    };
+    let regime_age = match (main.renewal, surface.map(|s| s.regime)) {
+        (Renewal::LiquidCycle, _) => {
+            main.age_gyr as f32 * super::surface_age::LIQUID_CYCLE_AGE_SHARE.pick(rng)
         }
+        (_, Some(Regime::Plates) | None) => fallback::SURFACE_AGE_GA.pick(rng),
+        (_, Some(Regime::Episodic)) => EPISODIC_SURFACE_AGE_GA.pick(rng),
+        (_, Some(Regime::HeatPipe)) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),
+        (_, Some(Regime::Stagnant)) => main.age_gyr as f32 * STAGNANT_SURFACE_AGE_SHARE.pick(rng),
     };
     let radius_km = (model.interior.radius_earth * crate::exomoon::EARTH_M / 1000.0) as f32;
     let model_circumference = 2.0 * std::f32::consts::PI * radius_km;
