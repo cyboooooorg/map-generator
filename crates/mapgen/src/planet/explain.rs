@@ -302,7 +302,7 @@ pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super:
 /// the chain started the kept pass with: the boiled steam when `surface`
 /// boiled and stayed a runaway, its own water when the water left after
 /// the boil condensed again, else the water of its first pass.
-fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
+pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
     let interior = &surface_interior(context, model);
     let (i, fluence) = (&model.inputs, model.xuv_fluence);
     let start = if surface.water.boiled && surface.water.runaway {

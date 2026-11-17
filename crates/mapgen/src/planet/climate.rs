@@ -987,7 +987,8 @@ pub(super) fn wet_temperature_k(
 
 /// What a body's carbon cycle gives its climate beyond its air: the
 /// carbon it holds, the CO₂ frost on its ground and the draw of its
-/// snowball state.
+/// snowball state; and the SO₂ frost its volcanoes lay, which the
+/// climate reads the same way as the CO₂ frost.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CarbonCycle {
     /// CO₂ the body has outgassed, bar, before escape to space and the
@@ -996,9 +997,14 @@ pub struct CarbonCycle {
     pub inventory_bar: f64,
     /// CO₂ the cold trap froze out of the air onto the ground before the
     /// climate, bar ([`super::atmosphere::cold_trap`]): a frost where the
-    /// surface is cold enough to keep it ([`Body::frost_bar`]), which
-    /// brightens the body (Io's in the model).
+    /// surface is cold enough to keep it ([`Body::frost`]), which
+    /// brightens the body.
     pub frozen_bar: f64,
+    /// SO₂ frost a heat-pipe body's volcanoes lay on its ground, bar
+    /// ([`super::atmosphere::volcanic_so2_frost_bar`]): it brightens the
+    /// body where its surface keeps it frozen ([`frost`]; Io's in the
+    /// model).
+    pub so2_frost_bar: f64,
     /// Uniform in `[0, 1]` ([`super::PlanetInputs::snowball_draw`]): a
     /// body with both a temperate and a frozen state is a snowball when
     /// it is below [`snowball_chance`].
@@ -1048,7 +1054,7 @@ pub struct CarbonCycle {
 /// of their condensate at the surface temperature, solved together with
 /// it (see [`under_albedo`]); the rest lies on the ground, where
 /// [`liquid`] sees it and, frozen, brightens the body
-/// ([`Body::frost_bar`]). Methane's greenhouse counts only the methane its tropopause lets
+/// ([`Body::frost`]). Methane's greenhouse counts only the methane its tropopause lets
 /// through and saturates ([`methane_depth`]), so that a cold body under
 /// tens of bar of methane stays cold and condenses most of it (issue
 /// #443).
@@ -1190,6 +1196,9 @@ struct Body<'a> {
     /// CO₂ the cold trap froze onto the ground, bar
     /// ([`CarbonCycle::frozen_bar`]).
     frozen_co2: f64,
+    /// SO₂ frost its volcanoes lay on the ground, bar
+    /// ([`CarbonCycle::so2_frost_bar`]).
+    so2_frost: f64,
     co2: Option<f64>,
     /// The CO₂ of the maximum greenhouse, once found.
     greenhouse: std::cell::OnceCell<f64>,
@@ -1215,6 +1224,7 @@ impl<'a> Body<'a> {
             water_bar,
             most_co2: carbon.inventory_bar.min(condenses).max(gases.co2).max(0.0),
             frozen_co2: carbon.frozen_bar.max(0.0),
+            so2_frost: carbon.so2_frost_bar.max(0.0),
             co2: None,
             greenhouse: std::cell::OnceCell::new(),
         }
@@ -1226,38 +1236,25 @@ impl<'a> Body<'a> {
     }
 
     /// Frost on the ground of the body at `temperature_k` under `air`,
-    /// bar: the nitrogen it condenses there ([`condense`]) under
-    /// nitrogen's triple point, the methane it condenses under methane's
-    /// freezing point ([`methane_freezes_k`]; above it, a sea), and the
-    /// CO₂ the cold trap froze out ([`CarbonCycle::frozen_bar`]) that the
-    /// surface keeps frozen: what the air, at most CO₂'s sublimation
-    /// pressure there, cannot take back (none above CO₂'s triple point).
-    fn frost_bar(&self, temperature_k: f64, air: &Gases) -> f64 {
-        use super::atmosphere::{NITROGEN_TRIPLE_K, co2_frost_bar};
-        let condensate = condense(self.gases, temperature_k).1;
-        let n2 = if temperature_k < NITROGEN_TRIPLE_K {
-            condensate.n2
-        } else {
-            0.0
-        };
-        let ch4 = if temperature_k < methane_freezes_k(air.n2) {
-            condensate.ch4
-        } else {
-            0.0
-        };
-        let sublimes = (co2_frost_bar(temperature_k) - air.co2.max(0.0)).max(0.0);
-        let co2 = (self.frozen_co2 - sublimes).max(0.0);
-        n2 + ch4 + co2
+    /// bar, gas by gas ([`frost`]).
+    fn frost(&self, temperature_k: f64, air: &Gases) -> Gases {
+        frost(
+            &self.gases,
+            self.frozen_co2,
+            self.so2_frost,
+            temperature_k,
+            air,
+        )
     }
 
     /// [`derived_albedo`] of the body at `temperature_k` under `air`,
-    /// with its frost there ([`Body::frost_bar`]).
+    /// with its frost there ([`Body::frost`]).
     fn albedo_at(&self, temperature_k: f64, air: &Gases) -> f64 {
         derived_albedo(
             temperature_k,
             air,
             self.water,
-            self.frost_bar(temperature_k, air),
+            &self.frost(temperature_k, air),
         )
     }
 
@@ -1272,6 +1269,50 @@ impl<'a> Body<'a> {
         };
         let start = body.albedo_at(ICE_COVERED_K, &body.gases);
         settle(&body, start)
+    }
+}
+
+/// Frost on the ground of a body at `temperature_k` under `air`, bar,
+/// gas by gas, from its air before the climate (`gases`):
+///
+/// - the nitrogen it condenses there ([`condense`]) under nitrogen's
+///   triple point, and the methane it condenses under methane's freezing
+///   point ([`methane_freezes_k`]; above it, a sea);
+/// - the CO₂ the cold trap froze out (`frozen_co2`,
+///   [`CarbonCycle::frozen_bar`]) that the surface keeps frozen: what the
+///   air, at most CO₂'s sublimation pressure there, cannot take back (none
+///   above CO₂'s triple point);
+/// - the SO₂ frost its volcanoes lay (`so2_frost`,
+///   [`CarbonCycle::so2_frost_bar`]), less what the air takes back the
+///   same way at SO₂'s sublimation pressure.
+pub(crate) fn frost(
+    gases: &Gases,
+    frozen_co2: f64,
+    so2_frost: f64,
+    temperature_k: f64,
+    air: &Gases,
+) -> Gases {
+    use super::atmosphere::{NITROGEN_TRIPLE_K, co2_frost_bar, so2_frost_bar};
+    let condensate = condense(*gases, temperature_k).1;
+    let n2 = if temperature_k < NITROGEN_TRIPLE_K {
+        condensate.n2
+    } else {
+        0.0
+    };
+    let ch4 = if temperature_k < methane_freezes_k(air.n2) {
+        condensate.ch4
+    } else {
+        0.0
+    };
+    let kept = |frozen: f64, sublimes: f64, in_air: f64| {
+        (frozen.max(0.0) - (sublimes - in_air.max(0.0)).max(0.0)).max(0.0)
+    };
+    Gases {
+        n2,
+        ch4,
+        co2: kept(frozen_co2, co2_frost_bar(temperature_k), air.co2),
+        so2: kept(so2_frost, so2_frost_bar(temperature_k), air.so2),
+        ..Gases::default()
     }
 }
 
@@ -1440,10 +1481,10 @@ pub(crate) fn derived_albedo(
     temperature_k: f64,
     gases: &Gases,
     water: &Water,
-    frost_bar: f64,
+    frost: &Gases,
 ) -> f64 {
     let deck = sulphuric_deck(temperature_k, washed(*gases, water).so2);
-    bond_albedo(&cover(temperature_k, gases, water, frost_bar), gases, deck)
+    bond_albedo(&cover(temperature_k, gases, water, frost), gases, deck)
 }
 
 /// `gases` after the washing out of their SO₂
@@ -1660,6 +1701,7 @@ mod tests {
         CarbonCycle {
             inventory_bar,
             frozen_bar: 0.0,
+            so2_frost_bar: 0.0,
             snowball_draw: 1.0,
         }
     }

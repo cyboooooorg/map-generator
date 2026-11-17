@@ -592,11 +592,14 @@ pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.15;
 /// CO₂ 216.6 K and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm
 /// sublimation at 194.7 K); NH₃ 195.4 K and 0.0606 bar, 29 kJ/mol; CH₄
 /// 90.7 K and 0.117 bar, 9.1 kJ/mol; N₂ 63.15 K and 0.125 bar,
-/// 6.3 kJ/mol.
-struct Frost {
-    triple_k: f64,
-    triple_bar: f64,
-    sublimation_j_mol: f64,
+/// 6.3 kJ/mol. SO₂'s is [`SO2_FROST`].
+pub struct Frost {
+    /// Temperature of the triple point, K.
+    pub triple_k: f64,
+    /// Pressure of the triple point, bar.
+    pub triple_bar: f64,
+    /// Enthalpy of sublimation, J/mol.
+    pub sublimation_j_mol: f64,
 }
 
 const CO2_FROST: Frost = Frost {
@@ -613,6 +616,22 @@ const CH4_FROST: Frost = Frost {
     triple_k: 90.7,
     triple_bar: 0.117,
     sublimation_j_mol: 9_100.0,
+};
+/// SO₂: triple point 197.64 K and 0.0167 bar (Giauque & Stephenson 1938,
+/// J. Am. Chem. Soc. 60, 1389, through the NIST Chemistry WebBook;
+/// checked there), and the sublimation curve
+/// `P = 1.516e8 exp(-4510 K / T)` bar of Wagman 1979 (*Sublimation
+/// pressure and enthalpy of SO₂*, Chemical Thermodynamics Data Center,
+/// National Bureau of Standards), which Io's atmosphere is read with
+/// (quoted by Giles et al. 2024, arXiv:2405.19253; checked there):
+/// `4510 K · R` = 37.5 kJ/mol. Anchored at the triple point, the curve
+/// gives 1.3e-9 bar at 115 K, 1.4e-9 in Wagman's form. Fray & Schmitt
+/// 2009 (Planet. Space Sci. 57, 2053, doi:10.1016/j.pss.2009.09.011)
+/// review SO₂'s sublimation pressure too; their table was not read.
+pub const SO2_FROST: Frost = Frost {
+    triple_k: 197.64,
+    triple_bar: 0.0167,
+    sublimation_j_mol: 4510.0 * R_GAS,
 };
 const N2_FROST: Frost = Frost {
     triple_k: NITROGEN_TRIPLE_K,
@@ -769,6 +788,118 @@ pub(crate) fn condensed_air(air: Gases, inventory: &Gases, surface_k: f64) -> Ga
 /// freeze.
 pub(super) fn co2_frost_bar(temperature_k: f64) -> f64 {
     CO2_FROST.cap(f64::INFINITY, temperature_k)
+}
+
+/// Partial pressure of SO₂, bar, at which it frosts out at
+/// `temperature_k` ([`SO2_FROST`]); unbounded above its triple point.
+pub(super) fn so2_frost_bar(temperature_k: f64) -> f64 {
+    SO2_FROST.cap(f64::INFINITY, temperature_k)
+}
+
+/// Heat a kilogram of erupted magma carries out of a heat-pipe body, J:
+/// its latent heat of crystallisation, about 4e5 J/kg, and its heat
+/// capacity, about 1200 J/(kg·K), over the 1400 K from an eruption at
+/// about 1600 K (Io's ultramafic lavas, McEwen et al. 1998, Science 281,
+/// 87, doi:10.1126/science.281.5373.87) to its cold surface; values from
+/// memory, not checked. In a heat pipe the magma carries the body's heat
+/// up (O'Reilly & Davies 1981, Geophys. Res. Lett. 8, 313,
+/// doi:10.1029/GL008i004p00313; from memory, not checked), so the heat
+/// over this is the magma erupted: about 5e7 kg/s for Io's 1e14 W.
+const MAGMA_HEAT_J_KG: f64 = 2.1e6;
+
+/// SO₂ the volcanoes of a body bring up, kg/s: the magma its tidal heat
+/// erupts (`heat.tidal_w` over [`MAGMA_HEAT_J_KG`]) times the sulphur of
+/// its silicate (`inputs.volatiles.s` over the silicate share, that is
+/// [`super::inputs`]'s 250 ppm of rock), all of it degassed as SO₂
+/// ([`SO2_PER_S`]) into the vacuum or thin air of the vent. Only the
+/// tidal heat: a heat pipe fed by tides (Io) erupts it as fast as it
+/// comes, while radiogenic and secular heat leave by conduction in the
+/// other regimes; [`super::bare`] reads it for heat pipes only. About
+/// 1.7e4 kg/s for the model's Io (8.6e13 W of tides); its torus takes
+/// about 300 kg/s of it ([`so2_loss_kg_s`], at most [`PLASMA_LOSS_MAX`]),
+/// the rest falls back as frost.
+pub fn volcanic_so2_supply(heat: &super::InternalHeat, inputs: &PlanetInputs) -> f64 {
+    let silicate = (1.0 - inputs.water_fraction - inputs.envelope_fraction)
+        * (1.0 - inputs.core_mass_fraction);
+    if silicate <= 0.0 {
+        return 0.0;
+    }
+    let magma = heat.tidal_w.max(0.0) / MAGMA_HEAT_J_KG;
+    magma * inputs.volatiles.s.max(0.0) / silicate * SO2_PER_S
+}
+
+/// Time a heat-pipe body's SO₂ frost stays on its surface before fresh
+/// lava and plume deposits bury it, s: 150 000 years. Calibration on Io,
+/// no source: SO₂ frost covers most of Io's surface (Douté et al. 2001,
+/// Icarus 149, 107, doi:10.1006/icar.2000.6513; from memory, not
+/// checked), and this residence covers at least 80 % of the disc with
+/// frost on every draw of the `io-like` archetype, whose sulphur scatters
+/// by a factor of 20 (7.9e3 to 1.5e5 kg/s of SO₂ on seeds 1 to 40,
+/// 0.017 to 0.33 bar of frost against [`super::albedo`]'s layer of
+/// 0.02 bar). A shorter residence leaves its low-sulphur draws half
+/// bare, dark and too warm: their dayside frost then breathes more than
+/// 1e-8 bar. Not measured: Io's
+/// resurfacing, of the order of a centimetre a year (from memory, not
+/// checked), would bury a metre-thick deposit in about a century, but
+/// the frost sublimes and condenses again each day and so stays on top
+/// of what buries it.
+const SO2_FROST_RESIDENCE_S: f64 = 150_000.0 * 3.155_76e7;
+
+/// SO₂ frost, bar, a body's volcanoes keep on its ground: what of their
+/// `supply_kg_s` ([`volcanic_so2_supply`]) the body's non-thermal loss
+/// does not take ([`so2_loss_kg_s`]), laid over
+/// [`SO2_FROST_RESIDENCE_S`], `bar_per_kg` the weight of a kilogram on
+/// its surface. None when the loss takes all of the supply: the air and
+/// the frost leave as fast as they come, an exosphere.
+pub fn volcanic_so2_frost_bar(supply_kg_s: f64, body: &LossContext, bar_per_kg: f64) -> f64 {
+    let net = supply_kg_s - so2_loss_kg_s(body);
+    net.max(0.0) * SO2_FROST_RESIDENCE_S * bar_per_kg
+}
+
+/// SO₂ a body loses to [`non_thermal_loss`], kg/s: the photo-ions of its
+/// exobase swept away and the share of its giant's plasma sputtering
+/// fast enough to escape ([`escaping_share`]), over its whole surface.
+/// None outside a giant's magnetosphere.
+fn so2_loss_kg_s(body: &LossContext) -> f64 {
+    let Some(host) = &body.host else {
+        return 0.0;
+    };
+    let molecule = MOLECULAR_U[5] * AMU_KG;
+    let photo = PHOTO_IONISATION_AT_1_AU_S / (body.orbit_au * body.orbit_au) * EXOBASE_COLUMN_M2;
+    let flux = photo + plasma_flux(host) * escaping_share(molecule, body);
+    flux * 4.0 * PI * body.radius_m * body.radius_m * molecule
+}
+
+/// Factor on a body's equilibrium temperature (under its Bond albedo,
+/// starlight spread over the whole sphere) that gives the mean
+/// temperature of its dayside frost: the starlight spread over the
+/// dayside only, `2^(1/4)`. A heat pipe's internal heat leaves through
+/// its vents and lava, not through the cold lid the frost lies on.
+/// The model's Io, at 93 to 100 K of equilibrium under its Bond albedo
+/// of 0.54 to 0.63, has its frost at 110 to 119 K: its equatorial frost
+/// is at 106 to 117 K (Giles et al. 2024, arXiv:2405.19253; checked).
+const DAYSIDE_FACTOR: f64 = 1.189_207_115;
+
+/// `gases` with the SO₂ air a body's volcanic frost holds: the vapour of
+/// `so2_frost_bar` of frost ([`SO2_FROST`]) at the temperature of its
+/// dayside ([`DAYSIDE_FACTOR`] times `equilibrium_k`), at most the frost
+/// itself, where that is more than the air holds already. Io's dayside
+/// column, 1e16 to 2e17 cm⁻² (about 1 to 10 nbar), is that equilibrium
+/// (Giles et al. 2024, arXiv:2405.19253; checked).
+///
+/// It enters after the climate and the washing out ([`wash_out`]): the
+/// frost resupplies it within hours, faster than the plasma takes it
+/// ([`non_thermal_loss`], whose loss [`volcanic_so2_frost_bar`] already
+/// counts), and a nanobar weighs nothing in the climate.
+pub fn frost_so2_air(gases: Gases, so2_frost_bar: f64, equilibrium_k: f64) -> Gases {
+    if so2_frost_bar <= 0.0 {
+        return gases;
+    }
+    let vapour = SO2_FROST.cap(so2_frost_bar, equilibrium_k * DAYSIDE_FACTOR);
+    Gases {
+        so2: gases.so2.max(vapour),
+        ..gases
+    }
 }
 
 /// Methane the star's ultraviolet destroys on a body, bar per Gyr, per
@@ -981,6 +1112,72 @@ mod tests {
         // About 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
         let g = surface_air("Venus");
         assert!((0.008..=0.02).contains(&g.so2), "{g:?}");
+    }
+
+    /// The venus-like archetype keeps the SO₂ of its outgassing on every
+    /// seed (0.0054 to 0.072 bar on seeds 1-40 before the volcanic frost
+    /// of #525): an episodic lid has no SO₂ frost, so its air is the
+    /// outgassed SO₂ that stays in a dry air ([`SULPHUR_IN_AIR`],
+    /// [`wash_out`]).
+    #[test]
+    fn venus_keeps_its_so2() {
+        use crate::system::{SystemRequest, WholeSystemRequest, draw};
+        use rand::SeedableRng;
+        use std::collections::BTreeMap;
+        for seed in 1..=40 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                planets: Some(BTreeMap::from([("venus-like".to_string(), 1)])),
+                seed: Some(seed),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(
+                &request,
+                &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .expect("the system draws");
+            let body = system
+                .bodies
+                .iter()
+                .find(|b| b.params.archetype.as_deref() == Some("venus-like"))
+                .expect("a venus-like body");
+            let s = body
+                .model
+                .as_ref()
+                .and_then(|m| m.surface)
+                .expect("surface");
+            assert_ne!(s.regime, Regime::HeatPipe, "seed {seed}");
+            let so2 = s.gases.so2;
+            assert!((0.005..=0.08).contains(&so2), "seed {seed}: {s:?}");
+        }
+    }
+
+    /// A heat pipe's volcanoes keep SO₂ frost only with more supply than
+    /// the plasma takes, starting from none at that line; the frost's
+    /// vapour at Io's dayside is of Io's nanobar, and no frost leaves the
+    /// air as it is.
+    #[test]
+    fn volcanic_frost_needs_more_supply_than_loss() {
+        let io = LossContext {
+            gravity: 1.796,
+            radius_m: 1.8216e6,
+            orbit_au: 5.2,
+            age_gyr: 4.57,
+            host: Some(HostPlasma {
+                host_mass_earth: JUPITER_MASS_EARTH,
+                semi_major_axis_radii: 5.9,
+            }),
+        };
+        let loss = so2_loss_kg_s(&io);
+        // Io's torus takes about 1 t/s, mostly SO₂ and its fragments.
+        assert!((100.0..=1000.0).contains(&loss), "{loss}");
+        let bar_per_kg = 4.3e-19;
+        assert_eq!(volcanic_so2_frost_bar(0.5 * loss, &io, bar_per_kg), 0.0);
+        assert!(volcanic_so2_frost_bar(1.000_001 * loss, &io, bar_per_kg) < 1e-9);
+        assert!(volcanic_so2_frost_bar(50.0 * loss, &io, bar_per_kg) > 0.02);
+        let none = Gases::default();
+        assert_eq!(frost_so2_air(none, 0.0, 95.0), none);
+        let so2 = frost_so2_air(none, 0.05, 95.0).so2;
+        assert!((1e-10..=1e-8).contains(&so2), "{so2:e}");
     }
 
     #[test]

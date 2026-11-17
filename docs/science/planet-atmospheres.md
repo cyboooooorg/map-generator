@@ -375,7 +375,7 @@ O₂ of an icy surface is not modelled. An air that outlasts its loss
 keeps all of it, the loss being then a share of a large column. Since
 the step comes before the cold trap, a frost of an exhausted gas is gone
 too: Ganymede and Callisto no longer have the CO₂ frost that brightened
-them (`Body::frost_bar` reads what the cold trap froze out of what is
+them (`climate::frost` reads what the cold trap froze out of what is
 left), and the carbon cycle's inventory is what is left of their CO₂.
 
 A moon of a giant meets its giant's plasma in two places. The
@@ -406,6 +406,86 @@ air, as do every planet and every archetype but the four Galilean moons
 moons of giants with thin airs (2e-8 to 1.4e-3 bar) become exospheres;
 no class changes, and the thick airs of drawn moons (up to 36 bar round
 giants of 4 to 12 Jupiter masses) stay.
+
+**Volcanic SO₂** (`volcanic_so2_supply`, `volcanic_so2_frost_bar`,
+`frost_so2_air`; issue #525). A heat-pipe body erupts the heat its
+tides give it as magma, and the magma degasses its sulphur as SO₂,
+which falls back as frost and breathes a thin air over it. Io's air is
+that: a dayside column of 1e16 to 2e17 cm⁻² of SO₂ (about 1 to 10
+nbar) in sublimation equilibrium with SO₂ frost at 106 to 117 K on the
+equator (Giles et al. 2024, arXiv:2405.19253, 22 years of IRTF/TEXES
+spectra; checked), with N₂ and CO₂ far under it.
+
+```text
+supply = 2 s_sil · P_tidal / E_magma           kg/s of SO₂
+frost  = (supply − loss) · t_res · g / (4π R² · 1e5)   bar
+air    = P_SO₂(2^(1/4) · T_eq)                 at most the frost
+```
+
+- *Supply.* In a heat pipe the magma carries the heat up (O'Reilly &
+  Davies 1981, *Geophys. Res. Lett.* 8, 313; from memory, not checked):
+  the magma erupted is the tidal heat over the heat a kilogram of magma
+  carries, its latent heat (about 4e5 J/kg) and its heat capacity
+  (about 1200 J/(kg·K)) over the 1400 K from an eruption at about
+  1600 K (Io's ultramafic lavas, McEwen et al. 1998, *Science* 281, 87;
+  from memory, not checked) to the cold surface, `MAGMA_HEAT_J_KG` =
+  2.1e6 J/kg: about 5e7 kg/s for Io's 1e14 W. Its sulphur is the
+  silicate's (`s_sil`, the 250 ppm of `ROCK_S` times the body's
+  scatter), all degassed as SO₂ (64 for 32) into the vent's vacuum.
+  Only the tidal heat counts, and only in a heat pipe: radiogenic and
+  secular heat leave by conduction in the other regimes, whose air keeps
+  the outgassed SO₂ of `outgassed` (Venus unchanged). The model's Io
+  gives about 1.7e4 kg/s.
+- *Loss.* The non-thermal loss takes SO₂ at the rate per m² of the
+  step above, photo-ions and escaping sputtered molecules, over the
+  whole surface (`so2_loss_kg_s`): about 300 kg/s on Io, the order of the
+  tonne per second its torus is fed. A supply under it keeps no frost
+  and no air of its own; the frost starts from nothing at that line.
+- *Frost.* What the loss leaves lies on the ground for
+  `SO2_FROST_RESIDENCE_S`, 150 000 years, before lava and plume
+  deposits bury it. **Calibration** on Io, no source: SO₂ frost covers
+  most of Io (Douté et al. 2001, *Icarus* 149, 107; from memory, not
+  checked), and this residence covers at least 80 % of the disc on
+  every draw of `io-like`, whose sulphur scatters by a factor of 20
+  (7.9e3 to 1.5e5 kg/s, 0.017 to 0.33 bar of frost against the frost
+  layer of 0.02 bar); a shorter one leaves its low-sulphur draws half
+  bare, dark and warm enough to breathe more than 1e-8 bar. Io's
+  resurfacing, of the order of a centimetre a year (from memory, not
+  checked), would bury a metre of deposit in a century, but the frost
+  sublimes and condenses again each day and so stays on top. The climate
+  reads it as a frost (`climate::frost`, where the surface keeps it under
+  SO₂'s sublimation pressure), with its own albedo, `SO2_FROST_ALBEDO`
+  = 0.63, **calibration** on Io's Bond albedo (Simonelli & Veverka
+  1988, from memory, not checked) for a disc nearly all frost: darker
+  than the N₂, CH₄ and CO₂ frosts' 0.75, Io's frost being mixed with its
+  sulphur and silicate deposits. Under 0.75 the frost's dayside would
+  lie near 103 K and breathe 4e-11 bar.
+- *Vapour curve.* `SO2_FROST`: triple point 197.64 K and 0.0167 bar
+  (Giauque & Stephenson 1938, *J. Am. Chem. Soc.* 60, 1389, through the
+  NIST Chemistry WebBook; checked), and the sublimation curve
+  `P = 1.516e8 exp(−4510 K / T)` bar of Wagman 1979 (NBS Chemical
+  Thermodynamics Data Center; quoted by Giles et al. 2024, checked
+  there), so 37.5 kJ/mol from the triple point: 1.3e-9 bar at 115 K.
+  Fray & Schmitt 2009 (*Planet. Space Sci.* 57, 2053,
+  doi:10.1016/j.pss.2009.09.011) review SO₂'s sublimation pressure too;
+  their table was not read.
+- *Air.* The frost's vapour at the mean temperature of the dayside,
+  `2^(1/4)` times the equilibrium temperature under the body's Bond
+  albedo (`DAYSIDE_FACTOR`: the starlight over the dayside only; a heat
+  pipe's internal heat leaves through its vents and lava, not through
+  the cold lid under the frost). It enters after the climate and the
+  washing out: the frost resupplies it within hours, faster than any
+  sink, and a nanobar weighs nothing in the climate. It does not go
+  through the non-thermal loss, whose rate is already taken out of the
+  supply.
+
+Over seeds 1 to 40 of `archetype_census`, `io-like` breathes 2.4e-10 to
+5.5e-9 bar of SO₂ (median 8.9e-10), against 1.8e-14 to 1.1e-12 of N₂
+and 1.9e-12 to 3.0e-12 of CO₂, its Bond albedo 0.54 to 0.63 (median
+0.63; 0.11 before) and its mean surface temperature 101 to 113 K
+(median 107; 120 to 130 before, under its bare rock). Every other
+archetype's rows are unchanged; `venus-like` keeps 0.0054 to 0.072 bar
+of SO₂.
 
 **Methane photolysis** (`methane_photolysis`, before the cold trap, on
 the whole stock). The star's ultraviolet destroys methane at a rate set
@@ -479,7 +559,8 @@ frost wherever the surface is cold enough to keep it (below CO₂'s
 triple point, beyond what the air can take back at the surface's
 sublimation pressure), and the frosts of N₂, CH₄ and CO₂ brighten the
 body's Bond albedo (`albedo::cover`: 0.75, covering the share
-`frost / 0.02 bar` of the disc).
+`frost / 0.02 bar` of the disc), as does a heat pipe's volcanic SO₂
+frost (0.63, see *Volcanic SO₂*).
 
 **Photochemistry** (`photochemistry`, after the cold trap, on what is
 still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
@@ -550,16 +631,15 @@ masses, ice shares and orbits):
 |---|---|---|
 | Titan | hydrocarbon world, 93.5 K, 1.43 bar, 94 % N₂, 0.083 bar CH₄ (5.8 %) | 93.7 K, 1.47 bar, 5.7 % CH₄ |
 | Ganymede, Callisto | exospheres of 3e-12 bar (CO₂), 97.9 K, Bond albedo 0.60 | exospheres of 1e-12 (O₂) and 7.5e-12 bar (CO₂) |
-| Io | heat pipe, exosphere of 3e-12 bar (CO₂), 124.6 K, Bond albedo 0.11 with no frost | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
+| Io | heat pipe, 9.3e-10 bar of SO₂ over its SO₂ frost (N₂ and CO₂ an exosphere of 3e-12 bar), 105.2 K, Bond albedo 0.63 | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
 | Europa | exosphere of 3e-12 bar (CO₂), 98.0 K | exosphere of about 1e-12 bar (O₂) |
 | Triton | 1.9e-5 bar of N₂ over its frost at 36.4 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
 | Moon | 1e-12 bar | airless |
 
 Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
 by 0.3 dex). Io's N₂ and CO₂ are an exosphere on every seed (Jupiter's
-plasma torus exhausts them, see *Non-thermal loss*); its SO₂ has no
-frost or air of its own yet, so it lost the CO₂ frost that brightened
-it and its Bond albedo is its bare rock's. Triton's N₂ is its frost's vapour
+plasma torus exhausts them, see *Non-thermal loss*); its air is the
+SO₂ of its volcanic frost (see *Volcanic SO₂*). Triton's N₂ is its frost's vapour
 pressure at its surface temperature, which the frost's own albedo sets
 (issue #464; before, the cold trap held it at the equilibrium
 temperature under the reference albedo 0.3, 47 K, and kept 1.9e-3 bar).
@@ -850,7 +930,8 @@ the column absorbs at). The disc is split, planet-wide, into open ocean
 body, shielded from space weathering by `1 - exp(-p / 1e-4 bar)`), water
 ice and snow (0.6, from the ice line at -5 °C and the equator-to-pole
 contrast of an Earth-like planet, `ice_line_share`), frosts of N₂, CH₄ and
-CO₂ (0.75, the share `frost / 0.02 bar` of the disc), under a water cloud
+CO₂ (0.75, the share `frost / 0.02 bar` of the disc, all frosts together)
+and of volcanic SO₂ (0.63, its part of that share), under a water cloud
 cover that grows with the vapour (`1 - exp(-p_H₂O / 1.15e-2 bar)`, Earth's
 0.67 at its 1.26e-2 bar, each cloud 0.19), Rayleigh scattering of the air's
 column, a methane haze and, from 1e-3 bar of SO₂ (what the washing out
@@ -862,7 +943,8 @@ clear sky and a cold decked one). The model stores the air washed as the
 albedo washed it, and the look draws the same deck over the same share. Each constant is
 calibrated on several bodies at once and carries its source (several are
 from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
-0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64 and Triton 0.75.
+0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64, Triton 0.75 and
+Io 0.63.
 
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it

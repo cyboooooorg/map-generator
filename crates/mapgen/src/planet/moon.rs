@@ -289,6 +289,54 @@ mod tests {
         }
     }
 
+    /// Io breathes the SO₂ of its volcanoes: its dayside column of 1e16 to
+    /// 2e17 cm⁻² (about 1 to 10 nbar) sits on SO₂ frost at 106 to 117 K
+    /// (Giles et al. 2024, arXiv:2405.19253, from 22 years of IRTF/TEXES
+    /// spectra), far above the N₂ and CO₂ the plasma left it. On every
+    /// seed its air is 1e-10 to 1e-8 bar of SO₂, more than its N₂ and CO₂,
+    /// and the frost on its ground is SO₂.
+    #[test]
+    fn io_breathes_so2() {
+        use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
+        use std::collections::BTreeMap;
+        let mut albedo = Vec::new();
+        for seed in 1..=40 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                planets: Some(BTreeMap::from([("io-like".to_string(), 1)])),
+                seed: Some(seed),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(
+                &request,
+                &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .expect("the system draws");
+            let body = system
+                .bodies
+                .iter()
+                .find(|b| b.params.archetype.as_deref() == Some("io-like"))
+                .expect("an io-like body");
+            let m = body.model.as_ref().expect("a model");
+            let s = m.surface.expect("surface");
+            let g = s.gases;
+            assert!((1e-10..=1e-8).contains(&g.so2), "seed {seed}: {g:?}");
+            assert!(g.so2 > g.n2 + g.co2, "seed {seed}: {g:?}");
+            let context = body_context(&system, body).expect("its context");
+            let frost = crate::planet::explain::replay(&context, m, &s).frost;
+            assert!(frost.so2 > 0.0, "seed {seed}: {frost:?}");
+            assert!(
+                frost.so2 > frost.total() - frost.so2,
+                "seed {seed}: {frost:?}"
+            );
+            albedo.push(s.climate.bond_albedo);
+        }
+        albedo.sort_by(f64::total_cmp);
+        println!(
+            "Io Bond albedo: {:.3} / {:.3} / {:.3}",
+            albedo[0], albedo[20], albedo[39]
+        );
+    }
+
     /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its
     /// frost (1e-5 to 3e-5 bar) outlast what their giants' plasma and the
     /// Sun's ionisation take of them.
@@ -398,9 +446,9 @@ mod tests {
     /// airless icy Europa (0.68, Buratti & Veverka 1983) and Io under its
     /// frosts (0.63, Simonelli & Veverka 1988; all from memory, not
     /// checked), round one star. Io's CO₂ frost went with its air to
-    /// Jupiter's plasma ([`super::super::non_thermal_loss`]) and its SO₂
-    /// frost is not modelled yet (#525): until then it shows its bare
-    /// rock's albedo, darker than observed.
+    /// Jupiter's plasma ([`super::super::non_thermal_loss`]); the SO₂
+    /// frost of its volcanoes brightens it
+    /// ([`super::super::atmosphere::volcanic_so2_frost_bar`]).
     #[test]
     fn a_moon_uses_its_own_cover() {
         let titan = model(9.54, &titan());
@@ -417,7 +465,7 @@ mod tests {
         println!("Bond albedo: Titan {t:.3}, Europa {e:.3}, Io {i:.3}");
         assert!((0.2..=0.35).contains(&t), "Titan {t}: {titan:?}");
         assert!((0.5..=0.75).contains(&e), "Europa {e}: {europa:?}");
-        assert!((0.05..=0.7).contains(&i), "Io {i}: {io:?}");
+        assert!((0.4..=0.7).contains(&i), "Io {i}: {io:?}");
         assert!(t != e && e != i && t != i, "{t} {e} {i}");
     }
 

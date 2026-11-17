@@ -490,9 +490,15 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
         // whole.
         CloudKind::Sulfuric => shift(deck),
         // Water clouds follow the vapour (the albedo's cover).
-        CloudKind::Water => {
-            shift(cover(surface.climate.temperature_k, gases, &surface.water, 0.0).cloud)
-        }
+        CloudKind::Water => shift(
+            cover(
+                surface.climate.temperature_k,
+                gases,
+                &surface.water,
+                &super::Gases::default(),
+            )
+            .cloud,
+        ),
         _ => 0.0,
     };
     sky
@@ -1302,7 +1308,7 @@ mod tests {
                 so2,
                 ..Gases::default()
             };
-            let albedo = derived_albedo(400.0, &air, &surface.water, 0.0);
+            let albedo = derived_albedo(400.0, &air, &surface.water, &Gases::default());
             surface.gases = wash_out(air, SurfaceLiquid::None);
             let sky = sky_of(&model);
             let albedo_deck = albedo == DECK_ALBEDO;

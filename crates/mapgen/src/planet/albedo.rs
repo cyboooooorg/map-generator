@@ -27,8 +27,11 @@ pub struct Cover {
     pub ocean: f64,
     pub land: f64,
     pub ice: f64,
-    /// N₂, CH₄ or CO₂ frost ([`FROST_LAYER_BAR`], issue #464).
+    /// N₂, CH₄, CO₂ or SO₂ frost ([`FROST_LAYER_BAR`], issue #464).
     pub frost: f64,
+    /// The share of the disc of that frost that is SO₂ frost
+    /// ([`SO2_FROST_ALBEDO`]), part of `frost`.
+    pub so2_frost: f64,
     pub cloud: f64,
 }
 
@@ -84,15 +87,26 @@ const FROST_ALBEDO: f64 = 0.75;
 /// a frost gathers into deposits in its cold traps (poles, basins,
 /// shadows) and is spread no thinner, as [`ICE_SHEET_KM`] does for water
 /// ice. 0.02 bar: about 0.7 m of CO₂ frost on Io's gravity, or 2.5 m of
-/// N₂ frost on Triton's. Calibration on the moons, no source: the
-/// model's Io freezes 0.013 bar of CO₂ out of its air (the real one's
-/// frost is SO₂, which the model keeps far less of), which covers about
-/// two-thirds of its disc and gives it a Bond albedo of 0.56 (0.63
-/// observed, Simonelli & Veverka 1988, from memory, not checked; its
-/// frost-free ground is shielded regolith); Triton's 0.36 bar of N₂
-/// frost covers all of it with any value under that; Europa's trace of
-/// CO₂ frost (2e-4 bar) leaves it to its water ice.
+/// N₂ frost on Triton's. Calibration on the moons, no source: it was
+/// set on the CO₂ frost the model's Io then froze out of its air (0.013
+/// bar, two-thirds of its disc, a Bond albedo of 0.56); that air now goes
+/// to Jupiter's plasma and Io's frost is the SO₂ of its volcanoes, whose
+/// amount [`super::atmosphere::volcanic_so2_frost_bar`] is calibrated
+/// against this layer. Triton's 0.36 bar of N₂ frost covers all of it
+/// with any value under that; Europa's trace of CO₂ frost (2e-4 bar)
+/// leaves it to its water ice.
 const FROST_LAYER_BAR: f64 = 0.02;
+
+/// Albedo of the SO₂ frost of a volcanic body: 0.63, Io's Bond albedo
+/// (Simonelli & Veverka 1988, from memory, not checked), the albedo of a
+/// disc that frost covers nearly all of (Douté et al. 2001, Icarus 149,
+/// 107, doi:10.1006/icar.2000.6513, map it over most of Io; from memory,
+/// not checked). Calibration on Io: darker than [`FROST_ALBEDO`], since
+/// Io's frost lies mixed with its sulphur and silicate deposits. With it
+/// the frost's dayside lies at Io's 106 to 117 K
+/// ([`super::atmosphere::frost_so2_air`]); under [`FROST_ALBEDO`] it would
+/// lie near 103 K, and its vapour at 4e-11 bar, under Io's nanobar.
+const SO2_FROST_ALBEDO: f64 = 0.63;
 
 /// Annual mean temperature, K, under which a surface keeps ice or snow:
 /// −5 °C. Calibration: Budyko 1969 (doi:10.3402/tellusa.v21i5.10109)
@@ -302,7 +316,8 @@ fn ice_line_share(temperature_k: f64) -> f64 {
 }
 
 /// What covers a body at `temperature_k` under `gases` with `water`
-/// and `frost_bar` of N₂, CH₄ and CO₂ frost on its ground ([`Cover`]).
+/// and `frost` (bar, gas by gas) of N₂, CH₄, CO₂ and SO₂ frost on its
+/// ground ([`Cover`]).
 ///
 /// - Its water, out of a runaway, is open ocean ([`ocean_fraction`] of
 ///   its oceans) where the surface is warmer than the ice line and ice or
@@ -311,10 +326,12 @@ fn ice_line_share(temperature_k: f64) -> f64 {
 /// - The rest is bare land.
 /// - Its frost lies over the ocean's ice and the land, covering the share
 ///   `frost_bar / FROST_LAYER_BAR` of the disc ([`FROST_LAYER_BAR`]), all
-///   of it from that amount on.
+///   of it from that amount on, `frost_bar` all of its gases together;
+///   the SO₂ frost takes its part of that share.
 /// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`]):
 ///   none in a dry or airless sky.
-pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> Cover {
+pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost: &Gases) -> Cover {
+    let frost_bar = frost.total();
     let wet = water.is_wet();
     let (sea, ice) = if wet {
         let reach = (water.oceans.max(0.0) * OCEAN_LAYER_KM / ICE_SHEET_KM).min(1.0);
@@ -324,6 +341,11 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -
         )
     } else {
         (0.0, 0.0)
+    };
+    let so2_part = if frost_bar > 0.0 {
+        (frost.so2 / frost_bar).clamp(0.0, 1.0)
+    } else {
+        0.0
     };
     let frost = (frost_bar.max(0.0) / FROST_LAYER_BAR).min(1.0);
     let ocean = sea * (1.0 - ice) * (1.0 - frost);
@@ -335,6 +357,7 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -
         land,
         ice,
         frost,
+        so2_frost: frost * so2_part,
         cloud,
     }
 }
@@ -373,7 +396,8 @@ fn haze(gases: &Gases) -> f64 {
 ///
 /// The surface mixes its covers' albedos (ocean [`OCEAN_ALBEDO`], land
 /// from [`REGOLITH_ALBEDO`] when airless to [`SOIL_ALBEDO`] under an air,
-/// ice and snow [`ICE_ALBEDO`], frost [`FROST_ALBEDO`]); the water clouds' layer
+/// ice and snow [`ICE_ALBEDO`], frost [`FROST_ALBEDO`], SO₂ frost
+/// [`SO2_FROST_ALBEDO`]); the water clouds' layer
 /// ([`CLOUD_ALBEDO`] over their cover) lies over it, the Rayleigh
 /// scattering of the column over both (averaged over the Sun's spectrum
 /// band by band: what caps CO₂'s warming at the maximum greenhouse,
@@ -390,7 +414,8 @@ pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64) -> f64 {
     let surface = cover.ocean * OCEAN_ALBEDO
         + cover.land * land
         + cover.ice * ICE_ALBEDO
-        + cover.frost * FROST_ALBEDO;
+        + (cover.frost - cover.so2_frost) * FROST_ALBEDO
+        + cover.so2_frost * SO2_FROST_ALBEDO;
     let cloud = (cover.cloud * CLOUD_ALBEDO).clamp(0.0, 1.0);
     let clouded = over(cloud, 1.0 - cloud, surface);
     let tau = rayleigh_550(gases);
@@ -431,7 +456,7 @@ mod tests {
         let airless = Gases::default();
         assert!(airless.total() < 1e-6);
         for t in [100.0, 250.0, 440.0, 700.0] {
-            let c = cover(t, &airless, &dry, 0.0);
+            let c = cover(t, &airless, &dry, &Gases::default());
             assert_eq!(c.ocean, 0.0, "{t}: {c:?}");
             assert_eq!(c.cloud, 0.0, "{t}: {c:?}");
             assert_eq!(c.ice, 0.0, "{t}: {c:?}");
@@ -454,17 +479,17 @@ mod tests {
         let mut last = f64::INFINITY;
         for i in 0..=100 {
             let t = 200.0 + f64::from(i);
-            let ice = cover(t, &air, &water, 0.0).ice;
+            let ice = cover(t, &air, &water, &Gases::default()).ice;
             assert!(ice <= last, "{t}: {ice} > {last}");
             last = ice;
         }
-        let earth = cover(288.0, &air, &water, 0.0).ice;
+        let earth = cover(288.0, &air, &water, &Gases::default()).ice;
         assert!((0.06..=0.14).contains(&earth), "{earth}");
         for t in [200.0, 230.0, 240.0, 250.0] {
-            let ice = cover(t, &air, &water, 0.0).ice;
+            let ice = cover(t, &air, &water, &Gases::default()).ice;
             assert!(ice > 0.999, "{t}: {ice}");
         }
-        assert_eq!(cover(300.0, &air, &water, 0.0).ice, 0.0);
+        assert_eq!(cover(300.0, &air, &water, &Gases::default()).ice, 0.0);
     }
 
     #[test]
@@ -480,11 +505,14 @@ mod tests {
             kept_kg: 0.005 * super::super::OCEAN_KG,
             ..earth_water()
         };
-        let caps = cover(210.0, &air, &mars, 0.0);
+        let caps = cover(210.0, &air, &mars, &Gases::default());
         assert!(caps.ice > 0.0 && caps.ice < 0.02, "{caps:?}");
         let a = bond_albedo(&caps, &air, 0.0);
         assert!((0.2..=0.3).contains(&a), "{a}");
-        assert_eq!(cover(210.0, &air, &earth_water(), 0.0).ice, 1.0);
+        assert_eq!(
+            cover(210.0, &air, &earth_water(), &Gases::default()).ice,
+            1.0
+        );
     }
 
     #[test]
@@ -501,16 +529,29 @@ mod tests {
             n2: 1.4e-5,
             ..Gases::default()
         };
-        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, frost), &thin, 0.0);
-        let half = cover(40.0, &thin, &dry, FROST_LAYER_BAR / 2.0);
+        let n2 = |bar: f64| Gases {
+            n2: bar,
+            ..Gases::default()
+        };
+        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, &n2(frost)), &thin, 0.0);
+        let half = cover(40.0, &thin, &dry, &n2(FROST_LAYER_BAR / 2.0));
         assert!((half.frost - 0.5).abs() < 1e-12, "{half:?}");
         assert!((half.land - 0.5).abs() < 1e-12, "{half:?}");
         assert!(a(0.0) < a(FROST_LAYER_BAR / 2.0));
         assert!(a(FROST_LAYER_BAR / 2.0) < a(FROST_LAYER_BAR));
         assert_eq!(a(FROST_LAYER_BAR), a(10.0));
         assert!((a(10.0) - FROST_ALBEDO).abs() < 0.01, "{}", a(10.0));
+        // SO₂ frost, the volcanic frost of a heat pipe, is darker.
+        let so2 = Gases {
+            so2: 10.0,
+            ..Gases::default()
+        };
+        let volcanic = cover(40.0, &thin, &dry, &so2);
+        assert_eq!(volcanic.so2_frost, 1.0);
+        let a_so2 = bond_albedo(&volcanic, &thin, 0.0);
+        assert!((a_so2 - SO2_FROST_ALBEDO).abs() < 0.01, "{a_so2}");
         // Over ice, the frost takes its share from the ice.
-        let icy = cover(40.0, &thin, &earth_water(), FROST_LAYER_BAR / 4.0);
+        let icy = cover(40.0, &thin, &earth_water(), &n2(FROST_LAYER_BAR / 4.0));
         assert!(
             (icy.ice - 0.75).abs() < 1e-12 && icy.ocean == 0.0,
             "{icy:?}"
@@ -533,6 +574,7 @@ mod tests {
             land: 1.0,
             ice: 0.0,
             frost: 0.0,
+            so2_frost: 0.0,
             cloud: 0.0,
         };
         let a = |co2: f64| {

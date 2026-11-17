@@ -383,6 +383,9 @@ pub(crate) struct Air {
     /// CO₂ the cold trap froze onto the ground, bar
     /// ([`climate::CarbonCycle::frozen_bar`]).
     pub frozen_co2_bar: f64,
+    /// SO₂ frost the volcanoes of a heat pipe lay on the ground, bar
+    /// ([`climate::CarbonCycle::so2_frost_bar`]).
+    pub so2_frost_bar: f64,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -652,6 +655,10 @@ pub(crate) struct Bare {
     /// temperature ([`atmosphere::condense`]: the methane over its seas
     /// or frosts, the nitrogen of its frosts), bar.
     pub condensed: Gases,
+    /// Frost on the ground at the climate's surface temperature, bar, gas
+    /// by gas ([`climate::frost`]).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub frost: Gases,
 }
 
 /// The heaviest host whose magnetosphere [`non_thermal_loss`] reads, Earth
@@ -697,7 +704,10 @@ pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interio
 /// first pass, or its boiled steam): its [`regime`] and [`core`], its
 /// air ([`outgassed`], [`atmosphere`] under its [`shield`], [`non_thermal_loss`],
 /// [`methane_photolysis`], [`cold_trap`], [`photochemistry`]), its
-/// [`climate`], its [`life`] and the oxygen it makes. A runaway's water is
+/// [`climate`] (with the SO₂ frost a heat pipe's volcanoes lay,
+/// [`atmosphere::volcanic_so2_frost_bar`], whose vapour joins the air
+/// after it, [`atmosphere::frost_so2_air`]), its [`life`] and the oxygen
+/// it makes. A runaway's water is
 /// the steam escape has left in its air.
 pub(crate) fn bare(
     context: &Context,
@@ -718,7 +728,8 @@ pub(crate) fn bare(
         &shield(context, k),
         fluence,
     );
-    let (kept, lost) = non_thermal_loss(shoreline, &loss_context(context, inputs, interior));
+    let loss = loss_context(context, inputs, interior);
+    let (kept, lost) = non_thermal_loss(shoreline, &loss);
     let w = if w.runaway {
         w.keeping(kept.h2o / bar_per_kg)
     } else {
@@ -729,19 +740,40 @@ pub(crate) fn bare(
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
     let water_bar = w.kept_kg * bar_per_kg;
+    // A heat pipe's volcanoes lay SO₂ frost, which the climate sees in
+    // its albedo and whose vapour is the air's SO₂.
+    let so2_frost_bar = if r == crate::geology::Regime::HeatPipe {
+        let supply = atmosphere::volcanic_so2_supply(heat, inputs);
+        atmosphere::volcanic_so2_frost_bar(supply, &loss, bar_per_kg)
+    } else {
+        0.0
+    };
     // CO₂ the plasma exhausted is gone from the rocks' reach too: no
     // carbon cycle brings it back.
     let carbon = climate::CarbonCycle {
         inventory_bar: if lost.co2 > 0.0 { kept.co2 } else { out.co2 },
         frozen_bar: photolysed.co2 - trapped.co2,
+        so2_frost_bar,
         snowball_draw: inputs.snowball_draw,
     };
     let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
     let condensed = atmosphere::condense(gases, climate.temperature_k).1;
+    let frost = climate::frost(
+        &gases,
+        carbon.frozen_bar,
+        so2_frost_bar,
+        climate.temperature_k,
+        &after,
+    );
     let life = life(inputs, &climate, context.age_gyr);
     // Washed as the albedo washed it ([`climate::washed`]), so that the
-    // look's deck is the albedo's.
-    let surface_gases = climate::washed(oxygenate(after, &life), &w);
+    // look's deck is the albedo's; then the vapour of the volcanic frost,
+    // which the frost resupplies faster than anything takes it.
+    let surface_gases = atmosphere::frost_so2_air(
+        climate::washed(oxygenate(after, &life), &w),
+        frost.so2,
+        climate.equilibrium_k,
+    );
     Bare {
         surface: Surface {
             water: w,
@@ -757,6 +789,7 @@ pub(crate) fn bare(
             gases,
             carbon_bar: out.co2,
             frozen_co2_bar: photolysed.co2 - trapped.co2,
+            so2_frost_bar,
         },
         outgassed: out,
         kept,
@@ -765,6 +798,7 @@ pub(crate) fn bare(
         trapped,
         climate_gases: after,
         condensed,
+        frost,
     }
 }
 
