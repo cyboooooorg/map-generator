@@ -884,14 +884,15 @@ fn so2_loss_kg_s(body: &LossContext) -> f64 {
 const DAYSIDE_FACTOR: f64 = 1.189_207_115;
 
 /// SO₂ partial pressure, bar, under which a volcanic frost's vapour is
-/// added to the air after the climate ([`volcanic_so2_vapour`],
-/// [`super::bare`]): 1e-7 bar. It is ten thousand times under the
-/// sulphuric deck's 1e-3 bar ([`super::albedo`]) and a thousandth of the
-/// 1e-4 bar that shields a surface from space weathering, and the climate
-/// gives SO₂ no greenhouse: under it the SO₂ moves neither the albedo nor
-/// the temperature, so solving the climate without it changes nothing.
-/// Io's 1e-9 bar lies well under it. A warmer frost breathes more and its
-/// vapour goes through the climate and the washing out instead.
+/// added to the air after the climate rather than before it
+/// ([`volcanic_so2_vapour`], [`super::bare`]): 1e-7 bar. It is ten
+/// thousand times under the sulphuric deck's 1e-3 bar
+/// ([`super::albedo`]) and a thousandth of the 1e-4 bar that shields a
+/// surface from space weathering, and the climate gives SO₂ no
+/// greenhouse: under it the SO₂ moves neither the albedo nor the
+/// temperature, so solving the climate without it changes nothing.
+/// Io's 1e-9 bar lies well under it. The stored air is the vapour on both
+/// sides.
 pub const TRACE_SO2_BAR: f64 = 1.0e-7;
 
 /// SO₂ air, bar, a body's volcanic frost of `so2_frost_bar` holds: its
@@ -899,21 +900,25 @@ pub const TRACE_SO2_BAR: f64 = 1.0e-7;
 /// ([`DAYSIDE_FACTOR`] times `equilibrium_k`), at most the frost itself.
 /// Io's dayside column, 1e16 to 2e17 cm⁻² (about 1 to 10 nbar), is that
 /// equilibrium (Giles et al. 2024, arXiv:2405.19253; checked). `None`
-/// when that dayside is at or above SO₂'s triple point: the frost does
-/// not hold there, and the body keeps no volcanic frost or air beyond the
-/// SO₂ its outgassing already gives it ([`outgassed`], which counts the
-/// same sulphur over the body's age).
+/// when that dayside or the mean surface (`surface_k`, warmed by a
+/// greenhouse) is at or above SO₂'s triple point: the frost does not hold
+/// there, and the body keeps no volcanic frost or air beyond the SO₂ its
+/// outgassing gives it ([`outgassed`], which counts the same sulphur over
+/// the body's age). A scope limit: such a body's air does not get the
+/// tidal supply against a chemical lifetime, only that bulk SO₂, so a lava
+/// world's tides add none.
 ///
-/// The frost resupplies the air within hours, faster than the plasma
-/// takes it ([`non_thermal_loss`], whose rate [`volcanic_so2_frost_bar`]
-/// has already taken out of the supply), so it does not go through that
-/// step. Under [`TRACE_SO2_BAR`] it joins the air after the climate and
-/// the washing out ([`wash_out`], whose dry rule would scale a nanobar air
-/// by its own pressure over 10 bar); above it, before them. Below the
-/// triple point it is at most SO₂'s triple-point pressure, 0.0167 bar.
-pub fn volcanic_so2_vapour(so2_frost_bar: f64, equilibrium_k: f64) -> Option<f64> {
+/// The frost holds the air at this vapour, resupplying it within hours,
+/// so no sink of the air applies to it: neither the plasma's loss
+/// ([`non_thermal_loss`], whose rate [`volcanic_so2_frost_bar`] has
+/// already taken out of the supply) nor the washing out ([`wash_out`],
+/// whose dry rule scales a finite supply by its pressure over 10 bar).
+/// Under [`TRACE_SO2_BAR`] it joins the air after the climate; above it,
+/// before, the climate then solved again once. It is at most SO₂'s
+/// triple-point pressure, 0.0167 bar.
+pub fn volcanic_so2_vapour(so2_frost_bar: f64, equilibrium_k: f64, surface_k: f64) -> Option<f64> {
     let dayside_k = equilibrium_k * DAYSIDE_FACTOR;
-    if dayside_k >= SO2_FROST.triple_k {
+    if dayside_k.max(surface_k) >= SO2_FROST.triple_k {
         return None;
     }
     Some(SO2_FROST.cap(so2_frost_bar.max(0.0), dayside_k))
@@ -1191,17 +1196,19 @@ mod tests {
         assert_eq!(volcanic_so2_frost_bar(0.5 * loss, &io, bar_per_kg), 0.0);
         assert!(volcanic_so2_frost_bar(1.000_001 * loss, &io, bar_per_kg) < 1e-9);
         assert!(volcanic_so2_frost_bar(50.0 * loss, &io, bar_per_kg) > 0.02);
-        assert_eq!(volcanic_so2_vapour(0.0, 95.0), Some(0.0));
-        let so2 = volcanic_so2_vapour(0.05, 95.0).expect("a frost");
+        assert_eq!(volcanic_so2_vapour(0.0, 95.0, 100.0), Some(0.0));
+        let so2 = volcanic_so2_vapour(0.05, 95.0, 100.0).expect("a frost");
         assert!((1e-10..=1e-8).contains(&so2), "{so2:e}");
         // Warmer, more than a trace, at most the triple point's pressure;
         // above SO₂'s triple point on the dayside, no frost holds.
-        let warm = volcanic_so2_vapour(0.05, 150.0).expect("a frost");
+        let warm = volcanic_so2_vapour(0.05, 150.0, 150.0).expect("a frost");
         assert!(
             warm > TRACE_SO2_BAR && warm <= SO2_FROST.triple_bar,
             "{warm:e}"
         );
-        assert_eq!(volcanic_so2_vapour(0.05, 180.0), None);
+        assert_eq!(volcanic_so2_vapour(0.05, 180.0, 150.0), None);
+        // A greenhouse-warmed surface above it melts the frost too.
+        assert_eq!(volcanic_so2_vapour(0.05, 150.0, 200.0), None);
     }
 
     #[test]

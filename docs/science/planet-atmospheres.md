@@ -475,27 +475,34 @@ air    = P_SO₂(2^(1/4) · T_eq)                 at most the frost
   `2^(1/4)` times the equilibrium temperature under the body's Bond
   albedo (`DAYSIDE_FACTOR`: the starlight over the dayside only; a heat
   pipe's internal heat leaves through its vents and lava, not through
-  the cold lid under the frost), at most the frost. The frost resupplies
-  it within hours, so it does not go through the non-thermal loss,
-  whose rate is already taken out of the supply. Under `TRACE_SO2_BAR`,
-  1e-7 bar (ten thousand times under the sulphuric deck's 1e-3 bar, a
-  thousandth of the 1e-4 bar that shields a surface, and SO₂ has no
-  greenhouse in the climate), it moves neither the albedo nor the
-  temperature: it joins the stored air after the climate and the
-  washing out, whose dry rule would otherwise scale a nanobar air by its
-  own pressure over 10 bar. Above it, on a warmer heat pipe, the vapour
-  leaves the frost and goes into the air before the climate, which is
-  solved again with it, and the washing out treats it as any SO₂: the
-  stored deck is the albedo's, and air and frost together hold the
-  whole supply. Below the triple point the vapour is at most its
-  pressure, 0.0167 bar. A dayside at or above SO₂'s triple point holds
-  no frost: such a body keeps no volcanic frost or air beyond the SO₂
-  its outgassing gives it (`outgassed`, which counts the same sulphur
-  over its age), so a lava world's tides add no SO₂. Io round a Jupiter
-  at 2.5 AU breathes 1.7e-4 bar off 0.037 bar of frost and keeps 3e-9
-  bar once washed; at 1 AU, or round an Earth-mass host at 1 AU with
-  no plasma, its dayside is above the triple point and it keeps only
-  its outgassed trace.
+  the cold lid under the frost), at most the frost. The frost holds the
+  air at that vapour, resupplying it within hours, so no sink of the air
+  applies to it: neither the non-thermal loss, whose rate is already
+  taken out of the supply, nor the washing out, whose dry rule scales a
+  finite supply by its own pressure over 10 bar (it would cut a nanobar
+  air by ten orders of magnitude). The stored air's SO₂ is the vapour,
+  or the outgassed SO₂ the washing out leaves when that is more. Under
+  `TRACE_SO2_BAR`, 1e-7 bar (ten thousand times under the sulphuric
+  deck's 1e-3 bar, a thousandth of the 1e-4 bar that shields a surface,
+  and SO₂ has no greenhouse in the climate), the vapour moves neither the
+  albedo nor the temperature and joins the air after the climate. Above
+  it, on a warmer heat pipe, it leaves the frost and goes into the air
+  before the climate, which is solved again once with it (the vapour of
+  that second climate differs by 0.4 % at most, for Io round a Jupiter
+  at 2.5 AU). The vapour is at most SO₂'s triple-point pressure, 0.0167
+  bar, above the deck's 1e-3 bar, but the deck forms only over 273 K
+  and the frost only under 197.64 K: no deck forms over a frost, in the
+  albedo or in the look. A dayside or a mean surface (warmed by a
+  greenhouse) at or above SO₂'s triple point holds no frost: such a body
+  keeps no volcanic frost or air beyond the SO₂ its outgassing gives it
+  (`outgassed`, which counts the same sulphur over its age). A scope
+  limit: its air gets that bulk SO₂, not the tidal supply against a
+  chemical lifetime, so a lava world's tides add no SO₂. Io round a
+  Jupiter breathes 9.3e-10 bar at 5.2 AU, 1.2e-7 at 4 AU and 1.7e-4
+  off 0.037 bar of frost at 2.5 AU, its air growing steadily as it nears
+  the star; at 1 AU, or round an Earth-mass host at 1 AU with no plasma,
+  its dayside is above the triple point and it keeps only its outgassed
+  trace.
 
 Over seeds 1 to 40 of `archetype_census`, `io-like` breathes 2.4e-10 to
 5.5e-9 bar of SO₂ (median 8.9e-10), against 1.8e-14 to 1.1e-12 of N₂

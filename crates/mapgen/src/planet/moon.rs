@@ -386,6 +386,48 @@ mod tests {
         }
     }
 
+    /// Io's volcanic frost holds its air at its dayside vapour wherever
+    /// it lies, on both sides of [`TRACE_SO2_BAR`] (the vapour then joins
+    /// the air before the climate, not after it), and the air thickens
+    /// steadily as Io's giant nears the star, from 5.2 to 2.5 AU (1e-9 to
+    /// 1.7e-4 bar). The vapour of the final climate differs from the one
+    /// the climate was solved with by 0.4 % at most (at 2.5 AU): one pass
+    /// suffices.
+    ///
+    /// [`TRACE_SO2_BAR`]: crate::planet::atmosphere::TRACE_SO2_BAR
+    #[test]
+    fn a_frost_holds_its_air_at_its_vapour() {
+        use crate::planet::atmosphere::{
+            TRACE_SO2_BAR, bar_per_kg, volcanic_so2_frost_bar, volcanic_so2_supply,
+            volcanic_so2_vapour,
+        };
+        let io = moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041);
+        let (mut last, mut sides) = (0.0, [false; 2]);
+        for orbit in [5.2, 4.6, 4.2, 4.0, 3.9, 3.8, 3.6, 3.2, 2.8, 2.5] {
+            let m = model(orbit, &io);
+            let s = m.surface.expect("surface");
+            let context = planet_at(orbit).with_tide(io.tide);
+            let loss = crate::planet::loss_context(&context, &m.inputs, &m.interior);
+            let inventory = volcanic_so2_frost_bar(
+                volcanic_so2_supply(&m.heat, &m.inputs),
+                &loss,
+                bar_per_kg(m.inputs.mass_earth, &m.interior),
+            );
+            let c = s.climate;
+            let vapour =
+                volcanic_so2_vapour(inventory, c.equilibrium_k, c.temperature_k).expect("a frost");
+            let so2 = s.gases.so2;
+            assert!(
+                (so2 / vapour - 1.0).abs() < 0.01,
+                "{orbit} AU: {so2:e} against {vapour:e}"
+            );
+            assert!(so2 > last, "{orbit} AU: {so2:e} after {last:e}");
+            last = so2;
+            sides[usize::from(vapour > TRACE_SO2_BAR)] = true;
+        }
+        assert_eq!(sides, [true, true]);
+    }
+
     /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its
     /// frost (1e-5 to 3e-5 bar) outlast what their giants' plasma and the
     /// Sun's ionisation take of them.

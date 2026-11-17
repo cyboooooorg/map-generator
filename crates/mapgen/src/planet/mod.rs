@@ -768,27 +768,35 @@ pub(crate) fn bare(
         water_bar,
         carbon(so2_frost_bar),
     );
-    // The frost's vapour on the dayside: a trace joins the air after the
-    // climate; more goes into the air before it, out of the frost, and
-    // through the climate and the washing out as any SO₂ does. A dayside
-    // above SO₂'s triple point holds no frost: the body keeps the SO₂ its
-    // outgassing gave it.
-    let mut trace = 0.0;
+    // The frost's vapour on the dayside, the air's SO₂ wherever the frost
+    // holds: more than a trace goes into the air before the climate, out
+    // of the frost, and the climate is solved again with it. A surface or
+    // dayside above SO₂'s triple point holds no frost: the body keeps the
+    // SO₂ its outgassing gave it.
+    let mut vapour = 0.0;
     if volcanic_bar > 0.0 {
-        let added = match atmosphere::volcanic_so2_vapour(volcanic_bar, climate.equilibrium_k) {
+        let held = atmosphere::volcanic_so2_vapour(
+            volcanic_bar,
+            climate.equilibrium_k,
+            climate.temperature_k,
+        );
+        let added = match held {
             None => {
                 so2_frost_bar = 0.0;
                 Some(0.0)
             }
-            Some(vapour) if vapour > atmosphere::TRACE_SO2_BAR => Some(vapour),
-            Some(vapour) => {
-                trace = vapour;
+            Some(v) if v > atmosphere::TRACE_SO2_BAR => {
+                vapour = v;
+                Some(v)
+            }
+            Some(v) => {
+                vapour = v;
                 None
             }
         };
-        if let Some(vapour) = added {
-            gases.so2 += vapour;
-            so2_frost_bar = (so2_frost_bar - vapour).max(0.0);
+        if let Some(v) = added {
+            gases.so2 += v;
+            so2_frost_bar = (so2_frost_bar - v).max(0.0);
             (after, climate) = self::climate(
                 context,
                 gases,
@@ -803,8 +811,9 @@ pub(crate) fn bare(
     let condensed = atmosphere::condense(gases, climate.temperature_k).1;
     let life = life(inputs, &climate, context.age_gyr);
     // Washed as the albedo washed it ([`climate::washed`]), so that the
-    // look's deck is the albedo's; then the trace of the volcanic frost's
-    // vapour.
+    // look's deck is the albedo's; but the frost's vapour is not washed
+    // out: the frost holds the air at it, whatever takes it. Neither deck
+    // sees it, under SO₂'s triple point and so far under the deck's 273 K.
     let washed = climate::washed(oxygenate(after, &life), &w);
     #[cfg(test)]
     let frost = climate::frost(
@@ -815,7 +824,7 @@ pub(crate) fn bare(
         &after,
     );
     let surface_gases = Gases {
-        so2: washed.so2.max(trace),
+        so2: washed.so2.max(vapour),
         ..washed
     };
     Bare {
