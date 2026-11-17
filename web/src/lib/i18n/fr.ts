@@ -988,6 +988,17 @@ export const fr: Messages = {
     hillSphere: 'Sphère de Hill',
     hillSphereHelp: (p) =>
       `Trace la sphère de Hill de ${p.host}, la limite des orbites de ses lunes (sur le globe, depuis une lune : celle de sa planète) : ${p.radius}, ${p.radii} rayons planétaires`,
+    tides: 'Marées',
+    tidesHelp: `Trace dans le ciel (sur le globe) les régimes emboîtés des marées de l’hôte sur le corps affiché, du plus grand au plus petit${S}: la sphère de Hill, celle où les marées ont freiné sa rotation, celle où la chaleur de marée dépasse la chaleur radioactive, et la limite de Roche. Ses carrés${S}: un par sphère`,
+    tideLocking: 'Verrouillage de marée',
+    tideLockingHelp: (p) =>
+      `Trace la sphère de verrouillage de marée de ${p.host}${S}: en deçà, ses marées ont freiné la rotation de ${p.body ?? 'un satellite comme la Lune'} au fil de l’âge du système (${p.radius}, ${p.radii} rayons planétaires)`,
+    tideHeating: 'Chauffage de marée',
+    tideHeatingHelp: (p) =>
+      `Trace la sphère de chauffage de marée de ${p.host}${S}: en deçà, la chaleur de marée de ${p.body ?? 'un satellite rocheux'} dépasse sa chaleur radioactive (${p.radius}, ${p.radii} rayons planétaires)`,
+    tideRoche: 'Limite de Roche',
+    tideRocheHelp: (p) =>
+      `Trace la limite de Roche de ${p.host}${S}: en deçà, un corps fluide aussi dense que ${p.body ?? 'un satellite rocheux'} est disloqué (${p.radius}, ${p.radii} rayons planétaires)`,
     orbitLinesHelp: 'Trace les orbites des lunes dans le ciel (sur le globe), vues depuis le corps affiché',
     smallBodies: 'Petits corps',
     smallBodiesHelp:

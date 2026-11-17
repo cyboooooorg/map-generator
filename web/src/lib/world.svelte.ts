@@ -4,6 +4,7 @@
 import { t } from './i18n/index.svelte';
 import { api, sizeName, systemBodyId } from './api/client';
 import type { BodyExtras } from './api/types/BodyExtras';
+import type { TideZones } from './api/types/TideZones';
 import type { BodySizes } from './api/types/BodySizes';
 import type { PresentSize } from './api/types/PresentSize';
 import type { System } from './api/types/System';
@@ -67,6 +68,8 @@ export class LoadedWorld {
   systemEvicted = $state.raw<string[]>([]);
   /** What the planet model says of each body (cause trees, resemblance), by body id; none from the file alone. */
   systemExtras = $state.raw<Record<string, BodyExtras>>({});
+  /** The tide spheres of each body (`mapgen::tides`), by body id; none from the file alone. */
+  systemTides = $state.raw<Record<string, TideZones>>({});
   systemBody = $state<string | null>(null);
   /**
    * What the viewer shows: the body (`planet`), or the star and its system
@@ -99,6 +102,8 @@ export class LoadedWorld {
   shownSystemBody = $derived(this.system?.bodies.find((b) => b.id === this.systemBody) ?? null);
   /** The extras of the body shown, if the server sent any. */
   shownExtras = $derived(this.systemExtras[this.systemBody ?? ''] ?? null);
+  /** The tide spheres of the body shown, if the server sent any. */
+  shownTides = $derived(this.systemTides[this.systemBody ?? ''] ?? null);
   private systemController: AbortController | null = null;
   /** The layers as loaded, at the present. */
   private present: WorldLayers | null = null;
@@ -131,6 +136,7 @@ export class LoadedWorld {
     this.systemNames = {};
     this.systemEvicted = [];
     this.systemExtras = {};
+      this.systemTides = {};
     this.subject = 'planet';
     this.starMode = 'system';
     this.pinnedPlanets = [];
@@ -164,6 +170,7 @@ export class LoadedWorld {
       this.systemNames = {};
       this.systemEvicted = [];
       this.systemExtras = {};
+      this.systemTides = {};
       this.systemBody = null;
       this.loadBody(null);
     } else if (starView) {
@@ -173,12 +180,13 @@ export class LoadedWorld {
     this.systemId = id;
     this.worldId = null;
     (async () => {
-      const { system, names, evicted, extras } = await fetchSystem(id, controller.signal);
+      const { system, names, evicted, extras, tides } = await fetchSystem(id, controller.signal);
       if (controller.signal.aborted) return;
       this.system = system;
       this.systemNames = names;
       this.systemEvicted = evicted;
       this.systemExtras = extras;
+      this.systemTides = tides;
       // `focus` shows the planet the system was drawn around, as a planet.
       if (focus) this.subject = 'planet';
       const wanted = body ?? (focus ? null : again ? this.systemBody : null);
@@ -460,6 +468,7 @@ async function fetchSystem(
   names: Record<string, string>;
   evicted: string[];
   extras: Record<string, BodyExtras>;
+  tides: Record<string, TideZones>;
 }> {
   const response = await fetch(`/api/systems/${encodeURIComponent(id)}`, { signal, cache: 'no-cache' });
   if (response.ok) {
@@ -468,10 +477,13 @@ async function fetchSystem(
       names?: Record<string, string>;
       evicted?: string[];
       extras?: Record<string, BodyExtras>;
+      tides?: Record<string, TideZones>;
     };
-    return { system: body.system, names: body.names ?? {}, evicted: body.evicted ?? [], extras: body.extras ?? {} };
+    return { system: body.system, names: body.names ?? {}, evicted: body.evicted ?? [], extras: body.extras ?? {},
+      tides: body.tides ?? {},
+    };
   }
   const file = await fetch(`/systems/${encodeURIComponent(id)}/system.json`, { signal, cache: 'no-cache' });
   if (!file.ok) throw new Error(`${file.status} ${file.statusText}`);
-  return { system: (await file.json()) as System, names: {}, evicted: [], extras: {} };
+  return { system: (await file.json()) as System, names: {}, evicted: [], extras: {}, tides: {} };
 }

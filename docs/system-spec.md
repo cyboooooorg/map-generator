@@ -755,6 +755,10 @@ addressed as `<system-id>/<body-id>` everywhere.
   and `extras`, by body id for each body with a model: `explanation`, the
   cause trees of its derived values, and `similar`, the built-in
   archetype it resembles (its own when it was asked by archetype).
+  It also gives `tides`, by body id: the body's `host`, the `satellite`
+  that feels the tide, and the Hill, locking, heating and Roche radii in
+  km (`mapgen::tides`), derived at read time, never stored; a sphere is
+  absent (`null`) when it lies inside the host or beyond the Hill sphere.
 - `DELETE /api/systems/{id}`: delete a system; 409 while one of its
   bodies is being generated.
 - `PUT /api/systems/{id}/names`: replace the names given

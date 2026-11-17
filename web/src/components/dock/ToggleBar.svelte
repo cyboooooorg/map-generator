@@ -9,6 +9,8 @@
   export interface SubToggle {
     key: string;
     label: string;
+    /** A longer line for its tooltip, after the label. */
+    help?: string;
     /** Its glyph: it tells which body or scope the square is for. */
     icon: IconName;
     on: boolean;
@@ -87,7 +89,7 @@
                     class:on={sub.on}
                     aria-pressed={sub.on}
                     aria-label={sub.label}
-                    title={sub.label}
+                    title={sub.help ? `${sub.label}: ${sub.help}` : sub.label}
                     disabled={sub.disabled}
                     onclick={() => sub.set(!sub.on)}><Icon name={sub.icon} size={expanded ? 13 : 9} /></button
                   >
