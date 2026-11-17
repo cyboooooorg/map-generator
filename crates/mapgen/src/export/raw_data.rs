@@ -98,8 +98,15 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// drew rays converging on the poles) and gives the relief normals the
 /// pixel's true east-west width up to the poles: the same seed gives a
 /// slightly different world (its sea level, relief, climate and biomes);
-/// the stored fields are the same.
-pub const FORMAT_VERSION: u32 = 26;
+/// the stored fields are the same. Version
+/// 27 draws the volcanism of a body whose crust is an ice shell as
+/// cryovolcanism (#550): no lava, ash or magma on its ice, but fresh ice
+/// flows and cryovolcanic plains (biomes 41 and 42, `FreshIceFlow` and
+/// `CryovolcanicPlain`) under the look's new `rules.cryovolcanic`; a hot
+/// one in the heat-pipe regime no longer takes the `volcanic` look.
+/// Only icy bodies change, so worlds of version 24 still load (an icy
+/// moon keeps its lava until it is regenerated).
+pub const FORMAT_VERSION: u32 = 27;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`

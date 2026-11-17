@@ -104,11 +104,20 @@ pub enum Biome {
     /// A lake of liquid methane and ethane; replaces lakes on hydrocarbon
     /// worlds.
     HydrocarbonLake,
+    // ── Appended after id 40 (cryovolcanism on ice shells) ──────────────────
+    /// Bright fresh ice where water from the ocean under an ice shell
+    /// erupted and froze: vents and flows, the cryovolcanic counterpart of
+    /// [`Volcano`](Self::Volcano) and [`LavaField`](Self::LavaField).
+    FreshIceFlow,
+    /// Smooth young plains of an ice shell, where erupted water flooded
+    /// the lows and froze (Ganymede's smooth bright lanes, Europa's smooth
+    /// plains, Triton's walled plains).
+    CryovolcanicPlain,
 }
 
 impl Biome {
     /// Every biome, in id order.
-    pub const ALL: [Biome; 41] = [
+    pub const ALL: [Biome; 43] = [
         Biome::DeepOcean,
         Biome::Ocean,
         Biome::Beach,
@@ -150,6 +159,8 @@ impl Biome {
         Biome::GiantPolar,
         Biome::HydrocarbonSea,
         Biome::HydrocarbonLake,
+        Biome::FreshIceFlow,
+        Biome::CryovolcanicPlain,
     ];
 
     /// Whether the biome is a water surface, liquid or frozen (flat, not hillshaded).
@@ -236,6 +247,14 @@ pub fn surface_color(b: Biome) -> [u8; 3] {
         // side.
         Biome::HydrocarbonSea => [22, 17, 12],
         Biome::HydrocarbonLake => [30, 24, 17],
+        // Cryovolcanism: the brightest ground there is, fresh frost and
+        // coarse ice not yet darkened by radiation and dust. Enceladus,
+        // resurfaced by its plumes, has a Bond albedo of 0.81 (Howett et
+        // al. 2010, doi:10.1016/j.icarus.2009.07.016), whiter than any
+        // snow on this palette; its young plains a little greyer.
+        // Calibration on that ranking, no source for the values.
+        Biome::FreshIceFlow => [246, 250, 255],
+        Biome::CryovolcanicPlain => [228, 235, 242],
         // Giants: a Jovian palette; a giant world's own replaces it.
         Biome::GiantZone => [236, 224, 198],
         Biome::GiantBelt => [174, 124, 84],
@@ -301,6 +320,9 @@ pub fn biome_color(b: Biome) -> [u8; 3] {
         // Hydrocarbon liquids: dark browns, apart from water's blues.
         Biome::HydrocarbonSea => [74, 46, 20],
         Biome::HydrocarbonLake => [112, 74, 36],
+        // Cryovolcanism: cyan, the icy counterpart of lava's orange.
+        Biome::FreshIceFlow => [0, 225, 255],
+        Biome::CryovolcanicPlain => [125, 210, 200],
         Biome::GiantZone => [240, 226, 190],
         Biome::GiantBelt => [176, 116, 70],
         Biome::GiantStorm => [204, 84, 52],
@@ -360,6 +382,8 @@ pub fn biome_name(b: Biome) -> &'static str {
         Biome::GiantPolar => "Polar Region",
         Biome::HydrocarbonSea => "Hydrocarbon Sea",
         Biome::HydrocarbonLake => "Hydrocarbon Lake",
+        Biome::FreshIceFlow => "Fresh Ice Flow",
+        Biome::CryovolcanicPlain => "Cryovolcanic Plain",
     }
 }
 
@@ -471,6 +495,15 @@ pub struct BiomeRules {
     /// to 1: the flanks and vent of a cone rising out of the lowland. Above
     /// the background of a volcanic province, so only the cones reach it.
     pub vent_zone: f32,
+    /// Whether the world's volcanism is cryovolcanism: its crust is an ice
+    /// shell over water (set by the planet model, see
+    /// `crate::planet::interim::cryovolcanic`), so its volcanic zones are
+    /// drawn as erupted water frozen into fresh ice
+    /// ([`Biome::FreshIceFlow`], [`Biome::CryovolcanicPlain`]), never as
+    /// lava or ash (see [`BiomeRules::choose`]).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub cryovolcanic: bool,
 }
 
 impl Default for BiomeRules {
@@ -508,6 +541,7 @@ impl Default for BiomeRules {
             ash_elevation: -0.09,
             ash_zone: 0.15,
             vent_zone: 0.45,
+            cryovolcanic: false,
         }
     }
 }
@@ -560,8 +594,10 @@ impl BiomeRules {
         if self.dry { NO_WATER } else { self.waterline }
     }
 
-    /// Selects the biome of a pixel: altitude band, then volcanic override.
-    /// Planet looks remap the result afterwards.
+    /// Selects the biome of a pixel: altitude band, then volcanic override
+    /// (lava and ash, or on a [`cryovolcanic`](Self::cryovolcanic) world
+    /// fresh ice, see [`Self::apply_cryovolcanic`]). Planet looks remap
+    /// the result afterwards.
     pub fn choose(&self, input: BiomeInput) -> Biome {
         let BiomeInput {
             elevation: e,
@@ -599,7 +635,11 @@ impl BiomeRules {
         } else {
             self.land(t, m, summer, input.winter())
         };
-        self.apply_volcanic(base, e, input.volcanic_zone)
+        if self.cryovolcanic {
+            self.apply_cryovolcanic(base, input.volcanic_zone)
+        } else {
+            self.apply_volcanic(base, e, input.volcanic_zone)
+        }
     }
 
     // ── Altitude bands ────────────────────────────────────────────────────────
@@ -731,11 +771,100 @@ impl BiomeRules {
             other => other,
         }
     }
+
+    /// The volcanic override of a [`cryovolcanic`](Self::cryovolcanic)
+    /// world, whose crust is an ice shell over an ocean. Silicate magma,
+    /// about three times as dense as ice (2,700 to 3,000 kg/m³ against
+    /// 917), cannot rise through a water layer and its shell: what erupts
+    /// is water (or brine, or an ammonia–water melt) from the ocean or
+    /// from melt in the shell, which freezes at the surface into bright
+    /// fresh ice (Kargel 1995, doi:10.1007/BF00613296; Fagents 2003,
+    /// doi:10.1029/2003JE002128). Liquid water is denser than the ice it
+    /// erupts through, so it does not build cones as lava does: it floods
+    /// the lows into smooth plains, as on Ganymede's bright terrain, whose
+    /// smooth lanes are troughs flooded by water-ice lavas (Schenk et al.
+    /// 2001, doi:10.1038/35059018), Europa's smooth plains and lenticulae
+    /// (Fagents 2003) and Triton's walled plains (Croft et al. 1995, in
+    /// *Neptune and Triton*, University of Arizona Press); flows and
+    /// vents stand out where it erupts most, as Enceladus's south polar
+    /// terrain, the youngest ground of the moon (Porco et al. 2006,
+    /// doi:10.1126/science.1123013).
+    ///
+    /// The ladder, on any ground (water and liquid surfaces stay):
+    /// - **FreshIceFlow** — where the zone passes
+    ///   [`vent_zone`](Self::vent_zone): vents and the flows around them;
+    /// - **CryovolcanicPlain** — ground under the highland where it passes
+    ///   [`ash_zone`](Self::ash_zone): the flooded lows;
+    /// - the highland (mountain, snow) keeps its ridges below the vents.
+    fn apply_cryovolcanic(&self, biome: Biome, vz: f32) -> Biome {
+        if vz <= 0.0 || biome.is_water() {
+            return biome;
+        }
+        if vz > self.vent_zone {
+            Biome::FreshIceFlow
+        } else if vz > self.ash_zone && !matches!(biome, Biome::Mountain | Biome::Snow) {
+            Biome::CryovolcanicPlain
+        } else {
+            biome
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On an ice shell, the volcanic zones are fresh ice: flows at the
+    /// vents, plains in the lows, ridges kept on the highland, never lava
+    /// or ash; water stays water.
+    #[test]
+    fn a_cryovolcanic_world_erupts_fresh_ice() {
+        let rules = BiomeRules {
+            cryovolcanic: true,
+            ..BiomeRules::default()
+        };
+        let pixel = |elevation: f32, temperature: f32, volcanic_zone: f32| BiomeInput {
+            elevation,
+            moisture: 0.0,
+            temperature,
+            seasonality: 0.0,
+            volcanic_zone,
+            coast_distance_km: 1e6,
+            lake: false,
+            river: false,
+            highland_offset: 0.0,
+        };
+        let low = rules.highland - 0.05;
+        let high = rules.snow_line + 0.1;
+        let deep = rules.waterline - 0.1;
+        for t in [-150.0, -20.0, 15.0] {
+            for vz in [0.0, 0.1, 0.2, 0.3, 0.5, 0.6, 0.9, 1.0] {
+                for e in [low, high, deep] {
+                    let b = rules.choose(pixel(e, t, vz));
+                    assert!(
+                        !matches!(
+                            b,
+                            Biome::Volcano | Biome::LavaField | Biome::AshLand | Biome::MagmaSea
+                        ),
+                        "{t} °C, zone {vz}, elevation {e}: {b:?}"
+                    );
+                }
+                assert!(rules.choose(pixel(deep, t, vz)).is_water());
+            }
+            // Vents on any ground; plains in the lows; ridges kept.
+            assert_eq!(rules.choose(pixel(low, t, 0.9)), Biome::FreshIceFlow);
+            assert_eq!(rules.choose(pixel(high, t, 0.9)), Biome::FreshIceFlow);
+            assert_eq!(rules.choose(pixel(low, t, 0.3)), Biome::CryovolcanicPlain);
+            assert_eq!(rules.choose(pixel(high, t, 0.3)), Biome::Snow);
+            assert_ne!(rules.choose(pixel(low, t, 0.0)), Biome::CryovolcanicPlain);
+        }
+        // The same pixel on rock is lava.
+        assert!(
+            BiomeRules::default()
+                .choose(pixel(low, 15.0, 0.9))
+                .is_lava()
+        );
+    }
 
     #[test]
     fn a_dry_world_has_no_open_water() {

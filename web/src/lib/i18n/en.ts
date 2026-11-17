@@ -378,6 +378,8 @@ export const en = {
     GiantPolar: 'Polar region',
     HydrocarbonSea: 'Hydrocarbon Sea',
     HydrocarbonLake: 'Hydrocarbon Lake',
+    FreshIceFlow: 'Fresh Ice Flow',
+    CryovolcanicPlain: 'Cryovolcanic Plain',
   } satisfies Record<Biome, string>,
   /** Cloud kinds. */
   clouds: {
