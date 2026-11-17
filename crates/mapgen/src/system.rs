@@ -5709,12 +5709,15 @@ mod tests {
     }
 
     /// Callisto: no ocean, or a thin one deep down (Khurana et al. 1998,
-    /// doi:10.1038/27394).
+    /// doi:10.1038/27394). Under 100 km: without the CO₂ frost that
+    /// brightened it (its air went to Jupiter's plasma,
+    /// `planet::non_thermal_loss`), its surface is about 10 K warmer and
+    /// its shell thinner, up to 64 km of ocean on these seeds.
     #[test]
     fn callisto_has_no_ocean_or_a_thin_one() {
         for seed in 1..=10 {
             let s = asked_shell("callisto-like", seed);
-            assert!(s.ocean_km < 50.0, "seed {seed}: {s:?}");
+            assert!(s.ocean_km < 100.0, "seed {seed}: {s:?}");
         }
     }
 

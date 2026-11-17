@@ -83,8 +83,8 @@ pub mod surface_age;
 pub mod xuv;
 
 pub use atmosphere::{
-    Gases, atmosphere, cold_trap, escape_velocity_km_s, methane_photolysis, outgassed,
-    photochemistry, wash_out,
+    EXOSPHERE_BAR, Gases, HostPlasma, LossContext, atmosphere, cold_trap, escape_velocity_km_s,
+    methane_photolysis, non_thermal_loss, outgassed, photochemistry, wash_out,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
 pub use climate::{
@@ -632,8 +632,14 @@ pub(crate) struct Bare {
     pub before: Air,
     /// What it outgassed, bar ([`outgassed`]).
     pub outgassed: Gases,
-    /// What escape to space left of it ([`atmosphere`]), bar.
+    /// What escape to space left of it, bar: the cosmic shoreline's
+    /// ([`atmosphere`]), then the non-thermal loss inside a giant's
+    /// magnetosphere ([`non_thermal_loss`]).
     pub kept: Gases,
+    /// What the non-thermal loss took of the air the shoreline left, bar
+    /// ([`non_thermal_loss`]): non-zero for the gases it reduced to an
+    /// exosphere.
+    pub lost: Gases,
     /// What the star's ultraviolet left of that methane
     /// ([`methane_photolysis`]), bar.
     pub photolysed: Gases,
@@ -648,9 +654,48 @@ pub(crate) struct Bare {
     pub condensed: Gases,
 }
 
+/// The heaviest host whose magnetosphere [`non_thermal_loss`] reads, Earth
+/// masses: 13 Jupiter masses, the heaviest giant the generator draws
+/// ([`mass::draw_mass`]), at the deuterium-burning line. A heavier host is
+/// a star raising its own planet's tides (`context.tide` set to the star),
+/// not a giant with a plasma.
+const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * 317.8;
+
+/// What [`non_thermal_loss`] reads of a body of `inputs` and `interior`
+/// in `context`: its gravity and radius, its star's distance and its age,
+/// and, for a moon of a giant ([`moon_of_giant`], up to
+/// [`HOST_PLASMA_MAX_MASS_EARTH`]), the giant's mass and the moon's orbit
+/// in the giant's radii, that radius from the giant's mass and its
+/// equilibrium temperature ([`crate::giants::giant_radius`], as for the
+/// host giants of moons).
+pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interior) -> LossContext {
+    let radius_m = interior.radius_earth * EARTH_M;
+    let gravity = crate::exomoon::G * inputs.mass_earth * EARTH_KG / (radius_m * radius_m);
+    let giant =
+        |t: &HostTide| moon_of_giant(context) && t.host_kg <= HOST_PLASMA_MAX_MASS_EARTH * EARTH_KG;
+    let host = context.tide.filter(giant).map(|t| {
+        let host_mass_earth = t.host_kg / EARTH_KG;
+        let host_radius_m = f64::from(crate::giants::giant_radius(
+            host_mass_earth as f32,
+            context.equilibrium_k as f32,
+        )) * EARTH_M;
+        HostPlasma {
+            host_mass_earth,
+            semi_major_axis_radii: t.a_m / host_radius_m,
+        }
+    });
+    LossContext {
+        gravity,
+        radius_m,
+        orbit_au: context.orbit_au,
+        age_gyr: context.age_gyr,
+        host,
+    }
+}
+
 /// A bare body's surface from the water `w` it starts with (the chain's
 /// first pass, or its boiled steam): its [`regime`] and [`core`], its
-/// air ([`outgassed`], [`atmosphere`] under its [`shield`],
+/// air ([`outgassed`], [`atmosphere`] under its [`shield`], [`non_thermal_loss`],
 /// [`methane_photolysis`], [`cold_trap`], [`photochemistry`]), its
 /// [`climate`], its [`life`] and the oxygen it makes. A runaway's water is
 /// the steam escape has left in its air.
@@ -666,13 +711,14 @@ pub(crate) fn bare(
     let r = regime(inputs, heat, interior, &w);
     let k = core(inputs, interior, r, context.age_gyr);
     let out = outgassed(inputs, &w, r, interior);
-    let kept = atmosphere(
+    let shoreline = atmosphere(
         out,
         interior,
         inputs.mass_earth,
         &shield(context, k),
         fluence,
     );
+    let (kept, lost) = non_thermal_loss(shoreline, &loss_context(context, inputs, interior));
     let w = if w.runaway {
         w.keeping(kept.h2o / bar_per_kg)
     } else {
@@ -683,8 +729,10 @@ pub(crate) fn bare(
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
     let water_bar = w.kept_kg * bar_per_kg;
+    // CO₂ the plasma exhausted is gone from the rocks' reach too: no
+    // carbon cycle brings it back.
     let carbon = climate::CarbonCycle {
-        inventory_bar: out.co2,
+        inventory_bar: if lost.co2 > 0.0 { kept.co2 } else { out.co2 },
         frozen_bar: photolysed.co2 - trapped.co2,
         snowball_draw: inputs.snowball_draw,
     };
@@ -712,6 +760,7 @@ pub(crate) fn bare(
         },
         outgassed: out,
         kept,
+        lost,
         photolysed,
         trapped,
         climate_gases: after,

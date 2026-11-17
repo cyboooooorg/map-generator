@@ -157,8 +157,10 @@ pub enum Quantity {
     /// outgas it faster than weathering draws it down) and `methane_trap`
     /// (the cold keeps methane out of the air), `convecting` (the ice
     /// shell convects under a stagnant lid), `ammonia` (ammonia lowers
-    /// the ocean's freezing point) and `geysers` (the thin polar shell
-    /// cracks through and vents).
+    /// the ocean's freezing point), `geysers` (the thin polar shell
+    /// cracks through and vents) and `exosphere` (non-thermal loss
+    /// exhausted the gas's air, which is left as an exosphere:
+    /// [`super::non_thermal_loss`]).
     Note,
 }
 
@@ -575,6 +577,7 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
             (of(&steps.kept), of(&steps.photolysed), of(&steps.trapped));
         let before = of(&steps.before.gases);
         let condensed = of(&steps.condensed);
+        let lost = of(&steps.lost);
         let destroyed = (kept - photolysed) + (trapped - before).max(0.0);
         let steps = [
             (Quantity::Escape, of(&steps.outgassed) - kept),
@@ -593,6 +596,11 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
                 .filter(|(_, bar)| *bar > 0.0)
                 .map(|(q, bar)| Cause::of(q, bar)),
         );
+        // The escape counts the non-thermal loss too; a gas it exhausted
+        // is left as an exosphere ([`super::non_thermal_loss`]).
+        if lost > 0.0 {
+            causes.push(Cause::note("exosphere"));
+        }
         causes
     };
     let mut co2 = source(|g| g.co2, Some(InputField::Co2));
@@ -768,6 +776,31 @@ mod tests {
         for tree in &e.trees {
             assert!(depth(tree) <= 3, "{:?}: {tree:#?}", tree.quantity);
         }
+    }
+
+    /// Callisto round Jupiter: its CO₂ goes to the plasma, and the
+    /// pressure tree says the gas is left as an exosphere.
+    #[test]
+    fn an_exosphere_says_so() {
+        let (context, model) = solar("Callisto");
+        let context = context.with_tide(crate::planet::HostTide {
+            host_kg: 1.898e27,
+            a_m: 1.883e9,
+            eccentricity: 0.0074,
+            resonance: None,
+        });
+        let model = planet_model(&context, model.inputs);
+        let e = explain(&context, &model).expect("explained");
+        let pressure = root(&e, Quantity::Pressure);
+        assert!(pressure.value < 1e-10, "{pressure:#?}");
+        let co2 = find(pressure, Quantity::Co2).expect("its CO₂");
+        assert!(
+            co2.causes
+                .iter()
+                .any(|c| c.quantity == Quantity::Note && c.label.as_deref() == Some("exosphere")),
+            "{co2:#?}"
+        );
+        assert!(find(co2, Quantity::Escape).is_some(), "{co2:#?}");
     }
 
     #[test]

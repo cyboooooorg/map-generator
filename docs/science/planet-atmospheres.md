@@ -210,9 +210,9 @@ model freezes it, which only matters for its state, not its dynamo.
 
 `planet::atmosphere` (called by `planet_model`) gives the
 partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
-and O₂ (`Gases`, with `total()`), in five steps, called in this order:
-`outgassed`, `atmosphere`, `methane_photolysis`, `cold_trap`,
-`photochemistry`. The carbonate
+and O₂ (`Gases`, with `total()`), in six steps, called in this order:
+`outgassed`, `atmosphere`, `non_thermal_loss`, `methane_photolysis`,
+`cold_trap`, `photochemistry`. The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -287,6 +287,112 @@ calibrations on the Solar System bodies: the line passes close to Mars,
 as in the paper, Titan keeps a bar, and `s` is small enough that Venus,
 which has no dynamo, keeps its air. Every gas is
 kept in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
+
+**Non-thermal loss** (`non_thermal_loss`, after the shoreline, on the
+whole stock, frosts to come included). A thin air is an atmosphere only
+if the body supplies it faster than it loses it. Inside a giant's
+magnetosphere (a moon of a host of 10 M⊕ to 13 Jupiter masses, the
+heaviest giant drawn, `LossContext.host`; a heavier host is the star
+whose tides a planet's model reads),
+each molecule at the top of the air meets a loss per m² that does not
+depend on how much air there is:
+
+```text
+L = (J N_exo + f Φ) t
+J = 5e-7 s⁻¹ / d²                  photo-ionisation at d AU
+N_exo = 2.5e18 m⁻²                 the exobase column, 1/σ
+Φ = 1e13 m⁻² s⁻¹ (M / M_J)³ (a / 26.3 R_host)^-5.5, at most 2.2e14
+f = U (2x + U) / (x + U)²          share fast enough to escape
+```
+
+- *Photo-ionisation.* The Sun ionises a molecule about every 2e6 s at
+  1 AU (N₂ 3.5e-7, CO₂ 6e-7 s⁻¹ under the quiet Sun: Huebner, Keady &
+  Lyon 1992, *Astrophys. Space Sci.* 195, 1; from memory, not checked;
+  one order for every gas, `PHOTO_IONISATION_AT_1_AU_S`), scaled as
+  `1/d²` with the distance of the body (of its planet) to its star. The
+  ions made above the exobase, where a molecule leaves without a
+  collision, are swept away by the giant's corotating field: Carlson
+  1999 (*Science* 283, 820, doi:10.1126/science.283.5403.820) finds that
+  photo-ionisation and Jupiter's field would remove Callisto's CO₂ in a
+  few years (about four, from memory), so that it needs a steady supply.
+  The exobase column is `1/σ` with the hard-sphere cross-section of N₂,
+  O₂ and CO₂, about 4e-19 m² (`EXOBASE_COLUMN_M2`).
+- *Plasma sputtering.* The giant's plasma knocks molecules off the moon's
+  surface and air (`plasma_flux`). At Callisto's place (Jupiter's mass,
+  26.3 Jupiter radii) it is 1e13 m⁻² s⁻¹ (`PLASMA_LOSS_AT_CALLISTO`).
+  **Calibration** on Callisto's CO₂: the column the shoreline leaves it,
+  about 0.05 bar (5.5e28 m⁻²) and up to 0.2 bar on the archetype's
+  richest draws, must be gone within its age, since Callisto has only an
+  exosphere. That is about fifty times the water ice Jupiter's ions
+  sputter there: Callisto receives about 2e8 keV cm⁻² s⁻¹ of energetic
+  ions (Cooper et al. 2001, *Icarus* 149, 133, doi:10.1006/icar.2000.6498,
+  read through a secondary table, not checked), at about 0.1 molecule of
+  ice per keV (Europa's 2e27 H₂O s⁻¹ over its 6e10 keV cm⁻² s⁻¹; Johnson
+  et al. 2004, "Radiation effects on the surfaces of the Galilean
+  satellites", in *Jupiter: The Planet, Satellites and Magnetosphere*,
+  ch. 20; from memory, not checked), or 2e11 m⁻² s⁻¹. A CO₂ or N₂
+  frost, bound less than water ice, sputters several times more per ion;
+  the rest of the factor is the calibration's uncertainty. The flux falls
+  with the distance in the giant's radii as `r^-5.5`, the fit through
+  Cooper et al.'s energy fluxes at Europa (9.4 R_J, 6e10 keV cm⁻² s⁻¹),
+  Ganymede (15.0, 5e9) and Callisto (26.3, 2e8)
+  (`PLASMA_DISTANCE_EXPONENT`), and grows with the giant's mass as `M³`
+  (`PLASMA_MASS_EXPONENT`, **calibration**, no source: Jupiter's dipole
+  is about 20 times Saturn's for 3.3 times its mass; the cube keeps Titan
+  and Triton losing a few percent of their N₂ while Callisto loses all
+  its CO₂). The giant's radius is `giants::giant_radius` of its mass and
+  equilibrium temperature. The flux is capped at Io's loss, the largest
+  known, about one tonne per second over its 4.2e7 km², 2.2e14 SO₂
+  m⁻² s⁻¹ (Thomas et al. 2004, *Jupiter*, ch. 23; from memory, not
+  checked; `PLASMA_LOSS_MAX`): the power law would give Io sixty times
+  that, and the moons a few radii from a giant of ten Jupiter masses
+  millions of times, while the plasma a giant's moons load is limited by
+  what they supply and what its rotation carries.
+- *Escape share.* A sputtered molecule leaves only if it is faster than
+  the escape velocity. Sputtered energies follow `E / (E + U)³`
+  (Sigmund–Thompson) with `U` the binding energy of water ice, 0.45 eV
+  (`ICE_BINDING_EV`; Johnson 1990, *Energetic Charged-Particle
+  Interactions with Atmospheres and Surfaces*, from memory, not
+  checked); the share above the escape energy `x = m v_esc² / 2` is
+  `f` above: 0.4 for CO₂ on Callisto, 0.5 for N₂ on Titan, 0.05 for N₂
+  on a moon of the Earth's mass, which holds what its plasma knocks up.
+  Photo-ions are swept whatever the gravity.
+
+The air loses its gases in proportion to their share of its column
+`Σ p / (m g)`: an air whose column is less than its share-weighted loss
+over the age `t` is exhausted. It keeps only the exosphere its supply
+feeds, `EXOSPHERE_BAR` = 3e-12 bar, which its gases share in proportion
+to their supply, none keeping more than it had (an air already thinner
+stays as it is). That is the order of one exobase column, 2.5e18 m⁻² of
+CO₂ under a Galilean moon's 1.2 to 1.4 m/s², 2 to 3e-12 bar, where the
+measured exospheres sit: Callisto's CO₂ at 7.5e-12 bar (Carlson 1999; a
+column of 8e14 cm⁻² at about 150 K) and the O₂ of Europa and Ganymede
+near 1e-12 bar (Hall et al. 1995 and 1998, from memory, not checked).
+The exosphere is an order of magnitude, not a chemistry: the radiolytic
+O₂ of an icy surface is not modelled. An air that outlasts its loss
+keeps all of it, the loss being then a share of a large column. Since
+the step comes before the cold trap, a frost of an exhausted gas is gone
+too: Ganymede and Callisto no longer have the CO₂ frost that brightened
+them (`Body::frost_bar` reads what the cold trap froze out of what is
+left), and the carbon cycle's inventory is what is left of their CO₂.
+
+Outside a giant's magnetosphere the step takes nothing: the stellar
+wind's pick-up of photo-ions is already in the shoreline, which Zahnle &
+Catling fitted on the planets (Mars, Mercury) that undergo it. Counting
+it again would strip Mars, whose 0.006 bar is gone in a few hundred
+million years at its measured ion loss; its reservoirs (polar caps,
+regolith), which the model does not carry, resupply it. The pressure
+tree of the card names the escape (both losses) and adds the note
+`exosphere` under a gas the step exhausted.
+
+Over seeds 1 to 40 of `archetype_census` (loss over the column):
+Ganymede's CO₂ 5 to 72, Callisto's 2.8 to 95, so both are exhausted;
+Titan's N₂ 0.02 to 0.07 and Triton's 0.001 to 0.04, so both keep their
+air, as do every planet and every archetype but the four Galilean moons
+(their rows alone change). Through `moon_census 300`, eight drawn icy
+moons of giants with thin airs (2e-8 to 1.4e-3 bar) become exospheres;
+no class changes, and the thick airs of drawn moons (up to 36 bar round
+giants of 4 to 12 Jupiter masses) stay.
 
 **Methane photolysis** (`methane_photolysis`, before the cold trap, on
 the whole stock). The star's ultraviolet destroys methane at a rate set
@@ -430,14 +536,17 @@ masses, ice shares and orbits):
 | Moon | Result | Observed |
 |---|---|---|
 | Titan | hydrocarbon world, 93.5 K, 1.43 bar, 94 % N₂, 0.083 bar CH₄ (5.8 %) | 93.7 K, 1.47 bar, 5.7 % CH₄ |
-| Ganymede, Callisto | 4e-5 and 9e-6 bar | airless |
-| Io | heat pipe, 1.3e-4 bar, 108 K, Bond albedo 0.56 under 0.013 bar of CO₂ frost | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
-| Europa | 8e-6 bar | airless |
+| Ganymede, Callisto | exospheres of 3e-12 bar (CO₂), 97.9 K, Bond albedo 0.60 | exospheres of 1e-12 (O₂) and 7.5e-12 bar (CO₂) |
+| Io | heat pipe, exosphere of 3e-12 bar (CO₂), 124.6 K, Bond albedo 0.11 with no frost | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
+| Europa | exosphere of 3e-12 bar (CO₂), 98.0 K | exosphere of about 1e-12 bar (O₂) |
 | Triton | 1.9e-5 bar of N₂ over its frost at 36.4 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
 | Moon | 1e-12 bar | airless |
 
 Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
-by 0.3 dex), Io's air up to 8e-4 bar. Triton's N₂ is its frost's vapour
+by 0.3 dex). Io's N₂ and CO₂ are an exosphere on every seed (Jupiter's
+plasma torus exhausts them, see *Non-thermal loss*); its SO₂ has no
+frost or air of its own yet, so it lost the CO₂ frost that brightened
+it and its Bond albedo is its bare rock's. Triton's N₂ is its frost's vapour
 pressure at its surface temperature, which the frost's own albedo sets
 (issue #464; before, the cold trap held it at the equilibrium
 temperature under the reference albedo 0.3, 47 K, and kept 1.9e-3 bar).

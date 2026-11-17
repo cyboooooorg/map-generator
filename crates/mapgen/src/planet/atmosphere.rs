@@ -304,6 +304,235 @@ pub fn atmosphere(
     outgassed.scaled(kept)
 }
 
+/// Pressure, bar, at which a body's air that non-thermal loss has
+/// exhausted is stored ([`non_thermal_loss`]): an exosphere, whose
+/// molecules fly from the surface without meeting each other. Its column
+/// is at most about one exobase column, `1/σ` with the hard-sphere
+/// cross-section `σ ≈ 4e-19 m²` of N₂, O₂ and CO₂ (kinetic diameters of
+/// 3.3 to 3.6 Å; from memory, not checked): `2.5e18 m⁻²`, which weighs
+/// `N m g` = 2 to 3e-12 bar of CO₂ under a Galilean moon's 1.2 to
+/// 1.4 m/s². The measured exospheres sit there: Callisto's CO₂ at
+/// 7.5e-12 bar, a column of 8e14 cm⁻² at about 150 K (Carlson 1999,
+/// doi:10.1126/science.283.5403.820; its abstract, checked through a
+/// bibliographic record), and the O₂ of Europa and Ganymede at about
+/// 1e-12 bar (Hall et al. 1995 and 1998, from memory, not checked). The
+/// exosphere's pressure is an order of magnitude, not a chemistry (the
+/// radiolytic O₂ of an icy surface is not modelled): 3e-12 bar, far under
+/// [`crate::atmosphere::AIRLESS_BAR`].
+pub const EXOSPHERE_BAR: f64 = 3.0e-12;
+
+/// A giant whose magnetosphere a moon orbits in, as [`non_thermal_loss`]
+/// reads it: the corotating plasma that sputters the moon's surface and
+/// air grows with the giant's mass and falls steeply with the moon's
+/// distance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HostPlasma {
+    /// Mass of the giant, Earth masses.
+    pub host_mass_earth: f64,
+    /// Semi-major axis of the moon's orbit, in the giant's radii.
+    pub semi_major_axis_radii: f64,
+}
+
+/// What [`non_thermal_loss`] reads of a body.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LossContext {
+    /// Surface gravity, m/s².
+    pub gravity: f64,
+    /// Radius, m.
+    pub radius_m: f64,
+    /// Distance to the star, AU (of the planet, for a moon).
+    pub orbit_au: f64,
+    /// Age of the system, Gyr: how long the loss has worked.
+    pub age_gyr: f64,
+    /// The giant whose magnetosphere the body orbits in, `None` for a
+    /// planet and for a moon of a body that is no giant.
+    pub host: Option<HostPlasma>,
+}
+
+/// Photo-ionisation rate of a molecule of the air at 1 AU from the Sun,
+/// per second: N₂ about 3.5e-7 and CO₂ about 6e-7 under the quiet Sun
+/// (Huebner, Keady & Lyon 1992, Astrophys. Space Sci. 195, 1; from
+/// memory, not checked), one order for every gas. Scaled by `1/d²`.
+const PHOTO_IONISATION_AT_1_AU_S: f64 = 5.0e-7;
+
+/// Column of an exobase, molecules per m²: `1/σ` with the hard-sphere
+/// cross-section of [`EXOSPHERE_BAR`], 4e-19 m². Above it, a molecule
+/// leaves without a collision; the photo-ions made there are what the
+/// giant's corotating field sweeps away, whatever the column under it.
+const EXOBASE_COLUMN_M2: f64 = 2.5e18;
+
+/// Molecules the giant's plasma removes from a moon's surface and air at
+/// Callisto's place (Jupiter's mass, 26.3 Jupiter radii), per m² and per
+/// second, before the share fast enough to escape
+/// ([`escaping_share`]). Calibration on Callisto's CO₂: the column the
+/// cosmic shoreline leaves it (about 0.05 bar, 5.5e28 m⁻², more on the
+/// archetype's richest draws) must be gone within its age, since Carlson
+/// 1999 (see [`EXOSPHERE_BAR`]) sees only an exosphere, which
+/// photo-ionisation and Jupiter's field sweep away in a few years and
+/// which needs a steady supply. The value is about ten times the water
+/// ice Jupiter's ions sputter there: they bring Callisto about 2e8 keV
+/// cm⁻² s⁻¹ (Cooper et al. 2001, Icarus 149, 133,
+/// doi:10.1006/icar.2000.6498, through a secondary table, not checked),
+/// at about 0.1 molecule of ice per keV (Europa's 2e27 H₂O s⁻¹ over
+/// its 6e10 keV cm⁻² s⁻¹; Johnson et al. 2004, "Radiation effects on the
+/// surfaces of the Galilean satellites", in *Jupiter: The Planet,
+/// Satellites and Magnetosphere*, ch. 20; from memory, not checked):
+/// 2e11 m⁻² s⁻¹. A frost of CO₂ or N₂, bound less than water ice,
+/// sputters several times more per ion.
+const PLASMA_LOSS_AT_CALLISTO: f64 = 1.0e13;
+
+/// Exponent of the moon's distance (giant radii) in the plasma's loss:
+/// the energy flux of Jupiter's energetic ions falls from Europa
+/// (9.4 R_J, about 6e10 keV cm⁻² s⁻¹) to Ganymede (15.0, 5e9) and
+/// Callisto (26.3, 2e8) about as `r^-5.5` (Cooper et al. 2001, see
+/// [`PLASMA_LOSS_AT_CALLISTO`]; a fit through the three).
+const PLASMA_DISTANCE_EXPONENT: f64 = 5.5;
+
+/// Exponent of the giant's mass in the plasma's loss. Calibration, no
+/// source: a heavier giant has a stronger field and a denser plasma
+/// (Jupiter's dipole is about 20 times Saturn's for 3.3 times its mass);
+/// 2 keeps Titan (Saturn, 20.3 radii) and Triton (Neptune, 14.3 radii)
+/// losing a few percent of their N₂ over their age while Callisto loses
+/// all its CO₂.
+const PLASMA_MASS_EXPONENT: f64 = 3.0;
+
+/// The most molecules per m² and per second a giant's plasma removes
+/// from a moon: Io's, the largest known, about one tonne per second
+/// over its 4.2e7 km² (Thomas et al. 2004, "The Io neutral clouds and
+/// plasma torus", in *Jupiter: The Planet, Satellites and
+/// Magnetosphere*, ch. 23; from memory, not checked), 2.2e14 SO₂ m⁻²
+/// s⁻¹. The power law of [`plasma_flux`] would give Io sixty times that,
+/// and a moon a few radii from a giant of ten Jupiter masses millions of
+/// times: the plasma a giant's moons load is limited by what they
+/// supply and what its rotation can carry, which the law does not see.
+const PLASMA_LOSS_MAX: f64 = 2.2e14;
+
+/// Jupiter's mass, Earth masses, and Callisto's orbit, Jupiter radii: the
+/// place of [`PLASMA_LOSS_AT_CALLISTO`].
+const JUPITER_MASS_EARTH: f64 = 317.8;
+const CALLISTO_RADII: f64 = 26.3;
+
+/// Binding energy of water ice, eV: the energy scale of the molecules
+/// a plasma ion sputters from an icy surface (Johnson 1990, *Energetic
+/// Charged-Particle Interactions with Atmospheres and Surfaces*,
+/// Springer; from memory, not checked).
+const ICE_BINDING_EV: f64 = 0.45;
+
+/// Joules per electronvolt.
+const EV_J: f64 = 1.602_176_634e-19;
+
+/// Atomic mass unit, kg.
+const AMU_KG: f64 = 1.660_54e-27;
+
+/// Molecular masses of the gases of [`Gases`], u, in its field order.
+const MOLECULAR_U: [f64; 7] = [28.014, 44.01, 18.015, 16.04, 17.031, 64.07, 32.0];
+
+impl Gases {
+    /// The partial pressures, in [`MOLECULAR_U`]'s order.
+    fn to_array(self) -> [f64; 7] {
+        [
+            self.n2, self.co2, self.h2o, self.ch4, self.nh3, self.so2, self.o2,
+        ]
+    }
+
+    fn from_array(a: [f64; 7]) -> Self {
+        let [n2, co2, h2o, ch4, nh3, so2, o2] = a;
+        Self {
+            n2,
+            co2,
+            h2o,
+            ch4,
+            nh3,
+            so2,
+            o2,
+        }
+    }
+}
+
+/// Share of the molecules a plasma sputters that leave faster than the
+/// escape velocity: the sputtered energies follow `E / (E + U)³`
+/// (Sigmund–Thompson, `U` the [`ICE_BINDING_EV`]), of which
+/// `U (2x + U) / (x + U)²` lie above the escape energy `x = m v² / 2`.
+/// About 0.4 for CO₂ on Callisto, 0.5 for N₂ on Titan, 0.05 for N₂ on a
+/// moon of the Earth's mass: a large moon holds what its plasma knocks
+/// up.
+fn escaping_share(molecule_kg: f64, body: &LossContext) -> f64 {
+    let x = 0.5 * molecule_kg * 2.0 * body.gravity * body.radius_m / EV_J;
+    let u = ICE_BINDING_EV;
+    u * (2.0 * x + u) / ((x + u) * (x + u))
+}
+
+/// Molecules per m² and per second a moon's air loses at the top to its
+/// giant's magnetosphere, before the share that escapes: the plasma's
+/// sputtering ([`PLASMA_LOSS_AT_CALLISTO`] scaled by the giant's mass and
+/// the moon's distance in its radii), at most [`PLASMA_LOSS_MAX`].
+fn plasma_flux(host: &HostPlasma) -> f64 {
+    let mass = host.host_mass_earth / JUPITER_MASS_EARTH;
+    let distance = host.semi_major_axis_radii.max(1.0) / CALLISTO_RADII;
+    let flux = PLASMA_LOSS_AT_CALLISTO
+        * mass.powf(PLASMA_MASS_EXPONENT)
+        * distance.powf(-PLASMA_DISTANCE_EXPONENT);
+    flux.min(PLASMA_LOSS_MAX)
+}
+
+/// The gases a body keeps against non-thermal loss over its age, and
+/// what it loses: `(kept, lost)`.
+///
+/// The air (`gases`, what the cosmic shoreline of [`atmosphere`] left,
+/// its frosts to come included) is what the body supplied over its age.
+/// Inside a giant's magnetosphere each of its molecules at the top meets
+/// a loss per m² that does not depend on how much air there is,
+/// `L = (J N_exo + f P) t`:
+///
+/// - photo-ionisation at the body's distance, `J =`
+///   [`PHOTO_IONISATION_AT_1_AU_S`]` / d²`, of the exobase column
+///   `N_exo` ([`EXOBASE_COLUMN_M2`]), whose ions the giant's corotating
+///   field sweeps away (Carlson 1999's loss for Callisto's CO₂);
+/// - the giant's plasma sputtering ([`plasma_flux`]), times the share of
+///   the sputtered molecules that escape ([`escaping_share`], which
+///   depends on the molecule's mass).
+///
+/// The air loses its gases in proportion to their share of its column
+/// `Σ p / (m g)`, so the mean of their `L` weighted by those shares is
+/// the air's loss over the age `t`. An air whose column is less than
+/// that is exhausted: it had no air that lasts, only the exosphere its
+/// supply feeds, an order of magnitude ([`EXOSPHERE_BAR`]) that its
+/// gases share in proportion to their supply, each keeping at most what
+/// it had. An air that outlasts its loss keeps all of it: the loss is
+/// then a share of a large column, and the bulk escape is the
+/// shoreline's.
+///
+/// Outside a giant's magnetosphere nothing is lost here: the stellar
+/// wind's pick-up of photo-ions is already in the shoreline, which Zahnle
+/// & Catling 2017 fitted on the planets (Mars, Mercury) that undergo it;
+/// counting it again would strip Mars. Titan's 1.5 bar and Triton's N₂
+/// and its frost lose a few percent of their column over the age;
+/// Europa, Ganymede, Callisto and Io lose their CO₂ and N₂.
+pub fn non_thermal_loss(gases: Gases, body: &LossContext) -> (Gases, Gases) {
+    let Some(host) = &body.host else {
+        return (gases, Gases::default());
+    };
+    let seconds = body.age_gyr.max(0.0) * GYR_S;
+    let photo = PHOTO_IONISATION_AT_1_AU_S / (body.orbit_au * body.orbit_au) * EXOBASE_COLUMN_M2;
+    let plasma = plasma_flux(host);
+    let partial = gases.to_array();
+    let (mut column, mut loss) = (0.0, 0.0);
+    for (&bar, &u) in partial.iter().zip(&MOLECULAR_U) {
+        let molecule = u * AMU_KG;
+        let n = bar.max(0.0) * PA_PER_BAR / (molecule * body.gravity);
+        column += n;
+        loss += n * (photo + plasma * escaping_share(molecule, body)) * seconds;
+    }
+    // `loss` is the share-weighted loss times the column.
+    if column <= 0.0 || column * column >= loss {
+        return (gases, Gases::default());
+    }
+    let supply: f64 = partial.iter().map(|p| p.max(0.0)).sum();
+    let kept = partial.map(|p| p.min(EXOSPHERE_BAR * p.max(0.0) / supply));
+    let lost = std::array::from_fn(|i| partial[i] - kept[i]);
+    (Gases::from_array(kept), Gases::from_array(lost))
+}
+
 /// Solar constant, W/m² (Kopp & Lean 2011, doi:10.1029/2010GL045777):
 /// the insolation of 1.
 const SOLAR_CONSTANT_W_M2: f64 = 1361.0;
@@ -684,6 +913,15 @@ mod tests {
     /// of part 2: water, regime, core, outgassing, escape, methane
     /// photolysis, cold trap, photochemistry.
     fn air(inputs: &PlanetInputs, orbit_au: f64) -> Gases {
+        let (c, int, air) = shoreline(inputs, orbit_au);
+        let air = methane_photolysis(air, &c, inputs.mass_earth, &int);
+        photochemistry(cold_trap(air, c.equilibrium_k), c.equilibrium_k)
+    }
+
+    /// The context, the interior and the air the cosmic shoreline leaves
+    /// `inputs` at `orbit_au` round the Sun ([`air`]'s chain up to
+    /// [`atmosphere`]).
+    fn shoreline(inputs: &PlanetInputs, orbit_au: f64) -> (Context, Interior, Gases) {
         let c = sun(orbit_au);
         let int = interior(inputs, &c.exposure());
         let fluence = xuv_fluence(&c);
@@ -698,8 +936,7 @@ mod tests {
         let k = core(inputs, &int, r, NOW);
         let out = outgassed(inputs, &w, r, &int);
         let air = atmosphere(out, &int, inputs.mass_earth, &k, fluence);
-        let air = methane_photolysis(air, &c, inputs.mass_earth, &int);
-        photochemistry(cold_trap(air, c.equilibrium_k), c.equilibrium_k)
+        (c, int, air)
     }
 
     /// The air of the reference body `name`.
@@ -906,6 +1143,83 @@ mod tests {
         let p = photochemistry(g, 300.0);
         assert_eq!(p.nh3, 0.0);
         assert!((p.n2 - 29.0).abs() < 1e-9, "{p:?}");
+    }
+
+    /// Venus, the Earth and Mars lose nothing to [`non_thermal_loss`]:
+    /// a planet's loss to its star is the shoreline's, so their air goes
+    /// on as it was. The Earth's air would outlast even Jupiter's plasma
+    /// at Callisto's place: its gravity holds what the plasma knocks up
+    /// ([`escaping_share`]).
+    #[test]
+    fn thick_airs_are_untouched() {
+        for name in ["Venus", "Earth", "Mars"] {
+            let b = reference(name);
+            let inputs = model_inputs(b);
+            let (c, int, air) = shoreline(&inputs, b.orbit_au);
+            let body = crate::planet::loss_context(&c, &inputs, &int);
+            assert_eq!(body.host, None, "{name}");
+            assert_eq!(
+                non_thermal_loss(air, &body),
+                (air, Gases::default()),
+                "{name}"
+            );
+        }
+        let earth = model_inputs(reference("Earth"));
+        let (c, int, air) = shoreline(&earth, 1.0);
+        let body = LossContext {
+            orbit_au: 5.2,
+            host: Some(HostPlasma {
+                host_mass_earth: JUPITER_MASS_EARTH,
+                semi_major_axis_radii: CALLISTO_RADII,
+            }),
+            ..crate::planet::loss_context(&c, &earth, &int)
+        };
+        assert_eq!(non_thermal_loss(air, &body), (air, Gases::default()));
+    }
+
+    /// A gas that cannot last is reduced to an exosphere of at most
+    /// [`EXOSPHERE_BAR`], shared by the exhausted gases in proportion to
+    /// their supply, never more than a gas had; what it lost is the
+    /// rest.
+    #[test]
+    fn an_exhausted_air_is_an_exosphere() {
+        let callisto = LossContext {
+            gravity: 1.24,
+            radius_m: 2.41e6,
+            orbit_au: 5.2,
+            age_gyr: 4.57,
+            host: Some(HostPlasma {
+                host_mass_earth: JUPITER_MASS_EARTH,
+                semi_major_axis_radii: CALLISTO_RADII,
+            }),
+        };
+        let air = Gases {
+            n2: 1e-6,
+            co2: 0.05,
+            so2: 1e-15,
+            ..Gases::default()
+        };
+        let (kept, lost) = non_thermal_loss(air, &callisto);
+        assert!((kept.total() - EXOSPHERE_BAR).abs() < 1e-15, "{kept:?}");
+        assert!(kept.co2 > kept.n2 && kept.n2 > 0.0, "{kept:?}");
+        assert!(kept.so2 > 0.0 && kept.so2 < air.so2, "{kept:?}");
+        // An air already thinner than an exosphere stays as it is.
+        let trace = Gases {
+            co2: 1e-13,
+            ..Gases::default()
+        };
+        assert_eq!(
+            non_thermal_loss(trace, &callisto),
+            (trace, Gases::default())
+        );
+        let sum = |g: Gases| g.to_array().iter().sum::<f64>();
+        assert!((sum(kept) + sum(lost) - sum(air)).abs() < 1e-15);
+        // Outside a giant's magnetosphere, nothing goes.
+        let planet = LossContext {
+            host: None,
+            ..callisto
+        };
+        assert_eq!(non_thermal_loss(air, &planet), (air, Gases::default()));
     }
 
     #[test]
