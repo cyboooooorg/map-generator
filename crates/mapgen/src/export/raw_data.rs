@@ -93,7 +93,13 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// so worlds of version 24 still load (it keeps its craters and has no
 /// stripes until it is regenerated); the stored fields are the same and
 /// [`crate::system::SYSTEM_FORMAT_VERSION`] stays as it is.
-pub const FORMAT_VERSION: u32 = 25;
+/// Version 26 draws only the noise octaves the grid resolves
+/// (`generation::Sampler::resolved`: no detail finer than two rows, which
+/// drew rays converging on the poles) and gives the relief normals the
+/// pixel's true east-west width up to the poles: the same seed gives a
+/// slightly different world (its sea level, relief, climate and biomes);
+/// the stored fields are the same.
+pub const FORMAT_VERSION: u32 = 26;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`

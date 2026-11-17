@@ -14,6 +14,10 @@
 //!   every zoom level. Height detail fades out at the waterline; near the
 //!   coast the base elevation is read at a sideways-displaced position
 //!   instead, so coastlines get a fractal outline without islets or ponds.
+//! - **Poles**: beyond 60 degrees of latitude, the base layers the tiles
+//!   interpolate are smoothed along their parallels towards a base row's
+//!   length, as the base resolves them along the meridians, so the narrow
+//!   polar columns' 16-bit stairs and edges draw no rays out of the poles.
 //! - **Climate**: temperature, moisture and the other biome inputs are read
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
@@ -34,8 +38,10 @@
 //! A [`DetailWorld`] keeps the base layers as stored in `raw_data/` (16 bits
 //! per value, see [`Layer16`]), decoded as they are sampled, plus a byte of
 //! albedo (fresh craters' ejecta and rays, format version 8), a byte of
-//! flags and the water depth per pixel: about 23 bytes per base pixel
-//! (0.8 GB at 8192 × 4096).
+//! flags and the water depth per pixel, and four layers smoothed along
+//! the parallels on the rows beyond 60 degrees of latitude (32 bits a
+//! value, see [`PolarBand`]): about 28 bytes per base pixel (0.95 GB at
+//! 8192 × 4096).
 use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
 use crate::craters::{CraterField, Window, base_min_diameter_km};
@@ -60,7 +66,7 @@ pub const TILE_SIZE: u32 = 256;
 /// `TILE_RENDER_VERSION` in `web/src/lib/viewer/TileLayer.ts`) whenever
 /// the colours or the shading of tiles change, or browsers keep showing
 /// tiles drawn by the previous renderer.
-pub const RENDER_VERSION: u32 = 10;
+pub const RENDER_VERSION: u32 = 11;
 /// Deepest level served: at z = 8 an Earth-sized planet is about 300 m per pixel.
 pub const MAX_LEVEL: u32 = 8;
 /// Amplitude of the first detail octave (elevation units), on plains.
@@ -158,6 +164,13 @@ pub struct DetailWorld {
     craters: CraterField,
     /// Whether the world's crust is an ice shell (see [`ice_shell`]).
     ice_shell: bool,
+    /// The base layers the tiles interpolate, near the poles, smoothed
+    /// along their parallels (see [`PolarBand`]): the elevation, the
+    /// albedo, the roughness of the surfaces and the floodplains.
+    polar_elevation: PolarBand,
+    polar_albedo: PolarBand,
+    polar_roughness: PolarBand,
+    polar_floodplain: PolarBand,
     /// The stripes of the world's geysers, which the tiles draw at their
     /// own resolution, and the base map's raster of them, which they take
     /// off the base layers first (see [`DetailWorld::tile_stripes`]).
@@ -227,6 +240,29 @@ impl<L: Samples + ?Sized> Samples for Unstriped<'_, L> {
     fn value(&self, i: usize) -> f32 {
         let v = self.layer.value(i);
         self.stripes.map_or(v, |s| v - s.get(i, self.k))
+    }
+}
+
+/// A base layer with the stripes its base map drew added back (to an
+/// [`Unstriped`] one smoothed near the poles, see [`DetailWorld::base_ground`]).
+struct Striped<'a, L> {
+    layer: L,
+    stripes: Option<&'a BaseStripes>,
+    k: usize,
+}
+
+impl<L: Samples> Samples for Striped<'_, L> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        let v = self.layer.value(i);
+        self.stripes.map_or(v, |s| v + s.get(i, self.k))
+    }
+}
+
+impl<L: Samples + ?Sized> Samples for &L {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        (**self).value(i)
     }
 }
 
@@ -301,19 +337,43 @@ fn bilinear(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y:
     top * (1.0 - fy) + bottom * fy
 }
 
-/// Bicubic (uniform cubic B-spline) sample of a base layer: its slope and
-/// its curvature are continuous, so the relief lit from the tiles' normals
-/// shows no crease along base pixel edges (Catmull-Rom's curvature jumped
-/// there, a washboard on every slope). It smooths the samples slightly
-/// rather than passing through them: a base pixel's own value moves by at
-/// most a third of its difference with the mean of its neighbours.
+/// [`bicubic64`] in single precision.
+#[cfg(test)]
 fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f32 {
+    bicubic64(layer, width, height, x, y) as f32
+}
+
+/// Bicubic (uniform cubic B-spline) sample of a base layer, in double
+/// precision: its slope and its curvature are continuous, so the relief
+/// lit from the tiles' normals shows no crease along base pixel edges
+/// (Catmull-Rom's curvature jumped there, a washboard on every slope). It
+/// smooths the samples slightly rather than passing through them: a base
+/// pixel's own value moves by at most a third of its difference with the
+/// mean of its neighbours.
+///
+/// Rows beyond a pole are those as far on its other side, half a turn
+/// round (the sphere continues through the pole), rather than the polar
+/// row repeated: the interpolated field stays smooth through the pole,
+/// where the polar row repeated held each column's value up to it, a cone
+/// of slopes that grew without end towards it. In double precision, a
+/// tile's pixels near a pole (metres apart along their parallel at the
+/// deepest level) keep the differences their slopes are read from.
+fn bicubic64(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: f64) -> f64 {
     let (w, h) = (width as i64, height as i64);
-    let (x, y) = (x - 0.5, (y - 0.5).clamp(0.0, (h - 1) as f64));
+    let (x, y) = (x - 0.5, y - 0.5);
     let (x0, y0) = (x.floor() as i64, y.floor() as i64);
-    let (fx, fy) = ((x - x0 as f64) as f32, (y - y0 as f64) as f32);
-    let at = |xx: i64, yy: i64| layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize);
-    let cubic = |p: [f32; 4], t: f32| {
+    let (fx, fy) = (x - x0 as f64, y - y0 as f64);
+    let at = |xx: i64, yy: i64| {
+        let (xx, yy) = if yy < 0 {
+            (xx + w / 2, -1 - yy)
+        } else if yy >= h {
+            (xx + w / 2, 2 * h - 1 - yy)
+        } else {
+            (xx, yy)
+        };
+        f64::from(layer.value((yy.clamp(0, h - 1) * w + xx.rem_euclid(w)) as usize))
+    };
+    let cubic = |p: [f64; 4], t: f64| {
         let (t2, t3, u) = (t * t, t * t * t, 1.0 - t);
         (u * u * u * p[0]
             + (3.0 * t3 - 6.0 * t2 + 4.0) * p[1]
@@ -321,11 +381,177 @@ fn bicubic(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y: 
             + t3 * p[3])
             / 6.0
     };
-    let rows: [f32; 4] = std::array::from_fn(|j| {
+    let rows: [f64; 4] = std::array::from_fn(|j| {
         let yy = y0 - 1 + j as i64;
         cubic(std::array::from_fn(|i| at(x0 - 1 + i as i64, yy)), fx)
     });
     cubic(rows, fy)
+}
+
+/// A base layer's rows near the poles smoothed along their parallel to a
+/// base row's length, so the tiles read from it carry no structure along
+/// the parallels finer than the base resolves along the meridians.
+///
+/// A base column narrows as `cos(lat)` towards a pole while a row keeps
+/// its height: on the polar row of a 512 x 256 map a column is a 160th of
+/// a row. The stored layer's 16-bit stairs, its biome borders and its
+/// edges a few columns wide along a parallel are then structure hundreds
+/// of times finer than a row, which the interpolation spreads over two
+/// rows radially: steep east-west slopes in the tiles' normals, rays of
+/// light and shade out of the pole. This is the "polar filter" of
+/// latitude-longitude grids, which removes from the rows near the poles
+/// the zonal waves shorter than the grid's meridional spacing (Arakawa
+/// and Lamb 1977, Methods in Computational Physics 17, 173-265,
+/// doi:10.1016/B978-0-12-460817-7.50009-4): a field is sampled no finer
+/// than it is resolved (Shannon 1949, Proc. IRE 37, 10-21,
+/// doi:10.1109/JRPROC.1949.232969).
+///
+/// Along a meridian the tiles see the base through a cubic B-spline one
+/// row wide (see [`bicubic64`]), a smoothing of variance a third of a row
+/// squared, `k² / 3` columns squared where `k = 1 / cos(lat)` columns make
+/// a row; along a parallel, through one a column wide, `1 / 3`. A box `w`
+/// columns wide (cutting the columns at its ends for their share) adds
+/// about `(w² - 1) / 12` (exactly at odd widths, a little more between
+/// them), so four in a row (see [`POLAR_PASSES`]) bring the parallel's to
+/// `w² / 3`. Boxes of `w² = k² - 3 = tan²(lat) - 2` columns
+/// (see [`polar_box`]) are one column, the row itself, at 60 degrees:
+/// rows nearer the equator are not stored and read as they are, so the
+/// tiles there are unchanged. Nowhere is the parallel's smoothing below
+/// half the meridian's (in standard deviation), as the base itself has it
+/// at 60 degrees, and it tends to the meridian's at the pole: 81 % of it
+/// at 70 degrees, 95 % at 80.
+struct PolarBand {
+    width: usize,
+    height: usize,
+    /// Rows smoothed at each pole.
+    rows: usize,
+    /// The first `rows` rows, then the last `rows`, row-major.
+    values: Vec<f32>,
+}
+
+/// Width in base columns of the boxes [`PolarBand`] smooths row `y` of a
+/// map `height` rows high with: `sqrt(tan²(lat) - 2)` at the row's
+/// centre, one column (the row itself) at 60 degrees of latitude.
+fn polar_box(y: usize, height: usize) -> f64 {
+    let colat = (y as f64 + 0.5) / height as f64 * PI;
+    let tan = 1.0 / colat.min(PI - colat).tan();
+    (tan * tan - 2.0).max(0.0).sqrt()
+}
+
+/// Boxes [`PolarBand`] smooths a row with in turn.
+const POLAR_PASSES: usize = 4;
+
+/// Base layers a [`DetailWorld`] smooths near the poles (see
+/// [`PolarBand`]): the elevation, the albedo, the roughness and the
+/// floodplains.
+const POLAR_LAYERS: usize = 4;
+
+/// Bytes a [`DetailWorld`] of a `width` x `height` base map holds for its
+/// layers smoothed near the poles (see [`PolarBand`]): 32 bits a value on
+/// the rows beyond 60 degrees of latitude, a third of them, about 5.3
+/// bytes a base pixel.
+pub fn polar_band_bytes(width: u32, height: u32) -> usize {
+    POLAR_LAYERS * 2 * polar_rows(height as usize) * width as usize * size_of::<f32>()
+}
+
+/// Rows [`PolarBand`] smooths at each pole of a map `height` rows high:
+/// those whose box is wider than a column.
+fn polar_rows(height: usize) -> usize {
+    (0..height / 2)
+        .take_while(|&y| polar_box(y, height) > 1.0)
+        .count()
+}
+
+impl PolarBand {
+    fn new(layer: &(impl Samples + Sync + ?Sized), width: u32, height: u32) -> Self {
+        let (w, h) = (width as usize, height as usize);
+        let rows = polar_rows(h);
+        let mut values = vec![0.0f32; 2 * rows * w];
+        let ys: Vec<usize> = (0..rows).chain(h - rows..h).collect();
+        values
+            .par_chunks_mut(w.max(1))
+            .zip(ys)
+            .for_each(|(out, y)| {
+                let mut row: Vec<f64> = (0..w).map(|x| f64::from(layer.value(y * w + x))).collect();
+                for _ in 0..POLAR_PASSES {
+                    row = box_filter(&row, polar_box(y, h));
+                }
+                for (out, v) in out.iter_mut().zip(row) {
+                    *out = v as f32;
+                }
+            });
+        Self {
+            width: w,
+            height: h,
+            rows,
+            values,
+        }
+    }
+
+    /// No row smoothed: the layer as it is.
+    fn none(width: u32, height: u32) -> Self {
+        Self {
+            width: width as usize,
+            height: height as usize,
+            rows: 0,
+            values: Vec::new(),
+        }
+    }
+
+    fn bytes(&self) -> usize {
+        self.values.len() * size_of::<f32>()
+    }
+}
+
+/// Mean of the periodic `row` over a box `wide` columns centred on each
+/// column, the columns it cuts at its ends counted for their share: the
+/// row itself where `wide` is one column or less.
+fn box_filter(row: &[f64], wide: f64) -> Vec<f64> {
+    let w = row.len();
+    if wide <= 1.0 {
+        return row.to_vec();
+    }
+    // Integral of the row from the west edge of column 0 to `t` columns.
+    let mut prefix = Vec::with_capacity(w + 1);
+    let mut sum = 0.0;
+    prefix.push(0.0);
+    for &v in row {
+        sum += v;
+        prefix.push(sum);
+    }
+    let integral = |t: f64| {
+        let turns = (t / w as f64).floor();
+        let r = t - turns * w as f64;
+        let j = (r.floor() as usize).min(w - 1);
+        turns * sum + prefix[j] + (r - j as f64) * row[j]
+    };
+    (0..w)
+        .map(|c| {
+            let centre = c as f64 + 0.5;
+            (integral(centre + wide / 2.0) - integral(centre - wide / 2.0)) / wide
+        })
+        .collect()
+}
+
+/// A base layer read through its [`PolarBand`].
+struct Banded<'a, L> {
+    layer: L,
+    band: &'a PolarBand,
+}
+
+impl<L: Samples> Samples for Banded<'_, L> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        let b = self.band;
+        let y = i / b.width;
+        if y < b.rows {
+            b.values[i]
+        } else if y >= b.height - b.rows {
+            b.values[i - (b.height - 2 * b.rows) * b.width]
+        } else {
+            self.layer.value(i)
+        }
+    }
 }
 
 /// Fractal noise at a unit vector, octaves from `first` to `last` wavelength
@@ -337,7 +563,7 @@ fn band_limited(
     first_km: f64,
     last_km: f64,
     gain: f64,
-) -> f32 {
+) -> f64 {
     let mut sum = 0.0;
     let (mut wavelength, mut amplitude) = (first_km, 1.0);
     while wavelength >= last_km {
@@ -346,7 +572,7 @@ fn band_limited(
         wavelength /= 2.0;
         amplitude *= gain;
     }
-    sum as f32
+    sum
 }
 
 /// Share of the height detail a biome's surface gets: snow, ice and lava
@@ -440,10 +666,46 @@ impl DetailWorld {
             let raster = crate::stripes::raster(&world.params.grid(), &world.params);
             (stripes, BaseStripes::new(&raster, world.width as usize))
         });
+        // The band is smoothed without the base map's stripes, which the
+        // tiles draw again at their own resolution (see `tile_stripes`).
+        let base_stripes = stripes.as_ref().map(|s| &s.1);
+        let polar_elevation = PolarBand::new(
+            &Unstriped {
+                layer: &world.elevation,
+                stripes: base_stripes,
+                k: 0,
+            },
+            world.width,
+            world.height,
+        );
+        let polar_albedo = if world.albedo.is_empty() {
+            PolarBand::none(world.width, world.height)
+        } else {
+            PolarBand::new(
+                &Unstriped {
+                    layer: &Albedo(&world.albedo),
+                    stripes: base_stripes,
+                    k: 1,
+                },
+                world.width,
+                world.height,
+            )
+        };
+        let ice_shell = ice_shell(&world.params);
+        let polar_roughness = PolarBand::new(
+            &Roughness(&world.biomes, ice_shell),
+            world.width,
+            world.height,
+        );
+        let polar_floodplain = PolarBand::new(&world.floodplain, world.width, world.height);
         Self {
             stripes,
+            polar_elevation,
+            polar_albedo,
+            polar_roughness,
+            polar_floodplain,
             craters: CraterField::context_at(&world.params, epoch_ga),
-            ice_shell: ice_shell(&world.params),
+            ice_shell,
             flags,
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
@@ -470,7 +732,31 @@ impl DetailWorld {
             + self.flags.len()
             + self.depths.len() * size_of::<f32>()
             + self.river_bounds.len() * size_of::<[f64; 4]>()
+            + self.polar_elevation.bytes()
+            + self.polar_albedo.bytes()
+            + self.polar_roughness.bytes()
+            + self.polar_floodplain.bytes()
             + self.stripes.as_ref().map_or(0, |s| s.1.bytes())
+    }
+
+    /// The base elevation as the tiles interpolate it: without the
+    /// stripes the base map drew (see [`Self::unstriped`]), smoothed near
+    /// the poles (see [`PolarBand`]).
+    fn base_elevation(&self) -> Banded<'_, Unstriped<'_, Layer16>> {
+        Banded {
+            layer: self.unstriped(&self.world.elevation, 0),
+            band: &self.polar_elevation,
+        }
+    }
+
+    /// The base elevation of the ground, its stripes included: as
+    /// [`Self::base_elevation`], with the base map's stripes added back.
+    fn base_ground(&self) -> Striped<'_, Banded<'_, Unstriped<'_, Layer16>>> {
+        Striped {
+            layer: self.base_elevation(),
+            stripes: self.stripes.as_ref().map(|s| &s.1),
+            k: 0,
+        }
     }
 
     /// Base pixel coordinates of a longitude and latitude.
@@ -500,9 +786,12 @@ impl DetailWorld {
     fn tile_stripes(&self, tile: TileId, pixel_km: f64) -> Option<Vec<(f32, f32)>> {
         let (stripes, _) = self.stripes.as_ref()?;
         let side = TILE_SIZE as usize + 2;
+        // Not clamped: a point beyond a pole (a border pixel, or a
+        // pixel's footprint on the polar row) lies on its other side, as
+        // `tile_elevation` reads the ground there.
         let at = |x: f64, y: f64| {
             let (lon, lat) = tile.lon_lat(x, y);
-            sphere(lon, lat.clamp(-PI / 2.0, PI / 2.0), 1.0)
+            sphere(lon, lat, 1.0)
         };
         let angle = |a: [f64; 3], b: [f64; 3]| {
             (a[0] * b[0] + a[1] * b[1] + a[2] * b[2])
@@ -542,16 +831,24 @@ impl DetailWorld {
         self.world.params.circumference_km as f64 / self.world.width as f64
     }
 
-    /// Detailed elevation at a point, for a tile whose pixels are `pixel_km`.
+    /// [`Self::elevation64`] in single precision.
+    #[cfg(test)]
     fn elevation(&self, lon: f64, lat: f64, pixel_km: f64) -> f32 {
+        self.elevation64(lon, lat, pixel_km) as f32
+    }
+
+    /// Detailed elevation at a point, for a tile whose pixels are
+    /// `pixel_km`, in double precision (see [`bicubic64`]).
+    fn elevation64(&self, lon: f64, lat: f64, pixel_km: f64) -> f64 {
         let w = &self.world;
         let (x, y) = self.base_xy(lon, lat);
-        let elevation = self.unstriped(&w.elevation, 0);
-        let base = bicubic(&elevation, w.width, w.height, x, y);
+        let elevation = self.base_elevation();
+        let base64 = bicubic64(&elevation, w.width, w.height, x, y);
+        let base = base64 as f32;
         let first = 2.0 * self.base_px_km();
         let last = FINEST_PX * pixel_km;
         if last > first {
-            return base;
+            return base64;
         }
         let p = sphere(lon, lat, 1.0);
         let radius = w.params.circumference_km as f64 / TAU;
@@ -567,7 +864,7 @@ impl DetailWorld {
         } else {
             1.0 - smoothstep(COAST_BAND.0, COAST_BAND.1, (base - waterline).abs())
         };
-        let base = if coastal > 0.0 {
+        let base64 = if coastal > 0.0 {
             let (mut dx, mut dy) = (0.0, 0.0);
             let (mut wavelength, mut share) = (first, COAST_WARP);
             let mut k = 0.0;
@@ -586,10 +883,11 @@ impl DetailWorld {
                 share *= COAST_WARP_DECAY;
                 k += 7.3;
             }
-            bicubic(&elevation, w.width, w.height, x + dx, y + dy)
+            bicubic64(&elevation, w.width, w.height, x + dx, y + dy)
         } else {
-            base
+            base64
         };
+        let base = base64 as f32;
 
         // Height detail: calmer on plains (and at every zoom), stronger and
         // 1/f on high ground, none at the waterline.
@@ -601,7 +899,10 @@ impl DetailWorld {
             * crate::generation::relief_share(&w.params)
             * (1.0 + MOUNTAIN_BOOST * high)
             * bilinear(
-                &Roughness(&w.biomes, self.ice_shell),
+                &Banded {
+                    layer: &Roughness(&w.biomes, self.ice_shell),
+                    band: &self.polar_roughness,
+                },
                 w.width,
                 w.height,
                 x,
@@ -614,8 +915,14 @@ impl DetailWorld {
             smoothstep(0.0, SHORE_FADE, above.abs())
         };
         // Floodplains stay flat valley floors.
-        let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&w.floodplain, w.width, w.height, x, y);
-        base + amplitude * shore * floor * band_limited(&self.noise, p, radius, first, last, gain)
+        let floodplain = Banded {
+            layer: &w.floodplain,
+            band: &self.polar_floodplain,
+        };
+        let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&floodplain, w.width, w.height, x, y);
+        base64
+            + f64::from(amplitude * shore * floor)
+                * band_limited(&self.noise, p, radius, first, last, gain)
     }
 
     /// Elevation of a tile with a one-pixel border, for slopes (row-major,
@@ -623,7 +930,9 @@ impl DetailWorld {
     /// small for the base map, and the rivers' channels (`channel`, same
     /// layout). Also the same without those craters, which biomes follow: a
     /// small crater changes the relief, not the ground it is dug into.
-    fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f32>, Vec<f32>) {
+    /// The first in double precision, for the slopes near the poles (see
+    /// [`bicubic64`]).
+    fn tile_elevation(&self, tile: TileId, pixel_km: f64, channel: &[f32]) -> (Vec<f64>, Vec<f32>) {
         let w = &self.world;
         let side = TILE_SIZE as usize + 2;
         let waterline = w.params.open_waterline();
@@ -634,25 +943,32 @@ impl DetailWorld {
             .map(|i| {
                 let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
                 let (lon, lat) = tile.lon_lat(px, py);
-                let ground = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km)
-                    + stripes.as_ref().map_or(0.0, |s| s[i].0);
+                // A border pixel beyond a pole lies on its other side.
+                let (lon, lat) = if lat.abs() > PI / 2.0 {
+                    (lon + PI, lat.signum() * PI - lat)
+                } else {
+                    (lon, lat)
+                };
+                let ground = self.elevation64(lon, lat, pixel_km)
+                    + stripes.as_ref().map_or(0.0, |s| f64::from(s[i].0));
+                let waterline = f64::from(waterline);
                 let e = match &craters {
                     // Craters never dig the land below the sea.
                     Some(relief) if ground >= waterline => {
-                        (ground + relief[i]).max(waterline + 1e-6)
+                        (ground + f64::from(relief[i])).max(waterline + 1e-6)
                     }
-                    Some(relief) => ground + relief[i],
+                    Some(relief) => ground + f64::from(relief[i]),
                     None => ground,
                 };
                 // The river's channel and banks, never below the sea.
-                let channelled = |e: f32| {
+                let channelled = |e: f64| {
                     if e >= waterline {
-                        (e - channel[i]).max(waterline + 1e-6)
+                        (e - f64::from(channel[i])).max(waterline + 1e-6)
                     } else {
                         e
                     }
                 };
-                (channelled(e), channelled(ground))
+                (channelled(e), channelled(ground) as f32)
             })
             .unzip()
     }
@@ -705,7 +1021,7 @@ impl DetailWorld {
             let lat = c.centre[2].clamp(-1.0, 1.0).asin();
             let lon = c.centre[1].atan2(c.centre[0]).rem_euclid(TAU);
             let (x, y) = self.base_xy(lon, lat);
-            bilinear(&w.elevation, w.width, w.height, x, y)
+            bilinear(&self.base_ground(), w.width, w.height, x, y)
         };
         // The hillshade exaggerates relief about 60 times (`RELIEF_KM`), for
         // the gentle slopes of the base map: small crater walls would turn
@@ -760,7 +1076,8 @@ impl DetailWorld {
                 let (bx, by) = self.base_xy(lon, lat);
                 let (cx, cy) = (bx + wx * CLIMATE_WARP_PX, by + wy * CLIMATE_WARP_PX);
                 let sample = |layer: &dyn Samples| bilinear(layer, w.width, w.height, cx, cy);
-                let base_above = sample(&w.elevation) - w.params.sea_level - look.rules.waterline;
+                let base_above =
+                    sample(&self.base_ground()) - w.params.sea_level - look.rules.waterline;
                 // Temperature follows the detailed elevation (lapse rate).
                 let t = sample(&w.temperature) + temperature(0.0, above, lapse)
                     - temperature(0.0, base_above, lapse);
@@ -815,7 +1132,11 @@ impl DetailWorld {
                         // Fresh craters' ejecta and rays, at the base
                         // resolution; the stripes at the tile's.
                         let albedo = Albedo(&w.albedo);
-                        let a = bilinear(&self.unstriped(&albedo, 1), w.width, w.height, bx, by)
+                        let albedo = Banded {
+                            layer: self.unstriped(&albedo, 1),
+                            band: &self.polar_albedo,
+                        };
+                        let a = bilinear(&albedo, w.width, w.height, bx, by)
                             + stripes
                                 .as_ref()
                                 .map_or(0.0, |s| s[(py + 1) * side + px + 1].1);
@@ -841,21 +1162,28 @@ impl DetailWorld {
     /// map's exaggeration, from the tile's elevation with its one-pixel
     /// border: neighbouring tiles share their edge pixels, so their normals
     /// meet without a seam.
+    ///
+    /// The run towards the east is the pixel's true width on its parallel,
+    /// down to the pixels next to the poles (whose centres lie half a pixel
+    /// from them), as on the base map (see [`relief::slopes`]): a floor at
+    /// 0.05 of the equator's shrank the slopes along the parallels within
+    /// 2.9 degrees of the poles, a cone in the light. In double precision:
+    /// at the deepest level, those pixels are metres apart.
     fn normal(
         &self,
-        elevation: &[f32],
+        elevation: &[f64],
         side: usize,
         x: usize,
         y: usize,
         pixel_km: f64,
         lat: f64,
     ) -> [f32; 3] {
-        let relief = relief_km(self.world().params.circumference_km);
+        let relief = f64::from(relief_km(self.world().params.circumference_km));
         let at = |x: usize, y: usize| elevation[y * side + x] * relief;
-        let dx_km = (pixel_km * lat.cos().max(0.05)) as f32;
+        let dx_km = pixel_km * lat.cos();
         let dz_east = (at(x + 1, y) - at(x - 1, y)) / (2.0 * dx_km);
-        let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km as f32);
-        relief::normal_of(dz_east, dz_north)
+        let dz_north = (at(x, y - 1) - at(x, y + 1)) / (2.0 * pixel_km);
+        relief::normal_of(dz_east as f32, dz_north as f32)
     }
 
     /// Anti-aliased coverage of the rivers on a tile, drawn with the base
@@ -1067,6 +1395,79 @@ mod tests {
         assert!((at - 4.0 / 9.0).abs() < 1e-5, "{at}");
     }
 
+    /// The interpolated base continues through a pole: a plane through the
+    /// centre (`x`, the unit vector's first component), sampled at the base
+    /// pixels, is read back near the pole within a hundredth of a row's
+    /// rise. Repeating the polar row held each column's value up to the
+    /// pole (an error of half a row's rise there), a cone whose slopes grew
+    /// without end towards it.
+    #[test]
+    fn the_interpolated_base_continues_through_the_poles() {
+        let (w, h) = (64u32, 32u32);
+        let grid = crate::geo::Grid {
+            width: w,
+            height: h,
+            circumference_km: 40_000.0,
+        };
+        let plane: Vec<f32> = (0..w * h)
+            .map(|i| grid.unit_vector_at(f64::from(i % w), f64::from(i / w))[0] as f32)
+            .collect();
+        let row = PI / f64::from(h);
+        let mut worst = 0.0f64;
+        for k in 0..200 {
+            let lon = f64::from(k) * 0.173 % TAU;
+            // Within a row of either pole.
+            let colat = f64::from(k % 20) / 20.0 * row;
+            for lat in [PI / 2.0 - colat, colat - PI / 2.0] {
+                let (x, y) = (lon / TAU * f64::from(w), (0.5 - lat / PI) * f64::from(h));
+                let want = lat.cos() * lon.cos();
+                worst = worst.max((bicubic64(&plane, w, h, x, y) - want).abs() / row);
+            }
+        }
+        assert!(worst < 0.01, "{worst} of a row's rise");
+    }
+
+    /// A tile's normals keep the slopes of the ground up to the pole: on a
+    /// plane through the centre, at the deepest level, the slope towards
+    /// the east of the polar tile's pixels is the plane's. With the east-
+    /// west run floored at 0.05 of the equator's (2.9 degrees) and the
+    /// elevation in single precision, it was off by the whole slope.
+    #[test]
+    fn tile_normals_keep_a_planes_slopes_up_to_the_pole() {
+        let d = detail_world();
+        let radius = f64::from(d.world().params.circumference_km) / TAU;
+        let relief = f64::from(relief_km(d.world().params.circumference_km));
+        // At longitude 90 degrees, where the plane rises along the parallels.
+        let tile = TileId {
+            z: MAX_LEVEL,
+            x: 1 << (MAX_LEVEL - 1),
+            y: 0,
+        };
+        let (cols, _) = tile.grid();
+        let pixel_km = d.world().params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
+        let side = TILE_SIZE as usize + 2;
+        // A gentle tilt (a slope of 0.2 at the exaggeration), on ground
+        // standing at 0.3 as land does.
+        let a = 0.2 * radius / relief;
+        let elevation: Vec<f64> = (0..side * side)
+            .map(|i| {
+                let (lon, lat) = tile.lon_lat((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
+                0.3 + a * lat.cos() * lon.cos()
+            })
+            .collect();
+        let mut worst = 0.0f64;
+        for y in 1..40 {
+            for x in (1..side - 1).step_by(5) {
+                let (lon, lat) = tile.lon_lat(x as f64 - 1.0, y as f64 - 1.0);
+                let n = d.normal(&elevation, side, x, y, pixel_km, lat);
+                let east = -f64::from(n[0]) / f64::from(n[2]);
+                let want = relief * a * -lon.sin() / radius;
+                worst = worst.max((east - want).abs() / 0.2);
+            }
+        }
+        assert!(worst < 0.01, "{worst}");
+    }
+
     /// The curvature of the interpolated base is continuous across the base
     /// pixels: a jump there shows as a crease at every base pixel in the
     /// lit relief of a tile (a washboard on every slope).
@@ -1160,7 +1561,9 @@ mod tests {
 
     #[test]
     fn coarse_tiles_agree_with_the_base_world() {
-        // Level 0 tiles are 512 × 256 together: the size of this base world.
+        // Level 0 tiles are 512 × 256 together: the size of this base world,
+        // as the tiles read it (smoothed along the parallels beyond 60
+        // degrees, see `PolarBand`).
         let d = detail_world();
         let w = d.world();
         let look = &w.params.look;
@@ -1172,7 +1575,8 @@ mod tests {
                     let (lon, lat) = TileId { z: 0, x, y: 0 }.lon_lat(px as f64, py as f64);
                     let (bx, by) = d.base_xy(lon, lat);
                     let i = w.index(bx as u32 % w.width, (by as u32).min(w.height - 1));
-                    let base_water = w.elevation.get(i) - w.params.sea_level < look.rules.waterline;
+                    let base_water =
+                        d.base_elevation().value(i) - w.params.sea_level < look.rules.waterline;
                     let tile_water =
                         d.elevation(lon, lat, 1e9) - w.params.sea_level < look.rules.waterline;
                     same_water += usize::from(base_water == tile_water);
@@ -1201,7 +1605,7 @@ mod tests {
             let lon = (k as f64 * 0.731) % TAU;
             let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;
             let (x, y) = d.base_xy(lon, lat);
-            let base = bicubic(&w.elevation, w.width, w.height, x, y);
+            let base = bicubic(&d.base_elevation(), w.width, w.height, x, y);
             if (base - waterline).abs() < COAST_BAND.1 {
                 continue;
             }
@@ -1221,7 +1625,7 @@ mod tests {
             let lon = (k as f64 * 0.731) % TAU;
             let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;
             let (x, y) = d.base_xy(lon, lat);
-            let base = bicubic(&w.elevation, w.width, w.height, x, y);
+            let base = bicubic(&d.base_elevation(), w.width, w.height, x, y);
             if (base - waterline).abs() < COAST_BAND.1 {
                 continue;
             }
@@ -1250,7 +1654,7 @@ mod tests {
         let base = |tile: TileId, px: f64, py: f64| {
             let (lon, lat) = tile.lon_lat(px, py);
             let (x, y) = d.base_xy(lon, lat.clamp(-PI / 2.0, PI / 2.0));
-            bicubic(&w.elevation, w.width, w.height, x, y)
+            bicubic(&d.base_elevation(), w.width, w.height, x, y)
         };
         let (mut sum, mut count) = (0.0, 0.0);
         let tiles = (0..4000u32)
@@ -1263,8 +1667,12 @@ mod tests {
             .take(8);
         for tile in tiles {
             let (_, ground) = d.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
-            let detail: Vec<f32> = (0..side * side)
-                .map(|i| ground[i] - base(tile, (i % side) as f64 - 1.0, (i / side) as f64 - 1.0))
+            let detail: Vec<f64> = (0..side * side)
+                .map(|i| {
+                    f64::from(
+                        ground[i] - base(tile, (i % side) as f64 - 1.0, (i / side) as f64 - 1.0),
+                    )
+                })
                 .collect();
             for y in (1..side - 1).step_by(4) {
                 let (_, lat) = tile.lon_lat(0.0, y as f64 - 1.0);
@@ -1375,7 +1783,7 @@ mod tests {
                 };
                 let (cratered, bare) =
                     europa.tile_elevation(tile, pixel_km, &vec![0.0; side * side]);
-                cratered != bare
+                cratered.iter().zip(&bare).any(|(&c, &b)| c as f32 != b)
             })
             .count();
         assert!(dug > 0, "no small crater on 16 tiles");
@@ -1607,5 +2015,171 @@ mod tests {
             diff / (2.0 * TILE_SIZE as f32 * 3.0) < 20.0,
             "mean step {diff}"
         );
+    }
+
+    /// Base worlds of an Enceladus-sized moon (500 km across, 512 x 256:
+    /// a base row is 3.1 km, a column 19 m on the polar row) whose
+    /// elevation is a gentle isotropic random relief (Perlin noise on the
+    /// sphere, a lattice cell four rows wide, one per seed), quantised to
+    /// 16 bits as stored: a 16-bit step is about 50 m at the hillshade's
+    /// exaggeration, a sixteenth of the relief's rise over a row.
+    fn moons_of_random_relief(seeds: std::ops::Range<u32>) -> Vec<DetailWorld> {
+        let params = crate::world::WorldParams {
+            sea_level: 0.2,
+            circumference_km: 40_000.0,
+            ..crate::generation::tests::preset_params("terran", 3, 512, 256)
+        };
+        let mut world = generate(&params).world;
+        world.params.circumference_km = 1_590.0;
+        let grid = world.params.grid();
+        // Four rows a lattice cell: 256 rows span pi.
+        let f = 256.0 / (4.0 * PI);
+        seeds
+            .map(|seed| {
+                let noise = Perlin::new(seed);
+                for y in 0..world.height {
+                    for x in 0..world.width {
+                        let p = grid.unit_vector_at(f64::from(x), f64::from(y));
+                        // Off the lattice's lines, where Perlin noise is calm.
+                        let v = noise.get([p[0] * f + 0.37, p[1] * f + 0.61, p[2] * f + 0.23]);
+                        let i = world.index(x, y);
+                        world.elevation[i] = 0.6 + 0.004 * v as f32;
+                    }
+                }
+                DetailWorld::new(LoadedWorld::from_world(&world))
+            })
+            .collect()
+    }
+
+    /// Mean squares of the east and north components of the tile normals
+    /// of level `z` and row `y` whose latitudes lie in `band` (degrees,
+    /// either hemisphere), over the tiles round the globe, and their count.
+    fn normal_squares(d: &DetailWorld, z: u32, y: u32, band: (f64, f64)) -> (f64, f64, usize) {
+        let (cols, _) = TileId { z, x: 0, y }.grid();
+        let pixel_km = d.world().params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
+        let side = TILE_SIZE as usize + 2;
+        let no_rivers = vec![0.0; side * side];
+        let (mut east, mut north, mut n) = (0.0, 0.0, 0usize);
+        for x in (0..cols).step_by((cols as usize / 8).max(1)) {
+            let tile = TileId { z, x, y };
+            let (elevation, _) = d.tile_elevation(tile, pixel_km, &no_rivers);
+            for py in 1..side - 1 {
+                for px in (1..side - 1).step_by(3) {
+                    let (_, lat) = tile.lon_lat(px as f64 - 1.0, py as f64 - 1.0);
+                    if !(band.0..band.1).contains(&lat.to_degrees().abs()) {
+                        continue;
+                    }
+                    let normal = d.normal(&elevation, side, px, py, pixel_km, lat);
+                    east += f64::from(normal[0]).powi(2);
+                    north += f64::from(normal[1]).powi(2);
+                    n += 1;
+                }
+            }
+        }
+        (east, north, n)
+    }
+
+    /// Root mean square of the east and north components of the normals of
+    /// level `z`'s polar tiles on worlds `ds`, within `band` (degrees).
+    fn polar_normal_rms(ds: &[DetailWorld], z: u32, band: (f64, f64)) -> (f64, f64) {
+        let rows = 1 << z;
+        let (mut east, mut north, mut n) = (0.0, 0.0, 0usize);
+        for d in ds {
+            for y in [0, rows - 1] {
+                let (e, s, k) = normal_squares(d, z, y, band);
+                (east, north, n) = (east + e, north + s, n + k);
+            }
+        }
+        assert!(n > 0, "no pixel in {band:?}");
+        ((east / n as f64).sqrt(), (north / n as f64).sqrt())
+    }
+
+    /// Near a pole, a base column is a sliver of a base row (a 160th of it
+    /// on the polar row of a 512 x 256 map): the 16-bit stairs, biome
+    /// borders and edges a few columns wide along a parallel, spread over
+    /// two rows by the interpolation, turned into steep east-west slopes,
+    /// rays of light and shade out of the pole. The tiles carry no
+    /// structure along the parallels finer than a base row: near a pole
+    /// their normals lean east no more than north, as at mid-latitudes.
+    /// Without the polar band, the east component's root mean square was
+    /// 1.80 times the north's within a row of the poles (0.458 against
+    /// 0.255) and 1.32 times one to four rows from them.
+    #[test]
+    fn polar_tiles_lean_east_no_more_than_north() {
+        let ds = moons_of_random_relief(0..4);
+        let row = 180.0 / f64::from(ds[0].world().height);
+        // Level 4: 16 tile pixels a base row.
+        let (east, north, n) = normal_squares(&ds[0], 4, 5, (20.0, 40.0));
+        let (mid_east, mid_north) = ((east / n as f64).sqrt(), (north / n as f64).sqrt());
+        assert!(
+            (mid_east / mid_north - 1.0).abs() < 0.1,
+            "mid-latitude east {mid_east} north {mid_north}"
+        );
+        for band in [(90.0 - row, 90.0), (90.0 - 4.0 * row, 90.0 - row)] {
+            let (east, north) = polar_normal_rms(&ds, 4, band);
+            assert!(east < 1.2 * north, "{band:?}: east {east} north {north}");
+        }
+    }
+
+    /// The polar band leaves the rows within 60 degrees of the equator as
+    /// they are: tiles there are the same, byte for byte, with or without
+    /// it. Nearer the poles it changes them.
+    #[test]
+    fn tiles_away_from_the_poles_are_unchanged() {
+        let d = detail_world();
+        let mut plain = detail_world();
+        let (w, h) = (d.world().width, d.world().height);
+        assert!(d.polar_elevation.rows > 0);
+        plain.polar_elevation = PolarBand::none(w, h);
+        plain.polar_albedo = PolarBand::none(w, h);
+        plain.polar_roughness = PolarBand::none(w, h);
+        plain.polar_floodplain = PolarBand::none(w, h);
+        // Level 3 has 8 rows of tiles, 22.5 degrees each: the second spans
+        // 67.5 to 45 degrees, and reads the band above 60 only.
+        for y in 1..7 {
+            for x in [0, 5, 11] {
+                let tile = TileId { z: 3, x, y };
+                let (a, b) = (d.render_tile(tile), plain.render_tile(tile));
+                for py in 0..TILE_SIZE {
+                    let (_, lat) = tile.lon_lat(0.0, f64::from(py));
+                    // The interpolation reads two base rows (1.4 degrees)
+                    // round a pixel, the climate's warp one more.
+                    if lat.to_degrees().abs() > 57.0 {
+                        continue;
+                    }
+                    for row in [py, py + TILE_SIZE] {
+                        for px in 0..TILE_SIZE {
+                            assert_eq!(
+                                a.get_pixel(px, row),
+                                b.get_pixel(px, row),
+                                "{tile:?} {px} {row}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        let pole = TileId { z: 3, x: 5, y: 0 };
+        assert_ne!(d.render_tile(pole), plain.render_tile(pole));
+    }
+
+    /// A box one column wide or less is the row itself; a wider one keeps
+    /// the row's mean and a plane along it, and cuts the columns at its
+    /// ends for their share.
+    #[test]
+    fn box_filter_cuts_the_columns_at_its_ends() {
+        let row: Vec<f64> = (0..16).map(|i| f64::from((i * 7) % 5)).collect();
+        assert_eq!(box_filter(&row, 1.0), row);
+        assert_eq!(box_filter(&row, 0.4), row);
+        let smooth = box_filter(&row, 2.5);
+        let mean = |r: &[f64]| r.iter().sum::<f64>() / r.len() as f64;
+        assert!((mean(&smooth) - mean(&row)).abs() < 1e-12);
+        // Column 3 over 2.5 columns: itself, and three quarters of each
+        // neighbour.
+        let want = (row[3] + 0.75 * (row[2] + row[4])) / 2.5;
+        assert!((smooth[3] - want).abs() < 1e-12, "{} {want}", smooth[3]);
+        // Wrapping round the parallel.
+        let want = (row[0] + 0.75 * (row[15] + row[1])) / 2.5;
+        assert!((smooth[0] - want).abs() < 1e-12, "{} {want}", smooth[0]);
     }
 }

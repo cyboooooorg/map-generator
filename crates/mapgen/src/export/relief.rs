@@ -18,13 +18,23 @@ pub const FLAT: [u8; 3] = [128, 128, 255];
 
 /// Slopes of the exaggerated elevation at pixel `(x, y)`, rise over run:
 /// towards the east and towards the north.
+///
+/// The run towards the east is the pixel's true width on its parallel,
+/// `C cos(latitude) / width`, down to the rows next to the poles (whose
+/// centres lie half a row from them, so it never vanishes): the floor of
+/// [`Grid::dx_km`], kept for areas, shrank the slopes along the parallels
+/// within 5.7 degrees of the poles, and the light drew a cone there. The
+/// elevation holds no detail finer than its rows (see
+/// `generation::Sampler::resolved`), so it varies smoothly along those
+/// short parallels and their slopes stay those of the ground.
 pub(crate) fn slopes(world: &World, grid: &Grid, x: u32, y: u32) -> (f32, f32) {
     let (w, h) = (world.width, world.height);
     let relief = super::relief_km(world.params.circumference_km);
     let elev = |x: u32, y: u32| world.elevation[world.index(x, y)] * relief;
     let (west, east) = ((x + w - 1) % w, (x + 1) % w);
     let (north, south) = (y.saturating_sub(1), (y + 1).min(h - 1));
-    let dz_east = (elev(east, y) - elev(west, y)) / (2.0 * grid.dx_km(y));
+    let dx_km = grid.circumference_km * grid.latitude(y).cos() as f32 / w as f32;
+    let dz_east = (elev(east, y) - elev(west, y)) / (2.0 * dx_km);
     let dz_north =
         (elev(x, north) - elev(x, south)) / ((south - north).max(1) as f32 * grid.dy_km());
     (dz_east, dz_north)
@@ -120,6 +130,49 @@ mod tests {
         let half = relief_normal(&world, &grid, 32, 16);
         assert!(seam[0] < 0.0 && half[0] > 0.0, "{seam:?} {half:?}");
         assert!((seam[0] + half[0]).abs() < 1e-3, "{seam:?} {half:?}");
+    }
+
+    /// Ground tilted as a plane through the centre, rising towards
+    /// longitude 0 (elevation `A x`, `x` the unit vector's first
+    /// component): its slopes towards the east and the north are those of
+    /// the plane at every latitude, the pole's included. With the pixel's
+    /// east-west size floored at a tenth of the equator's (its floor for
+    /// areas, see [`Grid::dx_km`]), the slope towards the east shrank to
+    /// `sin(colatitude) / 0.1` of its value within 5.7 degrees of the
+    /// poles (0.17 at 1 degree): the light caught only the slopes along
+    /// the meridians there, a cone round the pole.
+    #[test]
+    fn a_tilted_plane_keeps_its_slopes_up_to_the_poles() {
+        let mut p = crate::generation::tests::params(3, "terran");
+        (p.width, p.height) = (512, 256);
+        let grid = p.grid();
+        let a = 1e-4;
+        let mut world = crate::generation::generate(&p).world;
+        for y in 0..world.height {
+            for x in 0..world.width {
+                let [vx, _, _] = grid.unit_vector_at(f64::from(x), f64::from(y));
+                let i = world.index(x, y);
+                world.elevation[i] = (a * vx) as f32;
+            }
+        }
+        let relief = f64::from(super::super::relief_km(p.circumference_km));
+        let radius = f64::from(p.circumference_km) / std::f64::consts::TAU;
+        let mut worst: f64 = 0.0;
+        for y in (0..world.height).filter(|&y| grid.latitude(y).abs() > 80f64.to_radians()) {
+            let lat = grid.latitude(y);
+            for x in (0..world.width).step_by(7) {
+                let lon = grid.longitude_at(f64::from(x));
+                let (east, north) = slopes(&world, &grid, x, y);
+                // The gradient of `A x` on the sphere, along east and north.
+                let want_east = relief * a * -lon.sin() / radius;
+                let want_north = relief * a * -lat.sin() * lon.cos() / radius;
+                let scale = relief * a / radius;
+                worst = worst
+                    .max((f64::from(east) - want_east).abs() / scale)
+                    .max((f64::from(north) - want_north).abs() / scale);
+            }
+        }
+        assert!(worst < 0.02, "{worst}");
     }
 
     #[test]
