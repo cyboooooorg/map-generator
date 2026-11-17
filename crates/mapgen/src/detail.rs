@@ -14,6 +14,10 @@
 //!   every zoom level. Height detail fades out at the waterline; near the
 //!   coast the base elevation is read at a sideways-displaced position
 //!   instead, so coastlines get a fractal outline without islets or ponds.
+//! - **Poles**: beyond 60 degrees of latitude, the base layers the tiles
+//!   interpolate are smoothed along their parallels towards a base row's
+//!   length, as the base resolves them along the meridians, so the narrow
+//!   polar columns' 16-bit stairs and edges draw no rays out of the poles.
 //! - **Climate**: temperature, moisture and the other biome inputs are read
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
@@ -29,8 +33,10 @@
 //! A [`DetailWorld`] keeps the base layers as stored in `raw_data/` (16 bits
 //! per value, see [`Layer16`]), decoded as they are sampled, plus a byte of
 //! albedo (fresh craters' ejecta and rays, format version 8), a byte of
-//! flags and the water depth per pixel: about 23 bytes per base pixel
-//! (0.8 GB at 8192 × 4096).
+//! flags and the water depth per pixel, and four layers smoothed along
+//! the parallels on the rows beyond 60 degrees of latitude (32 bits a
+//! value, see [`PolarBand`]): about 28 bytes per base pixel (0.95 GB at
+//! 8192 × 4096).
 use crate::biome::{Biome, BiomeInput, surface_color};
 use crate::climate::temperature;
 use crate::craters::{CraterField, Window, base_min_diameter_km};
@@ -152,6 +158,13 @@ pub struct DetailWorld {
     craters: CraterField,
     /// Whether the world's crust is an ice shell (see [`ice_shell`]).
     ice_shell: bool,
+    /// The base layers the tiles interpolate, near the poles, smoothed
+    /// along their parallels (see [`PolarBand`]): the elevation, the
+    /// albedo, the roughness of the surfaces and the floodplains.
+    polar_elevation: PolarBand,
+    polar_albedo: PolarBand,
+    polar_roughness: PolarBand,
+    polar_floodplain: PolarBand,
 }
 
 /// Flag of base lake pixels (water above the waterline, not under a drawn
@@ -276,6 +289,172 @@ fn bicubic64(layer: &(impl Samples + ?Sized), width: u32, height: u32, x: f64, y
     cubic(rows, fy)
 }
 
+/// A base layer's rows near the poles smoothed along their parallel to a
+/// base row's length, so the tiles read from it carry no structure along
+/// the parallels finer than the base resolves along the meridians.
+///
+/// A base column narrows as `cos(lat)` towards a pole while a row keeps
+/// its height: on the polar row of a 512 x 256 map a column is a 160th of
+/// a row. The stored layer's 16-bit stairs, its biome borders and its
+/// edges a few columns wide along a parallel are then structure hundreds
+/// of times finer than a row, which the interpolation spreads over two
+/// rows radially: steep east-west slopes in the tiles' normals, rays of
+/// light and shade out of the pole. This is the "polar filter" of
+/// latitude-longitude grids, which removes from the rows near the poles
+/// the zonal waves shorter than the grid's meridional spacing (Arakawa
+/// and Lamb 1977, Methods in Computational Physics 17, 173-265,
+/// doi:10.1016/B978-0-12-460817-7.50009-4): a field is sampled no finer
+/// than it is resolved (Shannon 1949, Proc. IRE 37, 10-21,
+/// doi:10.1109/JRPROC.1949.232969).
+///
+/// Along a meridian the tiles see the base through a cubic B-spline one
+/// row wide (see [`bicubic64`]), a smoothing of variance a third of a row
+/// squared, `k² / 3` columns squared where `k = 1 / cos(lat)` columns make
+/// a row; along a parallel, through one a column wide, `1 / 3`. A box `w`
+/// columns wide (cutting the columns at its ends for their share) adds
+/// about `(w² - 1) / 12` (exactly at odd widths, a little more between
+/// them), so four in a row (see [`POLAR_PASSES`]) bring the parallel's to
+/// `w² / 3`. Boxes of `w² = k² - 3 = tan²(lat) - 2` columns
+/// (see [`polar_box`]) are one column, the row itself, at 60 degrees:
+/// rows nearer the equator are not stored and read as they are, so the
+/// tiles there are unchanged. Nowhere is the parallel's smoothing below
+/// half the meridian's (in standard deviation), as the base itself has it
+/// at 60 degrees, and it tends to the meridian's at the pole: 81 % of it
+/// at 70 degrees, 95 % at 80.
+struct PolarBand {
+    width: usize,
+    height: usize,
+    /// Rows smoothed at each pole.
+    rows: usize,
+    /// The first `rows` rows, then the last `rows`, row-major.
+    values: Vec<f32>,
+}
+
+/// Width in base columns of the boxes [`PolarBand`] smooths row `y` of a
+/// map `height` rows high with: `sqrt(tan²(lat) - 2)` at the row's
+/// centre, one column (the row itself) at 60 degrees of latitude.
+fn polar_box(y: usize, height: usize) -> f64 {
+    let colat = (y as f64 + 0.5) / height as f64 * PI;
+    let tan = 1.0 / colat.min(PI - colat).tan();
+    (tan * tan - 2.0).max(0.0).sqrt()
+}
+
+/// Boxes [`PolarBand`] smooths a row with in turn.
+const POLAR_PASSES: usize = 4;
+
+/// Base layers a [`DetailWorld`] smooths near the poles (see
+/// [`PolarBand`]): the elevation, the albedo, the roughness and the
+/// floodplains.
+const POLAR_LAYERS: usize = 4;
+
+/// Bytes a [`DetailWorld`] of a `width` x `height` base map holds for its
+/// layers smoothed near the poles (see [`PolarBand`]): 32 bits a value on
+/// the rows beyond 60 degrees of latitude, a third of them, about 5.3
+/// bytes a base pixel.
+pub fn polar_band_bytes(width: u32, height: u32) -> usize {
+    POLAR_LAYERS * 2 * polar_rows(height as usize) * width as usize * size_of::<f32>()
+}
+
+/// Rows [`PolarBand`] smooths at each pole of a map `height` rows high:
+/// those whose box is wider than a column.
+fn polar_rows(height: usize) -> usize {
+    (0..height / 2)
+        .take_while(|&y| polar_box(y, height) > 1.0)
+        .count()
+}
+
+impl PolarBand {
+    fn new(layer: &(impl Samples + Sync + ?Sized), width: u32, height: u32) -> Self {
+        let (w, h) = (width as usize, height as usize);
+        let rows = polar_rows(h);
+        let mut values = vec![0.0f32; 2 * rows * w];
+        let ys: Vec<usize> = (0..rows).chain(h - rows..h).collect();
+        values
+            .par_chunks_mut(w.max(1))
+            .zip(ys)
+            .for_each(|(out, y)| {
+                let mut row: Vec<f64> = (0..w).map(|x| f64::from(layer.value(y * w + x))).collect();
+                for _ in 0..POLAR_PASSES {
+                    row = box_filter(&row, polar_box(y, h));
+                }
+                for (out, v) in out.iter_mut().zip(row) {
+                    *out = v as f32;
+                }
+            });
+        Self {
+            width: w,
+            height: h,
+            rows,
+            values,
+        }
+    }
+
+    /// No row smoothed: the layer as it is.
+    fn none(width: u32, height: u32) -> Self {
+        Self {
+            width: width as usize,
+            height: height as usize,
+            rows: 0,
+            values: Vec::new(),
+        }
+    }
+
+    fn bytes(&self) -> usize {
+        self.values.len() * size_of::<f32>()
+    }
+}
+
+/// Mean of the periodic `row` over a box `wide` columns centred on each
+/// column, the columns it cuts at its ends counted for their share: the
+/// row itself where `wide` is one column or less.
+fn box_filter(row: &[f64], wide: f64) -> Vec<f64> {
+    let w = row.len();
+    if wide <= 1.0 {
+        return row.to_vec();
+    }
+    // Integral of the row from the west edge of column 0 to `t` columns.
+    let mut prefix = Vec::with_capacity(w + 1);
+    let mut sum = 0.0;
+    prefix.push(0.0);
+    for &v in row {
+        sum += v;
+        prefix.push(sum);
+    }
+    let integral = |t: f64| {
+        let turns = (t / w as f64).floor();
+        let r = t - turns * w as f64;
+        let j = (r.floor() as usize).min(w - 1);
+        turns * sum + prefix[j] + (r - j as f64) * row[j]
+    };
+    (0..w)
+        .map(|c| {
+            let centre = c as f64 + 0.5;
+            (integral(centre + wide / 2.0) - integral(centre - wide / 2.0)) / wide
+        })
+        .collect()
+}
+
+/// A base layer read through its [`PolarBand`].
+struct Banded<'a, L: ?Sized> {
+    layer: &'a L,
+    band: &'a PolarBand,
+}
+
+impl<L: Samples + ?Sized> Samples for Banded<'_, L> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        let b = self.band;
+        let y = i / b.width;
+        if y < b.rows {
+            b.values[i]
+        } else if y >= b.height - b.rows {
+            b.values[i - (b.height - 2 * b.rows) * b.width]
+        } else {
+            self.layer.value(i)
+        }
+    }
+}
+
 /// Fractal noise at a unit vector, octaves from `first` to `last` wavelength
 /// (km), each `gain` times the amplitude of the previous one.
 fn band_limited(
@@ -384,9 +563,26 @@ impl DetailWorld {
             .collect();
         drop(coverage);
         let depths = water_depths_of(&world.params, |i| world.elevation.get(i), &world.biomes);
+        let polar_elevation = PolarBand::new(&world.elevation, world.width, world.height);
+        let polar_albedo = if world.albedo.is_empty() {
+            PolarBand::none(world.width, world.height)
+        } else {
+            PolarBand::new(&Albedo(&world.albedo), world.width, world.height)
+        };
+        let ice_shell = ice_shell(&world.params);
+        let polar_roughness = PolarBand::new(
+            &Roughness(&world.biomes, ice_shell),
+            world.width,
+            world.height,
+        );
+        let polar_floodplain = PolarBand::new(&world.floodplain, world.width, world.height);
         Self {
+            polar_elevation,
+            polar_albedo,
+            polar_roughness,
+            polar_floodplain,
             craters: CraterField::context_at(&world.params, epoch_ga),
-            ice_shell: ice_shell(&world.params),
+            ice_shell,
             flags,
             depths,
             noise: Perlin::new(seed.wrapping_add(1000)),
@@ -413,6 +609,18 @@ impl DetailWorld {
             + self.flags.len()
             + self.depths.len() * size_of::<f32>()
             + self.river_bounds.len() * size_of::<[f64; 4]>()
+            + self.polar_elevation.bytes()
+            + self.polar_albedo.bytes()
+            + self.polar_roughness.bytes()
+            + self.polar_floodplain.bytes()
+    }
+
+    /// The base elevation as the tiles read it (see [`PolarBand`]).
+    fn base_elevation(&self) -> Banded<'_, Layer16> {
+        Banded {
+            layer: &self.world.elevation,
+            band: &self.polar_elevation,
+        }
     }
 
     /// Base pixel coordinates of a longitude and latitude.
@@ -438,7 +646,8 @@ impl DetailWorld {
     fn elevation64(&self, lon: f64, lat: f64, pixel_km: f64) -> f64 {
         let w = &self.world;
         let (x, y) = self.base_xy(lon, lat);
-        let base64 = bicubic64(&w.elevation, w.width, w.height, x, y);
+        let elevation = self.base_elevation();
+        let base64 = bicubic64(&elevation, w.width, w.height, x, y);
         let base = base64 as f32;
         let first = 2.0 * self.base_px_km();
         let last = FINEST_PX * pixel_km;
@@ -478,7 +687,7 @@ impl DetailWorld {
                 share *= COAST_WARP_DECAY;
                 k += 7.3;
             }
-            bicubic64(&w.elevation, w.width, w.height, x + dx, y + dy)
+            bicubic64(&elevation, w.width, w.height, x + dx, y + dy)
         } else {
             base64
         };
@@ -494,7 +703,10 @@ impl DetailWorld {
             * crate::generation::relief_share(&w.params)
             * (1.0 + MOUNTAIN_BOOST * high)
             * bilinear(
-                &Roughness(&w.biomes, self.ice_shell),
+                &Banded {
+                    layer: &Roughness(&w.biomes, self.ice_shell),
+                    band: &self.polar_roughness,
+                },
                 w.width,
                 w.height,
                 x,
@@ -507,7 +719,11 @@ impl DetailWorld {
             smoothstep(0.0, SHORE_FADE, above.abs())
         };
         // Floodplains stay flat valley floors.
-        let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&w.floodplain, w.width, w.height, x, y);
+        let floodplain = Banded {
+            layer: &w.floodplain,
+            band: &self.polar_floodplain,
+        };
+        let floor = 1.0 - FLOODPLAIN_CALM * bilinear(&floodplain, w.width, w.height, x, y);
         base64
             + f64::from(amplitude * shore * floor)
                 * band_limited(&self.noise, p, radius, first, last, gain)
@@ -607,7 +823,7 @@ impl DetailWorld {
             let lat = c.centre[2].clamp(-1.0, 1.0).asin();
             let lon = c.centre[1].atan2(c.centre[0]).rem_euclid(TAU);
             let (x, y) = self.base_xy(lon, lat);
-            bilinear(&w.elevation, w.width, w.height, x, y)
+            bilinear(&self.base_elevation(), w.width, w.height, x, y)
         };
         // The hillshade exaggerates relief about 60 times (`RELIEF_KM`), for
         // the gentle slopes of the base map: small crater walls would turn
@@ -661,7 +877,8 @@ impl DetailWorld {
                 let (bx, by) = self.base_xy(lon, lat);
                 let (cx, cy) = (bx + wx * CLIMATE_WARP_PX, by + wy * CLIMATE_WARP_PX);
                 let sample = |layer: &dyn Samples| bilinear(layer, w.width, w.height, cx, cy);
-                let base_above = sample(&w.elevation) - w.params.sea_level - look.rules.waterline;
+                let base_above =
+                    sample(&self.base_elevation()) - w.params.sea_level - look.rules.waterline;
                 // Temperature follows the detailed elevation (lapse rate).
                 let t = sample(&w.temperature) + temperature(0.0, above, lapse)
                     - temperature(0.0, base_above, lapse);
@@ -714,7 +931,11 @@ impl DetailWorld {
                         colour
                     } else {
                         // Fresh craters' ejecta and rays, at the base resolution.
-                        let a = bilinear(&Albedo(&w.albedo), w.width, w.height, bx, by);
+                        let albedo = Banded {
+                            layer: &Albedo(&w.albedo),
+                            band: &self.polar_albedo,
+                        };
+                        let a = bilinear(&albedo, w.width, w.height, bx, by);
                         with_albedo(colour, a)
                     };
                     (colour, relief::encode_normal(normal))
@@ -1136,7 +1357,9 @@ mod tests {
 
     #[test]
     fn coarse_tiles_agree_with_the_base_world() {
-        // Level 0 tiles are 512 × 256 together: the size of this base world.
+        // Level 0 tiles are 512 × 256 together: the size of this base world,
+        // as the tiles read it (smoothed along the parallels beyond 60
+        // degrees, see `PolarBand`).
         let d = detail_world();
         let w = d.world();
         let look = &w.params.look;
@@ -1148,7 +1371,8 @@ mod tests {
                     let (lon, lat) = TileId { z: 0, x, y: 0 }.lon_lat(px as f64, py as f64);
                     let (bx, by) = d.base_xy(lon, lat);
                     let i = w.index(bx as u32 % w.width, (by as u32).min(w.height - 1));
-                    let base_water = w.elevation.get(i) - w.params.sea_level < look.rules.waterline;
+                    let base_water =
+                        d.base_elevation().value(i) - w.params.sea_level < look.rules.waterline;
                     let tile_water =
                         d.elevation(lon, lat, 1e9) - w.params.sea_level < look.rules.waterline;
                     same_water += usize::from(base_water == tile_water);
@@ -1177,7 +1401,7 @@ mod tests {
             let lon = (k as f64 * 0.731) % TAU;
             let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;
             let (x, y) = d.base_xy(lon, lat);
-            let base = bicubic(&w.elevation, w.width, w.height, x, y);
+            let base = bicubic(&d.base_elevation(), w.width, w.height, x, y);
             if (base - waterline).abs() < COAST_BAND.1 {
                 continue;
             }
@@ -1197,7 +1421,7 @@ mod tests {
             let lon = (k as f64 * 0.731) % TAU;
             let lat = ((k as f64 * 0.377) % PI) - PI / 2.0;
             let (x, y) = d.base_xy(lon, lat);
-            let base = bicubic(&w.elevation, w.width, w.height, x, y);
+            let base = bicubic(&d.base_elevation(), w.width, w.height, x, y);
             if (base - waterline).abs() < COAST_BAND.1 {
                 continue;
             }
@@ -1226,7 +1450,7 @@ mod tests {
         let base = |tile: TileId, px: f64, py: f64| {
             let (lon, lat) = tile.lon_lat(px, py);
             let (x, y) = d.base_xy(lon, lat.clamp(-PI / 2.0, PI / 2.0));
-            bicubic(&w.elevation, w.width, w.height, x, y)
+            bicubic(&d.base_elevation(), w.width, w.height, x, y)
         };
         let (mut sum, mut count) = (0.0, 0.0);
         let tiles = (0..4000u32)
@@ -1379,5 +1603,171 @@ mod tests {
             diff / (2.0 * TILE_SIZE as f32 * 3.0) < 20.0,
             "mean step {diff}"
         );
+    }
+
+    /// Base worlds of an Enceladus-sized moon (500 km across, 512 x 256:
+    /// a base row is 3.1 km, a column 19 m on the polar row) whose
+    /// elevation is a gentle isotropic random relief (Perlin noise on the
+    /// sphere, a lattice cell four rows wide, one per seed), quantised to
+    /// 16 bits as stored: a 16-bit step is about 50 m at the hillshade's
+    /// exaggeration, a sixteenth of the relief's rise over a row.
+    fn moons_of_random_relief(seeds: std::ops::Range<u32>) -> Vec<DetailWorld> {
+        let params = crate::world::WorldParams {
+            sea_level: 0.2,
+            circumference_km: 40_000.0,
+            ..crate::generation::tests::preset_params("terran", 3, 512, 256)
+        };
+        let mut world = generate(&params).world;
+        world.params.circumference_km = 1_590.0;
+        let grid = world.params.grid();
+        // Four rows a lattice cell: 256 rows span pi.
+        let f = 256.0 / (4.0 * PI);
+        seeds
+            .map(|seed| {
+                let noise = Perlin::new(seed);
+                for y in 0..world.height {
+                    for x in 0..world.width {
+                        let p = grid.unit_vector_at(f64::from(x), f64::from(y));
+                        // Off the lattice's lines, where Perlin noise is calm.
+                        let v = noise.get([p[0] * f + 0.37, p[1] * f + 0.61, p[2] * f + 0.23]);
+                        let i = world.index(x, y);
+                        world.elevation[i] = 0.6 + 0.004 * v as f32;
+                    }
+                }
+                DetailWorld::new(LoadedWorld::from_world(&world))
+            })
+            .collect()
+    }
+
+    /// Mean squares of the east and north components of the tile normals
+    /// of level `z` and row `y` whose latitudes lie in `band` (degrees,
+    /// either hemisphere), over the tiles round the globe, and their count.
+    fn normal_squares(d: &DetailWorld, z: u32, y: u32, band: (f64, f64)) -> (f64, f64, usize) {
+        let (cols, _) = TileId { z, x: 0, y }.grid();
+        let pixel_km = d.world().params.circumference_km as f64 / (cols as f64 * TILE_SIZE as f64);
+        let side = TILE_SIZE as usize + 2;
+        let no_rivers = vec![0.0; side * side];
+        let (mut east, mut north, mut n) = (0.0, 0.0, 0usize);
+        for x in (0..cols).step_by((cols as usize / 8).max(1)) {
+            let tile = TileId { z, x, y };
+            let (elevation, _) = d.tile_elevation(tile, pixel_km, &no_rivers);
+            for py in 1..side - 1 {
+                for px in (1..side - 1).step_by(3) {
+                    let (_, lat) = tile.lon_lat(px as f64 - 1.0, py as f64 - 1.0);
+                    if !(band.0..band.1).contains(&lat.to_degrees().abs()) {
+                        continue;
+                    }
+                    let normal = d.normal(&elevation, side, px, py, pixel_km, lat);
+                    east += f64::from(normal[0]).powi(2);
+                    north += f64::from(normal[1]).powi(2);
+                    n += 1;
+                }
+            }
+        }
+        (east, north, n)
+    }
+
+    /// Root mean square of the east and north components of the normals of
+    /// level `z`'s polar tiles on worlds `ds`, within `band` (degrees).
+    fn polar_normal_rms(ds: &[DetailWorld], z: u32, band: (f64, f64)) -> (f64, f64) {
+        let rows = 1 << z;
+        let (mut east, mut north, mut n) = (0.0, 0.0, 0usize);
+        for d in ds {
+            for y in [0, rows - 1] {
+                let (e, s, k) = normal_squares(d, z, y, band);
+                (east, north, n) = (east + e, north + s, n + k);
+            }
+        }
+        assert!(n > 0, "no pixel in {band:?}");
+        ((east / n as f64).sqrt(), (north / n as f64).sqrt())
+    }
+
+    /// Near a pole, a base column is a sliver of a base row (a 160th of it
+    /// on the polar row of a 512 x 256 map): the 16-bit stairs, biome
+    /// borders and edges a few columns wide along a parallel, spread over
+    /// two rows by the interpolation, turned into steep east-west slopes,
+    /// rays of light and shade out of the pole. The tiles carry no
+    /// structure along the parallels finer than a base row: near a pole
+    /// their normals lean east no more than north, as at mid-latitudes.
+    /// Without the polar band, the east component's root mean square was
+    /// 1.80 times the north's within a row of the poles (0.458 against
+    /// 0.255) and 1.32 times one to four rows from them.
+    #[test]
+    fn polar_tiles_lean_east_no_more_than_north() {
+        let ds = moons_of_random_relief(0..4);
+        let row = 180.0 / f64::from(ds[0].world().height);
+        // Level 4: 16 tile pixels a base row.
+        let (east, north, n) = normal_squares(&ds[0], 4, 5, (20.0, 40.0));
+        let (mid_east, mid_north) = ((east / n as f64).sqrt(), (north / n as f64).sqrt());
+        assert!(
+            (mid_east / mid_north - 1.0).abs() < 0.1,
+            "mid-latitude east {mid_east} north {mid_north}"
+        );
+        for band in [(90.0 - row, 90.0), (90.0 - 4.0 * row, 90.0 - row)] {
+            let (east, north) = polar_normal_rms(&ds, 4, band);
+            assert!(east < 1.2 * north, "{band:?}: east {east} north {north}");
+        }
+    }
+
+    /// The polar band leaves the rows within 60 degrees of the equator as
+    /// they are: tiles there are the same, byte for byte, with or without
+    /// it. Nearer the poles it changes them.
+    #[test]
+    fn tiles_away_from_the_poles_are_unchanged() {
+        let d = detail_world();
+        let mut plain = detail_world();
+        let (w, h) = (d.world().width, d.world().height);
+        assert!(d.polar_elevation.rows > 0);
+        plain.polar_elevation = PolarBand::none(w, h);
+        plain.polar_albedo = PolarBand::none(w, h);
+        plain.polar_roughness = PolarBand::none(w, h);
+        plain.polar_floodplain = PolarBand::none(w, h);
+        // Level 3 has 8 rows of tiles, 22.5 degrees each: the second spans
+        // 67.5 to 45 degrees, and reads the band above 60 only.
+        for y in 1..7 {
+            for x in [0, 5, 11] {
+                let tile = TileId { z: 3, x, y };
+                let (a, b) = (d.render_tile(tile), plain.render_tile(tile));
+                for py in 0..TILE_SIZE {
+                    let (_, lat) = tile.lon_lat(0.0, f64::from(py));
+                    // The interpolation reads two base rows (1.4 degrees)
+                    // round a pixel, the climate's warp one more.
+                    if lat.to_degrees().abs() > 57.0 {
+                        continue;
+                    }
+                    for row in [py, py + TILE_SIZE] {
+                        for px in 0..TILE_SIZE {
+                            assert_eq!(
+                                a.get_pixel(px, row),
+                                b.get_pixel(px, row),
+                                "{tile:?} {px} {row}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        let pole = TileId { z: 3, x: 5, y: 0 };
+        assert_ne!(d.render_tile(pole), plain.render_tile(pole));
+    }
+
+    /// A box one column wide or less is the row itself; a wider one keeps
+    /// the row's mean and a plane along it, and cuts the columns at its
+    /// ends for their share.
+    #[test]
+    fn box_filter_cuts_the_columns_at_its_ends() {
+        let row: Vec<f64> = (0..16).map(|i| f64::from((i * 7) % 5)).collect();
+        assert_eq!(box_filter(&row, 1.0), row);
+        assert_eq!(box_filter(&row, 0.4), row);
+        let smooth = box_filter(&row, 2.5);
+        let mean = |r: &[f64]| r.iter().sum::<f64>() / r.len() as f64;
+        assert!((mean(&smooth) - mean(&row)).abs() < 1e-12);
+        // Column 3 over 2.5 columns: itself, and three quarters of each
+        // neighbour.
+        let want = (row[3] + 0.75 * (row[2] + row[4])) / 2.5;
+        assert!((smooth[3] - want).abs() < 1e-12, "{} {want}", smooth[3]);
+        // Wrapping round the parallel.
+        let want = (row[0] + 0.75 * (row[15] + row[1])) / 2.5;
+        assert!((smooth[0] - want).abs() < 1e-12, "{} {want}", smooth[0]);
     }
 }

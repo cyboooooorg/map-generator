@@ -1,9 +1,11 @@
 //! Worlds loaded for the deep zoom tiles and the hex grid, rendered on demand
 //! from the world's raw data.
 //!
-//! A loaded world ([`DetailWorld`]) takes about 23 bytes per base pixel
-//! ([`LOADED_BYTES_PER_PIXEL`]): 0.2 GB at 4096 × 2048, 0.8 GB at
-//! 8192 × 4096. The most recently used worlds stay in memory within a byte
+//! A loaded world ([`DetailWorld`]) takes about 28 bytes per base pixel
+//! ([`LOADED_BYTES_PER_PIXEL`], plus its layers smoothed along the
+//! parallels beyond 60 degrees of latitude,
+//! [`mapgen::detail::polar_band_bytes`]): 0.24 GB at 4096 × 2048, 0.95 GB
+//! at 8192 × 4096. The most recently used worlds stay in memory within a byte
 //! budget (`MAPGEN_TILE_CACHE_MB`); the last one used is kept even when it
 //! alone exceeds it. The memory of evicted worlds is given back to the
 //! system before the next one loads ([`memory::release`]).
@@ -38,7 +40,8 @@ pub const DEFAULT_BUDGET_BYTES: usize = 1 << 30;
 
 /// Bytes a loaded world holds per base pixel (see [`DetailWorld::bytes`]):
 /// eight 16-bit layers, the biome, the 8-bit albedo, the lake and river
-/// flags and the 32-bit water depth.
+/// flags and the 32-bit water depth; the layers smoothed near the poles
+/// come on top ([`mapgen::detail::polar_band_bytes`]).
 pub const LOADED_BYTES_PER_PIXEL: usize = 8 * 2 + 1 + 1 + 1 + 4;
 
 /// A loaded world, keyed by id, revision (the modification time of its
@@ -288,7 +291,10 @@ fn expected_bytes(dir: &Path) -> usize {
     std::fs::read(dir.join("raw_data").join("world.json"))
         .ok()
         .and_then(|json| serde_json::from_slice::<Size>(&json).ok())
-        .map_or(0, |s| s.width * s.height * LOADED_BYTES_PER_PIXEL)
+        .map_or(0, |s| {
+            s.width * s.height * LOADED_BYTES_PER_PIXEL
+                + mapgen::detail::polar_band_bytes(s.width as u32, s.height as u32)
+        })
 }
 
 fn load(dir: &Path, epoch_ma: Option<i32>) -> Result<Arc<DetailWorld>, String> {
