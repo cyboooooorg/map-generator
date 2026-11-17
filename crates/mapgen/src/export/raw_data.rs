@@ -91,8 +91,8 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// flows and cryovolcanic plains (biomes 41 and 42, `FreshIceFlow` and
 /// `CryovolcanicPlain`) under the look's new `rules.cryovolcanic`; a hot
 /// one in the heat-pipe regime no longer takes the `volcanic` look.
-/// Worlds of the earlier versions would keep the lava, so they are
-/// refused.
+/// Only icy bodies change, so worlds of version 24 still load (an icy
+/// moon keeps its lava until it is regenerated).
 pub const FORMAT_VERSION: u32 = 27;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
@@ -101,7 +101,7 @@ pub const FORMAT_VERSION: u32 = 27;
 /// load, a hillshade baked into the surface instead of relief normals):
 /// they are refused with a message pointing to the main menu's Regenerate
 /// button.
-pub const MIN_FORMAT_VERSION: u32 = 27;
+pub const MIN_FORMAT_VERSION: u32 = 24;
 
 /// Range of the shape layer: the radius as a share of the mean one.
 const SHAPE: (f32, f32) = (0.0, 2.0);
