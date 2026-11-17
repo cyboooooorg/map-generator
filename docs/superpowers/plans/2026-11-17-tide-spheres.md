@@ -79,6 +79,9 @@ Three.js.
   pub struct TideZones {
       /// The body the spheres are centred on: the moon's planet, or the planet itself.
       pub host: String,
+      /// The body that feels the tide: the moon shown, or a planet's most
+      /// massive moon; `None` for a moonless planet's typical satellite.
+      pub satellite: Option<String>,
       pub hill_km: f64,
       pub locking_km: Option<f64>,
       pub heating_km: Option<f64>,
@@ -102,9 +105,15 @@ Rules for `tide_zones` (from the spec):
   `host_kg = parent.physical.mass_earth × EARTH_KG`. Hill is the
   parent's, round its primary: the parent's own parent if any, else the
   star, `star.info.mass × SUN_KG`, with the parent's `orbit`.
-- **Planet** (no parent): `host` is itself. Hill is its own. Roche uses
-  density `3.0` g/cm³ (the typical rocky satellite). Locking uses the
-  Moon: `7.342e22` kg, `1737.4` km, `3.344` g/cm³. Heating is `None`.
+- **Moon**: `satellite` is `Some(own id)`.
+- **Planet with moons** (bodies whose `parent` is the planet): `host` is
+  itself. Every field equals `tide_zones` of its most massive moon
+  (largest `physical.mass_earth`), `satellite` naming that moon. The
+  moon's Hill is its parent's, so Hill is the planet's own.
+- **Planet without moons**: `host` is itself, `satellite` is `None`.
+  Hill is its own. Roche uses density `3.0` g/cm³ (the typical rocky
+  satellite). Locking uses the Moon: `7.342e22` kg, `1737.4` km,
+  `3.344` g/cm³. Heating is `None`.
 - `hill_km = a (1 − clamp(e, 0, 0.95)) cbrt(m / 3M)`.
 - `locking_km`: `a₀ (age / despin_gyr(m, R, ρ, MOON_INERTIA, M, a₀))^(1/6)`
   with any `a₀` (use `1e5` km).
@@ -158,7 +167,10 @@ Rules for `tide_zones` (from the spec):
     `tide_zones` is `Some`. Every radius present is finite and larger
     than the host's `radius_km`. When `locking_km` and `roche_km` are
     both present, `roche_km < locking_km`. A moon's `host` equals its
-    `parent`.
+    `parent` and its `satellite` is its own id. A planet with moons has
+    the zones of its most massive moon (`satellite` is that moon's id,
+    every field equal), and a moonless one has `satellite: None` and
+    `heating_km: None`.
   - `spheres_inside_the_host_are_dropped`: take a body from such a drawn
     system, set its host's `radius_km` to `1e9` in a clone, and check
     that every `Option` field is `None`.
@@ -246,7 +258,7 @@ Rules for `tide_zones` (from the spec):
 - [ ] **Step 1: Write the failing tests** in `world.svelte.test.ts`,
   next to `keeps the extras the route sends…` (line 35):
   - `keeps the tides the route sends`: the route answers
-    `{ system, tides: { 'd-1': { host: 'd', hill_km: 1e6, locking_km: 5e5,
+    `{ system, tides: { 'd-1': { host: 'd', satellite: 'd-1', hill_km: 1e6, locking_km: 5e5,
     heating_km: null, roche_km: 2e4 } } }`. Then
     `world.systemTides` equals it, and `world.shownTides` is that entry
     once `d-1` is shown.
@@ -356,9 +368,10 @@ Rules for `tide_zones` (from the spec):
   - `tideRoche`, `tideRocheHelp(…)`: within it, a fluid body as dense as
     `body` is torn apart.
 
-  From a planet, `body` reads "a Moon-like satellite" or "a rocky
-  satellite" (en), and « un satellite comme la Lune » or « un satellite
-  rocheux » (fr). Match the style of the strings around them, including
+  `body` is the name of `tides.satellite` (from `world.systemNames`, else
+  its designation). When it is null (a moonless planet), it reads "a
+  Moon-like satellite" or "a rocky satellite" (en), and « un satellite
+  comme la Lune » or « un satellite rocheux » (fr). Match the style of the strings around them, including
   the `${S}` spacing helper in `fr.ts`.
 - [ ] **Step 5: Docs.** In `web/README.md:47`, describe the Tides switch
   with its four squares, what each sphere means, that the radii come

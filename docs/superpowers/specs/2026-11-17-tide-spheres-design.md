@@ -86,13 +86,17 @@ eccentricity, composition).
   Hill sphere (as today); Roche, locking and heating are the moon's own,
   round that planet.
 - **A planet shown** (no host): centred on the planet itself. Hill is
-  its own Hill sphere (as today). The other spheres are those of a
-  typical satellite, since no moon is selected:
-  - Roche: two spheres would muddle the square; use one, for rock
-    (builder's call: rock density `3.0` g/cm³, or the density of the
-    planet's largest moon if it has moons; pick one and document it);
-  - locking: a Moon-like satellite (the Moon's mass, radius, density);
-  - heating: hidden (a typical satellite has no eccentricity).
+  its own Hill sphere (as today). The other spheres belong to the body
+  that feels the tide, and none is selected (decided with the user on
+  2026-11-17):
+  - **the planet has moons**: those of its most massive moon, with its
+    real mass, radius, density, eccentricity and composition: Roche,
+    locking and heating exactly as when that moon is shown. The help
+    names the moon ("for Ganymede");
+  - **it has none**: those of a typical satellite, named as such in the
+    help: Roche for rock at `3.0` g/cm³, locking for a Moon-like
+    satellite (the Moon's mass, radius and density), and no heating
+    sphere (a typical satellite has no eccentricity).
 - "Has a host" is the rule `hillSphere` uses today
   (`web/src/lib/systemSky.ts:381`): the body has a `parent`. The primary
   of the Hill sphere is the host's own `parent` if any, else the star
@@ -122,7 +126,7 @@ distance, the new function inverts it for the distance, analytically:
   (`moons.rs:1983`). `despin_gyr` already fixes its assumptions (first
   day 12 h, `Q = 100`, the body's own Love number from `love_number`,
   capped at 0.3): keep them, so the sphere agrees with the `locked` flag
-  the generator stored. The typical satellite of a planet shown goes
+  the generator stored. The typical satellite of a moonless planet goes
   through the same function with the Moon's mass, radius and density.
 - **Orbit**: `a` and `e` are the stored orbital elements of the body
   (`Body.orbit.semi_major_axis_km`, `eccentricity`), and for Hill those
@@ -159,8 +163,9 @@ where a value is given:
 
 - A new function in `mapgen` (builder's call where: a new
   `crates/mapgen/src/tides.rs` fits) takes the system and a body id and
-  returns `Option<TideZones>`: the host's id and the four radii in km,
-  each `Option<f64>`.
+  returns `Option<TideZones>`: the host's id, the id of the body that
+  feels the tide (`None` for the typical satellite), and the four radii
+  in km, each `Option<f64>` but Hill.
 - The server adds it at read time, as a map of its own next to the
   existing read-time `extras`: `tides: BTreeMap<String, TideZones>`
   keyed by body id, on `SystemDetail` (`GET /api/systems/{id}`,
@@ -202,8 +207,6 @@ where a value is given:
 ## Left to the builder
 
 - Where the Rust function lives and how it is split.
-- The typical satellite's Roche density for a planet shown: decided
-  while planning, a fixed 3.0 g/cm³.
 - Decided while planning: the star view's Hill circles stay in
   TypeScript for now (a backlog issue). Its giants are not keyed by body
   id. Originally left open: whether the star view's Hill circles (`hillRadiusAu`,
