@@ -17,6 +17,11 @@
 //! - **Climate**: temperature, moisture and the other biome inputs are read
 //!   at a slightly warped position, so biome borders become irregular instead
 //!   of interpolated straight edges; temperature follows the new elevation.
+//! - **Tiger stripes**: the stripes of a body's geysers are taken off the
+//!   base elevation and albedo ([`crate::stripes::raster`]) and drawn
+//!   again on each tile at its own resolution, as the small craters are:
+//!   interpolated, the base map's stripes made a comb of teeth one base
+//!   row long near the pole.
 //! - **Biomes**: the generation's own rules and look remap, with soft
 //!   borders and the vector rivers drawn at the tile's scale, without
 //!   hillshade: a tile holds its colour above and its relief normals below
@@ -42,6 +47,7 @@ use crate::export::variation::{SurfaceVariation, sphere};
 use crate::export::{blend_river, relief, relief_km, water_colour, water_depths_of, with_albedo};
 use crate::hex;
 use crate::rivers;
+use crate::stripes::Stripes;
 use image::{Rgb, RgbImage};
 use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
@@ -152,6 +158,76 @@ pub struct DetailWorld {
     craters: CraterField,
     /// Whether the world's crust is an ice shell (see [`ice_shell`]).
     ice_shell: bool,
+    /// The stripes of the world's geysers, which the tiles draw at their
+    /// own resolution, and the base map's raster of them, which they take
+    /// off the base layers first (see [`DetailWorld::tile_stripes`]).
+    stripes: Option<(Stripes, BaseStripes)>,
+}
+
+/// The stripes of a world's geysers as its base layers hold them (see
+/// [`crate::stripes::raster`]): per row from `y0`, runs of consecutive
+/// pixels from a column, with their height and albedo changes.
+struct BaseStripes {
+    width: usize,
+    y0: usize,
+    rows: Vec<Vec<(usize, Vec<[f32; 2]>)>>,
+}
+
+impl BaseStripes {
+    /// The runs of `raster` (by index) on a base map `width` pixels wide.
+    fn new(raster: &[(usize, f32, f32)], width: usize) -> Self {
+        let y0 = raster.first().map_or(0, |r| r.0 / width);
+        let y1 = raster.last().map_or(0, |r| r.0 / width + 1);
+        let mut rows: Vec<Vec<(usize, Vec<[f32; 2]>)>> = vec![Vec::new(); y1 - y0];
+        let mut last = usize::MAX;
+        for &(i, e, a) in raster {
+            let runs = &mut rows[i / width - y0];
+            match runs.last_mut() {
+                Some((_, values)) if last.wrapping_add(1) == i && i % width != 0 => {
+                    values.push([e, a]);
+                }
+                _ => runs.push((i % width, vec![[e, a]])),
+            }
+            last = i;
+        }
+        Self { width, y0, rows }
+    }
+
+    /// The height (`k` 0) or albedo (`k` 1) change at base pixel `i`.
+    #[inline]
+    fn get(&self, i: usize, k: usize) -> f32 {
+        let (y, x) = (i / self.width, i % self.width);
+        let Some(runs) = y.checked_sub(self.y0).and_then(|r| self.rows.get(r)) else {
+            return 0.0;
+        };
+        runs.iter()
+            .find(|(x0, values)| x >= *x0 && x < x0 + values.len())
+            .map_or(0.0, |(x0, values)| values[x - x0][k])
+    }
+
+    fn bytes(&self) -> usize {
+        self.rows
+            .iter()
+            .flatten()
+            .map(|(_, v)| size_of::<(usize, Vec<[f32; 2]>)>() + v.len() * size_of::<[f32; 2]>())
+            .sum()
+    }
+}
+
+/// A base layer with the stripes its base map drew taken off: its height
+/// (`k` 0) or its albedo (`k` 1).
+struct Unstriped<'a, L: ?Sized> {
+    layer: &'a L,
+    stripes: Option<&'a BaseStripes>,
+    k: usize,
+}
+
+impl<L: Samples + ?Sized> Samples for Unstriped<'_, L> {
+    #[inline]
+    fn value(&self, i: usize) -> f32 {
+        let v = self.layer.value(i);
+        self.stripes.map_or(v, |s| v - s.get(i, self.k))
+    }
 }
 
 /// Flag of base lake pixels (water above the waterline, not under a drawn
@@ -360,7 +436,12 @@ impl DetailWorld {
             .collect();
         drop(coverage);
         let depths = water_depths_of(&world.params, |i| world.elevation.get(i), &world.biomes);
+        let stripes = Stripes::of(&world.params).map(|stripes| {
+            let raster = crate::stripes::raster(&world.params.grid(), &world.params);
+            (stripes, BaseStripes::new(&raster, world.width as usize))
+        });
         Self {
+            stripes,
             craters: CraterField::context_at(&world.params, epoch_ga),
             ice_shell: ice_shell(&world.params),
             flags,
@@ -389,6 +470,7 @@ impl DetailWorld {
             + self.flags.len()
             + self.depths.len() * size_of::<f32>()
             + self.river_bounds.len() * size_of::<[f64; 4]>()
+            + self.stripes.as_ref().map_or(0, |s| s.1.bytes())
     }
 
     /// Base pixel coordinates of a longitude and latitude.
@@ -396,6 +478,63 @@ impl DetailWorld {
         (
             lon / TAU * self.world.width as f64,
             (0.5 - lat / PI) * self.world.height as f64,
+        )
+    }
+
+    /// The base elevation (`k` 0) or albedo (`k` 1) without the stripes
+    /// the base map drew, which the tiles draw at their own resolution.
+    fn unstriped<'a, L: Samples + ?Sized>(&'a self, layer: &'a L, k: usize) -> Unstriped<'a, L> {
+        Unstriped {
+            layer,
+            stripes: self.stripes.as_ref().map(|s| &s.1),
+            k,
+        }
+    }
+
+    /// The stripes of the world's geysers drawn on a tile with its
+    /// one-pixel border (row-major, `TILE_SIZE + 2` wide) at the tile's
+    /// own resolution ([`crate::stripes::drawn_width_km`] of its pixels,
+    /// averaged over each one, as the base map draws them on its own):
+    /// the height change, in elevation units, and the albedo shift; `None`
+    /// when they are nowhere near the tile.
+    fn tile_stripes(&self, tile: TileId, pixel_km: f64) -> Option<Vec<(f32, f32)>> {
+        let (stripes, _) = self.stripes.as_ref()?;
+        let side = TILE_SIZE as usize + 2;
+        let at = |x: f64, y: f64| {
+            let (lon, lat) = tile.lon_lat(x, y);
+            sphere(lon, lat.clamp(-PI / 2.0, PI / 2.0), 1.0)
+        };
+        let angle = |a: [f64; 3], b: [f64; 3]| {
+            (a[0] * b[0] + a[1] * b[1] + a[2] * b[2])
+                .clamp(-1.0, 1.0)
+                .acos()
+        };
+        let half = TILE_SIZE as f64 / 2.0 - 0.5;
+        let centre = at(half, half);
+        let radius = [
+            (-1.0, -1.0),
+            (side as f64, -1.0),
+            (-1.0, side as f64),
+            (side as f64, side as f64),
+        ]
+        .iter()
+        .map(|&(x, y)| angle(centre, at(x, y)))
+        .fold(0.0f64, f64::max);
+        let (width, footprint) = (
+            crate::stripes::drawn_width_km(pixel_km),
+            pixel_km * 2f64.sqrt(),
+        );
+        if angle(stripes.pole, centre) - radius > stripes.cap_rad(width, footprint) {
+            return None;
+        }
+        Some(
+            (0..side * side)
+                .into_par_iter()
+                .map(|i| {
+                    let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
+                    stripes.pixel(at, px, py, width, footprint)
+                })
+                .collect(),
         )
     }
 
@@ -407,7 +546,8 @@ impl DetailWorld {
     fn elevation(&self, lon: f64, lat: f64, pixel_km: f64) -> f32 {
         let w = &self.world;
         let (x, y) = self.base_xy(lon, lat);
-        let base = bicubic(&w.elevation, w.width, w.height, x, y);
+        let elevation = self.unstriped(&w.elevation, 0);
+        let base = bicubic(&elevation, w.width, w.height, x, y);
         let first = 2.0 * self.base_px_km();
         let last = FINEST_PX * pixel_km;
         if last > first {
@@ -446,7 +586,7 @@ impl DetailWorld {
                 share *= COAST_WARP_DECAY;
                 k += 7.3;
             }
-            bicubic(&w.elevation, w.width, w.height, x + dx, y + dy)
+            bicubic(&elevation, w.width, w.height, x + dx, y + dy)
         } else {
             base
         };
@@ -488,12 +628,14 @@ impl DetailWorld {
         let side = TILE_SIZE as usize + 2;
         let waterline = w.params.open_waterline();
         let craters = self.crater_relief(tile, pixel_km);
+        let stripes = self.tile_stripes(tile, pixel_km);
         (0..side * side)
             .into_par_iter()
             .map(|i| {
                 let (px, py) = ((i % side) as f64 - 1.0, (i / side) as f64 - 1.0);
                 let (lon, lat) = tile.lon_lat(px, py);
-                let ground = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km);
+                let ground = self.elevation(lon, lat.clamp(-PI / 2.0, PI / 2.0), pixel_km)
+                    + stripes.as_ref().map_or(0.0, |s| s[i].0);
                 let e = match &craters {
                     // Craters never dig the land below the sea.
                     Some(relief) if ground >= waterline => {
@@ -587,6 +729,7 @@ impl DetailWorld {
         let side = n + 2;
         let (coverage, channel) = self.river_coverage(tile, pixel_km);
         let (elevation, surface) = self.tile_elevation(tile, pixel_km, &channel);
+        let stripes = self.tile_stripes(tile, pixel_km);
 
         let river_colour = linear_of(surface_color(look.remap(Biome::River)));
         let lapse = w.lapse_rate;
@@ -669,8 +812,13 @@ impl DetailWorld {
                     let colour = if dry.is_lava() || w.albedo.is_empty() {
                         colour
                     } else {
-                        // Fresh craters' ejecta and rays, at the base resolution.
-                        let a = bilinear(&Albedo(&w.albedo), w.width, w.height, bx, by);
+                        // Fresh craters' ejecta and rays, at the base
+                        // resolution; the stripes at the tile's.
+                        let albedo = Albedo(&w.albedo);
+                        let a = bilinear(&self.unstriped(&albedo, 1), w.width, w.height, bx, by)
+                            + stripes
+                                .as_ref()
+                                .map_or(0.0, |s| s[(py + 1) * side + px + 1].1);
                         with_albedo(colour, a)
                     };
                     (colour, relief::encode_normal(normal))
@@ -1231,6 +1379,214 @@ mod tests {
             })
             .count();
         assert!(dug > 0, "no small crater on 16 tiles");
+    }
+
+    /// The LoadedWorld of the Enceladus of seed 1 at 512 × 256 (base
+    /// rows 3.1 km), with its geysers.
+    fn enceladus() -> &'static LoadedWorld {
+        use rand::SeedableRng;
+        use std::sync::OnceLock;
+        static WORLD: OnceLock<LoadedWorld> = OnceLock::new();
+        WORLD.get_or_init(|| {
+            let request: crate::system::SystemRequest = serde_json::from_str(
+                r#"{"system":{"star":"G2V","metallicity":0.0,"planets":{"enceladus-like":1},"seed":1}}"#,
+            )
+            .unwrap();
+            let system =
+                crate::system::draw(&request, &mut rand::rngs::StdRng::seed_from_u64(1)).unwrap();
+            let moon = system
+                .bodies
+                .iter()
+                .find(|b| b.params.archetype.as_deref() == Some("enceladus-like"))
+                .unwrap();
+            let mut params = crate::system::generation_params(moon);
+            (params.width, params.height) = (512, 256);
+            assert!(params.model.as_ref().unwrap().geysers.is_some());
+            LoadedWorld::from_world(&generate(&params).world)
+        })
+    }
+
+    /// The z = 5 tiles a stripe crosses, and the tile pixel coordinates of
+    /// the drawn lines of the stripes (`crate::planet::geysers::drawn_line`),
+    /// their middle only (the ends taper away).
+    fn stripe_tiles(world: &LoadedWorld) -> (Vec<TileId>, Vec<Vec<(f64, f64)>>) {
+        let p = &world.params;
+        let geysers = p.model.as_ref().unwrap().geysers.as_ref().unwrap();
+        let radius_km = f64::from(p.circumference_km) / TAU;
+        let z = 5;
+        let (cols, rows) = TileId { z, x: 0, y: 0 }.grid();
+        let lines: Vec<Vec<(f64, f64)>> = geysers
+            .fractures
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.length_km > 0.0)
+            .map(|(i, f)| {
+                let line = crate::planet::geysers::drawn_line(f, i, radius_km);
+                let n = line.len();
+                line[n / 5..n - n / 5]
+                    .iter()
+                    .map(|v| {
+                        let lat = v[2].clamp(-1.0, 1.0).asin();
+                        let lon = v[1].atan2(v[0]).rem_euclid(TAU);
+                        (
+                            lon / TAU * f64::from(cols * TILE_SIZE) - 0.5,
+                            (0.5 - lat / PI) * f64::from(rows * TILE_SIZE) - 0.5,
+                        )
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut tiles: Vec<TileId> = lines
+            .iter()
+            .flat_map(|l| [l[l.len() / 4], l[l.len() / 2], l[3 * l.len() / 4]])
+            .map(|(x, y)| TileId {
+                z,
+                x: (x / f64::from(TILE_SIZE)) as u32 % cols,
+                y: ((y / f64::from(TILE_SIZE)) as u32).min(rows - 1),
+            })
+            .collect();
+        tiles.sort_by_key(|t| (t.x, t.y));
+        tiles.dedup();
+        (tiles, lines)
+    }
+
+    /// How far, in tile pixels, the dark trough of the stripes drawn on
+    /// the z = 5 tiles of an Enceladus (base rows 3.1 km, 32 tile pixels)
+    /// lies from the drawn line of its fracture: measured across each
+    /// tile column (or row, where the line runs closer to a column) as
+    /// the centroid of the darkening within 20 pixels of the line.
+    fn trough_offsets(d: &DetailWorld) -> Vec<f64> {
+        let (tiles, lines) = stripe_tiles(d.world());
+        let ts = f64::from(TILE_SIZE);
+        let mut offsets = Vec::new();
+        for tile in tiles {
+            let image = d.render_tile(tile);
+            let (ox, oy) = (f64::from(tile.x) * ts, f64::from(tile.y) * ts);
+            let lum = |x: i64, y: i64| -> Option<f64> {
+                if !(0..TILE_SIZE as i64).contains(&x) || !(0..TILE_SIZE as i64).contains(&y) {
+                    return None;
+                }
+                let p = image.get_pixel(x as u32, y as u32);
+                Some(p.0.iter().map(|&c| f64::from(c)).sum())
+            };
+            for line in &lines {
+                for s in line.windows(2) {
+                    let ((x0, y0), (x1, y1)) =
+                        ((s[0].0 - ox, s[0].1 - oy), (s[1].0 - ox, s[1].1 - oy));
+                    if (x1 - x0).abs() > ts {
+                        continue; // across longitude 0
+                    }
+                    let along_x = (x1 - x0).abs() >= (y1 - y0).abs();
+                    // Measure across the axis the line runs closer to.
+                    let (a0, a1, b0, b1) = if along_x {
+                        (x0, x1, y0, y1)
+                    } else {
+                        (y0, y1, x0, x1)
+                    };
+                    let (lo, hi) = (a0.min(a1).ceil() as i64, a0.max(a1).floor() as i64);
+                    for a in lo..=hi {
+                        let t = if a1 == a0 {
+                            0.0
+                        } else {
+                            (a as f64 - a0) / (a1 - a0)
+                        };
+                        let b = b0 + t * (b1 - b0);
+                        let at = |k: i64| {
+                            if along_x { lum(a, k) } else { lum(k, a) }
+                        };
+                        let window: Option<Vec<(i64, f64)>> = (b.round() as i64 - 20
+                            ..=b.round() as i64 + 20)
+                            .map(|k| at(k).map(|l| (k, l)))
+                            .collect();
+                        let Some(window) = window else { continue };
+                        let bright = window.iter().map(|w| w.1).fold(0.0, f64::max);
+                        let (mut sum, mut weight) = (0.0, 0.0);
+                        for (k, l) in &window {
+                            sum += *k as f64 * (bright - l);
+                            weight += bright - l;
+                        }
+                        if weight > 200.0 {
+                            offsets.push(sum / weight - b);
+                        }
+                    }
+                }
+            }
+        }
+        offsets
+    }
+
+    /// The tiger stripes in the tiles follow their fracture's drawn line
+    /// at the tile's resolution: no comb of teeth one base row long, as
+    /// when the tiles interpolated the stripes the base map drew at its
+    /// own pixel centres.
+    #[test]
+    fn tiles_draw_the_stripes_along_their_line() {
+        let d = DetailWorld::new(enceladus().clone());
+        let mut offsets = trough_offsets(&d);
+        assert!(offsets.len() > 500, "{} samples", offsets.len());
+        offsets.iter_mut().for_each(|o| *o = o.abs());
+        offsets.sort_by(f64::total_cmp);
+        let (median, p95) = (
+            offsets[offsets.len() / 2],
+            offsets[offsets.len() * 95 / 100],
+        );
+        println!(
+            "{} samples, offset median {median:.2} px, 95th {p95:.2} px",
+            offsets.len()
+        );
+        assert!(
+            p95 < 2.0,
+            "median {median:.2} px, 95th percentile {p95:.2} px"
+        );
+    }
+
+    /// At the base map's resolution (z = 0 on a map 512 pixels wide), a
+    /// tile draws the stripes the base map holds, pixel for pixel: the
+    /// tiles take off exactly what they draw back.
+    #[test]
+    fn tiles_at_the_base_resolution_draw_the_base_stripes() {
+        let d = DetailWorld::new(enceladus().clone());
+        let (_, base) = d.stripes.as_ref().unwrap();
+        let w = d.world();
+        assert_eq!(w.width, 2 * TILE_SIZE);
+        let pixel_km = f64::from(w.params.circumference_km) / f64::from(w.width);
+        let side = TILE_SIZE as usize + 2;
+        let mut touched = 0;
+        for x in 0..2 {
+            let drawn = d.tile_stripes(TileId { z: 0, x, y: 0 }, pixel_km).unwrap();
+            for py in 0..TILE_SIZE as usize {
+                for px in 0..TILE_SIZE as usize {
+                    let i = py * w.width as usize + x as usize * TILE_SIZE as usize + px;
+                    let (e, a) = drawn[(py + 1) * side + px + 1];
+                    assert!((e - base.get(i, 0)).abs() < 1e-6, "{px}, {py}");
+                    assert!((a - base.get(i, 1)).abs() < 1e-6, "{px}, {py}");
+                    touched += usize::from(a != 0.0);
+                }
+            }
+        }
+        assert!(touched > 50, "{touched} pixels");
+    }
+
+    /// Tiles away from the stripes are drawn as without them.
+    #[test]
+    fn tiles_away_from_the_stripes_are_unchanged() {
+        let world = enceladus();
+        let mut bare = world.clone();
+        let geysers = bare.params.model.as_mut().unwrap().geysers.take().unwrap();
+        let (with, without) = (DetailWorld::new(world.clone()), DetailWorld::new(bare));
+        // The other hemisphere's tiles, at a few levels.
+        let row = |z: u32| if geysers.south { 0 } else { (1 << z) - 1 };
+        for (z, x) in [(2, 3), (4, 11), (5, 40), (6, 77)] {
+            let tile = TileId {
+                z,
+                x,
+                y: row(z) + if z > 2 { 2 } else { 0 },
+            };
+            assert!(
+                with.render_tile(tile) == without.render_tile(tile),
+                "{tile:?}"
+            );
+        }
     }
 
     #[test]
