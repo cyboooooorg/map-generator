@@ -560,7 +560,18 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         moment_of_inertia,
         terrain: surface_age::Terrain::default(),
     };
-    model.terrain = surface_age::terrain(&model, context.age_gyr);
+    // The frost the climate left on the ground at its temperature.
+    let frost = match (&air, &model.surface) {
+        (Some(air), Some(surface)) => climate::frost(
+            &air.gases,
+            0.0,
+            0.0,
+            surface.climate.temperature_k,
+            &surface.gases,
+        ),
+        _ => Gases::default(),
+    };
+    model.terrain = surface_age::terrain(&model, context.age_gyr, &frost);
     (model, air)
 }
 

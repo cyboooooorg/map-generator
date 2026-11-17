@@ -598,14 +598,19 @@ pub fn params_for(
     let look_age = pick(d.surface_age, fallback::SURFACE_AGE_GA, rng);
     let main = match model.terrain.main() {
         Some(unit) => *unit,
-        None => *super::surface_age::terrain(model, f64::from(placed.age_gyr))
-            .units
-            .first()
-            .expect("a terrain has a unit"),
+        None => {
+            *super::surface_age::terrain(model, f64::from(placed.age_gyr), &super::Gases::default())
+                .units
+                .first()
+                .expect("a terrain has a unit")
+        }
     };
     let regime_age = match (main.renewal, surface.map(|s| s.regime)) {
         (Renewal::LiquidCycle, _) => {
             main.age_gyr as f32 * super::surface_age::LIQUID_CYCLE_AGE_SHARE.pick(rng)
+        }
+        (Renewal::VolatileIce, _) => {
+            main.age_gyr as f32 * super::surface_age::VOLATILE_ICE_AGE_SHARE.pick(rng)
         }
         (_, Some(Regime::Plates) | None) => fallback::SURFACE_AGE_GA.pick(rng),
         (_, Some(Regime::Episodic)) => EPISODIC_SURFACE_AGE_GA.pick(rng),

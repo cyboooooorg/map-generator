@@ -8,11 +8,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::PlanetModel;
+use super::albedo::cover;
 use super::climate::SurfaceLiquid;
 use super::heat::InternalHeat;
 use super::inputs::HostTide;
 use super::interim::{EPISODIC_SURFACE_AGE_GA, ERODING_BAR, HEAT_PIPE_SURFACE_AGE_GA};
+use super::{Gases, PlanetModel};
 use crate::archetype::ParamDefault;
 use crate::geology::Regime;
 use crate::request::fallback;
@@ -102,6 +103,18 @@ pub const LIQUID_CYCLE_RETENTION_GYR: f64 = 1.0;
 /// Titan's 0.2 to 1 Ga (Neish & Lorenz 2012).
 pub(super) const LIQUID_CYCLE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.2, 1.0]);
 
+/// Age under which the mobile ice of a surface leaves it, Ga: its frost
+/// of nitrogen, methane or carbon monoxide sublimes and re-condenses over
+/// the seasons and the years, and buries what lies under it. Triton's
+/// surface keeps about 10 to 100 Ma of craters (Schenk & Zahnle 2007,
+/// Icarus 192, 135, doi:10.1016/j.icarus.2007.07.004).
+pub const VOLATILE_ICE_RETENTION_GYR: f64 = 0.1;
+
+/// Share of [`VOLATILE_ICE_RETENTION_GYR`] a surface under mobile ice
+/// keeps, a range, drawn by `interim::params_for` in the regime draw's
+/// place: Triton's 10 to 100 Ma (Schenk & Zahnle 2007).
+pub(super) const VOLATILE_ICE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.1, 1.0]);
+
 /// Age of the surface of a world whose liquid cycle renews it, Ga, or
 /// `None` without one (a plate or heat-pipe regime renews faster, see
 /// [`terrain`]): air of `ERODING_BAR` or more over a surface liquid
@@ -154,10 +167,54 @@ pub fn icy_estimate(
 }
 
 /// After the climate: every unit of the body, in a system `age_gyr` Ga
-/// old. For now one unit: a liquid cycle's ([`liquid_cycle_age_gyr`]), else the mean of the regime's range, or for a
-/// stagnant lid the system's age, shortened over an ice crust by
-/// [`ice_lid_age_share`].
-pub fn terrain(model: &PlanetModel, age_gyr: f64) -> Terrain {
+/// old, with `frost` (bar, gas by gas, [`super::climate::frost`]) on its
+/// ground. A liquid cycle's unit ([`liquid_cycle_age_gyr`]), else the
+/// mean of the regime's range, or for a stagnant lid the system's age,
+/// shortened over an ice crust by [`ice_lid_age_share`]. A body whose air
+/// is in vapour equilibrium with a nitrogen or methane frost (carbon
+/// monoxide is not a gas of the model) also gets a
+/// [`Renewal::VolatileIce`] unit of the share of its disc that frost
+/// covers ([`super::albedo::cover`]); the other unit keeps the rest. The
+/// SO₂ frost of a volcanic body is not mobile ice: a heat pipe renews
+/// faster.
+pub fn terrain(model: &PlanetModel, age_gyr: f64, frost: &Gases) -> Terrain {
+    let base = base_terrain(model, age_gyr);
+    let Some(surface) = model.surface.as_ref() else {
+        return base;
+    };
+    let volatile = Gases {
+        n2: frost.n2,
+        ch4: frost.ch4,
+        ..Gases::default()
+    };
+    let share = cover(
+        surface.climate.temperature_k,
+        &surface.gases,
+        &surface.water,
+        &volatile,
+    )
+    .frost;
+    if share <= 0.0 {
+        return base;
+    }
+    let mut units = vec![TerrainUnit {
+        age_gyr: VOLATILE_ICE_RETENTION_GYR,
+        share,
+        renewal: Renewal::VolatileIce,
+    }];
+    if share < 1.0 {
+        units.extend(base.units.iter().map(|u| TerrainUnit {
+            share: u.share * (1.0 - share),
+            ..*u
+        }));
+    }
+    // Largest first; the volatile ice leads a tie.
+    units.sort_by(|a, b| b.share.total_cmp(&a.share));
+    Terrain { units }
+}
+
+/// The unit of the surface under the mobile ice, if any.
+fn base_terrain(model: &PlanetModel, age_gyr: f64) -> Terrain {
     let regime = model.surface.as_ref().map(|s| s.regime);
     if let (Some(surface), Some(regime)) = (model.surface.as_ref(), regime)
         && regime == Regime::Stagnant
@@ -239,6 +296,38 @@ mod tests {
     }
 
     #[test]
+    fn triton_is_young() {
+        for seed in 1..=40 {
+            let p = params_of("triton-like", seed).expect("drawn");
+            let m = p.model.as_ref().expect("a model");
+            assert_eq!(
+                m.terrain.main().unwrap().renewal,
+                Renewal::VolatileIce,
+                "seed {seed}: {:?}",
+                m.terrain
+            );
+            assert!(p.surface_age_ga < 0.1, "seed {seed}: {}", p.surface_age_ga);
+        }
+    }
+
+    #[test]
+    fn titan_is_not_volatile_ice() {
+        for seed in 1..=40 {
+            let p = params_of("titan-like", seed).expect("drawn");
+            let m = p.model.as_ref().expect("a model");
+            assert!(
+                m.terrain
+                    .units
+                    .iter()
+                    .all(|u| u.renewal != Renewal::VolatileIce),
+                "seed {seed}: {:?}",
+                m.terrain
+            );
+            assert_eq!(m.terrain.main().unwrap().renewal, Renewal::LiquidCycle);
+        }
+    }
+
+    #[test]
     fn liquid_cycle_age_is_continuous_in_pressure() {
         use super::{SurfaceLiquid, liquid_cycle_age_gyr};
         let ages: Vec<f64> = (0..=50)
@@ -278,6 +367,7 @@ mod tests {
         .unwrap();
         assert_eq!(fixture.len(), 210);
         let mut drifted = vec![];
+        let mut skipped_volatile = 0;
         for (arch, seed, bits) in fixture {
             let p = params_of(&arch, seed).expect("drawn");
             let now = p.surface_age_ga.to_bits();
@@ -292,17 +382,23 @@ mod tests {
             let slack = if ice_lid { 2 } else { 0 };
             // A liquid cycle renews the surface on purpose (#491): the
             // Titan-like rows move to 0.2-1 Ga, see `titan_is_young`.
-            if p.model.as_ref().is_some_and(|m| {
-                m.terrain
-                    .main()
-                    .is_some_and(|u| u.renewal == Renewal::LiquidCycle)
-            }) {
-                continue;
+            // So does mobile ice: the triton-like rows move under 0.1
+            // Ga, see `triton_is_young`.
+            let main = p.model.as_ref().and_then(|m| m.terrain.main().copied());
+            match main.map(|u| u.renewal) {
+                Some(Renewal::LiquidCycle) => continue,
+                Some(Renewal::VolatileIce) => {
+                    assert!(arch.starts_with("triton-like"), "{arch} {seed}");
+                    skipped_volatile += 1;
+                    continue;
+                }
+                _ => {}
             }
             if now.abs_diff(bits) > slack {
                 drifted.push(format!("{arch} {seed}: {bits} -> {now}"));
             }
         }
         assert!(drifted.is_empty(), "{drifted:#?}");
+        assert!(skipped_volatile > 0, "no triton-like row was skipped");
     }
 }

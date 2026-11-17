@@ -600,8 +600,7 @@ more are flooded flat at a date of that window and darkened.
   One age stands for the whole surface: Ganymede's two terrains and
   Enceladus's young south pole (its model's tides give it a quarter of the
   heat it radiates) are not told apart, Enceladus taking its old plains'
-  age, and Triton, whose surface is young from the heat of its capture,
-  keeps an old one.
+  age (Triton's young surface is the volatile-ice unit below).
 - **A liquid cycle renews a stagnant lid's surface (Titan).** A world in
   the stagnant regime with air of 0.01 bar or more over liquid water or
   hydrocarbons gets one `LiquidCycle` terrain unit
@@ -614,6 +613,19 @@ more are flooded flat at a date of that window and darkened.
   at 0.01 bar, so that it is continuous in pressure (a choice, no source
   for the interpolation). Plate, episodic and heat-pipe regimes keep
   their own, faster, ages; Mars and Mercury (no liquid) stay old.
+- **Mobile volatile ice renews the surface (Triton).** A body whose air
+  is in vapour equilibrium with a nitrogen or methane frost (the
+  condensate of `atmosphere::condense` under the gas's triple point or
+  its sea's freezing point, `climate::frost`; carbon monoxide is not a
+  gas of the model) gets a `VolatileIce` terrain unit whose share is the
+  frost's share of the disc (`albedo::cover`, `frost_bar /
+  FROST_LAYER_BAR`); the unit under it keeps the rest. Triton's surface
+  keeps 10 to 100 Ma of craters (Schenk & Zahnle 2007, Icarus 192, 135,
+  doi:10.1016/j.icarus.2007.07.004: `VOLATILE_ICE_RETENTION_GYR` = 0.1
+  Ga, scattered by `VOLATILE_ICE_AGE_SHARE` = 0.1 to 1). Triton's N2
+  frost covers all of its disc, so the unit is the whole surface and the
+  map reads under 0.1 Ga. The SO2 frost of Io is not mobile ice: its
+  heat pipe renews faster.
 - **Sea floors are cleared by the preset, not by plates.** A crater on the
   floor of a sea that still fills the basins leaves nothing on any world,
   whatever its tectonic regime: the rule reads only the sea, and plate
