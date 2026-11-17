@@ -506,6 +506,9 @@ pub struct SystemDetail {
     /// the cause trees of its derived values and the archetype it
     /// resembles.
     pub extras: BTreeMap<String, BodyExtras>,
+    /// Each body's tide spheres (`mapgen::tides`), by body id, derived at
+    /// read time.
+    pub tides: BTreeMap<String, mapgen::tides::TideZones>,
 }
 
 /// The planet model's account of one body, for the viewer's cards.

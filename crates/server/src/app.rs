@@ -877,9 +877,11 @@ async fn get_system(
     tokio::task::spawn_blocking(move || {
         let system = mapgen::system::read_system(&systems::system_dir(&root, &owned))?;
         let extras = body_extras(&system, &shared.catalog, false);
+        let tides = mapgen::tides::system_tides(&system);
         Ok::<_, String>(SystemDetail {
             system,
             extras,
+            tides,
             names: index.names(&owned).unwrap_or_default(),
             evicted: index.evicted_bodies(&owned).unwrap_or_default(),
         })
@@ -3039,6 +3041,16 @@ mod tests {
         let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
         let focus = detail["system"]["focus"].as_str().unwrap().to_string();
         (id, focus)
+    }
+
+    #[tokio::test]
+    async fn a_system_detail_carries_its_bodies_tides() {
+        let app = router(temp_config("tides"));
+        let (id, focus) = generated_planet(&app, "earth-like", 3, "").await;
+        let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        let detail: serde_json::Value = serde_json::from_str(&detail).unwrap();
+        assert_eq!(detail["tides"][&focus]["host"], focus.as_str());
+        assert!(detail["tides"][&focus]["hill_km"].as_f64().unwrap() > 1e5);
     }
 
     #[tokio::test]
