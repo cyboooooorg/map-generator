@@ -11,6 +11,7 @@ export type Geysers = {
  */
 south: boolean, 
 /**
- * The fractures, parallel, from one side of the region to the other.
+ * The fractures, roughly parallel, inside the region; a branch, when
+ * there is one, comes last.
  */
 fractures: Array<Fracture>, };

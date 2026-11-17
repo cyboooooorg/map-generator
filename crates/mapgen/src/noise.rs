@@ -28,6 +28,32 @@ pub fn fbm(noise: &Perlin, x: f64, y: f64, z: f64, octaves: u32) -> f32 {
     (value / max_value) as f32
 }
 
+/// Like [`fbm`] with `weights.len()` octaves, octave `k` (frequency `2^k`)
+/// weighted by `weights[k]`, in `[0, 1]`: 1 keeps it, 0 drops it (and
+/// skips it). The sum is still normalised by every octave's full
+/// amplitude, so that dropping the finest octaves smooths the field
+/// without scaling up the coarser ones: a low-pass filter, for a map
+/// whose pixels cannot resolve them (see `generation::Sampler::resolved`).
+/// With every weight 1 it is exactly [`fbm`].
+pub fn fbm_weighted(noise: &Perlin, x: f64, y: f64, z: f64, weights: &[f64]) -> f32 {
+    let mut value = 0.0f64;
+    let mut amplitude = 1.0f64;
+    let mut frequency = 1.0f64;
+    let mut max_value = 0.0f64;
+
+    for &w in weights {
+        if w == 1.0 {
+            value += noise.get([x * frequency, y * frequency, z * frequency]) * amplitude;
+        } else if w > 0.0 {
+            value += noise.get([x * frequency, y * frequency, z * frequency]) * amplitude * w;
+        }
+        max_value += amplitude;
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    (value / max_value) as f32
+}
+
 /// Ridged noise — inverts the absolute value to produce sharp mountain peaks
 /// instead of smooth hills.  Returns a value in `[0.0, 1.0]`.
 pub fn ridged(noise: &Perlin, x: f64, y: f64, z: f64) -> f32 {

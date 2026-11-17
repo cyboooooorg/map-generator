@@ -14,7 +14,7 @@ use crate::geo::Grid;
 use crate::geology::Regime;
 use crate::hydrology::hydrology;
 use crate::noise::{
-    EARTH_CIRCUMFERENCE_KM, cell_value, fbm, lattice_points, ridged, smoothstep, stream,
+    EARTH_CIRCUMFERENCE_KM, cell_value, fbm_weighted, lattice_points, ridged, smoothstep, stream,
     stream_seed,
 };
 use crate::planet::regime::OCEAN_KG;
@@ -812,9 +812,80 @@ pub fn carbon_cycle(regime: Regime, pressure_bar: f32) -> f32 {
     }
 }
 
+/// Size of a noise's lattice cell, in map rows, below which the map
+/// leaves it out and above which it draws it whole (see
+/// [`Sampler::resolved`]). Perlin noise varies within a lattice cell along
+/// a quintic curve, so most of its power lies at wavelengths of one to two
+/// cells: a cell of 2 rows puts its finest wavelengths at the rows'
+/// Nyquist limit (2 rows), one of 4 rows samples its features about 4
+/// times per wavelength. Calibration: on an Enceladus-sized moon at 512 ×
+/// 256, the share of the polar parallels' variance held by wavelengths
+/// under two rows (see the tests) falls from 0.2 to under 0.01.
+const RESOLVED_ROWS: (f64, f64) = (2.0, 4.0);
+/// Amplitude of the domain warp of the mountains, in units of the
+/// sphere's radius.
+const WARP: f64 = 0.25;
+/// RMS gradient of the `noise` crate's 3-D Perlin noise, per lattice
+/// unit (measured in the tests; its values have an RMS of 0.31).
+const PERLIN_GRADIENT_RMS: f64 = 1.42;
+/// Mean of [`ridged`] noise over the sphere, which a ridged octave the map
+/// cannot resolve is drawn as (see [`Sampler::resolved`]).
+const RIDGED_MEAN: f32 = 0.744;
+/// Frequencies of the mountains' ridged octaves (the main ridge and its
+/// two finer ones), per unit of the sphere's radius, times the noise
+/// scale.
+const RIDGES: [f64; 3] = [5.0, 10.7, 22.1];
+/// Octaves of the volcanic zones' noise, at the noise scale.
+const VOLCANIC_OCTAVES: usize = 3;
+/// Octaves of the continents' noise, at `0.8 ×` the noise scale.
+const CONTINENT_OCTAVES: usize = 5;
+/// Most octaves of a climate field (see [`Sampler::climate_spec`]).
+const CLIMATE_OCTAVES: usize = 5;
+
+/// The weight of every noise octave of a [`Sampler`] on its map (see
+/// [`Sampler::resolved`]), found once rather than at every pixel.
+#[derive(Default)]
+struct OctaveWeights {
+    continents: [f64; CONTINENT_OCTAVES],
+    /// The ridged octaves, at the frequency the domain warp squeezes them
+    /// to ([`Sampler::warp_squeeze`]).
+    ridges: [f32; 3],
+    volcanic: [f64; VOLCANIC_OCTAVES],
+    highlands: [f64; HIGHLANDS.octaves as usize],
+    /// Per climate field, in [`ClimateField::ALL`] order; past a field's
+    /// own octaves, unused.
+    climate: [[f64; CLIMATE_OCTAVES]; ClimateField::COUNT],
+}
+
+impl OctaveWeights {
+    fn new(sampler: &Sampler) -> Self {
+        let s = sampler.noise_scale;
+        let octave = |k: usize| f64::from(1u32 << k);
+        let squeeze = sampler.warp_squeeze();
+        Self {
+            continents: std::array::from_fn(|k| sampler.resolved(0.8 * s * octave(k))),
+            ridges: std::array::from_fn(|k| sampler.resolved(RIDGES[k] * s * squeeze) as f32),
+            volcanic: std::array::from_fn(|k| sampler.resolved(s * octave(k))),
+            highlands: std::array::from_fn(|k| sampler.resolved(HIGHLANDS.frequency * octave(k))),
+            climate: ClimateField::ALL.map(|field| {
+                let (_, f, _, octaves) = sampler.climate_spec(field);
+                debug_assert!(octaves as usize <= CLIMATE_OCTAVES);
+                std::array::from_fn(|k| sampler.resolved(f * octave(k)))
+            }),
+        }
+    }
+}
+
 /// Noise sources and derived constants for one world.
 pub struct Sampler {
     grid: Grid,
+    /// Size of a row of the map the noise is drawn for, km: the world's,
+    /// even when the sampler samples a coarser grid (see
+    /// [`Self::with_frame_at`]).
+    row_km: f64,
+    /// The weights of the noise octaves on that map (see
+    /// [`Self::resolved`]), computed once.
+    octaves: OctaveWeights,
     /// The plates and their boundaries, on worlds with plate tectonics.
     tectonics: Option<crate::plates::PlateMap>,
     /// Share of the noise's mountain weight kept on worlds with plates:
@@ -994,6 +1065,19 @@ impl Sampler {
     /// `frame` when given (built for the same world, see
     /// [`crate::plates::PlateFrame`]): only their crust is found again.
     pub fn with_frame(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -> Self {
+        Self::with_frame_at(p, frame, p.grid().dy_km())
+    }
+
+    /// Like [`Self::with_frame`], its noise band-limited for a map whose
+    /// rows are `row_km` km (see [`Self::resolved`]) rather than for the
+    /// grid of `p`: the calibrations that sample a world on a coarse grid
+    /// (its sea level, its mean temperature) see the field the world's own
+    /// map will hold, not one smoothed to their grid.
+    pub fn with_frame_at(
+        p: &WorldParams,
+        frame: Option<&crate::plates::PlateFrame>,
+        row_km: f32,
+    ) -> Self {
         let seed = p.seed;
         // Scale noise frequencies by planet size: a larger circumference
         // stretches the unit-sphere coordinates, producing broader continents.
@@ -1012,6 +1096,8 @@ impl Sampler {
             (p.sea_level + p.look.rules.waterline, 0.0, 0.0)
         };
         let mut sampler = Self {
+            row_km: f64::from(row_km),
+            octaves: OctaveWeights::default(),
             tectonics: None,
             noise_mountains: 1.0,
             arc_volcanism: ARC_VOLCANISM.0
@@ -1055,6 +1141,7 @@ impl Sampler {
                 .then(|| Perlin::new(stream_seed(seed, stream::HIGHLANDS))),
             highland_datum: HighlandDatum::Sea,
         };
+        sampler.octaves = OctaveWeights::new(&sampler);
         sampler.highland_datum = highland_datum(p, &sampler.crust, sampler.waterline);
         if !p.look.rules.dry {
             sampler.crust_line = sampler.crust_line();
@@ -1076,6 +1163,44 @@ impl Sampler {
         sampler
     }
 
+    /// Weight of noise of `frequency` (cycles per unit of the sphere's
+    /// radius: a lattice cell of `R / frequency` km) on the world's map
+    /// (rows of `row_km`, see [`Self::with_frame_at`]): 1 when its
+    /// cell spans [`RESOLVED_ROWS`]`.1` rows or more, fading to 0 at
+    /// [`RESOLVED_ROWS`]`.0` rows (a smoothstep in the cell's size).
+    ///
+    /// The rows are the coarsest sampling of an equirectangular map: a
+    /// row is `C / 2h` km everywhere, while a pixel's east-west size
+    /// shrinks as the cosine of the latitude. Noise finer than two rows
+    /// (the Nyquist limit of the meridians) is aliased between the rows;
+    /// near a pole, where the parallels sample it many times finer, the
+    /// same noise is resolved along them, and the map holds detail that
+    /// varies across the meridians and jumps along them: the globe draws
+    /// it as rays converging on the pole. Leaving out what the rows cannot
+    /// resolve makes the field the same, isotropic, at every latitude
+    /// (the band limit of sampling on the sphere: Driscoll & Healy 1994,
+    /// doi:10.1006/aama.1994.1008, sample a field of bandwidth `B` on
+    /// `2B` rows). The detail tiles add the finer detail back, from two
+    /// base pixels down (see `detail::DetailWorld`).
+    fn resolved(&self, frequency: f64) -> f64 {
+        let cell_km = f64::from(self.grid.circumference_km) / std::f64::consts::TAU / frequency;
+        let rows = cell_km / self.row_km;
+        let (lo, hi) = RESOLVED_ROWS;
+        let t = ((rows - lo) / (hi - lo)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
+
+    /// How much the domain warp of the mountains squeezes their noise, as
+    /// a factor on its frequency: `1 + WARP · 2s · |∇n|`, the warp's
+    /// displacement ([`WARP`] units of the sphere's radius, at frequency
+    /// `2s`) stretching the coordinates by its gradient, with the RMS
+    /// gradient of Perlin noise ([`PERLIN_GRADIENT_RMS`]). About 1.7 on
+    /// Earth, 6.7 on a moon of noise scale 8: there the warp folds the
+    /// ridges into features several times finer than their lattice.
+    fn warp_squeeze(&self) -> f64 {
+        1.0 + WARP * 2.0 * self.noise_scale * PERLIN_GRADIENT_RMS
+    }
+
     /// Share of the noise mountains kept at a unit vector: 1 inside the
     /// highland provinces of a world without plates, 0 on its plains, 1
     /// everywhere on a world with plates.
@@ -1084,7 +1209,7 @@ impl Sampler {
             return 1.0;
         };
         let f = HIGHLANDS.frequency;
-        let v = fbm(noise, p[0] * f, p[1] * f, p[2] * f, HIGHLANDS.octaves);
+        let v = fbm_weighted(noise, p[0] * f, p[1] * f, p[2] * f, &self.octaves.highlands);
         smoothstep(HIGHLANDS.edge.0, HIGHLANDS.edge.1, v)
     }
 
@@ -1127,14 +1252,21 @@ impl Sampler {
         levels.last().map_or(0.0, |l| l.0)
     }
 
-    /// The continents' shape at a unit vector: its coarse octaves and its
-    /// fine ones (see [`Self::sample`]).
+    /// The continents' shape at a unit vector: its 5 octaves, split into
+    /// the 2 coarse ones (continents, basins) and the 3 fine ones (hills),
+    /// each weighted by how well the map resolves it ([`Self::resolved`]).
     fn continent_shape(&self, p: [f64; 3]) -> (f32, f32) {
         let c = 0.8 * self.noise_scale;
+        // Same normalisation as `fbm` with 5 octaves.
         let norm = 1.0 + 0.5 + 0.25 + 0.125 + 0.0625;
         let octave = |k: u32| {
             let f = c * f64::from(1u32 << k);
-            self.continent_noise.get([p[0] * f, p[1] * f, p[2] * f]) as f32 / (1u32 << k) as f32
+            let weight = self.octaves.continents[k as usize];
+            if weight == 0.0 {
+                return 0.0;
+            }
+            (self.continent_noise.get([p[0] * f, p[1] * f, p[2] * f]) * weight) as f32
+                / (1u32 << k) as f32
         };
         (
             (octave(0) + octave(1)) / norm,
@@ -1201,12 +1333,12 @@ impl Sampler {
     /// point: the climate does not move with the plates).
     pub fn climate(&self, field: ClimateField, [nx, ny, nz]: [f64; 3]) -> f32 {
         let (noise, f, offset, octaves) = self.climate_spec(field);
-        fbm(
+        fbm_weighted(
             noise,
             nx * f + offset[0],
             ny * f + offset[1],
             nz * f + offset[2],
-            octaves,
+            &self.octaves.climate[field as usize][..octaves as usize],
         )
     }
 
@@ -1252,24 +1384,11 @@ impl Sampler {
         let warp_y =
             self.warp_noise_b
                 .get([nx * 2.0 * s + 5.2, ny * 2.0 * s + 1.3, nz * 2.0 * s + 3.7]);
-        let wnx = nx + warp_x * 0.25;
-        let wny = ny + warp_y * 0.25;
+        let wnx = nx + warp_x * WARP;
+        let wny = ny + warp_y * WARP;
 
-        // Continent shape: 5 octaves, split into the 2 coarse ones (continents,
-        // basins) and the 3 fine ones (hills).
-        let c = 0.8 * s;
-        // Same normalisation as `fbm` with 5 octaves.
-        let norm = 1.0 + 0.5 + 0.25 + 0.125 + 0.0625;
-        let shape = |x: f64, y: f64, z: f64| {
-            let octave = |k: u32| {
-                let f = c * f64::from(1u32 << k);
-                self.continent_noise.get([x * f, y * f, z * f]) as f32 / (1u32 << k) as f32
-            };
-            (
-                (octave(0) + octave(1)) / norm,
-                (octave(2) + octave(3) + octave(4)) / norm,
-            )
-        };
+        // Continent shape (see `continent_shape`).
+        let shape = |x: f64, y: f64, z: f64| self.continent_shape([x, y, z]);
         let (coarse, fine) = shape(nx, ny, nz);
         // Continent outline: near the coast the noise is sampled at a
         // position displaced sideways by every octave finer than its own,
@@ -1347,22 +1466,40 @@ impl Sampler {
 
         // Ridged mountains blended only onto elevated terrain: a main ridge,
         // with two finer ridged octaves concentrated on it.
-        let ridge = |f: f64, o: f64| {
-            ridged(
+        // Each one drawn as far as the map resolves it (see `resolved`),
+        // its mean elsewhere: at the frequency the warp squeezes it to.
+        let ridge = |k: usize, o: f64| {
+            let f = RIDGES[k] * s;
+            let weight = self.octaves.ridges[k];
+            if weight == 0.0 {
+                return RIDGED_MEAN;
+            }
+            let r = ridged(
                 &self.elevation_noise,
                 wnx * f + o,
                 wny * f - o,
                 nz * f + 0.5 * o,
-            )
+            );
+            if weight == 1.0 {
+                r
+            } else {
+                RIDGED_MEAN + weight * (r - RIDGED_MEAN)
+            }
         };
-        let main = ridge(5.0 * s, 0.0);
-        let detail = 0.6 * ridge(10.7 * s, 23.0) + 0.4 * ridge(22.1 * s, 41.0);
+        let main = ridge(0, 0.0);
+        let detail = 0.6 * ridge(1, 23.0) + 0.4 * ridge(2, 41.0);
         let mountain = main * (1.0 - MOUNTAIN_DETAIL + MOUNTAIN_DETAIL * detail);
 
         // Volcanic zones are broad; volcanoes are cones within them, which
         // rise above the terrain (islands at sea). Away from a cone the zone
         // stays below the ash threshold.
-        let volcanic_raw = fbm(&self.volcano_noise, nx * s, ny * s, nz * s, 3);
+        let volcanic_raw = fbm_weighted(
+            &self.volcano_noise,
+            nx * s,
+            ny * s,
+            nz * s,
+            &self.octaves.volcanic,
+        );
         // Plate boundaries: their own relief, ranges where they close, and
         // volcanic arcs over subducting plates.
         let plates = self
@@ -1734,7 +1871,8 @@ pub fn mean_surface_temperature_c(params: &WorldParams) -> f32 {
     let waterline = coarse.sea_level + rules_waterline;
     let frame = (coarse.look.geology.regime == Regime::Plates && coarse.drift_ma == 0.0)
         .then(|| crate::plates::PlateFrame::new(&coarse));
-    let sampler = Sampler::with_frame(&coarse, frame.as_ref());
+    // The noise as the world's own map holds it (see `Sampler::resolved`).
+    let sampler = Sampler::with_frame_at(&coarse, frame.as_ref(), params.grid().dy_km());
     let (sum, total) = (0..grid.height)
         .into_par_iter()
         .map(|y| {
@@ -1784,13 +1922,20 @@ const LAND_TOLERANCE: f64 = 0.003;
 /// its biomes, the hydraulic erosion left out: the noise relief (its
 /// plates taken from `frame` when given), flattened on a small body
 /// ([`relief_share`]), the craters of the wet era, the volcanic cones,
-/// the craters of the dry era and the lava floods, then the dry band
+/// the fractures of the geysers ([`crate::stripes::apply_stripes`]), the
+/// craters of the dry era and the lava floods, then the dry band
 /// lifted again ([`keep_band_dry`]). The craters are those the grid
-/// resolves ([`base_min_diameter_km`]).
-fn cratered_relief(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -> Vec<f32> {
+/// resolves ([`base_min_diameter_km`]). The noise is band-limited for a
+/// map whose rows are `row_km` km (the world's: see
+/// [`Sampler::with_frame_at`]).
+fn cratered_relief(
+    p: &WorldParams,
+    frame: Option<&crate::plates::PlateFrame>,
+    row_km: f32,
+) -> Vec<f32> {
     let grid = p.grid();
     let w = grid.width as usize;
-    let sampler = Sampler::with_frame(p, frame);
+    let sampler = Sampler::with_frame_at(p, frame, row_km);
     let (mut elevation, cones): (Vec<f32>, Vec<f32>) = (0..grid.height as usize)
         .into_par_iter()
         .flat_map_iter(|y| {
@@ -1814,6 +1959,7 @@ fn cratered_relief(p: &WorldParams, frame: Option<&crate::plates::PlateFrame>) -
         .par_iter_mut()
         .zip(&cones)
         .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
+    crate::stripes::apply_stripes(&mut elevation, &grid, p);
     craters.apply(&mut elevation, &grid, Era::Dry);
     keep_band_dry(p, &grid, &mut elevation, None);
     elevation
@@ -1863,7 +2009,7 @@ pub fn sea_level_for_land_fraction(params: &WorldParams, fraction: f32) -> f32 {
             ..coarse.clone()
         };
         let waterline = level + p.look.rules.waterline;
-        let elevation = cratered_relief(&p, frame.as_ref());
+        let elevation = cratered_relief(&p, frame.as_ref(), params.grid().dy_km());
         let land: f64 = elevation
             .chunks(grid.width as usize)
             .zip(&weights)
@@ -1962,7 +2108,7 @@ pub fn sea_level_for_water(params: &WorldParams, depth_m: f64) -> f32 {
             ..coarse.clone()
         };
         let waterline = level + p.look.rules.waterline;
-        let sampler = Sampler::with_frame(&p, frame.as_ref());
+        let sampler = Sampler::with_frame_at(&p, frame.as_ref(), params.grid().dy_km());
         let water: f64 = (0..grid.height)
             .into_par_iter()
             .map(|y| {
@@ -2264,6 +2410,9 @@ pub fn generate_with_progress(
         .zip(&cones)
         .for_each(|(e, c)| *e = (*e + c).clamp(-1.0, 1.0));
     drop(cones);
+    // The fractures of the geysers, as young as the cones: kept in the
+    // elevation without the young craters, which the epochs draw on.
+    crate::stripes::apply_stripes(&mut elevation, &grid, params);
     // The young craters' height change, kept to export the elevation
     // without them (the surface the time slider draws them on).
     let mut young_craters = elevation.clone();
@@ -2274,6 +2423,8 @@ pub fn generate_with_progress(
     let pixel_km = f64::from(grid.circumference_km) / f64::from(width);
     let mut albedo = CraterField::new(params, RAY_MIN_PIXELS * pixel_km).albedo(&grid);
     darken_maria(&mut albedo, &mare);
+    // The fractures of the geysers, darker than the plains.
+    crate::stripes::stripe_albedo(&mut albedo, &grid, params);
     young_craters
         .par_iter_mut()
         .zip(&elevation)
@@ -3594,27 +3745,30 @@ pub(crate) mod tests {
     #[test]
     fn dry_worlds_keep_their_plains_and_relief_datum() {
         for (name, expected) in [
-            // `Sampler::sample` at the points below on origin/main (e243b4b).
+            // `Sampler::sample` at the points below on origin/main
+            // (e243b4b), then with the noise band-limited to the grid
+            // (`Sampler::resolved`: on this 256 × 128 grid the finest
+            // octaves fade, moving these points by 0.002 at most).
             (
                 "venus-like",
                 [
-                    -0.215725,
-                    -0.248_503_3,
-                    -0.210_015_6,
-                    -0.217_175_4,
-                    -0.260_295_3,
-                    -0.230_008_3,
+                    -0.215_476_9,
+                    -0.248_357_8,
+                    -0.210_010_7,
+                    -0.217_180_9,
+                    -0.260_533_9,
+                    -0.229_686_8,
                 ],
             ),
             (
                 "mercury-like",
                 [
-                    -0.204_925_6,
-                    -0.270_677_6,
-                    -0.191_738_3,
-                    -0.222_719_1,
-                    -0.235_384_9,
-                    -0.279_495_4,
+                    -0.207_177_8,
+                    -0.270_604_8,
+                    -0.191_472_4,
+                    -0.222_948_6,
+                    -0.234_631_4,
+                    -0.279_371_2,
                 ],
             ),
         ] {
@@ -3959,5 +4113,153 @@ pub(crate) mod tests {
             w.params.circumference_km as f64,
         );
         assert_eq!(g.river_coverage, coverage);
+    }
+
+    /// [`RIDGED_MEAN`] and [`PERLIN_GRADIENT_RMS`] are those of the noise:
+    /// sampled at 200 000 points spread over many lattice cells.
+    #[test]
+    fn the_noise_constants_are_measured_on_the_noise() {
+        let n = 200_000;
+        // Points spread over a volume many lattice cells across.
+        let point = |i: u32| {
+            let t = f64::from(i);
+            [
+                (t * 0.618_034).fract() * 97.0,
+                (t * 0.754_878).fract() * 89.0,
+                (t * 0.569_840).fract() * 83.0,
+            ]
+        };
+        let mut sum = 0.0f64;
+        for seed in 0..4 {
+            let noise = Perlin::new(seed);
+            for i in 0..n / 4 {
+                let p = point(i);
+                sum += f64::from(ridged(&noise, p[0], p[1], p[2]));
+            }
+        }
+        let mean = sum / f64::from(n);
+        assert!((mean - f64::from(RIDGED_MEAN)).abs() < 0.005, "{mean}");
+        let noise = Perlin::new(1);
+        let e = 1e-4;
+        let squares: f64 = (0..n)
+            .map(|i| {
+                let p = point(i);
+                let v = noise.get(p);
+                (0..3)
+                    .map(|k| {
+                        let mut q = p;
+                        q[k] += e;
+                        ((noise.get(q) - v) / e).powi(2)
+                    })
+                    .sum::<f64>()
+            })
+            .sum();
+        let rms = (squares / f64::from(n)).sqrt();
+        assert!((rms - PERLIN_GRADIENT_RMS).abs() < 0.02, "{rms}");
+    }
+
+    /// Share of the variance along the parallels near the poles (rows at
+    /// colatitudes 1 to 15 degrees, both poles) held by wavelengths shorter
+    /// than two rows: detail the map's meridians, sampled once per row,
+    /// cannot resolve. Near a pole a row's pixels are much closer together
+    /// than its rows, so such detail shows along the parallels but is
+    /// aliased between the rows, and the globe draws it as rays converging
+    /// on the pole. A field resolved by the grid holds next to none.
+    pub(crate) fn subgrid_share(field: &[f32], grid: &Grid) -> f64 {
+        let (w, h) = (grid.width as usize, grid.height as usize);
+        let table: Vec<(f64, f64)> = (0..w)
+            .map(|k| (std::f64::consts::TAU * k as f64 / w as f64).sin_cos())
+            .collect();
+        let (mut high, mut total) = (0.0, 0.0);
+        for y in 0..h {
+            let lat = grid.latitude(y as u32);
+            if !(1.0..=15.0).contains(&(90.0 - lat.to_degrees().abs())) {
+                continue;
+            }
+            let row: Vec<f64> = field[y * w..(y + 1) * w]
+                .iter()
+                .map(|&v| f64::from(v))
+                .collect();
+            let mean = row.iter().sum::<f64>() / w as f64;
+            // Parseval: the variance is the sum of the harmonics' powers,
+            // each counted on both sides of the spectrum.
+            let variance: f64 = row.iter().map(|v| (v - mean).powi(2)).sum::<f64>();
+            // Harmonics whose wavelength (km) is at least two rows.
+            let resolved = (h as f64 * lat.cos()).floor() as usize;
+            let mut low = 0.0;
+            for m in 1..=resolved.min(w / 2) {
+                let (mut re, mut im) = (0.0, 0.0);
+                for (x, v) in row.iter().enumerate() {
+                    let (sin, cos) = table[(m * x) % w];
+                    re += (v - mean) * cos;
+                    im -= (v - mean) * sin;
+                }
+                let both = if 2 * m == w { 1.0 } else { 2.0 };
+                low += both * (re * re + im * im) / w as f64;
+            }
+            high += (variance - low).max(0.0);
+            total += variance;
+        }
+        high / total.max(1e-30)
+    }
+
+    /// The ice world of a Saturn's system, the third moon of the system
+    /// of seed 7 asking for a Saturn and an Enceladus (radius 255 km,
+    /// 1 600 km round: its noise at the largest scale, 8, see
+    /// [`MAX_NOISE_SCALE`]), at the size a moon's viewer gets.
+    fn small_ice_moon() -> WorldParams {
+        let request: crate::system::SystemRequest = serde_json::from_str(
+            r#"{"system":{"planets":{"saturn-like":1,"enceladus-like":1},"seed":7}}"#,
+        )
+        .unwrap();
+        let system = crate::system::draw(
+            &request,
+            &mut <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(1),
+        )
+        .unwrap();
+        let moon = system.bodies.iter().find(|b| b.id == "b-3").unwrap();
+        let mut p = crate::system::generation_params(moon);
+        (p.width, p.height) = (512, 256);
+        p
+    }
+
+    /// The relief and the climate of a small moon's map hold no detail
+    /// finer than two of its rows (see [`Sampler::resolved`]): near the
+    /// poles, where the parallels sample that detail many times finer
+    /// than the meridians, it drew rays converging on the pole. On this
+    /// moon, its ridged mountains (a lattice cell of 2 rows for the main
+    /// octave, under half a row for the finest, both squeezed by the
+    /// domain warp) and its climate's variability (cells of 0.1 row) put
+    /// 0.20 of its polar elevation's variance along the parallels, and
+    /// 0.09 of its temperature's, at wavelengths under two rows; a
+    /// rocky planet at 2048 × 1024 puts none there.
+    #[test]
+    fn a_small_moons_map_holds_no_detail_finer_than_its_rows() {
+        let p = small_ice_moon();
+        assert!(p.circumference_km < 2_000.0, "{}", p.circumference_km);
+        let grid = p.grid();
+        let world = generate(&p).world;
+        let elevation = subgrid_share(&world.elevation, &grid);
+        let temperature = subgrid_share(&world.temperature, &grid);
+        assert!(elevation < 0.01, "elevation {elevation}");
+        assert!(temperature < 0.01, "temperature {temperature}");
+    }
+
+    /// The finest octaves of the noise fade out of a map that cannot
+    /// resolve them, and only those: on Earth at 2048 × 1024 every
+    /// octave of the relief is drawn whole.
+    #[test]
+    fn the_noise_keeps_every_octave_a_large_map_resolves() {
+        let p = preset_params("earth-like", 3, 2048, 1024);
+        let sampler = Sampler::new(&p);
+        let s = sampler.noise_scale;
+        // The finest ridged octave (squeezed by the warp), the finest
+        // continent octave.
+        assert_eq!(sampler.resolved(22.1 * s * sampler.warp_squeeze()), 1.0);
+        assert_eq!(sampler.resolved(0.8 * s * 16.0), 1.0);
+        // Half as many pixels: the finest ridged octave fades.
+        let small = Sampler::new(&preset_params("earth-like", 3, 256, 128));
+        let finest = small.resolved(22.1 * s * small.warp_squeeze());
+        assert!(finest < 1.0, "{finest}");
     }
 }

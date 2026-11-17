@@ -57,6 +57,8 @@ export interface QualityProfile {
    * orbits play: more, the smoother a line passing near the camera.
    */
   orbitSamples: number;
+  /** Share of the dust grains drawn in the halo round a venting moon and the cloud round a ring-feeding one (see dustGrains.ts). */
+  dustGrains: number;
 }
 
 export const PROFILES: Record<Quality, QualityProfile> = {
@@ -79,6 +81,7 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     // 0.5° apart: no corner shows on a line passing a twentieth of its
     // radius from the camera (under a tenth of a pixel off the curve).
     orbitSamples: 720,
+    dustGrains: 1,
   },
   light: {
     quality: 'light',
@@ -100,6 +103,7 @@ export const PROFILES: Record<Quality, QualityProfile> = {
     ringRocks: false,
     // 2.25° apart (see ORBIT_SAMPLES in lib/systemSky.ts).
     orbitSamples: 160,
+    dustGrains: 0.4,
   },
 };
 

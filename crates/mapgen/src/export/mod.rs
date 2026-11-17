@@ -1043,7 +1043,9 @@ mod reference {
         // Central differences; longitude wraps, latitude clamps at the poles.
         let (west, east) = ((x + w - 1) % w, (x + 1) % w);
         let (north, south) = (y.saturating_sub(1), (y + 1).min(h - 1));
-        let dz_east = (elev(east, y) - elev(west, y)) / (2.0 * grid.dx_km(y));
+        // The pixel's true width on its parallel (see `relief::slopes`).
+        let dx_km = grid.circumference_km * grid.latitude(y).cos() as f32 / w as f32;
+        let dz_east = (elev(east, y) - elev(west, y)) / (2.0 * dx_km);
         let dz_north =
             (elev(x, north) - elev(x, south)) / ((south - north).max(1) as f32 * grid.dy_km());
         let normal = [-dz_east, -dz_north, 1.0];
