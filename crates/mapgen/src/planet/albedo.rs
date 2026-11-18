@@ -10,8 +10,6 @@
 //! and the temperature together as a fixed point, and
 //! [`super::Context::with_albedo`] turns an albedo into the equilibrium
 //! temperature the climate absorbs at.
-use std::sync::LazyLock;
-
 use super::climate::{
     EARTH_GRAVITY_M_S2, Planet, WATER_LATENT_J_KG, water_boils_k, water_saturation_bar,
 };
@@ -391,29 +389,63 @@ fn rayleigh_550(gases: &Gases, planet: &Planet) -> f64 {
 }
 
 /// Effective temperature, K, of the light the Rayleigh scattering is
-/// averaged over: the Sun's (the star's spectrum is not passed; a red
-/// star's light scatters less).
-const RAYLEIGH_SPECTRUM_K: f64 = 5780.0;
+/// averaged over when the star's is unknown (not positive), and for
+/// [`bond_albedo`]: the Sun's nominal 5772 K (IAU 2015 Resolution B3;
+/// from memory, not checked).
+pub(crate) const SUN_TEFF_K: f64 = 5772.0;
 
-/// The light of a black body at [`RAYLEIGH_SPECTRUM_K`], by wavelength:
-/// each band's `(550 nm / λ)⁴` and its share of the light, from 0.2 to
-/// 5 µm in 240 bands even in ln λ.
-static SPECTRUM: LazyLock<Vec<(f64, f64)>> = LazyLock::new(|| {
-    let (from, to, n) = (0.2e-6_f64, 5.0e-6_f64, 240);
-    let step = (to / from).ln() / f64::from(n);
-    // h c / k, m·K.
-    let c2 = 1.438_777e-2;
-    let bands: Vec<(f64, f64)> = (0..n)
-        .map(|i| {
-            let lambda = from * (step * (f64::from(i) + 0.5)).exp();
-            // B_λ dλ with dλ = λ d(ln λ).
-            let planck = lambda.powi(-4) / ((c2 / (lambda * RAYLEIGH_SPECTRUM_K)).exp() - 1.0);
-            ((0.55e-6 / lambda).powi(4), planck)
-        })
-        .collect();
-    let total: f64 = bands.iter().map(|b| b.1).sum();
-    bands.into_iter().map(|(r, w)| (r, w / total)).collect()
-});
+/// The light of a black body at `teff_k` (a star of that effective
+/// temperature), by wavelength: each band's `(550 nm / λ)⁴` and its share
+/// of the light, from 0.2 to 5 µm in [`SPECTRUM_BANDS`] bands even in
+/// `ln λ`. A redder star's light scatters less: Rayleigh's `λ⁻⁴` weighs
+/// the blue (Kopparapu et al. 2013, §4.1, doi:10.1088/0004-637X/765/2/131,
+/// read on arXiv:1301.6674v2: the main reason the outer edge of an
+/// M dwarf's habitable zone lies at a lower flux; the stronger
+/// near-infrared absorption of its light by CO₂ and water, their other
+/// reason, is left out). Kept for the last star asked, per thread: a
+/// body's climate asks for one star thousands of times.
+fn spectrum(teff_k: f64) -> Bands {
+    thread_local! {
+        static LAST: std::cell::RefCell<Option<(f64, Bands)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    let teff = if teff_k > 0.0 { teff_k } else { SUN_TEFF_K };
+    LAST.with(|last| {
+        if let Some((k, bands)) = last.borrow().as_ref()
+            && *k == teff
+        {
+            return bands.clone();
+        }
+        let (from, to, n) = (0.2e-6_f64, 5.0e-6_f64, SPECTRUM_BANDS);
+        let step = (to / from).ln() / f64::from(n);
+        // h c / k, m·K.
+        let c2 = 1.438_777e-2;
+        let bands: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                let lambda = from * (step * (f64::from(i) + 0.5)).exp();
+                // B_λ dλ with dλ = λ d(ln λ).
+                let planck = lambda.powi(-4) / ((c2 / (lambda * teff)).exp() - 1.0);
+                ((0.55e-6 / lambda).powi(4), planck)
+            })
+            .collect();
+        let total: f64 = bands.iter().map(|b| b.1).sum();
+        let bands = std::rc::Rc::new(
+            bands
+                .into_iter()
+                .map(|(r, w)| (r, w / total))
+                .collect::<Vec<_>>(),
+        );
+        *last.borrow_mut() = Some((teff, bands.clone()));
+        bands
+    })
+}
+
+/// Bands of [`spectrum`].
+const SPECTRUM_BANDS: u32 = 240;
+
+/// The bands of a star's light ([`spectrum`]): each band's
+/// `(550 nm / λ)⁴` and its share of the light.
+type Bands = std::rc::Rc<Vec<(f64, f64)>>;
 
 /// Reflectance of a conservative Rayleigh layer of optical depth `tau`
 /// over a black surface, in the two-stream approximation:
@@ -637,26 +669,31 @@ pub(crate) fn haze(gases: &Gases) -> f64 {
 /// over both absorbs on the way down and back up
 /// ([`vapour_transmission`]), the Rayleigh
 /// scattering of the column over both (averaged over the Sun's spectrum
-/// band by band: what caps CO₂'s warming at the maximum greenhouse,
-/// Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131), and a methane
+/// band by band, [`spectrum`]: with CO₂ condensing in the column, what
+/// caps CO₂'s warming at the maximum greenhouse, Kopparapu et al. 2013,
+/// doi:10.1088/0004-637X/765/2/131), and a methane
 /// haze over all ([`HAZE_ALBEDO`], [`HAZE_ABSORPTION`]). A deck hides
 /// everything below it ([`DECK_ALBEDO`]) where it lies. The air's
-/// column is Earth's gravity's ([`bond_albedo_over`] takes the body's).
+/// column is Earth's gravity's and the light the Sun's
+/// ([`bond_albedo_over`] takes the body's and its star's).
 pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64) -> f64 {
-    bond_albedo_over(cover, gases, deck, None, &Planet::EARTH)
+    bond_albedo_over(cover, gases, deck, None, &Planet::EARTH, SUN_TEFF_K)
 }
 
 /// [`bond_albedo`] of a body whose ice and land are, where `crust` is
 /// given, an exposed ice crust of that albedo (the area-weighted
 /// [`icy_unit_albedo`] of its terrain units) instead of snow and rock,
 /// on `planet`, whose gravity sets the column of its air
-/// ([`rayleigh_550`], [`vapour_transmission`]).
+/// ([`rayleigh_550`], [`vapour_transmission`]), under the light of a
+/// star of effective temperature `star_k` (K), whose spectrum the
+/// Rayleigh scattering is averaged over ([`spectrum`]).
 pub fn bond_albedo_over(
     cover: &Cover,
     gases: &Gases,
     deck: f64,
     crust: Option<f64>,
     planet: &Planet,
+    star_k: f64,
 ) -> f64 {
     let deck = deck.clamp(0.0, 1.0);
     if deck >= 1.0 {
@@ -678,7 +715,7 @@ pub fn bond_albedo_over(
     let tau = rayleigh_550(gases, planet);
     let h = haze(gases);
     let (hr, ht) = (h * HAZE_ALBEDO, 1.0 - h * (HAZE_ALBEDO + HAZE_ABSORPTION));
-    let below: f64 = SPECTRUM
+    let below: f64 = spectrum(star_k)
         .iter()
         .map(|&(scale, weight)| {
             let r = rayleigh_reflectance(tau * scale);
@@ -946,7 +983,7 @@ mod tests {
         let heavy = rayleigh_550(&air, &planet(2.0 * EARTH_GRAVITY_M_S2, 1.5));
         assert!((heavy / rayleigh_550(&air, &earth) - 0.5).abs() < 1e-12);
         // So the low-gravity body is brighter over the same ground.
-        let a = |p: &Planet| bond_albedo_over(&bare_land(), &air, 0.0, None, p);
+        let a = |p: &Planet| bond_albedo_over(&bare_land(), &air, 0.0, None, p, SUN_TEFF_K);
         assert!(a(&titan) > a(&earth) + 0.05, "{} {}", a(&titan), a(&earth));
     }
 
@@ -958,10 +995,10 @@ mod tests {
         let none = Gases::default();
         for g in [3.7, EARTH_GRAVITY_M_S2] {
             let p = planet(g, 0.5);
-            let a = bond_albedo_over(&bare_land(), &none, 0.0, None, &p);
+            let a = bond_albedo_over(&bare_land(), &none, 0.0, None, &p, SUN_TEFF_K);
             assert!((a - REGOLITH_ALBEDO).abs() < 1e-12, "{g}: {a}");
             assert_eq!(vapour_transmission(&none, &p), 1.0);
-            let crust = bond_albedo_over(&bare_land(), &none, 0.0, Some(0.6), &p);
+            let crust = bond_albedo_over(&bare_land(), &none, 0.0, Some(0.6), &p, SUN_TEFF_K);
             assert!((crust - 0.6).abs() < 1e-12, "{g}: {crust}");
         }
     }
@@ -1015,8 +1052,8 @@ mod tests {
         println!("Earth's two-way transmission of its vapour: {t:.3}");
         assert!((0.75..=0.9).contains(&t), "{t}");
         let c = bare_land();
-        let a_dry = bond_albedo_over(&c, &dry, 0.0, None, &Planet::EARTH);
-        let a_moist = bond_albedo_over(&c, &moist, 0.0, None, &Planet::EARTH);
+        let a_dry = bond_albedo_over(&c, &dry, 0.0, None, &Planet::EARTH, SUN_TEFF_K);
+        let a_moist = bond_albedo_over(&c, &moist, 0.0, None, &Planet::EARTH, SUN_TEFF_K);
         assert!(a_moist < a_dry, "{a_moist} {a_dry}");
     }
 
@@ -1038,7 +1075,7 @@ mod tests {
             &Gases::default(),
             &Planet::EARTH,
         );
-        let a = bond_albedo_over(&c, &air, 0.0, None, &Planet::EARTH);
+        let a = bond_albedo_over(&c, &air, 0.0, None, &Planet::EARTH, SUN_TEFF_K);
         println!("Earth's Bond albedo at 288 K: {a:.4}");
         assert!((0.29..=0.31).contains(&a), "{a}");
     }

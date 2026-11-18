@@ -305,8 +305,8 @@ impl PlanetModel {
     /// of the drawn mass; the CO₂, N₂, CH₄, NH₃ and sulphur factors, the stored volatiles over
     /// the formation rule of the formation shares (1 where the rule is 0);
     /// the core share, the radiogenic abundance, `life: Some(arose)` and
-    /// `snowball: Some(frozen)` (a pinned snowball replays the CO₂ it
-    /// froze with, not the amount its draw had built up).
+    /// `snowball: Some(frozen)` (frozen over, as a snowball or for good:
+    /// the branch of its climate the draw picked).
     ///
     /// Set in a request with the same context, they derive the same inputs
     /// and class whatever the seed: the scatter of every volatile is
@@ -347,10 +347,15 @@ impl PlanetModel {
                 s: Some(factor(i.volatiles.s, rule.s)),
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
-                // The state, not the draw: a pinned snowball replays its
-                // CO₂ from where it froze (the draw at 0), not from where
-                // its draw caught the build-up.
-                snowball: Some(self.surface.is_some_and(|s| s.climate.snowball)),
+                // The state, not the draw: the frozen branch (a snowball,
+                // or a state frozen for good beside a temperate one, whose
+                // chance is 1) replays with the draw at 0, the temperate
+                // one at 1. A body frozen with no temperate state has one
+                // branch, which either draw gives.
+                snowball: Some(
+                    self.surface
+                        .is_some_and(|s| s.climate.snowball || climate::frozen_over(&s.climate)),
+                ),
             },
         }
     }
@@ -1319,6 +1324,9 @@ mod tests {
     /// its ice), 0.579 495 860 419 before its clouds followed their
     /// relative humidity (issue #523: the cover's vapour scale went from
     /// 1.15e-2 to 1.0e-2 bar, so its saturated-at-77 % air holds a little
-    /// more cloud).
-    const SNOWBALL_ALBEDO: f64 = 0.579_665_635_432;
+    /// more cloud), 0.579 665 635 432 before it held the CO₂ its
+    /// thermostat reaches, just short of the thaw, instead of half way
+    /// there, and its Rayleigh scattering followed the Sun's 5772 K
+    /// instead of 5780 K (issue #522).
+    const SNOWBALL_ALBEDO: f64 = 0.577_539_497_011;
 }

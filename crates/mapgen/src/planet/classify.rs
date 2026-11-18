@@ -550,9 +550,12 @@ mod tests {
     /// (1.296 S⊕ at its 7220 K) whose absorbed light (about 307 W/m² at
     /// the Bond albedo of an ice-free ocean world, about 0.3) exceeds the
     /// moist plateau (about 284 W/m²): an Earth-like wet planet there has
-    /// no wet balance and boils. (1.24 S⊕ under the fixed albedo 0.3;
-    /// the derived albedo of a planet with ice caps lets one at 1.24 S⊕
-    /// keep its ocean.)
+    /// no wet balance and boils, under a thin enough air. (1.24 S⊕ under
+    /// the fixed albedo 0.3; the derived albedo of a planet with ice caps
+    /// lets one at 1.24 S⊕ keep its ocean, and since the Rayleigh
+    /// scattering follows the star's spectrum an F star's blue light
+    /// raises the albedo of an Earth under 2.4 bar of N₂ to about 0.40,
+    /// under the plateau up to the runaway limit.)
     const F0V_BOILING_FLUX: f64 = 1.28;
 
     #[test]
@@ -598,17 +601,26 @@ mod tests {
     #[test]
     fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
         // The Earth at 1.28 S⊕ round an F0V star (see F0V_BOILING_FLUX)
-        // with the volatiles of 0.1 % of ice and just enough water that
-        // the steam pass's energy-limited escape leaves 0.03 bar of it
-        // (some 1.6e17 kg): its first pass boils (2.4 bar of N₂, no wet
-        // balance), but so little vapour cannot hold the outgoing
-        // radiation at the moist limit, so the leftover recondenses into
-        // a small ocean. (Under the fixed albedo 0.3, with 0.1 bar left the balance was at
-        // 404 K, over the boiling point, all of it vapour; from about
-        // 1 bar there is none and the steam runaway stands.)
+        // with the volatiles of 0.1 % of ice, a tenth of their N₂, and
+        // just enough water that the steam pass's energy-limited escape
+        // leaves 0.03 bar of it (some 1.6e17 kg): its first pass boils
+        // (0.24 bar of N₂, no wet balance), but so little vapour cannot
+        // hold the outgoing radiation at the moist limit, so the leftover
+        // recondenses into a small ocean. (Under the fixed albedo 0.3,
+        // with 0.1 bar left the balance was at 404 K, over the boiling
+        // point, all of it vapour; from about 1 bar there is none and the
+        // steam runaway stands. The rule's 2.4 bar of N₂ scatter the
+        // F star's blue light enough, since its Rayleigh scattering
+        // follows the star's spectrum, that the first pass keeps a wet
+        // balance and does not boil: issue #522.)
         let context = f0v_at(F0V_BOILING_FLUX);
+        const N2_SHARE: f64 = 0.1;
+        let rule = volatile_rule(1.0 - 1.0e-3, 1.0e-3, 0.325);
         let mut inputs = PlanetInputs {
-            volatiles: volatile_rule(1.0 - 1.0e-3, 1.0e-3, 0.325),
+            volatiles: crate::planet::Volatiles {
+                n2: N2_SHARE * rule.n2,
+                ..rule
+            },
             ..model_inputs(reference("Earth"))
         };
         let left_bar = 0.03;

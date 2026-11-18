@@ -176,7 +176,10 @@ pub enum Quantity {
     /// `snowball` (frozen over by the ice–albedo feedback until volcanic
     /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
     /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
-    /// outgas it faster than weathering draws it down) and `methane_trap`
+    /// outgas it faster than weathering draws it down), `co2_condenses`
+    /// (that maximum is set by CO₂ condensing high in the air, short of
+    /// the carbon inventory: more of it no longer warms the ground) and
+    /// `methane_trap`
     /// (the cold keeps methane out of the air), `convecting` (the ice
     /// shell convects under a stagnant lid), `ammonia` (ammonia lowers
     /// the ocean's freezing point), `geysers` (the thin polar shell
@@ -554,7 +557,13 @@ fn temperature_tree(
     {
         // Plates and liquid water but no thermostat: the CO₂ is at the
         // most the volcanoes leave, and the greenhouse at its maximum.
-        co2.because(vec![Cause::note("co2_build_up")])
+        // Short of the carbon inventory, the maximum is CO₂ condensing
+        // high in the air (issue #522), not the carbon running out.
+        let mut notes = vec![Cause::note("co2_build_up")];
+        if gases.co2 < steps.before.carbon_bar * (1.0 - 1e-9) {
+            notes.push(Cause::note("co2_condenses"));
+        }
+        co2.because(notes)
     } else {
         co2
     };
@@ -1410,6 +1419,7 @@ mod tests {
                     deck,
                     crust,
                     &steps.planet,
+                    context.teff_k,
                 );
                 // The climate's fixed point stops when its temperature moves
                 // under `ALBEDO_TOLERANCE_K` (0.1 K), so its albedo is the
@@ -1579,20 +1589,26 @@ mod tests {
 
     #[test]
     fn a_planet_at_its_maximum_greenhouse_says_its_co2_builds_up() {
-        let (context, model) = earth_at(1.6, false);
-        let c = model.surface.as_ref().unwrap().climate;
-        assert!(!c.regulated && c.liquid == SurfaceLiquid::Water, "{c:?}");
+        // Just inside the outer edge, past where the thermostat holds:
+        // its CO₂ is the maximum greenhouse, which CO₂ condensing aloft
+        // sets well short of its carbon (issue #522). The band is narrow,
+        // so it is looked for.
+        let (context, model) = (0..=60)
+            .map(|i| earth_at(1.70 + 0.002 * f64::from(i), false))
+            .find(|(_, m)| {
+                let c = m.surface.as_ref().unwrap().climate;
+                !c.regulated && c.liquid == SurfaceLiquid::Water
+            })
+            .expect("a liquid planet past the thermostat");
         let e = explain(&context, &model).expect("explained");
-        assert!(has_note(
-            root(&e, Quantity::SurfaceTemperature),
-            "co2_build_up"
-        ));
+        let t = root(&e, Quantity::SurfaceTemperature);
+        assert!(has_note(t, "co2_build_up"), "{t:#?}");
+        assert!(has_note(t, "co2_condenses"), "{t:#?}");
         let (context, model) = earth();
         let e = explain(&context, &model).unwrap();
-        assert!(!has_note(
-            root(&e, Quantity::SurfaceTemperature),
-            "co2_build_up"
-        ));
+        let t = root(&e, Quantity::SurfaceTemperature);
+        assert!(!has_note(t, "co2_build_up"));
+        assert!(!has_note(t, "co2_condenses"));
     }
 
     #[test]

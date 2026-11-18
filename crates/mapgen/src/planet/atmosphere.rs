@@ -900,6 +900,50 @@ pub(super) fn co2_frost_bar(temperature_k: f64) -> f64 {
     CO2_FROST.cap(f64::INFINITY, temperature_k)
 }
 
+/// CO₂'s critical point, 304.13 K and 73.77 bar (NIST Chemistry
+/// WebBook; from memory, not checked): above it CO₂ does not condense.
+const CO2_CRITICAL_K: f64 = 304.13;
+const CO2_CRITICAL_BAR: f64 = 73.77;
+
+/// Molar latent heat, J/mol, with which CO₂ condenses at `temperature_k`
+/// ([`co2_saturation_bar`]): its sublimation enthalpy ([`CO2_FROST`])
+/// under its triple point; above it, the vaporisation enthalpy of the
+/// Clausius–Clapeyron line through its triple and critical points,
+/// `R ln(p_c / p_t) / (1/T_t − 1/T_c)`, about 16.6 kJ/mol (it gives
+/// 35 bar at 273 K, the 34.9 bar Kopparapu et al. 2013 take there);
+/// 0 past the critical point.
+pub(super) fn co2_latent_j_mol(temperature_k: f64) -> f64 {
+    let Sublimation::Enthalpy(sublimation) = CO2_FROST.sublimation else {
+        unreachable!("CO₂'s frost follows its sublimation enthalpy")
+    };
+    if temperature_k < CO2_FROST.triple_k {
+        sublimation
+    } else if temperature_k < CO2_CRITICAL_K {
+        R_GAS * (CO2_CRITICAL_BAR / CO2_FROST.triple_bar).ln()
+            / (1.0 / CO2_FROST.triple_k - 1.0 / CO2_CRITICAL_K)
+    } else {
+        0.0
+    }
+}
+
+/// Partial pressure of CO₂, bar, at which it condenses at
+/// `temperature_k`: its frost's under its triple point
+/// ([`co2_frost_bar`]), its liquid's above it up to its critical point
+/// (Clausius–Clapeyron with [`co2_latent_j_mol`] from the triple
+/// point), unbounded past it. Where CO₂ condenses in a column of air
+/// ([`super::column`]).
+pub(super) fn co2_saturation_bar(temperature_k: f64) -> f64 {
+    if temperature_k < CO2_FROST.triple_k {
+        co2_frost_bar(temperature_k)
+    } else if temperature_k < CO2_CRITICAL_K {
+        let latent = co2_latent_j_mol(temperature_k);
+        CO2_FROST.triple_bar
+            * (-latent / R_GAS * (1.0 / temperature_k - 1.0 / CO2_FROST.triple_k)).exp()
+    } else {
+        f64::INFINITY
+    }
+}
+
 /// Partial pressure of SO₂, bar, at which it frosts out at
 /// `temperature_k` ([`SO2_FROST`]); unbounded above its triple point.
 pub(super) fn so2_frost_bar(temperature_k: f64) -> f64 {

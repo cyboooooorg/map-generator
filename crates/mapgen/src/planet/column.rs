@@ -5,8 +5,16 @@
 //! until its water vapour saturates, then the moist pseudo-adiabat
 //! (Pierrehumbert 2010, *Principles of Planetary Climate*, §2.7, his
 //! eq. 2.33); past water's critical point the vapour is a gas like the
-//! others. A skin temperature floors the column (a stratosphere, where
-//! the vapour keeps the mixing ratio of its cold trap). The grey optical
+//! others. Where the CO₂ of a cold column reaches its own saturation
+//! (its frost below its triple point, its liquid above), it condenses
+//! and the air follows CO₂'s pseudo-adiabat, its CO₂ thinning to what
+//! saturation leaves (Kasting 1991, doi:10.1016/0019-1035(91)90137-I,
+//! Appendix B, which Kopparapu et al. 2013 follow; from memory, not
+//! checked), so that a thick CO₂ air's greenhouse flattens: with its
+//! Rayleigh scattering, the maximum greenhouse at the outer edge of the
+//! habitable zone (issue #522). A skin temperature floors the column (a
+//! stratosphere, where the vapour and the CO₂ keep the mixing ratio of
+//! their cold trap). The grey optical
 //! depth is integrated down from the top with the per-gas laws of
 //! [`super::climate`], and the outgoing radiation is the grey two-stream
 //! integral of `σ T⁴` over it.
@@ -17,6 +25,7 @@
 //! Abe 1992, doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2) until
 //! the dry adiabat from a hot surface reaches them.
 use super::Gases;
+use super::atmosphere::{co2_latent_j_mol, co2_saturation_bar};
 use super::climate::{
     STEAM_MAX_BAR, WATER_CRITICAL_K, WATER_L_OVER_R, foreign_share, opacity_per_ln_p,
     optical_depth_at, water_saturation_bar,
@@ -186,9 +195,22 @@ impl DryAir {
         } else {
             0.0
         };
+        self.with_co2(dry_bar, vapour_bar, self.gases.co2 * share)
+    }
+
+    /// [`DryAir::at`] with `co2_bar` of CO₂ at the level, what its
+    /// condensation leaves there ([`olr_under_skin_w_m2`]): the other
+    /// gases share the rest of the dry air in their surface proportions.
+    fn with_co2(&self, dry_bar: f64, vapour_bar: f64, co2_bar: f64) -> Gases {
+        let others = self.pressure - self.gases.co2;
+        let share = if others > 0.0 {
+            (dry_bar - co2_bar).max(0.0) / others
+        } else {
+            0.0
+        };
         Gases {
             n2: self.gases.n2 * share,
-            co2: self.gases.co2 * share,
+            co2: co2_bar,
             h2o: vapour_bar,
             ch4: self.radiating_ch4 * share,
             nh3: self.gases.nh3 * share,
@@ -196,6 +218,42 @@ impl DryAir {
             o2: self.gases.o2 * share,
         }
     }
+
+    /// Molar heat capacity, J/(mol·K), of the gases other than CO₂: the
+    /// air CO₂ condenses out of ([`co2_lapse`]); nitrogen's when there is
+    /// none.
+    fn cp_without_co2(&self) -> f64 {
+        let g = &self.gases;
+        let others = g.n2 + g.ch4 + g.nh3 + g.so2 + g.o2;
+        if others > 0.0 {
+            (g.n2 * N2_CP + g.ch4 * CH4_CP + g.nh3 * NH3_CP + g.so2 * SO2_CP + g.o2 * O2_CP)
+                / others
+        } else {
+            N2_CP
+        }
+    }
+}
+
+/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on the moist
+/// pseudo-adiabat of CO₂ condensing out of `air` (Kasting 1991,
+/// doi:10.1016/0019-1035(91)90137-I, from memory, not checked; its
+/// Appendix B, which Kopparapu et al. 2013 follow in the upper
+/// troposphere, checked on their arXiv:1301.6674v2; written here as the general
+/// pseudo-adiabat of Pierrehumbert 2010, eq. 2.33, used for water in
+/// [`lapse`], with CO₂ the condensable, [`co2_latent_j_mol`] its latent
+/// heat, and the other gases and the little water vapour so cold an air
+/// holds the non-condensing part). Pure CO₂ follows its saturation curve,
+/// `d T/d ln p = R T²/L`.
+fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64) -> f64 {
+    let t = temperature_k;
+    let e = co2_saturation_bar(t).min(pressure_bar);
+    let dry = (pressure_bar - e).max(0.0);
+    let latent = co2_latent_j_mol(t);
+    let l_over_r = latent / R_GAS;
+    let l_t = latent / t;
+    let a = (R_GAS * dry + l_t * e)
+        / (air.cp_without_co2() * dry + (CO2_CP + (l_over_r / t - 1.0) * l_t) * e);
+    a * t * pressure_bar / (dry + a * e * l_over_r / t)
 }
 
 /// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on the moist
@@ -294,9 +352,19 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
     let (ratio, half_ratio) = ((-step).exp(), (-0.5 * step).exp());
     let (last_ratio, last_half) = ((-last).exp(), (-0.5 * last).exp());
     let mut top = air.at(air.pressure, vapour);
+    // CO₂'s share of the dry air: where the air reaches its saturation it
+    // condenses, the air follows its pseudo-adiabat ([`co2_lapse`]) and
+    // the share falls to what saturation leaves; above the skin it keeps
+    // the share of its cold trap.
+    let mut co2_share = if air.pressure > 0.0 {
+        air.gases.co2 / air.pressure
+    } else {
+        0.0
+    };
+    let mut co2_saturated = false;
     for i in 0..=n {
         let v = vapour_share * p;
-        let level = air.at(p - v, v);
+        let level = air.with_co2(p - v, v, co2_share * (p - v));
         temperature[i] = t;
         opacity[i] = opacity_per_ln_p(&level, share);
         if i == n {
@@ -314,9 +382,37 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
         if frozen {
             continue;
         }
-        // Midpoint (second-order Runge–Kutta) step up the adiabat.
-        let half = t - 0.5 * h * lapse(&air, t, p_here, saturated, vapour_share);
-        t -= h * lapse(&air, half, p_mid, saturated, vapour_share);
+        // Midpoint (second-order Runge–Kutta) step up the adiabat. Where
+        // CO₂ saturates (so cold an air holds next to no water), its
+        // pseudo-adiabat; the step in which it first saturates is split
+        // where it does (the excess `ln(p_CO₂ / p_sat)` taken linear
+        // across the step), so that the column moves smoothly with its
+        // CO₂.
+        let moist = |t: f64, from: f64, h: f64| {
+            let half = t - 0.5 * h * co2_lapse(&air, t, from);
+            t - h * co2_lapse(&air, half, from * (-0.5 * h).exp())
+        };
+        if co2_saturated {
+            t = moist(t, p_here, h);
+        } else {
+            let half = t - 0.5 * h * lapse(&air, t, p_here, saturated, vapour_share);
+            let next = t - h * lapse(&air, half, p_mid, saturated, vapour_share);
+            let excess = |t: f64, co2: f64| (co2 / co2_saturation_bar(t)).ln();
+            let below = excess(t, level.co2);
+            let above = excess(next, co2_share * p * (1.0 - vapour_share));
+            if level.co2 > 0.0 && above >= 0.0 {
+                let f = if below >= 0.0 {
+                    0.0
+                } else {
+                    below / (below - above)
+                };
+                let crossed = t + f * (next - t);
+                t = moist(crossed, p_here * (-f * h).exp(), (1.0 - f) * h);
+                co2_saturated = true;
+            } else {
+                t = next;
+            }
+        }
         if t <= skin_k {
             t = skin_k;
             frozen = true;
@@ -327,6 +423,10 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
                 saturated = true;
                 vapour_share = e.min(p) / p;
             }
+        }
+        let dry = p * (1.0 - vapour_share);
+        if dry > 0.0 {
+            co2_share = co2_share.min(co2_saturation_bar(t) / dry);
         }
     }
 

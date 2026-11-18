@@ -204,9 +204,11 @@ pub struct WorldRequest {
     /// `true`: life arises wherever the world allows it; `false`: never;
     /// left out, drawn.
     pub life: Option<bool>,
-    /// `true`: the planet is a snowball wherever its climate has a frozen
-    /// state beside the temperate one; `false`: never; left out, the
-    /// archetype's, else drawn (see [`crate::planet::climate::climate`]).
+    /// `true`: the planet takes the frozen state wherever its climate has
+    /// one beside the temperate one (a snowball, or frozen for good where
+    /// no CO₂ within its maximum greenhouse thaws it); `false`: never;
+    /// left out, the archetype's, else drawn (see
+    /// [`crate::planet::climate::climate`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snowball: Option<bool>,
     /// `auto` (rarely the moon of a giant, as the seed draws, the default),

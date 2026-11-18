@@ -323,6 +323,21 @@ fn stratospheric_share(gases: &Gases, skin_k: f64) -> f64 {
     CH4_NEAR_IR_MAX * m / (m + CH4_NEAR_IR_HALF_BAR)
 }
 
+/// The temperature, K, of the tropopause of a body whose effective
+/// temperature (that of the light it absorbs and sends back out) is
+/// `effective_k`: the skin temperature of a grey atmosphere,
+/// `T_eff · 2^-¼`, that of a thin top layer which absorbs as much of
+/// the planet's emission as it sends out up and down (Pierrehumbert
+/// 2010, *Principles of Planetary Climate*, §4.3; from memory, not
+/// checked). The column of [`super::column`] floors its temperature
+/// there (its stratosphere); it is the column's own, so it follows the
+/// albedo the climate settles on: where CO₂ condenses
+/// ([`super::atmosphere::co2_saturation_bar`]) it cold-traps the CO₂
+/// above it, as it does methane (issue #522).
+pub(crate) fn tropopause_k(effective_k: f64) -> f64 {
+    effective_k.max(0.0) * 0.5_f64.powf(0.25)
+}
+
 /// What the surface of a body under `gases` absorbs, W/m², at the
 /// equilibrium temperature `t_eq` (the light, `σ T_eq⁴`) with
 /// `heat_flux_w_m2` of internal heat: the light less the share the
@@ -334,7 +349,7 @@ fn stratospheric_share(gases: &Gases, skin_k: f64) -> f64 {
 /// that of a grey stratosphere.
 fn absorbed_w_m2(t_eq: f64, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
     let t_eq = t_eq.max(0.0);
-    let skin = t_eq * 0.5_f64.powf(0.25);
+    let skin = tropopause_k(t_eq);
     SIGMA * t_eq.powi(4) * (1.0 - stratospheric_share(gases, skin)) + heat_flux_w_m2.max(0.0)
 }
 
@@ -656,7 +671,7 @@ pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::Lazy
 /// The skin temperature, K, of the surface solves (`T_eq / 2^¼`) for a
 /// body that absorbs `absorbed_w_m2`: `T_eq = (absorbed / σ)^¼`.
 fn plateau_skin_k(absorbed_w_m2: f64) -> f64 {
-    (absorbed_w_m2 / SIGMA).powf(0.25) * 0.5_f64.powf(0.25)
+    tropopause_k((absorbed_w_m2 / SIGMA).powf(0.25))
 }
 
 /// Steam column, bar, over which a runaway's Bond albedo moves from
@@ -764,7 +779,7 @@ pub fn surface_temperature_k(
     if gases.total() <= 0.0 || bare <= 0.0 {
         return bare;
     }
-    let skin = t_eq * 0.5_f64.powf(0.25);
+    let skin = tropopause_k(t_eq);
     let excess = |t: f64| e * column::olr_under_skin_w_m2(gases, t, skin) - absorbed;
     // The column radiates no more than its surface, so `bare` is a lower
     // bound; and the vapour in `gases` would condense on a surface colder
@@ -1188,7 +1203,7 @@ fn wet_balance(
 ) -> Option<(Gases, f64)> {
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = absorbed_w_m2(t_eq, &gases, heat_flux_w_m2);
-    let skin = t_eq * 0.5_f64.powf(0.25);
+    let skin = tropopause_k(t_eq);
     // A grey surface as in `surface_temperature_k`.
     let e = emissivity.clamp(0.01, 1.0);
     let excess = |t: f64| {
@@ -1250,6 +1265,51 @@ fn wet_climate(
         )
     })
 }
+
+/// [`wet_climate`] of a body whose CO₂ has built up with no thermostat
+/// to hold it (a snowball's, or one past its maximum greenhouse): where
+/// its surface is colder than the point at which `gases.co2` condenses
+/// ([`super::atmosphere::co2_saturation_bar`]), the CO₂ frosts onto the
+/// ground (or rains out) until the air keeps what its surface allows,
+/// the surface cooling with it. Steps from the CO₂ given down to that
+/// of its surface, which converge on the warmest such balance: the one a
+/// cooling planet reaches. The cold trap of [`super::atmosphere::cold_trap`],
+/// at the surface the climate solves.
+fn collapsed_climate(
+    context: &Context,
+    gases: Gases,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+    emissivity: f64,
+) -> (Gases, f64) {
+    let solve = |co2: f64| {
+        wet_climate(
+            context,
+            Gases { co2, ..gases },
+            heat_flux_w_m2,
+            water_bar,
+            emissivity,
+        )
+    };
+    let (mut air, mut t) = solve(gases.co2);
+    for _ in 0..COLLAPSE_ITERATIONS {
+        let kept = super::atmosphere::co2_saturation_bar(t);
+        if air.co2 <= kept * (1.0 + COLLAPSE_TOLERANCE) {
+            break;
+        }
+        (air, t) = solve(kept);
+    }
+    (air, t)
+}
+
+/// Most steps of [`collapsed_climate`]: far more than the handful it
+/// takes, each step's CO₂ following the surface temperature's frost
+/// point, which moves less than the CO₂.
+const COLLAPSE_ITERATIONS: usize = 100;
+
+/// Share by which the CO₂ of [`collapsed_climate`] may exceed what its
+/// surface keeps once settled.
+const COLLAPSE_TOLERANCE: f64 = 1e-4;
 
 /// Temperature, K, of a surface whose water vapour follows its
 /// temperature, as [`climate`] solves it without the thermostat (see
@@ -1340,19 +1400,20 @@ pub struct CarbonCycle {
 ///   temperature. Weathering slows on a cold planet while volcanoes go on,
 ///   so its CO₂ builds up past what the air held before the climate
 ///   (Kasting et al. 1993, doi:10.1006/icar.1993.1010; issue #510), up
-///   to the carbon inventory (`carbon.inventory_bar`) and at most what
-///   does not frost out at the cold trap's temperature
-///   ([`super::atmosphere::cold_trap`]): the equilibrium temperature
-///   under the reference albedo 0.3 (`context.equilibrium_k`), standing
-///   in for the upper troposphere where CO₂ condenses. That cap, not
-///   Rayleigh scattering, sets the outer edge of the habitable zone
-///   here: without it, the column's CO₂ greenhouse outgrows its
-///   scattering (406 K at 1.6 AU round the Sun with Earth's 44.7 bar of
-///   carbon), so there is no maximum greenhouse within the inventory.
+///   to its maximum greenhouse ([`maximum_greenhouse`], at most the
+///   carbon inventory `carbon.inventory_bar`): past it, more CO₂ cools
+///   the planet, since it condenses high in the column, where the air
+///   follows its saturation up to the tropopause ([`tropopause_k`],
+///   [`super::column`]), and its Rayleigh scattering keeps growing
+///   (Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131; issue
+///   #522). The column, and so the cap, is the climate's own: it follows
+///   the albedo the climate settles on. That maximum sets the outer edge
+///   of the habitable zone, about 1.78 AU round the Sun for an Earth.
 ///   If no CO₂ in that range reaches the thermostat, the planet takes the
-///   CO₂ of its warmest climate, the maximum greenhouse
-///   ([`maximum_greenhouse`]); if none is still too warm, the planet is
-///   hotter. Only a temperature reached is `regulated`.
+///   CO₂ of its warmest climate, the maximum greenhouse; on a surface
+///   too cold to keep it, it frosts out ([`collapsed_climate`])
+///   ; if none is still too warm, the planet is hotter. Only a
+///   temperature reached is `regulated`.
 ///
 /// Under each albedo too, the gases that condense on the surface
 /// ([`condense`]: methane and nitrogen) keep in the air only the vapour
@@ -1374,17 +1435,22 @@ pub struct CarbonCycle {
 ///   body covered in ice, with the CO₂ the temperate one held when it
 ///   froze: weathering stops under the ice, and volcanic CO₂ builds up
 ///   until it thaws the planet (Hoffman et al. 2017,
-///   doi:10.1126/sciadv.1600983).
+///   doi:10.1126/sciadv.1600983), if any within its maximum greenhouse
+///   does; on its cold surface CO₂ the surface cannot keep frosts out.
 ///
 /// When both exist (the ice–albedo feedback makes the body bistable), it
 /// is a snowball when `carbon.snowball_draw` is below
 /// [`snowball_chance`]: the share of its history such a planet spends
-/// frozen. Its CO₂ is then the amount built up so far, half way
-/// ([`SNOWBALL_BUILT_UP`]) from the CO₂ it froze with to the CO₂ that
-/// thaws it: one CO₂ per state, so that pinning the state alone
-/// ([`super::PlanetModel::formation`]) gives the same planet again. When
-/// no CO₂ within what the body can hold thaws it (the chance is then 1),
-/// the frozen state is for good: not a [`Climate::snowball`].
+/// frozen. Its CO₂ is then what its thermostat reaches: the most that
+/// leaves it frozen, just short of the CO₂ that thaws it
+/// ([`FrozenBranch::still_frozen_bar`]); one CO₂ per state, so that
+/// pinning the state alone ([`super::PlanetModel::formation`]) gives the
+/// same planet again. When not even its maximum greenhouse thaws it (the
+/// chance is then 1), the frozen state is for good, with the CO₂ of that
+/// maximum (less what its surface frosts out): not a
+/// [`Climate::snowball`]. Round the Sun an Earth is in that band from
+/// about 1.45 AU to the outer edge: so cold an icy body's CO₂ condenses
+/// aloft and scatters before it can warm the ice to a thaw.
 ///
 /// The liquid follows from the temperature and pressure (see
 /// [`LAVA_K`] and the phase diagrams of water and hydrocarbons).
@@ -1451,9 +1517,11 @@ pub fn climate_over(
     if carbon.snowball_draw >= chance {
         return branches.warm;
     }
-    let built_up =
-        frozen.froze_bar + SNOWBALL_BUILT_UP * (frozen.still_frozen_bar - frozen.froze_bar);
-    let (gases, climate) = body.frozen_at(built_up);
+    // Weathering stops under the ice and volcanoes build the CO₂ up to
+    // what its thermostat reaches: the most that leaves it frozen, just
+    // short of the CO₂ that thaws it, or, where none within its maximum
+    // greenhouse does, all of that.
+    let (gases, climate) = body.frozen_at(frozen.still_frozen_bar);
     // A frozen state that no CO₂ the body can hold thaws is frozen for
     // good, not a snowball awaiting its thaw.
     let snowball = frozen_over(&climate) && frozen.thaw_bar.is_finite();
@@ -1500,13 +1568,6 @@ pub fn temperate_steps(
 pub(super) fn frozen_over(climate: &Climate) -> bool {
     climate.liquid != SurfaceLiquid::Water && climate.temperature_k < ICE_MELTS_K
 }
-
-/// Share of the way from the CO₂ a snowball froze with to the CO₂ that
-/// thaws it that a snowball holds ([`climate`]): a half, the mean of a
-/// build-up at a steady rate seen at a uniform time. Not drawn, so that a
-/// snowball pinned by its state alone (`InputOverrides::snowball`, which
-/// sets the draw to 0) holds the CO₂ it was drawn with.
-const SNOWBALL_BUILT_UP: f64 = 0.5;
 
 /// The share of its history a planet whose climate has both a temperate
 /// and a frozen state spends frozen: a snowball lasts until volcanoes
@@ -1558,11 +1619,9 @@ struct Body<'a> {
     regime: Regime,
     heat_flux_w_m2: f64,
     water_bar: f64,
-    /// The most CO₂ the air can hold, bar: the carbon inventory, at most
-    /// what does not frost out at the cold trap's temperature (the
-    /// equilibrium temperature under the reference albedo 0.3, standing
-    /// in for the upper troposphere; see [`climate`]), and never less
-    /// than the air already holds.
+    /// The most CO₂ the air can hold, bar: the carbon inventory, never
+    /// less than the air already holds. Its maximum greenhouse
+    /// ([`Body::greenhouse_co2`]) caps what warms it.
     most_co2: f64,
     /// CO₂ the cold trap froze onto the ground, bar
     /// ([`CarbonCycle::frozen_bar`]).
@@ -1592,7 +1651,6 @@ impl<'a> Body<'a> {
         planet: &'a Planet,
         crust: Option<f64>,
     ) -> Self {
-        let condenses = super::atmosphere::co2_frost_bar(context.equilibrium_k);
         Body {
             context,
             gases,
@@ -1600,7 +1658,7 @@ impl<'a> Body<'a> {
             regime,
             heat_flux_w_m2,
             water_bar,
-            most_co2: carbon.inventory_bar.min(condenses).max(gases.co2).max(0.0),
+            most_co2: carbon.inventory_bar.max(gases.co2).max(0.0),
             frozen_co2: carbon.frozen_bar.max(0.0),
             so2_frost: carbon.so2_frost_bar.max(0.0),
             co2: None,
@@ -1608,6 +1666,12 @@ impl<'a> Body<'a> {
             planet,
             crust,
         }
+    }
+
+    /// The CO₂ of the body's maximum greenhouse, bar ([`maximum_greenhouse`]),
+    /// found once.
+    fn greenhouse_co2(&self) -> f64 {
+        *self.greenhouse.get_or_init(|| maximum_greenhouse(self))
     }
 
     /// Whether the body keeps water out of a runaway.
@@ -1642,6 +1706,7 @@ impl<'a> Body<'a> {
             &self.frost(temperature_k, air),
             self.planet,
             crust,
+            self.context.teff_k,
         )
     }
 
@@ -1776,7 +1841,9 @@ struct FrozenBranch {
     /// CO₂ the temperate branch held when it froze, bar.
     froze_bar: f64,
     /// The most CO₂ known to leave the body frozen, bar: just under the
-    /// thaw, or all the air can hold when that never thaws it.
+    /// thaw (within [`THAW_STEPS`]' bisection), or its maximum greenhouse
+    /// ([`Body::greenhouse_co2`]) when that never thaws it. The CO₂ a
+    /// snowball holds ([`climate_over`]).
     still_frozen_bar: f64,
     /// The least CO₂ known to thaw it, bar; infinite when none does.
     thaw_bar: f64,
@@ -1806,7 +1873,7 @@ fn branches(body: &Body) -> Branches {
     if thawed(froze_bar) {
         return Branches { warm, frozen: None };
     }
-    let most = body.most_co2;
+    let most = body.greenhouse_co2();
     let frozen = if most <= froze_bar || !thawed(most) {
         FrozenBranch {
             froze_bar,
@@ -1886,6 +1953,9 @@ fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> Pass {
                 };
                 thermostat(&condensed, &context, emissivity)
             }
+        } else if body.co2.is_some() {
+            let (g, t) = collapsed_climate(&context, air, flux, water_bar, emissivity);
+            (g, t, false)
         } else {
             let (g, t) = wet_climate(&context, air, flux, water_bar, emissivity);
             (g, t, false)
@@ -1985,11 +2055,20 @@ pub(crate) fn derived_albedo(
     water: &Water,
     frost: &Gases,
 ) -> f64 {
-    derived_albedo_over(temperature_k, gases, water, frost, &Planet::EARTH, None)
+    derived_albedo_over(
+        temperature_k,
+        gases,
+        water,
+        frost,
+        &Planet::EARTH,
+        None,
+        super::albedo::SUN_TEFF_K,
+    )
 }
 
 /// [`derived_albedo`] on `planet` over an exposed ice crust of albedo
-/// `crust`, if any ([`super::albedo::bond_albedo_over`]).
+/// `crust`, if any, under the light of a star of `star_k`
+/// ([`super::albedo::bond_albedo_over`]).
 fn derived_albedo_over(
     temperature_k: f64,
     gases: &Gases,
@@ -1997,6 +2076,7 @@ fn derived_albedo_over(
     frost: &Gases,
     planet: &Planet,
     crust: Option<f64>,
+    star_k: f64,
 ) -> f64 {
     let deck = sulphuric_deck(temperature_k, washed(*gases, water).so2);
     bond_albedo_over(
@@ -2005,6 +2085,7 @@ fn derived_albedo_over(
         deck,
         crust,
         planet,
+        star_k,
     )
 }
 
@@ -2046,7 +2127,8 @@ fn warm_start(body: &Body) -> (f64, f64) {
 /// `body` from the derived albedo and emissivity `start`: each step
 /// solves the climate under them ([`under_albedo`]) and moves each
 /// [`ALBEDO_DAMPING`] of the way to the one its temperature derives (half
-/// as far after each step that turns back, so that a swing settles),
+/// as far after each step whose derived light turns back, so that a
+/// swing settles),
 /// until the temperature moves less than [`ALBEDO_TOLERANCE_K`] and the
 /// derived albedo and emissivity would move the surface's radiative
 /// equilibrium (`T_eq ε^-¼`) less than that too. The climate keeps the
@@ -2078,19 +2160,19 @@ fn settle_steps(body: &Body, start: (f64, f64)) -> (Gases, Climate, usize) {
         // Settled when the temperature has stopped moving and the albedo
         // it derives would not move the light by more either (a
         // thermostat holds the temperature whatever the albedo).
-        let residual_k =
-            (radiative_k(derived, derived_emissivity) - radiative_k(albedo, emissivity)).abs();
-        if (t - last).abs() < ALBEDO_TOLERANCE_K && residual_k < ALBEDO_TOLERANCE_K {
+        let push_k = radiative_k(derived, derived_emissivity) - radiative_k(albedo, emissivity);
+        if (t - last).abs() < ALBEDO_TOLERANCE_K && push_k.abs() < ALBEDO_TOLERANCE_K {
             settled = true;
             break;
         }
-        // A step that turns back the way the last one came overshot: the
-        // fixed point is between them, and the next steps go half as far.
-        let step = t - last;
-        if step * moved < 0.0 {
+        // A step the derived light pushes back the way the last one came
+        // overshot: the fixed point is between them, and the next steps
+        // go half as far. The light, not the temperature: a thermostat
+        // holds the temperature while its albedo still moves.
+        if push_k * moved < 0.0 {
             damping *= 0.5;
         }
-        moved = step;
+        moved = push_k;
         last = t;
         albedo += damping * (derived - albedo);
         emissivity += damping * (derived_emissivity - emissivity);
@@ -2123,20 +2205,21 @@ fn settle_steps(body: &Body, start: (f64, f64)) -> (Gases, Climate, usize) {
 }
 
 /// The carbonate thermostat of `body` under the light of `context`: the
-/// CO₂ in `[0, most_co2]` that puts the surface at [`THERMOSTAT_K`],
-/// solved in `ln CO₂` (see [`climate`]). Returns the gases, the
-/// temperature and whether it was reached. Short of the thermostat with
-/// all the CO₂ the air can hold, it takes the [`maximum_greenhouse`].
+/// CO₂ up to its maximum greenhouse ([`Body::greenhouse_co2`]) that puts
+/// the surface at [`THERMOSTAT_K`], solved in `ln CO₂` (see [`climate`]).
+/// Returns the gases, the temperature and whether it was reached. Short
+/// of the thermostat at that maximum, it takes it, less what a surface
+/// too cold to keep it frosts out ([`collapsed_climate`]).
 /// The surface radiates with `emissivity` ([`surface_temperature_k`]):
 /// 1 wherever the thermostat holds, far above where nitrogen frosts, but
 /// not on a cold body with plates that it cannot reach.
 fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, bool) {
     let (gases, heat_flux_w_m2, water_bar) = (body.gases, body.heat_flux_w_m2, body.water_bar);
-    let most = body.most_co2;
+    let most = body.greenhouse_co2();
     let at_target = with_vapour(gases, THERMOSTAT_K, water_bar);
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = absorbed_w_m2(t_eq, &gases, heat_flux_w_m2);
-    let skin = t_eq * 0.5_f64.powf(0.25);
+    let skin = tropopause_k(t_eq);
     // With `co2` in the air the surface is warmer than the thermostat
     // when, at `THERMOSTAT_K`, it sends out less than it absorbs (the
     // outgoing radiation rises with the surface temperature).
@@ -2145,10 +2228,9 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
         |co2: f64| e * column::olr_under_skin_w_m2(&Gases { co2, ..at_target }, THERMOSTAT_K, skin);
     let all = absorbed - olr_at(most);
     if all <= 0.0 {
-        let co2 = *body.greenhouse.get_or_init(|| maximum_greenhouse(body));
-        let (g, t) = wet_climate(
+        let (g, t) = collapsed_climate(
             context,
-            Gases { co2, ..gases },
+            Gases { co2: most, ..gases },
             heat_flux_w_m2,
             water_bar,
             emissivity,
@@ -2207,10 +2289,14 @@ const GREENHOUSE_STEPS: usize = 40;
 /// maximum greenhouse): the amount at which a surface at
 /// [`THERMOSTAT_K`] gains most, the light it absorbs under the albedo
 /// that CO₂ derives (its Rayleigh scattering) against what its column
-/// sends out. Golden-section search in `ln CO₂` over
-/// [`GREENHOUSE_DECADES`] under the most; with the column of
-/// [`super::column`] the CO₂'s greenhouse outgrows its scattering, so it
-/// is the most the air can hold in practice.
+/// sends out, the column's stratosphere at the tropopause that albedo
+/// gives ([`tropopause_k`]). Golden-section search in `ln CO₂` over
+/// [`GREENHOUSE_DECADES`] under the most. Where CO₂ condenses in the
+/// column ([`super::column`]: its air follows the CO₂ saturation curve
+/// and the tropopause cold-traps it) its greenhouse flattens, so that
+/// its scattering wins past a few bar: the maximum Kopparapu et al. 2013
+/// (doi:10.1088/0004-637X/765/2/131) find near 8 bar, 4.7 to 5.8 bar
+/// here for an Earth between 1.5 and 1.8 AU round the Sun (issue #522).
 fn maximum_greenhouse(body: &Body) -> f64 {
     let most = body.most_co2;
     if most <= 0.0 {
@@ -2224,7 +2310,7 @@ fn maximum_greenhouse(body: &Body) -> f64 {
         };
         let albedo = body.albedo_at(THERMOSTAT_K, &gases);
         let t_eq = body.context.with_albedo(albedo).equilibrium_k.max(0.0);
-        let skin = t_eq * 0.5_f64.powf(0.25);
+        let skin = tropopause_k(t_eq);
         absorbed_w_m2(t_eq, &gases, 0.0) - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin)
     };
     let ratio = (5f64.sqrt() - 1.0) / 2.0;
@@ -2554,7 +2640,7 @@ mod tests {
         // The greenhouse alone, at Titan's surface temperature: the
         // outgoing radiation methane holds back from 1 to 10 bar is under
         // a third of what it holds back from 0.01 to 0.1 bar.
-        let skin = context.equilibrium_k * 0.5_f64.powf(0.25);
+        let skin = tropopause_k(context.equilibrium_k);
         let olr = |ch4: f64| {
             let gases = Gases {
                 n2: 1.45,
@@ -2790,7 +2876,7 @@ mod tests {
         let t_eq: f64 = 83.0;
         let light = SIGMA * t_eq.powi(4);
         let absorbed = absorbed_w_m2(t_eq, &titan, 0.1);
-        let expected = light * (1.0 - stratospheric_share(&titan, t_eq * 0.5f64.powf(0.25))) + 0.1;
+        let expected = light * (1.0 - stratospheric_share(&titan, tropopause_k(t_eq))) + 0.1;
         assert!((absorbed - expected).abs() < 1e-12, "{absorbed} {expected}");
         assert_eq!(absorbed_w_m2(t_eq, &dry, 0.1), light + 0.1);
     }
@@ -2873,9 +2959,13 @@ mod tests {
             let liquid = c.liquid == SurfaceLiquid::Water;
             assert_eq!(liquid, c.temperature_k >= 273.15, "{c:?}");
         }
-        // At 2 AU the CO₂ the cold leaves in the air is not enough.
+        // At 2 AU, past the outer edge, no CO₂ is enough: the planet
+        // freezes, and its air keeps only the CO₂ its frozen surface
+        // does not frost out (issue #522).
         let (d, g, c) = climate_at(&earth, 2.0);
-        assert_eq!(g.co2, d.gases.co2, "{g:?}");
+        assert!(g.co2 <= d.gases.co2, "{g:?}");
+        let kept = super::super::atmosphere::co2_saturation_bar(c.temperature_k);
+        assert!(g.co2 <= kept * 1.001, "{g:?} over {kept}");
         assert!(!c.regulated, "{c:?}");
         assert_eq!(c.liquid, SurfaceLiquid::None, "{c:?}");
         // With a ten-thousandth of its CO₂, the thermostat runs out: it puts
@@ -3205,11 +3295,11 @@ mod tests {
     #[test]
     fn an_earth_track_planet_stays_temperate_to_the_maximum_greenhouse() {
         // The outer edge of the Sun's habitable zone, the maximum
-        // greenhouse, is about 1.67 AU (Kopparapu et al. 2013, *ApJ* 765,
-        // 131, doi:10.1088/0004-637X/765/2/131): an Earth on its temperate
-        // branch builds up its CO₂ and keeps liquid water to 1.6 AU, and
-        // freezes beyond the edge. Colder the farther, with no step but
-        // the edge.
+        // greenhouse, is about 1.70 AU (Kopparapu et al. 2013, *ApJ* 765,
+        // 131, doi:10.1088/0004-637X/765/2/131), 1.78 AU here: an Earth
+        // on its temperate branch builds up its CO₂ and keeps liquid
+        // water to 1.6 AU, and freezes beyond the edge. Colder the
+        // farther, with no step but the edge.
         let earth = earth_drawn(1.0);
         let mut last = f64::INFINITY;
         for au in [1.0, 1.4, 1.6, 1.8, 2.5] {
@@ -3238,7 +3328,8 @@ mod tests {
         // At 1.6 AU, an air that holds a tenth of a bar of CO₂ before the
         // climate (what escape and the cold trap left of it): weathering
         // slows and volcanoes give it more, up to the thermostat, within
-        // the carbon inventory and what does not frost out.
+        // the carbon inventory and the maximum greenhouse, past which
+        // CO₂ condensing aloft and its scattering cool more than it warms.
         let d = derive_at(&earth_drawn(1.0), 1.6);
         let snapshot = Gases {
             co2: 0.1,
@@ -3259,8 +3350,20 @@ mod tests {
         let (g, c) = with(d.carbon);
         assert!(g.co2 > snapshot.co2, "{g:?}");
         assert!(g.co2 <= d.carbon.inventory_bar, "{g:?} {:?}", d.carbon);
-        let frost = super::super::atmosphere::co2_frost_bar(d.context.equilibrium_k);
-        assert!(g.co2 <= frost, "{g:?} {frost}");
+        let body = Body::new(
+            &d.context,
+            snapshot,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+            &d.carbon,
+            &d.planet,
+            None,
+        );
+        let cap = body.greenhouse_co2();
+        assert!(cap < d.carbon.inventory_bar, "{cap} {:?}", d.carbon);
+        assert!(g.co2 <= cap, "{g:?} {cap}");
         assert!(c.regulated, "{c:?}");
         // A smaller inventory stops it short of the thermostat.
         let (g, c) = with(temperate(0.5));
@@ -3281,12 +3384,12 @@ mod tests {
 
     #[test]
     fn a_frozen_state_no_co2_thaws_is_no_snowball() {
-        // Drawn frozen where no CO₂ within the inventory and what does not
-        // frost out thaws it: it stays frozen for good, so it is no
-        // snowball (whose card promises a thaw). At 1.64 AU: up to
-        // 1.61 AU about 1.6 bar of CO₂ thaws it, since its vapour
-        // absorbs sunlight (issue #523), and past 1.66 AU the temperate
-        // state freezes too.
+        // Drawn frozen where no CO₂ up to its maximum greenhouse thaws
+        // it: it stays frozen for good, so it is no snowball (whose card
+        // promises a thaw). At 1.64 AU: up to about 1.43 AU some 1.3 bar
+        // of CO₂ thaws it, past that its cold column condenses and
+        // scatters the CO₂ before it warms the ice (issue #522), and past
+        // 1.78 AU the temperate state freezes too.
         let earth = earth_drawn(0.0);
         let d = derive_at(&earth, 1.64);
         let body = Body::new(
@@ -3420,6 +3523,138 @@ mod tests {
         assert_eq!(c.liquid, SurfaceLiquid::None, "{c:?}");
         assert!(c.bond_albedo > 0.5, "{c:?}");
         assert!(c.temperature_k < 260.0, "{c:?}");
+    }
+
+    /// Whether Earth on its temperate branch keeps liquid water under
+    /// the light of a star of `teff_k` at the flux `1 / orbit_au²`: its
+    /// body as the chain derives it at that orbit round the Sun, lit by
+    /// the other star's spectrum (Kopparapu et al. 2013 normalize every
+    /// star's light the same way).
+    fn wet_at(teff_k: f64, orbit_au: f64) -> bool {
+        let earth = earth_drawn(1.0);
+        let d = derive_at(&earth, orbit_au);
+        let context = Context {
+            teff_k,
+            ..d.context
+        };
+        let (_, c) = climate(
+            &context,
+            d.gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+            d.carbon,
+            &d.planet,
+        );
+        c.liquid == SurfaceLiquid::Water
+    }
+
+    /// The outer edge of the habitable zone of Earth round a star of
+    /// `teff_k`, AU at the flux of the Sun: the largest orbit at which it
+    /// keeps liquid water, bisected between 1 and 3 AU.
+    fn outer_edge_au(teff_k: f64) -> f64 {
+        let (mut wet, mut dry) = (1.0, 3.0);
+        assert!(wet_at(teff_k, wet), "{teff_k} K: frozen at 1 AU");
+        assert!(!wet_at(teff_k, dry), "{teff_k} K: wet at 3 AU");
+        for _ in 0..12 {
+            let mid = 0.5 * (wet + dry);
+            if wet_at(teff_k, mid) {
+                wet = mid;
+            } else {
+                dry = mid;
+            }
+        }
+        wet
+    }
+
+    /// Kopparapu et al. 2013's maximum greenhouse, the flux of the outer
+    /// edge of the habitable zone (S⊕) round a star of `teff_k`: their
+    /// eq. 2 with the coefficients of their Table 3 (arXiv:1301.6674v2,
+    /// the last version; checked there: S⊙ 0.3438, a 5.8942e-5,
+    /// b 1.6558e-9, c −3.0045e-12, d −5.2983e-16).
+    fn kopparapu_maximum_greenhouse(teff_k: f64) -> f64 {
+        let t = teff_k - 5780.0;
+        0.3438 + 5.8942e-5 * t + 1.6558e-9 * t.powi(2)
+            - 3.0045e-12 * t.powi(3)
+            - 5.2983e-16 * t.powi(4)
+    }
+
+    #[test]
+    fn the_outer_edge_round_the_sun_is_kopparapus() {
+        // Kopparapu et al. 2013 put the maximum greenhouse at 1.70 AU
+        // (doi:10.1088/0004-637X/765/2/131): CO₂ condensing in the
+        // column and Rayleigh scattering, not a frost cap at a set
+        // albedo (issue #522). The bound is their 1.70 AU (§3.3, read on
+        // arXiv:1301.6674v2) within the ±0.1 AU the spec allows; the
+        // spec's 1.67 AU centre was a slip, corrected by the controller's
+        // ruling on lot 3C-2, Task 4. The model gives 1.78 AU; Task 7
+        // checks it again after the refit of the CO₂ law.
+        let teff = crate::planet::reference::sun_at(1.0).teff_k;
+        let edge = outer_edge_au(teff);
+        println!("outer edge round the Sun: {edge:.3} AU");
+        assert!((1.60..=1.80).contains(&edge), "{edge} AU");
+    }
+
+    #[test]
+    fn the_outer_edge_follows_the_star() {
+        // A redder star's light scatters less (Rayleigh's λ⁻⁴), so the
+        // maximum greenhouse holds at a lower flux.
+        for teff in [4500.0, 3300.0] {
+            let edge = outer_edge_au(teff);
+            let s = 1.0 / (edge * edge);
+            let kopparapu = kopparapu_maximum_greenhouse(teff);
+            println!("{teff} K: edge {edge:.3} AU, S {s:.4} against {kopparapu:.4}");
+            assert!(
+                (s / kopparapu - 1.0).abs() <= 0.15,
+                "{teff} K: S {s} against {kopparapu}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_snowball_holds_the_co2_its_thermostat_reaches() {
+        // Frozen, weathering stops and volcanoes build the CO₂ up to what
+        // thaws the ice, or, where none within reach does, to the most
+        // its column lets warm (the maximum greenhouse; issue #522).
+        let earth = earth_drawn(0.0);
+        let mut seen = 0;
+        for au in [1.2, 1.4, 1.5, 1.6] {
+            let d = derive_at(&earth, au);
+            let body = Body::new(
+                &d.context,
+                d.gases,
+                &d.water,
+                d.regime,
+                d.heat_flux_w_m2,
+                d.water_bar,
+                &d.carbon,
+                &d.planet,
+                None,
+            );
+            let Some(frozen) = branches(&body).frozen else {
+                continue;
+            };
+            let cap = body.greenhouse_co2();
+            let reached = frozen.thaw_bar.min(cap);
+            let (_, g, c) = climate_at(&earth, au);
+            println!(
+                "{au} AU: CO₂ {:.4} bar, thaw {:.4}, cap {cap:.4}, snowball {}, {:.1} K",
+                g.co2, frozen.thaw_bar, c.snowball, c.temperature_k
+            );
+            assert!(frozen_over(&c), "{au} AU: {c:?}");
+            if c.snowball {
+                seen += 1;
+                assert!((g.co2 / reached - 1.0).abs() < 0.01, "{au} AU: {g:?}");
+            } else {
+                // Frozen for good: what the cap leaves in the air over so
+                // cold a surface, the rest frosted onto the ground.
+                let kept = super::super::atmosphere::co2_saturation_bar(c.temperature_k);
+                assert!(g.co2 <= cap * 1.0001, "{au} AU: {g:?}");
+                assert!(g.co2 <= kept * 1.001, "{au} AU: {g:?} over {kept}");
+            }
+        }
+        assert!(seen >= 2, "too few snowballs: {seen}");
     }
 
     #[test]

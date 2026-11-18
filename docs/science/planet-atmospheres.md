@@ -991,11 +991,27 @@ vapour taken at that temperature, sends out what it absorbs (solved in
 `ln CO₂`). It can build the CO₂ up past what the air held before the
 climate (what escape and the cold trap left of it), since weathering
 slows and the volcanoes keep giving: up to the planet's carbon inventory
-(all it outgassed, `CarbonCycle::inventory_bar`), capped where CO₂ frosts
-out at its equilibrium temperature (`co2_frost_bar`). If that most is
-not enough, the planet keeps the CO₂ of its maximum greenhouse and is
-colder: below 273 K its water freezes. If no CO₂ at all is still too
-warm, the planet is hotter. Only a temperature reached is `regulated`.
+(all it outgassed, `CarbonCycle::inventory_bar`), at most its maximum
+greenhouse (`maximum_greenhouse`, `Body::greenhouse_co2`; issue #522).
+That maximum comes from the column itself, as in Kopparapu et al. 2013
+(doi:10.1088/0004-637X/765/2/131): where the CO₂ of a cold column reaches
+its saturation (`atmosphere::co2_saturation_bar`, its frost below
+216.6 K, its liquid above) it condenses, the air follows CO₂'s
+pseudo-adiabat (`column::co2_lapse`, Kasting 1991 Appendix B) and the
+tropopause (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼`
+of the climate's own albedo) cold-traps it, so its greenhouse flattens
+while its Rayleigh scattering keeps growing. The Rayleigh scattering is
+averaged over the star's black-body spectrum (`albedo::spectrum`): a red
+star's light scatters less, so the maximum holds at a lower flux. For an
+Earth the maximum is 4.7 to 5.8 bar of CO₂ between 1.5 and 1.8 AU round
+the Sun (Kopparapu: about 8 bar), and the outer edge, the last orbit with
+liquid water, is 1.78 AU (Kopparapu: 1.70 AU); round 4500 K and 3300 K
+stars its flux is within 1 % and 5 % of their fit. If the maximum is not
+enough, the planet keeps the CO₂ of its maximum greenhouse and is
+colder: below 273 K its water freezes, and where its surface is too
+cold to keep that CO₂ it frosts out until the air keeps what the surface
+allows (`collapsed_climate`). If no CO₂ at all is still too warm, the
+planet is hotter. Only a temperature reached is `regulated`.
 The grid's `carbon_cycle` is unchanged; part 3 aligns them.
 
 **Bond albedo** (`albedo::cover`, `albedo::bond_albedo`, issue #510). The
@@ -1231,24 +1247,29 @@ the frozen one, started from a body covered in ice with the CO₂ the
 temperate one held when it froze. Weathering stops under the ice, so
 volcanic CO₂ builds up in the frozen air until it thaws the planet (the
 snowball Earth of Hoffman et al. 2017, doi:10.1126/sciadv.1600983); the
-frozen branch's CO₂ is the amount that would be there, half way
-(`SNOWBALL_BUILT_UP`) from the CO₂ it froze with to the CO₂ that thaws it.
+frozen branch's CO₂ is what its thermostat reaches: the most that leaves
+it frozen, just short of the CO₂ that thaws it (`still_frozen_bar`), or
+its maximum greenhouse where none thaws it, less what its cold surface
+frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
 `d / (d + 0.8 bar × v / v⊕)`: the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (0.8 bar gives Earth, which spent about a tenth of its history frozen, a
-chance of 0.1). Where no CO₂ within the planet's inventory and its frost
-cap thaws it (the chance is then 1, from about 1.6 AU for an Earth-like
-planet round the Sun), the frozen state is for good: the planet is
+chance of 0.1). Where no CO₂ up to its maximum greenhouse thaws it (the
+chance is then 1, from about 1.45 AU for an Earth-like planet round the
+Sun: an icy body's cold column condenses and scatters its CO₂ before it
+warms the ice to a thaw), the frozen state is for good: the planet is
 frozen but not a snowball, and its card says so (the `frozen` note). So snowballs are rare near S = 1, likelier towards the
 outer edge of the habitable zone and on planets that outgas little, and
 `--snowball yes|no` pins the state. A snowball is drawn with the `frozen`
 look and keeps its relief and coastlines; no sulphuric cloud forms in its
 cold air. On the sweep of an Earth-like planet round the Sun the warm
-branch runs from the runaway at about 0.95 AU to 1.6 AU (288 K, the
-thermostat's, with 1.6 bar of CO₂ at 1.6 AU) and ends near 1.67 AU, beyond
-which the frozen branch is the only one (187 K at 1.8 AU).
+branch runs from the runaway at about 0.95 AU to 1.77 AU (288 K, the
+thermostat's, with 1.6 bar of CO₂ at 1.6 AU), keeps liquid water at its
+maximum greenhouse to 1.78 AU (282 K, 5.7 bar of CO₂), beyond which the
+frozen branch is the only one (152 K at 1.8 AU, its CO₂ frosted out
+down to 0.01 bar).
 
 **Sulphur and SO₂.** Outgassed sulphur stays in the air as SO₂ only in
 share `SULPHUR_IN_AIR` (5e-5); over liquid water or with free oxygen above
