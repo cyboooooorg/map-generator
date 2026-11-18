@@ -2479,7 +2479,7 @@
     {/if}
     {#if dialLines}
       <div class="dial-figures">
-        <p class="muted">{dialLines[0]}<br />{dialLines[1]}</p>
+        <p class="muted"><Glossed text={dialLines[0]} /><br /><Glossed text={dialLines[1]} /></p>
         <button
           class="small"
           onclick={() => (dialGlossary = !dialGlossary)}
@@ -2545,7 +2545,7 @@
         <label>
           <span title={t.viewer.riverFromHelp}>{t.viewer.riverFrom}</span>
           <input type="range" min="3" max="7" step="0.1" bind:value={hexRiverLog} />
-          <small class="value">{formatArea(10 ** hexRiverLog)}</small>
+          <small class="value"><Glossed text={formatArea(10 ** hexRiverLog)} inert /></small>
         </label>
         <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
       {/if}

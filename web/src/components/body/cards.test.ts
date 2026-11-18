@@ -257,7 +257,8 @@ describe('themed body cards', () => {
       world.systemExtras = { c: { explanation: { trees: [tree] }, similar: null } } as unknown as typeof world.systemExtras;
       const html = renderCard(SurfaceCard, { world });
       expect(html).toContain('aria-expanded="false"');
-      expect(html).toContain(locale === 'en' ? '0.63 · volcanic SO₂ frost' : '0,63 · givre de SO₂ volcanique');
+      expect(html.replace(/<[^>]+>/g, '')).toContain(locale === 'en' ? '0.63 · volcanic SO₂ frost' : '0,63 · givre de SO₂ volcanique');
+      expect(html).toMatch(/<abbr class="gloss" title="[^"]+"[^>]*>SO₂<\/abbr>/);
       expect(html).not.toMatch(/frost_so2|cover_share/);
     }
     setLocale('en');

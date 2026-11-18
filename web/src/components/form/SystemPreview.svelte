@@ -25,9 +25,9 @@
     <h4>{text.star}</h4>
     <p class="star">
       <StarDot colour={starDotColour(system.star.type)} label={system.star.type} />
-      <strong>{formatStar(info)}</strong>
+      <strong><Glossed text={formatStar(info)} /></strong>
     </p>
-    <p class="muted">{text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}{ageSources.length > 0 ? ` ${text.ageSetBy({ names: ageSources.join(', ') })}` : ''}</p>
+    <p class="muted"><Glossed text={`${text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}${ageSources.length > 0 ? ` ${text.ageSetBy({ names: ageSources.join(', ') })}` : ''}`} /></p>
   </section>
   <section aria-label={text.planets}>
     <h4>{text.planets}</h4>

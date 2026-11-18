@@ -201,7 +201,7 @@
       <dt title={t.starSurface.rotationHelp}>{t.starSurface.rotation}</dt>
       <dd>{t.starSurface.rotationValue({ equator: daysText(rotationAt(activity, 0)), sixty: daysText(rotationAt(activity, 60)) })}</dd>
       <dt title={t.starSurface.ageHelp}>{t.starSurface.age}</dt>
-      <dd>{withUnit(formatUpTo(activity.age_gyr, activity.age_gyr < 1 ? 2 : 1), t.starView.gyr)}</dd>
+      <dd><Glossed text={withUnit(formatUpTo(activity.age_gyr, activity.age_gyr < 1 ? 2 : 1), t.starView.gyr)} /></dd>
       <dt title={t.starSurface.rossbyHelp}>{t.starSurface.rossby}</dt>
       <dd>{activity.rossby > 0 ? formatUpTo(activity.rossby, 2) : t.starSurface.none}</dd>
     {/if}

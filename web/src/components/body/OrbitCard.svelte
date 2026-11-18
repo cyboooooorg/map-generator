@@ -56,7 +56,7 @@
       <dd><Glossed text={t.worldInfo.hostSky({ size: `${formatUpTo(host.angular_diameter_deg, 1)}°` })} /></dd>
       <dt title={t.worldInfo.tidalHelp}><Glossed text={t.worldInfo.tidal} /></dt>
       <dd>
-        {withUnit(formatUpTo(host.tidal_flux, host.tidal_flux < 1 ? 2 : 0), 'W/m²')}{#if host.inside_edge}
+        <Glossed text={withUnit(formatUpTo(host.tidal_flux, host.tidal_flux < 1 ? 2 : 0), 'W/m²')} />{#if host.inside_edge}
           · <strong><Glossed text={t.worldInfo.insideEdge} /></strong>{/if}
       </dd>
     {/if}

@@ -65,7 +65,7 @@
     {#if albedo !== null}
       <dt><Glossed text={t.cards.bondAlbedo} /></dt>
       <dd>
-        {formatNumber(albedo, 2)}{albedoFrost ? ` · ${albedoFrost}` : ''}<CauseTree tree={albedoTree} open={albedoOpen} ontoggle={() => (albedoOpen = !albedoOpen)} {oninput} />
+        <Glossed text={`${formatNumber(albedo, 2)}${albedoFrost ? ` · ${albedoFrost}` : ''}`} /><CauseTree tree={albedoTree} open={albedoOpen} ontoggle={() => (albedoOpen = !albedoOpen)} {oninput} />
       </dd>
     {/if}
     {#if units.length > 1}

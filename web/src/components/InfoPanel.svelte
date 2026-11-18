@@ -169,7 +169,7 @@
         <dt><Glossed text={t.info.meanMoisture} /></dt>
         <dd><Glossed text={formatNumber(hex.moisture, 2)} /></dd>
         <dt><Glossed text={t.info.largestRiver} /></dt>
-        <dd>{hex.maxFlowKm2 > 0 ? formatArea(hex.maxFlowKm2) : t.info.noRiver}{hex.river ? t.info.riverHex : ''}</dd>
+        <dd><Glossed text={`${hex.maxFlowKm2 > 0 ? formatArea(hex.maxFlowKm2) : t.info.noRiver}${hex.river ? t.info.riverHex : ''}`} /></dd>
       </dl>
     {/if}
   {:else}
