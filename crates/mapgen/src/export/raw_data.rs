@@ -108,7 +108,9 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// moon keeps its lava until it is regenerated). Version 28 comes with
 /// lot 3C-1 of the climate pass: a model stores its terrain units
 /// (`PlanetModel::terrain`: age, share and renewal of each part of the
-/// surface), the surface age, the Bond albedo of an icy crust, the air of
+/// surface), its climate the surface's emissivity
+/// (`Climate::emissivity`, below 1 under nitrogen frost) and a surface
+/// liquid may be nitrogen (`SurfaceLiquid::Nitrogen`); the surface age, the Bond albedo of an icy crust, the air of
 /// a thin-aired moon and Io's SO₂ frost follow new laws, and the card
 /// explains them. The same seed gives another world for the bodies they
 /// touch; worlds of version 24 to 27 still load (a world of version 27

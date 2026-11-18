@@ -67,7 +67,7 @@ impl Terrain {
 }
 
 /// Internal heat flux, W/m², under which a stagnant ice lid keeps half the
-/// surface age a rock lid would ((`interim::STAGNANT_SURFACE_AGE_SHARE`)), and the
+/// surface age a rock lid would (`interim::STAGNANT_SURFACE_AGE_SHARE`), and the
 /// steepness of the fall past it ([`ICE_LID_EXPONENT`]): the share kept is
 /// `1 / (1 + (F / F½)^n)`. An ice shell resurfaces (convection, diapirs,
 /// cryovolcanism, tectonics) far more readily than rock, ice flowing and

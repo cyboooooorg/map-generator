@@ -79,9 +79,12 @@ use std::sync::Arc;
 /// with lot 3 of the climate pass: the moons' resonant heat, the moment
 /// of inertia of a differentiated body, the convective ice shell and the
 /// geysers of a thin polar shell. Version 10 comes with lot 3C-1: the
-/// models carry their terrain units, the card's new quantities (surface
-/// age, terrain unit, emissivity) and notes, so a system of version 9
-/// does not parse as today's and is refused on its version.
+/// models carry their terrain units, the climate's `emissivity` and the
+/// `Nitrogen` surface liquid, a drawn moon captured into a resonance its
+/// `capture_age_share` ([`Body::capture_age_share`]), and the card's new
+/// quantities (surface age, terrain unit, emissivity) and notes, so a
+/// system of version 9 does not parse as today's and is refused on its
+/// version.
 pub const SYSTEM_FORMAT_VERSION: u32 = 10;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;

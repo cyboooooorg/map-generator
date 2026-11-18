@@ -858,13 +858,14 @@ liquid water. Three rules bound it:
   depends on the star's spectrum; one value serves every star.
 
 Titan at Saturn's orbit (`titan-like`, seeds 1 to 40 of
-`archetype_census`) comes out at 90.6 to 93.0 K (median 92.1 K), 1.28 to
-1.54 bar and 3.8 to 5.7 % methane (median 4.8 %), against Titan's 93.7 K,
-1.47 bar and 5.65 % (90.4 to 94.5 K and 3.7 to 6.8 % before the
-anti-greenhouse); the seed under 1.3 bar is one drawn with 1.21 bar of
-N₂. Seed 182's planet d of `planet_census` is a hydrocarbon world at
-135 K (149 K before), with 2.6 of its 26 bar of methane in its air and
-the rest in its seas, under the 150 K line.
+`archetype_census`) comes out at 90.8 to 93.1 K (median 92.3 K), 1.31 to
+1.58 bar (median 1.47 bar, no seed under 1.3 bar since `titan-like`
+pins `n2 = 0.82`, see [atmospheres.md](atmospheres.md)) and 3.8 to
+5.7 % methane (median 4.8 %), against Titan's 93.7 K, 1.47 bar and
+5.65 % (90.4 to 94.5 K and 3.7 to 6.8 % before the anti-greenhouse).
+Seed 182's planet d of `planet_census` is a hydrocarbon world at 140 K
+(149 K before), with 3.3 bar of methane in its air and the rest of its
+methane in its seas, under the 150 K line.
 
 **The moist plateau.** On a saturated column the levels that radiate to
 space sit on water's saturation curve whatever the surface temperature,

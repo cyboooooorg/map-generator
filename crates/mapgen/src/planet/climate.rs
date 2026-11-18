@@ -196,7 +196,7 @@ const H2O_OPACITY: f64 = 111.0;
 /// [`CH4_NEAR_IR_MAX`]: Titan's 93.7 K (Fulchignoni et al. 2005,
 /// doi:10.1038/nature04314) and the 5.65 % of methane near its surface
 /// (Niemann et al. 2005, doi:10.1038/nature04122), which `titan-like`
-/// reaches as 90.6 to 93.0 K (median 92.1 K) and 3.8 to 5.7 % (median
+/// reaches as 90.8 to 93.1 K (median 92.3 K) and 3.8 to 5.7 % (median
 /// 4.8 %) over seeds 1 to 40 of `archetype_census`, against the 90 to
 /// 97 K and 3 to 6 % of issue #530, under the vapour of its seas and the
 /// anti-greenhouse of [`stratospheric_share`], on the column of
@@ -272,7 +272,7 @@ fn methane_depth(gases: &Gases) -> (f64, f64) {
 /// bibliographic data checked, the paper not) describe on Titan together
 /// with its haze's. Calibration, no source, together with
 /// [`CH4_OPACITY`] and [`CH4_NEAR_IR_HALF_BAR`]: `titan-like` at 3.8 to
-/// 5.7 % of methane and 90.6 to 93.0 K over seeds 1 to 40 of
+/// 5.7 % of methane and 90.8 to 93.1 K over seeds 1 to 40 of
 /// `archetype_census` (targets 3 to 6 % and 90 to 97 K, issue #530),
 /// where it takes 11 % of the light of the reference Titan. Because the
 /// methane let through the cold trap grows with the tropopause's
