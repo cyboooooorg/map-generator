@@ -498,7 +498,7 @@ pub(crate) fn sulphuric_deck(temperature_k: f64, so2_bar: f64) -> f64 {
 
 /// Strength of a methane haze in `gases`, 0 to 1 ([`HAZE_CH4_BAR`],
 /// [`HAZE_CH4_PER_CO2`]).
-fn haze(gases: &Gases) -> f64 {
+pub(crate) fn haze(gases: &Gases) -> f64 {
     let ch4 = gases.ch4.max(0.0);
     if ch4 <= 0.0 {
         return 0.0;

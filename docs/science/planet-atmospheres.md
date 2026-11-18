@@ -1105,6 +1105,28 @@ miss. Miranda comes out 0.31 against about 0.2, Umbriel 0.18 against
 too dark; the law has no term for their carbon-rich non-ice material,
 nor for Umbriel's unusual darkness, and does not order them.
 
+**How the card explains the albedo** (`explain::albedo_tree`, no
+generation change). The albedo is its own tree, `bond_albedo`, on the
+Surface card ("Bond albedo", with its "Why?"), and the same node sits under
+the equilibrium temperature of the surface temperature's tree. Its
+children are the parts of the cover the climate weighed, one
+`cover_share` each with its share of the disc, largest first: ocean, bare
+land, water ice and snow, a frost per gas (N₂, CH₄, CO₂, SO₂), or an ice
+`crust` where the crust's albedo replaced the land and the ice, and a
+sulphuric acid `deck`; the surface's parts and the deck sum to 1. The
+water clouds (their cover) and the methane haze (its strength) are layers
+over them, listed after. A part under 1 % of the disc is left out
+(`COVER_SHARE_MIN`: it moves the albedo by less than a hundredth of the
+gap between two covers' albedos). The cover is replayed from what the
+climate used (its air, the water, the frost and the surface
+temperature), not drawn again; a test checks that the albedo it weighs is
+the stored one. Under the crust the tree names the terrain units whose
+ages set its albedo and the plumes' fallout; under the SO₂ frost, the
+note that the volcanoes lay it (Io). The node nested in the temperature
+tree has no room under its parts (the trees stay three levels deep), so
+it names them without those details. A body whose albedo is mostly a
+frost says so on the card's value line ("0.63 · volcanic SO₂ frost").
+
 Census, seeds 1 to 40 (min, median, max):
 
 | Body | Bond albedo | T, K | Observed |

@@ -11,6 +11,9 @@ export type Explanation = {
  * only): [`Quantity::Class`], [`Quantity::SurfaceTemperature`],
  * [`Quantity::Pressure`], [`Quantity::Liquid`], [`Quantity::Regime`],
  * [`Quantity::MagneticField`], [`Quantity::WaterKept`], then
- * [`Quantity::SurfaceAge`] when the model has terrain units.
+ * [`Quantity::SurfaceAge`] when the model has terrain units. The
+ * Bond albedo's own tree ([`Quantity::BondAlbedo`]) follows the
+ * surface temperature's, whose equilibrium node holds the same
+ * albedo one level shallower.
  */
 trees: Array<Cause>, };

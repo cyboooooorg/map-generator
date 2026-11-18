@@ -30,7 +30,10 @@ pub struct Explanation {
     /// only): [`Quantity::Class`], [`Quantity::SurfaceTemperature`],
     /// [`Quantity::Pressure`], [`Quantity::Liquid`], [`Quantity::Regime`],
     /// [`Quantity::MagneticField`], [`Quantity::WaterKept`], then
-    /// [`Quantity::SurfaceAge`] when the model has terrain units.
+    /// [`Quantity::SurfaceAge`] when the model has terrain units. The
+    /// Bond albedo's own tree ([`Quantity::BondAlbedo`]) follows the
+    /// surface temperature's, whose equilibrium node holds the same
+    /// albedo one level shallower.
     pub trees: Vec<Cause>,
 }
 
@@ -148,6 +151,11 @@ pub enum Quantity {
     TerrainUnit,
     /// Emissivity of the surface, 0 to 1: below 1 under nitrogen frost.
     Emissivity,
+    /// A part of what the Bond albedo weighs: its share of the disc, 0 to
+    /// 1, labelled with its key (`ocean`, `land`, `ice`, `crust`,
+    /// `frost_n2`, `frost_ch4`, `frost_co2`, `frost_so2`, `cloud`, `haze`,
+    /// `deck`).
+    CoverShare,
     /// Thickness of the ice shell, km (its mean over the surface).
     ShellThickness,
     /// Depth of the liquid ocean under the shell, km.
@@ -288,6 +296,7 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
     let mut trees = vec![class_tree(model)];
     if let (Some(surface), Some(steps)) = (&model.surface, &steps) {
         trees.push(temperature_tree(context, model, surface, steps)?);
+        trees.push(albedo_tree(context, model, surface, steps, false));
         trees.push(pressure_tree(surface, steps));
         trees.push(liquid_tree(surface));
         trees.push(regime_tree(context, model, surface));
@@ -553,21 +562,7 @@ fn temperature_tree(
     } else {
         ch4
     };
-    // Bright ice sets the albedo of a frozen world, and what ends it.
-    // Only a body with plates could have built CO₂ up to a thaw: without
-    // them (Mars, Titan) the cold has another cause.
-    let frozen =
-        frozen_over(climate) && surface.water.oceans > 0.0 && surface.regime == Regime::Plates;
-    let albedo = Cause::of(Quantity::BondAlbedo, climate.bond_albedo);
-    let albedo = if let Some(causes) = icy_albedo_causes(context, model, surface, steps) {
-        albedo.because(causes)
-    } else if climate.snowball {
-        albedo.because(vec![Cause::note("snowball")])
-    } else if frozen {
-        albedo.because(vec![Cause::note("frozen")])
-    } else {
-        albedo
-    };
+    let albedo = albedo_tree(context, model, surface, steps, true);
     let absorbers = [
         (gases.n2 > 0.0).then(|| Cause::of(Quantity::N2, gases.n2).set_by(InputField::N2)),
         (gases.co2 > 0.0).then_some(co2),
@@ -596,6 +591,109 @@ fn temperature_tree(
                 .because(vec![heat_flux(context, model)]),
         ]),
     )
+}
+
+/// Smallest share of the disc, 0 to 1, that the Bond albedo's tree names:
+/// a cover under 1 % moves the albedo by less than a hundredth of the
+/// difference between two covers' albedos.
+const COVER_SHARE_MIN: f64 = 0.01;
+
+/// The Bond albedo and what sets it: the cover the climate weighed
+/// ([`super::albedo::cover`], replayed from the water, the air and the
+/// frost the climate used, at its surface temperature) as one
+/// [`Quantity::CoverShare`] per part with its share of the disc, largest
+/// first. The surface's parts (ocean, land, ice, a frost per gas) and the
+/// sulphuric acid deck over them sum to 1; the water clouds and the
+/// methane haze are layers over those, each with its own cover (the
+/// cloud's share of the disc, the haze's strength), none named under
+/// [`COVER_SHARE_MIN`]. An exposed ice crust
+/// ([`icy_albedo_causes`]) replaces the land and the ice (`crust`).
+///
+/// `nested` is the node under the temperature tree's equilibrium
+/// temperature, where a part has no room below it (the tree stays three
+/// levels deep); the albedo's own tree (`!nested`) puts under the crust
+/// the units that set it and the plume's fallout, and under the SO₂ frost
+/// the note of the volcanoes that lay it.
+fn albedo_tree(
+    context: &Context,
+    model: &PlanetModel,
+    surface: &Surface,
+    steps: &Bare,
+    nested: bool,
+) -> Cause {
+    let climate = &surface.climate;
+    let gases = &steps.climate_gases;
+    let cover = super::albedo::cover(climate.temperature_k, gases, &surface.water, &steps.frost);
+    let deck = super::albedo::sulphuric_deck(
+        climate.temperature_k,
+        super::climate::washed(*gases, &surface.water).so2,
+    )
+    .clamp(0.0, 1.0);
+    let crust = icy_albedo_causes(context, model, surface, steps);
+    let part = |key: &str, share: f64, causes: Vec<Cause>| {
+        (share >= COVER_SHARE_MIN).then(|| {
+            Cause::keyed(Quantity::CoverShare, key)
+                .with_value(share)
+                .because(if nested { Vec::new() } else { causes })
+        })
+    };
+    let bare = 1.0 - deck;
+    let frost_bar = steps.frost.total();
+    let of_frost = |bar: f64| {
+        if frost_bar > 0.0 {
+            cover.frost * bar / frost_bar
+        } else {
+            0.0
+        }
+    };
+    let volcanic = if steps.before.so2_frost_bar > 0.0 {
+        vec![Cause::note("volcanic_frost")]
+    } else {
+        Vec::new()
+    };
+    let (ice_key, ice_share, ice_causes) = match crust {
+        Some(causes) => ("crust", cover.land + cover.ice, causes),
+        None => ("ice", cover.ice, Vec::new()),
+    };
+    let mut surface_parts: Vec<Cause> = [
+        part("ocean", cover.ocean * bare, Vec::new()),
+        part(
+            "land",
+            if ice_key == "crust" {
+                0.0
+            } else {
+                cover.land * bare
+            },
+            Vec::new(),
+        ),
+        part(ice_key, ice_share * bare, ice_causes),
+        part("frost_n2", of_frost(steps.frost.n2) * bare, Vec::new()),
+        part("frost_ch4", of_frost(steps.frost.ch4) * bare, Vec::new()),
+        part("frost_co2", of_frost(steps.frost.co2) * bare, Vec::new()),
+        part("frost_so2", cover.so2_frost * bare, volcanic),
+        part("deck", deck, Vec::new()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    surface_parts.sort_by(|a, b| b.value.total_cmp(&a.value));
+    let layers = [
+        part("cloud", cover.cloud, Vec::new()),
+        part("haze", super::albedo::haze(gases), Vec::new()),
+    ];
+    let mut causes = surface_parts;
+    causes.extend(layers.into_iter().flatten());
+    // Bright ice sets the albedo of a frozen world, and what ends it.
+    // Only a body with plates could have built CO₂ up to a thaw: without
+    // them (Mars, Titan) the cold has another cause.
+    let frozen =
+        frozen_over(climate) && surface.water.oceans > 0.0 && surface.regime == Regime::Plates;
+    if climate.snowball {
+        causes.push(Cause::note("snowball"));
+    } else if frozen {
+        causes.push(Cause::note("frozen"));
+    }
+    Cause::of(Quantity::BondAlbedo, climate.bond_albedo).because(causes)
 }
 
 /// What set the Bond albedo of an exposed ice crust: the ages of the
@@ -1017,20 +1115,16 @@ mod tests {
     fn an_icy_albedo_names_the_surface_ages_that_set_it() {
         let (context, model) = solar("Europa");
         let e = explain(&context, &model).expect("explained");
-        let t = root(&e, Quantity::SurfaceTemperature);
-        let albedo = find(t, Quantity::BondAlbedo).expect("a BondAlbedo cause");
-        assert!(
-            albedo
-                .causes
-                .iter()
-                .any(|c| c.quantity == Quantity::SurfaceAge),
-            "{albedo:#?}"
-        );
+        let albedo = root(&e, Quantity::BondAlbedo);
+        assert!(find(albedo, Quantity::SurfaceAge).is_some(), "{albedo:#?}");
+        let nested = find(root(&e, Quantity::SurfaceTemperature), Quantity::BondAlbedo)
+            .expect("the temperature tree's albedo");
+        assert_eq!(nested.value, albedo.value);
         let (context, model) = earth();
         let e = explain(&context, &model).unwrap();
-        let t = root(&e, Quantity::SurfaceTemperature);
-        let albedo = find(t, Quantity::BondAlbedo).unwrap();
-        assert!(albedo.causes.is_empty(), "{albedo:#?}");
+        let albedo = root(&e, Quantity::BondAlbedo);
+        assert!(find(albedo, Quantity::SurfaceAge).is_none(), "{albedo:#?}");
+        assert!(cover_part(albedo, "ocean").is_some(), "{albedo:#?}");
     }
 
     /// Triton's nitrogen frost lowers its emissivity: the equilibrium
@@ -1089,19 +1183,184 @@ mod tests {
         };
         for seed in [1, 2, 3] {
             let e = drawn("triton-like", seed);
-            let t = root(&e, Quantity::SurfaceTemperature);
-            let albedo = find(t, Quantity::BondAlbedo).expect("an albedo node");
+            let albedo = root(&e, Quantity::BondAlbedo);
             assert!(
                 find(albedo, Quantity::SurfaceAge).is_none(),
                 "seed {seed}: {albedo:#?}"
             );
             let e = drawn("ganymede-like", seed);
-            let t = root(&e, Quantity::SurfaceTemperature);
-            let albedo = find(t, Quantity::BondAlbedo).expect("an albedo node");
+            let albedo = root(&e, Quantity::BondAlbedo);
             assert!(
                 find(albedo, Quantity::SurfaceAge).is_some(),
                 "seed {seed}: {albedo:#?}"
             );
+        }
+    }
+
+    /// A body drawn from `arch` with `seed`, its context, model and
+    /// explanation.
+    fn drawn_body(arch: &str, seed: u32) -> (Context, PlanetModel, Explanation) {
+        use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
+        use rand::SeedableRng;
+        let request = SystemRequest::System(WholeSystemRequest {
+            planets: Some(std::collections::BTreeMap::from([(arch.to_string(), 1)])),
+            seed: Some(seed),
+            ..WholeSystemRequest::default()
+        });
+        let system = draw(
+            &request,
+            &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+        )
+        .expect("the system draws");
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.params.archetype.as_deref() == Some(arch))
+            .expect("the asked body")
+            .clone();
+        let context = body_context(&system, &body).expect("a context");
+        let model = body.model.expect("a model");
+        let e = explain(&context, &model).expect("explained");
+        (context, model, e)
+    }
+
+    /// The part of an albedo tree under `key`.
+    fn cover_part<'a>(albedo: &'a Cause, key: &str) -> Option<&'a Cause> {
+        albedo
+            .causes
+            .iter()
+            .find(|c| c.quantity == Quantity::CoverShare && c.label.as_deref() == Some(key))
+    }
+
+    /// The surface's parts and the deck: what sums to the whole disc (the
+    /// clouds and the haze are layers over it).
+    fn disc_sum(albedo: &Cause) -> f64 {
+        albedo
+            .causes
+            .iter()
+            .filter(|c| {
+                c.quantity == Quantity::CoverShare
+                    && !matches!(c.label.as_deref(), Some("cloud" | "haze"))
+            })
+            .map(|c| c.value)
+            .sum()
+    }
+
+    /// Triton's whole disc is frost (the volatiles of its cold air, one
+    /// part per gas); Io's is SO₂ frost, the
+    /// volcanoes' (with its note); neither names land or ice.
+    #[test]
+    fn a_frosted_disc_names_its_frost() {
+        for seed in [1, 2, 3] {
+            let (_, model, e) = drawn_body("triton-like", seed);
+            let albedo = root(&e, Quantity::BondAlbedo);
+            let frost: f64 = ["frost_n2", "frost_ch4", "frost_co2"]
+                .iter()
+                .filter_map(|k| cover_part(albedo, k))
+                .map(|c| c.value)
+                .sum();
+            assert!(frost > 0.95, "seed {seed}: {albedo:#?}");
+            assert!(cover_part(albedo, "land").is_none(), "{albedo:#?}");
+            assert_eq!(albedo.value, model.surface.unwrap().climate.bond_albedo);
+            let (_, _, e) = drawn_body("io-like", seed);
+            let albedo = root(&e, Quantity::BondAlbedo);
+            let frost = cover_part(albedo, "frost_so2").expect("SO₂ frost");
+            assert!(frost.value > 0.95, "seed {seed}: {albedo:#?}");
+            assert!(has_note(frost, "volcanic_frost"), "{frost:#?}");
+        }
+    }
+
+    /// Titan's methane haze is a layer of its own.
+    #[test]
+    fn titan_names_its_haze() {
+        let (_, _, e) = drawn_body("titan-like", 1);
+        let albedo = root(&e, Quantity::BondAlbedo);
+        let haze = cover_part(albedo, "haze").expect("the haze");
+        assert!(haze.value > 0.1, "{albedo:#?}");
+        assert!(depth(albedo) <= 3);
+    }
+
+    /// Ganymede's exposed crust keeps its two terrain units and the
+    /// plumes' note stays where it was; the temperature tree's albedo
+    /// names the same parts without them (it has no room below).
+    #[test]
+    fn an_icy_crust_names_its_units() {
+        let (_, _, e) = drawn_body("ganymede-like", 1);
+        let albedo = root(&e, Quantity::BondAlbedo);
+        let crust = cover_part(albedo, "crust").expect("the crust");
+        let units = crust
+            .causes
+            .iter()
+            .filter(|c| c.quantity == Quantity::SurfaceAge)
+            .count();
+        assert!(units >= 2, "{albedo:#?}");
+        let nested = find(root(&e, Quantity::SurfaceTemperature), Quantity::BondAlbedo).unwrap();
+        let nested_crust = cover_part(nested, "crust").expect("the crust, nested");
+        assert!(nested_crust.causes.is_empty());
+        assert_eq!(nested_crust.value, crust.value);
+        assert!(depth(root(&e, Quantity::SurfaceTemperature)) <= 3);
+    }
+
+    /// Earth's albedo is its oceans, land, ice and clouds.
+    #[test]
+    fn earth_names_its_clouds_oceans_and_land() {
+        let (_, _, e) = drawn_body("earth-like", 1);
+        let albedo = root(&e, Quantity::BondAlbedo);
+        for key in ["ocean", "land", "cloud"] {
+            assert!(cover_part(albedo, key).is_some(), "{key}: {albedo:#?}");
+        }
+        assert!(cover_part(albedo, "frost_n2").is_none());
+    }
+
+    /// The parts are the cover the climate weighed: they sum to the disc
+    /// and the albedo they weigh is the stored one.
+    #[test]
+    fn the_shares_are_the_cover_the_climate_used() {
+        for arch in [
+            "earth-like",
+            "triton-like",
+            "io-like",
+            "titan-like",
+            "ganymede-like",
+        ] {
+            for seed in [1, 2] {
+                let (context, model, e) = drawn_body(arch, seed);
+                let albedo = root(&e, Quantity::BondAlbedo);
+                let sum = disc_sum(albedo);
+                assert!((0.97..=1.03).contains(&sum), "{arch} {seed}: {sum}");
+                let surface = model.surface.as_ref().unwrap();
+                let steps = replay(&context, &model, surface);
+                let cover = super::super::albedo::cover(
+                    surface.climate.temperature_k,
+                    &steps.climate_gases,
+                    &surface.water,
+                    &steps.frost,
+                );
+                let deck = albedo
+                    .causes
+                    .iter()
+                    .find(|c| c.label.as_deref() == Some("deck"))
+                    .map_or(0.0, |c| c.value);
+                let weighed = super::super::albedo::bond_albedo_over(
+                    &cover,
+                    &steps.climate_gases,
+                    deck,
+                    None,
+                );
+                if arch != "ganymede-like" {
+                    assert!(
+                        (weighed - surface.climate.bond_albedo).abs() < 0.02,
+                        "{arch} {seed}: {weighed} vs {}",
+                        surface.climate.bond_albedo
+                    );
+                }
+                if let Some(cloud) = cover_part(albedo, "cloud") {
+                    assert!((cloud.value - cover.cloud).abs() < 1e-12);
+                }
+                for tree in &e.trees {
+                    assert!(depth(tree) <= 3, "{arch}: {:?}", tree.quantity);
+                }
+            }
         }
     }
 
