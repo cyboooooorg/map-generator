@@ -106,6 +106,34 @@ input[type='radio'] {
   cursor: help;
 }
 
+/* A formula or unit whose name shows on hover (title) and on tap (focus). */
+.gloss {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+  position: relative;
+}
+.gloss[data-name]:focus {
+  outline: none;
+}
+.gloss[data-name]:focus::after {
+  content: attr(data-name);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  z-index: 100;
+  background: var(--control-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: normal;
+  pointer-events: none;
+}
+
 /*
  * A panel of the interface, framed as the theme frames it: its corners
  * cut (--frame-clip), a glow inside (--glow) and decorations drawn over
