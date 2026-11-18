@@ -657,8 +657,9 @@ pub(crate) struct Bare {
     /// What the star's ultraviolet left of that methane
     /// ([`methane_photolysis`]), bar.
     pub photolysed: Gases,
-    /// Whether the air is reducing ([`atmosphere::reducing`]): it then
-    /// outgassed no CO₂ ([`atmosphere::without_co2_if_reducing`]).
+    /// Whether the air is a Titan's dense, hazy, reducing air
+    /// ([`atmosphere::reducing`], [`atmosphere::titan_like_air`]): it
+    /// then outgassed no CO₂ ([`atmosphere::without_co2_if_reducing`]).
     pub reducing: bool,
     /// What the cold left of that in the air ([`cold_trap`]), bar.
     pub trapped: Gases,
@@ -741,6 +742,12 @@ pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interio
 /// climate then solved again; none on a dayside above SO₂'s triple
 /// point), its [`life`] and the oxygen it makes. A runaway's water is
 /// the steam escape has left in its air.
+///
+/// A body whose methane survives ([`atmosphere::reducing`]) is first
+/// solved without CO₂ ([`atmosphere::without_co2_if_reducing`]); it keeps
+/// that air only if its climate leaves it the dense, hazy, reducing air
+/// of a Titan ([`atmosphere::titan_like_air`]), and is solved again with
+/// its CO₂ otherwise (a Triton's thin nitrogen air keeps its CO₂ frost).
 pub(crate) fn bare(
     context: &Context,
     inputs: &PlanetInputs,
@@ -748,6 +755,24 @@ pub(crate) fn bare(
     heat: &InternalHeat,
     fluence: f64,
     w: Water,
+) -> Bare {
+    let held_back = bare_air(context, inputs, interior, heat, fluence, w, true);
+    if !held_back.reducing || atmosphere::titan_like_air(&held_back.climate_gases) {
+        held_back
+    } else {
+        bare_air(context, inputs, interior, heat, fluence, w, false)
+    }
+}
+
+/// [`bare`], with the CO₂ of a reducing air held back when `hold_back`.
+fn bare_air(
+    context: &Context,
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    heat: &InternalHeat,
+    fluence: f64,
+    w: Water,
+    hold_back: bool,
 ) -> Bare {
     let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, interior);
     let r = regime(inputs, heat, interior, &w);
@@ -771,7 +796,7 @@ pub(crate) fn bare(
     // without it.
     let mut out = outgassed(inputs, &w, r, interior);
     let (mut kept, mut lost, mut photolysed) = escaped(out);
-    let reducing = atmosphere::reducing(&photolysed, context.equilibrium_k);
+    let reducing = hold_back && atmosphere::reducing(&photolysed, context.equilibrium_k);
     if reducing && out.co2 > 0.0 {
         out = atmosphere::without_co2_if_reducing(out, reducing);
         (kept, lost, photolysed) = escaped(out);

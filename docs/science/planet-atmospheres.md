@@ -576,8 +576,11 @@ understate the destruction round red dwarfs, if anything).
 **Reducing air** (`reducing`, `without_co2_if_reducing`, issue #557).
 A body whose methane survives the ultraviolet (the air the photolysis
 leaves holds some) under an equilibrium temperature of 150 K (the line
-of *Photochemistry* below) has a reducing air, as Titan's, and outgasses
-no CO₂: the chain runs again without it. Titan's interior holds CO₂,
+of *Photochemistry* below) has a reducing air. The chain first solves it
+without CO₂; it keeps that air if the climate then leaves a Titan's
+dense, hazy air (`titan_like_air`: methane still in it, over methane's
+triple-point pressure of 0.1169 bar, the line of the hydrocarbon-world
+class), and is solved again with its CO₂ otherwise. Titan's interior holds CO₂,
 likely its most abundant gas (up to 3 % of its mass), but stores it,
 mostly dissolved in its ocean, and what reaches the air is a moderate
 outgassing of methane (Tobie, Gautier & Hersant 2012, ApJ 752, 125,
@@ -594,12 +597,12 @@ pressure tree shows the missing CO₂ with the note `reducing_air`.
 Departures: the storage in an ocean would hold for any ice-covered
 ocean, but only Titan's case is checked, so the CO₂ of bodies whose air
 is not reducing is kept (Europa's surface shows some); Titan's N₂ still
-comes from its ammonia, though ammonia dissolves in an ocean as well;
-and Triton's trace of methane makes its air reducing too, so the model's
-Triton keeps none of the 6 to 14 bar of CO₂ it froze under its nitrogen
-frost before, while Triton's surface shows some CO₂ ice (Cruikshank et
-al. 1993, Science 261, 742). Its nitrogen frost covers its whole disc
-either way: its albedo and temperature do not move.
+comes from its ammonia, though ammonia dissolves in an ocean as well.
+Triton's trace of methane makes its air reducing too, but its thin
+nitrogen air is no Titan's: it keeps its CO₂ frost, as Triton's surface
+shows CO₂ ice (Cruikshank et al. 1993, Science 261, 742; Quirico et al.
+1999, Icarus 139, 159). The model's triton-likes freeze 6 to 32 bar of
+it under their nitrogen frost, far more than a surface veneer.
 
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
 body's equilibrium temperature frosts onto the ground until its partial

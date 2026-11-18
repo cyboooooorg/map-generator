@@ -1393,6 +1393,23 @@ mod tests {
         }
     }
 
+    /// A Triton-like body keeps its CO₂ frost: its trace of methane
+    /// makes its air reducing, but its thin nitrogen air is no Titan's
+    /// (`atmosphere::titan_like_air`), and Triton's surface shows CO₂ ice
+    /// (issue #557).
+    #[test]
+    fn triton_likes_keep_their_co2_frost() {
+        for seed in 1..=10 {
+            let (context, model, e) = drawn_body("triton-like", seed);
+            let surface = model.surface.as_ref().expect("a surface");
+            let frost = replay(&context, &model, surface).frost;
+            assert!(frost.co2 > 0.0, "seed {seed}: {frost:?}");
+            assert!(co2_frost_share(&context, &model) > 0.0, "seed {seed}");
+            assert!(!has_note(root(&e, Quantity::Pressure), "reducing_air"));
+            println!("triton-like {seed}: CO2 frost {:.3e} bar", frost.co2);
+        }
+    }
+
     /// Ganymede's exposed crust keeps its two terrain units and the
     /// plumes' note stays where it was; the temperature tree's albedo
     /// names the same parts without them (it has no room below).

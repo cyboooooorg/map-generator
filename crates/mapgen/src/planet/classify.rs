@@ -167,7 +167,7 @@ const DENSE_AIR_BAR: f64 = 1.0;
 /// body whose outgassing barely outruns its star's ultraviolet keeps a
 /// trace of methane over its ice under a thinner air
 /// ([`super::atmosphere::methane_photolysis`]), and stays an ice world.
-const METHANE_TRIPLE_BAR: f64 = 0.1169;
+pub(crate) const METHANE_TRIPLE_BAR: f64 = 0.1169;
 
 /// Earth oceans of water kept from which an ocean world drowns all land.
 /// Calibration: Cowan & Abbot 2014, doi:10.1088/0004-637X/781/1/27, find

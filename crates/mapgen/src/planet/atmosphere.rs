@@ -1171,6 +1171,19 @@ pub fn reducing(photolysed: &Gases, equilibrium_k: f64) -> bool {
     photolysed.ch4 > 0.0 && equilibrium_k < METHANE_SURVIVES_K
 }
 
+/// Whether the air a climate leaves (`climate_air`) is a Titan's: dense
+/// enough for a hydrocarbon liquid, over methane's triple-point pressure
+/// ([`super::classify::METHANE_TRIPLE_BAR`], the line of the
+/// hydrocarbon-world class), and still holding methane, which makes its
+/// haze ([`super::albedo::haze`]). The sources of
+/// [`without_co2_if_reducing`] describe that air; a Triton's thin
+/// nitrogen air, a few µbar, is not one, and Triton's surface shows CO₂
+/// ice (Cruikshank et al. 1993, Science 261, 742; Quirico et al. 1999,
+/// Icarus 139, 159).
+pub fn titan_like_air(climate_air: &Gases) -> bool {
+    climate_air.ch4 > 0.0 && climate_air.total() > super::classify::METHANE_TRIPLE_BAR
+}
+
 /// `gases` without their CO₂ on a body whose air is `reducing`
 /// ([`reducing`]); unchanged otherwise.
 ///
@@ -1197,12 +1210,10 @@ pub fn reducing(photolysed: &Gases, equilibrium_k: f64) -> bool {
 /// the CO₂ of the bodies whose air is not reducing (Europa's surface
 /// shows some), and keeps the N₂ that Titan's ammonia gives
 /// ([`photochemistry`]) though ammonia dissolves in an ocean as well.
-/// A known departure: Triton's trace of methane makes its air reducing
-/// too, so the model's Triton keeps no CO₂ (it froze 6 to 14 bar of it
-/// under its nitrogen frost before), while Triton's surface shows some
-/// CO₂ ice (Cruikshank et al. 1993, Science 261, 742). Its nitrogen
-/// frost covers its whole disc either way: its albedo and temperature
-/// do not move.
+/// The chain holds the CO₂ back only where the climate then leaves a
+/// Titan's dense, hazy air ([`titan_like_air`], see `planet::bare`):
+/// Triton's trace of methane makes its air reducing too, but its thin
+/// air keeps its CO₂ frost, as Triton's surface shows.
 pub fn without_co2_if_reducing(gases: Gases, reducing: bool) -> Gases {
     if reducing {
         Gases { co2: 0.0, ..gases }
