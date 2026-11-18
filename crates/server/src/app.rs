@@ -5551,9 +5551,39 @@ mod tests {
     async fn a_system_with_no_planet_is_stored_listed_resolved_and_exported() {
         let app = router(temp_config("no-planet"));
         let request = r#"{"system": {"star": "O5V", "planets": {}, "seed": 5, "width": 64, "height": 32}}"#;
+        no_planet_round_trip(&app, request, 5).await;
+    }
 
+    /// The drawn case: an O5V system that ends with no planet but a belt
+    /// (the first such seed of 1..=60), through the same paths.
+    #[tokio::test]
+    async fn a_drawn_o_star_with_no_planet_and_a_belt_is_stored_and_exported() {
+        let app = router(temp_config("no-planet-belt"));
+        let mut found = None;
+        for seed in 1..=60u32 {
+            let request = format!(
+                r#"{{"system": {{"star": "O5V", "seed": {seed}, "width": 64, "height": 32}}}}"#
+            );
+            let (status, body) = call(&app, "POST", "/api/systems/resolve", Some(&request)).await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+            let system = &json(&body)["system"];
+            let belts = system["belts"].as_array().map_or(0, Vec::len);
+            if system["bodies"].as_array().unwrap().is_empty() && belts > 0 {
+                found = Some((seed, request, belts));
+                break;
+            }
+        }
+        let (seed, request, belts) = found.expect("a planetless O5V draw with a belt in 1..=60");
+        let id = no_planet_round_trip(&app, &request, seed).await;
+        let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(json(&detail)["system"]["belts"].as_array().unwrap().len(), belts);
+    }
+
+    /// Resolves, stores, reads, lists and exports `request` (a system with
+    /// no body and no focus); answers its id.
+    async fn no_planet_round_trip(app: &Router, request: &str, seed: u32) -> String {
         // Resolved: nothing written, no formation, no job.
-        let (status, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+        let (status, body) = call(app, "POST", "/api/systems/resolve", Some(request)).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let resolved = json(&body);
         assert_eq!(resolved["system"]["bodies"], serde_json::json!([]));
@@ -5562,17 +5592,17 @@ mod tests {
         assert!(resolved["job_id"].is_null());
 
         // Stored, with no job to wait for.
-        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        let (status, body) = call(app, "POST", "/api/systems", Some(request)).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let created = json(&body);
         assert!(created["job_id"].is_null(), "{created}");
         let id = created["system_id"].as_str().unwrap().to_string();
 
         // Read back and listed.
-        let (status, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        let (status, detail) = call(app, "GET", &format!("/api/systems/{id}"), None).await;
         assert_eq!(status, StatusCode::OK, "{detail}");
         assert_eq!(json(&detail)["system"]["bodies"], serde_json::json!([]));
-        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let (_, list) = call(app, "GET", "/api/systems", None).await;
         let list = json(&list);
         assert_eq!(list.as_array().unwrap().len(), 1);
         assert_eq!(list[0]["planets"], serde_json::json!({}));
@@ -5581,14 +5611,15 @@ mod tests {
         assert_eq!(list[0]["star"], "O5V");
 
         // Exported, and drawn again from its `create`.
-        let (status, _, bytes) = get_bytes(&app, &format!("/api/systems/{id}/export")).await;
+        let (status, _, bytes) = get_bytes(app, &format!("/api/systems/{id}/export")).await;
         assert_eq!(status, StatusCode::OK);
         let entries = zip_entries(bytes);
         let document: serde_json::Value =
             serde_json::from_slice(&entries[&format!("{id}/system.json")]).unwrap();
         assert_eq!(document["bodies"], serde_json::json!([]));
-        assert_eq!(document["create"]["system"]["seed"], 5);
+        assert_eq!(document["create"]["system"]["seed"], seed);
         assert_eq!(entries.len(), 1, "{:?}", entries.keys());
+        id
     }
 
     /// Removes every `life_draw` and `snowball_draw` of a model from
