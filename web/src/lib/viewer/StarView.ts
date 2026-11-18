@@ -1863,7 +1863,7 @@ export class StarView {
                 this.giantMarkers.map((m) => m.position),
               )
             : null,
-        starPin: this.pins.length > 0 ? this.screen(new Vector3(0, PIN_HEIGHT, 0)) : null,
+        starPin: this.starPinLine ? this.screen(new Vector3(0, PIN_HEIGHT, 0)) : null,
         frost: this.frost.visible
           ? (() => {
               const at = this.screen(this.inPlaneAt(-Math.PI / 2, this.frostAu));
