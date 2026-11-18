@@ -189,6 +189,8 @@ export class LoadedWorld {
       this.systemTides = tides;
       // `focus` shows the planet the system was drawn around, as a planet.
       if (focus) this.subject = 'planet';
+      // A system with no planet has no body to show as one: its star alone.
+      if (!system.bodies.some((b) => b.kind === 'planet')) this.subject = 'star';
       const wanted = body ?? (focus ? null : again ? this.systemBody : null);
       const known = (b: string | null | undefined) => (b && system.bodies.some((x) => x.id === b) ? b : null);
       const first =

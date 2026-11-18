@@ -195,6 +195,8 @@
   const giantList = $derived(
     (giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: g.name, kindLabel: kinds?.[i] ?? null })),
   );
+  /** A planetary system with no planet: its star alone, with no planet orbit, marker or planet facts. */
+  const lone = $derived(selected !== null && giantList.length === 0);
   /** Whether some giant lies where the view compresses distances. */
   const compressFrom = $derived(selected !== null ? systemCompressedFrom(star) : compressedFrom(star));
   const compressed = $derived(!(selected !== null && realScale) && giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressFrom));
@@ -442,8 +444,8 @@
 
   /** How fast time runs in the animation, and the day of the year it shows. */
   const clockText = $derived.by(() => {
-    if (selected !== null && giantList.length > 0) {
-      // A planetary system runs on one clock, in Earth days a second.
+    if (selected !== null) {
+      // A planetary system (planetless ones too) runs on one clock, in Earth days a second.
       return t.starView.systemClock({
         days: formatInt(2 ** speed),
         day: formatInt(Math.floor(elapsedDays) + 1),
@@ -679,7 +681,7 @@
   /** The panels of the dock: the star, the planet shown, and the system's planets. */
   const dockPanels = $derived<DockPanel[]>([
     { id: 'star', title: t.starView.starSection, icon: 'star', content: starPanel },
-    { id: 'planet', title: selected !== null ? t.starView.selectedSection : t.starView.planetSection, icon: 'planet', content: planetPanel },
+    ...(lone ? [] : [{ id: 'planet', title: selected !== null ? t.starView.selectedSection : t.starView.planetSection, icon: 'planet' as const, content: planetPanel }]),
     ...(!worldGiant || selected !== null
       ? [{ id: 'planets', title: kinds ? t.starView.planets : t.starView.giantsSection, icon: 'list' as const, content: planetsPanel }]
       : []),
@@ -887,7 +889,7 @@
     <small class="muted">{t.starView.giantsOff}</small>
   {:else}
     {#if giantList.length === 0}
-      <small class="muted">{t.starView.noGiants}</small>
+      <small class="muted">{lone ? t.starView.noPlanet : t.starView.noGiants}</small>
     {:else}
       <ul class="giants">
         {#each giantList as giant, i (i)}
@@ -949,12 +951,14 @@
         {/each}
       </ul>
     {/if}
+    {#if !lone}
     <dl>
       <dt title={t.starView.forcedHelp}>{t.starView.forced}</dt>
       <dd>{formatUpTo(giantSystem.forced_eccentricity, 3)}</dd>
       <dt title={t.starView.impactsHelp}>{t.starView.impacts}</dt>
       <dd>{t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })}</dd>
     </dl>
+    {/if}
   {/if}
 {/snippet}
 <div class="star-pane" class:concealed={hidden}>

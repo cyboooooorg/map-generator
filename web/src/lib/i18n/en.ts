@@ -274,6 +274,7 @@ export const en = {
     habitableFilter: 'With a habitable world',
     habitableLine: 'A world with liquid water',
     habitableShort: 'Liquid water',
+    noPlanet: 'No planet',
     outdated: 'Outdated: made by an older generator',
     newerFormat: 'Made by a newer generator: update this one to open it',
     outdatedWorlds: 'Outdated worlds: made by an older generator',
@@ -1467,6 +1468,7 @@ export const en = {
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
     giantsOff: 'Not modelled (generated without giant planets)',
     noGiants: 'None: no giant in this system, like most red dwarfs',
+    noPlanet: 'No planet: this star is alone in its system',
     giantLine: (p: { name: string; kind: string; mass: string; orbit: string; year: string }) =>
       `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
     hotGiant: 'hot Jupiter',
