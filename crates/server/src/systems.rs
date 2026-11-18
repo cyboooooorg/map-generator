@@ -653,7 +653,7 @@ mod tests {
 
     const SYSTEM: &str = r#"{
         "format_version": 12, "seed": 42, "width": 1024, "height": 512,
-        "star": {"type": "K1V", "designation": "MGS 48213",
+        "star": {"type": "K1V", "kind": "dwarf", "designation": "MGS 48213",
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
             {"id": "b", "kind": "planet", "type": "barren", "parent": null, "designation": "MGS 48213 b", "generated": false},
@@ -693,7 +693,7 @@ mod tests {
     #[test]
     fn a_system_with_no_body_is_summarized_with_no_planet() {
         let json = r#"{"format_version": 12, "seed": 5, "width": 64, "height": 32,
-            "star": {"type": "O5V", "designation": "MGS 1",
+            "star": {"type": "O5V", "kind": "dwarf", "designation": "MGS 1",
                      "info": {"light": [0.6, 0.7, 1.0], "hz_inner_au": 90.0, "hz_outer_au": 160.0}},
             "bodies": []}"#;
         let s = summarize("mgs-1-5", json.as_bytes(), 3).unwrap();
