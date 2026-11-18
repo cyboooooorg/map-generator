@@ -1716,10 +1716,6 @@ export const en = {
       name: "M♃: Jupiter's mass (318 M⊕)",
       examples: 'Saturn: 0.30 · Jupiter: 1 · brown dwarfs: 13 to 80',
     },
-    'R♃': {
-      name: "R♃: Jupiter's radius (71 492 km, 11 R⊕)",
-      examples: 'Saturn: 0.84 · Jupiter: 1',
-    },
     'M☉': {
       name: "M☉: the Sun's mass (333 000 M⊕)",
       examples: 'red dwarfs: 0.08 to 0.6 · the Sun: 1 · Sirius: 2.1',
@@ -1803,7 +1799,6 @@ export const en = {
       'M⊕': 'Earth mass',
       'R⊕': 'Earth radius',
       'M♃': 'Jupiter mass',
-      'R♃': 'Jupiter radius',
       'L☉': 'solar luminosity',
       'R☉': 'solar radius',
       'M☉': 'solar mass',

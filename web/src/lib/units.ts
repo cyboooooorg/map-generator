@@ -9,7 +9,7 @@ import type { GlossUnit } from './glossary';
  * `°C`, which the `K` entry covers.
  */
 export const UNITS = [
-  'Ga', 'Ma', 'Gyr', 'bar', 'g', 'K', 'AU', 'UA', 'L☉', 'R☉', 'M☉', 'M⊕', 'R⊕', 'M♃', 'R♃', 'RJ', 'g/cm³', 'S⊕',
+  'Ga', 'Ma', 'Gyr', 'bar', 'g', 'K', 'AU', 'UA', 'L☉', 'R☉', 'M☉', 'M⊕', 'R⊕', 'M♃', 'RJ', 'g/cm³', 'S⊕',
   'W/m²', 'µT', 'm/s²', 'mm/s²', 'km', 'km²', 'M km²', 'km/s', 'TW', 'GW', 'MW', 'W',
 ] as const satisfies readonly GlossUnit[];
 export type Unit = (typeof UNITS)[number];

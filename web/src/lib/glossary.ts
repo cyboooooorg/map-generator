@@ -12,7 +12,7 @@ export type Formula = (typeof FORMULAS)[number];
 
 /** Units whose symbol is unambiguous: glossed anywhere. */
 export const SYMBOL_UNITS = [
-  'M⊕', 'R⊕', 'M♃', 'R♃', 'M☉', 'L☉', 'R☉', 'S⊕', 'W/m²', 'µT', 'm/s²', 'mm/s²', '°C',
+  'M⊕', 'R⊕', 'M♃', 'M☉', 'L☉', 'R☉', 'S⊕', 'W/m²', 'µT', 'm/s²', 'mm/s²', '°C',
 ] as const;
 
 /** Units made of plain letters: glossed only right after a number. */

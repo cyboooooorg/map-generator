@@ -1628,10 +1628,6 @@ export const fr: Messages = {
       name: `M♃${S}: la masse de Jupiter (318${S}M⊕)`,
       examples: `Saturne${S}: 0,30 · Jupiter${S}: 1 · naines brunes${S}: 13 à 80`,
     },
-    'R♃': {
-      name: `R♃${S}: le rayon de Jupiter (71${S}492${S}km, 11${S}R⊕)`,
-      examples: `Saturne${S}: 0,84 · Jupiter${S}: 1`,
-    },
     'M☉': {
       name: `M☉${S}: la masse du Soleil (333${S}000${S}M⊕)`,
       examples: `naines rouges${S}: 0,08 à 0,6 · le Soleil${S}: 1 · Sirius${S}: 2,1`,
@@ -1715,7 +1711,6 @@ export const fr: Messages = {
       'M⊕': 'masse terrestre',
       'R⊕': 'rayon terrestre',
       'M♃': 'masse de Jupiter',
-      'R♃': 'rayon de Jupiter',
       'L☉': 'luminosité solaire',
       'R☉': 'rayon solaire',
       'M☉': 'masse solaire',
