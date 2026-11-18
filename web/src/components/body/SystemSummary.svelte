@@ -62,13 +62,13 @@
       {/each}
     </div>
     <small class="muted"
-      >{t.card.systemFacts({
+      ><Glossed text={t.card.systemFacts({
         planets: planets.length,
         moons: system.bodies.length - planets.length,
         ice: formatAu(star.ice_line_au),
         metallicity: `${star.metallicity >= 0 ? '+' : ''}${formatUpTo(star.metallicity, 2)}`,
         age: formatAge(star.info.age_gyr),
-      })}</small
+      })} /></small
     >
   </section>
 {/if}

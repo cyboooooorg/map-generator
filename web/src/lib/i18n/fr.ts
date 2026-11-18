@@ -1707,6 +1707,9 @@ export const fr: Messages = {
       'H₂': 'dihydrogène',
       'H₂/He': 'hydrogène et hélium',
     },
+    notations: {
+      '[Fe/H]': `métallicité${S}: abondance du fer rapportée au Soleil (échelle logarithmique)`,
+    },
     units: {
       'M⊕': 'masse terrestre',
       'R⊕': 'rayon terrestre',

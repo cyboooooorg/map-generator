@@ -1795,6 +1795,9 @@ export const en = {
       'H₂': 'hydrogen',
       'H₂/He': 'hydrogen and helium',
     },
+    notations: {
+      '[Fe/H]': 'metallicity: iron abundance relative to the Sun (log scale)',
+    },
     units: {
       'M⊕': 'Earth mass',
       'R⊕': 'Earth radius',

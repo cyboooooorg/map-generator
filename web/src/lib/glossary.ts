@@ -3,12 +3,16 @@
 // `glossary` block of the i18n catalogs.
 import { t } from './i18n/index.svelte';
 
-export type GlossKind = 'formula' | 'unit';
+export type GlossKind = 'formula' | 'unit' | 'notation';
 export type Segment = { text: string } | { text: string; kind: GlossKind; name: string };
 
 /** Molecules, in subscript form only: ASCII `CO2`, `He`, `Ar` stay plain text. */
 export const FORMULAS = ['CO₂', 'N₂', 'O₂', 'CH₄', 'C₂H₆', 'H₂O', 'NH₃', 'SO₂', 'H₂', 'H₂/He'] as const;
 export type Formula = (typeof FORMULAS)[number];
+
+/** Notations that are neither molecules nor units, matched with their brackets. */
+export const NOTATIONS = ['[Fe/H]'] as const;
+export type Notation = (typeof NOTATIONS)[number];
 
 /** Units whose symbol is unambiguous: glossed anywhere. */
 export const SYMBOL_UNITS = [
@@ -37,6 +41,10 @@ const FORMULA_RE = new RegExp(
   `(?<![\\p{L}\\p{N}${SUBSCRIPTS}])(${longestFirst(FORMULAS)})(?![\\p{L}\\p{N}${SUBSCRIPTS}])`,
   'gu',
 );
+const NOTATION_RE = new RegExp(
+  `(?<![\\p{L}\\p{N}])(${longestFirst(NOTATIONS)})(?![\\p{L}\\p{N}])`,
+  'gu',
+);
 const SYMBOL_RE = new RegExp(
   `(?<![\\p{L}\\p{N}])(${longestFirst(SYMBOL_UNITS)})(?![\\p{L}\\p{N}²³])`,
   'gu',
@@ -57,6 +65,7 @@ function hits(text: string): Hit[] {
     }
   };
   scan(FORMULA_RE, 'formula');
+  scan(NOTATION_RE, 'notation');
   scan(SYMBOL_RE, 'unit');
   scan(LETTER_RE, 'unit');
   found.sort((a, b) => a.start - b.start || b.end - a.end);
@@ -67,7 +76,8 @@ function hits(text: string): Hit[] {
 
 /** The name of `term` in the active language, or null when it is not a known term. */
 export function glossName(kind: GlossKind, term: string): string | null {
-  const names: Record<string, string> = kind === 'formula' ? t.glossary.formulas : t.glossary.units;
+  const names: Record<string, string> =
+    kind === 'formula' ? t.glossary.formulas : kind === 'notation' ? t.glossary.notations : t.glossary.units;
   const key = term.replace(/[\u00a0\u202f]/g, ' ');
   return Object.hasOwn(names, key) ? (names[key] ?? null) : null;
 }

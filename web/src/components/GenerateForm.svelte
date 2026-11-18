@@ -794,7 +794,7 @@
       <div class="advanced-body">
       <fieldset>
         <legend>
-          {t.form.metallicity}
+          <Glossed text={t.form.metallicity} />
           <label class="check inline">
             <input type="checkbox" bind:checked={giantChoice.metallicityRandom} />
             {t.form.random}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setLocale } from './i18n/index.svelte';
 import { en } from './i18n/en';
 import { fr } from './i18n/fr';
-import { FORMULAS, GLOSS_UNITS, glossName, glossSegments } from './glossary';
+import { FORMULAS, GLOSS_UNITS, NOTATIONS, glossName, glossSegments } from './glossary';
 
 const glossed = (s: string) => glossSegments(s).filter((g) => 'kind' in g).map((g) => g.text);
 
@@ -51,6 +51,12 @@ describe('glossSegments', () => {
   it('ignores ASCII lookalikes', () => expect(glossed('He said CO2')).toEqual([]));
   it('does not gloss k₂/Q', () => expect(glossed('k₂/Q')).toEqual([]));
   it('does not cut a longer word', () => expect(glossed('5 kmh, 5 Gyr, 5 km²')).toEqual(['Gyr', 'km²']));
+  it('glosses [Fe/H] as an exact token, brackets included', () => {
+    expect(glossed('Star metallicity [Fe/H]')).toEqual(['[Fe/H]']);
+    expect(glossed('ice line 3 AU · [Fe/H] +0.1 · age 4 Ga')).toEqual(['[Fe/H]', 'AU', 'Ga']);
+    expect(glossed('Fe/H and [Fe/H]x and a[Fe/H]')).toEqual([]);
+    expect(glossName('notation', '[Fe/H]')).toBe('metallicity: iron abundance relative to the Sun (log scale)');
+  });
   it('names the glossed terms', () => {
     expect(glossName('formula', 'CO₂')).not.toBeNull();
     expect(glossName('unit', 'bar')).not.toBeNull();
@@ -62,6 +68,7 @@ describe('glossary catalogs', () => {
   it('names every formula and unit in both languages', () => {
     for (const catalog of [en, fr]) {
       for (const f of FORMULAS) expect(catalog.glossary.formulas[f].length).toBeGreaterThan(0);
+      for (const n of NOTATIONS) expect(catalog.glossary.notations[n].length).toBeGreaterThan(0);
       for (const u of GLOSS_UNITS) expect(catalog.glossary.units[u].length).toBeGreaterThan(0);
     }
   });
