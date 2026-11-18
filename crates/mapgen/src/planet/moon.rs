@@ -451,6 +451,24 @@ mod tests {
         }
     }
 
+    /// Titan's air near its surface holds 5.65 % methane (Niemann et al.
+    /// 2005, doi:10.1038/nature04122): `titan-like` keeps 3 to 6 % on
+    /// every seed of `archetype_census`, at 90 to 97 K over its seas
+    /// (issue #530).
+    #[test]
+    fn titan_methane_is_three_to_six_percent() {
+        for seed in 1..=40 {
+            let m = archetype_moon("titan-like", seed);
+            assert_eq!(m.class, PlanetClass::HydrocarbonWorld, "seed {seed}: {m:?}");
+            let s = m.surface.expect("surface");
+            assert_eq!(s.climate.liquid, SurfaceLiquid::Hydrocarbons, "{s:?}");
+            let t = s.climate.temperature_k;
+            assert!((90.0..=97.0).contains(&t), "seed {seed}: {s:?}");
+            let ch4 = s.gases.ch4 / s.gases.total();
+            assert!((0.03..=0.06).contains(&ch4), "seed {seed}: {ch4} {s:?}");
+        }
+    }
+
     #[test]
     fn ganymede_is_airless() {
         let m = model(

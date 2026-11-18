@@ -192,15 +192,21 @@ fn co2_amount(co2: f64) -> f64 {
 const H2O_OPACITY: f64 = 111.0;
 
 /// Grey opacity of methane at 1 bar in 1 bar of air, with
-/// [`LINE_EXPONENT`]. Calibration, no source: Titan's 93.7 K
-/// (Fulchignoni et al. 2005, doi:10.1038/nature04314), which `titan-like`
-/// at Saturn's orbit reaches (93.3 to 93.8 K over seeds 0 to 19) under
-/// the vapour of its seas, on the column of [`super::column`] (3.3 before
-/// its saturation, issue #443; 3.4 on the old Eddington core, issue
-/// #441). Titan's real greenhouse is mostly collision-induced (N₂–N₂,
-/// N₂–CH₄, N₂–H₂; McKay, Pollack & Courtin 1991,
-/// doi:10.1126/science.11538492, not checked), and its haze cools it by
-/// about 9 K; this opacity carries all of it. That is why it keeps the
+/// [`LINE_EXPONENT`]. Calibration, no source, together with
+/// [`CH4_NEAR_IR_MAX`]: Titan's 93.7 K (Fulchignoni et al. 2005,
+/// doi:10.1038/nature04314) and the 5.65 % of methane near its surface
+/// (Niemann et al. 2005, doi:10.1038/nature04122), which `titan-like`
+/// reaches as 90.6 to 93.0 K (median 92.1 K) and 3.8 to 5.7 % (median
+/// 4.8 %) over seeds 1 to 40 of `archetype_census`, against the 90 to
+/// 97 K and 3 to 6 % of issue #530, under the vapour of its seas and the
+/// anti-greenhouse of [`stratospheric_share`], on the column of
+/// [`super::column`] (6.0 before the anti-greenhouse, which put
+/// `titan-like` at 90.4 to 94.5 K and 3.7 to 6.8 %; 3.3 before its
+/// saturation, issue #443; 3.4 on the old Eddington core, issue #441).
+/// Titan's real greenhouse is mostly collision-induced (N₂–N₂, N₂–CH₄,
+/// N₂–H₂; McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492,
+/// not checked), and its haze cools it by about 9 K; this opacity carries
+/// all of it but the methane's own near-infrared share. That is why it keeps the
 /// square root of the air's pressure (see [`methane_depth`]):
 /// collision-induced absorption grows with the nitrogen faster than line
 /// broadening does, not slower.
@@ -208,7 +214,7 @@ const H2O_OPACITY: f64 = 111.0;
 /// It applies to the methane that radiates, the methane cold-trapped at
 /// the tropopause left out (see [`super::column`]), and saturates past
 /// [`CH4_SATURATION_BAR`] (see [`methane_depth`]).
-const CH4_OPACITY: f64 = 6.0;
+const CH4_OPACITY: f64 = 7.75;
 
 /// Methane, bar, past which its greenhouse saturates ([`methane_depth`]):
 /// the amount `u` its opacity counts grows as `p / (1 + p / s)`, `p` the
@@ -223,9 +229,13 @@ const CH4_OPACITY: f64 = 6.0;
 /// Calibration, no source, together with [`CH4_OPACITY`], on three
 /// constraints at once: Titan's 93.7 K; Titan's warming from 1 to 10 bar
 /// of methane under a third of its warming from 0.01 to 0.1 bar (0.6 K
-/// against 2.6 K; 0.05 bar gave 2.9 K against 4.2 K); and seed 182's
-/// planet d (an equilibrium temperature of 114 K under 4.4 bar of N₂ and
-/// 26 bar of methane) under 150 K (149 K; 157 K with 0.05 bar). Titan's
+/// against 2.6 K with the opacity 6.0; 0.05 bar gave 2.9 K against
+/// 4.2 K), now held on the outgoing radiation alone, since the
+/// anti-greenhouse of [`stratospheric_share`] grows over the second step
+/// (with it, 0.8 K against 1.2 K); and seed 182's planet d (an
+/// equilibrium temperature of 114 K under 4.4 bar of N₂ and 26 bar of
+/// methane) under 150 K (149 K before the anti-greenhouse, 135 K with
+/// it; 157 K with 0.05 bar). Titan's
 /// own radiating methane, some 0.05 bar, is past it: its greenhouse is
 /// already saturated. Without it, the `sqrt(p_CH₄ P)` law stretched
 /// 500-fold past Titan put that planet at 351 K (issue #443).
@@ -252,6 +262,67 @@ fn methane_depth(gases: &Gases) -> (f64, f64) {
     let depth = CH4_OPACITY * (u * b).sqrt();
     let rate = 0.5 * (growth + (others + u * growth) / b);
     (depth, rate * depth)
+}
+
+/// Most of the starlight a body absorbs that the methane above its
+/// tropopause can take in its near-infrared bands (0.89 to 3.3 µm, from
+/// memory) and send back to space ([`stratospheric_share`]): the
+/// anti-greenhouse of methane, which McKay, Pollack & Courtin 1991
+/// (*Science* 253, 1118, doi:10.1126/science.11538492; title and
+/// bibliographic data checked, the paper not) describe on Titan together
+/// with its haze's. Calibration, no source, together with
+/// [`CH4_OPACITY`] and [`CH4_NEAR_IR_HALF_BAR`]: `titan-like` at 3.8 to
+/// 5.7 % of methane and 90.6 to 93.0 K over seeds 1 to 40 of
+/// `archetype_census` (targets 3 to 6 % and 90 to 97 K, issue #530),
+/// where it takes 11 % of the light of the reference Titan. Because the
+/// methane let through the cold trap grows with the tropopause's
+/// temperature, a Titan nearer its star loses more of its light: it
+/// narrows the spread of the archetype's temperature (2.4 K against
+/// 4.1 K without it), and with it the spread of the methane its seas
+/// keep in its air. A larger value narrows it more but needs a larger
+/// [`CH4_OPACITY`] (0.4 with 8.5: 90.8 to 92.4 K, 3.9 to 5.3 %). The
+/// share of the light in methane's bands depends on the star's spectrum,
+/// redder stars giving more of it; one value for every star here.
+const CH4_NEAR_IR_MAX: f64 = 0.3;
+
+/// Methane above the tropopause, bar, at which it takes half of
+/// [`CH4_NEAR_IR_MAX`] ([`stratospheric_share`]): the column past which
+/// its near-infrared bands are opaque and only their wings widen.
+/// Calibration, no source, with [`CH4_NEAR_IR_MAX`]: Titan's cold trap
+/// lets through some 0.003 bar (its stratosphere's 1.4 % of methane over
+/// 0.1 bar holds 0.0014 bar, Niemann et al. 2005, from memory), under
+/// it, so that its share still grows with the tropopause's temperature;
+/// a world of 26 bar of methane under a warm tropopause takes nearly all
+/// of [`CH4_NEAR_IR_MAX`] (0.27 for census seed 182's planet d).
+const CH4_NEAR_IR_HALF_BAR: f64 = 0.005;
+
+/// Share of the starlight a body absorbs that the methane above its
+/// tropopause takes first, in its near-infrared bands, and sends back
+/// to space: `m / (m + h)` of [`CH4_NEAR_IR_MAX`], `m` the methane above
+/// the tropopause of a stratosphere at `skin_k`
+/// ([`column::stratospheric_methane_bar`]) and `h`
+/// [`CH4_NEAR_IR_HALF_BAR`]. None without methane.
+fn stratospheric_share(gases: &Gases, skin_k: f64) -> f64 {
+    let m = column::stratospheric_methane_bar(gases, skin_k);
+    if m <= 0.0 {
+        return 0.0;
+    }
+    CH4_NEAR_IR_MAX * m / (m + CH4_NEAR_IR_HALF_BAR)
+}
+
+/// What the surface of a body under `gases` absorbs, W/m², at the
+/// equilibrium temperature `t_eq` (the light, `σ T_eq⁴`) with
+/// `heat_flux_w_m2` of internal heat: the light less the share the
+/// stratosphere's methane takes and radiates to space
+/// ([`stratospheric_share`], the anti-greenhouse of McKay, Pollack &
+/// Courtin 1991, doi:10.1126/science.11538492, not checked), under the
+/// skin temperature `T_eq / 2^¼` the column uses. The stratosphere that
+/// absorbs it is not warmed in the column: its skin temperature stays
+/// that of a grey stratosphere.
+fn absorbed_w_m2(t_eq: f64, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
+    let t_eq = t_eq.max(0.0);
+    let skin = t_eq * 0.5_f64.powf(0.25);
+    SIGMA * t_eq.powi(4) * (1.0 - stratospheric_share(gases, skin)) + heat_flux_w_m2.max(0.0)
 }
 
 /// Power of a partial pressure, and of the broadening pressure, in a
@@ -642,7 +713,8 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// radiative–convective column of [`super::column`] balances what the
 /// surface absorbs, `σ T_eq⁴`, with `T_eq` the context's equilibrium
 /// temperature (under the Bond albedo it was given, see
-/// [`Context::with_albedo`]), plus the internal heat; the column's
+/// [`Context::with_albedo`]) less the share the stratosphere's methane
+/// takes ([`absorbed_w_m2`]), plus the internal heat; the column's
 /// stratosphere sits at the skin temperature `T_eq / 2^¼` of a grey
 /// atmosphere (Pierrehumbert 2010, §4.3; from memory, not checked). Its opacities are calibrated on Venus, Earth, Titan and
 /// the moist plateau; a steam atmosphere sends out the Simpson–Nakajima
@@ -660,7 +732,7 @@ pub fn surface_temperature_k(
     emissivity: f64,
 ) -> f64 {
     let t_eq = context.equilibrium_k.max(0.0);
-    let absorbed = SIGMA * t_eq.powi(4) + heat_flux_w_m2.max(0.0);
+    let absorbed = absorbed_w_m2(t_eq, gases, heat_flux_w_m2);
     let e = emissivity.clamp(0.01, 1.0);
     let bare = (absorbed / (e * SIGMA)).powf(0.25);
     if gases.total() <= 0.0 || bare <= 0.0 {
@@ -799,29 +871,92 @@ const NITROGEN_RAOULT_SHARE: f64 = 0.5;
 /// droplets; beyond it the rule below is not checked.
 const MAX_NITROGEN_IN_LIQUID: f64 = 0.3;
 
-/// The temperature, K, under which the surface liquid of a body whose air
-/// holds `n2_bar` of nitrogen freezes: the methane liquidus lowered by the
-/// nitrogen dissolved in it; pure methane's triple point without
-/// nitrogen.
+/// Triple point of ethane, K: 90.4 K (Lemmon et al. 2013, as Richardson,
+/// Hartwig & Leachman 2019 quote it; checked in their manuscript).
+const ETHANE_TRIPLE_K: f64 = 90.4;
+
+/// Enthalpy of melting of the ethane solid that a cold liquid freezes
+/// into, over the gas constant, K: 2.79 kJ/mol at 89.5 K (Domalski &
+/// Hearing 1996, through the NIST Chemistry WebBook; checked there) over
+/// 8.314 J/(mol·K). Ethane's own enthalpy of fusion is 0.583 kJ/mol
+/// (Atake & Chihara 1976, NIST), but its plastic phase lasts less than a
+/// kelvin under its triple point: under it the solid takes the
+/// transition's enthalpy too, the sum Domalski & Hearing give.
+const ETHANE_FUSION_L_OVER_R: f64 = 2_790.0 / 8.314;
+
+/// Non-ideality of methane in a liquid of methane, ethane and nitrogen:
+/// the regular-solution parameter `W / R`, K, whose activity coefficient
+/// `ln γ = (W / R)(1 − x)² / T` raises the methane liquidus
+/// ([`hydrocarbon_freezes_k`]). Calibration, no source, on Richardson,
+/// Hartwig & Leachman 2019's liquid F1 (61.0 % methane, 25.6 % ethane,
+/// 13.4 % nitrogen, frozen at 71.5 ± 0.5 K), which the ideal liquidus
+/// puts at 64.9 K: an ideal methane liquidus is too steep, its enthalpy
+/// of fusion (0.94 kJ/mol) being small.
+const METHANE_EXCESS_W_OVER_R: f64 = 75.3;
+
+/// The temperature, K, under which a liquid of methane with mole
+/// fractions `nitrogen` of N₂ and `ethane` of C₂H₆ freezes: the higher of
+/// its methane and ethane liquidus (the solid that comes out first).
 ///
-/// A simple fit, labelled so. The liquid's nitrogen mole fraction `x` is
-/// half of Raoult's law at the surface's N₂ partial pressure and pure
-/// methane's triple point ([`NITROGEN_RAOULT_SHARE`], Thompson, Zollweg &
-/// Gabis 1992), at most [`MAX_NITROGEN_IN_LIQUID`]; the methane liquidus
-/// is an ideal solution's (the Schröder–van Laar equation,
-/// `ln(1 − x) = −(L_fus / R)(1/T − 1/T_m)`, with methane's enthalpy of
-/// fusion). Titan's 1.45 bar of N₂ gives `x` = 0.19 and a liquid down to
-/// 77.6 K (its surface: 93.7 K); the cap stops the fall at 70.4 K.
-/// Richardson, Hartwig & Leachman 2019
-/// (doi:10.1016/j.ijthermalsci.2018.12.024) measured liquid
-/// methane–ethane–nitrogen mixtures freezing at 71.5 K (13.4 % N₂, 0.29
-/// bar) and 74.0 K (7.9 % N₂, 0.52 bar), "more than 15 K below" pure
-/// methane's triple point; for those nitrogen shares this binary rule,
-/// without the ethane, gives 81.3 and 85.0 K: it errs towards freezing.
+/// A simple fit, labelled so, of a phase diagram this does not resolve
+/// (the solid solutions, the ternary eutectic). The ethane liquidus is an
+/// ideal solution's, the Schröder–van Laar equation
+/// `ln x = −(L / R)(1/T − 1/T_m)` with [`ETHANE_FUSION_L_OVER_R`] and
+/// [`ETHANE_TRIPLE_K`]; the methane liquidus a regular solution's, the
+/// same with `ln(γ x)` ([`METHANE_EXCESS_W_OVER_R`],
+/// [`METHANE_FUSION_L_OVER_R`], [`METHANE_TRIPLE_K`]), nitrogen and
+/// ethane taken alike. Richardson, Hartwig & Leachman 2019
+/// (doi:10.1016/j.ijthermalsci.2018.12.024; checked in their NASA
+/// manuscript, NTRS 20180008677) measured two liquids freezing at 71.5
+/// K (F1: 61.0 % CH₄, 25.6 % C₂H₆, 13.4 % N₂, 0.29 bar) and 74.0 K (F2:
+/// 46.9 %, 45.3 %, 7.9 %, 0.52 bar), "more than 15 K below" the pure
+/// ices: this gives 71.5 K (methane first; the calibration) and 74.5 K
+/// (ethane first, the ideal law alone), where the binary
+/// methane–nitrogen rule without the ethane gave 81.3 and 85.0 K. Pure
+/// methane freezes at its triple point.
+fn hydrocarbon_freezes_k(nitrogen: f64, ethane: f64) -> f64 {
+    let nitrogen = nitrogen.clamp(0.0, 1.0);
+    let ethane = ethane.clamp(0.0, 1.0 - nitrogen);
+    let methane = 1.0 - nitrogen - ethane;
+    let liquidus = |x: f64, triple_k: f64, l_over_r: f64, w_over_r: f64| {
+        if x <= 0.0 {
+            return 0.0;
+        }
+        // `ln x + W (1 − x)² / T = −L (1/T − 1/T_m)`, solved for `1/T`.
+        let inverse = (l_over_r / triple_k - x.ln()) / (l_over_r + w_over_r * (1.0 - x).powi(2));
+        1.0 / inverse
+    };
+    let methane_k = liquidus(
+        methane,
+        METHANE_TRIPLE_K,
+        METHANE_FUSION_L_OVER_R,
+        METHANE_EXCESS_W_OVER_R,
+    );
+    let ethane_k = liquidus(ethane, ETHANE_TRIPLE_K, ETHANE_FUSION_L_OVER_R, 0.0);
+    methane_k.max(ethane_k)
+}
+
+/// The temperature, K, under which the hydrocarbon sea of a body whose
+/// air holds `n2_bar` of nitrogen freezes: the liquidus of a sea of
+/// methane, ethane and the nitrogen dissolved in it
+/// ([`hydrocarbon_freezes_k`]).
+///
+/// The sea's nitrogen mole fraction is half of Raoult's law at the
+/// surface's N₂ partial pressure and pure methane's triple point
+/// ([`NITROGEN_RAOULT_SHARE`], Thompson, Zollweg & Gabis 1992), at most
+/// [`MAX_NITROGEN_IN_LIQUID`]; its methane [`SEA_METHANE_SHARE`], the
+/// share the climate's air keeps over it (Raoult's law); the rest is
+/// ethane, which methane's photolysis makes on any methane world (the
+/// model does not track it). Titan's 1.45 bar of N₂ gives 19 % N₂ and
+/// 31 % ethane and a liquid down to 68.7 K (its surface: 93.7 K; 77.6 K
+/// without the ethane); with no nitrogen, half ethane, 76.6 K; the cap
+/// stops the fall at the methane liquidus of half methane, 67.6 K.
 pub fn methane_freezes_k(n2_bar: f64) -> f64 {
-    let x = (NITROGEN_RAOULT_SHARE * n2_bar.max(0.0) / nitrogen_vapour_bar(METHANE_TRIPLE_K))
-        .min(MAX_NITROGEN_IN_LIQUID);
-    1.0 / (1.0 / METHANE_TRIPLE_K - (1.0 - x).ln() / METHANE_FUSION_L_OVER_R)
+    let nitrogen = (NITROGEN_RAOULT_SHARE * n2_bar.max(0.0)
+        / nitrogen_vapour_bar(METHANE_TRIPLE_K))
+    .min(MAX_NITROGEN_IN_LIQUID);
+    let ethane = (1.0 - SEA_METHANE_SHARE - nitrogen).max(0.0);
+    hydrocarbon_freezes_k(nitrogen, ethane)
 }
 
 /// Normal boiling point of ethane, K, at 1 atm (NIST Chemistry WebBook,
@@ -868,8 +1003,8 @@ pub const LAVA_K: f64 = 1400.0;
 /// checked); water between the melting of ice and its boiling point at
 /// the surface pressure, above its triple point pressure, when water is
 /// kept out of a runaway; hydrocarbons between the freezing point of
-/// the sea ([`sea_freezes_k`]: methane with the nitrogen of the air
-/// dissolved in it, or nitrogen's triple point where nitrogen condenses
+/// the sea ([`sea_freezes_k`]: methane and ethane with the nitrogen of
+/// the air dissolved in them, or nitrogen's triple point where nitrogen condenses
 /// into it) and ethane's boiling point, where there is enough methane to
 /// condense ([`methane_condenses`]); nitrogen where nitrogen condenses
 /// above its triple point without a methane liquid (it is condensed only
@@ -912,10 +1047,10 @@ fn liquid(temperature_k: f64, gases: &Gases, water: &Water, condensate: &Gases) 
 /// meet at about 48 K and two-thirds nitrogen), but N₂ and CH₄ freeze
 /// into solid solutions that an ideal liquidus does not describe (not
 /// checked), so the rule stops at the triple point and errs towards
-/// freezing, as [`methane_freezes_k`] does. Otherwise the methane
-/// liquidus with the nitrogen the air dissolves in it
-/// ([`methane_freezes_k`]). Issue #524.
-fn sea_freezes_k(air_n2_bar: f64, condensate: &Gases) -> f64 {
+/// freezing. Otherwise the liquidus of a methane–ethane sea with the
+/// nitrogen the air dissolves in it ([`methane_freezes_k`], issue #530).
+/// Issue #524.
+pub(crate) fn sea_freezes_k(air_n2_bar: f64, condensate: &Gases) -> f64 {
     if condensate.n2 > 0.0 {
         NITROGEN_TRIPLE_K
     } else {
@@ -1014,7 +1149,7 @@ fn wet_balance(
     emissivity: f64,
 ) -> Option<(Gases, f64)> {
     let t_eq = context.equilibrium_k.max(0.0);
-    let absorbed = SIGMA * t_eq.powi(4) + heat_flux_w_m2.max(0.0);
+    let absorbed = absorbed_w_m2(t_eq, &gases, heat_flux_w_m2);
     let skin = t_eq * 0.5_f64.powf(0.25);
     // A grey surface as in `surface_temperature_k`.
     let e = emissivity.clamp(0.01, 1.0);
@@ -1598,7 +1733,8 @@ fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> (Gases, f64, bool,
     };
     // The gases that condense on the surface ([`condense`]) keep in the
     // air what its temperature allows, and the temperature follows from
-    // that air: from the black body's, the coldest surface, each step
+    // that air: from the black body's (the coldest surface but for the
+    // methane's anti-greenhouse, which a step down undoes), each step
     // solves the climate with the air the last temperature leaves, which
     // rises towards the coldest balance (more air, more greenhouse). Most
     // bodies condense nothing at their black body's temperature, and
@@ -1755,7 +1891,7 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
     let most = body.most_co2;
     let at_target = with_vapour(gases, THERMOSTAT_K, water_bar);
     let t_eq = context.equilibrium_k.max(0.0);
-    let absorbed = SIGMA * t_eq.powi(4) + heat_flux_w_m2.max(0.0);
+    let absorbed = absorbed_w_m2(t_eq, &gases, heat_flux_w_m2);
     let skin = t_eq * 0.5_f64.powf(0.25);
     // With `co2` in the air the surface is warmer than the thermostat
     // when, at `THERMOSTAT_K`, it sends out less than it absorbs (the
@@ -1845,7 +1981,7 @@ fn maximum_greenhouse(body: &Body) -> f64 {
         let albedo = body.albedo_at(THERMOSTAT_K, &gases);
         let t_eq = body.context.with_albedo(albedo).equilibrium_k.max(0.0);
         let skin = t_eq * 0.5_f64.powf(0.25);
-        SIGMA * t_eq.powi(4) - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin)
+        absorbed_w_m2(t_eq, &gases, 0.0) - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin)
     };
     let ratio = (5f64.sqrt() - 1.0) / 2.0;
     let (mut a, mut b) = (most.ln() - GREENHOUSE_DECADES * 10f64.ln(), most.ln());
@@ -2076,10 +2212,29 @@ mod tests {
             };
             surface_temperature_k(&context, &gases, 0.0, 1.0)
         };
+        // The greenhouse alone, at Titan's surface temperature: the
+        // outgoing radiation methane holds back from 1 to 10 bar is under
+        // a third of what it holds back from 0.01 to 0.1 bar.
+        let skin = context.equilibrium_k * 0.5_f64.powf(0.25);
+        let olr = |ch4: f64| {
+            let gases = Gases {
+                n2: 1.45,
+                ch4,
+                ..Gases::default()
+            };
+            column::olr_under_skin_w_m2(&gases, 93.7, skin)
+        };
+        let trace = olr(0.01) - olr(0.1);
+        let thick = olr(1.0) - olr(10.0);
+        assert!(trace > 0.0, "{trace}");
+        assert!(thick < trace / 3.0, "{thick} W/m² against {trace} W/m²");
+        // With the anti-greenhouse of the methane let through the cold
+        // trap, which fills up between 0.01 and 0.1 bar, the warming from
+        // 1 to 10 bar stays under that from 0.01 to 0.1 bar.
         let trace = t(0.1) - t(0.01);
         let thick = t(10.0) - t(1.0);
         assert!(trace > 0.0, "{trace}");
-        assert!(thick < trace / 3.0, "{thick} K against {trace} K");
+        assert!(thick < trace, "{thick} K against {trace} K");
     }
 
     #[test]
@@ -2118,16 +2273,21 @@ mod tests {
 
     #[test]
     fn nitrogen_keeps_methane_liquid_below_its_triple_point() {
-        // No nitrogen: pure methane.
-        assert_eq!(methane_freezes_k(0.0), METHANE_TRIPLE_K);
-        // Titan's 1.45 bar of N₂: about a fifth of the liquid, down to
-        // about 78 K.
+        // No nitrogen: a sea of half methane, half ethane, liquid down
+        // to about 77 K.
+        let bare = methane_freezes_k(0.0);
+        assert!((75.0..78.0).contains(&bare), "{bare}");
+        // Titan's 1.45 bar of N₂: about a fifth of the liquid, and less
+        // ethane, down to about 69 K.
         let titan = methane_freezes_k(1.45);
-        assert!((76.0..80.0).contains(&titan), "{titan}");
-        // More nitrogen, colder liquid, down to the cap.
+        assert!((67.0..71.0).contains(&titan), "{titan}");
+        // More nitrogen, colder liquid, down to the cap, where methane
+        // freezes first.
         assert!(methane_freezes_k(0.5) > titan);
         assert!(methane_freezes_k(10.0) < titan);
-        assert!((methane_freezes_k(100.0) - 70.4).abs() < 0.2);
+        let floor = hydrocarbon_freezes_k(MAX_NITROGEN_IN_LIQUID, 1.0 - SEA_METHANE_SHARE - 0.3);
+        assert!((methane_freezes_k(100.0) - floor).abs() < 1e-9);
+        assert!((66.0..69.0).contains(&floor), "{floor}");
         // A Titan at 89 K under 1 bar of N₂ keeps its lakes.
         let gases = Gases {
             n2: 1.0,
@@ -2148,8 +2308,18 @@ mod tests {
             liquid(89.0, &gases, &dry, &seas),
             SurfaceLiquid::Hydrocarbons
         );
+        // Without nitrogen its ethane keeps it liquid at 89 K too, but
+        // not at 75 K.
         let thin = Gases { n2: 0.0, ..gases };
-        assert_eq!(liquid(89.0, &thin, &dry, &seas), SurfaceLiquid::None);
+        assert_eq!(
+            liquid(89.0, &thin, &dry, &seas),
+            SurfaceLiquid::Hydrocarbons
+        );
+        let cold = Gases {
+            ch4: methane_sea_vapour_bar(75.0),
+            ..thin
+        };
+        assert_eq!(liquid(75.0, &cold, &dry, &seas), SurfaceLiquid::None);
     }
 
     /// Nitrogen alone, condensed above its triple point and under its
@@ -2210,6 +2380,115 @@ mod tests {
         );
         let frost = frost(&gases, 0.0, 0.0, t, &air);
         assert_eq!(frost.ch4 + frost.n2, 0.0, "{frost:?}");
+    }
+
+    /// Ethane lowers the freezing point of a methane–nitrogen liquid:
+    /// Richardson, Hartwig & Leachman 2019's two liquids (F1: 61.0 %
+    /// CH₄, 25.6 % C₂H₆, 13.4 % N₂, frozen at 71.5 ± 0.5 K; F2: 46.9 %,
+    /// 45.3 %, 7.9 %, at 74.0 ± 0.5 K) within 2 K, where the binary rule
+    /// gave 81.3 and 85.0 K (issue #530).
+    #[test]
+    fn ethane_lowers_the_liquidus() {
+        let f1 = hydrocarbon_freezes_k(0.134, 0.256);
+        assert!((f1 - 71.5).abs() < 2.0, "{f1}");
+        let f2 = hydrocarbon_freezes_k(0.079, 0.453);
+        assert!((f2 - 74.0).abs() < 2.0, "{f2}");
+        // Without ethane or nitrogen, pure methane's triple point.
+        assert!((hydrocarbon_freezes_k(0.0, 0.0) - METHANE_TRIPLE_K).abs() < 1e-9);
+        // A sea under Titan's air, with its ethane, stays liquid well
+        // under the binary rule's 77.6 K.
+        let titan = methane_freezes_k(1.45);
+        assert!(titan < 72.0, "{titan}");
+    }
+
+    /// Methane over its own ice keeps all of its saturation pressure
+    /// (activity 1, a pure solid); over a sea, [`SEA_METHANE_SHARE`] of
+    /// it (issue #530).
+    #[test]
+    fn methane_ice_holds_its_full_saturation() {
+        let gases = Gases {
+            n2: 1e-3,
+            ch4: 1.0,
+            ..Gases::default()
+        };
+        let ice_k = 50.0;
+        assert!(ice_k < methane_freezes_k(gases.n2));
+        let (air, _) = condense(gases, ice_k);
+        let full = methane_saturation_bar(ice_k);
+        assert!((air.ch4 / full - 1.0).abs() < 1e-9, "{air:?} {full:e}");
+        let sea_k = 95.0;
+        let (air, _) = condense(gases, sea_k);
+        assert!(
+            (air.ch4 / methane_sea_vapour_bar(sea_k) - 1.0).abs() < 1e-9,
+            "{air:?}"
+        );
+    }
+
+    /// Methane above the tropopause absorbs starlight in its
+    /// near-infrared bands and sends it back to space (the
+    /// anti-greenhouse): a share of the light that grows with the
+    /// methane let through the cold trap and saturates, taken off what
+    /// the surface absorbs (issue #530).
+    #[test]
+    fn stratospheric_methane_takes_a_share_of_the_light() {
+        let titan = Gases {
+            n2: 1.4,
+            ch4: 0.08,
+            ..Gases::default()
+        };
+        let dry = Gases { ch4: 0.0, ..titan };
+        let skin = 70.0;
+        assert_eq!(stratospheric_share(&dry, skin), 0.0);
+        let share = stratospheric_share(&titan, skin);
+        assert!((0.01..0.2).contains(&share), "{share}");
+        // A warmer tropopause lets more methane through: more of the light.
+        assert!(stratospheric_share(&titan, skin + 3.0) > share);
+        // Twenty-six bar of methane under a warm tropopause: saturated.
+        let rich = Gases { ch4: 26.0, ..titan };
+        let most = stratospheric_share(&rich, 96.0);
+        assert!(most > share && most <= CH4_NEAR_IR_MAX, "{most}");
+        // It comes off the light the surface absorbs, not the heat.
+        let t_eq: f64 = 83.0;
+        let light = SIGMA * t_eq.powi(4);
+        let absorbed = absorbed_w_m2(t_eq, &titan, 0.1);
+        let expected = light * (1.0 - stratospheric_share(&titan, t_eq * 0.5f64.powf(0.25))) + 0.1;
+        assert!((absorbed - expected).abs() < 1e-12, "{absorbed} {expected}");
+        assert_eq!(absorbed_w_m2(t_eq, &dry, 0.1), light + 0.1);
+    }
+
+    /// Census seed 182's planet d (issue #443): an equilibrium temperature
+    /// near 114 K under some 4 bar of N₂ and 26 bar of methane, which the
+    /// saturated methane greenhouse keeps under the 150 K line, drawn as
+    /// `planet_census` draws it (issue #530).
+    #[test]
+    fn census_182_d() {
+        use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, draw};
+        use rand::SeedableRng;
+        let request = SystemRequest::System(WholeSystemRequest {
+            seed: Some(182),
+            ..WholeSystemRequest::default()
+        });
+        let system =
+            draw(&request, &mut rand::rngs::StdRng::seed_from_u64(182)).expect("the system draws");
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Planet && b.id == "d")
+            .expect("planet d");
+        let model = crate::planet::body_model(&system, body).expect("a model");
+        let s = model.surface.expect("a surface");
+        let c = s.climate;
+        eprintln!(
+            "182 d: {} T {:.2} K T_eq {:.2} K {:?} {:?}",
+            model.class.key(),
+            c.temperature_k,
+            c.equilibrium_k,
+            c.liquid,
+            s.gases
+        );
+        assert!(c.equilibrium_k < 150.0, "{c:?}");
+        assert!(c.temperature_k < 150.0, "{c:?} {:?}", s.gases);
+        assert_ne!(c.liquid, SurfaceLiquid::Water, "{c:?}");
     }
 
     /// A frost of nitrogen radiates as β-N₂ ice: a body under it settles

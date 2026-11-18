@@ -382,23 +382,33 @@ Their near-black brown is a calibration with those maps as its target.
   from the world's circulation, and does not model the north-south
   asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
   band is a straight line of latitude.
-- **Nitrogen keeps methane liquid, by a simple rule.** Pure methane
-  freezes at 90.67 K, but a sea under a nitrogen air is a mixture: N₂
-  dissolves in liquid methane, and the mixture freezes lower. Thompson,
-  Zollweg & Gabis 1992 [15] find that methane condensing under Titan's air
-  holds 16 to 30 % N₂, about half of what Raoult's law gives, and
-  Richardson, Hartwig & Leachman 2019 [16] measured methane–ethane–nitrogen
-  liquids freezing at 71.5 K (13.4 % N₂) and 74.0 K (7.9 % N₂), more than
-  15 K below the pure ices. The app (`methane_freezes_k`) takes the N₂ in
-  the liquid as half of Raoult's law at the surface's N₂ partial pressure
-  and methane's triple point (nitrogen's vapour pressure from NIST's
-  Antoine fit), at most 30 %, and lowers the freezing point as an ideal
-  solution would (the Schröder–van Laar equation, with methane's enthalpy
-  of fusion, 0.939 kJ/mol): about 78 K under Titan's 1.45 bar of N₂,
-  pure methane's 90.67 K with no nitrogen, never below 70.4 K. It is a
-  simple fit, not the full phase diagram: it leaves the ethane out, which
-  lowers the freezing point further (the binary rule gives 81 and 85 K for
-  Richardson's two liquids), so it errs towards freezing. Where nitrogen
+- **Nitrogen and ethane keep methane liquid, by a simple rule.** Pure
+  methane freezes at 90.67 K, but a sea under a nitrogen air is a
+  mixture: N₂ dissolves in liquid methane, methane's photolysis makes
+  ethane, and the mixture freezes lower. Thompson, Zollweg & Gabis 1992
+  [15] find that methane condensing under Titan's air holds 16 to 30 %
+  N₂, about half of what Raoult's law gives, and Richardson, Hartwig &
+  Leachman 2019 [16] measured two liquids freezing at 71.5 K (61.0 %
+  methane, 25.6 % ethane, 13.4 % N₂) and 74.0 K (46.9 %, 45.3 %, 7.9 %),
+  more than 15 K below the pure ices (compositions read in their NASA
+  manuscript, NTRS 20180008677). The app (`methane_freezes_k`,
+  `hydrocarbon_freezes_k`, issue #530) takes the N₂ in the sea as half of
+  Raoult's law at the surface's N₂ partial pressure and methane's triple
+  point (nitrogen's vapour pressure from NIST's Antoine fit), at most
+  30 %, its methane as the half the climate's air keeps over it
+  (`SEA_METHANE_SHARE`), and the rest as ethane; the sea freezes at the
+  higher of two liquidus: ethane's, an ideal solution's (the
+  Schröder–van Laar equation, with ethane's triple point, 90.4 K, and the
+  2.79 kJ/mol Domalski & Hearing give for melting the solid below its
+  plastic phase, through NIST), and methane's, a regular solution's
+  (methane's enthalpy of fusion, 0.939 kJ/mol, and an interaction
+  `W / R` = 75.3 K calibrated on Richardson's first liquid, which the
+  ideal law puts at 64.9 K). It gives 71.5 and 74.5 K for Richardson's
+  two liquids (81.3 and 85.0 K before the ethane), about 69 K under
+  Titan's 1.45 bar of N₂, about 76 K with no nitrogen (a sea of half
+  ethane), and never below 68 K. It is a simple fit, not the full phase
+  diagram: it does not resolve the solid solutions or the ternary
+  eutectic, and the sea's composition is fixed, not tracked. Where nitrogen
   itself condenses (below about 84 K under 2 bar of it), the sea is
   nitrogen-rich and stays liquid down to nitrogen's triple point,
   63.14 K (`sea_freezes_k`, issue #524); nitrogen condensed with no
@@ -407,8 +417,9 @@ Their near-black brown is a calibration with those maps as its target.
   is stable under any air above its triple-point pressure (0.1169 bar,
   NIST), from which `planet::classify` names a hydrocarbon world. A lake
   needs enough methane to condense, the vapour of a Titan sea at the
-  surface temperature (half of pure methane's saturation, Raoult's law);
-  the climate condenses the rest of a body's methane onto its ground and
+  surface temperature (half of pure methane's saturation, Raoult's law;
+  over methane ice, under the sea's freezing point, all of it, issue
+  #530); the climate condenses the rest of a body's methane onto its ground and
   its air keeps that vapour, about 5 % of Titan's (issue #443, see
   [planet-atmospheres.md](planet-atmospheres.md)).
 - **Titan's methane is an archetype's cause.** The model draws the methane

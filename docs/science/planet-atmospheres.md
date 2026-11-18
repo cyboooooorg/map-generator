@@ -785,12 +785,12 @@ source:
 |---|---|---|---|
 | CO₂ | 1.45 (0.74 under the fixed albedo 0.3, 1.66 before #441) | 0.19 (0.07, 0.25 before #441) | Venus's 737 K under 85 bar at its Bond albedo 0.76, and the late Archean Earth |
 | H₂O | 111 (5.9) | 0.5 | the moist plateau at about 287 W/m² |
-| CH₄ | 6.0 (3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K |
+| CH₄ | 7.75 (6.0 before #530, 3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K and 3 to 6 % of methane, with the anti-greenhouse |
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
 CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
 doi:10.1126/science.11538492, not checked); the methane opacity carries
-all of it here.
+all of it here but the near-infrared share its methane takes (below).
 
 **Methane** (issue #443). The `sqrt(p_CH₄ P)` law, calibrated on Titan,
 was stretched 500-fold past it: a planet at an equilibrium temperature of
@@ -800,7 +800,9 @@ liquid water. Three rules bound it:
 - *Condensation at the surface.* Inside the climate's fixed point
   (`atmosphere::condense`, applied at each step to the temperature the
   last one found, from the black body's up to the coldest balance), the
-  air keeps at most the vapour of a Titan sea, `x p_sat(T_s)`: `p_sat`
+  air keeps at most the vapour of a Titan sea, `x p_sat(T_s)`, or of
+  methane ice, `p_sat(T_s)`, under the sea's freezing point
+  (`sea_freezes_k`; activity 1 over a pure solid, issue #530): `p_sat`
   the saturation pressure of pure methane
   (`atmosphere::methane_saturation_bar`: over its ice below its triple
   point, 90.7 K and 0.117 bar, over its liquid above with the mean latent
@@ -821,21 +823,40 @@ liquid water. Three rules bound it:
 - *Saturation.* The amount the opacity counts is
   `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
   it collides with counts the methane as `u`:
-  `τ = 6.0 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
+  `τ = 7.75 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
   at their centres, and more methane only widens their wings (the
   logarithmic forcing of a saturated band, Pierrehumbert 2010, §4.4); a
   body at 90 to 120 K radiates at 25 to 60 µm, where methane has no
   strong band of its own. With it, raising Titan's methane from 1 to
-  10 bar warms it by 0.6 K where 0.01 to 0.1 bar warms it by 2.6 K.
+  10 bar holds back under a third of the outgoing radiation that 0.01
+  to 0.1 bar holds back (with the opacity 6.0, 0.6 K of warming against
+  2.6 K).
+- *Anti-greenhouse* (issue #530). The methane above the tropopause
+  absorbs starlight in its near-infrared bands and radiates it back to
+  space, so the surface never gets it (McKay, Pollack & Courtin 1991,
+  *Science* 253, 1118, describe it on Titan together with its haze's;
+  not checked beyond the bibliographic data). `climate::absorbed_w_m2`
+  takes the share `0.3 m / (m + 0.005 bar)` off the light the surface
+  absorbs (`CH4_NEAR_IR_MAX`, `CH4_NEAR_IR_HALF_BAR`), `m` the methane
+  above the 0.1 bar tropopause that the cold trap lets through
+  (`column::stratospheric_methane_bar`); the internal heat is not
+  touched, and the stratosphere that absorbs it is not warmed in the
+  column. Both constants are calibrations, no source, with the opacity
+  7.75: the reference Titan loses 11 % of its light, and since a warmer
+  tropopause lets more methane through, a Titan nearer its star loses
+  more, which narrows the archetype's spread of temperature and of the
+  methane its seas keep in its air. A world of 26 bar of methane takes
+  nearly all of the 0.3. The share of the light in methane's bands
+  depends on the star's spectrum; one value serves every star.
 
-Titan at Saturn's orbit (`titan-like`, seeds 0 to 19) comes out at 93.3
-to 93.8 K, 1.38 to 1.49 bar and 5.8 % methane; seed 182's planet d at
-149 K, with 5.2 of its 26 bar of methane in its air and the rest in its
-seas. The near-infrared absorption of methane, which heats the upper air
-and cools the surface (the anti-greenhouse), is not added: on Titan it is
-part of the 9 K its haze takes, which the Titan-calibrated opacity
-already carries, and it would only cool the thick methane worlds
-further.
+Titan at Saturn's orbit (`titan-like`, seeds 1 to 40 of
+`archetype_census`) comes out at 90.6 to 93.0 K (median 92.1 K), 1.28 to
+1.54 bar and 3.8 to 5.7 % methane (median 4.8 %), against Titan's 93.7 K,
+1.47 bar and 5.65 % (90.4 to 94.5 K and 3.7 to 6.8 % before the
+anti-greenhouse); the seed under 1.3 bar is one drawn with 1.21 bar of
+N₂. Seed 182's planet d of `planet_census` is a hydrocarbon world at
+135 K (149 K before), with 2.6 of its 26 bar of methane in its air and
+the rest in its seas, under the 150 K line.
 
 **The moist plateau.** On a saturated column the levels that radiate to
 space sit on water's saturation curve whatever the surface temperature,
@@ -1173,8 +1194,9 @@ and pressure, in this order:
   (`methane_sea_vapour_bar`), so that a trace of methane makes no lake
   and none forms past methane's critical point (190.56 K). The sea
   freezes at methane's freezing point lowered by the nitrogen of the air
-  dissolved in it (`methane_freezes_k`: 90.67 K with no N₂, about 78 K
-  under Titan's 1.45 bar, see [atmospheres.md](atmospheres.md)); where
+  dissolved in it and the ethane methane's photolysis makes
+  (`methane_freezes_k`: about 76 K with no N₂, about 69 K under Titan's
+  1.45 bar, see [atmospheres.md](atmospheres.md)); where
   nitrogen itself condenses (`condense`), the air holds pure nitrogen's
   saturation and the sea it condenses into is nitrogen-rich, liquid down
   to nitrogen's triple point, 63.14 K, where its methane freezes with it

@@ -117,6 +117,21 @@ fn radiating_methane_bar(gases: &Gases, pressure_bar: f64, skin_k: f64) -> f64 {
     ch4.min(share * pressure_bar)
 }
 
+/// The methane, bar, above the tropopause of a uniform air of `gases`
+/// under a stratosphere at `skin_k`: its column there, the mixing ratio
+/// the cold trap lets through ([`radiating_methane_bar`]) times the
+/// tropopause's pressure ([`TROPOPAUSE_BAR`]; the whole of a thinner
+/// air). The methane whose near-infrared bands take a share of the
+/// starlight before it reaches the troposphere
+/// ([`super::climate`]'s anti-greenhouse).
+pub(super) fn stratospheric_methane_bar(gases: &Gases, skin_k: f64) -> f64 {
+    let pressure = gases.total();
+    if pressure <= 0.0 {
+        return 0.0;
+    }
+    radiating_methane_bar(gases, pressure, skin_k) * TROPOPAUSE_BAR.min(pressure) / pressure
+}
+
 /// The gases of a column without their water, as mole fractions and the
 /// molar heat capacity of the mixture.
 struct DryAir {

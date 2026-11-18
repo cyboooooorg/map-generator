@@ -748,8 +748,10 @@ struct Condensable {
     critical_k: f64,
     /// Share of the pure gas's saturation pressure that the air over its
     /// condensate holds (Raoult's law: the gas's mole fraction in the
-    /// condensate), 1 for a pure condensate.
-    activity: f64,
+    /// condensate), 1 for a pure condensate: a function of the surface
+    /// temperature, the air left by the gases before it in [`CONDENSING`]
+    /// and what they condensed.
+    activity: fn(f64, &Gases, &Gases) -> f64,
     /// The gas's partial pressure in a [`Gases`].
     of: fn(&mut Gases) -> &mut f64,
 }
@@ -788,40 +790,60 @@ pub(crate) const SEA_METHANE_SHARE: f64 = 0.5;
 /// The gases that condense on the surface inside the climate
 /// ([`condense`]):
 ///
-/// - methane over a sea of methane, nitrogen and ethane
-///   ([`SEA_METHANE_SHARE`]), normal boiling point 111.67 K and critical
-///   point 190.56 K;
 /// - nitrogen over its own ice or liquid (activity 1: a pure frost,
 ///   which Triton's N₂ air sits in equilibrium with, issue #464; a
 ///   condensed liquid is nitrogen-rich, issue #524), normal boiling
 ///   point 77.34 K and critical point 126.19 K (Jacobsen, Stewart et al.
-///   1986, through the NIST Chemistry WebBook; checked there).
+///   1986, through the NIST Chemistry WebBook; checked there);
+/// - methane, after it, over a sea of methane, nitrogen and ethane
+///   ([`SEA_METHANE_SHARE`]) where the sea is liquid, and over its own
+///   ice (activity 1, a pure solid, issue #530) under the sea's
+///   freezing point ([`super::climate::sea_freezes_k`], with the
+///   nitrogen the air keeps and condenses), normal boiling point
+///   111.67 K and critical point 190.56 K.
 ///
 /// Methane's points from the NIST Chemistry WebBook (from memory, not
 /// checked).
 const CONDENSING: [Condensable; 2] = [
     Condensable {
-        frost: CH4_FROST,
-        boils_k: 111.67,
-        critical_k: 190.56,
-        activity: SEA_METHANE_SHARE,
-        of: |g| &mut g.ch4,
-    },
-    Condensable {
         frost: N2_FROST,
         boils_k: 77.34,
         critical_k: 126.19,
-        activity: 1.0,
+        activity: |_, _, _| 1.0,
         of: |g| &mut g.n2,
     },
+    Condensable {
+        frost: CH4_FROST,
+        boils_k: 111.67,
+        critical_k: 190.56,
+        activity: methane_activity,
+        of: |g| &mut g.ch4,
+    },
 ];
+
+/// The index of methane in [`CONDENSING`].
+const METHANE: usize = 1;
+
+/// Activity of methane over what condenses of it on a surface at
+/// `surface_k`, under `air` with `condensate` already on the ground: 1
+/// over its ice, under the freezing point of the sea it would make
+/// ([`super::climate::sea_freezes_k`]); [`SEA_METHANE_SHARE`] over the
+/// sea. The step at the freezing point is a simplification: at the
+/// liquidus the sea and the ice hold the same vapour.
+fn methane_activity(surface_k: f64, air: &Gases, condensate: &Gases) -> f64 {
+    if surface_k < super::climate::sea_freezes_k(air.n2, condensate) {
+        1.0
+    } else {
+        SEA_METHANE_SHARE
+    }
+}
 
 /// Saturation vapour pressure of pure methane at `temperature_k`, bar:
 /// over its ice below its triple point (90.7 K, 0.117 bar), over its
 /// liquid above, up to its critical point (190.56 K), past which it is
 /// infinite: methane does not condense there.
 pub(crate) fn methane_saturation_bar(temperature_k: f64) -> f64 {
-    CONDENSING[0].saturation_bar(temperature_k)
+    CONDENSING[METHANE].saturation_bar(temperature_k)
 }
 
 /// The air and the condensate of `gases` (bar) on a surface at
@@ -841,8 +863,9 @@ pub(crate) fn condense(gases: Gases, surface_k: f64) -> (Gases, Gases) {
     let mut air = gases;
     let mut condensate = Gases::default();
     for gas in &CONDENSING {
+        let activity = (gas.activity)(surface_k, &air, &condensate);
         let kept = (gas.of)(&mut air);
-        let most = gas.activity * gas.saturation_bar(surface_k);
+        let most = activity * gas.saturation_bar(surface_k);
         if *kept > most {
             *(gas.of)(&mut condensate) = *kept - most;
             *kept = most;
