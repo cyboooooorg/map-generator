@@ -119,14 +119,19 @@ pub(super) const VOLATILE_ICE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.1
 /// Age of the surface of a world whose liquid cycle renews it, Ga, or
 /// `None` without one (a plate or heat-pipe regime renews faster, see
 /// [`terrain`]): air of `ERODING_BAR` or more over a surface liquid
-/// of water or hydrocarbons. The age is [`LIQUID_CYCLE_RETENTION_GYR`] in
+/// of water, hydrocarbons or nitrogen (nitrogen rain and rivers are
+/// physically analogous to Titan's methane cycle; no source gives a
+/// retention age for them, so the hydrocarbon values are reused as a
+/// stated assumption). The age is [`LIQUID_CYCLE_RETENTION_GYR`] in
 /// air of ten times `ERODING_BAR`, and rises with the log of the pressure
 /// down to the system's `age_gyr` at `ERODING_BAR` (where the cycle just
 /// starts to carve, see `interim::params_for`'s erosion), so that it is
 /// continuous in pressure. Calibration, no source for the interpolation.
 pub fn liquid_cycle_age_gyr(pressure_bar: f64, liquid: SurfaceLiquid, age_gyr: f64) -> Option<f64> {
-    if !matches!(liquid, SurfaceLiquid::Water | SurfaceLiquid::Hydrocarbons)
-        || pressure_bar < ERODING_BAR
+    if !matches!(
+        liquid,
+        SurfaceLiquid::Water | SurfaceLiquid::Hydrocarbons | SurfaceLiquid::Nitrogen
+    ) || pressure_bar < ERODING_BAR
     {
         return None;
     }

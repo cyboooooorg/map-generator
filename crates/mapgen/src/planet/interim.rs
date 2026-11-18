@@ -161,6 +161,11 @@ pub(super) const ERODING_BAR: f64 = crate::atmosphere::LIQUID_WATER_BAR as f64;
 /// fainter than Earth's; half.
 const HYDROCARBON_EROSION: f32 = 0.5;
 
+/// Erosion of a world with liquid nitrogen against one with liquid
+/// water. Assumption, no source: N2 rain and rivers are analogous to
+/// Titan's methane cycle, so the hydrocarbon value is reused.
+const NITROGEN_EROSION: f32 = HYDROCARBON_EROSION;
+
 /// Age of the surface of a world in the episodic regime, Ga: Venus's,
 /// 0.3 to 0.8 Ga from its craters (Strom, Schaber & Dawson 1994,
 /// *JGR* 99, about 0.3 Ga; McKinnon et al. 1997, *Venus II*, about
@@ -526,7 +531,7 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///   - its surface pressure, the air's total (within
 ///     [`crate::request::PRESSURE_BAR`]);
 ///   - its erosion: 1 with liquid water, [`HYDROCARBON_EROSION`] with
-///     hydrocarbons, none otherwise, times `min(1, P / 0.01 bar)`;
+///     hydrocarbons, [`NITROGEN_EROSION`] with nitrogen, none otherwise, times `min(1, P / 0.01 bar)`;
 ///   - its volcanism, `0.5 √(F / 0.087 W/m²)` of its heat flux `F`
 ///     against Earth's ([`EARTH_HEAT_FLUX_W_M2`]), 1 in the heat-pipe
 ///     regime, halved under a stagnant lid, within
@@ -642,6 +647,7 @@ pub fn params_for(
                 let wet = match surface.climate.liquid {
                     SurfaceLiquid::Water => 1.0,
                     SurfaceLiquid::Hydrocarbons => HYDROCARBON_EROSION,
+                    SurfaceLiquid::Nitrogen => NITROGEN_EROSION,
                     _ => 0.0,
                 };
                 let erosion = wet * (pressure / ERODING_BAR).min(1.0) as f32;
@@ -910,6 +916,26 @@ mod tests {
     fn model_of(name: &str) -> PlanetModel {
         let body = reference(name);
         planet_model(&sun_at(body.orbit_au), model_inputs(body))
+    }
+
+    /// A nitrogen sea renews the surface and erodes it like Titan's
+    /// methane one (issue #558, the surface part).
+    #[test]
+    fn a_nitrogen_sea_renews_and_erodes_the_surface() {
+        let mut model = model_of("Titan");
+        let surface = model.surface.as_mut().expect("Titan has a surface");
+        surface.climate.liquid = SurfaceLiquid::Nitrogen;
+        let terrain =
+            super::super::surface_age::terrain(&model, 4.6, &super::super::Gases::default(), None);
+        assert_eq!(
+            terrain.main().expect("a unit").renewal,
+            Renewal::LiquidCycle,
+            "{terrain:?}"
+        );
+        model.terrain = terrain;
+        let params = params_for(&model, &earth_placed(1), &mut StdRng::seed_from_u64(1));
+        assert!(params.erosion > 0.0, "{}", params.erosion);
+        assert!(params.surface_age_ga <= 1.0, "{}", params.surface_age_ga);
     }
 
     #[test]

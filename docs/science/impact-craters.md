@@ -656,8 +656,8 @@ more are flooded flat at a date of that window and darkened.
   1.1 to 9.3 Ga ago (median 4.1 Ga): most drawn chains close early, a
   few percent wide of their 2:1.
 - **A liquid cycle renews a stagnant lid's surface (Titan).** A world in
-  the stagnant regime with air of 0.01 bar or more over liquid water or
-  hydrocarbons gets one `LiquidCycle` terrain unit
+  the stagnant regime with air of 0.01 bar or more over liquid water,
+  hydrocarbons or nitrogen gets one `LiquidCycle` terrain unit
   (`planet::surface_age::liquid_cycle_age_gyr`), 0.2 to 1 Ga old instead
   of 70 to 95 % of its system's age: Titan keeps about 60 craters, a
   crater retention age of 0.2 to 1 Ga (Neish & Lorenz 2012,
@@ -666,7 +666,14 @@ more are flooded flat at a date of that window and darkened.
   0.1 bar up and rises with the log of the pressure to the system's age
   at 0.01 bar, so that it is continuous in pressure (a choice, no source
   for the interpolation). Plate, episodic and heat-pipe regimes keep
-  their own, faster, ages; Mars and Mercury (no liquid) stay old.
+  their own, faster, ages; Mars and Mercury (no liquid) stay old. A
+  nitrogen sea takes the hydrocarbons' age and erosion
+  (`HYDROCARBON_EROSION`, 0.5, as `NITROGEN_EROSION`): nitrogen rain and
+  rivers are analogous to Titan's methane cycle, and no source gives them
+  their own, an assumption (issue #558; the map still draws no nitrogen
+  sea). Of the 38 nitrogen-sea planets of 500 drawn systems
+  (`planet_census 500`), the 29 under a stagnant lid change surface age
+  (the others have plates, a faster renewal), all 38 gain erosion.
 - **Mobile volatile ice renews the surface (Triton).** A body whose air
   is in vapour equilibrium with a nitrogen or methane frost (the
   condensate of `atmosphere::condense` under the gas's triple point or
