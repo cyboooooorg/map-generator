@@ -520,9 +520,11 @@ fn plasma_flux(host: &HostPlasma) -> f64 {
 /// Outside a giant's magnetosphere nothing is lost here: the stellar
 /// wind's pick-up of photo-ions is already in the shoreline, which Zahnle
 /// & Catling 2017 fitted on the planets (Mars, Mercury) that undergo it;
-/// counting it again would strip Mars. Titan's 1.5 bar and Triton's N₂
-/// and its frost lose a few percent of their column over the age;
-/// Europa, Ganymede, Callisto and Io lose their CO₂ and N₂.
+/// counting it again would strip Mars. An air that survives this
+/// loss (Titan's 1.5 bar, Triton's N₂ and its frost) is kept whole, the
+/// loss being all or nothing at the cutoff (a few percent of its column
+/// would be the physical loss, #559); Europa, Ganymede, Callisto and Io
+/// lose their CO₂ and N₂.
 pub fn non_thermal_loss(gases: Gases, body: &LossContext) -> (Gases, Gases) {
     let Some(host) = &body.host else {
         return (gases, Gases::default());
