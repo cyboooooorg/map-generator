@@ -286,7 +286,7 @@ In `system.rs` tests:
 **Interfaces:**
 - Consumes: Tasks 1, 2, 4.
 - Produces:
-  - `pub const HOST_HOST_KIND` is not a name; use `stream::HOST_KIND: u32 = 44` in `noise.rs`, documented like `GALAXY`.
+  - `stream::HOST_KIND: u32 = 44` in `noise.rs`, documented like `GALAXY`.
   - `pub const HOST_KIND_SHARES: [(HostKind, f64); 10]`: relative shares per star from the study's section 2.1. Each value carries a comment with its source, and each kind's issue confirms its share before enabling it.
     - Dwarf: 0.93.
     - WhiteDwarf: 0.059 (Mamajek).
