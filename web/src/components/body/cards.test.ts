@@ -216,6 +216,14 @@ describe('themed body cards', () => {
     expect(html.match(/class="value area[ "]/g)).toHaveLength(2);
   });
 
+  it('glosses a legend row without nesting a focusable abbr in its button', () => {
+    const html = renderCard(LegendCard, { ramp: null, stats, colour: () => 'red' });
+    const rows = html.match(/<button[^]*?<\/button>/g) ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.join('')).toContain('<abbr');
+    for (const row of rows) expect(row).not.toContain('tabindex');
+  });
+
   it('shows every biome as a segment of the share bar, sized by its share', () => {
     const html = renderCard(LegendCard, { ramp: null, stats, colour: () => 'red' });
     const bar = html.match(/<div class="bar[ "][^]*?<\/div>/)?.[0] ?? '';

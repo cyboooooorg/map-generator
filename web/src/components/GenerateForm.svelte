@@ -549,12 +549,12 @@
     {#if !variedFrom}
       <div class="kinds" role="group" aria-label={t.form.mode}>
         <button type="button" class="kind" class:active={mode === 'system'} aria-pressed={mode === 'system'} onclick={() => (mode = 'system')}>
-          <strong><Glossed text={t.form.modeSystem} /></strong>
-          <small><Glossed text={t.form.modeSystemHelp} /></small>
+          <strong><Glossed text={t.form.modeSystem} inert /></strong>
+          <small><Glossed text={t.form.modeSystemHelp} inert /></small>
         </button>
         <button type="button" class="kind" class:active={mode === 'around'} aria-pressed={mode === 'around'} onclick={() => (mode = 'around')}>
-          <strong><Glossed text={t.form.modeAround} /></strong>
-          <small><Glossed text={t.form.modeAroundHelp} /></small>
+          <strong><Glossed text={t.form.modeAround} inert /></strong>
+          <small><Glossed text={t.form.modeAroundHelp} inert /></small>
         </button>
       </div>
       <div class="all-random">
@@ -577,7 +577,7 @@
         {#if !systemStarRandom}
           <div class="star">
             <label class="labelled">
-              <span><Glossed text={t.form.starClass} /></span>
+              <span><Glossed text={t.form.starClass} inert /></span>
               <span class="with-dot">
                 <StarDot colour={dotOfSystemStar} label={starType(systemClass, systemSubtype)} />
                 <select bind:value={systemClass}>
@@ -588,7 +588,7 @@
               </span>
             </label>
             <label class="labelled">
-              <span><Glossed text={t.form.starSubtype} /></span>
+              <span><Glossed text={t.form.starSubtype} inert /></span>
               <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} />
             </label>
             <span class="labelled">
@@ -596,7 +596,7 @@
               <strong class="value"><Glossed text={starType(systemClass, systemSubtype)} /></strong>
             </span>
           </div>
-          <p class="help"><Glossed text={t.form.starClasses[systemClass] ?? ''} /></p>
+          <p class="help"><Glossed text={t.form.starClasses[systemClass]} /></p>
         {:else}
           <p class="help"><Glossed text={t.form.systemStarRandomHelp} /></p>
         {/if}
@@ -606,7 +606,7 @@
     <legend>{t.form.star}</legend>
     <div class="star">
       <label class="labelled">
-        <span><Glossed text={t.form.starClass} /></span>
+        <span><Glossed text={t.form.starClass} inert /></span>
         <span class="with-dot">
           <StarDot colour={dotOfStar} label={star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype)} />
           <select bind:value={star.klass} onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}>
@@ -618,7 +618,7 @@
         </span>
       </label>
       <label class="labelled">
-        <span><Glossed text={t.form.starSubtype} /></span>
+        <span><Glossed text={t.form.starSubtype} inert /></span>
         <select bind:value={star.subtype} disabled={star.klass === ''}>
           {#each subtypes(star.klass) as subtype (subtype)}
             <option value={subtype}>{formatUpTo(subtype, 1)}</option>
@@ -626,7 +626,7 @@
         </select>
       </label>
     </div>
-    <p class="help"><Glossed text={star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass] ?? ''} /></p>
+    <p class="help"><Glossed text={star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass]} /></p>
   </fieldset>
   <fieldset>
     <legend>
@@ -679,7 +679,7 @@
           <div class="counts">
             {#each spec.archetypes as type (type)}
               <label>
-                <span><Glossed text={archetypeName({ name: type })} /></span>
+                <span><Glossed text={archetypeName({ name: type })} inert /></span>
                 <input type="number" min="0" max={spec.max_planets} step="1" bind:value={planetCounts[type]} />
               </label>
             {/each}
@@ -690,7 +690,7 @@
             <div class="counts">
               {#each spec.moon_archetypes as type (type)}
                 <label>
-                  <span><Glossed text={archetypeName({ name: type })} /></span>
+                  <span><Glossed text={archetypeName({ name: type })} inert /></span>
                   <input type="number" min="0" max={spec.max_planets} step="1" bind:value={moonCounts[type]} />
                 </label>
               {/each}
@@ -702,7 +702,7 @@
       </fieldset>
     {:else}
   <label class="row">
-    <span><Glossed text={t.form.planet} /></span>
+    <span><Glossed text={t.form.planet} inert /></span>
     <select value={planet} onchange={(e) => chooseArchetype(e.currentTarget.value)} disabled={randomPlanet}>
       {#each archetypes.filter((a) => !a.moon) as archetype (archetype.spec)}
         <option value={archetype.spec}>{archetypeName(archetype)}{archetype.built_in ? '' : ` (${archetype.spec})`}</option>
@@ -790,7 +790,7 @@
     {/if}
   {:else if step === 'advanced'}
     <details class="advanced" open>
-      <summary><Glossed text={t.form.advanced} /></summary>
+      <summary><Glossed text={t.form.advanced} inert /></summary>
       <div class="advanced-body">
       <fieldset>
         <legend>
@@ -840,7 +840,7 @@
       {/if}
 
       <div class="row">
-        <label for="seed"><Glossed text={t.form.seed} /></label>
+        <label for="seed"><Glossed text={t.form.seed} inert /></label>
         <div class="seed">
           <input id="seed" type="text" inputmode="numeric" placeholder={t.form.seedPlaceholder} bind:value={seed} />
           <button type="button" onclick={rollSeed} title={t.form.rollHelp}>{t.form.roll}</button>
@@ -850,7 +850,7 @@
         </div>
       </div>
       <label class="row">
-        <span><Glossed text={t.form.size} /></span>
+        <span><Glossed text={t.form.size} inert /></span>
         <select bind:value={size}>
           {#each sizes as [w, h] (`${w}x${h}`)}
             <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size || w * h > spec.max_pixels}
@@ -905,7 +905,7 @@
     <aside class="side"><PreviewPanel {preview} kind={mode} {ageSources} onjump={jump} onreroll={reroll} /></aside>
   {:else}
     <details class="fold">
-      <summary><Glossed text={t.form.preview.summary} /></summary>
+      <summary><Glossed text={t.form.preview.summary} inert /></summary>
       <PreviewPanel {preview} kind={mode} folded {ageSources} onjump={jump} onreroll={reroll} />
     </details>
   {/if}

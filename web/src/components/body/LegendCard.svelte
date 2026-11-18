@@ -62,9 +62,9 @@
           title={t.viewer.highlightHelp}
         >
           <span class="swatch" style:background={colour(entry.biome)}></span>
-          <span class="name"><Glossed text={biomeName(entry.biome)} /></span>
-          <span class="value"><Glossed text={formatShare(entry.share)} /></span>
-          <span class="value area" title={t.cards.biomeArea}><Glossed text={formatArea(entry.areaKm2)} /></span>
+          <span class="name"><Glossed text={biomeName(entry.biome)} inert /></span>
+          <span class="value"><Glossed text={formatShare(entry.share)} inert /></span>
+          <span class="value area" title={t.cards.biomeArea}><Glossed text={formatArea(entry.areaKm2)} inert /></span>
         </button>
       </li>
     {/each}

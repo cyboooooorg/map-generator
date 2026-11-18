@@ -50,7 +50,7 @@
               <th scope="row">{body.designation}</th>
               <td>{classLabel(body.type, body.model)}</td>
               <td><Glossed text={formatMassWithNote(body.physical.mass_earth)} /></td>
-              <td>{formatAu(body.orbit.semi_major_axis_au)}</td>
+              <td><Glossed text={formatAu(body.orbit.semi_major_axis_au)} /></td>
               <td>{moonsOf(body.id)}</td>
             </tr>
           {/each}

@@ -1720,6 +1720,18 @@ export const en = {
       name: "R♃: Jupiter's radius (71 492 km, 11 R⊕)",
       examples: 'Saturn: 0.84 · Jupiter: 1',
     },
+    'M☉': {
+      name: "M☉: the Sun's mass (333 000 M⊕)",
+      examples: 'red dwarfs: 0.08 to 0.6 · the Sun: 1 · Sirius: 2.1',
+    },
+    RJ: {
+      name: "RJ: Jupiter's radius (71 492 km, 11.2 R⊕)",
+      examples: 'Saturn: 0.84 · Jupiter: 1 · hot Jupiters: 1 to 1.8',
+    },
+    'g/cm³': {
+      name: 'g/cm³: grams per cubic centimetre, a density',
+      examples: 'water: 1 · Saturn: 0.69 · Moon: 3.34 · Earth: 5.51',
+    },
     'S⊕': {
       name: 'S⊕: the light a planet receives, 1 S⊕ is what Earth gets from the Sun',
       examples: 'Mars: 0.43 · Earth: 1 · Venus: 1.9',
@@ -1794,6 +1806,9 @@ export const en = {
       'R♃': 'Jupiter radius',
       'L☉': 'solar luminosity',
       'R☉': 'solar radius',
+      'M☉': 'solar mass',
+      RJ: 'RJ: Jupiter radius',
+      'g/cm³': 'grams per cubic centimetre: density',
       'S⊕': 'Earth insolation: the stellar flux Earth receives',
       'W/m²': 'watts per square metre: power per area',
       'µT': 'microtesla: magnetic field',
@@ -1802,7 +1817,7 @@ export const en = {
       '°C': 'degrees Celsius: temperature',
       bar: 'bar: pressure',
       K: 'kelvin: temperature from absolute zero',
-      g: 'g: surface gravity (Earth = 1 g)',
+      g: 'g: surface gravity',
       Ga: 'Ga: billion years',
       Ma: 'Ma: million years',
       Gyr: 'Gyr: billion years',

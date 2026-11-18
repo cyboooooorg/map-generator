@@ -1632,6 +1632,18 @@ export const fr: Messages = {
       name: `R♃${S}: le rayon de Jupiter (71${S}492${S}km, 11${S}R⊕)`,
       examples: `Saturne${S}: 0,84 · Jupiter${S}: 1`,
     },
+    'M☉': {
+      name: `M☉${S}: la masse du Soleil (333${S}000${S}M⊕)`,
+      examples: `naines rouges${S}: 0,08 à 0,6 · le Soleil${S}: 1 · Sirius${S}: 2,1`,
+    },
+    RJ: {
+      name: `RJ${S}: le rayon de Jupiter (71${S}492${S}km, 11,2${S}R⊕)`,
+      examples: `Saturne${S}: 0,84 · Jupiter${S}: 1 · Jupiters chauds${S}: 1 à 1,8`,
+    },
+    'g/cm³': {
+      name: `g/cm³${S}: grammes par centimètre cube, une masse volumique`,
+      examples: `eau${S}: 1 · Saturne${S}: 0,69 · Lune${S}: 3,34 · Terre${S}: 5,51`,
+    },
     'S⊕': {
       name: `S⊕${S}: la lumière que reçoit une planète, 1${S}S⊕ est ce que la Terre reçoit du Soleil`,
       examples: `Mars${S}: 0,43 · Terre${S}: 1 · Vénus${S}: 1,9`,
@@ -1706,6 +1718,9 @@ export const fr: Messages = {
       'R♃': 'rayon de Jupiter',
       'L☉': 'luminosité solaire',
       'R☉': 'rayon solaire',
+      'M☉': 'masse solaire',
+      RJ: `RJ${S}: rayon de Jupiter`,
+      'g/cm³': `grammes par centimètre cube${S}: masse volumique`,
       'S⊕': `insolation terrestre${S}: le flux stellaire reçu par la Terre`,
       'W/m²': `watts par mètre carré${S}: puissance par surface`,
       'µT': `microtesla${S}: champ magnétique`,
@@ -1714,7 +1729,7 @@ export const fr: Messages = {
       '°C': `degrés Celsius${S}: température`,
       bar: `bar${S}: pression`,
       K: `kelvin${S}: température depuis le zéro absolu`,
-      g: `g${S}: gravité de surface (Terre = 1 g)`,
+      g: `g${S}: gravité de surface`,
       Ga: `Ga${S}: milliard d’années`,
       Ma: `Ma${S}: million d’années`,
       Gyr: `Gyr${S}: milliard d’années`,

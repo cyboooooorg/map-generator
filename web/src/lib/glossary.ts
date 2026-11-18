@@ -12,21 +12,24 @@ export type Formula = (typeof FORMULAS)[number];
 
 /** Units whose symbol is unambiguous: glossed anywhere. */
 export const SYMBOL_UNITS = [
-  'M⊕', 'R⊕', 'M♃', 'R♃', 'L☉', 'R☉', 'S⊕', 'W/m²', 'µT', 'm/s²', 'mm/s²', '°C',
+  'M⊕', 'R⊕', 'M♃', 'R♃', 'M☉', 'L☉', 'R☉', 'S⊕', 'W/m²', 'µT', 'm/s²', 'mm/s²', '°C',
 ] as const;
 
 /** Units made of plain letters: glossed only right after a number. */
 export const LETTER_UNITS = [
-  'bar', 'K', 'g', 'Ga', 'Ma', 'Gyr', 'AU', 'UA', 'km', 'km²', 'km/s', 'TW', 'GW', 'MW', 'W', 'M km²',
+  'bar', 'K', 'g', 'Ga', 'Ma', 'Gyr', 'AU', 'UA', 'RJ', 'g/cm³', 'km', 'km²', 'km/s', 'TW', 'GW', 'MW', 'W', 'M km²',
 ] as const;
 
 export const GLOSS_UNITS = [...SYMBOL_UNITS, ...LETTER_UNITS] as const;
 export type GlossUnit = (typeof GLOSS_UNITS)[number];
 
+/** A space as typed in a key, or no-break, or narrow no-break (French). */
+const SPACE = '[ \\u00a0\\u202f]';
+
 const longestFirst = (terms: readonly string[]): string =>
   [...terms]
     .sort((a, b) => b.length - a.length)
-    .map((s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&'))
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/ /g, SPACE))
     .join('|');
 
 const SUBSCRIPTS = '₀-₉';
@@ -40,7 +43,7 @@ const SYMBOL_RE = new RegExp(
 );
 // After a digit or a superscript digit (`×10²⁶`), and a space, no-break or narrow no-break.
 const LETTER_RE = new RegExp(
-  `(?<=[\\d⁰-⁹][ \\u00a0\\u202f])(${longestFirst(LETTER_UNITS)})(?![\\p{L}\\p{N}²³/]|-\\p{L})`,
+  `(?<=[\\d⁰¹²³⁴-⁹][ \\u00a0\\u202f])(${longestFirst(LETTER_UNITS)})(?![\\p{L}\\p{N}²³/]|-\\p{L})`,
   'gu',
 );
 
@@ -65,7 +68,8 @@ function hits(text: string): Hit[] {
 /** The name of `term` in the active language, or null when it is not a known term. */
 export function glossName(kind: GlossKind, term: string): string | null {
   const names: Record<string, string> = kind === 'formula' ? t.glossary.formulas : t.glossary.units;
-  return Object.hasOwn(names, term) ? (names[term] ?? null) : null;
+  const key = term.replace(/[\u00a0\u202f]/g, ' ');
+  return Object.hasOwn(names, key) ? (names[key] ?? null) : null;
 }
 
 /** Splits `text` into plain and glossed parts; joining every `text` gives back the input. */

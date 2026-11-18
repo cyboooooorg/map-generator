@@ -938,7 +938,7 @@
               mass: formatUpTo(belt.mass_earth, belt.mass_earth < 0.01 ? 6 : 3),
               composition: t.starView.beltCompositions[belt.composition] ?? belt.composition,
             })}{#if shaper}<br /><small class="muted"><Glossed text={t.starView.beltShaped({ planet: shaper.name })} /></small>{/if}{#if belt.gaps.length > 0}<br /><small
-                class="muted">{t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })}</small
+                class="muted"><Glossed text={t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })} /></small
               >{/if}
           </li>
         {/each}

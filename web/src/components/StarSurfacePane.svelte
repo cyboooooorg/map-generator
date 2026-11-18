@@ -8,6 +8,7 @@
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import { formatInt, formatShare, formatUpTo, formatYear, withUnit } from '../lib/format';
   import { t } from '../lib/i18n/index.svelte';
+  import Glossed from './Glossed.svelte';
   import { activeRegions, activityRelativeToSun, angularVelocity } from '../lib/starActivity';
   import { clampSpeed, cycleJumps, cyclePhase, defaultStarSpeed, STAR_SPEED_MAX, STAR_SPEED_MIN } from '../lib/starClock';
   import { currentProfile } from '../lib/viewer/quality';
@@ -193,7 +194,7 @@
   <p class="heading"><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></p>
   <dl>
     <dt title={t.starSurface.temperatureHelp}>{t.starSurface.temperature}</dt>
-    <dd>{withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')}</dd>
+    <dd><Glossed text={withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')} /></dd>
     {#if activity}
       <dt title={t.starSurface.envelopeHelp}>{t.starSurface.envelope}</dt>
       <dd>{t.starSurface.envelopes[activity.envelope] ?? activity.envelope}</dd>

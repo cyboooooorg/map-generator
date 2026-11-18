@@ -70,7 +70,7 @@
       </dd>
     {:else}
       <dd>
-        {withUnit(formatInt(body.physical.radius_km), 'km')}{#if body.physical.axes_km}{' '}(<span class="axes-help" title={t.card.axesHelp}><Glossed text={t.card.axes({
+        <Glossed text={withUnit(formatInt(body.physical.radius_km), 'km')} />{#if body.physical.axes_km}{' '}(<span class="axes-help" title={t.card.axesHelp}><Glossed text={t.card.axes({
             a: withUnit(formatInt(2 * body.physical.axes_km[0]), 'km'),
             b: formatInt(2 * body.physical.axes_km[1]),
             c: formatInt(2 * body.physical.axes_km[2]),

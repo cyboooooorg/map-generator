@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLocale } from './i18n/index.svelte';
 import { en } from './i18n/en';
 import { fr } from './i18n/fr';
 import { FORMULAS, GLOSS_UNITS, glossName, glossSegments } from './glossary';
@@ -23,6 +24,29 @@ describe('glossSegments', () => {
     expect(glossed('4,5 Ga and 3 km²')).toEqual(['Ga', 'km²']);
   });
   it('reads exponent numbers', () => expect(glossed('3.8×10²⁶ W')).toEqual(['W']));
+  it('reads every superscript digit before a unit', () => {
+    expect(glossed('3×10⁻¹² bar')).toEqual(['bar']);
+    expect(glossed('2×10²³ W')).toEqual(['W']);
+    expect(glossed('1.2×10¹³ W')).toEqual(['W']);
+  });
+  it('glosses the French M km² written with a narrow no-break space', () => {
+    setLocale('fr');
+    try {
+      const text = '149\u202fM\u202fkm²';
+      expect(glossed(text)).toEqual(['M\u202fkm²']);
+      expect(glossSegments(text).map((g) => g.text).join('')).toBe(text);
+      expect(glossName('unit', 'M\u202fkm²')).toBe(fr.glossary.units['M km²']);
+      expect(glossed('149 M km²')).toEqual(['M km²']);
+    } finally {
+      setLocale('en');
+    }
+  });
+  it('knows the Jupiter radius, the solar mass and the density unit', () => {
+    expect(glossed('1.2 RJ and 0.3 M☉ and 5.51 g/cm³')).toEqual(['RJ', 'M☉', 'g/cm³']);
+    expect(glossed('RJ without a number')).toEqual([]);
+    expect(glossName('unit', 'g/cm³')).toBe(en.glossary.units['g/cm³']);
+  });
+  it('names g without a reference value', () => expect(en.glossary.units.g).not.toContain('='));
   it('finds symbol units anywhere', () => expect(glossed('masse en M⊕')).toEqual(['M⊕']));
   it('ignores ASCII lookalikes', () => expect(glossed('He said CO2')).toEqual([]));
   it('does not gloss k₂/Q', () => expect(glossed('k₂/Q')).toEqual([]));

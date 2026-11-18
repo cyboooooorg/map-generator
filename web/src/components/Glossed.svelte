@@ -5,8 +5,8 @@
   // focusable element must not be nested.
   import { glossSegments } from '../lib/glossary';
 
-  let { text, inert = false }: { text: string; inert?: boolean } = $props();
-  const segments = $derived(glossSegments(text));
+  let { text, inert = false }: { text: string | null | undefined; inert?: boolean } = $props();
+  const segments = $derived(text ? glossSegments(text) : []);
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

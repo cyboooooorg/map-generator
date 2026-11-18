@@ -116,7 +116,9 @@ input[type='radio'] {
   left: 0;
   margin-top: 4px;
   padding: 2px 6px;
-  white-space: nowrap;
+  white-space: normal;
+  width: max-content;
+  max-width: min(18em, 80vw);
   z-index: 100;
   background: var(--control-bg);
   color: var(--text);

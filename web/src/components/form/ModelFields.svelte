@@ -118,8 +118,8 @@
     {@const count = pinnedCount(values, group.fields)}
     <details open={open.has(group.id)} ontoggle={(e) => toggleGroup(group.id, e.currentTarget.open)} class="group" data-group={group.id}>
       <summary>
-        <span class="title"><Glossed text={t.form.model.groups[group.id].title} /></span>
-        <span class="count" class:some={count > 0}><Glossed text={count > 0 ? t.form.model.groupSet({ count }) : t.form.model.groupDrawn} /></span>
+        <span class="title"><Glossed text={t.form.model.groups[group.id].title} inert /></span>
+        <span class="count" class:some={count > 0}><Glossed text={count > 0 ? t.form.model.groupSet({ count }) : t.form.model.groupDrawn} inert /></span>
       </summary>
       <p class="help"><Glossed text={t.form.model.groups[group.id].help} /></p>
       {#each group.fields as key (key)}
@@ -209,7 +209,7 @@
             <p class="unit-note water-amount"><Glossed text={waterLines.join(' · ')} /></p>
           {/if}
           {#if referencesLine(key, spec)}
-            <p class="unit-note references"><Glossed text={referencesLine(key, spec) ?? ''} /></p>
+            <p class="unit-note references"><Glossed text={referencesLine(key, spec)} /></p>
           {/if}
           {#if refusal && refusedField === key}
             <p class="error" role="alert"><Glossed text={detailText(refusal)} /></p>

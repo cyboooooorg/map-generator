@@ -39,7 +39,7 @@
   <dl class="facts">
     {#if giant}
       <dt title={t.worldInfo.giantCloudsHelp}><Glossed text={t.worldInfo.giantClouds} /></dt>
-      <dd>{t.starView.cloudClasses[giant.class] ?? ''} · {withUnit(formatInt(giant.effective_k), 'K')}</dd>
+      <dd><Glossed text={`${t.starView.cloudClasses[giant.class] ?? ''} · ${withUnit(formatInt(giant.effective_k), 'K')}`} /></dd>
       <dt title={t.worldInfo.giantWindsHelp}><Glossed text={t.worldInfo.giantWinds} /></dt>
       <dd>
         <Glossed text={t.worldInfo.giantWindsValue({
