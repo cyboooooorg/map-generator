@@ -53,7 +53,7 @@ describe('glossSegments', () => {
   it('does not cut a longer word', () => expect(glossed('5 kmh, 5 Gyr, 5 km²')).toEqual(['Gyr', 'km²']));
   it('glosses [Fe/H] as an exact token, brackets included', () => {
     expect(glossed('Star metallicity [Fe/H]')).toEqual(['[Fe/H]']);
-    expect(glossed('ice line 3 AU · [Fe/H] +0.1 · age 4 Ga')).toEqual(['[Fe/H]', 'AU', 'Ga']);
+    expect(glossed('ice line 3 AU · [Fe/H] +0.1 · age 4 Ga')).toEqual(['AU', '[Fe/H]', 'Ga']);
     expect(glossed('Fe/H and [Fe/H]x and a[Fe/H]')).toEqual([]);
     expect(glossName('notation', '[Fe/H]')).toBe('metallicity: iron abundance relative to the Sun (log scale)');
   });
