@@ -5,7 +5,7 @@
 //! other kinds are recognised by the parser so that a request for one is
 //! refused with the issue that tracks it, rather than as a typo.
 
-use crate::star::{CLASSES, TYPE_RANGE};
+use crate::star::{CLASSES, StarValues, TYPE_RANGE, values};
 use serde::{Deserialize, Serialize};
 
 /// What a planet's host is, by the physics that sets its light and its
@@ -70,6 +70,16 @@ impl HostKind {
             HostKind::WolfRayet => Some(582),
             HostKind::QuasiStar => Some(583),
         }
+    }
+
+    /// Why a request for this kind is refused while it is not modelled,
+    /// with the issue that tracks it.
+    pub fn refusal(self) -> String {
+        format!(
+            "{} are not modelled yet (see #{})",
+            self.name(),
+            self.issue().unwrap_or_default()
+        )
     }
 
     /// The plural noun of the kind, for messages ("white dwarfs are not
@@ -207,9 +217,61 @@ pub fn parse_host(text: &str) -> Result<HostType, String> {
     host(kind, code)
 }
 
+/// The physical state of a host of `kind` and `mass` (solar masses): what
+/// the rest of the generator reads of a star. `age_gyr` is unused by
+/// dwarfs, whose light does not change along the model's span; kinds that
+/// evolve will read it. Refused for a kind not modelled yet and for a
+/// dwarf mass outside the sequence (about 0.08 to 90 solar masses).
+pub fn host_state(kind: HostKind, mass: f32, _age_gyr: f32) -> Result<StarValues, String> {
+    if !kind.available() {
+        return Err(kind.refusal());
+    }
+    dwarf_code_for_mass(mass)
+        .map(values)
+        .ok_or_else(|| format!("no main-sequence dwarf of {mass} solar masses"))
+}
+
+/// The spectral code of the main-sequence dwarf of `mass` (solar masses),
+/// the inverse of [`values`]; `None` outside the sequence.
+pub fn dwarf_code_for_mass(mass: f32) -> Option<f32> {
+    // The mass falls as the code rises: `lo` is the heaviest end.
+    let (mut lo, mut hi) = TYPE_RANGE;
+    if !(values(hi).mass..=values(lo).mass).contains(&mass) {
+        return None;
+    }
+    for _ in 0..40 {
+        let mid = 0.5 * (lo + hi);
+        if values(mid).mass > mass {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    Some(0.5 * (lo + hi))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dwarf_state_inverts_the_sequence() {
+        for code in [3.0, 15.0, 42.0, 55.5, 64.5, 69.5] {
+            let v = values(code);
+            let s = host_state(HostKind::Dwarf, v.mass, 4.6).unwrap();
+            assert!((s.teff_k - v.teff_k).abs() / v.teff_k < 1e-3, "{code}");
+            assert!(
+                (s.luminosity - v.luminosity).abs() / v.luminosity < 1e-3,
+                "{code}"
+            );
+        }
+        assert!(host_state(HostKind::Dwarf, 500.0, 4.6).is_err());
+        assert!(
+            host_state(HostKind::WhiteDwarf, 0.6, 4.6)
+                .unwrap_err()
+                .contains("#577")
+        );
+    }
 
     #[test]
     fn dwarf_notations_keep_their_codes() {

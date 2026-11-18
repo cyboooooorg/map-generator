@@ -204,10 +204,9 @@ pub fn parse_type(text: &str) -> Result<f32, String> {
         Ok(host.code)
     } else {
         Err(format!(
-            "spectral type {:?}: {} are not modelled yet (see #{})",
+            "spectral type {:?}: {}",
             text.trim(),
-            host.kind.name(),
-            host.kind.issue().unwrap_or_default()
+            host.kind.refusal()
         ))
     }
 }
@@ -582,7 +581,33 @@ impl StarInfo {
         age_gyr: f32,
         seed: u32,
     ) -> Self {
-        let v = values(code);
+        Self::from_values(
+            type_name(code),
+            values(code),
+            orbit_au,
+            eccentricity,
+            mass_earth,
+            radius_earth,
+            age_gyr,
+            seed,
+        )
+    }
+
+    /// Like [`Self::for_planet`] for a host described by its `star` values
+    /// and called `name`, whatever its kind (see
+    /// [`crate::host::host_state`]).
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_values(
+        name: String,
+        star: StarValues,
+        orbit_au: f32,
+        eccentricity: f32,
+        mass_earth: f32,
+        radius_earth: f32,
+        age_gyr: f32,
+        seed: u32,
+    ) -> Self {
+        let v = star;
         let at = |au: f32| v.luminosity / (au * au);
         let insolation = at(orbit_au) * mean_flux_factor(eccentricity);
         let (periapsis, apoapsis) = (
@@ -599,7 +624,7 @@ impl StarInfo {
             0.0
         };
         Self {
-            kind: type_name(code),
+            kind: name,
             teff_k: v.teff_k,
             luminosity: v.luminosity,
             mass: v.mass,
@@ -814,6 +839,16 @@ pub fn orbit_at(code: f32, position: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn star_info_from_values_matches_new() {
+        for code in [15.0, 42.0, 64.5] {
+            let a = StarInfo::for_planet(code, 0.7, 0.1, 1.0, 1.0, 3.0, 7);
+            let b =
+                StarInfo::from_values(type_name(code), values(code), 0.7, 0.1, 1.0, 1.0, 3.0, 7);
+            assert_eq!(a, b);
+        }
+    }
+
     use super::*;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
