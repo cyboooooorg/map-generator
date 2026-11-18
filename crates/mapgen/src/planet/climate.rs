@@ -2457,7 +2457,7 @@ mod tests {
     }
 
     /// Census seed 182's planet d (issue #443): an equilibrium temperature
-    /// near 114 K under some 4 bar of N₂ and 26 bar of methane, which the
+    /// near 114 K under some 4 bar of N₂ and a methane-rich air, which the
     /// saturated methane greenhouse keeps under the 150 K line, drawn as
     /// `planet_census` draws it (issue #530).
     #[test]
@@ -2478,14 +2478,11 @@ mod tests {
         let model = crate::planet::body_model(&system, body).expect("a model");
         let s = model.surface.expect("a surface");
         let c = s.climate;
-        eprintln!(
-            "182 d: {} T {:.2} K T_eq {:.2} K {:?} {:?}",
-            model.class.key(),
-            c.temperature_k,
-            c.equilibrium_k,
-            c.liquid,
-            s.gases
-        );
+        // The planet the issue names: T_eq about 114.5 K, 4.4 bar of N₂
+        // and 3.3 bar of methane over its seas once the rest condensed.
+        assert!((110.0..120.0).contains(&c.equilibrium_k), "{c:?}");
+        assert!((4.0..5.0).contains(&s.gases.n2), "{:?}", s.gases);
+        assert!((2.0..5.0).contains(&s.gases.ch4), "{:?}", s.gases);
         assert!(c.equilibrium_k < 150.0, "{c:?}");
         assert!(c.temperature_k < 150.0, "{c:?} {:?}", s.gases);
         assert_ne!(c.liquid, SurfaceLiquid::Water, "{c:?}");
