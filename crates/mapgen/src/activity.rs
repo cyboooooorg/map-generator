@@ -287,7 +287,7 @@ pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
 /// The activity of a host of `kind`, deterministic in `system_seed`.
 ///
 /// A kind without a convective photosphere (white dwarf, neutron star,
-/// magnetar, black hole, Wolf-Rayet, quasi-star) is quiet: no spots, no
+/// magnetar, black hole, Wolf-Rayet) is quiet: no spots, no
 /// granulation contrast, and a rotation from the radiative formula. The
 /// four draws of [`star_activity`] still happen, in the same order. Each
 /// kind's own issue gives its own rotation.
@@ -574,7 +574,6 @@ mod tests {
             HostKind::Magnetar,
             HostKind::BlackHole,
             HostKind::WolfRayet,
-            HostKind::QuasiStar,
         ] {
             let a = host_activity(kind, &info, 3);
             assert_eq!(a.envelope, Envelope::Radiative, "{kind:?}");
@@ -586,6 +585,8 @@ mod tests {
             host_activity(HostKind::Dwarf, &info, 3),
             star_activity(&info, 3)
         );
+        // A quasi-star's envelope is convective (Begelman et al. 2008).
+        assert!(HostKind::QuasiStar.has_convective_photosphere());
     }
 
     #[test]
