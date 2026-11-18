@@ -13,8 +13,34 @@ would show, and what the code would need. The objects: neutron stars
 other luminosity classes (subgiants, giants, supergiants), white dwarfs,
 brown dwarfs, Wolf-Rayet stars, and quasi-stars.
 
-This document is a study and a proposal. It decides nothing: the last
-section is a recommendation to discuss with the user.
+This document is a study and a proposal; the decisions taken with the
+user on 2026-11-18 follow, and they amend the recommendation of
+section 4.
+
+## Decisions (2026-11-18)
+
+Taken with the user:
+
+- **Order across both studies:** the host-kind data model first, then
+  the binary systems of #376 (a companion can then be a white dwarf or
+  a neutron star), then the evolved hosts and the other kinds of this
+  study.
+- **Random draw:** the new objects enter the default random draw, with
+  the frequencies of section 2.1, so existing seeds may give other
+  systems (allowed as long as the new worlds stay coherent). As for the
+  dwarfs (`10-stars.md`), the form lets the user pick any kind,
+  including the ones whose real frequency rounds to zero.
+- **Systems without planets:** a system may have no planet at all, and
+  the viewer shows it as such: the host in the star view and the
+  system view, with no placeholder planet and no orbit. Today a
+  planetless system (a hot blue star, for instance) gets a message, a
+  false orbit and a placeholder planet; fixing that is a prerequisite.
+- **Hosts without planets are in scope:** black holes, magnetars,
+  Wolf-Rayet stars and quasi-stars are no longer out. They are drawn
+  (or picked in the form) as planetless systems, shown for themselves
+  in the viewer: the lensed black hole, the magnetar's field and
+  flares, the Wolf-Rayet wind and nebula, the quasi-star's envelope.
+  Quasi-stars stay flagged as hypothetical in the interface.
 
 Reading convention: a number without a mark comes from the cited source
 or from the NASA Exoplanet Archive query named in the text. "Own
@@ -694,7 +720,7 @@ white dwarf needs a plain disk mode, a pulsar a point mode. The
 orrery and the cards (`SystemOrrery.svelte`, `StarPane.svelte`) need the
 new type names.
 
-## 4. Recommendation (proposal, to decide with the user)
+## 4. Recommendation (proposal, amended by the decisions above)
 
 The order below weighs three criteria for each object: how plausible
 planets are (known examples, a model), how interesting the result is in
