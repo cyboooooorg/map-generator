@@ -469,6 +469,23 @@ pub fn draw(request: &SystemRequest, rng: &mut impl RngExt) -> Result<System, Re
         SystemRequest::System(whole) => draw_whole(request, whole, rng),
         SystemRequest::Around(world) => {
             let resolved = world.resolve(rng)?;
+            // An orbit asked inside the host's inner edge (only a hot or
+            // wide host moves it above 0.02 AU) would put the planet in or
+            // against its star.
+            let edge = crate::host::inner_edge_au(&crate::star::values(resolved.params.star));
+            let asked = world.orbit_au.is_some() || world.hz_position.is_some();
+            if asked
+                && edge > crate::host::MIN_INNER_EDGE_AU
+                && f64::from(resolved.params.orbit_au) < edge
+            {
+                return Err(RequestError::OutOfRange {
+                    field: "orbit_au",
+                    limits: crate::request::Limits {
+                        min: edge as f32,
+                        max: crate::request::ORBIT_AU.max,
+                    },
+                });
+            }
             let model = resolved.model().clone();
             Ok(draw_around(request, resolved.params, model))
         }
@@ -1062,6 +1079,11 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
     // its own stream (`rng` is not touched, so a dwarf draws as before).
     let kind = match (&whole.star, asked_star) {
         (None, None) => crate::host::draw_host_kind(seed),
+        (Some(text), _) => {
+            crate::host::parse_host(text)
+                .map_err(RequestError::BadStar)?
+                .kind
+        }
         _ => crate::host::HostKind::Dwarf,
     };
     let star_code = match (&whole.star, asked_star) {
@@ -1453,6 +1475,12 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
         && let Some(giants) = GiantSystem::draw(&params)
     {
         for g in giants.giants {
+            // A hot giant is drawn from 0.02 AU: not inside a wide host.
+            let g_orbit = if inner_edge > crate::host::MIN_INNER_EDGE_AU {
+                f64::from(g.orbit_au).max(inner_edge)
+            } else {
+                f64::from(g.orbit_au)
+            };
             let giant_class = if g.hot {
                 PlanetClass::HotJupiter
             } else if g.kind == GiantKind::Ice {
@@ -1463,8 +1491,8 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
             slots.push(Slot {
                 placement: Placement::Giant(giant_class),
                 mass_earth: f64::from(g.mass_earth),
-                orbit_au: f64::from(g.orbit_au),
-                drawn_au: f64::from(g.orbit_au),
+                orbit_au: g_orbit,
+                drawn_au: g_orbit,
                 eccentricity: f64::from(g.eccentricity),
                 fixed: true,
             });
@@ -3277,6 +3305,59 @@ fn name_world(dir: &std::path::Path, system: &str, body: &str) -> Result<(), Str
 
 #[cfg(test)]
 mod tests {
+    fn o3_world(orbit_au: Option<f32>, seed: u32) -> WorldRequest {
+        WorldRequest {
+            planet: Some("earth-like".into()),
+            star: Some("O3V".into()),
+            age_gyr: Some(0.0005),
+            orbit_au,
+            seed: Some(seed),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        }
+    }
+
+    /// An orbit asked inside the edge of a hot host is refused; one
+    /// asked inside 0.02 AU of a cool dwarf is not (no change there).
+    #[test]
+    fn an_orbit_asked_inside_the_host_edge_is_refused() {
+        let edge = crate::host::inner_edge_au(&crate::star::values(parse_type("O3V").unwrap()));
+        let world = o3_world(Some(0.03), 7);
+        match draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(7)) {
+            Err(RequestError::OutOfRange { field, limits }) => {
+                assert_eq!(field, "orbit_au");
+                assert!((f64::from(limits.min) - edge).abs() < 1e-6);
+            }
+            other => panic!("{:?}", other.map(|s| s.seed)),
+        }
+        let far = o3_world(Some(1.0), 7);
+        assert!(draw(&SystemRequest::Around(far), &mut StdRng::seed_from_u64(7)).is_ok());
+    }
+
+    /// Hot giants drawn under the edge of an O3V are raised to it.
+    #[test]
+    fn giants_round_a_hot_host_keep_its_edge() {
+        let edge = crate::host::inner_edge_au(&crate::star::values(parse_type("O3V").unwrap()));
+        let mut at_edge = 0;
+        for seed in 0..400 {
+            let world = o3_world(None, seed);
+            let sys = draw(
+                &SystemRequest::Around(world),
+                &mut StdRng::seed_from_u64(seed as u64),
+            );
+            let Ok(sys) = sys else { continue };
+            for b in sys.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                let a = b.orbit.semi_major_axis_au;
+                assert!(a >= edge - 1e-9, "seed {seed}: {a} < {edge}");
+                if (a - edge).abs() < 1e-9 {
+                    at_edge += 1;
+                }
+            }
+        }
+        assert!(at_edge > 0, "no hot giant was clamped in 400 seeds");
+    }
+
     use super::*;
     use crate::planet::PLANET_CLASSES;
     use crate::rings::RingRole;

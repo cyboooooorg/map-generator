@@ -104,11 +104,17 @@ impl HostKind {
 
     /// Whether the photosphere has a convective envelope, so that it can
     /// carry a dynamo, spots and granulation. A degenerate or hydrogen-free
-    /// surface has none.
+    /// surface has none. A quasi-star's envelope is convective (Begelman,
+    /// Rossi & Armitage 2008). Old brown dwarfs are kept convective on
+    /// purpose: their quiet branch is left to #580.
     pub fn has_convective_photosphere(self) -> bool {
         matches!(
             self,
-            HostKind::Dwarf | HostKind::Subgiant | HostKind::Giant | HostKind::BrownDwarf
+            HostKind::Dwarf
+                | HostKind::Subgiant
+                | HostKind::Giant
+                | HostKind::BrownDwarf
+                | HostKind::QuasiStar
         )
     }
 }
@@ -295,21 +301,27 @@ pub fn host_state(kind: HostKind, mass: f32, _age_gyr: f32) -> Result<StarValues
 
 /// The spectral code of the main-sequence dwarf of `mass` (solar masses),
 /// the inverse of [`values`]; `None` outside the sequence.
+///
+/// The mass of the table is not monotonic between A3 and A8 (1.86 at A3
+/// then 1.93 at A4; 1.77 at A7 then 1.81 at A8), so a mass can belong to
+/// several codes. The answer is deterministic: a mass equal to a row's own
+/// is that row's code (the first such row), otherwise the first bracket of
+/// two rows, from the hottest, whose masses surround it, interpolated
+/// linearly in log mass as [`values`] does. So the A4 mass (1.93) gives
+/// A4, while a mass of 1.95 gives a code between A2 and A3.
 pub fn dwarf_code_for_mass(mass: f32) -> Option<f32> {
-    // The mass falls as the code rises: `lo` is the heaviest end.
-    let (mut lo, mut hi) = TYPE_RANGE;
-    if !(values(hi).mass..=values(lo).mass).contains(&mass) {
-        return None;
+    if let Some((code, _)) = crate::star::sequence_masses().find(|&(_, m)| m == mass) {
+        return Some(code);
     }
-    for _ in 0..40 {
-        let mid = 0.5 * (lo + hi);
-        if values(mid).mass > mass {
-            lo = mid;
-        } else {
-            hi = mid;
+    let rows: Vec<(f32, f32)> = crate::star::sequence_masses().collect();
+    rows.windows(2).find_map(|w| {
+        let ((c0, m0), (c1, m1)) = (w[0], w[1]);
+        if mass < m0.min(m1) || mass > m0.max(m1) {
+            return None;
         }
-    }
-    Some(0.5 * (lo + hi))
+        let f = (mass.ln() - m0.ln()) / (m1.ln() - m0.ln());
+        Some(c0 + f * (c1 - c0))
+    })
 }
 
 /// Nearest a planet is placed to any host, AU: the inner edge of a system
@@ -357,15 +369,18 @@ mod tests {
 
     #[test]
     fn shares_cover_every_kind_once() {
-        let mut kinds: Vec<_> = HOST_KIND_SHARES.iter().map(|(k, _)| *k).collect();
-        kinds.dedup();
+        let kinds: std::collections::HashSet<_> =
+            HOST_KIND_SHARES.iter().map(|(k, _)| *k).collect();
+        assert_eq!(HOST_KIND_SHARES.len(), HostKind::ALL.len());
         assert_eq!(kinds.len(), HostKind::ALL.len());
+        assert!(HostKind::ALL.iter().all(|k| kinds.contains(k)));
         assert!(HOST_KIND_SHARES.iter().all(|(_, s)| *s >= 0.0));
     }
 
     #[test]
     fn dwarf_state_inverts_the_sequence() {
-        for code in [3.0, 15.0, 42.0, 55.5, 64.5, 69.5] {
+        let codes: Vec<f32> = crate::star::sequence_masses().map(|(c, _)| c).collect();
+        for code in codes.into_iter().chain([3.5, 15.5, 42.5, 55.25, 64.75]) {
             let v = values(code);
             let s = host_state(HostKind::Dwarf, v.mass, 4.6).unwrap();
             assert!((s.teff_k - v.teff_k).abs() / v.teff_k < 1e-3, "{code}");
@@ -380,6 +395,22 @@ mod tests {
                 .unwrap_err()
                 .contains("#577")
         );
+    }
+
+    /// A4 and A8 sit on the non-monotonic stretch of the table; their own
+    /// masses give their own codes, not the earlier bracket that also
+    /// reaches the mass.
+    #[test]
+    fn the_a4_mass_gives_a4() {
+        let v = values(24.0);
+        let s = host_state(HostKind::Dwarf, v.mass, 4.6).unwrap();
+        assert!((s.teff_k - v.teff_k).abs() / v.teff_k < 0.005);
+        assert_eq!(dwarf_code_for_mass(v.mass), Some(24.0));
+        assert_eq!(dwarf_code_for_mass(values(28.0).mass), Some(28.0));
+        // Between rows, the hottest bracket wins: 1.95 is reached between
+        // A2 and A3 (and again between A3 and A4).
+        let c = dwarf_code_for_mass(1.95).unwrap();
+        assert!((22.0..23.0).contains(&c), "{c}");
     }
 
     #[test]
@@ -445,9 +476,16 @@ mod tests {
 
     #[test]
     fn cool_dwarfs_keep_the_old_edge() {
-        for code in [25.0, 30.0, 42.0, 69.5] {
+        for code in [21.0, 25.0, 30.0, 42.0, 69.5] {
             assert_eq!(inner_edge_au(&values(code)), MIN_INNER_EDGE_AU, "{code}");
         }
+    }
+
+    /// A1 is the last type on the old edge; A0 is the first above it.
+    #[test]
+    fn the_edge_changes_between_a1_and_a0() {
+        assert_eq!(inner_edge_au(&values(21.0)), MIN_INNER_EDGE_AU);
+        assert!(inner_edge_au(&values(20.0)) > MIN_INNER_EDGE_AU);
     }
 
     /// The 2 radii term still exceeds 0.02 AU for the B7 to A0 dwarfs

@@ -160,6 +160,11 @@ pub struct StarValues {
     pub mass: f32,
 }
 
+/// The `(code, mass)` of every row of the dwarf sequence, in code order.
+pub(crate) fn sequence_masses() -> impl Iterator<Item = (f32, f32)> {
+    SEQUENCE.iter().map(|r| (r.code, r.mass))
+}
+
 /// The values of a spectral type (`class × 10 + subtype`), interpolated
 /// in the mean dwarf sequence (linearly in log for every value), clamped
 /// to O3–M9.5.
@@ -196,17 +201,31 @@ pub fn values(code: f32) -> StarValues {
 /// `V` (`G2V`, `M4.5`, `K`). Case-insensitive.
 ///
 /// Other kinds of host (giants, white dwarfs…) are recognised by
-/// [`crate::host::parse_host`] but not modelled yet: they are refused here
-/// with the issue that tracks them.
+/// [`crate::host::parse_host`] but are never read here: a code of this
+/// module is a main-sequence dwarf's. A kind not modelled yet is refused
+/// with the issue that tracks it; a kind modelled later is refused as not
+/// a dwarf, so that enabling it never turns `DA` into an O3V. Callers that
+/// accept other kinds use [`crate::host::parse_host`].
 pub fn parse_type(text: &str) -> Result<f32, String> {
     let host = crate::host::parse_host(text)?;
-    if host.kind.available() {
+    dwarf_code_of(text, host, host.kind.available())
+}
+
+/// The dwarf code of `host` parsed from `text`; `available` is whether its
+/// kind is modelled (a parameter so that a test can say it is).
+fn dwarf_code_of(text: &str, host: crate::host::HostType, available: bool) -> Result<f32, String> {
+    if host.kind == crate::host::HostKind::Dwarf {
         Ok(host.code)
-    } else {
+    } else if !available {
         Err(format!(
             "spectral type {:?}: {}",
             text.trim(),
             host.kind.refusal()
+        ))
+    } else {
+        Err(format!(
+            "spectral type {:?}: not a main-sequence dwarf",
+            text.trim()
         ))
     }
 }
@@ -655,6 +674,8 @@ impl StarInfo {
     }
 
     /// The spectral type of a stored star, the Sun's if it does not parse.
+    /// Only valid for main-sequence dwarfs: a host of another kind has no
+    /// dwarf code and reads as the Sun.
     pub fn code(&self) -> f32 {
         parse_type(&self.kind).unwrap_or(SUN)
     }
@@ -882,6 +903,18 @@ mod tests {
             "{e}"
         );
         assert!(parse_type("K3III").unwrap_err().contains("#576"));
+    }
+
+    /// Enabling a kind later must never turn it into a dwarf code.
+    #[test]
+    fn an_available_non_dwarf_kind_is_never_a_dwarf_code() {
+        for t in ["DA", "K3III", "G8IV", "L5", "PSR", "WR", "QS"] {
+            let host = crate::host::parse_host(t).unwrap();
+            let e = dwarf_code_of(t, host, true).unwrap_err();
+            assert!(e.contains("not a main-sequence dwarf"), "{t}: {e}");
+        }
+        let g2 = crate::host::parse_host("G2V").unwrap();
+        assert_eq!(dwarf_code_of("G2V", g2, true), Ok(42.0));
     }
 
     #[test]
