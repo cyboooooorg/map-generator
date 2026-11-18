@@ -36,6 +36,7 @@
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { unitTooltip } from '../lib/units';
+  import { toggleDialog, type Dialog } from '../lib/dialogs';
   import UnitsPanel from './UnitsPanel.svelte';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
@@ -401,8 +402,9 @@
   /** The base map's download and decoding, while it loads. */
   let mapProgress = $state.raw<LoadProgress | null>(null);
   let error = $state<string | null>(null);
-  let showHelp = $state(false);
-  let showUnits = $state(false);
+  let openDialog = $state<Dialog | null>(null);
+  const showHelp = $derived(openDialog === 'help');
+  const showUnits = $derived(openDialog === 'units');
   let panelOpen = $state(saved.panelOpen && wideQuery.matches);
 
   $effect(() => {
@@ -2324,17 +2326,14 @@
         if (worldId) void screenshot();
         break;
       case 'help':
-        showHelp = !showHelp;
-        showUnits = false;
+        openDialog = toggleDialog(openDialog, 'help');
         break;
       case 'units':
-        showUnits = !showUnits;
-        showHelp = false;
+        openDialog = toggleDialog(openDialog, 'units');
         break;
       case 'escape':
-        if (showHelp || showUnits) {
-          showHelp = false;
-          showUnits = false;
+        if (openDialog) {
+          openDialog = toggleDialog(openDialog, 'escape');
         } else {
           pinned = null;
           onEscape();
@@ -2388,7 +2387,7 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      showHelp = false;
+      openDialog = toggleDialog(openDialog, 'escape');
     }
   }
 </script>
@@ -2732,18 +2731,12 @@
       <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     {/if}
     <button
-      onclick={() => {
-        showHelp = !showHelp;
-        showUnits = false;
-      }}
+      onclick={() => (openDialog = toggleDialog(openDialog, 'help'))}
       aria-expanded={showHelp}
       title={t.viewer.shortcutsHelp}>?</button
     >
     <button
-      onclick={() => {
-        showUnits = !showUnits;
-        showHelp = false;
-      }}
+      onclick={() => (openDialog = toggleDialog(openDialog, 'units'))}
       aria-expanded={showUnits}
       title={t.viewer.unitsHelp}>{t.viewer.units}</button
     >
@@ -2806,7 +2799,7 @@
     >
       <header>
         <strong>{t.viewer.shortcuts}</strong>
-        <button class="close" onclick={() => (showHelp = false)} aria-label={t.viewer.close}>×</button>
+        <button class="close" onclick={() => (openDialog = null)} aria-label={t.viewer.close}>×</button>
       </header>
       <dl>
         {#each shortcutHelp() as [key, action] (key)}
@@ -2817,7 +2810,7 @@
     </div>
   {/if}
   {#if showUnits}
-    <UnitsPanel onClose={() => (showUnits = false)} />
+    <UnitsPanel onClose={() => (openDialog = null)} />
   {/if}
 
   {#if generationText}

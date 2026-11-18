@@ -3,7 +3,7 @@
   // familiar values. Takes the focus when it opens and gives it back when it
   // closes, so a keyboard user lands where they were.
   import { t } from '../lib/i18n/index.svelte';
-  import { UNITS } from '../lib/units';
+  import { panelUnits } from '../lib/units';
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -37,7 +37,7 @@
     <button class="close" onclick={onClose} aria-label={t.viewer.close}>×</button>
   </header>
   <dl>
-    {#each UNITS as unit (unit)}
+    {#each panelUnits() as unit (unit)}
       <dt><abbr>{unit}</abbr></dt>
       <dd>{t.units[unit].name}<br /><small>{t.units[unit].examples}</small></dd>
     {/each}

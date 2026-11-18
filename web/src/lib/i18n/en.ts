@@ -1666,7 +1666,7 @@ export const en = {
   units: {
     title: 'Units',
     Ga: {
-      name: 'Ga: a billion years (10⁹ years, 1 000 Ma)',
+      name: 'Ga: a billion years (10⁹ years, 1 000 Ma), also written Gyr',
       examples: 'Earth and the Solar System: 4.5 Ga · lunar maria: 3 to 3.9 Ga',
     },
     Ma: {
