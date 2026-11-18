@@ -433,7 +433,8 @@ mod tests {
         assert_eq!(sides, [true, true]);
     }
 
-    /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its
+    /// Titan's 1.3 to 1.65 bar (its 1.47 bar, with up to 0.1 bar of
+    /// methane over seas at 94 K, issue #563) and Triton's N₂ in equilibrium with its
     /// frost (1e-5 to 3e-5 bar) outlast what their giants' plasma and the
     /// Sun's ionisation take of them, on every seed of `archetype_census`.
     #[test]
@@ -441,7 +442,10 @@ mod tests {
         for seed in 1..=40 {
             let titan = archetype_moon("titan-like", seed);
             let p = pressure(&titan);
-            assert!((1.3..=1.6).contains(&p), "Titan seed {seed}: {p} {titan:?}");
+            assert!(
+                (1.3..=1.65).contains(&p),
+                "Titan seed {seed}: {p} {titan:?}"
+            );
             let triton = archetype_moon("triton-like", seed);
             let n2 = triton.surface.expect("surface").gases.n2;
             assert!(

@@ -824,12 +824,13 @@ source:
 |---|---|---|---|
 | CO₂ | 1.45 (0.74 under the fixed albedo 0.3, 1.66 before #441) | 0.19 (0.07, 0.25 before #441) | Venus's 737 K under 85 bar at its Bond albedo 0.76, and the late Archean Earth |
 | H₂O | 111 (5.9) | 0.5 | the moist plateau at about 287 W/m² |
-| CH₄ | 7.75 (6.0 before #530, 3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K and 3 to 6 % of methane, with the anti-greenhouse |
+| CH₄ | 14.3 (7.75 before #563, 6.0 before #530, 3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K, under the anti-greenhouse anchored on McKay et al. 1991 |
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
-CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
-doi:10.1126/science.11538492, not checked); the methane opacity carries
-all of it here but the near-infrared share its methane takes (below).
+CH₄ and H₂, which warms it by 21 K, while its haze cools it by 9 K
+(McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492, abstract
+checked); the methane opacity carries all of the greenhouse here, the
+nitrogen's own included, and the anti-greenhouse (below) the cooling.
 
 **Methane** (issue #443). The `sqrt(p_CH₄ P)` law, calibrated on Titan,
 was stretched 500-fold past it: a planet at an equilibrium temperature of
@@ -862,7 +863,7 @@ liquid water. Three rules bound it:
 - *Saturation.* The amount the opacity counts is
   `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
   it collides with counts the methane as `u`:
-  `τ = 7.75 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
+  `τ = 14.3 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
   at their centres, and more methane only widens their wings (the
   logarithmic forcing of a saturated band, Pierrehumbert 2010, §4.4); a
   body at 90 to 120 K radiates at 25 to 60 µm, where methane has no
@@ -870,33 +871,42 @@ liquid water. Three rules bound it:
   10 bar holds back under a third of the outgoing radiation that 0.01
   to 0.1 bar holds back (with the opacity 6.0, 0.6 K of warming against
   2.6 K).
-- *Anti-greenhouse* (issue #530). The methane above the tropopause
-  absorbs starlight in its near-infrared bands and radiates it back to
-  space, so the surface never gets it (McKay, Pollack & Courtin 1991,
-  *Science* 253, 1118, describe it on Titan together with its haze's;
-  not checked beyond the bibliographic data). `climate::absorbed_w_m2`
-  takes the share `0.3 m / (m + 0.005 bar)` off the light the surface
+- *Anti-greenhouse* (issues #530, #563). The stratosphere, the methane
+  above the tropopause in its near-infrared bands and the organic haze
+  its photolysis makes, absorbs starlight and radiates it half back to
+  space, so the surface never gets that half. `climate::absorbed_w_m2`
+  takes the share `0.5 m / (m + 0.002 bar)` off the light the surface
   absorbs (`CH4_NEAR_IR_MAX`, `CH4_NEAR_IR_HALF_BAR`), `m` the methane
   above the 0.1 bar tropopause that the cold trap lets through
   (`column::stratospheric_methane_bar`); the internal heat is not
   touched, and the stratosphere that absorbs it is not warmed in the
-  column. Both constants are calibrations, no source, with the opacity
-  7.75: the reference Titan loses 11 % of its light, and since a warmer
-  tropopause lets more methane through, a Titan nearer its star loses
-  more, which narrows the archetype's spread of temperature and of the
-  methane its seas keep in its air. A world of 26 bar of methane takes
-  nearly all of the 0.3. The share of the light in methane's bands
-  depends on the star's spectrum; one value serves every star.
+  column. The maximum, 0.5, is the limit of a layer that absorbs all
+  the light and radiates half of it down. The half-column is anchored
+  on Titan (issue #563): McKay, Pollack & Courtin 1991 (*Science* 253,
+  1118, abstract checked) find the anti-greenhouse cools its 94 K
+  surface by 9 K, the greenhouse warming it by 21 K, so its surface
+  keeps `(94 / 103)⁴` of the light under the same greenhouse, a share of
+  0.306; their split of the light, 1.5 W/m² absorbed in the
+  stratosphere of 2.6 W/m² (reproduced by Robinson & Catling 2012, ApJ
+  757, 104, §4.3), half of it going up, gives 0.29. The reference
+  Titan's cold trap lets through 0.0031 bar, which takes 0.304 (0.11
+  with the calibration of issue #530, `0.3 m / (m + 0.005 bar)`). Since
+  a warmer tropopause lets more methane through, a Titan nearer its
+  star loses more. A world of 26 bar of methane takes nearly all of the
+  0.5. One value serves every star, though redder stars put more of
+  their light in methane's bands.
 
 Titan at Saturn's orbit (`titan-like`, seeds 1 to 40 of
-`archetype_census`) comes out at 90.8 to 93.1 K (median 92.3 K), 1.31 to
-1.58 bar (median 1.47 bar, no seed under 1.3 bar since `titan-like`
-pins `n2 = 0.82`, see [atmospheres.md](atmospheres.md)) and 3.8 to
-5.7 % methane (median 4.8 %), against Titan's 93.7 K, 1.47 bar and
-5.65 % (90.4 to 94.5 K and 3.7 to 6.8 % before the anti-greenhouse).
-Seed 182's planet d of `planet_census` is a hydrocarbon world at 140 K
-(149 K before), with 3.3 bar of methane in its air and the rest of its
-methane in its seas, under the 150 K line.
+`archetype_census`) comes out at 92.4 to 94.6 K (mean 93.75 K, median
+93.85 K), 1.31 to 1.61 bar (median 1.49 bar, no seed under 1.3 bar
+since `titan-like` pins `n2 = 0.82`, see [atmospheres.md](atmospheres.md))
+and 5.5 to 5.9 % methane (median 5.8 %), against Titan's 93.7 K, 1.47 bar
+and 5.65 % (91.0 to 93.3 K and 3.9 to 5.8 % before the anchor of issue
+#563; 90.4 to 94.5 K and 3.7 to 6.8 % before the anti-greenhouse).
+Seed 182's planet d of `planet_census` is a hydrocarbon world at 129 K
+(136 K before the anchor, 149 K before the anti-greenhouse), with 1.8 bar
+of methane in its air and the rest of its methane in its seas, under the
+150 K line.
 
 **The moist plateau.** On a saturated column the levels that radiate to
 space sit on water's saturation curve whatever the surface temperature,

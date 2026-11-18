@@ -342,7 +342,7 @@ fn main() {
             so2: 5.0e-5,
             ..Gases::default()
         };
-        phase("methane", methane, 0.7, 1.0, methane_freezes_k(methane.n2));
+        phase("methane", methane, 0.7, 1.3, methane_freezes_k(methane.n2));
         // A Triton-like body: 0.5 bar of N2 and no methane.
         let nitrogen = Gases {
             n2: 0.5,

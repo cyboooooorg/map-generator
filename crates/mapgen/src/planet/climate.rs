@@ -205,21 +205,23 @@ fn co2_amount(co2: f64) -> f64 {
 const H2O_OPACITY: f64 = 111.0;
 
 /// Grey opacity of methane at 1 bar in 1 bar of air, with
-/// [`LINE_EXPONENT`]. Calibration, no source, together with
-/// [`CH4_NEAR_IR_MAX`]: Titan's 93.7 K (Fulchignoni et al. 2005,
-/// doi:10.1038/nature04314) and the 5.65 % of methane near its surface
-/// (Niemann et al. 2005, doi:10.1038/nature04122), which `titan-like`
-/// reaches as 90.8 to 93.1 K (median 92.3 K) and 3.8 to 5.7 % (median
-/// 4.8 %) over seeds 1 to 40 of `archetype_census`, against the 90 to
-/// 97 K and 3 to 6 % of issue #530, under the vapour of its seas and the
-/// anti-greenhouse of [`stratospheric_share`], on the column of
-/// [`super::column`] (6.0 before the anti-greenhouse, which put
-/// `titan-like` at 90.4 to 94.5 K and 3.7 to 6.8 %; 3.3 before its
-/// saturation, issue #443; 3.4 on the old Eddington core, issue #441).
-/// Titan's real greenhouse is mostly collision-induced (N₂–N₂, N₂–CH₄,
-/// N₂–H₂; McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492,
-/// not checked), and its haze cools it by about 9 K; this opacity carries
-/// all of it but the methane's own near-infrared share. That is why it keeps the
+/// [`LINE_EXPONENT`]. Calibration on Titan's 93.7 K (Fulchignoni et
+/// al. 2005, doi:10.1038/nature04314) under the anti-greenhouse of
+/// [`stratospheric_share`] anchored on McKay, Pollack & Courtin 1991
+/// (issue #563): `titan-like` reaches 92.4 to 94.6 K (mean 93.75 K,
+/// median 93.85 K) and 5.5 to 5.9 % of methane (mean 5.75 %, against the
+/// 5.65 % near Titan's surface, Niemann et al. 2005,
+/// doi:10.1038/nature04122) over seeds 1 to 40 of `archetype_census`,
+/// under the vapour of its seas, on the column of [`super::column`]
+/// (7.75 under the weaker, unanchored anti-greenhouse of issue #530,
+/// which put `titan-like` at 91.0 to 93.3 K; 6.0 before any
+/// anti-greenhouse; 3.3 before its saturation, issue #443; 3.4 on the
+/// old Eddington core, issue #441). Titan's real greenhouse is mostly
+/// collision-induced (N₂–N₂, N₂–CH₄, N₂–H₂), and warms it by 21 K
+/// (McKay, Pollack & Courtin 1991, *Science* 253, 1118,
+/// doi:10.1126/science.11538492, abstract checked); this opacity
+/// carries all of it, the nitrogen's own included, now that the haze's
+/// 9 K of cooling is the anti-greenhouse's. That is why it keeps the
 /// square root of the air's pressure (see [`methane_depth`]):
 /// collision-induced absorption grows with the nitrogen faster than line
 /// broadening does, not slower.
@@ -227,7 +229,7 @@ const H2O_OPACITY: f64 = 111.0;
 /// It applies to the methane that radiates, the methane cold-trapped at
 /// the tropopause left out (see [`super::column`]), and saturates past
 /// [`CH4_SATURATION_BAR`] (see [`methane_depth`]).
-const CH4_OPACITY: f64 = 7.75;
+const CH4_OPACITY: f64 = 14.3;
 
 /// Methane, bar, past which its greenhouse saturates ([`methane_depth`]):
 /// the amount `u` its opacity counts grows as `p / (1 + p / s)`, `p` the
@@ -243,12 +245,15 @@ const CH4_OPACITY: f64 = 7.75;
 /// constraints at once: Titan's 93.7 K; Titan's warming from 1 to 10 bar
 /// of methane under a third of its warming from 0.01 to 0.1 bar (0.6 K
 /// against 2.6 K with the opacity 6.0; 0.05 bar gave 2.9 K against
-/// 4.2 K), now held on the outgoing radiation alone, since the
-/// anti-greenhouse of [`stratospheric_share`] grows over the second step
-/// (with it, 0.8 K against 1.2 K); and seed 182's planet d (an
-/// equilibrium temperature of 114 K under 4.4 bar of N₂ and 26 bar of
-/// methane) under 150 K (149 K before the anti-greenhouse, 135 K with
-/// it; 157 K with 0.05 bar). Titan's
+/// 4.2 K), now held on the outgoing radiation alone (0.05 against
+/// 0.32 W/m² with the opacity 14.3), since the anti-greenhouse of
+/// [`stratospheric_share`] fills over the second step: the reference
+/// Titan cools by 2.2 K from 0.01 to 0.1 bar, and warms by 1.4 K from 1
+/// to 10 bar against 7.2 K from 0.001 to 0.01 bar; and seed 182's planet
+/// d (an equilibrium temperature of 114 K under 4.4 bar of N₂ and 26 bar
+/// of methane) under 150 K (149 K before the anti-greenhouse, 135 K with
+/// that of issue #530, 129 K with the anchored one, issue #563; 157 K
+/// with 0.05 bar). Not refitted with the anchor of issue #563. Titan's
 /// own radiating methane, some 0.05 bar, is past it: its greenhouse is
 /// already saturated. Without it, the `sqrt(p_CH₄ P)` law stretched
 /// 500-fold past Titan put that planet at 351 K (issue #443).
@@ -277,41 +282,47 @@ fn methane_depth(gases: &Gases) -> (f64, f64) {
     (depth, rate * depth)
 }
 
-/// Most of the starlight a body absorbs that the methane above its
-/// tropopause can take in its near-infrared bands (0.89 to 3.3 µm, from
-/// memory) and send back to space ([`stratospheric_share`]): the
-/// anti-greenhouse of methane, which McKay, Pollack & Courtin 1991
-/// (*Science* 253, 1118, doi:10.1126/science.11538492; title and
-/// bibliographic data checked, the paper not) describe on Titan together
-/// with its haze's. Calibration, no source, together with
-/// [`CH4_OPACITY`] and [`CH4_NEAR_IR_HALF_BAR`]: `titan-like` at 3.8 to
-/// 5.7 % of methane and 90.8 to 93.1 K over seeds 1 to 40 of
-/// `archetype_census` (targets 3 to 6 % and 90 to 97 K, issue #530),
-/// where it takes 11 % of the light of the reference Titan. Because the
-/// methane let through the cold trap grows with the tropopause's
-/// temperature, a Titan nearer its star loses more of its light: it
-/// narrows the spread of the archetype's temperature (2.4 K against
-/// 4.1 K without it), and with it the spread of the methane its seas
-/// keep in its air. A larger value narrows it more but needs a larger
-/// [`CH4_OPACITY`] (0.4 with 8.5: 90.8 to 92.4 K, 3.9 to 5.3 %). The
-/// share of the light in methane's bands depends on the star's spectrum,
-/// redder stars giving more of it; one value for every star here.
-const CH4_NEAR_IR_MAX: f64 = 0.3;
+/// Most of the starlight a body absorbs that its stratosphere can send
+/// back to space ([`stratospheric_share`]): one half. A thin layer that
+/// absorbs all the light, and is transparent in the thermal infrared,
+/// radiates what it absorbs half up to space and half down to the
+/// surface (the textbook layer argument), so that the surface keeps at
+/// least half of it: the largest anti-greenhouse, which cools an
+/// effective temperature by the factor `2^-¼` (0.84; "the maximum impact
+/// of the organic haze on Titan is (1-0.84) × 82 K = 13 K", English
+/// Wikipedia, *Anti-greenhouse effect*, checked, no source given for
+/// that line). The
+/// absorber is methane in its near-infrared bands and the organic haze
+/// its photolysis makes, which McKay, Pollack & Courtin 1991 (*Science*
+/// 253, 1118, doi:10.1126/science.11538492, abstract checked) find does
+/// most of Titan's: one stratosphere for both here, its absorption
+/// measured by its methane. Up to issue #563 a calibration of 0.3; the
+/// half is the layer's limit, not a fit. One value for every star,
+/// though redder stars put more of their light in methane's bands.
+const CH4_NEAR_IR_MAX: f64 = 0.5;
 
-/// Methane above the tropopause, bar, at which it takes half of
-/// [`CH4_NEAR_IR_MAX`] ([`stratospheric_share`]): the column past which
-/// its near-infrared bands are opaque and only their wings widen.
-/// Calibration, no source, with [`CH4_NEAR_IR_MAX`]: Titan's cold trap
-/// lets through some 0.003 bar (its stratosphere's 1.4 % of methane over
-/// 0.1 bar holds 0.0014 bar, Niemann et al. 2005, from memory), under
-/// it, so that its share still grows with the tropopause's temperature;
-/// a world of 26 bar of methane under a warm tropopause takes nearly all
-/// of [`CH4_NEAR_IR_MAX`] (0.27 for census seed 182's planet d).
-const CH4_NEAR_IR_HALF_BAR: f64 = 0.005;
+/// Methane above the tropopause, bar, at which the stratosphere takes
+/// half of [`CH4_NEAR_IR_MAX`] ([`stratospheric_share`]): the column past
+/// which its near-infrared bands and its haze are opaque and only their
+/// wings widen. Anchored on Titan's anti-greenhouse (issue #563): McKay,
+/// Pollack & Courtin 1991 (*Science* 253, 1118,
+/// doi:10.1126/science.11538492, abstract checked) find it cools Titan's
+/// 94 K surface by 9 K, the greenhouse warming it by 21 K, so that under
+/// the same greenhouse its surface keeps `(94 / 103)⁴` of the light it
+/// absorbs, a share of 0.306 sent back to space. Their split of that
+/// light, 1.5 W/m² absorbed in the stratosphere of 2.6 W/m² (as
+/// Robinson & Catling 2012, ApJ 757, 104, arXiv:1209.1833, §4.3, take
+/// it from them, checked there), half of which goes up, gives 0.29. The
+/// reference Titan's cold trap lets through 0.0031 bar, where this
+/// half-column gives it 0.304. Under it, the share still grows with the
+/// tropopause's temperature; a world of 26 bar of methane under a warm
+/// tropopause takes nearly all of [`CH4_NEAR_IR_MAX`]. 0.005 before the
+/// anchor, with a maximum of 0.3 (a share of 0.11 on Titan).
+const CH4_NEAR_IR_HALF_BAR: f64 = 0.002;
 
-/// Share of the starlight a body absorbs that the methane above its
-/// tropopause takes first, in its near-infrared bands, and sends back
-/// to space: `m / (m + h)` of [`CH4_NEAR_IR_MAX`], `m` the methane above
+/// Share of the starlight a body absorbs that its stratosphere, the
+/// methane above its tropopause and the haze it makes, takes first and
+/// sends back to space: `m / (m + h)` of [`CH4_NEAR_IR_MAX`], `m` the methane above
 /// the tropopause of a stratosphere at `skin_k`
 /// ([`column::stratospheric_methane_bar`]) and `h`
 /// [`CH4_NEAR_IR_HALF_BAR`]. None without methane.
@@ -343,7 +354,8 @@ pub(crate) fn tropopause_k(effective_k: f64) -> f64 {
 /// `heat_flux_w_m2` of internal heat: the light less the share the
 /// stratosphere's methane takes and radiates to space
 /// ([`stratospheric_share`], the anti-greenhouse of McKay, Pollack &
-/// Courtin 1991, doi:10.1126/science.11538492, not checked), under the
+/// Courtin 1991, doi:10.1126/science.11538492, abstract checked; issue
+/// #563), under the
 /// skin temperature `T_eq / 2^¼` the column uses. The stratosphere that
 /// absorbs it is not warmed in the column: its skin temperature stays
 /// that of a grey stratosphere.
@@ -2654,9 +2666,11 @@ mod tests {
         assert!(trace > 0.0, "{trace}");
         assert!(thick < trace / 3.0, "{thick} W/m² against {trace} W/m²");
         // With the anti-greenhouse of the methane let through the cold
-        // trap, which fills up between 0.01 and 0.1 bar, the warming from
-        // 1 to 10 bar stays under that from 0.01 to 0.1 bar.
-        let trace = t(0.1) - t(0.01);
+        // trap, which fills up between 0.01 and 0.1 bar and there
+        // outweighs the saturating greenhouse (issue #563), the warming
+        // from 1 to 10 bar stays under that from 0.001 to 0.01 bar, before
+        // it fills.
+        let trace = t(0.01) - t(0.001);
         let thick = t(10.0) - t(1.0);
         assert!(trace > 0.0, "{trace}");
         assert!(thick < trace, "{thick} K against {trace} K");
@@ -2865,7 +2879,8 @@ mod tests {
         let skin = 70.0;
         assert_eq!(stratospheric_share(&dry, skin), 0.0);
         let share = stratospheric_share(&titan, skin);
-        assert!((0.01..0.2).contains(&share), "{share}");
+        // About McKay et al.'s 0.3 on Titan (issue #563).
+        assert!((0.2..0.4).contains(&share), "{share}");
         // A warmer tropopause lets more methane through: more of the light.
         assert!(stratospheric_share(&titan, skin + 3.0) > share);
         // Twenty-six bar of methane under a warm tropopause: saturated.
@@ -2879,6 +2894,35 @@ mod tests {
         let expected = light * (1.0 - stratospheric_share(&titan, tropopause_k(t_eq))) + 0.1;
         assert!((absorbed - expected).abs() < 1e-12, "{absorbed} {expected}");
         assert_eq!(absorbed_w_m2(t_eq, &dry, 0.1), light + 0.1);
+    }
+
+    /// Titan's anti-greenhouse cools its 94 K surface by 9 K (McKay,
+    /// Pollack & Courtin 1991, *Science* 253, 1118,
+    /// doi:10.1126/science.11538492, abstract checked): under the same
+    /// greenhouse, the light its surface keeps is `(94 / 103)⁴` of what
+    /// it would keep without it, a share of 0.306 sent back to space.
+    /// The same paper's split of the light Titan absorbs, 1.5 W/m² in
+    /// its stratosphere of 2.6 W/m² (as reproduced by Robinson & Catling
+    /// 2012, ApJ 757, 104, arXiv:1209.1833, §4.3, checked), half of which
+    /// the stratosphere radiates up, gives 0.29. The reference Titan's
+    /// stratosphere takes it within 10 % (issue #563), and a column of
+    /// methane past saturation never more than half of the light.
+    #[test]
+    fn the_methane_anti_greenhouse_matches_mckay() {
+        let (_, g, titan) = climate_of("Titan");
+        let share = stratospheric_share(&g, tropopause_k(titan.equilibrium_k));
+        let mckay = 1.0 - (94.0_f64 / (94.0 + 9.0)).powi(4);
+        assert!(
+            (share / mckay - 1.0).abs() < 0.1,
+            "{share} against {mckay} {titan:?} {g:?}"
+        );
+        let split = 0.5 * 1.5 / 2.6;
+        assert!(
+            (share / split - 1.0).abs() < 0.15,
+            "{share} against {split}"
+        );
+        let rich = Gases { ch4: 26.0, ..g };
+        assert!(stratospheric_share(&rich, 100.0) <= 0.5);
     }
 
     /// Census seed 182's planet d (issue #443): an equilibrium temperature
@@ -2904,10 +2948,12 @@ mod tests {
         let s = model.surface.expect("a surface");
         let c = s.climate;
         // The planet the issue names: T_eq about 114.5 K, 4.4 bar of N₂
-        // and 3.3 bar of methane over its seas once the rest condensed.
+        // and 1.8 bar of methane over its seas once the rest condensed
+        // (3.3 bar before the anchored anti-greenhouse cooled it, issue
+        // #563).
         assert!((110.0..120.0).contains(&c.equilibrium_k), "{c:?}");
         assert!((4.0..5.0).contains(&s.gases.n2), "{:?}", s.gases);
-        assert!((2.0..5.0).contains(&s.gases.ch4), "{:?}", s.gases);
+        assert!((1.0..5.0).contains(&s.gases.ch4), "{:?}", s.gases);
         assert!(c.equilibrium_k < 150.0, "{c:?}");
         assert!(c.temperature_k < 150.0, "{c:?} {:?}", s.gases);
         assert_ne!(c.liquid, SurfaceLiquid::Water, "{c:?}");
@@ -4058,12 +4104,13 @@ mod tests {
         let freezes_k = methane_freezes_k(gases.n2);
         let sweep = titan_sweep(gases, METHANE_SWEEP.0, METHANE_SWEEP.1, 200);
         // The methane darkening the air (its near-infrared absorption)
-        // makes such a body bistable on either side of the freezing
-        // point, whatever the phase change: from about 62 K (its frost
-        // bright, its air cold and clear) to about 74 K, and over about
-        // 1.2 K just above the point, where the air the warming sea
-        // gives darkens the body faster than it warms (`climate_sweep
-        // phase`). Those folds are steps between settled climates; the
+        // makes such a body bistable below the freezing point, whatever
+        // the phase change: from about 62 K (its frost bright, its air
+        // cold and clear) to about 72 K (`climate_sweep phase`). That
+        // fold is a step between settled climates (the step of about
+        // 1.2 K just above the point went with the anchored
+        // anti-greenhouse of issue #563, which takes more of the light
+        // the warming sea's methane would darken); the
         // phase change itself is crossed through its band, where before
         // its smoothing the fixed point cycled.
         settles_across(&sweep, freezes_k, f64::INFINITY);
@@ -4083,7 +4130,7 @@ mod tests {
 
     /// The light, against Titan's, over which [`thin_titan`]'s surface
     /// spans the methane sea's freezing point ± 3 K.
-    const METHANE_SWEEP: (f64, f64) = (0.7, 1.0);
+    const METHANE_SWEEP: (f64, f64) = (0.7, 1.3);
 
     /// The light, against Titan's, over which [`nitrogen_world`]'s
     /// surface spans nitrogen's triple point ± 3 K.
