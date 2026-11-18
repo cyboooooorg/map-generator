@@ -268,7 +268,7 @@ const CH4_SATURATION_BAR: f64 = 0.01;
 /// `u` (methane past its saturation adds no absorber, nor a partner). In
 /// a uniform air every partial pressure grows as `p`, so the rate is
 /// `½ (d ln u / d ln p + d ln B / d ln p)` times the depth.
-fn methane_depth(gases: &Gases) -> (f64, f64) {
+pub(super) fn methane_depth(gases: &Gases) -> (f64, f64) {
     let ch4 = gases.ch4.max(0.0);
     if ch4 <= 0.0 {
         return (0.0, 0.0);
