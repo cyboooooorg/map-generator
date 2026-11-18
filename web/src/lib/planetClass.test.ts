@@ -61,6 +61,9 @@ describe('planet classes', () => {
     expect(hasFrozenSurface('rocky', model(0.005, 'none', 215))).toBe(false);
     expect(hasFrozenSurface('rocky', model(0.25, 'water', 285))).toBe(false);
     expect(hasFrozenSurface('rocky', model(0.25, 'none', 280))).toBe(false);
+    // A nitrogen sea lies over the frozen water, as `interim::base_of` has it.
+    expect(hasFrozenSurface('rocky', model(0.25, 'nitrogen', 70))).toBe(true);
+    expect(hasFrozenSurface('rocky', model(0.25, 'hydrocarbons', 92))).toBe(false);
     expect(hasFrozenSurface('ice-world', model(5, 'none', 100))).toBe(false);
     expect(hasFrozenSurface('ocean-world', model(20, 'none', 200))).toBe(false);
     expect(hasFrozenSurface('ice-giant', model(1, 'none', 100))).toBe(false);
