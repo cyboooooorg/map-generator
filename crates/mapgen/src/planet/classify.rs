@@ -800,16 +800,16 @@ mod tests {
         assert!(not_finite(&negative).is_some());
     }
 
-    /// A Titan at 12.5 AU, without the CO₂ whose frost would brighten it
-    /// once its haze thins (see the report of issue #524), cools to about
-    /// 64 K: under the liquidus of its methane–ethane sea, nitrogen
-    /// condenses into its seas, which stay liquid, and it stays a
-    /// hydrocarbon world (issue #524; 12 AU before the anti-greenhouse
-    /// and the ethane of issue #530, where it now stays at 84 K).
+    /// A Titan at 12.5 AU cools to about 64 K: under the liquidus of its
+    /// methane–ethane sea, nitrogen condenses into its seas, which stay
+    /// liquid, and it stays a hydrocarbon world (issue #524; 12 AU before
+    /// the anti-greenhouse and the ethane of issue #530, where it now
+    /// stays at 84 K). Its reducing air outgasses no CO₂, whose frost
+    /// would brighten it once its haze thins (issue #557): the test no
+    /// longer takes the CO₂ out of its inputs.
     #[test]
     fn condensed_nitrogen_keeps_the_hydrocarbon_class() {
-        let mut inputs = model_inputs(reference("Titan"));
-        inputs.volatiles.co2 = 0.0;
+        let inputs = model_inputs(reference("Titan"));
         let model = planet_model(&sun_at(12.5), inputs);
         let s = model.surface.expect("a surface");
         let t = s.climate.temperature_k;

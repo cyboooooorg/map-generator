@@ -232,7 +232,7 @@ describe('themed body cards', () => {
 
   it('explains the Bond albedo on the surface card, naming a frost that covers the disc', () => {
     const part = (label: string, value: number) => ({ quantity: 'cover_share', value, label, input: null, causes: [] });
-    const io = body({ model: { ...model, surface: { ...surface, climate: { ...surface.climate, bond_albedo: 0.63 } } } });
+    const io = body({ model: { ...model, surface: { ...surface, climate: { ...surface.climate, liquid: 'none', bond_albedo: 0.63 } } } });
     const world = worldOf([io, moon], 'c', earthMeta);
     for (const locale of ['en', 'fr'] as const) {
       setLocale(locale);
@@ -250,5 +250,16 @@ describe('themed body cards', () => {
       expect(html).not.toMatch(/frost_so2|cover_share/);
     }
     setLocale('en');
+  });
+  it('names a body with seas by its liquid, not by a frost over its land', () => {
+    const part = (label: string, value: number) => ({ quantity: 'cover_share', value, label, input: null, causes: [] });
+    const titan = body({ model: { ...model, surface: { ...surface, climate: { ...surface.climate, liquid: 'hydrocarbons', bond_albedo: 0.29 } } } });
+    const world = worldOf([titan, moon], 'c', earthMeta);
+    setLocale('en');
+    const tree = { quantity: 'bond_albedo', value: 0.29, label: null, input: null, causes: [part('frost_co2', 0.9), part('haze', 1)] };
+    world.systemExtras = { c: { explanation: { trees: [tree] }, similar: null } } as unknown as typeof world.systemExtras;
+    const html = renderCard(SurfaceCard, { world });
+    expect(html).toContain('0.29 · hydrocarbons');
+    expect(html).not.toContain('0.29 · carbon dioxide frost');
   });
 });

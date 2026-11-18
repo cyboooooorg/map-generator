@@ -657,6 +657,9 @@ pub(crate) struct Bare {
     /// What the star's ultraviolet left of that methane
     /// ([`methane_photolysis`]), bar.
     pub photolysed: Gases,
+    /// Whether the air is reducing ([`atmosphere::reducing`]): it then
+    /// outgassed no CO₂ ([`atmosphere::without_co2_if_reducing`]).
+    pub reducing: bool,
     /// What the cold left of that in the air ([`cold_trap`]), bar.
     pub trapped: Gases,
     /// The air as the climate left it, before life oxygenated it: the
@@ -749,22 +752,35 @@ pub(crate) fn bare(
     let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, interior);
     let r = regime(inputs, heat, interior, &w);
     let k = core(inputs, interior, r, context.age_gyr);
-    let out = outgassed(inputs, &w, r, interior);
-    let shoreline = atmosphere(
-        out,
-        interior,
-        inputs.mass_earth,
-        &shield(context, k),
-        fluence,
-    );
     let loss = loss_context(context, inputs, interior);
-    let (kept, lost) = non_thermal_loss(shoreline, &loss);
+    // What escape and the star's ultraviolet leave of an outgassed air.
+    let escaped = |out: Gases| {
+        let shoreline = atmosphere(
+            out,
+            interior,
+            inputs.mass_earth,
+            &shield(context, k),
+            fluence,
+        );
+        let (kept, lost) = non_thermal_loss(shoreline, &loss);
+        let photolysed = methane_photolysis(kept, context, inputs.mass_earth, interior);
+        (kept, lost, photolysed)
+    };
+    // A reducing air outgasses no CO₂ and makes none
+    // ([`atmosphere::without_co2_if_reducing`]): the chain runs again
+    // without it.
+    let mut out = outgassed(inputs, &w, r, interior);
+    let (mut kept, mut lost, mut photolysed) = escaped(out);
+    let reducing = atmosphere::reducing(&photolysed, context.equilibrium_k);
+    if reducing && out.co2 > 0.0 {
+        out = atmosphere::without_co2_if_reducing(out, reducing);
+        (kept, lost, photolysed) = escaped(out);
+    }
     let w = if w.runaway {
         w.keeping(kept.h2o / bar_per_kg)
     } else {
         w
     };
-    let photolysed = methane_photolysis(kept, context, inputs.mass_earth, interior);
     let trapped = cold_trap(photolysed, context.equilibrium_k);
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
@@ -902,6 +918,7 @@ pub(crate) fn bare(
         kept,
         lost,
         photolysed,
+        reducing,
         trapped,
         climate_gases: after,
         condensed,

@@ -573,6 +573,34 @@ departures: the outgassing is spread evenly over the age, and the
 larger Lyman α share of an M dwarf's light is not modelled (both
 understate the destruction round red dwarfs, if anything).
 
+**Reducing air** (`reducing`, `without_co2_if_reducing`, issue #557).
+A body whose methane survives the ultraviolet (the air the photolysis
+leaves holds some) under an equilibrium temperature of 150 K (the line
+of *Photochemistry* below) has a reducing air, as Titan's, and outgasses
+no CO₂: the chain runs again without it. Titan's interior holds CO₂,
+likely its most abundant gas (up to 3 % of its mass), but stores it,
+mostly dissolved in its ocean, and what reaches the air is a moderate
+outgassing of methane (Tobie, Gautier & Hersant 2012, ApJ 752, 125,
+doi:10.1088/0004-637X/752/2/125; abstract checked). The CO₂ of its air,
+about 15 ppb in the stratosphere (Cassini CIRS: de Kok et al. 2007,
+Coustenis et al. 2010, doi:10.1016/j.icarus.2009.11.027), is made there
+from oxygen falling in from outside, most likely from Enceladus (Hörst,
+Vuitton & Yelle 2008, doi:10.1029/2008JE003135; checked). Before, the
+model's Titan froze out 40 to 150 bar of outgassed CO₂, a frost over its
+whole disc under its haze, and census seed 387's planet d, a dim Titan
+at about 74 K, was bright enough under its CO₂ frost to freeze its
+nitrogen out and end an ice world; it now keeps its seas at 95 K. The
+pressure tree shows the missing CO₂ with the note `reducing_air`.
+Departures: the storage in an ocean would hold for any ice-covered
+ocean, but only Titan's case is checked, so the CO₂ of bodies whose air
+is not reducing is kept (Europa's surface shows some); Titan's N₂ still
+comes from its ammonia, though ammonia dissolves in an ocean as well;
+and Triton's trace of methane makes its air reducing too, so the model's
+Triton keeps none of the 6 to 14 bar of CO₂ it froze under its nitrogen
+frost before, while Triton's surface shows some CO₂ ice (Cruikshank et
+al. 1993, Science 261, 742). Its nitrogen frost covers its whole disc
+either way: its albedo and temperature do not move.
+
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
 body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
@@ -595,7 +623,7 @@ NIST's triple point, 3 % higher; the α fit to the β curve at the
 transition, 2.6 % apart), and under 10 K, where the α polynomial turns
 over, the curve goes on with its slope there. It gives 1.4e-5 bar at
 37.2 K: Triton's N₂ ice, at 37 to 38 K, is β-N₂. This freezes Titan's
-CO₂ and NH₃. Above the triple point the
+NH₃ (its CO₂ is not outgassed: *Reducing air* above). Above the triple point the
 gas stays; whether it rains out depends on the surface temperature,
 which the climate sets. Water is left to the climate, and so are methane
 (issue #443) and nitrogen (issue #464): their air moves the surface

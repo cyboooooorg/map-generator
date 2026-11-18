@@ -180,7 +180,9 @@ pub enum Quantity {
     /// (that maximum is set by CO₂ condensing high in the air, short of
     /// the carbon inventory: more of it no longer warms the ground) and
     /// `methane_trap`
-    /// (the cold keeps methane out of the air), `convecting` (the ice
+    /// (the cold keeps methane out of the air), `reducing_air` (a
+    /// reducing, methane-rich air: the body outgasses no CO₂ and its air
+    /// makes none, [`super::atmosphere::without_co2_if_reducing`]), `convecting` (the ice
     /// shell convects under a stagnant lid), `ammonia` (ammonia lowers
     /// the ocean's freezing point), `geysers` (the thin polar shell
     /// cracks through and vents) and `exosphere` (non-thermal loss
@@ -883,6 +885,9 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
     if surface.climate.regulated {
         co2.push(Cause::note("thermostat"));
     }
+    if steps.reducing {
+        co2.push(Cause::note("reducing_air"));
+    }
     let h2o = if surface.water.runaway {
         source(|g| g.h2o, Some(InputField::WaterOceans))
     } else {
@@ -920,10 +925,11 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
             vec![Cause::note("life").set_by(InputField::Life)],
         ),
     ];
+    // A reducing air shows its missing CO₂, with the note that says why.
     Cause::of(Quantity::Pressure, g.total()).because(
         gases
             .into_iter()
-            .filter(|(_, bar, _)| *bar > 0.0)
+            .filter(|(q, bar, _)| *bar > 0.0 || (*q == Quantity::Co2 && steps.reducing))
             .map(|(q, bar, causes)| Cause::of(q, bar).because(causes))
             .collect(),
     )
@@ -1333,6 +1339,58 @@ mod tests {
         let haze = cover_part(albedo, "haze").expect("the haze");
         assert!(haze.value > 0.1, "{albedo:#?}");
         assert!(depth(albedo) <= 3);
+    }
+
+    /// The share of the disc the CO₂ frost of a drawn body covers on its
+    /// own ([`super::super::albedo::frost_cover`] of its CO₂ frost alone,
+    /// whatever frost lies on top of it).
+    fn co2_frost_share(context: &Context, model: &PlanetModel) -> f64 {
+        let surface = model.surface.as_ref().expect("a surface");
+        let frost = replay(context, model, surface).frost;
+        super::super::albedo::frost_cover(&Gases {
+            co2: frost.co2,
+            ..Gases::default()
+        })
+    }
+
+    /// Census seed 387's planet d (issue #557), drawn as `planet_census`
+    /// draws it: an icy, methane-bearing planet at an equilibrium
+    /// temperature near 74 K. The CO₂ it would outgas stays in its
+    /// ocean and its reducing air makes none, so no CO₂ frost brightens
+    /// it into a nitrogen-frosted ice world: it keeps its seas.
+    #[test]
+    fn a_hazy_hydrocarbon_world_wears_no_co2_frost_sheet() {
+        use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, body_context, draw};
+        let request = SystemRequest::System(WholeSystemRequest {
+            seed: Some(387),
+            ..WholeSystemRequest::default()
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(387)).expect("the system draws");
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Planet && b.id == "d")
+            .expect("planet d");
+        let context = body_context(&system, body).expect("a context");
+        let model = body.model.clone().expect("a model");
+        assert!((70.0..78.0).contains(&context.equilibrium_k), "{context:?}");
+        assert_eq!(model.class, PlanetClass::HydrocarbonWorld, "{model:#?}");
+        let share = co2_frost_share(&context, &model);
+        assert!(share < 0.5, "{share}");
+    }
+
+    /// No Titan-like body wears a CO₂ frost: Titan's surface shows none,
+    /// and its air holds about 15 ppb of CO₂ (issue #557).
+    #[test]
+    fn titan_likes_wear_no_co2_frost() {
+        for seed in 1..=40 {
+            let (context, model, e) = drawn_body("titan-like", seed);
+            let share = co2_frost_share(&context, &model);
+            assert!(share < 0.1, "seed {seed}: {share}");
+            // The pressure tree says why its CO₂ is missing.
+            let pressure = root(&e, Quantity::Pressure);
+            assert!(has_note(pressure, "reducing_air"), "seed {seed}");
+        }
     }
 
     /// Ganymede's exposed crust keeps its two terrain units and the

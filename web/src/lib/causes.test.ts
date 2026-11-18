@@ -105,6 +105,14 @@ describe('formatCause', () => {
     expect(dominantFrost(tree([['ice', 0.9]]))).toBeNull();
     expect(dominantFrost(null)).toBeNull();
   });
+  it('names a body with a surface liquid by its liquid, not by a frost over it', () => {
+    setLocale('en');
+    const tree = (parts: [string, number][]) => node('bond_albedo', 0.29, { causes: parts.map(([k, v]) => node('cover_share', v, { label: k })) });
+    expect(dominantFrost(tree([['frost_co2', 0.8], ['haze', 1]]), 'hydrocarbons')).toBe(t.cards.liquids.hydrocarbons);
+    expect(dominantFrost(tree([['frost_n2', 0.9]]), 'none')).toBe('nitrogen frost');
+    expect(dominantFrost(tree([['frost_n2', 0.9]]), null)).toBe('nitrogen frost');
+    expect(dominantFrost(tree([['land', 0.7]]), 'water')).toBeNull();
+  });
   it('writes a key in the active language', () => {
     setLocale('en');
     expect(formatCause(node('regime', 0, { label: 'plates' }))).toBe('plate tectonics');
@@ -128,7 +136,7 @@ describe('the cause catalog', () => {
     });
     it(`words every note the server sends in ${locale}`, () => {
       setLocale(locale);
-      for (const key of ['thermostat', 'life', 'runaway', 'boiled', 'snowball', 'frozen', 'co2_build_up', 'co2_condenses', 'methane_trap', 'not_converged']) {
+      for (const key of ['thermostat', 'life', 'runaway', 'boiled', 'snowball', 'frozen', 'co2_build_up', 'co2_condenses', 'reducing_air', 'methane_trap', 'not_converged']) {
         expect(t.causes.notes[key], key).toBeTruthy();
         expect(formatCause(node('note', 0, { label: key })), key).toBe(t.causes.notes[key]);
       }

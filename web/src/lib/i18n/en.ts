@@ -523,6 +523,7 @@ export const en = {
       frozen: 'Frozen for good: bright ice reflects the starlight, and no amount of CO₂ can thaw it at this distance',
       co2_build_up: 'The CO₂ built up to the most the greenhouse can use: the thermostat cannot reach its temperature at this distance',
       co2_condenses: 'CO₂ condenses high in the air: more of it no longer warms the ground',
+      reducing_air: 'A methane-rich, reducing air: the body outgasses its carbon as methane, keeps its CO₂ inside, and its air makes none',
       not_converged: 'The climate did not settle on one temperature: the value shown is the last estimate',
       convecting: 'The shell convects under a stagnant lid, which carries the heat out faster than conduction',
       ammonia: 'The ammonia of the ocean lowers its freezing point, so the shell is thinner and the ocean deeper',

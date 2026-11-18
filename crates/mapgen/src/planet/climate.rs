@@ -3967,7 +3967,17 @@ mod tests {
     /// Titan's body under `gases`, its light scaled by each of `count`
     /// factors from `low` to `high`: the flux and the climate.
     fn titan_sweep(gases: Gases, low: f64, high: f64, count: usize) -> Vec<(f64, Climate)> {
-        let (d, _, _) = climate_of("Titan");
+        sweep_of(&climate_of("Titan").0, gases, low, high, count)
+    }
+
+    /// [`titan_sweep`] of the body `d` rather than Titan.
+    fn sweep_of(
+        d: &Derived,
+        gases: Gases,
+        low: f64,
+        high: f64,
+        count: usize,
+    ) -> Vec<(f64, Climate)> {
         (0..count)
             .map(|i| {
                 let f = low + (high - low) * i as f64 / (count - 1) as f64;
@@ -4025,16 +4035,21 @@ mod tests {
         Gases { n2: 0.1, ..d.gases }
     }
 
-    /// A Triton-like body: Titan's without its methane, under 0.5 bar
-    /// of nitrogen, which frosts on its ground under nitrogen's triple
-    /// point and pools above it.
-    fn nitrogen_world() -> Gases {
-        let (d, _, _) = climate_of("Titan");
-        Gases {
+    /// A Triton-like body: Titan without its methane, under 0.5 bar of
+    /// nitrogen, which frosts on its ground under nitrogen's triple point
+    /// and pools above it. Without methane its air is not reducing, so it
+    /// keeps the CO₂ frost it outgasses (`atmosphere::reducing`, issue
+    /// #557).
+    fn nitrogen_world() -> (Derived, Gases) {
+        let mut inputs = model_inputs(reference("Titan"));
+        inputs.volatiles.ch4 = 0.0;
+        let (d, _, _) = climate_at(&inputs, reference("Titan").orbit_au);
+        let gases = Gases {
             n2: 0.5,
             ch4: 0.0,
             ..d.gases
-        }
+        };
+        (d, gases)
     }
 
     #[test]
@@ -4061,7 +4076,8 @@ mod tests {
 
     #[test]
     fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
-        let sweep = titan_sweep(nitrogen_world(), NITROGEN_SWEEP.0, NITROGEN_SWEEP.1, 200);
+        let (d, gases) = nitrogen_world();
+        let sweep = sweep_of(&d, gases, NITROGEN_SWEEP.0, NITROGEN_SWEEP.1, 200);
         settles_across(&sweep, NITROGEN_TRIPLE_K, 1.0);
     }
 

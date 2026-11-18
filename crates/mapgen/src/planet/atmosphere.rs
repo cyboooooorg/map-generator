@@ -1146,7 +1146,8 @@ pub fn methane_photolysis(
 /// A gas whose triple point lies above the body's `equilibrium_k` cannot
 /// stay liquid there: it frosts onto the surface until its partial
 /// pressure falls to its sublimation pressure (Clausius–Clapeyron from
-/// the triple point, see [`Frost`]). This freezes Titan's CO₂ and NH₃.
+/// the triple point, see [`Frost`]). This freezes Titan's NH₃ (its CO₂
+/// is not outgassed: [`without_co2_if_reducing`]).
 /// Above the triple point the gas stays: whether it rains out as a liquid
 /// depends on the surface temperature, which the climate sets. Water is
 /// the climate's too (a runaway's steam sits on a planet far hotter than
@@ -1159,6 +1160,54 @@ pub fn cold_trap(gases: Gases, equilibrium_k: f64) -> Gases {
         co2: CO2_FROST.cap(gases.co2, equilibrium_k),
         nh3: NH3_FROST.cap(gases.nh3, equilibrium_k),
         ..gases
+    }
+}
+
+/// Whether a body's air is reducing: methane survives in it
+/// (`photolysed`, the air [`methane_photolysis`] leaves, still holds some)
+/// and the body is too cold for the OH of water vapour to oxidise it
+/// ([`METHANE_SURVIVES_K`], as [`photochemistry`] reads it): Titan's air.
+pub fn reducing(photolysed: &Gases, equilibrium_k: f64) -> bool {
+    photolysed.ch4 > 0.0 && equilibrium_k < METHANE_SURVIVES_K
+}
+
+/// `gases` without their CO₂ on a body whose air is `reducing`
+/// ([`reducing`]); unchanged otherwise.
+///
+/// Such a body outgasses its carbon as methane, not as CO₂, and its air
+/// makes none of its own:
+///
+/// - Titan's interior holds CO₂, likely its most abundant gas (up to 3 %
+///   of its mass), but stores it, mostly dissolved in its ocean; what
+///   reaches the air is a moderate outgassing of methane (Tobie, Gautier
+///   & Hersant 2012, ApJ 752, 125, doi:10.1088/0004-637X/752/2/125; the
+///   abstract checked).
+/// - The CO₂ of its air, about 15 ppb in the stratosphere (Cassini CIRS:
+///   de Kok et al. 2007, Icarus 186, 354, and Coustenis et al. 2010,
+///   Icarus 207, 461, doi:10.1016/j.icarus.2009.11.027; the value checked
+///   through later citations of them), is made there from oxygen that
+///   falls in from outside, O⁺ ions most likely from Enceladus, turned
+///   into CO and CO₂ (Hörst, Vuitton & Yelle 2008, JGR 113, E10006,
+///   doi:10.1029/2008JE003135; checked): a trace no outgassing feeds.
+///
+/// Without it, the model's Titan froze out 40 to 150 bar of outgassed
+/// CO₂, a frost over its whole disc that its surface does not show
+/// (issue #557). Tobie et al.'s storage in the ocean would hold for any
+/// ice-covered ocean, but only Titan's case is checked: the model keeps
+/// the CO₂ of the bodies whose air is not reducing (Europa's surface
+/// shows some), and keeps the N₂ that Titan's ammonia gives
+/// ([`photochemistry`]) though ammonia dissolves in an ocean as well.
+/// A known departure: Triton's trace of methane makes its air reducing
+/// too, so the model's Triton keeps no CO₂ (it froze 6 to 14 bar of it
+/// under its nitrogen frost before), while Triton's surface shows some
+/// CO₂ ice (Cruikshank et al. 1993, Science 261, 742). Its nitrogen
+/// frost covers its whole disc either way: its albedo and temperature
+/// do not move.
+pub fn without_co2_if_reducing(gases: Gases, reducing: bool) -> Gases {
+    if reducing {
+        Gases { co2: 0.0, ..gases }
+    } else {
+        gases
     }
 }
 

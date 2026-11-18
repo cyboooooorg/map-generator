@@ -4,6 +4,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
+import type { SurfaceLiquid } from './api/types/SurfaceLiquid';
 import { formatCelsius, formatMassEarth, formatInt, formatNumber, formatScientific, formatSurfaceAge, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 import { className } from './i18n/names.svelte';
@@ -38,11 +39,15 @@ const FROST_COVERS: ReadonlySet<string> = new Set(['frost_n2', 'frost_ch4', 'fro
 
 /**
  * The frost that covers most of a body's disc (over half), worded, or null:
- * the albedo's value line names it without opening its tree.
+ * the albedo's value line names it without opening its tree. A body with a
+ * surface `liquid` (seas of water, hydrocarbons, nitrogen or lava) is named
+ * by its liquid instead: its seas outrank a frost on its land, as its class
+ * does (a hazy hydrocarbon world is no ice world, issue #557).
  */
-export function dominantFrost(tree: Cause | null): string | null {
+export function dominantFrost(tree: Cause | null, liquid: SurfaceLiquid | null = null): string | null {
   const part = tree?.causes.find((c) => c.quantity === 'cover_share' && c.label !== null && FROST_COVERS.has(c.label) && c.value > 0.5);
-  return part?.label ? coverName(part.label) : null;
+  if (!part?.label) return null;
+  return liquid !== null && liquid !== 'none' ? t.cards.liquids[liquid] : coverName(part.label);
 }
 
 /** A number to three significant digits. */

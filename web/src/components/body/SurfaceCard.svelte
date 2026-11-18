@@ -30,8 +30,8 @@
   const units = $derived(unitsFor(body?.model?.terrain));
   const albedo = $derived(body?.model?.surface?.climate.bond_albedo ?? null);
   const albedoTree = $derived(treeFor(explanation, 'bond_albedo'));
-  /** The frost that makes the albedo, named on the value line. */
-  const albedoFrost = $derived(dominantFrost(albedoTree));
+  /** The frost that makes the albedo, named on the value line (the liquid instead when there is one). */
+  const albedoFrost = $derived(dominantFrost(albedoTree, body?.model?.surface?.climate.liquid ?? null));
   const meta = $derived(world.meta);
   const stats = $derived(world.stats);
   const rivers = $derived(world.rivers);

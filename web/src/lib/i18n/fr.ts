@@ -483,6 +483,7 @@ export const fr: Messages = {
       frozen: 'Gelée pour de bon : la glace, brillante, réfléchit la lumière de l’étoile, et aucune quantité de CO₂ ne peut la faire fondre à cette distance',
       co2_build_up: 'Le CO₂ s’est accumulé jusqu’au maximum utile à l’effet de serre : le thermostat ne peut pas atteindre sa température à cette distance',
       co2_condenses: 'Le CO₂ se condense en altitude : en ajouter ne réchauffe plus le sol',
+      reducing_air: 'Air réducteur, riche en méthane : le corps dégaze son carbone en méthane, garde son CO₂ à l’intérieur, et son air n’en fabrique pas',
       not_converged: 'Le climat ne s’est pas stabilisé sur une température : la valeur affichée est la dernière estimation',
       convecting: 'La croûte convecte sous un couvercle immobile, qui évacue la chaleur plus vite que la conduction',
       ammonia: 'L’ammoniac de l’océan abaisse son point de congélation : la croûte est plus mince et l’océan plus profond',
