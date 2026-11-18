@@ -434,6 +434,16 @@ Their near-black brown is a calibration with those maps as its target.
   Sun-like star every asked Titan is then a hydrocarbon world; round an
   old K dwarf (8 Gyr) some lose their methane, and round an M dwarf their
   air, to the star's long-lasting ultraviolet.
+- **Titan's nitrogen is an archetype's calibration.** Its primordial
+  nitrogen is not measured, so `titan-like` pins the factor on the
+  nitrogen rule (0.1 % of the ices) at `n2 = 0.82` instead of the
+  log-normal draw, with Titan's 1.47 bar at the surface (Huygens HASI,
+  Fulchignoni et al. 2005) as its target. The pin does not fix the
+  result: what escape takes at the cosmic shoreline (13 to 27 %) still
+  changes with the drawn orbit of its giant, and the outgassed nitrogen
+  with its drawn ice share, so the 40 seeds of `archetype_census` keep 1.24 to 1.52 bar
+  of N₂ and 1.31 to 1.58 bar of air, median 1.47 bar. At 0.8 the median
+  was 1.44 bar and one seed fell to 1.28 bar.
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon

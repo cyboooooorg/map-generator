@@ -435,10 +435,10 @@ mod tests {
 
     /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its
     /// frost (1e-5 to 3e-5 bar) outlast what their giants' plasma and the
-    /// Sun's ionisation take of them.
+    /// Sun's ionisation take of them, on every seed of `archetype_census`.
     #[test]
     fn titan_and_triton_keep_their_air() {
-        for seed in 1..=20 {
+        for seed in 1..=40 {
             let titan = archetype_moon("titan-like", seed);
             let p = pressure(&titan);
             assert!((1.3..=1.6).contains(&p), "Titan seed {seed}: {p} {titan:?}");

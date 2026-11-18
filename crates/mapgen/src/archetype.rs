@@ -80,7 +80,7 @@
 //!   oceans, about the 0.004 of its polar deposits and ground ice (Carr &
 //!   Head 2015, see `planet::classify::ICE_WORLD_MIN_OCEANS`), stays
 //!   under the 0.01 that shows as ice;
-//! - `titan-like`: its mass fixed (0.0225), and `n2 = 0.8`, the nitrogen
+//! - `titan-like`: its mass fixed (0.0225), and `n2 = 0.82`, the nitrogen
 //!   its ices carry, beside its methane factor.
 //!
 //! `venus-like` holds 60 to 120 bar without a pin.
