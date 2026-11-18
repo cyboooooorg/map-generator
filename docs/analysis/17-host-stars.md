@@ -770,6 +770,10 @@ To file after the user decides; none is filed by this study.
    Add `HostKind`, extended `parse_type`, a state `(mass, age)` entry
    point, a host-dependent inner edge, a quiet-star branch in
    `activity.rs`, and a new draw stream; no change to default draws.
+   Started in #569 (`HostKind`, `parse_host`, `host_state`, the
+   host-dependent inner edge, the quiet activity branch, the `HOST_KIND`
+   stream and `star.kind` in `system.json`, format 12); every other kind
+   stays refused until its own issue.
 2. **Evolved hosts: subgiants and red giants.** Stellar tracks (for
    example MIST) for the post-main-sequence, ages beyond the
    main-sequence lifetime, engulfment limit, widened orbits, viewer
