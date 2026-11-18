@@ -1360,11 +1360,6 @@ mod tests {
                     &surface.water,
                     &steps.frost,
                 );
-                let deck = albedo
-                    .causes
-                    .iter()
-                    .find(|c| c.label.as_deref() == Some("deck"))
-                    .map_or(0.0, |c| c.value);
                 let deck = super::super::albedo::sulphuric_deck(
                     surface.climate.temperature_k,
                     super::super::climate::washed(steps.climate_gases, &surface.water).so2,
