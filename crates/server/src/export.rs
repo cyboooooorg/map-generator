@@ -136,6 +136,8 @@ pub fn with_seed(request: &SystemRequest, seed: u32) -> SystemRequest {
 /// `system.json` stores its parameters
 /// ([`mapgen::request::WorldRequest::pinned`]). Without a focus body (never
 /// written by the server) the request stays as stored, with a warning.
+/// A whole system has no focus by design, and may have no body at all (a
+/// star alone): its request is then kept as stored, with no warning.
 pub fn create(system: &System) -> SystemRequest {
     let focus = system
         .focus

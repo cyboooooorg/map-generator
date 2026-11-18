@@ -690,6 +690,8 @@ async fn resolve_system(
         } else {
             BTreeMap::new()
         };
+        // A system with no focus body (a whole system, possibly with no
+        // planet at all) has no formation to show: `None`, on purpose.
         let formation = system
             .bodies
             .iter()
@@ -5540,6 +5542,53 @@ mod tests {
             system["request"]["system"]["seed"] = serde_json::Value::Null;
         }
         assert_eq!(after, before);
+    }
+
+    /// A system with no planet (a hot blue star, or no planet asked for)
+    /// is a normal one: stored, read back, listed, resolved and exported
+    /// with no body and no focus (#568).
+    #[tokio::test]
+    async fn a_system_with_no_planet_is_stored_listed_resolved_and_exported() {
+        let app = router(temp_config("no-planet"));
+        let request = r#"{"system": {"star": "O5V", "planets": {}, "seed": 5, "width": 64, "height": 32}}"#;
+
+        // Resolved: nothing written, no formation, no job.
+        let (status, body) = call(&app, "POST", "/api/systems/resolve", Some(request)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let resolved = json(&body);
+        assert_eq!(resolved["system"]["bodies"], serde_json::json!([]));
+        assert!(resolved["system"]["focus"].is_null());
+        assert!(resolved["formation"].is_null(), "{resolved}");
+        assert!(resolved["job_id"].is_null());
+
+        // Stored, with no job to wait for.
+        let (status, body) = call(&app, "POST", "/api/systems", Some(request)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let created = json(&body);
+        assert!(created["job_id"].is_null(), "{created}");
+        let id = created["system_id"].as_str().unwrap().to_string();
+
+        // Read back and listed.
+        let (status, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
+        assert_eq!(status, StatusCode::OK, "{detail}");
+        assert_eq!(json(&detail)["system"]["bodies"], serde_json::json!([]));
+        let (_, list) = call(&app, "GET", "/api/systems", None).await;
+        let list = json(&list);
+        assert_eq!(list.as_array().unwrap().len(), 1);
+        assert_eq!(list[0]["planets"], serde_json::json!({}));
+        assert_eq!(list[0]["bodies"], serde_json::json!([]));
+        assert_eq!(list[0]["moons"], 0);
+        assert_eq!(list[0]["star"], "O5V");
+
+        // Exported, and drawn again from its `create`.
+        let (status, _, bytes) = get_bytes(&app, &format!("/api/systems/{id}/export")).await;
+        assert_eq!(status, StatusCode::OK);
+        let entries = zip_entries(bytes);
+        let document: serde_json::Value =
+            serde_json::from_slice(&entries[&format!("{id}/system.json")]).unwrap();
+        assert_eq!(document["bodies"], serde_json::json!([]));
+        assert_eq!(document["create"]["system"]["seed"], 5);
+        assert_eq!(entries.len(), 1, "{:?}", entries.keys());
     }
 
     /// Removes every `life_draw` and `snowball_draw` of a model from
