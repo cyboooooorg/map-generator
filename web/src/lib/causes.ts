@@ -28,6 +28,23 @@ function keyLabel(quantity: Quantity, key: string): string {
   return tables[quantity]?.[key] ?? key;
 }
 
+/** The name of an albedo's part, its key when unknown. */
+function coverName(key: string): string {
+  return (t.causes.covers as Record<string, string>)[key] ?? key;
+}
+
+/** The parts of an albedo that are a frost: a body wearing one over half its disc is named by it. */
+const FROST_COVERS: ReadonlySet<string> = new Set(['frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2']);
+
+/**
+ * The frost that covers most of a body's disc (over half), worded, or null:
+ * the albedo's value line names it without opening its tree.
+ */
+export function dominantFrost(tree: Cause | null): string | null {
+  const part = tree?.causes.find((c) => c.quantity === 'cover_share' && c.label !== null && FROST_COVERS.has(c.label) && c.value > 0.5);
+  return part?.label ? coverName(part.label) : null;
+}
+
 /** A number to three significant digits. */
 function significant(value: number): string {
   if (value === 0) return '0';
@@ -44,6 +61,10 @@ export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): st
   if (cause.label !== null && (cause.quantity === 'terrain_unit' || cause.quantity === 'surface_age')) {
     const value = cause.quantity === 'terrain_unit' ? withUnit(formatInt(Math.round(cause.value * 100)), '%') : formatSurfaceAge(cause.value);
     return t.causes.renewalValue({ renewal: (t.causes.renewals as Record<string, string>)[cause.label] ?? cause.label, value });
+  }
+  // A part of what the albedo weighs: its key and its share of the disc.
+  if (cause.label !== null && cause.quantity === 'cover_share') {
+    return t.causes.coverValue({ cover: coverName(cause.label), value: withUnit(formatInt(Math.round(cause.value * 100)), '%') });
   }
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);
   if (cause.quantity === 'surface_age') return formatSurfaceAge(cause.value);

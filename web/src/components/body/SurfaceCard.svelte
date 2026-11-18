@@ -5,7 +5,7 @@
   import { t } from '../../lib/i18n/index.svelte';
   import { formatArea, formatInt, formatNumber, formatShare, formatSurfaceAge, formatUpTo, withUnit } from '../../lib/format';
   import { unitTooltip } from '../../lib/units';
-  import { treeFor } from '../../lib/causes';
+  import { dominantFrost, treeFor } from '../../lib/causes';
   import { unitsFor } from '../../lib/surfaceUnits';
   import CauseTree from './CauseTree.svelte';
   import type { CardSource } from '../../lib/cardSource';
@@ -16,15 +16,22 @@
   const explanation = $derived(world.shownExtras?.explanation ?? null);
   /** Whether the causes of the surface age are unfolded. */
   let open = $state(false);
+  /** Whether the causes of the Bond albedo are unfolded. */
+  let albedoOpen = $state(false);
   // Trees start closed on every body; a preview answer is a new object for the same body: only the id counts.
   const bodyId = $derived(world.systemBody);
   $effect(() => {
     void bodyId;
     open = false;
+    albedoOpen = false;
   });
   const body = $derived(world.shownSystemBody);
   /** The parts of the surface and their ages: shown only for a surface of several. */
   const units = $derived(unitsFor(body?.model?.terrain));
+  const albedo = $derived(body?.model?.surface?.climate.bond_albedo ?? null);
+  const albedoTree = $derived(treeFor(explanation, 'bond_albedo'));
+  /** The frost that makes the albedo, named on the value line. */
+  const albedoFrost = $derived(dominantFrost(albedoTree));
   const meta = $derived(world.meta);
   const stats = $derived(world.stats);
   const rivers = $derived(world.rivers);
@@ -55,6 +62,12 @@
         {oninput}
       />
     </dd>
+    {#if albedo !== null}
+      <dt>{t.cards.bondAlbedo}</dt>
+      <dd>
+        {formatNumber(albedo, 2)}{albedoFrost ? ` · ${albedoFrost}` : ''}<CauseTree tree={albedoTree} open={albedoOpen} ontoggle={() => (albedoOpen = !albedoOpen)} {oninput} />
+      </dd>
+    {/if}
     {#if units.length > 1}
       <dt>{t.cards.terrainUnits}</dt>
       <dd>

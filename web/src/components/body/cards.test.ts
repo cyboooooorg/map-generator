@@ -5,6 +5,7 @@ import type { Body } from '../../lib/api/types/Body';
 import type { System } from '../../lib/api/types/System';
 import type { WorldMetadata } from '../../lib/api/types/WorldMetadata';
 import type { WorldStats } from '../../lib/stats';
+import { setLocale } from '../../lib/i18n/index.svelte';
 import { LoadedWorld } from '../../lib/world.svelte';
 import AtmosphereCard from './AtmosphereCard.svelte';
 import BodyHeader from './BodyHeader.svelte';
@@ -227,5 +228,27 @@ describe('themed body cards', () => {
     const html = renderCard(AtmosphereCard, { world });
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('Light received');
+  });
+
+  it('explains the Bond albedo on the surface card, naming a frost that covers the disc', () => {
+    const part = (label: string, value: number) => ({ quantity: 'cover_share', value, label, input: null, causes: [] });
+    const io = body({ model: { ...model, surface: { ...surface, climate: { ...surface.climate, bond_albedo: 0.63 } } } });
+    const world = worldOf([io, moon], 'c', earthMeta);
+    for (const locale of ['en', 'fr'] as const) {
+      setLocale(locale);
+      world.systemExtras = {} as typeof world.systemExtras;
+      const dt = locale === 'en' ? 'Bond albedo' : 'Albédo de Bond';
+      const bare = renderCard(SurfaceCard, { world });
+      expect(labels(bare), locale).toContain(dt);
+      expect(bare).toContain(locale === 'en' ? '0.63' : '0,63');
+      expect(bare).not.toContain('aria-expanded');
+      const tree = { quantity: 'bond_albedo', value: 0.63, label: null, input: null, causes: [part('frost_so2', 0.97), part('cloud', 0.02)] };
+      world.systemExtras = { c: { explanation: { trees: [tree] }, similar: null } } as unknown as typeof world.systemExtras;
+      const html = renderCard(SurfaceCard, { world });
+      expect(html).toContain('aria-expanded="false"');
+      expect(html).toContain(locale === 'en' ? '0.63 · volcanic SO₂ frost' : '0,63 · givre de SO₂ volcanique');
+      expect(html).not.toMatch(/frost_so2|cover_share/);
+    }
+    setLocale('en');
   });
 });

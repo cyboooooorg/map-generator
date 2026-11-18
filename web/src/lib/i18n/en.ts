@@ -232,6 +232,8 @@ export const en = {
     flattening: 'Flattening',
     spot: 'Storm',
     surfaceAge: 'Surface age',
+    /** The Bond albedo: the share of the starlight the body reflects. */
+    bondAlbedo: 'Bond albedo',
     /** The parts of a surface of several ages: one line each. */
     terrainUnits: 'Terrains',
     impacts: 'Giants and impacts',
@@ -451,6 +453,7 @@ export const en = {
       surface_age: 'Surface age',
       terrain_unit: 'Terrain',
       emissivity: 'Emissivity',
+      cover_share: '',
       shell_thickness: 'Ice shell thickness',
       ocean_depth: 'Ocean depth',
       polar_shell: 'Ice shell at the poles',
@@ -501,6 +504,7 @@ export const en = {
       surface_age: 'Ga',
       terrain_unit: '%',
       emissivity: '',
+      cover_share: '',
       shell_thickness: 'km',
       ocean_depth: 'km',
       polar_shell: 'km',
@@ -542,6 +546,22 @@ export const en = {
     } satisfies Record<Renewal, string>,
     /** A terrain unit or a surface age in a tree: what renewed it, and the share or the age. */
     renewalValue: (p: { renewal: string; value: string }) => `${p.renewal}, ${p.value}`,
+    /** What a Bond albedo weighs, by the key of its part (its share follows). */
+    covers: {
+      ocean: 'ocean',
+      land: 'bare land',
+      ice: 'water ice and snow',
+      crust: 'ice crust',
+      frost_n2: 'nitrogen frost',
+      frost_ch4: 'methane frost',
+      frost_co2: 'carbon dioxide frost',
+      frost_so2: 'volcanic SO₂ frost',
+      cloud: 'water clouds',
+      haze: 'methane haze',
+      deck: 'sulphuric acid clouds',
+    } as Record<string, string>,
+    /** The part of the disc a cover takes. */
+    coverValue: (p: { cover: string; value: string }) => `${p.cover}, ${p.value}`,
     /** The request fields, named as the creation form names them. */
     inputs: {
       mass_earth: 'Mass',

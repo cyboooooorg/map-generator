@@ -3,7 +3,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
-import { drivenBy, formatCause, treeFor } from './causes';
+import { dominantFrost, drivenBy, formatCause, treeFor } from './causes';
 import { formatMassEarth, formatSurfaceAge, formatSurfaceTemperature, formatUpTo, withUnit } from './format';
 import { setLocale, t } from './i18n/index.svelte';
 
@@ -16,7 +16,7 @@ const QUANTITIES: Record<Quantity, true> = {
   nh3: true, so2: true, outgassed: true, escape: true, destroyed: true, frozen_out: true, from_ammonia: true, weathered: true,
   liquid: true, regime: true, magnetic_field: true, core_state: true, core_mass_fraction: true, class: true, mass: true,
   radius: true, envelope_fraction: true, envelope_lost: true, water_formed: true, water_kept: true, age: true, shell_thickness: true, ocean_depth: true, polar_shell: true,
-  moment_of_inertia: true, resonant_heat: true, host_dissipation: true, surface_age: true, terrain_unit: true, emissivity: true, note: true,
+  moment_of_inertia: true, resonant_heat: true, host_dissipation: true, surface_age: true, terrain_unit: true, emissivity: true, cover_share: true, note: true,
 };
 const INPUTS: Record<InputField, true> = {
   mass_earth: true, core_mass_fraction: true, water_oceans: true, envelope_fraction: true, co2: true, n2: true, ch4: true,
@@ -77,6 +77,27 @@ describe('formatCause', () => {
     }
     setLocale('en');
   });
+  it('writes the parts of an albedo with their share of the disc, in both languages', () => {
+    for (const locale of ['en', 'fr'] as const) {
+      setLocale(locale);
+      for (const key of Object.keys(t.causes.covers)) {
+        const text = formatCause(node('cover_share', 0.63, { label: key }));
+        expect(text, `${locale} ${key}`).toContain(t.causes.covers[key]);
+        expect(text, `${locale} ${key}`).toMatch(/63\s?%/);
+        if (key.includes('_')) expect(text, `${locale} ${key}`).not.toContain(key);
+      }
+    }
+    setLocale('en');
+    expect(Object.keys(t.causes.covers)).toEqual(['ocean', 'land', 'ice', 'crust', 'frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2', 'cloud', 'haze', 'deck']);
+  });
+  it('names a frost over most of the disc, and nothing else', () => {
+    setLocale('en');
+    const tree = (parts: [string, number][]) => node('bond_albedo', 0.7, { causes: parts.map(([k, v]) => node('cover_share', v, { label: k })) });
+    expect(dominantFrost(tree([['frost_n2', 0.9], ['cloud', 0.3]]))).toBe('nitrogen frost');
+    expect(dominantFrost(tree([['frost_so2', 0.4], ['land', 0.6]]))).toBeNull();
+    expect(dominantFrost(tree([['ice', 0.9]]))).toBeNull();
+    expect(dominantFrost(null)).toBeNull();
+  });
   it('writes a key in the active language', () => {
     setLocale('en');
     expect(formatCause(node('regime', 0, { label: 'plates' }))).toBe('plate tectonics');
@@ -93,7 +114,7 @@ describe('the cause catalog', () => {
       for (const q of Object.keys(QUANTITIES) as Quantity[]) {
         expect(t.causes.units[q], q).toBeTypeOf('string');
         expect(t.causes.quantities[q], q).toBeTypeOf('string');
-        if (q !== 'note') expect(t.causes.quantities[q], q).not.toBe('');
+        if (q !== 'note' && q !== 'cover_share') expect(t.causes.quantities[q], q).not.toBe('');
       }
       for (const f of Object.keys(INPUTS) as InputField[]) expect(t.causes.inputs[f], f).toBeTruthy();
       setLocale('en');
