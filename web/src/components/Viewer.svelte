@@ -35,7 +35,9 @@
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { onThemeChange, overlayColours } from '../lib/themes';
-  import { UNITS, unitTooltip } from '../lib/units';
+  import Glossed from './Glossed.svelte';
+  import { toggleDialog, type Dialog } from '../lib/dialogs';
+  import UnitsPanel from './UnitsPanel.svelte';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { orbitReadout } from '../lib/orbitClock';
@@ -400,7 +402,9 @@
   /** The base map's download and decoding, while it loads. */
   let mapProgress = $state.raw<LoadProgress | null>(null);
   let error = $state<string | null>(null);
-  let showHelp = $state(false);
+  let openDialog = $state<Dialog | null>(null);
+  const showHelp = $derived(openDialog === 'help');
+  const showUnits = $derived(openDialog === 'units');
   let panelOpen = $state(saved.panelOpen && wideQuery.matches);
 
   $effect(() => {
@@ -2323,11 +2327,14 @@
         if (worldId) void screenshot();
         break;
       case 'help':
-        showHelp = !showHelp;
+        openDialog = toggleDialog(openDialog, 'help');
+        break;
+      case 'units':
+        openDialog = toggleDialog(openDialog, 'units');
         break;
       case 'escape':
-        if (showHelp) {
-          showHelp = false;
+        if (openDialog) {
+          openDialog = toggleDialog(openDialog, 'escape');
         } else {
           pinned = null;
           onEscape();
@@ -2381,7 +2388,7 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      showHelp = false;
+      openDialog = toggleDialog(openDialog, 'escape');
     }
   }
 </script>
@@ -2473,7 +2480,7 @@
     {/if}
     {#if dialLines}
       <div class="dial-figures">
-        <p class="muted">{dialLines[0]}<br />{dialLines[1]}</p>
+        <p class="muted"><Glossed text={dialLines[0]} /><br /><Glossed text={dialLines[1]} /></p>
         <button
           class="small"
           onclick={() => (dialGlossary = !dialGlossary)}
@@ -2539,7 +2546,7 @@
         <label>
           <span title={t.viewer.riverFromHelp}>{t.viewer.riverFrom}</span>
           <input type="range" min="3" max="7" step="0.1" bind:value={hexRiverLog} />
-          <small class="value">{formatArea(10 ** hexRiverLog)}</small>
+          <small class="value"><Glossed text={formatArea(10 ** hexRiverLog)} inert /></small>
         </label>
         <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
       {/if}
@@ -2548,7 +2555,7 @@
 {#snippet epochPanel()}
   <div class="panel-body">
       <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
-        <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
+        <span class="epoch-label" aria-live="polite"><Glossed text={formatEpoch(epochShown)} /></span>
         <input
           type="range"
           min={0}
@@ -2724,7 +2731,16 @@
       >
       <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     {/if}
-    <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
+    <button
+      onclick={() => (openDialog = toggleDialog(openDialog, 'help'))}
+      aria-expanded={showHelp}
+      title={t.viewer.shortcutsHelp}>?</button
+    >
+    <button
+      onclick={() => (openDialog = toggleDialog(openDialog, 'units'))}
+      aria-expanded={showUnits}
+      title={t.viewer.unitsHelp}>{t.viewer.units}</button
+    >
   </div>
 
   {#if world.subject === 'planet'}
@@ -2784,7 +2800,7 @@
     >
       <header>
         <strong>{t.viewer.shortcuts}</strong>
-        <button class="close" onclick={() => (showHelp = false)} aria-label={t.viewer.close}>×</button>
+        <button class="close" onclick={() => (openDialog = null)} aria-label={t.viewer.close}>×</button>
       </header>
       <dl>
         {#each shortcutHelp() as [key, action] (key)}
@@ -2792,14 +2808,10 @@
           <dd>{action}</dd>
         {/each}
       </dl>
-      <strong class="units">{t.units.title}</strong>
-      <dl>
-        {#each UNITS as unit (unit)}
-          <dt><abbr>{unit}</abbr></dt>
-          <dd>{t.units[unit].name}<br /><small>{t.units[unit].examples}</small></dd>
-        {/each}
-      </dl>
     </div>
+  {/if}
+  {#if showUnits}
+    <UnitsPanel onClose={() => (openDialog = null)} />
   {/if}
 
   {#if generationText}
@@ -3081,13 +3093,6 @@
   }
   .help dd {
     margin: 0;
-  }
-  .help .units {
-    display: block;
-    margin: 10px 0 6px;
-  }
-  .help small {
-    color: var(--muted);
   }
   kbd {
     font-family: ui-monospace, monospace;

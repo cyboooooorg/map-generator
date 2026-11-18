@@ -19,9 +19,6 @@
   color: var(--link);
   text-align: left;
 }
-.facts .unit-help {
-  cursor: help;
-}
 /* A line the live preview just changed (see `flashLines`): a brief highlight.
    Two names for one animation, so that it replays when the next answer moves
    the line again. */
@@ -54,4 +51,11 @@
   [data-line][data-flash] {
     animation: none;
   }
+}
+
+/* The three axes of a small body, explained in a title. */
+.facts .axes-help {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
 }

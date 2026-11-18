@@ -12,6 +12,7 @@
   import type { CameraState } from '../lib/viewer/PlanetView';
   import type { LoadedWorld } from '../lib/world.svelte';
   import InfoPanel from './InfoPanel.svelte';
+  import Glossed from './Glossed.svelte';
   import Viewer from './Viewer.svelte';
 
   interface Props {
@@ -157,7 +158,7 @@
 
   {#if measuring}
     <div class="measure" role="region" aria-label={t.measure.label}>
-      <strong>{path.length < 2 ? t.measure.start : formatKm(distance)}</strong>
+      <strong><Glossed text={path.length < 2 ? t.measure.start : formatKm(distance)} /></strong>
       {#if path.length >= 2}
         <small>{t.measure.legs({ legs: path.length - 1 })}</small>
       {/if}

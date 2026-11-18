@@ -1,0 +1,30 @@
+import { render } from 'svelte/server';
+import { describe, expect, it } from 'vitest';
+import Glossed from './Glossed.svelte';
+
+const html = (props: { text: string | null | undefined; inert?: boolean }) => render(Glossed, { props }).body;
+
+describe('Glossed', () => {
+  it('renders CO₂ as a focusable abbr with its name', () => {
+    const body = html({ text: 'CO₂' });
+    expect(body).toContain('<abbr class="gloss"');
+    expect(body).toContain('title="carbon dioxide"');
+    expect(body).toContain('tabindex="0"');
+    expect(body).toContain('CO₂');
+  });
+
+  it('inert glossed terms are not focusable', () => {
+    const body = html({ text: 'CO₂', inert: true });
+    expect(body).toContain('title="carbon dioxide"');
+    expect(body).not.toContain('tabindex');
+  });
+
+  it('renders nothing for a missing text', () => {
+    expect(html({ text: undefined })).not.toContain('<abbr');
+    expect(html({ text: null })).not.toContain('abbr');
+  });
+
+  it('plain text stays plain', () => {
+    expect(html({ text: 'no units here' })).not.toContain('<abbr');
+  });
+});

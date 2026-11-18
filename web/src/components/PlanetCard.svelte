@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from './Glossed.svelte';
   // A planet's card in the star view of a planetary system: its facts beside
   // its marker, linked to it by a line, opened by hovering the marker and
   // kept open by its pin (see StarPane.svelte and lib/planetCard.ts).
@@ -88,7 +89,7 @@
 {#snippet value(metric: CardMetric, text: string)}
   {@const mark = marks[metric]}
   <span class={mark ?? ''} title={mark === 'max' ? t.planetCard.highest : mark === 'min' ? t.planetCard.lowest : undefined}
-    >{text}{#if mark}<span class="mark" aria-label={mark === 'max' ? t.planetCard.highest : t.planetCard.lowest}
+    ><Glossed text={text} />{#if mark}<span class="mark" aria-label={mark === 'max' ? t.planetCard.highest : t.planetCard.lowest}
         >{mark === 'max' ? '▲' : '▼'}</span
       >{/if}</span
   >
@@ -131,31 +132,31 @@
     </button>
   </header>
   <dl>
-    <dt>{t.planetCard.size}</dt>
+    <dt><Glossed text={t.planetCard.size} /></dt>
     <dd>{@render value('radius', radius)} · {@render value('mass', mass)}</dd>
-    <dt>{t.planetCard.orbit}</dt>
+    <dt><Glossed text={t.planetCard.orbit} /></dt>
     <dd>{@render value('orbit', formatAu(planet.orbit_au))} · e {formatUpTo(planet.eccentricity, 3)}</dd>
-    <dt>{t.planetCard.motion}</dt>
+    <dt><Glossed text={t.planetCard.motion} /></dt>
     <dd>{@render value('speed', t.planetCard.speedNow({ speed }))}</dd>
-    <dt>{t.planetCard.year}</dt>
+    <dt><Glossed text={t.planetCard.year} /></dt>
     <dd>{@render value('year', formatYear(planet.year_days))}</dd>
-    <dt>{t.planetCard.age}</dt>
-    <dd>{formatAge(star.age_gyr)}</dd>
-    <dt>{t.planetCard.day}</dt>
+    <dt><Glossed text={t.planetCard.age} /></dt>
+    <dd><Glossed text={formatAge(star.age_gyr)} /></dd>
+    <dt><Glossed text={t.planetCard.day} /></dt>
     <dd>{@render value('day', day)}</dd>
-    <dt>{t.planetCard.light}</dt>
+    <dt><Glossed text={t.planetCard.light} /></dt>
     <dd>{@render value('light', t.planetCard.lightValue({ flux: formatUpTo(planet.flux_earth, planet.flux_earth < 0.1 ? 3 : 2) }))}</dd>
-    <dt>{t.planetCard.gravity}</dt>
+    <dt><Glossed text={t.planetCard.gravity} /></dt>
     <dd>{@render value('gravity', withUnit(formatUpTo(planet.gravity, 2), 'g'))}</dd>
-    <dt>{t.planetCard.equilibrium}</dt>
+    <dt><Glossed text={t.planetCard.equilibrium} /></dt>
     <dd>{@render value('equilibrium', withUnit(formatInt(Math.round(planet.equilibrium_k - 273.15)), '°C'))}</dd>
     {#if planet.surface_k !== null}
-      <dt>{t.planetCard.surfaceTemperature}</dt>
-      <dd>{formatCelsius(planet.surface_k)}</dd>
+      <dt><Glossed text={t.planetCard.surfaceTemperature} /></dt>
+      <dd><Glossed text={formatCelsius(planet.surface_k)} /></dd>
     {/if}
-    <dt>{t.planetCard.zone}</dt>
-    <dd>{zone}</dd>
-    <dt>{t.planetCard.moons}</dt>
+    <dt><Glossed text={t.planetCard.zone} /></dt>
+    <dd><Glossed text={zone} /></dd>
+    <dt><Glossed text={t.planetCard.moons} /></dt>
     <dd>
       {@render value('moons', formatInt(planet.moons))}{#each planet.moonList as moon, i (moon.id)}{i === 0 ? ' · ' : ', '}<button
           type="button"
@@ -165,7 +166,7 @@
     </dd>
   </dl>
   <footer>
-    <small class="muted">{planet.generated ? t.planetCard.generated : t.planetCard.notGenerated}</small>
+    <small class="muted"><Glossed text={planet.generated ? t.planetCard.generated : t.planetCard.notGenerated} /></small>
     <button type="button" onclick={onOpen}>{planet.generated ? t.planetCard.open : t.planetCard.openGenerate}</button>
   </footer>
 </section>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from '../Glossed.svelte';
   // Moons and rings: the moons of a planet (each a link to its card), its
   // rings and the dust rings, a ring moon's part in them, and the tides.
   import './facts.css';
@@ -25,7 +26,7 @@
 {#if body}
   <dl class="facts">
     {#if body.kind === 'planet'}
-      <dt title={t.worldInfo.moonsHelp}>{t.card.moons}</dt>
+      <dt title={t.worldInfo.moonsHelp}><Glossed text={t.card.moons} /></dt>
       <dd class="moons">
         {#each family as moon (moon.id)}
           {#if world.preview}
@@ -40,33 +41,33 @@
       </dd>
     {/if}
     {#if tides}
-      <dt title={t.worldInfo.tidesHelp}>{t.worldInfo.tides}</dt>
+      <dt title={t.worldInfo.tidesHelp}><Glossed text={t.worldInfo.tides} /></dt>
       <dd>
         {t.worldInfo.tidesValue({ tide: formatUpTo(tides.tide, tides.tide < 1 ? 2 : 1) })} ·
-        <span title={t.worldInfo.tiltHelp}>{tides.tilt_steadied ? t.worldInfo.tiltSteady : t.worldInfo.tiltFree}</span>
+        <span title={t.worldInfo.tiltHelp}><Glossed text={tides.tilt_steadied ? t.worldInfo.tiltSteady : t.worldInfo.tiltFree} /></span>
       </dd>
     {/if}
     {#if rings}
-      <dt>{t.card.rings}</dt>
+      <dt><Glossed text={t.card.rings} /></dt>
       <dd>
-        {t.card.ringsValue({
+        <Glossed text={t.card.ringsValue({
           kind: rings.bright ? 'bright' : 'faint',
           inner: formatUpTo(rings.inner, 2),
           outer: formatUpTo(rings.outer, 2),
           gaps: rings.gaps.length,
-        })}
+        })} />
       </dd>
     {/if}
     {#if rings?.d_ring}
-      <dt>{t.card.dRingTitle}</dt>
-      <dd>{t.card.dRing({ inner: formatUpTo(rings.d_ring.inner, 2), outer: formatUpTo(rings.d_ring.outer, 2) })}</dd>
+      <dt><Glossed text={t.card.dRingTitle} /></dt>
+      <dd><Glossed text={t.card.dRing({ inner: formatUpTo(rings.d_ring.inner, 2), outer: formatUpTo(rings.d_ring.outer, 2) })} /></dd>
     {/if}
     {#if body.params.ridge}
-      <dt>{t.card.ridge}</dt>
-      <dd>{t.card.ridgeValue({ height: withUnit(formatInt(Math.round(body.params.ridge * 100)), '%') })}</dd>
+      <dt><Glossed text={t.card.ridge} /></dt>
+      <dd><Glossed text={t.card.ridgeValue({ height: withUnit(formatInt(Math.round(body.params.ridge * 100)), '%') })} /></dd>
     {/if}
     {#if dust.length > 0}
-      <dt>{t.card.dustRings}</dt>
+      <dt><Glossed text={t.card.dustRings} /></dt>
       <dd>
         {#each dust as ring, k (k)}
           {@const moon = family.find((m) => m.id === ring.source)}
@@ -82,12 +83,12 @@
       </dd>
     {/if}
     {#if fed}
-      <dt>{t.card.dustSource}</dt>
-      <dd>{t.card.dustFed({ kind: fed.kind })}</dd>
+      <dt><Glossed text={t.card.dustSource} /></dt>
+      <dd><Glossed text={t.card.dustFed({ kind: fed.kind })} /></dd>
     {/if}
     {#if part}
-      <dt>{t.card.ringRole}</dt>
-      <dd>{t.card.ringRoles[part.role]({ gap: withUnit(formatInt(part.gapKm ?? 0), 'km') })}</dd>
+      <dt><Glossed text={t.card.ringRole} /></dt>
+      <dd><Glossed text={t.card.ringRoles[part.role]({ gap: withUnit(formatInt(part.gapKm ?? 0), 'km') })} /></dd>
     {/if}
   </dl>
 {/if}

@@ -33,6 +33,6 @@ describe('GenerateForm', () => {
     const initial = { planet: 'earth-like', seed: 42, co2: 2, ch4: 0.5, age_gyr: 3, life: false, eccentricity: 0.1 };
     const out = render(GenerateForm, { props: { archetypes, spec, initial, variedFrom: 'x', atSummary: true, onSubmitted: () => {}, onCancel: () => {} } }).body;
     for (const key of ['co2', 'ch4', 'age_gyr', 'life', 'eccentricity'] as const) expect(out).toContain(t.form.model[key].label);
-    expect(out).toMatch(/Seed<\/dt> <dd[^>]*>42</);
+    expect(out.replace(/<!--.*?-->/g, '')).toMatch(/Seed<\/dt> <dd[^>]*>42</);
   });
 });

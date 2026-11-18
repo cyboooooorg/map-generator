@@ -14,6 +14,7 @@
     snapDrift,
   } from '../lib/drift';
   import { t } from '../lib/i18n/index.svelte';
+  import Glossed from './Glossed.svelte';
 
   interface Props {
     /** Id of the body shown (`systems/<system>/bodies/<body>`). */
@@ -89,7 +90,7 @@
 <div class="panel-body drift">
   <p class="help">{t.drift.help}</p>
   <div class="row" role="group" aria-label={t.drift.slider} title={t.drift.help}>
-    <span class="label" aria-live="polite">{formatDrift(shown)}</span>
+    <span class="label" aria-live="polite"><Glossed text={formatDrift(shown)} /></span>
     <input
       type="range"
       min={-DRIFT_LIMIT_MA}
@@ -120,7 +121,7 @@
   <div class="row">
     <button onclick={() => onGenerate(choice)} disabled={choice === snapDrift(current)} title={t.drift.generateHelp}>{t.drift.generate}</button>
     {#if choice === snapDrift(current)}
-      <span class="hint">{t.drift.fromHere({ epoch: formatDrift(current) })}</span>
+      <span class="hint"><Glossed text={t.drift.fromHere({ epoch: formatDrift(current) })} /></span>
     {/if}
   </div>
 </div>
