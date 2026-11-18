@@ -25,6 +25,23 @@ describe('system star view', () => {
     expect(giant.name).toBe(system.bodies.find((x) => x.id === 'c')!.designation);
   });
 
+  it('shows a system with no planet as its star alone, with no planet orbit', () => {
+    const lone = { ...system, bodies: [], focus: null } as unknown as System;
+    const view = systemStarView(lone, null);
+    // The star's own fields, not the Sun's.
+    expect(view.star.type).toBe(system.star.info.type);
+    expect(view.star.luminosity).toBe(system.star.info.luminosity);
+    expect(view.star.hz_inner_au).toBe(system.star.info.hz_inner_au);
+    // No planet, so no orbit a planet would draw (not the Sun's 1 AU).
+    expect(view.star.orbit_au).toBe(0);
+    expect(view.star.year_days).toBe(0);
+    expect(view.ids).toEqual([]);
+    expect(view.planets).toEqual([]);
+    expect(view.giants.giants).toEqual([]);
+    expect(view.selected).toBe(-1);
+    expect(view.belts).toEqual(system.belts ?? []);
+  });
+
   it('labels the other planets with the names given to them', () => {
     const b = system.bodies.find((x) => x.id === 'b')!;
     expect(systemStarView(system, b, { c: 'Tethys' }).giants.giants[1]!.name).toBe('Tethys');

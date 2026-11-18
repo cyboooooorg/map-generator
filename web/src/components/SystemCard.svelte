@@ -112,6 +112,9 @@
           {#each compact ? chips.slice(0, MAX_CHIPS) : chips as chip (chip.type)}
             <span class="chip"><span class="dot small" style:background={chip.colour} aria-hidden="true"></span>{chip.text}</span>
           {/each}
+          {#if chips.length === 0}
+            <span class="chip none">{t.systemList.noPlanet}</span>
+          {/if}
           {#if compact && chips.length > MAX_CHIPS}
             <span class="more" title={chips.slice(MAX_CHIPS).map((c) => c.text).join(', ')}>+{chips.length - MAX_CHIPS}</span>
           {/if}
@@ -233,6 +236,10 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--text) 9%, transparent);
     font-size: 0.9em;
+  }
+  .chip.none {
+    padding-left: 9px;
+    color: var(--muted);
   }
   /* A meaning, not a theme colour: green in every theme. */
   .habitable {

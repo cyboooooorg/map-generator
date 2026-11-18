@@ -7287,4 +7287,63 @@ mod titan_tests {
             assert!((0.5..2.0).contains(&share), "seed {seed}: {share} %");
         }
     }
+
+    /// A whole system may end with no planet: a star alone, with no
+    /// body and no focus (issue #568).
+    #[test]
+    fn a_whole_system_with_no_planet_is_a_star_alone() {
+        for star in ["O5V", "B1V", "G2V"] {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some(star.into()),
+                planets: Some(BTreeMap::new()),
+                seed: Some(1),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            assert!(system.bodies.is_empty(), "{star}");
+            assert!(system.focus.is_none(), "{star}");
+            let json = serde_json::to_string(&system).unwrap();
+            let back: System = serde_json::from_str(&json).unwrap();
+            assert!(back.bodies.is_empty() && back.focus.is_none());
+        }
+    }
+
+    /// The first seeds, in 1..=60, whose drawn O5V system ends with no
+    /// planet: one with no belt, one with a belt left.
+    pub(crate) fn planetless_o_star_seeds() -> (Option<u32>, Option<u32>) {
+        let (mut bare, mut belted) = (None, None);
+        for seed in 1..=60u32 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some("O5V".into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            if !system.bodies.is_empty() {
+                continue;
+            }
+            assert!(system.focus.is_none(), "seed {seed}");
+            if system.belts.is_empty() {
+                bare = bare.or(Some(seed));
+            } else {
+                belted = belted.or(Some(seed));
+            }
+        }
+        (bare, belted)
+    }
+
+    /// A hot blue star finds no room for a planet in a drawn system.
+    #[test]
+    fn a_drawn_o_star_can_end_with_no_planet() {
+        let (bare, belted) = planetless_o_star_seeds();
+        assert!(bare.is_some(), "no O5V draw of 1..=60 ends with no planet");
+        assert!(
+            belted.is_some(),
+            "no planetless O5V draw of 1..=60 keeps a belt"
+        );
+    }
 }

@@ -691,6 +691,18 @@ mod tests {
     }
 
     #[test]
+    fn a_system_with_no_body_is_summarized_with_no_planet() {
+        let json = r#"{"format_version": 10, "seed": 5, "width": 64, "height": 32,
+            "star": {"type": "O5V", "designation": "MGS 1",
+                     "info": {"light": [0.6, 0.7, 1.0], "hz_inner_au": 90.0, "hz_outer_au": 160.0}},
+            "bodies": []}"#;
+        let s = summarize("mgs-1-5", json.as_bytes(), 3).unwrap();
+        assert!(s.planets.is_empty() && s.bodies.is_empty());
+        assert_eq!((s.moons, s.star.as_str()), (0, "O5V"));
+        assert_eq!(s.star_light, [0.6, 0.7, 1.0]);
+    }
+
+    #[test]
     fn summaries_count_planets_by_type_and_list_bodies() {
         let s = summarize("mgs-48213-42", SYSTEM.as_bytes(), 7).unwrap();
         assert_eq!((s.seed, s.width, s.star.as_str()), (42, 1024, "K1V"));

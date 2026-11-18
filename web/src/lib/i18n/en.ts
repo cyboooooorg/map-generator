@@ -274,6 +274,7 @@ export const en = {
     habitableFilter: 'With a habitable world',
     habitableLine: 'A world with liquid water',
     habitableShort: 'Liquid water',
+    noPlanet: 'No planet',
     outdated: 'Outdated: made by an older generator',
     newerFormat: 'Made by a newer generator: update this one to open it',
     outdatedWorlds: 'Outdated worlds: made by an older generator',
@@ -1469,6 +1470,7 @@ export const en = {
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
     giantsOff: 'Not modelled (generated without giant planets)',
     noGiants: 'None: no giant in this system, like most red dwarfs',
+    noPlanet: 'No planet: this star is alone in its system',
     giantLine: (p: { name: string; kind: string; mass: string; orbit: string; year: string }) =>
       `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
     hotGiant: 'hot Jupiter',
@@ -1548,6 +1550,10 @@ export const en = {
     orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
     showOrbit: 'Orbits',
     showZone: 'Habitable zone',
+    squareZoneDrawn: 'Habitable zone: the zone drawn',
+    squareZoneDrawnHelp: 'The shaded ring where a planet could keep liquid water',
+    squareZoneDistances: 'Habitable zone: its distances',
+    squareZoneDistancesHelp: "The distances of the zone's inner and outer edges from the star, and its width",
     circular: (p: { distance: string }) => `circular orbit: ${p.distance} all year, no periapsis or apoapsis`,
     distancesHelp:
       'The distance from the star to the planet and the light it gets now, the closest and farthest points of its orbit, the edges of the habitable zone',

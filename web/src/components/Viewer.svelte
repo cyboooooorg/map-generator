@@ -284,6 +284,8 @@
   let starDistances = $state(false);
   let starOrbit = $state(true);
   let starZone = $state(true);
+  /** The habitable zone's distances: off like Distances, which they were part of (neither is saved, both start off). */
+  let starZoneDistances = $state(false);
   let starProminences = $state(true);
   /** Whether the star view draws the star through its warm display filter (true colour by default). */
   let starFilter = $state(false);
@@ -979,8 +981,9 @@
   const pickedPlanet = $derived(sys && starPick ? (sys.bodies.find((b) => b.id === starPick && b.kind === 'planet') ?? null) : null);
   /** The planet the star view's orbit facts describe: the one picked, else any (nothing is then selected). */
   const starBase = $derived(pickedPlanet ?? sysPlanet ?? sys?.bodies.find((b) => b.kind === 'planet') ?? null);
+  /** A loaded system always has a star view, planetless ones included (its star alone, `starBase` null). */
   const sysStar = $derived(
-    sys && starBase ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>, t.viewer.frozenSurface) : null,
+    sys ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>, t.viewer.frozenSurface) : null,
   );
   /** Picks planet `index` of the star view, or lets it go if it is the one picked: its card pinned or unpinned with it. */
   function togglePick(index: number): void {
@@ -2648,6 +2651,7 @@
       bind:distances={starDistances}
       bind:orbit={starOrbit}
       bind:zone={starZone}
+      bind:zoneDistances={starZoneDistances}
       bind:prominences={starProminences}
       giantSystem={system.giants}
       worldGiant={meta?.giant ?? null}
@@ -2719,7 +2723,7 @@
         {/each}
       {/if}
     </select>
-    <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
+    <button onclick={resetView} disabled={!worldId && !(world.subject === 'star' && sys)} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
     {#if world.subject === 'planet'}
       <button
         onclick={onToggleMeasure}
@@ -2830,10 +2834,15 @@
       {/if}
     </div>
   {/if}
-  {#if !worldId && !sysBody}
+  {#if world.systemId && !world.system && !world.error}
+    <!-- A system being fetched: a neutral cue, in the star view too. -->
+    <p class="overlay">{t.viewer.loading}</p>
+  {:else if world.subject === 'star'}
+    <!-- The star view needs no world and no maps to wait for: a system with no planet shows its star alone. -->
+  {:else if !world.systemId && !worldId && !sysBody}
     <p class="overlay">{t.viewer.noWorld}</p>
-  {:else if world.subject === 'star' || sysBody?.generated === false}
-    <!-- The star view, or a body not generated yet: no maps to wait for. -->
+  {:else if sysBody?.generated === false}
+    <!-- A body not generated yet: no maps to wait for. -->
   {:else if loading}
     <div class="overlay">
       <div class="loading">

@@ -73,10 +73,13 @@ export interface SystemPlanet {
  * order, each under the name given to it in `names` (by body id), else its
  * designation, its type worded by `typeLabels` (by type), else as is, and
  * followed by `frozenLabel` for a rocky world with a frozen surface.
+ * A system with no planet (`planet` null, `bodies` empty) gives its star
+ * alone: no planet and no orbit (the orbit fields are zero, not a 1 AU
+ * placeholder), `selected` at -1 (none selected) and its belts, if any.
  */
 export function systemStarView(
   system: System,
-  planet: Body,
+  planet: Body | null,
   names: Readonly<Record<string, string>> = {},
   typeLabels: Readonly<Record<string, string>> = {},
   frozenLabel = '',
@@ -91,25 +94,46 @@ export function systemStarView(
   belts: Belt[];
 } {
   const base = system.star.info;
-  const a = planet.orbit.semi_major_axis_au;
-  const e = planet.orbit.eccentricity;
-  const star = withOrbitDefaults({
-    ...base,
-    orbit_au: a,
-    eccentricity: e,
-    periapsis_au: a * (1 - e),
-    apoapsis_au: a * (1 + e),
-    insolation: planet.surroundings.flux_earth,
-    insolation_periapsis: base.luminosity / (a * (1 - e)) ** 2,
-    insolation_apoapsis: base.luminosity / (a * (1 + e)) ** 2,
-    hz_position: planet.surroundings.hz_position,
-    equilibrium_k: planet.surroundings.equilibrium_k,
-    year_days: planet.orbit.period_days,
-    angular_diameter_deg: (2 * Math.atan((SUN_RADIUS_AU * base.radius) / a)) / DEG,
-    tidally_locked: planet.spin.locked,
-    spin_orbit_3_2: planet.spin.spin_orbit_3_2 ?? false,
-    spin_turns: planet.spin.resonance_turns ?? 0,
-  });
+  const a = planet?.orbit.semi_major_axis_au ?? 0;
+  const e = planet?.orbit.eccentricity ?? 0;
+  const star = withOrbitDefaults(
+    planet
+      ? {
+          ...base,
+          orbit_au: a,
+          eccentricity: e,
+          periapsis_au: a * (1 - e),
+          apoapsis_au: a * (1 + e),
+          insolation: planet.surroundings.flux_earth,
+          insolation_periapsis: base.luminosity / (a * (1 - e)) ** 2,
+          insolation_apoapsis: base.luminosity / (a * (1 + e)) ** 2,
+          hz_position: planet.surroundings.hz_position,
+          equilibrium_k: planet.surroundings.equilibrium_k,
+          year_days: planet.orbit.period_days,
+          angular_diameter_deg: (2 * Math.atan((SUN_RADIUS_AU * base.radius) / a)) / DEG,
+          tidally_locked: planet.spin.locked,
+          spin_orbit_3_2: planet.spin.spin_orbit_3_2 ?? false,
+          spin_turns: planet.spin.resonance_turns ?? 0,
+        }
+      : {
+          // No planet: nothing orbits, so no orbit value is made up.
+          ...base,
+          orbit_au: 0,
+          eccentricity: 0,
+          periapsis_au: 0,
+          apoapsis_au: 0,
+          insolation: 0,
+          insolation_periapsis: 0,
+          insolation_apoapsis: 0,
+          hz_position: 0,
+          equilibrium_k: 0,
+          year_days: 0,
+          angular_diameter_deg: 0,
+          tidally_locked: false,
+          spin_orbit_3_2: false,
+          spin_turns: 0,
+        },
+  );
   const all = system.bodies.filter((b) => b.kind === 'planet');
   const moonsOf = (id: string) =>
     system.bodies
@@ -162,7 +186,7 @@ export function systemStarView(
   });
   return {
     star,
-    omega: (planet.orbit.node_deg + planet.orbit.periapsis_deg) * DEG,
+    omega: planet ? (planet.orbit.node_deg + planet.orbit.periapsis_deg) * DEG : 0,
     giants: { giants, forced_eccentricity: 0, impact_factor: 1 },
     ids: all.map((b) => b.id),
     planets: all.map((body) => ({
@@ -188,7 +212,7 @@ export function systemStarView(
       preview: body.preview,
       trojans: body.trojans ?? null,
     })),
-    selected: all.findIndex((b) => b.id === planet.id),
+    selected: planet ? all.findIndex((b) => b.id === planet.id) : -1,
     belts: system.belts ?? [],
   };
 }

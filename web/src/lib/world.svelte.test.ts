@@ -107,6 +107,30 @@ describe('LoadedWorld.loadSystem', () => {
     expect(world.shownSystemBody?.id).toBe('d');
   });
 
+  it('opens a system with no planet on the star view, whatever is asked', async () => {
+    const lone = { focus: null, bodies: [] };
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: lone }) }));
+    const world = new LoadedWorld();
+    for (const [asked, focus] of [
+      [null, false],
+      [null, true],
+      ['d', false],
+      ['star', false],
+    ] as const) {
+      world.loadSystem(`lone-${asked}-${focus}`, asked, focus);
+      await flush();
+      // Never the planet view with no body to show.
+      expect(world.subject).toBe('star');
+      expect(world.system?.bodies).toEqual([]);
+      expect(world.systemBody).toBeNull();
+      expect(world.worldId).toBeNull();
+    }
+    // The same system loaded again keeps the star view.
+    world.loadSystem('lone-star-false', null, true);
+    await flush();
+    expect(world.subject).toBe('star');
+  });
+
   it('opens the star view from body=star', async () => {
     vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ system: files.a }) }));
     const world = new LoadedWorld();
