@@ -292,7 +292,7 @@ kept in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
 whole stock, frosts to come included). A thin air is an atmosphere only
 if the body supplies it faster than it loses it. Inside a giant's
 magnetosphere (a moon of a host of 10 M⊕ to 13 Jupiter masses, the
-heaviest giant drawn, `LossContext.host`; a heavier host is the star
+heaviest giant drawn, `HOST_PLASMA_MAX_MASS_EARTH`, `LossContext.host`; a heavier host is the star
 whose tides a planet's model reads),
 each molecule at the top of the air meets a loss per m² that does not
 depend on how much air there is:
@@ -586,7 +586,8 @@ Schmitt 2009 (*Planet. Space Sci.* 57, 2053,
 doi:10.1016/j.pss.2009.09.011), as Lisse et al. 2021 (*Icarus* 356,
 114072, doi:10.1016/j.icarus.2020.114072, supplementary Table 2)
 reproduce them (`N2_ALPHA_FIT`, `N2_BETA_FIT`): β-N₂ from the triple
-point down to the α–β transition at 35.61 K (Scott 1976, from memory),
+point down to the α–β transition at 35.61 K (`NITROGEN_ALPHA_BETA_K`,
+Scott 1976, from memory),
 α-N₂ below. The phase of each fit is read off its values (the β fit
 gives 0.1215 bar at the triple point, the α fit 0.317 bar), the paper
 itself not read. Each fit is pinned to the curve above it (the β fit to
@@ -1048,7 +1049,8 @@ and Io (a heat pipe, its SO₂ frost) keep their paths. Each unit:
   isotropic scatterers, `(1 − γ) / (1 + γ)` with `γ = √(1 − w)` (Hapke
   1981, JGR 86, 3039, from memory), taken as approximately its Bond
   albedo (Hapke's spherical albedo is slightly lower for dark grains);
-  a little dust darkens ice much. `0.006` is a calibration on Europa
+  a little dust darkens ice much. `0.006` (`DUST_PER_ROCK_TO_ICE`) is a
+calibration on Europa
   (`ρ` 9 to 16).
 - **A dark lag** covers patches of it: a share
   `0.88 · min(1, rock / 0.5) · (1 − exp(−N / 0.004))` of the unit,
@@ -1057,22 +1059,32 @@ and Io (a heat pipe, its SO₂ frost) keep their paths. Each unit:
   Hartmann 2001), slow at today's flux and fast under the late heavy
   bombardment. Sublimation and impact gardening leave the rock of an old
   ice-rock crust as a lag and the ice as bright frost on cold crests
-  (Spencer 1987; Moore et al. 1999, Callisto; from memory). `0.88` is a
-  calibration on Callisto (about 0.2), whose rock share, 0.5, is the
-  reference under which the lag covers less in proportion (an old crust
-  of 94 % ice keeps 0.77); `0.004` is a calibration on Ganymede (its
+  (Spencer 1987; Moore et al. 1999, Callisto; from memory). `0.88`
+  (`LAG_MAX_SHARE`) is a calibration on Callisto (about 0.2), whose
+  rock share, 0.5 (`LAG_ROCK_SHARE`), is the reference under which the lag covers less in proportion (an old crust
+  of 94 % ice keeps 0.77); `0.004` (`LAG_CRATERS_PER_KM2`) is a
+  calibration on Ganymede (its
   2 Gyr renewed terrain keeps 70 % of its ice uncovered).
-- **A plume's fallout** keeps `0.6 × v` of the ice under fresh frost,
-  `v` the strength the body vents with (`geysers::vent_strength`): 0
-  unless it passes the conditions of its geysers other than the crack,
-  then rising linearly with its polar shell's overburden from 0 at the
-  crack threshold to 1 at 0.6 of it (the model's Enceladus carries 0.4
-  to 0.55 of it). 0.6 is a calibration on Enceladus, 0.81 (Howett et al.
-  2010; the plume and E-ring fallout: Verbiscer et al. 2007, Kempf et
-  al. 2010; from memory). The fallout brightens and cools the surface,
+- **A plume's fallout** keeps `FALLOUT_SHARE × v` of the ice under
+  fresh frost, `v` the strength the body vents with
+  (`geysers::vent_strength`): 0 unless it passes the conditions of its
+  geysers other than the crack, then rising linearly with its polar
+  shell's overburden from 0 at the crack threshold to 1 at
+  `FULL_VENT_OVERBURDEN` of it. The two constants are both 0.6 but
+  unrelated. `FALLOUT_SHARE` (0.6) is a calibration on Enceladus, 0.81
+  (Howett et al. 2010; the plume and E-ring fallout: Verbiscer et al.
+  2007, Kempf et al. 2010; from memory). `FULL_VENT_OVERBURDEN` (0.6
+  of the crack threshold) is not a calibration but a bound above the
+  model's Enceladus band, whose polar overburden is 0.4 to 0.55 of the
+  threshold over the census seeds: any value from 0.55 up keeps
+  Enceladus venting in full on every seed, so that `FALLOUT_SHARE`
+  applies to it whole; the value only sets how fast the vent fades on
+  thicker shells, which no body constrains. The fallout brightens and cools the surface,
   which thickens the shell and weakens the vent: the strength the
   climate takes is the fixed point of that decreasing map, bisected in
-  12 steps (`planet::bare`). It is 0 exactly where the stored geysers
+  12 steps (`VENT_STEPS`, `planet::bare`), 14 climate solves
+  per venting crust (one without fallout, 12 in the bisection, one at
+  the strength taken). It is 0 exactly where the stored geysers
   stop, so over the 300 drawn systems of `drawn_icy_moons_stay_in_bounds`
   the climate takes a fallout on exactly the ice crusts that store
   geysers (36 of them).
@@ -1085,7 +1097,12 @@ which were not looked at while setting them: the model gives Miranda
 0.31, Ariel 0.18, Umbriel 0.18, Titania 0.19 and Oberon 0.19, against
 about 0.1 to 0.25 observed (Ariel about 0.23, Umbriel 0.10, Titania 0.17,
 Oberon 0.14; Veverka et al. 1991, Karkoschka 2001, from memory); the
-test asserts 0.08 to 0.35.
+test asserts 0.08 to 0.35. It is a weak validation, which separates
+dark old crusts from bright young ones and no more: the per-moon values
+miss. Miranda comes out 0.31 against about 0.2, Umbriel 0.18 against
+0.10 and Oberon 0.19 against 0.14, while Ariel (0.18 against 0.23) is
+too dark; the law has no term for their carbon-rich non-ice material,
+nor for Umbriel's unusual darkness, and does not order them.
 
 Census, seeds 1 to 40 (min, median, max):
 

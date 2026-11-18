@@ -398,15 +398,20 @@ Their near-black brown is a calibration with those maps as its target.
   30 %, its methane as the half the climate's air keeps over it
   (`SEA_METHANE_SHARE`), and the rest as ethane; the sea freezes at the
   higher of two liquidus: ethane's, an ideal solution's (the
-  Schröder–van Laar equation, with ethane's triple point, 90.4 K, and the
-  2.79 kJ/mol Domalski & Hearing give for melting the solid below its
+  Schröder–van Laar equation, with ethane's triple point, 90.4 K
+  (`ETHANE_TRIPLE_K`), and the 2.79 kJ/mol (`ETHANE_FUSION_L_OVER_R`)
+  Domalski & Hearing give for melting the solid below its
   plastic phase, through NIST), and methane's, a regular solution's
   (methane's enthalpy of fusion, 0.939 kJ/mol, and an interaction
-  `W / R` = 75.3 K calibrated on Richardson's first liquid, which the
+  `W / R` = 75.3 K (`METHANE_EXCESS_W_OVER_R`) calibrated on Richardson's first liquid, which the
   ideal law puts at 64.9 K). It gives 71.5 and 74.5 K for Richardson's
   two liquids (81.3 and 85.0 K before the ethane), about 69 K under
   Titan's 1.45 bar of N₂, about 76 K with no nitrogen (a sea of half
-  ethane), and never below 68 K. It is a simple fit, not the full phase
+  ethane), and never below 67.97 K. That floor is the methane liquidus
+  of the sea's fixed half of methane: the nitrogen dissolved in the sea
+  takes the place of ethane, not of methane, so it lowers the freezing
+  point only by diluting the ethane, until the ethane liquidus falls
+  under methane's (from about 2 bar of N₂). It is a simple fit, not the full phase
   diagram: it does not resolve the solid solutions or the ternary
   eutectic, and the sea's composition is fixed, not tracked. Where nitrogen
   itself condenses (below about 84 K under 2 bar of it), the sea is

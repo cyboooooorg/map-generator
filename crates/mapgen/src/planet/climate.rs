@@ -948,9 +948,14 @@ fn hydrocarbon_freezes_k(nitrogen: f64, ethane: f64) -> f64 {
 /// share the climate's air keeps over it (Raoult's law); the rest is
 /// ethane, which methane's photolysis makes on any methane world (the
 /// model does not track it). Titan's 1.45 bar of N₂ gives 19 % N₂ and
-/// 31 % ethane and a liquid down to 68.7 K (its surface: 93.7 K; 77.6 K
-/// without the ethane); with no nitrogen, half ethane, 76.6 K; the cap
-/// stops the fall at the methane liquidus of half methane, 67.6 K.
+/// 31 % ethane and a liquid down to 68.71 K (its surface: 93.7 K;
+/// 79.41 K without the ethane); with no nitrogen, half ethane, 76.18 K.
+///
+/// The methane share is fixed, so the methane liquidus is a constant
+/// floor, 67.97 K (half methane): the dissolved nitrogen replaces
+/// ethane, not methane, and lowers the freezing point only by diluting
+/// the ethane, until the ethane liquidus falls under that floor (from
+/// about 2 bar of N₂; the [`MAX_NITROGEN_IN_LIQUID`] cap comes later).
 pub fn methane_freezes_k(n2_bar: f64) -> f64 {
     let nitrogen = (NITROGEN_RAOULT_SHARE * n2_bar.max(0.0)
         / nitrogen_vapour_bar(METHANE_TRIPLE_K))

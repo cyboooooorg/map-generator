@@ -324,10 +324,15 @@ pub(crate) fn vents(interior: &Interior, shell: &IceShell, heat: &InternalHeat) 
 }
 
 /// Polar overburden, as a share of [`CRACK_OVERBURDEN_PA`], at and under
-/// which a body vents at full strength ([`vent_strength`]): 0.6.
-/// Calibration on Enceladus, which the plume's fallout is calibrated on
-/// (`albedo::icy_unit_albedo`): the model's Enceladus carries 0.4 to
-/// 0.55 of the threshold at its pole, so it vents in full on every seed.
+/// which a body vents at full strength ([`vent_strength`]): 0.6. Not a
+/// calibration: no body's value is fitted with it. It is a bound set
+/// just above the model's Enceladus, which carries 0.4 to 0.55 of the
+/// threshold at its pole over the seeds of `archetype_census`, so that
+/// Enceladus vents in full on every seed and the plume's fallout,
+/// calibrated on it (`albedo::FALLOUT_SHARE`), applies whole. Any value
+/// from 0.55 to under 1 keeps that; it only sets how fast the vent fades
+/// on the thicker polar shells of other bodies, which no observation
+/// constrains.
 const FULL_VENT_OVERBURDEN: f64 = 0.6;
 
 /// How strongly a body of `interior` making `heat` under the ice shell

@@ -701,7 +701,10 @@ mod tests {
     /// orbits: JPL satellite parameters; ice shares from their densities
     /// (1.2 to 1.7 g/cm³), about half. The band asserted is wide, 0.08
     /// to 0.35: the law has no term for their dark, carbon-rich
-    /// non-ice material, nor for Umbriel's unusual darkness.
+    /// non-ice material, nor for Umbriel's unusual darkness. It separates
+    /// dark old crusts from bright young ones only: the per-moon values
+    /// miss (Miranda 0.31 against about 0.2, Umbriel 0.18 against 0.10,
+    /// Oberon 0.19 against 0.14).
     #[test]
     fn uranian_moons_are_dark() {
         const URANUS_KG: f64 = 8.681e25;
