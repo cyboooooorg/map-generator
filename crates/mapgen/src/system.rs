@@ -3240,6 +3240,19 @@ mod tests {
     use crate::planet::PLANET_CLASSES;
     use crate::rings::RingRole;
 
+    #[test]
+    fn a_named_white_dwarf_is_a_bad_star() {
+        let request = SystemRequest::System(WholeSystemRequest {
+            star: Some("DA".into()),
+            seed: Some(1),
+            ..Default::default()
+        });
+        match draw(&request, &mut StdRng::seed_from_u64(1)) {
+            Err(RequestError::BadStar(m)) => assert!(m.contains("#577"), "{m}"),
+            other => panic!("expected BadStar, got {:?}", other.map(|_| ())),
+        }
+    }
+
     /// Whether `b` is a planet whose world is a giant's.
     pub(super) fn giant(b: &Body) -> bool {
         b.kind == BodyKind::Planet && b.params.giant_mass_earth.is_some()

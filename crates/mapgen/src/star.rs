@@ -191,35 +191,23 @@ pub fn values(code: f32) -> StarValues {
     }
 }
 
-/// Reads a spectral type: a class letter, an optional subtype (0–9.5,
-/// default 5) and an optional luminosity class `V` (`G2V`, `M4.5`, `K`).
-/// Case-insensitive.
+/// Reads a spectral type of a main-sequence dwarf: a class letter, an
+/// optional subtype (0–9.5, default 5) and an optional luminosity class
+/// `V` (`G2V`, `M4.5`, `K`). Case-insensitive.
+///
+/// Other kinds of host (giants, white dwarfs…) are recognised by
+/// [`crate::host::parse_host`] but not modelled yet: they are refused here
+/// with the issue that tracks them.
 pub fn parse_type(text: &str) -> Result<f32, String> {
-    let text = text.trim();
-    let mut chars = text.chars();
-    let class = chars
-        .next()
-        .map(|c| c.to_ascii_uppercase())
-        .and_then(|c| CLASSES.iter().position(|&k| k == c))
-        .ok_or_else(|| format!("spectral type {text:?}: starts with one of O B A F G K M"))?;
-    let rest = chars.as_str();
-    let rest = rest.strip_suffix(['V', 'v']).unwrap_or(rest);
-    let subtype = if rest.is_empty() {
-        5.0
-    } else {
-        rest.parse::<f32>()
-            .ok()
-            .filter(|s| (0.0..10.0).contains(s))
-            .ok_or_else(|| {
-                format!("spectral type {text:?}: the subtype is a number from 0 to 9.5")
-            })?
-    };
-    let code = class as f32 * 10.0 + subtype;
-    if (TYPE_RANGE.0..=TYPE_RANGE.1).contains(&code) {
-        Ok(code)
+    let host = crate::host::parse_host(text)?;
+    if host.kind.available() {
+        Ok(host.code)
     } else {
         Err(format!(
-            "spectral type {text:?}: main-sequence dwarfs go from O3 to M9.5"
+            "spectral type {:?}: {} are not modelled yet (see #{})",
+            text.trim(),
+            host.kind.name(),
+            host.kind.issue().unwrap_or_default()
         ))
     }
 }
@@ -849,6 +837,16 @@ mod tests {
         assert!(parse_type("X2").is_err());
         assert!(parse_type("G12").is_err());
         assert!(parse_type("O1").is_err());
+    }
+
+    #[test]
+    fn unavailable_kinds_name_their_issue() {
+        let e = parse_type("DA").unwrap_err();
+        assert!(
+            e.contains("white dwarfs are not modelled yet") && e.contains("#577"),
+            "{e}"
+        );
+        assert!(parse_type("K3III").unwrap_err().contains("#576"));
     }
 
     #[test]
