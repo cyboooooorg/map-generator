@@ -6,6 +6,7 @@
   import type { InputField } from '../../lib/api/types/InputField';
   import type { Quantity } from '../../lib/api/types/Quantity';
   import Branch from './CauseBranch.svelte';
+  import Glossed from '../Glossed.svelte';
 
   interface Props {
     cause: Cause;
@@ -19,6 +20,7 @@
 
   const name = $derived(t.causes.quantities[cause.quantity]);
   const text = $derived(formatCause(cause, parent));
+  const line = $derived(name ? t.causes.line({ name, value: text }) : text);
   const field = $derived(cause.input ? t.causes.inputs[cause.input] : null);
 </script>
 
@@ -26,11 +28,11 @@
   {#if oninput && cause.input !== null}
     {@const input = cause.input}
     <button type="button" class="input" title={field ? t.causes.inputTitle({ field }) : undefined} onclick={() => oninput(input)}
-      >{name ? t.causes.line({ name, value: text }) : text}</button
+      ><Glossed text={line} inert /></button
     >
   {:else}
     <span class:input={cause.input !== null} title={field ? t.causes.inputTitle({ field }) : undefined}
-      >{name ? t.causes.line({ name, value: text }) : text}</span
+      ><Glossed text={line} /></span
     >
   {/if}
   {#if cause.causes.length > 0}

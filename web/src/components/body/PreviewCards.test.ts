@@ -30,7 +30,7 @@ const cards: [string, Component<any>][] = [
   ['moons', MoonsCard],
 ];
 const html = (card: Component<any>, result: ResolvedSystem) =>
-  render(card, { props: { world: previewSource(result), onRenamed: () => {}, onGenerate: () => {} } }).body;
+  render(card, { props: { world: previewSource(result), onRenamed: () => {}, onGenerate: () => {} } }).body.replace(/<!--.*?-->|<abbr[^>]*>|<\/abbr>/g, '');
 const count = (text: string, part: string) => text.split(part).length - 1;
 
 describe('cards from a resolved body', () => {
@@ -71,7 +71,7 @@ describe('cards from a resolved body', () => {
 describe('input leaves', () => {
   const node = (over: Partial<Cause>): Cause => ({ quantity: 'pressure', value: 1, label: null, input: null, causes: [], ...over });
   const tree = node({ quantity: 'surface_temperature', value: 288, causes: [node({ quantity: 'light_received', value: 1, input: 'insolation' })] });
-  const out = (oninput?: ((field: InputField) => void) | undefined) => render(CauseTree, { props: { tree, open: true, ontoggle: () => {}, oninput } }).body;
+  const out = (oninput?: ((field: InputField) => void) | undefined) => render(CauseTree, { props: { tree, open: true, ontoggle: () => {}, oninput } }).body.replace(/<!--.*?-->/g, '');
 
   it('is a button when oninput is set', () => {
     const set = out(() => {});

@@ -760,7 +760,6 @@ export const fr: Messages = {
     random: 'au hasard',
     model: {
       /** What the mass units say when hovered. */
-      massUnits: { earth: 'masses terrestres (5,97×10²¹ t)', jupiter: 'masses de Jupiter (317,8 masses terrestres)' },
       groups: {
         orbit: { title: 'Forme de l’orbite et âge', help: 'À quel point l’orbite est allongée, et l’âge de l’étoile qu’elle contourne.' },
         composition: { title: 'De quoi elle est faite', help: `Masse, fer, eau et gaz${S}: les ingrédients qui fixent sa taille, sa gravité et son air.` },
@@ -994,6 +993,8 @@ export const fr: Messages = {
     screenshot: 'Capture',
     screenshotHelp: 'Enregistrer la vue en PNG (P)',
     shortcutsHelp: 'Raccourcis clavier (?)',
+    units: 'Unités',
+    unitsHelp: 'Ce que signifient les unités de l’interface (I)',
     display: 'Affichage',
     hide: 'Masquer',
     globe: 'Globe',
@@ -1318,8 +1319,9 @@ export const fr: Messages = {
     elevationContours: 'Courbes de niveau',
     measure: 'Mesurer des distances',
     screenshot: 'Capture',
-    escape: 'Fermer cette aide ou le panneau du point, arrêter la mesure',
+    escape: 'Fermer cette aide, les unités ou le panneau du point, arrêter la mesure',
     help: 'Cette aide',
+    units: 'Les unités',
   },
   epochs: {
     slider: 'Époque',
@@ -1597,6 +1599,148 @@ export const fr: Messages = {
     g: {
       name: `g${S}: gravité de surface, 1${S}g est celle de la Terre (9,81${S}m/s²)`,
       examples: `Lune${S}: 0,17 · Mars${S}: 0,38 · Terre${S}: 1`,
+    },
+    Gyr: {
+      name: `Gyr${S}: un milliard d’années, comme Ga (10⁹ ans)`,
+      examples: `Terre${S}: 4,5${S}Gyr · le Soleil${S}: 4,6${S}Gyr`,
+    },
+    K: {
+      name: `K${S}: kelvin, température comptée depuis le zéro absolu (°C = K − 273,15)`,
+      examples: `0${S}K${S}: zéro absolu · 93,7${S}K${S}: Titan · 255${S}K${S}: la Terre sans effet de serre · 288${S}K${S}: la Terre`,
+    },
+    UA: {
+      name: `UA${S}: unité astronomique, la distance moyenne de la Terre au Soleil`,
+      examples: `Mercure${S}: 0,39 · Terre${S}: 1 · Mars${S}: 1,52`,
+    },
+    'R☉': {
+      name: `R☉${S}: le rayon du Soleil (696${S}000${S}km)`,
+      examples: `naines rouges${S}: 0,1 à 0,6 · le Soleil${S}: 1 · Sirius${S}: 1,7`,
+    },
+    'M⊕': {
+      name: `M⊕${S}: la masse de la Terre (6 × 10²⁴${S}kg)`,
+      examples: `Lune${S}: 0,012 · Mars${S}: 0,107 · Terre${S}: 1 · Neptune${S}: 17`,
+    },
+    'R⊕': {
+      name: `R⊕${S}: le rayon de la Terre (6${S}371${S}km)`,
+      examples: `Lune${S}: 0,27 · Mars${S}: 0,53 · Terre${S}: 1 · Neptune${S}: 3,9`,
+    },
+    'M♃': {
+      name: `M♃${S}: la masse de Jupiter (318${S}M⊕)`,
+      examples: `Saturne${S}: 0,30 · Jupiter${S}: 1 · naines brunes${S}: 13 à 80`,
+    },
+    'M☉': {
+      name: `M☉${S}: la masse du Soleil (333${S}000${S}M⊕)`,
+      examples: `naines rouges${S}: 0,08 à 0,6 · le Soleil${S}: 1 · Sirius${S}: 2,1`,
+    },
+    RJ: {
+      name: `RJ${S}: le rayon de Jupiter (71${S}492${S}km, 11,2${S}R⊕)`,
+      examples: `Saturne${S}: 0,84 · Jupiter${S}: 1 · Jupiters chauds${S}: 1 à 1,8`,
+    },
+    'g/cm³': {
+      name: `g/cm³${S}: grammes par centimètre cube, une masse volumique`,
+      examples: `eau${S}: 1 · Saturne${S}: 0,69 · Lune${S}: 3,34 · Terre${S}: 5,51`,
+    },
+    'S⊕': {
+      name: `S⊕${S}: la lumière que reçoit une planète, 1${S}S⊕ est ce que la Terre reçoit du Soleil`,
+      examples: `Mars${S}: 0,43 · Terre${S}: 1 · Vénus${S}: 1,9`,
+    },
+    'W/m²': {
+      name: `W/m²${S}: watts par mètre carré, la puissance de la lumière ou de la chaleur sur une surface`,
+      examples: `lumière du Soleil sur Terre${S}: 1${S}361 en haut de l’air · Mars${S}: 586`,
+    },
+    µT: {
+      name: `µT${S}: microtesla, l’intensité d’un champ magnétique`,
+      examples: `la Terre au sol${S}: 25 à 65 · un aimant de frigo${S}: 5${S}000`,
+    },
+    'm/s²': {
+      name: `m/s²${S}: mètres par seconde carrée, une accélération${S}; la gravité en est une`,
+      examples: `gravité de la Terre${S}: 9,81 · Lune${S}: 1,62 · Mars${S}: 3,71`,
+    },
+    'mm/s²': {
+      name: `mm/s²${S}: millimètres par seconde carrée, une très petite accélération (1${S}m/s² = 1${S}000${S}mm/s²)`,
+      examples: `attraction de marée de la Lune sur la Terre${S}: environ 1`,
+    },
+    km: {
+      name: `km${S}: kilomètre, 1${S}000 mètres`,
+      examples: `rayon de la Terre${S}: 6${S}371 · Terre–Lune${S}: 384${S}000`,
+    },
+    'km²': {
+      name: `km²${S}: kilomètre carré, une surface`,
+      examples: `France${S}: 550${S}000 · océans de la Terre${S}: 361 millions`,
+    },
+    'M km²': {
+      name: `M${S}km²${S}: million de kilomètres carrés, une surface`,
+      examples: `terres de la Terre${S}: 149 · Mars${S}: 145 · Australie${S}: 7,7`,
+    },
+    'km/s': {
+      name: `km/s${S}: kilomètres par seconde, une vitesse`,
+      examples: `la Terre autour du Soleil${S}: 30 · libération depuis la Terre${S}: 11,2`,
+    },
+    TW: {
+      name: `TW${S}: térawatt, mille milliards de watts`,
+      examples: `consommation de l’humanité${S}: environ 19 · lumière du Soleil sur Terre${S}: 174${S}000`,
+    },
+    GW: {
+      name: `GW${S}: gigawatt, un milliard de watts`,
+      examples: `un réacteur nucléaire${S}: 1 · volcanisme d’Io${S}: 100${S}000`,
+    },
+    MW: {
+      name: `MW${S}: mégawatt, un million de watts`,
+      examples: `une éolienne${S}: 3 · un TGV${S}: 9`,
+    },
+    W: {
+      name: `W${S}: watt, une unité de puissance`,
+      examples: `une ampoule${S}: 10 · le Soleil${S}: 3,8 × 10²⁶`,
+    },
+  },
+  /** Names of the formulas and units the interface prints, for tooltips. */
+  glossary: {
+    formulas: {
+      'CO₂': 'dioxyde de carbone',
+      'N₂': 'diazote',
+      'O₂': 'dioxygène',
+      'CH₄': 'méthane',
+      'C₂H₆': 'éthane',
+      'H₂O': 'eau',
+      'NH₃': 'ammoniac',
+      'SO₂': 'dioxyde de soufre',
+      'H₂': 'dihydrogène',
+      'H₂/He': 'hydrogène et hélium',
+    },
+    notations: {
+      '[Fe/H]': `métallicité${S}: abondance du fer rapportée au Soleil (échelle logarithmique)`,
+    },
+    units: {
+      'M⊕': 'masse terrestre',
+      'R⊕': 'rayon terrestre',
+      'M♃': 'masse de Jupiter',
+      'L☉': 'luminosité solaire',
+      'R☉': 'rayon solaire',
+      'M☉': 'masse solaire',
+      RJ: `RJ${S}: rayon de Jupiter`,
+      'g/cm³': `grammes par centimètre cube${S}: masse volumique`,
+      'S⊕': `insolation terrestre${S}: le flux stellaire reçu par la Terre`,
+      'W/m²': `watts par mètre carré${S}: puissance par surface`,
+      'µT': `microtesla${S}: champ magnétique`,
+      'm/s²': `mètres par seconde carrée${S}: accélération`,
+      'mm/s²': `millimètres par seconde carrée${S}: accélération`,
+      '°C': `degrés Celsius${S}: température`,
+      bar: `bar${S}: pression`,
+      K: `kelvin${S}: température depuis le zéro absolu`,
+      g: `g${S}: gravité de surface`,
+      Ga: `Ga${S}: milliard d’années`,
+      Ma: `Ma${S}: million d’années`,
+      Gyr: `Gyr${S}: milliard d’années`,
+      AU: `AU${S}: unité astronomique, distance Terre-Soleil`,
+      UA: `UA${S}: unité astronomique, distance Terre-Soleil`,
+      km: `kilomètre${S}: distance`,
+      'km²': `kilomètre carré${S}: surface`,
+      'km/s': `kilomètres par seconde${S}: vitesse`,
+      TW: `térawatt${S}: puissance`,
+      GW: `gigawatt${S}: puissance`,
+      MW: `mégawatt${S}: puissance`,
+      W: `watt${S}: puissance`,
+      'M km²': `million de kilomètres carrés${S}: surface`,
     },
   },
   loading: {

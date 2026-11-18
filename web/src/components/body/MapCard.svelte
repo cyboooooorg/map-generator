@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from '../Glossed.svelte';
   // The generated map: its seed and archetype, when it was made, and what to
   // do with it: generate it again, vary it, copy its command or link, delete
   // it, download its files.
@@ -71,10 +72,10 @@
 
 {#if meta}
   <dl class="facts">
-    <dt>{t.worldInfo.seed}</dt>
+    <dt><Glossed text={t.worldInfo.seed} /></dt>
     <dd>{meta.seed}</dd>
     {#if revision}
-      <dt>{t.worldInfo.generated}</dt>
+      <dt><Glossed text={t.worldInfo.generated} /></dt>
       <dd title={new Date(revision).toLocaleString(getLocale())}>{formatAgo(revision)}</dd>
     {/if}
   </dl>
@@ -86,7 +87,7 @@
     <button type="button" class="danger" onclick={onDelete}>{t.worldInfo.delete}</button>
   </div>
   <div class="downloads">
-    <span>{t.worldInfo.download}</span>
+    <span><Glossed text={t.worldInfo.download} /></span>
     {#if id && size}
       <a href={worldFile(id, size, 'world.png', world.revision)} download={`${id}.png`}>{t.worldInfo.mapPng}</a>
       <a href={worldFile(id, size, 'legend.png', world.revision)} download={`${id}-legend.png`}>{t.worldInfo.legend}</a>

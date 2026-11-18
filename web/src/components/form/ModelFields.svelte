@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from '../Glossed.svelte';
   // Every input of the planet model a lone world takes, in folded groups. A
   // field is drawn (the value the seed drew is shown, greyed) or pinned (a
   // slider and a number box on its scale, with the Solar System's values to
@@ -17,7 +18,7 @@
   import { archetypeName } from '../../lib/i18n/names.svelte';
   import { waterDepthKm, waterShare } from '../../lib/waterAmount';
   import { massNote } from '../../lib/massFormat';
-  import MassUnits from '../MassUnits.svelte';
+  
   import MarkedSlider, { type SliderMark } from './MarkedSlider.svelte';
   import { type DrawnValues, type ModelValues, PIN_DEFAULTS, pinnedCount } from '../../lib/modelRequest';
   import { fromPosition, fromShown, SLIDER_STEPS, toPosition, toShown } from '../../lib/modelScale';
@@ -117,17 +118,17 @@
     {@const count = pinnedCount(values, group.fields)}
     <details open={open.has(group.id)} ontoggle={(e) => toggleGroup(group.id, e.currentTarget.open)} class="group" data-group={group.id}>
       <summary>
-        <span class="title">{t.form.model.groups[group.id].title}</span>
-        <span class="count" class:some={count > 0}>{count > 0 ? t.form.model.groupSet({ count }) : t.form.model.groupDrawn}</span>
+        <span class="title"><Glossed text={t.form.model.groups[group.id].title} inert /></span>
+        <span class="count" class:some={count > 0}><Glossed text={count > 0 ? t.form.model.groupSet({ count }) : t.form.model.groupDrawn} inert /></span>
       </summary>
-      <p class="help">{t.form.model.groups[group.id].help}</p>
+      <p class="help"><Glossed text={t.form.model.groups[group.id].help} /></p>
       {#each group.fields as key (key)}
         {@const text = t.form.model[key]}
         {@const unused = isUnused(key)}
         {@const entry = values[key]}
         <div class="field" id={`model-${key}`} class:unused class:pinned={!entry.random}>
           <div class="head">
-            <span class="name"><strong>{text.label}</strong> <span class="term">{text.term}</span></span>
+            <span class="name"><strong><Glossed text={text.label} /></strong> <span class="term"><Glossed text={text.term} /></span></span>
             {#if key !== 'life'}
               <label class="pin" title={t.form.model.setHelp}>
                 <input type="checkbox" checked={!entry.random} onchange={(e) => pin(key, e.currentTarget.checked)} aria-label={`${text.label}: ${t.form.model.set}`} />
@@ -136,7 +137,7 @@
             {/if}
           </div>
           {#if unused}
-            <p class="note">{t.form.model.notUsed}</p>
+            <p class="note"><Glossed text={t.form.model.notUsed} /></p>
           {:else}
             <p class="drives"><span aria-hidden="true">→</span> <span class="visually-hidden">{t.form.model.driveLabel}:</span> {driveText(key)}</p>
           {/if}
@@ -157,14 +158,14 @@
               {/each}
             </div>
             {#if entry.random && typeof drawn?.life === 'boolean'}
-              <p class="drawn">{t.form.model.lifeDrawnValue({ arose: drawn.life })}</p>
+              <p class="drawn"><Glossed text={t.form.model.lifeDrawnValue({ arose: drawn.life })} /></p>
             {/if}
           {:else}
             {@const limits = limitsOf(key, spec)}
             {#if entry.random}
               <p class="drawn">
                 {#if typeof drawn?.[key] === 'number'}
-                  <MassUnits text={t.form.model.drawnValue({ value: fieldValueText(key, drawn[key] as number) })} />
+                  <Glossed text={t.form.model.drawnValue({ value: fieldValueText(key, drawn[key] as number) })} />
                 {:else}
                   {t.form.model.drawn}: {t.form.model.drawnUnknown}
                 {/if}
@@ -190,28 +191,28 @@
                   oninput={(e) => setValue(key, fromShown(key, e.currentTarget.valueAsNumber))}
                   aria-label={`${text.label} (${text.unit})`}
                 />
-                <span class="unit"><MassUnits text={text.unit} /></span>
+                <span class="unit"><Glossed text={text.unit} /></span>
               </div>
               {#if key === 'mass_earth'}
-                <p class="mass-note"><MassUnits text={`(${massNote(numeric(key))})`} /></p>
+                <p class="mass-note"><Glossed text={`(${massNote(numeric(key))})`} /></p>
               {/if}
             {/if}
           {/if}
-          <p class="unit-help"><MassUnits text={text.unitHelp} /></p>
+          <p class="unit-note"><Glossed text={text.unitHelp} /></p>
           {#if key === 'age_gyr' && archetypeSetsAge !== null}
-            <p class="unit-help age-set">{formatUpTo(archetypeSetsAge, 3)} {text.unit} · {t.form.model.ageSetBy({ name: ageName })}</p>
+            <p class="unit-note age-set"><Glossed text={`${formatUpTo(archetypeSetsAge, 3)} ${text.unit} · ${t.form.model.ageSetBy({ name: ageName })}`} /></p>
             {#if ageDiffers}
-              <p class="warning" role="status">{t.form.model.ageWarning({ name: ageName, age: formatUpTo(archetypeSetsAge, 3) })}</p>
+              <p class="warning" role="status"><Glossed text={t.form.model.ageWarning({ name: ageName, age: formatUpTo(archetypeSetsAge, 3) })} /></p>
             {/if}
           {/if}
           {#if key === 'water_oceans' && waterLines}
-            <p class="unit-help water-amount">{waterLines.join(' · ')}</p>
+            <p class="unit-note water-amount"><Glossed text={waterLines.join(' · ')} /></p>
           {/if}
           {#if referencesLine(key, spec)}
-            <p class="unit-help references">{referencesLine(key, spec)}</p>
+            <p class="unit-note references"><Glossed text={referencesLine(key, spec)} /></p>
           {/if}
           {#if refusal && refusedField === key}
-            <p class="error" role="alert">{detailText(refusal)}</p>
+            <p class="error" role="alert"><Glossed text={detailText(refusal)} /></p>
           {/if}
         </div>
       {/each}
@@ -248,7 +249,7 @@
     color: var(--link);
   }
   .help,
-  .unit-help,
+  .unit-note,
   .note {
     margin: 2px 0 0;
     color: var(--muted);

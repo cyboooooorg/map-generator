@@ -10,7 +10,7 @@
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import type { StarActivity } from '../lib/api/types/StarActivity';
   import { formatAge, formatAu, formatCelsius, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
-  import { unitTooltip } from '../lib/units';
+  import Glossed from './Glossed.svelte';
   import type { Moon } from '../lib/api/types/Moon';
   import type { Giant } from '../lib/api/types/Giant';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
@@ -814,80 +814,80 @@
 {/if}
 </div>
 {#snippet starPanel()}
-  <p class="heading"><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></p>
+  <p class="heading"><strong><Glossed text={t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })} /></strong></p>
   <dl>
-    <dt title={t.starView.temperatureHelp}>{t.starView.temperature}</dt>
-    <dd>{withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')}</dd>
-    <dt title={t.starView.luminosityHelp}>{t.starView.luminosity}</dt>
-    <dd class="unit-help" title={unitTooltip('L☉')}>{withUnit(formatUpTo(star.luminosity, star.luminosity < 0.01 ? 4 : 2), 'L☉')}</dd>
-    <dt title={t.starView.sizeHelp}>{t.starView.size}</dt>
+    <dt title={t.starView.temperatureHelp}><Glossed text={t.starView.temperature} /></dt>
+    <dd><Glossed text={withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')} /></dd>
+    <dt title={t.starView.luminosityHelp}><Glossed text={t.starView.luminosity} /></dt>
+    <dd><Glossed text={withUnit(formatUpTo(star.luminosity, star.luminosity < 0.01 ? 4 : 2), 'L☉')} /></dd>
+    <dt title={t.starView.sizeHelp}><Glossed text={t.starView.size} /></dt>
     <dd>
-      {t.starView.sizeValue({
+      <Glossed text={t.starView.sizeValue({
         radius: withUnit(formatUpTo(star.radius, 2), 'R☉'),
         mass: withUnit(formatUpTo(star.mass, 2), 'M☉'),
-      })}
+      })} />
     </dd>
-    <dt title={t.starView.metallicityHelp}>{t.starView.metallicity}</dt>
+    <dt title={t.starView.metallicityHelp}><Glossed text={t.starView.metallicity} /></dt>
     <dd>
-      {t.starView.metallicityValue({
+      <Glossed text={t.starView.metallicityValue({
         dex: `${star.metallicity >= 0 ? '+' : ''}${formatUpTo(star.metallicity, 2)}`,
         ratio: `${formatUpTo(10 ** star.metallicity, 2)}×`,
-      })}
+      })} />
     </dd>
-    <dt title={t.starView.lifetimeHelp}>{t.starView.lifetime}</dt>
-    <dd>{withUnit(formatUpTo(star.lifetime_gyr, star.lifetime_gyr < 10 ? 1 : 0), t.starView.gyr)}</dd>
-    <dt title={t.starView.ageHelp}>{t.starView.age}</dt>
-    <dd>{formatAge(star.age_gyr)}</dd>
+    <dt title={t.starView.lifetimeHelp}><Glossed text={t.starView.lifetime} /></dt>
+    <dd><Glossed text={withUnit(formatUpTo(star.lifetime_gyr, star.lifetime_gyr < 10 ? 1 : 0), t.starView.gyr)} /></dd>
+    <dt title={t.starView.ageHelp}><Glossed text={t.starView.age} /></dt>
+    <dd><Glossed text={formatAge(star.age_gyr)} /></dd>
     <dt title={t.starView.zoneHelp}><span class="swatch zone"></span>{t.starView.zone}</dt>
     <dd>
-      {t.starView.range({
+      <Glossed text={t.starView.range({
         inner: formatAu(star.hz_inner_au),
         outer: formatAu(star.hz_outer_au),
-      })}
+      })} />
     </dd>
   </dl>
   {#if selected !== null && !realScale}
-    <small class="muted">{t.starView.systemScale}</small>
+    <small class="muted"><Glossed text={t.starView.systemScale} /></small>
   {:else}
-    <small class="muted">{t.starView.schematic}</small>
+    <small class="muted"><Glossed text={t.starView.schematic} /></small>
   {/if}
   {#if compressed && selected === null && giants}
-    <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
+    <small class="muted"><Glossed text={t.starView.compressed({ distance: formatAu(compressFrom) })} /></small>
   {/if}
 {/snippet}
 {#snippet planetPanel()}
   {#if selected === -1}
-    <p class="muted hint">{t.starView.pickHint}</p>
+    <p class="muted hint"><Glossed text={t.starView.pickHint} /></p>
   {:else}
   <dl>
     <dt title={t.starView.orbitHelp}><span class="swatch orbit"></span>{t.worldInfo.orbit}</dt>
-    <dd class="unit-help" title={unitTooltip('AU')}>{formatOrbit(star)}</dd>
-    <dt title={t.starView.eccentricityHelp}>{t.worldInfo.eccentricity}</dt>
-    <dd>{formatEccentricity(star)}</dd>
-    <dt title={t.starView.speedHelp}>{t.starView.speed}</dt>
-    <dd>{speedText}</dd>
-    <dt>{t.worldInfo.year}</dt>
-    <dd>{formatYear(star.year_days)}</dd>
-    <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
-    <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
+    <dd><Glossed text={formatOrbit(star)} /></dd>
+    <dt title={t.starView.eccentricityHelp}><Glossed text={t.worldInfo.eccentricity} /></dt>
+    <dd><Glossed text={formatEccentricity(star)} /></dd>
+    <dt title={t.starView.speedHelp}><Glossed text={t.starView.speed} /></dt>
+    <dd><Glossed text={speedText} /></dd>
+    <dt><Glossed text={t.worldInfo.year} /></dt>
+    <dd><Glossed text={formatYear(star.year_days)} /></dd>
+    <dt title={t.starView.equilibriumHelp}><Glossed text={t.starView.equilibrium} /></dt>
+    <dd><Glossed text={withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')} /></dd>
     {#if selected !== null && selected >= 0 && planets?.[selected]?.surface_k != null}
-      <dt>{t.starView.surfaceTemperature}</dt>
-      <dd>{formatCelsius(planets[selected]!.surface_k!)}</dd>
+      <dt><Glossed text={t.starView.surfaceTemperature} /></dt>
+      <dd><Glossed text={formatCelsius(planets[selected]!.surface_k!)} /></dd>
     {/if}
   </dl>
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->
-    <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
+    <small class="muted"><Glossed text={t.starView.circular({ distance: formatAu(star.orbit_au) })} /></small>
   {/if}
   {/if}
 {/snippet}
 {#snippet planetsPanel()}
-  <h4 title={t.starView.giantsHelp}>{kinds ? t.starView.planets : t.starView.giantsSection}</h4>
+  <h4 title={t.starView.giantsHelp}><Glossed text={kinds ? t.starView.planets : t.starView.giantsSection} /></h4>
   {#if giantSystem === null}
-    <small class="muted">{t.starView.giantsOff}</small>
+    <small class="muted"><Glossed text={t.starView.giantsOff} /></small>
   {:else}
     {#if giantList.length === 0}
-      <small class="muted">{t.starView.noGiants}</small>
+      <small class="muted"><Glossed text={t.starView.noGiants} /></small>
     {:else}
       <ul class="giants">
         {#each giantList as giant, i (i)}
@@ -924,9 +924,9 @@
       </ul>
     {/if}
     {#if selected !== null}
-      <h4 title={t.starView.smallBodiesHelp}>{t.starView.smallBodies}</h4>
+      <h4 title={t.starView.smallBodiesHelp}><Glossed text={t.starView.smallBodies} /></h4>
       {#if belts.length === 0}
-        <small class="muted">{t.starView.noSmallBodies}</small>
+        <small class="muted"><Glossed text={t.starView.noSmallBodies} /></small>
       {/if}
       <ul class="small-bodies">
         {#each belts as belt, k (k)}
@@ -937,23 +937,23 @@
               range: beltRange(belt),
               mass: formatUpTo(belt.mass_earth, belt.mass_earth < 0.01 ? 6 : 3),
               composition: t.starView.beltCompositions[belt.composition] ?? belt.composition,
-            })}{#if shaper}<br /><small class="muted">{t.starView.beltShaped({ planet: shaper.name })}</small>{/if}{#if belt.gaps.length > 0}<br /><small
-                class="muted">{t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })}</small
+            })}{#if shaper}<br /><small class="muted"><Glossed text={t.starView.beltShaped({ planet: shaper.name })} /></small>{/if}{#if belt.gaps.length > 0}<br /><small
+                class="muted"><Glossed text={t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })} /></small
               >{/if}
           </li>
         {/each}
         {#each planets ?? [] as planet (planet.id)}
           {#if planet.trojans && planet.trojans.l4 + planet.trojans.l5 > 0}
-            <li>{t.starView.trojansRow({ planet: planet.name, l4: formatInt(planet.trojans.l4), l5: formatInt(planet.trojans.l5) })}</li>
+            <li><Glossed text={t.starView.trojansRow({ planet: planet.name, l4: formatInt(planet.trojans.l4), l5: formatInt(planet.trojans.l5) })} /></li>
           {/if}
         {/each}
       </ul>
     {/if}
     <dl>
-      <dt title={t.starView.forcedHelp}>{t.starView.forced}</dt>
-      <dd>{formatUpTo(giantSystem.forced_eccentricity, 3)}</dd>
-      <dt title={t.starView.impactsHelp}>{t.starView.impacts}</dt>
-      <dd>{t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })}</dd>
+      <dt title={t.starView.forcedHelp}><Glossed text={t.starView.forced} /></dt>
+      <dd><Glossed text={formatUpTo(giantSystem.forced_eccentricity, 3)} /></dd>
+      <dt title={t.starView.impactsHelp}><Glossed text={t.starView.impacts} /></dt>
+      <dd><Glossed text={t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })} /></dd>
     </dl>
   {/if}
 {/snippet}

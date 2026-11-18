@@ -5,7 +5,7 @@
   import { t } from '../../lib/i18n/index.svelte';
   import { atmosphereLine } from '../../lib/planetCard';
   import { formatAtmosphere, formatInt, formatSurfaceTemperature, withUnit } from '../../lib/format';
-  import { unitTooltip } from '../../lib/units';
+  import Glossed from '../Glossed.svelte';
   import CauseTree from './CauseTree.svelte';
   import { treeFor } from '../../lib/causes';
   import type { Quantity } from '../../lib/api/types/Quantity';
@@ -38,41 +38,41 @@
 {#if body}
   <dl class="facts">
     {#if giant}
-      <dt title={t.worldInfo.giantCloudsHelp}>{t.worldInfo.giantClouds}</dt>
-      <dd>{t.starView.cloudClasses[giant.class] ?? ''} · {withUnit(formatInt(giant.effective_k), 'K')}</dd>
-      <dt title={t.worldInfo.giantWindsHelp}>{t.worldInfo.giantWinds}</dt>
+      <dt title={t.worldInfo.giantCloudsHelp}><Glossed text={t.worldInfo.giantClouds} /></dt>
+      <dd><Glossed text={`${t.starView.cloudClasses[giant.class] ?? ''} · ${withUnit(formatInt(giant.effective_k), 'K')}`} /></dd>
+      <dt title={t.worldInfo.giantWindsHelp}><Glossed text={t.worldInfo.giantWinds} /></dt>
       <dd>
-        {t.worldInfo.giantWindsValue({
+        <Glossed text={t.worldInfo.giantWindsValue({
           jets: giant.jets,
           west: withUnit(formatInt(giant.wind_west), 'm/s'),
           east: withUnit(formatInt(giant.wind_east), 'm/s'),
-        })}
+        })} />
       </dd>
       {#if giant.great_spot}
-        <dt>{t.cards.spot}</dt>
-        <dd>{giant.kind === 'ice' ? t.worldInfo.darkSpot : t.worldInfo.greatSpot}</dd>
+        <dt><Glossed text={t.cards.spot} /></dt>
+        <dd><Glossed text={giant.kind === 'ice' ? t.worldInfo.darkSpot : t.worldInfo.greatSpot} /></dd>
       {/if}
-      <dt title={t.worldInfo.polesHelp}>{t.worldInfo.poles}</dt>
+      <dt title={t.worldInfo.polesHelp}><Glossed text={t.worldInfo.poles} /></dt>
       <dd>
-        {t.worldInfo.polesValue({
+        <Glossed text={t.worldInfo.polesValue({
           north: t.worldInfo.pole({ style: giant.poles[0], cyclones: giant.polar_cyclones[0] }),
           south: t.worldInfo.pole({ style: giant.poles[1], cyclones: giant.polar_cyclones[1] }),
-        })}
+        })} />
       </dd>
     {:else}
       {#if air || meta}
-        <dt>{t.cards.pressure}</dt>
-        <dd><span class="unit-help" title={unitTooltip('bar')}>{air ?? (meta ? formatAtmosphere(meta) : '')}</span><CauseTree tree={treeFor(explanation, 'pressure')} open={open === 'pressure'} ontoggle={toggle('pressure')} {oninput} /></dd>
+        <dt><Glossed text={t.cards.pressure} /></dt>
+        <dd><Glossed text={air ?? (meta ? formatAtmosphere(meta) : '')} /><CauseTree tree={treeFor(explanation, 'pressure')} open={open === 'pressure'} ontoggle={toggle('pressure')} {oninput} /></dd>
       {/if}
       {#if temperature}
-        <dt>{t.card.surfaceTemperature}</dt>
-        <dd>{temperature}<CauseTree tree={treeFor(explanation, 'surface_temperature')} open={open === 'surface_temperature'} ontoggle={toggle('surface_temperature')} {oninput} /></dd>
+        <dt><Glossed text={t.card.surfaceTemperature} /></dt>
+        <dd><Glossed text={temperature} /><CauseTree tree={treeFor(explanation, 'surface_temperature')} open={open === 'surface_temperature'} ontoggle={toggle('surface_temperature')} {oninput} /></dd>
       {/if}
       {#if surface}
-        <dt>{t.cards.liquid}</dt>
-        <dd>{t.cards.liquids[surface.climate.liquid]}<CauseTree tree={treeFor(explanation, 'liquid')} open={open === 'liquid'} ontoggle={toggle('liquid')} {oninput} /></dd>
-        <dt>{t.cards.life}</dt>
-        <dd>{surface.life.oxygenated ? t.cards.lifeOxygenated : surface.life.arose ? t.cards.lifeArose : t.cards.lifeNone}</dd>
+        <dt><Glossed text={t.cards.liquid} /></dt>
+        <dd><Glossed text={t.cards.liquids[surface.climate.liquid]} /><CauseTree tree={treeFor(explanation, 'liquid')} open={open === 'liquid'} ontoggle={toggle('liquid')} {oninput} /></dd>
+        <dt><Glossed text={t.cards.life} /></dt>
+        <dd><Glossed text={surface.life.oxygenated ? t.cards.lifeOxygenated : surface.life.arose ? t.cards.lifeArose : t.cards.lifeNone} /></dd>
       {/if}
     {/if}
   </dl>

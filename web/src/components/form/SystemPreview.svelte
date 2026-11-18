@@ -8,7 +8,7 @@
   import { formatAge, formatAu, formatStar, formatUpTo } from '../../lib/format';
   import { formatMassWithNote } from '../../lib/massFormat';
   import type { System } from '../../lib/api/types/System';
-  import MassUnits from '../MassUnits.svelte';
+  import Glossed from '../Glossed.svelte';
   import StarDot from './StarDot.svelte';
 
   /** The archetypes asked that set the system's age (see archetypeAge.ts), named on the star line. */
@@ -25,9 +25,9 @@
     <h4>{text.star}</h4>
     <p class="star">
       <StarDot colour={starDotColour(system.star.type)} label={system.star.type} />
-      <strong>{formatStar(info)}</strong>
+      <strong><Glossed text={formatStar(info)} /></strong>
     </p>
-    <p class="muted">{text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}{ageSources.length > 0 ? ` ${text.ageSetBy({ names: ageSources.join(', ') })}` : ''}</p>
+    <p class="muted"><Glossed text={`${text.starLine({ age: formatAge(info.age_gyr), metallicity: formatUpTo(system.star.metallicity, 2) })}${ageSources.length > 0 ? ` ${text.ageSetBy({ names: ageSources.join(', ') })}` : ''}`} /></p>
   </section>
   <section aria-label={text.planets}>
     <h4>{text.planets}</h4>
@@ -49,8 +49,8 @@
             <tr>
               <th scope="row">{body.designation}</th>
               <td>{classLabel(body.type, body.model)}</td>
-              <td><MassUnits text={formatMassWithNote(body.physical.mass_earth)} /></td>
-              <td>{formatAu(body.orbit.semi_major_axis_au)}</td>
+              <td><Glossed text={formatMassWithNote(body.physical.mass_earth)} /></td>
+              <td><Glossed text={formatAu(body.orbit.semi_major_axis_au)} /></td>
               <td>{moonsOf(body.id)}</td>
             </tr>
           {/each}
