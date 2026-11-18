@@ -2819,9 +2819,12 @@
       {/if}
     </div>
   {/if}
-  {#if world.subject === 'star'}
+  {#if world.systemId && !world.system && !world.error}
+    <!-- A system being fetched: a neutral cue, in the star view too. -->
+    <p class="overlay">{t.viewer.loading}</p>
+  {:else if world.subject === 'star'}
     <!-- The star view needs no world and no maps to wait for: a system with no planet shows its star alone. -->
-  {:else if !worldId && !sysBody}
+  {:else if !world.systemId && !worldId && !sysBody}
     <p class="overlay">{t.viewer.noWorld}</p>
   {:else if sysBody?.generated === false}
     <!-- A body not generated yet: no maps to wait for. -->

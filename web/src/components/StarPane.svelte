@@ -970,7 +970,7 @@
   <div class="toggles">
     <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
   </div>
-  <Dock kind="star" panels={dockPanels} defaultActive="star" />
+  <Dock kind="star" panels={dockPanels} defaultActive="star" knownIds={["planet"]} />
   <PlaybackBar
     bind:playing={animated}
     speed={selected !== null
