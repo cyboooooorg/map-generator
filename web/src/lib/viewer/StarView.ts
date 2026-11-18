@@ -1840,7 +1840,10 @@ export class StarView {
     this.frames.measure(this.renderer.getContext(), this.draw);
     this.onAxes(axesOnScreen(this.camera.quaternion));
     const giantsShown = this.giantsOn && this.giants.length > 0;
-    if ((this.distancesOn || giantsShown) && this.info) {
+    // The star's pin and the frost line carry their own labels, so a system
+    // with no planet still labels them without Distances.
+    const pinShown = this.starPinLine !== null && this.pinGroup.visible;
+    if ((this.distancesOn || giantsShown || pinShown || this.frost.visible) && this.info) {
       // The zone's edges are labelled across the apsides line, away from
       // the periapsis and apoapsis labels.
       const edge = (au: number) => this.screen(this.zoneEdge(au));
@@ -1850,7 +1853,7 @@ export class StarView {
       this.onLabels({
         planet: planet && { ...planet, au: this.planetAu },
         // A planetary system labels the selected planet as the others.
-        self: on || this.selected !== null ? null : this.screen(this.planet.position),
+        self: on || !giantsShown || this.selected !== null ? null : this.screen(this.planet.position),
         periapsis: on && this.orbitOn && anyPlanet ? this.screen(this.apsides[0]!.position) : null,
         apoapsis: on && this.orbitOn && anyPlanet ? this.screen(this.apsides[1]!.position) : null,
         inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
@@ -1863,7 +1866,7 @@ export class StarView {
                 this.giantMarkers.map((m) => m.position),
               )
             : null,
-        starPin: this.starPinLine ? this.screen(new Vector3(0, PIN_HEIGHT, 0)) : null,
+        starPin: pinShown ? this.screen(new Vector3(0, PIN_HEIGHT, 0)) : null,
         frost: this.frost.visible
           ? (() => {
               const at = this.screen(this.inPlaneAt(-Math.PI / 2, this.frostAu));
