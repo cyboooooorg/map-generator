@@ -24,6 +24,7 @@
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
+  import { partsOn, pressParts } from '../lib/switches';
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
   import { currentProfile } from '../lib/viewer/quality';
@@ -45,6 +46,8 @@
     /** Whether the orbit line and the habitable zone are drawn. */
     orbit: boolean;
     zone: boolean;
+    /** Whether the habitable zone's distances (its edges and width) are shown, with or without the zone drawn. */
+    zoneDistances: boolean;
     /** Whether the coronal loops (and eruptions) are drawn. */
     prominences: boolean;
     /** The planet's moons, nearest first, drawn around it. */
@@ -147,6 +150,7 @@
     omega,
     animated = $bindable(),
     distances = $bindable(),
+    zoneDistances = $bindable(),
     orbit = $bindable(),
     zone = $bindable(),
     prominences = $bindable(),
@@ -401,6 +405,7 @@
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
   $effect(() => view?.setZoneVisible(zone));
+  $effect(() => view?.setZoneDistances(zoneDistances));
   $effect(() => view?.setProminences(prominences));
   // A giant's moon: the marker on the orbit is the giant, the world goes
   // round it at its pace relative to the year.
@@ -641,11 +646,37 @@
     };
   });
 
+  /** The habitable zone: the ring drawn and its distances, as two squares; the main button sets both. */
+  const zoneSwitch = $derived.by<Toggle>(() => {
+    const parts = [
+      { on: zone, shown: true },
+      { on: zoneDistances, shown: true },
+    ];
+    return {
+      key: 'zone',
+      label: t.starView.showZone,
+      icon: 'zone',
+      on: partsOn(parts, false),
+      set: () => {
+        const next = pressParts(parts, false);
+        zone = next;
+        zoneDistances = next;
+      },
+      subs: [
+        { key: 'zone-drawn', label: t.starView.squareZoneDrawn, help: t.starView.squareZoneDrawnHelp, icon: 'zone', on: zone, set: (v) => (zone = v) },
+        { key: 'zone-distances', label: t.starView.squareZoneDistances, help: t.starView.squareZoneDistancesHelp, icon: 'distance', on: zoneDistances, set: (v) => (zoneDistances = v) },
+      ],
+    };
+  });
+  /** A system with no belt has none to show. */
+  const hasBelts = $derived(belts.length > 0);
+
   /** The display switches, as the icon bar groups them: lines, measures, structure, sky. */
   const toggleGroups = $derived<Toggle[][]>([
     [
-      { key: 'orbit', label: t.starView.showOrbit, icon: 'orbit', on: orbit, set: (v) => (orbit = v) },
-      { key: 'zone', label: t.starView.showZone, icon: 'zone', on: zone, set: (v) => (zone = v) },
+      // With no planet there is no orbit, planet line, vector or sphere to switch.
+      ...(lone ? [] : [{ key: 'orbit', label: t.starView.showOrbit, icon: 'orbit' as const, on: orbit, set: (v: boolean) => (orbit = v) }]),
+      zoneSwitch,
       // A star without activity, or a radiative one (no convective zone, no
       // field to hold loops), has none to show.
       ...(activity !== null && activity.envelope !== 'radiative'
@@ -656,8 +687,8 @@
         : []),
     ],
     [
-      { key: 'distances', label: t.starView.distances, help: t.starView.distancesHelp, icon: 'distance', on: distances, set: (v) => (distances = v) },
-      ...(selected !== null
+      ...(lone ? [] : [{ key: 'distances', label: t.starView.distances, help: t.starView.distancesHelp, icon: 'distance' as const, on: distances, set: (v: boolean) => (distances = v) }]),
+      ...(selected !== null && !lone
         ? [
             { key: 'links', label: t.starView.showLinks, help: t.starView.showLinksHelp, icon: 'links' as const, on: links, set: (v: boolean) => (links = v) },
             { key: 'velocities', label: t.starView.showVelocities, help: t.starView.showVelocitiesHelp, icon: 'velocity' as const, on: velocities, set: (v: boolean) => (velocities = v) },
@@ -668,10 +699,12 @@
     selected !== null
       ? [
           { key: 'frost', label: t.starView.showFrost, help: t.starView.showFrostHelp, icon: 'frost', on: frost, set: (v) => (frost = v) },
-          { key: 'hills', label: t.starView.showHills, help: t.starView.showHillsHelp, icon: 'hills', on: hills, set: (v) => (hills = v) },
-          { key: 'belts', label: t.starView.showBelts, help: t.starView.showBeltsHelp, icon: 'belt', on: showBelts, set: (v) => (showBelts = v) },
-          { key: 'trojans', label: t.starView.showTrojans, help: t.starView.showTrojansHelp, icon: 'trojans', on: showTrojans, set: (v) => (showTrojans = v) },
-          { key: 'lagrange', label: t.starView.showLagrange, help: t.starView.showLagrangeHelp, icon: 'lagrange', on: showLagrange, set: (v) => (showLagrange = v) },
+          ...(lone ? [] : [{ key: 'hills', label: t.starView.showHills, help: t.starView.showHillsHelp, icon: 'hills' as const, on: hills, set: (v: boolean) => (hills = v) }]),
+          ...(hasBelts ? [{ key: 'belts', label: t.starView.showBelts, help: t.starView.showBeltsHelp, icon: 'belt' as const, on: showBelts, set: (v: boolean) => (showBelts = v) }] : []),
+          ...(lone ? [] : [
+            { key: 'trojans', label: t.starView.showTrojans, help: t.starView.showTrojansHelp, icon: 'trojans' as const, on: showTrojans, set: (v: boolean) => (showTrojans = v) },
+            { key: 'lagrange', label: t.starView.showLagrange, help: t.starView.showLagrangeHelp, icon: 'lagrange' as const, on: showLagrange, set: (v: boolean) => (showLagrange = v) },
+          ]),
           { key: 'scale', label: t.starView.realScale, help: t.starView.realScaleHelp, icon: 'scale', on: realScale, set: (v) => (realScale = v) },
         ]
       : [],

@@ -284,6 +284,8 @@
   let starDistances = $state(false);
   let starOrbit = $state(true);
   let starZone = $state(true);
+  /** The habitable zone's distances: off like Distances, which they were part of (neither is saved, both start off). */
+  let starZoneDistances = $state(false);
   let starProminences = $state(true);
   /** Whether the star view draws the star through its warm display filter (true colour by default). */
   let starFilter = $state(false);
@@ -2649,6 +2651,7 @@
       bind:distances={starDistances}
       bind:orbit={starOrbit}
       bind:zone={starZone}
+      bind:zoneDistances={starZoneDistances}
       bind:prominences={starProminences}
       giantSystem={system.giants}
       worldGiant={meta?.giant ?? null}

@@ -888,6 +888,13 @@ addressed as `<system-id>/<body-id>` everywhere.
   planet. The planet view is never entered (no "no world" message), and
   the body picker offers no body. Its card and orrery draw the star in
   its own colour, with a "No planet" chip and a count of 0.
+  The star view's switches that would do nothing without a planet
+  (orbit, distances, lines to the star, velocities, pull, Hill spheres,
+  trojans, Lagrange points, and belts when there are none) are hidden.
+- **Habitable zone switch.** In the star view the habitable zone is one
+  switch with two squares: the zone drawn, and its distances (edges,
+  width and the line across it), which do not depend on the Distances
+  switch; the main button sets both.
 - **Main menu.** The app opens on a menu, and no viewer starts until a
   system is opened. The menu shows the systems in sections (pinned,
   today since the last local midnight, older; empty ones hidden), sorted

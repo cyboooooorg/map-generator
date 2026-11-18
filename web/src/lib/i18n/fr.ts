@@ -1469,6 +1469,10 @@ export const fr: Messages = {
     orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
     showOrbit: 'Orbites',
     showZone: 'Zone habitable',
+    squareZoneDrawn: 'Zone habitable : la zone dessinée',
+    squareZoneDrawnHelp: "L'anneau ombré où une planète pourrait garder de l'eau liquide",
+    squareZoneDistances: 'Zone habitable : ses distances',
+    squareZoneDistancesHelp: "Les distances des bords intérieur et extérieur de la zone à l'étoile, et sa largeur",
     circular: (p) => `orbite circulaire${S}: ${p.distance} toute l’année, ni périastre ni apoastre`,
     distancesHelp:
       'La distance de l’étoile à la planète et la lumière qu’elle reçoit en ce moment, les points le plus proche et le plus lointain de son orbite, les bords de la zone habitable',

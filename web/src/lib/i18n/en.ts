@@ -1550,6 +1550,10 @@ export const en = {
     orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
     showOrbit: 'Orbits',
     showZone: 'Habitable zone',
+    squareZoneDrawn: 'Habitable zone: the zone drawn',
+    squareZoneDrawnHelp: 'The shaded ring where a planet could keep liquid water',
+    squareZoneDistances: 'Habitable zone: its distances',
+    squareZoneDistancesHelp: "The distances of the zone's inner and outer edges from the star, and its width",
     circular: (p: { distance: string }) => `circular orbit: ${p.distance} all year, no periapsis or apoapsis`,
     distancesHelp:
       'The distance from the star to the planet and the light it gets now, the closest and farthest points of its orbit, the edges of the habitable zone',

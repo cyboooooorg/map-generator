@@ -207,6 +207,8 @@ export class StarView {
   private omega = 0;
   private at: (au: number) => number = (au) => au;
   private distancesOn = false;
+  /** Whether the habitable zone's distances (its edges, its width, the line across it) are shown. */
+  private zoneDistancesOn = false;
   /** The coronal loops over the active regions, turning with the surface; the eruption under way. */
   private readonly arcs = new Group();
   private loops!: CoronalLoops;
@@ -752,6 +754,13 @@ export class StarView {
   /** Shows the star–planet line, the periapsis and apoapsis, and reports their places (see onLabels). */
   setDistances(on: boolean): void {
     this.distancesOn = on;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  /** Shows the habitable zone's edges, its width and the line across it, with or without the zone drawn. */
+  setZoneDistances(on: boolean): void {
+    this.zoneDistancesOn = on;
     this.applyVisibility();
     this.requestRender();
   }
@@ -1382,7 +1391,7 @@ export class StarView {
       const highlight = this.orbitHighlights[k];
       if (highlight) highlight.visible = orbitsOn && bright;
     });
-    this.zoneLine.visible = this.selected !== null && this.zoneOn && this.distancesOn;
+    this.zoneLine.visible = this.selected !== null && this.zoneDistancesOn;
     // A planetary system draws a dotted line to every planet instead.
     this.link.visible = this.distancesOn && this.selected === null;
     const system = this.selected !== null && this.giantsOn;
@@ -1843,7 +1852,7 @@ export class StarView {
     // The star's pin and the frost line carry their own labels, so a system
     // with no planet still labels them without Distances.
     const pinShown = this.starPinLine !== null && this.pinGroup.visible;
-    if ((this.distancesOn || giantsShown || pinShown || this.frost.visible) && this.info) {
+    if ((this.distancesOn || this.zoneDistancesOn || giantsShown || pinShown || this.frost.visible) && this.info) {
       // The zone's edges are labelled across the apsides line, away from
       // the periapsis and apoapsis labels.
       const edge = (au: number) => this.screen(this.zoneEdge(au));
@@ -1856,8 +1865,8 @@ export class StarView {
         self: on || !giantsShown || this.selected !== null ? null : this.screen(this.planet.position),
         periapsis: on && this.orbitOn && anyPlanet ? this.screen(this.apsides[0]!.position) : null,
         apoapsis: on && this.orbitOn && anyPlanet ? this.screen(this.apsides[1]!.position) : null,
-        inner: on && this.zoneOn ? edge(this.info.hz_inner_au) : null,
-        outer: on && this.zoneOn ? edge(this.info.hz_outer_au) : null,
+        inner: this.zoneDistancesOn ? edge(this.info.hz_inner_au) : null,
+        outer: this.zoneDistancesOn ? edge(this.info.hz_outer_au) : null,
         star: this.screen(new Vector3()),
         small:
           this.selected !== null
