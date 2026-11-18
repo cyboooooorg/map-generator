@@ -8,7 +8,8 @@
 //! rest of the system drawn round it, a giant's moon putting its giant on
 //! its orbit).
 //!
-//! **Zones.** From the star: the inner edge (0.02 AU), the habitable zone
+//! **Zones.** From the star: the inner edge ([`crate::host::inner_edge_au`]: 0.02 AU, more round an
+//! O to A0 dwarf), the habitable zone
 //! (Kopparapu et al. 2013, as [`StarInfo`] has it), the ice line `2.7 √L`
 //! AU (Hayashi 1981) and the outer edge (60 AU). Each planet type has a
 //! band it may sit in and one it prefers ([`band`]).
@@ -84,7 +85,9 @@ use std::sync::Arc;
 /// `capture_age_share` ([`Body::capture_age_share`]), and the card's new
 /// quantities (surface age, terrain unit, emissivity) and notes, so a
 /// system of version 9 does not parse as today's and is refused on its
-/// version.
+/// version. Version 12 stores the host's kind (`star.kind`, always `dwarf`
+/// for now) and moves the inner edge of O to A0 dwarfs outside two
+/// stellar radii ([`crate::host::inner_edge_au`]).
 pub const SYSTEM_FORMAT_VERSION: u32 = 12;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;

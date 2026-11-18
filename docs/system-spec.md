@@ -163,8 +163,11 @@ regenerating one body leaves the others alone.
 From the star (its luminosity `L`, temperature, mass, as `StarInfo` has
 them):
 
-- the **inner edge**: no planet inside 0.02 AU nor inside the star's
-  Roche limit for the planet's density;
+- the **inner edge**: no planet inside the largest of 0.02 AU, the fluid
+  Roche limit of a rocky planet of the host's mean density and two
+  stellar radii (`host::inner_edge_au`). Dwarfs from A1 to M keep
+  0.02 AU; O to A0 dwarfs get a larger edge (0.125 AU for an O3V). An
+  orbit asked inside it, round one planet, is refused;
 - the **habitable zone**: Kopparapu et al. 2013 fluxes, as today;
 - the **ice line**, `2.7 √L` AU (Hayashi 1981);
 - the **outer edge**: 60 AU, as the giants' draw keeps today, and within
@@ -584,7 +587,8 @@ systems/<system-id>/
     by preset and stored no physical model, version 3 kept a preset in
     each body's world parameters and no model for the planet asked for,
     version 4 gave no moon a model;
-  - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
+  - `star`: today's `StarInfo` and its designation, and `kind`, the kind
+    of host (`dwarf` for every system drawn today; format 12). `info.age_gyr` is the
     age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
     10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
     of the request, which must lie in `(0, lifetime]`. Every body shares
