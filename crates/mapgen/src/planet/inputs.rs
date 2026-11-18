@@ -61,8 +61,10 @@ pub struct HostTide {
     /// pair's orbits, and that dissipation, the host's locked `k₂/Q`
     /// ([`super::resonance::resonant_heat`]); the moon dissipates the
     /// larger of that heat and its own tide
-    /// ([`super::resonance::todays_heat_w`]). `None` for a body in no
-    /// chain, or whose pair pumps nothing.
+    /// ([`super::resonance::todays_heat_w`]), and whether and when the
+    /// chain captured it through Laplace-like resonances. `None` for a
+    /// body in no chain; the outermost moon of a chain, and one whose
+    /// pair pumps nothing, have a heat of 0.
     pub resonance: Option<super::resonance::Resonance>,
 }
 

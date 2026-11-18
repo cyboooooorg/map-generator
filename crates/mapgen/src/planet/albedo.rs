@@ -27,8 +27,11 @@ pub struct Cover {
     pub ocean: f64,
     pub land: f64,
     pub ice: f64,
-    /// N₂, CH₄ or CO₂ frost ([`FROST_LAYER_BAR`], issue #464).
+    /// N₂, CH₄, CO₂ or SO₂ frost ([`FROST_LAYER_BAR`], issue #464).
     pub frost: f64,
+    /// The share of the disc of that frost that is SO₂ frost
+    /// ([`SO2_FROST_ALBEDO`]), part of `frost`.
+    pub so2_frost: f64,
     pub cloud: f64,
 }
 
@@ -84,15 +87,140 @@ const FROST_ALBEDO: f64 = 0.75;
 /// a frost gathers into deposits in its cold traps (poles, basins,
 /// shadows) and is spread no thinner, as [`ICE_SHEET_KM`] does for water
 /// ice. 0.02 bar: about 0.7 m of CO₂ frost on Io's gravity, or 2.5 m of
-/// N₂ frost on Triton's. Calibration on the moons, no source: the
-/// model's Io freezes 0.013 bar of CO₂ out of its air (the real one's
-/// frost is SO₂, which the model keeps far less of), which covers about
-/// two-thirds of its disc and gives it a Bond albedo of 0.56 (0.63
-/// observed, Simonelli & Veverka 1988, from memory, not checked; its
-/// frost-free ground is shielded regolith); Triton's 0.36 bar of N₂
-/// frost covers all of it with any value under that; Europa's trace of
-/// CO₂ frost (2e-4 bar) leaves it to its water ice.
+/// N₂ frost on Triton's. Calibration on the moons, no source: it was
+/// set on the CO₂ frost the model's Io then froze out of its air (0.013
+/// bar, two-thirds of its disc, a Bond albedo of 0.56); that air now goes
+/// to Jupiter's plasma and Io's frost is the SO₂ of its volcanoes, whose
+/// amount [`super::atmosphere::volcanic_so2_frost_bar`] is calibrated
+/// against this layer. Triton's 0.36 bar of N₂ frost covers all of it
+/// with any value under that; Europa's trace of CO₂ frost (2e-4 bar)
+/// leaves it to its water ice.
 const FROST_LAYER_BAR: f64 = 0.02;
+
+/// Albedo of the SO₂ frost of a volcanic body: 0.63, Io's Bond albedo
+/// (Simonelli & Veverka 1988, from memory, not checked), the albedo of a
+/// disc that frost covers nearly all of (Douté et al. 2001, Icarus 149,
+/// 107, doi:10.1006/icar.2000.6513, map it over most of Io; from memory,
+/// not checked). Calibration on Io: darker than [`FROST_ALBEDO`], since
+/// Io's frost lies mixed with its sulphur and silicate deposits. With it
+/// the frost's dayside lies at Io's 106 to 117 K
+/// ([`super::atmosphere::volcanic_so2_vapour`]); under [`FROST_ALBEDO`] it would
+/// lie near 103 K, and its vapour at 4e-11 bar, under Io's nanobar.
+const SO2_FROST_ALBEDO: f64 = 0.63;
+
+/// Bond albedo of clean, fine-grained water ice: 0.85. Calibration, the
+/// fresh end of the icy-age law ([`icy_unit_albedo`]): brighter than
+/// Enceladus (0.81 ± 0.04; Howett et al. 2010, Icarus 206, 573,
+/// doi:10.1016/j.icarus.2009.07.016, from memory, not checked), whose ice
+/// holds some dust, and than the model's sea ice and snow
+/// ([`ICE_ALBEDO`]); pure water frost reflects about 0.9 of the visible
+/// but absorbs its near infrared, about half of sunlight.
+const PURE_ICE_ALBEDO: f64 = 0.85;
+
+/// Rock dust in a fresh ice surface per unit of the body's rock-to-ice
+/// mass ratio, as a share of its grains: 0.006 ([`icy_unit_albedo`]). A
+/// body's renewed ice carries the rock its ocean and its crust were in
+/// contact with (Europa's hydrated salts; McCord et al. 1998, Science
+/// 280, 1242, from memory, not checked): a mostly-rock body's ice is
+/// dirtier. Calibration on Europa: its rock-to-ice ratio of 9 to 16 puts
+/// 5 to 10 % of dust in its young ice, a Bond albedo of 0.59 to 0.66
+/// (observed about 0.62 to 0.68, from memory).
+const DUST_PER_ROCK_TO_ICE: f64 = 0.006;
+
+/// Most of an old ice surface a dark lag covers on a body of
+/// [`LAG_ROCK_SHARE`] rock or more: 0.88 ([`icy_unit_albedo`]).
+/// Sublimation and impact gardening leave the rock of an old ice-rock
+/// crust as a dark lag, with the ice redeposited as bright frost on
+/// cold crests and poleward slopes (Spencer 1987, Icarus 69, 297; Moore
+/// et al. 1999, Icarus 140, 294, doi:10.1006/icar.1999.6132, Callisto
+/// mantled by dark debris but for its bright crests; both from memory,
+/// not checked). Calibration on Callisto's Bond albedo, about 0.2.
+const LAG_MAX_SHARE: f64 = 0.88;
+
+/// Rock share of a body, as a fraction of its mass, from which its lag
+/// reaches [`LAG_MAX_SHARE`]; with less rock it covers less, in
+/// proportion (a crust of 94 % ice has little rock to leave): 0.5,
+/// Callisto's, the body [`LAG_MAX_SHARE`] is calibrated on (about half
+/// rock, Anderson et al. 2001, doi:10.1006/icar.2001.6664, from memory,
+/// not checked; the `callisto-like` archetype draws 45 to 55 % ice).
+/// A reference, not a free constant.
+const LAG_ROCK_SHARE: f64 = 0.5;
+
+/// Craters of 1 km or more per km² over which a lag covers `1 − 1/e` of
+/// [`LAG_MAX_SHARE`]: 0.004, the count of the lunar chronology on a
+/// surface about 3.45 Gyr old ([`crate::craters::crater_density`]). The
+/// lag follows the impacts a surface has taken, which garden it and
+/// bring its dust: slowly at today's rate, fast under the late heavy
+/// bombardment. Calibration on Ganymede: its 2 Gyr renewed terrain
+/// keeps 70 % of its fresh ice uncovered, its 4.5 Gyr dark terrain is
+/// Callisto's.
+const LAG_CRATERS_PER_KM2: f64 = 0.004;
+
+/// Share of a body's ice that the fallout of its plume keeps under fresh
+/// frost ([`PURE_ICE_ALBEDO`]) when it vents at full strength
+/// (`geysers::vent_strength`): 0.6. Enceladus's plume
+/// feeds Saturn's E ring and falls back over its whole surface, fastest
+/// near its south pole, so that its surface stays as bright as fresh
+/// frost whatever its craters' age (Verbiscer et al. 2007, Science 315,
+/// 815, doi:10.1126/science.1134681; Kempf et al. 2010, Icarus 206, 446,
+/// doi:10.1016/j.icarus.2009.09.016; both from memory, not checked).
+/// Calibration on Enceladus's Bond albedo, 0.81 (Howett et al. 2010).
+const FALLOUT_SHARE: f64 = 0.6;
+
+/// Single-scattering albedo of an isotropic scatterer whose diffusive
+/// reflectance is `albedo` (the inverse of [`diffusive_albedo`]).
+fn single_scattering(albedo: f64) -> f64 {
+    let gamma = (1.0 - albedo) / (1.0 + albedo);
+    1.0 - gamma * gamma
+}
+
+/// Diffusive (bihemispherical) reflectance of a half-space of isotropic
+/// scatterers of single-scattering albedo `w`: `(1 − γ) / (1 + γ)` with
+/// `γ = √(1 − w)` (Hapke 1981, JGR 86, 3039,
+/// doi:10.1029/JB086iB04p03039, from memory, not checked), taken as
+/// approximately the Bond albedo of a surface whose grains scatter alike
+/// in every direction (Hapke's spherical albedo is slightly lower for
+/// dark grains).
+fn diffusive_albedo(w: f64) -> f64 {
+    let gamma = (1.0 - w).clamp(0.0, 1.0).sqrt();
+    (1.0 - gamma) / (1.0 + gamma)
+}
+
+/// Bond albedo of a unit of exposed water ice on an ice crust, last
+/// renewed `age_gyr` Gyr ago, on a body whose rock is `rock_share` of
+/// its mass, venting with the strength `vent`, 0 to 1
+/// (`geysers::vent_strength`).
+///
+/// - Its fresh ice is an intimate mix of [`PURE_ICE_ALBEDO`] ice and
+///   rock dust at [`REGOLITH_ALBEDO`], the dust `DUST_PER_ROCK_TO_ICE`
+///   times the body's rock-to-ice ratio: their single-scattering
+///   albedos mix by grain and the mix reflects as Hapke's isotropic
+///   half-space ([`diffusive_albedo`]). A little dust darkens ice much.
+/// - A dark lag at [`REGOLITH_ALBEDO`] covers patches of it, a share
+///   `LAG_MAX_SHARE · min(1, rock / LAG_ROCK_SHARE) · (1 − exp(−N /
+///   LAG_CRATERS_PER_KM2))` of the surface, `N` the crater count of the
+///   lunar chronology on a surface that old
+///   ([`crate::craters::crater_density`]); the patches mix by area.
+/// - A plume's fallout covers `vent ·` [`FALLOUT_SHARE`] of it with
+///   fresh frost.
+pub fn icy_unit_albedo(age_gyr: f64, rock_share: f64, vent: f64) -> f64 {
+    let rock = rock_share.clamp(0.0, 1.0);
+    let ice = 1.0 - rock;
+    let dust = if DUST_PER_ROCK_TO_ICE * rock >= ice {
+        1.0
+    } else {
+        DUST_PER_ROCK_TO_ICE * rock / ice
+    };
+    let w = (1.0 - dust) * single_scattering(PURE_ICE_ALBEDO)
+        + dust * single_scattering(REGOLITH_ALBEDO);
+    let fresh = diffusive_albedo(w);
+    let craters = crate::craters::crater_density(age_gyr.max(0.0));
+    let ceiling = LAG_MAX_SHARE * (rock / LAG_ROCK_SHARE).min(1.0);
+    let lag = ceiling * (1.0 - (-craters / LAG_CRATERS_PER_KM2).exp());
+    let aged = (1.0 - lag) * fresh + lag * REGOLITH_ALBEDO;
+    let fallout = FALLOUT_SHARE * vent.clamp(0.0, 1.0);
+    (1.0 - fallout) * aged + fallout * PURE_ICE_ALBEDO
+}
 
 /// Annual mean temperature, K, under which a surface keeps ice or snow:
 /// −5 °C. Calibration: Budyko 1969 (doi:10.3402/tellusa.v21i5.10109)
@@ -301,8 +429,16 @@ fn ice_line_share(temperature_k: f64) -> f64 {
     1.0 - x2.clamp(0.0, 1.0).sqrt()
 }
 
+/// Share of a body's disc, 0 to 1, that `frost` (bar, gas by gas, all
+/// together) covers: `frost / FROST_LAYER_BAR`, all of it from that
+/// amount on ([`FROST_LAYER_BAR`]).
+pub(crate) fn frost_cover(frost: &Gases) -> f64 {
+    (frost.total().max(0.0) / FROST_LAYER_BAR).min(1.0)
+}
+
 /// What covers a body at `temperature_k` under `gases` with `water`
-/// and `frost_bar` of N₂, CH₄ and CO₂ frost on its ground ([`Cover`]).
+/// and `frost` (bar, gas by gas) of N₂, CH₄, CO₂ and SO₂ frost on its
+/// ground ([`Cover`]).
 ///
 /// - Its water, out of a runaway, is open ocean ([`ocean_fraction`] of
 ///   its oceans) where the surface is warmer than the ice line and ice or
@@ -311,10 +447,12 @@ fn ice_line_share(temperature_k: f64) -> f64 {
 /// - The rest is bare land.
 /// - Its frost lies over the ocean's ice and the land, covering the share
 ///   `frost_bar / FROST_LAYER_BAR` of the disc ([`FROST_LAYER_BAR`]), all
-///   of it from that amount on.
+///   of it from that amount on, `frost_bar` all of its gases together;
+///   the SO₂ frost takes its part of that share.
 /// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`]):
 ///   none in a dry or airless sky.
-pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -> Cover {
+pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost: &Gases) -> Cover {
+    let frost_bar = frost.total();
     let wet = water.is_wet();
     let (sea, ice) = if wet {
         let reach = (water.oceans.max(0.0) * OCEAN_LAYER_KM / ICE_SHEET_KM).min(1.0);
@@ -325,7 +463,12 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -
     } else {
         (0.0, 0.0)
     };
-    let frost = (frost_bar.max(0.0) / FROST_LAYER_BAR).min(1.0);
+    let so2_part = if frost_bar > 0.0 {
+        (frost.so2 / frost_bar).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let frost = frost_cover(frost);
     let ocean = sea * (1.0 - ice) * (1.0 - frost);
     let ice = ice * (1.0 - frost);
     let land = (1.0 - ocean - ice - frost).max(0.0);
@@ -335,6 +478,7 @@ pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost_bar: f64) -
         land,
         ice,
         frost,
+        so2_frost: frost * so2_part,
         cloud,
     }
 }
@@ -354,7 +498,7 @@ pub(crate) fn sulphuric_deck(temperature_k: f64, so2_bar: f64) -> f64 {
 
 /// Strength of a methane haze in `gases`, 0 to 1 ([`HAZE_CH4_BAR`],
 /// [`HAZE_CH4_PER_CO2`]).
-fn haze(gases: &Gases) -> f64 {
+pub(crate) fn haze(gases: &Gases) -> f64 {
     let ch4 = gases.ch4.max(0.0);
     if ch4 <= 0.0 {
         return 0.0;
@@ -373,7 +517,8 @@ fn haze(gases: &Gases) -> f64 {
 ///
 /// The surface mixes its covers' albedos (ocean [`OCEAN_ALBEDO`], land
 /// from [`REGOLITH_ALBEDO`] when airless to [`SOIL_ALBEDO`] under an air,
-/// ice and snow [`ICE_ALBEDO`], frost [`FROST_ALBEDO`]); the water clouds' layer
+/// ice and snow [`ICE_ALBEDO`], frost [`FROST_ALBEDO`], SO₂ frost
+/// [`SO2_FROST_ALBEDO`]); the water clouds' layer
 /// ([`CLOUD_ALBEDO`] over their cover) lies over it, the Rayleigh
 /// scattering of the column over both (averaged over the Sun's spectrum
 /// band by band: what caps CO₂'s warming at the maximum greenhouse,
@@ -381,16 +526,28 @@ fn haze(gases: &Gases) -> f64 {
 /// haze over all ([`HAZE_ALBEDO`], [`HAZE_ABSORPTION`]). A deck hides
 /// everything below it ([`DECK_ALBEDO`]) where it lies.
 pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64) -> f64 {
+    bond_albedo_over(cover, gases, deck, None)
+}
+
+/// [`bond_albedo`] of a body whose ice and land are, where `crust` is
+/// given, an exposed ice crust of that albedo (the area-weighted
+/// [`icy_unit_albedo`] of its terrain units) instead of snow and rock.
+pub fn bond_albedo_over(cover: &Cover, gases: &Gases, deck: f64, crust: Option<f64>) -> f64 {
     let deck = deck.clamp(0.0, 1.0);
     if deck >= 1.0 {
         return DECK_ALBEDO;
     }
     let shield = 1.0 - (-gases.total().max(0.0) / SHIELD_BAR).exp();
     let land = REGOLITH_ALBEDO + (SOIL_ALBEDO - REGOLITH_ALBEDO) * shield;
+    let (land, ice) = match crust {
+        Some(a) => (a, a),
+        None => (land, ICE_ALBEDO),
+    };
     let surface = cover.ocean * OCEAN_ALBEDO
         + cover.land * land
-        + cover.ice * ICE_ALBEDO
-        + cover.frost * FROST_ALBEDO;
+        + cover.ice * ice
+        + (cover.frost - cover.so2_frost) * FROST_ALBEDO
+        + cover.so2_frost * SO2_FROST_ALBEDO;
     let cloud = (cover.cloud * CLOUD_ALBEDO).clamp(0.0, 1.0);
     let clouded = over(cloud, 1.0 - cloud, surface);
     let tau = rayleigh_550(gases);
@@ -431,7 +588,7 @@ mod tests {
         let airless = Gases::default();
         assert!(airless.total() < 1e-6);
         for t in [100.0, 250.0, 440.0, 700.0] {
-            let c = cover(t, &airless, &dry, 0.0);
+            let c = cover(t, &airless, &dry, &Gases::default());
             assert_eq!(c.ocean, 0.0, "{t}: {c:?}");
             assert_eq!(c.cloud, 0.0, "{t}: {c:?}");
             assert_eq!(c.ice, 0.0, "{t}: {c:?}");
@@ -454,17 +611,17 @@ mod tests {
         let mut last = f64::INFINITY;
         for i in 0..=100 {
             let t = 200.0 + f64::from(i);
-            let ice = cover(t, &air, &water, 0.0).ice;
+            let ice = cover(t, &air, &water, &Gases::default()).ice;
             assert!(ice <= last, "{t}: {ice} > {last}");
             last = ice;
         }
-        let earth = cover(288.0, &air, &water, 0.0).ice;
+        let earth = cover(288.0, &air, &water, &Gases::default()).ice;
         assert!((0.06..=0.14).contains(&earth), "{earth}");
         for t in [200.0, 230.0, 240.0, 250.0] {
-            let ice = cover(t, &air, &water, 0.0).ice;
+            let ice = cover(t, &air, &water, &Gases::default()).ice;
             assert!(ice > 0.999, "{t}: {ice}");
         }
-        assert_eq!(cover(300.0, &air, &water, 0.0).ice, 0.0);
+        assert_eq!(cover(300.0, &air, &water, &Gases::default()).ice, 0.0);
     }
 
     #[test]
@@ -480,11 +637,14 @@ mod tests {
             kept_kg: 0.005 * super::super::OCEAN_KG,
             ..earth_water()
         };
-        let caps = cover(210.0, &air, &mars, 0.0);
+        let caps = cover(210.0, &air, &mars, &Gases::default());
         assert!(caps.ice > 0.0 && caps.ice < 0.02, "{caps:?}");
         let a = bond_albedo(&caps, &air, 0.0);
         assert!((0.2..=0.3).contains(&a), "{a}");
-        assert_eq!(cover(210.0, &air, &earth_water(), 0.0).ice, 1.0);
+        assert_eq!(
+            cover(210.0, &air, &earth_water(), &Gases::default()).ice,
+            1.0
+        );
     }
 
     #[test]
@@ -501,20 +661,62 @@ mod tests {
             n2: 1.4e-5,
             ..Gases::default()
         };
-        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, frost), &thin, 0.0);
-        let half = cover(40.0, &thin, &dry, FROST_LAYER_BAR / 2.0);
+        let n2 = |bar: f64| Gases {
+            n2: bar,
+            ..Gases::default()
+        };
+        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, &n2(frost)), &thin, 0.0);
+        let half = cover(40.0, &thin, &dry, &n2(FROST_LAYER_BAR / 2.0));
         assert!((half.frost - 0.5).abs() < 1e-12, "{half:?}");
         assert!((half.land - 0.5).abs() < 1e-12, "{half:?}");
         assert!(a(0.0) < a(FROST_LAYER_BAR / 2.0));
         assert!(a(FROST_LAYER_BAR / 2.0) < a(FROST_LAYER_BAR));
         assert_eq!(a(FROST_LAYER_BAR), a(10.0));
         assert!((a(10.0) - FROST_ALBEDO).abs() < 0.01, "{}", a(10.0));
+        // SO₂ frost, the volcanic frost of a heat pipe, is darker.
+        let so2 = Gases {
+            so2: 10.0,
+            ..Gases::default()
+        };
+        let volcanic = cover(40.0, &thin, &dry, &so2);
+        assert_eq!(volcanic.so2_frost, 1.0);
+        let a_so2 = bond_albedo(&volcanic, &thin, 0.0);
+        assert!((a_so2 - SO2_FROST_ALBEDO).abs() < 0.01, "{a_so2}");
         // Over ice, the frost takes its share from the ice.
-        let icy = cover(40.0, &thin, &earth_water(), FROST_LAYER_BAR / 4.0);
+        let icy = cover(40.0, &thin, &earth_water(), &n2(FROST_LAYER_BAR / 4.0));
         assert!(
             (icy.ice - 0.75).abs() < 1e-12 && icy.ocean == 0.0,
             "{icy:?}"
         );
+    }
+
+    /// The icy-age law darkens ice with its age and its body's rock,
+    /// within fresh ice and the lag, and a plume's fallout brightens it.
+    #[test]
+    fn old_and_dusty_ice_is_darker() {
+        let a = icy_unit_albedo;
+        let mut last = f64::INFINITY;
+        for i in 0..=50 {
+            let age = 0.1 * f64::from(i);
+            let now = a(age, 0.5, 0.0);
+            assert!(now <= last, "{age}: {now} > {last}");
+            assert!((REGOLITH_ALBEDO..=PURE_ICE_ALBEDO).contains(&now), "{now}");
+            last = now;
+        }
+        assert!(a(0.1, 0.9, 0.0) < a(0.1, 0.6, 0.0));
+        // The fallout brightens in proportion to the vent's strength.
+        assert!(a(0.4, 0.65, 0.0) < a(0.4, 0.65, 0.5));
+        assert!(a(0.4, 0.65, 0.5) < a(0.4, 0.65, 1.0));
+        assert!(a(4.5, 0.5, 1.0) < PURE_ICE_ALBEDO);
+        assert!((a(0.0, 0.0, 0.0) - PURE_ICE_ALBEDO).abs() < 1e-12);
+        // All rock: the dust's own albedo, never NaN.
+        assert!((a(0.0, 1.0, 0.0) - REGOLITH_ALBEDO).abs() < 1e-9);
+        // Callisto-like: old, half rock.
+        let callisto = a(4.55, 0.5, 0.0);
+        assert!((0.15..=0.3).contains(&callisto), "{callisto}");
+        // An old crust of 94 % ice (Tethys-like) has little rock for a
+        // lag and stays bright; an old half-rock one (Callisto) does not.
+        assert!(a(4.5, 0.06, 0.0) > 0.7, "{}", a(4.5, 0.06, 0.0));
     }
 
     #[test]
@@ -533,6 +735,7 @@ mod tests {
             land: 1.0,
             ice: 0.0,
             frost: 0.0,
+            so2_frost: 0.0,
             cloud: 0.0,
         };
         let a = |co2: f64| {

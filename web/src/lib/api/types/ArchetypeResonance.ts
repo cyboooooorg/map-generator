@@ -3,16 +3,25 @@ import type { ParamDefault } from "./ParamDefault";
 
 /**
  * The resonance partners of a moon archetype (`[moon.resonance]`):
- * regular moons of its host, one 2:1 step outward on the chain, and
- * optionally one step inward (Io inside Europa).
+ * regular moons of its host, one 2:1 step outward on the chain, one
+ * step inward (Io inside Europa), or both, and a second step inward
+ * (Io and Europa inside Ganymede).
  */
 export type ArchetypeResonance = { 
 /**
- * The outer partner's mass over its host's mass.
+ * The outer partner's mass over its host's mass, when the moon has
+ * one in 2:1 resonance outside it (none for Ganymede, the outermost
+ * of the Laplace chain).
  */
-partner_mass_ratio: ParamDefault, 
+partner_mass_ratio?: ParamDefault, 
 /**
  * The inner partner's mass over its host's mass, when the moon has
  * one in 2:1 resonance inside it too.
  */
-inner_partner_mass_ratio?: ParamDefault, };
+inner_partner_mass_ratio?: ParamDefault, 
+/**
+ * The mass over its host's mass of the moon in 2:1 resonance inside
+ * its inner partner, two chain steps in (Io for Ganymede, the
+ * outermost of a three-moon chain); needs an inner partner.
+ */
+second_inner_partner_mass_ratio?: ParamDefault, };

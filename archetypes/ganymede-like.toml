@@ -39,3 +39,13 @@ eccentricity = [0.001, 0.002]
 # composition, structure and dynamics of the Galilean satellites, in
 # Jupiter: the planet, satellites and magnetosphere, Cambridge UP).
 ice_fraction = [0.40, 0.50]
+
+[moon.resonance]
+# Europa, in 2:1 resonance inside it (the Laplace chain, Ganymede its
+# outermost moon: no partner outside it): 4.80e22 kg over Jupiter's
+# 1.8982e27 kg is 2.53e-5 (JPL planetary satellite physical parameters;
+# NASA Jupiter fact sheet), within ±4 %.
+inner_partner_mass_ratio = [2.4e-5, 2.6e-5]
+# Io, in 2:1 resonance inside Europa: 8.93e22 kg over Jupiter's
+# 1.898e27 kg is 4.70e-5 (same sources), within ±2 %.
+second_inner_partner_mass_ratio = [4.6e-5, 4.8e-5]

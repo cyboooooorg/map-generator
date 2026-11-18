@@ -51,6 +51,10 @@ pub struct MoonFormation {
     pub birth: MoonBirth,
     /// Its planet and its orbit around it, whose tides heat it.
     pub tide: HostTide,
+    /// For a drawn moon its planet's tides captured into a 2:1 resonance,
+    /// the share of the system's age since then
+    /// ([`super::resonance::Captures`]); `None` otherwise.
+    pub capture_age_share: Option<f64>,
 }
 
 /// Equilibrium temperature of the planet, K, under which the moons born
@@ -180,6 +184,7 @@ mod tests {
                 eccentricity,
                 resonance: None,
             },
+            capture_age_share: None,
         }
     }
 
@@ -230,6 +235,237 @@ mod tests {
             let ch4 = s.gases.ch4 / p;
             assert!((0.03..=0.06).contains(&ch4), "seed {seed}: {s:?}");
             assert!(ocean_km(&m) < 400.0, "{:?}", m.ice_shell);
+        }
+    }
+
+    /// The model of the moon of archetype `name` in the system of `seed`
+    /// that asks for it, as `archetype_census` draws it.
+    fn archetype_moon(name: &str, seed: u32) -> PlanetModel {
+        use crate::system::{SystemRequest, WholeSystemRequest, draw};
+        use std::collections::BTreeMap;
+        let request = SystemRequest::System(WholeSystemRequest {
+            planets: Some(BTreeMap::from([(name.to_string(), 1)])),
+            seed: Some(seed),
+            ..WholeSystemRequest::default()
+        });
+        let system = draw(
+            &request,
+            &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+        )
+        .expect("the system draws");
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.params.archetype.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("{name} seed {seed}: no body"));
+        body.model.clone().expect("an asked moon has a model")
+    }
+
+    /// Europa, Ganymede and Callisto lose the CO₂ and N₂ the shoreline
+    /// left them to Jupiter's plasma and keep an exosphere: Callisto's
+    /// CO₂ at 7.5e-12 bar (Carlson 1999, doi:10.1126/science.283.5403.820),
+    /// Europa's and Ganymede's O₂ near 1e-12 (spec goal 2: 1e-13 to
+    /// 1e-10 bar).
+    #[test]
+    fn galilean_icy_moons_have_exospheres() {
+        for name in ["europa-like", "ganymede-like", "callisto-like"] {
+            for seed in 1..=20 {
+                let m = archetype_moon(name, seed);
+                let p = pressure(&m);
+                assert!(
+                    (1e-13..=1e-10).contains(&p),
+                    "{name} seed {seed}: {p:e} {m:?}"
+                );
+            }
+        }
+    }
+
+    /// Io sits in Jupiter's plasma torus: its N₂ and CO₂ are an exosphere
+    /// at most, whatever else it breathes.
+    #[test]
+    fn io_loses_its_nitrogen_and_carbon_dioxide() {
+        for seed in 1..=20 {
+            let m = archetype_moon("io-like", seed);
+            let g = m.surface.expect("surface").gases;
+            assert!(
+                g.n2 + g.co2 <= super::super::EXOSPHERE_BAR,
+                "seed {seed}: {g:?}"
+            );
+        }
+    }
+
+    /// Io breathes the SO₂ of its volcanoes: its dayside column of 1e16 to
+    /// 2e17 cm⁻² (about 1 to 10 nbar) sits on SO₂ frost at 106 to 117 K
+    /// (Giles et al. 2024, arXiv:2405.19253, from 22 years of IRTF/TEXES
+    /// spectra), far above the N₂ and CO₂ the plasma left it. On every
+    /// seed its air is 1e-10 to 1e-8 bar of SO₂, more than its N₂ and CO₂,
+    /// the frost on its ground is SO₂, and its Bond albedo is within 0.4
+    /// to 0.7 (0.63 observed, Simonelli & Veverka 1988, from memory).
+    #[test]
+    fn io_breathes_so2() {
+        use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
+        use std::collections::BTreeMap;
+        for seed in 1..=40 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                planets: Some(BTreeMap::from([("io-like".to_string(), 1)])),
+                seed: Some(seed),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(
+                &request,
+                &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .expect("the system draws");
+            let body = system
+                .bodies
+                .iter()
+                .find(|b| b.params.archetype.as_deref() == Some("io-like"))
+                .expect("an io-like body");
+            let m = body.model.as_ref().expect("a model");
+            let s = m.surface.expect("surface");
+            let g = s.gases;
+            assert!((1e-10..=1e-8).contains(&g.so2), "seed {seed}: {g:?}");
+            assert!(g.so2 > g.n2 + g.co2, "seed {seed}: {g:?}");
+            let context = body_context(&system, body).expect("its context");
+            let frost = crate::planet::explain::replay(&context, m, &s).frost;
+            assert!(frost.so2 > 0.0, "seed {seed}: {frost:?}");
+            assert!(
+                frost.so2 > frost.total() - frost.so2,
+                "seed {seed}: {frost:?}"
+            );
+            let a = s.climate.bond_albedo;
+            assert!((0.4..=0.7).contains(&a), "seed {seed}: albedo {a}");
+        }
+    }
+
+    /// A heat pipe warmer than Io keeps its volcanic SO₂ within the
+    /// chain. Io round a Jupiter at 2.5 AU: its dayside frost, under SO₂'s
+    /// triple point, breathes far more than a trace, which goes into the
+    /// air before the climate, so that air and frost together hold the
+    /// whole supply and the stored air, washed out as any SO₂ is, holds at
+    /// most that. Io round a Jupiter at 1 AU and an Io round an Earth-mass
+    /// host at 1 AU (no giant's plasma): their dayside is above the triple
+    /// point, so they keep no volcanic frost and no volcanic air, only the
+    /// SO₂ of their outgassing, finite and small.
+    #[test]
+    fn a_warm_heat_pipe_keeps_its_volcanic_so2() {
+        use crate::planet::atmosphere::{
+            SO2_FROST, TRACE_SO2_BAR, bar_per_kg, volcanic_so2_frost_bar, volcanic_so2_supply,
+        };
+        let io = moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041);
+        let near_earth = moon(0.015, 0.0, MoonBirth::Disk, EARTH_HOST_KG, 5.0e7, 0.02);
+        for (orbit, f, frost) in [
+            (2.5, &io, true),
+            (1.0, &io, false),
+            (1.0, &near_earth, false),
+        ] {
+            let m = model(orbit, f);
+            let s = m.surface.expect("surface");
+            assert_eq!(s.regime, Regime::HeatPipe, "{orbit} AU: {s:?}");
+            let context = planet_at(orbit).with_tide(f.tide);
+            let steps = crate::planet::explain::replay(&context, &m, &s);
+            let loss = crate::planet::loss_context(&context, &m.inputs, &m.interior);
+            let supply = volcanic_so2_supply(&m.heat, &m.inputs);
+            let inventory =
+                volcanic_so2_frost_bar(supply, &loss, bar_per_kg(m.inputs.mass_earth, &m.interior));
+            assert!(inventory > 0.0, "{orbit} AU: {supply}");
+            let vapour = steps.before.gases.so2 - steps.trapped.so2;
+            let so2 = s.gases.so2;
+            assert!(so2.is_finite() && so2 >= 0.0, "{orbit} AU: {s:?}");
+            assert!(so2 <= steps.before.gases.so2, "{orbit} AU: {s:?}");
+            if frost {
+                let held = vapour + steps.before.so2_frost_bar;
+                assert!(
+                    (TRACE_SO2_BAR..=SO2_FROST.triple_bar).contains(&vapour),
+                    "{orbit} AU: {vapour:e}"
+                );
+                assert!(
+                    (held / inventory - 1.0).abs() < 1e-9,
+                    "{orbit} AU: {held:e} of {inventory:e}"
+                );
+            } else {
+                assert_eq!(vapour, 0.0, "{orbit} AU");
+                assert_eq!(steps.before.so2_frost_bar, 0.0, "{orbit} AU");
+                assert!(so2 < SO2_FROST.triple_bar, "{orbit} AU: {s:?}");
+            }
+        }
+    }
+
+    /// Io's volcanic frost holds its air at its dayside vapour wherever
+    /// it lies, on both sides of [`TRACE_SO2_BAR`] (the vapour then joins
+    /// the air before the climate, not after it), and the air thickens
+    /// steadily as Io's giant nears the star, from 5.2 to 2.5 AU (1e-9 to
+    /// 1.7e-4 bar). The vapour of the final climate differs from the one
+    /// the climate was solved with by 0.4 % at most (at 2.5 AU): one pass
+    /// suffices.
+    ///
+    /// [`TRACE_SO2_BAR`]: crate::planet::atmosphere::TRACE_SO2_BAR
+    #[test]
+    fn a_frost_holds_its_air_at_its_vapour() {
+        use crate::planet::atmosphere::{
+            TRACE_SO2_BAR, bar_per_kg, volcanic_so2_frost_bar, volcanic_so2_supply,
+            volcanic_so2_vapour,
+        };
+        let io = moon(0.015, 0.0, MoonBirth::Disk, JUPITER_KG, 4.217e8, 0.0041);
+        let (mut last, mut sides) = (0.0, [false; 2]);
+        for orbit in [5.2, 4.6, 4.2, 4.0, 3.9, 3.8, 3.6, 3.2, 2.8, 2.5] {
+            let m = model(orbit, &io);
+            let s = m.surface.expect("surface");
+            let context = planet_at(orbit).with_tide(io.tide);
+            let loss = crate::planet::loss_context(&context, &m.inputs, &m.interior);
+            let inventory = volcanic_so2_frost_bar(
+                volcanic_so2_supply(&m.heat, &m.inputs),
+                &loss,
+                bar_per_kg(m.inputs.mass_earth, &m.interior),
+            );
+            let c = s.climate;
+            let vapour =
+                volcanic_so2_vapour(inventory, c.equilibrium_k, c.temperature_k).expect("a frost");
+            let so2 = s.gases.so2;
+            assert!(
+                (so2 / vapour - 1.0).abs() < 0.01,
+                "{orbit} AU: {so2:e} against {vapour:e}"
+            );
+            assert!(so2 > last, "{orbit} AU: {so2:e} after {last:e}");
+            last = so2;
+            sides[usize::from(vapour > TRACE_SO2_BAR)] = true;
+        }
+        assert_eq!(sides, [true, true]);
+    }
+
+    /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its
+    /// frost (1e-5 to 3e-5 bar) outlast what their giants' plasma and the
+    /// Sun's ionisation take of them, on every seed of `archetype_census`.
+    #[test]
+    fn titan_and_triton_keep_their_air() {
+        for seed in 1..=40 {
+            let titan = archetype_moon("titan-like", seed);
+            let p = pressure(&titan);
+            assert!((1.3..=1.6).contains(&p), "Titan seed {seed}: {p} {titan:?}");
+            let triton = archetype_moon("triton-like", seed);
+            let n2 = triton.surface.expect("surface").gases.n2;
+            assert!(
+                (1e-5..=3e-5).contains(&n2),
+                "Triton seed {seed}: {n2:e} {triton:?}"
+            );
+        }
+    }
+
+    /// Titan's air near its surface holds 5.65 % methane (Niemann et al.
+    /// 2005, doi:10.1038/nature04122): `titan-like` keeps 3 to 6 % on
+    /// every seed of `archetype_census`, at 90 to 97 K over its seas
+    /// (issue #530).
+    #[test]
+    fn titan_methane_is_three_to_six_percent() {
+        for seed in 1..=40 {
+            let m = archetype_moon("titan-like", seed);
+            assert_eq!(m.class, PlanetClass::HydrocarbonWorld, "seed {seed}: {m:?}");
+            let s = m.surface.expect("surface");
+            assert_eq!(s.climate.liquid, SurfaceLiquid::Hydrocarbons, "{s:?}");
+            let t = s.climate.temperature_k;
+            assert!((90.0..=97.0).contains(&t), "seed {seed}: {s:?}");
+            let ch4 = s.gases.ch4 / s.gases.total();
+            assert!((0.03..=0.06).contains(&ch4), "seed {seed}: {ch4} {s:?}");
         }
     }
 
@@ -319,11 +555,189 @@ mod tests {
         assert!(a >= 0.6, "{s:?}");
     }
 
+    /// Triton at 38 K (37-39) under 1.4e-5 bar of N₂ (1e-5 to 2e-5) on
+    /// every seed of its archetype (spec goal 6, issue #529): its air is
+    /// the vapour of its β-N₂ frost (Fray & Schmitt 2009, through
+    /// [`super::super::atmosphere`]), at the temperature that frost's
+    /// emissivity gives it.
+    #[test]
+    fn triton_is_38_kelvin() {
+        for seed in 1..=40 {
+            let m = archetype_moon("triton-like", seed);
+            let s = m.surface.expect("surface");
+            let (t, n2) = (s.climate.temperature_k, s.gases.n2);
+            assert!((37.0..=39.0).contains(&t), "seed {seed}: {t} K {s:?}");
+            assert!((1e-5..=2e-5).contains(&n2), "seed {seed}: {n2:e} bar {s:?}");
+            assert!(s.climate.bond_albedo >= 0.6, "seed {seed}: {s:?}");
+        }
+    }
+
+    /// The icy Galilean moons and Enceladus take the Bond albedo of their
+    /// terrain units (spec goal 4), and the mean temperature it gives,
+    /// on every seed of their archetypes. Observed Bond albedos (from
+    /// memory, not checked): Enceladus 0.81 ± 0.04 (Howett et al. 2010,
+    /// Icarus 206, 573), Europa about 0.62-0.68, Ganymede about 0.4 and
+    /// Callisto about 0.2 (Squyres & Veverka 1981; Buratti 1991). The
+    /// bounds are the spec's targets.
+    #[test]
+    fn icy_moons_take_their_albedo() {
+        for (name, albedo, kelvin) in [
+            ("enceladus-like", 0.75..=0.85, 55.0..=75.0),
+            ("europa-like", 0.55..=0.70, 90.0..=105.0),
+            ("ganymede-like", 0.35..=0.50, 100.0..=112.0),
+            ("callisto-like", 0.15..=0.30, 108.0..=122.0),
+        ] {
+            for seed in 1..=40 {
+                let m = archetype_moon(name, seed);
+                let s = m.surface.expect("surface");
+                let (a, t) = (s.climate.bond_albedo, s.climate.temperature_k);
+                assert!(albedo.contains(&a), "{name} seed {seed}: albedo {a}");
+                assert!(kelvin.contains(&t), "{name} seed {seed}: {t} K");
+            }
+        }
+    }
+
+    /// Every icy moon of 300 drawn systems (Review Focus 1): a Bond
+    /// albedo within 0.05-0.95, a finite temperature, and no air above
+    /// [`crate::atmosphere::AIRLESS_BAR`] unless an ice holds it (a
+    /// frost, or its own water ice: a moon darkened to 240 K breathes
+    /// its ice's 0.4 mbar of vapour) or it is dense
+    /// (`interim::ERODING_BAR` or more). On every body of those
+    /// systems with a stagnant-lid ice crust, its climate took a plume's
+    /// fallout (a vent strength above 0, `super::super::vent_strength`)
+    /// exactly when its model stores geysers. The bodies with geysers
+    /// and no such crust (rocky or wet-rock frozen bodies, or a crust
+    /// with plates) are counted apart: their climate reads no fallout.
+    #[test]
+    fn drawn_icy_moons_stay_in_bounds() {
+        use crate::generation::{CrustKind, model_crust_kind};
+        use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, body_context, draw};
+        let airless = f64::from(crate::atmosphere::AIRLESS_BAR);
+        let dense = super::super::interim::ERODING_BAR;
+        let (mut icy, mut vented, mut elsewhere) = (0usize, 0usize, 0usize);
+        let mut unlidded = 0usize;
+        let mut disagree = Vec::new();
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for seed in 1..=300 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                seed: Some(seed),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(
+                &request,
+                &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .expect("the system draws");
+            for body in &system.bodies {
+                let Some(m) = body.model.as_ref() else {
+                    continue;
+                };
+                let context = body_context(&system, body).expect("its context");
+                let Some(s) = m.surface else {
+                    continue;
+                };
+                let steps = crate::planet::explain::replay(&context, m, &s);
+                match steps.vent {
+                    Some(vent) => {
+                        if (vent > 0.0) != m.geysers.is_some() {
+                            disagree.push(format!(
+                                "seed {seed} {} {:?} vent {vent} T {:.1} {:?}",
+                                body.id, body.kind, s.climate.temperature_k, m.ice_shell
+                            ));
+                        }
+                        vented += usize::from(vent > 0.0);
+                    }
+                    None => {
+                        elsewhere += usize::from(m.geysers.is_some());
+                        unlidded += usize::from(model_crust_kind(m) == CrustKind::Ice);
+                    }
+                }
+                if body.kind != BodyKind::Moon || model_crust_kind(m) != CrustKind::Ice {
+                    continue;
+                }
+                icy += 1;
+                let (a, t, p) = (
+                    s.climate.bond_albedo,
+                    s.climate.temperature_k,
+                    s.gases.total(),
+                );
+                lo = lo.min(a);
+                hi = hi.max(a);
+                assert!((0.05..=0.95).contains(&a), "seed {seed} {}: {a}", body.id);
+                assert!(t.is_finite(), "seed {seed} {}: {s:?}", body.id);
+                // Over the airless line, the air is the vapour of an
+                // ice: its own water ice's (a warm crust sublimating) or
+                // a frost's.
+                if p > airless && p < dense && s.gases.h2o < 0.5 * p {
+                    assert!(
+                        steps.frost.total() > 0.0,
+                        "seed {seed} {}: {p:e} bar, no frost: {s:?}",
+                        body.id
+                    );
+                }
+            }
+        }
+        println!(
+            "{icy} icy moons, albedo {lo:.3}-{hi:.3}; {vented} ice crusts vent, \
+             {elsewhere} other bodies have geysers; {unlidded} ice crusts \
+             without a stagnant lid"
+        );
+        assert!(icy > 100, "{icy}");
+        assert!(
+            disagree.is_empty(),
+            "{} disagree: {disagree:?}",
+            disagree.len()
+        );
+    }
+
+    /// Validation, out of the calibration set: the icy-age law
+    /// (`albedo::icy_unit_albedo`) was calibrated on Enceladus, Europa,
+    /// Ganymede and Callisto; the five large moons of Uranus, round a
+    /// Uranus at 19.2 AU, were not looked at while tuning it. Their Bond
+    /// albedos are about 0.1 to 0.25 (Ariel about 0.23, Umbriel 0.10,
+    /// Titania 0.17, Oberon 0.14, Miranda about 0.2; Veverka et al.
+    /// 1991 in *Uranus*, University of Arizona Press, and Karkoschka
+    /// 2001, Icarus 151, 51; from memory, not checked). Masses and
+    /// orbits: JPL satellite parameters; ice shares from their densities
+    /// (1.2 to 1.7 g/cm³), about half. The band asserted is wide, 0.08
+    /// to 0.35: the law has no term for their dark, carbon-rich
+    /// non-ice material, nor for Umbriel's unusual darkness. It separates
+    /// dark old crusts from bright young ones only: the per-moon values
+    /// miss (Miranda 0.31 against about 0.2, Umbriel 0.18 against 0.10,
+    /// Oberon 0.19 against 0.14).
+    #[test]
+    fn uranian_moons_are_dark() {
+        const URANUS_KG: f64 = 8.681e25;
+        for (name, mass_earth, ice, a_m, e) in [
+            ("Miranda", 1.10e-5, 0.6, 1.299e8, 0.0013),
+            ("Ariel", 2.09e-4, 0.45, 1.909e8, 0.0012),
+            ("Umbriel", 2.14e-4, 0.5, 2.660e8, 0.0039),
+            ("Titania", 5.69e-4, 0.45, 4.363e8, 0.0011),
+            ("Oberon", 5.16e-4, 0.5, 5.835e8, 0.0014),
+        ] {
+            let m = model(
+                19.19,
+                &moon(mass_earth, ice, MoonBirth::Disk, URANUS_KG, a_m, e),
+            );
+            let s = m.surface.expect("surface");
+            let a = s.climate.bond_albedo;
+            println!(
+                "{name}: Bond albedo {a:.3}, {:.1} K, units {:?}",
+                s.climate.temperature_k, m.terrain.units
+            );
+            assert!((0.08..=0.35).contains(&a), "{name}: {a}");
+        }
+    }
+
     /// A moon's albedo comes from its own cover, not its planet's
     /// (Review Focus 4): Titan under its haze (0.27, Li et al. 2011), an
-    /// airless icy Europa (0.68, Buratti & Veverka 1983) and Io under its
-    /// frosts (0.63, Simonelli & Veverka 1988; all from memory, not
-    /// checked), round one star.
+    /// airless icy Europa under its young, dusty ice (0.68, Buratti &
+    /// Veverka 1983; the spec's 0.55 to 0.70, `albedo::icy_unit_albedo`)
+    /// and Io under its frosts (0.63, Simonelli & Veverka 1988; all from
+    /// memory, not checked), round one star. Io's CO₂ frost went with its air to
+    /// Jupiter's plasma ([`super::super::non_thermal_loss`]); the SO₂
+    /// frost of its volcanoes brightens it
+    /// ([`super::super::atmosphere::volcanic_so2_frost_bar`]).
     #[test]
     fn a_moon_uses_its_own_cover() {
         let titan = model(9.54, &titan());
@@ -339,7 +753,7 @@ mod tests {
         let (t, e, i) = (albedo(&titan), albedo(&europa), albedo(&io));
         println!("Bond albedo: Titan {t:.3}, Europa {e:.3}, Io {i:.3}");
         assert!((0.2..=0.35).contains(&t), "Titan {t}: {titan:?}");
-        assert!((0.5..=0.75).contains(&e), "Europa {e}: {europa:?}");
+        assert!((0.55..=0.70).contains(&e), "Europa {e}: {europa:?}");
         assert!((0.4..=0.7).contains(&i), "Io {i}: {io:?}");
         assert!(t != e && e != i && t != i, "{t} {e} {i}");
     }

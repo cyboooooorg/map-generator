@@ -788,6 +788,34 @@ mod tests {
         assert!(not_finite(&negative).is_some());
     }
 
+    /// A Titan at 12.5 AU, without the CO₂ whose frost would brighten it
+    /// once its haze thins (see the report of issue #524), cools to about
+    /// 64 K: under the liquidus of its methane–ethane sea, nitrogen
+    /// condenses into its seas, which stay liquid, and it stays a
+    /// hydrocarbon world (issue #524; 12 AU before the anti-greenhouse
+    /// and the ethane of issue #530, where it now stays at 84 K).
+    #[test]
+    fn condensed_nitrogen_keeps_the_hydrocarbon_class() {
+        let mut inputs = model_inputs(reference("Titan"));
+        inputs.volatiles.co2 = 0.0;
+        let model = planet_model(&sun_at(12.5), inputs);
+        let s = model.surface.expect("a surface");
+        let t = s.climate.temperature_k;
+        // Methane and ethane, with the nitrogen the air dissolves, would
+        // have frozen: the nitrogen condensed into the sea keeps it liquid.
+        assert!(
+            t < super::super::climate::methane_freezes_k(s.gases.n2),
+            "{s:?}"
+        );
+        assert!(t >= crate::planet::atmosphere::NITROGEN_TRIPLE_K, "{s:?}");
+        assert_eq!(
+            s.climate.liquid,
+            crate::planet::SurfaceLiquid::Hydrocarbons,
+            "{s:?}"
+        );
+        assert_eq!(model.class, HydrocarbonWorld, "{s:?}");
+    }
+
     /// The path of the first number of `model` that is not finite or is
     /// negative, if any. serde_json writes a non-finite `f64` as `null`,
     /// so a `null` counts as one, except where an `Option` is expected

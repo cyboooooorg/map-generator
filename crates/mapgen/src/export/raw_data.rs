@@ -105,8 +105,18 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// `CryovolcanicPlain`) under the look's new `rules.cryovolcanic`; a hot
 /// one in the heat-pipe regime no longer takes the `volcanic` look.
 /// Only icy bodies change, so worlds of version 24 still load (an icy
-/// moon keeps its lava until it is regenerated).
-pub const FORMAT_VERSION: u32 = 27;
+/// moon keeps its lava until it is regenerated). Version 28 comes with
+/// lot 3C-1 of the climate pass: a model stores its terrain units
+/// (`PlanetModel::terrain`: age, share and renewal of each part of the
+/// surface), its climate the surface's emissivity
+/// (`Climate::emissivity`, below 1 under nitrogen frost) and a surface
+/// liquid may be nitrogen (`SurfaceLiquid::Nitrogen`); the surface age, the Bond albedo of an icy crust, the air of
+/// a thin-aired moon and Io's SO₂ frost follow new laws, and the card
+/// explains them. The same seed gives another world for the bodies they
+/// touch; worlds of version 24 to 27 still load (a world of version 27
+/// has no terrain units until it is regenerated), and
+/// [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 10.
+pub const FORMAT_VERSION: u32 = 28;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`
@@ -1391,6 +1401,40 @@ mod tests {
         let loaded = load_layers(&world_dir);
         std::fs::remove_dir_all(&world_dir).unwrap();
         assert!(loaded.is_ok(), "{:?}", loaded.err());
+    }
+
+    /// Worlds of format 27 lack the terrain units of their model (format
+    /// 28): they still load, with no units.
+    #[test]
+    fn a_format_27_world_reads_without_terrain() {
+        const { assert!(MIN_FORMAT_VERSION <= 27 && FORMAT_VERSION > 27) };
+        let (world, world_dir) = exported_earth("format-27");
+        assert!(
+            !world
+                .params
+                .model
+                .as_ref()
+                .unwrap()
+                .terrain
+                .units
+                .is_empty(),
+            "a format 28 world stores its terrain"
+        );
+        let path = world_dir.join("raw_data/world.json");
+        let mut json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        json["format_version"] = 27.into();
+        json["model"]
+            .as_object_mut()
+            .unwrap()
+            .remove("terrain")
+            .expect("the model stores its terrain");
+        std::fs::write(&path, json.to_string()).unwrap();
+        let loaded = load_layers(&world_dir);
+        std::fs::remove_dir_all(&world_dir).unwrap();
+        let loaded = loaded.expect("a format 27 world loads");
+        let model = loaded.params.model.expect("its model");
+        assert!(model.terrain.units.is_empty(), "{:?}", model.terrain);
     }
 
     #[test]

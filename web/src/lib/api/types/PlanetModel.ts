@@ -6,6 +6,7 @@ import type { InternalHeat } from "./InternalHeat";
 import type { PlanetClass } from "./PlanetClass";
 import type { PlanetInputs } from "./PlanetInputs";
 import type { Surface } from "./Surface";
+import type { Terrain } from "./Terrain";
 
 /**
  * A planet as the model derives it: what it is made of, its layers, the
@@ -54,4 +55,9 @@ geysers: Geysers | null,
  * ([`differentiation::moment_of_inertia`]); 0 in a model stored
  * before it existed.
  */
-moment_of_inertia: number, };
+moment_of_inertia: number, 
+/**
+ * The parts of its surface and their ages ([`surface_age::terrain`]);
+ * empty in a model stored before it existed.
+ */
+terrain: Terrain, };

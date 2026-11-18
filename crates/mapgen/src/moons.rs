@@ -47,6 +47,7 @@
 //! for a giant world and a giant of a system alike (`of_giant`).
 use crate::giants::GiantKind;
 use crate::noise::{stream, stream_seed};
+use crate::planet::resonance::Placement;
 use crate::star::StarInfo;
 use crate::world::WorldParams;
 use serde::{Deserialize, Serialize};
@@ -299,6 +300,12 @@ pub struct Moon {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub archetype: Option<String>,
+    /// For a drawn moon its giant's tides captured into a 2:1 resonance,
+    /// the share of its system's age since then
+    /// ([`crate::planet::resonance::Captures`]); `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub capture_age_share: Option<f32>,
 }
 
 /// A moon a whole system asks for by archetype (`titan-like`), drawn once
@@ -330,6 +337,11 @@ pub struct AskedMoon {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub inner_partner_mass_ratio: Option<f32>,
+    /// Mass of the moon in 2:1 resonance inward of its inner partner, over
+    /// its giant's mass, when its archetype names one (Io for Ganymede).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub second_inner_partner_mass_ratio: Option<f32>,
 }
 
 impl AskedMoon {
@@ -351,11 +363,17 @@ impl AskedMoon {
             partner_mass_ratio: moon
                 .resonance
                 .as_ref()
-                .map(|r| pick(r.partner_mass_ratio) as f32),
+                .and_then(|r| r.partner_mass_ratio)
+                .map(|r| pick(r) as f32),
             inner_partner_mass_ratio: moon
                 .resonance
                 .as_ref()
                 .and_then(|r| r.inner_partner_mass_ratio)
+                .map(|r| pick(r) as f32),
+            second_inner_partner_mass_ratio: moon
+                .resonance
+                .as_ref()
+                .and_then(|r| r.second_inner_partner_mass_ratio)
                 .map(|r| pick(r) as f32),
         }
     }
@@ -363,7 +381,7 @@ impl AskedMoon {
     /// The orbits of the partners this moon is in resonance with, in its
     /// giant's radii, with their masses over the giant's: one chain step
     /// outward ([`CHAIN_STEP`], periods doubling) and, when its archetype
-    /// names one, one step inward, from `a_radii` (this moon's, once
+    /// names them, one step inward and two, from `a_radii` (this moon's, once
     /// pushed out of the giant's rings and Roche limit).
     fn partner_orbits(&self) -> impl Iterator<Item = (f64, f64, bool)> + '_ {
         let outer = self
@@ -372,7 +390,10 @@ impl AskedMoon {
         let inner = self
             .inner_partner_mass_ratio
             .map(|r| (self.a_radii / CHAIN_STEP, f64::from(r), true));
-        outer.into_iter().chain(inner)
+        let second = self
+            .second_inner_partner_mass_ratio
+            .map(|r| (self.a_radii / CHAIN_STEP / CHAIN_STEP, f64::from(r), true));
+        outer.into_iter().chain(inner).chain(second)
     }
 
     /// The partners of the disk-born `moons` asked, as moons asked for
@@ -443,6 +464,7 @@ impl AskedMoon {
                         captured: false,
                         partner_mass_ratio: None,
                         inner_partner_mass_ratio: None,
+                        second_inner_partner_mass_ratio: None,
                     },
                     inner,
                 ));
@@ -1395,6 +1417,7 @@ impl MoonSystem {
                     barycentre_km: barycentre as f32,
                     seed: stream_seed(seed, stream::MOONS).wrapping_add(k as u32 + 1),
                     archetype: None,
+                    capture_age_share: None,
                 }
             })
             .collect();
@@ -1589,19 +1612,27 @@ impl MoonSystem {
                     }
                 })
                 .collect();
-            let slots = captured_slots(
+            let captured = captured_slots(
                 p,
                 (m_g, r_g),
                 &slots,
                 &masses,
-                asked_disk.iter().map(|m| (m.a_radii, m.mass_earth)).chain(
-                    sided
-                        .iter()
-                        .zip(&partner_orbits)
-                        .filter_map(|((m, _), a)| a.map(|a| (a, m.mass_earth))),
-                ),
+                asked_disk
+                    .iter()
+                    .map(|m| {
+                        let asked = Placement::Asked {
+                            inward: m.inner_partner_mass_ratio.is_some(),
+                            outward: m.partner_mass_ratio.is_some(),
+                        };
+                        (m.a_radii, m.mass_earth, asked)
+                    })
+                    .chain(sided.iter().zip(&partner_orbits).filter_map(|((m, _), a)| {
+                        a.map(|a| (a, m.mass_earth, Placement::Partner))
+                    })),
             );
-            for (k, (&a_radii, &mass)) in slots.iter().zip(&masses).enumerate() {
+            for (k, (&(a_radii, capture_age_share), &mass)) in
+                captured.iter().zip(&masses).enumerate()
+            {
                 let icy = a_radii > ice_line;
                 let bulk = if icy {
                     Bulk::cold(&mut rng)
@@ -1613,7 +1644,7 @@ impl MoonSystem {
                 } else {
                     forced_eccentricity(&mut rng)
                 };
-                moons.push(regular_moon(
+                let mut moon = regular_moon(
                     p,
                     &mut rng,
                     m_g,
@@ -1626,7 +1657,9 @@ impl MoonSystem {
                     MoonOrigin::Disk,
                     0.3,
                     eccentricity,
-                ));
+                );
+                moon.capture_age_share = capture_age_share.map(|s| s as f32);
+                moons.push(moon);
             }
             // The asked ones, at their orbits pushed out of the rings and
             // the Roche limit as the chain is, after the drawn ones.
@@ -1790,17 +1823,19 @@ const RING_CLEARANCE_RADII: f64 = 0.3;
 /// giant's tides have driven its moons into resonance
 /// ([`crate::planet::resonance::capture`]): the drawn moons, of `masses`
 /// kg, among the `fixed` ones (the asked moons and their partners, at
-/// their orbits in radii, of their masses in Earth masses), round a giant
+/// their orbits in radii, of their masses in Earth masses, with how each
+/// is placed), round a giant
 /// of `m_g` kg and radius `r_g` km, `p.age_gyr` old. A drawn moon the
 /// pair inside it captured sits at the commensurability, one left free
-/// out of [`crate::planet::resonance::RESONANCE_BAND`].
+/// out of [`crate::planet::resonance::RESONANCE_BAND`]. Each with the
+/// share of the age since its capture, for one captured.
 fn captured_slots(
     p: &WorldParams,
     (m_g, r_g): (f64, f64),
     slots: &[f64],
     masses: &[f64],
-    fixed: impl Iterator<Item = (f64, f64)>,
-) -> Vec<f64> {
+    fixed: impl Iterator<Item = (f64, f64, Placement)>,
+) -> Vec<(f64, Option<f64>)> {
     use crate::planet::resonance::{Orbiter, capture};
     let radius_m = r_g * 1000.0;
     let orbiter = |a_radii: f64, mass_kg: f64| {
@@ -1814,22 +1849,23 @@ fn captured_slots(
             k2_over_q: 0.0,
         }
     };
-    // Each moon, with the slot it is (`None` for a fixed one).
-    let mut moons: Vec<(Orbiter, Option<usize>)> = slots
+    // Each moon, how it is placed, and the slot it is (`None` for a fixed
+    // one).
+    let mut moons: Vec<(Orbiter, Placement, Option<usize>)> = slots
         .iter()
         .zip(masses)
         .enumerate()
-        .map(|(k, (&a, &m))| (orbiter(a, m), Some(k)))
-        .chain(fixed.map(|(a, m)| (orbiter(a, m * EARTH_MASS_KG), None)))
+        .map(|(k, (&a, &m))| (orbiter(a, m), Placement::Drawn, Some(k)))
+        .chain(fixed.map(|(a, m, placed)| (orbiter(a, m * EARTH_MASS_KG), placed, None)))
         .collect();
     moons.sort_by(|a, b| a.0.a_m.total_cmp(&b.0.a_m));
-    let placed: Vec<bool> = moons.iter().map(|(_, k)| k.is_none()).collect();
-    let mut orbiters: Vec<Orbiter> = moons.iter().map(|(o, _)| *o).collect();
-    capture(m_g, radius_m, f64::from(p.age_gyr), &mut orbiters, &placed);
-    let mut out = slots.to_vec();
-    for (o, (_, k)) in orbiters.iter().zip(&moons) {
+    let placed: Vec<Placement> = moons.iter().map(|(_, p, _)| *p).collect();
+    let mut orbiters: Vec<Orbiter> = moons.iter().map(|(o, _, _)| *o).collect();
+    let captures = capture(m_g, radius_m, f64::from(p.age_gyr), &mut orbiters, &placed);
+    let mut out: Vec<(f64, Option<f64>)> = slots.iter().map(|&a| (a, None)).collect();
+    for ((o, share), (_, _, k)) in orbiters.iter().zip(&captures.age_share).zip(&moons) {
         if let Some(k) = k {
-            out[*k] = o.a_m / radius_m;
+            out[*k] = (o.a_m / radius_m, *share);
         }
     }
     out
@@ -2254,6 +2290,7 @@ fn regular_moon(
         barycentre_km: (a * mass / (m_g + mass)) as f32,
         seed,
         archetype: None,
+        capture_age_share: None,
     }
 }
 
@@ -2415,6 +2452,7 @@ mod tests {
             barycentre_km: 4670.0,
             seed: 0,
             archetype: None,
+            capture_age_share: None,
         };
         let system = |moons: Vec<Moon>| MoonSystem {
             planet_day_hours: 24.0,

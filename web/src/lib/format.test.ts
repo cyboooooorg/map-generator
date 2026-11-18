@@ -122,6 +122,10 @@ describe('format', () => {
       '0.0060 bar, dust clouds',
     );
     expect(formatAtmosphere({ ...meta, pressure_bar: 0, look } as unknown as WorldMetadata)).toBe('none');
+    // An air the plasma collapsed is an exosphere.
+    expect(formatAtmosphere({ ...meta, pressure_bar: 3e-12, look } as unknown as WorldMetadata)).toMatch(/^exosphere, 3×10⁻¹²\s?bar$/);
+    // Triton's thin N₂ air is not an exosphere.
+    expect(formatAtmosphere({ ...meta, pressure_bar: 1.5e-5, look } as unknown as WorldMetadata)).toMatch(/^1\.5×10⁻⁵\s?bar, dust clouds$/);
   });
 
   it("describes the geology", () => {

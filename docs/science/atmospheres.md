@@ -382,28 +382,49 @@ Their near-black brown is a calibration with those maps as its target.
   from the world's circulation, and does not model the north-south
   asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
   band is a straight line of latitude.
-- **Nitrogen keeps methane liquid, by a simple rule.** Pure methane
-  freezes at 90.67 K, but a sea under a nitrogen air is a mixture: N₂
-  dissolves in liquid methane, and the mixture freezes lower. Thompson,
-  Zollweg & Gabis 1992 [15] find that methane condensing under Titan's air
-  holds 16 to 30 % N₂, about half of what Raoult's law gives, and
-  Richardson, Hartwig & Leachman 2019 [16] measured methane–ethane–nitrogen
-  liquids freezing at 71.5 K (13.4 % N₂) and 74.0 K (7.9 % N₂), more than
-  15 K below the pure ices. The app (`methane_freezes_k`) takes the N₂ in
-  the liquid as half of Raoult's law at the surface's N₂ partial pressure
-  and methane's triple point (nitrogen's vapour pressure from NIST's
-  Antoine fit), at most 30 %, and lowers the freezing point as an ideal
-  solution would (the Schröder–van Laar equation, with methane's enthalpy
-  of fusion, 0.939 kJ/mol): about 78 K under Titan's 1.45 bar of N₂,
-  pure methane's 90.67 K with no nitrogen, never below 70.4 K. It is a
-  simple fit, not the full phase diagram: it leaves the ethane out, which
-  lowers the freezing point further (the binary rule gives 81 and 85 K for
-  Richardson's two liquids), so it errs towards freezing. Liquid methane
+- **Nitrogen and ethane keep methane liquid, by a simple rule.** Pure
+  methane freezes at 90.67 K, but a sea under a nitrogen air is a
+  mixture: N₂ dissolves in liquid methane, methane's photolysis makes
+  ethane, and the mixture freezes lower. Thompson, Zollweg & Gabis 1992
+  [15] find that methane condensing under Titan's air holds 16 to 30 %
+  N₂, about half of what Raoult's law gives, and Richardson, Hartwig &
+  Leachman 2019 [16] measured two liquids freezing at 71.5 K (61.0 %
+  methane, 25.6 % ethane, 13.4 % N₂) and 74.0 K (46.9 %, 45.3 %, 7.9 %),
+  more than 15 K below the pure ices (compositions read in their NASA
+  manuscript, NTRS 20180008677). The app (`methane_freezes_k`,
+  `hydrocarbon_freezes_k`, issue #530) takes the N₂ in the sea as half of
+  Raoult's law at the surface's N₂ partial pressure and methane's triple
+  point (nitrogen's vapour pressure from NIST's Antoine fit), at most
+  30 %, its methane as the half the climate's air keeps over it
+  (`SEA_METHANE_SHARE`), and the rest as ethane; the sea freezes at the
+  higher of two liquidus: ethane's, an ideal solution's (the
+  Schröder–van Laar equation, with ethane's triple point, 90.4 K
+  (`ETHANE_TRIPLE_K`), and the 2.79 kJ/mol (`ETHANE_FUSION_L_OVER_R`)
+  Domalski & Hearing give for melting the solid below its
+  plastic phase, through NIST), and methane's, a regular solution's
+  (methane's enthalpy of fusion, 0.939 kJ/mol, and an interaction
+  `W / R` = 75.3 K (`METHANE_EXCESS_W_OVER_R`) calibrated on Richardson's first liquid, which the
+  ideal law puts at 64.9 K). It gives 71.5 and 74.5 K for Richardson's
+  two liquids (81.3 and 85.0 K before the ethane), about 69 K under
+  Titan's 1.45 bar of N₂, about 76 K with no nitrogen (a sea of half
+  ethane), and never below 67.97 K. That floor is the methane liquidus
+  of the sea's fixed half of methane: the nitrogen dissolved in the sea
+  takes the place of ethane, not of methane, so it lowers the freezing
+  point only by diluting the ethane, until the ethane liquidus falls
+  under methane's (from about 2 bar of N₂). It is a simple fit, not the full phase
+  diagram: it does not resolve the solid solutions or the ternary
+  eutectic, and the sea's composition is fixed, not tracked. Where nitrogen
+  itself condenses (below about 84 K under 2 bar of it), the sea is
+  nitrogen-rich and stays liquid down to nitrogen's triple point,
+  63.14 K (`sea_freezes_k`, issue #524); nitrogen condensed with no
+  methane is a sea of its own (`nitrogen`), and below its triple point
+  a frost. Liquid methane
   is stable under any air above its triple-point pressure (0.1169 bar,
   NIST), from which `planet::classify` names a hydrocarbon world. A lake
   needs enough methane to condense, the vapour of a Titan sea at the
-  surface temperature (half of pure methane's saturation, Raoult's law);
-  the climate condenses the rest of a body's methane onto its ground and
+  surface temperature (half of pure methane's saturation, Raoult's law;
+  over methane ice, under the sea's freezing point, all of it, issue
+  #530); the climate condenses the rest of a body's methane onto its ground and
   its air keeps that vapour, about 5 % of Titan's (issue #443, see
   [planet-atmospheres.md](planet-atmospheres.md)).
 - **Titan's methane is an archetype's cause.** The model draws the methane
@@ -418,6 +439,18 @@ Their near-black brown is a calibration with those maps as its target.
   Sun-like star every asked Titan is then a hydrocarbon world; round an
   old K dwarf (8 Gyr) some lose their methane, and round an M dwarf their
   air, to the star's long-lasting ultraviolet.
+- **Titan's nitrogen is an archetype's calibration.** Its primordial
+  nitrogen is not measured, so `titan-like` pins the factor on the
+  nitrogen rule (0.1 % of the ices) at `n2 = 0.82` instead of the
+  log-normal draw, with Titan's 1.47 bar at the surface (Huygens HASI,
+  Fulchignoni et al. 2005) as its target. The pin does not fix the
+  result: what escape takes at the cosmic shoreline (13 to 27 %) still
+  changes with the drawn orbit of its giant, and the outgassed nitrogen
+  with its drawn ice share: over the 40 seeds of `archetype_census` it
+  keeps 1.24 to 1.52 bar of N₂ and 1.31 to 1.58 bar of air, median
+  1.47 bar (at 0.8 the median was 1.44 bar and one seed fell to
+  1.28 bar). The band holds over those seeds with about 1 % to spare at
+  each end; other seeds or other hosts may leave it.
 - **The greenhouse is a number per type.** It does not come from the
   pressure or the gases: a world asked for at 92 bar with a `terran`
   preset gets Venus's heat transport but no greenhouse beyond the carbon

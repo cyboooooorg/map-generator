@@ -39,14 +39,18 @@ export type SurfaceModel = {
 /**
  * Whether a world of class `cls` with `model` is rocky but holds its
  * water frozen at the surface: at least `ICE_WORLD_MIN_OCEANS` Earth
- * oceans kept, no liquid, under 273.15 K. Never an ice world (that is
- * already its class), an ocean world or a giant; false without a model.
+ * oceans kept, no liquid or a nitrogen sea (it lies over the frozen
+ * water, as the generator's base look has it, `interim::base_of`), under
+ * 273.15 K. Never an ice world (that is already its class), an ocean
+ * world or a giant; false without a model.
  */
 export function hasFrozenSurface(cls: string, model: SurfaceModel): boolean {
   const surface = model?.surface;
   if (!surface || cls === 'ice-world' || cls === 'ocean-world' || isGiantType(cls)) return false;
   return (
-    surface.water.oceans >= ICE_WORLD_MIN_OCEANS && surface.climate.liquid === 'none' && surface.climate.temperature_k < FREEZING_K
+    surface.water.oceans >= ICE_WORLD_MIN_OCEANS &&
+    (surface.climate.liquid === 'none' || surface.climate.liquid === 'nitrogen') &&
+    surface.climate.temperature_k < FREEZING_K
   );
 }
 

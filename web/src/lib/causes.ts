@@ -4,7 +4,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
-import { formatCelsius, formatMassEarth, formatNumber, formatUpTo, withUnit } from './format';
+import { formatCelsius, formatMassEarth, formatInt, formatNumber, formatScientific, formatSurfaceAge, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 import { className } from './i18n/names.svelte';
 
@@ -28,19 +28,27 @@ function keyLabel(quantity: Quantity, key: string): string {
   return tables[quantity]?.[key] ?? key;
 }
 
-const SUPERSCRIPT: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+/** The name of an albedo's part, its key when unknown. */
+function coverName(key: string): string {
+  return (t.causes.covers as Record<string, string>)[key] ?? key;
+}
 
-/** A power of ten written with superscript digits: 1.76×10¹³. */
-function scientific(value: number): string {
-  const [mantissa, exponent] = Number(value.toPrecision(3)).toExponential().split('e');
-  const digits = String(Number(exponent)).replace(/./g, (c) => SUPERSCRIPT[c] ?? c);
-  return `${mantissa}×10${digits}`;
+/** The parts of an albedo that are a frost: a body wearing one over half its disc is named by it. */
+const FROST_COVERS: ReadonlySet<string> = new Set(['frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2']);
+
+/**
+ * The frost that covers most of a body's disc (over half), worded, or null:
+ * the albedo's value line names it without opening its tree.
+ */
+export function dominantFrost(tree: Cause | null): string | null {
+  const part = tree?.causes.find((c) => c.quantity === 'cover_share' && c.label !== null && FROST_COVERS.has(c.label) && c.value > 0.5);
+  return part?.label ? coverName(part.label) : null;
 }
 
 /** A number to three significant digits. */
 function significant(value: number): string {
   if (value === 0) return '0';
-  if (Math.abs(value) >= 1e6 || Math.abs(value) < 1e-3) return scientific(value);
+  if (Math.abs(value) >= 1e6 || Math.abs(value) < 1e-3) return formatScientific(value);
   return formatUpTo(Number(value.toPrecision(3)), 6);
 }
 
@@ -49,7 +57,18 @@ function significant(value: number): string {
  * quantity whose unit an escape takes (its parent's).
  */
 export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): string {
+  // A part of a surface (its share) or an age that a renewal set: both the key and the value.
+  if (cause.label !== null && (cause.quantity === 'terrain_unit' || cause.quantity === 'surface_age')) {
+    const value = cause.quantity === 'terrain_unit' ? withUnit(formatInt(Math.round(cause.value * 100)), '%') : formatSurfaceAge(cause.value);
+    return t.causes.renewalValue({ renewal: (t.causes.renewals as Record<string, string>)[cause.label] ?? cause.label, value });
+  }
+  // A part of what the albedo weighs: its key and its share of the disc.
+  if (cause.label !== null && cause.quantity === 'cover_share') {
+    const value = withUnit(formatInt(Math.round(cause.value * 100)), '%');
+    return (cause.label === 'haze' ? t.causes.hazeValue : t.causes.coverValue)({ cover: coverName(cause.label), value });
+  }
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);
+  if (cause.quantity === 'surface_age') return formatSurfaceAge(cause.value);
   // The same quantity is written as the cards write it.
   if (cause.quantity === 'surface_temperature' || cause.quantity === 'equilibrium_temperature') return formatCelsius(cause.value);
   if (cause.quantity === 'mass') return formatMassEarth(cause.value);

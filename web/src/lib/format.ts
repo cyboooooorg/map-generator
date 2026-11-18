@@ -259,14 +259,47 @@ export function saveBlob(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+const SUPERSCRIPT: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+
+/** A power of ten written with superscript digits: 1.76×10¹³ (the locale's decimal separator). */
+export function formatScientific(value: number): string {
+  const [mantissa, exponent] = Number(value.toPrecision(3)).toExponential().split('e');
+  const digits = String(Number(exponent)).replace(/./g, (c) => SUPERSCRIPT[c] ?? c);
+  return `${formatUpTo(Number(mantissa), 2)}×10${digits}`;
+}
+
+/**
+ * Pressure, bar, an air collapsed by the non-thermal loss of a giant's
+ * plasma is left at: `EXOSPHERE_BAR` of the generator
+ * (crates/mapgen/src/planet/atmosphere.rs, 3e-12; a Rust test keeps the
+ * two equal). Such an air is an exosphere, whose molecules never meet.
+ */
+export const EXOSPHERE_BAR = 3e-12;
+
+/** Whether an air of `bar` is an exosphere: at most twice [`EXOSPHERE_BAR`], the level the collapse leaves. */
+export function isExosphere(bar: number): boolean {
+  return bar > 0 && bar <= 2 * EXOSPHERE_BAR;
+}
+
+/** Pressure under which a card writes a pressure in scientific notation, bar. */
+const SCIENTIFIC_BELOW_BAR = 1e-3;
+
+/** Whether a pressure is written in scientific notation, never rounded to "0 bar". */
+export function isThin(bar: number): boolean {
+  return bar > 0 && bar < SCIENTIFIC_BELOW_BAR;
+}
+
 /** The pressure and clouds of a world, e.g. "1.00 bar, water clouds". */
 export function formatAtmosphere(meta: WorldMetadata): string {
   const pressure = meta.pressure_bar ?? 1;
   if (pressure === 0) {
     return t.worldInfo.airless;
   }
+  if (isExosphere(pressure)) {
+    return t.worldInfo.exosphere({ pressure: withUnit(formatScientific(pressure), 'bar') });
+  }
   const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
-  const bar = withUnit(formatNumber(pressure, digits), 'bar');
+  const bar = withUnit(isThin(pressure) ? formatScientific(pressure) : formatNumber(pressure, digits), 'bar');
   const clouds = meta.look.atmosphere.clouds;
   return clouds === 'none'
     ? t.worldInfo.pressureNoClouds({ pressure: bar })

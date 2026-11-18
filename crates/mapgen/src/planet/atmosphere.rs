@@ -304,6 +304,252 @@ pub fn atmosphere(
     outgassed.scaled(kept)
 }
 
+/// Pressure, bar, at which a body's air that non-thermal loss has
+/// exhausted is stored ([`non_thermal_loss`]): an exosphere, whose
+/// molecules fly from the surface without meeting each other. Its column
+/// is at most about one exobase column, `1/σ` with the hard-sphere
+/// cross-section `σ ≈ 4e-19 m²` of N₂, O₂ and CO₂ (kinetic diameters of
+/// 3.3 to 3.6 Å; from memory, not checked): `2.5e18 m⁻²`, which weighs
+/// `N m g` = 2 to 3e-12 bar of CO₂ under a Galilean moon's 1.2 to
+/// 1.4 m/s². The measured exospheres sit there: Callisto's CO₂ at
+/// 7.5e-12 bar, a column of 8e14 cm⁻² at about 150 K (Carlson 1999,
+/// doi:10.1126/science.283.5403.820; its abstract, checked through a
+/// bibliographic record), and the O₂ of Europa and Ganymede at about
+/// 1e-12 bar (Hall et al. 1995 and 1998, from memory, not checked). The
+/// exosphere's pressure is an order of magnitude, not a chemistry (the
+/// radiolytic O₂ of an icy surface is not modelled): 3e-12 bar, far under
+/// [`crate::atmosphere::AIRLESS_BAR`].
+pub const EXOSPHERE_BAR: f64 = 3.0e-12;
+
+/// A giant whose magnetosphere a moon orbits in, as [`non_thermal_loss`]
+/// reads it: the corotating plasma that sputters the moon's surface and
+/// air grows with the giant's mass and falls steeply with the moon's
+/// distance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HostPlasma {
+    /// Mass of the giant, Earth masses.
+    pub host_mass_earth: f64,
+    /// Semi-major axis of the moon's orbit, in the giant's radii.
+    pub semi_major_axis_radii: f64,
+}
+
+/// What [`non_thermal_loss`] reads of a body.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LossContext {
+    /// Surface gravity, m/s².
+    pub gravity: f64,
+    /// Radius, m.
+    pub radius_m: f64,
+    /// Distance to the star, AU (of the planet, for a moon).
+    pub orbit_au: f64,
+    /// Age of the system, Gyr: how long the loss has worked.
+    pub age_gyr: f64,
+    /// The giant whose magnetosphere the body orbits in, `None` for a
+    /// planet and for a moon of a body that is no giant.
+    pub host: Option<HostPlasma>,
+}
+
+/// Photo-ionisation rate of a molecule of the air at 1 AU from the Sun,
+/// per second: N₂ about 3.5e-7 and CO₂ about 6e-7 under the quiet Sun
+/// (Huebner, Keady & Lyon 1992, Astrophys. Space Sci. 195, 1; from
+/// memory, not checked), one order for every gas. Scaled by `1/d²`.
+const PHOTO_IONISATION_AT_1_AU_S: f64 = 5.0e-7;
+
+/// Column of an exobase, molecules per m²: `1/σ` with the hard-sphere
+/// cross-section of [`EXOSPHERE_BAR`], 4e-19 m². Above it, a molecule
+/// leaves without a collision; the photo-ions made there are what the
+/// giant's corotating field sweeps away, whatever the column under it.
+const EXOBASE_COLUMN_M2: f64 = 2.5e18;
+
+/// Molecules the giant's plasma removes from a moon's surface and air at
+/// Callisto's place (Jupiter's mass, 26.3 Jupiter radii), per m² and per
+/// second, before the share fast enough to escape
+/// ([`escaping_share`]). Calibration on Callisto's CO₂: the column the
+/// cosmic shoreline leaves it (about 0.05 bar, 5.5e28 m⁻², more on the
+/// archetype's richest draws) must be gone within its age, since Carlson
+/// 1999 (see [`EXOSPHERE_BAR`]) sees only an exosphere, which
+/// photo-ionisation and Jupiter's field sweep away in a few years and
+/// which needs a steady supply. The value is about fifty times the water
+/// ice Jupiter's ions sputter there: they bring Callisto about 2e8 keV
+/// cm⁻² s⁻¹ (Cooper et al. 2001, Icarus 149, 133,
+/// doi:10.1006/icar.2000.6498, through a secondary table, not checked),
+/// at about 0.1 molecule of ice per keV (Europa's 2e27 H₂O s⁻¹ over
+/// its 6e10 keV cm⁻² s⁻¹; Johnson et al. 2004, "Radiation effects on the
+/// surfaces of the Galilean satellites", in *Jupiter: The Planet,
+/// Satellites and Magnetosphere*, ch. 20; from memory, not checked):
+/// 2e11 m⁻² s⁻¹, fifty times less. A frost of CO₂ or N₂, bound less
+/// than water ice, sputters several times more per ion; the rest of the
+/// factor is the calibration's uncertainty.
+const PLASMA_LOSS_AT_CALLISTO: f64 = 1.0e13;
+
+/// Exponent of the moon's distance (giant radii) in the plasma's loss:
+/// the energy flux of Jupiter's energetic ions falls from Europa
+/// (9.4 R_J, about 6e10 keV cm⁻² s⁻¹) to Ganymede (15.0, 5e9) and
+/// Callisto (26.3, 2e8) about as `r^-5.5` (Cooper et al. 2001, see
+/// [`PLASMA_LOSS_AT_CALLISTO`]; a fit through the three).
+const PLASMA_DISTANCE_EXPONENT: f64 = 5.5;
+
+/// Exponent of the giant's mass in the plasma's loss. Calibration, no
+/// source: a heavier giant has a stronger field and a denser plasma
+/// (Jupiter's dipole is about 20 times Saturn's for 3.3 times its mass).
+/// The cube keeps Titan (Saturn, 20.3 radii) losing at most 7 % of its N₂
+/// over its age and Triton (Neptune, 12.4 to 15 radii) at most 4 %, while
+/// Callisto loses all its CO₂ (`archetype_census`, seeds 1 to 40). With 2,
+/// Triton, whose giant is 18.5 times lighter than Jupiter, would lose up
+/// to about 80 % of its N₂ and its frost (and Titan up to 23 %): too
+/// close to the line for a body that keeps its air.
+const PLASMA_MASS_EXPONENT: f64 = 3.0;
+
+/// The most molecules per m² and per second a giant's plasma removes
+/// from a moon: Io's, the largest known, about one tonne per second
+/// over its 4.2e7 km² (Thomas et al. 2004, "The Io neutral clouds and
+/// plasma torus", in *Jupiter: The Planet, Satellites and
+/// Magnetosphere*, ch. 23; from memory, not checked), 2.2e14 SO₂ m⁻²
+/// s⁻¹. The power law of [`plasma_flux`] would give Io about 170 times that,
+/// and a moon a few radii from a giant of ten Jupiter masses millions of
+/// times: the plasma a giant's moons load is limited by what they
+/// supply and what its rotation can carry, which the law does not see.
+const PLASMA_LOSS_MAX: f64 = 2.2e14;
+
+/// Jupiter's mass, Earth masses, and Callisto's orbit, Jupiter radii: the
+/// place of [`PLASMA_LOSS_AT_CALLISTO`].
+const JUPITER_MASS_EARTH: f64 = crate::giants::JUPITER_EARTH_MASSES as f64;
+const CALLISTO_RADII: f64 = 26.3;
+
+/// Binding energy of water ice, eV: the energy scale of the molecules
+/// a plasma ion sputters from an icy surface (Johnson 1990, *Energetic
+/// Charged-Particle Interactions with Atmospheres and Surfaces*,
+/// Springer; from memory, not checked).
+const ICE_BINDING_EV: f64 = 0.45;
+
+/// Joules per electronvolt.
+const EV_J: f64 = 1.602_176_634e-19;
+
+/// Atomic mass unit, kg.
+const AMU_KG: f64 = 1.660_54e-27;
+
+/// Molecular masses of the gases of [`Gases`], u, in its field order.
+const MOLECULAR_U: [f64; 7] = [28.014, 44.01, 18.015, 16.04, 17.031, 64.07, 32.0];
+
+impl Gases {
+    /// The partial pressures, in [`MOLECULAR_U`]'s order.
+    fn to_array(self) -> [f64; 7] {
+        [
+            self.n2, self.co2, self.h2o, self.ch4, self.nh3, self.so2, self.o2,
+        ]
+    }
+
+    fn from_array(a: [f64; 7]) -> Self {
+        let [n2, co2, h2o, ch4, nh3, so2, o2] = a;
+        Self {
+            n2,
+            co2,
+            h2o,
+            ch4,
+            nh3,
+            so2,
+            o2,
+        }
+    }
+}
+
+/// Share of the molecules a plasma sputters that leave faster than the
+/// escape velocity: the sputtered energies follow `E / (E + U)³`
+/// (Sigmund–Thompson, `U` the [`ICE_BINDING_EV`]), of which
+/// `U (2x + U) / (x + U)²` lie above the escape energy `x = m v² / 2`.
+/// About 0.4 for CO₂ on Callisto, 0.5 for N₂ on Titan, 0.05 for N₂ on a
+/// moon of the Earth's mass: a large moon holds what its plasma knocks
+/// up.
+fn escaping_share(molecule_kg: f64, body: &LossContext) -> f64 {
+    let x = 0.5 * molecule_kg * 2.0 * body.gravity * body.radius_m / EV_J;
+    let u = ICE_BINDING_EV;
+    u * (2.0 * x + u) / ((x + u) * (x + u))
+}
+
+/// Molecules per m² and per second a moon's air loses at the top to its
+/// giant's magnetosphere, before the share that escapes: the plasma's
+/// sputtering ([`PLASMA_LOSS_AT_CALLISTO`] scaled by the giant's mass and
+/// the moon's distance in its radii), at most [`PLASMA_LOSS_MAX`].
+fn plasma_flux(host: &HostPlasma) -> f64 {
+    let mass = host.host_mass_earth / JUPITER_MASS_EARTH;
+    let distance = host.semi_major_axis_radii.max(1.0) / CALLISTO_RADII;
+    let flux = PLASMA_LOSS_AT_CALLISTO
+        * mass.powf(PLASMA_MASS_EXPONENT)
+        * distance.powf(-PLASMA_DISTANCE_EXPONENT);
+    flux.min(PLASMA_LOSS_MAX)
+}
+
+/// The gases a body keeps against non-thermal loss over its age, and
+/// what it loses: `(kept, lost)`.
+///
+/// The air (`gases`, what the cosmic shoreline of [`atmosphere`] left,
+/// its frosts to come included) is what the body supplied over its age.
+/// Inside a giant's magnetosphere each of its molecules at the top meets
+/// a loss per m² that does not depend on how much air there is,
+/// `L = (J N_exo + f P) t`:
+///
+/// - photo-ionisation at the body's distance, `J =`
+///   [`PHOTO_IONISATION_AT_1_AU_S`]` / d²`, of the exobase column
+///   `N_exo` ([`EXOBASE_COLUMN_M2`]), whose ions the giant's corotating
+///   field sweeps away (Carlson 1999's loss for Callisto's CO₂);
+/// - the giant's plasma sputtering ([`plasma_flux`]), times the share of
+///   the sputtered molecules that escape ([`escaping_share`], which
+///   depends on the molecule's mass).
+///
+/// The air loses its gases in proportion to their share of its column
+/// `Σ p / (m g)`, so the mean of their `L` weighted by those shares is
+/// the air's loss over the age `t`. An air whose column is less than
+/// that is exhausted: it had no air that lasts, only the exosphere its
+/// supply feeds, an order of magnitude ([`EXOSPHERE_BAR`]) that its
+/// gases share in proportion to their supply, each keeping at most what
+/// it had. An air that outlasts its loss keeps all of it: the loss is
+/// then a share of a large column, and the bulk escape is the
+/// shoreline's.
+///
+/// A moon of a giant also meets the shoreline without its own field
+/// (`planet::shield`): the giant's plasma reaching
+/// its upper air lets the star's XUV and wind strip it as an unmagnetised
+/// body's, a bulk escape scaled from the star's light by a fixed factor
+/// of 2 that does not see the plasma's own energy, its distance or its
+/// giant's mass. This step adds that energy, the sputtering and the
+/// sweeping of photo-ions. The two overlap in cause (the plasma) but not
+/// in process; any overlap is absorbed by the calibration of
+/// [`PLASMA_LOSS_AT_CALLISTO`], made on the air the unshielded shoreline
+/// leaves, and the thick airs it must keep (Titan, Triton) do not change.
+///
+/// Outside a giant's magnetosphere nothing is lost here: the stellar
+/// wind's pick-up of photo-ions is already in the shoreline, which Zahnle
+/// & Catling 2017 fitted on the planets (Mars, Mercury) that undergo it;
+/// counting it again would strip Mars. An air that survives this
+/// loss (Titan's 1.5 bar, Triton's N₂ and its frost) is kept whole, the
+/// loss being all or nothing at the cutoff (a few percent of its column
+/// would be the physical loss, #559); Europa, Ganymede, Callisto and Io
+/// lose their CO₂ and N₂.
+pub fn non_thermal_loss(gases: Gases, body: &LossContext) -> (Gases, Gases) {
+    let Some(host) = &body.host else {
+        return (gases, Gases::default());
+    };
+    let seconds = body.age_gyr.max(0.0) * GYR_S;
+    let photo = PHOTO_IONISATION_AT_1_AU_S / (body.orbit_au * body.orbit_au) * EXOBASE_COLUMN_M2;
+    let plasma = plasma_flux(host);
+    let partial = gases.to_array();
+    let (mut column, mut loss) = (0.0, 0.0);
+    for (&bar, &u) in partial.iter().zip(&MOLECULAR_U) {
+        let molecule = u * AMU_KG;
+        let n = bar.max(0.0) * PA_PER_BAR / (molecule * body.gravity);
+        column += n;
+        loss += n * (photo + plasma * escaping_share(molecule, body)) * seconds;
+    }
+    // `loss` is the share-weighted loss times the column.
+    if column <= 0.0 || column * column >= loss {
+        return (gases, Gases::default());
+    }
+    let supply: f64 = partial.iter().map(|p| p.max(0.0)).sum();
+    let kept = partial.map(|p| p.min(EXOSPHERE_BAR * p.max(0.0) / supply));
+    let lost = std::array::from_fn(|i| partial[i] - kept[i]);
+    (Gases::from_array(kept), Gases::from_array(lost))
+}
+
 /// Solar constant, W/m² (Kopp & Lean 2011, doi:10.1029/2010GL045777):
 /// the insolation of 1.
 const SOLAR_CONSTANT_W_M2: f64 = 1361.0;
@@ -339,53 +585,152 @@ const CH4_PER_LYMAN_ALPHA_PHOTON: f64 = 13.9;
 const R_GAS: f64 = 8.314;
 
 /// Triple point of nitrogen, K: under it, the nitrogen a surface
-/// condenses is a frost (NIST Chemistry WebBook, 63.15 K; from memory,
-/// not checked).
-pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.15;
+/// condenses is a frost, above it a liquid (Jacobsen, Stewart et al.
+/// 1986 and Angus, de Reuck et al. 1979, 63.14 K, through the NIST
+/// Chemistry WebBook; checked there).
+pub(crate) const NITROGEN_TRIPLE_K: f64 = 63.14;
 
-/// A gas's triple point (K, bar) and its enthalpy of sublimation
-/// (J/mol). Values from memory (NIST Chemistry WebBook), not checked:
-/// CO₂ 216.6 K and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm
-/// sublimation at 194.7 K); NH₃ 195.4 K and 0.0606 bar, 29 kJ/mol; CH₄
-/// 90.7 K and 0.117 bar, 9.1 kJ/mol; N₂ 63.15 K and 0.125 bar,
-/// 6.3 kJ/mol.
-struct Frost {
-    triple_k: f64,
-    triple_bar: f64,
-    sublimation_j_mol: f64,
+/// A gas's triple point (K, bar) and its sublimation curve below it.
+/// Values from memory (NIST Chemistry WebBook), not checked: CO₂ 216.6 K
+/// and 5.185 bar, 26.1 kJ/mol (which gives its 1 atm sublimation at
+/// 194.7 K); NH₃ 195.4 K and 0.0606 bar, 29 kJ/mol; CH₄ 90.7 K and
+/// 0.117 bar, 9.1 kJ/mol. SO₂'s is [`SO2_FROST`], N₂'s [`N2_FROST`].
+pub struct Frost {
+    /// Temperature of the triple point, K.
+    pub triple_k: f64,
+    /// Pressure of the triple point, bar.
+    pub triple_bar: f64,
+    /// The sublimation curve from the triple point down.
+    pub sublimation: Sublimation,
+}
+
+/// How a [`Frost`]'s sublimation pressure falls below its triple point.
+pub enum Sublimation {
+    /// Clausius–Clapeyron from the triple point with this enthalpy of
+    /// sublimation, J/mol, held constant.
+    Enthalpy(f64),
+    /// A measured curve: `ln(p / p_triple)` at the temperature, K.
+    Fit(fn(f64) -> f64),
 }
 
 const CO2_FROST: Frost = Frost {
     triple_k: 216.6,
     triple_bar: 5.185,
-    sublimation_j_mol: 26_100.0,
+    sublimation: Sublimation::Enthalpy(26_100.0),
 };
 const NH3_FROST: Frost = Frost {
     triple_k: 195.4,
     triple_bar: 0.0606,
-    sublimation_j_mol: 29_000.0,
+    sublimation: Sublimation::Enthalpy(29_000.0),
 };
 const CH4_FROST: Frost = Frost {
     triple_k: 90.7,
     triple_bar: 0.117,
-    sublimation_j_mol: 9_100.0,
+    sublimation: Sublimation::Enthalpy(9_100.0),
 };
+/// SO₂: triple point 197.64 K and 0.0167 bar (Giauque & Stephenson 1938,
+/// J. Am. Chem. Soc. 60, 1389, through the NIST Chemistry WebBook;
+/// checked there), and the sublimation curve
+/// `P = 1.516e8 exp(-4510 K / T)` bar of Wagman 1979 (*Sublimation
+/// pressure and enthalpy of SO₂*, Chemical Thermodynamics Data Center,
+/// National Bureau of Standards), which Io's atmosphere is read with
+/// (quoted by Giles et al. 2024, arXiv:2405.19253; checked there):
+/// `4510 K · R` = 37.5 kJ/mol. Anchored at the triple point, the curve
+/// gives 1.3e-9 bar at 115 K, 1.4e-9 in Wagman's form. Fray & Schmitt
+/// 2009 (Planet. Space Sci. 57, 2053, doi:10.1016/j.pss.2009.09.011)
+/// review SO₂'s sublimation pressure too; their table was not read.
+pub const SO2_FROST: Frost = Frost {
+    triple_k: 197.64,
+    triple_bar: 0.0167,
+    sublimation: Sublimation::Enthalpy(4510.0 * R_GAS),
+};
+
+/// N₂: triple point [`NITROGEN_TRIPLE_K`] and 0.1253 bar (Angus, de
+/// Reuck et al. 1979, through the NIST Chemistry WebBook; checked
+/// there), and the sublimation curve of Fray & Schmitt 2009
+/// ([`nitrogen_sublimation`]).
 const N2_FROST: Frost = Frost {
     triple_k: NITROGEN_TRIPLE_K,
-    triple_bar: 0.125,
-    sublimation_j_mol: 6_300.0,
+    triple_bar: 0.1253,
+    sublimation: Sublimation::Fit(nitrogen_sublimation),
 };
+
+/// Fray & Schmitt 2009 (Planet. Space Sci. 57, 2053,
+/// doi:10.1016/j.pss.2009.09.011), their Table 2 fits of N₂'s
+/// sublimation pressure, `ln(p / 1 bar) = Σ Aᵢ / Tⁱ`, as Lisse et al.
+/// 2021 (Icarus 356, 114072, doi:10.1016/j.icarus.2020.114072,
+/// supplementary Table 2; checked there) reproduce them: `N2-1` for
+/// cubic α-N₂, `N2-2` for hexagonal β-N₂. The phases are read off the
+/// curves (the paper itself was not read): `N2-2` gives 0.1215 bar at the
+/// triple point, `N2-1` 0.317 bar; the two meet within 3 % at the α–β
+/// transition, [`NITROGEN_ALPHA_BETA_K`].
+const N2_ALPHA_FIT: [f64; 6] = [12.40, -807.4, -3926.0, 62_970.0, -463_300.0, 1_325_000.0];
+/// See [`N2_ALPHA_FIT`].
+const N2_BETA_FIT: [f64; 5] = [8.514, -458.4, -19_870.0, 480_000.0, -4_524_000.0];
+
+/// The α–β transition of solid nitrogen at low pressure, K: 35.61 K
+/// (Scott 1976, Phys. Rep. 27, 89; from memory, not checked). Triton's
+/// and Pluto's N₂ ice, at 37 to 40 K, is β-N₂.
+const NITROGEN_ALPHA_BETA_K: f64 = 35.61;
+
+/// The coldest temperature, K, at which [`N2_ALPHA_FIT`] is read: the
+/// polynomial still falls with the temperature there (it turns over
+/// under about 6 K); colder, its curve goes on with its slope at this
+/// temperature (a constant enthalpy, about 7.4 kJ/mol). Under 1e-33 bar
+/// either way.
+const NITROGEN_FIT_FLOOR_K: f64 = 10.0;
+
+/// `Σ Aᵢ xⁱ` and its derivative in `x`, at `x` = `1 / T`.
+fn fit_at(coefficients: &[f64], x: f64) -> (f64, f64) {
+    coefficients
+        .iter()
+        .rev()
+        .fold((0.0, 0.0), |(value, slope), &a| {
+            (value * x + a, slope * x + value)
+        })
+}
+
+/// `ln(p / p_triple)` of N₂ ice at `temperature_k`, under its triple
+/// point: Fray & Schmitt's β-N₂ curve ([`N2_BETA_FIT`]) down to the α–β
+/// transition, their α-N₂ curve ([`N2_ALPHA_FIT`]) below it. Each is
+/// pinned to the curve above it, the β curve to the triple point of
+/// [`N2_FROST`] (it falls 3 % short of 0.1253 bar there) and the α curve
+/// to the β curve at the transition (2.6 % apart), so that the curve is
+/// continuous; within those few percent, the fits as published. At 37.5 K,
+/// 1.68e-5 bar; Triton's 14 µbar (Tyler et al. 1989) sits at 37.2 K.
+fn nitrogen_sublimation(temperature_k: f64) -> f64 {
+    let ln = |fit: &[f64], t: f64| fit_at(fit, 1.0 / t).0;
+    let beta = |t: f64| ln(&N2_BETA_FIT, t) - ln(&N2_BETA_FIT, NITROGEN_TRIPLE_K);
+    let t = temperature_k.max(1.0);
+    if t >= NITROGEN_ALPHA_BETA_K {
+        return beta(t);
+    }
+    let alpha = |t: f64| {
+        ln(&N2_ALPHA_FIT, t) - ln(&N2_ALPHA_FIT, NITROGEN_ALPHA_BETA_K)
+            + beta(NITROGEN_ALPHA_BETA_K)
+    };
+    if t >= NITROGEN_FIT_FLOOR_K {
+        return alpha(t);
+    }
+    let floor = 1.0 / NITROGEN_FIT_FLOOR_K;
+    let slope = fit_at(&N2_ALPHA_FIT, floor).1;
+    alpha(NITROGEN_FIT_FLOOR_K) + slope * (1.0 / t - floor)
+}
 
 impl Frost {
     /// The partial pressure the gas keeps at `temperature_k`: below its
-    /// triple point, at most its sublimation pressure (Clausius–Clapeyron
+    /// triple point, at most its sublimation pressure ([`Sublimation`]
     /// from the triple point); at or above it, all of it.
     fn cap(&self, partial_bar: f64, temperature_k: f64) -> f64 {
         if temperature_k >= self.triple_k {
             return partial_bar;
         }
-        let exponent =
-            -self.sublimation_j_mol / R_GAS * (1.0 / temperature_k.max(1.0) - 1.0 / self.triple_k);
+        let exponent = match self.sublimation {
+            Sublimation::Enthalpy(j_mol) => {
+                -j_mol / R_GAS * (1.0 / temperature_k.max(1.0) - 1.0 / self.triple_k)
+            }
+            Sublimation::Fit(curve) => curve(temperature_k),
+        };
         partial_bar.min(self.triple_bar * exponent.exp())
     }
 }
@@ -405,8 +750,10 @@ struct Condensable {
     critical_k: f64,
     /// Share of the pure gas's saturation pressure that the air over its
     /// condensate holds (Raoult's law: the gas's mole fraction in the
-    /// condensate), 1 for a pure condensate.
-    activity: f64,
+    /// condensate), 1 for a pure condensate: a function of the surface
+    /// temperature, the air left by the gases before it in [`CONDENSING`]
+    /// and what they condensed.
+    activity: fn(f64, &Gases, &Gases) -> f64,
     /// The gas's partial pressure in a [`Gases`].
     of: fn(&mut Gases) -> &mut f64,
 }
@@ -445,37 +792,60 @@ pub(crate) const SEA_METHANE_SHARE: f64 = 0.5;
 /// The gases that condense on the surface inside the climate
 /// ([`condense`]):
 ///
-/// - methane over a sea of methane, nitrogen and ethane
-///   ([`SEA_METHANE_SHARE`]), normal boiling point 111.67 K and critical
-///   point 190.56 K;
-/// - nitrogen over its own ice (activity 1: a pure frost, which Triton's
-///   N₂ air sits in equilibrium with; issue #464), normal boiling point
-///   77.36 K and critical point 126.19 K.
+/// - nitrogen over its own ice or liquid (activity 1: a pure frost,
+///   which Triton's N₂ air sits in equilibrium with, issue #464; a
+///   condensed liquid is nitrogen-rich, issue #524), normal boiling
+///   point 77.34 K and critical point 126.19 K (Jacobsen, Stewart et al.
+///   1986, through the NIST Chemistry WebBook; checked there);
+/// - methane, after it, over a sea of methane, nitrogen and ethane
+///   ([`SEA_METHANE_SHARE`]) where the sea is liquid, and over its own
+///   ice (activity 1, a pure solid, issue #530) under the sea's
+///   freezing point ([`super::climate::sea_freezes_k`], with the
+///   nitrogen the air keeps and condenses), normal boiling point
+///   111.67 K and critical point 190.56 K.
 ///
-/// Points from the NIST Chemistry WebBook (from memory, not checked).
+/// Methane's points from the NIST Chemistry WebBook (from memory, not
+/// checked).
 const CONDENSING: [Condensable; 2] = [
+    Condensable {
+        frost: N2_FROST,
+        boils_k: 77.34,
+        critical_k: 126.19,
+        activity: |_, _, _| 1.0,
+        of: |g| &mut g.n2,
+    },
     Condensable {
         frost: CH4_FROST,
         boils_k: 111.67,
         critical_k: 190.56,
-        activity: SEA_METHANE_SHARE,
+        activity: methane_activity,
         of: |g| &mut g.ch4,
     },
-    Condensable {
-        frost: N2_FROST,
-        boils_k: 77.36,
-        critical_k: 126.19,
-        activity: 1.0,
-        of: |g| &mut g.n2,
-    },
 ];
+
+/// The index of methane in [`CONDENSING`].
+const METHANE: usize = 1;
+
+/// Activity of methane over what condenses of it on a surface at
+/// `surface_k`, under `air` with `condensate` already on the ground: 1
+/// over its ice, under the freezing point of the sea it would make
+/// ([`super::climate::sea_freezes_k`]); [`SEA_METHANE_SHARE`] over the
+/// sea. The step at the freezing point is a simplification: at the
+/// liquidus the sea and the ice hold the same vapour.
+fn methane_activity(surface_k: f64, air: &Gases, condensate: &Gases) -> f64 {
+    if surface_k < super::climate::sea_freezes_k(air.n2, condensate) {
+        1.0
+    } else {
+        SEA_METHANE_SHARE
+    }
+}
 
 /// Saturation vapour pressure of pure methane at `temperature_k`, bar:
 /// over its ice below its triple point (90.7 K, 0.117 bar), over its
 /// liquid above, up to its critical point (190.56 K), past which it is
 /// infinite: methane does not condense there.
 pub(crate) fn methane_saturation_bar(temperature_k: f64) -> f64 {
-    CONDENSING[0].saturation_bar(temperature_k)
+    CONDENSING[METHANE].saturation_bar(temperature_k)
 }
 
 /// The air and the condensate of `gases` (bar) on a surface at
@@ -495,8 +865,9 @@ pub(crate) fn condense(gases: Gases, surface_k: f64) -> (Gases, Gases) {
     let mut air = gases;
     let mut condensate = Gases::default();
     for gas in &CONDENSING {
+        let activity = (gas.activity)(surface_k, &air, &condensate);
         let kept = (gas.of)(&mut air);
-        let most = gas.activity * gas.saturation_bar(surface_k);
+        let most = activity * gas.saturation_bar(surface_k);
         if *kept > most {
             *(gas.of)(&mut condensate) = *kept - most;
             *kept = most;
@@ -525,6 +896,140 @@ pub(crate) fn condensed_air(air: Gases, inventory: &Gases, surface_k: f64) -> Ga
 /// freeze.
 pub(super) fn co2_frost_bar(temperature_k: f64) -> f64 {
     CO2_FROST.cap(f64::INFINITY, temperature_k)
+}
+
+/// Partial pressure of SO₂, bar, at which it frosts out at
+/// `temperature_k` ([`SO2_FROST`]); unbounded above its triple point.
+pub(super) fn so2_frost_bar(temperature_k: f64) -> f64 {
+    SO2_FROST.cap(f64::INFINITY, temperature_k)
+}
+
+/// Heat a kilogram of erupted magma carries out of a heat-pipe body, J:
+/// its latent heat of crystallisation, about 4e5 J/kg, and its heat
+/// capacity, about 1200 J/(kg·K), over the 1400 K from an eruption at
+/// about 1600 K (Io's ultramafic lavas, McEwen et al. 1998, Science 281,
+/// 87, doi:10.1126/science.281.5373.87) to its cold surface; values from
+/// memory, not checked. In a heat pipe the magma carries the body's heat
+/// up (O'Reilly & Davies 1981, Geophys. Res. Lett. 8, 313,
+/// doi:10.1029/GL008i004p00313; from memory, not checked), so the heat
+/// over this is the magma erupted: about 5e7 kg/s for Io's 1e14 W.
+const MAGMA_HEAT_J_KG: f64 = 2.1e6;
+
+/// SO₂ the volcanoes of a body bring up, kg/s: the magma its tidal heat
+/// erupts (`heat.tidal_w` over [`MAGMA_HEAT_J_KG`]) times the sulphur of
+/// its silicate (`inputs.volatiles.s` over the silicate share, that is
+/// [`super::inputs`]'s 250 ppm of rock), all of it degassed as SO₂
+/// ([`SO2_PER_S`]) into the vacuum or thin air of the vent.
+/// [`super::bare`] reads it for heat pipes only. A scope limit: in a heat
+/// pipe all of the internal heat leaves through its vents, radiogenic and
+/// secular heat too, but only the tidal heat is counted here, so a heat
+/// pipe driven by its own young heat (a hot young planet) gets no
+/// volcanic SO₂ from this rule. About 1.7e4 kg/s for the model's Io
+/// (8.6e13 W of tides); its torus takes about 300 kg/s of it
+/// ([`so2_loss_kg_s`], at most [`PLASMA_LOSS_MAX`]), the rest falls back
+/// as frost.
+pub fn volcanic_so2_supply(heat: &super::InternalHeat, inputs: &PlanetInputs) -> f64 {
+    let silicate = (1.0 - inputs.water_fraction - inputs.envelope_fraction)
+        * (1.0 - inputs.core_mass_fraction);
+    if silicate <= 0.0 {
+        return 0.0;
+    }
+    let magma = heat.tidal_w.max(0.0) / MAGMA_HEAT_J_KG;
+    magma * inputs.volatiles.s.max(0.0) / silicate * SO2_PER_S
+}
+
+/// Time over which a heat pipe's volcanic SO₂ accumulates as frost, s:
+/// 150 000 years. Not a measured burial time: the frost sublimes and
+/// condenses again each day and so stays on top of the lava and plume
+/// deposits that bury Io's surface at about a centimetre a year (from
+/// memory, not checked). It is the knob that, with
+/// [`super::albedo`]'s frost layer of 0.02 bar (itself calibrated on
+/// Io's old CO₂ frost), sets the share of the disc the frost covers.
+/// Calibration on Io, no source: SO₂ frost covers most of Io's surface
+/// (Douté et al. 2001, Icarus 149, 107, doi:10.1006/icar.2000.6513; from
+/// memory, not checked), and 150 kyr covers at least 80 % of the disc on
+/// every draw of the `io-like` archetype, whose sulphur scatters by a
+/// factor of 20 (7.9e3 to 1.5e5 kg/s of SO₂ on seeds 1 to 40, 0.017 to
+/// 0.33 bar of frost). A shorter one leaves its low-sulphur draws half
+/// bare, dark and too warm: their dayside frost then breathes more than
+/// 1e-8 bar. On a warmer heat pipe, the share of it the dayside cannot
+/// keep frozen is in the air instead ([`volcanic_so2_vapour`]).
+const SO2_FROST_RESIDENCE_S: f64 = 150_000.0 * 3.155_76e7;
+
+/// SO₂ frost, bar, a body's volcanoes keep on its ground: what of their
+/// `supply_kg_s` ([`volcanic_so2_supply`]) the body's non-thermal loss
+/// does not take ([`so2_loss_kg_s`]), laid over
+/// [`SO2_FROST_RESIDENCE_S`], `bar_per_kg` the weight of a kilogram on
+/// its surface. None when the loss takes all of the supply: the air and
+/// the frost leave as fast as they come, an exosphere.
+pub fn volcanic_so2_frost_bar(supply_kg_s: f64, body: &LossContext, bar_per_kg: f64) -> f64 {
+    let net = supply_kg_s - so2_loss_kg_s(body);
+    net.max(0.0) * SO2_FROST_RESIDENCE_S * bar_per_kg
+}
+
+/// SO₂ a body loses to [`non_thermal_loss`], kg/s: the photo-ions of its
+/// exobase swept away and the share of its giant's plasma sputtering
+/// fast enough to escape ([`escaping_share`]), over its whole surface.
+/// None outside a giant's magnetosphere.
+fn so2_loss_kg_s(body: &LossContext) -> f64 {
+    let Some(host) = &body.host else {
+        return 0.0;
+    };
+    let molecule = MOLECULAR_U[5] * AMU_KG;
+    let photo = PHOTO_IONISATION_AT_1_AU_S / (body.orbit_au * body.orbit_au) * EXOBASE_COLUMN_M2;
+    let flux = photo + plasma_flux(host) * escaping_share(molecule, body);
+    flux * 4.0 * PI * body.radius_m * body.radius_m * molecule
+}
+
+/// Factor on a body's equilibrium temperature (under its Bond albedo,
+/// starlight spread over the whole sphere) that gives the mean
+/// temperature of its dayside frost: the starlight spread over the
+/// dayside only, `2^(1/4)`. A heat pipe's internal heat leaves through
+/// its vents and lava, not through the cold lid the frost lies on.
+/// The model's Io, at 93 to 100 K of equilibrium under its Bond albedo
+/// of 0.54 to 0.63, has its frost at 110 to 119 K: its equatorial frost
+/// is at 106 to 117 K (Giles et al. 2024, arXiv:2405.19253; checked).
+const DAYSIDE_FACTOR: f64 = 1.189_207_115;
+
+/// SO₂ partial pressure, bar, under which a volcanic frost's vapour is
+/// added to the air after the climate rather than before it
+/// ([`volcanic_so2_vapour`], [`super::bare`]): 1e-7 bar. It is ten
+/// thousand times under the sulphuric deck's 1e-3 bar
+/// ([`super::albedo`]) and a thousandth of the 1e-4 bar that shields a
+/// surface from space weathering, and the climate gives SO₂ no
+/// greenhouse: under it the SO₂ moves neither the albedo nor the
+/// temperature, so solving the climate without it changes nothing.
+/// Io's 1e-9 bar lies well under it. The stored air is the vapour on both
+/// sides.
+pub const TRACE_SO2_BAR: f64 = 1.0e-7;
+
+/// SO₂ air, bar, a body's volcanic frost of `so2_frost_bar` holds: its
+/// vapour ([`SO2_FROST`]) at the mean temperature of its dayside
+/// ([`DAYSIDE_FACTOR`] times `equilibrium_k`), at most the frost itself.
+/// Io's dayside column, 1e16 to 2e17 cm⁻² (about 1 to 10 nbar), is that
+/// equilibrium (Giles et al. 2024, arXiv:2405.19253; checked). `None`
+/// when that dayside or the mean surface (`surface_k`, warmed by a
+/// greenhouse) is at or above SO₂'s triple point: the frost does not hold
+/// there, and the body keeps no volcanic frost or air beyond the SO₂ its
+/// outgassing gives it ([`outgassed`], which counts the same sulphur over
+/// the body's age). A scope limit: such a body's air does not get the
+/// tidal supply against a chemical lifetime, only that bulk SO₂, so a lava
+/// world's tides add none.
+///
+/// The frost holds the air at this vapour, resupplying it within hours,
+/// so no sink of the air applies to it: neither the plasma's loss
+/// ([`non_thermal_loss`], whose rate [`volcanic_so2_frost_bar`] has
+/// already taken out of the supply) nor the washing out ([`wash_out`],
+/// whose dry rule scales a finite supply by its pressure over 10 bar).
+/// Under [`TRACE_SO2_BAR`] it joins the air after the climate; above it,
+/// before, the climate then solved again once. It is at most SO₂'s
+/// triple-point pressure, 0.0167 bar.
+pub fn volcanic_so2_vapour(so2_frost_bar: f64, equilibrium_k: f64, surface_k: f64) -> Option<f64> {
+    let dayside_k = equilibrium_k * DAYSIDE_FACTOR;
+    if dayside_k.max(surface_k) >= SO2_FROST.triple_k {
+        return None;
+    }
+    Some(SO2_FROST.cap(so2_frost_bar.max(0.0), dayside_k))
 }
 
 /// Methane the star's ultraviolet destroys on a body, bar per Gyr, per
@@ -655,6 +1160,23 @@ pub fn photochemistry(gases: Gases, equilibrium_k: f64) -> Gases {
 mod tests {
     use super::*;
     use crate::atmosphere::AIRLESS_BAR;
+
+    /// The web card writes an air at most twice this as an exosphere:
+    /// its mirror in `web/src/lib/format.ts` must be the same number.
+    #[test]
+    fn the_web_mirrors_the_exosphere_level() {
+        let web = include_str!("../../../../web/src/lib/format.ts");
+        let line = web
+            .lines()
+            .find(|l| l.starts_with("export const EXOSPHERE_BAR = "))
+            .expect("the web mirror");
+        let value: f64 = line
+            .trim_start_matches("export const EXOSPHERE_BAR = ")
+            .trim_end_matches(';')
+            .parse()
+            .unwrap();
+        assert_eq!(value, super::EXOSPHERE_BAR);
+    }
     use crate::exomoon::EARTH_KG;
     use crate::planet::core::core;
     use crate::planet::heat::{InternalHeat, radiogenic_w, secular_w};
@@ -684,6 +1206,15 @@ mod tests {
     /// of part 2: water, regime, core, outgassing, escape, methane
     /// photolysis, cold trap, photochemistry.
     fn air(inputs: &PlanetInputs, orbit_au: f64) -> Gases {
+        let (c, int, air) = shoreline(inputs, orbit_au);
+        let air = methane_photolysis(air, &c, inputs.mass_earth, &int);
+        photochemistry(cold_trap(air, c.equilibrium_k), c.equilibrium_k)
+    }
+
+    /// The context, the interior and the air the cosmic shoreline leaves
+    /// `inputs` at `orbit_au` round the Sun ([`air`]'s chain up to
+    /// [`atmosphere`]).
+    fn shoreline(inputs: &PlanetInputs, orbit_au: f64) -> (Context, Interior, Gases) {
         let c = sun(orbit_au);
         let int = interior(inputs, &c.exposure());
         let fluence = xuv_fluence(&c);
@@ -698,8 +1229,7 @@ mod tests {
         let k = core(inputs, &int, r, NOW);
         let out = outgassed(inputs, &w, r, &int);
         let air = atmosphere(out, &int, inputs.mass_earth, &k, fluence);
-        let air = methane_photolysis(air, &c, inputs.mass_earth, &int);
-        photochemistry(cold_trap(air, c.equilibrium_k), c.equilibrium_k)
+        (c, int, air)
     }
 
     /// The air of the reference body `name`.
@@ -724,11 +1254,112 @@ mod tests {
         assert!(g.so2 < 1e-6, "{g:?}");
     }
 
+    /// N₂ ice's sublimation curve is Fray & Schmitt's (issue #529):
+    /// NIST's triple point, Triton's 14 µbar at 37.2 K (β-N₂), continuous
+    /// across the α–β transition and falling with the temperature down
+    /// past the fit's floor.
+    #[test]
+    fn nitrogen_frost_follows_fray_and_schmitt() {
+        let p = |t: f64| N2_FROST.cap(f64::INFINITY, t);
+        assert!((p(NITROGEN_TRIPLE_K - 1e-9) - 0.1253).abs() < 1e-6);
+        // The β fit as published, 3 % low at the triple point, pinned there.
+        let beta = (fit_at(&N2_BETA_FIT, 1.0 / 37.2).0).exp() * 0.1253 / 0.1215;
+        assert!((p(37.2) / beta - 1.0).abs() < 0.01, "{} {beta}", p(37.2));
+        assert!((p(37.2) - 1.4e-5).abs() < 0.05e-5, "{}", p(37.2));
+        let at = NITROGEN_ALPHA_BETA_K;
+        assert!((p(at - 1e-9) / p(at) - 1.0).abs() < 1e-6);
+        let mut last = p(NITROGEN_TRIPLE_K - 1e-9);
+        for tenth in (20..631).rev() {
+            let now = p(f64::from(tenth) / 10.0);
+            assert!(
+                now < last && now > 0.0,
+                "{} K: {now}",
+                f64::from(tenth) / 10.0
+            );
+            last = now;
+        }
+    }
+
     #[test]
     fn venus_keeps_its_sulphur_dioxide() {
         // About 150 ppm of 92 bar (Bertaux et al. 2007, Marcq et al. 2018).
         let g = surface_air("Venus");
         assert!((0.008..=0.02).contains(&g.so2), "{g:?}");
+    }
+
+    /// The venus-like archetype keeps the SO₂ of its outgassing on every
+    /// seed (0.0054 to 0.072 bar on seeds 1-40 before the volcanic frost
+    /// of #525): an episodic lid has no SO₂ frost, so its air is the
+    /// outgassed SO₂ that stays in a dry air ([`SULPHUR_IN_AIR`],
+    /// [`wash_out`]).
+    #[test]
+    fn venus_keeps_its_so2() {
+        use crate::system::{SystemRequest, WholeSystemRequest, draw};
+        use rand::SeedableRng;
+        use std::collections::BTreeMap;
+        for seed in 1..=40 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                planets: Some(BTreeMap::from([("venus-like".to_string(), 1)])),
+                seed: Some(seed),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(
+                &request,
+                &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .expect("the system draws");
+            let body = system
+                .bodies
+                .iter()
+                .find(|b| b.params.archetype.as_deref() == Some("venus-like"))
+                .expect("a venus-like body");
+            let s = body
+                .model
+                .as_ref()
+                .and_then(|m| m.surface)
+                .expect("surface");
+            assert_ne!(s.regime, Regime::HeatPipe, "seed {seed}");
+            let so2 = s.gases.so2;
+            assert!((0.005..=0.08).contains(&so2), "seed {seed}: {s:?}");
+        }
+    }
+
+    /// A heat pipe's volcanoes keep SO₂ frost only with more supply than
+    /// the plasma takes, starting from none at that line; the frost's
+    /// vapour at Io's dayside is of Io's nanobar, and no frost leaves the
+    /// air as it is.
+    #[test]
+    fn volcanic_frost_needs_more_supply_than_loss() {
+        let io = LossContext {
+            gravity: 1.796,
+            radius_m: 1.8216e6,
+            orbit_au: 5.2,
+            age_gyr: 4.57,
+            host: Some(HostPlasma {
+                host_mass_earth: JUPITER_MASS_EARTH,
+                semi_major_axis_radii: 5.9,
+            }),
+        };
+        let loss = so2_loss_kg_s(&io);
+        // Io's torus takes about 1 t/s, mostly SO₂ and its fragments.
+        assert!((100.0..=1000.0).contains(&loss), "{loss}");
+        let bar_per_kg = 4.3e-19;
+        assert_eq!(volcanic_so2_frost_bar(0.5 * loss, &io, bar_per_kg), 0.0);
+        assert!(volcanic_so2_frost_bar(1.000_001 * loss, &io, bar_per_kg) < 1e-9);
+        assert!(volcanic_so2_frost_bar(50.0 * loss, &io, bar_per_kg) > 0.02);
+        assert_eq!(volcanic_so2_vapour(0.0, 95.0, 100.0), Some(0.0));
+        let so2 = volcanic_so2_vapour(0.05, 95.0, 100.0).expect("a frost");
+        assert!((1e-10..=1e-8).contains(&so2), "{so2:e}");
+        // Warmer, more than a trace, at most the triple point's pressure;
+        // above SO₂'s triple point on the dayside, no frost holds.
+        let warm = volcanic_so2_vapour(0.05, 150.0, 150.0).expect("a frost");
+        assert!(
+            warm > TRACE_SO2_BAR && warm <= SO2_FROST.triple_bar,
+            "{warm:e}"
+        );
+        assert_eq!(volcanic_so2_vapour(0.05, 180.0, 150.0), None);
+        // A greenhouse-warmed surface above it melts the frost too.
+        assert_eq!(volcanic_so2_vapour(0.05, 150.0, 200.0), None);
     }
 
     #[test]
@@ -906,6 +1537,83 @@ mod tests {
         let p = photochemistry(g, 300.0);
         assert_eq!(p.nh3, 0.0);
         assert!((p.n2 - 29.0).abs() < 1e-9, "{p:?}");
+    }
+
+    /// Venus, the Earth and Mars lose nothing to [`non_thermal_loss`]:
+    /// a planet's loss to its star is the shoreline's, so their air goes
+    /// on as it was. The Earth's air would outlast even Jupiter's plasma
+    /// at Callisto's place: its gravity holds what the plasma knocks up
+    /// ([`escaping_share`]).
+    #[test]
+    fn thick_airs_are_untouched() {
+        for name in ["Venus", "Earth", "Mars"] {
+            let b = reference(name);
+            let inputs = model_inputs(b);
+            let (c, int, air) = shoreline(&inputs, b.orbit_au);
+            let body = crate::planet::loss_context(&c, &inputs, &int);
+            assert_eq!(body.host, None, "{name}");
+            assert_eq!(
+                non_thermal_loss(air, &body),
+                (air, Gases::default()),
+                "{name}"
+            );
+        }
+        let earth = model_inputs(reference("Earth"));
+        let (c, int, air) = shoreline(&earth, 1.0);
+        let body = LossContext {
+            orbit_au: 5.2,
+            host: Some(HostPlasma {
+                host_mass_earth: JUPITER_MASS_EARTH,
+                semi_major_axis_radii: CALLISTO_RADII,
+            }),
+            ..crate::planet::loss_context(&c, &earth, &int)
+        };
+        assert_eq!(non_thermal_loss(air, &body), (air, Gases::default()));
+    }
+
+    /// A gas that cannot last is reduced to an exosphere of at most
+    /// [`EXOSPHERE_BAR`], shared by the exhausted gases in proportion to
+    /// their supply, never more than a gas had; what it lost is the
+    /// rest.
+    #[test]
+    fn an_exhausted_air_is_an_exosphere() {
+        let callisto = LossContext {
+            gravity: 1.24,
+            radius_m: 2.41e6,
+            orbit_au: 5.2,
+            age_gyr: 4.57,
+            host: Some(HostPlasma {
+                host_mass_earth: JUPITER_MASS_EARTH,
+                semi_major_axis_radii: CALLISTO_RADII,
+            }),
+        };
+        let air = Gases {
+            n2: 1e-6,
+            co2: 0.05,
+            so2: 1e-15,
+            ..Gases::default()
+        };
+        let (kept, lost) = non_thermal_loss(air, &callisto);
+        assert!((kept.total() - EXOSPHERE_BAR).abs() < 1e-15, "{kept:?}");
+        assert!(kept.co2 > kept.n2 && kept.n2 > 0.0, "{kept:?}");
+        assert!(kept.so2 > 0.0 && kept.so2 < air.so2, "{kept:?}");
+        // An air already thinner than an exosphere stays as it is.
+        let trace = Gases {
+            co2: 1e-13,
+            ..Gases::default()
+        };
+        assert_eq!(
+            non_thermal_loss(trace, &callisto),
+            (trace, Gases::default())
+        );
+        let sum = |g: Gases| g.to_array().iter().sum::<f64>();
+        assert!((sum(kept) + sum(lost) - sum(air)).abs() < 1e-15);
+        // Outside a giant's magnetosphere, nothing goes.
+        let planet = LossContext {
+            host: None,
+            ..callisto
+        };
+        assert_eq!(non_thermal_loss(air, &planet), (air, Gases::default()));
     }
 
     #[test]

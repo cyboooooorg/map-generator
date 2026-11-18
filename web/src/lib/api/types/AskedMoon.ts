@@ -34,4 +34,9 @@ partner_mass_ratio?: number,
  * Mass of the moon in 2:1 resonance inward of it, over its giant's
  * mass, when its archetype names one (Io for Europa).
  */
-inner_partner_mass_ratio?: number, };
+inner_partner_mass_ratio?: number, 
+/**
+ * Mass of the moon in 2:1 resonance inward of its inner partner, over
+ * its giant's mass, when its archetype names one (Io for Ganymede).
+ */
+second_inner_partner_mass_ratio?: number, };

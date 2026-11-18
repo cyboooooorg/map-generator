@@ -22,6 +22,13 @@ equilibrium_k: number,
  */
 bond_albedo: number, liquid: SurfaceLiquid, 
 /**
+ * Emissivity the surface radiated under ([`emissivity`]): 1 but
+ * where nitrogen frost covers it. Like the Bond albedo, the one the
+ * climate was solved under, so that it reproduces. 1 in the worlds
+ * stored before it.
+ */
+emissivity: number, 
+/**
  * The carbonate thermostat holds the temperature at
  * [`THERMOSTAT_K`]: plates, liquid water and enough CO₂ to reach it.
  */

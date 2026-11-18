@@ -1743,7 +1743,7 @@ mod tests {
         assert!(ice_shell(&params));
         (params.width, params.height) = (256, 128);
         // Its tidal heat keeps its surface young, a few Ma here
-        // (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), with hardly a
+        // (`planet::surface_age::ICE_LID_HALF_FLUX_W_M2`), with hardly a
         // crater: aged as a Callisto, so that its tiles have small craters
         // to dig.
         assert!(params.surface_age_ga < 0.1, "{}", params.surface_age_ga);

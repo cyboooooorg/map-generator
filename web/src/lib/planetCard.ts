@@ -7,7 +7,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { PlanetModel } from './api/types/PlanetModel';
 import type { Quantity } from './api/types/Quantity';
-import { formatInt, formatUpTo, withUnit } from './format';
+import { formatInt, formatScientific, formatUpTo, isExosphere, isThin, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 
 /** Where a planet's mean orbit lies against the habitable zone. */
@@ -187,12 +187,15 @@ export function atmosphereLine(model: Pick<PlanetModel, 'surface'>): string | nu
   const total = entries.reduce((sum, e) => sum + e.bar, 0);
   if (!(total > 0)) return null;
   const digits = total < 0.1 ? 3 : total < 10 ? 2 : 0;
+  // An air the giant's plasma collapsed is an exosphere; a thin one (Triton's N₂, Io's SO₂) keeps its name, in scientific notation.
+  const written = isThin(total) ? withUnit(formatScientific(total), 'bar') : withUnit(formatUpTo(total, digits), 'bar');
+  const pressure = isExosphere(total) ? t.worldInfo.exosphere({ pressure: written }) : written;
   const main = entries
     .filter((e) => e.bar / total >= MIN_GAS_SHARE)
     .sort((a, b) => b.bar - a.bar)
     .slice(0, MAX_GASES)
     .map((e) => `${GAS_LABELS[e.gas]} ${withUnit(formatInt(Math.round((100 * e.bar) / total)), '%')}`);
-  return [withUnit(formatUpTo(total, digits), 'bar'), ...main].join(' · ');
+  return [pressure, ...main].join(' · ');
 }
 
 /** "ocean of 120 km under 60 km of ice (conductive)" for a body with a liquid ocean under its ice shell; null otherwise. */

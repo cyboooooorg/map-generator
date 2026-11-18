@@ -79,11 +79,12 @@ pub mod moon;
 pub mod reference;
 pub mod regime;
 pub mod resonance;
+pub mod surface_age;
 pub mod xuv;
 
 pub use atmosphere::{
-    Gases, atmosphere, cold_trap, escape_velocity_km_s, methane_photolysis, outgassed,
-    photochemistry, wash_out,
+    EXOSPHERE_BAR, Gases, HostPlasma, LossContext, atmosphere, cold_trap, escape_velocity_km_s,
+    methane_photolysis, non_thermal_loss, outgassed, photochemistry, wash_out,
 };
 pub use classify::{PLANET_CLASSES, PlanetClass, classify};
 pub use climate::{
@@ -250,6 +251,10 @@ pub struct PlanetModel {
     /// before it existed.
     #[serde(default)]
     pub moment_of_inertia: f64,
+    /// The parts of its surface and their ages ([`surface_age::terrain`]);
+    /// empty in a model stored before it existed.
+    #[serde(default)]
+    pub terrain: surface_age::Terrain,
 }
 
 /// The inputs a planet formed with, as a request sets them: what
@@ -378,6 +383,9 @@ pub(crate) struct Air {
     /// CO₂ the cold trap froze onto the ground, bar
     /// ([`climate::CarbonCycle::frozen_bar`]).
     pub frozen_co2_bar: f64,
+    /// SO₂ frost the volcanoes of a heat pipe lay on the ground, bar
+    /// ([`climate::CarbonCycle::so2_frost_bar`]).
+    pub so2_frost_bar: f64,
 }
 
 /// Mass of the Sun, kg: the IAU 2015 nominal solar mass parameter
@@ -531,14 +539,9 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         _ => interior,
     };
     let class = classify(&inputs, &interior, context.period_days(), surface.as_ref());
-    let nh3_ice = if inputs.water_fraction > 0.0 {
-        inputs.volatiles.nh3 / inputs.water_fraction
-    } else {
-        0.0
-    };
-    let ice_shell = ice_shell(&interior, &heat, surface.as_ref(), nh3_ice);
+    let ice_shell = ice_shell(&interior, &heat, surface.as_ref(), nh3_of_ice(&inputs));
     let moment_of_inertia = differentiation::moment_of_inertia(&interior);
-    let model = PlanetModel {
+    let mut model = PlanetModel {
         drawn_mass_earth,
         inputs,
         interior,
@@ -550,7 +553,20 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         ice_shell,
         geysers: None,
         moment_of_inertia,
+        terrain: surface_age::Terrain::default(),
     };
+    // The frost the climate left on the ground at its temperature.
+    let frost = match (&air, &model.surface) {
+        (Some(air), Some(surface)) => climate::frost(
+            &air.gases,
+            0.0,
+            0.0,
+            surface.climate.temperature_k,
+            &surface.gases,
+        ),
+        _ => Gases::default(),
+    };
+    model.terrain = surface_age::terrain(&model, context.age_gyr, &frost, context.tide.as_ref());
     (model, air)
 }
 
@@ -625,8 +641,14 @@ pub(crate) struct Bare {
     pub before: Air,
     /// What it outgassed, bar ([`outgassed`]).
     pub outgassed: Gases,
-    /// What escape to space left of it ([`atmosphere`]), bar.
+    /// What escape to space left of it, bar: the cosmic shoreline's
+    /// ([`atmosphere`]), then the non-thermal loss inside a giant's
+    /// magnetosphere ([`non_thermal_loss`]).
     pub kept: Gases,
+    /// What the non-thermal loss took of the air the shoreline left, bar
+    /// ([`non_thermal_loss`]): non-zero for the gases it reduced to an
+    /// exosphere.
+    pub lost: Gases,
     /// What the star's ultraviolet left of that methane
     /// ([`methane_photolysis`]), bar.
     pub photolysed: Gases,
@@ -639,13 +661,64 @@ pub(crate) struct Bare {
     /// temperature ([`atmosphere::condense`]: the methane over its seas
     /// or frosts, the nitrogen of its frosts), bar.
     pub condensed: Gases,
+    /// Frost on the ground at the climate's surface temperature, bar, gas
+    /// by gas ([`climate::frost`]).
+    pub frost: Gases,
+    /// The vent strength its ice crust's plume fallout was taken at
+    /// ([`vent_strength`]); `None` without an ice crust ([`ice_crust`]).
+    #[cfg(test)]
+    pub vent: Option<f64>,
+}
+
+/// The heaviest host whose magnetosphere [`non_thermal_loss`] reads, Earth
+/// masses: 13 Jupiter masses, the heaviest giant the generator draws
+/// ([`mass::draw_mass`]), at the deuterium-burning line. A heavier host is
+/// a star raising its own planet's tides (`context.tide` set to the star),
+/// not a giant with a plasma.
+const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * crate::giants::JUPITER_EARTH_MASSES as f64;
+
+/// What [`non_thermal_loss`] reads of a body of `inputs` and `interior`
+/// in `context`: its gravity and radius, its star's distance and its age,
+/// and, for a moon of a giant ([`moon_of_giant`], up to
+/// [`HOST_PLASMA_MAX_MASS_EARTH`]), the giant's mass and the moon's orbit
+/// in the giant's radii, that radius from the giant's mass and its
+/// equilibrium temperature ([`crate::giants::giant_radius`], as for the
+/// host giants of moons).
+pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interior) -> LossContext {
+    let radius_m = interior.radius_earth * EARTH_M;
+    let gravity = crate::exomoon::G * inputs.mass_earth * EARTH_KG / (radius_m * radius_m);
+    let giant =
+        |t: &HostTide| moon_of_giant(context) && t.host_kg <= HOST_PLASMA_MAX_MASS_EARTH * EARTH_KG;
+    let host = context.tide.filter(giant).map(|t| {
+        let host_mass_earth = t.host_kg / EARTH_KG;
+        let host_radius_m = f64::from(crate::giants::giant_radius(
+            host_mass_earth as f32,
+            context.equilibrium_k as f32,
+        )) * EARTH_M;
+        HostPlasma {
+            host_mass_earth,
+            semi_major_axis_radii: t.a_m / host_radius_m,
+        }
+    });
+    LossContext {
+        gravity,
+        radius_m,
+        orbit_au: context.orbit_au,
+        age_gyr: context.age_gyr,
+        host,
+    }
 }
 
 /// A bare body's surface from the water `w` it starts with (the chain's
 /// first pass, or its boiled steam): its [`regime`] and [`core`], its
-/// air ([`outgassed`], [`atmosphere`] under its [`shield`],
+/// air ([`outgassed`], [`atmosphere`] under its [`shield`], [`non_thermal_loss`],
 /// [`methane_photolysis`], [`cold_trap`], [`photochemistry`]), its
-/// [`climate`], its [`life`] and the oxygen it makes. A runaway's water is
+/// [`climate`] (with the SO₂ frost a heat pipe's volcanoes lay,
+/// [`atmosphere::volcanic_so2_frost_bar`], whose dayside vapour,
+/// [`atmosphere::volcanic_so2_vapour`], joins the air after it while it is
+/// a trace, [`atmosphere::TRACE_SO2_BAR`], and before it otherwise, the
+/// climate then solved again; none on a dayside above SO₂'s triple
+/// point), its [`life`] and the oxygen it makes. A runaway's water is
 /// the steam escape has left in its air.
 pub(crate) fn bare(
     context: &Context,
@@ -659,13 +732,15 @@ pub(crate) fn bare(
     let r = regime(inputs, heat, interior, &w);
     let k = core(inputs, interior, r, context.age_gyr);
     let out = outgassed(inputs, &w, r, interior);
-    let kept = atmosphere(
+    let shoreline = atmosphere(
         out,
         interior,
         inputs.mass_earth,
         &shield(context, k),
         fluence,
     );
+    let loss = loss_context(context, inputs, interior);
+    let (kept, lost) = non_thermal_loss(shoreline, &loss);
     let w = if w.runaway {
         w.keeping(kept.h2o / bar_per_kg)
     } else {
@@ -676,17 +751,116 @@ pub(crate) fn bare(
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
     let water_bar = w.kept_kg * bar_per_kg;
-    let carbon = climate::CarbonCycle {
-        inventory_bar: out.co2,
+    // A heat pipe's volcanoes lay SO₂ frost, which the climate sees in
+    // its albedo and whose vapour is the air's SO₂.
+    let volcanic_bar = if r == crate::geology::Regime::HeatPipe {
+        let supply = atmosphere::volcanic_so2_supply(heat, inputs);
+        atmosphere::volcanic_so2_frost_bar(supply, &loss, bar_per_kg)
+    } else {
+        0.0
+    };
+    // CO₂ the plasma exhausted is gone from the rocks' reach too: no
+    // carbon cycle brings it back.
+    let carbon = |so2_frost_bar: f64| climate::CarbonCycle {
+        inventory_bar: if lost.co2 > 0.0 { kept.co2 } else { out.co2 },
         frozen_bar: photolysed.co2 - trapped.co2,
+        so2_frost_bar,
         snowball_draw: inputs.snowball_draw,
     };
-    let (after, climate) = self::climate(context, gases, &w, r, flux, water_bar, carbon);
+    let (mut gases, mut so2_frost_bar) = (gases, volcanic_bar);
+    // An ice crust under its plume's fallout, as strongly as it vents
+    // under the climate the fallout gives it: the fallout brightens and
+    // cools the surface, which thickens the shell and weakens the vent,
+    // so the strength the climate takes is the fixed point of a
+    // decreasing map, found by bisection.
+    let icy = ice_crust(inputs, &w, r);
+    let crust = |vent: f64| icy.then(|| crust_albedo(context, inputs, heat, interior, vent));
+    let solve = |gases: Gases, so2_frost_bar: f64, vent: f64| {
+        climate::climate_over(
+            context,
+            gases,
+            &w,
+            r,
+            flux,
+            water_bar,
+            carbon(so2_frost_bar),
+            crust(vent),
+        )
+    };
+    let vents_under =
+        |c: &climate::Climate| vent_strength(inputs, interior, heat, c.temperature_k, c.liquid);
+    let (mut after, mut climate) = solve(gases, so2_frost_bar, 0.0);
+    let mut vent = 0.0;
+    if icy {
+        let most = vents_under(&climate);
+        if most > 0.0 {
+            let (mut low, mut high) = (0.0, most);
+            for _ in 0..VENT_STEPS {
+                let mid = 0.5 * (low + high);
+                if vents_under(&solve(gases, so2_frost_bar, mid).1) > mid {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            // Under `low`'s climate the body vents more than `low`, so
+            // its stored geysers exist; `high` may not vent at all.
+            vent = if low > 0.0 { low } else { high };
+            (after, climate) = solve(gases, so2_frost_bar, vent);
+        }
+    }
+    // The frost's vapour on the dayside, the air's SO₂ wherever the frost
+    // holds: more than a trace goes into the air before the climate, out
+    // of the frost, and the climate is solved again with it. A surface or
+    // dayside above SO₂'s triple point holds no frost: the body keeps the
+    // SO₂ its outgassing gave it.
+    let mut vapour = 0.0;
+    if volcanic_bar > 0.0 {
+        let held = atmosphere::volcanic_so2_vapour(
+            volcanic_bar,
+            climate.equilibrium_k,
+            climate.temperature_k,
+        );
+        let added = match held {
+            None => {
+                so2_frost_bar = 0.0;
+                Some(0.0)
+            }
+            Some(v) if v > atmosphere::TRACE_SO2_BAR => {
+                vapour = v;
+                Some(v)
+            }
+            Some(v) => {
+                vapour = v;
+                None
+            }
+        };
+        if let Some(v) = added {
+            gases.so2 += v;
+            so2_frost_bar = (so2_frost_bar - v).max(0.0);
+            // A heat pipe has no ice crust (`ice_crust`): no vent to
+            // check again.
+            (after, climate) = solve(gases, so2_frost_bar, vent);
+        }
+    }
     let condensed = atmosphere::condense(gases, climate.temperature_k).1;
     let life = life(inputs, &climate, context.age_gyr);
     // Washed as the albedo washed it ([`climate::washed`]), so that the
-    // look's deck is the albedo's.
-    let surface_gases = climate::washed(oxygenate(after, &life), &w);
+    // look's deck is the albedo's; but the frost's vapour is not washed
+    // out: the frost holds the air at it, whatever takes it. Neither deck
+    // sees it, under SO₂'s triple point and so far under the deck's 273 K.
+    let washed = climate::washed(oxygenate(after, &life), &w);
+    let frost = climate::frost(
+        &gases,
+        photolysed.co2 - trapped.co2,
+        so2_frost_bar,
+        climate.temperature_k,
+        &after,
+    );
+    let surface_gases = Gases {
+        so2: washed.so2.max(vapour),
+        ..washed
+    };
     Bare {
         surface: Surface {
             water: w,
@@ -702,13 +876,97 @@ pub(crate) fn bare(
             gases,
             carbon_bar: out.co2,
             frozen_co2_bar: photolysed.co2 - trapped.co2,
+            so2_frost_bar,
         },
         outgassed: out,
         kept,
+        lost,
         photolysed,
         trapped,
         climate_gases: after,
         condensed,
+        frost,
+        #[cfg(test)]
+        vent: icy.then_some(vent),
+    }
+}
+
+/// Bisection steps of a venting crust's strength ([`bare`]): 12, under
+/// 3e-4 of the strength, far under what moves the albedo.
+const VENT_STEPS: usize = 12;
+
+/// Whether a body of `inputs` with the water `w` and the regime `regime`
+/// it starts its climate with has a stagnant-lid ice crust, before its
+/// model exists: `generation::model_crust_kind`'s test of an ice crust
+/// ([`classify::ICE_WORLD_MIN_WATER`] of water and
+/// [`classify::ICE_WORLD_MIN_OCEANS`] of it kept, no surface liquid
+/// water), narrowed to a stagnant lid out of a runaway, the bodies
+/// `surface_age::terrain` gives ice units. A body with plates or
+/// episodic overturn that the model calls an ice crust keeps the ice
+/// albedo of [`albedo::cover`]. The liquid-water condition is the
+/// climate's: the crust's albedo replaces the cover's ice and land
+/// ([`albedo::cover`]), none of which is open water, and only under an
+/// air thinner than `interim::ERODING_BAR` ([`climate::climate_over`]).
+fn ice_crust(inputs: &PlanetInputs, w: &Water, regime: crate::geology::Regime) -> bool {
+    use classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
+    regime == crate::geology::Regime::Stagnant
+        && !w.runaway
+        && inputs.water_fraction >= ICE_WORLD_MIN_WATER
+        && w.oceans >= ICE_WORLD_MIN_OCEANS
+}
+
+/// The Bond albedo of the exposed ice crust ([`ice_crust`]) of a body of
+/// `inputs`, `heat` and `interior` in `context`: the area-weighted
+/// [`albedo::icy_unit_albedo`] of the ice units it has before its
+/// climate ([`surface_age::icy_estimate`]), its rock `1 − water_fraction`
+/// of its mass, under its plume's fallout at the vent strength `vent`
+/// ([`vent_strength`]).
+fn crust_albedo(
+    context: &Context,
+    inputs: &PlanetInputs,
+    heat: &InternalHeat,
+    interior: &Interior,
+    vent: f64,
+) -> f64 {
+    let rock = 1.0 - inputs.water_fraction;
+    surface_age::icy_estimate(
+        heat,
+        interior.radius_earth,
+        context.age_gyr,
+        context.tide.as_ref(),
+    )
+    .units
+    .iter()
+    .map(|u| u.share * albedo::icy_unit_albedo(u.age_gyr, rock, vent))
+    .sum()
+}
+
+/// How strongly a body of `inputs`, `interior` and `heat` vents under a
+/// surface at `surface_k` with `liquid` on it, 0 to 1, for the fallout
+/// of its plume ([`albedo::icy_unit_albedo`]): [`geysers::vent_strength`]
+/// on the ice shell [`ice_shell`] gives it there (none over surface
+/// liquid water), the criterion its stored geysers read ([`vent`]).
+pub(crate) fn vent_strength(
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    heat: &InternalHeat,
+    surface_k: f64,
+    liquid: SurfaceLiquid,
+) -> f64 {
+    if liquid == SurfaceLiquid::Water {
+        return 0.0;
+    }
+    ice_shell::shell_under(interior, heat, surface_k, nh3_of_ice(inputs))
+        .map_or(0.0, |shell| geysers::vent_strength(interior, &shell, heat))
+}
+
+/// Ammonia per kilogram of a body's ice: its `nh3` over its water share
+/// (none without water).
+fn nh3_of_ice(inputs: &PlanetInputs) -> f64 {
+    if inputs.water_fraction > 0.0 {
+        inputs.volatiles.nh3 / inputs.water_fraction
+    } else {
+        0.0
     }
 }
 
@@ -1003,4 +1261,41 @@ mod tests {
             assert_eq!(body_model(&system, body).is_none(), small, "{}", body.id);
         }
     }
+
+    /// A snowball keeps its albedo path (Review Focus 4): an Earth-like
+    /// planet pinned frozen at 1.2 AU, built as `climate_sweep` builds
+    /// it, has no ice crust (its water is a thin ocean on rock), so the
+    /// icy-age law does not touch it: its Bond albedo is the one it had
+    /// before that law (0.6224 at bf1f1f2).
+    #[test]
+    fn a_snowball_keeps_its_albedo() {
+        use crate::request::WorldRequest;
+        let request = WorldRequest {
+            planet: Some("earth-like".into()),
+            snowball: Some(true),
+            seed: Some(1),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.2),
+            age_gyr: Some(4.57),
+            alone: Some(true),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let resolved = request
+            .resolve(&mut StdRng::seed_from_u64(1))
+            .expect("an Earth resolves");
+        let surface = resolved.model().surface.expect("a surface");
+        assert!(surface.climate.snowball, "{surface:?}");
+        let a = surface.climate.bond_albedo;
+        println!("snowball Bond albedo {a:.12}");
+        assert!((a - SNOWBALL_ALBEDO).abs() < 1e-9, "{a}");
+    }
+
+    /// The Bond albedo of [`a_snowball_keeps_its_albedo`]'s snowball
+    /// before the icy-age law, to the last digit printed: the test's
+    /// point is that the law leaves it unchanged, so it is pinned to
+    /// 1e-9, and a later change to the snowball's albedo re-pins it
+    /// knowingly.
+    const SNOWBALL_ALBEDO: f64 = 0.622_385_341_082;
 }

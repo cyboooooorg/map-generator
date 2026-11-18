@@ -78,8 +78,14 @@ use std::sync::Arc;
 /// and is refused on its version, like every older one. Version 9 comes
 /// with lot 3 of the climate pass: the moons' resonant heat, the moment
 /// of inertia of a differentiated body, the convective ice shell and the
-/// geysers of a thin polar shell.
-pub const SYSTEM_FORMAT_VERSION: u32 = 9;
+/// geysers of a thin polar shell. Version 10 comes with lot 3C-1: the
+/// models carry their terrain units, the climate's `emissivity` and the
+/// `Nitrogen` surface liquid, a drawn moon captured into a resonance its
+/// `capture_age_share` ([`Body::capture_age_share`]), and the card's new
+/// quantities (surface age, terrain unit, emissivity) and notes, so a
+/// system of version 9 does not parse as today's and is refused on its
+/// version.
+pub const SYSTEM_FORMAT_VERSION: u32 = 10;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Inner and outer edges of a system, AU.
@@ -261,6 +267,13 @@ pub struct Body {
     /// such moons, on prograde orbits, form resonant chains ([`chain_member`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub disk_born: bool,
+    /// For a drawn moon its planet's tides captured into a 2:1 resonance,
+    /// the share of the system's age since then
+    /// ([`crate::planet::resonance::Captures`]), which dates its tidal
+    /// episode ([`crate::planet::surface_age::tidal_episode`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub capture_age_share: Option<f64>,
     /// A planet's physical model, as [`derive_model`] gave it when the
     /// system was drawn, or as the resolution of its request gave the world
     /// a system is drawn around (a giant's moon included); none for any
@@ -1742,7 +1755,10 @@ fn assemble(
                 let Some(heat) = heat else {
                     continue;
                 };
-                formation.tide.resonance = Some(heat);
+                formation.tide.resonance = Some(Resonance {
+                    capture_age_share: formation.capture_age_share,
+                    ..heat
+                });
                 moon_models[k] = Some(round_moon_model(
                     seed,
                     &moon_id(k),
@@ -1821,6 +1837,7 @@ fn assemble(
                 disk_born: formation
                     .as_ref()
                     .is_some_and(|f| f.birth == MoonBirth::Disk),
+                capture_age_share: formation.as_ref().and_then(|f| f.capture_age_share),
                 model: moon_model,
             });
         }
@@ -2083,6 +2100,7 @@ fn planet_body(
         trojans: None,
         ring_role: None,
         disk_born: false,
+        capture_age_share: None,
         model,
     };
     // The sky the viewer draws puts the planet on its node line (the spring
@@ -2147,6 +2165,7 @@ pub fn moon_formation(moon: &Moon, planet_mass_earth: f64) -> MoonFormation {
             // Set once its neighbours are known (see `chain_heat`).
             resonance: None,
         },
+        capture_age_share: moon.capture_age_share.map(f64::from),
     }
 }
 
@@ -2305,7 +2324,10 @@ fn stored_chain_heat(
         .iter()
         .map(|b| (&b.orbit, b.model.as_ref().expect("filtered on its model")))
         .collect();
-    chain_heat(host, context, &parts)[at]
+    chain_heat(host, context, &parts)[at].map(|heat| Resonance {
+        capture_age_share: body.capture_age_share,
+        ..heat
+    })
 }
 
 /// The fields of a moon drawn by [`MoonSystem`]: a small one's type
@@ -2829,6 +2851,7 @@ fn host_chain(
                 eccentricity: SIBLING_ECCENTRICITY,
                 resonance: sibling_heat[k],
             },
+            capture_age_share: None,
         });
         moons.push((
             f64::from(sibling.distance_km),
@@ -5344,17 +5367,21 @@ mod tests {
 
     /// Enceladus: a global ocean under 18 to 22 km of ice on average,
     /// under 5 km at the south pole (Čadek et al. 2016,
-    /// doi:10.1002/2016GL068634). The model's is about twice as thick
-    /// (see `docs/science/planet-interiors.md`, "Where it departs"): its
-    /// 11 to 17 GW over Enceladus's true radius (247 to 261 km since its
-    /// core is hydrated rock under water of 1 g/cm³) conducts through
-    /// 36 to 45 km of ice, 8 to 11 km at the poles; the band holds that.
+    /// doi:10.1002/2016GL068634). The model's is more than twice as
+    /// thick (see `docs/science/planet-interiors.md`, "Where it
+    /// departs"): its 11 to 17 GW over Enceladus's true radius (247 to
+    /// 261 km since its core is hydrated rock under water of 1 g/cm³)
+    /// conducts through 45 to 54 km of ice, 10 to 13 km at the poles,
+    /// under its surface at 60 to 64 K (its Bond albedo of 0.78, the
+    /// fallout of its plume, `albedo::icy_unit_albedo`; 36 to 45 km and
+    /// 8 to 11 km under the 86 K the regolith's albedo gave it before);
+    /// the band holds that.
     #[test]
     fn enceladus_shell_and_ocean() {
         for seed in 1..=10 {
             let s = asked_shell("enceladus-like", seed);
-            assert!((15.0..45.0).contains(&s.shell_km), "seed {seed}: {s:?}");
-            assert!(s.polar_shell_km < 11.0, "seed {seed}: {s:?}");
+            assert!((15.0..60.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!(s.polar_shell_km < 14.0, "seed {seed}: {s:?}");
             assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
         }
     }
@@ -5708,13 +5735,22 @@ mod tests {
         }
     }
 
-    /// Callisto: no ocean, or a thin one deep down (Khurana et al. 1998,
-    /// doi:10.1038/27394).
+    /// Callisto: no ocean, or one deep down under a thick shell (Khurana
+    /// et al. 1998, doi:10.1038/27394; Zimmer et al. 2000, Icarus 147,
+    /// 329, an ocean of 10 km or more under some 100 to 200 km of ice to
+    /// match its induced field, from memory, not checked); neither depth
+    /// is well measured. Its old surface's dark lag (its Bond albedo
+    /// 0.19 to 0.25, `albedo::icy_unit_albedo`) puts it at 111 to 119 K,
+    /// about 20 K warmer than under its former ice albedo of 0.6, which
+    /// thins the shell: 0 to 99 km of ocean over seeds 1 to 40 under
+    /// 155 to 240 km of ice. The bound keeps the shell at least about
+    /// two-thirds of the water layer.
     #[test]
     fn callisto_has_no_ocean_or_a_thin_one() {
         for seed in 1..=10 {
             let s = asked_shell("callisto-like", seed);
-            assert!(s.ocean_km < 50.0, "seed {seed}: {s:?}");
+            assert!(s.ocean_km < 120.0, "seed {seed}: {s:?}");
+            assert!(s.shell_km > 120.0, "seed {seed}: {s:?}");
         }
     }
 
@@ -5850,7 +5886,7 @@ mod tests {
     }
 
     /// The surface of a stagnant ice lid is as young as its heat makes it
-    /// (`planet::interim::ICE_LID_HALF_FLUX_W_M2`), in a system of the
+    /// (`planet::surface_age::ICE_LID_HALF_FLUX_W_M2`), in a system of the
     /// Sun's age: Callisto's ancient (about 4 Ga), Ganymede's 2 to 4 Ga,
     /// Europa's under 0.1 Ga (40 to 90 Ma, Zahnle et al. 2003,
     /// doi:10.1016/S0019-1035(03)00048-4), Io's none (its volcanoes'),
@@ -5864,9 +5900,14 @@ mod tests {
             let age = |name: &str| solar_aged_moon(name, seed).params.surface_age_ga;
             let callisto = age("callisto-like");
             assert!(callisto >= 3.0, "seed {seed}: Callisto {callisto} Ga");
+            // Ganymede's map shows its main unit, the grooved terrain a
+            // past tidal episode renewed (Showman & Malhotra 1997,
+            // doi:10.1006/icar.1996.5669): 2.0 Ga at 4.57 Ga, calibrated
+            // on the 2 Ga crater counts give it (Zahnle et al. 2003),
+            // within the tidal episode's 0.9 to 1.1 spread (#566).
             let ganymede = age("ganymede-like");
             assert!(
-                (2.0..=4.4).contains(&ganymede),
+                (1.75..=2.25).contains(&ganymede),
                 "seed {seed}: Ganymede {ganymede} Ga"
             );
             let europa = age("europa-like");
@@ -7206,14 +7247,14 @@ mod titan_tests {
     }
 
     /// The Titans of the `titan-like` systems of seeds 5 and 12, whose
-    /// surfaces keep most of their system's 4.57 Ga of craters, generated at the
+    /// surfaces are renewed by their liquid cycle (0.2 to 1 Ga), generated at the
     /// size their viewer gets (512 × 256): about 1 % of their surface is
     /// liquid, the share their sea level is calibrated for
     /// (`HYDROCARBON_LAND_FRACTION`). Issue #482: none was drawn, the sea
     /// level search sampling the relief without its craters, which fill
     /// the polar lows the search had flooded.
     #[test]
-    fn an_old_cratered_titan_keeps_about_a_percent_of_liquid() {
+    fn a_young_titan_keeps_about_a_percent_of_liquid() {
         for seed in [5, 12] {
             let request: SystemRequest = serde_json::from_str(&format!(
                 r#"{{"system":{{"planets":{{"titan-like":1}},"seed":{seed}}}}}"#
@@ -7227,7 +7268,11 @@ mod titan_tests {
                 .unwrap();
             let params = generation_params(moon);
             assert_eq!((params.width, params.height), (512, 256));
-            assert!(params.surface_age_ga > 3.5, "{}", params.surface_age_ga);
+            assert!(
+                (0.2..=1.0).contains(&params.surface_age_ga),
+                "{}",
+                params.surface_age_ga
+            );
             let world = crate::generation::generate(&params).world;
             let grid = params.grid();
             let (mut liquid, mut total) = (0.0f64, 0.0f64);

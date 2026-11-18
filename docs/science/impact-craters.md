@@ -595,13 +595,98 @@ more are flooded flat at a date of that window and darkened.
   surface age a rock lid would (70 to 95 % of its system's age), `F` its
   internal heat flux, tidal and radiogenic
   (`planet::interim::ICE_LID_HALF_FLUX_W_M2`). The law is a choice that
-  puts Callisto (2 to 5 mW/m² in the model) near 4 Ga, Ganymede 2 to 4 Ga
-  and Europa (about 35 mW/m² of tides) under 0.1 Ga; no study gives it.
-  One age stands for the whole surface: Ganymede's two terrains and
+  puts Callisto (2 to 5 mW/m² in the model) and Ganymede's dark terrain
+  near 4 Ga and Europa (about 35 mW/m² of tides) under 0.1 Ga; no study gives it.
+  Ganymede's two terrains are two units (the tidal episode below);
   Enceladus's young south pole (its model's tides give it a quarter of the
-  heat it radiates) are not told apart, Enceladus taking its old plains'
-  age, and Triton, whose surface is young from the heat of its capture,
-  keeps an old one.
+  heat it radiates) is not told apart, Enceladus taking its old plains'
+  age (Triton's young surface is the volatile-ice unit below).
+- **A past tidal episode renews part of a resonant moon (Ganymede).**
+  A moon of a resonant chain of three or more, not its innermost, was
+  captured into it after its inner moons had locked, through Laplace-like
+  three-body resonances that pumped its eccentricity for a while:
+  Ganymede's to about 0.07, tidal heating several hundred times today's,
+  enough to resurface its grooved terrain (Showman & Malhotra 1997,
+  Icarus 127, 93, doi:10.1006/icar.1996.5669;
+  `TIDAL_EPISODE_ECCENTRICITY`). That is the source's scope: a moon
+  locked in a 2:1 pair alone gets no episode (an outer moon's forced
+  eccentricity in a pair is small, Dione's about 0.002). Over an ice
+  crust the episode leaves a `TidalEpisode` terrain unit
+  (`planet::surface_age::tidal_episode`, the same in `icy_estimate`
+  before the climate and in `terrain` after it):
+  - **when**: a drawn moon at its capture. `resonance::capture` closes
+    its pair's period ratio at a constant rate over the age, so a pair
+    formed `ln(ratio/2)` wide of the 2:1 is captured after the share
+    `ln(ratio/2) / closing` of the age, `closing` the fall of `ln(ratio)`
+    over the whole age; the rest of the age is the episode's age
+    (`Captures::age_share`, stored on the moon as `capture_age_share`).
+    A placed moon (asked by archetype, or its partner), whose formation
+    orbit the draw does not know, takes `TIDAL_EPISODE_AGE_SHARE` = 0.44
+    of the age: a calibration on Ganymede, 2.0 Ga at 4.57 Ga, the age
+    crater counts give its grooved terrain (Zahnle et al. 2003, model A,
+    not checked again);
+  - **how much**: `TIDAL_EPISODE_SHARE` = 65 % (Ganymede's light
+    terrain, its dark terrain about 35 %, Patterson et al. 2010, Icarus
+    207, 845, doi:10.1016/j.icarus.2009.11.035; a calibration, no law
+    says why the episode stopped short) times the share an ice lid would
+    renew at the episode's flux (`1 − 1 / (1 + (F / 10 mW/m²)⁴)`, the
+    tide at e = 0.07 on the moon's present orbit, `ICY_K2_OVER_Q`).
+    Ganymede's episode heats it about 0.3 W/m², so the share is 65 %;
+    a small or distant moon, barely heated, keeps more of its surface,
+    and a patch under 1 % (`TIDAL_EPISODE_MIN_SHARE`) is no unit;
+  - **who keeps it**: a moon whose surface renews faster than the
+    episode is old keeps one unit (Io's heat pipe, Europa's young lid);
+    the innermost moon of a chain, a moon of a pair alone, and a moon in
+    no chain (Callisto) have no episode.
+  `ganymede-like` names Europa inside it and Io inside Europa
+  (`[moon.resonance]`), so it is the outermost moon of a three-moon
+  chain. The map shows the main unit: Ganymede's grooved terrain, 2.0 Ga
+  scattered once by `TIDAL_EPISODE_AGE_SPREAD` (0.9 to 1.1, a stated
+  spread of about 10 % on a calibrated age, not a calibration; the
+  stagnant lid's 0.7 to 0.95 does not apply a second time, issue #566),
+  about 1.8 to 2.2 Ga over seeds 1 to 40 (median 2.0), where it showed
+  2 to 4.4 Ga before the episode and 1.4 to 1.9 Ga when the scatter was
+  applied twice; the explain tree's root holds the unit's model age,
+  not the drawn map age, which agree within that spread; its dark terrain keeps its ice
+  lid's 4.4 to 4.5 Ga as the second unit. In the archetype census
+  (seeds 1 to 40) every Ganymede has the two units, every Callisto one,
+  and Europa and Io are unchanged. Over 300 drawn systems
+  (`ocean_census 20 300`), 58 of the 449 drawn icy moons carry an
+  episode (13 %), renewing 1 to 65 % of their surface (median 64 %),
+  1.1 to 9.3 Ga ago (median 4.1 Ga): most drawn chains close early, a
+  few percent wide of their 2:1.
+- **A liquid cycle renews a stagnant lid's surface (Titan).** A world in
+  the stagnant regime with air of 0.01 bar or more over liquid water,
+  hydrocarbons or nitrogen gets one `LiquidCycle` terrain unit
+  (`planet::surface_age::liquid_cycle_age_gyr`), 0.2 to 1 Ga old instead
+  of 70 to 95 % of its system's age: Titan keeps about 60 craters, a
+  crater retention age of 0.2 to 1 Ga (Neish & Lorenz 2012,
+  doi:10.1016/j.pss.2011.02.016; `LIQUID_CYCLE_RETENTION_GYR` = 1 Ga,
+  scattered by `LIQUID_CYCLE_AGE_SHARE` = 0.2 to 1). The age is 1 Ga from
+  0.1 bar up and rises with the log of the pressure to the system's age
+  at 0.01 bar, so that it is continuous in pressure (a choice, no source
+  for the interpolation). Plate, episodic and heat-pipe regimes keep
+  their own, faster, ages; Mars and Mercury (no liquid) stay old. A
+  nitrogen sea takes the hydrocarbons' age and erosion
+  (`HYDROCARBON_EROSION`, 0.5, as `NITROGEN_EROSION`): nitrogen rain and
+  rivers are analogous to Titan's methane cycle, and no source gives them
+  their own, an assumption (issue #558; the map still draws no nitrogen
+  sea). Of the 38 nitrogen-sea planets of 500 drawn systems
+  (`planet_census 500`), the 29 under a stagnant lid change surface age
+  (the others have plates, a faster renewal), all 38 gain erosion.
+- **Mobile volatile ice renews the surface (Triton).** A body whose air
+  is in vapour equilibrium with a nitrogen or methane frost (the
+  condensate of `atmosphere::condense` under the gas's triple point or
+  its sea's freezing point, `climate::frost`; carbon monoxide is not a
+  gas of the model) gets a `VolatileIce` terrain unit whose share is the
+  frost's share of the disc (`albedo::cover`, `frost_bar /
+  FROST_LAYER_BAR`); the unit under it keeps the rest. Triton's surface
+  keeps 10 to 100 Ma of craters (Schenk & Zahnle 2007, Icarus 192, 135,
+  doi:10.1016/j.icarus.2007.07.004: `VOLATILE_ICE_RETENTION_GYR` = 0.1
+  Ga, scattered by `VOLATILE_ICE_AGE_SHARE` = 0.1 to 1). Triton's N2
+  frost covers all of its disc, so the unit is the whole surface and the
+  map reads under 0.1 Ga. The SO2 frost of Io is not mobile ice: its
+  heat pipe renews faster.
 - **Sea floors are cleared by the preset, not by plates.** A crater on the
   floor of a sea that still fills the basins leaves nothing on any world,
   whatever its tectonic regime: the rule reads only the sea, and plate

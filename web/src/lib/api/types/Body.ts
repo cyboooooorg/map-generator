@@ -61,6 +61,13 @@ ring_role?: RingRole,
  */
 disk_born?: boolean, 
 /**
+ * For a drawn moon its planet's tides captured into a 2:1 resonance,
+ * the share of the system's age since then
+ * ([`crate::planet::resonance::Captures`]), which dates its tidal
+ * episode ([`crate::planet::surface_age::tidal_episode`]).
+ */
+capture_age_share?: number, 
+/**
  * A planet's physical model, as [`derive_model`] gave it when the
  * system was drawn, or as the resolution of its request gave the world
  * a system is drawn around (a giant's moon included); none for any

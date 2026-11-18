@@ -6,6 +6,7 @@ use rand::RngExt;
 
 use super::albedo::{EARTH_CLOUD_COVER, cover, sulphuric_deck};
 use super::classify::ICE_WORLD_MIN_OCEANS;
+use super::surface_age::Renewal;
 use super::{PlanetClass, PlanetModel, SurfaceLiquid};
 use crate::archetype::ParamDefault;
 use crate::atmosphere::{AIRLESS_BAR, Atmosphere, CloudKind};
@@ -153,56 +154,35 @@ pub(super) fn volcanism(flux_w_m2: f64, regime: Regime) -> f64 {
 /// Surface pressure under which water and hydrocarbons carve less, bar:
 /// [`crate::atmosphere::LIQUID_WATER_BAR`], under which the generator
 /// keeps no liquid. The erosion scales as `min(1, P / 0.01)`.
-const ERODING_BAR: f64 = crate::atmosphere::LIQUID_WATER_BAR as f64;
+pub(super) const ERODING_BAR: f64 = crate::atmosphere::LIQUID_WATER_BAR as f64;
 
 /// Erosion of a world with liquid hydrocarbons against one with liquid
 /// water. Calibration, no source: Titan's river networks are fewer and
 /// fainter than Earth's; half.
 const HYDROCARBON_EROSION: f32 = 0.5;
 
+/// Erosion of a world with liquid nitrogen against one with liquid
+/// water. Assumption, no source: N2 rain and rivers are analogous to
+/// Titan's methane cycle, so the hydrocarbon value is reused.
+const NITROGEN_EROSION: f32 = HYDROCARBON_EROSION;
+
 /// Age of the surface of a world in the episodic regime, Ga: Venus's,
 /// 0.3 to 0.8 Ga from its craters (Strom, Schaber & Dawson 1994,
 /// *JGR* 99, about 0.3 Ga; McKinnon et al. 1997, *Venus II*, about
 /// 0.75 Ga).
-const EPISODIC_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.3, 0.8]);
+pub(super) const EPISODIC_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.3, 0.8]);
 
 /// Age of the surface of a world in the heat-pipe regime, Ga: Io's, which
 /// shows no impact crater, so that its volcanoes resurface it faster than
 /// craters form; younger than about a million years (Johnson et al. 1979,
 /// *Nature* 280: about 1 cm of lava a year).
-const HEAT_PIPE_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.0, 0.001]);
+pub(super) const HEAT_PIPE_SURFACE_AGE_GA: ParamDefault = ParamDefault::Range([0.0, 0.001]);
 
 /// Share of the system's age a stagnant lid's surface keeps, a range:
 /// Mars's oldest terrains are about 4.1 Ga old and Mercury's about 4.0
 /// (Fassett 2016, *JGR Planets* 121), 0.7 to 0.95 of 4.57 Ga
 /// allowing for younger lids.
-const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]);
-
-/// Internal heat flux, W/m², under which a stagnant ice lid keeps half the
-/// surface age a rock lid would ([`STAGNANT_SURFACE_AGE_SHARE`]), and the
-/// steepness of the fall past it ([`ICE_LID_EXPONENT`]): the share kept is
-/// `1 / (1 + (F / F½)^n)`. An ice shell resurfaces (convection, diapirs,
-/// cryovolcanism, tectonics) far more readily than rock, ice flowing and
-/// melting within a hundred kelvin of its surface, and the conductive lid
-/// over its warm ice thins as `1 / F` (`ice_shell::conductive_shell_m`).
-/// Calibration on the Galilean moons, no source for the law itself: 10
-/// mW/m² and 4 keep Callisto's surface (about 2 to 5 mW/m² of radiogenic
-/// heat in the model) about 4 Ga old, saturated with craters (Zahnle et
-/// al. 2003, doi:10.1016/S0019-1035(03)00048-4), Ganymede's (its dark
-/// terrain about 4 Ga, its grooved terrain about 2 Ga) 2 to 4 Ga, and
-/// Europa's (35 mW/m² of tidal heat, see `heat::ICY_K2_OVER_Q`) under
-/// 0.1 Ga, near its 40 to 90 Ma (Zahnle et al. 2003; Bierhaus et al.
-/// 2009, *Europa*, University of Arizona Press). A rock lid keeps its
-/// age (Mars and Mercury, about 20 mW/m² today, keep 4 Ga surfaces).
-const ICE_LID_HALF_FLUX_W_M2: f64 = 0.010;
-/// See [`ICE_LID_HALF_FLUX_W_M2`].
-const ICE_LID_EXPONENT: i32 = 4;
-
-/// Share of a rock lid's surface age that a stagnant ice lid pushing out
-/// `flux_w_m2` keeps ([`ICE_LID_HALF_FLUX_W_M2`]).
-fn ice_lid_age_share(flux_w_m2: f64) -> f64 {
-    1.0 / (1.0 + (flux_w_m2 / ICE_LID_HALF_FLUX_W_M2).powi(ICE_LID_EXPONENT))
-}
+pub(super) const STAGNANT_SURFACE_AGE_SHARE: ParamDefault = ParamDefault::Range([0.7, 0.95]);
 
 /// Share of a hydrocarbon world's surface that is dry land: Titan's lakes
 /// and seas cover about 1 % of it (Hayes 2016,
@@ -515,9 +495,15 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
         // whole.
         CloudKind::Sulfuric => shift(deck),
         // Water clouds follow the vapour (the albedo's cover).
-        CloudKind::Water => {
-            shift(cover(surface.climate.temperature_k, gases, &surface.water, 0.0).cloud)
-        }
+        CloudKind::Water => shift(
+            cover(
+                surface.climate.temperature_k,
+                gases,
+                &surface.water,
+                &super::Gases::default(),
+            )
+            .cloud,
+        ),
         _ => 0.0,
     };
     sky
@@ -545,7 +531,7 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///   - its surface pressure, the air's total (within
 ///     [`crate::request::PRESSURE_BAR`]);
 ///   - its erosion: 1 with liquid water, [`HYDROCARBON_EROSION`] with
-///     hydrocarbons, none otherwise, times `min(1, P / 0.01 bar)`;
+///     hydrocarbons, [`NITROGEN_EROSION`] with nitrogen, none otherwise, times `min(1, P / 0.01 bar)`;
 ///   - its volcanism, `0.5 √(F / 0.087 W/m²)` of its heat flux `F`
 ///     against Earth's ([`EARTH_HEAT_FLUX_W_M2`]), 1 in the heat-pipe
 ///     regime, halved under a stagnant lid, within
@@ -555,7 +541,7 @@ pub fn renders_as_giant(model: &PlanetModel) -> bool {
 ///     ([`EPISODIC_SURFACE_AGE_GA`]), heat-pipe Io's
 ///     ([`HEAT_PIPE_SURFACE_AGE_GA`]), a stagnant lid most of the
 ///     system's age ([`STAGNANT_SURFACE_AGE_SHARE`]), an ice lid less the
-///     more heat it lets out ([`ICE_LID_HALF_FLUX_W_M2`]: Europa's is
+///     more heat it lets out ([`super::surface_age::ICE_LID_HALF_FLUX_W_M2`]: Europa's is
 ///     young, Callisto's old);
 ///   - its gravity, the model's (the star's tides, the moons, the tilt
 ///     they leave it and its tidal flats see the model's mass);
@@ -615,19 +601,32 @@ pub fn params_for(
     let look_erosion = pick(d.erosion, fallback::EROSION, rng);
     let look_pressure = pick(d.pressure, fallback::PRESSURE_BAR, rng);
     let look_age = pick(d.surface_age, fallback::SURFACE_AGE_GA, rng);
-    let regime_age = match surface.map(|s| s.regime) {
-        Some(Regime::Plates) | None => fallback::SURFACE_AGE_GA.pick(rng),
-        Some(Regime::Episodic) => EPISODIC_SURFACE_AGE_GA.pick(rng),
-        Some(Regime::HeatPipe) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),
-        Some(Regime::Stagnant) => {
-            let age = placed.age_gyr * STAGNANT_SURFACE_AGE_SHARE.pick(rng);
-            if crate::generation::model_crust_kind(model) == crate::generation::CrustKind::Ice {
-                let flux = model.heat.flux_w_m2(model.interior.radius_earth);
-                age * ice_lid_age_share(flux) as f32
-            } else {
-                age
-            }
+    let main = match model.terrain.main() {
+        Some(unit) => *unit,
+        None => *super::surface_age::terrain(
+            model,
+            f64::from(placed.age_gyr),
+            &super::Gases::default(),
+            None,
+        )
+        .units
+        .first()
+        .expect("a terrain has a unit"),
+    };
+    let regime_age = match (main.renewal, surface.map(|s| s.regime)) {
+        (Renewal::LiquidCycle, _) => {
+            main.age_gyr as f32 * super::surface_age::LIQUID_CYCLE_AGE_SHARE.pick(rng)
         }
+        (Renewal::VolatileIce, _) => {
+            main.age_gyr as f32 * super::surface_age::VOLATILE_ICE_AGE_SHARE.pick(rng)
+        }
+        (Renewal::TidalEpisode, _) => {
+            main.age_gyr as f32 * super::surface_age::TIDAL_EPISODE_AGE_SPREAD.pick(rng)
+        }
+        (_, Some(Regime::Plates) | None) => fallback::SURFACE_AGE_GA.pick(rng),
+        (_, Some(Regime::Episodic)) => EPISODIC_SURFACE_AGE_GA.pick(rng),
+        (_, Some(Regime::HeatPipe)) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),
+        (_, Some(Regime::Stagnant)) => main.age_gyr as f32 * STAGNANT_SURFACE_AGE_SHARE.pick(rng),
     };
     let radius_km = (model.interior.radius_earth * crate::exomoon::EARTH_M / 1000.0) as f32;
     let model_circumference = 2.0 * std::f32::consts::PI * radius_km;
@@ -648,6 +647,7 @@ pub fn params_for(
                 let wet = match surface.climate.liquid {
                     SurfaceLiquid::Water => 1.0,
                     SurfaceLiquid::Hydrocarbons => HYDROCARBON_EROSION,
+                    SurfaceLiquid::Nitrogen => NITROGEN_EROSION,
                     _ => 0.0,
                 };
                 let erosion = wet * (pressure / ERODING_BAR).min(1.0) as f32;
@@ -916,6 +916,26 @@ mod tests {
     fn model_of(name: &str) -> PlanetModel {
         let body = reference(name);
         planet_model(&sun_at(body.orbit_au), model_inputs(body))
+    }
+
+    /// A nitrogen sea renews the surface and erodes it like Titan's
+    /// methane one (issue #558, the surface part).
+    #[test]
+    fn a_nitrogen_sea_renews_and_erodes_the_surface() {
+        let mut model = model_of("Titan");
+        let surface = model.surface.as_mut().expect("Titan has a surface");
+        surface.climate.liquid = SurfaceLiquid::Nitrogen;
+        let terrain =
+            super::super::surface_age::terrain(&model, 4.6, &super::super::Gases::default(), None);
+        assert_eq!(
+            terrain.main().expect("a unit").renewal,
+            Renewal::LiquidCycle,
+            "{terrain:?}"
+        );
+        model.terrain = terrain;
+        let params = params_for(&model, &earth_placed(1), &mut StdRng::seed_from_u64(1));
+        assert!(params.erosion > 0.0, "{}", params.erosion);
+        assert!(params.surface_age_ga <= 1.0, "{}", params.surface_age_ga);
     }
 
     #[test]
@@ -1325,7 +1345,7 @@ mod tests {
                 so2,
                 ..Gases::default()
             };
-            let albedo = derived_albedo(400.0, &air, &surface.water, 0.0);
+            let albedo = derived_albedo(400.0, &air, &surface.water, &Gases::default());
             surface.gases = wash_out(air, SurfaceLiquid::None);
             let sky = sky_of(&model);
             let albedo_deck = albedo == DECK_ALBEDO;
@@ -1398,6 +1418,7 @@ mod tests {
                 eccentricity,
                 resonance: None,
             },
+            capture_age_share: None,
         };
         derive_moon_model(
             1,

@@ -3914,6 +3914,7 @@ pub(crate) mod tests {
                 eccentricity: 0.0549,
                 resonance: None,
             },
+            capture_age_share: None,
         };
         let model = derive_moon_model(
             seed,

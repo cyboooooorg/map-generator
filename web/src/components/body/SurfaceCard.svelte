@@ -3,13 +3,35 @@
   // land and water, rivers, and the giants that shape the impacts.
   import './facts.css';
   import { t } from '../../lib/i18n/index.svelte';
-  import { formatArea, formatInt, formatNumber, formatShare, formatSurfaceAge, formatUpTo } from '../../lib/format';
+  import { formatArea, formatInt, formatNumber, formatShare, formatSurfaceAge, formatUpTo, withUnit } from '../../lib/format';
   import { unitTooltip } from '../../lib/units';
+  import { dominantFrost, treeFor } from '../../lib/causes';
+  import { unitsFor } from '../../lib/surfaceUnits';
+  import CauseTree from './CauseTree.svelte';
   import type { CardSource } from '../../lib/cardSource';
+  import type { InputField } from '../../lib/api/types/InputField';
 
-  let { world }: { world: CardSource } = $props();
+  let { world, oninput }: { world: CardSource; oninput?: ((field: InputField) => void) | undefined } = $props();
 
+  const explanation = $derived(world.shownExtras?.explanation ?? null);
+  /** Whether the causes of the surface age are unfolded. */
+  let open = $state(false);
+  /** Whether the causes of the Bond albedo are unfolded. */
+  let albedoOpen = $state(false);
+  // Trees start closed on every body; a preview answer is a new object for the same body: only the id counts.
+  const bodyId = $derived(world.systemBody);
+  $effect(() => {
+    void bodyId;
+    open = false;
+    albedoOpen = false;
+  });
   const body = $derived(world.shownSystemBody);
+  /** The parts of the surface and their ages: shown only for a surface of several. */
+  const units = $derived(unitsFor(body?.model?.terrain));
+  const albedo = $derived(body?.model?.surface?.climate.bond_albedo ?? null);
+  const albedoTree = $derived(treeFor(explanation, 'bond_albedo'));
+  /** The frost that makes the albedo, named on the value line. */
+  const albedoFrost = $derived(dominantFrost(albedoTree));
   const meta = $derived(world.meta);
   const stats = $derived(world.stats);
   const rivers = $derived(world.rivers);
@@ -32,7 +54,28 @@
       <dd>{formatNumber(meta.erosion, 2)}</dd>
     {/if}
     <dt>{t.cards.surfaceAge}</dt>
-    <dd class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatSurfaceAge(body.params.surface_age_ga)}</dd>
+    <dd>
+      <span class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatSurfaceAge(body.params.surface_age_ga)}</span><CauseTree
+        tree={treeFor(explanation, 'surface_age')}
+        {open}
+        ontoggle={() => (open = !open)}
+        {oninput}
+      />
+    </dd>
+    {#if albedo !== null}
+      <dt>{t.cards.bondAlbedo}</dt>
+      <dd>
+        {formatNumber(albedo, 2)}{albedoFrost ? ` · ${albedoFrost}` : ''}<CauseTree tree={albedoTree} open={albedoOpen} ontoggle={() => (albedoOpen = !albedoOpen)} {oninput} />
+      </dd>
+    {/if}
+    {#if units.length > 1}
+      <dt>{t.cards.terrainUnits}</dt>
+      <dd>
+        {#each units as unit}
+          <div>{t.causes.renewalValue({ renewal: t.causes.renewals[unit.renewal], value: `${withUnit(formatInt(Math.round(unit.share * 100)), '%')} · ${formatSurfaceAge(unit.age_gyr)}` })}</div>
+        {/each}
+      </dd>
+    {/if}
     {#if stats}
       <dt>{t.worldInfo.surface}</dt>
       <dd>{formatArea(stats.surfaceKm2)}</dd>

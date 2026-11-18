@@ -316,6 +316,55 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
     scale(a, 1.0 / dot(a, a).sqrt())
 }
 
+/// Whether a body of `interior` making `heat` under the ice shell
+/// `shell` vents: the seedless criterion of [`geysers`] (see there), its
+/// [`vent_strength`] above 0.
+pub(crate) fn vents(interior: &Interior, shell: &IceShell, heat: &InternalHeat) -> bool {
+    vent_strength(interior, shell, heat) > 0.0
+}
+
+/// Polar overburden, as a share of [`CRACK_OVERBURDEN_PA`], at and under
+/// which a body vents at full strength ([`vent_strength`]): 0.6. Not a
+/// calibration: no body's value is fitted with it. It is a bound set
+/// just above the model's Enceladus, which carries 0.4 to 0.55 of the
+/// threshold at its pole over the seeds of `archetype_census`, so that
+/// Enceladus vents in full on every seed and the plume's fallout,
+/// calibrated on it (`albedo::FALLOUT_SHARE`), applies whole. Any value
+/// from 0.55 to under 1 keeps that; it only sets how fast the vent fades
+/// on the thicker polar shells of other bodies, which no observation
+/// constrains.
+const FULL_VENT_OVERBURDEN: f64 = 0.6;
+
+/// How strongly a body of `interior` making `heat` under the ice shell
+/// `shell` vents, 0 to 1: 0 unless it passes the conditions of
+/// [`geysers`] other than the crack (an ocean, a shell that does not
+/// convect and that its tides thin at the poles, the tides making
+/// [`TIDAL_SHARE`] of its heat), then rising from 0 with its polar shell
+/// at the crack threshold (`ρ g h` at [`CRACK_OVERBURDEN_PA`]) to 1 at
+/// [`FULL_VENT_OVERBURDEN`] of it, linearly in the overburden: a thinner
+/// shell cracks through more of its cap and lets out more plume. The
+/// climate reads it for the plume's fallout (`super::vent_strength`), so
+/// that the fallout fades to nothing where the geysers stop, with no
+/// step for its fixed point to straddle.
+pub(crate) fn vent_strength(interior: &Interior, shell: &IceShell, heat: &InternalHeat) -> f64 {
+    if shell.convecting
+        || shell.ocean_km <= 0.0
+        || shell.polar_shell_km >= shell.shell_km
+        || heat.tidal_w < TIDAL_SHARE * heat.total_w()
+    {
+        return 0.0;
+    }
+    let x = ICE_DENSITY * gravity(interior) * shell.polar_shell_km * 1e3 / CRACK_OVERBURDEN_PA;
+    ((1.0 - x) / (1.0 - FULL_VENT_OVERBURDEN)).clamp(0.0, 1.0)
+}
+
+/// Surface gravity, m/s², of a body of `interior`, from its layers.
+fn gravity(interior: &Interior) -> f64 {
+    let radius_m = interior.radius_earth * EARTH_M;
+    let mass_kg: f64 = interior.layers.iter().map(|l| l.mass_earth).sum::<f64>() * EARTH_KG;
+    G * mass_kg / (radius_m * radius_m)
+}
+
 /// The geysers of a body of `interior` making `heat` under the ice shell
 /// `shell`, the pole and the fractures' layout drawn from `seed` (a
 /// stream of their own); `None` when its shell does not crack through.
@@ -326,7 +375,7 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
 ///   making at least [`TIDAL_SHARE`] of its heat), and is thin enough at
 ///   the pole that fractures cross it: the hydrostatic pressure
 ///   at its base, `ρ g h` with [`ICE_DENSITY`] and the surface gravity, is
-///   at most [`CRACK_OVERBURDEN_PA`] (Rudolph & Manga 2009,
+///   under [`CRACK_OVERBURDEN_PA`] (Rudolph & Manga 2009,
 ///   doi:10.1016/j.icarus.2008.10.010).
 /// - **Pole.** The tides thin both poles alike; Enceladus vents from its
 ///   south pole only, so the seed picks one.
@@ -355,20 +404,11 @@ pub fn geysers(
     heat: &InternalHeat,
     seed: u32,
 ) -> Option<Geysers> {
-    if shell.convecting
-        || shell.ocean_km <= 0.0
-        || shell.polar_shell_km >= shell.shell_km
-        || heat.tidal_w < TIDAL_SHARE * heat.total_w()
-    {
+    if !vents(interior, shell, heat) {
         return None;
     }
+    let cracks = |shell_m: f64| ICE_DENSITY * gravity(interior) * shell_m <= CRACK_OVERBURDEN_PA;
     let radius_m = interior.radius_earth * EARTH_M;
-    let mass_kg: f64 = interior.layers.iter().map(|l| l.mass_earth).sum::<f64>() * EARTH_KG;
-    let gravity = G * mass_kg / (radius_m * radius_m);
-    let cracks = |shell_m: f64| ICE_DENSITY * gravity * shell_m <= CRACK_OVERBURDEN_PA;
-    if !cracks(shell.polar_shell_km * 1e3) {
-        return None;
-    }
     let mut region_deg = 0.0;
     while region_deg + REGION_STEP_DEG <= MAX_REGION_DEG
         && cracks(shell_at_m(

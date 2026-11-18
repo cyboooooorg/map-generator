@@ -47,7 +47,7 @@ struct Column {
 
 /// Every column, in print order. Add a field of the model here and the
 /// tables show it.
-const COLUMNS: [Column; 7] = [
+const COLUMNS: [Column; 10] = [
     Column {
         name: "shell km",
         read: |m| m.ice_shell.map(|s| s.shell_km),
@@ -83,7 +83,30 @@ const COLUMNS: [Column; 7] = [
         read: |m| Some(f64::from(u8::from(m.geysers.is_some()))),
         share: true,
     },
+    Column {
+        name: "tidal episode share",
+        read: |m| Some(f64::from(u8::from(episode(m).is_some()))),
+        share: true,
+    },
+    Column {
+        name: "episode renewed",
+        read: |m| episode(m).map(|u| u.share),
+        share: false,
+    },
+    Column {
+        name: "episode Ga",
+        read: |m| episode(m).map(|u| u.age_gyr),
+        share: false,
+    },
 ];
+
+/// The terrain unit a past tidal episode left on a body, if any.
+fn episode(m: &PlanetModel) -> Option<&mapgen::planet::surface_age::TerrainUnit> {
+    m.terrain
+        .units
+        .iter()
+        .find(|u| u.renewal == mapgen::planet::surface_age::Renewal::TidalEpisode)
+}
 
 fn whole(seed: u32, archetype: Option<&str>) -> System {
     let request = SystemRequest::System(WholeSystemRequest {

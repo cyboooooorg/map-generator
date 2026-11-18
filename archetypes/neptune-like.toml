@@ -19,6 +19,11 @@ age_gyr = 4.57
 
 [orbit]
 star = "G2V"
-insolation = [0.0010, 0.0012]
+# What Neptune receives over its own orbit: 1/q² to 1/Q² of the Earth's,
+# with a = 30.07 AU and e = 0.009 (NASA Neptune fact sheet), q = 29.80
+# and Q = 30.34 AU. Narrower than the other giants' ±9 %: Triton's N₂
+# air is the vapour of its frost, which doubles every kelvin or so, and
+# ±9 % of light moves its surface by ±0.75 K (issue #529).
+insolation = [0.00109, 0.00113]
 eccentricity = 0.009
 axial_tilt = 28.3
