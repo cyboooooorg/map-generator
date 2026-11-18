@@ -8,6 +8,9 @@
 use crate::star::{CLASSES, StarValues, TYPE_RANGE, values};
 use serde::{Deserialize, Serialize};
 
+/// Astronomical unit, km (IAU 2012).
+const AU_KM: f64 = 1.495_978_707e8;
+
 /// What a planet's host is, by the physics that sets its light and its
 /// surroundings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -250,6 +253,38 @@ pub fn dwarf_code_for_mass(mass: f32) -> Option<f32> {
     Some(0.5 * (lo + hi))
 }
 
+/// Nearest a planet is placed to any host, AU: the inner edge of a system
+/// round a cool dwarf.
+pub const MIN_INNER_EDGE_AU: f64 = 0.02;
+/// Bulk density, g/cm³, of the rocky planet whose Roche limit sets the
+/// edge: Earth's.
+pub const ROCKY_DENSITY: f64 = 5.5;
+/// Host radii inside which no planet is placed: the closest planets known
+/// orbit at 2 to 3 stellar radii (WASP-12 b, about 3).
+pub const STELLAR_RADII_EDGE: f64 = 2.0;
+/// Solar radius, AU (695 700 km over the IAU astronomical unit).
+const SOLAR_RADIUS_AU: f64 = 0.004_650_47;
+/// Solar radius, km.
+const SOLAR_RADIUS_KM: f64 = 695_700.0;
+/// Mean density of the Sun, g/cm³.
+const SOLAR_DENSITY: f64 = 1.41;
+
+/// The inner edge of a system round `star`, AU: the largest of
+/// [`MIN_INNER_EDGE_AU`], the fluid Roche limit of a rocky planet
+/// ([`ROCKY_DENSITY`]) and [`STELLAR_RADII_EDGE`] stellar radii. A fixed
+/// edge would put planets inside an O or hot B star (an O3V is 0.06 AU in
+/// radius), while the closest planets known orbit at 2 to 3 radii of
+/// their star. Dwarfs from B7 to M keep 0.02 AU, so their systems do not
+/// change.
+pub fn inner_edge_au(star: &StarValues) -> f64 {
+    let radius = f64::from(star.radius);
+    let density = SOLAR_DENSITY * f64::from(star.mass) / radius.powi(3);
+    let roche_au = crate::tides::roche_km(radius * SOLAR_RADIUS_KM, density, ROCKY_DENSITY) / AU_KM;
+    MIN_INNER_EDGE_AU
+        .max(roche_au)
+        .max(STELLAR_RADII_EDGE * radius * SOLAR_RADIUS_AU)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,5 +367,28 @@ mod tests {
             assert_eq!(k.available(), k == HostKind::Dwarf);
             assert_eq!(k.issue().is_none(), k == HostKind::Dwarf);
         }
+    }
+
+    #[test]
+    fn cool_dwarfs_keep_the_old_edge() {
+        for code in [25.0, 30.0, 42.0, 69.5] {
+            assert_eq!(inner_edge_au(&values(code)), MIN_INNER_EDGE_AU, "{code}");
+        }
+    }
+
+    /// The 2 radii term still exceeds 0.02 AU for the B7 to A0 dwarfs
+    /// (R > 2.15 R☉): their edge is the stellar one, below 0.03 AU.
+    #[test]
+    fn late_b_dwarfs_get_a_slightly_wider_edge() {
+        let edge = inner_edge_au(&values(17.0));
+        assert!(edge > MIN_INNER_EDGE_AU && edge < 0.03, "{edge}");
+    }
+
+    #[test]
+    fn hot_stars_push_the_edge_outside_themselves() {
+        let o3 = values(3.0);
+        let r_au = f64::from(o3.radius) * 0.004_650_47;
+        assert!(inner_edge_au(&o3) >= 2.0 * r_au - 1e-9);
+        assert!(inner_edge_au(&o3) > 0.1); // exercises the hot-Jupiter clamp
     }
 }

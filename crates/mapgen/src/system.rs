@@ -88,8 +88,8 @@ use std::sync::Arc;
 pub const SYSTEM_FORMAT_VERSION: u32 = 10;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
-/// Inner and outer edges of a system, AU.
-const INNER_EDGE_AU: f64 = 0.02;
+/// Outer edge of a system, AU. The inner edge depends on the host
+/// ([`crate::host::inner_edge_au`]).
 const OUTER_EDGE_AU: f64 = 60.0;
 /// Tries to place a system's planets before a request fails.
 const TRIES: usize = 24;
@@ -653,7 +653,12 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
 /// times `10^(2 [Fe/H])` and the star's mass, like the other gas giants),
 /// on an orbit of 1 to 10 days, log-uniform, within 0.1 AU. The spacing
 /// then keeps other planets beyond four times its period.
-fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Option<f64> {
+fn drawn_hot_jupiter(
+    star: &StarInfo,
+    inner_edge_au: f64,
+    metallicity: f64,
+    rng: &mut impl RngExt,
+) -> Option<f64> {
     let mass = f64::from(star.mass);
     let odds =
         (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5)).min(0.2);
@@ -663,7 +668,7 @@ fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -
         let days = (lo.ln() + u * (hi / lo).ln()).exp();
         (mass * (days / 365.25).powi(2))
             .cbrt()
-            .clamp(INNER_EDGE_AU, 0.1)
+            .clamp(inner_edge_au, 0.1_f64.max(inner_edge_au))
     })
 }
 
@@ -673,7 +678,12 @@ fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -
 /// dwarf; Mulders et al. 2018) on periods log-uniform from 1 to 400 days,
 /// a few colder ones beyond, the giants as [`GiantSystem`] draws them, and
 /// last a hot Jupiter ([`drawn_hot_jupiter`]).
-fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(Origin, f64)> {
+fn drawn_slots(
+    star: &StarInfo,
+    inner_edge_au: f64,
+    metallicity: f64,
+    rng: &mut impl RngExt,
+) -> Vec<(Origin, f64)> {
     let mass = f64::from(star.mass);
     let inner_mean = if mass < 0.6 {
         2.5
@@ -690,7 +700,7 @@ fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<
     let mut out = Vec::new();
     for _ in 0..poisson(inner_mean, rng) {
         let days = (1f64.ln() + rng.random::<f64>() * 400f64.ln()).exp();
-        let a = (mass * (days / 365.25).powi(2)).cbrt().max(INNER_EDGE_AU);
+        let a = (mass * (days / 365.25).powi(2)).cbrt().max(inner_edge_au);
         out.push((Origin::Small, a));
     }
     // Colder small planets, between the habitable zone and the outer giants.
@@ -704,10 +714,12 @@ fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<
         out.push((Origin::IceGiant, ice * 10f64.powf(0.7 + 0.3 * normal(rng))));
     }
     // Drawn last, so that the other planets' draws stay as they were.
-    out.extend(drawn_hot_jupiter(star, metallicity, rng).map(|a| (Origin::HotJupiter, a)));
+    out.extend(
+        drawn_hot_jupiter(star, inner_edge_au, metallicity, rng).map(|a| (Origin::HotJupiter, a)),
+    );
     // A slot whose orbit falls outside the system is dropped, after every
     // draw, as `place` dropped it.
-    out.retain(|(_, a)| (INNER_EDGE_AU..=OUTER_EDGE_AU).contains(a));
+    out.retain(|(_, a)| (inner_edge_au..=OUTER_EDGE_AU).contains(a));
     out
 }
 
@@ -819,15 +831,15 @@ fn place(slots: &[Slot], star_mass: f64, zone: Option<(f64, f64)>) -> Result<Vec
 
 /// How many planets of an archetype fit in its band, packed from its
 /// inner edge at the spacing, each of a typical mass.
-fn fits(asked: &Asked, star_mass: f64) -> u32 {
+fn fits(asked: &Asked, star_mass: f64, inner_edge_au: f64) -> u32 {
     let (min, max) = asked.band;
     let mut rng = StdRng::seed_from_u64(0);
     let mass = asked.archetype.mass(&mut rng);
     let mut last = Slot {
         placement: Placement::Requested(asked.clone()),
         mass_earth: mass,
-        orbit_au: min.max(INNER_EDGE_AU),
-        drawn_au: min.max(INNER_EDGE_AU),
+        orbit_au: min.max(inner_edge_au),
+        drawn_au: min.max(inner_edge_au),
         eccentricity: 0.0,
         fixed: false,
     };
@@ -1055,6 +1067,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
     let star = StarInfo::new(star_code, 1.0, 0.0, age_gyr);
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
+    let inner_edge_au = crate::host::inner_edge_au(&crate::star::values(star_code));
 
     // The preferred band of each planet asked, to draw its distance again
     // when a try fails.
@@ -1090,10 +1103,10 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                     .orbit
                     .orbit_range_au(f64::from(star.luminosity), star_mass)
                     .ok_or_else(impossible)?;
-                if far < INNER_EDGE_AU || near > OUTER_EDGE_AU {
+                if far < inner_edge_au || near > OUTER_EDGE_AU {
                     return Err(impossible());
                 }
-                let lo = near.max(INNER_EDGE_AU);
+                let lo = near.max(inner_edge_au);
                 let hi = far.min(OUTER_EDGE_AU).max(lo);
                 let class = trial_class(
                     &archetype,
@@ -1178,7 +1191,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                     .iter()
                     .filter(|(a, _, _)| a.archetype.name == *name)
                     .count() as u32;
-                let room = fits(asked, star_mass);
+                let room = fits(asked, star_mass, inner_edge_au);
                 if count > room {
                     return Err(RequestError::ZoneFull {
                         body_type: name.clone(),
@@ -1194,7 +1207,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
             }
             list
         }
-        None => drawn_slots(&star, f64::from(metallicity), &mut rng)
+        None => drawn_slots(&star, inner_edge_au, f64::from(metallicity), &mut rng)
             .into_iter()
             .map(|(origin, a)| (Placement::Drawn(origin), a))
             .collect(),
@@ -1222,6 +1235,12 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                 let jitter = 1.0 + 0.2 * (rng.random::<f64>() - 0.5);
                 let orbit_au = match placement {
                     Placement::Requested(_) => *a,
+                    // The jitter may not carry a planet inside a hot
+                    // host's edge; round a cool dwarf it may, as it
+                    // always did.
+                    _ if inner_edge_au > crate::host::MIN_INNER_EDGE_AU => {
+                        (*a * jitter).max(inner_edge_au)
+                    }
                     _ => *a * jitter,
                 };
                 let drawn = if placement.is_hot_jupiter() {
@@ -1330,9 +1349,10 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
         });
     }
     let (body_type, fits) = match last_error {
-        Some((Placement::Requested(asked), _)) => {
-            (asked.archetype.name.clone(), fits(&asked, star_mass))
-        }
+        Some((Placement::Requested(asked), _)) => (
+            asked.archetype.name.clone(),
+            fits(&asked, star_mass, inner_edge_au),
+        ),
         _ => (String::new(), 0),
     };
     let asked_of = whole
@@ -1384,6 +1404,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
     let star = StarInfo::new(params.star, 1.0, 0.0, params.age_gyr);
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
+    let inner_edge = crate::host::inner_edge_au(&crate::star::values(params.star));
     let host = HostGiant::draw(&params);
     // A lone planet: no giant and no rocky neighbour.
     let alone = request.is_alone();
@@ -1436,7 +1457,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
     let mut rocky = if alone {
         Vec::new()
     } else {
-        drawn_slots(&star, f64::from(params.metallicity), &mut rng)
+        drawn_slots(&star, inner_edge, f64::from(params.metallicity), &mut rng)
     };
     rocky.retain(|(origin, _)| *origin == Origin::Small);
     for (origin, a) in rocky {
@@ -3275,8 +3296,11 @@ mod tests {
         for seed in 1..=200 {
             let mut rng = StdRng::seed_from_u64(seed);
             let star = StarInfo::new(parse_type("G2V").unwrap(), 1.0, 0.0, 4.6);
-            for (origin, a) in drawn_slots(&star, 0.0, &mut rng) {
-                assert!((INNER_EDGE_AU..=OUTER_EDGE_AU).contains(&a), "{a}");
+            for (origin, a) in drawn_slots(&star, crate::host::MIN_INNER_EDGE_AU, 0.0, &mut rng) {
+                assert!(
+                    (crate::host::MIN_INNER_EDGE_AU..=OUTER_EDGE_AU).contains(&a),
+                    "{a}"
+                );
                 if origin == Origin::HotJupiter {
                     assert!(a <= 0.1, "{a}");
                 }
@@ -7358,5 +7382,37 @@ mod titan_tests {
             belted.is_some(),
             "no planetless O5V draw of 1..=60 keeps a belt"
         );
+    }
+
+    /// No body of a system round a hot O star orbits inside its edge, a
+    /// hot Jupiter asked included.
+    #[test]
+    fn no_planet_orbits_inside_an_o_star() {
+        let edge = 2.0 * f64::from(crate::star::values(3.0).radius) * 0.004_650_47;
+        for seed in 1..=40u32 {
+            for planets in [None, Some(BTreeMap::from([("hot-jupiter".to_string(), 1)]))] {
+                let request = SystemRequest::System(WholeSystemRequest {
+                    star: Some("O3V".into()),
+                    planets,
+                    seed: Some(seed),
+                    width: Some(64),
+                    height: Some(32),
+                    ..Default::default()
+                });
+                let Ok(system) = draw(&request, &mut StdRng::seed_from_u64(1)) else {
+                    continue;
+                };
+                for b in &system.bodies {
+                    if b.parent.is_none() {
+                        assert!(
+                            b.orbit.semi_major_axis_au >= edge * (1.0 - 1e-6),
+                            "seed {seed}: {} at {}",
+                            b.id,
+                            b.orbit.semi_major_axis_au
+                        );
+                    }
+                }
+            }
+        }
     }
 }
