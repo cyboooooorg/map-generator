@@ -108,6 +108,107 @@ const FROST_LAYER_BAR: f64 = 0.02;
 /// lie near 103 K, and its vapour at 4e-11 bar, under Io's nanobar.
 const SO2_FROST_ALBEDO: f64 = 0.63;
 
+/// Bond albedo of clean, fine-grained water ice: 0.85. Calibration, the
+/// fresh end of the icy-age law ([`icy_unit_albedo`]): brighter than
+/// Enceladus (0.81 ± 0.04; Howett et al. 2010, Icarus 206, 573,
+/// doi:10.1016/j.icarus.2009.07.016, from memory, not checked), whose ice
+/// holds some dust, and than the model's sea ice and snow
+/// ([`ICE_ALBEDO`]); pure water frost reflects about 0.9 of the visible
+/// but absorbs its near infrared, about half of sunlight.
+const PURE_ICE_ALBEDO: f64 = 0.85;
+
+/// Rock dust in a fresh ice surface per unit of the body's rock-to-ice
+/// mass ratio, as a share of its grains: 0.006 ([`icy_unit_albedo`]). A
+/// body's renewed ice carries the rock its ocean and its crust were in
+/// contact with (Europa's hydrated salts; McCord et al. 1998, Science
+/// 280, 1242, from memory, not checked): a mostly-rock body's ice is
+/// dirtier. Calibration on Europa: its rock-to-ice ratio of 9 to 16 puts
+/// 5 to 10 % of dust in its young ice, a Bond albedo of 0.59 to 0.66
+/// (observed about 0.62 to 0.68, from memory).
+const DUST_PER_ROCK_TO_ICE: f64 = 0.006;
+
+/// Most of an old ice surface a dark lag covers: 0.88 ([`icy_unit_albedo`]).
+/// Sublimation and impact gardening leave the rock of an old ice-rock
+/// crust as a dark lag, with the ice redeposited as bright frost on
+/// cold crests and poleward slopes (Spencer 1987, Icarus 69, 297; Moore
+/// et al. 1999, Icarus 140, 294, doi:10.1006/icar.1999.6132, Callisto
+/// mantled by dark debris but for its bright crests; both from memory,
+/// not checked). Calibration on Callisto's Bond albedo, about 0.2.
+const LAG_MAX_SHARE: f64 = 0.88;
+
+/// Craters of 1 km or more per km² over which a lag covers `1 − 1/e` of
+/// [`LAG_MAX_SHARE`]: 0.004, the count of the lunar chronology on a
+/// surface about 3.45 Gyr old ([`crate::craters::crater_density`]). The
+/// lag follows the impacts a surface has taken, which garden it and
+/// bring its dust: slowly at today's rate, fast under the late heavy
+/// bombardment. Calibration on Ganymede: its 2 Gyr renewed terrain
+/// keeps 70 % of its fresh ice uncovered, its 4.5 Gyr dark terrain is
+/// Callisto's.
+const LAG_CRATERS_PER_KM2: f64 = 0.004;
+
+/// Share of a venting body's ice that the fallout of its plume keeps
+/// under fresh frost ([`PURE_ICE_ALBEDO`]): 0.6. Enceladus's plume
+/// feeds Saturn's E ring and falls back over its whole surface, fastest
+/// near its south pole, so that its surface stays as bright as fresh
+/// frost whatever its craters' age (Verbiscer et al. 2007, Science 315,
+/// 815, doi:10.1126/science.1134681; Kempf et al. 2010, Icarus 206, 446,
+/// doi:10.1016/j.icarus.2009.09.016; both from memory, not checked).
+/// Calibration on Enceladus's Bond albedo, 0.81 (Howett et al. 2010).
+const FALLOUT_SHARE: f64 = 0.6;
+
+/// Single-scattering albedo of an isotropic scatterer whose diffusive
+/// reflectance is `albedo` (the inverse of [`diffusive_albedo`]).
+fn single_scattering(albedo: f64) -> f64 {
+    let gamma = (1.0 - albedo) / (1.0 + albedo);
+    1.0 - gamma * gamma
+}
+
+/// Diffusive (bihemispherical) reflectance of a half-space of isotropic
+/// scatterers of single-scattering albedo `w`: `(1 − γ) / (1 + γ)` with
+/// `γ = √(1 − w)` (Hapke 1981, JGR 86, 3039,
+/// doi:10.1029/JB086iB04p03039, from memory, not checked), the Bond
+/// albedo of a surface whose grains scatter alike in every direction.
+fn diffusive_albedo(w: f64) -> f64 {
+    let gamma = (1.0 - w).clamp(0.0, 1.0).sqrt();
+    (1.0 - gamma) / (1.0 + gamma)
+}
+
+/// Bond albedo of a unit of exposed water ice on an ice crust, last
+/// renewed `age_gyr` Gyr ago, on a body whose rock is `rock_share` of
+/// its mass, under the fallout of its plume when it vents (`fallout`).
+///
+/// - Its fresh ice is an intimate mix of [`PURE_ICE_ALBEDO`] ice and
+///   rock dust at [`REGOLITH_ALBEDO`], the dust `DUST_PER_ROCK_TO_ICE`
+///   times the body's rock-to-ice ratio: their single-scattering
+///   albedos mix by grain and the mix reflects as Hapke's isotropic
+///   half-space ([`diffusive_albedo`]). A little dust darkens ice much.
+/// - A dark lag at [`REGOLITH_ALBEDO`] covers patches of it, a share
+///   `LAG_MAX_SHARE · (1 − exp(−N / LAG_CRATERS_PER_KM2))` of the
+///   surface, `N` the crater count of the lunar chronology on a surface
+///   that old ([`crate::craters::crater_density`]); the patches mix by
+///   area.
+/// - A plume's fallout covers [`FALLOUT_SHARE`] of it with fresh frost.
+pub fn icy_unit_albedo(age_gyr: f64, rock_share: f64, fallout: bool) -> f64 {
+    let rock = rock_share.clamp(0.0, 1.0);
+    let ice = 1.0 - rock;
+    let dust = if DUST_PER_ROCK_TO_ICE * rock >= ice {
+        1.0
+    } else {
+        DUST_PER_ROCK_TO_ICE * rock / ice
+    };
+    let w = (1.0 - dust) * single_scattering(PURE_ICE_ALBEDO)
+        + dust * single_scattering(REGOLITH_ALBEDO);
+    let fresh = diffusive_albedo(w);
+    let craters = crate::craters::crater_density(age_gyr.max(0.0));
+    let lag = LAG_MAX_SHARE * (1.0 - (-craters / LAG_CRATERS_PER_KM2).exp());
+    let aged = (1.0 - lag) * fresh + lag * REGOLITH_ALBEDO;
+    if fallout {
+        (1.0 - FALLOUT_SHARE) * aged + FALLOUT_SHARE * PURE_ICE_ALBEDO
+    } else {
+        aged
+    }
+}
+
 /// Annual mean temperature, K, under which a surface keeps ice or snow:
 /// −5 °C. Calibration: Budyko 1969 (doi:10.3402/tellusa.v21i5.10109)
 /// takes −10 °C and other energy-balance models 0 °C; −5 °C puts Earth's
@@ -412,15 +513,26 @@ fn haze(gases: &Gases) -> f64 {
 /// haze over all ([`HAZE_ALBEDO`], [`HAZE_ABSORPTION`]). A deck hides
 /// everything below it ([`DECK_ALBEDO`]) where it lies.
 pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64) -> f64 {
+    bond_albedo_over(cover, gases, deck, None)
+}
+
+/// [`bond_albedo`] of a body whose ice and land are, where `crust` is
+/// given, an exposed ice crust of that albedo (the area-weighted
+/// [`icy_unit_albedo`] of its terrain units) instead of snow and rock.
+pub fn bond_albedo_over(cover: &Cover, gases: &Gases, deck: f64, crust: Option<f64>) -> f64 {
     let deck = deck.clamp(0.0, 1.0);
     if deck >= 1.0 {
         return DECK_ALBEDO;
     }
     let shield = 1.0 - (-gases.total().max(0.0) / SHIELD_BAR).exp();
     let land = REGOLITH_ALBEDO + (SOIL_ALBEDO - REGOLITH_ALBEDO) * shield;
+    let (land, ice) = match crust {
+        Some(a) => (a, a),
+        None => (land, ICE_ALBEDO),
+    };
     let surface = cover.ocean * OCEAN_ALBEDO
         + cover.land * land
-        + cover.ice * ICE_ALBEDO
+        + cover.ice * ice
         + (cover.frost - cover.so2_frost) * FROST_ALBEDO
         + cover.so2_frost * SO2_FROST_ALBEDO;
     let cloud = (cover.cloud * CLOUD_ALBEDO).clamp(0.0, 1.0);
@@ -563,6 +675,30 @@ mod tests {
             (icy.ice - 0.75).abs() < 1e-12 && icy.ocean == 0.0,
             "{icy:?}"
         );
+    }
+
+    /// The icy-age law darkens ice with its age and its body's rock,
+    /// within fresh ice and the lag, and a plume's fallout brightens it.
+    #[test]
+    fn old_and_dusty_ice_is_darker() {
+        let a = icy_unit_albedo;
+        let mut last = f64::INFINITY;
+        for i in 0..=50 {
+            let age = 0.1 * f64::from(i);
+            let now = a(age, 0.5, false);
+            assert!(now <= last, "{age}: {now} > {last}");
+            assert!((REGOLITH_ALBEDO..=PURE_ICE_ALBEDO).contains(&now), "{now}");
+            last = now;
+        }
+        assert!(a(0.1, 0.9, false) < a(0.1, 0.6, false));
+        assert!(a(0.4, 0.65, true) > a(0.4, 0.65, false));
+        assert!(a(4.5, 0.5, true) < PURE_ICE_ALBEDO);
+        assert!((a(0.0, 0.0, false) - PURE_ICE_ALBEDO).abs() < 1e-12);
+        // All rock: the dust's own albedo, never NaN.
+        assert!((a(0.0, 1.0, false) - REGOLITH_ALBEDO).abs() < 1e-9);
+        // Callisto-like: old, half rock.
+        let callisto = a(4.55, 0.5, false);
+        assert!((0.15..=0.3).contains(&callisto), "{callisto}");
     }
 
     #[test]

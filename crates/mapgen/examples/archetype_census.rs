@@ -5,8 +5,9 @@
 //! cargo run --release -p mapgen --example archetype_census -- [SEEDS=20] [ARCHETYPE...]
 //! ```
 //!
-//! Each row prints the body's class, surface temperature, air (total and
-//! main gases), surface liquid, surface age and crater rate, terrain units (renewal, age, share), mass, radius,
+//! Each row prints the body's class, surface temperature, Bond albedo,
+//! water fraction, air (total and main gases), surface liquid, surface
+//! age and crater rate, terrain units (renewal, age, share), mass, radius,
 //! tidal heat and, for icy bodies, the ice shell and the geysers.
 use std::collections::BTreeMap;
 
@@ -106,8 +107,10 @@ fn main() {
             if let Some(s) = m.surface.as_ref() {
                 let g = &s.gases;
                 line += &format!(
-                    " | T {:.1} K P {:.3e} bar co2 {:.2e} n2 {:.2e} h2o {:.2e} ch4 {:.2e} so2 {:.2e} o2 {:.2e} | {:?} {:?} snow {} | sea {:.2}",
+                    " | T {:.1} K A {:.3} water {:.3} P {:.3e} bar co2 {:.2e} n2 {:.2e} h2o {:.2e} ch4 {:.2e} so2 {:.2e} o2 {:.2e} | {:?} {:?} snow {} | sea {:.2}",
                     s.climate.temperature_k,
+                    s.climate.bond_albedo,
+                    m.inputs.water_fraction,
                     g.total(),
                     g.co2,
                     g.n2,

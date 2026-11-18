@@ -603,15 +603,17 @@ and thinner ice. Ammonia keeps a thin ocean under a shell that would
 otherwise freeze through; a shell thick enough to convect sheds its heat
 faster than it comes and freezes its ocean, unless ammonia stops it.
 
-**Orders of magnitude** (asked moons, seeds 1 to 20). Europa (8 % water,
-its tides from its resonances) gets a shell of 12 to 27 km, 6 to 15 km
-at the poles, over an ocean of 80 to 158 km. Enceladus, 11 to 17 GW
-from its resonance with Dione, gets 35.8 to 44.6 km of ice, 8 to 11 km at
-the poles, over 15 to 29 km of ocean. Ganymede, heated mostly by its
-rock, gets 130 to 232 km of ice and 35 to 125 km of ocean above ice V;
-Titan, with its ammonia, 136 to 175 km over 55 to 107 km; Callisto,
-whose water layer above its mixed rock and ice is thin, mostly freezes
-through (204 to 254 km of ice; an ocean on a few seeds, up to 44 km). The Solar System's moon archetypes carry
+**Orders of magnitude** (asked moons, seeds 1 to 40, under the surface
+temperatures their icy albedos give, `albedo::icy_unit_albedo`). Europa
+(8 % water, its tides from its resonances) gets a shell of 12 to 34 km,
+6 to 19 km at the poles, over an ocean of 80 to 158 km. Enceladus, 11 to
+17 GW from its resonance with Dione, under a surface at 60 to 64 K, gets
+44.6 to 53.8 km of ice, 10.5 to 13.3 km at the poles, over 3 to 20 km of
+ocean. Ganymede, heated mostly by its rock, gets 131 to 189 km of ice
+and 75 to 126 km of ocean above ice V; Titan, with its ammonia, 125 to
+177 km over 63 to 120 km; Callisto, whose water layer above its mixed
+rock and ice is thin, and whose dark surface is at 113 to 119 K, gets
+155 to 240 km of ice over 0 to 99 km of ocean. The Solar System's moon archetypes carry
 the chondritic radiogenic abundance of the solar nebula, 0.9 to 1.1
 times the Earth's (Lodders 2003), not the 0.15 dex drawn across stellar
 systems.
@@ -882,11 +884,13 @@ archetypes):
   the shell at both poles alike, where Enceladus's south pole is thinner
   than its north. Their share and caps are calibrated on Enceladus
   alone, and the threshold of 300 MPa that keeps a core unconsolidated
-  has no source. Enceladus's mean shell, 35.8 to 44.6 km over seeds 1 to
-  20 (8 to 11 km at the poles), is about twice the 18 to 22 km observed
-  (Čadek et al. 2016): the model's heat for it (11 to 17 GW) over its
-  true radius gives a conductive mean shell thicker than the observed
-  one.
+  has no source. Enceladus's mean shell, 44.6 to 53.8 km over seeds 1 to
+  40 (10.5 to 13.3 km at the poles), is more than twice the 18 to 22 km
+  observed (Čadek et al. 2016): the model's heat for it (11 to 17 GW)
+  over its true radius gives a conductive mean shell thicker than the
+  observed one, and its surface at about 62 K (its observed Bond albedo,
+  0.81, as the fallout of its plume gives it) thickens it further than
+  the 86 K its regolith albedo gave it before (35.8 to 44.6 km).
 - **Geysers crack by weight alone.** Whether a shell cracks through is
   read from the weight of the ice at its base against a threshold
   calibrated on the two limits of Rudolph & Manga (2009); the tension

@@ -670,9 +670,9 @@ masses, ice shares and orbits):
 | Moon | Result | Observed |
 |---|---|---|
 | Titan | hydrocarbon world, 93.5 K, 1.43 bar, 94 % N₂, 0.083 bar CH₄ (5.8 %) | 93.7 K, 1.47 bar, 5.7 % CH₄ |
-| Ganymede, Callisto | exospheres of 3e-12 bar (CO₂), 97.9 K, Bond albedo 0.60 | exospheres of 1e-12 (O₂) and 7.5e-12 bar (CO₂) |
+| Ganymede, Callisto | exospheres of 3e-12 bar (CO₂), 116.6 K, Bond albedo 0.19 (alone, out of resonance, Ganymede keeps one old unit, Callisto's; in its chain, 0.45 and 102 to 108 K, see "Icy albedo") | exospheres of 1e-12 (O₂) and 7.5e-12 bar (CO₂); Bond albedo about 0.4 and 0.2 |
 | Io | heat pipe, 9.3e-10 bar of SO₂ over its SO₂ frost (N₂ and CO₂ an exosphere of 3e-12 bar), 105.2 K, Bond albedo 0.63 | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
-| Europa | exosphere of 3e-12 bar (CO₂), 98.0 K | exosphere of about 1e-12 bar (O₂) |
+| Europa | exosphere of 3e-12 bar (CO₂), 96.1 K, Bond albedo 0.63 | exosphere of about 1e-12 bar (O₂), Bond albedo about 0.62 to 0.68 |
 | Triton | 1.7e-5 bar of N₂ over its frost at 37.5 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
 | Moon | 1e-12 bar | airless |
 
@@ -992,6 +992,71 @@ calibrated on several bodies at once and carries its source (several are
 from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
 0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64, Triton 0.75 and
 Io 0.63.
+
+**Icy albedo from surface age** (`albedo::icy_unit_albedo`, climate
+pass lot 3C-1, goal 4). The exposed water ice of an ice crust darkens
+with its age and its rock, and the body's Bond albedo is the
+area-weighted mix of its terrain units. The crust is
+`generation::model_crust_kind`'s, read before the model exists
+(`planet::ice_crust`: a stagnant lid, 5 % of water or more and 0.01
+oceans of it kept, out of a runaway); its third condition, no liquid
+water at the surface, is the climate's, since the crust's albedo
+replaces only the cover's ice and land, never open water, and only
+under an air thinner than `ERODING_BAR` (0.01 bar), where nothing
+erodes or buries the ice. The units are those of
+`surface_age::icy_estimate`, before the climate: an ice lid, and on a
+member of a Laplace-like chain the unit its past tidal episode renewed.
+Rocky planets with ice caps, snowballs (water under 5 % of the mass),
+Titan (its haze, over 0.01 bar), Triton (its N₂ frost covers its disc)
+and Io (a heat pipe, its SO₂ frost) keep their paths. Each unit:
+
+- **Fresh ice** is an intimate mix of clean ice (`PURE_ICE_ALBEDO`
+  0.85, calibration: brighter than Enceladus's 0.81) and rock dust at
+  the regolith's 0.11, the dust `0.006 ρ` of its grains, `ρ` the body's
+  rock-to-ice mass ratio (`1 − water_fraction` over `water_fraction`):
+  a mostly-rock body's ice is dirtier (Europa's salts). The grains'
+  single-scattering albedos mix and the mix reflects as a half-space of
+  isotropic scatterers, `(1 − γ) / (1 + γ)` with `γ = √(1 − w)` (Hapke
+  1981, JGR 86, 3039, from memory), so that a little dust darkens ice
+  much. `0.006` is a calibration on Europa (`ρ` 9 to 16).
+- **A dark lag** covers patches of it: a share
+  `0.88 (1 − exp(−N / 0.004))` of the unit, `N` the craters of 1 km or
+  more per km² of the lunar chronology on a surface that old
+  (`craters::crater_density`, Neukum, Ivanov & Hartmann 2001), slow at
+  today's flux and fast under the late heavy bombardment. Sublimation and
+  impact gardening leave the rock of an old ice-rock crust as a lag and
+  the ice as bright frost on cold crests (Spencer 1987; Moore et al.
+  1999, Callisto; from memory). `0.88` is a calibration on Callisto
+  (about 0.2), `0.004` on Ganymede (its 2 Gyr renewed terrain keeps 70 %
+  of its ice uncovered).
+- **A plume's fallout** keeps 0.6 of a venting body's ice under fresh
+  frost (calibration on Enceladus, 0.81, Howett et al. 2010; the plume
+  and E-ring fallout: Verbiscer et al. 2007, Kempf et al. 2010; from
+  memory). Whether it vents is the seedless criterion of its geysers
+  (`geysers::vents`), read before the climate on the shell under its
+  equilibrium temperature, then on the shell under the climate's
+  temperature, the climate solved again under the other answer when
+  they differ. Over the 300 drawn systems of
+  `drawn_icy_moons_stay_in_bounds` the answer agrees with the stored
+  geysers on every ice crust but one, which sits on the threshold
+  (its fallout cools it to 62.0 K, under the shell that cracks; without
+  it, 63.6 K).
+
+Census, seeds 1 to 40 (min, median, max):
+
+| Body | Bond albedo | T, K | Observed |
+|---|---|---|---|
+| Enceladus | 0.769, 0.782, 0.787 | 60.3, 62.2, 63.9 | 0.81 ± 0.04 (Howett et al. 2010) |
+| Europa | 0.587, 0.623, 0.660 | 91.9, 95.8, 100.1 | about 0.62 to 0.68 |
+| Ganymede | 0.451, 0.455, 0.458 | 102.2, 105.1, 107.7 | about 0.4 |
+| Callisto | 0.192, 0.193, 0.193 | 112.6, 115.9, 118.7 | about 0.2 |
+
+Enceladus took the regolith's 0.11 before (85 to 89 K): its 0.027
+oceans spread as 1.5 km sheets cover 5 % of its disc, the rest counting
+as bare rock; the Galilean moons took the ice's 0.6 (95 to 98 K). The
+colder Enceladus has a thicker shell (45 to 54 km, 10 to 13 km at the
+poles, still venting on every seed), the warmer Callisto a thinner one
+(155 to 240 km over 0 to 99 km of ocean).
 
 **Emissivity** (`climate::emissivity`, `N2_ICE_EMISSIVITY`, issue #529).
 The surface radiates as a black body except under nitrogen frost, which

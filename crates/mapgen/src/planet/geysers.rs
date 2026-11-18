@@ -316,6 +316,25 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
     scale(a, 1.0 / dot(a, a).sqrt())
 }
 
+/// Whether a body of `interior` making `heat` under the ice shell
+/// `shell` vents: the seedless criterion of [`geysers`] (see there),
+/// which the climate also reads, on a shell of its own, for the plume's
+/// fallout (`super::plume_fallout`).
+pub(crate) fn vents(interior: &Interior, shell: &IceShell, heat: &InternalHeat) -> bool {
+    !shell.convecting
+        && shell.ocean_km > 0.0
+        && shell.polar_shell_km < shell.shell_km
+        && heat.tidal_w >= TIDAL_SHARE * heat.total_w()
+        && ICE_DENSITY * gravity(interior) * shell.polar_shell_km * 1e3 <= CRACK_OVERBURDEN_PA
+}
+
+/// Surface gravity, m/s², of a body of `interior`, from its layers.
+fn gravity(interior: &Interior) -> f64 {
+    let radius_m = interior.radius_earth * EARTH_M;
+    let mass_kg: f64 = interior.layers.iter().map(|l| l.mass_earth).sum::<f64>() * EARTH_KG;
+    G * mass_kg / (radius_m * radius_m)
+}
+
 /// The geysers of a body of `interior` making `heat` under the ice shell
 /// `shell`, the pole and the fractures' layout drawn from `seed` (a
 /// stream of their own); `None` when its shell does not crack through.
@@ -355,20 +374,11 @@ pub fn geysers(
     heat: &InternalHeat,
     seed: u32,
 ) -> Option<Geysers> {
-    if shell.convecting
-        || shell.ocean_km <= 0.0
-        || shell.polar_shell_km >= shell.shell_km
-        || heat.tidal_w < TIDAL_SHARE * heat.total_w()
-    {
+    if !vents(interior, shell, heat) {
         return None;
     }
+    let cracks = |shell_m: f64| ICE_DENSITY * gravity(interior) * shell_m <= CRACK_OVERBURDEN_PA;
     let radius_m = interior.radius_earth * EARTH_M;
-    let mass_kg: f64 = interior.layers.iter().map(|l| l.mass_earth).sum::<f64>() * EARTH_KG;
-    let gravity = G * mass_kg / (radius_m * radius_m);
-    let cracks = |shell_m: f64| ICE_DENSITY * gravity * shell_m <= CRACK_OVERBURDEN_PA;
-    if !cracks(shell.polar_shell_km * 1e3) {
-        return None;
-    }
     let mut region_deg = 0.0;
     while region_deg + REGION_STEP_DEG <= MAX_REGION_DEG
         && cracks(shell_at_m(

@@ -670,6 +670,10 @@ pub(crate) struct Bare {
     /// by gas ([`climate::frost`]).
     #[cfg(test)]
     pub frost: Gases,
+    /// Whether the climate took its ice crust under a plume's fallout
+    /// ([`plume_fallout`]); `None` without an ice crust ([`crust_albedo`]).
+    #[cfg(test)]
+    pub fallout: Option<bool>,
 }
 
 /// The heaviest host whose magnetosphere [`non_thermal_loss`] reads, Earth
@@ -770,15 +774,40 @@ pub(crate) fn bare(
         snowball_draw: inputs.snowball_draw,
     };
     let (mut gases, mut so2_frost_bar) = (gases, volcanic_bar);
-    let (mut after, mut climate) = self::climate(
-        context,
-        gases,
-        &w,
-        r,
-        flux,
-        water_bar,
-        carbon(so2_frost_bar),
-    );
+    // An ice crust under its plume's fallout, if it vents: guessed on
+    // the shell under the equilibrium temperature, then checked on the
+    // shell under the climate's, and the climate solved again under the
+    // other answer when they differ (the fallout's brightness cools the
+    // surface and thickens the shell).
+    let icy = ice_crust(inputs, &w, r);
+    let crust = |fallout: bool| icy.then(|| crust_albedo(context, inputs, heat, interior, fallout));
+    let solve = |gases: Gases, so2_frost_bar: f64, fallout: bool| {
+        climate::climate_over(
+            context,
+            gases,
+            &w,
+            r,
+            flux,
+            water_bar,
+            carbon(so2_frost_bar),
+            crust(fallout),
+        )
+    };
+    let mut fallout = icy && plume_fallout(inputs, interior, heat, context.equilibrium_k, None);
+    let (mut after, mut climate) = solve(gases, so2_frost_bar, fallout);
+    if icy {
+        let vents = plume_fallout(
+            inputs,
+            interior,
+            heat,
+            climate.temperature_k,
+            Some(climate.liquid),
+        );
+        if vents != fallout {
+            fallout = vents;
+            (after, climate) = solve(gases, so2_frost_bar, fallout);
+        }
+    }
     // The frost's vapour on the dayside, the air's SO₂ wherever the frost
     // holds: more than a trace goes into the air before the climate, out
     // of the frost, and the climate is solved again with it. A surface or
@@ -808,15 +837,7 @@ pub(crate) fn bare(
         if let Some(v) = added {
             gases.so2 += v;
             so2_frost_bar = (so2_frost_bar - v).max(0.0);
-            (after, climate) = self::climate(
-                context,
-                gases,
-                &w,
-                r,
-                flux,
-                water_bar,
-                carbon(so2_frost_bar),
-            );
+            (after, climate) = solve(gases, so2_frost_bar, fallout);
         }
     }
     let condensed = atmosphere::condense(gases, climate.temperature_k).1;
@@ -864,7 +885,79 @@ pub(crate) fn bare(
         condensed,
         #[cfg(test)]
         frost,
+        #[cfg(test)]
+        fallout: icy.then_some(fallout),
     }
+}
+
+/// Whether a body of `inputs` with the water `w` and the regime `regime`
+/// it starts its climate with has an ice crust: the test of
+/// `generation::model_crust_kind`, read before the model exists. A
+/// stagnant lid (the regime `surface_age::terrain` gives ice units),
+/// [`classify::ICE_WORLD_MIN_WATER`] of water and
+/// [`classify::ICE_WORLD_MIN_OCEANS`] of it kept, out of a runaway. That
+/// test's third condition, no liquid water at the surface, is the
+/// climate's: the crust's albedo applies to the cover's ice and land
+/// ([`albedo::cover`]), none of which is open water, and only under an
+/// air thinner than `interim::ERODING_BAR` ([`climate::climate_over`]).
+fn ice_crust(inputs: &PlanetInputs, w: &Water, regime: crate::geology::Regime) -> bool {
+    use classify::{ICE_WORLD_MIN_OCEANS, ICE_WORLD_MIN_WATER};
+    regime == crate::geology::Regime::Stagnant
+        && !w.runaway
+        && inputs.water_fraction >= ICE_WORLD_MIN_WATER
+        && w.oceans >= ICE_WORLD_MIN_OCEANS
+}
+
+/// The Bond albedo of the exposed ice crust ([`ice_crust`]) of a body of
+/// `inputs`, `heat` and `interior` in `context`: the area-weighted
+/// [`albedo::icy_unit_albedo`] of the ice units it has before its
+/// climate ([`surface_age::icy_estimate`]), its rock `1 − water_fraction`
+/// of its mass, under its plume's fallout if `fallout`
+/// ([`plume_fallout`]).
+fn crust_albedo(
+    context: &Context,
+    inputs: &PlanetInputs,
+    heat: &InternalHeat,
+    interior: &Interior,
+    fallout: bool,
+) -> f64 {
+    let rock = 1.0 - inputs.water_fraction;
+    surface_age::icy_estimate(
+        heat,
+        interior.radius_earth,
+        context.age_gyr,
+        context.tide.as_ref(),
+    )
+    .units
+    .iter()
+    .map(|u| u.share * albedo::icy_unit_albedo(u.age_gyr, rock, fallout))
+    .sum()
+}
+
+/// Whether a body of `inputs`, `interior` and `heat` vents under a
+/// surface at `surface_k`, so that its plume's fallout keeps its ice
+/// fresh ([`albedo::icy_unit_albedo`]): the criterion of its geysers
+/// ([`geysers::vents`]) on the ice shell [`ice_shell`] gives it there,
+/// none over surface liquid water (`liquid`, when known). [`bare`] reads
+/// it before the climate under the equilibrium temperature, then under
+/// the climate's own, as the stored geysers do ([`vent`]).
+pub(crate) fn plume_fallout(
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    heat: &InternalHeat,
+    surface_k: f64,
+    liquid: Option<SurfaceLiquid>,
+) -> bool {
+    if liquid == Some(SurfaceLiquid::Water) {
+        return false;
+    }
+    let nh3_ice = if inputs.water_fraction > 0.0 {
+        inputs.volatiles.nh3 / inputs.water_fraction
+    } else {
+        0.0
+    };
+    ice_shell::shell_under(interior, heat, surface_k, nh3_ice)
+        .is_some_and(|shell| geysers::vents(interior, &shell, heat))
 }
 
 /// The model of the planet `id` of the system of `system_seed`, in its
@@ -1158,4 +1251,38 @@ mod tests {
             assert_eq!(body_model(&system, body).is_none(), small, "{}", body.id);
         }
     }
+
+    /// A snowball keeps its albedo path (Review Focus 4): an Earth-like
+    /// planet pinned frozen at 1.2 AU, built as `climate_sweep` builds
+    /// it, has no ice crust (its water is a thin ocean on rock), so the
+    /// icy-age law does not touch it: its Bond albedo is the one it had
+    /// before that law (0.6224 at bf1f1f2).
+    #[test]
+    fn a_snowball_keeps_its_albedo() {
+        use crate::request::WorldRequest;
+        let request = WorldRequest {
+            planet: Some("earth-like".into()),
+            snowball: Some(true),
+            seed: Some(1),
+            star: Some("G2V".into()),
+            orbit_au: Some(1.2),
+            age_gyr: Some(4.57),
+            alone: Some(true),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        };
+        let resolved = request
+            .resolve(&mut StdRng::seed_from_u64(1))
+            .expect("an Earth resolves");
+        let surface = resolved.model().surface.expect("a surface");
+        assert!(surface.climate.snowball, "{surface:?}");
+        let a = surface.climate.bond_albedo;
+        println!("snowball Bond albedo {a:.12}");
+        assert!((a - SNOWBALL_ALBEDO).abs() < 1e-9, "{a}");
+    }
+
+    /// The Bond albedo of [`a_snowball_keeps_its_albedo`]'s snowball
+    /// before the icy-age law.
+    const SNOWBALL_ALBEDO: f64 = 0.622_385_341_082;
 }

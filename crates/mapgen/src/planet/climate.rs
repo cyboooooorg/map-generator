@@ -10,7 +10,7 @@
 //! the phase diagrams of water, hydrocarbons and basalt.
 use serde::{Deserialize, Serialize};
 
-use super::albedo::{REFERENCE_ALBEDO, bond_albedo, cover, sulphuric_deck};
+use super::albedo::{REFERENCE_ALBEDO, bond_albedo_over, cover, sulphuric_deck};
 use super::atmosphere::{
     NITROGEN_TRIPLE_K, SEA_METHANE_SHARE, condense, condensed_air, methane_saturation_bar,
 };
@@ -1199,6 +1199,34 @@ pub fn climate(
     water_bar: f64,
     carbon: CarbonCycle,
 ) -> (Gases, Climate) {
+    climate_over(
+        context,
+        gases,
+        water,
+        regime,
+        heat_flux_w_m2,
+        water_bar,
+        carbon,
+        None,
+    )
+}
+
+/// [`climate`] of a body whose ice and land are an exposed ice crust of
+/// albedo `crust` (`super::crust_albedo`: the area-weighted
+/// [`super::albedo::icy_unit_albedo`] of its terrain units) wherever its
+/// air is under `interim::ERODING_BAR`; `None` for any other body, whose
+/// ice is snow and sea ice and whose land is rock.
+#[allow(clippy::too_many_arguments)]
+pub fn climate_over(
+    context: &Context,
+    gases: Gases,
+    water: &Water,
+    regime: Regime,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+    carbon: CarbonCycle,
+    crust: Option<f64>,
+) -> (Gases, Climate) {
     let body = Body::new(
         context,
         gases,
@@ -1207,6 +1235,7 @@ pub fn climate(
         heat_flux_w_m2,
         water_bar,
         &carbon,
+        crust,
     );
     let branches = branches(&body);
     let Some(frozen) = &branches.frozen else {
@@ -1309,9 +1338,12 @@ struct Body<'a> {
     co2: Option<f64>,
     /// The CO₂ of the maximum greenhouse, once found.
     greenhouse: std::cell::OnceCell<f64>,
+    /// Albedo of its exposed ice crust, if it has one ([`climate_over`]).
+    crust: Option<f64>,
 }
 
 impl<'a> Body<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         context: &'a Context,
         gases: Gases,
@@ -1320,6 +1352,7 @@ impl<'a> Body<'a> {
         heat_flux_w_m2: f64,
         water_bar: f64,
         carbon: &CarbonCycle,
+        crust: Option<f64>,
     ) -> Self {
         let condenses = super::atmosphere::co2_frost_bar(context.equilibrium_k);
         Body {
@@ -1334,6 +1367,7 @@ impl<'a> Body<'a> {
             so2_frost: carbon.so2_frost_bar.max(0.0),
             co2: None,
             greenhouse: std::cell::OnceCell::new(),
+            crust,
         }
     }
 
@@ -1355,13 +1389,19 @@ impl<'a> Body<'a> {
     }
 
     /// [`derived_albedo`] of the body at `temperature_k` under `air`,
-    /// with its frost there ([`Body::frost`]).
+    /// with its frost there ([`Body::frost`]), and its ice crust's albedo
+    /// where its air is under `interim::ERODING_BAR` (a thicker air
+    /// erodes and buries the ice, `surface_age::terrain`).
     fn albedo_at(&self, temperature_k: f64, air: &Gases) -> f64 {
-        derived_albedo(
+        let crust = self
+            .crust
+            .filter(|_| air.total() < super::interim::ERODING_BAR);
+        derived_albedo_over(
             temperature_k,
             air,
             self.water,
             &self.frost(temperature_k, air),
+            crust,
         )
     }
 
@@ -1595,14 +1635,32 @@ const CONDENSE_ITERATIONS: usize = 100;
 /// `frost_bar` of frost on the ground: its [`cover`], with the sulphuric
 /// deck [`sulphuric_deck`] makes of the SO₂ the washing out leaves
 /// ([`washed`]).
+#[cfg(test)]
 pub(crate) fn derived_albedo(
     temperature_k: f64,
     gases: &Gases,
     water: &Water,
     frost: &Gases,
 ) -> f64 {
+    derived_albedo_over(temperature_k, gases, water, frost, None)
+}
+
+/// [`derived_albedo`] over an exposed ice crust of albedo `crust`, if
+/// any ([`super::albedo::bond_albedo_over`]).
+fn derived_albedo_over(
+    temperature_k: f64,
+    gases: &Gases,
+    water: &Water,
+    frost: &Gases,
+    crust: Option<f64>,
+) -> f64 {
     let deck = sulphuric_deck(temperature_k, washed(*gases, water).so2);
-    bond_albedo(&cover(temperature_k, gases, water, frost), gases, deck)
+    bond_albedo_over(
+        &cover(temperature_k, gases, water, frost),
+        gases,
+        deck,
+        crust,
+    )
 }
 
 /// `gases` after the washing out of their SO₂
@@ -2515,6 +2573,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             &d.carbon,
+            None,
         );
         let b = branches(&body);
         match &b.frozen {
@@ -2615,6 +2674,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             &d.carbon,
+            None,
         );
         let frozen = branches(&body).frozen.expect("bistable at 1.6 AU");
         assert!(frozen.thaw_bar.is_infinite(), "{}", frozen.thaw_bar);
@@ -2657,6 +2717,7 @@ mod tests {
                 d.heat_flux_w_m2,
                 0.0,
                 &temperate(air.co2),
+                None,
             );
             let (g, c) = climate(
                 &context,

@@ -762,6 +762,22 @@ pub fn ice_shell(
     )
 }
 
+/// The [`ice_shell`] a body of `interior` making `heat`, its ice
+/// carrying `nh3_ice_fraction` of ammonia, would have under a frozen
+/// surface at `surface_k`, before its climate is known; `None` without a
+/// water layer or at [`MELT_K`] and above.
+pub(crate) fn shell_under(
+    interior: &Interior,
+    heat: &InternalHeat,
+    surface_k: f64,
+    nh3_ice_fraction: f64,
+) -> Option<IceShell> {
+    if surface_k >= MELT_K {
+        return None;
+    }
+    frozen_shell(interior, heat, surface_k, nh3_ice_fraction, Ice::SHELL)
+}
+
 /// The [`ice_shell`] of a body of `interior` making `heat` under a frozen
 /// surface at `surface_k`, its ice carrying `nh3_ice_fraction` of
 /// ammonia, of `ice`; `None` without a water layer.

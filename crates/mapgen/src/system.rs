@@ -5361,17 +5361,21 @@ mod tests {
 
     /// Enceladus: a global ocean under 18 to 22 km of ice on average,
     /// under 5 km at the south pole (Čadek et al. 2016,
-    /// doi:10.1002/2016GL068634). The model's is about twice as thick
-    /// (see `docs/science/planet-interiors.md`, "Where it departs"): its
-    /// 11 to 17 GW over Enceladus's true radius (247 to 261 km since its
-    /// core is hydrated rock under water of 1 g/cm³) conducts through
-    /// 36 to 45 km of ice, 8 to 11 km at the poles; the band holds that.
+    /// doi:10.1002/2016GL068634). The model's is more than twice as
+    /// thick (see `docs/science/planet-interiors.md`, "Where it
+    /// departs"): its 11 to 17 GW over Enceladus's true radius (247 to
+    /// 261 km since its core is hydrated rock under water of 1 g/cm³)
+    /// conducts through 45 to 54 km of ice, 10 to 13 km at the poles,
+    /// under its surface at 60 to 64 K (its Bond albedo of 0.78, the
+    /// fallout of its plume, `albedo::icy_unit_albedo`; 36 to 45 km and
+    /// 8 to 11 km under the 86 K the regolith's albedo gave it before);
+    /// the band holds that.
     #[test]
     fn enceladus_shell_and_ocean() {
         for seed in 1..=10 {
             let s = asked_shell("enceladus-like", seed);
-            assert!((15.0..45.0).contains(&s.shell_km), "seed {seed}: {s:?}");
-            assert!(s.polar_shell_km < 11.0, "seed {seed}: {s:?}");
+            assert!((15.0..60.0).contains(&s.shell_km), "seed {seed}: {s:?}");
+            assert!(s.polar_shell_km < 14.0, "seed {seed}: {s:?}");
             assert!(s.ocean_km > 0.0, "seed {seed}: {s:?}");
         }
     }
@@ -5725,16 +5729,22 @@ mod tests {
         }
     }
 
-    /// Callisto: no ocean, or a thin one deep down (Khurana et al. 1998,
-    /// doi:10.1038/27394). Under 100 km: without the CO₂ frost that
-    /// brightened it (its air went to Jupiter's plasma,
-    /// `planet::non_thermal_loss`), its surface is about 10 K warmer and
-    /// its shell thinner, up to 64 km of ocean on these seeds.
+    /// Callisto: no ocean, or one deep down under a thick shell (Khurana
+    /// et al. 1998, doi:10.1038/27394; Zimmer et al. 2000, Icarus 147,
+    /// 329, an ocean of 10 km or more under some 100 to 200 km of ice to
+    /// match its induced field, from memory, not checked). The ocean is
+    /// not measured; its shell is. Its old surface's dark lag (its Bond
+    /// albedo 0.19, `albedo::icy_unit_albedo`) puts it at 113 to 119 K,
+    /// about 20 K warmer than under its former ice albedo of 0.6, which
+    /// thins the shell: 0 to 99 km of ocean over seeds 1 to 40 under
+    /// 155 to 240 km of ice. The bound keeps the shell at least about
+    /// two-thirds of the water layer.
     #[test]
     fn callisto_has_no_ocean_or_a_thin_one() {
         for seed in 1..=10 {
             let s = asked_shell("callisto-like", seed);
-            assert!(s.ocean_km < 100.0, "seed {seed}: {s:?}");
+            assert!(s.ocean_km < 120.0, "seed {seed}: {s:?}");
+            assert!(s.shell_km > 120.0, "seed {seed}: {s:?}");
         }
     }
 
