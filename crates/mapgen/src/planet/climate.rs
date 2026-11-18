@@ -65,6 +65,19 @@ pub struct Climate {
     /// habitable zone), or whose frozen state no CO₂ it can hold thaws,
     /// is frozen but not a snowball.
     pub snowball: bool,
+    /// The climate's fixed points settled: the condensation of its air
+    /// within [`TOLERANCE_K`] and its albedo and emissivity within
+    /// [`ALBEDO_TOLERANCE_K`]. When not, the temperature is the last
+    /// estimate of a cycle (issue #562). True in the worlds stored
+    /// before it.
+    #[serde(default = "converged_default")]
+    pub converged: bool,
+}
+
+/// [`Climate::converged`] of the worlds stored before it: the climates
+/// they show are taken as settled.
+fn converged_default() -> bool {
+    true
 }
 
 /// Stefan–Boltzmann constant, W/(m²·K⁴) (CODATA 2018, exact).
@@ -1400,6 +1413,33 @@ pub fn climate_over(
     )
 }
 
+/// The temperate branch of [`climate`] (the fixed point started warm,
+/// never a snowball) and the steps its albedo's fixed point took: a probe
+/// of its convergence (`climate_sweep phase`, issue #562), not part of
+/// the model's chain.
+#[allow(clippy::too_many_arguments)]
+pub fn temperate_steps(
+    context: &Context,
+    gases: Gases,
+    water: &Water,
+    regime: Regime,
+    heat_flux_w_m2: f64,
+    water_bar: f64,
+    carbon: CarbonCycle,
+) -> (Gases, Climate, usize) {
+    let body = Body::new(
+        context,
+        gases,
+        water,
+        regime,
+        heat_flux_w_m2,
+        water_bar,
+        &carbon,
+        None,
+    );
+    settle_steps(&body, warm_start(&body))
+}
+
 /// Whether `climate` is frozen over: no liquid water and a surface under
 /// the melting point of ice.
 pub(super) fn frozen_over(climate: &Climate) -> bool {
@@ -1568,13 +1608,56 @@ impl<'a> Body<'a> {
     }
 }
 
+/// Width, K, of the band under a phase change over which a condensate
+/// passes from its frozen phase to its liquid one in the climate
+/// ([`frozen_share`]): a numerical smoothing, not physics. At the step
+/// itself the climate's fixed points have no solution and cycle (issue
+/// #562): nitrogen frost radiates at [`N2_ICE_EMISSIVITY`] and its liquid
+/// as a black body, so a surface just under the triple point warms over
+/// it and one just over it cools under it; methane's air thins by half
+/// over its sea ([`SEA_METHANE_SHARE`]) and its frost darkens into a
+/// sea. 1 K: the narrowest band over which the albedo's damped fixed
+/// point ([`settle`], [`ALBEDO_DAMPING`]) settles at the triple point,
+/// where the emissivity's 0.89-to-1 step moves the surface by about
+/// 1.9 K (`ε^-¼` at 63 K): over a band of width `w` its loop gain is
+/// about `1.8 K / w`, and the damped step converges under a gain of 3,
+/// so from about 0.6 K (`climate_sweep phase` shows the cycles under a
+/// step). A planet settling in the band is shifted by at most its width
+/// from where the step would put it.
+pub(crate) const PHASE_BAND_K: f64 = 1.0;
+
+/// Share of a condensate frozen at `temperature_k` near the point
+/// `melts_k` it melts at: 1 at and under `melts_k - PHASE_BAND_K`, 0 at
+/// and above `melts_k` (so that above it nothing changes), linear between
+/// ([`PHASE_BAND_K`], a numerical smoothing).
+pub(crate) fn frozen_share(temperature_k: f64, melts_k: f64) -> f64 {
+    ((melts_k - temperature_k) / PHASE_BAND_K).clamp(0.0, 1.0)
+}
+
+/// The frost, bar, left of `condensate` (bar) with the share `frozen` of
+/// it frozen ([`frozen_share`]): all of it when all is frozen; in the
+/// band where it melts, that share of the most that counts towards its
+/// cover ([`super::albedo::FROST_LAYER_BAR`]), so that its cover, and
+/// with it the albedo and the emissivity, retreats across the whole band
+/// rather than at its warm end, where a thick frost would only start to
+/// uncover the ground.
+fn melting(condensate: f64, frozen: f64) -> f64 {
+    let condensate = condensate.max(0.0);
+    if frozen >= 1.0 {
+        condensate
+    } else {
+        frozen * condensate.min(super::albedo::FROST_LAYER_BAR)
+    }
+}
+
 /// Frost on the ground of a body at `temperature_k` under `air`, bar,
 /// gas by gas, from its air before the climate (`gases`):
 ///
 /// - the nitrogen it condenses there ([`condense`]) under nitrogen's
 ///   triple point (above it, a liquid), and the methane it condenses
 ///   under the freezing point of its sea ([`sea_freezes_k`]; above it, a
-///   sea);
+///   sea), each melting over the last [`PHASE_BAND_K`] under its point
+///   ([`frozen_share`]);
 /// - the CO₂ the cold trap froze out (`frozen_co2`,
 ///   [`CarbonCycle::frozen_bar`]) that the surface keeps frozen: what the
 ///   air, at most CO₂'s sublimation pressure there, cannot take back (none
@@ -1591,16 +1674,14 @@ pub(crate) fn frost(
 ) -> Gases {
     use super::atmosphere::{co2_frost_bar, so2_frost_bar};
     let condensate = condense(*gases, temperature_k).1;
-    let n2 = if temperature_k < NITROGEN_TRIPLE_K {
-        condensate.n2
-    } else {
-        0.0
-    };
-    let ch4 = if temperature_k < sea_freezes_k(air.n2, &condensate) {
-        condensate.ch4
-    } else {
-        0.0
-    };
+    let n2 = melting(
+        condensate.n2,
+        frozen_share(temperature_k, NITROGEN_TRIPLE_K),
+    );
+    let ch4 = melting(
+        condensate.ch4,
+        frozen_share(temperature_k, sea_freezes_k(air.n2, &condensate)),
+    );
     let kept = |frozen: f64, sublimes: f64, in_air: f64| {
         (frozen.max(0.0) - (sublimes - in_air.max(0.0)).max(0.0)).max(0.0)
     };
@@ -1709,14 +1790,28 @@ const ALBEDO_TOLERANCE_K: f64 = 0.1;
 /// ice-free cover.
 const ALBEDO_DAMPING: f64 = 0.5;
 
+/// One solve of [`under_albedo`].
+struct Pass {
+    gases: Gases,
+    /// Surface temperature, K.
+    temperature_k: f64,
+    /// The thermostat holds it.
+    regulated: bool,
+    /// The context it absorbed its light in.
+    context: Context,
+    /// The condensation's fixed point settled within [`TOLERANCE_K`].
+    converged: bool,
+}
+
 /// The climate of `body` under the derived Bond albedo `albedo`, before
 /// the runaway blend ([`absorbing`]), its surface radiating with
 /// `emissivity`: its gases, its temperature, whether the thermostat holds
-/// it, and the context it absorbed its light in.
-fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> (Gases, f64, bool, Context) {
+/// it, the context it absorbed its light in, and whether the
+/// condensation of its air settled.
+fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> Pass {
     let context = absorbing(body.context, body.water, body.gases.h2o, albedo);
     let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
-    let solve = |air: Gases| {
+    let under = |air: Gases| {
         if !body.wet() {
             let t = surface_temperature_k(&context, &air, flux, emissivity);
             (air, t, false)
@@ -1743,29 +1838,75 @@ fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> (Gases, f64, bool,
     // solves the climate with the air the last temperature leaves, which
     // rises towards the coldest balance (more air, more greenhouse). Most
     // bodies condense nothing at their black body's temperature, and
-    // nothing at a warmer one either: one step.
+    // nothing at a warmer one either: one step. Where the air overshoots
+    // (the step crossed a phase change that thins it, as methane's sea
+    // freezing), the steps would swing across it: the temperature is
+    // solved for in the bracket the last two steps make.
     let absorbed = SIGMA * context.equilibrium_k.max(0.0).powi(4) + flux.max(0.0);
     let mut t = (absorbed / (emissivity.clamp(0.01, 1.0) * SIGMA)).powf(0.25);
     let mut air = condense(body.gases, t).0;
-    let mut pass = solve(air);
+    let mut pass = under(air);
     if air == body.gases {
-        return (pass.0, pass.1, pass.2, context);
+        return Pass {
+            gases: pass.0,
+            temperature_k: pass.1,
+            regulated: pass.2,
+            context,
+            converged: true,
+        };
     }
+    let mut converged = false;
+    let mut last: Option<Point> = None;
     for _ in 0..CONDENSE_ITERATIONS {
-        if (pass.1 - t).abs() < TOLERANCE_K {
+        // How far the temperature assumed is above the one its air gives.
+        let here = Point {
+            x: t,
+            f: t - pass.1,
+        };
+        if here.f.abs() < TOLERANCE_K {
+            converged = true;
             break;
         }
+        if let Some(before) = last.filter(|b| (b.f < 0.0) != (here.f < 0.0)) {
+            let (low, high) = if here.f < 0.0 {
+                (here, before)
+            } else {
+                (before, here)
+            };
+            if low.x < high.x {
+                let excess = |x: f64| x - under(condense(body.gases, x).0).1;
+                t = solve(excess, low, high, BRACKET_TOLERANCE_K);
+                air = condense(body.gases, t).0;
+                pass = under(air);
+                converged = (pass.1 - t).abs() < TOLERANCE_K;
+                break;
+            }
+        }
+        last = Some(here);
         t = pass.1;
         let next = condense(body.gases, t).0;
         if next == air {
+            converged = true;
             break;
         }
         air = next;
-        pass = solve(air);
+        pass = under(air);
     }
-    let gases = condensed_air(pass.0, &body.gases, pass.1);
-    (gases, pass.1, pass.2, context)
+    Pass {
+        gases: condensed_air(pass.0, &body.gases, pass.1),
+        temperature_k: pass.1,
+        regulated: pass.2,
+        context,
+        converged,
+    }
 }
+
+/// Width, K, of the bracket the condensation's fixed point in
+/// [`under_albedo`] solves its temperature in when its steps overshoot:
+/// a hundredth of [`TOLERANCE_K`], so that the temperature the air
+/// gives, which moves faster than the one assumed across a phase change,
+/// lands within [`TOLERANCE_K`] of it.
+const BRACKET_TOLERANCE_K: f64 = TOLERANCE_K * 1e-2;
 
 /// Most steps of the condensation's fixed point in [`under_albedo`]:
 /// far more than the few it takes, the greenhouse of what condenses
@@ -1825,48 +1966,76 @@ pub(crate) fn washed(gases: Gases, water: &Water) -> Gases {
 /// as warm as a body with no ice ([`super::albedo::ICE_FREE_K`]), so that
 /// it settles on the warmest climate.
 fn warm_start(body: &Body) -> (f64, f64) {
-    let (gases, t, _, _) = under_albedo(body, REFERENCE_ALBEDO, 1.0);
-    let warm = t.max(super::albedo::ICE_FREE_K);
+    let pass = under_albedo(body, REFERENCE_ALBEDO, 1.0);
+    let warm = pass.temperature_k.max(super::albedo::ICE_FREE_K);
     (
-        body.albedo_at(warm, &gases),
-        body.emissivity_at(warm, &gases),
+        body.albedo_at(warm, &pass.gases),
+        body.emissivity_at(warm, &pass.gases),
     )
 }
 
 /// The fixed point of the albedo, the emissivity and the climate of
 /// `body` from the derived albedo and emissivity `start`: each step
 /// solves the climate under them ([`under_albedo`]) and moves each
-/// [`ALBEDO_DAMPING`] of the way to the one its temperature derives,
+/// [`ALBEDO_DAMPING`] of the way to the one its temperature derives (half
+/// as far after each step that turns back, so that a swing settles),
 /// until the temperature moves less than [`ALBEDO_TOLERANCE_K`] and the
 /// derived albedo and emissivity would move the surface's radiative
 /// equilibrium (`T_eq ε^-¼`) less than that too. The climate keeps the
 /// albedo and emissivity it was solved under, so that it reproduces. It
-/// is not a snowball: [`climate`] marks the frozen branch it draws.
+/// is not a snowball: [`climate`] marks the frozen branch it draws. It
+/// is [`Climate::converged`] when this fixed point and the last
+/// condensation in it ([`under_albedo`]) settled.
 fn settle(body: &Body, start: (f64, f64)) -> (Gases, Climate) {
+    let (gases, climate, _) = settle_steps(body, start);
+    (gases, climate)
+}
+
+/// [`settle`], with the steps its fixed point took.
+fn settle_steps(body: &Body, start: (f64, f64)) -> (Gases, Climate, usize) {
     let radiative_k = |albedo: f64, emissivity: f64| {
         body.context.with_albedo(albedo).equilibrium_k / emissivity.clamp(0.01, 1.0).powf(0.25)
     };
     let (mut albedo, mut emissivity) = start;
     let mut last = f64::NAN;
     let mut pass = under_albedo(body, albedo, emissivity);
-    for _ in 0..ALBEDO_ITERATIONS {
-        let t = pass.1;
-        let derived = body.albedo_at(t, &pass.0);
-        let derived_emissivity = body.emissivity_at(t, &pass.0);
+    let mut settled = false;
+    let mut steps = 0;
+    let mut damping = ALBEDO_DAMPING;
+    let mut moved = 0.0;
+    while steps < ALBEDO_ITERATIONS {
+        let t = pass.temperature_k;
+        let derived = body.albedo_at(t, &pass.gases);
+        let derived_emissivity = body.emissivity_at(t, &pass.gases);
         // Settled when the temperature has stopped moving and the albedo
         // it derives would not move the light by more either (a
         // thermostat holds the temperature whatever the albedo).
         let residual_k =
             (radiative_k(derived, derived_emissivity) - radiative_k(albedo, emissivity)).abs();
         if (t - last).abs() < ALBEDO_TOLERANCE_K && residual_k < ALBEDO_TOLERANCE_K {
+            settled = true;
             break;
         }
+        // A step that turns back the way the last one came overshot: the
+        // fixed point is between them, and the next steps go half as far.
+        let step = t - last;
+        if step * moved < 0.0 {
+            damping *= 0.5;
+        }
+        moved = step;
         last = t;
-        albedo += ALBEDO_DAMPING * (derived - albedo);
-        emissivity += ALBEDO_DAMPING * (derived_emissivity - emissivity);
+        albedo += damping * (derived - albedo);
+        emissivity += damping * (derived_emissivity - emissivity);
         pass = under_albedo(body, albedo, emissivity);
+        steps += 1;
     }
-    let (gases, temperature_k, regulated, context) = pass;
+    let Pass {
+        gases,
+        temperature_k,
+        regulated,
+        context,
+        converged,
+    } = pass;
     let condensate = condense(body.gases, temperature_k).1;
     let liquid = liquid(temperature_k, &gases, body.water, &condensate);
     (
@@ -1879,7 +2048,9 @@ fn settle(body: &Body, start: (f64, f64)) -> (Gases, Climate) {
             emissivity,
             regulated,
             snowball: false,
+            converged: settled && converged,
         },
+        steps,
     )
 }
 
@@ -3373,4 +3544,122 @@ mod tests {
         let s = serde_json::to_string(&SurfaceLiquid::Hydrocarbons).unwrap();
         assert_eq!(s, "\"hydrocarbons\"");
     }
+
+    #[test]
+    fn a_format_10_climate_reads_as_converged() {
+        // Review Focus 5: a climate stored before `converged` (format 10)
+        // still loads, as a converged one.
+        let json = r#"{"temperature_k":288.0,"equilibrium_k":255.0,"bond_albedo":0.3,
+            "liquid":"water","emissivity":1.0,"regulated":true,"snowball":false}"#;
+        let c: Climate = serde_json::from_str(json).unwrap();
+        assert!(c.converged, "{c:?}");
+    }
+
+    /// Titan's body under `gases`, its light scaled by each of `count`
+    /// factors from `low` to `high`: the flux and the climate.
+    fn titan_sweep(gases: Gases, low: f64, high: f64, count: usize) -> Vec<(f64, Climate)> {
+        let (d, _, _) = climate_of("Titan");
+        (0..count)
+            .map(|i| {
+                let f = low + (high - low) * i as f64 / (count - 1) as f64;
+                let context = Context {
+                    insolation: d.context.insolation * f,
+                    equilibrium_k: d.context.equilibrium_k * f.powf(0.25),
+                    ..d.context
+                };
+                let (_, c) = climate(
+                    &context,
+                    gases,
+                    &d.water,
+                    d.regime,
+                    d.heat_flux_w_m2,
+                    d.water_bar,
+                    d.carbon,
+                );
+                (context.insolation, c)
+            })
+            .collect()
+    }
+
+    /// Review Focus 1: across `threshold_k`, every climate of `sweep`
+    /// settled, and its temperature rises with the flux, with no jump
+    /// over `most_jump_k` between neighbours.
+    fn settles_across(sweep: &[(f64, Climate)], threshold_k: f64, most_jump_k: f64) {
+        let (first, last) = (sweep[0].1, sweep[sweep.len() - 1].1);
+        assert!(
+            first.temperature_k <= threshold_k - 3.0 && last.temperature_k >= threshold_k + 3.0,
+            "the sweep spans {:.2} to {:.2} K, not {threshold_k:.2} ± 3 K",
+            first.temperature_k,
+            last.temperature_k
+        );
+        for (flux, c) in sweep {
+            assert!(c.converged, "{flux:.6}: {c:?}");
+        }
+        for pair in sweep.windows(2) {
+            let ((f0, a), (f1, b)) = (pair[0], pair[1]);
+            let step = b.temperature_k - a.temperature_k;
+            assert!(
+                step > -ALBEDO_TOLERANCE_K && step < most_jump_k,
+                "{f0:.6} -> {f1:.6}: {:.3} -> {:.3} K ({a:?} {b:?})",
+                a.temperature_k,
+                b.temperature_k
+            );
+        }
+    }
+
+    /// Titan's methane over a thinner nitrogen air, 0.1 bar: one that
+    /// stays a gas down to nitrogen's triple point, so that the sweep
+    /// crosses the methane sea's freezing point alone.
+    fn thin_titan() -> Gases {
+        let (d, _, _) = climate_of("Titan");
+        Gases { n2: 0.1, ..d.gases }
+    }
+
+    /// A Triton-like body: Titan's without its methane, under 0.5 bar
+    /// of nitrogen, which frosts on its ground under nitrogen's triple
+    /// point and pools above it.
+    fn nitrogen_world() -> Gases {
+        let (d, _, _) = climate_of("Titan");
+        Gases {
+            n2: 0.5,
+            ch4: 0.0,
+            ..d.gases
+        }
+    }
+
+    #[test]
+    fn the_fixed_point_converges_across_the_methane_freezing_point() {
+        let gases = thin_titan();
+        let freezes_k = methane_freezes_k(gases.n2);
+        let sweep = titan_sweep(gases, METHANE_SWEEP.0, METHANE_SWEEP.1, 200);
+        // The methane darkening the air (its near-infrared absorption)
+        // makes such a body bistable on either side of the freezing
+        // point, whatever the phase change: from about 62 K (its frost
+        // bright, its air cold and clear) to about 74 K, and over about
+        // 1.2 K just above the point, where the air the warming sea
+        // gives darkens the body faster than it warms (`climate_sweep
+        // phase`). Those folds are steps between settled climates; the
+        // phase change itself is crossed through its band, where before
+        // its smoothing the fixed point cycled.
+        settles_across(&sweep, freezes_k, f64::INFINITY);
+        let melting = sweep
+            .iter()
+            .filter(|(_, c)| (freezes_k - PHASE_BAND_K..freezes_k).contains(&c.temperature_k))
+            .count();
+        assert!(melting >= 20, "{melting} climates in the band");
+    }
+
+    #[test]
+    fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
+        let sweep = titan_sweep(nitrogen_world(), NITROGEN_SWEEP.0, NITROGEN_SWEEP.1, 200);
+        settles_across(&sweep, NITROGEN_TRIPLE_K, 1.0);
+    }
+
+    /// The light, against Titan's, over which [`thin_titan`]'s surface
+    /// spans the methane sea's freezing point ± 3 K.
+    const METHANE_SWEEP: (f64, f64) = (0.7, 1.0);
+
+    /// The light, against Titan's, over which [`nitrogen_world`]'s
+    /// surface spans nitrogen's triple point ± 3 K.
+    const NITROGEN_SWEEP: (f64, f64) = (0.7, 1.2);
 }

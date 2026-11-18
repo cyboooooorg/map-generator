@@ -5,17 +5,24 @@
 //! the snowballs of 500 drawn systems by insolation).
 //!
 //! ```text
-//! cargo run --release -p mapgen --example climate_sweep [sweep|moons|all]
+//! cargo run --release -p mapgen --example climate_sweep [sweep|moons|phase|all]
 //! ```
 //!
 //! `sweep` is section 1 (distance sweep, Solar System bodies), `moons`
-//! section 3 (seeds 1 to 10 of `titan-like` and `triton-like`); with no
+//! section 3 (seeds 1 to 10 of `titan-like` and `triton-like`), `phase`
+//! section 6 (the climate's fixed point swept across the methane sea's
+//! freezing point and nitrogen's triple point, issue #562); with no
 //! argument or `all` every section runs, which takes a few minutes. The
 //! planet census (`planet_census 500`) prints the class mix and the same
 //! snowball and methane checks.
 use std::collections::BTreeMap;
 
-use mapgen::planet::{self, PlanetModel, SurfaceLiquid, interim, outgassed};
+use mapgen::geology::Regime;
+use mapgen::planet::climate::temperate_steps;
+use mapgen::planet::{
+    self, CarbonCycle, Context, Gases, PlanetModel, SurfaceLiquid, Water, interim,
+    methane_freezes_k, outgassed,
+};
 use mapgen::request::WorldRequest;
 use mapgen::star::StarInfo;
 use mapgen::system::{BodyKind, SystemRequest, WholeSystemRequest, draw};
@@ -171,6 +178,85 @@ fn summarize(label: &str, rows: &[Row]) {
     );
 }
 
+/// Titan round the Sun before its climate, as the model derives it
+/// (the reference body Titan of `planet::reference`): its context, its
+/// water, its heat flux (W/m²), its water as vapour (bar) and its carbon
+/// cycle. Its gases are each sweep's.
+fn titan() -> (Context, Water, f64, f64, CarbonCycle) {
+    let context = Context {
+        star_mass: 1.0,
+        metallicity: 0.0,
+        orbit_au: 9.58,
+        eccentricity: 0.0,
+        ice_line_au: 2.7,
+        insolation: 0.010_896,
+        equilibrium_k: 82.387,
+        age_gyr: 4.6,
+        teff_k: 5770.0,
+        luminosity: 1.0233,
+        tide: None,
+    };
+    let water = Water {
+        runaway: false,
+        boiled: false,
+        kept_kg: 6.0467e22,
+        oceans: 43.19,
+    };
+    let carbon = CarbonCycle {
+        inventory_bar: 103.52,
+        frozen_bar: 103.17,
+        so2_frost_bar: 0.0,
+        snowball_draw: 1.0,
+    };
+    (context, water, 0.003_616, 10_464.6, carbon)
+}
+
+/// Section 6: the fixed point of Titan's body under `gases`, its light
+/// scaled from `low` to `high` times Titan's in 200 steps, across
+/// `threshold_k`. Prints each flux (Earth's = 1), temperature, albedo
+/// step count and whether it settled, then the cycles found: climates
+/// that did not settle, and neighbours whose temperature falls with more
+/// light or jumps by over 1 K.
+fn phase(label: &str, gases: Gases, low: f64, high: f64, threshold_k: f64) {
+    let (titan, water, heat, water_bar, carbon) = titan();
+    println!("-- {label}: across {threshold_k:.2} K");
+    let mut last: Option<f64> = None;
+    let (mut unsettled, mut falls, mut jumps, mut most_steps) = (0, 0, 0, 0);
+    for i in 0..200 {
+        let f = low + (high - low) * f64::from(i) / 199.0;
+        let context = Context {
+            insolation: titan.insolation * f,
+            equilibrium_k: titan.equilibrium_k * f.powf(0.25),
+            ..titan
+        };
+        let (_, c, steps) = temperate_steps(
+            &context,
+            gases,
+            &water,
+            Regime::Stagnant,
+            heat,
+            water_bar,
+            carbon,
+        );
+        let t = c.temperature_k;
+        let step = last.map_or(0.0, |l| t - l);
+        unsettled += usize::from(!c.converged);
+        falls += usize::from(step < -0.1);
+        jumps += usize::from(step > 1.0);
+        most_steps = most_steps.max(steps);
+        if (t - threshold_k).abs() < 3.5 {
+            println!(
+                "flux {:.6} T {t:.3} iterations {steps:>3} converged {} | A {:.3} e {:.3} {:?}",
+                context.insolation, c.converged, c.bond_albedo, c.emissivity, c.liquid
+            );
+        }
+        last = Some(t);
+    }
+    println!(
+        "{label}: {unsettled} not converged, {falls} falls, {jumps} jumps over 1 K, at most {most_steps} iterations"
+    );
+}
+
 fn main() {
     let which = std::env::args().nth(1).unwrap_or_else(|| "all".into());
     let all = which == "all";
@@ -237,6 +323,26 @@ fn main() {
                 }
             }
         }
+    }
+    if all || which == "phase" {
+        println!("\n== 6. phase changes in the climate's fixed point (Titan's body, issue #562)");
+        // Titan's methane under 0.1 bar of N2, which stays a gas down to
+        // nitrogen's triple point: the methane sea's freezing alone.
+        let methane = Gases {
+            n2: 0.1,
+            ch4: 6.253,
+            co2: 2.9e-10,
+            so2: 5.0e-5,
+            ..Gases::default()
+        };
+        phase("methane", methane, 0.7, 1.0, methane_freezes_k(methane.n2));
+        // A Triton-like body: 0.5 bar of N2 and no methane.
+        let nitrogen = Gases {
+            n2: 0.5,
+            ch4: 0.0,
+            ..methane
+        };
+        phase("nitrogen", nitrogen, 0.7, 1.2, 63.14);
     }
     if all || which == "census" {
         let mut hydro = (0u32, f64::MAX);

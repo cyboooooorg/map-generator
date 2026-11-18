@@ -1188,6 +1188,32 @@ with 0.8: the calibration sits just above the coarse-grained end, a
 lower value warming the model's Triton, under its frost albedo of 0.75,
 past 38 K. One value serves α- and β-N₂.
 
+**Phase changes and convergence** (`Climate::converged`,
+`climate::PHASE_BAND_K`, issue #562). Two phase changes were steps
+inside the fixed points: nitrogen frost (emissivity 0.89) becomes a
+black-body liquid at its triple point, 63.14 K, and methane's air halves
+when its ice melts into a sea (`sea_freezes_k`). A surface just under
+such a point warmed over it and one just over it cooled under it, so the
+fixed point had no solution there and cycled until its step limit,
+silently. Both now pass from one phase to the other over the last 1 K
+under the point (`frozen_share`): the frost's cover retreats and
+methane's activity falls from 1 to 0.5 across that band. The band is a
+numerical smoothing, not physics; 1 K is the narrowest over which the
+damped fixed point settles at the triple point (over a band `w` the
+emissivity's loop gain is about `1.8 K / w`). The condensation's fixed
+point solves its temperature in the bracket its last two steps make
+when they overshoot, and the albedo's fixed point halves its damping
+when a step turns back. A climate whose fixed points still do not
+settle is stored with `converged: false` and the card says so under its
+temperature (worlds stored before read `true`). `cargo run --release
+-p mapgen --example climate_sweep phase` sweeps a Titan-like and a
+Triton-like body across both points and prints each flux, temperature,
+step count and whether it settled. The methane-like sweep still shows
+two steps between settled climates, from about 62 to 74 K and over about
+1.2 K just above the sea's freezing point: methane darkening the body
+(its near-infrared absorption) makes it bistable there, whatever the
+phase change.
+
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
 bistable: the temperate one, started from a warm planet with no ice, and

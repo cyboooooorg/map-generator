@@ -186,8 +186,9 @@ pub enum Quantity {
     /// renewed the surface), `volatile_ice` (volatile ice comes and goes
     /// on part of it), `tidal_episode` (a past tidal episode renewed part
     /// of it), `volcanic_frost` (the SO₂ air is the vapour of the
-    /// volcanic frost) and `fallout` (a plume's fallout brightens the
-    /// ice).
+    /// volcanic frost), `fallout` (a plume's fallout brightens the
+    /// ice) and `not_converged` (the climate's fixed point did not
+    /// settle: the temperature is its last estimate, issue #562).
     Note,
 }
 
@@ -571,26 +572,41 @@ fn temperature_tree(
             .then(|| Cause::of(Quantity::H2o, gases.h2o).set_by(InputField::WaterOceans)),
         (gases.ch4 > 0.0).then_some(ch4),
     ];
+    // A climate whose fixed points did not settle shows the last
+    // estimate of its cycle (issue #562).
+    let unsettled = (!climate.converged).then(|| Cause::note("not_converged"));
     Some(
-        Cause::of(Quantity::SurfaceTemperature, stored).because(vec![
-            Cause::of(Quantity::EquilibriumTemperature, bare_k).because(
-                [
-                    Some(
-                        Cause::of(Quantity::LightReceived, context.insolation)
-                            .set_by(InputField::Insolation),
+        Cause::of(Quantity::SurfaceTemperature, stored).because(
+            [
+                Some(
+                    Cause::of(Quantity::EquilibriumTemperature, bare_k).because(
+                        [
+                            Some(
+                                Cause::of(Quantity::LightReceived, context.insolation)
+                                    .set_by(InputField::Insolation),
+                            ),
+                            Some(albedo),
+                            (emissivity < 1.0).then(|| Cause::of(Quantity::Emissivity, emissivity)),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
                     ),
-                    Some(albedo),
-                    (emissivity < 1.0).then(|| Cause::of(Quantity::Emissivity, emissivity)),
-                ]
-                .into_iter()
-                .flatten()
-                .collect(),
-            ),
-            Cause::of(Quantity::Greenhouse, air_k - bare_k)
-                .because(absorbers.into_iter().flatten().collect()),
-            Cause::of(Quantity::InternalWarming, full_k - air_k)
-                .because(vec![heat_flux(context, model)]),
-        ]),
+                ),
+                Some(
+                    Cause::of(Quantity::Greenhouse, air_k - bare_k)
+                        .because(absorbers.into_iter().flatten().collect()),
+                ),
+                Some(
+                    Cause::of(Quantity::InternalWarming, full_k - air_k)
+                        .because(vec![heat_flux(context, model)]),
+                ),
+                unsettled,
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        ),
     )
 }
 
@@ -1525,6 +1541,22 @@ mod tests {
         let albedo = find(t, Quantity::BondAlbedo).expect("a BondAlbedo cause");
         assert_eq!(albedo.value, model.surface.unwrap().climate.bond_albedo);
         assert!(!has_note(t, "snowball"));
+    }
+
+    #[test]
+    fn a_climate_that_did_not_settle_says_so() {
+        let (context, mut model) = earth();
+        let e = explain(&context, &model).expect("explained");
+        assert!(!has_note(
+            root(&e, Quantity::SurfaceTemperature),
+            "not_converged"
+        ));
+        model.surface.as_mut().unwrap().climate.converged = false;
+        let e = explain(&context, &model).expect("explained");
+        assert!(has_note(
+            root(&e, Quantity::SurfaceTemperature),
+            "not_converged"
+        ));
     }
 
     #[test]

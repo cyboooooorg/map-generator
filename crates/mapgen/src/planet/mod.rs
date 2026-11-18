@@ -1296,6 +1296,7 @@ mod tests {
     /// before the icy-age law, to the last digit printed: the test's
     /// point is that the law leaves it unchanged, so it is pinned to
     /// 1e-9, and a later change to the snowball's albedo re-pins it
-    /// knowingly.
-    const SNOWBALL_ALBEDO: f64 = 0.622_385_341_082;
+    /// knowingly: 0.622 385 341 082 before the albedo's fixed point
+    /// halved its steps where they swing (issue #562).
+    const SNOWBALL_ALBEDO: f64 = 0.622_375_946_206;
 }

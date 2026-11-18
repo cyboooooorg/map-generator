@@ -41,4 +41,12 @@ regulated: boolean,
  * habitable zone), or whose frozen state no CO₂ it can hold thaws,
  * is frozen but not a snowball.
  */
-snowball: boolean, };
+snowball: boolean, 
+/**
+ * The climate's fixed points settled: the condensation of its air
+ * within [`TOLERANCE_K`] and its albedo and emissivity within
+ * [`ALBEDO_TOLERANCE_K`]. When not, the temperature is the last
+ * estimate of a cycle (issue #562). True in the worlds stored
+ * before it.
+ */
+converged: boolean, };

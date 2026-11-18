@@ -95,7 +95,7 @@ const FROST_ALBEDO: f64 = 0.75;
 /// against this layer. Triton's 0.36 bar of N₂ frost covers all of it
 /// with any value under that; Europa's trace of CO₂ frost (2e-4 bar)
 /// leaves it to its water ice.
-const FROST_LAYER_BAR: f64 = 0.02;
+pub(crate) const FROST_LAYER_BAR: f64 = 0.02;
 
 /// Albedo of the SO₂ frost of a volcanic body: 0.63, Io's Bond albedo
 /// (Simonelli & Veverka 1988, from memory, not checked), the albedo of a

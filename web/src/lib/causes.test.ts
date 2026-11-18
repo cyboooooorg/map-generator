@@ -128,7 +128,7 @@ describe('the cause catalog', () => {
     });
     it(`words every note the server sends in ${locale}`, () => {
       setLocale(locale);
-      for (const key of ['thermostat', 'life', 'runaway', 'boiled', 'snowball', 'frozen', 'co2_build_up', 'methane_trap']) {
+      for (const key of ['thermostat', 'life', 'runaway', 'boiled', 'snowball', 'frozen', 'co2_build_up', 'methane_trap', 'not_converged']) {
         expect(t.causes.notes[key], key).toBeTruthy();
         expect(formatCause(node('note', 0, { label: key })), key).toBe(t.causes.notes[key]);
       }

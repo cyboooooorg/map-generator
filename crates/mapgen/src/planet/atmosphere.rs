@@ -830,14 +830,16 @@ const METHANE: usize = 1;
 /// `surface_k`, under `air` with `condensate` already on the ground: 1
 /// over its ice, under the freezing point of the sea it would make
 /// ([`super::climate::sea_freezes_k`]); [`SEA_METHANE_SHARE`] over the
-/// sea. The step at the freezing point is a simplification: at the
-/// liquidus the sea and the ice hold the same vapour.
+/// sea, at and above it. The step at the freezing point is a
+/// simplification (at the liquidus the sea and the ice hold the same
+/// vapour), ramped over the last [`super::climate::PHASE_BAND_K`] under
+/// it as the frost melts ([`super::climate::frozen_share`]): a numerical
+/// smoothing, without which the climate's fixed point cycles across it
+/// (issue #562).
 fn methane_activity(surface_k: f64, air: &Gases, condensate: &Gases) -> f64 {
-    if surface_k < super::climate::sea_freezes_k(air.n2, condensate) {
-        1.0
-    } else {
-        SEA_METHANE_SHARE
-    }
+    use super::climate::{frozen_share, sea_freezes_k};
+    let ice = frozen_share(surface_k, sea_freezes_k(air.n2, condensate));
+    SEA_METHANE_SHARE + (1.0 - SEA_METHANE_SHARE) * ice
 }
 
 /// Saturation vapour pressure of pure methane at `temperature_k`, bar:
