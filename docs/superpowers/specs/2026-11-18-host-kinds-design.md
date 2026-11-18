@@ -37,7 +37,8 @@ kind.
 - No new kind drawn or offered with placeholder physics: a world must
   never show a white dwarf computed as a dwarf.
 - No change to existing seeds: every system drawn today must come out
-  identical, apart from the format number and the new field.
+  identical, apart from the format number, the new field and the hosts
+  whose inner edge moves (item 5).
 - No change to the signature or meaning of `habitable_fluxes`,
   `StarInfo.teff_k` or `StarInfo.luminosity` (read by the climate of
   lot 3C-2, owned by another session).
@@ -83,11 +84,15 @@ lands.
    values instead of a code, so a companion (#570) or a non-dwarf host
    can be described. `StarInfo::new` for a dwarf gives the same result
    as before.
-5. **Inner edge**: `inner_edge_au(host)` is the larger of today's
-   0.02 AU and the host's Roche limit for a rocky body
-   (`tides::roche_km`). For every dwarf the Roche limit lies inside
-   0.02 AU, so layouts do not change. `INNER_EDGE_AU` call sites
-   (`system.rs`) use it.
+5. **Inner edge**: `inner_edge_au(host)` is the largest of today's
+   0.02 AU, the host's Roche limit for a rocky body (`tides::roche_km`,
+   density 5.5 g/cm³) and two stellar radii (the closest known planets
+   orbit at 2 to 3 stellar radii). Today a planet around an O star or a
+   hot B star can be placed inside the star (O3V is 13.4 R☉, 0.062 AU,
+   against an edge of 0.02 AU). Decided with the user on 2026-11-18:
+   fix it here. Systems around O to B6 dwarfs (radius above 2.15 R☉,
+   about 0.1 % of default draws) change; every dwarf from B7 to M stays
+   byte-identical. `INNER_EDGE_AU` call sites (`system.rs`) use it.
 6. **Quiet-star activity**: `star_activity` gets a branch chosen by the
    kind for hosts without a convective photosphere (white dwarfs,
    neutron stars, old brown dwarfs): no spots, no granulation, given
