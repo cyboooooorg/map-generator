@@ -997,6 +997,7 @@ mod tests {
             assert_eq!(age.value, unit.age_gyr);
         }
         assert!(find(tree, Quantity::Age).is_some(), "{tree:#?}");
+        assert!(has_note(tree, "tidal_episode"), "{tree:#?}");
         assert!(depth(tree) <= 3, "{tree:#?}");
     }
 

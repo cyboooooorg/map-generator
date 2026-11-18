@@ -7,7 +7,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { PlanetModel } from './api/types/PlanetModel';
 import type { Quantity } from './api/types/Quantity';
-import { AIRLESS_BAR, formatInt, formatScientific, formatUpTo, withUnit } from './format';
+import { formatInt, formatScientific, formatUpTo, isExosphere, isThin, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 
 /** Where a planet's mean orbit lies against the habitable zone. */
@@ -187,8 +187,9 @@ export function atmosphereLine(model: Pick<PlanetModel, 'surface'>): string | nu
   const total = entries.reduce((sum, e) => sum + e.bar, 0);
   if (!(total > 0)) return null;
   const digits = total < 0.1 ? 3 : total < 10 ? 2 : 0;
-  // Under the limit of an atmosphere the air is an exosphere (Io's SO₂, a Galilean moon's CO₂ or O₂).
-  const pressure = total < AIRLESS_BAR ? t.worldInfo.exosphere({ pressure: withUnit(formatScientific(total), 'bar') }) : withUnit(formatUpTo(total, digits), 'bar');
+  // An air the giant's plasma collapsed is an exosphere; a thin one (Triton's N₂, Io's SO₂) keeps its name, in scientific notation.
+  const written = isThin(total) ? withUnit(formatScientific(total), 'bar') : withUnit(formatUpTo(total, digits), 'bar');
+  const pressure = isExosphere(total) ? t.worldInfo.exosphere({ pressure: written }) : written;
   const main = entries
     .filter((e) => e.bar / total >= MIN_GAS_SHARE)
     .sort((a, b) => b.bar - a.bar)

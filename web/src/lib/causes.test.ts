@@ -106,7 +106,7 @@ describe('the cause catalog', () => {
       }
       expect(formatCause(node('bond_albedo', 0.306))).toBe(locale === 'en' ? '0.306' : '0,306');
       // The host's locked k2/Q is a value without a unit (#533).
-      expect(formatCause(node('host_dissipation', 2.2e-4))).toBe('2.2×10⁻⁴');
+      expect(formatCause(node('host_dissipation', 2.2e-4))).toBe(locale === 'fr' ? '2,2×10⁻⁴' : '2.2×10⁻⁴');
       setLocale('en');
     });
   }

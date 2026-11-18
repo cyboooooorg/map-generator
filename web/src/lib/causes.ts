@@ -4,7 +4,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
-import { formatCelsius, formatMassEarth, formatNumber, formatScientific, formatSurfaceAge, formatUpTo, withUnit } from './format';
+import { formatCelsius, formatMassEarth, formatInt, formatNumber, formatScientific, formatSurfaceAge, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 import { className } from './i18n/names.svelte';
 
@@ -42,7 +42,7 @@ function significant(value: number): string {
 export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): string {
   // A part of a surface (its share) or an age that a renewal set: both the key and the value.
   if (cause.label !== null && (cause.quantity === 'terrain_unit' || cause.quantity === 'surface_age')) {
-    const value = cause.quantity === 'terrain_unit' ? withUnit(formatNumber(Math.round(cause.value * 100)), '%') : formatSurfaceAge(cause.value);
+    const value = cause.quantity === 'terrain_unit' ? withUnit(formatInt(Math.round(cause.value * 100)), '%') : formatSurfaceAge(cause.value);
     return t.causes.renewalValue({ renewal: (t.causes.renewals as Record<string, string>)[cause.label] ?? cause.label, value });
   }
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);

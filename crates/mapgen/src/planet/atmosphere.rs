@@ -1158,6 +1158,23 @@ pub fn photochemistry(gases: Gases, equilibrium_k: f64) -> Gases {
 mod tests {
     use super::*;
     use crate::atmosphere::AIRLESS_BAR;
+
+    /// The web card writes an air at most twice this as an exosphere:
+    /// its mirror in `web/src/lib/format.ts` must be the same number.
+    #[test]
+    fn the_web_mirrors_the_exosphere_level() {
+        let web = include_str!("../../../../web/src/lib/format.ts");
+        let line = web
+            .lines()
+            .find(|l| l.starts_with("export const EXOSPHERE_BAR = "))
+            .expect("the web mirror");
+        let value: f64 = line
+            .trim_start_matches("export const EXOSPHERE_BAR = ")
+            .trim_end_matches(';')
+            .parse()
+            .unwrap();
+        assert_eq!(value, super::EXOSPHERE_BAR);
+    }
     use crate::exomoon::EARTH_KG;
     use crate::planet::core::core;
     use crate::planet::heat::{InternalHeat, radiogenic_w, secular_w};

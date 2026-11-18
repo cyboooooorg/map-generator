@@ -209,12 +209,18 @@ describe('a body card of the planet model', () => {
     expect(atmosphereLine(model(null, 0))).toBeNull();
   });
 
-  it('calls an air under the limit of an atmosphere an exosphere and names Io\'s SO₂', () => {
+  it('calls only an air the plasma collapsed an exosphere', () => {
     setLocale('en');
-    const io = { surface: { gases: { n2: 0, co2: 0, h2o: 0, ch4: 0, nh3: 0, so2: 3e-9, o2: 0 } } } as unknown as PlanetModel;
-    expect(atmosphereLine(io)).toMatch(/^exosphere, 3×10⁻⁹\s?bar · SO₂ 100\s?%$/);
+    const air = (gas: 'n2' | 'so2' | 'co2', bar: number) =>
+      ({ surface: { gases: { n2: 0, co2: 0, h2o: 0, ch4: 0, nh3: 0, so2: 0, o2: 0, [gas]: bar } } }) as unknown as PlanetModel;
+    // Callisto's CO₂, at the level the collapse leaves.
+    expect(atmosphereLine(air('co2', 3e-12))).toMatch(/^exosphere, 3×10⁻¹²\s?bar · CO₂ 100\s?%$/);
+    // Io's SO₂ is the dayside vapour of its frost, a thin air.
+    expect(atmosphereLine(air('so2', 3e-9))).toMatch(/^3×10⁻⁹\s?bar · SO₂ 100\s?%$/);
+    // Triton's N₂ is a thin collisional air, never "0 bar".
+    expect(atmosphereLine(air('n2', 1.5e-5))).toMatch(/^1\.5×10⁻⁵\s?bar · N₂ 100\s?%$/);
     setLocale('fr');
-    expect(atmosphereLine(io)).toMatch(/^exosphère, 3×10⁻⁹\s?bar · SO₂ 100\s?%$/);
+    expect(atmosphereLine(air('n2', 1.5e-5))).toMatch(/^1,5×10⁻⁵\s?bar · N₂ 100\s?%$/);
     setLocale('en');
   });
 

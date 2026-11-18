@@ -397,8 +397,11 @@ million years at its measured ion loss; its reservoirs (polar caps,
 regolith), which the model does not carry, resupply it. The pressure
 tree of the card names the escape (both losses) and adds the note
 `exosphere` under a gas the step exhausted. The card writes an air
-under `AIRLESS_BAR` (1e-4 bar) as an exosphere, in scientific notation
-(Io's reads `exosphere, 3×10⁻⁹ bar · SO₂ 100 %`), and Io's SO₂ node of
+the step collapsed (at most twice `EXOSPHERE_BAR`, mirrored in
+`web/src/lib/format.ts`) as an exosphere (`exosphere, 3×10⁻¹² bar · CO₂
+100 %`); a thin air under 1e-3 bar keeps its name and is written in
+scientific notation (Triton's N₂ `1.5×10⁻⁵ bar`, Io's SO₂ `3×10⁻⁹ bar`,
+a real air over its frost). Io's SO₂ node of
 the pressure tree names the volcanic frost (`volcanic_frost`) the air is
 the vapour of, in place of an outgassing and an escape it does not have.
 
