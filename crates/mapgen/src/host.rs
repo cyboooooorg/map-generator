@@ -113,6 +113,65 @@ impl HostKind {
     }
 }
 
+/// The relative share of each kind among the hosts of a galaxy, from the
+/// study of host kinds (section 2.1). Each kind's issue confirms its share
+/// before enabling it; a kind not [`HostKind::available`] is never drawn.
+pub const HOST_KIND_SHARES: [(HostKind, f64); 10] = [
+    // Main-sequence stars: the bulk of the stars (study, section 2.1).
+    (HostKind::Dwarf, 0.93),
+    // Mamajek: white dwarfs among the stars of the solar neighbourhood.
+    (HostKind::WhiteDwarf, 0.059),
+    // Mamajek: evolved stars 1.1 %, of which red giants 0.33 %.
+    (HostKind::Subgiant, 0.0077),
+    (HostKind::Giant, 0.0033),
+    // Kirkpatrick 2021, a lower bound.
+    (HostKind::BrownDwarf, 0.16),
+    // Order of one in a thousand (study, estimate).
+    (HostKind::NeutronStar, 1e-3),
+    // Order of a hundredth of the neutron stars (study, estimate).
+    (HostKind::Magnetar, 1e-5),
+    // Olejak 2020: about 1.3e8 against about 1e11 stars (study, estimate).
+    (HostKind::BlackHole, 1e-3),
+    // Rosslowe & Crowther 2015.
+    (HostKind::WolfRayet, 1e-8),
+    // Hypothetical: left to #583.
+    (HostKind::QuasiStar, 0.0),
+];
+
+/// The kind of host of the system `system_seed`, from its own stream.
+///
+/// While only dwarfs are modelled this is always [`HostKind::Dwarf`] and
+/// no rng is seeded. Once other kinds are available, a dwarf is drawn with
+/// the share of the dwarfs and the others with theirs.
+pub fn draw_host_kind(system_seed: u32) -> HostKind {
+    use rand::{RngExt, SeedableRng, rngs::StdRng};
+    let others: f64 = HOST_KIND_SHARES
+        .iter()
+        .filter(|(k, _)| *k != HostKind::Dwarf && k.available())
+        .map(|(_, s)| s)
+        .sum();
+    if others <= 0.0 {
+        return HostKind::Dwarf;
+    }
+    let mut rng = StdRng::seed_from_u64(u64::from(crate::noise::stream_seed(
+        system_seed,
+        crate::noise::stream::HOST_KIND,
+    )));
+    let total: f64 = HOST_KIND_SHARES
+        .iter()
+        .filter(|(k, _)| k.available())
+        .map(|(_, s)| s)
+        .sum();
+    let mut x = rng.random::<f64>() * total;
+    for (kind, share) in HOST_KIND_SHARES.iter().filter(|(k, _)| k.available()) {
+        if x < *share {
+            return *kind;
+        }
+        x -= share;
+    }
+    HostKind::Dwarf
+}
+
 /// A parsed spectral type: the kind of host and its position along that
 /// kind's own sequence (for dwarfs, `class × 10 + subtype`, O = 0 … M = 6).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -288,6 +347,21 @@ pub fn inner_edge_au(star: &StarValues) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_kind_but_dwarfs_is_drawn_yet() {
+        for seed in 0..2_000 {
+            assert_eq!(draw_host_kind(seed), HostKind::Dwarf);
+        }
+    }
+
+    #[test]
+    fn shares_cover_every_kind_once() {
+        let mut kinds: Vec<_> = HOST_KIND_SHARES.iter().map(|(k, _)| *k).collect();
+        kinds.dedup();
+        assert_eq!(kinds.len(), HostKind::ALL.len());
+        assert!(HOST_KIND_SHARES.iter().all(|(_, s)| *s >= 0.0));
+    }
 
     #[test]
     fn dwarf_state_inverts_the_sequence() {

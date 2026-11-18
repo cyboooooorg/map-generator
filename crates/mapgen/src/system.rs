@@ -32,7 +32,7 @@
 //! stored, so a body generated later is the world it would have been at
 //! once.
 
-use crate::activity::{StarActivity, star_activity};
+use crate::activity::StarActivity;
 use crate::archetype::{Archetype, ParamDefault};
 use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
 use crate::export::Diagnostics;
@@ -85,7 +85,7 @@ use std::sync::Arc;
 /// quantities (surface age, terrain unit, emissivity) and notes, so a
 /// system of version 9 does not parse as today's and is refused on its
 /// version.
-pub const SYSTEM_FORMAT_VERSION: u32 = 10;
+pub const SYSTEM_FORMAT_VERSION: u32 = 12;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Outer edge of a system, AU. The inner edge depends on the host
@@ -197,6 +197,8 @@ pub struct SystemStar {
     /// Spectral type (`G2V`).
     #[serde(rename = "type")]
     pub spectral: String,
+    /// What the host is (`dwarf`); only dwarfs are modelled so far.
+    pub kind: crate::host::HostKind,
     /// Catalogue designation (`MGS 48213`).
     pub designation: String,
     /// The star seen from 1 AU (its temperature, luminosity, mass, radius,
@@ -444,7 +446,11 @@ pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
     // A system drawn before the star's activity existed gets it derived,
     // the same as a draw would store.
     if system.star.activity.is_none() {
-        system.star.activity = Some(star_activity(&system.star.info, system.seed));
+        system.star.activity = Some(crate::activity::host_activity(
+            system.star.kind,
+            &system.star.info,
+            system.seed,
+        ));
     }
     // Likewise its place in the galaxy, from the seed and the stored
     // metallicity.
@@ -1007,6 +1013,7 @@ fn draw_whole(
     Ok(assemble(
         request,
         p.seed,
+        p.kind,
         p.star_code,
         p.age_gyr,
         p.metallicity,
@@ -1021,6 +1028,7 @@ fn draw_whole(
 /// [`assemble`] makes them bodies.
 struct Placed {
     seed: u32,
+    kind: crate::host::HostKind,
     star_code: f32,
     age_gyr: f32,
     metallicity: f32,
@@ -1049,6 +1057,12 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
     let asked_star = match (&whole.star, &whole.planets) {
         (None, Some(planets)) => asked_star_of(planets, age_asked, seed)?,
         _ => None,
+    };
+    // A named or archetype star is a dwarf; a drawn one takes the kind of
+    // its own stream (`rng` is not touched, so a dwarf draws as before).
+    let kind = match (&whole.star, asked_star) {
+        (None, None) => crate::host::draw_host_kind(seed),
+        _ => crate::host::HostKind::Dwarf,
     };
     let star_code = match (&whole.star, asked_star) {
         (Some(text), _) => parse_type(text).map_err(RequestError::BadStar)?,
@@ -1280,6 +1294,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                 // out are dropped rather than failing.
                 return Ok(Placed {
                     seed,
+                    kind,
                     star_code,
                     age_gyr,
                     metallicity,
@@ -1325,6 +1340,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
             match space(&mut slots, star_mass, ice) {
                 Ok(()) => {
                     return Ok(Placed {
+                        kind,
                         seed,
                         star_code,
                         age_gyr,
@@ -1340,6 +1356,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
         }
         return Ok(Placed {
             seed,
+            kind,
             star_code,
             age_gyr,
             metallicity,
@@ -1496,6 +1513,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
     assemble(
         request,
         seed,
+        crate::host::HostKind::Dwarf,
         params.star,
         params.age_gyr,
         params.metallicity,
@@ -1527,6 +1545,7 @@ pub(crate) fn body_seed(seed: u32, id: &str) -> u32 {
 fn assemble(
     request: &SystemRequest,
     seed: u32,
+    kind: crate::host::HostKind,
     star_code: f32,
     age_gyr: f32,
     metallicity: f32,
@@ -1953,8 +1972,9 @@ fn assemble(
         height,
         star: SystemStar {
             spectral: info.kind.clone(),
+            kind,
             designation,
-            activity: Some(star_activity(&info, seed)),
+            activity: Some(crate::activity::host_activity(kind, &info, seed)),
             info,
             metallicity,
             ice_line_au: ice,
@@ -6426,6 +6446,25 @@ mod focus_ring_tests {
     use super::tests::host_of;
     use super::*;
     use crate::rings::RingRole;
+
+    #[test]
+    fn a_drawn_system_stores_a_dwarf_kind() {
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
+            star: None,
+            metallicity: None,
+            planets: None,
+            seed: Some(5),
+            width: Some(64),
+            height: Some(32),
+        });
+        let system = draw(&request, &mut rand::rng()).unwrap();
+        assert_eq!(system.star.kind, crate::host::HostKind::Dwarf);
+        let json = serde_json::to_string(&system).unwrap();
+        assert!(json.contains("\"kind\":\"dwarf\""));
+        let back: System = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.star.kind, crate::host::HostKind::Dwarf);
+    }
 
     fn around(planet: &str, seed: u32, host: Option<HostMode>) -> System {
         let world = WorldRequest {
