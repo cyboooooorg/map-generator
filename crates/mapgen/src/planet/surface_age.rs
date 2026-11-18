@@ -183,6 +183,14 @@ pub const TIDAL_EPISODE_SHARE: f64 = 0.65;
 /// is dated by its capture ([`super::resonance::Captures::age_share`]).
 pub const TIDAL_EPISODE_AGE_SHARE: f64 = 0.44;
 
+/// Spread of the stored map age of a tidal episode's unit around its
+/// model age ([`TIDAL_EPISODE_AGE_SHARE`] already is the calibration, so
+/// the scatter is centred on 1), a range drawn by `interim::params_for`
+/// in the regime draw's place. A stated spread of about 10 %, in the
+/// order of the 1 Ga uncertainty on Ganymede's grooved terrain age
+/// (Zahnle et al. 2003), not a calibration.
+pub(super) const TIDAL_EPISODE_AGE_SPREAD: ParamDefault = ParamDefault::Range([0.9, 1.1]);
+
 /// Least share of the surface an episode's unit covers: a smaller patch
 /// is not a unit. Calibration, no source.
 pub const TIDAL_EPISODE_MIN_SHARE: f64 = 0.01;
@@ -422,6 +430,24 @@ mod tests {
             );
             assert!(p.surface_age_ga < 0.1, "seed {seed}: {}", p.surface_age_ga);
         }
+    }
+
+    /// The tidal episode's age is scattered once (issue #566): the stored
+    /// map age stays near the unit's 2.0 Ga.
+    #[test]
+    fn ganymedes_stored_age_is_about_two_ga() {
+        let mut ages = vec![];
+        for seed in 1..=40 {
+            let p = params_of("ganymede-like", seed).expect("drawn");
+            let m = p.model.as_ref().expect("a model");
+            let unit = m.terrain.main().expect("a unit");
+            assert_eq!(unit.renewal, Renewal::TidalEpisode, "seed {seed}");
+            let ratio = f64::from(p.surface_age_ga) / unit.age_gyr;
+            assert!((0.89..=1.11).contains(&ratio), "seed {seed}: {ratio}");
+            ages.push(p.surface_age_ga);
+        }
+        ages.sort_by(f32::total_cmp);
+        assert!((1.7..=2.3).contains(&ages[20]), "{ages:?}");
     }
 
     #[test]

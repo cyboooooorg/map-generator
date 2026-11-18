@@ -641,8 +641,13 @@ more are flooded flat at a date of that window and darkened.
   `ganymede-like` names Europa inside it and Io inside Europa
   (`[moon.resonance]`), so it is the outermost moon of a three-moon
   chain. The map shows the main unit: Ganymede's grooved terrain, 2.0 Ga
-  under the stagnant lid's 0.7 to 0.95 scatter, about 1.4 to 1.9 Ga,
-  where it showed 2 to 4.4 Ga before; its dark terrain keeps its ice
+  scattered once by `TIDAL_EPISODE_AGE_SPREAD` (0.9 to 1.1, a stated
+  spread of about 10 % on a calibrated age, not a calibration; the
+  stagnant lid's 0.7 to 0.95 does not apply a second time, issue #566),
+  about 1.8 to 2.2 Ga over seeds 1 to 40 (median 2.0), where it showed
+  2 to 4.4 Ga before the episode and 1.4 to 1.9 Ga when the scatter was
+  applied twice; the explain tree's root holds the unit's model age,
+  not the drawn map age, which agree within that spread; its dark terrain keeps its ice
   lid's 4.4 to 4.5 Ga as the second unit. In the archetype census
   (seeds 1 to 40) every Ganymede has the two units, every Callisto one,
   and Europa and Io are unchanged. Over 300 drawn systems

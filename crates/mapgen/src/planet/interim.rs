@@ -615,6 +615,9 @@ pub fn params_for(
         (Renewal::VolatileIce, _) => {
             main.age_gyr as f32 * super::surface_age::VOLATILE_ICE_AGE_SHARE.pick(rng)
         }
+        (Renewal::TidalEpisode, _) => {
+            main.age_gyr as f32 * super::surface_age::TIDAL_EPISODE_AGE_SPREAD.pick(rng)
+        }
         (_, Some(Regime::Plates) | None) => fallback::SURFACE_AGE_GA.pick(rng),
         (_, Some(Regime::Episodic)) => EPISODIC_SURFACE_AGE_GA.pick(rng),
         (_, Some(Regime::HeatPipe)) => HEAT_PIPE_SURFACE_AGE_GA.pick(rng),

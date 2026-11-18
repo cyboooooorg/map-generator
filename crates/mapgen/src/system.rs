@@ -5904,10 +5904,10 @@ mod tests {
             // past tidal episode renewed (Showman & Malhotra 1997,
             // doi:10.1006/icar.1996.5669): 2.0 Ga at 4.57 Ga, calibrated
             // on the 2 Ga crater counts give it (Zahnle et al. 2003),
-            // under the stagnant lid's 0.7 to 0.95 scatter.
+            // within the tidal episode's 0.9 to 1.1 spread (#566).
             let ganymede = age("ganymede-like");
             assert!(
-                (1.4..=1.95).contains(&ganymede),
+                (1.75..=2.25).contains(&ganymede),
                 "seed {seed}: Ganymede {ganymede} Ga"
             );
             let europa = age("europa-like");

@@ -646,6 +646,12 @@ fn icy_albedo_causes(
 /// The tree of the surface's age: its units (their shares and ages), the
 /// age of the system they are bounded by and a note for each renewal that
 /// needs its own words. `None` for a model stored without terrain.
+///
+/// The root holds the main unit's model age, not the card's
+/// `surface_age_ga`: the card shows the age the generation drew around it
+/// (a spread of `interim::params_for`, about 10 % for a tidal episode,
+/// more for a lid), which the model does not store and this replay cannot
+/// see. The two agree to that spread; the units' ages are the model's.
 fn surface_age_tree(context: &Context, model: &PlanetModel) -> Option<Cause> {
     let main = model.terrain.main()?;
     let mut causes: Vec<Cause> = model
