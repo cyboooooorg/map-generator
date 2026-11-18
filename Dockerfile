@@ -9,6 +9,8 @@ FROM rust:1.99-slim-trixie AS rust
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
+# The opacity-table builder is a workspace member (never built here)
+COPY tools tools
 # Built-in archetypes and looks are embedded in the binaries at compile time
 COPY archetypes archetypes
 COPY looks looks
