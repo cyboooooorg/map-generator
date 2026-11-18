@@ -5732,9 +5732,9 @@ mod tests {
     /// Callisto: no ocean, or one deep down under a thick shell (Khurana
     /// et al. 1998, doi:10.1038/27394; Zimmer et al. 2000, Icarus 147,
     /// 329, an ocean of 10 km or more under some 100 to 200 km of ice to
-    /// match its induced field, from memory, not checked). The ocean is
-    /// not measured; its shell is. Its old surface's dark lag (its Bond
-    /// albedo 0.19, `albedo::icy_unit_albedo`) puts it at 113 to 119 K,
+    /// match its induced field, from memory, not checked); neither depth
+    /// is well measured. Its old surface's dark lag (its Bond albedo
+    /// 0.19 to 0.25, `albedo::icy_unit_albedo`) puts it at 111 to 119 K,
     /// about 20 K warmer than under its former ice albedo of 0.6, which
     /// thins the shell: 0 to 99 km of ocean over seeds 1 to 40 under
     /// 155 to 240 km of ice. The bound keeps the shell at least about

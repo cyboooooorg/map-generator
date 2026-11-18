@@ -127,7 +127,8 @@ const PURE_ICE_ALBEDO: f64 = 0.85;
 /// (observed about 0.62 to 0.68, from memory).
 const DUST_PER_ROCK_TO_ICE: f64 = 0.006;
 
-/// Most of an old ice surface a dark lag covers: 0.88 ([`icy_unit_albedo`]).
+/// Most of an old ice surface a dark lag covers on a body of
+/// [`LAG_ROCK_SHARE`] rock or more: 0.88 ([`icy_unit_albedo`]).
 /// Sublimation and impact gardening leave the rock of an old ice-rock
 /// crust as a dark lag, with the ice redeposited as bright frost on
 /// cold crests and poleward slopes (Spencer 1987, Icarus 69, 297; Moore
@@ -135,6 +136,15 @@ const DUST_PER_ROCK_TO_ICE: f64 = 0.006;
 /// mantled by dark debris but for its bright crests; both from memory,
 /// not checked). Calibration on Callisto's Bond albedo, about 0.2.
 const LAG_MAX_SHARE: f64 = 0.88;
+
+/// Rock share of a body, as a fraction of its mass, from which its lag
+/// reaches [`LAG_MAX_SHARE`]; with less rock it covers less, in
+/// proportion (a crust of 94 % ice has little rock to leave): 0.5,
+/// Callisto's, the body [`LAG_MAX_SHARE`] is calibrated on (about half
+/// rock, Anderson et al. 2001, doi:10.1006/icar.2001.6664, from memory,
+/// not checked; the `callisto-like` archetype draws 45 to 55 % ice).
+/// A reference, not a free constant.
+const LAG_ROCK_SHARE: f64 = 0.5;
 
 /// Craters of 1 km or more per km² over which a lag covers `1 − 1/e` of
 /// [`LAG_MAX_SHARE`]: 0.004, the count of the lunar chronology on a
@@ -146,8 +156,9 @@ const LAG_MAX_SHARE: f64 = 0.88;
 /// Callisto's.
 const LAG_CRATERS_PER_KM2: f64 = 0.004;
 
-/// Share of a venting body's ice that the fallout of its plume keeps
-/// under fresh frost ([`PURE_ICE_ALBEDO`]): 0.6. Enceladus's plume
+/// Share of a body's ice that the fallout of its plume keeps under fresh
+/// frost ([`PURE_ICE_ALBEDO`]) when it vents at full strength
+/// (`geysers::vent_strength`): 0.6. Enceladus's plume
 /// feeds Saturn's E ring and falls back over its whole surface, fastest
 /// near its south pole, so that its surface stays as bright as fresh
 /// frost whatever its craters' age (Verbiscer et al. 2007, Science 315,
@@ -166,8 +177,10 @@ fn single_scattering(albedo: f64) -> f64 {
 /// Diffusive (bihemispherical) reflectance of a half-space of isotropic
 /// scatterers of single-scattering albedo `w`: `(1 − γ) / (1 + γ)` with
 /// `γ = √(1 − w)` (Hapke 1981, JGR 86, 3039,
-/// doi:10.1029/JB086iB04p03039, from memory, not checked), the Bond
-/// albedo of a surface whose grains scatter alike in every direction.
+/// doi:10.1029/JB086iB04p03039, from memory, not checked), taken as
+/// approximately the Bond albedo of a surface whose grains scatter alike
+/// in every direction (Hapke's spherical albedo is slightly lower for
+/// dark grains).
 fn diffusive_albedo(w: f64) -> f64 {
     let gamma = (1.0 - w).clamp(0.0, 1.0).sqrt();
     (1.0 - gamma) / (1.0 + gamma)
@@ -175,7 +188,8 @@ fn diffusive_albedo(w: f64) -> f64 {
 
 /// Bond albedo of a unit of exposed water ice on an ice crust, last
 /// renewed `age_gyr` Gyr ago, on a body whose rock is `rock_share` of
-/// its mass, under the fallout of its plume when it vents (`fallout`).
+/// its mass, venting with the strength `vent`, 0 to 1
+/// (`geysers::vent_strength`).
 ///
 /// - Its fresh ice is an intimate mix of [`PURE_ICE_ALBEDO`] ice and
 ///   rock dust at [`REGOLITH_ALBEDO`], the dust `DUST_PER_ROCK_TO_ICE`
@@ -183,12 +197,13 @@ fn diffusive_albedo(w: f64) -> f64 {
 ///   albedos mix by grain and the mix reflects as Hapke's isotropic
 ///   half-space ([`diffusive_albedo`]). A little dust darkens ice much.
 /// - A dark lag at [`REGOLITH_ALBEDO`] covers patches of it, a share
-///   `LAG_MAX_SHARE · (1 − exp(−N / LAG_CRATERS_PER_KM2))` of the
-///   surface, `N` the crater count of the lunar chronology on a surface
-///   that old ([`crate::craters::crater_density`]); the patches mix by
-///   area.
-/// - A plume's fallout covers [`FALLOUT_SHARE`] of it with fresh frost.
-pub fn icy_unit_albedo(age_gyr: f64, rock_share: f64, fallout: bool) -> f64 {
+///   `LAG_MAX_SHARE · min(1, rock / LAG_ROCK_SHARE) · (1 − exp(−N /
+///   LAG_CRATERS_PER_KM2))` of the surface, `N` the crater count of the
+///   lunar chronology on a surface that old
+///   ([`crate::craters::crater_density`]); the patches mix by area.
+/// - A plume's fallout covers `vent ·` [`FALLOUT_SHARE`] of it with
+///   fresh frost.
+pub fn icy_unit_albedo(age_gyr: f64, rock_share: f64, vent: f64) -> f64 {
     let rock = rock_share.clamp(0.0, 1.0);
     let ice = 1.0 - rock;
     let dust = if DUST_PER_ROCK_TO_ICE * rock >= ice {
@@ -200,13 +215,11 @@ pub fn icy_unit_albedo(age_gyr: f64, rock_share: f64, fallout: bool) -> f64 {
         + dust * single_scattering(REGOLITH_ALBEDO);
     let fresh = diffusive_albedo(w);
     let craters = crate::craters::crater_density(age_gyr.max(0.0));
-    let lag = LAG_MAX_SHARE * (1.0 - (-craters / LAG_CRATERS_PER_KM2).exp());
+    let ceiling = LAG_MAX_SHARE * (rock / LAG_ROCK_SHARE).min(1.0);
+    let lag = ceiling * (1.0 - (-craters / LAG_CRATERS_PER_KM2).exp());
     let aged = (1.0 - lag) * fresh + lag * REGOLITH_ALBEDO;
-    if fallout {
-        (1.0 - FALLOUT_SHARE) * aged + FALLOUT_SHARE * PURE_ICE_ALBEDO
-    } else {
-        aged
-    }
+    let fallout = FALLOUT_SHARE * vent.clamp(0.0, 1.0);
+    (1.0 - fallout) * aged + fallout * PURE_ICE_ALBEDO
 }
 
 /// Annual mean temperature, K, under which a surface keeps ice or snow:
@@ -685,20 +698,25 @@ mod tests {
         let mut last = f64::INFINITY;
         for i in 0..=50 {
             let age = 0.1 * f64::from(i);
-            let now = a(age, 0.5, false);
+            let now = a(age, 0.5, 0.0);
             assert!(now <= last, "{age}: {now} > {last}");
             assert!((REGOLITH_ALBEDO..=PURE_ICE_ALBEDO).contains(&now), "{now}");
             last = now;
         }
-        assert!(a(0.1, 0.9, false) < a(0.1, 0.6, false));
-        assert!(a(0.4, 0.65, true) > a(0.4, 0.65, false));
-        assert!(a(4.5, 0.5, true) < PURE_ICE_ALBEDO);
-        assert!((a(0.0, 0.0, false) - PURE_ICE_ALBEDO).abs() < 1e-12);
+        assert!(a(0.1, 0.9, 0.0) < a(0.1, 0.6, 0.0));
+        // The fallout brightens in proportion to the vent's strength.
+        assert!(a(0.4, 0.65, 0.0) < a(0.4, 0.65, 0.5));
+        assert!(a(0.4, 0.65, 0.5) < a(0.4, 0.65, 1.0));
+        assert!(a(4.5, 0.5, 1.0) < PURE_ICE_ALBEDO);
+        assert!((a(0.0, 0.0, 0.0) - PURE_ICE_ALBEDO).abs() < 1e-12);
         // All rock: the dust's own albedo, never NaN.
-        assert!((a(0.0, 1.0, false) - REGOLITH_ALBEDO).abs() < 1e-9);
+        assert!((a(0.0, 1.0, 0.0) - REGOLITH_ALBEDO).abs() < 1e-9);
         // Callisto-like: old, half rock.
-        let callisto = a(4.55, 0.5, false);
+        let callisto = a(4.55, 0.5, 0.0);
         assert!((0.15..=0.3).contains(&callisto), "{callisto}");
+        // An old crust of 94 % ice (Tethys-like) has little rock for a
+        // lag and stays bright; an old half-rock one (Callisto) does not.
+        assert!(a(4.5, 0.06, 0.0) > 0.7, "{}", a(4.5, 0.06, 0.0));
     }
 
     #[test]

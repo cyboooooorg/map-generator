@@ -585,9 +585,11 @@ mod tests {
     /// frost, or its own water ice: a moon darkened to 240 K breathes
     /// its ice's 0.4 mbar of vapour) or it is dense
     /// (`interim::ERODING_BAR` or more). On every body of those
-    /// systems with an ice crust, the plume's fallout its climate took
-    /// ([`super::super::plume_fallout`]) agrees with the geysers its
-    /// model stores.
+    /// systems with a stagnant-lid ice crust, its climate took a plume's
+    /// fallout (a vent strength above 0, `super::super::vent_strength`)
+    /// exactly when its model stores geysers. The bodies with geysers
+    /// and no such crust (rocky or wet-rock frozen bodies, or a crust
+    /// with plates) are counted apart: their climate reads no fallout.
     #[test]
     fn drawn_icy_moons_stay_in_bounds() {
         use crate::generation::{CrustKind, model_crust_kind};
@@ -595,6 +597,7 @@ mod tests {
         let airless = f64::from(crate::atmosphere::AIRLESS_BAR);
         let dense = super::super::interim::ERODING_BAR;
         let (mut icy, mut vented, mut elsewhere) = (0usize, 0usize, 0usize);
+        let mut unlidded = 0usize;
         let mut disagree = Vec::new();
         let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
         for seed in 1..=300 {
@@ -616,17 +619,20 @@ mod tests {
                     continue;
                 };
                 let steps = crate::planet::explain::replay(&context, m, &s);
-                match steps.fallout {
-                    Some(fallout) => {
-                        if fallout != m.geysers.is_some() {
+                match steps.vent {
+                    Some(vent) => {
+                        if (vent > 0.0) != m.geysers.is_some() {
                             disagree.push(format!(
-                                "seed {seed} {} {:?} fallout {fallout} T {:.1} {:?}",
+                                "seed {seed} {} {:?} vent {vent} T {:.1} {:?}",
                                 body.id, body.kind, s.climate.temperature_k, m.ice_shell
                             ));
                         }
-                        vented += usize::from(fallout);
+                        vented += usize::from(vent > 0.0);
                     }
-                    None => elsewhere += usize::from(m.geysers.is_some()),
+                    None => {
+                        elsewhere += usize::from(m.geysers.is_some());
+                        unlidded += usize::from(model_crust_kind(m) == CrustKind::Ice);
+                    }
                 }
                 if body.kind != BodyKind::Moon || model_crust_kind(m) != CrustKind::Ice {
                     continue;
@@ -655,19 +661,51 @@ mod tests {
         }
         println!(
             "{icy} icy moons, albedo {lo:.3}-{hi:.3}; {vented} ice crusts vent, \
-             {elsewhere} other bodies have geysers"
+             {elsewhere} other bodies have geysers; {unlidded} ice crusts \
+             without a stagnant lid"
         );
         assert!(icy > 100, "{icy}");
-        // One body sits on the vent threshold: its fallout cools it
-        // (62.0 K) under the shell that cracks, and without it it warms
-        // (63.6 K) over that shell, so that neither answer holds under its
-        // own climate (seed 295 e-1).
-        println!("{} disagree: {disagree:?}", disagree.len());
         assert!(
-            disagree.len() <= 1,
+            disagree.is_empty(),
             "{} disagree: {disagree:?}",
             disagree.len()
         );
+    }
+
+    /// Validation, out of the calibration set: the icy-age law
+    /// (`albedo::icy_unit_albedo`) was calibrated on Enceladus, Europa,
+    /// Ganymede and Callisto; the five large moons of Uranus, round a
+    /// Uranus at 19.2 AU, were not looked at while tuning it. Their Bond
+    /// albedos are about 0.1 to 0.25 (Ariel about 0.23, Umbriel 0.10,
+    /// Titania 0.17, Oberon 0.14, Miranda about 0.2; Veverka et al.
+    /// 1991 in *Uranus*, University of Arizona Press, and Karkoschka
+    /// 2001, Icarus 151, 51; from memory, not checked). Masses and
+    /// orbits: JPL satellite parameters; ice shares from their densities
+    /// (1.2 to 1.7 g/cm³), about half. The band asserted is wide, 0.08
+    /// to 0.35: the law has no term for their dark, carbon-rich
+    /// non-ice material, nor for Umbriel's unusual darkness.
+    #[test]
+    fn uranian_moons_are_dark() {
+        const URANUS_KG: f64 = 8.681e25;
+        for (name, mass_earth, ice, a_m, e) in [
+            ("Miranda", 1.10e-5, 0.6, 1.299e8, 0.0013),
+            ("Ariel", 2.09e-4, 0.45, 1.909e8, 0.0012),
+            ("Umbriel", 2.14e-4, 0.5, 2.660e8, 0.0039),
+            ("Titania", 5.69e-4, 0.45, 4.363e8, 0.0011),
+            ("Oberon", 5.16e-4, 0.5, 5.835e8, 0.0014),
+        ] {
+            let m = model(
+                19.19,
+                &moon(mass_earth, ice, MoonBirth::Disk, URANUS_KG, a_m, e),
+            );
+            let s = m.surface.expect("surface");
+            let a = s.climate.bond_albedo;
+            println!(
+                "{name}: Bond albedo {a:.3}, {:.1} K, units {:?}",
+                s.climate.temperature_k, m.terrain.units
+            );
+            assert!((0.08..=0.35).contains(&a), "{name}: {a}");
+        }
     }
 
     /// A moon's albedo comes from its own cover, not its planet's

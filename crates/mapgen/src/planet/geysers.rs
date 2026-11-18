@@ -317,15 +317,40 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
 }
 
 /// Whether a body of `interior` making `heat` under the ice shell
-/// `shell` vents: the seedless criterion of [`geysers`] (see there),
-/// which the climate also reads, on a shell of its own, for the plume's
-/// fallout (`super::plume_fallout`).
+/// `shell` vents: the seedless criterion of [`geysers`] (see there), its
+/// [`vent_strength`] above 0.
 pub(crate) fn vents(interior: &Interior, shell: &IceShell, heat: &InternalHeat) -> bool {
-    !shell.convecting
-        && shell.ocean_km > 0.0
-        && shell.polar_shell_km < shell.shell_km
-        && heat.tidal_w >= TIDAL_SHARE * heat.total_w()
-        && ICE_DENSITY * gravity(interior) * shell.polar_shell_km * 1e3 <= CRACK_OVERBURDEN_PA
+    vent_strength(interior, shell, heat) > 0.0
+}
+
+/// Polar overburden, as a share of [`CRACK_OVERBURDEN_PA`], at and under
+/// which a body vents at full strength ([`vent_strength`]): 0.6.
+/// Calibration on Enceladus, which the plume's fallout is calibrated on
+/// (`albedo::icy_unit_albedo`): the model's Enceladus carries 0.4 to
+/// 0.55 of the threshold at its pole, so it vents in full on every seed.
+const FULL_VENT_OVERBURDEN: f64 = 0.6;
+
+/// How strongly a body of `interior` making `heat` under the ice shell
+/// `shell` vents, 0 to 1: 0 unless it passes the conditions of
+/// [`geysers`] other than the crack (an ocean, a shell that does not
+/// convect and that its tides thin at the poles, the tides making
+/// [`TIDAL_SHARE`] of its heat), then rising from 0 with its polar shell
+/// at the crack threshold (`ρ g h` at [`CRACK_OVERBURDEN_PA`]) to 1 at
+/// [`FULL_VENT_OVERBURDEN`] of it, linearly in the overburden: a thinner
+/// shell cracks through more of its cap and lets out more plume. The
+/// climate reads it for the plume's fallout (`super::vent_strength`), so
+/// that the fallout fades to nothing where the geysers stop, with no
+/// step for its fixed point to straddle.
+pub(crate) fn vent_strength(interior: &Interior, shell: &IceShell, heat: &InternalHeat) -> f64 {
+    if shell.convecting
+        || shell.ocean_km <= 0.0
+        || shell.polar_shell_km >= shell.shell_km
+        || heat.tidal_w < TIDAL_SHARE * heat.total_w()
+    {
+        return 0.0;
+    }
+    let x = ICE_DENSITY * gravity(interior) * shell.polar_shell_km * 1e3 / CRACK_OVERBURDEN_PA;
+    ((1.0 - x) / (1.0 - FULL_VENT_OVERBURDEN)).clamp(0.0, 1.0)
 }
 
 /// Surface gravity, m/s², of a body of `interior`, from its layers.
@@ -345,7 +370,7 @@ fn gravity(interior: &Interior) -> f64 {
 ///   making at least [`TIDAL_SHARE`] of its heat), and is thin enough at
 ///   the pole that fractures cross it: the hydrostatic pressure
 ///   at its base, `ρ g h` with [`ICE_DENSITY`] and the surface gravity, is
-///   at most [`CRACK_OVERBURDEN_PA`] (Rudolph & Manga 2009,
+///   under [`CRACK_OVERBURDEN_PA`] (Rudolph & Manga 2009,
 ///   doi:10.1016/j.icarus.2008.10.010).
 /// - **Pole.** The tides thin both poles alike; Enceladus vents from its
 ///   south pole only, so the seed picks one.

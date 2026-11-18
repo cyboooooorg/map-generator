@@ -612,7 +612,7 @@ temperatures their icy albedos give, `albedo::icy_unit_albedo`). Europa
 ocean. Ganymede, heated mostly by its rock, gets 131 to 189 km of ice
 and 75 to 126 km of ocean above ice V; Titan, with its ammonia, 125 to
 177 km over 63 to 120 km; Callisto, whose water layer above its mixed
-rock and ice is thin, and whose dark surface is at 113 to 119 K, gets
+rock and ice is thin, and whose dark surface is at 111 to 119 K, gets
 155 to 240 km of ice over 0 to 99 km of ocean. The Solar System's moon archetypes carry
 the chondritic radiogenic abundance of the solar nebula, 0.9 to 1.1
 times the Earth's (Lodders 2003), not the 0.15 dex drawn across stellar
