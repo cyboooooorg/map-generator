@@ -363,11 +363,23 @@ const HAZE_ABSORPTION: f64 = 0.55;
 /// `g⊕ / g` times Earth's on a body of gravity `g` ([`rayleigh_550`]).
 const RAYLEIGH_N2_550: f64 = 0.0965;
 
+/// Rayleigh scattering of a CO₂ molecule against an N₂ molecule: 2.5.
+/// Kopparapu et al. 2013 (doi:10.1088/0004-637X/765/2/131, §2.2, read
+/// on arXiv:1301.6674v2): CO₂ "is 2.5 times better than air" at
+/// Rayleigh scattering. Sneep & Ubachs 2005 (JQSRT 92, 293,
+/// doi:10.1016/j.jqsrt.2004.07.025) measured the cross-sections at
+/// 532 nm in a ratio of about 2.4 (from memory, not checked).
+const CO2_RAYLEIGH_PER_N2: f64 = 2.5;
+
 /// Rayleigh depth per bar of each gas, relative to nitrogen: its
 /// molecules scatter as the square of their polarizability and a bar of
 /// it holds `28 / μ` times as many molecules (CRC Handbook
-/// polarizabilities: N₂ 1.74, CO₂ 2.91, CH₄ 2.59, NH₃ 2.26,
-/// SO₂ 3.72, O₂ 1.58 Å³; King factors ignored). Water vapour is left
+/// polarizabilities: N₂ 1.74, CH₄ 2.59, NH₃ 2.26, SO₂ 3.72, O₂ 1.58 Å³;
+/// King factors ignored). CO₂ takes its measured ratio instead,
+/// [`CO2_RAYLEIGH_PER_N2`]: its static polarizability (2.91 Å³) would
+/// give 2.80, about 12 % too much, since what scatters visible light is
+/// the optical polarizability and CO₂'s King factor is larger than
+/// N₂'s (issue #523). Water vapour is left
 /// out: it scatters, but absorbs more of the near infrared, so that a
 /// moist atmosphere's albedo stays near 0.2 to 0.3 (Kopparapu et al.
 /// 2013); the climate blends a steam column towards that moist albedo
@@ -381,7 +393,7 @@ fn rayleigh_550(gases: &Gases, planet: &Planet) -> f64 {
     let per = |alpha: f64, mu: f64| (alpha / 1.74).powi(2) * 28.0 / mu;
     RAYLEIGH_N2_550 * EARTH_GRAVITY_M_S2 / planet.gravity_m_s2
         * (gases.n2.max(0.0)
-            + gases.co2.max(0.0) * per(2.91, 44.0)
+            + gases.co2.max(0.0) * CO2_RAYLEIGH_PER_N2 * 28.0 / 44.0
             + gases.ch4.max(0.0) * per(2.59, 16.0)
             + gases.nh3.max(0.0) * per(2.26, 17.0)
             + gases.so2.max(0.0) * per(3.72, 64.0)
@@ -961,6 +973,26 @@ mod tests {
             gravity_m_s2,
             radius_earth,
         }
+    }
+
+    /// A molecule of CO₂ scatters about 2.5 times as much light as one of
+    /// air (Kopparapu et al. 2013, §2.2, read on arXiv:1301.6674v2), not
+    /// the 2.80 the squared static polarizabilities give (issue #523).
+    #[test]
+    fn co2_scatters_two_and_a_half_times_nitrogen_per_molecule() {
+        let earth = planet(EARTH_GRAVITY_M_S2, 1.0);
+        let one = |gases: Gases| rayleigh_550(&gases, &earth);
+        let n2 = one(Gases {
+            n2: 1.0,
+            ..Gases::default()
+        });
+        let co2 = one(Gases {
+            co2: 1.0,
+            ..Gases::default()
+        });
+        // A bar of CO₂ holds 28/44 as many molecules as a bar of N₂.
+        let per_molecule = co2 / n2 * 44.0 / 28.0;
+        assert!((per_molecule - 2.5).abs() < 1e-9, "{per_molecule}");
     }
 
     /// Issue #523, Review Focus 2: the same surface pressure weighs a

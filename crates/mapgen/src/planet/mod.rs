@@ -1369,6 +1369,8 @@ mod tests {
     /// more cloud), 0.579 665 635 432 before it held the CO₂ its
     /// thermostat reaches, just short of the thaw, instead of half way
     /// there, and its Rayleigh scattering followed the Sun's 5772 K
-    /// instead of 5780 K (issue #522).
-    const SNOWBALL_ALBEDO: f64 = 0.577_539_497_011;
+    /// instead of 5780 K (issue #522), 0.577 539 497 011 before a CO₂
+    /// molecule scattered 2.5 times as much light as an N₂ one instead
+    /// of 2.80 (issue #523).
+    const SNOWBALL_ALBEDO: f64 = 0.576_530_988_055;
 }
