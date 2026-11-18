@@ -35,7 +35,8 @@
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { onThemeChange, overlayColours } from '../lib/themes';
-  import { UNITS, unitTooltip } from '../lib/units';
+  import { unitTooltip } from '../lib/units';
+  import UnitsPanel from './UnitsPanel.svelte';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { orbitReadout } from '../lib/orbitClock';
@@ -401,6 +402,7 @@
   let mapProgress = $state.raw<LoadProgress | null>(null);
   let error = $state<string | null>(null);
   let showHelp = $state(false);
+  let showUnits = $state(false);
   let panelOpen = $state(saved.panelOpen && wideQuery.matches);
 
   $effect(() => {
@@ -2323,10 +2325,16 @@
         break;
       case 'help':
         showHelp = !showHelp;
+        showUnits = false;
+        break;
+      case 'units':
+        showUnits = !showUnits;
+        showHelp = false;
         break;
       case 'escape':
-        if (showHelp) {
+        if (showHelp || showUnits) {
           showHelp = false;
+          showUnits = false;
         } else {
           pinned = null;
           onEscape();
@@ -2723,7 +2731,22 @@
       >
       <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     {/if}
-    <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
+    <button
+      onclick={() => {
+        showHelp = !showHelp;
+        showUnits = false;
+      }}
+      aria-expanded={showHelp}
+      title={t.viewer.shortcutsHelp}>?</button
+    >
+    <button
+      onclick={() => {
+        showUnits = !showUnits;
+        showHelp = false;
+      }}
+      aria-expanded={showUnits}
+      title={t.viewer.unitsHelp}>{t.viewer.units}</button
+    >
   </div>
 
   {#if world.subject === 'planet'}
@@ -2791,14 +2814,10 @@
           <dd>{action}</dd>
         {/each}
       </dl>
-      <strong class="units">{t.units.title}</strong>
-      <dl>
-        {#each UNITS as unit (unit)}
-          <dt><abbr>{unit}</abbr></dt>
-          <dd>{t.units[unit].name}<br /><small>{t.units[unit].examples}</small></dd>
-        {/each}
-      </dl>
     </div>
+  {/if}
+  {#if showUnits}
+    <UnitsPanel onClose={() => (showUnits = false)} />
   {/if}
 
   {#if generationText}
@@ -3075,13 +3094,6 @@
   }
   .help dd {
     margin: 0;
-  }
-  .help .units {
-    display: block;
-    margin: 10px 0 6px;
-  }
-  .help small {
-    color: var(--muted);
   }
   kbd {
     font-family: ui-monospace, monospace;

@@ -1059,6 +1059,8 @@ export const en = {
     screenshot: 'Screenshot',
     screenshotHelp: 'Save the view as a PNG (P)',
     shortcutsHelp: 'Keyboard shortcuts (?)',
+    units: 'Units',
+    unitsHelp: 'What the units of the interface mean (I)',
     display: 'Display',
     hide: 'Hide',
     globe: 'Globe',
@@ -1386,8 +1388,9 @@ export const en = {
     elevationContours: 'Elevation contours',
     measure: 'Measure distances',
     screenshot: 'Screenshot',
-    escape: 'Close this help or the point panel, stop measuring',
+    escape: 'Close this help, the units or the point panel, stop measuring',
     help: 'This help',
+    units: 'The units reference',
   },
   /** The time slider. */
   epochs: {
@@ -1685,6 +1688,90 @@ export const en = {
     'L☉': {
       name: "L☉: the Sun's luminosity (3.8 × 10²⁶ W)",
       examples: 'red dwarfs: 0.0001 to 0.08 · the Sun: 1 · Sirius: 25',
+    },
+    Gyr: {
+      name: 'Gyr: a billion years, as Ga (10⁹ years)',
+      examples: 'Earth: 4.5 Gyr old · the Sun: 4.6 Gyr old',
+    },
+    K: {
+      name: 'K: kelvin, temperature counted from absolute zero (°C = K − 273.15)',
+      examples: '0 K: absolute zero · 93.7 K: Titan · 255 K: Earth without its greenhouse · 288 K: Earth',
+    },
+    UA: {
+      name: 'UA: astronomical unit (the French spelling of AU), the mean distance from Earth to the Sun',
+      examples: 'Mercury: 0.39 · Earth: 1 · Mars: 1.52',
+    },
+    'R☉': {
+      name: "R☉: the Sun's radius (696 000 km)",
+      examples: 'red dwarfs: 0.1 to 0.6 · the Sun: 1 · Sirius: 1.7',
+    },
+    'M⊕': {
+      name: "M⊕: Earth's mass (6 × 10²⁴ kg)",
+      examples: 'Moon: 0.012 · Mars: 0.107 · Earth: 1 · Neptune: 17',
+    },
+    'R⊕': {
+      name: "R⊕: Earth's radius (6 371 km)",
+      examples: 'Moon: 0.27 · Mars: 0.53 · Earth: 1 · Neptune: 3.9',
+    },
+    'M♃': {
+      name: "M♃: Jupiter's mass (318 M⊕)",
+      examples: 'Saturn: 0.30 · Jupiter: 1 · brown dwarfs: 13 to 80',
+    },
+    'R♃': {
+      name: "R♃: Jupiter's radius (71 492 km, 11 R⊕)",
+      examples: 'Saturn: 0.84 · Jupiter: 1',
+    },
+    'S⊕': {
+      name: 'S⊕: the light a planet receives, 1 S⊕ is what Earth gets from the Sun',
+      examples: 'Mars: 0.43 · Earth: 1 · Venus: 1.9',
+    },
+    'W/m²': {
+      name: 'W/m²: watts per square metre, the power of light or heat on a surface',
+      examples: "Earth's sunlight: 1 361 at the top of the air · Mars: 586",
+    },
+    µT: {
+      name: 'µT: microtesla, the strength of a magnetic field',
+      examples: 'Earth at the surface: 25 to 65 · a fridge magnet: 5 000',
+    },
+    'm/s²': {
+      name: 'm/s²: metres per second squared, an acceleration; gravity is one',
+      examples: "Earth's gravity: 9.81 · Moon: 1.62 · Mars: 3.71",
+    },
+    'mm/s²': {
+      name: 'mm/s²: millimetres per second squared, a tiny acceleration (1 m/s² = 1 000 mm/s²)',
+      examples: 'tidal pull of the Moon on Earth: about 1',
+    },
+    km: {
+      name: 'km: kilometre, 1 000 metres',
+      examples: "Earth's radius: 6 371 · Earth to the Moon: 384 000",
+    },
+    'km²': {
+      name: 'km²: square kilometre, an area',
+      examples: "France: 550 000 · Earth's oceans: 361 million",
+    },
+    'M km²': {
+      name: 'M km²: million square kilometres, an area',
+      examples: "Earth's land: 149 · Mars: 145 · Australia: 7.7",
+    },
+    'km/s': {
+      name: 'km/s: kilometres per second, a speed',
+      examples: 'Earth around the Sun: 30 · escape from Earth: 11.2',
+    },
+    TW: {
+      name: 'TW: terawatt, a thousand billion watts',
+      examples: "humanity's power use: about 19 · sunlight on Earth: 174 000",
+    },
+    GW: {
+      name: 'GW: gigawatt, a billion watts',
+      examples: 'a nuclear reactor: 1 · volcanism of Io: 100 000',
+    },
+    MW: {
+      name: 'MW: megawatt, a million watts',
+      examples: 'a wind turbine: 3 · a TGV: 9',
+    },
+    W: {
+      name: 'W: watt, a unit of power',
+      examples: 'a lightbulb: 10 · the Sun: 3.8 × 10²⁶',
     },
   } satisfies { title: string } & Record<Unit, { name: string; examples: string }>,
   /** Names of the formulas and units the interface prints, for tooltips. */

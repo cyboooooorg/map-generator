@@ -11,6 +11,8 @@ describe('shortcutFor', () => {
     expect(shortcutFor('w')).toEqual({ action: 'drift' });
     expect(shortcutFor('Escape')).toEqual({ action: 'escape' });
     expect(shortcutFor('x')).toBeNull();
+    expect(shortcutFor('i')).toEqual({ action: 'units' });
+    expect(shortcutHelp().some(([key]) => key === 'I')).toBe(true);
     expect(shortcutFor('F1')).toBeNull();
   });
 
