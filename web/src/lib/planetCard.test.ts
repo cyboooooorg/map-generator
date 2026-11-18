@@ -209,6 +209,15 @@ describe('a body card of the planet model', () => {
     expect(atmosphereLine(model(null, 0))).toBeNull();
   });
 
+  it('calls an air under the limit of an atmosphere an exosphere and names Io\'s SO₂', () => {
+    setLocale('en');
+    const io = { surface: { gases: { n2: 0, co2: 0, h2o: 0, ch4: 0, nh3: 0, so2: 3e-9, o2: 0 } } } as unknown as PlanetModel;
+    expect(atmosphereLine(io)).toMatch(/^exosphere, 3×10⁻⁹\s?bar · SO₂ 100\s?%$/);
+    setLocale('fr');
+    expect(atmosphereLine(io)).toMatch(/^exosphère, 3×10⁻⁹\s?bar · SO₂ 100\s?%$/);
+    setLocale('en');
+  });
+
   it('shows a small moons bulk', () => {
     setLocale('en');
     expect(bulkLine({ rock: 0.6, ice: 0.3, carbon: 0.1 })).toBe('rock 60 % · ice 30 % · carbon 10 %');

@@ -70,7 +70,7 @@
             <OrbitCard {world} />
             <InteriorCard {world} oninput={onjump} />
             <AtmosphereCard {world} oninput={onjump} />
-            <SurfaceCard {world} />
+            <SurfaceCard {world} oninput={onjump} />
             <MoonsCard {world} />
           </div>
         {:else if kind === 'system'}

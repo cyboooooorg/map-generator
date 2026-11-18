@@ -4,7 +4,7 @@ import type { Cause } from './api/types/Cause';
 import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
-import { formatCelsius, formatMassEarth, formatNumber, formatUpTo, withUnit } from './format';
+import { formatCelsius, formatMassEarth, formatNumber, formatScientific, formatSurfaceAge, formatUpTo, withUnit } from './format';
 import { t } from './i18n/index.svelte';
 import { className } from './i18n/names.svelte';
 
@@ -28,19 +28,10 @@ function keyLabel(quantity: Quantity, key: string): string {
   return tables[quantity]?.[key] ?? key;
 }
 
-const SUPERSCRIPT: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
-
-/** A power of ten written with superscript digits: 1.76×10¹³. */
-function scientific(value: number): string {
-  const [mantissa, exponent] = Number(value.toPrecision(3)).toExponential().split('e');
-  const digits = String(Number(exponent)).replace(/./g, (c) => SUPERSCRIPT[c] ?? c);
-  return `${mantissa}×10${digits}`;
-}
-
 /** A number to three significant digits. */
 function significant(value: number): string {
   if (value === 0) return '0';
-  if (Math.abs(value) >= 1e6 || Math.abs(value) < 1e-3) return scientific(value);
+  if (Math.abs(value) >= 1e6 || Math.abs(value) < 1e-3) return formatScientific(value);
   return formatUpTo(Number(value.toPrecision(3)), 6);
 }
 
@@ -49,7 +40,13 @@ function significant(value: number): string {
  * quantity whose unit an escape takes (its parent's).
  */
 export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): string {
+  // A part of a surface (its share) or an age that a renewal set: both the key and the value.
+  if (cause.label !== null && (cause.quantity === 'terrain_unit' || cause.quantity === 'surface_age')) {
+    const value = cause.quantity === 'terrain_unit' ? withUnit(formatNumber(Math.round(cause.value * 100)), '%') : formatSurfaceAge(cause.value);
+    return t.causes.renewalValue({ renewal: (t.causes.renewals as Record<string, string>)[cause.label] ?? cause.label, value });
+  }
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);
+  if (cause.quantity === 'surface_age') return formatSurfaceAge(cause.value);
   // The same quantity is written as the cards write it.
   if (cause.quantity === 'surface_temperature' || cause.quantity === 'equilibrium_temperature') return formatCelsius(cause.value);
   if (cause.quantity === 'mass') return formatMassEarth(cause.value);

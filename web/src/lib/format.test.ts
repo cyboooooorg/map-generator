@@ -122,6 +122,8 @@ describe('format', () => {
       '0.0060 bar, dust clouds',
     );
     expect(formatAtmosphere({ ...meta, pressure_bar: 0, look } as unknown as WorldMetadata)).toBe('none');
+    // Under the limit of an atmosphere, what is left is an exosphere.
+    expect(formatAtmosphere({ ...meta, pressure_bar: 3e-12, look } as unknown as WorldMetadata)).toMatch(/^exosphere, 3×10⁻¹²\s?bar$/);
   });
 
   it("describes the geology", () => {

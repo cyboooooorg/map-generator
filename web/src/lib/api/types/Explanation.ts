@@ -10,6 +10,7 @@ export type Explanation = {
  * its value does not exist (a body without surface has its class
  * only): [`Quantity::Class`], [`Quantity::SurfaceTemperature`],
  * [`Quantity::Pressure`], [`Quantity::Liquid`], [`Quantity::Regime`],
- * [`Quantity::MagneticField`], [`Quantity::WaterKept`].
+ * [`Quantity::MagneticField`], [`Quantity::WaterKept`], then
+ * [`Quantity::SurfaceAge`] when the model has terrain units.
  */
 trees: Array<Cause>, };

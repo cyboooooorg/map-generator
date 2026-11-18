@@ -396,7 +396,11 @@ it again would strip Mars, whose 0.006 bar is gone in a few hundred
 million years at its measured ion loss; its reservoirs (polar caps,
 regolith), which the model does not carry, resupply it. The pressure
 tree of the card names the escape (both losses) and adds the note
-`exosphere` under a gas the step exhausted.
+`exosphere` under a gas the step exhausted. The card writes an air
+under `AIRLESS_BAR` (1e-4 bar) as an exosphere, in scientific notation
+(Io's reads `exosphere, 3×10⁻⁹ bar · SO₂ 100 %`), and Io's SO₂ node of
+the pressure tree names the volcanic frost (`volcanic_frost`) the air is
+the vapour of, in place of an outgassing and an escape it does not have.
 
 Over seeds 1 to 40 of `archetype_census` (loss over the column):
 Ganymede's CO₂ 5 to 72, Callisto's 2.8 to 95, so both are exhausted;

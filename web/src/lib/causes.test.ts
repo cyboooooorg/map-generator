@@ -4,7 +4,7 @@ import type { Explanation } from './api/types/Explanation';
 import type { InputField } from './api/types/InputField';
 import type { Quantity } from './api/types/Quantity';
 import { drivenBy, formatCause, treeFor } from './causes';
-import { formatMassEarth, formatSurfaceTemperature, formatUpTo, withUnit } from './format';
+import { formatMassEarth, formatSurfaceAge, formatSurfaceTemperature, formatUpTo, withUnit } from './format';
 import { setLocale, t } from './i18n/index.svelte';
 
 const node = (quantity: Quantity, value: number, over: Partial<Cause> = {}): Cause => ({ quantity, value, label: null, input: null, causes: [], ...over });
@@ -16,7 +16,7 @@ const QUANTITIES: Record<Quantity, true> = {
   nh3: true, so2: true, outgassed: true, escape: true, destroyed: true, frozen_out: true, from_ammonia: true, weathered: true,
   liquid: true, regime: true, magnetic_field: true, core_state: true, core_mass_fraction: true, class: true, mass: true,
   radius: true, envelope_fraction: true, envelope_lost: true, water_formed: true, water_kept: true, age: true, shell_thickness: true, ocean_depth: true, polar_shell: true,
-  moment_of_inertia: true, resonant_heat: true, host_dissipation: true, note: true,
+  moment_of_inertia: true, resonant_heat: true, host_dissipation: true, surface_age: true, terrain_unit: true, emissivity: true, note: true,
 };
 const INPUTS: Record<InputField, true> = {
   mass_earth: true, core_mass_fraction: true, water_oceans: true, envelope_fraction: true, co2: true, n2: true, ch4: true,
@@ -59,6 +59,23 @@ describe('formatCause', () => {
     setLocale('en');
     expect(formatCause(node('radiogenic_heat', 1.76e13))).toMatch(/^1\.76×10¹³\s?W$/);
     expect(formatCause(node('radiogenic_heat', 2e-5))).toMatch(/^2×10⁻⁵\s?W$/);
+  });
+  it('writes a surface age and a terrain unit with their renewal', () => {
+    setLocale('en');
+    expect(formatCause(node('surface_age', 4.5))).toBe(formatSurfaceAge(4.5));
+    expect(formatCause(node('terrain_unit', 0.65, { label: 'tidal-episode' }))).toBe(t.causes.renewalValue({ renewal: t.causes.renewals['tidal-episode'], value: '65 %' }));
+    expect(formatCause(node('surface_age', 2, { label: 'ice-lid' }))).toContain(t.causes.renewals['ice-lid']);
+    expect(formatCause(node('emissivity', 0.89))).toBe('0.89');
+  });
+  it('writes the new notes in both languages', () => {
+    for (const locale of ['en', 'fr'] as const) {
+      setLocale(locale);
+      for (const key of ['exosphere', 'liquid_cycle', 'volatile_ice', 'tidal_episode', 'volcanic_frost', 'fallout']) {
+        expect(formatCause(node('note', 0, { label: key })), `${locale} ${key}`).toBe(t.causes.notes[key]);
+        expect(t.causes.notes[key], `${locale} ${key}`).toBeTypeOf('string');
+      }
+    }
+    setLocale('en');
   });
   it('writes a key in the active language', () => {
     setLocale('en');

@@ -31,3 +31,20 @@ fn a_system_of_format_8_is_outdated_without_panicking() {
     assert!(error.contains("format version 8"), "{error}");
     assert!(error.contains("Regenerate"), "{error}");
 }
+
+/// A system of format 9 (before the terrain units of lot 3C-1) is refused
+/// on its version too, with the way out.
+#[test]
+fn a_system_of_format_9_is_outdated_without_panicking() {
+    let dir = std::env::temp_dir().join(format!("mapgen-old-system-9-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("system.json"),
+        r#"{"format_version": 9, "seed": 1, "bodies": [{"id": "a", "model": {"climate": {}}}]}"#,
+    )
+    .unwrap();
+    let error = mapgen::system::read_system(&dir).expect_err("refused");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(error.contains("format version 9"), "{error}");
+    assert!(error.contains("Regenerate"), "{error}");
+}

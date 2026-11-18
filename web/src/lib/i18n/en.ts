@@ -10,6 +10,7 @@ import type { InputField } from '../api/types/InputField';
 import type { Mouth } from '../api/types/Mouth';
 import type { Quantity } from '../api/types/Quantity';
 import type { Regime } from '../api/types/Regime';
+import type { Renewal } from '../api/types/Renewal';
 import type { Stage } from '../api/types/Stage';
 import type { Unit } from '../units';
 import { resonanceCycle } from '../spinResonance';
@@ -231,6 +232,8 @@ export const en = {
     flattening: 'Flattening',
     spot: 'Storm',
     surfaceAge: 'Surface age',
+    /** The parts of a surface of several ages: one line each. */
+    terrainUnits: 'Terrains',
     impacts: 'Giants and impacts',
   },
   systemList: {
@@ -445,6 +448,9 @@ export const en = {
       water_formed: 'Water at formation',
       water_kept: 'Water kept',
       age: 'Age',
+      surface_age: 'Surface age',
+      terrain_unit: 'Terrain',
+      emissivity: 'Emissivity',
       shell_thickness: 'Ice shell thickness',
       ocean_depth: 'Ocean depth',
       polar_shell: 'Ice shell at the poles',
@@ -492,6 +498,9 @@ export const en = {
       water_formed: 'oceans',
       water_kept: 'oceans',
       age: 'Gyr',
+      surface_age: 'Ga',
+      terrain_unit: '%',
+      emissivity: '',
       shell_thickness: 'km',
       ocean_depth: 'km',
       polar_shell: 'km',
@@ -513,7 +522,26 @@ export const en = {
       ammonia: 'The ammonia of the ocean lowers its freezing point, so the shell is thinner and the ocean deeper',
       geysers: 'Tides thin the shell at the pole until fractures cross it: the ocean vents as geysers',
       methane_trap: 'The cold traps the methane: it condenses out of the air, so the air keeps only the vapour of a sea',
+      exosphere: 'The plasma of the host giant swept the air away: what is left is an exosphere, whose molecules never meet',
+      liquid_cycle: 'Rain, rivers and seas wear the surface down, so it stays young',
+      volatile_ice: 'Frost of nitrogen or methane comes and goes with the seasons and covers part of the surface',
+      tidal_episode: 'A past tidal episode (a resonance with its sister moons) renewed part of the surface',
+      volcanic_frost: 'The air is the dayside vapour of the SO₂ frost the volcanoes lay on the ground',
+      fallout: 'The fallout of the plumes covers part of the ice with fresh frost',
     } as Record<string, string>,
+    /** What last renewed a part of a surface. */
+    renewals: {
+      formation: 'not renewed since it formed',
+      plates: 'plate tectonics',
+      episodic: 'episodic overturn',
+      'heat-pipe': 'heat-pipe volcanism',
+      'ice-lid': 'ice lid renewed from within',
+      'liquid-cycle': 'liquid cycle',
+      'volatile-ice': 'volatile ice',
+      'tidal-episode': 'tidal episode',
+    } satisfies Record<Renewal, string>,
+    /** A terrain unit or a surface age in a tree: what renewed it, and the share or the age. */
+    renewalValue: (p: { renewal: string; value: string }) => `${p.renewal}, ${p.value}`,
     /** The request fields, named as the creation form names them. */
     inputs: {
       mass_earth: 'Mass',
@@ -545,6 +573,8 @@ export const en = {
     gravity: 'Gravity',
     atmosphere: 'Atmosphere',
     airless: 'none',
+    /** An air thinner than the limit of an atmosphere: its molecules never meet. */
+    exosphere: (p: { pressure: string }) => `exosphere, ${p.pressure}`,
     pressureClouds: (p: { pressure: string; clouds: string }) => `${p.pressure}, ${p.clouds} clouds`,
     pressureNoClouds: (p: { pressure: string }) => `${p.pressure}, no clouds`,
     geology: 'Geology',

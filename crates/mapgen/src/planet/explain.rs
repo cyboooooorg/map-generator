@@ -13,9 +13,10 @@
 use serde::Serialize;
 
 use super::climate::{frozen_over, wet_temperature_k};
+use super::surface_age::Renewal;
 use super::{
-    Bare, Context, Gases, OCEAN_KG, PlanetModel, Surface, SurfaceLiquid, Water, bare,
-    internal_heat, steam, surface_temperature_k, water,
+    Bare, Context, Gases, OCEAN_KG, PlanetModel, Surface, SurfaceLiquid, Water, bare, ice_crust,
+    internal_heat, steam, surface_temperature_k, vent_strength, water,
 };
 use crate::exomoon::EARTH_KG;
 use crate::geology::Regime;
@@ -28,7 +29,8 @@ pub struct Explanation {
     /// its value does not exist (a body without surface has its class
     /// only): [`Quantity::Class`], [`Quantity::SurfaceTemperature`],
     /// [`Quantity::Pressure`], [`Quantity::Liquid`], [`Quantity::Regime`],
-    /// [`Quantity::MagneticField`], [`Quantity::WaterKept`].
+    /// [`Quantity::MagneticField`], [`Quantity::WaterKept`], then
+    /// [`Quantity::SurfaceAge`] when the model has terrain units.
     pub trees: Vec<Cause>,
 }
 
@@ -135,6 +137,17 @@ pub enum Quantity {
     WaterKept,
     /// Age of the system, Gyr.
     Age,
+    /// Age of a surface, Gyr: the root's is its largest unit's; a unit's
+    /// own age sits under it. Under a Bond albedo, a unit's age that set
+    /// it, labelled with the unit's renewal key.
+    SurfaceAge,
+    /// A part of the surface renewed the same way: its share of the area,
+    /// 0 to 1, labelled with its renewal key (`formation`, `plates`,
+    /// `episodic`, `heat-pipe`, `ice-lid`, `liquid-cycle`, `volatile-ice`,
+    /// `tidal-episode`, see [`super::surface_age::Renewal`]).
+    TerrainUnit,
+    /// Emissivity of the surface, 0 to 1: below 1 under nitrogen frost.
+    Emissivity,
     /// Thickness of the ice shell, km (its mean over the surface).
     ShellThickness,
     /// Depth of the liquid ocean under the shell, km.
@@ -160,7 +173,12 @@ pub enum Quantity {
     /// the ocean's freezing point), `geysers` (the thin polar shell
     /// cracks through and vents) and `exosphere` (non-thermal loss
     /// exhausted the gas's air, which is left as an exosphere:
-    /// [`super::non_thermal_loss`]).
+    /// [`super::non_thermal_loss`]), `liquid_cycle` (a liquid cycle
+    /// renewed the surface), `volatile_ice` (volatile ice comes and goes
+    /// on part of it), `tidal_episode` (a past tidal episode renewed part
+    /// of it), `volcanic_frost` (the SO₂ air is the vapour of the
+    /// volcanic frost) and `fallout` (a plume's fallout brightens the
+    /// ice).
     Note,
 }
 
@@ -212,6 +230,11 @@ impl Cause {
             label: Some(key.to_owned()),
             ..Self::of(Quantity::Note, 0.0)
         }
+    }
+
+    /// The same cause with `value`.
+    fn with_value(self, value: f64) -> Self {
+        Self { value, ..self }
     }
 
     /// The value as the request's `field` sets it.
@@ -271,6 +294,7 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
         trees.push(field_tree(context, model, surface));
         trees.push(water_tree(model, surface));
     }
+    trees.extend(surface_age_tree(context, model));
     trees.extend(ocean_tree(context, model));
     trees.extend(polar_tree(context, model));
     if model.ice_shell.is_some() || context.tide.is_some() {
@@ -535,7 +559,9 @@ fn temperature_tree(
     let frozen =
         frozen_over(climate) && surface.water.oceans > 0.0 && surface.regime == Regime::Plates;
     let albedo = Cause::of(Quantity::BondAlbedo, climate.bond_albedo);
-    let albedo = if climate.snowball {
+    let albedo = if let Some(causes) = icy_albedo_causes(context, model, surface, steps) {
+        albedo.because(causes)
+    } else if climate.snowball {
         albedo.because(vec![Cause::note("snowball")])
     } else if frozen {
         albedo.because(vec![Cause::note("frozen")])
@@ -551,17 +577,94 @@ fn temperature_tree(
     ];
     Some(
         Cause::of(Quantity::SurfaceTemperature, stored).because(vec![
-            Cause::of(Quantity::EquilibriumTemperature, bare_k).because(vec![
-                Cause::of(Quantity::LightReceived, context.insolation)
-                    .set_by(InputField::Insolation),
-                albedo,
-            ]),
+            Cause::of(Quantity::EquilibriumTemperature, bare_k).because(
+                [
+                    Some(
+                        Cause::of(Quantity::LightReceived, context.insolation)
+                            .set_by(InputField::Insolation),
+                    ),
+                    Some(albedo),
+                    (emissivity < 1.0).then(|| Cause::of(Quantity::Emissivity, emissivity)),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
             Cause::of(Quantity::Greenhouse, air_k - bare_k)
                 .because(absorbers.into_iter().flatten().collect()),
             Cause::of(Quantity::InternalWarming, full_k - air_k)
                 .because(vec![heat_flux(context, model)]),
         ]),
     )
+}
+
+/// What set the Bond albedo of an exposed ice crust: the ages of the
+/// units it was derived from ([`super::surface_age::icy_estimate`], as
+/// [`super::crust_albedo`] reads them) and the plume's fallout when the
+/// body vents; `None` when the albedo is the cover's, not the crust's
+/// (no ice crust, or an air that erodes it).
+fn icy_albedo_causes(
+    context: &Context,
+    model: &PlanetModel,
+    surface: &Surface,
+    steps: &Bare,
+) -> Option<Vec<Cause>> {
+    if !ice_crust(&model.inputs, &surface.water, surface.regime)
+        || steps.climate_gases.total() >= super::interim::ERODING_BAR
+    {
+        return None;
+    }
+    let interior = surface_interior(context, model);
+    let units = super::surface_age::icy_estimate(
+        &model.heat,
+        interior.radius_earth,
+        context.age_gyr,
+        context.tide.as_ref(),
+    );
+    let mut causes: Vec<Cause> = units
+        .units
+        .iter()
+        .map(|u| Cause::keyed(Quantity::SurfaceAge, u.renewal).with_value(u.age_gyr))
+        .collect();
+    let vent = vent_strength(
+        &model.inputs,
+        &interior,
+        &model.heat,
+        surface.climate.temperature_k,
+        surface.climate.liquid,
+    );
+    if vent > 0.0 {
+        causes.push(Cause::note("fallout"));
+    }
+    Some(causes)
+}
+
+/// The tree of the surface's age: its units (their shares and ages), the
+/// age of the system they are bounded by and a note for each renewal that
+/// needs its own words. `None` for a model stored without terrain.
+fn surface_age_tree(context: &Context, model: &PlanetModel) -> Option<Cause> {
+    let main = model.terrain.main()?;
+    let mut causes: Vec<Cause> = model
+        .terrain
+        .units
+        .iter()
+        .map(|u| {
+            Cause::keyed(Quantity::TerrainUnit, u.renewal)
+                .with_value(u.share)
+                .because(vec![Cause::of(Quantity::SurfaceAge, u.age_gyr)])
+        })
+        .collect();
+    causes.push(Cause::of(Quantity::Age, context.age_gyr).set_by(InputField::AgeGyr));
+    for (renewal, key) in [
+        (Renewal::LiquidCycle, "liquid_cycle"),
+        (Renewal::VolatileIce, "volatile_ice"),
+        (Renewal::TidalEpisode, "tidal_episode"),
+    ] {
+        if model.terrain.units.iter().any(|u| u.renewal == renewal) {
+            causes.push(Cause::note(key));
+        }
+    }
+    Some(Cause::of(Quantity::SurfaceAge, main.age_gyr).because(causes))
 }
 
 /// Each gas of the air (as stored, after life) from its source and what
@@ -625,6 +728,18 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
             Cause::of(Quantity::SurfaceTemperature, surface.climate.temperature_k),
         ]
     };
+    // A volcanic body's SO₂ air is the dayside vapour of the frost its
+    // volcanoes lay ([`super::atmosphere::volcanic_so2_vapour`]), not an
+    // outgassed gas the escape left.
+    let frost = steps.before.so2_frost_bar;
+    let so2 = if frost > 0.0 {
+        vec![
+            Cause::of(Quantity::FrozenOut, frost),
+            Cause::note("volcanic_frost"),
+        ]
+    } else {
+        source(|g| g.so2, None)
+    };
     let gases = [
         (Quantity::N2, g.n2, source(|g| g.n2, Some(InputField::N2))),
         (Quantity::Co2, g.co2, co2),
@@ -635,7 +750,7 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
             source(|g| g.ch4, Some(InputField::Ch4)),
         ),
         (Quantity::Nh3, g.nh3, source(|g| g.nh3, None)),
-        (Quantity::So2, g.so2, source(|g| g.so2, None)),
+        (Quantity::So2, g.so2, so2),
         (
             Quantity::O2,
             g.o2,
@@ -753,6 +868,42 @@ mod tests {
         (context, planet_model(&context, model_inputs(b)))
     }
 
+    /// A round moon of a giant `host_kg` heavy, `orbit_au` from the Sun,
+    /// formed as `birth` says; its context and model, as the system's draw
+    /// gives them.
+    fn moon_of(
+        orbit_au: f64,
+        (mass_earth, ice_fraction): (f64, f64),
+        birth: crate::planet::moon::MoonBirth,
+        tide: crate::planet::HostTide,
+    ) -> (Context, PlanetModel) {
+        let formation = crate::planet::moon::MoonFormation {
+            mass_earth,
+            ice_fraction,
+            birth,
+            tide,
+            capture_age_share: None,
+        };
+        let planet = sun_at(orbit_au);
+        let model = crate::planet::moon::derive_moon_model(
+            1,
+            "p1/m1",
+            &planet,
+            &formation,
+            &InputOverrides::default(),
+        );
+        (planet.with_tide(tide), model)
+    }
+
+    fn tide(host_kg: f64, a_m: f64, eccentricity: f64) -> crate::planet::HostTide {
+        crate::planet::HostTide {
+            host_kg,
+            a_m,
+            eccentricity,
+            resonance: None,
+        }
+    }
+
     fn root(e: &Explanation, quantity: Quantity) -> &Cause {
         e.trees
             .iter()
@@ -811,6 +962,106 @@ mod tests {
             "{co2:#?}"
         );
         assert!(find(co2, Quantity::Escape).is_some(), "{co2:#?}");
+    }
+
+    /// Ganymede's surface age has a tree: one child per terrain unit with
+    /// its renewal as the key, the age of the system, and the tidal
+    /// episode's note.
+    #[test]
+    fn explain_has_a_surface_age_tree_for_ganymede() {
+        use crate::planet::moon::MoonBirth;
+        let tide = crate::planet::HostTide {
+            resonance: Some(crate::planet::resonance::Resonance {
+                heat_w: 0.0,
+                host_k2_over_q: 8.5e-6,
+                laplace_like: true,
+                capture_age_share: None,
+            }),
+            ..tide(1.898e27, 1.0704e9, 0.0013)
+        };
+        let (context, model) = moon_of(5.2, (0.0248, 0.45), MoonBirth::Disk, tide);
+        assert!(model.terrain.units.len() >= 2, "{:?}", model.terrain);
+        let e = explain(&context, &model).expect("explained");
+        let tree = root(&e, Quantity::SurfaceAge);
+        let units: Vec<_> = tree
+            .causes
+            .iter()
+            .filter(|c| c.quantity == Quantity::TerrainUnit)
+            .collect();
+        assert_eq!(units.len(), model.terrain.units.len(), "{tree:#?}");
+        for (cause, unit) in units.iter().zip(&model.terrain.units) {
+            assert_eq!(cause.value, unit.share);
+            let key = serde_json::to_value(unit.renewal).unwrap();
+            assert_eq!(cause.label.as_deref(), key.as_str());
+            let age = find(cause, Quantity::SurfaceAge).expect("the unit's age");
+            assert_eq!(age.value, unit.age_gyr);
+        }
+        assert!(find(tree, Quantity::Age).is_some(), "{tree:#?}");
+        assert!(depth(tree) <= 3, "{tree:#?}");
+    }
+
+    /// An icy moon's Bond albedo takes its terrain units' ages as causes;
+    /// Earth's, set by what covers it, takes none.
+    #[test]
+    fn an_icy_albedo_names_the_surface_ages_that_set_it() {
+        let (context, model) = solar("Europa");
+        let e = explain(&context, &model).expect("explained");
+        let t = root(&e, Quantity::SurfaceTemperature);
+        let albedo = find(t, Quantity::BondAlbedo).expect("a BondAlbedo cause");
+        assert!(
+            albedo
+                .causes
+                .iter()
+                .any(|c| c.quantity == Quantity::SurfaceAge),
+            "{albedo:#?}"
+        );
+        let (context, model) = earth();
+        let e = explain(&context, &model).unwrap();
+        let t = root(&e, Quantity::SurfaceTemperature);
+        let albedo = find(t, Quantity::BondAlbedo).unwrap();
+        assert!(albedo.causes.is_empty(), "{albedo:#?}");
+    }
+
+    /// Triton's nitrogen frost lowers its emissivity: the equilibrium
+    /// temperature says so.
+    #[test]
+    fn nitrogen_frost_gives_the_equilibrium_an_emissivity() {
+        let (context, model) = moon_of(
+            30.07,
+            (0.0036, 0.3),
+            crate::planet::moon::MoonBirth::Captured,
+            tide(1.024e26, 3.5476e8, 0.0),
+        );
+        let e = explain(&context, &model).expect("explained");
+        let t = root(&e, Quantity::SurfaceTemperature);
+        let eq = find(t, Quantity::EquilibriumTemperature).unwrap();
+        let em = find(eq, Quantity::Emissivity).expect("an emissivity cause");
+        assert!(em.value < 1.0 && em.value >= 0.89, "{em:?}");
+        let (context, model) = earth();
+        let e = explain(&context, &model).unwrap();
+        let eq = find(
+            root(&e, Quantity::SurfaceTemperature),
+            Quantity::EquilibriumTemperature,
+        )
+        .unwrap();
+        assert!(find(eq, Quantity::Emissivity).is_none());
+    }
+
+    /// Io's SO₂ is the volcanic frost's vapour: its node names the frost,
+    /// not the outgassing and the escape.
+    #[test]
+    fn io_says_its_so2_air_is_the_frosts_vapour() {
+        let (context, model) = moon_of(
+            5.2,
+            (0.015, 0.0),
+            crate::planet::moon::MoonBirth::Disk,
+            tide(1.898e27, 4.217e8, 0.0041),
+        );
+        let e = explain(&context, &model).expect("explained");
+        let p = root(&e, Quantity::Pressure);
+        let so2 = find(p, Quantity::So2).expect("Io's SO₂");
+        assert!(has_note(so2, "volcanic_frost"), "{so2:#?}");
+        assert!(find(so2, Quantity::Escape).is_none(), "{so2:#?}");
     }
 
     #[test]

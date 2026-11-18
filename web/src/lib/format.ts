@@ -259,11 +259,30 @@ export function saveBlob(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+const SUPERSCRIPT: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+
+/** A power of ten written with superscript digits: 1.76×10¹³. */
+export function formatScientific(value: number): string {
+  const [mantissa, exponent] = Number(value.toPrecision(3)).toExponential().split('e');
+  const digits = String(Number(exponent)).replace(/./g, (c) => SUPERSCRIPT[c] ?? c);
+  return `${mantissa}×10${digits}`;
+}
+
+/**
+ * Surface pressure, bar, under which a world has no atmosphere to speak of
+ * (`AIRLESS_BAR` in the generator): what is left of the air is an
+ * exosphere, whose molecules never meet.
+ */
+export const AIRLESS_BAR = 1e-4;
+
 /** The pressure and clouds of a world, e.g. "1.00 bar, water clouds". */
 export function formatAtmosphere(meta: WorldMetadata): string {
   const pressure = meta.pressure_bar ?? 1;
   if (pressure === 0) {
     return t.worldInfo.airless;
+  }
+  if (pressure < AIRLESS_BAR) {
+    return t.worldInfo.exosphere({ pressure: withUnit(formatScientific(pressure), 'bar') });
   }
   const digits = pressure < 0.1 ? Math.max(0, 1 - Math.floor(Math.log10(pressure))) : 2;
   const bar = withUnit(formatNumber(pressure, digits), 'bar');
