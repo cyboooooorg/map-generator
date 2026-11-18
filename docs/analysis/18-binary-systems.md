@@ -3,7 +3,8 @@
 Issue #376. Request of 2026-11-15: study the systems with more than one
 star or with a compact object in a pair, so that the user can decide
 which configurations the generator and the viewer should get. This is a
-research study, not a decision: the last section is a proposal.
+research study; the decisions taken with the user on 2026-11-18
+follow, and they amend the proposal of section 4.
 
 Compact objects on their own (neutron stars, pulsars, magnetars, black
 holes, white dwarfs, giants, brown dwarfs) are the subject of the
@@ -15,6 +16,31 @@ Archive queried through its TAP service). A claim marked [M] could not
 be checked against a source and must be rechecked before it goes into
 code. Numbers marked "computed here" are my own arithmetic on checked
 inputs, not published results.*
+
+## Decisions (2026-11-18)
+
+Taken with the user:
+
+- **Order across both studies:** the host-kind data model of #375
+  first, then steps 1 and 2 of section 4 (S-type companions, then
+  circumbinary planets), then the rest of #375; white-dwarf companions
+  come with the white-dwarf hosts.
+- **Random draw:** companions enter the default random draw with the
+  multiplicity of section 2.1, not behind an option, so existing seeds
+  may give other systems (allowed as long as the new worlds stay
+  coherent). The follow-up issues drop the "gated by an option" clause.
+- **Systems without planets** are allowed (decided in #375): a
+  configuration that cannot keep planets is still drawn and shown for
+  itself. Black-hole companions (X-ray binaries) and pairs of compact
+  objects therefore come back in scope, after the compact hosts of
+  #375, as planetless systems in the viewer.
+- **Triples:** the general three-body problem has no closed solution
+  and is chaotic, but most real triples are hierarchical (a close pair
+  and a distant third body, like Alpha Centauri AB and Proxima), stable
+  by the Mardling-Aarseth criterion and well described by two nested
+  Kepler orbits, which is all the generator uses. Hierarchical triples
+  are kept for after steps 1 and 2, reusing their data model;
+  non-hierarchical ones, unstable, stay out.
 
 ## 1. What the code does today
 
@@ -454,7 +480,7 @@ low and the cost is high.
   with its own activity. The living star work (#343-#345) is one star
   per scene.
 
-## 4. Recommendation (proposal, to decide with the user)
+## 4. Recommendation (proposal, amended by the decisions above)
 
 The order is by frequency, plausibility of planets, visual interest
 and cost.
