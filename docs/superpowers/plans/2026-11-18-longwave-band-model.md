@@ -66,6 +66,28 @@
 - [ ] **Step 4: Run** the tests and confirm they PASS. If a radiation check misses outside the papers' range, stop and report the numbers.
 - [ ] **Step 5: Commit** `feat(planet): add a simple spectral model of CO2 and water` (`Refs: #523`).
 
+### Task 7.1b: HITRAN correlated-k table (spec section "Revision after task 7.2")
+
+**Files:**
+- Create: a Rust table builder in its own small binary crate, `tools/opacity-table/` (added to the workspace), with a README.
+- Create: the table file `crates/mapgen/data/opacity.bin` (at most 4 MB) and `crates/mapgen/data/OPACITY.md`, which records provenance, versions, citations and the regeneration command.
+- Modify: `crates/mapgen/src/planet/spectrum.rs`. It reads the table, interpolates in ln p and T, and combines the gases by random overlap. Its Jeevanjee & Fueglistaler bands are replaced; the CIA and the CH₄ stand-in stay.
+
+**Interfaces:**
+- `spectrum.rs` keeps the interface it had at the end of 7.1. The per-bin optical depth becomes a sum over g-points, so it may expose `G` and the weights. The 7.2 work in progress (`task-7.2-wip.diff`) is adapted to that.
+
+- [ ] **Step 1:** Download HITRAN2020 H₂O and CO₂ (0-5000 cm⁻¹), the partition sums and the MT_CKD coefficients into the scratchpad or `tools/opacity-table/raw/` (git-ignored). Write the exact URLs into the README.
+- [ ] **Step 2: Builder tests.**
+  - A known H₂O line strength scaled from 296 K to 250 K agrees with HITRAN's documented formula within 0.1 %.
+  - The k-distribution of one bin reproduces the line-by-line mean transmission within 2 %, for paths from 1e-4 to 1e2 kg/m².
+  - Both tests run on a small synthetic or embedded line set, so CI never downloads anything.
+- [ ] **Step 3:** Build the table, commit it, and switch `spectrum.rs` to it. The 7.1 radiation tests must still pass: doubling forcing 3.7 ± 0.6, logarithmic within 15 %, Earth OLR 265 ± 10, bin halving < 0.1, Planck sum.
+- [ ] **Step 4:** Apply the 7.2 WIP diff and run its column tests: plateau 282 ± 14, anchor flat within 2 %, CO₂/N₂ independence, Titan/airless, Venus finite. If the plateau or anchor still misses with HITRAN plus MT_CKD, stop and report the numbers.
+- [ ] **Step 5:** Run the full suite and clippy, remove the `zz_diag` test, and commit twice:
+  - `feat(planet): take thermal absorption from a HITRAN correlated-k table`
+  - then the 7.2 message `feat(planet): integrate the climate column over spectral bins`
+  Both carry `Refs: #523`.
+
 ### Task 7.2: Spectral column
 
 **Files:**

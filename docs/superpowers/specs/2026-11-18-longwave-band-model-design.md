@@ -167,3 +167,54 @@ the checks above must still hold.
   diffusivity factor, as the column already does.
 - **Formats.** No new numbers: the lot already takes system 11 and world 29
   in its final task.
+
+## Revision after task 7.2: absorption from HITRAN lines
+
+Task 7.2 integrated the column over the simple bands of the papers. The
+plateau came out at 310.8 W/m² against 282 ± 14. The anchor varied 3 %
+over 380-640 K. The excess lies at 0-1200 cm⁻¹ and comes from levels at
+265-275 K. Simple water bands have no line-wing opacity that grows with
+temperature, and Koll et al. 2023 say so themselves. The column also
+became 83 times slower. The user's decision (2026-11-18): take the
+absorption from the real HITRAN lines, precomputed into a versioned table.
+
+- **Source data.**
+  - HITRAN2020 line lists (Gordon et al. 2022) for H₂O and CO₂, main
+    isotopologues, over 0-5000 cm⁻¹, with an intensity cutoff low enough
+    that the bin means move less than 1 %.
+  - HITRAN partition sums for the temperature scaling of the line strength.
+  - MT_CKD continuum for water, self and foreign (Mlawer et al. 2012, 2023;
+    public coefficients from AER), with the 25 cm⁻¹ line cutoff it assumes.
+  - HITRAN CO₂–CO₂ CIA, as already binned.
+  - The raw files are downloaded, never committed. The request carries no
+    personal data. The repository holds the derived table, its regeneration
+    command and its provenance (versions, dates, citations).
+- **Table.** Correlated-k per spectral bin: a few g-points per bin, with
+  absorption coefficients per unit mass on a grid of log p and T.
+  - Water gets a self-broadened and a foreign-broadened set, combined by
+    its share.
+  - Lines use the Voigt profile with the 25 cm⁻¹ cutoff.
+  - The grid covers 1e-5 to 100 bar and 100 to 900 K. Past its edges the
+    table clamps in T and scales linearly in p.
+  - The table is one binary file of at most 4 MB, read with `include_bytes!`.
+  - The builder chooses the bin width, the g-points and the grid.
+- **Overlap.** Gases combine by random overlap within a bin: the
+  transmissions of the gases multiply.
+- **Builder tool.** In Rust, like the rest of the generator, as a separate
+  binary that the generator never runs. It reads the downloaded files and
+  writes the table. A short README documents it: purpose, prerequisites,
+  download, usage.
+- **What stays.**
+  - The column's per-bin integration from task 7.2 (saved diff).
+  - The tail band past 5000 cm⁻¹: for a transparent air it sends out the
+    rest of σT⁴ with the last bin's absorption.
+  - `STEAM_MAX_BAR`.
+  - The CH₄ stand-in over 0-650 cm⁻¹.
+  - The checks and their priority order.
+- **Performance.** The 20 % budget still holds. Whatever brings the cost
+  back within it goes in task 7.4: fewer g-points, coarser bins inside the
+  halving check, or a cache of the column OLR within one planet's solve.
+- **Venus.** The CO₂ far wings are sub-Lorentzian (the χ factor of Perrin
+  & Hartmann 1989). This lot includes them only if the builder can do so
+  from the cited paper without fitting. Otherwise the Venus follow-up issue
+  names them.
