@@ -153,8 +153,9 @@ pub enum Quantity {
     Emissivity,
     /// A part of what the Bond albedo weighs: its share of the disc, 0 to
     /// 1, labelled with its key (`ocean`, `land`, `ice`, `crust`,
-    /// `frost_n2`, `frost_ch4`, `frost_co2`, `frost_so2`, `cloud`, `haze`,
-    /// `deck`).
+    /// `frost_n2`, `frost_ch4`, `frost_co2`, `frost_so2`, `cloud`, `deck`);
+    /// for `haze` the value is its strength (0 to 1), not a share of the
+    /// disc.
     CoverShare,
     /// Thickness of the ice shell, km (its mean over the surface).
     ShellThickness,
@@ -602,18 +603,23 @@ const COVER_SHARE_MIN: f64 = 0.01;
 /// ([`super::albedo::cover`], replayed from the water, the air and the
 /// frost the climate used, at its surface temperature) as one
 /// [`Quantity::CoverShare`] per part with its share of the disc, largest
-/// first. The surface's parts (ocean, land, ice, a frost per gas) and the
+/// first. The surface's parts (ocean, land, ice, a frost) and the
 /// sulphuric acid deck over them sum to 1; the water clouds and the
-/// methane haze are layers over those, each with its own cover (the
-/// cloud's share of the disc, the haze's strength), none named under
-/// [`COVER_SHARE_MIN`]. An exposed ice crust
+/// methane haze are layers over those (the cloud's share of the disc, the
+/// haze's strength, which is not a share of it), none named under
+/// [`COVER_SHARE_MIN`]. The frosts other than SO₂ weigh one albedo
+/// together, so they are one part, named for the one lying on top by the
+/// layering of the condensates (N₂, then CH₄, then CO₂: the most volatile
+/// present); the frosts beneath it are omitted. SO₂ frost is its own
+/// part, with its own albedo. An exposed ice crust
 /// ([`icy_albedo_causes`]) replaces the land and the ice (`crust`).
 ///
 /// `nested` is the node under the temperature tree's equilibrium
 /// temperature, where a part has no room below it (the tree stays three
 /// levels deep); the albedo's own tree (`!nested`) puts under the crust
 /// the units that set it and the plume's fallout, and under the SO₂ frost
-/// the note of the volcanoes that lay it.
+/// the note of the volcanoes that lay it. (The nested crust has no room
+/// for a pointer to the Bond albedo row, which holds those units.)
 fn albedo_tree(
     context: &Context,
     model: &PlanetModel,
@@ -638,10 +644,28 @@ fn albedo_tree(
         })
     };
     let bare = 1.0 - deck;
-    let frost_bar = steps.frost.total();
-    let of_frost = |bar: f64| {
-        if frost_bar > 0.0 {
-            cover.frost * bar / frost_bar
+    // The climate weighs one albedo for the whole non-SO₂ frost
+    // ([`super::albedo::FROST_ALBEDO`]), so its share of the disc is the
+    // frosts' together; the card names the frost lying on top, the most
+    // volatile present (N₂, CH₄, CO₂ in that order: the layering of the
+    // condensates, the coldest on top), and omits those beneath it.
+    debug_assert!(
+        steps.frost.o2 + steps.frost.h2o + steps.frost.nh3 <= 0.0,
+        "a frost of a gas the cover does not weigh: {:?}",
+        steps.frost
+    );
+    let other_frost = (cover.frost - cover.so2_frost).max(0.0);
+    let top_frost = [
+        ("frost_n2", steps.frost.n2),
+        ("frost_ch4", steps.frost.ch4),
+        ("frost_co2", steps.frost.co2),
+    ]
+    .into_iter()
+    .find(|&(_, bar)| bar > 0.0)
+    .map(|(key, _)| key);
+    let on_top = |key: &str| {
+        if top_frost == Some(key) {
+            other_frost * bare
         } else {
             0.0
         }
@@ -667,9 +691,9 @@ fn albedo_tree(
             Vec::new(),
         ),
         part(ice_key, ice_share * bare, ice_causes),
-        part("frost_n2", of_frost(steps.frost.n2) * bare, Vec::new()),
-        part("frost_ch4", of_frost(steps.frost.ch4) * bare, Vec::new()),
-        part("frost_co2", of_frost(steps.frost.co2) * bare, Vec::new()),
+        part("frost_n2", on_top("frost_n2"), Vec::new()),
+        part("frost_ch4", on_top("frost_ch4"), Vec::new()),
+        part("frost_co2", on_top("frost_co2"), Vec::new()),
         part("frost_so2", cover.so2_frost * bare, volcanic),
         part("deck", deck, Vec::new()),
     ]
@@ -1341,25 +1365,83 @@ mod tests {
                     .iter()
                     .find(|c| c.label.as_deref() == Some("deck"))
                     .map_or(0.0, |c| c.value);
+                let deck = super::super::albedo::sulphuric_deck(
+                    surface.climate.temperature_k,
+                    super::super::climate::washed(steps.climate_gases, &surface.water).so2,
+                );
+                let crust = cover_part(albedo, "crust").map(|_| {
+                    let interior = surface_interior(&context, &model);
+                    let vent = vent_strength(
+                        &model.inputs,
+                        &interior,
+                        &model.heat,
+                        surface.climate.temperature_k,
+                        surface.climate.liquid,
+                    );
+                    super::super::crust_albedo(
+                        &context,
+                        &model.inputs,
+                        &model.heat,
+                        &interior,
+                        vent,
+                    )
+                });
                 let weighed = super::super::albedo::bond_albedo_over(
                     &cover,
                     &steps.climate_gases,
                     deck,
-                    None,
+                    crust,
                 );
-                if arch != "ganymede-like" {
-                    assert!(
-                        (weighed - surface.climate.bond_albedo).abs() < 0.02,
-                        "{arch} {seed}: {weighed} vs {}",
-                        surface.climate.bond_albedo
-                    );
-                }
+                // The climate's fixed point stops when its temperature moves
+                // under `ALBEDO_TOLERANCE_K` (0.1 K), so its albedo is the
+                // cover's (its ice line, its frost's layer) at a temperature
+                // that near the stored one: 1e-3 left on Earth, 3e-3 on
+                // Triton, whose frost is just short of its whole disc. The
+                // replay is exact only to that fixed point.
+                assert!(
+                    (weighed - surface.climate.bond_albedo).abs() < 5e-3,
+                    "{arch} {seed}: {weighed} vs {}",
+                    surface.climate.bond_albedo
+                );
                 if let Some(cloud) = cover_part(albedo, "cloud") {
                     assert!((cloud.value - cover.cloud).abs() < 1e-12);
                 }
                 for tree in &e.trees {
                     assert!(depth(tree) <= 3, "{arch}: {:?}", tree.quantity);
                 }
+            }
+        }
+    }
+
+    /// Mixed frosts name the one lying on top (the most volatile), once,
+    /// with the share of all the non-SO₂ frost; the albedo is unchanged.
+    #[test]
+    fn a_mixed_frost_names_the_one_on_top() {
+        for seed in 1..=6 {
+            let (context, model, e) = drawn_body("triton-like", seed);
+            let albedo = root(&e, Quantity::BondAlbedo);
+            let surface = model.surface.as_ref().unwrap();
+            let steps = replay(&context, &model, surface);
+            let frosts: Vec<&Cause> = albedo
+                .causes
+                .iter()
+                .filter(|c| c.label.as_deref().is_some_and(|l| l.starts_with("frost_")))
+                .collect();
+            assert_eq!(frosts.len(), 1, "seed {seed}: {albedo:#?}");
+            let cover = super::super::albedo::cover(
+                surface.climate.temperature_k,
+                &steps.climate_gases,
+                &surface.water,
+                &steps.frost,
+            );
+            assert!((frosts[0].value - cover.frost).abs() < 1e-9);
+            if steps.frost.n2 > 0.0 {
+                assert_eq!(frosts[0].label.as_deref(), Some("frost_n2"), "{seed}");
+            } else if steps.frost.ch4 > 0.0 {
+                assert_eq!(frosts[0].label.as_deref(), Some("frost_ch4"), "{seed}");
+            }
+            if steps.frost.n2 > 0.0 || steps.frost.ch4 > 0.0 {
+                assert_ne!(frosts[0].label.as_deref(), Some("frost_co2"), "{seed}");
             }
         }
     }

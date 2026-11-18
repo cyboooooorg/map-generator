@@ -64,7 +64,8 @@ export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): st
   }
   // A part of what the albedo weighs: its key and its share of the disc.
   if (cause.label !== null && cause.quantity === 'cover_share') {
-    return t.causes.coverValue({ cover: coverName(cause.label), value: withUnit(formatInt(Math.round(cause.value * 100)), '%') });
+    const value = withUnit(formatInt(Math.round(cause.value * 100)), '%');
+    return (cause.label === 'haze' ? t.causes.hazeValue : t.causes.coverValue)({ cover: coverName(cause.label), value });
   }
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);
   if (cause.quantity === 'surface_age') return formatSurfaceAge(cause.value);

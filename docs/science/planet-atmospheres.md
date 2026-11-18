@@ -1111,16 +1111,23 @@ Surface card ("Bond albedo", with its "Why?"), and the same node sits under
 the equilibrium temperature of the surface temperature's tree. Its
 children are the parts of the cover the climate weighed, one
 `cover_share` each with its share of the disc, largest first: ocean, bare
-land, water ice and snow, a frost per gas (N₂, CH₄, CO₂, SO₂), or an ice
+land, water ice and snow, the frost (SO₂ frost, with its own albedo, is a
+part of its own; the other frosts weigh one albedo together, so they are
+one part, named for the one lying on top by the layering of the
+condensates, N₂ then CH₄ then CO₂, the most volatile present, and those
+beneath it are omitted), or an ice
 `crust` where the crust's albedo replaced the land and the ice, and a
 sulphuric acid `deck`; the surface's parts and the deck sum to 1. The
-water clouds (their cover) and the methane haze (its strength) are layers
-over them, listed after. A part under 1 % of the disc is left out
+water clouds (their cover) and the methane haze (its strength, which is
+not a share of the disc, worded as such) are layers over them, listed
+after. A part under 1 % of the disc is left out
 (`COVER_SHARE_MIN`: it moves the albedo by less than a hundredth of the
 gap between two covers' albedos). The cover is replayed from what the
 climate used (its air, the water, the frost and the surface
-temperature), not drawn again; a test checks that the albedo it weighs is
-the stored one. Under the crust the tree names the terrain units whose
+temperature), not drawn again; a test checks that the albedo it weighs
+(over the crust's, where it has one) is the stored one within 5e-3: the
+climate's fixed point stops when its temperature moves under 0.1 K, so
+the replay is exact only to that. Under the crust the tree names the terrain units whose
 ages set its albedo and the plumes' fallout; under the SO₂ frost, the
 note that the volcanoes lay it (Io). The node nested in the temperature
 tree has no room under its parts (the trees stay three levels deep), so

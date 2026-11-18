@@ -518,6 +518,7 @@ export const fr: Messages = {
       deck: 'nuages d’acide sulfurique',
     },
     coverValue: (p) => `${p.cover}, ${p.value}`,
+    hazeValue: (p) => `${p.cover}, intensité ${p.value}`,
     inputs: {
       mass_earth: 'Masse',
       core_mass_fraction: 'Part du noyau',

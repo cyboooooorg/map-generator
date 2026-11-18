@@ -90,6 +90,13 @@ describe('formatCause', () => {
     setLocale('en');
     expect(Object.keys(t.causes.covers)).toEqual(['ocean', 'land', 'ice', 'crust', 'frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2', 'cloud', 'haze', 'deck']);
   });
+  it('writes the haze as a strength, not a share of the disc', () => {
+    setLocale('en');
+    expect(formatCause(node('cover_share', 0.55, { label: 'haze' }))).toBe('methane haze, strength 55 %');
+    setLocale('fr');
+    expect(formatCause(node('cover_share', 0.55, { label: 'haze' }))).toContain('intensité');
+    setLocale('en');
+  });
   it('names a frost over most of the disc, and nothing else', () => {
     setLocale('en');
     const tree = (parts: [string, number][]) => node('bond_albedo', 0.7, { causes: parts.map(([k, v]) => node('cover_share', v, { label: k })) });

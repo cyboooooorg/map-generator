@@ -562,6 +562,8 @@ export const en = {
     } as Record<string, string>,
     /** The part of the disc a cover takes. */
     coverValue: (p: { cover: string; value: string }) => `${p.cover}, ${p.value}`,
+    /** The haze is weighed by its strength, not by a share of the disc. */
+    hazeValue: (p: { cover: string; value: string }) => `${p.cover}, strength ${p.value}`,
     /** The request fields, named as the creation form names them. */
     inputs: {
       mass_earth: 'Mass',
