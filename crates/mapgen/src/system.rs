@@ -7287,4 +7287,45 @@ mod titan_tests {
             assert!((0.5..2.0).contains(&share), "seed {seed}: {share} %");
         }
     }
+
+    /// A whole system may end with no planet: a star alone, with no
+    /// body and no focus (issue #568).
+    #[test]
+    fn a_whole_system_with_no_planet_is_a_star_alone() {
+        for star in ["O5V", "B1V", "G2V"] {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some(star.into()),
+                planets: Some(BTreeMap::new()),
+                seed: Some(1),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            assert!(system.bodies.is_empty(), "{star}");
+            assert!(system.focus.is_none(), "{star}");
+            let json = serde_json::to_string(&system).unwrap();
+            let back: System = serde_json::from_str(&json).unwrap();
+            assert!(back.bodies.is_empty() && back.focus.is_none());
+        }
+    }
+
+    /// A hot blue star finds no room for a planet in a drawn system: the
+    /// seeds below end with no body and no focus, one with a belt left.
+    #[test]
+    fn a_drawn_o_star_can_end_with_no_planet() {
+        for (seed, belts) in [(2u32, 0usize), (14, 1)] {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some("O5V".into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            assert!(system.bodies.is_empty(), "seed {seed}");
+            assert!(system.focus.is_none(), "seed {seed}");
+            assert_eq!(system.belts.len(), belts, "seed {seed}");
+        }
+    }
 }
