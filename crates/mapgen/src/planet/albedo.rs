@@ -12,7 +12,9 @@
 //! temperature the climate absorbs at.
 use std::sync::LazyLock;
 
-use super::climate::{EARTH_GRAVITY_M_S2, Planet, WATER_LATENT_J_KG, water_boils_k};
+use super::climate::{
+    EARTH_GRAVITY_M_S2, Planet, WATER_LATENT_J_KG, water_boils_k, water_saturation_bar,
+};
 use super::{Gases, Water};
 
 /// The Bond albedo behind a context's equilibrium temperature: Earth's,
@@ -270,18 +272,31 @@ const OCEAN_LAYER_KM: f64 = 2.745;
 const EARTH_OCEAN_FRACTION: f64 = 0.71;
 
 /// Water vapour, bar, over which the water cloud cover grows as
-/// `1 − exp(−p_H₂O / CLOUD_H2O_BAR)`: 1.15e-2 bar, which puts Earth's
-/// 1.26e-2 bar of vapour under its cover of about two-thirds (0.67, ISCCP
-/// and MODIS; Stubenrauch et al. 2013, doi:10.1175/BAMS-D-12-00117.1,
-/// from memory, not checked). Calibration on Earth alone, its form a
-/// choice: the air of a frozen planet (about 1e-4 bar at 230 K) holds
-/// about 1 % of cloud cover, Mars's under 0.2 %; a warmer, moister world
-/// is cloudier towards an overcast sky, as the general circulation
-/// models of moist greenhouses find their clouds thickening with the
-/// light (Wolf & Toon 2015, doi:10.1002/2015JD023302, from memory, not
-/// checked), which keeps an all-ocean world on Earth's side of the
-/// runaway limit.
-const CLOUD_H2O_BAR: f64 = 1.15e-2;
+/// `1 − exp(−p_H₂O / CLOUD_H2O_BAR)` at saturation (see
+/// [`CLOUD_HUMIDITY_EXPONENT`] for the humidity): 1.0e-2 bar.
+/// Calibration on Earth alone, its form a choice: Earth's 1.26e-2 bar of
+/// vapour at 77 % relative humidity then makes its cover of about
+/// two-thirds (0.67, ISCCP and MODIS; Stubenrauch et al. 2013,
+/// doi:10.1175/BAMS-D-12-00117.1, from memory, not checked). The vapour stands in for the cloud
+/// water the model does not carry: the air of a frozen planet (about
+/// 1e-4 bar at 230 K) holds about 1 % of cloud cover, Mars's under
+/// 0.2 %; a warmer, moister world is cloudier towards an overcast sky,
+/// as the general circulation models of moist greenhouses find their
+/// clouds thickening with the light (Wolf & Toon 2015,
+/// doi:10.1002/2015JD023302, from memory, not checked), which keeps an all-ocean world on Earth's
+/// side of the runaway limit.
+const CLOUD_H2O_BAR: f64 = 1.0e-2;
+
+/// Exponent of the relative humidity in the cloud cover, 0.25: the
+/// factor `RH^0.25` of the semi-empirical cloudiness of Xu & Randall
+/// 1996 (*J. Atmos. Sci.* 53, 3084, doi:10.1175/1520-0469(1996)053<3084:ASCPFU>2.0.CO;2),
+/// fitted to cloud-resolving simulations. Their other factor, the cloud
+/// water over the saturation deficit, is the vapour term of
+/// [`CLOUD_H2O_BAR`] here. The same vapour in a warmer air is further
+/// from saturation and covers less of the sky: a dry world whose air
+/// holds all of its little water is clearer than an ocean world with the
+/// same vapour (issue #523).
+const CLOUD_HUMIDITY_EXPONENT: f64 = 0.25;
 
 /// Earth's cloud cover, `0.67`, the one [`CLOUD_H2O_BAR`] is calibrated
 /// on: the look draws it as no shift of the cover.
@@ -525,8 +540,9 @@ pub(crate) fn frost_cover(frost: &Gases) -> f64 {
 ///   `frost_bar / FROST_LAYER_BAR` of the disc ([`FROST_LAYER_BAR`]), all
 ///   of it from that amount on, `frost_bar` all of its gases together;
 ///   the SO₂ frost takes its part of that share.
-/// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`]):
-///   none in a dry or airless sky.
+/// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`])
+///   and its relative humidity at `temperature_k`
+///   ([`CLOUD_HUMIDITY_EXPONENT`]): none in a dry or airless sky.
 pub fn cover(
     temperature_k: f64,
     gases: &Gases,
@@ -555,7 +571,7 @@ pub fn cover(
     let ocean = sea * (1.0 - ice) * (1.0 - frost);
     let ice = ice * (1.0 - frost);
     let land = (1.0 - ocean - ice - frost).max(0.0);
-    let cloud = 1.0 - (-gases.h2o.max(0.0) / CLOUD_H2O_BAR).exp();
+    let cloud = cloud_cover(temperature_k, gases.h2o);
     Cover {
         ocean,
         land,
@@ -564,6 +580,21 @@ pub fn cover(
         so2_frost: frost * so2_part,
         cloud,
     }
+}
+
+/// Share of the disc, 0 to 1, under water clouds in an air at
+/// `temperature_k` that holds `h2o_bar` of vapour: the relative humidity
+/// to the power [`CLOUD_HUMIDITY_EXPONENT`] times the vapour's
+/// `1 − exp(−p_H₂O / CLOUD_H2O_BAR)`. The humidity is the vapour over
+/// its saturation at the surface's temperature, at most 1 (a runaway's
+/// steam, past water's critical point, is saturated).
+fn cloud_cover(temperature_k: f64, h2o_bar: f64) -> f64 {
+    let h2o = h2o_bar.max(0.0);
+    if h2o <= 0.0 {
+        return 0.0;
+    }
+    let humidity = (h2o / water_saturation_bar(temperature_k)).min(1.0);
+    humidity.powf(CLOUD_HUMIDITY_EXPONENT) * (1.0 - (-h2o / CLOUD_H2O_BAR).exp())
 }
 
 /// Share of the disc, 0 to 1, that a sulphuric acid deck covers on a
@@ -1010,5 +1041,43 @@ mod tests {
         let a = bond_albedo_over(&c, &air, 0.0, None, &Planet::EARTH);
         println!("Earth's Bond albedo at 288 K: {a:.4}");
         assert!((0.29..=0.31).contains(&a), "{a}");
+    }
+
+    #[test]
+    fn cloud_cover_depends_on_more_than_vapour() {
+        // The same vapour in a warmer air is further from saturation, and
+        // a drier air makes fewer clouds (issue #523): Earth's vapour at
+        // 288 K and at 320 K, and a trace of water that cannot fill a warm
+        // air (a desert world whose air holds all its water).
+        let air = |h2o: f64| Gases {
+            n2: 0.78,
+            o2: 0.21,
+            co2: 4e-4,
+            h2o,
+            ..Gases::default()
+        };
+        let cloud = |t: f64, h2o: f64| {
+            cover(
+                t,
+                &air(h2o),
+                &earth_water(),
+                &Gases::default(),
+                &Planet::EARTH,
+            )
+            .cloud
+        };
+        let vapour = 0.77 * super::super::climate::water_saturation_bar(288.0);
+        let (cool, warm) = (cloud(288.0, vapour), cloud(320.0, vapour));
+        println!("cloud cover at 288 K {cool:.4}, at 320 K {warm:.4}");
+        assert!(warm < cool - 0.01, "{warm} vs {cool}");
+        // Earth's own air keeps its cover of about two-thirds.
+        assert!((cool - EARTH_CLOUD_COVER).abs() < 0.01, "{cool}");
+        // A saturated air makes no more cloud than its vapour allows, and
+        // more than the same vapour unsaturated.
+        let sat = super::super::climate::water_saturation_bar(288.0);
+        assert!(cloud(288.0, sat) > cool, "{} vs {cool}", cloud(288.0, sat));
+        assert!(cloud(288.0, sat) <= 1.0);
+        // No vapour, no cloud, at any temperature.
+        assert_eq!(cloud(300.0, 0.0), 0.0);
     }
 }

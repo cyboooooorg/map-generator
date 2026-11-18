@@ -2014,14 +2014,19 @@ pub(crate) fn washed(gases: Gases, water: &Water) -> Gases {
 /// The albedo and emissivity the fixed point of `body` starts from warm:
 /// those of the cover of the climate under [`REFERENCE_ALBEDO`], at least
 /// as warm as a body with no ice ([`super::albedo::ICE_FREE_K`]), so that
-/// it settles on the warmest climate.
+/// it settles on the warmest climate. A wet body's air holds the vapour
+/// its water keeps at that temperature ([`with_vapour`]): its clouds
+/// follow their humidity, and the vapour of a colder surface in a warmer
+/// air would start the fixed point under too thin a cloud cover.
 fn warm_start(body: &Body) -> (f64, f64) {
     let pass = under_albedo(body, REFERENCE_ALBEDO, 1.0);
     let warm = pass.temperature_k.max(super::albedo::ICE_FREE_K);
-    (
-        body.albedo_at(warm, &pass.gases),
-        body.emissivity_at(warm, &pass.gases),
-    )
+    let air = if body.wet() {
+        with_vapour(pass.gases, warm, body.water_bar)
+    } else {
+        pass.gases
+    };
+    (body.albedo_at(warm, &air), body.emissivity_at(warm, &air))
 }
 
 /// The fixed point of the albedo, the emissivity and the climate of
@@ -2336,6 +2341,23 @@ mod tests {
         let (d, _, c) = climate_of("Venus");
         let expected = d.context.with_albedo(c.bond_albedo).equilibrium_k;
         assert!((c.equilibrium_k - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn earths_cloud_cover_stays_two_thirds() {
+        // The cover the model's Earth settles under: 0.67 ± 0.03 (ISCCP
+        // and MODIS, Stubenrauch et al. 2013), issue #523.
+        let (d, g, c) = climate_of("Earth");
+        let cloud = super::super::albedo::cover(
+            c.temperature_k,
+            &g,
+            &d.water,
+            &Gases::default(),
+            &d.planet,
+        )
+        .cloud;
+        println!("Earth's cloud cover {cloud:.4} at {:.1} K", c.temperature_k);
+        assert!((cloud - 0.67).abs() <= 0.03, "{cloud}");
     }
 
     #[test]

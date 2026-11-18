@@ -1010,8 +1010,11 @@ contrast of an Earth-like planet, `ice_line_share`, as far as the body's
 water reaches as 1.5 km sheets once spread over its area), frosts of N₂, CH₄ and
 CO₂ (0.75, the share `frost / 0.02 bar` of the disc, all frosts together)
 and of volcanic SO₂ (0.63, its part of that share), under a water cloud
-cover that grows with the vapour (`1 - exp(-p_H₂O / 1.15e-2 bar)`, Earth's
-0.67 at its 1.26e-2 bar, each cloud top 0.297), the absorption of the
+cover that grows with the vapour and with its relative humidity
+(`RH^0.25 (1 - exp(-p_H₂O / 1e-2 bar))`, the humidity factor of Xu &
+Randall 1996's cloudiness; Earth's 0.67 at its 1.26e-2 bar and 77 %, a
+dry world whose air holds all its little water clearer than an ocean
+world with the same vapour; each cloud top 0.297), the absorption of the
 water vapour over them on the way down and back up (Lacis & Hansen 1974's
 near-infrared absorptivity of the vapour's column, which falls off with
 height as Clausius–Clapeyron and the lapse rate set: 24 kg/m² on Earth,

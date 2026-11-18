@@ -1316,6 +1316,9 @@ mod tests {
     /// halved its steps where they swing (issue #562), 0.622 375 946 206
     /// before its water vapour absorbed sunlight (issue #523: its 8e-4
     /// bar of vapour at 250 K take about 8 % of the light reflected by
-    /// its ice).
-    const SNOWBALL_ALBEDO: f64 = 0.579_495_860_419;
+    /// its ice), 0.579 495 860 419 before its clouds followed their
+    /// relative humidity (issue #523: the cover's vapour scale went from
+    /// 1.15e-2 to 1.0e-2 bar, so its saturated-at-77 % air holds a little
+    /// more cloud).
+    const SNOWBALL_ALBEDO: f64 = 0.579_665_635_432;
 }
