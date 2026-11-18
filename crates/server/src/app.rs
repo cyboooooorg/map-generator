@@ -5550,7 +5550,8 @@ mod tests {
     #[tokio::test]
     async fn a_system_with_no_planet_is_stored_listed_resolved_and_exported() {
         let app = router(temp_config("no-planet"));
-        let request = r#"{"system": {"star": "O5V", "planets": {}, "seed": 5, "width": 64, "height": 32}}"#;
+        let request =
+            r#"{"system": {"star": "O5V", "planets": {}, "seed": 5, "width": 64, "height": 32}}"#;
         no_planet_round_trip(&app, request, 5).await;
     }
 
@@ -5576,7 +5577,10 @@ mod tests {
         let (seed, request, belts) = found.expect("a planetless O5V draw with a belt in 1..=60");
         let id = no_planet_round_trip(&app, &request, seed).await;
         let (_, detail) = call(&app, "GET", &format!("/api/systems/{id}"), None).await;
-        assert_eq!(json(&detail)["system"]["belts"].as_array().unwrap().len(), belts);
+        assert_eq!(
+            json(&detail)["system"]["belts"].as_array().unwrap().len(),
+            belts
+        );
     }
 
     /// Resolves, stores, reads, lists and exports `request` (a system with

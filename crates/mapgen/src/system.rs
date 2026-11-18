@@ -7341,6 +7341,9 @@ mod titan_tests {
     fn a_drawn_o_star_can_end_with_no_planet() {
         let (bare, belted) = planetless_o_star_seeds();
         assert!(bare.is_some(), "no O5V draw of 1..=60 ends with no planet");
-        assert!(belted.is_some(), "no planetless O5V draw of 1..=60 keeps a belt");
+        assert!(
+            belted.is_some(),
+            "no planetless O5V draw of 1..=60 keeps a belt"
+        );
     }
 }
