@@ -255,6 +255,8 @@ pub(crate) struct Derived {
     /// The carbon cycle of the climate: the CO₂ outgassed before escape
     /// and the snowball draw of `inputs`.
     pub carbon: super::climate::CarbonCycle,
+    /// Its gravity and radius ([`super::climate_planet`]).
+    pub planet: super::climate::Planet,
 }
 
 /// The Sun's context at `orbit_au`, 4.6 Gyr, with the insolation of
@@ -281,6 +283,7 @@ pub(crate) fn derive_at(inputs: &super::PlanetInputs, orbit_au: f64) -> Derived 
     let air = air.expect("a body with an envelope has no surface");
     let bar_per_kg = super::atmosphere::bar_per_kg(model.inputs.mass_earth, &model.interior);
     Derived {
+        planet: super::climate_planet(&model.inputs, &model.interior),
         heat_flux_w_m2: model.heat.flux_w_m2(model.interior.radius_earth),
         water_bar: air.water.kept_kg * bar_per_kg,
         context,

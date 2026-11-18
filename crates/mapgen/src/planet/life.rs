@@ -90,6 +90,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             d.carbon,
+            &d.planet,
         );
         let l = life(&inputs, &c, age_gyr);
         (l, oxygenate(gases, &l))

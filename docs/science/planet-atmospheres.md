@@ -1006,12 +1006,18 @@ the column absorbs at). The disc is split, planet-wide, into open ocean
 (0.06), bare land (0.25 under an air, the regolith's 0.11 on an airless
 body, shielded from space weathering by `1 - exp(-p / 1e-4 bar)`), water
 ice and snow (0.6, from the ice line at -5 °C and the equator-to-pole
-contrast of an Earth-like planet, `ice_line_share`), frosts of N₂, CH₄ and
+contrast of an Earth-like planet, `ice_line_share`, as far as the body's
+water reaches as 1.5 km sheets once spread over its area), frosts of N₂, CH₄ and
 CO₂ (0.75, the share `frost / 0.02 bar` of the disc, all frosts together)
 and of volcanic SO₂ (0.63, its part of that share), under a water cloud
 cover that grows with the vapour (`1 - exp(-p_H₂O / 1.15e-2 bar)`, Earth's
-0.67 at its 1.26e-2 bar, each cloud 0.19), Rayleigh scattering of the air's
-column, a methane haze and, from 1e-3 bar of SO₂ (what the washing out
+0.67 at its 1.26e-2 bar, each cloud top 0.297), the absorption of the
+water vapour over them on the way down and back up (Lacis & Hansen 1974's
+near-infrared absorptivity of the vapour's column, which falls off with
+height as Clausius–Clapeyron and the lapse rate set: 24 kg/m² on Earth,
+about 17 % of the light lost on the round trip), Rayleigh scattering of
+the air's column `p / g` (Titan's 1.5 bar weigh seven times Earth's
+column), a methane haze and, from 1e-3 bar of SO₂ (what the washing out
 leaves) in a surface above 273 K, a sulphuric acid deck that hides all
 below it (0.76), over a share of the disc that grows linearly from none
 at 273 K to all of it at 313 K (`DECK_ONSET_K`, a calibration: a deck
@@ -1020,8 +1026,9 @@ clear sky and a cold decked one). The model stores the air washed as the
 albedo washed it, and the look draws the same deck over the same share. Each constant is
 calibrated on several bodies at once and carries its source (several are
 from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
-0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64, Triton 0.75 and
-Io 0.63.
+0.76, Mars 0.25, a frozen Earth-like planet about 0.58 (its vapour
+absorbs some of what its ice reflects), Triton 0.75, Io 0.63 and
+Enceladus 0.80 (issue #523: gravity, area and the air's absorption).
 
 **Icy albedo from surface age** (`albedo::icy_unit_albedo`, climate
 pass lot 3C-1, goal 4). The exposed water ice of an ice crust darkens

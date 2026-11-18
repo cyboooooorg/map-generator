@@ -826,12 +826,18 @@ pub fn hides_surface(surface: &super::Surface) -> bool {
         && surface.climate.temperature_k >= WATER_CRITICAL_K
 }
 
+/// Latent heat of vaporisation of water, J/kg: 2.4e6, between its
+/// 2.50e6 at 0 °C and 2.26e6 at 100 °C.
+pub(super) const WATER_LATENT_J_KG: f64 = 2.4e6;
+
+/// Gas constant of water vapour, J/(kg·K): 461.5.
+pub(super) const WATER_R_V: f64 = 461.5;
+
 /// Latent heat of vaporisation of water over its gas constant
-/// (`L / R_v`), K: `L` 2.4e6 J/kg, between its 2.50e6 at 0 °C and 2.26e6
-/// at 100 °C, over `R_v` 461.5 J/(kg·K). This mean puts the boiling point
-/// at 1 atm at 373 K and the saturation at 288 K within 5 % of the
-/// tables.
-pub(super) const WATER_L_OVER_R: f64 = 2.4e6 / 461.5;
+/// (`L / R_v`), K: [`WATER_LATENT_J_KG`] over [`WATER_R_V`]. This mean
+/// puts the boiling point at 1 atm at 373 K and the saturation at 288 K
+/// within 5 % of the tables.
+pub(super) const WATER_L_OVER_R: f64 = WATER_LATENT_J_KG / WATER_R_V;
 
 /// Saturation vapour pressure of water at `temperature_k`, bar:
 /// Clausius–Clapeyron from the triple point with a constant latent heat
@@ -843,8 +849,9 @@ pub(super) fn water_saturation_bar(temperature_k: f64) -> f64 {
 }
 
 /// Boiling point of water under `pressure_bar`, K: the same
-/// Clausius–Clapeyron inverted, capped at the critical point.
-fn water_boils_k(pressure_bar: f64) -> f64 {
+/// Clausius–Clapeyron inverted, capped at the critical point. It is also
+/// the dew point of a vapour of partial pressure `pressure_bar`.
+pub(super) fn water_boils_k(pressure_bar: f64) -> f64 {
     let p = pressure_bar.max(WATER_TRIPLE_BAR);
     let inverse = 1.0 / WATER_TRIPLE_K - (p / WATER_TRIPLE_BAR).ln() / WATER_L_OVER_R;
     if inverse <= 1.0 / WATER_CRITICAL_K {
@@ -1245,6 +1252,31 @@ pub(super) fn wet_temperature_k(
     wet_climate(context, *gases, heat_flux_w_m2, water_bar, emissivity).1
 }
 
+/// Earth's surface gravity, m/s²: 9.81 (standard gravity 9.80665).
+pub const EARTH_GRAVITY_M_S2: f64 = 9.81;
+
+/// What the climate reads of the body itself beyond its air and water:
+/// its surface gravity, which sets how heavy a column the same surface
+/// pressure weighs (the air's Rayleigh scattering and the lapse rate its
+/// vapour thins with, [`super::albedo::bond_albedo_over`]), and its
+/// radius, over whose area its water spreads into ice
+/// ([`super::albedo::cover`]). Issue #523.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Planet {
+    /// Surface gravity, m/s².
+    pub gravity_m_s2: f64,
+    /// Radius, Earth radii.
+    pub radius_earth: f64,
+}
+
+impl Planet {
+    /// Earth: [`EARTH_GRAVITY_M_S2`] and one Earth radius.
+    pub const EARTH: Planet = Planet {
+        gravity_m_s2: EARTH_GRAVITY_M_S2,
+        radius_earth: 1.0,
+    };
+}
+
 /// What a body's carbon cycle gives its climate beyond its air: the
 /// carbon it holds, the CO₂ frost on its ground and the draw of its
 /// snowball state; and the SO₂ frost its volcanoes lay, which the
@@ -1343,6 +1375,10 @@ pub struct CarbonCycle {
 ///
 /// The liquid follows from the temperature and pressure (see
 /// [`LAVA_K`] and the phase diagrams of water and hydrocarbons).
+///
+/// `planet` is the body's gravity and radius ([`Planet`]), which its
+/// albedo reads.
+#[allow(clippy::too_many_arguments)]
 pub fn climate(
     context: &Context,
     gases: Gases,
@@ -1351,6 +1387,7 @@ pub fn climate(
     heat_flux_w_m2: f64,
     water_bar: f64,
     carbon: CarbonCycle,
+    planet: &Planet,
 ) -> (Gases, Climate) {
     climate_over(
         context,
@@ -1360,6 +1397,7 @@ pub fn climate(
         heat_flux_w_m2,
         water_bar,
         carbon,
+        planet,
         None,
     )
 }
@@ -1378,6 +1416,7 @@ pub fn climate_over(
     heat_flux_w_m2: f64,
     water_bar: f64,
     carbon: CarbonCycle,
+    planet: &Planet,
     crust: Option<f64>,
 ) -> (Gases, Climate) {
     let body = Body::new(
@@ -1388,6 +1427,7 @@ pub fn climate_over(
         heat_flux_w_m2,
         water_bar,
         &carbon,
+        planet,
         crust,
     );
     let branches = branches(&body);
@@ -1426,6 +1466,7 @@ pub fn temperate_steps(
     heat_flux_w_m2: f64,
     water_bar: f64,
     carbon: CarbonCycle,
+    planet: &Planet,
 ) -> (Gases, Climate, usize) {
     let body = Body::new(
         context,
@@ -1435,6 +1476,7 @@ pub fn temperate_steps(
         heat_flux_w_m2,
         water_bar,
         &carbon,
+        planet,
         None,
     );
     settle_steps(&body, warm_start(&body))
@@ -1518,6 +1560,8 @@ struct Body<'a> {
     co2: Option<f64>,
     /// The CO₂ of the maximum greenhouse, once found.
     greenhouse: std::cell::OnceCell<f64>,
+    /// Its gravity and radius ([`Planet`]).
+    planet: &'a Planet,
     /// Albedo of its exposed ice crust, if it has one ([`climate_over`]).
     crust: Option<f64>,
 }
@@ -1532,6 +1576,7 @@ impl<'a> Body<'a> {
         heat_flux_w_m2: f64,
         water_bar: f64,
         carbon: &CarbonCycle,
+        planet: &'a Planet,
         crust: Option<f64>,
     ) -> Self {
         let condenses = super::atmosphere::co2_frost_bar(context.equilibrium_k);
@@ -1547,6 +1592,7 @@ impl<'a> Body<'a> {
             so2_frost: carbon.so2_frost_bar.max(0.0),
             co2: None,
             greenhouse: std::cell::OnceCell::new(),
+            planet,
             crust,
         }
     }
@@ -1581,6 +1627,7 @@ impl<'a> Body<'a> {
             air,
             self.water,
             &self.frost(temperature_k, air),
+            self.planet,
             crust,
         )
     }
@@ -1914,7 +1961,8 @@ const BRACKET_TOLERANCE_K: f64 = TOLERANCE_K * 1e-2;
 const CONDENSE_ITERATIONS: usize = 100;
 
 /// The Bond albedo of `water` and `gases` at `temperature_k` with
-/// `frost_bar` of frost on the ground: its [`cover`], with the sulphuric
+/// `frost_bar` of frost on the ground, with Earth's gravity and radius
+/// ([`Planet::EARTH`]): its [`cover`], with the sulphuric
 /// deck [`sulphuric_deck`] makes of the SO₂ the washing out leaves
 /// ([`washed`]).
 #[cfg(test)]
@@ -1924,24 +1972,26 @@ pub(crate) fn derived_albedo(
     water: &Water,
     frost: &Gases,
 ) -> f64 {
-    derived_albedo_over(temperature_k, gases, water, frost, None)
+    derived_albedo_over(temperature_k, gases, water, frost, &Planet::EARTH, None)
 }
 
-/// [`derived_albedo`] over an exposed ice crust of albedo `crust`, if
-/// any ([`super::albedo::bond_albedo_over`]).
+/// [`derived_albedo`] on `planet` over an exposed ice crust of albedo
+/// `crust`, if any ([`super::albedo::bond_albedo_over`]).
 fn derived_albedo_over(
     temperature_k: f64,
     gases: &Gases,
     water: &Water,
     frost: &Gases,
+    planet: &Planet,
     crust: Option<f64>,
 ) -> f64 {
     let deck = sulphuric_deck(temperature_k, washed(*gases, water).so2);
     bond_albedo_over(
-        &cover(temperature_k, gases, water, frost),
+        &cover(temperature_k, gases, water, frost, planet),
         gases,
         deck,
         crust,
+        planet,
     )
 }
 
@@ -2202,6 +2252,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             d.carbon,
+            &d.planet,
         );
         (d, g, c)
     }
@@ -2369,6 +2420,7 @@ mod tests {
             0.0283,
             19_065.0,
             temperate(160.9),
+            &Planet::EARTH,
         );
         assert!(c.temperature_k < 150.0, "{c:?} {air:?}");
         assert_ne!(c.liquid, SurfaceLiquid::Water, "{c:?}");
@@ -2730,6 +2782,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             temperate(scarce.co2),
+            &d.planet,
         );
         assert!(g.co2 <= scarce.co2, "{g:?}");
         assert!(!c.regulated, "{c:?}");
@@ -2825,6 +2878,7 @@ mod tests {
             0.09,
             280.0,
             temperate(air.co2),
+            &Planet::EARTH,
         );
         assert_eq!(g.h2o, 280.0, "{g:?}");
     }
@@ -2871,6 +2925,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             d.carbon,
+            &d.planet,
         )
     }
 
@@ -3025,6 +3080,7 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             &d.carbon,
+            &d.planet,
             None,
         );
         let b = branches(&body);
@@ -3086,6 +3142,7 @@ mod tests {
                 d.heat_flux_w_m2,
                 d.water_bar,
                 carbon,
+                &d.planet,
             )
         };
         let (g, c) = with(d.carbon);
@@ -3115,9 +3172,12 @@ mod tests {
     fn a_frozen_state_no_co2_thaws_is_no_snowball() {
         // Drawn frozen where no CO₂ within the inventory and what does not
         // frost out thaws it: it stays frozen for good, so it is no
-        // snowball (whose card promises a thaw).
+        // snowball (whose card promises a thaw). At 1.64 AU: up to
+        // 1.61 AU about 1.6 bar of CO₂ thaws it, since its vapour
+        // absorbs sunlight (issue #523), and past 1.66 AU the temperate
+        // state freezes too.
         let earth = earth_drawn(0.0);
-        let d = derive_at(&earth, 1.6);
+        let d = derive_at(&earth, 1.64);
         let body = Body::new(
             &d.context,
             d.gases,
@@ -3126,11 +3186,12 @@ mod tests {
             d.heat_flux_w_m2,
             d.water_bar,
             &d.carbon,
+            &d.planet,
             None,
         );
-        let frozen = branches(&body).frozen.expect("bistable at 1.6 AU");
+        let frozen = branches(&body).frozen.expect("bistable at 1.64 AU");
         assert!(frozen.thaw_bar.is_infinite(), "{}", frozen.thaw_bar);
-        let (_, _, c) = climate_at(&earth, 1.6);
+        let (_, _, c) = climate_at(&earth, 1.64);
         assert!(frozen_over(&c), "{c:?}");
         assert!(!c.snowball, "{c:?}");
         // Where the CO₂ thaws it, a frozen draw is a snowball.
@@ -3169,6 +3230,7 @@ mod tests {
                 d.heat_flux_w_m2,
                 0.0,
                 &temperate(air.co2),
+                &d.planet,
                 None,
             );
             let (g, c) = climate(
@@ -3179,6 +3241,7 @@ mod tests {
                 d.heat_flux_w_m2,
                 0.0,
                 temperate(air.co2),
+                &d.planet,
             );
             if (263.0..=330.0).contains(&c.temperature_k) {
                 near += 1;
@@ -3575,6 +3638,7 @@ mod tests {
                     d.heat_flux_w_m2,
                     d.water_bar,
                     d.carbon,
+                    &d.planet,
                 );
                 (context.insolation, c)
             })

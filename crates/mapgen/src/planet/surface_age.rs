@@ -319,6 +319,7 @@ pub fn terrain(
         &surface.gases,
         &surface.water,
         &volatile,
+        &super::climate_planet(&model.inputs, &model.interior),
     )
     .frost;
     if share <= 0.0 {

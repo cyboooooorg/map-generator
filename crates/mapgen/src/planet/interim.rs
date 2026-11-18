@@ -501,6 +501,7 @@ pub fn sky_of(model: &PlanetModel) -> Atmosphere {
                 gases,
                 &surface.water,
                 &super::Gases::default(),
+                &super::climate_planet(&model.inputs, &model.interior),
             )
             .cloud,
         ),

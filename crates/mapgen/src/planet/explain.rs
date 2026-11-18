@@ -645,7 +645,13 @@ fn albedo_tree(
 ) -> Cause {
     let climate = &surface.climate;
     let gases = &steps.climate_gases;
-    let cover = super::albedo::cover(climate.temperature_k, gases, &surface.water, &steps.frost);
+    let cover = super::albedo::cover(
+        climate.temperature_k,
+        gases,
+        &surface.water,
+        &steps.frost,
+        &steps.planet,
+    );
     let deck = super::albedo::sulphuric_deck(
         climate.temperature_k,
         super::climate::washed(*gases, &surface.water).so2,
@@ -1375,6 +1381,7 @@ mod tests {
                     &steps.climate_gases,
                     &surface.water,
                     &steps.frost,
+                    &steps.planet,
                 );
                 let deck = super::super::albedo::sulphuric_deck(
                     surface.climate.temperature_k,
@@ -1402,6 +1409,7 @@ mod tests {
                     &steps.climate_gases,
                     deck,
                     crust,
+                    &steps.planet,
                 );
                 // The climate's fixed point stops when its temperature moves
                 // under `ALBEDO_TOLERANCE_K` (0.1 K), so its albedo is the
@@ -1444,6 +1452,7 @@ mod tests {
                 &steps.climate_gases,
                 &surface.water,
                 &steps.frost,
+                &steps.planet,
             );
             assert!((frosts[0].value - cover.frost).abs() < 1e-9);
             if steps.frost.n2 > 0.0 {

@@ -12,6 +12,7 @@
 //! temperature the climate absorbs at.
 use std::sync::LazyLock;
 
+use super::climate::{EARTH_GRAVITY_M_S2, Planet, WATER_LATENT_J_KG, water_boils_k};
 use super::{Gases, Water};
 
 /// The Bond albedo behind a context's equilibrium temperature: Earth's,
@@ -259,8 +260,9 @@ pub(crate) const ICE_COVERED_K: f64 = ICE_LINE_K - ICE_LINE_CONTRAST_K / 3.0;
 const ICE_SHEET_KM: f64 = 1.5;
 
 /// Depth, km, of a global layer of one Earth ocean of water over Earth's
-/// surface: 1.4e21 kg at 1000 kg/m³ over 5.1e14 m². The model takes
-/// every body's area as Earth's here (the cover is given no radius).
+/// surface: 1.4e21 kg at 1000 kg/m³ over 5.1e14 m². Over a body of
+/// radius `R` (Earth radii) the same water makes a layer `1 / R²` as
+/// deep ([`cover`], issue #523).
 const OCEAN_LAYER_KM: f64 = 2.745;
 
 /// Earth's share of its disc under oceans, 0.71, for its one ocean
@@ -285,16 +287,16 @@ const CLOUD_H2O_BAR: f64 = 1.15e-2;
 /// on: the look draws it as no shift of the cover.
 pub(crate) const EARTH_CLOUD_COVER: f64 = 0.67;
 
-/// Albedo of a water cloud layer, as the reflectance of the cloud cover's
-/// share of the disc: 0.19. Calibration on Earth's Bond albedo, 0.30
-/// (CERES; Stephens et al. 2015, doi:10.1002/2014RG000449), with its
-/// ocean, land, ice and Rayleigh scattering, as the model derives them
-/// at 288 K. Lower than a thick cloud's 0.5 to 0.7: Earth's cloud cover
-/// counts thin clouds too, and the model's air absorbs no sunlight (the
-/// real one takes about a fifth of it, water vapour and ozone), so its
-/// clear sky (about 0.2) is brighter than Earth's (about 0.15) and its
-/// clouds carry less of the albedo.
-const CLOUD_ALBEDO: f64 = 0.19;
+/// Albedo of the tops of a water cloud layer, before the vapour above
+/// them absorbs any of the light ([`vapour_transmission`]), as the
+/// reflectance of the cloud cover's share of the disc: 0.297.
+/// Calibration on Earth's Bond albedo, 0.30 (CERES; Stephens et al. 2015,
+/// doi:10.1002/2014RG000449), with its ocean, land, ice, Rayleigh
+/// scattering and water vapour, as the model derives them at 288 K
+/// (0.19 while the air absorbed no light, issue #523). Lower than a
+/// thick cloud's 0.5 to 0.7: Earth's cloud cover counts thin clouds
+/// too.
+const CLOUD_ALBEDO: f64 = 0.297;
 
 /// Albedo of a sulphuric acid deck, which hides all below it: Venus's
 /// Bond albedo, 0.76 (Haus et al. 2016, doi:10.1016/j.icarus.2015.11.011,
@@ -341,10 +343,11 @@ const HAZE_CH4_PER_CO2: f64 = 0.2;
 const HAZE_ALBEDO: f64 = 0.25;
 const HAZE_ABSORPTION: f64 = 0.55;
 
-/// Rayleigh optical depth at 550 nm of a bar of nitrogen: 0.0965 (Earth's
-/// 1013 hPa of air give 0.097; Bucholtz 1995, doi:10.1364/AO.34.002765,
-/// from memory, not checked). The depth grows with the column's mass,
-/// which the model takes from the pressure alone (Earth's gravity).
+/// Rayleigh optical depth at 550 nm of a bar of nitrogen under Earth's
+/// gravity: 0.0965 (Earth's 1013 hPa of air give 0.097; Bucholtz 1995,
+/// doi:10.1364/AO.34.002765, from memory, not checked). The depth grows
+/// with the column's mass, `p / g`: a bar weighs a column
+/// `g⊕ / g` times Earth's on a body of gravity `g` ([`rayleigh_550`]).
 const RAYLEIGH_N2_550: f64 = 0.0965;
 
 /// Rayleigh depth per bar of each gas, relative to nitrogen: its
@@ -355,10 +358,15 @@ const RAYLEIGH_N2_550: f64 = 0.0965;
 /// out: it scatters, but absorbs more of the near infrared, so that a
 /// moist atmosphere's albedo stays near 0.2 to 0.3 (Kopparapu et al.
 /// 2013); the climate blends a steam column towards that moist albedo
-/// (`climate::runaway_albedo`).
-fn rayleigh_550(gases: &Gases) -> f64 {
+/// (`climate::runaway_albedo`); it absorbs instead
+/// ([`vapour_transmission`]).
+///
+/// The column is the pressure over `planet`'s gravity: a low-gravity
+/// moon (Titan, 1.35 m/s²) holds over seven times the molecules Earth
+/// does under the same pressure, a super-Earth fewer (issue #523).
+fn rayleigh_550(gases: &Gases, planet: &Planet) -> f64 {
     let per = |alpha: f64, mu: f64| (alpha / 1.74).powi(2) * 28.0 / mu;
-    RAYLEIGH_N2_550
+    RAYLEIGH_N2_550 * EARTH_GRAVITY_M_S2 / planet.gravity_m_s2
         * (gases.n2.max(0.0)
             + gases.co2.max(0.0) * per(2.91, 44.0)
             + gases.ch4.max(0.0) * per(2.59, 16.0)
@@ -399,6 +407,73 @@ static SPECTRUM: LazyLock<Vec<(f64, f64)>> = LazyLock::new(|| {
 fn rayleigh_reflectance(tau: f64) -> f64 {
     let x = 0.75 * tau.max(0.0);
     x / (1.0 + x)
+}
+
+/// Earth's mean tropospheric lapse rate, K/m: 6.5e-3 (U.S. Standard
+/// Atmosphere 1976). A body's scales with its gravity, as the adiabat
+/// `g / c_p` does ([`vapour_column_kg_m2`]).
+const EARTH_LAPSE_K_M: f64 = 6.5e-3;
+
+/// Mass of water vapour over a square metre, kg/m², of an air whose
+/// vapour at the surface is `h2o_bar` on `planet`.
+///
+/// The vapour stays near saturation as the air cools with height, so
+/// that by Clausius–Clapeyron it thins with the scale height
+/// `H_v = R_v T² / (L Γ)` (`Γ` the lapse rate, [`EARTH_LAPSE_K_M`]
+/// scaled by gravity), `T` its dew point; its column is the surface
+/// density `p / (R_v T)` over that height, `p T / (L Γ)`. Earth's
+/// 1.3e-2 bar at a 284 K dew point make 24 kg/m², against a measured
+/// mean of about 25 kg/m² of precipitable water (Trenberth, Fasullo &
+/// Smith 2005, doi:10.1007/s00382-005-0017-4, from memory, not checked).
+/// Never more than the vapour would weigh alone, `p / g` (a steam air).
+fn vapour_column_kg_m2(h2o_bar: f64, planet: &Planet) -> f64 {
+    let p = h2o_bar.max(0.0) * 1e5;
+    if p <= 0.0 {
+        return 0.0;
+    }
+    let dew_k = water_boils_k(h2o_bar);
+    let lapse = EARTH_LAPSE_K_M * planet.gravity_m_s2 / EARTH_GRAVITY_M_S2;
+    (p * dew_k / (WATER_LATENT_J_KG * lapse)).min(p / planet.gravity_m_s2)
+}
+
+/// Share of the sunlight a column of `y` cm of precipitable water,
+/// counted along the light's slanted path, absorbs: the near-infrared
+/// bands of water vapour, `2.9 y / ((1 + 141.5 y)^0.635 + 5.925 y)`
+/// (Lacis & Hansen 1974, doi:10.1175/1520-0469(1974)031<0118:APFTAO>2.0.CO;2,
+/// their eq. 20, from memory, not checked). It saturates, as the bands
+/// do, at `2.9 / 5.925`, 49 % of the light.
+fn water_absorptivity(y_cm: f64) -> f64 {
+    let y = y_cm.max(0.0);
+    2.9 * y / ((1.0 + 141.5 * y).powf(0.635) + 5.925 * y)
+}
+
+/// Lengthening of the light's path through the vapour on its way down,
+/// averaged over the disc: Lacis & Hansen's magnification
+/// `35 / √(1224 μ₀² + 1)` at the disc's mean `μ₀ = 2/3` (the cosine of
+/// the Sun's zenith angle weighted by the light it brings), 1.5.
+const PATH_DOWN: f64 = 1.5;
+
+/// Lengthening of the path of the light reflected back up, diffuse:
+/// 1.9 (Lacis & Hansen 1974, their magnification for reflected light,
+/// from memory, not checked).
+const PATH_UP: f64 = 1.9;
+
+/// Share of the light that crosses an air's water vapour down to the
+/// clouds and the ground and back up to space: `1 − A(y)` of
+/// [`water_absorptivity`] along both paths ([`PATH_DOWN`], [`PATH_UP`])
+/// through the vapour's column ([`vapour_column_kg_m2`], 1 kg/m² being
+/// 0.1 cm of precipitable water).
+///
+/// Earth's air absorbs about 23 % of the sunlight (78 of 341 W/m²;
+/// Trenberth, Fasullo & Kiehl 2009, doi:10.1175/2008BAMS2634.1), most of
+/// it in its water vapour: this takes some 14 % on the way down, the
+/// rest being its ozone, aerosols and cloud droplets, which the model
+/// does not carry. CO₂'s near-infrared bands take about 1 % on Earth and
+/// are left out; methane's are Titan's haze's absorption
+/// ([`HAZE_ABSORPTION`], calibrated with them). 1 with no vapour.
+fn vapour_transmission(gases: &Gases, planet: &Planet) -> f64 {
+    let y = 0.1 * vapour_column_kg_m2(gases.h2o, planet);
+    1.0 - water_absorptivity(y * (PATH_DOWN + PATH_UP))
 }
 
 /// The albedo of a layer of reflectance `r` and transmission `t` over a
@@ -443,7 +518,8 @@ pub(crate) fn frost_cover(frost: &Gases) -> f64 {
 /// - Its water, out of a runaway, is open ocean ([`ocean_fraction`] of
 ///   its oceans) where the surface is warmer than the ice line and ice or
 ///   snow where it is colder ([`ice_line_share`]), the ice limited by
-///   sheets the water can make ([`ICE_SHEET_KM`]).
+///   sheets the water can make ([`ICE_SHEET_KM`]) out of the layer it
+///   would spread into over `planet`'s area ([`OCEAN_LAYER_KM`]).
 /// - The rest is bare land.
 /// - Its frost lies over the ocean's ice and the land, covering the share
 ///   `frost_bar / FROST_LAYER_BAR` of the disc ([`FROST_LAYER_BAR`]), all
@@ -451,11 +527,18 @@ pub(crate) fn frost_cover(frost: &Gases) -> f64 {
 ///   the SO₂ frost takes its part of that share.
 /// - Its water clouds follow the vapour in the air ([`CLOUD_H2O_BAR`]):
 ///   none in a dry or airless sky.
-pub fn cover(temperature_k: f64, gases: &Gases, water: &Water, frost: &Gases) -> Cover {
+pub fn cover(
+    temperature_k: f64,
+    gases: &Gases,
+    water: &Water,
+    frost: &Gases,
+    planet: &Planet,
+) -> Cover {
     let frost_bar = frost.total();
     let wet = water.is_wet();
     let (sea, ice) = if wet {
-        let reach = (water.oceans.max(0.0) * OCEAN_LAYER_KM / ICE_SHEET_KM).min(1.0);
+        let layer_km = OCEAN_LAYER_KM / planet.radius_earth.powi(2);
+        let reach = (water.oceans.max(0.0) * layer_km / ICE_SHEET_KM).min(1.0);
         (
             ocean_fraction(water.oceans),
             ice_line_share(temperature_k) * reach,
@@ -519,20 +602,31 @@ pub(crate) fn haze(gases: &Gases) -> f64 {
 /// from [`REGOLITH_ALBEDO`] when airless to [`SOIL_ALBEDO`] under an air,
 /// ice and snow [`ICE_ALBEDO`], frost [`FROST_ALBEDO`], SO₂ frost
 /// [`SO2_FROST_ALBEDO`]); the water clouds' layer
-/// ([`CLOUD_ALBEDO`] over their cover) lies over it, the Rayleigh
+/// ([`CLOUD_ALBEDO`] over their cover) lies over it, the water vapour
+/// over both absorbs on the way down and back up
+/// ([`vapour_transmission`]), the Rayleigh
 /// scattering of the column over both (averaged over the Sun's spectrum
 /// band by band: what caps CO₂'s warming at the maximum greenhouse,
 /// Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131), and a methane
 /// haze over all ([`HAZE_ALBEDO`], [`HAZE_ABSORPTION`]). A deck hides
-/// everything below it ([`DECK_ALBEDO`]) where it lies.
+/// everything below it ([`DECK_ALBEDO`]) where it lies. The air's
+/// column is Earth's gravity's ([`bond_albedo_over`] takes the body's).
 pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64) -> f64 {
-    bond_albedo_over(cover, gases, deck, None)
+    bond_albedo_over(cover, gases, deck, None, &Planet::EARTH)
 }
 
 /// [`bond_albedo`] of a body whose ice and land are, where `crust` is
 /// given, an exposed ice crust of that albedo (the area-weighted
-/// [`icy_unit_albedo`] of its terrain units) instead of snow and rock.
-pub fn bond_albedo_over(cover: &Cover, gases: &Gases, deck: f64, crust: Option<f64>) -> f64 {
+/// [`icy_unit_albedo`] of its terrain units) instead of snow and rock,
+/// on `planet`, whose gravity sets the column of its air
+/// ([`rayleigh_550`], [`vapour_transmission`]).
+pub fn bond_albedo_over(
+    cover: &Cover,
+    gases: &Gases,
+    deck: f64,
+    crust: Option<f64>,
+    planet: &Planet,
+) -> f64 {
     let deck = deck.clamp(0.0, 1.0);
     if deck >= 1.0 {
         return DECK_ALBEDO;
@@ -549,8 +643,8 @@ pub fn bond_albedo_over(cover: &Cover, gases: &Gases, deck: f64, crust: Option<f
         + (cover.frost - cover.so2_frost) * FROST_ALBEDO
         + cover.so2_frost * SO2_FROST_ALBEDO;
     let cloud = (cover.cloud * CLOUD_ALBEDO).clamp(0.0, 1.0);
-    let clouded = over(cloud, 1.0 - cloud, surface);
-    let tau = rayleigh_550(gases);
+    let clouded = over(cloud, 1.0 - cloud, surface) * vapour_transmission(gases, planet);
+    let tau = rayleigh_550(gases, planet);
     let h = haze(gases);
     let (hr, ht) = (h * HAZE_ALBEDO, 1.0 - h * (HAZE_ALBEDO + HAZE_ABSORPTION));
     let below: f64 = SPECTRUM
@@ -588,7 +682,7 @@ mod tests {
         let airless = Gases::default();
         assert!(airless.total() < 1e-6);
         for t in [100.0, 250.0, 440.0, 700.0] {
-            let c = cover(t, &airless, &dry, &Gases::default());
+            let c = cover(t, &airless, &dry, &Gases::default(), &Planet::EARTH);
             assert_eq!(c.ocean, 0.0, "{t}: {c:?}");
             assert_eq!(c.cloud, 0.0, "{t}: {c:?}");
             assert_eq!(c.ice, 0.0, "{t}: {c:?}");
@@ -611,17 +705,20 @@ mod tests {
         let mut last = f64::INFINITY;
         for i in 0..=100 {
             let t = 200.0 + f64::from(i);
-            let ice = cover(t, &air, &water, &Gases::default()).ice;
+            let ice = cover(t, &air, &water, &Gases::default(), &Planet::EARTH).ice;
             assert!(ice <= last, "{t}: {ice} > {last}");
             last = ice;
         }
-        let earth = cover(288.0, &air, &water, &Gases::default()).ice;
+        let earth = cover(288.0, &air, &water, &Gases::default(), &Planet::EARTH).ice;
         assert!((0.06..=0.14).contains(&earth), "{earth}");
         for t in [200.0, 230.0, 240.0, 250.0] {
-            let ice = cover(t, &air, &water, &Gases::default()).ice;
+            let ice = cover(t, &air, &water, &Gases::default(), &Planet::EARTH).ice;
             assert!(ice > 0.999, "{t}: {ice}");
         }
-        assert_eq!(cover(300.0, &air, &water, &Gases::default()).ice, 0.0);
+        assert_eq!(
+            cover(300.0, &air, &water, &Gases::default(), &Planet::EARTH).ice,
+            0.0
+        );
     }
 
     #[test]
@@ -637,12 +734,19 @@ mod tests {
             kept_kg: 0.005 * super::super::OCEAN_KG,
             ..earth_water()
         };
-        let caps = cover(210.0, &air, &mars, &Gases::default());
+        let caps = cover(210.0, &air, &mars, &Gases::default(), &Planet::EARTH);
         assert!(caps.ice > 0.0 && caps.ice < 0.02, "{caps:?}");
         let a = bond_albedo(&caps, &air, 0.0);
         assert!((0.2..=0.3).contains(&a), "{a}");
         assert_eq!(
-            cover(210.0, &air, &earth_water(), &Gases::default()).ice,
+            cover(
+                210.0,
+                &air,
+                &earth_water(),
+                &Gases::default(),
+                &Planet::EARTH
+            )
+            .ice,
             1.0
         );
     }
@@ -665,8 +769,20 @@ mod tests {
             n2: bar,
             ..Gases::default()
         };
-        let a = |frost: f64| bond_albedo(&cover(40.0, &thin, &dry, &n2(frost)), &thin, 0.0);
-        let half = cover(40.0, &thin, &dry, &n2(FROST_LAYER_BAR / 2.0));
+        let a = |frost: f64| {
+            bond_albedo(
+                &cover(40.0, &thin, &dry, &n2(frost), &Planet::EARTH),
+                &thin,
+                0.0,
+            )
+        };
+        let half = cover(
+            40.0,
+            &thin,
+            &dry,
+            &n2(FROST_LAYER_BAR / 2.0),
+            &Planet::EARTH,
+        );
         assert!((half.frost - 0.5).abs() < 1e-12, "{half:?}");
         assert!((half.land - 0.5).abs() < 1e-12, "{half:?}");
         assert!(a(0.0) < a(FROST_LAYER_BAR / 2.0));
@@ -678,12 +794,18 @@ mod tests {
             so2: 10.0,
             ..Gases::default()
         };
-        let volcanic = cover(40.0, &thin, &dry, &so2);
+        let volcanic = cover(40.0, &thin, &dry, &so2, &Planet::EARTH);
         assert_eq!(volcanic.so2_frost, 1.0);
         let a_so2 = bond_albedo(&volcanic, &thin, 0.0);
         assert!((a_so2 - SO2_FROST_ALBEDO).abs() < 0.01, "{a_so2}");
         // Over ice, the frost takes its share from the ice.
-        let icy = cover(40.0, &thin, &earth_water(), &n2(FROST_LAYER_BAR / 4.0));
+        let icy = cover(
+            40.0,
+            &thin,
+            &earth_water(),
+            &n2(FROST_LAYER_BAR / 4.0),
+            &Planet::EARTH,
+        );
         assert!(
             (icy.ice - 0.75).abs() < 1e-12 && icy.ocean == 0.0,
             "{icy:?}"
@@ -753,5 +875,140 @@ mod tests {
         println!("albedo under 0, 8, 90 bar of CO2: {thin:.3} {eight:.3} {ninety:.3}");
         assert!(thin < eight && eight < ninety, "{thin} {eight} {ninety}");
         assert!(ninety < 1.0);
+    }
+
+    fn bare_land() -> Cover {
+        Cover {
+            ocean: 0.0,
+            land: 1.0,
+            ice: 0.0,
+            frost: 0.0,
+            so2_frost: 0.0,
+            cloud: 0.0,
+        }
+    }
+
+    fn planet(gravity_m_s2: f64, radius_earth: f64) -> Planet {
+        Planet {
+            gravity_m_s2,
+            radius_earth,
+        }
+    }
+
+    /// Issue #523, Review Focus 2: the same surface pressure weighs a
+    /// column `p / g` deep, so a low-gravity moon (Titan, g = 1.35)
+    /// scatters as much more than a body with Earth's gravity as its
+    /// column is heavier, and a super-Earth less.
+    #[test]
+    fn rayleigh_counts_the_column_mass() {
+        let air = Gases {
+            n2: 1.5,
+            ..Gases::default()
+        };
+        let (titan, earth) = (planet(1.35, 0.404), planet(EARTH_GRAVITY_M_S2, 1.0));
+        let ratio = rayleigh_550(&air, &titan) / rayleigh_550(&air, &earth);
+        let expected = EARTH_GRAVITY_M_S2 / 1.35;
+        assert!(
+            (ratio / expected - 1.0).abs() < 0.05,
+            "{ratio} vs {expected}"
+        );
+        let heavy = rayleigh_550(&air, &planet(2.0 * EARTH_GRAVITY_M_S2, 1.5));
+        assert!((heavy / rayleigh_550(&air, &earth) - 0.5).abs() < 1e-12);
+        // So the low-gravity body is brighter over the same ground.
+        let a = |p: &Planet| bond_albedo_over(&bare_land(), &air, 0.0, None, p);
+        assert!(a(&titan) > a(&earth) + 0.05, "{} {}", a(&titan), a(&earth));
+    }
+
+    /// Review Focus 3: with no air, neither the scattering nor the
+    /// absorption of the air touches the surface's albedo, whatever the
+    /// gravity.
+    #[test]
+    fn an_airless_body_keeps_its_surface_albedo() {
+        let none = Gases::default();
+        for g in [3.7, EARTH_GRAVITY_M_S2] {
+            let p = planet(g, 0.5);
+            let a = bond_albedo_over(&bare_land(), &none, 0.0, None, &p);
+            assert!((a - REGOLITH_ALBEDO).abs() < 1e-12, "{g}: {a}");
+            assert_eq!(vapour_transmission(&none, &p), 1.0);
+            let crust = bond_albedo_over(&bare_land(), &none, 0.0, Some(0.6), &p);
+            assert!((crust - 0.6).abs() < 1e-12, "{g}: {crust}");
+        }
+    }
+
+    /// The same water spread over a planet twice Earth's radius makes a
+    /// layer a quarter as deep, which reaches a quarter as far as ice.
+    #[test]
+    fn ice_reach_scales_with_area() {
+        let air = Gases {
+            n2: 1.0,
+            ..Gases::default()
+        };
+        let little = Water {
+            oceans: 0.05,
+            kept_kg: 0.05 * super::super::OCEAN_KG,
+            ..earth_water()
+        };
+        let ice = |radius: f64| {
+            cover(
+                200.0,
+                &air,
+                &little,
+                &Gases::default(),
+                &planet(EARTH_GRAVITY_M_S2, radius),
+            )
+            .ice
+        };
+        let (one, two) = (ice(1.0), ice(2.0));
+        assert!(one < 1.0, "{one}");
+        assert!((two / one - 0.25).abs() < 1e-12, "{two} / {one}");
+    }
+
+    /// Earth's air absorbs about a fifth of the sunlight, most of it in
+    /// its water vapour: the vapour of 288 K under Earth's gravity takes
+    /// some 15 % of the light on its way down and back; none without
+    /// vapour.
+    #[test]
+    fn the_air_absorbs_sunlight_with_its_vapour() {
+        let dry = Gases {
+            n2: 0.78,
+            o2: 0.21,
+            co2: 4e-4,
+            ..Gases::default()
+        };
+        let moist = Gases {
+            h2o: 0.77 * super::super::climate::water_saturation_bar(288.0),
+            ..dry
+        };
+        assert_eq!(vapour_transmission(&dry, &Planet::EARTH), 1.0);
+        let t = vapour_transmission(&moist, &Planet::EARTH);
+        println!("Earth's two-way transmission of its vapour: {t:.3}");
+        assert!((0.75..=0.9).contains(&t), "{t}");
+        let c = bare_land();
+        let a_dry = bond_albedo_over(&c, &dry, 0.0, None, &Planet::EARTH);
+        let a_moist = bond_albedo_over(&c, &moist, 0.0, None, &Planet::EARTH);
+        assert!(a_moist < a_dry, "{a_moist} {a_dry}");
+    }
+
+    /// The cloud albedo is re-derived with the air's absorption, so that
+    /// Earth's Bond albedo stays at its measured 0.30 (CERES).
+    #[test]
+    fn earth_keeps_its_bond_albedo() {
+        let air = Gases {
+            n2: 0.78,
+            o2: 0.21,
+            co2: 4e-4,
+            h2o: 0.77 * super::super::climate::water_saturation_bar(288.0),
+            ..Gases::default()
+        };
+        let c = cover(
+            288.0,
+            &air,
+            &earth_water(),
+            &Gases::default(),
+            &Planet::EARTH,
+        );
+        let a = bond_albedo_over(&c, &air, 0.0, None, &Planet::EARTH);
+        println!("Earth's Bond albedo at 288 K: {a:.4}");
+        assert!((0.29..=0.31).contains(&a), "{a}");
     }
 }

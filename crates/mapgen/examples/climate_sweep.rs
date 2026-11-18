@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 
 use mapgen::geology::Regime;
-use mapgen::planet::climate::temperate_steps;
+use mapgen::planet::climate::{Planet, temperate_steps};
 use mapgen::planet::{
     self, CarbonCycle, Context, Gases, PlanetModel, SurfaceLiquid, Water, interim,
     methane_freezes_k, outgassed,
@@ -182,6 +182,12 @@ fn summarize(label: &str, rows: &[Row]) {
 /// (the reference body Titan of `planet::reference`): its context, its
 /// water, its heat flux (W/m²), its water as vapour (bar) and its carbon
 /// cycle. Its gases are each sweep's.
+/// Titan's gravity and radius: 1.352 m/s², 0.404 Earth radii (2575 km).
+const TITAN_PLANET: Planet = Planet {
+    gravity_m_s2: 1.352,
+    radius_earth: 0.404,
+};
+
 fn titan() -> (Context, Water, f64, f64, CarbonCycle) {
     let context = Context {
         star_mass: 1.0,
@@ -237,6 +243,7 @@ fn phase(label: &str, gases: Gases, low: f64, high: f64, threshold_k: f64) {
             heat,
             water_bar,
             carbon,
+            &TITAN_PLANET,
         );
         let t = c.temperature_k;
         let step = last.map_or(0.0, |l| t - l);

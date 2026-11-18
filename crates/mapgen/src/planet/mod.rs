@@ -668,6 +668,9 @@ pub(crate) struct Bare {
     /// ([`vent_strength`]); `None` without an ice crust ([`ice_crust`]).
     #[cfg(test)]
     pub vent: Option<f64>,
+    /// The gravity and radius the climate was solved on
+    /// ([`climate_planet`]), which its albedo read.
+    pub planet: climate::Planet,
 }
 
 /// The heaviest host whose magnetosphere [`non_thermal_loss`] reads, Earth
@@ -676,6 +679,16 @@ pub(crate) struct Bare {
 /// a star raising its own planet's tides (`context.tide` set to the star),
 /// not a giant with a plasma.
 const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * crate::giants::JUPITER_EARTH_MASSES as f64;
+
+/// The gravity and radius the climate reads of a body of `inputs` and
+/// `interior` ([`climate::Planet`]): `G M / R²` of its mass and radius.
+pub fn climate_planet(inputs: &PlanetInputs, interior: &Interior) -> climate::Planet {
+    let radius_m = interior.radius_earth * EARTH_M;
+    climate::Planet {
+        gravity_m_s2: crate::exomoon::G * inputs.mass_earth * EARTH_KG / (radius_m * radius_m),
+        radius_earth: interior.radius_earth,
+    }
+}
 
 /// What [`non_thermal_loss`] reads of a body of `inputs` and `interior`
 /// in `context`: its gravity and radius, its star's distance and its age,
@@ -686,7 +699,7 @@ const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * crate::giants::JUPITER_EARTH_MASS
 /// host giants of moons).
 pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interior) -> LossContext {
     let radius_m = interior.radius_earth * EARTH_M;
-    let gravity = crate::exomoon::G * inputs.mass_earth * EARTH_KG / (radius_m * radius_m);
+    let gravity = climate_planet(inputs, interior).gravity_m_s2;
     let giant =
         |t: &HostTide| moon_of_giant(context) && t.host_kg <= HOST_PLASMA_MAX_MASS_EARTH * EARTH_KG;
     let host = context.tide.filter(giant).map(|t| {
@@ -775,6 +788,7 @@ pub(crate) fn bare(
     // decreasing map, found by bisection.
     let icy = ice_crust(inputs, &w, r);
     let crust = |vent: f64| icy.then(|| crust_albedo(context, inputs, heat, interior, vent));
+    let planet = climate_planet(inputs, interior);
     let solve = |gases: Gases, so2_frost_bar: f64, vent: f64| {
         climate::climate_over(
             context,
@@ -784,6 +798,7 @@ pub(crate) fn bare(
             flux,
             water_bar,
             carbon(so2_frost_bar),
+            &planet,
             crust(vent),
         )
     };
@@ -886,6 +901,7 @@ pub(crate) fn bare(
         climate_gases: after,
         condensed,
         frost,
+        planet,
         #[cfg(test)]
         vent: icy.then_some(vent),
     }
@@ -1297,6 +1313,9 @@ mod tests {
     /// point is that the law leaves it unchanged, so it is pinned to
     /// 1e-9, and a later change to the snowball's albedo re-pins it
     /// knowingly: 0.622 385 341 082 before the albedo's fixed point
-    /// halved its steps where they swing (issue #562).
-    const SNOWBALL_ALBEDO: f64 = 0.622_375_946_206;
+    /// halved its steps where they swing (issue #562), 0.622 375 946 206
+    /// before its water vapour absorbed sunlight (issue #523: its 8e-4
+    /// bar of vapour at 250 K take about 8 % of the light reflected by
+    /// its ice).
+    const SNOWBALL_ALBEDO: f64 = 0.579_495_860_419;
 }
