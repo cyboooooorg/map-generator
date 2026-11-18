@@ -418,7 +418,9 @@ locked only on the sides its archetype names a partner on
 (`[moon.resonance]`, `resonance::Placement`): the drawn moons keep out
 of the 2:1 band on its other sides instead, a drawn moon left
 uncaptured where its capture would put it there and moved just out of
-it when it lies in it. Ganymede, which names Europa and Io inside it,
+it when it lies in it (a drawn innermost moon always outward, to a
+period ratio of 1.970, so that it never comes nearer the Roche limit or
+the rings than it was drawn). Ganymede, which names Europa and Io inside it,
 locks with no drawn moon outside it, and Callisto, which names none,
 with no neighbour, as the real Callisto turns 2.33 times Ganymede's
 period. The share of the age since a drawn moon's capture is kept

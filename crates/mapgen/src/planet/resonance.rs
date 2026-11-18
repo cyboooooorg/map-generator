@@ -128,7 +128,8 @@ fn migration_rate(host_kg: f64, host_radius_m: f64, host_k2_over_q: f64, moon: &
 /// *Solar System Dynamics*, §8.12, not checked), a divergent one never.
 /// The period ratio of the pair falls by `(3/2) Δ(ȧ/a)` times the age:
 /// a pair formed wide of 2 by less than that reaches it, after the share
-/// `ln(ratio/2)` of that closing; one formed inside 2 (Dione and Rhea,
+/// `ln(ratio/2) / closing` of the age, `closing` the fall of
+/// `ln(ratio)` over the whole age; one formed inside 2 (Dione and Rhea,
 /// at 1.67) moves away from it. The locked moons then migrate together,
 /// at `2 ΣT / ΣL`, and may catch the next one out: Io drove Europa, and
 /// the two Ganymede, into the Laplace resonance (Yoder 1979,
@@ -142,7 +143,8 @@ fn migration_rate(host_kg: f64, host_radius_m: f64, host_k2_over_q: f64, moon: &
 /// and Ganymede, its outermost moon, lock with no drawn moon outside
 /// them. The drawn moons keep out of the band of such a side instead: a
 /// drawn moon is not captured where that would put it in it, and one in
-/// it is moved just out of it. A drawn moon that is captured is moved to
+/// it is moved just out of it (an innermost one outward, never nearer
+/// its host). A drawn moon that is captured is moved to
 /// [`COMMENSURATE_A_RATIO`] of its inner neighbour (period twice its),
 /// and one not captured that lies in the band is moved just out of it,
 /// so that the orbits say which pairs are locked ([`chains`]).
@@ -163,12 +165,14 @@ pub fn capture(
         }
     };
     // A drawn innermost moon in the band of an asked one outside it that
-    // names no partner inside: moved just out of it.
+    // names no partner inside: moved just out of it, outward (at most
+    // 2.5 % in period, 1.7 % in orbit), so that it never comes nearer
+    // the Roche limit or the rings than it was drawn.
     if let ([first, second, ..], [Placement::Drawn, next, ..]) = (&mut *moons, placed)
         && !next.inward()
         && in_band(second.period_s / first.period_s)
     {
-        let to = out_of_band(second.period_s / first.period_s);
+        let to = RESONANCE_BAND.0 / 1.005;
         first.a_m = second.a_m / to.powf(2.0 / 3.0);
         first.period_s = second.period_s / to;
     }
@@ -762,6 +766,38 @@ mod tests {
         );
     }
 
+    /// A drawn innermost moon in the band of an asked moon outside it
+    /// that names no partner inside is moved out of the band outward,
+    /// never inward: inward it could cross the Roche limit or the rings
+    /// its orbit was drawn outside of, which `capture` does not see.
+    #[test]
+    fn a_drawn_innermost_moon_leaves_an_asked_band_outward() {
+        let alone = Placement::Asked {
+            inward: false,
+            outward: false,
+        };
+        for ratio in [1.99, 2.0, 2.01, 2.019] {
+            let asked = at_ratio(&io(), europa(), ratio);
+            let mut moons = [io(), asked];
+            let locked = capture(
+                JUPITER_KG,
+                JUPITER_R_M,
+                4.57,
+                &mut moons,
+                &[Placement::Drawn, alone],
+            )
+            .locked;
+            assert_eq!(locked, vec![false], "{ratio}");
+            assert_eq!(moons[1], asked, "{ratio}");
+            assert!(moons[0].a_m >= io().a_m, "{ratio}: {:?}", moons[0]);
+            let to = moons[1].period_s / moons[0].period_s;
+            assert!(
+                (to - RESONANCE_BAND.0 / 1.005).abs() < 1e-12,
+                "{ratio}: {to}"
+            );
+        }
+    }
+
     #[test]
     fn an_asked_moon_locks_only_with_the_partners_it_names() {
         // Ganymede asked with Europa inside it and none outside: a drawn
@@ -833,8 +869,8 @@ mod tests {
     #[test]
     fn a_drawn_moon_keeps_out_of_an_asked_moons_unnamed_side() {
         // Io asked with Europa outside it and none inside, a drawn moon
-        // inside it in its band: the drawn moon moves, Io and its pair
-        // with Europa stay.
+        // inside it in its band: the drawn moon moves out of the band
+        // outward, Io and its pair with Europa stay.
         let asked = Placement::Asked {
             inward: false,
             outward: true,
@@ -858,7 +894,7 @@ mod tests {
         assert_eq!(moons[1], io());
         assert_eq!(moons[2], europa);
         let ratio = moons[1].period_s / moons[0].period_s;
-        assert!((RESONANCE_BAND.1..2.04).contains(&ratio), "{ratio}");
+        assert!((1.96..RESONANCE_BAND.0).contains(&ratio), "{ratio}");
     }
 
     #[test]

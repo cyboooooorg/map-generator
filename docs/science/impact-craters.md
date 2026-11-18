@@ -616,8 +616,9 @@ more are flooded flat at a date of that window and darkened.
   before the climate and in `terrain` after it):
   - **when**: a drawn moon at its capture. `resonance::capture` closes
     its pair's period ratio at a constant rate over the age, so a pair
-    formed `ln(ratio/2)` wide of the 2:1 is captured after that share of
-    the closing; the rest of the age is the episode's age
+    formed `ln(ratio/2)` wide of the 2:1 is captured after the share
+    `ln(ratio/2) / closing` of the age, `closing` the fall of `ln(ratio)`
+    over the whole age; the rest of the age is the episode's age
     (`Captures::age_share`, stored on the moon as `capture_age_share`).
     A placed moon (asked by archetype, or its partner), whose formation
     orbit the draw does not know, takes `TIDAL_EPISODE_AGE_SHARE` = 0.44
