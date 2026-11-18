@@ -663,7 +663,6 @@ pub(crate) struct Bare {
     pub condensed: Gases,
     /// Frost on the ground at the climate's surface temperature, bar, gas
     /// by gas ([`climate::frost`]).
-    #[cfg(test)]
     pub frost: Gases,
     /// The vent strength its ice crust's plume fallout was taken at
     /// ([`vent_strength`]); `None` without an ice crust ([`ice_crust`]).
@@ -851,7 +850,6 @@ pub(crate) fn bare(
     // out: the frost holds the air at it, whatever takes it. Neither deck
     // sees it, under SO₂'s triple point and so far under the deck's 273 K.
     let washed = climate::washed(oxygenate(after, &life), &w);
-    #[cfg(test)]
     let frost = climate::frost(
         &gases,
         photolysed.co2 - trapped.co2,
@@ -887,7 +885,6 @@ pub(crate) fn bare(
         trapped,
         climate_gases: after,
         condensed,
-        #[cfg(test)]
         frost,
         #[cfg(test)]
         vent: icy.then_some(vent),

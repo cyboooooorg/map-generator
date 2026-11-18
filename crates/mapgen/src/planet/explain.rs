@@ -602,7 +602,10 @@ fn temperature_tree(
 /// units it was derived from ([`super::surface_age::icy_estimate`], as
 /// [`super::crust_albedo`] reads them) and the plume's fallout when the
 /// body vents; `None` when the albedo is the cover's, not the crust's
-/// (no ice crust, or an air that erodes it).
+/// (no ice crust, an air that erodes it, or a frost over the whole disc,
+/// as Triton's nitrogen: the crust then has no weight in the albedo,
+/// [`super::albedo::bond_albedo_over`]). A frost over part of the disc
+/// keeps the units: they set the albedo of the share it leaves bare.
 fn icy_albedo_causes(
     context: &Context,
     model: &PlanetModel,
@@ -611,6 +614,7 @@ fn icy_albedo_causes(
 ) -> Option<Vec<Cause>> {
     if !ice_crust(&model.inputs, &surface.water, surface.regime)
         || steps.climate_gases.total() >= super::interim::ERODING_BAR
+        || super::albedo::frost_cover(&steps.frost) >= 1.0
     {
         return None;
     }
@@ -1046,6 +1050,53 @@ mod tests {
         )
         .unwrap();
         assert!(find(eq, Quantity::Emissivity).is_none());
+    }
+
+    /// The albedo node names the surface's age only where the age sets
+    /// the albedo (spec goal 8): Triton's 0.747 is its nitrogen frost's,
+    /// which covers its whole disc, so its node names no terrain unit,
+    /// while Ganymede's, an exposed crust, names its units.
+    #[test]
+    fn a_frosted_disc_takes_no_age_in_its_albedo() {
+        use crate::system::{SystemRequest, WholeSystemRequest, body_context, draw};
+        use rand::SeedableRng;
+        let drawn = |arch: &str, seed: u32| {
+            let request = SystemRequest::System(WholeSystemRequest {
+                planets: Some(std::collections::BTreeMap::from([(arch.to_string(), 1)])),
+                seed: Some(seed),
+                ..WholeSystemRequest::default()
+            });
+            let system = draw(
+                &request,
+                &mut rand::rngs::StdRng::seed_from_u64(u64::from(seed)),
+            )
+            .expect("the system draws");
+            let body = system
+                .bodies
+                .iter()
+                .find(|b| b.params.archetype.as_deref() == Some(arch))
+                .expect("the asked body")
+                .clone();
+            let context = body_context(&system, &body).expect("a context");
+            let model = body.model.expect("a model");
+            explain(&context, &model).expect("explained")
+        };
+        for seed in [1, 2, 3] {
+            let e = drawn("triton-like", seed);
+            let t = root(&e, Quantity::SurfaceTemperature);
+            let albedo = find(t, Quantity::BondAlbedo).expect("an albedo node");
+            assert!(
+                find(albedo, Quantity::SurfaceAge).is_none(),
+                "seed {seed}: {albedo:#?}"
+            );
+            let e = drawn("ganymede-like", seed);
+            let t = root(&e, Quantity::SurfaceTemperature);
+            let albedo = find(t, Quantity::BondAlbedo).expect("an albedo node");
+            assert!(
+                find(albedo, Quantity::SurfaceAge).is_some(),
+                "seed {seed}: {albedo:#?}"
+            );
+        }
     }
 
     /// Io's SO₂ is the volcanic frost's vapour: its node names the frost,
