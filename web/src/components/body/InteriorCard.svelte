@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from '../Glossed.svelte';
   // Interior: size and mass, density and gravity, what the body is made of,
   // its core and magnetic field, its tectonics and internal heat.
   import './facts.css';
@@ -48,81 +49,81 @@
 
 {#if body}
   <dl class="facts">
-    <dt>{t.cards.mass}</dt>
+    <dt><Glossed text={t.cards.mass} /></dt>
     {#if giant}
       <dd>
-        {t.worldInfo.giantMassValue({
+        <Glossed text={t.worldInfo.giantMassValue({
           jupiter: withUnit(formatUpTo(giant.mass_earth / 317.8, 2), 'M♃'),
           earth: withUnit(formatInt(giant.mass_earth), 'M⊕'),
-        })}
+        })} />
       </dd>
     {:else}
-      <dd>{formatMassEarth(body.physical.mass_earth)}</dd>
+      <dd><Glossed text={formatMassEarth(body.physical.mass_earth)} /></dd>
     {/if}
-    <dt>{t.cards.radius}</dt>
+    <dt><Glossed text={t.cards.radius} /></dt>
     {#if giant}
       <dd>
-        {t.worldInfo.giantMassValue({
+        <Glossed text={t.worldInfo.giantMassValue({
           jupiter: withUnit(formatUpTo(giant.radius_earth / 11.21, 2), 'RJ'),
           earth: withUnit(formatUpTo(giant.radius_earth, 1), 'R⊕'),
-        })}
+        })} />
       </dd>
     {:else}
       <dd>
-        {withUnit(formatInt(body.physical.radius_km), 'km')}{#if body.physical.axes_km}{' '}(<span class="unit-help" title={t.card.axesHelp}>{t.card.axes({
+        {withUnit(formatInt(body.physical.radius_km), 'km')}{#if body.physical.axes_km}{' '}(<span class="axes-help" title={t.card.axesHelp}><Glossed text={t.card.axes({
             a: withUnit(formatInt(2 * body.physical.axes_km[0]), 'km'),
             b: formatInt(2 * body.physical.axes_km[1]),
             c: formatInt(2 * body.physical.axes_km[2]),
-          })}</span>){/if}
+          })} /></span>){/if}
       </dd>
     {/if}
-    <dt>{t.cards.density}</dt>
-    <dd>{withUnit(formatUpTo(body.physical.density, 2), 'g/cm³')}</dd>
-    <dt>{t.worldInfo.gravity}</dt>
-    <dd>{withUnit(formatUpTo(body.physical.gravity, 2), 'g')}</dd>
+    <dt><Glossed text={t.cards.density} /></dt>
+    <dd><Glossed text={withUnit(formatUpTo(body.physical.density, 2), 'g/cm³')} /></dd>
+    <dt><Glossed text={t.worldInfo.gravity} /></dt>
+    <dd><Glossed text={withUnit(formatUpTo(body.physical.gravity, 2), 'g')} /></dd>
     {#if meta}
-      <dt>{t.worldInfo.circumference}</dt>
-      <dd>{withUnit(formatInt(meta.circumference_km), 'km')}</dd>
+      <dt><Glossed text={t.worldInfo.circumference} /></dt>
+      <dd><Glossed text={withUnit(formatInt(meta.circumference_km), 'km')} /></dd>
     {/if}
     {#if layers}
-      <dt>{t.cards.layers}</dt>
-      <dd>{layers}<CauseTree tree={treeFor(explanation, 'ocean_depth')} open={open === 'ocean_depth'} ontoggle={toggle('ocean_depth')} {oninput} /></dd>
+      <dt><Glossed text={t.cards.layers} /></dt>
+      <dd><Glossed text={layers} /><CauseTree tree={treeFor(explanation, 'ocean_depth')} open={open === 'ocean_depth'} ontoggle={toggle('ocean_depth')} {oninput} /></dd>
     {/if}
     {#if model?.surface}
-      <dt>{t.card.regime}</dt>
-      <dd>{t.regimes[model.surface.regime]}<CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} {oninput} /></dd>
+      <dt><Glossed text={t.card.regime} /></dt>
+      <dd><Glossed text={t.regimes[model.surface.regime]} /><CauseTree tree={treeFor(explanation, 'regime')} open={open === 'regime'} ontoggle={toggle('regime')} {oninput} /></dd>
     {/if}
     {#if model?.surface}
-      <dt>{t.cards.waterKept}</dt>
-      <dd>{withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)}<CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} {oninput} /></dd>
+      <dt><Glossed text={t.cards.waterKept} /></dt>
+      <dd><Glossed text={withUnit(formatUpTo(model.surface.water.oceans, 3), t.causes.units.water_kept)} /><CauseTree tree={treeFor(explanation, 'water_kept')} open={open === 'water_kept'} ontoggle={toggle('water_kept')} {oninput} /></dd>
     {/if}
     {#if core}
-      <dt>{t.cards.core}</dt>
-      <dd>{t.cards.coreStates[core.state]}</dd>
-      <dt>{t.cards.field}</dt>
-      <dd>{core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField}<CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} {oninput} /></dd>
+      <dt><Glossed text={t.cards.core} /></dt>
+      <dd><Glossed text={t.cards.coreStates[core.state]} /></dd>
+      <dt><Glossed text={t.cards.field} /></dt>
+      <dd><Glossed text={core.dynamo ? withUnit(formatUpTo(core.field_ut, 1), 'µT') : t.cards.noField} /><CauseTree tree={treeFor(explanation, 'magnetic_field')} open={open === 'magnetic_field'} ontoggle={toggle('magnetic_field')} {oninput} /></dd>
     {/if}
     {#if model}
-      <dt>{t.cards.heat}</dt>
-      <dd>{t.cards.heatValue({ radiogenic: power(model.heat.radiogenic_w), tidal: power(model.heat.tidal_w), secular: power(model.heat.secular_w) })}</dd>
+      <dt><Glossed text={t.cards.heat} /></dt>
+      <dd><Glossed text={t.cards.heatValue({ radiogenic: power(model.heat.radiogenic_w), tidal: power(model.heat.tidal_w), secular: power(model.heat.secular_w) })} /></dd>
     {/if}
     {#if tidal && (body?.kind === 'moon' || model?.ice_shell)}
-      <dt>{t.card.tidalHeat}</dt>
-      <dd>{tidal}<CauseTree tree={treeFor(explanation, 'heat_flux')} open={open === 'heat_flux'} ontoggle={toggle('heat_flux')} {oninput} /></dd>
+      <dt><Glossed text={t.card.tidalHeat} /></dt>
+      <dd><Glossed text={tidal} /><CauseTree tree={treeFor(explanation, 'heat_flux')} open={open === 'heat_flux'} ontoggle={toggle('heat_flux')} {oninput} /></dd>
     {/if}
     {#if inertia}
-      <dt>{t.card.momentOfInertia}</dt>
-      <dd>{inertia}<CauseTree tree={treeFor(explanation, 'moment_of_inertia')} open={open === 'moment_of_inertia'} ontoggle={toggle('moment_of_inertia')} {oninput} /></dd>
+      <dt><Glossed text={t.card.momentOfInertia} /></dt>
+      <dd><Glossed text={inertia} /><CauseTree tree={treeFor(explanation, 'moment_of_inertia')} open={open === 'moment_of_inertia'} ontoggle={toggle('moment_of_inertia')} {oninput} /></dd>
     {/if}
     {#if geysers}
-      <dt>{t.card.geysers}</dt>
-      <dd>{geysers}</dd>
+      <dt><Glossed text={t.card.geysers} /></dt>
+      <dd><Glossed text={geysers} /></dd>
     {/if}
     {#if giant}
-      <dt>{t.cards.flattening}</dt>
-      <dd>{formatUpTo(giant.flattening, 3)}</dd>
-      <dt title={t.worldInfo.giantHeatHelp}>{t.worldInfo.giantHeat}</dt>
-      <dd>{t.worldInfo.giantHeatValue({ ratio: formatUpTo(giant.heat_ratio, 1) })}</dd>
+      <dt><Glossed text={t.cards.flattening} /></dt>
+      <dd><Glossed text={formatUpTo(giant.flattening, 3)} /></dd>
+      <dt title={t.worldInfo.giantHeatHelp}><Glossed text={t.worldInfo.giantHeat} /></dt>
+      <dd><Glossed text={t.worldInfo.giantHeatValue({ ratio: formatUpTo(giant.heat_ratio, 1) })} /></dd>
     {/if}
   </dl>
 {/if}

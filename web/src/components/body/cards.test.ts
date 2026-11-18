@@ -21,7 +21,7 @@ const surface = {
   climate: { temperature_k: 288, liquid: 'water', regulated: true },
   core: { state: 'liquid', dynamo: true, field_ut: 50 },
   life: { arose: true, oxygenated: true },
-  regime: 'plate_tectonics',
+  regime: 'plates',
   water: { runaway: false, boiled: false, kept_kg: 1, oceans: 1 },
 };
 const model = {
@@ -88,8 +88,9 @@ function worldOf(bodies: Body[], shown: string, meta: WorldMetadata | null): Loa
 }
 
 const NOOP = () => {};
-const renderCard = (card: Component<any>, props: Record<string, unknown>): string => render(card, { props }).body;
-const labels = (html: string) => [...html.matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map((m) => m[1] ?? '');
+const renderCard = (card: Component<any>, props: Record<string, unknown>): string => render(card, { props }).body.replace(/<!--.*?-->/g, '');
+const noAbbr = (html: string) => html.replace(/<abbr[^>]*>|<\/abbr>/g, '');
+const labels = (html: string) => [...noAbbr(html).matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map((m) => m[1] ?? '');
 
 /** The labels of every card of a body, together. */
 function allLabels(world: LoadedWorld): string[] {
@@ -143,9 +144,11 @@ describe('themed body cards', () => {
     const air = renderCard(AtmosphereCard, { world });
     // The model's pressure (its gases' sum) and temperature, not the deck's
     // render pressure, clouds or spot.
-    expect(air).toContain('410,172 bar');
-    expect(air).not.toContain('0.3 bar');
-    expect(air).toContain('1,406 °C');
+    expect(noAbbr(air)).toContain('410,172 bar');
+    expect(air).toMatch(/<abbr class="gloss"[^>]*title="bar: pressure"/);
+    expect(air).not.toContain('Venus');
+    expect(noAbbr(air)).not.toContain('0.3 bar');
+    expect(noAbbr(air)).toContain('1,406 °C');
     expect(labels(air)).not.toContain('Clouds');
     expect(air).not.toContain('spot');
     // Earth units and its steam layer, no Jupiter units or flattening.
@@ -195,7 +198,7 @@ describe('themed body cards', () => {
       },
     });
     const html = renderCard(InteriorCard, { world: worldOf([earthLike, enceladus], 'c-1', null) });
-    expect(html).toContain('ocean of 30 km under 25 km of ice (conductive)');
+    expect(noAbbr(html)).toContain('ocean of 30 km under 25 km of ice (conductive)');
     expect(html).toContain('0.335 — differentiated');
     expect(html).toContain('active at the south pole');
     expect(labels(html)).toContain('Tidal heat');

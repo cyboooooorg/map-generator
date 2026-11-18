@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from '../Glossed.svelte';
   // The summary of the system shown (docs/system-spec.md, *Interface*): its
   // star, a strip of its planets that picks one, and its counts. The only
   // place the system's age is shown.
@@ -39,10 +40,10 @@
   <section class="system" aria-label={t.card.system}>
     <header>
       <NameEditor {world} id="star" designation={star.designation} name={starName} {onRenamed} />
-      <small>{starName === star.designation ? '' : `${star.designation} · `}{star.type} · {t.card.starFacts({
+      <small><Glossed text={`${starName === star.designation ? '' : `${star.designation} · `}${star.type} · ${t.card.starFacts({
           temperature: withUnit(formatInt(Math.round(star.info.teff_k / 10) * 10), 'K'),
           luminosity: withUnit(formatUpTo(star.info.luminosity, star.info.luminosity < 0.01 ? 4 : 2), 'L☉'),
-        })}</small>
+        })}`} /></small>
     </header>
     <div class="strip" role="group" aria-label={t.card.planets}>
       {#each planets as p (p.id)}

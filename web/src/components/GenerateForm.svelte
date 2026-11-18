@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from './Glossed.svelte';
   import { hostsAdded, planetsRequest } from '../lib/systemPlanets';
   import { detailText, errorField, errorText } from '../lib/i18n/errors';
   import { t } from '../lib/i18n/index.svelte';
@@ -523,7 +524,7 @@
 
 <div class="wrap" bind:clientWidth={width}>
 <form onsubmit={submit} class:compact={!wide}>
-  <h2>{variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newSystem}</h2>
+  <h2><Glossed text={variedFrom ? t.form.vary({ id: variedFrom }) : t.form.newSystem} /></h2>
   <ol class="steps" aria-label={t.form.stepsLabel}>
     {#each STEPS as s, i (s)}
       <li class:current={s === step} class:done={i < stepIndex}>
@@ -534,12 +535,12 @@
     {/each}
   </ol>
   {#if variedFrom}
-    <p class="help">{t.form.variedHelp({ id: variedFrom })}</p>
+    <p class="help"><Glossed text={t.form.variedHelp({ id: variedFrom })} /></p>
   {:else if memory}
-    <p class="help">{t.form.memoryHelpBefore}<strong>{t.form.memoryHelpDefaults}</strong>{t.form.memoryHelpAfter}</p>
+    <p class="help">{t.form.memoryHelpBefore}<strong><Glossed text={t.form.memoryHelpDefaults} /></strong>{t.form.memoryHelpAfter}</p>
   {/if}
   {#if missingArchetype}
-    <p class="error">{t.form.missingArchetype({ archetype: start.initial?.planet ?? '' })}</p>
+    <p class="error"><Glossed text={t.form.missingArchetype({ archetype: start.initial?.planet ?? '' })} /></p>
   {/if}
 
   <div class="body" class:split={wide}>
@@ -548,20 +549,20 @@
     {#if !variedFrom}
       <div class="kinds" role="group" aria-label={t.form.mode}>
         <button type="button" class="kind" class:active={mode === 'system'} aria-pressed={mode === 'system'} onclick={() => (mode = 'system')}>
-          <strong>{t.form.modeSystem}</strong>
-          <small>{t.form.modeSystemHelp}</small>
+          <strong><Glossed text={t.form.modeSystem} /></strong>
+          <small><Glossed text={t.form.modeSystemHelp} /></small>
         </button>
         <button type="button" class="kind" class:active={mode === 'around'} aria-pressed={mode === 'around'} onclick={() => (mode = 'around')}>
-          <strong>{t.form.modeAround}</strong>
-          <small>{t.form.modeAroundHelp}</small>
+          <strong><Glossed text={t.form.modeAround} /></strong>
+          <small><Glossed text={t.form.modeAroundHelp} /></small>
         </button>
       </div>
       <div class="all-random">
         <button type="button" onclick={allRandom} disabled={submitting}>{t.form.allRandom}</button>
-        <small class="help">{t.form.allRandomHelp}</small>
+        <small class="help"><Glossed text={t.form.allRandomHelp} /></small>
       </div>
     {:else}
-      <p class="help">{t.form.modeAround}</p>
+      <p class="help"><Glossed text={t.form.modeAround} /></p>
     {/if}
   {:else if step === 'star'}
     {#if mode === 'system'}
@@ -576,7 +577,7 @@
         {#if !systemStarRandom}
           <div class="star">
             <label class="labelled">
-              <span>{t.form.starClass}</span>
+              <span><Glossed text={t.form.starClass} /></span>
               <span class="with-dot">
                 <StarDot colour={dotOfSystemStar} label={starType(systemClass, systemSubtype)} />
                 <select bind:value={systemClass}>
@@ -587,17 +588,17 @@
               </span>
             </label>
             <label class="labelled">
-              <span>{t.form.starSubtype}</span>
+              <span><Glossed text={t.form.starSubtype} /></span>
               <input type="number" min={systemClass === 'O' ? 3 : 0} max="9.5" step="0.5" bind:value={systemSubtype} />
             </label>
             <span class="labelled">
-              <span>{t.form.starType}</span>
-              <strong class="value">{starType(systemClass, systemSubtype)}</strong>
+              <span><Glossed text={t.form.starType} /></span>
+              <strong class="value"><Glossed text={starType(systemClass, systemSubtype)} /></strong>
             </span>
           </div>
-          <p class="help">{t.form.starClasses[systemClass]}</p>
+          <p class="help"><Glossed text={t.form.starClasses[systemClass] ?? ''} /></p>
         {:else}
-          <p class="help">{t.form.systemStarRandomHelp}</p>
+          <p class="help"><Glossed text={t.form.systemStarRandomHelp} /></p>
         {/if}
       </fieldset>
     {:else}
@@ -605,7 +606,7 @@
     <legend>{t.form.star}</legend>
     <div class="star">
       <label class="labelled">
-        <span>{t.form.starClass}</span>
+        <span><Glossed text={t.form.starClass} /></span>
         <span class="with-dot">
           <StarDot colour={dotOfStar} label={star.klass === '' ? t.form.starAuto : starType(star.klass, star.subtype)} />
           <select bind:value={star.klass} onchange={() => (star.subtype = Math.max(star.subtype, star.klass === 'O' ? 3 : 0))}>
@@ -617,7 +618,7 @@
         </span>
       </label>
       <label class="labelled">
-        <span>{t.form.starSubtype}</span>
+        <span><Glossed text={t.form.starSubtype} /></span>
         <select bind:value={star.subtype} disabled={star.klass === ''}>
           {#each subtypes(star.klass) as subtype (subtype)}
             <option value={subtype}>{formatUpTo(subtype, 1)}</option>
@@ -625,7 +626,7 @@
         </select>
       </label>
     </div>
-    <p class="help">{star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass]}</p>
+    <p class="help"><Glossed text={star.klass === '' ? t.form.starAutoHelp : t.form.starClasses[star.klass] ?? ''} /></p>
   </fieldset>
   <fieldset>
     <legend>
@@ -661,7 +662,7 @@
         {/if}
       </div>
     {/if}
-    <p class="help">{star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp}</p>
+    <p class="help"><Glossed text={star.orbitBy === 'position' ? t.form.orbitPositionHelp : t.form.orbitAuHelp} /></p>
   </fieldset>
     {/if}
   {:else if step === 'planets'}
@@ -678,30 +679,30 @@
           <div class="counts">
             {#each spec.archetypes as type (type)}
               <label>
-                <span>{archetypeName({ name: type })}</span>
+                <span><Glossed text={archetypeName({ name: type })} /></span>
                 <input type="number" min="0" max={spec.max_planets} step="1" bind:value={planetCounts[type]} />
               </label>
             {/each}
           </div>
-          <p class="help" class:error={!planetsValid}>{t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets })}</p>
+          <p class="help" class:error={!planetsValid}><Glossed text={t.form.systemPlanetsTotal({ count: planetTotal, max: spec.max_planets })} /></p>
           {#if spec.moon_archetypes.length > 0}
-            <h4>{t.form.systemMoons}</h4>
+            <h4><Glossed text={t.form.systemMoons} /></h4>
             <div class="counts">
               {#each spec.moon_archetypes as type (type)}
                 <label>
-                  <span>{archetypeName({ name: type })}</span>
+                  <span><Glossed text={archetypeName({ name: type })} /></span>
                   <input type="number" min="0" max={spec.max_planets} step="1" bind:value={moonCounts[type]} />
                 </label>
               {/each}
             </div>
-            <p class="help">{t.form.systemMoonsHelp}</p>
+            <p class="help"><Glossed text={t.form.systemMoonsHelp} /></p>
           {/if}
         {/if}
-        <p class="help">{t.form.systemPlanetsHelp}</p>
+        <p class="help"><Glossed text={t.form.systemPlanetsHelp} /></p>
       </fieldset>
     {:else}
   <label class="row">
-    <span>{t.form.planet}</span>
+    <span><Glossed text={t.form.planet} /></span>
     <select value={planet} onchange={(e) => chooseArchetype(e.currentTarget.value)} disabled={randomPlanet}>
       {#each archetypes.filter((a) => !a.moon) as archetype (archetype.spec)}
         <option value={archetype.spec}>{archetypeName(archetype)}{archetype.built_in ? '' : ` (${archetype.spec})`}</option>
@@ -713,7 +714,7 @@
     {t.form.randomPlanet}
   </label>
   {#if selectedArchetype && !randomPlanet}
-    <p class="help">{archetypeDescription(selectedArchetype)}</p>
+    <p class="help"><Glossed text={archetypeDescription(selectedArchetype)} /></p>
   {/if}
 
   {#each shownFields as field (field)}
@@ -742,7 +743,7 @@
           <input type="number" min={limits.min} max={limits.max} step="any" bind:value={fields[field].value} />
         </div>
       {/if}
-      <p class="help">{fieldText(field).help}</p>
+      <p class="help"><Glossed text={fieldText(field).help} /></p>
     </fieldset>
   {/each}
 
@@ -762,7 +763,7 @@
   {/if}
 
   {#if !giantWorld && giantChoice.host === 'giant'}
-    <p class="help">{t.form.moonsOfAMoon}</p>
+    <p class="help"><Glossed text={t.form.moonsOfAMoon} /></p>
   {:else if !giantWorld}
   <fieldset>
     <legend>{t.form.moons}</legend>
@@ -773,7 +774,7 @@
         <option value={count}>{t.form.moonsCount({ count })}</option>
       {/each}
     </select>
-    <p class="help">{t.form.moonsHelp}</p>
+    <p class="help"><Glossed text={t.form.moonsHelp} /></p>
   </fieldset>
   {/if}
   {#if mode === 'around'}
@@ -783,13 +784,13 @@
         <input type="checkbox" bind:checked={giantChoice.alone} />
         {t.form.alone}
       </label>
-      <p class="help">{t.form.aloneHelp}</p>
+      <p class="help"><Glossed text={t.form.aloneHelp} /></p>
     </fieldset>
   {/if}
     {/if}
   {:else if step === 'advanced'}
     <details class="advanced" open>
-      <summary>{t.form.advanced}</summary>
+      <summary><Glossed text={t.form.advanced} /></summary>
       <div class="advanced-body">
       <fieldset>
         <legend>
@@ -812,19 +813,19 @@
             />
           </div>
         {/if}
-        <p class="help">{t.form.metallicityHelp}</p>
+        <p class="help"><Glossed text={t.form.metallicityHelp} /></p>
       </fieldset>
       {#if !giantWorld && mode === 'around'}
         <fieldset>
           <legend>{t.form.giants}</legend>
           {#if giantChoice.alone}
-            <p class="help">{t.form.giantsAlone}</p>
+            <p class="help"><Glossed text={t.form.giantsAlone} /></p>
           {:else}
             <select bind:value={giantChoice.giants} aria-label={t.form.giants}>
               <option value="auto">{t.form.giantsAuto}</option>
               <option value="none">{t.form.giantsNone}</option>
             </select>
-            <p class="help">{t.form.giantsHelp}</p>
+            <p class="help"><Glossed text={t.form.giantsHelp} /></p>
           {/if}
         </fieldset>
         <fieldset>
@@ -834,12 +835,12 @@
             <option value="none">{t.form.hostNone}</option>
             <option value="giant">{t.form.hostGiant}</option>
           </select>
-          <p class="help">{t.form.hostHelp}</p>
+          <p class="help"><Glossed text={t.form.hostHelp} /></p>
         </fieldset>
       {/if}
 
       <div class="row">
-        <label for="seed">{t.form.seed}</label>
+        <label for="seed"><Glossed text={t.form.seed} /></label>
         <div class="seed">
           <input id="seed" type="text" inputmode="numeric" placeholder={t.form.seedPlaceholder} bind:value={seed} />
           <button type="button" onclick={rollSeed} title={t.form.rollHelp}>{t.form.roll}</button>
@@ -849,7 +850,7 @@
         </div>
       </div>
       <label class="row">
-        <span>{t.form.size}</span>
+        <span><Glossed text={t.form.size} /></span>
         <select bind:value={size}>
           {#each sizes as [w, h] (`${w}x${h}`)}
             <option value={`${w}x${h}`} disabled={w > spec.max_size || h > spec.max_size || w * h > spec.max_pixels}
@@ -868,13 +869,13 @@
       </div>
     </details>
     {#if !seedValid}
-      <p class="error">{t.form.seedInvalid({ max: formatInt(MAX_SEED) })}</p>
+      <p class="error"><Glossed text={t.form.seedInvalid({ max: formatInt(MAX_SEED) })} /></p>
     {/if}
   {:else}
     <dl class="summary">
       {#each summary as line (line.label)}
-        <dt>{line.label}</dt>
-        <dd>{line.value}</dd>
+        <dt><Glossed text={line.label} /></dt>
+        <dd><Glossed text={line.value} /></dd>
       {/each}
     </dl>
     <p class="help cost">
@@ -884,11 +885,11 @@
       })}
     </p>
   {#if !seedValid}
-    <p class="error">{t.form.seedInvalid({ max: formatInt(MAX_SEED) })}</p>
+    <p class="error"><Glossed text={t.form.seedInvalid({ max: formatInt(MAX_SEED) })} /></p>
   {:else if conflict}
     <div class="warning">
       <p>
-        {t.form.exists({ id: targetId ?? '' })}
+        <Glossed text={t.form.exists({ id: targetId ?? '' })} />
       </p>
       <label class="check">
         <input type="checkbox" bind:checked={replace} />
@@ -904,7 +905,7 @@
     <aside class="side"><PreviewPanel {preview} kind={mode} {ageSources} onjump={jump} onreroll={reroll} /></aside>
   {:else}
     <details class="fold">
-      <summary>{t.form.preview.summary}</summary>
+      <summary><Glossed text={t.form.preview.summary} /></summary>
       <PreviewPanel {preview} kind={mode} folded {ageSources} onjump={jump} onreroll={reroll} />
     </details>
   {/if}
@@ -914,13 +915,13 @@
        while a step scrolls. -->
   <div class="footer">
     {#if error}
-      <p class="error">{error}</p>
+      <p class="error"><Glossed text={error} /></p>
     {/if}
     {#if refusalText && !refusalAtField}
-      <p class="error" role="alert">{refusalText}</p>
+      <p class="error" role="alert"><Glossed text={refusalText} /></p>
     {/if}
     {#if step === 'summary'}
-      <p class="help">{t.form.background}</p>
+      <p class="help"><Glossed text={t.form.background} /></p>
     {/if}
     <div class="actions">
       <button type="button" class="reset" onclick={resetForm} title={t.form.defaultsHelp}

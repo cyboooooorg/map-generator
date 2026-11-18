@@ -99,13 +99,6 @@ input[type='radio'] {
   accent-color: var(--accent);
 }
 
-/* A value or label with a unit explained in its tooltip (see lib/units.ts). */
-.unit-help {
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-  cursor: help;
-}
-
 /* A formula or unit whose name shows on hover (title) and on tap (focus). */
 .gloss {
   text-decoration: underline dotted;

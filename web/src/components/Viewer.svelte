@@ -35,7 +35,7 @@
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { onThemeChange, overlayColours } from '../lib/themes';
-  import { unitTooltip } from '../lib/units';
+  import Glossed from './Glossed.svelte';
   import { toggleDialog, type Dialog } from '../lib/dialogs';
   import UnitsPanel from './UnitsPanel.svelte';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
@@ -2554,7 +2554,7 @@
 {#snippet epochPanel()}
   <div class="panel-body">
       <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
-        <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
+        <span class="epoch-label" aria-live="polite"><Glossed text={formatEpoch(epochShown)} /></span>
         <input
           type="range"
           min={0}

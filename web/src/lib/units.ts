@@ -1,8 +1,8 @@
 // The units of the interface, explained in the Units panel (long name and
-// reference values) and named in short in tooltips.
+// reference values).
 
 import { getLocale } from './i18n/index.svelte';
-import { glossName, type GlossUnit } from './glossary';
+import type { GlossUnit } from './glossary';
 
 /**
  * Units explained in the Units panel, in its order: every glossed unit but
@@ -13,11 +13,6 @@ export const UNITS = [
   'W/m²', 'µT', 'm/s²', 'mm/s²', 'km', 'km²', 'M km²', 'km/s', 'TW', 'GW', 'MW', 'W',
 ] as const satisfies readonly GlossUnit[];
 export type Unit = (typeof UNITS)[number];
-
-/** Tooltip naming `units`, one short name per line, without reference values. */
-export function unitTooltip(...units: Unit[]): string {
-  return units.map((unit) => glossName('unit', unit) ?? unit).join('\n');
-}
 
 /**
  * The units the panel lists in the active language: one row per unit, so

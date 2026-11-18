@@ -8,7 +8,7 @@
   import { formatAge, formatAu, formatStar, formatUpTo } from '../../lib/format';
   import { formatMassWithNote } from '../../lib/massFormat';
   import type { System } from '../../lib/api/types/System';
-  import MassUnits from '../MassUnits.svelte';
+  import Glossed from '../Glossed.svelte';
   import StarDot from './StarDot.svelte';
 
   /** The archetypes asked that set the system's age (see archetypeAge.ts), named on the star line. */
@@ -49,7 +49,7 @@
             <tr>
               <th scope="row">{body.designation}</th>
               <td>{classLabel(body.type, body.model)}</td>
-              <td><MassUnits text={formatMassWithNote(body.physical.mass_earth)} /></td>
+              <td><Glossed text={formatMassWithNote(body.physical.mass_earth)} /></td>
               <td>{formatAu(body.orbit.semi_major_axis_au)}</td>
               <td>{moonsOf(body.id)}</td>
             </tr>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from './Glossed.svelte';
   import { t } from '../lib/i18n/index.svelte';
   import { biomeName } from '../lib/i18n/names.svelte';
   import type { HexMap } from '../lib/api/types/HexMap';
@@ -89,7 +90,7 @@
 >
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <header onpointerdown={drag}>
-    <strong>{formatLonLat(point)}</strong>
+    <strong><Glossed text={formatLonLat(point)} /></strong>
     <span class="actions">
       <button class="small" onclick={copyCoordinates} title={t.info.copyHelp}>{t.info.copy}</button>
       <button class="close" onclick={onClose} aria-label={t.info.close}>×</button>
@@ -103,76 +104,76 @@
       </p>
     {/if}
     <dl>
-      <dt>{t.info.elevation}</dt>
-      <dd>{signed(sample.relief, 3)} <small>{t.info.aboveCoastline}</small></dd>
-      <dt>{t.info.temperature}</dt>
-      <dd>{withUnit(formatNumber(sample.temperature, 1), '°C')} <small>{t.info.annualMean}</small></dd>
-      <dt>{t.info.moisture}</dt>
-      <dd>{formatNumber(sample.moisture, 2)} <small>{t.info.moistureScale}</small></dd>
+      <dt><Glossed text={t.info.elevation} /></dt>
+      <dd><Glossed text={signed(sample.relief, 3)} /> <small><Glossed text={t.info.aboveCoastline} /></small></dd>
+      <dt><Glossed text={t.info.temperature} /></dt>
+      <dd><Glossed text={withUnit(formatNumber(sample.temperature, 1), '°C')} /> <small><Glossed text={t.info.annualMean} /></small></dd>
+      <dt><Glossed text={t.info.moisture} /></dt>
+      <dd><Glossed text={formatNumber(sample.moisture, 2)} /> <small><Glossed text={t.info.moistureScale} /></small></dd>
       {#if sample.flowKm2 > 0}
-        <dt>{t.info.drainage}</dt>
-        <dd>{formatArea(sample.flowKm2)} <small>{t.info.upstream}</small></dd>
+        <dt><Glossed text={t.info.drainage} /></dt>
+        <dd><Glossed text={formatArea(sample.flowKm2)} /> <small><Glossed text={t.info.upstream} /></small></dd>
       {/if}
       {#if sample.coastKm !== null}
-        <dt>{t.info.toSea}</dt>
-        <dd>{sample.coastCapped ? t.info.over({ distance: formatKm(sample.coastKm) }) : formatKm(sample.coastKm)}</dd>
+        <dt><Glossed text={t.info.toSea} /></dt>
+        <dd><Glossed text={sample.coastCapped ? t.info.over({ distance: formatKm(sample.coastKm) }) : formatKm(sample.coastKm)} /></dd>
       {/if}
       {#if sample.volcanic !== null}
-        <dt>{t.info.volcanic}</dt>
-        <dd>{formatNumber(sample.volcanic, 2)} <small>{t.info.volcanicScale}</small></dd>
+        <dt><Glossed text={t.info.volcanic} /></dt>
+        <dd><Glossed text={formatNumber(sample.volcanic, 2)} /> <small><Glossed text={t.info.volcanicScale} /></small></dd>
       {/if}
       {#if sample.floodplain !== null && sample.floodplain > 0.01}
-        <dt>{t.info.floodplain}</dt>
-        <dd>{formatNumber(sample.floodplain, 2)} <small>{t.info.floodplainScale}</small></dd>
+        <dt><Glossed text={t.info.floodplain} /></dt>
+        <dd><Glossed text={formatNumber(sample.floodplain, 2)} /> <small><Glossed text={t.info.floodplainScale} /></small></dd>
       {/if}
       {#if sample.highlandOffset !== null}
-        <dt>{t.info.highland}</dt>
-        <dd>{signed(sample.highlandOffset, 3)} <small>{t.info.highlandScale}</small></dd>
+        <dt><Glossed text={t.info.highland} /></dt>
+        <dd><Glossed text={signed(sample.highlandOffset, 3)} /> <small><Glossed text={t.info.highlandScale} /></small></dd>
       {/if}
-      <dt>{t.info.pixel}</dt>
+      <dt><Glossed text={t.info.pixel} /></dt>
       <dd>{sample.x}, {sample.y}</dd>
     </dl>
 
     {#if river}
       {@const parent = river.river.parent !== null ? rivers?.byId.get(river.river.parent) : undefined}
-      <h3>{t.info.river({ id: river.river.id })}</h3>
+      <h3><Glossed text={t.info.river({ id: river.river.id })} /></h3>
       <dl>
-        <dt>{t.info.flowHere}</dt>
-        <dd>{formatArea(river.flowKm2)} <small>{t.info.drained}</small></dd>
-        <dt>{t.info.atMouth}</dt>
-        <dd>{formatArea(rivers?.mouthFlowKm2(river.river) ?? 0)}</dd>
-        <dt>{t.info.length}</dt>
-        <dd>{formatKm(rivers?.lengthKm(river.river) ?? 0)}</dd>
-        <dt>{t.info.endsIn}</dt>
+        <dt><Glossed text={t.info.flowHere} /></dt>
+        <dd><Glossed text={formatArea(river.flowKm2)} /> <small><Glossed text={t.info.drained} /></small></dd>
+        <dt><Glossed text={t.info.atMouth} /></dt>
+        <dd><Glossed text={formatArea(rivers?.mouthFlowKm2(river.river) ?? 0)} /></dd>
+        <dt><Glossed text={t.info.length} /></dt>
+        <dd><Glossed text={formatKm(rivers?.lengthKm(river.river) ?? 0)} /></dd>
+        <dt><Glossed text={t.info.endsIn} /></dt>
         <dd>
           {t.info.mouths[river.river.mouth]}{#if parent}&nbsp;(#{parent.id}){/if}{#if river.river.estuary}{t.info.estuary}{/if}
         </dd>
         {#if river.river.source !== null}
-          <dt>{t.info.delta}</dt>
-          <dd>{t.info.branchOf({ id: river.river.source })}</dd>
+          <dt><Glossed text={t.info.delta} /></dt>
+          <dd><Glossed text={t.info.branchOf({ id: river.river.source })} /></dd>
         {/if}
       </dl>
     {/if}
 
     {#if hex}
-      <h3>{t.info.hex({ col: hex.cell.col, row: hex.cell.row })}</h3>
+      <h3><Glossed text={t.info.hex({ col: hex.cell.col, row: hex.cell.row })} /></h3>
       <dl>
-        <dt>{t.info.mainBiome}</dt>
+        <dt><Glossed text={t.info.mainBiome} /></dt>
         <dd>
           {#if hex.biome}<span class="swatch inline" style:background={hex.biome.color}></span>{biomeName(hex.biome)}{/if}
         </dd>
-        <dt>{t.info.meanElevation}</dt>
-        <dd>{signed(hex.elevation - coastline(meta), 3)} <small>{t.info.aboveCoastline}</small></dd>
-        <dt>{t.info.meanTemperature}</dt>
-        <dd>{withUnit(formatNumber(hex.temperature, 1), '°C')}</dd>
-        <dt>{t.info.meanMoisture}</dt>
-        <dd>{formatNumber(hex.moisture, 2)}</dd>
-        <dt>{t.info.largestRiver}</dt>
+        <dt><Glossed text={t.info.meanElevation} /></dt>
+        <dd><Glossed text={signed(hex.elevation - coastline(meta), 3)} /> <small><Glossed text={t.info.aboveCoastline} /></small></dd>
+        <dt><Glossed text={t.info.meanTemperature} /></dt>
+        <dd><Glossed text={withUnit(formatNumber(hex.temperature, 1), '°C')} /></dd>
+        <dt><Glossed text={t.info.meanMoisture} /></dt>
+        <dd><Glossed text={formatNumber(hex.moisture, 2)} /></dd>
+        <dt><Glossed text={t.info.largestRiver} /></dt>
         <dd>{hex.maxFlowKm2 > 0 ? formatArea(hex.maxFlowKm2) : t.info.noRiver}{hex.river ? t.info.riverHex : ''}</dd>
       </dl>
     {/if}
   {:else}
-    <p class="muted">{t.info.loading}</p>
+    <p class="muted"><Glossed text={t.info.loading} /></p>
   {/if}
 </aside>
 

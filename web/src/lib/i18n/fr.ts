@@ -760,7 +760,6 @@ export const fr: Messages = {
     random: 'au hasard',
     model: {
       /** What the mass units say when hovered. */
-      massUnits: { earth: 'masses terrestres (5,97×10²¹ t)', jupiter: 'masses de Jupiter (317,8 masses terrestres)' },
       groups: {
         orbit: { title: 'Forme de l’orbite et âge', help: 'À quel point l’orbite est allongée, et l’âge de l’étoile qu’elle contourne.' },
         composition: { title: 'De quoi elle est faite', help: `Masse, fer, eau et gaz${S}: les ingrédients qui fixent sa taille, sa gravité et son air.` },

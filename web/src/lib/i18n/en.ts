@@ -813,7 +813,6 @@ export const en = {
     random: 'random',
     model: {
       /** What the mass units say when hovered. */
-      massUnits: { earth: 'Earth masses (5.97×10²¹ t)', jupiter: 'Jupiter masses (317.8 Earth masses)' },
       /** The groups of fields, folded until opened. */
       groups: {
         orbit: { title: 'Orbit shape and age', help: 'How elliptical the orbit is, and how old the star it circles.' },

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Glossed from '../Glossed.svelte';
   // The legend of the layer shown: a ramp for a quantity, or, for biomes,
   // a bar of every biome's share, then each biome's swatch, share and area. A biome's row highlights it on the
   // globe (hover) or keeps it highlighted (click).
@@ -35,9 +36,9 @@
 </script>
 
 {#if ramp}
-  <strong>{ramp.title}</strong>
+  <strong><Glossed text={ramp.title} /></strong>
   <div class="ramp" style:background={ramp.gradient}></div>
-  <div class="ends"><span>{ramp.min}</span><span>{ramp.max}</span></div>
+  <div class="ends"><span><Glossed text={ramp.min} /></span><span><Glossed text={ramp.max} /></span></div>
 {:else if stats}
   <div class="bar" aria-hidden="true">
     {#each stats.shares as entry (entry.biome.id)}
@@ -61,9 +62,9 @@
           title={t.viewer.highlightHelp}
         >
           <span class="swatch" style:background={colour(entry.biome)}></span>
-          <span class="name">{biomeName(entry.biome)}</span>
-          <span class="value">{formatShare(entry.share)}</span>
-          <span class="value area" title={t.cards.biomeArea}>{formatArea(entry.areaKm2)}</span>
+          <span class="name"><Glossed text={biomeName(entry.biome)} /></span>
+          <span class="value"><Glossed text={formatShare(entry.share)} /></span>
+          <span class="value area" title={t.cards.biomeArea}><Glossed text={formatArea(entry.areaKm2)} /></span>
         </button>
       </li>
     {/each}
@@ -74,7 +75,7 @@
     </button>
   {/if}
 {:else}
-  <p class="muted">{t.cards.legendEmpty}</p>
+  <p class="muted"><Glossed text={t.cards.legendEmpty} /></p>
 {/if}
 
 <style>
