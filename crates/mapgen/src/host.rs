@@ -274,8 +274,8 @@ const SOLAR_DENSITY: f64 = 1.41;
 /// ([`ROCKY_DENSITY`]) and [`STELLAR_RADII_EDGE`] stellar radii. A fixed
 /// edge would put planets inside an O or hot B star (an O3V is 0.06 AU in
 /// radius), while the closest planets known orbit at 2 to 3 radii of
-/// their star. Dwarfs from B7 to M keep 0.02 AU, so their systems do not
-/// change.
+/// their star. Dwarfs from A1 to M keep 0.02 AU, so their systems do not
+/// change; O to A0 dwarfs (radius above 2.15 R☉) get the larger edge.
 pub fn inner_edge_au(star: &StarValues) -> f64 {
     let radius = f64::from(star.radius);
     let density = SOLAR_DENSITY * f64::from(star.mass) / radius.powi(3);

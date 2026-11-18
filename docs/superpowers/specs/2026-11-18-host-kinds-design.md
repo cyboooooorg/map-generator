@@ -90,8 +90,8 @@ lands.
    orbit at 2 to 3 stellar radii). Today a planet around an O star or a
    hot B star can be placed inside the star (O3V is 13.4 R☉, 0.062 AU,
    against an edge of 0.02 AU). Decided with the user on 2026-11-18:
-   fix it here. Systems around O to B6 dwarfs (radius above 2.15 R☉,
-   about 0.1 % of default draws) change; every dwarf from B7 to M stays
+   fix it here. Systems around O to A0 dwarfs (radius above 2.15 R☉,
+   under 0.5 % of default draws) change; every dwarf from A1 to M stays
    byte-identical. `INNER_EDGE_AU` call sites (`system.rs`) use it.
 6. **Quiet-star activity**: `star_activity` gets a branch chosen by the
    kind for hosts without a convective photosphere (white dwarfs,
