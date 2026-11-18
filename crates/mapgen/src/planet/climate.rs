@@ -697,6 +697,19 @@ const STEAM_ALBEDO_BAR: f64 = 1.0;
 /// its water (Mercury, a dry Venus): no moist atmosphere is left whose
 /// albedo the limit describes; the blend brings a runaway losing its
 /// water there continuously.
+///
+/// At the limit itself the albedo steps, and that step is physics, not
+/// a numerical defect (issue #523): the temperate branch ends there (on
+/// Earth, a thermostat at 288 K under its derived albedo, about 0.30)
+/// and the steam branch begins (all its ocean in the air, under `A_rg`,
+/// about 0.23 round the Sun), two climate states with different albedos.
+/// A runaway that kept the wet albedo at `S_rg` would absorb less than
+/// its moist plateau and not run away, so no blend from the wet albedo
+/// at the limit is faithful; one would need a ramp constant with no
+/// process behind it. The equilibrium temperature is continuous in the
+/// flux on each branch and jumps across the limit by the albedo change
+/// alone, `T_eq ∝ (1 − A)^¼`
+/// (`the_runaway_edge_steps_only_by_the_branches_albedos`).
 pub(super) fn runaway_albedo(context: &Context, water: &Water, steam_bar: f64, albedo: f64) -> f64 {
     let steam = 1.0 - (-steam_bar.max(0.0) / STEAM_ALBEDO_BAR).exp();
     if !(water.runaway && water.kept_kg > 0.0) || steam <= 0.0 {
@@ -2358,6 +2371,82 @@ mod tests {
         .cloud;
         println!("Earth's cloud cover {cloud:.4} at {:.1} K", c.temperature_k);
         assert!((cloud - 0.67).abs() <= 0.03, "{cloud}");
+    }
+
+    #[test]
+    fn the_runaway_edge_steps_only_by_the_branches_albedos() {
+        // Issue #523, ruling of the climate pass lot 3C-2: Earth's
+        // inventory (its water kept, no escape) swept in 0.1 % steps of
+        // flux across its star's runaway limit `S_rg`, on the temperate
+        // branch below (wet) and the steam branch above (its whole ocean
+        // in the air). The step at `S_rg` is the bifurcation between the
+        // two branches, physics rather than a defect (`runaway_albedo`):
+        // 1. on each branch the equilibrium temperature is continuous in
+        //    the flux: with the flux's own `S^¼` taken out, it moves by
+        //    under 0.5 K between neighbours 1 % apart;
+        // 2. across `S_rg` it jumps by the change of albedo between the
+        //    branches, `T_eq ∝ (S (1 − A))^¼`, within 0.5 K, and by
+        //    nothing else.
+        let earth = PlanetInputs {
+            snowball_draw: 1.0,
+            ..model_inputs(reference("Earth"))
+        };
+        let teff = crate::planet::reference::sun_at(1.0).teff_k;
+        let limit = f64::from(crate::star::habitable_fluxes(teff as f32).0);
+        let d = crate::planet::reference::derive_at(&earth, (0.98 * limit).powf(-0.5));
+        assert!(d.water.is_wet(), "{:?}", d.water);
+        // (flux over `S_rg`, equilibrium temperature, Bond albedo)
+        let at = |f: f64| {
+            let context = crate::planet::reference::sun_at((f * limit).powf(-0.5));
+            let runaway = f > 1.0;
+            let water = Water { runaway, ..d.water };
+            let gases = if runaway {
+                Gases {
+                    h2o: d.water_bar,
+                    ..d.gases
+                }
+            } else {
+                d.gases
+            };
+            let (_, c) = climate(
+                &context,
+                gases,
+                &water,
+                d.regime,
+                d.heat_flux_w_m2,
+                d.water_bar,
+                d.carbon,
+                &d.planet,
+            );
+            (f, c.equilibrium_k, c.bond_albedo)
+        };
+        let temperate: Vec<_> = (0..=20).map(|i| at(0.98 + 0.001 * f64::from(i))).collect();
+        let steam: Vec<_> = (1..=20).map(|i| at(1.0 + 0.001 * f64::from(i))).collect();
+        for branch in [&temperate, &steam] {
+            for pair in branch.windows(11) {
+                let (a, b) = (pair[0], pair[10]);
+                let (ta, tb) = (a.1 / a.0.powf(0.25), b.1 / b.0.powf(0.25));
+                assert!(
+                    (tb - ta).abs() < 0.5,
+                    "{:.3} -> {:.3} S_rg: {ta:.2} -> {tb:.2} K",
+                    a.0,
+                    b.0
+                );
+            }
+        }
+        let (wet, hot) = (temperate[20], steam[0]);
+        let expected = wet.1 * (hot.0 / wet.0 * (1.0 - hot.2) / (1.0 - wet.2)).powf(0.25);
+        println!(
+            "edge: A {:.4} -> {:.4}, T_eq {:.2} -> {:.2} K (albedo alone {expected:.2} K)",
+            wet.2, hot.2, wet.1, hot.1
+        );
+        assert!(
+            (hot.1 - expected).abs() < 0.5,
+            "{:.2} K vs {expected:.2} K",
+            hot.1
+        );
+        // The branches differ in albedo: the step is real, not zero.
+        assert!(hot.2 < wet.2 - 0.03, "{wet:?} {hot:?}");
     }
 
     #[test]
