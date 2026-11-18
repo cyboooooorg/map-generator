@@ -531,6 +531,7 @@ mod tests {
         .unwrap();
         assert_eq!(fixture.len(), 210);
         let mut drifted = vec![];
+        let mut skipped_liquid = 0;
         let mut skipped_volatile = 0;
         let mut skipped_episode = 0;
         for (arch, seed, bits) in fixture {
@@ -553,7 +554,11 @@ mod tests {
             // see `ganymede_has_grooved_terrain`.
             let main = p.model.as_ref().and_then(|m| m.terrain.main().copied());
             match main.map(|u| u.renewal) {
-                Some(Renewal::LiquidCycle) => continue,
+                Some(Renewal::LiquidCycle) => {
+                    assert!(arch.starts_with("titan-like"), "{arch} {seed}");
+                    skipped_liquid += 1;
+                    continue;
+                }
                 Some(Renewal::VolatileIce) => {
                     assert!(arch.starts_with("triton-like"), "{arch} {seed}");
                     skipped_volatile += 1;
@@ -571,6 +576,7 @@ mod tests {
             }
         }
         assert!(drifted.is_empty(), "{drifted:#?}");
+        assert!(skipped_liquid > 0, "no titan-like row was skipped");
         assert!(skipped_volatile > 0, "no triton-like row was skipped");
         assert!(skipped_episode > 0, "no ganymede-like row was skipped");
     }
