@@ -4520,6 +4520,61 @@ mod tests {
     }
 
     #[test]
+    fn heat_pipe_moons_explain_their_temperature() {
+        // `earth-like` asked as a giant's moon, request seeds 1 to 40, the
+        // caller seeded 5 (#520): some come out as tidally heated
+        // heat-pipe volcanic worlds, whose replayed temperature missed the
+        // stored one. Every body is explained, and the temperature root is
+        // the stored temperature.
+        use crate::geology::Regime;
+        use crate::planet::{Quantity, explain};
+        let mut failed = Vec::new();
+        let mut heat_pipes = 0;
+        for seed in 1..=40 {
+            let system = draw(
+                &SystemRequest::Around(WorldRequest {
+                    planet: Some("earth-like".into()),
+                    seed: Some(seed),
+                    host: Some(HostMode::Giant),
+                    width: Some(64),
+                    height: Some(32),
+                    ..WorldRequest::default()
+                }),
+                &mut StdRng::seed_from_u64(5),
+            )
+            .unwrap();
+            for body in &system.bodies {
+                let Some(model) = &body.model else { continue };
+                let context = body_context(&system, body).expect("a context");
+                let Some(e) = explain(&context, model) else {
+                    failed.push(format!("{seed} {}: {:?}", body.id, model.class));
+                    continue;
+                };
+                if let Some(surface) = &model.surface {
+                    if body.kind == BodyKind::Moon && surface.regime == Regime::HeatPipe {
+                        heat_pipes += 1;
+                    }
+                    let root = e
+                        .trees
+                        .iter()
+                        .find(|c| c.quantity == Quantity::SurfaceTemperature)
+                        .expect("a temperature tree");
+                    let stored = surface.climate.temperature_k;
+                    if (root.value - stored).abs() > 0.5 {
+                        failed.push(format!(
+                            "{seed} {}: {} K vs {stored} K",
+                            body.id, root.value
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failed.is_empty(), "{failed:#?}");
+        // The case of the issue is among them.
+        assert!(heat_pipes > 0, "no heat-pipe moon over the 40 seeds");
+    }
+
+    #[test]
     fn explain_refuses_a_model_its_context_does_not_reproduce() {
         let system = drawn_g2v(3);
         let body = system
