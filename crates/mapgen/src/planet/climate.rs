@@ -1,10 +1,11 @@
 //! The surface climate of a rocky or icy body and the liquid on its
 //! surface (part 2 of the physical planet model, issue #423).
 //!
-//! [`surface_temperature_k`] balances the outgoing radiation of a grey
-//! radiative–convective column of CO₂, H₂O and CH₄ ([`super::column`])
-//! against the light and heat the surface takes in; [`climate`] adds the
-//! water vapour
+//! [`surface_temperature_k`] balances the outgoing radiation of a
+//! radiative–convective column of CO₂, H₂O and CH₄, integrated over the
+//! thermal spectrum from HITRAN lines and the MT_CKD continua
+//! ([`super::column`], [`super::spectrum`]; issue #523), against the
+//! light and heat the surface takes in; [`climate`] adds the water vapour
 //! that an ocean or ice keeps in the air, runs the carbonate thermostat of
 //! a planet with plates and water, and reads the liquid at the surface off
 //! the phase diagrams of water, hydrocarbons and basalt.
@@ -127,91 +128,10 @@ pub fn emissivity(frost: &Gases) -> f64 {
     1.0 - (1.0 - N2_ICE_EMISSIVITY) * share
 }
 
-/// Grey opacity of CO₂ at 1 bar of CO₂ in 1 bar of air: its optical
-/// depth through a uniform column (see [`optical_depth_at`]).
-/// Calibration, no source, on the column of [`super::column`]: Venus's
-/// 737 K under its 85 bar of CO₂ at its real Bond albedo, 0.76, which the
-/// derived albedo gives its sulphuric deck (739 K in the model; issue
-/// #510), together with the late Archean Earth of [`CO2_EXPONENT`]. It
-/// leaves Mars within two kelvin of its equilibrium temperature. (0.74
-/// with the exponent 0.07 under the fixed albedo 0.3, which left Venus at
-/// 565 K under 0.76; 1.66 on the old Eddington core, 0.575 on the column
-/// with the old exponent 0.27, issue #441.)
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const CO2_OPACITY: f64 = 1.45;
-
-/// Power of the CO₂ partial pressure in its opacity. Calibration, no
-/// source: CO₂'s 15 µm band is saturated at its centre, so its forcing
-/// grows with the logarithm of its amount (Myhre et al. 1998,
-/// doi:10.1029/98GL01908, `ΔF = 5.35 ln(C/C₀)` W/m²); a small power
-/// stands in for that logarithm across the six decades from Earth's
-/// 3e-4 bar to Venus's 85 bar.
-///
-/// Calibration on the column of issue #441, with [`CO2_OPACITY`], on
-/// Venus's 737 K at its Bond albedo 0.76 and the late Archean Earth (0.82
-/// of today's Sun, 10 mbar of CO₂ in 1 bar of N₂, Earth's albedo), which
-/// must stay above 270 K and warm by 3 to 8 K when its nitrogen doubles
-/// (Charnay et al. 2013, see [`THICK_AIR_EXPONENT`]): 0.19 gives it
-/// 272 K and +7.0 K. A lower power makes small amounts of CO₂ stronger
-/// against Venus's 85 bar and the Archean's nitrogen warming larger
-/// (0.13: +11.5 K); a higher one the reverse (0.25: 268 K). Under the
-/// fixed albedo 0.3, 0.07 held Venus at 737 K (0.27 before issue #441,
-/// which left the Archean at 259 K). Modern Earth's thermostat then
-/// leaves a few mbar of CO₂ (the real one, 0.28 mbar): the grey column's
-/// trace CO₂ is weaker than the real band.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const CO2_EXPONENT: f64 = 0.19;
-
-/// Partial pressure of CO₂, bar, below which its opacity falls in
-/// proportion to its amount instead of as [`CO2_EXPONENT`]: the weak-line
-/// limit, where the band is no longer saturated at its centre and absorbs
-/// in proportion to the absorber (Pierrehumbert 2010, §4.4; Goody & Yung
-/// 1989, ch. 4). Calibration, no source, at about 1 ppm of a bar: well
-/// under Earth's 280 ppm, under the few ppm the thermostat leaves under 2
-/// or 3 bar of N₂, and above the 3e-10 bar on Titan, which the small
-/// power would otherwise turn into a greenhouse of a few kelvin.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const CO2_WEAK_BAR: f64 = 1e-6;
-
-/// The power of CO₂'s own pressure in its opacity at `co2` bar: 1 in the
-/// weak-line limit under [`CO2_WEAK_BAR`], [`CO2_EXPONENT`] above it.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-fn co2_power(co2: f64) -> f64 {
-    if co2 < CO2_WEAK_BAR {
-        1.0
-    } else {
-        CO2_EXPONENT
-    }
-}
-
-/// CO₂'s own factor in its opacity, `(p / 1 bar)^a`, continuous at
-/// [`CO2_WEAK_BAR`]: linear under it, [`CO2_EXPONENT`] above it.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-fn co2_amount(co2: f64) -> f64 {
-    if co2 < CO2_WEAK_BAR {
-        CO2_WEAK_BAR.powf(CO2_EXPONENT) * co2 / CO2_WEAK_BAR
-    } else {
-        co2.powf(CO2_EXPONENT)
-    }
-}
-
-/// Grey opacity of water vapour at 1 bar of pure steam, with
-/// [`LINE_EXPONENT`] (see [`water_broadening_bar`]). Calibration on the
-/// column of [`super::column`]: its moist plateau, the Simpson–Nakajima
-/// limit [`SIMPSON_NAKAJIMA_W_M2`], at 287 W/m² (282 W/m² in Goldblatt
-/// et al. 2013) for Earth's air at 340 to 400 K; held a few W/m² above
-/// the limit so that Earth's no-CO₂ climate and the late Archean stay
-/// within their targets. It is twenty times
-/// the old Eddington core's 5.9 (issue #441) because it now counts the
-/// water's own pressure as its broadener, whose lines it widens about
-/// twenty times better than nitrogen does (see
-/// [`WATER_FOREIGN_BROADENING`]), and because the column radiates from
-/// its cold upper levels where the vapour is a trace.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const H2O_OPACITY: f64 = 111.0;
-
-/// Grey opacity of methane at 1 bar in 1 bar of air, with
-/// [`LINE_EXPONENT`]. Calibration on Titan's 93.7 K (Fulchignoni et
+/// Grey opacity of methane at 1 bar in 1 bar of air, the square root of
+/// its amount times the air's (see [`methane_depth`]); the spectral column
+/// takes it over 0-650 cm⁻¹ only ([`super::spectrum`]). Calibration on
+/// Titan's 93.7 K (Fulchignoni et
 /// al. 2005, doi:10.1038/nature04314) under the anti-greenhouse of
 /// [`stratospheric_share`] anchored on McKay, Pollack & Courtin 1991
 /// (issue #563): `titan-like` reaches 92.4 to 94.6 K (mean 93.75 K,
@@ -371,152 +291,6 @@ fn absorbed_w_m2(t_eq: f64, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
     SIGMA * t_eq.powi(4) * (1.0 - stratospheric_share(gases, skin)) + heat_flux_w_m2.max(0.0)
 }
 
-/// Power of a partial pressure, and of the broadening pressure, in a
-/// gas's opacity: the strong-line (square-root) limit, where a pressure-
-/// broadened line absorbs as `sqrt(S u α)`, its absorber path `u ∝ p_i`
-/// and its width `α` growing with the pressure of the gases round it
-/// (Pierrehumbert 2010, *Principles of Planetary Climate*, §4.4; Goody &
-/// Yung 1989, *Atmospheric Radiation*, ch. 4).
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const LINE_EXPONENT: f64 = 0.5;
-
-/// Pressure of the other gases, bar, up to which they broaden lines in
-/// proportion (see [`foreign_share`]): the gases other than CO₂ and water
-/// themselves (N₂, O₂, CH₄...). Calibration on the column of
-/// [`super::column`] (1 bar on the old Eddington core, issue #441): above
-/// three times Earth's air (2.5 bar of N₂ and O₂), so that the moist
-/// plateau of [`SIMPSON_NAKAJIMA_W_M2`] moves by under 2 % between one
-/// and three times Earth's nitrogen, as the limit should (Nakajima,
-/// Hayashi & Abe 1992); a lower knee tempered the broadening of a 3x
-/// nitrogen column and lifted its plateau by 4 %.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const BROADENING_KNEE_BAR: f64 = 2.6;
-
-/// Power of the other gases' pressure past [`BROADENING_KNEE_BAR`] in
-/// the pressure that broadens lines: none, their broadening stops
-/// growing there (0.2 on the old Eddington core).
-///
-/// Calibration on an Earth at 1 AU with modern CO₂ and 2 to 11 bar of
-/// N₂ (issue #441): it must keep a moist balance below 330 K. Thick
-/// nitrogen does warm a planet by pressure broadening: Goldblatt et al.
-/// 2009 (*Nature Geosci.* 2, 891, doi:10.1038/ngeo692; abstract checked)
-/// find 4.4 °C for doubled nitrogen on the late Archean Earth in a 1-D
-/// radiative–convective model, Charnay et al. 2013 (*JGR Atmos.* 118,
-/// 10414, doi:10.1002/jgrd.50808; §5.2 checked in arXiv 1310.4286) +7 °C
-/// in a GCM for the air going from 1 to 2 bar, and Wolf & Toon 2014
-/// (*Astrobiology* 14, 241, doi:10.1089/ast.2013.1112; abstract checked)
-/// 3 to 7 K for plausible nitrogen. The real rise is milder than the
-/// strong-line law because lines overlap and saturate (Vladilo et al.
-/// 2013, ApJ 767, 65, doi:10.1088/0004-637X/767/1/65, App. A.3,
-/// checked); the grey column, whose outgoing radiation rises slowly with
-/// the surface temperature near the moist plateau, amplifies any
-/// broadening more than they find, so past the knee it adds none.
-///
-/// The saturation also acts level by level: see [`LOCAL_KNEE_BAR`].
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const THICK_AIR_EXPONENT: f64 = 0.0;
-
-/// Pressure of the other gases at a level, bar, up to which they broaden
-/// the lines there in proportion; past it, as `K (p/K)^`
-/// [`LOCAL_KNEE_EXPONENT`]. Lines overlap and their absorption saturates
-/// as they widen (Vladilo et al. 2013, ApJ 767, 65,
-/// doi:10.1088/0004-637X/767/1/65, App. A.3, checked), so that nitrogen
-/// warms a planet much less than the strong-line law says.
-///
-/// Calibration on the column of [`super::column`] (issue #441): at 288 K
-/// the column emits from levels of a few tenths of a bar of nitrogen, past
-/// the knee, so a modern Earth under 2 or 3 bar of N₂ stays regulated,
-/// one without CO₂ falls to 263 K (well below 288 K; Lacis et al. 2010,
-/// *Science* 330, 356, doi:10.1126/science.1190653) and doubled nitrogen
-/// warms the late Archean by 7.4 K (Goldblatt et al. 2009 find 4.4 K,
-/// Charnay et al. 2013 7 K); at the 380 K moist plateau the emitting
-/// levels hold a few hundredths of a bar of nitrogen, under the knee, so
-/// the plateau keeps its independence from the nitrogen.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const LOCAL_KNEE_BAR: f64 = 0.18;
-
-/// Power of the other gases' pressure past [`LOCAL_KNEE_BAR`] at a level
-/// in the pressure that broadens lines there. Calibration with it: the
-/// doubled-nitrogen warming of the late Archean (7.4 K at 0.05, 9.2 K at
-/// 0.1 with a knee of 0.2 bar).
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const LOCAL_KNEE_EXPONENT: f64 = 0.05;
-
-/// How well the other gases broaden water's lines against the water
-/// itself, per bar (see [`water_broadening_bar`]). Calibration on the
-/// column of [`super::column`]: with it the moist plateau stays within
-/// 2 % between one and three times Earth's nitrogen (more nitrogen lifts
-/// the plateau through the adiabat and lowers it through broadening; a
-/// share of 0 lifts it by several per cent), and Earth's
-/// thermostat holds 288 K with under 0.01 bar of CO₂. Water broadens its
-/// own lines about five times better than air does (self- against
-/// air-broadened half-widths in HITRAN, Gordon et al. 2017, *JQSRT* 203,
-/// 3, doi:10.1016/j.jqsrt.2017.06.038; from memory, not checked), and its
-/// self-continuum, which dominates the windows of a moist atmosphere, is
-/// some hundred times its foreign continuum per molecule (Shine, Ptashnik
-/// & Rädel 2012, *Surv. Geophys.* 33, 535, doi:10.1007/s10712-011-9170-y;
-/// from memory, not checked): a grey share between the two.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-const WATER_FOREIGN_BROADENING: f64 = 0.05;
-
-/// Share of their own pressure with which the other gases of `gases`
-/// (bar; not CO₂ nor water) broaden lines: 1 up to
-/// [`BROADENING_KNEE_BAR`] of them, less past it, so that their whole
-/// column broadens as `K (P/K)^`[`THICK_AIR_EXPONENT`]. The column of
-/// [`super::column`] applies it to every level, so that a uniform column
-/// keeps the totals of [`optical_depth_at`] at its surface.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-pub(super) fn foreign_share(gases: &Gases) -> f64 {
-    let others = (gases.total() - gases.co2.max(0.0) - gases.h2o.max(0.0)).max(0.0);
-    if others <= BROADENING_KNEE_BAR {
-        1.0
-    } else {
-        BROADENING_KNEE_BAR * (others / BROADENING_KNEE_BAR).powf(THICK_AIR_EXPONENT) / others
-    }
-}
-
-/// Pressure, bar, that broadens the lines of CO₂ in `gases`: CO₂ and
-/// water in full, plus the other gases (N₂, O₂, CH₄, the rest) times
-/// `share` (see [`foreign_share`]), saturating past [`LOCAL_KNEE_BAR`].
-///
-/// A gas broadens its own lines in full (pure CO₂ on Venus and Mars),
-/// and water broadens CO₂'s lines much more than N₂ and O₂ do (Tan,
-/// Kochanov, Rothman & Gordon 2019, *JGR Atmos.* 124, 11580,
-/// doi:10.1029/2019JD030929; abstract checked), so it is not tempered as
-/// a foreign gas. Tempering it (issue #440's first rule) cooled an Earth
-/// at 1.6 AU, all its 1.8 bar of CO₂ in the air, from 287.8 K to 281 K
-/// on the old core: it moved in the cold edge of the habitable zone,
-/// which Kopparapu et al. 2013 (*ApJ* 765, 131,
-/// doi:10.1088/0004-637X/765/2/131) put at about 1.67 AU with CO₂–H₂O
-/// atmospheres, by a broadening no calibration constrains.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-fn broadening_bar(gases: &Gases, share: f64) -> f64 {
-    let co2 = gases.co2.max(0.0);
-    let h2o = gases.h2o.max(0.0);
-    let others = (gases.total() - co2 - h2o).max(0.0) * share;
-    let foreign = if others <= LOCAL_KNEE_BAR {
-        others
-    } else {
-        LOCAL_KNEE_BAR * (others / LOCAL_KNEE_BAR).powf(LOCAL_KNEE_EXPONENT)
-    };
-    co2 + h2o + foreign
-}
-
-/// Pressure, bar, that broadens the lines of water vapour in `gases`:
-/// the water itself, plus [`WATER_FOREIGN_BROADENING`] times the rest
-/// (CO₂ in full, the other gases times `share`). CO₂ broadens water's
-/// lines 1.33 to 1.45 times as much as air (Yang et al. 2022, *Acta Phys.
-/// Sin.* 71, 203301, doi:10.7498/aps.71.20220700; abstract checked;
-/// Brown, Humphrey & Gamache 2007, *J. Mol. Spectrosc.* 246, 1,
-/// doi:10.1016/j.jms.2007.07.010, in the far infrared, not checked); it
-/// counts here as air does, so that the opacities keep their
-/// calibration.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-fn water_broadening_bar(gases: &Gases, share: f64) -> f64 {
-    let h2o = gases.h2o.max(0.0);
-    h2o + WATER_FOREIGN_BROADENING * (broadening_bar(gases, share) - h2o)
-}
-
 /// The Simpson–Nakajima limit, W/m²: the outgoing longwave radiation of
 /// a moist atmosphere, whose emission comes from levels pinned to
 /// water's saturation curve and so no longer depends on the surface
@@ -526,7 +300,7 @@ fn water_broadening_bar(gases: &Gases, share: f64) -> f64 {
 /// 130, doi:10.3847/1538-4357/ac1345; §III.1 read in arXiv 2107.14150)
 /// 283 W/m², and Hamano et al. 2015 (*ApJ* 806, 216,
 /// doi:10.1088/0004-637X/806/2/216; read in arXiv 1505.03552) 280 W/m².
-/// The target of [`H2O_OPACITY`].
+/// The bound of the column's moist plateau ([`MOIST_PLATEAU_W_M2`]).
 #[cfg(test)]
 const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
 
@@ -538,77 +312,21 @@ const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
 /// plateau reaching a constant of about 1800 K as the steam thickens to
 /// 295 bar (Goldblatt 2015, *Astrobiology* 15, 362,
 /// doi:10.1089/ast.2014.1268, read in arXiv 1503.04835, puts the rise
-/// past 1500 K, through the 4 µm window). A grey column has no window:
-/// the dry adiabat of a deeper steam column reaches its emitting levels
-/// ever later (about 2600 K under 300 bar, 20 000 K under the 1.6e5 bar
-/// of a 30 %-water Earth). Calibration: the steam column whose plateau
-/// ends at 1800 K (the grey plateau ends at about 1320 K under 10 bar).
+/// past 1500 K, through the 4 µm window). Calibration on the grey column
+/// of issue #441, which had no window: the dry adiabat of a deeper steam
+/// column reached its emitting levels ever later (about 2600 K under 300
+/// bar, 20 000 K under the 1.6e5 bar of a 30 %-water Earth), and the cap
+/// put the end of its plateau at 1800 K.
 ///
-/// This cap is a surrogate: it stands for the non-grey 4 µm window
-/// (Boukrouche et al. 2021; Goldblatt 2015) through which a real hot
-/// steam atmosphere radiates and which the grey column cannot see. The
-/// window exists in any thick steam column, so the cap holds for every
-/// column the model solves: a runaway's steam, and the vapour of a wet
-/// surface too (capped at its saturation first, it reaches 70 bar only
-/// above about 560 K, near water's critical point).
+/// The spectral column ([`super::spectrum`]) has the 4 µm window, but its
+/// opacity table ends at 100 bar and its levels at [`super::column`]'s
+/// grid: the cap is kept (issue #523) so that a runaway's 1.6e5 bar of
+/// steam stay inside both. The window exists in any thick steam column,
+/// so the cap holds for every column the model solves: a runaway's
+/// steam, and the vapour of a wet surface too (capped at its saturation
+/// first, it reaches 70 bar only above about 560 K, near water's critical
+/// point).
 pub(super) const STEAM_MAX_BAR: f64 = 70.0;
-
-/// The column totals of the grey optical depths of CO₂, water and
-/// methane in a uniform air of `gases` (bar), whose other gases broaden
-/// lines by `share` of their pressure: each absorber's
-/// `k_i (p_i / 1 bar)^a_i (P_b / 1 bar)^½`, the last factor the pressure
-/// broadening of its lines (see [`LINE_EXPONENT`]). For CO₂ `P_b` is
-/// [`broadening_bar`], for water [`water_broadening_bar`]; methane's
-/// saturates and its `P_b` is the whole air, since its opacity stands for
-/// Titan's collision-induced greenhouse (see [`methane_depth`]).
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-fn depths(gases: &Gases, share: f64) -> [f64; 3] {
-    // `LINE_EXPONENT` is ½: square roots, the column's hot path.
-    const { assert!(LINE_EXPONENT == 0.5) };
-    let co2 = gases.co2.max(0.0);
-    let h2o = gases.h2o.max(0.0);
-    [
-        if co2 > 0.0 {
-            CO2_OPACITY * co2_amount(co2) * broadening_bar(gases, share).max(0.0).sqrt()
-        } else {
-            0.0
-        },
-        H2O_OPACITY * (h2o * water_broadening_bar(gases, share).max(0.0)).sqrt(),
-        methane_depth(gases).0,
-    ]
-}
-
-/// Grey infrared optical depth, from the top down to where the air has
-/// the partial pressures `gases` (bar), of a uniform air whose other
-/// gases broaden lines by `share` of their pressure (see [`depths`]).
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-pub(super) fn optical_depth_at(gases: &Gases, share: f64) -> f64 {
-    depths(gases, share).iter().sum()
-}
-
-/// Grey optical depth per unit `ln p` at a level whose partial pressures
-/// are `gases`: the derivative of [`optical_depth_at`] through a uniform
-/// air, whose partial pressures all grow as `p`, so that a column of
-/// constant composition integrates back to its totals. Each depth of CO₂
-/// and water goes as `p^(a_i + ½)`, so its rate per `ln p` is `(a_i + ½)`
-/// times itself; methane's saturates ([`methane_depth`]).
-/// Past [`LOCAL_KNEE_BAR`] of foreign gases the broadening grows slower
-/// and this rate overstates the derivative a little; the calibrations
-/// are made with it.
-#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
-pub(super) fn opacity_per_ln_p(gases: &Gases, share: f64) -> f64 {
-    let [co2, h2o, _] = depths(gases, share);
-    (co2_power(gases.co2.max(0.0)) + LINE_EXPONENT) * co2
-        + (LINE_EXPONENT + LINE_EXPONENT) * h2o
-        + methane_depth(gases).1
-}
-
-/// Grey infrared optical depth of a uniform column of `gases` (bar)
-/// down to its surface (see [`optical_depth_at`], [`foreign_share`]).
-#[cfg(test)]
-fn optical_depth(gases: &Gases) -> f64 {
-    optical_depth_at(gases, foreign_share(gases))
-}
 
 /// Absolute tolerance, K, of the surface temperatures solved for.
 const TOLERANCE_K: f64 = 1e-2;
@@ -3440,78 +3158,6 @@ mod tests {
         let warming = t2 - t1;
         assert!((3.0..=8.0).contains(&warming), "{t1} -> {t2}: {g2:?}");
     }
-
-    #[test]
-    fn a_pure_gas_broadens_its_own_lines_in_full() {
-        // Venus's CO₂ and a steam atmosphere: the gas is its own air, so
-        // the strong-line law holds whole.
-        let venus = Gases {
-            co2: 85.0,
-            ..Gases::default()
-        };
-        let expected = CO2_OPACITY * 85.0_f64.powf(CO2_EXPONENT) * 85.0_f64.sqrt();
-        assert!((optical_depth(&venus) / expected - 1.0).abs() < 1e-12);
-        let steam = Gases {
-            h2o: 260.0,
-            ..Gases::default()
-        };
-        let expected = H2O_OPACITY * 260.0;
-        assert!((optical_depth(&steam) / expected - 1.0).abs() < 1e-12);
-        // Below the column's knee, CO₂ keeps the square root of its own
-        // and the water's pressure plus the nitrogen's, saturated past
-        // the local knee; water its own pressure plus a share of the rest.
-        let earth = Gases {
-            n2: 0.9,
-            co2: 3e-4,
-            h2o: 0.0126,
-            ..Gases::default()
-        };
-        let n2 = local_foreign(0.9);
-        let water_broadening = 0.0126 + WATER_FOREIGN_BROADENING * (n2 + 3e-4);
-        let expected = CO2_OPACITY * 3e-4_f64.powf(CO2_EXPONENT) * (3e-4 + 0.0126 + n2).sqrt()
-            + H2O_OPACITY * (0.0126 * water_broadening).sqrt();
-        assert!((optical_depth(&earth) / expected - 1.0).abs() < 1e-12);
-    }
-
-    /// The pressure of `others` bar of foreign gases at a level, saturated
-    /// past [`LOCAL_KNEE_BAR`].
-    fn local_foreign(others: f64) -> f64 {
-        if others <= LOCAL_KNEE_BAR {
-            others
-        } else {
-            LOCAL_KNEE_BAR * (others / LOCAL_KNEE_BAR).powf(LOCAL_KNEE_EXPONENT)
-        }
-    }
-
-    #[test]
-    fn co2_and_water_broaden_each_other_in_full() {
-        // CO₂ broadens water vapour's lines at least as well as N₂ does,
-        // and water CO₂'s (Yang et al. 2022; Tan et al. 2019): only the
-        // other gases are tempered past the knee.
-        let thick = Gases {
-            n2: 0.89,
-            co2: 1.8,
-            h2o: 0.01,
-            ..Gases::default()
-        };
-        let co2 = |pb: f64| CO2_OPACITY * 1.8_f64.powf(CO2_EXPONENT) * pb.sqrt();
-        let water = |foreign: f64| {
-            H2O_OPACITY * (0.01 * (0.01 + WATER_FOREIGN_BROADENING * (1.8 + foreign))).sqrt()
-        };
-        let n2 = local_foreign(0.89);
-        let expected = co2(1.8 + 0.01 + n2) + water(n2);
-        assert!((optical_depth(&thick) / expected - 1.0).abs() < 1e-12);
-        // Past the knee only the nitrogen is tempered: 5 bar of N₂ count
-        // as K (5/K)^THICK_AIR_EXPONENT bar (then saturated past the local
-        // knee), the CO₂ and the vapour in full for both.
-        let nitrogen = Gases { n2: 5.0, ..thick };
-        let n2 = local_foreign(
-            BROADENING_KNEE_BAR * (5.0 / BROADENING_KNEE_BAR).powf(THICK_AIR_EXPONENT),
-        );
-        let expected = co2(1.8 + 0.01 + n2) + water(n2);
-        assert!((optical_depth(&nitrogen) / expected - 1.0).abs() < 1e-12);
-    }
-
     /// Earth's inputs with the snowball draw `draw`.
     fn earth_drawn(draw: f64) -> PlanetInputs {
         PlanetInputs {
@@ -3938,37 +3584,6 @@ mod tests {
             }
         }
         assert!(seen >= 2, "too few snowballs: {seen}");
-    }
-
-    #[test]
-    fn a_uniform_column_integrates_to_the_column_totals() {
-        // The opacity per ln p of a uniform air, integrated from the top
-        // to the surface, gives back the totals of the per-gas laws, for
-        // an air whose other gases stay under `LOCAL_KNEE_BAR`.
-        let air = Gases {
-            n2: 0.15,
-            co2: 0.3,
-            h2o: 0.05,
-            ch4: 0.02,
-            ..Gases::default()
-        };
-        let share = foreign_share(&air);
-        let steps = 20_000;
-        let span = 40.0_f64;
-        let mut tau = 0.0;
-        for i in 0..steps {
-            let f = (-(span * (i as f64 + 0.5) / steps as f64)).exp();
-            let level = Gases {
-                n2: air.n2 * f,
-                co2: air.co2 * f,
-                h2o: air.h2o * f,
-                ch4: air.ch4 * f,
-                ..Gases::default()
-            };
-            tau += opacity_per_ln_p(&level, share) * span / steps as f64;
-        }
-        let total = optical_depth(&air);
-        assert!((tau / total - 1.0).abs() < 1e-6, "{tau} vs {total}");
     }
 
     #[test]

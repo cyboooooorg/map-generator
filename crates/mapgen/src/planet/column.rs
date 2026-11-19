@@ -1,5 +1,6 @@
-//! A radiative–convective grey column: the outgoing longwave radiation
-//! of an atmosphere whose temperature follows its adiabats (issue #441).
+//! A radiative–convective spectral column: the outgoing longwave
+//! radiation of an atmosphere whose temperature follows its adiabats
+//! (issues #441 and #523).
 //!
 //! From the surface up, the air follows the dry adiabat of its mixture
 //! until its water vapour saturates, then the moist pseudo-adiabat
@@ -14,10 +15,16 @@
 //! Rayleigh scattering, the maximum greenhouse at the outer edge of the
 //! habitable zone (issue #522). A skin temperature floors the column (a
 //! stratosphere, where the vapour and the CO₂ keep the mixing ratio of
-//! their cold trap). The grey optical
-//! depth is integrated down from the top with the per-gas laws of
-//! [`super::climate`], and the outgoing radiation is the grey two-stream
-//! integral of `σ T⁴` over it.
+//! their cold trap).
+//!
+//! The radiation is summed bin by bin over the thermal infrared
+//! ([`super::spectrum`]: 20 cm⁻¹ bins from 0 to 5000 cm⁻¹ and a tail past
+//! it): in each bin the transmission to space of CO₂'s and water's lines
+//! (a correlated-k table from HITRAN, a few g-points per bin), of their
+//! continua (MT_CKD), of the CO₂–CO₂ pairs and of methane's grey
+//! stand-in, and the two-stream, non-scattering emission of each layer's
+//! mean Planck flux with the diffusivity 1.66. Whatever no gas closes
+//! stays open: water's window, the far wings of thin CO₂.
 //!
 //! On a moist column the levels that radiate to space sit on water's
 //! saturation curve whatever the surface temperature, so the outgoing
@@ -118,9 +125,9 @@ const MAX_LEVELS: usize = 1280;
 /// Top of the column: `TOP_SHARE` of the surface pressure, and never
 /// above `TOP_BAR`, so that the emitting levels of water (near 1e-3 bar)
 /// stay inside a thick column. Above the top the air is taken uniform at
-/// the top's temperature (its optical depth is the per-gas laws' column
-/// total at the top's pressures), exact in a stratosphere at the skin
-/// temperature.
+/// the top's temperature (its optical depth is that of a uniform air at
+/// the top's pressures, [`spectrum::depth_above`]), exact in a
+/// stratosphere at the skin temperature.
 const TOP_SHARE: f64 = 1e-3;
 const TOP_BAR: f64 = 1e-4;
 
