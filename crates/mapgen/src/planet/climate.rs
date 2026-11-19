@@ -134,11 +134,13 @@ pub fn emissivity(frost: &Gases) -> f64 {
 /// Titan's 93.7 K (Fulchignoni et
 /// al. 2005, doi:10.1038/nature04314) under the anti-greenhouse of
 /// [`stratospheric_share`] anchored on McKay, Pollack & Courtin 1991
-/// (issue #563): `titan-like` reaches 92.4 to 94.6 K (mean 93.75 K,
-/// median 93.85 K) and 5.5 to 5.9 % of methane (mean 5.75 %, against the
+/// (issue #563): `titan-like` reaches 92.4 to 94.5 K (mean 93.69 K,
+/// median 93.75 K) and 5.5 to 5.9 % of methane (mean 5.71 %, against the
 /// 5.65 % near Titan's surface, Niemann et al. 2005,
 /// doi:10.1038/nature04122) over seeds 1 to 40 of `archetype_census`,
-/// under the vapour of its seas, on the column of [`super::column`]
+/// under the vapour of its seas, on the spectral column of
+/// [`super::column`] (issue #523). 14.3 on the grey column, which left
+/// `titan-like` at 95.1 K and 6.6 % of methane on the spectral one
 /// (7.75 under the weaker, unanchored anti-greenhouse of issue #530,
 /// which put `titan-like` at 91.0 to 93.3 K; 6.0 before any
 /// anti-greenhouse; 3.3 before its saturation, issue #443; 3.4 on the
@@ -155,7 +157,7 @@ pub fn emissivity(frost: &Gases) -> f64 {
 /// It applies to the methane that radiates, the methane cold-trapped at
 /// the tropopause left out (see [`super::column`]), and saturates past
 /// [`CH4_SATURATION_BAR`] (see [`methane_depth`]).
-const CH4_OPACITY: f64 = 14.3;
+const CH4_OPACITY: f64 = 13.4;
 
 /// Methane, bar, past which its greenhouse saturates ([`methane_depth`]):
 /// the amount `u` its opacity counts grows as `p / (1 + p / s)`, `p` the
@@ -2852,12 +2854,12 @@ mod tests {
         let s = model.surface.expect("a surface");
         let c = s.climate;
         // The planet the issue names: T_eq about 114.5 K, 4.4 bar of N₂
-        // and 1.8 bar of methane over its seas once the rest condensed
-        // (3.3 bar before the anchored anti-greenhouse cooled it, issue
-        // #563).
+        // and 0.9 bar of methane over its seas once the rest condensed
+        // (1.8 bar on the grey column, issue #523; 3.3 bar before the
+        // anchored anti-greenhouse cooled it, issue #563).
         assert!((110.0..120.0).contains(&c.equilibrium_k), "{c:?}");
         assert!((4.0..5.0).contains(&s.gases.n2), "{:?}", s.gases);
-        assert!((1.0..5.0).contains(&s.gases.ch4), "{:?}", s.gases);
+        assert!((0.5..5.0).contains(&s.gases.ch4), "{:?}", s.gases);
         assert!(c.equilibrium_k < 150.0, "{c:?}");
         assert!(c.temperature_k < 150.0, "{c:?} {:?}", s.gases);
         assert_ne!(c.liquid, SurfaceLiquid::Water, "{c:?}");
