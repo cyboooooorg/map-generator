@@ -15,6 +15,7 @@ use super::albedo::{REFERENCE_ALBEDO, bond_albedo_over, cover, sulphuric_deck};
 use super::atmosphere::{
     NITROGEN_TRIPLE_K, SEA_METHANE_SHARE, condense, condensed_air, methane_saturation_bar,
 };
+use super::column::Profile;
 use super::{Context, Gases, Water, column};
 use crate::geology::Regime;
 
@@ -402,7 +403,7 @@ const RUNAWAY_ALBEDO: (f64, f64) = (0.0, 0.9);
 /// Robinson, Zahnle & Crisp 2013, *Nature Geosci.* 6, 661, Fig. 1); the
 /// column's does too (about 295 W/m² at 360 K, 284 from 500 K on). It is
 /// taken under the stratosphere the surface solves give it
-/// ([`column::plateau_olr_under_skin_w_m2`], on the plateau's finer grid
+/// ([`Profile::PLATEAU`], on the plateau's finer grid
 /// of [`column::PLATEAU_LEVELS_PER_DECADE`]): the skin `T_eq / 2^¼` of a
 /// body at its star's runaway limit `S_rg`. There a runaway absorbs the
 /// plateau itself (see [`absorbing`]), so `T_eq = (F_plateau / σ)^¼`
@@ -449,7 +450,7 @@ pub(super) fn moist_earth_olr_w_m2(surface_k: f64, skin_k: f64) -> f64 {
         ..Gases::default()
     };
     let moist = with_vapour(air, surface_k, f64::INFINITY);
-    column::plateau_olr_under_skin_w_m2(&moist, surface_k, skin_k, &Planet::EARTH)
+    column::olr_w_m2(&moist, surface_k, skin_k, &Planet::EARTH, Profile::PLATEAU)
 }
 
 /// The skin temperature, K, of the surface solves (`T_eq / 2^¼`) for a
@@ -564,18 +565,19 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// a body past `S_rg` absorbs more than its own column's limit and runs
 /// away past it.
 ///
-/// [`Sky::Plateau`]: column::saturated_olr_under_skin_w_m2
+/// [`Sky::Plateau`]: Profile::SATURATED
 fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
     let dry = Gases { h2o: 0.0, ..*gases };
     let asymptote = |skin_k: f64| {
         let sum: f64 = PLATEAU_SURFACES_K
             .iter()
             .map(|&t| {
-                column::saturated_olr_under_skin_w_m2(
+                column::olr_w_m2(
                     &with_vapour(dry, t, water_bar),
                     t,
                     skin_k,
                     planet,
+                    Profile::SATURATED,
                 )
             })
             .sum();
@@ -628,7 +630,7 @@ pub fn surface_temperature_k(
         return bare;
     }
     let skin = tropopause_k(t_eq);
-    let excess = |t: f64| e * column::olr_under_skin_w_m2(gases, t, skin, planet) - absorbed;
+    let excess = |t: f64| e * column::olr_w_m2(gases, t, skin, planet, Profile::CLIMATE) - absorbed;
     // The column radiates no more than its surface, so `bare` is a lower
     // bound; and the vapour in `gases` would condense on a surface colder
     // than its saturation temperature (a runaway's steam is all in its
@@ -1048,7 +1050,7 @@ const RUNAWAY_PROBE_K: f64 = 380.0;
 /// `None` when the water runs away: the absorbed light and heat exceed
 /// the moist limit, the most the column sends out over a surface below
 /// water's critical point with its troposphere saturated
-/// ([`column::saturated_olr_under_skin_w_m2`]), as Kasting 1988 and
+/// ([`Profile::SATURATED`]), as Kasting 1988 and
 /// Kopparapu et al. 2013 take the inner edge. The balance itself is the
 /// climate's column, its humidity falling with height (Manabe &
 /// Wetherald 1967), which sends out more than the saturated one and so
@@ -1083,19 +1085,25 @@ fn wet_balance(
         return None;
     }
     let saturated = |t: f64| {
-        e * column::saturated_olr_under_skin_w_m2(
+        e * column::olr_w_m2(
             &with_vapour(gases, t, water_bar),
             t,
             skin,
             planet,
+            Profile::SATURATED,
         ) - absorbed
     };
     if saturated(RUNAWAY_PROBE_K) < 0.0 {
         first_balance(saturated, absorbed, bare)?;
     }
     let excess = |t: f64| {
-        e * column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin, planet)
-            - absorbed
+        e * column::olr_w_m2(
+            &with_vapour(gases, t, water_bar),
+            t,
+            skin,
+            planet,
+            Profile::CLIMATE,
+        ) - absorbed
     };
     let t = first_balance(excess, absorbed, bare)?;
     Some((with_vapour(gases, t, water_bar), t))
@@ -2181,11 +2189,12 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
     // outgoing radiation rises with the surface temperature).
     let e = emissivity.clamp(0.01, 1.0);
     let olr_at = |co2: f64| {
-        e * column::olr_under_skin_w_m2(
+        e * column::olr_w_m2(
             &Gases { co2, ..at_target },
             THERMOSTAT_K,
             skin,
             body.planet,
+            Profile::CLIMATE,
         )
     };
     let all = absorbed - olr_at(most);
@@ -2290,7 +2299,7 @@ fn maximum_greenhouse(body: &Body) -> f64 {
         let t_eq = body.context.with_albedo(albedo).equilibrium_k.max(0.0);
         let skin = tropopause_k(t_eq);
         absorbed_w_m2(t_eq, &gases, 0.0)
-            - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin, body.planet)
+            - column::olr_w_m2(&gases, THERMOSTAT_K, skin, body.planet, Profile::CLIMATE)
     };
     let ratio = (5f64.sqrt() - 1.0) / 2.0;
     let (mut a, mut b) = (most.ln() - GREENHOUSE_DECADES * 10f64.ln(), most.ln());
@@ -2499,8 +2508,8 @@ mod tests {
         let (d, g, c) = climate_of("Earth");
         let air = with_vapour(Gases { co2: 2.8e-4, ..g }, 288.0, d.water_bar);
         let skin = tropopause_k(c.equilibrium_k);
-        let clear = column::clear_olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
-        let all = column::olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
+        let clear = column::olr_w_m2(&air, 288.0, skin, &d.planet, Profile::CLEAR);
+        let all = column::olr_w_m2(&air, 288.0, skin, &d.planet, Profile::CLIMATE);
         println!("Earth: clear sky {clear:.2}, all sky {all:.2} W/m²");
         assert!((all - 240.0).abs() <= 8.0, "all sky {all}");
         assert!((clear - 267.0).abs() <= 8.0, "clear sky {clear}");
@@ -2516,7 +2525,7 @@ mod tests {
         let (d, g, c) = climate_of("Earth");
         let air = with_vapour(Gases { co2: 2.8e-4, ..g }, 288.0, d.water_bar);
         let skin = tropopause_k(c.equilibrium_k);
-        let clear = column::clear_olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
+        let clear = column::olr_w_m2(&air, 288.0, skin, &d.planet, Profile::CLEAR);
         println!("Earth's clear sky: {clear:.2} W/m²");
         assert!((clear - 267.0).abs() <= 8.0, "{clear}");
     }
@@ -2528,8 +2537,8 @@ mod tests {
             let (d, g, c) = climate_of(name);
             let skin = tropopause_k(c.equilibrium_k);
             let t = c.temperature_k;
-            let clear = column::clear_olr_under_skin_w_m2(&g, t, skin, &d.planet);
-            let all = column::olr_under_skin_w_m2(&g, t, skin, &d.planet);
+            let clear = column::olr_w_m2(&g, t, skin, &d.planet, Profile::CLEAR);
+            let all = column::olr_w_m2(&g, t, skin, &d.planet, Profile::CLIMATE);
             assert!((all / clear - 1.0).abs() < 1e-9, "{name}: {all} vs {clear}");
         }
     }
@@ -2739,7 +2748,7 @@ mod tests {
                 ch4,
                 ..Gases::default()
             };
-            column::olr_under_skin_w_m2(&gases, 93.7, skin, &d.planet)
+            column::olr_w_m2(&gases, 93.7, skin, &d.planet, Profile::CLIMATE)
         };
         let trace = olr(0.01) - olr(0.1);
         let thick = olr(1.0) - olr(10.0);
@@ -3348,8 +3357,8 @@ mod tests {
             let skin = tropopause_k(faint.equilibrium_k);
             let excess = |t: f64| {
                 let air = with_vapour(gases, t, d.water_bar);
-                let clear = column::clear_olr_under_skin_w_m2(&air, t, skin, &d.planet);
-                let all = column::olr_under_skin_w_m2(&air, t, skin, &d.planet);
+                let clear = column::olr_w_m2(&air, t, skin, &d.planet, Profile::CLEAR);
+                let all = column::olr_w_m2(&air, t, skin, &d.planet, Profile::CLIMATE);
                 let f = super::super::albedo::cloud_cover(t, air.h2o);
                 let olr = if f > 0.0 {
                     clear + fixed / f * (all - clear)
@@ -3841,8 +3850,8 @@ mod tests {
         };
         for t in [700.0, 1500.0, 2500.0] {
             assert_eq!(
-                column::olr_w_m2(&runaway, t, &Planet::EARTH),
-                column::olr_w_m2(&capped, t, &Planet::EARTH)
+                column::olr_w_m2(&runaway, t, 0.0, &Planet::EARTH, Profile::SATURATED),
+                column::olr_w_m2(&capped, t, 0.0, &Planet::EARTH, Profile::SATURATED)
             );
         }
     }
@@ -3989,11 +3998,12 @@ mod tests {
         let plateau = *MOIST_PLATEAU_W_M2;
         let skin = plateau_skin_k(plateau);
         for t in PLATEAU_SURFACES_K {
-            let olr = column::saturated_olr_under_skin_w_m2(
+            let olr = column::olr_w_m2(
                 &with_vapour(earth_air(), t, f64::INFINITY),
                 t,
                 skin,
                 &Planet::EARTH,
+                Profile::SATURATED,
             );
             assert!(
                 (olr / plateau - 1.0).abs() < 0.01,
@@ -4033,7 +4043,9 @@ mod tests {
             column::olr_w_m2(
                 &with_vapour(earth_air(), t, f64::INFINITY),
                 t,
+                0.0,
                 &Planet::EARTH,
+                Profile::SATURATED,
             )
         };
         for t in [340.0, 360.0, 380.0, 400.0] {
@@ -4052,7 +4064,9 @@ mod tests {
             column::olr_w_m2(
                 &with_vapour(Gases { n2, ..earth_air() }, 380.0, f64::INFINITY),
                 380.0,
+                0.0,
                 &Planet::EARTH,
+                Profile::SATURATED,
             )
         };
         let (one, two, three) = (plateau(0.78), plateau(1.56), plateau(2.34));
@@ -4063,7 +4077,13 @@ mod tests {
 
     #[test]
     fn an_airless_column_emits_from_the_surface() {
-        let olr = column::olr_w_m2(&Gases::default(), 250.0, &Planet::EARTH);
+        let olr = column::olr_w_m2(
+            &Gases::default(),
+            250.0,
+            0.0,
+            &Planet::EARTH,
+            Profile::SATURATED,
+        );
         assert!((olr - SIGMA * 250f64.powi(4)).abs() < 1e-6, "{olr}");
     }
 
@@ -4102,14 +4122,16 @@ mod tests {
             h2o: 10.0,
             ..Gases::default()
         };
-        let olr = column::olr_w_m2(&steam, 680.0, &Planet::EARTH);
+        let olr = column::olr_w_m2(&steam, 680.0, 0.0, &Planet::EARTH, Profile::SATURATED);
         assert!(
             (olr / SIMPSON_NAKAJIMA_W_M2 - 1.0).abs() < 0.1,
             "{olr} W/m²"
         );
         // Where the plateau ends (Boukrouche et al. 2021: about 1050 K).
         let mut t = 680.0;
-        while column::olr_w_m2(&steam, t, &Planet::EARTH) < 1.1 * olr && t < 5000.0 {
+        while column::olr_w_m2(&steam, t, 0.0, &Planet::EARTH, Profile::SATURATED) < 1.1 * olr
+            && t < 5000.0
+        {
             t += 10.0;
         }
         println!("10 bar of steam leaves the plateau at about {t} K");

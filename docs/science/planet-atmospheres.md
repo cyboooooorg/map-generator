@@ -1167,7 +1167,7 @@ Enceladus 0.80 (issue #523: gravity, area and the air's absorption).
 of the longwave band model). The star's light crosses the air band by
 band, over the 240 bands of its Planck spectrum from 0.2 to 5 µm:
 
-- **The column** is the climate's (`column::shortwave_levels`: its
+- **The column** is the climate's (`column::levels` of `Profile::SHORTWAVE`: its
   adiabats and its falling humidity) on a coarse grid, 3 levels per
   decade up to 1 % of the surface pressure, clear and with no
   stratosphere. Against 16 levels to 0.1 %, Earth's albedo moves by

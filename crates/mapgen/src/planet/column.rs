@@ -110,10 +110,10 @@ const OPAQUE: f64 = 4.248_354_255_291_589e-18;
 const LEVELS_PER_DECADE: f64 = 20.0;
 
 /// Levels per decade of the column that measures the moist plateau
-/// ([`plateau_olr_under_skin_w_m2`]): against twice as many, the plateau
+/// ([`Profile::PLATEAU`]): against twice as many, the plateau
 /// moves by under 0.5 W/m² (the test
 /// `the_plateaus_grid_is_converged`; 0.01 W/m² once the saturation and
-/// the cold trap fall between levels, see [`olr_bands`]), and
+/// the cold trap fall between levels, see [`with_column`]), and
 /// [`LEVELS_PER_DECADE`] gives it within 0.05 W/m².
 pub(crate) const PLATEAU_LEVELS_PER_DECADE: f64 = 80.0;
 
@@ -245,7 +245,7 @@ impl DryAir {
 
     /// The gases that radiate at a level where the dry air has `dry_bar`,
     /// the vapour `vapour_bar` and the CO₂ `co2_bar`, what its
-    /// condensation leaves there ([`olr_under_skin_w_m2`]): the other
+    /// condensation leaves there ([`with_column`]): the other
     /// gases share the rest of the dry air in their surface proportions,
     /// and the methane cold-trapped at the tropopause (see
     /// [`radiating_methane_bar`]) is left out.
@@ -340,22 +340,11 @@ fn lapse(
     }
 }
 
-/// Outgoing longwave radiation, W/m², of a column with surface partial
-/// pressures `gases` (bar; `gases.h2o` the vapour at the surface) over a
-/// surface at `surface_k`, with no stratosphere, under a clear sky over a
-/// saturated troposphere ([`saturated_olr_under_skin_w_m2`]): the column
-/// the moist limit and the steam plateau are checked on. See the module
-/// documentation.
-#[cfg(test)]
-pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64, planet: &Planet) -> f64 {
-    saturated_olr_under_skin_w_m2(gases, surface_k, 0.0, planet)
-}
-
 /// The sky and humidity of a column.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Sky {
     /// The climate's: its water clouds radiate in its place
-    /// ([`olr_under_skin_w_m2`]) and its troposphere's humidity falls
+    /// ([`olr_w_m2`]) and its troposphere's humidity falls
     /// with the pressure ([`relative_humidity`]).
     Cloudy,
     /// The same air under a clear sky.
@@ -389,109 +378,112 @@ fn relative_humidity(surface: f64, share: f64) -> f64 {
     surface * ((share - 0.02) / (1.0 - 0.02)).max(0.0)
 }
 
-/// Outgoing longwave radiation, W/m², of the column of [`olr_w_m2`] whose
-/// temperature never falls below `skin_k` (its stratosphere).
+/// How a column is built: its sky and humidity ([`Sky`]) and its pressure
+/// grid, `levels_per_decade` levels per decade from the surface up to
+/// `top_share` of the surface pressure, never above `top_bar`. Every
+/// column of the model is one of these, through one builder
+/// ([`with_column`]).
+#[derive(Clone, Copy)]
+pub(crate) struct Profile {
+    sky: Sky,
+    levels_per_decade: f64,
+    top_share: f64,
+    top_bar: f64,
+}
+
+impl Profile {
+    /// The climate's column ([`olr_w_m2`]): its water clouds, its falling
+    /// humidity, on [`LEVELS_PER_DECADE`] up to [`TOP_SHARE`] of the
+    /// surface pressure (never above [`TOP_BAR`]).
+    pub(crate) const CLIMATE: Profile = Profile {
+        sky: Sky::Cloudy,
+        levels_per_decade: LEVELS_PER_DECADE,
+        top_share: TOP_SHARE,
+        top_bar: TOP_BAR,
+    };
+
+    /// [`Profile::CLIMATE`] under a clear sky.
+    #[cfg(test)]
+    pub(crate) const CLEAR: Profile = Profile {
+        sky: Sky::Clear,
+        ..Profile::CLIMATE
+    };
+
+    /// [`Profile::CLIMATE`] under a clear sky over a troposphere saturated
+    /// above where its vapour condenses ([`Sky::Plateau`]): the column
+    /// whose maximum outgoing radiation is the moist limit a wet surface
+    /// runs away past (see `climate::wet_balance`).
+    pub(crate) const SATURATED: Profile = Profile {
+        sky: Sky::Plateau,
+        ..Profile::CLIMATE
+    };
+
+    /// [`Profile::SATURATED`] on the finer grid of
+    /// [`PLATEAU_LEVELS_PER_DECADE`], for the moist plateau: Goldblatt et
+    /// al. 2013's and the other line-by-line plateaus are clear-sky and
+    /// saturated.
+    pub(crate) const PLATEAU: Profile = Profile {
+        levels_per_decade: PLATEAU_LEVELS_PER_DECADE,
+        ..Profile::SATURATED
+    };
+
+    /// The column the star's near infrared crosses ([`levels`],
+    /// `super::shortwave`): the same adiabats and the same falling humidity
+    /// as the climate's, on a coarser grid ([`SHORTWAVE_LEVELS_PER_DECADE`],
+    /// up to [`SHORTWAVE_TOP_SHARE`] of the surface pressure), clear.
+    pub(crate) const SHORTWAVE: Profile = Profile {
+        sky: Sky::Clear,
+        levels_per_decade: SHORTWAVE_LEVELS_PER_DECADE,
+        top_share: SHORTWAVE_TOP_SHARE,
+        top_bar: f64::INFINITY,
+    };
+
+    /// This profile on `levels_per_decade` levels per decade.
+    #[cfg(test)]
+    pub(crate) const fn on(self, levels_per_decade: f64) -> Profile {
+        Profile {
+            levels_per_decade,
+            ..self
+        }
+    }
+
+    /// This profile up to `top_share` of the surface pressure.
+    #[cfg(test)]
+    pub(crate) const fn up_to(self, top_share: f64) -> Profile {
+        Profile { top_share, ..self }
+    }
+}
+
+/// Outgoing longwave radiation, W/m², of a column with surface partial
+/// pressures `gases` (bar; `gases.h2o` the vapour at the surface) over a
+/// surface at `surface_k`, whose temperature never falls below `skin_k`
+/// (its stratosphere; 0 for none), built as `profile` says. See the
+/// module documentation.
 ///
 /// The column runs from the surface, where the vapour is `gases.h2o`
 /// capped at saturation below water's critical point (and at
-/// [`STEAM_MAX_BAR`] in any column, wet or runaway: the non-grey window
-/// it stands for exists in every thick steam column), up to [`TOP_SHARE`] of the surface pressure
-/// (never above [`TOP_BAR`]) on a log grid. Without air the surface
-/// radiates as a black body. `planet`'s gravity turns the pressures into
-/// the absorbers' column masses (`p / g`).
+/// [`STEAM_MAX_BAR`] in any column, wet or runaway: the 4 µm window it
+/// stands for exists in every thick steam column), up to the profile's
+/// top on a log grid. Without air the surface radiates as a black body.
+/// `planet`'s gravity turns the pressures into the absorbers' column
+/// masses (`p / g`).
 ///
-/// The water clouds of the albedo, `f` of the sky
-/// ([`super::albedo::cloud_cover`] of the surface temperature and
-/// `gases.h2o`), send out the cloudy column's radiation, the rest the
-/// clear column's: `(1 − f) OLR_clear + f OLR_cloudy` ([`radiate`]).
-pub(crate) fn olr_under_skin_w_m2(
-    gases: &Gases,
-    surface_k: f64,
-    skin_k: f64,
-    planet: &Planet,
-) -> f64 {
-    olr_on_grid(
-        gases,
-        surface_k,
-        skin_k,
-        planet,
-        LEVELS_PER_DECADE,
-        Sky::Cloudy,
-    )
-}
-
-/// [`olr_under_skin_w_m2`] under a clear sky.
-#[cfg(test)]
-pub(crate) fn clear_olr_under_skin_w_m2(
-    gases: &Gases,
-    surface_k: f64,
-    skin_k: f64,
-    planet: &Planet,
-) -> f64 {
-    olr_on_grid(
-        gases,
-        surface_k,
-        skin_k,
-        planet,
-        LEVELS_PER_DECADE,
-        Sky::Clear,
-    )
-}
-
-/// [`olr_under_skin_w_m2`] under a clear sky over a troposphere
-/// saturated above where its vapour condenses ([`Sky::Plateau`]): the
-/// column whose maximum outgoing radiation is the moist limit a wet
-/// surface runs away past (see `climate::wet_balance`).
-pub(crate) fn saturated_olr_under_skin_w_m2(
-    gases: &Gases,
-    surface_k: f64,
-    skin_k: f64,
-    planet: &Planet,
-) -> f64 {
-    olr_on_grid(
-        gases,
-        surface_k,
-        skin_k,
-        planet,
-        LEVELS_PER_DECADE,
-        Sky::Plateau,
-    )
-}
-
-/// [`clear_olr_under_skin_w_m2`] on the finer grid of
-/// [`PLATEAU_LEVELS_PER_DECADE`], for the moist plateau: Goldblatt et
-/// al. 2013's and the other line-by-line plateaus are clear-sky and
-/// saturated ([`Sky::Plateau`]).
-pub(crate) fn plateau_olr_under_skin_w_m2(
-    gases: &Gases,
-    surface_k: f64,
-    skin_k: f64,
-    planet: &Planet,
-) -> f64 {
-    olr_on_grid(
-        gases,
-        surface_k,
-        skin_k,
-        planet,
-        PLATEAU_LEVELS_PER_DECADE,
-        Sky::Plateau,
-    )
-}
-
-/// [`olr_under_skin_w_m2`] with `levels_per_decade` levels per decade,
-/// under the `sky`.
+/// Under the climate's sky ([`Profile::CLIMATE`]) the water clouds of the
+/// albedo, `f` of the sky ([`super::albedo::cloud_cover`] of the surface
+/// temperature and `gases.h2o`), send out the cloudy column's radiation,
+/// the rest the clear column's: `(1 − f) OLR_clear + f OLR_cloudy`
+/// ([`radiate`]).
 ///
 /// A planet's solves ask for the same column more than once (its settle
 /// loop runs the same balances again): the last [`REMEMBERED`] columns of
 /// the thread are kept with their outgoing radiation, keyed on the exact
 /// bits of their inputs, so that the answer is the same.
-fn olr_on_grid(
+pub(crate) fn olr_w_m2(
     gases: &Gases,
     surface_k: f64,
     skin_k: f64,
     planet: &Planet,
-    levels_per_decade: f64,
-    sky: Sky,
+    profile: Profile,
 ) -> f64 {
     let key = [
         gases.n2,
@@ -504,22 +496,16 @@ fn olr_on_grid(
         surface_k,
         skin_k,
         planet.gravity_m_s2,
-        levels_per_decade,
-        sky.key(),
+        profile.levels_per_decade,
+        profile.top_share,
+        profile.top_bar,
+        profile.sky.key(),
     ]
     .map(f64::to_bits);
     if let Some(olr) = REMEMBERED_OLR.with_borrow(|memory| memory.find(&key)) {
         return olr;
     }
-    let olr = match olr_bands(
-        gases,
-        surface_k,
-        skin_k,
-        planet,
-        levels_per_decade,
-        sky,
-        radiate,
-    ) {
+    let olr = match with_column(gases, surface_k, skin_k, planet, profile, radiate) {
         Some(bands) => bands.iter().sum(),
         None => SIGMA * surface_k.max(1.0).powi(4),
     };
@@ -527,13 +513,13 @@ fn olr_on_grid(
     olr
 }
 
-/// Columns [`olr_on_grid`] keeps per thread.
+/// Columns [`olr_w_m2`] keeps per thread.
 const REMEMBERED: usize = 1024;
 
 /// The inputs of a column, as bits: the seven partial pressures, the
-/// surface and skin temperatures, the gravity, the levels per decade and
-/// the sky.
-type ColumnKey = [u64; 12];
+/// surface and skin temperatures, the gravity, and the profile's levels
+/// per decade, top and sky.
+type ColumnKey = [u64; 14];
 
 /// The last [`REMEMBERED`] columns of a thread and their outgoing
 /// radiation, the oldest replaced first.
@@ -562,7 +548,7 @@ impl Memory {
 thread_local! {
     static REMEMBERED_OLR: std::cell::RefCell<Memory> = const {
         std::cell::RefCell::new(Memory {
-            keys: [[0; 12]; REMEMBERED],
+            keys: [[0; 14]; REMEMBERED],
             olr: [0.0; REMEMBERED],
             len: 0,
             next: 0,
@@ -570,37 +556,8 @@ thread_local! {
     };
 }
 
-/// The outgoing radiation of [`olr_under_skin_w_m2`], W/m², in each band
-/// of [`spectrum`], on a grid of `levels_per_decade`, under the `sky`,
-/// summed by `radiation` ([`radiate`]); `None` without air.
-fn olr_bands(
-    gases: &Gases,
-    surface_k: f64,
-    skin_k: f64,
-    planet: &Planet,
-    levels_per_decade: f64,
-    sky: Sky,
-    radiation: fn(&Column) -> [f64; BANDS],
-) -> Option<[f64; BANDS]> {
-    let grid = Grid {
-        levels_per_decade,
-        top_share: TOP_SHARE,
-        top_bar: TOP_BAR,
-    };
-    with_column(gases, surface_k, skin_k, planet, grid, sky, radiation)
-}
-
-/// The pressure grid of a column: its levels per decade, and its top,
-/// `top_share` of the surface pressure and never above `top_bar`.
-#[derive(Clone, Copy)]
-struct Grid {
-    levels_per_decade: f64,
-    top_share: f64,
-    top_bar: f64,
-}
-
 /// Levels per decade of the column the star's near infrared is absorbed
-/// in ([`shortwave_levels`]). Calibration of the grid, not of the
+/// in ([`Profile::SHORTWAVE`]). Calibration of the grid, not of the
 /// physics: against sixteen per decade, four move Earth's Bond albedo by
 /// under 1e-3 and its clear-sky shortwave absorption by under 1 W/m²
 /// (the test `albedo::tests::the_shortwave_column_is_converged`).
@@ -619,63 +576,42 @@ pub(crate) struct Levels {
     pub(crate) spans: Vec<f64>,
 }
 
-/// The column of `gases` over a surface at `surface_k` on `planet` that
-/// the star's near infrared crosses (`super::shortwave`): the same
-/// adiabats and the same falling humidity as the climate's
-/// ([`olr_under_skin_w_m2`]), on a coarser grid
-/// ([`SHORTWAVE_LEVELS_PER_DECADE`], up to [`SHORTWAVE_TOP_SHARE`] of the
-/// surface pressure), clear, and with no stratosphere: the albedo is
-/// solved before the skin it sets, and the air above the tropopause
-/// (some 10 % of Earth's, its ozone not modelled) absorbs next to none
-/// of the near infrared that CO₂ and water take. `None` without air.
-pub(crate) fn shortwave_levels(gases: &Gases, surface_k: f64, planet: &Planet) -> Option<Levels> {
-    shortwave_levels_on(
-        gases,
-        surface_k,
-        planet,
-        SHORTWAVE_LEVELS_PER_DECADE,
-        SHORTWAVE_TOP_SHARE,
-    )
-}
-
-/// [`shortwave_levels`] with `levels_per_decade` levels per decade up to
-/// `top_share` of the surface pressure.
-pub(crate) fn shortwave_levels_on(
+/// The levels of the column of `gases` over a surface at `surface_k` on
+/// `planet`, built as `profile` says, with no stratosphere
+/// ([`Profile::SHORTWAVE`]: the albedo is solved before the skin it sets,
+/// and the air above the tropopause, some 10 % of Earth's, its ozone not
+/// modelled, absorbs next to none of the near infrared that CO₂ and water
+/// take). `None` without air.
+pub(crate) fn levels(
     gases: &Gases,
     surface_k: f64,
     planet: &Planet,
-    levels_per_decade: f64,
-    top_share: f64,
+    profile: Profile,
 ) -> Option<Levels> {
-    let grid = Grid {
-        levels_per_decade,
-        top_share,
-        top_bar: f64::INFINITY,
-    };
-    with_column(gases, surface_k, 0.0, planet, grid, Sky::Clear, |c| {
-        Levels {
-            levels: (0..=c.top()).map(|i| c.level(i)).collect(),
-            spans: (0..c.top()).map(|i| c.span(i)).collect(),
-        }
+    with_column(gases, surface_k, 0.0, planet, profile, |c| Levels {
+        levels: (0..=c.top()).map(|i| c.level(i)).collect(),
+        spans: (0..c.top()).map(|i| c.span(i)).collect(),
     })
 }
 
-/// Builds the column of [`olr_under_skin_w_m2`] on `grid` under the
-/// `sky` and hands it to `use_column`; `None` without air.
+/// Builds the column of [`olr_w_m2`] under a stratosphere at `skin_k` as
+/// `profile` says and hands it to `use_column` (the fast sum [`radiate`],
+/// the shortwave's [`levels`], or the tests' reference sum); `None`
+/// without air.
 fn with_column<R>(
     gases: &Gases,
     surface_k: f64,
     skin_k: f64,
     planet: &Planet,
-    grid: Grid,
-    sky: Sky,
+    profile: Profile,
     use_column: impl FnOnce(&Column) -> R,
 ) -> Option<R> {
-    let Grid {
+    let Profile {
+        sky,
         levels_per_decade,
         top_share,
         top_bar,
-    } = grid;
+    } = profile;
     let surface_k = surface_k.max(1.0);
     let air = DryAir::of(gases, skin_k);
     let steam = if gases.h2o > 0.0 {
@@ -1365,13 +1301,12 @@ mod tests {
     /// Outgoing radiation of `air` over a moist surface at `t`, under the
     /// plateau's skin, on Earth.
     fn moist_olr(air: Gases, t: f64) -> f64 {
-        olr_on_grid(
+        olr_w_m2(
             &with_vapour(air, t, f64::INFINITY),
             t,
             plateau_skin(),
             &Planet::EARTH,
-            LEVELS_PER_DECADE,
-            Sky::Plateau,
+            Profile::SATURATED,
         )
     }
 
@@ -1410,13 +1345,12 @@ mod tests {
     /// Outgoing radiation of Earth's moist air over a saturated surface at
     /// `t`, under the plateau's skin, on `levels` levels per decade.
     fn moist_olr_on(t: f64, levels: f64) -> f64 {
-        olr_on_grid(
+        olr_w_m2(
             &with_vapour(earth_air(), t, f64::INFINITY),
             t,
             plateau_skin(),
             &Planet::EARTH,
-            levels,
-            Sky::Plateau,
+            Profile::PLATEAU.on(levels),
         )
     }
 
@@ -1475,7 +1409,7 @@ mod tests {
             ..Gases::default()
         };
         let black = SIGMA * 93.7f64.powi(4);
-        let olr = olr_under_skin_w_m2(&air, 93.7, tropopause_k(82.0), &titan);
+        let olr = olr_w_m2(&air, 93.7, tropopause_k(82.0), &titan, Profile::CLIMATE);
         println!("Titan-like column: {olr:.3} W/m² against σT⁴ {black:.3}");
         assert!(olr.is_finite() && olr > 0.0 && olr < black, "{olr}");
         // Nitrogen alone is transparent: the ground radiates through it.
@@ -1483,10 +1417,16 @@ mod tests {
             n2: 1.45,
             ..Gases::default()
         };
-        let bare = olr_under_skin_w_m2(&n2, 93.7, tropopause_k(82.0), &titan);
+        let bare = olr_w_m2(&n2, 93.7, tropopause_k(82.0), &titan, Profile::CLIMATE);
         assert!((bare / black - 1.0).abs() < 1e-9, "{bare} vs {black}");
         // And with no air at all.
-        let airless = olr_w_m2(&Gases::default(), 250.0, &Planet::EARTH);
+        let airless = olr_w_m2(
+            &Gases::default(),
+            250.0,
+            0.0,
+            &Planet::EARTH,
+            Profile::SATURATED,
+        );
         assert!((airless - SIGMA * 250f64.powi(4)).abs() < 1e-6, "{airless}");
     }
 
@@ -1564,19 +1504,11 @@ mod tests {
             ),
         ];
         for (gases, t, skin, planet) in cases {
-            let olr = |radiation| {
-                olr_bands(
-                    &gases,
-                    t,
-                    skin,
-                    &planet,
-                    LEVELS_PER_DECADE,
-                    Sky::Cloudy,
-                    radiation,
-                )
-                .expect("air")
-                .iter()
-                .sum::<f64>()
+            let olr = |radiation: fn(&Column) -> [f64; BANDS]| {
+                with_column(&gases, t, skin, &planet, Profile::CLIMATE, radiation)
+                    .expect("air")
+                    .iter()
+                    .sum::<f64>()
             };
             let (fast, reference) = (olr(radiate), olr(radiate_reference));
             println!("{t} K: fast {fast:.5}, reference {reference:.5} W/m²");
@@ -1597,7 +1529,7 @@ mod tests {
             co2: 92.0,
             ..Gases::default()
         };
-        let olr = olr_under_skin_w_m2(&air, 737.0, tropopause_k(230.0), &venus);
+        let olr = olr_w_m2(&air, 737.0, tropopause_k(230.0), &venus, Profile::CLIMATE);
         println!("Venus column: {olr:.3} W/m²");
         assert!(olr.is_finite() && olr > 0.0, "{olr}");
         assert!(olr < SIGMA * 737f64.powi(4), "{olr}");

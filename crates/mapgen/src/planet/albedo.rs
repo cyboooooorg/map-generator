@@ -12,6 +12,7 @@
 //! [`super::Context::with_albedo`] turns an albedo into the equilibrium
 //! temperature the climate absorbs at.
 use super::climate::{EARTH_GRAVITY_M_S2, Planet, water_saturation_bar};
+use super::column::Profile;
 use super::{Gases, Water};
 
 /// The Bond albedo behind a context's equilibrium temperature: Earth's,
@@ -632,7 +633,7 @@ pub fn bond_albedo(cover: &Cover, gases: &Gases, deck: f64, surface_k: f64) -> f
 /// given, an exposed ice crust of that albedo (the area-weighted
 /// [`icy_unit_albedo`] of its terrain units) instead of snow and rock,
 /// on `planet`, whose gravity sets the column of its air
-/// ([`rayleigh_550`], [`super::column::shortwave_levels`]), under the
+/// ([`rayleigh_550`], [`Profile::SHORTWAVE`]), under the
 /// light of a star of effective temperature `star_k` (K), whose spectrum
 /// the scattering and the absorption are averaged over ([`spectrum`]).
 pub fn bond_albedo_over(
@@ -696,7 +697,7 @@ fn paths_through(
         return paths;
     }
     let h = haze(gases);
-    let column = super::column::shortwave_levels(gases, surface_k, planet);
+    let column = super::column::levels(gases, surface_k, planet, Profile::SHORTWAVE);
     let air = super::shortwave::Air {
         haze: (h * HAZE_ALBEDO, 1.0 - h * (HAZE_ALBEDO + HAZE_ABSORPTION)),
         rayleigh_550: rayleigh_550(gases, planet),
@@ -1168,12 +1169,11 @@ mod tests {
         let c = earth_cover(true);
         let ground = c.ocean * OCEAN_ALBEDO + c.land * SOIL_ALBEDO + c.ice * ICE_ALBEDO;
         let budget = |levels_per_decade: f64, top_share: f64| {
-            let column = super::super::column::shortwave_levels_on(
+            let column = super::super::column::levels(
                 &air,
                 288.0,
                 &Planet::EARTH,
-                levels_per_decade,
-                top_share,
+                Profile::SHORTWAVE.on(levels_per_decade).up_to(top_share),
             );
             let air = Air {
                 haze: (0.0, 1.0),
@@ -1205,7 +1205,7 @@ mod tests {
         for (air, t) in [(earth_air(), 288.0), (thick, 273.0)] {
             let c = cover(t, &air, &earth_water(), &Gases::default(), &Planet::EARTH);
             let ground = c.ocean * OCEAN_ALBEDO + c.land * SOIL_ALBEDO + c.ice * ICE_ALBEDO;
-            let column = super::super::column::shortwave_levels(&air, t, &Planet::EARTH);
+            let column = super::super::column::levels(&air, t, &Planet::EARTH, Profile::SHORTWAVE);
             let drop = |star_k: f64| {
                 let light = spectrum(star_k);
                 let budget = |column| {

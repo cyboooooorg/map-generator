@@ -6,7 +6,7 @@
 //! The Bond albedo ([`super::albedo`]) splits the star's light into the
 //! bands of its spectrum, from 0.2 to 5 µm. Each band crosses the same
 //! column the climate's outgoing radiation does
-//! ([`super::column::shortwave_levels`]: its adiabats and its falling
+//! ([`super::column::Profile::SHORTWAVE`]: its adiabats and its falling
 //! humidity, on a coarser grid), in layers:
 //!
 //! - **Absorption:** from 0.7 µm (14 364 cm⁻¹) to 5 µm (2 000 cm⁻¹),
@@ -428,7 +428,7 @@ fn piece_depth_fast(piece: &Piece, lower: f32, upper: f32) -> f64 {
 
 /// What the air alone sets of the light's way: its methane haze (its
 /// reflectance and transmission), its Rayleigh depth at 550 nm and its
-/// column ([`super::column::shortwave_levels`], `None` without air); the
+/// column ([`super::column::levels`], `None` without air); the
 /// ground and the clouds under it are the cover's ([`Paths::budget`]).
 pub(crate) struct Air<'a> {
     pub(crate) haze: (f64, f64),
