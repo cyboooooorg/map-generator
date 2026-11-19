@@ -599,21 +599,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
-        // The Earth at 1.28 S⊕ round an F0V star (see F0V_BOILING_FLUX)
-        // with the volatiles of 0.1 % of ice, a tenth of their N₂, and
-        // just enough water that the steam pass's energy-limited escape
-        // leaves 0.03 bar of it (some 1.6e17 kg): its first pass boils
-        // (0.24 bar of N₂, no wet balance), but so little vapour cannot
-        // hold the outgoing radiation at the moist limit, so the leftover
-        // recondenses into a small ocean. (Under the fixed albedo 0.3,
-        // with 0.1 bar left the balance was at 404 K, over the boiling
-        // point, all of it vapour; from about 1 bar there is none and the
-        // steam runaway stands. The rule's 2.4 bar of N₂ scatter the
-        // F star's blue light enough, since its Rayleigh scattering
-        // follows the star's spectrum, that the first pass keeps a wet
-        // balance and does not boil: issue #522.)
+    /// The Earth at 1.28 S⊕ round an F0V star (see F0V_BOILING_FLUX)
+    /// with the volatiles of 0.1 % of ice, a tenth of their N₂, and
+    /// just enough water that the steam pass's energy-limited escape
+    /// leaves 0.03 bar of it (some 1.6e17 kg): its first pass boils
+    /// (0.24 bar of N₂, no wet balance), but so little vapour cannot
+    /// hold the outgoing radiation at the moist limit, so the leftover
+    /// recondenses into a small ocean. (Under the fixed albedo 0.3,
+    /// with 0.1 bar left the balance was at 404 K, over the boiling
+    /// point, all of it vapour; from about 1 bar there is none and the
+    /// steam runaway stands. The rule's 2.4 bar of N₂ scatter the
+    /// F star's blue light enough, since its Rayleigh scattering
+    /// follows the star's spectrum, that the first pass keeps a wet
+    /// balance and does not boil: issue #522.)
+    ///
+    /// Its context, the water it formed with (kg) and its model.
+    fn recondensed() -> (Context, f64, crate::planet::PlanetModel) {
         let context = f0v_at(F0V_BOILING_FLUX);
         const N2_SHARE: f64 = 0.1;
         let rule = volatile_rule(1.0 - 1.0e-3, 1.0e-3, 0.325);
@@ -639,6 +640,12 @@ mod tests {
         }
         let all = inputs.water_fraction * mass_kg;
         let model = planet_model(&context, inputs);
+        (context, all, model)
+    }
+
+    #[test]
+    fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
+        let (_, all, model) = recondensed();
         let surface = model.surface.expect("a bare body has a surface");
         assert!(!surface.water.runaway, "{surface:?}");
         assert!(surface.water.boiled, "{surface:?}");
@@ -646,6 +653,35 @@ mod tests {
         assert!(surface.water.kept_kg < 1e-3 * all, "{surface:?}");
         assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
         assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    #[test]
+    fn a_recondensed_boil_shows_in_the_tree() {
+        // The water tree says the ocean boiled once, with the water
+        // escape took, in Earth oceans (#517).
+        let (context, all, model) = recondensed();
+        let surface = model.surface.as_ref().expect("a bare body has a surface");
+        assert!(
+            surface.water.boiled && !surface.water.runaway,
+            "{surface:?}"
+        );
+        let explanation = crate::planet::explain(&context, &model).expect("an explanation");
+        let water = explanation
+            .trees
+            .iter()
+            .find(|c| c.quantity == crate::planet::Quantity::WaterKept)
+            .expect("a water tree");
+        let note = water
+            .causes
+            .iter()
+            .find(|c| c.label.as_deref() == Some("boiled_recondensed"))
+            .unwrap_or_else(|| panic!("a boiled_recondensed note: {water:#?}"));
+        let lost = (all - surface.water.kept_kg) / crate::planet::OCEAN_KG;
+        assert!(
+            (note.value - lost).abs() <= 1e-9 * lost,
+            "{} vs {lost}",
+            note.value
+        );
     }
 
     /// A cause of `quantity` in `tree`, itself or below it.

@@ -72,6 +72,10 @@ export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): st
     const value = withUnit(formatInt(Math.round(cause.value * 100)), '%');
     return (cause.label === 'haze' ? t.causes.hazeValue : t.causes.coverValue)({ cover: coverName(cause.label), value });
   }
+  // An ocean that boiled and condensed again: the note carries the water lost, in Earth oceans.
+  if (cause.quantity === 'note' && cause.label === 'boiled_recondensed') {
+    return t.causes.boiledRecondensed({ lost: withUnit(formatUpTo(cause.value, 3), t.causes.units.water_kept) });
+  }
   if (cause.label !== null) return keyLabel(cause.quantity, cause.label);
   if (cause.quantity === 'surface_age') return formatSurfaceAge(cause.value);
   // The same quantity is written as the cards write it.

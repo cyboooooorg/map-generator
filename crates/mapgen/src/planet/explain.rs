@@ -48,7 +48,8 @@ pub struct Cause {
     /// The key of a value that is not a number: a class
     /// (`PlanetClass::key`, `mini-neptune`), a regime (`plates`), a
     /// liquid (`water`), a core state (`liquid`), or a note's key
-    /// (`thermostat`, `life`, `runaway`, `boiled`, `snowball`, `frozen`,
+    /// (`thermostat`, `life`, `runaway`, `boiled`, `boiled_recondensed`
+    /// (its value the water lost, Earth oceans), `snowball`, `frozen`,
     /// `co2_build_up`, `methane_trap`).
     pub label: Option<String>,
     /// The request's field this value comes from, when a request sets it.
@@ -173,6 +174,8 @@ pub enum Quantity {
     /// A condition, in `label`: `thermostat` (the carbonate thermostat
     /// set the CO₂), `life` (its oxygen), `runaway` or `boiled` (the
     /// water ran away by the insolation limit, or the climate boiled it),
+    /// `boiled_recondensed` (the ocean boiled once and the water escape
+    /// left condensed again; its value is the water lost, Earth oceans),
     /// `snowball` (frozen over by the ice–albedo feedback until volcanic
     /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
     /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
@@ -1022,15 +1025,21 @@ fn field_tree(context: &Context, model: &PlanetModel, surface: &Surface) -> Caus
 
 /// The water kept from the water the body formed with (its share of the
 /// mass escape left, as [`super::water`] takes it) and, in a runaway,
-/// what escape took of its steam.
+/// what escape took of its steam. An ocean that boiled and whose leftover
+/// condensed again (`boiled`, no runaway) says so in a
+/// `boiled_recondensed` note whose value is the water escape took, Earth
+/// oceans (#517).
 fn water_tree(model: &PlanetModel, surface: &Surface) -> Cause {
     let formed = water_oceans(model.formed_inputs());
     let mut causes = vec![Cause::of(Quantity::WaterFormed, formed).set_by(InputField::WaterOceans)];
+    let lost = (formed - surface.water.oceans).max(0.0);
     if surface.water.runaway {
         causes.push(runaway(&surface.water));
-        if formed > surface.water.oceans {
-            causes.push(Cause::of(Quantity::Escape, formed - surface.water.oceans));
+        if lost > 0.0 {
+            causes.push(Cause::of(Quantity::Escape, lost));
         }
+    } else if surface.water.boiled {
+        causes.push(Cause::note("boiled_recondensed").with_value(lost));
     }
     Cause::of(Quantity::WaterKept, surface.water.oceans).because(causes)
 }

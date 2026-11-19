@@ -140,6 +140,10 @@ describe('the cause catalog', () => {
         expect(t.causes.notes[key], key).toBeTruthy();
         expect(formatCause(node('note', 0, { label: key })), key).toBe(t.causes.notes[key]);
       }
+      // The ocean that boiled and condensed again names the water lost (#517).
+      const recondensed = formatCause(node('note', 2.5, { label: 'boiled_recondensed' }));
+      expect(recondensed).toBe(t.causes.boiledRecondensed({ lost: formatCause(node('water_kept', 2.5)) }));
+      expect(recondensed).toContain(locale === 'en' ? '2.5' : '2,5');
       expect(formatCause(node('bond_albedo', 0.306))).toBe(locale === 'en' ? '0.306' : '0,306');
       // The host's locked k2/Q is a value without a unit (#533).
       expect(formatCause(node('host_dissipation', 2.2e-4))).toBe(locale === 'fr' ? '2,2×10⁻⁴' : '2.2×10⁻⁴');

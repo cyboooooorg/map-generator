@@ -1586,10 +1586,12 @@ doi:10.1038/ngeo1892), the body has run away after all, in one pass
 with no loop: the steps from the regime on run once more from its
 steam (`regime::steam`, the water left after energy-limited escape, in
 the air), flagged `boiled`, on the body that water leaves
-(`planet::after_steam`: its mass, layers and heat derived again). If escape leaves water and that leftover has
-a wet balance of its own (too little vapour to hold the moist limit),
-it condenses again and a third run keeps it as an ocean (`boiled`, no
-runaway); otherwise the steam run stands, dry when escape took all the
+(`planet::after_steam`: its mass, layers and heat derived again). If
+escape leaves water and that leftover has a wet balance of its own (too
+little vapour to hold the moist limit), it condenses again and a third
+run keeps it as an ocean (`boiled`, no runaway; the water cause tree
+says so in a `boiled_recondensed` note that carries the water lost,
+issue #517); otherwise the steam run stands, dry when escape took all the
 water. There is no temperature condition, so a boil whose dry air is
 under 647 K still ends dry (issue #442). A body
 that keeps an envelope has no surface: `PlanetModel.surface` is `None`.

@@ -522,6 +522,7 @@ export const fr: Messages = {
     },
     coverValue: (p) => `${p.cover}, ${p.value}`,
     hazeValue: (p) => `${p.cover}, intensité ${p.value}`,
+    boiledRecondensed: (p) => `L’océan a bouilli une fois : l’échappement a emporté ${p.lost} de son eau dans l’espace, et le reste s’est condensé de nouveau`,
     inputs: {
       mass_earth: 'Masse',
       core_mass_fraction: 'Part du noyau',
