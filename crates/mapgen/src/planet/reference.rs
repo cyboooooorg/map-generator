@@ -186,18 +186,34 @@ pub(crate) fn inputs_of(body: &ReferenceBody) -> super::PlanetInputs {
 /// scatter: its composition, the volatiles of the rule of
 /// [`super::inputs::draw_inputs`] for its rock and ice, Earth's radiogenic
 /// abundance. Every Solar System test from the atmosphere on uses it.
+///
+/// Mars's CO₂ is the rule's times [`MARS_CO2_FACTOR`], so that its air
+/// holds the real 6.1 mbar (the rule alone left it 14 mbar).
 #[cfg(test)]
 pub(crate) fn model_inputs(body: &ReferenceBody) -> super::PlanetInputs {
     let refractory = 1.0 - body.water_fraction - body.envelope_fraction;
+    let mut volatiles =
+        super::inputs::volatile_rule(refractory, body.water_fraction, body.core_mass_fraction);
+    if body.name == "Mars" {
+        volatiles.co2 *= MARS_CO2_FACTOR;
+    }
     super::PlanetInputs {
-        volatiles: super::inputs::volatile_rule(
-            refractory,
-            body.water_fraction,
-            body.core_mass_fraction,
-        ),
+        volatiles,
         ..inputs_of(body)
     }
 }
+
+/// Factor on the volatile rule's CO₂ of the reference Mars
+/// ([`model_inputs`]), as an `InputOverrides::co2` would set it: its air
+/// then holds 6.1 mbar of CO₂ before the climate, Mars's mean surface
+/// pressure (about 6.1 mbar, almost all CO₂; Haberle et al. 2017, *The
+/// Atmosphere and Climate of Mars*, from memory, not checked), where the
+/// rule alone left 14.0 mbar. The air's CO₂ goes in proportion to the
+/// factor (0.6: 8.4 mbar, 0.4: 5.6 mbar), so 6.1 / 14.0. The climate
+/// bound on Mars (210 ± 5 K) is checked on this air, the one the planet
+/// has (issue #523).
+#[cfg(test)]
+const MARS_CO2_FACTOR: f64 = 6.1 / 13.98;
 
 /// Inputs without envelope, volatiles at zero, Earth's radiogenic
 /// abundance.
