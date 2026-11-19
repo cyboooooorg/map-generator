@@ -346,7 +346,7 @@ fn lapse(
 /// saturated troposphere ([`saturated_olr_under_skin_w_m2`]): the column
 /// the moist limit and the steam plateau are checked on. See the module
 /// documentation.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64, planet: &Planet) -> f64 {
     saturated_olr_under_skin_w_m2(gases, surface_k, 0.0, planet)
 }
@@ -421,7 +421,7 @@ pub(crate) fn olr_under_skin_w_m2(
 }
 
 /// [`olr_under_skin_w_m2`] under a clear sky.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn clear_olr_under_skin_w_m2(
     gases: &Gases,
     surface_k: f64,
@@ -1256,7 +1256,7 @@ fn log_mean_f32(a: f32, ln_a: f32, b: f32, ln_b: f32) -> f32 {
 /// with [`spectrum::absorption_spectrum`], over every band and level.
 #[cfg(test)]
 fn radiate_reference(column: &Column) -> [f64; BANDS] {
-    use spectrum::{Spectrum, absorption_spectrum, depth_above};
+    use spectrum::reference::{Spectrum, absorption_spectrum, depth_above, log_mean};
     let n = column.top();
     let (has_co2, has_water) = (column.has_co2, column.has_water);
     let w = spectrum::weights();
@@ -1327,7 +1327,7 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
 fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], span: f64) -> f64 {
     let mut sum = 0.0;
     for g in 0..G {
-        seen[g] *= (-DIFFUSIVITY * log_mean(top[g], bottom[g]) * span).exp();
+        seen[g] *= (-DIFFUSIVITY * spectrum::reference::log_mean(top[g], bottom[g]) * span).exp();
         sum += w[g] * seen[g];
     }
     sum
@@ -1337,23 +1337,6 @@ fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], s
 #[cfg(test)]
 fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
-}
-
-/// Logarithmic mean of two opacities per `ln p`: the exact mean over a
-/// layer where the opacity grows exponentially in `ln p` (a power of the
-/// pressure, as through a uniform air), and the arithmetic mean's limit
-/// when they are equal.
-#[cfg(test)]
-fn log_mean(a: f64, b: f64) -> f64 {
-    if a <= 0.0 || b <= 0.0 {
-        return 0.5 * (a + b);
-    }
-    let r = b / a;
-    if (r - 1.0).abs() < 1e-6 {
-        0.5 * (a + b)
-    } else {
-        (b - a) / r.ln()
-    }
 }
 
 #[cfg(test)]

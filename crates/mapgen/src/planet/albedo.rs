@@ -754,6 +754,7 @@ pub(crate) fn shortwave_budget(
 
 #[cfg(test)]
 mod tests {
+    use super::super::shortwave::{Air, Paths};
     use super::*;
 
     fn earth_water() -> Water {
@@ -1174,14 +1175,13 @@ mod tests {
                 levels_per_decade,
                 top_share,
             );
-            let sky = super::super::shortwave::Sky {
-                ground,
-                cloud: EARTH_CLOUD_COVER * CLOUD_ALBEDO,
+            let air = Air {
                 haze: (0.0, 1.0),
                 rayleigh_550: rayleigh_550(&air, &Planet::EARTH),
                 column: column.as_ref(),
             };
-            super::super::shortwave::budget(&sky, &spectrum(SUN_TEFF_K))
+            Paths::through(&air, &spectrum(SUN_TEFF_K))
+                .budget(ground, EARTH_CLOUD_COVER * CLOUD_ALBEDO)
         };
         let coarse = budget(3.0, 1e-2);
         let fine = budget(16.0, 1e-3);
@@ -1207,16 +1207,17 @@ mod tests {
             let ground = c.ocean * OCEAN_ALBEDO + c.land * SOIL_ALBEDO + c.ice * ICE_ALBEDO;
             let column = super::super::column::shortwave_levels(&air, t, &Planet::EARTH);
             let drop = |star_k: f64| {
-                let sky = |column| super::super::shortwave::Sky {
-                    ground,
-                    cloud: c.cloud * CLOUD_ALBEDO,
-                    haze: (0.0, 1.0),
-                    rayleigh_550: rayleigh_550(&air, &Planet::EARTH),
-                    column,
-                };
                 let light = spectrum(star_k);
-                let scattered = super::super::shortwave::budget(&sky(None), &light);
-                let absorbed = super::super::shortwave::budget(&sky(column.as_ref()), &light);
+                let budget = |column| {
+                    let air = Air {
+                        haze: (0.0, 1.0),
+                        rayleigh_550: rayleigh_550(&air, &Planet::EARTH),
+                        column,
+                    };
+                    Paths::through(&air, &light).budget(ground, c.cloud * CLOUD_ALBEDO)
+                };
+                let scattered = budget(None);
+                let absorbed = budget(column.as_ref());
                 (scattered.albedo - absorbed.albedo, absorbed)
             };
             let (g, g_budget) = drop(SUN_TEFF_K);

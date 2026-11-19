@@ -518,24 +518,6 @@ impl Stack {
     }
 }
 
-/// What the albedo stacks over the ground: the ground's albedo, the
-/// water clouds' layer, a methane haze on top, the air's Rayleigh depth
-/// and its column.
-pub(crate) struct Sky<'a> {
-    /// Albedo of the ground under the light (diffuse).
-    pub(crate) ground: f64,
-    /// Reflectance of the water clouds' layer, which absorbs nothing and
-    /// lets the rest of the light through.
-    pub(crate) cloud: f64,
-    /// Reflectance and transmission of a methane haze over all.
-    pub(crate) haze: (f64, f64),
-    /// Rayleigh optical depth of the whole air at 550 nm.
-    pub(crate) rayleigh_550: f64,
-    /// The air's column ([`super::column::shortwave_levels`]), `None`
-    /// without air.
-    pub(crate) column: Option<&'a Levels>,
-}
-
 /// Where the star's light goes, as shares of it: reflected to space (the
 /// Bond albedo of the sky over the ground) and absorbed by the air (its
 /// gases and haze); the rest is absorbed by the ground.
@@ -596,22 +578,6 @@ fn pieces(levels: &Levels) -> (Vec<Piece>, usize) {
     (out, cloud_at)
 }
 
-/// Mean of a rate that varies exponentially in `ln p` between `a` and
-/// `b`: their logarithmic mean (their arithmetic mean if either is
-/// nothing).
-#[cfg(test)]
-fn log_mean(a: f64, b: f64) -> f64 {
-    if a <= 0.0 || b <= 0.0 {
-        return 0.5 * (a + b);
-    }
-    let r = a / b;
-    if (r - 1.0).abs() < 1e-6 {
-        0.5 * (a + b)
-    } else {
-        (a - b) / r.ln()
-    }
-}
-
 /// Vertical optical depth of `piece` for a rate per `ln p` of `lower` at
 /// its lower level and `upper` at its upper level, taken exponential in
 /// `ln p` between them.
@@ -630,7 +596,7 @@ fn piece_depth(piece: &Piece, lower: f64, upper: f64) -> f64 {
             lower * (upper / lower).powf(x)
         }
     };
-    piece.span * log_mean(at(piece.from), at(piece.to))
+    piece.span * spectrum::reference::log_mean(at(piece.from), at(piece.to))
 }
 
 /// [`piece_depth`] in single precision with [`fast_math`]'s `exp` and
@@ -662,22 +628,10 @@ fn piece_depth_fast(piece: &Piece, lower: f32, upper: f32) -> f64 {
     f64::from(span * mean)
 }
 
-/// The light of the bands `bands` (each band's `(550 nm / λ)⁴` and its
-/// share of the light, from the albedo's spectrum, bluest first) through
-/// `sky`: its [`Budget`].
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn budget(sky: &Sky, bands: &[(f64, f64)]) -> Budget {
-    let air = Air {
-        haze: sky.haze,
-        rayleigh_550: sky.rayleigh_550,
-        column: sky.column,
-    };
-    Paths::through(&air, bands).budget(sky.ground, sky.cloud)
-}
-
-/// What the air alone sets of the light's way: its methane haze, its
-/// Rayleigh depth and its column ([`Sky`] without the ground and the
-/// clouds, which the cover sets).
+/// What the air alone sets of the light's way: its methane haze (its
+/// reflectance and transmission), its Rayleigh depth at 550 nm and its
+/// column ([`super::column::shortwave_levels`], `None` without air); the
+/// ground and the clouds under it are the cover's ([`Paths::budget`]).
 pub(crate) struct Air<'a> {
     pub(crate) haze: (f64, f64),
     pub(crate) rayleigh_550: f64,
@@ -696,7 +650,8 @@ pub(crate) struct Paths {
 }
 
 impl Paths {
-    /// The paths of `bands` through `air` (see [`budget`]).
+    /// The paths of `bands` (each band's `(550 nm / λ)⁴` and its share of
+    /// the light, from the albedo's spectrum, bluest first) through `air`.
     pub(crate) fn through(air: &Air, bands: &[(f64, f64)]) -> Paths {
         let (hr, ht) = air.haze;
         let top = Stack::EMPTY.over(hr, ht);
