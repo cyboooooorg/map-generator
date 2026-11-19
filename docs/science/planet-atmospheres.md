@@ -848,7 +848,14 @@ stratosphere the surface solves give a body at that limit, skin
 `T_eq / 2^¼` with `T_eq = (F_plateau / σ)^¼`) exactly at its star's
 runaway limit `S_rg` (`star::habitable_fluxes`), clamped to 0 to 0.9:
 `A_rg = 1 − 4 F_plateau / (S_rg S₀)`, with `S₀` the solar constant
-behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). The albedo moves from
+behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). `F_plateau` is the
+higher of Earth's air's plateau and the body's own (issue #523,
+`moist_plateau_of`: the asymptote of its dry air over a saturated
+surface, its vapour capped by its water, on its gravity), so that a
+runaway absorbs more than its own steam column can send out: on Earth's
+plateau the super-Earth of issue #492 (1.7 g, 0.45 bar of CO₂, its own
+plateau 299 W/m²) stayed at water's critical point, and now settles at
+1399 K. The albedo moves from
 the body's derived albedo `A_d` to `A_rg` with the steam column,
 `A = A_d + (A_rg − A_d) (1 − exp(−p_steam / 1 bar))` (`STEAM_ALBEDO_BAR`,
 a calibration: the moist atmospheres of Kopparapu et al. hold a fraction

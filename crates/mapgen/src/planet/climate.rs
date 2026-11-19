@@ -509,7 +509,22 @@ const STEAM_ALBEDO_BAR: f64 = 1.0;
 /// flux on each branch and jumps across the limit by the albedo change
 /// alone, `T_eq ∝ (1 − A)^¼`
 /// (`the_runaway_edge_steps_only_by_the_branches_albedos`).
+#[cfg(test)]
 pub(super) fn runaway_albedo(context: &Context, water: &Water, steam_bar: f64, albedo: f64) -> f64 {
+    runaway_albedo_under(context, water, steam_bar, albedo, *MOIST_PLATEAU_W_M2)
+}
+
+/// [`runaway_albedo`] with `A_rg` taken on the moist plateau `plateau`
+/// (W/m²) instead of Earth's air's: a body's own
+/// ([`moist_plateau_of`]), so that the steam column it settles on is the
+/// one whose limit its light exceeds.
+fn runaway_albedo_under(
+    context: &Context,
+    water: &Water,
+    steam_bar: f64,
+    albedo: f64,
+    plateau: f64,
+) -> f64 {
     let steam = 1.0 - (-steam_bar.max(0.0) / STEAM_ALBEDO_BAR).exp();
     if !(water.runaway && water.kept_kg > 0.0) || steam <= 0.0 {
         return albedo;
@@ -518,16 +533,64 @@ pub(super) fn runaway_albedo(context: &Context, water: &Water, steam_bar: f64, a
     // `S₀` as `equilibrium_k` takes it: `σ (255 K)⁴ = (1 − 0.3) S₀ / 4`.
     let earth_eq = f64::from(crate::star::equilibrium_k(1.0));
     let solar_constant = 4.0 * SIGMA * earth_eq.powi(4) / (1.0 - REFERENCE_ALBEDO);
-    let moist = (1.0 - 4.0 * *MOIST_PLATEAU_W_M2 / (limit * solar_constant))
-        .clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1);
+    let moist =
+        (1.0 - 4.0 * plateau / (limit * solar_constant)).clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1);
     albedo + (moist - albedo) * steam
 }
 
 /// The `context` the climate of a body with `water` and `steam_bar` of
 /// steam absorbs its light in, under its derived `albedo`: the context
 /// under the [`runaway_albedo`] ([`Context::with_albedo`]).
+#[cfg(test)]
 pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo: f64) -> Context {
     context.with_albedo(runaway_albedo(context, water, steam_bar, albedo))
+}
+
+/// The moist plateau, W/m², of a body's own steam column: the
+/// asymptote of the outgoing radiation of its dry `gases` over a
+/// saturated surface at [`PLATEAU_SURFACES_K`], its vapour capped by its
+/// water supply `water_bar`, on `planet` (its gravity sets the column's
+/// mass), on the grid and saturated column ([`Sky::Plateau`]) the surface
+/// solves of a runaway use, under the skin of a body that absorbs it
+/// (the fixed point of [`MOIST_PLATEAU_W_M2`]).
+///
+/// The chain declares a runaway by its star's limit `S_rg`
+/// ([`crate::star::habitable_fluxes`]) and [`runaway_albedo`] makes a
+/// plateau bind exactly there. Taken on Earth's air, that plateau
+/// (283.5 W/m²) left a runaway whose own column sends out more (the
+/// super-Earth of issue #492: 1.7 g, 0.45 bar of CO₂, 299 W/m²)
+/// absorbing less than its steam radiates, held at the critical point's
+/// floor; on its own plateau (where it is the higher, [`Body::plateau`]),
+/// a body past `S_rg` absorbs more than its own column's limit and runs
+/// away past it.
+///
+/// [`Sky::Plateau`]: column::saturated_olr_under_skin_w_m2
+fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
+    let dry = Gases { h2o: 0.0, ..*gases };
+    let asymptote = |skin_k: f64| {
+        let sum: f64 = PLATEAU_SURFACES_K
+            .iter()
+            .map(|&t| {
+                column::saturated_olr_under_skin_w_m2(
+                    &with_vapour(dry, t, water_bar),
+                    t,
+                    skin_k,
+                    planet,
+                )
+            })
+            .sum();
+        sum / PLATEAU_SURFACES_K.len() as f64
+    };
+    let mut plateau = *MOIST_PLATEAU_W_M2;
+    for _ in 0..8 {
+        let next = asymptote(plateau_skin_k(plateau));
+        let settled = (next - plateau).abs() < 0.01;
+        plateau = next;
+        if settled {
+            break;
+        }
+    }
+    plateau
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
@@ -1476,6 +1539,8 @@ struct Body<'a> {
     co2: Option<f64>,
     /// The CO₂ of the maximum greenhouse, once found.
     greenhouse: std::cell::OnceCell<f64>,
+    /// Its own moist plateau, W/m², once found ([`Body::plateau`]).
+    plateau: std::cell::OnceCell<f64>,
     /// Its gravity and radius ([`Planet`]).
     planet: &'a Planet,
     /// Albedo of its exposed ice crust, if it has one ([`climate_over`]).
@@ -1507,9 +1572,45 @@ impl<'a> Body<'a> {
             so2_frost: carbon.so2_frost_bar.max(0.0),
             co2: None,
             greenhouse: std::cell::OnceCell::new(),
+            plateau: std::cell::OnceCell::new(),
             planet,
             crust,
         }
+    }
+
+    /// The moist plateau its runaway albedo binds at its star's limit:
+    /// for a body in a water runaway that keeps water, its own steam
+    /// column's ([`moist_plateau_of`]) where it exceeds Earth's air's
+    /// ([`MOIST_PLATEAU_W_M2`]), so that past the limit it absorbs more
+    /// than either sends out; Earth's air's otherwise. A thick air (a
+    /// runaway's hundreds of bar of CO₂) has no plateau of its own: its
+    /// saturated column's radiation rises with the surface from far
+    /// under Earth's, and Earth's plateau already runs it away.
+    fn plateau(&self) -> f64 {
+        *self.plateau.get_or_init(|| {
+            if self.water.runaway && self.water.kept_kg > 0.0 {
+                moist_plateau_of(&self.gases, self.water_bar, self.planet).max(*MOIST_PLATEAU_W_M2)
+            } else {
+                *MOIST_PLATEAU_W_M2
+            }
+        })
+    }
+
+    /// The `context` it absorbs its light in under its derived `albedo`
+    /// ([`runaway_albedo`] on its own [`Body::plateau`]).
+    fn absorbing(&self, albedo: f64) -> Context {
+        self.context.with_albedo(self.runaway_albedo(albedo))
+    }
+
+    /// [`runaway_albedo`] of its steam on its own [`Body::plateau`].
+    fn runaway_albedo(&self, albedo: f64) -> f64 {
+        runaway_albedo_under(
+            self.context,
+            self.water,
+            self.gases.h2o,
+            albedo,
+            self.plateau(),
+        )
     }
 
     /// The CO₂ of the body's maximum greenhouse, bar ([`maximum_greenhouse`]),
@@ -1567,6 +1668,7 @@ impl<'a> Body<'a> {
             co2: Some(co2),
             gases: Gases { co2, ..self.gases },
             greenhouse: std::cell::OnceCell::new(),
+            plateau: std::cell::OnceCell::new(),
             ..*self
         };
         let start = (
@@ -1780,7 +1882,7 @@ struct Pass {
 /// it, the context it absorbed its light in, and whether the
 /// condensation of its air settled.
 fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> Pass {
-    let context = absorbing(body.context, body.water, body.gases.h2o, albedo);
+    let context = body.absorbing(albedo);
     let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
     let under = |air: Gases| {
         if !body.wet() {
@@ -1793,6 +1895,7 @@ fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> Pass {
                 let condensed = Body {
                     gases: air,
                     greenhouse: std::cell::OnceCell::new(),
+                    plateau: std::cell::OnceCell::new(),
                     ..*body
                 };
                 thermostat(&condensed, &context, emissivity)
@@ -2038,7 +2141,7 @@ fn settle_steps(body: &Body, start: (f64, f64)) -> (Gases, Climate, usize) {
         Climate {
             temperature_k,
             equilibrium_k: context.equilibrium_k,
-            bond_albedo: runaway_albedo(body.context, body.water, body.gases.h2o, albedo),
+            bond_albedo: body.runaway_albedo(albedo),
             liquid,
             emissivity,
             regulated,
