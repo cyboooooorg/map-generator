@@ -8,6 +8,11 @@ line-by-line absorption coefficients are sorted and reduced to 8
 g-points, on a grid of pressure and temperature.
 `opacity-halved.bin` is the same table on 10 cm⁻¹ bins over 0-2500 cm⁻¹ at
 200-300 K, read only by the test `halving_bins_keeps_the_forcing`.
+`shortwave.bin` is the table of the star's near infrared that the Bond
+albedo absorbs (`crates/mapgen/src/planet/shortwave.rs`, task 7.6 of
+#523): the same lines and sets on the albedo's own spectral bands from
+0.7 to 5 µm, with MT_CKD's water and CO₂ continua (see
+[Shortwave table](#shortwave-table)).
 
 Both are built by `tools/opacity-table` (see its README) and never by the
 generator.
@@ -20,6 +25,7 @@ cargo run --release -j 4 -p opacity-table
 cargo run --release -j 4 -p opacity-table -- \
   --bin-width 10 --top 2500 --temperatures 200,225,250,275,300 \
   --out crates/mapgen/data/opacity-halved.bin
+cargo run --release -j 4 -p opacity-table -- --shortwave
 ```
 
 The raw downloads (about 80 MB) stay in `tools/opacity-table/raw/`, which
@@ -29,20 +35,27 @@ is git-ignored.
 
 | Input | Version | Where | Downloaded |
 |---|---|---|---|
-| H₂O lines: H₂¹⁶O, H₂¹⁸O, H₂¹⁷O, HD¹⁶O, 0-5025 cm⁻¹, 99 006 lines | HITRAN2024, as served (updates to May 2026) | HITRAN's public line-by-line API, `https://hitran.org/lbl/api` | 2026-11-18 |
-| CO₂ lines: ¹²C¹⁶O₂, ¹³C¹⁶O₂, ¹⁶O¹²C¹⁸O, ¹⁶O¹²C¹⁷O, 0-5025 cm⁻¹, 336 165 lines | HITRAN2024, as served | same | 2026-11-18 |
+| H₂O lines: H₂¹⁶O, H₂¹⁸O, H₂¹⁷O, HD¹⁶O, 0-5025 cm⁻¹, 99 006 lines (shortwave: 1975-14 389 cm⁻¹, 255 613 lines, downloaded 2026-11-19) | HITRAN2024, as served (updates to May 2026) | HITRAN's public line-by-line API, `https://hitran.org/lbl/api` | 2026-11-18 |
+| CO₂ lines: ¹²C¹⁶O₂, ¹³C¹⁶O₂, ¹⁶O¹²C¹⁸O, ¹⁶O¹²C¹⁷O, 0-5025 cm⁻¹, 336 165 lines (shortwave: 1975-14 389 cm⁻¹, 313 716 lines, downloaded 2026-11-19) | HITRAN2024, as served | same | 2026-11-18 |
 | Partition sums of the same isotopologues | TIPS, as HITRAN serves it | `https://hitran.org/data/Q/q<id>.txt` | 2026-11-18 |
-| Water continuum (in `spectrum.rs`, not in the table) | MT_CKD 4.3 | `absco-ref_wv-mt-ckd.nc`, `https://github.com/AER-RC/MT_CKD_H2O`, tag 4.3 | 2026-11-18 |
+| Water continuum (in `spectrum.rs` for the longwave; binned into `shortwave.bin`) | MT_CKD 4.3 | `absco-ref_wv-mt-ckd.nc`, `https://github.com/AER-RC/MT_CKD_H2O`, tag 4.3 | 2026-11-18 |
 | CO₂ continuum (in the table) | MT_CKD 4.3: LBLRTM's `contnm.f90` at commit `f66bb596`, the submodule of `AER-RC/MT_CKD` tag 4.3 | `https://github.com/AER-RC/LBLRTM` | 2026-11-19 |
 
 The design named HITRAN2020 (Gordon et al. 2022); HITRAN's server now
 serves only its successor, HITRAN2024, so the table is built from it.
 
-SHA-256 of the inputs, concatenated in file-name order:
+SHA-256 of the inputs of `opacity.bin`, concatenated in file-name order
+(the pieces up to 5000 cm⁻¹):
 `cat raw/lines/h2o_*` `55b9aaec0f3360debac33d5cd05a030d14d5c1626e0dac6347d4090132921b69`,
 `cat raw/lines/co2_*` `cec95004862a0652506141e10915cddf4df065e152d6334c5691f96289360b0a`,
 `absco-ref_wv-mt-ckd.nc` `69944eb8b045c268e2daeb2cddf536b99f9e9efe7e91c425067b46a5b287ddb3`,
 `contnm.f90` `643f4173063d51759a0ea9e5715d0fcbd4066902452a2a5e56f62d37de69bcf7`.
+With the pieces up to 14 500 cm⁻¹ that `shortwave.bin` reads (2026-11-19;
+HITRAN answers 404 for the CO₂ pieces without lines, 13 000-13 500 and
+14 250-14 500 cm⁻¹, which `fetch.sh` keeps empty), `cat raw/lines/h2o_*.par`
+gives `a506a99b60f816e250c85d395cc6845a91e6fab80214cba230ee917dc965b9a3`
+and `cat raw/lines/co2_*.par`
+`03faa6af0b219c1d9e1b5a62202fde3825d108a1c5672defd1d3cfe4525215d9`.
 
 ## Citations
 
@@ -141,3 +154,41 @@ A code `q` ≥ 1 stands for `ln k = −30 + (q − 1) × 48/65534` (k from
 9.4e-14 m²/kg, taken as nothing. `opacity.bin` is 3 844 380 bytes
 (250 bins × 8 g-points × 15 pressures × 16 temperatures × 4 sets, then
 the continuum's 250 bins); `opacity-halved.bin` 1 204 292 bytes.
+
+## Shortwave table
+
+`shortwave.bin` is built by `opacity-table --shortwave` from the same
+line lists, partition sums and line shapes as `opacity.bin`:
+
+- **Bins:** the bands of the Bond albedo's stellar spectrum
+  (`planet::albedo::spectrum`, 240 bands even in `ln λ` from 0.2 to
+  5 µm), from the one that holds 0.7 µm to 5 µm: 147 bins over
+  2000-14 364 cm⁻¹, 27 to 193 cm⁻¹ wide. `mapgen` checks the table's
+  edges against its bands when it loads it.
+- **Grid:** the same 15 pressures and 4 sets; 13 temperatures, 150, 175,
+  200, 225, 250, 275, 300, 325, 350, 400, 500, 650 and 900 K, so that the
+  table stays under 2 MB.
+- **Continua:** MT_CKD 4.3's CO₂ continuum (`contnm.f90`, to 10 000
+  cm⁻¹) as in `opacity.bin`, and its water continuum, the mean over each
+  bin of the file's `self_absco_ref` and `for_absco_ref` and the
+  coefficient-weighted mean of `self_texp` (read from
+  `absco-ref_wv-mt-ckd.nc`, NetCDF classic).
+- **Not in it:** CO₂–CO₂ collision-induced absorption, which `mapgen`
+  takes from its longwave binning of HITRAN's `CO2-CO2_2024.cia`; ozone
+  and O₂.
+
+Layout, little-endian, as `opacity.bin` but for these fields:
+
+| Field | Type |
+|---|---|
+| magic `MGSWCK01` | 8 bytes |
+| bins, g-points, pressures, temperatures, sets | 5 × u32 |
+| bin edges, cm⁻¹, ascending | (bins + 1) × f64 |
+| g-interval edges, `ln p`, temperatures, `ln k` of code 1 and step | as `opacity.bin` |
+| codes | sets × pressures × temperatures × bins × g-points × u16 |
+| CO₂ continuum: its `T_eff` and per bin coefficient and exponent | as `opacity.bin` |
+| water continuum per bin: self coefficient at 296 K, self exponent, foreign coefficient at 296 K (cm² per molecule per cm⁻¹ at 1013 mbar) | bins × 3 × f64 |
+
+`shortwave.bin` is 1 841 972 bytes (147 bins × 8 g-points × 15 pressures
+× 13 temperatures × 4 sets, then the continua). The build takes about
+four minutes on four threads.

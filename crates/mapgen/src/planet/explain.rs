@@ -1498,6 +1498,7 @@ mod tests {
                     crust,
                     &steps.planet,
                     context.teff_k,
+                    surface.climate.temperature_k,
                 );
                 // The climate's fixed point stops when its temperature moves
                 // under `ALBEDO_TOLERANCE_K` (0.1 K), so its albedo is the

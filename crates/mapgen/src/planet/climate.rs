@@ -2210,6 +2210,7 @@ fn derived_albedo_over(
         crust,
         planet,
         star_k,
+        temperature_k,
     )
 }
 
@@ -3829,6 +3830,37 @@ mod tests {
         0.3438 + 5.8942e-5 * t + 1.6558e-9 * t.powi(2)
             - 3.0045e-12 * t.powi(3)
             - 5.2983e-16 * t.powi(4)
+    }
+
+    #[test]
+    fn the_maximum_greenhouse_albedo_round_the_sun_is_kopparapus() {
+        // Kopparapu et al. 2013 (arXiv:1301.6674v2, Fig. 5, digitised in
+        // task 7.3 of #523): at the maximum greenhouse round the Sun, 8
+        // bar of CO₂ over a 273 K surface, the planet's albedo is 0.417,
+        // net of what CO₂ and water absorb of the Sun's near infrared.
+        // Earth's body at 1.70 AU under the same air; ± 0.04, the spread
+        // of the cover (the model's ice and clouds at 273 K against
+        // their cloud-free ground of albedo 0.32).
+        let earth = earth_drawn(1.0);
+        let d = derive_at(&earth, 1.70);
+        let body = Body::new(
+            &d.context,
+            d.gases,
+            &d.water,
+            d.regime,
+            d.heat_flux_w_m2,
+            d.water_bar,
+            &d.carbon,
+            &d.planet,
+            None,
+        );
+        let gases = Gases {
+            co2: 8.0,
+            ..with_vapour(d.gases, 273.0, body.water_bar)
+        };
+        let albedo = body.albedo_at(273.0, &gases);
+        println!("albedo at the maximum greenhouse round the Sun: {albedo:.4}");
+        assert!((albedo - 0.42).abs() <= 0.04, "{albedo}");
     }
 
     #[test]

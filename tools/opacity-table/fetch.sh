@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the raw inputs of the opacity table into raw/ (git-ignored):
-# HITRAN line lists of H2O and CO2 (main isotopologues, 0-5000 cm-1) through
+# HITRAN line lists of H2O and CO2 (main isotopologues, 0-14500 cm-1: the
+# longwave table's 0-5000 and the shortwave table's 2000-14400) through
 # HITRAN's public line-by-line API, the HITRAN partition sums (TIPS),
 # and MT_CKD 4.3's water continuum coefficients. Anonymous requests: no
 # account, no personal data.
@@ -14,15 +15,21 @@ agent="opacity-table-builder"
 for gas in h2o:1,2,3,4 co2:7,8,9,10; do
   name="${gas%%:*}"
   ids="${gas#*:}"
-  for lo in $(seq 0 250 4750); do
+  for lo in $(seq 0 250 14250); do
     hi=$((lo + 250))
     out="raw/lines/${name}_${lo}_${hi}.par"
-    [[ -s "$out" ]] && continue
+    [[ -s "$out" || -e "$out.empty" ]] && continue
     # The server's Content-Length overstates the body by one byte per line,
-    # so curl reports a short transfer (exit 18) on a complete file.
-    curl -g -sS -A "$agent" -o "$out" \
-      "https://hitran.org/lbl/api?iso_ids_list=${ids}&numin=${lo}&numax=${hi}&head=False&fixwidth=0&sep=[comma]&request_params=par_line" \
+    # so curl reports a short transfer (exit 18) on a complete file. A
+    # piece without lines (CO2 has none at 13000-13500 and above 14250
+    # cm-1) is answered 404 with an HTML page: it is kept as an empty file.
+    code=$(curl -g -sS -A "$agent" -o "$out" -w '%{http_code}' \
+      "https://hitran.org/lbl/api?iso_ids_list=${ids}&numin=${lo}&numax=${hi}&head=False&fixwidth=0&sep=[comma]&request_params=par_line") \
       || [[ $? -eq 18 ]]
+    if [[ "$code" == 404 ]]; then
+      : > "$out"
+      touch "$out.empty"
+    fi
   done
 done
 

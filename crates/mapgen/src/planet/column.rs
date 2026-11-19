@@ -133,7 +133,7 @@ const TOP_BAR: f64 = 1e-4;
 /// doi:10.1175/JCLI-3299.1; from memory, not checked). ISCCP measures
 /// the tops over the real ground, so the share is against the mean
 /// surface pressure, not the sea level's.
-const CLOUD_TOP_SHARE: f64 = 580.0 / 985.5;
+pub(crate) const CLOUD_TOP_SHARE: f64 = 580.0 / 985.5;
 
 /// Infrared optical depth of the water clouds: ISCCP's global mean
 /// visible optical thickness, 3.8 (same Table 4 and §6a), over 2.0, the
@@ -575,6 +575,100 @@ fn olr_bands(
     sky: Sky,
     radiation: fn(&Column) -> [f64; BANDS],
 ) -> Option<[f64; BANDS]> {
+    let grid = Grid {
+        levels_per_decade,
+        top_share: TOP_SHARE,
+        top_bar: TOP_BAR,
+    };
+    with_column(gases, surface_k, skin_k, planet, grid, sky, radiation)
+}
+
+/// The pressure grid of a column: its levels per decade, and its top,
+/// `top_share` of the surface pressure and never above `top_bar`.
+#[derive(Clone, Copy)]
+struct Grid {
+    levels_per_decade: f64,
+    top_share: f64,
+    top_bar: f64,
+}
+
+/// Levels per decade of the column the star's near infrared is absorbed
+/// in ([`shortwave_levels`]). Calibration of the grid, not of the
+/// physics: against sixteen per decade, four move Earth's Bond albedo by
+/// under 1e-3 and its clear-sky shortwave absorption by under 1 W/m²
+/// (the test `albedo::tests::the_shortwave_column_is_converged`).
+const SHORTWAVE_LEVELS_PER_DECADE: f64 = 3.0;
+
+/// Top of the shortwave column, as a share of the surface pressure: the
+/// air above holds 1 % of the column's gases, and the bands it would
+/// absorb in are the strongest, whose cores the air below closes anyway.
+const SHORTWAVE_TOP_SHARE: f64 = 1e-2;
+
+/// A column's levels, as the shortwave reads them: each level's
+/// temperature and partial pressures from the surface up, and the span in
+/// `ln p` of each layer between two levels.
+pub(crate) struct Levels {
+    pub(crate) levels: Vec<spectrum::Level>,
+    pub(crate) spans: Vec<f64>,
+}
+
+/// The column of `gases` over a surface at `surface_k` on `planet` that
+/// the star's near infrared crosses (`super::shortwave`): the same
+/// adiabats and the same falling humidity as the climate's
+/// ([`olr_under_skin_w_m2`]), on a coarser grid
+/// ([`SHORTWAVE_LEVELS_PER_DECADE`], up to [`SHORTWAVE_TOP_SHARE`] of the
+/// surface pressure), clear, and with no stratosphere: the albedo is
+/// solved before the skin it sets, and the air above the tropopause
+/// (some 10 % of Earth's, its ozone not modelled) absorbs next to none
+/// of the near infrared that CO₂ and water take. `None` without air.
+pub(crate) fn shortwave_levels(gases: &Gases, surface_k: f64, planet: &Planet) -> Option<Levels> {
+    shortwave_levels_on(
+        gases,
+        surface_k,
+        planet,
+        SHORTWAVE_LEVELS_PER_DECADE,
+        SHORTWAVE_TOP_SHARE,
+    )
+}
+
+/// [`shortwave_levels`] with `levels_per_decade` levels per decade up to
+/// `top_share` of the surface pressure.
+pub(crate) fn shortwave_levels_on(
+    gases: &Gases,
+    surface_k: f64,
+    planet: &Planet,
+    levels_per_decade: f64,
+    top_share: f64,
+) -> Option<Levels> {
+    let grid = Grid {
+        levels_per_decade,
+        top_share,
+        top_bar: f64::INFINITY,
+    };
+    with_column(gases, surface_k, 0.0, planet, grid, Sky::Clear, |c| {
+        Levels {
+            levels: (0..=c.top()).map(|i| c.level(i)).collect(),
+            spans: (0..c.top()).map(|i| c.span(i)).collect(),
+        }
+    })
+}
+
+/// Builds the column of [`olr_under_skin_w_m2`] on `grid` under the
+/// `sky` and hands it to `use_column`; `None` without air.
+fn with_column<R>(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+    grid: Grid,
+    sky: Sky,
+    use_column: impl FnOnce(&Column) -> R,
+) -> Option<R> {
+    let Grid {
+        levels_per_decade,
+        top_share,
+        top_bar,
+    } = grid;
     let surface_k = surface_k.max(1.0);
     let air = DryAir::of(gases, skin_k);
     let steam = if gases.h2o > 0.0 {
@@ -592,7 +686,7 @@ fn olr_bands(
     if surface_bar <= 0.0 {
         return None;
     }
-    let top_bar = (surface_bar * TOP_SHARE).min(TOP_BAR);
+    let top_bar = (surface_bar * top_share).min(top_bar);
     let span = (surface_bar / top_bar).ln();
     // Fixed steps in ln p from the surface, the last one shorter, so that
     // the outgoing radiation does not jump as the surface pressure moves.
@@ -775,7 +869,7 @@ fn olr_bands(
         has_water: vapour > 0.0,
         cloud,
     };
-    Some(radiation(&column))
+    Some(use_column(&column))
 }
 
 /// Span in `ln p` of the layer above level `i` of a column of `n`

@@ -80,6 +80,7 @@ pub mod moon;
 pub mod reference;
 pub mod regime;
 pub mod resonance;
+pub(crate) mod shortwave;
 pub(crate) mod spectrum;
 pub mod surface_age;
 pub mod xuv;

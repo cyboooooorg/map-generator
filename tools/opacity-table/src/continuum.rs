@@ -1,4 +1,5 @@
-//! MT_CKD's CO₂ continuum, binned on the table's bins.
+//! MT_CKD's CO₂ continuum, binned on the table's bins, and its water
+//! continuum, binned on the shortwave table's ([`WaterContinuum`]).
 //!
 //! MT_CKD's CO₂ continuum (Mlawer et al. 2012, *Phil. Trans. R. Soc. A*
 //! 370, 2520) is the absorption of CO₂'s lines beyond the 25 cm⁻¹ cutoff
@@ -126,6 +127,58 @@ impl Co2Continuum {
     }
 }
 
+/// MT_CKD 4.3's water vapour continuum, as `absco-ref_wv-mt-ckd.nc` gives
+/// it every 10 cm⁻¹ from 0 to 20 000 cm⁻¹ (Mlawer et al. 2012): the self
+/// coefficient at 296 K, its temperature exponent and the foreign
+/// coefficient at 296 K, cm² per molecule per cm⁻¹ at 1013 mbar (the
+/// file's `self_absco_ref`, `self_texp` and `for_absco_ref`, those
+/// `mapgen`'s longwave continuum reads). `mapgen` takes the absorption
+/// per molecule as `mt_ckd_h2o_absco` does:
+/// `(C_s (296/T)^n e + C_f (p − e)) / p_ref × (296/T) × ν tanh(c₂ν/2T)`.
+pub struct WaterContinuum {
+    /// `(ν, C_s, n, C_f)` at each point of the file.
+    points: Vec<(f64, f64, f64, f64)>,
+}
+
+impl WaterContinuum {
+    /// Reads the continuum from the variables of the NetCDF file.
+    pub fn from_netcdf(nc: &crate::netcdf::NetCdf) -> Option<Self> {
+        let nu = nc.variable("wavenumbers")?;
+        let own = nc.variable("self_absco_ref")?;
+        let exponent = nc.variable("self_texp")?;
+        let foreign = nc.variable("for_absco_ref")?;
+        if [own.len(), exponent.len(), foreign.len()] != [nu.len(); 3] {
+            return None;
+        }
+        Some(Self {
+            points: (0..nu.len())
+                .map(|i| (nu[i], own[i], exponent[i], foreign[i]))
+                .collect(),
+        })
+    }
+
+    /// The bin from `lo` to `hi` cm⁻¹: the mean self coefficient of its
+    /// points, their exponent weighted by it, and the mean foreign
+    /// coefficient. A continuum is smooth across a bin, so the mean of
+    /// its coefficients is the mean of its thin optical depth.
+    pub fn bin(&self, lo: f64, hi: f64) -> (f64, f64, f64) {
+        let (mut own, mut weighted, mut foreign, mut n) = (0.0, 0.0, 0.0, 0);
+        for &(nu, s, a, f) in &self.points {
+            if nu >= lo && nu < hi {
+                own += s;
+                weighted += s * a;
+                foreign += f;
+                n += 1;
+            }
+        }
+        if n == 0 {
+            return (0.0, 0.0, 0.0);
+        }
+        let exponent = if own > 0.0 { weighted / own } else { 0.0 };
+        (own / n as f64, exponent, foreign / n as f64)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +221,22 @@ mod tests {
         );
         assert_eq!(exponent, 0.0);
         assert_eq!(c.bin(100.0, 120.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn the_water_continuum_bins_its_points() {
+        let w = WaterContinuum {
+            points: vec![
+                (0.0, 4e-22, 2.0, 1e-23),
+                (10.0, 2e-22, 5.0, 3e-23),
+                (20.0, 1e-22, 1.0, 5e-23),
+            ],
+        };
+        let (own, exponent, foreign) = w.bin(0.0, 20.0);
+        assert!((own / 3e-22 - 1.0).abs() < 1e-12);
+        assert!((exponent - 3.0).abs() < 1e-12);
+        assert!((foreign / 2e-23 - 1.0).abs() < 1e-12);
+        assert_eq!(w.bin(100.0, 120.0), (0.0, 0.0, 0.0));
     }
 
     #[test]

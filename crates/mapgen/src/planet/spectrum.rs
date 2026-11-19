@@ -93,7 +93,7 @@ impl Level {
     }
 
     /// Mean molar mass of the air, kg/mol.
-    fn molar_mass_kg(&self) -> f64 {
+    pub(crate) fn molar_mass_kg(&self) -> f64 {
         let g = &self.gases;
         let p = self.pressure_bar();
         if p <= 0.0 {
@@ -112,16 +112,16 @@ impl Level {
     /// Mass of a gas of molar mass `molar_kg` and partial pressure
     /// `partial_bar`, kg/m², per unit `ln p` of the column at this level:
     /// `(p_i M_i / (p M̄)) p / g`, its mass share of the air above.
-    fn mass_per_ln_p(&self, partial_bar: f64, molar_kg: f64) -> f64 {
+    pub(crate) fn mass_per_ln_p(&self, partial_bar: f64, molar_kg: f64) -> f64 {
         partial_bar.max(0.0) * PA_PER_BAR * molar_kg / (self.molar_mass_kg() * self.gravity_m_s2)
     }
 }
 
 /// Pascals per bar.
-const PA_PER_BAR: f64 = 1e5;
+pub(crate) const PA_PER_BAR: f64 = 1e5;
 
 /// Avogadro constant, 1/mol (CODATA 2018, exact).
-const AVOGADRO: f64 = 6.022_140_76e23;
+pub(crate) const AVOGADRO: f64 = 6.022_140_76e23;
 
 /// Boltzmann constant, J/K (CODATA 2018, exact).
 const BOLTZMANN: f64 = 1.380_649e-23;
@@ -131,13 +131,13 @@ const SIGMA: f64 = 5.670_374_419e-8;
 
 /// Second radiation constant `h c / k`, cm·K (CODATA 2018,
 /// 1.438 776 877e-2 m·K).
-const C2_CM_K: f64 = 1.438_776_877;
+pub(crate) const C2_CM_K: f64 = 1.438_776_877;
 
 /// Molar masses, kg/mol, from the IUPAC standard atomic weights (H
 /// 1.008, C 12.011, N 14.007, O 15.999, S 32.06).
 const N2_KG_MOL: f64 = 28.014e-3;
-const CO2_KG_MOL: f64 = 44.009e-3;
-const H2O_KG_MOL: f64 = 18.015e-3;
+pub(crate) const CO2_KG_MOL: f64 = 44.009e-3;
+pub(crate) const H2O_KG_MOL: f64 = 18.015e-3;
 const CH4_KG_MOL: f64 = 16.043e-3;
 const NH3_KG_MOL: f64 = 17.031e-3;
 const SO2_KG_MOL: f64 = 64.058e-3;
@@ -548,8 +548,8 @@ const MT_CKD_STEP_CM: f64 = 50.0;
 
 /// Reference temperature (K) and pressure (bar) of [`MT_CKD`]: 296 K and
 /// 1013 mbar (the file's `ref_temp` and `ref_press`).
-const MT_CKD_REFERENCE_K: f64 = 296.0;
-const MT_CKD_REFERENCE_BAR: f64 = 1.013;
+pub(crate) const MT_CKD_REFERENCE_K: f64 = 296.0;
+pub(crate) const MT_CKD_REFERENCE_BAR: f64 = 1.013;
 
 /// The water vapour continuum of MT_CKD 4.3 (Mlawer et al. 2012,
 /// doi:10.1098/rsta.2011.0295; file `absco-ref_wv-mt-ckd.nc` of
@@ -708,7 +708,10 @@ fn water_continuum(nu: f64, level: &Level) -> f64 {
 const CO2_CIA_K: [f64; 4] = [200.0, 300.0, 450.0, 800.0];
 
 /// Width of the cells of [`CO2_CIA`], cm⁻¹.
-const CO2_CIA_CELL_CM: f64 = 20.0;
+pub(crate) const CO2_CIA_CELL_CM: f64 = 20.0;
+
+/// Upper end, cm⁻¹, of the last band of [`CO2_CIA`].
+pub(crate) const CO2_CIA_TOP_CM: f64 = 4500.0;
 
 /// CO₂–CO₂ collision-induced absorption, binned from HITRAN's
 /// `CO2-CO2_2024.cia` (hitran.org/cia; Karman et al. 2019, *Icarus*
@@ -873,7 +876,7 @@ const CO2_CIA: [(f64, [f64; 4]); 139] = [
 /// `k(ν, T) n²` per metre of air (`n` the CO₂ number density), times the
 /// air's thickness per `ln p`, `k_B T / (m̄ g)`. Not broadened.
 #[cfg_attr(not(test), allow(dead_code))]
-fn co2_pairs(nu: f64, level: &Level) -> f64 {
+pub(crate) fn co2_pairs(nu: f64, level: &Level) -> f64 {
     let co2 = level.gases.co2;
     if co2 <= 0.0 {
         return 0.0;

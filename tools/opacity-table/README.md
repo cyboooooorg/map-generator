@@ -1,6 +1,11 @@
 # opacity-table
 
-Builds `crates/mapgen/data/opacity.bin`, the correlated-k table of CO₂ and
+Builds `crates/mapgen/data/opacity.bin`, and with `--shortwave`
+`crates/mapgen/data/shortwave.bin`. The second table covers the star's
+near infrared on the Bond albedo's bands from 0.7 to 5 µm, with MT_CKD's
+water continuum binned in (`crates/mapgen/src/planet/shortwave.rs`).
+
+`opacity.bin` is the correlated-k table of CO₂ and
 water line absorption, with MT_CKD's CO₂ continuum, that the climate column of `mapgen` reads
 (`crates/mapgen/src/planet/spectrum.rs`). The generator never runs this
 tool: the table is committed, and this tool only regenerates it. The
@@ -23,7 +28,7 @@ over the same bins.
 
 - Rust (the workspace toolchain, see `mise.toml`).
 - `curl`, for `fetch.sh`.
-- About 100 MB of disk for the raw downloads, and a few minutes on four
+- About 200 MB of disk for the raw downloads, and a few minutes on four
   cores.
 
 ## Download
@@ -39,7 +44,8 @@ tools/opacity-table/fetch.sh
 It fetches:
 
 - HITRAN line lists through HITRAN's public line-by-line API, in pieces of
-  250 cm⁻¹ from 0 to 5000 cm⁻¹, for the main isotopologues (global ids 1-4:
+  250 cm⁻¹ from 0 to 14 500 cm⁻¹ (a piece without lines is answered 404
+  and kept as an empty file), for the main isotopologues (global ids 1-4:
   H₂¹⁶O, H₂¹⁸O, H₂¹⁷O, HD¹⁶O; 7-10: ¹²C¹⁶O₂, ¹³C¹⁶O₂, ¹⁶O¹²C¹⁸O,
   ¹⁶O¹²C¹⁷O), as 160-character `.par` records:
   `https://hitran.org/lbl/api?iso_ids_list=1,2,3,4&numin=0&numax=250&head=False&fixwidth=0&sep=[comma]&request_params=par_line`
@@ -74,17 +80,27 @@ writes the test-only table on bins half as wide, which the test
 `halving_bins_keeps_the_forcing` of `spectrum.rs` reads. Both take about
 three minutes on four threads.
 
+To build the shortwave table:
+
+```bash
+cargo run --release -j 4 -p opacity-table -- --shortwave
+```
+
+It writes `crates/mapgen/data/shortwave.bin` in about four minutes on
+four threads; the albedo tests of `mapgen` check it.
+
 Then run `cargo test -p mapgen spectrum` and the column tests.
 
 ## Configuration
 
 | Option | Default | Meaning |
 |---|---|---|
+| `--shortwave` | off | Build `shortwave.bin`: the albedo's bands over 0.7-5 µm, 13 temperatures, MT_CKD's water continuum |
 | `--raw DIR` | `tools/opacity-table/raw` | Where `fetch.sh` put the downloads |
-| `--out FILE` | `crates/mapgen/data/opacity.bin` | The table to write |
+| `--out FILE` | `crates/mapgen/data/opacity.bin` (`shortwave.bin` with `--shortwave`) | The table to write |
 | `--bin-width CM` | `20` | Width of a spectral bin, cm⁻¹ |
 | `--top CM` | `5000` | Upper end of the spectrum, cm⁻¹ |
-| `--temperatures K,…` | 16 values from 100 to 900 K | Temperatures of the grid |
+| `--temperatures K,…` | 16 values from 100 to 900 K (13 from 150 K with `--shortwave`) | Temperatures of the grid |
 | `--pressure-step DECADES` | `0.5` | Spacing of the pressure grid, 1e-5 to 100 bar |
 | `--threads N` | `4` | Worker threads |
 

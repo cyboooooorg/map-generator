@@ -4,15 +4,20 @@
 //! reduced to g-points.
 //!
 //! ```text
-//! opacity-table [--raw DIR] [--out FILE] [--bin-width CM] [--top CM]
-//!               [--temperatures K,K,…] [--pressure-step DECADES]
-//!               [--threads N]
+//! opacity-table [--shortwave] [--raw DIR] [--out FILE] [--bin-width CM]
+//!               [--top CM] [--temperatures K,K,…]
+//!               [--pressure-step DECADES] [--threads N]
 //! ```
+//!
+//! `--shortwave` builds the shortwave table instead (`shortwave.bin`):
+//! the bands of the albedo's stellar spectrum from 0.7 to 5 µm
+//! ([`shortwave_edges`]), with MT_CKD's water continuum binned in.
 
 mod continuum;
 mod hitran;
 mod kdist;
 mod lbl;
+mod netcdf;
 mod table;
 mod voigt;
 
@@ -122,6 +127,8 @@ struct Gas {
 }
 
 struct Options {
+    /// Whether to build the shortwave table ([`shortwave_edges`]).
+    shortwave: bool,
     raw: PathBuf,
     out: PathBuf,
     bin_width_cm: f64,
@@ -132,16 +139,30 @@ struct Options {
 }
 
 fn options() -> Result<Options, String> {
+    let shortwave = std::env::args().any(|a| a == "--shortwave");
     let mut o = Options {
+        shortwave,
         raw: PathBuf::from("tools/opacity-table/raw"),
-        out: PathBuf::from("crates/mapgen/data/opacity.bin"),
+        out: PathBuf::from(if shortwave {
+            "crates/mapgen/data/shortwave.bin"
+        } else {
+            "crates/mapgen/data/opacity.bin"
+        }),
         bin_width_cm: 20.0,
-        top_cm: 5000.0,
-        temperatures_k: table::TEMPERATURES.to_vec(),
+        top_cm: if shortwave {
+            *shortwave_edges().last().expect("edges")
+        } else {
+            5000.0
+        },
+        temperatures_k: if shortwave {
+            table::SHORTWAVE_TEMPERATURES.to_vec()
+        } else {
+            table::TEMPERATURES.to_vec()
+        },
         pressure_step: table::PRESSURE_STEP,
         threads: 4,
     };
-    let mut args = std::env::args().skip(1);
+    let mut args = std::env::args().skip(1).filter(|a| a != "--shortwave");
     while let Some(flag) = args.next() {
         let value = args.next().ok_or(format!("{flag} needs a value"))?;
         let number = |v: &str| v.parse::<f64>().map_err(|e| format!("{v}: {e}"));
@@ -161,10 +182,41 @@ fn options() -> Result<Options, String> {
     Ok(o)
 }
 
+/// Shortest and longest wavelengths of the albedo's stellar spectrum, µm,
+/// and its number of bands, even in `ln λ` (`mapgen`'s
+/// `planet::albedo::spectrum`, which checks the table's edges against
+/// its own).
+const SPECTRUM_UM: (f64, f64, usize) = (0.2, 5.0, 240);
+
+/// Shortest wavelength, µm, of the shortwave table: the bands of the
+/// spectrum from the one that holds 0.7 µm up, where CO₂ and water
+/// absorb the star's near infrared (water's weakest band, near 0.72 µm,
+/// and everything redder).
+const SHORTWAVE_FROM_UM: f64 = 0.7;
+
+/// Edges, cm⁻¹, ascending, of the shortwave table's bins: the bands of
+/// the albedo's spectrum ([`SPECTRUM_UM`]) from the one holding
+/// [`SHORTWAVE_FROM_UM`] to 5 µm, 147 bands over 2 000-14 388 cm⁻¹.
+fn shortwave_edges() -> Vec<f64> {
+    let (from, to, n) = SPECTRUM_UM;
+    let step = (to / from).ln() / n as f64;
+    let first = ((SHORTWAVE_FROM_UM / from).ln() / step).floor() as usize;
+    (first..=n)
+        .rev()
+        .map(|e| 1e4 / (from * (step * e as f64).exp()))
+        .collect()
+}
+
 /// Reads the lines of `molecule` from every `.par` file of `dir` whose
 /// name starts with `prefix`, keeping the isotopologues of
-/// [`ISOTOPOLOGUES`] up to `top_cm` + the cutoff.
-fn read_lines(dir: &Path, prefix: &str, molecule: u8, top_cm: f64) -> Result<Vec<Line>, String> {
+/// [`ISOTOPOLOGUES`] from `bottom_cm` − the cutoff to `top_cm` + the
+/// cutoff.
+fn read_lines(
+    dir: &Path,
+    prefix: &str,
+    molecule: u8,
+    (bottom_cm, top_cm): (f64, f64),
+) -> Result<Vec<Line>, String> {
     let mut lines = Vec::new();
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for entry in entries {
@@ -181,7 +233,9 @@ fn read_lines(dir: &Path, prefix: &str, molecule: u8, top_cm: f64) -> Result<Vec
             let known = ISOTOPOLOGUES
                 .iter()
                 .any(|i| i.molecule == line.molecule && i.local == line.isotopologue);
-            if line.molecule == molecule && known && line.wavenumber <= top_cm + CUTOFF_CM {
+            let inside =
+                line.wavenumber >= bottom_cm - CUTOFF_CM && line.wavenumber <= top_cm + CUTOFF_CM;
+            if line.molecule == molecule && known && inside {
                 lines.push(line);
             }
         }
@@ -199,7 +253,17 @@ fn read_gas(
     molar_kg: f64,
     pedestal: Pedestal,
 ) -> Result<Gas, String> {
-    let lines = read_lines(&o.raw.join("lines"), prefix, molecule, o.top_cm)?;
+    let bottom_cm = if o.shortwave {
+        shortwave_edges()[0]
+    } else {
+        0.0
+    };
+    let lines = read_lines(
+        &o.raw.join("lines"),
+        prefix,
+        molecule,
+        (bottom_cm, o.top_cm),
+    )?;
     let mut isotopologues = Vec::new();
     for i in ISOTOPOLOGUES.iter().filter(|i| i.molecule == molecule) {
         let path = o.raw.join("q").join(format!("q{}.txt", i.global));
@@ -267,10 +331,7 @@ fn job(gas: &Gas, set: Set, header: &Header, p_bar: f64, t_k: f64) -> Vec<u16> {
     let to_mass = 1e-4 * AVOGADRO / gas.molar_kg;
     let mut codes = Vec::with_capacity(header.bins * G);
     for b in 0..header.bins {
-        let (lo, hi) = (
-            b as f64 * header.bin_width_cm,
-            (b + 1) as f64 * header.bin_width_cm,
-        );
+        let (lo, hi) = header.bin(b);
         let first = lines.partition_point(|l| l.centre < lo - CUTOFF_CM);
         let last = lines.partition_point(|l| l.centre <= hi + CUTOFF_CM);
         let near = &lines[first..last];
@@ -298,24 +359,47 @@ fn run() -> Result<(), String> {
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let continuum = continuum::Co2Continuum::parse(&text)
         .ok_or(format!("{}: no CO2 continuum", path.display()))?;
-    let bins = (o.top_cm / o.bin_width_cm).round() as usize;
-    let header = Header {
+    let edges_cm = o.shortwave.then(shortwave_edges);
+    let bins = match &edges_cm {
+        Some(edges) => edges.len() - 1,
+        None => (o.top_cm / o.bin_width_cm).round() as usize,
+    };
+    let mut header = Header {
         bins,
-        bin_width_cm: o.bin_width_cm,
+        bin_width_cm: if o.shortwave { 0.0 } else { o.bin_width_cm },
+        edges_cm,
         pressures_bar: table::pressures(o.pressure_step),
         temperatures_k: o.temperatures_k.clone(),
-        co2_continuum: (0..bins)
-            .map(|b| continuum.bin(b as f64 * o.bin_width_cm, (b + 1) as f64 * o.bin_width_cm))
-            .collect(),
+        co2_continuum: Vec::new(),
+        water_continuum: Vec::new(),
     };
+    header.co2_continuum = (0..bins)
+        .map(|b| {
+            let (lo, hi) = header.bin(b);
+            continuum.bin(lo, hi)
+        })
+        .collect();
+    if o.shortwave {
+        let path = o.raw.join("absco-ref_wv-mt-ckd.nc");
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let water = netcdf::NetCdf::parse(&bytes)
+            .and_then(|nc| continuum::WaterContinuum::from_netcdf(&nc))
+            .ok_or(format!("{}: no water continuum", path.display()))?;
+        header.water_continuum = (0..bins)
+            .map(|b| {
+                let (lo, hi) = header.bin(b);
+                water.bin(lo, hi)
+            })
+            .collect();
+    }
     let water = read_gas(&o, "h2o_", 1, 18.015e-3, Pedestal::Flat)?;
     let co2 = read_gas(&o, "co2_", 2, 44.009e-3, Pedestal::Quadratic)?;
     eprintln!(
-        "{} H2O lines, {} CO2 lines; {} bins of {} cm-1, {} pressures, {} temperatures",
+        "{} H2O lines, {} CO2 lines; {} bins over {:?} cm-1, {} pressures, {} temperatures",
         water.lines.len(),
         co2.lines.len(),
         header.bins,
-        header.bin_width_cm,
+        (header.bin(0).0, header.bin(header.bins - 1).1),
         header.pressures_bar.len(),
         header.temperatures_k.len()
     );
@@ -372,4 +456,23 @@ fn run() -> Result<(), String> {
     std::fs::write(&o.out, &bytes).map_err(|e| format!("{}: {e}", o.out.display()))?;
     eprintln!("wrote {} ({} bytes)", o.out.display(), bytes.len());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shortwave_bins_are_the_spectrum_bands_from_0_7_um() {
+        let edges = shortwave_edges();
+        assert_eq!(edges.len(), 148);
+        assert!((edges[0] - 2000.0).abs() < 1e-9, "{}", edges[0]);
+        let last = edges[147];
+        assert!((14_300.0..14_400.0).contains(&last), "{last}");
+        assert!(edges.windows(2).all(|w| w[1] > w[0]));
+        // Even in ln λ: each band spans ln(25)/240.
+        for w in edges.windows(2) {
+            assert!(((w[1] / w[0]).ln() - 25f64.ln() / 240.0).abs() < 1e-12);
+        }
+    }
 }

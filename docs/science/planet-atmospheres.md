@@ -1132,13 +1132,10 @@ cover that grows with the vapour and with its relative humidity
 (`RH^0.25 (1 - exp(-p_H₂O / 1e-2 bar))`, the humidity factor of Xu &
 Randall 1996's cloudiness; Earth's 0.67 at its 1.26e-2 bar and 77 %, a
 dry world whose air holds all its little water clearer than an ocean
-world with the same vapour; each cloud top 0.297), the absorption of the
-water vapour over them on the way down and back up (Lacis & Hansen 1974's
-near-infrared absorptivity of the vapour's column, which falls off with
-height as Clausius–Clapeyron and the lapse rate set: 24 kg/m² on Earth,
-about 17 % of the light lost on the round trip), Rayleigh scattering of
-the air's column `p / g` (Titan's 1.5 bar weigh seven times Earth's
-column), a methane haze and, from 1e-3 bar of SO₂ (what the washing out
+world with the same vapour; each cloud top 0.252, calibrated on Earth's
+0.30), Rayleigh scattering of the air's column `p / g` (Titan's 1.5 bar
+weigh seven times Earth's
+column), a methane haze and, from 1e-3 bar of SO₂ (what the washing outcolumn), a methane haze and, from 1e-3 bar of SO₂ (what the washing out
 leaves) in a surface above 273 K, a sulphuric acid deck that hides all
 below it (0.76), over a share of the disc that grows linearly from none
 at 273 K to all of it at 313 K (`DECK_ONSET_K`, a calibration: a deck
@@ -1146,10 +1143,57 @@ whole at one temperature left the fixed point no balance between a warm
 clear sky and a cold decked one). The model stores the air washed as the
 albedo washed it, and the look draws the same deck over the same share. Each constant is
 calibrated on several bodies at once and carries its source (several are
-from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
+from memory, marked in `albedo.rs`). The model gives Earth 0.30, Venus
 0.76, Mars 0.25, a frozen Earth-like planet about 0.58 (its vapour
 absorbs some of what its ice reflects), Triton 0.75, Io 0.63 and
 Enceladus 0.80 (issue #523: gravity, area and the air's absorption).
+
+**Near-infrared absorption** (`planet::shortwave`, issue #523, task 7.6
+of the longwave band model). The star's light crosses the air band by
+band, over the 240 bands of its Planck spectrum from 0.2 to 5 µm:
+
+- **The column** is the climate's (`column::shortwave_levels`: its
+  adiabats and its falling humidity) on a coarse grid, 3 levels per
+  decade up to 1 % of the surface pressure, clear and with no
+  stratosphere. Against 16 levels to 0.1 %, Earth's albedo moves by
+  1e-4 and its absorption by 0.05 W/m².
+- **Absorption** from 0.7 to 5 µm (14 364 to 2 000 cm⁻¹) comes from a
+  second correlated-k table of CO₂'s and water's HITRAN2024 lines on the
+  albedo's own bands (`crates/mapgen/data/shortwave.bin`, 1.8 MB,
+  `crates/mapgen/data/OPACITY.md`). MT_CKD 4.3's water and CO₂ continua
+  and HITRAN's CO₂–CO₂ collision-induced bands (2510-3250 and 3995-4500
+  cm⁻¹; the file holds none at 1.73 or 1.18 µm) are added per band.
+  Bluer light is only scattered: ozone is not modelled.
+- **Each layer** takes its absorption and its share of the Rayleigh
+  depth together in a two-stream solution (Meador & Weaver 1980 with
+  the hemispheric-mean coefficients of Toon et al. 1989, at the
+  longwave column's diffusivity 1.66). The light is taken as diffuse,
+  which gives the spherical albedo of the whole disc at once. CO₂ and
+  water overlap at random within a band, each pair of g-points a stack
+  of its own.
+- **The water clouds** sit at their ISCCP tops (0.589 of the surface
+  pressure) inside the column: the vapour below them absorbs only what
+  they let through.
+- **What the air absorbs** is absorbed by the planet: the climate
+  balances everything but the reflected light.
+- **Cost:** the light's paths through a given air are kept per air
+  (the last 32 of a thread), and the cover's ground and clouds are
+  stacked on them for a few operations per path.
+
+Checks (tests):
+
+- Earth's clear-sky air at 288 K absorbs 48 W/m², within the 40-60
+  W/m² that water vapour, CO₂ and O₂ take of the observed 70 (Kim &
+  Ramanathan 2008: ozone about 13, aerosols about 7).
+- The albedo at Kopparapu's maximum greenhouse (Earth at 1.70 AU, 8 bar
+  of CO₂ over 273 K) is 0.455, against their 0.417 ± 0.04 (it was 0.499
+  without absorption).
+- The same air lowers an M dwarf's planet's albedo more than a G
+  star's: 0.074 against 0.032 under Earth's air.
+
+The outer edge moved from 1.47 to 1.54 AU round the Sun; the K and M
+edges' fluxes from +43 % and +47 % to +25 % and +20 % of Kopparapu's.
+The lot keeps the edge there (task 7.3 of #523 sets its bound).
 
 **Icy albedo from surface age** (`albedo::icy_unit_albedo`, climate
 pass lot 3C-1, goal 4). The exposed water ice of an ice crust darkens
