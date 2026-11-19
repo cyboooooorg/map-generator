@@ -80,17 +80,20 @@ const WATER_L_MOLAR: f64 = WATER_L_OVER_R * R_GAS;
 /// outgoing radiation.
 const OPAQUE: f64 = 4.248_354_255_291_589e-18;
 
-/// Levels of the pressure grid per decade of pressure. Calibration: the
-/// moist plateau moves by under 0.5 W/m² and Earth's thermostat CO₂ by
-/// under 5 % against a grid two and a half times as fine; twelve levels
-/// put Earth's outgoing radiation 3.6 W/m² off with the trapezoidal rule.
+/// Levels of the pressure grid per decade of pressure. Calibration
+/// (task 7.4 of #523, on the spectral column): against a grid two and a
+/// half times as fine, Earth's outgoing radiation at 288 K moves by 0.13
+/// to 0.21 W/m², so its thermostat CO₂ by 0.7 to 4.7 % (400 ppm to
+/// 1 bar), and the moist column over 500-640 K by under 0.05 W/m²; ten
+/// levels move Earth's by 0.5 to 0.6 W/m², its CO₂ by up to 14 %.
 const LEVELS_PER_DECADE: f64 = 20.0;
 
 /// Levels per decade of the column that measures the moist plateau
 /// ([`plateau_olr_under_skin_w_m2`]): against twice as many, the plateau
 /// moves by under 0.5 W/m² (the test
-/// `the_plateaus_grid_is_converged`), where [`LEVELS_PER_DECADE`] leaves
-/// it about 2 W/m² high.
+/// `the_plateaus_grid_is_converged`; 0.01 W/m² once the saturation and
+/// the cold trap fall between levels, see [`olr_bands`]), and
+/// [`LEVELS_PER_DECADE`] gives it within 0.05 W/m².
 pub(crate) const PLATEAU_LEVELS_PER_DECADE: f64 = 80.0;
 
 /// Most levels in a column: eight decades of pressure at twice
@@ -485,6 +488,7 @@ fn olr_bands(
         if frozen {
             continue;
         }
+        let start = t;
         // Midpoint (second-order Runge–Kutta) step up the adiabat. Where
         // CO₂ saturates (so cold an air holds next to no water), its
         // pseudo-adiabat; the step in which it first saturates is split
@@ -499,7 +503,32 @@ fn olr_bands(
             t = moist(t, p_here, h);
         } else {
             let half = t - 0.5 * h * lapse(&air, t, p_here, saturated, vapour_share);
-            let next = t - h * lapse(&air, half, p_mid, saturated, vapour_share);
+            let mut next = t - h * lapse(&air, half, p_mid, saturated, vapour_share);
+            // The step in which the vapour first saturates is split where
+            // it does (the excess `ln(e / e_sat)` taken linear across the
+            // step), the rest taken on the moist adiabat: the vapour the
+            // column keeps above then moves smoothly with the grid and the
+            // surface, instead of jumping by a step's condensation.
+            if !saturated && vapour_share > 0.0 && next < WATER_CRITICAL_K {
+                let excess = |t: f64, p: f64| {
+                    (vapour_share * p / water_saturation_bar(t.min(WATER_CRITICAL_K))).ln()
+                };
+                let (below, above) = (excess(t, p_here), excess(next, p));
+                if above >= 0.0 {
+                    let f = if below >= 0.0 {
+                        0.0
+                    } else {
+                        below / (below - above)
+                    };
+                    let crossed = t + f * (next - t);
+                    let from = p_here * (-f * h).exp();
+                    let rest = (1.0 - f) * h;
+                    let half = crossed - 0.5 * rest * lapse(&air, crossed, from, true, 0.0);
+                    next =
+                        crossed - rest * lapse(&air, half, from * (-0.5 * rest).exp(), true, 0.0);
+                    saturated = true;
+                }
+            }
             let excess = |t: f64, co2: f64| (co2 / co2_saturation_bar(t)).ln();
             let below = excess(t, level.co2);
             let above = excess(next, co2_share * p * (1.0 - vapour_share));
@@ -516,18 +545,26 @@ fn olr_bands(
                 t = next;
             }
         }
+        // The cold trap: where the air reaches the skin, its vapour and its
+        // CO₂ keep the mixing ratio saturation leaves there, at the
+        // pressure where it does (`t` taken linear across the step), so
+        // that it moves smoothly with the grid and the surface.
+        let mut trap = p;
         if t <= skin_k {
+            if start > skin_k {
+                trap = p_here * (-h * (start - skin_k) / (start - t)).exp();
+            }
             t = skin_k;
             frozen = true;
         }
         if saturated || t < WATER_CRITICAL_K {
             let e = water_saturation_bar(t);
-            if saturated || vapour_share * p >= e {
+            if saturated || vapour_share * trap >= e {
                 saturated = true;
-                vapour_share = e.min(p) / p;
+                vapour_share = e.min(trap) / trap;
             }
         }
-        let dry = p * (1.0 - vapour_share);
+        let dry = trap * (1.0 - vapour_share);
         if dry > 0.0 {
             co2_share = co2_share.min(co2_saturation_bar(t) / dry);
         }
