@@ -2,7 +2,7 @@
 
 `opacity.bin` holds the absorption of CO₂'s and water's spectral lines that
 the climate column integrates (`crates/mapgen/src/planet/spectrum.rs`,
-issue #523), and MT_CKD's CO₂ continuum on the same bins. The lines form a
+issue #523; read by `crates/mapgen/src/planet/ktable.rs`), and MT_CKD's CO₂ continuum on the same bins. The lines form a
 correlated-k table: within each 20 cm⁻¹ bin from 0 to 5000 cm⁻¹ the
 line-by-line absorption coefficients are sorted and reduced to 8
 g-points, on a grid of pressure and temperature.
@@ -154,6 +154,8 @@ A code `q` ≥ 1 stands for `ln k = −30 + (q − 1) × 48/65534` (k from
 9.4e-14 m²/kg, taken as nothing. `opacity.bin` is 3 844 380 bytes
 (250 bins × 8 g-points × 15 pressures × 16 temperatures × 4 sets, then
 the continuum's 250 bins); `opacity-halved.bin` 1 204 292 bytes.
+`crates/mapgen/src/planet/ktable.rs` decodes and interpolates both this
+layout and the shortwave one below.
 
 ## Shortwave table
 

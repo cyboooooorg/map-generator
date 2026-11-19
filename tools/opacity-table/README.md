@@ -7,7 +7,8 @@ water continuum binned in (`crates/mapgen/src/planet/shortwave.rs`).
 
 `opacity.bin` is the correlated-k table of CO₂ and
 water line absorption, with MT_CKD's CO₂ continuum, that the climate column of `mapgen` reads
-(`crates/mapgen/src/planet/spectrum.rs`). The generator never runs this
+(`crates/mapgen/src/planet/spectrum.rs`; both tables are decoded by
+`crates/mapgen/src/planet/ktable.rs`). The generator never runs this
 tool: the table is committed, and this tool only regenerates it. The
 table's provenance, layout and citations are in
 `crates/mapgen/data/OPACITY.md`.

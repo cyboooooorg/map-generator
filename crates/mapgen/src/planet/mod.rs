@@ -74,6 +74,7 @@ pub mod ice_shell;
 pub mod inputs;
 pub mod interim;
 pub mod interior;
+pub(crate) mod ktable;
 pub mod life;
 pub mod mass;
 pub mod moon;

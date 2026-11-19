@@ -51,178 +51,22 @@ use std::sync::LazyLock;
 
 use super::column::{CLOUD_TOP_SHARE, Levels};
 use super::fast_math;
-use super::spectrum::{
-    self, AVOGADRO, C2_CM_K, CO2_KG_MOL, DIFFUSIVITY, G, H2O_KG_MOL, Level, MT_CKD_REFERENCE_BAR,
-    MT_CKD_REFERENCE_K, PA_PER_BAR,
-};
+use super::ktable::{CO2_SELF_SET, CO2_SET, G, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
+use super::spectrum::{self, CO2_KG_MOL, DIFFUSIVITY, H2O_KG_MOL, Level};
 
-/// The shortwave table of CO₂'s and water's lines,
-/// `crates/mapgen/data/shortwave.bin`, decoded (format in
-/// `crates/mapgen/data/OPACITY.md`): for each set (CO₂ broadened by air,
-/// water broadened by air, water broadened by itself, CO₂ broadened by
-/// itself), each pressure and temperature of its grid, each bin and each
-/// g-point, the mass absorption coefficient of the gas, m²/kg, as `ln k`;
-/// and MT_CKD 4.3's continua binned on the same bins. Between the grid's
-/// nodes `ln k` is interpolated linearly in `ln p` and in `T`; past its
-/// edges the temperature is clamped and `k` scales as `p` (Lorentz), as
-/// the longwave table does.
-struct Table {
-    /// Edges of the bins, cm⁻¹, ascending.
-    edges_cm: Vec<f64>,
-    /// Weight of each g-point.
-    weights: [f64; G],
-    /// `ln p` of the pressures of the grid, bar.
-    ln_p: Vec<f64>,
-    /// Temperatures of the grid, K.
-    t_k: Vec<f64>,
-    /// `ln k`, [set][pressure][temperature][bin][g-point].
-    ln_k: Vec<f32>,
-    /// MT_CKD's CO₂ continuum of each bin: coefficient at
-    /// [`Table::co2_t_eff_k`], cm² per molecule per cm⁻¹, and the
-    /// exponent of its band head.
-    co2_continuum: Vec<(f64, f64)>,
-    /// Temperature, K, at which the CO₂ continuum's exponents scale by 1.
-    co2_t_eff_k: f64,
-    /// MT_CKD's water continuum of each bin: self coefficient at 296 K,
-    /// its temperature exponent, foreign coefficient at 296 K, cm² per
-    /// molecule per cm⁻¹ at 1013 mbar.
-    water_continuum: Vec<(f64, f64, f64)>,
-}
-
-/// File signature of the shortwave table.
-const TABLE_MAGIC: &[u8; 8] = b"MGSWCK01";
-
-/// `ln k` given to the code 0 (under the table's floor, 9.4e-14 m²/kg).
-const LN_K_ZERO: f32 = -50.0;
-
-/// Index of the sets in [`Table`].
-const CO2_SET: usize = 0;
-const WATER_FOREIGN_SET: usize = 1;
-const WATER_SELF_SET: usize = 2;
-const CO2_SELF_SET: usize = 3;
-const SETS: usize = 4;
-
-impl Table {
-    /// Decodes a shortwave table file; `None` if it is not one, or not of
-    /// [`G`] g-points and [`SETS`] sets.
-    fn parse(bytes: &[u8]) -> Option<Table> {
-        let mut at = 0usize;
-        let mut take = |n: usize| -> Option<&[u8]> {
-            let s = bytes.get(at..at + n)?;
-            at += n;
-            Some(s)
-        };
-        if take(8)? != TABLE_MAGIC {
-            return None;
-        }
-        let mut ints = [0usize; 5];
-        for i in &mut ints {
-            *i = u32::from_le_bytes(take(4)?.try_into().ok()?) as usize;
-        }
-        let [bins, g, n_p, n_t, sets] = ints;
-        if g != G || sets != SETS || n_p < 2 || n_t < 2 || bins == 0 {
-            return None;
-        }
-        let mut float = || -> Option<f64> { Some(f64::from_le_bytes(take(8)?.try_into().ok()?)) };
-        let edges_cm = (0..=bins).map(|_| float()).collect::<Option<Vec<_>>>()?;
-        let mut bounds = [0.0; G + 1];
-        for b in &mut bounds {
-            *b = float()?;
-        }
-        let ln_p = (0..n_p).map(|_| float()).collect::<Option<Vec<_>>>()?;
-        let t_k = (0..n_t).map(|_| float()).collect::<Option<Vec<_>>>()?;
-        let (k0, step) = (float()?, float()?);
-        let count = SETS * n_p * n_t * bins * G;
-        let codes = take(2 * count)?;
-        let ln_k = codes
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|c| match u16::from_le_bytes(*c) {
-                0 => LN_K_ZERO,
-                q => (k0 + f64::from(q - 1) * step) as f32,
-            })
-            .collect();
-        let mut float = || -> Option<f64> { Some(f64::from_le_bytes(take(8)?.try_into().ok()?)) };
-        let co2_t_eff_k = float()?;
-        let co2_continuum = (0..bins)
-            .map(|_| Some((float()?, float()?)))
-            .collect::<Option<Vec<_>>>()?;
-        let water_continuum = (0..bins)
-            .map(|_| Some((float()?, float()?, float()?)))
-            .collect::<Option<Vec<_>>>()?;
-        Some(Table {
-            edges_cm,
-            weights: std::array::from_fn(|i| bounds[i + 1] - bounds[i]),
-            ln_p,
-            t_k,
-            ln_k,
-            co2_continuum,
-            co2_t_eff_k,
-            water_continuum,
-        })
-    }
-
-    fn bins(&self) -> usize {
-        self.edges_cm.len() - 1
-    }
-
-    /// Start in [`Table::ln_k`] of a set's coefficients at a node.
-    fn offset(&self, set: usize, p: usize, t: usize) -> usize {
-        ((set * self.ln_p.len() + p) * self.t_k.len() + t) * self.bins() * G
-    }
-
-    /// Where `(p_bar, t_k)` falls on the grid: the four corners' offsets
-    /// in set 0 and their weights, and the factor `p / p_edge` past the
-    /// pressure range.
-    fn corners(&self, p_bar: f64, t_k: f64) -> ([usize; 4], [f32; 4], f64) {
-        let lp = p_bar.max(f64::MIN_POSITIVE).ln();
-        let last_p = self.ln_p.len() - 1;
-        let (ip, fp, scale) = if lp <= self.ln_p[0] {
-            (0, 0.0, (lp - self.ln_p[0]).exp())
-        } else if lp >= self.ln_p[last_p] {
-            (last_p - 1, 1.0, (lp - self.ln_p[last_p]).exp())
-        } else {
-            let i = self.ln_p.partition_point(|&x| x <= lp).clamp(1, last_p) - 1;
-            (
-                i,
-                (lp - self.ln_p[i]) / (self.ln_p[i + 1] - self.ln_p[i]),
-                1.0,
-            )
-        };
-        let last_t = self.t_k.len() - 1;
-        let t = t_k.clamp(self.t_k[0], self.t_k[last_t]);
-        let it = self.t_k.partition_point(|&x| x <= t).clamp(1, last_t) - 1;
-        let ft = (t - self.t_k[it]) / (self.t_k[it + 1] - self.t_k[it]);
-        (
-            [
-                self.offset(0, ip, it),
-                self.offset(0, ip + 1, it),
-                self.offset(0, ip, it + 1),
-                self.offset(0, ip + 1, it + 1),
-            ],
-            [
-                ((1.0 - fp) * (1.0 - ft)) as f32,
-                (fp * (1.0 - ft)) as f32,
-                ((1.0 - fp) * ft) as f32,
-                (fp * ft) as f32,
-            ],
-            scale,
-        )
-    }
-
-    /// Centre of bin `b`, cm⁻¹.
-    fn centre_cm(&self, b: usize) -> f64 {
-        0.5 * (self.edges_cm[b] + self.edges_cm[b + 1])
-    }
-}
-
-/// The shortwave table, checked against the albedo's bands.
+/// The shortwave table of CO₂'s and water's lines
+/// (`crates/mapgen/data/shortwave.bin`, see [`super::ktable`]), with
+/// MT_CKD 4.3's water and CO₂ continua binned on its bins, checked
+/// against the albedo's bands.
 static TABLE: LazyLock<Table> = LazyLock::new(|| {
     let table = Table::parse(include_bytes!("../../data/shortwave.bin"))
         .expect("crates/mapgen/data/shortwave.bin is a shortwave table of 8 g-points");
+    assert!(
+        !table.edges_cm.is_empty(),
+        "shortwave.bin is a longwave table"
+    );
     let bands = super::albedo::SPECTRUM_BANDS as usize;
-    let first = bands - table.bins();
+    let first = bands - table.bins;
     for (j, &edge) in table.edges_cm.iter().enumerate() {
         let lambda_m = super::albedo::band_edge_m((bands - j) as u32);
         assert!(
@@ -253,72 +97,43 @@ struct LevelAbsorption {
     grey: Vec<f32>,
 }
 
-/// `ln k` of the four nodes `rows` weighted by `w`, plus `add`, into
-/// `out`.
-#[inline(never)]
-fn interpolate(rows: [&[f32]; 4], w: &[f32; 4], add: f32, out: &mut [f32]) {
-    let [r0, r1, r2, r3] = rows;
-    for ((((o, a), b), c), d) in out.iter_mut().zip(r0).zip(r1).zip(r2).zip(r3) {
-        *o = w[0] * a + w[1] * b + w[2] * c + w[3] * d + add;
-    }
-}
-
-/// `e^a + e^b`, into `out`.
-#[inline(never)]
-fn add_exp(a: &[f32], b: &[f32], out: &mut [f32]) {
-    for ((o, a), b) in out.iter_mut().zip(a).zip(b) {
-        *o = fast_math::exp(*a) + fast_math::exp(*b);
-    }
-}
-
 impl LevelAbsorption {
     /// The absorption of `level` in every bin of `table`.
     fn of(table: &Table, level: &Level) -> Self {
-        let m = table.bins() * G;
+        let m = table.bins * G;
         let mut out = Self {
             co2: vec![0.0; m],
             water: vec![0.0; m],
-            grey: vec![0.0; table.bins()],
+            grey: vec![0.0; table.bins],
         };
         let p = level.pressure_bar();
         let t = level.temperature_k;
         if p <= 0.0 || t <= 0.0 || level.gravity_m_s2 <= 0.0 {
             return out;
         }
-        let (at, w, scale) = table.corners(p, t);
-        let set_size = table.offset(1, 0, 0);
-        let node = |set: usize, corner: usize| -> &[f32] {
-            let start = set * set_size + at[corner];
-            &table.ln_k[start..start + m]
-        };
-        let rows = |set: usize| [0, 1, 2, 3].map(|c| node(set, c));
         let mut by_air = vec![0.0f32; m];
         let mut by_self = vec![0.0f32; m];
-        // Each gas's two sets, broadened by the air and by the gas itself,
-        // mixed by its share of the pressure.
-        let mut gas =
-            |partial: f64, molar: f64, air_set: usize, self_set: usize, out: &mut [f32]| {
-                if partial <= 0.0 {
-                    return;
-                }
-                let mass = scale * level.mass_per_ln_p(partial, molar);
-                let share = (partial / p).clamp(0.0, 1.0);
-                // `ln 0` is −∞, which `exp` takes to its floor.
-                let (air_ln, self_ln) = (
-                    (mass * (1.0 - share)).ln() as f32,
-                    (mass * share).ln() as f32,
+        // Each gas's lines ([`Table::lines`]).
+        let mut gas = |partial: f64, molar: f64, sets: (usize, usize), out: &mut [f32]| {
+            if partial > 0.0 {
+                table.lines(
+                    level,
+                    partial,
+                    molar,
+                    sets,
+                    m,
+                    &mut by_air,
+                    &mut by_self,
+                    out,
                 );
-                interpolate(rows(air_set), &w, air_ln, &mut by_air);
-                interpolate(rows(self_set), &w, self_ln, &mut by_self);
-                add_exp(&by_air, &by_self, out);
-            };
+            }
+        };
         let g = level.gases;
-        gas(g.co2, CO2_KG_MOL, CO2_SET, CO2_SELF_SET, &mut out.co2);
+        gas(g.co2, CO2_KG_MOL, (CO2_SET, CO2_SELF_SET), &mut out.co2);
         gas(
             g.h2o,
             H2O_KG_MOL,
-            WATER_FOREIGN_SET,
-            WATER_SELF_SET,
+            (WATER_FOREIGN_SET, WATER_SELF_SET),
             &mut out.water,
         );
         for (b, grey) in out.grey.iter_mut().enumerate() {
@@ -331,45 +146,28 @@ impl LevelAbsorption {
 }
 
 /// Optical depth per `ln p` of MT_CKD 4.3's water continuum in bin `b`
-/// at `level`, as the longwave's (`spectrum::water_continuum`, whose
-/// form and citation it shares), with the bin's binned coefficients at
-/// its centre.
+/// at `level`: the longwave's ([`spectrum::water_continuum_depth`]) with
+/// the bin's binned coefficients at its centre.
 fn water_continuum(table: &Table, b: usize, level: &Level) -> f64 {
-    let e = level.gases.h2o;
-    if e <= 0.0 {
-        return 0.0;
-    }
-    let (own, exponent, foreign) = table.water_continuum[b];
-    let nu = table.centre_cm(b);
-    let t = level.temperature_k;
-    let ratio = MT_CKD_REFERENCE_K / t;
-    let radiation = nu * (0.5 * C2_CM_K * nu / t).tanh();
-    let others = (level.pressure_bar() - e).max(0.0);
-    let per_molecule_cm2 = (own * ratio.powf(exponent) * e + foreign * others)
-        / MT_CKD_REFERENCE_BAR
-        * ratio
-        * radiation;
-    let molecules_m2 = e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-    per_molecule_cm2 * 1e-4 * molecules_m2
+    spectrum::water_continuum_depth(table.water_continuum[b], centre_cm(table, b), level)
 }
 
 /// Optical depth per `ln p` of MT_CKD 4.3's CO₂ continuum in bin `b` at
-/// `level`, as the longwave's (`spectrum::co2_continuum`, whose form and
-/// citation it shares): `contnm.f90` gives it to 10 000 cm⁻¹.
+/// `level`: the longwave's ([`spectrum::co2_continuum_depth`]) with the
+/// bin's binned coefficient at its centre; `contnm.f90` gives it to
+/// 10 000 cm⁻¹.
 fn co2_continuum(table: &Table, b: usize, level: &Level) -> f64 {
-    let co2 = level.gases.co2;
-    let (c, a) = table.co2_continuum[b];
-    if co2 <= 0.0 || c <= 0.0 {
-        return 0.0;
-    }
-    let t = level.temperature_k;
-    let nu = table.centre_cm(b);
-    let radiation = nu * (0.5 * C2_CM_K * nu / t).tanh();
-    let per_molecule = c * (a * (t / table.co2_t_eff_k).ln()).exp() * radiation;
-    let p = level.pressure_bar();
-    let molecules_m2 = co2 * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-    let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
-    per_molecule * density * 1e-4 * molecules_m2
+    spectrum::co2_continuum_depth(
+        table.co2_continuum[b],
+        table.co2_continuum_t_eff_k,
+        centre_cm(table, b),
+        level,
+    )
+}
+
+/// Centre of bin `b` of `table`, cm⁻¹.
+fn centre_cm(table: &Table, b: usize) -> f64 {
+    0.5 * (table.edges_cm[b] + table.edges_cm[b + 1])
 }
 
 /// Optical depth per `ln p` of CO₂–CO₂ collision-induced absorption in
@@ -674,7 +472,7 @@ impl Paths {
             .iter()
             .map(|level| LevelAbsorption::of(table, level))
             .collect();
-        let first_absorbed = bands.len() - table.bins();
+        let first_absorbed = bands.len() - table.bins;
         let mut co2 = Points::new(pieces.len());
         let mut water = Points::new(pieces.len());
         let mut grey = vec![0.0; pieces.len()];
@@ -882,9 +680,9 @@ mod tests {
     #[test]
     fn the_table_is_on_the_albedo_bands() {
         let table = &*TABLE;
-        assert_eq!(table.bins(), 147);
+        assert_eq!(table.bins, 147);
         assert!((table.edges_cm[0] - 2000.0).abs() < 1e-6);
-        assert!(table.edges_cm[table.bins()] > 14_300.0);
+        assert!(table.edges_cm[table.bins] > 14_300.0);
         assert!((table.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
     }
 }

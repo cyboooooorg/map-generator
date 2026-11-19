@@ -7,6 +7,7 @@
 //! read it; the generator never does.
 
 use super::*;
+use crate::planet::ktable::{CO2_SELF_SET, CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
 
 /// Hemispheric flux, W/m², that a black body at `t_k` emits in bin `i`:
 /// `π ∫ B_ν dν` over the bin, exact (see [`planck_between`]).
@@ -88,55 +89,40 @@ fn grey_between(lo: f64, hi: f64, level: &Level) -> f64 {
         + methane(lo, hi, level)
 }
 
-/// Optical depth per `ln p` of the water continuum at `nu` cm⁻¹ (see
-/// [`MT_CKD`]): the absorption per molecule times the vapour's molecules
-/// per unit area per `ln p`, `e N_A / (M̄ g)`.
+/// Optical depth per `ln p` of the water continuum at `nu` cm⁻¹:
+/// [`water_continuum_depth`] with [`MT_CKD`]'s coefficients interpolated
+/// in their logarithm at `nu`.
 fn water_continuum(nu: f64, level: &Level) -> f64 {
-    let e = level.gases.h2o;
-    if e <= 0.0 || nu <= 0.0 {
+    if level.gases.h2o <= 0.0 || nu <= 0.0 {
         return 0.0;
     }
-    let t = level.temperature_k;
     let x = (nu / MT_CKD_STEP_CM).clamp(0.0, (MT_CKD.len() - 1) as f64);
     let k = (x as usize).min(MT_CKD.len() - 2);
     let f = x - k as f64;
     let (a, b) = (MT_CKD[k], MT_CKD[k + 1]);
     let log_lerp = |u: f64, v: f64| (u.ln() * (1.0 - f) + v.ln() * f).exp();
-    let self_coeff = log_lerp(a.1, b.1);
-    let exponent = a.2 * (1.0 - f) + b.2 * f;
-    let foreign_coeff = log_lerp(a.3, b.3);
-    let ratio = MT_CKD_REFERENCE_K / t;
-    let radiation = nu * (0.5 * C2_CM_K * nu / t).tanh();
-    let others = (level.pressure_bar() - e).max(0.0);
-    let per_molecule_cm2 = (self_coeff * ratio.powf(exponent) * e + foreign_coeff * others)
-        / MT_CKD_REFERENCE_BAR
-        * ratio
-        * radiation;
-    let molecules_m2 = e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-    per_molecule_cm2 * 1e-4 * molecules_m2
+    let coefficients = (
+        log_lerp(a.1, b.1),
+        a.2 * (1.0 - f) + b.2 * f,
+        log_lerp(a.3, b.3),
+    );
+    water_continuum_depth(coefficients, nu, level)
 }
 
-/// Optical depth per `ln p` of MT_CKD's CO₂ continuum in bin `i`: the
-/// far wings of CO₂'s lines beyond the table's 25 cm⁻¹ cutoff, with their
-/// sub-Lorentzian shape and line coupling, as LBLRTM's `CONTNM` takes it,
-/// `C(ν) (p / p_ref)(296 K / T) R(ν, T) (T / T_eff)^n` per molecule with
-/// `R = ν tanh(c₂ν / 2T)` (the coefficients binned by `tools/opacity-table`
-/// from MT_CKD 4.3's `contnm.f90`; see `crates/mapgen/data/OPACITY.md`).
-/// It is broadened by the whole air, like water's foreign continuum, so
-/// that it grows as the CO₂ times the pressure: it closes the windows of
-/// a thick CO₂ air (a vertical depth of about 7 at 1000 cm⁻¹ under 8 bar)
-/// and is negligible at Earth's 400 ppm outside the 15 µm band.
+/// Optical depth per `ln p` of MT_CKD's CO₂ continuum in bin `i`:
+/// [`co2_continuum_depth`] with the longwave table's coefficient at the
+/// bin's centre.
 fn co2_continuum(i: usize, level: &Level) -> f64 {
-    let co2 = level.gases.co2;
-    let t = level.temperature_k;
-    if co2 <= 0.0 || i >= BINS {
+    if i >= BINS {
         return 0.0;
     }
-    let p = level.pressure_bar();
-    let molecules_m2 = co2 * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-    let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
-    let ln_t = (t / OPACITY.co2_continuum_t_eff_k).ln();
-    co2_continuum_per_molecule(i, t, ln_t) * density * 1e-4 * molecules_m2
+    let table = &*OPACITY;
+    co2_continuum_depth(
+        table.co2_continuum[i],
+        table.co2_continuum_t_eff_k,
+        BIN_TABLE.centre_cm[i],
+        level,
+    )
 }
 
 /// Optical depth per `ln p` of methane between `lo` and `hi` cm⁻¹: the
@@ -258,7 +244,7 @@ pub(crate) fn depth_above(level: &Level, rate: &Spectrum, out: &mut Spectrum) {
     }
 }
 
-impl super::Table {
+impl Table {
     /// Mass absorption coefficients, m²/kg, of `set` at `p_bar` and
     /// `t_k` in `bin`, times `factor`, into `out`.
     pub(crate) fn coefficients(
@@ -333,7 +319,7 @@ impl super::GreyRates {
         if let Some((e, ln_ratio, others, scale)) = self.continuum {
             let (self_coeff, exponent, foreign_coeff) = table.continuum[i];
             let nu = table.centre_cm[i];
-            let radiation = nu * (0.5 * C2_CM_K * nu / self.t).tanh();
+            let radiation = radiation_term(nu, self.t);
             o += (self_coeff * (exponent * ln_ratio).exp() * e + foreign_coeff * others)
                 * scale
                 * radiation;
@@ -348,7 +334,8 @@ impl super::GreyRates {
             o += table.methane_share[i] * rate;
         }
         if let Some((ln_t, scale)) = self.co2_continuum {
-            o += co2_continuum_per_molecule(i, self.t, ln_t) * scale;
+            let coefficient = OPACITY.co2_continuum[i];
+            o += co2_continuum_per_molecule(coefficient, table.centre_cm[i], self.t, ln_t) * scale;
         }
         o
     }
