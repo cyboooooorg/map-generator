@@ -778,6 +778,35 @@ column:
 τ_i = k_i (p_i / 1 bar)^a_i (P_b,i / 1 bar)^½        (a uniform column)
 ```
 
+**Cloud greenhouse** (`planet::column`, issue #523). The albedo's water
+clouds cover `f` of the sky (`albedo::cloud_cover`: Xu & Randall's
+`RH^0.25` times `1 − exp(−p_H₂O / 1e-2 bar)`, Earth's 0.67). That share
+radiates from a grey layer at the cloud top instead of the clear column
+below it:
+
+```text
+OLR = (1 − f) OLR_clear + f OLR_cloudy
+OLR_cloudy = above_c + seen_c (ε B(T_c) + (1 − ε) I_clear(p_c))
+```
+
+with `above_c` what the air above the top sends out, `seen_c` its
+transmission to space and `I_clear(p_c)` the clear column's upward flux
+at the top, band by band, so that the cloudy column needs no second sum.
+
+- The top sits at 0.589 of the surface pressure: ISCCP's global annual
+  mean cloud-top pressure, 580 mb (Rossow & Schiffer 1999, *BAMS* 80,
+  2261, §6a and Table 4), over Earth's mean surface pressure, 985.5 hPa
+  (Trenberth & Smith 2005; from memory, not checked).
+- The emissivity is `1 − exp(−1.66 τ_ir)` = 0.957, with ISCCP's mean
+  visible optical thickness 3.8 and its `τ_ir = τ / 2` (same paper, §5)
+  and the column's diffusivity 1.66.
+- Only water clouds count; a body without water vapour (Mars, Titan)
+  radiates as before. The moist plateau stays clear-sky, as the
+  line-by-line plateaus it is checked against are.
+- Check: Earth's longwave cloud effect, clear-sky less all-sky OLR, is
+  29.0 W/m² at 280 ppm and 288 K, against 28 ± 5 W/m² (CERES EBAF, Loeb
+  et al. 2018).
+
 **Albedo of a water runaway** (`climate::absorbing`, issue #492). A body
 in a water runaway (by the insolation limit or a boil) that keeps steam
 in its air absorbs under

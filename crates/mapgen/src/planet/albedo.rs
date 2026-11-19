@@ -632,7 +632,7 @@ pub fn cover(
 /// `1 − exp(−p_H₂O / CLOUD_H2O_BAR)`. The humidity is the vapour over
 /// its saturation at the surface's temperature, at most 1 (a runaway's
 /// steam, past water's critical point, is saturated).
-fn cloud_cover(temperature_k: f64, h2o_bar: f64) -> f64 {
+pub(crate) fn cloud_cover(temperature_k: f64, h2o_bar: f64) -> f64 {
     let h2o = h2o_bar.max(0.0);
     if h2o <= 0.0 {
         return 0.0;

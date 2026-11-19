@@ -24,7 +24,15 @@
 //! radiation flattens at the Simpson–Nakajima limit (Nakajima, Hayashi &
 //! Abe 1992, doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2) until
 //! the dry adiabat from a hot surface reaches them.
+//!
+//! Water clouds cover the share of the sky the albedo gives them
+//! ([`super::albedo::cloud_cover`]): that share radiates from a cloud
+//! top ([`CLOUD_TOP_SHARE`] of the surface pressure, of emissivity
+//! [`CLOUD_EMISSIVITY`]) instead of from the clear column below it, so
+//! that the albedo's clouds, which reflect the light, also hold in the
+//! heat ([`radiate`]).
 use super::Gases;
+use super::albedo::cloud_cover;
 use super::atmosphere::{co2_latent_j_mol, co2_saturation_bar};
 use super::climate::{
     Planet, STEAM_MAX_BAR, WATER_CRITICAL_K, WATER_L_OVER_R, water_saturation_bar,
@@ -109,6 +117,31 @@ const MAX_LEVELS: usize = 1280;
 /// temperature.
 const TOP_SHARE: f64 = 1e-3;
 const TOP_BAR: f64 = 1e-4;
+
+/// Pressure of the water clouds' tops, as a share of the surface
+/// pressure: 0.589, ISCCP's global annual mean cloud-top pressure, 580
+/// mb (Rossow & Schiffer 1999, *BAMS* 80, 2261,
+/// doi:10.1175/1520-0477(1999)080<2261:AIUCFI>2.0.CO;2, §6a and Table
+/// 4, D2 1986; checked), over Earth's global mean surface pressure, 985.5
+/// hPa (Trenberth & Smith 2005, *J. Climate* 18, 864,
+/// doi:10.1175/JCLI-3299.1; from memory, not checked). ISCCP measures
+/// the tops over the real ground, so the share is against the mean
+/// surface pressure, not the sea level's.
+const CLOUD_TOP_SHARE: f64 = 580.0 / 985.5;
+
+/// Infrared optical depth of the water clouds: ISCCP's global mean
+/// visible optical thickness, 3.8 (same Table 4 and §6a), over 2.0, the
+/// ratio of the visible to the 11 µm optical thickness ISCCP takes
+/// (Rossow & Schiffer 1999, §5: `τ_ir = τ / 2.0`; checked).
+const CLOUD_IR_DEPTH: f64 = 3.8 / 2.0;
+
+/// The clouds' infrared emissivity for the column's fluxes:
+/// `1 − exp(−D τ_ir)`, with the diffusivity `D` the column's gases take
+/// ([`DIFFUSIVITY`]): 0.957. A cloud is grey in the infrared, and black
+/// past a few optical depths.
+fn cloud_emissivity() -> f64 {
+    1.0 - (-DIFFUSIVITY * CLOUD_IR_DEPTH).exp()
+}
 
 /// Pressure, bar, of the tropopause of a thick atmosphere, where its
 /// air is coldest: about 0.1 bar on every thick atmosphere of the Solar
@@ -303,6 +336,15 @@ pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64, planet: &Planet) -> f64 {
     olr_under_skin_w_m2(gases, surface_k, 0.0, planet)
 }
 
+/// Whether a column's water clouds radiate in its place
+/// ([`olr_under_skin_w_m2`]) or the sky is taken clear (the moist
+/// plateau, which line-by-line models give clear).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Sky {
+    Cloudy,
+    Clear,
+}
+
 /// Outgoing longwave radiation, W/m², of the column of [`olr_w_m2`] whose
 /// temperature never falls below `skin_k` (its stratosphere).
 ///
@@ -313,27 +355,66 @@ pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64, planet: &Planet) -> f64 {
 /// (never above [`TOP_BAR`]) on a log grid. Without air the surface
 /// radiates as a black body. `planet`'s gravity turns the pressures into
 /// the absorbers' column masses (`p / g`).
+///
+/// The water clouds of the albedo, `f` of the sky
+/// ([`super::albedo::cloud_cover`] of the surface temperature and
+/// `gases.h2o`), send out the cloudy column's radiation, the rest the
+/// clear column's: `(1 − f) OLR_clear + f OLR_cloudy` ([`radiate`]).
 pub(crate) fn olr_under_skin_w_m2(
     gases: &Gases,
     surface_k: f64,
     skin_k: f64,
     planet: &Planet,
 ) -> f64 {
-    olr_on_grid(gases, surface_k, skin_k, planet, LEVELS_PER_DECADE)
+    olr_on_grid(
+        gases,
+        surface_k,
+        skin_k,
+        planet,
+        LEVELS_PER_DECADE,
+        Sky::Cloudy,
+    )
 }
 
-/// [`olr_under_skin_w_m2`] on the finer grid of
-/// [`PLATEAU_LEVELS_PER_DECADE`], for the moist plateau.
+/// [`olr_under_skin_w_m2`] under a clear sky.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn clear_olr_under_skin_w_m2(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+) -> f64 {
+    olr_on_grid(
+        gases,
+        surface_k,
+        skin_k,
+        planet,
+        LEVELS_PER_DECADE,
+        Sky::Clear,
+    )
+}
+
+/// [`clear_olr_under_skin_w_m2`] on the finer grid of
+/// [`PLATEAU_LEVELS_PER_DECADE`], for the moist plateau: Goldblatt et
+/// al. 2013's and the other line-by-line plateaus are clear-sky.
 pub(crate) fn plateau_olr_under_skin_w_m2(
     gases: &Gases,
     surface_k: f64,
     skin_k: f64,
     planet: &Planet,
 ) -> f64 {
-    olr_on_grid(gases, surface_k, skin_k, planet, PLATEAU_LEVELS_PER_DECADE)
+    olr_on_grid(
+        gases,
+        surface_k,
+        skin_k,
+        planet,
+        PLATEAU_LEVELS_PER_DECADE,
+        Sky::Clear,
+    )
 }
 
-/// [`olr_under_skin_w_m2`] with `levels_per_decade` levels per decade.
+/// [`olr_under_skin_w_m2`] with `levels_per_decade` levels per decade,
+/// under the `sky`.
 ///
 /// A planet's solves ask for the same column more than once (its settle
 /// loop runs the same balances again): the last [`REMEMBERED`] columns of
@@ -345,6 +426,7 @@ fn olr_on_grid(
     skin_k: f64,
     planet: &Planet,
     levels_per_decade: f64,
+    sky: Sky,
 ) -> f64 {
     let key = [
         gases.n2,
@@ -358,12 +440,21 @@ fn olr_on_grid(
         skin_k,
         planet.gravity_m_s2,
         levels_per_decade,
+        if sky == Sky::Cloudy { 1.0 } else { 0.0 },
     ]
     .map(f64::to_bits);
     if let Some(olr) = REMEMBERED_OLR.with_borrow(|memory| memory.find(&key)) {
         return olr;
     }
-    let olr = match olr_bands(gases, surface_k, skin_k, planet, levels_per_decade, radiate) {
+    let olr = match olr_bands(
+        gases,
+        surface_k,
+        skin_k,
+        planet,
+        levels_per_decade,
+        sky,
+        radiate,
+    ) {
         Some(bands) => bands.iter().sum(),
         None => SIGMA * surface_k.max(1.0).powi(4),
     };
@@ -375,8 +466,9 @@ fn olr_on_grid(
 const REMEMBERED: usize = 1024;
 
 /// The inputs of a column, as bits: the seven partial pressures, the
-/// surface and skin temperatures, the gravity and the levels per decade.
-type ColumnKey = [u64; 11];
+/// surface and skin temperatures, the gravity, the levels per decade and
+/// the sky.
+type ColumnKey = [u64; 12];
 
 /// The last [`REMEMBERED`] columns of a thread and their outgoing
 /// radiation, the oldest replaced first.
@@ -405,7 +497,7 @@ impl Memory {
 thread_local! {
     static REMEMBERED_OLR: std::cell::RefCell<Memory> = const {
         std::cell::RefCell::new(Memory {
-            keys: [[0; 11]; REMEMBERED],
+            keys: [[0; 12]; REMEMBERED],
             olr: [0.0; REMEMBERED],
             len: 0,
             next: 0,
@@ -414,14 +506,15 @@ thread_local! {
 }
 
 /// The outgoing radiation of [`olr_under_skin_w_m2`], W/m², in each band
-/// of [`spectrum`], on a grid of `levels_per_decade`, summed by
-/// `radiation` ([`radiate`]); `None` without air.
+/// of [`spectrum`], on a grid of `levels_per_decade`, under the `sky`,
+/// summed by `radiation` ([`radiate`]); `None` without air.
 fn olr_bands(
     gases: &Gases,
     surface_k: f64,
     skin_k: f64,
     planet: &Planet,
     levels_per_decade: f64,
+    sky: Sky,
     radiation: fn(&Column) -> [f64; BANDS],
 ) -> Option<[f64; BANDS]> {
     let surface_k = surface_k.max(1.0);
@@ -570,6 +663,22 @@ fn olr_bands(
         }
     }
 
+    // The cloud top, `CLOUD_TOP_SHARE` of the surface pressure: in the
+    // layer above level `i`, `x` of its span up.
+    let cover = match sky {
+        Sky::Cloudy => cloud_cover(surface_k, gases.h2o),
+        Sky::Clear => 0.0,
+    };
+    let cloud = (cover > 0.0).then(|| {
+        let up = -CLOUD_TOP_SHARE.ln();
+        let i = ((up / step).floor() as usize).min(n - 1);
+        let x = ((up - i as f64 * step) / column_span(i, n, step, last)).clamp(0.0, 1.0);
+        Cloud {
+            layer: i,
+            up: x,
+            weight: cover * cloud_emissivity(),
+        }
+    });
     let column = Column {
         temperature: &temperature[..=n],
         levels: &levels[..=n],
@@ -578,8 +687,25 @@ fn olr_bands(
         gravity_m_s2: planet.gravity_m_s2,
         has_co2: gases.co2 > 0.0,
         has_water: vapour > 0.0,
+        cloud,
     };
     Some(radiation(&column))
+}
+
+/// Span in `ln p` of the layer above level `i` of a column of `n`
+/// layers, `step` each but the last (top) one's `last`.
+fn column_span(i: usize, n: usize, step: f64, last: f64) -> f64 {
+    if i + 1 == n { last } else { step }
+}
+
+/// A column's water clouds: their top sits `up` (0 to 1) of the way up
+/// the layer above level `layer`, in `ln p`, and `weight` is their cover
+/// times their emissivity ([`radiate`]).
+#[derive(Clone, Copy)]
+struct Cloud {
+    layer: usize,
+    up: f64,
+    weight: f64,
 }
 
 /// The levels of a column, from the surface up, as its radiation reads
@@ -597,6 +723,8 @@ struct Column<'a> {
     /// Whether the column holds CO₂ and water vapour.
     has_co2: bool,
     has_water: bool,
+    /// Its water clouds, if any.
+    cloud: Option<Cloud>,
 }
 
 impl Column<'_> {
@@ -607,11 +735,7 @@ impl Column<'_> {
 
     /// Span in `ln p` of the layer above level `i`.
     fn span(&self, i: usize) -> f64 {
-        if i + 1 == self.top() {
-            self.last
-        } else {
-            self.step
-        }
+        column_span(i, self.top(), self.step, self.last)
     }
 
     fn level(&self, i: usize) -> spectrum::Level {
@@ -733,6 +857,18 @@ fn summed_bins(temperature: &[f64]) -> usize {
 /// is opaque ([`OPAQUE`]); the bins a cold column cannot send out
 /// ([`summed_bins`]) are taken as clear, the surface's.
 ///
+/// Water clouds ([`Cloud`]) cover `f` of the sky with a grey layer of
+/// emissivity `ε` at their top. Under it the clear column's radiation
+/// from below reaches the top through `1 − ε` of it, and the cloud adds
+/// `ε B(T_c)` times the transmission to space from its top, so that
+/// each band's `(1 − f) OLR_clear + f OLR_cloudy` is
+/// `OLR_clear − f ε (OLR_clear − above_c − seen_c B_c)`, with `above_c`
+/// the radiation of the air above the top, `seen_c` its transmission to
+/// space and `B_c` its Planck flux, each taken linear in `ln p` across
+/// the layer it sits in. The cloudy column costs no second sum. Bins a
+/// cold column leaves out stay clear; a column opaque above the cloud
+/// sends out the same either way.
+///
 /// In single precision with [`spectrum::fast_level`] and [`fast_math`]
 /// (the test `the_fast_radiation_is_the_reference` holds it to the
 /// double-precision sum of `spectrum`).
@@ -792,7 +928,17 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     if tail {
         out[TAIL] = planck[TAIL] * (1.0 - seen[BINS - 1]);
     }
+    // What a cloud top sends out per band, `above_c + seen_c B_c`, once
+    // the sum has passed it.
+    let mut cloud_top: Option<[f64; BANDS]> = None;
+    let mut above = [0.0; BANDS];
+    let mut seen_above = [0.0; BINS];
     for i in (0..n).rev() {
+        let at_cloud = column.cloud.filter(|c| c.layer == i);
+        if at_cloud.is_some() {
+            above = out;
+            seen_above = seen;
+        }
         spectrum::fast_level(&column.level(i), bins, bottom);
         spectrum::planck_spectrum_upto(column.temperature[i], bins, &mut planck_below);
         let slant = (DIFFUSIVITY * column.span(i)) as f32;
@@ -829,10 +975,25 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         if tail {
             out[TAIL] += 0.5 * (planck[TAIL] + planck_below[TAIL]) * (last_seen - seen[BINS - 1]);
         }
+        if let Some(cloud) = at_cloud {
+            let x = cloud.up;
+            let mid = |below: f64, above: f64| below + x * (above - below);
+            let mut sent = [0.0; BANDS];
+            for b in 0..bins {
+                let seen_c = mid(seen[b], seen_above[b]);
+                sent[b] = mid(out[b], above[b]) + seen_c * mid(planck_below[b], planck[b]);
+            }
+            if tail {
+                let seen_c = mid(seen[BINS - 1], seen_above[BINS - 1]);
+                sent[TAIL] =
+                    mid(out[TAIL], above[TAIL]) + seen_c * mid(planck_below[TAIL], planck[TAIL]);
+            }
+            cloud_top = Some(sent);
+        }
         std::mem::swap(top, bottom);
         std::mem::swap(&mut planck, &mut planck_below);
         if !open {
-            return out;
+            return under_clouds(out, column.cloud, cloud_top, bins, tail);
         }
     }
     // `planck` is now the surface's, at `temperature[0]`.
@@ -841,6 +1002,29 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     }
     if tail {
         out[TAIL] += planck[TAIL] * seen[BINS - 1];
+    }
+    under_clouds(out, column.cloud, cloud_top, bins, tail)
+}
+
+/// The clear column's radiation `out` per band, with `cloud`'s share of
+/// the sky sending out what its top does (`sent`, once the sum has
+/// passed it; see [`radiate`]) over the first `bins` bins, and the tail
+/// with them when `tail`.
+fn under_clouds(
+    mut out: [f64; BANDS],
+    cloud: Option<Cloud>,
+    sent: Option<[f64; BANDS]>,
+    bins: usize,
+    tail: bool,
+) -> [f64; BANDS] {
+    if let (Some(cloud), Some(sent)) = (cloud, sent) {
+        let blend = |clear: f64, sent: f64| clear - cloud.weight * (clear - sent);
+        for b in 0..bins {
+            out[b] = blend(out[b], sent[b]);
+        }
+        if tail {
+            out[TAIL] = blend(out[TAIL], sent[TAIL]);
+        }
     }
     out
 }
@@ -913,7 +1097,9 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         seen[k] = through;
         out[k] = planck[k] * (1.0 - through);
     }
+    let mut cloud_top = None;
     for i in (0..n).rev() {
+        let (above, seen_above) = (out, seen);
         absorption_spectrum(&column.level(i), &mut rate_below);
         planck_spectrum(column.temperature[i], &mut planck_below);
         let h = column.span(i);
@@ -929,13 +1115,22 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
             out[k] += 0.5 * (planck[k] + planck_below[k]) * (seen[k] - below);
             seen[k] = below;
         }
+        if let Some(cloud) = column.cloud.filter(|c| c.layer == i) {
+            let mid = |below: f64, above: f64| below + cloud.up * (above - below);
+            let mut sent = [0.0; BANDS];
+            for k in 0..BANDS {
+                sent[k] = mid(out[k], above[k])
+                    + mid(seen[k], seen_above[k]) * mid(planck_below[k], planck[k]);
+            }
+            cloud_top = Some(sent);
+        }
         std::mem::swap(&mut rate, &mut rate_below);
         std::mem::swap(&mut planck, &mut planck_below);
     }
     for k in 0..BANDS {
         out[k] += planck[k] * seen[k];
     }
-    out
+    under_clouds(out, column.cloud, cloud_top, BINS, true)
 }
 
 /// One gas through one layer of `span` in `ln p`: each g-point's
@@ -1000,7 +1195,7 @@ mod tests {
     /// Outgoing radiation of `air` over a moist surface at `t`, under the
     /// plateau's skin, on Earth.
     fn moist_olr(air: Gases, t: f64) -> f64 {
-        olr_under_skin_w_m2(
+        clear_olr_under_skin_w_m2(
             &with_vapour(air, t, f64::INFINITY),
             t,
             plateau_skin(),
@@ -1049,6 +1244,7 @@ mod tests {
             plateau_skin(),
             &Planet::EARTH,
             levels,
+            Sky::Clear,
         )
     }
 
@@ -1197,10 +1393,18 @@ mod tests {
         ];
         for (gases, t, skin, planet) in cases {
             let olr = |radiation| {
-                olr_bands(&gases, t, skin, &planet, LEVELS_PER_DECADE, radiation)
-                    .expect("air")
-                    .iter()
-                    .sum::<f64>()
+                olr_bands(
+                    &gases,
+                    t,
+                    skin,
+                    &planet,
+                    LEVELS_PER_DECADE,
+                    Sky::Cloudy,
+                    radiation,
+                )
+                .expect("air")
+                .iter()
+                .sum::<f64>()
             };
             let (fast, reference) = (olr(radiate), olr(radiate_reference));
             println!("{t} K: fast {fast:.5}, reference {reference:.5} W/m²");

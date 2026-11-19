@@ -2554,6 +2554,34 @@ mod tests {
     }
 
     #[test]
+    fn earths_clouds_hold_in_28_w_m2() {
+        // Earth's longwave cloud radiative effect, clear-sky less all-sky
+        // outgoing radiation: 28 ± 5 W/m² (CERES EBAF, Loeb et al. 2018,
+        // doi:10.1175/JCLI-D-17-0208.1), on its preindustrial air at
+        // 288 K under its own skin.
+        let (d, g, c) = climate_of("Earth");
+        let air = with_vapour(Gases { co2: 2.8e-4, ..g }, 288.0, d.water_bar);
+        let skin = tropopause_k(c.equilibrium_k);
+        let clear = column::clear_olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
+        let all = column::olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
+        println!("Earth: clear sky {clear:.2}, all sky {all:.2} W/m²");
+        assert!((clear - all - 28.0).abs() <= 5.0, "{clear} - {all}");
+    }
+
+    #[test]
+    fn mars_and_titan_have_no_cloud_greenhouse() {
+        // Their albedos have no water clouds, nor do their columns.
+        for name in ["Mars", "Titan"] {
+            let (d, g, c) = climate_of(name);
+            let skin = tropopause_k(c.equilibrium_k);
+            let t = c.temperature_k;
+            let clear = column::clear_olr_under_skin_w_m2(&g, t, skin, &d.planet);
+            let all = column::olr_under_skin_w_m2(&g, t, skin, &d.planet);
+            assert!((all / clear - 1.0).abs() < 1e-9, "{name}: {all} vs {clear}");
+        }
+    }
+
+    #[test]
     fn earths_cloud_cover_stays_two_thirds() {
         // The cover the model's Earth settles under: 0.67 ± 0.03 (ISCCP
         // and MODIS, Stubenrauch et al. 2013), issue #523.
