@@ -262,6 +262,7 @@ fn surface_class(surface: &Surface) -> Option<PlanetClass> {
 mod tests {
     use super::PlanetClass::*;
     use super::*;
+    use crate::exomoon::EARTH_KG;
     use crate::planet::inputs::volatile_rule;
     use crate::planet::reference::{inputs_of, model_inputs, with_envelope};
     use crate::planet::{Context, SOLAR_BODIES, planet_model, reference};
@@ -645,6 +646,110 @@ mod tests {
         assert!(surface.water.kept_kg < 1e-3 * all, "{surface:?}");
         assert_eq!(surface.climate.liquid, SurfaceLiquid::Water, "{surface:?}");
         assert_ne!(model.class, RunawayGreenhouse);
+    }
+
+    /// A cause of `quantity` in `tree`, itself or below it.
+    fn find(tree: &crate::planet::Cause, quantity: crate::planet::Quantity) -> bool {
+        tree.quantity == quantity || tree.causes.iter().any(|c| find(c, quantity))
+    }
+
+    #[test]
+    fn a_steam_runaway_weighs_only_the_water_it_kept() {
+        // The Earth with 1 % of water (some 43 Earth oceans) at 1.4 S⊕
+        // round an F0V star, over its runaway limit: escape takes part of
+        // the steam and leaves it most (#513). (A boil that keeps steam
+        // needs a fine-tuned water share: at the boiling flux the boils
+        // lose all of it, and more water than escape takes keeps a wet
+        // balance; `a_dry_runaway_keeps_its_dry_mass` takes a boil.)
+        let context = f0v_at(1.4);
+        let water = 0.01;
+        let inputs = PlanetInputs {
+            water_fraction: water,
+            volatiles: volatile_rule(1.0 - water, water, 0.325),
+            ..model_inputs(reference("Earth"))
+        };
+        let model = planet_model(&context, inputs.clone());
+        let surface = model.surface.as_ref().expect("a bare body has a surface");
+        assert!(surface.water.runaway, "{surface:?}");
+        assert_eq!(model.before_steam.as_ref(), Some(&inputs));
+        let formed = crate::planet::body_interior(&context, &inputs);
+        let fluence = crate::planet::xuv_fluence(&context);
+        let kept_kg = crate::planet::steam(&inputs, &formed, fluence).kept_kg;
+        assert!(kept_kg > 0.0);
+        let lost_kg = inputs.water_fraction * inputs.mass_earth * EARTH_KG - kept_kg;
+        let mass = model.drawn_mass_earth - lost_kg / EARTH_KG;
+        let m = &model.inputs;
+        assert!(
+            (m.mass_earth - mass).abs() <= 1e-9 * mass,
+            "{m:?} vs {mass}"
+        );
+        let water_kg = m.water_fraction * m.mass_earth * EARTH_KG;
+        assert!((water_kg - kept_kg).abs() <= 1e-9 * kept_kg, "{m:?}");
+        // The layers and gravity are the kept mass's: no larger than the
+        // same body's with all its water (a hidden surface's steam layer
+        // was already the steam kept), and lighter.
+        let with_all = if crate::planet::climate::hides_surface(surface) {
+            crate::planet::steam_interior(
+                &formed,
+                inputs.mass_earth,
+                surface.water.kept_kg,
+                &context.exposure(),
+            )
+        } else {
+            formed
+        };
+        let i = &model.interior;
+        assert!(
+            i.radius_earth <= with_all.radius_earth,
+            "{i:?} vs {with_all:?}"
+        );
+        assert!(i.gravity < with_all.gravity, "{i:?} vs {with_all:?}");
+        let gravity = m.mass_earth / i.radius_earth.powi(2);
+        assert!((i.gravity - gravity).abs() <= 1e-9 * gravity, "{i:?}");
+        // The formation is the drawn one: the escaped water is not an
+        // envelope, and the water is the water formed.
+        let formation = model.formation();
+        assert_eq!(formation.overrides.envelope_fraction, Some(0.0));
+        let oceans = water * inputs.mass_earth * EARTH_KG / crate::planet::OCEAN_KG;
+        let formed_oceans = formation.overrides.water_oceans.unwrap();
+        assert!((formed_oceans - oceans).abs() <= 1e-9 * oceans);
+        // Explain replays it, and its mass shows the water lost.
+        let explanation = crate::planet::explain(&context, &model).expect("an explanation");
+        let mass = explanation.trees[0]
+            .causes
+            .iter()
+            .find(|c| c.quantity == crate::planet::Quantity::Mass)
+            .expect("a mass");
+        assert!(find(mass, crate::planet::Quantity::Escape), "{mass:#?}");
+    }
+
+    #[test]
+    fn a_dry_runaway_keeps_its_dry_mass() {
+        // The dry boil of `a_boil_that_escapes_all_its_water_ends_dry`.
+        let water = 3.0e-4;
+        let context = f0v_at(F0V_BOILING_FLUX);
+        let inputs = PlanetInputs {
+            water_fraction: water,
+            volatiles: crate::planet::Volatiles {
+                co2: 6.0e-5,
+                ..volatile_rule(1.0 - water, water, 0.325)
+            },
+            ..model_inputs(reference("Earth"))
+        };
+        let model = planet_model(&context, inputs.clone());
+        let surface = model.surface.as_ref().expect("a bare body has a surface");
+        assert!(surface.water.boiled && surface.water.runaway, "{surface:?}");
+        assert_eq!(surface.water.kept_kg, 0.0);
+        let m = &model.inputs;
+        assert_eq!(m.water_fraction, 0.0);
+        assert!(m.mass_earth > 0.0);
+        let dry = inputs.mass_earth * (1.0 - water);
+        assert!((m.mass_earth - dry).abs() <= 1e-9 * dry, "{m:?}");
+        let explanation = crate::planet::explain(&context, &model).expect("an explanation");
+        assert!(
+            find(&explanation.trees[0], crate::planet::Quantity::Escape),
+            "{explanation:#?}"
+        );
     }
 
     /// The model of the case of #492 (system mgs-81447-3145862552, body

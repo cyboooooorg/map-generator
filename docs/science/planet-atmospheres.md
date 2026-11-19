@@ -111,6 +111,17 @@ again. In a runaway all the water kept is steam in
 the air: `Water::kept_kg` is what escape to space leaves of it, and the
 air's H₂O is that water's weight.
 
+The water escape took leaves the planet's mass too (#513,
+`planet::after_steam`): `PlanetModel.inputs` holds the mass less that
+water, the water share of what is left, and the envelope and volatiles
+at the same mass (their shares grow). The layers, gravity and internal
+heat are derived again from it before the steam pass runs, so the
+climate's column sees the lighter body. `PlanetModel.before_steam`
+keeps the inputs from before the runaway: the request's formation is
+read from them, and `drawn_mass_earth` stays the mass drawn. The cause
+tree shows the mass from the mass formed and the water kept, with the
+water formed and the water lost.
+
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
 
@@ -1574,7 +1585,8 @@ heat exceed the moist limit; Goldblatt et al. 2013,
 doi:10.1038/ngeo1892), the body has run away after all, in one pass
 with no loop: the steps from the regime on run once more from its
 steam (`regime::steam`, the water left after energy-limited escape, in
-the air), flagged `boiled`. If escape leaves water and that leftover has
+the air), flagged `boiled`, on the body that water leaves
+(`planet::after_steam`: its mass, layers and heat derived again). If escape leaves water and that leftover has
 a wet balance of its own (too little vapour to hold the moist limit),
 it condenses again and a third run keeps it as an ocean (`boiled`, no
 runaway); otherwise the steam run stands, dry when escape took all the

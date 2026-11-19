@@ -676,7 +676,7 @@ impl WorldRequest {
             // knows a set envelope).
             if let Some(water_oceans) = overrides.water_oceans {
                 let envelope = model.formation().overrides.envelope_fraction;
-                if model.inputs.water_fraction + envelope.unwrap_or(0.0) > 1.0 {
+                if model.formed_inputs().water_fraction + envelope.unwrap_or(0.0) > 1.0 {
                     return Err(RequestError::WaterHeavierThanPlanet {
                         water_oceans,
                         mass_earth,

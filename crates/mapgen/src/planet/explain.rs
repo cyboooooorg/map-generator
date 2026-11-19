@@ -341,15 +341,28 @@ pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super:
 /// The surface steps of `model` run again (see [`bare`]), from the water
 /// the chain started the kept pass with: the boiled steam when `surface`
 /// boiled and stayed a runaway, its own water when the water left after
-/// the boil condensed again, else the water of its first pass.
+/// the boil condensed again, else the water of its first pass. A runaway's
+/// steam is what escape left of the water the body formed with
+/// ([`PlanetModel::formed_inputs`], on that body's layers), and the pass
+/// runs on what it kept (`model.inputs`, see [`super::after_steam`]).
 pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
     let interior = &surface_interior(context, model);
     let (i, fluence) = (&model.inputs, model.xuv_fluence);
+    let formed = model.formed_inputs();
+    let formed_interior = || {
+        if model.before_steam.is_some() {
+            super::body_interior(context, formed)
+        } else {
+            interior.clone()
+        }
+    };
     let start = if surface.water.boiled && surface.water.runaway {
         Water {
             boiled: true,
-            ..steam(i, interior, fluence)
+            ..steam(formed, &formed_interior(), fluence)
         }
+    } else if surface.water.runaway {
+        water(context, formed, &formed_interior(), fluence)
     } else if surface.water.boiled {
         surface.water
     } else {
@@ -360,15 +373,41 @@ pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) 
 
 /// The mass kept. It is the request's own when escape took nothing of the
 /// envelope; otherwise it is derived from the mass drawn, which is the input.
+/// After a steam runaway it is that mass less the water escape took
+/// ([`super::after_steam`]): the water it kept, from the water formed and
+/// the water lost, in Earth oceans.
 fn mass(model: &PlanetModel) -> Cause {
-    let kept = Cause::of(Quantity::Mass, model.inputs.mass_earth);
-    if model.drawn_mass_earth == model.inputs.mass_earth {
+    let Some(formed) = &model.before_steam else {
+        return formed_mass(model, model.inputs.mass_earth);
+    };
+    let formed_oceans = water_oceans(formed);
+    let kept = water_oceans(&model.inputs);
+    Cause::of(Quantity::Mass, model.inputs.mass_earth).because(vec![
+        formed_mass(model, formed.mass_earth),
+        Cause::of(Quantity::WaterKept, kept).because(vec![
+            Cause::of(Quantity::WaterFormed, formed_oceans).set_by(InputField::WaterOceans),
+            Cause::of(Quantity::Escape, formed_oceans - kept),
+        ]),
+    ])
+}
+
+/// The mass `mass_earth` the body formed with after photoevaporation: the
+/// request's own when escape took nothing of the envelope, else derived
+/// from the mass drawn.
+fn formed_mass(model: &PlanetModel, mass_earth: f64) -> Cause {
+    let kept = Cause::of(Quantity::Mass, mass_earth);
+    if model.drawn_mass_earth == mass_earth {
         kept.set_by(InputField::MassEarth)
     } else {
         kept.because(vec![
             Cause::of(Quantity::Mass, model.drawn_mass_earth).set_by(InputField::MassEarth),
         ])
     }
+}
+
+/// The water of a body of `inputs`, Earth oceans.
+fn water_oceans(inputs: &super::PlanetInputs) -> f64 {
+    inputs.water_fraction * inputs.mass_earth * EARTH_KG / OCEAN_KG
 }
 
 fn water_kept(surface: &Surface) -> Cause {
@@ -985,7 +1024,7 @@ fn field_tree(context: &Context, model: &PlanetModel, surface: &Surface) -> Caus
 /// mass escape left, as [`super::water`] takes it) and, in a runaway,
 /// what escape took of its steam.
 fn water_tree(model: &PlanetModel, surface: &Surface) -> Cause {
-    let formed = model.inputs.water_fraction * model.inputs.mass_earth * EARTH_KG / OCEAN_KG;
+    let formed = water_oceans(model.formed_inputs());
     let mut causes = vec![Cause::of(Quantity::WaterFormed, formed).set_by(InputField::WaterOceans)];
     if surface.water.runaway {
         causes.push(runaway(&surface.water));
@@ -1800,8 +1839,21 @@ mod tests {
             .expect("the class reads the mass");
         assert_eq!(mass.input, None);
         assert_eq!(mass.value, model.inputs.mass_earth);
-        let [drawn] = mass.causes.as_slice() else {
-            panic!("one cause: {:?}", mass.causes)
+        // A body whose steam ran away after its envelope went weighs its
+        // formed mass less the water lost (#513): the drawn mass is under
+        // that formed mass.
+        let formed = if model.before_steam.is_some() {
+            assert!(
+                mass.causes
+                    .iter()
+                    .any(|c| c.quantity == Quantity::WaterKept)
+            );
+            &mass.causes[0]
+        } else {
+            mass
+        };
+        let [drawn] = formed.causes.as_slice() else {
+            panic!("one cause: {:?}", formed.causes)
         };
         assert_eq!(drawn.input, Some(InputField::MassEarth));
         assert_eq!(drawn.value, model.drawn_mass_earth);
