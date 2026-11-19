@@ -261,6 +261,15 @@ impl TileCache {
         guard
     }
 
+    /// Holds the world loads as a load in progress does, so that a
+    /// generation that starts waits at [`TileCache::suspend`], already
+    /// running, until the permit drops: a running job that cannot finish
+    /// before the test cancels it.
+    #[cfg(test)]
+    pub async fn hold_loads(&self) -> tokio::sync::SemaphorePermit<'_> {
+        self.loads.acquire().await.expect("never closed")
+    }
+
     /// Forgets a key and everything under it (a system and its bodies).
     /// Returns whether a loaded world was dropped.
     pub fn forget(&self, id: &str) -> bool {
