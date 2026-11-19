@@ -5,7 +5,7 @@
 //!
 //! | Field | Type |
 //! |---|---|
-//! | magic `MGOPACK1` | 8 bytes |
+//! | magic `MGOPACK2` | 8 bytes |
 //! | bins, g-points, pressures, temperatures, sets | 5 × u32 |
 //! | bin width, cm⁻¹ | f64 |
 //! | g-interval edges | (g-points + 1) × f64 |
@@ -13,6 +13,8 @@
 //! | temperatures, K | temperatures × f64 |
 //! | `ln k` of code 1, and the step per code | 2 × f64 |
 //! | codes | sets × pressures × temperatures × bins × g-points × u16 |
+//! | CO₂ continuum: `T_eff`, K | f64 |
+//! | CO₂ continuum per bin: coefficient, cm² per molecule per cm⁻¹, and exponent | bins × 2 × f64 |
 //!
 //! A code `q` ≥ 1 is `ln k = ln_k0 + (q − 1) step` with `k` in m²/kg; code
 //! 0 is a coefficient under `exp(ln_k0)`, taken as zero.
@@ -20,7 +22,7 @@
 use crate::kdist::{BOUNDS, G};
 
 /// File signature.
-pub const MAGIC: &[u8; 8] = b"MGOPACK1";
+pub const MAGIC: &[u8; 8] = b"MGOPACK2";
 
 /// `ln k` of code 1: k = 9.4e-14 m²/kg. Venus's 92 bar of CO₂ weigh
 /// 1e6 kg/m², so a coefficient under it adds under 1e-7 to any depth.
@@ -42,9 +44,12 @@ pub enum Set {
     WaterForeign,
     /// Water's lines broadened by water vapour (the self set).
     WaterSelf,
+    /// CO₂'s lines broadened by CO₂ (HITRAN's `γ_self`): the bulk gas of a
+    /// thick CO₂ air.
+    Co2Self,
 }
 
-pub const SETS: [Set; 3] = [Set::Co2, Set::WaterForeign, Set::WaterSelf];
+pub const SETS: [Set; 4] = [Set::Co2, Set::WaterForeign, Set::WaterSelf, Set::Co2Self];
 
 /// Pressures of the grid, bar: every `step` decades from 1e-5 to 100
 /// (the table's: every half decade).
@@ -58,11 +63,13 @@ pub fn pressures(step: f64) -> Vec<f64> {
 /// Decades between two pressures of the grid.
 pub const PRESSURE_STEP: f64 = 0.5;
 
-/// Temperatures of the grid, K: 25 K apart where Earth-like and moist
-/// columns lie, wider in the hot steam and Venus range.
-pub const TEMPERATURES: [f64; 18] = [
-    100.0, 125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0, 325.0, 350.0, 400.0, 450.0,
-    500.0, 600.0, 700.0, 800.0, 900.0,
+/// Temperatures of the grid, K: 25 K apart where Earth-like, Martian and
+/// moist columns lie, wider in the hot steam and Venus range. Sixteen, so
+/// that the four sets fit in 4 MB (450 and 700 K were dropped with the
+/// CO₂ self set; the deep layers there are opaque in the lines).
+pub const TEMPERATURES: [f64; 16] = [
+    100.0, 125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0, 325.0, 350.0, 400.0, 500.0,
+    600.0, 800.0, 900.0,
 ];
 
 /// The code of a coefficient `k`, m²/kg.
@@ -90,6 +97,9 @@ pub struct Header {
     pub bin_width_cm: f64,
     pub pressures_bar: Vec<f64>,
     pub temperatures_k: Vec<f64>,
+    /// MT_CKD's CO₂ continuum of each bin: coefficient (cm² per molecule
+    /// per cm⁻¹, at [`crate::continuum::T_EFF_K`]) and exponent.
+    pub co2_continuum: Vec<(f64, f64)>,
 }
 
 impl Header {
@@ -108,7 +118,8 @@ impl Header {
 /// The file of `header` and its `codes`.
 pub fn write(header: &Header, codes: &[u16]) -> Vec<u8> {
     assert_eq!(codes.len(), header.codes());
-    let mut out = Vec::with_capacity(256 + 2 * codes.len());
+    assert_eq!(header.co2_continuum.len(), header.bins);
+    let mut out = Vec::with_capacity(256 + 2 * codes.len() + 16 * header.bins);
     out.extend_from_slice(MAGIC);
     for n in [
         header.bins,
@@ -128,6 +139,11 @@ pub fn write(header: &Header, codes: &[u16]) -> Vec<u8> {
     float(LN_K_STEP);
     for q in codes {
         out.extend_from_slice(&q.to_le_bytes());
+    }
+    out.extend_from_slice(&crate::continuum::T_EFF_K.to_le_bytes());
+    for (c, a) in &header.co2_continuum {
+        out.extend_from_slice(&c.to_le_bytes());
+        out.extend_from_slice(&a.to_le_bytes());
     }
     out
 }
@@ -165,11 +181,12 @@ pub fn read(bytes: &[u8]) -> Option<(Header, Vec<u16>)> {
     if k0 != LN_K0 || step != LN_K_STEP {
         return None;
     }
-    let header = Header {
+    let mut header = Header {
         bins,
         bin_width_cm,
         pressures_bar,
         temperatures_k,
+        co2_continuum: Vec::new(),
     };
     let rest = take(2 * header.codes())?;
     let codes = rest
@@ -178,6 +195,13 @@ pub fn read(bytes: &[u8]) -> Option<(Header, Vec<u16>)> {
         .iter()
         .map(|c| u16::from_le_bytes(*c))
         .collect();
+    let mut float = || -> Option<f64> { Some(f64::from_le_bytes(take(8)?.try_into().ok()?)) };
+    if float()? != crate::continuum::T_EFF_K {
+        return None;
+    }
+    header.co2_continuum = (0..bins)
+        .map(|_| Some((float()?, float()?)))
+        .collect::<Option<Vec<_>>>()?;
     Some((header, codes))
 }
 
@@ -203,12 +227,14 @@ mod tests {
             bin_width_cm: 20.0,
             pressures_bar: vec![1e-2, 1.0],
             temperatures_k: vec![200.0, 300.0],
+            co2_continuum: vec![(1e-25, 0.0), (2e-26, 0.5), (0.0, 0.0)],
         };
         let codes: Vec<u16> = (0..header.codes()).map(|i| i as u16 * 7).collect();
         let (h, c) = read(&write(&header, &codes)).expect("reads");
         assert_eq!(c, codes);
         assert_eq!((h.bins, h.bin_width_cm), (3, 20.0));
         assert_eq!(h.temperatures_k, header.temperatures_k);
+        assert_eq!(h.co2_continuum, header.co2_continuum);
         for (a, b) in h.pressures_bar.iter().zip(&header.pressures_bar) {
             assert!((a / b - 1.0).abs() < 1e-15);
         }

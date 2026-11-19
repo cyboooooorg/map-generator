@@ -16,14 +16,19 @@
 //! The absorbers, each with its source:
 //!
 //! - **CO₂ and water lines:** a correlated-k table built offline from the
-//!   HITRAN2020 line lists (Gordon et al. 2022, *JQSRT* 277, 107949) by
+//!   HITRAN2024 line lists (Gordon et al. 2026, *JQSRT* 109807; the
+//!   design named HITRAN2020, which HITRAN no longer serves) by
 //!   `tools/opacity-table` (provenance in `crates/mapgen/data/OPACITY.md`).
 //!   Within a bin the lines' coefficients are sorted into [`G`] g-points,
 //!   each with a weight ([`weights`]), on a grid of pressure and
-//!   temperature; water has a set broadened by air and one broadened by
-//!   itself, mixed by the vapour's share of the pressure. The table holds
-//!   the lines' temperature dependence (strengths, hot bands, widths) and
-//!   their Voigt shape out to 25 cm⁻¹ ([`Table`]).
+//!   temperature; each gas has a set broadened by air and one broadened by
+//!   itself (HITRAN's `γ_self`), mixed by its share of the pressure. The
+//!   table holds the lines' temperature dependence (strengths, hot bands,
+//!   widths) and their Voigt shape out to 25 cm⁻¹, less the pedestal
+//!   MT_CKD's continua assume ([`Table`]).
+//! - **CO₂ continuum:** MT_CKD 4.3's, the far wings of CO₂'s lines beyond
+//!   25 cm⁻¹ with their sub-Lorentzian shape, binned into the table
+//!   ([`co2_continuum`]); it grows as the CO₂ times the pressure.
 //! - **Water continuum:** MT_CKD 4.3's self and foreign continua (Mlawer
 //!   et al. 2012), the self part growing as the vapour pressure squared
 //!   and the foreign part as the vapour times the other gases
@@ -35,7 +40,7 @@
 //!   absorption ([`super::climate`]'s methane law), over
 //!   0-[`METHANE_TOP_CM`] cm⁻¹ only.
 //!
-//! The continuum, the pairs and methane are smooth across a bin: each is
+//! The continua, the pairs and methane are smooth across a bin: each is
 //! one optical depth per bin, added to every g-point ([`BinAbsorption`]).
 //! CO₂ and water overlap at random within a bin (Lacis & Oinas 1991,
 //! *JGR* 96, 9027): the transmission of a path is the product of each
@@ -259,7 +264,7 @@ pub(crate) struct BinAbsorption {
     pub(crate) co2: [f64; G],
     /// Water's lines at each g-point.
     pub(crate) water: [f64; G],
-    /// Water's continuum, CO₂–CO₂ pairs and methane.
+    /// The continua of water and CO₂, CO₂–CO₂ pairs and methane.
     pub(crate) grey: f64,
 }
 
@@ -303,10 +308,16 @@ pub(crate) struct Table {
     t_k: Vec<f64>,
     /// `ln k`, [set][pressure][temperature][bin][g-point].
     ln_k: Vec<f32>,
+    /// MT_CKD's CO₂ continuum of each bin: its coefficient at
+    /// [`Table::co2_continuum_t_eff_k`], cm² per molecule per cm⁻¹, and its
+    /// temperature exponent (see [`co2_continuum`]).
+    co2_continuum: Vec<(f64, f64)>,
+    /// Temperature, K, at which the continuum's exponents scale by 1.
+    co2_continuum_t_eff_k: f64,
 }
 
 /// File signature of the table.
-const TABLE_MAGIC: &[u8; 8] = b"MGOPACK1";
+const TABLE_MAGIC: &[u8; 8] = b"MGOPACK2";
 
 /// `ln k` given to the code 0 (a coefficient under the table's floor,
 /// 9.4e-14 m²/kg): 2e-22 m²/kg, nothing at any column mass.
@@ -316,11 +327,12 @@ const LN_K_ZERO: f32 = -50.0;
 const CO2_SET: usize = 0;
 const WATER_FOREIGN_SET: usize = 1;
 const WATER_SELF_SET: usize = 2;
-const SETS: usize = 3;
+const CO2_SELF_SET: usize = 3;
+const SETS: usize = 4;
 
 impl Table {
     /// Decodes a table file; `None` if it is not one, or not of [`G`]
-    /// g-points and three sets.
+    /// g-points and [`SETS`] sets.
     fn parse(bytes: &[u8]) -> Option<Table> {
         let mut at = 0usize;
         let mut take = |n: usize| -> Option<&[u8]> {
@@ -359,7 +371,14 @@ impl Table {
                 q => (k0 + f64::from(q - 1) * step) as f32,
             })
             .collect();
+        let mut float = || -> Option<f64> { Some(f64::from_le_bytes(take(8)?.try_into().ok()?)) };
+        let co2_continuum_t_eff_k = float()?;
+        let co2_continuum = (0..bins)
+            .map(|_| Some((float()?, float()?)))
+            .collect::<Option<Vec<_>>>()?;
         Some(Table {
+            co2_continuum,
+            co2_continuum_t_eff_k,
             bins,
             bin_width_cm,
             weights: std::array::from_fn(|i| bounds[i + 1] - bounds[i]),
@@ -450,7 +469,13 @@ impl Table {
         let g = &level.gases;
         if g.co2 > 0.0 {
             let mass = level.mass_per_ln_p(g.co2, CO2_KG_MOL);
-            self.coefficients(CO2_SET, p, t, bin, mass, &mut out.co2);
+            let share = (g.co2 / p).clamp(0.0, 1.0);
+            let mut own = [0.0; G];
+            self.coefficients(CO2_SET, p, t, bin, mass * (1.0 - share), &mut out.co2);
+            self.coefficients(CO2_SELF_SET, p, t, bin, mass * share, &mut own);
+            for (c, s) in out.co2.iter_mut().zip(own) {
+                *c += s;
+            }
         }
         if g.h2o > 0.0 {
             let mass = level.mass_per_ln_p(g.h2o, H2O_KG_MOL);
@@ -502,7 +527,7 @@ pub(crate) fn absorption_per_ln_p(i: usize, level: &Level) -> BinAbsorption {
 }
 
 /// Optical depth per `ln p` between `lo` and `hi` cm⁻¹ of what is smooth
-/// across a bin: water's continuum and CO₂–CO₂ pairs at the bin's centre,
+/// across a bin: the continua of water and CO₂ and the CO₂–CO₂ pairs at the bin's centre,
 /// and methane on the share of the bin it covers.
 #[cfg_attr(not(test), allow(dead_code))]
 fn grey_between(lo: f64, hi: f64, level: &Level) -> f64 {
@@ -512,7 +537,10 @@ fn grey_between(lo: f64, hi: f64, level: &Level) -> f64 {
         return 0.0;
     }
     let nu = 0.5 * (lo + hi);
-    water_continuum(nu, level) + co2_pairs(nu, level) + methane(lo, hi, level)
+    water_continuum(nu, level)
+        + co2_continuum((lo / BIN_WIDTH_CM).round() as usize, level)
+        + co2_pairs(nu, level)
+        + methane(lo, hi, level)
 }
 
 /// Spacing of [`MT_CKD`]'s nodes, cm⁻¹.
@@ -870,6 +898,43 @@ fn co2_pairs(nu: f64, level: &Level) -> f64 {
     k_cm5 * 1e-10 * density_m3 * density_m3 * thickness_m
 }
 
+/// Absorption, cm², of one CO₂ molecule in bin `i` at `t` K (`ln_t` is
+/// `ln (T / T_eff)`) in air at MT_CKD's reference density (see
+/// [`co2_continuum`]).
+fn co2_continuum_per_molecule(i: usize, t: f64, ln_t: f64) -> f64 {
+    let (c, a) = OPACITY.co2_continuum[i];
+    if c <= 0.0 {
+        return 0.0;
+    }
+    let nu = BIN_TABLE.centre_cm[i];
+    let radiation = nu * (0.5 * C2_CM_K * nu / t).tanh();
+    c * (a * ln_t).exp() * radiation
+}
+
+/// Optical depth per `ln p` of MT_CKD's CO₂ continuum in bin `i`: the
+/// far wings of CO₂'s lines beyond the table's 25 cm⁻¹ cutoff, with their
+/// sub-Lorentzian shape and line coupling, as LBLRTM's `CONTNM` takes it,
+/// `C(ν) (p / p_ref)(296 K / T) R(ν, T) (T / T_eff)^n` per molecule with
+/// `R = ν tanh(c₂ν / 2T)` (the coefficients binned by `tools/opacity-table`
+/// from MT_CKD 4.3's `contnm.f90`; see `crates/mapgen/data/OPACITY.md`).
+/// It is broadened by the whole air, like water's foreign continuum, so
+/// that it grows as the CO₂ times the pressure: it closes the windows of
+/// a thick CO₂ air (a vertical depth of about 7 at 1000 cm⁻¹ under 8 bar)
+/// and is negligible at Earth's 400 ppm outside the 15 µm band.
+#[cfg_attr(not(test), allow(dead_code))]
+fn co2_continuum(i: usize, level: &Level) -> f64 {
+    let co2 = level.gases.co2;
+    let t = level.temperature_k;
+    if co2 <= 0.0 || i >= BINS {
+        return 0.0;
+    }
+    let p = level.pressure_bar();
+    let molecules_m2 = co2 * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
+    let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
+    let ln_t = (t / OPACITY.co2_continuum_t_eff_k).ln();
+    co2_continuum_per_molecule(i, t, ln_t) * density * 1e-4 * molecules_m2
+}
+
 /// Upper end, cm⁻¹, of methane's grey stand-in: the far infrared of
 /// Titan's N₂–N₂ and CH₄–N₂ collision-induced absorption (Courtin,
 /// Gautier & McKay 1995, the design's call).
@@ -908,7 +973,7 @@ pub(crate) struct Spectrum {
     pub(crate) co2: [[f64; G]; BANDS],
     /// Water's lines, per band and g-point.
     pub(crate) water: [[f64; G]; BANDS],
-    /// Water's continuum, CO₂–CO₂ pairs and methane, per band.
+    /// The continua of water and CO₂, CO₂–CO₂ pairs and methane, per band.
     pub(crate) grey: [f64; BANDS],
 }
 
@@ -1013,11 +1078,16 @@ fn lines_spectrum(level: &Level, out: &mut Spectrum) {
             + w[3] * f64::from(table.ln_k[at[3] + i])
     };
     if g.co2 > 0.0 {
-        let (at, w, scale) = table.corners(CO2_SET, p, t);
-        let factor = scale * level.mass_per_ln_p(g.co2, CO2_KG_MOL);
+        let (by_air, wa, scale) = table.corners(CO2_SET, p, t);
+        let (own, ws, _) = table.corners(CO2_SELF_SET, p, t);
+        let mass = scale * level.mass_per_ln_p(g.co2, CO2_KG_MOL);
+        let share = (g.co2 / p).clamp(0.0, 1.0);
+        let (air_mass, self_mass) = (mass * (1.0 - share), mass * share);
         for (b, row) in out.co2[..BINS].iter_mut().enumerate() {
             for (k, o) in row.iter_mut().enumerate() {
-                *o = factor * interpolate(&at, &w, b * G + k).exp();
+                let i = b * G + k;
+                *o = air_mass * interpolate(&by_air, &wa, i).exp()
+                    + self_mass * interpolate(&own, &ws, i).exp();
             }
         }
     }
@@ -1047,7 +1117,7 @@ fn grey_spectrum(level: &Level, out: &mut [f64; BANDS]) {
 }
 
 /// What [`grey_between`] needs at one level, taken once for every bin:
-/// water's continuum, the CO₂ pairs and methane, each when the level
+/// the continua of water and CO₂, the CO₂ pairs and methane, each when the level
 /// holds it.
 struct GreyRates {
     /// The level's temperature, K.
@@ -1060,6 +1130,9 @@ struct GreyRates {
     pairs: Option<(usize, f64, f64)>,
     /// Methane's rate per `ln p` ([`super::climate`]'s methane law).
     methane: Option<f64>,
+    /// CO₂'s continuum: `ln (T / T_eff)` and the factor of its
+    /// coefficient.
+    co2_continuum: Option<(f64, f64)>,
 }
 
 impl GreyRates {
@@ -1091,11 +1164,21 @@ impl GreyRates {
             (j, f, 1e-10 * density_m3 * density_m3 * thickness_m)
         });
         let methane = (g.ch4 > 0.0).then(|| methane_depth(g).1);
+        let co2_continuum = (g.co2 > 0.0).then(|| {
+            let molecules_m2 =
+                g.co2 * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
+            let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
+            (
+                (t / OPACITY.co2_continuum_t_eff_k).ln(),
+                density * 1e-4 * molecules_m2,
+            )
+        });
         Self {
             t,
             continuum,
             pairs,
             methane,
+            co2_continuum,
         }
     }
 
@@ -1143,6 +1226,11 @@ impl GreyRates {
                 *o += (share * rate) as f32;
             }
         }
+        if let Some((ln_t, scale)) = self.co2_continuum {
+            for (i, o) in out.iter_mut().enumerate() {
+                *o += (co2_continuum_per_molecule(i, self.t, ln_t) * scale) as f32;
+            }
+        }
     }
 
     /// The grey absorption per `ln p` of bin `i`.
@@ -1166,6 +1254,9 @@ impl GreyRates {
         if let Some(rate) = self.methane {
             o += table.methane_share[i] * rate;
         }
+        if let Some((ln_t, scale)) = self.co2_continuum {
+            o += co2_continuum_per_molecule(i, self.t, ln_t) * scale;
+        }
         o
     }
 }
@@ -1185,7 +1276,7 @@ pub(crate) struct FastLevel {
     /// Water's lines and their logarithms.
     pub(crate) water: [f32; POINTS],
     pub(crate) water_ln: [f32; POINTS],
-    /// Water's continuum, CO₂–CO₂ pairs and methane, per bin, and their
+    /// The continua of water and CO₂, CO₂–CO₂ pairs and methane, per bin, and their
     /// logarithms.
     pub(crate) grey: [f32; BINS],
     pub(crate) grey_ln: [f32; BINS],
@@ -1219,12 +1310,24 @@ pub(crate) fn fast_level(level: &Level, bins: usize, out: &mut FastLevel) {
     let g = &level.gases;
     let valid = p > 0.0 && t > 0.0 && level.gravity_m_s2 > 0.0;
     let node = |at: usize| -> &[f32] { &table.ln_k[at..at + m] };
+    // Each gas's two sets, broadened by the air and by the gas itself,
+    // mixed by its share of the pressure: their logarithms, then their
+    // sum and its logarithm.
+    let mut own_ln = [0.0; POINTS];
     if valid && g.co2 > 0.0 {
-        let (at, w, scale) = table.corners(CO2_SET, p, t);
-        let w = w.map(|w| w as f32);
-        let ln_factor = (scale * level.mass_per_ln_p(g.co2, CO2_KG_MOL)).ln() as f32;
-        interpolate(&at.map(node), &w, ln_factor, &mut out.co2_ln[..m]);
-        exp_all(&out.co2_ln[..m], &mut out.co2[..m]);
+        let (by_air, wa, scale) = table.corners(CO2_SET, p, t);
+        let (own, ws, _) = table.corners(CO2_SELF_SET, p, t);
+        let (wa, ws) = (wa.map(|w| w as f32), ws.map(|w| w as f32));
+        let mass = scale * level.mass_per_ln_p(g.co2, CO2_KG_MOL);
+        let share = (g.co2 / p).clamp(0.0, 1.0);
+        let (air_mass, self_mass) = (
+            (mass * (1.0 - share)).ln() as f32,
+            (mass * share).ln() as f32,
+        );
+        interpolate(&by_air.map(node), &wa, air_mass, &mut out.co2_ln[..m]);
+        interpolate(&own.map(node), &ws, self_mass, &mut own_ln[..m]);
+        add_exp(&out.co2_ln[..m], &own_ln[..m], &mut out.co2[..m]);
+        ln_all(&out.co2[..m], &mut out.co2_ln[..m]);
     } else {
         out.co2[..m].fill(0.0);
     }
@@ -1239,8 +1342,6 @@ pub(crate) fn fast_level(level: &Level, bins: usize, out: &mut FastLevel) {
             (mass * (1.0 - share)).ln() as f32,
             (mass * share).ln() as f32,
         );
-        // The two sets' logarithms, then their sum and its logarithm.
-        let mut own_ln = [0.0; POINTS];
         interpolate(&foreign.map(node), &wf, by_air, &mut out.water_ln[..m]);
         interpolate(&own.map(node), &ws, by_self, &mut own_ln[..m]);
         add_exp(&out.water_ln[..m], &own_ln[..m], &mut out.water[..m]);
@@ -1264,14 +1365,6 @@ fn interpolate(rows: &[&[f32]; 4], w: &[f32; 4], add: f32, out: &mut [f32]) {
     let [r0, r1, r2, r3] = rows;
     for ((((o, a), b), c), d) in out.iter_mut().zip(*r0).zip(*r1).zip(*r2).zip(*r3) {
         *o = w[0] * a + w[1] * b + w[2] * c + w[3] * d + add;
-    }
-}
-
-/// `e^x` of every `x`, into `out`.
-#[inline(never)]
-fn exp_all(x: &[f32], out: &mut [f32]) {
-    for (o, x) in out.iter_mut().zip(x) {
-        *o = super::fast_math::exp(*x);
     }
 }
 

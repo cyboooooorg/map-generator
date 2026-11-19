@@ -32,3 +32,9 @@ done
 
 [[ -s raw/absco-ref_wv-mt-ckd.nc ]] || curl -sSL -A "$agent" -o raw/absco-ref_wv-mt-ckd.nc \
   "https://raw.githubusercontent.com/AER-RC/MT_CKD_H2O/4.3/data/absco-ref_wv-mt-ckd.nc"
+
+# MT_CKD 4.3 (AER-RC/MT_CKD, tag 4.3) takes LBLRTM at this commit
+# ("Changes for MT_CKD_4.1", 2022-12-28); its contnm.f90 holds the CO2
+# continuum (BLOCK DATA BFCO2, XFACCO2, FRNCO2).
+[[ -s raw/contnm.f90 ]] || curl -sSL -A "$agent" -o raw/contnm.f90 \
+  "https://raw.githubusercontent.com/AER-RC/LBLRTM/f66bb596e1686e5ff162a6fadc014e91d3ce01d4/src/contnm.f90"

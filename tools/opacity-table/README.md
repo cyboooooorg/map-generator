@@ -1,7 +1,7 @@
 # opacity-table
 
 Builds `crates/mapgen/data/opacity.bin`, the correlated-k table of CO₂ and
-water line absorption that the climate column of `mapgen` reads
+water line absorption, with MT_CKD's CO₂ continuum, that the climate column of `mapgen` reads
 (`crates/mapgen/src/planet/spectrum.rs`). The generator never runs this
 tool: the table is committed, and this tool only regenerates it. The
 table's provenance, layout and citations are in
@@ -10,11 +10,14 @@ table's provenance, layout and citations are in
 ## Purpose
 
 For each absorber set (CO₂ broadened by air, water broadened by air, water
-broadened by itself), each pressure and each temperature of the grid, the
-tool sums the HITRAN lines of every 20 cm⁻¹ bin from 0 to 5000 cm⁻¹ line by
-line (Voigt profiles cut at 25 cm⁻¹, water's plinth removed for MT_CKD),
-sorts the absorption coefficients of the bin and keeps the mean of each of
-8 g-intervals. It writes them, quantised in `ln k`, into one binary file.
+broadened by itself, CO₂ broadened by itself), each pressure and each
+temperature of the grid, the tool sums the HITRAN lines of every 20 cm⁻¹
+bin from 0 to 5000 cm⁻¹ line by line (Voigt profiles cut at 25 cm⁻¹, less
+the pedestal MT_CKD's continua assume: water's flat plinth, CO₂'s
+quadratic one from LBLRTM), sorts the absorption coefficients of the bin
+and keeps the mean of each of 8 g-intervals. It writes them, quantised in
+`ln k`, into one binary file, followed by MT_CKD's CO₂ continuum averaged
+over the same bins.
 
 ## Prerequisites
 
@@ -51,6 +54,9 @@ It fetches:
   `https://raw.githubusercontent.com/AER-RC/MT_CKD_H2O/4.3/data/absco-ref_wv-mt-ckd.nc`
   (kept for provenance: `spectrum.rs` holds the continuum, read from this
   file in task 7.1).
+- MT_CKD 4.3's CO₂ continuum, in LBLRTM's `contnm.f90` at the commit
+  MT_CKD 4.3 pins (`f66bb596`, SHA-256 checked by the script):
+  `https://raw.githubusercontent.com/AER-RC/LBLRTM/f66bb596e1686e5ff162a6fadc014e91d3ce01d4/src/contnm.f90`.
 
 ## Usage
 
@@ -78,7 +84,7 @@ Then run `cargo test -p mapgen spectrum` and the column tests.
 | `--out FILE` | `crates/mapgen/data/opacity.bin` | The table to write |
 | `--bin-width CM` | `20` | Width of a spectral bin, cm⁻¹ |
 | `--top CM` | `5000` | Upper end of the spectrum, cm⁻¹ |
-| `--temperatures K,…` | 18 values from 100 to 900 K | Temperatures of the grid |
+| `--temperatures K,…` | 16 values from 100 to 900 K | Temperatures of the grid |
 | `--pressure-step DECADES` | `0.5` | Spacing of the pressure grid, 1e-5 to 100 bar |
 | `--threads N` | `4` | Worker threads |
 
@@ -94,6 +100,8 @@ cargo test -j 4 -p opacity-table -- --test-threads 4
 
 They run on embedded or synthetic lines and never download anything: the
 HITRAN record format, the temperature scaling of a line strength against
-HITRAN's documented formula, the Voigt function against its integral, the
+HITRAN's documented formula, the Voigt function against its integral,
+the CO₂ pedestal against LBLRTM's formula, the parsing and binning of the
+CO₂ continuum, the
 layered line sum against the direct sum, and the g-points against the
 line-by-line mean transmission over paths of 1e-4 to 1e2 kg/m².

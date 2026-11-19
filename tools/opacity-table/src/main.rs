@@ -9,6 +9,7 @@
 //!               [--threads N]
 //! ```
 
+mod continuum;
 mod hitran;
 mod kdist;
 mod lbl;
@@ -20,7 +21,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hitran::{Line, PartitionSum, T_REF, parse_line, strength_at};
 use kdist::{G, reduce};
-use lbl::{Cutoff, Shape, bin_spectrum};
+use lbl::{Cutoff, Pedestal, Shape, bin_spectrum};
 use table::{Header, SETS, Set, encode};
 
 /// Avogadro constant, 1/mol (CODATA 2018, exact).
@@ -33,7 +34,9 @@ const LIGHT: f64 = 299_792_458.0;
 const BAR_PER_ATM: f64 = 1.013_25;
 
 /// Distance from a line's centre beyond which it adds nothing, cm⁻¹: 25,
-/// MT_CKD's convention (Mlawer et al. 2012), for both gases.
+/// MT_CKD's convention (Mlawer et al. 2012), for both gases; beyond it
+/// their continua take over (water's in mapgen, CO₂'s in the table, see
+/// [`continuum`]).
 const CUTOFF_CM: f64 = 25.0;
 
 /// Most samples of one bin (see [`lbl::sample_step`]): 2e6, a step of
@@ -113,9 +116,9 @@ struct Gas {
     /// Mean molar mass of the gas at natural abundance, kg/mol (IUPAC
     /// standard atomic weights, as mapgen's).
     molar_kg: f64,
-    /// Whether the lines lose the plinth under the cutoff (water, for
-    /// MT_CKD).
-    plinth: bool,
+    /// What the lines lose under the cutoff (MT_CKD's convention for the
+    /// gas, see [`lbl::Pedestal`]).
+    pedestal: Pedestal,
 }
 
 struct Options {
@@ -194,7 +197,7 @@ fn read_gas(
     prefix: &str,
     molecule: u8,
     molar_kg: f64,
-    plinth: bool,
+    pedestal: Pedestal,
 ) -> Result<Gas, String> {
     let lines = read_lines(&o.raw.join("lines"), prefix, molecule, o.top_cm)?;
     let mut isotopologues = Vec::new();
@@ -209,12 +212,14 @@ fn read_gas(
         lines,
         isotopologues,
         molar_kg,
-        plinth,
+        pedestal,
     })
 }
 
 /// The lines of `gas` at `p_bar` and `t_k`, broadened by air or by the
-/// gas itself, sorted by their shifted centres.
+/// gas itself (HITRAN's `γ_air` or `γ_self`, both with its `n_air`, the
+/// only exponent a `.par` record carries), sorted by their shifted
+/// centres.
 fn shapes(gas: &Gas, broadening: Set, p_bar: f64, t_k: f64) -> Vec<Shape> {
     let p_atm = p_bar / BAR_PER_ATM;
     // Per isotopologue: local number, Doppler 1/e width per cm⁻¹ of
@@ -233,7 +238,7 @@ fn shapes(gas: &Gas, broadening: Set, p_bar: f64, t_k: f64) -> Vec<Shape> {
         .filter_map(|line| {
             let &(_, doppler, q_ref, q_t) =
                 per_isotopologue.iter().find(|i| i.0 == line.isotopologue)?;
-            let gamma = if broadening == Set::WaterSelf {
+            let gamma = if matches!(broadening, Set::WaterSelf | Set::Co2Self) {
                 line.gamma_self
             } else {
                 line.gamma_air
@@ -257,7 +262,7 @@ fn job(gas: &Gas, set: Set, header: &Header, p_bar: f64, t_k: f64) -> Vec<u16> {
     let lines = shapes(gas, set, p_bar, t_k);
     let cutoff = Cutoff {
         distance_cm: CUTOFF_CM,
-        plinth: gas.plinth,
+        pedestal: gas.pedestal,
     };
     let to_mass = 1e-4 * AVOGADRO / gas.molar_kg;
     let mut codes = Vec::with_capacity(header.bins * G);
@@ -289,14 +294,22 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let o = options()?;
+    let path = o.raw.join("contnm.f90");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let continuum = continuum::Co2Continuum::parse(&text)
+        .ok_or(format!("{}: no CO2 continuum", path.display()))?;
+    let bins = (o.top_cm / o.bin_width_cm).round() as usize;
     let header = Header {
-        bins: (o.top_cm / o.bin_width_cm).round() as usize,
+        bins,
         bin_width_cm: o.bin_width_cm,
         pressures_bar: table::pressures(o.pressure_step),
         temperatures_k: o.temperatures_k.clone(),
+        co2_continuum: (0..bins)
+            .map(|b| continuum.bin(b as f64 * o.bin_width_cm, (b + 1) as f64 * o.bin_width_cm))
+            .collect(),
     };
-    let water = read_gas(&o, "h2o_", 1, 18.015e-3, true)?;
-    let co2 = read_gas(&o, "co2_", 2, 44.009e-3, false)?;
+    let water = read_gas(&o, "h2o_", 1, 18.015e-3, Pedestal::Flat)?;
+    let co2 = read_gas(&o, "co2_", 2, 44.009e-3, Pedestal::Quadratic)?;
     eprintln!(
         "{} H2O lines, {} CO2 lines; {} bins of {} cm-1, {} pressures, {} temperatures",
         water.lines.len(),
@@ -324,7 +337,11 @@ fn run() -> Result<(), String> {
                             break;
                         };
                         let set = SETS[s];
-                        let gas = if set == Set::Co2 { &co2 } else { &water };
+                        let gas = if matches!(set, Set::Co2 | Set::Co2Self) {
+                            &co2
+                        } else {
+                            &water
+                        };
                         let (p_bar, t_k) = (header.pressures_bar[p], header.temperatures_k[t]);
                         let codes = job(gas, set, &header, p_bar, t_k);
                         mine.push((header.offset(s, p, t), codes));

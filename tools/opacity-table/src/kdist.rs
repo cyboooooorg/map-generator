@@ -56,7 +56,7 @@ mod tests {
     fn the_g_points_reproduce_the_line_by_line_transmission() {
         let cutoff = Cutoff {
             distance_cm: 25.0,
-            plinth: false,
+            pedestal: crate::lbl::Pedestal::None,
         };
         let w = weights();
         for lorentz in [0.07, 7e-3, 1e-4] {

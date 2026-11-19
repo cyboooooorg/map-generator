@@ -1,10 +1,16 @@
 //! Line-by-line absorption cross-sections over one spectral bin.
 //!
 //! Each line is a Voigt profile cut at [`Cutoff::distance_cm`] from its
-//! centre; with [`Cutoff::plinth`] the profile's value at the cutoff is
-//! subtracted inside it, MT_CKD's convention for water (Mlawer et al.
-//! 2012, *Phil. Trans. R. Soc. A* 370, 2520, §2: the line contribution
-//! beyond 25 cm⁻¹ and the "plinth" under it belong to the continuum).
+//! centre, less the pedestal ([`Pedestal`]) that MT_CKD's continua assume
+//! LBLRTM removes inside the cutoff: the line contribution beyond 25 cm⁻¹
+//! and the pedestal under it belong to the continuum (Mlawer et al.
+//! 2012, *Phil. Trans. R. Soc. A* 370, 2520, §2). For water the pedestal
+//! is the profile's value at the cutoff (the "plinth"); for CO₂, LBLRTM's
+//! fourth function (`oprop.f90`, the `fcnt_fn` of its CO₂ branch, read on
+//! github.com/AER-RC/LBLRTM at the commit MT_CKD 4.3 pins) subtracts
+//! `(2 − d²/B²)` times the Lorentz value at the cutoff `B`, which its CO₂
+//! continuum assumes since MT_CKD 2.0 ("Fundamental change in the lblrtm
+//! fourth function with consequent changes in continuum", Nov 2007).
 //!
 //! The bin is sampled on a uniform grid fine enough to resolve its
 //! narrowest line ([`sample_step`]). Summing every line on every sample is
@@ -50,23 +56,44 @@ impl Shape {
     }
 }
 
+/// What is subtracted from a line inside its cutoff (see the module
+/// documentation).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pedestal {
+    /// Nothing (the synthetic bands of the tests).
+    #[cfg_attr(not(test), allow(dead_code))]
+    None,
+    /// The profile's value at the cutoff (water, MT_CKD's plinth).
+    Flat,
+    /// `(2 − d²/B²)` times the Lorentz value at the cutoff `B` (CO₂,
+    /// LBLRTM's fourth function).
+    Quadratic,
+}
+
 /// Where the lines are cut.
 #[derive(Clone, Copy, Debug)]
 pub struct Cutoff {
     /// Distance from the centre beyond which a line adds nothing, cm⁻¹.
     pub distance_cm: f64,
-    /// Whether the profile's value at the cutoff is subtracted inside it.
-    pub plinth: bool,
+    /// What is subtracted inside it.
+    pub pedestal: Pedestal,
 }
 
 /// The cross-section of `line` at `distance` cm⁻¹ from its centre, cm².
 fn contribution(line: &Shape, distance: f64, cutoff: Cutoff) -> f64 {
-    if distance >= cutoff.distance_cm {
+    let b = cutoff.distance_cm;
+    if distance >= b {
         return 0.0;
     }
     let mut f = profile(distance, line.doppler_e, line.lorentz);
-    if cutoff.plinth {
-        f -= profile(cutoff.distance_cm, line.doppler_e, line.lorentz);
+    match cutoff.pedestal {
+        Pedestal::None => {}
+        Pedestal::Flat => f -= profile(b, line.doppler_e, line.lorentz),
+        Pedestal::Quadratic => {
+            let a = line.lorentz;
+            let at_cut = a / (std::f64::consts::PI * (a * a + b * b));
+            f -= (2.0 - distance * distance / (b * b)) * at_cut;
+        }
     }
     line.strength * f.max(0.0)
 }
@@ -274,7 +301,12 @@ pub(crate) mod tests {
 
     const WATER: Cutoff = Cutoff {
         distance_cm: 25.0,
-        plinth: true,
+        pedestal: Pedestal::Flat,
+    };
+
+    const CO2: Cutoff = Cutoff {
+        distance_cm: 25.0,
+        pedestal: Pedestal::Quadratic,
     };
 
     #[test]
@@ -308,5 +340,28 @@ pub(crate) mod tests {
         assert!((near - (profile(1.0, 1e-3, 0.1) - at_cut)).abs() < 1e-15);
         assert_eq!(contribution(&line, 25.0, WATER), 0.0);
         assert_eq!(contribution(&line, 30.0, WATER), 0.0);
+    }
+
+    #[test]
+    fn the_co2_pedestal_is_lblrtms_fourth_function() {
+        // LBLRTM's CO₂ branch: `f4fn = sil/(α² + d²) − (2 − d²/B²) sil/(α² + B²)`
+        // with `sil = S α / π`, so that the line meets zero at the cutoff.
+        let line = Shape {
+            centre: 0.0,
+            strength: 1.0,
+            doppler_e: 1e-4,
+            lorentz: 0.5,
+        };
+        let lorentz = |d: f64| 0.5 / (std::f64::consts::PI * (0.25 + d * d));
+        for d in [5.0, 12.0, 20.0, 24.0] {
+            let expected = lorentz(d) - (2.0 - d * d / 625.0) * lorentz(25.0);
+            let got = contribution(&line, d, CO2);
+            assert!(
+                (got / expected - 1.0).abs() < 1e-3,
+                "{d}: {got} vs {expected}"
+            );
+        }
+        assert!(contribution(&line, 24.999, CO2) < 1e-6 * lorentz(24.999));
+        assert_eq!(contribution(&line, 25.0, CO2), 0.0);
     }
 }
