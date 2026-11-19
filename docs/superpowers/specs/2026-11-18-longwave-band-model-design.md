@@ -68,7 +68,11 @@ Independent physics checks of the radiation alone:
 - Moist plateau (runaway limit): 282 ± 14 W/m² (Goldblatt et al. 2013),
   independent of CO₂ up to 1e-2 bar and of N₂ from 1 to 3 times Earth's
   within 3 %.
-- Runaway anchor flat within 2 % over 380-640 K.
+- Runaway anchor: line-by-line OLR curves rise to a maximum near
+  350-400 K, then fall a few percent to the asymptote (Goldblatt et al.
+  2013). The asymptote (mean over 500-640 K) is 282 ± 14 W/m², flat
+  within 1 % over 500-640 K, with the peak at most 6 % above it.
+  `MOIST_PLATEAU_W_M2` is that asymptote.
 
 Climate outcomes (the bounds of the lot):
 
