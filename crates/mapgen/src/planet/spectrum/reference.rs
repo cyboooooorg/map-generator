@@ -90,23 +90,13 @@ fn smooth_between(lo: f64, hi: f64, level: &Level) -> f64 {
 }
 
 /// Optical depth per `ln p` of the water continuum at `nu` cm⁻¹:
-/// [`water_continuum_depth`] with [`MT_CKD`]'s coefficients interpolated
-/// in their logarithm at `nu`.
+/// [`water_continuum_depth`] with [`MT_CKD`]'s coefficients at `nu`
+/// ([`mt_ckd_at`]).
 fn water_continuum(nu: f64, level: &Level) -> f64 {
     if level.gases.h2o <= 0.0 || nu <= 0.0 {
         return 0.0;
     }
-    let x = (nu / MT_CKD_STEP_CM).clamp(0.0, (MT_CKD.len() - 1) as f64);
-    let k = (x as usize).min(MT_CKD.len() - 2);
-    let f = x - k as f64;
-    let (a, b) = (MT_CKD[k], MT_CKD[k + 1]);
-    let log_lerp = |u: f64, v: f64| (u.ln() * (1.0 - f) + v.ln() * f).exp();
-    let coefficients = (
-        log_lerp(a.1, b.1),
-        a.2 * (1.0 - f) + b.2 * f,
-        log_lerp(a.3, b.3),
-    );
-    water_continuum_depth(coefficients, nu, level)
+    water_continuum_depth(mt_ckd_at(nu), nu, level)
 }
 
 /// Optical depth per `ln p` of MT_CKD's CO₂ continuum in bin `i`:

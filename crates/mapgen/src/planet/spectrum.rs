@@ -122,6 +122,24 @@ impl Level {
     pub(crate) fn mass_per_ln_p(&self, partial_bar: f64, molar_kg: f64) -> f64 {
         partial_bar.max(0.0) * PA_PER_BAR * molar_kg / (self.molar_mass_kg() * self.gravity_m_s2)
     }
+
+    /// Molecules per m² per unit `ln p` of a gas of partial pressure
+    /// `partial_bar` at this level, `p_i N_A / (M̄ g)`.
+    pub(crate) fn molecules_per_ln_p(&self, partial_bar: f64) -> f64 {
+        partial_bar * PA_PER_BAR * AVOGADRO / (self.molar_mass_kg() * self.gravity_m_s2)
+    }
+
+    /// Number density, per m³, of a gas of partial pressure `partial_bar`
+    /// at this level's temperature.
+    fn density_m3(&self, partial_bar: f64) -> f64 {
+        partial_bar * PA_PER_BAR / (BOLTZMANN * self.temperature_k)
+    }
+
+    /// Thickness of the air per unit `ln p` at this level, m:
+    /// `k_B T N_A / (M̄ g)`.
+    fn thickness_per_ln_p_m(&self) -> f64 {
+        BOLTZMANN * self.temperature_k * AVOGADRO / (self.molar_mass_kg() * self.gravity_m_s2)
+    }
 }
 
 /// Pascals per bar.
@@ -551,24 +569,39 @@ pub(crate) fn co2_pairs(nu: f64, level: &Level) -> f64 {
     if co2 <= 0.0 {
         return 0.0;
     }
-    let cell = (nu / CO2_CIA_CELL_CM).floor() * CO2_CIA_CELL_CM;
-    let Ok(row) = CO2_CIA.binary_search_by(|(start, _)| start.total_cmp(&cell)) else {
+    let Some(row) = co2_cia_row(nu) else {
         return 0.0;
     };
     let values = CO2_CIA[row].1;
-    let t = level.temperature_k;
-    let k_cm5 = if t <= CO2_CIA_K[0] {
-        values[0]
-    } else if t >= CO2_CIA_K[3] {
-        values[3]
+    let (j, f) = co2_cia_column(level.temperature_k);
+    let k_cm5 = values[j] * (1.0 - f) + values[j + 1] * f;
+    let density_m3 = level.density_m3(co2);
+    k_cm5 * 1e-10 * density_m3 * density_m3 * level.thickness_per_ln_p_m()
+}
+
+/// Row of [`CO2_CIA`] whose cell holds `nu` cm⁻¹, if any.
+fn co2_cia_row(nu: f64) -> Option<usize> {
+    let cell = (nu / CO2_CIA_CELL_CM).floor() * CO2_CIA_CELL_CM;
+    CO2_CIA
+        .binary_search_by(|(start, _)| start.total_cmp(&cell))
+        .ok()
+}
+
+/// Where `t_k` falls among [`CO2_CIA_K`]: the column below it and the
+/// share of the next, held at the ends.
+fn co2_cia_column(t_k: f64) -> (usize, f64) {
+    if t_k <= CO2_CIA_K[0] {
+        (0, 0.0)
+    } else if t_k >= CO2_CIA_K[3] {
+        (2, 1.0)
     } else {
-        let j = CO2_CIA_K.iter().rposition(|&k| k <= t).unwrap_or(0).min(2);
-        let f = (t - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]);
-        values[j] * (1.0 - f) + values[j + 1] * f
-    };
-    let density_m3 = co2 * PA_PER_BAR / (BOLTZMANN * t);
-    let thickness_m = BOLTZMANN * t * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-    k_cm5 * 1e-10 * density_m3 * density_m3 * thickness_m
+        let j = CO2_CIA_K
+            .iter()
+            .rposition(|&k| k <= t_k)
+            .unwrap_or(0)
+            .min(2);
+        (j, (t_k - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]))
+    }
 }
 
 /// The radiation term `R(ν, T) = ν tanh(c₂ν / 2T)` of MT_CKD's continua,
@@ -604,8 +637,7 @@ pub(crate) fn water_continuum_depth(coefficients: (f64, f64, f64), nu: f64, leve
         / MT_CKD_REFERENCE_BAR
         * ratio
         * radiation;
-    let molecules_m2 = e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-    per_molecule_cm2 * 1e-4 * molecules_m2
+    per_molecule_cm2 * 1e-4 * level.molecules_per_ln_p(e)
 }
 
 /// Absorption, cm², of one CO₂ molecule at `nu` cm⁻¹ and `t` K (`ln_t`
@@ -649,10 +681,12 @@ pub(crate) fn co2_continuum_depth(
     }
     let t = level.temperature_k;
     let p = level.pressure_bar();
-    let molecules_m2 = co2 * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
     let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
     let ln_t = (t / t_eff_k).ln();
-    co2_continuum_per_molecule(coefficient, nu, t, ln_t) * density * 1e-4 * molecules_m2
+    co2_continuum_per_molecule(coefficient, nu, t, ln_t)
+        * density
+        * 1e-4
+        * level.molecules_per_ln_p(co2)
 }
 
 /// Upper end, cm⁻¹, of methane's grey stand-in: the far infrared of
@@ -678,7 +712,7 @@ struct BinTable {
     /// Centre, cm⁻¹.
     centre_cm: [f64; BINS],
     /// [`MT_CKD`]'s self coefficient, its temperature exponent and its
-    /// foreign coefficient, interpolated as `reference::water_continuum` does.
+    /// foreign coefficient at the centre ([`mt_ckd_at`]).
     continuum: [(f64, f64, f64); BINS],
     /// Row of [`CO2_CIA`], if the bin has one.
     cia_row: [Option<usize>; BINS],
@@ -710,24 +744,29 @@ static BIN_TABLE: LazyLock<BinTable> = LazyLock::new(|| {
         let (lo, hi) = bin_edges(i);
         let nu = 0.5 * (lo + hi);
         table.centre_cm[i] = nu;
-        let x = (nu / MT_CKD_STEP_CM).clamp(0.0, (MT_CKD.len() - 1) as f64);
-        let k = (x as usize).min(MT_CKD.len() - 2);
-        let f = x - k as f64;
-        let (a, b) = (MT_CKD[k], MT_CKD[k + 1]);
-        let log_lerp = |u: f64, v: f64| (u.ln() * (1.0 - f) + v.ln() * f).exp();
-        table.continuum[i] = (
-            log_lerp(a.1, b.1),
-            a.2 * (1.0 - f) + b.2 * f,
-            log_lerp(a.3, b.3),
-        );
-        let cell = (nu / CO2_CIA_CELL_CM).floor() * CO2_CIA_CELL_CM;
-        table.cia_row[i] = CO2_CIA
-            .binary_search_by(|(start, _)| start.total_cmp(&cell))
-            .ok();
+        table.continuum[i] = mt_ckd_at(nu);
+        table.cia_row[i] = co2_cia_row(nu);
         table.methane_share[i] = ((METHANE_TOP_CM.min(hi) - lo) / (hi - lo)).clamp(0.0, 1.0);
     }
     table
 });
+
+/// [`MT_CKD`]'s coefficients at `nu` cm⁻¹: the self coefficient, its
+/// temperature exponent and the foreign coefficient, the coefficients
+/// interpolated in their logarithm and the exponent linearly between the
+/// nodes.
+fn mt_ckd_at(nu: f64) -> (f64, f64, f64) {
+    let x = (nu / MT_CKD_STEP_CM).clamp(0.0, (MT_CKD.len() - 1) as f64);
+    let k = (x as usize).min(MT_CKD.len() - 2);
+    let f = x - k as f64;
+    let (a, b) = (MT_CKD[k], MT_CKD[k + 1]);
+    let log_lerp = |u: f64, v: f64| (u.ln() * (1.0 - f) + v.ln() * f).exp();
+    (
+        log_lerp(a.1, b.1),
+        a.2 * (1.0 - f) + b.2 * f,
+        log_lerp(a.3, b.3),
+    )
+}
 
 /// What the smooth absorption of a bin needs at one level, taken once for every bin:
 /// the continua of water and CO₂, the CO₂ pairs and methane, each when the level
@@ -757,33 +796,24 @@ impl SmoothRates {
             let e = g.h2o;
             let ratio = MT_CKD_REFERENCE_K / t;
             let others = (p - e).max(0.0);
-            let molecules_m2 =
-                e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-            let scale = ratio / MT_CKD_REFERENCE_BAR * 1e-4 * molecules_m2;
+            let scale = ratio / MT_CKD_REFERENCE_BAR * 1e-4 * level.molecules_per_ln_p(e);
             (e, ratio.ln(), others, scale)
         });
         let pairs = (g.co2 > 0.0).then(|| {
-            let (j, f) = if t <= CO2_CIA_K[0] {
-                (0, 0.0)
-            } else if t >= CO2_CIA_K[3] {
-                (2, 1.0)
-            } else {
-                let j = CO2_CIA_K.iter().rposition(|&k| k <= t).unwrap_or(0).min(2);
-                (j, (t - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]))
-            };
-            let density_m3 = g.co2 * PA_PER_BAR / (BOLTZMANN * t);
-            let thickness_m =
-                BOLTZMANN * t * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-            (j, f, 1e-10 * density_m3 * density_m3 * thickness_m)
+            let (j, f) = co2_cia_column(t);
+            let density_m3 = level.density_m3(g.co2);
+            (
+                j,
+                f,
+                1e-10 * density_m3 * density_m3 * level.thickness_per_ln_p_m(),
+            )
         });
         let methane = (g.ch4 > 0.0).then(|| methane_depth(g).1);
         let co2_continuum = (g.co2 > 0.0).then(|| {
-            let molecules_m2 =
-                g.co2 * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
             let density = p / MT_CKD_REFERENCE_BAR * MT_CKD_REFERENCE_K / t;
             (
                 (t / OPACITY.co2_continuum_t_eff_k).ln(),
-                density * 1e-4 * molecules_m2,
+                density * 1e-4 * level.molecules_per_ln_p(g.co2),
             )
         });
         Self {
