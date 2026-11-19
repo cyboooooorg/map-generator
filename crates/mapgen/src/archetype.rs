@@ -1388,15 +1388,22 @@ mass_earth = 5000.0
     /// Titan's 1.47 bar (Fulchignoni et al. 2005,
     /// doi:10.1038/nature04314), within 1.2 to 1.8 on every seed, under a
     /// few percent of methane.
+    /// Titan-like's surface pressure, bar: the spread of
+    /// `archetype_census titan-like 500` over seeds 1-500 (min 1.263,
+    /// 5th percentile 1.339, median 1.493, 95th 1.615, max 1.660 bar at
+    /// `n2 = 0.82`), rounded outward to 0.05 bar (#565). Titan's own is
+    /// 1.47 bar (Fulchignoni et al. 2005, doi:10.1038/nature04314).
+    const TITAN_BAR: std::ops::RangeInclusive<f64> = 1.25..=1.70;
+
     #[test]
     fn titan_like_has_titan_air() {
         let a = Archetype::load("titan-like").unwrap();
-        for seed in 0..20 {
+        for seed in 0..40 {
             let m = moon_model_of(&a, seed);
             assert_eq!(m.class.key(), "hydrocarbon-world", "seed {seed}: {m:?}");
             let gases = m.surface.expect("a moon has a surface").gases;
             let bar = gases.total();
-            assert!((1.2..=1.8).contains(&bar), "seed {seed}: {bar} bar");
+            assert!(TITAN_BAR.contains(&bar), "seed {seed}: {bar} bar");
             let ch4 = gases.ch4 / bar;
             assert!((0.01..=0.10).contains(&ch4), "seed {seed}: CH4 {ch4}");
         }
@@ -1406,14 +1413,14 @@ mass_earth = 5000.0
     /// the orbit and the age it draws there.
     #[test]
     fn faithful_archetypes_hold_in_a_whole_system() {
-        for (name, lo, hi) in [
-            ("earth-like", 0.7, 1.3),
-            ("mars-like", 0.004, 0.010),
-            ("venus-like", 60.0, 120.0),
-            ("titan-like", 1.2, 1.8),
+        for (name, lo, hi, seeds) in [
+            ("earth-like", 0.7, 1.3, 20),
+            ("mars-like", 0.004, 0.010, 20),
+            ("venus-like", 60.0, 120.0, 20),
+            ("titan-like", *TITAN_BAR.start(), *TITAN_BAR.end(), 40),
         ] {
             let a = Archetype::load(name).unwrap();
-            for seed in 0..20 {
+            for seed in 0..seeds {
                 let (context, model, _) = drawn(&a, seed);
                 assert!((context.age_gyr - 4.57).abs() < 1e-6, "{name} seed {seed}");
                 let bar = model.surface.expect("a surface").gases.total();

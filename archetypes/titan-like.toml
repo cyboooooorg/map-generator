@@ -33,9 +33,11 @@ ch4 = [1.0, 2.0]
 # What it outgasses changes with its drawn ice share, and what escape
 # at the cosmic shoreline takes of it (13 to 27 %) with the drawn orbit
 # of its giant: about 1.2 to 1.5 bar of N2 over the 40 seeds of
-# archetype_census at 0.8. The factor centres their median on 1.47 bar,
-# and over those 40 seeds each lands within 1.3 to 1.6 bar (1.31 to
-# 1.58): a result over those seeds, not a bound for every draw.
+# archetype_census at 0.8. The factor centres their median on 1.47 bar.
+# Over seeds 1-500 of archetype_census (#565) the surface pressure has a
+# median of 1.49 bar, 5th and 95th percentiles of 1.34 and 1.62 bar, and
+# ranges from 1.26 to 1.66 bar: a result over those seeds, not a bound
+# for every draw.
 n2 = 0.82
 # Its rock's U, Th and K, Earth's abundance = 1: the Solar System's
 # bodies formed from one nebula of chondritic composition (Lodders 2003,
