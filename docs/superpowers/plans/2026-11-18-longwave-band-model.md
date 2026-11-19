@@ -108,6 +108,27 @@
 - [ ] **Step 4: Run** the new tests and the column tests, and confirm PASS. Climate tests may fail at this step; list them in the report for 7.3.
 - [ ] **Step 5: Commit** `feat(planet): integrate the climate column over spectral bins` (`Refs: #523`).
 
+### Task 7.3a: CO2 continuum (from task-7.3-wip.diff)
+
+- [ ] Commit the MT_CKD 4.3 CO₂ continuum and the CO₂ self-broadened set, along with the rebuilt table and the updated OPACITY.md (with the right sizes). Drop `zz_diag_*`. The radiation tests must pass, while climate failures stay for 7.3. Commit message: `feat(planet): add the CO2 far wings from MT_CKD` (`Refs: #523`).
+
+### Task 7.5: Cloud greenhouse (spec "Revision after task 7.3")
+
+- [ ] Add the test `earths_clouds_trap_28_w_m2`: the OLR difference between clear and cloudy skies is 28 ± 5 W/m² on Earth's column, with the albedo's own cloud cover.
+- [ ] A cloud-free body (dry, or with no water clouds) keeps its OLR unchanged. Test it on Mars and Titan.
+- [ ] Implement the cloud top and emissivity from ISCCP, cited. Explain replays the same OLR.
+- [ ] Commit: `feat(planet): let water clouds trap heat` (`Refs: #523`).
+
+### Task 7.6: Near-infrared absorption (spec "Revision after task 7.3")
+
+- [ ] Extend `tools/opacity-table` to build a shortwave table over 2 000-14 300 cm⁻¹, at most 2 MB, documented in OPACITY.md.
+- [ ] Add these tests:
+  - Earth's clear-sky atmospheric absorption is 60-80 W/m²;
+  - the maximum-greenhouse albedo round the Sun is 0.42 ± 0.04;
+  - an M-star planet's albedo drops more than a G-star planet's under the same air.
+- [ ] Implement the absorption per band in the `albedo.rs` spectrum, in the same pass as the Rayleigh two-stream. Explain's albedo tree still sums.
+- [ ] Commit: `feat(planet): absorb the star's near infrared in CO2 and water` (`Refs: #523`).
+
 ### Task 7.3: Climate bounds on the spectral column
 
 **Files:**

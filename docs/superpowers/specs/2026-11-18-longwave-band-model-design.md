@@ -222,3 +222,38 @@ absorption from the real HITRAN lines, precomputed into a versioned table.
   & Hartmann 1989). This lot includes them only if the builder can do so
   from the cited paper without fitting. Otherwise the Venus follow-up issue
   names them.
+
+## Revision after task 7.3: cloud greenhouse and near-infrared absorption
+
+Task 7.3 found that the thick CO₂ greenhouse lacked the far wings past
+the 25 cm⁻¹ line cut-off. With the MT_CKD 4.3 CO₂ continuum added, 8 bar
+of CO₂ at 1.70 AU radiates 73.5 W/m² (Kopparapu 67.4). Two bounds still
+missed, each because of something this spec had left out. The user's
+decisions (2026-11-19) bring both into this lot:
+
+- **Cloud greenhouse.** The albedo already carries the clouds' shortwave
+  effect (the RH-based cover of the lot), but the column was clear-sky, so
+  Earth reached only 280.5 K at 280 ppm. The cloudy share of the sky (the
+  same cover the albedo uses) now radiates from a cloud top instead of the
+  clear column: OLR = (1 − f)·OLR_clear + f·OLR_cloudy.
+  - The cloud top's pressure is taken from satellite climatology (ISCCP,
+    Rossow & Schiffer 1999), as a share of the surface pressure.
+  - The cloud's infrared emissivity comes from the same climatology's
+    optical thickness.
+  - Only water clouds count, on bodies whose albedo already has them.
+  - Check: Earth's longwave cloud effect is 28 ± 5 W/m² (CERES EBAF, Loeb
+    et al. 2018).
+- **Near-infrared absorption.** About 60 % of the outer-edge gap came from
+  the albedo: 0.499 against Kopparapu's 0.417 at the maximum greenhouse,
+  because CO₂ and H₂O did not absorb the star's near infrared.
+  - The shortwave spectrum of `albedo.rs` (Planck bands of the star,
+    Rayleigh) gains the absorption of CO₂ and H₂O, from a second compact
+    HITRAN correlated-k table over 2 000 to 14 300 cm⁻¹ (0.7-5 µm). It is
+    built by the same tool and is at most 2 MB.
+  - What the atmosphere absorbs counts as absorbed by the planet.
+  - Checks: Earth's clear-sky atmospheric shortwave absorption is 60-80
+    W/m² of the 340 W/m² incoming (Kim & Ramanathan 2008; Wild et al. 2013
+    give about 74 W/m² all-sky). The maximum-greenhouse albedo round the Sun
+    is 0.42 ± 0.04. Edge S_eff for K and M is within ±15 % of Kopparapu.
+- Both lines move out of the non-goals. The checks and the priority order
+  are otherwise unchanged.
