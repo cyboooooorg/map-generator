@@ -1279,23 +1279,14 @@ fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
 mod tests {
     use super::*;
     use crate::planet::climate::{
-        MOIST_PLATEAU_W_M2, PLATEAU_SURFACES_K, Planet, tropopause_k, with_vapour,
+        EARTH_AIR, MOIST_PLATEAU_W_M2, PLATEAU_SURFACES_K, Planet, plateau_skin_k, tropopause_k,
+        with_vapour,
     };
-
-    /// Earth's dry air, bar.
-    fn earth_air() -> Gases {
-        Gases {
-            n2: 0.78,
-            o2: 0.21,
-            co2: 4e-4,
-            ..Gases::default()
-        }
-    }
 
     /// The skin of the moist plateau's solves: `T_eq / 2^¼` of a body that
     /// absorbs the plateau.
     fn plateau_skin() -> f64 {
-        tropopause_k((*MOIST_PLATEAU_W_M2 / SIGMA).powf(0.25))
+        plateau_skin_k(*MOIST_PLATEAU_W_M2)
     }
 
     /// Outgoing radiation of `air` over a moist surface at `t`, under the
@@ -1322,14 +1313,14 @@ mod tests {
 
     #[test]
     fn the_plateau_ignores_co2_and_nitrogen() {
-        let base = moist_olr(earth_air(), 380.0);
+        let base = moist_olr(EARTH_AIR, 380.0);
         for co2 in [4e-4, 1e-3, 1e-2] {
             for n2 in [0.78, 1.56, 2.34] {
                 let olr = moist_olr(
                     Gases {
                         co2,
                         n2,
-                        ..earth_air()
+                        ..EARTH_AIR
                     },
                     380.0,
                 );
@@ -1346,7 +1337,7 @@ mod tests {
     /// `t`, under the plateau's skin, on `levels` levels per decade.
     fn moist_olr_on(t: f64, levels: f64) -> f64 {
         olr_w_m2(
-            &with_vapour(earth_air(), t, f64::INFINITY),
+            &with_vapour(EARTH_AIR, t, f64::INFINITY),
             t,
             plateau_skin(),
             &Planet::EARTH,
@@ -1447,7 +1438,7 @@ mod tests {
             gravity_m_s2: 3.71,
             radius_earth: 0.53,
         };
-        let moist = |t: f64| with_vapour(earth_air(), t, f64::INFINITY);
+        let moist = |t: f64| with_vapour(EARTH_AIR, t, f64::INFINITY);
         let cases = [
             (moist(288.0), 288.0, 200.0, Planet::EARTH),
             (moist(250.0), 250.0, 180.0, Planet::EARTH),
@@ -1457,7 +1448,7 @@ mod tests {
                 Gases {
                     h2o: 70.0,
                     co2: 6.0,
-                    ..earth_air()
+                    ..EARTH_AIR
                 },
                 1500.0,
                 250.0,
@@ -1496,7 +1487,7 @@ mod tests {
             (
                 Gases {
                     co2: 0.3,
-                    ..earth_air()
+                    ..EARTH_AIR
                 },
                 288.0,
                 190.0,

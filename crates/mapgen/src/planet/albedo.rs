@@ -755,6 +755,7 @@ pub(crate) fn shortwave_budget(
 
 #[cfg(test)]
 mod tests {
+    use super::super::climate::EARTH_AIR;
     use super::super::shortwave::{Air, Paths};
     use super::*;
 
@@ -792,11 +793,8 @@ mod tests {
     #[test]
     fn ice_cover_grows_as_the_planet_cools() {
         let air = Gases {
-            n2: 0.78,
-            o2: 0.21,
-            co2: 4e-4,
             h2o: 0.01,
-            ..Gases::default()
+            ..EARTH_AIR
         };
         let water = earth_water();
         let mut last = f64::INFINITY;
@@ -1086,11 +1084,8 @@ mod tests {
     /// surface, 400 ppm of CO₂.
     fn earth_air() -> Gases {
         Gases {
-            n2: 0.78,
-            o2: 0.21,
-            co2: 4e-4,
             h2o: 0.77 * super::super::climate::water_saturation_bar(288.0),
-            ..Gases::default()
+            ..EARTH_AIR
         }
     }
 
@@ -1252,13 +1247,7 @@ mod tests {
         // a drier air makes fewer clouds (issue #523): Earth's vapour at
         // 288 K and at 320 K, and a trace of water that cannot fill a warm
         // air (a desert world whose air holds all its water).
-        let air = |h2o: f64| Gases {
-            n2: 0.78,
-            o2: 0.21,
-            co2: 4e-4,
-            h2o,
-            ..Gases::default()
-        };
+        let air = |h2o: f64| Gases { h2o, ..EARTH_AIR };
         let cloud = |t: f64, h2o: f64| {
             cover(
                 t,

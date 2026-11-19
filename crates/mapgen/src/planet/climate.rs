@@ -407,20 +407,16 @@ const RUNAWAY_ALBEDO: (f64, f64) = (0.0, 0.9);
 /// of [`column::PLATEAU_LEVELS_PER_DECADE`]): the skin `T_eq / 2^¼` of a
 /// body at its star's runaway limit `S_rg`. There a runaway absorbs the
 /// plateau itself (see [`absorbing`]), so `T_eq = (F_plateau / σ)^¼`
-/// whatever the star: the plateau and its skin are solved together by a
-/// fixed-point iteration (the skin moves the plateau by under 0.1 W/m²,
-/// so a few steps settle it).
+/// whatever the star: the plateau and its skin are solved together
+/// ([`plateau_w_m2`]).
 pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::LazyLock::new(|| {
-    let mut plateau = 282.0;
-    for _ in 0..8 {
-        let next = moist_asymptote_w_m2(plateau_skin_k(plateau));
-        let settled = (next - plateau).abs() < 0.01;
-        plateau = next;
-        if settled {
-            break;
-        }
-    }
-    plateau
+    plateau_w_m2(
+        &EARTH_AIR,
+        f64::INFINITY,
+        &Planet::EARTH,
+        Profile::PLATEAU,
+        282.0,
+    )
 });
 
 /// Surfaces, K, over which [`MOIST_PLATEAU_W_M2`] averages the moist
@@ -428,29 +424,45 @@ pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::Lazy
 pub(super) const PLATEAU_SURFACES_K: [f64; 8] =
     [500.0, 520.0, 540.0, 560.0, 580.0, 600.0, 620.0, 640.0];
 
-/// Mean outgoing radiation, W/m², of Earth's air over a saturated surface
-/// at [`PLATEAU_SURFACES_K`] under a skin at `skin_k`, on the plateau's
-/// grid.
-fn moist_asymptote_w_m2(skin_k: f64) -> f64 {
-    let sum: f64 = PLATEAU_SURFACES_K
-        .iter()
-        .map(|&t| moist_earth_olr_w_m2(t, skin_k))
-        .sum();
-    sum / PLATEAU_SURFACES_K.len() as f64
-}
+/// Earth's dry air, bar: 0.78 of N₂, 0.21 of O₂ and 400 ppm of CO₂ (argon
+/// has no field in [`Gases`]; it neither absorbs nor changes the adiabat
+/// much). The air of [`MOIST_PLATEAU_W_M2`], and of the tests.
+pub(crate) const EARTH_AIR: Gases = Gases {
+    n2: 0.78,
+    co2: 4e-4,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.21,
+};
 
-/// Outgoing radiation, W/m², of Earth's air (0.78 bar N₂, 0.21 bar O₂,
-/// 400 ppm CO₂) over a saturated surface at `surface_k`, under a skin at
-/// `skin_k`, on the plateau's grid.
-pub(super) fn moist_earth_olr_w_m2(surface_k: f64, skin_k: f64) -> f64 {
-    let air = Gases {
-        n2: 0.78,
-        o2: 0.21,
-        co2: 4e-4,
-        ..Gases::default()
+/// The moist plateau, W/m², of the `dry` air over a saturated surface, its
+/// vapour capped by `water_bar`, on `planet`, on the column of `profile`:
+/// the mean outgoing radiation over [`PLATEAU_SURFACES_K`] under the skin
+/// of a body that absorbs it ([`plateau_skin_k`]), the two solved together
+/// by a fixed-point iteration from `start` (the skin moves the plateau by
+/// under 0.1 W/m², so a few steps settle it).
+fn plateau_w_m2(dry: &Gases, water_bar: f64, planet: &Planet, profile: Profile, start: f64) -> f64 {
+    let asymptote = |skin_k: f64| {
+        let sum: f64 = PLATEAU_SURFACES_K
+            .iter()
+            .map(|&t| {
+                column::olr_w_m2(&with_vapour(*dry, t, water_bar), t, skin_k, planet, profile)
+            })
+            .sum();
+        sum / PLATEAU_SURFACES_K.len() as f64
     };
-    let moist = with_vapour(air, surface_k, f64::INFINITY);
-    column::olr_w_m2(&moist, surface_k, skin_k, &Planet::EARTH, Profile::PLATEAU)
+    let mut plateau = start;
+    for _ in 0..8 {
+        let next = asymptote(plateau_skin_k(plateau));
+        let settled = (next - plateau).abs() < 0.01;
+        plateau = next;
+        if settled {
+            break;
+        }
+    }
+    plateau
 }
 
 /// The skin temperature, K, of the surface solves (`T_eq / 2^¼`) for a
@@ -568,31 +580,13 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// [`Sky::Plateau`]: Profile::SATURATED
 fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
     let dry = Gases { h2o: 0.0, ..*gases };
-    let asymptote = |skin_k: f64| {
-        let sum: f64 = PLATEAU_SURFACES_K
-            .iter()
-            .map(|&t| {
-                column::olr_w_m2(
-                    &with_vapour(dry, t, water_bar),
-                    t,
-                    skin_k,
-                    planet,
-                    Profile::SATURATED,
-                )
-            })
-            .sum();
-        sum / PLATEAU_SURFACES_K.len() as f64
-    };
-    let mut plateau = *MOIST_PLATEAU_W_M2;
-    for _ in 0..8 {
-        let next = asymptote(plateau_skin_k(plateau));
-        let settled = (next - plateau).abs() < 0.01;
-        plateau = next;
-        if settled {
-            break;
-        }
-    }
-    plateau
+    plateau_w_m2(
+        &dry,
+        water_bar,
+        planet,
+        Profile::SATURATED,
+        *MOIST_PLATEAU_W_M2,
+    )
 }
 
 /// Mean surface temperature, K, of a body with `gases` (bar) under its
@@ -3892,17 +3886,6 @@ mod tests {
         assert_eq!(surface.climate.liquid, SurfaceLiquid::None, "{surface:?}");
     }
 
-    /// Earth's air without its vapour, bar (argon has no field in
-    /// [`Gases`]; it neither absorbs nor changes the adiabat much).
-    fn earth_air() -> Gases {
-        Gases {
-            n2: 0.78,
-            o2: 0.21,
-            co2: 4e-4,
-            ..Gases::default()
-        }
-    }
-
     #[test]
     fn a_runaway_absorbs_the_moist_plateau_at_its_runaway_limit() {
         // At the runaway limit of Kopparapu et al. for its star, a body
@@ -3999,7 +3982,7 @@ mod tests {
         let skin = plateau_skin_k(plateau);
         for t in PLATEAU_SURFACES_K {
             let olr = column::olr_w_m2(
-                &with_vapour(earth_air(), t, f64::INFINITY),
+                &with_vapour(EARTH_AIR, t, f64::INFINITY),
                 t,
                 skin,
                 &Planet::EARTH,
@@ -4041,7 +4024,7 @@ mod tests {
         // plateau, yet above 240 W/m².
         let olr = |t: f64| {
             column::olr_w_m2(
-                &with_vapour(earth_air(), t, f64::INFINITY),
+                &with_vapour(EARTH_AIR, t, f64::INFINITY),
                 t,
                 0.0,
                 &Planet::EARTH,
@@ -4062,7 +4045,7 @@ mod tests {
     fn the_plateau_does_not_depend_on_nitrogen() {
         let plateau = |n2: f64| {
             column::olr_w_m2(
-                &with_vapour(Gases { n2, ..earth_air() }, 380.0, f64::INFINITY),
+                &with_vapour(Gases { n2, ..EARTH_AIR }, 380.0, f64::INFINITY),
                 380.0,
                 0.0,
                 &Planet::EARTH,
