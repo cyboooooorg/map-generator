@@ -119,6 +119,12 @@
 - [ ] Implement the cloud top and emissivity from ISCCP, cited. Explain replays the same OLR.
 - [ ] Commit: `feat(planet): let water clouds trap heat` (`Refs: #523`).
 
+### Task 7.5b: Falling humidity (spec "Revision after task 7.5")
+
+- [ ] Add the test `earths_clear_sky_olr_is_ceres`: Earth's clear-sky column through the climate is 267 ± 8 W/m². Keep the cloud effect at 28 ± 5 and the plateau at saturation at 282 ± 14.
+- [ ] Implement the Manabe-Wetherald RH profile in the column's moist levels, with the constant cited, and do the same in `wet_balance`'s vapour path. Explain replays it.
+- [ ] Commit: `feat(planet): dry the upper troposphere` (`Refs: #523`).
+
 ### Task 7.6: Near-infrared absorption (spec "Revision after task 7.3")
 
 - [ ] Extend `tools/opacity-table` to build a shortwave table over 2 000-14 300 cm⁻¹, at most 2 MB, documented in OPACITY.md.

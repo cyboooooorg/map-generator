@@ -257,3 +257,19 @@ decisions (2026-11-19) bring both into this lot:
     is 0.42 ± 0.04. Edge S_eff for K and M is within ±15 % of Kopparapu.
 - Both lines move out of the non-goals. The checks and the priority order
   are otherwise unchanged.
+
+## Revision after task 7.5: falling humidity
+
+With the cloud greenhouse right (29 W/m² on Earth), the clear sky
+proved too opaque. Earth's clear-sky OLR was 253 W/m², against about 267
+from CERES clear-sky. The cause was 77 % relative humidity held all the
+way to the tropopause. The user's decision (2026-11-19):
+
+- The troposphere's relative humidity falls with pressure, following
+  Manabe & Wetherald (1967):
+  RH = RH_s · (Q − 0.02) / (1 − 0.02), with Q = p / p_s and RH_s = 0.77.
+  This is the profile of the Kasting and Kopparapu habitable-zone models.
+- The runaway plateau stays computed at saturation, as in Goldblatt
+  et al. 2013 and Kopparapu et al. 2013.
+- Check: Earth's clear-sky OLR is 267 ± 8 W/m², from CERES EBAF clear-sky
+  (Loeb et al. 2018).
