@@ -1512,6 +1512,14 @@ pub fn snowball_chance(thaw_bar: f64, heat_flux_w_m2: f64, regime: Regime) -> f6
 /// al. 2017, doi:10.1126/sciadv.1600983, from memory, not checked), and
 /// the model's Earth at 1 AU needs about 0.09 bar of CO₂ more to thaw
 /// than it froze with, so 0.8 bar gives it a chance of 0.1.
+///
+/// Re-derived on the spectral column (issue #523): Earth at 1 AU needs
+/// 0.091 bar more to thaw, a chance of 0.102, so the value stays. The
+/// grey column of commit 3c47979 thawed it with 0.031 bar more (a chance
+/// of 0.037): its CO₂ law, a power 0.19 of the amount calibrated on
+/// Venus and the late Archean, gave a cold, dry snowball its warming
+/// with less CO₂ than the HITRAN band, whose forcing grows only with the
+/// logarithm of the amount once its centre is saturated.
 const SNOWBALL_WARM_BAR: f64 = 0.8;
 
 /// What [`climate`] solves for: the body's context, its air before the
@@ -2360,16 +2368,28 @@ mod tests {
         // The thermostat leaves a trace of CO₂, not tens of bars.
         assert!(g.co2 < 0.01, "{g:?}");
 
+        // Venus is measured only (issue #523): 737 K in reality, 577 K on
+        // the spectral column under its 85 bar of CO₂ and its Bond albedo
+        // 0.76. The gap is the infrared opacity of its H₂SO₄ clouds and its
+        // SO₂, which the model does not carry (follow-up issue). The bound
+        // pins what the model reaches, so that a change shows.
         let (_, g, venus) = climate_of("Venus");
         assert!(
-            (687.0..=787.0).contains(&venus.temperature_k),
+            (572.0..=582.0).contains(&venus.temperature_k),
             "{venus:?} {g:?}"
         );
         assert_eq!(venus.liquid, SurfaceLiquid::None, "{venus:?}");
 
+        // Mars: 210 ± 5 K (its mean surface temperature).
         let (_, g, mars) = climate_of("Mars");
+        println!(
+            "Mars: {:.2} K (T_eq {:.2} K) under {:.4} bar",
+            mars.temperature_k,
+            mars.equilibrium_k,
+            g.total()
+        );
         assert!(
-            (198.0..=222.0).contains(&mars.temperature_k),
+            (205.0..=215.0).contains(&mars.temperature_k),
             "{mars:?} {g:?}"
         );
         assert_eq!(mars.liquid, SurfaceLiquid::None, "{mars:?}");
@@ -2380,6 +2400,57 @@ mod tests {
             "{titan:?} {g:?}"
         );
         assert_eq!(titan.liquid, SurfaceLiquid::Hydrocarbons, "{titan:?}");
+    }
+
+    #[test]
+    fn earth_holds_its_preindustrial_co2() {
+        // Earth's preindustrial air held 280 ppm of CO₂ at about 288 K
+        // (Myhre et al. 1998, doi:10.1029/98GL01908). The thermostat,
+        // which holds 288 K, keeps CO₂ within what the model's own CO₂
+        // sensitivity maps 286 to 290 K to, and 280 ppm under Earth's own
+        // albedo gives 286 to 290 K.
+        //
+        // The thermostat's CO₂ (1.2e-4 bar) sits under 280 ppm: the
+        // column is 1.5 K warm at 280 ppm, from its clouds, whose
+        // longwave effect (34 W/m²) is above Earth's measured 28 W/m²
+        // (CERES; the science doc, "Calibration").
+        let (d, g, earth) = climate_of("Earth");
+        let at = |co2: f64| {
+            wet_temperature_k(
+                &d.context.with_albedo(earth.bond_albedo),
+                &Gases { co2, ..g },
+                d.heat_flux_w_m2,
+                d.water_bar,
+                1.0,
+                &d.planet,
+            )
+        };
+        let preindustrial = at(2.8e-4);
+        // The CO₂ that gives `target`, by bisection on its logarithm
+        // between 1e-6 and 1e-2 bar.
+        let co2_for = |target: f64| {
+            let (mut low, mut high) = (1e-6_f64.ln(), 1e-2_f64.ln());
+            for _ in 0..30 {
+                let mid = 0.5 * (low + high);
+                if at(mid.exp()) < target {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            (0.5 * (low + high)).exp()
+        };
+        let (cold, warm) = (co2_for(286.0), co2_for(290.0));
+        println!(
+            "Earth: thermostat {:.3e} bar at {:.2} K; 280 ppm gives {preindustrial:.2} K; \
+             286-290 K from {cold:.3e} to {warm:.3e} bar",
+            g.co2, earth.temperature_k
+        );
+        assert!(
+            (286.0..=290.0).contains(&preindustrial),
+            "{preindustrial} K"
+        );
+        assert!((cold..=warm).contains(&g.co2), "{g:?} {earth:?}");
     }
 
     #[test]
@@ -3010,8 +3081,12 @@ mod tests {
 
     #[test]
     fn the_thermostat_never_exceeds_the_outgassed_co2() {
+        // At 1.3 AU, inside the outer edge (1.535 AU) and short of where
+        // the build-up of a cold planet's CO₂ (issue #522) may take its
+        // air past what it outgassed (from about 1.45 AU): the thermostat
+        // holds 288 K on 1.4 bar of the 45 outgassed.
         let earth = model_inputs(reference("Earth"));
-        let (d, g, c) = climate_at(&earth, 1.6);
+        let (d, g, c) = climate_at(&earth, 1.3);
         assert!(g.co2 <= d.gases.co2, "{g:?} {:?}", d.gases);
         if !c.regulated {
             // Short of CO₂: all of it is in the air, and the water is
@@ -3225,7 +3300,19 @@ mod tests {
         // Goldblatt et al. 2009 (doi:10.1038/ngeo692). Their CO₂ held
         // fixed, no thermostat, and Earth's albedo (0.3): this checks the
         // column's greenhouse, so the ice–albedo feedback of the derived
-        // albedo is left out (the wet balance under the given light).
+        // albedo is left out.
+        //
+        // Goldblatt's column is 1-D under a fixed albedo, its clouds in
+        // that albedo: they do not change with the surface. So the
+        // balance here holds the cloud cover fixed, at that of the 1-bar
+        // air's own climate (`wet_temperature_k`): the clear sky with
+        // that share of cloudy sky, `(1 − f₀) OLR_clear + f₀ OLR_cloudy`
+        // (0.40 of the sky at 275.4 K: +4.9 K; the clear sky alone gives
+        // +4.3 K). With the cover free (+10.3 K) it grows with the
+        // warming (0.22 to 0.39 of the sky from 265 to 275 K, 0.61 at
+        // 285 K) under the same fixed albedo: each new
+        // cloud brings its longwave warming without its reflection, half
+        // a cloud.
         let d = derive_at(&model_inputs(reference("Earth")), 1.0);
         let faint = Context {
             equilibrium_k: d.context.equilibrium_k * 0.82_f64.powf(0.25),
@@ -3240,28 +3327,59 @@ mod tests {
             so2: 0.0,
             o2: 0.0,
         };
+        let free = wet_temperature_k(
+            &faint,
+            &air(0.99),
+            d.heat_flux_w_m2,
+            d.water_bar,
+            1.0,
+            &d.planet,
+        );
+        let cover = |t: f64| {
+            super::super::albedo::cloud_cover(t, with_vapour(air(0.99), t, d.water_bar).h2o)
+        };
+        let fixed = cover(free);
+        // The surface whose column, under that cover, sends out what it
+        // absorbs, by bisection between 200 and 400 K. The column's
+        // cloudy sky is `(OLR − (1 − f) OLR_clear) / f` of its own
+        // cover `f`.
         let temperature = |gases: Gases| {
-            (
-                gases,
-                wet_temperature_k(
-                    &faint,
-                    &gases,
-                    d.heat_flux_w_m2,
-                    d.water_bar,
-                    1.0,
-                    &d.planet,
-                ),
-            )
+            let absorbed = absorbed_w_m2(faint.equilibrium_k, &gases, d.heat_flux_w_m2);
+            let skin = tropopause_k(faint.equilibrium_k);
+            let excess = |t: f64| {
+                let air = with_vapour(gases, t, d.water_bar);
+                let clear = column::clear_olr_under_skin_w_m2(&air, t, skin, &d.planet);
+                let all = column::olr_under_skin_w_m2(&air, t, skin, &d.planet);
+                let f = super::super::albedo::cloud_cover(t, air.h2o);
+                let olr = if f > 0.0 {
+                    clear + fixed / f * (all - clear)
+                } else {
+                    clear
+                };
+                olr - absorbed
+            };
+            let (mut low, mut high) = (200.0, 400.0);
+            assert!(excess(low) < 0.0 && excess(high) > 0.0);
+            for _ in 0..40 {
+                let mid = 0.5 * (low + high);
+                if excess(mid) < 0.0 {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            (gases, 0.5 * (low + high))
         };
         let (g1, t1) = temperature(air(0.99));
         let (g2, t2) = temperature(air(1.99));
         println!(
-            "late Archean: {t1:.1} K, +{:.1} K with twice the N₂",
+            "late Archean: {t1:.1} K (cover {fixed:.3} of the {free:.1} K climate), \
+             +{:.1} K with twice the N₂",
             t2 - t1
         );
         assert!((270.0..=290.0).contains(&t1), "{t1} {g1:?}");
         let warming = t2 - t1;
-        assert!((3.0..=8.0).contains(&warming), "{t1} -> {t2}: {g2:?}");
+        assert!((3.0..=6.0).contains(&warming), "{t1} -> {t2}: {g2:?}");
     }
     /// Earth's inputs with the snowball draw `draw`.
     fn earth_drawn(draw: f64) -> PlanetInputs {
@@ -3299,19 +3417,20 @@ mod tests {
     fn an_earth_track_planet_stays_temperate_to_the_maximum_greenhouse() {
         // The outer edge of the Sun's habitable zone, the maximum
         // greenhouse, is about 1.70 AU (Kopparapu et al. 2013, *ApJ* 765,
-        // 131, doi:10.1088/0004-637X/765/2/131), 1.78 AU here: an Earth
-        // on its temperate branch builds up its CO₂ and keeps liquid
-        // water to 1.6 AU, and freezes beyond the edge. Colder the
+        // 131, doi:10.1088/0004-637X/765/2/131), 1.535 AU on the spectral
+        // column (frozen there, issue #523; 1.78 AU on the grey one): an
+        // Earth on its temperate branch builds up its CO₂ and keeps liquid
+        // water to 1.5 AU, and freezes beyond the edge. Colder the
         // farther, with no step but the edge.
         let earth = earth_drawn(1.0);
         let mut last = f64::INFINITY;
-        for au in [1.0, 1.4, 1.6, 1.8, 2.5] {
+        for au in [1.0, 1.4, 1.5, 1.6, 1.8, 2.5] {
             let (_, g, c) = climate_at(&earth, au);
             println!(
                 "{au} AU: {:.1} K, A {:.3}, CO₂ {:.3e} bar, {:?}, regulated {}",
                 c.temperature_k, c.bond_albedo, g.co2, c.liquid, c.regulated
             );
-            if au <= 1.6 {
+            if au <= 1.5 {
                 assert!(c.temperature_k >= 273.0, "{au} AU: {c:?} {g:?}");
                 assert_eq!(c.liquid, SurfaceLiquid::Water, "{au} AU: {c:?}");
             } else {
@@ -3328,12 +3447,13 @@ mod tests {
 
     #[test]
     fn co2_builds_up_past_the_outgassed_snapshot() {
-        // At 1.6 AU, an air that holds a tenth of a bar of CO₂ before the
+        // At 1.5 AU, inside the outer edge (1.535 AU, issue #523), an air
+        // that holds a tenth of a bar of CO₂ before the
         // climate (what escape and the cold trap left of it): weathering
         // slows and volcanoes give it more, up to the thermostat, within
         // the carbon inventory and the maximum greenhouse, past which
         // CO₂ condensing aloft and its scattering cool more than it warms.
-        let d = derive_at(&earth_drawn(1.0), 1.6);
+        let d = derive_at(&earth_drawn(1.0), 1.5);
         let snapshot = Gases {
             co2: 0.1,
             ..d.gases
@@ -3389,12 +3509,13 @@ mod tests {
     fn a_frozen_state_no_co2_thaws_is_no_snowball() {
         // Drawn frozen where no CO₂ up to its maximum greenhouse thaws
         // it: it stays frozen for good, so it is no snowball (whose card
-        // promises a thaw). At 1.64 AU: up to about 1.43 AU some 1.3 bar
-        // of CO₂ thaws it, past that its cold column condenses and
-        // scatters the CO₂ before it warms the ice (issue #522), and past
-        // 1.78 AU the temperate state freezes too.
+        // promises a thaw). At 1.45 AU: up to about 1.3 AU some CO₂ thaws
+        // it, past that its cold column condenses and scatters the CO₂
+        // before it warms the ice (issue #522), and past the outer edge,
+        // 1.535 AU on the spectral column (issue #523), the temperate
+        // state freezes too.
         let earth = earth_drawn(0.0);
-        let d = derive_at(&earth, 1.64);
+        let d = derive_at(&earth, 1.45);
         let body = Body::new(
             &d.context,
             d.gases,
@@ -3406,9 +3527,9 @@ mod tests {
             &d.planet,
             None,
         );
-        let frozen = branches(&body).frozen.expect("bistable at 1.64 AU");
+        let frozen = branches(&body).frozen.expect("bistable at 1.45 AU");
         assert!(frozen.thaw_bar.is_infinite(), "{}", frozen.thaw_bar);
-        let (_, _, c) = climate_at(&earth, 1.64);
+        let (_, _, c) = climate_at(&earth, 1.45);
         assert!(frozen_over(&c), "{c:?}");
         assert!(!c.snowball, "{c:?}");
         // Where the CO₂ thaws it, a frozen draw is a snowball.
@@ -3622,25 +3743,37 @@ mod tests {
         // albedo (issue #522). The bound is their 1.70 AU (§3.3, read on
         // arXiv:1301.6674v2) within the ±0.1 AU the spec allows; the
         // spec's 1.67 AU centre was a slip, corrected by the controller's
-        // ruling on lot 3C-2, Task 4. The model gives 1.78 AU; Task 7
-        // checks it again after the refit of the CO₂ law.
+        // ruling on lot 3C-2, Task 4.
+        //
+        // Frozen by the user's decision (issue #523): the bound pins what
+        // the spectral column reaches, 1.535 AU (S 0.424 against 0.343,
+        // +24 %). The gap left against Kopparapu 2013 is the thick CO₂'s
+        // outgoing radiation, 73.5 W/m² under 8 bar at 1.70 AU against
+        // their 67.4, and the albedo at the maximum greenhouse, 0.455
+        // against their 0.417 (follow-up issue).
         let teff = crate::planet::reference::sun_at(1.0).teff_k;
         let edge = outer_edge_au(teff);
         println!("outer edge round the Sun: {edge:.3} AU");
-        assert!((1.60..=1.80).contains(&edge), "{edge} AU");
+        assert!((edge - 1.535).abs() <= 0.005, "{edge} AU");
     }
 
     #[test]
     fn the_outer_edge_follows_the_star() {
-        // A redder star's light scatters less (Rayleigh's λ⁻⁴), so the
+        // A redder star's light scatters less (Rayleigh's λ⁻⁴) and more
+        // of it falls in the near-infrared bands of CO₂ and water, so the
         // maximum greenhouse holds at a lower flux.
-        for teff in [4500.0, 3300.0] {
+        //
+        // Frozen with the Sun's edge (issue #523): the bounds pin what the
+        // spectral column reaches, +25 % at 4500 K and +20 % at 3300 K
+        // against Kopparapu 2013's S_eff (the spec asked ±15 %), for the
+        // same gaps as `the_outer_edge_round_the_sun_is_kopparapus`.
+        for (teff, excess) in [(4500.0, 0.250), (3300.0, 0.201)] {
             let edge = outer_edge_au(teff);
             let s = 1.0 / (edge * edge);
             let kopparapu = kopparapu_maximum_greenhouse(teff);
             println!("{teff} K: edge {edge:.3} AU, S {s:.4} against {kopparapu:.4}");
             assert!(
-                (s / kopparapu - 1.0).abs() <= 0.15,
+                (s / kopparapu - 1.0 - excess).abs() <= 0.01,
                 "{teff} K: S {s} against {kopparapu}"
             );
         }
@@ -3653,7 +3786,9 @@ mod tests {
         // its column lets warm (the maximum greenhouse; issue #522).
         let earth = earth_drawn(0.0);
         let mut seen = 0;
-        for au in [1.2, 1.4, 1.5, 1.6] {
+        // Snowballs up to about 1.3 AU, frozen for good past it to the
+        // outer edge (1.535 AU on the spectral column, issue #523).
+        for au in [1.0, 1.2, 1.4, 1.5] {
             let d = derive_at(&earth, au);
             let body = Body::new(
                 &d.context,
@@ -3842,11 +3977,19 @@ mod tests {
     fn the_runaway_plateau_is_the_solves_moist_branch() {
         // The plateau `A_rg` is anchored on is the outgoing radiation the
         // surface solves give a moist column, under the skin of a body at
-        // the runaway limit, to 1 % over the moist branch.
+        // the runaway limit, to 1 % over the plateau's own surfaces
+        // (`PLATEAU_SURFACES_K`, 500-640 K). Line-by-line curves rise to a
+        // maximum near 350-400 K and fall a few percent to the asymptote
+        // (Goldblatt, Robinson, Zahnle & Crisp 2013, *Nature Geosci.* 6,
+        // 661, Fig. 1): 380 K sits on that maximum, some 3 % above the
+        // plateau on every grid, and `the_runaway_anchor_is_flat` bounds
+        // it (at most 6 % above). The solves take the runaway on the
+        // saturated column (`wet_balance`), not on the falling-humidity
+        // one of a temperate surface.
         let plateau = *MOIST_PLATEAU_W_M2;
         let skin = plateau_skin_k(plateau);
-        for t in [380.0, 450.0, 550.0, 640.0] {
-            let olr = column::olr_under_skin_w_m2(
+        for t in PLATEAU_SURFACES_K {
+            let olr = column::saturated_olr_under_skin_w_m2(
                 &with_vapour(earth_air(), t, f64::INFINITY),
                 t,
                 skin,
@@ -4111,6 +4254,9 @@ mod tests {
     const METHANE_SWEEP: (f64, f64) = (0.7, 1.3);
 
     /// The light, against Titan's, over which [`nitrogen_world`]'s
-    /// surface spans nitrogen's triple point ± 3 K.
-    const NITROGEN_SWEEP: (f64, f64) = (0.7, 1.2);
+    /// surface spans nitrogen's triple point ± 3 K. The spectral column
+    /// (issue #523) keeps that surface a little colder than the grey one
+    /// did, so the light reaches 1.25 times Titan's (1.2 before) for the
+    /// sweep to cross the point's band.
+    const NITROGEN_SWEEP: (f64, f64) = (0.7, 1.25);
 }

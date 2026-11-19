@@ -1668,12 +1668,13 @@ mod tests {
 
     #[test]
     fn a_planet_at_its_maximum_greenhouse_says_its_co2_builds_up() {
-        // Just inside the outer edge, past where the thermostat holds:
-        // its CO₂ is the maximum greenhouse, which CO₂ condensing aloft
-        // sets well short of its carbon (issue #522). The band is narrow,
-        // so it is looked for.
+        // Just inside the outer edge (1.535 AU on the spectral column,
+        // issue #523), past where the thermostat holds: its CO₂ is the
+        // maximum greenhouse, which CO₂ condensing aloft sets well short
+        // of its carbon (issue #522). The band is narrow, so it is looked
+        // for.
         let (context, model) = (0..=60)
-            .map(|i| earth_at(1.70 + 0.002 * f64::from(i), false))
+            .map(|i| earth_at(1.48 + 0.002 * f64::from(i), false))
             .find(|(_, m)| {
                 let c = m.surface.as_ref().unwrap().climate;
                 !c.regulated && c.liquid == SurfaceLiquid::Water

@@ -1375,6 +1375,9 @@ mod tests {
     /// there, and its Rayleigh scattering followed the Sun's 5772 K
     /// instead of 5780 K (issue #522), 0.577 539 497 011 before a CO₂
     /// molecule scattered 2.5 times as much light as an N₂ one instead
-    /// of 2.80 (issue #523).
-    const SNOWBALL_ALBEDO: f64 = 0.576_530_988_055;
+    /// of 2.80 (issue #523), 0.576 530 988 055 on the grey longwave
+    /// column, before the spectral one (issue #523: the thermostat holds
+    /// the snowball's CO₂ at what the HITRAN band needs to thaw it, and
+    /// that CO₂ absorbs the near infrared its ice reflects).
+    const SNOWBALL_ALBEDO: f64 = 0.545_695_039_691;
 }

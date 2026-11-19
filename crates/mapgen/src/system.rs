@@ -6920,10 +6920,14 @@ mod lone_tests {
     /// 68 K and freezes its methane (an ice world, was a hydrocarbon
     /// world). Again when a giant's tides decide which drawn moons lock
     /// in resonance and place them at the 2:1 (seed 1's `f-6` to `f-9`
-    /// a little further out, under fewer impacts).
+    /// a little further out, under fewer impacts). Again when the
+    /// greenhouse came from a spectral column (issue #523): seed 2's `c`,
+    /// a hot CO₂ world at 0.14 AU, stays under the 1400 K of a lava world
+    /// (a runaway greenhouse, was a lava world), as Venus cools from 739
+    /// to 577 K.
     const MAIN_SIGNATURES: [&str; 4] = [
         "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0006:0.0822:false d-6:rocky:0.0012:0.0822:false d-7:rocky:0.0020:0.0822:false e:rocky:1.0116:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0031:1.0702:false f-7:ice-world:0.0049:0.8102:false f-8:ice-world:0.0077:0.6464:false f-9:ice-world:0.0123:0.5432:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
-        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0005:0.0365:false d-4:rocky:0.0008:0.0365:false d-5:rocky:0.0013:0.0365:false d-6:rocky:0.0020:0.0365:false e:rocky:1.0116:0.0365:true f:ice-world:4.9333:0.0365:true",
+        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:runaway-greenhouse:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0005:0.0365:false d-4:rocky:0.0008:0.0365:false d-5:rocky:0.0013:0.0365:false d-6:rocky:0.0020:0.0365:false e:rocky:1.0116:0.0365:true f:ice-world:4.9333:0.0365:true",
         "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:1.0116:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
         "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:1.0116:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:ice-world:13.6131:0.0350:true",
     ];
