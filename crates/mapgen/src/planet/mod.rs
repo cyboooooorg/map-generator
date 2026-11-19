@@ -24,7 +24,7 @@
 //! [`atmosphere::photochemistry`] derive its air, as [`Gases`], from what
 //! it outgasses, what escape leaves, what its star's ultraviolet destroys
 //! and what its cold freezes out.
-//! [`climate::climate`] sets its surface temperature through a grey
+//! [`climate::climate`] sets its surface temperature through a spectral
 //! radiative–convective column (`column`) and the carbonate thermostat,
 //! under the Bond albedo [`albedo::bond_albedo`] derives from what covers
 //! it ([`albedo::cover`]), the two solved together, and the
@@ -1376,8 +1376,8 @@ mod tests {
     /// there, and its Rayleigh scattering followed the Sun's 5772 K
     /// instead of 5780 K (issue #522), 0.577 539 497 011 before a CO₂
     /// molecule scattered 2.5 times as much light as an N₂ one instead
-    /// of 2.80 (issue #523), 0.576 530 988 055 on the grey longwave
-    /// column, before the spectral one (issue #523: the thermostat holds
+    /// of 2.80 (issue #523), 0.576 530 988 055 before the spectral
+    /// longwave column (issue #523: the thermostat holds
     /// the snowball's CO₂ at what the HITRAN band needs to thaw it, and
     /// that CO₂ absorbs the near infrared its ice reflects).
     const SNOWBALL_ALBEDO: f64 = 0.545_695_039_691;

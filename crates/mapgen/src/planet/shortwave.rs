@@ -94,7 +94,7 @@ const THIN: f64 = 0.1;
 struct LevelAbsorption {
     co2: Vec<f32>,
     water: Vec<f32>,
-    grey: Vec<f32>,
+    smooth: Vec<f32>,
 }
 
 impl LevelAbsorption {
@@ -104,7 +104,7 @@ impl LevelAbsorption {
         let mut out = Self {
             co2: vec![0.0; m],
             water: vec![0.0; m],
-            grey: vec![0.0; table.bins],
+            smooth: vec![0.0; table.bins],
         };
         let p = level.pressure_bar();
         let t = level.temperature_k;
@@ -136,8 +136,8 @@ impl LevelAbsorption {
             (WATER_FOREIGN_SET, WATER_SELF_SET),
             &mut out.water,
         );
-        for (b, grey) in out.grey.iter_mut().enumerate() {
-            *grey = (water_continuum(table, b, level)
+        for (b, smooth) in out.smooth.iter_mut().enumerate() {
+            *smooth = (water_continuum(table, b, level)
                 + co2_continuum(table, b, level)
                 + co2_pairs(table, b, level)) as f32;
         }
@@ -475,7 +475,7 @@ impl Paths {
         let first_absorbed = bands.len() - table.bins;
         let mut co2 = Points::new(pieces.len());
         let mut water = Points::new(pieces.len());
-        let mut grey = vec![0.0; pieces.len()];
+        let mut smooth = vec![0.0; pieces.len()];
         let stacks = |depths: &dyn Fn(usize) -> f64, scale: f64| -> (Stack, Stack) {
             let (mut above, mut below) = (top, Stack::EMPTY);
             for (i, piece) in pieces.iter().enumerate() {
@@ -502,7 +502,7 @@ impl Paths {
             let bin = bands.len() - 1 - i;
             for (k, piece) in pieces.iter().enumerate() {
                 let (lower, upper) = (&absorption[piece.lower], &absorption[piece.lower + 1]);
-                grey[k] = piece_depth_fast(piece, lower.grey[bin], upper.grey[bin]);
+                smooth[k] = piece_depth_fast(piece, lower.smooth[bin], upper.smooth[bin]);
                 for g in 0..G {
                     let at = bin * G + g;
                     co2.depth[g][k] = piece_depth_fast(piece, lower.co2[at], upper.co2[at]);
@@ -513,7 +513,7 @@ impl Paths {
             water.merge(&table.weights);
             for (wc, dc) in co2.points() {
                 for (ww, dw) in water.points() {
-                    let (above, below) = stacks(&|k| dc[k] + dw[k] + grey[k], scale);
+                    let (above, below) = stacks(&|k| dc[k] + dw[k] + smooth[k], scale);
                     paths.push((weight * wc * ww, above, below));
                 }
             }

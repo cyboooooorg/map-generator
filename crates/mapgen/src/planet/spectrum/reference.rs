@@ -44,7 +44,7 @@ pub(crate) struct BinAbsorption {
     /// Water's lines at each g-point.
     pub(crate) water: [f64; G],
     /// The continua of water and CO₂, CO₂–CO₂ pairs and methane.
-    pub(crate) grey: f64,
+    pub(crate) smooth: f64,
 }
 
 impl BinAbsorption {
@@ -52,7 +52,7 @@ impl BinAbsorption {
     /// absorption (an optical depth per `ln p` times a span of `ln p`),
     /// along the slant of [`DIFFUSIVITY`]: CO₂'s and water's
     /// transmissions, each summed over its g-points with [`weights`],
-    /// multiply (random overlap), and the grey part's with them.
+    /// multiply (random overlap), and the smooth part's with them.
     pub(crate) fn transmission(&self, amount: f64) -> f64 {
         let w = weights();
         let gas = |k: &[f64; G]| -> f64 {
@@ -61,7 +61,7 @@ impl BinAbsorption {
                 .map(|(k, w)| w * (-DIFFUSIVITY * k * amount).exp())
                 .sum()
         };
-        gas(&self.co2) * gas(&self.water) * (-DIFFUSIVITY * self.grey * amount).exp()
+        gas(&self.co2) * gas(&self.water) * (-DIFFUSIVITY * self.smooth * amount).exp()
     }
 }
 
@@ -76,7 +76,7 @@ pub(crate) fn absorption_per_ln_p(i: usize, level: &Level) -> BinAbsorption {
 /// Optical depth per `ln p` between `lo` and `hi` cm⁻¹ of what is smooth
 /// across a bin: the continua of water and CO₂ and the CO₂–CO₂ pairs at the bin's centre,
 /// and methane on the share of the bin it covers.
-fn grey_between(lo: f64, hi: f64, level: &Level) -> f64 {
+fn smooth_between(lo: f64, hi: f64, level: &Level) -> f64 {
     let p = level.pressure_bar();
     let t = level.temperature_k;
     if p <= 0.0 || t <= 0.0 || level.gravity_m_s2 <= 0.0 {
@@ -145,7 +145,7 @@ pub(crate) struct Spectrum {
     /// Water's lines, per band and g-point.
     pub(crate) water: [[f64; G]; BANDS],
     /// The continua of water and CO₂, CO₂–CO₂ pairs and methane, per band.
-    pub(crate) grey: [f64; BANDS],
+    pub(crate) smooth: [f64; BANDS],
 }
 
 impl Default for Spectrum {
@@ -153,7 +153,7 @@ impl Default for Spectrum {
         Self {
             co2: [[0.0; G]; BANDS],
             water: [[0.0; G]; BANDS],
-            grey: [0.0; BANDS],
+            smooth: [0.0; BANDS],
         }
     }
 }
@@ -164,16 +164,16 @@ impl Default for Spectrum {
 pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
     out.co2[..BINS].fill([0.0; G]);
     out.water[..BINS].fill([0.0; G]);
-    out.grey[..BINS].fill(0.0);
+    out.smooth[..BINS].fill(0.0);
     let p = level.pressure_bar();
     let t = level.temperature_k;
     if p > 0.0 && t > 0.0 && level.gravity_m_s2 > 0.0 {
         lines_spectrum(level, out);
-        grey_spectrum(level, &mut out.grey);
+        smooth_spectrum(level, &mut out.smooth);
     }
     out.co2[TAIL] = out.co2[BINS - 1];
     out.water[TAIL] = out.water[BINS - 1];
-    out.grey[TAIL] = out.grey[BINS - 1];
+    out.smooth[TAIL] = out.smooth[BINS - 1];
 }
 
 /// CO₂'s and water's lines of every bin at `level`, from [`OPACITY`] as
@@ -219,9 +219,9 @@ fn lines_spectrum(level: &Level, out: &mut Spectrum) {
     }
 }
 
-/// [`grey_between`] of every bin at `level` into `out`.
-fn grey_spectrum(level: &Level, out: &mut [f64; BANDS]) {
-    let rates = GreyRates::of(level);
+/// [`smooth_between`] of every bin at `level` into `out`.
+fn smooth_spectrum(level: &Level, out: &mut [f64; BANDS]) {
+    let rates = SmoothRates::of(level);
     for (i, o) in out[..BINS].iter_mut().enumerate() {
         *o = rates.bin(i);
     }
@@ -240,7 +240,7 @@ pub(crate) fn depth_above(level: &Level, rate: &Spectrum, out: &mut Spectrum) {
         out.co2[i] = rate.co2[i].map(|k| 0.5 * k);
         out.water[i] = rate.water[i].map(|k| 0.5 * k);
         let share = table.methane_share[i.min(BINS - 1)];
-        out.grey[i] = 0.5 * rate.grey[i] + share * (total - 0.5 * methane_rate);
+        out.smooth[i] = 0.5 * rate.smooth[i] + share * (total - 0.5 * methane_rate);
     }
 }
 
@@ -269,7 +269,7 @@ impl Table {
     }
 
     /// The absorption of `bin` at `level` (see [`absorption_per_ln_p`]),
-    /// its grey part taken at the bin's centre.
+    /// its smooth part taken at the bin's centre.
     pub(crate) fn bin_absorption(&self, bin: usize, level: &Level) -> BinAbsorption {
         let mut out = BinAbsorption::default();
         let p = level.pressure_bar();
@@ -306,13 +306,13 @@ impl Table {
             }
         }
         let lo = bin as f64 * self.bin_width_cm;
-        out.grey = grey_between(lo, lo + self.bin_width_cm, level);
+        out.smooth = smooth_between(lo, lo + self.bin_width_cm, level);
         out
     }
 }
 
-impl super::GreyRates {
-    /// The grey absorption per `ln p` of bin `i`.
+impl super::SmoothRates {
+    /// The smooth absorption per `ln p` of bin `i`.
     fn bin(&self, i: usize) -> f64 {
         let table = &*BIN_TABLE;
         let mut o = 0.0;

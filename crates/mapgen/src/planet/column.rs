@@ -872,14 +872,14 @@ impl Column<'_> {
 
 /// Scratch of [`radiate`]: the absorption at a layer's two levels, the
 /// slant optical depth to space of each g-point of CO₂ and water and of
-/// the grey part, and their transmissions. Kept per thread: it is some
+/// the smooth part, and their transmissions. Kept per thread: it is some
 /// 120 kB.
 struct Scratch {
     top: FastLevel,
     bottom: FastLevel,
     co2: Depths,
     water: Depths,
-    grey: [f32; BINS],
+    smooth: [f32; BINS],
 }
 
 /// A gas's slant optical depth to space at each bin and g-point, and its
@@ -941,7 +941,7 @@ thread_local! {
         bottom: FastLevel::default(),
         co2: Depths::new(),
         water: Depths::new(),
-        grey: [0.0; BINS],
+        smooth: [0.0; BINS],
     }));
 }
 
@@ -972,7 +972,7 @@ fn summed_bins(temperature: &[f64]) -> usize {
 /// top down: the layer-mean Planck flux of the band times what the layer
 /// takes of the transmission to space. Within a bin each g-point of CO₂
 /// and of water keeps its own transmission; the bin's is the product of
-/// the gases' weighted sums and the grey part's (random overlap, see
+/// the gases' weighted sums and the smooth part's (random overlap, see
 /// `spectrum`). The tail band takes the last bin's absorption, so its
 /// transmission is that bin's. A layer's depth is the logarithmic mean of
 /// the opacities at its two levels times its span. Above the top the air
@@ -1005,7 +1005,7 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         bottom,
         co2,
         water,
-        grey,
+        smooth,
     } = scratch;
     let n = column.top();
     let weights = spectrum::weights().map(|w| w as f32);
@@ -1029,11 +1029,11 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     if has_water {
         water.above(&top.water, m);
     }
-    for (b, (depth, rate)) in grey.iter_mut().zip(&top.grey).take(bins).enumerate() {
-        *depth = (DIFFUSIVITY * spectrum::grey_above(&top_level, f64::from(*rate), b)) as f32;
+    for (b, (depth, rate)) in smooth.iter_mut().zip(&top.smooth).take(bins).enumerate() {
+        *depth = (DIFFUSIVITY * spectrum::smooth_above(&top_level, f64::from(*rate), b)) as f32;
     }
-    let through = |b: usize, grey: &[f32; BINS], co2: &Depths, water: &Depths| {
-        let mut through = fast_math::exp(-grey[b]);
+    let through = |b: usize, smooth: &[f32; BINS], co2: &Depths, water: &Depths| {
+        let mut through = fast_math::exp(-smooth[b]);
         if has_co2 {
             through *= co2.bin(&weights, b);
         }
@@ -1045,7 +1045,7 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
     // The tail is summed with the last bin, when every bin is.
     let tail = bins == BINS;
     for b in 0..bins {
-        seen[b] = through(b, grey, co2, water);
+        seen[b] = through(b, smooth, co2, water);
         out[b] = planck[b] * (1.0 - seen[b]);
     }
     if tail {
@@ -1066,9 +1066,9 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         spectrum::planck_spectrum_upto(column.temperature[i], bins, &mut planck_below);
         let slant = (DIFFUSIVITY * column.span(i)) as f32;
         deepen(
-            &mut grey[..bins],
-            (&top.grey[..bins], &top.grey_ln[..bins]),
-            (&bottom.grey[..bins], &bottom.grey_ln[..bins]),
+            &mut smooth[..bins],
+            (&top.smooth[..bins], &top.smooth_ln[..bins]),
+            (&bottom.smooth[..bins], &bottom.smooth_ln[..bins]),
             slant,
         );
         if has_co2 {
@@ -1090,7 +1090,7 @@ fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
         let mut open = false;
         let last_seen = seen[BINS - 1];
         for b in 0..bins {
-            let below = through(b, grey, co2, water);
+            let below = through(b, smooth, co2, water);
             out[b] += 0.5 * (planck[b] + planck_below[b]) * (seen[b] - below);
             seen[b] = below;
             open |= below > OPAQUE;
@@ -1199,7 +1199,7 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
     let mut rate = Spectrum::default();
     let mut rate_below = Spectrum::default();
     let mut through_g = Spectrum::default();
-    let Spectrum { co2, water, grey } = &mut through_g;
+    let Spectrum { co2, water, smooth } = &mut through_g;
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let mut seen = [0.0; BANDS];
     absorption_spectrum(&column.level(n), &mut rate);
@@ -1207,8 +1207,8 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
     planck_spectrum(column.temperature[n], &mut planck);
     let mut out = [0.0; BANDS];
     for k in 0..BANDS {
-        let mut through = (-DIFFUSIVITY * rate_below.grey[k]).exp();
-        grey[k] = through;
+        let mut through = (-DIFFUSIVITY * rate_below.smooth[k]).exp();
+        smooth[k] = through;
         if has_co2 {
             co2[k] = rate_below.co2[k].map(|d| (-DIFFUSIVITY * d).exp());
             through *= dot(w, &co2[k]);
@@ -1227,8 +1227,8 @@ fn radiate_reference(column: &Column) -> [f64; BANDS] {
         planck_spectrum(column.temperature[i], &mut planck_below);
         let h = column.span(i);
         for k in 0..BANDS {
-            grey[k] *= (-DIFFUSIVITY * log_mean(rate.grey[k], rate_below.grey[k]) * h).exp();
-            let mut below = grey[k];
+            smooth[k] *= (-DIFFUSIVITY * log_mean(rate.smooth[k], rate_below.smooth[k]) * h).exp();
+            let mut below = smooth[k];
             if has_co2 {
                 below *= layer(w, &mut co2[k], &rate.co2[k], &rate_below.co2[k], h);
             }

@@ -443,7 +443,7 @@ mod tests {
     fn a_water_topped_body_under_thick_nitrogen_keeps_its_ocean() {
         // 1 Earth mass, 1 % water (some 40 oceans) at 1 AU, below the
         // runaway limit of the insolation, under the 20 bar of nitrogen
-        // its ice brings. The old grey core carried its vapour feedback
+        // its ice brings. The old Eddington core carried its vapour feedback
         // past 647 K and boiled it (issue #441); the moist limit does not
         // depend on the nitrogen, and the column keeps the ocean warm but
         // liquid.
@@ -467,7 +467,7 @@ mod tests {
         // 0.2 M⊕ with 5 % of water at 0.8 and 0.9 AU, inside the runaway
         // limit of the insolation: every kg of water a runaway keeps is
         // steam in its air, none of it neither vapour nor liquid. (At 1.0
-        // and 1.2 AU the old grey core boiled them, issue #441.)
+        // and 1.2 AU the old Eddington core boiled them, issue #441.)
         let mut runaways = 0;
         for (water, orbit_au) in [(0.05, 0.8), (0.05, 0.9)] {
             let inputs = PlanetInputs {
@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn a_cool_small_planet_does_not_boil() {
         // 0.2 M⊕ at 1.5 AU with 0.1 % of water (0.85 Earth oceans). The
-        // old grey core carried its vapour feedback past 647 K, then
+        // old Eddington core carried its vapour feedback past 647 K, then
         // refused the boil because its steam escaped to nothing and the
         // dry re-run sat at 293 K. With a moist limit its light (some
         // 107 W/m²) is far under the plateau: a wet balance exists, it

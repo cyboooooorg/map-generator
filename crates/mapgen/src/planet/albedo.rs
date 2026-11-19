@@ -306,8 +306,8 @@ pub(crate) const EARTH_CLOUD_COVER: f64 = 0.67;
 /// doi:10.1002/2014RG000449), with its ocean, land, ice, Rayleigh
 /// scattering and the near-infrared absorption of its water vapour and
 /// CO₂ ([`super::shortwave`]), as the model derives them at 288 K (0.19
-/// while the air absorbed no light; 0.297 while a grey vapour
-/// absorbed below and above the clouds alike, before the clouds sat at
+/// while the air absorbed no light; 0.297 while the vapour's
+/// absorption was one law taken below and above the clouds alike, before the clouds sat at
 /// their tops inside the column, issue #523). Lower than a thick cloud's
 /// 0.5 to 0.7: Earth's cloud cover counts thin clouds too.
 const CLOUD_ALBEDO: f64 = 0.252;

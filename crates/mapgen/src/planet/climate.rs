@@ -140,8 +140,8 @@ pub fn emissivity(frost: &Gases) -> f64 {
 /// 5.65 % near Titan's surface, Niemann et al. 2005,
 /// doi:10.1038/nature04122) over seeds 1 to 40 of `archetype_census`,
 /// under the vapour of its seas, on the spectral column of
-/// [`super::column`] (issue #523). 14.3 on the grey column, which left
-/// `titan-like` at 95.1 K and 6.6 % of methane on the spectral one
+/// [`super::column`] (issue #523). 14.3 before it, which left
+/// `titan-like` at 95.1 K and 6.6 % of methane on the spectral column
 /// (7.75 under the weaker, unanchored anti-greenhouse of issue #530,
 /// which put `titan-like` at 91.0 to 93.3 K; 6.0 before any
 /// anti-greenhouse; 3.3 before its saturation, issue #443; 3.4 on the
@@ -315,8 +315,8 @@ const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
 /// plateau reaching a constant of about 1800 K as the steam thickens to
 /// 295 bar (Goldblatt 2015, *Astrobiology* 15, 362,
 /// doi:10.1089/ast.2014.1268, read in arXiv 1503.04835, puts the rise
-/// past 1500 K, through the 4 µm window). Calibration on the grey column
-/// of issue #441, which had no window: the dry adiabat of a deeper steam
+/// past 1500 K, through the 4 µm window). Calibration on the column of
+/// issue #441, which had no window: the dry adiabat of a deeper steam
 /// column reached its emitting levels ever later (about 2600 K under 300
 /// bar, 20 000 K under the 1.6e5 bar of a 30 %-water Earth), and the cap
 /// put the end of its plateau at 1800 K.
@@ -1516,12 +1516,9 @@ pub fn snowball_chance(thaw_bar: f64, heat_flux_w_m2: f64, regime: Regime) -> f6
 /// than it froze with, so 0.8 bar gives it a chance of 0.1.
 ///
 /// Re-derived on the spectral column (issue #523): Earth at 1 AU needs
-/// 0.091 bar more to thaw, a chance of 0.102, so the value stays. The
-/// grey column of commit 3c47979 thawed it with 0.031 bar more (a chance
-/// of 0.037): its CO₂ law, a power 0.19 of the amount calibrated on
-/// Venus and the late Archean, gave a cold, dry snowball its warming
-/// with less CO₂ than the HITRAN band, whose forcing grows only with the
-/// logarithm of the amount once its centre is saturated.
+/// 0.091 bar more to thaw, a chance of 0.102, so the value stays: the
+/// HITRAN band's forcing grows only with the logarithm of the amount once
+/// its centre is saturated.
 const SNOWBALL_WARM_BAR: f64 = 0.8;
 
 /// What [`climate`] solves for: the body's context, its air before the
@@ -3032,7 +3029,7 @@ mod tests {
         let c = s.climate;
         // The planet the issue names: T_eq about 114.5 K, 4.4 bar of N₂
         // and 0.9 bar of methane over its seas once the rest condensed
-        // (1.8 bar on the grey column, issue #523; 3.3 bar before the
+        // (1.8 bar before the spectral column, issue #523; 3.3 bar before the
         // anchored anti-greenhouse cooled it, issue #563).
         assert!((110.0..120.0).contains(&c.equilibrium_k), "{c:?}");
         assert!((4.0..5.0).contains(&s.gases.n2), "{:?}", s.gases);
@@ -3421,7 +3418,7 @@ mod tests {
         // The outer edge of the Sun's habitable zone, the maximum
         // greenhouse, is about 1.70 AU (Kopparapu et al. 2013, *ApJ* 765,
         // 131, doi:10.1088/0004-637X/765/2/131), 1.535 AU on the spectral
-        // column (frozen there, issue #523; 1.78 AU on the grey one): an
+        // column (frozen there, issue #523): an
         // Earth on its temperate branch builds up its CO₂ and keeps liquid
         // water to 1.5 AU, and freezes beyond the edge. Colder the
         // farther, with no step but the edge.
@@ -4073,7 +4070,7 @@ mod tests {
     #[test]
     fn a_thick_nitrogen_earth_stays_temperate() {
         // Issue #441: at 1 AU with modern CO₂, 2 bar of N₂ tipped the old
-        // grey core over the runaway; the moist limit does not depend on
+        // Eddington core over the runaway; the moist limit does not depend on
         // the nitrogen, so even 11 bar keep a balance.
         let d = derive_at(&model_inputs(reference("Earth")), 1.0);
         for n2 in [2.0, 5.0, 11.0] {
@@ -4098,9 +4095,9 @@ mod tests {
     }
 
     #[test]
-    fn thin_steam_follows_the_plateau_past_the_old_grey_law() {
-        // 10 bar of pure steam: the old grey law sent out the limit from
-        // about 680 K; on the column it is still on the plateau there.
+    fn thin_steam_stays_on_the_plateau_at_680_k() {
+        // 10 bar of pure steam: the column is still on the plateau at
+        // 680 K.
         let steam = Gases {
             h2o: 10.0,
             ..Gases::default()
@@ -4260,8 +4257,8 @@ mod tests {
 
     /// The light, against Titan's, over which [`nitrogen_world`]'s
     /// surface spans nitrogen's triple point ± 3 K. The spectral column
-    /// (issue #523) keeps that surface a little colder than the grey one
-    /// did, so the light reaches 1.25 times Titan's (1.2 before) for the
+    /// (issue #523) keeps that surface a little colder than the column
+    /// before it did, so the light reaches 1.25 times Titan's (1.2 before) for the
     /// sweep to cross the point's band.
     const NITROGEN_SWEEP: (f64, f64) = (0.7, 1.25);
 }

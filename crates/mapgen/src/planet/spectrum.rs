@@ -2,7 +2,7 @@
 //! bin of wavenumber, and how much a black body emits there (issue #523,
 //! the longwave band model of lot 3C-2).
 //!
-//! A grey optical depth closes the whole spectrum at once, while CO₂ and
+//! One optical depth for the whole spectrum would close it at once, while CO₂ and
 //! water absorb in bands: the opaque part of CO₂'s 15 µm band widens with
 //! the logarithm of its amount, which is why its forcing is logarithmic
 //! (Romps, Seeley & Edman 2022, *J. Climate* 35, 4027,
@@ -672,8 +672,8 @@ pub(crate) const BANDS: usize = BINS + 1;
 /// one does.
 pub(crate) const TAIL: usize = BINS;
 
-/// What the grey absorption of every bin needs that does not depend on
-/// the level, at the bin's centre (see [`GreyRates`]).
+/// What the smooth absorption of every bin needs that does not depend on
+/// the level, at the bin's centre (see [`SmoothRates`]).
 struct BinTable {
     /// Centre, cm⁻¹.
     centre_cm: [f64; BINS],
@@ -689,7 +689,7 @@ struct BinTable {
 /// [`BinTable::continuum`] in single precision. The self and foreign
 /// coefficients are scaled by 1e20: a cm² per molecule of 1e-27 is
 /// under the least normal `f32` times the vapour's molecules; the factor
-/// comes back in [`GreyRates::fast`]'s `scale`.
+/// comes back in [`SmoothRates::fast`]'s `scale`.
 static FAST_CONTINUUM: LazyLock<[(f32, f32, f32); BINS]> = LazyLock::new(|| {
     BIN_TABLE
         .continuum
@@ -729,10 +729,10 @@ static BIN_TABLE: LazyLock<BinTable> = LazyLock::new(|| {
     table
 });
 
-/// What the grey absorption of a bin needs at one level, taken once for every bin:
+/// What the smooth absorption of a bin needs at one level, taken once for every bin:
 /// the continua of water and CO₂, the CO₂ pairs and methane, each when the level
 /// holds it.
-struct GreyRates {
+struct SmoothRates {
     /// The level's temperature, K.
     t: f64,
     /// Water's continuum: the vapour, bar; `ln (296 K / T)`; the other
@@ -748,7 +748,7 @@ struct GreyRates {
     co2_continuum: Option<(f64, f64)>,
 }
 
-impl GreyRates {
+impl SmoothRates {
     fn of(level: &Level) -> Self {
         let p = level.pressure_bar();
         let t = level.temperature_k;
@@ -795,7 +795,7 @@ impl GreyRates {
         }
     }
 
-    /// [`GreyRates::bin`] of every bin into `out`, in single precision
+    /// [`SmoothRates::bin`] of every bin into `out`, in single precision
     /// with [`super::fast_math`]'s `exp` (`tanh y = 1 − 2 / (e^{2y} + 1)`).
     fn fast(&self, out: &mut [f32]) {
         use super::fast_math::exp;
@@ -853,7 +853,7 @@ pub(crate) const POINTS: usize = BINS * G;
 
 /// The absorption of one level in the column's fast layout (see
 /// [`fast_level`]): CO₂'s and water's lines at each bin and g-point
-/// (index `bin · G + g`) and the grey part of each bin, per unit `ln p`,
+/// (index `bin · G + g`) and the smooth part of each bin, per unit `ln p`,
 /// and their logarithms, in single precision.
 #[derive(Clone)]
 pub(crate) struct FastLevel {
@@ -865,8 +865,8 @@ pub(crate) struct FastLevel {
     pub(crate) water_ln: [f32; POINTS],
     /// The continua of water and CO₂, CO₂–CO₂ pairs and methane, per bin, and their
     /// logarithms.
-    pub(crate) grey: [f32; BINS],
-    pub(crate) grey_ln: [f32; BINS],
+    pub(crate) smooth: [f32; BINS],
+    pub(crate) smooth_ln: [f32; BINS],
 }
 
 impl Default for FastLevel {
@@ -876,8 +876,8 @@ impl Default for FastLevel {
             co2_ln: [0.0; POINTS],
             water: [0.0; POINTS],
             water_ln: [0.0; POINTS],
-            grey: [0.0; BINS],
-            grey_ln: [0.0; BINS],
+            smooth: [0.0; BINS],
+            smooth_ln: [0.0; BINS],
         }
     }
 }
@@ -933,11 +933,11 @@ pub(crate) fn fast_level(level: &Level, bins: usize, out: &mut FastLevel) {
         out.water[..m].fill(0.0);
     }
     if valid {
-        GreyRates::of(level).fast(&mut out.grey[..bins]);
+        SmoothRates::of(level).fast(&mut out.smooth[..bins]);
     } else {
-        out.grey[..bins].fill(0.0);
+        out.smooth[..bins].fill(0.0);
     }
-    ln_all(&out.grey[..bins], &mut out.grey_ln[..bins]);
+    ln_all(&out.smooth[..bins], &mut out.smooth_ln[..bins]);
 }
 
 /// `ln x` of every `x`, into `out`, in a function of its own so that it
@@ -950,11 +950,11 @@ fn ln_all(x: &[f32], out: &mut [f32]) {
 }
 
 /// Vertical optical depth per bin above `level`, the top of a column, of
-/// what is grey: `reference::depth_above`'s, from the level's grey rate `grey` in
+/// what is smooth: `reference::depth_above`'s, from the level's smooth rate `smooth` in
 /// bin `bin`.
-pub(crate) fn grey_above(level: &Level, grey: f64, bin: usize) -> f64 {
+pub(crate) fn smooth_above(level: &Level, smooth: f64, bin: usize) -> f64 {
     let (total, methane_rate) = methane_depth(&level.gases);
-    0.5 * grey + BIN_TABLE.methane_share[bin] * (total - 0.5 * methane_rate)
+    0.5 * smooth + BIN_TABLE.methane_share[bin] * (total - 0.5 * methane_rate)
 }
 
 /// Black-body flux, W/m², of every band at `t_k` into `out`: the bins'
@@ -1076,13 +1076,13 @@ mod tests {
     }
 
     /// A path through the air: the optical depth of each g-point of each
-    /// gas, and the grey part's, summed layer by layer.
+    /// gas, and the smooth part's, summed layer by layer.
     fn add_layer(path: &mut BinAbsorption, a: &BinAbsorption, b: &BinAbsorption, span: f64) {
         for g in 0..G {
             path.co2[g] += log_mean(a.co2[g], b.co2[g]) * span;
             path.water[g] += log_mean(a.water[g], b.water[g]) * span;
         }
-        path.grey += log_mean(a.grey, b.grey) * span;
+        path.smooth += log_mean(a.smooth, b.smooth) * span;
     }
 
     /// Outgoing longwave radiation, W/m², through the `bins` of `table`,
@@ -1298,7 +1298,7 @@ mod tests {
         };
         for i in 0..BINS {
             let a = absorption_per_ln_p(i, &level);
-            let all = a.co2.iter().chain(&a.water).chain([&a.grey]);
+            let all = a.co2.iter().chain(&a.water).chain([&a.smooth]);
             for x in all {
                 assert!(x.is_finite() && *x >= 0.0, "bin {i}: {a:?}");
             }
@@ -1357,16 +1357,16 @@ mod tests {
                     assert!(close(spectrum.water[i][g], one.water[g]), "water bin {i}");
                 }
                 assert!(
-                    close(spectrum.grey[i], one.grey),
+                    close(spectrum.smooth[i], one.smooth),
                     "bin {i} at {} K: {} vs {}",
                     level.temperature_k,
-                    spectrum.grey[i],
-                    one.grey
+                    spectrum.smooth[i],
+                    one.smooth
                 );
             }
             assert_eq!(spectrum.co2[TAIL], spectrum.co2[BINS - 1]);
             assert_eq!(spectrum.water[TAIL], spectrum.water[BINS - 1]);
-            assert_eq!(spectrum.grey[TAIL], spectrum.grey[BINS - 1]);
+            assert_eq!(spectrum.smooth[TAIL], spectrum.smooth[BINS - 1]);
         }
     }
 
