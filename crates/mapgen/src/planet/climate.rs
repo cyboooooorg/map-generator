@@ -1257,6 +1257,24 @@ impl Planet {
         gravity_m_s2: EARTH_GRAVITY_M_S2,
         radius_earth: 1.0,
     };
+
+    /// Titan, Venus and Mars, for the tests' columns: surface gravity
+    /// (NASA fact sheets) and mean radius, Earth radii.
+    #[cfg(test)]
+    pub(crate) const TITAN: Planet = Planet {
+        gravity_m_s2: 1.352,
+        radius_earth: 0.404,
+    };
+    #[cfg(test)]
+    pub(crate) const VENUS: Planet = Planet {
+        gravity_m_s2: 8.87,
+        radius_earth: 0.95,
+    };
+    #[cfg(test)]
+    pub(crate) const MARS: Planet = Planet {
+        gravity_m_s2: 3.71,
+        radius_earth: 0.53,
+    };
 }
 
 /// What a body's carbon cycle gives its climate beyond its air: the

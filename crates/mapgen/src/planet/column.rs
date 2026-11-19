@@ -1390,17 +1390,19 @@ mod tests {
     fn a_column_without_co2_or_water_radiates_from_its_methane_or_ground() {
         // Titan: 1.45 bar of N₂ and 5 % methane over 93.7 K, under the skin
         // of its 82 K equilibrium, at its gravity.
-        let titan = Planet {
-            gravity_m_s2: 1.352,
-            radius_earth: 0.404,
-        };
         let air = Gases {
             n2: 1.45,
             ch4: 0.07,
             ..Gases::default()
         };
         let black = SIGMA * 93.7f64.powi(4);
-        let olr = olr_w_m2(&air, 93.7, tropopause_k(82.0), &titan, Profile::CLIMATE);
+        let olr = olr_w_m2(
+            &air,
+            93.7,
+            tropopause_k(82.0),
+            &Planet::TITAN,
+            Profile::CLIMATE,
+        );
         println!("Titan-like column: {olr:.3} W/m² against σT⁴ {black:.3}");
         assert!(olr.is_finite() && olr > 0.0 && olr < black, "{olr}");
         // Nitrogen alone is transparent: the ground radiates through it.
@@ -1408,7 +1410,13 @@ mod tests {
             n2: 1.45,
             ..Gases::default()
         };
-        let bare = olr_w_m2(&n2, 93.7, tropopause_k(82.0), &titan, Profile::CLIMATE);
+        let bare = olr_w_m2(
+            &n2,
+            93.7,
+            tropopause_k(82.0),
+            &Planet::TITAN,
+            Profile::CLIMATE,
+        );
         assert!((bare / black - 1.0).abs() < 1e-9, "{bare} vs {black}");
         // And with no air at all.
         let airless = olr_w_m2(
@@ -1426,18 +1434,6 @@ mod tests {
         // The single-precision sum over the open bins against the
         // double-precision one over every band, on columns from Titan to
         // Venus and a steam runaway.
-        let titan = Planet {
-            gravity_m_s2: 1.352,
-            radius_earth: 0.404,
-        };
-        let venus = Planet {
-            gravity_m_s2: 8.87,
-            radius_earth: 0.95,
-        };
-        let mars = Planet {
-            gravity_m_s2: 3.71,
-            radius_earth: 0.53,
-        };
         let moist = |t: f64| with_vapour(EARTH_AIR, t, f64::INFINITY);
         let cases = [
             (moist(288.0), 288.0, 200.0, Planet::EARTH),
@@ -1463,7 +1459,7 @@ mod tests {
                 },
                 737.0,
                 tropopause_k(230.0),
-                venus,
+                Planet::VENUS,
             ),
             (
                 Gases {
@@ -1472,7 +1468,7 @@ mod tests {
                 },
                 210.0,
                 tropopause_k(200.0),
-                mars,
+                Planet::MARS,
             ),
             (
                 Gases {
@@ -1482,7 +1478,7 @@ mod tests {
                 },
                 93.7,
                 tropopause_k(82.0),
-                titan,
+                Planet::TITAN,
             ),
             (
                 Gases {
@@ -1512,15 +1508,17 @@ mod tests {
 
     #[test]
     fn venus_column_is_finite() {
-        let venus = Planet {
-            gravity_m_s2: 8.87,
-            radius_earth: 0.95,
-        };
         let air = Gases {
             co2: 92.0,
             ..Gases::default()
         };
-        let olr = olr_w_m2(&air, 737.0, tropopause_k(230.0), &venus, Profile::CLIMATE);
+        let olr = olr_w_m2(
+            &air,
+            737.0,
+            tropopause_k(230.0),
+            &Planet::VENUS,
+            Profile::CLIMATE,
+        );
         println!("Venus column: {olr:.3} W/m²");
         assert!(olr.is_finite() && olr > 0.0, "{olr}");
         assert!(olr < SIGMA * 737f64.powi(4), "{olr}");

@@ -1012,7 +1012,7 @@ pub(crate) fn planck_spectrum_upto(t_k: f64, bins: usize, out: &mut [f64; BANDS]
 mod tests {
     use super::reference::*;
     use super::*;
-    use crate::planet::climate::{EARTH_GRAVITY_M_S2, water_saturation_bar};
+    use crate::planet::climate::{EARTH_GRAVITY_M_S2, Planet, water_saturation_bar};
 
     /// The table on bins half as wide (10 cm⁻¹) over 0-2500 cm⁻¹, at
     /// 200-300 K only, built by the same tool for
@@ -1294,7 +1294,7 @@ mod tests {
                 so2: 1.4e-2,
                 ..Gases::default()
             },
-            gravity_m_s2: 8.87,
+            gravity_m_s2: Planet::VENUS.gravity_m_s2,
         };
         for i in 0..BINS {
             let a = absorption_per_ln_p(i, &level);
@@ -1324,7 +1324,7 @@ mod tests {
                     h2o: 3e-3,
                     ..Gases::default()
                 },
-                gravity_m_s2: 8.87,
+                gravity_m_s2: Planet::VENUS.gravity_m_s2,
             },
             Level {
                 temperature_k: 93.7,
@@ -1333,7 +1333,7 @@ mod tests {
                     ch4: 0.07,
                     ..Gases::default()
                 },
-                gravity_m_s2: 1.352,
+                gravity_m_s2: Planet::TITAN.gravity_m_s2,
             },
             Level {
                 temperature_k: 640.0,
