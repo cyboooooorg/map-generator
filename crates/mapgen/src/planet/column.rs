@@ -31,6 +31,12 @@
 //! [`CLOUD_EMISSIVITY`]) instead of from the clear column below it, so
 //! that the albedo's clouds, which reflect the light, also hold in the
 //! heat ([`radiate`]).
+//!
+//! Above a temperate surface the troposphere's relative humidity falls
+//! with the pressure ([`relative_humidity`], Manabe & Wetherald 1967);
+//! over a saturated or supercritical surface, and for the moist plateau
+//! ([`Sky::Plateau`]), it stays saturated, the column whose maximum is
+//! the moist limit a wet surface runs away past.
 use super::Gases;
 use super::albedo::cloud_cover;
 use super::atmosphere::{co2_latent_j_mol, co2_saturation_bar};
@@ -329,20 +335,51 @@ fn lapse(
 
 /// Outgoing longwave radiation, W/m², of a column with surface partial
 /// pressures `gases` (bar; `gases.h2o` the vapour at the surface) over a
-/// surface at `surface_k`, with no stratosphere. See the module
-/// documentation and [`olr_under_skin_w_m2`].
+/// surface at `surface_k`, with no stratosphere, under a clear sky over a
+/// saturated troposphere ([`saturated_olr_under_skin_w_m2`]): the column
+/// the moist limit and the steam plateau are checked on. See the module
+/// documentation.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64, planet: &Planet) -> f64 {
-    olr_under_skin_w_m2(gases, surface_k, 0.0, planet)
+    saturated_olr_under_skin_w_m2(gases, surface_k, 0.0, planet)
 }
 
-/// Whether a column's water clouds radiate in its place
-/// ([`olr_under_skin_w_m2`]) or the sky is taken clear (the moist
-/// plateau, which line-by-line models give clear).
+/// The sky and humidity of a column.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Sky {
+    /// The climate's: its water clouds radiate in its place
+    /// ([`olr_under_skin_w_m2`]) and its troposphere's humidity falls
+    /// with the pressure ([`relative_humidity`]).
     Cloudy,
+    /// The same air under a clear sky.
     Clear,
+    /// The moist plateau's: a clear sky over a troposphere saturated
+    /// above where its vapour condenses, as the line-by-line plateaus of
+    /// Goldblatt et al. 2013 and Kopparapu et al. 2013 take it.
+    Plateau,
+}
+
+impl Sky {
+    fn key(self) -> f64 {
+        match self {
+            Sky::Cloudy => 0.0,
+            Sky::Clear => 1.0,
+            Sky::Plateau => 2.0,
+        }
+    }
+}
+
+/// Relative humidity of the troposphere at `share` of the surface
+/// pressure (`p / p_s` of the whole air), over a surface at `surface`
+/// relative humidity: `RH_s (Q − 0.02) / (1 − 0.02)`, Manabe & Wetherald
+/// 1967 (*J. Atmos. Sci.* 24, 241, doi:10.1175/1520-0469(1967)024
+/// <0241:TEOTAW>2.0.CO;2, their eq. 2; from memory, not checked), the
+/// profile of the habitable-zone columns of Kasting et al. 1993 and
+/// Kopparapu et al. 2013. The surface keeps its own humidity (Earth's
+/// [`super::climate`] 0.77, the profile's `RH_s`); the air dries
+/// upwards, to none at 2 % of the surface pressure.
+fn relative_humidity(surface: f64, share: f64) -> f64 {
+    surface * ((share - 0.02) / (1.0 - 0.02)).max(0.0)
 }
 
 /// Outgoing longwave radiation, W/m², of the column of [`olr_w_m2`] whose
@@ -394,9 +431,30 @@ pub(crate) fn clear_olr_under_skin_w_m2(
     )
 }
 
+/// [`olr_under_skin_w_m2`] under a clear sky over a troposphere
+/// saturated above where its vapour condenses ([`Sky::Plateau`]): the
+/// column whose maximum outgoing radiation is the moist limit a wet
+/// surface runs away past (see `climate::wet_balance`).
+pub(crate) fn saturated_olr_under_skin_w_m2(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+) -> f64 {
+    olr_on_grid(
+        gases,
+        surface_k,
+        skin_k,
+        planet,
+        LEVELS_PER_DECADE,
+        Sky::Plateau,
+    )
+}
+
 /// [`clear_olr_under_skin_w_m2`] on the finer grid of
 /// [`PLATEAU_LEVELS_PER_DECADE`], for the moist plateau: Goldblatt et
-/// al. 2013's and the other line-by-line plateaus are clear-sky.
+/// al. 2013's and the other line-by-line plateaus are clear-sky and
+/// saturated ([`Sky::Plateau`]).
 pub(crate) fn plateau_olr_under_skin_w_m2(
     gases: &Gases,
     surface_k: f64,
@@ -409,7 +467,7 @@ pub(crate) fn plateau_olr_under_skin_w_m2(
         skin_k,
         planet,
         PLATEAU_LEVELS_PER_DECADE,
-        Sky::Clear,
+        Sky::Plateau,
     )
 }
 
@@ -440,7 +498,7 @@ fn olr_on_grid(
         skin_k,
         planet.gravity_m_s2,
         levels_per_decade,
-        if sky == Sky::Cloudy { 1.0 } else { 0.0 },
+        sky.key(),
     ]
     .map(f64::to_bits);
     if let Some(olr) = REMEMBERED_OLR.with_borrow(|memory| memory.find(&key)) {
@@ -562,8 +620,32 @@ fn olr_bands(
         0.0
     };
     let mut co2_saturated = false;
+    // The vapour that radiates: in the climate's columns the troposphere's
+    // relative humidity falls with the pressure from the surface's
+    // ([`relative_humidity`]), the temperature still following the
+    // adiabats above; above the cold trap, the mixing ratio it leaves.
+    // A supercritical level holds its vapour as a gas. Over a saturated
+    // or supercritical surface (a boiling ocean, a runaway's steam,
+    // where the vapour is the air rather than a trace in it) the column
+    // stays saturated, as Kasting 1988 and Kopparapu et al. 2013 take
+    // their moist and runaway atmospheres.
+    let falling = sky != Sky::Plateau && !supercritical && !saturated;
+    let surface_humidity = if falling {
+        (vapour / water_saturation_bar(surface_k)).min(1.0)
+    } else {
+        1.0
+    };
+    let mut trapped_share: Option<f64> = None;
     for i in 0..=n {
-        let v = vapour_share * p;
+        let mut v = vapour_share * p;
+        if falling {
+            if let Some(share) = trapped_share {
+                v = v.min(share * p);
+            } else if t < WATER_CRITICAL_K {
+                let profile = relative_humidity(surface_humidity, p / surface_bar);
+                v = v.min(profile * water_saturation_bar(t));
+            }
+        }
         let level = air.with_co2(p - v, v, co2_share * (p - v));
         temperature[i] = t;
         levels[i] = level;
@@ -649,6 +731,10 @@ fn olr_bands(
             }
             t = skin_k;
             frozen = true;
+            if falling && trapped_share.is_none() {
+                let profile = relative_humidity(surface_humidity, trap / surface_bar);
+                trapped_share = Some(profile * water_saturation_bar(t).min(trap) / trap);
+            }
         }
         if saturated || t < WATER_CRITICAL_K {
             let e = water_saturation_bar(t);
@@ -667,7 +753,7 @@ fn olr_bands(
     // layer above level `i`, `x` of its span up.
     let cover = match sky {
         Sky::Cloudy => cloud_cover(surface_k, gases.h2o),
-        Sky::Clear => 0.0,
+        Sky::Clear | Sky::Plateau => 0.0,
     };
     let cloud = (cover > 0.0).then(|| {
         let up = -CLOUD_TOP_SHARE.ln();
@@ -1195,11 +1281,13 @@ mod tests {
     /// Outgoing radiation of `air` over a moist surface at `t`, under the
     /// plateau's skin, on Earth.
     fn moist_olr(air: Gases, t: f64) -> f64 {
-        clear_olr_under_skin_w_m2(
+        olr_on_grid(
             &with_vapour(air, t, f64::INFINITY),
             t,
             plateau_skin(),
             &Planet::EARTH,
+            LEVELS_PER_DECADE,
+            Sky::Plateau,
         )
     }
 
@@ -1244,7 +1332,7 @@ mod tests {
             plateau_skin(),
             &Planet::EARTH,
             levels,
-            Sky::Clear,
+            Sky::Plateau,
         )
     }
 

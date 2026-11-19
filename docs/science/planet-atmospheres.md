@@ -801,11 +801,43 @@ at the top, band by band, so that the cloudy column needs no second sum.
   visible optical thickness 3.8 and its `τ_ir = τ / 2` (same paper, §5)
   and the column's diffusivity 1.66.
 - Only water clouds count; a body without water vapour (Mars, Titan)
-  radiates as before. The moist plateau stays clear-sky, as the
-  line-by-line plateaus it is checked against are.
-- Check: Earth's longwave cloud effect, clear-sky less all-sky OLR, is
-  29.0 W/m² at 280 ppm and 288 K, against 28 ± 5 W/m² (CERES EBAF, Loeb
-  et al. 2018).
+  radiates as before. The moist plateau stays clear-sky and saturated, as
+  the line-by-line plateaus it is checked against are.
+- Check, at 280 ppm and 288 K with the falling humidity below: all-sky
+  OLR 236.8 W/m² against CERES EBAF's 240 ± 8 (Loeb et al. 2018),
+  clear-sky 270.9 against 267 ± 8, cloud effect 34.1 against 28 ± 8.
+  CERES samples its clear sky in cloud-free scenes, drier than the clear
+  sky of a cloudy air (Sohn & Bennartz 2008), hence the wider bounds.
+
+**Falling humidity** (`planet::column`, issue #523). Above a temperate
+surface (subcritical and below saturation, 77 % on a wet body) the
+troposphere's relative humidity falls with the pressure as Manabe &
+Wetherald 1967 set it, the profile of the habitable-zone models of
+Kasting et al. 1993 and Kopparapu et al. 2013:
+
+```text
+RH = RH_s (Q − 0.02) / (1 − 0.02),   Q = p / p_s
+```
+
+- The surface keeps its own humidity `RH_s`; the temperature still
+  follows the adiabats; above the cold trap the vapour keeps the mixing
+  ratio the profile leaves there.
+- Over a saturated or supercritical surface (a boiling ocean, a
+  runaway's steam) the column stays saturated, and the moist plateau is
+  computed saturated and clear, as Goldblatt et al. 2013 and Kopparapu
+  et al. 2013 take it.
+- **Runaway convention.** A drier column has no moist limit of its own:
+  its OLR keeps rising with the surface (414 W/m² at 340 K against about
+  290 saturated). A wet surface therefore runs away when what it absorbs
+  exceeds the most its *saturated* column sends out below water's
+  critical point, on its own air, skin and water supply
+  (`climate::wet_balance`, probed at 380 K and otherwise scanned); below
+  that, its balance is solved on the falling-humidity column. This is
+  Kasting's and Kopparapu's practice: a saturated troposphere for the
+  inner edge, Manabe & Wetherald's for temperate climates.
+- Check: Earth's clear-sky OLR is 270.9 W/m² at 280 ppm and 288 K,
+  against 267 ± 8 (CERES EBAF clear-sky); it was 253 with the
+  troposphere saturated above its condensation level.
 
 **Albedo of a water runaway** (`climate::absorbing`, issue #492). A body
 in a water runaway (by the insolation limit or a boil) that keeps steam

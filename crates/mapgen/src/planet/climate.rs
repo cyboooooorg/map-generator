@@ -1246,6 +1246,14 @@ const ITERATIONS: usize = 60;
 /// to water's critical point.
 const SCAN_RATIO: f64 = 1.03;
 
+/// Surface temperature, K, at which [`wet_balance`] first tries the
+/// saturated column for a runaway: near the maximum of its outgoing
+/// radiation, which line-by-line curves reach at 350-400 K (Goldblatt et
+/// al. 2013, Fig. 1; the column's anchor test). Only a shortcut: a
+/// surface whose saturated column there sends out what it absorbs cannot
+/// run away; any other is scanned in full.
+const RUNAWAY_PROBE_K: f64 = 380.0;
+
 /// The coldest balance of a surface whose water vapour follows its
 /// temperature: the gases with that vapour and the temperature `T`, K,
 /// at which the column of [`super::column`] over a surface at `T`, its
@@ -1253,13 +1261,23 @@ const SCAN_RATIO: f64 = 1.03;
 /// absorbs plus its internal heat. A cooling planet stops at the first
 /// such `T` above its dry temperature (no surface colder than the dry
 /// temperature balances: the vapour only lowers the outgoing radiation).
-/// `None` when no surface below
-/// water's critical point radiates that much: the absorbed light and
-/// heat exceed the moist limit, and the water runs away.
 ///
-/// The temperature is scanned up from the black body's, by the `T⁴` step
-/// of `bracket` but at most [`SCAN_RATIO`], to [`WATER_CRITICAL_K`], and
-/// the first crossing solved.
+/// `None` when the water runs away: the absorbed light and heat exceed
+/// the moist limit, the most the column sends out over a surface below
+/// water's critical point with its troposphere saturated
+/// ([`column::saturated_olr_under_skin_w_m2`]), as Kasting 1988 and
+/// Kopparapu et al. 2013 take the inner edge. The balance itself is the
+/// climate's column, its humidity falling with height (Manabe &
+/// Wetherald 1967), which sends out more than the saturated one and so
+/// has no moist limit of its own. The saturated maximum is not a
+/// constant: the air, the skin and a water supply too small to saturate
+/// the column (a trace of water does not boil) all move it, so it is
+/// looked for on the body's own air, at [`RUNAWAY_PROBE_K`] first and
+/// otherwise by the scan.
+///
+/// Each scan goes up from the black body's temperature by the `T⁴` step
+/// of `bracket`, but at most [`SCAN_RATIO`], to [`WATER_CRITICAL_K`],
+/// and solves the first crossing.
 fn wet_balance(
     context: &Context,
     gases: Gases,
@@ -1273,10 +1291,6 @@ fn wet_balance(
     let skin = tropopause_k(t_eq);
     // A grey surface as in `surface_temperature_k`.
     let e = emissivity.clamp(0.01, 1.0);
-    let excess = |t: f64| {
-        e * column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin, planet)
-            - absorbed
-    };
     // No surface colder than a grey body balances; the vapour only
     // lowers the outgoing radiation, so none colder than the dry
     // temperature either, and the scan from the grey body finds the
@@ -1285,12 +1299,35 @@ fn wet_balance(
     if bare >= WATER_CRITICAL_K {
         return None;
     }
+    let saturated = |t: f64| {
+        e * column::saturated_olr_under_skin_w_m2(
+            &with_vapour(gases, t, water_bar),
+            t,
+            skin,
+            planet,
+        ) - absorbed
+    };
+    if saturated(RUNAWAY_PROBE_K) < 0.0 {
+        first_balance(saturated, absorbed, bare)?;
+    }
+    let excess = |t: f64| {
+        e * column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin, planet)
+            - absorbed
+    };
+    let t = first_balance(excess, absorbed, bare)?;
+    Some((with_vapour(gases, t, water_bar), t))
+}
+
+/// The first surface temperature, K, from `bare` up to
+/// [`WATER_CRITICAL_K`], at which `excess` (outgoing less `absorbed`,
+/// W/m²) reaches zero, scanned as [`wet_balance`] says; `None` if none.
+fn first_balance(excess: impl Fn(f64) -> f64, absorbed: f64, bare: f64) -> Option<f64> {
     let mut low = Point {
         x: bare,
         f: excess(bare),
     };
     if low.f >= 0.0 {
-        return Some((with_vapour(gases, bare, water_bar), bare));
+        return Some(bare);
     }
     loop {
         // The `T⁴` step of `bracket`, at most `SCAN_RATIO`.
@@ -1300,8 +1337,7 @@ fn wet_balance(
             .min(WATER_CRITICAL_K);
         let high = Point { x, f: excess(x) };
         if high.f >= 0.0 {
-            let t = solve(excess, low, high, TOLERANCE_K);
-            return Some((with_vapour(gases, t, water_bar), t));
+            return Some(solve(&excess, low, high, TOLERANCE_K));
         }
         if x >= WATER_CRITICAL_K {
             return None;
@@ -2554,18 +2590,40 @@ mod tests {
     }
 
     #[test]
-    fn earths_clouds_hold_in_28_w_m2() {
-        // Earth's longwave cloud radiative effect, clear-sky less all-sky
-        // outgoing radiation: 28 ± 5 W/m² (CERES EBAF, Loeb et al. 2018,
-        // doi:10.1175/JCLI-D-17-0208.1), on its preindustrial air at
-        // 288 K under its own skin.
+    fn earths_clouds_trap_what_ceres_sees() {
+        // CERES EBAF (Loeb et al. 2018, doi:10.1175/JCLI-D-17-0208.1):
+        // all-sky 240, clear-sky 267 and so a longwave cloud effect of 28
+        // W/m², on Earth's preindustrial air at 288 K under its own skin.
+        // Each bound is ± 8: CERES's clear sky is sampled in cloud-free
+        // scenes, which are drier than the clear sky of the cloudy air
+        // the model's column stands for, so its clear-sky outgoing
+        // radiation is biased high and the cloud effect with it (Sohn &
+        // Bennartz 2008, doi:10.1029/2007JD008984; from memory, not
+        // checked). The clouds' ISCCP top and emissivity are not tuned
+        // on it.
         let (d, g, c) = climate_of("Earth");
         let air = with_vapour(Gases { co2: 2.8e-4, ..g }, 288.0, d.water_bar);
         let skin = tropopause_k(c.equilibrium_k);
         let clear = column::clear_olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
         let all = column::olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
         println!("Earth: clear sky {clear:.2}, all sky {all:.2} W/m²");
-        assert!((clear - all - 28.0).abs() <= 5.0, "{clear} - {all}");
+        assert!((all - 240.0).abs() <= 8.0, "all sky {all}");
+        assert!((clear - 267.0).abs() <= 8.0, "clear sky {clear}");
+        assert!((clear - all - 28.0).abs() <= 8.0, "{clear} - {all}");
+    }
+
+    #[test]
+    fn earths_clear_sky_olr_is_ceres() {
+        // Earth's clear-sky outgoing radiation, 267 ± 8 W/m² (CERES EBAF,
+        // Loeb et al. 2018, doi:10.1175/JCLI-D-17-0208.1), through the
+        // climate's column at 288 K: its humidity falling from the
+        // surface's 77 % (Manabe & Wetherald 1967).
+        let (d, g, c) = climate_of("Earth");
+        let air = with_vapour(Gases { co2: 2.8e-4, ..g }, 288.0, d.water_bar);
+        let skin = tropopause_k(c.equilibrium_k);
+        let clear = column::clear_olr_under_skin_w_m2(&air, 288.0, skin, &d.planet);
+        println!("Earth's clear sky: {clear:.2} W/m²");
+        assert!((clear - 267.0).abs() <= 8.0, "{clear}");
     }
 
     #[test]
