@@ -1236,7 +1236,7 @@ pub(super) fn with_vapour(gases: Gases, temperature_k: f64, water_bar: f64) -> G
 
 /// Most iterations of the regula falsi of the surface solves and of the
 /// thermostat: more than they need for [`TOLERANCE_K`] and a CO₂ to
-/// 1e-9 of itself.
+/// [`THERMOSTAT_TOLERANCE`].
 const ITERATIONS: usize = 60;
 
 /// Ratio between the surface temperatures [`wet_balance`] tries in turn
@@ -2359,7 +2359,7 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
             x: most.ln(),
             f: all,
         };
-        solve(deficit, low, top, 1e-9).exp()
+        solve(deficit, low, top, THERMOSTAT_TOLERANCE).exp()
     };
     let regulated = Gases {
         co2: high,
@@ -2372,13 +2372,27 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
     )
 }
 
+/// Width in `ln CO₂` under which the thermostat's regula falsi
+/// ([`thermostat`]) stops: 1e-3, a tenth of a percent of the CO₂. The
+/// surface warms by its climate sensitivity per e-fold of CO₂, some 4 K
+/// at Earth's (3 K per doubling) and under 10 K anywhere the thermostat
+/// holds, so that this moves its temperature by under 0.01 K, within
+/// [`TOLERANCE_K`]. It was 1e-9, a column or two more per solve.
+const THERMOSTAT_TOLERANCE: f64 = 1e-3;
+
 /// Decades of CO₂ under the most the air can hold that
 /// [`maximum_greenhouse`] searches.
 const GREENHOUSE_DECADES: f64 = 4.0;
 
-/// Golden-section steps of [`maximum_greenhouse`]: 0.618⁴⁰ of its range,
-/// some 1e-8 decades.
-const GREENHOUSE_STEPS: usize = 40;
+/// Golden-section steps of [`maximum_greenhouse`]: 0.618¹⁸ of its range,
+/// 6e-4 decades (0.14 % of the CO₂). Its users need no finer: the thaw
+/// search ([`branches`]) bisects up to it to 2⁻¹² of a range of a few
+/// decades, some 1e-3 decades, and the thermostat ([`thermostat`]) caps
+/// its CO₂ there, which [`THERMOSTAT_TOLERANCE`] resolves to 4e-4
+/// decades. At the maximum the gain is flat (its error goes as the
+/// square of the CO₂ missed), so that the warmth missed is unmeasurable.
+/// It was 40 steps (1e-8 decades): 22 columns more per search.
+const GREENHOUSE_STEPS: usize = 18;
 
 /// The CO₂, bar, of the warmest climate of `body` within its
 /// `most_co2` (Kasting et al. 1993, doi:10.1006/icar.1993.1010, the
