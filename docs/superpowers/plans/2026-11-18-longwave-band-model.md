@@ -156,3 +156,13 @@
 - [ ] **Step 1:** Run `generation-profiler` (agent) to compare the whole-system draw time on the same seeds: main at the branch base (3c47979) against HEAD.
 - [ ] **Step 2:** If the cost is over +20 %, cache or tabulate the OLR (keyed on bins of the surface temperature, the skin and the composition). Alternatively, coarsen the bins within the 7.1 halving check. Re-run the profiler and all the checks.
 - [ ] **Step 3: Commit** `perf(planet): …` if anything changed.
+
+### Task 7.7: Consolidation pass (user request, 2026-11-19)
+
+The worlds must stay byte-identical. Prove it with `world-coherence-checker` on the binaries before and after this task, run by the main session.
+
+- [ ] Remove every leftover of the grey model: constants, helpers, comments and docs that still say "grey".
+- [ ] Build all the column variants through one profile builder with options: clear sky, cloudy, saturated (for the runaway), Manabe-Wetherald, and the fast and reference sums.
+- [ ] Give the longwave and shortwave HITRAN tables one loader and one interpolation, shared by `spectrum.rs` and `albedo.rs`, and by the builder tool where it fits.
+- [ ] Gather the test helpers duplicated across tasks (Earth air, fixed profiles, bound tables).
+- [ ] Commit as `refactor(planet): …`, one logical change per commit, with `Refs: #523`. Run the full suite, then clippy.
