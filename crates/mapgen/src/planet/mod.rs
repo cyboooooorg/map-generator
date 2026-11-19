@@ -67,6 +67,7 @@ pub mod core;
 pub mod differentiation;
 pub mod escape;
 pub mod explain;
+pub(crate) mod fast_math;
 pub mod geysers;
 pub mod heat;
 pub mod ice_shell;

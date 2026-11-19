@@ -215,16 +215,29 @@ fn planck_head(x: f64) -> f64 {
     sum
 }
 
+/// `1/n` for `n` from 1 to 64, the terms of [`planck_tail`].
+const INVERSES: [f64; 64] = {
+    let mut out = [0.0; 64];
+    let mut n = 0;
+    while n < 64 {
+        out[n] = 1.0 / (n + 1) as f64;
+        n += 1;
+    }
+    out
+};
+
 /// `∫ₓ^∞ t³/(eᵗ − 1) dt` for `x` ≥ [`SERIES_SWITCH`]:
 /// `Σₙ e^(−nx) (x³/n + 3x²/n² + 6x/n³ + 6/n⁴)`, summed until its terms
 /// fall under 1e-16 of the first.
 fn planck_tail(x: f64) -> f64 {
     let mut sum = 0.0;
-    for n in 1..=64 {
-        let n = n as f64;
-        let e = (-n * x).exp();
-        let term =
-            e * (x * x * x / n + 3.0 * x * x / (n * n) + 6.0 * x / (n * n * n) + 6.0 / n.powi(4));
+    // `e^(−nx)` as the powers of `e^(−x)`: one exponential per edge.
+    let first = (-x).exp();
+    let mut e = 1.0;
+    for inverse in &INVERSES {
+        e *= first;
+        let (i1, i2) = (*inverse, inverse * inverse);
+        let term = e * (x * x * x * i1 + 3.0 * x * x * i2 + 6.0 * x * i2 * i1 + 6.0 * i2 * i2);
         sum += term;
         if term <= 1e-16 * sum {
             break;
@@ -888,6 +901,7 @@ pub(crate) const TAIL: usize = BINS;
 
 /// The absorption of every band at one level, per unit `ln p` (see
 /// [`BinAbsorption`]; the tail's is the last bin's, see [`TAIL`]).
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Debug)]
 pub(crate) struct Spectrum {
     /// CO₂'s lines, per band and g-point.
@@ -922,6 +936,19 @@ struct BinTable {
     methane_share: [f64; BINS],
 }
 
+/// [`BinTable::continuum`] in single precision. The self and foreign
+/// coefficients are scaled by 1e20: a cm² per molecule of 1e-27 is
+/// under the least normal `f32` times the vapour's molecules; the factor
+/// comes back in [`GreyRates::fast`]'s `scale`.
+static FAST_CONTINUUM: LazyLock<[(f32, f32, f32); BINS]> = LazyLock::new(|| {
+    BIN_TABLE
+        .continuum
+        .map(|(s, n, f)| ((s * 1e20) as f32, n as f32, (f * 1e20) as f32))
+});
+
+/// [`BinTable::centre_cm`] in single precision.
+static FAST_CENTRE: LazyLock<[f32; BINS]> = LazyLock::new(|| BIN_TABLE.centre_cm.map(|c| c as f32));
+
 static BIN_TABLE: LazyLock<BinTable> = LazyLock::new(|| {
     let mut table = BinTable {
         centre_cm: [0.0; BINS],
@@ -955,6 +982,7 @@ static BIN_TABLE: LazyLock<BinTable> = LazyLock::new(|| {
 /// [`absorption_per_ln_p`] of every band at `level` into `out` (the
 /// tail's is the last bin's, see [`TAIL`]): the same sums, with what does
 /// not depend on the bin taken once per level.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
     out.co2[..BINS].fill([0.0; G]);
     out.water[..BINS].fill([0.0; G]);
@@ -972,6 +1000,7 @@ pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
 
 /// CO₂'s and water's lines of every bin at `level`, from [`OPACITY`] as
 /// [`Table::bin_absorption`] takes them.
+#[cfg_attr(not(test), allow(dead_code))]
 fn lines_spectrum(level: &Level, out: &mut Spectrum) {
     let table = &*OPACITY;
     let p = level.pressure_bar();
@@ -1009,53 +1038,265 @@ fn lines_spectrum(level: &Level, out: &mut Spectrum) {
 }
 
 /// [`grey_between`] of every bin at `level` into `out`.
+#[cfg_attr(not(test), allow(dead_code))]
 fn grey_spectrum(level: &Level, out: &mut [f64; BANDS]) {
-    let table = &*BIN_TABLE;
-    let p = level.pressure_bar();
-    let t = level.temperature_k;
-    let bins = &mut out[..BINS];
-    let g = &level.gases;
-    if g.h2o > 0.0 {
-        let e = g.h2o;
-        let ratio = MT_CKD_REFERENCE_K / t;
-        let ln_ratio = ratio.ln();
-        let others = (p - e).max(0.0);
-        let molecules_m2 = e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-        let scale = ratio / MT_CKD_REFERENCE_BAR * 1e-4 * molecules_m2;
-        for (i, o) in bins.iter_mut().enumerate() {
-            let (self_coeff, exponent, foreign_coeff) = table.continuum[i];
-            let nu = table.centre_cm[i];
-            let radiation = nu * (0.5 * C2_CM_K * nu / t).tanh();
-            *o += (self_coeff * (exponent * ln_ratio).exp() * e + foreign_coeff * others)
-                * scale
-                * radiation;
+    let rates = GreyRates::of(level);
+    for (i, o) in out[..BINS].iter_mut().enumerate() {
+        *o = rates.bin(i);
+    }
+}
+
+/// What [`grey_between`] needs at one level, taken once for every bin:
+/// water's continuum, the CO₂ pairs and methane, each when the level
+/// holds it.
+struct GreyRates {
+    /// The level's temperature, K.
+    t: f64,
+    /// Water's continuum: the vapour, bar; `ln (296 K / T)`; the other
+    /// gases, bar; and the factor of the absorption per molecule.
+    continuum: Option<(f64, f64, f64, f64)>,
+    /// CO₂ pairs: the column of [`CO2_CIA_K`] below the temperature, the
+    /// share of the next, and the factor of the coefficient.
+    pairs: Option<(usize, f64, f64)>,
+    /// Methane's rate per `ln p` ([`super::climate`]'s methane law).
+    methane: Option<f64>,
+}
+
+impl GreyRates {
+    fn of(level: &Level) -> Self {
+        let p = level.pressure_bar();
+        let t = level.temperature_k;
+        let g = &level.gases;
+        let continuum = (g.h2o > 0.0).then(|| {
+            let e = g.h2o;
+            let ratio = MT_CKD_REFERENCE_K / t;
+            let others = (p - e).max(0.0);
+            let molecules_m2 =
+                e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
+            let scale = ratio / MT_CKD_REFERENCE_BAR * 1e-4 * molecules_m2;
+            (e, ratio.ln(), others, scale)
+        });
+        let pairs = (g.co2 > 0.0).then(|| {
+            let (j, f) = if t <= CO2_CIA_K[0] {
+                (0, 0.0)
+            } else if t >= CO2_CIA_K[3] {
+                (2, 1.0)
+            } else {
+                let j = CO2_CIA_K.iter().rposition(|&k| k <= t).unwrap_or(0).min(2);
+                (j, (t - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]))
+            };
+            let density_m3 = g.co2 * PA_PER_BAR / (BOLTZMANN * t);
+            let thickness_m =
+                BOLTZMANN * t * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
+            (j, f, 1e-10 * density_m3 * density_m3 * thickness_m)
+        });
+        let methane = (g.ch4 > 0.0).then(|| methane_depth(g).1);
+        Self {
+            t,
+            continuum,
+            pairs,
+            methane,
         }
     }
-    if g.co2 > 0.0 {
-        let (j, f) = if t <= CO2_CIA_K[0] {
-            (0, 0.0)
-        } else if t >= CO2_CIA_K[3] {
-            (2, 1.0)
-        } else {
-            let j = CO2_CIA_K.iter().rposition(|&k| k <= t).unwrap_or(0).min(2);
-            (j, (t - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]))
-        };
-        let density_m3 = g.co2 * PA_PER_BAR / (BOLTZMANN * t);
-        let thickness_m = BOLTZMANN * t * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
-        let scale = 1e-10 * density_m3 * density_m3 * thickness_m;
-        for (o, row) in bins.iter_mut().zip(&table.cia_row) {
-            if let Some(row) = row {
-                let v = CO2_CIA[*row].1;
-                *o += (v[j] * (1.0 - f) + v[j + 1] * f) * scale;
+
+    /// [`GreyRates::bin`] of every bin into `out`, in single precision
+    /// with [`super::fast_math`]'s `exp` (`tanh y = 1 − 2 / (e^{2y} + 1)`).
+    fn fast(&self, out: &mut [f32]) {
+        use super::fast_math::exp;
+        let table = &*BIN_TABLE;
+        out.fill(0.0);
+        if let Some((e, ln_ratio, others, scale)) = self.continuum {
+            let (e, ln_ratio, others, scale) = (
+                e as f32,
+                ln_ratio as f32,
+                others as f32,
+                (scale * 1e-20) as f32,
+            );
+            let c2_t = (C2_CM_K / self.t) as f32;
+            for (i, o) in out.iter_mut().enumerate() {
+                let (self_coeff, exponent, foreign_coeff) = FAST_CONTINUUM[i];
+                let nu = FAST_CENTRE[i];
+                // `tanh (y/2)`, from its series where the subtraction
+                // would cancel.
+                let y = c2_t * nu;
+                let tanh = if y < 0.1 {
+                    0.5 * y * (1.0 - y * y / 12.0)
+                } else {
+                    1.0 - 2.0 / (exp(y) + 1.0)
+                };
+                let radiation = nu * tanh;
+                *o += (self_coeff * exp(exponent * ln_ratio) * e + foreign_coeff * others)
+                    * scale
+                    * radiation;
+            }
+        }
+        if let Some((j, f, scale)) = self.pairs {
+            for (o, row) in out.iter_mut().zip(&table.cia_row) {
+                if let Some(row) = row {
+                    let v = CO2_CIA[*row].1;
+                    *o += ((v[j] * (1.0 - f) + v[j + 1] * f) * scale) as f32;
+                }
+            }
+        }
+        if let Some(rate) = self.methane {
+            for (o, share) in out.iter_mut().zip(&table.methane_share) {
+                *o += (share * rate) as f32;
             }
         }
     }
-    if g.ch4 > 0.0 {
-        let rate = methane_depth(g).1;
-        for (o, share) in bins.iter_mut().zip(&table.methane_share) {
-            *o += share * rate;
+
+    /// The grey absorption per `ln p` of bin `i`.
+    fn bin(&self, i: usize) -> f64 {
+        let table = &*BIN_TABLE;
+        let mut o = 0.0;
+        if let Some((e, ln_ratio, others, scale)) = self.continuum {
+            let (self_coeff, exponent, foreign_coeff) = table.continuum[i];
+            let nu = table.centre_cm[i];
+            let radiation = nu * (0.5 * C2_CM_K * nu / self.t).tanh();
+            o += (self_coeff * (exponent * ln_ratio).exp() * e + foreign_coeff * others)
+                * scale
+                * radiation;
+        }
+        if let Some((j, f, scale)) = self.pairs
+            && let Some(row) = table.cia_row[i]
+        {
+            let v = CO2_CIA[row].1;
+            o += (v[j] * (1.0 - f) + v[j + 1] * f) * scale;
+        }
+        if let Some(rate) = self.methane {
+            o += table.methane_share[i] * rate;
+        }
+        o
+    }
+}
+
+/// Number of a level's g-points over every bin.
+pub(crate) const POINTS: usize = BINS * G;
+
+/// The absorption of one level in the column's fast layout (see
+/// [`fast_level`]): CO₂'s and water's lines at each bin and g-point
+/// (index `bin · G + g`) and the grey part of each bin, per unit `ln p`,
+/// and their logarithms, in single precision.
+#[derive(Clone)]
+pub(crate) struct FastLevel {
+    /// CO₂'s lines and their logarithms.
+    pub(crate) co2: [f32; POINTS],
+    pub(crate) co2_ln: [f32; POINTS],
+    /// Water's lines and their logarithms.
+    pub(crate) water: [f32; POINTS],
+    pub(crate) water_ln: [f32; POINTS],
+    /// Water's continuum, CO₂–CO₂ pairs and methane, per bin, and their
+    /// logarithms.
+    pub(crate) grey: [f32; BINS],
+    pub(crate) grey_ln: [f32; BINS],
+}
+
+impl Default for FastLevel {
+    fn default() -> Self {
+        Self {
+            co2: [0.0; POINTS],
+            co2_ln: [0.0; POINTS],
+            water: [0.0; POINTS],
+            water_ln: [0.0; POINTS],
+            grey: [0.0; BINS],
+            grey_ln: [0.0; BINS],
         }
     }
+}
+
+/// [`absorption_spectrum`] of the first `bins` bins at `level`, into `out`
+/// in its fast layout (the other bins are left as they were): the same
+/// table, interpolation and sums, in single precision with
+/// [`super::fast_math`]'s `exp` and `ln`, in loops over the bins and
+/// g-points that compile to vector instructions. An absent gas has no
+/// lines (zero).
+pub(crate) fn fast_level(level: &Level, bins: usize, out: &mut FastLevel) {
+    let table = &*OPACITY;
+    let bins = bins.min(BINS);
+    let m = bins * G;
+    let p = level.pressure_bar();
+    let t = level.temperature_k;
+    let g = &level.gases;
+    let valid = p > 0.0 && t > 0.0 && level.gravity_m_s2 > 0.0;
+    let node = |at: usize| -> &[f32] { &table.ln_k[at..at + m] };
+    if valid && g.co2 > 0.0 {
+        let (at, w, scale) = table.corners(CO2_SET, p, t);
+        let w = w.map(|w| w as f32);
+        let ln_factor = (scale * level.mass_per_ln_p(g.co2, CO2_KG_MOL)).ln() as f32;
+        interpolate(&at.map(node), &w, ln_factor, &mut out.co2_ln[..m]);
+        exp_all(&out.co2_ln[..m], &mut out.co2[..m]);
+    } else {
+        out.co2[..m].fill(0.0);
+    }
+    if valid && g.h2o > 0.0 {
+        let (foreign, wf, scale) = table.corners(WATER_FOREIGN_SET, p, t);
+        let (own, ws, _) = table.corners(WATER_SELF_SET, p, t);
+        let (wf, ws) = (wf.map(|w| w as f32), ws.map(|w| w as f32));
+        let mass = scale * level.mass_per_ln_p(g.h2o, H2O_KG_MOL);
+        let share = (g.h2o / p).clamp(0.0, 1.0);
+        // `ln 0` is −∞, which `exp` takes to its floor.
+        let (by_air, by_self) = (
+            (mass * (1.0 - share)).ln() as f32,
+            (mass * share).ln() as f32,
+        );
+        // The two sets' logarithms, then their sum and its logarithm.
+        let mut own_ln = [0.0; POINTS];
+        interpolate(&foreign.map(node), &wf, by_air, &mut out.water_ln[..m]);
+        interpolate(&own.map(node), &ws, by_self, &mut own_ln[..m]);
+        add_exp(&out.water_ln[..m], &own_ln[..m], &mut out.water[..m]);
+        ln_all(&out.water[..m], &mut out.water_ln[..m]);
+    } else {
+        out.water[..m].fill(0.0);
+    }
+    if valid {
+        GreyRates::of(level).fast(&mut out.grey[..bins]);
+    } else {
+        out.grey[..bins].fill(0.0);
+    }
+    ln_all(&out.grey[..bins], &mut out.grey_ln[..bins]);
+}
+
+/// `ln k` of the four nodes `rows` weighted by `w`, plus `add`, into
+/// `out`. Each loop of [`fast_level`] is a function of its own, whose
+/// slices the compiler knows apart, so that it takes vector instructions.
+#[inline(never)]
+fn interpolate(rows: &[&[f32]; 4], w: &[f32; 4], add: f32, out: &mut [f32]) {
+    let [r0, r1, r2, r3] = rows;
+    for ((((o, a), b), c), d) in out.iter_mut().zip(*r0).zip(*r1).zip(*r2).zip(*r3) {
+        *o = w[0] * a + w[1] * b + w[2] * c + w[3] * d + add;
+    }
+}
+
+/// `e^x` of every `x`, into `out`.
+#[inline(never)]
+fn exp_all(x: &[f32], out: &mut [f32]) {
+    for (o, x) in out.iter_mut().zip(x) {
+        *o = super::fast_math::exp(*x);
+    }
+}
+
+/// `e^a + e^b`, into `out`.
+#[inline(never)]
+fn add_exp(a: &[f32], b: &[f32], out: &mut [f32]) {
+    for ((o, a), b) in out.iter_mut().zip(a).zip(b) {
+        *o = super::fast_math::exp(*a) + super::fast_math::exp(*b);
+    }
+}
+
+/// `ln x` of every `x`, into `out`.
+#[inline(never)]
+fn ln_all(x: &[f32], out: &mut [f32]) {
+    for (o, x) in out.iter_mut().zip(x) {
+        *o = super::fast_math::ln(*x);
+    }
+}
+
+/// Vertical optical depth per bin above `level`, the top of a column, of
+/// what is grey: [`depth_above`]'s, from the level's grey rate `grey` in
+/// bin `bin`.
+pub(crate) fn grey_above(level: &Level, grey: f64, bin: usize) -> f64 {
+    let (total, methane_rate) = methane_depth(&level.gases);
+    0.5 * grey + BIN_TABLE.methane_share[bin] * (total - 0.5 * methane_rate)
 }
 
 /// Vertical optical depth of each band above `level`, the top of a
@@ -1064,6 +1305,7 @@ fn grey_spectrum(level: &Level, out: &mut [f64; BANDS]) {
 /// `rate`) for every absorber that grows as `p²` (lines broadened by the
 /// pressure, the continuum, the CO₂ pairs), and methane's column total
 /// ([`super::climate`]'s methane law saturates).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn depth_above(level: &Level, rate: &Spectrum, out: &mut Spectrum) {
     let (total, methane_rate) = methane_depth(&level.gases);
     let table = &*BIN_TABLE;
@@ -1079,6 +1321,12 @@ pub(crate) fn depth_above(level: &Level, rate: &Spectrum, out: &mut Spectrum) {
 /// [`planck_bin_w_m2`] and the tail's rest of `σT⁴` past
 /// [`SPECTRUM_TOP_CM`], each Planck integral taken once per edge.
 pub(crate) fn planck_spectrum(t_k: f64, out: &mut [f64; BANDS]) {
+    planck_spectrum_upto(t_k, BINS, out);
+}
+
+/// [`planck_spectrum`] of the first `bins` bins, and of the tail when they
+/// are all of them; the other bands are left at zero.
+pub(crate) fn planck_spectrum_upto(t_k: f64, bins: usize, out: &mut [f64; BANDS]) {
     out.fill(0.0);
     if t_k <= 0.0 {
         return;
@@ -1096,7 +1344,7 @@ pub(crate) fn planck_spectrum(t_k: f64, out: &mut [f64; BANDS]) {
     };
     let mut x_lo = 0.0;
     let mut lo = edge(0);
-    for (i, o) in out[..BINS].iter_mut().enumerate() {
+    for (i, o) in out[..bins.min(BINS)].iter_mut().enumerate() {
         let x_hi = C2_CM_K * (i + 1) as f64 * BIN_WIDTH_CM / t_k;
         let hi = edge(i + 1);
         let integral = if x_lo >= SERIES_SWITCH {
@@ -1108,6 +1356,9 @@ pub(crate) fn planck_spectrum(t_k: f64, out: &mut [f64; BANDS]) {
         };
         *o = black * integral.max(0.0);
         (x_lo, lo) = (x_hi, hi);
+    }
+    if bins < BINS {
+        return;
     }
     let rest = if x_lo >= SERIES_SWITCH {
         lo

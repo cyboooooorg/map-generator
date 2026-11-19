@@ -29,8 +29,9 @@ use super::atmosphere::{co2_latent_j_mol, co2_saturation_bar};
 use super::climate::{
     Planet, STEAM_MAX_BAR, WATER_CRITICAL_K, WATER_L_OVER_R, water_saturation_bar,
 };
+use super::fast_math;
 use super::spectrum::{
-    self, BANDS, DIFFUSIVITY, G, Spectrum, absorption_spectrum, depth_above, planck_spectrum,
+    self, BANDS, BINS, DIFFUSIVITY, FastLevel, G, POINTS, TAIL, planck_spectrum,
 };
 
 /// Stefan–Boltzmann constant, W/(m²·K⁴) (CODATA 2018, exact).
@@ -330,6 +331,11 @@ pub(crate) fn plateau_olr_under_skin_w_m2(
 }
 
 /// [`olr_under_skin_w_m2`] with `levels_per_decade` levels per decade.
+///
+/// A planet's solves ask for the same column more than once (its settle
+/// loop runs the same balances again): the last [`REMEMBERED`] columns of
+/// the thread are kept with their outgoing radiation, keyed on the exact
+/// bits of their inputs, so that the answer is the same.
 fn olr_on_grid(
     gases: &Gases,
     surface_k: f64,
@@ -337,20 +343,83 @@ fn olr_on_grid(
     planet: &Planet,
     levels_per_decade: f64,
 ) -> f64 {
-    match olr_bands(gases, surface_k, skin_k, planet, levels_per_decade) {
+    let key = [
+        gases.n2,
+        gases.co2,
+        gases.h2o,
+        gases.ch4,
+        gases.nh3,
+        gases.so2,
+        gases.o2,
+        surface_k,
+        skin_k,
+        planet.gravity_m_s2,
+        levels_per_decade,
+    ]
+    .map(f64::to_bits);
+    if let Some(olr) = REMEMBERED_OLR.with_borrow(|memory| memory.find(&key)) {
+        return olr;
+    }
+    let olr = match olr_bands(gases, surface_k, skin_k, planet, levels_per_decade, radiate) {
         Some(bands) => bands.iter().sum(),
         None => SIGMA * surface_k.max(1.0).powi(4),
+    };
+    REMEMBERED_OLR.with_borrow_mut(|memory| memory.keep(key, olr));
+    olr
+}
+
+/// Columns [`olr_on_grid`] keeps per thread.
+const REMEMBERED: usize = 1024;
+
+/// The inputs of a column, as bits: the seven partial pressures, the
+/// surface and skin temperatures, the gravity and the levels per decade.
+type ColumnKey = [u64; 11];
+
+/// The last [`REMEMBERED`] columns of a thread and their outgoing
+/// radiation, the oldest replaced first.
+struct Memory {
+    keys: [ColumnKey; REMEMBERED],
+    olr: [f64; REMEMBERED],
+    len: usize,
+    next: usize,
+}
+
+impl Memory {
+    fn find(&self, key: &ColumnKey) -> Option<f64> {
+        (0..self.len)
+            .find(|&i| self.keys[i] == *key)
+            .map(|i| self.olr[i])
+    }
+
+    fn keep(&mut self, key: ColumnKey, olr: f64) {
+        self.keys[self.next] = key;
+        self.olr[self.next] = olr;
+        self.next = (self.next + 1) % REMEMBERED;
+        self.len = (self.len + 1).min(REMEMBERED);
     }
 }
 
+thread_local! {
+    static REMEMBERED_OLR: std::cell::RefCell<Memory> = const {
+        std::cell::RefCell::new(Memory {
+            keys: [[0; 11]; REMEMBERED],
+            olr: [0.0; REMEMBERED],
+            len: 0,
+            next: 0,
+        })
+    };
+}
+
 /// The outgoing radiation of [`olr_under_skin_w_m2`], W/m², in each band
-/// of [`spectrum`], on a grid of `levels_per_decade`; `None` without air.
+/// of [`spectrum`], on a grid of `levels_per_decade`, summed by
+/// `radiation` ([`radiate`]); `None` without air.
 fn olr_bands(
     gases: &Gases,
     surface_k: f64,
     skin_k: f64,
     planet: &Planet,
     levels_per_decade: f64,
+    radiation: fn(&Column) -> [f64; BANDS],
 ) -> Option<[f64; BANDS]> {
     let surface_k = surface_k.max(1.0);
     let air = DryAir::of(gases, skin_k);
@@ -376,7 +445,6 @@ fn olr_bands(
     let step = (std::f64::consts::LN_10 / levels_per_decade).max(span / MAX_LEVELS as f64);
     let n = ((span / step).ceil() as usize).clamp(1, MAX_LEVELS);
     let last = span - (n - 1) as f64 * step;
-    let step_of = |i: usize| if i + 1 == n { last } else { step };
 
     // Temperature and gases of each level, from the surface up.
     let mut temperature = [0.0; MAX_LEVELS + 1];
@@ -465,30 +533,334 @@ fn olr_bands(
         }
     }
 
-    // Two-stream radiation to space in each band, summed from the top
-    // down: the layer-mean Planck flux of the band times what the layer
-    // takes of the transmission to space. Within a band each g-point of
-    // CO₂ and of water keeps its own transmission; the band's is the
-    // product of the gases' weighted sums and the grey part's (random
-    // overlap, see `spectrum`).
-    let level_at = |i: usize| spectrum::Level {
-        temperature_k: temperature[i],
-        gases: levels[i],
+    let column = Column {
+        temperature: &temperature[..=n],
+        levels: &levels[..=n],
+        step,
+        last,
         gravity_m_s2: planet.gravity_m_s2,
+        has_co2: gases.co2 > 0.0,
+        has_water: vapour > 0.0,
     };
-    let (has_co2, has_water) = (gases.co2 > 0.0, vapour > 0.0);
+    Some(radiation(&column))
+}
+
+/// The levels of a column, from the surface up, as its radiation reads
+/// them.
+struct Column<'a> {
+    /// Temperature of each level, K.
+    temperature: &'a [f64],
+    /// Partial pressures of each level, bar.
+    levels: &'a [Gases],
+    /// Step in `ln p` between levels, and the last (top) one.
+    step: f64,
+    last: f64,
+    /// Surface gravity, m/s².
+    gravity_m_s2: f64,
+    /// Whether the column holds CO₂ and water vapour.
+    has_co2: bool,
+    has_water: bool,
+}
+
+impl Column<'_> {
+    /// Index of the top level.
+    fn top(&self) -> usize {
+        self.levels.len() - 1
+    }
+
+    /// Span in `ln p` of the layer above level `i`.
+    fn span(&self, i: usize) -> f64 {
+        if i + 1 == self.top() {
+            self.last
+        } else {
+            self.step
+        }
+    }
+
+    fn level(&self, i: usize) -> spectrum::Level {
+        spectrum::Level {
+            temperature_k: self.temperature[i],
+            gases: self.levels[i],
+            gravity_m_s2: self.gravity_m_s2,
+        }
+    }
+}
+
+/// Scratch of [`radiate`]: the absorption at a layer's two levels, the
+/// slant optical depth to space of each g-point of CO₂ and water and of
+/// the grey part, and their transmissions. Kept per thread: it is some
+/// 120 kB.
+struct Scratch {
+    top: FastLevel,
+    bottom: FastLevel,
+    co2: Depths,
+    water: Depths,
+    grey: [f32; BINS],
+}
+
+/// A gas's slant optical depth to space at each bin and g-point, and its
+/// transmission.
+struct Depths {
+    depth: [f32; POINTS],
+    through: [f32; POINTS],
+}
+
+impl Depths {
+    fn new() -> Self {
+        Self {
+            depth: [0.0; POINTS],
+            through: [0.0; POINTS],
+        }
+    }
+
+    /// The depths of the first `m` g-points (over the bins) in the uniform
+    /// air above the top, from its opacities `rate`: half its rate per
+    /// `ln p` (see [`spectrum::depth_above`]), slanted.
+    fn above(&mut self, rate: &[f32; POINTS], m: usize) {
+        let half = 0.5 * DIFFUSIVITY as f32;
+        for (d, r) in self.depth[..m].iter_mut().zip(&rate[..m]) {
+            *d = half * r;
+        }
+        transmissions(&self.depth[..m], &mut self.through[..m]);
+    }
+
+    /// One layer of `slant` (its span in `ln p` times [`DIFFUSIVITY`])
+    /// over the first `m` g-points: each one's depth gains the log mean of
+    /// its opacities at the layer's top and bottom (each the opacity and
+    /// its logarithm).
+    fn deepen(
+        &mut self,
+        top: (&[f32; POINTS], &[f32; POINTS]),
+        bottom: (&[f32; POINTS], &[f32; POINTS]),
+        slant: f32,
+        m: usize,
+    ) {
+        deepen(
+            &mut self.depth[..m],
+            (&top.0[..m], &top.1[..m]),
+            (&bottom.0[..m], &bottom.1[..m]),
+            slant,
+        );
+        transmissions(&self.depth[..m], &mut self.through[..m]);
+    }
+
+    /// The gas's transmission in bin `b`, summed over its g-points.
+    fn bin(&self, weights: &[f32; G], b: usize) -> f32 {
+        let through = &self.through[b * G..(b + 1) * G];
+        weights.iter().zip(through).map(|(w, t)| w * t).sum()
+    }
+}
+
+thread_local! {
+    static SCRATCH: std::cell::RefCell<Box<Scratch>> = std::cell::RefCell::new(Box::new(Scratch {
+        top: FastLevel::default(),
+        bottom: FastLevel::default(),
+        co2: Depths::new(),
+        water: Depths::new(),
+        grey: [0.0; BINS],
+    }));
+}
+
+/// Share of `σT⁴` at a column's warmest level under which the bins past
+/// it are left out of the sum ([`radiate`]): about the precision of its
+/// single-precision sums.
+const NEGLIGIBLE: f64 = 1e-7;
+
+/// The bins a column of `temperature` (K, each level's) sums: all of them
+/// but the last ones whose black-body flux at the warmest level, with the
+/// tail's, is under [`NEGLIGIBLE`] of the total. A column under 300 K
+/// stops short of 5000 cm⁻¹, one under 100 K short of 1800 cm⁻¹.
+fn summed_bins(temperature: &[f64]) -> usize {
+    let warmest = temperature.iter().copied().fold(0.0, f64::max);
+    let mut planck = [0.0; BANDS];
+    planck_spectrum(warmest, &mut planck);
+    let floor = NEGLIGIBLE * planck.iter().sum::<f64>();
+    let mut rest = planck[TAIL];
+    let mut bins = BINS;
+    while bins > 1 && rest + planck[bins - 1] <= floor {
+        rest += planck[bins - 1];
+        bins -= 1;
+    }
+    bins
+}
+
+/// Two-stream radiation to space in each band of `column`, summed from the
+/// top down: the layer-mean Planck flux of the band times what the layer
+/// takes of the transmission to space. Within a bin each g-point of CO₂
+/// and of water keeps its own transmission; the bin's is the product of
+/// the gases' weighted sums and the grey part's (random overlap, see
+/// `spectrum`). The tail band takes the last bin's absorption, so its
+/// transmission is that bin's. A layer's depth is the logarithmic mean of
+/// the opacities at its two levels times its span. Above the top the air
+/// is uniform ([`spectrum::depth_above`]). The sum stops where every bin
+/// is opaque ([`OPAQUE`]); the bins a cold column cannot send out
+/// ([`summed_bins`]) are taken as clear, the surface's.
+///
+/// In single precision with [`spectrum::fast_level`] and [`fast_math`]
+/// (the test `the_fast_radiation_is_the_reference` holds it to the
+/// double-precision sum of `spectrum`).
+fn radiate(column: &Column) -> [f64; BANDS] {
+    SCRATCH.with_borrow_mut(|scratch| radiate_with(column, scratch))
+}
+
+fn radiate_with(column: &Column, scratch: &mut Scratch) -> [f64; BANDS] {
+    let Scratch {
+        top,
+        bottom,
+        co2,
+        water,
+        grey,
+    } = scratch;
+    let n = column.top();
+    let weights = spectrum::weights().map(|w| w as f32);
+    let (has_co2, has_water) = (column.has_co2, column.has_water);
+    let bins = summed_bins(column.temperature);
+    let m = bins * G;
+    let mut seen = [0.0; BINS];
+    let mut out = [0.0; BANDS];
+    if bins < BINS {
+        let mut ground = [0.0; BANDS];
+        planck_spectrum(column.temperature[0], &mut ground);
+        out[bins..].copy_from_slice(&ground[bins..]);
+    }
+    let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
+    let top_level = column.level(n);
+    spectrum::fast_level(&top_level, bins, top);
+    spectrum::planck_spectrum_upto(column.temperature[n], bins, &mut planck);
+    if has_co2 {
+        co2.above(&top.co2, m);
+    }
+    if has_water {
+        water.above(&top.water, m);
+    }
+    for (b, (depth, rate)) in grey.iter_mut().zip(&top.grey).take(bins).enumerate() {
+        *depth = (DIFFUSIVITY * spectrum::grey_above(&top_level, f64::from(*rate), b)) as f32;
+    }
+    let through = |b: usize, grey: &[f32; BINS], co2: &Depths, water: &Depths| {
+        let mut through = fast_math::exp(-grey[b]);
+        if has_co2 {
+            through *= co2.bin(&weights, b);
+        }
+        if has_water {
+            through *= water.bin(&weights, b);
+        }
+        f64::from(through)
+    };
+    // The tail is summed with the last bin, when every bin is.
+    let tail = bins == BINS;
+    for b in 0..bins {
+        seen[b] = through(b, grey, co2, water);
+        out[b] = planck[b] * (1.0 - seen[b]);
+    }
+    if tail {
+        out[TAIL] = planck[TAIL] * (1.0 - seen[BINS - 1]);
+    }
+    for i in (0..n).rev() {
+        spectrum::fast_level(&column.level(i), bins, bottom);
+        spectrum::planck_spectrum_upto(column.temperature[i], bins, &mut planck_below);
+        let slant = (DIFFUSIVITY * column.span(i)) as f32;
+        deepen(
+            &mut grey[..bins],
+            (&top.grey[..bins], &top.grey_ln[..bins]),
+            (&bottom.grey[..bins], &bottom.grey_ln[..bins]),
+            slant,
+        );
+        if has_co2 {
+            co2.deepen(
+                (&top.co2, &top.co2_ln),
+                (&bottom.co2, &bottom.co2_ln),
+                slant,
+                m,
+            );
+        }
+        if has_water {
+            water.deepen(
+                (&top.water, &top.water_ln),
+                (&bottom.water, &bottom.water_ln),
+                slant,
+                m,
+            );
+        }
+        let mut open = false;
+        let last_seen = seen[BINS - 1];
+        for b in 0..bins {
+            let below = through(b, grey, co2, water);
+            out[b] += 0.5 * (planck[b] + planck_below[b]) * (seen[b] - below);
+            seen[b] = below;
+            open |= below > OPAQUE;
+        }
+        if tail {
+            out[TAIL] += 0.5 * (planck[TAIL] + planck_below[TAIL]) * (last_seen - seen[BINS - 1]);
+        }
+        std::mem::swap(top, bottom);
+        std::mem::swap(&mut planck, &mut planck_below);
+        if !open {
+            return out;
+        }
+    }
+    // `planck` is now the surface's, at `temperature[0]`.
+    for b in 0..bins {
+        out[b] += planck[b] * seen[b];
+    }
+    if tail {
+        out[TAIL] += planck[TAIL] * seen[BINS - 1];
+    }
+    out
+}
+
+/// `depth` gains `slant` times the log mean of the opacities at a layer's
+/// top and bottom (each the opacity and its logarithm), in a function of
+/// its own so that it takes vector instructions.
+#[inline(never)]
+fn deepen(depth: &mut [f32], top: (&[f32], &[f32]), bottom: (&[f32], &[f32]), slant: f32) {
+    let layers = top.0.iter().zip(top.1).zip(bottom.0.iter().zip(bottom.1));
+    for (d, ((a, ln_a), (b, ln_b))) in depth.iter_mut().zip(layers) {
+        *d += slant * log_mean_f32(*a, *ln_a, *b, *ln_b);
+    }
+}
+
+/// `e^(−depth)` of every depth, into `out`.
+#[inline(never)]
+fn transmissions(depth: &[f32], out: &mut [f32]) {
+    for (o, d) in out.iter_mut().zip(depth) {
+        *o = fast_math::exp(-d);
+    }
+}
+
+/// [`log_mean`] of `a` and `b` given their logarithms, branch-free: within
+/// 1 % of each other, its series `a (1 + d/2 + d²/6 + d³/24)` in `d = ln
+/// (b/a)` (remainder under 1e-10), and the arithmetic mean if either is
+/// zero.
+#[inline(always)]
+fn log_mean_f32(a: f32, ln_a: f32, b: f32, ln_b: f32) -> f32 {
+    let d = ln_b - ln_a;
+    let series = a * (1.0 + d * (0.5 + d * (1.0 / 6.0 + d * (1.0 / 24.0))));
+    let exact = (b - a) / d;
+    let mean = if d.abs() < 1e-2 { series } else { exact };
+    if a > 0.0 && b > 0.0 {
+        mean
+    } else {
+        0.5 * (a + b)
+    }
+}
+
+/// The double-precision sum that [`radiate`] stands for, band by band
+/// with [`spectrum::absorption_spectrum`], over every band and level.
+#[cfg(test)]
+fn radiate_reference(column: &Column) -> [f64; BANDS] {
+    use spectrum::{Spectrum, absorption_spectrum, depth_above};
+    let n = column.top();
+    let (has_co2, has_water) = (column.has_co2, column.has_water);
     let w = spectrum::weights();
-    let mut work = Box::new(Work::default());
-    let Work {
-        rate,
-        rate_below,
-        through: Spectrum { co2, water, grey },
-    } = &mut *work;
+    let mut rate = Spectrum::default();
+    let mut rate_below = Spectrum::default();
+    let mut through_g = Spectrum::default();
+    let Spectrum { co2, water, grey } = &mut through_g;
     let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
     let mut seen = [0.0; BANDS];
-    absorption_spectrum(&level_at(n), rate);
-    depth_above(&level_at(n), rate, rate_below);
-    planck_spectrum(temperature[n], &mut planck);
+    absorption_spectrum(&column.level(n), &mut rate);
+    depth_above(&column.level(n), &rate, &mut rate_below);
+    planck_spectrum(column.temperature[n], &mut planck);
     let mut out = [0.0; BANDS];
     for k in 0..BANDS {
         let mut through = (-DIFFUSIVITY * rate_below.grey[k]).exp();
@@ -505,10 +877,9 @@ fn olr_bands(
         out[k] = planck[k] * (1.0 - through);
     }
     for i in (0..n).rev() {
-        absorption_spectrum(&level_at(i), rate_below);
-        planck_spectrum(temperature[i], &mut planck_below);
-        let h = step_of(i);
-        let mut open = false;
+        absorption_spectrum(&column.level(i), &mut rate_below);
+        planck_spectrum(column.temperature[i], &mut planck_below);
+        let h = column.span(i);
         for k in 0..BANDS {
             grey[k] *= (-DIFFUSIVITY * log_mean(rate.grey[k], rate_below.grey[k]) * h).exp();
             let mut below = grey[k];
@@ -520,34 +891,20 @@ fn olr_bands(
             }
             out[k] += 0.5 * (planck[k] + planck_below[k]) * (seen[k] - below);
             seen[k] = below;
-            open |= below > OPAQUE;
         }
-        std::mem::swap(rate, rate_below);
+        std::mem::swap(&mut rate, &mut rate_below);
         std::mem::swap(&mut planck, &mut planck_below);
-        if !open {
-            return Some(out);
-        }
     }
-    // `planck` is now the surface's, at `temperature[0]`.
     for k in 0..BANDS {
         out[k] += planck[k] * seen[k];
     }
-    Some(out)
-}
-
-/// Scratch of [`olr_bands`]: the absorption at a layer's two levels, and
-/// the transmission to space of each g-point of CO₂ and water and of the
-/// grey part, per band.
-#[derive(Default)]
-struct Work {
-    rate: Spectrum,
-    rate_below: Spectrum,
-    through: Spectrum,
+    out
 }
 
 /// One gas through one layer of `span` in `ln p`: each g-point's
 /// transmission `seen` loses the layer's depth, the log mean of its rates
 /// at the layer's top and bottom; returns the gas's weighted transmission.
+#[cfg(test)]
 fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], span: f64) -> f64 {
     let mut sum = 0.0;
     for g in 0..G {
@@ -558,6 +915,7 @@ fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], s
 }
 
 /// `Σ a b`.
+#[cfg(test)]
 fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
@@ -566,6 +924,7 @@ fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
 /// layer where the opacity grows exponentially in `ln p` (a power of the
 /// pressure, as through a uniform air), and the arithmetic mean's limit
 /// when they are equal.
+#[cfg(test)]
 fn log_mean(a: f64, b: f64) -> f64 {
     if a <= 0.0 || b <= 0.0 {
         return 0.5 * (a + b);
@@ -724,6 +1083,95 @@ mod tests {
         // And with no air at all.
         let airless = olr_w_m2(&Gases::default(), 250.0, &Planet::EARTH);
         assert!((airless - SIGMA * 250f64.powi(4)).abs() < 1e-6, "{airless}");
+    }
+
+    #[test]
+    fn the_fast_radiation_is_the_reference() {
+        // The single-precision sum over the open bins against the
+        // double-precision one over every band, on columns from Titan to
+        // Venus and a steam runaway.
+        let titan = Planet {
+            gravity_m_s2: 1.352,
+            radius_earth: 0.404,
+        };
+        let venus = Planet {
+            gravity_m_s2: 8.87,
+            radius_earth: 0.95,
+        };
+        let mars = Planet {
+            gravity_m_s2: 3.71,
+            radius_earth: 0.53,
+        };
+        let moist = |t: f64| with_vapour(earth_air(), t, f64::INFINITY);
+        let cases = [
+            (moist(288.0), 288.0, 200.0, Planet::EARTH),
+            (moist(250.0), 250.0, 180.0, Planet::EARTH),
+            (moist(380.0), 380.0, plateau_skin(), Planet::EARTH),
+            (moist(600.0), 600.0, plateau_skin(), Planet::EARTH),
+            (
+                Gases {
+                    h2o: 70.0,
+                    co2: 6.0,
+                    ..earth_air()
+                },
+                1500.0,
+                250.0,
+                Planet::EARTH,
+            ),
+            (
+                Gases {
+                    co2: 92.0,
+                    n2: 3.2,
+                    h2o: 3e-3,
+                    ..Gases::default()
+                },
+                737.0,
+                tropopause_k(230.0),
+                venus,
+            ),
+            (
+                Gases {
+                    co2: 6e-3,
+                    ..Gases::default()
+                },
+                210.0,
+                tropopause_k(200.0),
+                mars,
+            ),
+            (
+                Gases {
+                    n2: 1.45,
+                    ch4: 0.07,
+                    ..Gases::default()
+                },
+                93.7,
+                tropopause_k(82.0),
+                titan,
+            ),
+            (
+                Gases {
+                    co2: 0.3,
+                    ..earth_air()
+                },
+                288.0,
+                190.0,
+                Planet::EARTH,
+            ),
+        ];
+        for (gases, t, skin, planet) in cases {
+            let olr = |radiation| {
+                olr_bands(&gases, t, skin, &planet, LEVELS_PER_DECADE, radiation)
+                    .expect("air")
+                    .iter()
+                    .sum::<f64>()
+            };
+            let (fast, reference) = (olr(radiate), olr(radiate_reference));
+            println!("{t} K: fast {fast:.5}, reference {reference:.5} W/m²");
+            assert!(
+                (fast - reference).abs() < 1e-5 * reference + 1e-6,
+                "{gases:?} at {t} K: {fast} vs {reference}"
+            );
+        }
     }
 
     #[test]
