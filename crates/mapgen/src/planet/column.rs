@@ -27,8 +27,10 @@
 use super::Gases;
 use super::atmosphere::{co2_latent_j_mol, co2_saturation_bar};
 use super::climate::{
-    STEAM_MAX_BAR, WATER_CRITICAL_K, WATER_L_OVER_R, foreign_share, opacity_per_ln_p,
-    optical_depth_at, water_saturation_bar,
+    Planet, STEAM_MAX_BAR, WATER_CRITICAL_K, WATER_L_OVER_R, water_saturation_bar,
+};
+use super::spectrum::{
+    self, BANDS, DIFFUSIVITY, G, Spectrum, absorption_spectrum, depth_above, planck_spectrum,
 };
 
 /// Stefan–Boltzmann constant, W/(m²·K⁴) (CODATA 2018, exact).
@@ -72,13 +74,10 @@ fn steam_cp(temperature_k: f64) -> f64 {
 /// and the saturation curve share one latent heat.
 const WATER_L_MOLAR: f64 = WATER_L_OVER_R * R_GAS;
 
-/// Optical depth from the top at which the column radiates to space in
-/// the grey two-stream approximation: the diffusivity factor `D` = 3/2
-/// of the Eddington closure (Pierrehumbert 2010, §4.3; from memory, not
-/// checked), with which the
-/// transmission `exp(−D τ)` falls to `1/e` at `τ` = 2/3, the Eddington
-/// emission level.
-const DIFFUSIVITY: f64 = 1.5;
+/// Transmission under which a band of the column is opaque: below it,
+/// `exp(−40)`, the levels and the surface it hides add nothing to the
+/// outgoing radiation.
+const OPAQUE: f64 = 4.248_354_255_291_589e-18;
 
 /// Levels of the pressure grid per decade of pressure. Calibration: the
 /// moist plateau moves by under 0.5 W/m² and Earth's thermostat CO₂ by
@@ -86,9 +85,17 @@ const DIFFUSIVITY: f64 = 1.5;
 /// put Earth's outgoing radiation 3.6 W/m² off with the trapezoidal rule.
 const LEVELS_PER_DECADE: f64 = 20.0;
 
-/// Most levels in a column: sixteen decades of pressure (the steam is
-/// capped at [`STEAM_MAX_BAR`], so a column spans about seven).
-const MAX_LEVELS: usize = 320;
+/// Levels per decade of the column that measures the moist plateau
+/// ([`plateau_olr_under_skin_w_m2`]): against twice as many, the plateau
+/// moves by under 0.5 W/m² (the test
+/// `the_plateaus_grid_is_converged`), where [`LEVELS_PER_DECADE`] leaves
+/// it about 2 W/m² high.
+pub(crate) const PLATEAU_LEVELS_PER_DECADE: f64 = 80.0;
+
+/// Most levels in a column: eight decades of pressure at twice
+/// [`PLATEAU_LEVELS_PER_DECADE`] (the steam is capped at
+/// [`STEAM_MAX_BAR`], so a column spans about seven).
+const MAX_LEVELS: usize = 1280;
 
 /// Top of the column: `TOP_SHARE` of the surface pressure, and never
 /// above `TOP_BAR`, so that the emitting levels of water (near 1e-3 bar)
@@ -186,21 +193,12 @@ impl DryAir {
         }
     }
 
-    /// The gases that radiate at a level where the dry air has `dry_bar`
-    /// and the vapour `vapour_bar`: the methane cold-trapped at the
-    /// tropopause (see [`radiating_methane_bar`]) is left out.
-    fn at(&self, dry_bar: f64, vapour_bar: f64) -> Gases {
-        let share = if self.pressure > 0.0 {
-            dry_bar / self.pressure
-        } else {
-            0.0
-        };
-        self.with_co2(dry_bar, vapour_bar, self.gases.co2 * share)
-    }
-
-    /// [`DryAir::at`] with `co2_bar` of CO₂ at the level, what its
+    /// The gases that radiate at a level where the dry air has `dry_bar`,
+    /// the vapour `vapour_bar` and the CO₂ `co2_bar`, what its
     /// condensation leaves there ([`olr_under_skin_w_m2`]): the other
-    /// gases share the rest of the dry air in their surface proportions.
+    /// gases share the rest of the dry air in their surface proportions,
+    /// and the methane cold-trapped at the tropopause (see
+    /// [`radiating_methane_bar`]) is left out.
     fn with_co2(&self, dry_bar: f64, vapour_bar: f64, co2_bar: f64) -> Gases {
         let others = self.pressure - self.gases.co2;
         let share = if others > 0.0 {
@@ -297,8 +295,8 @@ fn lapse(
 /// surface at `surface_k`, with no stratosphere. See the module
 /// documentation and [`olr_under_skin_w_m2`].
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64) -> f64 {
-    olr_under_skin_w_m2(gases, surface_k, 0.0)
+pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64, planet: &Planet) -> f64 {
+    olr_under_skin_w_m2(gases, surface_k, 0.0, planet)
 }
 
 /// Outgoing longwave radiation, W/m², of the column of [`olr_w_m2`] whose
@@ -309,10 +307,52 @@ pub(crate) fn olr_w_m2(gases: &Gases, surface_k: f64) -> f64 {
 /// [`STEAM_MAX_BAR`] in any column, wet or runaway: the non-grey window
 /// it stands for exists in every thick steam column), up to [`TOP_SHARE`] of the surface pressure
 /// (never above [`TOP_BAR`]) on a log grid. Without air the surface
-/// radiates as a black body.
-pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) -> f64 {
+/// radiates as a black body. `planet`'s gravity turns the pressures into
+/// the absorbers' column masses (`p / g`).
+pub(crate) fn olr_under_skin_w_m2(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+) -> f64 {
+    olr_on_grid(gases, surface_k, skin_k, planet, LEVELS_PER_DECADE)
+}
+
+/// [`olr_under_skin_w_m2`] on the finer grid of
+/// [`PLATEAU_LEVELS_PER_DECADE`], for the moist plateau.
+pub(crate) fn plateau_olr_under_skin_w_m2(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+) -> f64 {
+    olr_on_grid(gases, surface_k, skin_k, planet, PLATEAU_LEVELS_PER_DECADE)
+}
+
+/// [`olr_under_skin_w_m2`] with `levels_per_decade` levels per decade.
+fn olr_on_grid(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+    levels_per_decade: f64,
+) -> f64 {
+    match olr_bands(gases, surface_k, skin_k, planet, levels_per_decade) {
+        Some(bands) => bands.iter().sum(),
+        None => SIGMA * surface_k.max(1.0).powi(4),
+    }
+}
+
+/// The outgoing radiation of [`olr_under_skin_w_m2`], W/m², in each band
+/// of [`spectrum`], on a grid of `levels_per_decade`; `None` without air.
+fn olr_bands(
+    gases: &Gases,
+    surface_k: f64,
+    skin_k: f64,
+    planet: &Planet,
+    levels_per_decade: f64,
+) -> Option<[f64; BANDS]> {
     let surface_k = surface_k.max(1.0);
-    let black = SIGMA * surface_k.powi(4);
     let air = DryAir::of(gases, skin_k);
     let steam = if gases.h2o > 0.0 {
         gases.h2o.min(STEAM_MAX_BAR)
@@ -327,23 +367,20 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
     };
     let surface_bar = air.pressure + vapour;
     if surface_bar <= 0.0 {
-        return black;
+        return None;
     }
-    // The other gases broaden lines in proportion to their pressure, by
-    // the share their whole column has (see `foreign_share`).
-    let share = foreign_share(&air.at(air.pressure, steam));
     let top_bar = (surface_bar * TOP_SHARE).min(TOP_BAR);
     let span = (surface_bar / top_bar).ln();
     // Fixed steps in ln p from the surface, the last one shorter, so that
     // the outgoing radiation does not jump as the surface pressure moves.
-    let step = (std::f64::consts::LN_10 / LEVELS_PER_DECADE).max(span / MAX_LEVELS as f64);
+    let step = (std::f64::consts::LN_10 / levels_per_decade).max(span / MAX_LEVELS as f64);
     let n = ((span / step).ceil() as usize).clamp(1, MAX_LEVELS);
     let last = span - (n - 1) as f64 * step;
     let step_of = |i: usize| if i + 1 == n { last } else { step };
 
-    // Temperature and opacity per ln p of each level, from the surface up.
+    // Temperature and gases of each level, from the surface up.
     let mut temperature = [0.0; MAX_LEVELS + 1];
-    let mut opacity = [0.0; MAX_LEVELS + 1];
+    let mut levels = [Gases::default(); MAX_LEVELS + 1];
     let mut saturated = !supercritical && steam >= water_saturation_bar(surface_k);
     let mut frozen = false;
     let mut vapour_share = vapour / surface_bar;
@@ -351,7 +388,6 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
     let mut p = surface_bar;
     let (ratio, half_ratio) = ((-step).exp(), (-0.5 * step).exp());
     let (last_ratio, last_half) = ((-last).exp(), (-0.5 * last).exp());
-    let mut top = air.at(air.pressure, vapour);
     // CO₂'s share of the dry air: where the air reaches its saturation it
     // condenses, the air follows its pseudo-adiabat ([`co2_lapse`]) and
     // the share falls to what saturation leaves; above the skin it keeps
@@ -366,9 +402,8 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
         let v = vapour_share * p;
         let level = air.with_co2(p - v, v, co2_share * (p - v));
         temperature[i] = t;
-        opacity[i] = opacity_per_ln_p(&level, share);
+        levels[i] = level;
         if i == n {
-            top = level;
             break;
         }
         let (h, r, half_r) = if i + 1 == n {
@@ -430,22 +465,101 @@ pub(crate) fn olr_under_skin_w_m2(gases: &Gases, surface_k: f64, skin_k: f64) ->
         }
     }
 
-    // Grey two-stream radiation to space, summed from the top down.
-    let mut tau = optical_depth_at(&top, share);
-    let mut seen = (-DIFFUSIVITY * tau).exp();
-    let mut out = SIGMA * temperature[n].powi(4) * (1.0 - seen);
+    // Two-stream radiation to space in each band, summed from the top
+    // down: the layer-mean Planck flux of the band times what the layer
+    // takes of the transmission to space. Within a band each g-point of
+    // CO₂ and of water keeps its own transmission; the band's is the
+    // product of the gases' weighted sums and the grey part's (random
+    // overlap, see `spectrum`).
+    let level_at = |i: usize| spectrum::Level {
+        temperature_k: temperature[i],
+        gases: levels[i],
+        gravity_m_s2: planet.gravity_m_s2,
+    };
+    let (has_co2, has_water) = (gases.co2 > 0.0, vapour > 0.0);
+    let w = spectrum::weights();
+    let mut work = Box::new(Work::default());
+    let Work {
+        rate,
+        rate_below,
+        through: Spectrum { co2, water, grey },
+    } = &mut *work;
+    let (mut planck, mut planck_below) = ([0.0; BANDS], [0.0; BANDS]);
+    let mut seen = [0.0; BANDS];
+    absorption_spectrum(&level_at(n), rate);
+    depth_above(&level_at(n), rate, rate_below);
+    planck_spectrum(temperature[n], &mut planck);
+    let mut out = [0.0; BANDS];
+    for k in 0..BANDS {
+        let mut through = (-DIFFUSIVITY * rate_below.grey[k]).exp();
+        grey[k] = through;
+        if has_co2 {
+            co2[k] = rate_below.co2[k].map(|d| (-DIFFUSIVITY * d).exp());
+            through *= dot(w, &co2[k]);
+        }
+        if has_water {
+            water[k] = rate_below.water[k].map(|d| (-DIFFUSIVITY * d).exp());
+            through *= dot(w, &water[k]);
+        }
+        seen[k] = through;
+        out[k] = planck[k] * (1.0 - through);
+    }
     for i in (0..n).rev() {
-        let depth = log_mean(opacity[i], opacity[i + 1]) * step_of(i);
-        let source = 0.5 * SIGMA * (temperature[i].powi(4) + temperature[i + 1].powi(4));
-        let below = seen * (-DIFFUSIVITY * depth).exp();
-        out += source * (seen - below);
-        seen = below;
-        tau += depth;
-        if DIFFUSIVITY * tau > 40.0 {
-            return out;
+        absorption_spectrum(&level_at(i), rate_below);
+        planck_spectrum(temperature[i], &mut planck_below);
+        let h = step_of(i);
+        let mut open = false;
+        for k in 0..BANDS {
+            grey[k] *= (-DIFFUSIVITY * log_mean(rate.grey[k], rate_below.grey[k]) * h).exp();
+            let mut below = grey[k];
+            if has_co2 {
+                below *= layer(w, &mut co2[k], &rate.co2[k], &rate_below.co2[k], h);
+            }
+            if has_water {
+                below *= layer(w, &mut water[k], &rate.water[k], &rate_below.water[k], h);
+            }
+            out[k] += 0.5 * (planck[k] + planck_below[k]) * (seen[k] - below);
+            seen[k] = below;
+            open |= below > OPAQUE;
+        }
+        std::mem::swap(rate, rate_below);
+        std::mem::swap(&mut planck, &mut planck_below);
+        if !open {
+            return Some(out);
         }
     }
-    out + black * seen
+    // `planck` is now the surface's, at `temperature[0]`.
+    for k in 0..BANDS {
+        out[k] += planck[k] * seen[k];
+    }
+    Some(out)
+}
+
+/// Scratch of [`olr_bands`]: the absorption at a layer's two levels, and
+/// the transmission to space of each g-point of CO₂ and water and of the
+/// grey part, per band.
+#[derive(Default)]
+struct Work {
+    rate: Spectrum,
+    rate_below: Spectrum,
+    through: Spectrum,
+}
+
+/// One gas through one layer of `span` in `ln p`: each g-point's
+/// transmission `seen` loses the layer's depth, the log mean of its rates
+/// at the layer's top and bottom; returns the gas's weighted transmission.
+fn layer(w: &[f64; G], seen: &mut [f64; G], top: &[f64; G], bottom: &[f64; G], span: f64) -> f64 {
+    let mut sum = 0.0;
+    for g in 0..G {
+        seen[g] *= (-DIFFUSIVITY * log_mean(top[g], bottom[g]) * span).exp();
+        sum += w[g] * seen[g];
+    }
+    sum
+}
+
+/// `Σ a b`.
+fn dot(a: &[f64; G], b: &[f64; G]) -> f64 {
+    a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
 
 /// Logarithmic mean of two opacities per `ln p`: the exact mean over a
@@ -461,5 +575,170 @@ fn log_mean(a: f64, b: f64) -> f64 {
         0.5 * (a + b)
     } else {
         (b - a) / r.ln()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planet::climate::{
+        MOIST_PLATEAU_W_M2, PLATEAU_SURFACES_K, Planet, tropopause_k, with_vapour,
+    };
+
+    /// Earth's dry air, bar.
+    fn earth_air() -> Gases {
+        Gases {
+            n2: 0.78,
+            o2: 0.21,
+            co2: 4e-4,
+            ..Gases::default()
+        }
+    }
+
+    /// The skin of the moist plateau's solves: `T_eq / 2^¼` of a body that
+    /// absorbs the plateau.
+    fn plateau_skin() -> f64 {
+        tropopause_k((*MOIST_PLATEAU_W_M2 / SIGMA).powf(0.25))
+    }
+
+    /// Outgoing radiation of `air` over a moist surface at `t`, under the
+    /// plateau's skin, on Earth.
+    fn moist_olr(air: Gases, t: f64) -> f64 {
+        olr_under_skin_w_m2(
+            &with_vapour(air, t, f64::INFINITY),
+            t,
+            plateau_skin(),
+            &Planet::EARTH,
+        )
+    }
+
+    #[test]
+    fn the_moist_plateau_is_goldblatts() {
+        // Goldblatt, Robinson, Zahnle & Crisp 2013: 282 W/m² line by line;
+        // 5 % covers Boukrouche et al. 2021 (283) and Hamano et al. 2015
+        // (280).
+        let plateau = *MOIST_PLATEAU_W_M2;
+        println!("moist plateau {plateau:.2} W/m²");
+        assert!((plateau - 282.0).abs() <= 14.0, "{plateau} W/m²");
+    }
+
+    #[test]
+    fn the_plateau_ignores_co2_and_nitrogen() {
+        let base = moist_olr(earth_air(), 380.0);
+        for co2 in [4e-4, 1e-3, 1e-2] {
+            for n2 in [0.78, 1.56, 2.34] {
+                let olr = moist_olr(
+                    Gases {
+                        co2,
+                        n2,
+                        ..earth_air()
+                    },
+                    380.0,
+                );
+                println!("CO₂ {co2} bar, N₂ {n2} bar: {olr:.2} W/m²");
+                assert!(
+                    (olr / base - 1.0).abs() < 0.03,
+                    "CO₂ {co2}, N₂ {n2}: {olr} vs {base}"
+                );
+            }
+        }
+    }
+
+    /// Outgoing radiation of Earth's moist air over a saturated surface at
+    /// `t`, under the plateau's skin, on `levels` levels per decade.
+    fn moist_olr_on(t: f64, levels: f64) -> f64 {
+        olr_on_grid(
+            &with_vapour(earth_air(), t, f64::INFINITY),
+            t,
+            plateau_skin(),
+            &Planet::EARTH,
+            levels,
+        )
+    }
+
+    #[test]
+    fn the_runaway_anchor_is_flat() {
+        // Past the curve's maximum the outgoing radiation is flat within
+        // 1 % of its asymptote, the plateau, over 500-640 K, and the
+        // maximum (near 350-400 K, Goldblatt et al. 2013) stands at most
+        // 6 % above it.
+        let plateau = *MOIST_PLATEAU_W_M2;
+        for t in PLATEAU_SURFACES_K {
+            let olr = moist_olr_on(t, PLATEAU_LEVELS_PER_DECADE);
+            println!("anchor at {t} K: {olr:.2} W/m²");
+            assert!(
+                (olr / plateau - 1.0).abs() < 0.01,
+                "{t} K: {olr} vs {plateau}"
+            );
+        }
+        let peak = (0..9)
+            .map(|i| moist_olr_on(340.0 + 20.0 * i as f64, PLATEAU_LEVELS_PER_DECADE))
+            .fold(0.0, f64::max);
+        println!("peak {peak:.2} W/m² over the plateau {plateau:.2}");
+        assert!(peak <= 1.06 * plateau, "peak {peak} vs {plateau}");
+        assert!(peak > plateau, "no maximum before the plateau: {peak}");
+    }
+
+    #[test]
+    fn the_plateaus_grid_is_converged() {
+        let skin = plateau_skin();
+        let mean = |levels: f64| {
+            PLATEAU_SURFACES_K
+                .iter()
+                .map(|&t| moist_olr_on(t, levels))
+                .sum::<f64>()
+                / PLATEAU_SURFACES_K.len() as f64
+        };
+        let (plateau, fine) = (
+            mean(PLATEAU_LEVELS_PER_DECADE),
+            mean(2.0 * PLATEAU_LEVELS_PER_DECADE),
+        );
+        println!("asymptote under skin {skin:.1} K: {plateau:.2}, twice as fine {fine:.2}");
+        assert!((plateau - fine).abs() < 0.5, "{plateau} vs {fine}");
+    }
+
+    #[test]
+    fn a_column_without_co2_or_water_radiates_from_its_methane_or_ground() {
+        // Titan: 1.45 bar of N₂ and 5 % methane over 93.7 K, under the skin
+        // of its 82 K equilibrium, at its gravity.
+        let titan = Planet {
+            gravity_m_s2: 1.352,
+            radius_earth: 0.404,
+        };
+        let air = Gases {
+            n2: 1.45,
+            ch4: 0.07,
+            ..Gases::default()
+        };
+        let black = SIGMA * 93.7f64.powi(4);
+        let olr = olr_under_skin_w_m2(&air, 93.7, tropopause_k(82.0), &titan);
+        println!("Titan-like column: {olr:.3} W/m² against σT⁴ {black:.3}");
+        assert!(olr.is_finite() && olr > 0.0 && olr < black, "{olr}");
+        // Nitrogen alone is transparent: the ground radiates through it.
+        let n2 = Gases {
+            n2: 1.45,
+            ..Gases::default()
+        };
+        let bare = olr_under_skin_w_m2(&n2, 93.7, tropopause_k(82.0), &titan);
+        assert!((bare / black - 1.0).abs() < 1e-9, "{bare} vs {black}");
+        // And with no air at all.
+        let airless = olr_w_m2(&Gases::default(), 250.0, &Planet::EARTH);
+        assert!((airless - SIGMA * 250f64.powi(4)).abs() < 1e-6, "{airless}");
+    }
+
+    #[test]
+    fn venus_column_is_finite() {
+        let venus = Planet {
+            gravity_m_s2: 8.87,
+            radius_earth: 0.95,
+        };
+        let air = Gases {
+            co2: 92.0,
+            ..Gases::default()
+        };
+        let olr = olr_under_skin_w_m2(&air, 737.0, tropopause_k(230.0), &venus);
+        println!("Venus column: {olr:.3} W/m²");
+        assert!(olr.is_finite() && olr > 0.0, "{olr}");
+        assert!(olr < SIGMA * 737f64.powi(4), "{olr}");
     }
 }

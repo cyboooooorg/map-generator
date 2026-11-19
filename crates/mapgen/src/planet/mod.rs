@@ -509,6 +509,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
                     water,
                     flux,
                     water.kept_kg * bar_per_kg,
+                    &steps.planet,
                 )
         };
         let mut steps = bare(context, &inputs, &interior, &heat, fluence, w);

@@ -137,6 +137,7 @@ pub fn emissivity(frost: &Gases) -> f64 {
 /// with the exponent 0.07 under the fixed albedo 0.3, which left Venus at
 /// 565 K under 0.76; 1.66 on the old Eddington core, 0.575 on the column
 /// with the old exponent 0.27, issue #441.)
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const CO2_OPACITY: f64 = 1.45;
 
 /// Power of the CO₂ partial pressure in its opacity. Calibration, no
@@ -158,6 +159,7 @@ const CO2_OPACITY: f64 = 1.45;
 /// which left the Archean at 259 K). Modern Earth's thermostat then
 /// leaves a few mbar of CO₂ (the real one, 0.28 mbar): the grey column's
 /// trace CO₂ is weaker than the real band.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const CO2_EXPONENT: f64 = 0.19;
 
 /// Partial pressure of CO₂, bar, below which its opacity falls in
@@ -168,10 +170,12 @@ const CO2_EXPONENT: f64 = 0.19;
 /// under Earth's 280 ppm, under the few ppm the thermostat leaves under 2
 /// or 3 bar of N₂, and above the 3e-10 bar on Titan, which the small
 /// power would otherwise turn into a greenhouse of a few kelvin.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const CO2_WEAK_BAR: f64 = 1e-6;
 
 /// The power of CO₂'s own pressure in its opacity at `co2` bar: 1 in the
 /// weak-line limit under [`CO2_WEAK_BAR`], [`CO2_EXPONENT`] above it.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 fn co2_power(co2: f64) -> f64 {
     if co2 < CO2_WEAK_BAR {
         1.0
@@ -182,6 +186,7 @@ fn co2_power(co2: f64) -> f64 {
 
 /// CO₂'s own factor in its opacity, `(p / 1 bar)^a`, continuous at
 /// [`CO2_WEAK_BAR`]: linear under it, [`CO2_EXPONENT`] above it.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 fn co2_amount(co2: f64) -> f64 {
     if co2 < CO2_WEAK_BAR {
         CO2_WEAK_BAR.powf(CO2_EXPONENT) * co2 / CO2_WEAK_BAR
@@ -202,6 +207,7 @@ fn co2_amount(co2: f64) -> f64 {
 /// twenty times better than nitrogen does (see
 /// [`WATER_FOREIGN_BROADENING`]), and because the column radiates from
 /// its cold upper levels where the vapour is a trace.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const H2O_OPACITY: f64 = 111.0;
 
 /// Grey opacity of methane at 1 bar in 1 bar of air, with
@@ -371,6 +377,7 @@ fn absorbed_w_m2(t_eq: f64, gases: &Gases, heat_flux_w_m2: f64) -> f64 {
 /// and its width `α` growing with the pressure of the gases round it
 /// (Pierrehumbert 2010, *Principles of Planetary Climate*, §4.4; Goody &
 /// Yung 1989, *Atmospheric Radiation*, ch. 4).
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const LINE_EXPONENT: f64 = 0.5;
 
 /// Pressure of the other gases, bar, up to which they broaden lines in
@@ -382,6 +389,7 @@ const LINE_EXPONENT: f64 = 0.5;
 /// and three times Earth's nitrogen, as the limit should (Nakajima,
 /// Hayashi & Abe 1992); a lower knee tempered the broadening of a 3x
 /// nitrogen column and lifted its plateau by 4 %.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const BROADENING_KNEE_BAR: f64 = 2.6;
 
 /// Power of the other gases' pressure past [`BROADENING_KNEE_BAR`] in
@@ -405,6 +413,7 @@ const BROADENING_KNEE_BAR: f64 = 2.6;
 /// broadening more than they find, so past the knee it adds none.
 ///
 /// The saturation also acts level by level: see [`LOCAL_KNEE_BAR`].
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const THICK_AIR_EXPONENT: f64 = 0.0;
 
 /// Pressure of the other gases at a level, bar, up to which they broaden
@@ -423,12 +432,14 @@ const THICK_AIR_EXPONENT: f64 = 0.0;
 /// Charnay et al. 2013 7 K); at the 380 K moist plateau the emitting
 /// levels hold a few hundredths of a bar of nitrogen, under the knee, so
 /// the plateau keeps its independence from the nitrogen.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const LOCAL_KNEE_BAR: f64 = 0.18;
 
 /// Power of the other gases' pressure past [`LOCAL_KNEE_BAR`] at a level
 /// in the pressure that broadens lines there. Calibration with it: the
 /// doubled-nitrogen warming of the late Archean (7.4 K at 0.05, 9.2 K at
 /// 0.1 with a knee of 0.2 bar).
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const LOCAL_KNEE_EXPONENT: f64 = 0.05;
 
 /// How well the other gases broaden water's lines against the water
@@ -445,6 +456,7 @@ const LOCAL_KNEE_EXPONENT: f64 = 0.05;
 /// some hundred times its foreign continuum per molecule (Shine, Ptashnik
 /// & Rädel 2012, *Surv. Geophys.* 33, 535, doi:10.1007/s10712-011-9170-y;
 /// from memory, not checked): a grey share between the two.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 const WATER_FOREIGN_BROADENING: f64 = 0.05;
 
 /// Share of their own pressure with which the other gases of `gases`
@@ -453,6 +465,7 @@ const WATER_FOREIGN_BROADENING: f64 = 0.05;
 /// column broadens as `K (P/K)^`[`THICK_AIR_EXPONENT`]. The column of
 /// [`super::column`] applies it to every level, so that a uniform column
 /// keeps the totals of [`optical_depth_at`] at its surface.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 pub(super) fn foreign_share(gases: &Gases) -> f64 {
     let others = (gases.total() - gases.co2.max(0.0) - gases.h2o.max(0.0)).max(0.0);
     if others <= BROADENING_KNEE_BAR {
@@ -476,6 +489,7 @@ pub(super) fn foreign_share(gases: &Gases) -> f64 {
 /// which Kopparapu et al. 2013 (*ApJ* 765, 131,
 /// doi:10.1088/0004-637X/765/2/131) put at about 1.67 AU with CO₂–H₂O
 /// atmospheres, by a broadening no calibration constrains.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 fn broadening_bar(gases: &Gases, share: f64) -> f64 {
     let co2 = gases.co2.max(0.0);
     let h2o = gases.h2o.max(0.0);
@@ -497,6 +511,7 @@ fn broadening_bar(gases: &Gases, share: f64) -> f64 {
 /// doi:10.1016/j.jms.2007.07.010, in the far infrared, not checked); it
 /// counts here as air does, so that the opacities keep their
 /// calibration.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 fn water_broadening_bar(gases: &Gases, share: f64) -> f64 {
     let h2o = gases.h2o.max(0.0);
     h2o + WATER_FOREIGN_BROADENING * (broadening_bar(gases, share) - h2o)
@@ -546,6 +561,7 @@ pub(super) const STEAM_MAX_BAR: f64 = 70.0;
 /// [`broadening_bar`], for water [`water_broadening_bar`]; methane's
 /// saturates and its `P_b` is the whole air, since its opacity stands for
 /// Titan's collision-induced greenhouse (see [`methane_depth`]).
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 fn depths(gases: &Gases, share: f64) -> [f64; 3] {
     // `LINE_EXPONENT` is ½: square roots, the column's hot path.
     const { assert!(LINE_EXPONENT == 0.5) };
@@ -565,6 +581,7 @@ fn depths(gases: &Gases, share: f64) -> [f64; 3] {
 /// Grey infrared optical depth, from the top down to where the air has
 /// the partial pressures `gases` (bar), of a uniform air whose other
 /// gases broaden lines by `share` of their pressure (see [`depths`]).
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 pub(super) fn optical_depth_at(gases: &Gases, share: f64) -> f64 {
     depths(gases, share).iter().sum()
 }
@@ -578,6 +595,7 @@ pub(super) fn optical_depth_at(gases: &Gases, share: f64) -> f64 {
 /// Past [`LOCAL_KNEE_BAR`] of foreign gases the broadening grows slower
 /// and this rate overstates the derivative a little; the calibrations
 /// are made with it.
+#[cfg_attr(not(test), allow(dead_code))] // Grey law (#523), out of the column.
 pub(super) fn opacity_per_ln_p(gases: &Gases, share: f64) -> f64 {
     let [co2, h2o, _] = depths(gases, share);
     (co2_power(gases.co2.max(0.0)) + LINE_EXPONENT) * co2
@@ -656,33 +674,67 @@ fn bracket(mut excess: impl FnMut(f64) -> f64, absorbed: f64, start: Point) -> (
 /// ([`absorbing`]).
 const RUNAWAY_ALBEDO: (f64, f64) = (0.0, 0.9);
 
-/// The column's own moist plateau, W/m²: the outgoing radiation of
-/// Earth's air over a saturated surface at 380 K (about 287 W/m², the
-/// Simpson–Nakajima limit of the column, see [`H2O_OPACITY`]), under the
-/// stratosphere the surface solves give it ([`column::olr_under_skin_w_m2`]):
-/// the skin `T_eq / 2^¼` of a body at its star's runaway limit `S_rg`.
-/// There a runaway absorbs the plateau itself (see [`absorbing`]), so
-/// `T_eq = (F_plateau / σ)^¼` whatever the star: the plateau and its skin
-/// are solved together by a fixed-point iteration (the skin moves the
-/// plateau by under 0.1 W/m², so a few steps settle it).
+/// The column's own moist plateau, W/m²: the asymptote of the outgoing
+/// radiation of Earth's air over a saturated surface, the
+/// Simpson–Nakajima limit, as the mean over surfaces of 500 to 640 K
+/// ([`PLATEAU_SURFACES_K`]). Line-by-line curves rise to a maximum near
+/// 350-400 K and then fall a few percent to this asymptote (Goldblatt,
+/// Robinson, Zahnle & Crisp 2013, *Nature Geosci.* 6, 661, Fig. 1); the
+/// column's does too (about 295 W/m² at 360 K, 284 from 500 K on). It is
+/// taken under the stratosphere the surface solves give it
+/// ([`column::plateau_olr_under_skin_w_m2`], on the plateau's finer grid
+/// of [`column::PLATEAU_LEVELS_PER_DECADE`]): the skin `T_eq / 2^¼` of a
+/// body at its star's runaway limit `S_rg`. There a runaway absorbs the
+/// plateau itself (see [`absorbing`]), so `T_eq = (F_plateau / σ)^¼`
+/// whatever the star: the plateau and its skin are solved together by a
+/// fixed-point iteration (the skin moves the plateau by under 0.1 W/m²,
+/// so a few steps settle it).
 pub(super) static MOIST_PLATEAU_W_M2: std::sync::LazyLock<f64> = std::sync::LazyLock::new(|| {
+    let mut plateau = 282.0;
+    for _ in 0..8 {
+        let next = moist_asymptote_w_m2(plateau_skin_k(plateau));
+        let settled = (next - plateau).abs() < 0.01;
+        plateau = next;
+        if settled {
+            break;
+        }
+    }
+    plateau
+});
+
+/// Surfaces, K, over which [`MOIST_PLATEAU_W_M2`] averages the moist
+/// column: 500 to 640 K every 20 K, past the curve's maximum.
+pub(super) const PLATEAU_SURFACES_K: [f64; 8] =
+    [500.0, 520.0, 540.0, 560.0, 580.0, 600.0, 620.0, 640.0];
+
+/// Mean outgoing radiation, W/m², of Earth's air over a saturated surface
+/// at [`PLATEAU_SURFACES_K`] under a skin at `skin_k`, on the plateau's
+/// grid.
+fn moist_asymptote_w_m2(skin_k: f64) -> f64 {
+    let sum: f64 = PLATEAU_SURFACES_K
+        .iter()
+        .map(|&t| moist_earth_olr_w_m2(t, skin_k))
+        .sum();
+    sum / PLATEAU_SURFACES_K.len() as f64
+}
+
+/// Outgoing radiation, W/m², of Earth's air (0.78 bar N₂, 0.21 bar O₂,
+/// 400 ppm CO₂) over a saturated surface at `surface_k`, under a skin at
+/// `skin_k`, on the plateau's grid.
+pub(super) fn moist_earth_olr_w_m2(surface_k: f64, skin_k: f64) -> f64 {
     let air = Gases {
         n2: 0.78,
         o2: 0.21,
         co2: 4e-4,
         ..Gases::default()
     };
-    let moist = with_vapour(air, 380.0, f64::INFINITY);
-    let mut plateau = column::olr_w_m2(&moist, 380.0);
-    for _ in 0..8 {
-        plateau = column::olr_under_skin_w_m2(&moist, 380.0, plateau_skin_k(plateau));
-    }
-    plateau
-});
+    let moist = with_vapour(air, surface_k, f64::INFINITY);
+    column::plateau_olr_under_skin_w_m2(&moist, surface_k, skin_k, &Planet::EARTH)
+}
 
 /// The skin temperature, K, of the surface solves (`T_eq / 2^¼`) for a
 /// body that absorbs `absorbed_w_m2`: `T_eq = (absorbed / σ)^¼`.
-fn plateau_skin_k(absorbed_w_m2: f64) -> f64 {
+pub(super) fn plateau_skin_k(absorbed_w_m2: f64) -> f64 {
     tropopause_k((absorbed_w_m2 / SIGMA).powf(0.25))
 }
 
@@ -783,6 +835,7 @@ pub fn surface_temperature_k(
     gases: &Gases,
     heat_flux_w_m2: f64,
     emissivity: f64,
+    planet: &Planet,
 ) -> f64 {
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = absorbed_w_m2(t_eq, gases, heat_flux_w_m2);
@@ -792,7 +845,7 @@ pub fn surface_temperature_k(
         return bare;
     }
     let skin = tropopause_k(t_eq);
-    let excess = |t: f64| e * column::olr_under_skin_w_m2(gases, t, skin) - absorbed;
+    let excess = |t: f64| e * column::olr_under_skin_w_m2(gases, t, skin, planet) - absorbed;
     // The column radiates no more than its surface, so `bare` is a lower
     // bound; and the vapour in `gases` would condense on a surface colder
     // than its saturation temperature (a runaway's steam is all in its
@@ -1163,17 +1216,18 @@ pub fn boils(
     water: &Water,
     heat_flux_w_m2: f64,
     water_bar: f64,
+    planet: &Planet,
 ) -> bool {
     !water.runaway
         && water.kept_kg > 0.0
-        && wet_balance(context, *gases, heat_flux_w_m2, water_bar, 1.0).is_none()
+        && wet_balance(context, *gases, heat_flux_w_m2, water_bar, 1.0, planet).is_none()
 }
 
 /// `gases` with the water vapour an ocean or ice keeps at
 /// `temperature_k`: [`RELATIVE_HUMIDITY`] of saturation, but never more
 /// than the `water_bar` the body's whole water would weigh as vapour (a
 /// trace of water cannot fill the air with a hundred bar of steam).
-fn with_vapour(gases: Gases, temperature_k: f64, water_bar: f64) -> Gases {
+pub(super) fn with_vapour(gases: Gases, temperature_k: f64, water_bar: f64) -> Gases {
     Gases {
         h2o: (RELATIVE_HUMIDITY * water_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
         ..gases
@@ -1212,6 +1266,7 @@ fn wet_balance(
     heat_flux_w_m2: f64,
     water_bar: f64,
     emissivity: f64,
+    planet: &Planet,
 ) -> Option<(Gases, f64)> {
     let t_eq = context.equilibrium_k.max(0.0);
     let absorbed = absorbed_w_m2(t_eq, &gases, heat_flux_w_m2);
@@ -1219,7 +1274,8 @@ fn wet_balance(
     // A grey surface as in `surface_temperature_k`.
     let e = emissivity.clamp(0.01, 1.0);
     let excess = |t: f64| {
-        e * column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin) - absorbed
+        e * column::olr_under_skin_w_m2(&with_vapour(gases, t, water_bar), t, skin, planet)
+            - absorbed
     };
     // No surface colder than a grey body balances; the vapour only
     // lowers the outgoing radiation, so none colder than the dry
@@ -1265,15 +1321,24 @@ fn wet_climate(
     heat_flux_w_m2: f64,
     water_bar: f64,
     emissivity: f64,
+    planet: &Planet,
 ) -> (Gases, f64) {
-    wet_balance(context, gases, heat_flux_w_m2, water_bar, emissivity).unwrap_or_else(|| {
+    wet_balance(
+        context,
+        gases,
+        heat_flux_w_m2,
+        water_bar,
+        emissivity,
+        planet,
+    )
+    .unwrap_or_else(|| {
         let steam = Gases {
             h2o: water_bar.max(0.0),
             ..gases
         };
         (
             steam,
-            surface_temperature_k(context, &steam, heat_flux_w_m2, emissivity),
+            surface_temperature_k(context, &steam, heat_flux_w_m2, emissivity, planet),
         )
     })
 }
@@ -1293,6 +1358,7 @@ fn collapsed_climate(
     heat_flux_w_m2: f64,
     water_bar: f64,
     emissivity: f64,
+    planet: &Planet,
 ) -> (Gases, f64) {
     let solve = |co2: f64| {
         wet_climate(
@@ -1301,6 +1367,7 @@ fn collapsed_climate(
             heat_flux_w_m2,
             water_bar,
             emissivity,
+            planet,
         )
     };
     let (mut air, mut t) = solve(gases.co2);
@@ -1333,8 +1400,17 @@ pub(super) fn wet_temperature_k(
     heat_flux_w_m2: f64,
     water_bar: f64,
     emissivity: f64,
+    planet: &Planet,
 ) -> f64 {
-    wet_climate(context, *gases, heat_flux_w_m2, water_bar, emissivity).1
+    wet_climate(
+        context,
+        *gases,
+        heat_flux_w_m2,
+        water_bar,
+        emissivity,
+        planet,
+    )
+    .1
 }
 
 /// Earth's surface gravity, m/s²: 9.81 (standard gravity 9.80665).
@@ -1952,7 +2028,7 @@ fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> Pass {
     let (flux, water_bar) = (body.heat_flux_w_m2, body.water_bar);
     let under = |air: Gases| {
         if !body.wet() {
-            let t = surface_temperature_k(&context, &air, flux, emissivity);
+            let t = surface_temperature_k(&context, &air, flux, emissivity, body.planet);
             (air, t, false)
         } else if body.regime == Regime::Plates && body.co2.is_none() {
             if air == body.gases {
@@ -1966,10 +2042,10 @@ fn under_albedo(body: &Body, albedo: f64, emissivity: f64) -> Pass {
                 thermostat(&condensed, &context, emissivity)
             }
         } else if body.co2.is_some() {
-            let (g, t) = collapsed_climate(&context, air, flux, water_bar, emissivity);
+            let (g, t) = collapsed_climate(&context, air, flux, water_bar, emissivity, body.planet);
             (g, t, false)
         } else {
-            let (g, t) = wet_climate(&context, air, flux, water_bar, emissivity);
+            let (g, t) = wet_climate(&context, air, flux, water_bar, emissivity, body.planet);
             (g, t, false)
         }
     };
@@ -2236,8 +2312,14 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
     // when, at `THERMOSTAT_K`, it sends out less than it absorbs (the
     // outgoing radiation rises with the surface temperature).
     let e = emissivity.clamp(0.01, 1.0);
-    let olr_at =
-        |co2: f64| e * column::olr_under_skin_w_m2(&Gases { co2, ..at_target }, THERMOSTAT_K, skin);
+    let olr_at = |co2: f64| {
+        e * column::olr_under_skin_w_m2(
+            &Gases { co2, ..at_target },
+            THERMOSTAT_K,
+            skin,
+            body.planet,
+        )
+    };
     let all = absorbed - olr_at(most);
     if all <= 0.0 {
         let (g, t) = collapsed_climate(
@@ -2246,6 +2328,7 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
             heat_flux_w_m2,
             water_bar,
             emissivity,
+            body.planet,
         );
         return (g, t, false);
     }
@@ -2256,6 +2339,7 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
             heat_flux_w_m2,
             water_bar,
             emissivity,
+            body.planet,
         );
         return (g, t, false);
     }
@@ -2283,7 +2367,7 @@ fn thermostat(body: &Body, context: &Context, emissivity: f64) -> (Gases, f64, b
     };
     (
         regulated,
-        surface_temperature_k(context, &regulated, heat_flux_w_m2, emissivity),
+        surface_temperature_k(context, &regulated, heat_flux_w_m2, emissivity, body.planet),
         true,
     )
 }
@@ -2323,7 +2407,8 @@ fn maximum_greenhouse(body: &Body) -> f64 {
         let albedo = body.albedo_at(THERMOSTAT_K, &gases);
         let t_eq = body.context.with_albedo(albedo).equilibrium_k.max(0.0);
         let skin = tropopause_k(t_eq);
-        absorbed_w_m2(t_eq, &gases, 0.0) - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin)
+        absorbed_w_m2(t_eq, &gases, 0.0)
+            - column::olr_under_skin_w_m2(&gases, THERMOSTAT_K, skin, body.planet)
     };
     let ratio = (5f64.sqrt() - 1.0) / 2.0;
     let (mut a, mut b) = (most.ln() - GREENHOUSE_DECADES * 10f64.ln(), most.ln());
@@ -2647,7 +2732,7 @@ mod tests {
                 ch4,
                 ..Gases::default()
             };
-            surface_temperature_k(&context, &gases, 0.0, 1.0)
+            surface_temperature_k(&context, &gases, 0.0, 1.0, &d.planet)
         };
         // The greenhouse alone, at Titan's surface temperature: the
         // outgoing radiation methane holds back from 1 to 10 bar is under
@@ -2659,7 +2744,7 @@ mod tests {
                 ch4,
                 ..Gases::default()
             };
-            column::olr_under_skin_w_m2(&gases, 93.7, skin)
+            column::olr_under_skin_w_m2(&gases, 93.7, skin, &d.planet)
         };
         let trace = olr(0.01) - olr(0.1);
         let thick = olr(1.0) - olr(10.0);
@@ -2970,8 +3055,14 @@ mod tests {
         assert_eq!(emissivity(&Gases::default()), 1.0);
         assert!((emissivity(&frost) - N2_ICE_EMISSIVITY).abs() < 1e-12);
         let c = crate::planet::reference::sun_at(30.0);
-        let black = surface_temperature_k(&c, &Gases::default(), 0.0, 1.0);
-        let grey = surface_temperature_k(&c, &Gases::default(), 0.0, N2_ICE_EMISSIVITY);
+        let black = surface_temperature_k(&c, &Gases::default(), 0.0, 1.0, &Planet::EARTH);
+        let grey = surface_temperature_k(
+            &c,
+            &Gases::default(),
+            0.0,
+            N2_ICE_EMISSIVITY,
+            &Planet::EARTH,
+        );
         let ratio = grey / black;
         assert!(
             (ratio - N2_ICE_EMISSIVITY.powf(-0.25)).abs() < 1e-9,
@@ -3107,14 +3198,21 @@ mod tests {
         };
         let close = crate::planet::reference::sun_at(0.9);
         let earth = crate::planet::reference::sun_at(1.0);
-        assert!(boils(&close, &air, &ocean, 0.09, 280.0));
-        assert!(!boils(&earth, &air, &ocean, 0.09, 280.0));
+        assert!(boils(&close, &air, &ocean, 0.09, 280.0, &Planet::EARTH));
+        assert!(!boils(&earth, &air, &ocean, 0.09, 280.0, &Planet::EARTH));
         let runaway = Water {
             runaway: true,
             ..ocean
         };
-        assert!(!boils(&close, &air, &runaway, 0.09, 280.0));
-        assert!(!boils(&close, &air, &ocean.keeping(5e17), 0.09, 1e-4));
+        assert!(!boils(&close, &air, &runaway, 0.09, 280.0, &Planet::EARTH));
+        assert!(!boils(
+            &close,
+            &air,
+            &ocean.keeping(5e17),
+            0.09,
+            1e-4,
+            &Planet::EARTH
+        ));
         // Without a balance, the climate puts all the water in the air
         // (a placeholder the chain replaces).
         let (g, _) = climate(
@@ -3139,16 +3237,16 @@ mod tests {
             ..Gases::default()
         };
         let thick = Gases { co2: 1.0, ..thin };
-        let t_thin = surface_temperature_k(&c, &thin, 0.0, 1.0);
-        let t_thick = surface_temperature_k(&c, &thick, 0.0, 1.0);
+        let t_thin = surface_temperature_k(&c, &thin, 0.0, 1.0, &Planet::EARTH);
+        let t_thick = surface_temperature_k(&c, &thick, 0.0, 1.0, &Planet::EARTH);
         assert!(
             t_thin > c.equilibrium_k && t_thick > t_thin,
             "{t_thin} {t_thick}"
         );
         // Internal heat warms an airless surface.
-        let bare = surface_temperature_k(&c, &Gases::default(), 0.0, 1.0);
+        let bare = surface_temperature_k(&c, &Gases::default(), 0.0, 1.0, &Planet::EARTH);
         assert!((bare - c.equilibrium_k).abs() < 1e-9);
-        assert!(surface_temperature_k(&c, &Gases::default(), 100.0, 1.0) > bare);
+        assert!(surface_temperature_k(&c, &Gases::default(), 100.0, 1.0, &Planet::EARTH) > bare);
     }
 
     /// The model Earth at 1 AU with `n2_bar` of nitrogen in its air and
@@ -3221,7 +3319,14 @@ mod tests {
         let temperature = |gases: Gases| {
             (
                 gases,
-                wet_temperature_k(&faint, &gases, d.heat_flux_w_m2, d.water_bar, 1.0),
+                wet_temperature_k(
+                    &faint,
+                    &gases,
+                    d.heat_flux_w_m2,
+                    d.water_bar,
+                    1.0,
+                    &d.planet,
+                ),
             )
         };
         let (g1, t1) = temperature(air(0.99));
@@ -3748,7 +3853,10 @@ mod tests {
             ..runaway
         };
         for t in [700.0, 1500.0, 2500.0] {
-            assert_eq!(column::olr_w_m2(&runaway, t), column::olr_w_m2(&capped, t));
+            assert_eq!(
+                column::olr_w_m2(&runaway, t, &Planet::EARTH),
+                column::olr_w_m2(&capped, t, &Planet::EARTH)
+            );
         }
     }
 
@@ -3886,8 +3994,12 @@ mod tests {
         let plateau = *MOIST_PLATEAU_W_M2;
         let skin = plateau_skin_k(plateau);
         for t in [380.0, 450.0, 550.0, 640.0] {
-            let olr =
-                column::olr_under_skin_w_m2(&with_vapour(earth_air(), t, f64::INFINITY), t, skin);
+            let olr = column::olr_under_skin_w_m2(
+                &with_vapour(earth_air(), t, f64::INFINITY),
+                t,
+                skin,
+                &Planet::EARTH,
+            );
             assert!(
                 (olr / plateau - 1.0).abs() < 0.01,
                 "{t} K: {olr} vs {plateau}"
@@ -3922,7 +4034,13 @@ mod tests {
         // reaches the limit asymptotically as the surface warms (Goldblatt
         // et al. 2013, Fig. 1), so at 320 K it is still rising: below the
         // plateau, yet above 240 W/m².
-        let olr = |t: f64| column::olr_w_m2(&with_vapour(earth_air(), t, f64::INFINITY), t);
+        let olr = |t: f64| {
+            column::olr_w_m2(
+                &with_vapour(earth_air(), t, f64::INFINITY),
+                t,
+                &Planet::EARTH,
+            )
+        };
         for t in [340.0, 360.0, 380.0, 400.0] {
             let olr = olr(t);
             assert!((268.0..=296.0).contains(&olr), "{t} K: {olr}");
@@ -3939,6 +4057,7 @@ mod tests {
             column::olr_w_m2(
                 &with_vapour(Gases { n2, ..earth_air() }, 380.0, f64::INFINITY),
                 380.0,
+                &Planet::EARTH,
             )
         };
         let (one, two, three) = (plateau(0.78), plateau(1.56), plateau(2.34));
@@ -3949,7 +4068,7 @@ mod tests {
 
     #[test]
     fn an_airless_column_emits_from_the_surface() {
-        let olr = column::olr_w_m2(&Gases::default(), 250.0);
+        let olr = column::olr_w_m2(&Gases::default(), 250.0, &Planet::EARTH);
         assert!((olr - SIGMA * 250f64.powi(4)).abs() < 1e-6, "{olr}");
     }
 
@@ -3966,8 +4085,15 @@ mod tests {
                 h2o: 0.0,
                 ..d.gases
             };
-            let (g, t) = wet_balance(&d.context, gases, d.heat_flux_w_m2, d.water_bar, 1.0)
-                .unwrap_or_else(|| panic!("{n2} bar of N₂ runs away"));
+            let (g, t) = wet_balance(
+                &d.context,
+                gases,
+                d.heat_flux_w_m2,
+                d.water_bar,
+                1.0,
+                &d.planet,
+            )
+            .unwrap_or_else(|| panic!("{n2} bar of N₂ runs away"));
             println!("{n2} bar of N₂: {t:.1} K");
             assert!(t < 330.0, "{n2} bar: {t} K {g:?}");
         }
@@ -3981,14 +4107,14 @@ mod tests {
             h2o: 10.0,
             ..Gases::default()
         };
-        let olr = column::olr_w_m2(&steam, 680.0);
+        let olr = column::olr_w_m2(&steam, 680.0, &Planet::EARTH);
         assert!(
             (olr / SIMPSON_NAKAJIMA_W_M2 - 1.0).abs() < 0.1,
             "{olr} W/m²"
         );
         // Where the plateau ends (Boukrouche et al. 2021: about 1050 K).
         let mut t = 680.0;
-        while column::olr_w_m2(&steam, t) < 1.1 * olr && t < 5000.0 {
+        while column::olr_w_m2(&steam, t, &Planet::EARTH) < 1.1 * olr && t < 5000.0 {
             t += 10.0;
         }
         println!("10 bar of steam leaves the plateau at about {t} K");

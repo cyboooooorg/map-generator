@@ -42,7 +42,6 @@
 //! gas's transmission, each the weighted sum over its g-points. The
 //! column masses come from `p / g` with the body's gravity
 //! ([`Level::gravity_m_s2`]).
-#![cfg_attr(not(test), allow(dead_code))]
 
 use std::sync::LazyLock;
 
@@ -151,6 +150,7 @@ fn edges_of(width: f64, i: usize) -> (f64, f64) {
 
 /// Hemispheric flux, W/m², that a black body at `t_k` emits in bin `i`:
 /// `π ∫ B_ν dν` over the bin, exact (see [`planck_between`]).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn planck_bin_w_m2(i: usize, t_k: f64) -> f64 {
     let (lo, hi) = bin_edges(i);
     planck_between(lo, hi, t_k)
@@ -159,6 +159,7 @@ pub(crate) fn planck_bin_w_m2(i: usize, t_k: f64) -> f64 {
 /// Hemispheric black-body flux, W/m², at `t_k` between `lo` and `hi`
 /// cm⁻¹: `σT⁴` times the share of the Planck function between
 /// `x = c₂ν/T` at the two edges, `(15/π⁴) ∫ x³/(eˣ − 1) dx`.
+#[cfg_attr(not(test), allow(dead_code))]
 fn planck_between(lo: f64, hi: f64, t_k: f64) -> f64 {
     if t_k <= 0.0 || hi <= lo {
         return 0.0;
@@ -239,6 +240,7 @@ pub(crate) const G: usize = 8;
 /// optical depths): each gas's lines at its g-points, and what is smooth
 /// across the bin.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct BinAbsorption {
     /// CO₂'s lines at each g-point.
     pub(crate) co2: [f64; G],
@@ -248,6 +250,7 @@ pub(crate) struct BinAbsorption {
     pub(crate) grey: f64,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 impl BinAbsorption {
     /// Mean transmission of the bin through `amount` times this
     /// absorption (an optical depth per `ln p` times a span of `ln p`),
@@ -399,6 +402,7 @@ impl Table {
 
     /// Mass absorption coefficients, m²/kg, of `set` at `p_bar` and
     /// `t_k` in `bin`, times `factor`, into `out`.
+    #[cfg_attr(not(test), allow(dead_code))]
     fn coefficients(
         &self,
         set: usize,
@@ -422,6 +426,7 @@ impl Table {
 
     /// The absorption of `bin` at `level` (see [`absorption_per_ln_p`]),
     /// its grey part taken at the bin's centre.
+    #[cfg_attr(not(test), allow(dead_code))]
     fn bin_absorption(&self, bin: usize, level: &Level) -> BinAbsorption {
         let mut out = BinAbsorption::default();
         let p = level.pressure_bar();
@@ -478,6 +483,7 @@ pub(crate) fn weights() -> &'static [f64; G] {
 /// every absorber at `level`: CO₂'s and water's lines at their g-points,
 /// and water's continuum, CO₂–CO₂ collision-induced absorption and
 /// methane's grey stand-in (see the module documentation).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn absorption_per_ln_p(i: usize, level: &Level) -> BinAbsorption {
     OPACITY.bin_absorption(i, level)
 }
@@ -485,6 +491,7 @@ pub(crate) fn absorption_per_ln_p(i: usize, level: &Level) -> BinAbsorption {
 /// Optical depth per `ln p` between `lo` and `hi` cm⁻¹ of what is smooth
 /// across a bin: water's continuum and CO₂–CO₂ pairs at the bin's centre,
 /// and methane on the share of the bin it covers.
+#[cfg_attr(not(test), allow(dead_code))]
 fn grey_between(lo: f64, hi: f64, level: &Level) -> f64 {
     let p = level.pressure_bar();
     let t = level.temperature_k;
@@ -630,6 +637,7 @@ const MT_CKD: [(f64, f64, f64, f64); 101] = [
 /// Optical depth per `ln p` of the water continuum at `nu` cm⁻¹ (see
 /// [`MT_CKD`]): the absorption per molecule times the vapour's molecules
 /// per unit area per `ln p`, `e N_A / (M̄ g)`.
+#[cfg_attr(not(test), allow(dead_code))]
 fn water_continuum(nu: f64, level: &Level) -> f64 {
     let e = level.gases.h2o;
     if e <= 0.0 || nu <= 0.0 {
@@ -823,6 +831,7 @@ const CO2_CIA: [(f64, [f64; 4]); 139] = [
 /// Optical depth per `ln p` of CO₂–CO₂ pairs at `nu` cm⁻¹:
 /// `k(ν, T) n²` per metre of air (`n` the CO₂ number density), times the
 /// air's thickness per `ln p`, `k_B T / (m̄ g)`. Not broadened.
+#[cfg_attr(not(test), allow(dead_code))]
 fn co2_pairs(nu: f64, level: &Level) -> f64 {
     let co2 = level.gases.co2;
     if co2 <= 0.0 {
@@ -856,12 +865,256 @@ const METHANE_TOP_CM: f64 = 650.0;
 /// Optical depth per `ln p` of methane between `lo` and `hi` cm⁻¹: the
 /// rate of [`super::climate`]'s grey methane law at this level, on the
 /// share of the bin under [`METHANE_TOP_CM`].
+#[cfg_attr(not(test), allow(dead_code))]
 fn methane(lo: f64, hi: f64, level: &Level) -> f64 {
     let share = ((METHANE_TOP_CM.min(hi) - lo) / (hi - lo)).clamp(0.0, 1.0);
     if share <= 0.0 || level.gases.ch4 <= 0.0 {
         return 0.0;
     }
     share * methane_depth(&level.gases).1
+}
+
+/// Bands of the column's sum: the [`BINS`] bins, and the tail past
+/// [`SPECTRUM_TOP_CM`] as one more band ([`TAIL`]).
+pub(crate) const BANDS: usize = BINS + 1;
+
+/// Index of the tail band, from [`SPECTRUM_TOP_CM`] to infinity. It takes
+/// the absorption of the last bin, so that a hot column that the bins
+/// leave short of `σT⁴` (0.4 % at 640 K, 43 % at 1800 K) still sends out
+/// the rest of its black body through the air there, and a column of
+/// transparent air sends out exactly the surface's `σT⁴`, as an airless
+/// one does.
+pub(crate) const TAIL: usize = BINS;
+
+/// The absorption of every band at one level, per unit `ln p` (see
+/// [`BinAbsorption`]; the tail's is the last bin's, see [`TAIL`]).
+#[derive(Clone, Debug)]
+pub(crate) struct Spectrum {
+    /// CO₂'s lines, per band and g-point.
+    pub(crate) co2: [[f64; G]; BANDS],
+    /// Water's lines, per band and g-point.
+    pub(crate) water: [[f64; G]; BANDS],
+    /// Water's continuum, CO₂–CO₂ pairs and methane, per band.
+    pub(crate) grey: [f64; BANDS],
+}
+
+impl Default for Spectrum {
+    fn default() -> Self {
+        Self {
+            co2: [[0.0; G]; BANDS],
+            water: [[0.0; G]; BANDS],
+            grey: [0.0; BANDS],
+        }
+    }
+}
+
+/// What the grey absorption of every bin needs that does not depend on
+/// the level, at the bin's centre (see [`grey_between`]).
+struct BinTable {
+    /// Centre, cm⁻¹.
+    centre_cm: [f64; BINS],
+    /// [`MT_CKD`]'s self coefficient, its temperature exponent and its
+    /// foreign coefficient, interpolated as [`water_continuum`] does.
+    continuum: [(f64, f64, f64); BINS],
+    /// Row of [`CO2_CIA`], if the bin has one.
+    cia_row: [Option<usize>; BINS],
+    /// Share of the bin under [`METHANE_TOP_CM`].
+    methane_share: [f64; BINS],
+}
+
+static BIN_TABLE: LazyLock<BinTable> = LazyLock::new(|| {
+    let mut table = BinTable {
+        centre_cm: [0.0; BINS],
+        continuum: [(0.0, 0.0, 0.0); BINS],
+        cia_row: [None; BINS],
+        methane_share: [0.0; BINS],
+    };
+    for i in 0..BINS {
+        let (lo, hi) = bin_edges(i);
+        let nu = 0.5 * (lo + hi);
+        table.centre_cm[i] = nu;
+        let x = (nu / MT_CKD_STEP_CM).clamp(0.0, (MT_CKD.len() - 1) as f64);
+        let k = (x as usize).min(MT_CKD.len() - 2);
+        let f = x - k as f64;
+        let (a, b) = (MT_CKD[k], MT_CKD[k + 1]);
+        let log_lerp = |u: f64, v: f64| (u.ln() * (1.0 - f) + v.ln() * f).exp();
+        table.continuum[i] = (
+            log_lerp(a.1, b.1),
+            a.2 * (1.0 - f) + b.2 * f,
+            log_lerp(a.3, b.3),
+        );
+        let cell = (nu / CO2_CIA_CELL_CM).floor() * CO2_CIA_CELL_CM;
+        table.cia_row[i] = CO2_CIA
+            .binary_search_by(|(start, _)| start.total_cmp(&cell))
+            .ok();
+        table.methane_share[i] = ((METHANE_TOP_CM.min(hi) - lo) / (hi - lo)).clamp(0.0, 1.0);
+    }
+    table
+});
+
+/// [`absorption_per_ln_p`] of every band at `level` into `out` (the
+/// tail's is the last bin's, see [`TAIL`]): the same sums, with what does
+/// not depend on the bin taken once per level.
+pub(crate) fn absorption_spectrum(level: &Level, out: &mut Spectrum) {
+    out.co2[..BINS].fill([0.0; G]);
+    out.water[..BINS].fill([0.0; G]);
+    out.grey[..BINS].fill(0.0);
+    let p = level.pressure_bar();
+    let t = level.temperature_k;
+    if p > 0.0 && t > 0.0 && level.gravity_m_s2 > 0.0 {
+        lines_spectrum(level, out);
+        grey_spectrum(level, &mut out.grey);
+    }
+    out.co2[TAIL] = out.co2[BINS - 1];
+    out.water[TAIL] = out.water[BINS - 1];
+    out.grey[TAIL] = out.grey[BINS - 1];
+}
+
+/// CO₂'s and water's lines of every bin at `level`, from [`OPACITY`] as
+/// [`Table::bin_absorption`] takes them.
+fn lines_spectrum(level: &Level, out: &mut Spectrum) {
+    let table = &*OPACITY;
+    let p = level.pressure_bar();
+    let t = level.temperature_k;
+    let g = &level.gases;
+    let interpolate = |at: &[usize; 4], w: &[f64; 4], i: usize| {
+        w[0] * f64::from(table.ln_k[at[0] + i])
+            + w[1] * f64::from(table.ln_k[at[1] + i])
+            + w[2] * f64::from(table.ln_k[at[2] + i])
+            + w[3] * f64::from(table.ln_k[at[3] + i])
+    };
+    if g.co2 > 0.0 {
+        let (at, w, scale) = table.corners(CO2_SET, p, t);
+        let factor = scale * level.mass_per_ln_p(g.co2, CO2_KG_MOL);
+        for (b, row) in out.co2[..BINS].iter_mut().enumerate() {
+            for (k, o) in row.iter_mut().enumerate() {
+                *o = factor * interpolate(&at, &w, b * G + k).exp();
+            }
+        }
+    }
+    if g.h2o > 0.0 {
+        let (foreign, wf, scale) = table.corners(WATER_FOREIGN_SET, p, t);
+        let (own, ws, _) = table.corners(WATER_SELF_SET, p, t);
+        let mass = scale * level.mass_per_ln_p(g.h2o, H2O_KG_MOL);
+        let share = (g.h2o / p).clamp(0.0, 1.0);
+        let (by_air, by_self) = (mass * (1.0 - share), mass * share);
+        for (b, row) in out.water[..BINS].iter_mut().enumerate() {
+            for (k, o) in row.iter_mut().enumerate() {
+                let i = b * G + k;
+                *o = by_air * interpolate(&foreign, &wf, i).exp()
+                    + by_self * interpolate(&own, &ws, i).exp();
+            }
+        }
+    }
+}
+
+/// [`grey_between`] of every bin at `level` into `out`.
+fn grey_spectrum(level: &Level, out: &mut [f64; BANDS]) {
+    let table = &*BIN_TABLE;
+    let p = level.pressure_bar();
+    let t = level.temperature_k;
+    let bins = &mut out[..BINS];
+    let g = &level.gases;
+    if g.h2o > 0.0 {
+        let e = g.h2o;
+        let ratio = MT_CKD_REFERENCE_K / t;
+        let ln_ratio = ratio.ln();
+        let others = (p - e).max(0.0);
+        let molecules_m2 = e * PA_PER_BAR * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
+        let scale = ratio / MT_CKD_REFERENCE_BAR * 1e-4 * molecules_m2;
+        for (i, o) in bins.iter_mut().enumerate() {
+            let (self_coeff, exponent, foreign_coeff) = table.continuum[i];
+            let nu = table.centre_cm[i];
+            let radiation = nu * (0.5 * C2_CM_K * nu / t).tanh();
+            *o += (self_coeff * (exponent * ln_ratio).exp() * e + foreign_coeff * others)
+                * scale
+                * radiation;
+        }
+    }
+    if g.co2 > 0.0 {
+        let (j, f) = if t <= CO2_CIA_K[0] {
+            (0, 0.0)
+        } else if t >= CO2_CIA_K[3] {
+            (2, 1.0)
+        } else {
+            let j = CO2_CIA_K.iter().rposition(|&k| k <= t).unwrap_or(0).min(2);
+            (j, (t - CO2_CIA_K[j]) / (CO2_CIA_K[j + 1] - CO2_CIA_K[j]))
+        };
+        let density_m3 = g.co2 * PA_PER_BAR / (BOLTZMANN * t);
+        let thickness_m = BOLTZMANN * t * AVOGADRO / (level.molar_mass_kg() * level.gravity_m_s2);
+        let scale = 1e-10 * density_m3 * density_m3 * thickness_m;
+        for (o, row) in bins.iter_mut().zip(&table.cia_row) {
+            if let Some(row) = row {
+                let v = CO2_CIA[*row].1;
+                *o += (v[j] * (1.0 - f) + v[j + 1] * f) * scale;
+            }
+        }
+    }
+    if g.ch4 > 0.0 {
+        let rate = methane_depth(g).1;
+        for (o, share) in bins.iter_mut().zip(&table.methane_share) {
+            *o += share * rate;
+        }
+    }
+}
+
+/// Vertical optical depth of each band above `level`, the top of a
+/// column, through a uniform air at its temperature and composition
+/// above it: half its rate per `ln p` ([`absorption_spectrum`], in
+/// `rate`) for every absorber that grows as `p²` (lines broadened by the
+/// pressure, the continuum, the CO₂ pairs), and methane's column total
+/// ([`super::climate`]'s methane law saturates).
+pub(crate) fn depth_above(level: &Level, rate: &Spectrum, out: &mut Spectrum) {
+    let (total, methane_rate) = methane_depth(&level.gases);
+    let table = &*BIN_TABLE;
+    for i in 0..BANDS {
+        out.co2[i] = rate.co2[i].map(|k| 0.5 * k);
+        out.water[i] = rate.water[i].map(|k| 0.5 * k);
+        let share = table.methane_share[i.min(BINS - 1)];
+        out.grey[i] = 0.5 * rate.grey[i] + share * (total - 0.5 * methane_rate);
+    }
+}
+
+/// Black-body flux, W/m², of every band at `t_k` into `out`: the bins'
+/// [`planck_bin_w_m2`] and the tail's rest of `σT⁴` past
+/// [`SPECTRUM_TOP_CM`], each Planck integral taken once per edge.
+pub(crate) fn planck_spectrum(t_k: f64, out: &mut [f64; BANDS]) {
+    out.fill(0.0);
+    if t_k <= 0.0 {
+        return;
+    }
+    let black = SIGMA * t_k.powi(4) / PLANCK_TOTAL;
+    // At each edge, the head integral from 0 under the switch and the
+    // tail integral to infinity over it, as `planck_between` takes them.
+    let edge = |k: usize| {
+        let x = C2_CM_K * k as f64 * BIN_WIDTH_CM / t_k;
+        if x >= SERIES_SWITCH {
+            planck_tail(x)
+        } else {
+            planck_head(x)
+        }
+    };
+    let mut x_lo = 0.0;
+    let mut lo = edge(0);
+    for (i, o) in out[..BINS].iter_mut().enumerate() {
+        let x_hi = C2_CM_K * (i + 1) as f64 * BIN_WIDTH_CM / t_k;
+        let hi = edge(i + 1);
+        let integral = if x_lo >= SERIES_SWITCH {
+            lo - hi
+        } else if x_hi < SERIES_SWITCH {
+            hi - lo
+        } else {
+            (PLANCK_TOTAL - hi) - lo
+        };
+        *o = black * integral.max(0.0);
+        (x_lo, lo) = (x_hi, hi);
+    }
+    let rest = if x_lo >= SERIES_SWITCH {
+        lo
+    } else {
+        PLANCK_TOTAL - lo
+    };
+    out[TAIL] = black * rest.max(0.0);
 }
 
 #[cfg(test)]
@@ -1170,6 +1423,89 @@ mod tests {
             for x in all {
                 assert!(x.is_finite() && *x >= 0.0, "bin {i}: {a:?}");
             }
+        }
+    }
+
+    #[test]
+    fn the_spectrum_of_a_level_is_its_bins() {
+        let levels = [
+            Level {
+                temperature_k: 288.0,
+                gases: Gases {
+                    h2o: 0.013,
+                    ..earth_air(400.0)
+                },
+                gravity_m_s2: EARTH_GRAVITY_M_S2,
+            },
+            Level {
+                temperature_k: 735.0,
+                gases: Gases {
+                    n2: 3.2,
+                    co2: 88.8,
+                    h2o: 3e-3,
+                    ..Gases::default()
+                },
+                gravity_m_s2: 8.87,
+            },
+            Level {
+                temperature_k: 93.7,
+                gases: Gases {
+                    n2: 1.45,
+                    ch4: 0.07,
+                    ..Gases::default()
+                },
+                gravity_m_s2: 1.352,
+            },
+            Level {
+                temperature_k: 640.0,
+                gases: Gases {
+                    h2o: 70.0,
+                    n2: 0.78,
+                    co2: 4e-4,
+                    ..Gases::default()
+                },
+                gravity_m_s2: EARTH_GRAVITY_M_S2,
+            },
+        ];
+        let mut spectrum = Spectrum::default();
+        let close = |a: f64, b: f64| (a - b).abs() <= 1e-12 * b.abs().max(1e-300);
+        for level in &levels {
+            absorption_spectrum(level, &mut spectrum);
+            for i in 0..BINS {
+                let one = absorption_per_ln_p(i, level);
+                for g in 0..G {
+                    assert!(close(spectrum.co2[i][g], one.co2[g]), "CO₂ bin {i}");
+                    assert!(close(spectrum.water[i][g], one.water[g]), "water bin {i}");
+                }
+                assert!(
+                    close(spectrum.grey[i], one.grey),
+                    "bin {i} at {} K: {} vs {}",
+                    level.temperature_k,
+                    spectrum.grey[i],
+                    one.grey
+                );
+            }
+            assert_eq!(spectrum.co2[TAIL], spectrum.co2[BINS - 1]);
+            assert_eq!(spectrum.water[TAIL], spectrum.water[BINS - 1]);
+            assert_eq!(spectrum.grey[TAIL], spectrum.grey[BINS - 1]);
+        }
+    }
+
+    #[test]
+    fn the_planck_spectrum_is_the_bins_and_their_rest() {
+        let mut planck = [0.0; BANDS];
+        for t in [40.0, 100.0, 288.0, 640.0, 1800.0, 3000.0] {
+            planck_spectrum(t, &mut planck);
+            for (i, p) in planck[..BINS].iter().enumerate() {
+                let one = planck_bin_w_m2(i, t);
+                assert!(
+                    (p - one).abs() <= 1e-12 * one.max(1e-300),
+                    "bin {i}: {p} vs {one}"
+                );
+            }
+            let black = SIGMA * f64::powi(t, 4);
+            let sum: f64 = planck.iter().sum();
+            assert!((sum / black - 1.0).abs() < 1e-9, "{t} K: {sum} vs {black}");
         }
     }
 }
