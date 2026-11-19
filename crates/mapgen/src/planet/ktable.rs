@@ -56,7 +56,7 @@ pub(crate) struct Table {
     ln_p: Vec<f64>,
     /// Temperatures of the grid, K.
     t_k: Vec<f64>,
-    /// `ln k`, [set][pressure][temperature][bin][g-point].
+    /// `ln k`, `[set][pressure][temperature][bin][g-point]`.
     pub(crate) ln_k: Vec<f32>,
     /// MT_CKD's CO₂ continuum of each bin: its coefficient at
     /// [`Table::co2_continuum_t_eff_k`], cm² per molecule per cm⁻¹, and its

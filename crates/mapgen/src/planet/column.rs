@@ -35,7 +35,7 @@
 //! Water clouds cover the share of the sky the albedo gives them
 //! ([`super::albedo::cloud_cover`]): that share radiates from a cloud
 //! top ([`CLOUD_TOP_SHARE`] of the surface pressure, of emissivity
-//! [`CLOUD_EMISSIVITY`]) instead of from the clear column below it, so
+//! [`cloud_emissivity`]) instead of from the clear column below it, so
 //! that the albedo's clouds, which reflect the light, also hold in the
 //! heat ([`radiate`]).
 //!
@@ -126,7 +126,7 @@ const MAX_LEVELS: usize = 1280;
 /// above `TOP_BAR`, so that the emitting levels of water (near 1e-3 bar)
 /// stay inside a thick column. Above the top the air is taken uniform at
 /// the top's temperature (its optical depth is that of a uniform air at
-/// the top's pressures, [`spectrum::depth_above`]), exact in a
+/// the top's pressures, [`spectrum::smooth_above`]), exact in a
 /// stratosphere at the skin temperature.
 const TOP_SHARE: f64 = 1e-3;
 const TOP_BAR: f64 = 1e-4;
@@ -899,7 +899,7 @@ impl Depths {
 
     /// The depths of the first `m` g-points (over the bins) in the uniform
     /// air above the top, from its opacities `rate`: half its rate per
-    /// `ln p` (see [`spectrum::depth_above`]), slanted.
+    /// `ln p` (see `spectrum::reference::depth_above`), slanted.
     fn above(&mut self, rate: &[f32; POINTS], m: usize) {
         let half = 0.5 * DIFFUSIVITY as f32;
         for (d, r) in self.depth[..m].iter_mut().zip(&rate[..m]) {
@@ -976,7 +976,7 @@ fn summed_bins(temperature: &[f64]) -> usize {
 /// `spectrum`). The tail band takes the last bin's absorption, so its
 /// transmission is that bin's. A layer's depth is the logarithmic mean of
 /// the opacities at its two levels times its span. Above the top the air
-/// is uniform ([`spectrum::depth_above`]). The sum stops where every bin
+/// is uniform ([`spectrum::smooth_above`]). The sum stops where every bin
 /// is opaque ([`OPAQUE`]); the bins a cold column cannot send out
 /// ([`summed_bins`]) are taken as clear, the surface's.
 ///
@@ -1171,7 +1171,8 @@ fn transmissions(depth: &[f32], out: &mut [f32]) {
     }
 }
 
-/// [`log_mean`] of `a` and `b` given their logarithms, branch-free: within
+/// The logarithmic mean (`spectrum::reference::log_mean`) of `a` and `b`
+/// given their logarithms, branch-free: within
 /// 1 % of each other, its series `a (1 + d/2 + d²/6 + d³/24)` in `d = ln
 /// (b/a)` (remainder under 1e-10), and the arithmetic mean if either is
 /// zero.

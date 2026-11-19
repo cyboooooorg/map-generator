@@ -825,7 +825,8 @@ impl SmoothRates {
         }
     }
 
-    /// [`SmoothRates::bin`] of every bin into `out`, in single precision
+    /// The smooth absorption per `ln p` of every bin (`reference`'s
+    /// `SmoothRates::bin`) into `out`, in single precision
     /// with [`super::fast_math`]'s `exp` (`tanh y = 1 − 2 / (e^{2y} + 1)`).
     fn fast(&self, out: &mut [f32]) {
         use super::fast_math::exp;

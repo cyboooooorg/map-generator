@@ -397,7 +397,7 @@ fn piece_depth(piece: &Piece, lower: f64, upper: f64) -> f64 {
     piece.span * spectrum::reference::log_mean(at(piece.from), at(piece.to))
 }
 
-/// [`piece_depth`] in single precision with [`fast_math`]'s `exp` and
+/// `piece_depth` (the tests' double-precision depth) in single precision with [`fast_math`]'s `exp` and
 /// `ln`, for the many depths of [`Paths::through`].
 #[inline]
 fn piece_depth_fast(piece: &Piece, lower: f32, upper: f32) -> f64 {
