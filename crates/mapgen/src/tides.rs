@@ -488,7 +488,10 @@ mod tests {
         // Disk-born moons are large and close: every one drawn in seeds 1
         // to 12 is locked. The unlocked moons are the small captured ones
         // of the rocky planets (seed 11), so every unlocked moon is checked.
-        for system in drawn(1..=12) {
+        // Seeds 11 and 12 (were 1 to 12, 115 s in release since the
+        // spectral column): seed 11 holds all the unlocked moons of the
+        // twelve, and each system's giant brings its locked disk moons.
+        for system in drawn(11..=12) {
             for moon in system.bodies.iter().filter(|b| b.kind == BodyKind::Moon) {
                 let zones = tide_zones(&system, &moon.id).unwrap();
                 let a = moon.orbit.semi_major_axis_km;

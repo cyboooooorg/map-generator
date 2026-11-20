@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "tools/opacity-table"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,8 +24,15 @@ mapgen = { path = "crates/mapgen" }
 # unoptimized: build the dependencies optimized (once) and the workspace
 # crates at opt-level 1, which keeps incremental rebuilds short. Debug
 # assertions and overflow checks stay on. See README, Development tasks.
+# The test profile inherits the dev one, `package."*"` included.
 [profile.dev.package."*"]
 opt-level = 3
 
 [profile.test]
 opt-level = 1
+
+# Except the generator itself in tests: since the spectral column (climate
+# lot 3C-2) its climate solves dominate the suite, and at opt-level 3 they
+# run several times faster than at 1, for a longer rebuild of `mapgen`.
+[profile.test.package.mapgen]
+opt-level = 3

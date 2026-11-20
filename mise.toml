@@ -21,8 +21,20 @@ depends = ["build"]
 run = "target/release/hexgrid"
 
 [tasks.test]
-description = "Run the test suite"
+description = "Run the test suite, without the slow tests (`#[ignore = \"slow: …\"]`)"
 run = "cargo test --workspace --all-features"
+
+[tasks."test:mapgen"]
+description = "Run the generator's tests only (the CI job test-mapgen)"
+run = "cargo test -p mapgen --all-features"
+
+[tasks."test:rest"]
+description = "Run the tests of every crate but the generator (the CI job test-rest)"
+run = "cargo test --workspace --exclude mapgen --all-features"
+
+[tasks."test:slow"]
+description = "Run only the slow tests the default suite skips (release build, 4 threads); run it before opening a pull request"
+run = "cargo test --workspace --all-features --release -- --ignored --test-threads 4"
 
 [tasks."test:invariance"]
 description = "Check that a planet keeps its large-scale geography at 1024 and 2048 pixels wide (slow, release build)"

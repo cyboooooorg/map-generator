@@ -44,6 +44,10 @@ Rules that follow from it:
   of them again on top of the new `main`.
 - Two sessions working at once tell each other before rebuilding
   `develop`, since a rebuild drops what the other merged into it.
+- Before opening a pull request that touches the Rust crates, run the
+  slow tests the default suite skips (`#[ignore = "slow: …"]`) on its
+  branch: `mise run test:slow` (release, 4 threads). CI runs them too,
+  in the `test-slow` job, but only on pull requests into `main`.
 - A pull request that conflicts with `main` is rebased (or `main` merged
   into it) on its own branch before step 2.
 - Merge commits follow Conventional Commits too: git's default message

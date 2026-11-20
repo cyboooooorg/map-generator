@@ -204,9 +204,11 @@ pub struct WorldRequest {
     /// `true`: life arises wherever the world allows it; `false`: never;
     /// left out, drawn.
     pub life: Option<bool>,
-    /// `true`: the planet is a snowball wherever its climate has a frozen
-    /// state beside the temperate one; `false`: never; left out, the
-    /// archetype's, else drawn (see [`crate::planet::climate::climate`]).
+    /// `true`: the planet takes the frozen state wherever its climate has
+    /// one beside the temperate one (a snowball, or frozen for good where
+    /// no CO₂ within its maximum greenhouse thaws it); `false`: never;
+    /// left out, the archetype's, else drawn (see
+    /// [`crate::planet::climate::climate`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snowball: Option<bool>,
     /// `auto` (rarely the moon of a giant, as the seed draws, the default),
@@ -674,7 +676,7 @@ impl WorldRequest {
             // knows a set envelope).
             if let Some(water_oceans) = overrides.water_oceans {
                 let envelope = model.formation().overrides.envelope_fraction;
-                if model.inputs.water_fraction + envelope.unwrap_or(0.0) > 1.0 {
+                if model.formed_inputs().water_fraction + envelope.unwrap_or(0.0) > 1.0 {
                     return Err(RequestError::WaterHeavierThanPlanet {
                         water_oceans,
                         mass_earth,
@@ -965,9 +967,9 @@ fn host_tide(
 ) -> crate::planet::HostTide {
     let a_m = f64::from(host.distance_km) * 1000.0;
     let eccentricity = f64::from(host.eccentricity);
-    let inputs = &model.inputs;
+    let inputs = crate::planet::explain::surface_inputs(context, model);
     let world = crate::planet::resonance::Orbiter {
-        mass_kg: inputs.mass_earth * crate::exomoon::EARTH_KG,
+        mass_kg: model.inputs.mass_earth * crate::exomoon::EARTH_KG,
         a_m,
         period_s: f64::from(host.period_days) * 86_400.0,
         eccentricity,
@@ -1434,8 +1436,12 @@ mod tests {
                 ..named(Some("hot-jupiter"), 8)
             },
         ];
+        // One draw per request (were three, 116 s in release since the
+        // spectral column): each request is its own case and pins its
+        // seed, so the generator's draw only fills the fields the seed
+        // leaves open; the eleven requests cover every kind of field.
         for request in requests {
-            for draw in 0..3u64 {
+            for draw in 0..1u64 {
                 let rng = &mut StdRng::seed_from_u64(draw);
                 let resolved = request.resolve(rng).unwrap();
                 let pinned = request.pinned(&resolved.params, Some(resolved.model()));
@@ -1777,8 +1783,11 @@ mod tests {
         // Seeded, so that a failure reproduces. 200 seeds draw 41
         // mini-Neptunes, 16 ice giants and 9 hot Neptunes; the tilt of
         // seeds 79, 82 and 164 (mini-Neptunes), 151 and 171 (ice giants)
-        // passes 85°.
-        for seed in 0..200 {
+        // passes 85°. Seeds 0 to 19 and those five (were 0 to 199, 256 s
+        // in release since the spectral column): the five are the cases
+        // that reach the giants' 90° bound, the first twenty the ordinary
+        // draws under 85° and the surface ages.
+        for seed in (0..20).chain([79, 82, 151, 164, 171]) {
             let resolved = WorldRequest::default()
                 .resolve(&mut StdRng::seed_from_u64(seed))
                 .unwrap();
@@ -1826,6 +1835,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 400 drawn Earths for the share of tilts their moons steady, 33 min in release; run with --include-ignored before a PR"]
     fn moons_steady_the_drawn_tilt_and_set_the_shores() {
         let (mut free, mut steady) = (0, 0);
         for seed in 0..400 {
@@ -1859,6 +1869,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 340 drawn worlds for the despun and moonless cases, 22 min in release; run with --include-ignored before a PR"]
     fn moons_asked_for_get_a_star_and_orbit_with_room_for_them() {
         let mut despun = 0;
         for seed in 0..40 {
@@ -1952,8 +1963,12 @@ mod tests {
     #[test]
     fn a_giants_moon_takes_its_volcanism_from_its_final_orbit() {
         // The giants may force the eccentricity after the host is known:
-        // the volcanism follows the tides of the final orbit.
-        for seed in 0..40 {
+        // the volcanism follows the tides of the final orbit. Seeds 0, 4,
+        // 15, 30 and 32 (were 0 to 39, 270 s in release since the
+        // spectral column): of the forty, the moons whose volcanism is
+        // neither full (1) nor zero at the host's, so where the bound can
+        // bind; seed 30's sits exactly on it (0.976 both).
+        for seed in [0, 4, 15, 30, 32] {
             let p = resolve(&WorldRequest {
                 mass_earth: Some(1.0),
                 host: Some(crate::exomoon::HostMode::Giant),
@@ -2006,6 +2021,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 800 drawn worlds resolved two or three times each to find the orbits giants force, over 90 min in release; run with --include-ignored before a PR"]
     fn a_world_its_giants_make_eccentric_replays_its_effects_from_its_pinned_request() {
         // Moons left to the seed and moons asked for: both see the orbit.
         let requests = [

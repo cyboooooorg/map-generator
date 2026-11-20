@@ -1,0 +1,8 @@
+[package]
+name = "opacity-table"
+description = "Offline builder of mapgen's correlated-k opacity table from HITRAN lines"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]

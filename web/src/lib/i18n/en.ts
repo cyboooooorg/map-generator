@@ -523,6 +523,9 @@ export const en = {
       snowball: 'A snowball: bright ice reflects the starlight and keeps the world frozen, until the CO₂ its volcanoes keep outgassing, no longer drawn down by weathering under the ice, builds up enough greenhouse to thaw it',
       frozen: 'Frozen for good: bright ice reflects the starlight, and no amount of CO₂ can thaw it at this distance',
       co2_build_up: 'The CO₂ built up to the most the greenhouse can use: the thermostat cannot reach its temperature at this distance',
+      co2_condenses: 'More CO₂ would no longer warm the ground: the starlight it scatters outgrows its greenhouse, which flattens where it condenses high in the air',
+      reducing_air: 'A methane-rich, reducing air: the body outgasses its carbon as methane, keeps its CO₂ inside, and its air makes none',
+      not_converged: 'The climate did not settle on one temperature: the value shown is the last estimate',
       convecting: 'The shell convects under a stagnant lid, which carries the heat out faster than conduction',
       ammonia: 'The ammonia of the ocean lowers its freezing point, so the shell is thinner and the ocean deeper',
       geysers: 'Tides thin the shell at the pole until fractures cross it: the ocean vents as geysers',
@@ -533,6 +536,8 @@ export const en = {
       tidal_episode: 'A past tidal episode (a resonance with its sister moons) renewed part of the surface',
       volcanic_frost: 'The air is the dayside vapour of the SO₂ frost the volcanoes lay on the ground',
       fallout: 'The fallout of the plumes covers part of the ice with fresh frost',
+      moist_limit: 'Steam reflects the starlight as a moist air does at the runaway limit: under this albedo, the light it absorbs at its star’s runaway limit is the most a moist air can send out (Earth’s moist limit)',
+      moist_limit_own: 'Steam reflects the starlight as a moist air does at the runaway limit, on its own column’s moist limit: its gravity and air raise that limit above Earth’s, so the steam is darker and, past its star’s runaway limit, the body absorbs more than its column can send out',
     } as Record<string, string>,
     /** What last renewed a part of a surface. */
     renewals: {
@@ -560,11 +565,19 @@ export const en = {
       cloud: 'water clouds',
       haze: 'methane haze',
       deck: 'sulphuric acid clouds',
+      steam: 'steam of the runaway',
     } as Record<string, string>,
     /** The part of the disc a cover takes. */
     coverValue: (p: { cover: string; value: string }) => `${p.cover}, ${p.value}`,
     /** The haze is weighed by its strength, not by a share of the disc. */
     hazeValue: (p: { cover: string; value: string }) => `${p.cover}, strength ${p.value}`,
+    /**
+     * A runaway's steam is weighed by the weight of the moist albedo in its
+     * blend with the covers' one, not by a share of the disc.
+     */
+    steamValue: (p: { cover: string; value: string }) => `${p.cover}: the moist albedo weighs ${p.value} against the covers’`,
+    /** An ocean that boiled and condensed again, with the water escape took (#517). */
+    boiledRecondensed: (p: { lost: string }) => `The ocean boiled once: escape took ${p.lost} of its water to space, and what was left condensed again`,
     /** The request fields, named as the creation form names them. */
     inputs: {
       mass_earth: 'Mass',

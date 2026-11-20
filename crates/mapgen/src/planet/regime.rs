@@ -107,6 +107,7 @@ pub fn water(
 /// air, where the XUV splits it and the hydrogen escapes at the
 /// energy-limited rate (Owen & Wu 2017, [`energy_limited_loss_kg`]) with
 /// 9 kg of water for each kg of hydrogen: `kept = max(0, water - 9 H)`.
+/// The water lost leaves the planet's mass ([`super::after_steam`]).
 pub fn steam(inputs: &PlanetInputs, interior: &Interior, fluence_rel: f64) -> Water {
     let initial = inputs.water_fraction * inputs.mass_earth * EARTH_KG;
     let hydrogen = energy_limited_loss_kg(interior, inputs.mass_earth, fluence_rel);

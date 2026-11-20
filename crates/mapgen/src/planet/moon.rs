@@ -213,14 +213,16 @@ mod tests {
     }
 
     /// Titan at Saturn's orbit with the `titan-like` archetype's factors:
-    /// its 93.7 K within 90 to 97, its 1.47 bar (Fulchignoni et al. 2005,
-    /// doi:10.1038/nature04314) within 1.3 to 1.6, and 3 to 6 % of
-    /// methane near its surface (5.7 %, Niemann et al. 2005,
-    /// doi:10.1038/nature04122), on every seed.
+    /// its 93.7 K within 90 to 97 on every seed and within 1 K on average
+    /// (the calibration of `climate::CH4_OPACITY`), its 1.47 bar
+    /// (Fulchignoni et al. 2005, doi:10.1038/nature04314) within 1.3 to
+    /// 1.6, and 3 to 6 % of methane near its surface (5.7 %, Niemann et
+    /// al. 2005, doi:10.1038/nature04122), on every seed.
     #[test]
     fn titan_comes_out_a_hydrocarbon_world() {
         use rand::SeedableRng;
         let archetype = crate::archetype::Archetype::load("titan-like").unwrap();
+        let mut sum = 0.0;
         for seed in 0..20 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(u64::from(seed));
             let overrides = archetype.overrides(&mut rng);
@@ -235,7 +237,11 @@ mod tests {
             let ch4 = s.gases.ch4 / p;
             assert!((0.03..=0.06).contains(&ch4), "seed {seed}: {s:?}");
             assert!(ocean_km(&m) < 400.0, "{:?}", m.ice_shell);
+            sum += t;
         }
+        let mean = sum / 20.0;
+        println!("titan-like: {mean:.2} K on average");
+        assert!((mean - 93.7).abs() <= 1.0, "{mean} K");
     }
 
     /// The model of the moon of archetype `name` in the system of `seed`
@@ -433,7 +439,8 @@ mod tests {
         assert_eq!(sides, [true, true]);
     }
 
-    /// Titan's 1.3 to 1.6 bar and Triton's N₂ in equilibrium with its
+    /// Titan's 1.3 to 1.65 bar (its 1.47 bar, with up to 0.1 bar of
+    /// methane over seas at 94 K, issue #563) and Triton's N₂ in equilibrium with its
     /// frost (1e-5 to 3e-5 bar) outlast what their giants' plasma and the
     /// Sun's ionisation take of them, on every seed of `archetype_census`.
     #[test]
@@ -441,7 +448,10 @@ mod tests {
         for seed in 1..=40 {
             let titan = archetype_moon("titan-like", seed);
             let p = pressure(&titan);
-            assert!((1.3..=1.6).contains(&p), "Titan seed {seed}: {p} {titan:?}");
+            assert!(
+                (1.3..=1.65).contains(&p),
+                "Titan seed {seed}: {p} {titan:?}"
+            );
             let triton = archetype_moon("triton-like", seed);
             let n2 = triton.surface.expect("surface").gases.n2;
             assert!(
@@ -609,6 +619,7 @@ mod tests {
     /// and no such crust (rocky or wet-rock frozen bodies, or a crust
     /// with plates) are counted apart: their climate reads no fallout.
     #[test]
+    #[ignore = "slow: 300 whole systems, every body replayed, 7 min in release; run with --include-ignored before a PR"]
     fn drawn_icy_moons_stay_in_bounds() {
         use crate::generation::{CrustKind, model_crust_kind};
         use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, body_context, draw};

@@ -319,6 +319,7 @@ pub fn terrain(
         &surface.gases,
         &surface.water,
         &volatile,
+        &super::climate_planet(&model.inputs, &model.interior),
     )
     .frost;
     if share <= 0.0 {
@@ -555,6 +556,7 @@ mod tests {
     /// within two ulps, see below): the terrain units change where the age
     /// comes from, not what it is.
     #[test]
+    #[ignore = "slow: the 210 fixture worlds drawn again, 4.5 min in release; run with --include-ignored before a PR"]
     fn stored_ages_do_not_move() {
         let fixture: Vec<(String, u32, u32)> = serde_json::from_str(include_str!(
             "../../tests/fixtures/surface_ages_99690d2.json"

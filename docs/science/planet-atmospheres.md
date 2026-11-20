@@ -111,6 +111,25 @@ again. In a runaway all the water kept is steam in
 the air: `Water::kept_kg` is what escape to space leaves of it, and the
 air's H₂O is that water's weight.
 
+The water escape took leaves the planet's mass too (#513,
+`planet::after_steam`): `PlanetModel.inputs` holds the mass less that
+water, the water share of what is left, and the envelope and volatiles
+at the same mass (their shares grow). The layers, gravity and internal
+heat are derived again from it before the steam pass runs, so the
+climate's column sees the lighter body. That pass's own escape (the
+cosmic shoreline and the non-thermal loss, below) then takes more of
+the steam: the mass and the layers are derived once more from the water
+it kept (`Water::kept_kg`, what the card shows), without running the
+climate again, so the mass, the water card and both cause trees agree;
+the heat stays the one the climate ran on, and the explanation finds
+that body again from the water the pass started with
+(`explain::surface_inputs`). `PlanetModel.before_steam`
+keeps the inputs from before the runaway, when escape took water: the
+request's formation is
+read from them, and `drawn_mass_earth` stays the mass drawn. The cause
+tree shows the mass from the mass formed and the water kept, with the
+water formed and the water lost.
+
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
 
@@ -573,6 +592,37 @@ departures: the outgassing is spread evenly over the age, and the
 larger Lyman α share of an M dwarf's light is not modelled (both
 understate the destruction round red dwarfs, if anything).
 
+**Reducing air** (`reducing`, `without_co2_if_reducing`, issue #557).
+A body whose methane survives the ultraviolet (the air the photolysis
+leaves holds some) under an equilibrium temperature of 150 K (the line
+of *Photochemistry* below) has a reducing air. The chain first solves it
+without CO₂; it keeps that air if the climate then leaves a Titan's
+dense, hazy air (`titan_like_air`: methane still in it, over methane's
+triple-point pressure of 0.1169 bar, the line of the hydrocarbon-world
+class), and is solved again with its CO₂ otherwise. Titan's interior holds CO₂,
+likely its most abundant gas (up to 3 % of its mass), but stores it,
+mostly dissolved in its ocean, and what reaches the air is a moderate
+outgassing of methane (Tobie, Gautier & Hersant 2012, ApJ 752, 125,
+doi:10.1088/0004-637X/752/2/125; abstract checked). The CO₂ of its air,
+about 15 ppb in the stratosphere (Cassini CIRS: de Kok et al. 2007,
+Coustenis et al. 2010, doi:10.1016/j.icarus.2009.11.027), is made there
+from oxygen falling in from outside, most likely from Enceladus (Hörst,
+Vuitton & Yelle 2008, doi:10.1029/2008JE003135; checked). Before, the
+model's Titan froze out 40 to 150 bar of outgassed CO₂, a frost over its
+whole disc under its haze, and census seed 387's planet d, a dim Titan
+at about 74 K, was bright enough under its CO₂ frost to freeze its
+nitrogen out and end an ice world; it now keeps its seas at 95 K. The
+pressure tree shows the missing CO₂ with the note `reducing_air`.
+Departures: the storage in an ocean would hold for any ice-covered
+ocean, but only Titan's case is checked, so the CO₂ of bodies whose air
+is not reducing is kept (Europa's surface shows some); Titan's N₂ still
+comes from its ammonia, though ammonia dissolves in an ocean as well.
+Triton's trace of methane makes its air reducing too, but its thin
+nitrogen air is no Titan's: it keeps its CO₂ frost, as Triton's surface
+shows CO₂ ice (Cruikshank et al. 1993, Science 261, 742; Quirico et al.
+1999, Icarus 139, 159). The model's triton-likes freeze 6 to 32 bar of
+it under their nitrogen frost, far more than a surface veneer.
+
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
 body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
@@ -595,7 +645,7 @@ NIST's triple point, 3 % higher; the α fit to the β curve at the
 transition, 2.6 % apart), and under 10 K, where the α polynomial turns
 over, the curve goes on with its slope there. It gives 1.4e-5 bar at
 37.2 K: Triton's N₂ ice, at 37 to 38 K, is β-N₂. This freezes Titan's
-CO₂ and NH₃. Above the triple point the
+NH₃ (its CO₂ is not outgassed: *Reducing air* above). Above the triple point the
 gas stays; whether it rains out depends on the surface temperature,
 which the climate sets. Water is left to the climate, and so are methane
 (issue #443) and nitrogen (issue #464): their air moves the surface
@@ -630,7 +680,7 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 |---|---|---|---|
 | Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
 | Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.78 bar N₂ |
-| Mars | 0.014 bar | 0.002 to 0.05 bar | 0.006 bar |
+| Mars | 0.006 bar (its CO₂ scaled to the real 6.1 mbar, `MARS_CO2_FACTOR`; 0.014 bar from the rule alone) | 0.002 to 0.05 bar | 0.006 bar |
 | Titan | 2.2 bar, 95 % N₂, 0.11 bar CH₄ after the climate (6.3 bar before it condenses) | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
@@ -716,9 +766,9 @@ holds the temperature (`Climate::regulated`). It takes the gases after
 `photochemistry` and returns them with the CO₂ the thermostat leaves and
 the water vapour the climate sets.
 
-**Radiative–convective grey column** (`surface_temperature_k`,
-`planet::column`, issue #441). The surface temperature is the one at
-which the outgoing longwave radiation (OLR) of a grey column over the
+**Radiative–convective column** (`surface_temperature_k`,
+`planet::column`, issues #441 and #523). The surface temperature is the
+one at which the outgoing longwave radiation (OLR) of a column over the
 surface balances what it absorbs, `σ T_eq⁴ + q`, with `T_eq` the
 equilibrium temperature under the body's derived Bond albedo
 (`planet::albedo`, issue #510: its oceans, land, ice, frost, clouds,
@@ -736,16 +786,125 @@ column:
   equation (it grows from 34 to 52 J/(mol·K) between 300 and 2000 K);
 - stops cooling at the skin temperature `T_eq / 2^¼`, a stratosphere
   where the vapour keeps the mixing ratio of its cold trap;
-- integrates the grey optical depth from the top down with the per-gas
-  laws below, written per unit `ln p` so that a uniform column gives back
-  their totals (`τ_i ∝ p^(a_i + ½)`, so `dτ_i / d ln p = (a_i + ½) τ_i`);
-- sends out the grey two-stream integral of `σ T⁴` over it with the
-  diffusivity factor 3/2 (the transmission falls to `1/e` at `τ` = 2/3,
-  the Eddington emission level), plus the surface's `σ T_s⁴ e^(−3τ_s/2)`.
+- sums its emission over the thermal spectrum (`planet::spectrum`): 250
+  bins of 20 cm⁻¹ from 0 to 5000 cm⁻¹, and a tail past it for the rest of
+  `σ T⁴`. In each bin every layer sends out its mean Planck flux with the
+  two-stream, non-scattering transmission of the layers above it, with the
+  diffusivity factor 1.66 (Elsasser), and the surface its own through the
+  whole column.
+
+**Absorbers** (`planet::spectrum`, issue #523). A grey optical depth
+closes the whole spectrum at once; real CO₂ absorbs in bands whose opaque
+part widens with the logarithm of its amount, which is why its forcing is
+logarithmic (Romps, Seeley & Edman 2022, doi:10.1175/JCLI-D-21-0275.1),
+and water leaves a window open between its rotation band and its
+vibration–rotation band. Three refits of a grey CO₂ law failed to hold
+Earth at 280 ppm, the outer edge, the moist plateau, Mars and Venus
+together, so the column takes each gas's absorption from its spectrum:
+
+- **CO₂ and water lines:** a correlated-k table built offline from the
+  HITRAN2024 line lists (Gordon et al. 2026) by `tools/opacity-table`
+  (`crates/mapgen/data/opacity.bin`, 3.8 MB; provenance, grid and
+  regeneration in `crates/mapgen/data/OPACITY.md`). Each bin holds 8
+  g-points on a grid of 15 pressures (1e-5 to 100 bar) and 16
+  temperatures (100 to 900 K), the lines Voigt-shaped to 25 cm⁻¹ with
+  their temperature dependence (strengths, hot bands, widths). Each gas
+  has a set broadened by air and one by itself (HITRAN's `γ_self`), mixed
+  by its share of the pressure, so pure CO₂ (Venus, Mars, a thick CO₂ air)
+  takes its self-broadened lines.
+- **CO₂ continuum:** MT_CKD 4.3's, the sub-Lorentzian far wings of CO₂'s
+  lines beyond the 25 cm⁻¹ cutoff (the χ factor of Perrin & Hartmann 1989
+  is built into it). Without them 8 bar of CO₂ at 1.70 AU sent out 94 W/m²
+  instead of 73.5 (Kopparapu et al. 2013: 67.4).
+- **Water continuum:** MT_CKD 4.3's self (as the vapour pressure squared)
+  and foreign (as the vapour times the other gases) continua (Mlawer et
+  al. 2012), which assume the same 25 cm⁻¹ cutoff.
+- **CO₂–CO₂ pairs:** HITRAN's collision-induced absorption (Karman et al.
+  2019), as the CO₂ density squared, not broadened.
+- **Methane:** its grey stand-in for Titan's collision-induced bands
+  (below), over 0-650 cm⁻¹ only, where those bands lie.
+
+CO₂ and water overlap at random within a bin (Lacis & Oinas 1991): the
+transmissions multiply. The lines take the pressure at each level, so
+`κ ∝ p` in their Lorentz wings, at Mars's millibars as at Venus's 92 bar;
+the column masses are `p / g` with the body's gravity.
+
+Checks of the radiation alone (tests of `planet::spectrum` and
+`planet::column`):
+
+| Check | Result | Bound |
+|---|---|---|
+| CO₂ doubling forcing, 280 to 560 ppm, Earth column | 3.32 W/m² | 3.7 ± 0.6 (Myhre et al. 1998) |
+| Forcing per doubling at 70, 280 and 1000 ppm | 2.97, 3.32, 3.68 W/m² | within 15 % of their mean |
+| Earth clear-sky OLR, 288 K, 77 % humidity, fixed profile | 258.2 W/m² | 265 ± 10 (Kiehl & Trenberth 1997) |
+| Moist plateau (runaway asymptote, mean over 500-640 K) | 283.5 W/m² | 282 ± 14 (Goldblatt et al. 2013) |
+| Plateau over 500-640 K / its peak (360 K) | within 0.2 % / +3.9 % | 1 % / at most +6 % |
+| Halving the bins | 0.01 W/m² on the forcing | under 0.1 |
+
+The column costs some 600 times the grey one per call; a draw of 20
+systems takes about 32 s, against 0.4 s on the grey column (issue #593
+holds the solver's redesign).
+
+**Cloud greenhouse** (`planet::column`, issue #523). The albedo's water
+clouds cover `f` of the sky (`albedo::cloud_cover`: Xu & Randall's
+`RH^0.25` times `1 − exp(−p_H₂O / 1e-2 bar)`, Earth's 0.67). That share
+radiates from a grey layer at the cloud top instead of the clear column
+below it:
 
 ```text
-τ_i = k_i (p_i / 1 bar)^a_i (P_b,i / 1 bar)^½        (a uniform column)
+OLR = (1 − f) OLR_clear + f OLR_cloudy
+OLR_cloudy = above_c + seen_c (ε B(T_c) + (1 − ε) I_clear(p_c))
 ```
+
+with `above_c` what the air above the top sends out, `seen_c` its
+transmission to space and `I_clear(p_c)` the clear column's upward flux
+at the top, band by band, so that the cloudy column needs no second sum.
+
+- The top sits at 0.589 of the surface pressure: ISCCP's global annual
+  mean cloud-top pressure, 580 mb (Rossow & Schiffer 1999, *BAMS* 80,
+  2261, §6a and Table 4), over Earth's mean surface pressure, 985.5 hPa
+  (Trenberth & Smith 2005; from memory, not checked).
+- The emissivity is `1 − exp(−1.66 τ_ir)` = 0.957, with ISCCP's mean
+  visible optical thickness 3.8 and its `τ_ir = τ / 2` (same paper, §5)
+  and the column's diffusivity 1.66.
+- Only water clouds count; a body without water vapour (Mars, Titan)
+  radiates as before. The moist plateau stays clear-sky and saturated, as
+  the line-by-line plateaus it is checked against are.
+- Check, at 280 ppm and 288 K with the falling humidity below: all-sky
+  OLR 236.8 W/m² against CERES EBAF's 240 ± 8 (Loeb et al. 2018),
+  clear-sky 270.9 against 267 ± 8, cloud effect 34.1 against 28 ± 8.
+  CERES samples its clear sky in cloud-free scenes, drier than the clear
+  sky of a cloudy air (Sohn & Bennartz 2008), hence the wider bounds.
+
+**Falling humidity** (`planet::column`, issue #523). Above a temperate
+surface (subcritical and below saturation, 77 % on a wet body) the
+troposphere's relative humidity falls with the pressure as Manabe &
+Wetherald 1967 set it, the profile of the habitable-zone models of
+Kasting et al. 1993 and Kopparapu et al. 2013:
+
+```text
+RH = RH_s (Q − 0.02) / (1 − 0.02),   Q = p / p_s
+```
+
+- The surface keeps its own humidity `RH_s`; the temperature still
+  follows the adiabats; above the cold trap the vapour keeps the mixing
+  ratio the profile leaves there.
+- Over a saturated or supercritical surface (a boiling ocean, a
+  runaway's steam) the column stays saturated, and the moist plateau is
+  computed saturated and clear, as Goldblatt et al. 2013 and Kopparapu
+  et al. 2013 take it.
+- **Runaway convention.** A drier column has no moist limit of its own:
+  its OLR keeps rising with the surface (414 W/m² at 340 K against about
+  290 saturated). A wet surface therefore runs away when what it absorbs
+  exceeds the most its *saturated* column sends out below water's
+  critical point, on its own air, skin and water supply
+  (`climate::wet_balance`, probed at 380 K and otherwise scanned); below
+  that, its balance is solved on the falling-humidity column. This is
+  Kasting's and Kopparapu's practice: a saturated troposphere for the
+  inner edge, Manabe & Wetherald's for temperate climates.
+- Check: Earth's clear-sky OLR is 270.9 W/m² at 280 ppm and 288 K,
+  against 267 ± 8 (CERES EBAF clear-sky); it was 253 with the
+  troposphere saturated above its condensation level.
 
 **Albedo of a water runaway** (`climate::absorbing`, issue #492). A body
 in a water runaway (by the insolation limit or a boil) that keeps steam
@@ -756,13 +915,24 @@ stratosphere the surface solves give a body at that limit, skin
 `T_eq / 2^¼` with `T_eq = (F_plateau / σ)^¼`) exactly at its star's
 runaway limit `S_rg` (`star::habitable_fluxes`), clamped to 0 to 0.9:
 `A_rg = 1 − 4 F_plateau / (S_rg S₀)`, with `S₀` the solar constant
-behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). The albedo moves from
+behind `T_eq` (255 K at 1 S⊕ with albedo 0.3). `F_plateau` is the
+higher of Earth's air's plateau and the body's own (issue #523,
+`moist_plateau_of`: the asymptote of its dry air over a saturated
+surface, its vapour capped by its water, on its gravity), so that a
+runaway absorbs more than its own steam column can send out: on Earth's
+plateau the super-Earth of issue #492 (1.7 g, 0.45 bar of CO₂, its own
+plateau 299 W/m²) stayed at water's critical point, and now settles at
+1399 K. The albedo moves from
 the body's derived albedo `A_d` to `A_rg` with the steam column,
 `A = A_d + (A_rg − A_d) (1 − exp(−p_steam / 1 bar))` (`STEAM_ALBEDO_BAR`,
 a calibration: the moist atmospheres of Kopparapu et al. hold a fraction
 of a bar to about one bar of vapour at the limit), so a thick column
 takes `A_rg` whole and a runaway losing the last of its water comes back
-to its derived albedo without a jump. Kopparapu et al.
+to its derived albedo without a jump. The albedo's cause tree shows
+that blend as a `steam` part: its weight `1 − exp(−p_steam / 1 bar)`,
+with `A_rg` and a note naming the plateau that sets it (`moist_limit`,
+Earth's air's; `moist_limit_own`, the body's own;
+`climate::steam_albedo`). Kopparapu et al.
 2013 (doi:10.1088/0004-637X/765/2/131) and 2014 place the runaway limit
 where the light a moist atmosphere absorbs, with the albedo its own
 spectrum gives under that star, meets its outgoing limit. With Earth's
@@ -773,32 +943,19 @@ balances past the plateau. Wet bodies keep their derived albedo (Earth's
 about 0.3), and so does a runaway whose escape took all its water
 (Mercury, Venus), which has no moist air left.
 
-`p_i` are the partial pressures of CO₂, H₂O and CH₄ and `P_b,i` the
-pressure that broadens each gas's lines (below). The square roots are the
-strong-line limit of a pressure-broadened band, which absorbs as
-`sqrt(S u α)` with the path `u ∝ p_i` and the width `α` growing with the
-pressure round the lines (Pierrehumbert 2010, §4.4; Goody & Yung 1989).
-CO₂'s power is smaller, 0.19: its 15 µm band is saturated at the centre,
-so its forcing grows with the logarithm of its amount (Myhre et al. 1998,
-doi:10.1029/98GL01908). With Venus pinning its opacity (737 K under 85
-bar at its derived Bond albedo 0.76, its sulphuric deck's), the power
-sets how strong small amounts of CO₂ are: the late Archean Earth (below)
-must stay above 270 K and warm by 3 to 8 K when its nitrogen doubles;
-0.19 gives 272 K and +7.0 K (0.27 left it at 259 K, 0.25 at 268 K). Under 1e-6 bar (`CO2_WEAK_BAR`) CO₂ absorbs in
-proportion to its amount, the weak-line limit; without it Titan's 3e-10
-bar of CO₂ warmed it by about 3 K. The opacities are calibrations with no
-source:
-
-| Gas | `k_i` | `a_i` | Calibrated on |
-|---|---|---|---|
-| CO₂ | 1.45 (0.74 under the fixed albedo 0.3, 1.66 before #441) | 0.19 (0.07, 0.25 before #441) | Venus's 737 K under 85 bar at its Bond albedo 0.76, and the late Archean Earth |
-| H₂O | 111 (5.9) | 0.5 | the moist plateau at about 287 W/m² |
-| CH₄ | 7.75 (6.0 before #530, 3.3 before #443, 3.4 before #441) | 0.5, saturating past 0.01 bar | Titan's 93.7 K and 3 to 6 % of methane, with the anti-greenhouse |
+**Methane's stand-in.** Methane keeps one grey optical depth, over 0-650
+cm⁻¹ only (Courtin, Gautier & McKay 1995 place Titan's N₂–N₂ and CH₄–N₂
+collision-induced bands there), `τ = k (u B)^½` with `u` its saturated
+amount and `B` the air it collides with (see **Methane** below), and
+`k` = 13.4 (`CH4_OPACITY`), calibrated on Titan's 93.7 K (14.3 on the grey
+column, 7.75 before #563, 6.0 before #530, 3.3 before #443, 3.4 before
+#441). A spectral Titan is left for later.
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
-CH₄ and H₂, partly undone by its haze (McKay, Pollack & Courtin 1991,
-doi:10.1126/science.11538492, not checked); the methane opacity carries
-all of it here but the near-infrared share its methane takes (below).
+CH₄ and H₂, which warms it by 21 K, while its haze cools it by 9 K
+(McKay, Pollack & Courtin 1991, doi:10.1126/science.11538492, abstract
+checked); the methane opacity carries all of the greenhouse here, the
+nitrogen's own included, and the anti-greenhouse (below) the cooling.
 
 **Methane** (issue #443). The `sqrt(p_CH₄ P)` law, calibrated on Titan,
 was stretched 500-fold past it: a planet at an equilibrium temperature of
@@ -831,7 +988,7 @@ liquid water. Three rules bound it:
 - *Saturation.* The amount the opacity counts is
   `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
   it collides with counts the methane as `u`:
-  `τ = 7.75 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
+  `τ = 13.4 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
   at their centres, and more methane only widens their wings (the
   logarithmic forcing of a saturated band, Pierrehumbert 2010, §4.4); a
   body at 90 to 120 K radiates at 25 to 60 µm, where methane has no
@@ -839,33 +996,43 @@ liquid water. Three rules bound it:
   10 bar holds back under a third of the outgoing radiation that 0.01
   to 0.1 bar holds back (with the opacity 6.0, 0.6 K of warming against
   2.6 K).
-- *Anti-greenhouse* (issue #530). The methane above the tropopause
-  absorbs starlight in its near-infrared bands and radiates it back to
-  space, so the surface never gets it (McKay, Pollack & Courtin 1991,
-  *Science* 253, 1118, describe it on Titan together with its haze's;
-  not checked beyond the bibliographic data). `climate::absorbed_w_m2`
-  takes the share `0.3 m / (m + 0.005 bar)` off the light the surface
+- *Anti-greenhouse* (issues #530, #563). The stratosphere, the methane
+  above the tropopause in its near-infrared bands and the organic haze
+  its photolysis makes, absorbs starlight and radiates it half back to
+  space, so the surface never gets that half. `climate::absorbed_w_m2`
+  takes the share `0.5 m / (m + 0.002 bar)` off the light the surface
   absorbs (`CH4_NEAR_IR_MAX`, `CH4_NEAR_IR_HALF_BAR`), `m` the methane
   above the 0.1 bar tropopause that the cold trap lets through
   (`column::stratospheric_methane_bar`); the internal heat is not
   touched, and the stratosphere that absorbs it is not warmed in the
-  column. Both constants are calibrations, no source, with the opacity
-  7.75: the reference Titan loses 11 % of its light, and since a warmer
-  tropopause lets more methane through, a Titan nearer its star loses
-  more, which narrows the archetype's spread of temperature and of the
-  methane its seas keep in its air. A world of 26 bar of methane takes
-  nearly all of the 0.3. The share of the light in methane's bands
-  depends on the star's spectrum; one value serves every star.
+  column. The maximum, 0.5, is the limit of a layer that absorbs all
+  the light and radiates half of it down. The half-column is anchored
+  on Titan (issue #563): McKay, Pollack & Courtin 1991 (*Science* 253,
+  1118, abstract checked) find the anti-greenhouse cools its 94 K
+  surface by 9 K, the greenhouse warming it by 21 K, so its surface
+  keeps `(94 / 103)⁴` of the light under the same greenhouse, a share of
+  0.306; their split of the light, 1.5 W/m² absorbed in the
+  stratosphere of 2.6 W/m² (reproduced by Robinson & Catling 2012, ApJ
+  757, 104, §4.3), half of it going up, gives 0.29. The reference
+  Titan's cold trap lets through 0.0031 bar, which takes 0.304 (0.11
+  with the calibration of issue #530, `0.3 m / (m + 0.005 bar)`). Since
+  a warmer tropopause lets more methane through, a Titan nearer its
+  star loses more. A world of 26 bar of methane takes nearly all of the
+  0.5. One value serves every star, though redder stars put more of
+  their light in methane's bands.
 
 Titan at Saturn's orbit (`titan-like`, seeds 1 to 40 of
-`archetype_census`) comes out at 90.8 to 93.1 K (median 92.3 K), 1.31 to
-1.58 bar (median 1.47 bar, no seed under 1.3 bar since `titan-like`
-pins `n2 = 0.82`, see [atmospheres.md](atmospheres.md)) and 3.8 to
-5.7 % methane (median 4.8 %), against Titan's 93.7 K, 1.47 bar and
-5.65 % (90.4 to 94.5 K and 3.7 to 6.8 % before the anti-greenhouse).
-Seed 182's planet d of `planet_census` is a hydrocarbon world at 140 K
-(149 K before), with 3.3 bar of methane in its air and the rest of its
-methane in its seas, under the 150 K line.
+`archetype_census`) comes out at 92.4 to 94.5 K (mean 93.69 K, median
+93.75 K), 1.31 to 1.61 bar (median 1.48 bar, no seed under 1.3 bar
+since `titan-like` pins `n2 = 0.82`, see [atmospheres.md](atmospheres.md))
+and 5.5 to 5.9 % methane (median 5.7 %), against Titan's 93.7 K, 1.47 bar
+and 5.65 % (95.1 K and 6.6 % on the spectral column before the opacity
+was re-anchored; 91.0 to 93.3 K and 3.9 to 5.8 % before the anchor of
+issue #563; 90.4 to 94.5 K and 3.7 to 6.8 % before the anti-greenhouse).
+Seed 182's planet d of `planet_census` is a hydrocarbon world under the
+150 K line (129 K on the grey column, 136 K before the anchor, 149 K
+before the anti-greenhouse), with 0.9 bar of methane in its air (1.8 bar
+on the grey column) and the rest of its methane in its seas.
 
 **The moist plateau.** On a saturated column the levels that radiate to
 space sit on water's saturation curve whatever the surface temperature,
@@ -875,96 +1042,66 @@ Robinson, Zahnle & Crisp 2013 (doi:10.1038/ngeo1892, abstract checked)
 find it at 282 W/m² line by line, Boukrouche, Lichtenberg & Pierrehumbert
 2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv 2107.14150) at
 283 W/m² and Hamano et al. 2015 (doi:10.1088/0004-637X/806/2/216) at
-280 W/m². With Earth's air saturated at 77 %, the column sends out 279,
-287, 288 and 288 W/m² from a surface at 340, 360, 380 and 400 K, and
-255 W/m² at 320 K, where it still approaches the limit (the moist OLR
-reaches it only asymptotically, Goldblatt et al. 2013); at 380 K, 287.6,
-287.7 and 287.5 W/m² with one, two and three times Earth's nitrogen. The
-plateau sits a few W/m² above the line-by-line limit so that Earth
-without CO₂ and the late Archean (below) stay within their targets. The old Eddington core
+280 W/m². Line-by-line curves rise to a maximum near 350-400 K and fall
+a few per cent to the asymptote (Goldblatt et al. 2013, Fig. 2). The
+spectral column does the same over Earth's air, saturated: 294.6 W/m² at
+360 K, then 283.4 to 283.9 W/m² over 500-640 K. `MOIST_PLATEAU_W_M2` is
+that asymptote, 283.5 W/m², computed once on a finer grid (80 levels per
+decade, converged to 0.5 W/m²); it moves by under 2 % with CO₂ up to
+1e-2 bar and with one to three times Earth's nitrogen. The old Eddington core
 (`T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`) had no plateau: its moist OLR peaked at
 253 W/m² at Earth's composition and fell with nitrogen.
 
-**Broadening** (`broadening_bar`, `water_broadening_bar`,
-`foreign_share`, issues #440 and #441). For CO₂, `P_b` is the pressure of
-CO₂ and water vapour in full plus the pressure `P_o` of the other gases
-(N₂, O₂, CH₄, the rest), in proportion up to 2.6 bar of them
-(`BROADENING_KNEE_BAR`) and no further past it (`THICK_AIR_EXPONENT` 0):
-the column applies to every level the share `K / P_o` the whole column
-has past the knee. For water vapour, `P_b` is the vapour's own pressure
-plus 0.05 (`WATER_FOREIGN_BROADENING`) times that of the rest: water
-broadens its own lines about five times better than air does (HITRAN's
-self- against air-broadened half-widths, Gordon et al. 2017,
-doi:10.1016/j.jqsrt.2017.06.038, from memory), and its self-continuum
-dominates the windows of a moist air (Shine, Ptashnik & Rädel 2012,
-doi:10.1007/s10712-011-9170-y, from memory).
-
-Both numbers come from the plateau. More nitrogen lifts it through the
-adiabat (a column of more nitrogen holds less vapour per kelvin of its
-upper levels) and lowers it through broadening: without foreign
-broadening of water the plateau rises by several per cent from one to
-three times Earth's nitrogen; with the old knee
-at 1 bar the tempered broadening of a 3x column lifted it by 4 %. The
-knee sits above three times Earth's air (2.55 bar of N₂ and O₂).
-
-At each level the foreign pressure that broadens CO₂'s and water's lines
-also saturates past 0.18 bar (`LOCAL_KNEE_BAR`), growing as
-`K (p/K)^0.05` beyond it (`LOCAL_KNEE_EXPONENT`): lines overlap and their
-absorption saturates as they widen (Vladilo et al. 2013,
-doi:10.1088/0004-637X/767/1/65, App. A.3). At 288 K the column radiates
-from levels with a few tenths of a bar of nitrogen, past this knee, so
-thick nitrogen warms a temperate planet little; at the 380 K plateau the
-radiating levels hold a few hundredths of a bar, under it, so the plateau
-keeps its independence from the nitrogen.
-
-Methane keeps the whole pressure, its own counted as the saturated
-amount `u` (see **Methane** above): its opacity stands for Titan's
+**Broadening.** The lines take the total pressure at each level from the
+table, whose Voigt widths grow with it, CO₂'s and water's each broadened
+by the air and by the gas itself in proportion to its share; the
+continua grow as the product of the absorber and its partner, the CO₂
+pairs as the CO₂ density squared. The knees and broadening shares of the
+grey laws (`BROADENING_KNEE_BAR`, `LOCAL_KNEE_BAR`,
+`WATER_FOREIGN_BROADENING`, issues #440 and #441) are gone with them.
+Methane's stand-in keeps the whole pressure, its own counted as the
+saturated amount `u` (see **Methane** above): it stands for Titan's
 collision-induced greenhouse, which grows with the nitrogen faster than
 line broadening.
 
-CO₂ and water vapour count in full for each other's lines: water
-broadens CO₂'s much more than N₂ and O₂ do (Tan, Kochanov, Rothman &
-Gordon 2019, doi:10.1029/2019JD030929, abstract checked), and CO₂
-broadens water's 1.33 to 1.45 times as much as air (Yang et al. 2022,
-doi:10.7498/aps.71.20220700, abstract checked); in water's foreign share
-it counts as air does.
-
 **Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar) and no
-thermostat, an Earth keeps a moist balance at 307, 310 and 307 K under 2,
-5 and 11 bar of N₂; on the old core 2 bar already ran away. Doubled
-nitrogen warms as the 1-D and 3-D models find (Goldblatt et al. 2009,
-doi:10.1038/ngeo692: +4.4 °C for doubled nitrogen on the late Archean
-Earth; Charnay et al. 2013, doi:10.1002/jgrd.50808: +7 °C in a GCM;
-Wolf & Toon 2014, doi:10.1089/ast.2013.1112: 3 to 7 K): in Charnay's
-setting (0.82 of today's Sun, 10 mbar of CO₂, no thermostat) the column
-goes from 271.1 K to 278.4 K (+7.3 K; thin margins against the test's
-270 K floor and +8 K ceiling). The thermostat holds an Earth under 2 or
-3 bar of N₂ at 288 K with 8e-6 and 6e-6 bar of CO₂, and an Earth with
-no CO₂ under 1 bar of N₂ falls to 263 K, well below 288 K (Lacis et al.
-2010, doi:10.1126/science.1190653). The OLR rises slowly with the
-surface temperature below the plateau (about 1 W/m² per kelvin), so a
-forcing warms the grey column more than a line-by-line one.
+thermostat, an Earth keeps a moist balance at 300, 310 and 319 K under 2,
+5 and 11 bar of N₂; on the old core 2 bar already ran away. The
+thermostat holds an Earth under 2 or 3 bar of N₂ at 288 K with 1.3e-5
+bar of CO₂, and an Earth with no CO₂ under its own albedo falls to
+277 K, below 288 K (Lacis et al. 2010, doi:10.1126/science.1190653).
+
+Doubled nitrogen warms the late Archean Earth by 4.4 °C in the clear-sky
+1-D model of Goldblatt et al. 2009 (doi:10.1038/ngeo692), by 7 °C in
+the GCM of Charnay et al. 2013 (doi:10.1002/jgrd.50808), and by 3 to 7 K
+in Wolf & Toon 2014 (doi:10.1089/ast.2013.1112). In Charnay's setting
+(0.82 of today's Sun, 10 mbar of CO₂, no thermostat, Earth's albedo 0.3
+held fixed) the all-sky column goes from 275.4 K to 285.7 K, +10.3 K.
+At a fixed 275 K surface the doubled nitrogen holds back 9.1 W/m², about
+half of it the lines' wider Lorentz wings and half the colder moist
+adiabat and the vapour it keeps; but the cloud cover grows from 0.39 at
+275 K to 0.61 at 285 K, and with the albedo held fixed each new cloud
+brings its longwave trapping without its reflection: half a cloud.
+Goldblatt's 1-D model keeps its clouds in a fixed albedo, so the test
+compares the two airs at a fixed cloud cover, that of the 1-bar
+climate (0.40 at 275.4 K): +4.9 K, inside the 1-D range of 4 to 5 K
+(the clear sky alone gives +4.3 K).
 
 **Steam.** A steam runaway's gases are fixed, its surface no colder than
 the saturation temperature of its steam. Pure steam follows the plateau
-too: 10 bar of it send out 282 W/m² from 700 to 1000 K and leave the
-plateau at about 1290 K, where the dry adiabat from the surface reaches
-the emitting levels (Boukrouche et al. 2021 find about 1050 K under
-10 bar, Goldblatt 2015, doi:10.1089/ast.2014.1268, a rise past 1500 K
-through the 4 µm window; the old grey law sent out the limit from about
-680 K). A grey column has no window, so a deeper steam column leaves the
-plateau ever later (about 2600 K under 300 bar, 20 000 K under the
-1.6e5 bar of a 30 %-water Earth), where Boukrouche et al. find the end
-of the plateau reaching a constant of about 1800 K as the steam thickens
-to 295 bar. The column therefore holds at most 70 bar of steam
-(`STEAM_MAX_BAR`, calibrated so that a thick steam column leaves the
-plateau at 1800 K); the steam under it changes neither the radiation
-nor the broadening of the CO₂ lines. The 30 %-water planet at 0.7 AU
-(489 W/m² absorbed, 1.6e5 bar of steam; 8805 K under the plain grey law,
-2076 K under the old cap) settles at 2099 K. The cap is a surrogate: it
-stands for the non-grey 4 µm window (Boukrouche et al. 2021; Goldblatt
-2015) through which a real hot steam atmosphere radiates and which the
-grey column cannot see.
+too: 10 bar of it leave the plateau at about 1100 K, where the dry
+adiabat from the surface reaches the emitting levels (Boukrouche et al.
+2021 find about 1050 K under 10 bar, Goldblatt 2015,
+doi:10.1089/ast.2014.1268, a rise past 1500 K through the 4 µm window).
+The column holds at most 70 bar of steam (`STEAM_MAX_BAR`), the steam
+under it changing nothing. The cap was calibrated on the grey column,
+which had no window: a deeper steam column left its plateau ever later
+(about 2600 K under 300 bar, 20 000 K under the 1.6e5 bar of a 30 %-water
+Earth), where Boukrouche et al. find the end of the plateau reaching a
+constant of about 1800 K as the steam thickens to 295 bar; the cap put
+it at 1800 K. The spectral column has the window, and keeps the cap so
+that a runaway's 1.6e5 bar of steam stay inside its opacity table, which
+ends at 100 bar.
 
 **Water vapour.** Where water is kept and there is no runaway, the air
 above the ocean or the ice holds 77 % of the saturation pressure (the
@@ -991,11 +1128,47 @@ vapour taken at that temperature, sends out what it absorbs (solved in
 `ln CO₂`). It can build the CO₂ up past what the air held before the
 climate (what escape and the cold trap left of it), since weathering
 slows and the volcanoes keep giving: up to the planet's carbon inventory
-(all it outgassed, `CarbonCycle::inventory_bar`), capped where CO₂ frosts
-out at its equilibrium temperature (`co2_frost_bar`). If that most is
-not enough, the planet keeps the CO₂ of its maximum greenhouse and is
-colder: below 273 K its water freezes. If no CO₂ at all is still too
-warm, the planet is hotter. Only a temperature reached is `regulated`.
+(all it outgassed, `CarbonCycle::inventory_bar`), at most its maximum
+greenhouse (`maximum_greenhouse`, `Body::greenhouse_co2`; issue #522).
+That maximum is the model's own, not a published edge: a golden-section
+search in `ln CO₂` for the amount at which a surface at 288 K gains most,
+the light it absorbs under the albedo that CO₂ gives against what the
+spectral column sends out. Three things in the model cap it:
+
+- CO₂'s bands saturate: the correlated-k lines, the MT_CKD far wings and
+  the CO₂–CO₂ pairs close the 15 µm region, so each bar adds less
+  trapping;
+- where the CO₂ of a cold column reaches its saturation
+  (`atmosphere::co2_saturation_bar`, its frost below 216.6 K, its liquid
+  above) it condenses, the air follows CO₂'s pseudo-adiabat
+  (`column::co2_lapse`, Kasting 1991 Appendix B) and the tropopause
+  (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼` of the
+  climate's own albedo) cold-traps it;
+- its Rayleigh scattering keeps growing with the column, averaged over
+  the star's black-body spectrum (`albedo::spectrum`), while its
+  near-infrared absorption (`planet::shortwave`) takes back part of what
+  it reflects. A red star's light scatters less and falls more in the
+  absorption bands, so the maximum holds at a lower flux.
+
+Kopparapu et al. 2013 (doi:10.1088/0004-637X/765/2/131) find the same
+mechanism and put its edge at 1.70 AU round the Sun (0.343 S⊕). The model
+lands closer in: for an Earth the outer edge, the last orbit with liquid
+water, is 1.535 AU (0.424 S⊕, +24 %), and round 4500 K and 3300 K stars
+its flux is 25 % and 20 % above their fit (the edge was 1.47 AU before
+the near-infrared absorption, 1.78 AU on the grey column). Two measured
+parts make the gap: the thick CO₂ column sends out too much, 73.5 W/m²
+under 8 bar at 1.70 AU against Kopparapu's 67.4, so it needs less light
+to stay warm; and the albedo at their maximum greenhouse is 0.455
+against their 0.417. Neither is tuned away: the edge tests pin what the
+model reaches (1.535 ± 0.005 AU, +25 % and +20 % ± 1 %), so that a
+change shows, and issue #595 holds the search for the missing physics
+(the CO₂ far-wing shape against MT_CKD, CO₂ ice clouds, the 0-D
+column's stratosphere, the HITRAN versions). If the maximum is not
+enough, the planet keeps the CO₂ of its maximum greenhouse and is
+colder: below 273 K its water freezes, and where its surface is too
+cold to keep that CO₂ it frosts out until the air keeps what the surface
+allows (`collapsed_climate`). If no CO₂ at all is still too warm, the
+planet is hotter. Only a temperature reached is `regulated`.
 The grid's `carbon_cycle` is unchanged; part 3 aligns them.
 
 **Bond albedo** (`albedo::cover`, `albedo::bond_albedo`, issue #510). The
@@ -1006,22 +1179,78 @@ the column absorbs at). The disc is split, planet-wide, into open ocean
 (0.06), bare land (0.25 under an air, the regolith's 0.11 on an airless
 body, shielded from space weathering by `1 - exp(-p / 1e-4 bar)`), water
 ice and snow (0.6, from the ice line at -5 °C and the equator-to-pole
-contrast of an Earth-like planet, `ice_line_share`), frosts of N₂, CH₄ and
+contrast of an Earth-like planet, `ice_line_share`, as far as the body's
+water reaches as 1.5 km sheets once spread over its area), frosts of N₂, CH₄ and
 CO₂ (0.75, the share `frost / 0.02 bar` of the disc, all frosts together)
 and of volcanic SO₂ (0.63, its part of that share), under a water cloud
-cover that grows with the vapour (`1 - exp(-p_H₂O / 1.15e-2 bar)`, Earth's
-0.67 at its 1.26e-2 bar, each cloud 0.19), Rayleigh scattering of the air's
-column, a methane haze and, from 1e-3 bar of SO₂ (what the washing out
-leaves) in a surface above 273 K, a sulphuric acid deck that hides all
+cover that grows with the vapour and with its relative humidity
+(`RH^0.25 (1 - exp(-p_H₂O / 1e-2 bar))`, the humidity factor of Xu &
+Randall 1996's cloudiness; Earth's 0.67 at its 1.26e-2 bar and 77 %, a
+dry world whose air holds all its little water clearer than an ocean
+world with the same vapour; each cloud top 0.252, calibrated on Earth's
+0.30), Rayleigh scattering of the air's column `p / g` (Titan's 1.5 bar
+weigh seven times Earth's column; CO₂ scatters 2.5 times as much as
+nitrogen), the near-infrared absorption of its CO₂ and water vapour
+(**Near-infrared absorption** below), a methane haze and, from 1e-3 bar
+of SO₂ (what the washing out leaves) in a surface above 273 K, a sulphuric acid deck that hides all
 below it (0.76), over a share of the disc that grows linearly from none
 at 273 K to all of it at 313 K (`DECK_ONSET_K`, a calibration: a deck
 whole at one temperature left the fixed point no balance between a warm
 clear sky and a cold decked one). The model stores the air washed as the
 albedo washed it, and the look draws the same deck over the same share. Each constant is
 calibrated on several bodies at once and carries its source (several are
-from memory, marked in `albedo.rs`). The model gives Earth 0.29, Venus
-0.76, Mars 0.25, a frozen Earth-like planet 0.62 to 0.64, Triton 0.75 and
-Io 0.63.
+from memory, marked in `albedo.rs`). The model gives Earth 0.30, Venus
+0.76, Mars 0.25, a frozen Earth-like planet about 0.58 (its vapour
+absorbs some of what its ice reflects), Triton 0.75, Io 0.63 and
+Enceladus 0.80 (issue #523: gravity, area and the air's absorption).
+
+**Near-infrared absorption** (`planet::shortwave`, issue #523, task 7.6
+of the longwave band model). The star's light crosses the air band by
+band, over the 240 bands of its Planck spectrum from 0.2 to 5 µm:
+
+- **The column** is the climate's (`column::levels` of `Profile::SHORTWAVE`: its
+  adiabats and its falling humidity) on a coarse grid, 3 levels per
+  decade up to 1 % of the surface pressure, clear and with no
+  stratosphere. Against 16 levels to 0.1 %, Earth's albedo moves by
+  1e-4 and its absorption by 0.05 W/m².
+- **Absorption** from 0.7 to 5 µm (14 364 to 2 000 cm⁻¹) comes from a
+  second correlated-k table of CO₂'s and water's HITRAN2024 lines on the
+  albedo's own bands (`crates/mapgen/data/shortwave.bin`, 1.8 MB,
+  `crates/mapgen/data/OPACITY.md`). MT_CKD 4.3's water and CO₂ continua
+  and HITRAN's CO₂–CO₂ collision-induced bands (2510-3250 and 3995-4500
+  cm⁻¹; the file holds none at 1.73 or 1.18 µm) are added per band.
+  Bluer light is only scattered: ozone is not modelled.
+- **Each layer** takes its absorption and its share of the Rayleigh
+  depth together in a two-stream solution (Meador & Weaver 1980 with
+  the hemispheric-mean coefficients of Toon et al. 1989, at the
+  longwave column's diffusivity 1.66). The light is taken as diffuse,
+  which gives the spherical albedo of the whole disc at once. CO₂ and
+  water overlap at random within a band, each pair of g-points a stack
+  of its own.
+- **The water clouds** sit at their ISCCP tops (0.589 of the surface
+  pressure) inside the column: the vapour below them absorbs only what
+  they let through.
+- **What the air absorbs** is absorbed by the planet: the climate
+  balances everything but the reflected light.
+- **Cost:** the light's paths through a given air are kept per air
+  (the last 32 of a thread), and the cover's ground and clouds are
+  stacked on them for a few operations per path.
+
+Checks (tests):
+
+- Earth's clear-sky air at 288 K absorbs 48 W/m², within the 40-60
+  W/m² that water vapour, CO₂ and O₂ take of the observed 70 (Kim &
+  Ramanathan 2008: ozone about 13, aerosols about 7).
+- The albedo at Kopparapu's maximum greenhouse (Earth at 1.70 AU, 8 bar
+  of CO₂ over 273 K) is 0.455, against their 0.417 ± 0.04 (it was 0.499
+  without absorption).
+- The same air lowers an M dwarf's planet's albedo more than a G
+  star's: 0.074 against 0.032 under Earth's air.
+
+The outer edge moved from 1.47 to 1.535 AU round the Sun; the K and M
+edges' fluxes from +43 % and +47 % to +25 % and +20 % of Kopparapu's.
+The edge tests are frozen there; issue #595 holds the rest of the gap
+(see **Carbonate thermostat** above).
 
 **Icy albedo from surface age** (`albedo::icy_unit_albedo`, climate
 pass lot 3C-1, goal 4). The exposed water ice of an ice crust darkens
@@ -1134,16 +1363,19 @@ tree has no room under its parts (the trees stay three levels deep), so
 it names them without those details. A body whose albedo is mostly a
 frost says so on the card's value line ("0.63 · volcanic SO₂ frost").
 
-Census, seeds 1 to 40 (min, median, max):
+Census, seeds 1 to 40 of `archetype_census` (min, median, max; climate
+pass lot 3C-2):
 
 | Body | Bond albedo | T, K | Observed |
 |---|---|---|---|
-| Enceladus | 0.769, 0.782, 0.787 | 60.3, 62.2, 63.9 | 0.81 ± 0.04 (Howett et al. 2010) |
-| Europa | 0.587, 0.623, 0.660 | 91.9, 95.8, 100.1 | about 0.62 to 0.68 |
-| Ganymede | 0.451, 0.455, 0.458 | 102.2, 105.1, 107.7 | about 0.4 |
-| Callisto | 0.192, 0.203, 0.250 | 110.8, 115.3, 118.6 | about 0.2 |
+| Enceladus | 0.789, 0.803, 0.812 | 58.7, 60.7, 62.5 | 0.81 ± 0.04 (Howett et al. 2010) |
+| Europa | 0.586, 0.625, 0.660 | 91.9, 95.8, 100.1 | about 0.62 to 0.68 |
+| Ganymede | 0.451, 0.454, 0.457 | 102.2, 105.1, 107.7 | about 0.4 |
+| Callisto | 0.196, 0.204, 0.250 | 110.8, 115.1, 118.4 | about 0.2 |
 
-Enceladus took the regolith's 0.11 before (85 to 89 K): its 0.027
+Before lot 3C-2 Enceladus came out at 0.782 (62.2 K) and Callisto at
+0.203; the other moons moved by under 0.002. Enceladus once took the
+regolith's 0.11 (85 to 89 K): its 0.027
 oceans spread as 1.5 km sheets cover 5 % of its disc, the rest counting
 as bare rock; the Galilean moons took the ice's 0.6 (95 to 98 K). The
 colder Enceladus has a thicker shell (45 to 54 km, 10 to 13 km at the
@@ -1188,6 +1420,32 @@ with 0.8: the calibration sits just above the coarse-grained end, a
 lower value warming the model's Triton, under its frost albedo of 0.75,
 past 38 K. One value serves α- and β-N₂.
 
+**Phase changes and convergence** (`Climate::converged`,
+`climate::PHASE_BAND_K`, issue #562). Two phase changes were steps
+inside the fixed points: nitrogen frost (emissivity 0.89) becomes a
+black-body liquid at its triple point, 63.14 K, and methane's air halves
+when its ice melts into a sea (`sea_freezes_k`). A surface just under
+such a point warmed over it and one just over it cooled under it, so the
+fixed point had no solution there and cycled until its step limit,
+silently. Both now pass from one phase to the other over the last 1 K
+under the point (`frozen_share`): the frost's cover retreats and
+methane's activity falls from 1 to 0.5 across that band. The band is a
+numerical smoothing, not physics; 1 K is the narrowest over which the
+damped fixed point settles at the triple point (over a band `w` the
+emissivity's loop gain is about `1.8 K / w`). The condensation's fixed
+point solves its temperature in the bracket its last two steps make
+when they overshoot, and the albedo's fixed point halves its damping
+when a step turns back. A climate whose fixed points still do not
+settle is stored with `converged: false` and the card says so under its
+temperature (worlds stored before read `true`). `cargo run --release
+-p mapgen --example climate_sweep phase` sweeps a Titan-like and a
+Triton-like body across both points and prints each flux, temperature,
+step count and whether it settled. The methane-like sweep still shows
+two steps between settled climates, from about 62 to 74 K and over about
+1.2 K just above the sea's freezing point: methane darkening the body
+(its near-infrared absorption) makes it bistable there, whatever the
+phase change.
+
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
 bistable: the temperate one, started from a warm planet with no ice, and
@@ -1195,24 +1453,30 @@ the frozen one, started from a body covered in ice with the CO₂ the
 temperate one held when it froze. Weathering stops under the ice, so
 volcanic CO₂ builds up in the frozen air until it thaws the planet (the
 snowball Earth of Hoffman et al. 2017, doi:10.1126/sciadv.1600983); the
-frozen branch's CO₂ is the amount that would be there, half way
-(`SNOWBALL_BUILT_UP`) from the CO₂ it froze with to the CO₂ that thaws it.
+frozen branch's CO₂ is what its thermostat reaches: the most that leaves
+it frozen, just short of the CO₂ that thaws it (`still_frozen_bar`), or
+its maximum greenhouse where none thaws it, less what its cold surface
+frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
 `d / (d + 0.8 bar × v / v⊕)`: the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (0.8 bar gives Earth, which spent about a tenth of its history frozen, a
-chance of 0.1). Where no CO₂ within the planet's inventory and its frost
-cap thaws it (the chance is then 1, from about 1.6 AU for an Earth-like
-planet round the Sun), the frozen state is for good: the planet is
+chance of 0.1: on the spectral column Earth at 1 AU needs 0.091 bar more
+CO₂ to thaw, a chance of 0.102; 0.031 bar on the grey column). Where no
+CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
+about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
+warms the ice to a thaw), the frozen state is for good: the planet is
 frozen but not a snowball, and its card says so (the `frozen` note). So snowballs are rare near S = 1, likelier towards the
 outer edge of the habitable zone and on planets that outgas little, and
 `--snowball yes|no` pins the state. A snowball is drawn with the `frozen`
 look and keeps its relief and coastlines; no sulphuric cloud forms in its
-cold air. On the sweep of an Earth-like planet round the Sun the warm
-branch runs from the runaway at about 0.95 AU to 1.6 AU (288 K, the
-thermostat's, with 1.6 bar of CO₂ at 1.6 AU) and ends near 1.67 AU, beyond
-which the frozen branch is the only one (187 K at 1.8 AU).
+cold air. On the sweep of an Earth-like planet round the Sun (`climate_sweep
+sweep`) the warm branch runs from the runaway at about 0.95 AU to the
+outer edge at 1.535 AU (288 K, the thermostat's, with 0.47 bar of CO₂ at
+1.2 AU, 2.8 bar at 1.4 AU and 5.7 bar at 1.5 AU), beyond which the frozen
+branch is the only one (165 K at 1.6 AU, its CO₂ frosted out down to
+0.06 bar; 152 K at 1.8 AU).
 
 **Sulphur and SO₂.** Outgassed sulphur stays in the air as SO₂ only in
 share `SULPHUR_IN_AIR` (5e-5); over liquid water or with free oxygen above
@@ -1272,25 +1536,38 @@ inputs round the Sun at 4.6 Gyr:
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, 3e-4 bar of CO₂ | 288 ± 6 K, water, regulated, under 0.01 bar of CO₂ | 288 K, 280 ppm before industry |
-| Venus | 737 K, none | 737 ± 50 K, none | 737 K |
-| Mars | 209 K, none | 210 ± 12 K, none | about 210 K |
-| Titan | 96 K, hydrocarbons | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
-| Mercury | 410 K, its equilibrium temperature | within 1 K of it | airless |
+| Earth | 288 K, water, regulated, 1.2e-4 bar of CO₂; 289.5 K at 280 ppm | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ within the CO₂ the model maps 286-290 K to (3.7e-5 to 3.7e-4 bar) | 288 K, 280 ppm before industry |
+| Venus | 577 K, none | measured: pinned at 577 ± 5 K, none | 737 K |
+| Mars | 214.5 K (T_eq 210.3 K) under 6.4 mbar, none | 210 ± 5 K, none | about 210 K |
+| Titan | 99 K, hydrocarbons (2.2 bar); `titan-like` 93.7 K | 94 ± 8 K, hydrocarbons; `titan-like` 93.7 ± 1 K | 94 K, methane and ethane lakes |
+| Mercury | 435 K, its equilibrium temperature | within 1 K of it | airless |
 
-Earth's thermostat needs 3.0e-4 bar of CO₂ on the column, about the
-pre-industrial 280 ppm (270 ppm on the old core). An Earth moved round
-the Sun keeps 288 K out to 1.4 AU (0.7 bar of CO₂ at 1.2 AU, 2.1 bar at
-1.4 AU), still has its ocean at 1.5 AU (286 K, all its 2.9 bar of CO₂ in
-the air) and freezes beyond (254 K at 1.6 AU with all its 1.8 bar of
-CO₂, 235 K at 1.7 AU). The column itself puts the edge farther than the
-maximum-greenhouse limit of Kopparapu et al. 2013
-(doi:10.1088/0004-637X/765/2/131: 273 K at about 1.67 AU with the best
-CO₂, up to 8 bar), as a grey column without Rayleigh scattering should:
-at 1.6 AU it reaches 274 K under 3 bar of CO₂ and 288 K under 4 bar. The
-Earth track runs short of CO₂ there, and Venus's albedo of 0.3, which
-pins CO₂'s strength, is issue #510. At 0.9 AU it has run away (717 K, no
-water); at 0.01 AU it is a lava world.
+On the spectral column (issue #523) Earth's thermostat needs 1.2e-4 bar
+of CO₂ (2.3e-3 bar on the grey column of commit 3c47979), under the
+real 280 ppm: Earth is 1.5 K warm. 280 ppm under Earth's own albedo give
+289.5 K, 1.5 K over the thermostat's 288 K, and the model's CO₂ moves
+Earth by only about 1.8 K per factor e, so the thermostat goes down a
+factor 2.3 to shed it. The cause is the clouds' longwave effect: 34
+W/m² in the column against 28 W/m² measured (CERES), while its clear
+sky is 4 W/m² over CERES's, so its all-sky OLR is 3 W/m² under the
+measured 240 W/m². The check bounds Earth at 280 ppm (286-290 K) and
+asks the thermostat's CO₂ to lie within what the model's own CO₂
+sensitivity maps 286-290 K to (3.7e-5 to 3.7e-4 bar); nothing is tuned
+to close the bias.
+Venus reaches 577 K under its 85 bar of CO₂ and its Bond albedo 0.76
+(739 K on the grey column, whose CO₂ opacity was calibrated on it): the
+infrared opacity of its H₂SO₄ clouds and its SO₂ are not modelled, and
+the hot bands of the line list above 700 K are unchecked (issue #594;
+the spectral column before the CO₂ continuum gave 451 K). The reference Mars takes the real 6.1 mbar of CO₂
+(`MARS_CO2_FACTOR`; the volatile rule alone gives it 14 mbar) and
+reaches 214.5 K over an equilibrium temperature of 210.3 K: any
+greenhouse puts it over the 210 K mean surface temperature observed,
+which a uniform 1-D surface cannot reach (the real surface radiates more
+than `σ T_mean⁴` for its uneven temperatures); `mars-like`, with 4.8
+mbar, reaches 215 K too on the distance sweep (`climate_sweep sweep`),
+and 213.3 to 214.1 K under 5.7 to 5.9 mbar over seeds 1 to 40 of
+`archetype_census`, where `venus-like` reaches 552 to 601 K (median
+575 K) under 75 to 98 bar.
 
 ## Life
 
@@ -1346,10 +1623,13 @@ heat exceed the moist limit; Goldblatt et al. 2013,
 doi:10.1038/ngeo1892), the body has run away after all, in one pass
 with no loop: the steps from the regime on run once more from its
 steam (`regime::steam`, the water left after energy-limited escape, in
-the air), flagged `boiled`. If escape leaves water and that leftover has
-a wet balance of its own (too little vapour to hold the moist limit),
-it condenses again and a third run keeps it as an ocean (`boiled`, no
-runaway); otherwise the steam run stands, dry when escape took all the
+the air), flagged `boiled`, on the body that water leaves
+(`planet::after_steam`: its mass, layers and heat derived again). If
+escape leaves water and that leftover has a wet balance of its own (too
+little vapour to hold the moist limit), it condenses again and a third
+run keeps it as an ocean (`boiled`, no runaway; the water cause tree
+says so in a `boiled_recondensed` note that carries the water lost,
+issue #517); otherwise the steam run stands, dry when escape took all the
 water. There is no temperature condition, so a boil whose dry air is
 under 647 K still ends dry (issue #442). A body
 that keeps an envelope has no surface: `PlanetModel.surface` is `None`.
@@ -1490,31 +1770,35 @@ Measured, not tuned: `cargo run --release -p mapgen --example planet_census
 -- 500` draws systems of seeds 1 to 500 and derives every planet through
 `body_model`. The medians of temperature and pressure are over the
 planets with a surface (`NaN` for the classes that have none). The output
-below is the one of the climate pass, lot 1 (issues #441, #442 and #492):
-the radiative–convective column with its moist plateau, the runaway
-decided by that plateau, and the steam worlds. The census counts the
-runaways by their source (`Water::boiled`) and by decade of their steam
-column, with the steam worlds apart, and the wet planets left past 647 K
-because their boil was not kept.
+below is the one of the climate pass, lot 3C-2 (issue #523): the
+spectral column (correlated-k lines, MT_CKD continua, CO₂ pairs, cloud
+greenhouse, falling humidity), the near-infrared absorption, the outer
+edge from the column's own maximum greenhouse and the steam runaway's
+mass loss. The census counts the runaways by their source
+(`Water::boiled`) and by decade of their steam column, with the steam
+worlds apart, the wet planets left past 647 K because their boil was not
+kept, the snowballs by insolation and the methane worlds. It took 428 s
+on four threads (`RAYON_NUM_THREADS=4`; about 0.85 s a system, issue
+#593 holds the column's cost).
 
 ```text
 500 systems, 1552 planets
 
 base preset of the worlds (planets)
 barren           293   18.9 %
-caustic           53    3.4 %
-frozen           567   36.5 %
+caustic           55    3.5 %
+frozen           553   35.6 %
 gas-giant         65    4.2 %
 hot-jupiter       45    2.9 %
 ice-giant        453   29.2 %
 steam-world        2    0.1 %
-terran            27    1.7 %
-volcanic          47    3.0 %
+terran            43    2.8 %
+volcanic          43    2.8 %
 
 planets per radius bin (Fulton et al. 2017 bins, R_earth)
-    <1    40.9 %  (635)
+    <1    41.0 %  (636)
  1-1.5    19.3 %  (300)
- 1.5-2     6.3 %  (98)
+ 1.5-2     6.2 %  (97)
    2-3    12.6 %  (196)
    3-4     7.6 %  (118)
    4-6    10.0 %  (155)
@@ -1527,30 +1811,30 @@ class               planets  age Gyr  mass M⊕    a AU    CMF    water  envelop
 gas-giant                65     4.39   48.726   2.165  0.325   0.0267    0.9000     NaN        NaN
 hot-jupiter               2     8.72  225.725   0.036  0.432   0.0000    0.9289     NaN        NaN
 hot-neptune              43     5.28   13.503   0.030  0.286   0.0007    0.1791     NaN        NaN
-hydrocarbon-world         8     2.10    0.125   1.736  0.316   0.2609    0.0000      84      3.440
+hydrocarbon-world         7     1.90    0.137   3.894  0.303   0.2794    0.0000     101      2.500
 ice-giant               160     5.63   14.366   0.700  0.300   0.2496    0.1805     NaN        NaN
-ice-world               448     5.51    0.389   0.369  0.311   0.3465    0.0000      91      0.056
-lava-world               18     2.25    2.828   0.041  0.299   0.0006    0.0000    1708      0.000
+ice-world               449     5.43    0.380   0.373  0.311   0.3454    0.0000      70      0.018
+lava-world               15     3.18    0.674   0.034  0.300   0.0000    0.0000    1777      0.000
 mini-neptune            293     5.26    5.298   0.315  0.307   0.2427    0.0193     NaN        NaN
-ocean-world               6     2.99    1.841   0.136  0.324   0.0019    0.0000     288     14.595
-rocky                   397     5.41    0.282   0.048  0.310   0.0005    0.0000     322      0.000
-runaway-greenhouse       60     5.63    1.574   0.144  0.320   0.0006    0.0000     842     49.685
-steam-world               2     6.60    3.189   0.134  0.492   0.4052    0.0000    2032 623182.205
-super-earth              29     4.60    2.756   0.042  0.304   0.0006    0.0000     620      0.109
-volcanic-world           21     3.74    0.194   0.059  0.327   0.0009    0.0000     425      0.000
+ocean-world               6     3.78    1.841   0.065  0.333   0.0019    0.0000     288     10.009
+rocky                   399     5.38    0.283   0.048  0.309   0.0000    0.0000     338      0.000
+runaway-greenhouse       63     5.22    1.596   0.141  0.317   0.0000    0.0000     650     52.480
+steam-world               2     6.60    3.159   0.134  0.492   0.4002    0.0000    1796 630440.205
+super-earth              27     5.12    2.840   0.042  0.316   0.0002    0.0000     596      0.622
+volcanic-world           21     3.74    0.189   0.059  0.327   0.0000    0.0000     452      0.000
 
 class mix (1552 planets)
-ice-world             28.9 %  (448)
-rocky                 25.6 %  (397)
+ice-world             28.9 %  (449)
+rocky                 25.7 %  (399)
 mini-neptune          18.9 %  (293)
 ice-giant             10.3 %  (160)
 gas-giant              4.2 %  (65)
-runaway-greenhouse     3.9 %  (60)
+runaway-greenhouse     4.1 %  (63)
 hot-neptune            2.8 %  (43)
-super-earth            1.9 %  (29)
+super-earth            1.7 %  (27)
 volcanic-world         1.4 %  (21)
-lava-world             1.2 %  (18)
-hydrocarbon-world      0.5 %  (8)
+lava-world             1.0 %  (15)
+hydrocarbon-world      0.5 %  (7)
 ocean-world            0.4 %  (6)
 hot-jupiter            0.1 %  (2)
 steam-world            0.1 %  (2)
@@ -1561,10 +1845,11 @@ no giant, surface hidden by an envelope: 6 (0.4 %)
   super-earth            4
 
 surface liquid (983 planets with a surface)
-Hydrocarbons           0.8 %  (8)
-Lava                   1.8 %  (18)
-None                  94.4 %  (928)
-Water                  3.0 %  (29)
+Hydrocarbons           0.7 %  (7)
+Lava                   1.5 %  (15)
+Nitrogen               4.0 %  (39)
+None                  89.4 %  (879)
+Water                  4.4 %  (43)
 
 tectonic regime (983 planets with a surface)
 Episodic              21.3 %  (209)
@@ -1574,48 +1859,57 @@ Stagnant              41.5 %  (408)
 
 surface age, Ga, by class and regime (planets with a surface)
 class               regime         n  median    mean
-hydrocarbon-world   Stagnant       8   0.269   1.167
-ice-world           Plates       258   0.403   0.407
-ice-world           Stagnant     188   3.375   2.697
-lava-world          Episodic      12   0.471   0.492
-lava-world          HeatPipe       2   0.001   0.001
-lava-world          Stagnant       4   4.126   3.353
+hydrocarbon-world   Stagnant       7   0.580   0.591
+ice-world           Plates       257   0.351   0.332
+ice-world           Stagnant     190   0.268   1.396
+lava-world          Episodic       9   0.443   0.480
+lava-world          HeatPipe       1   0.000   0.000
+lava-world          Stagnant       5   4.600   3.603
 ocean-world         HeatPipe       1   0.000   0.000
-ocean-world         Plates         4   0.376   0.378
-ocean-world         Stagnant       1   1.022   1.022
-rocky               Episodic     127   0.540   0.541
+ocean-world         Plates         5   0.507   0.464
+rocky               Episodic     130   0.545   0.544
 rocky               Plates        63   0.376   0.379
-rocky               Stagnant     207   4.574   3.629
-runaway-greenhouse  Episodic      53   0.521   0.520
-runaway-greenhouse  HeatPipe       7   0.001   0.001
-steam-world         Episodic       2   0.370   0.370
-super-earth         Episodic      15   0.605   0.592
+rocky               Stagnant     206   4.569   3.625
+runaway-greenhouse  Episodic      55   0.521   0.520
+runaway-greenhouse  HeatPipe       8   0.001   0.001
+steam-world         Episodic       2   0.000   0.000
+super-earth         Episodic      13   0.555   0.571
 super-earth         Plates        10   0.504   0.450
 volcanic-world      HeatPipe      21   0.000   0.000
-all                              983           1.555
+all                              983           1.283
 
-runaways: 383 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 60 by the limit, 0 boiled
+runaways: 383 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 63 by the limit, 0 boiled
 boils whose leftover water condensed again: 0
 wet, not in runaway and past 647 K: 0
 runaways by steam column (other classes / steam worlds, median K), steam-world line 2206.3999999999996 bar:
-        <1 bar:  374 /    0  500 K
-      1-10 bar:    3 /    0  1368 K
-    10-1e2 bar:    3 /    0  2617 K
-   1e2-1e3 bar:    1 /    0  1605 K
+        <1 bar:  375 /    0  502 K
+      1-10 bar:    2 /    0  410 K
+    10-1e2 bar:    3 /    0  2148 K
+   1e2-1e3 bar:    1 /    0  1741 K
    1e3-1e4 bar:    0 /    0  NaN K
    1e4-1e5 bar:    0 /    0  NaN K
-     >=1e5 bar:    0 /    2  2032 K
+     >=1e5 bar:    0 /    2  1796 K
 
-life: 1.1 % of planets with a surface (11), 0.7 % oxygenated (7)
+life: 1.8 % of planets with a surface (18), 1.5 % oxygenated (15)
+
+snowballs / planets with liquid water, by insolation (Earth's = 1)
+  S     >1.1:    0 /    0
+  S  0.9-1.1:    0 /    4
+  S  0.7-0.9:    0 /   11
+  S  0.5-0.7:    6 /    9
+  S 0.36-0.5:    1 /   11
+  S    <0.36:    0 /    8
+
+methane: 0 planets under 150 K of equilibrium warmed past 273 K with methane; 7 hydrocarbon liquids (least CH4 0.0212 bar), 0 under too little methane to condense
 
 radius histogram, period under 100 days (818 planets)
  0.00-0.25      0.0 %  (0)
- 0.25-0.50      7.6 %  (62)
- 0.50-0.75     21.8 %  (178)
- 0.75-1.00     19.3 %  (158)
- 1.00-1.25     13.2 %  (108)
- 1.25-1.50      7.0 %  (57)
- 1.50-1.75      3.4 %  (28)
+ 0.25-0.50      8.3 %  (68)
+ 0.50-0.75     21.4 %  (175)
+ 0.75-1.00     19.1 %  (156)
+ 1.00-1.25     13.4 %  (110)
+ 1.25-1.50      6.7 %  (55)
+ 1.50-1.75      3.3 %  (27)
  1.75-2.00      2.0 %  (16)
  2.00-2.25      2.8 %  (23)
  2.25-2.50      2.7 %  (22)
@@ -1635,46 +1929,57 @@ gas-giant              0.9 %  (7)
 hot-jupiter            0.2 %  (2)
 hot-neptune            5.3 %  (43)
 ice-giant              5.7 %  (47)
-ice-world             14.2 %  (116)
-lava-world             2.2 %  (18)
+ice-world             14.1 %  (115)
+lava-world             1.8 %  (15)
 mini-neptune          16.0 %  (131)
-ocean-world            0.6 %  (5)
-rocky                 42.9 %  (351)
-runaway-greenhouse     6.2 %  (51)
+ocean-world            0.7 %  (6)
+rocky                 43.2 %  (353)
+runaway-greenhouse     6.6 %  (54)
 steam-world            0.2 %  (2)
-super-earth            2.9 %  (24)
+super-earth            2.7 %  (22)
 volcanic-world         2.6 %  (21)
 ```
 
-What it shows, plainly:
+What it shows, plainly (against the census of lot 1, the grey column):
 
 - **Steam worlds** are 0.1 % of the planets (2 of 1552), both far over
-  100 000 bar of steam (median 2032 K at the surface, 623 182 bar). They
-  are the only runaways above 1e5 bar; the 381 other runaways hold
-  under 1e4 bar (374 of them under 1 bar of steam) and stay
-  `runaway-greenhouse` or another class.
-- **Runaway greenhouses** are 3.9 % (60), all by the insolation limit
-  (none boiled): median 842 K under 49.7 bar. A boil whose water
-  condensed again once the planet was dry is counted apart (none here),
-  and no wet planet is left past 647 K out of a runaway.
+  100 000 bar of steam (median 1796 K at the surface, 630 440 bar; 2032 K
+  on the grey column, whose steam had no window). They are the only
+  runaways above 1e5 bar; the 381 other runaways hold under 1e3 bar (375
+  of them under 1 bar of steam) and stay `runaway-greenhouse` or another
+  class.
+- **Runaway greenhouses** are 4.1 % (63, 60 before), all by the
+  insolation limit (none boiled): median 650 K under 52.5 bar (842 K
+  on the grey column). No boil condensed again and no wet planet is left past 647 K
+  out of a runaway.
+- **Water** is the surface liquid of 4.4 % of the planets with a
+  surface (43, 29 before), and **nitrogen** (a liquid since lot 3C-1)
+  of 4.0 % (39). The ice worlds' median temperature is 70 K (91 K
+  before).
+- **Snowballs** are 7, all between 0.36 and 0.7 S⊕ (6 of them between
+  0.5 and 0.7), against 43 planets with liquid water; none of the 15
+  wet planets above 0.7 S⊕ drew one.
 - **Radius valley.** With the close-in planets (818 with a period under
-  100 days) the histogram now dips at 1.50-2.00 R⊕ (3.4 % and 2.0 %)
+  100 days) the histogram dips at 1.50-2.00 R⊕ (3.3 % and 2.0 %)
   between the rocky peak at 0.5-1.0 R⊕ and a second hump at 2.0-3.0 R⊕
-  (2.8, 2.7 and 3.5 % in the bins from 2.00 to 2.75), and 39.8 % of all
+  (2.8, 2.7 and 3.5 % in the bins from 2.00 to 2.75), and 39.6 % of all
   planets are above 1.5 R⊕. The model was not tuned to produce a valley.
 - **Mini-Neptunes** are 18.9 % (293) and hot Neptunes 2.8 % (43): the
   class mix counts the envelope classes the radius histogram reads.
-- **Lava worlds** are 1.2 % (18), airless dry rocks at a median 1708 K,
+- **Lava worlds** are 1.0 % (15), airless dry rocks at a median 1777 K,
   and volcanic worlds 1.4 % (21), all in the heat-pipe regime.
-- **Hydrocarbon worlds** are 0.5 % (8), small icy bodies (median
-  0.125 M⊕) far from their stars (median 1.7 AU) under 3.4 bar at 84 K.
+- **Hydrocarbon worlds** are 0.5 % (7), small icy bodies (median
+  0.137 M⊕) far from their stars (median 3.9 AU) under 2.5 bar at 101 K;
+  none is a methane world warmed past 273 K, and none holds too little
+  methane to condense (the least, 0.021 bar).
 - **Ocean worlds** are 0.4 % (6), held at 288 K by their thermostat under
-  a median 14.6 bar.
+  a median 10.0 bar.
 - **Surfaces hidden by an envelope**: 6 planets that are no giant (0.4 %),
   2 ice worlds and 4 super-Earths.
 - **Tectonic regimes** over the 983 planets with a surface: plates
-  34.1 %, stagnant lid 41.5 %, episodic 21.3 %, heat pipe 3.2 %.
-- **Surface liquid**: none for 94.4 %, water 3.0 % (29), lava 1.8 % and
-  hydrocarbons 0.8 %.
-- **Life** arises on 1.1 % of the planets with a surface (11), 0.7 %
-  with oxygen (7).
+  34.1 %, stagnant lid 41.5 %, episodic 21.3 %, heat pipe 3.2 %
+  (unchanged).
+- **Surface liquid**: none for 89.4 %, water 4.4 % (43), nitrogen 4.0 %
+  (39), lava 1.5 % (15) and hydrocarbons 0.7 % (7).
+- **Life** arises on 1.8 % of the planets with a surface (18, 11
+  before), 1.5 % with oxygen (15, 7 before): more planets keep water.

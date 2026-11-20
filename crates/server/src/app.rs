@@ -5697,6 +5697,19 @@ mod tests {
         }
     }
 
+    /// Waits, for 60 s at most, until a job has taken the generation
+    /// queue (it is then running, before its first stage).
+    async fn wait_queue_taken(state: &Shared) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while state.queue.available_permits() > 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no job took the queue after 60 s"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
     async fn wait_job(app: &Router, created: &str) -> String {
         let created: serde_json::Value = serde_json::from_str(created).unwrap();
         let uri = format!("/api/jobs/{}/events", created["job_id"].as_str().unwrap());
@@ -5707,8 +5720,13 @@ mod tests {
     async fn lists_and_cancels_jobs() {
         let config = temp_config("cancel");
         let root = config.systems_dir.clone();
-        let app = router(config);
-        // The first job holds the queue; the second waits behind it.
+        let state = new_state(&config);
+        let app = routes(state.clone(), &config);
+        // The test holds the queue, so that neither job can run, let
+        // alone finish, before it is cancelled, however fast the draw and
+        // the generation are: the first job waits for the queue, the
+        // second behind it.
+        let busy = state.queue.acquire().await.unwrap();
         let first = r#"{"around": {"planet": "mars-like", "seed": 1, "width": 512, "height": 256, "moons": "none", "giants": "none"}}"#;
         let small = r#"{"around": {"planet": "mars-like", "seed": 2, "width": 64, "height": 32, "moons": "none", "giants": "none"}}"#;
         let (_, body) = call(&app, "POST", "/api/systems", Some(first)).await;
@@ -5750,11 +5768,17 @@ mod tests {
         let (status, _) = call(&app, "DELETE", "/api/jobs/999", None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
-        // A running job stops when its next stage starts.
+        // A running job stops when its next stage starts. The test holds
+        // the world loads, so the first job, once it takes the queue, is
+        // running (stored so) but waits before its first stage until the
+        // cancel is in.
         let first_id = first["job_id"].as_str().unwrap();
-        wait_running(&app).await;
+        let loads = state.tiles.hold_loads().await;
+        drop(busy);
+        wait_queue_taken(&state).await;
         let (status, _) = call(&app, "DELETE", &format!("/api/jobs/{first_id}"), None).await;
         assert_eq!(status, StatusCode::ACCEPTED);
+        drop(loads);
         let (_, events) = call(&app, "GET", &format!("/api/jobs/{first_id}/events"), None).await;
         assert!(events.contains("\"status\":\"cancelled\""), "{events}");
 

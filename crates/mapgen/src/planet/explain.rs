@@ -48,7 +48,8 @@ pub struct Cause {
     /// The key of a value that is not a number: a class
     /// (`PlanetClass::key`, `mini-neptune`), a regime (`plates`), a
     /// liquid (`water`), a core state (`liquid`), or a note's key
-    /// (`thermostat`, `life`, `runaway`, `boiled`, `snowball`, `frozen`,
+    /// (`thermostat`, `life`, `runaway`, `boiled`, `boiled_recondensed`
+    /// (its value the water lost, Earth oceans), `snowball`, `frozen`,
     /// `co2_build_up`, `methane_trap`).
     pub label: Option<String>,
     /// The request's field this value comes from, when a request sets it.
@@ -155,7 +156,8 @@ pub enum Quantity {
     /// 1, labelled with its key (`ocean`, `land`, `ice`, `crust`,
     /// `frost_n2`, `frost_ch4`, `frost_co2`, `frost_so2`, `cloud`, `deck`);
     /// for `haze` the value is its strength (0 to 1), not a share of the
-    /// disc.
+    /// disc, and for a runaway's `steam` the weight of the moist albedo in
+    /// its blend (see [`albedo_tree`]).
     CoverShare,
     /// Thickness of the ice shell, km (its mean over the surface).
     ShellThickness,
@@ -173,11 +175,20 @@ pub enum Quantity {
     /// A condition, in `label`: `thermostat` (the carbonate thermostat
     /// set the CO₂), `life` (its oxygen), `runaway` or `boiled` (the
     /// water ran away by the insolation limit, or the climate boiled it),
+    /// `boiled_recondensed` (the ocean boiled once and the water escape
+    /// left condensed again; its value is the water lost, Earth oceans),
     /// `snowball` (frozen over by the ice–albedo feedback until volcanic
     /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
     /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
-    /// outgas it faster than weathering draws it down) and `methane_trap`
-    /// (the cold keeps methane out of the air), `convecting` (the ice
+    /// outgas it faster than weathering draws it down), `co2_condenses`
+    /// (that maximum is short of the carbon inventory: past it the light
+    /// CO₂ scatters outgrows its greenhouse, which flattens where it
+    /// condenses high in the air, so more of it no longer warms the
+    /// ground; the key keeps its name) and
+    /// `methane_trap`
+    /// (the cold keeps methane out of the air), `reducing_air` (a
+    /// reducing, methane-rich air: the body outgasses no CO₂ and its air
+    /// makes none, [`super::atmosphere::without_co2_if_reducing`]), `convecting` (the ice
     /// shell convects under a stagnant lid), `ammonia` (ammonia lowers
     /// the ocean's freezing point), `geysers` (the thin polar shell
     /// cracks through and vents) and `exosphere` (non-thermal loss
@@ -186,8 +197,12 @@ pub enum Quantity {
     /// renewed the surface), `volatile_ice` (volatile ice comes and goes
     /// on part of it), `tidal_episode` (a past tidal episode renewed part
     /// of it), `volcanic_frost` (the SO₂ air is the vapour of the
-    /// volcanic frost) and `fallout` (a plume's fallout brightens the
-    /// ice).
+    /// volcanic frost), `fallout` (a plume's fallout brightens the
+    /// ice), `moist_limit` and `moist_limit_own` (a runaway's steam
+    /// reflects as a moist air at its star's runaway limit, on Earth's
+    /// air's moist limit or on its own column's, which its gravity and
+    /// air raise above it) and `not_converged` (the climate's fixed point did not
+    /// settle: the temperature is its last estimate, issue #562).
     Note,
 }
 
@@ -285,7 +300,11 @@ const HEAT_TOLERANCE: f64 = 1e-6;
 /// (with air and heat, minus with air only), whose sum must be the stored
 /// temperature within [`TEMPERATURE_TOLERANCE_K`].
 pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
-    let heat = internal_heat(context, &model.inputs, &surface_interior(context, model));
+    let heat = internal_heat(
+        context,
+        &surface_inputs(context, model),
+        &surface_interior(context, model),
+    );
     let close = |a: f64, b: f64| (a - b).abs() <= HEAT_TOLERANCE * a.abs().max(b.abs());
     if !close(heat.tidal_w, model.heat.tidal_w)
         || !close(heat.radiogenic_w, model.heat.radiogenic_w)
@@ -316,53 +335,128 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
     Some(Explanation { trees })
 }
 
+/// The water the chain started the kept surface pass of `model` with:
+/// the boiled steam when `surface` boiled and stayed a runaway, its own
+/// water when the water left after the boil condensed again, else the
+/// water of its first pass. A runaway's steam is what escape left of the
+/// water the body formed with ([`PlanetModel::formed_inputs`], on that
+/// body's layers).
+fn start_water(context: &Context, model: &PlanetModel, surface: &Surface) -> Water {
+    let fluence = model.xuv_fluence;
+    let formed = model.formed_inputs();
+    let formed_interior = || super::body_interior(context, formed);
+    if surface.water.boiled && surface.water.runaway {
+        Water {
+            boiled: true,
+            ..steam(formed, &formed_interior(), fluence)
+        }
+    } else if surface.water.runaway {
+        water(context, formed, &formed_interior(), fluence)
+    } else if surface.water.boiled {
+        surface.water
+    } else {
+        water(
+            context,
+            &model.inputs,
+            &surface_interior(context, model),
+            fluence,
+        )
+    }
+}
+
+/// The inputs the chain ran the heat and the kept surface pass on: the
+/// model's, except after a runaway whose pass kept less of its steam
+/// than it was handed (the cosmic shoreline and the non-thermal loss,
+/// [`Water::keeping`]): the model weighs the water kept, the pass ran on
+/// the steam it started with ([`super::after_steam`] of each).
+pub(crate) fn surface_inputs(context: &Context, model: &PlanetModel) -> super::PlanetInputs {
+    match (&model.surface, &model.before_steam) {
+        (Some(surface), Some(formed)) if surface.water.runaway => {
+            let start = start_water(context, model, surface);
+            if start.kept_kg > surface.water.kept_kg {
+                super::after_steam(formed, &start)
+            } else {
+                model.inputs.clone()
+            }
+        }
+        _ => model.inputs.clone(),
+    }
+}
+
 /// The interior the chain ran the heat and the surface steps on: the
 /// model's, except a steam world's, whose interior was derived again
-/// with its steam afterwards ([`super::steam_interior`]).
+/// with its steam afterwards ([`super::steam_interior`]), and a runaway's
+/// whose pass kept less steam than it started with, whose layers were
+/// derived again for the water kept: the layers of [`surface_inputs`].
 pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
-    if model
-        .interior
-        .layers
-        .iter()
-        .any(|l| l.material == super::Material::Steam)
+    let inputs = surface_inputs(context, model);
+    if inputs != model.inputs
+        || model
+            .interior
+            .layers
+            .iter()
+            .any(|l| l.material == super::Material::Steam)
     {
-        super::body_interior(context, &model.inputs)
+        super::body_interior(context, &inputs)
     } else {
         model.interior.clone()
     }
 }
 
 /// The surface steps of `model` run again (see [`bare`]), from the water
-/// the chain started the kept pass with: the boiled steam when `surface`
-/// boiled and stayed a runaway, its own water when the water left after
-/// the boil condensed again, else the water of its first pass.
+/// the chain started the kept pass with ([`start_water`]), on the body it
+/// ran on ([`surface_inputs`], [`surface_interior`]).
 pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
-    let interior = &surface_interior(context, model);
-    let (i, fluence) = (&model.inputs, model.xuv_fluence);
-    let start = if surface.water.boiled && surface.water.runaway {
-        Water {
-            boiled: true,
-            ..steam(i, interior, fluence)
-        }
-    } else if surface.water.boiled {
-        surface.water
-    } else {
-        water(context, i, interior, fluence)
-    };
-    bare(context, i, interior, &model.heat, fluence, start)
+    let inputs = surface_inputs(context, model);
+    let interior = surface_interior(context, model);
+    let start = start_water(context, model, surface);
+    bare(
+        context,
+        &inputs,
+        &interior,
+        &model.heat,
+        model.xuv_fluence,
+        start,
+    )
 }
 
 /// The mass kept. It is the request's own when escape took nothing of the
 /// envelope; otherwise it is derived from the mass drawn, which is the input.
+/// After a steam runaway it is that mass less the water escape took
+/// ([`super::after_steam`]): the water it kept, from the water formed and
+/// the water lost, in Earth oceans.
 fn mass(model: &PlanetModel) -> Cause {
-    let kept = Cause::of(Quantity::Mass, model.inputs.mass_earth);
-    if model.drawn_mass_earth == model.inputs.mass_earth {
+    let Some(formed) = &model.before_steam else {
+        return formed_mass(model, model.inputs.mass_earth);
+    };
+    let formed_oceans = water_oceans(formed);
+    let kept = water_oceans(&model.inputs);
+    Cause::of(Quantity::Mass, model.inputs.mass_earth).because(vec![
+        formed_mass(model, formed.mass_earth),
+        Cause::of(Quantity::WaterKept, kept).because(vec![
+            Cause::of(Quantity::WaterFormed, formed_oceans).set_by(InputField::WaterOceans),
+            Cause::of(Quantity::Escape, formed_oceans - kept),
+        ]),
+    ])
+}
+
+/// The mass `mass_earth` the body formed with after photoevaporation: the
+/// request's own when escape took nothing of the envelope, else derived
+/// from the mass drawn.
+fn formed_mass(model: &PlanetModel, mass_earth: f64) -> Cause {
+    let kept = Cause::of(Quantity::Mass, mass_earth);
+    if model.drawn_mass_earth == mass_earth {
         kept.set_by(InputField::MassEarth)
     } else {
         kept.because(vec![
             Cause::of(Quantity::Mass, model.drawn_mass_earth).set_by(InputField::MassEarth),
         ])
     }
+}
+
+/// The water of a body of `inputs`, Earth oceans.
+fn water_oceans(inputs: &super::PlanetInputs) -> f64 {
+    inputs.water_fraction * inputs.mass_earth * EARTH_KG / OCEAN_KG
 }
 
 fn water_kept(surface: &Surface) -> Cause {
@@ -402,12 +496,13 @@ fn resonant(context: &Context, model: &PlanetModel) -> bool {
         return false;
     };
     let tide = super::tide_of(context);
+    let inputs = surface_inputs(context, model);
     let own_w = super::heat::tidal_power_w(
         tide.host_kg,
         surface_interior(context, model).radius_earth * crate::exomoon::EARTH_M,
         tide.a_m,
         tide.eccentricity,
-        super::heat::k2_over_q(model.inputs.envelope_fraction, model.inputs.water_fraction),
+        super::heat::k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
     );
     resonant_w > own_w
 }
@@ -517,8 +612,10 @@ fn temperature_tree(
     // (below 1 under nitrogen frost): the equilibrium temperature here is
     // the surface's, `T_eq ε^-¼`.
     let emissivity = surface.climate.emissivity;
-    let bare_k = surface_temperature_k(context, &Gases::default(), 0.0, emissivity);
-    let air_k = surface_temperature_k(context, gases, 0.0, emissivity);
+    // The gravity the climate was solved on: the column's absorber paths.
+    let planet = &steps.planet;
+    let bare_k = surface_temperature_k(context, &Gases::default(), 0.0, emissivity, planet);
+    let air_k = surface_temperature_k(context, gases, 0.0, emissivity, planet);
     // Water whose vapour followed the temperature was solved with it: its
     // balance is recomputed the same way, since the column with the
     // vapour held fixed can balance at another temperature (it jumps
@@ -535,9 +632,10 @@ fn temperature_tree(
             flux,
             surface.water.kept_kg * bar_per_kg,
             emissivity,
+            planet,
         )
     } else {
-        surface_temperature_k(context, gases, flux, emissivity)
+        surface_temperature_k(context, gases, flux, emissivity, planet)
     };
     let stored = surface.climate.temperature_k;
     if (full_k - stored).abs() > TEMPERATURE_TOLERANCE_K {
@@ -553,7 +651,14 @@ fn temperature_tree(
     {
         // Plates and liquid water but no thermostat: the CO₂ is at the
         // most the volcanoes leave, and the greenhouse at its maximum.
-        co2.because(vec![Cause::note("co2_build_up")])
+        // Short of the carbon inventory, the maximum is the CO₂'s own
+        // scattering outgrowing a greenhouse that its condensation high
+        // in the air flattened (issue #522), not the carbon running out.
+        let mut notes = vec![Cause::note("co2_build_up")];
+        if gases.co2 < steps.before.carbon_bar * (1.0 - 1e-9) {
+            notes.push(Cause::note("co2_condenses"));
+        }
+        co2.because(notes)
     } else {
         co2
     };
@@ -571,26 +676,41 @@ fn temperature_tree(
             .then(|| Cause::of(Quantity::H2o, gases.h2o).set_by(InputField::WaterOceans)),
         (gases.ch4 > 0.0).then_some(ch4),
     ];
+    // A climate whose fixed points did not settle shows the last
+    // estimate of its cycle (issue #562).
+    let unsettled = (!climate.converged).then(|| Cause::note("not_converged"));
     Some(
-        Cause::of(Quantity::SurfaceTemperature, stored).because(vec![
-            Cause::of(Quantity::EquilibriumTemperature, bare_k).because(
-                [
-                    Some(
-                        Cause::of(Quantity::LightReceived, context.insolation)
-                            .set_by(InputField::Insolation),
+        Cause::of(Quantity::SurfaceTemperature, stored).because(
+            [
+                Some(
+                    Cause::of(Quantity::EquilibriumTemperature, bare_k).because(
+                        [
+                            Some(
+                                Cause::of(Quantity::LightReceived, context.insolation)
+                                    .set_by(InputField::Insolation),
+                            ),
+                            Some(albedo),
+                            (emissivity < 1.0).then(|| Cause::of(Quantity::Emissivity, emissivity)),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
                     ),
-                    Some(albedo),
-                    (emissivity < 1.0).then(|| Cause::of(Quantity::Emissivity, emissivity)),
-                ]
-                .into_iter()
-                .flatten()
-                .collect(),
-            ),
-            Cause::of(Quantity::Greenhouse, air_k - bare_k)
-                .because(absorbers.into_iter().flatten().collect()),
-            Cause::of(Quantity::InternalWarming, full_k - air_k)
-                .because(vec![heat_flux(context, model)]),
-        ]),
+                ),
+                Some(
+                    Cause::of(Quantity::Greenhouse, air_k - bare_k)
+                        .because(absorbers.into_iter().flatten().collect()),
+                ),
+                Some(
+                    Cause::of(Quantity::InternalWarming, full_k - air_k)
+                        .because(vec![heat_flux(context, model)]),
+                ),
+                unsettled,
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        ),
     )
 }
 
@@ -613,6 +733,12 @@ const COVER_SHARE_MIN: f64 = 0.01;
 /// present); the frosts beneath it are omitted. SO₂ frost is its own
 /// part, with its own albedo. An exposed ice crust
 /// ([`icy_albedo_causes`]) replaces the land and the ice (`crust`).
+/// A runaway that keeps steam blends that albedo towards the moist one
+/// `A_rg` (see [`super::climate::steam_albedo`]): a `steam` part carries
+/// the blend's weight, with `A_rg` and the plateau that sets it
+/// (`moist_limit`, Earth's air's; `moist_limit_own`, its own column's)
+/// under it, so that the stored albedo is the covers' one moved towards
+/// `A_rg` by that weight.
 ///
 /// `nested` is the node under the temperature tree's equilibrium
 /// temperature, where a part has no room below it (the tree stays three
@@ -629,7 +755,13 @@ fn albedo_tree(
 ) -> Cause {
     let climate = &surface.climate;
     let gases = &steps.climate_gases;
-    let cover = super::albedo::cover(climate.temperature_k, gases, &surface.water, &steps.frost);
+    let cover = super::albedo::cover(
+        climate.temperature_k,
+        gases,
+        &surface.water,
+        &steps.frost,
+        &steps.planet,
+    );
     let deck = super::albedo::sulphuric_deck(
         climate.temperature_k,
         super::climate::washed(*gases, &surface.water).so2,
@@ -707,6 +839,23 @@ fn albedo_tree(
     ];
     let mut causes = surface_parts;
     causes.extend(layers.into_iter().flatten());
+    // A runaway's steam blends the covers' albedo towards the moist one:
+    // its weight, with that albedo and the plateau that sets it.
+    if let Some(steam) = steam_albedo(context, model, surface, steps) {
+        let plateau = if steam.own {
+            "moist_limit_own"
+        } else {
+            "moist_limit"
+        };
+        causes.extend(part(
+            "steam",
+            steam.share,
+            vec![
+                Cause::of(Quantity::BondAlbedo, steam.moist),
+                Cause::note(plateau),
+            ],
+        ));
+    }
     // Bright ice sets the albedo of a frozen world, and what ends it.
     // Only a body with plates could have built CO₂ up to a thaw: without
     // them (Mars, Titan) the cold has another cause.
@@ -718,6 +867,27 @@ fn albedo_tree(
         causes.push(Cause::note("frozen"));
     }
     Cause::of(Quantity::BondAlbedo, climate.bond_albedo).because(causes)
+}
+
+/// What the steam of a runaway did to its Bond albedo
+/// ([`super::climate::steam_albedo`]), on the body and air its climate ran
+/// on; `None` without one.
+fn steam_albedo(
+    context: &Context,
+    model: &PlanetModel,
+    surface: &Surface,
+    steps: &Bare,
+) -> Option<super::climate::SteamAlbedo> {
+    let inputs = surface_inputs(context, model);
+    let bar_per_kg =
+        super::atmosphere::bar_per_kg(inputs.mass_earth, &surface_interior(context, model));
+    super::climate::steam_albedo(
+        context,
+        &steps.before.gases,
+        &surface.water,
+        surface.water.kept_kg * bar_per_kg,
+        &steps.planet,
+    )
 }
 
 /// What set the Bond albedo of an exposed ice crust: the ages of the
@@ -852,6 +1022,9 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
     if surface.climate.regulated {
         co2.push(Cause::note("thermostat"));
     }
+    if steps.reducing {
+        co2.push(Cause::note("reducing_air"));
+    }
     let h2o = if surface.water.runaway {
         source(|g| g.h2o, Some(InputField::WaterOceans))
     } else {
@@ -889,10 +1062,11 @@ fn pressure_tree(surface: &Surface, steps: &Bare) -> Cause {
             vec![Cause::note("life").set_by(InputField::Life)],
         ),
     ];
+    // A reducing air shows its missing CO₂, with the note that says why.
     Cause::of(Quantity::Pressure, g.total()).because(
         gases
             .into_iter()
-            .filter(|(_, bar, _)| *bar > 0.0)
+            .filter(|(q, bar, _)| *bar > 0.0 || (*q == Quantity::Co2 && steps.reducing))
             .map(|(q, bar, causes)| Cause::of(q, bar).because(causes))
             .collect(),
     )
@@ -943,15 +1117,21 @@ fn field_tree(context: &Context, model: &PlanetModel, surface: &Surface) -> Caus
 
 /// The water kept from the water the body formed with (its share of the
 /// mass escape left, as [`super::water`] takes it) and, in a runaway,
-/// what escape took of its steam.
+/// what escape took of its steam. An ocean that boiled and whose leftover
+/// condensed again (`boiled`, no runaway) says so in a
+/// `boiled_recondensed` note whose value is the water escape took, Earth
+/// oceans (#517).
 fn water_tree(model: &PlanetModel, surface: &Surface) -> Cause {
-    let formed = model.inputs.water_fraction * model.inputs.mass_earth * EARTH_KG / OCEAN_KG;
+    let formed = water_oceans(model.formed_inputs());
     let mut causes = vec![Cause::of(Quantity::WaterFormed, formed).set_by(InputField::WaterOceans)];
+    let lost = (formed - surface.water.oceans).max(0.0);
     if surface.water.runaway {
         causes.push(runaway(&surface.water));
-        if formed > surface.water.oceans {
-            causes.push(Cause::of(Quantity::Escape, formed - surface.water.oceans));
+        if lost > 0.0 {
+            causes.push(Cause::of(Quantity::Escape, lost));
         }
+    } else if surface.water.boiled {
+        causes.push(Cause::note("boiled_recondensed").with_value(lost));
     }
     Cause::of(Quantity::WaterKept, surface.water.oceans).because(causes)
 }
@@ -1304,6 +1484,75 @@ mod tests {
         assert!(depth(albedo) <= 3);
     }
 
+    /// The share of the disc the CO₂ frost of a drawn body covers on its
+    /// own ([`super::super::albedo::frost_cover`] of its CO₂ frost alone,
+    /// whatever frost lies on top of it).
+    fn co2_frost_share(context: &Context, model: &PlanetModel) -> f64 {
+        let surface = model.surface.as_ref().expect("a surface");
+        let frost = replay(context, model, surface).frost;
+        super::super::albedo::frost_cover(&Gases {
+            co2: frost.co2,
+            ..Gases::default()
+        })
+    }
+
+    /// Census seed 387's planet d (issue #557), drawn as `planet_census`
+    /// draws it: an icy, methane-bearing planet at an equilibrium
+    /// temperature near 74 K. The CO₂ it would outgas stays in its
+    /// ocean and its reducing air makes none, so no CO₂ frost brightens
+    /// it into a nitrogen-frosted ice world: it keeps its seas.
+    #[test]
+    fn a_hazy_hydrocarbon_world_wears_no_co2_frost_sheet() {
+        use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, body_context, draw};
+        let request = SystemRequest::System(WholeSystemRequest {
+            seed: Some(387),
+            ..WholeSystemRequest::default()
+        });
+        let system = draw(&request, &mut StdRng::seed_from_u64(387)).expect("the system draws");
+        let body = system
+            .bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::Planet && b.id == "d")
+            .expect("planet d");
+        let context = body_context(&system, body).expect("a context");
+        let model = body.model.clone().expect("a model");
+        assert!((70.0..78.0).contains(&context.equilibrium_k), "{context:?}");
+        assert_eq!(model.class, PlanetClass::HydrocarbonWorld, "{model:#?}");
+        let share = co2_frost_share(&context, &model);
+        assert!(share < 0.5, "{share}");
+    }
+
+    /// No Titan-like body wears a CO₂ frost: Titan's surface shows none,
+    /// and its air holds about 15 ppb of CO₂ (issue #557).
+    #[test]
+    fn titan_likes_wear_no_co2_frost() {
+        for seed in 1..=40 {
+            let (context, model, e) = drawn_body("titan-like", seed);
+            let share = co2_frost_share(&context, &model);
+            assert!(share < 0.1, "seed {seed}: {share}");
+            // The pressure tree says why its CO₂ is missing.
+            let pressure = root(&e, Quantity::Pressure);
+            assert!(has_note(pressure, "reducing_air"), "seed {seed}");
+        }
+    }
+
+    /// A Triton-like body keeps its CO₂ frost: its trace of methane
+    /// makes its air reducing, but its thin nitrogen air is no Titan's
+    /// (`atmosphere::titan_like_air`), and Triton's surface shows CO₂ ice
+    /// (issue #557).
+    #[test]
+    fn triton_likes_keep_their_co2_frost() {
+        for seed in 1..=10 {
+            let (context, model, e) = drawn_body("triton-like", seed);
+            let surface = model.surface.as_ref().expect("a surface");
+            let frost = replay(&context, &model, surface).frost;
+            assert!(frost.co2 > 0.0, "seed {seed}: {frost:?}");
+            assert!(co2_frost_share(&context, &model) > 0.0, "seed {seed}");
+            assert!(!has_note(root(&e, Quantity::Pressure), "reducing_air"));
+            println!("triton-like {seed}: CO2 frost {:.3e} bar", frost.co2);
+        }
+    }
+
     /// Ganymede's exposed crust keeps its two terrain units and the
     /// plumes' note stays where it was; the temperature tree's albedo
     /// names the same parts without them (it has no room below).
@@ -1359,6 +1608,7 @@ mod tests {
                     &steps.climate_gases,
                     &surface.water,
                     &steps.frost,
+                    &steps.planet,
                 );
                 let deck = super::super::albedo::sulphuric_deck(
                     surface.climate.temperature_k,
@@ -1386,6 +1636,9 @@ mod tests {
                     &steps.climate_gases,
                     deck,
                     crust,
+                    &steps.planet,
+                    context.teff_k,
+                    surface.climate.temperature_k,
                 );
                 // The climate's fixed point stops when its temperature moves
                 // under `ALBEDO_TOLERANCE_K` (0.1 K), so its albedo is the
@@ -1428,6 +1681,7 @@ mod tests {
                 &steps.climate_gases,
                 &surface.water,
                 &steps.frost,
+                &steps.planet,
             );
             assert!((frosts[0].value - cover.frost).abs() < 1e-9);
             if steps.frost.n2 > 0.0 {
@@ -1528,6 +1782,22 @@ mod tests {
     }
 
     #[test]
+    fn a_climate_that_did_not_settle_says_so() {
+        let (context, mut model) = earth();
+        let e = explain(&context, &model).expect("explained");
+        assert!(!has_note(
+            root(&e, Quantity::SurfaceTemperature),
+            "not_converged"
+        ));
+        model.surface.as_mut().unwrap().climate.converged = false;
+        let e = explain(&context, &model).expect("explained");
+        assert!(has_note(
+            root(&e, Quantity::SurfaceTemperature),
+            "not_converged"
+        ));
+    }
+
+    #[test]
     fn a_snowball_says_why_it_froze() {
         let (context, model) = earth_at(1.0, true);
         let s = model.surface.as_ref().unwrap();
@@ -1538,20 +1808,27 @@ mod tests {
 
     #[test]
     fn a_planet_at_its_maximum_greenhouse_says_its_co2_builds_up() {
-        let (context, model) = earth_at(1.6, false);
-        let c = model.surface.as_ref().unwrap().climate;
-        assert!(!c.regulated && c.liquid == SurfaceLiquid::Water, "{c:?}");
+        // Just inside the outer edge (1.535 AU on the spectral column,
+        // issue #523), past where the thermostat holds: its CO₂ is the
+        // maximum greenhouse, which CO₂ condensing aloft sets well short
+        // of its carbon (issue #522). The band is narrow, so it is looked
+        // for.
+        let (context, model) = (0..=60)
+            .map(|i| earth_at(1.48 + 0.002 * f64::from(i), false))
+            .find(|(_, m)| {
+                let c = m.surface.as_ref().unwrap().climate;
+                !c.regulated && c.liquid == SurfaceLiquid::Water
+            })
+            .expect("a liquid planet past the thermostat");
         let e = explain(&context, &model).expect("explained");
-        assert!(has_note(
-            root(&e, Quantity::SurfaceTemperature),
-            "co2_build_up"
-        ));
+        let t = root(&e, Quantity::SurfaceTemperature);
+        assert!(has_note(t, "co2_build_up"), "{t:#?}");
+        assert!(has_note(t, "co2_condenses"), "{t:#?}");
         let (context, model) = earth();
         let e = explain(&context, &model).unwrap();
-        assert!(!has_note(
-            root(&e, Quantity::SurfaceTemperature),
-            "co2_build_up"
-        ));
+        let t = root(&e, Quantity::SurfaceTemperature);
+        assert!(!has_note(t, "co2_build_up"));
+        assert!(!has_note(t, "co2_condenses"));
     }
 
     #[test]
@@ -1663,8 +1940,21 @@ mod tests {
             .expect("the class reads the mass");
         assert_eq!(mass.input, None);
         assert_eq!(mass.value, model.inputs.mass_earth);
-        let [drawn] = mass.causes.as_slice() else {
-            panic!("one cause: {:?}", mass.causes)
+        // A body whose steam ran away after its envelope went weighs its
+        // formed mass less the water lost (#513): the drawn mass is under
+        // that formed mass.
+        let formed = if model.before_steam.is_some() {
+            assert!(
+                mass.causes
+                    .iter()
+                    .any(|c| c.quantity == Quantity::WaterKept)
+            );
+            &mass.causes[0]
+        } else {
+            mass
+        };
+        let [drawn] = formed.causes.as_slice() else {
+            panic!("one cause: {:?}", formed.causes)
         };
         assert_eq!(drawn.input, Some(InputField::MassEarth));
         assert_eq!(drawn.value, model.drawn_mass_earth);

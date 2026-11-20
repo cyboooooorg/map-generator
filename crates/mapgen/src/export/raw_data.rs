@@ -115,8 +115,20 @@ pub const RIVERS_FILE: &str = "rivers.json";
 /// explains them. The same seed gives another world for the bodies they
 /// touch; worlds of version 24 to 27 still load (a world of version 27
 /// has no terrain units until it is regenerated), and
-/// [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 10.
-pub const FORMAT_VERSION: u32 = 28;
+/// [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 10. Version 29 comes
+/// with lot 3C-2 of the climate pass: the greenhouse comes from a
+/// spectral correlated-k column (HITRAN2024 lines, MT_CKD 4.3 continua,
+/// CO₂–CO₂ pairs, water clouds that trap heat, a humidity falling with
+/// height), the star's near infrared is absorbed in the air, the outer
+/// edge of the habitable zone is the column's own maximum greenhouse, the
+/// methane opacity is re-anchored on Titan, the climate stores whether
+/// its fixed points settled (`Climate::converged`) and a steam runaway
+/// loses the mass of the water that escaped (`PlanetModel::before_steam`
+/// keeps the inputs from before). The stored fields of the layers are the
+/// same, so worlds of version 24 to 28 still load, but the same seed gives
+/// another climate, sea level and biomes for most bodies, and
+/// [`crate::system::SYSTEM_FORMAT_VERSION`] goes to 13.
+pub const FORMAT_VERSION: u32 = 29;
 
 /// The oldest format [`load_layers`] reads. Older worlds were made with
 /// algorithms the generator no longer carries (temperatures on a `[0, 1]`

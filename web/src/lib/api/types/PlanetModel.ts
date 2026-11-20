@@ -60,4 +60,13 @@ moment_of_inertia: number,
  * The parts of its surface and their ages ([`surface_age::terrain`]);
  * empty in a model stored before it existed.
  */
-terrain: Terrain, };
+terrain: Terrain, 
+/**
+ * What it was made of before a steam runaway took its water
+ * ([`after_steam`]): the inputs after photoevaporation, which
+ * `inputs` replaces with the water escape left. `None` for a body
+ * whose water did not run away or whose escape took none of it (its
+ * mass did not change), and in a model stored before the escaped
+ * water left the mass (#513).
+ */
+before_steam?: PlanetInputs, };

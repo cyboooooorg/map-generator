@@ -581,7 +581,8 @@ systems/<system-id>/
   a given name are kept apart (below).
 - **`system.json`** is written once, when the system is drawn, and holds
   everything a card, a sphere, the sky and the star view need:
-  - `format_version` (6), the request, the seed and the map size. A
+  - `format_version` (`SYSTEM_FORMAT_VERSION`, 13 at the time of
+    writing), the request, the seed and the map size. A
     system of another version is refused, not migrated: version 1 kept a
     body's files directly in `bodies/<id>/`, version 2 typed its planets
     by preset and stored no physical model, version 3 kept a preset in
@@ -614,7 +615,13 @@ systems/<system-id>/
     was solved with and whether the planet is a `snowball`, drawn from
     the formation's `snowball_draw`; since format 8 of the system and 24
     of the world; format 9 of the system adds lot 3's resonant heat,
-    moment of inertia, convective shell and geysers), derived once when the system is drawn from its orbit, the
+    moment of inertia, convective shell and geysers; format 13 adds the
+    climate's `converged`, whether its fixed points settled, true in a
+    model stored before it, and, for a body whose water ran away as steam
+    and lost some of it to escape, `before_steam`, the inputs from before
+    escape took that water: its
+    `inputs` then hold the mass less the water lost, null for any other
+    body and in a model stored before it), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it
     (`model.drawn_mass_earth`), from its own stream (`<id>/model`). Its
     `type` is the model's class (`rocky`, `super-earth`, `ice-world`,

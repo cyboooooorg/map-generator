@@ -24,7 +24,7 @@
 //! [`atmosphere::photochemistry`] derive its air, as [`Gases`], from what
 //! it outgasses, what escape leaves, what its star's ultraviolet destroys
 //! and what its cold freezes out.
-//! [`climate::climate`] sets its surface temperature through a grey
+//! [`climate::climate`] sets its surface temperature through a spectral
 //! radiative–convective column (`column`) and the carbonate thermostat,
 //! under the Bond albedo [`albedo::bond_albedo`] derives from what covers
 //! it ([`albedo::cover`]), the two solved together, and the
@@ -67,18 +67,22 @@ pub mod core;
 pub mod differentiation;
 pub mod escape;
 pub mod explain;
+pub(crate) mod fast_math;
 pub mod geysers;
 pub mod heat;
 pub mod ice_shell;
 pub mod inputs;
 pub mod interim;
 pub mod interior;
+pub(crate) mod ktable;
 pub mod life;
 pub mod mass;
 pub mod moon;
 pub mod reference;
 pub mod regime;
 pub mod resonance;
+pub(crate) mod shortwave;
+pub(crate) mod spectrum;
 pub mod surface_age;
 pub mod xuv;
 
@@ -255,6 +259,15 @@ pub struct PlanetModel {
     /// empty in a model stored before it existed.
     #[serde(default)]
     pub terrain: surface_age::Terrain,
+    /// What it was made of before a steam runaway took its water
+    /// ([`after_steam`]): the inputs after photoevaporation, which
+    /// `inputs` replaces with the water escape left. `None` for a body
+    /// whose water did not run away or whose escape took none of it (its
+    /// mass did not change), and in a model stored before the escaped
+    /// water left the mass (#513).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub before_steam: Option<PlanetInputs>,
 }
 
 /// The inputs a planet formed with, as a request sets them: what
@@ -298,6 +311,12 @@ fn exact_preimage(target: f64, start: f64, f: impl Fn(f64) -> f64) -> f64 {
 }
 
 impl PlanetModel {
+    /// What it was made of after photoevaporation and before a steam
+    /// runaway took its water: `before_steam`, else `inputs`.
+    pub fn formed_inputs(&self) -> &PlanetInputs {
+        self.before_steam.as_ref().unwrap_or(&self.inputs)
+    }
+
     /// The inputs this planet formed with, as a request sets them
     /// ([`Formation`]): the drawn mass (before photoevaporation); the
     /// envelope share at formation, `(M e + M₀ − M) / M₀` with `M₀` the
@@ -305,8 +324,8 @@ impl PlanetModel {
     /// of the drawn mass; the CO₂, N₂, CH₄, NH₃ and sulphur factors, the stored volatiles over
     /// the formation rule of the formation shares (1 where the rule is 0);
     /// the core share, the radiogenic abundance, `life: Some(arose)` and
-    /// `snowball: Some(frozen)` (a pinned snowball replays the CO₂ it
-    /// froze with, not the amount its draw had built up).
+    /// `snowball: Some(frozen)` (frozen over, as a snowball or for good:
+    /// the branch of its climate the draw picked).
     ///
     /// Set in a request with the same context, they derive the same inputs
     /// and class whatever the seed: the scatter of every volatile is
@@ -314,7 +333,7 @@ impl PlanetModel {
     /// nudged by an ulp or two so that the request's arithmetic gives the
     /// stored value exactly.
     pub fn formation(&self) -> Formation {
-        let i = &self.inputs;
+        let i = self.formed_inputs();
         let drawn = self.drawn_mass_earth;
         let envelope = if i.mass_earth == drawn {
             i.envelope_fraction
@@ -347,10 +366,15 @@ impl PlanetModel {
                 s: Some(factor(i.volatiles.s, rule.s)),
                 radiogenic: Some(i.radiogenic),
                 life: Some(self.surface.is_some_and(|s| s.life.arose)),
-                // The state, not the draw: a pinned snowball replays its
-                // CO₂ from where it froze (the draw at 0), not from where
-                // its draw caught the build-up.
-                snowball: Some(self.surface.is_some_and(|s| s.climate.snowball)),
+                // The state, not the draw: the frozen branch (a snowball,
+                // or a state frozen for good beside a temperate one, whose
+                // chance is 1) replays with the draw at 0, the temperate
+                // one at 1. A body frozen with no temperate state has one
+                // branch, which either draw gives.
+                snowball: Some(
+                    self.surface
+                        .is_some_and(|s| s.climate.snowball || climate::frozen_over(&s.climate)),
+                ),
             },
         }
     }
@@ -423,6 +447,10 @@ const AU_M: f64 = 1.495_978_707e11;
 /// run with it as an ocean (`boiled`, no runaway) is kept, else the
 /// steam run is (Kasting 1988, doi:10.1016/0019-1035(88)90116-9, not
 /// checked, for the moist runaway; there is no temperature condition).
+/// Each run after a runaway (by the insolation limit or a boil) is on
+/// the body its water leaves ([`after_steam`]: the water escape took
+/// leaves its mass, and its layers and heat are derived again); the
+/// model keeps the inputs from before in `before_steam`.
 /// In a runaway the water kept is what the escape of [`atmosphere`]
 /// leaves of the steam in the air, so the
 /// [`Water`] and the air's H₂O agree. Last, its [`ice_shell`] from its
@@ -485,33 +513,44 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     let interior = body_interior(context, &inputs);
     let heat = internal_heat(context, &inputs, &interior);
     let mut air = None;
+    // The body the kept surface pass ran on: the formed one, or what a
+    // steam runaway left of it ([`after_steam`]).
+    let mut body = Ran {
+        inputs: inputs.clone(),
+        interior: interior.clone(),
+        heat,
+    };
     let surface = if inputs.envelope_fraction >= escape::MIN_ENVELOPE {
         None
     } else {
         let w = water(context, &inputs, &interior, fluence);
-        let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, &interior);
-        let flux = heat.flux_w_m2(interior.radius_earth);
         // A thermostat that reached its temperature found a wet balance:
         // only the others need the moist-limit test, under the Bond albedo
         // their climate settled on.
-        let boils = |steps: &Bare| {
+        let boils = |steps: &Bare, ran: &Ran| {
             let water = &steps.surface.water;
+            let bar_per_kg = atmosphere::bar_per_kg(ran.inputs.mass_earth, &ran.interior);
             !steps.surface.climate.regulated
                 && climate::boils(
                     &context.with_albedo(steps.surface.climate.bond_albedo),
                     &steps.climate_gases,
                     water,
-                    flux,
+                    ran.heat.flux_w_m2(ran.interior.radius_earth),
                     water.kept_kg * bar_per_kg,
+                    &steps.planet,
                 )
         };
-        let mut steps = bare(context, &inputs, &interior, &heat, fluence, w);
-        if boils(&steps) {
+        if w.runaway {
+            body = ran_after_steam(context, &inputs, &w);
+        }
+        let mut steps = body.bare(context, fluence, w);
+        if boils(&steps, &body) {
             let boiled = Water {
                 boiled: true,
                 ..steam(&inputs, &interior, fluence)
             };
-            steps = bare(context, &inputs, &interior, &heat, fluence, boiled);
+            body = ran_after_steam(context, &inputs, &boiled);
+            steps = body.bare(context, fluence, boiled);
             let left = steps.surface.water;
             if left.kept_kg > 0.0 {
                 // The water escape left, condensed again: kept if it has a
@@ -520,15 +559,40 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
                     runaway: false,
                     ..left
                 };
-                let wet = bare(context, &inputs, &interior, &heat, fluence, condensed);
-                if !boils(&wet) {
+                let wet_body = ran_after_steam(context, &inputs, &condensed);
+                let wet = wet_body.bare(context, fluence, condensed);
+                if !boils(&wet, &wet_body) {
                     steps = wet;
+                    body = wet_body;
                 }
             }
+        }
+        // A runaway's pass loses more of the steam it was handed to the
+        // cosmic shoreline and the non-thermal loss ([`Water::keeping`]):
+        // the body weighs the water it kept, and its layers are derived
+        // again for it, once, without re-running the climate (as the
+        // steam interior below is). The heat stays the one the climate
+        // ran on; [`explain::surface_inputs`] recovers that body.
+        let kept = steps.surface.water;
+        let handed = body.inputs.water_fraction * body.inputs.mass_earth * EARTH_KG;
+        if kept.runaway && kept.kept_kg < handed {
+            let left = after_steam(&inputs, &kept);
+            body = Ran {
+                interior: body_interior(context, &left),
+                inputs: left,
+                heat: body.heat,
+            };
         }
         air = Some(steps.before);
         Some(steps.surface)
     };
+    // Only a runaway whose escape took water changed the body.
+    let before_steam = (body.inputs != inputs).then_some(inputs);
+    let Ran {
+        inputs,
+        interior,
+        heat,
+    } = body;
     // A deep supercritical steam column hides the surface and inflates
     // the planet (#492): its interior is derived again with the steam on
     // top, once, without re-running the climate under the new gravity.
@@ -554,6 +618,7 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         geysers: None,
         moment_of_inertia,
         terrain: surface_age::Terrain::default(),
+        before_steam,
     };
     // The frost the climate left on the ground at its temperature.
     let frost = match (&air, &model.surface) {
@@ -568,6 +633,76 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
     };
     model.terrain = surface_age::terrain(&model, context.age_gyr, &frost, context.tide.as_ref());
     (model, air)
+}
+
+/// What a body is made of, its layers and its heat: those a surface pass
+/// ([`bare`]) runs on.
+#[derive(Clone, Debug)]
+pub(crate) struct Ran {
+    pub inputs: PlanetInputs,
+    pub interior: Interior,
+    pub heat: InternalHeat,
+}
+
+impl Ran {
+    /// The surface steps of this body from the water `w` ([`bare`]).
+    pub(crate) fn bare(&self, context: &Context, fluence: f64, w: Water) -> Bare {
+        bare(
+            context,
+            &self.inputs,
+            &self.interior,
+            &self.heat,
+            fluence,
+            w,
+        )
+    }
+}
+
+/// The body of `formed` (after photoevaporation) once a steam runaway left
+/// it the water `w` ([`after_steam`]): its layers ([`body_interior`]) and
+/// heat ([`internal_heat`]) derived again from what it kept.
+pub(crate) fn ran_after_steam(context: &Context, formed: &PlanetInputs, w: &Water) -> Ran {
+    let inputs = after_steam(formed, w);
+    let interior = body_interior(context, &inputs);
+    let heat = internal_heat(context, &inputs, &interior);
+    Ran {
+        inputs,
+        interior,
+        heat,
+    }
+}
+
+/// What a body of `inputs` is made of once a steam runaway left it the
+/// water `water` (#513): the water escape took (`inputs`' water less
+/// `water.kept_kg`, none if it kept more) leaves the mass, and the water
+/// share is what it kept over what is left. The envelope and the volatiles
+/// keep their mass, so their shares grow by the mass lost; the core share
+/// is of the refractory mass, which escape does not touch. Hydrogen
+/// escapes and leaves its oxygen behind ([`steam`]); that oxygen is not
+/// tracked, here as there. As [`envelope_after_escape`] does for the
+/// envelope.
+pub fn after_steam(inputs: &PlanetInputs, water: &Water) -> PlanetInputs {
+    let mass_kg = inputs.mass_earth * EARTH_KG;
+    let lost_kg = (inputs.water_fraction * mass_kg - water.kept_kg).max(0.0);
+    if lost_kg <= 0.0 {
+        return inputs.clone();
+    }
+    let mass_earth = inputs.mass_earth - lost_kg / EARTH_KG;
+    let scale = inputs.mass_earth / mass_earth;
+    let v = &inputs.volatiles;
+    PlanetInputs {
+        mass_earth,
+        water_fraction: water.kept_kg.max(0.0) / (mass_earth * EARTH_KG),
+        envelope_fraction: inputs.envelope_fraction * scale,
+        volatiles: Volatiles {
+            co2: v.co2 * scale,
+            n2: v.n2 * scale,
+            ch4: v.ch4 * scale,
+            nh3: v.nh3 * scale,
+            s: v.s * scale,
+        },
+        ..inputs.clone()
+    }
 }
 
 /// The layers of a body of `inputs` (after escape) in its formation
@@ -652,6 +787,10 @@ pub(crate) struct Bare {
     /// What the star's ultraviolet left of that methane
     /// ([`methane_photolysis`]), bar.
     pub photolysed: Gases,
+    /// Whether the air is a Titan's dense, hazy, reducing air
+    /// ([`atmosphere::reducing`], [`atmosphere::titan_like_air`]): it
+    /// then outgassed no CO₂ ([`atmosphere::without_co2_if_reducing`]).
+    pub reducing: bool,
     /// What the cold left of that in the air ([`cold_trap`]), bar.
     pub trapped: Gases,
     /// The air as the climate left it, before life oxygenated it: the
@@ -668,6 +807,9 @@ pub(crate) struct Bare {
     /// ([`vent_strength`]); `None` without an ice crust ([`ice_crust`]).
     #[cfg(test)]
     pub vent: Option<f64>,
+    /// The gravity and radius the climate was solved on
+    /// ([`climate_planet`]), which its albedo read.
+    pub planet: climate::Planet,
 }
 
 /// The heaviest host whose magnetosphere [`non_thermal_loss`] reads, Earth
@@ -676,6 +818,16 @@ pub(crate) struct Bare {
 /// a star raising its own planet's tides (`context.tide` set to the star),
 /// not a giant with a plasma.
 const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * crate::giants::JUPITER_EARTH_MASSES as f64;
+
+/// The gravity and radius the climate reads of a body of `inputs` and
+/// `interior` ([`climate::Planet`]): `G M / R²` of its mass and radius.
+pub fn climate_planet(inputs: &PlanetInputs, interior: &Interior) -> climate::Planet {
+    let radius_m = interior.radius_earth * EARTH_M;
+    climate::Planet {
+        gravity_m_s2: crate::exomoon::G * inputs.mass_earth * EARTH_KG / (radius_m * radius_m),
+        radius_earth: interior.radius_earth,
+    }
+}
 
 /// What [`non_thermal_loss`] reads of a body of `inputs` and `interior`
 /// in `context`: its gravity and radius, its star's distance and its age,
@@ -686,7 +838,7 @@ const HOST_PLASMA_MAX_MASS_EARTH: f64 = 13.0 * crate::giants::JUPITER_EARTH_MASS
 /// host giants of moons).
 pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interior) -> LossContext {
     let radius_m = interior.radius_earth * EARTH_M;
-    let gravity = crate::exomoon::G * inputs.mass_earth * EARTH_KG / (radius_m * radius_m);
+    let gravity = climate_planet(inputs, interior).gravity_m_s2;
     let giant =
         |t: &HostTide| moon_of_giant(context) && t.host_kg <= HOST_PLASMA_MAX_MASS_EARTH * EARTH_KG;
     let host = context.tide.filter(giant).map(|t| {
@@ -720,6 +872,12 @@ pub fn loss_context(context: &Context, inputs: &PlanetInputs, interior: &Interio
 /// climate then solved again; none on a dayside above SO₂'s triple
 /// point), its [`life`] and the oxygen it makes. A runaway's water is
 /// the steam escape has left in its air.
+///
+/// A body whose methane survives ([`atmosphere::reducing`]) is first
+/// solved without CO₂ ([`atmosphere::without_co2_if_reducing`]); it keeps
+/// that air only if its climate leaves it the dense, hazy, reducing air
+/// of a Titan ([`atmosphere::titan_like_air`]), and is solved again with
+/// its CO₂ otherwise (a Triton's thin nitrogen air keeps its CO₂ frost).
 pub(crate) fn bare(
     context: &Context,
     inputs: &PlanetInputs,
@@ -728,25 +886,56 @@ pub(crate) fn bare(
     fluence: f64,
     w: Water,
 ) -> Bare {
+    let held_back = bare_air(context, inputs, interior, heat, fluence, w, true);
+    if !held_back.reducing || atmosphere::titan_like_air(&held_back.climate_gases) {
+        held_back
+    } else {
+        bare_air(context, inputs, interior, heat, fluence, w, false)
+    }
+}
+
+/// [`bare`], with the CO₂ of a reducing air held back when `hold_back`.
+fn bare_air(
+    context: &Context,
+    inputs: &PlanetInputs,
+    interior: &Interior,
+    heat: &InternalHeat,
+    fluence: f64,
+    w: Water,
+    hold_back: bool,
+) -> Bare {
     let bar_per_kg = atmosphere::bar_per_kg(inputs.mass_earth, interior);
     let r = regime(inputs, heat, interior, &w);
     let k = core(inputs, interior, r, context.age_gyr);
-    let out = outgassed(inputs, &w, r, interior);
-    let shoreline = atmosphere(
-        out,
-        interior,
-        inputs.mass_earth,
-        &shield(context, k),
-        fluence,
-    );
     let loss = loss_context(context, inputs, interior);
-    let (kept, lost) = non_thermal_loss(shoreline, &loss);
+    // What escape and the star's ultraviolet leave of an outgassed air.
+    let escaped = |out: Gases| {
+        let shoreline = atmosphere(
+            out,
+            interior,
+            inputs.mass_earth,
+            &shield(context, k),
+            fluence,
+        );
+        let (kept, lost) = non_thermal_loss(shoreline, &loss);
+        let photolysed = methane_photolysis(kept, context, inputs.mass_earth, interior);
+        (kept, lost, photolysed)
+    };
+    // A reducing air outgasses no CO₂ and makes none
+    // ([`atmosphere::without_co2_if_reducing`]): the chain runs again
+    // without it.
+    let mut out = outgassed(inputs, &w, r, interior);
+    let (mut kept, mut lost, mut photolysed) = escaped(out);
+    let reducing = hold_back && atmosphere::reducing(&photolysed, context.equilibrium_k);
+    if reducing && out.co2 > 0.0 {
+        out = atmosphere::without_co2_if_reducing(out, reducing);
+        (kept, lost, photolysed) = escaped(out);
+    }
     let w = if w.runaway {
         w.keeping(kept.h2o / bar_per_kg)
     } else {
         w
     };
-    let photolysed = methane_photolysis(kept, context, inputs.mass_earth, interior);
     let trapped = cold_trap(photolysed, context.equilibrium_k);
     let gases = photochemistry(trapped, context.equilibrium_k);
     let flux = heat.flux_w_m2(interior.radius_earth);
@@ -775,6 +964,7 @@ pub(crate) fn bare(
     // decreasing map, found by bisection.
     let icy = ice_crust(inputs, &w, r);
     let crust = |vent: f64| icy.then(|| crust_albedo(context, inputs, heat, interior, vent));
+    let planet = climate_planet(inputs, interior);
     let solve = |gases: Gases, so2_frost_bar: f64, vent: f64| {
         climate::climate_over(
             context,
@@ -784,6 +974,7 @@ pub(crate) fn bare(
             flux,
             water_bar,
             carbon(so2_frost_bar),
+            &planet,
             crust(vent),
         )
     };
@@ -882,10 +1073,12 @@ pub(crate) fn bare(
         kept,
         lost,
         photolysed,
+        reducing,
         trapped,
         climate_gases: after,
         condensed,
         frost,
+        planet,
         #[cfg(test)]
         vent: icy.then_some(vent),
     }
@@ -1070,10 +1263,18 @@ mod tests {
             let draw = model.inputs.snowball_draw;
             assert!((0.0..1.0).contains(&draw), "{}: {draw}", body.id);
             assert_ne!(draw, model.inputs.life_draw, "{}", body.id);
-            // Photoevaporation can only lower the mass, by the envelope lost.
+            // Photoevaporation can only lower the mass, by the envelope
+            // lost, and a steam runaway by the water escape took.
             let lost = model.drawn_mass_earth - model.inputs.mass_earth;
             assert!(lost >= 0.0, "{}", body.id);
-            assert!(lost <= 1.0e-3 + model.envelope_lost * model.drawn_mass_earth);
+            let formed = model.formed_inputs();
+            let water_lost = formed.water_fraction * formed.mass_earth
+                - model.inputs.water_fraction * model.inputs.mass_earth;
+            assert!(
+                lost <= 1.0e-3 + model.envelope_lost * model.drawn_mass_earth + water_lost,
+                "{}",
+                body.id
+            );
         }
         // Another id draws other inputs.
         let b = planets[0];
@@ -1296,6 +1497,21 @@ mod tests {
     /// before the icy-age law, to the last digit printed: the test's
     /// point is that the law leaves it unchanged, so it is pinned to
     /// 1e-9, and a later change to the snowball's albedo re-pins it
-    /// knowingly.
-    const SNOWBALL_ALBEDO: f64 = 0.622_385_341_082;
+    /// knowingly: 0.622 385 341 082 before the albedo's fixed point
+    /// halved its steps where they swing (issue #562), 0.622 375 946 206
+    /// before its water vapour absorbed sunlight (issue #523: its 8e-4
+    /// bar of vapour at 250 K take about 8 % of the light reflected by
+    /// its ice), 0.579 495 860 419 before its clouds followed their
+    /// relative humidity (issue #523: the cover's vapour scale went from
+    /// 1.15e-2 to 1.0e-2 bar, so its saturated-at-77 % air holds a little
+    /// more cloud), 0.579 665 635 432 before it held the CO₂ its
+    /// thermostat reaches, just short of the thaw, instead of half way
+    /// there, and its Rayleigh scattering followed the Sun's 5772 K
+    /// instead of 5780 K (issue #522), 0.577 539 497 011 before a CO₂
+    /// molecule scattered 2.5 times as much light as an N₂ one instead
+    /// of 2.80 (issue #523), 0.576 530 988 055 before the spectral
+    /// longwave column (issue #523: the thermostat holds
+    /// the snowball's CO₂ at what the HITRAN band needs to thaw it, and
+    /// that CO₂ absorbs the near infrared its ice reflects).
+    const SNOWBALL_ALBEDO: f64 = 0.545_695_039_691;
 }

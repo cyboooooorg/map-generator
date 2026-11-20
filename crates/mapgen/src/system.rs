@@ -87,8 +87,15 @@ use std::sync::Arc;
 /// system of version 9 does not parse as today's and is refused on its
 /// version. Version 12 stores the host's kind (`star.kind`, always `dwarf`
 /// for now) and moves the inner edge of O to A0 dwarfs outside two
-/// stellar radii ([`crate::host::inner_edge_au`]).
-pub const SYSTEM_FORMAT_VERSION: u32 = 12;
+/// stellar radii ([`crate::host::inner_edge_au`]). Version 13 comes with
+/// lot 3C-2 of the climate pass: the greenhouse comes from a spectral
+/// column and the outer edge from its maximum greenhouse, the albedo
+/// weighs the air's column and absorption, the climate stores whether its
+/// fixed points settled (`Climate::converged`), and a steam runaway's
+/// model keeps its inputs from before escape took its water
+/// (`PlanetModel::before_steam`), so the bodies of a system of version 12
+/// are not the ones its seed draws today and it is refused as outdated.
+pub const SYSTEM_FORMAT_VERSION: u32 = 13;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Outer edge of a system, AU. The inner edge depends on the host
@@ -2293,10 +2300,10 @@ fn host_kg(params: &WorldParams) -> f64 {
 /// (the interior the model's heat was run on, see
 /// [`crate::planet::explain`]).
 fn chain_orbiter(context: &Context, model: &PlanetModel, orbit: &Orbit) -> Orbiter {
-    let inputs = &model.inputs;
+    let inputs = crate::planet::explain::surface_inputs(context, model);
     let interior = crate::planet::explain::surface_interior(context, model);
     Orbiter {
-        mass_kg: inputs.mass_earth * EARTH_KG,
+        mass_kg: model.inputs.mass_earth * EARTH_KG,
         a_m: orbit.semi_major_axis_km * 1000.0,
         period_s: orbit.period_days * DAY_S,
         eccentricity: orbit.eccentricity,
@@ -3342,8 +3349,12 @@ mod tests {
     #[test]
     fn giants_round_a_hot_host_keep_its_edge() {
         let edge = crate::host::inner_edge_au(&crate::star::values(parse_type("O3V").unwrap()));
+        // Seeds 0 to 19 (were 0 to 399, 414 s in release since the
+        // spectral column): the edge holds on every planet whatever the
+        // draw, and seeds 7, 12, 13 and 16 draw a giant under it that is
+        // raised to it (39 of the 400 did, the first at seed 7).
         let mut at_edge = 0;
-        for seed in 0..400 {
+        for seed in 0..20 {
             let world = o3_world(None, seed);
             let sys = draw(
                 &SystemRequest::Around(world),
@@ -3358,7 +3369,7 @@ mod tests {
                 }
             }
         }
-        assert!(at_edge > 0, "no hot giant was clamped in 400 seeds");
+        assert!(at_edge > 0, "no hot giant was clamped in 20 seeds");
     }
 
     use super::*;
@@ -3737,6 +3748,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 600 whole systems for the 1 % rate of hot Jupiters, 4 min in release; run with --include-ignored before a PR"]
     fn a_drawn_system_sometimes_has_a_hot_jupiter() {
         let (mut hot, mut close) = (0, 0);
         let n = 600;
@@ -3942,8 +3954,11 @@ mod tests {
 
     #[test]
     fn a_giants_preview_is_linear_and_follows_the_bands_it_will_get() {
+        // Seeds 0 to 3 (were 0 to 9, 103 s in release since the spectral
+        // column): each system keeps the three giants it asks for, so
+        // four give the twelve previews the count below asks for.
         let mut checked = 0;
-        for seed in 0..10 {
+        for seed in 0..4 {
             let system = draw(
                 &whole(
                     &[("jupiter-like", 2), ("neptune-like", 1), ("earth-like", 1)],
@@ -3987,6 +4002,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 40 whole systems for over 60 giants and their rings, 7 min in release; run with --include-ignored before a PR"]
     fn giants_get_their_rings_from_the_system() {
         let (mut bright, mut faint, mut giants) = (0, 0, 0);
         for seed in 0..40 {
@@ -4509,8 +4525,15 @@ mod tests {
 
     #[test]
     fn every_planet_stores_its_model_and_its_class() {
+        // Seeds 1 to 3 round a planet and 1 to 4 for whole systems (were
+        // 1 to 10 and 1 to 20, 59 s in release since the spectral
+        // column): the class key is checked on every planet whatever its
+        // class; seeds 1, 2 and 4 draw round moons with a model of their
+        // own (2, 4 and 1) and every seed small moons without one, so
+        // both branches of the moons' check run.
+        //
         // Around a planet: every planet, the world asked included.
-        for seed in 1..=10 {
+        for seed in 1..=3 {
             let world = WorldRequest {
                 planet: Some("earth-like".into()),
                 seed: Some(seed),
@@ -4529,7 +4552,7 @@ mod tests {
             assert!(asked.model.is_some(), "seed {seed}");
         }
         // A whole system: every planet.
-        for seed in 1..=20 {
+        for seed in 1..=4 {
             let system = drawn_g2v(seed);
             for body in &system.bodies {
                 match body.kind {
@@ -4661,6 +4684,75 @@ mod tests {
     }
 
     #[test]
+    fn heat_pipe_moons_explain_their_temperature() {
+        // `earth-like` asked as a giant's moon, the caller seeded 5 (#520):
+        // some come out as tidally heated heat-pipe volcanic worlds under
+        // a steaming air, whose replayed temperature missed the stored
+        // one. Every body is explained, and the temperature root is the
+        // stored temperature. Request seeds 1 and 8 (were 1 to 8, 123 s
+        // in release; the issue's 1 to 40 took 10 min): of the eight,
+        // only they draw such a moon (seed 1's d-2, seed 8's d-5, the
+        // issue's measured case), and the guard asks for at least one,
+        // so the sample holds the path.
+        use crate::geology::Regime;
+        use crate::planet::{Quantity, explain};
+        let mut failed = Vec::new();
+        let mut heat_pipes = 0;
+        for seed in [1, 8] {
+            let system = draw(
+                &SystemRequest::Around(WorldRequest {
+                    planet: Some("earth-like".into()),
+                    seed: Some(seed),
+                    host: Some(HostMode::Giant),
+                    width: Some(64),
+                    height: Some(32),
+                    ..WorldRequest::default()
+                }),
+                &mut StdRng::seed_from_u64(5),
+            )
+            .unwrap();
+            for body in &system.bodies {
+                let Some(model) = &body.model else { continue };
+                let context = body_context(&system, body).expect("a context");
+                let Some(e) = explain(&context, model) else {
+                    failed.push(format!("{seed} {}: {:?}", body.id, model.class));
+                    continue;
+                };
+                if let Some(surface) = &model.surface {
+                    // The path of the issue: a heat-pipe volcanic moon
+                    // whose hot air holds bars of steam (44 bar at 525 K
+                    // in the issue, about 12 bar at 465 K today).
+                    if body.kind == BodyKind::Moon
+                        && surface.regime == Regime::HeatPipe
+                        && surface.gases.h2o > 1.0
+                        && model.class == crate::planet::PlanetClass::VolcanicWorld
+                    {
+                        heat_pipes += 1;
+                    }
+                    let root = e
+                        .trees
+                        .iter()
+                        .find(|c| c.quantity == Quantity::SurfaceTemperature)
+                        .expect("a temperature tree");
+                    let stored = surface.climate.temperature_k;
+                    if (root.value - stored).abs() > 0.5 {
+                        failed.push(format!(
+                            "{seed} {}: {} K vs {stored} K",
+                            body.id, root.value
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failed.is_empty(), "{failed:#?}");
+        // The case of the issue is among them.
+        assert!(
+            heat_pipes > 0,
+            "no steaming heat-pipe volcanic moon over the seeds"
+        );
+    }
+
+    #[test]
     fn explain_refuses_a_model_its_context_does_not_reproduce() {
         let system = drawn_g2v(3);
         let body = system
@@ -4683,9 +4775,12 @@ mod tests {
 
     #[test]
     fn requested_slots_store_the_derived_class() {
-        // terran=1, gas-giant=1 round a G2V, seeds 1..=10: one planet in
-        // each band; each stores a class key, whatever it is.
-        for seed in 1..=10 {
+        // terran=1, gas-giant=1 round a G2V, seeds 1..=3: one planet in
+        // each band; each stores a class key, whatever it is. Three seeds
+        // (were ten, 97 s in release since the spectral column): the
+        // slots asked are kept on every seed by construction, and the
+        // class key is checked on each planet whatever its class.
+        for seed in 1..=3 {
             let system = requested(seed, &[("earth-like", 1), ("jupiter-like", 1)]);
             let planets: Vec<_> = system
                 .bodies
@@ -5116,6 +5211,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 300 drawn systems for over 20 belt zones, 26 min in release; run with --include-ignored before a PR"]
     fn drawn_planets_round_a_world_keep_out_of_the_first_cold_giants_belt_zone() {
         // Issue #449 with `--draw-only`: the drawn planets are kept one by
         // one, so a small slot of an ice giant's mass drawn after them
@@ -5167,6 +5263,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 40 whole systems for over 10 inner belts and 10 trojan swarms, 6.5 min in release; run with --include-ignored before a PR"]
     fn systems_get_belts_trojans_and_their_crater_rate() {
         let (mut inner, mut trojans) = (0, 0);
         for seed in 0..40 {
@@ -5611,6 +5708,7 @@ mod tests {
     /// giant with a moon with geysers close in has one plume ring, from
     /// the innermost of them.
     #[test]
+    #[ignore = "slow: 500 drawn systems for the plume rings of venting moons, 7 min in release; run with --include-ignored before a PR"]
     fn plume_rings_follow_geysers() {
         let (mut fed, mut vents) = (0, 0);
         for seed in 1..=500 {
@@ -6280,8 +6378,12 @@ mod tests {
         model.surface.expect("a surface").gases.total()
     }
 
+    /// Seeds 0 to 3 (were 0 to 9; Earth's took 96 s in release): the star
+    /// is the archetype's on every seed by construction, and the pressure
+    /// bounds are held over 20 seeds of a whole system by
+    /// `archetype::tests::faithful_archetypes_hold_in_a_whole_system`.
     fn assert_brings_its_sun(archetype: &str, bar: std::ops::RangeInclusive<f64>) {
-        for seed in 0..10 {
+        for seed in 0..4 {
             let system = whole_starless(&[(archetype, 1)], seed).unwrap();
             assert_eq!(system.star.spectral, "G2V", "{archetype} seed {seed}");
             let p = asked_pressure_bar(&system, archetype);
@@ -6630,6 +6732,7 @@ mod focus_ring_tests {
     }
 
     #[test]
+    #[ignore = "slow: 30 drawn systems round a world, 5.5 min in release; run with --include-ignored before a PR"]
     fn the_rings_of_a_worlds_giant_stay_inside_its_chain() {
         for seed in 0..30 {
             let system = around("earth-like", seed, Some(HostMode::Giant));
@@ -6684,6 +6787,7 @@ mod spin_tests {
     /// year when locked, a year over the turns in a resonance. The moon
     /// system once drew its own, on an Earth's mass, and could disagree.
     #[test]
+    #[ignore = "slow: 300 drawn red-dwarf systems, 7 min in release; run with --include-ignored before a PR"]
     fn rocky_day_follows_the_one_spin_state() {
         let (mut locked, mut resonant) = (0, 0);
         for seed in 0..300 {
@@ -6730,8 +6834,12 @@ mod spin_tests {
 
     #[test]
     fn planets_locked_to_their_star_turn_on_circles_upright() {
+        // Seeds 0 to 9 (were 0 to 59, 59 s in release since the spectral
+        // column): every planet's spin is checked against its star's
+        // tides whatever it is; they hold 19 locked planets and the
+        // first 3:2 resonance (seed 4; four in the sixty seeds).
         let (mut locked, mut resonant) = (0, 0);
-        for seed in 0..60 {
+        for seed in 0..10 {
             let system = red_dwarf_system(seed);
             for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
                 if giant(body) {
@@ -6812,6 +6920,7 @@ mod spin_tests {
     }
 
     #[test]
+    #[ignore = "slow: 20 drawn systems and their moons' worlds, 5 min in release; run with --include-ignored before a PR"]
     fn a_moons_spin_and_world_share_one_tilt_and_giants_one_recipe() {
         for seed in 0..20 {
             let request = SystemRequest::System(WholeSystemRequest {
@@ -6931,8 +7040,11 @@ mod lone_tests {
 
     #[test]
     fn a_planets_moon_list_agrees_with_its_round_moons_bodies() {
+        // Seeds 1 and 2 (were 1 to 12, 61 s in release since the spectral
+        // column): they draw 11 round moons with bodies, against the 4
+        // the count below asks for (seed 1 alone, 7).
         let mut checked = 0;
-        for seed in 1..=12 {
+        for seed in 1..=2 {
             let system = around("earth-like", seed, None, None);
             for planet in system.bodies.iter().filter(|b| b.kind != BodyKind::Moon) {
                 let Some(drawn) = MoonSystem::draw(&planet.params) else {
@@ -6967,6 +7079,7 @@ mod lone_tests {
     }
 
     #[test]
+    #[ignore = "slow: 60 drawn systems, alone and not, for over 20 with company, 5 min in release; run with --include-ignored before a PR"]
     fn a_lone_planet_has_no_other_planet_belt_or_giant_neighbour() {
         let mut crowded = 0;
         for seed in 1..=30 {
@@ -6989,7 +7102,10 @@ mod lone_tests {
 
     #[test]
     fn a_lone_moon_of_a_giant_keeps_its_host_and_nothing_else() {
-        for seed in 1..=10 {
+        // Seeds 1 to 3 (were 1 to 10, 109 s in release since the spectral
+        // column): `alone` drops every other body whatever the draws, so
+        // any seed takes the path; three vary the giant drawn.
+        for seed in 1..=3 {
             let lone = around("earth-like", seed, Some(HostMode::Giant), Some(true));
             let only = planets(&lone);
             assert_eq!(only.len(), 1, "seed {seed}");
@@ -7010,8 +7126,11 @@ mod lone_tests {
 
     #[test]
     fn a_request_without_alone_is_the_one_it_was() {
-        // Neither the flag left out nor false changes the system.
-        for seed in 1..=5 {
+        // Neither the flag left out nor false changes the system. Seeds 1
+        // and 2 (were 1 to 5, 54 s in release): the flag is read before
+        // any draw, so one seed shows it; the second guards against a
+        // match by chance.
+        for seed in 1..=2 {
             let a = serde_json::to_string(&around("earth-like", seed, None, None)).unwrap();
             let b = serde_json::to_string(&around("earth-like", seed, None, Some(false))).unwrap();
             let strip = |s: &str| s.replace("\"alone\":false,", "");
@@ -7080,10 +7199,14 @@ mod lone_tests {
     /// 68 K and freezes its methane (an ice world, was a hydrocarbon
     /// world). Again when a giant's tides decide which drawn moons lock
     /// in resonance and place them at the 2:1 (seed 1's `f-6` to `f-9`
-    /// a little further out, under fewer impacts).
+    /// a little further out, under fewer impacts). Again when the
+    /// greenhouse came from a spectral column (issue #523): seed 2's `c`,
+    /// a hot CO₂ world at 0.14 AU, stays under the 1400 K of a lava world
+    /// (a runaway greenhouse, was a lava world), as Venus cools from 739
+    /// to 577 K.
     const MAIN_SIGNATURES: [&str; 4] = [
         "mgs-72469-1 belts=2 b:lava-world:0.0231:0.0822:true c:runaway-greenhouse:0.2071:0.0822:true d:mini-neptune:0.6127:0.0822:true d-1:icy-moon:0.0002:0.0822:false d-2:icy-moon:0.0003:0.0822:false d-3:icy-moon:0.0005:0.0822:false d-4:icy-moon:0.0005:0.0822:false d-5:icy-moon:0.0006:0.0822:false d-6:rocky:0.0012:0.0822:false d-7:rocky:0.0020:0.0822:false e:rocky:1.0116:0.0822:true f:gas-giant:7.3269:0.0350:true f-1:icy-moon:0.0006:3.8200:false f-2:icy-moon:0.0009:2.8707:false f-3:icy-moon:0.0009:2.8545:false f-4:icy-moon:0.0011:2.3634:false f-5:ice-world:0.0019:1.4829:false f-6:ice-world:0.0031:1.0702:false f-7:ice-world:0.0049:0.8102:false f-8:ice-world:0.0077:0.6464:false f-9:ice-world:0.0123:0.5432:false g:ice-world:13.6776:0.0350:false g-1:icy-moon:0.0109:0.0350:false g-2:icy-moon:0.0165:0.0350:false g-3:icy-moon:0.0219:0.0350:false",
-        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:lava-world:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0005:0.0365:false d-4:rocky:0.0008:0.0365:false d-5:rocky:0.0013:0.0365:false d-6:rocky:0.0020:0.0365:false e:rocky:1.0116:0.0365:true f:ice-world:4.9333:0.0365:true",
+        "mgs-26800-2 belts=1 b:lava-world:0.0328:0.0365:true c:runaway-greenhouse:0.1379:0.0365:true d:mini-neptune:0.4847:0.0365:true d-1:icy-moon:0.0002:0.0365:false d-2:icy-moon:0.0002:0.0365:false d-3:rocky:0.0005:0.0365:false d-4:rocky:0.0008:0.0365:false d-5:rocky:0.0013:0.0365:false d-6:rocky:0.0020:0.0365:false e:rocky:1.0116:0.0365:true f:ice-world:4.9333:0.0365:true",
         "mgs-65727-3 belts=0 b:rocky:0.0476:0.0350:true c:rocky:0.0633:0.0350:true d:rocky:0.6279:0.0350:true d-1:rocky-moon:0.0001:0.0350:false d-2:rocky-moon:0.0002:0.0350:false e:rocky:1.0116:0.0350:true e-1:rocky-moon:0.0002:0.0350:false e-2:rocky-moon:0.0003:0.0350:false f:rocky:2.4861:0.0350:true",
         "mgs-86994-4 belts=0 b:super-earth:0.0409:0.0350:true c:rocky:0.0725:0.0350:true c-1:rocky-moon:0.0002:0.0350:false d:rocky:1.0116:0.0350:true e:hydrocarbon-world:9.6954:0.0350:true e-1:rocky:0.0012:0.0350:false e-2:icy-moon:0.0050:0.0350:false e-3:icy-moon:0.0062:0.0350:false e-4:icy-moon:0.0096:0.0350:false f:ice-world:13.6131:0.0350:true",
     ];
