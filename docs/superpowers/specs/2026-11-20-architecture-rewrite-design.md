@@ -127,7 +127,9 @@ In what order to build (approach 3):
    `crates/cli`, the server's Docker and mise tasks, and lays out the new
    workspace. It keeps `web/` untouched, `docs/analysis/`,
    `docs/science/`, `docs/system-spec.md` and `docs/backlog.md` as
-   references, and rewrites `README.md` for the new state. History is
+   references, and rewrites `README.md` for the new state. It also
+   lands the guardrails (see Guardrails): the CI checks, the
+   `CLAUDE.md` architecture section and the updated agents. History is
    kept: nothing is force-pushed.
 5. Each following pull request adds one feature (see Build order).
 
@@ -468,6 +470,60 @@ Not built in the engine phase, but the design keeps it possible:
   environment and varying with the date.
 - The pole artefacts of #425 disappear only once a viewer samples the
   grid directly (a cube map for example), a later step.
+
+## Guardrails
+
+The architecture is enforced by tools first, by written rules second.
+All of it lands in the first code pull request, with the crates it
+describes.
+
+**CI checks.**
+
+- A test reads `cargo metadata` and fails when a dependency points the
+  wrong way (the graph in Crates): `world` depending on `system`,
+  `science` depending on anything but its units, a domain crate
+  depending on `adapters`.
+- Clippy `disallowed_methods` forbids random sources outside the seed
+  hierarchy; `disallowed_types` forbids `std::fs`, `std::net` and
+  process spawning in `science`, `timeline`, `system`, `world` and
+  `catalogue`. Only `adapters` and `cli` touch the outside world.
+- The determinism test (Determinism and seeds).
+
+**`CLAUDE.md` architecture section**, short and pointing to this
+document:
+
+- the crates, their role and the direction of dependencies;
+- where a change goes:
+
+  | Change | Crate |
+  | --- | --- |
+  | A physical law, a unit, a calibrated constant | `science` |
+  | How a body or system changes over time, an event | `system` |
+  | What the engines exchange | `timeline` |
+  | How a state is laid out on the surface | `world` |
+  | What is stored, cached, evicted | `catalogue` |
+  | A file format, an export, a text catalogue | `adapters` |
+  | Wiring, command-line options | `cli` |
+
+- the anti-goals of this document as rules: no feedback from the map to
+  the system engine, no central-object kind read by the map, one code
+  path per value (causes included), codes not text in the domain, only
+  inputs stored, physics ported not reinvented.
+
+**Agents** (`.claude/agents/`), updated to the new layout:
+
+| Agent | Change |
+| --- | --- |
+| `codebase-mapper` | The new crate map |
+| `branch-reviewer` | Checks boundaries and the engine version |
+| `science-fixer` | Targets `science`, ports physics, no format bump |
+| `branch-syncer` | Description without `raw_data` and tiles |
+| `world-coherence-checker` | The oracle: legacy against new, by distributions |
+| `generation-profiler` | The new CLI |
+| `develop-deployer` | Paused during the engine phase |
+| `viewer-visual-check` | Paused during the engine phase |
+
+The `CLAUDE.md` table of agents and the README follow.
 
 ## Build order
 
