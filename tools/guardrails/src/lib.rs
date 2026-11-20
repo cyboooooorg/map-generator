@@ -6,4 +6,5 @@ pub mod budget;
 pub mod clippy_config;
 pub mod constants;
 pub mod deps;
+pub mod lints;
 pub mod readme;

@@ -17,7 +17,7 @@ struct Cli {
 enum Command {
     /// Fail when the run of a JUnit report took longer than the budget.
     Budget {
-        /// nextest's JUnit report (target/nextest/<profile>/junit-<tier>.xml).
+        /// nextest's JUnit report (target/nextest/<profile>/junit.xml).
         report: PathBuf,
         /// Budget in seconds.
         seconds: f64,

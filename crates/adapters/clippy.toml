@@ -1,7 +1,8 @@
 # Relaxed copy of the root clippy.toml for a crate that may touch the
 # outside world: it keeps only the entries marked "shared" there (random
 # sources, the wall clock, default-hashed maps). tools/guardrails checks
-# that they stay identical to the root ones.
+# that they stay identical to the root ones, and that relaxed copies exist
+# only in crates/adapters, crates/cli and tools/*.
 
 disallowed-methods = [
   # shared: random sources outside the seed hierarchy
@@ -11,12 +12,20 @@ disallowed-methods = [
   { path = "rand::make_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "getrandom::fill", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "getrandom::getrandom", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::SeedableRng::from_os_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::SeedableRng::from_entropy", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::SeedableRng::try_from_os_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "std::hash::RandomState::new", reason = "random hasher keys: use a seeded hasher or a BTreeMap" },
   # shared: the wall clock makes outputs depend on when they run
   { path = "std::time::SystemTime::now", reason = "outputs must not depend on the wall clock; dates come from the inputs" },
+  { path = "std::time::SystemTime::elapsed", reason = "outputs must not depend on the wall clock; dates come from the inputs" },
 ]
 
 disallowed-types = [
   # shared: iteration order depends on a random hasher
   { path = "std::collections::HashMap", reason = "random iteration order: use BTreeMap" },
   { path = "std::collections::HashSet", reason = "random iteration order: use BTreeSet" },
+  { path = "std::hash::RandomState", reason = "random hasher keys: use a seeded hasher or a BTreeMap" },
+  { path = "rand::rngs::OsRng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::rngs::ThreadRng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
 ]
