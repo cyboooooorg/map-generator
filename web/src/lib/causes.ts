@@ -41,13 +41,14 @@ const FROST_COVERS: ReadonlySet<string> = new Set(['frost_n2', 'frost_ch4', 'fro
  * The frost that covers most of a body's disc (over half), worded, or null:
  * the albedo's value line names it without opening its tree. A body with a
  * surface `liquid` (seas of water, hydrocarbons, nitrogen or lava) is named
- * by its liquid instead: its seas outrank a frost on its land, as its class
- * does (a hazy hydrocarbon world is no ice world, issue #557).
+ * by nothing: its seas outrank a frost on its land, as its class does (a
+ * hazy hydrocarbon world is no ice world, issue #557), but dark seas do not
+ * make its albedo, so the line names neither; its tree shows the frost.
  */
 export function dominantFrost(tree: Cause | null, liquid: SurfaceLiquid | null = null): string | null {
+  if (liquid !== null && liquid !== 'none') return null;
   const part = tree?.causes.find((c) => c.quantity === 'cover_share' && c.label !== null && FROST_COVERS.has(c.label) && c.value > 0.5);
-  if (!part?.label) return null;
-  return liquid !== null && liquid !== 'none' ? t.cards.liquids[liquid] : coverName(part.label);
+  return part?.label ? coverName(part.label) : null;
 }
 
 /** A number to three significant digits. */

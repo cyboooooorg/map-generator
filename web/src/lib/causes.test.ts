@@ -105,10 +105,11 @@ describe('formatCause', () => {
     expect(dominantFrost(tree([['ice', 0.9]]))).toBeNull();
     expect(dominantFrost(null)).toBeNull();
   });
-  it('names a body with a surface liquid by its liquid, not by a frost over it', () => {
+  it('names neither a liquid nor a frost over a body with a surface liquid', () => {
     setLocale('en');
     const tree = (parts: [string, number][]) => node('bond_albedo', 0.29, { causes: parts.map(([k, v]) => node('cover_share', v, { label: k })) });
-    expect(dominantFrost(tree([['frost_co2', 0.8], ['haze', 1]]), 'hydrocarbons')).toBe(t.cards.liquids.hydrocarbons);
+    expect(dominantFrost(tree([['frost_co2', 0.8], ['haze', 1]]), 'hydrocarbons')).toBeNull();
+    expect(dominantFrost(tree([['frost_ch4', 0.9]]), 'water')).toBeNull();
     expect(dominantFrost(tree([['frost_n2', 0.9]]), 'none')).toBe('nitrogen frost');
     expect(dominantFrost(tree([['frost_n2', 0.9]]), null)).toBe('nitrogen frost');
     expect(dominantFrost(tree([['land', 0.7]]), 'water')).toBeNull();

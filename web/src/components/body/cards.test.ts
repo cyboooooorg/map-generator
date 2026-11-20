@@ -263,7 +263,7 @@ describe('themed body cards', () => {
     }
     setLocale('en');
   });
-  it('names a body with seas by its liquid, not by a frost over its land', () => {
+  it('names neither the seas nor a frost over its land on the albedo line', () => {
     const part = (label: string, value: number) => ({ quantity: 'cover_share', value, label, input: null, causes: [] });
     const titan = body({ model: { ...model, surface: { ...surface, climate: { ...surface.climate, liquid: 'hydrocarbons', bond_albedo: 0.29 } } } });
     const world = worldOf([titan, moon], 'c', earthMeta);
@@ -271,7 +271,8 @@ describe('themed body cards', () => {
     const tree = { quantity: 'bond_albedo', value: 0.29, label: null, input: null, causes: [part('frost_co2', 0.9), part('haze', 1)] };
     world.systemExtras = { c: { explanation: { trees: [tree] }, similar: null } } as unknown as typeof world.systemExtras;
     const html = renderCard(SurfaceCard, { world });
-    expect(html).toContain('0.29 · hydrocarbons');
+    expect(html).toContain('<dd>0.29<button');
+    expect(html).not.toContain('0.29 · hydrocarbons');
     expect(html).not.toContain('0.29 · carbon dioxide frost');
   });
 });
