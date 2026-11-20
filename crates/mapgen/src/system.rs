@@ -87,8 +87,15 @@ use std::sync::Arc;
 /// system of version 9 does not parse as today's and is refused on its
 /// version. Version 12 stores the host's kind (`star.kind`, always `dwarf`
 /// for now) and moves the inner edge of O to A0 dwarfs outside two
-/// stellar radii ([`crate::host::inner_edge_au`]).
-pub const SYSTEM_FORMAT_VERSION: u32 = 12;
+/// stellar radii ([`crate::host::inner_edge_au`]). Version 13 comes with
+/// lot 3C-2 of the climate pass: the greenhouse comes from a spectral
+/// column and the outer edge from its maximum greenhouse, the albedo
+/// weighs the air's column and absorption, the climate stores whether its
+/// fixed points settled (`Climate::converged`), and a steam runaway's
+/// model keeps its inputs from before escape took its water
+/// (`PlanetModel::before_steam`), so the bodies of a system of version 12
+/// are not the ones its seed draws today and it is refused as outdated.
+pub const SYSTEM_FORMAT_VERSION: u32 = 13;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
 /// Outer edge of a system, AU. The inner edge depends on the host
