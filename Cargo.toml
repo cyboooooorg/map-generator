@@ -1,38 +1,33 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "tools/opacity-table"]
+members = ["crates/*", "tools/*"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 
+# Internal crates by path; external dependencies are added by the pull
+# requests that use them. The direction of the edges is checked by
+# tools/guardrails (see CLAUDE.md, Architecture).
 [workspace.dependencies]
-clap = { version = "4.6.7", features = ["derive", "env"] }
-crc32fast = "1.5.0"
-fdeflate = "0.3.7"
-font8x8 = "0.3"
-image = "0.25.9"
-noise = "0.9.0"
-rand = "0.10.0"
-rayon = "1.12.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order", "float_roundtrip"] }
-toml = "1.1.8"
-mapgen = { path = "crates/mapgen" }
+science = { path = "crates/science" }
+timeline = { path = "crates/timeline" }
+system = { path = "crates/system" }
+world = { path = "crates/world" }
+catalogue = { path = "crates/catalogue" }
+adapters = { path = "crates/adapters" }
 
-# Most test time goes into generating worlds, over ten times slower
-# unoptimized: build the dependencies optimized (once) and the workspace
-# crates at opt-level 1, which keeps incremental rebuilds short. Debug
-# assertions and overflow checks stay on. See README, Development tasks.
-# The test profile inherits the dev one, `package."*"` included.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# The lists live in clippy.toml (and the relaxed copies in adapters, cli
+# and tools): random sources outside the seed hierarchy, wall clocks,
+# default-hashed maps, files, network and processes.
+[workspace.lints.clippy]
+disallowed_methods = "deny"
+disallowed_types = "deny"
+
+# Dependencies are built optimized once; the workspace crates stay at the
+# default level for short incremental rebuilds.
 [profile.dev.package."*"]
-opt-level = 3
-
-[profile.test]
-opt-level = 1
-
-# Except the generator itself in tests: since the spectral column (climate
-# lot 3C-2) its climate solves dominate the suite, and at opt-level 3 they
-# run several times faster than at 1, for a longer rebuild of `mapgen`.
-[profile.test.package.mapgen]
 opt-level = 3

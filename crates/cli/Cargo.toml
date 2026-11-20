@@ -1,14 +1,21 @@
 [package]
 name = "map-generator"
-description = "Command-line tools: map-generator (generate a world) and hexgrid (hex resampling)"
+description = "Command-line composition root: wires the adapters into the engines' ports"
 version.workspace = true
 edition.workspace = true
-default-run = "map-generator"
+publish = false
+
+[[bin]]
+name = "map-generator"
+path = "src/main.rs"
 
 [dependencies]
-mapgen.workspace = true
-clap.workspace = true
-image.workspace = true
-rand.workspace = true
-rayon.workspace = true
-serde_json.workspace = true
+science.workspace = true
+timeline.workspace = true
+system.workspace = true
+world.workspace = true
+catalogue.workspace = true
+adapters.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "adapters"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+catalogue.workspace = true
+system.workspace = true
+world.workspace = true
+timeline.workspace = true
+science.workspace = true
+
+[lints]
+workspace = true
