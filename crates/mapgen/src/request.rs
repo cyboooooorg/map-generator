@@ -967,9 +967,9 @@ fn host_tide(
 ) -> crate::planet::HostTide {
     let a_m = f64::from(host.distance_km) * 1000.0;
     let eccentricity = f64::from(host.eccentricity);
-    let inputs = &model.inputs;
+    let inputs = crate::planet::explain::surface_inputs(context, model);
     let world = crate::planet::resonance::Orbiter {
-        mass_kg: inputs.mass_earth * crate::exomoon::EARTH_KG,
+        mass_kg: model.inputs.mass_earth * crate::exomoon::EARTH_KG,
         a_m,
         period_s: f64::from(host.period_days) * 86_400.0,
         eccentricity,

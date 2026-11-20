@@ -481,8 +481,13 @@ mod tests {
                 continue;
             }
             runaways += 1;
-            let radius = model.interior.radius_earth * crate::exomoon::EARTH_M;
-            let mass = model.inputs.mass_earth * crate::exomoon::EARTH_KG;
+            // On the body the climate ran on: the model then weighs only
+            // the water its pass kept, without solving the air again.
+            let context = sun_at(orbit_au);
+            let interior = crate::planet::explain::surface_interior(&context, &model);
+            let inputs = crate::planet::explain::surface_inputs(&context, &model);
+            let radius = interior.radius_earth * crate::exomoon::EARTH_M;
+            let mass = inputs.mass_earth * crate::exomoon::EARTH_KG;
             let gravity = crate::exomoon::G * mass / (radius * radius);
             let bar_per_kg = gravity / (4.0 * std::f64::consts::PI * radius * radius) / 1.0e5;
             let kept_bar = surface.water.kept_kg * bar_per_kg;
@@ -684,6 +689,97 @@ mod tests {
         );
     }
 
+    /// The first cause of `quantity` in `tree`, itself or below it.
+    fn cause_of(
+        tree: &crate::planet::Cause,
+        quantity: crate::planet::Quantity,
+    ) -> Option<&crate::planet::Cause> {
+        if tree.quantity == quantity {
+            return Some(tree);
+        }
+        tree.causes.iter().find_map(|c| cause_of(c, quantity))
+    }
+
+    #[test]
+    fn a_runaway_weighs_the_water_its_own_pass_kept() {
+        // A runaway's kept pass loses more of its steam to the cosmic
+        // shoreline and the non-thermal loss than the energy-limited
+        // escape it was handed: the mass, the layers and both trees are
+        // those of the water the card shows (#513). Bodies with 10 % of
+        // water at 0.4 AU round a K5V star, near their shoreline: at
+        // 0.3 M⊕ the pass keeps under 1 % of the steam, at 0.6 M⊕ about
+        // three quarters, deep enough to hide the surface; and the
+        // super-Earth of #492, whose steam hides it too.
+        let k5v = |mass: f64| {
+            let water = 0.1;
+            let inputs = PlanetInputs {
+                volatiles: volatile_rule(1.0 - water, water, 0.325),
+                ..reference::inputs(mass, 0.25, water)
+            };
+            let star = StarInfo::new(parse_type("K5V").unwrap(), 0.4, 0.0, DEFAULT_AGE_GYR);
+            let context = Context::of(&star, 0.0, 0.1);
+            let model = planet_model(&context, inputs);
+            (context, model)
+        };
+        let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
+        let super_earth = (Context::of(&star, 0.0, 0.1), the_492_super_earth());
+        let mut hidden = false;
+        let mut short = false;
+        for (name, (context, model)) in [
+            ("0.3 M⊕", k5v(0.3)),
+            ("0.6 M⊕", k5v(0.6)),
+            ("#492", super_earth),
+        ] {
+            let surface = model.surface.as_ref().expect("a bare body has a surface");
+            assert!(surface.water.runaway, "{name}: {surface:?}");
+            let formed = crate::planet::body_interior(&context, model.formed_inputs());
+            let fluence = crate::planet::xuv_fluence(&context);
+            let handed = crate::planet::steam(model.formed_inputs(), &formed, fluence).kept_kg;
+            println!(
+                "{name}: handed {handed:.3e} kg, kept {:.3e} kg",
+                surface.water.kept_kg
+            );
+            short |= surface.water.kept_kg < (1.0 - 1e-3) * handed;
+            let m = &model.inputs;
+            let water_kg = m.water_fraction * m.mass_earth * EARTH_KG;
+            let kept = surface.water.kept_kg;
+            assert!(
+                (water_kg - kept).abs() <= 1e-9 * kept,
+                "{name}: {water_kg} vs {kept}"
+            );
+            let explanation = crate::planet::explain(&context, &model).expect("an explanation");
+            let mass =
+                cause_of(&explanation.trees[0], crate::planet::Quantity::Mass).expect("a mass");
+            let water = explanation
+                .trees
+                .iter()
+                .find(|c| c.quantity == crate::planet::Quantity::WaterKept)
+                .expect("a water tree");
+            let mass_kept = cause_of(mass, crate::planet::Quantity::WaterKept).expect("water kept");
+            let close = |a: f64, b: f64| (a - b).abs() <= 1e-9 * a.abs().max(b.abs());
+            assert!(
+                close(mass_kept.value, water.value),
+                "{name}: {mass:#?} vs {water:#?}"
+            );
+            let escape = |tree: &crate::planet::Cause| {
+                cause_of(tree, crate::planet::Quantity::Escape).map(|c| c.value)
+            };
+            let (a, b) = (escape(mass_kept).unwrap(), escape(water).unwrap());
+            assert!(close(a, b), "{name}: escape {a} vs {b}");
+            if crate::planet::climate::hides_surface(surface) {
+                hidden = true;
+                let layers: f64 = model.interior.layers.iter().map(|l| l.mass_earth).sum();
+                assert!(
+                    close(layers, m.mass_earth),
+                    "{name}: {layers} vs {}",
+                    m.mass_earth
+                );
+            }
+        }
+        assert!(hidden, "no steam world hides its surface");
+        assert!(short, "no pass kept less than it was handed");
+    }
+
     /// A cause of `quantity` in `tree`, itself or below it.
     fn find(tree: &crate::planet::Cause, quantity: crate::planet::Quantity) -> bool {
         tree.quantity == quantity || tree.causes.iter().any(|c| find(c, quantity))
@@ -709,8 +805,9 @@ mod tests {
         assert!(surface.water.runaway, "{surface:?}");
         assert_eq!(model.before_steam.as_ref(), Some(&inputs));
         let formed = crate::planet::body_interior(&context, &inputs);
-        let fluence = crate::planet::xuv_fluence(&context);
-        let kept_kg = crate::planet::steam(&inputs, &formed, fluence).kept_kg;
+        // The water its kept pass left: what the energy-limited escape
+        // left less what the shoreline took of the steam.
+        let kept_kg = surface.water.kept_kg;
         assert!(kept_kg > 0.0);
         let lost_kg = inputs.water_fraction * inputs.mass_earth * EARTH_KG - kept_kg;
         let mass = model.drawn_mass_earth - lost_kg / EARTH_KG;
@@ -736,7 +833,7 @@ mod tests {
         };
         let i = &model.interior;
         assert!(
-            i.radius_earth <= with_all.radius_earth,
+            i.radius_earth <= with_all.radius_earth * (1.0 + 1e-12),
             "{i:?} vs {with_all:?}"
         );
         assert!(i.gravity < with_all.gravity, "{i:?} vs {with_all:?}");

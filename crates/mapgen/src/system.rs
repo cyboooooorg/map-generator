@@ -2300,10 +2300,10 @@ fn host_kg(params: &WorldParams) -> f64 {
 /// (the interior the model's heat was run on, see
 /// [`crate::planet::explain`]).
 fn chain_orbiter(context: &Context, model: &PlanetModel, orbit: &Orbit) -> Orbiter {
-    let inputs = &model.inputs;
+    let inputs = crate::planet::explain::surface_inputs(context, model);
     let interior = crate::planet::explain::surface_interior(context, model);
     Orbiter {
-        mass_kg: inputs.mass_earth * EARTH_KG,
+        mass_kg: model.inputs.mass_earth * EARTH_KG,
         a_m: orbit.semi_major_axis_km * 1000.0,
         period_s: orbit.period_days * DAY_S,
         eccentricity: orbit.eccentricity,

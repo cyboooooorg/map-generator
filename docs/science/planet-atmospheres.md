@@ -116,7 +116,14 @@ The water escape took leaves the planet's mass too (#513,
 water, the water share of what is left, and the envelope and volatiles
 at the same mass (their shares grow). The layers, gravity and internal
 heat are derived again from it before the steam pass runs, so the
-climate's column sees the lighter body. `PlanetModel.before_steam`
+climate's column sees the lighter body. That pass's own escape (the
+cosmic shoreline and the non-thermal loss, below) then takes more of
+the steam: the mass and the layers are derived once more from the water
+it kept (`Water::kept_kg`, what the card shows), without running the
+climate again, so the mass, the water card and both cause trees agree;
+the heat stays the one the climate ran on, and the explanation finds
+that body again from the water the pass started with
+(`explain::surface_inputs`). `PlanetModel.before_steam`
 keeps the inputs from before the runaway: the request's formation is
 read from them, and `drawn_mass_earth` stays the mass drawn. The cause
 tree shows the mass from the mass formed and the water kept, with the

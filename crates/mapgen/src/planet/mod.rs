@@ -566,6 +566,22 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
                 }
             }
         }
+        // A runaway's pass loses more of the steam it was handed to the
+        // cosmic shoreline and the non-thermal loss ([`Water::keeping`]):
+        // the body weighs the water it kept, and its layers are derived
+        // again for it, once, without re-running the climate (as the
+        // steam interior below is). The heat stays the one the climate
+        // ran on; [`explain::surface_inputs`] recovers that body.
+        let kept = steps.surface.water;
+        let handed = body.inputs.water_fraction * body.inputs.mass_earth * EARTH_KG;
+        if kept.runaway && kept.kept_kg < handed {
+            let left = after_steam(&inputs, &kept);
+            body = Ran {
+                interior: body_interior(context, &left),
+                inputs: left,
+                heat: body.heat,
+            };
+        }
         air = Some(steps.before);
         Some(steps.surface)
     };
