@@ -4669,16 +4669,19 @@ mod tests {
 
     #[test]
     fn heat_pipe_moons_explain_their_temperature() {
-        // `earth-like` asked as a giant's moon, request seeds 1 to 40, the
-        // caller seeded 5 (#520): some come out as tidally heated
-        // heat-pipe volcanic worlds, whose replayed temperature missed the
-        // stored one. Every body is explained, and the temperature root is
-        // the stored temperature.
+        // `earth-like` asked as a giant's moon, the caller seeded 5 (#520):
+        // some come out as tidally heated heat-pipe volcanic worlds under
+        // a steaming air, whose replayed temperature missed the stored
+        // one. Every body is explained, and the temperature root is the
+        // stored temperature. Request seeds 1 to 8 (2 min in release;
+        // the issue's 1 to 40 took 10): seeds 1 and 8 each draw such a
+        // moon (seed 8 is the issue's measured case), and the guard
+        // asks for at least one, so the sample holds the path.
         use crate::geology::Regime;
         use crate::planet::{Quantity, explain};
         let mut failed = Vec::new();
         let mut heat_pipes = 0;
-        for seed in 1..=40 {
+        for seed in 1..=8 {
             let system = draw(
                 &SystemRequest::Around(WorldRequest {
                     planet: Some("earth-like".into()),
@@ -4699,7 +4702,14 @@ mod tests {
                     continue;
                 };
                 if let Some(surface) = &model.surface {
-                    if body.kind == BodyKind::Moon && surface.regime == Regime::HeatPipe {
+                    // The path of the issue: a heat-pipe volcanic moon
+                    // whose hot air holds bars of steam (44 bar at 525 K
+                    // in the issue, about 12 bar at 465 K today).
+                    if body.kind == BodyKind::Moon
+                        && surface.regime == Regime::HeatPipe
+                        && surface.gases.h2o > 1.0
+                        && model.class == crate::planet::PlanetClass::VolcanicWorld
+                    {
                         heat_pipes += 1;
                     }
                     let root = e
@@ -4719,7 +4729,10 @@ mod tests {
         }
         assert!(failed.is_empty(), "{failed:#?}");
         // The case of the issue is among them.
-        assert!(heat_pipes > 0, "no heat-pipe moon over the 40 seeds");
+        assert!(
+            heat_pipes > 0,
+            "no steaming heat-pipe volcanic moon over the seeds"
+        );
     }
 
     #[test]
