@@ -70,7 +70,7 @@ describe('formatCause', () => {
   it('writes the new notes in both languages', () => {
     for (const locale of ['en', 'fr'] as const) {
       setLocale(locale);
-      for (const key of ['exosphere', 'liquid_cycle', 'volatile_ice', 'tidal_episode', 'volcanic_frost', 'fallout']) {
+      for (const key of ['exosphere', 'liquid_cycle', 'volatile_ice', 'tidal_episode', 'volcanic_frost', 'fallout', 'moist_limit', 'moist_limit_own']) {
         expect(formatCause(node('note', 0, { label: key })), `${locale} ${key}`).toBe(t.causes.notes[key]);
         expect(t.causes.notes[key], `${locale} ${key}`).toBeTypeOf('string');
       }
@@ -88,7 +88,7 @@ describe('formatCause', () => {
       }
     }
     setLocale('en');
-    expect(Object.keys(t.causes.covers)).toEqual(['ocean', 'land', 'ice', 'crust', 'frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2', 'cloud', 'haze', 'deck']);
+    expect(Object.keys(t.causes.covers)).toEqual(['ocean', 'land', 'ice', 'crust', 'frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2', 'cloud', 'haze', 'deck', 'steam']);
   });
   it('writes the haze as a strength, not a share of the disc', () => {
     setLocale('en');

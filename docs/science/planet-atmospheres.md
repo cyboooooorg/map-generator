@@ -928,7 +928,11 @@ the body's derived albedo `A_d` to `A_rg` with the steam column,
 a calibration: the moist atmospheres of Kopparapu et al. hold a fraction
 of a bar to about one bar of vapour at the limit), so a thick column
 takes `A_rg` whole and a runaway losing the last of its water comes back
-to its derived albedo without a jump. Kopparapu et al.
+to its derived albedo without a jump. The albedo's cause tree shows
+that blend as a `steam` part: its weight `1 − exp(−p_steam / 1 bar)`,
+with `A_rg` and a note naming the plateau that sets it (`moist_limit`,
+Earth's air's; `moist_limit_own`, the body's own;
+`climate::steam_albedo`). Kopparapu et al.
 2013 (doi:10.1088/0004-637X/765/2/131) and 2014 place the runaway limit
 where the light a moist atmosphere absorbs, with the albedo its own
 spectrum gives under that star, meets its outgoing limit. With Earth's

@@ -156,7 +156,8 @@ pub enum Quantity {
     /// 1, labelled with its key (`ocean`, `land`, `ice`, `crust`,
     /// `frost_n2`, `frost_ch4`, `frost_co2`, `frost_so2`, `cloud`, `deck`);
     /// for `haze` the value is its strength (0 to 1), not a share of the
-    /// disc.
+    /// disc, and for a runaway's `steam` the weight of the moist albedo in
+    /// its blend (see [`albedo_tree`]).
     CoverShare,
     /// Thickness of the ice shell, km (its mean over the surface).
     ShellThickness,
@@ -197,7 +198,10 @@ pub enum Quantity {
     /// on part of it), `tidal_episode` (a past tidal episode renewed part
     /// of it), `volcanic_frost` (the SO₂ air is the vapour of the
     /// volcanic frost), `fallout` (a plume's fallout brightens the
-    /// ice) and `not_converged` (the climate's fixed point did not
+    /// ice), `moist_limit` and `moist_limit_own` (a runaway's steam
+    /// reflects as a moist air at its star's runaway limit, on Earth's
+    /// air's moist limit or on its own column's, which its gravity and
+    /// air raise above it) and `not_converged` (the climate's fixed point did not
     /// settle: the temperature is its last estimate, issue #562).
     Note,
 }
@@ -729,6 +733,12 @@ const COVER_SHARE_MIN: f64 = 0.01;
 /// present); the frosts beneath it are omitted. SO₂ frost is its own
 /// part, with its own albedo. An exposed ice crust
 /// ([`icy_albedo_causes`]) replaces the land and the ice (`crust`).
+/// A runaway that keeps steam blends that albedo towards the moist one
+/// `A_rg` (see [`super::climate::steam_albedo`]): a `steam` part carries
+/// the blend's weight, with `A_rg` and the plateau that sets it
+/// (`moist_limit`, Earth's air's; `moist_limit_own`, its own column's)
+/// under it, so that the stored albedo is the covers' one moved towards
+/// `A_rg` by that weight.
 ///
 /// `nested` is the node under the temperature tree's equilibrium
 /// temperature, where a part has no room below it (the tree stays three
@@ -829,6 +839,23 @@ fn albedo_tree(
     ];
     let mut causes = surface_parts;
     causes.extend(layers.into_iter().flatten());
+    // A runaway's steam blends the covers' albedo towards the moist one:
+    // its weight, with that albedo and the plateau that sets it.
+    if let Some(steam) = steam_albedo(context, model, surface, steps) {
+        let plateau = if steam.own {
+            "moist_limit_own"
+        } else {
+            "moist_limit"
+        };
+        causes.extend(part(
+            "steam",
+            steam.share,
+            vec![
+                Cause::of(Quantity::BondAlbedo, steam.moist),
+                Cause::note(plateau),
+            ],
+        ));
+    }
     // Bright ice sets the albedo of a frozen world, and what ends it.
     // Only a body with plates could have built CO₂ up to a thaw: without
     // them (Mars, Titan) the cold has another cause.
@@ -840,6 +867,27 @@ fn albedo_tree(
         causes.push(Cause::note("frozen"));
     }
     Cause::of(Quantity::BondAlbedo, climate.bond_albedo).because(causes)
+}
+
+/// What the steam of a runaway did to its Bond albedo
+/// ([`super::climate::steam_albedo`]), on the body and air its climate ran
+/// on; `None` without one.
+fn steam_albedo(
+    context: &Context,
+    model: &PlanetModel,
+    surface: &Surface,
+    steps: &Bare,
+) -> Option<super::climate::SteamAlbedo> {
+    let inputs = surface_inputs(context, model);
+    let bar_per_kg =
+        super::atmosphere::bar_per_kg(inputs.mass_earth, &surface_interior(context, model));
+    super::climate::steam_albedo(
+        context,
+        &steps.before.gases,
+        &surface.water,
+        surface.water.kept_kg * bar_per_kg,
+        &steps.planet,
+    )
 }
 
 /// What set the Bond albedo of an exposed ice crust: the ages of the

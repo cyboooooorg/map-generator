@@ -958,6 +958,82 @@ mod tests {
     }
 
     #[test]
+    fn a_runaways_albedo_tree_shows_its_steam() {
+        // The stored Bond albedo of a runaway is its covers' blended
+        // towards the moist albedo by its steam: the tree carries that
+        // part, its weight, the moist albedo and the plateau that set it.
+        // The #492 super-Earth's steam is thick enough that the blend is
+        // the moist albedo itself, on its own column's plateau (its 1.7 g
+        // and its CO₂ send out more than Earth's air).
+        let star = StarInfo::new(parse_type("M9V").unwrap(), 0.018, 0.0, DEFAULT_AGE_GYR);
+        let context = Context::of(&star, 0.0, 0.1);
+        let model = the_492_super_earth();
+        let stored = model.surface.as_ref().unwrap().climate.bond_albedo;
+        let explanation = crate::planet::explain(&context, &model).expect("an explanation");
+        let albedo = explanation
+            .trees
+            .iter()
+            .find(|c| c.quantity == crate::planet::Quantity::BondAlbedo)
+            .expect("an albedo tree");
+        let steam = albedo
+            .causes
+            .iter()
+            .find(|c| c.label.as_deref() == Some("steam"))
+            .unwrap_or_else(|| panic!("a steam part: {albedo:#?}"));
+        assert_eq!(steam.value, 1.0, "{steam:#?}");
+        let moist = cause_of(steam, crate::planet::Quantity::BondAlbedo).expect("A_rg");
+        assert!(
+            (moist.value - stored).abs() <= 1e-12,
+            "{} vs {stored}",
+            moist.value
+        );
+        assert!(
+            steam
+                .causes
+                .iter()
+                .any(|c| c.label.as_deref() == Some("moist_limit_own")),
+            "{steam:#?}"
+        );
+        // A light body's column sends out less than Earth's air: its
+        // steam's albedo is on Earth's air's plateau (0.3 M⊕ with 10 % of
+        // water at 0.4 AU round a K5V star, as in
+        // `a_runaway_weighs_the_water_its_own_pass_kept`); a wet Earth
+        // has no steam part.
+        let water = 0.1;
+        let inputs = PlanetInputs {
+            volatiles: volatile_rule(1.0 - water, water, 0.325),
+            ..reference::inputs(0.3, 0.25, water)
+        };
+        let star = StarInfo::new(parse_type("K5V").unwrap(), 0.4, 0.0, DEFAULT_AGE_GYR);
+        let context = Context::of(&star, 0.0, 0.1);
+        let model = planet_model(&context, inputs);
+        let explanation = crate::planet::explain(&context, &model).expect("an explanation");
+        let albedo = explanation
+            .trees
+            .iter()
+            .find(|c| c.quantity == crate::planet::Quantity::BondAlbedo)
+            .expect("an albedo tree");
+        let steam = albedo
+            .causes
+            .iter()
+            .find(|c| c.label.as_deref() == Some("steam"))
+            .unwrap_or_else(|| panic!("a steam part: {albedo:#?}"));
+        assert!(
+            steam
+                .causes
+                .iter()
+                .any(|c| c.label.as_deref() == Some("moist_limit")),
+            "{steam:#?}"
+        );
+        let model = model_at(1.0, 2.3e-4, 1.0);
+        let explanation = crate::planet::explain(&sun_at(1.0), &model).expect("an explanation");
+        assert!(!explanation.trees.iter().any(|t| {
+            t.quantity == crate::planet::Quantity::BondAlbedo
+                && t.causes.iter().any(|c| c.label.as_deref() == Some("steam"))
+        }));
+    }
+
+    #[test]
     fn thin_steam_over_rock_stays_a_runaway_greenhouse() {
         // 1 M⊕ with 0.01 % of water (about 115 bar if all of it were
         // steam) at 0.7 AU round the Sun, inside the runaway limit of the

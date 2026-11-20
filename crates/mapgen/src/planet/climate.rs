@@ -542,13 +542,58 @@ fn runaway_albedo_under(
     if !(water.runaway && water.kept_kg > 0.0) || steam <= 0.0 {
         return albedo;
     }
+    albedo + (moist_albedo(context, plateau) - albedo) * steam
+}
+
+/// `A_rg = 1 − 4 F_plateau / (S_rg S₀)` of [`runaway_albedo`] on the moist
+/// plateau `plateau` (W/m²), clamped to [`RUNAWAY_ALBEDO`].
+fn moist_albedo(context: &Context, plateau: f64) -> f64 {
     let limit = f64::from(crate::star::habitable_fluxes(context.teff_k as f32).0);
     // `S₀` as `equilibrium_k` takes it: `σ (255 K)⁴ = (1 − 0.3) S₀ / 4`.
     let earth_eq = f64::from(crate::star::equilibrium_k(1.0));
     let solar_constant = 4.0 * SIGMA * earth_eq.powi(4) / (1.0 - REFERENCE_ALBEDO);
-    let moist =
-        (1.0 - 4.0 * plateau / (limit * solar_constant)).clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1);
-    albedo + (moist - albedo) * steam
+    (1.0 - 4.0 * plateau / (limit * solar_constant)).clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1)
+}
+
+/// What a runaway's steam did to its Bond albedo ([`Body::runaway_albedo`]),
+/// for its cause tree: the stored albedo is the covers' one blended
+/// towards `moist` by `share`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SteamAlbedo {
+    /// The blend's weight, `1 − exp(−p_steam / STEAM_ALBEDO_BAR)`
+    /// ([`STEAM_ALBEDO_BAR`]).
+    pub share: f64,
+    /// The moist albedo `A_rg` it blends towards ([`runaway_albedo`]).
+    pub moist: f64,
+    /// Whether `A_rg` is on the body's own steam column's plateau
+    /// ([`moist_plateau_of`]), its gravity and air raising it over Earth's
+    /// air's ([`MOIST_PLATEAU_W_M2`]), rather than on Earth's.
+    pub own: bool,
+}
+
+/// [`SteamAlbedo`] of a body whose climate ran on `gases` with `water`,
+/// `water_bar` of it and on `planet` (as [`climate_over`] was given
+/// them), in `context`; `None` without a water runaway that keeps steam,
+/// whose albedo is the covers' alone. It takes the body's own plateau
+/// again, one more plateau search than the climate made.
+pub(crate) fn steam_albedo(
+    context: &Context,
+    gases: &Gases,
+    water: &Water,
+    water_bar: f64,
+    planet: &Planet,
+) -> Option<SteamAlbedo> {
+    let share = 1.0 - (-gases.h2o.max(0.0) / STEAM_ALBEDO_BAR).exp();
+    if !(water.runaway && water.kept_kg > 0.0) || share <= 0.0 {
+        return None;
+    }
+    let own = moist_plateau_of(gases, water_bar, planet);
+    let plateau = own.max(*MOIST_PLATEAU_W_M2);
+    Some(SteamAlbedo {
+        share,
+        moist: moist_albedo(context, plateau),
+        own: own > *MOIST_PLATEAU_W_M2,
+    })
 }
 
 /// The `context` the climate of a body with `water` and `steam_bar` of

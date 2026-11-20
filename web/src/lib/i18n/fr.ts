@@ -496,6 +496,8 @@ export const fr: Messages = {
       tidal_episode: 'Un épisode de marée passé (une résonance avec ses lunes sœurs) a renouvelé une partie de la surface',
       volcanic_frost: 'L’air est la vapeur, côté jour, du givre de SO₂ que les volcans déposent sur le sol',
       fallout: 'Les retombées des panaches couvrent une partie de la glace d’un givre frais',
+      moist_limit: 'La vapeur réfléchit la lumière comme un air humide à la limite d’emballement : sous cet albédo, la lumière qu’elle absorbe à la limite d’emballement de son étoile est le maximum qu’un air humide peut émettre (la limite humide de la Terre)',
+      moist_limit_own: 'La vapeur réfléchit la lumière comme un air humide à la limite d’emballement, sur la limite humide de sa propre colonne : sa gravité et son air élèvent cette limite au-dessus de celle de la Terre, la vapeur est donc plus sombre et, passé la limite d’emballement de son étoile, le corps absorbe plus que sa colonne ne peut émettre',
     },
     renewals: {
       formation: 'inchangée depuis sa formation',
@@ -520,6 +522,7 @@ export const fr: Messages = {
       cloud: 'nuages d’eau',
       haze: 'brume de méthane',
       deck: 'nuages d’acide sulfurique',
+      steam: 'vapeur de l’emballement',
     },
     coverValue: (p) => `${p.cover}, ${p.value}`,
     hazeValue: (p) => `${p.cover}, intensité ${p.value}`,

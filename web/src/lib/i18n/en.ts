@@ -536,6 +536,8 @@ export const en = {
       tidal_episode: 'A past tidal episode (a resonance with its sister moons) renewed part of the surface',
       volcanic_frost: 'The air is the dayside vapour of the SO₂ frost the volcanoes lay on the ground',
       fallout: 'The fallout of the plumes covers part of the ice with fresh frost',
+      moist_limit: 'Steam reflects the starlight as a moist air does at the runaway limit: under this albedo, the light it absorbs at its star’s runaway limit is the most a moist air can send out (Earth’s moist limit)',
+      moist_limit_own: 'Steam reflects the starlight as a moist air does at the runaway limit, on its own column’s moist limit: its gravity and air raise that limit above Earth’s, so the steam is darker and, past its star’s runaway limit, the body absorbs more than its column can send out',
     } as Record<string, string>,
     /** What last renewed a part of a surface. */
     renewals: {
@@ -563,6 +565,7 @@ export const en = {
       cloud: 'water clouds',
       haze: 'methane haze',
       deck: 'sulphuric acid clouds',
+      steam: 'steam of the runaway',
     } as Record<string, string>,
     /** The part of the disc a cover takes. */
     coverValue: (p: { cover: string; value: string }) => `${p.cover}, ${p.value}`,
