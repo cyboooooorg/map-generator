@@ -1,0 +1,17 @@
+// markdownlint default rules on the Markdown written for the rewrite.
+// Legacy documents (docs/science, docs/system-spec.md, older specs and
+// plans) are linted once they are rewritten.
+{
+  "config": {
+    // Table rows and code blocks cannot be wrapped; prose keeps 80 columns.
+    "MD013": { "tables": false, "code_blocks": false }
+  },
+  "globs": [
+    "README.md",
+    "CLAUDE.md",
+    "crates/**/*.md",
+    "tools/guardrails/**/*.md",
+    ".claude/agents/*.md",
+    "docs/superpowers/plans/2026-11-20-rewrite-*.md"
+  ]
+}

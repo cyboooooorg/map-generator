@@ -170,7 +170,11 @@ Each line has its test in Tasks 3 to 5.
 
 - [ ] **Step 5: Verify the build**
 
-  Run: `cargo build --workspace && cargo clippy --workspace --all-targets -- -D warnings`
+  ```bash
+  cargo build --workspace
+  cargo clippy --workspace --all-targets -- -D warnings
+  ```
+
   Expected: both succeed with no warning.
 
 - [ ] **Step 6: Commit**
@@ -311,7 +315,8 @@ Each line has its test in Tasks 3 to 5.
   Run: `cargo nextest run -p guardrails`
   Expected: PASS, unit and workspace tests.
 
-- [ ] **Step 6: Commit** `test(guardrails): check dependency direction, science constants and README length`.
+- [ ] **Step 6: Commit** `test(guardrails): check dependency direction,
+  science constants and README length`.
 
 ### Task 4: Test tiers, budgets and the mise tasks
 
@@ -327,7 +332,8 @@ Each line has its test in Tasks 3 to 5.
 - Produces: `budget::wall_seconds(junit_xml: &str) -> Result<f64, String>`
   (the `time` of the root `testsuites` element) and the binary
   `guardrails budget <junit.xml> <seconds> <tier name>`, exit 1 with
-  `tier 1 took 131.4 s, budget 120 s: move, merge or delete tests (see CLAUDE.md, Tests)`.
+  `tier 1 took 131.4 s, budget 120 s: move, merge or delete tests
+  (see CLAUDE.md, Tests)`.
 - mise tasks: `fmt`, `fmt:check`, `lint` (clippy, warnings denied),
   `test:tier1`, `test:tier2`, `test:heavy`, `test` (tier 1 + 2),
   `md:lint`, `ci` (depends on `fmt:check`, `lint`, `test:tier1`,
@@ -344,12 +350,12 @@ Each line has its test in Tasks 3 to 5.
   (`default-filter = "not package(regression)"`), `tier2`
   (`default-filter = "package(regression)"`), `heavy`
   (`default-filter = "all()"`, run with `--run-ignored only`), each with
-  `junit.path = "junit-<tier>.xml"`; `test-threads = 4` in the default
+  `junit.path = "junit.xml"`; `test-threads = 4` in the default
   profile, which the tier profiles inherit (shared machine). CI passes
   `--test-threads num-cpus` on the command line.
 - [ ] **Step 4: Write the mise tasks.** `test:tier1` runs
   `cargo nextest run --profile tier1 --workspace` then
-  `cargo run -q -p guardrails -- budget target/nextest/tier1/junit-tier1.xml 120 "tier 1"`;
+  `guardrails budget target/nextest/tier1/junit.xml 120 "tier 1"`;
   `test:tier2` the same with 480 s; `test:heavy` runs
   `cargo nextest run --profile heavy --release --run-ignored only`.
   Tools: add `"cargo:cargo-nextest"` and `"npm:markdownlint-cli2"`
@@ -359,7 +365,8 @@ Each line has its test in Tasks 3 to 5.
   `docs/superpowers/plans/2026-11-20-rewrite-*.md` (legacy docs are
   linted when rewritten).
 - [ ] **Step 5: Prove the budget fails.** Run
-  `cargo run -q -p guardrails -- budget target/nextest/tier1/junit-tier1.xml 0.001 "tier 1"`.
+  `guardrails budget target/nextest/tier1/junit.xml 0.001 "tier 1"`
+  (through `cargo run -q -p guardrails --`).
   Expected: exit 1 with the message above.
 - [ ] **Step 6: Run `mise run ci`.** Expected: all green, tier 1 and 2
   times printed under their budgets.
@@ -399,7 +406,8 @@ Each line has its test in Tasks 3 to 5.
   binary cache comes with PR 5.
 - [ ] **Step 3: Validate** with `actionlint` (`mise x aqua:rhysd/actionlint -- actionlint`).
   Expected: no error.
-- [ ] **Step 4: Commit** `ci: run the mise tasks with path filters and a summary job`.
+- [ ] **Step 4: Commit** `ci: run the mise tasks with path filters and a
+  summary job`.
 
 ### Task 6: Documentation: README, CLAUDE.md, studies to the Wiki
 
@@ -451,7 +459,8 @@ Each line has its test in Tasks 3 to 5.
   engine-phase rule of spec Proof (build `develop`, run the CLI on the
   oracle's seeds, downscaled projections for the user).
 - [ ] **Step 6: Run `mise run md:lint`.** Expected: no error.
-- [ ] **Step 7: Commit** `docs: rewrite the README and CLAUDE.md for the rewrite workspace`.
+- [ ] **Step 7: Commit** `docs: rewrite the README and CLAUDE.md for the
+  rewrite workspace`.
 
 ### Task 7: Agents
 

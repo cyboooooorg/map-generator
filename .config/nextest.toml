@@ -1,0 +1,21 @@
+# Test tiers (CLAUDE.md, Tests). Tier 1: every test outside the regression
+# crate; tier 2: the regression crate; tier 3 (heavy): the ignored tests,
+# each marked `#[ignore = "heavy: <why>"]`. The mise tasks test:tier1,
+# test:tier2 and test:heavy pick the profile and check the budget.
+
+[profile.default]
+# Shared machine: stay at four threads locally. CI passes
+# --test-threads num-cpus.
+test-threads = 4
+
+[profile.tier1]
+default-filter = "not package(regression)"
+junit.path = "junit.xml"
+
+[profile.tier2]
+default-filter = "package(regression)"
+junit.path = "junit.xml"
+
+[profile.heavy]
+default-filter = "all()"
+junit.path = "junit.xml"

@@ -1,0 +1,6 @@
+// Agent files are prompts: front matter, then text, no top-level heading.
+// A directory config replaces the root one, so MD013 is repeated here.
+{
+  "MD041": false,
+  "MD013": { "tables": false, "code_blocks": false }
+}

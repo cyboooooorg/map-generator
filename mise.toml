@@ -1,63 +1,65 @@
 # Toolchain and tasks for map-generator.
 # Run `mise install` once, then `mise tasks` to list the available tasks.
+# `mise run ci` runs what the GitHub pipeline runs for Rust and Markdown.
 
 [tools]
 rust = { version = "1.99", components = "clippy,rustfmt" }
-# Matches the Docker image (Dockerfile)
+cargo-nextest = "0.9.152"
+"npm:markdownlint-cli2" = "0.24.1"
+actionlint = "1.7.12"
+shellcheck = "0.11.0"
+# The front-end (web/, paused during the engine phase of the rewrite)
 node = "26"
 
-[tasks.build]
-description = "Build the optimized binary"
-run = "cargo build --release"
-
-[tasks.gen]
-description = "Generate a planet and its system into systems/ (pass options after --, e.g. mise run gen -- --planet mars-like)"
-depends = ["build"]
-run = "target/release/map-generator"
-
-[tasks.hex]
-description = "Resample a generated world onto a hex grid (e.g. mise run hex -- systems/mgs-36196-42/bodies/d/sizes/2048x1024 --columns 96)"
-depends = ["build"]
-run = "target/release/hexgrid"
-
-[tasks.test]
-description = "Run the test suite, without the slow tests (`#[ignore = \"slow: …\"]`)"
-run = "cargo test --workspace --all-features"
-
-[tasks."test:mapgen"]
-description = "Run the generator's tests only (the CI job test-mapgen)"
-run = "cargo test -p mapgen --all-features"
-
-[tasks."test:rest"]
-description = "Run the tests of every crate but the generator (the CI job test-rest)"
-run = "cargo test --workspace --exclude mapgen --all-features"
-
-[tasks."test:slow"]
-description = "Run only the slow tests the default suite skips (release build, 4 threads); run it before opening a pull request"
-run = "cargo test --workspace --all-features --release -- --ignored --test-threads 4"
-
-[tasks."test:invariance"]
-description = "Check that a planet keeps its large-scale geography at 1024 and 2048 pixels wide (slow, release build)"
-run = "cargo test --release -p mapgen --all-features --test resolution_invariance -- --ignored"
-
-[tasks.lint]
-description = "Check formatting and run clippy with warnings denied"
-run = [
-  "cargo fmt --check",
-  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
-]
+[tasks.ci]
+description = "Run every check of the pipeline but the front-end: format, clippy, tier 1 and 2 tests with their budgets, markdownlint"
+depends = ["fmt:check", "lint", "test:tier1", "test:tier2", "md:lint"]
 
 [tasks.fmt]
 description = "Format the code"
 run = "cargo fmt"
 
-[tasks.clean-systems]
-description = "Delete every generated system under systems/ (asks first); restart the server after it so its index drops them"
-confirm = "Delete every system under ./systems (names and pins included)?"
-run = "find ./systems -mindepth 1 -not -name '.gitignore' -delete"
+[tasks."fmt:check"]
+description = "Check formatting"
+run = "cargo fmt --check"
+
+[tasks.lint]
+description = "Run clippy with warnings denied (determinism and boundary lints included)"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.test]
+description = "Run tier 1 and tier 2 tests with their budgets"
+depends = ["test:tier1", "test:tier2"]
+
+[tasks."test:tier1"]
+description = "Tier 1 (unit tests and guardrails), budget 2 min (pass nextest options after --)"
+run = [
+  "cargo nextest run --profile tier1 --workspace {{arg(name='nextest_args', var=true, default='')}}",
+  "cargo run -q -p guardrails -- budget target/nextest/tier1/junit.xml 120 'tier 1'",
+]
+
+[tasks."test:tier2"]
+description = "Tier 2 (regression crate, shared reference systems), budget 8 min (pass nextest options after --)"
+run = [
+  "cargo nextest run --profile tier2 --workspace {{arg(name='nextest_args', var=true, default='')}}",
+  "cargo run -q -p guardrails -- budget target/nextest/tier2/junit.xml 480 'tier 2'",
+]
+
+[tasks."test:heavy"]
+description = "Tier 3 (heavy: 15 km worlds, oracle, censuses), release build, no budget; paste its output in a pull request that changes what the engines produce"
+run = "cargo nextest run --profile heavy --release --workspace --run-ignored only --no-tests pass"
+
+[tasks."md:lint"]
+description = "Lint the Markdown written for the rewrite (globs in .markdownlint-cli2.jsonc)"
+run = "markdownlint-cli2"
+
+[tasks."ci:actions"]
+description = "Lint the GitHub workflows"
+run = "actionlint"
 
 # ---------------------------------------------------------------------------------------------------- #
-# Web app (web/ front-end, crates/server back-end)
+# Front-end (web/): kept untouched during the engine phase; its checks keep running in CI.
+# Not part of `ci`: `npm ci` must not run in a worktree on the shared machine.
 # ---------------------------------------------------------------------------------------------------- #
 [tasks."web:install"]
 description = "Install the front-end dependencies (skipped when package-lock.json has not changed)"
@@ -77,32 +79,3 @@ description = "Build the front-end into web/dist/"
 depends = ["web:install"]
 dir = "web"
 run = "npm run build"
-
-[tasks."server:dev"]
-description = "Run the web server on http://localhost:3000 (systems/ and archetypes/ of this checkout)"
-run = "cargo run -p mapgen-server"
-
-[tasks.dev]
-description = "Run the server and the Vite dev server together: http://localhost:5173 (Ctrl+C stops both)"
-depends = ["web:install"]
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-cargo build -p mapgen-server
-target/debug/mapgen-server &
-server=$!
-trap 'kill $server 2>/dev/null' EXIT
-cd web && npm run dev
-"""
-
-# ---------------------------------------------------------------------------------------------------- #
-# Docker (behind the machine-wide Traefik, http://planets.localhost)
-# `up` is a file task in mise-tasks/
-# ---------------------------------------------------------------------------------------------------- #
-[tasks.down]
-description = "Stops the planet viewer container"
-run = "docker compose down --remove-orphans"
-
-[tasks.logs]
-description = "Follows the planet viewer container logs"
-run = "docker compose logs -f planets"
