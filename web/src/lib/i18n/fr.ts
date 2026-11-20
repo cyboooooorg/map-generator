@@ -483,7 +483,7 @@ export const fr: Messages = {
       snowball: 'Une boule de neige : la glace, brillante, réfléchit la lumière de l’étoile et garde le monde gelé, jusqu’à ce que le CO₂ que ses volcans continuent de rejeter, que l’altération ne retire plus sous la glace, s’accumule assez pour que l’effet de serre la fasse fondre',
       frozen: 'Gelée pour de bon : la glace, brillante, réfléchit la lumière de l’étoile, et aucune quantité de CO₂ ne peut la faire fondre à cette distance',
       co2_build_up: 'Le CO₂ s’est accumulé jusqu’au maximum utile à l’effet de serre : le thermostat ne peut pas atteindre sa température à cette distance',
-      co2_condenses: 'Le CO₂ se condense en altitude : en ajouter ne réchauffe plus le sol',
+      co2_condenses: 'Davantage de CO₂ ne réchaufferait plus le sol : la lumière de l’étoile qu’il diffuse l’emporte sur son effet de serre, qui plafonne là où il se condense en altitude',
       reducing_air: 'Air réducteur, riche en méthane : le corps dégaze son carbone en méthane, garde son CO₂ à l’intérieur, et son air n’en fabrique pas',
       not_converged: 'Le climat ne s’est pas stabilisé sur une température : la valeur affichée est la dernière estimation',
       convecting: 'La croûte convecte sous un couvercle immobile, qui évacue la chaleur plus vite que la conduction',

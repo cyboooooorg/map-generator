@@ -180,8 +180,10 @@ pub enum Quantity {
     /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
     /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
     /// outgas it faster than weathering draws it down), `co2_condenses`
-    /// (that maximum is set by CO₂ condensing high in the air, short of
-    /// the carbon inventory: more of it no longer warms the ground) and
+    /// (that maximum is short of the carbon inventory: past it the light
+    /// CO₂ scatters outgrows its greenhouse, which flattens where it
+    /// condenses high in the air, so more of it no longer warms the
+    /// ground; the key keeps its name) and
     /// `methane_trap`
     /// (the cold keeps methane out of the air), `reducing_air` (a
     /// reducing, methane-rich air: the body outgasses no CO₂ and its air
@@ -645,8 +647,9 @@ fn temperature_tree(
     {
         // Plates and liquid water but no thermostat: the CO₂ is at the
         // most the volcanoes leave, and the greenhouse at its maximum.
-        // Short of the carbon inventory, the maximum is CO₂ condensing
-        // high in the air (issue #522), not the carbon running out.
+        // Short of the carbon inventory, the maximum is the CO₂'s own
+        // scattering outgrowing a greenhouse that its condensation high
+        // in the air flattened (issue #522), not the carbon running out.
         let mut notes = vec![Cause::note("co2_build_up")];
         if gases.co2 < steps.before.carbon_bar * (1.0 - 1e-9) {
             notes.push(Cause::note("co2_condenses"));
