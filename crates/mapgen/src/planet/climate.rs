@@ -563,9 +563,9 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// asymptote of the outgoing radiation of its dry `gases` over a
 /// saturated surface at [`PLATEAU_SURFACES_K`], its vapour capped by its
 /// water supply `water_bar`, on `planet` (its gravity sets the column's
-/// mass), on the grid and saturated column ([`Sky::Plateau`]) the surface
-/// solves of a runaway use, under the skin of a body that absorbs it
-/// (the fixed point of [`MOIST_PLATEAU_W_M2`]).
+/// mass), on the grid and saturated column ([`Profile::SATURATED`]) the
+/// surface solves of a runaway use, under the skin of a body that absorbs
+/// it (the fixed point of [`MOIST_PLATEAU_W_M2`]).
 ///
 /// The chain declares a runaway by its star's limit `S_rg`
 /// ([`crate::star::habitable_fluxes`]) and [`runaway_albedo`] makes a
@@ -576,8 +576,6 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// floor; on its own plateau (where it is the higher, [`Body::plateau`]),
 /// a body past `S_rg` absorbs more than its own column's limit and runs
 /// away past it.
-///
-/// [`Sky::Plateau`]: Profile::SATURATED
 fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
     let dry = Gases { h2o: 0.0, ..*gases };
     plateau_w_m2(
@@ -600,10 +598,13 @@ fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
 /// [`Context::with_albedo`]) less the share the stratosphere's methane
 /// takes ([`absorbed_w_m2`]), plus the internal heat; the column's
 /// stratosphere sits at the skin temperature `T_eq / 2^¼` of a grey
-/// atmosphere (Pierrehumbert 2010, §4.3; from memory, not checked). Its opacities are calibrated on Venus, Earth, Titan and
-/// the moist plateau; a steam atmosphere sends out the Simpson–Nakajima
-/// limit until its surface passes about 1800 K. Without air, the surface
-/// sits at `T_eq` warmed by its internal heat alone.
+/// atmosphere (Pierrehumbert 2010, §4.3; from memory, not checked). Its
+/// opacities are HITRAN's lines and MT_CKD's continua, methane's alone a
+/// grey law calibrated on Titan ([`super::spectrum`]); a steam column
+/// sends out the Simpson–Nakajima limit until the dry adiabat from its
+/// hot surface reaches the levels that radiate ([`super::column`]).
+/// Without air, the surface sits at `T_eq` warmed by its internal heat
+/// alone.
 ///
 /// A grey surface (`emissivity` under 1) sends out `ε σ T⁴`: the column's
 /// outgoing radiation is taken times `ε`, as through a transparent air.
