@@ -566,15 +566,17 @@ document:
 - the anti-goals of this document as rules: no feedback from the map to
   the system engine, no central-object kind read by the map, one code
   path per value (causes included), codes not text in the domain, only
-  inputs stored, physics ported not reinvented.
+  inputs stored, physics ported not reinvented;
+- the **no invented data** rule (Documentation), for Claude and every
+  agent.
 
 **Agents** (`.claude/agents/`), updated to the new layout:
 
 | Agent | Change |
 | --- | --- |
 | `codebase-mapper` | The new crate map |
-| `branch-reviewer` | Checks boundaries and the engine version |
-| `science-fixer` | Targets `science`, ports physics, no format bump |
+| `branch-reviewer` | Boundaries, engine version, uncited numbers |
+| `science-fixer` | Targets `science`, ports physics, studies first |
 | `branch-syncer` | Description without `raw_data` and tiles |
 | `world-coherence-checker` | The oracle: legacy against new, by distributions |
 | `generation-profiler` | The new CLI |
@@ -621,6 +623,36 @@ partly by CI:
 
 The legacy pages are rewritten to these rules as their laws are ported
 (Porting rule), not all at once.
+
+### No invented data
+
+Values have been made up in the past where the science was missing.
+The rule, for Claude and every agent, in `CLAUDE.md` and in the agents
+that touch physics:
+
+1. **Missing or thin science stops the work.** When a law, a constant
+   or a range is needed and the reference does not cover it, or covers
+   it with a study too shallow for the case, do the study first: search
+   the literature, then create or extend the reference page (with its
+   sources) before writing the code that uses it. A larger question
+   gets a study in the Wiki, and the page cites it.
+2. **Calibrate only when no data exists.** If the study finds no
+   measurement, model or published range for the case, a value may be
+   calibrated. It is then:
+   - marked in the code: its doc comment starts with `Calibration:`,
+     says what it was fitted against and how, and links the page;
+   - described in the page's calibration section, with what was
+     searched and not found;
+   - listed in the pull request description, under its own heading, so
+     the review sees every new calibration.
+3. **Every number in `science` is either sourced or calibrated.** A CI
+   check fails when a constant (`const`, `static`, or a numeric literal
+   bound by name) in `science` has no doc comment starting with
+   `Source:` or `Calibration:`. Plain mathematical numbers (0, 1, 2, π,
+   unit conversions) are exempt; the exact exemption list is left to
+   the builder.
+4. `branch-reviewer` flags any new number that is neither sourced nor
+   calibrated, anywhere in the engines too, not only in `science`.
 
 ## Build order
 
