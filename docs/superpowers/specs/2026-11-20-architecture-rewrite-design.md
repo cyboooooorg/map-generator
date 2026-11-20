@@ -128,8 +128,9 @@ In what order to build (approach 3):
    workspace. It keeps `web/` untouched, `docs/analysis/`,
    `docs/science/`, `docs/system-spec.md` and `docs/backlog.md` as
    references, and rewrites `README.md` for the new state. It also
-   lands the guardrails (see Guardrails): the CI checks, the
-   `CLAUDE.md` architecture section and the updated agents. History is
+   lands the guardrails (see Guardrails): the mise tasks and the CI that
+   runs them, the CI checks, the `CLAUDE.md` architecture section and
+   the updated agents. History is
    kept: nothing is force-pushed.
 5. Each following pull request adds one feature (see Build order).
 
@@ -477,6 +478,16 @@ The architecture is enforced by tools first, by written rules second.
 All of it lands in the first code pull request, with the crates it
 describes.
 
+**One command for the CI, locally and on GitHub.** The first pull
+request brings back mise tasks for the new workspace, with a single
+`mise run ci` that runs everything the pipeline runs: format check,
+clippy, tests, the guardrail checks below and markdownlint. The GitHub
+workflow installs mise and calls the same tasks (one job per task when
+they are worth running in parallel), so a green `mise run ci` locally
+means a green pipeline. Slow tests keep their own task outside `ci`, as
+`test:slow` does today. Other tasks (`gen`, `export`, `oracle`, `fmt`)
+are added with the features that need them.
+
 **CI checks.**
 
 - A test reads `cargo metadata` and fails when a dependency points the
@@ -488,6 +499,13 @@ describes.
   process spawning in `science`, `timeline`, `system`, `world` and
   `catalogue`. Only `adapters` and `cli` touch the outside world.
 - The determinism test (Determinism and seeds).
+- **A short README.** The legacy `README.md` grew to about 240 KB, too
+  large to read or maintain. The new one keeps to purpose,
+  prerequisites, installation, usage and configuration, and links out
+  for the rest; each crate has its own short `README.md` for its role
+  and ports. A CI check fails when the root README passes 300 lines or
+  a crate README 150 *(my call)*: detail goes into `docs/`, never into
+  a README.
 
 **`CLAUDE.md` architecture section**, short and pointing to this
 document:
