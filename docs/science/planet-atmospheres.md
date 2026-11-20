@@ -1435,7 +1435,10 @@ damped fixed point settles at the triple point (over a band `w` the
 emissivity's loop gain is about `1.8 K / w`). The condensation's fixed
 point solves its temperature in the bracket its last two steps make
 when they overshoot, and the albedo's fixed point halves its damping
-when a step turns back. A climate whose fixed points still do not
+when a step turns back. Each of its steps goes as far as the secant
+through its last two steps puts the fixed point, between half the way
+and all the way to the albedo derived (issue #593: about half the steps
+of a fixed damping of 0.5, and never further than the undamped step). A climate whose fixed points still do not
 settle is stored with `converged: false` and the card says so under its
 temperature (worlds stored before read `true`). `cargo run --release
 -p mapgen --example climate_sweep phase` sweeps a Titan-like and a

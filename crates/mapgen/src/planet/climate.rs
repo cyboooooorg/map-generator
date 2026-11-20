@@ -1101,8 +1101,11 @@ const RUNAWAY_PROBE_K: f64 = 380.0;
 /// otherwise by the scan.
 ///
 /// Each scan goes up from the black body's temperature by the `T⁴` step
-/// of `bracket`, but at most [`SCAN_RATIO`], to [`WATER_CRITICAL_K`],
-/// and solves the first crossing.
+/// of `bracket`, or by the secant through its last two points where that
+/// goes further (the moist column's outgoing radiation rises more slowly
+/// than `T⁴`, and the `T⁴` step crawls towards the balance at its 0.1 %
+/// floor), but at most [`SCAN_RATIO`], to [`WATER_CRITICAL_K`], and
+/// solves the first crossing.
 fn wet_balance(
     context: &Context,
     gases: Gases,
@@ -1160,10 +1163,17 @@ fn first_balance(excess: impl Fn(f64) -> f64, absorbed: f64, bare: f64) -> Optio
     if low.f >= 0.0 {
         return Some(bare);
     }
+    let mut before: Option<Point> = None;
     loop {
-        // The `T⁴` step of `bracket`, at most `SCAN_RATIO`.
+        // The `T⁴` step of `bracket`, or further where the secant through
+        // the last two points says so, at most `SCAN_RATIO`.
         let olr = (low.f + absorbed).max(1e-3 * absorbed);
-        let x = (low.x * (absorbed / olr).powf(0.25) * 1.0005)
+        let t4 = low.x * (absorbed / olr).powf(0.25);
+        let guess = match before {
+            Some(b) if low.f > b.f => t4.max(low.x - low.f * (low.x - b.x) / (low.f - b.f)),
+            _ => t4,
+        };
+        let x = (guess * 1.0005)
             .clamp(low.x * 1.001, low.x * SCAN_RATIO)
             .min(WATER_CRITICAL_K);
         let high = Point { x, f: excess(x) };
@@ -1173,6 +1183,7 @@ fn first_balance(excess: impl Fn(f64) -> f64, absorbed: f64, bare: f64) -> Optio
         if x >= WATER_CRITICAL_K {
             return None;
         }
+        before = Some(low);
         low = high;
     }
 }
@@ -2145,10 +2156,16 @@ fn warm_start(body: &Body) -> (f64, f64) {
 
 /// The fixed point of the albedo, the emissivity and the climate of
 /// `body` from the derived albedo and emissivity `start`: each step
-/// solves the climate under them ([`under_albedo`]) and moves each
-/// [`ALBEDO_DAMPING`] of the way to the one its temperature derives (half
-/// as far after each step whose derived light turns back, so that a
-/// swing settles),
+/// solves the climate under them ([`under_albedo`]) and moves part of
+/// the way to the one its temperature derives: as far as the secant
+/// through its last two steps puts the zero of the push (the derived
+/// light less the light used), but at least [`ALBEDO_DAMPING`] of the
+/// way and never past the light derived (the damping halving after each
+/// step whose derived light turns back, so that a swing settles). The
+/// secant saves about half the steps of a fixed damping (issue #593);
+/// capped at the light derived, it goes no further than the undamped
+/// step, so that it does not jump across the ice-albedo feedback to the
+/// other branch. It goes on
 /// until the temperature moves less than [`ALBEDO_TOLERANCE_K`] and the
 /// derived albedo and emissivity would move the surface's radiative
 /// equilibrium (`T_eq ε^-¼`) less than that too. The climate keeps the
@@ -2173,6 +2190,7 @@ fn settle_steps(body: &Body, start: (f64, f64)) -> (Gases, Climate, usize) {
     let mut steps = 0;
     let mut damping = ALBEDO_DAMPING;
     let mut moved = 0.0;
+    let mut before: Option<Point> = None;
     while steps < ALBEDO_ITERATIONS {
         let t = pass.temperature_k;
         let derived = body.albedo_at(t, &pass.gases);
@@ -2192,10 +2210,30 @@ fn settle_steps(body: &Body, start: (f64, f64)) -> (Gases, Climate, usize) {
         if push_k * moved < 0.0 {
             damping *= 0.5;
         }
+        // The share of the way to go: where the push shrinks as the light
+        // moves, as far as the secant through the last two steps puts its
+        // zero, but never past the light derived, nor shorter than the
+        // damping.
+        let here = Point {
+            x: radiative_k(albedo, emissivity),
+            f: push_k,
+        };
+        let share = match before {
+            Some(b) if here.x != b.x => {
+                let slope = (here.f - b.f) / (here.x - b.x);
+                if slope < 0.0 {
+                    (-1.0 / slope).clamp(damping, 1.0)
+                } else {
+                    damping
+                }
+            }
+            _ => damping,
+        };
+        before = Some(here);
         moved = push_k;
         last = t;
-        albedo += damping * (derived - albedo);
-        emissivity += damping * (derived_emissivity - emissivity);
+        albedo += share * (derived - albedo);
+        emissivity += share * (derived_emissivity - emissivity);
         pass = under_albedo(body, albedo, emissivity);
         steps += 1;
     }

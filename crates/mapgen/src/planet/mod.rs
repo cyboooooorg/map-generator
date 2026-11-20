@@ -1512,6 +1512,9 @@ mod tests {
     /// of 2.80 (issue #523), 0.576 530 988 055 before the spectral
     /// longwave column (issue #523: the thermostat holds
     /// the snowball's CO₂ at what the HITRAN band needs to thaw it, and
-    /// that CO₂ absorbs the near infrared its ice reflects).
-    const SNOWBALL_ALBEDO: f64 = 0.545_695_039_691;
+    /// that CO₂ absorbs the near infrared its ice reflects), 0.545 695
+    /// 039 691 before the albedo's fixed point stepped by the secant of
+    /// its push (issue #593: it stops at another point within its 0.1 K
+    /// tolerance).
+    const SNOWBALL_ALBEDO: f64 = 0.545_339_574_845;
 }
