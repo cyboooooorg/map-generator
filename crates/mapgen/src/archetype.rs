@@ -1385,9 +1385,6 @@ mass_earth = 5000.0
         }
     }
 
-    /// Titan's 1.47 bar (Fulchignoni et al. 2005,
-    /// doi:10.1038/nature04314), within 1.2 to 1.8 on every seed, under a
-    /// few percent of methane.
     /// Titan-like's surface pressure, bar: the spread of
     /// `archetype_census titan-like 500` over seeds 1-500 (min 1.263,
     /// 5th percentile 1.339, median 1.493, 95th 1.615, max 1.660 bar at
@@ -1395,6 +1392,8 @@ mass_earth = 5000.0
     /// 1.47 bar (Fulchignoni et al. 2005, doi:10.1038/nature04314).
     const TITAN_BAR: std::ops::RangeInclusive<f64> = 1.25..=1.70;
 
+    /// Titan's air: a surface pressure within [`TITAN_BAR`] on every
+    /// seed, of which 1 to 10 % is methane.
     #[test]
     fn titan_like_has_titan_air() {
         let a = Archetype::load("titan-like").unwrap();
