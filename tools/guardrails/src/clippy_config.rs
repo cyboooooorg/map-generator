@@ -95,21 +95,52 @@ fn paths(table: &toml::Table, key: &str) -> BTreeSet<String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_relaxed_copy_without_hash_map_is_reported() {
-        let root = tempfile::tempdir().unwrap();
-        let full = format!(
+    fn full() -> String {
+        format!(
             "disallowed-methods = [{}]\ndisallowed-types = [{}]\n",
             SHARED_METHODS
                 .map(|p| format!("{{ path = \"{p}\" }}"))
                 .join(", "),
             SHARED_TYPES.map(|p| format!("\"{p}\"")).join(", "),
-        );
-        fs::write(root.path().join("clippy.toml"), &full).unwrap();
+        )
+    }
+
+    /// Missing entries when the root holds every shared entry and
+    /// `crates/cli/clippy.toml` holds `copy`.
+    fn with_copy(copy: &str) -> Vec<String> {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("clippy.toml"), full()).unwrap();
         fs::create_dir_all(root.path().join("crates/cli")).unwrap();
-        let relaxed = full.replace("\"std::collections::HashMap\", ", "");
-        fs::write(root.path().join("crates/cli/clippy.toml"), relaxed).unwrap();
-        let missing = missing_shared_entries(root.path());
+        fs::write(root.path().join("crates/cli/clippy.toml"), copy).unwrap();
+        missing_shared_entries(root.path())
+    }
+
+    #[test]
+    fn a_complete_copy_passes() {
+        assert_eq!(with_copy(&full()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_relaxed_copy_without_a_random_source_is_reported() {
+        let copy = full().replace("{ path = \"rand::thread_rng\" }, ", "");
+        let missing = with_copy(&copy);
+        assert_eq!(missing.len(), 1, "{missing:?}");
+        assert!(
+            missing[0]
+                .ends_with("crates/cli/clippy.toml: disallowed-methods lacks rand::thread_rng")
+        );
+    }
+
+    #[test]
+    fn an_unparsable_copy_is_reported() {
+        let missing = with_copy("disallowed-methods = [");
+        assert_eq!(missing.len(), 1, "{missing:?}");
+        assert!(missing[0].contains("crates/cli/clippy.toml: does not parse"));
+    }
+
+    #[test]
+    fn a_relaxed_copy_without_hash_map_is_reported() {
+        let missing = with_copy(&full().replace("\"std::collections::HashMap\", ", ""));
         assert_eq!(missing.len(), 1, "{missing:?}");
         assert!(
             missing[0].ends_with(

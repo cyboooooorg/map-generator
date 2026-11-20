@@ -30,17 +30,20 @@ fn dependency_graph_points_inwards() {
 #[test]
 fn science_constants_are_sourced() {
     let mut missing = Vec::new();
+    let mut scanned = 0;
     for entry in walkdir::WalkDir::new(root().join("crates/science/src"))
         .into_iter()
         .filter_map(Result::ok)
     {
         if entry.path().extension().is_some_and(|ext| ext == "rs") {
+            scanned += 1;
             let source = fs::read_to_string(entry.path()).unwrap();
             for name in constants::undocumented(&source) {
                 missing.push(format!("{}: {name}", entry.path().display()));
             }
         }
     }
+    assert!(scanned > 0, "no source file found under crates/science/src");
     assert!(
         missing.is_empty(),
         "constants without a doc comment starting with {:?}:\n{}",
