@@ -1,0 +1,46 @@
+# Determinism and boundaries of the domain crates (science, timeline,
+# system, world, catalogue). See CLAUDE.md, Architecture.
+#
+# clippy reads the nearest clippy.toml without merging: crates/adapters,
+# crates/cli and tools/* carry a relaxed copy that keeps the entries marked
+# "shared" below. tools/guardrails checks that every copy keeps them.
+# `allow-invalid` keeps a path valid while its crate is not a dependency.
+
+disallowed-methods = [
+  # shared: random sources outside the seed hierarchy
+  { path = "rand::rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::thread_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::random", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::make_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "getrandom::fill", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "getrandom::getrandom", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  # shared: the wall clock makes outputs depend on when they run
+  { path = "std::time::SystemTime::now", reason = "outputs must not depend on the wall clock; dates come from the inputs" },
+  # domain only: timings, environment, processes and files
+  { path = "std::time::Instant::now", reason = "timings belong to adapters and the CLI" },
+  { path = "std::env::var", reason = "configuration arrives through the inputs, read by the CLI" },
+  { path = "std::env::vars", reason = "configuration arrives through the inputs, read by the CLI" },
+  { path = "std::process::Command::new", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::read", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::read_to_string", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::write", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::create_dir_all", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::remove_file", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::remove_dir_all", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::rename", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::copy", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::read_dir", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::metadata", reason = "only adapters and the CLI touch the outside world" },
+]
+
+disallowed-types = [
+  # shared: iteration order depends on a random hasher
+  { path = "std::collections::HashMap", reason = "random iteration order: use BTreeMap" },
+  { path = "std::collections::HashSet", reason = "random iteration order: use BTreeSet" },
+  # domain only: files and network
+  { path = "std::fs::File", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::fs::OpenOptions", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::net::TcpStream", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::net::TcpListener", reason = "only adapters and the CLI touch the outside world" },
+  { path = "std::net::UdpSocket", reason = "only adapters and the CLI touch the outside world" },
+]

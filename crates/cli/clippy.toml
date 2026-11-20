@@ -1,0 +1,22 @@
+# Relaxed copy of the root clippy.toml for a crate that may touch the
+# outside world: it keeps only the entries marked "shared" there (random
+# sources, the wall clock, default-hashed maps). tools/guardrails checks
+# that they stay identical to the root ones.
+
+disallowed-methods = [
+  # shared: random sources outside the seed hierarchy
+  { path = "rand::rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::thread_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::random", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "rand::make_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "getrandom::fill", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "getrandom::getrandom", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  # shared: the wall clock makes outputs depend on when they run
+  { path = "std::time::SystemTime::now", reason = "outputs must not depend on the wall clock; dates come from the inputs" },
+]
+
+disallowed-types = [
+  # shared: iteration order depends on a random hasher
+  { path = "std::collections::HashMap", reason = "random iteration order: use BTreeMap" },
+  { path = "std::collections::HashSet", reason = "random iteration order: use BTreeSet" },
+]
