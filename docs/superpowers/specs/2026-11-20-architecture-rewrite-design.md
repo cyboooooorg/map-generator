@@ -90,7 +90,12 @@ The rewrite fails, even if it runs, when:
   feature into `main`, tested on `develop` (`CLAUDE.md`), Conventional
   Commits, cocogitto check.
 - **Peer sessions:** the rewrite starts only once mapgen1 and mapgen3
-  have merged their work into `main`.
+  have merged their work into `main`. Done: both confirmed on
+  2026-11-20, `main` at 561fa463.
+- **Generation time:** whole-life computation and the backward search
+  of archetypes can cost far more than the legacy single-date draw.
+  Slice 1 measures it (`generation-profiler`); a budget per system is
+  then set with the user and enforced like the test budgets.
 
 ## Approaches
 
@@ -119,7 +124,7 @@ In what order to build (approach 3):
 
 ## Migration
 
-1. Wait for mapgen1 and mapgen3 to merge into `main`.
+1. Wait for mapgen1 and mapgen3 to merge into `main` (done).
 2. Rewrite the issues (see Issues rewrite) before the first code pull
    request, so each issue points at a section of this document.
 3. Tag the last legacy commit `legacy-final` (an annotated tag, plus a
@@ -130,11 +135,10 @@ In what order to build (approach 3):
    workspace. It keeps `web/` untouched, keeps `docs/science/`,
    `docs/system-spec.md` and `docs/backlog.md` as references, moves
    `docs/analysis/` to the GitHub Wiki (see Documentation), and
-   rewrites `README.md` for the new state. It also
-   lands the guardrails (see Guardrails): the mise tasks and the CI that
-   runs them, the CI checks, the `CLAUDE.md` architecture section and
-   the updated agents. History is
-   kept: nothing is force-pushed.
+   rewrites `README.md` for the new state. It also lands the guardrails
+   (see Guardrails): the mise tasks and the CI that runs them, the CI
+   checks, the `CLAUDE.md` architecture section and the updated agents.
+   History is kept: nothing is force-pushed.
 5. Each following pull request adds one feature (see Build order).
 
 **Porting rule.** Physics is ported, not reinvented: a law, a
@@ -148,8 +152,12 @@ map row by row are the exception: they are rewritten for the new grid
 `world-coherence-checker` agent compares worlds of the two binaries by
 statistics (area-weighted land share, relief, temperature, moisture,
 and biomes through a mapping from legacy biomes to the new named
-biomes), never by bytes. Each feature pull request states the tolerance
-it was checked against, and explains any deliberate departure.
+biomes), never by bytes. The same seed no longer gives the same
+system, so the comparison is **per archetype, as distributions over
+many seeds**, never seed by seed. It is a tier-3 test (see Tests): a
+pull request that changes what the engines produce states the
+tolerance it was checked against, and explains any deliberate
+departure.
 
 ## Architecture
 
@@ -170,11 +178,16 @@ Dependencies point inwards only:
 
 ```text
 cli ──> adapters ──> catalogue, system, world, timeline, science
+catalogue ──> system (the inputs type), timeline
 system ──> timeline, science
 world  ──> timeline, science
-catalogue ──> timeline
 timeline ──> science (units only)
 ```
+
+The inputs (request, seed, archetype, present date, observed data) are
+the system engine's domain type; `catalogue` stores them, hence its
+dependency on `system`. `world` never depends on `system`, nor
+`system` on `world`.
 
 `timeline` is a *published language* in the DDD sense *(my call)*: the
 two engines share its types instead of each translating its own copy,
@@ -290,10 +303,18 @@ sequence outlasts any useful date.
 Turns one keyframe or event state of one body into a world. Maps exist
 only at keyframes and events, generated on demand.
 
-**Port:** `TimelineSource` (read a body's keyframe at a date). One seed
-per context, derived from the system seed and the body's designation.
-Also `ReliefSource` for imported relief (#422), resampled onto the
-simulation grid.
+**Port:** `TimelineSource` (read a body's keyframes and events up to a
+date, not only the one at that date). One seed per context, derived
+from the system seed and the body's designation. Also `ReliefSource`
+for imported relief (#422), resampled onto the simulation grid.
+
+**Coherence across dates.** A body's world at a date derives from the
+body's own seed **and from its history in the timeline up to that
+date**: the same continents, moved by drift; craters accumulated from
+the impact flux so far; relief shaped by the regimes it went through.
+So the Earth at -500 Myr and today are the same planet at two dates,
+never two independent draws. Every map pass that depends on time reads
+the history, not only the keyframe.
 
 **Ocean share** *(my call)*: the system engine owns how much of the
 surface is ocean (it needs it for the global albedo and climate), from
@@ -316,10 +337,10 @@ rotators, #322-#325).
   three-face corners.
 - **Fixed cell size of 15 km** on solid-surface and ice-shell worlds,
   whatever their radius. An Earth has about 2.7 M cells; Mars about
-  0.76 M; a 500 km moon a few thousand. The cell size is an engine
-  constant recorded with the engine version; `generation-profiler`
-  measures the first slice, and it may go down to 10 km if the cost
-  allows.
+  0.76 M; a 500 km moon a few thousand. The cell size is a **parameter
+  of the grid**, whose default is recorded with the engine version;
+  tests use a coarser value (Tests). `generation-profiler` measures the
+  first slice, and the default may go down to 10 km if the cost allows.
 - **Cap** *(my call)*: above 8 M cells (a solid body of about 1.7 Earth
   radii), the cell grows so the count stays at 8 M, keeping the
   generation peak near 1 GB. Giant-atmosphere worlds do not use the
@@ -738,8 +759,9 @@ Through the whole chain, minimal:
 - CLI: generate from inputs, write the timeline as JSON and the world
   fields, export a 2:1 PNG projection and an SVG cross-section of each
   body, print cause trees with `--explain`;
-- determinism lint and test; legacy oracle comparison on a fixed set of
-  seeds per archetype.
+- determinism lint and test; legacy oracle comparison per archetype,
+  over a fixed set of seeds;
+- a measure of generation time, to set the budget (Constraints).
 
 It may be split into several pull requests (science and units, system
 engine, grid, map passes, CLI and oracle), each leaving `main`
@@ -787,12 +809,15 @@ Done once this design is approved, before the first code pull request:
 
 ## Proof
 
-- Each slice and feature pull request: unit tests ported with the law,
-  the determinism test, and a `world-coherence-checker` comparison
-  against `legacy-final` with its tolerance stated.
+- Each slice and feature pull request: tier 1 and tier 2 green within
+  their budgets (Tests); when it changes what the engines produce, the
+  tier-3 output in its description, including the
+  `world-coherence-checker` comparison against `legacy-final` with its
+  tolerance stated.
 - The first slice is profiled (`generation-profiler`) before the cell
-  size is fixed.
-- `branch-reviewer` reviews each branch once before its pull request.
+  size and the generation-time budget are fixed.
+- `branch-reviewer` and `test-reviewer` review each branch once before
+  its pull request.
 - **Testing on `develop` during the engine phase** *(my call)*: with no
   server, `develop-deployer` and planets.localhost are not used for the
   new code. A pull request is tried by building `develop` and running
