@@ -857,6 +857,23 @@ mod tests {
     }
 
     #[test]
+    fn a_runaway_that_lost_nothing_keeps_its_mass_tree() {
+        // A dry Earth at 0.7 AU round the Sun runs away by the insolation
+        // limit with no water to lose: its mass did not change, so the
+        // model keeps no inputs from before and the mass tree no escape.
+        let model = model_at(1.0, 0.0, 0.7);
+        let surface = model.surface.as_ref().expect("a bare body has a surface");
+        assert!(surface.water.runaway, "{surface:?}");
+        assert_eq!(model.before_steam, None);
+        let explanation = crate::planet::explain(&sun_at(0.7), &model).expect("an explanation");
+        assert!(
+            !find(&explanation.trees[0], crate::planet::Quantity::Escape),
+            "{:#?}",
+            explanation.trees[0]
+        );
+    }
+
+    #[test]
     fn a_dry_runaway_keeps_its_dry_mass() {
         // The dry boil of `a_boil_that_escapes_all_its_water_ends_dry`.
         let water = 3.0e-4;

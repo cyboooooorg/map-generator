@@ -262,8 +262,9 @@ pub struct PlanetModel {
     /// What it was made of before a steam runaway took its water
     /// ([`after_steam`]): the inputs after photoevaporation, which
     /// `inputs` replaces with the water escape left. `None` for a body
-    /// whose water did not run away, and in a model stored before the
-    /// escaped water left the mass (#513).
+    /// whose water did not run away or whose escape took none of it (its
+    /// mass did not change), and in a model stored before the escaped
+    /// water left the mass (#513).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub before_steam: Option<PlanetInputs>,
@@ -585,10 +586,8 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
         air = Some(steps.before);
         Some(steps.surface)
     };
-    let before_steam = surface
-        .as_ref()
-        .is_some_and(|s| s.water.runaway || s.water.boiled)
-        .then_some(inputs);
+    // Only a runaway whose escape took water changed the body.
+    let before_steam = (body.inputs != inputs).then_some(inputs);
     let Ran {
         inputs,
         interior,

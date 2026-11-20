@@ -65,7 +65,8 @@ terrain: Terrain,
  * What it was made of before a steam runaway took its water
  * ([`after_steam`]): the inputs after photoevaporation, which
  * `inputs` replaces with the water escape left. `None` for a body
- * whose water did not run away, and in a model stored before the
- * escaped water left the mass (#513).
+ * whose water did not run away or whose escape took none of it (its
+ * mass did not change), and in a model stored before the escaped
+ * water left the mass (#513).
  */
 before_steam?: PlanetInputs, };

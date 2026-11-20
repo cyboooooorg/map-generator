@@ -617,8 +617,9 @@ systems/<system-id>/
     of the world; format 9 of the system adds lot 3's resonant heat,
     moment of inertia, convective shell and geysers; format 13 adds the
     climate's `converged`, whether its fixed points settled, true in a
-    model stored before it, and, for a body whose water ran away as steam,
-    `before_steam`, the inputs from before escape took that water: its
+    model stored before it, and, for a body whose water ran away as steam
+    and lost some of it to escape, `before_steam`, the inputs from before
+    escape took that water: its
     `inputs` then hold the mass less the water lost, null for any other
     body and in a model stored before it), derived once when the system is drawn from its orbit, the
     system's age, metallicity and ice line, and the mass drawn for it

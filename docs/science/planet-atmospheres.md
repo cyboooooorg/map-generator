@@ -124,7 +124,8 @@ climate again, so the mass, the water card and both cause trees agree;
 the heat stays the one the climate ran on, and the explanation finds
 that body again from the water the pass started with
 (`explain::surface_inputs`). `PlanetModel.before_steam`
-keeps the inputs from before the runaway: the request's formation is
+keeps the inputs from before the runaway, when escape took water: the
+request's formation is
 read from them, and `drawn_mass_earth` stays the mass drawn. The cause
 tree shows the mass from the mass formed and the water kept, with the
 water formed and the water lost.
