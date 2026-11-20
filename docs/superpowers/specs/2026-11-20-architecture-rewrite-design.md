@@ -41,7 +41,9 @@ the computation itself, and systems that change over time.
    the same code that computes the value.
 5. Inputs only as stored truth: everything else is a regenerable cache,
    so format migrations shrink to the inputs.
-6. Room for what is already planned without touching the planet chain:
+6. A cross-section of every body (planets, large and small moons,
+   stars) at any keyframe, from the interiors the engine computes.
+7. Room for what is already planned without touching the planet chain:
    multiple-star systems, exotic and evolving hosts, real systems and
    relief, a galactic environment, rogue planets.
 
@@ -249,7 +251,7 @@ Per body:
   call, to be tuned on the first slices)*:
 
   | Quantity | Threshold |
-| --- | --- |
+  | --- | --- |
   | Bolometric flux received | 2 % |
   | XUV flux received | 10 % |
   | Body mass | 1 % |
@@ -414,6 +416,43 @@ birth: "earth-like" promises an Earth-like planet today. The engine:
 
 The tolerance of each target and the search method are left to the
 builder.
+
+### Cross-sections
+
+Every body can be shown cut open: planets, large and small moons, and
+stars (#423 listed the planet's cross-section for later; it becomes
+part of the design). The cut is **data produced by the system engine**,
+which already computes interiors; how it is drawn belongs to adapters
+(an SVG export now, the viewer later).
+
+Per body and per keyframe, the timeline carries an **interior profile**:
+
+- an ordered list of **layers** from the centre out, each with its
+  outer radius, material or phase, and state (solid, liquid, plasma,
+  partly molten, porous);
+- **radial profiles** sampled along the radius: density, pressure,
+  temperature, and for stars the energy transport (radiative or
+  convective) and the share of fusion;
+- the **causes** of each layer (why the core is liquid, why there is an
+  ocean under the ice), like any other derived quantity.
+
+What the layers are depends on the body, not on a fixed template:
+
+| Body | Layers, for example |
+| --- | --- |
+| Rocky planet | Inner and outer core, mantle, crust, ocean, atmosphere |
+| Large icy moon | Core, rocky mantle, high-pressure ice, ocean, ice shell |
+| Small body | Undifferentiated rock and ice, or a rubble pile |
+| Giant | Core, metallic hydrogen, molecular envelope, cloud decks |
+| Main-sequence star | Core, radiative zone, convective zone, photosphere |
+| Evolved star | Inert core, burning shells, envelope |
+| Remnant | Crust and degenerate interior, or a horizon for a black hole |
+
+Small bodies keep their irregular shape (`docs/science/moon-shapes.md`):
+the profile then holds the shape's outline in the cut plane, not only a
+radius. Profiles evolve with the keyframes, so a cut can be shown at
+any date (a core freezing, an ocean refreezing, a star growing a
+convective envelope).
 
 ### Causes and provenance
 
@@ -592,14 +631,15 @@ Through the whole chain, minimal:
 - `science`: only the laws the slice uses, ported with their tests;
 - system engine: one main-sequence star, rocky planets and giants, no
   moons; a timeline with **one keyframe, the present**; global climate;
-  causes; designations;
+  causes; designations; the interior profiles of the star and the
+  planets (Cross-sections);
 - map generator: cube-sphere grid at 15 km, solid-surface worlds only:
   relief, spatialized climate, Köppen class, surface layers, named
   biomes; seasonal statistics;
 - catalogue: inputs repository and caches on the filesystem;
 - CLI: generate from inputs, write the timeline as JSON and the world
-  fields, export a 2:1 PNG projection, print cause trees with
-  `--explain`;
+  fields, export a 2:1 PNG projection and an SVG cross-section of each
+  body, print cause trees with `--explain`;
 - determinism lint and test; legacy oracle comparison on a fixed set of
   seeds per archetype.
 
@@ -612,14 +652,16 @@ buildable and tested.
 The order below is a proposal, refined in the rewritten roadmap:
 
 1. Hydrology, erosion, coast distance and ocean currents on the grid.
-2. Moons and the tree's nesting; tides and spin.
+2. Moons and the tree's nesting; tides and spin; the moons' profiles,
+   small irregular bodies included.
 3. Ice-shell and giant-atmosphere world kinds.
 4. Keyframes in the past and future: stellar evolution on the main
    sequence, thresholds, epochs; drift level A then B.
 5. Events: snowball, runaway, ocean loss, tidal locking; then
    collisions and instabilities.
 6. Environment and external events (flybys, captures, comet showers).
-7. Host phases and remnants; binaries and triples (#585's steps).
+7. Host phases and remnants, with their profiles; binaries and triples
+   (#585's steps).
 8. Populations: belts, rings, dust rings, trans-Neptunian objects.
 9. Real systems and real relief (#418, #419, #422).
 10. Server and viewer reconnection (a track of its own).
