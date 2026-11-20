@@ -298,19 +298,30 @@ For development with hot reload, see [web/README.md](web/README.md) (`mise run d
 | `mise run dev`                  | Run the web server and the front-end with hot reload                                |
 | `mise run web:check`            | Type-check and test the front-end                                                   |
 | `mise run hex`                  | Resample a generated world onto a hex grid, see [Hex grid export](#hex-grid-export) |
-| `mise run test`                 | Run the test suite                                                                  |
+| `mise run test`                 | Run the test suite, without the slow tests                                          |
+| `mise run test:mapgen` / `test:rest` | Run the generator's tests only, or every other crate's (the two CI test jobs) |
+| `mise run test:slow`            | Run only the slow tests `mise run test` skips (release build, 4 threads); run it before opening a pull request |
 | `mise run test:invariance`      | Check that a planet keeps its large-scale land and biomes at 1024 and 2048 pixels wide (slow, release build; skipped by `mise run test`) |
 | `mise run lint`                 | Check formatting and run clippy (`-D warnings`)                                     |
 | `mise run fmt`                  | Format the code                                                                     |
 | `mise run clean-systems`        | Delete every generated system under `systems/`, after a confirmation; restart the server (`docker restart map-generator`) so its index drops them |
 
-The CI workflow (`.github/workflows/ci.yml`) runs three jobs in parallel on every push to `main` and on pull requests: `lint` (`mise run lint`), `test` (`mise run test`, then checks the generated TypeScript types are committed) and `web` (`mise run web:check` / `web:build`). It caches the compiled dependencies with `Swatinem/rust-cache`, keyed on `Cargo.lock`, every crate's `Cargo.toml` and the root `Cargo.toml` (its build profiles); the workspace crates themselves are rebuilt on every run.
+The CI workflow (`.github/workflows/ci.yml`) runs its jobs in parallel on every push to `main` and on pull requests: `lint` (`mise run lint`), `test-mapgen` and `test-rest` (the generator's tests and every other crate's, `mise run test:mapgen` and `test:rest`, on two runners side by side; each then checks the generated TypeScript types are committed) and `web` (`mise run web:check` / `web:build`), and, only on a push to `main` or a pull request into it, `test-slow` (`mise run test:slow`). It caches the compiled dependencies with `Swatinem/rust-cache`, keyed on `Cargo.lock`, every crate's `Cargo.toml` and the root `Cargo.toml` (its build profiles); the workspace crates themselves are rebuilt on every run.
 
 Tests are compiled with some optimization (`[profile.test]` and `[profile.dev.package."*"]` in `Cargo.toml`): most of their time goes into generating worlds, which runs over ten times slower unoptimized. The dependencies are built at `opt-level = 3`, once; the workspace crates at `opt-level = 1`, which keeps their incremental rebuilds short, except `mapgen` itself (`[profile.test.package.mapgen]`), at `opt-level = 3`: since the spectral column of the climate its solves dominate the suite, and at 3 they run as fast as in release. An incremental rebuild of `mapgen`'s tests takes about 2 min on a 10-core Mac (121 s, against 99 s at `opt-level = 1`). Debug assertions and overflow checks stay on. The default suite (`mise run test`) takes about 14 min for `mapgen` and 6 min for the other crates at 4 threads. To debug a test step by step, build it unoptimized for one run:
 
 ```bash
 CARGO_PROFILE_TEST_OPT_LEVEL=0 cargo test -p mapgen <test name>
 ```
+
+**Slow tests.** The tests that draw many worlds to check a rate or a bound over a sample (a census of seeds, a sweep of the climate), each over about two minutes, are marked `#[ignore = "slow: <what it draws, how long>; …"]`, so that `mise run test` stays short. They still run in CI, in the `test-slow` job, on pull requests into `main` and on pushes to it; run them yourself before opening a pull request, in release:
+
+```bash
+mise run test:slow                     # only the slow tests (about 1 h 45 at 4 threads, set by its slowest test)
+cargo test --workspace --all-features --release -- --include-ignored --test-threads 4   # everything
+```
+
+`mise run test:slow` includes the resolution check of `mise run test:invariance`. A test that grows past two minutes either shrinks its sample to the smallest that still holds its bound, with the reason in its doc comment (the spread measured, the case it must contain), or joins the slow ones; never loosen a bound to make a smaller sample pass.
 
 ### Archetypes and looks
 

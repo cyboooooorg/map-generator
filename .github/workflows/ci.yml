@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
 
-# Lint, tests and front-end run as separate jobs, side by side. Each Rust job
-# keeps its own rust-cache entry (the key includes the job id): clippy and the
-# test profile build different artifacts anyway.
+# Lint, tests, slow tests and front-end run as separate jobs, side by side.
+# Each Rust job keeps its own rust-cache entry (the key includes the job id):
+# clippy, the test profile and the release build of the slow tests build
+# different artifacts anyway.
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -26,7 +27,10 @@ jobs:
       - name: Lint
         run: mise run lint
 
-  test:
+  # The test suite in two jobs side by side, each on its own runner: the
+  # generator's tests take over twice as long as all the others together,
+  # and `mise run test` runs them one after the other.
+  test-mapgen:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,10 +40,44 @@ jobs:
           # See the lint job.
           key: ${{ hashFiles('Cargo.toml') }}
       - name: Test
-        run: mise run test
+        run: mise run test:mapgen
       - name: Generated TypeScript types are committed
-        # `cargo test` regenerates web/src/lib/api/types from the Rust API types.
+        # `cargo test` regenerates web/src/lib/api/types from the Rust API
+        # types: mapgen's here, the server's in `test-rest`.
         run: git diff --exit-code -- web/src/lib/api/types
+
+  test-rest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # See the lint job.
+          key: ${{ hashFiles('Cargo.toml') }}
+      - name: Test
+        run: mise run test:rest
+      - name: Generated TypeScript types are committed
+        # The server's API types, see `test-mapgen`.
+        run: git diff --exit-code -- web/src/lib/api/types
+
+  # The tests marked `#[ignore = "slow: …"]` (statistical samples over many
+  # drawn worlds, sweeps of the climate): only for what goes into main, a
+  # pull request into it or a push to it, so that everyday pushes keep a
+  # short test jobs. Release build, like `mise run test:slow`.
+  test-slow:
+    if: github.event_name == 'push' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # See the lint job.
+          key: ${{ hashFiles('Cargo.toml') }}
+      - name: Slow tests
+        run: mise run test:slow
 
   web:
     runs-on: ubuntu-latest

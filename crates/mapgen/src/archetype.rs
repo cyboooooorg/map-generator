@@ -1169,6 +1169,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 20 drawn models of each of the 21 archetypes, 4 min in release; run with --include-ignored before a PR"]
     fn every_archetype_comes_out_as_its_class() {
         for a in Archetype::built_in() {
             for seed in 0..20 {
@@ -1421,6 +1422,7 @@ mass_earth = 5000.0
     /// The same ranges when a whole system asks for the archetype, round
     /// the orbit and the age it draws there.
     #[test]
+    #[ignore = "slow: 100 whole systems for the pressures of Earth, Mars, Venus and Titan, 3.5 min in release; run with --include-ignored before a PR"]
     fn faithful_archetypes_hold_in_a_whole_system() {
         for (name, lo, hi, seeds) in [
             ("earth-like", 0.7, 1.3, 20),
@@ -1513,6 +1515,7 @@ mass_earth = 5000.0
     }
 
     #[test]
+    #[ignore = "slow: 420 whole systems, 20 per archetype, for its 16-of-20 recognition rate, 9 min in release; run with --include-ignored before a PR"]
     fn solar_system_archetypes_are_recognised() {
         let all = Archetype::built_in();
         let mut weak = Vec::new();

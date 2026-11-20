@@ -3748,6 +3748,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 600 whole systems for the 1 % rate of hot Jupiters, 4 min in release; run with --include-ignored before a PR"]
     fn a_drawn_system_sometimes_has_a_hot_jupiter() {
         let (mut hot, mut close) = (0, 0);
         let n = 600;
@@ -4001,6 +4002,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 40 whole systems for over 60 giants and their rings, 7 min in release; run with --include-ignored before a PR"]
     fn giants_get_their_rings_from_the_system() {
         let (mut bright, mut faint, mut giants) = (0, 0, 0);
         for seed in 0..40 {
@@ -5209,6 +5211,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 300 drawn systems for over 20 belt zones, 26 min in release; run with --include-ignored before a PR"]
     fn drawn_planets_round_a_world_keep_out_of_the_first_cold_giants_belt_zone() {
         // Issue #449 with `--draw-only`: the drawn planets are kept one by
         // one, so a small slot of an ice giant's mass drawn after them
@@ -5260,6 +5263,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 40 whole systems for over 10 inner belts and 10 trojan swarms, 6.5 min in release; run with --include-ignored before a PR"]
     fn systems_get_belts_trojans_and_their_crater_rate() {
         let (mut inner, mut trojans) = (0, 0);
         for seed in 0..40 {
@@ -5704,6 +5708,7 @@ mod tests {
     /// giant with a moon with geysers close in has one plume ring, from
     /// the innermost of them.
     #[test]
+    #[ignore = "slow: 500 drawn systems for the plume rings of venting moons, 7 min in release; run with --include-ignored before a PR"]
     fn plume_rings_follow_geysers() {
         let (mut fed, mut vents) = (0, 0);
         for seed in 1..=500 {
@@ -6727,6 +6732,7 @@ mod focus_ring_tests {
     }
 
     #[test]
+    #[ignore = "slow: 30 drawn systems round a world, 5.5 min in release; run with --include-ignored before a PR"]
     fn the_rings_of_a_worlds_giant_stay_inside_its_chain() {
         for seed in 0..30 {
             let system = around("earth-like", seed, Some(HostMode::Giant));
@@ -6781,6 +6787,7 @@ mod spin_tests {
     /// year when locked, a year over the turns in a resonance. The moon
     /// system once drew its own, on an Earth's mass, and could disagree.
     #[test]
+    #[ignore = "slow: 300 drawn red-dwarf systems, 7 min in release; run with --include-ignored before a PR"]
     fn rocky_day_follows_the_one_spin_state() {
         let (mut locked, mut resonant) = (0, 0);
         for seed in 0..300 {
@@ -6913,6 +6920,7 @@ mod spin_tests {
     }
 
     #[test]
+    #[ignore = "slow: 20 drawn systems and their moons' worlds, 5 min in release; run with --include-ignored before a PR"]
     fn a_moons_spin_and_world_share_one_tilt_and_giants_one_recipe() {
         for seed in 0..20 {
             let request = SystemRequest::System(WholeSystemRequest {
@@ -7071,6 +7079,7 @@ mod lone_tests {
     }
 
     #[test]
+    #[ignore = "slow: 60 drawn systems, alone and not, for over 20 with company, 5 min in release; run with --include-ignored before a PR"]
     fn a_lone_planet_has_no_other_planet_belt_or_giant_neighbour() {
         let mut crowded = 0;
         for seed in 1..=30 {

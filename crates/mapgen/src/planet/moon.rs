@@ -619,6 +619,7 @@ mod tests {
     /// and no such crust (rocky or wet-rock frozen bodies, or a crust
     /// with plates) are counted apart: their climate reads no fallout.
     #[test]
+    #[ignore = "slow: 300 whole systems, every body replayed, 7 min in release; run with --include-ignored before a PR"]
     fn drawn_icy_moons_stay_in_bounds() {
         use crate::generation::{CrustKind, model_crust_kind};
         use crate::system::{BodyKind, SystemRequest, WholeSystemRequest, body_context, draw};

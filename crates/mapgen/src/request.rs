@@ -1835,6 +1835,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 400 drawn Earths for the share of tilts their moons steady, 33 min in release; run with --include-ignored before a PR"]
     fn moons_steady_the_drawn_tilt_and_set_the_shores() {
         let (mut free, mut steady) = (0, 0);
         for seed in 0..400 {
@@ -1868,6 +1869,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 340 drawn worlds for the despun and moonless cases, 22 min in release; run with --include-ignored before a PR"]
     fn moons_asked_for_get_a_star_and_orbit_with_room_for_them() {
         let mut despun = 0;
         for seed in 0..40 {
@@ -2019,6 +2021,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 800 drawn worlds resolved two or three times each to find the orbits giants force, over 90 min in release; run with --include-ignored before a PR"]
     fn a_world_its_giants_make_eccentric_replays_its_effects_from_its_pinned_request() {
         // Moons left to the seed and moons asked for: both see the orbit.
         let requests = [

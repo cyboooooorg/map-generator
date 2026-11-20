@@ -3828,6 +3828,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: two bisections of the outer edge, 28 climates, 2.5 min in release; run with --include-ignored before a PR"]
     fn the_outer_edge_follows_the_star() {
         // A redder star's light scatters less (Rayleigh's λ⁻⁴) and more
         // of it falls in the near-infrared bands of CO₂ and water, so the
