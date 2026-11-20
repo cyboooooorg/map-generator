@@ -1335,7 +1335,8 @@ pub struct CarbonCycle {
 ///   (Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131; issue
 ///   #522). The column, and so the cap, is the climate's own: it follows
 ///   the albedo the climate settles on. That maximum sets the outer edge
-///   of the habitable zone, about 1.78 AU round the Sun for an Earth.
+///   of the habitable zone, 1.535 AU round the Sun for an Earth on the
+///   spectral column, short of Kopparapu's 1.70 AU (issue #595).
 ///   If no CO₂ in that range reaches the thermostat, the planet takes the
 ///   CO₂ of its warmest climate, the maximum greenhouse; on a surface
 ///   too cold to keep it, it frosts out ([`collapsed_climate`])
@@ -2389,7 +2390,7 @@ mod tests {
         // Venus is measured only (issue #523): 737 K in reality, 577 K on
         // the spectral column under its 85 bar of CO₂ and its Bond albedo
         // 0.76. The gap is the infrared opacity of its H₂SO₄ clouds and its
-        // SO₂, which the model does not carry (follow-up issue). The bound
+        // SO₂, which the model does not carry (issue #594). The bound
         // pins what the model reaches, so that a change shows.
         let (_, g, venus) = climate_of("Venus");
         assert!(
@@ -3436,7 +3437,7 @@ mod tests {
         // The outer edge of the Sun's habitable zone, the maximum
         // greenhouse, is about 1.70 AU (Kopparapu et al. 2013, *ApJ* 765,
         // 131, doi:10.1088/0004-637X/765/2/131), 1.535 AU on the spectral
-        // column (frozen there, issue #523): an
+        // column (frozen there, issues #523 and #595): an
         // Earth on its temperate branch builds up its CO₂ and keeps liquid
         // water to 1.5 AU, and freezes beyond the edge. Colder the
         // farther, with no step but the edge.
@@ -3768,7 +3769,7 @@ mod tests {
         // +24 %). The gap left against Kopparapu 2013 is the thick CO₂'s
         // outgoing radiation, 73.5 W/m² under 8 bar at 1.70 AU against
         // their 67.4, and the albedo at the maximum greenhouse, 0.455
-        // against their 0.417 (follow-up issue).
+        // against their 0.417 (issue #595).
         let teff = crate::planet::reference::sun_at(1.0).teff_k;
         let edge = outer_edge_au(teff);
         println!("outer edge round the Sun: {edge:.3} AU");
