@@ -526,6 +526,7 @@ export const fr: Messages = {
     },
     coverValue: (p) => `${p.cover}, ${p.value}`,
     hazeValue: (p) => `${p.cover}, intensité ${p.value}`,
+    steamValue: (p) => `${p.cover}${S}: l’albédo humide pèse ${p.value} face à celui des couvertures`,
     boiledRecondensed: (p) => `L’océan a bouilli une fois : l’échappement a emporté ${p.lost} de son eau dans l’espace, et le reste s’est condensé de nouveau`,
     inputs: {
       mass_earth: 'Masse',

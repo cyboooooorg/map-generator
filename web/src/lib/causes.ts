@@ -68,10 +68,13 @@ export function formatCause(cause: Cause, unitOf: Quantity = cause.quantity): st
     const value = cause.quantity === 'terrain_unit' ? withUnit(formatInt(Math.round(cause.value * 100)), '%') : formatSurfaceAge(cause.value);
     return t.causes.renewalValue({ renewal: (t.causes.renewals as Record<string, string>)[cause.label] ?? cause.label, value });
   }
-  // A part of what the albedo weighs: its key and its share of the disc.
+  // A part of what the albedo weighs: its key and its share of the disc
+  // (the haze, its strength; a runaway's steam, the weight of the moist
+  // albedo in its blend with the covers').
   if (cause.label !== null && cause.quantity === 'cover_share') {
     const value = withUnit(formatInt(Math.round(cause.value * 100)), '%');
-    return (cause.label === 'haze' ? t.causes.hazeValue : t.causes.coverValue)({ cover: coverName(cause.label), value });
+    const format = cause.label === 'haze' ? t.causes.hazeValue : cause.label === 'steam' ? t.causes.steamValue : t.causes.coverValue;
+    return format({ cover: coverName(cause.label), value });
   }
   // An ocean that boiled and condensed again: the note carries the water lost, in Earth oceans.
   if (cause.quantity === 'note' && cause.label === 'boiled_recondensed') {

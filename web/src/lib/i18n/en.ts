@@ -571,6 +571,11 @@ export const en = {
     coverValue: (p: { cover: string; value: string }) => `${p.cover}, ${p.value}`,
     /** The haze is weighed by its strength, not by a share of the disc. */
     hazeValue: (p: { cover: string; value: string }) => `${p.cover}, strength ${p.value}`,
+    /**
+     * A runaway's steam is weighed by the weight of the moist albedo in its
+     * blend with the covers' one, not by a share of the disc.
+     */
+    steamValue: (p: { cover: string; value: string }) => `${p.cover}: the moist albedo weighs ${p.value} against the covers’`,
     /** An ocean that boiled and condensed again, with the water escape took (#517). */
     boiledRecondensed: (p: { lost: string }) => `The ocean boiled once: escape took ${p.lost} of its water to space, and what was left condensed again`,
     /** The request fields, named as the creation form names them. */
