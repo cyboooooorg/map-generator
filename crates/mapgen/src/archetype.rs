@@ -1320,15 +1320,29 @@ mass_earth = 5000.0
         assert_eq!(o.radiogenic, Some(1.0));
     }
 
+    /// The `earth-like` models of seeds 0 to 20, derived once (in parallel)
+    /// for the three tests below that read them: each derivation takes
+    /// about 5 s in release since the spectral column, and the tests
+    /// derived the same 20 models three times over.
+    fn earth_models() -> &'static [PlanetModel] {
+        use rayon::prelude::*;
+        static MODELS: std::sync::OnceLock<Vec<PlanetModel>> = std::sync::OnceLock::new();
+        MODELS.get_or_init(|| {
+            let a = Archetype::load("earth-like").unwrap();
+            (0..=20u32)
+                .into_par_iter()
+                .map(|seed| model_of(&a, seed))
+                .collect()
+        })
+    }
+
     /// Earth's 1.013 bar, within 0.7 to 1.3 on every seed: the archetype
     /// pins the mass, the light and the ammonia factor whose photolysis
     /// feeds the N₂.
     #[test]
     fn earth_like_keeps_its_ocean_and_its_life() {
-        let a = Archetype::load("earth-like").unwrap();
-        for seed in 0..20 {
-            let m = model_of(&a, seed);
-            let s = m.surface.expect("a bare world has a surface");
+        for (seed, m) in earth_models()[..20].iter().enumerate() {
+            let s = m.surface.as_ref().expect("a bare world has a surface");
             let oceans = s.water.oceans;
             assert!((0.5..2.0).contains(&oceans), "seed {seed}: {oceans} oceans");
             assert!(s.life.arose, "seed {seed}: {:?}", s.life);
@@ -1342,9 +1356,7 @@ mass_earth = 5000.0
     /// pins Earth's radiogenic abundance as well as its mass and age.
     #[test]
     fn earth_like_has_earths_heat_flux() {
-        let a = Archetype::load("earth-like").unwrap();
-        for seed in 0..20 {
-            let m = model_of(&a, seed);
+        for (seed, m) in earth_models()[..20].iter().enumerate() {
             let flux = m.heat.flux_w_m2(m.interior.radius_earth);
             assert!((0.087..=0.092).contains(&flux), "seed {seed}: {flux} W/m²");
         }
@@ -1354,10 +1366,8 @@ mass_earth = 5000.0
     /// climate has a frozen state at 1 AU (`snowball = false`).
     #[test]
     fn earth_like_never_snowballs() {
-        let a = Archetype::load("earth-like").unwrap();
-        for seed in 1..=20 {
-            let m = model_of(&a, seed);
-            let s = m.surface.expect("a bare world has a surface");
+        for (seed, m) in earth_models().iter().enumerate().skip(1) {
+            let s = m.surface.as_ref().expect("a bare world has a surface");
             assert!(!s.climate.snowball, "seed {seed}: {:?}", s.climate);
             assert_eq!(m.inputs.snowball_draw, 1.0, "seed {seed}");
         }

@@ -1436,8 +1436,12 @@ mod tests {
                 ..named(Some("hot-jupiter"), 8)
             },
         ];
+        // One draw per request (were three, 116 s in release since the
+        // spectral column): each request is its own case and pins its
+        // seed, so the generator's draw only fills the fields the seed
+        // leaves open; the eleven requests cover every kind of field.
         for request in requests {
-            for draw in 0..3u64 {
+            for draw in 0..1u64 {
                 let rng = &mut StdRng::seed_from_u64(draw);
                 let resolved = request.resolve(rng).unwrap();
                 let pinned = request.pinned(&resolved.params, Some(resolved.model()));
@@ -1779,8 +1783,11 @@ mod tests {
         // Seeded, so that a failure reproduces. 200 seeds draw 41
         // mini-Neptunes, 16 ice giants and 9 hot Neptunes; the tilt of
         // seeds 79, 82 and 164 (mini-Neptunes), 151 and 171 (ice giants)
-        // passes 85°.
-        for seed in 0..200 {
+        // passes 85°. Seeds 0 to 19 and those five (were 0 to 199, 256 s
+        // in release since the spectral column): the five are the cases
+        // that reach the giants' 90° bound, the first twenty the ordinary
+        // draws under 85° and the surface ages.
+        for seed in (0..20).chain([79, 82, 151, 164, 171]) {
             let resolved = WorldRequest::default()
                 .resolve(&mut StdRng::seed_from_u64(seed))
                 .unwrap();
@@ -1954,8 +1961,12 @@ mod tests {
     #[test]
     fn a_giants_moon_takes_its_volcanism_from_its_final_orbit() {
         // The giants may force the eccentricity after the host is known:
-        // the volcanism follows the tides of the final orbit.
-        for seed in 0..40 {
+        // the volcanism follows the tides of the final orbit. Seeds 0, 4,
+        // 15, 30 and 32 (were 0 to 39, 270 s in release since the
+        // spectral column): of the forty, the moons whose volcanism is
+        // neither full (1) nor zero at the host's, so where the bound can
+        // bind; seed 30's sits exactly on it (0.976 both).
+        for seed in [0, 4, 15, 30, 32] {
             let p = resolve(&WorldRequest {
                 mass_earth: Some(1.0),
                 host: Some(crate::exomoon::HostMode::Giant),

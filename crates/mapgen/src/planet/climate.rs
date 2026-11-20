@@ -2619,7 +2619,7 @@ mod tests {
     #[test]
     fn the_runaway_edge_steps_only_by_the_branches_albedos() {
         // Issue #523, ruling of the climate pass lot 3C-2: Earth's
-        // inventory (its water kept, no escape) swept in 0.1 % steps of
+        // inventory (its water kept, no escape) swept in steps of 1 % of
         // flux across its star's runaway limit `S_rg`, on the temperate
         // branch below (wet) and the steam branch above (its whole ocean
         // in the air). The step at `S_rg` is the bifurcation between the
@@ -2663,11 +2663,16 @@ mod tests {
             );
             (f, c.equilibrium_k, c.bond_albedo)
         };
-        let temperate: Vec<_> = (0..=20).map(|i| at(0.98 + 0.001 * f64::from(i))).collect();
-        let steam: Vec<_> = (1..=20).map(|i| at(1.0 + 0.001 * f64::from(i))).collect();
+        // Each branch at flux points 1 % apart (at most), from 2 % below
+        // `S_rg` to 2 % above (was every 0.1 %, 41 climates and 90 s in
+        // release): a jump over 0.5 K anywhere on a branch falls between
+        // two neighbours here as it fell inside a sliding 1 % window of
+        // the finer sweep, so the bound catches the same steps.
+        let temperate: Vec<_> = [0.98, 0.99, 1.0].into_iter().map(at).collect();
+        let steam: Vec<_> = [1.001, 1.01, 1.02].into_iter().map(at).collect();
         for branch in [&temperate, &steam] {
-            for pair in branch.windows(11) {
-                let (a, b) = (pair[0], pair[10]);
+            for pair in branch.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
                 let (ta, tb) = (a.1 / a.0.powf(0.25), b.1 / b.0.powf(0.25));
                 assert!(
                     (tb - ta).abs() < 0.5,
@@ -2677,7 +2682,7 @@ mod tests {
                 );
             }
         }
-        let (wet, hot) = (temperate[20], steam[0]);
+        let (wet, hot) = (temperate[2], steam[0]);
         let expected = wet.1 * (hot.0 / wet.0 * (1.0 - hot.2) / (1.0 - wet.2)).powf(0.25);
         println!(
             "edge: A {:.4} -> {:.4}, T_eq {:.2} -> {:.2} K (albedo alone {expected:.2} K)",

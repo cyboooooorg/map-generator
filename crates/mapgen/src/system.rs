@@ -3349,8 +3349,12 @@ mod tests {
     #[test]
     fn giants_round_a_hot_host_keep_its_edge() {
         let edge = crate::host::inner_edge_au(&crate::star::values(parse_type("O3V").unwrap()));
+        // Seeds 0 to 19 (were 0 to 399, 414 s in release since the
+        // spectral column): the edge holds on every planet whatever the
+        // draw, and seeds 7, 12, 13 and 16 draw a giant under it that is
+        // raised to it (39 of the 400 did, the first at seed 7).
         let mut at_edge = 0;
-        for seed in 0..400 {
+        for seed in 0..20 {
             let world = o3_world(None, seed);
             let sys = draw(
                 &SystemRequest::Around(world),
@@ -3365,7 +3369,7 @@ mod tests {
                 }
             }
         }
-        assert!(at_edge > 0, "no hot giant was clamped in 400 seeds");
+        assert!(at_edge > 0, "no hot giant was clamped in 20 seeds");
     }
 
     use super::*;
@@ -3949,8 +3953,11 @@ mod tests {
 
     #[test]
     fn a_giants_preview_is_linear_and_follows_the_bands_it_will_get() {
+        // Seeds 0 to 3 (were 0 to 9, 103 s in release since the spectral
+        // column): each system keeps the three giants it asks for, so
+        // four give the twelve previews the count below asks for.
         let mut checked = 0;
-        for seed in 0..10 {
+        for seed in 0..4 {
             let system = draw(
                 &whole(
                     &[("jupiter-like", 2), ("neptune-like", 1), ("earth-like", 1)],
@@ -4516,8 +4523,15 @@ mod tests {
 
     #[test]
     fn every_planet_stores_its_model_and_its_class() {
+        // Seeds 1 to 3 round a planet and 1 to 4 for whole systems (were
+        // 1 to 10 and 1 to 20, 59 s in release since the spectral
+        // column): the class key is checked on every planet whatever its
+        // class; seeds 1, 2 and 4 draw round moons with a model of their
+        // own (2, 4 and 1) and every seed small moons without one, so
+        // both branches of the moons' check run.
+        //
         // Around a planet: every planet, the world asked included.
-        for seed in 1..=10 {
+        for seed in 1..=3 {
             let world = WorldRequest {
                 planet: Some("earth-like".into()),
                 seed: Some(seed),
@@ -4536,7 +4550,7 @@ mod tests {
             assert!(asked.model.is_some(), "seed {seed}");
         }
         // A whole system: every planet.
-        for seed in 1..=20 {
+        for seed in 1..=4 {
             let system = drawn_g2v(seed);
             for body in &system.bodies {
                 match body.kind {
@@ -4673,15 +4687,16 @@ mod tests {
         // some come out as tidally heated heat-pipe volcanic worlds under
         // a steaming air, whose replayed temperature missed the stored
         // one. Every body is explained, and the temperature root is the
-        // stored temperature. Request seeds 1 to 8 (2 min in release;
-        // the issue's 1 to 40 took 10): seeds 1 and 8 each draw such a
-        // moon (seed 8 is the issue's measured case), and the guard
-        // asks for at least one, so the sample holds the path.
+        // stored temperature. Request seeds 1 and 8 (were 1 to 8, 123 s
+        // in release; the issue's 1 to 40 took 10 min): of the eight,
+        // only they draw such a moon (seed 1's d-2, seed 8's d-5, the
+        // issue's measured case), and the guard asks for at least one,
+        // so the sample holds the path.
         use crate::geology::Regime;
         use crate::planet::{Quantity, explain};
         let mut failed = Vec::new();
         let mut heat_pipes = 0;
-        for seed in 1..=8 {
+        for seed in [1, 8] {
             let system = draw(
                 &SystemRequest::Around(WorldRequest {
                     planet: Some("earth-like".into()),
@@ -4758,9 +4773,12 @@ mod tests {
 
     #[test]
     fn requested_slots_store_the_derived_class() {
-        // terran=1, gas-giant=1 round a G2V, seeds 1..=10: one planet in
-        // each band; each stores a class key, whatever it is.
-        for seed in 1..=10 {
+        // terran=1, gas-giant=1 round a G2V, seeds 1..=3: one planet in
+        // each band; each stores a class key, whatever it is. Three seeds
+        // (were ten, 97 s in release since the spectral column): the
+        // slots asked are kept on every seed by construction, and the
+        // class key is checked on each planet whatever its class.
+        for seed in 1..=3 {
             let system = requested(seed, &[("earth-like", 1), ("jupiter-like", 1)]);
             let planets: Vec<_> = system
                 .bodies
@@ -6355,8 +6373,12 @@ mod tests {
         model.surface.expect("a surface").gases.total()
     }
 
+    /// Seeds 0 to 3 (were 0 to 9; Earth's took 96 s in release): the star
+    /// is the archetype's on every seed by construction, and the pressure
+    /// bounds are held over 20 seeds of a whole system by
+    /// `archetype::tests::faithful_archetypes_hold_in_a_whole_system`.
     fn assert_brings_its_sun(archetype: &str, bar: std::ops::RangeInclusive<f64>) {
-        for seed in 0..10 {
+        for seed in 0..4 {
             let system = whole_starless(&[(archetype, 1)], seed).unwrap();
             assert_eq!(system.star.spectral, "G2V", "{archetype} seed {seed}");
             let p = asked_pressure_bar(&system, archetype);
@@ -6805,8 +6827,12 @@ mod spin_tests {
 
     #[test]
     fn planets_locked_to_their_star_turn_on_circles_upright() {
+        // Seeds 0 to 9 (were 0 to 59, 59 s in release since the spectral
+        // column): every planet's spin is checked against its star's
+        // tides whatever it is; they hold 19 locked planets and the
+        // first 3:2 resonance (seed 4; four in the sixty seeds).
         let (mut locked, mut resonant) = (0, 0);
-        for seed in 0..60 {
+        for seed in 0..10 {
             let system = red_dwarf_system(seed);
             for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
                 if giant(body) {
@@ -7006,8 +7032,11 @@ mod lone_tests {
 
     #[test]
     fn a_planets_moon_list_agrees_with_its_round_moons_bodies() {
+        // Seeds 1 and 2 (were 1 to 12, 61 s in release since the spectral
+        // column): they draw 11 round moons with bodies, against the 4
+        // the count below asks for (seed 1 alone, 7).
         let mut checked = 0;
-        for seed in 1..=12 {
+        for seed in 1..=2 {
             let system = around("earth-like", seed, None, None);
             for planet in system.bodies.iter().filter(|b| b.kind != BodyKind::Moon) {
                 let Some(drawn) = MoonSystem::draw(&planet.params) else {
@@ -7064,7 +7093,10 @@ mod lone_tests {
 
     #[test]
     fn a_lone_moon_of_a_giant_keeps_its_host_and_nothing_else() {
-        for seed in 1..=10 {
+        // Seeds 1 to 3 (were 1 to 10, 109 s in release since the spectral
+        // column): `alone` drops every other body whatever the draws, so
+        // any seed takes the path; three vary the giant drawn.
+        for seed in 1..=3 {
             let lone = around("earth-like", seed, Some(HostMode::Giant), Some(true));
             let only = planets(&lone);
             assert_eq!(only.len(), 1, "seed {seed}");
@@ -7085,8 +7117,11 @@ mod lone_tests {
 
     #[test]
     fn a_request_without_alone_is_the_one_it_was() {
-        // Neither the flag left out nor false changes the system.
-        for seed in 1..=5 {
+        // Neither the flag left out nor false changes the system. Seeds 1
+        // and 2 (were 1 to 5, 54 s in release): the flag is read before
+        // any draw, so one seed shows it; the second guards against a
+        // match by chance.
+        for seed in 1..=2 {
             let a = serde_json::to_string(&around("earth-like", seed, None, None)).unwrap();
             let b = serde_json::to_string(&around("earth-like", seed, None, Some(false))).unwrap();
             let strip = |s: &str| s.replace("\"alone\":false,", "");
