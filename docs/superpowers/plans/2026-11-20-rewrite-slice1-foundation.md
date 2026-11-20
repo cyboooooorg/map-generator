@@ -94,6 +94,20 @@ sessions.
   PR 2**, when its first page is rewritten to the new rules; the
   determinism test also comes with PR 2, when there is a system to
   regenerate. This PR lands the clippy lint for it.
+- **Left to PR 2: the tier-2 fixtures.** The spec caches the reference
+  worlds on disk under a key hashing the engine sources. `crates/regression`
+  falls under the strict root `clippy.toml` (no `std::fs`), so PR 2 decides
+  who writes them: `regression` joins the relaxed crates (a `clippy.toml`
+  and an entry in `RELAXED` of `tools/guardrails`), or the fixtures go
+  through a catalogue port and its `adapters` implementation.
+- **Review follow-ups applied on the branch.** `mise run ci` runs its steps
+  one after the other (two tiers at once would take eight threads) and
+  includes actionlint; tier 1 also runs the doctests; a `let` bound to a
+  bare number in `science` must become a documented constant; relaxed
+  clippy copies are pinned to `crates/adapters`, `crates/cli` and
+  `tools/*`, and hidden `.clippy.toml` files are refused; every member
+  inherits the workspace lints; every member has a README; the study and
+  code links of `docs/` point at the Wiki and at `legacy-final`.
 - **`tools/opacity-table` stays** (standalone, no dependency on the
   legacy crates); its output path moves with the climate port (PR 3).
 - Removed with the legacy crates: `Dockerfile`, `compose.yaml`,

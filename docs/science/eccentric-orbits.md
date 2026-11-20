@@ -263,8 +263,8 @@ Laskar et al. 2004).
    speeds by the vis-viva equation (`orbitalSpeed`).
 
 The rules, trimmed (from
-[`crates/mapgen/src/star.rs`](../../crates/mapgen/src/star.rs) and
-[`crates/mapgen/src/giants.rs`](../../crates/mapgen/src/giants.rs)):
+[`crates/mapgen/src/star.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/star.rs) and
+[`crates/mapgen/src/giants.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giants.rs)):
 
 ```rust
 /// `1 / sqrt(1 − e²)` (1.0001 for Earth, 1.02 for Mercury, 1.25 at e = 0.6).
@@ -298,7 +298,7 @@ pub fn forced_eccentricity(a: f64, a_g: f64, e_g: f64) -> f64 {
 }
 ```
 
-The request ([`request.rs`](../../crates/mapgen/src/request.rs)) then
+The request ([`request.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/request.rs)) then
 raises a drawn eccentricity, up to three times as the giants are drawn
 again round the new orbit:
 
@@ -396,9 +396,9 @@ if eccentricity_drawn && !locked {
 
 ## See also
 
-- [docs/analysis/10-stars.md](../analysis/10-stars.md): the study behind
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars): the study behind
   the app's stars and orbits, with the eccentric orbits follow-up.
-- [docs/analysis/12-gas-giants.md](../analysis/12-gas-giants.md): the
+- [12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants): the
   giants and their forced eccentricity.
 - [Why are giant planets far from their star, and what is a hot
   Jupiter?](giant-planet-placement.md): where the giants that force an

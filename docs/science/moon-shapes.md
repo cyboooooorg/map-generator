@@ -199,7 +199,7 @@ moons, and a giant's ring moons.
 
 ### How it computes them
 
-[`MoonSystem`](../../crates/mapgen/src/moons.rs) decides from the mean
+[`MoonSystem`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/moons.rs) decides from the mean
 radius and the composition whether a moon is round, for a rocky planet's
 moons and for a giant's regular moons alike (one function, `moon_axes`):
 
@@ -224,7 +224,7 @@ moons and for a giant's regular moons alike (one function, `moon_axes`):
    near its Roche limit.
 5. **The surface** is the ellipsoid with low-frequency bumps: a noise of
    order one times 12 % of the radius times `1 − c/a`
-   ([`shape_at`](../../crates/mapgen/src/moons.rs)), written as
+   ([`shape_at`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/moons.rs)), written as
    `raw_data/shape.png` for every irregular or stretched moon, with the
    long axis at longitude 180°, facing the planet. The three axes are
    stored in `world.json` and in the system (`axes_km`).
@@ -257,7 +257,7 @@ fn moon_axes(composition, radius_km, draws: [f64; 2], locked) -> [f64; 3] {
 
 Ring moons have their own copy of the rule with the ice limit
 (`irregular` and `ROUND_ICE_KM` in
-[`rings.rs`](../../crates/mapgen/src/rings.rs)). The viewer reads
+[`rings.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/rings.rs)). The viewer reads
 `shape.png` and moves each vertex of the globe out to that radius, tilting
 its normal by the shape's slopes (`setShape` in
 [`PlanetView.ts`](../../web/src/lib/viewer/PlanetView.ts), `shapeAt` in
@@ -346,7 +346,7 @@ its normal by the shape's slopes (`setShape` in
 
 ## See also
 
-- [docs/analysis/11-moons.md](../analysis/11-moons.md), section 5 "Round
+- [11-moons (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/11-moons), section 5 "Round
   or misshapen": the study behind the app's moon shapes.
 - [Why are ring moons so small?](ring-moons.md): ring moons, whose shapes
   follow the same rule.

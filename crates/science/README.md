@@ -19,7 +19,8 @@ pull requests of slice 1 that use them (#602).
 
 ## Dependencies
 
-None outside the standard library. Every other crate may depend on it.
+None outside the standard library. The engines, `catalogue`, `adapters`,
+`cli` and `regression` may depend on it.
 
 The direction of dependencies is checked by `tools/guardrails`
 (`mise run test:tier1`). See the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md),

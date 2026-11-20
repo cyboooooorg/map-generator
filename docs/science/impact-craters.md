@@ -261,7 +261,7 @@ regime.
 
 ### How it computes them
 
-[`craters.rs`](../../crates/mapgen/src/craters.rs) draws a crater field that
+[`craters.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/craters.rs) draws a crater field that
 depends only on the planet and the seed:
 
 1. **How many.** `crater_density` is the lunar chronology above. The density
@@ -392,7 +392,7 @@ Moon). A
 crater of 170 m or less is worn out (below 3 % of its relief, `WORN_OUT`)
 after 3 Ga.
 
-**The flux from the orbit.** [`impacts.rs`](../../crates/mapgen/src/impacts.rs)
+**The flux from the orbit.** [`impacts.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/impacts.rs)
 gives a world with a model its flux per unit area and its crater size
 against the Moon's, the reference of the chronology (a body at 1 AU from a
 Sun-like star, $g$ = 1.62 m/s², $v_{esc}$ = 2.37 km/s). A moon, a round
@@ -510,7 +510,7 @@ and its craters 0.94 times the Moon's (1.17 for a Mars-sized one) instead
 of growing with the speed. Since the flux is bounded, so is the
 population of future craters, which has no saturation cap.
 
-**Epochs.** [`epoch.rs`](../../crates/mapgen/src/epoch.rs) shows the
+**Epochs.** [`epoch.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/epoch.rs) shows the
 surface at another time $t$. The generation keeps the elevation without the
 craters of the dry era (`raw_data/elevation_base.png`). At an epoch, the
 craters at least $t$ old (and, in the future, those formed by then) are
@@ -843,7 +843,7 @@ more are flooded flat at a date of that window and darkened.
 
 ## See also
 
-- [docs/analysis/08-geology.md](../analysis/08-geology.md): the study behind
+- [08-geology (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/08-geology): the study behind
   the app's craters and time slider, sections 3, 5 and 6.
 - [Do all rocky planets have plate tectonics?](plate-tectonics.md): the
   other way a surface is renewed.

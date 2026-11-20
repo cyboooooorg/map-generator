@@ -5,7 +5,7 @@ something looks the way it does, and how the app computes it. Each article
 explains the science first, with its equations and sources, then shows how
 the app turns it into a calculation and where it simplifies.
 
-The study documents in [docs/analysis/](../analysis/) are where the app's
+The studies in the [Wiki](https://github.com/cyboooooorg/map-generator/wiki) are where the app's
 rules were decided. These articles explain one topic each to a reader who
 wants to understand it, and link back to those studies.
 
@@ -85,7 +85,7 @@ Every article has these sections, in this order:
      changes, and when it would show. Say it plainly: this section is what
      makes the article honest.
 5. **Sources**: a numbered list.
-6. **See also**: the study in `docs/analysis/`, related articles, the spec.
+6. **See also**: the study in the Wiki, related articles, the spec.
 
 ### Equations
 

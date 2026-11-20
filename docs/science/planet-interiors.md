@@ -743,12 +743,12 @@ the system's seed and `<id>/model`, so they depend on no other body.
 Water is drawn as a share of the mass that is not gas, then scaled by one
 minus the envelope, so that a wet giant keeps its rock.
 
-Sources: [mod.rs](../../crates/mapgen/src/planet/mod.rs),
-[inputs.rs](../../crates/mapgen/src/planet/inputs.rs),
-[interior.rs](../../crates/mapgen/src/planet/interior.rs),
-[differentiation.rs](../../crates/mapgen/src/planet/differentiation.rs),
-[heat.rs](../../crates/mapgen/src/planet/heat.rs),
-[classify.rs](../../crates/mapgen/src/planet/classify.rs).
+Sources: [mod.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/mod.rs),
+[inputs.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/inputs.rs),
+[interior.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/interior.rs),
+[differentiation.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/differentiation.rs),
+[heat.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/heat.rs),
+[classify.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/classify.rs).
 
 ### Measuring it
 
@@ -761,7 +761,7 @@ base preset each world renders with (`planet::interim::base_of`; the
 `body_type` is the class itself), the share of planets per
 radius bin of Fulton et al. (2017), and the median age, iron share, water
 and envelope per class
-([planet_census.rs](../../crates/mapgen/examples/planet_census.rs)).
+([planet_census.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/examples/planet_census.rs)).
 
 ### From the model to the map
 

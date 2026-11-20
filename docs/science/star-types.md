@@ -212,7 +212,7 @@ a glow that grows with its luminosity.
 
 ### How it computes them
 
-The model lives in [`star.rs`](../../crates/mapgen/src/star.rs):
+The model lives in [`star.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/star.rs):
 
 1. **A type is a number.** The class is 0 for O to 6 for M; the type is
    `class × 10 + subtype`, so G2 is 42 and M4.5 is 64.5. Only luminosity
@@ -385,7 +385,7 @@ Its glow grows with the log of the luminosity, within bounds
 
 ## See also
 
-- [docs/analysis/10-stars.md](../analysis/10-stars.md): the study behind
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars): the study behind
   the app's stars, with its reference values.
 - [What is the habitable zone?](habitable-zone.md): where a planet of each
   type of star can keep liquid water.

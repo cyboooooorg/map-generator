@@ -207,7 +207,7 @@ In the star view of a planetary system:
 ### How it computes them
 
 The system draws each planet's trojans once the planets are placed
-([`belts::draw_trojans`](../../crates/mapgen/src/belts.rs)), from a random
+([`belts::draw_trojans`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/belts.rs)), from a random
 stream of their own:
 
 1. **Routh's criterion.** No trojans if the planet's mass share is 0.0385
@@ -381,7 +381,7 @@ plane.
 
 ## See also
 
-- [docs/analysis/13-asteroids.md](../analysis/13-asteroids.md): the study
+- [13-asteroids (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/13-asteroids): the study
   behind the app's trojans and Lagrange points, with more sources.
 - [How do asteroid belts form?](asteroid-belts.md): the other small bodies
   a giant shapes, the Hildas among them.

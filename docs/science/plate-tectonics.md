@@ -221,11 +221,11 @@ id that names it (`terran-past250ma-42`).
 
 ### How it computes them
 
-[`plates.rs`](../../crates/mapgen/src/plates.rs) builds the plates, and
-[`generation.rs`](../../crates/mapgen/src/generation.rs) adds their relief
+[`plates.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/plates.rs) builds the plates, and
+[`generation.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/generation.rs) adds their relief
 when the world's regime is plates. That regime is decided before the world
 is generated: `regime_of` in
-[`geology.rs`](../../crates/mapgen/src/geology.rs), called by
+[`geology.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/geology.rs), called by
 `WorldRequest::resolve`, keeps a plate preset's plates unless the world is
 under 0.3 Earth masses or under `LIQUID_WATER_BAR`, and stores the result in
 the preset of `world.json`:
@@ -455,7 +455,7 @@ and 0 for the other regimes and without liquid water.
 
 ## See also
 
-- [docs/analysis/08-geology.md](../analysis/08-geology.md): the study behind
+- [08-geology (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/08-geology): the study behind
   the app's regimes, plates and drift, sections 1, 2, 4 and 8.
 - [How do impact craters form and fade?](impact-craters.md): how the regime
   shows on worlds without plates.

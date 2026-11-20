@@ -187,12 +187,12 @@ ring moons are bodies of the system:
 
 Each one's card tells its part ("orbits inside the rings and clears a gap
 40 km wide round its orbit"). The rules and their sources are in
-[docs/analysis/14-rings.md](../analysis/14-rings.md).
+[14-rings (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/14-rings).
 
 ### How it computes them
 
 The system draws a giant's rings, then
-[`rings::shape`](../../crates/mapgen/src/rings.rs) shapes them with the
+[`rings::shape`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/rings.rs) shapes them with the
 giant's density and mass:
 
 1. **The outer edge** is the fluid Roche limit of the ring particles, their
@@ -330,7 +330,7 @@ the smaller they are (`irregular` in the same file).
 
 ## See also
 
-- [docs/analysis/14-rings.md](../analysis/14-rings.md): the study behind the
+- [14-rings (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/14-rings): the study behind the
   app's rings and ring moons, with more sources.
 - [docs/system-spec.md](../system-spec.md): ring moons as bodies of a
   system.
