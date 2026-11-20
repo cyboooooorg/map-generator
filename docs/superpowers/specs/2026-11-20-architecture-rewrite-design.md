@@ -524,9 +524,74 @@ request brings back mise tasks for the new workspace, with a single
 clippy, tests, the guardrail checks below and markdownlint. The GitHub
 workflow installs mise and calls the same tasks (one job per task when
 they are worth running in parallel), so a green `mise run ci` locally
-means a green pipeline. Slow tests keep their own task outside `ci`, as
-`test:slow` does today. Other tasks (`gen`, `export`, `oracle`, `fmt`)
-are added with the features that need them.
+means a green pipeline. Heavy tests keep their own task outside `ci`
+(`test:heavy`, see Tests). Other tasks (`gen`, `export`, `oracle`,
+`fmt`) are added with the features that need them.
+
+### Tests
+
+The legacy suite grew to 1 069 Rust tests, and its pipeline from about
+8 minutes to more than two hours (two runs on 2026-11-20: 1 h 12 and
+2 h 23). Most of the time went into generating worlds: each feature
+added tests that generated their own planet. The rewrite keeps tests in
+three tiers with hard budgets.
+
+| Tier | What | Where | Budget |
+| --- | --- | --- | --- |
+| 1. Unit | Laws, pure functions vs published values | Every push | 2 min |
+| 2. Regression | Shared reference systems, contracts | Every push | 8 min |
+| 3. Heavy | 15 km worlds, oracle, censuses, profiles | Local, manual | None |
+
+Tiers 1 and 2 run on GitHub at every push; tier 3 runs locally or by
+hand on GitHub.
+
+- **Tier 2 shares its worlds.** A few reference systems are generated
+  once per run on a coarse test grid (60 km *(my call)*) and every
+  tier-2 test asserts on them: statistics with tolerances, contracts,
+  determinism. No test generates a world of its own.
+- **Budgets are enforced.** cargo-nextest runs one profile per tier,
+  and CI fails when tier 1 or tier 2 passes its budget. The answer is
+  an arbitration: move a test to tier 3, merge it with another, or
+  delete it.
+- **Tier 3 is proven in the pull request.** A pull request that
+  changes what the engines produce pastes the output of
+  `mise run test:heavy` (oracle report, censuses) in its description.
+  The same tier can be started by hand on GitHub
+  (`workflow_dispatch`).
+- **Expected values come from sources, not from the code** (No
+  invented data). A test that pins the code's current output is allowed
+  only in tier 2, as a regression net, never as proof that a law is
+  right.
+- The budgets are the user's to change.
+
+**`test-reviewer` agent** (new, read-only, sonnet, medium effort), run
+once per branch before its pull request, alongside `branch-reviewer`.
+It checks that each new test sits in the right tier and generates no
+world of its own, finds duplicates and tests made useless by the
+change, checks that expected values have a source, and measures with
+nextest what the branch adds to each tier against its budget. It
+proposes arbitrations (move, merge, delete); the main session decides,
+and the user when a budget is at stake.
+
+**GitHub Actions caches**, to keep the pipeline short:
+
+- `jdx/mise-action` caches the tools and `Swatinem/rust-cache` the
+  compiled dependencies, as in the legacy workflow.
+- **Path filters:** a pull request touching only `docs/` or `web/` does
+  not run the Rust jobs. A job that always reports keeps the required
+  checks satisfied.
+- **Tier-2 fixtures cached:** the reference worlds are written to disk
+  and cached under a key hashing the sources of `science`, `timeline`,
+  `system`, `world` and `Cargo.lock`, so a change to adapters, the CLI
+  or the docs does not regenerate them, and a stale fixture cannot
+  survive an engine change.
+- **Partitions:** tier 2 is split across runners
+  (`cargo nextest --partition`) when its budget gets tight.
+- **`main` keeps the cache warm:** branches read `main`'s cache, not
+  each other's, so CI runs on every push to `main`. GitHub keeps 10 GB
+  per repository and evicts the least recently used entries.
+- **Tier 3 on GitHub** caches the `legacy-final` oracle binary under
+  the tag's SHA, so it is built once.
 
 **CI checks.**
 
@@ -578,6 +643,7 @@ document:
 | `branch-reviewer` | Boundaries, engine version, uncited numbers |
 | `science-fixer` | Targets `science`, ports physics, studies first |
 | `branch-syncer` | Description without `raw_data` and tiles |
+| `test-reviewer` | New: tiers, duplicates, sources, budgets (Tests) |
 | `world-coherence-checker` | The oracle: legacy against new, by distributions |
 | `generation-profiler` | The new CLI |
 | `develop-deployer` | Paused during the engine phase |
