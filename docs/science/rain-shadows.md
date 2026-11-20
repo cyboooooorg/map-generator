@@ -302,12 +302,12 @@ requires a windward maximum of 6 to 16 m, a lee under 0.5 of flat ground
 and a warm lee).
 
 The code is in
-[`crates/mapgen/src/climate.rs`](../../crates/mapgen/src/climate.rs)
+[`crates/mapgen/src/climate.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/climate.rs)
 (`moisture`, `rain_along`, `Belts`, `holding_capacity`, `annual_rain_mm`),
 called from the moisture pass of
-[`crates/mapgen/src/generation.rs`](../../crates/mapgen/src/generation.rs)
+[`crates/mapgen/src/generation.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/generation.rs)
 (`belts` gives a world's wind belts); biomes are chosen in
-[`crates/mapgen/src/biome.rs`](../../crates/mapgen/src/biome.rs)
+[`crates/mapgen/src/biome.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/biome.rs)
 (`BiomeRules::arid`).
 
 ### Where it departs from the science
@@ -467,7 +467,7 @@ were computed for this article from sources 1 to 3 and from the code.
 - [README, "Moisture — winds and rain
   shadows"](../../README.md#moisture--winds-and-rain-shadows): the app's
   moisture model in full.
-- [docs/analysis/02-biome-banding.md](../analysis/02-biome-banding.md),
+- [02-biome-banding (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/02-biome-banding),
   option D "Moisture transport": why dry interiors and moisture bands were
   studied, and what was deferred.
 - Related articles: [How does axial tilt make climate zones and

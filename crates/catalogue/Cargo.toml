@@ -1,0 +1,12 @@
+[package]
+name = "catalogue"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+system.workspace = true
+timeline.workspace = true
+
+[lints]
+workspace = true

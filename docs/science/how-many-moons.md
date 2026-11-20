@@ -273,12 +273,12 @@ $2^{2/3} \approx 1.59$ times the last.
 ### How it computes them
 
 A rocky planet's moons come from `MoonSystem::draw` in
-[moons.rs](../../crates/mapgen/src/moons.rs), on a noise stream of their
+[moons.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/moons.rs), on a noise stream of their
 own:
 
 1. **The planet.** Its mass follows from its size by the mass–radius
    relation of rocky planets (`rocky_gravity` in
-   [world.rs](../../crates/mapgen/src/world.rs), after Zeng et al. 2016).
+   [world.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/world.rs), after Zeng et al. 2016).
    Its Hill radius is taken at periapsis. A planet its star has despun
    (locked, or in the 3:2 resonance: see
    [Why does a world always show the same face to its
@@ -339,7 +339,7 @@ let stable = |c: &Candidate| {
 
 A giant draws its moons with `of_giant` in the same file, whether it is a
 giant world or a giant of a planetary system
-([system.rs](../../crates/mapgen/src/system.rs) calls `MoonSystem::draw`
+([system.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs) calls `MoonSystem::draw`
 for it). Two to five regular moons share 1 to 2.5 × $10^{-4}$ of its
 mass (uniform, the Solar System's range, Canup & Ward 2006), on a resonant
 chain, each orbit $2^{2/3}$ times the last, from 4 to 8 giant radii
@@ -409,7 +409,7 @@ carry a Titan (1.3 × $10^{-3}$ of its mass); a Saturn round a late M
 dwarf has no room for one.
 
 A rocky world drawn as the moon of a giant
-([exomoon.rs](../../crates/mapgen/src/exomoon.rs)) gets siblings on the same
+([exomoon.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/exomoon.rs)) gets siblings on the same
 chain round it. Ring moons are drawn apart (see
 [Why are ring moons so small?](ring-moons.md)).
 
@@ -538,9 +538,9 @@ chain round it. Ring moons are drawn apart (see
 
 ## See also
 
-- [docs/analysis/11-moons.md](../analysis/11-moons.md): the study behind
+- [11-moons (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/11-moons): the study behind
   the app's moons, their odds and the stable zone.
-- [docs/analysis/12-gas-giants.md](../analysis/12-gas-giants.md), "On their
+- [12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants), "On their
   own moons": a giant's regular moons and the $10^{-4}$ scaling.
 - [Why does a world always show the same face to its
   host?](tidal-locking.md)

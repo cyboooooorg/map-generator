@@ -1,5 +1,12 @@
 # opacity-table
 
+> **Rewrite status.** The climate column that reads these tables is ported
+> into `crates/science` with slice 1 (#602, the planet model pull
+> request), together with the committed tables and `OPACITY.md`. Until
+> then the readers and the tables live at the tag `legacy-final`
+> (`crates/mapgen/src/planet/`, `crates/mapgen/data/`); this tool now
+> writes to `crates/science/data/` by default.
+
 Builds `crates/mapgen/data/opacity.bin`, and with `--shortwave`
 `crates/mapgen/data/shortwave.bin`. The second table covers the star's
 near infrared on the Bond albedo's bands from 0.7 to 5 µm, with MT_CKD's
@@ -73,7 +80,7 @@ From the repository root, after the download:
 cargo run --release -j 4 -p opacity-table
 cargo run --release -j 4 -p opacity-table -- \
   --bin-width 10 --top 2500 --temperatures 200,225,250,275,300 \
-  --out crates/mapgen/data/opacity-halved.bin
+  --out crates/science/data/opacity-halved.bin
 ```
 
 The first command writes `crates/mapgen/data/opacity.bin`; the second
@@ -87,10 +94,10 @@ To build the shortwave table:
 cargo run --release -j 4 -p opacity-table -- --shortwave
 ```
 
-It writes `crates/mapgen/data/shortwave.bin` in about four minutes on
+It writes `crates/science/data/shortwave.bin` in about four minutes on
 four threads; the albedo tests of `mapgen` check it.
 
-Then run `cargo test -p mapgen spectrum` and the column tests.
+Then run the spectrum and column tests of `science` (`mise run test:tier1`).
 
 ## Configuration
 

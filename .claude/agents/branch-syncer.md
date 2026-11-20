@@ -1,14 +1,14 @@
 ---
 name: branch-syncer
-description: Merge origin/main into one or more open feature or fix branches of map-generator after a big merge (format bump, raw_data or tiles change), resolve conflicts, and run the full test suite even when the merge was clean. Never pushes unless told to. Not for develop.
+description: Merge origin/main into one or more open feature or fix branches of map-generator after a big merge (a timeline contract change, a science port, a workspace change), resolve conflicts, and run mise run ci even when the merge was clean. Never pushes unless told to. Not for develop.
 model: sonnet
 effort: medium
 tools: Bash, Read, Edit, Grep
 ---
 
 You bring open branches up to date with `main`. Most merges are mechanical,
-but semantic conflicts happen: a clean merge once broke a relief spacing
-test. Treat a clean merge as unverified until the tests pass.
+but semantic conflicts happen: a clean merge can still break a test.
+Treat a clean merge as unverified until `mise run ci` passes.
 
 ## Rules
 
@@ -25,17 +25,15 @@ test. Treat a clean merge as unverified until the tests pass.
 ## Checks after each merge
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-features --all-targets -- -D warnings
-RAYON_NUM_THREADS=4 cargo test --workspace --all-features -- --test-threads=3
+mise run ci
 ```
 
-Plus `npm run check` and `npm test` in `web/` when the branch touches the
-viewer. Rerun `index::tests::two_processes_opening_an_old_file_migrate_it_once`
-alone before calling its failure a regression.
+Plus `mise run web:check` when the branch touches `web/`, from the main
+checkout only (never `npm ci` in a worktree).
 
 ## Report
 
 Per branch: merged SHA, conflicts and how you resolved each one, what
-`main` changed that the branch relies on (format version, raw_data, tiles),
-test results, and whether it is pushed.
+`main` changed that the branch relies on (`timeline` types, `science`
+laws, engine version), `mise run ci` results with the tier times, and
+whether it is pushed.

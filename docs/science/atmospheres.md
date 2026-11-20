@@ -233,7 +233,7 @@ $10^{-4}$ bar the halo goes: an airless world shows a hard limb against
 space. The world card gives the pressure and the kind of clouds; the form
 has a **Pressure** field, logarithmic, from airless to 1,000 bar. The
 choices behind the sky and the clouds are in
-[docs/analysis/07-atmospheres.md](../analysis/07-atmospheres.md).
+[07-atmospheres (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/07-atmospheres).
 
 ### How it computes them
 
@@ -242,7 +242,7 @@ from the request, else from the planet type's preset, else from 0.7 to
 1.5 bar. It now comes from the planet model's air (`planet::atmosphere`);
 the table keeps the former presets' values, which
 `planet::interim::draws_of` still gives the looks (in
-[`looks/`](../../looks/)) of a world whose model leaves them open:
+[`looks/`](https://github.com/cyboooooorg/map-generator/tree/legacy-final/looks)) of a world whose model leaves them open:
 
 | Preset | Pressure | Greenhouse | Clouds |
 | --- | --- | --- | --- |
@@ -258,8 +258,8 @@ the table keeps the former presets' values, which
 | `rocky-moon`, `icy-moon` | 0 | 0 °C | none |
 
 The pressure then drives four rules (from
-[`crates/mapgen/src/atmosphere.rs`](../../crates/mapgen/src/atmosphere.rs)
-and [`generation.rs`](../../crates/mapgen/src/generation.rs)):
+[`crates/mapgen/src/atmosphere.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/atmosphere.rs)
+and [`generation.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/generation.rs)):
 
 ```rust
 /// Below this surface pressure (bar) a world has no atmosphere to speak of:
@@ -292,7 +292,7 @@ let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
    On a wet world with plate tectonics (at least 0.01 bar), a carbon cycle
    also regulates it across the habitable zone: from +30 °C at the inner
    edge, through Earth's climate at Earth's place, to −15 °C at the outer
-   edge ([`star.rs`](../../crates/mapgen/src/star.rs),
+   edge ([`star.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/star.rs),
    `star_temperatures`).
 
 In the viewer, the halo's thickness and its optical depth grow with the
@@ -576,9 +576,9 @@ Their near-black brown is a calibration with those maps as its target.
 
 ## See also
 
-- [docs/analysis/07-atmospheres.md](../analysis/07-atmospheres.md): the
+- [07-atmospheres (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/07-atmospheres): the
   study behind the app's atmospheres, skies and clouds.
-- [docs/analysis/10-stars.md](../analysis/10-stars.md): the star's light
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars): the star's light
   and the habitable zone.
 - [What does an eccentric orbit change?](eccentric-orbits.md): the light a
   world gets over its year.

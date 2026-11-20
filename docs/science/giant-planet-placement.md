@@ -245,12 +245,12 @@ The panel's **Giant planets** section lists each one by its letter
 and year, and in its tooltip its cloud class, radius, temperature,
 eccentricity and rings. A whole system (`--system`) places its giants among
 its other planets. The rules and their sources are in
-[docs/analysis/12-gas-giants.md](../analysis/12-gas-giants.md); the README's
+[12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants); the README's
 **giants** paragraph sums them up.
 
 ### How it computes them
 
-Round a world, [`GiantSystem::draw`](../../crates/mapgen/src/giants.rs)
+Round a world, [`GiantSystem::draw`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giants.rs)
 draws the giants on a random stream of their own, so the world's other
 drawn values do not change:
 
@@ -346,7 +346,7 @@ let inflation = (1.0
 cold * if m > 30.0 { inflation } else { 1.0 }
 ```
 
-A whole system ([`system.rs`](../../crates/mapgen/src/system.rs)) places
+A whole system ([`system.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs)) places
 each planet type in a band of distances (`band`), from the star out:
 
 | Type | May sit in | Prefers |
@@ -495,7 +495,7 @@ at most 20 %, on a period of 1 to 10 days within 0.1 AU.
 
 ## See also
 
-- [docs/analysis/12-gas-giants.md](../analysis/12-gas-giants.md): the study
+- [12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants): the study
   behind the app's giant planets, with more sources.
 - [What does an eccentric orbit change?](eccentric-orbits.md): how an
   eccentric giant stretches a world's orbit.

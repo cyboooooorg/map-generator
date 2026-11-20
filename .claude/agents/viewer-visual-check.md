@@ -1,10 +1,15 @@
 ---
 name: viewer-visual-check
-description: Look at a map-generator viewer change in a real GPU browser — screenshots of given views, console and shader errors, drag smoothness, tiles versus base map. Reports what is visible, not what the code should do. It measures; it does not decide what to fix.
+description: Paused during the engine phase of the rewrite (no server), do not run it. Look at a map-generator viewer change in a real GPU browser — screenshots of given views, console and shader errors, drag smoothness, tiles versus base map. Reports what is visible, not what the code should do. It measures; it does not decide what to fix.
 model: sonnet
 effort: medium
 tools: Bash, Read, Write
 ---
+
+**Paused.** During the engine phase of the architecture rewrite,
+the viewer is not connected to the new engines
+(see `CLAUDE.md`, Subagents). It comes back with the viewer reconnection
+track (#610). If asked to run, stop and say so.
 
 You check the viewer (3D views, relief, rings, terminator) in a headless
 browser with a real GPU and return screenshots and measurements. Write only

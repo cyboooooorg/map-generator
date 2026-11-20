@@ -187,7 +187,7 @@ A request for more planets of a type than fit in its band fails with
 ### How it computes them
 
 When it draws a whole system,
-[`system.rs`](../../crates/mapgen/src/system.rs) places the planets from
+[`system.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs) places the planets from
 the star outwards:
 
 1. **Each type in its band**: temperate planets in the habitable zone,
@@ -259,7 +259,7 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
 ```
 
 A single world drawn on its own, outside a system, gets its giant planets
-from [`giants.rs`](../../crates/mapgen/src/giants.rs) instead. There, a
+from [`giants.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giants.rs) instead. There, a
 giant must keep the same `hill_spacing` from the world and from every
 other giant, apoapsis to periapsis. A giant that fails is drawn again up
 to 6 times, then dropped.
@@ -328,7 +328,7 @@ test in `system.rs`).
 
 - [docs/system-spec.md](../system-spec.md): spacing and order of the
   planets in a system.
-- [docs/analysis/12-gas-giants.md](../analysis/12-gas-giants.md): the
+- [12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants): the
   study behind the giants, their Hill spheres and their spacing.
 - [What are Lagrange points and trojans?](lagrange-points.md): the Hill
   radius as the distance to L1 and L2.

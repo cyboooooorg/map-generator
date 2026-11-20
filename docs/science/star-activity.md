@@ -298,7 +298,7 @@ quarter and half of the square's side, always starts outside the disc.
 
 ### How it computes them
 
-[`activity.rs`](../../crates/mapgen/src/activity.rs) derives a
+[`activity.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/activity.rs) derives a
 `StarActivity` from the star's temperature, mass, radius and age
 (`StarInfo::age_gyr`, drawn per system) and the system's seed. The seed
 draws, from its own stream (`STAR_ACTIVITY`) and in a fixed order: a
@@ -478,7 +478,7 @@ let region_rate =
 ```
 
 A system drawn before this existed has no `activity` in its file:
-[`read_system`](../../crates/mapgen/src/system.rs) derives it on read,
+[`read_system`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs) derives it on read,
 the same value a new draw stores, so the API always serves it.
 
 For the Sun's type (G2V) the medians over seeds are a rotation of 25.8

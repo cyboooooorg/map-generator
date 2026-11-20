@@ -249,7 +249,7 @@ presets).
 
 ### How it computes them
 
-The zone lives in [`star.rs`](../../crates/mapgen/src/star.rs):
+The zone lives in [`star.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/star.rs):
 
 1. **The edge fluxes** come from the fit of Kopparapu et al. (2014): the
    runaway greenhouse (1 Earth mass) inside, the maximum greenhouse
@@ -397,7 +397,7 @@ every other planet, temperatures in kelvin scale as $S^{1/4}$.
 
 ## See also
 
-- [docs/analysis/10-stars.md](../analysis/10-stars.md): the study behind
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars): the study behind
   the app's stars, orbits and climate by star.
 - [What does a G-type star mean?](star-types.md): the stars whose light
   sets the zone.

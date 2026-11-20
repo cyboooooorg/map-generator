@@ -1,0 +1,22 @@
+name: Heavy tests
+
+# Tier 3 (15 km worlds, oracle, censuses), started by hand. A pull request
+# that changes what the engines produce pastes the output of
+# `mise run test:heavy` in its description; this runs the same on GitHub.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  heavy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('Cargo.toml') }}
+      - run: mise run test:heavy -- --test-threads num-cpus

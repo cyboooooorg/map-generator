@@ -278,7 +278,7 @@ surface (see [What does a G-type star mean?](star-types.md)).
 
 ## See also
 
-- [docs/analysis/10-stars.md](../analysis/10-stars.md): the study behind
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars): the study behind
   the app's stars, its step 6 for vegetation.
 - [What does a G-type star mean?](star-types.md): the colour of a star's
   light.

@@ -41,7 +41,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 ## 1. Deep zoom in the viewer
 
 - **Status:** done
-- **Analysis:** [01-deep-zoom.md](analysis/01-deep-zoom.md)
+- **Analysis:** [01-deep-zoom.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/01-deep-zoom.md)
 - **Problem:** worlds are generated at about 20 km per pixel; zooming in only
   magnifies those pixels.
 - **Decision:** detail is synthesised on demand, not generated: the noise has
@@ -78,7 +78,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 ## 2. Biomes form bands and have hard transitions
 
 - **Status:** done
-- **Analysis:** [02-biome-banding.md](analysis/02-biome-banding.md)
+- **Analysis:** [02-biome-banding.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/02-biome-banding.md)
 - **Findings:** latitude explains 99.3 % of land temperature and 76 % of land
   moisture, so every threshold draws an east-west line; the moisture noise is
   tiny. The altitude "rings" are the contour lines drawn on land, not biomes.
@@ -111,7 +111,7 @@ Each step regenerates different worlds for a given seed; `raw_data` moves to
 ## 3. Rivers are too straight and too thin
 
 - **Status:** done
-- **Analysis:** [03-rivers.md](analysis/03-rivers.md)
+- **Analysis:** [03-rivers.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/03-rivers.md)
 - **Findings:** the hydrology is sound; the drawing is the problem. All river
   length follows the 8 grid directions, 23–28 % of 160 km windows are
   straight, 41–45 % of river pixels lie on flats raised by the depression
@@ -212,7 +212,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 6. Atmospheres
 
 - **Status:** done
-- **Analysis:** [07-atmospheres.md](analysis/07-atmospheres.md)
+- **Analysis:** [07-atmospheres.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/07-atmospheres.md)
 - **Problem:** every planet shows the same blue rim glow, airless worlds
   included, and the climate ignores the atmosphere: Venus keeps Earth's
   equator-to-pole contrast, airless worlds get rain unless their preset
@@ -261,7 +261,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 8. Impact craters and geological time
 
 - **Status:** done
-- **Analysis:** [08-geology.md](analysis/08-geology.md)
+- **Analysis:** [08-geology.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/08-geology.md)
 - **Problem:** no world has impact craters, so dead worlds (`barren`,
   `mars-like`, `mercury-like`) look like dry Earths; the surface has no
   history and no notion of time.
@@ -289,7 +289,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 - **Status:** done (step 1: static plates shape the relief, on a
   cube-sphere grid that reaches the poles; step 2: `--drift`; step 3:
   the viewer's Drift panel)
-- **Analysis:** [08-geology.md](analysis/08-geology.md), section 8
+- **Analysis:** [08-geology.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/08-geology.md), section 8
 - **Problem:** continents come from noise, not from plates: mountains
   and volcanoes are not tied to plate boundaries, and continents cannot
   drift over time.
@@ -322,7 +322,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 10. Internationalisation of the web app
 
 - **Status:** done
-- **Analysis:** [09-i18n.md](analysis/09-i18n.md)
+- **Analysis:** [09-i18n.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/09-i18n.md)
 - **Problem:** every string of the web app is English, written in the
   templates; numbers and dates are formatted for English only.
 - **Decision (2026-11-03):** a typed in-house catalog (English source, French typed
@@ -341,7 +341,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 11. The host star
 
 - **Status:** done
-- **Analysis:** [10-stars.md](analysis/10-stars.md)
+- **Analysis:** [10-stars.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/10-stars.md)
 - **Problem:** every world orbits an implicit Sun at 1 AU: temperatures
   come from Earth's profile and preset shifts, the light is white, and
   no star is drawn in the viewer.
@@ -403,7 +403,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 13. Moons
 
 - **Status:** done
-- **Analysis:** [11-moons.md](analysis/11-moons.md)
+- **Analysis:** [11-moons.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/11-moons.md)
 - **Problem:** worlds have a star and an orbit but no satellites: no
   moon in the star view or the sky, and nothing ties the axial tilt or
   the tides to a moon.
@@ -435,7 +435,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 14. Giant planets
 
 - **Status:** done
-- **Analysis:** [12-gas-giants.md](analysis/12-gas-giants.md)
+- **Analysis:** [12-gas-giants.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/12-gas-giants.md)
 - **Problem:** every world is a rocky or icy body alone around its star:
   no giant planet in its system, no giant world to generate, and no
   world can be the moon of a giant.
@@ -558,7 +558,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 - **Status:** done (the four tasks of the plan: the draw, the system,
   the star view, and the small bodies marked in a planet's sky)
 - **Plan:** [2026-11-06-asteroid-belts.md](superpowers/plans/2026-11-06-asteroid-belts.md)
-- **Analysis:** [13-asteroids.md](analysis/13-asteroids.md)
+- **Analysis:** [13-asteroids.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/13-asteroids.md)
 - **Problem:** a system has a star, planets and moons, but no small
   bodies: no asteroid belt, no Kuiper belt, no trojans, and its Lagrange
   points are not shown.
@@ -588,7 +588,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 18. Rings and ring moons
 
 - **Status:** in progress
-- **Analysis:** [analysis/14-rings.md](analysis/14-rings.md)
+- **Analysis:** [analysis/14-rings.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/14-rings.md)
 - **Problem:** giants' rings are drawn twice with different odds
   (`giant_world.rs` for giant worlds, `giants.rs` for a rocky world's
   giant neighbours), not before a giant of a system is generated, and
@@ -878,7 +878,7 @@ interiors; the model's deepest interiors are wetter than Earth's, whose
 ## 22. Storage
 
 - **Status:** decided (2026-11-08)
-- **Analysis:** [analysis/15-storage.md](analysis/15-storage.md)
+- **Analysis:** [analysis/15-storage.md](https://github.com/cyboooooorg/map-generator/blob/legacy-final/docs/analysis/15-storage.md)
 - **Problem:** everything is files on one host's disk: listing systems
   opens every `system.json`, jobs are lost on a restart, source data,
   derived files and diagnostics share one directory (about 30 % of the

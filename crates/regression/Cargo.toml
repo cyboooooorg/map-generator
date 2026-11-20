@@ -1,0 +1,16 @@
+[package]
+name = "regression"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+science.workspace = true
+timeline.workspace = true
+system.workspace = true
+world.workspace = true
+catalogue.workspace = true
+adapters.workspace = true
+
+[lints]
+workspace = true

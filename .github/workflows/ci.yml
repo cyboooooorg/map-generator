@@ -7,84 +7,127 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
-# Lint, tests, slow tests and front-end run as separate jobs, side by side.
-# Each Rust job keeps its own rust-cache entry (the key includes the job id):
-# clippy, the test profile and the release build of the slow tests build
-# different artifacts anyway.
+# Every job runs a mise task, so `mise run ci` locally runs what this
+# pipeline runs (the front-end apart, see mise.toml). Path filters skip the
+# jobs a change cannot affect; `ci-ok` always reports, so it is the one
+# check to require. Pushes to main keep main's caches warm for branches.
 jobs:
-  lint:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      web: ${{ steps.filter.outputs.web }}
+      markdown: ${{ steps.filter.outputs.markdown }}
     steps:
       - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
-      - uses: Swatinem/rust-cache@v2
+      - uses: dorny/paths-filter@v4
+        id: filter
         with:
-          # rust-cache keys on Cargo.lock and the members' Cargo.toml, not the
-          # root one: without this, a profile change there keeps restoring a
-          # stale target/ that never gets saved again (full match).
-          key: ${{ hashFiles('Cargo.toml') }}
-      - name: Lint
-        run: mise run lint
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'tools/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '**/clippy.toml'
+              - '.config/**'
+              - 'mise.toml'
+              - 'README.md'
+              - '.github/workflows/**'
+            web:
+              - 'web/**'
+              - 'mise.toml'
+              - '.github/workflows/**'
+            markdown:
+              - '**/*.md'
+              - '**/.markdownlint*'
+              - 'mise.toml'
+              - '.github/workflows/**'
 
-  # The test suite in two jobs side by side, each on its own runner: the
-  # generator's tests take over twice as long as all the others together,
-  # and `mise run test` runs them one after the other.
-  test-mapgen:
+  fmt-lint:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
       - uses: Swatinem/rust-cache@v2
         with:
-          # See the lint job.
+          # rust-cache keys on Cargo.lock and the members' manifests, not the
+          # root one: a profile change there must not restore a stale target/.
           key: ${{ hashFiles('Cargo.toml') }}
-      - name: Test
-        run: mise run test:mapgen
-      - name: Generated TypeScript types are committed
-        # `cargo test` regenerates web/src/lib/api/types from the Rust API
-        # types: mapgen's here, the server's in `test-rest`.
-        run: git diff --exit-code -- web/src/lib/api/types
+          # Only main saves: branches read main's cache, so their own entries
+          # would only evict it from the 10 GB the repository is allowed.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: mise run fmt:check
+      - run: mise run lint
+      - run: mise run ci:actions
 
-  test-rest:
+  tier1:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
       - uses: Swatinem/rust-cache@v2
         with:
-          # See the lint job.
           key: ${{ hashFiles('Cargo.toml') }}
-      - name: Test
-        run: mise run test:rest
-      - name: Generated TypeScript types are committed
-        # The server's API types, see `test-mapgen`.
-        run: git diff --exit-code -- web/src/lib/api/types
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Builds before the timed run, so the budget measures the tests only.
+      - run: cargo nextest run --profile tier1 --workspace --no-run
+      - run: mise run test:tier1 -- --test-threads num-cpus
 
-  # The tests marked `#[ignore = "slow: …"]` (statistical samples over many
-  # drawn worlds, sweeps of the climate): only for what goes into main, a
-  # pull request into it or a push to it, so that everyday pushes keep a
-  # short test jobs. Release build, like `mise run test:slow`.
-  test-slow:
-    if: github.event_name == 'push' || github.base_ref == 'main'
+  tier2:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
       - uses: Swatinem/rust-cache@v2
         with:
-          # See the lint job.
           key: ${{ hashFiles('Cargo.toml') }}
-      - name: Slow tests
-        run: mise run test:slow
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo nextest run --profile tier2 --workspace --no-run
+      - run: mise run test:tier2 -- --test-threads num-cpus
+
+  markdown:
+    needs: changes
+    if: needs.changes.outputs.markdown == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: mise run md:lint
 
   web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
-      - name: Front-end checks
-        run: mise run web:check
-      - name: Front-end build
-        run: mise run web:build
+      - run: mise run web:check
+      - run: mise run web:build
+
+  # The one check to require: green when every other job passed or was
+  # skipped by the path filters, red when one failed or was cancelled.
+  ci-ok:
+    if: always()
+    needs: [changes, fmt-lint, tier1, tier2, markdown, web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *) exit 1 ;;
+            esac
+          done

@@ -1,6 +1,0 @@
-target
-systems
-web/node_modules
-web/dist
-.git
-tools/opacity-table/raw

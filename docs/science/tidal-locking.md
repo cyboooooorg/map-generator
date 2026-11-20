@@ -273,14 +273,14 @@ flowchart LR
 
 **Whether a planet is despun, locked or in 3:2.** The generator keeps the
 scaling of the first equation for an Earth-like planet (`locking_gyr` in
-[star.rs](../../crates/mapgen/src/star.rs)) and compares it with the star's
+[star.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/star.rs)) and compares it with the star's
 age (`age_gyr` of the star: drawn per system between 0.5 and 10 Gyr, or
 the star's whole main-sequence life if shorter; 4.6 Gyr, the Sun's, for
 stored files that have none). An older system therefore locks more of its
 planets. A despun
 planet is then locked below an eccentricity of 0.06 and in the 3:2
 resonance from it (`locked` and `resonant` in
-[spin.rs](../../crates/mapgen/src/spin.rs), the rule of Ribas et al. 2016):
+[spin.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/spin.rs), the rule of Ribas et al. 2016):
 
 ```rust
 /// Time for the star's tides to lock an Earth-like planet's spin, Gyr
@@ -317,21 +317,21 @@ those closer in end locked. A despun planet then:
 
 1. **Turns once a year** (locked), or **three times every two years**
    (3:2): its sidereal day is its year divided by 1 or by 1.5 in the
-   system ([system.rs](../../crates/mapgen/src/system.rs)) and in the moons
-   of a lone world ([moons.rs](../../crates/mapgen/src/moons.rs)). A hot or
+   system ([system.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs)) and in the moons
+   of a lone world ([moons.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/moons.rs)). A hot or
    locked giant turns once a year too
-   ([giant_world.rs](../../crates/mapgen/src/giant_world.rs)).
+   ([giant_world.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giant_world.rs)).
 2. **Gets a substellar climate if locked.** Its temperature follows the
    angle from the point under the star instead of the latitude
    (`LockedClimate`, see
-   [generation.rs](../../crates/mapgen/src/generation.rs)). A planet in
+   [generation.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/generation.rs)). A planet in
    3:2 has the climate of a rotating one, with the wind belts of its
    slow day.
 3. **Gets a circular orbit** when the tides have circularised it, in a
    lone world and in a system alike
-   ([request.rs](../../crates/mapgen/src/request.rs),
+   ([request.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/request.rs),
    `tidal_eccentricity` in
-   [system.rs](../../crates/mapgen/src/system.rs)).
+   [system.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs)).
 4. **Stands upright:** a drawn axial tilt becomes 0 (`spin::upright`, after
    Heller et al. 2011: the Cassini state, Mercury's obliquity being 2
    arcminutes). A tilt the user sets stays.
@@ -340,7 +340,7 @@ those closer in end locked. A despun planet then:
    [How many moons can a planet keep?](how-many-moons.md)).
 6. **Draws more craters on its leading side** since it locked, if it is
    locked, not in 3:2
-   ([craters.rs](../../crates/mapgen/src/craters.rs)).
+   ([craters.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/craters.rs)).
 
 **Giants.** A giant has its own constants in `giant_locking_gyr`: the Love
 number $k_2 = 0.565$ measured by Juno (Durante et al. 2020), $Q \approx
@@ -352,7 +352,7 @@ thousand years, a giant at 0.3 AU from the Sun never does. A despun giant
 is locked, never in 3:2, and its orbit is circularised by its own tides
 (`giant_circularised`).
 
-**Whether a moon is locked.** [moons.rs](../../crates/mapgen/src/moons.rs)
+**Whether a moon is locked.** [moons.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/moons.rs)
 computes the time with `despin_gyr`, Gladman et al.'s formula for the
 moon: a first day of 12 hours, $Q = 100$, a moment of inertia of
 $0.4\,mR^2$, and a Love number from the rigidity of rock
@@ -552,9 +552,9 @@ anomaly from Kepler's equation: 28.9° at $e = 0.25$, against $2e = 28.6°$).
 
 ## See also
 
-- [docs/analysis/10-stars.md](../analysis/10-stars.md), step 5: the study
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars), step 5: the study
   behind locked planets and their climate.
-- [docs/analysis/11-moons.md](../analysis/11-moons.md): locked moons and
+- [11-moons (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/11-moons): locked moons and
   binaries.
 - [docs/backlog.md](../backlog.md), item 19: what the tides and moons
   fixes left open (higher resonances, a gradual capture, the slow-rotator

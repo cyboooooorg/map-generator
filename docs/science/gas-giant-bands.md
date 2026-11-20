@@ -241,14 +241,14 @@ colours, between the band edges they will be generated with.
 
 ### How it computes them
 
-[`giant_world.rs`](../../crates/mapgen/src/giant_world.rs) draws the look
+[`giant_world.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giant_world.rs) draws the look
 of a giant (`Look::draw`), then samples it on every pixel:
 
 1. **The cloud class.** The effective temperature combines the starlight
    (its equilibrium temperature) and the heat of the interior:
    $T_\text{eff} = (T_\text{eq}^4 + T_\text{int}^4)^{1/4}$.
    `internal_temperature` in
-   [`giants.rs`](../../crates/mapgen/src/giants.rs) cools a gas giant with
+   [`giants.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giants.rs) cools a gas giant with
    its mass and the age of the system (`age_gyr` of the star, drawn
    between 0.5 and 10 Gyr, or up to the lifetime of a shorter-lived star;
    4.6 Gyr, Jupiter's age, is the normalisation):
@@ -266,7 +266,7 @@ of a giant (`Look::draw`), then samples it on every pixel:
    322 K at 5 Gyr), about 1,000 K at 0.1 Gyr (953 K) and 530 K at 1 Gyr
    (491 K). An ice giant keeps 40 K.
 
-   [`giant_clouds.rs`](../../crates/mapgen/src/giant_clouds.rs) turns
+   [`giant_clouds.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giant_clouds.rs) turns
    $T_\text{eff}$ into a class (`Clouds::of`). Classes I to III come from
    cloud decks. The temperature profile is a dry adiabat,
    $T = 1.31\,T_\text{eff}\,P^{2/7}$ with $P$ in bar (1.31 is Jupiter's
@@ -570,7 +570,7 @@ edges were stored gets evenly spaced bands.
 
 ## See also
 
-- [docs/analysis/12-gas-giants.md](../analysis/12-gas-giants.md): the study
+- [12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants): the study
   behind the app's giant planets and giant worlds.
 - [Why are giant planets far from their star, and what is a hot
   Jupiter?](giant-planet-placement.md)

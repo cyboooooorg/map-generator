@@ -308,17 +308,17 @@ The sea swings about a fifth as much as the land (0.10 against 0.45). At
 scorching summer to a winter far below freezing.
 
 The tilt is resolved with the moons in
-[`crates/mapgen/src/request.rs`](../../crates/mapgen/src/request.rs) and
-[`crates/mapgen/src/moons.rs`](../../crates/mapgen/src/moons.rs)
+[`crates/mapgen/src/request.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/request.rs) and
+[`crates/mapgen/src/moons.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/moons.rs)
 (`PlanetEffects::tilt`). The rows and the seasons are built in
-[`crates/mapgen/src/climate.rs`](../../crates/mapgen/src/climate.rs)
+[`crates/mapgen/src/climate.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/climate.rs)
 (`seasons` in
-[`crates/mapgen/src/generation.rs`](../../crates/mapgen/src/generation.rs)),
+[`crates/mapgen/src/generation.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/generation.rs)),
 and the star and the eccentric orbit act on them in
-[`crates/mapgen/src/star.rs`](../../crates/mapgen/src/star.rs)
+[`crates/mapgen/src/star.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/star.rs)
 (`star_temperatures`, `mean_flux_factor`). Ice, tundra and the tropics are
 chosen in
-[`crates/mapgen/src/biome.rs`](../../crates/mapgen/src/biome.rs)
+[`crates/mapgen/src/biome.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/biome.rs)
 (`BiomeRules`).
 
 ### Where it departs from the science
@@ -439,11 +439,11 @@ from the code.
 
 - [README, "Temperature — axial tilt"](../../README.md#temperature--axial-tilt):
   the app's whole temperature chain.
-- [docs/analysis/07-atmospheres.md](../analysis/07-atmospheres.md),
+- [07-atmospheres (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/07-atmospheres),
   "Climate effects": heat transport and greenhouse on top of the rows.
-- [docs/analysis/10-stars.md](../analysis/10-stars.md), "Consequences for a
+- [10-stars (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/10-stars), "Consequences for a
   planet" and "Eccentric orbits": the star's light and the orbit.
-- [docs/analysis/11-moons.md](../analysis/11-moons.md), "Effects of a moon
+- [11-moons (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/11-moons), "Effects of a moon
   on its planet": the tilt steadied by a large moon.
 - Related articles: [What does an eccentric orbit
   change?](eccentric-orbits.md), [Why does a world always show the same

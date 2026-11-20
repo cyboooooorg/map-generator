@@ -186,13 +186,13 @@ The source moon's card says what it feeds.
 ### How it computes them
 
 The system first draws each giant's rings with its preset's odds
-([`draw_rings`](../../crates/mapgen/src/giant_world.rs)): a bright ring
+([`draw_rings`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/giant_world.rs)): a bright ring
 from 1.2–1.5 to 2.1–2.5 radii, or a faint ring 0.05 to 0.3 radii wide
 starting at 1.5 to 1.9. Then
-[`shape_rings`](../../crates/mapgen/src/system.rs) computes the giant's
+[`shape_rings`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs) computes the giant's
 mean density from its mass and its equatorial radius, its $J_2$ from its
 flattening and spin, and the room its moons leave, and hands the rings to
-[`rings::shape`](../../crates/mapgen/src/rings.rs):
+[`rings::shape`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/rings.rs):
 
 1. **The outer edge of bright rings** is the fluid Roche limit for
    particles of 0.5 to 0.9 g/cm³, with no cap: 2.15 to 2.62 radii round a
@@ -232,7 +232,7 @@ and spin parameter $q = \Omega^2 R^3 / GM$ by the first-order relation of
 a fluid planet, $f = \tfrac{3}{2} J_2 + q/2$ (Murray & Dermott 1999,
 §4.5).
 
-Then [`rings::dust_rings`](../../crates/mapgen/src/rings.rs) adds the
+Then [`rings::dust_rings`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/rings.rs) adds the
 dust rings from the giant's moons:
 
 1. **Gossamer rings:** each of the one or two outermost edge moons or
@@ -408,7 +408,7 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
 
 ## See also
 
-- [docs/analysis/14-rings.md](../analysis/14-rings.md): the study behind the
+- [14-rings (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/14-rings): the study behind the
   app's rings, ring moons and dust rings.
 - [Why are ring moons so small?](ring-moons.md): the moons in and next to
   the rings, and the Roche zone they live in.

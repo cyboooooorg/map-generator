@@ -216,7 +216,7 @@ The points are far denser than real bodies, and the help says so.
 ### How it computes them
 
 The system places its planets first, then
-[`belts::draw_belts`](../../crates/mapgen/src/belts.rs) draws the belts
+[`belts::draw_belts`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/belts.rs) draws the belts
 from a random stream of their own, so that the planets do not move:
 
 1. **The inner belt** needs a giant beyond half the ice line that is not
@@ -228,7 +228,7 @@ from a random stream of their own, so that the planets do not move:
    radii beyond its periapsis and apoapsis. The widest piece left is kept
    if its outer edge is at least 1.15 times its inner edge. When placing
    the planets, the system already pushes rocky planets out of the zone
-   ([`system.rs`](../../crates/mapgen/src/system.rs)).
+   ([`system.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/system.rs)).
 3. **Gaps** at the giant's 3:1, 5:2 and 7:3, each
    $0.012\,a\sqrt{\mu/\mu_J}$ wide, where $\mu_J$ is Jupiter's mass
    share.
@@ -276,7 +276,7 @@ scattered disk, spread evenly in distance but for the gaps, each on a
 circular orbit tilted up to twice the belt's typical inclination.
 
 The belts also set every body's crater rate
-([`belts::impact_factor`](../../crates/mapgen/src/belts.rs)): four fifths
+([`belts::impact_factor`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/belts.rs)): four fifths
 from the inner belt's mass and one fifth from the outer belt's and
 scattered disk's, each against the Solar System's, times the effect of
 the giant just outside the body's orbit.
@@ -396,7 +396,7 @@ the giant just outside the body's orbit.
 
 ## See also
 
-- [docs/analysis/13-asteroids.md](../analysis/13-asteroids.md): the study
+- [13-asteroids (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/13-asteroids): the study
   behind the app's belts and trojans, with more sources.
 - [What are Lagrange points and trojans?](lagrange-points.md): the
   bodies in a giant's 1:1 resonance.
