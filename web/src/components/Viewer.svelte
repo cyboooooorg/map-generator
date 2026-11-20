@@ -35,7 +35,9 @@
   import { retryWhileBusy } from '../lib/retry';
   import { debouncedSetting, loadSetting } from '../lib/settings';
   import { onThemeChange, overlayColours } from '../lib/themes';
-  import { UNITS, unitTooltip } from '../lib/units';
+  import Glossed from './Glossed.svelte';
+  import { toggleDialog, type Dialog } from '../lib/dialogs';
+  import UnitsPanel from './UnitsPanel.svelte';
   import { epochFile, epochRange, epochSteps, formatEpoch, nearestStep } from '../lib/epochs';
   import { altAllowed, RELIEF_DEFAULT, RELIEF_MAX, shortcutFor, shortcutHelp, stepRelief } from '../lib/shortcuts';
   import { orbitReadout } from '../lib/orbitClock';
@@ -282,6 +284,8 @@
   let starDistances = $state(false);
   let starOrbit = $state(true);
   let starZone = $state(true);
+  /** The habitable zone's distances: off like Distances, which they were part of (neither is saved, both start off). */
+  let starZoneDistances = $state(false);
   let starProminences = $state(true);
   /** Whether the star view draws the star through its warm display filter (true colour by default). */
   let starFilter = $state(false);
@@ -400,7 +404,9 @@
   /** The base map's download and decoding, while it loads. */
   let mapProgress = $state.raw<LoadProgress | null>(null);
   let error = $state<string | null>(null);
-  let showHelp = $state(false);
+  let openDialog = $state<Dialog | null>(null);
+  const showHelp = $derived(openDialog === 'help');
+  const showUnits = $derived(openDialog === 'units');
   let panelOpen = $state(saved.panelOpen && wideQuery.matches);
 
   $effect(() => {
@@ -975,8 +981,9 @@
   const pickedPlanet = $derived(sys && starPick ? (sys.bodies.find((b) => b.id === starPick && b.kind === 'planet') ?? null) : null);
   /** The planet the star view's orbit facts describe: the one picked, else any (nothing is then selected). */
   const starBase = $derived(pickedPlanet ?? sysPlanet ?? sys?.bodies.find((b) => b.kind === 'planet') ?? null);
+  /** A loaded system always has a star view, planetless ones included (its star alone, `starBase` null). */
   const sysStar = $derived(
-    sys && starBase ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>, t.viewer.frozenSurface) : null,
+    sys ? systemStarView(sys, starBase, world.systemNames, t.viewer.bodyTypes as Record<string, string>, t.viewer.frozenSurface) : null,
   );
   /** Picks planet `index` of the star view, or lets it go if it is the one picked: its card pinned or unpinned with it. */
   function togglePick(index: number): void {
@@ -2322,11 +2329,14 @@
         if (worldId) void screenshot();
         break;
       case 'help':
-        showHelp = !showHelp;
+        openDialog = toggleDialog(openDialog, 'help');
+        break;
+      case 'units':
+        openDialog = toggleDialog(openDialog, 'units');
         break;
       case 'escape':
-        if (showHelp) {
-          showHelp = false;
+        if (openDialog) {
+          openDialog = toggleDialog(openDialog, 'escape');
         } else {
           pinned = null;
           onEscape();
@@ -2380,7 +2390,7 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      showHelp = false;
+      openDialog = toggleDialog(openDialog, 'escape');
     }
   }
 </script>
@@ -2472,7 +2482,7 @@
     {/if}
     {#if dialLines}
       <div class="dial-figures">
-        <p class="muted">{dialLines[0]}<br />{dialLines[1]}</p>
+        <p class="muted"><Glossed text={dialLines[0]} /><br /><Glossed text={dialLines[1]} /></p>
         <button
           class="small"
           onclick={() => (dialGlossary = !dialGlossary)}
@@ -2538,7 +2548,7 @@
         <label>
           <span title={t.viewer.riverFromHelp}>{t.viewer.riverFrom}</span>
           <input type="range" min="3" max="7" step="0.1" bind:value={hexRiverLog} />
-          <small class="value">{formatArea(10 ** hexRiverLog)}</small>
+          <small class="value"><Glossed text={formatArea(10 ** hexRiverLog)} inert /></small>
         </label>
         <button class="small" onclick={downloadHex} disabled={!hexMap}>{t.viewer.downloadHex}</button>
       {/if}
@@ -2547,7 +2557,7 @@
 {#snippet epochPanel()}
   <div class="panel-body">
       <div class="epoch" role="group" aria-label={t.epochs.slider} title={`${t.epochs.sliderHelp}. ${t.epochs.presentOnly}`}>
-        <span class="epoch-label unit-help" title={unitTooltip('Ma', 'Ga')} aria-live="polite">{formatEpoch(epochShown)}</span>
+        <span class="epoch-label" aria-live="polite"><Glossed text={formatEpoch(epochShown)} /></span>
         <input
           type="range"
           min={0}
@@ -2641,6 +2651,7 @@
       bind:distances={starDistances}
       bind:orbit={starOrbit}
       bind:zone={starZone}
+      bind:zoneDistances={starZoneDistances}
       bind:prominences={starProminences}
       giantSystem={system.giants}
       worldGiant={meta?.giant ?? null}
@@ -2712,7 +2723,7 @@
         {/each}
       {/if}
     </select>
-    <button onclick={resetView} disabled={!worldId} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
+    <button onclick={resetView} disabled={!worldId && !(world.subject === 'star' && sys)} title={t.viewer.resetViewHelp}>{t.viewer.resetView}</button>
     {#if world.subject === 'planet'}
       <button
         onclick={onToggleMeasure}
@@ -2723,7 +2734,16 @@
       >
       <button onclick={screenshot} disabled={!worldId} title={t.viewer.screenshotHelp}>{t.viewer.screenshot}</button>
     {/if}
-    <button onclick={() => (showHelp = !showHelp)} aria-expanded={showHelp} title={t.viewer.shortcutsHelp}>?</button>
+    <button
+      onclick={() => (openDialog = toggleDialog(openDialog, 'help'))}
+      aria-expanded={showHelp}
+      title={t.viewer.shortcutsHelp}>?</button
+    >
+    <button
+      onclick={() => (openDialog = toggleDialog(openDialog, 'units'))}
+      aria-expanded={showUnits}
+      title={t.viewer.unitsHelp}>{t.viewer.units}</button
+    >
   </div>
 
   {#if world.subject === 'planet'}
@@ -2783,7 +2803,7 @@
     >
       <header>
         <strong>{t.viewer.shortcuts}</strong>
-        <button class="close" onclick={() => (showHelp = false)} aria-label={t.viewer.close}>×</button>
+        <button class="close" onclick={() => (openDialog = null)} aria-label={t.viewer.close}>×</button>
       </header>
       <dl>
         {#each shortcutHelp() as [key, action] (key)}
@@ -2791,14 +2811,10 @@
           <dd>{action}</dd>
         {/each}
       </dl>
-      <strong class="units">{t.units.title}</strong>
-      <dl>
-        {#each UNITS as unit (unit)}
-          <dt><abbr>{unit}</abbr></dt>
-          <dd>{t.units[unit].name}<br /><small>{t.units[unit].examples}</small></dd>
-        {/each}
-      </dl>
     </div>
+  {/if}
+  {#if showUnits}
+    <UnitsPanel onClose={() => (openDialog = null)} />
   {/if}
 
   {#if generationText}
@@ -2818,10 +2834,15 @@
       {/if}
     </div>
   {/if}
-  {#if !worldId && !sysBody}
+  {#if world.systemId && !world.system && !world.error}
+    <!-- A system being fetched: a neutral cue, in the star view too. -->
+    <p class="overlay">{t.viewer.loading}</p>
+  {:else if world.subject === 'star'}
+    <!-- The star view needs no world and no maps to wait for: a system with no planet shows its star alone. -->
+  {:else if !world.systemId && !worldId && !sysBody}
     <p class="overlay">{t.viewer.noWorld}</p>
-  {:else if world.subject === 'star' || sysBody?.generated === false}
-    <!-- The star view, or a body not generated yet: no maps to wait for. -->
+  {:else if sysBody?.generated === false}
+    <!-- A body not generated yet: no maps to wait for. -->
   {:else if loading}
     <div class="overlay">
       <div class="loading">
@@ -3075,13 +3096,6 @@
   }
   .help dd {
     margin: 0;
-  }
-  .help .units {
-    display: block;
-    margin: 10px 0 6px;
-  }
-  .help small {
-    color: var(--muted);
   }
   kbd {
     font-family: ui-monospace, monospace;

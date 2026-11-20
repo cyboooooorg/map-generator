@@ -160,6 +160,11 @@ pub struct StarValues {
     pub mass: f32,
 }
 
+/// The `(code, mass)` of every row of the dwarf sequence, in code order.
+pub(crate) fn sequence_masses() -> impl Iterator<Item = (f32, f32)> {
+    SEQUENCE.iter().map(|r| (r.code, r.mass))
+}
+
 /// The values of a spectral type (`class × 10 + subtype`), interpolated
 /// in the mean dwarf sequence (linearly in log for every value), clamped
 /// to O3–M9.5.
@@ -191,35 +196,36 @@ pub fn values(code: f32) -> StarValues {
     }
 }
 
-/// Reads a spectral type: a class letter, an optional subtype (0–9.5,
-/// default 5) and an optional luminosity class `V` (`G2V`, `M4.5`, `K`).
-/// Case-insensitive.
+/// Reads a spectral type of a main-sequence dwarf: a class letter, an
+/// optional subtype (0–9.5, default 5) and an optional luminosity class
+/// `V` (`G2V`, `M4.5`, `K`). Case-insensitive.
+///
+/// Other kinds of host (giants, white dwarfs…) are recognised by
+/// [`crate::host::parse_host`] but are never read here: a code of this
+/// module is a main-sequence dwarf's. A kind not modelled yet is refused
+/// with the issue that tracks it; a kind modelled later is refused as not
+/// a dwarf, so that enabling it never turns `DA` into an O3V. Callers that
+/// accept other kinds use [`crate::host::parse_host`].
 pub fn parse_type(text: &str) -> Result<f32, String> {
-    let text = text.trim();
-    let mut chars = text.chars();
-    let class = chars
-        .next()
-        .map(|c| c.to_ascii_uppercase())
-        .and_then(|c| CLASSES.iter().position(|&k| k == c))
-        .ok_or_else(|| format!("spectral type {text:?}: starts with one of O B A F G K M"))?;
-    let rest = chars.as_str();
-    let rest = rest.strip_suffix(['V', 'v']).unwrap_or(rest);
-    let subtype = if rest.is_empty() {
-        5.0
-    } else {
-        rest.parse::<f32>()
-            .ok()
-            .filter(|s| (0.0..10.0).contains(s))
-            .ok_or_else(|| {
-                format!("spectral type {text:?}: the subtype is a number from 0 to 9.5")
-            })?
-    };
-    let code = class as f32 * 10.0 + subtype;
-    if (TYPE_RANGE.0..=TYPE_RANGE.1).contains(&code) {
-        Ok(code)
+    let host = crate::host::parse_host(text)?;
+    dwarf_code_of(text, host, host.kind.available())
+}
+
+/// The dwarf code of `host` parsed from `text`; `available` is whether its
+/// kind is modelled (a parameter so that a test can say it is).
+fn dwarf_code_of(text: &str, host: crate::host::HostType, available: bool) -> Result<f32, String> {
+    if host.kind == crate::host::HostKind::Dwarf {
+        Ok(host.code)
+    } else if !available {
+        Err(format!(
+            "spectral type {:?}: {}",
+            text.trim(),
+            host.kind.refusal()
+        ))
     } else {
         Err(format!(
-            "spectral type {text:?}: main-sequence dwarfs go from O3 to M9.5"
+            "spectral type {:?}: not a main-sequence dwarf",
+            text.trim()
         ))
     }
 }
@@ -594,7 +600,33 @@ impl StarInfo {
         age_gyr: f32,
         seed: u32,
     ) -> Self {
-        let v = values(code);
+        Self::from_values(
+            type_name(code),
+            values(code),
+            orbit_au,
+            eccentricity,
+            mass_earth,
+            radius_earth,
+            age_gyr,
+            seed,
+        )
+    }
+
+    /// Like [`Self::for_planet`] for a host described by its `star` values
+    /// and called `name`, whatever its kind (see
+    /// [`crate::host::host_state`]).
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_values(
+        name: String,
+        star: StarValues,
+        orbit_au: f32,
+        eccentricity: f32,
+        mass_earth: f32,
+        radius_earth: f32,
+        age_gyr: f32,
+        seed: u32,
+    ) -> Self {
+        let v = star;
         let at = |au: f32| v.luminosity / (au * au);
         let insolation = at(orbit_au) * mean_flux_factor(eccentricity);
         let (periapsis, apoapsis) = (
@@ -611,7 +643,7 @@ impl StarInfo {
             0.0
         };
         Self {
-            kind: type_name(code),
+            kind: name,
             teff_k: v.teff_k,
             luminosity: v.luminosity,
             mass: v.mass,
@@ -642,6 +674,8 @@ impl StarInfo {
     }
 
     /// The spectral type of a stored star, the Sun's if it does not parse.
+    /// Only valid for main-sequence dwarfs: a host of another kind has no
+    /// dwarf code and reads as the Sun.
     pub fn code(&self) -> f32 {
         parse_type(&self.kind).unwrap_or(SUN)
     }
@@ -826,6 +860,16 @@ pub fn orbit_at(code: f32, position: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn star_info_from_values_matches_new() {
+        for code in [15.0, 42.0, 64.5] {
+            let a = StarInfo::for_planet(code, 0.7, 0.1, 1.0, 1.0, 3.0, 7);
+            let b =
+                StarInfo::from_values(type_name(code), values(code), 0.7, 0.1, 1.0, 1.0, 3.0, 7);
+            assert_eq!(a, b);
+        }
+    }
+
     use super::*;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
@@ -849,6 +893,28 @@ mod tests {
         assert!(parse_type("X2").is_err());
         assert!(parse_type("G12").is_err());
         assert!(parse_type("O1").is_err());
+    }
+
+    #[test]
+    fn unavailable_kinds_name_their_issue() {
+        let e = parse_type("DA").unwrap_err();
+        assert!(
+            e.contains("white dwarfs are not modelled yet") && e.contains("#577"),
+            "{e}"
+        );
+        assert!(parse_type("K3III").unwrap_err().contains("#576"));
+    }
+
+    /// Enabling a kind later must never turn it into a dwarf code.
+    #[test]
+    fn an_available_non_dwarf_kind_is_never_a_dwarf_code() {
+        for t in ["DA", "K3III", "G8IV", "L5", "PSR", "WR", "QS"] {
+            let host = crate::host::parse_host(t).unwrap();
+            let e = dwarf_code_of(t, host, true).unwrap_err();
+            assert!(e.contains("not a main-sequence dwarf"), "{t}: {e}");
+        }
+        let g2 = crate::host::parse_host("G2V").unwrap();
+        assert_eq!(dwarf_code_of("G2V", g2, true), Ok(42.0));
     }
 
     #[test]

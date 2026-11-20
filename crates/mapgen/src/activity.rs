@@ -22,6 +22,7 @@
 //! time) are drawn in the browser, from [`StarActivity::seed`] and these
 //! parameters (`web/src/lib/starActivity.ts`).
 use crate::giants::normal;
+use crate::host::HostKind;
 use crate::noise::{stream, stream_seed};
 use crate::star::{SUN_TEFF_K, StarInfo};
 use rand::rngs::StdRng;
@@ -280,6 +281,17 @@ const LIMB: [(f32, f32, f32); 7] = [
 /// fixed order (rotation scatter, cycle scatter, cycle phase, region
 /// seed), so a star keeps its activity across versions.
 pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
+    host_activity(HostKind::Dwarf, info, system_seed)
+}
+
+/// The activity of a host of `kind`, deterministic in `system_seed`.
+///
+/// A kind without a convective photosphere (white dwarf, neutron star,
+/// magnetar, black hole, Wolf-Rayet) is quiet: no spots, no
+/// granulation contrast, and a rotation from the radiative formula. The
+/// four draws of [`star_activity`] still happen, in the same order. Each
+/// kind's own issue gives its own rotation.
+pub fn host_activity(kind: HostKind, info: &StarInfo, system_seed: u32) -> StarActivity {
     let mut rng = StdRng::seed_from_u64(u64::from(stream_seed(system_seed, stream::STAR_ACTIVITY)));
     let rotation_scatter = (ROTATION_SCATTER * normal(&mut rng)).exp() as f32;
     let cycle_scatter = (CYCLE_SCATTER * normal(&mut rng)).exp() as f32;
@@ -288,7 +300,11 @@ pub fn star_activity(info: &StarInfo, system_seed: u32) -> StarActivity {
 
     let (teff, mass, radius) = (info.teff_k, info.mass, info.radius);
     let age_gyr = info.age_gyr;
-    let envelope = envelope(teff, mass);
+    let envelope = if kind.has_convective_photosphere() {
+        envelope(teff, mass)
+    } else {
+        Envelope::Radiative
+    };
     let rotation_days = rotation_days(envelope, teff, radius, age_gyr) * rotation_scatter;
     let rotation_days = match envelope {
         Envelope::FullyConvective => rotation_days.clamp(MID_M_PERIOD.0, MID_M_PERIOD.1),
@@ -546,6 +562,31 @@ mod tests {
         let mut values: Vec<f32> = (0..201).map(|seed| f(&star_activity(info, seed))).collect();
         values.sort_by(f32::total_cmp);
         values[values.len() / 2]
+    }
+
+    #[test]
+    fn quiet_kinds_have_no_spots_or_granulation() {
+        use crate::host::HostKind;
+        let info = StarInfo::new(42.0, 1.0, 0.0, 4.6);
+        for kind in [
+            HostKind::WhiteDwarf,
+            HostKind::NeutronStar,
+            HostKind::Magnetar,
+            HostKind::BlackHole,
+            HostKind::WolfRayet,
+        ] {
+            let a = host_activity(kind, &info, 3);
+            assert_eq!(a.envelope, Envelope::Radiative, "{kind:?}");
+            assert_eq!(a.spot_coverage, 0.0, "{kind:?}");
+            assert_eq!(a.granule_contrast, 0.0, "{kind:?}");
+            assert_eq!(a.activity, 0.0, "{kind:?}");
+        }
+        assert_eq!(
+            host_activity(HostKind::Dwarf, &info, 3),
+            star_activity(&info, 3)
+        );
+        // A quasi-star's envelope is convective (Begelman et al. 2008).
+        assert!(HostKind::QuasiStar.has_convective_photosphere());
     }
 
     #[test]

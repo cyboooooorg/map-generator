@@ -652,8 +652,8 @@ mod tests {
     }
 
     const SYSTEM: &str = r#"{
-        "format_version": 10, "seed": 42, "width": 1024, "height": 512,
-        "star": {"type": "K1V", "designation": "MGS 48213",
+        "format_version": 12, "seed": 42, "width": 1024, "height": 512,
+        "star": {"type": "K1V", "kind": "dwarf", "designation": "MGS 48213",
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
             {"id": "b", "kind": "planet", "type": "barren", "parent": null, "designation": "MGS 48213 b", "generated": false},
@@ -691,6 +691,18 @@ mod tests {
     }
 
     #[test]
+    fn a_system_with_no_body_is_summarized_with_no_planet() {
+        let json = r#"{"format_version": 12, "seed": 5, "width": 64, "height": 32,
+            "star": {"type": "O5V", "kind": "dwarf", "designation": "MGS 1",
+                     "info": {"light": [0.6, 0.7, 1.0], "hz_inner_au": 90.0, "hz_outer_au": 160.0}},
+            "bodies": []}"#;
+        let s = summarize("mgs-1-5", json.as_bytes(), 3).unwrap();
+        assert!(s.planets.is_empty() && s.bodies.is_empty());
+        assert_eq!((s.moons, s.star.as_str()), (0, "O5V"));
+        assert_eq!(s.star_light, [0.6, 0.7, 1.0]);
+    }
+
+    #[test]
     fn summaries_count_planets_by_type_and_list_bodies() {
         let s = summarize("mgs-48213-42", SYSTEM.as_bytes(), 7).unwrap();
         assert_eq!((s.seed, s.width, s.star.as_str()), (42, 1024, "K1V"));
@@ -721,7 +733,7 @@ mod tests {
     fn a_format_4_system_is_outdated() {
         // Made before round moons went through the planet model (part 4 of
         // #423): listed, flagged outdated, with no bodies.
-        let old = SYSTEM.replace(r#""format_version": 10"#, r#""format_version": 4"#);
+        let old = SYSTEM.replace(r#""format_version": 12"#, r#""format_version": 4"#);
         let s = summarize("mgs-48213-42", old.as_bytes(), 7).unwrap();
         assert!(s.outdated);
         assert_eq!((s.seed, s.star.as_str()), (42, "K1V"));
@@ -827,7 +839,7 @@ mod tests {
 
     #[test]
     fn each_body_has_its_original_size() {
-        let json = r#"{"format_version": 10, "width": 1024, "height": 512, "bodies": [
+        let json = r#"{"format_version": 12, "width": 1024, "height": 512, "bodies": [
             {"id": "c", "params": {"width": 1024, "height": 512}},
             {"id": "c-1", "params": {"width": 512, "height": 256}},
             {"id": "d"}
@@ -849,7 +861,7 @@ mod tests {
         assert!(originals.original_size(&root, "mgs-2-2", "c").is_err());
         // The file rewritten (a system drawn again under its id) is read
         // again, here one of the layout before sizes, which is refused.
-        let old = json.replace(r#""format_version": 10"#, r#""format_version": 1"#);
+        let old = json.replace(r#""format_version": 12"#, r#""format_version": 1"#);
         let error = original_sizes(old.as_bytes()).unwrap_err();
         assert!(error.contains("format version 1"), "{error}");
         // (A length of its own: some file systems stamp in coarse ticks.)

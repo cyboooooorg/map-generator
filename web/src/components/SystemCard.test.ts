@@ -24,11 +24,11 @@ const system = (extra: Partial<SystemSummary> = {}): SystemSummary => ({
   ...extra,
 });
 
-const html = (s: SystemSummary): string =>
+const html = (s: SystemSummary, compact = false): string =>
   render(SystemCard, {
     props: {
       system: s,
-      compact: false,
+      compact,
       selecting: false,
       chosen: false,
       renaming: false,
@@ -80,5 +80,17 @@ describe('SystemCard', () => {
     expect(out).toMatch(/<button class="open[ "]/);
     expect(out).not.toContain('Outdated');
     expect(out).not.toContain('data-regenerate');
+  });
+
+  it('says a system has no planet, in the full and the compact card', () => {
+    const lone = system({ star: 'O5V', designation: 'MGS 9', star_light: [0.6, 0.7, 1] });
+    for (const compact of [false, true]) {
+      const out = html(lone, compact);
+      expect(out).toContain('No planet');
+      // The star's own colour, no planet chip.
+      expect(out).toContain('<b>O5V</b>');
+      expect(out).not.toContain('dot small');
+    }
+    expect(html(system({ planets: { 'earth-like': 1 }, bodies: [] }))).not.toContain('No planet');
   });
 });

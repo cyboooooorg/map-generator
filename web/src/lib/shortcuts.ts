@@ -28,6 +28,7 @@ export type Shortcut =
         | 'measure'
         | 'screenshot'
         | 'help'
+        | 'units'
         | 'escape'
         | 'previousWorld'
         | 'nextWorld'
@@ -64,6 +65,7 @@ const KEYS: Record<string, Simple> = {
   j: 'elevationContours',
   d: 'measure',
   p: 'screenshot',
+  i: 'units',
   '?': 'help',
   escape: 'escape',
   '[': 'previousWorld',
@@ -128,6 +130,7 @@ export function shortcutHelp(): readonly [string, string][] {
     ['J', t.shortcuts.elevationContours],
     ['D', t.shortcuts.measure],
     ['P', t.shortcuts.screenshot],
+    ['I', t.shortcuts.units],
     ['Esc', t.shortcuts.escape],
     ['?', t.shortcuts.help],
   ];

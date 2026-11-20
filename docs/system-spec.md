@@ -163,8 +163,11 @@ regenerating one body leaves the others alone.
 From the star (its luminosity `L`, temperature, mass, as `StarInfo` has
 them):
 
-- the **inner edge**: no planet inside 0.02 AU nor inside the star's
-  Roche limit for the planet's density;
+- the **inner edge**: no planet inside the largest of 0.02 AU, the fluid
+  Roche limit of a rocky planet of the host's mean density and two
+  stellar radii (`host::inner_edge_au`). Dwarfs from A1 to M keep
+  0.02 AU; O to A0 dwarfs get a larger edge (0.125 AU for an O3V). An
+  orbit asked inside it, round one planet, is refused;
 - the **habitable zone**: Kopparapu et al. 2013 fluxes, as today;
 - the **ice line**, `2.7 √L` AU (Hayashi 1981);
 - the **outer edge**: 60 AU, as the giants' draw keeps today, and within
@@ -213,7 +216,12 @@ them today (metallicity and star mass), a hot Jupiter included: about
   no type and no band: a small one stays within 1.5 times the orbit it
   was drawn at (calibration: it keeps the planet near where its
   formation context put it), a giant within the system; one that finds
-  no room there is dropped.
+  no room there is dropped. A drawn system may therefore end with no
+  planet at all (a hot blue star, an O5V for instance): its `bodies` list
+  is empty, it has no `focus`, and only the belts that the star alone
+  allows remain. That is a normal system, not an error, and it is stored,
+  listed, resolved and exported like any other. Asking for no planet
+  (`planets: {}`) gives the same result on any star.
 - Neighbouring periods fall mostly between 1.3 and 3 times each other
   (the peas-in-a-pod systems of Weiss et al. 2018): planets of a system
   are of similar size and evenly spaced in `log a`.
@@ -579,7 +587,8 @@ systems/<system-id>/
     by preset and stored no physical model, version 3 kept a preset in
     each body's world parameters and no model for the planet asked for,
     version 4 gave no moon a model;
-  - `star`: today's `StarInfo` and its designation. `info.age_gyr` is the
+  - `star`: today's `StarInfo` and its designation, and `kind`, the kind
+    of host (`dwarf` for every system drawn today; format 12). `info.age_gyr` is the
     age of the star in Gyr, drawn from the `AGE` stream between 0.5 and
     10 Gyr (uniform; the star's lifetime if shorter) or set by `age_gyr`
     of the request, which must lie in `(0, lifetime]`. Every body shares
@@ -876,6 +885,20 @@ addressed as `<system-id>/<body-id>` everywhere.
   its seasons and moons. Both views show an axes gizmo; the star view's
   right button pans the camera, and opening a planet flies to it (and
   back out on return).
+- **System without planet.** A system with an empty `bodies` list opens
+  on the star view, in system mode, with the star alone: no planet
+  marker, no planet orbit and no clock that depends on one; the belts are
+  drawn when there are any, and the planets panel says there is no
+  planet. The planet view is never entered (no "no world" message), and
+  the body picker offers no body. Its card and orrery draw the star in
+  its own colour, with a "No planet" chip and a count of 0.
+  The star view's switches that would do nothing without a planet
+  (orbit, distances, lines to the star, velocities, pull, Hill spheres,
+  trojans, Lagrange points, and belts when there are none) are hidden.
+- **Habitable zone switch.** In the star view the habitable zone is one
+  switch with two squares: the zone drawn, and its distances (edges,
+  width and the line across it), which do not depend on the Distances
+  switch; the main button sets both.
 - **Main menu.** The app opens on a menu, and no viewer starts until a
   system is opened. The menu shows the systems in sections (pinned,
   today since the last local midnight, older; empty ones hidden), sorted

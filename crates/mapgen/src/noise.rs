@@ -198,6 +198,9 @@ pub mod stream {
     pub const HIGHLANDS: u32 = 42;
     /// A system's place in the galaxy (see `crate::galaxy`).
     pub const GALAXY: u32 = 43;
+    /// The kind of a system's host, when more than dwarfs are modelled
+    /// (see `crate::host::draw_host_kind`).
+    pub const HOST_KIND: u32 = 44;
     /// A system's draw (see `crate::system`): its planets, and its bodies'
     /// seeds and orbits.
     pub const SYSTEM: u32 = 64;
@@ -238,7 +241,14 @@ mod tests {
     fn stream_seeds_differ_between_streams_and_worlds() {
         let mut seen = std::collections::HashSet::new();
         for seed in [0, 1, 2, 100, u32::MAX] {
-            for s in (stream::ELEVATION..=stream::STAR_ACTIVITY).chain([stream::SYSTEM]) {
+            for s in (stream::ELEVATION..=stream::STAR_ACTIVITY).chain([
+                stream::AGE,
+                stream::HIGHLANDS,
+                stream::GALAXY,
+                stream::HOST_KIND,
+                stream::SYSTEM,
+                stream::ARCHETYPE_AGE,
+            ]) {
                 assert!(seen.insert(stream_seed(seed, s)), "seed {seed} stream {s}");
             }
         }

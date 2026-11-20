@@ -274,6 +274,7 @@ export const en = {
     habitableFilter: 'With a habitable world',
     habitableLine: 'A world with liquid water',
     habitableShort: 'Liquid water',
+    noPlanet: 'No planet',
     outdated: 'Outdated: made by an older generator',
     newerFormat: 'Made by a newer generator: update this one to open it',
     outdatedWorlds: 'Outdated worlds: made by an older generator',
@@ -818,7 +819,6 @@ export const en = {
     random: 'random',
     model: {
       /** What the mass units say when hovered. */
-      massUnits: { earth: 'Earth masses (5.97×10²¹ t)', jupiter: 'Jupiter masses (317.8 Earth masses)' },
       /** The groups of fields, folded until opened. */
       groups: {
         orbit: { title: 'Orbit shape and age', help: 'How elliptical the orbit is, and how old the star it circles.' },
@@ -1064,6 +1064,8 @@ export const en = {
     screenshot: 'Screenshot',
     screenshotHelp: 'Save the view as a PNG (P)',
     shortcutsHelp: 'Keyboard shortcuts (?)',
+    units: 'Units',
+    unitsHelp: 'What the units of the interface mean (I)',
     display: 'Display',
     hide: 'Hide',
     globe: 'Globe',
@@ -1391,8 +1393,9 @@ export const en = {
     elevationContours: 'Elevation contours',
     measure: 'Measure distances',
     screenshot: 'Screenshot',
-    escape: 'Close this help or the point panel, stop measuring',
+    escape: 'Close this help, the units or the point panel, stop measuring',
     help: 'This help',
+    units: 'The units reference',
   },
   /** The time slider. */
   epochs: {
@@ -1472,6 +1475,7 @@ export const en = {
       'The other planets of the system that matter to this world: gas and ice giants, drawn with the odds observed around stars of this type and metallicity',
     giantsOff: 'Not modelled (generated without giant planets)',
     noGiants: 'None: no giant in this system, like most red dwarfs',
+    noPlanet: 'No planet: this star is alone in its system',
     giantLine: (p: { name: string; kind: string; mass: string; orbit: string; year: string }) =>
       `${p.name} · ${p.kind} · ${p.mass} · ${p.orbit} · ${p.year}`,
     hotGiant: 'hot Jupiter',
@@ -1551,6 +1555,10 @@ export const en = {
     orbitLabel: (p: { name: string; distance: string }) => `${p.name} · ${p.distance}`,
     showOrbit: 'Orbits',
     showZone: 'Habitable zone',
+    squareZoneDrawn: 'Habitable zone: the zone drawn',
+    squareZoneDrawnHelp: 'The shaded ring where a planet could keep liquid water',
+    squareZoneDistances: 'Habitable zone: its distances',
+    squareZoneDistancesHelp: "The distances of the zone's inner and outer edges from the star, and its width",
     circular: (p: { distance: string }) => `circular orbit: ${p.distance} all year, no periapsis or apoapsis`,
     distancesHelp:
       'The distance from the star to the planet and the light it gets now, the closest and farthest points of its orbit, the edges of the habitable zone',
@@ -1668,7 +1676,7 @@ export const en = {
   units: {
     title: 'Units',
     Ga: {
-      name: 'Ga: a billion years (10⁹ years, 1 000 Ma)',
+      name: 'Ga: a billion years (10⁹ years, 1 000 Ma), also written Gyr',
       examples: 'Earth and the Solar System: 4.5 Ga · lunar maria: 3 to 3.9 Ga',
     },
     Ma: {
@@ -1691,7 +1699,149 @@ export const en = {
       name: "L☉: the Sun's luminosity (3.8 × 10²⁶ W)",
       examples: 'red dwarfs: 0.0001 to 0.08 · the Sun: 1 · Sirius: 25',
     },
+    Gyr: {
+      name: 'Gyr: a billion years, as Ga (10⁹ years)',
+      examples: 'Earth: 4.5 Gyr old · the Sun: 4.6 Gyr old',
+    },
+    K: {
+      name: 'K: kelvin, temperature counted from absolute zero (°C = K − 273.15)',
+      examples: '0 K: absolute zero · 93.7 K: Titan · 255 K: Earth without its greenhouse · 288 K: Earth',
+    },
+    UA: {
+      name: 'UA: astronomical unit (the French spelling of AU), the mean distance from Earth to the Sun',
+      examples: 'Mercury: 0.39 · Earth: 1 · Mars: 1.52',
+    },
+    'R☉': {
+      name: "R☉: the Sun's radius (696 000 km)",
+      examples: 'red dwarfs: 0.1 to 0.6 · the Sun: 1 · Sirius: 1.7',
+    },
+    'M⊕': {
+      name: "M⊕: Earth's mass (6 × 10²⁴ kg)",
+      examples: 'Moon: 0.012 · Mars: 0.107 · Earth: 1 · Neptune: 17',
+    },
+    'R⊕': {
+      name: "R⊕: Earth's radius (6 371 km)",
+      examples: 'Moon: 0.27 · Mars: 0.53 · Earth: 1 · Neptune: 3.9',
+    },
+    'M♃': {
+      name: "M♃: Jupiter's mass (318 M⊕)",
+      examples: 'Saturn: 0.30 · Jupiter: 1 · brown dwarfs: 13 to 80',
+    },
+    'M☉': {
+      name: "M☉: the Sun's mass (333 000 M⊕)",
+      examples: 'red dwarfs: 0.08 to 0.6 · the Sun: 1 · Sirius: 2.1',
+    },
+    RJ: {
+      name: "RJ: Jupiter's radius (71 492 km, 11.2 R⊕)",
+      examples: 'Saturn: 0.84 · Jupiter: 1 · hot Jupiters: 1 to 1.8',
+    },
+    'g/cm³': {
+      name: 'g/cm³: grams per cubic centimetre, a density',
+      examples: 'water: 1 · Saturn: 0.69 · Moon: 3.34 · Earth: 5.51',
+    },
+    'S⊕': {
+      name: 'S⊕: the light a planet receives, 1 S⊕ is what Earth gets from the Sun',
+      examples: 'Mars: 0.43 · Earth: 1 · Venus: 1.9',
+    },
+    'W/m²': {
+      name: 'W/m²: watts per square metre, the power of light or heat on a surface',
+      examples: "Earth's sunlight: 1 361 at the top of the air · Mars: 586",
+    },
+    µT: {
+      name: 'µT: microtesla, the strength of a magnetic field',
+      examples: 'Earth at the surface: 25 to 65 · a fridge magnet: 5 000',
+    },
+    'm/s²': {
+      name: 'm/s²: metres per second squared, an acceleration; gravity is one',
+      examples: "Earth's gravity: 9.81 · Moon: 1.62 · Mars: 3.71",
+    },
+    'mm/s²': {
+      name: 'mm/s²: millimetres per second squared, a tiny acceleration (1 m/s² = 1 000 mm/s²)',
+      examples: 'tidal pull of the Moon on Earth: about 1',
+    },
+    km: {
+      name: 'km: kilometre, 1 000 metres',
+      examples: "Earth's radius: 6 371 · Earth to the Moon: 384 000",
+    },
+    'km²': {
+      name: 'km²: square kilometre, an area',
+      examples: "France: 550 000 · Earth's oceans: 361 million",
+    },
+    'M km²': {
+      name: 'M km²: million square kilometres, an area',
+      examples: "Earth's land: 149 · Mars: 145 · Australia: 7.7",
+    },
+    'km/s': {
+      name: 'km/s: kilometres per second, a speed',
+      examples: 'Earth around the Sun: 30 · escape from Earth: 11.2',
+    },
+    TW: {
+      name: 'TW: terawatt, a thousand billion watts',
+      examples: "humanity's power use: about 19 · sunlight on Earth: 174 000",
+    },
+    GW: {
+      name: 'GW: gigawatt, a billion watts',
+      examples: 'a nuclear reactor: 1 · volcanism of Io: 100 000',
+    },
+    MW: {
+      name: 'MW: megawatt, a million watts',
+      examples: 'a wind turbine: 3 · a TGV: 9',
+    },
+    W: {
+      name: 'W: watt, a unit of power',
+      examples: 'a lightbulb: 10 · the Sun: 3.8 × 10²⁶',
+    },
   } satisfies { title: string } & Record<Unit, { name: string; examples: string }>,
+  /** Names of the formulas and units the interface prints, for tooltips. */
+  glossary: {
+    formulas: {
+      'CO₂': 'carbon dioxide',
+      'N₂': 'nitrogen',
+      'O₂': 'oxygen',
+      'CH₄': 'methane',
+      'C₂H₆': 'ethane',
+      'H₂O': 'water',
+      'NH₃': 'ammonia',
+      'SO₂': 'sulfur dioxide',
+      'H₂': 'hydrogen',
+      'H₂/He': 'hydrogen and helium',
+    },
+    notations: {
+      '[Fe/H]': 'metallicity: iron abundance relative to the Sun (log scale)',
+    },
+    units: {
+      'M⊕': 'Earth mass',
+      'R⊕': 'Earth radius',
+      'M♃': 'Jupiter mass',
+      'L☉': 'solar luminosity',
+      'R☉': 'solar radius',
+      'M☉': 'solar mass',
+      RJ: 'RJ: Jupiter radius',
+      'g/cm³': 'grams per cubic centimetre: density',
+      'S⊕': 'Earth insolation: the stellar flux Earth receives',
+      'W/m²': 'watts per square metre: power per area',
+      'µT': 'microtesla: magnetic field',
+      'm/s²': 'metres per second squared: acceleration',
+      'mm/s²': 'millimetres per second squared: acceleration',
+      '°C': 'degrees Celsius: temperature',
+      bar: 'bar: pressure',
+      K: 'kelvin: temperature from absolute zero',
+      g: 'g: surface gravity',
+      Ga: 'Ga: billion years',
+      Ma: 'Ma: million years',
+      Gyr: 'Gyr: billion years',
+      AU: 'AU: astronomical unit, the Earth-Sun distance',
+      UA: 'UA: astronomical unit, the Earth-Sun distance',
+      km: 'kilometre: distance',
+      'km²': 'square kilometre: area',
+      'km/s': 'kilometres per second: speed',
+      TW: 'terawatt: power',
+      GW: 'gigawatt: power',
+      MW: 'megawatt: power',
+      W: 'watt: power',
+      'M km²': 'million square kilometres: area',
+    },
+  },
   /** Loading bars. */
   loading: {
     decoding: (p: { file: string }) => `Decoding ${p.file}`,
