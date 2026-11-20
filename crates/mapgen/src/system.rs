@@ -8,7 +8,8 @@
 //! rest of the system drawn round it, a giant's moon putting its giant on
 //! its orbit).
 //!
-//! **Zones.** From the star: the inner edge (0.02 AU), the habitable zone
+//! **Zones.** From the star: the inner edge ([`crate::host::inner_edge_au`]: 0.02 AU, more round an
+//! O to A0 dwarf), the habitable zone
 //! (Kopparapu et al. 2013, as [`StarInfo`] has it), the ice line `2.7 √L`
 //! AU (Hayashi 1981) and the outer edge (60 AU). Each planet type has a
 //! band it may sit in and one it prefers ([`band`]).
@@ -32,7 +33,7 @@
 //! stored, so a body generated later is the world it would have been at
 //! once.
 
-use crate::activity::{StarActivity, star_activity};
+use crate::activity::StarActivity;
 use crate::archetype::{Archetype, ParamDefault};
 use crate::exomoon::{EARTH_KG, EARTH_M, G, HostGiant, HostMode};
 use crate::export::Diagnostics;
@@ -84,12 +85,21 @@ use std::sync::Arc;
 /// `capture_age_share` ([`Body::capture_age_share`]), and the card's new
 /// quantities (surface age, terrain unit, emissivity) and notes, so a
 /// system of version 9 does not parse as today's and is refused on its
-/// version.
-pub const SYSTEM_FORMAT_VERSION: u32 = 10;
+/// version. Version 12 stores the host's kind (`star.kind`, always `dwarf`
+/// for now) and moves the inner edge of O to A0 dwarfs outside two
+/// stellar radii ([`crate::host::inner_edge_au`]). Version 13 comes with
+/// lot 3C-2 of the climate pass: the greenhouse comes from a spectral
+/// column and the outer edge from its maximum greenhouse, the albedo
+/// weighs the air's column and absorption, the climate stores whether its
+/// fixed points settled (`Climate::converged`), and a steam runaway's
+/// model keeps its inputs from before escape took its water
+/// (`PlanetModel::before_steam`), so the bodies of a system of version 12
+/// are not the ones its seed draws today and it is refused as outdated.
+pub const SYSTEM_FORMAT_VERSION: u32 = 13;
 /// Most planets a system holds, moons not counted.
 pub const MAX_PLANETS: usize = 15;
-/// Inner and outer edges of a system, AU.
-const INNER_EDGE_AU: f64 = 0.02;
+/// Outer edge of a system, AU. The inner edge depends on the host
+/// ([`crate::host::inner_edge_au`]).
 const OUTER_EDGE_AU: f64 = 60.0;
 /// Tries to place a system's planets before a request fails.
 const TRIES: usize = 24;
@@ -197,6 +207,8 @@ pub struct SystemStar {
     /// Spectral type (`G2V`).
     #[serde(rename = "type")]
     pub spectral: String,
+    /// What the host is (`dwarf`); only dwarfs are modelled so far.
+    pub kind: crate::host::HostKind,
     /// Catalogue designation (`MGS 48213`).
     pub designation: String,
     /// The star seen from 1 AU (its temperature, luminosity, mass, radius,
@@ -444,7 +456,11 @@ pub fn read_system(dir: &std::path::Path) -> Result<System, String> {
     // A system drawn before the star's activity existed gets it derived,
     // the same as a draw would store.
     if system.star.activity.is_none() {
-        system.star.activity = Some(star_activity(&system.star.info, system.seed));
+        system.star.activity = Some(crate::activity::host_activity(
+            system.star.kind,
+            &system.star.info,
+            system.seed,
+        ));
     }
     // Likewise its place in the galaxy, from the seed and the stored
     // metallicity.
@@ -463,6 +479,23 @@ pub fn draw(request: &SystemRequest, rng: &mut impl RngExt) -> Result<System, Re
         SystemRequest::System(whole) => draw_whole(request, whole, rng),
         SystemRequest::Around(world) => {
             let resolved = world.resolve(rng)?;
+            // An orbit asked inside the host's inner edge (only a hot or
+            // wide host moves it above 0.02 AU) would put the planet in or
+            // against its star.
+            let edge = crate::host::inner_edge_au(&crate::star::values(resolved.params.star));
+            let asked = world.orbit_au.is_some() || world.hz_position.is_some();
+            if asked
+                && edge > crate::host::MIN_INNER_EDGE_AU
+                && f64::from(resolved.params.orbit_au) < edge
+            {
+                return Err(RequestError::OutOfRange {
+                    field: "orbit_au",
+                    limits: crate::request::Limits {
+                        min: edge as f32,
+                        max: crate::request::ORBIT_AU.max,
+                    },
+                });
+            }
             let model = resolved.model().clone();
             Ok(draw_around(request, resolved.params, model))
         }
@@ -653,7 +686,12 @@ fn clear(a: &Slot, b: &Slot, star_mass: f64) -> bool {
 /// times `10^(2 [Fe/H])` and the star's mass, like the other gas giants),
 /// on an orbit of 1 to 10 days, log-uniform, within 0.1 AU. The spacing
 /// then keeps other planets beyond four times its period.
-fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Option<f64> {
+fn drawn_hot_jupiter(
+    star: &StarInfo,
+    inner_edge_au: f64,
+    metallicity: f64,
+    rng: &mut impl RngExt,
+) -> Option<f64> {
     let mass = f64::from(star.mass);
     let odds =
         (HOT_JUPITERS * 10f64.powf(2.0 * metallicity).min(10.0) * mass.clamp(0.1, 2.5)).min(0.2);
@@ -663,7 +701,7 @@ fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -
         let days = (lo.ln() + u * (hi / lo).ln()).exp();
         (mass * (days / 365.25).powi(2))
             .cbrt()
-            .clamp(INNER_EDGE_AU, 0.1)
+            .clamp(inner_edge_au, 0.1_f64.max(inner_edge_au))
     })
 }
 
@@ -673,7 +711,12 @@ fn drawn_hot_jupiter(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -
 /// dwarf; Mulders et al. 2018) on periods log-uniform from 1 to 400 days,
 /// a few colder ones beyond, the giants as [`GiantSystem`] draws them, and
 /// last a hot Jupiter ([`drawn_hot_jupiter`]).
-fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<(Origin, f64)> {
+fn drawn_slots(
+    star: &StarInfo,
+    inner_edge_au: f64,
+    metallicity: f64,
+    rng: &mut impl RngExt,
+) -> Vec<(Origin, f64)> {
     let mass = f64::from(star.mass);
     let inner_mean = if mass < 0.6 {
         2.5
@@ -690,7 +733,7 @@ fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<
     let mut out = Vec::new();
     for _ in 0..poisson(inner_mean, rng) {
         let days = (1f64.ln() + rng.random::<f64>() * 400f64.ln()).exp();
-        let a = (mass * (days / 365.25).powi(2)).cbrt().max(INNER_EDGE_AU);
+        let a = (mass * (days / 365.25).powi(2)).cbrt().max(inner_edge_au);
         out.push((Origin::Small, a));
     }
     // Colder small planets, between the habitable zone and the outer giants.
@@ -704,10 +747,12 @@ fn drawn_slots(star: &StarInfo, metallicity: f64, rng: &mut impl RngExt) -> Vec<
         out.push((Origin::IceGiant, ice * 10f64.powf(0.7 + 0.3 * normal(rng))));
     }
     // Drawn last, so that the other planets' draws stay as they were.
-    out.extend(drawn_hot_jupiter(star, metallicity, rng).map(|a| (Origin::HotJupiter, a)));
+    out.extend(
+        drawn_hot_jupiter(star, inner_edge_au, metallicity, rng).map(|a| (Origin::HotJupiter, a)),
+    );
     // A slot whose orbit falls outside the system is dropped, after every
     // draw, as `place` dropped it.
-    out.retain(|(_, a)| (INNER_EDGE_AU..=OUTER_EDGE_AU).contains(a));
+    out.retain(|(_, a)| (inner_edge_au..=OUTER_EDGE_AU).contains(a));
     out
 }
 
@@ -819,15 +864,15 @@ fn place(slots: &[Slot], star_mass: f64, zone: Option<(f64, f64)>) -> Result<Vec
 
 /// How many planets of an archetype fit in its band, packed from its
 /// inner edge at the spacing, each of a typical mass.
-fn fits(asked: &Asked, star_mass: f64) -> u32 {
+fn fits(asked: &Asked, star_mass: f64, inner_edge_au: f64) -> u32 {
     let (min, max) = asked.band;
     let mut rng = StdRng::seed_from_u64(0);
     let mass = asked.archetype.mass(&mut rng);
     let mut last = Slot {
         placement: Placement::Requested(asked.clone()),
         mass_earth: mass,
-        orbit_au: min.max(INNER_EDGE_AU),
-        drawn_au: min.max(INNER_EDGE_AU),
+        orbit_au: min.max(inner_edge_au),
+        drawn_au: min.max(inner_edge_au),
         eccentricity: 0.0,
         fixed: false,
     };
@@ -995,6 +1040,7 @@ fn draw_whole(
     Ok(assemble(
         request,
         p.seed,
+        p.kind,
         p.star_code,
         p.age_gyr,
         p.metallicity,
@@ -1009,6 +1055,7 @@ fn draw_whole(
 /// [`assemble`] makes them bodies.
 struct Placed {
     seed: u32,
+    kind: crate::host::HostKind,
     star_code: f32,
     age_gyr: f32,
     metallicity: f32,
@@ -1038,6 +1085,17 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
         (None, Some(planets)) => asked_star_of(planets, age_asked, seed)?,
         _ => None,
     };
+    // A named or archetype star is a dwarf; a drawn one takes the kind of
+    // its own stream (`rng` is not touched, so a dwarf draws as before).
+    let kind = match (&whole.star, asked_star) {
+        (None, None) => crate::host::draw_host_kind(seed),
+        (Some(text), _) => {
+            crate::host::parse_host(text)
+                .map_err(RequestError::BadStar)?
+                .kind
+        }
+        _ => crate::host::HostKind::Dwarf,
+    };
     let star_code = match (&whole.star, asked_star) {
         (Some(text), _) => parse_type(text).map_err(RequestError::BadStar)?,
         (None, Some(code)) => code,
@@ -1055,6 +1113,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
     let star = StarInfo::new(star_code, 1.0, 0.0, age_gyr);
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
+    let inner_edge_au = crate::host::inner_edge_au(&crate::star::values(star_code));
 
     // The preferred band of each planet asked, to draw its distance again
     // when a try fails.
@@ -1090,10 +1149,10 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                     .orbit
                     .orbit_range_au(f64::from(star.luminosity), star_mass)
                     .ok_or_else(impossible)?;
-                if far < INNER_EDGE_AU || near > OUTER_EDGE_AU {
+                if far < inner_edge_au || near > OUTER_EDGE_AU {
                     return Err(impossible());
                 }
-                let lo = near.max(INNER_EDGE_AU);
+                let lo = near.max(inner_edge_au);
                 let hi = far.min(OUTER_EDGE_AU).max(lo);
                 let class = trial_class(
                     &archetype,
@@ -1178,7 +1237,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                     .iter()
                     .filter(|(a, _, _)| a.archetype.name == *name)
                     .count() as u32;
-                let room = fits(asked, star_mass);
+                let room = fits(asked, star_mass, inner_edge_au);
                 if count > room {
                     return Err(RequestError::ZoneFull {
                         body_type: name.clone(),
@@ -1194,7 +1253,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
             }
             list
         }
-        None => drawn_slots(&star, f64::from(metallicity), &mut rng)
+        None => drawn_slots(&star, inner_edge_au, f64::from(metallicity), &mut rng)
             .into_iter()
             .map(|(origin, a)| (Placement::Drawn(origin), a))
             .collect(),
@@ -1222,6 +1281,12 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                 let jitter = 1.0 + 0.2 * (rng.random::<f64>() - 0.5);
                 let orbit_au = match placement {
                     Placement::Requested(_) => *a,
+                    // The jitter may not carry a planet inside a hot
+                    // host's edge; round a cool dwarf it may, as it
+                    // always did.
+                    _ if inner_edge_au > crate::host::MIN_INNER_EDGE_AU => {
+                        (*a * jitter).max(inner_edge_au)
+                    }
                     _ => *a * jitter,
                 };
                 let drawn = if placement.is_hot_jupiter() {
@@ -1261,6 +1326,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
                 // out are dropped rather than failing.
                 return Ok(Placed {
                     seed,
+                    kind,
                     star_code,
                     age_gyr,
                     metallicity,
@@ -1306,6 +1372,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
             match space(&mut slots, star_mass, ice) {
                 Ok(()) => {
                     return Ok(Placed {
+                        kind,
                         seed,
                         star_code,
                         age_gyr,
@@ -1321,6 +1388,7 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
         }
         return Ok(Placed {
             seed,
+            kind,
             star_code,
             age_gyr,
             metallicity,
@@ -1330,9 +1398,10 @@ fn place_whole(whole: &WholeSystemRequest, rng: &mut impl RngExt) -> Result<Plac
         });
     }
     let (body_type, fits) = match last_error {
-        Some((Placement::Requested(asked), _)) => {
-            (asked.archetype.name.clone(), fits(&asked, star_mass))
-        }
+        Some((Placement::Requested(asked), _)) => (
+            asked.archetype.name.clone(),
+            fits(&asked, star_mass, inner_edge_au),
+        ),
         _ => (String::new(), 0),
     };
     let asked_of = whole
@@ -1384,6 +1453,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
     let star = StarInfo::new(params.star, 1.0, 0.0, params.age_gyr);
     let ice = 2.7 * f64::from(star.luminosity).sqrt();
     let star_mass = f64::from(star.mass);
+    let inner_edge = crate::host::inner_edge_au(&crate::star::values(params.star));
     let host = HostGiant::draw(&params);
     // A lone planet: no giant and no rocky neighbour.
     let alone = request.is_alone();
@@ -1415,6 +1485,12 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
         && let Some(giants) = GiantSystem::draw(&params)
     {
         for g in giants.giants {
+            // A hot giant is drawn from 0.02 AU: not inside a wide host.
+            let g_orbit = if inner_edge > crate::host::MIN_INNER_EDGE_AU {
+                f64::from(g.orbit_au).max(inner_edge)
+            } else {
+                f64::from(g.orbit_au)
+            };
             let giant_class = if g.hot {
                 PlanetClass::HotJupiter
             } else if g.kind == GiantKind::Ice {
@@ -1425,8 +1501,8 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
             slots.push(Slot {
                 placement: Placement::Giant(giant_class),
                 mass_earth: f64::from(g.mass_earth),
-                orbit_au: f64::from(g.orbit_au),
-                drawn_au: f64::from(g.orbit_au),
+                orbit_au: g_orbit,
+                drawn_au: g_orbit,
                 eccentricity: f64::from(g.eccentricity),
                 fixed: true,
             });
@@ -1436,7 +1512,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
     let mut rocky = if alone {
         Vec::new()
     } else {
-        drawn_slots(&star, f64::from(params.metallicity), &mut rng)
+        drawn_slots(&star, inner_edge, f64::from(params.metallicity), &mut rng)
     };
     rocky.retain(|(origin, _)| *origin == Origin::Small);
     for (origin, a) in rocky {
@@ -1475,6 +1551,7 @@ fn draw_around(request: &SystemRequest, params: WorldParams, model: PlanetModel)
     assemble(
         request,
         seed,
+        crate::host::HostKind::Dwarf,
         params.star,
         params.age_gyr,
         params.metallicity,
@@ -1506,6 +1583,7 @@ pub(crate) fn body_seed(seed: u32, id: &str) -> u32 {
 fn assemble(
     request: &SystemRequest,
     seed: u32,
+    kind: crate::host::HostKind,
     star_code: f32,
     age_gyr: f32,
     metallicity: f32,
@@ -1932,8 +2010,9 @@ fn assemble(
         height,
         star: SystemStar {
             spectral: info.kind.clone(),
+            kind,
             designation,
-            activity: Some(star_activity(&info, seed)),
+            activity: Some(crate::activity::host_activity(kind, &info, seed)),
             info,
             metallicity,
             ice_line_au: ice,
@@ -2221,10 +2300,10 @@ fn host_kg(params: &WorldParams) -> f64 {
 /// (the interior the model's heat was run on, see
 /// [`crate::planet::explain`]).
 fn chain_orbiter(context: &Context, model: &PlanetModel, orbit: &Orbit) -> Orbiter {
-    let inputs = &model.inputs;
+    let inputs = crate::planet::explain::surface_inputs(context, model);
     let interior = crate::planet::explain::surface_interior(context, model);
     Orbiter {
-        mass_kg: inputs.mass_earth * EARTH_KG,
+        mass_kg: model.inputs.mass_earth * EARTH_KG,
         a_m: orbit.semi_major_axis_km * 1000.0,
         period_s: orbit.period_days * DAY_S,
         eccentricity: orbit.eccentricity,
@@ -3236,9 +3315,79 @@ fn name_world(dir: &std::path::Path, system: &str, body: &str) -> Result<(), Str
 
 #[cfg(test)]
 mod tests {
+    fn o3_world(orbit_au: Option<f32>, seed: u32) -> WorldRequest {
+        WorldRequest {
+            planet: Some("earth-like".into()),
+            star: Some("O3V".into()),
+            age_gyr: Some(0.0005),
+            orbit_au,
+            seed: Some(seed),
+            width: Some(64),
+            height: Some(32),
+            ..WorldRequest::default()
+        }
+    }
+
+    /// An orbit asked inside the edge of a hot host is refused; one
+    /// asked inside 0.02 AU of a cool dwarf is not (no change there).
+    #[test]
+    fn an_orbit_asked_inside_the_host_edge_is_refused() {
+        let edge = crate::host::inner_edge_au(&crate::star::values(parse_type("O3V").unwrap()));
+        let world = o3_world(Some(0.03), 7);
+        match draw(&SystemRequest::Around(world), &mut StdRng::seed_from_u64(7)) {
+            Err(RequestError::OutOfRange { field, limits }) => {
+                assert_eq!(field, "orbit_au");
+                assert!((f64::from(limits.min) - edge).abs() < 1e-6);
+            }
+            other => panic!("{:?}", other.map(|s| s.seed)),
+        }
+        let far = o3_world(Some(1.0), 7);
+        assert!(draw(&SystemRequest::Around(far), &mut StdRng::seed_from_u64(7)).is_ok());
+    }
+
+    /// Hot giants drawn under the edge of an O3V are raised to it.
+    #[test]
+    fn giants_round_a_hot_host_keep_its_edge() {
+        let edge = crate::host::inner_edge_au(&crate::star::values(parse_type("O3V").unwrap()));
+        // Seeds 0 to 19 (were 0 to 399, 414 s in release since the
+        // spectral column): the edge holds on every planet whatever the
+        // draw, and seeds 7, 12, 13 and 16 draw a giant under it that is
+        // raised to it (39 of the 400 did, the first at seed 7).
+        let mut at_edge = 0;
+        for seed in 0..20 {
+            let world = o3_world(None, seed);
+            let sys = draw(
+                &SystemRequest::Around(world),
+                &mut StdRng::seed_from_u64(seed as u64),
+            );
+            let Ok(sys) = sys else { continue };
+            for b in sys.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
+                let a = b.orbit.semi_major_axis_au;
+                assert!(a >= edge - 1e-9, "seed {seed}: {a} < {edge}");
+                if (a - edge).abs() < 1e-9 {
+                    at_edge += 1;
+                }
+            }
+        }
+        assert!(at_edge > 0, "no hot giant was clamped in 20 seeds");
+    }
+
     use super::*;
     use crate::planet::PLANET_CLASSES;
     use crate::rings::RingRole;
+
+    #[test]
+    fn a_named_white_dwarf_is_a_bad_star() {
+        let request = SystemRequest::System(WholeSystemRequest {
+            star: Some("DA".into()),
+            seed: Some(1),
+            ..Default::default()
+        });
+        match draw(&request, &mut StdRng::seed_from_u64(1)) {
+            Err(RequestError::BadStar(m)) => assert!(m.contains("#577"), "{m}"),
+            other => panic!("expected BadStar, got {:?}", other.map(|_| ())),
+        }
+    }
 
     /// Whether `b` is a planet whose world is a giant's.
     pub(super) fn giant(b: &Body) -> bool {
@@ -3262,8 +3411,11 @@ mod tests {
         for seed in 1..=200 {
             let mut rng = StdRng::seed_from_u64(seed);
             let star = StarInfo::new(parse_type("G2V").unwrap(), 1.0, 0.0, 4.6);
-            for (origin, a) in drawn_slots(&star, 0.0, &mut rng) {
-                assert!((INNER_EDGE_AU..=OUTER_EDGE_AU).contains(&a), "{a}");
+            for (origin, a) in drawn_slots(&star, crate::host::MIN_INNER_EDGE_AU, 0.0, &mut rng) {
+                assert!(
+                    (crate::host::MIN_INNER_EDGE_AU..=OUTER_EDGE_AU).contains(&a),
+                    "{a}"
+                );
                 if origin == Origin::HotJupiter {
                     assert!(a <= 0.1, "{a}");
                 }
@@ -3596,6 +3748,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 600 whole systems for the 1 % rate of hot Jupiters, 4 min in release; run with --include-ignored before a PR"]
     fn a_drawn_system_sometimes_has_a_hot_jupiter() {
         let (mut hot, mut close) = (0, 0);
         let n = 600;
@@ -3801,8 +3954,11 @@ mod tests {
 
     #[test]
     fn a_giants_preview_is_linear_and_follows_the_bands_it_will_get() {
+        // Seeds 0 to 3 (were 0 to 9, 103 s in release since the spectral
+        // column): each system keeps the three giants it asks for, so
+        // four give the twelve previews the count below asks for.
         let mut checked = 0;
-        for seed in 0..10 {
+        for seed in 0..4 {
             let system = draw(
                 &whole(
                     &[("jupiter-like", 2), ("neptune-like", 1), ("earth-like", 1)],
@@ -3846,6 +4002,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 40 whole systems for over 60 giants and their rings, 7 min in release; run with --include-ignored before a PR"]
     fn giants_get_their_rings_from_the_system() {
         let (mut bright, mut faint, mut giants) = (0, 0, 0);
         for seed in 0..40 {
@@ -4368,8 +4525,15 @@ mod tests {
 
     #[test]
     fn every_planet_stores_its_model_and_its_class() {
+        // Seeds 1 to 3 round a planet and 1 to 4 for whole systems (were
+        // 1 to 10 and 1 to 20, 59 s in release since the spectral
+        // column): the class key is checked on every planet whatever its
+        // class; seeds 1, 2 and 4 draw round moons with a model of their
+        // own (2, 4 and 1) and every seed small moons without one, so
+        // both branches of the moons' check run.
+        //
         // Around a planet: every planet, the world asked included.
-        for seed in 1..=10 {
+        for seed in 1..=3 {
             let world = WorldRequest {
                 planet: Some("earth-like".into()),
                 seed: Some(seed),
@@ -4388,7 +4552,7 @@ mod tests {
             assert!(asked.model.is_some(), "seed {seed}");
         }
         // A whole system: every planet.
-        for seed in 1..=20 {
+        for seed in 1..=4 {
             let system = drawn_g2v(seed);
             for body in &system.bodies {
                 match body.kind {
@@ -4521,16 +4685,20 @@ mod tests {
 
     #[test]
     fn heat_pipe_moons_explain_their_temperature() {
-        // `earth-like` asked as a giant's moon, request seeds 1 to 40, the
-        // caller seeded 5 (#520): some come out as tidally heated
-        // heat-pipe volcanic worlds, whose replayed temperature missed the
-        // stored one. Every body is explained, and the temperature root is
-        // the stored temperature.
+        // `earth-like` asked as a giant's moon, the caller seeded 5 (#520):
+        // some come out as tidally heated heat-pipe volcanic worlds under
+        // a steaming air, whose replayed temperature missed the stored
+        // one. Every body is explained, and the temperature root is the
+        // stored temperature. Request seeds 1 and 8 (were 1 to 8, 123 s
+        // in release; the issue's 1 to 40 took 10 min): of the eight,
+        // only they draw such a moon (seed 1's d-2, seed 8's d-5, the
+        // issue's measured case), and the guard asks for at least one,
+        // so the sample holds the path.
         use crate::geology::Regime;
         use crate::planet::{Quantity, explain};
         let mut failed = Vec::new();
         let mut heat_pipes = 0;
-        for seed in 1..=40 {
+        for seed in [1, 8] {
             let system = draw(
                 &SystemRequest::Around(WorldRequest {
                     planet: Some("earth-like".into()),
@@ -4551,7 +4719,14 @@ mod tests {
                     continue;
                 };
                 if let Some(surface) = &model.surface {
-                    if body.kind == BodyKind::Moon && surface.regime == Regime::HeatPipe {
+                    // The path of the issue: a heat-pipe volcanic moon
+                    // whose hot air holds bars of steam (44 bar at 525 K
+                    // in the issue, about 12 bar at 465 K today).
+                    if body.kind == BodyKind::Moon
+                        && surface.regime == Regime::HeatPipe
+                        && surface.gases.h2o > 1.0
+                        && model.class == crate::planet::PlanetClass::VolcanicWorld
+                    {
                         heat_pipes += 1;
                     }
                     let root = e
@@ -4571,7 +4746,10 @@ mod tests {
         }
         assert!(failed.is_empty(), "{failed:#?}");
         // The case of the issue is among them.
-        assert!(heat_pipes > 0, "no heat-pipe moon over the 40 seeds");
+        assert!(
+            heat_pipes > 0,
+            "no steaming heat-pipe volcanic moon over the seeds"
+        );
     }
 
     #[test]
@@ -4597,9 +4775,12 @@ mod tests {
 
     #[test]
     fn requested_slots_store_the_derived_class() {
-        // terran=1, gas-giant=1 round a G2V, seeds 1..=10: one planet in
-        // each band; each stores a class key, whatever it is.
-        for seed in 1..=10 {
+        // terran=1, gas-giant=1 round a G2V, seeds 1..=3: one planet in
+        // each band; each stores a class key, whatever it is. Three seeds
+        // (were ten, 97 s in release since the spectral column): the
+        // slots asked are kept on every seed by construction, and the
+        // class key is checked on each planet whatever its class.
+        for seed in 1..=3 {
             let system = requested(seed, &[("earth-like", 1), ("jupiter-like", 1)]);
             let planets: Vec<_> = system
                 .bodies
@@ -5030,6 +5211,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 300 drawn systems for over 20 belt zones, 26 min in release; run with --include-ignored before a PR"]
     fn drawn_planets_round_a_world_keep_out_of_the_first_cold_giants_belt_zone() {
         // Issue #449 with `--draw-only`: the drawn planets are kept one by
         // one, so a small slot of an ice giant's mass drawn after them
@@ -5081,6 +5263,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 40 whole systems for over 10 inner belts and 10 trojan swarms, 6.5 min in release; run with --include-ignored before a PR"]
     fn systems_get_belts_trojans_and_their_crater_rate() {
         let (mut inner, mut trojans) = (0, 0);
         for seed in 0..40 {
@@ -5525,6 +5708,7 @@ mod tests {
     /// giant with a moon with geysers close in has one plume ring, from
     /// the innermost of them.
     #[test]
+    #[ignore = "slow: 500 drawn systems for the plume rings of venting moons, 7 min in release; run with --include-ignored before a PR"]
     fn plume_rings_follow_geysers() {
         let (mut fed, mut vents) = (0, 0);
         for seed in 1..=500 {
@@ -6194,8 +6378,12 @@ mod tests {
         model.surface.expect("a surface").gases.total()
     }
 
+    /// Seeds 0 to 3 (were 0 to 9; Earth's took 96 s in release): the star
+    /// is the archetype's on every seed by construction, and the pressure
+    /// bounds are held over 20 seeds of a whole system by
+    /// `archetype::tests::faithful_archetypes_hold_in_a_whole_system`.
     fn assert_brings_its_sun(archetype: &str, bar: std::ops::RangeInclusive<f64>) {
-        for seed in 0..10 {
+        for seed in 0..4 {
             let system = whole_starless(&[(archetype, 1)], seed).unwrap();
             assert_eq!(system.star.spectral, "G2V", "{archetype} seed {seed}");
             let p = asked_pressure_bar(&system, archetype);
@@ -6445,6 +6633,25 @@ mod focus_ring_tests {
     use super::*;
     use crate::rings::RingRole;
 
+    #[test]
+    fn a_drawn_system_stores_a_dwarf_kind() {
+        let request = SystemRequest::System(WholeSystemRequest {
+            age_gyr: None,
+            star: None,
+            metallicity: None,
+            planets: None,
+            seed: Some(5),
+            width: Some(64),
+            height: Some(32),
+        });
+        let system = draw(&request, &mut rand::rng()).unwrap();
+        assert_eq!(system.star.kind, crate::host::HostKind::Dwarf);
+        let json = serde_json::to_string(&system).unwrap();
+        assert!(json.contains("\"kind\":\"dwarf\""));
+        let back: System = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.star.kind, crate::host::HostKind::Dwarf);
+    }
+
     fn around(planet: &str, seed: u32, host: Option<HostMode>) -> System {
         let world = WorldRequest {
             planet: Some(planet.into()),
@@ -6525,6 +6732,7 @@ mod focus_ring_tests {
     }
 
     #[test]
+    #[ignore = "slow: 30 drawn systems round a world, 5.5 min in release; run with --include-ignored before a PR"]
     fn the_rings_of_a_worlds_giant_stay_inside_its_chain() {
         for seed in 0..30 {
             let system = around("earth-like", seed, Some(HostMode::Giant));
@@ -6579,6 +6787,7 @@ mod spin_tests {
     /// year when locked, a year over the turns in a resonance. The moon
     /// system once drew its own, on an Earth's mass, and could disagree.
     #[test]
+    #[ignore = "slow: 300 drawn red-dwarf systems, 7 min in release; run with --include-ignored before a PR"]
     fn rocky_day_follows_the_one_spin_state() {
         let (mut locked, mut resonant) = (0, 0);
         for seed in 0..300 {
@@ -6625,8 +6834,12 @@ mod spin_tests {
 
     #[test]
     fn planets_locked_to_their_star_turn_on_circles_upright() {
+        // Seeds 0 to 9 (were 0 to 59, 59 s in release since the spectral
+        // column): every planet's spin is checked against its star's
+        // tides whatever it is; they hold 19 locked planets and the
+        // first 3:2 resonance (seed 4; four in the sixty seeds).
         let (mut locked, mut resonant) = (0, 0);
-        for seed in 0..60 {
+        for seed in 0..10 {
             let system = red_dwarf_system(seed);
             for body in system.bodies.iter().filter(|b| b.kind == BodyKind::Planet) {
                 if giant(body) {
@@ -6707,6 +6920,7 @@ mod spin_tests {
     }
 
     #[test]
+    #[ignore = "slow: 20 drawn systems and their moons' worlds, 5 min in release; run with --include-ignored before a PR"]
     fn a_moons_spin_and_world_share_one_tilt_and_giants_one_recipe() {
         for seed in 0..20 {
             let request = SystemRequest::System(WholeSystemRequest {
@@ -6826,8 +7040,11 @@ mod lone_tests {
 
     #[test]
     fn a_planets_moon_list_agrees_with_its_round_moons_bodies() {
+        // Seeds 1 and 2 (were 1 to 12, 61 s in release since the spectral
+        // column): they draw 11 round moons with bodies, against the 4
+        // the count below asks for (seed 1 alone, 7).
         let mut checked = 0;
-        for seed in 1..=12 {
+        for seed in 1..=2 {
             let system = around("earth-like", seed, None, None);
             for planet in system.bodies.iter().filter(|b| b.kind != BodyKind::Moon) {
                 let Some(drawn) = MoonSystem::draw(&planet.params) else {
@@ -6862,6 +7079,7 @@ mod lone_tests {
     }
 
     #[test]
+    #[ignore = "slow: 60 drawn systems, alone and not, for over 20 with company, 5 min in release; run with --include-ignored before a PR"]
     fn a_lone_planet_has_no_other_planet_belt_or_giant_neighbour() {
         let mut crowded = 0;
         for seed in 1..=30 {
@@ -6884,7 +7102,10 @@ mod lone_tests {
 
     #[test]
     fn a_lone_moon_of_a_giant_keeps_its_host_and_nothing_else() {
-        for seed in 1..=10 {
+        // Seeds 1 to 3 (were 1 to 10, 109 s in release since the spectral
+        // column): `alone` drops every other body whatever the draws, so
+        // any seed takes the path; three vary the giant drawn.
+        for seed in 1..=3 {
             let lone = around("earth-like", seed, Some(HostMode::Giant), Some(true));
             let only = planets(&lone);
             assert_eq!(only.len(), 1, "seed {seed}");
@@ -6905,8 +7126,11 @@ mod lone_tests {
 
     #[test]
     fn a_request_without_alone_is_the_one_it_was() {
-        // Neither the flag left out nor false changes the system.
-        for seed in 1..=5 {
+        // Neither the flag left out nor false changes the system. Seeds 1
+        // and 2 (were 1 to 5, 54 s in release): the flag is read before
+        // any draw, so one seed shows it; the second guards against a
+        // match by chance.
+        for seed in 1..=2 {
             let a = serde_json::to_string(&around("earth-like", seed, None, None)).unwrap();
             let b = serde_json::to_string(&around("earth-like", seed, None, Some(false))).unwrap();
             let strip = |s: &str| s.replace("\"alone\":false,", "");
@@ -7344,6 +7568,97 @@ mod titan_tests {
             }
             let share = 100.0 * liquid / total;
             assert!((0.5..2.0).contains(&share), "seed {seed}: {share} %");
+        }
+    }
+
+    /// A whole system may end with no planet: a star alone, with no
+    /// body and no focus (issue #568).
+    #[test]
+    fn a_whole_system_with_no_planet_is_a_star_alone() {
+        for star in ["O5V", "B1V", "G2V"] {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some(star.into()),
+                planets: Some(BTreeMap::new()),
+                seed: Some(1),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            assert!(system.bodies.is_empty(), "{star}");
+            assert!(system.focus.is_none(), "{star}");
+            let json = serde_json::to_string(&system).unwrap();
+            let back: System = serde_json::from_str(&json).unwrap();
+            assert!(back.bodies.is_empty() && back.focus.is_none());
+        }
+    }
+
+    /// The first seeds, in 1..=60, whose drawn O5V system ends with no
+    /// planet: one with no belt, one with a belt left.
+    pub(crate) fn planetless_o_star_seeds() -> (Option<u32>, Option<u32>) {
+        let (mut bare, mut belted) = (None, None);
+        for seed in 1..=60u32 {
+            let request = SystemRequest::System(WholeSystemRequest {
+                star: Some("O5V".into()),
+                seed: Some(seed),
+                width: Some(64),
+                height: Some(32),
+                ..Default::default()
+            });
+            let system = draw(&request, &mut StdRng::seed_from_u64(1)).unwrap();
+            if !system.bodies.is_empty() {
+                continue;
+            }
+            assert!(system.focus.is_none(), "seed {seed}");
+            if system.belts.is_empty() {
+                bare = bare.or(Some(seed));
+            } else {
+                belted = belted.or(Some(seed));
+            }
+        }
+        (bare, belted)
+    }
+
+    /// A hot blue star finds no room for a planet in a drawn system.
+    #[test]
+    fn a_drawn_o_star_can_end_with_no_planet() {
+        let (bare, belted) = planetless_o_star_seeds();
+        assert!(bare.is_some(), "no O5V draw of 1..=60 ends with no planet");
+        assert!(
+            belted.is_some(),
+            "no planetless O5V draw of 1..=60 keeps a belt"
+        );
+    }
+
+    /// No body of a system round a hot O star orbits inside its edge, a
+    /// hot Jupiter asked included.
+    #[test]
+    fn no_planet_orbits_inside_an_o_star() {
+        let edge = 2.0 * f64::from(crate::star::values(3.0).radius) * 0.004_650_47;
+        for seed in 1..=40u32 {
+            for planets in [None, Some(BTreeMap::from([("hot-jupiter".to_string(), 1)]))] {
+                let request = SystemRequest::System(WholeSystemRequest {
+                    star: Some("O3V".into()),
+                    planets,
+                    seed: Some(seed),
+                    width: Some(64),
+                    height: Some(32),
+                    ..Default::default()
+                });
+                let Ok(system) = draw(&request, &mut StdRng::seed_from_u64(1)) else {
+                    continue;
+                };
+                for b in &system.bodies {
+                    if b.parent.is_none() {
+                        assert!(
+                            b.orbit.semi_major_axis_au >= edge * (1.0 - 1e-6),
+                            "seed {seed}: {} at {}",
+                            b.id,
+                            b.orbit.semi_major_axis_au
+                        );
+                    }
+                }
+            }
         }
     }
 }

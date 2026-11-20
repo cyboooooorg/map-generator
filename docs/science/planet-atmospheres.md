@@ -116,8 +116,16 @@ The water escape took leaves the planet's mass too (#513,
 water, the water share of what is left, and the envelope and volatiles
 at the same mass (their shares grow). The layers, gravity and internal
 heat are derived again from it before the steam pass runs, so the
-climate's column sees the lighter body. `PlanetModel.before_steam`
-keeps the inputs from before the runaway: the request's formation is
+climate's column sees the lighter body. That pass's own escape (the
+cosmic shoreline and the non-thermal loss, below) then takes more of
+the steam: the mass and the layers are derived once more from the water
+it kept (`Water::kept_kg`, what the card shows), without running the
+climate again, so the mass, the water card and both cause trees agree;
+the heat stays the one the climate ran on, and the explanation finds
+that body again from the water the pass started with
+(`explain::surface_inputs`). `PlanetModel.before_steam`
+keeps the inputs from before the runaway, when escape took water: the
+request's formation is
 read from them, and `drawn_mass_earth` stays the mass drawn. The cause
 tree shows the mass from the mass formed and the water kept, with the
 water formed and the water lost.
@@ -920,7 +928,11 @@ the body's derived albedo `A_d` to `A_rg` with the steam column,
 a calibration: the moist atmospheres of Kopparapu et al. hold a fraction
 of a bar to about one bar of vapour at the limit), so a thick column
 takes `A_rg` whole and a runaway losing the last of its water comes back
-to its derived albedo without a jump. Kopparapu et al.
+to its derived albedo without a jump. The albedo's cause tree shows
+that blend as a `steam` part: its weight `1 − exp(−p_steam / 1 bar)`,
+with `A_rg` and a note naming the plateau that sets it (`moist_limit`,
+Earth's air's; `moist_limit_own`, the body's own;
+`climate::steam_albedo`). Kopparapu et al.
 2013 (doi:10.1088/0004-637X/765/2/131) and 2014 place the runaway limit
 where the light a moist atmosphere absorbs, with the albedo its own
 spectrum gives under that star, meets its outgoing limit. With Earth's
@@ -1118,23 +1130,40 @@ climate (what escape and the cold trap left of it), since weathering
 slows and the volcanoes keep giving: up to the planet's carbon inventory
 (all it outgassed, `CarbonCycle::inventory_bar`), at most its maximum
 greenhouse (`maximum_greenhouse`, `Body::greenhouse_co2`; issue #522).
-That maximum comes from the column itself, as in Kopparapu et al. 2013
-(doi:10.1088/0004-637X/765/2/131): where the CO₂ of a cold column reaches
-its saturation (`atmosphere::co2_saturation_bar`, its frost below
-216.6 K, its liquid above) it condenses, the air follows CO₂'s
-pseudo-adiabat (`column::co2_lapse`, Kasting 1991 Appendix B) and the
-tropopause (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼`
-of the climate's own albedo) cold-traps it, so its greenhouse flattens
-while its Rayleigh scattering keeps growing. The Rayleigh scattering is
-averaged over the star's black-body spectrum (`albedo::spectrum`): a red
-star's light scatters less, so the maximum holds at a lower flux. For an
-Earth the outer edge, the last orbit with liquid water, is 1.535 AU round
-the Sun (Kopparapu: 1.70 AU), and round 4500 K and 3300 K stars its flux
-is 25 % and 20 % above their fit (issue #523; the edge was 1.78 AU on the
-grey column). The gap is the thick CO₂'s outgoing radiation, 73.5 W/m²
-under 8 bar at 1.70 AU against Kopparapu's 67.4, and the albedo at the
-maximum greenhouse, 0.455 against their 0.417; the lot keeps the edge
-there and a follow-up issue holds the rest. If the maximum is not
+That maximum is the model's own, not a published edge: a golden-section
+search in `ln CO₂` for the amount at which a surface at 288 K gains most,
+the light it absorbs under the albedo that CO₂ gives against what the
+spectral column sends out. Three things in the model cap it:
+
+- CO₂'s bands saturate: the correlated-k lines, the MT_CKD far wings and
+  the CO₂–CO₂ pairs close the 15 µm region, so each bar adds less
+  trapping;
+- where the CO₂ of a cold column reaches its saturation
+  (`atmosphere::co2_saturation_bar`, its frost below 216.6 K, its liquid
+  above) it condenses, the air follows CO₂'s pseudo-adiabat
+  (`column::co2_lapse`, Kasting 1991 Appendix B) and the tropopause
+  (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼` of the
+  climate's own albedo) cold-traps it;
+- its Rayleigh scattering keeps growing with the column, averaged over
+  the star's black-body spectrum (`albedo::spectrum`), while its
+  near-infrared absorption (`planet::shortwave`) takes back part of what
+  it reflects. A red star's light scatters less and falls more in the
+  absorption bands, so the maximum holds at a lower flux.
+
+Kopparapu et al. 2013 (doi:10.1088/0004-637X/765/2/131) find the same
+mechanism and put its edge at 1.70 AU round the Sun (0.343 S⊕). The model
+lands closer in: for an Earth the outer edge, the last orbit with liquid
+water, is 1.535 AU (0.424 S⊕, +24 %), and round 4500 K and 3300 K stars
+its flux is 25 % and 20 % above their fit (the edge was 1.47 AU before
+the near-infrared absorption, 1.78 AU on the grey column). Two measured
+parts make the gap: the thick CO₂ column sends out too much, 73.5 W/m²
+under 8 bar at 1.70 AU against Kopparapu's 67.4, so it needs less light
+to stay warm; and the albedo at their maximum greenhouse is 0.455
+against their 0.417. Neither is tuned away: the edge tests pin what the
+model reaches (1.535 ± 0.005 AU, +25 % and +20 % ± 1 %), so that a
+change shows, and issue #595 holds the search for the missing physics
+(the CO₂ far-wing shape against MT_CKD, CO₂ ice clouds, the 0-D
+column's stratosphere, the HITRAN versions). If the maximum is not
 enough, the planet keeps the CO₂ of its maximum greenhouse and is
 colder: below 273 K its water freezes, and where its surface is too
 cold to keep that CO₂ it frosts out until the air keeps what the surface
@@ -1160,9 +1189,10 @@ Randall 1996's cloudiness; Earth's 0.67 at its 1.26e-2 bar and 77 %, a
 dry world whose air holds all its little water clearer than an ocean
 world with the same vapour; each cloud top 0.252, calibrated on Earth's
 0.30), Rayleigh scattering of the air's column `p / g` (Titan's 1.5 bar
-weigh seven times Earth's
-column), a methane haze and, from 1e-3 bar of SO₂ (what the washing outcolumn), a methane haze and, from 1e-3 bar of SO₂ (what the washing out
-leaves) in a surface above 273 K, a sulphuric acid deck that hides all
+weigh seven times Earth's column; CO₂ scatters 2.5 times as much as
+nitrogen), the near-infrared absorption of its CO₂ and water vapour
+(**Near-infrared absorption** below), a methane haze and, from 1e-3 bar
+of SO₂ (what the washing out leaves) in a surface above 273 K, a sulphuric acid deck that hides all
 below it (0.76), over a share of the disc that grows linearly from none
 at 273 K to all of it at 313 K (`DECK_ONSET_K`, a calibration: a deck
 whole at one temperature left the fixed point no balance between a warm
@@ -1217,9 +1247,10 @@ Checks (tests):
 - The same air lowers an M dwarf's planet's albedo more than a G
   star's: 0.074 against 0.032 under Earth's air.
 
-The outer edge moved from 1.47 to 1.54 AU round the Sun; the K and M
+The outer edge moved from 1.47 to 1.535 AU round the Sun; the K and M
 edges' fluxes from +43 % and +47 % to +25 % and +20 % of Kopparapu's.
-The lot keeps the edge there (task 7.3 of #523 sets its bound).
+The edge tests are frozen there; issue #595 holds the rest of the gap
+(see **Carbonate thermostat** above).
 
 **Icy albedo from surface age** (`albedo::icy_unit_albedo`, climate
 pass lot 3C-1, goal 4). The exposed water ice of an ice crust darkens
@@ -1332,16 +1363,19 @@ tree has no room under its parts (the trees stay three levels deep), so
 it names them without those details. A body whose albedo is mostly a
 frost says so on the card's value line ("0.63 · volcanic SO₂ frost").
 
-Census, seeds 1 to 40 (min, median, max):
+Census, seeds 1 to 40 of `archetype_census` (min, median, max; climate
+pass lot 3C-2):
 
 | Body | Bond albedo | T, K | Observed |
 |---|---|---|---|
-| Enceladus | 0.769, 0.782, 0.787 | 60.3, 62.2, 63.9 | 0.81 ± 0.04 (Howett et al. 2010) |
-| Europa | 0.587, 0.623, 0.660 | 91.9, 95.8, 100.1 | about 0.62 to 0.68 |
-| Ganymede | 0.451, 0.455, 0.458 | 102.2, 105.1, 107.7 | about 0.4 |
-| Callisto | 0.192, 0.203, 0.250 | 110.8, 115.3, 118.6 | about 0.2 |
+| Enceladus | 0.789, 0.803, 0.812 | 58.7, 60.7, 62.5 | 0.81 ± 0.04 (Howett et al. 2010) |
+| Europa | 0.586, 0.625, 0.660 | 91.9, 95.8, 100.1 | about 0.62 to 0.68 |
+| Ganymede | 0.451, 0.454, 0.457 | 102.2, 105.1, 107.7 | about 0.4 |
+| Callisto | 0.196, 0.204, 0.250 | 110.8, 115.1, 118.4 | about 0.2 |
 
-Enceladus took the regolith's 0.11 before (85 to 89 K): its 0.027
+Before lot 3C-2 Enceladus came out at 0.782 (62.2 K) and Callisto at
+0.203; the other moons moved by under 0.002. Enceladus once took the
+regolith's 0.11 (85 to 89 K): its 0.027
 oceans spread as 1.5 km sheets cover 5 % of its disc, the rest counting
 as bare rock; the Galilean moons took the ice's 0.6 (95 to 98 K). The
 colder Enceladus has a thicker shell (45 to 54 km, 10 to 13 km at the
@@ -1525,14 +1559,18 @@ sensitivity maps 286-290 K to (3.7e-5 to 3.7e-4 bar); nothing is tuned
 to close the bias.
 Venus reaches 577 K under its 85 bar of CO₂ and its Bond albedo 0.76
 (739 K on the grey column, whose CO₂ opacity was calibrated on it): the
-infrared opacity of its H₂SO₄ clouds and its SO₂ are not modelled (a
-follow-up issue). The reference Mars takes the real 6.1 mbar of CO₂
+infrared opacity of its H₂SO₄ clouds and its SO₂ are not modelled, and
+the hot bands of the line list above 700 K are unchecked (issue #594;
+the spectral column before the CO₂ continuum gave 451 K). The reference Mars takes the real 6.1 mbar of CO₂
 (`MARS_CO2_FACTOR`; the volatile rule alone gives it 14 mbar) and
 reaches 214.5 K over an equilibrium temperature of 210.3 K: any
 greenhouse puts it over the 210 K mean surface temperature observed,
 which a uniform 1-D surface cannot reach (the real surface radiates more
 than `σ T_mean⁴` for its uneven temperatures); `mars-like`, with 4.8
-mbar, reaches 215 K too.
+mbar, reaches 215 K too on the distance sweep (`climate_sweep sweep`),
+and 213.3 to 214.1 K under 5.7 to 5.9 mbar over seeds 1 to 40 of
+`archetype_census`, where `venus-like` reaches 552 to 601 K (median
+575 K) under 75 to 98 bar.
 
 ## Life
 
@@ -1735,31 +1773,35 @@ Measured, not tuned: `cargo run --release -p mapgen --example planet_census
 -- 500` draws systems of seeds 1 to 500 and derives every planet through
 `body_model`. The medians of temperature and pressure are over the
 planets with a surface (`NaN` for the classes that have none). The output
-below is the one of the climate pass, lot 1 (issues #441, #442 and #492):
-the radiative–convective column with its moist plateau, the runaway
-decided by that plateau, and the steam worlds. The census counts the
-runaways by their source (`Water::boiled`) and by decade of their steam
-column, with the steam worlds apart, and the wet planets left past 647 K
-because their boil was not kept.
+below is the one of the climate pass, lot 3C-2 (issue #523): the
+spectral column (correlated-k lines, MT_CKD continua, CO₂ pairs, cloud
+greenhouse, falling humidity), the near-infrared absorption, the outer
+edge from the column's own maximum greenhouse and the steam runaway's
+mass loss. The census counts the runaways by their source
+(`Water::boiled`) and by decade of their steam column, with the steam
+worlds apart, the wet planets left past 647 K because their boil was not
+kept, the snowballs by insolation and the methane worlds. It took 428 s
+on four threads (`RAYON_NUM_THREADS=4`; about 0.85 s a system, issue
+#593 holds the column's cost).
 
 ```text
 500 systems, 1552 planets
 
 base preset of the worlds (planets)
 barren           293   18.9 %
-caustic           53    3.4 %
-frozen           567   36.5 %
+caustic           55    3.5 %
+frozen           553   35.6 %
 gas-giant         65    4.2 %
 hot-jupiter       45    2.9 %
 ice-giant        453   29.2 %
 steam-world        2    0.1 %
-terran            27    1.7 %
-volcanic          47    3.0 %
+terran            43    2.8 %
+volcanic          43    2.8 %
 
 planets per radius bin (Fulton et al. 2017 bins, R_earth)
-    <1    40.9 %  (635)
+    <1    41.0 %  (636)
  1-1.5    19.3 %  (300)
- 1.5-2     6.3 %  (98)
+ 1.5-2     6.2 %  (97)
    2-3    12.6 %  (196)
    3-4     7.6 %  (118)
    4-6    10.0 %  (155)
@@ -1772,30 +1814,30 @@ class               planets  age Gyr  mass M⊕    a AU    CMF    water  envelop
 gas-giant                65     4.39   48.726   2.165  0.325   0.0267    0.9000     NaN        NaN
 hot-jupiter               2     8.72  225.725   0.036  0.432   0.0000    0.9289     NaN        NaN
 hot-neptune              43     5.28   13.503   0.030  0.286   0.0007    0.1791     NaN        NaN
-hydrocarbon-world         8     2.10    0.125   1.736  0.316   0.2609    0.0000      84      3.440
+hydrocarbon-world         7     1.90    0.137   3.894  0.303   0.2794    0.0000     101      2.500
 ice-giant               160     5.63   14.366   0.700  0.300   0.2496    0.1805     NaN        NaN
-ice-world               448     5.51    0.389   0.369  0.311   0.3465    0.0000      91      0.056
-lava-world               18     2.25    2.828   0.041  0.299   0.0006    0.0000    1708      0.000
+ice-world               449     5.43    0.380   0.373  0.311   0.3454    0.0000      70      0.018
+lava-world               15     3.18    0.674   0.034  0.300   0.0000    0.0000    1777      0.000
 mini-neptune            293     5.26    5.298   0.315  0.307   0.2427    0.0193     NaN        NaN
-ocean-world               6     2.99    1.841   0.136  0.324   0.0019    0.0000     288     14.595
-rocky                   397     5.41    0.282   0.048  0.310   0.0005    0.0000     322      0.000
-runaway-greenhouse       60     5.63    1.574   0.144  0.320   0.0006    0.0000     842     49.685
-steam-world               2     6.60    3.189   0.134  0.492   0.4052    0.0000    2032 623182.205
-super-earth              29     4.60    2.756   0.042  0.304   0.0006    0.0000     620      0.109
-volcanic-world           21     3.74    0.194   0.059  0.327   0.0009    0.0000     425      0.000
+ocean-world               6     3.78    1.841   0.065  0.333   0.0019    0.0000     288     10.009
+rocky                   399     5.38    0.283   0.048  0.309   0.0000    0.0000     338      0.000
+runaway-greenhouse       63     5.22    1.596   0.141  0.317   0.0000    0.0000     650     52.480
+steam-world               2     6.60    3.159   0.134  0.492   0.4002    0.0000    1796 630440.205
+super-earth              27     5.12    2.840   0.042  0.316   0.0002    0.0000     596      0.622
+volcanic-world           21     3.74    0.189   0.059  0.327   0.0000    0.0000     452      0.000
 
 class mix (1552 planets)
-ice-world             28.9 %  (448)
-rocky                 25.6 %  (397)
+ice-world             28.9 %  (449)
+rocky                 25.7 %  (399)
 mini-neptune          18.9 %  (293)
 ice-giant             10.3 %  (160)
 gas-giant              4.2 %  (65)
-runaway-greenhouse     3.9 %  (60)
+runaway-greenhouse     4.1 %  (63)
 hot-neptune            2.8 %  (43)
-super-earth            1.9 %  (29)
+super-earth            1.7 %  (27)
 volcanic-world         1.4 %  (21)
-lava-world             1.2 %  (18)
-hydrocarbon-world      0.5 %  (8)
+lava-world             1.0 %  (15)
+hydrocarbon-world      0.5 %  (7)
 ocean-world            0.4 %  (6)
 hot-jupiter            0.1 %  (2)
 steam-world            0.1 %  (2)
@@ -1806,10 +1848,11 @@ no giant, surface hidden by an envelope: 6 (0.4 %)
   super-earth            4
 
 surface liquid (983 planets with a surface)
-Hydrocarbons           0.8 %  (8)
-Lava                   1.8 %  (18)
-None                  94.4 %  (928)
-Water                  3.0 %  (29)
+Hydrocarbons           0.7 %  (7)
+Lava                   1.5 %  (15)
+Nitrogen               4.0 %  (39)
+None                  89.4 %  (879)
+Water                  4.4 %  (43)
 
 tectonic regime (983 planets with a surface)
 Episodic              21.3 %  (209)
@@ -1819,48 +1862,57 @@ Stagnant              41.5 %  (408)
 
 surface age, Ga, by class and regime (planets with a surface)
 class               regime         n  median    mean
-hydrocarbon-world   Stagnant       8   0.269   1.167
-ice-world           Plates       258   0.403   0.407
-ice-world           Stagnant     188   3.375   2.697
-lava-world          Episodic      12   0.471   0.492
-lava-world          HeatPipe       2   0.001   0.001
-lava-world          Stagnant       4   4.126   3.353
+hydrocarbon-world   Stagnant       7   0.580   0.591
+ice-world           Plates       257   0.351   0.332
+ice-world           Stagnant     190   0.268   1.396
+lava-world          Episodic       9   0.443   0.480
+lava-world          HeatPipe       1   0.000   0.000
+lava-world          Stagnant       5   4.600   3.603
 ocean-world         HeatPipe       1   0.000   0.000
-ocean-world         Plates         4   0.376   0.378
-ocean-world         Stagnant       1   1.022   1.022
-rocky               Episodic     127   0.540   0.541
+ocean-world         Plates         5   0.507   0.464
+rocky               Episodic     130   0.545   0.544
 rocky               Plates        63   0.376   0.379
-rocky               Stagnant     207   4.574   3.629
-runaway-greenhouse  Episodic      53   0.521   0.520
-runaway-greenhouse  HeatPipe       7   0.001   0.001
-steam-world         Episodic       2   0.370   0.370
-super-earth         Episodic      15   0.605   0.592
+rocky               Stagnant     206   4.569   3.625
+runaway-greenhouse  Episodic      55   0.521   0.520
+runaway-greenhouse  HeatPipe       8   0.001   0.001
+steam-world         Episodic       2   0.000   0.000
+super-earth         Episodic      13   0.555   0.571
 super-earth         Plates        10   0.504   0.450
 volcanic-world      HeatPipe      21   0.000   0.000
-all                              983           1.555
+all                              983           1.283
 
-runaways: 383 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 60 by the limit, 0 boiled
+runaways: 383 by the insolation limit, 0 boiled; of the runaway-greenhouse class: 63 by the limit, 0 boiled
 boils whose leftover water condensed again: 0
 wet, not in runaway and past 647 K: 0
 runaways by steam column (other classes / steam worlds, median K), steam-world line 2206.3999999999996 bar:
-        <1 bar:  374 /    0  500 K
-      1-10 bar:    3 /    0  1368 K
-    10-1e2 bar:    3 /    0  2617 K
-   1e2-1e3 bar:    1 /    0  1605 K
+        <1 bar:  375 /    0  502 K
+      1-10 bar:    2 /    0  410 K
+    10-1e2 bar:    3 /    0  2148 K
+   1e2-1e3 bar:    1 /    0  1741 K
    1e3-1e4 bar:    0 /    0  NaN K
    1e4-1e5 bar:    0 /    0  NaN K
-     >=1e5 bar:    0 /    2  2032 K
+     >=1e5 bar:    0 /    2  1796 K
 
-life: 1.1 % of planets with a surface (11), 0.7 % oxygenated (7)
+life: 1.8 % of planets with a surface (18), 1.5 % oxygenated (15)
+
+snowballs / planets with liquid water, by insolation (Earth's = 1)
+  S     >1.1:    0 /    0
+  S  0.9-1.1:    0 /    4
+  S  0.7-0.9:    0 /   11
+  S  0.5-0.7:    6 /    9
+  S 0.36-0.5:    1 /   11
+  S    <0.36:    0 /    8
+
+methane: 0 planets under 150 K of equilibrium warmed past 273 K with methane; 7 hydrocarbon liquids (least CH4 0.0212 bar), 0 under too little methane to condense
 
 radius histogram, period under 100 days (818 planets)
  0.00-0.25      0.0 %  (0)
- 0.25-0.50      7.6 %  (62)
- 0.50-0.75     21.8 %  (178)
- 0.75-1.00     19.3 %  (158)
- 1.00-1.25     13.2 %  (108)
- 1.25-1.50      7.0 %  (57)
- 1.50-1.75      3.4 %  (28)
+ 0.25-0.50      8.3 %  (68)
+ 0.50-0.75     21.4 %  (175)
+ 0.75-1.00     19.1 %  (156)
+ 1.00-1.25     13.4 %  (110)
+ 1.25-1.50      6.7 %  (55)
+ 1.50-1.75      3.3 %  (27)
  1.75-2.00      2.0 %  (16)
  2.00-2.25      2.8 %  (23)
  2.25-2.50      2.7 %  (22)
@@ -1880,46 +1932,57 @@ gas-giant              0.9 %  (7)
 hot-jupiter            0.2 %  (2)
 hot-neptune            5.3 %  (43)
 ice-giant              5.7 %  (47)
-ice-world             14.2 %  (116)
-lava-world             2.2 %  (18)
+ice-world             14.1 %  (115)
+lava-world             1.8 %  (15)
 mini-neptune          16.0 %  (131)
-ocean-world            0.6 %  (5)
-rocky                 42.9 %  (351)
-runaway-greenhouse     6.2 %  (51)
+ocean-world            0.7 %  (6)
+rocky                 43.2 %  (353)
+runaway-greenhouse     6.6 %  (54)
 steam-world            0.2 %  (2)
-super-earth            2.9 %  (24)
+super-earth            2.7 %  (22)
 volcanic-world         2.6 %  (21)
 ```
 
-What it shows, plainly:
+What it shows, plainly (against the census of lot 1, the grey column):
 
 - **Steam worlds** are 0.1 % of the planets (2 of 1552), both far over
-  100 000 bar of steam (median 2032 K at the surface, 623 182 bar). They
-  are the only runaways above 1e5 bar; the 381 other runaways hold
-  under 1e4 bar (374 of them under 1 bar of steam) and stay
-  `runaway-greenhouse` or another class.
-- **Runaway greenhouses** are 3.9 % (60), all by the insolation limit
-  (none boiled): median 842 K under 49.7 bar. A boil whose water
-  condensed again once the planet was dry is counted apart (none here),
-  and no wet planet is left past 647 K out of a runaway.
+  100 000 bar of steam (median 1796 K at the surface, 630 440 bar; 2032 K
+  on the grey column, whose steam had no window). They are the only
+  runaways above 1e5 bar; the 381 other runaways hold under 1e3 bar (375
+  of them under 1 bar of steam) and stay `runaway-greenhouse` or another
+  class.
+- **Runaway greenhouses** are 4.1 % (63, 60 before), all by the
+  insolation limit (none boiled): median 650 K under 52.5 bar (842 K
+  on the grey column). No boil condensed again and no wet planet is left past 647 K
+  out of a runaway.
+- **Water** is the surface liquid of 4.4 % of the planets with a
+  surface (43, 29 before), and **nitrogen** (a liquid since lot 3C-1)
+  of 4.0 % (39). The ice worlds' median temperature is 70 K (91 K
+  before).
+- **Snowballs** are 7, all between 0.36 and 0.7 S⊕ (6 of them between
+  0.5 and 0.7), against 43 planets with liquid water; none of the 15
+  wet planets above 0.7 S⊕ drew one.
 - **Radius valley.** With the close-in planets (818 with a period under
-  100 days) the histogram now dips at 1.50-2.00 R⊕ (3.4 % and 2.0 %)
+  100 days) the histogram dips at 1.50-2.00 R⊕ (3.3 % and 2.0 %)
   between the rocky peak at 0.5-1.0 R⊕ and a second hump at 2.0-3.0 R⊕
-  (2.8, 2.7 and 3.5 % in the bins from 2.00 to 2.75), and 39.8 % of all
+  (2.8, 2.7 and 3.5 % in the bins from 2.00 to 2.75), and 39.6 % of all
   planets are above 1.5 R⊕. The model was not tuned to produce a valley.
 - **Mini-Neptunes** are 18.9 % (293) and hot Neptunes 2.8 % (43): the
   class mix counts the envelope classes the radius histogram reads.
-- **Lava worlds** are 1.2 % (18), airless dry rocks at a median 1708 K,
+- **Lava worlds** are 1.0 % (15), airless dry rocks at a median 1777 K,
   and volcanic worlds 1.4 % (21), all in the heat-pipe regime.
-- **Hydrocarbon worlds** are 0.5 % (8), small icy bodies (median
-  0.125 M⊕) far from their stars (median 1.7 AU) under 3.4 bar at 84 K.
+- **Hydrocarbon worlds** are 0.5 % (7), small icy bodies (median
+  0.137 M⊕) far from their stars (median 3.9 AU) under 2.5 bar at 101 K;
+  none is a methane world warmed past 273 K, and none holds too little
+  methane to condense (the least, 0.021 bar).
 - **Ocean worlds** are 0.4 % (6), held at 288 K by their thermostat under
-  a median 14.6 bar.
+  a median 10.0 bar.
 - **Surfaces hidden by an envelope**: 6 planets that are no giant (0.4 %),
   2 ice worlds and 4 super-Earths.
 - **Tectonic regimes** over the 983 planets with a surface: plates
-  34.1 %, stagnant lid 41.5 %, episodic 21.3 %, heat pipe 3.2 %.
-- **Surface liquid**: none for 94.4 %, water 3.0 % (29), lava 1.8 % and
-  hydrocarbons 0.8 %.
-- **Life** arises on 1.1 % of the planets with a surface (11), 0.7 %
-  with oxygen (7).
+  34.1 %, stagnant lid 41.5 %, episodic 21.3 %, heat pipe 3.2 %
+  (unchanged).
+- **Surface liquid**: none for 89.4 %, water 4.4 % (43), nitrogen 4.0 %
+  (39), lava 1.5 % (15) and hydrocarbons 0.7 % (7).
+- **Life** arises on 1.8 % of the planets with a surface (18, 11
+  before), 1.5 % with oxygen (15, 7 before): more planets keep water.

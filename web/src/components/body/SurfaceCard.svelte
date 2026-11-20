@@ -4,7 +4,7 @@
   import './facts.css';
   import { t } from '../../lib/i18n/index.svelte';
   import { formatArea, formatInt, formatNumber, formatShare, formatSurfaceAge, formatUpTo, withUnit } from '../../lib/format';
-  import { unitTooltip } from '../../lib/units';
+  import Glossed from '../Glossed.svelte';
   import { dominantFrost, treeFor } from '../../lib/causes';
   import { unitsFor } from '../../lib/surfaceUnits';
   import CauseTree from './CauseTree.svelte';
@@ -30,7 +30,7 @@
   const units = $derived(unitsFor(body?.model?.terrain));
   const albedo = $derived(body?.model?.surface?.climate.bond_albedo ?? null);
   const albedoTree = $derived(treeFor(explanation, 'bond_albedo'));
-  /** The frost that makes the albedo, named on the value line (the liquid instead when there is one). */
+  /** The frost that makes the albedo, named on the value line (none over a surface liquid). */
   const albedoFrost = $derived(dominantFrost(albedoTree, body?.model?.surface?.climate.liquid ?? null));
   const meta = $derived(world.meta);
   const stats = $derived(world.stats);
@@ -46,16 +46,16 @@
 {#if body}
   <dl class="facts">
     {#if meta}
-      <dt>{t.worldInfo.seaLevel}</dt>
-      <dd>{formatNumber(meta.sea_level, 3)}</dd>
-      <dt>{t.worldInfo.volcanism}</dt>
-      <dd>{formatNumber(meta.volcanic_intensity, 2)}</dd>
-      <dt>{t.worldInfo.erosion}</dt>
-      <dd>{formatNumber(meta.erosion, 2)}</dd>
+      <dt><Glossed text={t.worldInfo.seaLevel} /></dt>
+      <dd><Glossed text={formatNumber(meta.sea_level, 3)} /></dd>
+      <dt><Glossed text={t.worldInfo.volcanism} /></dt>
+      <dd><Glossed text={formatNumber(meta.volcanic_intensity, 2)} /></dd>
+      <dt><Glossed text={t.worldInfo.erosion} /></dt>
+      <dd><Glossed text={formatNumber(meta.erosion, 2)} /></dd>
     {/if}
-    <dt>{t.cards.surfaceAge}</dt>
+    <dt><Glossed text={t.cards.surfaceAge} /></dt>
     <dd>
-      <span class="unit-help" title={unitTooltip('Ga', 'Ma')}>{formatSurfaceAge(body.params.surface_age_ga)}</span><CauseTree
+      <Glossed text={formatSurfaceAge(body.params.surface_age_ga)} /><CauseTree
         tree={treeFor(explanation, 'surface_age')}
         {open}
         ontoggle={() => (open = !open)}
@@ -63,31 +63,31 @@
       />
     </dd>
     {#if albedo !== null}
-      <dt>{t.cards.bondAlbedo}</dt>
+      <dt><Glossed text={t.cards.bondAlbedo} /></dt>
       <dd>
-        {formatNumber(albedo, 2)}{albedoFrost ? ` · ${albedoFrost}` : ''}<CauseTree tree={albedoTree} open={albedoOpen} ontoggle={() => (albedoOpen = !albedoOpen)} {oninput} />
+        <Glossed text={`${formatNumber(albedo, 2)}${albedoFrost ? ` · ${albedoFrost}` : ''}`} /><CauseTree tree={albedoTree} open={albedoOpen} ontoggle={() => (albedoOpen = !albedoOpen)} {oninput} />
       </dd>
     {/if}
     {#if units.length > 1}
-      <dt>{t.cards.terrainUnits}</dt>
+      <dt><Glossed text={t.cards.terrainUnits} /></dt>
       <dd>
         {#each units as unit}
-          <div>{t.causes.renewalValue({ renewal: t.causes.renewals[unit.renewal], value: `${withUnit(formatInt(Math.round(unit.share * 100)), '%')} · ${formatSurfaceAge(unit.age_gyr)}` })}</div>
+          <div><Glossed text={t.causes.renewalValue({ renewal: t.causes.renewals[unit.renewal], value: `${withUnit(formatInt(Math.round(unit.share * 100)), '%')} · ${formatSurfaceAge(unit.age_gyr)}` })} /></div>
         {/each}
       </dd>
     {/if}
     {#if stats}
-      <dt>{t.worldInfo.surface}</dt>
-      <dd>{formatArea(stats.surfaceKm2)}</dd>
-      <dt>{landLabel}</dt>
+      <dt><Glossed text={t.worldInfo.surface} /></dt>
+      <dd><Glossed text={formatArea(stats.surfaceKm2)} /></dd>
+      <dt><Glossed text={landLabel} /></dt>
       <dd>{formatShare(stats.land)} / {formatShare(stats.water)}</dd>
     {/if}
     {#if rivers}
-      <dt>{t.worldInfo.rivers}</dt>
+      <dt><Glossed text={t.worldInfo.rivers} /></dt>
       <dd>{formatInt(rivers.file.rivers.length)}</dd>
     {/if}
     {#if meta?.giants}
-      <dt title={t.worldInfo.giantsHelp}>{t.cards.impacts}</dt>
+      <dt title={t.worldInfo.giantsHelp}><Glossed text={t.cards.impacts} /></dt>
       <dd>
         {meta.giants.giants.length === 0
           ? t.worldInfo.noGiants

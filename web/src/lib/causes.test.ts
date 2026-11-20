@@ -70,7 +70,7 @@ describe('formatCause', () => {
   it('writes the new notes in both languages', () => {
     for (const locale of ['en', 'fr'] as const) {
       setLocale(locale);
-      for (const key of ['exosphere', 'liquid_cycle', 'volatile_ice', 'tidal_episode', 'volcanic_frost', 'fallout']) {
+      for (const key of ['exosphere', 'liquid_cycle', 'volatile_ice', 'tidal_episode', 'volcanic_frost', 'fallout', 'moist_limit', 'moist_limit_own']) {
         expect(formatCause(node('note', 0, { label: key })), `${locale} ${key}`).toBe(t.causes.notes[key]);
         expect(t.causes.notes[key], `${locale} ${key}`).toBeTypeOf('string');
       }
@@ -88,13 +88,20 @@ describe('formatCause', () => {
       }
     }
     setLocale('en');
-    expect(Object.keys(t.causes.covers)).toEqual(['ocean', 'land', 'ice', 'crust', 'frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2', 'cloud', 'haze', 'deck']);
+    expect(Object.keys(t.causes.covers)).toEqual(['ocean', 'land', 'ice', 'crust', 'frost_n2', 'frost_ch4', 'frost_co2', 'frost_so2', 'cloud', 'haze', 'deck', 'steam']);
   });
   it('writes the haze as a strength, not a share of the disc', () => {
     setLocale('en');
     expect(formatCause(node('cover_share', 0.55, { label: 'haze' }))).toBe('methane haze, strength 55 %');
     setLocale('fr');
     expect(formatCause(node('cover_share', 0.55, { label: 'haze' }))).toContain('intensité');
+    setLocale('en');
+  });
+  it('writes a runaway\'s steam as the weight of the moist albedo, not a share of the disc', () => {
+    setLocale('en');
+    expect(formatCause(node('cover_share', 1, { label: 'steam' }))).toBe('steam of the runaway: the moist albedo weighs 100 % against the covers’');
+    setLocale('fr');
+    expect(formatCause(node('cover_share', 0.4, { label: 'steam' }))).toBe('vapeur de l’emballement\u202f: l’albédo humide pèse 40\u202f% face à celui des couvertures');
     setLocale('en');
   });
   it('names a frost over most of the disc, and nothing else', () => {
@@ -105,10 +112,11 @@ describe('formatCause', () => {
     expect(dominantFrost(tree([['ice', 0.9]]))).toBeNull();
     expect(dominantFrost(null)).toBeNull();
   });
-  it('names a body with a surface liquid by its liquid, not by a frost over it', () => {
+  it('names neither a liquid nor a frost over a body with a surface liquid', () => {
     setLocale('en');
     const tree = (parts: [string, number][]) => node('bond_albedo', 0.29, { causes: parts.map(([k, v]) => node('cover_share', v, { label: k })) });
-    expect(dominantFrost(tree([['frost_co2', 0.8], ['haze', 1]]), 'hydrocarbons')).toBe(t.cards.liquids.hydrocarbons);
+    expect(dominantFrost(tree([['frost_co2', 0.8], ['haze', 1]]), 'hydrocarbons')).toBeNull();
+    expect(dominantFrost(tree([['frost_ch4', 0.9]]), 'water')).toBeNull();
     expect(dominantFrost(tree([['frost_n2', 0.9]]), 'none')).toBe('nitrogen frost');
     expect(dominantFrost(tree([['frost_n2', 0.9]]), null)).toBe('nitrogen frost');
     expect(dominantFrost(tree([['land', 0.7]]), 'water')).toBeNull();

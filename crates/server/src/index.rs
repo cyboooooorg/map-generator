@@ -1590,9 +1590,9 @@ mod tests {
     use std::path::PathBuf;
 
     const SYSTEM: &str = r#"{
-        "format_version": 10, "seed": 42, "width": 1024, "height": 512,
+        "format_version": 13, "seed": 42, "width": 1024, "height": 512,
         "request": {"system": {"star": null, "metallicity": null, "planets": null, "seed": 42, "width": 1024, "height": 512}},
-        "star": {"type": "K1V", "designation": "MGS 48213", "metallicity": 0.0, "ice_line_au": 2.0,
+        "star": {"type": "K1V", "kind": "dwarf", "designation": "MGS 48213", "metallicity": 0.0, "ice_line_au": 2.0,
                  "info": {"light": [1.0, 0.8, 0.6], "hz_inner_au": 0.6, "hz_outer_au": 1.1}},
         "bodies": [
             {"id": "b", "kind": "planet", "type": "barren", "parent": null, "designation": "MGS 48213 b", "generated": false},

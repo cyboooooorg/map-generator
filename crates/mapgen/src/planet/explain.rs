@@ -156,7 +156,8 @@ pub enum Quantity {
     /// 1, labelled with its key (`ocean`, `land`, `ice`, `crust`,
     /// `frost_n2`, `frost_ch4`, `frost_co2`, `frost_so2`, `cloud`, `deck`);
     /// for `haze` the value is its strength (0 to 1), not a share of the
-    /// disc.
+    /// disc, and for a runaway's `steam` the weight of the moist albedo in
+    /// its blend (see [`albedo_tree`]).
     CoverShare,
     /// Thickness of the ice shell, km (its mean over the surface).
     ShellThickness,
@@ -180,8 +181,10 @@ pub enum Quantity {
     /// CO₂ thaws it), `frozen` (frozen with no warm state to reach),
     /// `co2_build_up` (the CO₂ at the greenhouse's maximum: volcanoes
     /// outgas it faster than weathering draws it down), `co2_condenses`
-    /// (that maximum is set by CO₂ condensing high in the air, short of
-    /// the carbon inventory: more of it no longer warms the ground) and
+    /// (that maximum is short of the carbon inventory: past it the light
+    /// CO₂ scatters outgrows its greenhouse, which flattens where it
+    /// condenses high in the air, so more of it no longer warms the
+    /// ground; the key keeps its name) and
     /// `methane_trap`
     /// (the cold keeps methane out of the air), `reducing_air` (a
     /// reducing, methane-rich air: the body outgasses no CO₂ and its air
@@ -195,7 +198,10 @@ pub enum Quantity {
     /// on part of it), `tidal_episode` (a past tidal episode renewed part
     /// of it), `volcanic_frost` (the SO₂ air is the vapour of the
     /// volcanic frost), `fallout` (a plume's fallout brightens the
-    /// ice) and `not_converged` (the climate's fixed point did not
+    /// ice), `moist_limit` and `moist_limit_own` (a runaway's steam
+    /// reflects as a moist air at its star's runaway limit, on Earth's
+    /// air's moist limit or on its own column's, which its gravity and
+    /// air raise above it) and `not_converged` (the climate's fixed point did not
     /// settle: the temperature is its last estimate, issue #562).
     Note,
 }
@@ -294,7 +300,11 @@ const HEAT_TOLERANCE: f64 = 1e-6;
 /// (with air and heat, minus with air only), whose sum must be the stored
 /// temperature within [`TEMPERATURE_TOLERANCE_K`].
 pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
-    let heat = internal_heat(context, &model.inputs, &surface_interior(context, model));
+    let heat = internal_heat(
+        context,
+        &surface_inputs(context, model),
+        &surface_interior(context, model),
+    );
     let close = |a: f64, b: f64| (a - b).abs() <= HEAT_TOLERANCE * a.abs().max(b.abs());
     if !close(heat.tidal_w, model.heat.tidal_w)
         || !close(heat.radiogenic_w, model.heat.radiogenic_w)
@@ -325,41 +335,17 @@ pub fn explain(context: &Context, model: &PlanetModel) -> Option<Explanation> {
     Some(Explanation { trees })
 }
 
-/// The interior the chain ran the heat and the surface steps on: the
-/// model's, except a steam world's, whose interior was derived again
-/// with its steam afterwards ([`super::steam_interior`]).
-pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
-    if model
-        .interior
-        .layers
-        .iter()
-        .any(|l| l.material == super::Material::Steam)
-    {
-        super::body_interior(context, &model.inputs)
-    } else {
-        model.interior.clone()
-    }
-}
-
-/// The surface steps of `model` run again (see [`bare`]), from the water
-/// the chain started the kept pass with: the boiled steam when `surface`
-/// boiled and stayed a runaway, its own water when the water left after
-/// the boil condensed again, else the water of its first pass. A runaway's
-/// steam is what escape left of the water the body formed with
-/// ([`PlanetModel::formed_inputs`], on that body's layers), and the pass
-/// runs on what it kept (`model.inputs`, see [`super::after_steam`]).
-pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
-    let interior = &surface_interior(context, model);
-    let (i, fluence) = (&model.inputs, model.xuv_fluence);
+/// The water the chain started the kept surface pass of `model` with:
+/// the boiled steam when `surface` boiled and stayed a runaway, its own
+/// water when the water left after the boil condensed again, else the
+/// water of its first pass. A runaway's steam is what escape left of the
+/// water the body formed with ([`PlanetModel::formed_inputs`], on that
+/// body's layers).
+fn start_water(context: &Context, model: &PlanetModel, surface: &Surface) -> Water {
+    let fluence = model.xuv_fluence;
     let formed = model.formed_inputs();
-    let formed_interior = || {
-        if model.before_steam.is_some() {
-            super::body_interior(context, formed)
-        } else {
-            interior.clone()
-        }
-    };
-    let start = if surface.water.boiled && surface.water.runaway {
+    let formed_interior = || super::body_interior(context, formed);
+    if surface.water.boiled && surface.water.runaway {
         Water {
             boiled: true,
             ..steam(formed, &formed_interior(), fluence)
@@ -369,9 +355,69 @@ pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) 
     } else if surface.water.boiled {
         surface.water
     } else {
-        water(context, i, interior, fluence)
-    };
-    bare(context, i, interior, &model.heat, fluence, start)
+        water(
+            context,
+            &model.inputs,
+            &surface_interior(context, model),
+            fluence,
+        )
+    }
+}
+
+/// The inputs the chain ran the heat and the kept surface pass on: the
+/// model's, except after a runaway whose pass kept less of its steam
+/// than it was handed (the cosmic shoreline and the non-thermal loss,
+/// [`Water::keeping`]): the model weighs the water kept, the pass ran on
+/// the steam it started with ([`super::after_steam`] of each).
+pub(crate) fn surface_inputs(context: &Context, model: &PlanetModel) -> super::PlanetInputs {
+    match (&model.surface, &model.before_steam) {
+        (Some(surface), Some(formed)) if surface.water.runaway => {
+            let start = start_water(context, model, surface);
+            if start.kept_kg > surface.water.kept_kg {
+                super::after_steam(formed, &start)
+            } else {
+                model.inputs.clone()
+            }
+        }
+        _ => model.inputs.clone(),
+    }
+}
+
+/// The interior the chain ran the heat and the surface steps on: the
+/// model's, except a steam world's, whose interior was derived again
+/// with its steam afterwards ([`super::steam_interior`]), and a runaway's
+/// whose pass kept less steam than it started with, whose layers were
+/// derived again for the water kept: the layers of [`surface_inputs`].
+pub(crate) fn surface_interior(context: &Context, model: &PlanetModel) -> super::Interior {
+    let inputs = surface_inputs(context, model);
+    if inputs != model.inputs
+        || model
+            .interior
+            .layers
+            .iter()
+            .any(|l| l.material == super::Material::Steam)
+    {
+        super::body_interior(context, &inputs)
+    } else {
+        model.interior.clone()
+    }
+}
+
+/// The surface steps of `model` run again (see [`bare`]), from the water
+/// the chain started the kept pass with ([`start_water`]), on the body it
+/// ran on ([`surface_inputs`], [`surface_interior`]).
+pub(crate) fn replay(context: &Context, model: &PlanetModel, surface: &Surface) -> Bare {
+    let inputs = surface_inputs(context, model);
+    let interior = surface_interior(context, model);
+    let start = start_water(context, model, surface);
+    bare(
+        context,
+        &inputs,
+        &interior,
+        &model.heat,
+        model.xuv_fluence,
+        start,
+    )
 }
 
 /// The mass kept. It is the request's own when escape took nothing of the
@@ -450,12 +496,13 @@ fn resonant(context: &Context, model: &PlanetModel) -> bool {
         return false;
     };
     let tide = super::tide_of(context);
+    let inputs = surface_inputs(context, model);
     let own_w = super::heat::tidal_power_w(
         tide.host_kg,
         surface_interior(context, model).radius_earth * crate::exomoon::EARTH_M,
         tide.a_m,
         tide.eccentricity,
-        super::heat::k2_over_q(model.inputs.envelope_fraction, model.inputs.water_fraction),
+        super::heat::k2_over_q(inputs.envelope_fraction, inputs.water_fraction),
     );
     resonant_w > own_w
 }
@@ -604,8 +651,9 @@ fn temperature_tree(
     {
         // Plates and liquid water but no thermostat: the CO₂ is at the
         // most the volcanoes leave, and the greenhouse at its maximum.
-        // Short of the carbon inventory, the maximum is CO₂ condensing
-        // high in the air (issue #522), not the carbon running out.
+        // Short of the carbon inventory, the maximum is the CO₂'s own
+        // scattering outgrowing a greenhouse that its condensation high
+        // in the air flattened (issue #522), not the carbon running out.
         let mut notes = vec![Cause::note("co2_build_up")];
         if gases.co2 < steps.before.carbon_bar * (1.0 - 1e-9) {
             notes.push(Cause::note("co2_condenses"));
@@ -685,6 +733,12 @@ const COVER_SHARE_MIN: f64 = 0.01;
 /// present); the frosts beneath it are omitted. SO₂ frost is its own
 /// part, with its own albedo. An exposed ice crust
 /// ([`icy_albedo_causes`]) replaces the land and the ice (`crust`).
+/// A runaway that keeps steam blends that albedo towards the moist one
+/// `A_rg` (see [`super::climate::steam_albedo`]): a `steam` part carries
+/// the blend's weight, with `A_rg` and the plateau that sets it
+/// (`moist_limit`, Earth's air's; `moist_limit_own`, its own column's)
+/// under it, so that the stored albedo is the covers' one moved towards
+/// `A_rg` by that weight.
 ///
 /// `nested` is the node under the temperature tree's equilibrium
 /// temperature, where a part has no room below it (the tree stays three
@@ -785,6 +839,23 @@ fn albedo_tree(
     ];
     let mut causes = surface_parts;
     causes.extend(layers.into_iter().flatten());
+    // A runaway's steam blends the covers' albedo towards the moist one:
+    // its weight, with that albedo and the plateau that sets it.
+    if let Some(steam) = steam_albedo(context, model, surface, steps) {
+        let plateau = if steam.own {
+            "moist_limit_own"
+        } else {
+            "moist_limit"
+        };
+        causes.extend(part(
+            "steam",
+            steam.share,
+            vec![
+                Cause::of(Quantity::BondAlbedo, steam.moist),
+                Cause::note(plateau),
+            ],
+        ));
+    }
     // Bright ice sets the albedo of a frozen world, and what ends it.
     // Only a body with plates could have built CO₂ up to a thaw: without
     // them (Mars, Titan) the cold has another cause.
@@ -796,6 +867,27 @@ fn albedo_tree(
         causes.push(Cause::note("frozen"));
     }
     Cause::of(Quantity::BondAlbedo, climate.bond_albedo).because(causes)
+}
+
+/// What the steam of a runaway did to its Bond albedo
+/// ([`super::climate::steam_albedo`]), on the body and air its climate ran
+/// on; `None` without one.
+fn steam_albedo(
+    context: &Context,
+    model: &PlanetModel,
+    surface: &Surface,
+    steps: &Bare,
+) -> Option<super::climate::SteamAlbedo> {
+    let inputs = surface_inputs(context, model);
+    let bar_per_kg =
+        super::atmosphere::bar_per_kg(inputs.mass_earth, &surface_interior(context, model));
+    super::climate::steam_albedo(
+        context,
+        &steps.before.gases,
+        &surface.water,
+        surface.water.kept_kg * bar_per_kg,
+        &steps.planet,
+    )
 }
 
 /// What set the Bond albedo of an exposed ice crust: the ages of the

@@ -44,6 +44,10 @@ Rules that follow from it:
   of them again on top of the new `main`.
 - Two sessions working at once tell each other before rebuilding
   `develop`, since a rebuild drops what the other merged into it.
+- Before opening a pull request that touches the Rust crates, run the
+  slow tests the default suite skips (`#[ignore = "slow: …"]`) on its
+  branch: `mise run test:slow` (release, 4 threads). CI runs them too,
+  in the `test-slow` job, but only on pull requests into `main`.
 - A pull request that conflicts with `main` is rebased (or `main` merged
   into it) on its own branch before step 2.
 - Merge commits follow Conventional Commits too: git's default message
@@ -61,6 +65,28 @@ the history.
 
 - A new backlog item, or a review remark left for later, becomes an issue
   (`gh issue create --label backlog`).
+- Place every new issue in the roadmap when filing it, so none is
+  forgotten or goes stale outside the plan. The roadmap is #427; each
+  track (A to F) is a tracking issue whose sub-issues are its steps.
+  - An issue that belongs to a track becomes a sub-issue of that track's
+    tracking issue, and goes into its ordered list (`## Order`,
+    `## Steps, in order`) when the track keeps one:
+
+    ```bash
+    id=$(gh api repos/{owner}/{repo}/issues/<n> --jq .id)
+    gh api repos/{owner}/{repo}/issues/<track>/sub_issues -F sub_issue_id="$id"
+    ```
+
+  - An issue that waits on a track without belonging to it goes under
+    `## Issues waiting on a track` in #427, with what it waits for. A
+    large idea not scheduled yet goes under `## Later, not scheduled`.
+  - A small, independent issue (a viewer bug, a climate, spin or system
+    detail) stays out of the roadmap: its theme label is enough, and it
+    can be picked any time.
+  - A new track gets its tracking issue, a row in #427's `## Tracks`
+    table, a place in `## Order`, and becomes a sub-issue of #427.
+  - An issue closed as not planned or as a duplicate leaves its track's
+    list; one moved to another track moves in both places.
 - A pull request that resolves an issue says so in its description with a
   closing keyword, one per issue (`Closes #123`, `Fixes #124`), so that
   GitHub closes the issue when the pull request is merged into `main`. A

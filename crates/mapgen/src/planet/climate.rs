@@ -542,13 +542,58 @@ fn runaway_albedo_under(
     if !(water.runaway && water.kept_kg > 0.0) || steam <= 0.0 {
         return albedo;
     }
+    albedo + (moist_albedo(context, plateau) - albedo) * steam
+}
+
+/// `A_rg = 1 − 4 F_plateau / (S_rg S₀)` of [`runaway_albedo`] on the moist
+/// plateau `plateau` (W/m²), clamped to [`RUNAWAY_ALBEDO`].
+fn moist_albedo(context: &Context, plateau: f64) -> f64 {
     let limit = f64::from(crate::star::habitable_fluxes(context.teff_k as f32).0);
     // `S₀` as `equilibrium_k` takes it: `σ (255 K)⁴ = (1 − 0.3) S₀ / 4`.
     let earth_eq = f64::from(crate::star::equilibrium_k(1.0));
     let solar_constant = 4.0 * SIGMA * earth_eq.powi(4) / (1.0 - REFERENCE_ALBEDO);
-    let moist =
-        (1.0 - 4.0 * plateau / (limit * solar_constant)).clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1);
-    albedo + (moist - albedo) * steam
+    (1.0 - 4.0 * plateau / (limit * solar_constant)).clamp(RUNAWAY_ALBEDO.0, RUNAWAY_ALBEDO.1)
+}
+
+/// What a runaway's steam did to its Bond albedo ([`Body::runaway_albedo`]),
+/// for its cause tree: the stored albedo is the covers' one blended
+/// towards `moist` by `share`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SteamAlbedo {
+    /// The blend's weight, `1 − exp(−p_steam / STEAM_ALBEDO_BAR)`
+    /// ([`STEAM_ALBEDO_BAR`]).
+    pub share: f64,
+    /// The moist albedo `A_rg` it blends towards ([`runaway_albedo`]).
+    pub moist: f64,
+    /// Whether `A_rg` is on the body's own steam column's plateau
+    /// ([`moist_plateau_of`]), its gravity and air raising it over Earth's
+    /// air's ([`MOIST_PLATEAU_W_M2`]), rather than on Earth's.
+    pub own: bool,
+}
+
+/// [`SteamAlbedo`] of a body whose climate ran on `gases` with `water`,
+/// `water_bar` of it and on `planet` (as [`climate_over`] was given
+/// them), in `context`; `None` without a water runaway that keeps steam,
+/// whose albedo is the covers' alone. It takes the body's own plateau
+/// again, one more plateau search than the climate made.
+pub(crate) fn steam_albedo(
+    context: &Context,
+    gases: &Gases,
+    water: &Water,
+    water_bar: f64,
+    planet: &Planet,
+) -> Option<SteamAlbedo> {
+    let share = 1.0 - (-gases.h2o.max(0.0) / STEAM_ALBEDO_BAR).exp();
+    if !(water.runaway && water.kept_kg > 0.0) || share <= 0.0 {
+        return None;
+    }
+    let own = moist_plateau_of(gases, water_bar, planet);
+    let plateau = own.max(*MOIST_PLATEAU_W_M2);
+    Some(SteamAlbedo {
+        share,
+        moist: moist_albedo(context, plateau),
+        own: own > *MOIST_PLATEAU_W_M2,
+    })
 }
 
 /// The `context` the climate of a body with `water` and `steam_bar` of
@@ -563,9 +608,9 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// asymptote of the outgoing radiation of its dry `gases` over a
 /// saturated surface at [`PLATEAU_SURFACES_K`], its vapour capped by its
 /// water supply `water_bar`, on `planet` (its gravity sets the column's
-/// mass), on the grid and saturated column ([`Sky::Plateau`]) the surface
-/// solves of a runaway use, under the skin of a body that absorbs it
-/// (the fixed point of [`MOIST_PLATEAU_W_M2`]).
+/// mass), on the grid and saturated column ([`Profile::SATURATED`]) the
+/// surface solves of a runaway use, under the skin of a body that absorbs
+/// it (the fixed point of [`MOIST_PLATEAU_W_M2`]).
 ///
 /// The chain declares a runaway by its star's limit `S_rg`
 /// ([`crate::star::habitable_fluxes`]) and [`runaway_albedo`] makes a
@@ -576,8 +621,6 @@ pub(super) fn absorbing(context: &Context, water: &Water, steam_bar: f64, albedo
 /// floor; on its own plateau (where it is the higher, [`Body::plateau`]),
 /// a body past `S_rg` absorbs more than its own column's limit and runs
 /// away past it.
-///
-/// [`Sky::Plateau`]: Profile::SATURATED
 fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
     let dry = Gases { h2o: 0.0, ..*gases };
     plateau_w_m2(
@@ -600,10 +643,13 @@ fn moist_plateau_of(gases: &Gases, water_bar: f64, planet: &Planet) -> f64 {
 /// [`Context::with_albedo`]) less the share the stratosphere's methane
 /// takes ([`absorbed_w_m2`]), plus the internal heat; the column's
 /// stratosphere sits at the skin temperature `T_eq / 2^¼` of a grey
-/// atmosphere (Pierrehumbert 2010, §4.3; from memory, not checked). Its opacities are calibrated on Venus, Earth, Titan and
-/// the moist plateau; a steam atmosphere sends out the Simpson–Nakajima
-/// limit until its surface passes about 1800 K. Without air, the surface
-/// sits at `T_eq` warmed by its internal heat alone.
+/// atmosphere (Pierrehumbert 2010, §4.3; from memory, not checked). Its
+/// opacities are HITRAN's lines and MT_CKD's continua, methane's alone a
+/// grey law calibrated on Titan ([`super::spectrum`]); a steam column
+/// sends out the Simpson–Nakajima limit until the dry adiabat from its
+/// hot surface reaches the levels that radiate ([`super::column`]).
+/// Without air, the surface sits at `T_eq` warmed by its internal heat
+/// alone.
 ///
 /// A grey surface (`emissivity` under 1) sends out `ε σ T⁴`: the column's
 /// outgoing radiation is taken times `ε`, as through a transparent air.
@@ -1346,7 +1392,8 @@ pub struct CarbonCycle {
 ///   (Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131; issue
 ///   #522). The column, and so the cap, is the climate's own: it follows
 ///   the albedo the climate settles on. That maximum sets the outer edge
-///   of the habitable zone, about 1.78 AU round the Sun for an Earth.
+///   of the habitable zone, 1.535 AU round the Sun for an Earth on the
+///   spectral column, short of Kopparapu's 1.70 AU (issue #595).
 ///   If no CO₂ in that range reaches the thermostat, the planet takes the
 ///   CO₂ of its warmest climate, the maximum greenhouse; on a surface
 ///   too cold to keep it, it frosts out ([`collapsed_climate`])
@@ -2427,7 +2474,7 @@ mod tests {
         // Venus is measured only (issue #523): 737 K in reality, 577 K on
         // the spectral column under its 85 bar of CO₂ and its Bond albedo
         // 0.76. The gap is the infrared opacity of its H₂SO₄ clouds and its
-        // SO₂, which the model does not carry (follow-up issue). The bound
+        // SO₂, which the model does not carry (issue #594). The bound
         // pins what the model reaches, so that a change shows.
         let (_, g, venus) = climate_of("Venus");
         assert!(
@@ -2610,7 +2657,7 @@ mod tests {
     #[test]
     fn the_runaway_edge_steps_only_by_the_branches_albedos() {
         // Issue #523, ruling of the climate pass lot 3C-2: Earth's
-        // inventory (its water kept, no escape) swept in 0.1 % steps of
+        // inventory (its water kept, no escape) swept in steps of 1 % of
         // flux across its star's runaway limit `S_rg`, on the temperate
         // branch below (wet) and the steam branch above (its whole ocean
         // in the air). The step at `S_rg` is the bifurcation between the
@@ -2654,11 +2701,16 @@ mod tests {
             );
             (f, c.equilibrium_k, c.bond_albedo)
         };
-        let temperate: Vec<_> = (0..=20).map(|i| at(0.98 + 0.001 * f64::from(i))).collect();
-        let steam: Vec<_> = (1..=20).map(|i| at(1.0 + 0.001 * f64::from(i))).collect();
+        // Each branch at flux points 1 % apart (at most), from 2 % below
+        // `S_rg` to 2 % above (was every 0.1 %, 41 climates and 90 s in
+        // release): a jump over 0.5 K anywhere on a branch falls between
+        // two neighbours here as it fell inside a sliding 1 % window of
+        // the finer sweep, so the bound catches the same steps.
+        let temperate: Vec<_> = [0.98, 0.99, 1.0].into_iter().map(at).collect();
+        let steam: Vec<_> = [1.001, 1.01, 1.02].into_iter().map(at).collect();
         for branch in [&temperate, &steam] {
-            for pair in branch.windows(11) {
-                let (a, b) = (pair[0], pair[10]);
+            for pair in branch.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
                 let (ta, tb) = (a.1 / a.0.powf(0.25), b.1 / b.0.powf(0.25));
                 assert!(
                     (tb - ta).abs() < 0.5,
@@ -2668,7 +2720,7 @@ mod tests {
                 );
             }
         }
-        let (wet, hot) = (temperate[20], steam[0]);
+        let (wet, hot) = (temperate[2], steam[0]);
         let expected = wet.1 * (hot.0 / wet.0 * (1.0 - hot.2) / (1.0 - wet.2)).powf(0.25);
         println!(
             "edge: A {:.4} -> {:.4}, T_eq {:.2} -> {:.2} K (albedo alone {expected:.2} K)",
@@ -3474,7 +3526,7 @@ mod tests {
         // The outer edge of the Sun's habitable zone, the maximum
         // greenhouse, is about 1.70 AU (Kopparapu et al. 2013, *ApJ* 765,
         // 131, doi:10.1088/0004-637X/765/2/131), 1.535 AU on the spectral
-        // column (frozen there, issue #523): an
+        // column (frozen there, issues #523 and #595): an
         // Earth on its temperate branch builds up its CO₂ and keeps liquid
         // water to 1.5 AU, and freezes beyond the edge. Colder the
         // farther, with no step but the edge.
@@ -3806,7 +3858,7 @@ mod tests {
         // +24 %). The gap left against Kopparapu 2013 is the thick CO₂'s
         // outgoing radiation, 73.5 W/m² under 8 bar at 1.70 AU against
         // their 67.4, and the albedo at the maximum greenhouse, 0.455
-        // against their 0.417 (follow-up issue).
+        // against their 0.417 (issue #595).
         let teff = crate::planet::reference::sun_at(1.0).teff_k;
         let edge = outer_edge_au(teff);
         println!("outer edge round the Sun: {edge:.3} AU");
@@ -3814,6 +3866,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: two bisections of the outer edge, 28 climates, 2.5 min in release; run with --include-ignored before a PR"]
     fn the_outer_edge_follows_the_star() {
         // A redder star's light scatters less (Rayleigh's λ⁻⁴) and more
         // of it falls in the near-infrared bands of CO₂ and water, so the

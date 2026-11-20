@@ -37,12 +37,13 @@ function html(over: { values?: ModelValues; drawn?: DrawnValues | null; radiusEa
     },
   }).body;
 }
-/** The markup of one field. */
-const field = (out: string, key: string) => {
+/** The markup of one field, without comments and, unless `raw`, without the glossary's <abbr> tags. */
+const field = (out: string, key: string, raw = false) => {
   const start = out.indexOf(`id="model-${key}"`);
   expect(start).toBeGreaterThan(-1);
   const next = out.indexOf('id="model-', start + 1);
-  return out.slice(start, next === -1 ? undefined : next);
+  const slice = out.slice(start, next === -1 ? undefined : next).replace(/<!--.*?-->/g, '');
+  return raw ? slice : slice.replace(/<abbr[^>]*>|<\/abbr>/g, '');
 };
 
 const mars = { spec: 'mars-like', name: 'mars-like', locales: {}, inputs: { mass_earth: 0.107, age_gyr: 4.57 } } as unknown as ArchetypeInfo;
@@ -143,7 +144,7 @@ describe('ModelFields', () => {
 
   it('quotes the same reference values in the help line as on the chips', () => {
     const out = html({ values: initialModelValues({ mass_earth: 2 }) });
-    const line = field(out, 'mass_earth').match(/<p class="unit-help references[^"]*">([^<]*)<\/p>/)![1]!;
+    const line = field(out, 'mass_earth').match(/<p class="unit-note references[^"]*">([^<]*)<\/p>/)![1]!;
     expect(line).toBe('Reference masses: Mars 0.107 · Earth 1 · Neptune 17.15 · Jupiter 317.8');
     // The chips quote the same bodies as the line.
     for (const body of ['mars', 'earth', 'neptune', 'jupiter'] as const) expect(field(out, 'mass_earth')).toContain(`${t.form.model.bodies[body]} `);
@@ -153,7 +154,8 @@ describe('ModelFields', () => {
   it('shows the drawn value, greyed, on a drawn field', () => {
     const out = html({ drawn: { mass_earth: 1.085, water_oceans: 0.9 } });
     const mass = field(out, 'mass_earth');
-    expect(mass.replace(/<!--.*?-->/g, '')).toContain('Drawn: 1.085 <abbr title="Earth masses (5.97×10²¹ t)">M⊕</abbr> (6.48×10²¹ t)');
+    expect(mass).toContain('Drawn: 1.085 M⊕ (6.48×10²¹ t)');
+    expect(field(out, 'mass_earth', true)).toMatch(/Drawn: 1\.085 <abbr class="gloss" title="Earth mass"[^>]*>M⊕<\/abbr>/);
     expect(mass).not.toContain('type="range"');
     expect(field(out, 'water_oceans')).toContain('Drawn: 0.9 Earth oceans');
   });

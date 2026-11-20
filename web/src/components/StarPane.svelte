@@ -10,7 +10,7 @@
   import type { StarInfo } from '../lib/api/types/StarInfo';
   import type { StarActivity } from '../lib/api/types/StarActivity';
   import { formatAge, formatAu, formatCelsius, formatEccentricity, formatInt, formatNumber, formatOrbit, formatUpTo, formatYear, withUnit } from '../lib/format';
-  import { unitTooltip } from '../lib/units';
+  import Glossed from './Glossed.svelte';
   import type { Moon } from '../lib/api/types/Moon';
   import type { Giant } from '../lib/api/types/Giant';
   import type { GiantSystem } from '../lib/api/types/GiantSystem';
@@ -24,6 +24,7 @@
   import Dock, { type DockPanel } from './dock/Dock.svelte';
   import PlaybackBar from './dock/PlaybackBar.svelte';
   import ToggleBar, { type Toggle } from './dock/ToggleBar.svelte';
+  import { partsOn, pressParts } from '../lib/switches';
   import { onThemeChange, overlayColours } from '../lib/themes';
   import { type SystemLabels, StarView, YEAR_S } from '../lib/viewer/StarView';
   import { currentProfile } from '../lib/viewer/quality';
@@ -45,6 +46,8 @@
     /** Whether the orbit line and the habitable zone are drawn. */
     orbit: boolean;
     zone: boolean;
+    /** Whether the habitable zone's distances (its edges and width) are shown, with or without the zone drawn. */
+    zoneDistances: boolean;
     /** Whether the coronal loops (and eruptions) are drawn. */
     prominences: boolean;
     /** The planet's moons, nearest first, drawn around it. */
@@ -147,6 +150,7 @@
     omega,
     animated = $bindable(),
     distances = $bindable(),
+    zoneDistances = $bindable(),
     orbit = $bindable(),
     zone = $bindable(),
     prominences = $bindable(),
@@ -195,6 +199,8 @@
   const giantList = $derived(
     (giantSystem?.giants ?? []).map((g, i) => ({ ...g, name: g.name, kindLabel: kinds?.[i] ?? null })),
   );
+  /** A planetary system with no planet: its star alone, with no planet orbit, marker or planet facts. */
+  const lone = $derived(selected !== null && giantList.length === 0);
   /** Whether some giant lies where the view compresses distances. */
   const compressFrom = $derived(selected !== null ? systemCompressedFrom(star) : compressedFrom(star));
   const compressed = $derived(!(selected !== null && realScale) && giantList.some((g) => g.orbit_au * (1 + g.eccentricity) > compressFrom));
@@ -399,6 +405,7 @@
   $effect(() => view?.setDistances(distances));
   $effect(() => view?.setOrbitVisible(orbit));
   $effect(() => view?.setZoneVisible(zone));
+  $effect(() => view?.setZoneDistances(zoneDistances));
   $effect(() => view?.setProminences(prominences));
   // A giant's moon: the marker on the orbit is the giant, the world goes
   // round it at its pace relative to the year.
@@ -442,8 +449,8 @@
 
   /** How fast time runs in the animation, and the day of the year it shows. */
   const clockText = $derived.by(() => {
-    if (selected !== null && giantList.length > 0) {
-      // A planetary system runs on one clock, in Earth days a second.
+    if (selected !== null) {
+      // A planetary system (planetless ones too) runs on one clock, in Earth days a second.
       return t.starView.systemClock({
         days: formatInt(2 ** speed),
         day: formatInt(Math.floor(elapsedDays) + 1),
@@ -639,11 +646,37 @@
     };
   });
 
+  /** The habitable zone: the ring drawn and its distances, as two squares; the main button sets both. */
+  const zoneSwitch = $derived.by<Toggle>(() => {
+    const parts = [
+      { on: zone, shown: true },
+      { on: zoneDistances, shown: true },
+    ];
+    return {
+      key: 'zone',
+      label: t.starView.showZone,
+      icon: 'zone',
+      on: partsOn(parts, false),
+      set: () => {
+        const next = pressParts(parts, false);
+        zone = next;
+        zoneDistances = next;
+      },
+      subs: [
+        { key: 'zone-drawn', label: t.starView.squareZoneDrawn, help: t.starView.squareZoneDrawnHelp, icon: 'zone', on: zone, set: (v) => (zone = v) },
+        { key: 'zone-distances', label: t.starView.squareZoneDistances, help: t.starView.squareZoneDistancesHelp, icon: 'distance', on: zoneDistances, set: (v) => (zoneDistances = v) },
+      ],
+    };
+  });
+  /** A system with no belt has none to show. */
+  const hasBelts = $derived(belts.length > 0);
+
   /** The display switches, as the icon bar groups them: lines, measures, structure, sky. */
   const toggleGroups = $derived<Toggle[][]>([
     [
-      { key: 'orbit', label: t.starView.showOrbit, icon: 'orbit', on: orbit, set: (v) => (orbit = v) },
-      { key: 'zone', label: t.starView.showZone, icon: 'zone', on: zone, set: (v) => (zone = v) },
+      // With no planet there is no orbit, planet line, vector or sphere to switch.
+      ...(lone ? [] : [{ key: 'orbit', label: t.starView.showOrbit, icon: 'orbit' as const, on: orbit, set: (v: boolean) => (orbit = v) }]),
+      zoneSwitch,
       // A star without activity, or a radiative one (no convective zone, no
       // field to hold loops), has none to show.
       ...(activity !== null && activity.envelope !== 'radiative'
@@ -654,8 +687,8 @@
         : []),
     ],
     [
-      { key: 'distances', label: t.starView.distances, help: t.starView.distancesHelp, icon: 'distance', on: distances, set: (v) => (distances = v) },
-      ...(selected !== null
+      ...(lone ? [] : [{ key: 'distances', label: t.starView.distances, help: t.starView.distancesHelp, icon: 'distance' as const, on: distances, set: (v: boolean) => (distances = v) }]),
+      ...(selected !== null && !lone
         ? [
             { key: 'links', label: t.starView.showLinks, help: t.starView.showLinksHelp, icon: 'links' as const, on: links, set: (v: boolean) => (links = v) },
             { key: 'velocities', label: t.starView.showVelocities, help: t.starView.showVelocitiesHelp, icon: 'velocity' as const, on: velocities, set: (v: boolean) => (velocities = v) },
@@ -666,10 +699,12 @@
     selected !== null
       ? [
           { key: 'frost', label: t.starView.showFrost, help: t.starView.showFrostHelp, icon: 'frost', on: frost, set: (v) => (frost = v) },
-          { key: 'hills', label: t.starView.showHills, help: t.starView.showHillsHelp, icon: 'hills', on: hills, set: (v) => (hills = v) },
-          { key: 'belts', label: t.starView.showBelts, help: t.starView.showBeltsHelp, icon: 'belt', on: showBelts, set: (v) => (showBelts = v) },
-          { key: 'trojans', label: t.starView.showTrojans, help: t.starView.showTrojansHelp, icon: 'trojans', on: showTrojans, set: (v) => (showTrojans = v) },
-          { key: 'lagrange', label: t.starView.showLagrange, help: t.starView.showLagrangeHelp, icon: 'lagrange', on: showLagrange, set: (v) => (showLagrange = v) },
+          ...(lone ? [] : [{ key: 'hills', label: t.starView.showHills, help: t.starView.showHillsHelp, icon: 'hills' as const, on: hills, set: (v: boolean) => (hills = v) }]),
+          ...(hasBelts ? [{ key: 'belts', label: t.starView.showBelts, help: t.starView.showBeltsHelp, icon: 'belt' as const, on: showBelts, set: (v: boolean) => (showBelts = v) }] : []),
+          ...(lone ? [] : [
+            { key: 'trojans', label: t.starView.showTrojans, help: t.starView.showTrojansHelp, icon: 'trojans' as const, on: showTrojans, set: (v: boolean) => (showTrojans = v) },
+            { key: 'lagrange', label: t.starView.showLagrange, help: t.starView.showLagrangeHelp, icon: 'lagrange' as const, on: showLagrange, set: (v: boolean) => (showLagrange = v) },
+          ]),
           { key: 'scale', label: t.starView.realScale, help: t.starView.realScaleHelp, icon: 'scale', on: realScale, set: (v) => (realScale = v) },
         ]
       : [],
@@ -679,7 +714,7 @@
   /** The panels of the dock: the star, the planet shown, and the system's planets. */
   const dockPanels = $derived<DockPanel[]>([
     { id: 'star', title: t.starView.starSection, icon: 'star', content: starPanel },
-    { id: 'planet', title: selected !== null ? t.starView.selectedSection : t.starView.planetSection, icon: 'planet', content: planetPanel },
+    ...(lone ? [] : [{ id: 'planet', title: selected !== null ? t.starView.selectedSection : t.starView.planetSection, icon: 'planet' as const, content: planetPanel }]),
     ...(!worldGiant || selected !== null
       ? [{ id: 'planets', title: kinds ? t.starView.planets : t.starView.giantsSection, icon: 'list' as const, content: planetsPanel }]
       : []),
@@ -814,80 +849,80 @@
 {/if}
 </div>
 {#snippet starPanel()}
-  <p class="heading"><strong>{t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })}</strong></p>
+  <p class="heading"><strong><Glossed text={t.starView.heading({ type: star.type, kind: t.starView.classNames[star.type[0] ?? 'G'] ?? '' })} /></strong></p>
   <dl>
-    <dt title={t.starView.temperatureHelp}>{t.starView.temperature}</dt>
-    <dd>{withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')}</dd>
-    <dt title={t.starView.luminosityHelp}>{t.starView.luminosity}</dt>
-    <dd class="unit-help" title={unitTooltip('L☉')}>{withUnit(formatUpTo(star.luminosity, star.luminosity < 0.01 ? 4 : 2), 'L☉')}</dd>
-    <dt title={t.starView.sizeHelp}>{t.starView.size}</dt>
+    <dt title={t.starView.temperatureHelp}><Glossed text={t.starView.temperature} /></dt>
+    <dd><Glossed text={withUnit(formatInt(Math.round(star.teff_k / 10) * 10), 'K')} /></dd>
+    <dt title={t.starView.luminosityHelp}><Glossed text={t.starView.luminosity} /></dt>
+    <dd><Glossed text={withUnit(formatUpTo(star.luminosity, star.luminosity < 0.01 ? 4 : 2), 'L☉')} /></dd>
+    <dt title={t.starView.sizeHelp}><Glossed text={t.starView.size} /></dt>
     <dd>
-      {t.starView.sizeValue({
+      <Glossed text={t.starView.sizeValue({
         radius: withUnit(formatUpTo(star.radius, 2), 'R☉'),
         mass: withUnit(formatUpTo(star.mass, 2), 'M☉'),
-      })}
+      })} />
     </dd>
-    <dt title={t.starView.metallicityHelp}>{t.starView.metallicity}</dt>
+    <dt title={t.starView.metallicityHelp}><Glossed text={t.starView.metallicity} /></dt>
     <dd>
-      {t.starView.metallicityValue({
+      <Glossed text={t.starView.metallicityValue({
         dex: `${star.metallicity >= 0 ? '+' : ''}${formatUpTo(star.metallicity, 2)}`,
         ratio: `${formatUpTo(10 ** star.metallicity, 2)}×`,
-      })}
+      })} />
     </dd>
-    <dt title={t.starView.lifetimeHelp}>{t.starView.lifetime}</dt>
-    <dd>{withUnit(formatUpTo(star.lifetime_gyr, star.lifetime_gyr < 10 ? 1 : 0), t.starView.gyr)}</dd>
-    <dt title={t.starView.ageHelp}>{t.starView.age}</dt>
-    <dd>{formatAge(star.age_gyr)}</dd>
+    <dt title={t.starView.lifetimeHelp}><Glossed text={t.starView.lifetime} /></dt>
+    <dd><Glossed text={withUnit(formatUpTo(star.lifetime_gyr, star.lifetime_gyr < 10 ? 1 : 0), t.starView.gyr)} /></dd>
+    <dt title={t.starView.ageHelp}><Glossed text={t.starView.age} /></dt>
+    <dd><Glossed text={formatAge(star.age_gyr)} /></dd>
     <dt title={t.starView.zoneHelp}><span class="swatch zone"></span>{t.starView.zone}</dt>
     <dd>
-      {t.starView.range({
+      <Glossed text={t.starView.range({
         inner: formatAu(star.hz_inner_au),
         outer: formatAu(star.hz_outer_au),
-      })}
+      })} />
     </dd>
   </dl>
   {#if selected !== null && !realScale}
-    <small class="muted">{t.starView.systemScale}</small>
+    <small class="muted"><Glossed text={t.starView.systemScale} /></small>
   {:else}
-    <small class="muted">{t.starView.schematic}</small>
+    <small class="muted"><Glossed text={t.starView.schematic} /></small>
   {/if}
   {#if compressed && selected === null && giants}
-    <small class="muted">{t.starView.compressed({ distance: formatAu(compressFrom) })}</small>
+    <small class="muted"><Glossed text={t.starView.compressed({ distance: formatAu(compressFrom) })} /></small>
   {/if}
 {/snippet}
 {#snippet planetPanel()}
   {#if selected === -1}
-    <p class="muted hint">{t.starView.pickHint}</p>
+    <p class="muted hint"><Glossed text={t.starView.pickHint} /></p>
   {:else}
   <dl>
     <dt title={t.starView.orbitHelp}><span class="swatch orbit"></span>{t.worldInfo.orbit}</dt>
-    <dd class="unit-help" title={unitTooltip('AU')}>{formatOrbit(star)}</dd>
-    <dt title={t.starView.eccentricityHelp}>{t.worldInfo.eccentricity}</dt>
-    <dd>{formatEccentricity(star)}</dd>
-    <dt title={t.starView.speedHelp}>{t.starView.speed}</dt>
-    <dd>{speedText}</dd>
-    <dt>{t.worldInfo.year}</dt>
-    <dd>{formatYear(star.year_days)}</dd>
-    <dt title={t.starView.equilibriumHelp}>{t.starView.equilibrium}</dt>
-    <dd>{withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')}</dd>
+    <dd><Glossed text={formatOrbit(star)} /></dd>
+    <dt title={t.starView.eccentricityHelp}><Glossed text={t.worldInfo.eccentricity} /></dt>
+    <dd><Glossed text={formatEccentricity(star)} /></dd>
+    <dt title={t.starView.speedHelp}><Glossed text={t.starView.speed} /></dt>
+    <dd><Glossed text={speedText} /></dd>
+    <dt><Glossed text={t.worldInfo.year} /></dt>
+    <dd><Glossed text={formatYear(star.year_days)} /></dd>
+    <dt title={t.starView.equilibriumHelp}><Glossed text={t.starView.equilibrium} /></dt>
+    <dd><Glossed text={withUnit(formatNumber(star.equilibrium_k - 273.15), '°C')} /></dd>
     {#if selected !== null && selected >= 0 && planets?.[selected]?.surface_k != null}
-      <dt>{t.starView.surfaceTemperature}</dt>
-      <dd>{formatCelsius(planets[selected]!.surface_k!)}</dd>
+      <dt><Glossed text={t.starView.surfaceTemperature} /></dt>
+      <dd><Glossed text={formatCelsius(planets[selected]!.surface_k!)} /></dd>
     {/if}
   </dl>
   {#if distances && star.eccentricity <= 0.001}
     <!-- A circle has no closest or farthest point: say why none is marked. -->
-    <small class="muted">{t.starView.circular({ distance: formatAu(star.orbit_au) })}</small>
+    <small class="muted"><Glossed text={t.starView.circular({ distance: formatAu(star.orbit_au) })} /></small>
   {/if}
   {/if}
 {/snippet}
 {#snippet planetsPanel()}
-  <h4 title={t.starView.giantsHelp}>{kinds ? t.starView.planets : t.starView.giantsSection}</h4>
+  <h4 title={t.starView.giantsHelp}><Glossed text={kinds ? t.starView.planets : t.starView.giantsSection} /></h4>
   {#if giantSystem === null}
-    <small class="muted">{t.starView.giantsOff}</small>
+    <small class="muted"><Glossed text={t.starView.giantsOff} /></small>
   {:else}
     {#if giantList.length === 0}
-      <small class="muted">{t.starView.noGiants}</small>
+      <small class="muted"><Glossed text={lone ? t.starView.noPlanet : t.starView.noGiants} /></small>
     {:else}
       <ul class="giants">
         {#each giantList as giant, i (i)}
@@ -924,9 +959,9 @@
       </ul>
     {/if}
     {#if selected !== null}
-      <h4 title={t.starView.smallBodiesHelp}>{t.starView.smallBodies}</h4>
+      <h4 title={t.starView.smallBodiesHelp}><Glossed text={t.starView.smallBodies} /></h4>
       {#if belts.length === 0}
-        <small class="muted">{t.starView.noSmallBodies}</small>
+        <small class="muted"><Glossed text={t.starView.noSmallBodies} /></small>
       {/if}
       <ul class="small-bodies">
         {#each belts as belt, k (k)}
@@ -937,24 +972,26 @@
               range: beltRange(belt),
               mass: formatUpTo(belt.mass_earth, belt.mass_earth < 0.01 ? 6 : 3),
               composition: t.starView.beltCompositions[belt.composition] ?? belt.composition,
-            })}{#if shaper}<br /><small class="muted">{t.starView.beltShaped({ planet: shaper.name })}</small>{/if}{#if belt.gaps.length > 0}<br /><small
-                class="muted">{t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })}</small
+            })}{#if shaper}<br /><small class="muted"><Glossed text={t.starView.beltShaped({ planet: shaper.name })} /></small>{/if}{#if belt.gaps.length > 0}<br /><small
+                class="muted"><Glossed text={t.starView.beltGaps({ gaps: belt.gaps.map((g) => withUnit(formatUpTo(g[0], 2), 'AU')).join(', ') })} /></small
               >{/if}
           </li>
         {/each}
         {#each planets ?? [] as planet (planet.id)}
           {#if planet.trojans && planet.trojans.l4 + planet.trojans.l5 > 0}
-            <li>{t.starView.trojansRow({ planet: planet.name, l4: formatInt(planet.trojans.l4), l5: formatInt(planet.trojans.l5) })}</li>
+            <li><Glossed text={t.starView.trojansRow({ planet: planet.name, l4: formatInt(planet.trojans.l4), l5: formatInt(planet.trojans.l5) })} /></li>
           {/if}
         {/each}
       </ul>
     {/if}
+    {#if !lone}
     <dl>
-      <dt title={t.starView.forcedHelp}>{t.starView.forced}</dt>
-      <dd>{formatUpTo(giantSystem.forced_eccentricity, 3)}</dd>
-      <dt title={t.starView.impactsHelp}>{t.starView.impacts}</dt>
-      <dd>{t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })}</dd>
+      <dt title={t.starView.forcedHelp}><Glossed text={t.starView.forced} /></dt>
+      <dd><Glossed text={formatUpTo(giantSystem.forced_eccentricity, 3)} /></dd>
+      <dt title={t.starView.impactsHelp}><Glossed text={t.starView.impacts} /></dt>
+      <dd><Glossed text={t.starView.impactsValue({ factor: `${formatUpTo(giantSystem.impact_factor, 2)}×` })} /></dd>
     </dl>
+    {/if}
   {/if}
 {/snippet}
 <div class="star-pane" class:concealed={hidden}>
@@ -966,7 +1003,7 @@
   <div class="toggles">
     <ToggleBar label={t.starView.displaySection} groups={toggleGroups} />
   </div>
-  <Dock kind="star" panels={dockPanels} defaultActive="star" />
+  <Dock kind="star" panels={dockPanels} defaultActive="star" knownIds={["planet"]} />
   <PlaybackBar
     bind:playing={animated}
     speed={selected !== null

@@ -307,6 +307,17 @@ every other planet, temperatures in kelvin scale as $S^{1/4}$.
 - **One pair of edges.** The app uses the conservative edges only. Recent
   Venus and early Mars are not drawn, though a Mars-like world at 1.52 AU
   is inside the zone, as the real Mars is.
+- **The planet model's own outer edge sits closer in.** The zone drawn
+  here is Kopparapu's fit, but each planet's climate comes from its own
+  radiative–convective column (see [planet atmospheres, part
+  2](planet-atmospheres.md#climate-and-surface-liquid)). That column
+  finds the same maximum greenhouse, CO₂ that stops warming as its bands
+  fill, as it condenses high in the air and as its scattering grows, but
+  it reaches it at more light: an Earth keeps liquid water out to 1.535 AU
+  round the Sun, not 1.70 AU, and round K and M stars at 25 % and 20 %
+  more light than the fit. So an Earth-like planet drawn in the outer
+  part of the zone freezes. The gap is measured, not tuned away (issue
+  #595).
 - **Hot stars are extrapolated.** The fit holds from 2,600 to 7,200 K. The
   app clamps hotter stars to 7,200 K: an A, B or O star gets the edge
   fluxes of an early F star, scaled to its luminosity. The cards do not

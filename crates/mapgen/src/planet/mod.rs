@@ -262,8 +262,9 @@ pub struct PlanetModel {
     /// What it was made of before a steam runaway took its water
     /// ([`after_steam`]): the inputs after photoevaporation, which
     /// `inputs` replaces with the water escape left. `None` for a body
-    /// whose water did not run away, and in a model stored before the
-    /// escaped water left the mass (#513).
+    /// whose water did not run away or whose escape took none of it (its
+    /// mass did not change), and in a model stored before the escaped
+    /// water left the mass (#513).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub before_steam: Option<PlanetInputs>,
@@ -566,13 +567,27 @@ pub(crate) fn chain(context: &Context, inputs: PlanetInputs) -> (PlanetModel, Op
                 }
             }
         }
+        // A runaway's pass loses more of the steam it was handed to the
+        // cosmic shoreline and the non-thermal loss ([`Water::keeping`]):
+        // the body weighs the water it kept, and its layers are derived
+        // again for it, once, without re-running the climate (as the
+        // steam interior below is). The heat stays the one the climate
+        // ran on; [`explain::surface_inputs`] recovers that body.
+        let kept = steps.surface.water;
+        let handed = body.inputs.water_fraction * body.inputs.mass_earth * EARTH_KG;
+        if kept.runaway && kept.kept_kg < handed {
+            let left = after_steam(&inputs, &kept);
+            body = Ran {
+                interior: body_interior(context, &left),
+                inputs: left,
+                heat: body.heat,
+            };
+        }
         air = Some(steps.before);
         Some(steps.surface)
     };
-    let before_steam = surface
-        .as_ref()
-        .is_some_and(|s| s.water.runaway || s.water.boiled)
-        .then_some(inputs);
+    // Only a runaway whose escape took water changed the body.
+    let before_steam = (body.inputs != inputs).then_some(inputs);
     let Ran {
         inputs,
         interior,

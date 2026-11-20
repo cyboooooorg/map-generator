@@ -98,7 +98,9 @@ describe('PreviewPanel', () => {
     const out = render(PreviewPanel, { props: { preview, kind: 'system', onreroll: () => {} } }).body;
     expect(out).toContain(t.form.preview.system.planets);
     expect(out).toContain('MGS 1 b');
-    expect(out).toContain(formatAu(planet.orbit.semi_major_axis_au));
+    // The unit is glossed, so the number and the unit are split by the abbr.
+    expect(out).toContain(formatAu(planet.orbit.semi_major_axis_au).replace(/ AU$/, ' '));
+    expect(out).toContain('>AU</abbr>');
     expect(out).not.toContain('class="cards');
     // The answer of the other kind of request is not shown.
     const lone = render(PreviewPanel, { props: { preview, kind: 'around', onreroll: () => {} } }).body;

@@ -1169,6 +1169,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow: 20 drawn models of each of the 21 archetypes, 4 min in release; run with --include-ignored before a PR"]
     fn every_archetype_comes_out_as_its_class() {
         for a in Archetype::built_in() {
             for seed in 0..20 {
@@ -1320,15 +1321,29 @@ mass_earth = 5000.0
         assert_eq!(o.radiogenic, Some(1.0));
     }
 
+    /// The `earth-like` models of seeds 0 to 20, derived once (in parallel)
+    /// for the three tests below that read them: each derivation takes
+    /// about 5 s in release since the spectral column, and the tests
+    /// derived the same 20 models three times over.
+    fn earth_models() -> &'static [PlanetModel] {
+        use rayon::prelude::*;
+        static MODELS: std::sync::OnceLock<Vec<PlanetModel>> = std::sync::OnceLock::new();
+        MODELS.get_or_init(|| {
+            let a = Archetype::load("earth-like").unwrap();
+            (0..=20u32)
+                .into_par_iter()
+                .map(|seed| model_of(&a, seed))
+                .collect()
+        })
+    }
+
     /// Earth's 1.013 bar, within 0.7 to 1.3 on every seed: the archetype
     /// pins the mass, the light and the ammonia factor whose photolysis
     /// feeds the N₂.
     #[test]
     fn earth_like_keeps_its_ocean_and_its_life() {
-        let a = Archetype::load("earth-like").unwrap();
-        for seed in 0..20 {
-            let m = model_of(&a, seed);
-            let s = m.surface.expect("a bare world has a surface");
+        for (seed, m) in earth_models()[..20].iter().enumerate() {
+            let s = m.surface.as_ref().expect("a bare world has a surface");
             let oceans = s.water.oceans;
             assert!((0.5..2.0).contains(&oceans), "seed {seed}: {oceans} oceans");
             assert!(s.life.arose, "seed {seed}: {:?}", s.life);
@@ -1342,9 +1357,7 @@ mass_earth = 5000.0
     /// pins Earth's radiogenic abundance as well as its mass and age.
     #[test]
     fn earth_like_has_earths_heat_flux() {
-        let a = Archetype::load("earth-like").unwrap();
-        for seed in 0..20 {
-            let m = model_of(&a, seed);
+        for (seed, m) in earth_models()[..20].iter().enumerate() {
             let flux = m.heat.flux_w_m2(m.interior.radius_earth);
             assert!((0.087..=0.092).contains(&flux), "seed {seed}: {flux} W/m²");
         }
@@ -1354,10 +1367,8 @@ mass_earth = 5000.0
     /// climate has a frozen state at 1 AU (`snowball = false`).
     #[test]
     fn earth_like_never_snowballs() {
-        let a = Archetype::load("earth-like").unwrap();
-        for seed in 1..=20 {
-            let m = model_of(&a, seed);
-            let s = m.surface.expect("a bare world has a surface");
+        for (seed, m) in earth_models().iter().enumerate().skip(1) {
+            let s = m.surface.as_ref().expect("a bare world has a surface");
             assert!(!s.climate.snowball, "seed {seed}: {:?}", s.climate);
             assert_eq!(m.inputs.snowball_draw, 1.0, "seed {seed}");
         }
@@ -1385,9 +1396,6 @@ mass_earth = 5000.0
         }
     }
 
-    /// Titan's 1.47 bar (Fulchignoni et al. 2005,
-    /// doi:10.1038/nature04314), within 1.2 to 1.8 on every seed, under a
-    /// few percent of methane.
     /// Titan-like's surface pressure, bar: the spread of
     /// `archetype_census titan-like 500` over seeds 1-500 (min 1.263,
     /// 5th percentile 1.339, median 1.493, 95th 1.615, max 1.660 bar at
@@ -1395,6 +1403,8 @@ mass_earth = 5000.0
     /// 1.47 bar (Fulchignoni et al. 2005, doi:10.1038/nature04314).
     const TITAN_BAR: std::ops::RangeInclusive<f64> = 1.25..=1.70;
 
+    /// Titan's air: a surface pressure within [`TITAN_BAR`] on every
+    /// seed, of which 1 to 10 % is methane.
     #[test]
     fn titan_like_has_titan_air() {
         let a = Archetype::load("titan-like").unwrap();
@@ -1412,6 +1422,7 @@ mass_earth = 5000.0
     /// The same ranges when a whole system asks for the archetype, round
     /// the orbit and the age it draws there.
     #[test]
+    #[ignore = "slow: 100 whole systems for the pressures of Earth, Mars, Venus and Titan, 3.5 min in release; run with --include-ignored before a PR"]
     fn faithful_archetypes_hold_in_a_whole_system() {
         for (name, lo, hi, seeds) in [
             ("earth-like", 0.7, 1.3, 20),
@@ -1504,6 +1515,7 @@ mass_earth = 5000.0
     }
 
     #[test]
+    #[ignore = "slow: 420 whole systems, 20 per archetype, for its 16-of-20 recognition rate, 9 min in release; run with --include-ignored before a PR"]
     fn solar_system_archetypes_are_recognised() {
         let all = Archetype::built_in();
         let mut weak = Vec::new();

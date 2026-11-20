@@ -47,6 +47,16 @@ describe('orbitRadius', () => {
 });
 
 describe('orrery', () => {
+  it('draws a system with no planet as its star alone, with no orbit and no zone', () => {
+    for (const kind of ['sqrt', 'log'] as const) {
+      const o = orrery(system([], [90, 160]), 72, 40, kind);
+      expect(o.planets).toEqual([]);
+      expect(o.zone).toBeNull();
+      expect(Number.isFinite(o.starR) && o.starR > 0).toBe(true);
+      expect([o.cx, o.cy]).toEqual([36, 20]);
+    }
+  });
+
   it('puts the outermost orbit at the edge of the box and every dot inside it', () => {
     const o = orrery(system([body('b', 0.4), body('c', 1), body('d', 5.2, { body_type: 'gas-giant' })]), 72, 40);
     expect(o.planets.map((p) => p.id)).toEqual(['b', 'c', 'd']);

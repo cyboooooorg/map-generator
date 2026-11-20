@@ -21,7 +21,7 @@ const surface = {
   climate: { temperature_k: 288, liquid: 'water', regulated: true },
   core: { state: 'liquid', dynamo: true, field_ut: 50 },
   life: { arose: true, oxygenated: true },
-  regime: 'plate_tectonics',
+  regime: 'plates',
   water: { runaway: false, boiled: false, kept_kg: 1, oceans: 1 },
 };
 const model = {
@@ -88,8 +88,9 @@ function worldOf(bodies: Body[], shown: string, meta: WorldMetadata | null): Loa
 }
 
 const NOOP = () => {};
-const renderCard = (card: Component<any>, props: Record<string, unknown>): string => render(card, { props }).body;
-const labels = (html: string) => [...html.matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map((m) => m[1] ?? '');
+const renderCard = (card: Component<any>, props: Record<string, unknown>): string => render(card, { props }).body.replace(/<!--.*?-->/g, '');
+const noAbbr = (html: string) => html.replace(/<abbr[^>]*>|<\/abbr>/g, '');
+const labels = (html: string) => [...noAbbr(html).matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map((m) => m[1] ?? '');
 
 /** The labels of every card of a body, together. */
 function allLabels(world: LoadedWorld): string[] {
@@ -143,9 +144,11 @@ describe('themed body cards', () => {
     const air = renderCard(AtmosphereCard, { world });
     // The model's pressure (its gases' sum) and temperature, not the deck's
     // render pressure, clouds or spot.
-    expect(air).toContain('410,172 bar');
-    expect(air).not.toContain('0.3 bar');
-    expect(air).toContain('1,406 °C');
+    expect(noAbbr(air)).toContain('410,172 bar');
+    expect(air).toMatch(/<abbr class="gloss"[^>]*title="bar: pressure"/);
+    expect(air).not.toContain('Venus');
+    expect(noAbbr(air)).not.toContain('0.3 bar');
+    expect(noAbbr(air)).toContain('1,406 °C');
     expect(labels(air)).not.toContain('Clouds');
     expect(air).not.toContain('spot');
     // Earth units and its steam layer, no Jupiter units or flattening.
@@ -195,7 +198,7 @@ describe('themed body cards', () => {
       },
     });
     const html = renderCard(InteriorCard, { world: worldOf([earthLike, enceladus], 'c-1', null) });
-    expect(html).toContain('ocean of 30 km under 25 km of ice (conductive)');
+    expect(noAbbr(html)).toContain('ocean of 30 km under 25 km of ice (conductive)');
     expect(html).toContain('0.335 — differentiated');
     expect(html).toContain('active at the south pole');
     expect(labels(html)).toContain('Tidal heat');
@@ -211,6 +214,14 @@ describe('themed body cards', () => {
     expect(html).toContain('Desert');
     expect(html.match(/class="value[ "]/g)).toHaveLength(4);
     expect(html.match(/class="value area[ "]/g)).toHaveLength(2);
+  });
+
+  it('glosses a legend row without nesting a focusable abbr in its button', () => {
+    const html = renderCard(LegendCard, { ramp: null, stats, colour: () => 'red' });
+    const rows = html.match(/<button[^]*?<\/button>/g) ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.join('')).toContain('<abbr');
+    for (const row of rows) expect(row).not.toContain('tabindex');
   });
 
   it('shows every biome as a segment of the share bar, sized by its share', () => {
@@ -246,12 +257,13 @@ describe('themed body cards', () => {
       world.systemExtras = { c: { explanation: { trees: [tree] }, similar: null } } as unknown as typeof world.systemExtras;
       const html = renderCard(SurfaceCard, { world });
       expect(html).toContain('aria-expanded="false"');
-      expect(html).toContain(locale === 'en' ? '0.63 · volcanic SO₂ frost' : '0,63 · givre de SO₂ volcanique');
+      expect(html.replace(/<[^>]+>/g, '')).toContain(locale === 'en' ? '0.63 · volcanic SO₂ frost' : '0,63 · givre de SO₂ volcanique');
+      expect(html).toMatch(/<abbr class="gloss" title="[^"]+"[^>]*>SO₂<\/abbr>/);
       expect(html).not.toMatch(/frost_so2|cover_share/);
     }
     setLocale('en');
   });
-  it('names a body with seas by its liquid, not by a frost over its land', () => {
+  it('names neither the seas nor a frost over its land on the albedo line', () => {
     const part = (label: string, value: number) => ({ quantity: 'cover_share', value, label, input: null, causes: [] });
     const titan = body({ model: { ...model, surface: { ...surface, climate: { ...surface.climate, liquid: 'hydrocarbons', bond_albedo: 0.29 } } } });
     const world = worldOf([titan, moon], 'c', earthMeta);
@@ -259,7 +271,8 @@ describe('themed body cards', () => {
     const tree = { quantity: 'bond_albedo', value: 0.29, label: null, input: null, causes: [part('frost_co2', 0.9), part('haze', 1)] };
     world.systemExtras = { c: { explanation: { trees: [tree] }, similar: null } } as unknown as typeof world.systemExtras;
     const html = renderCard(SurfaceCard, { world });
-    expect(html).toContain('0.29 · hydrocarbons');
+    expect(html).toContain('<dd>0.29<button');
+    expect(html).not.toContain('0.29 · hydrocarbons');
     expect(html).not.toContain('0.29 · carbon dioxide frost');
   });
 });
