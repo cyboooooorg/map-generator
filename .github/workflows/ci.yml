@@ -58,6 +58,9 @@ jobs:
           # rust-cache keys on Cargo.lock and the members' manifests, not the
           # root one: a profile change there must not restore a stale target/.
           key: ${{ hashFiles('Cargo.toml') }}
+          # Only main saves: branches read main's cache, so their own entries
+          # would only evict it from the 10 GB the repository is allowed.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: mise run fmt:check
       - run: mise run lint
       - run: mise run ci:actions
@@ -72,6 +75,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ hashFiles('Cargo.toml') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Builds before the timed run, so the budget measures the tests only.
       - run: cargo nextest run --profile tier1 --workspace --no-run
       - run: mise run test:tier1 -- --test-threads num-cpus
@@ -86,6 +90,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ hashFiles('Cargo.toml') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo nextest run --profile tier2 --workspace --no-run
       - run: mise run test:tier2 -- --test-threads num-cpus
 

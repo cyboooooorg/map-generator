@@ -144,9 +144,9 @@ fn options() -> Result<Options, String> {
         shortwave,
         raw: PathBuf::from("tools/opacity-table/raw"),
         out: PathBuf::from(if shortwave {
-            "crates/mapgen/data/shortwave.bin"
+            "crates/science/data/shortwave.bin"
         } else {
-            "crates/mapgen/data/opacity.bin"
+            "crates/science/data/opacity.bin"
         }),
         bin_width_cm: 20.0,
         top_cm: if shortwave {
