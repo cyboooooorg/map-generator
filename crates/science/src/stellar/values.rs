@@ -400,6 +400,22 @@ fn low_mass_logs(mass: f64, feh: f64, age: f64) -> Logs {
     logs
 }
 
+/// Central temperature of a Baraffe star of `mass` at `age`, K: log T_c
+/// bilinear in log mass and log age, held at the last row (10 Gyr) beyond
+/// it, at solar metallicity (no Dartmouth offset).
+pub(crate) fn low_mass_central_temperature(mass: f64, age: f64) -> f64 {
+    let (tracks, by_mass) = low_mass_bracket(mass);
+    let log_tc: f64 = by_mass
+        .terms()
+        .map(|(i, w)| {
+            let rows = &tracks[i].rows;
+            let at = bracket_clamped(rows.len(), |k| rows[k].age, age, f64::ln);
+            lerp(rows[at.lo].log_tc, rows[at.hi].log_tc, at.weight) * w
+        })
+        .sum();
+    10f64.powf(log_tc)
+}
+
 /// The Dartmouth offset at `mass` (held outside the tabulated masses) and
 /// `feh` (zero at [Fe/H] 0), linear in both.
 fn dartmouth_offset(mass: f64, feh: f64) -> Logs {

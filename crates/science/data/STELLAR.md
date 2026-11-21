@@ -263,7 +263,8 @@ models; 98 % at 0.25 R, or 99 % at 0.3 R, holds for both.
 Below 0.3 M☉ the YREC runs fail (rescaled from the 0.3 M☉ start model,
 they end in NaN). Two kinds of rows:
 
-- **Baraffe rows**, `mass_msun age_gyr teff log_l r_rsun`, solar
+- **Baraffe rows**, `mass_msun age_gyr teff log_l r_rsun log_tc
+  log_rhoc` (log₁₀ of the central T in K and density in g cm⁻³), solar
   metallicity, from Baraffe, Homeier, Allard & Chabrier 2015 (A&A 577,
   A42, file `BHAC15_tracks+structure`) for 0.08, 0.09, 0.1, 0.11, 0.13,
   0.15, 0.17, 0.2, 0.3 and 0.4 M☉. For each mass, the tabulated rows
@@ -377,13 +378,22 @@ low-mass rows this way:
   step of 10⁻³ in ξ (ξ₁ = 3.653754, ρ_c/ρ̄ = 5.990705; Chandrasekhar 1939:
   3.65375, 5.99071), scaled to the star's mass and to the radius of
   `main_sequence`: ρ_c = ρ̄ ξ₁/(3|θ'₁|), P_c = G M²/(4π (n + 1) θ'₁² R⁴),
-  T_c = μ m_u P_c/(k ρ_c) with μ = 0.617, T = T_c θ held at T_eff at the
-  photosphere; ρ and P fall to 0 there. One convective layer. Fusion share
-  from ε ∝ ρ T⁴ (pp chain near 4 × 10⁶ K, Kippenhahn et al. 2012
-  §18.5.1), dL ∝ θ⁷ ξ² dξ. At 0.08 M☉ and 5 Gyr ρ_c is 696 g cm⁻³, 9 %
-  above BHAC15 (637.8); at 0.29 M☉, 99 g cm⁻³ and 7.6 × 10⁶ K against
-  YREC's 96 g cm⁻³ and 7.5 × 10⁶ K at 0.30 M☉. The switch is sharp: the
-  0.30-0.35 M☉ blend of `main_sequence` does not apply to the interior.
+  ρ = ρ_c θ^1.5, P = P_c θ^2.5; ρ and P fall to 0 at the photosphere. One
+  convective layer. Fusion share from ε ∝ ρ T⁴ (pp chain near 4 × 10⁶ K,
+  Kippenhahn et al. 2012 §18.5.1), dL ∝ θ⁷ ξ² dξ. At 0.08 M☉ and 5 Gyr
+  ρ_c is 696 g cm⁻³, 9 % above BHAC15 (637.8); at 0.29 M☉, 99 g cm⁻³
+  against YREC's 96 g cm⁻³ at 0.30 M☉.
+- **Temperature below 0.30 M☉** (`Calibration:`): T = T_c θ, with T_c
+  from the Baraffe `log_tc` column, read like the other Baraffe values
+  (bilinear in log mass and log age, held after 10 Gyr) but without the
+  Dartmouth offset, which has no T_c. T is held at T_eff at the photosphere
+  (r = 1, where θ = 0). The polytrope's own ideal-gas T_c = μ m_u P_c/(k ρ_c)
+  ignores the partial degeneracy of these stars: at 5 Gyr it gives 6.2 ×
+  10⁶ K at 0.08 and 0.1 M☉ against BHAC15's 3.61 and 4.58 × 10⁶ K. With
+  BHAC15's T_c, 0.29 M☉ has 7.32 × 10⁶ K against YREC's 7.49 × 10⁶ K at
+  0.30 M☉.
+- **Seam**: the switch at 0.30 M☉ is sharp: the 0.30-0.35 M☉ blend of
+  `main_sequence` does not apply to the interior.
 
 ## Features of the models
 

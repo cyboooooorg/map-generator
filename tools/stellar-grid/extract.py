@@ -431,6 +431,23 @@ def dartmouth_at(d, age_yr):
     return {k: float(np.interp(age_yr, d["age"], d[k])) for k in ("logt", "logl", "logr")}
 
 
+def dartmouth_rows(directory):
+    """The D rows: offsets at 5 Gyr of each [Fe/H] from [Fe/H] 0."""
+    dart = {}
+    for mass in DARTMOUTH_MASSES:
+        for tag in ("m10", "m05", "p00", "p05"):
+            path = os.path.join(directory, f"m{int(round(mass * 100)):03d}feh{tag}afep0.trk")
+            dart[(mass, tag)] = read_dartmouth(path)
+    rows = []
+    for mass in DARTMOUTH_MASSES:
+        ref = dartmouth_at(dart[(mass, "p00")], 5e9)
+        for feh, tag in DARTMOUTH_FEHS:
+            v = dartmouth_at(dart[(mass, tag)], 5e9)
+            rows.append((mass, feh, v["logt"] - ref["logt"], v["logl"] - ref["logl"],
+                         v["logr"] - ref["logr"]))
+    return rows
+
+
 def bhac_at(rows, age_gyr):
     lt = math.log10(age_gyr * 1e9)
     return {
@@ -523,7 +540,8 @@ def write_low_mass(path, bh, dart_rows):
                 "Source (rows without prefix): Baraffe, Homeier, Allard & Chabrier 2015,",
                 "A&A 577, A42 (BHAC15 tracks); derived numbers only, nearest tabulated",
                 "ages, every track to its end (10 Gyr). Lsun = 3.839e33 erg/s, Rsun = 6.96e10 cm.",
-                "columns: mass_msun age_gyr teff log_l r_rsun",
+                "columns: mass_msun age_gyr teff log_l r_rsun log_tc log_rhoc",
+                "(log_tc: central T in K, log_rhoc: central density in g/cm3, log10)",
                 "Source (D rows): Dartmouth (Dotter et al. 2008, ApJS 178, 89) tracks via",
                 "Kiauhoku (Claytor et al. 2020; Zenodo 14908017, CC-BY 4.0), [a/Fe] = 0:",
                 "value at feh minus value at feh 0, at 5 Gyr, linear in age.",
@@ -541,7 +559,7 @@ def write_low_mass(path, bh, dart_rows):
                 idx.append(len(rows) - 1)
             for k in idx:
                 v = rows[k]
-                f.write("\t".join(g(x) for x in (mass, 10 ** v[1] / 1e9, v[2], v[3], v[5])) + "\n")
+                f.write("\t".join(g(x) for x in (mass, 10 ** v[1] / 1e9, v[2], v[3], v[5], v[7], v[8])) + "\n")
         for row in dart_rows:
             f.write("D\t" + "\t".join(g(x) for x in row) + "\n")
 
@@ -608,18 +626,7 @@ def main():
     write_profiles(os.path.join(a.data, "stellar-profiles.tsv"), runs, prof_masses)
 
     bh = read_bhac15(a.bhac15)
-    dart = {}
-    for mass in DARTMOUTH_MASSES:
-        for tag in ("m10", "m05", "p00", "p05"):
-            path = os.path.join(a.dartmouth, f"m{int(round(mass * 100)):03d}feh{tag}afep0.trk")
-            dart[(mass, tag)] = read_dartmouth(path)
-    dart_rows = []
-    for mass in DARTMOUTH_MASSES:
-        ref = dartmouth_at(dart[(mass, "p00")], 5e9)
-        for feh, tag in DARTMOUTH_FEHS:
-            v = dartmouth_at(dart[(mass, tag)], 5e9)
-            dart_rows.append((mass, feh, v["logt"] - ref["logt"], v["logl"] - ref["logl"],
-                              v["logr"] - ref["logr"]))
+    dart_rows = dartmouth_rows(a.dartmouth)
     write_low_mass(os.path.join(a.data, "stellar-low-mass.tsv"), bh, dart_rows)
 
     # ---- checks quoted in STELLAR.md

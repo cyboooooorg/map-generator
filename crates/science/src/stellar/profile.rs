@@ -14,11 +14,12 @@
 //!   rank; a layer present in one profile only is kept when that profile is
 //!   the nearer one ([`blend_layers`]).
 //! - Below 0.30 M☉, the n = 1.5 polytrope scaled to the star's mass and
-//!   radius: one convective layer, fusion share from ε ∝ ρ T⁴.
+//!   radius: one convective layer, fusion share from ε ∝ ρ T⁴, temperature
+//!   T_c θ with T_c from Baraffe et al. (2015).
 
 use super::polytrope::{INDEX, polytrope};
 use super::tables::{ProfileLayer, ProfileSample, ProfileTrack, Snapshot, profiles};
-use super::values::{TrackClock, track_xc_frac};
+use super::values::{TrackClock, low_mass_central_temperature, track_xc_frac};
 use super::{StellarError, bracket, bracket_clamped, bracket_log, lerp, main_sequence};
 use crate::constants::{GRAVITATIONAL_CONSTANT, SOLAR_MASS, SOLAR_RADIUS};
 use crate::units::{Dex, Fraction, Gyr, Kelvin, KilogramPerCubicMetre, Metre, Pascal, SolarMass};
@@ -71,7 +72,12 @@ pub fn profile(
     let star = main_sequence(mass, metallicity, age)?;
     if mass.0 < POLYTROPE_BELOW {
         let radius = Metre(star.radius.0 * SOLAR_RADIUS.0);
-        Ok(polytrope_profile(mass, radius, star.effective_temperature))
+        Ok(polytrope_profile(
+            mass,
+            radius,
+            star.effective_temperature,
+            age,
+        ))
     } else {
         Ok(yrec(mass.0, metallicity.0, age.0).into_profile())
     }
@@ -255,10 +261,14 @@ fn blend_layers(a: &[ProfileLayer], b: &[ProfileLayer], weight: f64) -> Vec<Prof
 }
 
 /// The polytrope scaled to a star of `mass` and `radius`: ρ_c = ρ̄ ξ₁/(3|θ'₁|),
-/// P_c = G M² / (4π (n + 1) θ'₁² R⁴), T_c = μ m_u P_c / (k ρ_c); the
-/// temperature is held at T_eff where T_c θ falls below it, at the
-/// photosphere.
-fn polytrope_profile(mass: SolarMass, radius: Metre, teff: Kelvin) -> StellarProfile {
+/// P_c = G M² / (4π (n + 1) θ'₁² R⁴).
+///
+/// Calibration: the temperature is T_c θ with T_c from Baraffe et al.
+/// (2015) at the star's mass and `age`, not μ m_u P_c/(k ρ_c): the ideal gas
+/// misses the partial degeneracy of these stars and overshoots T_c by a
+/// third at 0.1 M☉. T is held at T_eff where T_c θ falls below it, at the
+/// photosphere (r = 1, where θ = 0).
+fn polytrope_profile(mass: SolarMass, radius: Metre, teff: Kelvin, age: Gyr) -> StellarProfile {
     let solution = polytrope();
     let (m, r) = (mass.0 * SOLAR_MASS.0, radius.0);
     let mean_density = m / (4.0 / 3.0 * PI * r.powi(3));
@@ -266,8 +276,7 @@ fn polytrope_profile(mass: SolarMass, radius: Metre, teff: Kelvin) -> StellarPro
     let slope = solution.surface_slope();
     let central_pressure =
         GRAVITATIONAL_CONSTANT * m * m / (4.0 * PI * (INDEX + 1.0) * slope * slope * r.powi(4));
-    let central_temperature =
-        MEAN_MOLECULAR_WEIGHT * ATOMIC_MASS_UNIT * central_pressure / (BOLTZMANN * central_density);
+    let central_temperature = low_mass_central_temperature(mass.0, age.0);
     let whole = StellarLayer {
         outer_radius: fraction(1.0),
         outer_mass: fraction(1.0),
@@ -294,14 +303,6 @@ fn polytrope_profile(mass: SolarMass, radius: Metre, teff: Kelvin) -> StellarPro
         samples,
     }
 }
-
-/// Definition: mean molecular weight of a fully ionised gas,
-/// 1/(2X + 3Y/4 + Z/2), at X = 0.70, Y = 0.28, Z = 0.02.
-const MEAN_MOLECULAR_WEIGHT: f64 = 0.617;
-/// Source: atomic mass constant, kg (CODATA 2018).
-const ATOMIC_MASS_UNIT: f64 = 1.660_539_066_60e-27;
-/// Source: Boltzmann constant, J K⁻¹ (CODATA 2018, exact since the 2019 SI).
-const BOLTZMANN: f64 = 1.380_649e-23;
 
 #[cfg(test)]
 mod tests {
@@ -438,6 +439,20 @@ mod tests {
         let rho = p.samples[0].density.0 / KG_M3_PER_G_CM3;
         let error = rho / LATE_M_DWARF_CENTRAL_DENSITY - 1.0;
         assert!(error.abs() < LATE_M_DWARF_TOLERANCE, "ρ_c {rho}");
+    }
+
+    /// Source: central temperature of a 0.1 M☉ star at 5 Gyr, log T_c 6.661
+    /// (Baraffe et al. 2015, BHAC15 tracks).
+    const LATE_M_DWARF_CENTRAL_TEMPERATURE: f64 = 4.58e6;
+    /// Definition: tolerance on the BHAC15 central temperature.
+    const CENTRAL_TEMPERATURE_FROM_BARAFFE: f64 = 0.03;
+
+    #[test]
+    fn a_late_m_dwarf_central_temperature_matches_baraffe() {
+        let p = profile(SolarMass(0.1), Dex(0.0), Gyr(5.0)).unwrap();
+        let t = p.samples[0].temperature.0;
+        let error = t / LATE_M_DWARF_CENTRAL_TEMPERATURE - 1.0;
+        assert!(error.abs() < CENTRAL_TEMPERATURE_FROM_BARAFFE, "T_c {t}");
     }
 
     #[test]

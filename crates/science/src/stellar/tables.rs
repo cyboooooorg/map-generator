@@ -73,6 +73,8 @@ pub(crate) struct LowMassRow {
     pub log_teff: f64,
     pub log_l: f64,
     pub log_r: f64,
+    /// Central temperature, K.
+    pub log_tc: f64,
 }
 
 /// A Baraffe track of one mass at solar metallicity.
@@ -213,7 +215,7 @@ fn parse_low_mass(text: &str) -> (Vec<LowMassTrack>, Vec<Offset>) {
             });
             continue;
         }
-        let [mass, age, teff, log_l, r] = numbers(FILE, line, &fields);
+        let [mass, age, teff, log_l, r, log_tc, _log_rhoc] = numbers(FILE, line, &fields);
         if teff <= 0.0 || r <= 0.0 {
             panic!("{FILE} line {line}: T_eff and R must be positive");
         }
@@ -222,6 +224,7 @@ fn parse_low_mass(text: &str) -> (Vec<LowMassTrack>, Vec<Offset>) {
             log_teff: teff.log10(),
             log_l,
             log_r: r.log10(),
+            log_tc,
         };
         match tracks.last_mut() {
             Some(track) if track.mass == mass => {
