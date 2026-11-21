@@ -46,6 +46,7 @@ mod codes {
     pub(crate) const ICE_LINE: &str = "system.draw.ice-line";
     pub(crate) const MASS: &str = "system.draw.mass";
     pub(crate) const SEMI_MAJOR_AXIS: &str = "system.draw.semi-major-axis";
+    pub(crate) const INSOLATION: &str = "system.draw.insolation";
     pub(crate) const PERIOD: &str = "system.draw.period";
     pub(crate) const ECCENTRICITY: &str = "system.draw.eccentricity";
     pub(crate) const PERIHELION_LONGITUDE: &str = "system.draw.perihelion-longitude";
@@ -190,10 +191,12 @@ enum Slot<'a> {
     Family(u32),
 }
 
-/// A try's mass and axis, before classifying.
+/// A try's mass and axis, before classifying, and the flux the axis
+/// comes from when an asked insolation band set it.
 struct Proposed {
     mass: EarthMass,
     a: AstronomicalUnit,
+    flux: Option<EarthFlux>,
 }
 
 /// The state shared by every slot of one system.
@@ -279,6 +282,7 @@ where
                 let proposed = Proposed {
                     mass,
                     a: proposal.a,
+                    flux: None,
                 };
                 (proposed, Provenance::Drawn, None)
             }
@@ -295,6 +299,12 @@ where
             Err(error) if archetype.is_some() => return Err(error),
             Err(_) => return Ok(None),
         };
+        // The class comes from the circular trial: its flux is the cause.
+        let classified_flux = circular
+            .sources
+            .iter()
+            .map(|source| source.flux.node())
+            .collect::<Vec<_>>();
         // An eccentricity is asked only when the archetype gives its range.
         let (e, e_provenance) = match archetype.and_then(|(_, placement)| placement.eccentricity) {
             Some((lo, hi)) => (lo + (hi - lo) * uniform(rng), Provenance::Input),
@@ -336,13 +346,8 @@ where
         {
             return Ok(None);
         }
-        let flux = trial
-            .sources
-            .iter()
-            .map(|source| source.flux.node())
-            .collect::<Vec<_>>();
         let mut causes = vec![trial.mass.node(), trial.orbit.semi_major_axis.node()];
-        causes.extend(flux);
+        causes.extend(classified_flux);
         trace.record(Code::of(codes::CLASS), outcome.class, &causes)?;
         Ok(Some((trial, outcome)))
     }
@@ -352,17 +357,22 @@ where
     fn band(&self, placement: &ArchetypePlacement, rng: &mut ChaCha8Rng) -> Proposed {
         let state = &self.system.star.state;
         let host = *state.mass.value();
-        let a = match placement.band {
+        let (a, flux) = match placement.band {
             Band::Insolation(lo, hi) => {
                 let flux = EarthFlux(log_uniform(rng, lo.0, hi.0));
-                AstronomicalUnit((state.luminosity.value().0 / flux.0).sqrt())
+                let a = AstronomicalUnit((state.luminosity.value().0 / flux.0).sqrt());
+                (a, Some(flux))
             }
-            Band::Period(lo, hi) => orbit::semi_major_axis(Day(log_uniform(rng, lo.0, hi.0)), host),
+            Band::Period(lo, hi) => (
+                orbit::semi_major_axis(Day(log_uniform(rng, lo.0, hi.0)), host),
+                None,
+            ),
         };
         let (lo, hi) = placement.mass;
         Proposed {
             mass: EarthMass(log_uniform(rng, lo.0, hi.0)),
             a,
+            flux,
         }
     }
 
@@ -399,7 +409,11 @@ where
         let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
         let a = propose(self.system.ctx, 0, &mut rng, placed).a;
         let radius = |mass: EarthMass, trace: &mut Trace| {
-            let proposed = Proposed { mass, a };
+            let proposed = Proposed {
+                mass,
+                a,
+                flux: None,
+            };
             let trial = self.circular(seed, &proposed, Provenance::Drawn, None, trace)?;
             Ok::<_, SystemError>((self.classify)(&trial, trace).ok().map(|o| o.radius.0))
         };
@@ -412,7 +426,8 @@ where
 
     /// The trial of a try on a circular orbit: its mass, axis and period,
     /// eccentricity and perihelion longitude imposed at zero, and the
-    /// sources at that orbit.
+    /// sources at that orbit. An axis set by an insolation band is
+    /// recorded from the band's flux (the leaf) and the luminosity.
     fn circular(
         &self,
         seed: Seed,
@@ -424,7 +439,17 @@ where
         let star = self.system.star;
         let host = &star.state.mass;
         let mass = trace.leaf(Code::of(codes::MASS), proposed.mass, provenance)?;
-        let a = trace.leaf(Code::of(codes::SEMI_MAJOR_AXIS), proposed.a, provenance)?;
+        let a = match proposed.flux {
+            Some(flux) => {
+                let flux = trace.leaf(Code::of(codes::INSOLATION), flux, provenance)?;
+                trace.record(
+                    Code::of(codes::SEMI_MAJOR_AXIS),
+                    proposed.a,
+                    &[flux.node(), star.state.luminosity.node()],
+                )?
+            }
+            None => trace.leaf(Code::of(codes::SEMI_MAJOR_AXIS), proposed.a, provenance)?,
+        };
         let period = trace.record(
             Code::of(codes::PERIOD),
             orbit::period(proposed.a, *host.value()),

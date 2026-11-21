@@ -240,6 +240,14 @@ radius, mean density), since it runs on a scratch trace. The orbit's
 perihelion longitude draws from `seed.derive("orbit/<trial label>")`. The
 engine version is 2.
 
+In the trace, what was drawn or asked is a leaf and the rest is recorded
+from it: an asked insolation band's flux (`system.draw.insolation`) is the
+leaf its axis comes from, with the star's luminosity; the class
+(`system.draw.class`) cites the mass, the axis and the flux of the
+circular trial it was classified on; and the spin's rate as a fraction of
+break-up (`system.draw.break-up-fraction`) is the leaf its period comes
+from, with the mass.
+
 ### Choices of the app
 
 A `Definition:` picks what to draw, never a physical rule. These are the

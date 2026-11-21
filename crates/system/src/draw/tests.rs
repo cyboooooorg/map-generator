@@ -415,6 +415,41 @@ fn an_asked_eccentricity_is_an_input_only_when_the_archetype_gives_one() {
 }
 
 #[test]
+fn an_insolation_band_traces_its_flux_and_the_class_its_circular_trial() {
+    let mut trace = Trace::new();
+    let (_, placed) = draw_system(&asking(2, &[("earth-like", 1)]), &mut trace, model).unwrap();
+    let earth = placed.iter().find(|p| p.asked.is_some()).unwrap();
+    let from = |node| match &trace.node(node).unwrap().origin {
+        Origin::Derived { from } => from.clone(),
+        other => panic!("{other:?}"),
+    };
+    let code = |node| trace.node(node).unwrap().code.clone();
+    // The axis comes from the asked flux (an input leaf) and the luminosity.
+    let axis_causes = from(earth.trial.orbit.semi_major_axis.node());
+    assert_eq!(code(axis_causes[0]), Code::of("system.draw.insolation"));
+    assert_eq!(
+        trace.node(axis_causes[0]).unwrap().origin,
+        Origin::Leaf(Provenance::Input)
+    );
+    // The class cites the circular trial's flux, not the eccentric orbit's.
+    let class = (0..trace.len())
+        .map(|i| serde_json::from_value(serde_json::json!(i)).unwrap())
+        .find(|&node| {
+            code(node) == Code::of("system.draw.class")
+                && from(node).contains(&earth.trial.mass.node())
+        })
+        .expect("the class node of the earth-like");
+    let causes = from(class);
+    let final_flux = earth.trial.sources.primary().flux.node();
+    assert!(!causes.contains(&final_flux));
+    assert!(
+        causes
+            .iter()
+            .any(|&node| code(node) == Code::of("system.draw.flux"))
+    );
+}
+
+#[test]
 fn the_solar_giants_can_be_asked_together() {
     let giants = ["jupiter-like", "saturn-like", "uranus-like", "neptune-like"];
     for seed in 0..10 {

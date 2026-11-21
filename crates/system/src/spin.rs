@@ -8,12 +8,13 @@ use crate::random::{log_uniform, normal, uniform};
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 use science::constants::{DAY, EARTH_EQUATORIAL_RADIUS, EARTH_MASS_PARAMETER};
-use science::units::{Day, Degree, EarthMass, EarthRadius};
-use timeline::{Code, PlanetClass, Provenance, Seed, Spin, Trace, Traced};
+use science::units::{Day, Degree, EarthMass, EarthRadius, Fraction};
+use timeline::{Code, ContractError, PlanetClass, Provenance, Seed, Spin, Trace, Traced};
 
 /// Cause codes of the spin's nodes.
 mod codes {
     pub(crate) const ROTATION_PERIOD: &str = "system.draw.rotation-period";
+    pub(crate) const BREAK_UP_FRACTION: &str = "system.draw.break-up-fraction";
     pub(crate) const OBLIQUITY: &str = "system.draw.obliquity";
 }
 
@@ -64,7 +65,9 @@ fn isotropic_obliquity(u: f64) -> Degree {
 /// Drawn from `body_seed.derive("spin")`: a rocky planet takes one
 /// 3-vector spin (its length gives the period, its angle to the orbit
 /// normal the obliquity); a giant takes the obliquity then the rate
-/// fraction. An archetype's obliquity replaces the drawn one
+/// fraction. The rate as a fraction of break-up is the drawn leaf
+/// (`system.draw.break-up-fraction`) and the period is recorded from it
+/// and the mass. An archetype's obliquity replaces the drawn one
 /// (`Provenance::Input`) after the draw, so asking it never shifts the
 /// period.
 ///
@@ -84,16 +87,13 @@ pub(crate) fn spin(
     let mut rng = ChaCha8Rng::seed_from_u64(body_seed.derive("spin").get());
     let gm = EARTH_MASS_PARAMETER * mass.value().0;
     let radius_metres = EARTH_EQUATORIAL_RADIUS.0 * radius.0;
-    let (period_seconds, drawn_obliquity) = if is_giant(class) {
+    // The break-up angular rate, `sqrt(GM / R^3)`: a giant's `v_break / R`.
+    let critical = (gm / radius_metres.powi(3)).sqrt();
+    let (fraction, drawn_obliquity) = if is_giant(class) {
         let obliquity = isotropic_obliquity(uniform(&mut rng));
         let fraction = log_uniform(&mut rng, GIANT_FRACTION_RANGE.0, GIANT_FRACTION_RANGE.1);
-        let break_up = (gm / radius_metres).sqrt();
-        (
-            std::f64::consts::TAU * radius_metres / (fraction * break_up),
-            obliquity,
-        )
+        (fraction, obliquity)
     } else {
-        let critical = (gm / radius_metres.powi(3)).sqrt();
         let sigma = ROCKY_SIGMA_OVER_CRITICAL * critical;
         let mut vector = [0.0_f64; 3];
         for _ in 0..ROCKY_MAX_DRAWS {
@@ -113,12 +113,23 @@ pub(crate) fn spin(
         }
         let rate = length(vector);
         let obliquity = Degree((vector[2] / rate).clamp(-1.0, 1.0).acos().to_degrees());
-        (std::f64::consts::TAU / rate, obliquity)
+        (rate / critical, obliquity)
     };
+    let fraction = Fraction::new(fraction).ok_or_else(|| {
+        SystemError::Contract(ContractError::NotFinite {
+            code: codes::BREAK_UP_FRACTION.to_owned(),
+        })
+    })?;
+    let fraction = trace.leaf(
+        Code::of(codes::BREAK_UP_FRACTION),
+        fraction,
+        Provenance::Drawn,
+    )?;
+    let period_seconds = std::f64::consts::TAU / (fraction.value().get() * critical);
     let period = trace.record(
         Code::of(codes::ROTATION_PERIOD),
         Day(period_seconds / DAY.0),
-        &[mass.node()],
+        &[fraction.node(), mass.node()],
     )?;
     let obliquity = match archetype.and_then(|placed| placed.obliquity) {
         Some(asked) => trace.leaf(Code::of(codes::OBLIQUITY), asked, Provenance::Input)?,
@@ -294,7 +305,12 @@ mod tests {
         assert_eq!(node.code, Code::of(codes::OBLIQUITY));
         let period = trace.node(spin.rotation_period.node()).unwrap();
         assert_eq!(period.code, Code::of(codes::ROTATION_PERIOD));
-        assert!(matches!(period.origin, Origin::Derived { .. }));
+        let Origin::Derived { from } = &period.origin else {
+            panic!("{:?}", period.origin);
+        };
+        let fraction = trace.node(from[0]).unwrap();
+        assert_eq!(fraction.code, Code::of(codes::BREAK_UP_FRACTION));
+        assert!(matches!(fraction.origin, Origin::Leaf(Provenance::Drawn)));
     }
 
     #[test]
