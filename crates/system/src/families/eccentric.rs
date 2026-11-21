@@ -3,11 +3,6 @@
 //! giants first, so that an inner planet knows the periapsis it must
 //! stay inside, then the small planets.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
-
 use super::laws::{
     ECCENTRIC_GIANT_MASS, fulton_axis, innermost_period, jupiter_masses, next_giant_axis,
     small_planet_mass,

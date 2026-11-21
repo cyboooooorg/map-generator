@@ -6,11 +6,6 @@
 //! range touches this file only. Study:
 //! `docs/superpowers/studies/2026-11-21-architecture-families`.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the family draw of a later task")
-)]
-
 /// Definition: planets of a compact system, uniform. Study row 1; source
 /// He 2019 (3.86 planets per cluster) and EPOS I (7 and more), the
 /// flattening is ours.

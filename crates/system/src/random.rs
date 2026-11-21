@@ -18,10 +18,6 @@ pub(crate) fn uniform(rng: &mut ChaCha8Rng) -> f64 {
 /// 1958, Ann. Math. Stat. 29, 610), two uniforms per number: the same
 /// arithmetic as the planet model's own copy (`planet::draws`), to be
 /// unified with it later.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn normal(rng: &mut ChaCha8Rng) -> f64 {
     let radius = (-2.0 * uniform(rng).ln()).sqrt();
     radius * (std::f64::consts::TAU * uniform(rng)).cos()
@@ -29,39 +25,23 @@ pub(crate) fn normal(rng: &mut ChaCha8Rng) -> f64 {
 
 /// A number whose logarithm is uniform between `ln lo` and `ln hi`, in
 /// `[lo, hi)`; one uniform.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn log_uniform(rng: &mut ChaCha8Rng, lo: f64, hi: f64) -> f64 {
     (lo * (hi / lo).powf(uniform(rng))).clamp(lo, hi.max(lo))
 }
 
 /// A Rayleigh number of scale `sigma` (density `x/σ² exp(-x²/2σ²)`), by
 /// its inverse CDF; one uniform.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn rayleigh(rng: &mut ChaCha8Rng, sigma: f64) -> f64 {
     sigma * (-2.0 * uniform(rng).ln()).sqrt()
 }
 
 /// The absolute value of a normal number of mean 0 and scale `sigma`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn half_gaussian(rng: &mut ChaCha8Rng, sigma: f64) -> f64 {
     (sigma * normal(rng)).abs()
 }
 
 /// `exp(mu + sigma z)`, `z` standard normal: a log-normal number whose
 /// median is `exp(mu)`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn log_normal(rng: &mut ChaCha8Rng, mu: f64, sigma: f64) -> f64 {
     (mu + sigma * normal(rng)).exp()
 }
@@ -70,10 +50,6 @@ pub(crate) fn log_normal(rng: &mut ChaCha8Rng, mu: f64, sigma: f64) -> f64 {
 /// (ACM TOMS 26, 363, section 4: `d = shape - 1/3`, `c = 1/sqrt(9d)`,
 /// accept `d v` when `ln u < x²/2 + d - d v + d ln v`); below a shape of
 /// 1, their section 6 boost: `Gamma(shape + 1) × u^(1/shape)`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn gamma(rng: &mut ChaCha8Rng, shape: f64) -> f64 {
     if shape < 1.0 {
         let boosted = gamma(rng, shape + 1.0);
@@ -97,10 +73,6 @@ pub(crate) fn gamma(rng: &mut ChaCha8Rng, shape: f64) -> f64 {
 /// A Beta(`a`, `b`) number, `X / (X + Y)` with `X`, `Y` Gamma of shapes
 /// `a` and `b`, in the open interval (0, 1): a result that rounds to
 /// exactly 0 or 1 is drawn again.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn beta(rng: &mut ChaCha8Rng, a: f64, b: f64) -> f64 {
     loop {
         let x = gamma(rng, a);
@@ -115,10 +87,6 @@ pub(crate) fn beta(rng: &mut ChaCha8Rng, a: f64, b: f64) -> f64 {
 /// One half of a Beta(`a`, `b`) law: below `median` (`upper` false) or
 /// at and above it (`upper` true), by drawing the whole law again until
 /// the number falls on the asked side (half the draws on average).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn beta_half(rng: &mut ChaCha8Rng, a: f64, b: f64, median: f64, upper: bool) -> f64 {
     loop {
         let value = beta(rng, a, b);
@@ -133,10 +101,6 @@ pub(crate) fn beta_half(rng: &mut ChaCha8Rng, a: f64, b: f64, median: f64, upper
 /// broken power law in `dN/d ln x`, continuous at the break. Drawn by the
 /// inverse CDF of each segment, the segment picked by its weight; two
 /// uniforms. An empty support (`hi <= lo`) returns `lo`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn broken_power_law(
     rng: &mut ChaCha8Rng,
     brk: f64,

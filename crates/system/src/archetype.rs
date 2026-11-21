@@ -35,10 +35,6 @@ pub struct ArchetypeId(pub Code);
 /// log-uniform and eccentricity uniform (`Definition:`); a fixed value
 /// is a zero-width range.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "read by the system draw, task 8")
-)]
 pub struct ArchetypePlacement {
     /// The orbit band.
     pub band: Band,
@@ -54,10 +50,6 @@ pub struct ArchetypePlacement {
 
 /// The orbit band of an archetype.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "read by the system draw, task 8")
-)]
 pub enum Band {
     /// A range of the circular flux `L/a²`, as legacy.
     Insolation(EarthFlux, EarthFlux),
@@ -67,10 +59,6 @@ pub enum Band {
 
 /// The host an archetype names.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "read by the system draw, task 8")
-)]
 pub struct Host {
     /// Host mass.
     pub mass: SolarMass,
@@ -268,10 +256,6 @@ static PLACEMENTS: [(&str, ArchetypePlacement); 14] = [
 
 /// The placement of a planet archetype; `None` for a moon or an unknown
 /// id.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "read by the system draw, task 8")
-)]
 pub fn placement(id: &ArchetypeId) -> Option<&'static ArchetypePlacement> {
     PLACEMENTS
         .iter()
@@ -285,10 +269,6 @@ pub fn placement(id: &ArchetypeId) -> Option<&'static ArchetypePlacement> {
 /// wins over the archetypes' (a star named is honoured, whatever it
 /// does to the planets asked); an archetype's age is kept only when the
 /// request names no date.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "read by the system draw, task 8")
-)]
 pub(crate) fn asked_host(
     asked: &BTreeMap<ArchetypeId, u32>,
     host_mass: Option<SolarMass>,

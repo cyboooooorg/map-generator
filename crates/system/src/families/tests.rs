@@ -133,7 +133,7 @@ fn leaf<T: NodeValueOf>(trace: &mut Trace, code: &'static str, value: T) -> Trac
 
 /// A placed planet of `mass` M⊕ at `au` around a 1 M☉ host; only the
 /// mass, the orbit and `asked` matter to the proposers.
-fn placed(trace: &mut Trace, mass: f64, au: f64, e: f64, asked: bool) -> Placed {
+pub(crate) fn placed(trace: &mut Trace, mass: f64, au: f64, e: f64, asked: bool) -> Placed {
     let band = |trace: &mut Trace| BandLight {
         flux: leaf(trace, "test.band-flux", WattPerSquareMetre(1.0)),
         fluence: leaf(trace, "test.band-fluence", JoulePerSquareMetre(1.0)),

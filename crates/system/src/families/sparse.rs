@@ -1,11 +1,6 @@
 //! The sparse family: none to two planets, each small or a giant with
 //! odds 1/2 (study row 5). Slots: the small planets, then the giants.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
-
 use super::laws::{ECCENTRIC_GIANT_MASS, jupiter_masses, small_planet_mass, sparse_axis};
 use super::table::{SPARSE_GIANT_CHANCE, SPARSE_PLANETS};
 use super::{Counts, FamilyContext, Placed, Proposal, SlotKind, uniform_count};

@@ -4,12 +4,6 @@
 //! One source for now, the host star: the star's high-energy history is
 //! computed once ([`light`]) and serves every planet around it.
 
-// Consumed by the system draw, a later task of the planet draw plan.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the planet draw, a later task")
-)]
-
 use crate::SystemError;
 use crate::star::Star;
 use science::orbit::{circular_flux, equilibrium, mean_flux_factor};

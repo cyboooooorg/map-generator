@@ -2,11 +2,6 @@
 //! a distant giant companion (study row 3). Slot 0 is the hot Jupiter,
 //! slot 1 the companion.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
-
 use super::laws::{
     COMPANION_MASS, HOT_JUPITER_MASS, companion_axis, hot_jupiter_axis, jupiter_masses,
 };

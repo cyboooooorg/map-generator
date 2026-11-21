@@ -1,18 +1,23 @@
 //! The system draw. Owner: mapgen3.
 //!
-//! [`draw_with`] draws the star, then (in later tasks) the family and
-//! the placements. `classify` is a parameter: the planet model's
-//! `class_of` is mapgen1's, and the tests pass a closure.
+//! [`draw_with`] draws the star, the family and the planets (in a later
+//! task, their designations and spins). `classify` is a parameter: the
+//! planet model's `class_of` is mapgen1's, and the tests pass a closure.
 
+use rand_chacha::ChaCha8Rng;
+use rand_core::SeedableRng;
 use timeline::{Designation, Seed, StarState, SystemNumber, Trace, Traced};
 
+use crate::archetype::asked_host;
 use crate::error::SystemError;
-use crate::families::Family;
+use crate::families::{Family, FamilyContext, Placed, pick_family, possible};
 use crate::inputs::{Inputs, Request};
 use crate::placement::{Placement, Trial, TrialOutcome};
+use crate::sources::light;
 use crate::star;
 use science::units::Gyr;
 
+mod place;
 #[cfg(test)]
 mod tests;
 
@@ -37,38 +42,58 @@ pub struct Drawn {
 
 /// Draws the system of `inputs`, recording every node in `trace`.
 ///
-/// This step draws the star only and returns no placement; the family is
-/// a placeholder until the family draw lands. `classify` reads the class
-/// of a trial; it is not called yet.
+/// The star comes first (its mass and date from the request, else from
+/// the asked archetypes' host), then the family on
+/// `seed.derive("family")`, then the planets. The placements stay empty
+/// until the designations land; the placed planets are reachable through
+/// [`draw_system`] meanwhile.
 ///
 /// # Errors
 ///
 /// `BodyRequestNotDrawn` for a [`Request::Body`] (a single body is not
-/// drawn by this entry point), and the star's errors.
+/// drawn by this entry point), the asked archetypes' errors
+/// (`UnknownArchetype`, `IncompatibleHost`, `TooManyPlanets`, `NoRoom`),
+/// the star's errors and a classifier error on an asked archetype.
 pub fn draw_with(
     inputs: &Inputs,
     trace: &mut Trace,
-    _classify: impl Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>,
+    classify: impl Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>,
 ) -> Result<Drawn, SystemError> {
+    draw_system(inputs, trace, classify).map(|(drawn, _)| drawn)
+}
+
+/// [`draw_with`], with the placed planets sorted by semi-major axis.
+pub(crate) fn draw_system(
+    inputs: &Inputs,
+    trace: &mut Trace,
+    classify: impl Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>,
+) -> Result<(Drawn, Vec<Placed>), SystemError> {
     let request = match &inputs.request {
         Request::System(request) => request,
         Request::Body(_) => return Err(SystemError::BodyRequestNotDrawn),
     };
-    let star = star::star(
-        request.host_mass,
-        request.metallicity,
-        inputs.present,
-        inputs.seed,
-        trace,
-    )?;
-    Ok(Drawn {
+    let (host_mass, present) = asked_host(&request.archetypes, request.host_mass, inputs.present)?;
+    let star = star::star(host_mass, request.metallicity, present, inputs.seed, trace)?;
+    let mut rng = ChaCha8Rng::seed_from_u64(inputs.seed.derive("family").get());
+    let family = pick_family(&mut rng, |family| possible(family, &star.state));
+    let ctx = FamilyContext::draw(family, &star.state, &mut rng);
+    let light = light(&star)?;
+    let system = place::System {
+        star: &star,
+        light: &light,
+        ctx: &ctx,
+        seed: inputs.seed,
+    };
+    let placed = place::place(&system, &request.archetypes, trace, &classify)?;
+    let drawn = Drawn {
         designation: Designation::star(system_number(inputs.seed)?),
         seed: inputs.seed,
         star: star.state,
         age: star.age,
-        family: Family::Sparse,
+        family,
         placements: Vec::new(),
-    })
+    };
+    Ok((drawn, placed))
 }
 
 /// The survey number, drawn from the seed: it may collide with another

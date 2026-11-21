@@ -8,11 +8,6 @@
 //! A period law truncated at the stellar surface leaves the Roche floor
 //! to the placement loop, which knows the classified density.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
-
 use super::{FULTON_OUTER_SUPPORT, Family, FamilyContext, HOT_JUPITER_MAX_PERIOD};
 use crate::random::{
     beta, beta_half, broken_power_law, half_gaussian, log_normal, log_uniform, normal, rayleigh,

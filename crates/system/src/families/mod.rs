@@ -20,29 +20,17 @@ mod solar_like;
 mod sparse;
 pub(crate) mod table;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 /// Source: EPOS I, a compact system reaches 640 d at most (study row 1,
 /// outer extent 35-640 d).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the family draw of a later task")
-)]
 const COMPACT_MAX_PERIOD: Day = Day(640.0);
 
 /// Source: Dawson & Johnson 2018, hot Jupiters up to 10 d (study G 1.1).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the family draw of a later task")
-)]
 const HOT_JUPITER_MAX_PERIOD: Day = Day(10.0);
 
 /// Source: Fulton 2021, the broken power law's support reaches 30 AU for
 /// the Sun (study G 3.1); scaled by the ice line (a Definition).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the family draw of a later task")
-)]
 const FULTON_OUTER_SUPPORT: AstronomicalUnit = AstronomicalUnit(30.0);
 
 /// The architecture of a drawn system. Drawn evenly (a user decision of
@@ -83,10 +71,6 @@ impl fmt::Display for Family {
 
 /// Picks a family evenly among those `possible` accepts. `Sparse` must be
 /// possible (it may hold no planet), so the loop ends.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the family draw of a later task")
-)]
 pub(crate) fn pick_family(rng: &mut ChaCha8Rng, possible: impl Fn(Family) -> bool) -> Family {
     const ALL: [Family; 5] = [
         Family::Compact,
@@ -105,10 +89,6 @@ pub(crate) fn pick_family(rng: &mut ChaCha8Rng, possible: impl Fn(Family) -> boo
 /// False only when the whole period support of `family` lies inside the
 /// star: its longest period is shorter than that of an orbit at the
 /// stellar surface. True for every host of 0.08 to 8 M☉; a test pins it.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the family draw of a later task")
-)]
 pub(crate) fn possible(family: Family, star: &StarState) -> bool {
     let mass = *star.mass.value();
     let surface = orbit::period(stellar_radius(star), mass);
@@ -131,10 +111,6 @@ fn stellar_radius(star: &StarState) -> AstronomicalUnit {
 /// How many family slots a system has: `small` small-planet slots and
 /// `giants` giant slots. Each family orders them (its module says how).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) struct Counts {
     pub small: u32,
     pub giants: u32,
@@ -142,10 +118,6 @@ pub(crate) struct Counts {
 
 /// What a family slot's proposal is: a small planet or a giant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) enum SlotKind {
     Small,
     Giant,
@@ -153,10 +125,6 @@ pub(crate) enum SlotKind {
 
 /// A family slot's proposed mass and semi-major axis, before classifying.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) struct Proposal {
     pub mass: EarthMass,
     pub a: AstronomicalUnit,
@@ -166,10 +134,6 @@ pub(crate) struct Proposal {
 /// A trial the placement loop kept, with its classified outcome, its
 /// label (for its orbit stream) and the archetype asked for it, if any.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) struct Placed {
     pub trial: Trial,
     pub outcome: TrialOutcome,
@@ -177,10 +141,6 @@ pub(crate) struct Placed {
     pub asked: Option<ArchetypeId>,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 impl Placed {
     fn mass(&self) -> EarthMass {
         *self.trial.mass.value()
@@ -208,10 +168,6 @@ impl Placed {
 }
 
 /// The drawn planet of `kind` furthest out, the anchor of a chain.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 fn outermost(placed: &[Placed], kind: SlotKind) -> Option<&Placed> {
     placed
         .iter()
@@ -220,10 +176,6 @@ fn outermost(placed: &[Placed], kind: SlotKind) -> Option<&Placed> {
 }
 
 /// The drawn planet of `kind` furthest in.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 fn innermost(placed: &[Placed], kind: SlotKind) -> Option<&Placed> {
     placed
         .iter()
@@ -232,20 +184,12 @@ fn innermost(placed: &[Placed], kind: SlotKind) -> Option<&Placed> {
 }
 
 /// A count uniform in `(low, high)`, both included.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 fn uniform_count(rng: &mut ChaCha8Rng, (low, high): (u32, u32)) -> u32 {
     let span = f64::from(high - low + 1);
     low + ((uniform(rng) * span) as u32).min(high - low)
 }
 
 /// The family's slot counts, drawn on the `family` stream.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn counts(family: Family, rng: &mut ChaCha8Rng) -> Counts {
     match family {
         Family::Compact => compact::counts(rng),
@@ -259,10 +203,6 @@ pub(crate) fn counts(family: Family, rng: &mut ChaCha8Rng) -> Counts {
 /// The proposal of family slot `slot` (0-based, family slots only), on
 /// that slot's stream, given every planet `placed` so far (asked ones
 /// are never a chain's anchor).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) fn propose(
     ctx: &FamilyContext,
     slot: u32,
@@ -280,10 +220,6 @@ pub(crate) fn propose(
 
 /// The family, its host and the system-level draws every slot reads.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 pub(crate) struct FamilyContext {
     pub family: Family,
     pub host: SolarMass,
@@ -302,10 +238,6 @@ pub(crate) struct FamilyContext {
     pub companion: bool,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
 impl FamilyContext {
     /// Draws, on the `family` stream after the family pick: the counts,
     /// then the system mass, σ_e and the stirred draw, in that order for

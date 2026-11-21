@@ -2,11 +2,6 @@
 //! beyond it (study row 2). Slots: the rocky planets first, inside out,
 //! then the giants.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
-
 use super::laws::{
     SOLAR_LIKE_GIANT_MASS, fulton_axis, innermost_period, next_giant_axis, next_rocky_axis,
     rocky_mass,

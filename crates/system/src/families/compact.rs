@@ -1,11 +1,6 @@
 //! The compact family: four to seven small planets packed outward from
 //! an innermost one (study row 1).
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the placement loop of a later task")
-)]
-
 use super::laws::{compact_ratio, innermost_period};
 use super::table::COMPACT_PLANETS;
 use super::uniform_count;
