@@ -45,6 +45,7 @@ pub fn allowed() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
 pub fn external_allowed(package: &str) -> Option<&'static [&'static str]> {
     match package {
         "science" => Some(&["serde", "serde_json"]),
+        "timeline" => Some(&["serde", "serde_json"]),
         _ => None,
     }
 }

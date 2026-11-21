@@ -499,6 +499,8 @@ name = "timeline"
 version = "0.1.0"
 dependencies = [
  "science",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
