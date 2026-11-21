@@ -172,7 +172,7 @@ too deep. Below 0.30 M☉ the polytrope's density is within 4 % of YREC's to
    solar convection zone", *Monthly Notices of the Royal Astronomical
    Society* 287, 189,
    [doi:10.1093/mnras/287.1.189](https://doi.org/10.1093/mnras/287.1.189).
-3. Herrera, C. & Serenelli, A. 2023, standard solar model B23
+3. Herrera, Y. & Serenelli, A. 2023, standard solar model B23
    (`struct+nu_SF3_MB22m.dat`), Zenodo,
    [doi:10.5281/zenodo.10174172](https://doi.org/10.5281/zenodo.10174172),
    CC-BY 4.0.

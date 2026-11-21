@@ -368,7 +368,9 @@ mod tests {
         )
         .err()
         .unwrap();
-        assert!(matches!(error, SystemError::PresentAfterLife { end, .. } if end.0 == AGE_OF_UNIVERSE.0));
+        assert!(
+            matches!(error, SystemError::PresentAfterLife { end, .. } if end.0 == AGE_OF_UNIVERSE.0)
+        );
     }
 
     #[test]
