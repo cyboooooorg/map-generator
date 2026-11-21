@@ -458,6 +458,8 @@ name = "system"
 version = "0.1.0"
 dependencies = [
  "science",
+ "serde",
+ "serde_json",
  "timeline",
 ]
 

@@ -46,6 +46,7 @@ pub fn external_allowed(package: &str) -> Option<&'static [&'static str]> {
     match package {
         "science" => Some(&["serde", "serde_json"]),
         "timeline" => Some(&["serde", "serde_json"]),
+        "system" => Some(&["serde", "serde_json"]),
         _ => None,
     }
 }
