@@ -60,6 +60,13 @@ pub const PASCALS_PER_BAR: f64 = 1e5;
 /// Definition: degrees in a half turn, so that a degree is pi/180 rad.
 pub const DEGREES_PER_HALF_TURN: f64 = 180.0;
 
+/// Source: IUGG mean radius R1 = (2a + b) / 3 of the GRS80 ellipsoid,
+/// 6 371 008.7714 m (Moritz 2000, "Geodetic Reference System 1980",
+/// J. Geodesy 74, 128-162; value read on the Wikipedia page of GRS80, which
+/// quotes it and cites that paper). Earth's volumetric mean radius is
+/// 6 371 000.79 m, 8 m smaller; no law here is sensitive to that.
+pub const EARTH_MEAN_RADIUS: Metre = Metre(6_371_008.771_4);
+
 #[cfg(test)]
 mod tests {
     use super::*;

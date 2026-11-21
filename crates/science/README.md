@@ -39,6 +39,27 @@ Stefan-Boltzmann constants (Tiesinga et al. 2021, Rev. Mod. Phys. 93,
 025010) as `Source:`; the solar and Earth masses as the nominal mass
 parameter divided by `GRAVITATIONAL_CONSTANT`.
 
+`EARTH_MEAN_RADIUS` is the IUGG mean radius R1 of GRS80 (6 371 008.7714 m,
+Moritz 2000, J. Geodesy 74, 128). `EarthRadius` stays the IAU equatorial
+radius.
+
+## Equations of state
+
+`science::eos` gives density against pressure at the reference
+temperature: `Eos` (`Vinet`, `BirchMurnaghan3`, `BirchMurnaghan2`) with
+`pressure(rho)` and `density(p)` (safeguarded Newton, bracketed between
+`rho0` and `100 rho0`, or the pressure maximum of a third-order form with
+`K0' < 4`); `Mix` (mass shares added by volume at equal pressure);
+`MaterialEos`, phases ordered by pressure, the last one unbounded, built by
+`MaterialEos::new` so that a later task can build one at run time. The
+materials are `core_alloy()` (Valencia et al. 2006 fits to PREM, liquid
+outer and solid inner core), `mantle()` (50/50 forsterite and enstatite
+below 23.83 GPa; 90 % (Mg0.88 Fe0.12) SiO3 bridgmanite and 10 % periclase
+above) and `ice_vii()` (Seager et al. 2007 Vinet fit). Values are in the
+study `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`.
+The mantle at the 670 km boundary is 7.5 % below PREM above it and 3.5 %
+above PREM below it (no mineral phase transitions, no temperature).
+
 ## Ports
 
 None: `science` is a library of pure functions. The laws arrive with the
