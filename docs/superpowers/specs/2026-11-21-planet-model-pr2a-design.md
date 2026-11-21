@@ -21,9 +21,10 @@ a layered cross-section, so that PR 2c (escape) and 2d (class, public
    - the ice-line flag is computed once;
    - the k2/Q choice reads the water's state (an inventory above 355 K
      is not icy) and the envelope fraction;
-   - a water world above 355 K: its steam is accounted for in the bulk
-     instead of mixing the whole mass with the dry radius (the exact
-     treatment is settled by the study, see below).
+   - the 355 K trigger of a water inventory is removed: it is the ice
+     VI-VII-liquid triple point, not a steam criterion. The radius of
+     steam and supercritical water worlds moves to PR 2d, which has the
+     climate their criterion needs (study decision 3).
 2. **Wider draws (#618):** each composition draw is **uniform between
    published bounds** (log-uniform where the quantity spans decades),
    like the star draw: core mass fraction, dry water fraction,
@@ -42,8 +43,7 @@ a layered cross-section, so that PR 2c (escape) and 2d (class, public
      integrated with `science::structure` (#617), the envelope filling
      the rest, the molecular to metallic hydrogen transition at a
      published pressure;
-   - inflation of hot Jupiters (Thorngren & Fortney 2018) if the tables
-     do not cover it, decided by the study.
+   - no hot-Jupiter inflation: it goes to #621 (study decision 1).
 
 ## Non-goals
 
@@ -67,8 +67,9 @@ the radius needs the cooling history).
 - No invented data: a study comes first, in
   `docs/superpowers/studies/2026-11-21-planet-model-2a/`, sourcing the
   bounds of each draw, the envelope bounds, the giant and mini-Neptune
-  tables (with their size and how they are read), the transition
-  pressure and the steam treatment. Missing science stops the work.
+  tables (with their size and how they are read) and the transition
+  pressure: `draw-bounds.md` and `giants-and-envelopes.md`, each with
+  the user's decisions. Missing science stops the work.
 - The tables are ported as data with their provenance, read by
   `science` with no file access at run time (`include_bytes!` or
   constants), as the stellar tables are.
