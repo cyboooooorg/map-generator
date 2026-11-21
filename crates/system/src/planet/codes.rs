@@ -35,13 +35,17 @@ pub(crate) const WATER_LAYER_MASS: &str = "planet.water-layer-mass";
 /// becomes the steam envelope of the planet interior plan's second pull
 /// request.
 pub(crate) const WATER_BEYOND_LAW: &str = "planet.water-beyond-law";
-/// Dry mass of a planet whose water is beyond the water laws, `(1 - w) M`:
-/// the mass of the condensed planet that its bulk describes.
+/// Dry mass of a planet whose water is beyond the water laws: the mass of
+/// the condensed planet that its bulk describes, `(1 - w) M` without an
+/// envelope, the core's dry mass plus the envelope for a mini-Neptune.
 pub(crate) const DRY_MASS: &str = "planet.dry-mass";
 /// Mass of an enveloped planet without its envelope, `(1 - f) M`: the
 /// condensed core a mini-Neptune's structure is built for, its water
 /// included as a share of it.
 pub(crate) const MASS_WITHOUT_ENVELOPE: &str = "planet.mass-without-envelope";
+/// Radius of a mini-Neptune's core, the planet without its envelope, from
+/// its integrated structure.
+pub(crate) const RADIUS_WITHOUT_ENVELOPE: &str = "planet.radius-without-envelope";
 /// Bolometric flux the planet receives from all its stars, the sum of
 /// every source's flux: the flux the envelope and giant tables read.
 pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";

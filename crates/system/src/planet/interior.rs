@@ -3,7 +3,7 @@
 //!
 //! [`interior`] dispatches on the envelope: a planet without one is
 //! [`rocky`]; an enveloped planet (a mini-Neptune or a giant) is built in
-//! [`super::enveloped`], a mini-Neptune's core by [`rocky`] too.
+//! [`super::enveloped`], a mini-Neptune's core by [`rocky_core`], the same structure.
 //!
 //! The drawn water fraction is the planet's bulk water. A dry planet's
 //! water stays in its mantle (hydrated silicate; its ocean comes from
@@ -212,6 +212,33 @@ pub(crate) fn rocky(
     trial: &Trial,
     trace: &mut Trace,
 ) -> Result<Interior, InteriorError> {
+    condensed(mass, drawn, trial, trace, codes::RADIUS)
+}
+
+/// [`rocky`] for a mini-Neptune's core: the same structure, its radius
+/// recorded as [`codes::RADIUS_WITHOUT_ENVELOPE`] so the trace tells it
+/// from the planet's.
+///
+/// # Errors
+///
+/// Those of [`rocky`].
+pub(crate) fn rocky_core(
+    mass: &Traced<EarthMass>,
+    drawn: &Drawn,
+    trial: &Trial,
+    trace: &mut Trace,
+) -> Result<Interior, InteriorError> {
+    condensed(mass, drawn, trial, trace, codes::RADIUS_WITHOUT_ENVELOPE)
+}
+
+/// The body of [`rocky`], its radius recorded under `radius_code`.
+fn condensed(
+    mass: &Traced<EarthMass>,
+    drawn: &Drawn,
+    trial: &Trial,
+    trace: &mut Trace,
+    radius_code: &'static str,
+) -> Result<Interior, InteriorError> {
     let total = Kilogram::from(*mass.value()).0;
     let cmf = drawn.core_mass_fraction.value().get();
     let w = drawn.water_fraction.value().get();
@@ -305,7 +332,7 @@ pub(crate) fn rocky(
         *mass
     };
     let radius = trace.record(
-        Code::of(codes::RADIUS),
+        Code::of(radius_code),
         EarthRadius::from(structure.radius),
         &[central_pressure.node()],
     )?;

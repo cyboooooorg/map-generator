@@ -11,7 +11,7 @@
 
 use super::codes;
 use super::draws::Drawn;
-use super::interior::{Interior, InteriorError, ShellRecord, rocky};
+use super::interior::{Interior, InteriorError, ShellRecord, Water, rocky_core};
 use crate::Trial;
 use science::constants::GRAVITATIONAL_CONSTANT;
 use science::envelope::envelope_thickness;
@@ -50,7 +50,8 @@ pub(crate) enum Body {
         /// The core, `(1 - f) M`, its water a share of it.
         core: Interior,
         envelope: EnvelopeRecord,
-        /// The whole planet: its mass, the core's radius plus the
+        /// The whole planet: its mass (without a water beyond the laws,
+        /// recorded apart in the core), the core's radius plus the
         /// envelope's thickness, the gravity and density of both.
         bulk: Bulk,
     },
@@ -210,10 +211,11 @@ fn envelope_layer(
     })
 }
 
-/// A mini-Neptune: the core `(1 - f) M` built by [`rocky`] (its water a
-/// share of it), under the envelope thickness of Lopez & Fortney 2014 for
+/// A mini-Neptune: the core `(1 - f) M` built by [`rocky_core`] (its water
+/// a share of it), under the envelope thickness of Lopez & Fortney 2014 for
 /// the whole planet. The radius is the core's plus the thickness; the bulk
-/// is the whole mass at that radius.
+/// is the whole mass at that radius, or the condensed planet's (the core's
+/// dry mass plus the envelope) when the core's water is beyond the laws.
 fn mini_neptune(trial: &Trial, drawn: &Drawn, trace: &mut Trace) -> Result<Body, InteriorError> {
     let (mass, f) = (trial.mass, drawn.envelope_fraction);
     let share = f.value().get();
@@ -222,7 +224,7 @@ fn mini_neptune(trial: &Trial, drawn: &Drawn, trace: &mut Trace) -> Result<Body,
         *mass.value() * (1.0 - share),
         &[mass.node(), f.node()],
     )?;
-    let core = rocky(&core_mass, drawn, trial, trace)?;
+    let core = rocky_core(&core_mass, drawn, trial, trace)?;
     let flux = bolometric_flux(trial, trace)?;
     let thickness = trace.record(
         Code::of(codes::ENVELOPE_THICKNESS),
@@ -239,7 +241,19 @@ fn mini_neptune(trial: &Trial, drawn: &Drawn, trace: &mut Trace) -> Result<Body,
         *core.bulk.radius.value() + *thickness.value(),
         &[core.bulk.radius.node(), thickness.node()],
     )?;
-    let bulk = bulk_of(mass, radius, trace)?;
+    // A core whose water is beyond the laws: the bulk describes the
+    // condensed planet, the core's dry mass plus the envelope, the water
+    // being recorded apart (`Water::BeyondLaw`).
+    let bulk_mass = if matches!(core.water, Water::BeyondLaw { .. }) {
+        trace.record(
+            Code::of(codes::DRY_MASS),
+            *core.bulk.mass.value() + EarthMass::from(*envelope_mass.value()),
+            &[core.bulk.mass.node(), envelope_mass.node()],
+        )?
+    } else {
+        mass
+    };
+    let bulk = bulk_of(bulk_mass, radius, trace)?;
     let outer = outer_at(radius, trace)?;
     let layer = envelope_layer(outer, envelope_mass, drawn, MatterState::Gas, None, trace)?;
     Ok(Body::MiniNeptune {

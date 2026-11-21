@@ -874,6 +874,15 @@ fn a_neptune_trial() {
             .iter()
             .all(|l| *l.material.value() != Material::Envelope)
     );
+    // The core's radius has its own code, the planet's is `planet.radius`.
+    assert_eq!(
+        trace.node(core.bulk.radius.node()).unwrap().code,
+        Code::of(codes::RADIUS_WITHOUT_ENVELOPE)
+    );
+    assert_eq!(
+        trace.node(body.bulk().radius.node()).unwrap().code,
+        Code::of(codes::RADIUS)
+    );
     // The core holds (1 - f) M.
     let core_mass = core.bulk.mass.value().0;
     assert!((core_mass / ((1.0 - envelope) * mass) - 1.0).abs() < 1e-12);
@@ -1021,4 +1030,60 @@ fn the_flux_record_cites_every_source() {
         let every: Vec<_> = t.sources.iter().map(|s| s.flux.node()).collect();
         assert_eq!(derived_from(&trace, flux), every);
     }
+}
+
+#[test]
+fn a_hot_mini_neptune_bulk_excludes_its_beyond_law_water() {
+    // Task 6's rule: the bulk of a planet whose water is beyond the laws
+    // describes the condensed planet. Definition: a 5 M_E water world with
+    // a 1 % envelope at 403 K.
+    let (mass, envelope) = (5.0, 0.01);
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, mass, HOT_ORBIT_AU, 0.0);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        WATER_WORLD_FRACTION,
+        0.0,
+        Some(true),
+        envelope,
+        None,
+    );
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let Body::MiniNeptune {
+        core,
+        envelope: record,
+        bulk,
+    } = &body
+    else {
+        panic!("a mini-Neptune");
+    };
+    // The water, w (1 - f) M, is recorded apart.
+    let Water::BeyondLaw { mass: water, .. } = core.water else {
+        panic!("{:?}", core.water);
+    };
+    assert_eq!(
+        trace.node(water.node()).unwrap().code,
+        Code::of(codes::WATER_BEYOND_LAW)
+    );
+    let water_me = science::units::EarthMass::from(*water.value()).0;
+    let expected_water = WATER_WORLD_FRACTION * (1.0 - envelope) * mass;
+    assert!((water_me / expected_water - 1.0).abs() < 1e-9);
+    // The bulk mass: the core's dry mass plus the envelope.
+    let dry = (1.0 - WATER_WORLD_FRACTION) * (1.0 - envelope) * mass + envelope * mass;
+    assert!((bulk.mass.value().0 / dry - 1.0).abs() < 1e-9);
+    let node = trace.node(bulk.mass.node()).unwrap();
+    assert_eq!(node.code, Code::of(codes::DRY_MASS));
+    assert_eq!(
+        derived_from(&trace, bulk.mass.node()),
+        vec![core.bulk.mass.node(), record.mass.node()]
+    );
+    // Gravity and density from that mass and the total radius.
+    let kg = science::units::Kilogram::from(*bulk.mass.value()).0;
+    let r = science::units::Metre::from(*bulk.radius.value()).0;
+    let g = science::constants::GRAVITATIONAL_CONSTANT * kg / (r * r);
+    assert!((bulk.surface_gravity.value().0 / g - 1.0).abs() < 1e-9);
+    let rho = kg / (4.0 / 3.0 * std::f64::consts::PI * r.powi(3));
+    assert!((bulk.mean_density.value().0 / rho - 1.0).abs() < 1e-9);
 }
