@@ -37,8 +37,8 @@ export is a separate plan.
   `relief.volcanoes`. No other randomness.
 - No row walking: per-cell functions of `Grid::point(k)` or passes
   over `Grid::neighbours(k)`; area weights from `Grid::area(k)`.
-- Heights in metres; `relief.height` stored `Storage::U16 { min:
-  -25_000.0, max: 25_000.0 }`.
+- Heights in metres; `relief.height` stored `Storage::U16` over
+  `±science::relief::HEIGHT_RANGE` (25 km, Task 2).
 - Physics ported from `legacy-final` comes with its legacy tests
   (adapted to metres); read legacy with `git show legacy-final:<path>`.
 - No whole world generated outside tier 3 (`#[ignore = "heavy: …"]`).
@@ -54,7 +54,7 @@ export is a separate plan.
 - A planet without `Surface` (a giant): `ReliefError::NoSurface`, no
   panic (Task 8).
 - A tiny grid (`Grid::new(1)`, `n = 1`, 6 cells) and a tiny body (the
-  octave count must stay ≥ 1): relief still built (Tasks 4 and 8).
+  octave count must stay ≥ 1): relief still built (Tasks 2 and 8).
 - High gravity (super-Earth) and low gravity (relief scale capped at
   2): heights stay within ±25 km, no saturation (Task 9).
 
@@ -75,9 +75,9 @@ Research task (opus). No Rust code.
 
 **Interfaces:**
 
-- Consumes: the scratchpad drafts `study-plates.md`,
-  `study-volcanoes.md`, `study-topography.md` (copy them into the
-  session's scratchpad path the controller gives).
+- Consumes: the drafts of 2026-11-21 in
+  `/private/tmp/claude-501/-Users-cyborg-Developer-map-generator/2f1a6d69-1abd-42db-8aff-0d0ae61e7f2f/scratchpad/`:
+  `study-plates.md`, `study-volcanoes.md`, `study-topography.md`.
 - Produces: the **retained values table** in the study README: one
   row per constant of Tasks 2-6 (name, value, unit, tag
   `Source`/`Calibration`/`Definition`, citation), the reference the
@@ -88,6 +88,11 @@ Research task (opus). No Rust code.
   publisher page, arXiv, NASA ADS full text) and record it as verified
   `[V]` with page, table or figure. Values found only second-hand stay
   `[S]` and go to the calibration list unless a primary source is found.
+  Two values the drafts did not settle and the passes need: the
+  amplitude of the topography per analogue (the fluctuation at a
+  reference wavelength: Landais et al. 2018's structure functions, or
+  the RMS of ETOPO 2022 and MOLA at that wavelength), and the
+  continental slope angle (about 3-4°, secondary sources so far).
 - [ ] **Step 2:** Fix the inconsistencies the drafts flagged: the
   Aharonson DOI is `10.1029/2000JE001403`; the Earth mean flux
   0.087 W/m² is Pollack et al. 1993, not Davies & Davies; the
@@ -127,9 +132,17 @@ Research task (opus). No Rust code.
   - `pub fn octaves(circumference: Metre, cell: Metre) -> u32`: from
     the circumference down to a wavelength of two cells, at least 1
     (`Definition:` the grid's Nyquist limit).
+  - `pub fn amplitude(analogue: Analogue) -> Metre` and
+    `pub const REFERENCE_WAVELENGTH: Metre`: the fluctuation of the
+    relief at that wavelength (Task 1), which scales the noise.
+  - `pub const HEIGHT_RANGE: Metre = Metre(25_000.0)` (`Definition:`
+    the storage range; Olympus Mons, the tallest known relief, stands
+    about 22 km, Plescia 2004).
+  - `STANDARD_GRAVITY: MetrePerSecondSquared = 9.80665` in
+    `science::constants` if absent (`Definition:` CGPM 1901).
   - `pub const MAX_RELIEF_SCALE: f64 = 2.0` and
     `pub fn relief_scale(gravity: MetrePerSecondSquared) -> f64` =
-    `min(g_earth / g, MAX_RELIEF_SCALE)` (port of
+    `min(STANDARD_GRAVITY / g, MAX_RELIEF_SCALE)` (port of
     `legacy-final:crates/mapgen/src/generation.rs:407-420`; Weisskopf
     1975, Plescia 2004).
 
@@ -140,7 +153,8 @@ Research task (opus). No Rust code.
   1` = 11; `octaves(1 km, 15 km)` = 1); `analogues_keep_their_measured_hurst`
   (Earth 0.479, Mars 0.53); ported
   `relief_stands_as_one_over_gravity_up_to_a_cap` from
-  `generation.rs:3491` (Earth 1, Mars ≈ 2.6 → capped 2, 2 g → 0.5).
+  `generation.rs:3491` (9.80665 → 1, Mars 3.71 → 2.64 capped to 2,
+  19.6133 → 0.5).
 - [ ] **Step 2:** `cargo nextest run -p science relief::spectrum` →
   FAIL (module missing).
 - [ ] **Step 3:** Implement the signatures above.
@@ -167,15 +181,18 @@ Research task (opus). No Rust code.
   - `pub fn continental_share(analogue: Analogue) -> Fraction`: Earth
     0.41 (Cogley 1984), Mars 0.58 (Marinova et al. 2008).
   - `pub fn floating_height(crust: &Crust, thickness: Metre) -> Metre`:
-    Airy, `(t - t_oceanic) × (1 - ρc/ρm)` (port of
-    `generation.rs:593-660`).
-  - `pub const ABYSS_DEPTH: Metre` (6.4 km, Parsons & Sclater 1977).
+    Airy, `(t - t_oceanic) × (1 - ρc/ρm)` (port of `Crust::height_km`
+    and the Airy part of `generation.rs:605-650`; the legacy mapping
+    from noise to thickness through the shelf and platform,
+    `crust_thickness_km` at 586, is not ported).
+  - `pub const CONTINENTAL_SLOPE: Radian` (Task 1: `Source:` if
+    verified, else `Calibration:`), the gradient over which the
+    continent's edge falls to the ocean floor.
 
 - [ ] **Step 1: Write the failing tests**: port
-  `the_crust_floats_by_its_thickness` (`generation.rs:3352`, Airy
-  contrast 3.5-6 km between continent and ocean floor for Earth) and
-  `worlds_without_plates_have_marss_highland_share` as a pure check of
-  `continental_share` (0.58 Mars, 0.41 Earth).
+  `the_crust_floats_by_its_thickness` (`generation.rs:3352`:
+  `floating_height(EARTH_CRUST, continental)` between 3.5 and 6 km,
+  4.84 km with 41.1/7.1 km and 2830/3300 kg/m³; oceanic thickness → 0).
 - [ ] **Step 2:** Run → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** `cargo nextest run -p science relief` and the
@@ -193,22 +210,27 @@ Research task (opus). No Rust code.
 
 - Produces (plates; values from the Task 1 table):
   - `pub enum Boundary { Collision, Andean, IslandArc, Rift, Ridge, Transform }`
+  - `pub const ARC_SLAB_DEPTH: Metre` (105 km, Syracuse & Abers 2006)
+    and `pub const SLAB_DIP: Radian` (Task 1).
+  - `pub fn ridge_depth(age: Gyr) -> Metre` = 2.5 km + 0.35 km × √(age
+    in Ma) (Parsons & Sclater 1977, port of `plates.rs:485-491`).
   - `pub fn boundary_height(kind: Boundary, distance: Metre, convergence:
     MetrePerSecond) -> Metre`:
     the profile across the boundary (positive distance on the
     overriding side). Trench relief and width (Zhang et al. 2018);
-    arc at `ARC_SLAB_DEPTH / tan(dip)` (Syracuse & Abers 2006, England
+    arc at `ARC_SLAB_DEPTH / tan(SLAB_DIP)` (Syracuse & Abers 2006, England
     & Katz 2010); rift axis width (Hopper & Buck 1996); orogen width
-    and height (Royden et al. 2008, Allmendinger et al. 1997); ridge
-    crest `RIDGE_CREST` 2.5 km and subsidence (Parsons & Sclater 1977,
-    port of `plates.rs:485-491`); amplitudes without a source are the
-    calibrations of the Task 1 list.
+    and height (Royden et al. 2008, Allmendinger et al. 1997); ridges
+    through `ridge_depth` at the age `distance / convergence`;
+    amplitudes without a source are the calibrations of the Task 1
+    list.
   - `pub const PLATE_COUNT: (u32, u32)`, `pub const PLATE_SPEED:
     (MetrePerSecond, MetrePerSecond)`,
     `pub const PLATE_SIZE_EXPONENT: f64` (Sornette & Pisarenko 2003),
-    `pub const SLAB_FULL_SHARE: Fraction` (0.25, Zahirovic et al. 2015).
-  - Add `MetrePerSecond` to `science::units` if absent (with a
-    `Definition:` conversion from cm/yr).
+    `pub const SLAB_FULL_SHARE: f64` (0.25, Zahirovic et al. 2015;
+    `f64` because `Fraction::new` is not `const`).
+  - Add `MetrePerSecond` to `science::units` (absent today; `unit!`
+    and a `Definition:` conversion from cm/yr).
 - Produces (volcanoes):
   - `pub fn heat_flux(total: Watt, radius: Metre) -> WattPerSquareMetre` = total
     / 4πR².
@@ -219,17 +241,18 @@ Research task (opus). No Rust code.
     Grosse & Kervyn 2018), `pub const CONE_HEIGHT_MAX: Metre`,
     `pub const ARC_SPACING_MEAN: Metre` and `ARC_SPACING_SHAPE: f64`
     (Gamma, de Bremond d'Ars et al. 1995), `pub const CONE_SPACING: Metre`
-    and `VOLCANIC_PROVINCE_SHARE: Fraction` (calibrations).
+    and `VOLCANIC_PROVINCE_SHARE: f64` (calibrations).
 
 - [ ] **Step 1: Write the failing tests**:
   `trenches_sit_in_the_published_range` (minimum of the Andean and
   island-arc profiles between −4.7 and −0.9 km, width at half depth
   between 31 and 93 km); `arcs_stand_above_the_slab_depth` (arc peak
-  at `ARC_SLAB_DEPTH / tan(dip)` ± one width);
+  at `ARC_SLAB_DEPTH / tan(SLAB_DIP)` ± one width);
   `rifts_are_narrower_than_a_hundred_kilometres`;
   `collisions_reach_tibets_height` (peak ≤ 5 km at Earth gravity);
   port `ridges_follow_the_age_depth_relation_of_the_ocean_floor`
-  (`plates.rs:1212`: 2.5 km crest, 3.55 km at 9 Ma);
+  (`plates.rs:1212`: `ridge_depth(0)` = 2.5 km, `ridge_depth(9 Ma)` =
+  3.55 km);
   `volcanism_meets_its_anchors` (0.087 → Earth's value of the Task 1
   table, 2.5 → 1, monotonic); `earths_heat_flux_is_its_mean_flux`
   (44.2 TW over Earth's radius → 0.087 W/m² ± 1 %).
@@ -265,12 +288,20 @@ Research task (opus). No Rust code.
     the value below which `share` of the sphere's area lies
     (`share` 0 → min, 1 → max).
   - `pub fn area_mean(grid: &Grid, values: &[f32]) -> f32`.
+  - `pub fn distance_to(grid: &Grid, radius: Metre, sources: &[bool]) -> Vec<f32>`:
+    great-circle distance (metres) from each cell to the nearest
+    source cell, by a multi-source Dijkstra over `Grid::neighbours`
+    with great-circle edge lengths; the one distance pass of the
+    plates (Task 6) and the continental slope (Task 7).
 
 - [ ] **Step 1: Write the failing tests**:
   `fbm_is_deterministic` (same seed and point, same value; another
-  seed, another value); `fbm_follows_its_hurst_exponent` (structure
-  function of 10⁴ point pairs at two separations, log-log slope within
-  ±0.05 of `H` for H = 0.48 and 0.8, over the octave band);
+  seed, another value); `fbm_follows_its_hurst_exponent` (first-order
+  structure function, mean `|f(p) − f(q)|` over 10⁴ pairs at two
+  separations inside the octave band: log-log slope within ±0.05 of
+  `H` for H = 0.48 and 0.8); `distances_follow_great_circles`
+  (sources = one cell on `Grid::new(32)`, unit radius: distance to
+  the antipodal cell within 2 % of π);
   `area_quantile_splits_the_sphere` (field = z coordinate on
   `Grid::new(32)`: quantile at 0.5 ≈ 0, at 0.29 ≈ `2 × 0.29 − 1` = −0.42 (Archimedes)
   within one cell); `area_quantile_handles_the_ends` (0 → min, 1 → max,
@@ -297,17 +328,19 @@ Research task (opus). No Rust code.
     port of `legacy-final:crates/mapgen/src/plates.rs` (`Plates::new`
     at 126, `plate_at`, the subplate lattice and slab pull at 934) onto
     `world::Grid` (same cube layout), drift (`drift_ma`) left out.
-  - `pub fn PlateMap::boundary_height(&self, grid: &Grid, gravity:
-    MetrePerSecondSquared) -> Vec<f32>`:
-    classify each boundary cell (convergence from the two Euler
-    velocities, which side is continental), compute the distance to
-    the boundary by a multi-source Dijkstra over `Grid::neighbours`
-    with great-circle edge lengths, apply
+  - `pub fn PlateMap::boundary_height(&self, grid: &Grid, radius: Metre,
+    gravity: MetrePerSecondSquared) -> (Vec<f32>, Vec<f32>)`: heights
+    and the arc mask's weight (for the arc cones of Task 7).
+    Classify each boundary cell (convergence from the two Euler
+    velocities, which side is continental), take the distance to the
+    boundary from `distance_to` (Task 5), apply
     `science::relief::plates::boundary_height`, scaled by
     `relief_scale`.
 
-- [ ] **Step 1: Write the failing tests** (`Grid::new(24)`, ~3500
-  cells, hand-built continental mask): port
+- [ ] **Step 1: Write the failing tests** (`Grid::new(24)`, 3456
+  cells, Earth radius, hand-built continental mask, for coverage and
+  determinism; the profile tests use `Grid::new(48)` on a body of
+  radius 306 km, cells about 10 km, finer than a trench): port
   `plates_cover_the_sphere_with_varied_sizes` (`plates.rs:1186`;
   count within `PLATE_COUNT`),
   `boundaries_raise_ranges_and_arcs_and_sink_trenches`
@@ -328,12 +361,23 @@ Research task (opus). No Rust code.
 **Interfaces:**
 
 - Consumes: Tasks 2-6.
+- Modify: `crates/timeline/src/keyframe_tests.rs` and
+  `crates/timeline/Cargo.toml`: move `earth_like_fixture` (line 62) to
+  a `pub mod fixtures` behind a `fixtures` feature;
+  `crates/world/Cargo.toml` `[dev-dependencies]` enables it
+  (`timeline = { workspace = true, features = ["fixtures"] }`).
 - Produces (each returns metres per cell):
+  - `pub enum ReliefError { NoSurface }` in
+    `crates/world/src/relief/mod.rs` (its `Display` a code:
+    `relief.no-surface`).
   - `pub fn continents(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Vec<f32>,
     Vec<bool>)`:
-    fBm at the analogue's H, crust line = `area_quantile` at
-    `1 − continental_share`, Airy floating height per cell, the mask of
-    continental cells. Non-plate regimes: the legacy `HIGHLANDS` noise
+    fBm at the analogue's H; crust line = `area_quantile` at
+    `1 − continental_share`; mask = cells above it; on a continental
+    cell, the step `min(floating_height(crust, continental_thickness),
+    distance_to(ocean cells) × tan(CONTINENTAL_SLOPE))`, 0 on the
+    ocean floor; plus fBm × `amplitude(analogue)` × `relief_scale`.
+    Non-plate regimes: the legacy `HIGHLANDS` noise
     (`generation.rs:729`); a world without liquid: dry plains
     `DRY_PLAINS_KM` (`generation.rs:2154`), both ported as calibrations
     into `science::relief`.
@@ -359,11 +403,15 @@ Research task (opus). No Rust code.
   `Forcing`): `continental_share_lies_above_the_crust_line` (area of
   the mask = 0.41 ± one cell's share for Earth);
   `the_continent_floor_step_is_airys` (median continent − median floor
-  within the Airy contrast of Task 3); `volcanoes_keep_their_aspect`
+  within 1 km of the Airy step, 4.84 km for Earth);
+  `the_continental_edge_keeps_its_slope` (no neighbour pair across the
+  edge steeper than `tan(CONTINENTAL_SLOPE)` plus the noise's own
+  gradient); `volcanoes_keep_their_aspect`
   (every cone's height/half-width within `CONE_ASPECT`);
   `a_cold_planet_has_no_isolated_cones` (flux 0 → no cone);
-  `forcing_reads_the_regime_not_the_body` (`Forcing::read` on the
-  timeline fixture, Plates → Earth analogue).
+  `forcing_reads_the_regime_not_the_body` (`Forcing::read` on
+  `timeline::fixtures::earth_like_fixture`, Plates → Earth analogue;
+  `surface: None` → `ReliefError::NoSurface`).
 - [ ] **Step 2:** Run → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** `cargo nextest run -p world relief` → PASS.
@@ -374,15 +422,13 @@ Research task (opus). No Rust code.
 
 **Files:**
 
-- Modify: `crates/world/src/relief/mod.rs`, `crates/world/src/error.rs`
+- Modify: `crates/world/src/relief/mod.rs`
 - Create: `crates/world/src/relief/generate_tests.rs`
 
 **Interfaces:**
 
 - Produces:
   - `pub const HEIGHT: &str = "relief.height"` (the `FieldId` code).
-  - `pub enum ReliefError { NoSurface }` (or a `WorldError` variant;
-    the builder picks, one place only).
   - `pub fn sea_level(grid: &Grid, heights: &[f32], ocean_share:
     Option<Fraction>) -> f32`:
     `area_quantile(…, share)` when `Some(share)` with share > 0;
@@ -390,8 +436,9 @@ Research task (opus). No Rust code.
   - `pub fn generate(state: &PlanetState, seed: Seed, grid: &Grid) ->
     Result<Field, ReliefError>`:
     `Forcing::read`, continents + plates + mountains + volcanoes, minus
-    `sea_level`, as `Field { values: Values::F32, categorical: false, storage:
-    Storage::U16 { min: -25_000.0, max: 25_000.0 } }`.
+    `sea_level`, as `Field { values: Values::F32(…), categorical:
+    false, storage: Storage::U16 { min: −HEIGHT_RANGE, max:
+    HEIGHT_RANGE } }` (as `f32`).
 
 - [ ] **Step 1: Write the failing tests**:
   `sea_level_leaves_the_ocean_share_under_water`
@@ -412,9 +459,8 @@ Research task (opus). No Rust code.
 
 - Create: `crates/world/tests/relief_heavy.rs` and its hand-built
   states (Earth-, Mars- and Venus-like `PlanetState`s, built from the
-  structural fixture of `crates/timeline/src/keyframe_tests.rs:62`,
-  promoted to a `timeline` test-support module if needed without
-  adding a dependency to `world`).
+  `timeline::fixtures` module of Task 7, with regime, gravity, radius,
+  heat and liquid set per case).
 
 **Interfaces:**
 
@@ -422,9 +468,10 @@ Research task (opus). No Rust code.
 
 - [ ] **Step 1: Write the tests**, each `#[ignore = "heavy: world at 60 km"]`,
   seeds 1-3, `Grid::for_radius(R, 60 km)`:
-  `earth_like_has_earths_hypsometry` (ocean share 0.71 → land 0.29;
-  land above 2 km 4-15 %, above 4 km 0.5-4 %, sea deeper than 6 km
-  under 3 %: ETOPO 2022 as in `generation.rs:3202`);
+  `earth_like_has_earths_hypsometry` (ocean share 0.71; as in
+  `generation.rs:3202`, ETOPO 2022: of the land, 45-75 % under 500 m,
+  4-15 % above 2 km, 0.5-4 % above 4 km; of the sea floor, under 3 %
+  deeper than 6 km and over 70 % deeper than 1 km);
   `mars_like_keeps_its_highland_share` (0.55-0.61);
   `venus_like_is_unimodal` (80 % within 1 km of the mean, Ford &
   Pettengill 1992); `relief_has_its_analogues_hurst_exponent` (H
@@ -435,7 +482,8 @@ Research task (opus). No Rust code.
   --profile heavy -p world --run-ignored only`) → record results. A
   failing hypsometry test: port `MOUNTAIN_ONSET`/`MOUNTAIN_BLEND` or the
   shelf constants as calibrations (Task 7), then rerun; report the
-  final numbers.
+  final numbers. A calibration added here goes back to the user, as
+  in Task 1's checkpoint.
 - [ ] **Step 3:** Commit `test(world): add the relief censuses`.
 
 ### Task 10: Documentation, follow-ups, CI
@@ -444,7 +492,8 @@ Research task (opus). No Rust code.
 
 - Modify: `crates/world/README.md` (the relief field, its sea-level
   convention, the passes and their seeds), `crates/science/README.md`
-  (the `relief` module).
+  (the `relief` module), `crates/timeline/README.md` (the `fixtures`
+  feature).
 
 - [ ] **Step 1:** Update the READMEs.
 - [ ] **Step 2:** File the follow-up issues of the spec (craters on
