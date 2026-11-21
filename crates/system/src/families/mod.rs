@@ -22,8 +22,10 @@ pub(crate) mod table;
 #[cfg(test)]
 pub(crate) mod tests;
 
-/// Source: EPOS I, a compact system reaches 640 d at most (study row 1,
-/// outer extent 35-640 d).
+/// Definition: the longest period of a compact system's innermost
+/// planet (and of the family's support), 640 d, the top of EPOS I's
+/// outer extent of 35-640 d (study row 1). The study gives that range as
+/// an outcome of the fit, not as a cap: the draw uses it as one.
 const COMPACT_MAX_PERIOD: Day = Day(640.0);
 
 /// Source: Dawson & Johnson 2018, hot Jupiters up to 10 d (study G 1.1).

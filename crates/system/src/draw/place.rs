@@ -68,9 +68,10 @@ const CLUSTER_RADIUS_SIGMA: f64 = 0.31;
 /// mass-radius slope (the plan: one probe at M, one at 1.1 M).
 const PROBE_STEP: f64 = 1.1;
 
-/// Calibration: the masses (in Earth masses) where the planet model's
-/// envelope regime jumps, 0.1, 5, 10 and 20 M⊕ (mapgen1, 2026-11-21): a
-/// slope probe must not straddle one.
+/// Definition: the masses (in Earth masses) where the planet model's
+/// envelope regime jumps, 0.1, 5, 10 and 20 M⊕, as given by the model's
+/// owner (mapgen1's planet model, 2026-11-21): a slope probe must not
+/// straddle one. They follow that model, not a source of their own.
 const ENVELOPE_REGIME_BOUNDS: [f64; 4] = [0.1, 5.0, 10.0, 20.0];
 
 /// Definition: redraws of a compact mass outside `[0.1, 30)` M⊕ before it

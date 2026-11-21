@@ -22,11 +22,12 @@ mod place;
 #[cfg(test)]
 mod tests;
 
-/// The first survey number, and how many numbers follow it.
-///
-/// Definition: the survey range of a system number is 10 000 to 99 999
-/// (the legacy `MGS` range, `timeline::SystemNumber`).
+/// Definition: the first survey number of a system, 10 000 (the legacy
+/// `MGS` range 10 000 to 99 999, `timeline::SystemNumber`).
 const NUMBER_BASE: u64 = 10_000;
+
+/// Definition: how many survey numbers follow [`NUMBER_BASE`], 90 000, so
+/// that a system number runs from 10 000 to 99 999.
 const NUMBER_SPAN: u64 = 90_000;
 
 /// A drawn system: the star's designation, seed and state, the age, the
