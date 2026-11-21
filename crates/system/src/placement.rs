@@ -6,10 +6,13 @@
 //! `"trial/slot-<n>"`, as legacy `system.rs:896-920`
 //! (`git show legacy-final:<path>`).
 //!
+//! `planet::class_of` runs the planet model's chain on a trial (its own
+//! seed, no spin, on a scratch copy of the trace) to read the class.
+//!
 //! The [`Placement`] adds the designation, the body seed and the spin,
-//! and `planet::model` runs again on it, drawing only from the body
-//! seed, never from `trial.seed` (two planets of one archetype share
-//! their trial streams). The orbit's period is the draw's (Kepler),
+//! and `planet::model` runs the same chain on it, drawing only from the
+//! body seed, never from `trial.seed` (two planets of one archetype
+//! share their trial streams). The orbit's period is the draw's (Kepler),
 //! never recomputed.
 //!
 //! Neither type is serialised.
