@@ -21,6 +21,8 @@ adapters = { path = "crates/adapters" }
 
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["float_roundtrip"] }
+tempfile = "3.27.0"
+png = "0.18.1"
 
 # The draws of the engines: a seeded generator from the seed hierarchy.
 rand_core = "0.10.1"

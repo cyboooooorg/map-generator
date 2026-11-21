@@ -32,6 +32,6 @@ pub use planet::{
     LiquidKind, Orbit, PlanetClass, PlanetState, Renewal, Spin, Surface, SurfaceLiquid,
     TargetOutcome, TectonicRegime, Terrain, TerrainUnit, Water,
 };
-pub use seed::Seed;
+pub use seed::{Seed, fnv1a64};
 pub use sources::{BandLight, StellarSource, StellarSources};
 pub use star::{StarPhase, StarState};
