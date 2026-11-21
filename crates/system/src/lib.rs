@@ -8,12 +8,14 @@
 mod archetype;
 pub mod draw;
 pub mod engine;
+mod error;
 mod inputs;
 mod placement;
 pub mod planet;
 pub mod star;
 
 pub use archetype::ArchetypeId;
+pub use error::SystemError;
 pub use inputs::{BodyRequest, INPUTS_SCHEMA, Inputs, Request, SystemRequest};
 pub use placement::{Placement, Trial};
 

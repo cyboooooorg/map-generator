@@ -44,6 +44,9 @@ trial becomes a `Placement` (designation, body seed, spin). The planet
 model runs on the placement and draws only from the body seed, never
 from `trial.seed`. The orbit's period is the draw's, never recomputed.
 
+`SystemError` (`error.rs`) is the error type of the engine, `non_exhaustive`;
+it wraps `ContractError` and the host errors of `science::stellar`.
+
 ## Versions
 
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
