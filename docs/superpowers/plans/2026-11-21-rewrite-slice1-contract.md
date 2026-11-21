@@ -657,7 +657,9 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
     no designation and its own seed (`system_seed.derive("trial/<archetype
     id>")` or `"trial/slot-<n>"`, as legacy `system.rs:896-920`); the
     placement adds the designation, the body seed and the spin, and
-    `model` runs again on it. The orbit's period is the draw's (Kepler),
+    `model` runs again on it, drawing only from the body seed, never
+    from `trial.seed` (two planets of one archetype share their trial
+    streams). The orbit's period is the draw's (Kepler),
     never recomputed.
   - Doc-only modules, each a `//!` comment fixing its owner and its
     future signature, no items:
