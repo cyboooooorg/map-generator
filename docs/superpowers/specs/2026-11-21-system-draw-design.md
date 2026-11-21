@@ -243,10 +243,17 @@ tools regenerate them.
   3. draw the eccentricity from the class's rule, then check spacing
      and hot-giant clearing against the planets already placed;
   4. on a violation, redraw the slot from its own stream (a drawn slot
-     only; an asked archetype is never moved, an earlier drawn
-     neighbour may be dropped instead), within the tries budget; when
-     the budget runs out, a drawn slot is left empty and an asked
-     archetype is refused with `SystemError`.
+     only; an asked archetype is never moved, and as it is placed
+     first it never meets a drawn neighbour), within the tries budget
+     of 20; when the budget runs out, a drawn slot is left empty and
+     an asked archetype is refused with `SystemError::NoRoom`.
+  Delivered (PR 2): `classify` is a parameter,
+  `Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>`, and
+  `TrialOutcome { class, radius, mean_density }` carries plain values,
+  not traced ones, since it runs on a scratch trace; the draw records
+  the kept class as `system.draw.class`. An asked host mass wins over
+  the host an archetype names. The sources, the plan's own choices and
+  the departures are in `docs/science/system-architectures.md`.
   The archetype table, with its placement half, is
   `system::archetype` (contract); this work fills the placement half
   for the legacy archetypes (`legacy-final:crates/mapgen/src/archetype.rs`).
@@ -285,8 +292,12 @@ T_eff.
 
 - From the system seed: `derive("star")` for class, mass, metallicity
   and age; `derive("family")` for the family and its slots; trials
-  `derive("trial/<archetype>")` or `derive("trial/slot-<n>")`; body
-  seeds `derive(<designation text>)` (contract). Each draw reads its
+  `derive("trial/<archetype>")` for the first copy of an asked
+  archetype, `derive("trial/<archetype>/<k>")` for copy `k` of 2 or
+  more, or `derive("trial/slot-<n>")` (family slots only, counted from
+  0); the perihelion longitude from `derive("orbit/<trial label>")`;
+  body seeds `derive(<designation text>)` (contract) and the spin from
+  `body_seed.derive("spin")`. Each draw reads its
   own stream, so adding a draw never shifts another.
 - Determinism test: a fixed set of `Inputs` hashed to golden values of
   the serialised `Drawn`, tier 1; floating-point paths avoid

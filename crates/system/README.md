@@ -12,14 +12,49 @@ request, the archetype targets, the present date.
 | `inputs` | shared | `Inputs`, `Request`, `SystemRequest`, `BodyRequest` |
 | `archetype` | mapgen3, mapgen1 | `ArchetypeId`; placement half (draw), targets half (planet model) |
 | `placement` | shared | `Trial`, `Placement`, `TrialOutcome`: the seam (the outcome holds plain values, since `class_of` runs on a scratch trace) |
-| `draw` | mapgen3 | `draw_with(inputs, trace, classify) -> Drawn`: the star and its system number; no placement yet, a body request is `BodyRequestNotDrawn` |
-| `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn` |
+| `draw` | mapgen3 | `draw_with(inputs, trace, classify) -> Drawn`: the star, its system number, the family and one `Placement` per planet; a body request is `BodyRequestNotDrawn` |
+| `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn`; `families::table` holds every count range |
+| `spin` | mapgen3 | the primordial spin of a planet (period, obliquity) |
 | `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
 | `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
 The remaining doc-only module fixes its future signature in a `//!` comment.
 `SystemError`, the engine's error type, lives in `src/error.rs`.
+
+## Planet draw
+
+`draw_with` draws the star, then the family on `seed.derive("family")`
+(compact, solar-like, hot Jupiter, eccentric giants, sparse, evenly), then
+the planets, sorted by distance (`b` the closest). `classify` is a
+parameter (the planet model's `class_of`, a closure in tests): it returns
+a `TrialOutcome` of plain values (class, radius, mean density), since it
+runs on a scratch trace.
+
+- **Slots.** Asked archetypes first, never moved, then the family's slots.
+  Each reads its own stream: `trial/<id>` (copy `k` of an asked archetype:
+  `trial/<id>/<k>`), `trial/slot-<n>` for family slot `n`. A try proposes a
+  mass and an axis, classifies a circular trial, draws the eccentricity
+  from the class, and checks the star, the Roche floor, the spacing to
+  every placed planet and the hot Jupiters' cleared zone. 20 tries per
+  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. More
+  than 649 planets is `TooManyPlanets`, before any allocation.
+- **Streams.** The perihelion longitude draws from `orbit/<trial label>`;
+  the body seed is `derive(<designation text>)`, the spin
+  `body_seed.derive("spin")`; the system number comes from
+  `derive("designation")`. Adding a draw never shifts another.
+- **Constants.** Count ranges and chances live in `families/table.rs`, the
+  sourced laws in `families/laws.rs`; each has a `Source:`,
+  `Calibration:` or `Definition:`. Orbit laws (Kepler, ice line
+  `2.7 au x M / Msun`, Roche floor, mutual Hill spacing, `K50`) are in
+  `science::orbit`.
+- **Spin.** Rocky: Kokubo & Genda's Gaussian spin vector; giants
+  (ice giants too): a log-uniform fraction of break-up, 0.07 to 0.35;
+  obliquity isotropic. Birth values: tidal locking is track T2 (#604).
+- **Cause codes** start with `system.draw.`.
+
+The sources, the choices that are the draw's own and where it departs from
+the science are in [the science page](../../docs/science/system-architectures.md).
 
 ## Planet interior
 
@@ -52,9 +87,9 @@ it wraps `ContractError` and the host errors of `science::stellar`.
 
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
   are the only stored truth.
-- `ENGINE_VERSION` is bumped whenever a timeline or a world could change
-  for the same inputs; it invalidates the caches, which are never
-  migrated.
+- `ENGINE_VERSION` (2 since the planet draw) is bumped whenever a
+  timeline or a world could change for the same inputs; it invalidates
+  the caches, which are never migrated.
 
 ## Ports
 
