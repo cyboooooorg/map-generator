@@ -19,9 +19,3 @@ junit.path = "junit.xml"
 [profile.heavy]
 default-filter = "all()"
 junit.path = "junit.xml"
-
-# The golden digests print the values to pin: show them on success, so
-# the CI log of a platform not yet pinned carries them.
-[[profile.tier2.overrides]]
-filter = "test(golden_digests)"
-success-output = "immediate"
