@@ -183,8 +183,11 @@ This document fixes W1 and the shape the others plug into.
   reads from the file's modification time and touches on every cache
   hit) and a byte budget,
   return the entries to drop: stale engine versions first, then least
-  recently used until under budget. The default budget is the user's to
-  set; W1 ships 2 GiB *(my call)*, an adapter setting.
+  recently used until under budget. The budget is a parameter (asked by
+  the user): the policy takes it as an argument, the fs store takes it
+  at construction, and W2 exposes it as a CLI option
+  (`--cache-budget`, in bytes with an optional unit). Its default is
+  2 GiB *(my call)*.
 - **Filesystem adapter** (`adapters::store`): one root directory,
 
   ```text
