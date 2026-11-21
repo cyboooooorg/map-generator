@@ -330,7 +330,9 @@ where
             ..circular
         };
         let asked = archetype.is_some();
-        if !self.spaced(&trial, asked, placed) || !self.cleared(&trial, &outcome, placed) {
+        if !self.spaced(&trial, outcome.class, asked, placed)
+            || !self.cleared(&trial, &outcome, placed)
+        {
             return Ok(None);
         }
         let flux = trial
@@ -468,13 +470,16 @@ where
     }
 
     /// The spacing to every placed planet, by [`Rules`].
-    fn spaced(&self, trial: &Trial, asked: bool, placed: &[Placed]) -> bool {
+    fn spaced(&self, trial: &Trial, class: PlanetClass, asked: bool, placed: &[Placed]) -> bool {
         let k50 = self
             .rules
             .k50(placed.iter().map(|p| &p.trial).chain([trial]));
         placed.iter().all(|planet| {
-            self.rules
-                .holds(&planet.trial, trial, !asked || planet.asked.is_none(), k50)
+            let faces = faces_k50(
+                (class, asked),
+                (planet.outcome.class, planet.asked.is_some()),
+            );
+            self.rules.holds(&planet.trial, trial, faces, k50)
         })
     }
 
@@ -507,9 +512,25 @@ pub(super) fn probe_mass(mass: EarthMass) -> Option<EarthMass> {
     }
 }
 
+/// Whether a pair faces K50 (when the system counts 3 or more planets):
+/// both planets small (neither a gas giant, a hot Jupiter nor an ice
+/// giant) and at least one drawn. Each side is its class and whether it
+/// was asked. A pair with a giant keeps the two-planet floor only (user
+/// decision, 2026-11-22): Pu & Wu's fit covers planets of 3 to 9 M⊕, and
+/// adjacent giants follow their own sourced axis ratio.
+fn faces_k50(one: (PlanetClass, bool), other: (PlanetClass, bool)) -> bool {
+    let giant = |class: PlanetClass| {
+        matches!(
+            class,
+            PlanetClass::GasGiant | PlanetClass::HotJupiter | PlanetClass::IceGiant
+        )
+    };
+    !(one.1 && other.1) && !giant(one.0) && !giant(other.0)
+}
+
 /// The spacing rules of a system: every pair keeps `2√3` mutual Hill
-/// radii; a pair holding a drawn planet keeps K50 as well when the
-/// system counts 3 or more planets.
+/// radii; a pair of small planets holding a drawn one keeps K50 as well
+/// when the system counts 3 or more planets ([`faces_k50`]).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Rules {
     pub host: SolarMass,
@@ -536,9 +557,9 @@ impl Rules {
         )
     }
 
-    /// Whether a pair keeps `2√3` and, when `drawn` (the pair holds a
-    /// drawn planet) in a system of 3 or more, `k50`. A NaN spacing fails.
-    fn holds(&self, one: &Trial, other: &Trial, drawn: bool, k50: f64) -> bool {
+    /// Whether a pair keeps `2√3` and, when it `faces` K50 ([`faces_k50`])
+    /// in a system of 3 or more, `k50`. A NaN spacing fails.
+    fn holds(&self, one: &Trial, other: &Trial, faces: bool, k50: f64) -> bool {
         let pair = |t: &Trial| Pair {
             mass: *t.mass.value(),
             a: *t.orbit.semi_major_axis.value(),
@@ -551,7 +572,7 @@ impl Rules {
             (other, one)
         };
         let delta = orbit::mutual_hill_spacing(inner, outer, self.host);
-        let k50_applies = drawn && self.total >= 3;
+        let k50_applies = faces && self.total >= 3;
         delta >= TWO_PLANET_FLOOR && (!k50_applies || delta >= k50)
     }
 }
@@ -570,8 +591,11 @@ pub(crate) fn recheck(placed: &mut Vec<Placed>, rules: &Rules) {
         let k50 = rules.k50(placed.iter().map(|p| &p.trial));
         let victim = (1..placed.len()).rev().find_map(|outer| {
             let (inner, outer_planet) = (&placed[outer - 1], &placed[outer]);
-            let drawn = inner.asked.is_none() || outer_planet.asked.is_none();
-            if rules.holds(&inner.trial, &outer_planet.trial, drawn, k50) {
+            let faces = faces_k50(
+                (inner.outcome.class, inner.asked.is_some()),
+                (outer_planet.outcome.class, outer_planet.asked.is_some()),
+            );
+            if rules.holds(&inner.trial, &outer_planet.trial, faces, k50) {
                 None
             } else if outer_planet.asked.is_none() {
                 Some(outer)

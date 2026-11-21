@@ -251,8 +251,9 @@ tools regenerate them.
   `Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>`, and
   `TrialOutcome { class, radius, mean_density }` carries plain values,
   not traced ones, since it runs on a scratch trace; the draw records
-  the kept class as `system.draw.class`. An asked host mass wins over
-  the host an archetype names. The sources, the plan's own choices and
+  the kept class as `system.draw.class`. $K_{50}$ binds only pairs of
+  two small planets with a drawn one (user, 2026-11-22). An asked host
+  mass wins over the host an archetype names. The sources, the plan's own choices and
   the departures are in `docs/science/system-architectures.md`.
   The archetype table, with its placement half, is
   `system::archetype` (contract); this work fills the placement half

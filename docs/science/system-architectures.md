@@ -100,7 +100,9 @@ stirred-up orbits need more room.
 - **Giants.** The first giant follows Fulton et al. (2021)'s broken power
   law in $a$: index +0.72 inside a break at 3.6 au, -0.86 beyond, up to
   30 au. The next one lies at a ratio $a_2/a_1$ below 10, peaking near 3
-  (Rosenthal et al. 2023).
+  (Rosenthal et al. 2023). The app draws $\ln(a_2/a_1)$ uniformly over
+  that range (a flattening, median ratio about 4), so it does not
+  reproduce the peak: see the departures.
 - **Hot Jupiters.** Between twice the Roche separation and 10 d (Dawson &
   Johnson 2018; Ford & Rasio 2006).
 
@@ -209,9 +211,13 @@ The spacing rule of a pair, as the draw applies it:
 ```rust
 // crates/system/src/draw/place.rs, Rules::holds
 let delta = orbit::mutual_hill_spacing(inner, outer, self.host);
-let k50_applies = drawn && self.total >= 3;
+let k50_applies = faces && self.total >= 3;
 delta >= TWO_PLANET_FLOOR && (!k50_applies || delta >= k50)
 ```
+
+`faces` is true when both planets of the pair are small (neither a gas
+giant, a hot Jupiter nor an ice giant) and at least one of them is
+drawn; a pair with a giant keeps the two-planet floor only.
 
 The eccentricity depends on the class and the family: hot Jupiters below
 0.1; giants from the family's Beta law (Rosenthal et al. 2023: the lower
@@ -220,6 +226,10 @@ system of ten and in the eccentric family; the whole multi-giant law for a
 hot Jupiter's companion; the whole single-giant law when sparse); small
 planets from a Rayleigh law (0.02 to 0.035 compact, 0.05 solar-like) or
 the half-Gaussian of 0.32 (Van Eylen et al. 2019) in the other families.
+The eccentric family's choice between the single-giant and the
+multi-giant law reads the family's planned giant count (its
+architecture), not the giants finally kept: a planned pair whose second
+giant found no room still draws its first from the multi-giant law.
 
 Every count range, the 1-in-10 above and the tries per slot live in one
 table, [`families/table.rs`](../../crates/system/src/families/table.rs).
@@ -244,8 +254,11 @@ choices this draw makes where no source gives one:
   regime of the model (bounds 0.1, 5, 10 and 20 M⊕, given by the model's
   owner), and when both sides cross a bound the planets keep the system
   mass. A scattered mass outside 0.1 to 30 M⊕ is redrawn up to 64 times.
-- $K_{50}$ applies only to pairs that hold a drawn planet, with a per-family
-  $\sigma_e$ clamped to 0.05 (the top of Pu & Wu's fit).
+- $K_{50}$ applies only to pairs of two small planets that hold a drawn
+  one (user decision, 2026-11-22), with a per-family $\sigma_e$ clamped
+  to 0.05 (the top of Pu & Wu's fit). Pairs with a giant keep the
+  two-planet floor only: the fit covers planets of 3 to 9 M⊕, and
+  adjacent giants follow their own axis-ratio law.
 - 20 tries per slot. A near-resonant pair picks 3:2 or 2:1 with equal
   odds; the next giant's $\ln(a_2/a_1)$ is uniform from 0.5 to $\ln 10$.
 - Giant spin fraction $f$ log-uniform from 0.07 to 0.35, for gas and ice
@@ -271,8 +284,16 @@ choices this draw makes where no source gives one:
   source alone.
 - **$K_{50}$ is a median.** Half of the systems at that spacing survive.
   Used as a floor it keeps drawn systems on the stable side, but it is
-  applied only to pairs with a drawn planet, so two asked planets face
-  only the two-planet floor.
+  applied only to pairs of small planets with a drawn one, so two asked
+  planets, and any pair with a giant, face only the two-planet floor.
+- **Giants spread wider than observed.** With the test classifier over
+  200 seeds, six hosts and five families, the median axis ratio of
+  adjacent giants is 5.2 (Rosenthal et al. 2023 peak near 3): the
+  uniform $\ln(a_2/a_1)$ draw has a median near 4, and rejected tries
+  push the kept giants further out. Chains of giants also reach far:
+  the widest orbit of that grid sits at about 7 200 au once scaled to the
+  Sun's ice line, beyond Fulton's 30 au support for the first giant. No
+  source gives an outer edge for the next giants, so none is applied.
 - **A $K_{50}$ of 13 to 14 removes most near-3:2 pairs of 5 M⊕ or
   more.** A pair drawn 0 to 5 % wide of 3:2 (period ratio 1.5 to 1.575)
   sits at 12.5 to 14 mutual Hill radii for two 5 M⊕ planets around a

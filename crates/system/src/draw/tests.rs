@@ -217,7 +217,12 @@ fn assert_valid(placed: &[Placed], ctx: &FamilyContext, what: &str) {
     );
 }
 
-fn every_family_on_every_host(seeds: u64) {
+/// Draws every family on every host for `seeds` seeds and checks each
+/// system; returns the axis ratios of adjacent cold giants (gas or ice
+/// giants, in order of distance) and the largest axis scaled to the Sun's
+/// ice line (`a × 2.7 au / ice line`).
+fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64) {
+    let (mut ratios, mut widest) = (Vec::new(), 0.0_f64);
     for host in [0.08, 0.3, 0.8, 1.0, 2.0, 8.0] {
         for family in FAMILIES {
             for seed in 0..seeds {
@@ -226,9 +231,26 @@ fn every_family_on_every_host(seeds: u64) {
                 let placed = run(seed, &parts, &BTreeMap::new(), &model)
                     .unwrap_or_else(|error| panic!("{what}: {error}"));
                 assert_valid(&placed, &parts.2, &what);
+                let scale = 2.7 / parts.2.ice_line.0;
+                widest = placed
+                    .iter()
+                    .map(|p| axis(p) * scale)
+                    .fold(widest, f64::max);
+                let giants: Vec<f64> = placed
+                    .iter()
+                    .filter(|p| {
+                        matches!(
+                            p.outcome.class,
+                            PlanetClass::GasGiant | PlanetClass::IceGiant
+                        )
+                    })
+                    .map(axis)
+                    .collect();
+                ratios.extend(giants.windows(2).map(|w| w[1] / w[0]));
             }
         }
     }
+    (ratios, widest)
 }
 
 #[test]
@@ -236,10 +258,18 @@ fn every_family_draws_on_every_host() {
     every_family_on_every_host(20);
 }
 
+/// Prints the median axis ratio of adjacent cold giants (Rosenthal et al.
+/// 2023 peak near 3) and the largest scaled axis, for the record.
 #[test]
 #[ignore = "slow: full grid"]
 fn every_family_draws_on_every_host_full_grid() {
-    every_family_on_every_host(200);
+    let (mut ratios, widest) = every_family_on_every_host(200);
+    ratios.sort_by(f64::total_cmp);
+    let median = ratios.get(ratios.len() / 2).copied().unwrap_or(f64::NAN);
+    eprintln!(
+        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au",
+        ratios.len()
+    );
 }
 
 #[test]
@@ -514,6 +544,32 @@ fn the_recheck_drops_drawn_planets_only() {
     let mut placed = vec![asked_one, asked_out];
     recheck(&mut placed, &rules);
     assert_eq!(placed.len(), 2);
+}
+
+#[test]
+fn a_pair_with_a_giant_keeps_the_two_planet_floor_only() {
+    let mut trace = Trace::new();
+    let rules = Rules {
+        host: SolarMass(1.0),
+        age: Gyr(4.6),
+        sigma_e: 0.05,
+        total: 3,
+    };
+    // Δ = 6 mutual Hill radii: above 2√3, below K50 (about 15 here).
+    let next = |a: f64, mass: f64| {
+        let hill = (2.0 * mass * 3.003e-6 / 3.0_f64).cbrt();
+        a * (1.0 + 3.0 * hill) / (1.0 - 3.0 * hill)
+    };
+    let inner = test_planet(&mut trace, 300.0, 5.0, 0.0, false);
+    let outer = test_planet(&mut trace, 300.0, next(5.0, 300.0), 0.0, false);
+    let mut placed = vec![inner, outer];
+    recheck(&mut placed, &rules);
+    assert_eq!(placed.len(), 2, "two drawn giants");
+    let small = test_planet(&mut trace, 1.0, 1.0, 0.0, false);
+    let small_out = test_planet(&mut trace, 1.0, next(1.0, 1.0), 0.0, false);
+    let mut placed = vec![small, small_out];
+    recheck(&mut placed, &rules);
+    assert_eq!(placed.len(), 1, "two drawn small planets");
 }
 
 #[test]
