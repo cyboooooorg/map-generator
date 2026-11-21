@@ -142,6 +142,11 @@ interpolates log-linearly in mass between the grid masses:
 | 3 | $2.0 \times 10^{-4}$ | 0.33 |
 | 5 | $8.7 \times 10^{-4}$ | 0.35 |
 
+The grid is by core mass, and the draw reads it at the planet's total
+mass: the two differ by the envelope's share, at most 35 % (the 0.35
+maximum at 5 $M_\oplus$; 20 % under the cap below). No grid by total
+mass was found.
+
 The cap of 0.20 is the edge of the Lopez & Fortney (2014) tables, which
 size the envelope's radius (below): a larger share would have no
 radius. It truncates the maxima of 3 and 5 $M_\oplus$ (0.33 and 0.35)
@@ -189,6 +194,15 @@ The radius is continuous at 1 $M_\oplus$ (below).
   and 12.9 to 15.4 (Neptune, 17.1 $M_\oplus$), so 9 to 25 % of hydrogen
   and helium (derived); nothing else bounds them, so the draw is uniform
   between the lowest, 0.09, and the cap.
+- **The heavy-element mass stops at the highest tabulated core.** From
+  about 17.4 $M_J$ (5 545 $M_\oplus$), the low end of the two-sigma band,
+  $57.9\,(M/M_J)^{0.61} / 1.82^2$, exceeds 100 $M_\oplus$, the highest
+  core of the giant tables (Fortney et al. 2007). There the heavy-element
+  mass is 100 $M_\oplus$, both ends of the draw, so the draw never fails
+  inside the fit's range (up to 20 $M_J$): at 6 000 $M_\oplus$ the band
+  starts at 104.9 $M_\oplus$ and the envelope is $1 - 100/6000$. The
+  study's survey of giant tables (its Sect. 1.5) found no other with a
+  free core mass, so none with a core above 100 $M_\oplus$.
 
 ### From layers to radius
 
@@ -391,6 +405,11 @@ thickness:
   (their Eq. 1, good to about 2 % for an Earth-like core), and
   interpolates the thickness linearly in the decimal logarithm of age,
   light, mass and envelope share. Age and light are clamped to the grid.
+  The 100 Myr table is not monotone in the envelope share at its low
+  end: at 0.1 and 10 times Earth's light and 1 to 8.5 $M_\oplus$, the
+  radius at 0.01 % is larger than at 0.02 % (1.22 against 1.16
+  $R_\oplus$ at 1 $M_\oplus$ and 0.1 times Earth's light), as printed in
+  the source; the model keeps the printed values.
   The light is the total of every star's, and the record of the thickness
   cites each star's flux.
 - **The layer** is one gas layer of mass $f M$, the thickness above the
@@ -429,7 +448,9 @@ Sect. 4). The radius is continuous at 1 $M_\oplus$: 1.7799 to
   gives a negative thickness: every node's radius exceeds its own core's
   (the least margin is 0.0053 $R_\oplus$, at 20 $M_\oplus$, 0.01 %, 0.1
   times Earth's light), and $M^{0.25}$ is convex in the logarithm of the
-  mass.
+  mass; along the envelope share the core's radius is concave in its
+  logarithm, and the gap that opens between two nodes stays under that
+  margin.
 
 #### Giants and the metallic hydrogen boundary
 
@@ -467,7 +488,9 @@ $M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at 3.16 Gyr and
   40, 0 to 50 at 60 to 100, 0 to 100 at 130 to 2 154, and 10 to 100 from
   2 200 to 3 594 (the coreless file at 0.02 au stops at 2 154). This
   makes the draw and the radius agree, so a drawn giant always has a
-  radius.
+  radius. From about 17.4 $M_J$ the fit's band lies above 100
+  $M_\oplus$ and the heavy-element mass is that highest core (see "The
+  envelope draw").
 - No inflation. The tables are the uninflated radius, and hot Jupiters
   stay near 1 $R_J$ until the integrated structure of issue #621 (the
   heating efficiency of Thorngren & Fortney 2018 is not a radius).
@@ -551,6 +574,19 @@ not a clipped radius.
   1.055 to 1.023 $R_J$ from 2 154 to 3 594 $M_\oplus$ (their Table 4, 9.5
   au, no core, 4.5 Gyr). A table of heavier giants was searched: none
   (the study's Sect. 1.5 lists the newer and alternative tables).
+- **A giant's core is solid.** A placeholder: the state of a dilute
+  ice-rock core at tens of Mbar is not modelled until the temperature
+  profile of the later pull requests arrives, the same convention as the
+  imposed solid mantle of a rocky planet. A state of a giant's core
+  usable without a temperature profile was searched: none (Jupiter's may
+  be diluted over a large share of its radius, Wahl et al. 2017).
+- **The cores are bounded from the ages after 0.1 Gyr.** `core_bounds`
+  asks every distance to bracket the mass at every tabulated age after
+  0.1 Gyr, a modelling choice: the 0.1 Gyr block leaves out some light
+  irradiated models (at 0.02 au a 10 $M_\oplus$ core starts at 21.54
+  $M_\oplus$ there), and a corner without its row falls back to the next
+  age. Fortney et al. (2007) give no age from which their grid is
+  complete.
 - **The boundary at 100 GPa.** A single measured value was searched:
   none; the published range is 50 to 200 GPa (above), the boundary has no
   temperature, and 100 GPa is the one that the Jupiter models use.
