@@ -6,6 +6,10 @@ use std::f64::consts::PI;
 use crate::error::WorldError;
 use crate::fields::{FieldId, World};
 
+/// Definition: the samples per mean cell side of the projection lattice:
+/// two, so that a sample never skips a cell the pixel covers (Nyquist).
+const SAMPLES_PER_CELL: f64 = 2.0;
+
 /// A 2:1 raster, row-major from the north-west corner.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Raster {
@@ -23,7 +27,7 @@ pub struct Raster {
 /// latitude `[π/2 − π·(j+1)/h, π/2 − π·j/h]`. It is sampled on a lattice
 /// uniform in longitude and in `sin φ`, so every sample covers the same
 /// area and the mean needs no weights. The lattice is denser than the
-/// grid (about two samples per mean cell side, with the longitude count
+/// grid (`SAMPLES_PER_CELL` per mean cell side, with the longitude count
 /// following the pixel's widest parallel), so a polar pixel, a long thin
 /// strip, still meets every cell it covers. Samples are not capped: their
 /// count is about four per grid cell over the whole raster, plus one per
@@ -63,8 +67,8 @@ pub fn project(world: &World, id: &FieldId, width: u32) -> Result<Raster, WorldE
         } else {
             north.abs().min(south.abs())
         };
-        let kx = ((2.0 * dlon * phi_max.cos() / cell).ceil() as usize).max(1);
-        let ky = ((2.0 * dlat / cell).ceil() as usize).max(1);
+        let kx = ((SAMPLES_PER_CELL * dlon * phi_max.cos() / cell).ceil() as usize).max(1);
+        let ky = ((SAMPLES_PER_CELL * dlat / cell).ceil() as usize).max(1);
         for i in 0..width {
             let lon0 = -PI + dlon * f64::from(i);
             classes.clear();

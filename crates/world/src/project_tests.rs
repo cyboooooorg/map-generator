@@ -43,6 +43,9 @@ fn a_constant_field_stays_constant_at_every_width() {
 fn a_latitude_field_projects_to_its_latitude() {
     let w = f32_world(64, |_, p| p[2].asin().to_degrees() as f32);
     let r = project(&w, &id(), 64).unwrap();
+    // The latitude of a pixel is the mean over its band, and a cell is
+    // up to 90/64 degrees tall at n = 64: a discretisation bound of the
+    // test grid, not a physical tolerance.
     let tol = 90.0 / 64.0;
     for j in 0..r.height {
         let lat = 90.0 - 180.0 * (f64::from(j) + 0.5) / f64::from(r.height);
@@ -55,6 +58,9 @@ fn a_latitude_field_projects_to_its_latitude() {
 
 #[test]
 fn areas_agree_between_grid_and_projection() {
+    // The cap z > 0.5 has area 2π(1 − 0.5) = π, a quarter of the sphere's
+    // 4π, so the area-weighted mean is 1/4. The 0.01 tolerances are
+    // discretisation bounds of the test grid and of the sampling lattice.
     let w = f32_world(64, |_, p| if p[2] > 0.5 { 1.0 } else { 0.0 });
     let g = w.grid();
     let f = w.field(&id()).unwrap();
@@ -83,7 +89,7 @@ fn polar_rows_average_every_cell_they_cover() {
     let w = f32_world(32, |k, _| (k % 2) as f32);
     let r = project(&w, &id(), 16).unwrap();
     assert!(
-        r.values[..16].iter().all(|&v| v > 0.0 && v < 1.0),
+        r.values[..16].iter().all(|&v| (0.2..=0.8).contains(&v)),
         "{:?}",
         &r.values[..16]
     );
@@ -122,7 +128,7 @@ fn an_unknown_field_is_missing() {
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "projection width must be even and non-zero")]
 fn an_odd_width_panics() {
     let w = f32_world(4, |_, _| 0.0);
     let _ = project(&w, &id(), 7);

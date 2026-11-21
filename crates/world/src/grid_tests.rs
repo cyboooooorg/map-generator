@@ -70,25 +70,33 @@ fn areas_sum_to_the_whole_sphere() {
 }
 
 #[test]
-fn corner_cells_have_eight_distinct_neighbours() {
+fn a_three_face_corner_has_seven_distinct_neighbours() {
+    // Three faces meet at a corner, so the eighth neighbour of a cell
+    // there does not exist: the cell has seven, all distinct.
     let g = Grid::new(8);
-    for face in 0..6u32 {
-        for (x, y) in [(0, 0), (7, 0), (0, 7), (7, 7)] {
-            let k = ((face * 8 + y) * 8 + x) as usize;
-            let mut ns: Vec<usize> = g.neighbours(k).collect();
-            ns.sort_unstable();
-            ns.dedup();
-            assert!(
-                ns.len() >= 7 && !ns.contains(&k),
-                "face {face} ({x},{y}): {ns:?}"
-            );
+    let mut corners = 0;
+    for k in 0..g.cell_count() {
+        let (_, x, y) = (k / 64, k % 8, k / 8 % 8);
+        let mut ns: Vec<usize> = g.neighbours(k).collect();
+        ns.sort_unstable();
+        ns.dedup();
+        assert!(!ns.contains(&k), "{k}");
+        let on_corner = (x == 0 || x == 7) && (y == 0 || y == 7);
+        if on_corner {
+            corners += 1;
+            assert_eq!(ns.len(), 7, "corner cell {k}: {ns:?}");
+        } else {
+            assert_eq!(ns.len(), 8, "cell {k}: {ns:?}");
         }
     }
+    assert_eq!(corners, 24);
 }
 
 #[test]
 fn area_ratio_stays_within_the_equiangular_spread() {
-    // Equi-angular cube map: cell areas vary by about 30 % (design).
+    // Equi-angular cube map: cell areas vary by about 30 % (architecture
+    // rewrite design, Simulation grid); 1.45 leaves room for the
+    // discretisation of n = 64.
     let g = Grid::new(64);
     let (min, max) = (0..g.cell_count())
         .map(|k| g.area(k))

@@ -58,6 +58,12 @@ impl Ramp {
 }
 
 /// The raster as a PNG file (8-bit RGB), coloured through `ramp`.
+///
+/// # Panics
+///
+/// When the raster holds other than `width * height` values, or when its
+/// size is zero or beyond what PNG can hold: neither comes out of
+/// `world::project`.
 pub fn encode_png(raster: &Raster, ramp: &Ramp) -> Vec<u8> {
     let data: Vec<u8> = raster.values.iter().flat_map(|&v| ramp.colour(v)).collect();
     let mut out = Vec::new();

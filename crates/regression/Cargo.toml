@@ -12,5 +12,8 @@ world.workspace = true
 catalogue.workspace = true
 adapters.workspace = true
 
+[dev-dependencies]
+serde_json.workspace = true
+
 [lints]
 workspace = true

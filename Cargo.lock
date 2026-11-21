@@ -427,6 +427,7 @@ dependencies = [
  "adapters",
  "catalogue",
  "science",
+ "serde_json",
  "system",
  "timeline",
  "world",
