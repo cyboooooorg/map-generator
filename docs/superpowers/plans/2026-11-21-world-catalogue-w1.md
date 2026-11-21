@@ -438,8 +438,8 @@ rewrite](../specs/2026-11-20-architecture-rewrite-design.md).
     `<root>/cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>.world`,
     `<root>/cache/uses.json` (`{"tick": u64, "uses": {"<path relative to
     cache/>": u64}}`).
-    `<slug>` is the designation's text lowercased with spaces as `-`
-    (`MGS 12345 b` → `mgs-12345-b`).
+    `<slug>` is the designation's text with spaces as `-`, case kept so it
+    parses back (`MGS 12345 b` → `MGS-12345-b`).
 
 - [ ] **Step 1: Write the failing integration tests** in
   `crates/adapters/tests/store.rs` (each in its own `tempfile::TempDir`):
