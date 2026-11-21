@@ -53,7 +53,8 @@ temperature (or, for water, along a path through the phase diagram):
 23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
 
 - `water(t)`, for 273.31 K <= t < 355 K: liquid (IAPWS-95), ice VI, ice VII
-  along the isotherm. Outside the range: `EosError::TemperatureOutOfRange`.
+  along the isotherm. Outside the range, and in the last 0.1 mK below
+  355 K where ice VI has no range: `EosError::TemperatureOutOfRange`.
 - `water_on_melting_curve()`, for colder bodies (Zeng and Sasselov 2013):
   ice Ih, III, V, VI, VII, switching at the IAPWS 2011 triple points.
 
@@ -85,7 +86,8 @@ step exactly (Brent's method on the step length), so the error stays
 fourth order; `STEPS_PER_LAYER` (20, a calibration) keeps R and C/MR^2
 within 1e-4 of the converged answer for Earth and a 20 Earth-mass planet.
 Below zero pressure, which a Runge-Kutta stage can predict near the
-surface, the density is the zero-pressure one.
+surface, the density is the zero-pressure one, and a recorded sample's
+pressure is floored at 0, so a zero surface pressure integrates.
 
 ```rust
 use science::constants::EARTH_MASS;
@@ -108,10 +110,10 @@ println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 
 Against measured values (tests of `structure.rs`; the table is on the
 page above): Earth R -0.29 %, C/MR^2 -0.24 %; Venus, Mars, Mercury, the Moon
-and Ganymede within 2 %; super-Earths of 5 Earth masses within 1.1 % of Zeng
-et al. Titan's C/MR^2 is not reproduced (partial differentiation). The core
-alloy is fitted to PREM (364 GPa) and used to 7.85 TPa at 20 Earth masses:
-that converges, but is not validated.
+and Ganymede within 2 %; super-Earths of 5 Earth masses within 2 % of Zeng
+et al. (1.1 % in the prototype). Titan's C/MR^2 is not reproduced (partial
+differentiation). The core alloy is fitted to PREM (364 GPa) and used to
+7.85 TPa at 20 Earth masses: that converges, but is not validated.
 
 ## Internal heat
 

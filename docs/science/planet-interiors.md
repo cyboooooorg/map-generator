@@ -81,9 +81,11 @@ one). A pressure that crosses the boundary between two phases of a
 material ends the step exactly there, so a phase change is a shell
 boundary and the error stays fourth order. Twenty steps per layer keep
 the radius and $C/MR^2$ within $10^{-4}$ of the converged answer for
-Earth and for 20 Earth masses (`STEPS_PER_LAYER`, a calibration; the
-convergence study is in the
-[prototype report](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md)).
+Earth and for 20 Earth masses (`STEPS_PER_LAYER`, a calibration,
+measured when the integrator was written against a 1280-step reference;
+the
+[prototype](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md),
+which did not end steps at the phase changes, needed 160).
 
 **In words.** Squeeze the planet under its own weight, layer by layer,
 until the pressure at the top is the surface's. The radius, the
@@ -140,7 +142,11 @@ are the candidates, proposed as a backlog issue).
 
 **Validation.** The measured values come from the sources named in the
 tests (`structure.rs`); the computed ones from the integrator, with the
-core mass fraction of each body from the cited source.
+core mass fraction of each body from the cited source. Of the laws, the
+liquid and ice Ih are checked against the IAPWS verification tables;
+ice VII against Seager et al.'s (2007, Table 3) polytrope at 3 GPa,
+within the 5 % they state below 5 GPa. No published density at pressure
+was found for ices III, V and VI beyond Journaux et al.'s parameters.
 
 | Body | Measured (source) | Computed | Error |
 | --- | --- | --- | --- |
@@ -170,8 +176,11 @@ fractions 0.325 (PREM), 0.30 (Skinner et al. 2026, citing Shah et al.
 rock and 0.455 ice of Rodriguez-Mozos & Moya (2022), along the melting
 curve. The two super-Earth rows are checked against fits of other
 models, not measurements; the second assumes the prototype's split of
-0.1625, 0.3375 and 0.5. The tests allow 2 % on the terrestrial bodies and
-1.1 % on the super-Earths.
+0.1625, 0.3375 and 0.5 (an assumption, as is Titan's 54.5 % rock and
+45.5 % ice). The prototype came within 1.1 % of both super-Earth curves;
+the tests allow 2 % on every body, the super-Earths included. At 20 Earth
+masses the integration is only checked to converge: no published curve is
+compared there (issue #616).
 
 **Titan.** The model is fully differentiated: iron, rock, then water.
 Titan's measured 0.3414 (Iess et al. 2010) is that of a partly
@@ -196,7 +205,10 @@ comes out right. Partial differentiation is the moons' track (T2).
   within 0.3 %.
 - **Water.** Liquid, VI and VII only between 273.31 and 355 K. Colder
   bodies follow the melting curve. Nothing above 355 K (steam, a
-  supercritical fluid) exists yet. Ices III, V and VI are 0 K curves,
+  supercritical fluid) exists yet. Within about 0.1 mK below 355 K the
+  IAPWS melting pressure of ice VI already passes the AQUA ice VI / ice
+  VII boundary (the two fits reach the triple point a hair apart), so the
+  isotherm is refused there too. Ices III, V and VI are 0 K curves,
   1 to 4 % denser than at their real temperature (the comparison with
   Acuña et al. 2021 is in the study); ice VII and the rock are
   300 K fits. The solid-solid boundaries between ices III, V and VI away
@@ -205,7 +217,17 @@ comes out right. Partial differentiation is the moons' track (T2).
   warm layer skips them.
 - **The water layer's temperature** is the planet's equilibrium
   temperature until the climate of the second pull request sets the
-  surface temperature. A water layer at 355 K or more is an error.
+  surface temperature. A water world at 355 K or more keeps its water
+  outside the structure (see "How it computes them").
+- **States by pressure.** The core's liquid outer and solid inner parts
+  are the two phases of its equation of state, switched at PREM's
+  inner-core boundary pressure (328.851 GPa, the Valencia et al. 2006
+  fit): for any body but Earth that is a pressure, not a melting state.
+  The water's liquid and ices are the phases of its law at its
+  temperature; at the zero surface pressure of this slice liquid water
+  would boil, and the vapour belongs to the atmosphere of the second pull
+  request. The thermal states come with the temperatures of a later pull
+  request.
 
 The envelope, the giants and the partly differentiated moons below are
 still the earlier model's (tag `legacy-final`); they are rewritten as the
@@ -413,8 +435,9 @@ study); the earlier model drew 0.15 dex.
 
 **Secular cooling.** A planet also loses the heat it was born with: its
 mantle and core cool. Earth loses 46.7 TW through its surface (Davies &
-Davies 2010), so 26.5 TW beyond its radiogenic 20.2. The model scales
-that by the silicate mass, which holds the heat, and lets it decay with
+Davies 2010), so 26.5 TW beyond its radiogenic 20.2 (the model's 46.7 TW
+total is that split, by construction). The model scales that by the
+silicate mass, which holds the heat, and lets it decay with
 age over a cooling time that grows as the area of the body, $R^2$ with
 $R^3 \propto M$:
 
@@ -464,15 +487,14 @@ moon has a measured $k_2/Q$; Enceladus's assumed value is $9 \times
 10^{-5}$ (Meyer & Wisdom 2007).
 
 **Orders of magnitude.** The test of the law takes Io round Jupiter with
-Io's measured 0.015, $e$ = 0.0041, $a$ = 421 800 km: it gets $9.3 \times
-10^{13}$ W, inside the $1.3 \pm 0.4 \times 10^{14}$ W that Veeder et al.
-(2004) observe. The test depends on the third digit of $e$: with 0.0040
-it would give $8.8 \times 10^{13}$ W, outside the range. Io's radius and
-Jupiter's mass are the NASA fact sheets', $a$ is from the JPL satellite
-mean elements (which give $e$ = 0.004 at one figure), and 0.0041 is from
-the Wikipedia infobox for Io, citing Lopes et al. (2023): a secondary
-source. The Veeder range was read in the abstract through a search
-result, not in the paper.
+Io's measured $k_2/Q$ = 0.015 ± 0.003 (Lainey et al. 2009), $e$ = 0.004
+and $a$ = 421 800 km (JPL satellite mean elements): over that $k_2/Q$
+range it gets $7.1$ to $10.6 \times 10^{13}$ W, which overlaps the
+$1.3 \pm 0.4 \times 10^{14}$ W that Veeder et al. (2004) observe. The
+test asserts that overlap, so it does not hang on the third digit of $e$
+(0.0041 in secondary sources raises the heat by 5 %). Io's radius and
+Jupiter's mass are the NASA fact sheets'. The Veeder range was read in
+the abstract through a search result, not in the paper.
 
 **Moons in resonance.** Neighbouring moons locked in a 2:1 resonance
 form a chain, as Io, Europa and Ganymede, or Enceladus and Dione
@@ -878,8 +900,9 @@ roadmap replace.
 
 `system::planet` draws a composition and builds the interior and the
 heat of a trial from it (`draws`, `interior`, `heat`; the trace codes are
-in `codes`). Each body draws from its own random stream, seeded by the
-body's seed, so it depends on no other body.
+in `codes`). The draw takes the seed from its caller: the planet model
+will pass the body's seed, so each body depends on no other, and the
+class trial of the backward search the trial's seed.
 
 - **Iron.** The core's share of the refractory mass is $0.32 + \sigma z$,
   $z$ a standard normal, with $\sigma$ = 0.12 below the median and 0.14
@@ -887,24 +910,41 @@ body's seed, so it depends on no other body.
   and a 68 % interval), kept between 0 and 1. The earlier model's slope
   of 0.15 per dex of `[Fe/H]` is gone: the new draw has none.
 - **Water inside the ice line.** Log-normal around 2700 ppm of the mass,
-  Earth's (Marty 2012), with $\sigma_{\ln}$ = 0.5 (Calibration, derived
-  from Marty's ±1350 ppm). A planet beyond the ice line, or one in ten
-  that migrated in (Calibration, as the earlier model), draws a uniform
-  share between 0.5 and 0.67 instead (Zeng et al. 2019).
+  Earth's bulk water (Marty 2012), with $\sigma_{\ln}$ = 0.5
+  (Calibration, derived from Marty's ±1350 ppm). A planet beyond the ice
+  line, or one in ten that migrated in (Calibration, as the earlier
+  model), is a water world and draws a uniform share between 0.5 and 0.67
+  instead (Zeng et al. 2019). The trace says why: a flag that the planet
+  formed beyond the ice line (from its orbit and the ice line) and a drawn
+  migration flag, from which the water fraction derives.
 - **Radiogenic abundance.** Normal around Earth's, 0.23 dex.
-- **Layers.** Core alloy $c (1 - w) M$, mantle $(1 - c)(1 - w) M$ and, if
-  $w > 0$, water $w M$, integrated at zero surface pressure (the system
-  has no atmosphere before the climate of the second pull request). The
-  water layer sits on the isotherm of the planet's equilibrium
-  temperature, which stands for the surface temperature until then: the
-  isotherm from 273.31 to 355 K, the melting curve colder, and an error
-  (`InteriorError::WaterTooHot`) from 355 K.
-- **Outputs.** Radius, surface gravity, mean density, each shell's outer
-  radius, mass, material and state (liquid or solid), and the three heats.
+- **Layers.** Core alloy $c (1 - w) M$ and mantle $(1 - c)(1 - w) M$,
+  integrated at zero surface pressure (the system has no atmosphere
+  before the climate of the second pull request). The drawn $w$ is the
+  bulk water. A dry planet's stays in its mantle, which weighs
+  $(1 - c)(1 - w) M + w M$: hydrated silicate, whose ocean comes from
+  outgassing in the second pull request (Marty's 2700 ppm is the bulk
+  Earth's water, not its oceans'). A water world adds a water layer
+  $w M$ on the isotherm of its equilibrium temperature, which stands for
+  the surface temperature until then: the isotherm from 273.31 to 355 K,
+  the melting curve colder. From 355 K, past the water laws, its water
+  is kept as an inventory without a layer, outside the structure, until
+  the second pull request gives it a steam envelope (as the earlier model's
+  `steam_interior`, after Turbet et al. 2020); its surface gravity and
+  mean density are those of the condensed planet under it.
+- **Outputs.** Radius, surface gravity, mean density, the core, mantle
+  and water masses, each shell's outer radius, mass, material and state,
+  and the three heats. The structure node is the central pressure the
+  integration finds, derived from the mass, the two fractions and the
+  water temperature when a layer uses it; the radius and every shell
+  derive from it, each shell also from its layer's mass. The heats scale
+  with the recorded mantle mass.
 
 **Orders of magnitude.** An Earth trial (1 $M_\oplus$ at 1 au, iron share
-0.325, water 0.27 %) comes out 6375 km, 0.07 % above the mean radius
-6371.0087 km, and gravity 9.8067 m/s², 0.003 % from 9.80665.
+0.325, water 0.27 % in the mantle) comes out 6354 km, 0.27 % below the
+mean radius 6371.0087 km, and gravity 9.874 m/s², 0.69 % above
+9.80665. Its mantle weighs $4.04 \times 10^{24}$ kg, near Dye's
+$4.03 \times 10^{24}$ kg silicate Earth.
 
 ### Measuring it
 
@@ -1086,9 +1126,6 @@ be replaced by a primary source when one is reached.
 - Earth's mean radius, 6 371 008.7714 m, is read on the Wikipedia GRS80
   page, which cites Moritz (2000); the IAG-hosted copy did not open and
   the paper was not read.
-- Io's eccentricity 0.0041 is from the Wikipedia infobox for Io (citing
-  Lopes et al. 2023); JPL gives 0.004. The test's margin depends on that
-  third digit.
 - The Veeder et al. (2004) heat range for Io was read in its abstract,
   through a search result.
 - Potassium's abundance is from the abstract of Arevalo et al. (2009),
