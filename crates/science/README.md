@@ -33,15 +33,11 @@ radius (6371 km) converts explicitly.
 ## Constants
 
 `science::constants` holds the sourced values the conversions use: the IAU
-2012 astronomical unit and the IAU 2015 Resolution B3 nominal values (Prša
-et al. 2016, AJ 152, 41) as `Definition:`; the CODATA 2018 gravitational and
-Stefan-Boltzmann constants (Tiesinga et al. 2021, Rev. Mod. Phys. 93,
-025010) as `Source:`; the solar and Earth masses as the nominal mass
-parameter divided by `GRAVITATIONAL_CONSTANT`.
-
-`EARTH_MEAN_RADIUS` is the IUGG mean radius R1 of GRS80 (6 371 008.7714 m,
-Moritz 2000, J. Geodesy 74, 128). `EarthRadius` stays the IAU equatorial
-radius.
+2012 astronomical unit and IAU 2015 B3 nominal values (Prša et al. 2016, AJ
+152, 41) as `Definition:`; the CODATA 2018 constants (Tiesinga et al. 2021)
+as `Source:`; the solar and Earth masses as the nominal mass parameter over
+`GRAVITATIONAL_CONSTANT`. `EARTH_MEAN_RADIUS` is the IUGG mean radius R1 of
+GRS80 (6 371 008.7714 m, Moritz 2000); `EarthRadius` stays the IAU equatorial.
 
 ## Equations of state
 
@@ -131,6 +127,12 @@ radius only: its C/MR^2 needs a partly differentiated interior, which this
 fully differentiated model does not represent. A 20 Earth-mass planet
 converges, but its core (7.9 TPa at the centre) is far beyond the range of
 the PREM fit of the core alloy.
+
+## Internal heat
+
+`science::heat`: `radiogenic`, `secular` and `tidal` power, and
+`k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
+kind). Values and sources: the doc comments.
 
 ## Ports
 
