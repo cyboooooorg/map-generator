@@ -18,7 +18,9 @@ pub enum ContractError {
     NoSource,
     /// More sources than a keyframe can hold.
     TooManySources(usize),
-    /// Atmosphere layers not ordered by altitude.
+    /// An orbit whose eccentricity is 1 or more.
+    EccentricityNotBelowOne,
+    /// Interior layers or samples not ordered by radius.
     LayersNotOrdered,
     /// Keyframes not ordered by date.
     KeyframesNotOrdered,
@@ -37,6 +39,7 @@ impl fmt::Display for ContractError {
             ContractError::UnknownNode { node } => write!(f, "unknown_node(node={node})"),
             ContractError::NoSource => write!(f, "no_source"),
             ContractError::TooManySources(n) => write!(f, "too_many_sources({n})"),
+            ContractError::EccentricityNotBelowOne => write!(f, "eccentricity_not_below_one"),
             ContractError::LayersNotOrdered => write!(f, "layers_not_ordered"),
             ContractError::KeyframesNotOrdered => write!(f, "keyframes_not_ordered"),
             ContractError::NoKeyframe => write!(f, "no_keyframe"),
