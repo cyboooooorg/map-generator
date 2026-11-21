@@ -19,7 +19,7 @@ use std::f64::consts::PI;
 /// 2018 (Science 361, 677), and the laboratory results differ by up to
 /// 95 GPa (study `giants-and-envelopes.md` §5.1). No single value is
 /// measured; the boundary is a pressure only, without a temperature. The
-/// page [What are planets made of?](../../../docs/science/planet-interiors.md),
+/// page [What are planets made of?](../../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
 /// section on giants, says what was searched.
 pub const METALLIC_PRESSURE: Pascal = Pascal(100e9);
 

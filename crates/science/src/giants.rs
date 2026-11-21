@@ -192,8 +192,8 @@ pub fn core_bounds(mass: EarthMass) -> Option<(EarthMass, EarthMass)> {
 /// radius is nearly flat there (at 4.5 Gyr, 9.5 au and no core, 1.055 to
 /// 1.023 R_J from 2 154 to 3 594 M⊕, Table 4), so the top row stands in
 /// for the heavier ones. What was searched and not found: the page
-/// [What are planets made of?](../../../docs/science/planet-interiors.md),
-/// section on giants (written with the planet model PR 2a).
+/// [What are planets made of?](../../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
+/// section on giants.
 fn mass_read(mass: EarthMass, grid: &Grid) -> EarthMass {
     EarthMass(mass.0.min(grid.top_mass))
 }

@@ -29,7 +29,7 @@ use timeline::{Bulk, Code, Material, MatterState, NodeId, Provenance, Trace, Tra
 /// Saturn or Neptune, and an ice giant's layer boundary is "not computed"
 /// (study `giants-and-envelopes.md` §5.2). Searched: a published mass
 /// above which a giant has a metallic layer; none found. The page
-/// [What are planets made of?](../../../../docs/science/planet-interiors.md),
+/// [What are planets made of?](../../../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
 /// section on giants, says what was searched.
 const METALLIC_MIN_MASS: EarthMass = EarthMass(50.0);
 

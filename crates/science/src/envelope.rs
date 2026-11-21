@@ -134,8 +134,8 @@ pub fn envelope_thickness(
 /// (plan call of the planet model PR 2a: it keeps the radius continuous
 /// at 1 M⊕ and underestimates a light planet's envelope). No model of
 /// Lopez & Fortney goes below 1 M⊕. What was searched and not found: the
-/// page [What are planets made of?](../../../docs/science/planet-interiors.md),
-/// section on mini-Neptunes (written with the planet model PR 2a).
+/// page [What are planets made of?](../../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
+/// section on mini-Neptunes.
 fn mass_read(mass: EarthMass) -> EarthMass {
     EarthMass(mass.0.max(MIN_MASS.0))
 }
@@ -145,8 +145,8 @@ fn mass_read(mass: EarthMass) -> EarthMass {
 /// with no envelope. The tables stop at 0.01 % and no model of a thinner
 /// envelope was found; the rule gives no thickness without gas and is
 /// continuous at 1e-4. What was searched and not found: the page
-/// [What are planets made of?](../../../docs/science/planet-interiors.md),
-/// section on mini-Neptunes (written with the planet model PR 2a).
+/// [What are planets made of?](../../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
+/// section on mini-Neptunes.
 fn below_the_tables(thickness_at_lowest: f64, envelope: Fraction) -> f64 {
     thickness_at_lowest * (envelope.get() / LOWEST_TABULATED.get()).min(1.0)
 }
