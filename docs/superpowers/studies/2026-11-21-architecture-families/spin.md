@@ -218,9 +218,17 @@ that stream, in a fixed order, so that adding a draw never shifts another.
   mean, a factor 4 to 5 and the 3 to 4 of the Solar System giants, never a
   distribution. 0.07 to 0.35 is a ratio of 5, containing 0.126 and the
   Solar System's 0.25 to 0.33 (derived). It is a flattening of what is read.
-- Applies to ice giants too, with the caveat that Bryan 2018 p4 excludes them
-  from the correlation test (solids dominate their mass). No separate source
-  was read for them. Open point 3.
+- Applies to ice giants too, as a `Definition:`. Bryan 2018 p4 excludes them
+  from the correlation test (solids dominate their mass). A follow-up search
+  (2026-11-21) found no ice-giant primordial spin: Batygin 2018
+  (arXiv:1803.07106) and Ginzburg & Chiang 2020 (arXiv:1910.11885), both
+  read through a summarising fetch, stop near Saturn's mass and predict no
+  mass trend; Morbidelli 2012 (arXiv:1208.4685) gives no initial spin for
+  proto-Uranus; the one exoplanet bound, HIP 41378 f (arXiv:2410.05408,
+  P ≥ 15.3 h), allows any f below 0.74 (**derived**). Check, **derived**
+  from the measured periods, masses and equatorial radii: Uranus f = 0.17,
+  Neptune 0.16, inside the range; Jupiter 0.30 and Saturn 0.40, so the
+  upper bound 0.35 leaves Saturn out (open point 6).
 
 ### 4.4 Giant obliquity
 
@@ -231,17 +239,16 @@ that stream, in a fixed order, so that adding a draw never shifts another.
 
 ### 4.5 Open points for the user
 
-1. **Rocky rate.** Kokubo & Genda (about 3 h median, gas-free, impacts only) or
-   Miguel & Brunini (10 to 10 000 h, planetesimal spin included)? The proposal
-   takes the one with a shape. The first gives very fast young rocky planets,
-   the second slower ones; neither reproduces Earth's 24 h, which a drawn world
-   gets only with tides and a giant impact that this draw does not model.
-2. **Giant obliquity.** Isotropic as a Definition, or aligned? A retrograde
-   half is a visible claim.
-3. **Ice giants.** Same `f` law as gas giants, or a separate range? No source
-   read.
+1. **Rocky rate.** Settled by the user (2026-11-21): Kokubo & Genda
+   (section 4.2).
+2. **Giant obliquity.** Settled by the user (2026-11-21): isotropic, as a
+   `Definition:` (section 4.4).
+3. **Ice giants.** Settled: the gas-giant law, as a `Definition:` (no
+   source found, Uranus and Neptune inside, section 4.3).
 4. **Obliquity range.** `ε` above 90 deg means a retrograde spin. Task 9 needs
    to know if `Spin.obliquity` accepts 0 to 180 deg.
 5. **Moons and tides.** This is the birth value. The present value of a planet
    close to its star (despun, Cassini state) is T2 (#604); the draw keeps the
    birth spin until then.
+6. **Saturn.** Its f of 0.40 lies above the 0.35 bound; raise the bound
+   to 0.40 (a ratio of 5.7) or keep 0.35.
