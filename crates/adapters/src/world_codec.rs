@@ -225,8 +225,23 @@ pub fn decode(bytes: &[u8]) -> Result<World, CodecError> {
             storage,
         });
     }
+    // Nothing is allocated from the header before the file proves it
+    // holds the values: the bytes left must cover every field.
+    let cells = usize::try_from(cells).map_err(|_| invalid("grid size"))?;
+    let mut needed = 0usize;
+    for header in &headers {
+        let size = match (header.kind, header.storage) {
+            (0, Storage::Exact) => 4,
+            (0, Storage::U16 { .. }) | (1, _) => 2,
+            (2, _) => 1,
+            _ => return Err(invalid("field type")),
+        };
+        needed = needed.saturating_add(cells.saturating_mul(size));
+    }
+    if r.bytes.len() < needed {
+        return Err(CodecError::Truncated);
+    }
     let grid = Grid::new(n);
-    let cells = grid.cell_count();
     let mut world = World::new(grid, body, keyframe, engine);
     for header in headers {
         let values = match (header.kind, header.storage) {

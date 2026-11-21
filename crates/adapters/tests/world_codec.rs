@@ -239,3 +239,17 @@ fn every_grid_that_can_be_built_can_be_read_back() {
         .unwrap();
     assert_eq!(decode(&encode(&world)).unwrap(), world);
 }
+
+#[test]
+fn a_header_claiming_a_huge_grid_without_payload_is_truncated() {
+    // The header of a world with one U8 field on a 26754-sided grid
+    // (4.3 G cells), and no values after it.
+    let mut bytes = encode(&sample());
+    let header_len = bytes.len() - 96 * (4 + 2 + 1);
+    bytes.truncate(header_len);
+    let n_at = 8 + 4 + 2 + designation().to_string().len() + 4;
+    bytes[n_at..n_at + 4].copy_from_slice(&26_754u32.to_le_bytes());
+    let started = std::time::Instant::now();
+    assert!(matches!(decode(&bytes), Err(CodecError::Truncated)));
+    assert!(started.elapsed().as_secs() < 1);
+}
