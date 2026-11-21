@@ -326,11 +326,20 @@ low-mass rows this way:
   xc_frac < 10⁻³), each is read at the star's fractional main-sequence age
   τ = (t − t_ZAMS)/(t_TAMS − t_ZAMS), linear in age between rows. When one
   of them stops at 20 Gyr, all are read at the star's absolute age, each
-  held at its first or last row outside its ages, and the star's life is
-  `Beyond(20 Gyr)`. This happens between the last mass that stops at
-  20 Gyr and the next (0.7-0.8 M☉ at [Fe/H] −1 and −0.5, 0.8-0.9 at 0,
-  0.9-1.0 at +0.5): there the lifetime jumps from `Beyond(20 Gyr)` to the
-  heavier track's TAMS (12.9 Gyr at 0.8 M☉ and [Fe/H] −1).
+  held at its first or last row outside its ages. This happens between the
+  last mass that stops at 20 Gyr and the next (0.7-0.8 M☉ at [Fe/H] −1 and
+  −0.5, 0.8-0.9 at 0, 0.9-1.0 at +0.5).
+- **TAMS age**: at each bracketing [Fe/H], when both tracks around the mass
+  reach the TAMS, linear in log t against log mass. When only the heavier
+  one does (at t_u), log t is extrapolated against log mass from it and the
+  next heavier track that reaches the TAMS, and kept at least t_u; when
+  neither does, there is none. Then linear in log t against [Fe/H]. A star
+  whose TAMS comes out above 20 Gyr, or is missing at either metallicity,
+  lives `Beyond(20 Gyr)`. So the lifetime falls continuously with mass: at
+  [Fe/H] −1, 19.3 Gyr at 0.72 M☉, 13.6 Gyr at 0.79 M☉, 12.9 Gyr at
+  0.8 M☉ (the table), `Beyond` from 0.71 M☉ down. In those pairs a star
+  past the heavier track's TAMS reads that track's last row (after the
+  hook): at [Fe/H] −1, 0.79 M☉ at 13 Gyr gets R = 1.13 R☉, 6225 K.
 - **Baraffe, below 0.35 M☉**: bilinear in log mass and log age, held at
   the last row (10 Gyr) beyond it, plus the Dartmouth offset in dex, linear
   in mass between 0.15 and 0.3 M☉ (held outside) and linear in [Fe/H]

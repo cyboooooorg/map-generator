@@ -10,7 +10,9 @@
 //!   are interpolated the same way in log t. When every track used reaches
 //!   its TAMS, each is read at the star's fractional main-sequence age
 //!   τ = (t − t_ZAMS)/(t_TAMS − t_ZAMS); otherwise at the star's absolute
-//!   age, each track held at its first or last row outside its ages.
+//!   age, each track held at its first or last row outside its ages. Below
+//!   the lightest track that reaches its TAMS, the TAMS age is extrapolated
+//!   in log t against log mass from the two lightest that do.
 //! - Baraffe (0.08-0.35 M☉): bilinear in log mass and log age, held at the
 //!   last row (10 Gyr) beyond it, plus the Dartmouth offset in dex,
 //!   linear in mass over 0.15-0.3 M☉ (held outside) and in [Fe/H].
@@ -133,7 +135,7 @@ pub fn life(mass: SolarMass, metallicity: Dex) -> Result<Life, StellarError> {
     let (m, feh) = (mass.0, metallicity.0);
     let w = yrec_weight(m);
     let low_zams = (w < 1.0).then(|| low_mass_zams(m));
-    let high = (w > 0.0).then(|| yrec_life(&yrec_tracks(m, feh)));
+    let high = (w > 0.0).then(|| yrec_life(m, feh, &yrec_tracks(m, feh)));
     Ok(match (low_zams, high) {
         (Some(zams), None) => Life {
             zams: Gyr(zams),
@@ -171,7 +173,7 @@ pub fn main_sequence(
         logs.add(low_mass_logs(m, feh, t), 1.0 - w);
     }
     if w > 0.0 {
-        logs.add(yrec_logs(&yrec_tracks(m, feh), t), w);
+        logs.add(yrec_logs(m, feh, &yrec_tracks(m, feh), t), w);
     }
     Ok(MainSequence {
         radius: SolarRadius(10f64.powf(logs.log_r)),
@@ -239,26 +241,67 @@ fn reach_tams(tracks: &[(&Track, f64)]) -> bool {
     tracks.iter().all(|(track, _)| track.reaches_tams())
 }
 
-fn yrec_life(tracks: &[(&Track, f64)]) -> Life {
+fn yrec_life(mass: f64, feh: f64, tracks: &[(&Track, f64)]) -> Life {
     let zams = Gyr(log_mean(tracks, Track::zams));
-    let end = if reach_tams(tracks) {
-        Lifetime::Ends(Gyr(log_mean(tracks, Track::end)))
-    } else {
-        Lifetime::Beyond(TABLE_END)
+    let end = match yrec_tams(mass, feh) {
+        Some(tams) if tams <= TABLE_END.0 => Lifetime::Ends(Gyr(tams)),
+        _ => Lifetime::Beyond(TABLE_END),
     };
     Life { zams, end }
 }
 
-fn yrec_logs(tracks: &[(&Track, f64)], age: f64) -> Logs {
-    let life = yrec_life(tracks);
+/// The star's TAMS age, Gyr: linear in log t against log mass at each
+/// bracketing metallicity ([`pair_tams`]), then against [Fe/H]; `None` when
+/// one of them never ends within the tables.
+fn yrec_tams(mass: f64, feh: f64) -> Option<f64> {
+    let t = tables();
+    let by_feh = bracket(&t.metallicities, feh).expect("metallicity checked against the grid");
+    let mut log_tams = 0.0;
+    for (i, w_feh) in by_feh.terms() {
+        let tracks = t.tracks_at(t.metallicities[i]);
+        log_tams += pair_tams(tracks, mass)?.ln() * w_feh;
+    }
+    Some(log_tams.exp())
+}
+
+/// The TAMS age at `mass` among the `tracks` of one metallicity, Gyr.
+///
+/// Both bracketing tracks end: interpolated in log t against log mass.
+/// Only the heavier one ends at t_u (the lighter stops at 20 Gyr): log t
+/// extrapolated against log mass from it and the next heavier track that
+/// ends, at least t_u. Neither ends: `None`. The caller turns an age past
+/// the end of the tables into [`Lifetime::Beyond`].
+fn pair_tams(tracks: &[Track], mass: f64) -> Option<f64> {
+    let masses: Vec<f64> = tracks.iter().map(|track| track.mass).collect();
+    let by_mass = bracket_log(&masses, mass).expect("the YREC grid covers 0.3-8 Msun");
+    if by_mass.terms().all(|(j, _)| tracks[j].reaches_tams()) {
+        let log_tams: f64 = by_mass.terms().map(|(j, w)| tracks[j].end().ln() * w).sum();
+        return Some(log_tams.exp());
+    }
+    let upper = &tracks[by_mass.hi];
+    if by_mass.lo == by_mass.hi || !upper.reaches_tams() {
+        return None;
+    }
+    let next = tracks[by_mass.hi + 1..]
+        .iter()
+        .find(|track| track.reaches_tams())
+        .expect("the heaviest tracks reach their TAMS");
+    let slope = (next.end() / upper.end()).ln() / (next.mass / upper.mass).ln();
+    let tams = upper.end() * (mass / upper.mass).powf(slope);
+    Some(tams.max(upper.end()))
+}
+
+fn yrec_logs(mass: f64, feh: f64, tracks: &[(&Track, f64)], age: f64) -> Logs {
+    let life = yrec_life(mass, feh, tracks);
+    let by_tau = reach_tams(tracks);
     let mut logs = Logs::default();
     for (track, w) in tracks {
         let track_age = match life.end {
-            Lifetime::Ends(tams) => {
+            Lifetime::Ends(tams) if by_tau => {
                 let tau = (age - life.zams.0) / (tams.0 - life.zams.0);
                 lerp(track.zams(), track.end(), tau)
             }
-            Lifetime::Beyond(_) => age,
+            _ => age,
         };
         let rows = &track.rows;
         let at = bracket_clamped(rows.len(), |i| rows[i].age, track_age, |v| v);
@@ -446,6 +489,21 @@ mod tests {
             main_sequence(SolarMass(1.0), Dex(0.6), Gyr(1.0)),
             Err(StellarError::MetallicityOutOfRange(_))
         ));
+    }
+
+    #[test]
+    fn the_lifetime_is_continuous_below_the_first_ending_track() {
+        // At [Fe/H] -1, 0.8 Msun is the lightest track that reaches its TAMS.
+        let end = |mass: f64| match life(SolarMass(mass), Dex(-1.0)).unwrap().end {
+            Lifetime::Ends(t) => t.0,
+            Lifetime::Beyond(_) => f64::INFINITY,
+        };
+        let (below, at) = (end(0.79), end(0.8));
+        assert!((below / at - 1.0).abs() < 0.1, "{below} vs {at}");
+        let ends: Vec<f64> = (70..=100).map(|i| end(f64::from(i) / 100.0)).collect();
+        for (i, pair) in ends.windows(2).enumerate() {
+            assert!(pair[1] <= pair[0], "step {i} from 0.7 Msun: {pair:?}");
+        }
     }
 
     #[test]
