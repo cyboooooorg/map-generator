@@ -36,8 +36,9 @@ committed: `prep_grid.py` regenerates the namelists.
   set.
 - About 21 GB of disk for the raw outputs, and about 35 minutes on 8
   cores for the 312 runs.
-- For `extract.py`, three downloads, kept outside the repository (only
-  derived numbers are committed):
+- For `extract.py`, three downloads, kept outside the repository (the
+  YREC and Dartmouth files give derived numbers; the Baraffe rows are an
+  extract of the published tables, see Licences and citations):
   - Baraffe et al. 2015, `BHAC15_tracks+structure` (the tracks with
     central temperature and density), as distributed by the authors.
   - The Dartmouth tracks of the Kiauhoku grids
@@ -143,9 +144,10 @@ and leaves it out of the tables (the tables use other masses above
   commits no YREC file: only `prep_grid.py`, which rewrites the shipped
   namelists locally, and the numbers derived from the runs, with this
   citation.
-- Baraffe, Homeier, Allard & Chabrier 2015, A&A 577, A42. The file has
-  no licence: only derived numbers enter the repository, with the
-  citation.
+- Baraffe, Homeier, Allard & Chabrier 2015, A&A 577, A42.
+  `stellar-low-mass.tsv` holds an extract of the published tables of
+  Baraffe et al. 2015, cited; no licence is stated on the authors' site;
+  the file itself is not redistributed.
 - Dotter et al. 2008, ApJS 178, 89 (Dartmouth), through Kiauhoku
   (Claytor et al. 2020, ApJ 888, 43), CC-BY 4.0.
 - Herrera & Serenelli 2023, Standard Solar Models B23 / SF-III, CC-BY

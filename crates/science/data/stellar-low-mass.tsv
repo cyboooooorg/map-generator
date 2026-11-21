@@ -1,7 +1,9 @@
 # Low-mass stars 0.08-0.4 Msun at solar metallicity, and metallicity offsets.
-# Source (rows without prefix): Baraffe, Homeier, Allard & Chabrier 2015,
-# A&A 577, A42 (BHAC15 tracks); derived numbers only, nearest tabulated
-# ages, every track to its end (10 Gyr). Lsun = 3.839e33 erg/s, Rsun = 6.96e10 cm.
+# Source (rows without prefix): an extract of the published tables of
+# Baraffe, Homeier, Allard & Chabrier 2015, A&A 577, A42 (BHAC15 tracks),
+# cited; no licence is stated on the authors' site; the file itself is not
+# redistributed. Rows as tabulated at the nearest tabulated ages, every
+# track to its end (10 Gyr). Lsun = 3.839e33 erg/s, Rsun = 6.96e10 cm.
 # columns: mass_msun age_gyr teff log_l r_rsun log_tc log_rhoc
 # (log_tc: central T in K, log_rhoc: central density in g/cm3, log10)
 # Source (D rows): Dartmouth (Dotter et al. 2008, ApJS 178, 89) tracks via

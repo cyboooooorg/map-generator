@@ -159,9 +159,11 @@ value of *what was picked* is sourced (`Source:` or `Calibration:`).
   metallicity for R, L, T_eff by age; the metallicity shift from
   Dartmouth (Dotter et al. 2008, via the Kiauhoku grids, CC-BY 4.0,
   Zenodo 14908017) as a relative offset from 0.15 to 0.3 M☉, held at
-  its 0.15 M☉ value below. Only derived numbers enter the repository,
-  with the citation; no file of theirs is redistributed (user,
-  2026-11-21). At 0.15-0.3 M☉ the two agree within about 2 %; at
+  its 0.15 M☉ value below. The Baraffe rows are an extract of the
+  published tables of Baraffe et al. 2015 (A&A 577, A42), cited; no
+  licence is stated on the authors' site; the file itself is not
+  redistributed (user, 2026-11-21). The Dartmouth offsets are derived
+  numbers. At 0.15-0.3 M☉ the two agree within about 2 %; at
   0.3 M☉ YREC is about 60 K hotter than Baraffe and 115 K hotter than
   Dartmouth (grey atmosphere). Values are blended over 0.30-0.35 M☉
   (Baraffe tabulates 0.3 and 0.4 M☉; YREC starts at 0.3 M☉, where it

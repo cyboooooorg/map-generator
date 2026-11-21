@@ -272,8 +272,10 @@ they end in NaN). Two kinds of rows:
   and 10 Gyr, the last being the end of the track (10.0 Gyr): 15 rows per
   mass, values as tabulated (BHAC15 uses L☉ = 3.839 × 10³³ erg s⁻¹ and
   R☉ = 6.96 × 10¹⁰ cm). Beyond the last tabulated age a reader holds the
-  last row: these stars change little after 10 Gyr. The file has no
-  licence; only these derived numbers are committed, with the citation.
+  last row: these stars change little after 10 Gyr. These rows are an
+  extract of the published tables of Baraffe et al. 2015 (A&A 577, A42),
+  cited; no licence is stated on the authors' site; the file itself is
+  not redistributed.
   0.3 and 0.4 M☉ are there for the seam with YREC, blended over
   0.30-0.35 M☉.
 - **Dartmouth rows**, `D mass_msun feh dlog_teff dlog_l dlog_r`: the
