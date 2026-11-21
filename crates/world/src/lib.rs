@@ -8,7 +8,9 @@
 pub mod error;
 pub mod fields;
 pub mod grid;
+pub mod project;
 
 pub use error::WorldError;
 pub use fields::{Field, FieldId, Storage, Values, World};
 pub use grid::{DEFAULT_CELL, Grid, MAX_CELLS};
+pub use project::{Raster, project};
