@@ -44,7 +44,7 @@ fn non_finite_values_are_refused_with_their_code() {
 }
 
 #[test]
-fn an_id_from_another_trace_is_refused() {
+fn an_id_past_the_end_of_the_trace_is_refused() {
     let mut other = Trace::new();
     let mut trace = Trace::new();
     let far = {
@@ -150,7 +150,7 @@ fn freezing_keeps_only_the_reachable_nodes_renumbered() {
 }
 
 #[test]
-fn freezing_a_foreign_id_is_refused() {
+fn freezing_an_id_past_the_end_of_the_trace_is_refused() {
     let (_, mut state) = sample();
     let empty = Trace::new();
     assert!(matches!(

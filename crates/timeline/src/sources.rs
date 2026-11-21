@@ -45,13 +45,21 @@ impl TryFrom<Vec<StellarSource>> for StellarSources {
 
 impl StellarSources {
     /// The sources of a planet: one to three, else `NoSource` or
-    /// `TooManySources`.
+    /// `TooManySources`, with masses in non-increasing order (primary
+    /// first), else `SourcesNotOrdered`.
     pub fn new(list: Vec<StellarSource>) -> Result<Self, ContractError> {
         match list.len() {
-            0 => Err(ContractError::NoSource),
-            1..=3 => Ok(StellarSources(list)),
-            n => Err(ContractError::TooManySources(n)),
+            0 => return Err(ContractError::NoSource),
+            1..=3 => {}
+            n => return Err(ContractError::TooManySources(n)),
         }
+        if list
+            .windows(2)
+            .any(|pair| pair[0].mass.value().0 < pair[1].mass.value().0)
+        {
+            return Err(ContractError::SourcesNotOrdered);
+        }
+        Ok(StellarSources(list))
     }
 
     /// The first star.

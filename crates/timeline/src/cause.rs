@@ -266,7 +266,7 @@ impl<K, V: TracedFields> TracedFields for BTreeMap<K, V> {
 }
 
 /// The recorder of causes while a timeline is computed.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Trace {
     nodes: Vec<Node>,
 }
@@ -292,7 +292,19 @@ impl Trace {
         self.push(code, value, Origin::Leaf(provenance))
     }
 
-    /// Records a value computed from the nodes `from`.
+    /// The number of nodes recorded so far.
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Whether nothing was recorded yet.
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
+    /// Records a value computed from the nodes `from`. Refuses an id the
+    /// trace has not issued yet (`id >= len`); it cannot tell an id of
+    /// another trace that happens to be below its length.
     pub fn record<T: NodeValueOf>(
         &mut self,
         code: Code,
@@ -339,7 +351,9 @@ impl Trace {
 
     /// Keeps the nodes `state` holds and their transitive sources, in
     /// increasing id order, renumbered from 0 (so every source stays
-    /// smaller than its node), and rewrites the ids in `state`.
+    /// smaller than its node), and rewrites the ids in `state`. Refuses
+    /// an id past the end of this trace (`id >= len`); an id of another
+    /// trace that is below its length cannot be told apart.
     pub fn freeze<S: TracedFields>(&self, state: &mut S) -> Result<CauseGraph, ContractError> {
         let mut held = Vec::new();
         state.for_each_node(&mut |id| held.push(*id));

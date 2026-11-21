@@ -145,10 +145,14 @@ contract_enum! {
 pub struct TerrainUnit {
     pub age: Traced<Gyr>,
     pub share: Traced<Fraction>,
-    pub renewal: Renewal,
+    pub renewal: Traced<Renewal>,
 }
 
-traced_fields!(TerrainUnit { age, share });
+traced_fields!(TerrainUnit {
+    age,
+    share,
+    renewal
+});
 
 /// The ages of the surface.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

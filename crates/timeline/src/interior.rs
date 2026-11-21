@@ -48,13 +48,14 @@ pub struct Layer {
     /// Stored: cross-sections and the moment of inertia read it, never
     /// an integral of the samples.
     pub mass: Traced<Kilogram>,
-    pub material: Material,
+    pub material: Traced<Material>,
     pub state: Traced<MatterState>,
 }
 
 traced_fields!(Layer {
     outer_radius,
     mass,
+    material,
     state
 });
 

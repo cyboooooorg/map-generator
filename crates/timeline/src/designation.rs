@@ -55,8 +55,42 @@ pub struct Designation {
     pub body: BodyPath,
 }
 
+impl Designation {
+    /// The designation of the star of `system`.
+    pub fn star(system: SystemNumber) -> Designation {
+        Designation {
+            system,
+            body: BodyPath::Star,
+        }
+    }
+
+    /// The designation of the planet at `rank` from the star, or
+    /// `InvalidDesignation` from rank 650 on.
+    pub fn planet(system: SystemNumber, rank: u32) -> Result<Designation, ContractError> {
+        let designation = Designation {
+            system,
+            body: BodyPath::Planet { rank },
+        };
+        designation.validate()?;
+        Ok(designation)
+    }
+
+    /// A planet rank below 650 (the fields are public, so a value built
+    /// by hand or deserialised is checked here).
+    pub(crate) fn validate(&self) -> Result<(), ContractError> {
+        match self.body {
+            BodyPath::Planet { rank } if rank >= MAX_RANKS => {
+                Err(ContractError::InvalidDesignation(format!("rank {rank}")))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// The letter `b` plus `k`, never past `z`: an index above 24 (a rank
+/// the contract refuses) is clamped, so nothing overflows or panics.
 fn letter(k: u32) -> char {
-    char::from(b'b' + k as u8)
+    char::from(b'b' + k.min(LETTERS - 1) as u8)
 }
 
 /// The letters of the planet at `rank` from the star (0 is the closest):
@@ -180,6 +214,32 @@ mod tests {
             "MGS 10000 {b",
         ] {
             assert!(bad.parse::<Designation>().is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn constructors_refuse_a_rank_of_650_or_more() {
+        let system = SystemNumber::new(12_345).unwrap();
+        assert_eq!(Designation::star(system).to_string(), "MGS 12345 A");
+        assert_eq!(
+            Designation::planet(system, 649).unwrap().to_string(),
+            "MGS 12345 zz"
+        );
+        assert_eq!(
+            Designation::planet(system, 650),
+            Err(ContractError::InvalidDesignation("rank 650".into()))
+        );
+    }
+
+    #[test]
+    fn letters_never_pass_z_for_a_rank_out_of_range() {
+        for rank in [650, 1_000, u32::MAX] {
+            assert!(
+                planet_letters(rank)
+                    .chars()
+                    .all(|c| ('b'..='z').contains(&c)),
+                "{rank}"
+            );
         }
     }
 

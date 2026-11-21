@@ -26,21 +26,44 @@ impl Seed {
     }
 }
 
+/// Source: Fowler, Noll and Vo, FNV hash (IETF draft-eastlake-fnv): the
+/// 64-bit offset basis.
+const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+
+/// Source: Fowler, Noll and Vo, FNV hash (IETF draft-eastlake-fnv): the
+/// 64-bit prime.
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// Source: Steele, Lea and Flood 2014, "Fast splittable pseudorandom
+/// number generators" (OOPSLA), and Vigna's splitmix64.c: the golden
+/// gamma added to the state.
+const SPLITMIX_GAMMA: u64 = 0x9e37_79b9_7f4a_7c15;
+
+/// Source: Steele, Lea and Flood 2014, "Fast splittable pseudorandom
+/// number generators" (OOPSLA), and Vigna's splitmix64.c: the first
+/// multiplier of the output mix.
+const SPLITMIX_MUL_1: u64 = 0xbf58_476d_1ce4_e5b9;
+
+/// Source: Steele, Lea and Flood 2014, "Fast splittable pseudorandom
+/// number generators" (OOPSLA), and Vigna's splitmix64.c: the second
+/// multiplier of the output mix.
+const SPLITMIX_MUL_2: u64 = 0x94d0_49bb_1331_11eb;
+
 /// FNV-1a, 64 bits.
 fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut hash = FNV_OFFSET_BASIS;
     for byte in bytes {
         hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        hash = hash.wrapping_mul(FNV_PRIME);
     }
     hash
 }
 
 /// The splitmix64 output function applied to `state + gamma`.
 fn splitmix64(state: u64) -> u64 {
-    let mut z = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    let mut z = state.wrapping_add(SPLITMIX_GAMMA);
+    z = (z ^ (z >> 30)).wrapping_mul(SPLITMIX_MUL_1);
+    z = (z ^ (z >> 27)).wrapping_mul(SPLITMIX_MUL_2);
     z ^ (z >> 31)
 }
 
@@ -68,6 +91,19 @@ mod tests {
         assert_ne!(parent.derive("").get(), parent.derive("b").get());
         assert_ne!(parent.derive("é").get(), parent.derive("e").get());
         assert_ne!(Seed::new(43).derive("b"), parent.derive("b"));
+    }
+
+    #[test]
+    fn a_child_seed_is_pinned() {
+        // Computed independently in Python from the published FNV-1a 64
+        // and splitmix64 definitions, not from this code.
+        assert_eq!(Seed::new(42).derive("b").get(), 0xf26f_e1b5_8802_18d1);
+    }
+
+    #[test]
+    fn derivation_order_matters() {
+        let root = Seed::new(42);
+        assert_ne!(root.derive("a").derive("b"), root.derive("b").derive("a"));
     }
 
     #[test]

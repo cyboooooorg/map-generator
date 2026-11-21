@@ -1,7 +1,7 @@
 //! Keyframes (the full state of a body at a date) and the timeline.
 
 use crate::{
-    CauseGraph, ContractError, Designation, NodeId, PlanetState, Seed, StarState, Trace,
+    BodyPath, CauseGraph, ContractError, Designation, NodeId, PlanetState, Seed, StarState, Trace,
     TracedFields,
 };
 use science::units::Gyr;
@@ -20,10 +20,15 @@ pub enum BodyState {
 }
 
 impl BodyState {
-    fn validate(&self) -> Result<(), ContractError> {
+    fn validate(&self, date: Gyr) -> Result<(), ContractError> {
         match self {
             BodyState::Star(star) => star.validate(),
-            BodyState::Planet(planet) => planet.validate(),
+            BodyState::Planet(planet) => {
+                if planet.age.value().0 != date.0 {
+                    return Err(ContractError::AgeMismatch);
+                }
+                planet.validate()
+            }
         }
     }
 
@@ -70,7 +75,7 @@ impl Keyframe {
     /// `trace` the state holds and renumbers the state's ids to it.
     pub fn new(date: Gyr, mut state: BodyState, trace: &Trace) -> Result<Keyframe, ContractError> {
         check_date(date, "keyframe.date")?;
-        state.validate()?;
+        state.validate(date)?;
         let causes = trace.freeze(&mut state)?;
         Ok(Keyframe {
             date,
@@ -84,7 +89,7 @@ impl Keyframe {
     pub fn validate(&self) -> Result<(), ContractError> {
         check_date(self.date, "keyframe.date")?;
         self.causes.validate()?;
-        self.state.validate()?;
+        self.state.validate(self.date)?;
         let mut state = self.state.clone();
         let mut missing = None;
         state.for_each_node(&mut |id| {
@@ -142,7 +147,9 @@ impl Timeline {
     }
 
     /// At least one keyframe, dates strictly increasing, one kind of
-    /// body, every keyframe valid.
+    /// body that matches the designation (a planet rank below 650), a
+    /// present date within the span of the keyframes, every keyframe
+    /// valid.
     pub fn validate(&self) -> Result<(), ContractError> {
         check_date(self.present, "timeline.present")?;
         let first = self.keyframes.first().ok_or(ContractError::NoKeyframe)?;
@@ -157,6 +164,15 @@ impl Timeline {
             .any(|k| !k.state.same_kind(&first.state))
         {
             return Err(ContractError::MixedBodyKinds);
+        }
+        self.body.validate()?;
+        let is_star = matches!(first.state, BodyState::Star(_));
+        if is_star != (self.body.body == BodyPath::Star) {
+            return Err(ContractError::BodyKindMismatch);
+        }
+        let last = self.keyframes.last().unwrap_or(first);
+        if self.present.0 < first.date.0 || self.present.0 > last.date.0 {
+            return Err(ContractError::PresentOutsideKeyframes);
         }
         self.keyframes.iter().try_for_each(Keyframe::validate)
     }

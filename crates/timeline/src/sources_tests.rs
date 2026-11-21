@@ -2,10 +2,16 @@ use super::*;
 use crate::{Code, Provenance, Trace};
 
 fn build(specs: &[(f64, f64, f64)]) -> Vec<StellarSource> {
+    let masses = vec![1.0; specs.len()];
+    build_with_masses(specs, &masses)
+}
+
+fn build_with_masses(specs: &[(f64, f64, f64)], masses: &[f64]) -> Vec<StellarSource> {
     let mut trace = Trace::new();
     specs
         .iter()
-        .map(|&(flux, equilibrium, teff)| StellarSource {
+        .zip(masses)
+        .map(|(&(flux, equilibrium, teff), &mass)| StellarSource {
             flux: trace
                 .leaf(Code::of("star.flux"), EarthFlux(flux), Provenance::Input)
                 .unwrap(),
@@ -20,7 +26,7 @@ fn build(specs: &[(f64, f64, f64)]) -> Vec<StellarSource> {
                 .leaf(Code::of("star.teff"), Kelvin(teff), Provenance::Input)
                 .unwrap(),
             mass: trace
-                .leaf(Code::of("star.mass"), SolarMass(1.0), Provenance::Input)
+                .leaf(Code::of("star.mass"), SolarMass(mass), Provenance::Input)
                 .unwrap(),
             luminosity: trace
                 .leaf(
@@ -100,4 +106,17 @@ fn every_node_is_visited_in_order() {
     let mut count = 0;
     s.for_each_node(&mut |_| count += 1);
     assert_eq!(count, 10);
+}
+
+#[test]
+fn sources_must_be_in_non_increasing_order_of_mass() {
+    let specs = [(0.5, 200.0, 4000.0), (0.5, 200.0, 4000.0)];
+    assert_eq!(
+        StellarSources::new(build_with_masses(&specs, &[0.5, 1.0])).unwrap_err(),
+        ContractError::SourcesNotOrdered
+    );
+    assert!(StellarSources::new(build_with_masses(&specs, &[1.0, 1.0])).is_ok());
+    assert!(StellarSources::new(build_with_masses(&specs, &[1.0, 0.5])).is_ok());
+    let json = serde_json::to_string(&build_with_masses(&specs, &[0.5, 1.0])).unwrap();
+    assert!(serde_json::from_str::<StellarSources>(&json).is_err());
 }

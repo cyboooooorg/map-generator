@@ -2,8 +2,9 @@
 //! generator: per body, keyframes (the full state at a date) and dated
 //! events, with their cause trees.
 //!
-//! Data types only, with validation; no behaviour. A keyframe carries
-//! physical forcings and states, never the kind of the central object.
+//! Data types with validation; the only behaviour is seed derivation
+//! and freezing a keyframe's causes. A keyframe carries physical
+//! forcings and states, never the kind of the central object.
 
 mod cause;
 mod designation;

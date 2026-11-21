@@ -28,6 +28,14 @@ pub enum ContractError {
     NoKeyframe,
     /// Keyframes of different kinds of body in one timeline.
     MixedBodyKinds,
+    /// A designation of one kind of body on keyframes of another.
+    BodyKindMismatch,
+    /// A planet state whose age is not its keyframe's date.
+    AgeMismatch,
+    /// A present date outside the span of the keyframes.
+    PresentOutsideKeyframes,
+    /// Stellar sources not in non-increasing order of mass.
+    SourcesNotOrdered,
 }
 
 impl fmt::Display for ContractError {
@@ -44,6 +52,10 @@ impl fmt::Display for ContractError {
             ContractError::KeyframesNotOrdered => write!(f, "keyframes_not_ordered"),
             ContractError::NoKeyframe => write!(f, "no_keyframe"),
             ContractError::MixedBodyKinds => write!(f, "mixed_body_kinds"),
+            ContractError::BodyKindMismatch => write!(f, "body_kind_mismatch"),
+            ContractError::AgeMismatch => write!(f, "age_mismatch"),
+            ContractError::PresentOutsideKeyframes => write!(f, "present_outside_keyframes"),
+            ContractError::SourcesNotOrdered => write!(f, "sources_not_ordered"),
         }
     }
 }
