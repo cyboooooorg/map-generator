@@ -647,13 +647,18 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
     within the star's lifetime) with `pub const INPUTS_SCHEMA: u32 = 1`.
     All serde. Doc: the stored truth; mapgen3 may refine the request
     and mapgen1 the archetypes in their pull requests.
-  - `placement.rs`: `Trial { designation: Designation, seed: Seed,
-    mass: Traced<EarthMass>, orbit: Orbit, sources: StellarSources,
-    age: Traced<Gyr>, metallicity: Traced<Dex>, ice_line:
-    Traced<AstronomicalUnit>, archetype: Option<ArchetypeId> }` and
-    `Placement { trial: Trial, spin: Spin }`, not serialised. Doc: the
-    draw builds the trial, asks its class, then adds the spin; the
-    orbit's period is the draw's (Kepler), never recomputed.
+  - `placement.rs`: `Trial { seed: Seed, mass: Traced<EarthMass>,
+    orbit: Orbit, sources: StellarSources, age: Traced<Gyr>,
+    metallicity: Traced<Dex>, ice_line: Traced<AstronomicalUnit>,
+    archetype: Option<ArchetypeId> }` and
+    `Placement { designation: Designation, seed: Seed, spin: Spin,
+    trial: Trial }`, not serialised. Doc: a trial runs before letters
+    exist (they follow distance once every orbit is placed), so it has
+    no designation and its own seed (`system_seed.derive("trial/<archetype
+    id>")` or `"trial/slot-<n>"`, as legacy `system.rs:896-920`); the
+    placement adds the designation, the body seed and the spin, and
+    `model` runs again on it. The orbit's period is the draw's (Kepler),
+    never recomputed.
   - Doc-only modules, each a `//!` comment fixing its owner and its
     future signature, no items:
     - `draw` (mapgen3): `pub fn draw(inputs: &Inputs, trace: &mut

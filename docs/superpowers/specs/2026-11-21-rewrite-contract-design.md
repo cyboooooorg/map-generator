@@ -289,7 +289,10 @@ change they ask for goes in 2a, not in a follow-up.
   next pull request), never `ENGINE_VERSION`.
 - The seam, fixed here so both sides work against it (settled with
   mapgen1 and mapgen3 on 2026-11-21):
-  - the draw builds a `Trial` per planet: designation, body seed, mass,
+  - the draw builds a `Trial` per planet before letters exist (they
+    follow distance once every orbit is placed): a trial seed of its own
+    (`trial/<archetype id>` or `trial/slot-<n>`, as legacy
+    `system.rs:896-920`), mass,
     orbit (with the period, computed by the draw from Kepler's law and
     the host mass; the planet model never recomputes it), the
     `StellarSources`, system age, metallicity, ice line, and the
@@ -303,7 +306,10 @@ change they ask for goes in 2a, not in a follow-up.
     classifier, as in the legacy code, at the cost of one model run per
     trial;
   - the draw then extends the trial into a `Placement`: the trial plus
-    the spin;
+    the designation, the body seed and the spin; `model` runs again on
+    it. Trials per system: one per distinct asked archetype, plus one
+    per drawn slot heavy enough to hold an envelope (#476), at most 15,
+    typically 0 to 3;
   - `planet::model(&Placement, &mut Trace) -> Result<PlanetState,
     SystemError>` (mapgen1) draws the planet's own inputs (composition,
     volatiles) from sub-seeds of the body seed, runs the archetype's
