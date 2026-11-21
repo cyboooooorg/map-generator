@@ -12,6 +12,8 @@
     "crates/**/*.md",
     "tools/guardrails/**/*.md",
     ".claude/agents/*.md",
-    "docs/superpowers/plans/2026-11-20-rewrite-*.md"
+    "docs/superpowers/plans/2026-11-20-rewrite-*.md",
+    "docs/superpowers/plans/2026-11-21-planet-interior.md",
+    "docs/superpowers/studies/2026-11-21-planet-interior/*.md"
   ]
 }
