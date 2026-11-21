@@ -41,6 +41,9 @@ variant as a code to the cause graph.
 
 ## The seed rule
 
+`fnv1a64` is public: the catalogue hashes the inputs of a system with it
+to make its id, so its output never changes.
+
 Nothing draws outside the seed hierarchy: a child seed is derived from
 its parent by label (`Seed::derive`). A timeline stores its seed and
 engine version; both are cache keys, nothing is migrated.

@@ -7,15 +7,20 @@ read and write files.
 
 ## Filesystem store
 
-`FsStore::new(root, budget)` implements `SystemRepository`,
+`FsStore::new(root, budget)` (`DEFAULT_BUDGET` is 2 GiB) implements `SystemRepository`,
 `TimelineCache` and `WorldCache`. Layout under `root`:
 
 ```text
 systems/<id>/inputs.json
 cache/<engine>/<id>/timelines.json
-cache/<engine>/<id>/worlds/<designation>/<keyframe>-<grid>.world
+cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>.world
 cache/uses.json
 ```
+
+`<slug>` is the body's designation with `-` for spaces (`MGS-12345-b`),
+`<keyframe>` its index in the timeline and `<grid>` the cells per face
+side. Never write under `root` by hand: inputs are the only truth, the
+rest is rebuilt.
 
 Writes are staged in `<file>.tmp` then renamed. A cache file that cannot
 be read or parsed is a miss. `cache/uses.json` holds a logical use
