@@ -159,11 +159,25 @@ impl Fraction {
     }
 }
 
-impl TryFrom<f64> for Fraction {
-    type Error = String;
+/// A number outside 0 to 1 offered as a [`Fraction`]. Its `Display` is a
+/// code with its parameter, never prose:
+/// `fraction-out-of-range(value=1.5)`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FractionOutOfRange(pub f64);
 
-    fn try_from(value: f64) -> Result<Self, String> {
-        Self::new(value).ok_or_else(|| format!("{value} is not a fraction between 0 and 1"))
+impl std::fmt::Display for FractionOutOfRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fraction-out-of-range(value={})", self.0)
+    }
+}
+
+impl std::error::Error for FractionOutOfRange {}
+
+impl TryFrom<f64> for Fraction {
+    type Error = FractionOutOfRange;
+
+    fn try_from(value: f64) -> Result<Self, FractionOutOfRange> {
+        Self::new(value).ok_or(FractionOutOfRange(value))
     }
 }
 
@@ -233,6 +247,19 @@ mod tests {
         assert!(Fraction::new(-1e-9).is_none() && Fraction::new(1.000_001).is_none());
         assert!(Fraction::new(f64::NAN).is_none());
         assert!(serde_json::from_str::<Fraction>("1.5").is_err());
+        assert_eq!(
+            Fraction::try_from(1.5).unwrap_err().to_string(),
+            "fraction-out-of-range(value=1.5)"
+        );
+        assert_eq!(
+            serde_json::from_str::<Fraction>("1.5")
+                .unwrap_err()
+                .to_string()
+                .split(" at line")
+                .next()
+                .unwrap(),
+            "fraction-out-of-range(value=1.5)"
+        );
         assert_eq!(
             serde_json::from_str::<Fraction>("0.25").unwrap().get(),
             0.25
