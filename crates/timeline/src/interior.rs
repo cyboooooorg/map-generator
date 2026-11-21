@@ -50,13 +50,17 @@ pub struct Layer {
     pub mass: Traced<Kilogram>,
     pub material: Traced<Material>,
     pub state: Traced<MatterState>,
+    /// How energy crosses the layer, when it is a zone of a star (core,
+    /// radiative and convective zones are all plasma, told apart here).
+    pub transport: Option<Traced<Transport>>,
 }
 
 traced_fields!(Layer {
     outer_radius,
     mass,
     material,
-    state
+    state,
+    transport
 });
 
 /// The matter at one radius.
@@ -67,7 +71,9 @@ pub struct RadialSample {
     pub pressure: Pascal,
     pub temperature: Kelvin,
     pub transport: Option<Transport>,
-    /// Share of the energy output made by fusion, in a star.
+    /// Definition: in a star, the cumulative share of the nuclear
+    /// luminosity produced inside this radius, L_nuc(r) / L_nuc (0 at the
+    /// centre, 1 at the edge of the burning core).
     pub fusion_share: Option<Fraction>,
 }
 
