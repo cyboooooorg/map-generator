@@ -27,9 +27,13 @@ request.
   planet model only reads those two fields.
 - **The seam.** `planet::class_of(&Trial, &Trace) ->
   Result<TrialOutcome, SystemError>` with
-  `TrialOutcome { class: Traced<PlanetClass>, bulk: Bulk }`. The draw
-  needs the bulk (mean density, radius, mass) for the Roche floor and
-  the hot-giant edge. One code path: the chain computes both. The draw
+  `TrialOutcome { class: PlanetClass, radius: EarthRadius,
+  mean_density: KilogramPerCubicMetre }` (defined in `placement.rs`),
+  plain values: `class_of` runs on a scratch clone of the trace, whose
+  node ids would cite the wrong nodes in the draw's trace, so the draw
+  records the kept class itself (`system.draw.class`). The draw needs the
+  radius and mean density for the Roche floor and the hot-giant edge.
+  One code path: the chain computes them with the class. The draw
   takes the classifier as a parameter and stubs it in its tests; the
   second pull request to merge wires the real one.
 - mapgen3 does not touch `crates/system/src/planet/**`; mapgen1 does
