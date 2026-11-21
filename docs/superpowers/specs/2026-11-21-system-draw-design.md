@@ -253,8 +253,11 @@ tools regenerate them.
   not traced ones, since it runs on a scratch trace; the draw records
   the kept class as `system.draw.class`. $K_{50}$ binds only pairs of
   two small planets with a drawn one (user, 2026-11-22). An asked host
-  mass wins over the host an archetype names. The sources, the plan's own choices and
-  the departures are in `docs/science/system-architectures.md`.
+  mass or date wins over the host an archetype names; the archetype's
+  age is kept only with its own host (no mass asked, or the same one),
+  otherwise the date is drawn as for a free system. The sources, the
+  plan's own choices and the departures are in
+  `docs/science/system-architectures.md`.
   The archetype table, with its placement half, is
   `system::archetype` (contract); this work fills the placement half
   for the legacy archetypes (`legacy-final:crates/mapgen/src/archetype.rs`).

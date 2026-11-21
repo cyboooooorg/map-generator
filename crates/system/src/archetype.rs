@@ -267,8 +267,10 @@ pub fn placement(id: &ArchetypeId) -> Option<&'static ArchetypePlacement> {
 /// settle on. Archetypes with a count of 0 are skipped; two that name
 /// different host masses are refused. A mass or date the request names
 /// wins over the archetypes' (a star named is honoured, whatever it
-/// does to the planets asked); an archetype's age is kept only when the
-/// request names no date.
+/// does to the planets asked). An archetype's age belongs to its host:
+/// it is kept only when the request names no date and the host used is
+/// the archetype's (no mass asked, or the same one); otherwise the date
+/// is drawn as for a free system.
 pub(crate) fn asked_host(
     asked: &BTreeMap<ArchetypeId, u32>,
     host_mass: Option<SolarMass>,
@@ -297,10 +299,10 @@ pub(crate) fn asked_host(
             Some(first) => first.age = first.age.or(host.age),
         }
     }
-    Ok((
-        host_mass.or(named.map(|h| h.mass)),
-        present.or(named.and_then(|h| h.age)),
-    ))
+    let age = named
+        .filter(|h| host_mass.is_none_or(|mass| mass == h.mass))
+        .and_then(|h| h.age);
+    Ok((host_mass.or(named.map(|h| h.mass)), present.or(age)))
 }
 
 #[cfg(test)]
@@ -363,7 +365,9 @@ mod tests {
     #[test]
     fn an_asked_host_mass_wins() {
         let result = asked_host(&asked(&[("earth-like", 1)]), Some(SolarMass(0.5)), None);
-        assert_eq!(result, Ok((Some(SolarMass(0.5)), Some(Gyr(4.57)))));
+        assert_eq!(result, Ok((Some(SolarMass(0.5)), None)));
+        let same = asked_host(&asked(&[("earth-like", 1)]), Some(SolarMass(1.0)), None);
+        assert_eq!(same, Ok((Some(SolarMass(1.0)), Some(Gyr(4.57)))));
         let named = asked_host(&asked(&[("earth-like", 1)]), None, None);
         assert_eq!(named, Ok((Some(SolarMass(1.0)), Some(Gyr(4.57)))));
     }

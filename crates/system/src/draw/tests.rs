@@ -361,6 +361,27 @@ fn an_asked_planet_is_never_moved() {
 }
 
 #[test]
+fn an_earth_like_around_2_solar_masses_draws() {
+    // The Sun's 4.57 Gyr is past a 2 M☉ star's main sequence: the date
+    // is drawn for the asked host instead.
+    let inputs = Inputs {
+        request: Request::System(SystemRequest {
+            host_mass: Some(SolarMass(2.0)),
+            metallicity: None,
+            archetypes: asked(&[("earth-like", 1)]),
+        }),
+        ..system_inputs(8)
+    };
+    let drawn = draw_with(&inputs, &mut Trace::new(), model).unwrap();
+    assert!(
+        drawn
+            .placements
+            .iter()
+            .any(|p| p.trial.archetype == Some(id("earth-like")))
+    );
+}
+
+#[test]
 fn asked_values_are_inputs_and_drawn_ones_draws() {
     let mut trace = Trace::new();
     let (_, placed) = draw_system(&asking(2, &[("earth-like", 1)]), &mut trace, model).unwrap();
