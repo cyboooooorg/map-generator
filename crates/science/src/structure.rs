@@ -397,12 +397,17 @@ impl Model<'_> {
         Ok(end)
     }
 
+    /// The recorded state at `s`. The pressure is floored at 0 as in
+    /// [`Model::derivatives`]: at a zero surface pressure the shooting
+    /// converges to within its tolerance on either side of 0, and a
+    /// pressure a hair below 0 is the surface, not a material out of range.
     fn sample(&self, law: &DensityLaw, s: &State) -> Result<Sample, EosError> {
+        let p = s.p.max(0.0);
         Ok(Sample {
             radius: Metre(s.r),
             enclosed_mass: Kilogram(self.mass * s.t * s.t * s.t),
-            density: law.density(Pascal(s.p))?,
-            pressure: Pascal(s.p),
+            density: law.density(Pascal(p))?,
+            pressure: Pascal(p),
         })
     }
 
@@ -693,6 +698,10 @@ mod tests {
     /// Source: 300 K, the isotherm of the Zeng et al. 2019 curve.
     const WATER_WORLD_TEMPERATURE: Kelvin = Kelvin(300.0);
 
+    /// Definition: masses, Earth masses, of the zero-pressure sweep (test
+    /// choices across the engine's rocky range, 0.1 to 10).
+    const ZERO_PRESSURE_MASSES: [f64; 6] = [0.1, 0.3, 1.0, 2.0, 5.0, 10.0];
+
     /// Definition: density of the test-only uniform material.
     const UNIFORM_DENSITY: f64 = 5000.0;
     /// Definition: a bulk modulus so large that the density is constant to
@@ -925,6 +934,31 @@ mod tests {
             Err(StructureError::NoMass)
         );
         assert_eq!(integrate(&[], SURFACE), Err(StructureError::NoMass));
+    }
+
+    #[test]
+    fn rocky_planets_integrate_at_zero_surface_pressure() {
+        // The engine integrates at 0 Pa until an atmosphere sets the surface
+        // pressure: the converged surface pressure lands a hair on either
+        // side of 0, and the surface must still read a density.
+        let (core, mantle) = (core_alloy(), mantle());
+        for masses in ZERO_PRESSURE_MASSES {
+            let mass = EARTH_MASS * masses;
+            let layers = [
+                LayerSpec {
+                    mass: mass * EARTH_CMF,
+                    material: &core,
+                },
+                LayerSpec {
+                    mass: mass * (1.0 - EARTH_CMF),
+                    material: &mantle,
+                },
+            ];
+            let s = integrate(&layers, Pascal(0.0));
+            assert!(s.is_ok(), "{masses} Earth masses: {s:?}");
+            let surface = s.unwrap().samples.last().copied().unwrap();
+            assert!(surface.pressure.0 >= 0.0, "{masses}: {surface:?}");
+        }
     }
 
     #[test]
