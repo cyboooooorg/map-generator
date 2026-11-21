@@ -12,6 +12,7 @@ timeline.workspace = true
 science.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+png.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

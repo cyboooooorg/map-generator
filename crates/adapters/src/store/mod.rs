@@ -82,7 +82,7 @@ pub struct FsStore {
 }
 
 /// Writes `bytes` to `path` through `<path>.tmp` and a rename.
-fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

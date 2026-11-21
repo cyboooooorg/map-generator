@@ -29,6 +29,11 @@ A `.world` file is the binary layout of `encode`/`decode` (see
 `src/world_codec.rs`): magic `MGWORLD1`, then little-endian header and
 fields. A truncated, corrupt or mismatching file is a cache miss.
 
+PNG projections: `write_png(path, raster, ramp)` colours a `world::Raster`
+through a `Ramp` (linear stops, `Ramp::grey` for a grey scale; NaN is
+black) and writes an 8-bit RGB PNG with the same staged write as the
+store.
+
 ## Ports
 
 None of its own: it implements the ports of the domain crates.
