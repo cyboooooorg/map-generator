@@ -11,7 +11,7 @@ use crate::{CatalogueError, SystemId};
 pub struct StoredSystem {
     pub id: SystemId,
     pub inputs: Inputs,
-    /// The engine version that last generated it.
+    /// The engine version that first generated it.
     pub engine: EngineVersion,
     pub name: Option<String>,
 }
@@ -24,6 +24,21 @@ impl StoredSystem {
             inputs,
             engine,
             name: None,
+        }
+    }
+
+    /// Refuses a record whose id is not the hash of its inputs: the id
+    /// is derived, so a mismatch means the inputs were edited by hand or
+    /// the record was built wrong.
+    pub fn check_id(&self) -> Result<(), CatalogueError> {
+        let computed = SystemId::of(&self.inputs);
+        if self.id == computed {
+            Ok(())
+        } else {
+            Err(CatalogueError::IdMismatch {
+                stored: self.id,
+                computed,
+            })
         }
     }
 

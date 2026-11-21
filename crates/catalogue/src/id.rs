@@ -14,6 +14,13 @@ pub enum CatalogueError {
     UnknownSchema { found: u32, expected: u32 },
     /// Text that is not a system id.
     BadId(String),
+    /// A stored record whose id is not the hash of its inputs.
+    IdMismatch {
+        /// The id the record carries.
+        stored: SystemId,
+        /// The id its inputs hash to.
+        computed: SystemId,
+    },
 }
 
 impl fmt::Display for CatalogueError {
@@ -23,6 +30,9 @@ impl fmt::Display for CatalogueError {
                 write!(f, "unknown_schema(found={found}, expected={expected})")
             }
             CatalogueError::BadId(text) => write!(f, "bad_id({text})"),
+            CatalogueError::IdMismatch { stored, computed } => {
+                write!(f, "id_mismatch(stored={stored}, computed={computed})")
+            }
         }
     }
 }

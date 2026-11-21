@@ -8,8 +8,10 @@
 //! <root>/cache/uses.json
 //! ```
 //!
-//! Every write is staged in `<file>.tmp` then renamed, so a reader never
-//! sees half a file. A cache file that cannot be read or parsed is a
+//! Every write is staged in `<file>.<pid>-<n>.tmp`, synced, then
+//! renamed, so a reader never sees half a file and two writers never
+//! share a staging file. (There is no lock: two writers of the same
+//! file race to the rename, and the last one wins.) A cache file that cannot be read or parsed is a
 //! miss, never an error: the cache is regenerated from the inputs.
 
 mod paths;
@@ -18,7 +20,9 @@ mod uses;
 use std::fmt;
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use catalogue::{
     CacheEntry, CacheKey, CatalogueError, StoredSystem, SystemId, SystemRepository, TimelineCache,
@@ -41,6 +45,8 @@ pub enum StoreError {
     Catalogue(CatalogueError),
     /// A world could not be encoded (decoding failures are misses).
     Codec(CodecError),
+    /// A world was put under a key that does not describe it.
+    KeyMismatch,
 }
 
 impl fmt::Display for StoreError {
@@ -50,6 +56,7 @@ impl fmt::Display for StoreError {
             StoreError::Json(error) => write!(f, "json({error})"),
             StoreError::Catalogue(error) => write!(f, "{error}"),
             StoreError::Codec(error) => write!(f, "{error}"),
+            StoreError::KeyMismatch => write!(f, "world.key-mismatch"),
         }
     }
 }
@@ -81,16 +88,32 @@ pub struct FsStore {
     budget: u64,
 }
 
-/// Writes `bytes` to `path` through `<path>.tmp` and a rename.
+/// The counter that makes each staging name unique within the process.
+static STAGING: AtomicU64 = AtomicU64::new(0);
+
+/// Writes `bytes` to `path` through `<path>.<pid>-<n>.tmp`: the staging
+/// file is synced to disk, then renamed over `path`.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     let mut staging = path.as_os_str().to_owned();
-    staging.push(".tmp");
+    staging.push(format!(
+        ".{}-{}.tmp",
+        std::process::id(),
+        STAGING.fetch_add(1, Ordering::Relaxed)
+    ));
     let staging = PathBuf::from(staging);
-    fs::write(&staging, bytes)?;
-    fs::rename(&staging, path)
+    let written = (|| {
+        let mut file = fs::File::create(&staging)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        fs::rename(&staging, path)
+    })();
+    if written.is_err() {
+        let _ = fs::remove_file(&staging);
+    }
+    written
 }
 
 /// Reads `path`, `None` when it does not exist.
@@ -120,6 +143,30 @@ fn subdirs(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     }
     found.sort();
     Ok(found)
+}
+
+/// Deletes the `*.tmp` files under `dir`: staging files of a write that
+/// was interrupted, never valid entries.
+fn remove_temporaries(dir: &Path) -> io::Result<()> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            remove_temporaries(&path)?;
+        } else if path.extension().is_some_and(|ext| ext == "tmp") {
+            match fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    Ok(())
 }
 
 impl FsStore {
@@ -245,6 +292,7 @@ impl FsStore {
     /// policy's picks in policy order.
     pub fn evict(&self, current: EngineVersion) -> Result<Vec<CacheKey>, StoreError> {
         let mut uses = self.load_uses();
+        remove_temporaries(&paths::cache_dir(&self.root))?;
         let (orphans, entries): (Vec<_>, Vec<_>) = self
             .entries(&uses)?
             .into_iter()
@@ -262,6 +310,14 @@ impl FsStore {
     }
 }
 
+/// Whether `world` is the one `key` names.
+fn world_matches(key: &WorldKey, world: &world::World) -> bool {
+    world.body() == &key.body
+        && world.keyframe() == key.keyframe
+        && world.grid().n() == key.grid
+        && world.engine() == key.engine
+}
+
 /// The system a cache entry belongs to.
 fn system_of(key: &CacheKey) -> SystemId {
     match key {
@@ -274,6 +330,7 @@ impl SystemRepository for FsStore {
     type Error = StoreError;
 
     fn put(&self, system: &StoredSystem) -> Result<(), StoreError> {
+        system.check_id()?;
         let bytes = serde_json::to_vec_pretty(system)?;
         write_atomic(&paths::inputs_file(&self.root, system.id), &bytes)?;
         Ok(())
@@ -285,6 +342,7 @@ impl SystemRepository for FsStore {
         };
         let system: StoredSystem = serde_json::from_slice(&bytes)?;
         system.check_schema()?;
+        system.check_id()?;
         Ok(Some(system))
     }
 
@@ -321,7 +379,8 @@ impl TimelineCache for FsStore {
             .flatten()
             .and_then(|bytes| serde_json::from_slice::<Vec<Timeline>>(&bytes).ok());
         if timelines.is_some() {
-            self.touch(paths::timelines_use_key(engine, system))?;
+            // A lost tick only makes the entry look older.
+            let _ = self.touch(paths::timelines_use_key(engine, system));
         }
         Ok(timelines)
     }
@@ -348,19 +407,18 @@ impl WorldCache for FsStore {
             .flatten()
             .and_then(|bytes| world_codec::decode(&bytes).ok())
             // A file that holds another world than its name says is a miss.
-            .filter(|world| {
-                world.body() == &key.body
-                    && world.keyframe() == key.keyframe
-                    && world.grid().n() == key.grid
-                    && world.engine() == key.engine
-            });
+            .filter(|world| world_matches(key, world));
         if world.is_some() {
-            self.touch(paths::world_use_key(key))?;
+            // A lost tick only makes the entry look older.
+            let _ = self.touch(paths::world_use_key(key));
         }
         Ok(world)
     }
 
     fn put(&self, key: &WorldKey, world: &world::World) -> Result<(), StoreError> {
+        if !world_matches(key, world) {
+            return Err(StoreError::KeyMismatch);
+        }
         write_atomic(
             &paths::world_file(&self.root, key),
             &world_codec::encode(world),

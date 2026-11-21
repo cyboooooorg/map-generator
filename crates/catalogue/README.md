@@ -14,7 +14,8 @@ unresolved: `present: None` (draw the age) differs from a fixed date. A
 system's MGS number is not a key (it can collide). `StoredSystem` holds
 the id, the inputs, the engine version that first generated them and an
 optional name; a repository refuses an unknown inputs schema
-(`CatalogueError::UnknownSchema`).
+(`CatalogueError::UnknownSchema`) and a record whose id is not the hash
+of its inputs (`CatalogueError::IdMismatch`), on `put` and on `get`.
 
 ## Ports
 

@@ -29,6 +29,10 @@ fn stored(seed: u64) -> StoredSystem {
     )
 }
 
+fn stored_id(seed: u64) -> SystemId {
+    stored(seed).id
+}
+
 fn store(dir: &TempDir) -> FsStore {
     FsStore::new(dir.path().to_path_buf(), u64::MAX)
 }
@@ -102,6 +106,97 @@ fn an_unknown_schema_on_disk_is_an_error() {
 }
 
 #[test]
+fn an_edited_inputs_file_no_longer_matches_its_id() {
+    let dir = TempDir::new().unwrap();
+    let store = store(&dir);
+    let system = stored(7);
+    SystemRepository::put(&store, &system).unwrap();
+    let path = dir
+        .path()
+        .join("systems")
+        .join(system.id.to_string())
+        .join("inputs.json");
+    let mut value: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    value["inputs"]["seed"] = serde_json::to_value(Seed::new(8)).unwrap();
+    fs::write(&path, value.to_string()).unwrap();
+    let error = SystemRepository::get(&store, system.id).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            StoreError::Catalogue(CatalogueError::IdMismatch { stored, computed })
+                if stored == system.id && computed == stored_id(8)
+        ),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_record_with_the_wrong_id_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let store = store(&dir);
+    let mut system = stored(7);
+    system.id = stored(8).id;
+    let error = SystemRepository::put(&store, &system).unwrap_err();
+    assert!(matches!(
+        error,
+        StoreError::Catalogue(CatalogueError::IdMismatch { .. })
+    ));
+    assert!(SystemRepository::list(&store).unwrap().is_empty());
+}
+
+#[test]
+fn a_cache_hit_survives_an_unwritable_ledger() {
+    let dir = TempDir::new().unwrap();
+    let store = store(&dir);
+    let id = stored(7).id;
+    TimelineCache::put(&store, id, ENGINE, &[]).unwrap();
+    // A directory where the ledger should be: it can be neither read nor
+    // replaced.
+    let ledger = dir.path().join("cache/uses.json");
+    fs::remove_file(&ledger).unwrap();
+    fs::create_dir(&ledger).unwrap();
+    assert_eq!(
+        TimelineCache::get(&store, id, ENGINE).unwrap(),
+        Some(Vec::new())
+    );
+}
+
+#[test]
+fn concurrent_writers_do_not_trip_over_each_other() {
+    let dir = TempDir::new().unwrap();
+    let store = store(&dir);
+    let system = stored(7);
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| {
+                for _ in 0..40 {
+                    SystemRepository::put(&store, &system).unwrap();
+                    TimelineCache::put(&store, system.id, ENGINE, &[]).unwrap();
+                }
+            });
+        }
+    });
+    assert_eq!(
+        SystemRepository::get(&store, system.id).unwrap(),
+        Some(system)
+    );
+}
+
+#[test]
+fn eviction_removes_leftover_temporary_files() {
+    let dir = TempDir::new().unwrap();
+    let store = store(&dir);
+    let system = stored(7);
+    SystemRepository::put(&store, &system).unwrap();
+    TimelineCache::put(&store, system.id, EngineVersion(1), &[]).unwrap();
+    let entry = dir.path().join("cache/1").join(system.id.to_string());
+    fs::write(entry.join("timelines.json.4242-0.tmp"), b"half").unwrap();
+    store.evict(EngineVersion(2)).unwrap();
+    assert!(!dir.path().join("cache/1").exists());
+}
+
+#[test]
 fn timelines_round_trip_and_another_engine_misses() {
     let dir = TempDir::new().unwrap();
     let store = store(&dir);
@@ -142,8 +237,21 @@ fn writes_leave_no_temporary_file() {
     TimelineCache::get(&store, system.id, ENGINE).unwrap();
     let mut files = Vec::new();
     files_under(dir.path(), &mut files);
-    assert!(files.len() >= 3, "{files:?}");
-    assert!(files.iter().all(|f| !f.ends_with(".tmp")), "{files:?}");
+    let root = dir.path().to_string_lossy().into_owned();
+    let mut relative: Vec<String> = files
+        .iter()
+        .map(|f| f.strip_prefix(&root).unwrap().to_string())
+        .collect();
+    relative.sort();
+    let id = system.id;
+    assert_eq!(
+        relative,
+        vec![
+            "/cache/1/".to_string() + &id.to_string() + "/timelines.json",
+            "/cache/uses.json".to_string(),
+            "/systems/".to_string() + &id.to_string() + "/inputs.json",
+        ]
+    );
 }
 
 #[test]

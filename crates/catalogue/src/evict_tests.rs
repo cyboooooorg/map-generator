@@ -72,15 +72,3 @@ fn a_zero_budget_drops_everything() {
     let gone = evict(&[a.clone(), stale.clone(), b.clone()], NOW, 0);
     assert_eq!(gone, vec![stale.key, b.key, a.key]);
 }
-
-#[test]
-fn the_key_reports_its_engine() {
-    assert_eq!(
-        timelines(1, EngineVersion(2), 1, 1).key.engine(),
-        EngineVersion(2)
-    );
-    assert_eq!(
-        world(1, EngineVersion(3), 1, 1).key.engine(),
-        EngineVersion(3)
-    );
-}

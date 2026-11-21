@@ -22,7 +22,12 @@ cache/uses.json
 side. Never write under `root` by hand: inputs are the only truth, the
 rest is rebuilt.
 
-Writes are staged in `<file>.tmp` then renamed. A cache file that cannot
+Writes are staged in `<file>.<pid>-<n>.tmp`, synced, then renamed; there
+is no lock, so two writers of one file race and the last rename wins.
+`evict` also deletes leftover `*.tmp` files under `cache/`. A cache hit
+never fails because `uses.json` could not be updated. `WorldCache::put`
+refuses a world that does not match its key (`StoreError::KeyMismatch`).
+A cache file that cannot
 be read or parsed is a miss. `cache/uses.json` holds a logical use
 counter (no wall clock); `FsStore::evict(current)` deletes the entries of
 other engine versions, then the least recently used ones until the cache

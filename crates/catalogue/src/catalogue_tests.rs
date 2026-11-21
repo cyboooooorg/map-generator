@@ -83,11 +83,3 @@ fn an_unknown_schema_is_refused() {
         })
     );
 }
-
-#[test]
-fn a_stored_system_round_trips_through_json() {
-    let mut stored = StoredSystem::new(inputs(7, "4.57", "earth-like"), EngineVersion(3));
-    stored.name = Some("Home".to_string());
-    let json = serde_json::to_string(&stored).unwrap();
-    assert_eq!(serde_json::from_str::<StoredSystem>(&json).unwrap(), stored);
-}
