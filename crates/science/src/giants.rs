@@ -63,6 +63,9 @@ pub struct Giant {
     /// fell back to an older age, the geometric mean of the ages actually
     /// read, weighted as the corners.
     pub age_used: Gyr,
+    /// The mass the tables were read at: the mass asked, or the tables'
+    /// top mass (3 593.81 M⊕) for a heavier giant (see [`mass_read`]).
+    pub mass_used: EarthMass,
 }
 
 /// Why a giant cannot be read in the tables.
@@ -96,7 +99,9 @@ impl std::error::Error for GiantError {}
 /// flux-equivalent distance `d_eq = 1 au / sqrt(flux / F⊕)` (study §1.3).
 /// Radius and `log L` are interpolated linearly in `log mass`, `log age`,
 /// `core` and `log d_eq`. The age is clamped to 1 Myr to 10 Gyr and `d_eq`
-/// to 0.02 to 9.5 au; the mass and the core are never extrapolated. An
+/// to 0.02 to 9.5 au; a mass above the tables is read at their top mass
+/// ([`mass_read`], reported in [`Giant::mass_used`]); a lighter mass and
+/// the core are never extrapolated. An
 /// interpolation corner whose block has no row at the mass (a young,
 /// irradiated, light model the authors excluded) takes the nearest older
 /// age that has one, and [`Giant::age_used`] says so.
@@ -121,7 +126,8 @@ pub fn giant(
     let ages = bracket(&grid.log_ages, age.log10()).ok_or(refused)?;
     let d_eq = clamp(1.0 / flux.0.sqrt(), &grid.distances);
     let distances = bracket(&grid.log_distances, d_eq.log10()).ok_or(refused)?;
-    let log_mass = mass.0.log10();
+    let mass_used = mass_read(mass, grid);
+    let log_mass = mass_used.0.log10();
 
     let (mut radius_rj, mut log_l, mut log_age_read) = (0.0, 0.0, 0.0);
     let mut fell_back = false;
@@ -154,6 +160,7 @@ pub fn giant(
             (true, Some(read_at)) => grid.ages[read_at],
             (true, None) => 10f64.powf(log_age_read),
         }),
+        mass_used,
     })
 }
 
@@ -163,11 +170,12 @@ pub fn giant(
 /// between them at every age and flux, a young corner without its row
 /// falling back to an older age.
 ///
-/// When no core qualifies (above 3 593.81 M⊕, the tables' largest mass, or
-/// below 12.92 M⊕) it returns `(0, 0)`, and [`giant`] refuses the mass.
-pub fn core_bounds(mass: EarthMass) -> (EarthMass, EarthMass) {
+/// A mass above the tables is read at their top mass, as in [`giant`].
+/// `None` when no core qualifies (below 12.92 M⊕): [`giant`] refuses such
+/// a mass at some age or distance.
+pub fn core_bounds(mass: EarthMass) -> Option<(EarthMass, EarthMass)> {
     let grid = &*GRID;
-    let log_mass = mass.0.log10();
+    let log_mass = mass_read(mass, grid).0.log10();
     let first_age = grid.ages.partition_point(|&a| a <= CORE_BOUNDS_AFTER_AGE.0);
     let covered: Vec<f64> = (0..grid.cores.len())
         .filter(|&c| {
@@ -177,10 +185,19 @@ pub fn core_bounds(mass: EarthMass) -> (EarthMass, EarthMass) {
         })
         .map(|c| grid.cores[c])
         .collect();
-    match (covered.first(), covered.last()) {
-        (Some(&low), Some(&high)) => (EarthMass(low), EarthMass(high)),
-        _ => (EarthMass(0.0), EarthMass(0.0)),
-    }
+    Some((EarthMass(*covered.first()?), EarthMass(*covered.last()?)))
+}
+
+/// Calibration: a giant heavier than the tables' top mass (3 593.81 M⊕,
+/// 11.3 M_J) is read at that mass. Giants are drawn up to about 13 M_J
+/// (4 130 M⊕) and no table of Fortney et al. 2007 goes beyond; their
+/// radius is nearly flat there (at 4.5 Gyr, 9.5 au and no core, 1.055 to
+/// 1.023 R_J from 2 154 to 3 594 M⊕, Table 4), so the top row stands in
+/// for the heavier ones. What was searched and not found: the page
+/// [What are planets made of?](../../../docs/science/planet-interiors.md),
+/// section on giants (written with the planet model PR 2a).
+fn mass_read(mass: EarthMass, grid: &Grid) -> EarthMass {
+    EarthMass(mass.0.min(grid.top_mass))
 }
 
 /// The radius of the 50/50 ice-rock core of Fortney et al. 2007's giants,
@@ -239,6 +256,8 @@ struct Grid {
     /// Ages, Gyr, increasing.
     ages: Vec<f64>,
     log_ages: Vec<f64>,
+    /// The largest mass of any row, M⊕.
+    top_mass: f64,
     /// Indexed by core, then distance, then age.
     blocks: Vec<Block>,
 }
@@ -317,6 +336,7 @@ fn parse(text: &str) -> Grid {
         blocks: (0..cores.len() * distances.len() * ages.len())
             .map(|_| Block::default())
             .collect(),
+        top_mass: rows.iter().map(|(_, r)| r[3]).fold(0.0, f64::max),
         cores,
         distances,
         ages,

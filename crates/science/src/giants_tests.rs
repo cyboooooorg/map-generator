@@ -77,6 +77,18 @@ const YOUNGEST_AGES: [Gyr; 2] = [Gyr(0.0010), Gyr(0.0032)];
 /// Source: the closest distance of the tables, 0.02 au.
 const CLOSEST_AU: f64 = 0.02;
 
+/// Source: the largest mass of the tables, 3 593.81 M⊕ (the last `Me` of
+/// every block but the coreless 0.02 au one; study §1.2).
+const TOP_MASS: EarthMass = EarthMass(3593.81);
+
+/// Definition: about 13 Jupiter masses (13 x 317.89 M⊕, rounded), the top
+/// of the giants the system engine draws.
+const HEAVIEST_GIANT: EarthMass = EarthMass(4130.0);
+
+/// Definition: a mass below the first row (12.92 M⊕) of every cored
+/// block and of the 0.02 au coreless block after 0.1 Gyr.
+const BELOW_EVERY_CORE: EarthMass = EarthMass(11.0);
+
 /// The flux, in Earth fluxes, of the Sun at `au`.
 fn flux_at(au: f64) -> EarthFlux {
     EarthFlux(1.0 / (au * au))
@@ -141,7 +153,8 @@ fn the_ice_rock_core_matches_table_1() {
 fn a_core_beyond_the_rows_is_refused() {
     let refused = giant(LIGHT_GIANT, CORES[2], TABLE_4_AGE, flux_at(1.0));
     assert!(matches!(refused, Err(GiantError::OutOfTable { .. })));
-    assert_eq!(core_bounds(LIGHT_GIANT), (CORES[0], CORES[1]));
+    assert_eq!(core_bounds(LIGHT_GIANT), Some((CORES[0], CORES[1])));
+    assert_eq!(core_bounds(BELOW_EVERY_CORE), None);
 }
 
 #[test]
@@ -159,8 +172,8 @@ fn a_missing_young_cell_falls_back_to_an_older_age() {
 
 #[test]
 fn every_value_is_finite_across_the_grid() {
-    for mass in [GAS_GIANT_MIN_MASS.0, 50.0, 318.0, 3000.0] {
-        let (low, high) = core_bounds(EarthMass(mass));
+    for mass in [GAS_GIANT_MIN_MASS.0, 50.0, 318.0, 3000.0, 4130.0] {
+        let (low, high) = core_bounds(EarthMass(mass)).unwrap();
         for core in [low, high] {
             for age in [0.001, 0.05, 4.5, 20.0] {
                 for au in [0.01, 0.03, 0.3, 5.0, 30.0] {
@@ -171,4 +184,18 @@ fn every_value_is_finite_across_the_grid() {
             }
         }
     }
+}
+
+#[test]
+fn a_mass_above_the_table_reads_the_top_row() {
+    let core = CORES[1];
+    let flux = flux_at(OUTER_DISTANCE_AU);
+    let heavy = giant(HEAVIEST_GIANT, core, TABLE_4_AGE, flux).unwrap();
+    let top = giant(TOP_MASS, core, TABLE_4_AGE, flux).unwrap();
+    assert_eq!(heavy.mass_used, TOP_MASS);
+    assert_eq!(heavy.radius, top.radius);
+    assert_eq!(heavy.luminosity, top.luminosity);
+    assert_eq!(top.mass_used, TOP_MASS);
+    assert_eq!(core_bounds(HEAVIEST_GIANT), core_bounds(TOP_MASS));
+    assert!(core_bounds(HEAVIEST_GIANT).is_some());
 }
