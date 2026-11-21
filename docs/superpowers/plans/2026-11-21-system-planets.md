@@ -343,7 +343,9 @@ same folder). Executors read both.
 **Interfaces:**
 
 - Produces:
-  - `pub struct ArchetypePlacement { pub band: Band, pub mass: (EarthMass, EarthMass), pub eccentricity: Option<(f64, f64)>, pub obliquity: Option<Degree>, pub host: Option<Host> }`,
+  - `pub struct ArchetypePlacement { pub band: Band,
+    pub mass: (EarthMass, EarthMass), pub eccentricity: Option<(f64, f64)>,
+    pub obliquity: Option<Degree>, pub host: Option<Host> }`,
     `pub enum Band { Insolation(EarthFlux, EarthFlux), Period(Day, Day) }`,
     `pub struct Host { pub mass: SolarMass, pub age: Gyr }`.
   - `pub fn placement(id: &ArchetypeId) -> Option<&'static ArchetypePlacement>`
@@ -356,7 +358,9 @@ same folder). Executors read both.
     Host masses of spectral types from the legacy star table
     (`legacy-final:crates/mapgen/src/star.rs`, Pecaut & Mamajek), age
     4.57 Gyr where the file sets it.
-  - `pub(crate) fn asked_host(asked: &BTreeMap<ArchetypeId, u32>, host_mass: Option<SolarMass>, present: Option<Gyr>) -> Result<(Option<SolarMass>, Option<Gyr>), SystemError>`:
+  - `pub(crate) fn asked_host(asked: &BTreeMap<ArchetypeId, u32>,
+    host_mass: Option<SolarMass>, present: Option<Gyr>) ->
+    Result<(Option<SolarMass>, Option<Gyr>), SystemError>`:
     merges the archetypes' hosts with the request; disagreement →
     `IncompatibleHost`; unknown id → `UnknownArchetype`.
 
@@ -426,7 +430,9 @@ same folder). Executors read both.
 
 **Interfaces:**
 
-- Produces: `pub(crate) fn spin(class: PlanetClass, mass: &Traced<EarthMass>, archetype: Option<&ArchetypePlacement>, seed: Seed, trace: &mut Trace) -> Result<Spin, SystemError>`
+- Produces: `pub(crate) fn spin(class: PlanetClass, mass: &Traced<EarthMass>,
+  archetype: Option<&ArchetypePlacement>, seed: Seed, trace: &mut Trace)
+  -> Result<Spin, SystemError>`
   with codes `system.draw.rotation-period`, `system.draw.obliquity`,
   drawing from `seed.derive("spin")`; an archetype's obliquity is
   `Provenance::Input`. Distributions and constants exactly as the
