@@ -49,8 +49,9 @@ const SPLITMIX_MUL_1: u64 = 0xbf58_476d_1ce4_e5b9;
 /// multiplier of the output mix.
 const SPLITMIX_MUL_2: u64 = 0x94d0_49bb_1331_11eb;
 
-/// FNV-1a, 64 bits.
-fn fnv1a64(bytes: &[u8]) -> u64 {
+/// FNV-1a, 64 bits. Part of the published contract: the catalogue keys
+/// stored systems by it, so its output never changes.
+pub fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash = FNV_OFFSET_BASIS;
     for byte in bytes {
         hash ^= u64::from(*byte);

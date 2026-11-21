@@ -5,10 +5,36 @@ everything regenerated from them (timelines, worlds, projections) with
 the eviction policy. A cache is invalidated by the engine version, never
 migrated; only the inputs carry a schema version.
 
+## Identity
+
+`SystemId::of(&inputs)` is the FNV-1a 64 hash (`timeline::fnv1a64`) of the
+inputs' JSON, shown as 16 hex digits. Equal inputs give the same id, so
+a regeneration finds its caches. Inputs are hashed as given, defaults
+unresolved: `present: None` (draw the age) differs from a fixed date. A
+system's MGS number is not a key (it can collide). `StoredSystem` holds
+the id, the inputs, the engine version that first generated them and an
+optional name; a repository refuses an unknown inputs schema
+(`CatalogueError::UnknownSchema`) and a record whose id is not the hash
+of its inputs (`CatalogueError::IdMismatch`), on `put` and on `get`.
+
 ## Ports
 
-`SystemRepository`, `TimelineCache` and `WorldCache` arrive with slice 1,
-PR 4; `SystemIndex` (the SQLite read model) with the server, track T10.
+- `SystemRepository`: `put`, `get`, `list`, `remove` of stored systems.
+- `TimelineCache`: the timelines of a system for an engine version.
+- `WorldCache`: a world by `WorldKey` (system, body, keyframe index, grid
+  `n` after the cap, engine version). It has an associated `World` type
+  because this crate cannot name `world::World`; the adapter fixes it.
+
+`SystemIndex` (the SQLite read model) comes with the server, track T10.
+
+## Invalidation and eviction
+
+A cache entry of another engine version is a miss and is dropped at the
+next eviction; nothing is migrated. `evict(entries, current, budget)` is
+pure: it returns the keys to delete, stale engine versions first, then
+the least recently used (by a logical tick, never the wall clock) until
+the total fits `budget` bytes. `DEFAULT_BUDGET` is 2 GiB; the store takes
+the budget at construction and the CLI will expose it with W2.
 
 ## Dependencies
 

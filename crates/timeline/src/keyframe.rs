@@ -48,7 +48,7 @@ impl TracedFields for BodyState {
 
 /// The version of the engines that made a timeline: a cache key, never
 /// migrated.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct EngineVersion(pub u32);
 
