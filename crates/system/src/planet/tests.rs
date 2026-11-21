@@ -8,10 +8,12 @@ use crate::Trial;
 use science::constants::EARTH_MEAN_RADIUS;
 use science::heat::TidalKind;
 use science::units::{AstronomicalUnit, Day, Degree, Dex, EarthMass, Fraction, Gyr, Kelvin};
-use science::units::{EarthFlux, SolarLuminosity, SolarMass};
+use science::units::{
+    EarthFlux, JoulePerSquareMetre, SolarLuminosity, SolarMass, WattPerSquareMetre,
+};
 use timeline::{
-    Code, Material, NodeValueOf, Orbit, Origin, Provenance, Seed, StellarSource, StellarSources,
-    Trace, Traced,
+    BandLight, Code, Material, NodeValueOf, Orbit, Origin, Provenance, Seed, StellarSource,
+    StellarSources, Trace, Traced,
 };
 
 /// Source: the 1901 definition of standard gravity by the 3rd CGPM,
@@ -60,6 +62,34 @@ fn trial(trace: &mut Trace, seed: u64, mass: f64, au: f64, ecc: f64) -> Trial {
         effective_temperature: leaf(trace, "test.teff", Kelvin(5772.0)),
         mass: leaf(trace, "test.star-mass", SolarMass(1.0)),
         luminosity: leaf(trace, "test.luminosity", SolarLuminosity(1.0)),
+        // Source: the Sun's XUV today, 4.6 mW/m², and over Earth's age,
+        // 5.64e15 J/m² (`science::xuv`), scaled as the flux.
+        xuv: BandLight {
+            flux: leaf(
+                trace,
+                "test.xuv-flux",
+                WattPerSquareMetre(4.6e-3 / (au * au)),
+            ),
+            fluence: leaf(
+                trace,
+                "test.xuv-fluence",
+                JoulePerSquareMetre(5.64e15 / (au * au)),
+            ),
+        },
+        // Source: the Sun's Lyman α today, 6.4 mW/m² (Ribas et al. 2005);
+        // its eq. 2 integrated over Earth's age, held before 0.1 Gyr.
+        lyman_alpha: BandLight {
+            flux: leaf(
+                trace,
+                "test.lya-flux",
+                WattPerSquareMetre(6.4e-3 / (au * au)),
+            ),
+            fluence: leaf(
+                trace,
+                "test.lya-fluence",
+                JoulePerSquareMetre(2.49e15 / (au * au)),
+            ),
+        },
     };
     let orbit = Orbit {
         semi_major_axis: leaf(trace, "test.a", AstronomicalUnit(au)),

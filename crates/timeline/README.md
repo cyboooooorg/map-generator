@@ -15,7 +15,9 @@ the kind of the central object.
   body.
 - `Trace`, `Traced<T>`, `CauseGraph`: the causes (see below).
 - `StellarSources`: one to three stars as a planet sees them (flux,
-  equilibrium temperature, star parameters).
+  equilibrium temperature, star parameters, and per band of high-energy
+  light, XUV and Lyman α, a `BandLight`: present flux in W/m² and fluence
+  since the star's birth in J/m²; `band_total` sums them).
 - `StarState`, `PlanetState` (and their parts: `Orbit`, `Spin`, `Bulk`,
   `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
   `SurfaceLiquid`, `Terrain`, `Life`): the state of a body at a date.

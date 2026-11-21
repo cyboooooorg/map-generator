@@ -33,5 +33,5 @@ pub use planet::{
     TargetOutcome, TectonicRegime, Terrain, TerrainUnit, Water,
 };
 pub use seed::{Seed, fnv1a64};
-pub use sources::{StellarSource, StellarSources};
+pub use sources::{BandLight, StellarSource, StellarSources};
 pub use star::{StarPhase, StarState};

@@ -1,7 +1,9 @@
 //! The stars lighting a planet: one entry per star, the primary first.
 
 use crate::{ContractError, NodeId, Traced, TracedFields};
-use science::units::{EarthFlux, Kelvin, SolarLuminosity, SolarMass};
+use science::units::{
+    EarthFlux, JoulePerSquareMetre, Kelvin, SolarLuminosity, SolarMass, WattPerSquareMetre,
+};
 use serde::{Deserialize, Serialize};
 
 /// One star as a planet sees it.
@@ -18,6 +20,30 @@ pub struct StellarSource {
     pub mass: Traced<SolarMass>,
     /// Luminosity of the star.
     pub luminosity: Traced<SolarLuminosity>,
+    /// X-ray and extreme-ultraviolet light, 1 to 1180 Å
+    /// (`science::xuv::XUV`): zero from a star without a corona.
+    pub xuv: BandLight,
+    /// H I Lyman α line, 1216 Å (`science::xuv::LYMAN_ALPHA`).
+    pub lyman_alpha: BandLight,
+}
+
+/// What a planet receives from one star in one band of its high-energy
+/// light (`science::xuv::History::exposure`), at the same eccentricity
+/// factor as the bolometric flux.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BandLight {
+    /// Present orbit-mean flux.
+    pub flux: Traced<WattPerSquareMetre>,
+    /// Energy per unit area received from the star's birth to the
+    /// present, the orbit taken as it is today.
+    pub fluence: Traced<JoulePerSquareMetre>,
+}
+
+impl TracedFields for BandLight {
+    fn for_each_node(&mut self, f: &mut dyn FnMut(&mut NodeId)) {
+        self.flux.for_each_node(f);
+        self.fluence.for_each_node(f);
+    }
 }
 
 impl TracedFields for StellarSource {
@@ -27,6 +53,8 @@ impl TracedFields for StellarSource {
         self.effective_temperature.for_each_node(f);
         self.mass.for_each_node(f);
         self.luminosity.for_each_node(f);
+        self.xuv.for_each_node(f);
+        self.lyman_alpha.for_each_node(f);
     }
 }
 
@@ -95,6 +123,22 @@ impl StellarSources {
         }
         let sum: f64 = self.0.iter().map(|s| s.equilibrium.value().0.powi(4)).sum();
         Kelvin(sum.sqrt().sqrt())
+    }
+
+    /// The sum of a band's flux and fluence over the stars, for example
+    /// `band_total(|s| &s.xuv)`. With one star, its values as stored.
+    pub fn band_total(
+        &self,
+        band: impl Fn(&StellarSource) -> &BandLight,
+    ) -> (WattPerSquareMetre, JoulePerSquareMetre) {
+        if self.0.len() == 1 {
+            let light = band(self.primary());
+            return (*light.flux.value(), *light.fluence.value());
+        }
+        self.0.iter().map(&band).fold(
+            (WattPerSquareMetre(0.0), JoulePerSquareMetre(0.0)),
+            |(flux, fluence), light| (flux + *light.flux.value(), fluence + *light.fluence.value()),
+        )
     }
 
     /// The mean of `f` weighted by flux, Σ flux·f / Σ flux. With one
