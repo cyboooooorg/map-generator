@@ -28,7 +28,8 @@ use science::units::{
 };
 use science::water::V_VI_LIQUID_TEMPERATURE;
 use timeline::{
-    Bulk, Code, Composition, ContractError, Material, MatterState, NodeId, Trace, Traced,
+    Bulk, Code, Composition, ContractError, Material, MatterState, NodeId, Provenance, Trace,
+    Traced,
 };
 
 /// Definition: the pressure at the surface of the structure, 0 Pa. The
@@ -55,9 +56,9 @@ pub(crate) enum Water {
         mass: Traced<Kilogram>,
         temperature: Traced<Kelvin>,
     },
-    /// Outside the structure, an inventory without a layer (a water world
-    /// at 355 K or more, past the water laws).
-    Inventory {
+    /// Outside the structure, recorded apart from the condensed planet (a
+    /// water world at 355 K or more, past the water laws).
+    BeyondLaw {
         mass: Traced<Kilogram>,
         temperature: Traced<Kelvin>,
     },
@@ -170,7 +171,7 @@ pub(crate) fn interior(
         drawn.core_mass_fraction.node(),
         drawn.water_fraction.node(),
     ];
-    let mut inputs: Vec<NodeId> = fractions.to_vec();
+    let mut temperature_node = None;
 
     let core_mass = trace.record(
         Code::of(codes::CORE_MASS),
@@ -200,9 +201,12 @@ pub(crate) fn interior(
         let temperature = trace.record(Code::of(codes::WATER_TEMPERATURE), t, &sources)?;
         let mut from = fractions.to_vec();
         from.push(temperature.node());
+        // The structure depends on the water temperature whenever the
+        // water is a layer; a water beyond the law is cited too, as the
+        // reason it is not one.
+        temperature_node = Some(temperature.node());
         match water_law(t)? {
             Some((eos, liquid)) => {
-                inputs.push(temperature.node());
                 let mass = trace.record(
                     Code::of(codes::WATER_LAYER_MASS),
                     Kilogram(w * total),
@@ -212,9 +216,12 @@ pub(crate) fn interior(
                 water_state = Water::Layer { mass, temperature };
             }
             None => {
-                let mass =
-                    trace.record(Code::of(codes::WATER_INVENTORY), Kilogram(w * total), &from)?;
-                water_state = Water::Inventory { mass, temperature };
+                let mass = trace.record(
+                    Code::of(codes::WATER_BEYOND_LAW),
+                    Kilogram(w * total),
+                    &from,
+                )?;
+                water_state = Water::BeyondLaw { mass, temperature };
             }
         }
     }
@@ -228,12 +235,26 @@ pub(crate) fn interior(
     let structure = integrate(&specs, SURFACE_PRESSURE)?;
     let condensed: f64 = layers.iter().map(|(_, _, mass)| mass.value().0).sum();
     let layer_nodes: Vec<NodeId> = layers.iter().map(|(_, _, mass)| mass.node()).collect();
+    let mut inputs: Vec<NodeId> = fractions.to_vec();
+    inputs.extend(&layer_nodes);
+    inputs.extend(temperature_node);
 
     let central_pressure = trace.record(
         Code::of(codes::CENTRAL_PRESSURE),
         structure.samples[0].pressure,
         &inputs,
     )?;
+    // A planet whose water is beyond the laws is described by its condensed
+    // planet: the bulk mass is the dry mass, the water mass is apart.
+    let bulk_mass = if matches!(water_state, Water::BeyondLaw { .. }) {
+        trace.record(
+            Code::of(codes::DRY_MASS),
+            science::units::EarthMass::from(Kilogram(condensed)),
+            &[trial.mass.node(), drawn.water_fraction.node()],
+        )?
+    } else {
+        trial.mass
+    };
     let radius = trace.record(
         Code::of(codes::RADIUS),
         EarthRadius::from(structure.radius),
@@ -298,13 +319,19 @@ pub(crate) fn interior(
             )?,
             mass: trace.record(Code::of(codes::LAYER_MASS), shell.mass, &from)?,
             material: trace.record(Code::of(codes::LAYER_MATERIAL), material, &from)?,
-            state: trace.record(Code::of(state_code), state, &from)?,
+            state: if matches!(kind, Kind::Mantle) {
+                // An engine constant until the temperatures of the second
+                // pull request: no node it derives from.
+                trace.leaf(Code::of(state_code), state, Provenance::Imposed)?
+            } else {
+                trace.record(Code::of(state_code), state, &from)?
+            },
         });
     }
 
     Ok(Interior {
         bulk: Bulk {
-            mass: trial.mass,
+            mass: bulk_mass,
             radius,
             surface_gravity,
             mean_density,

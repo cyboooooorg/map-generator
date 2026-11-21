@@ -2,11 +2,12 @@
 //! each recorded with the nodes it comes from.
 
 use super::codes;
+use super::interior::Water;
 use super::interior::{Interior, InteriorError};
 use crate::Trial;
 use science::constants::ASTRONOMICAL_UNIT;
 use science::heat::{TidalKind, k2_over_q, radiogenic, secular, tidal};
-use science::units::{Dex, Kilogram, Metre};
+use science::units::{Dex, Fraction, Kilogram, Metre};
 use timeline::{Code, Heat, Trace, Traced};
 
 /// Calibration: least share of the mass in water and ices that makes a
@@ -39,9 +40,8 @@ pub(crate) fn tidal_kind(envelope_fraction: f64, water_fraction: f64) -> TidalKi
 /// The heat sources of the planet at the age of the trial. The silicate
 /// is the interior's mantle (its recorded mass node, which holds a dry
 /// planet's water); the tide comes from the primary star on the trial's
-/// orbit, with a response set by the composition, on the recorded radius.
-/// The planet has no envelope in this slice, so it is never an enveloped
-/// body.
+/// orbit, with a response set by the composition and the envelope, on the
+/// recorded radius.
 ///
 /// # Errors
 ///
@@ -50,6 +50,7 @@ pub(crate) fn heat(
     trial: &Trial,
     interior: &Interior,
     abundance: &Traced<Dex>,
+    envelope: &Traced<Fraction>,
     trace: &mut Trace,
 ) -> Result<Heat, InteriorError> {
     let water = interior.composition.water_fraction;
@@ -73,7 +74,13 @@ pub(crate) fn heat(
 
     let primary = trial.sources.primary().mass;
     let orbit = &trial.orbit;
-    let kind = tidal_kind(0.0, water.value().get());
+    // A water beyond the laws is not part of the condensed planet that
+    // responds to the tide: it does not make the body icy.
+    let icy_water = match interior.water {
+        Water::BeyondLaw { .. } => 0.0,
+        _ => water.value().get(),
+    };
+    let kind = tidal_kind(envelope.value().get(), icy_water);
     let tidal_power = trace.record(
         Code::of(codes::HEAT_TIDAL),
         tidal(
@@ -89,6 +96,7 @@ pub(crate) fn heat(
             orbit.semi_major_axis.node(),
             orbit.eccentricity.node(),
             water.node(),
+            envelope.node(),
         ],
     )?;
     Ok(Heat {

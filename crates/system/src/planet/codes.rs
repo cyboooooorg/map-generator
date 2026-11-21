@@ -30,10 +30,14 @@ pub(crate) const CORE_MASS: &str = "planet.core-mass";
 pub(crate) const MANTLE_MASS: &str = "planet.mantle-mass";
 /// Mass of a water world's water layer, `w M`.
 pub(crate) const WATER_LAYER_MASS: &str = "planet.water-layer-mass";
-/// Mass of a hot water world's water, `w M`, kept as an inventory outside
-/// the structure: too hot for the water laws (355 K and above), it becomes
-/// the steam envelope of the planet interior plan's second pull request.
-pub(crate) const WATER_INVENTORY: &str = "planet.water-inventory";
+/// Mass of a hot water world's water, `w M`, recorded apart from the
+/// condensed planet: too hot for the water laws (355 K and above), it
+/// becomes the steam envelope of the planet interior plan's second pull
+/// request.
+pub(crate) const WATER_BEYOND_LAW: &str = "planet.water-beyond-law";
+/// Dry mass of a planet whose water is beyond the water laws, `(1 - w) M`:
+/// the mass of the condensed planet that its bulk describes.
+pub(crate) const DRY_MASS: &str = "planet.dry-mass";
 /// The structure node: the central pressure that the integration finds
 /// for the layers, which every radius and shell of the structure follows.
 pub(crate) const CENTRAL_PRESSURE: &str = "planet.structure.central-pressure";

@@ -353,7 +353,9 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
         vec![
             t.mass.node(),
             drawn.core_mass_fraction.node(),
-            drawn.water_fraction.node()
+            drawn.water_fraction.node(),
+            interior.core_mass.node(),
+            interior.mantle_mass.node(),
         ]
     );
     assert_eq!(from(interior.bulk.radius.node()), vec![structure]);
@@ -371,8 +373,12 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
             shell.outer_radius.node(),
             shell.mass.node(),
             shell.material.node(),
-            shell.state.node(),
-        ] {
+        ]
+        .into_iter()
+        .chain(
+            // The mantle's state is an engine constant, a leaf.
+            (*shell.material.value() != Material::Rock).then_some(shell.state.node()),
+        ) {
             let sources = from(node);
             assert_eq!(sources[0], structure);
             assert!(layer_masses.contains(&sources[1]), "{sources:?}");
@@ -403,7 +409,7 @@ fn a_hot_dry_planet_builds() {
 }
 
 #[test]
-fn a_hot_water_world_keeps_its_water_as_an_inventory() {
+fn a_hot_water_world_keeps_its_water_beyond_the_law() {
     let mut trace = Trace::new();
     let t = trial(&mut trace, 1, 1.0, HOT_ORBIT_AU, 0.0);
     let drawn = Drawn::fixed(
@@ -418,12 +424,12 @@ fn a_hot_water_world_keeps_its_water_as_an_inventory() {
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     assert_eq!(water_shells(&interior), 0);
-    let Water::Inventory { mass, .. } = interior.water else {
+    let Water::BeyondLaw { mass, .. } = interior.water else {
         panic!("{:?}", interior.water);
     };
     assert_eq!(
         trace.node(mass.node()).unwrap().code.as_str(),
-        codes::WATER_INVENTORY
+        codes::WATER_BEYOND_LAW
     );
     // Definition: the inventory is the bulk water, w M, and the structure
     // holds the rest.
@@ -480,7 +486,14 @@ fn heat_nodes_point_at_their_inputs() {
         None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
-    let heat = heat::heat(&t, &interior, &drawn.radiogenic_abundance, &mut trace).unwrap();
+    let heat = heat::heat(
+        &t,
+        &interior,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        &mut trace,
+    )
+    .unwrap();
     let sources = |node| match &trace.node(node).unwrap().origin {
         Origin::Derived { from } => from.clone(),
         _ => panic!("a heat node is derived"),
@@ -519,7 +532,14 @@ fn a_circular_orbit_has_no_tide() {
         None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
-    let heat = heat::heat(&t, &interior, &drawn.radiogenic_abundance, &mut trace).unwrap();
+    let heat = heat::heat(
+        &t,
+        &interior,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        &mut trace,
+    )
+    .unwrap();
     assert_eq!(heat.tidal.value().0, 0.0);
 }
 
@@ -550,4 +570,168 @@ fn the_envelope_and_a_giants_heavy_mass_are_drawn_leaves() {
     assert_eq!(node.origin, Origin::Leaf(Provenance::Drawn));
     let envelope = d.envelope_fraction.value().get();
     assert!((envelope - (1.0 - heavy.value().0 / 318.0)).abs() < 1e-12);
+}
+
+fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
+    match &trace.node(node).unwrap().origin {
+        Origin::Derived { from } => from.clone(),
+        origin => panic!("{origin:?} is not derived"),
+    }
+}
+
+#[test]
+fn central_pressure_cites_every_input() {
+    let mut trace = Trace::new();
+    for (au, expected_water) in [(1.0, true), (HOT_ORBIT_AU, true)] {
+        let t = trial(&mut trace, 1, 1.0, au, 0.0);
+        let drawn = Drawn::fixed(
+            &t,
+            &mut trace,
+            EARTH_CORE_MASS_FRACTION,
+            WATER_WORLD_FRACTION,
+            0.0,
+            Some(true),
+            0.0,
+            None,
+        );
+        let interior = interior(&t, &drawn, &mut trace).unwrap();
+        let from = derived_from(&trace, interior.central_pressure.node());
+        for node in [
+            t.mass.node(),
+            drawn.core_mass_fraction.node(),
+            drawn.water_fraction.node(),
+            interior.core_mass.node(),
+            interior.mantle_mass.node(),
+        ] {
+            assert!(from.contains(&node), "{node:?} missing from {from:?}");
+        }
+        match interior.water {
+            Water::Layer { mass, temperature } | Water::BeyondLaw { mass, temperature } => {
+                assert!(expected_water);
+                assert!(from.contains(&temperature.node()));
+                assert_eq!(
+                    from.contains(&mass.node()),
+                    matches!(interior.water, Water::Layer { .. })
+                );
+            }
+            Water::InMantle => panic!("a water world"),
+        }
+    }
+}
+
+#[test]
+fn the_mantle_state_is_a_constant() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 1.0, 1.0, 0.0);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        EARTH_WATER_FRACTION,
+        0.0,
+        Some(false),
+        0.0,
+        None,
+    );
+    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let mantle: Vec<_> = interior
+        .shells
+        .iter()
+        .filter(|shell| *shell.material.value() == Material::Rock)
+        .collect();
+    assert!(!mantle.is_empty());
+    for shell in mantle {
+        let node = trace.node(shell.state.node()).unwrap();
+        assert_eq!(node.code, Code::of(codes::LAYER_STATE));
+        assert_eq!(node.origin, Origin::Leaf(Provenance::Imposed));
+    }
+}
+
+#[test]
+fn water_beyond_the_law_is_not_icy() {
+    use science::constants::ASTRONOMICAL_UNIT;
+    use science::heat::{k2_over_q, tidal};
+    use science::units::{Kilogram, Metre};
+    let tide = |water: f64, envelope: f64, migrated: bool| {
+        let mut trace = Trace::new();
+        let t = trial(&mut trace, 1, 1.0, HOT_ORBIT_AU, 0.1);
+        let drawn = Drawn::fixed(
+            &t,
+            &mut trace,
+            EARTH_CORE_MASS_FRACTION,
+            water,
+            0.0,
+            Some(migrated),
+            envelope,
+            None,
+        );
+        let interior = interior(&t, &drawn, &mut trace).unwrap();
+        let heat = heat::heat(
+            &t,
+            &interior,
+            &drawn.radiogenic_abundance,
+            &drawn.envelope_fraction,
+            &mut trace,
+        )
+        .unwrap();
+        let expected = |kind| {
+            tidal(
+                Kilogram::from(*t.sources.primary().mass.value()),
+                Metre::from(*interior.bulk.radius.value()),
+                Metre(t.orbit.semi_major_axis.value().0 * ASTRONOMICAL_UNIT.0),
+                t.orbit.eccentricity.value().get(),
+                k2_over_q(kind),
+            )
+        };
+        (
+            heat.tidal.value().0,
+            expected(TidalKind::Rocky).0,
+            expected(TidalKind::Enveloped).0,
+        )
+    };
+    // A water world at 403 K: its water is beyond the law, the body rocky.
+    let (power, rocky, _) = tide(WATER_WORLD_FRACTION, 0.0, true);
+    assert_eq!(power, rocky);
+    // An enveloped planet gets the enveloped response.
+    let (power, rocky, enveloped) = tide(EARTH_WATER_FRACTION, 0.01, false);
+    assert_eq!(power, enveloped);
+    assert_ne!(rocky, enveloped);
+}
+
+#[test]
+fn water_beyond_the_law_bulk_is_the_condensed_planet() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 1.0, HOT_ORBIT_AU, 0.0);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        WATER_WORLD_FRACTION,
+        0.0,
+        Some(true),
+        0.0,
+        None,
+    );
+    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let dry = (1.0 - WATER_WORLD_FRACTION) * t.mass.value().0;
+    assert!((interior.bulk.mass.value().0 / dry - 1.0).abs() < 1e-9);
+    let node = trace.node(interior.bulk.mass.node()).unwrap();
+    assert_eq!(node.code, Code::of(codes::DRY_MASS));
+    let from = derived_from(&trace, interior.bulk.mass.node());
+    assert_eq!(from, vec![t.mass.node(), drawn.water_fraction.node()]);
+    // The gravity and the density are the dry planet's.
+    let kg = science::units::Kilogram::from(*interior.bulk.mass.value()).0;
+    let r = interior.structure.radius.0;
+    let g = science::constants::GRAVITATIONAL_CONSTANT * kg / (r * r);
+    assert!((interior.bulk.surface_gravity.value().0 / g - 1.0).abs() < 1e-9);
+    let rho = kg / (4.0 / 3.0 * std::f64::consts::PI * r.powi(3));
+    assert!((interior.bulk.mean_density.value().0 / rho - 1.0).abs() < 1e-9);
+    // The water mass is recorded apart.
+    let Water::BeyondLaw { mass, .. } = interior.water else {
+        panic!("{:?}", interior.water);
+    };
+    assert_eq!(
+        trace.node(mass.node()).unwrap().code,
+        Code::of(codes::WATER_BEYOND_LAW)
+    );
 }
