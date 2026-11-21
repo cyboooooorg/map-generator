@@ -162,8 +162,11 @@ value of *what was picked* is sourced (`Source:` or `Calibration:`).
   its 0.15 M☉ value below. Only derived numbers enter the repository,
   with the citation; no file of theirs is redistributed (user,
   2026-11-21). At 0.15-0.3 M☉ the two agree within about 2 %; at
-  0.3 M☉ YREC is about 100 K hotter than both (grey atmosphere): the
-  seam is blended over 0.28-0.32 M☉ and documented.
+  0.3 M☉ YREC is about 60 K hotter than Baraffe and 115 K hotter than
+  Dartmouth (grey atmosphere). Values are blended over 0.30-0.35 M☉
+  (Baraffe tabulates 0.3 and 0.4 M☉; YREC starts at 0.3 M☉, where it
+  is still fully convective, and has a radiative zone at 0.4 M☉); the
+  interior profile switches at 0.30 M☉. Both are documented.
 
 ### Interior profile
 
