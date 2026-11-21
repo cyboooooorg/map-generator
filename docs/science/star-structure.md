@@ -63,8 +63,9 @@ polytrope of index $n = 1.5$ (Chandrasekhar 1939; Kippenhahn et al.
 
 Above about 1.1 to 1.2 M☉ the energy source changes. The Sun burns
 hydrogen mostly by the proton-proton chain, whose rate grows with
-temperature as roughly $T^4$, near 4 × 10⁶ K (Kippenhahn et al. 2012,
-§18.5.1). A heavier star is hotter inside, and the CNO cycle takes over,
+temperature as roughly $T^4$ at the Sun's central 1.5 × 10⁷ K; the
+exponent is larger in cooler cores, about 6 at 5 × 10⁶ K (Kippenhahn et
+al. 2012, §18.5.1). A heavier star is hotter inside, and the CNO cycle takes over,
 which fuses hydrogen using carbon, nitrogen and oxygen as catalysts and is
 far more sensitive to temperature. The energy is then released in a small
 volume at the very centre, the temperature falls steeply outward, and the
@@ -112,11 +113,15 @@ errors are documented in
    temperature comes from Baraffe's tables: the polytrope's own ideal-gas
    value would be 6.2 × 10⁶ K at 0.08 M☉ and 5 Gyr, against 3.61 × 10⁶ K
    in Baraffe et al., because these stars are partly degenerate. The fusion
-   share follows a rate $\varepsilon \propto \rho\,T^4$.
-4. **The star has layers**: the radiative core or convective core, the
-   radiative zone, the convective envelope, and the photosphere. The
-   system engine's star state carries them with their bounds, and the
-   trace records each layer's outer radius, mass and transport.
+   share follows a rate $\varepsilon \propto \rho\,T^\nu$, where the
+   pp-chain exponent $\nu \approx 11.3\,T_6^{-1/3} - 2/3$ is taken at the
+   star's central temperature: about 6.7 at 0.08 M☉ and 5.1 at 0.29 M☉.
+4. **The star has layers**, one per energy transport: a convective or
+   radiative core, a radiative zone, a convective envelope. The outermost
+   ends at the photosphere (r = R); the atmosphere above it is not
+   modelled. The system engine's star state carries the layers with their
+   bounds, and the trace records each layer's outer radius, mass and
+   transport.
 
 ### Checking it against the Sun
 

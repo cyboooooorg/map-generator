@@ -14,10 +14,10 @@
 //!   rank; a layer present in one profile only is kept when that profile is
 //!   the nearer one ([`blend_layers`]).
 //! - Below 0.30 M☉, the n = 1.5 polytrope scaled to the star's mass and
-//!   radius: one convective layer, fusion share from ε ∝ ρ T⁴, temperature
-//!   T_c θ with T_c from Baraffe et al. (2015).
+//!   radius: one convective layer, temperature T_c θ with T_c from Baraffe
+//!   et al. (2015), fusion share from ε ∝ ρ T^ν with the pp-chain ν at T_c.
 
-use super::polytrope::{INDEX, polytrope};
+use super::polytrope::{INDEX, burning_exponent, polytrope};
 use super::tables::{ProfileLayer, ProfileSample, ProfileTrack, Snapshot, profiles};
 use super::values::{TrackClock, low_mass_central_temperature, track_xc_frac};
 use super::{StellarError, bracket, bracket_clamped, bracket_log, lerp, main_sequence};
@@ -277,6 +277,7 @@ fn polytrope_profile(mass: SolarMass, radius: Metre, teff: Kelvin, age: Gyr) -> 
     let central_pressure =
         GRAVITATIONAL_CONSTANT * m * m / (4.0 * PI * (INDEX + 1.0) * slope * slope * r.powi(4));
     let central_temperature = low_mass_central_temperature(mass.0, age.0);
+    let fusion = solution.fusion(burning_exponent(central_temperature));
     let whole = StellarLayer {
         outer_radius: fraction(1.0),
         outer_mass: fraction(1.0),
@@ -287,14 +288,15 @@ fn polytrope_profile(mass: SolarMass, radius: Metre, teff: Kelvin, age: Gyr) -> 
         .iter()
         .map(|&x| {
             let point = solution.at(x);
+            let theta_n = point.theta * point.theta.sqrt(); // θⁿ, n = 1.5
             StellarSample {
                 radius: fraction(x),
                 mass: fraction(point.mass),
-                density: KilogramPerCubicMetre(central_density * point.theta.powf(INDEX)),
-                pressure: Pascal(central_pressure * point.theta.powf(INDEX + 1.0)),
+                density: KilogramPerCubicMetre(central_density * theta_n),
+                pressure: Pascal(central_pressure * theta_n * point.theta),
                 temperature: Kelvin((central_temperature * point.theta).max(teff.0)),
                 convective: true,
-                fusion_share: fraction(point.fusion),
+                fusion_share: fraction(fusion.at(x)),
             }
         })
         .collect();

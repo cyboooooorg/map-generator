@@ -384,8 +384,13 @@ low-mass rows this way:
   3.65375, 5.99071), scaled to the star's mass and to the radius of
   `main_sequence`: ρ_c = ρ̄ ξ₁/(3|θ'₁|), P_c = G M²/(4π (n + 1) θ'₁² R⁴),
   ρ = ρ_c θ^1.5, P = P_c θ^2.5; ρ and P fall to 0 at the photosphere. One
-  convective layer. Fusion share from ε ∝ ρ T⁴ (pp chain near 4 × 10⁶ K,
-  Kippenhahn et al. 2012 §18.5.1), dL ∝ θ⁷ ξ² dξ. At 0.08 M☉ and 5 Gyr
+  convective layer. Fusion share from ε ∝ ρ T^ν, ν the pp-chain exponent
+  τ/3 − 2/3 with τ = 33.80 T₆^(−1/3) (ν ≈ 11.3 T₆^(−1/3) − 2/3; Clayton
+  1968; Kippenhahn et al. 2012 §18.5.1) at the star's T_c: dL ∝ ρ² T^ν
+  r² dr ∝ θ^(3+ν) ξ² dξ, by trapezoids. ν is 6.7 at 0.08 M☉ (T_c 3.6 ×
+  10⁶ K), 6.1 at 0.1 M☉ and 5.1 at 0.29 M☉. At 0.1 M☉ and 5 Gyr, half the
+  power comes from inside 0.239 R and 99 % from inside 0.511 R (0.271 and
+  0.575 R with a fixed ν = 4). At 0.08 M☉ and 5 Gyr
   ρ_c is 696 g cm⁻³, 9 % above BHAC15 (637.8); at 0.29 M☉, 99 g cm⁻³
   against YREC's 96 g cm⁻³ at 0.30 M☉.
 - **Temperature below 0.30 M☉** (`Calibration:`): T = T_c θ, with T_c
