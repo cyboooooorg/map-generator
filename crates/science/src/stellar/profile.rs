@@ -180,10 +180,10 @@ fn mix(parts: Vec<(Blend, f64)>) -> Blend {
 /// The YREC profile: snapshots in xc_frac, then log mass, then [Fe/H].
 fn yrec(mass: f64, feh: f64, age: f64) -> Blend {
     let table = profiles();
-    let clock = TrackClock::new(mass, feh, age);
     let by_feh = bracket(&table.metallicities, feh).expect("metallicity checked");
     let at_feh = by_feh.terms().map(|(i, w_feh)| {
         let tabulated = table.metallicities[i];
+        let clock = TrackClock::new(mass, tabulated, age);
         let tracks = table.tracks_at(tabulated);
         let masses: Vec<f64> = tracks.iter().map(|t| t.mass).collect();
         let by_mass = bracket_log(&masses, mass).expect("the profiles cover 0.3-8 Msun");

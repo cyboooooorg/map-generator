@@ -323,13 +323,18 @@ low-mass rows this way:
   then linear in [Fe/H]; a grid value uses its track alone. log L, log R
   and log T_eff are interpolated, never L, R or T_eff. The star's ZAMS and
   TAMS ages are interpolated the same way, in log t.
-- **Along a track**: when every track used reaches the TAMS (last
+- **Along a track**: the choice is made at each bracketing [Fe/H]. When
+  both tracks around the mass at that [Fe/H] reach the TAMS (last
   xc_frac < 10⁻³), each is read at the star's fractional main-sequence age
-  τ = (t − t_ZAMS)/(t_TAMS − t_ZAMS), linear in age between rows. When one
-  of them stops at 20 Gyr, all are read at the star's absolute age, each
-  held at its first or last row outside its ages. This happens between the
-  last mass that stops at 20 Gyr and the next (0.7-0.8 M☉ at [Fe/H] −1 and
-  −0.5, 0.8-0.9 at 0, 0.9-1.0 at +0.5).
+  at that [Fe/H], τ = (t − t_ZAMS)/(t_TAMS − t_ZAMS) with t_ZAMS (log mean
+  of the two tracks) and t_TAMS (as below) of that [Fe/H], linear in age
+  between rows. When one of them stops at 20 Gyr, both are read at the
+  star's absolute age, each held at its first or last row outside its
+  ages. This happens between the last mass that stops at 20 Gyr and the
+  next (0.7-0.8 M☉ at [Fe/H] −1 and −0.5, 0.8-0.9 at 0, 0.9-1.0 at +0.5).
+  Since each [Fe/H] chooses alone, the values are continuous as [Fe/H]
+  crosses a grid value (within 0.001 dex in log L for 0.85 and 0.95 M☉
+  from 0 to +0.001 and from −0.5 to −0.499).
 - **TAMS age**: at each bracketing [Fe/H], when both tracks around the mass
   reach the TAMS, linear in log t against log mass. When only the heavier
   one does (at t_u), log t is extrapolated against log mass from it and the

@@ -7,8 +7,9 @@
 //! - YREC (0.3-8 M☉): linear in log mass between the two bracketing
 //!   tracks of each bracketing metallicity, then linear in [Fe/H]; log L,
 //!   log R and log T_eff are interpolated. The star's ZAMS and TAMS ages
-//!   are interpolated the same way in log t. When every track used reaches
-//!   its TAMS, each is read at the star's fractional main-sequence age
+//!   are interpolated the same way in log t. At each bracketing
+//!   metallicity, when both tracks around the mass reach their TAMS, each
+//!   is read at the star's fractional main-sequence age at that metallicity
 //!   τ = (t − t_ZAMS)/(t_TAMS − t_ZAMS); otherwise at the star's absolute
 //!   age, each track held at its first or last row outside its ages. Below
 //!   the lightest track that reaches its TAMS, the TAMS age is extrapolated
@@ -173,7 +174,7 @@ pub fn main_sequence(
         logs.add(low_mass_logs(m, feh, t), 1.0 - w);
     }
     if w > 0.0 {
-        logs.add(yrec_logs(m, feh, &yrec_tracks(m, feh), t), w);
+        logs.add(yrec_logs(m, feh, t), w);
     }
     Ok(MainSequence {
         radius: SolarRadius(10f64.powf(logs.log_r)),
@@ -237,10 +238,6 @@ fn log_mean(tracks: &[(&Track, f64)], value: impl Fn(&Track) -> f64) -> f64 {
         .exp()
 }
 
-fn reach_tams(tracks: &[(&Track, f64)]) -> bool {
-    tracks.iter().all(|(track, _)| track.reaches_tams())
-}
-
 fn yrec_life(mass: f64, feh: f64, tracks: &[(&Track, f64)]) -> Life {
     let zams = Gyr(log_mean(tracks, Track::zams));
     let end = match yrec_tams(mass, feh) {
@@ -291,9 +288,11 @@ fn pair_tams(tracks: &[Track], mass: f64) -> Option<f64> {
     Some(tams.max(upper.end()))
 }
 
-/// How the YREC tracks are read for a star at an age: at its fractional
-/// main-sequence age τ when every track around it reaches its TAMS (and so
-/// does the star), otherwise at its absolute age.
+/// How the YREC tracks of one tabulated metallicity are read for a star at
+/// an age: at its fractional main-sequence age τ at that metallicity when
+/// both tracks around its mass reach their TAMS, otherwise at its absolute
+/// age. The choice is made per metallicity, so a star read between two
+/// metallicities is continuous as its [Fe/H] crosses a grid value.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TrackClock {
     age: f64,
@@ -301,18 +300,22 @@ pub(crate) struct TrackClock {
 }
 
 impl TrackClock {
-    /// The clock of a star of `mass` and `feh` (in the YREC range) at `age`.
+    /// The clock of a star of `mass` (in the YREC range) at `age` among the
+    /// tracks of the tabulated metallicity `feh`: τ from the ZAMS age (log
+    /// mean of the two tracks) and the TAMS age ([`pair_tams`]) there.
     pub fn new(mass: f64, feh: f64, age: f64) -> Self {
-        Self::of(mass, feh, &yrec_tracks(mass, feh), age)
-    }
-
-    fn of(mass: f64, feh: f64, tracks: &[(&Track, f64)], age: f64) -> Self {
-        let life = yrec_life(mass, feh, tracks);
-        let tau = match life.end {
-            Lifetime::Ends(tams) if reach_tams(tracks) => {
-                Some((age - life.zams.0) / (tams.0 - life.zams.0))
-            }
-            _ => None,
+        let tracks = tables().tracks_at(feh);
+        let masses: Vec<f64> = tracks.iter().map(|track| track.mass).collect();
+        let by_mass = bracket_log(&masses, mass).expect("the YREC grid covers 0.3-8 Msun");
+        let tau = if by_mass.terms().all(|(j, _)| tracks[j].reaches_tams()) {
+            let log_zams: f64 = by_mass
+                .terms()
+                .map(|(j, w)| tracks[j].zams().ln() * w)
+                .sum();
+            let zams = log_zams.exp();
+            pair_tams(tracks, mass).map(|tams| (age - zams) / (tams - zams))
+        } else {
+            None
         };
         Self { age, tau }
     }
@@ -346,20 +349,31 @@ pub(crate) fn track_xc_frac(clock: &TrackClock, mass: f64, feh: f64) -> f64 {
         .sum()
 }
 
-fn yrec_logs(mass: f64, feh: f64, tracks: &[(&Track, f64)], age: f64) -> Logs {
-    let clock = TrackClock::of(mass, feh, tracks, age);
+/// Log L, R and T_eff from the YREC tracks: at each bracketing
+/// metallicity, the two tracks around `mass` read by that metallicity's
+/// [`TrackClock`] and linear in log mass; then linear in [Fe/H].
+fn yrec_logs(mass: f64, feh: f64, age: f64) -> Logs {
+    let t = tables();
+    let by_feh = bracket(&t.metallicities, feh).expect("metallicity checked against the grid");
     let mut logs = Logs::default();
-    for (track, w) in tracks {
-        let rows = &track.rows;
-        let at = clock.rows(track);
-        logs.add(
-            Logs {
-                log_l: lerp(rows[at.lo].log_l, rows[at.hi].log_l, at.weight),
-                log_r: lerp(rows[at.lo].log_r, rows[at.hi].log_r, at.weight),
-                log_teff: lerp(rows[at.lo].log_teff, rows[at.hi].log_teff, at.weight),
-            },
-            *w,
-        );
+    for (i, w_feh) in by_feh.terms() {
+        let tabulated = t.metallicities[i];
+        let tracks = t.tracks_at(tabulated);
+        let clock = TrackClock::new(mass, tabulated, age);
+        let masses: Vec<f64> = tracks.iter().map(|track| track.mass).collect();
+        let by_mass = bracket_log(&masses, mass).expect("the YREC grid covers 0.3-8 Msun");
+        for (j, w) in by_mass.terms() {
+            let rows = &tracks[j].rows;
+            let at = clock.rows(&tracks[j]);
+            logs.add(
+                Logs {
+                    log_l: lerp(rows[at.lo].log_l, rows[at.hi].log_l, at.weight),
+                    log_r: lerp(rows[at.lo].log_r, rows[at.hi].log_r, at.weight),
+                    log_teff: lerp(rows[at.lo].log_teff, rows[at.hi].log_teff, at.weight),
+                },
+                w * w_feh,
+            );
+        }
     }
     logs
 }
@@ -566,6 +580,25 @@ mod tests {
         let ends: Vec<f64> = (70..=100).map(|i| end(f64::from(i) / 100.0)).collect();
         for (i, pair) in ends.windows(2).enumerate() {
             assert!(pair[1] <= pair[0], "step {i} from 0.7 Msun: {pair:?}");
+        }
+    }
+
+    #[test]
+    fn values_are_continuous_across_a_grid_metallicity() {
+        // Near 0.8-1 Msun some tracks stop before their TAMS: the τ or
+        // absolute-age reading must not jump as [Fe/H] leaves a grid value.
+        let log_l = |mass: f64, feh: f64, age: f64| {
+            main_sequence(SolarMass(mass), Dex(feh), Gyr(age))
+                .unwrap()
+                .luminosity
+                .0
+                .log10()
+        };
+        for (mass, age) in [(0.85, 8.0), (0.95, 8.0), (0.95, 3.0)] {
+            for (grid, off) in [(0.0, 0.001), (-0.5, -0.499)] {
+                let jump = (log_l(mass, off, age) - log_l(mass, grid, age)).abs();
+                assert!(jump < 0.002, "{mass} Msun {age} Gyr at {grid}: {jump} dex");
+            }
         }
     }
 
