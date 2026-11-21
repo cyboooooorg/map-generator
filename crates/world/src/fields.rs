@@ -125,8 +125,8 @@ impl World {
     ///
     /// `WrongLength` when it has not one value per cell, `Duplicate`
     /// when the code is taken, `Categorical` when a categorical field is
-    /// `F32`, `Storage` when `U16` storage has no finite range or the
-    /// field is not `F32`.
+    /// `F32`, `Storage` when `U16` storage has no finite range, the
+    /// field is not `F32`, or it holds a non-finite value.
     pub fn insert(&mut self, id: FieldId, field: Field) -> Result<(), WorldError> {
         let expected = self.grid.cell_count();
         let found = field.values.len();
@@ -144,7 +144,8 @@ impl World {
             return Err(WorldError::Categorical(id.0));
         }
         if let Storage::U16 { min, max } = field.storage {
-            let ranged = matches!(field.values, Values::F32(_))
+            // NaN would quantise to 0 and infinity to an end of the range.
+            let ranged = matches!(&field.values, Values::F32(v) if v.iter().all(|x| x.is_finite()))
                 && min.is_finite()
                 && max.is_finite()
                 && min < max;

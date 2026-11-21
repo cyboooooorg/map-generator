@@ -105,8 +105,7 @@ fn u16_storage_round_trips_within_one_step() {
     let (min, max) = (20.0_f32, 3000.0_f32);
     let grid = Grid::new(1);
     let mut world = World::new(grid, designation(), 0, ENGINE);
-    let mut values = vec![20.0, 288.15, 3000.0, 20.0, 100.0, 2999.0];
-    values.truncate(6);
+    let values = vec![20.0, 288.15, 3000.0, 20.0, 100.0, 2999.0];
     world
         .insert(
             FieldId(Code::of("climate.temperature")),
@@ -192,4 +191,51 @@ fn world_files_are_evicted_by_the_policy() {
         vec![CacheKey::World(key.clone())]
     );
     assert!(WorldCache::get(&store, &key).unwrap().is_none());
+}
+
+#[test]
+fn a_world_put_under_another_key_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let store = FsStore::new(dir.path().to_path_buf(), u64::MAX);
+    let good = key(system_id());
+    let world = sample();
+    let wrong = [
+        WorldKey {
+            keyframe: 4,
+            ..good.clone()
+        },
+        WorldKey {
+            grid: 5,
+            ..good.clone()
+        },
+        WorldKey {
+            engine: EngineVersion(2),
+            ..good.clone()
+        },
+        WorldKey {
+            body: Designation::planet(SystemNumber::new(10_001).unwrap(), 2).unwrap(),
+            ..good.clone()
+        },
+    ];
+    for key in &wrong {
+        assert!(WorldCache::put(&store, key, &world).is_err(), "{key:?}");
+    }
+    assert!(!dir.path().join("cache").exists());
+    WorldCache::put(&store, &good, &world).unwrap();
+}
+
+#[test]
+fn every_grid_that_can_be_built_can_be_read_back() {
+    // Larger than the cap `for_radius` holds to: `Grid::new` accepts it.
+    let grid = Grid::new(1500);
+    assert!(grid.cell_count() > world::MAX_CELLS);
+    let cells = grid.cell_count();
+    let mut world = World::new(grid, designation(), 0, ENGINE);
+    world
+        .insert(
+            FieldId(Code::of("surface.flag")),
+            field(Values::U8(vec![1; cells]), true, Storage::Exact),
+        )
+        .unwrap();
+    assert_eq!(decode(&encode(&world)).unwrap(), world);
 }

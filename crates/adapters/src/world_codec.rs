@@ -16,9 +16,17 @@
 use std::fmt;
 
 use timeline::{Code, Designation, EngineVersion};
-use world::{Field, FieldId, Grid, MAX_CELLS, Storage, Values, World};
+use world::{Field, FieldId, Grid, Storage, Values, World};
 
+/// The file magic. Change it (`MGWORLD2`, ...) whenever the layout above
+/// changes: an old file then reads as another file (a cache miss), never
+/// as a damaged one.
 const MAGIC: &[u8; 8] = b"MGWORLD1";
+
+/// The largest cell count a file may declare: the cell index of a world
+/// is a `u32` in the layout. Every grid `Grid::new` builds below it
+/// round-trips, including those above the generator's own cap.
+const MAX_FILE_CELLS: u64 = u32::MAX as u64;
 
 /// Why a world file could not be decoded.
 #[derive(Debug)]
@@ -58,8 +66,8 @@ const STEPS: f32 = 65535.0;
 ///
 /// # Panics
 ///
-/// When a text is longer than 65 535 bytes, or a cell count does not fit
-/// a `u32`: neither can come out of the generator.
+/// When a text is longer than 65 535 bytes, or the field count does not
+/// fit a `u32`: neither can come out of the generator.
 pub fn encode(world: &World) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
@@ -189,7 +197,7 @@ pub fn decode(bytes: &[u8]) -> Result<World, CodecError> {
     let keyframe = r.u32()?;
     let n = r.u32()?;
     let cells = u64::from(n) * u64::from(n) * 6;
-    if n == 0 || cells > MAX_CELLS as u64 {
+    if n == 0 || cells > MAX_FILE_CELLS {
         return Err(invalid("grid size"));
     }
     let count = r.u32()?;

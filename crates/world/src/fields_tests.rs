@@ -88,3 +88,22 @@ fn fields_iterate_in_code_order() {
     let codes: Vec<&str> = w.fields().map(|(i, _)| i.0.as_str()).collect();
     assert_eq!(codes, ["climate.temperature", "relief.height"]);
 }
+
+#[test]
+fn u16_storage_refuses_a_non_finite_value() {
+    for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let mut w = world();
+        let mut values = vec![0.5; 24];
+        values[3] = bad;
+        let field = Field {
+            values: Values::F32(values),
+            categorical: false,
+            storage: Storage::U16 { min: 0.0, max: 1.0 },
+        };
+        assert_eq!(
+            w.insert(id("climate.wetness"), field).unwrap_err(),
+            WorldError::Storage(Code::of("climate.wetness")),
+            "{bad}"
+        );
+    }
+}

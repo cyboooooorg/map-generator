@@ -15,7 +15,8 @@ object.
   is coarser. Areas sum to `4 pi`: weight every statistic by them.
 - `World`: a grid, the body's designation, a keyframe index, the engine
   version and named fields. `World::insert` refuses a field of the wrong
-  length, a duplicate code, or a storage mode that does not fit; errors
+  length, a duplicate code, or a storage mode that does not fit (`u16`
+  storage needs finite values); errors
   are `WorldError` codes, never text. Fields are `f32`, `u16` or `u8`;
   categorical ones (classes) are integers. Each field declares how it is
   quantised for storage. The fields themselves arrive with W2 to W4.
