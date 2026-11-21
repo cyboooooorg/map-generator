@@ -99,11 +99,19 @@ mod tests {
             // Source: IAU 2015 Resolution B3, nominal GM_sun.
             ("SOLAR_MASS_PARAMETER", SOLAR_MASS_PARAMETER, 1.327_124_4e20),
             // Source: IAU 2015 Resolution B3, nominal equatorial radius.
-            ("EARTH_EQUATORIAL_RADIUS", EARTH_EQUATORIAL_RADIUS.0, 6.378_1e6),
+            (
+                "EARTH_EQUATORIAL_RADIUS",
+                EARTH_EQUATORIAL_RADIUS.0,
+                6.378_1e6,
+            ),
             // Source: IAU 2015 Resolution B3, nominal GM_earth.
             ("EARTH_MASS_PARAMETER", EARTH_MASS_PARAMETER, 3.986_004e14),
             // Source: CODATA 2018, G.
-            ("GRAVITATIONAL_CONSTANT", GRAVITATIONAL_CONSTANT, 6.674_30e-11),
+            (
+                "GRAVITATIONAL_CONSTANT",
+                GRAVITATIONAL_CONSTANT,
+                6.674_30e-11,
+            ),
         ];
         for (name, value, published) in rows {
             assert_eq!(value, published, "{name}");
