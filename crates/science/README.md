@@ -81,6 +81,57 @@ their densities are 1 to 4 % above those at the real temperature.
 with the inverse for ice Ih, the ice VI / ice VII boundary and the triple
 points; each is checked against its release's verification table.
 
+## Hydrostatic structure
+
+`science::structure::integrate(layers, surface_pressure)` builds a planet
+in hydrostatic equilibrium from its layers, centre out (`LayerSpec`: a mass
+and a borrowed `MaterialEos`; zero-mass layers are skipped). It returns a
+`Structure`: the surface radius, the normalised moment of inertia
+`C/MR^2`, the `Shell`s (one per layer and phase actually present, so a
+phase change inside a layer is a shell boundary) and the `Sample`s (radius,
+enclosed mass, density, pressure at the centre and at the end of every
+step). Errors: `NoMass`, `NotFinite`, `NoConvergence`, `Eos`.
+
+The method is the study's prototype
+(`docs/superpowers/studies/2026-11-21-planet-interior/prototype/solve.py`):
+fourth-order Runge-Kutta in the mass coordinate `t = (m/M)^(1/3)`, state
+`(r, P, I)`, shooting on the central pressure (Brent's method, 1e-10
+relative) until the surface pressure is met. A phase transition ends a
+step exactly (Brent's method on the step length), so the error stays
+fourth order; `STEPS_PER_LAYER` (20, a calibration) keeps R and C/MR^2
+within 1e-4 of the converged answer for Earth and a 20 Earth-mass planet.
+Below zero pressure, which a Runge-Kutta stage can predict near the
+surface, the density is the zero-pressure one.
+
+```rust
+use science::constants::EARTH_MASS;
+use science::eos::{core_alloy, mantle};
+use science::structure::{LayerSpec, integrate};
+use science::units::Pascal;
+
+// Earth: core mass fraction 0.325 (PREM), 1 bar at the surface.
+let (core, rock) = (core_alloy(), mantle());
+let earth = integrate(
+    &[
+        LayerSpec { mass: EARTH_MASS * 0.325, material: &core },
+        LayerSpec { mass: EARTH_MASS * 0.675, material: &rock },
+    ],
+    Pascal(1e5),
+)
+.expect("Earth integrates");
+println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
+```
+
+Against measured values (tests of `structure.rs`): Earth R -0.29 %,
+C/MR^2 -0.24 %, central pressure +1.0 % and core radius 3480 km against
+PREM; Venus, Mars, Mercury, the Moon and Ganymede within 2 % on R and
+C/MR^2; 5 Earth masses within 0.2 % of Zeng et al. 2016 and, with 50 %
+water at 300 K, within 1 % of Zeng et al. 2019. Titan is checked on its
+radius only: its C/MR^2 needs a partly differentiated interior, which this
+fully differentiated model does not represent. A 20 Earth-mass planet
+converges, but its core (7.9 TPa at the centre) is far beyond the range of
+the PREM fit of the core alloy.
+
 ## Ports
 
 None: `science` is a library of pure functions. The laws arrive with the
