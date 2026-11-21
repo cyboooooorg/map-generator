@@ -54,8 +54,9 @@ pub const RIBAS_LYMAN_ALPHA: (f64, f64) = (19.2e-3, 0.72);
 pub const RIBAS_START: Gyr = Gyr(0.1);
 
 /// Calibration: the XUV band (1 to 1180 Å). Exponent: [`RIBAS_XUV`]'s.
-/// Share: [`RIBAS_XUV`] at [`RIBAS_START`] over today's solar constant
-/// (3.706e-4, the `legacy-final` value), times the present over the ZAMS
+/// Share: [`RIBAS_XUV`] at [`RIBAS_START`] over today's solar constant,
+/// [`crate::constants::SOLAR_IRRADIANCE`] (1361 W/m², IAU 2015 B3; Kopp
+/// & Lean 2011 measure 1360.8 ± 0.5): 3.706e-4, the `legacy-final` value, times the present over the ZAMS
 /// luminosity of the 1 M☉, [Fe/H] 0 track of the stellar tables, so that
 /// this Sun follows Ribas et al.'s fit at every age. Checked by the test
 /// `the_sun_follows_ribas`.
@@ -109,16 +110,19 @@ pub const DYNAMO_LIMIT: Kelvin = Kelvin(7_200.0);
 
 /// Definition: ages at which [`history`] samples the effective
 /// temperature between the ZAMS and the star's age, to find where the
-/// star gains or loses its corona.
+/// star gains or loses its corona. An episode shorter than a 64th of the
+/// main-sequence age so far could fall between two samples; none that
+/// short is expected on a single star's track.
 const TEMPERATURE_SAMPLES: u32 = 64;
 
 /// Definition: bisection steps that place a corona boundary, each halving
 /// the interval between two samples (60 reach the f64 resolution).
 const BISECTION_STEPS: u32 = 60;
 
-/// Definition: XUV energy per unit area the Sun delivered at 1 au from 0
+/// Source: XUV energy per unit area the Sun delivered at 1 au from 0
 /// to [`crate::heat::EARTH_AGE`], J/m²: [`RIBAS_XUV`] integrated, held at
-/// its [`RIBAS_START`] value before it (the model's Sun, checked by the
+/// its [`RIBAS_START`] value before it (Ribas et al. 2005, Table 5,
+/// integrated; the model's Sun, checked by the
 /// test `earth_fluence_is_the_ribas_integral`). The reference of escape
 /// laws calibrated on Earth.
 pub const EARTH_XUV_FLUENCE: JoulePerSquareMetre = JoulePerSquareMetre(5.64e15);
