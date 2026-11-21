@@ -1,6 +1,6 @@
 //! The error type of the system engine.
 
-use science::stellar::StellarError;
+use science::stellar::{MAX_MASS, MIN_MASS, StellarError};
 use science::units::{Dex, Gyr, SolarMass};
 use std::fmt;
 use timeline::ContractError;
@@ -33,8 +33,8 @@ impl fmt::Display for SystemError {
             Self::Contract(error) => write!(f, "system.contract: {error}"),
             Self::HostMassOutOfRange { mass } => write!(
                 f,
-                "system.host-mass-out-of-range: {} M☉ (0.08-8; above 8 see #615)",
-                mass.0
+                "system.host-mass-out-of-range: {} M☉ ({}-{}; above {} see #615)",
+                mass.0, MIN_MASS.0, MAX_MASS.0, MAX_MASS.0
             ),
             Self::MetallicityOutOfRange { metallicity } => {
                 write!(f, "system.metallicity-out-of-range: {} dex", metallicity.0)
@@ -86,6 +86,7 @@ mod tests {
         .to_string();
         assert!(message.contains("#615"), "{message}");
         assert!(message.starts_with("system.host-mass-out-of-range"));
+        assert!(message.contains("(0.08-8; above 8 see #615)"), "{message}");
     }
 
     #[test]

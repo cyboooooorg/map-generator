@@ -17,8 +17,8 @@ request, the archetype targets, the present date.
 | `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
-The remaining doc-only modules fix their future signatures in `//!` comments;
-`SystemError` is created with the first of them.
+The remaining doc-only modules fix their future signatures in `//!` comments.
+`SystemError`, the engine's error type, lives in `src/error.rs`.
 
 ## Planet interior
 
