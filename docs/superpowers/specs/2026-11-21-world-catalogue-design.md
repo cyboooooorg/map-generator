@@ -97,8 +97,8 @@ This document fixes W1 and the shape the others plug into.
   three-face corners resolved through the sphere.
 - `Grid::for_radius(radius, cell)`: faces of `n = round(π/2 × R / cell)`
   cells per side (a face spans a quarter of a great circle), so an Earth
-  at 15 km has `n = 667` and 2.67 M cells. Above 8 M cells, `n` is
-  reduced to stay at 8 M (the parent design's cap). The default cell size
+  at 15 km (IAU nominal equatorial radius) has `n = 668` and 2.68 M
+  cells. Above 8 M cells, `n` is reduced to stay at 8 M (the parent design's cap). The default cell size
   (15 km) is a `Definition:` constant recorded with the engine version;
   the tier-2 test grid uses 60 km.
 - Per-cell area (the spherical quadrilateral's solid angle) is computed
