@@ -6,12 +6,6 @@
 //! 1 M☉ star is hotter than G2. The class is not traced: the trace has
 //! no node type for a class index.
 
-// Consumed by the system draw, next pull request of the system-draw plan.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the system draw, next pull request")
-)]
-
 use crate::SystemError;
 use crate::random::uniform;
 use rand_chacha::ChaCha8Rng;

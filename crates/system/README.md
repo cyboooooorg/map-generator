@@ -11,13 +11,14 @@ request, the archetype targets, the present date.
 | --- | --- | --- |
 | `inputs` | shared | `Inputs`, `Request`, `SystemRequest`, `BodyRequest` |
 | `archetype` | mapgen3, mapgen1 | `ArchetypeId`; placement half (draw), targets half (planet model) |
-| `placement` | shared | `Trial`, `Placement`: the seam |
-| `draw` | mapgen3 | `draw(inputs, trace) -> Drawn` (signature only) |
-| `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced (crate-internal until the draw uses it) |
+| `placement` | shared | `Trial`, `Placement`, `TrialOutcome`: the seam (the outcome holds plain values, since `class_of` runs on a scratch trace) |
+| `draw` | mapgen3 | `draw_with(inputs, trace, classify) -> Drawn`: the star and its system number; no placement yet, a body request is `BodyRequestNotDrawn` |
+| `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn` |
+| `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
 | `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
-The remaining doc-only modules fix their future signatures in `//!` comments.
+The remaining doc-only module fixes its future signature in a `//!` comment.
 `SystemError`, the engine's error type, lives in `src/error.rs`.
 
 ## Planet interior
