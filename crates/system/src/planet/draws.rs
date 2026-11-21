@@ -1,6 +1,11 @@
 //! The draws of a planet's composition, each from its own sub-seed of the
-//! trial seed (`planet/cmf`, `planet/water`, `planet/radiogenic`), so that
-//! changing one draw never moves another.
+//! seed the caller passes (`planet/cmf`, `planet/water`,
+//! `planet/radiogenic`), so that changing one draw never moves another.
+//! `class_of` will pass the trial seed, `model` the body seed.
+//!
+//! Why a planet is a water world is recorded with its water: a flag
+//! derived from the orbit and the ice line (formed beyond it) and a drawn
+//! flag (migrated in from beyond it); the water fraction derives from both.
 //!
 //! The distributions are written by hand on a ChaCha8 stream: a uniform
 //! number in the open interval (0, 1) and a normal number by the Box-Muller
@@ -77,15 +82,42 @@ const MASS_FRACTION_MAX: f64 = 1.0;
 /// make a uniform number of the grid `k / 2^53`.
 const MANTISSA_BITS: u32 = 53;
 
-/// The composition a trial draws; its nodes are leaves of the trace.
+/// The composition a trial draws. The core mass fraction, the migration
+/// flag and the radiogenic abundance are drawn leaves of the trace; the
+/// water fraction derives from the two water-world flags.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Drawn {
-    /// Core mass fraction, of the whole planet.
+    /// Core mass fraction of the planet without its water: the core is
+    /// `cmf (1 - w) M`, the share of the refractory mass.
     pub core_mass_fraction: Traced<Fraction>,
-    /// Water mass fraction, of the whole planet.
+    /// Whether the planet formed at or beyond the ice line, derived from
+    /// the semi-major axis and the ice line.
+    pub formed_beyond_ice_line: Traced<bool>,
+    /// Whether the planet migrated in from beyond the ice line, drawn with
+    /// [`MIGRATION_CHANCE`] (drawn for every planet; it matters only inside
+    /// the ice line).
+    pub migrated: Traced<bool>,
+    /// Water mass fraction of the whole planet (bulk water), derived from
+    /// the two flags above.
     pub water_fraction: Traced<Fraction>,
     /// Radiogenic abundance, dex of Earth's.
     pub radiogenic_abundance: Traced<Dex>,
+}
+
+impl Drawn {
+    /// A water world: formed beyond the ice line or migrated from there.
+    /// Its water is a layer of its own; a dry planet's stays bound in the
+    /// mantle.
+    pub(crate) fn is_water_world(&self) -> bool {
+        *self.formed_beyond_ice_line.value() || *self.migrated.value()
+    }
+}
+
+/// The water draw: the fraction and whether the planet migrated.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WaterDraw {
+    pub fraction: f64,
+    pub migrated: bool,
 }
 
 /// The labels the sub-seeds are derived with.
@@ -103,39 +135,58 @@ pub(crate) const LABELS: Labels = Labels {
     radiogenic: "planet/radiogenic",
 };
 
-/// Draws the composition of `trial` and records it.
-pub(crate) fn draw(trial: &Trial, trace: &mut Trace) -> Result<Drawn, InteriorError> {
-    draw_with(trial, trace, &LABELS)
+/// Draws the composition of `trial` from `seed` and records it. The
+/// caller chooses the seed: `class_of` the trial's, `model` the body's.
+pub(crate) fn draw(seed: Seed, trial: &Trial, trace: &mut Trace) -> Result<Drawn, InteriorError> {
+    draw_with(seed, trial, trace, &LABELS)
 }
 
 /// [`draw`] with other labels, to show the draws are independent.
 pub(crate) fn draw_with(
+    seed: Seed,
     trial: &Trial,
     trace: &mut Trace,
     labels: &Labels,
 ) -> Result<Drawn, InteriorError> {
-    let beyond = trial.orbit.semi_major_axis.value().0 >= trial.ice_line.value().0;
-    let cmf = core_mass_fraction(trial.seed.derive(labels.core));
-    let water = water_fraction(trial.seed.derive(labels.water), beyond);
-    let radiogenic = radiogenic_abundance(trial.seed.derive(labels.radiogenic));
-    record(trace, cmf, water, radiogenic)
+    let beyond = formed_beyond_ice_line(trial);
+    let cmf = core_mass_fraction(seed.derive(labels.core));
+    let water = water_fraction(seed.derive(labels.water), beyond);
+    let radiogenic = radiogenic_abundance(seed.derive(labels.radiogenic));
+    record(trial, trace, cmf, water, radiogenic)
+}
+
+/// Whether `trial` sits at or beyond its ice line.
+fn formed_beyond_ice_line(trial: &Trial) -> bool {
+    trial.orbit.semi_major_axis.value().0 >= trial.ice_line.value().0
 }
 
 fn record(
+    trial: &Trial,
     trace: &mut Trace,
     cmf: f64,
-    water: f64,
+    water: WaterDraw,
     radiogenic: f64,
 ) -> Result<Drawn, InteriorError> {
     let cmf = Fraction::try_from(cmf).map_err(InteriorError::NotAFraction)?;
-    let water = Fraction::try_from(water).map_err(InteriorError::NotAFraction)?;
+    let fraction = Fraction::try_from(water.fraction).map_err(InteriorError::NotAFraction)?;
+    let core_mass_fraction =
+        trace.leaf(Code::of(codes::CORE_MASS_FRACTION), cmf, Provenance::Drawn)?;
+    let formed_beyond_ice_line = trace.record(
+        Code::of(codes::FORMED_BEYOND_ICE_LINE),
+        formed_beyond_ice_line(trial),
+        &[trial.orbit.semi_major_axis.node(), trial.ice_line.node()],
+    )?;
+    let migrated = trace.leaf(Code::of(codes::MIGRATED), water.migrated, Provenance::Drawn)?;
+    let water_fraction = trace.record(
+        Code::of(codes::WATER_FRACTION),
+        fraction,
+        &[formed_beyond_ice_line.node(), migrated.node()],
+    )?;
     Ok(Drawn {
-        core_mass_fraction: trace.leaf(
-            Code::of(codes::CORE_MASS_FRACTION),
-            cmf,
-            Provenance::Drawn,
-        )?,
-        water_fraction: trace.leaf(Code::of(codes::WATER_FRACTION), water, Provenance::Drawn)?,
+        core_mass_fraction,
+        formed_beyond_ice_line,
+        migrated,
+        water_fraction,
         radiogenic_abundance: trace.leaf(
             Code::of(codes::RADIOGENIC_ABUNDANCE),
             Dex(radiogenic),
@@ -160,7 +211,8 @@ fn normal(rng: &mut ChaCha8Rng) -> f64 {
 /// The core mass fraction: `0.32 + 0.12 z` for `z < 0` and `0.32 + 0.14 z`
 /// otherwise, `z` standard normal: half the mass on each side of the
 /// median 0.32, the 16th percentile at 0.20 and the 84th at 0.46.
-/// Clamped to a mass fraction, 0 to 1.
+/// Clamped to a mass fraction, 0 to 1. A share of the refractory mass
+/// (the planet without its water), as Plotnykov & Valencia infer it.
 pub(crate) fn core_mass_fraction(seed: Seed) -> f64 {
     let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
     let z = normal(&mut rng);
@@ -175,17 +227,19 @@ pub(crate) fn core_mass_fraction(seed: Seed) -> f64 {
 /// The water fraction: beyond the ice line, or with the migration chance
 /// inside it, uniform from 0.5 to 0.67; otherwise log-normal around
 /// 2700 ppm. The three draws (normal, uniform, uniform) are made in every
-/// case, so the stream does not depend on the branch.
-pub(crate) fn water_fraction(seed: Seed, beyond_ice_line: bool) -> f64 {
+/// case, so the stream does not depend on the branch; the migration draw
+/// is returned with the fraction.
+pub(crate) fn water_fraction(seed: Seed, beyond_ice_line: bool) -> WaterDraw {
     let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
     let z = normal(&mut rng);
     let icy = ICY_WATER_MIN + (ICY_WATER_MAX - ICY_WATER_MIN) * uniform(&mut rng);
     let migrated = uniform(&mut rng) < MIGRATION_CHANCE;
-    if beyond_ice_line || migrated {
+    let fraction = if beyond_ice_line || migrated {
         icy
     } else {
         DRY_WATER_MEDIAN * (DRY_WATER_SIGMA_LN * z).exp()
-    }
+    };
+    WaterDraw { fraction, migrated }
 }
 
 /// The radiogenic abundance, dex of Earth's: a normal of mean 0 and sigma
@@ -197,17 +251,26 @@ pub(crate) fn radiogenic_abundance(seed: Seed) -> f64 {
 
 #[cfg(test)]
 impl Drawn {
-    /// A composition set by hand, for a test that needs Earth's.
+    /// A composition set by hand for `trial`, for a test that needs Earth's
+    /// or a given kind of planet; whether it formed beyond the ice line
+    /// still comes from the trial.
     pub(crate) fn fixed(
+        trial: &Trial,
         trace: &mut Trace,
         core_mass_fraction: f64,
         water_fraction: f64,
         radiogenic_abundance: f64,
+        migrated: bool,
     ) -> Drawn {
+        let water = WaterDraw {
+            fraction: water_fraction,
+            migrated,
+        };
         record(
+            trial,
             trace,
             core_mass_fraction,
-            water_fraction,
+            water,
             radiogenic_abundance,
         )
         .unwrap()

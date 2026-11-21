@@ -30,8 +30,10 @@
 //! # What exists today
 //!
 //! The first slice of the chain: [`draws`] draws a planet's composition
-//! from sub-seeds of the trial seed, [`interior`] builds its structure
-//! with the `science` integrator, [`heat`] computes its internal heat.
+//! from sub-seeds of the seed it is given (`chain`'s `seed`: the trial
+//! seed for `class_of`, the body seed for `model`), [`interior`] builds its
+//! structure with the `science` integrator, [`heat`] computes its internal
+//! heat.
 //! Every value is recorded in the system's cause `Trace`, with the codes
 //! of [`codes`].
 

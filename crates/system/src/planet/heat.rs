@@ -37,10 +37,11 @@ pub(crate) fn tidal_kind(envelope_fraction: f64, water_fraction: f64) -> TidalKi
 }
 
 /// The heat sources of the planet at the age of the trial. The silicate
-/// is the rock layer, `(1 - cmf)(1 - w) M`; the tide comes from the
-/// primary star on the trial's orbit, with a response set by the
-/// composition. The planet has no envelope in this slice, so it is never
-/// an enveloped body.
+/// is the interior's mantle (its recorded mass node, which holds a dry
+/// planet's water); the tide comes from the primary star on the trial's
+/// orbit, with a response set by the composition, on the recorded radius.
+/// The planet has no envelope in this slice, so it is never an enveloped
+/// body.
 ///
 /// # Errors
 ///
@@ -51,29 +52,23 @@ pub(crate) fn heat(
     abundance: &Traced<Dex>,
     trace: &mut Trace,
 ) -> Result<Heat, InteriorError> {
-    let cmf = interior.composition.core_mass_fraction;
     let water = interior.composition.water_fraction;
-    let mass = interior.bulk.mass;
+    let silicate = interior.mantle_mass;
     let age = trial.age;
-    let silicate =
-        Kilogram::from(*mass.value()).0 * (1.0 - cmf.value().get()) * (1.0 - water.value().get());
-    let silicate = Kilogram(silicate);
 
     let radiogenic_power = trace.record(
         Code::of(codes::HEAT_RADIOGENIC),
-        radiogenic(silicate, 10f64.powf(abundance.value().0), *age.value()),
-        &[
-            mass.node(),
-            cmf.node(),
-            water.node(),
-            abundance.node(),
-            age.node(),
-        ],
+        radiogenic(
+            *silicate.value(),
+            10f64.powf(abundance.value().0),
+            *age.value(),
+        ),
+        &[silicate.node(), abundance.node(), age.node()],
     )?;
     let secular_power = trace.record(
         Code::of(codes::HEAT_SECULAR),
-        secular(silicate, *age.value()),
-        &[mass.node(), cmf.node(), water.node(), age.node()],
+        secular(*silicate.value(), *age.value()),
+        &[silicate.node(), age.node()],
     )?;
 
     let primary = trial.sources.primary().mass;
@@ -83,7 +78,7 @@ pub(crate) fn heat(
         Code::of(codes::HEAT_TIDAL),
         tidal(
             Kilogram::from(*primary.value()),
-            interior.structure.radius,
+            Metre::from(*interior.bulk.radius.value()),
             Metre(orbit.semi_major_axis.value().0 * ASTRONOMICAL_UNIT.0),
             orbit.eccentricity.value().get(),
             k2_over_q(kind),

@@ -22,13 +22,15 @@ The doc-only modules fix their future signatures in `//!` comments;
 
 ## Planet interior
 
-A trial's composition is drawn from the body seed: core mass fraction
-(split normal around 0.32), water share (log-normal inside the ice line,
-uniform 0.5 to 0.67 beyond), radiogenic abundance (0.23 dex). The layers
-are core alloy, mantle and, when there is water, a water layer, integrated
-at zero surface pressure with `science::structure`. The water layer sits at
-the trial's equilibrium temperature until the climate sets the surface
-temperature, and is an error (`InteriorError::WaterTooHot`) from 355 K. The
+A trial's composition is drawn from the seed its caller passes (the body
+seed for `model`, the trial seed for `class_of`): core mass fraction (split
+normal around 0.32), water share (log-normal inside the ice line, uniform
+0.5 to 0.67 for a water world, formed beyond it or migrated, both flags
+traced), radiogenic abundance (0.23 dex). The layers are core alloy and
+mantle (holding a dry planet's water), plus a water world's water layer at
+the trial's equilibrium temperature, integrated at zero surface pressure
+with `science::structure`. From 355 K a water world's water is an inventory
+outside the structure until the climate adds its steam envelope. The
 heat is radiogenic, secular and tidal (`science::heat`). Every draw and
 constant carries its `Source:` or `Calibration:`; the departures and limits
 (cold structure, extrapolated core, water range) are on the page
@@ -58,8 +60,8 @@ the external events track (T6, #608).
 ## Dependencies
 
 `timeline`, `science`, `serde`, `rand_chacha` and `rand_core` (the
-seeded draws of `planet::draws`, always from a sub-seed of the trial
-seed). Never `world`.
+seeded draws of `planet::draws`, always from a sub-seed of the seed the
+caller passes). Never `world`.
 
 The direction of dependencies is checked by `tools/guardrails`
 (`mise run test:tier1`). See the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md),
