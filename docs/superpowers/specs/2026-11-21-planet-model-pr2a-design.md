@@ -19,11 +19,15 @@ a layered cross-section, so that PR 2c (escape) and 2d (class, public
    - the mantle's solid state is a constant of the engine, not derived;
    - the migration flag is drawn and recorded only inside the ice line;
    - the ice-line flag is computed once;
-   - the k2/Q choice reads the water's state (an inventory above 355 K
-     is not icy) and the envelope fraction;
-   - the 355 K trigger of a water inventory is removed: it is the ice
-     VI-VII-liquid triple point, not a steam criterion. The radius of
-     steam and supercritical water worlds moves to PR 2d, which has the
+   - the k2/Q choice reads the water's state (water outside the
+     structure is not icy) and the envelope fraction;
+   - 355 K is no longer read as a steam criterion: it is only the upper
+     edge of `science::water`'s domain. A water world hotter than that
+     keeps its water outside the structure, recorded as "beyond the
+     water law" rather than as steam, and its bulk stays consistent
+     (the dry mass with the dry radius, the water mass apart) instead
+     of mixing the whole mass with the dry radius. The radius of steam
+     and supercritical water worlds moves to PR 2d, which has the
      climate their criterion needs (study decision 3).
 2. **Wider draws (#618):** each composition draw is **uniform between
    published bounds** (log-uniform where the quantity spans decades),
