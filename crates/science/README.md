@@ -127,6 +127,13 @@ exponent, rocky and icy k2/Q) say what was searched and not found; the page
 [The heat inside](../../docs/science/planet-interiors.md#the-heat-inside)
 lists them under "Where it departs from the science".
 
+## Main-sequence stars
+
+`science::stellar`: `life(mass, metallicity)` (ZAMS age, TAMS or
+`Beyond(20 Gyr)`) and `main_sequence(mass, metallicity, age)` (R, L,
+T_eff), over 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
+see [STELLAR.md](data/STELLAR.md#reading-the-tables).
+
 ## Ports
 
 None: `science` is a library of pure functions. The laws arrive with the

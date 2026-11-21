@@ -1,6 +1,6 @@
 //! Sourced physical constants.
 
-use crate::units::{Kilogram, Metre, Second, Watt, WattPerSquareMetre};
+use crate::units::{Gyr, Kelvin, Kilogram, Metre, Second, Watt, WattPerSquareMetre};
 
 /// Definition: IAU 2012 Resolution B2, 149 597 870 700 m exactly.
 pub const ASTRONOMICAL_UNIT: Metre = Metre(149_597_870_700.0);
@@ -66,6 +66,14 @@ pub const DEGREES_PER_HALF_TURN: f64 = 180.0;
 /// quotes it and cites that paper). Earth's volumetric mean radius is
 /// 6 371 000.79 m, 8 m smaller; no law here is sensitive to that.
 pub const EARTH_MEAN_RADIUS: Metre = Metre(6_371_008.771_4);
+
+/// Definition: IAU 2015 Resolution B3 nominal solar effective temperature,
+/// 5772 K (Prša et al. 2016, AJ 152, 41).
+pub const SOLAR_EFFECTIVE_TEMPERATURE: Kelvin = Kelvin(5772.0);
+
+/// Source: age of the Universe, 13.8 Gyr (Planck 2018 results VI, A&A 641,
+/// A6: 13.787 +/- 0.020 Gyr, TT,TE,EE+lowE+lensing+BAO).
+pub const AGE_OF_UNIVERSE: Gyr = Gyr(13.8);
 
 #[cfg(test)]
 mod tests {

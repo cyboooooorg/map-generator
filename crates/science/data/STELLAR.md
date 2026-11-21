@@ -292,6 +292,37 @@ Baraffe and 0.03 dex brighter, and about 115 K hotter than Dartmouth: its
 grey atmosphere, where Baraffe and Dartmouth use model atmospheres. The
 blend over 0.30-0.35 M☉ spreads that step over 0.05 M☉.
 
+## Reading the tables
+
+`science::stellar` (`life`, `main_sequence`) reads the tracks and the
+low-mass rows this way:
+
+- **YREC, 0.3-8 M☉**: linear in log mass between the two tracks around
+  the mass, at each of the two tabulated [Fe/H] around the metallicity,
+  then linear in [Fe/H]; a grid value uses its track alone. log L, log R
+  and log T_eff are interpolated, never L, R or T_eff. The star's ZAMS and
+  TAMS ages are interpolated the same way, in log t.
+- **Along a track**: when every track used reaches the TAMS (last
+  xc_frac < 10⁻³), each is read at the star's fractional main-sequence age
+  τ = (t − t_ZAMS)/(t_TAMS − t_ZAMS), linear in age between rows. When one
+  of them stops at 20 Gyr, all are read at the star's absolute age, each
+  held at its first or last row outside its ages, and the star's life is
+  `Beyond(20 Gyr)`. This happens between the last mass that stops at
+  20 Gyr and the next (0.7-0.8 M☉ at [Fe/H] −1 and −0.5, 0.8-0.9 at 0,
+  0.9-1.0 at +0.5): there the lifetime jumps from `Beyond(20 Gyr)` to the
+  heavier track's TAMS (12.9 Gyr at 0.8 M☉ and [Fe/H] −1).
+- **Baraffe, below 0.35 M☉**: bilinear in log mass and log age, held at
+  the last row (10 Gyr) beyond it, plus the Dartmouth offset in dex, linear
+  in mass between 0.15 and 0.3 M☉ (held outside) and linear in [Fe/H]
+  (zero at 0). The ZAMS is the `Definition:` above, interpolated in log t;
+  the life is `Beyond(20 Gyr)`.
+- **Seam**: from 0.30 to 0.35 M☉, the two above are blended in log, the
+  weight of YREC linear in mass from 0 to 1; the ZAMS age likewise, in
+  log t.
+- **Ages**: a star is answered from its ZAMS to its TAMS, or to 20 Gyr when
+  its life is `Beyond`; outside, `BeforeZams` or `AfterTams` (which carries
+  the 20 Gyr end in the second case).
+
 ## Features of the models
 
 - The YREC 0.3 M☉ snapshots are fully convective (one layer). At
