@@ -14,7 +14,7 @@ request, the archetype targets, the present date.
 | `placement` | shared | `Trial`, `Placement`: the seam |
 | `draw` | mapgen3 | `draw(inputs, trace) -> Drawn` (signature only) |
 | `star` | mapgen3 | `StarState` computation (signature only) |
-| `planet` | mapgen1 | `class_of`, `model` (signatures only) |
+| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
 The doc-only modules fix their future signatures in `//!` comments;
@@ -43,7 +43,9 @@ the external events track (T6, #608).
 
 ## Dependencies
 
-`timeline`, `science`, `serde`. Never `world`.
+`timeline`, `science`, `serde`, `rand_chacha` and `rand_core` (the
+seeded draws of `planet::draws`, always from a sub-seed of the trial
+seed). Never `world`.
 
 The direction of dependencies is checked by `tools/guardrails`
 (`mise run test:tier1`). See the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md),

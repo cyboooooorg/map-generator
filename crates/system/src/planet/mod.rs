@@ -26,3 +26,37 @@
 //! one classifier. `model` runs the same chain with the body seed
 //! (`placement.seed`, never `trial.seed`) and the spin, and the
 //! archetype's backward search. `SystemError` does not exist yet.
+//!
+//! # What exists today
+//!
+//! The first slice of the chain: [`draws`] draws a planet's composition
+//! from sub-seeds of the trial seed, [`interior`] builds its structure
+//! with the `science` integrator, [`heat`] computes its internal heat.
+//! Every value is recorded in the system's cause `Trace`, with the codes
+//! of [`codes`].
+
+// The slice is consumed by the planet chain (`class_of`, `model`), which
+// arrives with the next pull request of the planet interior plan.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod codes;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod draws;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod heat;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod interior;
+
+#[cfg(test)]
+mod tests;
