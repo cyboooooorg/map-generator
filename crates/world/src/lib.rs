@@ -4,3 +4,7 @@
 //!
 //! It spatializes the global state and never feeds anything back into the
 //! system engine. It never reads the kind of the central object.
+
+pub mod grid;
+
+pub use grid::{DEFAULT_CELL, Grid, MAX_CELLS};
