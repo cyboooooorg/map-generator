@@ -80,11 +80,9 @@ pub enum GiantError {
 impl std::fmt::Display for GiantError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::OutOfTable { mass, core } => write!(
-                f,
-                "no Fortney et al. 2007 row for {} M⊕ with a {} M⊕ core",
-                mass.0, core.0
-            ),
+            Self::OutOfTable { mass, core } => {
+                write!(f, "giant-out-of-table(mass={}, core={})", mass.0, core.0)
+            }
         }
     }
 }

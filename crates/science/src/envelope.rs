@@ -59,7 +59,7 @@ impl std::fmt::Display for EnvelopeError {
         match self {
             Self::OutOfTable { mass, envelope } => write!(
                 f,
-                "no Lopez & Fortney 2014 row for {} M⊕ with a {} envelope",
+                "envelope-out-of-table(mass={}, envelope={})",
                 mass.0,
                 envelope.get()
             ),

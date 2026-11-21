@@ -153,6 +153,10 @@ fn the_ice_rock_core_matches_table_1() {
 fn a_core_beyond_the_rows_is_refused() {
     let refused = giant(LIGHT_GIANT, CORES[2], TABLE_4_AGE, flux_at(1.0));
     assert!(matches!(refused, Err(GiantError::OutOfTable { .. })));
+    assert_eq!(
+        refused.unwrap_err().to_string(),
+        "giant-out-of-table(mass=20, core=25)"
+    );
     assert_eq!(core_bounds(LIGHT_GIANT), Some((CORES[0], CORES[1])));
     assert_eq!(core_bounds(BELOW_EVERY_CORE), None);
 }

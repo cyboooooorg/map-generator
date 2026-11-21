@@ -138,6 +138,10 @@ fn above_20_percent_is_refused() {
             envelope
         })
     );
+    assert_eq!(
+        refused.unwrap_err().to_string(),
+        "envelope-out-of-table(mass=5.5, envelope=0.25)"
+    );
 }
 
 #[test]
