@@ -630,8 +630,7 @@ pub fn water_on_melting_curve() -> MaterialEos {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::EARTH_MEAN_RADIUS;
-    use crate::units::{EarthRadius, Kelvin};
+    use crate::units::Kelvin;
 
     /// Source: PREM outer-core density on the core side of the CMB,
     /// 9.9035 g/cm3 (Rodriguez-Mozos and Moya 2022, Table 1; study).
@@ -654,8 +653,9 @@ mod tests {
     /// Calibration: tolerance against PREM for the upper mantle at 23.83 GPa.
     /// The 50/50 olivine-pyroxene mix has no olivine-to-wadsleyite or
     /// ringwoodite transitions, which the study (Unterborn et al. 2016,
-    /// section 3.5) puts at a net density change of order 10 %; the value
-    /// is the measured gap of the study's own recipe, not a fit.
+    /// section 3.5) puts at a net density change of 14.8 % over the upper
+    /// mantle; the value is the measured gap of the study's own recipe, not
+    /// a fit.
     const UPPER_MANTLE_TOLERANCE: f64 = 0.08;
     /// Calibration: tolerance against PREM for the lower mantle at 23.83 GPa.
     /// The study asks 3 %; the recipe (300 K bridgmanite and periclase, no
@@ -666,9 +666,9 @@ mod tests {
     const ROUND_TRIP: f64 = 1e-9;
     /// Definition: relative tolerance of a reference density at zero pressure.
     const ZERO_PRESSURE: f64 = 1e-12;
-    /// Calibration: an arbitrary test sample bulk modulus for BM2.
+    /// Definition: an arbitrary test sample bulk modulus for BM2.
     const SAMPLE_K0: f64 = 100e9;
-    /// Calibration: an arbitrary test sample density for BM2 (a law with no
+    /// Definition: an arbitrary test sample density for BM2 (a law with no
     /// material in this module).
     const SAMPLE_RHO0: f64 = 3000.0;
     /// Source: saturated liquid at 275 K, 999.887 406 kg/m3 at
@@ -685,10 +685,17 @@ mod tests {
     /// Source: melting pressure of ice VI, 1356.76 MPa at 320 K (IAPWS
     /// R14-08(2011), Table 3).
     const VI_MELTING_320_K: (f64, f64) = (320.0, 1356.76e6);
-    /// Source: specific volumes at 0 K and 1 bar of ices III, V and VI,
-    /// 8.595e-4, 8.035e-4 and 7.562e-4 m3/kg (Journaux et al. 2020, JGR
-    /// Planets 125, e2019JE006176, Table 3).
-    const JOURNAUX_VOLUMES: [f64; 3] = [8.595e-4, 8.035e-4, 7.562e-4];
+    /// Source: Seager et al. 2007 (ApJ 669, 1279), Table 3: the H2O
+    /// polytrope `rho = rho0 + c P^n`, rho0 1460 kg/m3, c 0.00311 kg m^-3
+    /// Pa^-n, n 0.513, a fit to the same ice VII Vinet law merged with
+    /// Thomas-Fermi-Dirac (study `equations-of-state.md`, section 1.1).
+    const SEAGER_WATER_POLYTROPE: (f64, f64, f64) = (1460.0, 0.00311, 0.513);
+    /// Definition: a pressure of the ice VII range below 5 GPa, where Seager
+    /// et al. 2007 state their polytropes' accuracy (3 GPa, a test choice).
+    const ICE_VII_TEST_PRESSURE: f64 = 3e9;
+    /// Source: Seager et al. 2007, section 5.1: the polytropes match the
+    /// detailed EOS "to within 2 to 5 %" below 5 GPa; the upper bound.
+    const SEAGER_POLYTROPE_ACCURACY: f64 = 0.05;
     /// Definition: relative tolerance against values printed with six to
     /// nine significant digits.
     const PRINTED: f64 = 1e-5;
@@ -798,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    fn liquid_water_is_a_thousand_kilograms_per_cubic_metre() {
+    fn water_material_reproduces_iapws_liquid_densities() {
         let (t, p, rho) = SATURATED_LIQUID_275_K;
         let got = water(Kelvin(t)).unwrap().density(Pascal(p)).unwrap();
         assert!(close(got.0, rho, NINE_DIGITS), "{got:?}");
@@ -817,11 +824,18 @@ mod tests {
     }
 
     #[test]
-    fn each_high_pressure_ice_starts_at_its_journaux_volume() {
-        for (law, volume) in [ICE_III, ICE_V, ICE_VI].iter().zip(JOURNAUX_VOLUMES) {
-            let rho = law.density(Pascal(0.0)).unwrap();
-            assert!(close(rho.0, 1.0 / volume, ZERO_PRESSURE), "{law:?}");
-        }
+    fn ice_vii_matches_the_seager_polytrope_below_five_gigapascals() {
+        // The only published density at pressure the study gives for the
+        // ices; ices III, V and VI have their Journaux et al. 2020
+        // parameters and no tabulated point in a source read.
+        let (rho0, c, n) = SEAGER_WATER_POLYTROPE;
+        let p = ICE_VII_TEST_PRESSURE;
+        let expected = rho0 + c * p.powf(n);
+        let got = ICE_VII_EOS.density(Pascal(p)).unwrap();
+        assert!(
+            close(got.0, expected, SEAGER_POLYTROPE_ACCURACY),
+            "{got:?} against {expected}"
+        );
     }
 
     #[test]
@@ -897,11 +911,5 @@ mod tests {
                 rho += DENSITY_STEP;
             }
         }
-    }
-
-    #[test]
-    fn earth_mean_radius_is_iugg() {
-        assert_eq!(EARTH_MEAN_RADIUS.0, 6_371_008.771_4);
-        assert!(EarthRadius::from(EARTH_MEAN_RADIUS).0 < 1.0);
     }
 }

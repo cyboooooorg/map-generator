@@ -676,24 +676,28 @@ mod tests {
     /// Source: Titan radius 2574.7 km (study section 2.7.6 target; the NASA
     /// sheet gives 2575 km).
     const TITAN_RADIUS: Metre = Metre(2574.7e3);
-    /// Source: Titan with no iron core, 54.5 % rock and 45.5 % ice: the
-    /// prototype's assumption (`prototype-report.md`, Ganymede's ice
-    /// fraction; no sourced Titan split was found). Indicative only.
+    /// Calibration: assumed, not sourced. Titan with no iron core, 54.5 %
+    /// rock and 45.5 % ice, the prototype's assumption
+    /// (`prototype-report.md`, Ganymede's ice fraction); no published Titan
+    /// split was found. The Titan radius check is indicative only.
     const TITAN_SPLIT: [f64; 3] = [0.0, 0.545, 0.455];
 
     /// Source: 5 Earth-mass Earth-like planet, 9860 km from Zeng et al. 2016
     /// `R = (1.07 - 0.21 cmf) M^(1/3.7)` at cmf 0.325 (`prototype-report.md`).
     const SUPER_EARTH_RADIUS: Metre = Metre(9860e3);
-    /// Source: 5 Earth masses, the super-Earths of the plan brief.
+    /// Definition: 5 Earth masses, the super-Earths of the plan brief (a
+    /// test choice).
     const SUPER_EARTH_MASSES: f64 = 5.0;
-    /// Source: 20 Earth masses, the largest rocky planet of the plan brief.
+    /// Definition: 20 Earth masses, the largest rocky planet of the plan
+    /// brief (a test choice).
     const LARGE_SUPER_EARTH_MASSES: f64 = 20.0;
     /// Source: 5 Earth masses with 50 % water, 1.911 Earth radii at 300 K
     /// (Zeng et al. 2019, PNAS 116, 9723; `prototype-report.md`).
     const WATER_WORLD_RADII: f64 = 1.911;
-    /// Source: the water world's split, 0.1625 / 0.3375 / 0.5: an Earth-like
-    /// rock part under 50 % water (the prototype's assumption,
-    /// `prototype-report.md`).
+    /// Calibration: assumed, not sourced. The water world's split, 0.1625 /
+    /// 0.3375 / 0.5: an Earth-like rock part (core 0.325 of it) under 50 %
+    /// water, the prototype's assumption (`prototype-report.md`); Zeng et
+    /// al. 2019 give the water share, not the split of the rest.
     const WATER_WORLD_SPLIT: [f64; 3] = [0.1625, 0.3375, 0.5];
     /// Source: 300 K, the isotherm of the Zeng et al. 2019 curve.
     const WATER_WORLD_TEMPERATURE: Kelvin = Kelvin(300.0);
@@ -897,7 +901,13 @@ mod tests {
             EARTH_MEAN_RADIUS * WATER_WORLD_RADII,
             None,
         );
+    }
 
+    #[test]
+    fn a_twenty_earth_mass_planet_converges_unvalidated() {
+        // Smoke test only: no published curve is checked at 20 Earth masses
+        // (the cold Birch-Murnaghan laws are past their validated range,
+        // issue #616); the integration must converge to finite values.
         let large = rocky(EARTH_MASS * LARGE_SUPER_EARTH_MASSES, EARTH_CMF);
         assert!(large.radius.0.is_finite() && large.moment_of_inertia.is_finite());
         assert!(large.samples.iter().all(|s| s.pressure.0.is_finite()
