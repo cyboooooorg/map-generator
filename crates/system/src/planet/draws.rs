@@ -17,12 +17,13 @@
 //! how the engine draws a planet, not laws of physics.
 
 use super::codes;
+use super::envelope::envelope_fraction;
 use super::interior::InteriorError;
 use crate::Trial;
 use crate::random::uniform;
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
-use science::units::{Dex, Fraction};
+use science::units::{Dex, EarthMass, Fraction};
 use timeline::{Code, Provenance, Seed, Trace, Traced};
 
 /// Source: Elkins-Tanton & Seager 2008, "Coreless Terrestrial Exoplanets"
@@ -98,6 +99,12 @@ pub(crate) struct Drawn {
     pub water_fraction: Traced<Fraction>,
     /// Radiogenic abundance, dex of Earth's.
     pub radiogenic_abundance: Traced<Dex>,
+    /// Primordial hydrogen-helium envelope mass fraction of the whole
+    /// planet, drawn by mass regime (`planet/envelope`).
+    pub envelope_fraction: Traced<Fraction>,
+    /// A gas giant's total heavy-element mass, drawn; `None` below
+    /// 20 M_E.
+    pub heavy_mass: Option<Traced<EarthMass>>,
 }
 
 impl Drawn {
@@ -129,6 +136,7 @@ pub(crate) struct Labels {
     pub core: &'static str,
     pub water: &'static str,
     pub radiogenic: &'static str,
+    pub envelope: &'static str,
 }
 
 /// The labels of the engine.
@@ -136,6 +144,7 @@ pub(crate) const LABELS: Labels = Labels {
     core: "planet/cmf",
     water: "planet/water",
     radiogenic: "planet/radiogenic",
+    envelope: "planet/envelope",
 };
 
 /// Draws the composition of `trial` from `seed` and records it. The
@@ -155,13 +164,23 @@ pub(crate) fn draw_with(
     let cmf = core_mass_fraction(seed.derive(labels.core));
     let water = water_draws(seed.derive(labels.water));
     let radiogenic = radiogenic_abundance(seed.derive(labels.radiogenic));
+    let envelope = envelope_fraction(seed.derive(labels.envelope), *trial.mass.value())?;
     let migrated = (!beyond).then_some(water.migrated);
     let fraction = if beyond || water.migrated {
         water.icy
     } else {
         water.dry
     };
-    record(trial, trace, beyond, cmf, fraction, migrated, radiogenic)
+    record(
+        trial,
+        trace,
+        beyond,
+        cmf,
+        fraction,
+        migrated,
+        radiogenic,
+        (envelope.fraction, envelope.heavy_mass),
+    )
 }
 
 /// Whether `trial` sits at or beyond its ice line.
@@ -169,6 +188,7 @@ fn formed_beyond_ice_line(trial: &Trial) -> bool {
     trial.orbit.semi_major_axis.value().0 >= trial.ice_line.value().0
 }
 
+#[expect(clippy::too_many_arguments, reason = "one argument per drawn leaf")]
 fn record(
     trial: &Trial,
     trace: &mut Trace,
@@ -177,6 +197,7 @@ fn record(
     water_fraction: f64,
     migrated: Option<bool>,
     radiogenic: f64,
+    (envelope, heavy_mass): (f64, Option<EarthMass>),
 ) -> Result<Drawn, InteriorError> {
     let cmf = Fraction::try_from(cmf).map_err(InteriorError::NotAFraction)?;
     let fraction = Fraction::try_from(water_fraction).map_err(InteriorError::NotAFraction)?;
@@ -192,6 +213,14 @@ fn record(
         .transpose()?;
     let water_fraction =
         trace.leaf(Code::of(codes::WATER_FRACTION), fraction, Provenance::Drawn)?;
+    let envelope_fraction = trace.leaf(
+        Code::of(codes::ENVELOPE_FRACTION),
+        Fraction::try_from(envelope).map_err(InteriorError::NotAFraction)?,
+        Provenance::Drawn,
+    )?;
+    let heavy_mass = heavy_mass
+        .map(|m| trace.leaf(Code::of(codes::HEAVY_MASS), m, Provenance::Drawn))
+        .transpose()?;
     Ok(Drawn {
         core_mass_fraction,
         formed_beyond_ice_line,
@@ -202,6 +231,8 @@ fn record(
             Dex(radiogenic),
             Provenance::Drawn,
         )?,
+        envelope_fraction,
+        heavy_mass,
     })
 }
 
@@ -243,6 +274,7 @@ impl Drawn {
     /// A composition set by hand for `trial`, for a test that needs Earth's
     /// or a given kind of planet; whether it formed beyond the ice line
     /// still comes from the trial. `migrated` is `None` beyond the ice line.
+    #[expect(clippy::too_many_arguments, reason = "one argument per drawn leaf")]
     pub(crate) fn fixed(
         trial: &Trial,
         trace: &mut Trace,
@@ -250,6 +282,8 @@ impl Drawn {
         water_fraction: f64,
         radiogenic_abundance: f64,
         migrated: Option<bool>,
+        envelope_fraction: f64,
+        heavy_mass: Option<EarthMass>,
     ) -> Drawn {
         record(
             trial,
@@ -259,6 +293,7 @@ impl Drawn {
             water_fraction,
             migrated,
             radiogenic_abundance,
+            (envelope_fraction, heavy_mass),
         )
         .unwrap()
     }

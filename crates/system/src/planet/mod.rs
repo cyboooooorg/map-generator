@@ -53,6 +53,11 @@ mod draws;
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod envelope;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod heat;
 #[cfg_attr(
     not(test),
@@ -60,5 +65,7 @@ mod heat;
 )]
 mod interior;
 
+#[cfg(test)]
+mod envelope_tests;
 #[cfg(test)]
 mod tests;

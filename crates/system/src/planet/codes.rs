@@ -13,6 +13,12 @@ pub(crate) const MIGRATED: &str = "planet.migrated";
 pub(crate) const WATER_FRACTION: &str = "planet.water-fraction";
 /// Radiogenic abundance of the planet in dex of Earth's, drawn.
 pub(crate) const RADIOGENIC_ABUNDANCE: &str = "planet.radiogenic-abundance";
+/// Primordial hydrogen-helium envelope mass fraction of the planet, drawn
+/// by mass regime (a gas giant's is `1 - heavy-element mass / M`).
+pub(crate) const ENVELOPE_FRACTION: &str = "planet.envelope-fraction";
+/// Total heavy-element mass of a gas giant, drawn around the Thorngren et
+/// al. 2016 fit within the tabulated cores.
+pub(crate) const HEAVY_MASS: &str = "planet.heavy-element-mass";
 /// Temperature of a water world's water: the equilibrium temperature of
 /// the trial, until the climate of the planet interior plan's second pull
 /// request gives the surface temperature.

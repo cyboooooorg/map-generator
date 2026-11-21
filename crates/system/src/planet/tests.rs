@@ -328,6 +328,8 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
         EARTH_WATER_FRACTION,
         0.0,
         Some(false),
+        0.0,
+        None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let r = interior.structure.radius.0;
@@ -392,6 +394,8 @@ fn a_hot_dry_planet_builds() {
         EARTH_WATER_FRACTION,
         0.0,
         Some(false),
+        0.0,
+        None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     assert_eq!(interior.water, Water::InMantle);
@@ -409,6 +413,8 @@ fn a_hot_water_world_keeps_its_water_as_an_inventory() {
         WATER_WORLD_FRACTION,
         0.0,
         Some(true),
+        0.0,
+        None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     assert_eq!(water_shells(&interior), 0);
@@ -439,6 +445,8 @@ fn a_temperate_water_world_has_a_water_layer() {
         WATER_WORLD_FRACTION,
         0.0,
         Some(true),
+        0.0,
+        None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let Water::Layer { mass, temperature } = interior.water else {
@@ -468,6 +476,8 @@ fn heat_nodes_point_at_their_inputs() {
         EARTH_WATER_FRACTION,
         0.1,
         Some(false),
+        0.0,
+        None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let heat = heat::heat(&t, &interior, &drawn.radiogenic_abundance, &mut trace).unwrap();
@@ -505,6 +515,8 @@ fn a_circular_orbit_has_no_tide() {
         EARTH_WATER_FRACTION,
         0.0,
         Some(false),
+        0.0,
+        None,
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let heat = heat::heat(&t, &interior, &drawn.radiogenic_abundance, &mut trace).unwrap();
@@ -519,4 +531,23 @@ fn the_tidal_kind_follows_the_composition() {
         heat::tidal_kind(ENVELOPED_MIN_ENVELOPE, 0.0),
         TidalKind::Enveloped
     );
+}
+
+#[test]
+fn the_envelope_and_a_giants_heavy_mass_are_drawn_leaves() {
+    let mut trace = Trace::new();
+    let small = trial(&mut trace, 3, 1.0, 1.0, 0.0);
+    let d = draws::draw(small.seed, &small, &mut trace).unwrap();
+    assert!(d.heavy_mass.is_none());
+    let node = trace.node(d.envelope_fraction.node()).unwrap();
+    assert_eq!(node.code, Code::of(codes::ENVELOPE_FRACTION));
+    assert_eq!(node.origin, Origin::Leaf(Provenance::Drawn));
+    let giant = trial(&mut trace, 3, 318.0, 1.0, 0.0);
+    let d = draws::draw(giant.seed, &giant, &mut trace).unwrap();
+    let heavy = d.heavy_mass.unwrap();
+    let node = trace.node(heavy.node()).unwrap();
+    assert_eq!(node.code, Code::of(codes::HEAVY_MASS));
+    assert_eq!(node.origin, Origin::Leaf(Provenance::Drawn));
+    let envelope = d.envelope_fraction.value().get();
+    assert!((envelope - (1.0 - heavy.value().0 / 318.0)).abs() < 1e-12);
 }

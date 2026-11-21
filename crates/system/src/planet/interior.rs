@@ -86,6 +86,9 @@ pub(crate) enum InteriorError {
     Structure(StructureError),
     Eos(EosError),
     NotAFraction(FractionOutOfRange),
+    /// A gas giant of this mass (M_E) has no heavy-element mass in the
+    /// range its tables and Thorngren et al. 2016's fit share.
+    NoHeavyMassRange(f64),
 }
 
 impl std::fmt::Display for InteriorError {
@@ -95,6 +98,7 @@ impl std::fmt::Display for InteriorError {
             Self::Structure(error) => write!(f, "interior-structure({error})"),
             Self::Eos(error) => write!(f, "interior-eos({error})"),
             Self::NotAFraction(error) => write!(f, "interior-{error}"),
+            Self::NoHeavyMassRange(mass) => write!(f, "interior-no-heavy-mass-range({mass})"),
         }
     }
 }
