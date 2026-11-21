@@ -179,9 +179,10 @@ This document fixes W1 and the shape the others plug into.
   `system::ENGINE_VERSION` is a miss, and is removed by the next
   eviction; never read, never migrated.
 - **Eviction policy** (domain, pure): given the entries (key, size in
-  bytes, last use as seconds since the Unix epoch, a `u64` the adapter
-  reads from the file's modification time and touches on every cache
-  hit) and a byte budget,
+  bytes, last use as a `u64` tick of a logical clock the fs store keeps
+  in `<root>/cache/uses.json` and advances on every `put` and every
+  hit; the wall clock is forbidden even in adapters, and a counter
+  keeps eviction deterministic in tests) and a byte budget,
   return the entries to drop: stale engine versions first, then least
   recently used until under budget. The budget is a parameter (asked by
   the user): the policy takes it as an argument, the fs store takes it
@@ -194,6 +195,7 @@ This document fixes W1 and the shape the others plug into.
   <root>/systems/<id>/inputs.json        stored truth
   <root>/cache/<engine>/<id>/timelines.json
   <root>/cache/<engine>/<id>/worlds/<designation>/<keyframe>-<grid>.world
+  <root>/cache/uses.json                 last-use ticks
   ```
 
   writes staged in a temporary file then renamed; reads of a missing or
