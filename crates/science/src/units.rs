@@ -86,6 +86,8 @@ unit!(/// Power, watt.
     Watt, "W");
 unit!(/// Irradiance, watt per square metre.
     WattPerSquareMetre, "W/m2");
+unit!(/// Energy per unit area (fluence), joule per square metre.
+    JoulePerSquareMetre, "J/m2");
 unit!(/// Acceleration, metre per second squared.
     MetrePerSecondSquared, "m/s2");
 unit!(/// Density, kilogram per cubic metre.

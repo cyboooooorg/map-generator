@@ -9,43 +9,80 @@ The interiors are in [planet-interiors.md](planet-interiors.md).
 
 ## XUV fluence
 
-`planet::xuv::xuv_fluence` gives the XUV energy per unit area a planet
-has received over its system's age, relative to Earth's (the Sun at
-1 AU at 4.567 Gyr is 1.0). It is the budget that drives photoevaporation.
+`science::xuv::history` reads one star's high-energy history once;
+`History::exposure` then gives the XUV flux a planet receives today and
+the XUV energy per unit area it has received over the star's age, both as
+multiples of the star's present bolometric flux at the planet, and
+`History::integrated_between` the energy between two ages. It is the
+budget that drives photoevaporation. The same history serves the Lyman α
+line (`LYMAN_ALPHA`), which photolyses methane. The sources were checked
+in the study `docs/superpowers/studies/2026-11-21-xuv-history.md`. The
+sections after this one still describe the `legacy-final` planet model
+(`xuv_fluence`, `EARTH_XUV_FLUENCE_J_M2`) until it is ported (#602).
 
-The star emits `L_XUV / L_bol = 3.71e-4` (1 to 1180 Å) while saturated:
-the Sun's own, from the fit `F = 29.7 τ^-1.23` erg s⁻¹ cm⁻² at 1 AU of
-Ribas et al. 2005 (doi:10.1086/427977; τ in Gyr, saturated before 0.1
-Gyr; their Table 5), 504 erg s⁻¹ cm⁻² at 0.1 Gyr over the 1361 W/m²
-solar constant (fit and band checked against the paper; the value before
-0.1 Gyr is an extrapolation, Ribas et al. use no star that young). It is
-below the X-ray saturation of the fastest rotators, `L_X / L_bol ≈
-10^-3` (Wright et al. 2011, doi:10.1088/0004-637X/743/1/48, mean
-`log R_X = -3.13`; checked).
+**The Sun.** Ribas et al. 2005 (ApJ 622, 680, doi:10.1086/427977, Table 5)
+measure the Sun's XUV flux (1 to 1180 Å) at 1 au against its age from five
+solar analogues aged 0.1 to 6.7 Gyr: `F = 29.7 τ^-1.23` erg s⁻¹ cm⁻², τ in
+Gyr, and `F = 19.2 τ^-0.72` for Lyman α (their eq. 2, "preliminary").
+That is a power law in absolute flux, while the Sun's bolometric
+luminosity rose by 40 % since its zero-age main sequence (ZAMS). So the
+band luminosity is a share of the star's ZAMS luminosity: 5.220e-4 for
+the XUV while saturated (1.043e-4 for Lyman α), which makes the 1 M☉,
+[Fe/H] 0 track of the stellar tables follow Ribas et al.'s fit at every
+age, within 0.2 %. The `legacy-final` code took 3.71e-4 of the present
+luminosity: exact for the Sun, but for a star whose luminosity changed
+more or less than the Sun's at its age, the history scaled with today's
+luminosity instead of its ZAMS one.
 
-The saturation lasts `t_sat`, a labelled calibration interpolated in
-log-log through three anchors (`SATURATION_GYR`), not a published
-relation:
+**Saturation.** The share holds for `t_sat`, a labelled calibration
+interpolated in log-log through three anchors, not a published relation:
 
 | Star mass | `t_sat` | Anchor |
-|---|---|---|
-| 1 M☉ | 0.1 Gyr | Jackson, Davis & Wheatley 2012 (MNRAS 422, 2024, doi:10.1111/j.1365-2966.2012.20657.x): `log τ_sat = 7.84` (70 Myr) for the Sun's colour bin, turn-off around 100 Myr for FGK stars (they cover no M dwarfs); 0.1 Gyr keeps Ribas et al.'s fit, which starts there |
-| 0.5 M☉ | 0.2 Gyr | Johnstone et al. 2021 (A&A 649, A96, doi:10.1051/0004-6361/202038407): slow and fast rotators stay on identical, saturated tracks until about 200 Myr |
-| 0.25 M☉ | 2 Gyr | the same, about 2 Gyr |
+| --- | --- | --- |
+| 1 M☉ | 0.1 Gyr | Jackson, Davis & Wheatley 2012 (MNRAS 422, 2024, Table 2): `log τ_sat = 7.84` (70 Myr) for the B−V bin that holds the Sun, 10^7.8 to 10^8.3 yr over FGK stars; 0.1 Gyr is where Ribas et al.'s fit starts |
+| 0.5 M☉ | 0.2 Gyr | Johnstone et al. 2021 (A&A 649, A96, doi:10.1051/0004-6361/202038407): slow and fast rotator tracks "almost identical until 200 Myr", read as the end of saturation |
+| 0.25 M☉ | 2 Gyr | the same, "2 Gyr" |
 
 Between the anchors `t_sat` goes as `M^-1` above 0.5 M☉ and `M^-3.3`
-below, extended past the ends: 0.42 Gyr at 0.4 M☉, 4.2 Gyr at 0.2 M☉,
-42 Gyr at 0.1 M☉ (saturated all its life, as Johnstone et al. find the
-smallest stars still are at 5 Gyr). Then the XUV decays as `t^-1.23`
-(Ribas et al. 2005, doi:10.1086/427977). The integral over the age is
-analytic and is multiplied by the insolation. The luminosity is taken
-constant over the age.
+below, extended past the ends: 4.2 Gyr at 0.2 M☉, 42 Gyr at 0.1 M☉,
+saturated all its life. Then the band luminosity decays as Ribas et al.'s
+power of age. One saturated share serves every convective star: the
+saturated X-ray share is about flat with spectral type (Wright et al.
+2011, ApJ 743, 48, `log R_X = -3.13`).
 
-Calibration targets: Earth is 1.0; its absolute value
-`EARTH_XUV_FLUENCE_J_M2` = 5.64e15 J/m² is Ribas et al.'s fit integrated
-over 4.567 Gyr, and today's flux 4.6 mW/m² is theirs, both within 1 %; 5
-to 10 Gyr adds under 30 %; a 0.2 M☉ star at Earth's insolation delivers
-more than 10 times Earth's fluence.
+**Stars without a corona.** A star at or above 7200 K has no convective
+envelope (Gray & Nagel 1989, the limit the legacy star activity used),
+hence no dynamo and no coronal XUV: A stars show no X-rays of their own
+(Schröder & Schmitt 2007), B stars about `L_X/L_bol ≈ 1e-7` from wind
+shocks. `history` reads the star's effective temperature along its track
+and counts the XUV only at the ages below the limit: a 1.6 M☉ star born
+hotter gains its corona as it cools. The decay runs on the star's age, so
+such a star starts its corona at the decayed level, while a star above
+the Kraft break has not spun down: its XUV is a lower bound. The Lyman α
+line is chromospheric, and photospheric in hot stars: it is not cut, and
+an A or B star gets the solar law, a lower bound too.
+
+**Before the ZAMS** `science::stellar::main_sequence` gives no values
+(the star's age must lie on its main sequence, as every drawn star's
+does): the star is taken at its ZAMS temperature, and the band at its
+saturated share of the ZAMS luminosity, from age 0. A contracting star is
+brighter (0.08 M☉ is 11 times its ZAMS luminosity at 0.05 Gyr in Baraffe
+et al. 2015), so this is a lower bound, large for late M dwarfs, whose
+ZAMS comes after 1 Gyr.
+
+Calibration targets: the Sun of the tables follows Ribas et al.'s fit
+from 0.1 to 6.7 Gyr within 0.2 %; Earth's fluence over 4.567 Gyr is
+`EARTH_XUV_FLUENCE` = 5.64e15 J/m², the fit integrated (held at its
+0.1 Gyr value before), and today's flux 4.6 mW/m²; Lyman α today is
+about 3.9e11 photons cm⁻² s⁻¹ (Ribas et al.).
+
+Where it departs from the science: the share is the Sun's for every
+convective star, while Jackson et al. measure the saturated X-ray share of
+early F stars about 10 times below the Sun's; the spread from the initial
+rotation (saturation from about 6 to 230 Myr at 1 M☉, Tu et al. 2015) is
+not drawn; the larger Lyman α share of an M dwarf's light, the
+photospheric EUV and Lyman α of hot stars and the brighter contracting
+star before the ZAMS are not modelled; the orbit is taken as it is today.
 
 ## Envelope escape
 
