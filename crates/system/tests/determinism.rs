@@ -1,5 +1,7 @@
 //! The draw is a pure function of its inputs: the same `Inputs` give the
-//! same system, in one process and across runs (`golden_digests`).
+//! same system in one process. Across runs and platforms, the digests of
+//! the reference systems are pinned in tier 2
+//! (`crates/regression/tests/determinism.rs`).
 
 use std::collections::BTreeMap;
 
@@ -119,31 +121,4 @@ fn the_same_inputs_give_the_same_digest() {
     for request in goldens() {
         assert_eq!(digest(&draw(&request)), digest(&draw(&request)));
     }
-}
-
-/// The digests of [`goldens`]. Ignored until pinned: CI runs on
-/// `ubuntu-latest` and the libm results may differ from macOS by an ulp,
-/// enough to flip a threshold. Read the Linux values from the CI log of
-/// this test run with `--ignored --nocapture`, paste them in `EXPECTED`
-/// and drop the `#[ignore]`.
-#[test]
-#[ignore = "digests not yet pinned from the Linux CI run"]
-fn golden_digests() {
-    // macOS values, to replace with the Linux CI ones.
-    const EXPECTED: [u64; 8] = [
-        13710157267424814265,
-        16494581978402232220,
-        12784802251799961512,
-        6748074216206917634,
-        8644050250174416647,
-        8845664612222415756,
-        12078261093261751040,
-        13410322849457797753,
-    ];
-    let digests: Vec<u64> = goldens()
-        .iter()
-        .map(|request| digest(&draw(request)))
-        .collect();
-    println!("golden digests: {digests:?}");
-    assert_eq!(digests, EXPECTED);
 }

@@ -8,6 +8,12 @@ generates a system or a world of its own outside tier 3.
 Test-only: it may depend on every engine, which a domain crate may not,
 even as a dev-dependency. Budget: 8 minutes on CI.
 
+`tests/determinism.rs` pins the digests of the reference systems, one
+table per platform (libm results may differ by an ulp). A platform
+without its table yet (Linux, until pinned from CI) prints its digests
+and passes with "linux digests not pinned yet"; the tier-2 profile shows
+that output on success.
+
 ## Ports
 
 None.
