@@ -15,6 +15,11 @@ mod placement;
 pub mod planet;
 mod random;
 mod sources;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "wired by the system draw, Task 10")
+)]
+mod spin;
 pub mod star;
 
 pub use archetype::ArchetypeId;
