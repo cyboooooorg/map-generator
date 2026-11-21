@@ -38,6 +38,8 @@ exists, so removing a system frees its caches at the next eviction.
 A `.world` file is the binary layout of `encode`/`decode` (see
 `src/world_codec.rs`): magic `MGWORLD1`, then little-endian header and
 fields. A truncated, corrupt or mismatching file is a cache miss.
+A grid above `world::MAX_N` is refused on both sides: `put` errors and
+`decode` returns `Invalid`.
 
 PNG projections: `write_png(path, raster, ramp)` colours a `world::Raster`
 through a `Ramp` (linear stops, `Ramp::grey` for a grey scale; NaN is

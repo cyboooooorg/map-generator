@@ -419,6 +419,11 @@ impl WorldCache for FsStore {
         if !world_matches(key, world) {
             return Err(StoreError::KeyMismatch);
         }
+        if world.grid().n() > world::MAX_N {
+            return Err(StoreError::Codec(CodecError::Invalid(
+                "grid size".to_string(),
+            )));
+        }
         write_atomic(
             &paths::world_file(&self.root, key),
             &world_codec::encode(world),

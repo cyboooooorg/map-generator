@@ -12,5 +12,5 @@ pub mod project;
 
 pub use error::WorldError;
 pub use fields::{Field, FieldId, Storage, Values, World};
-pub use grid::{DEFAULT_CELL, Grid, MAX_CELLS};
+pub use grid::{DEFAULT_CELL, Grid, MAX_CELLS, MAX_N};
 pub use project::{Raster, project};

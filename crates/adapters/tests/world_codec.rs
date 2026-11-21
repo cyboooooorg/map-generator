@@ -8,7 +8,7 @@ use catalogue::{CacheKey, StoredSystem, SystemId, SystemRepository, WorldCache, 
 use system::{ArchetypeId, BodyRequest, INPUTS_SCHEMA, Inputs, Request};
 use tempfile::TempDir;
 use timeline::{Code, Designation, EngineVersion, Seed, SystemNumber};
-use world::{Field, FieldId, Grid, Storage, Values, World};
+use world::{Field, FieldId, Grid, MAX_N, Storage, Values, World};
 
 const ENGINE: EngineVersion = EngineVersion(1);
 
@@ -225,31 +225,33 @@ fn a_world_put_under_another_key_is_refused() {
 }
 
 #[test]
-fn every_grid_that_can_be_built_can_be_read_back() {
-    // Larger than the cap `for_radius` holds to: `Grid::new` accepts it.
-    let grid = Grid::new(1500);
-    assert!(grid.cell_count() > world::MAX_CELLS);
-    let cells = grid.cell_count();
-    let mut world = World::new(grid, designation(), 0, ENGINE);
-    world
-        .insert(
-            FieldId(Code::of("surface.flag")),
-            field(Values::U8(vec![1; cells]), true, Storage::Exact),
-        )
-        .unwrap();
-    assert_eq!(decode(&encode(&world)).unwrap(), world);
+fn a_grid_above_the_cap_is_refused_on_both_sides() {
+    // Decoding: the header of the sample with n patched to MAX_N + 1.
+    let mut bytes = encode(&sample());
+    let n_at = 8 + 4 + 2 + designation().to_string().len() + 4;
+    bytes[n_at..n_at + 4].copy_from_slice(&(MAX_N + 1).to_le_bytes());
+    assert!(matches!(decode(&bytes), Err(CodecError::Invalid(_))));
+    bytes[n_at..n_at + 4].copy_from_slice(&0u32.to_le_bytes());
+    assert!(matches!(decode(&bytes), Err(CodecError::Invalid(_))));
+    // Caching: no unreadable file is written.
+    let dir = TempDir::new().unwrap();
+    let store = FsStore::new(dir.path().to_path_buf(), u64::MAX);
+    let big = World::new(Grid::new(MAX_N + 1), designation(), 3, ENGINE);
+    let key = WorldKey {
+        grid: MAX_N + 1,
+        ..key(system_id())
+    };
+    assert!(WorldCache::put(&store, &key, &big).is_err());
+    assert!(!dir.path().join("cache").exists());
 }
 
 #[test]
 fn a_header_claiming_a_huge_grid_without_payload_is_truncated() {
-    // The header of a world with one U8 field on a 26754-sided grid
-    // (4.3 G cells), and no values after it.
+    // The header of the sample with n patched to the cap, and no values.
     let mut bytes = encode(&sample());
     let header_len = bytes.len() - 96 * (4 + 2 + 1);
     bytes.truncate(header_len);
     let n_at = 8 + 4 + 2 + designation().to_string().len() + 4;
-    bytes[n_at..n_at + 4].copy_from_slice(&26_754u32.to_le_bytes());
-    let started = std::time::Instant::now();
+    bytes[n_at..n_at + 4].copy_from_slice(&MAX_N.to_le_bytes());
     assert!(matches!(decode(&bytes), Err(CodecError::Truncated)));
-    assert!(started.elapsed().as_secs() < 1);
 }

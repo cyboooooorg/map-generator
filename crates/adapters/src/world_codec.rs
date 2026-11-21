@@ -16,17 +16,12 @@
 use std::fmt;
 
 use timeline::{Code, Designation, EngineVersion};
-use world::{Field, FieldId, Grid, Storage, Values, World};
+use world::{Field, FieldId, Grid, MAX_N, Storage, Values, World};
 
 /// The file magic. Change it (`MGWORLD2`, ...) whenever the layout above
 /// changes: an old file then reads as another file (a cache miss), never
 /// as a damaged one.
 const MAGIC: &[u8; 8] = b"MGWORLD1";
-
-/// The largest cell count a file may declare: the cell index of a world
-/// is a `u32` in the layout. Every grid `Grid::new` builds below it
-/// round-trips, including those above the generator's own cap.
-const MAX_FILE_CELLS: u64 = u32::MAX as u64;
 
 /// Why a world file could not be decoded.
 #[derive(Debug)]
@@ -66,9 +61,11 @@ const STEPS: f32 = 65535.0;
 ///
 /// # Panics
 ///
-/// When a text is longer than 65 535 bytes, or the field count does not
-/// fit a `u32`: neither can come out of the generator.
+/// When a text is longer than 65 535 bytes, the field count does not fit
+/// a `u32`, or the grid is above `MAX_N` (the decoder refuses it):
+/// none can come out of the generator.
 pub fn encode(world: &World) -> Vec<u8> {
+    assert!(world.grid().n() <= MAX_N, "grid above the cell cap");
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&world.engine().0.to_le_bytes());
@@ -196,8 +193,7 @@ pub fn decode(bytes: &[u8]) -> Result<World, CodecError> {
     let body: Designation = r.text()?.parse().map_err(|_| invalid("designation"))?;
     let keyframe = r.u32()?;
     let n = r.u32()?;
-    let cells = u64::from(n) * u64::from(n) * 6;
-    if n == 0 || cells > MAX_FILE_CELLS {
+    if n == 0 || n > MAX_N {
         return Err(invalid("grid size"));
     }
     let count = r.u32()?;
@@ -227,7 +223,7 @@ pub fn decode(bytes: &[u8]) -> Result<World, CodecError> {
     }
     // Nothing is allocated from the header before the file proves it
     // holds the values: the bytes left must cover every field.
-    let cells = usize::try_from(cells).map_err(|_| invalid("grid size"))?;
+    let cells = 6 * (n as usize).pow(2);
     let mut needed = 0usize;
     for header in &headers {
         let size = match (header.kind, header.storage) {

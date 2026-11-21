@@ -32,6 +32,10 @@ pub const DEFAULT_CELL: Metre = Metre(15_000.0);
 /// Simulation grid).
 pub const MAX_CELLS: usize = 8_000_000;
 
+/// Definition: the largest `n` with `6 n² <= MAX_CELLS`, the cells per
+/// face side at the cap.
+pub const MAX_N: u32 = (MAX_CELLS / 6).isqrt() as u32;
+
 /// A cube-sphere grid of `6 × n²` cells. Cell `k` is at column `x`, row
 /// `y` of face `f`, with `k = (f × n + y) × n + x`.
 #[derive(Clone, Debug, PartialEq)]
@@ -72,8 +76,7 @@ impl Grid {
     /// so that the cell count stays within [`MAX_CELLS`].
     pub fn for_radius(radius: Metre, cell: Metre) -> Grid {
         let wanted = (std::f64::consts::FRAC_PI_2 * radius.0 / cell.0).round();
-        let cap = (MAX_CELLS as f64 / 6.0).sqrt().floor();
-        Grid::new(wanted.clamp(1.0, cap) as u32)
+        Grid::new(wanted.clamp(1.0, f64::from(MAX_N)) as u32)
     }
 
     /// Cells per face side.
