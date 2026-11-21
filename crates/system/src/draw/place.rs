@@ -604,39 +604,42 @@ impl Rules {
     }
 }
 
-/// Sorts `placed` by axis and re-checks adjacent pairs with the final
-/// `T1`, dropping the drawn planet of the outermost violating pair (its
-/// outer one when drawn), one per pass, until none violates. Asked
-/// planets are never dropped; two asked neighbours face only `2√3`,
-/// already met when placed. Each pass removes a planet or ends.
+/// Re-checks the pairs of adjacent planets with the final `T1` and
+/// returns `placed` sorted by axis. `placed` comes in placement order: of
+/// the outermost violating pair, the drawn planet placed later is
+/// dropped (never, say, the giant an eccentric family placed first), one
+/// per pass, until none violates. Asked planets are never dropped; two
+/// asked neighbours face only `2√3`, already met when placed. Each pass
+/// removes a planet or ends.
 pub(crate) fn recheck(placed: &mut Vec<Placed>, rules: &Rules) {
-    placed.sort_by(|a, b| {
+    let mut ordered: Vec<(usize, Placed)> = placed.drain(..).enumerate().collect();
+    ordered.sort_by(|(_, a), (_, b)| {
         let axis = |p: &Placed| p.trial.orbit.semi_major_axis.value().0;
         axis(a).total_cmp(&axis(b))
     });
-    for _ in 0..=placed.len() {
-        let k50 = rules.k50(placed.iter().map(|p| &p.trial));
-        let victim = (1..placed.len()).rev().find_map(|outer| {
-            let (inner, outer_planet) = (&placed[outer - 1], &placed[outer]);
+    for _ in 0..=ordered.len() {
+        let k50 = rules.k50(ordered.iter().map(|(_, p)| &p.trial));
+        let victim = (1..ordered.len()).rev().find_map(|outer| {
+            let (inner, outer_planet) = (&ordered[outer - 1], &ordered[outer]);
             let faces = faces_k50(
-                (inner.outcome.class, inner.asked.is_some()),
-                (outer_planet.outcome.class, outer_planet.asked.is_some()),
+                (inner.1.outcome.class, inner.1.asked.is_some()),
+                (outer_planet.1.outcome.class, outer_planet.1.asked.is_some()),
             );
-            if rules.holds(&inner.trial, &outer_planet.trial, faces, k50) {
-                None
-            } else if outer_planet.asked.is_none() {
-                Some(outer)
-            } else if inner.asked.is_none() {
-                Some(outer - 1)
-            } else {
-                None
+            if rules.holds(&inner.1.trial, &outer_planet.1.trial, faces, k50) {
+                return None;
             }
+            [(outer - 1, inner), (outer, outer_planet)]
+                .into_iter()
+                .filter(|(_, (_, planet))| planet.asked.is_none())
+                .max_by_key(|(_, (order, _))| *order)
+                .map(|(index, _)| index)
         });
         match victim {
             Some(index) => {
-                placed.remove(index);
+                ordered.remove(index);
             }
-            None => return,
+            None => break,
         }
     }
+    placed.extend(ordered.into_iter().map(|(_, planet)| planet));
 }

@@ -199,8 +199,10 @@ flowchart TD
    Jupiter's cleared zone. A slot has 20 tries; a drawn slot that spends
    them stays empty, an asked archetype is refused with `NoRoom`.
 4. **Re-check.** Once every orbit is placed, $T_1$ is known and the
-   pairs are checked again with the final $K_{50}$; the outer planet of a
-   violating pair is dropped when drawn. Asked planets are never dropped.
+   pairs of small planets are checked again with the final $K_{50}$; of
+   the outermost violating pair, the drawn planet placed later is dropped
+   (never a giant the eccentric family placed first), one per pass.
+   Asked planets are never dropped.
 5. **Names and spin.** The planets are sorted by axis, `Designation::planet`
    gives the closest rank 0, the body seed is `derive(<designation text>)`
    and the spin comes from `body_seed.derive("spin")`. The system number is

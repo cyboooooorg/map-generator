@@ -620,6 +620,33 @@ fn the_recheck_drops_drawn_planets_only() {
 }
 
 #[test]
+fn the_recheck_drops_the_drawn_planet_placed_later() {
+    let mut trace = Trace::new();
+    let rules = Rules {
+        host: SolarMass(1.0),
+        age: Gyr(4.6),
+        sigma_e: 0.05,
+        total: 3,
+    };
+    // Δ = 6 mutual Hill radii between two drawn 1 M⊕ planets: below K50.
+    let hill = (2.0 * 3.003e-6 / 3.0_f64).cbrt();
+    let outer = test_planet(&mut trace, 1.0, 1.0, 0.0, false);
+    let inner = test_planet(
+        &mut trace,
+        1.0,
+        (1.0 - 3.0 * hill) / (1.0 + 3.0 * hill),
+        0.0,
+        false,
+    );
+    // The outer one was placed first (as an eccentric family's first
+    // planet): the inner one, placed later, goes.
+    let mut placed = vec![outer, inner];
+    recheck(&mut placed, &rules);
+    assert_eq!(placed.len(), 1);
+    assert_eq!(axis(&placed[0]), 1.0);
+}
+
+#[test]
 fn a_pair_with_a_giant_keeps_the_two_planet_floor_only() {
     let mut trace = Trace::new();
     let rules = Rules {
