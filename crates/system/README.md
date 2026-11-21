@@ -14,11 +14,25 @@ request, the archetype targets, the present date.
 | `placement` | shared | `Trial`, `Placement`: the seam |
 | `draw` | mapgen3 | `draw(inputs, trace) -> Drawn` (signature only) |
 | `star` | mapgen3 | `StarState` computation (signature only) |
-| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them |
+| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
 The doc-only modules fix their future signatures in `//!` comments;
 `SystemError` is created with the first of them.
+
+## Planet interior
+
+A trial's composition is drawn from the body seed: core mass fraction
+(split normal around 0.32), water share (log-normal inside the ice line,
+uniform 0.5 to 0.67 beyond), radiogenic abundance (0.23 dex). The layers
+are core alloy, mantle and, when there is water, a water layer, integrated
+at zero surface pressure with `science::structure`. The water layer sits at
+the trial's equilibrium temperature until the climate sets the surface
+temperature, and is an error (`InteriorError::WaterTooHot`) from 355 K. The
+heat is radiogenic, secular and tidal (`science::heat`). Every draw and
+constant carries its `Source:` or `Calibration:`; the departures and limits
+(cold structure, extrapolated core, water range) are on the page
+[What are planets made of?](../../docs/science/planet-interiors.md#where-it-departs-from-the-science).
 
 ## The seam
 

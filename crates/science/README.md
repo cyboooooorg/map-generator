@@ -48,34 +48,22 @@ temperature (or, for water, along a path through the phase diagram):
 `rho0` and `100 rho0`, or the pressure maximum of a third-order form with
 `K0' < 4`); `Mix` (mass shares added by volume at equal pressure);
 `MaterialEos`, phases ordered by pressure, the last one unbounded, built by
-`MaterialEos::new` so that a later task can build one at run time. The
-materials are `core_alloy()` (Valencia et al. 2006 fits to PREM, liquid
-outer and solid inner core), `mantle()` (50/50 forsterite and enstatite
-below 23.83 GPa; 90 % (Mg0.88 Fe0.12) SiO3 bridgmanite and 10 % periclase
-above) and `ice_vii()` (Seager et al. 2007 Vinet fit). Values are in the
-study `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`.
-The mantle at the 670 km boundary is 7.5 % below PREM above it and 3.5 %
-above PREM below it (no mineral phase transitions, no temperature).
+`MaterialEos::new` so that a run-time material fits. The materials are
+`core_alloy()` (Valencia et al. 2006), `mantle()` (upper and lower, split at
+23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
 
-Water below 2.2 GPa has two materials, since the boundaries between ices
-III, V and VI away from the melting curve were not found in a source
-(study section 2.7):
+- `water(t)`, for 273.31 K <= t < 355 K: liquid (IAPWS-95), ice VI, ice VII
+  along the isotherm. Outside the range: `EosError::TemperatureOutOfRange`.
+- `water_on_melting_curve()`, for colder bodies (Zeng and Sasselov 2013):
+  ice Ih, III, V, VI, VII, switching at the IAPWS 2011 triple points.
 
-- `water(t)`, for 273.31 K <= t < 355 K: liquid water at `t` (IAPWS-95)
-  below the melting pressure of ice VI (IAPWS 2011), ice VI up to the
-  ice VI / ice VII boundary (AQUA, Haldemann et al. 2020), ice VII above.
-  Outside that range it returns `EosError::TemperatureOutOfRange`.
-- `water_on_melting_curve()`, for cold icy bodies (Zeng and Sasselov 2013):
-  ice Ih at its melting temperature (Feistel and Wagner 2006), then ices
-  III, V, VI and VII, switching at the IAPWS 2011 triple points with the
-  liquid (208.566, 350.1, 632.4 and 2216 MPa).
-
-Ices III, V and VI are the Journaux et al. 2020 cold (0 K) curves, so
-their densities are 1 to 4 % above those at the real temperature.
-`science::water` holds the laws themselves: `liquid_pressure` (IAPWS-95),
-`ice_ih_density` (IAPWS R10-06), the melting pressures of ices Ih and VI
-with the inverse for ice Ih, the ice VI / ice VII boundary and the triple
-points; each is checked against its release's verification table.
+`science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the
+melting pressures, the ice VI / ice VII boundary), each checked against its
+IAPWS verification table. Every value, its source and its fitted range are
+in the page [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
+Limits to know: the laws are cold (no thermal pressure), the mantle has no
+transition-zone phases (-7.5 % / +3.5 % against PREM at 23.83 GPa), ices III,
+V and VI are 0 K curves, and water has nothing above 355 K.
 
 ## Hydrostatic structure
 
@@ -118,21 +106,24 @@ let earth = integrate(
 println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 ```
 
-Against measured values (tests of `structure.rs`): Earth R -0.29 %,
-C/MR^2 -0.24 %, central pressure +1.0 % and core radius 3480 km against
-PREM; Venus, Mars, Mercury, the Moon and Ganymede within 2 % on R and
-C/MR^2; 5 Earth masses within 0.2 % of Zeng et al. 2016 and, with 50 %
-water at 300 K, within 1 % of Zeng et al. 2019. Titan is checked on its
-radius only: its C/MR^2 needs a partly differentiated interior, which this
-fully differentiated model does not represent. A 20 Earth-mass planet
-converges, but its core (7.9 TPa at the centre) is far beyond the range of
-the PREM fit of the core alloy.
+Against measured values (tests of `structure.rs`; the table is on the
+page above): Earth R -0.29 %, C/MR^2 -0.24 %; Venus, Mars, Mercury, the Moon
+and Ganymede within 2 %; super-Earths of 5 Earth masses within 1.1 % of Zeng
+et al. Titan's C/MR^2 is not reproduced (partial differentiation). The core
+alloy is fitted to PREM (364 GPa) and used to 7.85 TPa at 20 Earth masses:
+that converges, but is not validated.
 
 ## Internal heat
 
 `science::heat`: `radiogenic`, `secular` and `tidal` power, and
 `k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
-kind). Values and sources: the doc comments.
+kind). Radiogenic power comes from the abundances of U, Th and K and the
+Dye 2012 half-lives and heats; secular cooling scales Earth's 26.5 TW by the
+silicate mass; tidal heat is Peale, Cassen and Reynolds (1979). The
+`Calibration:` constants (U and Th abundances, cooling time and its mass
+exponent, rocky and icy k2/Q) say what was searched and not found; the page
+[The heat inside](../../docs/science/planet-interiors.md#the-heat-inside)
+lists them under "Where it departs from the science".
 
 ## Ports
 
