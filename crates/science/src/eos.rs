@@ -565,19 +565,29 @@ pub fn ice_vii() -> MaterialEos {
 ///
 /// # Errors
 ///
-/// [`EosError::TemperatureOutOfRange`] outside `[273.31 K, 355 K)` or for
-/// a temperature that is not a number.
+/// [`EosError::TemperatureOutOfRange`] outside `[273.31 K, 355 K)`, for a
+/// temperature that is not a number, and within about 0.1 mK of 355 K,
+/// where the IAPWS melting pressure of ice VI is no longer below the AQUA
+/// ice VI / ice VII boundary.
 pub fn water(t: Kelvin) -> Result<MaterialEos, EosError> {
     if !(water::V_VI_LIQUID_TEMPERATURE.0 <= t.0 && t.0 < water::VI_VII_LIQUID_TEMPERATURE.0) {
         return Err(EosError::TemperatureOutOfRange { temperature: t });
     }
+    let melting = water::ice_vi_melting_pressure(t);
+    let vi_vii = water::ice_vi_vii_pressure(t);
+    // The IAPWS melting curve and the AQUA boundary reach the 355 K triple
+    // point at slightly different temperatures: within about 0.1 mK of it
+    // the melting pressure passes the boundary and ice VI has no range.
+    if melting.0 >= vi_vii.0 {
+        return Err(EosError::TemperatureOutOfRange { temperature: t });
+    }
     Ok(MaterialEos::new(vec![
         Phase {
-            up_to: water::ice_vi_melting_pressure(t),
+            up_to: melting,
             density_law: DensityLaw::LiquidWater(t),
         },
         Phase {
-            up_to: water::ice_vi_vii_pressure(t),
+            up_to: vi_vii,
             density_law: DensityLaw::Single(ICE_VI),
         },
         Phase {
@@ -689,6 +699,16 @@ mod tests {
     const DENSITY_STEP: f64 = 1.0;
     /// Definition: temperatures across the isotherm range (its ends, inside).
     const ISOTHERMS: [f64; 4] = [273.31, 300.0, 330.0, 354.99];
+    /// Definition: a temperature 0.05 mK below the ice VI - ice VII - liquid
+    /// triple point. There the IAPWS 2011 melting pressure of ice VI
+    /// (2216.0008 MPa) is above the AQUA ice VI / ice VII boundary, capped
+    /// at its 2216 MPa triple point: the two fits reach the triple point at
+    /// temperatures about 0.08 mK apart, so ice VI has no range left.
+    const ICE_VI_CLOSED: f64 = 354.99995;
+    /// Definition: a temperature 0.1 mK below the triple point, where ice VI
+    /// still has a range (melting at 2215.9993 MPa, below the 2216 MPa
+    /// boundary), so the isotherm still builds.
+    const ICE_VI_THIN: f64 = 354.9999;
 
     fn close(a: f64, b: f64, tolerance: f64) -> bool {
         (a / b - 1.0).abs() < tolerance
@@ -850,6 +870,7 @@ mod tests {
         for t in [
             V_VI_LIQUID_TEMPERATURE.0 * (1.0 - 1e-9),
             VI_VII_LIQUID_TEMPERATURE.0,
+            ICE_VI_CLOSED,
             f64::NAN,
         ] {
             assert!(matches!(
@@ -858,6 +879,7 @@ mod tests {
             ));
         }
         assert!(water(V_VI_LIQUID_TEMPERATURE).is_ok());
+        assert!(water(Kelvin(ICE_VI_THIN)).is_ok());
     }
 
     #[test]
