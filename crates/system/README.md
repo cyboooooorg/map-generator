@@ -49,7 +49,7 @@ runs on a scratch trace.
   `2.7 au x M / Msun`, Roche floor, mutual Hill spacing, `K50`) are in
   `science::orbit`.
 - **Spin.** Rocky: Kokubo & Genda's Gaussian spin vector; giants
-  (ice giants too): a log-uniform fraction of break-up, 0.07 to 0.35;
+  (ice giants too): a log-uniform fraction of break-up, 0.07 to 0.40;
   obliquity isotropic. Birth values: tidal locking is track T2 (#604).
 - **Cause codes** start with `system.draw.`.
 

@@ -209,15 +209,17 @@ that stream, in a fixed order, so that adding a draw never shifts another.
 
 - **Distribution:** `P = 2π R / (f v_break)` with
   `v_break = sqrt(GM / R)` from the giant's own mass and radius, and `f` drawn
-  log-uniform on 0.07 to 0.35.
+  log-uniform on 0.07 to 0.40.
 - **Source:** Bryan 2018 p1 (Solar System giants 3 to 4 times below
   break-up, i.e. `f` 0.25 to 0.33, derived), p3 (mean 0.126), p4 (no
   dependence on mass); Bryan 2020 p1 (factor 4 to 5 of variation, an order of
   magnitude below break-up), p10 (no dependence on `a` or `M / M⋆`).
 - **Definition:** the shape (log-uniform) and the bounds. The sources give a
   mean, a factor 4 to 5 and the 3 to 4 of the Solar System giants, never a
-  distribution. 0.07 to 0.35 is a ratio of 5, containing 0.126 and the
-  Solar System's 0.25 to 0.33 (derived). It is a flattening of what is read.
+  distribution. 0.07 to 0.40 is a ratio of 5.7, containing 0.126 and the
+  Solar System's giants, Saturn's 0.40 included (derived). It is a
+  flattening of what is read. The upper bound was 0.35 in the first draft
+  of this study; the user raised it to 0.40 to hold Saturn (open point 6).
 - Applies to ice giants too, as a `Definition:`. Bryan 2018 p4 excludes them
   from the correlation test (solids dominate their mass). A follow-up search
   (2026-11-21) found no ice-giant primordial spin: Batygin 2018
@@ -227,8 +229,8 @@ that stream, in a fixed order, so that adding a draw never shifts another.
   proto-Uranus; the one exoplanet bound, HIP 41378 f (arXiv:2410.05408,
   P ≥ 15.3 h), allows any f below 0.74 (**derived**). Check, **derived**
   from the measured periods, masses and equatorial radii: Uranus f = 0.17,
-  Neptune 0.16, inside the range; Jupiter 0.30 and Saturn 0.40, so the
-  upper bound 0.35 leaves Saturn out (open point 6).
+  Neptune 0.16, Jupiter 0.30 and Saturn 0.40, all inside the range (open
+  point 6).
 
 ### 4.4 Giant obliquity
 
@@ -250,5 +252,6 @@ that stream, in a fixed order, so that adding a draw never shifts another.
 5. **Moons and tides.** This is the birth value. The present value of a planet
    close to its star (despun, Cassini state) is T2 (#604); the draw keeps the
    birth spin until then.
-6. **Saturn.** Its f of 0.40 lies above the 0.35 bound; raise the bound
-   to 0.40 (a ratio of 5.7) or keep 0.35.
+6. **Saturn.** Settled by the user (2026-11-22): the upper bound is
+   raised from 0.35 to 0.40 (a ratio of 5.7), so Saturn's f of 0.40 lies
+   inside (section 4.3).

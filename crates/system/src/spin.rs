@@ -34,9 +34,10 @@ const ROCKY_FALLBACK_FRACTION: f64 = 0.99;
 /// Definition: bounds of the giants' spin as a fraction `f` of the
 /// break-up rate, log-uniform. A flattening of Bryan et al. 2018
 /// (AJ 156, 100) p3 (mean 0.126) and Bryan et al. 2020 (factor 4 to 5
-/// of variation, p1): a ratio of 5 holding 0.126 and the Solar System's
-/// 0.25 to 0.33 (derived). Saturn (0.40) lies outside.
-const GIANT_FRACTION_RANGE: (f64, f64) = (0.07, 0.35);
+/// of variation, p1): a ratio of 5.7 holding 0.126 and the Solar
+/// System's giants, Jupiter 0.30 and Saturn 0.40 included (derived; the
+/// upper bound raised from 0.35 to hold Saturn, user, 2026-11-22).
+const GIANT_FRACTION_RANGE: (f64, f64) = (0.07, 0.40);
 
 /// Definition: the classes drawn with the giant law (a gas-accreting
 /// spin); every other class takes the rocky law. Ice giants share it for
@@ -71,7 +72,7 @@ fn isotropic_obliquity(u: f64) -> Degree {
 /// `sigma = 0.41 omega_cr` with `omega_cr = sqrt(GM / R^3)`, redrawn
 /// when `|omega| >= omega_cr` (Definition, from Miguel & Brunini 2010:
 /// faster planets do not survive). Giant: `P = 2 pi R / (f v_break)`,
-/// `v_break = sqrt(GM / R)`, `f` log-uniform on 0.07 to 0.35.
+/// `v_break = sqrt(GM / R)`, `f` log-uniform on 0.07 to 0.40.
 pub(crate) fn spin(
     class: PlanetClass,
     mass: &Traced<EarthMass>,
@@ -217,7 +218,7 @@ mod tests {
     #[test]
     fn giant_period_stays_in_the_fraction_range() {
         let slow = break_up_days(317.8, 11.2, 3) / 0.07;
-        let fast = break_up_days(317.8, 11.2, 3) / 0.35;
+        let fast = break_up_days(317.8, 11.2, 3) / 0.40;
         for seed in 0..SAMPLES {
             let (spin, _) = draw(PlanetClass::GasGiant, seed);
             let period = spin.rotation_period.value().0;
@@ -240,17 +241,17 @@ mod tests {
             })
             .sum::<f64>()
             / SAMPLES as f64;
-        let expected = (0.07_f64.ln() + 0.35_f64.ln()) / 2.0;
+        let expected = (0.07_f64.ln() + 0.40_f64.ln()) / 2.0;
         assert!((ln_mean - expected).abs() < 0.04, "{ln_mean} vs {expected}");
     }
 
     #[test]
     fn hot_jupiters_take_the_giant_law_and_others_the_rocky_one() {
-        // A giant period is far above break-up (f <= 0.35); a rocky one
+        // A giant period is far above break-up (f <= 0.40); a rocky one
         // can come close to it. Same stream, same mass: only the law differs.
         let giant = draw(PlanetClass::HotJupiter, 7).0;
         let ratio = break_up_days(317.8, 11.2, 3) / giant.rotation_period.value().0;
-        assert!((0.07..=0.35).contains(&ratio) || (ratio - 0.35).abs() < 1e-9);
+        assert!((0.07..=0.40).contains(&ratio) || (ratio - 0.40).abs() < 1e-9);
         let fast_rocky = (0..SAMPLES)
             .map(|seed| {
                 draw(PlanetClass::OceanWorld, seed)
@@ -260,7 +261,7 @@ mod tests {
                     .0
             })
             .fold(f64::INFINITY, f64::min);
-        assert!(fast_rocky < break_up_days(1.0, 1.0, 3) / 0.35);
+        assert!(fast_rocky < break_up_days(1.0, 1.0, 3) / 0.40);
     }
 
     #[test]

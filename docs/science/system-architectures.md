@@ -261,9 +261,9 @@ choices this draw makes where no source gives one:
   adjacent giants follow their own axis-ratio law.
 - 20 tries per slot. A near-resonant pair picks 3:2 or 2:1 with equal
   odds; the next giant's $\ln(a_2/a_1)$ is uniform from 0.5 to $\ln 10$.
-- Giant spin fraction $f$ log-uniform from 0.07 to 0.35, for gas and ice
-  giants alike (it holds 0.126 and the Solar System's 0.25 to 0.33;
-  Uranus 0.17 and Neptune 0.16 lie inside, Saturn's 0.40 above). A rocky
+- Giant spin fraction $f$ log-uniform from 0.07 to 0.40, for gas and ice
+  giants alike (it holds 0.126 and every Solar System giant: Uranus 0.17,
+  Neptune 0.16, Jupiter 0.30 and Saturn 0.40; user, 2026-11-22). A rocky
   spin is redrawn 64 times when it reaches break-up, then scaled to 0.99
   of it.
 - Where a class has no law in a family, a fallback: a giant in a compact
