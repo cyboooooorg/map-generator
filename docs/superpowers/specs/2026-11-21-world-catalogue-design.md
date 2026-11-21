@@ -12,7 +12,7 @@ into a world on the cube-sphere grid, and a catalogue that stores the
 inputs of a system and caches what is regenerated from them. Both crates
 are empty on `main`. The contract (`timeline::PlanetState`) already
 carries every field the map generator reads; mapgen1 fills the global
-climate, water and class in the planet model's PR 2, and mapgen3 the
+climate, water and class in the planet model's PR 2d, and mapgen3 the
 star and the system draw.
 
 ## Goals
@@ -78,7 +78,7 @@ How to split the work (decided with the user on 2026-11-21):
 | --- | --- | --- |
 | W1 | Catalogue ports and policy, fs store, grid, fields, projection, PNG | Nothing |
 | W2 | Relief on the grid, sea level, first CLI world export | mapgen3's system command (CLI only) |
-| W3 | Spatialized climate, seasonal statistics | mapgen1's planet PR 2 (climate, water) |
+| W3 | Spatialized climate, seasonal statistics | mapgen1's planet PR 2d (climate, liquids) |
 | W4 | Köppen-Geiger, surface layers, named biome | W3 |
 
 W2 to W4 get their own short design when they start: each begins with
