@@ -118,7 +118,7 @@ exponent, rocky and icy k2/Q) say what was searched and not found; the page
 [The heat inside](../../docs/science/planet-interiors.md#the-heat-inside)
 lists them under "Where it departs from the science".
 
-## Stars
+## Stars, light and orbits
 
 `science::stellar`: `life` (ZAMS age, TAMS or `Beyond(20 Gyr)`),
 `main_sequence` (R, L, T_eff) and `profile` (layers; ρ, P, T, fusion share)
@@ -126,6 +126,7 @@ of a star of 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
 see [STELLAR.md](data/STELLAR.md#reading-the-tables). `science::xuv`
 (`history`): a star's XUV and Lyman α history; see
 [XUV fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
+`science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
 
 ## Giants and envelopes
 

@@ -8,6 +8,10 @@ generates a system or a world of its own outside tier 3.
 Test-only: it may depend on every engine, which a domain crate may not,
 even as a dev-dependency. Budget: 8 minutes on CI.
 
+`tests/determinism.rs` pins the digests of the reference systems in one
+table: macOS and Linux gave the same values. Split it per platform if
+their libm ever differs by an ulp (a threshold of the draw would flip).
+
 ## Ports
 
 None.
