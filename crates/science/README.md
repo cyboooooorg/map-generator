@@ -121,17 +121,18 @@ exponent, rocky and icy k2/Q) say what was searched and not found; the page
 [The heat inside](../../docs/science/planet-interiors.md#the-heat-inside)
 lists them under "Where it departs from the science".
 
-## Main-sequence stars
+## Stars, light and orbits
 
 `science::stellar`: `life` (ZAMS age, TAMS or `Beyond(20 Gyr)`),
 `main_sequence` (R, L, T_eff) and `profile` (layers; ρ, P, T, fusion share)
 of a star of 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
 see [STELLAR.md](data/STELLAR.md#reading-the-tables).
 
-## High-energy light
-
 `science::xuv` (`history`): a star's XUV and Lyman α history; see
 [XUV fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
+
+`science::orbit`: Kepler's law, flux, equilibrium, ice line, Roche period,
+mutual Hill spacing and its floors (`TWO_PLANET_FLOOR`, Pu & Wu `k50`).
 
 ## Ports
 
