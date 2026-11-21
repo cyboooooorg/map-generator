@@ -9,9 +9,9 @@
 //! power law of age in absolute flux (Ribas et al. 2005), while its
 //! bolometric luminosity is not. A star without a convective envelope
 //! (effective temperature at or above [`DYNAMO_LIMIT`]) emits no coronal
-//! XUV ([`has_corona`]). [`exposure`] reads the star's ZAMS and present
-//! luminosity and its temperature history from the stellar tables
-//! ([`crate::stellar`]).
+//! XUV ([`has_corona`]); the Lyman α line is not cut. [`history`] reads
+//! the star's ZAMS and present luminosity and its temperature history from
+//! the stellar tables ([`crate::stellar`]) once, for every band and planet.
 //!
 //! Ported from the tag `legacy-final` (`planet/xuv.rs`), which took the
 //! present luminosity for the whole history, with the sources checked and
@@ -31,8 +31,11 @@ pub struct Band {
     /// Band luminosity over the ZAMS bolometric luminosity while
     /// saturated.
     pub saturated_ratio: f64,
-    /// `L_band ∝ t^-decay_exponent` after saturation.
+    /// `L_band ∝ t^-decay_exponent` after saturation. Not 1.
     pub decay_exponent: f64,
+    /// Whether the band comes from the corona, hence only while the star
+    /// has one ([`has_corona`]).
+    pub coronal: bool,
 }
 
 /// Source: the XUV flux of the Sun at 1 au against its age (1 to 1180 Å),
@@ -59,15 +62,19 @@ pub const RIBAS_START: Gyr = Gyr(0.1);
 pub const XUV: Band = Band {
     saturated_ratio: 5.220e-4,
     decay_exponent: 1.23,
+    coronal: true,
 };
 
 /// Calibration: the Lyman α line (1216 Å), from [`RIBAS_LYMAN_ALPHA`] as
 /// [`XUV`] (7.404e-5 times the same luminosity ratio). Its saturation time
 /// is taken as the XUV's, and the line's larger share of an M dwarf's
-/// light is not modelled.
+/// light is not modelled. The line is chromospheric, and photospheric in
+/// hot stars, so it is not cut at [`DYNAMO_LIMIT`]: an A or B star gets
+/// the solar law, a lower bound, since their photosphere emits there.
 pub const LYMAN_ALPHA: Band = Band {
     saturated_ratio: 1.043e-4,
     decay_exponent: 0.72,
+    coronal: false,
 };
 
 /// Calibration: saturation time against the star's mass, `(M / M☉,
@@ -100,7 +107,7 @@ const SATURATION_FLOOR: f64 = 0.05;
 /// wind shocks, neglected here.
 pub const DYNAMO_LIMIT: Kelvin = Kelvin(7_200.0);
 
-/// Definition: ages at which [`exposure`] samples the effective
+/// Definition: ages at which [`history`] samples the effective
 /// temperature between the ZAMS and the star's age, to find where the
 /// star gains or loses its corona.
 const TEMPERATURE_SAMPLES: u32 = 64;
@@ -118,7 +125,8 @@ pub const EARTH_XUV_FLUENCE: JoulePerSquareMetre = JoulePerSquareMetre(5.64e15);
 
 /// Saturation time of a star of `mass`: the log-log interpolation of
 /// [`SATURATION`], extrapolated along its end segments, the mass floored
-/// at 0.05 M☉.
+/// at 0.05 M☉. The helpers below take finite inputs; [`history`] checks
+/// its own through the stellar tables.
 pub fn saturation(mass: SolarMass) -> Gyr {
     let x = mass.0.max(SATURATION_FLOOR).ln();
     let i = usize::from(x >= SATURATION[1].0.ln());
@@ -142,8 +150,7 @@ pub fn ratio(band: Band, mass: SolarMass, age: Gyr) -> f64 {
 }
 
 /// Time integral of [`ratio`] from 0 to `age`, Gyr: constant while
-/// saturated, then the integral of the power law. The decay exponent must
-/// not be 1.
+/// saturated, then the integral of the power law.
 pub fn integrated_ratio(band: Band, mass: SolarMass, age: Gyr) -> Gyr {
     let t_sat = saturation(mass).0;
     let age = age.0.max(0.0);
@@ -195,30 +202,40 @@ impl Exposure {
     }
 }
 
-/// The [`Exposure`] in `band` of a planet around a star of `mass` and
-/// `metallicity` at `age`, on its main sequence: [`ratio`] times the ZAMS
-/// over the present luminosity, counted only while the star has a corona
-/// ([`has_corona`], its effective temperature read from the stellar tables
-/// at each age). Before the ZAMS, which the tables do not cover, the star
-/// is taken at its ZAMS temperature.
-pub fn exposure(
-    band: Band,
+/// The high-energy history of one star at its present age, which serves
+/// every band and every planet around it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct History {
     mass: SolarMass,
-    metallicity: Dex,
     age: Gyr,
-) -> Result<Exposure, StellarError> {
+    /// ZAMS over present luminosity.
+    scale: f64,
+    /// Ages, from 0, at which the star has a corona.
+    corona: Vec<(f64, f64)>,
+    corona_now: bool,
+}
+
+/// The [`History`] of a star of `mass` and `metallicity` at `age`, which
+/// must lie on its main sequence (as every drawn star's does), else the
+/// [`StellarError`] of [`main_sequence`]. The ZAMS and present luminosity
+/// come from the stellar tables, and the corona from the effective
+/// temperature along the track ([`has_corona`]). Before the ZAMS, where
+/// [`main_sequence`] gives no values, the star is taken at its ZAMS
+/// temperature and the band at its saturated share of the ZAMS
+/// luminosity, from age 0: a lower bound, since a contracting star is
+/// brighter. The decay runs on the star's age even for a star that gains
+/// its corona late, by cooling through [`DYNAMO_LIMIT`].
+pub fn history(mass: SolarMass, metallicity: Dex, age: Gyr) -> Result<History, StellarError> {
     let present = main_sequence(mass, metallicity, age)?;
     let zams = life(mass, metallicity)?.zams;
     let at_zams = main_sequence(mass, metallicity, zams)?;
-    let scale = at_zams.luminosity.0 / present.luminosity.0;
-    let corona = |t: f64| -> Result<bool, StellarError> {
+    let corona_at = |t: f64| -> Result<bool, StellarError> {
         Ok(has_corona(
             main_sequence(mass, metallicity, Gyr(t))?.effective_temperature,
         ))
     };
 
-    // The ages, from 0, at which the star has a corona, as intervals.
-    let mut spans: Vec<(f64, f64)> = Vec::new();
+    let mut corona: Vec<(f64, f64)> = Vec::new();
     let mut start = has_corona(at_zams.effective_temperature).then_some(0.0);
     let mut previous = (zams.0, start.is_some());
     for i in 1..=TEMPERATURE_SAMPLES {
@@ -229,35 +246,82 @@ pub fn exposure(
         } else {
             zams.0 + (age.0 - zams.0) * f64::from(i) / f64::from(TEMPERATURE_SAMPLES)
         };
-        let now = corona(t)?;
+        let now = corona_at(t)?;
         if now != previous.1 {
-            let edge = boundary(previous.0, t, previous.1, &corona)?;
+            let edge = boundary(previous.0, t, previous.1, &corona_at)?;
             match start.take() {
-                Some(from) => spans.push((from, edge)),
+                Some(from) => corona.push((from, edge)),
                 None => start = Some(edge),
             }
         }
         previous = (t, now);
     }
     if let Some(from) = start {
-        spans.push((from, age.0));
+        corona.push((from, age.0));
+    }
+    Ok(History {
+        mass,
+        age,
+        scale: at_zams.luminosity.0 / present.luminosity.0,
+        corona,
+        corona_now: has_corona(present.effective_temperature),
+    })
+}
+
+impl History {
+    /// The star's ZAMS over its present luminosity: turns [`ratio`] into a
+    /// share of the present light.
+    pub fn scale(&self) -> f64 {
+        self.scale
     }
 
-    let integrated: f64 = spans
-        .iter()
-        .map(|&(a, b)| {
-            integrated_ratio(band, mass, Gyr(b)).0 - integrated_ratio(band, mass, Gyr(a)).0
-        })
-        .sum();
-    let present_ratio = if has_corona(present.effective_temperature) {
-        ratio(band, mass, age) * scale
-    } else {
-        0.0
-    };
-    Ok(Exposure {
-        present_ratio,
-        integrated: Gyr(integrated * scale),
-    })
+    /// The ages from 0 at which the star has a corona, in order.
+    pub fn corona(&self) -> &[(f64, f64)] {
+        &self.corona
+    }
+
+    /// Band energy a planet received between ages `from` and `to` (within
+    /// 0 and the star's age), in units of the present bolometric flux,
+    /// Gyr; a coronal band counts only while the star has a corona.
+    pub fn integrated_between(&self, band: Band, from: Gyr, to: Gyr) -> Gyr {
+        let (from, to) = (from.0.max(0.0), to.0.min(self.age.0));
+        let all = [(0.0, self.age.0)];
+        let spans: &[(f64, f64)] = if band.coronal { &self.corona } else { &all };
+        let sum: f64 = spans
+            .iter()
+            .map(|&(a, b)| (a.max(from), b.min(to)))
+            .filter(|(a, b)| b > a)
+            .map(|(a, b)| {
+                integrated_ratio(band, self.mass, Gyr(b)).0
+                    - integrated_ratio(band, self.mass, Gyr(a)).0
+            })
+            .sum();
+        Gyr(sum * self.scale)
+    }
+
+    /// The [`Exposure`] in `band` of a planet around the star.
+    pub fn exposure(&self, band: Band) -> Exposure {
+        let present_ratio = if band.coronal && !self.corona_now {
+            0.0
+        } else {
+            ratio(band, self.mass, self.age) * self.scale
+        };
+        Exposure {
+            present_ratio,
+            integrated: self.integrated_between(band, Gyr(0.0), self.age),
+        }
+    }
+}
+
+/// The [`Exposure`] in `band` of a planet around a star of `mass` and
+/// `metallicity` at `age`: [`history`] for a single band.
+pub fn exposure(
+    band: Band,
+    mass: SolarMass,
+    metallicity: Dex,
+    age: Gyr,
+) -> Result<Exposure, StellarError> {
+    Ok(history(mass, metallicity, age)?.exposure(band))
 }
 
 /// The age between `a` and `b` where `corona` turns from `at_a`, by

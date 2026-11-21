@@ -154,12 +154,42 @@ fn a_star_without_a_corona_gives_no_xuv() {
     let zams = life(mass, feh).unwrap().zams;
     let star = main_sequence(mass, feh, Gyr(0.3)).unwrap();
     assert!(!has_corona(star.effective_temperature), "{star:?}");
-    let e = exposure(XUV, mass, feh, Gyr(0.3)).unwrap();
+    let h = history(mass, feh, Gyr(0.3)).unwrap();
+    let e = h.exposure(XUV);
     assert_eq!(
         (e.present_ratio, e.integrated.0),
         (0.0, 0.0),
         "zams {zams:?}"
     );
+    // The Lyman α line is not coronal: it keeps the solar law.
+    let line = h.exposure(LYMAN_ALPHA);
+    assert!(
+        line.present_ratio > 0.0 && line.integrated.0 > 0.0,
+        "{line:?}"
+    );
+}
+
+#[test]
+fn the_integral_between_two_ages_adds_up() {
+    for (mass, age) in [(1.0, 4.5673), (1.6, 2.0), (0.2, 8.0)] {
+        let (mass, feh) = (SolarMass(mass), Dex(0.0));
+        let h = history(mass, feh, Gyr(age)).unwrap();
+        for band in [XUV, LYMAN_ALPHA] {
+            let split = Gyr(age / 3.0);
+            let parts = h.integrated_between(band, Gyr(0.0), split).0
+                + h.integrated_between(band, split, Gyr(age)).0;
+            let whole = h.exposure(band).integrated.0;
+            assert!(
+                (parts / whole - 1.0).abs() < 1e-12,
+                "{mass:?}: {parts} {whole}"
+            );
+            // Clamped to [0, age].
+            assert_eq!(
+                h.integrated_between(band, Gyr(-1.0), Gyr(age * 2.0)).0,
+                whole
+            );
+        }
+    }
 }
 
 #[test]

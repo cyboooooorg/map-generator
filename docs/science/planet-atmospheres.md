@@ -9,13 +9,16 @@ The interiors are in [planet-interiors.md](planet-interiors.md).
 
 ## XUV fluence
 
-`science::xuv::exposure` gives, for one star lighting a planet, the XUV
-flux the planet receives today and the XUV energy per unit area it has
-received over the star's age, both as multiples of the star's present
-bolometric flux at the planet. It is the budget that drives
-photoevaporation. The same function serves the Lyman α line (`LYMAN_ALPHA`),
-which photolyses methane. The sources were checked in the study
-`docs/superpowers/studies/2026-11-21-xuv-history.md`.
+`science::xuv::history` reads one star's high-energy history once;
+`History::exposure` then gives the XUV flux a planet receives today and
+the XUV energy per unit area it has received over the star's age, both as
+multiples of the star's present bolometric flux at the planet, and
+`History::integrated_between` the energy between two ages. It is the
+budget that drives photoevaporation. The same history serves the Lyman α
+line (`LYMAN_ALPHA`), which photolyses methane. The sources were checked
+in the study `docs/superpowers/studies/2026-11-21-xuv-history.md`. The
+sections after this one still describe the `legacy-final` planet model
+(`xuv_fluence`, `EARTH_XUV_FLUENCE_J_M2`) until it is ported (#602).
 
 **The Sun.** Ribas et al. 2005 (ApJ 622, 680, doi:10.1086/427977, Table 5)
 measure the Sun's XUV flux (1 to 1180 Å) at 1 au against its age from five
@@ -26,9 +29,10 @@ luminosity rose by 40 % since its zero-age main sequence (ZAMS). So the
 band luminosity is a share of the star's ZAMS luminosity: 5.220e-4 for
 the XUV while saturated (1.043e-4 for Lyman α), which makes the 1 M☉,
 [Fe/H] 0 track of the stellar tables follow Ribas et al.'s fit at every
-age, within 0.2 %. The `legacy-final` code took a share of the present
-luminosity (3.71e-4), which overstated the young Sun's XUV by the same
-40 %.
+age, within 0.2 %. The `legacy-final` code took 3.71e-4 of the present
+luminosity: exact for the Sun, but for a star whose luminosity changed
+more or less than the Sun's at its age, the history scaled with today's
+luminosity instead of its ZAMS one.
 
 **Saturation.** The share holds for `t_sat`, a labelled calibration
 interpolated in log-log through three anchors, not a published relation:
@@ -50,13 +54,21 @@ saturated X-ray share is about flat with spectral type (Wright et al.
 envelope (Gray & Nagel 1989, the limit the legacy star activity used),
 hence no dynamo and no coronal XUV: A stars show no X-rays of their own
 (Schröder & Schmitt 2007), B stars about `L_X/L_bol ≈ 1e-7` from wind
-shocks. `exposure` reads the star's effective temperature along its track
-and counts only the ages below the limit: a 1.6 M☉ star born hotter gains
-its corona as it cools.
+shocks. `history` reads the star's effective temperature along its track
+and counts the XUV only at the ages below the limit: a 1.6 M☉ star born
+hotter gains its corona as it cools. The decay runs on the star's age, so
+such a star starts its corona at the decayed level, while a star above
+the Kraft break has not spun down: its XUV is a lower bound. The Lyman α
+line is chromospheric, and photospheric in hot stars: it is not cut, and
+an A or B star gets the solar law, a lower bound too.
 
-**Before the ZAMS** the tables have no values: the star is taken at its
-ZAMS temperature, and the band at its saturated share of the ZAMS
-luminosity, from age 0.
+**Before the ZAMS** `science::stellar::main_sequence` gives no values
+(the star's age must lie on its main sequence, as every drawn star's
+does): the star is taken at its ZAMS temperature, and the band at its
+saturated share of the ZAMS luminosity, from age 0. A contracting star is
+brighter (0.08 M☉ is 11 times its ZAMS luminosity at 0.05 Gyr in Baraffe
+et al. 2015), so this is a lower bound, large for late M dwarfs, whose
+ZAMS comes after 1 Gyr.
 
 Calibration targets: the Sun of the tables follows Ribas et al.'s fit
 from 0.1 to 6.7 Gyr within 0.2 %; Earth's fluence over 4.567 Gyr is
@@ -69,8 +81,8 @@ convective star, while Jackson et al. measure the saturated X-ray share of
 early F stars about 10 times below the Sun's; the spread from the initial
 rotation (saturation from about 6 to 230 Myr at 1 M☉, Tu et al. 2015) is
 not drawn; the larger Lyman α share of an M dwarf's light, the
-photospheric EUV of hot B stars and the brighter contracting star before
-the ZAMS are not modelled; the orbit is taken as it is today.
+photospheric EUV and Lyman α of hot stars and the brighter contracting
+star before the ZAMS are not modelled; the orbit is taken as it is today.
 
 ## Envelope escape
 

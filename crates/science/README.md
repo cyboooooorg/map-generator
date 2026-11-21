@@ -77,8 +77,8 @@ phase change inside a layer is a shell boundary) and the `Sample`s (radius,
 enclosed mass, density, pressure at the centre and at the end of every
 step). Errors: `NoMass`, `NotFinite`, `NoConvergence`, `Eos`.
 
-The method is the study's prototype (`prototype/solve.py`): fourth-order
-Runge-Kutta in `t = (m/M)^(1/3)`, state `(r, P, I)`, shooting on the central
+The method is the planet-interior study's prototype (`solve.py`): fourth
+order Runge-Kutta in `t = (m/M)^(1/3)`, state `(r, P, I)`, shooting on the central
 pressure (Brent, 1e-10 relative); a phase transition ends a step exactly.
 `STEPS_PER_LAYER` (20, a calibration) keeps R and C/MR^2 within 1e-4 of the
 converged answer. Below zero pressure the density is the zero-pressure one.
@@ -130,7 +130,7 @@ see [STELLAR.md](data/STELLAR.md#reading-the-tables).
 
 ## High-energy light
 
-`science::xuv` (`exposure`): a star's XUV and Lyman α history; see
+`science::xuv` (`history`): a star's XUV and Lyman α history; see
 [XUV fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 
 ## Ports

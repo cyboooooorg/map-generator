@@ -38,9 +38,10 @@ Sources: arXiv versions (astro-ph/0412253, 1111.0031, 2009.07695,
 
 1. **Luminosity history.** The luminosity is constant at its present
    value. `science::stellar::main_sequence` now gives `L(t)` from the
-   zero-age main sequence. A young Sun was about 30 % fainter, so the
-   constant-L fluence of a 4.6 Gyr G star is a little high. The
-   pre-main-sequence phase is not in the tables.
+   zero-age main sequence. The young Sun was about 30 % fainter, which
+   Ribas et al.'s absolute fluxes already include; a star whose
+   luminosity changed differently gets its history scaled by today's
+   luminosity. `main_sequence` gives no values before the ZAMS.
 2. **Stars without a convective envelope.** Coronal X-rays need a
    convective dynamo. X-ray emission is "not expected" earlier than A7
    (Schröder & Schmitt 2007, read through a secondary source, and its
@@ -98,7 +99,11 @@ Taken with the user on 2026-11-21.
   saturation is measured as `L_X/L_bol` while the star is young, where
   `L ≈ L_ZAMS`, and the decay after follows the spin-down. The Sun of the
   tables then follows the fit at every age (`R_sat = 5.220e-4`, the
-  legacy 3.706e-4 times `L_now / L_ZAMS` = 0.998 / 0.702), and the
+  legacy 3.706e-4 times `L_now / L_ZAMS` = 0.998 / 0.709), and the
   fluence stays analytic.
+- After review: the Lyman α line is chromospheric (photospheric in hot
+  stars), so it is not cut at 7200 K; A and B stars keep the solar law,
+  a lower bound. One `History` per star serves both bands and every
+  planet.
 - Leave the F-star decrease, the rotation spread, the M dwarf Lyman α
   share and the photospheric EUV of B stars out, stated in the docs.
