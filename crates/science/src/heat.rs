@@ -258,21 +258,22 @@ mod tests {
         /// factsheet/galileanfact_table.html). The sheet gives its mass as
         /// 8.93e22 kg (unused: the satellite's mass is neglected).
         const IO_RADIUS: Metre = Metre(1821.5e3);
-        /// Source: Io's orbital distance, 422e3 km (same fact sheet).
-        const IO_ORBIT: Metre = Metre(422e6);
-        /// Source: Io's eccentricity, 0.004 (same fact sheet).
-        const IO_ECCENTRICITY: f64 = 0.004;
+        /// Source: Io's mean semi-major axis, 421 800 km (JPL planetary
+        /// satellite mean elements, ssd.jpl.nasa.gov/sats/elem/, epoch
+        /// 2000-01-01.5 TDB; the Wikipedia infobox for Io gives the same).
+        const IO_ORBIT: Metre = Metre(421.8e6);
+        /// Source: Io's eccentricity, 0.0041 (Wikipedia infobox for Io,
+        /// citing Lopes 2023; read, a secondary source). The JPL table
+        /// gives 0.004 at one figure, which alone lowers the heat by 5 %.
+        const IO_ECCENTRICITY: f64 = 0.0041;
         /// Source: Io's `k2/Q`, 0.015 (Lainey et al. 2009, Nature 459, 957;
         /// Lainey 2016, Table 1).
         const IO_K2_OVER_Q: f64 = 0.015;
         let heat = tidal(JUPITER, IO_RADIUS, IO_ORBIT, IO_ECCENTRICITY, IO_K2_OVER_Q).0;
-        /// Source: Io's observed heat flow, 0.83e14 to 1.7e14 W: from
-        /// 8.33e13 W (Galileo PPR, Rathbun et al. 2004, Icarus 169, 127,
-        /// as tabulated in an energy-budget table seen through a search
-        /// result) to 1.3 +/- 0.4e14 W (Veeder et al. 2004, Icarus 169,
-        /// 264, abstract). The fact sheet's eccentricity is rounded to one
-        /// figure, which alone moves the heat by several per cent.
-        const OBSERVED: std::ops::RangeInclusive<f64> = 0.83e14..=1.7e14;
+        /// Source: Io's observed heat flow, 1.3 +/- 0.4e14 W, so 0.9e14 to
+        /// 1.7e14 W (Veeder et al. 2004, Icarus 169, 264, abstract as read
+        /// through a search result).
+        const OBSERVED: std::ops::RangeInclusive<f64> = 0.9e14..=1.7e14;
         assert!(OBSERVED.contains(&heat), "{heat}");
     }
 
