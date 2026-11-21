@@ -15,10 +15,6 @@ mod placement;
 pub mod planet;
 mod random;
 mod sources;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired by the system draw, Task 10")
-)]
 mod spin;
 pub mod star;
 
@@ -33,4 +29,7 @@ use timeline::EngineVersion;
 
 /// The version of the engines: bumped whenever a timeline or a world
 /// could change for the same inputs. A cache key, never migrated.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(1);
+///
+/// 2: the system draw places planets (designations, body seeds, spins),
+/// so the same `Inputs` give another system.
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(2);

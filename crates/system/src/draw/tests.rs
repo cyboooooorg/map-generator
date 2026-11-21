@@ -9,6 +9,7 @@ use crate::families::tests::placed as test_planet;
 use crate::families::{Counts, FamilyContext, Placed};
 use crate::inputs::{BodyRequest, INPUTS_SCHEMA, SystemRequest};
 use crate::sources::{Light, light};
+use crate::spin;
 use crate::star::Star;
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
@@ -94,7 +95,6 @@ fn a_drawn_system_carries_its_star() {
         expected.state.luminosity.value()
     );
     assert_eq!(drawn.age.value(), expected.age.value());
-    assert!(drawn.placements.is_empty());
     assert_eq!(drawn.seed, Seed::new(7));
 }
 
@@ -514,4 +514,100 @@ fn the_recheck_drops_drawn_planets_only() {
     let mut placed = vec![asked_one, asked_out];
     recheck(&mut placed, &rules);
     assert_eq!(placed.len(), 2);
+}
+
+#[test]
+fn designations_follow_distance() {
+    let mut checked = 0;
+    for seed in 0..40 {
+        let inputs = asking(seed, &[("earth-like", 1), ("hot-neptune", 1)]);
+        let drawn = draw_with(&inputs, &mut Trace::new(), model).unwrap();
+        let system = drawn.designation.system;
+        let axes: Vec<f64> = drawn
+            .placements
+            .iter()
+            .map(|p| p.trial.orbit.semi_major_axis.value().0)
+            .collect();
+        assert!(axes.windows(2).all(|pair| pair[0] <= pair[1]), "{axes:?}");
+        for (rank, placement) in (0_u32..).zip(&drawn.placements) {
+            let designation = Designation::planet(system, rank).unwrap();
+            assert_eq!(placement.designation, designation);
+            assert_eq!(
+                placement.seed,
+                Seed::new(seed).derive(&designation.to_string())
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 80, "{checked}");
+}
+
+#[test]
+fn a_planet_spin_comes_from_its_body_seed() {
+    let mut trace = Trace::new();
+    let drawn = draw_with(&asking(5, &[("earth-like", 1)]), &mut trace, model).unwrap();
+    let planet = drawn
+        .placements
+        .iter()
+        .find(|p| p.trial.archetype == Some(id("earth-like")))
+        .unwrap();
+    let outcome = model(&planet.trial, &Trace::new()).unwrap();
+    let again = spin::spin(
+        outcome.class,
+        &planet.trial.mass,
+        outcome.radius,
+        crate::archetype::placement(&id("earth-like")),
+        planet.seed,
+        &mut trace,
+    )
+    .unwrap();
+    assert_eq!(
+        again.rotation_period.value(),
+        planet.spin.rotation_period.value()
+    );
+    assert_eq!(again.obliquity.value(), planet.spin.obliquity.value());
+}
+
+#[test]
+fn adding_a_hostless_archetype_keeps_the_star_family_and_slots() {
+    let slot_seeds = |placed: &[Placed]| -> Vec<Seed> {
+        placed
+            .iter()
+            .filter(|p| p.asked.is_none())
+            .map(|p| p.trial.seed)
+            .collect()
+    };
+    let (mut compared, mut shared) = (0, 0);
+    for seed in 0..60 {
+        let (plain, without) = draw_system(&system_inputs(seed), &mut Trace::new(), model).unwrap();
+        let (added, with) = draw_system(
+            &asking(seed, &[("hot-neptune", 1)]),
+            &mut Trace::new(),
+            model,
+        )
+        .unwrap();
+        assert_eq!(plain.star, added.star);
+        assert_eq!(plain.family, added.family);
+        assert_eq!(plain.designation, added.designation);
+        // A slot of the plain draw may be lost to the asked planet, and
+        // one lost there may be kept here (its retries meet other
+        // neighbours), but every kept slot is on its own stream.
+        let before = slot_seeds(&without);
+        let streams: Vec<Seed> = (0..MAX_PLANETS)
+            .map(|n| Seed::new(seed).derive(&format!("trial/slot-{n}")))
+            .collect();
+        for slot in slot_seeds(&with) {
+            assert!(streams.contains(&slot), "seed {seed}: {slot:?}");
+            shared += usize::from(before.contains(&slot));
+            compared += 1;
+        }
+        for planet in with.iter().filter(|p| p.asked.is_some()) {
+            assert_eq!(
+                planet.trial.seed,
+                Seed::new(seed).derive("trial/hot-neptune")
+            );
+        }
+    }
+    assert!(compared > 20, "{compared}");
+    assert!(shared * 10 >= compared * 8, "{shared} of {compared}");
 }

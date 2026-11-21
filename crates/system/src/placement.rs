@@ -15,6 +15,10 @@
 //! share their trial streams). The orbit's period is the draw's (Kepler),
 //! never recomputed.
 //!
+//! The orbit's perihelion longitude draws from
+//! `system_seed.derive("orbit/<label>")`, where the label is the trial's
+//! (`earth-like`, `earth-like/2`, `slot-3`), not from the trial seed.
+//!
 //! Neither type is serialised.
 
 use science::units::{AstronomicalUnit, Dex, EarthMass, EarthRadius, Gyr, KilogramPerCubicMetre};

@@ -8,12 +8,13 @@ use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 use timeline::{Designation, Seed, StarState, SystemNumber, Trace, Traced};
 
-use crate::archetype::asked_host;
+use crate::archetype::{self, asked_host};
 use crate::error::SystemError;
 use crate::families::{Family, FamilyContext, Placed, pick_family, possible};
 use crate::inputs::{Inputs, Request};
 use crate::placement::{Placement, Trial, TrialOutcome};
 use crate::sources::light;
+use crate::spin;
 use crate::star;
 use science::units::Gyr;
 
@@ -44,9 +45,10 @@ pub struct Drawn {
 ///
 /// The star comes first (its mass and date from the request, else from
 /// the asked archetypes' host), then the family on
-/// `seed.derive("family")`, then the planets. The placements stay empty
-/// until the designations land; the placed planets are reachable through
-/// [`draw_system`] meanwhile.
+/// `seed.derive("family")`, then the planets, sorted by semi-major axis:
+/// the closest is rank 0 (`Designation::planet(system, rank)`), its body
+/// seed is `seed.derive(<designation text>)` and its spin is drawn from
+/// that body seed.
 ///
 /// # Errors
 ///
@@ -59,10 +61,32 @@ pub fn draw_with(
     trace: &mut Trace,
     classify: impl Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>,
 ) -> Result<Drawn, SystemError> {
-    draw_system(inputs, trace, classify).map(|(drawn, _)| drawn)
+    let (mut drawn, placed) = draw_system(inputs, trace, classify)?;
+    let system = drawn.designation.system;
+    for (rank, planet) in (0_u32..).zip(placed) {
+        let designation = Designation::planet(system, rank)?;
+        let seed = inputs.seed.derive(&designation.to_string());
+        let archetype = planet.asked.as_ref().and_then(archetype::placement);
+        let spin = spin::spin(
+            planet.outcome.class,
+            &planet.trial.mass,
+            planet.outcome.radius,
+            archetype,
+            seed,
+            trace,
+        )?;
+        drawn.placements.push(Placement {
+            designation,
+            seed,
+            spin,
+            trial: planet.trial,
+        });
+    }
+    Ok(drawn)
 }
 
-/// [`draw_with`], with the placed planets sorted by semi-major axis.
+/// The star, the family and the placed planets sorted by semi-major axis,
+/// before designations. `Drawn.placements` stays empty.
 pub(crate) fn draw_system(
     inputs: &Inputs,
     trace: &mut Trace,
