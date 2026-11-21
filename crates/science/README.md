@@ -46,7 +46,8 @@ radius.
 ## Equations of state
 
 `science::eos` gives density against pressure at the reference
-temperature: `Eos` (`Vinet`, `BirchMurnaghan3`, `BirchMurnaghan2`) with
+temperature (or, for water, along a path through the phase diagram):
+`Eos` (`Vinet`, `BirchMurnaghan3`, `BirchMurnaghan2`) with
 `pressure(rho)` and `density(p)` (safeguarded Newton, bracketed between
 `rho0` and `100 rho0`, or the pressure maximum of a third-order form with
 `K0' < 4`); `Mix` (mass shares added by volume at equal pressure);
@@ -59,6 +60,26 @@ above) and `ice_vii()` (Seager et al. 2007 Vinet fit). Values are in the
 study `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`.
 The mantle at the 670 km boundary is 7.5 % below PREM above it and 3.5 %
 above PREM below it (no mineral phase transitions, no temperature).
+
+Water below 2.2 GPa has two materials, since the boundaries between ices
+III, V and VI away from the melting curve were not found in a source
+(study section 2.7):
+
+- `water(t)`, for 273.31 K <= t < 355 K: liquid water at `t` (IAPWS-95)
+  below the melting pressure of ice VI (IAPWS 2011), ice VI up to the
+  ice VI / ice VII boundary (AQUA, Haldemann et al. 2020), ice VII above.
+  Outside that range it returns `EosError::TemperatureOutOfRange`.
+- `water_on_melting_curve()`, for cold icy bodies (Zeng and Sasselov 2013):
+  ice Ih at its melting temperature (Feistel and Wagner 2006), then ices
+  III, V, VI and VII, switching at the IAPWS 2011 triple points with the
+  liquid (208.566, 350.1, 632.4 and 2216 MPa).
+
+Ices III, V and VI are the Journaux et al. 2020 cold (0 K) curves, so
+their densities are 1 to 4 % above those at the real temperature.
+`science::water` holds the laws themselves: `liquid_pressure` (IAPWS-95),
+`ice_ih_density` (IAPWS R10-06), the melting pressures of ices Ih and VI
+with the inverse for ice Ih, the ice VI / ice VII boundary and the triple
+points; each is checked against its release's verification table.
 
 ## Ports
 

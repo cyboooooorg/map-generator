@@ -5,10 +5,16 @@
 //! safeguarded Newton iteration bracketed between the zero-pressure density
 //! `rho0` and `100 rho0`. A [`Mix`] adds the volumes of its components at
 //! equal pressure (Amagat's law). A [`MaterialEos`] chains [`Phase`]s over
-//! pressure ranges. Materials are values, not statics, so that a later task
-//! can build one at run time (liquid water from a temperature).
+//! pressure ranges. Materials are values, not statics: [`water`] is built
+//! at run time from a temperature.
+//!
+//! Water below 2.2 GPa uses the laws of [`crate::water`]: liquid water at a
+//! fixed temperature ([`DensityLaw::LiquidWater`]) and ice Ih on its melting
+//! curve ([`DensityLaw::IceIhOnMeltingCurve`]), with ices III, V and VI as
+//! Birch-Murnaghan cold curves.
 
-use crate::units::{KilogramPerCubicMetre, Pascal};
+use crate::units::{Kelvin, KilogramPerCubicMetre, Pascal};
+use crate::water;
 
 /// Definition: pascals in a gigapascal (SI prefix).
 const GIGAPASCAL: f64 = 1e9;
@@ -29,6 +35,17 @@ const RELATIVE_TOLERANCE: f64 = 1e-14;
 /// Definition: iteration cap of the inverse; the safeguarded Newton step
 /// halves the bracket at worst, so 200 steps exceed `f64` resolution.
 const MAX_ITERATIONS: usize = 200;
+
+/// Definition: bottom of the bracket of the inverse on the liquid-water
+/// branch, kg/m3. A tier-1 test checks that the IAPWS-95 pressure is
+/// negative there and rises up to [`LIQUID_HIGH`] over the whole range of
+/// [`water`], so the bracket holds exactly one liquid root for p >= 0.
+const LIQUID_LOW: f64 = 950.0;
+
+/// Definition: top of the same bracket, kg/m3; the same test checks that
+/// the pressure there is above the melting pressure of ice VI, the top of
+/// the liquid phase.
+const LIQUID_HIGH: f64 = 1400.0;
 
 /// Definition: exponent 1/3 of the Vinet strain variable
 /// `x = (rho0 / rho)^(1/3)`.
@@ -77,6 +94,11 @@ pub enum EosError {
     },
     /// The iteration ran out of steps.
     NoConvergence,
+    /// A material built for a temperature outside the range of its laws.
+    TemperatureOutOfRange {
+        /// The offending temperature.
+        temperature: Kelvin,
+    },
 }
 
 impl std::fmt::Display for EosError {
@@ -84,6 +106,11 @@ impl std::fmt::Display for EosError {
         match self {
             Self::OutOfRange { pressure } => write!(f, "eos-out-of-range(pressure={})", pressure.0),
             Self::NoConvergence => write!(f, "eos-no-convergence"),
+            Self::TemperatureOutOfRange { temperature } => write!(
+                f,
+                "eos-temperature-out-of-range(temperature={})",
+                temperature.0
+            ),
         }
     }
 }
@@ -145,42 +172,57 @@ impl Eos {
     /// the pressure at `100 rho0`; [`EosError::NoConvergence`] when the
     /// iteration cap is reached.
     pub fn density(&self, p: Pascal) -> Result<KilogramPerCubicMetre, EosError> {
-        let rho0 = self.rho0().0;
-        let out_of_range = EosError::OutOfRange { pressure: p };
-        if !p.0.is_finite() || p.0 < 0.0 {
-            return Err(out_of_range);
-        }
-        let (top, top_pressure) = self.top();
-        let (mut low, mut high) = (rho0, top);
-        if top_pressure < p.0 {
-            return Err(out_of_range);
-        }
-        let mut rho = low;
-        for _ in 0..MAX_ITERATIONS {
-            let f = self.pressure(KilogramPerCubicMetre(rho)).0 - p.0;
-            if f == 0.0 || (high - low) <= RELATIVE_TOLERANCE * rho {
-                return Ok(KilogramPerCubicMetre(rho));
-            }
-            if f < 0.0 {
-                low = rho;
-            } else {
-                high = rho;
-            }
-            // Central difference slope; falls back to bisection when the
-            // Newton step leaves the bracket.
-            let h = RELATIVE_TOLERANCE.sqrt() * rho;
-            let slope = (self.pressure(KilogramPerCubicMetre(rho + h)).0
-                - self.pressure(KilogramPerCubicMetre(rho - h)).0)
-                / (2.0 * h);
-            let newton = rho - f / slope;
-            rho = if newton.is_finite() && newton > low && newton < high {
-                newton
-            } else {
-                0.5 * (low + high)
-            };
-        }
-        Err(EosError::NoConvergence)
+        let (top, _) = self.top();
+        invert(
+            |rho| self.pressure(KilogramPerCubicMetre(rho)).0,
+            self.rho0().0,
+            top,
+            p,
+        )
     }
+}
+
+/// Density at pressure `p` of a law `pressure(rho)` increasing on
+/// `[low, high]`, by safeguarded Newton (central-difference slope, falling
+/// back to bisection when the step leaves the bracket).
+///
+/// # Errors
+///
+/// [`EosError::OutOfRange`] when `p` is negative, not finite or outside
+/// `[pressure(low), pressure(high)]`; [`EosError::NoConvergence`] when the
+/// iteration cap is reached.
+fn invert(
+    pressure: impl Fn(f64) -> f64,
+    low: f64,
+    high: f64,
+    p: Pascal,
+) -> Result<KilogramPerCubicMetre, EosError> {
+    let out_of_range = EosError::OutOfRange { pressure: p };
+    if !p.0.is_finite() || p.0 < 0.0 || p.0 < pressure(low) || pressure(high) < p.0 {
+        return Err(out_of_range);
+    }
+    let (mut low, mut high) = (low, high);
+    let mut rho = low;
+    for _ in 0..MAX_ITERATIONS {
+        let f = pressure(rho) - p.0;
+        if f == 0.0 || (high - low) <= RELATIVE_TOLERANCE * rho {
+            return Ok(KilogramPerCubicMetre(rho));
+        }
+        if f < 0.0 {
+            low = rho;
+        } else {
+            high = rho;
+        }
+        let h = RELATIVE_TOLERANCE.sqrt() * rho;
+        let slope = (pressure(rho + h) - pressure(rho - h)) / (2.0 * h);
+        let newton = rho - f / slope;
+        rho = if newton.is_finite() && newton > low && newton < high {
+            newton
+        } else {
+            0.5 * (low + high)
+        };
+    }
+    Err(EosError::NoConvergence)
 }
 
 /// Third-order Birch-Murnaghan pressure at `eta = rho / rho0`.
@@ -242,13 +284,23 @@ impl Mix {
     }
 }
 
-/// What gives the density inside one [`Phase`]: a single law or a mixture.
+/// What gives the density inside one [`Phase`]: a single law, a mixture,
+/// or one of the water laws of [`crate::water`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum DensityLaw {
     /// One equation of state.
     Single(Eos),
     /// Several, added by volume.
     Mix(Mix),
+    /// Liquid water at this temperature (IAPWS-95,
+    /// [`water::liquid_pressure`]), inverted on the liquid branch between
+    /// 950 and 1400 kg/m3.
+    LiquidWater(Kelvin),
+    /// Ice Ih at its melting temperature for the pressure (Feistel and
+    /// Wagner 2006 on the IAPWS 2011 melting curve,
+    /// [`water::ice_ih_density`] at [`water::ice_ih_melting_temperature`]),
+    /// from zero to the ice Ih - ice III - liquid triple point.
+    IceIhOnMeltingCurve,
 }
 
 impl DensityLaw {
@@ -261,6 +313,21 @@ impl DensityLaw {
         match self {
             Self::Single(eos) => eos.density(p),
             Self::Mix(mix) => mix.density(p),
+            Self::LiquidWater(t) => invert(
+                |rho| water::liquid_pressure(*t, KilogramPerCubicMetre(rho)).0,
+                LIQUID_LOW,
+                LIQUID_HIGH,
+                p,
+            ),
+            Self::IceIhOnMeltingCurve => {
+                if !p.0.is_finite() || p.0 < 0.0 || p.0 > water::IH_III_LIQUID_PRESSURE.0 {
+                    return Err(EosError::OutOfRange { pressure: p });
+                }
+                Ok(water::ice_ih_density(
+                    water::ice_ih_melting_temperature(p),
+                    p,
+                ))
+            }
         }
     }
 
@@ -268,11 +335,32 @@ impl DensityLaw {
     ///
     /// # Errors
     ///
-    /// See [`Mix::pressure`].
+    /// See [`Mix::pressure`]; for ice Ih, [`EosError::OutOfRange`] when
+    /// `rho` is outside its densities between zero pressure and the ice
+    /// Ih - ice III - liquid triple point (found by bisection, the density
+    /// rising with pressure along the melting curve).
     pub fn pressure(&self, rho: KilogramPerCubicMetre) -> Result<Pascal, EosError> {
         match self {
             Self::Single(eos) => Ok(eos.pressure(rho)),
             Self::Mix(mix) => mix.pressure(rho),
+            Self::LiquidWater(t) => Ok(water::liquid_pressure(*t, rho)),
+            Self::IceIhOnMeltingCurve => {
+                let (mut low, mut high) = (0.0, water::IH_III_LIQUID_PRESSURE.0);
+                if self.density(Pascal(low))?.0 > rho.0 || self.density(Pascal(high))?.0 < rho.0 {
+                    return Err(EosError::OutOfRange {
+                        pressure: Pascal(f64::NAN),
+                    });
+                }
+                for _ in 0..MAX_ITERATIONS {
+                    let mid = 0.5 * (low + high);
+                    if self.density(Pascal(mid))?.0 < rho.0 {
+                        low = mid;
+                    } else {
+                        high = mid;
+                    }
+                }
+                Ok(Pascal(0.5 * (low + high)))
+            }
         }
     }
 }
@@ -397,6 +485,17 @@ const ICE_VII_EOS: Eos = Eos::Vinet {
     k0_prime: 6.579_72,
 };
 
+/// Source: ice III cold (0 K) compression curve, V0 8.595e-4 m3/kg
+/// (rho0 = 1/V0), K0 9.9 GPa, K0' 6, third-order Eulerian finite strain
+/// (Journaux et al. 2020, JGR Planets 125, e2019JE006176, Table 3 and eq. 5).
+const ICE_III: Eos = bm3(1.0 / 8.595e-4, 9.9, 6.0);
+/// Source: ice V cold curve, V0 8.035e-4 m3/kg, K0 13.2 GPa, K0' 6 (same
+/// table).
+const ICE_V: Eos = bm3(1.0 / 8.035e-4, 13.2, 6.0);
+/// Source: ice VI cold curve, V0 7.562e-4 m3/kg, K0 15.2 GPa, K0' 6.5 (same
+/// table).
+const ICE_VI: Eos = bm3(1.0 / 7.562e-4, 15.2, 6.5);
+
 /// Core iron alloy: liquid outer core below the PREM inner-core boundary,
 /// solid inner core above (Valencia et al. 2006 fits to PREM).
 pub fn core_alloy() -> MaterialEos {
@@ -454,11 +553,75 @@ pub fn ice_vii() -> MaterialEos {
     }])
 }
 
+/// Water along the isotherm `t`, for 273.31 K <= `t` < 355 K (the ice V -
+/// ice VI - liquid and ice VI - ice VII - liquid triple points): liquid
+/// water (IAPWS-95 at `t`) below the melting pressure of ice VI at `t`
+/// (IAPWS 2011), ice VI (Journaux et al. 2020 cold curve) up to the ice VI
+/// / ice VII boundary at `t` (AQUA, Haldemann et al. 2020), ice VII above.
+///
+/// Below 273.31 K the liquid would meet ice Ih, III or V, whose bounds
+/// away from the melting curve were not found in a source (study section
+/// 2.7.4); [`water_on_melting_curve`] covers cold bodies.
+///
+/// # Errors
+///
+/// [`EosError::TemperatureOutOfRange`] outside `[273.31 K, 355 K)` or for
+/// a temperature that is not a number.
+pub fn water(t: Kelvin) -> Result<MaterialEos, EosError> {
+    if !(water::V_VI_LIQUID_TEMPERATURE.0 <= t.0 && t.0 < water::VI_VII_LIQUID_TEMPERATURE.0) {
+        return Err(EosError::TemperatureOutOfRange { temperature: t });
+    }
+    Ok(MaterialEos::new(vec![
+        Phase {
+            up_to: water::ice_vi_melting_pressure(t),
+            density_law: DensityLaw::LiquidWater(t),
+        },
+        Phase {
+            up_to: water::ice_vi_vii_pressure(t),
+            density_law: DensityLaw::Single(ICE_VI),
+        },
+        Phase {
+            up_to: Pascal(f64::INFINITY),
+            density_law: DensityLaw::Single(ICE_VII_EOS),
+        },
+    ]))
+}
+
+/// Water along its melting curve (Zeng and Sasselov 2013, PASP 125, 227,
+/// section 3.3): ice Ih at its melting temperature, then ices III, V and VI
+/// (Journaux et al. 2020 cold curves) and ice VII, switching at the triple
+/// points with the liquid (IAPWS 2011): 208.566, 350.1, 632.4 and
+/// 2216 MPa. No liquid and no temperature to choose: a cold icy body.
+pub fn water_on_melting_curve() -> MaterialEos {
+    MaterialEos::new(vec![
+        Phase {
+            up_to: water::IH_III_LIQUID_PRESSURE,
+            density_law: DensityLaw::IceIhOnMeltingCurve,
+        },
+        Phase {
+            up_to: water::III_V_LIQUID_PRESSURE,
+            density_law: DensityLaw::Single(ICE_III),
+        },
+        Phase {
+            up_to: water::V_VI_LIQUID_PRESSURE,
+            density_law: DensityLaw::Single(ICE_V),
+        },
+        Phase {
+            up_to: water::VI_VII_LIQUID_PRESSURE,
+            density_law: DensityLaw::Single(ICE_VI),
+        },
+        Phase {
+            up_to: Pascal(f64::INFINITY),
+            density_law: DensityLaw::Single(ICE_VII_EOS),
+        },
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::constants::EARTH_MEAN_RADIUS;
-    use crate::units::EarthRadius;
+    use crate::units::{EarthRadius, Kelvin};
 
     /// Source: PREM outer-core density on the core side of the CMB,
     /// 9.9035 g/cm3 (Rodriguez-Mozos and Moya 2022, Table 1; study).
@@ -498,6 +661,34 @@ mod tests {
     /// Calibration: an arbitrary test sample density for BM2 (a law with no
     /// material in this module).
     const SAMPLE_RHO0: f64 = 3000.0;
+    /// Source: saturated liquid at 275 K, 999.887 406 kg/m3 at
+    /// 0.698 451 167 kPa (IAPWS R6-95(2018), Table 8).
+    const SATURATED_LIQUID_275_K: (f64, f64, f64) = (275.0, 698.451_167, 999.887_406);
+    /// Source: liquid at 300 K, 996.556 kg/m3 at 0.099 241 835 2 MPa and
+    /// 1188.202 kg/m3 at 700.004 704 MPa (IAPWS R6-95(2018), Table 7).
+    const LIQUID_300_K: [(f64, f64); 2] = [(0.992_418_352e5, 996.556), (700.004_704e6, 1188.202)];
+    /// Definition: temperature of the Table 7 points above.
+    const ROOM: Kelvin = Kelvin(300.0);
+    /// Source: ice Ih at its normal melting point, 916.721 463 419 kg/m3 at
+    /// 101 325 Pa and 273.152 519 K (IAPWS R10-06(2009), Table 6).
+    const ICE_IH_ONE_ATMOSPHERE: (f64, f64) = (101_325.0, 916.721_463_419);
+    /// Source: melting pressure of ice VI, 1356.76 MPa at 320 K (IAPWS
+    /// R14-08(2011), Table 3).
+    const VI_MELTING_320_K: (f64, f64) = (320.0, 1356.76e6);
+    /// Source: specific volumes at 0 K and 1 bar of ices III, V and VI,
+    /// 8.595e-4, 8.035e-4 and 7.562e-4 m3/kg (Journaux et al. 2020, JGR
+    /// Planets 125, e2019JE006176, Table 3).
+    const JOURNAUX_VOLUMES: [f64; 3] = [8.595e-4, 8.035e-4, 7.562e-4];
+    /// Definition: relative tolerance against values printed with six to
+    /// nine significant digits.
+    const PRINTED: f64 = 1e-5;
+    /// Definition: relative tolerance of a density read back from a law
+    /// checked to nine digits in [`crate::water`].
+    const NINE_DIGITS: f64 = 1e-8;
+    /// Definition: a density step of 1 kg/m3, to sample the liquid branch.
+    const DENSITY_STEP: f64 = 1.0;
+    /// Definition: temperatures across the isotherm range (its ends, inside).
+    const ISOTHERMS: [f64; 4] = [273.31, 300.0, 330.0, 354.99];
 
     fn close(a: f64, b: f64, tolerance: f64) -> bool {
         (a / b - 1.0).abs() < tolerance
@@ -511,6 +702,9 @@ mod tests {
     fn each_law_gives_its_reference_density_at_zero_pressure() {
         let laws = [
             ICE_VII_EOS,
+            ICE_III,
+            ICE_V,
+            ICE_VI,
             FORSTERITE,
             PERICLASE,
             bm3(OUTER_CORE_RHO0, OUTER_CORE_K0, OUTER_CORE_K0_PRIME),
@@ -527,7 +721,13 @@ mod tests {
 
     #[test]
     fn density_inverts_pressure() {
-        for material in [core_alloy(), mantle(), ice_vii()] {
+        for material in [
+            core_alloy(),
+            mantle(),
+            ice_vii(),
+            water(ROOM).unwrap(),
+            water_on_melting_curve(),
+        ] {
             for p in pressures() {
                 let phase = material.phase_at(Pascal(p));
                 let rho = material.density(Pascal(p)).unwrap();
@@ -575,6 +775,106 @@ mod tests {
             ICE_VII_EOS.density(Pascal(f64::INFINITY)),
             Err(EosError::OutOfRange { .. })
         ));
+    }
+
+    #[test]
+    fn liquid_water_is_a_thousand_kilograms_per_cubic_metre() {
+        let (t, p, rho) = SATURATED_LIQUID_275_K;
+        let got = water(Kelvin(t)).unwrap().density(Pascal(p)).unwrap();
+        assert!(close(got.0, rho, NINE_DIGITS), "{got:?}");
+        let warm = water(ROOM).unwrap();
+        for (p, rho) in LIQUID_300_K {
+            let got = warm.density(Pascal(p)).unwrap();
+            assert!(close(got.0, rho, NINE_DIGITS), "{p}: {got:?}");
+        }
+    }
+
+    #[test]
+    fn ice_ih_density_at_one_bar() {
+        let (p, rho) = ICE_IH_ONE_ATMOSPHERE;
+        let got = water_on_melting_curve().density(Pascal(p)).unwrap();
+        assert!(close(got.0, rho, NINE_DIGITS), "{got:?}");
+    }
+
+    #[test]
+    fn each_high_pressure_ice_starts_at_its_journaux_volume() {
+        for (law, volume) in [ICE_III, ICE_V, ICE_VI].iter().zip(JOURNAUX_VOLUMES) {
+            let rho = law.density(Pascal(0.0)).unwrap();
+            assert!(close(rho.0, 1.0 / volume, ZERO_PRESSURE), "{law:?}");
+        }
+    }
+
+    #[test]
+    fn liquid_water_freezes_to_ice_vi_at_the_iapws_melting_pressure() {
+        let (t, p) = VI_MELTING_320_K;
+        let water = water(Kelvin(t)).unwrap();
+        let phases = water.phases();
+        assert_eq!(phases.len(), 3);
+        assert!(matches!(phases[0].density_law, DensityLaw::LiquidWater(_)));
+        assert!(
+            close(phases[0].up_to.0, p, PRINTED),
+            "{:?}",
+            phases[0].up_to
+        );
+        assert_eq!(phases[1].density_law, DensityLaw::Single(ICE_VI));
+        assert!(phases[1].up_to.0 < crate::water::VI_VII_LIQUID_PRESSURE.0);
+        assert_eq!(phases[2].density_law, DensityLaw::Single(ICE_VII_EOS));
+    }
+
+    #[test]
+    fn water_on_the_melting_curve_changes_phase_at_the_triple_points() {
+        use crate::water::{
+            IH_III_LIQUID_PRESSURE, III_V_LIQUID_PRESSURE, V_VI_LIQUID_PRESSURE,
+            VI_VII_LIQUID_PRESSURE,
+        };
+        let water = water_on_melting_curve();
+        let bounds: Vec<f64> = water.phases().iter().map(|p| p.up_to.0).collect();
+        let triple = [
+            IH_III_LIQUID_PRESSURE,
+            III_V_LIQUID_PRESSURE,
+            V_VI_LIQUID_PRESSURE,
+            VI_VII_LIQUID_PRESSURE,
+        ];
+        assert_eq!(bounds[..4], triple.map(|p| p.0));
+        assert!(bounds[4].is_infinite());
+        for bound in triple {
+            let below = water.density(Pascal(bound.0 * (1.0 - 1e-9))).unwrap();
+            let above = water.density(bound).unwrap();
+            assert!(above.0 > below.0, "{bound:?}: {below:?} {above:?}");
+        }
+    }
+
+    #[test]
+    fn water_outside_its_isotherm_range_is_an_error() {
+        use crate::water::{V_VI_LIQUID_TEMPERATURE, VI_VII_LIQUID_TEMPERATURE};
+        for t in [
+            V_VI_LIQUID_TEMPERATURE.0 * (1.0 - 1e-9),
+            VI_VII_LIQUID_TEMPERATURE.0,
+            f64::NAN,
+        ] {
+            assert!(matches!(
+                water(Kelvin(t)),
+                Err(EosError::TemperatureOutOfRange { .. })
+            ));
+        }
+        assert!(water(V_VI_LIQUID_TEMPERATURE).is_ok());
+    }
+
+    #[test]
+    fn the_liquid_bracket_holds_over_the_isotherm_range() {
+        for t in ISOTHERMS {
+            let t = Kelvin(t);
+            let freeze = crate::water::ice_vi_melting_pressure(t).0;
+            let pressure =
+                |rho: f64| crate::water::liquid_pressure(t, KilogramPerCubicMetre(rho)).0;
+            assert!(pressure(LIQUID_LOW) < 0.0, "{t:?}");
+            assert!(pressure(LIQUID_HIGH) > freeze, "{t:?}");
+            let mut rho = LIQUID_LOW;
+            while rho < LIQUID_HIGH {
+                assert!(pressure(rho + DENSITY_STEP) > pressure(rho), "{t:?} {rho}");
+                rho += DENSITY_STEP;
+            }
+        }
     }
 
     #[test]
