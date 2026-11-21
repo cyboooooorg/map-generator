@@ -77,17 +77,11 @@ phase change inside a layer is a shell boundary) and the `Sample`s (radius,
 enclosed mass, density, pressure at the centre and at the end of every
 step). Errors: `NoMass`, `NotFinite`, `NoConvergence`, `Eos`.
 
-The method is the study's prototype
-(`docs/superpowers/studies/2026-11-21-planet-interior/prototype/solve.py`):
-fourth-order Runge-Kutta in the mass coordinate `t = (m/M)^(1/3)`, state
-`(r, P, I)`, shooting on the central pressure (Brent's method, 1e-10
-relative) until the surface pressure is met. A phase transition ends a
-step exactly (Brent's method on the step length), so the error stays
-fourth order; `STEPS_PER_LAYER` (20, a calibration) keeps R and C/MR^2
-within 1e-4 of the converged answer for Earth and a 20 Earth-mass planet.
-Below zero pressure, which a Runge-Kutta stage can predict near the
-surface, the density is the zero-pressure one, and a recorded sample's
-pressure is floored at 0, so a zero surface pressure integrates.
+The method is the planet-interior study's prototype (`solve.py`): fourth
+order Runge-Kutta in `t = (m/M)^(1/3)`, state `(r, P, I)`, shooting on the central
+pressure (Brent, 1e-10 relative); a phase transition ends a step exactly.
+`STEPS_PER_LAYER` (20, a calibration) keeps R and C/MR^2 within 1e-4 of the
+converged answer. Below zero pressure the density is the zero-pressure one.
 
 ```rust
 use science::constants::EARTH_MASS;
@@ -133,6 +127,11 @@ lists them under "Where it departs from the science".
 `main_sequence` (R, L, T_eff) and `profile` (layers; ρ, P, T, fusion share)
 of a star of 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
 see [STELLAR.md](data/STELLAR.md#reading-the-tables).
+
+## High-energy light
+
+`science::xuv` (`history`): a star's XUV and Lyman α history; see
+[XUV fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 
 ## Ports
 
