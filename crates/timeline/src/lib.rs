@@ -9,6 +9,7 @@ mod cause;
 mod designation;
 mod error;
 mod seed;
+mod sources;
 
 pub use cause::{
     CauseGraph, Code, Node, NodeId, NodeValue, NodeValueOf, Origin, Provenance, Trace, Traced,
@@ -17,3 +18,4 @@ pub use cause::{
 pub use designation::{BodyPath, Designation, SystemNumber, planet_letters};
 pub use error::ContractError;
 pub use seed::Seed;
+pub use sources::{StellarSource, StellarSources};
