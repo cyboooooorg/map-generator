@@ -97,21 +97,23 @@ def read_track(path):
 
 
 def zams_index(t):
-    """First model of the last unbroken run with nuclear power >= 99 % of L
-    before 10 % of the central hydrogen is burnt.
+    """The ZAMS (`Definition:` in STELLAR.md): the first model whose nuclear
+    power is >= 99 % of L and whose radius has stopped shrinking (the next
+    model is not smaller).
 
-    The out-of-equilibrium burning of C12 on the approach to the main
-    sequence already gives >= 99 % for a few models, then drops: taking the
-    first such model would put the ZAMS on the pre-main-sequence.
+    The radius condition steps over the out-of-equilibrium burning of C12
+    on the approach to the main sequence, which gives >= 99 % for a few
+    models while the star still contracts. Nuclear power alone does not
+    mark the main sequence after that: CN and He3 approach equilibrium for
+    a long time, and L_nuc / L wavers around 0.97-1.05 (at 0.4 Msun and
+    +0.5 it touches 0.990 at 4.6 Gyr).
     """
     nuc = t["ppI_lsun"] + t["ppII_lsun"] + t["ppIII_lsun"] + t["CNO_lsun"] + t["3a_lsun"]
-    ok = nuc >= 0.99 * 10 ** t["LogL_lsun"]
-    burnt = np.nonzero(t["X_cen"] < 0.9 * t["X_cen"][0])[0]
-    k = int(burnt[0]) if len(burnt) else len(ok)
-    bad = np.nonzero(~ok[:k])[0]
-    i = int(bad[-1]) + 1 if len(bad) else 0
-    assert i < k, "no main sequence found"
-    return i
+    share = nuc / 10 ** t["LogL_lsun"]
+    lr = t["LogR_rsun"]
+    hit = np.nonzero((share[:-1] >= 0.99) & (lr[1:] >= lr[:-1]))[0]
+    assert len(hit), "no main sequence found"
+    return int(hit[0])
 
 
 # Fortran output can fuse two fields ("3.97-10.03") and drop the E of a
@@ -463,7 +465,8 @@ def write_tracks(path, runs, masses, step):
                 "physics, GS98 mixture, no diffusion, no rotation; computed for this",
                 "repository, derived numbers only. See STELLAR.md.",
                 f"Masses: 0.1 Msun steps to 2 Msun, then {g(step)} Msun steps.",
-                "Rows per (mass, feh): the ZAMS row (nuclear luminosity >= 99 % of L),",
+                "Rows per (mass, feh): the ZAMS row (first model with nuclear power >= 99 % of L",
+                "whose radius has stopped shrinking; see STELLAR.md),",
                 f"then about {TRACK_ROWS} rows evenly spaced in xc_frac to the end of the run",
                 "and rows near xc_frac 0.01, 0.003, 0.001 for the hook at the end",
                 "(TAMS, X_c = 1e-4: last xc_frac <= 1.6e-4; or 20 Gyr: last xc_frac >= 1.6e-3).",

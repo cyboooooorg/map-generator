@@ -7,11 +7,11 @@ comes from, how it was derived, and how far it can be trusted.
 
 | File | Range | Source | Size (bytes) |
 | --- | --- | --- | --- |
-| `stellar-tracks.tsv` | 0.3-8 M☉, 4 [Fe/H] | YREC grid, computed for this repository | 422 635 |
-| `stellar-profiles.tsv` | 0.3-8 M☉, 4 [Fe/H] | YREC grid | 1 819 114 |
+| `stellar-tracks.tsv` | 0.3-8 M☉, 4 [Fe/H] | YREC grid, computed for this repository | 422 584 |
+| `stellar-profiles.tsv` | 0.3-8 M☉, 4 [Fe/H] | YREC grid | 1 814 254 |
 | `stellar-low-mass.tsv` | 0.08-0.4 M☉ | Baraffe et al. 2015; Dartmouth offsets | 5 764 |
 
-Total 2 247 513 bytes (the budget is about 2.5 MB).
+Total 2 242 602 bytes (the budget is about 2.5 MB).
 
 ## Common format
 
@@ -45,14 +45,42 @@ level and is not in any table (3.3 M☉ is not a tabulated mass).
 
 Definitions used by the extraction:
 
-- **ZAMS** (`Definition:`): the first model of the last unbroken run of
-  models whose nuclear luminosity (pp chains, CNO, triple alpha) is at
-  least 99 % of L, before 10 % of the initial central hydrogen is burnt.
-  The first model above 99 % is not used: the out-of-equilibrium burning
-  of ¹²C on the approach to the main sequence crosses 99 % for a few
-  models, then drops back to about 60 %, and would put the ZAMS on the
-  pre-main sequence for some masses and not others (from 2 M☉ up, the
-  ZAMS radius then jumped by up to 0.09 dex between neighbouring masses).
+- **ZAMS** (`Definition:`): the first model whose nuclear luminosity
+  (pp chains, CNO, triple alpha) is at least 99 % of L and whose radius
+  has stopped shrinking (the next model is not smaller). The two
+  conditions together mark a star that has finished its pre-main-sequence
+  contraction and lives on nuclear power. Neither suffices alone:
+  - Nuclear power alone, first crossing: the out-of-equilibrium burning of
+    ¹²C on the approach to the main sequence gives ≥ 99 % for a few models
+    while the star still contracts, then drops (to about 60 % above
+    2 M☉). That puts the ZAMS on the pre-main sequence for some masses and
+    not others.
+  - Nuclear power alone, last unbroken run of ≥ 99 % before 10 % of X_c
+    is burnt (the first rule of this file): after the ZAMS, ³He and CN
+    approach equilibrium for a long time and L_nuc / L wavers around
+    0.97-1.05. A late dip below 0.99 moved the ZAMS deep into the main
+    sequence: 4.62 Gyr at 0.4 M☉ and +0.5 (0.39 and 0.17 Gyr at 0.3 and
+    0.5 M☉), 0.149 Gyr at 1.2 M☉ and +0.5 (0.042 at 1.1 M☉).
+  - The radius minimum alone, sought before 10 % of X_c is burnt: the
+    stars that build a convective core contract again after the ¹²C
+    transient, and the deeper of the two minima switches from one mass to
+    the next.
+
+  With this rule the ZAMS age falls with mass at every metallicity, or
+  rises by under 0.004 dex (three steps above 4.9 M☉), except at four
+  steps of 0.1 M☉. There the ¹²C transient first becomes deep enough to
+  stop the contraction early, and the next mass settles after it:
+
+  | [Fe/H] | Masses (M☉) | ZAMS ages (Gyr) |
+  | --- | --- | --- |
+  | −1 | 1.1 → 1.2 | 0.0200 → 0.0263 |
+  | −0.5 | 1.1 → 1.2 | 0.0238 → 0.0361 |
+  | 0 | 1.4 → 1.5 | 0.0184 → 0.0547 |
+  | 0 | 3.3 → 3.4 | 0.0031 → 0.0036 |
+
+  Each step is 0.2-1.3 % of the star's main-sequence life. At the ZAMS at
+  most 0.78 % of the central hydrogen is burnt (1.4 M☉ at 0 burns 0.04 %,
+  1.5 M☉ 0.78 %).
 - **xc_frac**: X_c divided by X_c at the ZAMS.
 - **TAMS**: X_c = 10⁻⁴. Divided by X_c at the ZAMS (0.65 to 0.75), the
   last row's xc_frac is at most 1.52 × 10⁻⁴ (1.1 M☉ at +0.5; the last
@@ -74,7 +102,7 @@ Rows per (mass, [Fe/H]), in age order: the ZAMS row; the track rows
 nearest 40 values of xc_frac evenly spaced from 1 down to the last
 model's; the rows nearest xc_frac 0.01, 0.003 and 0.001 (the hook at the
 end of the main sequence, where the star contracts in 1 % of its life);
-the last model. A track has 33 to 44 rows (rows nearest two targets are
+the last model. A track has 29 to 44 rows (rows nearest two targets are
 kept once).
 
 ## `stellar-profiles.tsv`
@@ -177,31 +205,23 @@ With the 0.1 M☉ grid everywhere the profiles would be 5.0 MB.
 
 ### Tracks
 
-Worst |error| in dex over all intervals and metallicities. The last
-three columns leave out the ZAMS row (τ > 0):
+Worst |error| in dex over all intervals and metallicities:
 
-| Step (M☉) | log L | log R | log T_eff | log L, τ > 0 | log R, τ > 0 | log T_eff, τ > 0 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0.2 (the table) | 0.031 | 0.007 | 0.005 | 0.024 | 0.007 | 0.005 |
-| 0.4 | 0.021 | 0.011 | 0.005 | 0.017 | 0.011 | 0.005 |
-| 1.0 | 0.021 | 0.018 | 0.009 | 0.017 | 0.018 | 0.009 |
-| 2.0 | 0.044 | 0.022 | 0.011 | 0.038 | 0.022 | 0.010 |
+| Step (M☉) | log L | log R | log T_eff |
+| --- | --- | --- | --- |
+| 0.2 (the table) | 0.0080 | 0.0094 | 0.0060 |
+| 0.4 | 0.0113 | 0.0139 | 0.0090 |
+| 0.6 | 0.0099 | 0.0162 | 0.0091 |
+| 1.0 | 0.0155 | 0.0180 | 0.0093 |
+| 2.0 | 0.0221 | 0.0223 | 0.0100 |
 
-At 0.2 M☉ steps, log R and log T_eff stay under 0.01 dex. log L does
-not, and its error does not fall with the step either.
-
-- Every log L error above 0.01 dex is at τ ≤ 0.03: the ZAMS row and the
-  start of the main sequence, where the luminosity is still settling after
-  the ¹²C transient. It differs from run to run by up to 0.03 dex.
-- From τ = 0.05 on, log L is within 0.008 dex.
-
-Per interval, the 0.2 M☉ steps give at most 0.0067 dex in log R
-(2.0-2.2 M☉) and 0.0045 dex in log T_eff.
+At 0.2 M☉ steps all three stay under 0.01 dex. The worst log L errors
+are at τ = 1, the end of the main sequence.
 
 ## The Sun: YREC against B23
 
 1 M☉, [Fe/H] 0, the stored model nearest 4.57 Gyr (model 480, 4.5728
-Gyr, xc_frac 0.5289): R = 0.9995 R☉ (IAU nominal radius), L =
+Gyr, xc_frac 0.5290): R = 0.9995 R☉ (IAU nominal radius), L =
 0.9982 L☉, T_eff = 5770.9 K, ρ_c = 145.4 g cm⁻³, T_c = 1.535 × 10⁷ K.
 Base of the convective envelope: 0.7262 R as a layer bound (halfway
 between shells), 0.7272 R as the first convective shell; helioseismology
@@ -210,7 +230,7 @@ gives 0.713 (Basu & Antia 1997, MNRAS 287, 189).
 Reference: B23 standard solar model `struct+nu_SF3_MB22m.dat`
 (Herrera & Serenelli 2023, Zenodo 10174172, CC-BY 4.0): ρ_c = 150.0
 g cm⁻³, T_c = 1.558 × 10⁷ K. The YREC column is what a reader of the
-table gets: the two snapshots that bracket xc_frac 0.5289 (0.688 and
+table gets: the two snapshots that bracket xc_frac 0.5290 (0.688 and
 0.476), interpolated linearly in xc_frac, then linear in r. It differs
 from the stored model's own shells by at most 0.6 % in ρ, P and T. The
 last two columns compare the fusion share with B23's L(r) divided by its
