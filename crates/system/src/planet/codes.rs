@@ -38,10 +38,32 @@ pub(crate) const WATER_BEYOND_LAW: &str = "planet.water-beyond-law";
 /// Dry mass of a planet whose water is beyond the water laws, `(1 - w) M`:
 /// the mass of the condensed planet that its bulk describes.
 pub(crate) const DRY_MASS: &str = "planet.dry-mass";
+/// Mass of an enveloped planet without its envelope, `(1 - f) M`: the
+/// condensed core a mini-Neptune's structure is built for, its water
+/// included as a share of it.
+pub(crate) const MASS_WITHOUT_ENVELOPE: &str = "planet.mass-without-envelope";
+/// Bolometric flux the planet receives from all its stars, the sum of
+/// every source's flux: the flux the envelope and giant tables read.
+pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";
+/// Mass of a mini-Neptune's hydrogen-helium envelope, `f M`.
+pub(crate) const ENVELOPE_MASS: &str = "planet.envelope.mass";
+/// Thickness of a mini-Neptune's envelope, read in the Lopez & Fortney 2014
+/// tables, added to the radius of its core.
+pub(crate) const ENVELOPE_THICKNESS: &str = "planet.envelope.thickness";
+/// Radius of a giant's ice-rock core, Fortney et al. 2007 Eq. 7.
+pub(crate) const GIANT_CORE_RADIUS: &str = "planet.giant.core-radius";
+/// Internal luminosity of a giant, read with its radius in the Fortney et
+/// al. 2007 tables.
+pub(crate) const GIANT_LUMINOSITY: &str = "planet.giant.internal-luminosity";
+/// Radius where a giant's hydrogen turns metallic: where the index-one
+/// polytrope of the planet reaches the metallic pressure.
+pub(crate) const METALLIC_RADIUS: &str = "planet.giant.metallic-radius";
 /// The structure node: the central pressure that the integration finds
 /// for the layers, which every radius and shell of the structure follows.
 pub(crate) const CENTRAL_PRESSURE: &str = "planet.structure.central-pressure";
-/// Radius of the planet, from the integrated structure.
+/// Radius of the planet: from the integrated structure (a rocky planet or
+/// a mini-Neptune's core), the core plus the envelope's thickness (a
+/// mini-Neptune), or the giant tables.
 pub(crate) const RADIUS: &str = "planet.radius";
 /// Surface gravity, `G M / R^2`.
 pub(crate) const SURFACE_GRAVITY: &str = "planet.surface-gravity";
@@ -53,15 +75,18 @@ pub(crate) const LAYER_OUTER_RADIUS: &str = "planet.layer.outer-radius";
 pub(crate) const LAYER_MASS: &str = "planet.layer.mass";
 /// Material of a shell.
 pub(crate) const LAYER_MATERIAL: &str = "planet.layer.material";
-/// State of the matter of a shell, set by the engine: the mantle is solid
-/// until the temperatures of the planet interior plan's second pull
-/// request.
+/// State of the matter of a shell, set by the engine until the
+/// temperatures of the planet interior plan's later pull requests: the
+/// mantle and a giant's ice-rock core are solid, an envelope without a
+/// metallic layer is gas.
 pub(crate) const LAYER_STATE: &str = "planet.layer.state";
 /// State of the matter of a shell read from the phase of its equation of
 /// state, which pressure alone selects: the core's liquid outer and solid
 /// inner phases switch at PREM's inner-core boundary pressure (the
 /// Valencia et al. 2006 fit), and the water's liquid and ices at their
-/// phase boundaries on its isotherm or melting curve. Not a thermal state:
+/// phase boundaries on its isotherm or melting curve, and a giant's
+/// hydrogen liquid (metallic) below the metallic pressure and gas above
+/// it. Not a thermal state:
 /// the core's comes with the temperatures of a later pull request.
 pub(crate) const LAYER_STATE_BY_PRESSURE: &str = "planet.layer.state-by-pressure";
 /// Radiogenic heating power.

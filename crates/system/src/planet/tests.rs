@@ -2,6 +2,7 @@
 
 use super::codes;
 use super::draws::{self, Drawn, LABELS, Labels};
+use super::enveloped::Body;
 use super::heat::{self, ENVELOPED_MIN_ENVELOPE, ICY_MIN_WATER};
 use super::interior::{Interior, Water, interior};
 use crate::Trial;
@@ -12,8 +13,8 @@ use science::units::{
     EarthFlux, JoulePerSquareMetre, SolarLuminosity, SolarMass, WattPerSquareMetre,
 };
 use timeline::{
-    BandLight, Code, Material, NodeValueOf, Orbit, Origin, Provenance, Seed, StellarSource,
-    StellarSources, Trace, Traced,
+    BandLight, Code, Material, MatterState, NodeValueOf, Orbit, Origin, Provenance, Seed,
+    StellarSource, StellarSources, Trace, Traced,
 };
 
 /// Source: the 1901 definition of standard gravity by the 3rd CGPM,
@@ -308,6 +309,14 @@ fn the_ice_line_decides_a_water_world() {
     }
 }
 
+/// The interior of a planet without an envelope.
+fn rocky_of(body: &Body) -> &Interior {
+    match body {
+        Body::Rocky(interior) => interior,
+        _ => panic!("not a rocky body"),
+    }
+}
+
 /// The shells of `interior` made of water or ice.
 fn water_shells(interior: &Interior) -> usize {
     interior
@@ -331,14 +340,15 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
     let r = interior.structure.radius.0;
     assert!((r / EARTH_MEAN_RADIUS.0 - 1.0).abs() < 0.01, "radius {r}");
     let g = interior.bulk.surface_gravity.value().0;
     assert!((g / STANDARD_GRAVITY - 1.0).abs() < 0.01, "gravity {g}");
     // Earth's bulk water is bound in its mantle: no layer of its own.
     assert_eq!(interior.water, Water::InMantle);
-    assert_eq!(water_shells(&interior), 0);
+    assert_eq!(water_shells(interior), 0);
     assert!(!interior.shells.is_empty());
 
     // The radius and every shell derive from the structure node, which
@@ -403,9 +413,10 @@ fn a_hot_dry_planet_builds() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
     assert_eq!(interior.water, Water::InMantle);
-    assert_eq!(water_shells(&interior), 0);
+    assert_eq!(water_shells(interior), 0);
 }
 
 #[test]
@@ -422,8 +433,9 @@ fn a_hot_water_world_keeps_its_water_beyond_the_law() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
-    assert_eq!(water_shells(&interior), 0);
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
+    assert_eq!(water_shells(interior), 0);
     let Water::BeyondLaw { mass, .. } = interior.water else {
         panic!("{:?}", interior.water);
     };
@@ -454,11 +466,12 @@ fn a_temperate_water_world_has_a_water_layer() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
     let Water::Layer { mass, temperature } = interior.water else {
         panic!("{:?}", interior.water);
     };
-    assert!(water_shells(&interior) > 0);
+    assert!(water_shells(interior) > 0);
     let structure = trace.node(interior.central_pressure.node()).unwrap();
     let Origin::Derived { from } = &structure.origin else {
         panic!("the structure node is derived");
@@ -485,10 +498,11 @@ fn heat_nodes_point_at_their_inputs() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
     let heat = heat::heat(
         &t,
-        &interior,
+        &body,
         &drawn.radiogenic_abundance,
         &drawn.envelope_fraction,
         &mut trace,
@@ -531,10 +545,10 @@ fn a_circular_orbit_has_no_tide() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
     let heat = heat::heat(
         &t,
-        &interior,
+        &body,
         &drawn.radiogenic_abundance,
         &drawn.envelope_fraction,
         &mut trace,
@@ -594,7 +608,8 @@ fn central_pressure_cites_every_input() {
             0.0,
             None,
         );
-        let interior = interior(&t, &drawn, &mut trace).unwrap();
+        let body = interior(&t, &drawn, &mut trace).unwrap();
+        let interior = rocky_of(&body);
         let from = derived_from(&trace, interior.central_pressure.node());
         for node in [
             t.mass.node(),
@@ -633,7 +648,8 @@ fn the_mantle_state_is_a_constant() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
     let mantle: Vec<_> = interior
         .shells
         .iter()
@@ -665,10 +681,10 @@ fn water_beyond_the_law_is_not_icy() {
             envelope,
             None,
         );
-        let interior = interior(&t, &drawn, &mut trace).unwrap();
+        let body = interior(&t, &drawn, &mut trace).unwrap();
         let heat = heat::heat(
             &t,
-            &interior,
+            &body,
             &drawn.radiogenic_abundance,
             &drawn.envelope_fraction,
             &mut trace,
@@ -677,7 +693,7 @@ fn water_beyond_the_law_is_not_icy() {
         let expected = |kind| {
             tidal(
                 Kilogram::from(*t.sources.primary().mass.value()),
-                Metre::from(*interior.bulk.radius.value()),
+                Metre::from(*body.bulk().radius.value()),
                 Metre(t.orbit.semi_major_axis.value().0 * ASTRONOMICAL_UNIT.0),
                 t.orbit.eccentricity.value().get(),
                 k2_over_q(kind),
@@ -712,7 +728,8 @@ fn water_beyond_the_law_bulk_is_the_condensed_planet() {
         0.0,
         None,
     );
-    let interior = interior(&t, &drawn, &mut trace).unwrap();
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
     let dry = (1.0 - WATER_WORLD_FRACTION) * t.mass.value().0;
     assert!((interior.bulk.mass.value().0 / dry - 1.0).abs() < 1e-9);
     let node = trace.node(interior.bulk.mass.node()).unwrap();
@@ -734,4 +751,274 @@ fn water_beyond_the_law_bulk_is_the_condensed_planet() {
         trace.node(mass.node()).unwrap().code,
         Code::of(codes::WATER_BEYOND_LAW)
     );
+}
+
+/// Source: Jupiter's and Neptune's equatorial radii at 1 bar, 71 492 km
+/// and 24 764 km (NASA fact sheets; study `giants-and-envelopes.md` §1.6).
+const JUPITER_RADIUS_KM: f64 = 71_492.0;
+const NEPTUNE_RADIUS_KM: f64 = 24_764.0;
+
+/// Source: IAU 2015 nominal equatorial Earth radius, 6378.1 km, the unit
+/// of `EarthRadius`.
+const EARTH_RADIUS_KM: f64 = 6_378.1;
+
+/// Source: Jupiter's mass, 318 M_E, its distance, 5.2 au, and the age of
+/// the solar system as Fortney et al. 2007 Table 4 takes it, 4.5 Gyr (study
+/// §1.6); a heavy-element core of 10 M_E, inside Wahl et al. 2017's 7 to
+/// 25 M_E (study §5.3).
+const JUPITER: (f64, f64, f64, f64) = (318.0, 5.2, 4.5, 10.0);
+
+/// Source: Neptune's mass, 17.1 M_E, at 30 au, with a 15 % envelope, the
+/// Lopez & Fortney 2014 column whose radius the study compares (§4).
+const NEPTUNE: (f64, f64, f64) = (17.1, 30.0, 0.15);
+
+/// Source: the study's comparison for Neptune (§4): the Lopez & Fortney
+/// 2014 radius lies 5 % below to 15 % above Neptune's.
+const NEPTUNE_RADIUS_RANGE: (f64, f64) = (0.95, 1.15);
+
+/// Definition: Review Focus 2's continuity at 1 M_E, where the envelope
+/// table is read at its lowest mass: radii within 2 %.
+const CONTINUITY: f64 = 0.02;
+
+fn km(radius: science::units::EarthRadius) -> f64 {
+    radius.0 * EARTH_RADIUS_KM
+}
+
+/// A Jupiter trial: 318 M_E at 5.2 au, 4.5 Gyr, heavy mass 10 M_E.
+fn jupiter(trace: &mut Trace) -> (Trial, Drawn) {
+    let (mass, au, age, heavy) = JUPITER;
+    let mut t = trial(trace, 1, mass, au, 0.0);
+    t.age = leaf(trace, "test.age", Gyr(age));
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        EARTH_CORE_MASS_FRACTION,
+        EARTH_WATER_FRACTION,
+        0.0,
+        None,
+        1.0 - heavy / mass,
+        Some(EarthMass(heavy)),
+    );
+    (t, drawn)
+}
+
+#[test]
+fn a_jupiter_trial() {
+    use science::giants::giant;
+    let mut trace = Trace::new();
+    let (t, drawn) = jupiter(&mut trace);
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let r = km(*body.bulk().radius.value());
+    assert!((r / JUPITER_RADIUS_KM - 1.0).abs() < 0.03, "radius {r} km");
+    let layers: Vec<_> = body
+        .layers()
+        .iter()
+        .map(|l| (*l.material.value(), *l.state.value()))
+        .collect();
+    assert_eq!(layers.len(), 3, "{layers:?}");
+    assert_eq!(layers[0].0, Material::RockIce);
+    assert_eq!(layers[1], (Material::Envelope, MatterState::Liquid));
+    assert_eq!(layers[2], (Material::Envelope, MatterState::Gas));
+    let heat = heat::heat(
+        &t,
+        &body,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        &mut trace,
+    )
+    .unwrap();
+    let (mass, au, age, heavy) = JUPITER;
+    let table = giant(
+        EarthMass(mass),
+        EarthMass(heavy),
+        Gyr(age),
+        EarthFlux(1.0 / (au * au)),
+    )
+    .unwrap();
+    assert_eq!(*heat.secular.value(), table.luminosity);
+    assert_eq!(heat.radiogenic.value().0, 0.0);
+}
+
+#[test]
+fn a_neptune_trial() {
+    let (mass, au, envelope) = NEPTUNE;
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, mass, au, 0.0);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        EARTH_WATER_FRACTION,
+        0.0,
+        None,
+        envelope,
+        None,
+    );
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let ratio = km(*body.bulk().radius.value()) / NEPTUNE_RADIUS_KM;
+    let (low, high) = NEPTUNE_RADIUS_RANGE;
+    assert!(ratio >= low && ratio <= high, "radius ratio {ratio}");
+    let Body::MiniNeptune { core, .. } = &body else {
+        panic!("a mini-Neptune");
+    };
+    let layers = body.layers();
+    // The core's shells, then one gas envelope.
+    assert_eq!(layers.len(), core.shells.len() + 1);
+    let last = layers.last().unwrap();
+    assert_eq!(
+        (*last.material.value(), *last.state.value()),
+        (Material::Envelope, MatterState::Gas)
+    );
+    assert!(
+        layers[..layers.len() - 1]
+            .iter()
+            .all(|l| *l.material.value() != Material::Envelope)
+    );
+    // The core holds (1 - f) M.
+    let core_mass = core.bulk.mass.value().0;
+    assert!((core_mass / ((1.0 - envelope) * mass) - 1.0).abs() < 1e-12);
+    heat::heat(
+        &t,
+        &body,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        &mut trace,
+    )
+    .unwrap();
+}
+
+#[test]
+fn earth_is_unchanged_without_an_envelope() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 1.0, 1.0, 0.0167);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        EARTH_WATER_FRACTION,
+        0.0,
+        Some(false),
+        0.0,
+        None,
+    );
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let interior = rocky_of(&body);
+    let r = interior.structure.radius.0;
+    assert!((r / EARTH_MEAN_RADIUS.0 - 1.0).abs() < 0.01, "radius {r}");
+    let g = body.bulk().surface_gravity.value().0;
+    assert!((g / STANDARD_GRAVITY - 1.0).abs() < 0.01, "gravity {g}");
+    assert_eq!(body.bulk().mass, t.mass);
+    assert_eq!(body.layers().len(), interior.shells.len());
+}
+
+#[test]
+fn a_negative_envelope_thickness_is_an_error() {
+    use super::enveloped::giant_envelope_thickness;
+    use super::interior::InteriorError;
+    use science::units::EarthRadius;
+    // Definition: radii in Earth radii, a core equal to and above the
+    // total, and below it.
+    let core = EarthRadius(4.0);
+    assert_eq!(
+        giant_envelope_thickness(core, core),
+        Err(InteriorError::NoEnvelope)
+    );
+    assert_eq!(
+        giant_envelope_thickness(EarthRadius(3.0), core),
+        Err(InteriorError::NoEnvelope)
+    );
+    assert_eq!(
+        giant_envelope_thickness(EarthRadius(11.0), core),
+        Ok(EarthRadius(7.0))
+    );
+}
+
+#[test]
+fn regime_edges_are_finite_and_1_earth_mass_is_continuous() {
+    // Review Focus 2 and 3: each regime edge, drawn by the engine, gives a
+    // finite radius and the model of its side.
+    for mass in [0.099, 0.101, 0.99, 1.01, 19.9, 20.1] {
+        for seed in 0..5 {
+            let mut trace = Trace::new();
+            let t = trial(&mut trace, seed, mass, 1.0, 0.0);
+            let drawn = draws::draw(t.seed, &t, &mut trace).unwrap();
+            let body = interior(&t, &drawn, &mut trace)
+                .unwrap_or_else(|e| panic!("{mass} M_E, seed {seed}: {e}"));
+            let r = body.bulk().radius.value().0;
+            assert!(r.is_finite() && r > 0.0, "{mass} M_E: radius {r}");
+            match (&body, mass) {
+                (Body::Rocky(_), m) if m < 0.1 => {}
+                (Body::MiniNeptune { .. }, m) if (0.1..20.0).contains(&m) => {}
+                (Body::Giant(_), m) if m >= 20.0 => {}
+                _ => panic!("{mass} M_E: wrong model"),
+            }
+        }
+    }
+    let radius = |mass: f64| {
+        let mut trace = Trace::new();
+        let t = trial(&mut trace, 1, mass, 1.0, 0.0);
+        let drawn = Drawn::fixed(
+            &t,
+            &mut trace,
+            EARTH_CORE_MASS_FRACTION,
+            EARTH_WATER_FRACTION,
+            0.0,
+            Some(false),
+            0.01,
+            None,
+        );
+        interior(&t, &drawn, &mut trace)
+            .unwrap()
+            .bulk()
+            .radius
+            .value()
+            .0
+    };
+    let (below, above) = (radius(0.99), radius(1.01));
+    assert!(
+        (above / below - 1.0).abs() < CONTINUITY,
+        "{below} -> {above}"
+    );
+}
+
+#[test]
+fn the_flux_record_cites_every_source() {
+    for giant in [false, true] {
+        let mut trace = Trace::new();
+        let (mut t, drawn) = if giant {
+            jupiter(&mut trace)
+        } else {
+            let t = trial(&mut trace, 1, 5.0, 1.0, 0.0);
+            let d = Drawn::fixed(
+                &t,
+                &mut trace,
+                EARTH_CORE_MASS_FRACTION,
+                EARTH_WATER_FRACTION,
+                0.0,
+                Some(false),
+                0.01,
+                None,
+            );
+            (t, d)
+        };
+        // A second star, a copy of the first with its own nodes.
+        let mut stars: Vec<StellarSource> = t.sources.iter().cloned().collect();
+        let mut second = stars[0].clone();
+        second.flux = leaf(&mut trace, "test.flux", *second.flux.value());
+        stars.push(second);
+        t.sources = StellarSources::new(stars).unwrap();
+        let body = interior(&t, &drawn, &mut trace).unwrap();
+        // The node the envelope or the giant's radius reads the flux from.
+        let read = match &body {
+            Body::MiniNeptune { envelope, .. } => envelope.thickness.node(),
+            Body::Giant(record) => record.bulk.radius.node(),
+            Body::Rocky(_) => panic!("an enveloped planet"),
+        };
+        let flux = derived_from(&trace, read)
+            .into_iter()
+            .find(|&n| trace.node(n).unwrap().code == Code::of(codes::BOLOMETRIC_FLUX))
+            .expect("a flux input");
+        let every: Vec<_> = t.sources.iter().map(|s| s.flux.node()).collect();
+        assert_eq!(derived_from(&trace, flux), every);
+    }
 }

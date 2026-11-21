@@ -32,8 +32,9 @@
 //! The first slice of the chain: [`draws`] draws a planet's composition
 //! from sub-seeds of the seed it is given (`chain`'s `seed`: the trial
 //! seed for `class_of`, the body seed for `model`), [`interior`] builds its
-//! structure with the `science` integrator, [`heat`] computes its internal
-//! heat.
+//! structure with the `science` integrator (a planet without an envelope,
+//! or a mini-Neptune's core), [`enveloped`] the mini-Neptunes and giants
+//! around it, [`heat`] computes its internal heat.
 //! Every value is recorded in the system's cause `Trace`, with the codes
 //! of [`codes`].
 
@@ -54,6 +55,11 @@ mod draws;
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
 mod envelope;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod enveloped;
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")

@@ -1,6 +1,10 @@
 //! The interior of a planet: its layers from the composition, the
 //! hydrostatic structure from `science`, every value recorded in the trace.
 //!
+//! [`interior`] dispatches on the envelope: a planet without one is
+//! [`rocky`]; an enveloped planet (a mini-Neptune or a giant) is built in
+//! [`super::enveloped`], a mini-Neptune's core by [`rocky`] too.
+//!
 //! The drawn water fraction is the planet's bulk water. A dry planet's
 //! water stays in its mantle (hydrated silicate; its ocean comes from
 //! outgassing, in the planet interior plan's second pull request). Only a
@@ -18,12 +22,15 @@
 
 use super::codes;
 use super::draws::Drawn;
+use super::enveloped::{Body, enveloped};
 use crate::Trial;
 use science::constants::GRAVITATIONAL_CONSTANT;
+use science::envelope::EnvelopeError;
 use science::eos::{EosError, MaterialEos, core_alloy, mantle, water, water_on_melting_curve};
+use science::giants::GiantError;
 use science::structure::{LayerSpec, Structure, StructureError, integrate};
 use science::units::{
-    EarthRadius, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
+    EarthMass, EarthRadius, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
     MetrePerSecondSquared, Pascal,
 };
 use science::water::V_VI_LIQUID_TEMPERATURE;
@@ -90,6 +97,11 @@ pub(crate) enum InteriorError {
     /// A gas giant of this mass (M_E) has no heavy-element mass in the
     /// range its tables and Thorngren et al. 2016's fit share.
     NoHeavyMassRange(f64),
+    /// A giant whose total radius is not above its core's: no room for an
+    /// envelope.
+    NoEnvelope,
+    Giant(GiantError),
+    Envelope(EnvelopeError),
 }
 
 impl std::fmt::Display for InteriorError {
@@ -100,6 +112,9 @@ impl std::fmt::Display for InteriorError {
             Self::Eos(error) => write!(f, "interior-eos({error})"),
             Self::NotAFraction(error) => write!(f, "interior-{error}"),
             Self::NoHeavyMassRange(mass) => write!(f, "interior-no-heavy-mass-range({mass})"),
+            Self::NoEnvelope => write!(f, "interior-no-envelope"),
+            Self::Giant(error) => write!(f, "interior-{error}"),
+            Self::Envelope(error) => write!(f, "interior-{error}"),
         }
     }
 }
@@ -124,6 +139,18 @@ impl From<EosError> for InteriorError {
     }
 }
 
+impl From<GiantError> for InteriorError {
+    fn from(error: GiantError) -> Self {
+        Self::Giant(error)
+    }
+}
+
+impl From<EnvelopeError> for InteriorError {
+    fn from(error: EnvelopeError) -> Self {
+        Self::Envelope(error)
+    }
+}
+
 /// What a layer is, to name its shells.
 #[derive(Clone, Copy)]
 enum Kind {
@@ -135,8 +162,29 @@ enum Kind {
     },
 }
 
-/// Builds the interior of `trial` from the composition `drawn`, integrated
-/// at zero surface pressure. Layers from the centre out:
+/// Builds the body of `trial` from the composition `drawn`: [`rocky`] at
+/// the trial's mass when the planet has no envelope, [`enveloped`]
+/// otherwise.
+///
+/// # Errors
+///
+/// The errors of [`rocky`] and [`enveloped`].
+pub(crate) fn interior(
+    trial: &Trial,
+    drawn: &Drawn,
+    trace: &mut Trace,
+) -> Result<Body, InteriorError> {
+    if drawn.envelope_fraction.value().get() == 0.0 {
+        Ok(Body::Rocky(rocky(&trial.mass, drawn, trial, trace)?))
+    } else {
+        enveloped(trial, drawn, trace)
+    }
+}
+
+/// Builds the condensed interior of `mass` (the trial's mass, or a
+/// mini-Neptune's mass without its envelope) from the composition `drawn`,
+/// integrated at zero surface pressure. Layers from the centre out, `M`
+/// being `mass`:
 ///
 /// - Fe-alloy core, `cmf (1 - w) M`;
 /// - rock mantle, `(1 - cmf)(1 - w) M`, plus `w M` for a dry planet (its
@@ -158,16 +206,17 @@ enum Kind {
 ///
 /// The errors of the structure, of the equations of state and of the
 /// trace.
-pub(crate) fn interior(
-    trial: &Trial,
+pub(crate) fn rocky(
+    mass: &Traced<EarthMass>,
     drawn: &Drawn,
+    trial: &Trial,
     trace: &mut Trace,
 ) -> Result<Interior, InteriorError> {
-    let total = Kilogram::from(*trial.mass.value()).0;
+    let total = Kilogram::from(*mass.value()).0;
     let cmf = drawn.core_mass_fraction.value().get();
     let w = drawn.water_fraction.value().get();
     let fractions = [
-        trial.mass.node(),
+        mass.node(),
         drawn.core_mass_fraction.node(),
         drawn.water_fraction.node(),
     ];
@@ -249,11 +298,11 @@ pub(crate) fn interior(
     let bulk_mass = if matches!(water_state, Water::BeyondLaw { .. }) {
         trace.record(
             Code::of(codes::DRY_MASS),
-            science::units::EarthMass::from(Kilogram(condensed)),
-            &[trial.mass.node(), drawn.water_fraction.node()],
+            EarthMass::from(Kilogram(condensed)),
+            &[mass.node(), drawn.water_fraction.node()],
         )?
     } else {
-        trial.mass
+        *mass
     };
     let radius = trace.record(
         Code::of(codes::RADIUS),
