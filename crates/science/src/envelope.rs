@@ -82,8 +82,11 @@ impl std::error::Error for EnvelopeError {}
 /// [`MIN_MASS`] (see `mass_read`); an envelope below [`LOWEST_TABULATED`]
 /// scales the thickness at [`LOWEST_TABULATED`] down to zero (see
 /// `below_the_tables`). The thickness is never negative: at every node the
-/// table radius exceeds the core radius, and the core radius is convex in
-/// `log mass`.
+/// table radius exceeds the core radius; the core radius is convex in
+/// `log mass`, so it stays under its interpolation along that axis; along
+/// the envelope axis it is concave in `log f` and may exceed its
+/// interpolation, by less than the least margin of a node's radius over its core,
+/// 0.0053 R⊕ (20 M⊕, 0.01 %, 0.1 F⊕, 1 Gyr).
 ///
 /// # Errors
 ///

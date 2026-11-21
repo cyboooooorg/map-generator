@@ -8,13 +8,15 @@ pub(crate) const CORE_MASS_FRACTION: &str = "planet.core-mass-fraction";
 pub(crate) const FORMED_BEYOND_ICE_LINE: &str = "planet.formed-beyond-ice-line";
 /// Whether the planet migrated in from beyond the ice line, drawn.
 pub(crate) const MIGRATED: &str = "planet.migrated";
-/// Water mass fraction of the planet (bulk water), drawn: an icy
-/// fraction for a water world, a dry one otherwise.
+/// Water mass fraction of the planet without its envelope (bulk water),
+/// drawn: an icy fraction for a water world, a dry one otherwise. A planet
+/// with an envelope fraction `f` holds `w (1 - f) M` of water.
 pub(crate) const WATER_FRACTION: &str = "planet.water-fraction";
 /// Radiogenic abundance of the planet in dex of Earth's, drawn.
 pub(crate) const RADIOGENIC_ABUNDANCE: &str = "planet.radiogenic-abundance";
-/// Primordial hydrogen-helium envelope mass fraction of the planet, drawn
-/// by mass regime (a gas giant's is `1 - heavy-element mass / M`).
+/// Primordial hydrogen-helium envelope mass fraction of the planet: drawn
+/// by mass regime below 20 M_E; a gas giant's is derived from its mass and
+/// its heavy-element mass, `1 - Mz / M`.
 pub(crate) const ENVELOPE_FRACTION: &str = "planet.envelope-fraction";
 /// Total heavy-element mass of a gas giant, drawn around the Thorngren et
 /// al. 2016 fit within the tabulated cores.
@@ -30,8 +32,8 @@ pub(crate) const CORE_MASS: &str = "planet.core-mass";
 pub(crate) const MANTLE_MASS: &str = "planet.mantle-mass";
 /// Mass of a water world's water layer, `w M`.
 pub(crate) const WATER_LAYER_MASS: &str = "planet.water-layer-mass";
-/// Mass of a hot water world's water, `w M`, recorded apart from the
-/// condensed planet: too hot for the water laws (355 K and above), it
+/// Mass of a hot water world's water, `w (1 - f) M` (`w M` without an
+/// envelope), recorded apart from the condensed planet: too hot for the water laws (355 K and above), it
 /// becomes the steam envelope of the planet interior plan's second pull
 /// request.
 pub(crate) const WATER_BEYOND_LAW: &str = "planet.water-beyond-law";
@@ -46,6 +48,14 @@ pub(crate) const MASS_WITHOUT_ENVELOPE: &str = "planet.mass-without-envelope";
 /// Radius of a mini-Neptune's core, the planet without its envelope, from
 /// its integrated structure.
 pub(crate) const RADIUS_WITHOUT_ENVELOPE: &str = "planet.radius-without-envelope";
+/// The age the giant tables were read at, when it differs from the age
+/// asked: clamped to the tables' 1 Myr to 10 Gyr, or an older age where a
+/// corner of the interpolation has no row. Derived from the age asked.
+pub(crate) const TABLE_AGE_USED: &str = "planet.table-age-used";
+/// The mass the giant tables were read at, when it differs from the mass
+/// asked: their top mass, 3 593.81 M_E, for a heavier giant. Derived from
+/// the mass asked.
+pub(crate) const TABLE_MASS_USED: &str = "planet.table-mass-used";
 /// Bolometric flux the planet receives from all its stars, the sum of
 /// every source's flux: the flux the envelope and giant tables read.
 pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";
@@ -82,7 +92,9 @@ pub(crate) const LAYER_MATERIAL: &str = "planet.layer.material";
 /// State of the matter of a shell, set by the engine until the
 /// temperatures of the planet interior plan's later pull requests: the
 /// mantle and a giant's ice-rock core are solid, an envelope without a
-/// metallic layer is gas.
+/// metallic layer is gas. A giant's core is a calibration, a placeholder:
+/// the state of a dilute ice-rock core at tens of Mbar is not modelled
+/// until the temperature profile arrives (`enveloped::GIANT_CORE_STATE`).
 pub(crate) const LAYER_STATE: &str = "planet.layer.state";
 /// State of the matter of a shell read from the phase of its equation of
 /// state, which pressure alone selects: the core's liquid outer and solid

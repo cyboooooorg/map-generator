@@ -45,10 +45,13 @@ const ICE_MASS_FRACTION: f64 = 0.5;
 /// Each pair is `[x1, x0]`, in the order a, b, c.
 const EQ_7: [[f64; 2]; 3] = [[0.0912, 0.1603], [0.3330, 0.7387], [0.4639, 1.1193]];
 
-/// Definition: the age after which [`core_bounds`] asks every distance to
-/// bracket the mass. The 0.1 Gyr block itself is left out: at 0.02 au, a
-/// 10 M⊕ core starts at 21.54 M⊕ there, and such a missing corner falls
-/// back to the next age (see [`giant`]).
+/// Calibration: the age after which [`core_bounds`] asks every distance to
+/// bracket the mass, a modelling choice. The 0.1 Gyr block itself is left
+/// out: at 0.02 au, a 10 M⊕ core starts at 21.54 M⊕ there, and such a
+/// missing corner falls back to the next age (see [`giant`]). Fortney et
+/// al. 2007 give no age from which their grid is complete; the page
+/// [What are planets made of?](../../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
+/// section on giants, says why.
 const CORE_BOUNDS_AFTER_AGE: Gyr = Gyr(0.1);
 
 /// A giant planet read in the tables.

@@ -7,6 +7,10 @@
 //! giants up to 20 M_E, and from there a gas giant's heavy-element mass,
 //! the envelope being the rest. The draw is the envelope before any loss
 //! after the disc disperses.
+//!
+//! The heavy-element mass is capped by the highest core of the giant
+//! tables, 100 M_E: from about 17.4 M_J, where the fit's two-sigma band
+//! lies wholly above it, a giant's heavy-element mass is 100 M_E.
 
 use super::interior::InteriorError;
 use crate::random::uniform;
@@ -76,7 +80,11 @@ const HEAVY_MASS_SPREAD: f64 = 1.82;
 /// fit, a factor `1.82^2` either side. The paper gives the 1-sigma scatter
 /// and no extremes. Searched: a published range of heavy-element masses
 /// per planet mass; none found (`draw-bounds.md` section 4d and
-/// Decisions, 2).
+/// Decisions, 2). Where the band's low end exceeds the highest tabulated
+/// core (100 M_E, from about 17.4 M_J, where `57.9 (M/M_J)^0.61 / 1.82^2`
+/// reaches 100), the heavy-element mass is that core, both ends of the
+/// draw: the giant tables have no heavier core, and the draw never fails
+/// inside the fit's range (up to 20 M_J).
 const HEAVY_MASS_SIGMAS: i32 = 2;
 
 /// What the envelope draw returns.
@@ -101,7 +109,8 @@ pub(crate) struct EnvelopeDraw {
 /// - 10 to 20 M_E: uniform from 0.09 to 0.20;
 /// - from 20 M_E: heavy-element mass log-uniform within a factor `1.82^2`
 ///   of Thorngren et al. 2016's fit, inside the cores the giant tables
-///   cover; the envelope is `1 - Mz / M`.
+///   cover (the highest core when the band lies above it); the envelope
+///   is `1 - Mz / M`.
 pub(crate) fn envelope_fraction(
     seed: Seed,
     mass: EarthMass,
@@ -150,14 +159,19 @@ fn log_uniform(u: f64, low: f64, high: f64) -> f64 {
 
 /// A gas giant's heavy-element mass: log-uniform within
 /// `HEAVY_MASS_SPREAD^HEAVY_MASS_SIGMAS` of Thorngren et al. 2016's fit,
-/// intersected with the cores of the giant tables.
+/// intersected with the cores of the giant tables; the highest core when
+/// the band's low end lies above it (see [`HEAVY_MASS_SIGMAS`]).
 fn heavy_mass(u: f64, mass: EarthMass) -> Result<EarthMass, InteriorError> {
     let (core_low, core_high) = core_bounds(mass).ok_or(InteriorError::NoHeavyMassRange(mass.0))?;
     let jupiter = JUPITER_MASS_PARAMETER / EARTH_MASS_PARAMETER;
     let fit = HEAVY_MASS_AT_ONE_JUPITER * (mass.0 / jupiter).powf(HEAVY_MASS_EXPONENT);
     let band = HEAVY_MASS_SPREAD.powi(HEAVY_MASS_SIGMAS);
+    let ceiling = core_high.0.min(mass.0);
+    if fit / band >= ceiling {
+        return Ok(EarthMass(ceiling));
+    }
     let low = (fit / band).max(core_low.0);
-    let high = (fit * band).min(core_high.0).min(mass.0);
+    let high = (fit * band).min(ceiling);
     if low >= high {
         return Err(InteriorError::NoHeavyMassRange(mass.0));
     }

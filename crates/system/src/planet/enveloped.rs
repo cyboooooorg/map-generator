@@ -40,6 +40,17 @@ const METALLIC_MIN_MASS: EarthMass = EarthMass(50.0);
 /// which an index-one polytrope holds; none found (same page section).
 const METALLIC_MAX_CORE_SHARE: f64 = 0.25;
 
+/// Calibration: the state of a giant's ice-rock core, solid. A
+/// placeholder: the state of a dilute ice-rock core at tens of Mbar is not
+/// modelled until the temperature profile of the planet interior plan's
+/// later pull requests arrives (the same convention as the imposed solid
+/// mantle of a rocky planet). Searched: a published state of a giant's
+/// core usable without a temperature profile; none found (Jupiter's may be
+/// diluted over a large share of its radius, Wahl et al. 2017). The page
+/// [What are planets made of?](../../../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
+/// section on giants, says what was searched.
+const GIANT_CORE_STATE: MatterState = MatterState::Solid;
+
 /// A planet's body: what [`super::interior::interior`] builds.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Body {
@@ -47,7 +58,9 @@ pub(crate) enum Body {
     Rocky(Interior),
     /// A condensed core under a hydrogen-helium envelope.
     MiniNeptune {
-        /// The core, `(1 - f) M`, its water a share of it.
+        /// The core, `(1 - f) M`, its water a share of it: its
+        /// `composition.water_fraction` is the core's share, the planet's
+        /// composition for the keyframe being built by PR 2d's chain.
         core: Interior,
         envelope: EnvelopeRecord,
         /// The whole planet: its mass (without a water beyond the laws,
@@ -312,7 +325,32 @@ fn gas_giant(
     let core = ice_rock_core_radius(*heavy.value());
     giant_envelope_thickness(table.radius, core)?;
 
-    let from = [mass.node(), heavy.node(), trial.age.node(), flux.node()];
+    // The tables may read another age or mass than asked: each is then a
+    // node of its own, derived from the asked value, and the radius and
+    // luminosity cite it instead.
+    let age_read = if table.age_used == *trial.age.value() {
+        trial.age.node()
+    } else {
+        trace
+            .record(
+                Code::of(codes::TABLE_AGE_USED),
+                table.age_used,
+                &[trial.age.node()],
+            )?
+            .node()
+    };
+    let mass_read = if table.mass_used == *mass.value() {
+        mass.node()
+    } else {
+        trace
+            .record(
+                Code::of(codes::TABLE_MASS_USED),
+                table.mass_used,
+                &[mass.node()],
+            )?
+            .node()
+    };
+    let from = [mass_read, heavy.node(), age_read, flux.node()];
     let radius = trace.record(Code::of(codes::RADIUS), table.radius, &from)?;
     let luminosity = trace.record(Code::of(codes::GIANT_LUMINOSITY), table.luminosity, &from)?;
     let core_radius = trace.record(
@@ -334,7 +372,7 @@ fn gas_giant(
         )?,
         state: trace.leaf(
             Code::of(codes::LAYER_STATE),
-            MatterState::Solid,
+            GIANT_CORE_STATE,
             Provenance::Imposed,
         )?,
     };

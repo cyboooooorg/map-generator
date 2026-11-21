@@ -80,8 +80,8 @@ const MIGRATION_CHANCE: f64 = 0.1;
 const RADIOGENIC_HALF_RANGE_DEX: f64 = 0.5;
 
 /// The composition a trial draws. The core mass fraction, the water
-/// fraction, the migration flag and the radiogenic abundance are drawn
-/// leaves of the trace.
+/// fraction, the migration flag, the radiogenic abundance and, below
+/// 20 M_E, the envelope fraction are drawn leaves of the trace.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Drawn {
     /// Core mass fraction of the planet without its water: the core is
@@ -94,13 +94,17 @@ pub(crate) struct Drawn {
     /// [`MIGRATION_CHANCE`]. `None` beyond the ice line, where there is
     /// nothing to migrate from (its uniform is still consumed).
     pub migrated: Option<Traced<bool>>,
-    /// Water mass fraction of the whole planet (bulk water): icy for a
-    /// water world, dry otherwise.
+    /// Water mass fraction of the planet without its envelope (bulk
+    /// water): icy for a water world, dry otherwise. A planet with an
+    /// envelope fraction `f` holds `w (1 - f) M` of water; without an
+    /// envelope, `w M`.
     pub water_fraction: Traced<Fraction>,
     /// Radiogenic abundance, dex of Earth's.
     pub radiogenic_abundance: Traced<Dex>,
     /// Primordial hydrogen-helium envelope mass fraction of the whole
-    /// planet, drawn by mass regime (`planet/envelope`).
+    /// planet, drawn by mass regime (`planet/envelope`) below 20 M_E; a
+    /// gas giant's is derived, `1 - Mz / M`, from its mass and
+    /// [`Self::heavy_mass`].
     pub envelope_fraction: Traced<Fraction>,
     /// A gas giant's total heavy-element mass, drawn; `None` below
     /// 20 M_E.
@@ -213,14 +217,24 @@ fn record(
         .transpose()?;
     let water_fraction =
         trace.leaf(Code::of(codes::WATER_FRACTION), fraction, Provenance::Drawn)?;
-    let envelope_fraction = trace.leaf(
-        Code::of(codes::ENVELOPE_FRACTION),
-        Fraction::try_from(envelope).map_err(InteriorError::NotAFraction)?,
-        Provenance::Drawn,
-    )?;
     let heavy_mass = heavy_mass
         .map(|m| trace.leaf(Code::of(codes::HEAVY_MASS), m, Provenance::Drawn))
         .transpose()?;
+    let envelope = Fraction::try_from(envelope).map_err(InteriorError::NotAFraction)?;
+    // A gas giant's envelope is computed, `1 - Mz / M`, from its mass and
+    // its drawn heavy-element mass; below 20 M_E it is drawn.
+    let envelope_fraction = match heavy_mass {
+        Some(heavy) => trace.record(
+            Code::of(codes::ENVELOPE_FRACTION),
+            envelope,
+            &[trial.mass.node(), heavy.node()],
+        )?,
+        None => trace.leaf(
+            Code::of(codes::ENVELOPE_FRACTION),
+            envelope,
+            Provenance::Drawn,
+        )?,
+    };
     Ok(Drawn {
         core_mass_fraction,
         formed_beyond_ice_line,

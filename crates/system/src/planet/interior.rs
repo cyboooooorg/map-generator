@@ -75,6 +75,9 @@ pub(crate) enum Water {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Interior {
     pub bulk: Bulk,
+    /// The fractions the structure is built with. For a mini-Neptune's
+    /// core, `water_fraction` is the core's share, of `(1 - f) M`; the
+    /// planet's composition for the keyframe is built by PR 2d's chain.
     pub composition: Composition,
     pub core_mass: Traced<Kilogram>,
     /// The silicate mantle, the mass the heat sources scale with.
