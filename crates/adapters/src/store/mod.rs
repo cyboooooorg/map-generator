@@ -22,8 +22,11 @@ use std::path::{Path, PathBuf};
 
 use catalogue::{
     CacheEntry, CacheKey, CatalogueError, StoredSystem, SystemId, SystemRepository, TimelineCache,
+    WorldCache, WorldKey,
 };
 use timeline::{EngineVersion, Timeline};
+
+use crate::world_codec::{self, CodecError};
 
 use uses::Uses;
 
@@ -36,6 +39,8 @@ pub enum StoreError {
     Json(serde_json::Error),
     /// The catalogue refused what was stored.
     Catalogue(CatalogueError),
+    /// A world could not be encoded (decoding failures are misses).
+    Codec(CodecError),
 }
 
 impl fmt::Display for StoreError {
@@ -44,6 +49,7 @@ impl fmt::Display for StoreError {
             StoreError::Io(error) => write!(f, "io({error})"),
             StoreError::Json(error) => write!(f, "json({error})"),
             StoreError::Catalogue(error) => write!(f, "{error}"),
+            StoreError::Codec(error) => write!(f, "{error}"),
         }
     }
 }
@@ -144,8 +150,7 @@ impl FsStore {
         self.save_uses(&uses)
     }
 
-    /// The cache entries on disk, with their sizes and last use. World
-    /// files are listed once the world cache exists.
+    /// The cache entries on disk, with their sizes and last use.
     fn entries(&self, uses: &Uses) -> Result<Vec<CacheEntry>, StoreError> {
         let mut entries = Vec::new();
         for (engine_name, engine_dir) in subdirs(&paths::cache_dir(&self.root))? {
@@ -165,44 +170,103 @@ impl FsStore {
                         last_use: uses.last(&key),
                     });
                 }
+                for (slug, slug_dir) in subdirs(&id_dir.join("worlds"))? {
+                    let Some(body) = paths::parse_body_slug(&slug) else {
+                        continue;
+                    };
+                    for file in fs::read_dir(&slug_dir)? {
+                        let file = file?;
+                        let Some((keyframe, grid)) =
+                            file.file_name().to_str().and_then(paths::parse_world_name)
+                        else {
+                            continue;
+                        };
+                        let key = WorldKey {
+                            system,
+                            body,
+                            keyframe,
+                            grid,
+                            engine,
+                        };
+                        entries.push(CacheEntry {
+                            bytes: file.metadata()?.len(),
+                            last_use: uses.last(&paths::world_use_key(&key)),
+                            key: CacheKey::World(key),
+                        });
+                    }
+                }
             }
         }
         Ok(entries)
     }
 
-    /// Deletes the cache entries that the policy picks for the engine
-    /// version `current` and this store's budget, and the directories
-    /// they leave empty. Returns the keys it removed, in policy order.
+    /// Deletes one cache entry, forgets its use, and removes the
+    /// directories it leaves empty.
+    fn remove_entry(&self, key: &CacheKey, uses: &mut Uses) -> Result<(), StoreError> {
+        let (file, use_key, system, engine) = match key {
+            CacheKey::Timelines { system, engine } => (
+                paths::timelines_file(&self.root, *engine, *system),
+                paths::timelines_use_key(*engine, *system),
+                *system,
+                *engine,
+            ),
+            CacheKey::World(world) => (
+                paths::world_file(&self.root, world),
+                paths::world_use_key(world),
+                world.system,
+                world.engine,
+            ),
+        };
+        match fs::remove_file(&file) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        uses.uses.remove(&use_key);
+        // Each `remove_dir` only succeeds on an empty directory: that is
+        // the point.
+        if let CacheKey::World(world) = key {
+            let worlds = paths::worlds_dir(&self.root, engine, system);
+            let _ = fs::remove_dir(worlds.join(paths::body_slug(&world.body)));
+            let _ = fs::remove_dir(worlds);
+        }
+        let dir = paths::entry_dir(&self.root, engine, system);
+        let _ = fs::remove_dir(&dir);
+        if let Some(engine_dir) = dir.parent() {
+            let _ = fs::remove_dir(engine_dir);
+        }
+        Ok(())
+    }
+
+    /// Deletes the cache entries of the systems that are no longer
+    /// stored, then those that the policy picks for the engine version
+    /// `current` and this store's budget, and the directories they leave
+    /// empty. Returns the keys it removed: the orphans first, then the
+    /// policy's picks in policy order.
     pub fn evict(&self, current: EngineVersion) -> Result<Vec<CacheKey>, StoreError> {
         let mut uses = self.load_uses();
-        let entries = self.entries(&uses)?;
-        let gone = catalogue::evict(&entries, current, self.budget);
+        let (orphans, entries): (Vec<_>, Vec<_>) = self
+            .entries(&uses)?
+            .into_iter()
+            .partition(|entry| !paths::inputs_file(&self.root, system_of(&entry.key)).exists());
+        let mut gone: Vec<CacheKey> = orphans.into_iter().map(|entry| entry.key).collect();
+        gone.sort();
+        gone.extend(catalogue::evict(&entries, current, self.budget));
         for key in &gone {
-            match key {
-                CacheKey::Timelines { system, engine } => {
-                    let file = paths::timelines_file(&self.root, *engine, *system);
-                    match fs::remove_file(&file) {
-                        Ok(()) => {}
-                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                        Err(error) => return Err(error.into()),
-                    }
-                    uses.uses
-                        .remove(&paths::timelines_use_key(*engine, *system));
-                    // Only succeeds on an empty directory: that is the point.
-                    let dir = paths::entry_dir(&self.root, *engine, *system);
-                    let _ = fs::remove_dir(&dir);
-                    if let Some(engine_dir) = dir.parent() {
-                        let _ = fs::remove_dir(engine_dir);
-                    }
-                }
-                // World files are not listed yet, so none is ever picked.
-                CacheKey::World(_) => {}
-            }
+            self.remove_entry(key, &mut uses)?;
         }
         if !gone.is_empty() {
             self.save_uses(&uses)?;
         }
         Ok(gone)
+    }
+}
+
+/// The system a cache entry belongs to.
+fn system_of(key: &CacheKey) -> SystemId {
+    match key {
+        CacheKey::Timelines { system, .. } => *system,
+        CacheKey::World(key) => key.system,
     }
 }
 
@@ -271,5 +335,36 @@ impl TimelineCache for FsStore {
         let bytes = serde_json::to_vec(timelines)?;
         write_atomic(&paths::timelines_file(&self.root, engine, system), &bytes)?;
         self.touch(paths::timelines_use_key(engine, system))
+    }
+}
+
+impl WorldCache for FsStore {
+    type World = world::World;
+    type Error = StoreError;
+
+    fn get(&self, key: &WorldKey) -> Result<Option<world::World>, StoreError> {
+        let world = read_optional(&paths::world_file(&self.root, key))
+            .ok()
+            .flatten()
+            .and_then(|bytes| world_codec::decode(&bytes).ok())
+            // A file that holds another world than its name says is a miss.
+            .filter(|world| {
+                world.body() == &key.body
+                    && world.keyframe() == key.keyframe
+                    && world.grid().n() == key.grid
+                    && world.engine() == key.engine
+            });
+        if world.is_some() {
+            self.touch(paths::world_use_key(key))?;
+        }
+        Ok(world)
+    }
+
+    fn put(&self, key: &WorldKey, world: &world::World) -> Result<(), StoreError> {
+        write_atomic(
+            &paths::world_file(&self.root, key),
+            &world_codec::encode(world),
+        )?;
+        self.touch(paths::world_use_key(key))
     }
 }

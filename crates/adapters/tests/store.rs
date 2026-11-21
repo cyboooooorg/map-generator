@@ -152,6 +152,8 @@ fn eviction_drops_stale_then_least_used() {
     let (a, b) = (stored(1).id, stored(2).id);
     let (one, two) = (EngineVersion(1), EngineVersion(2));
     let store = FsStore::new(dir.path().to_path_buf(), 2);
+    SystemRepository::put(&store, &stored(1)).unwrap();
+    SystemRepository::put(&store, &stored(2)).unwrap();
     TimelineCache::put(&store, a, one, &[]).unwrap();
     TimelineCache::put(&store, a, two, &[]).unwrap();
     TimelineCache::put(&store, b, two, &[]).unwrap();
@@ -178,4 +180,34 @@ fn eviction_drops_stale_then_least_used() {
         Some(Vec::new())
     );
     assert!(!dir.path().join("cache/1").exists());
+}
+
+#[test]
+fn eviction_drops_caches_of_removed_systems() {
+    let dir = TempDir::new().unwrap();
+    let (kept, removed) = (stored(1), stored(2));
+    let store = store(&dir);
+    SystemRepository::put(&store, &kept).unwrap();
+    SystemRepository::put(&store, &removed).unwrap();
+    TimelineCache::put(&store, kept.id, ENGINE, &[]).unwrap();
+    TimelineCache::put(&store, removed.id, ENGINE, &[]).unwrap();
+    SystemRepository::remove(&store, removed.id).unwrap();
+    let gone = store.evict(ENGINE).unwrap();
+    assert_eq!(
+        gone,
+        vec![CacheKey::Timelines {
+            system: removed.id,
+            engine: ENGINE
+        }]
+    );
+    assert_eq!(
+        TimelineCache::get(&store, kept.id, ENGINE).unwrap(),
+        Some(Vec::new())
+    );
+    assert!(
+        !dir.path()
+            .join("cache/1")
+            .join(removed.id.to_string())
+            .exists()
+    );
 }

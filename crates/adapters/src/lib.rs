@@ -4,5 +4,7 @@
 //! The only library crate allowed to touch the outside world.
 
 mod store;
+mod world_codec;
 
 pub use store::{FsStore, StoreError};
+pub use world_codec::{CodecError, decode, encode};

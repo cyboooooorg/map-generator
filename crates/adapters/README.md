@@ -7,12 +7,13 @@ read and write files.
 
 ## Filesystem store
 
-`FsStore::new(root, budget)` implements `SystemRepository` and
-`TimelineCache`. Layout under `root`:
+`FsStore::new(root, budget)` implements `SystemRepository`,
+`TimelineCache` and `WorldCache`. Layout under `root`:
 
 ```text
 systems/<id>/inputs.json
 cache/<engine>/<id>/timelines.json
+cache/<engine>/<id>/worlds/<designation>/<keyframe>-<grid>.world
 cache/uses.json
 ```
 
@@ -20,7 +21,13 @@ Writes are staged in `<file>.tmp` then renamed. A cache file that cannot
 be read or parsed is a miss. `cache/uses.json` holds a logical use
 counter (no wall clock); `FsStore::evict(current)` deletes the entries of
 other engine versions, then the least recently used ones until the cache
-fits `budget` bytes. World files come with the world cache.
+fits `budget` bytes. World and timeline files are both listed. It also
+deletes the cache entries of any system whose `inputs.json` no longer
+exists, so removing a system frees its caches at the next eviction.
+
+A `.world` file is the binary layout of `encode`/`decode` (see
+`src/world_codec.rs`): magic `MGWORLD1`, then little-endian header and
+fields. A truncated, corrupt or mismatching file is a cache miss.
 
 ## Ports
 
