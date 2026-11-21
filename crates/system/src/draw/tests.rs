@@ -398,6 +398,23 @@ fn asked_values_are_inputs_and_drawn_ones_draws() {
 }
 
 #[test]
+fn an_asked_eccentricity_is_an_input_only_when_the_archetype_gives_one() {
+    let mut trace = Trace::new();
+    let inputs = asking(2, &[("earth-like", 1), ("hot-neptune", 1)]);
+    let (_, placed) = draw_system(&inputs, &mut trace, model).unwrap();
+    let origin = |name: &str| {
+        let planet = placed.iter().find(|p| p.asked == Some(id(name))).unwrap();
+        trace
+            .node(planet.trial.orbit.eccentricity.node())
+            .unwrap()
+            .origin
+            .clone()
+    };
+    assert_eq!(origin("earth-like"), Origin::Leaf(Provenance::Input));
+    assert_eq!(origin("hot-neptune"), Origin::Leaf(Provenance::Drawn));
+}
+
+#[test]
 fn the_solar_giants_can_be_asked_together() {
     let giants = ["jupiter-like", "saturn-like", "uranus-like", "neptune-like"];
     for seed in 0..10 {

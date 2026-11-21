@@ -295,9 +295,10 @@ where
             Err(error) if archetype.is_some() => return Err(error),
             Err(_) => return Ok(None),
         };
-        let e = match archetype.and_then(|(_, placement)| placement.eccentricity) {
-            Some((lo, hi)) => lo + (hi - lo) * uniform(rng),
-            None => eccentricity(ctx, outcome.class, rng),
+        // An eccentricity is asked only when the archetype gives its range.
+        let (e, e_provenance) = match archetype.and_then(|(_, placement)| placement.eccentricity) {
+            Some((lo, hi)) => (lo + (hi - lo) * uniform(rng), Provenance::Input),
+            None => (eccentricity(ctx, outcome.class, rng), Provenance::Drawn),
         };
         let longitude = Degree(FULL_TURN.0 * uniform(longitudes));
         let Some(e) = Fraction::new(e).filter(|e| e.get() < 1.0) else {
@@ -306,7 +307,7 @@ where
         if !self.clear_of_the_star(proposed.a, e, &outcome) {
             return Ok(None);
         }
-        let eccentricity = trace.leaf(Code::of(codes::ECCENTRICITY), e, provenance)?;
+        let eccentricity = trace.leaf(Code::of(codes::ECCENTRICITY), e, e_provenance)?;
         let perihelion = trace.leaf(
             Code::of(codes::PERIHELION_LONGITUDE),
             longitude,
