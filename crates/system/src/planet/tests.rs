@@ -193,19 +193,13 @@ fn the_trace_says_why_a_planet_is_a_water_world() {
     let recorded = trace.node(migrated.node()).unwrap();
     assert_eq!(recorded.code.as_str(), codes::MIGRATED);
     assert_eq!(recorded.origin, Origin::Leaf(Provenance::Drawn));
-}
-
-#[test]
-fn the_water_fraction_is_a_drawn_leaf() {
-    // Gap 1: the flags are recorded apart, never the inputs of the water.
-    for (au, seed) in [(1.0, 3), (5.0, 3)] {
-        let mut trace = Trace::new();
-        let t = trial(&mut trace, seed, 1.0, au, 0.0);
-        let d = draws::draw(t.seed, &t, &mut trace).unwrap();
-        let water = trace.node(d.water_fraction.node()).unwrap();
-        assert_eq!(water.code.as_str(), codes::WATER_FRACTION);
-        assert_eq!(water.origin, Origin::Leaf(Provenance::Drawn));
-    }
+    // Gap 1: beyond the ice line too, the water fraction is a drawn leaf,
+    // the flags recorded apart, never its inputs.
+    let far = trial(&mut trace, 3, 1.0, 5.0, 0.0);
+    let d = draws::draw(far.seed, &far, &mut trace).unwrap();
+    let water = trace.node(d.water_fraction.node()).unwrap();
+    assert_eq!(water.code.as_str(), codes::WATER_FRACTION);
+    assert_eq!(water.origin, Origin::Leaf(Provenance::Drawn));
 }
 
 #[test]
@@ -350,6 +344,10 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
     assert_eq!(interior.water, Water::InMantle);
     assert_eq!(water_shells(interior), 0);
     assert!(!interior.shells.is_empty());
+    // Without an envelope the body is the planet: its whole mass, its
+    // shells only.
+    assert_eq!(body.bulk().mass, t.mass);
+    assert_eq!(body.layers().len(), interior.shells.len());
 
     // The radius and every shell derive from the structure node, which
     // derives from the inputs; a shell also from its layer's mass.
@@ -568,7 +566,7 @@ fn the_tidal_kind_follows_the_composition() {
 }
 
 #[test]
-fn the_envelope_and_a_giants_heavy_mass_are_drawn_leaves() {
+fn a_giants_envelope_derives_from_its_drawn_heavy_mass() {
     let mut trace = Trace::new();
     let small = trial(&mut trace, 3, 1.0, 1.0, 0.0);
     let d = draws::draw(small.seed, &small, &mut trace).unwrap();
@@ -582,8 +580,39 @@ fn the_envelope_and_a_giants_heavy_mass_are_drawn_leaves() {
     let node = trace.node(heavy.node()).unwrap();
     assert_eq!(node.code, Code::of(codes::HEAVY_MASS));
     assert_eq!(node.origin, Origin::Leaf(Provenance::Drawn));
+    // A giant's envelope is computed, `1 - Mz / M`: derived from the mass
+    // and the heavy-element mass.
+    let node = trace.node(d.envelope_fraction.node()).unwrap();
+    assert_eq!(node.code, Code::of(codes::ENVELOPE_FRACTION));
+    assert_eq!(
+        derived_from(&trace, d.envelope_fraction.node()),
+        vec![giant.mass.node(), heavy.node()]
+    );
     let envelope = d.envelope_fraction.value().get();
     assert!((envelope - (1.0 - heavy.value().0 / 318.0)).abs() < 1e-12);
+}
+
+#[test]
+fn a_giant_above_the_tables_cites_the_mass_they_were_read_at() {
+    // Definition: 4 000 M_E, above the tables' top mass, 3 593.81 M_E
+    // (Fortney et al. 2007), at 5.2 au.
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 4_000.0, 5.2, 0.0);
+    let drawn = draws::draw(t.seed, &t, &mut trace).unwrap();
+    let Body::Giant(record) = interior(&t, &drawn, &mut trace).unwrap() else {
+        panic!("a giant");
+    };
+    let read = derived_from(&trace, record.bulk.radius.node());
+    assert_eq!(read, derived_from(&trace, record.luminosity.node()));
+    assert!(!read.contains(&t.mass.node()));
+    let used = read
+        .iter()
+        .copied()
+        .find(|&n| trace.node(n).unwrap().code == Code::of(codes::TABLE_MASS_USED))
+        .expect("the mass read");
+    assert_eq!(derived_from(&trace, used), vec![t.mass.node()]);
+    // The age asked, 4.5673 Gyr, lies inside the tables and is read as is.
+    assert!(read.contains(&t.age.node()));
 }
 
 fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
@@ -596,7 +625,9 @@ fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> 
 #[test]
 fn central_pressure_cites_every_input() {
     let mut trace = Trace::new();
-    for (au, expected_water) in [(1.0, true), (HOT_ORBIT_AU, true)] {
+    // Two water worlds: at 1 au its water is a layer (`Water::Layer`), at
+    // 0.4 au beyond the water laws (`Water::BeyondLaw`).
+    for au in [1.0, HOT_ORBIT_AU] {
         let t = trial(&mut trace, 1, 1.0, au, 0.0);
         let drawn = Drawn::fixed(
             &t,
@@ -622,7 +653,7 @@ fn central_pressure_cites_every_input() {
         }
         match interior.water {
             Water::Layer { mass, temperature } | Water::BeyondLaw { mass, temperature } => {
-                assert!(expected_water);
+                assert_eq!(matches!(interior.water, Water::Layer { .. }), au == 1.0);
                 assert!(from.contains(&temperature.node()));
                 assert_eq!(
                     from.contains(&mass.node()),
@@ -732,6 +763,11 @@ fn water_beyond_the_law_bulk_is_the_condensed_planet() {
     let interior = rocky_of(&body);
     let dry = (1.0 - WATER_WORLD_FRACTION) * t.mass.value().0;
     assert!((interior.bulk.mass.value().0 / dry - 1.0).abs() < 1e-9);
+    // The radius is the condensed structure's.
+    assert_eq!(
+        *interior.bulk.radius.value(),
+        science::units::EarthRadius::from(interior.structure.radius)
+    );
     let node = trace.node(interior.bulk.mass.node()).unwrap();
     assert_eq!(node.code, Code::of(codes::DRY_MASS));
     let from = derived_from(&trace, interior.bulk.mass.node());
@@ -815,6 +851,10 @@ fn a_jupiter_trial() {
         .iter()
         .map(|l| (*l.material.value(), *l.state.value()))
         .collect();
+    // The layer order of Jupiter's models: a heavy-element core, metallic
+    // hydrogen below about 1 Mbar, molecular hydrogen above (study
+    // `giants-and-envelopes.md` §5.3, Debras & Chabrier 2019,
+    // arXiv:1901.05697).
     assert_eq!(layers.len(), 3, "{layers:?}");
     assert_eq!(layers[0].0, Material::RockIce);
     assert_eq!(layers[1], (Material::Envelope, MatterState::Liquid));
@@ -835,6 +875,8 @@ fn a_jupiter_trial() {
         EarthFlux(1.0 / (au * au)),
     )
     .unwrap();
+    // Wiring, not a published value: the secular heat is the tables'
+    // internal luminosity, read once.
     assert_eq!(*heat.secular.value(), table.luminosity);
     assert_eq!(heat.radiogenic.value().0, 0.0);
 }
@@ -894,30 +936,6 @@ fn a_neptune_trial() {
         &mut trace,
     )
     .unwrap();
-}
-
-#[test]
-fn earth_is_unchanged_without_an_envelope() {
-    let mut trace = Trace::new();
-    let t = trial(&mut trace, 1, 1.0, 1.0, 0.0167);
-    let drawn = Drawn::fixed(
-        &t,
-        &mut trace,
-        EARTH_CORE_MASS_FRACTION,
-        EARTH_WATER_FRACTION,
-        0.0,
-        Some(false),
-        0.0,
-        None,
-    );
-    let body = interior(&t, &drawn, &mut trace).unwrap();
-    let interior = rocky_of(&body);
-    let r = interior.structure.radius.0;
-    assert!((r / EARTH_MEAN_RADIUS.0 - 1.0).abs() < 0.01, "radius {r}");
-    let g = body.bulk().surface_gravity.value().0;
-    assert!((g / STANDARD_GRAVITY - 1.0).abs() < 0.01, "gravity {g}");
-    assert_eq!(body.bulk().mass, t.mass);
-    assert_eq!(body.layers().len(), interior.shells.len());
 }
 
 #[test]

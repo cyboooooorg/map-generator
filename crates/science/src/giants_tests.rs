@@ -49,9 +49,10 @@ const TABLE_1_ICE_ROCK: [(f64, f64); 3] = [(10.0, 2.48), (31.6, 3.23), (100.0, 4
 /// Table 1 to 2.5 % on average.
 const EQ_7_ACCURACY: f64 = 0.025;
 
-/// Source: the 3 % tolerance of the study's test proposal (§1.6: the model
-/// must reproduce Jupiter "to within a few percent"); the table gives
-/// 0.999 R_J for Jupiter with a 10 M⊕ core.
+/// Definition: a test tolerance of 3 %, the study's own choice (§1.6: the
+/// model must reproduce Jupiter "to within a few percent"; §5.3 says the
+/// tolerances are its own, not from a source); the table gives 0.999 R_J
+/// for Jupiter with a 10 M⊕ core.
 const JUPITER_TOLERANCE: f64 = 0.03;
 
 /// Definition: the 1 % tolerance the brief asks of a printed cell, the
