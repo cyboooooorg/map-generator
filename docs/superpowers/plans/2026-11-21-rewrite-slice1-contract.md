@@ -481,8 +481,10 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
     - `enum MatterState { Solid, Liquid, Gas, Plasma, PartlyMolten,
       Porous }`;
     - `enum Transport { Radiative, Convective }`;
-    - `Layer { outer_radius: Traced<Metre>, material: Material, state:
-      Traced<MatterState> }`;
+    - `Layer { outer_radius: Traced<Metre>, mass: Traced<Kilogram>,
+      material: Material, state: Traced<MatterState> }` (the mass is
+      stored: cross-sections and the moment of inertia read it, never
+      an integral of the samples);
     - `RadialSample { radius: Metre, density: KilogramPerCubicMetre,
       pressure: Pascal, temperature: Kelvin, transport:
       Option<Transport>, fusion_share: Option<Fraction> }`;
@@ -496,13 +498,33 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
     - `StarState { phase: StarPhase, mass: Traced<SolarMass>, radius:
       Traced<SolarRadius>, luminosity: Traced<SolarLuminosity>,
       effective_temperature: Traced<Kelvin>, metallicity: Traced<Dex>,
-      interior: InteriorProfile }`;
+      interior: Option<InteriorProfile> }` (no stellar structure before
+      mapgen3's study);
     - `Orbit { semi_major_axis: Traced<AstronomicalUnit>, eccentricity:
-      Traced<Fraction>, period: Traced<Day> }`;
+      Traced<Fraction>, period: Traced<Day>, perihelion_longitude:
+      Traced<Degree> }`; validation refuses an eccentricity of 1 or more
+      (`ContractError::EccentricityNotBelowOne`, a new variant);
     - `Spin { rotation_period: Traced<Day>, obliquity: Traced<Degree> }`;
     - `Bulk { mass: Traced<EarthMass>, radius: Traced<EarthRadius>,
       surface_gravity: Traced<MetrePerSecondSquared>, mean_density:
       Traced<KilogramPerCubicMetre> }`;
+    - `Composition { core_mass_fraction: Traced<Fraction>,
+      water_fraction: Traced<Fraction> }`;
+    - `enum PlanetClass { Rocky, SuperEarth, IceWorld, MiniNeptune,
+      IceGiant, GasGiant, HotJupiter, HotNeptune, LavaWorld,
+      VolcanicWorld, RunawayGreenhouse, HydrocarbonWorld, OceanWorld,
+      SteamWorld }` (legacy `planet/classify.rs:14`; the planet's own
+      class, also read by the system draw);
+    - `Heat { radiogenic: Traced<Watt>, tidal: Traced<Watt>, secular:
+      Traced<Watt> }`;
+    - `Water { inventory: Traced<Kilogram>, runaway: Traced<bool>,
+      boiled: Traced<bool> }` (runaway by insolation, boiled by the
+      climate; legacy `planet/regime.rs:37`);
+    - `enum Renewal { Formation, Plates, Episodic, HeatPipe, IceLid,
+      LiquidCycle, VolatileIce, TidalEpisode }`; `TerrainUnit { age:
+      Traced<Gyr>, share: Traced<Fraction>, renewal: Renewal }`;
+      `Terrain { units: Vec<TerrainUnit> }` (legacy
+      `planet/surface_age.rs:26-58`);
     - `enum TectonicRegime { Plates, Stagnant, Episodic, HeatPipe }`
       (legacy `geology.rs:76`); `enum CoreState { None, Liquid, Frozen }`;
       `Core { state: Traced<CoreState>, field: Traced<Tesla> }`;
@@ -517,11 +539,12 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
       `SurfaceLiquid { kind: Traced<LiquidKind>, inventory:
       Traced<Kilogram>, ocean_share: Traced<Fraction> }`;
     - `Life { arose: Traced<bool>, oxygenated: Traced<bool> }`;
-    - `Surface { regime: Traced<TectonicRegime>, core: Core, atmosphere:
-      Option<Atmosphere>, climate: GlobalClimate, liquid:
-      Option<SurfaceLiquid>, life: Life }`;
+    - `Surface { regime: Traced<TectonicRegime>, core: Core, water:
+      Water, atmosphere: Option<Atmosphere>, climate: GlobalClimate,
+      liquid: Option<SurfaceLiquid>, terrain: Terrain, life: Life }`;
     - `PlanetState { sources: StellarSources, age: Traced<Gyr>, orbit:
-      Orbit, spin: Spin, bulk: Bulk, interior: InteriorProfile,
+      Orbit, spin: Spin, bulk: Bulk, composition: Composition, class:
+      Traced<PlanetClass>, heat: Heat, interior: InteriorProfile,
       envelope_fraction: Traced<Fraction>, surface: Option<Surface> }`
       (no surface: a giant).
   - `keyframe.rs`:
@@ -570,6 +593,9 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
   fn layers_out_of_order_are_refused() { /* LayersNotOrdered */ }
 
   #[test]
+  fn an_eccentricity_of_one_is_refused() { /* EccentricityNotBelowOne */ }
+
+  #[test]
   fn a_timeline_needs_ordered_keyframes_of_one_body_kind() {
       // empty -> NoKeyframe; dates 4.57 then 4.0 -> KeyframesNotOrdered;
       // a star keyframe then a planet keyframe -> MixedBodyKinds.
@@ -593,6 +619,7 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
 - Modify: `crates/system/Cargo.toml` (`serde`; dev `serde_json`),
   `crates/system/src/lib.rs`, `crates/system/README.md`
 - Create: `crates/system/src/inputs.rs`, `crates/system/src/placement.rs`,
+  `crates/system/src/archetype.rs`,
   and doc-only `crates/system/src/{draw,planet,star,engine}.rs`
 
 **Interfaces:**
@@ -602,30 +629,44 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
   - `pub const ENGINE_VERSION: EngineVersion = EngineVersion(1);` in
     `lib.rs`, doc: bumped whenever a timeline or a world could change
     for the same inputs.
-  - `inputs.rs`: `ArchetypeId(Code)` serde transparent; `#[non_exhaustive]
-    enum Request { System(SystemRequest), Body(BodyRequest) }`;
-    `SystemRequest { host_mass: Option<SolarMass>, metallicity:
-    Option<Dex>, archetypes: Vec<ArchetypeId> }`; `BodyRequest {
+  - `archetype.rs`: `ArchetypeId(Code)` serde transparent, `Ord` (add
+    `Ord` to `Code` if Task 3 did not derive it); the module doc fixes
+    the split: `Archetype { id, placement: ArchetypePlacement, targets:
+    ArchetypeTargets }`, placement read by the draw and filled by
+    mapgen3 (host, insolation or period band, mass draw, eccentricity,
+    tilt, age), targets filled by mapgen1 (inputs, present-day targets,
+    tolerances); the backward search moves only the planet's own inputs
+    and records an unreachable target as an outcome with its cause.
+  - `inputs.rs`: `#[non_exhaustive] enum Request { System(SystemRequest),
+    Body(BodyRequest) }`; `SystemRequest { host_mass: Option<SolarMass>,
+    metallicity: Option<Dex>, archetypes: BTreeMap<ArchetypeId, u32> }`
+    (a count per archetype); `BodyRequest {
     host_mass: Option<SolarMass>, metallicity: Option<Dex>, archetype:
     Option<ArchetypeId> }`; `Inputs { schema: u32, seed: Seed, present:
-    Gyr, request: Request }` with `pub const INPUTS_SCHEMA: u32 = 1`.
+    Option<Gyr>, request: Request }` (no present: the draw takes the age
+    within the star's lifetime) with `pub const INPUTS_SCHEMA: u32 = 1`.
     All serde. Doc: the stored truth; mapgen3 may refine the request
     and mapgen1 the archetypes in their pull requests.
-  - `placement.rs`: `Placement { designation: Designation, seed: Seed,
-    mass: Traced<EarthMass>, orbit: Orbit, spin: Spin, sources:
-    StellarSources, age: Traced<Gyr>, metallicity: Traced<Dex>,
-    ice_line: Traced<AstronomicalUnit>, archetype: Option<ArchetypeId> }`,
-    not serialised. Doc: what the draw hands to the planet model.
+  - `placement.rs`: `Trial { designation: Designation, seed: Seed,
+    mass: Traced<EarthMass>, orbit: Orbit, sources: StellarSources,
+    age: Traced<Gyr>, metallicity: Traced<Dex>, ice_line:
+    Traced<AstronomicalUnit>, archetype: Option<ArchetypeId> }` and
+    `Placement { trial: Trial, spin: Spin }`, not serialised. Doc: the
+    draw builds the trial, asks its class, then adds the spin; the
+    orbit's period is the draw's (Kepler), never recomputed.
   - Doc-only modules, each a `//!` comment fixing its owner and its
     future signature, no items:
     - `draw` (mapgen3): `pub fn draw(inputs: &Inputs, trace: &mut
       Trace) -> Result<Drawn, SystemError>`, `Drawn` holding the star's
       designation, seed and `StarState` and one `Placement` per planet;
-    - `planet` (mapgen1): `pub fn model(placement: &Placement, trace:
-      &mut Trace) -> Result<PlanetState, SystemError>`; draws its own
-      inputs from sub-seeds of `placement.seed`, runs the archetype's
-      backward search;
-    - `star`: computes `StarState` and its profile;
+    - `planet` (mapgen1): `pub fn class_of(trial: &Trial) ->
+      Result<PlanetClass, SystemError>` (runs `model` with a scratch
+      `Trace` and returns the class: one classifier) and `pub fn
+      model(placement: &Placement, trace: &mut Trace) ->
+      Result<PlanetState, SystemError>`; draws its own inputs from
+      sub-seeds of the body seed, runs the archetype's backward search;
+    - `star` (mapgen3): computes `StarState` (main-sequence values, the
+      age draw) and later its profile;
     - `engine`: `pub fn generate(inputs: &Inputs) -> Result<Vec<Timeline>,
       SystemError>`: one `Trace` for the system, one timeline per body.
 
@@ -637,7 +678,7 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
       let inputs = Inputs {
           schema: INPUTS_SCHEMA,
           seed: Seed::new(7),
-          present: Gyr(4.57),
+          present: Some(Gyr(4.57)),
           request: Request::Body(BodyRequest {
               host_mass: None,
               metallicity: None,

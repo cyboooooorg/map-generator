@@ -152,6 +152,8 @@ in the libraries' defaults anyway.
   64 uses its published offset basis and prime, and splitmix64 is
   Vigna's finaliser (the legacy `stream_seed` mixed the same way on 32
   bits). A body's seed is `system_seed.derive(&designation.to_string())`.
+  An inner planet inserted by a new engine version renames, and so
+  reseeds, the planets beyond it: accepted under the generation policy.
   The timeline publishes each body's seed; the world derives its
   map-pass seeds from it. It is the only behaviour in `timeline`
   besides validation, because both engines must derive seeds the same
@@ -216,22 +218,43 @@ in the libraries' defaults anyway.
     luminosity, effective temperature, metallicity, interior profile;
   - planet:
     - forcings: `StellarSources`, the system age;
-    - orbit: semi-major axis, eccentricity, period;
+    - orbit: semi-major axis, eccentricity (below 1), period, longitude
+      of perihelion (the world's seasons need it);
     - spin: rotation period, obliquity;
     - bulk: mass, radius, surface gravity, mean density;
+    - composition: core mass fraction, water mass fraction (the world's
+      crust rule reads the water);
+    - class: the planet's own class (legacy `planet/classify.rs`, its 14
+      variants), one classifier in the system engine; it is the planet's
+      kind, not the central object's;
+    - internal heat: radiogenic, tidal and secular power (the world's
+      volcanism and relief read the heat flux, derived from it and the
+      radius);
     - interior profile (below), tectonic regime, core state and
       magnetic field;
     - envelope fraction (giants);
+    - water: the inventory, runaway (by insolation) and boiled (by the
+      climate) flags, apart from the surface liquid, since a runaway
+      planet keeps water as steam;
     - atmosphere: surface pressure, partial pressures per gas;
     - global climate: mean surface temperature, equilibrium temperature,
       Bond albedo, climate state (temperate, snowball, runaway);
-    - surface liquid: its kind (none, water, hydrocarbons, nitrogen,
-      lava), inventory, and ocean share of the surface (owned by the
-      system engine);
+    - surface liquid: its kind (water, hydrocarbons, nitrogen, lava), its
+      inventory, and ocean share of the surface (owned by the system
+      engine);
+    - terrain: surface units with their age, share and renewal kind
+      (legacy `planet/surface_age.rs`, 8 kinds), read by the world's
+      cratering;
     - life: arose, oxygenated.
+  - The star's interior profile is optional: the legacy code has no
+    stellar structure, so it needs a study first (No invented data).
+    The user chose to study it within slice 1 (mapgen3); its star-only
+    sample fields may be refined then, in a small announced pull
+    request.
 - `InteriorProfile` (#534, Cross-sections): layers from the centre out
   (outer radius, material, state: solid, liquid, plasma, partly molten,
-  porous) and radial samples (radius, density, pressure, temperature;
+  porous, and its mass, which cross-sections and the moment of inertia
+  need) and radial samples (radius, density, pressure, temperature;
   for stars also the transport and the share of fusion). Every layer is
   `Traced`.
 - Every enum of the contract is `#[non_exhaustive]`, so a track adds a
@@ -254,25 +277,55 @@ change they ask for goes in 2a, not in a follow-up.
   profile, whose types are in `timeline`), `engine` (assembles the
   timelines).
 - `Inputs` in 2a *(my call)*: a schema version, the root seed, the
-  present date, and the request, either a whole system or one body,
-  each with optional host, metallicity, and archetype. An archetype is
+  present date (optional: when absent, the draw takes the system age
+  within the star's lifetime, a `Drawn` leaf, as legacy
+  `star::draw_age_gyr`), and the request, either a whole system (a
+  count per archetype id) or one body (one archetype id), each with an
+  optional host mass and metallicity. An archetype is
   an `ArchetypeId` (a code); the targets behind each id, their
   tolerances and the backward search are mapgen1's. Inputs are the
   stored truth, so they derive serde from the start; a change to them
   bumps their schema version once the catalogue stores them (mapgen2's
   next pull request), never `ENGINE_VERSION`.
-- The seam, fixed here so both sides work against it:
-  - the draw produces, per planet, a `Placement`: designation, body seed,
-    mass, orbit, spin, `StellarSources`, system age, metallicity,
-    ice line, and the archetype id if any;
-  - the planet model exposes
-    `planet::model(&Placement, &mut Trace) -> PlanetState`; it draws its
-    own inputs (composition, volatiles) from sub-seeds of the body seed,
-    and runs the archetype's backward search when there are targets.
+- The seam, fixed here so both sides work against it (settled with
+  mapgen1 and mapgen3 on 2026-11-21):
+  - the draw builds a `Trial` per planet: designation, body seed, mass,
+    orbit (with the period, computed by the draw from Kepler's law and
+    the host mass; the planet model never recomputes it), the
+    `StellarSources`, system age, metallicity, ice line, and the
+    archetype id if any; all quantities are `Traced` leaves of the
+    system's `Trace` (provenance `Drawn`, `Imposed` or `Input`);
+  - the draw needs the class before it finishes placing (eccentricity,
+    hot-giant clearing, Hill spacing; legacy `trial_class`,
+    `system.rs:893`). `planet::class_of(&Trial) -> Result<PlanetClass,
+    SystemError>` (mapgen1) runs the planet model on the trial with a
+    scratch `Trace` it throws away and returns the state's class: one
+    classifier, as in the legacy code, at the cost of one model run per
+    trial;
+  - the draw then extends the trial into a `Placement`: the trial plus
+    the spin;
+  - `planet::model(&Placement, &mut Trace) -> Result<PlanetState,
+    SystemError>` (mapgen1) draws the planet's own inputs (composition,
+    volatiles) from sub-seeds of the body seed, runs the archetype's
+    backward search, and classifies with the same function at the end.
+- Archetypes: `system::archetype` holds one built-in table keyed by
+  `ArchetypeId`; `Archetype { id, placement: ArchetypePlacement,
+  targets: ArchetypeTargets }`. mapgen3 fills the placement part, read
+  by the draw (host star, insolation or period band, mass draw,
+  eccentricity, tilt, age); mapgen1 fills the targets part (core
+  fraction, water, envelope, volatiles, radiogenic, life, snowball, the
+  present-day targets and their tolerances). The backward search moves
+  only the planet's own inputs, never the orbit or the mass. A target it
+  cannot reach is recorded as an outcome with its cause (parent design,
+  Requests and archetypes), not an error. 2a creates the module with
+  `ArchetypeId`; the table arrives with their pull requests (it is
+  internal to `system`, so no `timeline` pull request).
+- `star` is mapgen3's: the main-sequence mass, radius, luminosity,
+  effective temperature and the age draw.
 - `ENGINE_VERSION`: the version stamped on every timeline.
-- 2a writes the types (`Inputs`, `Placement`) and the module doc
-  comments that fix the signatures; the functions arrive with mapgen3's
-  and mapgen1's pull requests.
+- 2a writes the types (`Inputs`, `Trial`, `Placement`, `ArchetypeId`)
+  and the module doc comments that fix the signatures; the functions
+  arrive with mapgen3's and mapgen1's pull requests.
 
 ## Fields left to later tracks
 
