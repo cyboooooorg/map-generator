@@ -286,7 +286,10 @@ change they ask for goes in 2a, not in a follow-up.
   tolerances and the backward search are mapgen1's. Inputs are the
   stored truth, so they derive serde from the start; a change to them
   bumps their schema version once the catalogue stores them (mapgen2's
-  next pull request), never `ENGINE_VERSION`.
+  next pull request), never `ENGINE_VERSION`. The engine version the
+  parent design lists among the stored inputs is stamped by the
+  catalogue next to them, not held in `Inputs` *(my call, found in
+  review)*: the engine, not the request, owns it.
 - The seam, fixed here so both sides work against it (settled with
   mapgen1 and mapgen3 on 2026-11-21):
   - the draw builds a `Trial` per planet before letters exist (they
@@ -300,11 +303,13 @@ change they ask for goes in 2a, not in a follow-up.
     system's `Trace` (provenance `Drawn`, `Imposed` or `Input`);
   - the draw needs the class before it finishes placing (eccentricity,
     hot-giant clearing, Hill spacing; legacy `trial_class`,
-    `system.rs:893`). `planet::class_of(&Trial) -> Result<PlanetClass,
-    SystemError>` (mapgen1) runs the planet model on the trial with a
-    scratch `Trace` it throws away and returns the state's class: one
-    classifier, as in the legacy code, at the cost of one model run per
-    trial;
+    `system.rs:893`). `planet::class_of(&Trial, &Trace) ->
+    Result<PlanetClass, SystemError>` (mapgen1) clones the system's
+    `Trace` into a scratch one (so the trial's ids stay valid), runs the
+    planet model's chain on the trial from `trial.seed` and without a
+    spin (as legacy `trial_class`), throws the scratch away and returns
+    the state's class: one classifier, as in the legacy code, at the
+    cost of one model run per trial;
   - the draw then extends the trial into a `Placement`: the trial plus
     the designation, the body seed and the spin; `model` runs again on
     it. Trials per system: one per distinct asked archetype, plus one

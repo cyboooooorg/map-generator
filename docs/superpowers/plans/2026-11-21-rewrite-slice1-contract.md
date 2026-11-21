@@ -666,9 +666,11 @@ refining `docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md`.
     - `draw` (mapgen3): `pub fn draw(inputs: &Inputs, trace: &mut
       Trace) -> Result<Drawn, SystemError>`, `Drawn` holding the star's
       designation, seed and `StarState` and one `Placement` per planet;
-    - `planet` (mapgen1): `pub fn class_of(trial: &Trial) ->
-      Result<PlanetClass, SystemError>` (runs `model` with a scratch
-      `Trace` and returns the class: one classifier) and `pub fn
+    - `planet` (mapgen1): `pub fn class_of(trial: &Trial, trace:
+      &Trace) -> Result<PlanetClass, SystemError>` (clones the trace,
+      runs the shared chain from `trial.seed` without a spin, returns
+      the class: one classifier; amended after the branch review) and
+      `pub fn
       model(placement: &Placement, trace: &mut Trace) ->
       Result<PlanetState, SystemError>`; draws its own inputs from
       sub-seeds of the body seed, runs the archetype's backward search;
