@@ -199,7 +199,10 @@ in the libraries' defaults anyway.
   three, validated. A source: orbit-mean bolometric flux (`EarthFlux`,
   eccentricity factor applied), equilibrium temperature from that star
   alone (`Kelvin`), effective temperature (`Kelvin`), mass (`SolarMass`),
-  luminosity (`SolarLuminosity`), each `Traced`. The equilibrium
+  luminosity (`SolarLuminosity`), and for the XUV and Lyman α bands a
+  `BandLight` (present flux, `WattPerSquareMetre`, and fluence since the
+  star's birth, `JoulePerSquareMetre`, from `science::xuv`; added after
+  2a at mapgen1's request, #622), each `Traced`. The equilibrium
   temperature keeps the legacy definition, Earth's Bond albedo 0.3
   (255 K at one Earth flux, `legacy-final:crates/mapgen/src/star.rs:322`),
   times the eccentricity factor; the law is ported by mapgen3, 2a only
@@ -352,7 +355,7 @@ fields it adds to `timeline`.
 | --- | --- |
 | Moon designations, the orbit tree's nesting, tides, tidal lock and substellar longitude | T2 #604 |
 | Ice-shell and giant-atmosphere states (shell, bands, winds) | T3 #605 |
-| Several keyframes, thresholds, XUV flux received per keyframe | T4 #606 |
+| Several keyframes, thresholds, XUV flux received per keyframe beyond the present | T4 #606 |
 | Events with their state before and after | T5 #607 |
 | Environment (galactic place, birth cluster), external events | T6 #608 |
 | Star phases beyond the main sequence, remnants, companion stars, circumbinary variability | T7 #585 |
