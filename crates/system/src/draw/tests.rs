@@ -261,7 +261,7 @@ fn every_family_draws_on_every_host() {
 /// Prints the median axis ratio of adjacent cold giants (Rosenthal et al.
 /// 2023 peak near 3) and the largest scaled axis, for the record.
 #[test]
-#[ignore = "slow: full grid"]
+#[ignore = "heavy: full grid"]
 fn every_family_draws_on_every_host_full_grid() {
     let (mut ratios, widest) = every_family_on_every_host(200);
     ratios.sort_by(f64::total_cmp);
