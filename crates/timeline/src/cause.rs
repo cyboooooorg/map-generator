@@ -5,8 +5,9 @@
 use crate::ContractError;
 use science::units::{
     AstronomicalUnit, Bar, Day, Degree, Dex, EarthFlux, EarthMass, EarthRadius, Fraction, Gyr,
-    Kelvin, Kilogram, KilogramPerCubicMetre, Metre, MetrePerSecondSquared, Pascal, Radian, Second,
-    SolarLuminosity, SolarMass, SolarRadius, Tesla, Watt, WattPerSquareMetre, Year,
+    JoulePerSquareMetre, Kelvin, Kilogram, KilogramPerCubicMetre, Metre, MetrePerSecondSquared,
+    Pascal, Radian, Second, SolarLuminosity, SolarMass, SolarRadius, Tesla, Watt,
+    WattPerSquareMetre, Year,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
@@ -116,6 +117,7 @@ number_node_value!(
     Second,
     Watt,
     WattPerSquareMetre,
+    JoulePerSquareMetre,
     MetrePerSecondSquared,
     KilogramPerCubicMetre,
     Radian,

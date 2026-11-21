@@ -204,3 +204,21 @@ fn node_values_carry_the_unit_symbol() {
     );
     assert_eq!(true.node_value(), NodeValue::Flag(true));
 }
+
+#[test]
+fn numbers_round_trip_through_json_bit_for_bit() {
+    // serde_json's default float parser can be off by one ulp (0.0048
+    // came back as 0.0048000000000000004); the workspace enables
+    // `float_roundtrip`.
+    for x in [
+        0.0048_f64,
+        4.8e-3 * 0.737_1,
+        1.867_5e15,
+        0.1 + 0.2,
+        6.02e23,
+        5e-324,
+    ] {
+        let back: f64 = serde_json::from_str(&serde_json::to_string(&x).unwrap()).unwrap();
+        assert_eq!(back.to_bits(), x.to_bits(), "{x:e}");
+    }
+}
