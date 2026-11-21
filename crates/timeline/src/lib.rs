@@ -30,7 +30,7 @@ pub use keyframe::{BodyState, EngineVersion, Keyframe, Timeline};
 pub use planet::{
     Atmosphere, Bulk, ClimateState, Composition, Core, CoreState, Gas, GlobalClimate, Heat, Life,
     LiquidKind, Orbit, PlanetClass, PlanetState, Renewal, Spin, Surface, SurfaceLiquid,
-    TectonicRegime, Terrain, TerrainUnit, Water,
+    TargetOutcome, TectonicRegime, Terrain, TerrainUnit, Water,
 };
 pub use seed::Seed;
 pub use sources::{StellarSource, StellarSources};

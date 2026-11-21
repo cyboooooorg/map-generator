@@ -254,6 +254,8 @@ contract_enum! {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SurfaceLiquid {
     pub kind: Traced<LiquidKind>,
+    /// When the liquid is water, the same node as `Water::inventory`
+    /// (one code path, never computed twice).
     pub inventory: Traced<Kilogram>,
     pub ocean_share: Traced<Fraction>,
 }
@@ -297,6 +299,15 @@ traced_fields!(Surface {
     life
 });
 
+contract_enum! {
+    /// Whether the archetype's backward search reached one of its
+    /// targets; the target is the node's code, the reasons its sources.
+    TargetOutcome {
+        Reached => "reached",
+        Unreachable => "unreachable",
+    }
+}
+
 /// A planet at a date.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlanetState {
@@ -312,6 +323,9 @@ pub struct PlanetState {
     pub envelope_fraction: Traced<Fraction>,
     /// None for a giant.
     pub surface: Option<Surface>,
+    /// One outcome per archetype target, empty without an archetype, so
+    /// a missed target that changes no value still reaches the keyframe.
+    pub targets: Vec<Traced<TargetOutcome>>,
 }
 
 traced_fields!(PlanetState {
@@ -325,7 +339,8 @@ traced_fields!(PlanetState {
     heat,
     interior,
     envelope_fraction,
-    surface
+    surface,
+    targets
 });
 
 impl PlanetState {

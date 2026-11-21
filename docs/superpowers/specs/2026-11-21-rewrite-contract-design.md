@@ -245,7 +245,10 @@ in the libraries' defaults anyway.
     - terrain: surface units with their age, share and renewal kind
       (legacy `planet/surface_age.rs`, 8 kinds), read by the world's
       cratering;
-    - life: arose, oxygenated.
+    - life: arose, oxygenated;
+    - archetype targets: one outcome per target (reached or
+      unreachable, the target as the node's code), empty without an
+      archetype, so a missed target that changes no value is kept.
   - The star's interior profile is optional: the legacy code has no
     stellar structure, so it needs a study first (No invented data).
     The user chose to study it within slice 1 (mapgen3); its star-only
@@ -253,9 +256,11 @@ in the libraries' defaults anyway.
     request.
 - `InteriorProfile` (#534, Cross-sections): layers from the centre out
   (outer radius, material, state: solid, liquid, plasma, partly molten,
-  porous, and its mass, which cross-sections and the moment of inertia
-  need) and radial samples (radius, density, pressure, temperature;
-  for stars also the transport and the share of fusion). Every layer is
+  porous, its mass, which cross-sections and the moment of inertia
+  need, and for a star's zones the energy transport, since they are all
+  plasma) and radial samples (radius, density, pressure, temperature;
+  for stars also the transport and the share of fusion, defined as the
+  cumulative nuclear luminosity inside the radius, L_nuc(r) / L_nuc). Every layer is
   `Traced`.
 - Every enum of the contract is `#[non_exhaustive]`, so a track adds a
   variant without breaking a match elsewhere.

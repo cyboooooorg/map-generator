@@ -3,7 +3,8 @@ use crate::{
     Atmosphere, Bulk, ClimateState, Code, Composition, Core, CoreState, Gas, GlobalClimate, Heat,
     InteriorProfile, Layer, Life, LiquidKind, Material, MatterState, NodeValueOf, Orbit,
     PlanetClass, Provenance, RadialSample, RadialSamples, Renewal, Spin, StarPhase, StellarSource,
-    StellarSources, Surface, SurfaceLiquid, TectonicRegime, Terrain, TerrainUnit, Traced, Water,
+    StellarSources, Surface, SurfaceLiquid, TargetOutcome, TectonicRegime, Terrain, TerrainUnit,
+    Traced, Transport, Water,
 };
 use science::units::{
     AstronomicalUnit, Bar, Day, Degree, Dex, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin,
@@ -30,6 +31,11 @@ fn interior(trace: &mut Trace, radii: [f64; 2]) -> InteriorProfile {
             mass: leaf(trace, "interior.layer.mass", Kilogram(1.0e24)),
             material: leaf(trace, "interior.layer.material", Material::Rock),
             state: leaf(trace, "interior.layer.state", MatterState::Solid),
+            transport: Some(leaf(
+                trace,
+                "interior.layer.transport",
+                Transport::Convective,
+            )),
         })
         .collect();
     let samples = RadialSamples(
@@ -134,6 +140,11 @@ fn earth_like_fixture(trace: &mut Trace, age: f64) -> PlanetState {
         interior: interior(trace, [3.48e6, 6.371e6]),
         envelope_fraction: leaf(trace, "planet.envelope", frac(0.0)),
         surface: Some(surface),
+        targets: vec![leaf(
+            trace,
+            "archetype.target.ocean",
+            TargetOutcome::Unreachable,
+        )],
     }
 }
 
