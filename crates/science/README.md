@@ -22,12 +22,9 @@ multiplies and divides by an `f64`, and carries its `SYMBOL`. `Fraction`
 also when deserialised.
 
 A field stores the unit the domain thinks in (au for an orbit, solar masses
-for a star); conversions go through `From`, both ways, for the pairs
-`AstronomicalUnit`/`Metre`, `SolarMass`/`Kilogram`, `EarthMass`/`Kilogram`,
-`SolarRadius`/`Metre`, `EarthRadius`/`Metre`, `SolarLuminosity`/`Watt`,
-`EarthFlux`/`WattPerSquareMetre`, `Bar`/`Pascal`, `Day`/`Second`,
-`Year`/`Second`, `Gyr`/`Year` and `Degree`/`Radian`. `EarthRadius` is the
-IAU nominal equatorial radius (6378.1 km): a law fitted against the mean
+for a star); `From` converts both ways between such a unit and its SI one
+(`AstronomicalUnit`/`Metre`, `Gyr`/`Year`, ...). `EarthRadius` is the IAU
+nominal equatorial radius (6378.1 km): a law fitted against the mean
 radius (6371 km) converts explicitly.
 
 ## Constants
@@ -121,24 +118,21 @@ exponent, rocky and icy k2/Q) say what was searched and not found; the page
 [The heat inside](../../docs/science/planet-interiors.md#the-heat-inside)
 lists them under "Where it departs from the science".
 
-## Main-sequence stars
+## Stars
 
 `science::stellar`: `life` (ZAMS age, TAMS or `Beyond(20 Gyr)`),
 `main_sequence` (R, L, T_eff) and `profile` (layers; ρ, P, T, fusion share)
 of a star of 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
-see [STELLAR.md](data/STELLAR.md#reading-the-tables).
-
-## Giant and mini-Neptune radii
-
-`data/` also holds the radius tables of Fortney et al. 2007 (giants,
-1 bar) and Lopez & Fortney 2014 (planets of 1 to 20 M⊕ with an envelope,
-20 mbar), with their provenance and validity limits:
-[GIANTS.md](data/GIANTS.md).
-
-## High-energy light
-
-`science::xuv` (`history`): a star's XUV and Lyman α history; see
+see [STELLAR.md](data/STELLAR.md#reading-the-tables). `science::xuv`
+(`history`): a star's XUV and Lyman α history; see
 [XUV fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
+
+## Giants and envelopes
+
+`science::giants`: `giant` (uninflated radius at 1 bar, internal
+luminosity) and `core_bounds` read the Fortney et al. 2007 tables, and
+`ice_rock_core_radius` is their Eq. 7. `data/` also holds Lopez & Fortney
+2014 (1 to 20 M⊕ with an envelope, 20 mbar); see [GIANTS.md](data/GIANTS.md).
 
 ## Ports
 

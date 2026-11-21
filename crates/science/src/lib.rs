@@ -7,6 +7,7 @@
 
 pub mod constants;
 pub mod eos;
+pub mod giants;
 pub mod heat;
 pub mod stellar;
 pub mod structure;
