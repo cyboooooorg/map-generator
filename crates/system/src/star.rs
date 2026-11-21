@@ -69,22 +69,21 @@ pub(crate) fn star(
     trace: &mut Trace,
 ) -> Result<Star, SystemError> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed.derive("star").get());
+    // The class, mass and metallicity are drawn even when asked, and the
+    // drawn values discarded, so that asking one never moves another draw.
+    let drawn_mass = draw_class_and_mass(&mut rng).1;
+    let drawn_metallicity =
+        Dex(MIN_METALLICITY.0 + (MAX_METALLICITY.0 - MIN_METALLICITY.0) * uniform(&mut rng));
     let (mass_value, mass_provenance) = match host_mass {
         Some(mass) => (mass, Provenance::Input),
-        None => (draw_class_and_mass(&mut rng).1, Provenance::Drawn),
+        None => (drawn_mass, Provenance::Drawn),
     };
     if !(MIN_MASS.0..=MAX_MASS.0).contains(&mass_value.0) {
         return Err(SystemError::HostMassOutOfRange { mass: mass_value });
     }
     let (metallicity_value, metallicity_provenance) = match metallicity {
         Some(value) => (value, Provenance::Input),
-        None => {
-            let span = MAX_METALLICITY.0 - MIN_METALLICITY.0;
-            (
-                Dex(MIN_METALLICITY.0 + span * uniform(&mut rng)),
-                Provenance::Drawn,
-            )
-        }
+        None => (drawn_metallicity, Provenance::Drawn),
     };
     if !(MIN_METALLICITY.0..=MAX_METALLICITY.0).contains(&metallicity_value.0) {
         return Err(SystemError::MetallicityOutOfRange {
@@ -93,6 +92,8 @@ pub(crate) fn star(
     }
     let life = life(mass_value, metallicity_value)?;
     let end = Gyr(life.end.age().0.min(AGE_OF_UNIVERSE.0));
+    // The interval of the drawn date is never empty.
+    debug_assert!(life.zams.0 <= end.0, "zams <= min(end, 13.8 Gyr)");
     let (age_value, age_provenance) = match present {
         Some(age) => (age, Provenance::Input),
         None => (
@@ -313,7 +314,7 @@ mod tests {
             let life = life(*star.state.mass.value(), *star.state.metallicity.value()).unwrap();
             let age = star.age.value().0;
             assert!(age >= life.zams.0, "{seed}");
-            assert!(age <= life.end.age().0.min(13.8), "{seed}");
+            assert!(age <= life.end.age().0.min(AGE_OF_UNIVERSE.0), "{seed}");
         }
     }
 
@@ -367,7 +368,7 @@ mod tests {
         )
         .err()
         .unwrap();
-        assert!(matches!(error, SystemError::PresentAfterLife { end, .. } if end.0 == 13.8));
+        assert!(matches!(error, SystemError::PresentAfterLife { end, .. } if end.0 == AGE_OF_UNIVERSE.0));
     }
 
     #[test]
@@ -381,6 +382,43 @@ mod tests {
             .err()
             .unwrap();
         assert!(matches!(error, SystemError::MetallicityOutOfRange { .. }));
+    }
+
+    #[test]
+    fn asking_the_mass_keeps_the_other_draws() {
+        let (free, _) = draw(42);
+        let mut trace = Trace::new();
+        let asked = star(
+            Some(*free.state.mass.value()),
+            None,
+            None,
+            Seed::new(42),
+            &mut trace,
+        )
+        .unwrap();
+        assert_eq!(
+            asked.state.metallicity.value(),
+            free.state.metallicity.value()
+        );
+        assert_eq!(asked.age.value(), free.age.value());
+    }
+
+    #[test]
+    fn the_mass_edges_are_accepted() {
+        for mass in [0.08, 8.0] {
+            for metallicity in [-1.0, 0.5] {
+                let mut trace = Trace::new();
+                let star = star(
+                    Some(SolarMass(mass)),
+                    Some(Dex(metallicity)),
+                    None,
+                    Seed::new(3),
+                    &mut trace,
+                )
+                .unwrap();
+                star.state.validate().unwrap();
+            }
+        }
     }
 
     #[test]
