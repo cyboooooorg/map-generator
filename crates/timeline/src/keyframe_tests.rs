@@ -1,15 +1,15 @@
 use super::*;
 use crate::{
-    Atmosphere, Bulk, ClimateState, Code, Composition, Core, CoreState, Gas, GlobalClimate, Heat,
-    InteriorProfile, Layer, Life, LiquidKind, Material, MatterState, NodeValueOf, Orbit,
-    PlanetClass, Provenance, RadialSample, RadialSamples, Renewal, Spin, StarPhase, StellarSource,
-    StellarSources, Surface, SurfaceLiquid, TargetOutcome, TectonicRegime, Terrain, TerrainUnit,
-    Traced, Transport, Water,
+    Atmosphere, BandLight, Bulk, ClimateState, Code, Composition, Core, CoreState, Gas,
+    GlobalClimate, Heat, InteriorProfile, Layer, Life, LiquidKind, Material, MatterState,
+    NodeValueOf, Orbit, PlanetClass, Provenance, RadialSample, RadialSamples, Renewal, Spin,
+    StarPhase, StellarSource, StellarSources, Surface, SurfaceLiquid, TargetOutcome,
+    TectonicRegime, Terrain, TerrainUnit, Traced, Transport, Water,
 };
 use science::units::{
-    AstronomicalUnit, Bar, Day, Degree, Dex, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin,
-    Kilogram, KilogramPerCubicMetre, Metre, MetrePerSecondSquared, Pascal, SolarLuminosity,
-    SolarMass, SolarRadius, Tesla, Watt,
+    AstronomicalUnit, Bar, Day, Degree, Dex, EarthFlux, EarthMass, EarthRadius, Fraction,
+    JoulePerSquareMetre, Kelvin, Kilogram, KilogramPerCubicMetre, Metre, MetrePerSecondSquared,
+    Pascal, SolarLuminosity, SolarMass, SolarRadius, Tesla, Watt, WattPerSquareMetre,
 };
 use std::collections::BTreeMap;
 
@@ -66,6 +66,18 @@ fn earth_like_fixture(trace: &mut Trace, age: f64) -> PlanetState {
         effective_temperature: leaf(trace, "star.teff", Kelvin(5772.0)),
         mass: leaf(trace, "star.mass", SolarMass(1.0)),
         luminosity: leaf(trace, "star.luminosity", SolarLuminosity(1.0)),
+        xuv: BandLight {
+            flux: leaf(trace, "star.xuv.flux", WattPerSquareMetre(4.6e-3)),
+            fluence: leaf(trace, "star.xuv.fluence", JoulePerSquareMetre(5.64e15)),
+        },
+        lyman_alpha: BandLight {
+            flux: leaf(trace, "star.lyman-alpha.flux", WattPerSquareMetre(6.4e-3)),
+            fluence: leaf(
+                trace,
+                "star.lyman-alpha.fluence",
+                JoulePerSquareMetre(2.49e15),
+            ),
+        },
     };
     let surface = Surface {
         regime: leaf(trace, "surface.regime", TectonicRegime::Plates),

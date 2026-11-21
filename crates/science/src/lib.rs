@@ -12,3 +12,4 @@ pub mod stellar;
 pub mod structure;
 pub mod units;
 pub mod water;
+pub mod xuv;
