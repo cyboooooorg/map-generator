@@ -358,6 +358,10 @@ dependencies = [
 [[package]]
 name = "science"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "semver"
@@ -454,6 +458,8 @@ name = "system"
 version = "0.1.0"
 dependencies = [
  "science",
+ "serde",
+ "serde_json",
  "timeline",
 ]
 
@@ -495,6 +501,8 @@ name = "timeline"
 version = "0.1.0"
 dependencies = [
  "science",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

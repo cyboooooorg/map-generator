@@ -9,10 +9,59 @@ A keyframe carries physical forcings and states (fluxes per stellar
 source, orbit, spin, interior, climate, atmosphere, surface liquid), never
 the kind of the central object.
 
+## Types
+
+- `Seed`, `Designation`: the seed hierarchy and the catalogue name of a
+  body.
+- `Trace`, `Traced<T>`, `CauseGraph`: the causes (see below).
+- `StellarSources`: one to three stars as a planet sees them (flux,
+  equilibrium temperature, star parameters).
+- `StarState`, `PlanetState` (and their parts: `Orbit`, `Spin`, `Bulk`,
+  `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
+  `SurfaceLiquid`, `Terrain`, `Life`): the state of a body at a date.
+  A giant has no `Surface`.
+- `InteriorProfile`: layers with their stored mass, and radial samples.
+- `Keyframe`: a date, a `BodyState` and the cause graph of its fields.
+- `Timeline`: the keyframes of one body, with its seed, the
+  `EngineVersion` that made it and the present date.
+
+Enums are `#[non_exhaustive]`, serialise in kebab-case and report their
+variant as a code to the cause graph.
+
+## The cause rule
+
+- Only a `Trace` makes a `Traced<T>`: the code that computes a value
+  records its node (`leaf` for an input, `record` for a derived value
+  with its sources). Nothing recomputes a value to explain it.
+- One trace per system. Each keyframe freezes its own subgraph:
+  `Keyframe::new` keeps the nodes its state holds and their sources,
+  renumbers them from 0 and rewrites the ids in the state.
+- A keyframe that came through deserialisation is checked with
+  `Keyframe::validate`: valid graph, valid state, every id present.
+
+## The seed rule
+
+Nothing draws outside the seed hierarchy: a child seed is derived from
+its parent by label (`Seed::derive`). A timeline stores its seed and
+engine version; both are cache keys, nothing is migrated.
+
+## Validation
+
+`Keyframe::new` and `Timeline::new` return a `ContractError` (a code
+with parameters, never text): eccentricity below 1, interior layers
+strictly increasing in radius, finite numbers, at least one keyframe,
+dates strictly increasing, one kind of body per timeline.
+
+## Left to later tracks
+
+The fields not in the contract yet are listed in the table of the
+[rewrite contract design](../../docs/superpowers/specs/2026-11-21-rewrite-contract-design.md),
+section Fields left to later tracks.
+
 ## Ports
 
 None: the map generator reads timelines through its own `TimelineSource`
-port. The types arrive with slice 1, PR 2.
+port.
 
 ## Dependencies
 
