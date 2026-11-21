@@ -128,6 +128,13 @@ lists them under "Where it departs from the science".
 of a star of 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
 see [STELLAR.md](data/STELLAR.md#reading-the-tables).
 
+## Giant and mini-Neptune radii
+
+`data/` also holds the radius tables of Fortney et al. 2007 (giants,
+1 bar) and Lopez & Fortney 2014 (planets of 1 to 20 M⊕ with an envelope,
+20 mbar), with their provenance and validity limits:
+[GIANTS.md](data/GIANTS.md).
+
 ## High-energy light
 
 `science::xuv` (`history`): a star's XUV and Lyman α history; see
