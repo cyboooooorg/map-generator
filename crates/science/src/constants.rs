@@ -29,6 +29,12 @@ pub const EARTH_EQUATORIAL_RADIUS: Metre = Metre(6.378_1e6);
 /// m^3/s^2 (Prša et al. 2016, AJ 152, 41).
 pub const EARTH_MASS_PARAMETER: f64 = 3.986_004e14;
 
+/// Definition: IAU 2015 Resolution B3 nominal Jupiter mass parameter GM, in
+/// m^3/s^2 (Prša et al. 2016, AJ 152, 41). Divided by
+/// [`EARTH_MASS_PARAMETER`] it gives Jupiter's mass in Earth masses
+/// (317.83), with no dependence on G.
+pub const JUPITER_MASS_PARAMETER: f64 = 1.266_865_3e17;
+
 /// Source: CODATA 2018 Newtonian constant of gravitation, in
 /// m^3 kg^-1 s^-2 (Tiesinga et al. 2021, Rev. Mod. Phys. 93, 025010).
 pub const GRAVITATIONAL_CONSTANT: f64 = 6.674_30e-11;

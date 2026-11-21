@@ -16,7 +16,7 @@ request, the archetype targets, the present date.
 | `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn`; `families::table` holds every count range |
 | `spin` | mapgen3 | the primordial spin of a planet (period, obliquity) |
 | `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
-| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
+| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `heat`, `codes`: the composition and envelope draws, the structure (rocky, mini-Neptune, giant) and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
 The remaining doc-only module fixes its future signature in a `//!` comment.
@@ -59,17 +59,32 @@ the science are in [the science page](../../docs/science/system-architectures.md
 ## Planet interior
 
 A trial's composition is drawn from the seed its caller passes (the body
-seed for `model`, the trial seed for `class_of`): core mass fraction (split
-normal around 0.32), water share (log-normal inside the ice line, uniform
-0.5 to 0.67 for a water world, formed beyond it or migrated, both flags
-traced), radiogenic abundance (0.23 dex). The layers are core alloy and
-mantle (holding a dry planet's water), plus a water world's water layer at
-the trial's equilibrium temperature, integrated at zero surface pressure
-with `science::structure`. From 355 K a water world's water is an inventory
-outside the structure until the climate adds its steam envelope. The
-heat is radiogenic, secular and tidal (`science::heat`). Every draw and
-constant carries its `Source:` or `Calibration:`; the departures and limits
-(cold structure, extrapolated core, water range) are on the page
+seed for `model`, the trial seed for `class_of`), each value from its own
+sub-seed and uniform between published bounds: core mass fraction 0 to 0.8,
+water log-uniform 1e-5 to 1e-2 inside the ice line and uniform
+0.1 to 0.67 beyond it or when migrated (chance 0.1, calibrated), radiogenic
+abundance ±0.5 dex. `planet::envelope` draws the hydrogen-helium share by
+mass (none under 0.1 M⊕, Lammer et al. 2014 bounds up to 5 M⊕, capped at
+0.20 under 20 M⊕, then a giant's heavy-element mass around the
+Thorngren et al. 2016 fit, inside the cores of the Fortney et al. 2007
+tables).
+
+`planet::interior` dispatches on the envelope. Without one, the layers
+are core alloy and mantle (holding a dry planet's water), plus a water
+world's water layer at the trial's equilibrium temperature, integrated at
+zero surface pressure with `science::structure`. A mini-Neptune is that
+core (mass `(1 - f) M`) plus the Lopez & Fortney 2014 thickness
+(`science::envelope`), under one gas layer. A giant (from 20 M⊕) takes its
+radius, core radius and internal luminosity from the Fortney tables
+(`science::giants`, no inflation), with a metallic hydrogen layer only
+above 50 M⊕ and a core under 25 % of its mass (`science::hydrogen`). A
+water world's water beyond the law of `science::water` (355 K) stays an
+inventory: the bulk is the condensed planet, until the climate (2d) adds
+its steam. The heat is radiogenic, secular and tidal (`science::heat`);
+a giant's secular heat is its table luminosity, its radiogenic heat zero.
+
+Every draw and constant carries its `Source:` or `Calibration:`. The laws,
+bounds, known jumps and limits are on the page
 [What are planets made of?](../../docs/science/planet-interiors.md#where-it-departs-from-the-science).
 
 ## The seam

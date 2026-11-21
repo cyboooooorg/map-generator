@@ -22,21 +22,18 @@ multiplies and divides by an `f64`, and carries its `SYMBOL`. `Fraction`
 also when deserialised.
 
 A field stores the unit the domain thinks in (au for an orbit, solar masses
-for a star); conversions go through `From`, both ways, for the pairs
-`AstronomicalUnit`/`Metre`, `SolarMass`/`Kilogram`, `EarthMass`/`Kilogram`,
-`SolarRadius`/`Metre`, `EarthRadius`/`Metre`, `SolarLuminosity`/`Watt`,
-`EarthFlux`/`WattPerSquareMetre`, `Bar`/`Pascal`, `Day`/`Second`,
-`Year`/`Second`, `Gyr`/`Year` and `Degree`/`Radian`. `EarthRadius` is the
-IAU nominal equatorial radius (6378.1 km): a law fitted against the mean
+for a star); `From` converts both ways between such a unit and its SI one
+(`AstronomicalUnit`/`Metre`, `Gyr`/`Year`, ...). `EarthRadius` is the IAU
+nominal equatorial radius (6378.1 km): a law fitted against the mean
 radius (6371 km) converts explicitly.
 
 ## Constants
 
 `science::constants` holds the sourced values the conversions use: the IAU
-2012 astronomical unit and IAU 2015 B3 nominal values (Prša et al. 2016, AJ
-152, 41) as `Definition:`; the CODATA 2018 constants (Tiesinga et al. 2021)
-as `Source:`; the solar and Earth masses as the nominal mass parameter over
-`GRAVITATIONAL_CONSTANT`. `EARTH_MEAN_RADIUS` is the IUGG mean radius R1 of
+2012 astronomical unit and IAU 2015 B3 nominal values (Prša et al. 2016) as
+`Definition:`; the CODATA 2018 constants (Tiesinga et al. 2021) as `Source:`;
+the solar and Earth masses as the nominal mass parameter over `G`.
+`EARTH_MEAN_RADIUS` is the IUGG mean radius R1 of
 GRS80 (6 371 008.7714 m, Moritz 2000); `EarthRadius` stays the IAU equatorial.
 
 ## Equations of state
@@ -126,18 +123,21 @@ lists them under "Where it departs from the science".
 `science::stellar`: `life` (ZAMS age, TAMS or `Beyond(20 Gyr)`),
 `main_sequence` (R, L, T_eff) and `profile` (layers; ρ, P, T, fusion share)
 of a star of 0.08-8 M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`;
-see [STELLAR.md](data/STELLAR.md#reading-the-tables).
-
-`science::xuv` (`history`): a star's XUV and Lyman α history; see
+see [STELLAR.md](data/STELLAR.md#reading-the-tables). `science::xuv`
+(`history`): a star's XUV and Lyman α history; see
 [XUV fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
+`science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
 
-`science::orbit`: Kepler's law, flux, equilibrium, ice line, Roche period,
-mutual Hill spacing and its floors (`TWO_PLANET_FLOOR`, Pu & Wu `k50`).
+## Giants and envelopes
 
-## Ports
-
-None: `science` is a library of pure functions. The laws arrive with the
-pull requests of slice 1 that use them (#602).
+`science::giants`: `giant` (uninflated radius at 1 bar, internal luminosity)
+and `core_bounds` read the Fortney et al. 2007 tables; `ice_rock_core_radius`
+is their Eq. 7. `science::envelope`: `envelope_thickness` is Lopez & Fortney
+2014 (1 to 20 M⊕, 1e-4 to 0.2 of H/He, 20 mbar) minus their core; the 1 M⊕ and
+1e-4 rules are calibrated. `science::hydrogen`: `polytrope_radius_at` places
+the 100 GPa metallic boundary of a giant. Data: [GIANTS.md](data/GIANTS.md);
+laws, tests and calibrations: [Mini-Neptunes](../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
+[Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary).
 
 ## Dependencies
 

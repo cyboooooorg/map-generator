@@ -1,6 +1,10 @@
 //! The interior of a planet: its layers from the composition, the
 //! hydrostatic structure from `science`, every value recorded in the trace.
 //!
+//! [`interior`] dispatches on the envelope: a planet without one is
+//! [`rocky`]; an enveloped planet (a mini-Neptune or a giant) is built in
+//! [`super::enveloped`], a mini-Neptune's core by [`rocky_core`], the same structure.
+//!
 //! The drawn water fraction is the planet's bulk water. A dry planet's
 //! water stays in its mantle (hydrated silicate; its ocean comes from
 //! outgassing, in the planet interior plan's second pull request). Only a
@@ -18,17 +22,21 @@
 
 use super::codes;
 use super::draws::Drawn;
+use super::enveloped::{Body, enveloped};
 use crate::Trial;
 use science::constants::GRAVITATIONAL_CONSTANT;
+use science::envelope::EnvelopeError;
 use science::eos::{EosError, MaterialEos, core_alloy, mantle, water, water_on_melting_curve};
+use science::giants::GiantError;
 use science::structure::{LayerSpec, Structure, StructureError, integrate};
 use science::units::{
-    EarthRadius, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
+    EarthMass, EarthRadius, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
     MetrePerSecondSquared, Pascal,
 };
 use science::water::V_VI_LIQUID_TEMPERATURE;
 use timeline::{
-    Bulk, Code, Composition, ContractError, Material, MatterState, NodeId, Trace, Traced,
+    Bulk, Code, Composition, ContractError, Material, MatterState, NodeId, Provenance, Trace,
+    Traced,
 };
 
 /// Definition: the pressure at the surface of the structure, 0 Pa. The
@@ -55,9 +63,9 @@ pub(crate) enum Water {
         mass: Traced<Kilogram>,
         temperature: Traced<Kelvin>,
     },
-    /// Outside the structure, an inventory without a layer (a water world
-    /// at 355 K or more, past the water laws).
-    Inventory {
+    /// Outside the structure, recorded apart from the condensed planet (a
+    /// water world at 355 K or more, past the water laws).
+    BeyondLaw {
         mass: Traced<Kilogram>,
         temperature: Traced<Kelvin>,
     },
@@ -67,6 +75,9 @@ pub(crate) enum Water {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Interior {
     pub bulk: Bulk,
+    /// The fractions the structure is built with. For a mini-Neptune's
+    /// core, `water_fraction` is the core's share, of `(1 - f) M`; the
+    /// planet's composition for the keyframe is built by PR 2d's chain.
     pub composition: Composition,
     pub core_mass: Traced<Kilogram>,
     /// The silicate mantle, the mass the heat sources scale with.
@@ -86,6 +97,14 @@ pub(crate) enum InteriorError {
     Structure(StructureError),
     Eos(EosError),
     NotAFraction(FractionOutOfRange),
+    /// A gas giant of this mass (M_E) has no heavy-element mass in the
+    /// range its tables and Thorngren et al. 2016's fit share.
+    NoHeavyMassRange(f64),
+    /// A giant whose total radius is not above its core's: no room for an
+    /// envelope.
+    NoEnvelope,
+    Giant(GiantError),
+    Envelope(EnvelopeError),
 }
 
 impl std::fmt::Display for InteriorError {
@@ -95,6 +114,10 @@ impl std::fmt::Display for InteriorError {
             Self::Structure(error) => write!(f, "interior-structure({error})"),
             Self::Eos(error) => write!(f, "interior-eos({error})"),
             Self::NotAFraction(error) => write!(f, "interior-{error}"),
+            Self::NoHeavyMassRange(mass) => write!(f, "interior-no-heavy-mass-range({mass})"),
+            Self::NoEnvelope => write!(f, "interior-no-envelope"),
+            Self::Giant(error) => write!(f, "interior-{error}"),
+            Self::Envelope(error) => write!(f, "interior-{error}"),
         }
     }
 }
@@ -119,6 +142,18 @@ impl From<EosError> for InteriorError {
     }
 }
 
+impl From<GiantError> for InteriorError {
+    fn from(error: GiantError) -> Self {
+        Self::Giant(error)
+    }
+}
+
+impl From<EnvelopeError> for InteriorError {
+    fn from(error: EnvelopeError) -> Self {
+        Self::Envelope(error)
+    }
+}
+
 /// What a layer is, to name its shells.
 #[derive(Clone, Copy)]
 enum Kind {
@@ -130,8 +165,29 @@ enum Kind {
     },
 }
 
-/// Builds the interior of `trial` from the composition `drawn`, integrated
-/// at zero surface pressure. Layers from the centre out:
+/// Builds the body of `trial` from the composition `drawn`: [`rocky`] at
+/// the trial's mass when the planet has no envelope, [`enveloped`]
+/// otherwise.
+///
+/// # Errors
+///
+/// The errors of [`rocky`] and [`enveloped`].
+pub(crate) fn interior(
+    trial: &Trial,
+    drawn: &Drawn,
+    trace: &mut Trace,
+) -> Result<Body, InteriorError> {
+    if drawn.envelope_fraction.value().get() == 0.0 {
+        Ok(Body::Rocky(rocky(&trial.mass, drawn, trial, trace)?))
+    } else {
+        enveloped(trial, drawn, trace)
+    }
+}
+
+/// Builds the condensed interior of `mass` (the trial's mass, or a
+/// mini-Neptune's mass without its envelope) from the composition `drawn`,
+/// integrated at zero surface pressure. Layers from the centre out, `M`
+/// being `mass`:
 ///
 /// - Fe-alloy core, `cmf (1 - w) M`;
 /// - rock mantle, `(1 - cmf)(1 - w) M`, plus `w M` for a dry planet (its
@@ -153,20 +209,48 @@ enum Kind {
 ///
 /// The errors of the structure, of the equations of state and of the
 /// trace.
-pub(crate) fn interior(
-    trial: &Trial,
+pub(crate) fn rocky(
+    mass: &Traced<EarthMass>,
     drawn: &Drawn,
+    trial: &Trial,
     trace: &mut Trace,
 ) -> Result<Interior, InteriorError> {
-    let total = Kilogram::from(*trial.mass.value()).0;
+    condensed(mass, drawn, trial, trace, codes::RADIUS)
+}
+
+/// [`rocky`] for a mini-Neptune's core: the same structure, its radius
+/// recorded as [`codes::RADIUS_WITHOUT_ENVELOPE`] so the trace tells it
+/// from the planet's.
+///
+/// # Errors
+///
+/// Those of [`rocky`].
+pub(crate) fn rocky_core(
+    mass: &Traced<EarthMass>,
+    drawn: &Drawn,
+    trial: &Trial,
+    trace: &mut Trace,
+) -> Result<Interior, InteriorError> {
+    condensed(mass, drawn, trial, trace, codes::RADIUS_WITHOUT_ENVELOPE)
+}
+
+/// The body of [`rocky`], its radius recorded under `radius_code`.
+fn condensed(
+    mass: &Traced<EarthMass>,
+    drawn: &Drawn,
+    trial: &Trial,
+    trace: &mut Trace,
+    radius_code: &'static str,
+) -> Result<Interior, InteriorError> {
+    let total = Kilogram::from(*mass.value()).0;
     let cmf = drawn.core_mass_fraction.value().get();
     let w = drawn.water_fraction.value().get();
     let fractions = [
-        trial.mass.node(),
+        mass.node(),
         drawn.core_mass_fraction.node(),
         drawn.water_fraction.node(),
     ];
-    let mut inputs: Vec<NodeId> = fractions.to_vec();
+    let mut temperature_node = None;
 
     let core_mass = trace.record(
         Code::of(codes::CORE_MASS),
@@ -196,9 +280,12 @@ pub(crate) fn interior(
         let temperature = trace.record(Code::of(codes::WATER_TEMPERATURE), t, &sources)?;
         let mut from = fractions.to_vec();
         from.push(temperature.node());
+        // The structure depends on the water temperature whenever the
+        // water is a layer; a water beyond the law is cited too, as the
+        // reason it is not one.
+        temperature_node = Some(temperature.node());
         match water_law(t)? {
             Some((eos, liquid)) => {
-                inputs.push(temperature.node());
                 let mass = trace.record(
                     Code::of(codes::WATER_LAYER_MASS),
                     Kilogram(w * total),
@@ -208,9 +295,12 @@ pub(crate) fn interior(
                 water_state = Water::Layer { mass, temperature };
             }
             None => {
-                let mass =
-                    trace.record(Code::of(codes::WATER_INVENTORY), Kilogram(w * total), &from)?;
-                water_state = Water::Inventory { mass, temperature };
+                let mass = trace.record(
+                    Code::of(codes::WATER_BEYOND_LAW),
+                    Kilogram(w * total),
+                    &from,
+                )?;
+                water_state = Water::BeyondLaw { mass, temperature };
             }
         }
     }
@@ -224,14 +314,28 @@ pub(crate) fn interior(
     let structure = integrate(&specs, SURFACE_PRESSURE)?;
     let condensed: f64 = layers.iter().map(|(_, _, mass)| mass.value().0).sum();
     let layer_nodes: Vec<NodeId> = layers.iter().map(|(_, _, mass)| mass.node()).collect();
+    let mut inputs: Vec<NodeId> = fractions.to_vec();
+    inputs.extend(&layer_nodes);
+    inputs.extend(temperature_node);
 
     let central_pressure = trace.record(
         Code::of(codes::CENTRAL_PRESSURE),
         structure.samples[0].pressure,
         &inputs,
     )?;
+    // A planet whose water is beyond the laws is described by its condensed
+    // planet: the bulk mass is the dry mass, the water mass is apart.
+    let bulk_mass = if matches!(water_state, Water::BeyondLaw { .. }) {
+        trace.record(
+            Code::of(codes::DRY_MASS),
+            EarthMass::from(Kilogram(condensed)),
+            &[mass.node(), drawn.water_fraction.node()],
+        )?
+    } else {
+        *mass
+    };
     let radius = trace.record(
-        Code::of(codes::RADIUS),
+        Code::of(radius_code),
         EarthRadius::from(structure.radius),
         &[central_pressure.node()],
     )?;
@@ -294,13 +398,19 @@ pub(crate) fn interior(
             )?,
             mass: trace.record(Code::of(codes::LAYER_MASS), shell.mass, &from)?,
             material: trace.record(Code::of(codes::LAYER_MATERIAL), material, &from)?,
-            state: trace.record(Code::of(state_code), state, &from)?,
+            state: if matches!(kind, Kind::Mantle) {
+                // An engine constant until the temperatures of the second
+                // pull request: no node it derives from.
+                trace.leaf(Code::of(state_code), state, Provenance::Imposed)?
+            } else {
+                trace.record(Code::of(state_code), state, &from)?
+            },
         });
     }
 
     Ok(Interior {
         bulk: Bulk {
-            mass: trial.mass,
+            mass: bulk_mass,
             radius,
             surface_gravity,
             mean_density,
