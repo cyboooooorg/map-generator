@@ -37,10 +37,6 @@ const WATER_WORLD_FRACTION: f64 = 0.5;
 /// laws end (a test choice).
 const HOT_ORBIT_AU: f64 = 0.4;
 
-/// Definition: the normal quantile of the 16th and 84th percentiles,
-/// Phi(-1) = 1 - Phi(1) = 0.1587.
-const ONE_SIGMA_TAIL: f64 = 0.1587;
-
 /// Definition: sampling tolerance of a share, a median or a moment over
 /// 10 000 draws, several standard errors (about 0.004 for a tail share).
 const SAMPLING: f64 = 0.02;
@@ -123,7 +119,7 @@ fn the_same_seed_draws_the_same_composition() {
             d.core_mass_fraction.value().get().to_bits(),
             d.water_fraction.value().get().to_bits(),
             d.radiogenic_abundance.value().0.to_bits(),
-            u64::from(*d.migrated.value()),
+            d.migrated.map_or(2, |m| u64::from(*m.value())),
         ]
     };
     assert_eq!(bits(&first), bits(&second));
@@ -176,7 +172,7 @@ fn the_trace_says_why_a_planet_is_a_water_world() {
     let d = draws::draw(t.seed, &t, &mut trace).unwrap();
     for (node, code) in [
         (d.core_mass_fraction.node(), codes::CORE_MASS_FRACTION),
-        (d.migrated.node(), codes::MIGRATED),
+        (d.water_fraction.node(), codes::WATER_FRACTION),
         (d.radiogenic_abundance.node(), codes::RADIOGENIC_ABUNDANCE),
     ] {
         let recorded = trace.node(node).unwrap();
@@ -191,87 +187,106 @@ fn the_trace_says_why_a_planet_is_a_water_world() {
             from: vec![t.orbit.semi_major_axis.node(), t.ice_line.node()]
         }
     );
-    let water = trace.node(d.water_fraction.node()).unwrap();
-    assert_eq!(water.code.as_str(), codes::WATER_FRACTION);
-    assert_eq!(
-        water.origin,
-        Origin::Derived {
-            from: vec![d.formed_beyond_ice_line.node(), d.migrated.node()]
-        }
-    );
-}
-
-/// Draws per distribution test.
-const N: u64 = 10_000;
-
-#[test]
-fn the_core_mass_fraction_follows_plotnykov_and_valencia() {
-    let mut cmf: Vec<f64> = (0..N)
-        .map(|i| draws::core_mass_fraction(Seed::new(i)))
-        .collect();
-    cmf.sort_by(f64::total_cmp);
-    let median = cmf[(N / 2) as usize];
-    assert!((median - 0.32).abs() < SAMPLING / 2.0, "median {median}");
-    // Plotnykov & Valencia 2020: 0.32 +0.14/-0.12, the 16th percentile at
-    // 0.20 and the 84th at 0.46.
-    let share =
-        |keep: &dyn Fn(f64) -> bool| cmf.iter().filter(|&&c| keep(c)).count() as f64 / N as f64;
-    let below = share(&|c| c < 0.20);
-    assert!(
-        (below - ONE_SIGMA_TAIL).abs() < SAMPLING,
-        "below 0.20: {below}"
-    );
-    let above = share(&|c| c > 0.46);
-    assert!(
-        (above - ONE_SIGMA_TAIL).abs() < SAMPLING,
-        "above 0.46: {above}"
-    );
-    assert!(cmf.iter().all(|c| (0.0..=1.0).contains(c)));
+    // Inside the ice line the migration draw is its own leaf.
+    let migrated = d.migrated.expect("inside the ice line");
+    let recorded = trace.node(migrated.node()).unwrap();
+    assert_eq!(recorded.code.as_str(), codes::MIGRATED);
+    assert_eq!(recorded.origin, Origin::Leaf(Provenance::Drawn));
 }
 
 #[test]
-fn the_water_fraction_follows_zeng_and_marty() {
-    let wet: Vec<f64> = (0..N)
-        .map(|i| draws::water_fraction(Seed::new(i), true).fraction)
-        .collect();
-    assert!(wet.iter().all(|w| (0.5..=0.67).contains(w)));
-
-    // Inside the ice line: a dry log-normal around Marty 2012's 2700 ppm
-    // (its median), or an icy fraction for the migrated planets.
-    let draws: Vec<_> = (0..N)
-        .map(|i| draws::water_fraction(Seed::new(i), false))
-        .collect();
-    let mut dry: Vec<f64> = draws
-        .iter()
-        .filter(|d| !d.migrated)
-        .map(|d| d.fraction)
-        .collect();
-    assert!(
-        draws
-            .iter()
-            .filter(|d| d.migrated)
-            .all(|d| d.fraction >= 0.5)
-    );
-    dry.sort_by(f64::total_cmp);
-    let median = dry[dry.len() / 2];
-    assert!(
-        (median / EARTH_WATER_FRACTION - 1.0).abs() < 0.1,
-        "median {median}"
-    );
+fn the_water_fraction_is_a_drawn_leaf() {
+    // Gap 1: the flags are recorded apart, never the inputs of the water.
+    for (au, seed) in [(1.0, 3), (5.0, 3)] {
+        let mut trace = Trace::new();
+        let t = trial(&mut trace, seed, 1.0, au, 0.0);
+        let d = draws::draw(t.seed, &t, &mut trace).unwrap();
+        let water = trace.node(d.water_fraction.node()).unwrap();
+        assert_eq!(water.code.as_str(), codes::WATER_FRACTION);
+        assert_eq!(water.origin, Origin::Leaf(Provenance::Drawn));
+    }
 }
 
 #[test]
-fn the_radiogenic_abundance_follows_nimmo() {
-    let dex: Vec<f64> = (0..N)
-        .map(|i| draws::radiogenic_abundance(Seed::new(i)))
-        .collect();
-    let mean = dex.iter().sum::<f64>() / N as f64;
-    let sd = (dex.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / N as f64).sqrt();
-    // Nimmo et al. 2020: 0.23 dex, centred on Earth.
-    assert!(
-        mean.abs() < SAMPLING / 2.0 && (sd - 0.23).abs() < SAMPLING / 2.0,
-        "mean {mean} sd {sd}"
-    );
+fn no_migration_is_recorded_beyond_the_ice_line() {
+    // Gap 4: beyond the ice line there is nothing to migrate from; the
+    // uniform is still consumed, so the water draw does not depend on it.
+    for i in 0..50 {
+        let mut trace = Trace::new();
+        let far = trial(&mut trace, i, 1.0, 5.0, 0.0);
+        let d = draws::draw(far.seed, &far, &mut trace).unwrap();
+        assert!(d.migrated.is_none());
+        let near = trial(&mut trace, i, 1.0, 1.0, 0.0);
+        let d = draws::draw(near.seed, &near, &mut trace).unwrap();
+        assert!(d.migrated.is_some());
+    }
+    let mut trace = Trace::new();
+    let far = trial(&mut trace, 9, 1.0, 5.0, 0.0);
+    let near = trial(&mut trace, 9, 1.0, 1.0, 0.0);
+    let icy = draws::water_draws(far.seed.derive(LABELS.water)).icy;
+    let d = draws::draw(far.seed, &far, &mut trace).unwrap();
+    assert_eq!(d.water_fraction.value().get(), icy);
+    let d = draws::draw(near.seed, &near, &mut trace).unwrap();
+    assert!(d.migrated.is_some());
+}
+
+/// Sub-seeds of the bound tests.
+const BOUND_SEEDS: u64 = 2_000;
+
+/// Whether `values` reach the lowest and the highest tenth of
+/// `[low, high]` (on the log scale when `log`).
+fn reaches_both_ends(values: &[f64], low: f64, high: f64, log: bool) -> bool {
+    let at = |v: f64| if log { v.ln() } else { v };
+    let (lo, hi) = (at(low), at(high));
+    let tenth = (hi - lo) / 10.0;
+    values.iter().any(|&v| at(v) <= lo + tenth) && values.iter().any(|&v| at(v) >= hi - tenth)
+}
+
+/// Every draw of `BOUND_SEEDS` sub-seeds: cmf, dry, icy, radiogenic.
+fn bound_draws() -> [Vec<f64>; 4] {
+    let seeds = (0..BOUND_SEEDS).map(Seed::new);
+    let mut out: [Vec<f64>; 4] = Default::default();
+    for seed in seeds {
+        out[0].push(draws::core_mass_fraction(seed));
+        let water = draws::water_draws(seed);
+        out[1].push(water.dry);
+        out[2].push(water.icy);
+        out[3].push(draws::radiogenic_abundance(seed));
+    }
+    out
+}
+
+#[test]
+fn draws_stay_within_their_published_bounds() {
+    // Bounds of `draw-bounds.md` sections 1 to 3.
+    let [cmf, dry, icy, radiogenic] = bound_draws();
+    assert!(cmf.iter().all(|c| (0.0..=0.8).contains(c)));
+    assert!(dry.iter().all(|w| (1e-5..=1e-2).contains(w)));
+    assert!(icy.iter().all(|w| (0.1..=0.67).contains(w)));
+    assert!(radiogenic.iter().all(|d| (-0.5..=0.5).contains(d)));
+}
+
+#[test]
+fn draws_reach_both_ends() {
+    let [cmf, dry, icy, radiogenic] = bound_draws();
+    assert!(reaches_both_ends(&cmf, 0.0, 0.8, false));
+    assert!(reaches_both_ends(&dry, 1e-5, 1e-2, true));
+    assert!(reaches_both_ends(&icy, 0.1, 0.67, false));
+    assert!(reaches_both_ends(&radiogenic, -0.5, 0.5, false));
+}
+
+#[test]
+fn the_water_draws_are_uniform_not_concentrated() {
+    // The dry water is uniform in its logarithm: half the draws lie below
+    // the geometric mean of the bounds, sqrt(1e-5 * 1e-2).
+    let [_, dry, icy, _] = bound_draws();
+    let share = |values: &[f64], cut: f64| {
+        values.iter().filter(|&&v| v < cut).count() as f64 / values.len() as f64
+    };
+    let below = share(&dry, (1e-5_f64 * 1e-2).sqrt());
+    assert!((below - 0.5).abs() < SAMPLING * 2.0, "dry below {below}");
+    let below = share(&icy, (0.1 + 0.67) / 2.0);
+    assert!((below - 0.5).abs() < SAMPLING * 2.0, "icy below {below}");
 }
 
 #[test]
@@ -281,14 +296,14 @@ fn the_ice_line_decides_a_water_world() {
         let far = trial(&mut trace, i, 1.0, 5.0, 0.0);
         let d = draws::draw(far.seed, &far, &mut trace).unwrap();
         assert!(*d.formed_beyond_ice_line.value() && d.is_water_world());
-        assert!((0.5..=0.67).contains(&d.water_fraction.value().get()));
+        assert!((0.1..=0.67).contains(&d.water_fraction.value().get()));
 
         let near = trial(&mut trace, i, 1.0, 1.0, 0.0);
         let d = draws::draw(near.seed, &near, &mut trace).unwrap();
         assert!(!*d.formed_beyond_ice_line.value());
-        assert_eq!(d.is_water_world(), *d.migrated.value());
+        assert_eq!(d.is_water_world(), d.migrated.is_some_and(|m| *m.value()));
         if !d.is_water_world() {
-            assert!(d.water_fraction.value().get() < 0.5);
+            assert!(d.water_fraction.value().get() <= 1e-2);
         }
     }
 }
@@ -312,7 +327,7 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.0,
-        false,
+        Some(false),
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let r = interior.structure.radius.0;
@@ -376,7 +391,7 @@ fn a_hot_dry_planet_builds() {
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.0,
-        false,
+        Some(false),
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     assert_eq!(interior.water, Water::InMantle);
@@ -393,7 +408,7 @@ fn a_hot_water_world_keeps_its_water_as_an_inventory() {
         EARTH_CORE_MASS_FRACTION,
         WATER_WORLD_FRACTION,
         0.0,
-        true,
+        Some(true),
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     assert_eq!(water_shells(&interior), 0);
@@ -423,7 +438,7 @@ fn a_temperate_water_world_has_a_water_layer() {
         EARTH_CORE_MASS_FRACTION,
         WATER_WORLD_FRACTION,
         0.0,
-        true,
+        Some(true),
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let Water::Layer { mass, temperature } = interior.water else {
@@ -452,7 +467,7 @@ fn heat_nodes_point_at_their_inputs() {
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.1,
-        false,
+        Some(false),
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let heat = heat::heat(&t, &interior, &drawn.radiogenic_abundance, &mut trace).unwrap();
@@ -489,7 +504,7 @@ fn a_circular_orbit_has_no_tide() {
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.0,
-        false,
+        Some(false),
     );
     let interior = interior(&t, &drawn, &mut trace).unwrap();
     let heat = heat::heat(&t, &interior, &drawn.radiogenic_abundance, &mut trace).unwrap();

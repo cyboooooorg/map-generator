@@ -8,8 +8,8 @@ pub(crate) const CORE_MASS_FRACTION: &str = "planet.core-mass-fraction";
 pub(crate) const FORMED_BEYOND_ICE_LINE: &str = "planet.formed-beyond-ice-line";
 /// Whether the planet migrated in from beyond the ice line, drawn.
 pub(crate) const MIGRATED: &str = "planet.migrated";
-/// Water mass fraction of the planet (bulk water), drawn on the branch the
-/// two flags above choose: a water world's or a dry planet's.
+/// Water mass fraction of the planet (bulk water), drawn: an icy
+/// fraction for a water world, a dry one otherwise.
 pub(crate) const WATER_FRACTION: &str = "planet.water-fraction";
 /// Radiogenic abundance of the planet in dex of Earth's, drawn.
 pub(crate) const RADIOGENIC_ABUNDANCE: &str = "planet.radiogenic-abundance";
