@@ -131,13 +131,13 @@ see [STELLAR.md](data/STELLAR.md#reading-the-tables). `science::xuv`
 
 `science::giants`: `giant` (uninflated radius at 1 bar, internal
 luminosity) and `core_bounds` read the Fortney et al. 2007 tables, and
-`ice_rock_core_radius` is their Eq. 7. `data/` also holds Lopez & Fortney
-2014 (1 to 20 M⊕ with an envelope, 20 mbar); see [GIANTS.md](data/GIANTS.md).
+`ice_rock_core_radius` is their Eq. 7. `science::envelope`: `envelope_thickness`
+is Lopez & Fortney 2014 (1 to 20 M⊕, 1e-4 to 0.2 of H/He, 20 mbar) minus their
+core; below, 1 M⊕ and 1e-4 rules (calibrated). See [GIANTS.md](data/GIANTS.md).
 
 ## Ports
 
-None: `science` is a library of pure functions. The laws arrive with the
-pull requests of slice 1 that use them (#602).
+None: `science` is a library of pure functions (laws arrive with slice 1, #602).
 
 ## Dependencies
 

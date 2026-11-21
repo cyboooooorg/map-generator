@@ -276,13 +276,13 @@ impl Grid {
 static GRID: LazyLock<Grid> = LazyLock::new(|| parse(TABLE));
 
 /// `x` clamped to the first and last values of the increasing `grid`.
-fn clamp(x: f64, grid: &[f64]) -> f64 {
+pub(crate) fn clamp(x: f64, grid: &[f64]) -> f64 {
     x.max(grid[0]).min(grid[grid.len() - 1])
 }
 
 /// The one or two indices of the increasing `grid` around `x`, with their
 /// linear weights, a zero weight left out; `None` outside the grid.
-fn bracket(grid: &[f64], x: f64) -> Option<Vec<(usize, f64)>> {
+pub(crate) fn bracket(grid: &[f64], x: f64) -> Option<Vec<(usize, f64)>> {
     if !(x >= grid[0] && x <= grid[grid.len() - 1]) {
         return None;
     }
