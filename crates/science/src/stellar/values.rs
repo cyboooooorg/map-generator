@@ -291,20 +291,67 @@ fn pair_tams(tracks: &[Track], mass: f64) -> Option<f64> {
     Some(tams.max(upper.end()))
 }
 
-fn yrec_logs(mass: f64, feh: f64, tracks: &[(&Track, f64)], age: f64) -> Logs {
-    let life = yrec_life(mass, feh, tracks);
-    let by_tau = reach_tams(tracks);
-    let mut logs = Logs::default();
-    for (track, w) in tracks {
-        let track_age = match life.end {
-            Lifetime::Ends(tams) if by_tau => {
-                let tau = (age - life.zams.0) / (tams.0 - life.zams.0);
-                lerp(track.zams(), track.end(), tau)
+/// How the YREC tracks are read for a star at an age: at its fractional
+/// main-sequence age τ when every track around it reaches its TAMS (and so
+/// does the star), otherwise at its absolute age.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TrackClock {
+    age: f64,
+    tau: Option<f64>,
+}
+
+impl TrackClock {
+    /// The clock of a star of `mass` and `feh` (in the YREC range) at `age`.
+    pub fn new(mass: f64, feh: f64, age: f64) -> Self {
+        Self::of(mass, feh, &yrec_tracks(mass, feh), age)
+    }
+
+    fn of(mass: f64, feh: f64, tracks: &[(&Track, f64)], age: f64) -> Self {
+        let life = yrec_life(mass, feh, tracks);
+        let tau = match life.end {
+            Lifetime::Ends(tams) if reach_tams(tracks) => {
+                Some((age - life.zams.0) / (tams.0 - life.zams.0))
             }
-            _ => age,
+            _ => None,
+        };
+        Self { age, tau }
+    }
+
+    /// The bracket of rows at which `track` is read, linear in age and held
+    /// at its first or last row outside its ages.
+    pub fn rows(&self, track: &Track) -> Bracket {
+        let track_age = match self.tau {
+            Some(tau) => lerp(track.zams(), track.end(), tau),
+            None => self.age,
         };
         let rows = &track.rows;
-        let at = bracket_clamped(rows.len(), |i| rows[i].age, track_age, |v| v);
+        bracket_clamped(rows.len(), |i| rows[i].age, track_age, |v| v)
+    }
+}
+
+/// Central hydrogen over its ZAMS value read by `clock` at `mass` among the
+/// tracks of the tabulated metallicity `feh`: linear in log mass between
+/// the two tracks around it (a grid mass uses its track alone).
+pub(crate) fn track_xc_frac(clock: &TrackClock, mass: f64, feh: f64) -> f64 {
+    let tracks = tables().tracks_at(feh);
+    let masses: Vec<f64> = tracks.iter().map(|track| track.mass).collect();
+    let by_mass = bracket_log(&masses, mass).expect("the YREC grid covers 0.3-8 Msun");
+    by_mass
+        .terms()
+        .map(|(j, w)| {
+            let rows = &tracks[j].rows;
+            let at = clock.rows(&tracks[j]);
+            lerp(rows[at.lo].xc_frac, rows[at.hi].xc_frac, at.weight) * w
+        })
+        .sum()
+}
+
+fn yrec_logs(mass: f64, feh: f64, tracks: &[(&Track, f64)], age: f64) -> Logs {
+    let clock = TrackClock::of(mass, feh, tracks, age);
+    let mut logs = Logs::default();
+    for (track, w) in tracks {
+        let rows = &track.rows;
+        let at = clock.rows(track);
         logs.add(
             Logs {
                 log_l: lerp(rows[at.lo].log_l, rows[at.hi].log_l, at.weight),

@@ -352,6 +352,39 @@ low-mass rows this way:
   its life is `Beyond`; outside, `BeforeZams` or `AfterTams` (which carries
   the 20 Gyr end in the second case).
 
+`profile` reads the profiles and builds the lightest stars this way:
+
+- **YREC profiles, from 0.30 M☉**: at each profile mass and tabulated
+  [Fe/H] around the star, xc_frac is read from the tracks with the clock
+  of `main_sequence` (τ or absolute age; linear in log mass between the
+  two tracks around a profile mass that has no track, 2.1, 2.3 and
+  2.5 M☉). The two snapshots around that xc_frac are interpolated linearly
+  in it, the first or last snapshot held outside them. Then linear in log
+  mass between the two profile masses around the star, then in [Fe/H].
+  Each step goes sample by sample at the same r/R: log ρ, log P, log T,
+  m/M and the fusion share linear, so masses and fusion share stay
+  non-decreasing.
+- **Layers**: at each step the two layer lists are aligned rank by rank. A
+  list without the other's convective core gets an empty one at the
+  centre; the shorter list gets empty layers at the photosphere,
+  alternating, up to the other's length. Bounds (r and m) are linear. A
+  layer empty in the nearer profile (weight below or above 0.5) is
+  dropped and its neighbours merge, so a layer present in one profile only
+  (the transient core of 1 M☉ near the ZAMS, a thin envelope zone of a hot
+  star) is kept while that profile is the nearer one. A sample takes the
+  transport of the layer that holds it.
+- **Below 0.30 M☉**: the n = 1.5 polytrope, integrated by RK4 at a fixed
+  step of 10⁻³ in ξ (ξ₁ = 3.653754, ρ_c/ρ̄ = 5.990705; Chandrasekhar 1939:
+  3.65375, 5.99071), scaled to the star's mass and to the radius of
+  `main_sequence`: ρ_c = ρ̄ ξ₁/(3|θ'₁|), P_c = G M²/(4π (n + 1) θ'₁² R⁴),
+  T_c = μ m_u P_c/(k ρ_c) with μ = 0.617, T = T_c θ held at T_eff at the
+  photosphere; ρ and P fall to 0 there. One convective layer. Fusion share
+  from ε ∝ ρ T⁴ (pp chain near 4 × 10⁶ K, Kippenhahn et al. 2012
+  §18.5.1), dL ∝ θ⁷ ξ² dξ. At 0.08 M☉ and 5 Gyr ρ_c is 696 g cm⁻³, 9 %
+  above BHAC15 (637.8); at 0.29 M☉, 99 g cm⁻³ and 7.6 × 10⁶ K against
+  YREC's 96 g cm⁻³ and 7.5 × 10⁶ K at 0.30 M☉. The switch is sharp: the
+  0.30-0.35 M☉ blend of `main_sequence` does not apply to the interior.
+
 ## Features of the models
 
 - The YREC 0.3 M☉ snapshots are fully convective (one layer). At

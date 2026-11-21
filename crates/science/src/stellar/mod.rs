@@ -3,12 +3,17 @@
 //!
 //! [`life`] gives the ages at which a star reaches and leaves the main
 //! sequence, [`main_sequence`] its radius, luminosity and effective
-//! temperature at a given age. YREC tracks cover 0.3-8 M☉, Baraffe et al.
-//! (2015) with Dartmouth metallicity offsets cover 0.08-0.35 M☉, blended
-//! over 0.30-0.35 M☉.
+//! temperature at a given age, [`profile`] its interior. YREC tracks and
+//! profiles cover 0.3-8 M☉, Baraffe et al. (2015) with Dartmouth
+//! metallicity offsets cover 0.08-0.35 M☉, blended over 0.30-0.35 M☉; below
+//! 0.30 M☉ the interior is an n = 1.5 polytrope.
 
+mod polytrope;
+mod profile;
 mod tables;
 mod values;
+
+pub use profile::{StellarLayer, StellarProfile, StellarSample, profile};
 
 pub use values::{
     Life, Lifetime, MAX_MASS, MAX_METALLICITY, MIN_MASS, MIN_METALLICITY, MainSequence,
