@@ -17,28 +17,21 @@ use rand_core::{Rng, SeedableRng};
 use science::units::{Dex, Fraction};
 use timeline::{Code, Provenance, Seed, Trace, Traced};
 
-/// Source: Plotnykov & Valencia 2020, MNRAS 499, 932, abstract: the
-/// core mass fraction inferred from stars is 0.32 +0.14/-0.12 (and 0.325
-/// for Earth, Wang et al. 2018). Read here as the mode of a split normal.
-const CMF_MODE: f64 = 0.32;
+/// Source: Plotnykov & Valencia 2020, MNRAS 499, 932, abstract: the core
+/// mass fraction inferred from stars is 0.32 +0.14/-0.12 (and 0.325 for
+/// Earth, Wang et al. 2018). Read as the median and the 68 % interval
+/// (16th and 84th percentiles), the median of the draw.
+const CMF_MEDIAN: f64 = 0.32;
 
 /// Source: Plotnykov & Valencia 2020, abstract: the lower uncertainty,
-/// 0.12, read as the sigma below the mode.
-const CMF_SIGMA_BELOW: f64 = 0.12;
+/// 0.12, the distance from the median to the 16th percentile (a 68 %
+/// interval), so the scale of the draw below the median.
+const CMF_SCALE_BELOW: f64 = 0.12;
 
 /// Source: Plotnykov & Valencia 2020, abstract: the upper uncertainty,
-/// 0.14, read as the sigma above the mode.
-const CMF_SIGMA_ABOVE: f64 = 0.14;
-
-/// Source: Plotnykov & Valencia 2020, abstract: the highest iron
-/// enrichment seen is a core mass fraction of about 0.8, the tail of the
-/// draw.
-const CMF_MAX: f64 = 0.8;
-
-/// Source: Plotnykov & Valencia 2020, abstract: rocky planets follow a
-/// distribution 0.24 +0.33/-0.18, whose lower edge, 0.24 - 0.18 = 0.06
-/// (derived), is the lowest core mass fraction drawn.
-const CMF_MIN: f64 = 0.06;
+/// 0.14, the distance from the median to the 84th percentile, so the
+/// scale of the draw above the median.
+const CMF_SCALE_ABOVE: f64 = 0.14;
 
 /// Source: Marty 2012, Earth Planet. Sci. Lett. 313, 56, p. 18: the bulk
 /// Earth holds 2700 +/- 1350 ppm of water by mass, the median of the dry
@@ -46,8 +39,8 @@ const CMF_MIN: f64 = 0.06;
 const DRY_WATER_MEDIAN: f64 = 2.7e-3;
 
 /// Calibration: sigma of the natural logarithm of the dry water fraction,
-/// 0.5, the relative spread of Marty 2012's 2700 +/- 1350 ppm read as one
-/// sigma (derived, small-spread approximation of a log-normal).
+/// 0.5, derived from Marty 2012's 2700 +/- 1350 ppm read as one sigma
+/// (1350 / 2700, the small-spread approximation of a log-normal).
 const DRY_WATER_SIGMA_LN: f64 = 0.5;
 
 /// Source: Zeng et al. 2019, PNAS 116, 9723, p. 7 and p. 20: the ice
@@ -69,10 +62,16 @@ const MIGRATION_CHANCE: f64 = 0.1;
 
 /// Source: Nimmo et al. 2020, p. 5: a 10-90 % range of [Eu/Mg] of about
 /// -0.3 to +0.3 dex among likely planet hosts, i.e. a sigma of 0.3 / 1.28
-/// = 0.23 dex if Gaussian (derived; Unterborn et al. 2015, whose Th
+/// = 0.23 dex if Gaussian (derived from that range; Unterborn et al. 2015, whose Th
 /// ranges from -0.23 to +0.40 dex, agrees). The spread of the radiogenic
 /// abundance, dex of Earth's.
 const RADIOGENIC_SIGMA_DEX: f64 = 0.23;
+
+/// Definition: a mass fraction is at least 0.
+const MASS_FRACTION_MIN: f64 = 0.0;
+
+/// Definition: a mass fraction is at most 1.
+const MASS_FRACTION_MAX: f64 = 1.0;
 
 /// Definition: bits of the mantissa of an `f64`, so that 53 random bits
 /// make a uniform number of the grid `k / 2^53`.
@@ -158,21 +157,19 @@ fn normal(rng: &mut ChaCha8Rng) -> f64 {
     radius * (std::f64::consts::TAU * uniform(rng)).cos()
 }
 
-/// The core mass fraction: a split normal of mode 0.32, sigma 0.12 below
-/// and 0.14 above, each side with a probability proportional to its
-/// sigma (the continuous split normal), clamped to 0.06 to 0.8. Two draws
-/// from the stream, always.
+/// The core mass fraction: `0.32 + 0.12 z` for `z < 0` and `0.32 + 0.14 z`
+/// otherwise, `z` standard normal: half the mass on each side of the
+/// median 0.32, the 16th percentile at 0.20 and the 84th at 0.46.
+/// Clamped to a mass fraction, 0 to 1.
 pub(crate) fn core_mass_fraction(seed: Seed) -> f64 {
     let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
-    let side = uniform(&mut rng);
-    let z = normal(&mut rng).abs();
-    let below = side < CMF_SIGMA_BELOW / (CMF_SIGMA_BELOW + CMF_SIGMA_ABOVE);
-    let value = if below {
-        CMF_MODE - CMF_SIGMA_BELOW * z
+    let z = normal(&mut rng);
+    let scale = if z < 0.0 {
+        CMF_SCALE_BELOW
     } else {
-        CMF_MODE + CMF_SIGMA_ABOVE * z
+        CMF_SCALE_ABOVE
     };
-    value.clamp(CMF_MIN, CMF_MAX)
+    (CMF_MEDIAN + scale * z).clamp(MASS_FRACTION_MIN, MASS_FRACTION_MAX)
 }
 
 /// The water fraction: beyond the ice line, or with the migration chance

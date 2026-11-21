@@ -123,18 +123,13 @@ fn draws_follow_their_sources() {
         .map(|i| draws::core_mass_fraction(Seed::new(i)))
         .collect();
     cmf.sort_by(f64::total_cmp);
-    // Derived: the median of a split normal of mode 0.32 and sigmas 0.12
-    // and 0.14 (Plotnykov & Valencia 2020) is 0.32 + 0.14 z, z the
-    // half-normal quantile at (0.5 - 0.12/0.26) / (1 - 0.12/0.26) = 0.0714,
-    // i.e. 0.0895: the mode is 0.32 but the median lies above it.
     let median = cmf[(N / 2) as usize];
-    assert!((median - 0.3325).abs() < 0.01, "median {median}");
-    assert!(cmf.iter().all(|c| (0.06..=0.8).contains(c)));
-    let below_mode = cmf.iter().filter(|&&c| c < 0.32).count() as f64 / N as f64;
-    assert!(
-        (below_mode - 0.12 / 0.26).abs() < 0.02,
-        "below the mode {below_mode}"
-    );
+    assert!((median - 0.32).abs() < 0.01, "median {median}");
+    // Definition: the 16th percentile of a normal, Phi(-1) = 0.1587, is
+    // the 0.32 - 0.12 = 0.20 of Plotnykov & Valencia 2020.
+    let below = cmf.iter().filter(|&&c| c < 0.20).count() as f64 / N as f64;
+    assert!((below - 0.1587).abs() < 0.02, "share below 0.20: {below}");
+    assert!(cmf.iter().all(|c| (0.0..=1.0).contains(c)));
 
     let wet: Vec<f64> = (0..N)
         .map(|i| draws::water_fraction(Seed::new(i), true))
