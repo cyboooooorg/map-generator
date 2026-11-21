@@ -33,11 +33,99 @@ radius (6371 km) converts explicitly.
 ## Constants
 
 `science::constants` holds the sourced values the conversions use: the IAU
-2012 astronomical unit and the IAU 2015 Resolution B3 nominal values (Prša
-et al. 2016, AJ 152, 41) as `Definition:`; the CODATA 2018 gravitational and
-Stefan-Boltzmann constants (Tiesinga et al. 2021, Rev. Mod. Phys. 93,
-025010) as `Source:`; the solar and Earth masses as the nominal mass
-parameter divided by `GRAVITATIONAL_CONSTANT`.
+2012 astronomical unit and IAU 2015 B3 nominal values (Prša et al. 2016, AJ
+152, 41) as `Definition:`; the CODATA 2018 constants (Tiesinga et al. 2021)
+as `Source:`; the solar and Earth masses as the nominal mass parameter over
+`GRAVITATIONAL_CONSTANT`. `EARTH_MEAN_RADIUS` is the IUGG mean radius R1 of
+GRS80 (6 371 008.7714 m, Moritz 2000); `EarthRadius` stays the IAU equatorial.
+
+## Equations of state
+
+`science::eos` gives density against pressure at the reference
+temperature (or, for water, along a path through the phase diagram):
+`Eos` (`Vinet`, `BirchMurnaghan3`, `BirchMurnaghan2`) with
+`pressure(rho)` and `density(p)` (safeguarded Newton, bracketed between
+`rho0` and `100 rho0`, or the pressure maximum of a third-order form with
+`K0' < 4`); `Mix` (mass shares added by volume at equal pressure);
+`MaterialEos`, phases ordered by pressure, the last one unbounded, built by
+`MaterialEos::new` so that a run-time material fits. The materials are
+`core_alloy()` (Valencia et al. 2006), `mantle()` (upper and lower, split at
+23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
+
+- `water(t)`, for 273.31 K <= t < 355 K: liquid (IAPWS-95), ice VI, ice VII
+  along the isotherm. Outside the range, and in the last 0.1 mK below
+  355 K where ice VI has no range: `EosError::TemperatureOutOfRange`.
+- `water_on_melting_curve()`, for colder bodies (Zeng and Sasselov 2013):
+  ice Ih, III, V, VI, VII, switching at the IAPWS 2011 triple points.
+
+`science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the
+melting pressures, the ice VI / ice VII boundary), each checked against its
+IAPWS verification table. Every value, its source and its fitted range are
+in the page [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
+Limits to know: the laws are cold (no thermal pressure), the mantle has no
+transition-zone phases (-7.5 % / +3.5 % against PREM at 23.83 GPa), ices III,
+V and VI are 0 K curves, and water has nothing above 355 K.
+
+## Hydrostatic structure
+
+`science::structure::integrate(layers, surface_pressure)` builds a planet
+in hydrostatic equilibrium from its layers, centre out (`LayerSpec`: a mass
+and a borrowed `MaterialEos`; zero-mass layers are skipped). It returns a
+`Structure`: the surface radius, the normalised moment of inertia
+`C/MR^2`, the `Shell`s (one per layer and phase actually present, so a
+phase change inside a layer is a shell boundary) and the `Sample`s (radius,
+enclosed mass, density, pressure at the centre and at the end of every
+step). Errors: `NoMass`, `NotFinite`, `NoConvergence`, `Eos`.
+
+The method is the study's prototype
+(`docs/superpowers/studies/2026-11-21-planet-interior/prototype/solve.py`):
+fourth-order Runge-Kutta in the mass coordinate `t = (m/M)^(1/3)`, state
+`(r, P, I)`, shooting on the central pressure (Brent's method, 1e-10
+relative) until the surface pressure is met. A phase transition ends a
+step exactly (Brent's method on the step length), so the error stays
+fourth order; `STEPS_PER_LAYER` (20, a calibration) keeps R and C/MR^2
+within 1e-4 of the converged answer for Earth and a 20 Earth-mass planet.
+Below zero pressure, which a Runge-Kutta stage can predict near the
+surface, the density is the zero-pressure one, and a recorded sample's
+pressure is floored at 0, so a zero surface pressure integrates.
+
+```rust
+use science::constants::EARTH_MASS;
+use science::eos::{core_alloy, mantle};
+use science::structure::{LayerSpec, integrate};
+use science::units::Pascal;
+
+// Earth: core mass fraction 0.325 (PREM), 1 bar at the surface.
+let (core, rock) = (core_alloy(), mantle());
+let earth = integrate(
+    &[
+        LayerSpec { mass: EARTH_MASS * 0.325, material: &core },
+        LayerSpec { mass: EARTH_MASS * 0.675, material: &rock },
+    ],
+    Pascal(1e5),
+)
+.expect("Earth integrates");
+println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
+```
+
+Against measured values (tests of `structure.rs`; the table is on the
+page above): Earth R -0.29 %, C/MR^2 -0.24 %; Venus, Mars, Mercury, the Moon
+and Ganymede within 2 %; super-Earths of 5 Earth masses within 2 % of Zeng
+et al. (1.1 % in the prototype). Titan's C/MR^2 is not reproduced (partial
+differentiation). The core alloy is fitted to PREM (364 GPa) and used to
+7.85 TPa at 20 Earth masses: that converges, but is not validated.
+
+## Internal heat
+
+`science::heat`: `radiogenic`, `secular` and `tidal` power, and
+`k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
+kind). Radiogenic power comes from the abundances of U, Th and K and the
+Dye 2012 half-lives and heats; secular cooling scales Earth's 26.5 TW by the
+silicate mass; tidal heat is Peale, Cassen and Reynolds (1979). The
+`Calibration:` constants (U and Th abundances, cooling time and its mass
+exponent, rocky and icy k2/Q) say what was searched and not found; the page
+[The heat inside](../../docs/science/planet-interiors.md#the-heat-inside)
+lists them under "Where it departs from the science".
 
 ## Ports
 

@@ -1,22 +1,25 @@
 # What are planets made of, and how big does that make them?
 
-Seen from: the model behind the planet cards, in the generator's code
-(`crates/mapgen/src/planet/`). Part 1 of the physical planet model
-computes it for every planet of a stored system but shows it nowhere yet,
-and does not change any generated world.
+Seen from: the planet model of the generator. Its interior and heat are
+computed by the system engine (`crates/system/src/planet/`) with the laws
+of `crates/science/` (equations of state, hydrostatic structure, heat);
+it shows them nowhere yet. The envelope, giants, moons, ice shell and
+map of the earlier crate (`crates/mapgen/src/planet/`, tag
+`legacy-final`) are described where they have not been rewritten.
 
 ## Short answer
 
 A planet is a stack of layers: an iron core, a rock mantle, a shell of
 water and ices, and sometimes a hydrogen and helium envelope. How much of
 each depends on where the planet formed (inside or beyond the ice line),
-around what star (its iron content) and how massive it grew (a heavy core
+and how massive it grew (a heavy core
 captures gas). Given the layers, the radius follows from how much each
 material is squeezed by the planet's own weight, plus the thickness of the
 envelope. The model then adds the heat made inside (radioactive decay and
 tides), the ice shell a frozen water layer keeps over an ocean, and reads
 a class off the result: rocky, super-Earth, ice world,
-mini-Neptune, ice giant, hot Neptune, gas giant or hot Jupiter. No class name goes into
+mini-Neptune, ice giant, hot Neptune, gas giant or hot Jupiter. No class name
+goes into
 the calculation; it only comes out.
 
 ## The science
@@ -28,17 +31,19 @@ in the protoplanetary disc and solid planets form with a large share of
 ice. The model reads the system's ice line (see
 [How do asteroid belts form?](asteroid-belts.md) and
 [giant planet placement](giant-planet-placement.md)): beyond it, ices make
-20 to 50 % of the non-gas mass, like Ganymede and Titan (about 40 to 50 %);
-inside it, 0.01 to 0.2 % (Earth holds 0.023 %, Marty 2012). One planet in
-ten inside the line is drawn as if it had formed beyond it and migrated in.
+50 to 67 % of the mass of the planets that formed there (Zeng et al.
+2019); the icy moons of the Solar System hold less, Ganymede and Titan
+about 40 to 50 %. Inside it, the water share is log-normal around
+0.27 % of the mass, Earth's bulk (Marty 2012). One planet in ten inside
+the line is drawn as if it had formed beyond it and migrated in.
 
-**Metallicity.** Stars rich in iron form planets rich in iron: Adibekyan et
-al. (2021) find the iron fraction of rocky planets rising with their
-star's. The model draws the iron core's share of the refractory (iron and
-rock) mass around Earth's 0.325, shifted by 0.15 per dex of the star's
-`[Fe/H]`, with a spread of 0.05. A few planets close to the star (5 % inside 0.3
-of the ice line) are drawn Mercury-like, their mantle stripped by giant
-impacts, with a core share of 0.55 to 0.75.
+**Iron.** The core's share of the iron and rock mass is drawn around
+0.32 (Plotnykov & Valencia 2020, inferred from the composition of stars:
+0.32, +0.14 and −0.12 at 68 %; Earth's is 0.325), with no dependence on
+the star's `[Fe/H]`, though Adibekyan et al. (2021) find the iron
+fraction of rocky planets rising with their star's. The earlier model's
+slope of 0.15 per dex and its Mercury-like planets with a stripped mantle
+are not in the new draw.
 
 **Core accretion.** A solid core that grows in the gas disc captures
 hydrogen and helium. Below about 0.5 Earth masses a body finishes forming
@@ -51,32 +56,182 @@ gas, Jupiter and Saturn 85 to 95 % (Guillot 2005, Helled et al. 2011).
 
 ### From layers to radius
 
-A sphere of density $\rho$ and mass $M$ has radius $R = (3M / 4\pi\rho)^{1/3}$.
-Rock under pressure is denser than rock at the surface, so a heavier planet
-is smaller than its uncompressed size. For the iron and rock, Zeng,
-Sasselov & Jacobsen (2016) fit models of Earth-like planets scaled from
-PREM, with $M$ in Earth masses and $c$ the core's share of the refractory
-mass:
+The solid part of a planet (iron core, rock mantle, water and ices) is
+built by integrating its hydrostatic equilibrium, not by a fit of radius
+against mass. Each layer has a mass and a material; a material is a law
+of density against pressure. The code is `science::structure` (the
+integrator), `science::eos` and `science::water` (the materials).
+
+**The equations.** At radius $r$ inside a planet of mass $M$, with $m(r)$
+the mass inside, $P$ the pressure and $\rho(P)$ the density of the
+material at that pressure:
 
 ```math
-R / R_\oplus = (1.07 - 0.21\,c)\,M^{1/3.7}
+\frac{dm}{dr} = 4\pi r^2 \rho, \qquad
+\frac{dP}{dr} = -\frac{G\,m\,\rho}{r^2}, \qquad
+C = \int_0^M \tfrac{2}{3}\, r^2\, dm
 ```
 
-**In words.** A planet is slightly smaller the more iron it holds, and
-grows more slowly than the cube root of its mass.
+The model integrates outward from the centre with fourth-order
+Runge-Kutta, using $t = (m/M)^{1/3}$ as the variable, so that the centre
+is not a singularity. The central pressure is not known: Brent's method
+searches it until the pressure at mass $M$ equals the surface pressure
+(1 bar in the tests, 0 in the system engine until the climate sets
+one). A pressure that crosses the boundary between two phases of a
+material ends the step exactly there, so a phase change is a shell
+boundary and the error stays fourth order. Twenty steps per layer keep
+the radius and $C/MR^2$ within $10^{-4}$ of the converged answer for
+Earth and for 20 Earth masses (`STEPS_PER_LAYER`, a calibration,
+measured when the integrator was written against a 1280-step reference;
+the
+[prototype](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md),
+which did not end steps at the phase changes, needed 160).
 
-**Orders of magnitude.** Earth ($c$ = 0.325, 1 $M_\oplus$) gives 1.00
-$R_\oplus$; a 5-Earth-mass planet of the same make gives 1.5 times that.
-The fit was made for 1 to 8 Earth masses.
+**In words.** Squeeze the planet under its own weight, layer by layer,
+until the pressure at the top is the surface's. The radius, the
+pressure and density at every depth and the moment of inertia come out
+together.
 
-The model takes the smaller of this radius and the uncompressed size (so
-Mars, which does not compress its rock, is not shrunk below its real
-size). The ratio of the two volumes, $k$, measures the compression. The
-iron core shrinks by $k$, and the water shell, softer than rock, by
-$k^{1.5}$, a calibration against the models of Zeng et al. (2019): a
-5-Earth-mass planet with half its mass in water comes out at 1.95 $R_\oplus$,
-between their 1.911 (300 K) and 1.981 (700 K), and within 6 % of them from
-1 to 20 Earth masses.
+**Orders of magnitude.** An Earth integrates in about 12 ms. It comes
+out 6352 km (6371 measured), with a core 3480 km across (PREM: 3480 km)
+and a central pressure of 367 GPa (PREM: 364 GPa).
+
+**The materials.** Each density law is an equation of state, a pressure
+$P(\rho)$ that the code inverts. Vinet and third-order Birch-Murnaghan
+(BM3) laws are fitted to experiments or to ab initio models near a
+reference density $\rho_0$, bulk modulus $K_0$ and its pressure
+derivative $K_0'$. A mix of minerals adds the volumes of its parts at
+equal pressure (Amagat's law), by mass share. The values are in
+`science::eos` and `science::water`, each with its source; the studies
+([equations of state](../superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
+[core and dynamo](../superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md))
+give the search behind them.
+
+| Layer | Material and law | $\rho_0$ (kg/m³), $K_0$ (GPa), $K_0'$ | Source |
+| --- | --- | --- | --- |
+| Outer core, below 328.851 GPa | Fe alloy, BM3, liquid | 6800, 165, 4.2 | Valencia et al. 2006, Table 1, fitted to PREM |
+| Inner core, above | Fe alloy, BM3, solid | 7990, 200, 5.2 | same |
+| Upper mantle, below 23.83 GPa | 50 % forsterite, 50 % enstatite, BM3 | 3230, 128, 4.2 and 3200, 107, 7.0 | Stixrude & Lithgow-Bertelloni 2005, as in Unterborn et al. 2016, Table 1 |
+| Lower mantle, above | 90 % (Mg0.88 Fe0.12) SiO3 bridgmanite, 10 % periclase, BM3 | 4110, 251, 4.1 and 5180, 272, 4.1 (Mg and Fe ends); 3590, 161, 3.8 | same; the mix after Seager et al. 2007 |
+| Liquid water | IAPWS-95, 56-term Helmholtz function | none (full equation) | IAPWS R6-95 (2018) |
+| Ice Ih | IAPWS Gibbs function | none (full equation) | IAPWS R10-06 (2009), Feistel & Wagner 2006 |
+| Ices III, V, VI | BM3 on the 0 K curve | 1163.5, 9.9, 6; 1244.6, 13.2, 6; 1322.4, 15.2, 6.5 | Journaux et al. 2020, Table 3 |
+| Ice VII | Vinet | 1460, 14.3771, 6.57972 | Seager et al. 2007, section 3.3 |
+
+The boundaries between phases of water are the melting curves of ices
+Ih and VI and the three triple points (208.566 MPa at 251.165 K,
+350.1 MPa and 632.4 MPa at 273.31 K, 2216 MPa at 355 K), from the IAPWS
+release R14-08 (2011) of Wagner et al., and the ice VI to ice VII
+boundary of the AQUA model (Haldemann et al. 2020, eq. 22). A water
+layer follows one of two paths, chosen by its temperature $T$:
+
+- **273.31 K ≤ $T$ < 355 K:** the isotherm at $T$. Liquid water up to
+  the melting pressure of ice VI, ice VI up to the VI to VII boundary,
+  ice VII above. At 355 K the ice VI interval closes, so nothing hotter
+  has a law yet.
+- **Colder:** the melting curve (Zeng & Sasselov 2013): ice Ih, then
+  III, V, VI and VII at the triple points. There is no liquid on it.
+
+**Fitted ranges.** The core alloy is fitted to PREM, up to 364 GPa. A 20
+Earth-mass planet takes the core alloy to 7.85 TPa at its
+centre and the mantle to 2.83 TPa at its base. The laws stay monotone
+there, but no source says they are right: that is an extrapolation of
+20 times the fitted range for the core, with no high-pressure branch yet
+(a Holzapfel iron law, Hakim et al. 2018, and a high-pressure silicate
+are the candidates, proposed as a backlog issue).
+
+**Validation.** The measured values come from the sources named in the
+tests (`structure.rs`); the computed ones from the integrator, with the
+core mass fraction of each body from the cited source. Of the laws, the
+liquid and ice Ih are checked against the IAPWS verification tables;
+ice VII against Seager et al.'s (2007, Table 3) polytrope at 3 GPa,
+within the 5 % they state below 5 GPa. No published density at pressure
+was found for ices III, V and VI beyond Journaux et al.'s parameters.
+
+| Body | Measured (source) | Computed | Error |
+| --- | --- | --- | --- |
+| Earth, radius | 6371.0 km (IUGG mean radius) | 6352.4 km | −0.29 % |
+| Earth, $C/MR^2$ | 0.3307 (Williams 1994, via Margot et al. 2018) | 0.3299 | −0.24 % |
+| Earth, central pressure | 363.852 GPa (PREM) | 367.45 GPa | +0.99 % |
+| Earth, core radius | 3480 km (PREM) | 3479.9 km | 0.0 % |
+| Venus, radius | 6051.8 km (NASA NSSDC) | 6028.6 km | −0.38 % |
+| Venus, $C/MR^2$ | 0.337 ± 0.024 (Margot et al. 2021) | 0.3333 | −1.11 % |
+| Mars, radius | 3389.5 km (NASA NSSDC) | 3412.3 km | +0.67 % |
+| Mars, $C/MR^2$ | 0.3638 (Konopliv et al. 2016) | 0.3590 | −1.31 % |
+| Mercury, radius | 2439.7 km (NASA NSSDC) | 2435.2 km | −0.19 % |
+| Mercury, $C/MR^2$ | 0.346 ± 0.009 (Margot et al. 2018) | 0.3413 | −1.36 % |
+| Moon, radius | 1737.4 km (NASA NSSDC) | 1746.4 km | +0.52 % |
+| Moon, $C/MR^2$ | 0.392728 (Williams et al. 2014) | 0.3949 | +0.56 % |
+| Ganymede, radius | 2634.1 km (NASA NSSDC; Gao & Stevenson 2013) | 2631.7 km | −0.09 % |
+| Ganymede, $C/MR^2$ | 0.3115 ± 0.003 (Schubert et al. 2004, via Rodriguez-Mozos & Moya 2022) | 0.3067 | −1.53 % |
+| Titan, radius | 2574.7 km | 2579.8 km | +0.20 % |
+| Titan, $C/MR^2$ | 0.3414 (Iess et al. 2010) | 0.3187 | −6.66 %, not reproduced |
+| 5 $M_\oplus$ rocky, radius | 9860 km (Zeng et al. 2016 fit) | 9840.6 km | −0.20 % |
+| 5 $M_\oplus$, 50 % water, 300 K | 12 175 km (1.911 $R_\oplus$, Zeng et al. 2019) | 12 059.9 km | −0.95 % |
+
+The Earth, Venus, Mars, Mercury and Moon rows use the core mass
+fractions 0.325 (PREM), 0.30 (Skinner et al. 2026, citing Shah et al.
+2022), 0.21 (Khan et al. 2023), 0.7136 (Genova et al. 2019) and 0.0168
+(Viswanathan et al. 2019). Ganymede takes the split 0.085 core, 0.46
+rock and 0.455 ice of Rodriguez-Mozos & Moya (2022), along the melting
+curve. The two super-Earth rows are checked against fits of other
+models, not measurements; the second assumes the prototype's split of
+0.1625, 0.3375 and 0.5 (an assumption, as is Titan's 54.5 % rock and
+45.5 % ice). The prototype came within 1.1 % of both super-Earth curves;
+the tests allow 2 % on every body, the super-Earths included. At 20 Earth
+masses the integration is only checked to converge: no published curve is
+compared there (issue #616).
+
+**Titan.** The model is fully differentiated: iron, rock, then water.
+Titan's measured 0.3414 (Iess et al. 2010) is that of a partly
+differentiated body, whose rock and ice are mixed to some depth. No
+water law changes that (every path tried gave −6.5 to −7.1 %); the model
+reproduces Titan's radius only. Ganymede, which is fully differentiated,
+comes out right. Partial differentiation is the moons' track (T2).
+
+**Limits, in short.**
+
+- **Cold structure.** The laws are at the reference temperature, with
+  no thermal pressure. Seager et al. (2007), Grasset et al. (2009) and
+  Hakim et al. (2018) put the effect at 1.5 % of the radius or less
+  below a 1500 K surface. A hotter surface (a lava world) comes out too
+  small by more, to be revisited in the second pull request.
+- **No transition-zone phases.** The mantle recipe is two mineral sets
+  split at 23.83 GPa. It has no olivine to wadsleyite or ringwoodite
+  transition, no post-perovskite, no temperature. Against PREM at
+  23.83 GPa the upper side comes out 7.5 % too light (3693 against
+  3992 kg/m³) and the lower side 3.5 % too dense (4533 against 4381).
+  The two errors partly offset: Earth's radius and $C/MR^2$ are still
+  within 0.3 %.
+- **Water.** Liquid, VI and VII only between 273.31 and 355 K. Colder
+  bodies follow the melting curve. Nothing above 355 K (steam, a
+  supercritical fluid) exists yet. Within about 0.1 mK below 355 K the
+  IAPWS melting pressure of ice VI already passes the AQUA ice VI / ice
+  VII boundary (the two fits reach the triple point a hair apart), so the
+  isotherm is refused there too. Ices III, V and VI are 0 K curves,
+  1 to 4 % denser than at their real temperature (the comparison with
+  Acuña et al. 2021 is in the study); ice VII and the rock are
+  300 K fits. The solid-solid boundaries between ices III, V and VI away
+  from the melting curve were not found in an open source (Choukroun &
+  Grasset 2007 and 2010 and Dunaeva 2010 are paywalled), which is why a
+  warm layer skips them.
+- **The water layer's temperature** is the planet's equilibrium
+  temperature until the climate of the second pull request sets the
+  surface temperature. A water world at 355 K or more keeps its water
+  outside the structure (see "How it computes them").
+- **States by pressure.** The core's liquid outer and solid inner parts
+  are the two phases of its equation of state, switched at PREM's
+  inner-core boundary pressure (328.851 GPa, the Valencia et al. 2006
+  fit): for any body but Earth that is a pressure, not a melting state.
+  The water's liquid and ices are the phases of its law at its
+  temperature; at the zero surface pressure of this slice liquid water
+  would boil, and the vapour belongs to the atmosphere of the second pull
+  request. The thermal states come with the temperatures of a later pull
+  request.
+
+The envelope, the giants and the partly differentiated moons below are
+still the earlier model's (tag `legacy-final`); they are rewritten as the
+tracks port them.
 
 **The envelope.** A hydrogen and helium envelope adds to the radius a
 thickness that Lopez & Fortney (2014) fit:
@@ -145,7 +300,8 @@ other planet, so the radius does not jump at 10 Earth masses or at 5 %
 gas. From 30 Earth masses, whatever the composition, and from half its
 mass in gas (a gas giant by its class, which under 30 Earth masses only
 a request makes), it goes through Neptune, Saturn and Jupiter (Chen &
-Kipping 2017) and is inflated when hot (Thorngren & Fortney 2018). The solid layers stay inside it, and the
+Kipping 2017) and is inflated when hot (Thorngren & Fortney 2018). The solid
+layers stay inside it, and the
 envelope fills the rest. A giant whose composition is not known (a
 world's giant neighbours, a giant world without a model) is sized as
 Neptune's composition at the coldest light of the grid up to Neptune's
@@ -223,7 +379,8 @@ observed), Enceladus 247 to 261 km (252.1), with its archetype's ice
 share set by mass balance to 32 to 37 % (its 1.61 g/cm³ over a 2.4 g/cm³
 core under water of 0.95 to 1).
 
-**The moment of inertia.** The model stores the factor $C / (M R^2)$ of
+**The moment of inertia, earlier model.** The earlier model stored the factor
+$C / (M R^2)$ of
 its layers, each of uniform density:
 
 ```math
@@ -235,61 +392,67 @@ Over the asked moons of seeds 1 to 20: Io 0.370 to 0.376 (0.378
 measured, Anderson et al. 2001), Europa 0.321 to 0.343 (0.346, Anderson
 et al. 1998; a Europa drawn with 10 % water comes out lowest),
 Enceladus 0.334 to 0.337 (0.335, Iess et al. 2014), Ganymede 0.306 to
-0.315 (0.311). Within each layer the compression is left out, so a large
-planet comes out high (Earth 0.354 against 0.3307 measured), and a giant
-more so.
+0.315 (0.311). Within each layer the compression was left out, so a large
+planet came out high (Earth 0.354 against 0.3307 measured); the
+integrated structure above gives Earth 0.3299 and replaces it for the
+solid layers.
 
 ### The heat inside
 
+The code is `science::heat` (the laws) and `system::planet::heat` (which
+body gets which law).
+
 **Radiogenic.** Uranium-238 and -235, thorium-232 and potassium-40 decay
-and heat the mantle. Earth makes about 20 TW today (Arevalo et al. 2009).
-The model splits that among the four isotopes by their present
-abundances and heat per kilogram (McDonough & Sun 1995, Turcotte &
-Schubert 2014) and runs each backwards or forwards by its half-life:
+and heat the rock. Each isotope's power per kilogram of silicate today is
+the abundance of its element in Earth's silicate part, times the heat
+per kilogram of the element (Dye 2012, Table 3: U 98.5, Th 26.3 and K
+$3.33 \times 10^{-3}$ µW/kg), times the isotope's share of the element
+(U-238: 0.958, derived in the heat study). The abundances are 20 ng/g
+for uranium and 80 ng/g for thorium, calibrations inside the published
+models (see "Where it departs from the science"), and 280 µg/g for potassium (Arevalo
+et al. 2009, a K/U ratio, read in its abstract). Each isotope is carried
+to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704,
+14.05 and 1.277 Gyr; the earlier model used 1.248 Gyr for potassium-40):
 
 ```math
-H = \sum_i s_i\, H_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\, a\, e^{\lambda_i (4.567 - t)}
+H = \sum_i p_i\, m_\mathrm{sil}\, a\, e^{\lambda_i (4.5673 - t)}
 ```
 
-where $s_i$ is each isotope's share of Earth's heat, $H_\oplus$ = 20 TW,
-$m_\mathrm{sil}$ the silicate mass, $a$ the planet's abundance relative to
-Earth's, $\lambda_i = \ln 2 / t_{1/2,i}$ and $t$ the age in Gyr.
+where $p_i$ is the isotope's power per kilogram today, $m_\mathrm{sil}$
+the silicate mass, $a$ the planet's abundance relative to Earth's,
+$\lambda_i = \ln 2 / t_{1/2,i}$, $t$ the age in Gyr and 4.5673 Gyr Earth's
+age (Connelly et al. 2012, read in its abstract). Earth's silicate mass
+is $4.03 \times 10^{24}$ kg (Dye 2012, Table 7).
 
 **In words.** The younger the planet, the more heat; the isotopes with
 short half-lives dominate early.
 
-**Orders of magnitude.** Earth formed with about five times its present
-radiogenic heat.
+**Orders of magnitude.** Earth makes 20.2 TW today: uranium-238 38 %,
+thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
+models span 11 to 38 TW (Dye 2012). The abundance $a$ is drawn around 1
+with a spread of 0.23 dex (Nimmo et al. 2020, derived in the heat
+study); the earlier model drew 0.15 dex.
 
 **Secular cooling.** A planet also loses the heat it was born with: its
-mantle and core cool. Earth loses about 47 TW through its surface
-(Davies & Davies 2010), so some 26 TW beyond its radiogenic 20, a Urey
-ratio (radiogenic over total) of 0.43, within the 0.3 to 0.5 of Korenaga
-(2008). The model scales Earth's 26 TW by the silicate mass, which holds
-the heat, and lets it decay with age over a cooling time that grows as
-the square of the body's size, the time heat takes to leave it by
-conduction (Turcotte & Schubert 2014, chapter 4):
+mantle and core cool. Earth loses 46.7 TW through its surface (Davies &
+Davies 2010), so 26.5 TW beyond its radiogenic 20.2 (the model's 46.7 TW
+total is that split, by construction). The model scales that by the
+silicate mass, which holds the heat, and lets it decay with
+age over a cooling time that grows as the area of the body, $R^2$ with
+$R^3 \propto M$:
 
 ```math
-S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\, e^{4.567/\tau_\oplus - t/\tau},
+S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\, e^{4.5673/\tau_\oplus - t/\tau},
 \qquad \tau = \tau_\oplus \left(\frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\right)^{2/3}
 ```
 
-with $S_\oplus$ = 26 TW and $\tau_\oplus$ = 10 Gyr, a calibration on Earth
-and Mars together: Earth's mantle cooled no faster in the past than its
-100 K/Gyr today (150 to 250 K since 3 Ga, Herzberg, Condie & Korenaga
-2010), so its loss decays slowly, and Mars, with an eighth of Earth's
-silicate, keeps about 0.8 TW over its 2.4 TW of radiogenic heat, 0.022
-W/m² in all, within the 0.019 to 0.025 of its thermal histories (Plesa et
-al. 2018).
+with $S_\oplus$ = 26.5 TW and $\tau_\oplus$ = 10 Gyr. Both the
+10 Gyr and the exponent 2/3 are calibrations: no source gives a cooling
+time or its scaling with mass (see "Where it departs from the science").
 
 **In words.** Every body holds the same heat per kilogram when it forms;
 a small one loses it sooner, so an old Mars or Moon keeps little and a
 super-Earth keeps more than its share.
-
-**Orders of magnitude.** Earth's model loses 46 TW, 0.090 W/m², and its
-volcanism, which follows the square root of the whole flux, is the
-scale's middle, 0.5.
 
 **Tidal.** A host raises tides in a planet on an eccentric orbit, and
 friction turns them into heat (Peale, Cassen & Reynolds 1979):
@@ -301,38 +464,37 @@ friction turns them into heat (Peale, Cassen & Reynolds 1979):
 with $M_h$ the host's mass, $R$ the planet's radius, $a$ and $e$ its orbit's
 semi-major axis and eccentricity, $n$ its mean motion, and $k_2/Q$ the
 tidal response. The host is the star for a planet; for a moon it is its
-planet, on the moon's orbit around it (`Context::with_tide`), while the
-star's light still arrives at the planet's orbit.
+planet, on the moon's orbit around it, while the star's light still
+arrives at the planet's orbit.
 
 The tidal response $k_2/Q$ depends on what the planet is made of, read
 from its composition, never from a class or a type name:
 
 | Body | Rule | $k_2/Q$ | Source |
 | --- | --- | --- | --- |
-| Enveloped | at least 0.1 % of the mass in gas | $1.1 \times 10^{-5}$ | Jupiter's, measured (Lainey et al. 2009) |
-| Icy | otherwise, at least 5 % water and ices | $2.5 \times 10^{-3}$ | calibration (Europa, Enceladus) |
-| Rocky | the rest | 0.015 | Io's, measured (Lainey et al. 2009) |
+| Enveloped | at least 0.1 % of the mass in gas | $1.102 \times 10^{-5}$ | Jupiter's, measured (Lainey et al. 2009; Lainey 2016, Table 1) |
+| Icy | otherwise, at least 5 % water and ices | $2.5 \times 10^{-3}$ | calibration, as the earlier model |
+| Rocky | the rest | $6 \times 10^{-3}$ | calibration: $k_2$ 0.3, $Q$ 50 (Henning et al. 2009) |
 
-The thresholds are the mini-Neptune and ice world lines of the classes
-below. A gas envelope sets the radius, whose fifth power the heat follows,
-but dissipates little: Jupiter's $k_2/Q$ is about 1400 times smaller than
-Io's. Saturn's, measured at $1.6$ to $2.3 \times 10^{-4}$ (Lainey et al.
-2012; Lainey 2016), is 15 to 20 times Jupiter's; the eccentricities of
-close-in giants point to a weaker one, a $Q' = 3Q/2k_2$ of $10^{6.5}$, about
-$5 \times 10^{-7}$ (Jackson, Greenberg & Barnes 2008). No icy moon has a
-measured $k_2/Q$: the icy value is a $k_2$ of about 0.25 for an ice shell
-over an ocean (Wahr et al. 2006) over a $Q$ of 100, a calibration.
+The two thresholds are calibrations as well, kept from the earlier model.
+No planet is enveloped yet: the interior has no gas layer. A gas
+envelope dissipates little: Jupiter's $k_2/Q$ is about 1400 times
+smaller than Io's. The rocky value is a model baseline for a cold
+planet, not a measurement: Io's measured 0.015 ± 0.003 is that of a
+partly molten body, and Earth's and Mars's, derived from Lainey (2016,
+Table 1), are $1.08 \times 10^{-3}$ and $1.74 \times 10^{-3}$. No icy
+moon has a measured $k_2/Q$; Enceladus's assumed value is $9 \times
+10^{-5}$ (Meyer & Wisdom 2007).
 
-**Orders of magnitude.** Io, with $k_2/Q$ = 0.015, gets about $10^{14}$ W
-from Jupiter (Lainey et al. 2009). Europa, with the icy value, gets about
-$1.1 \times 10^{12}$ W, 35 mW/m², within the 10 to 50 mW/m² of tidal
-heating that thermal models of its ice shell consider (Kimura 2024), and
-Enceladus about 3.7 GW, a quarter of the 15.8 GW it radiates (Howett et
-al. 2011). A Jupiter at 0.04 AU from the Sun on an orbit of eccentricity
-0.1 gets about 4 % of the starlight it absorbs; with Io's response, which
-every body took before, it got 60 times that starlight. Through the
-model, Io round Jupiter (`HostTide`, $e$ = 0.0041) gets $8.5 \times
-10^{13}$ W, 2.1 W/m², and loses it through a heat pipe.
+**Orders of magnitude.** The test of the law takes Io round Jupiter with
+Io's measured $k_2/Q$ = 0.015 ± 0.003 (Lainey et al. 2009), $e$ = 0.004
+and $a$ = 421 800 km (JPL satellite mean elements): over that $k_2/Q$
+range it gets $7.1$ to $10.6 \times 10^{13}$ W, which overlaps the
+$1.3 \pm 0.4 \times 10^{14}$ W that Veeder et al. (2004) observe. The
+test asserts that overlap, so it does not hang on the third digit of $e$
+(0.0041 in secondary sources raises the heat by 5 %). Io's radius and
+Jupiter's mass are the NASA fact sheets'. The Veeder range was read in
+the abstract through a search result, not in the paper.
 
 **Moons in resonance.** Neighbouring moons locked in a 2:1 resonance
 form a chain, as Io, Europa and Ganymede, or Enceladus and Dione
@@ -427,7 +589,8 @@ period. The share of the age since a drawn moon's capture is kept
 (`Captures::age_share`): a moon of a chain of three or more, not its
 innermost, went through Laplace-like resonances, whose tidal episode it
 dates (see [impact-craters.md](impact-craters.md), "A past tidal
-episode renews part of a resonant moon"). Over 300 drawn systems, 227 of the 353 neighbouring
+episode renews part of a resonant moon"). Over 300 drawn systems, 227 of the
+353 neighbouring
 pairs of round disk-born moons are locked (64 %; 322, 91 %, when any
 pair 1.8 to 2.2 apart counted): inner pairs converge fast and lock in
 cascade, outer ones too slowly to close a gap of a few percent. The
@@ -615,7 +778,8 @@ ocean. Ganymede, heated mostly by its rock, gets 131 to 189 km of ice
 and 75 to 126 km of ocean above ice V; Titan, with its ammonia, 125 to
 177 km over 63 to 120 km; Callisto, whose water layer above its mixed
 rock and ice is thin, and whose dark surface is at 111 to 119 K, gets
-155 to 240 km of ice over 0 to 99 km of ocean. The Solar System's moon archetypes carry
+155 to 240 km of ice over 0 to 99 km of ocean. The Solar System's moon
+archetypes carry
 the chondritic radiogenic abundance of the solar nebula, 0.9 to 1.1
 times the Earth's (Lodders 2003), not the 0.15 dex drawn across stellar
 systems.
@@ -667,7 +831,8 @@ tiles and at every epoch.
 
 Over seeds 1 to 20, every asked Enceladus vents (a polar shell of 7 to
 10 km, at most 1 MPa of ice under its 0.11 m/s², over a cap of 16°:
-three to six fractures, four or five on most seeds); Europa's polar shell, 6 to 16 km under 1.3 m/s², never
+three to six fractures, four or five on most seeds); Europa's polar shell, 6 to
+16 km under 1.3 m/s², never
 cracks through, nor do Ganymede's, Titan's or Callisto's. Across 300
 drawn systems, 11 % of the icy moons and 3 % of the icy planets vent;
 the moons among them are close-in, most of them in a 2:1 chain (some
@@ -696,8 +861,8 @@ it `CryovolcanicPlain`, smooth and a little greyer; its highland keeps
 its ridges. A heat-pipe one does not take the `volcanic` look: its
 volcanic zones spread over its lowlands as an Io's do and its flows
 cover the cores of its provinces, about 15 % of the surface, the plains
-most of the rest, under an Io's young surface. The tides stated in issue
-#550 (a Titan-sized moon of 55 % ices, 5.0e14 W, 5.6 W/m²) give such a
+most of the rest, under an Io's young surface. The tides stated in issue #550
+(a Titan-sized moon of 55 % ices, 5.0e14 W, 5.6 W/m²) give such a
 body: before, its map was the `volcanic` look throughout (magma seas,
 scorched waste, lava); now, at 256 × 128, about 15 % flows, 71 % plains
 and none of the silicate biomes. A frozen sea over a rocky crust (a
@@ -724,31 +889,62 @@ wins.
 
 ### What you see
 
-Nothing yet. Part 1 computes the model for the planets of a stored system
-(`planet::body_model`) and the system's age is now drawn, but no card shows
-the class, the layers or the heat, and no world changes: the
-`body_type` that the user asks for still decides what is generated. Later
-parts make the model decide.
+Nothing yet. The system engine computes the interior and the heat of
+every planet it draws and records them in the timeline's trace, but no
+card shows the layers or the heat. The sections "Measuring it" and "From
+the model to the map" below, and the envelope, giants and moons above,
+describe the earlier crate (tag `legacy-final`), which the tracks of the
+roadmap replace.
 
 ### How it computes them
 
-`planet::draw_inputs` draws the iron share, the water share, the envelope,
-the volatiles and the radiogenic abundance from the formation context (the
-star's metallicity, the orbit over the ice line) and the mass.
-`planet::interior` gives the layers and the radius, `planet::heat` the heat
-and `planet::classify` the class; `planet::body_model` chains them for one
-planet. Each planet's inputs come from their own random stream, seeded by
-the system's seed and `<id>/model`, so they depend on no other body.
+`system::planet` draws a composition and builds the interior and the
+heat of a trial from it (`draws`, `interior`, `heat`; the trace codes are
+in `codes`). The draw takes the seed from its caller: the planet model
+will pass the body's seed, so each body depends on no other, and the
+class trial of the backward search the trial's seed.
 
-Water is drawn as a share of the mass that is not gas, then scaled by one
-minus the envelope, so that a wet giant keeps its rock.
+- **Iron.** The core's share of the refractory mass is $0.32 + \sigma z$,
+  $z$ a standard normal, with $\sigma$ = 0.12 below the median and 0.14
+  above (Plotnykov & Valencia 2020: 0.32 +0.14/−0.12, read as a median
+  and a 68 % interval), kept between 0 and 1. The earlier model's slope
+  of 0.15 per dex of `[Fe/H]` is gone: the new draw has none.
+- **Water inside the ice line.** Log-normal around 2700 ppm of the mass,
+  Earth's bulk water (Marty 2012), with $\sigma_{\ln}$ = 0.5
+  (Calibration, derived from Marty's ±1350 ppm). A planet beyond the ice
+  line, or one in ten that migrated in (Calibration, as the earlier
+  model), is a water world and draws a uniform share between 0.5 and 0.67
+  instead (Zeng et al. 2019). The trace says why: a flag that the planet
+  formed beyond the ice line (from its orbit and the ice line) and a drawn
+  migration flag, from which the water fraction derives.
+- **Radiogenic abundance.** Normal around Earth's, 0.23 dex.
+- **Layers.** Core alloy $c (1 - w) M$ and mantle $(1 - c)(1 - w) M$,
+  integrated at zero surface pressure (the system has no atmosphere
+  before the climate of the second pull request). The drawn $w$ is the
+  bulk water. A dry planet's stays in its mantle, which weighs
+  $(1 - c)(1 - w) M + w M$: hydrated silicate, whose ocean comes from
+  outgassing in the second pull request (Marty's 2700 ppm is the bulk
+  Earth's water, not its oceans'). A water world adds a water layer
+  $w M$ on the isotherm of its equilibrium temperature, which stands for
+  the surface temperature until then: the isotherm from 273.31 to 355 K,
+  the melting curve colder. From 355 K, past the water laws, its water
+  is kept as an inventory without a layer, outside the structure, until
+  the second pull request gives it a steam envelope (as the earlier model's
+  `steam_interior`, after Turbet et al. 2020); its surface gravity and
+  mean density are those of the condensed planet under it.
+- **Outputs.** Radius, surface gravity, mean density, the core, mantle
+  and water masses, each shell's outer radius, mass, material and state,
+  and the three heats. The structure node is the central pressure the
+  integration finds, derived from the mass, the two fractions and the
+  water temperature when a layer uses it; the radius and every shell
+  derive from it, each shell also from its layer's mass. The heats scale
+  with the recorded mantle mass.
 
-Sources: [mod.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/mod.rs),
-[inputs.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/inputs.rs),
-[interior.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/interior.rs),
-[differentiation.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/differentiation.rs),
-[heat.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/heat.rs),
-[classify.rs](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/planet/classify.rs).
+**Orders of magnitude.** An Earth trial (1 $M_\oplus$ at 1 au, iron share
+0.325, water 0.27 % in the mantle) comes out 6354 km, 0.27 % below the
+mean radius 6371.0087 km, and gravity 9.874 m/s², 0.69 % above
+9.80665. Its mantle weighs $4.04 \times 10^{24}$ kg, near Dye's
+$4.03 \times 10^{24}$ kg silicate Earth.
 
 ### Measuring it
 
@@ -803,7 +999,8 @@ archetypes):
 - The gravity and the tectonic regime are the model's, and the radius is
   the interior's. The world is resolved at that gravity, so the star's
   tides, the moons it draws, the tilt they leave it and its tidal flats
-  read the model's mass, not the one the rocky relation gives its size. The relief parameters follow: volcanism from the heat
+  read the model's mass, not the one the rocky relation gives its size. The
+  relief parameters follow: volcanism from the heat
   flux (Earth's 0.087 W/m2 gives the preset's value), halved when
   stagnant, full under a heat pipe; the age of the surface from the
   regime.
@@ -832,11 +1029,121 @@ archetypes):
 
 ### Where it departs from the science
 
+**The integrated interior and the heat.** What the new interior and heat
+leave out or fit, and what changed from the earlier model. The first
+four are explained in "From layers to radius".
+
+- **Cold structure.** No thermal pressure: up to 1.5 % of the radius
+  below a 1500 K surface. A hotter surface (a lava world) is a known
+  limit for the second pull request to revisit.
+- **No transition-zone phases.** The mantle comes out 7.5 % too light
+  above 23.83 GPa and 3.5 % too dense below it, against PREM; Earth's
+  radius and $C/MR^2$ stay within 0.3 %.
+- **Extrapolated pressures.** The core alloy is fitted to PREM, up to
+  364 GPa, and used up to 7.85 TPa at 20 $M_\oplus$ (the mantle to
+  2.83 TPa, past the post-perovskite transition the model does not
+  have). Super-Earth radii above about 5 $M_\oplus$ carry that extra
+  error; a high-pressure branch is proposed, not built.
+- **Water.** Liquid, ice VI and ice VII between 273.31 and 355 K, the
+  melting curve for colder bodies, nothing above 355 K. Ices III, V and
+  VI are 0 K curves, 1 to 4 % too dense. The layer's temperature is the
+  equilibrium temperature until the climate of the second pull request.
+  The triple points are IAPWS 2011's (208.566, 350.1 and 632.4 MPa), not
+  the 209.5, 355.0 and 618.4 MPa Zeng & Sasselov (2013) took from
+  Choukroun & Grasset (2007). The ice VI to VII fit is quoted by Haldemann
+  et al. (2020) up to the triple point; its lower limit in temperature is
+  not stated, and the model uses it from 273.31 K.
+- **Titan.** Its $C/MR^2$ is 6.7 % too low (partial differentiation,
+  moons track T2); the radius is within 0.2 %. The Titan split of the
+  test (no core, 45.5 % ice) is the prototype's assumption: no sourced
+  split was found. Ganymede is reproduced.
+- **Mixing shares.** The 90 % bridgmanite and 10 % periclase of the lower
+  mantle are taken as mass shares (the sources do not say). The iron mole
+  fraction 0.12 becomes a mass share through molar masses computed from
+  the table's $\rho_0$ and molar volumes, about 0.1 % off.
+- **Not modelled.** No gas envelope, no partial differentiation, no
+  dynamo, no ice shell over an ocean in the new interior; the earlier
+  model's versions of these are described above and below.
+
+| What | Earlier model | Now | Source |
+| --- | --- | --- | --- |
+| Radius | Zeng et al. 2016 fit, uniform layers | integrated structure | prototype report |
+| Earth $C/MR^2$ | 0.354 | 0.330 | Williams 1994: 0.3307 |
+| Potassium-40 half-life | 1.248 Gyr | 1.277 Gyr | Dye 2012, Table 2 |
+| Iron share | normal, 0.325 + 0.15 per dex of `[Fe/H]`, σ 0.05 | split normal, median 0.32 (−0.12/+0.14), no slope | Plotnykov & Valencia 2020 |
+| Water beyond the ice line | uniform 0.2 to 0.5 | uniform 0.5 to 0.67 | Zeng et al. 2019 |
+| Radiogenic spread | 0.15 dex | 0.23 dex | Nimmo et al. 2020, derived |
+| Rocky tidal $k_2/Q$ | 0.015 (Io's) | $6 \times 10^{-3}$ | Henning et al. 2009 |
+| Earth radiogenic heat | 20 TW | 20.2 TW from abundances | Dye 2012 |
+
+**Calibrations of the interior and the heat.** Each is a choice, not a
+measurement; this is what was searched and not found.
+
+- **Uranium 20 ng/g and thorium 80 ng/g** of Earth's silicate part.
+  Inside the published models (Dye 2012, Table 7: uranium 12 to 22
+  ng/g cosmochemical, 20 to 35 geophysical; thorium 45 to 83 and 77 to
+  135). A single abundance set that all sources agree on was searched:
+  none, the models span 11 to 38 TW. Potassium, 280 µg/g, is a source
+  (Arevalo et al. 2009), read in the abstract.
+- **Cooling time 10 Gyr.** A sourced cooling time or law of cooling
+  against mass: none found. Arevalo et al. (2009) give 70 to 130 K/Gyr,
+  which on a 1600 to 1700 K mantle makes an e-folding time of 10 to
+  20 Gyr (derived here). Herzberg et al. (2010) and Plesa et al. (2018)
+  were not read for this.
+- **Cooling-time exponent 2/3.** A sourced scaling of secular cooling
+  with mass: none found. Valencia et al. (2007) call it difficult; Van
+  Heck & Tackley (2011) and arXiv:2110.03295 were not opened.
+- **Rocky $k_2/Q$ 6e-3.** A model baseline (Henning et al. 2009: $k_2$
+  0.3, $Q$ 50), not a measurement of a body.
+- **Icy $k_2/Q$ 2.5e-3.** A measured icy-moon value was searched: none.
+  The legacy citations (Wahr et al. 2006, Howett et al. 2011) were not
+  reached. Earth, the Moon and Mars at $6 \times 10^{-4}$ to
+  $1.7 \times 10^{-3}$ (Lainey 2016, Table 1) and Enceladus's assumed
+  $9 \times 10^{-5}$ bracket it.
+- **Icy threshold 5 % water and envelope threshold 0.1 % gas** for the
+  tidal kind. A published threshold of the tidal response against
+  composition was searched (heat study, section A4): none. They come from
+  the earlier model: Europa (about 8 % water) is icy, Io and Earth
+  (0.02 %) are rocky, and from 0.1 % an envelope lifts a 5 $M_\oplus$
+  core by about 0.15 $R_\oplus$ (Lopez & Fortney 2014).
+- **Migrated water-rich planets, one in ten.** A published fraction of
+  water-rich planets that formed beyond the ice line and migrated in was
+  searched: none found (Luque & Pallé 2022 say they exist, with no
+  fraction in the main text; heat study, section B7).
+- **Water spread $\sigma_{\ln}$ = 0.5**, derived from Marty's 2700 ±
+  1350 ppm read as one sigma (1350/2700, the small-spread approximation
+  of a log-normal).
+- **Twenty steps per layer.** Fitted on a $10^{-4}$ accuracy goal; ten
+  steps give $1.03 \times 10^{-4}$ against a 1280-step reference.
+- **Test tolerances against PREM.** 1 % for the core (the study gives no
+  fit quality for Valencia et al. 2006; 1 % is Zeng et al.'s for theirs),
+  8 % for the upper mantle and 4 % for the lower one: the measured gaps
+  of the recipe, not fits.
+
+**Secondary and partial reads.** Some values were read at second hand, to
+be replaced by a primary source when one is reached.
+
+- Earth's mean radius, 6 371 008.7714 m, is read on the Wikipedia GRS80
+  page, which cites Moritz (2000); the IAG-hosted copy did not open and
+  the paper was not read.
+- The Veeder et al. (2004) heat range for Io was read in its abstract,
+  through a search result.
+- Potassium's abundance is from the abstract of Arevalo et al. (2009),
+  Earth's age (4.5673 Gyr) from the abstract of Connelly et al. (2012).
+- Venus's, Mars's, Mercury's and the Moon's core mass fractions are read
+  through Skinner et al. (2026) and the prototype report; the planets'
+  masses and radii through the NASA fact sheets as read there.
+
+**The earlier model, still described above.** The departures that follow are
+those of the envelope, giants, moons, ice shell and map of the earlier crate.
+
 - **Calibrations.** Every constant marked "Calibration, no source" in the
   code is a choice, not a measurement: the shares of the iron core and of
   ice, the chance of keeping gas, the envelope share per mass, the iron
-  and water densities, the $k^{1.5}$ compression of water, and the class
-  thresholds that the table marks. Each names the bodies it reproduces.
+  and water densities of the earlier model, its $k^{1.5}$ compression
+  of water, and the class thresholds that the table marks. The
+  calibrations of the new interior and heat are listed above. Each names the
+  bodies it reproduces.
 - **Heavy elements in the envelope are a calibration.** The factor of
   the water share that thins an envelope is linear and set on Neptune
   alone, and applies to every planet with an envelope. Uranus comes out
@@ -940,9 +1247,9 @@ archetypes):
   Ganymede with little ice comes out at a moment of inertia as low as
   0.295.
 - **Tides** use one $k_2/Q$ per kind of body, not one per planet: a cold
-  rocky planet takes Io's, which is partly molten (Mars's is about
-  $1.7 \times 10^{-3}$, Lainey 2016), and every enveloped planet takes
-  Jupiter's, from a mini-Neptune to a hot Jupiter. They neglect the
+  rocky planet takes $6 \times 10^{-3}$, a model baseline (Mars's is
+  about $1.7 \times 10^{-3}$, Lainey 2016), and every enveloped planet
+  takes Jupiter's, from a mini-Neptune to a hot Jupiter. They neglect the
   planet's own mass.
 - **Cryovolcanism** is drawn on the volcanic zones of the silicate
   volcanism, their noise, provinces and cones, with fresh ice in place of
@@ -1213,19 +1520,21 @@ archetypes):
     distribution", *Proceedings of the National Academy of Sciences* 116,
     9723–9728,
     [doi:10.1073/pnas.1812905116](https://doi.org/10.1073/pnas.1812905116).
-    
+
     The three DOIs above were checked against the publishers' pages; the
     DOIs of the tidal sources (Howett, Jackson, Kimura, Lainey, Wahr) and of
     the ice shell's (Hussmann, and the IAPWS ice papers Feistel &
     Wagner 2006 and Wagner et al. 2011) against their Crossref records; the
     $651/T$ conductivity is quoted as the ice-shell literature cites Petrenko
-    & Whitworth, not checked in the book itself. Of the tidal figures, Jupiter's and Io's $k_2/Q$,
+    & Whitworth, not checked in the book itself. Of the tidal figures,
+    Jupiter's and Io's $k_2/Q$,
     Saturn's $1.59 \times 10^{-4}$ and Mars's $k_2$ and $Q$ match table 1 of
     Lainey 2016; Saturn's $2.3 \times 10^{-4}$, the planetary $Q$ of
     $10^{6.5}$ of Jackson et al. and Kimura's 10 to 50 mW/m² match their
     abstracts; Howett's 15.8 GW and Wahr's $k_2$ of 0.25 were not checked in
     the papers themselves. The resonance sources (Fuller, Luan & Quataert
-    2016; Meyer & Wisdom 2007; Lainey et al. 2020) are cited for their method, from their
+    2016; Meyer & Wisdom 2007; Lainey et al. 2020) are cited for their method,
+    from their
     abstracts; their DOIs and page ranges were not checked. Rudolph &
     Manga's limits (2.5 km for Europa, 25 km for Enceladus, under 1 to
     3 MPa of tension) match their abstract; Manga & Wang 2007 is cited for
@@ -1243,6 +1552,79 @@ archetypes):
     relation for rocky planets based on PREM", *The Astrophysical Journal*
     819, 127,
     [doi:10.3847/0004-637X/819/2/127](https://doi.org/10.3847/0004-637X/819/2/127).
+
+75. Acuña, L. et al. 2021, ice phases for interior models,
+    [arXiv:2101.08172](https://arxiv.org/abs/2101.08172) (cross-check only).
+76. Connelly, J. N. et al. 2012, *Science* 338, 651,
+    [doi:10.1126/science.1226919](https://doi.org/10.1126/science.1226919)
+    (abstract only).
+77. Dye, S. T. 2012, "Geo-neutrinos and the radioactive power of the
+    Earth", *Reviews of Geophysics* 50, RG3007,
+    [arXiv:1111.6099](https://arxiv.org/abs/1111.6099).
+78. Gao, P. & Stevenson, D. J. 2013, *Icarus* 226, 1185,
+    [doi:10.1016/j.icarus.2013.07.034](https://doi.org/10.1016/j.icarus.2013.07.034).
+79. Grasset, O., Schneider, J. & Sotin, C. 2009, *The Astrophysical
+    Journal* 693, 722.
+80. Haldemann, J. et al. 2020, "AQUA", water equation of state for
+    planetary interiors, [arXiv:2009.10098](https://arxiv.org/abs/2009.10098).
+81. Hakim, K. et al. 2018, *Icarus* 313, 61,
+    [doi:10.1016/j.icarus.2018.05.005](https://doi.org/10.1016/j.icarus.2018.05.005).
+82. Henning, W. G., O'Connell, R. J. & Sasselov, D. D. 2009, *The
+    Astrophysical Journal* 707, 1000.
+83. IAPWS R6-95(2018), R10-06(2009) and R14-08(2011): the IAPWS-95
+    formulation for ordinary water, the Gibbs energy of ice Ih (Feistel &
+    Wagner 2006) and the melting pressure curves (Wagner et al. 2011).
+84. Journaux, B. et al. 2020, *Journal of Geophysical Research: Planets*
+    125, e2019JE006176,
+    [doi:10.1029/2019JE006176](https://doi.org/10.1029/2019JE006176).
+85. Luque, R. & Pallé, E. 2022, *Science* 377, 1211,
+    [doi:10.1126/science.abl7164](https://doi.org/10.1126/science.abl7164).
+86. Margot, J.-L. et al. 2018, Mercury's moment of inertia,
+    [arXiv:1806.02024](https://arxiv.org/abs/1806.02024); Margot, J.-L. et
+    al. 2021, Venus's moment of inertia, *Nature Astronomy* 5, 676.
+87. Moritz, H. 2000, "Geodetic Reference System 1980", *Journal of
+    Geodesy* 74, 128 (read at second hand, see "Secondary and partial
+    reads").
+88. Nimmo, F., Primack, J., Faber, S. M., Ramirez-Ruiz, E. & Rieke, G.
+    2020, radiogenic heating and planetary habitability,
+    [arXiv:2011.04791](https://arxiv.org/abs/2011.04791).
+89. Plotnykov, M. & Valencia, D. 2020, *Monthly Notices of the Royal
+    Astronomical Society* 499, 932,
+    [doi:10.1093/mnras/staa2615](https://doi.org/10.1093/mnras/staa2615).
+90. Rodriguez-Mozos, J. M. & Moya, A. 2022, interior models of the
+    Solar System bodies (PREM tables, Ganymede),
+    [arXiv:2203.01065](https://arxiv.org/abs/2203.01065).
+91. Seager, S., Kuchner, M., Hier-Majumder, C. A. & Militzer, B. 2007,
+    *The Astrophysical Journal* 669, 1279.
+92. Skinner, Pudritz & Cloutier 2026, core mass fractions of the
+    terrestrial planets,
+    [arXiv:2604.15304](https://arxiv.org/abs/2604.15304).
+93. Unterborn, C. T. et al. 2016, *The Astrophysical Journal* 819, 32.
+94. Valencia, D., O'Connell, R. J. & Sasselov, D. D. 2006, "Internal
+    structure of massive terrestrial planets", *Icarus* 181, 545,
+    [doi:10.1016/j.icarus.2005.11.021](https://doi.org/10.1016/j.icarus.2005.11.021).
+95. Veeder, G. J. et al. 2004, *Icarus* 169, 264 (abstract only, via a
+    search result).
+96. Zeng, L. & Sasselov, D. 2013, "A detailed model grid for solid planets
+    from 0.1 through 100 Earth masses",
+    [arXiv:1301.0818](https://arxiv.org/abs/1301.0818).
+97. Stixrude, L. & Lithgow-Bertelloni, C. 2005, thermodynamics of mantle
+    minerals, as tabulated by Unterborn et al. (2016), Table 1.
+98. Also, as named in the text and listed in the studies: Dziewonski &
+    Anderson 1981 (PREM, through Rodriguez-Mozos & Moya 2022, Table 1),
+    Williams 1994 and Williams et al. 2014, Konopliv et al. 2016
+    (through Dehant et al. 2020, arXiv:1910.03899), Genova et al. 2019,
+    Khan et al. 2023, Viswanathan et al. 2019, Shah et al. 2022, Lopes
+    et al. 2023, and the NASA NSSDC and JPL fact sheets.
+
+The values, tables and pages read for each source of the integrated
+interior and heat (entries 75 to 98) are in the studies
+([equations of state](../superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
+[core and dynamo](../superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md),
+[heat and composition](../superpowers/studies/2026-11-21-planet-interior/heat-and-composition.md))
+and the
+[prototype report](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md);
+their source tables say how much of each paper was read.
 
 ## See also
 

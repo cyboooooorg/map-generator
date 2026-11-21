@@ -6,4 +6,8 @@
 //! README). The laws arrive with the pull requests that use them.
 
 pub mod constants;
+pub mod eos;
+pub mod heat;
+pub mod structure;
 pub mod units;
+pub mod water;

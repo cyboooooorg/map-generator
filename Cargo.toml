@@ -20,6 +20,10 @@ adapters = { path = "crates/adapters" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 
+# The draws of the engines: a seeded generator from the seed hierarchy.
+rand_core = "0.10.1"
+rand_chacha = "0.10.0"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
