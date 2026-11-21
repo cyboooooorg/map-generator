@@ -100,9 +100,11 @@ stirred-up orbits need more room.
 - **Giants.** The first giant follows Fulton et al. (2021)'s broken power
   law in $a$: index +0.72 inside a break at 3.6 au, -0.86 beyond, up to
   30 au. The next one lies at a ratio $a_2/a_1$ below 10, peaking near 3
-  (Rosenthal et al. 2023). The app draws $\ln(a_2/a_1)$ uniformly over
-  that range (a flattening, median ratio about 4), so it does not
-  reproduce the peak: see the departures.
+  (Rosenthal et al. 2023). The app draws $\ln(a_2/a_1)$ from a normal of
+  mean $\ln 3$ and width 0.5, drawn again outside 0.5 to $\ln 10$
+  (Rosenthal's sampling floor and "less than 10"); no drawn giant is kept
+  beyond Fulton's 30 au support. Over the test grid below, adjacent giants
+  sit at a median ratio of 3.1.
 - **Hot Jupiters.** Between twice the Roche separation and 10 d (Dawson &
   Johnson 2018; Ford & Rasio 2006).
 
@@ -187,8 +189,10 @@ flowchart TD
    the planet model, draw the eccentricity from the class, then check the
    periapsis against the star and the Roche floor (twice that for a hot
    Jupiter), the spacing against every planet already placed, and the hot
-   Jupiter's cleared zone. A slot has 20 tries; a drawn slot that spends
-   them stays empty, an asked archetype is refused with `NoRoom`.
+   Jupiter's cleared zone; a drawn giant past $30\ \mathrm{au}\times
+   a_{snow}/2.7\ \mathrm{au}$ is rejected too. A slot has 20 tries; a
+   drawn slot that spends them stays empty, an asked archetype is refused
+   with `NoRoom`.
 4. **Re-check.** Once every orbit is placed, $T_1$ is known and the
    pairs of small planets are checked again with the final $K_{50}$; of
    the outermost violating pair, the drawn planet placed later is dropped
@@ -261,7 +265,12 @@ choices this draw makes where no source gives one:
   two-planet floor only: the fit covers planets of 3 to 9 M⊕, and
   adjacent giants follow their own axis-ratio law.
 - 20 tries per slot. A near-resonant pair picks 3:2 or 2:1 with equal
-  odds; the next giant's $\ln(a_2/a_1)$ is uniform from 0.5 to $\ln 10$.
+  odds; the next giant's $\ln(a_2/a_1)$ has a width of 0.5 around $\ln 3$
+  (the study gives the peak, not the width; user, 2026-11-22), drawn
+  again up to 64 times outside its range, then set to $\ln 3$.
+- Fulton's 30 au support, scaled by the ice line, is an outer edge for
+  every drawn giant, not only the first (user, 2026-11-22); asked
+  archetypes are not bound by it.
 - Giant spin fraction $f$ log-uniform from 0.07 to 0.40, for gas and ice
   giants alike (it holds 0.126 and every Solar System giant: Uranus 0.17,
   Neptune 0.16, Jupiter 0.30 and Saturn 0.40; user, 2026-11-22). A rocky
@@ -295,14 +304,12 @@ choices this draw makes where no source gives one:
   Used as a floor it keeps drawn systems on the stable side, but it is
   applied only to pairs of small planets with a drawn one, so two asked
   planets, and any pair with a giant, face only the two-planet floor.
-- **Giants spread wider than observed.** With the test classifier over
-  200 seeds, six hosts and five families, the median axis ratio of
-  adjacent giants is 5.2 (Rosenthal et al. 2023 peak near 3): the
-  uniform $\ln(a_2/a_1)$ draw has a median near 4, and rejected tries
-  push the kept giants further out. Chains of giants also reach far:
-  the widest orbit of that grid sits at about 7 200 au once scaled to the
-  Sun's ice line, beyond Fulton's 30 au support for the first giant. No
-  source gives an outer edge for the next giants, so none is applied.
+- **Compact chains can run far out.** Only the innermost compact planet
+  is bounded (640 d); the next ones follow by period ratio with no outer
+  edge. Over the test grid (200 seeds, six hosts, five families, the
+  tests' stand-in classifier), compact planets reach 505 au once scaled
+  to the Sun's ice line, around a 0.08 M☉ star (40 au there); every giant
+  stays within 30 au scaled.
 - **A $K_{50}$ of 13 to 14 removes most near-3:2 pairs of 5 M⊕ or
   more.** A pair drawn 0 to 5 % wide of 3:2 (period ratio 1.5 to 1.575)
   sits at 12.5 to 14 mutual Hill radii for two 5 M⊕ planets around a

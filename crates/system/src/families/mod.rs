@@ -32,8 +32,9 @@ const COMPACT_MAX_PERIOD: Day = Day(640.0);
 const HOT_JUPITER_MAX_PERIOD: Day = Day(10.0);
 
 /// Source: Fulton 2021, the broken power law's support reaches 30 AU for
-/// the Sun (study G 3.1); scaled by the ice line (a Definition).
-const FULTON_OUTER_SUPPORT: AstronomicalUnit = AstronomicalUnit(30.0);
+/// the Sun (study G 3.1); scaled by the ice line (a Definition). No
+/// drawn giant is kept beyond it.
+pub(crate) const FULTON_OUTER_SUPPORT: AstronomicalUnit = AstronomicalUnit(30.0);
 
 /// The architecture of a drawn system. Drawn evenly (a user decision of
 /// 2026-11-21) on `seed.derive("family")`.

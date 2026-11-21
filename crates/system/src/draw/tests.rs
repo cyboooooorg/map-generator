@@ -220,9 +220,9 @@ fn assert_valid(placed: &[Placed], ctx: &FamilyContext, what: &str) {
 /// Draws every family on every host for `seeds` seeds and checks each
 /// system; returns the axis ratios of adjacent cold giants (gas or ice
 /// giants, in order of distance) and the largest axis scaled to the Sun's
-/// ice line (`a × 2.7 au / ice line`).
-fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64) {
-    let (mut ratios, mut widest) = (Vec::new(), 0.0_f64);
+/// ice line (`a × 2.7 au / ice line`), of every planet and of the giants.
+fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
+    let (mut ratios, mut widest, mut widest_giant) = (Vec::new(), 0.0_f64, 0.0_f64);
     for host in [0.08, 0.3, 0.8, 1.0, 2.0, 8.0] {
         for family in FAMILIES {
             for seed in 0..seeds {
@@ -236,6 +236,14 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64) {
                     .iter()
                     .map(|p| axis(p) * scale)
                     .fold(widest, f64::max);
+                // No drawn giant past Fulton's support, 30 au scaled.
+                assert!(
+                    placed
+                        .iter()
+                        .filter(|p| p.outcome.class == PlanetClass::GasGiant)
+                        .all(|p| axis(p) * scale <= 30.0 * (1.0 + 1e-12)),
+                    "{what}: past the outer support"
+                );
                 let giants: Vec<f64> = placed
                     .iter()
                     .filter(|p| {
@@ -247,10 +255,14 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64) {
                     .map(axis)
                     .collect();
                 ratios.extend(giants.windows(2).map(|w| w[1] / w[0]));
+                widest_giant = giants
+                    .iter()
+                    .map(|a| a * scale)
+                    .fold(widest_giant, f64::max);
             }
         }
     }
-    (ratios, widest)
+    (ratios, widest, widest_giant)
 }
 
 #[test]
@@ -263,11 +275,11 @@ fn every_family_draws_on_every_host() {
 #[test]
 #[ignore = "heavy: full grid"]
 fn every_family_draws_on_every_host_full_grid() {
-    let (mut ratios, widest) = every_family_on_every_host(200);
+    let (mut ratios, widest, widest_giant) = every_family_on_every_host(200);
     ratios.sort_by(f64::total_cmp);
     let median = ratios.get(ratios.len() / 2).copied().unwrap_or(f64::NAN);
     eprintln!(
-        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au",
+        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au (giants {widest_giant:.1} au)",
         ratios.len()
     );
 }

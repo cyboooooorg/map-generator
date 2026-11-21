@@ -144,6 +144,20 @@ fn next_giants_stay_within_their_ratio() {
 }
 
 #[test]
+fn next_giants_peak_near_a_ratio_of_three() {
+    let mut rng = rng(46);
+    let mut ln_ratios: Vec<f64> = (0..DRAWS)
+        .map(|_| (next_giant_axis(&mut rng, AstronomicalUnit(5.0)).0 / 5.0).ln())
+        .collect();
+    ln_ratios.sort_by(f64::total_cmp);
+    let median = ln_ratios[ln_ratios.len() / 2];
+    // Truncated at 0.5 (z = -1.197, 11.6 % cut) and ln 10 (z = 2.408,
+    // 0.8 % cut), the median sits at z = 0.135: ln 3 + 0.068 (derived),
+    // a ratio of 3.21.
+    assert!((median - 1.1663).abs() < 0.015, "{}", median.exp());
+}
+
+#[test]
 fn next_rocky_planets_stay_inside_their_limit() {
     let mut rng = rng(45);
     let host = SolarMass(1.0);

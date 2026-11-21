@@ -35,7 +35,7 @@ use crate::families::laws::{
     COMPANION_AXIS, SMALL_MASS_MAX, SMALL_MASS_MIN, eccentricity, ice_scale, k50_sigma_e,
 };
 use crate::families::table::SLOT_TRIES;
-use crate::families::{Family, FamilyContext, Placed, SlotKind, propose};
+use crate::families::{FULTON_OUTER_SUPPORT, Family, FamilyContext, Placed, SlotKind, propose};
 use crate::random::{log_uniform, normal, uniform};
 use crate::sources::{Light, sources};
 use crate::star::Star;
@@ -272,6 +272,13 @@ where
                 if ctx.family == Family::SolarLike
                     && proposal.kind == SlotKind::Small
                     && proposal.a.0 > ctx.ice_line.0
+                {
+                    return Ok(None);
+                }
+                // A drawn giant past Fulton's support, `30 au × ice line /
+                // 2.7 au` (G 3.1), spends the try.
+                if proposal.kind == SlotKind::Giant
+                    && proposal.a.0 > FULTON_OUTER_SUPPORT.0 * ice_scale(ctx.ice_line)
                 {
                     return Ok(None);
                 }

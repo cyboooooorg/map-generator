@@ -114,9 +114,22 @@ pub(crate) const FULTON_BEYOND: f64 = -0.86;
 
 /// Source: the range of `ln(a2/a1)` of adjacent giants: Rosenthal 2023's
 /// sampling floor 0.5 (p8, a ratio of 1.65) and "less than 10" (p10)
-/// (G 3.3). Uniform between them is a Definition: the study gives no
-/// width for the peak near 3.
+/// (G 3.3). A draw outside is drawn again.
 pub(crate) const NEXT_GIANT_LN_RATIO: (f64, f64) = (0.5, std::f64::consts::LN_10);
+
+/// Source: the peak of the axis ratio of adjacent giants, near 3
+/// (Rosenthal 2023 p10; G 3.3): the mean of `ln(a2/a1)` is `ln 3`.
+pub(crate) const NEXT_GIANT_LN_MEAN: f64 = 1.098_612_288_668_109_7;
+
+/// Definition: the width of the normal in `ln(a2/a1)`, 0.5 (user,
+/// 2026-11-22): the study gives a peak but no width.
+pub(crate) const NEXT_GIANT_LN_SIGMA: f64 = 0.5;
+
+/// Definition: draws of `ln(a2/a1)` before the next giant falls back to
+/// the peak ratio; a draw lands inside [`NEXT_GIANT_LN_RATIO`] with a
+/// probability above 0.85, so reaching the cap has a probability below
+/// `1e-50`.
+const NEXT_GIANT_REDRAWS: u32 = 64;
 
 /// Source: Fulton 2021 (p6), giant occurrence is constant in ln M from
 /// 30 to 900 Earth masses at 1-5 au (G 3.2): log-uniform.
@@ -306,11 +319,16 @@ pub(crate) fn fulton_axis(rng: &mut ChaCha8Rng, ice_line: AstronomicalUnit) -> A
     ))
 }
 
-/// The next giant out from one at `inner`: `ln(a2/a1)` uniform in
-/// [`NEXT_GIANT_LN_RATIO`] (G 3.3).
+/// The next giant out from one at `inner`: `ln(a2/a1)` normal of mean
+/// `ln 3` and σ 0.5, drawn again outside [`NEXT_GIANT_LN_RATIO`] up to
+/// [`NEXT_GIANT_REDRAWS`] times, then the peak ratio 3 (G 3.3).
 pub(crate) fn next_giant_axis(rng: &mut ChaCha8Rng, inner: AstronomicalUnit) -> AstronomicalUnit {
     let (lo, hi) = NEXT_GIANT_LN_RATIO;
-    AstronomicalUnit(inner.0 * (lo + (hi - lo) * uniform(rng)).exp())
+    let ln_ratio = (0..NEXT_GIANT_REDRAWS)
+        .map(|_| NEXT_GIANT_LN_MEAN + NEXT_GIANT_LN_SIGMA * normal(rng))
+        .find(|ln_ratio| (lo..hi).contains(ln_ratio))
+        .unwrap_or(NEXT_GIANT_LN_MEAN);
+    AstronomicalUnit(inner.0 * ln_ratio.exp())
 }
 
 /// A hot Jupiter's axis: its period log-uniform from that of the stellar
