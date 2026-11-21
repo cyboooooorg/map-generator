@@ -5,6 +5,23 @@ staging, PNG projections, SVG cross-sections, the English text catalogue
 of codes and cause trees, relief files. The only library crate allowed to
 read and write files.
 
+## Filesystem store
+
+`FsStore::new(root, budget)` implements `SystemRepository` and
+`TimelineCache`. Layout under `root`:
+
+```text
+systems/<id>/inputs.json
+cache/<engine>/<id>/timelines.json
+cache/uses.json
+```
+
+Writes are staged in `<file>.tmp` then renamed. A cache file that cannot
+be read or parsed is a miss. `cache/uses.json` holds a logical use
+counter (no wall clock); `FsStore::evict(current)` deletes the entries of
+other engine versions, then the least recently used ones until the cache
+fits `budget` bytes. World files come with the world cache.
+
 ## Ports
 
 None of its own: it implements the ports of the domain crates.

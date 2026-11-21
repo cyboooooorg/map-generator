@@ -8,7 +8,10 @@ version = "0.1.0"
 dependencies = [
  "catalogue",
  "science",
+ "serde",
+ "serde_json",
  "system",
+ "tempfile",
  "timeline",
  "world",
 ]
