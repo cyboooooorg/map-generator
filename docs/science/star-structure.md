@@ -160,11 +160,13 @@ too deep. Below 0.30 M☉ the polytrope's density is within 4 % of YREC's to
 - **The mass range.** The tables cover 0.08 to 8 M☉ and [Fe/H] from −1 to
   +0.5. A star outside is refused. The hot stars above 8 M☉ are
   tracked in issue #615.
-- **Between the grid masses**, the profiles are interpolated. Above 2 M☉
-  the steps are 0.2 M☉ and larger, and the worst interpolation error of a
-  profile is 0.136 dex for density, pressure or temperature at the worst
-  radius, and 0.078 dex inside 0.9 R. A transient or thin layer present
-  in one profile only is kept while that profile is the nearer one.
+- **Between the grid masses**, the values and profiles are interpolated.
+  The tracks are 0.1 M☉ apart up to 2 M☉, then 0.2 M☉; the profiles are
+  0.1 M☉ apart up to 2.6 M☉, then 1 M☉ from 3 to 8 M☉. The worst
+  interpolation error of a profile is 0.136 dex for density, pressure or
+  temperature at the worst radius, and 0.078 dex inside 0.9 R. A
+  transient or thin layer present in one profile only is kept while that
+  profile is the nearer one.
 - **Only the main sequence.** The model stops at the end of hydrogen
   burning in the core; a star past it is not drawn.
 

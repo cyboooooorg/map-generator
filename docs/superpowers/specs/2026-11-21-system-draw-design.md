@@ -171,9 +171,9 @@ value of *what was picked* is sourced (`Source:` or `Calibration:`).
 ### Interior profile
 
 - Above 0.3 M☉: the YREC structure at the nearest grid points,
-  interpolated, as `InteriorProfile` layers by transport (radiative
-  core or convective core, radiative zone, convective envelope,
-  photosphere) and radial samples with density, pressure, temperature,
+  interpolated, as `InteriorProfile` layers by transport (convective
+  or radiative core, radiative zone, convective envelope), the
+  outermost ending at the photosphere, and radial samples with density, pressure, temperature,
   transport and the cumulative share of nuclear power inside the
   radius.
 - 0.08-0.3 M☉: fully convective (Chabrier & Baraffe 1997), an n = 1.5
