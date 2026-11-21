@@ -8,6 +8,7 @@
 pub mod constants;
 pub mod eos;
 pub mod heat;
+pub mod stellar;
 pub mod structure;
 pub mod units;
 pub mod water;

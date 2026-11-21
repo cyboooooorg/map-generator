@@ -14,6 +14,7 @@ wants to understand it, and link back to those studies.
 ### Star view
 
 - [What does a G-type star mean?](star-types.md)
+- [What is inside a star?](star-structure.md)
 - [What is the habitable zone?](habitable-zone.md)
 - [How do asteroid belts form?](asteroid-belts.md)
 - [What are Lagrange points and trojans?](lagrange-points.md)

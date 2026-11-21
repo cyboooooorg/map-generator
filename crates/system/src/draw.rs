@@ -7,4 +7,4 @@
 //! ```
 //!
 //! `Drawn` holds the star's designation, seed and `StarState`, and one
-//! `Placement` per planet. `SystemError` does not exist yet.
+//! `Placement` per planet. `SystemError` is in `error.rs`.
