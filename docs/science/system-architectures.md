@@ -30,7 +30,7 @@ with probability 1/5 (a choice of what to draw, not a measurement):
 
 | Family | Planets | What it stands for |
 | --- | --- | --- |
-| Compact | 4 to 7 small planets within about 640 d | Kepler's multi-planet systems |
+| Compact | 4 to 7 small planets, the innermost within 640 d | Kepler's multi-planet systems |
 | Solar-like | 2 to 4 rocky planets inside the ice line, 1 to 4 giants beyond | The Solar System |
 | Hot Jupiter | One giant within 10 d, a distant giant in 7 systems of 10 | Dawson & Johnson 2018 |
 | Eccentric giants | 1 or 2 giants, 0 to 2 small planets inside them | Rosenthal et al. 2023, Zhu & Wu 2018 |
@@ -147,15 +147,6 @@ test). Tidal despinning and Cassini states change the birth spin later;
 they are a separate track (#604).
 
 ## In the app
-
-### What you see
-
-`mapgen system` (and the app's system view) shows a star with its planets
-in order of distance, `b` the closest. Each planet has a rotation period
-and an obliquity on its card; the family is one of the five codes
-`compact`, `solar-like`, `hot-jupiter`, `eccentric-giants`, `sparse`.
-Asking for archetypes places them first, in their own bands, and the draw
-fills around them without moving them.
 
 ### How it computes them
 
@@ -281,6 +272,14 @@ choices this draw makes where no source gives one:
   in a hot-Jupiter family draws the half-Gaussian of 0.32, an ice giant
   in the eccentric family the giant Beta.
 - Ice line $2.7\ \mathrm{au}\times M/M_\odot$ (user decision, 2026-11-21).
+- Mutual inclinations of Rayleigh scale $\sigma_{inc} = 1.4°$ (He et al.
+  2019, measured on compact systems) in $K_{50}$ for every family.
+- A rocky proposal of a solar-like system that lands past the ice line
+  (the proposer's fallback when the inner zone is full) is rejected: the
+  try is spent.
+- Log-uniform shapes where a source gives only a range: an asked
+  archetype's flux or period band and its mass range, and a hot
+  Jupiter's period between the stellar surface and 10 d.
 
 ### Where it departs from the science
 
