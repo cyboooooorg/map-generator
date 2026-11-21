@@ -12,6 +12,7 @@ mod error;
 mod inputs;
 mod placement;
 pub mod planet;
+mod random;
 pub mod star;
 
 pub use archetype::ArchetypeId;

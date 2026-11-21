@@ -13,11 +13,11 @@ request, the archetype targets, the present date.
 | `archetype` | mapgen3, mapgen1 | `ArchetypeId`; placement half (draw), targets half (planet model) |
 | `placement` | shared | `Trial`, `Placement`: the seam |
 | `draw` | mapgen3 | `draw(inputs, trace) -> Drawn` (signature only) |
-| `star` | mapgen3 | `StarState` computation (signature only) |
+| `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced (crate-internal until the draw uses it) |
 | `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `interior`, `heat`, `codes`: the composition draws, the structure and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
-The doc-only modules fix their future signatures in `//!` comments;
+The remaining doc-only modules fix their future signatures in `//!` comments;
 `SystemError` is created with the first of them.
 
 ## Planet interior
@@ -69,3 +69,25 @@ caller passes). Never `world`.
 The direction of dependencies is checked by `tools/guardrails`
 (`mise run test:tier1`). See the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md),
 section Architecture > System engine.
+
+## Star
+
+`star(host_mass, metallicity, present, seed, trace)` takes what is asked
+and draws the rest from `seed.derive("star")`, on one ChaCha8 stream, in
+this order: class, mass, metallicity, date. The class (M, K, G, F, A, B)
+is one chance in six each, only a bucket: the mass is log-uniform inside
+the class (`CLASS_BOUNDS`, Pecaut & Mamajek 2013), and the temperature
+comes from the stellar models. The metallicity is uniform from -1 to
++0.5 dex; the date uniform from the ZAMS to the end of the main sequence,
+capped at 13.8 Gyr. The class is not traced (the trace has no node type
+for an index).
+
+A mass or metallicity outside the tables, a date before the ZAMS or after
+the main sequence (or 13.8 Gyr) is refused with the matching
+`SystemError`. Nodes: `system.star.{mass, metallicity, age}` (leaves,
+`Input` or `Drawn`), `lifetime-end`, `radius`, `luminosity`,
+`effective-temperature` and `interior` (derived from the leaves), and per
+layer `system.star.layer-N.{outer-radius, mass, material, state,
+transport}` (a segment cannot start with a digit). Layers are plasma, in
+metres and kilograms (the layer's own mass; a thin surface layer can weigh
+0 kg). The laws and sources are in `science::stellar`.

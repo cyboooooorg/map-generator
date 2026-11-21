@@ -17,8 +17,9 @@
 use super::codes;
 use super::interior::InteriorError;
 use crate::Trial;
+use crate::random::uniform;
 use rand_chacha::ChaCha8Rng;
-use rand_core::{Rng, SeedableRng};
+use rand_core::SeedableRng;
 use science::units::{Dex, Fraction};
 use timeline::{Code, Provenance, Seed, Trace, Traced};
 
@@ -77,10 +78,6 @@ const MASS_FRACTION_MIN: f64 = 0.0;
 
 /// Definition: a mass fraction is at most 1.
 const MASS_FRACTION_MAX: f64 = 1.0;
-
-/// Definition: bits of the mantissa of an `f64`, so that 53 random bits
-/// make a uniform number of the grid `k / 2^53`.
-const MANTISSA_BITS: u32 = 53;
 
 /// The composition a trial draws. The core mass fraction, the migration
 /// flag and the radiogenic abundance are drawn leaves of the trace; the
@@ -193,12 +190,6 @@ fn record(
             Provenance::Drawn,
         )?,
     })
-}
-
-/// A uniform number in the open interval (0, 1).
-fn uniform(rng: &mut ChaCha8Rng) -> f64 {
-    let grid = 1.0 / (1u64 << MANTISSA_BITS) as f64;
-    ((rng.next_u64() >> (u64::BITS - MANTISSA_BITS)) as f64 + 0.5) * grid
 }
 
 /// A standard normal number, by the Box-Muller transform (Box & Muller
