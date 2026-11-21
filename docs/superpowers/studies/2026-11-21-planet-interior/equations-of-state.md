@@ -415,7 +415,7 @@ curve.
 | Lower mantle | 23.83 GPa to about 120 GPa | bridgmanite/periclase mix (SLB BM3) | bridgmanite 4.11 g/cc, 251 GPa, 4.1; MgO 3.59, 161, 3.8 | |
 | Lower mantle (high P) | > 122 GPa to TPa | ppv + dissociation (Umemoto & Wentzcovitch 2011) then TFD | transition 122 GPa (Zeng 2013); parameters **not found** | only matters for M > about 2 M_Earth; ppv jump about 1.5 % |
 | Ice VII / X | 2.2 GPa to 7.7 TPa | Seager Vinet/DFT: ρ0 1460, K0 14.3771 GPa, K0' 6.57972; or BME 23.7, 4.15 | Seager 2007 | one smooth closed form for the whole high-P range, at 300 K |
-| Water < 2.2 GPa | | tabular (AQUA) or IAPWS 95 plus Chaplin / Journaux | not read | strongly T-dependent, the polytrope/Vinet fits do not capture it |
+| Water < 2.2 GPa | | IAPWS-95 liquid, Feistel & Wagner ice Ih, Journaux 2020 ices III/V/VI, IAPWS 2011 melting curves | see section 2.7 | strongly T-dependent, the polytrope/Vinet fits do not capture it |
 
 Justification: every row has at least two independent papers that compare it
 with the
@@ -432,6 +432,192 @@ which reproduces Earth by construction but degrades above 1 M_Earth (Skinner
 section 5.2: the Zeng et al. curves predict increasingly smaller radii at high
 mass and
 pure-core radii several percent too large).
+
+### 2.7 Water below 2.2 GPa: liquid water and ices Ih, III, V, VI
+
+Follow-up study (task 2 of the plan of PR 1). The prototype's icy bodies
+miss by about 4.5 % in radius because every closed form of section 2.3
+starts at ice VII (1460 kg m^-3). This section gives the laws below
+2.2 GPa. Every value was read this session in the files listed below;
+values marked **(computed here)** come from my transcription of those laws,
+checked against the sources' own verification tables.
+
+Files read (downloaded, text extracted with pypdf):
+
+- IAPWS R6-95(2018), Revised Release on the IAPWS Formulation 1995
+  (liquid water, Wagner & Pruss 2002), from iapws.org.
+- IAPWS R10-06(2009), Revised Release on the Equation of State 2006 for
+  H2O Ice Ih (Feistel & Wagner 2006), from iapws.org.
+- IAPWS R14-08(2011), Revised Release on the Pressure along the Melting
+  and Sublimation Curves (Wagner et al. 2011), from iapws.org.
+- Journaux et al. 2020, arXiv:1907.09598 (preprint of the JGR Planets
+  paper), Table 3 and Table 4.
+- Haldemann et al. 2020 (AQUA), arXiv:2009.10098, eq. (22) and Table 2.
+- Acuña et al. 2021, arXiv:2101.08172, Table 1 (alternative ice set).
+- Zeng & Sasselov 2013, arXiv:1301.0818, section 3.3 (path along the
+  melting curve).
+
+#### 2.7.1 Liquid water: IAPWS-95
+
+Helmholtz free energy `f = R T [phi0(delta, tau) + phir(delta, tau)]`,
+`delta = rho / rho_c`, `tau = T_c / T` (R6-95 eq. 4). Pressure from the
+residual part only (R6-95 Table 3): `p = rho R T (1 + delta phir_delta)`.
+
+| Quantity | Value | Read in |
+| --- | --- | --- |
+| T_c | 647.096 K | R6-95 eq. (1) |
+| rho_c | 322 kg m^-3 | R6-95 eq. (2) |
+| R | 0.46151805 kJ kg^-1 K^-1 | R6-95 eq. (3), to be used with the coefficients |
+| phir | 56 terms: 7 polynomial, 44 exponential, 3 Gaussian, 2 non-analytic | R6-95 eq. (6), Table 2 (c_i, d_i, t_i, n_i, alpha_i, beta_i, gamma_i, epsilon_i, a_i, b_i, B_i, C_i, D_i, A_i) |
+| Check: phir_delta at 500 K, 838.025 kg m^-3 | -0.364366650 | R6-95 Table 6 |
+| Check: p at 300 K, 996.5560 / 1005.308 / 1188.202 kg m^-3 | 0.0992418352 / 20.0022515 / 700.004704 MPa | R6-95 Table 7 |
+| Check: saturated liquid at 275 K | rho' = 999.887406 kg m^-3 at 0.698451167 kPa | R6-95 Table 8 |
+
+Transcribed and evaluated **(computed here)**: phir_delta -0.3643666504;
+the seven Table 7 pressures (300, 500, 647, 900 K) within 1.5e-9; the
+Table 8 liquid density within 1.2e-10. IAPWS-95 is valid to 1 GPa below
+1273 K (Acuña 2021 section 2.1, quoting Wagner & Pruss 2002); the liquid
+range used below stays under 2.216 GPa and 355 K.
+
+#### 2.7.2 Ice Ih: Feistel & Wagner 2006 (IAPWS R10-06)
+
+Gibbs function (R10-06 eq. 1):
+
+    g(T, p) = g0(p) - s0 Tt tau
+              + Tt Re sum_k r_k [(t_k - tau) ln(t_k - tau) + (t_k + tau) ln(t_k + tau)
+                                 - 2 t_k ln t_k - tau^2 / t_k]
+
+with `g0(p) = sum_{k=0..4} g0k (pi - pi0)^k`, `r2(p) = sum_{k=0..2} r2k (pi - pi0)^k`,
+`tau = T / Tt`, `pi = p / pt`, `pi0 = p0 / pt`. Density `rho = 1 / g_p`
+(Table 3 eq. 4), with `g_p = g0_p + Tt Re{r2_p [...]}` (Table 4).
+
+| Quantity | Value | Read in |
+| --- | --- | --- |
+| Tt, pt, p0 | 273.16 K, 611.657 Pa, 101 325 Pa | R10-06 Table 1 |
+| g01 to g04 | 0.655022213658955, -0.189369929326131e-7, 0.339746123271053e-14, -0.556464869058991e-21 J kg^-1 | R10-06 Table 2 |
+| t2 | 0.337315741065416 + 0.335449415919309 i | R10-06 Table 2 |
+| r20, r21, r22 | (-72.5974574329220 - 78.1008427112870 i), (-0.557107698030123e-4 + 0.464578634580806e-4 i), (0.234801409215913e-10 - 0.285651142904972e-10 i) J kg^-1 K^-1 | R10-06 Table 2 |
+| Check: rho at (273.16 K, 611.657 Pa), (273.152519 K, 101 325 Pa), (100 K, 100 MPa) | 916.709492200, 916.721463419, 941.678203297 kg m^-3 | R10-06 Table 6 |
+
+Only `g_p` is needed for the density, so g00, s0, t1 and r1 drop out.
+Reproduced **(computed here)** within 5e-13.
+
+#### 2.7.3 Ices III, V, VI: Journaux et al. 2020
+
+Cold (0 K) compression curve of a Mie-Grüneisen equation of state, 3rd
+order Eulerian finite strain (Journaux eq. 5, the Birch-Murnaghan form of
+section 1.2), `K0`, `K0'` at 1 bar and 0 K:
+
+| Phase | V0 (m3 kg^-1) | V0 (cm3 mol^-1) | rho0 = 1/V0 (kg m^-3, computed here) | K0 (GPa) | K0' |
+| --- | --- | --- | --- | --- | --- |
+| Ice III | 8.595e-4 | 15.49(5) | 1163.5 | 9.9(3) | 6 |
+| Ice V | 8.035e-4 | 14.48(5) | 1244.6 | 13.2(3) | 6 |
+| Ice VI | 7.562e-4 | 13.62(2) | 1322.4 | 15.2(3) | 6.5 |
+
+Read in Journaux Table 3. The text (section 3.2.1) explains `K0' = 6`
+to 6.5: simultaneous fits to the compressions and to the Brillouin and
+ultrasonic adiabatic moduli; `K0' = 4` was assumed in earlier work.
+
+Alternative set, read in Acuña 2021 Table 1 (a compilation of Gagnon 1990,
+Tchijov 2004, Shaw 1986, Bezacier 2014, Choukroun & Grasset 2010): ice III
+rho0 1139.0 at T0 237.65 K, K 8.50 GPa, K' 5.7; ice V 1235.0, 237.65 K,
+13.30, 5.2; ice VI 1270.0 at 300 K, 14.05, BM2 (Bezacier 2014). Acuña
+does not state the isothermal form of the ice III and V laws, so the set
+is kept as a cross-check only. Its zero-pressure densities are below
+Journaux's 0 K ones by 2.1 % (III), 0.8 % (V) and 4.0 % (VI)
+**(computed here)**: that gap is thermal expansion between 0 K and T0.
+
+#### 2.7.4 Phase boundaries
+
+Melting pressures (IAPWS R14-08 section 3, `theta = T / T*`,
+`pi = p_melt / p*`):
+
+| Curve | Equation | T range | Read in |
+| --- | --- | --- | --- |
+| Ih | `pi = 1 + sum a_i (1 - theta^b_i)`, a = 0.119539337e7, 0.808183159e5, 0.333826860e4; b = 3, 25.75, 103.75; `T*` = 273.16 K, `p*` = 611.657 Pa | 251.165 to 273.16 K | eq. (1) |
+| III | `pi = 1 - 0.299948 (1 - theta^60)`, `T*` = 251.165 K, `p*` = 208.566 MPa | 251.165 to 256.164 K | eq. (2) |
+| V | `pi = 1 - 1.18721 (1 - theta^8)`, `T*` = 256.164 K, `p*` = 350.1 MPa | 256.164 to 273.31 K | eq. (3) |
+| VI | `pi = 1 - 1.07476 (1 - theta^4.6)`, `T*` = 273.31 K, `p*` = 632.4 MPa | 273.31 to 355 K | eq. (4) |
+| VII | `ln pi = 1.73683 (1 - 1/theta) - 0.0544606 (1 - theta^5) + 0.806106e-7 (1 - theta^22)`, `T*` = 355 K, `p*` = 2216 MPa | 355 to 715 K | eq. (5) |
+
+Triple points with the liquid (R14-08 Table 1, also Journaux Table 4):
+Ih-III-L 251.165 K, 208.566 MPa (computed by IAPWS to join eqs. 1 and 2;
+0.64 % from the experimental value); III-V-L 256.164 K, 350.1 MPa;
+V-VI-L 273.31 K, 632.4 MPa; VI-VII-L 355 K, 2216 MPa. Uncertainties
+(Table 2): 2 % (Ih), 3 % (III, V, VI), 7 % (VII). The Table 3 check values
+(Ih 260 K 138.268 MPa, III 254 K 268.685, V 265 K 479.640, VI 320 K
+1356.76, VII 550 K 6308.71) are reproduced within 3e-6 **(computed here)**,
+the precision of the printed values.
+
+Ice VI / ice VII (solid-solid), AQUA eq. (22), Table 2, fitted by
+Haldemann 2020 to the intersection of the Journaux 2020 and French &
+Redmer 2015 Gibbs surfaces "up to the triple point at 2.216 GPa":
+`T67 = x1 + x2 P + x3 ln P + x4 sqrt(P)` (P in Pa, T in K), x1 =
+-1.4699e5, x2 = 6.10791e-6, x3 = 8.1529e3, x4 = -8.8439e-1. The
+logarithm is natural: it gives T67(2.216 GPa) = 354.999 K, the triple
+point **(computed here)**; inverted, P67(273.31 K) = 1975 MPa, P67(300 K)
+= 2063 MPa.
+
+Solid-solid boundaries Ih/III, III/V and V/VI away from the melting curve:
+**not found** in a source read. Choukroun & Grasset 2007 and 2010 and
+Dunaeva et al. 2010 give them but were not accessible (no open copy; HAL
+record hal-00304418 has no file); Journaux 2020 shows them only in its
+Figure 3; the SeaFreeze package that computes them needs h5py, which
+does not build here. The solid triple points listed by Wikipedia (II-III-V,
+II-V-VI) carry no citation and were not used.
+
+#### 2.7.5 Two sourced paths through the phase diagram
+
+The missing solid-solid boundaries rule out an isotherm below 273.31 K
+(liquid there freezes to ice III or V, whose upper bounds are those
+boundaries). Two paths need only the boundaries above:
+
+1. **Isotherm, 273.31 K <= T < 355 K.** Liquid (IAPWS-95 at T) below
+   `p_melt,VI(T)`; ice VI from there to `P67(T)`; ice VII above. The lower
+   bound is the V-VI-L triple point; at 355 K the ice VI range closes
+   (`p_melt,VI(355 K) = P67(355 K) = 2216 MPa`), and above it the liquid
+   meets ice VII beyond IAPWS-95's 1 GPa range: not covered.
+2. **Melting curve** (Zeng & Sasselov 2013 section 3.3: "we follow the
+   solid phases along the melting curve"): ice Ih below 208.566 MPa at
+   `T = T_melt,Ih(p)` (eq. 1 inverted; 273.16 K below the triple-point
+   pressure), ice III to 350.1 MPa, ice V to 632.4 MPa, ice VI to
+   2216 MPa, ice VII above. Zeng & Sasselov used the Choukroun & Grasset
+   2007 triple points (209.5, 355.0, 618.4 MPa); the IAPWS 2011 values
+   replace them here. No liquid, no temperature to choose: a cold icy body
+   (Ih shell over high-pressure ice) without its ocean.
+
+Both keep the cold-structure rule of the plan for the solids: ices III, V
+and VI on their 0 K curves (density high by the thermal expansion to the
+real temperature, 1 to 4 % from the Acuña comparison above), ice VII on the
+300 K Vinet fit of section 2.3.
+
+#### 2.7.6 Check on Ganymede and Titan (prototype, computed here)
+
+Prototype of `prototype/` with candidate D1 (Valencia 2006 core, B
+mantle) and the Ganymede and Titan fractions of the prototype report; only
+the water law changes. Targets: Ganymede 2634.1 km, C/MR^2 0.3115; Titan
+2574.7 km, 0.3414. `prototype/water.py` transcribes the laws above and
+checks them against the IAPWS verification tables (`python water.py`);
+`prototype/water_run.py` gives this table.
+
+| Water law | Ganymede R | Ganymede C/MR^2 | Titan R | Titan C/MR^2 |
+| --- | --- | --- | --- | --- |
+| Ice VII Vinet only (prototype report) | 2512 (-4.62 %) | 0.3263 (+4.75 %) | 2461 (-4.43 %) | 0.3399 (-0.44 %) |
+| Melting curve, Journaux ices | 2631.6 (-0.09 %) | 0.3068 (-1.52 %) | 2579.7 (+0.20 %) | 0.3187 (-6.66 %) |
+| Isotherm 273.31 K, Journaux ice VI | 2634.9 (+0.03 %) | 0.3072 (-1.38 %) | 2583.0 (+0.32 %) | 0.3193 (-6.47 %) |
+| Isotherm 300 K, Journaux ice VI | 2657.7 (+0.90 %) | 0.3050 (-2.09 %) | 2606.6 (+1.24 %) | 0.3171 (-7.12 %) |
+| Melting curve, Acuña ices | 2644.7 (+0.40 %) | 0.3058 (-1.83 %) | 2591.6 (+0.66 %) | 0.3177 (-6.94 %) |
+
+Ganymede is within 2 % on both quantities with either path near 273 K.
+Titan's radius is too, but not its C/MR^2: the prototype's Titan split
+(no iron core, 45.5 % water, fully differentiated) is an assumption with
+no source, and Titan's high C/MR^2 points to a partly differentiated
+interior (rock mixed into the ice), which no water law fixes. Its earlier
+-0.44 % came from an ice layer that was too dense.
+
+Choice for the code: the Journaux 2020 set (primary, explicit form, the
+ices of the AQUA region 2), the two paths of section 2.7.5, and the VI/VII
+boundary of AQUA.
 
 ---
 
@@ -776,6 +962,10 @@ targets (Mercury-like 3.3053e23, Ganymede-like 1.4864e23 kg).
 - The Skinner 2026 and Attia 2026 papers are arXiv preprints (2026), not yet
   peer-reviewed
   versions as far as the files I read state.
+- Water (section 2.7): solid-solid boundaries Ih/III, III/V and V/VI away
+  from the melting curve not found (Choukroun & Grasset 2007, 2010 and
+  Dunaeva et al. 2010 not accessible). Journaux 2020 read in its arXiv
+  preprint, whose title differs from the published one.
 
 ---
 
@@ -784,6 +974,12 @@ targets (Mercury-like 3.3053e23, Ganymede-like 1.4864e23 kg).
 | Short name | Full citation | DOI / id |
 | --- | --- | --- |
 | Seager 2007 | Seager, Kuchner, Hier-Majumder, Militzer, ApJ 669, 1279 | 10.1086/521346; arXiv:0707.2895 |
+| IAPWS-95 | IAPWS R6-95(2018); Wagner & Pruss 2002, J. Phys. Chem. Ref. Data 31, 387 | 10.1063/1.1461829 |
+| Feistel & Wagner 2006 | IAPWS R10-06(2009); J. Phys. Chem. Ref. Data 35, 1021 | 10.1063/1.2183324 |
+| Wagner 2011 | IAPWS R14-08(2011); Wagner, Riethmann, Feistel, Harvey, J. Phys. Chem. Ref. Data 40, 043103 | 10.1063/1.3657937 |
+| Journaux 2020 | Journaux et al., JGR Planets 125, e2019JE006176 | 10.1029/2019JE006176; arXiv:1907.09598 |
+| Haldemann 2020 | Haldemann et al. (AQUA), A&A 643, A105 | 10.1051/0004-6361/202038367; arXiv:2009.10098 |
+| Acuña 2021 | Acuña et al., A&A 647, A53 | 10.1051/0004-6361/202039885; arXiv:2101.08172 |
 | Zeng & Sasselov 2013 | PASP 125, 227 | 10.1086/669163; arXiv:1301.0818 |
 | Zeng 2016 | Zeng, Sasselov, Jacobsen, ApJ 819, 127 | 10.3847/0004-637X/819/2/127; arXiv:1512.08827 |
 | Valencia 2006 | Valencia, O'Connell, Sasselov, Icarus 181, 545 | 10.1016/j.icarus.2005.11.021; arXiv:astro-ph/0511150 |
