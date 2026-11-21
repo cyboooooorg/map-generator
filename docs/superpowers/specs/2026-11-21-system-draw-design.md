@@ -216,7 +216,7 @@ tools regenerate them.
 ### Planets of a random system
 
 - **Family**, one of five, evenly (`Definition:`):
-  1. compact: 4-7 small planets inside about 0.3 AU, similar sizes
+  1. compact: 4-7 small planets, similar sizes
      ("peas in a pod", Weiss et al. 2018), near resonances;
   2. solar-like: rocky planets inside the ice line, giants beyond;
   3. hot Jupiter: one giant at a few days, no close companions, maybe a
@@ -285,10 +285,12 @@ T_eff.
 
 - The draw computes the period from Kepler's law and the host mass;
   perihelion longitude uniform in [0°, 360°) (`Definition:`).
-- Eccentricity from the class and family rules above; obliquity and
-  rotation period from the archetype placement or, when drawn, from
-  sources carried over from legacy (`docs/science/axial-tilt-climate.md`,
-  `eccentric-orbits.md`) after checking each has a source.
+- Eccentricity from the class and family rules above; obliquity from
+  the archetype placement when it gives one; otherwise obliquity and
+  rotation period are drawn from the spin study
+  (`docs/superpowers/studies/2026-11-21-architecture-families/spin.md`):
+  Kokubo & Genda's spin vector for rocky planets, a fraction of
+  break-up for giants, the birth value before tides (#604).
 - Designations follow distance once every orbit is placed: `b` the
   closest, `bb` after `z`, ranks from 650 refused (contract).
 
