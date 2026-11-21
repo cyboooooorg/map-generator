@@ -1,6 +1,9 @@
 # World and catalogue W1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Lay the infrastructure of the map generator and the catalogue:
 the cube-sphere grid, the world field container, the 2:1 projection, the
@@ -15,8 +18,10 @@ command, no physics.
 **Tech Stack:** Rust 2024 workspace, serde/serde_json, `png` crate
 (adapters only), cargo-nextest tiers, `mise run ci`.
 
-**Spec:** [world and catalogue design](../specs/2026-11-21-world-catalogue-design.md),
-section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-architecture-rewrite-design.md).
+**Spec:** [world and catalogue
+design](../specs/2026-11-21-world-catalogue-design.md),
+section "W1 in detail". Parent: [architecture
+rewrite](../specs/2026-11-20-architecture-rewrite-design.md).
 
 ## Global Constraints
 
@@ -169,7 +174,8 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 - [ ] **Step 5: Run `cargo nextest run -p world`, expect PASS; then
   `cargo clippy -p world --all-targets -- -D warnings`.**
 
-- [ ] **Step 6: Commit** `feat(world): port the cube-sphere grid with cell areas`.
+- [ ] **Step 6: Commit** `feat(world): port the cube-sphere grid with cell
+      areas`.
 
 ### Task 2: Fields and the world container
 
@@ -185,26 +191,34 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 
 - Consumes: `Grid` (Task 1); `timeline::{Code, Designation, EngineVersion}`.
 - Produces (re-exported at `world::`):
-  - `#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)] pub struct FieldId(pub Code);`
-  - `#[derive(Clone, Debug, PartialEq)] pub enum Values { F32(Vec<f32>), U16(Vec<u16>), U8(Vec<u8>) }`
+  - `#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)] pub struct
+    FieldId(pub Code);`
+  - `#[derive(Clone, Debug, PartialEq)] pub enum Values { F32(Vec<f32>),
+    U16(Vec<u16>), U8(Vec<u8>) }`
     with `len(&self) -> usize` and `get_f32(&self, k: usize) -> f32`.
-  - `#[derive(Clone, Copy, Debug, PartialEq)] pub enum Storage { Exact, U16 { min: f32, max: f32 } }`
+  - `#[derive(Clone, Copy, Debug, PartialEq)] pub enum Storage { Exact, U16 {
+    min: f32, max: f32 } }`
     — how an `F32` field is written to disk; `U16` maps `[min, max]`
     linearly onto `0..=65535`.
-  - `#[derive(Clone, Debug, PartialEq)] pub struct Field { pub values: Values, pub categorical: bool, pub storage: Storage }`
+  - `#[derive(Clone, Debug, PartialEq)] pub struct Field { pub values: Values,
+    pub categorical: bool, pub storage: Storage }`
   - `#[derive(Clone, Debug, PartialEq)] pub struct World` with private
-    fields `grid: Grid, body: Designation, keyframe: u32, engine: EngineVersion, fields: BTreeMap<FieldId, Field>`;
+    fields `grid: Grid, body: Designation, keyframe: u32, engine: EngineVersion,
+    fields: BTreeMap<FieldId, Field>`;
     `World::new(grid, body, keyframe, engine) -> World`;
     accessors `grid()`, `body()`, `keyframe()`, `engine()`;
     `insert(&mut self, id: FieldId, field: Field) -> Result<(), WorldError>`;
     `field(&self, id: &FieldId) -> Option<&Field>`;
     `fields(&self) -> impl Iterator<Item = (&FieldId, &Field)>`.
-  - `#[derive(Clone, Debug, PartialEq)] pub enum WorldError { WrongLength { field: Code, expected: usize, found: usize }, Duplicate(Code), Categorical(Code), Missing(Code), Storage(Code) }`
+  - `#[derive(Clone, Debug, PartialEq)] pub enum WorldError { WrongLength {
+    field: Code, expected: usize, found: usize }, Duplicate(Code),
+    Categorical(Code), Missing(Code), Storage(Code) }`
     implementing `Display` (codes and numbers only) and `Error`.
 
 - [ ] **Step 1: Write the failing tests** in `fields_tests.rs`:
   `a_field_of_the_wrong_length_is_refused` (`Grid::new(2)` has 24
-  cells; inserting 23 values gives `WrongLength { expected: 24, found: 23, .. }`),
+  cells; inserting 23 values gives `WrongLength { expected: 24, found: 23, ..
+  }`),
   `a_field_is_inserted_once` (second insert of the same id gives
   `Duplicate`), `a_categorical_field_is_integer` (`categorical: true`
   with `Values::F32` gives `Categorical`),
@@ -227,11 +241,14 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 
 **Interfaces:**
 
-- Consumes: `World`, `FieldId`, `Field`, `Values`, `WorldError` (Task 2), `Grid` (Task 1).
+- Consumes: `World`, `FieldId`, `Field`, `Values`, `WorldError` (Task 2), `Grid`
+  (Task 1).
 - Produces (re-exported at `world::`):
-  - `#[derive(Clone, Debug, PartialEq)] pub struct Raster { pub width: u32, pub height: u32, pub values: Vec<f32> }`
+  - `#[derive(Clone, Debug, PartialEq)] pub struct Raster { pub width: u32, pub
+    height: u32, pub values: Vec<f32> }`
     (row-major from the north-west corner, `height = width / 2`).
-  - `pub fn project(world: &World, id: &FieldId, width: u32) -> Result<Raster, WorldError>`
+  - `pub fn project(world: &World, id: &FieldId, width: u32) -> Result<Raster,
+    WorldError>`
     (`Missing` for an unknown id; panics on an odd or zero `width`).
 
 - [ ] **Step 1: Write the failing tests:**
@@ -290,16 +307,23 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 - Produces:
   - `timeline::fnv1a64(bytes: &[u8]) -> u64` (unchanged body; doc
     says it is part of the contract and used by the catalogue).
-  - `#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] pub struct SystemId(u64);`
+  - `#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] pub
+    struct SystemId(u64);`
     `SystemId::of(inputs: &Inputs) -> SystemId` (FNV-1a 64 of
     `serde_json::to_string(inputs)`); `Display` as 16 lowercase hex
     digits; `FromStr` back (exactly 16 hex digits); serde as that
     string.
-  - `#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)] pub struct StoredSystem { pub id: SystemId, pub inputs: Inputs, pub engine: EngineVersion, pub name: Option<String> }`
-    with `StoredSystem::new(inputs: Inputs, engine: EngineVersion) -> StoredSystem`
+  - `#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)] pub struct
+    StoredSystem { pub id: SystemId, pub inputs: Inputs, pub engine:
+    EngineVersion, pub name: Option<String> }`
+    with `StoredSystem::new(inputs: Inputs, engine: EngineVersion) ->
+    StoredSystem`
     and `check_schema(&self) -> Result<(), CatalogueError>`.
-  - `pub enum CatalogueError { UnknownSchema { found: u32, expected: u32 }, BadId(String) }` (`Display`, `Error`).
-  - `#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)] pub struct WorldKey { pub system: SystemId, pub body: Designation, pub keyframe: u32, pub grid: u32, pub engine: EngineVersion }`
+  - `pub enum CatalogueError { UnknownSchema { found: u32, expected: u32 },
+    BadId(String) }` (`Display`, `Error`).
+  - `#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)] pub struct WorldKey
+    { pub system: SystemId, pub body: Designation, pub keyframe: u32, pub grid:
+    u32, pub engine: EngineVersion }`
     (`EngineVersion` needs `PartialOrd, Ord`: add them in `timeline`).
   - Traits:
 
@@ -359,10 +383,13 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
   - `pub const DEFAULT_BUDGET: u64` = 2 GiB (`2 * 1024 * 1024 * 1024`),
     doc `Definition: the default byte budget of the caches (world and
     catalogue design; the user sets it with --cache-budget).`
-  - `#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)] pub enum CacheKey { Timelines { system: SystemId, engine: EngineVersion }, World(WorldKey) }`
+  - `#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)] pub enum CacheKey {
+    Timelines { system: SystemId, engine: EngineVersion }, World(WorldKey) }`
     with `engine(&self) -> EngineVersion`.
-  - `#[derive(Clone, Debug, PartialEq)] pub struct CacheEntry { pub key: CacheKey, pub bytes: u64, pub last_use: u64 }`
-  - `pub fn evict(entries: &[CacheEntry], current: EngineVersion, budget: u64) -> Vec<CacheKey>`:
+  - `#[derive(Clone, Debug, PartialEq)] pub struct CacheEntry { pub key:
+    CacheKey, pub bytes: u64, pub last_use: u64 }`
+  - `pub fn evict(entries: &[CacheEntry], current: EngineVersion, budget: u64)
+    -> Vec<CacheKey>`:
     every entry of another engine version, then the current ones by
     ascending `last_use` (ties by `key` order) until the remaining
     bytes are at most `budget`. Output in that order.
@@ -383,7 +410,8 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 
 **Files:**
 
-- Create: `crates/adapters/src/store/mod.rs`, `crates/adapters/src/store/paths.rs`,
+- Create: `crates/adapters/src/store/mod.rs`,
+  `crates/adapters/src/store/paths.rs`,
   `crates/adapters/src/store/uses.rs`, `crates/adapters/tests/store.rs`
 - Modify: `crates/adapters/src/lib.rs`, `crates/adapters/Cargo.toml`
   (`serde`, `serde_json`; dev-dependency `tempfile` at its latest
@@ -393,17 +421,23 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 
 - Consumes: Task 4 traits and types, Task 5 `CacheKey`, `CacheEntry`, `evict`.
 - Produces:
-  - `pub struct FsStore` with `FsStore::new(root: PathBuf, budget: u64) -> FsStore`.
-  - `#[derive(Debug)] pub enum StoreError { Io(std::io::Error), Json(serde_json::Error), Catalogue(catalogue::CatalogueError) }` (`Display`, `Error`, `From` each).
-  - `impl SystemRepository for FsStore` and `impl TimelineCache for FsStore` (`Error = StoreError`).
-  - `FsStore::evict(&self, current: EngineVersion) -> Result<Vec<CacheKey>, StoreError>`:
+  - `pub struct FsStore` with `FsStore::new(root: PathBuf, budget: u64) ->
+    FsStore`.
+  - `#[derive(Debug)] pub enum StoreError { Io(std::io::Error),
+    Json(serde_json::Error), Catalogue(catalogue::CatalogueError) }` (`Display`,
+    `Error`, `From` each).
+  - `impl SystemRepository for FsStore` and `impl TimelineCache for FsStore`
+    (`Error = StoreError`).
+  - `FsStore::evict(&self, current: EngineVersion) -> Result<Vec<CacheKey>,
+    StoreError>`:
     lists the cache entries on disk with their sizes and ticks, calls
     `catalogue::evict` with the store's budget, removes the returned
     files (and directories left empty), drops them from `uses.json`.
   - Layout (spec): `<root>/systems/<id>/inputs.json`,
     `<root>/cache/<engine>/<id>/timelines.json`,
     `<root>/cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>.world`,
-    `<root>/cache/uses.json` (`{"tick": u64, "uses": {"<path relative to cache/>": u64}}`).
+    `<root>/cache/uses.json` (`{"tick": u64, "uses": {"<path relative to
+    cache/>": u64}}`).
     `<slug>` is the designation's text lowercased with spaces as `-`
     (`MGS 12345 b` → `mgs-12345-b`).
 
@@ -430,22 +464,26 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
   failure to `Ok(None)`. Every `put` and every cache hit advances the
   tick and records it in `uses.json` (written with the same staging).
 - [ ] **Step 4: Run, expect PASS.**
-- [ ] **Step 5: Commit** `feat(adapters): store systems and timelines on the filesystem`.
+- [ ] **Step 5: Commit** `feat(adapters): store systems and timelines on the
+      filesystem`.
 
 ### Task 7: World codec and world cache
 
 **Files:**
 
-- Create: `crates/adapters/src/world_codec.rs`, `crates/adapters/tests/world_codec.rs`
+- Create: `crates/adapters/src/world_codec.rs`,
+  `crates/adapters/tests/world_codec.rs`
 - Modify: `crates/adapters/src/store/mod.rs`, `crates/adapters/src/lib.rs`
 
 **Interfaces:**
 
-- Consumes: `world::{World, Grid, FieldId, Field, Values, Storage}` (Tasks 1-2), `WorldKey`, `WorldCache` (Task 4), `FsStore` (Task 6).
+- Consumes: `world::{World, Grid, FieldId, Field, Values, Storage}`
+  (Tasks 1-2), `WorldKey`, `WorldCache` (Task 4), `FsStore` (Task 6).
 - Produces:
   - `pub fn encode(world: &World) -> Vec<u8>`
   - `pub fn decode(bytes: &[u8]) -> Result<World, CodecError>`;
-    `#[derive(Debug)] pub enum CodecError { Magic, Truncated, Invalid(String) }`.
+    `#[derive(Debug)] pub enum CodecError { Magic, Truncated, Invalid(String)
+    }`.
   - `impl WorldCache for FsStore` with `type World = world::World`.
   - Layout, little-endian: `b"MGWORLD1"`; `u32` engine; `u16` length +
     UTF-8 designation text; `u32` keyframe; `u32` grid `n`; `u32` field
@@ -486,14 +524,17 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 - Produces:
   - `#[derive(Clone, Debug)] pub struct Ramp { stops: Vec<(f32, [u8; 3])> }`
     with `Ramp::new(stops) -> Ramp` (panics unless sorted and non-empty)
-    and `Ramp::grey(min: f32, max: f32) -> Ramp`; `colour(&self, v: f32) -> [u8; 3]`
+    and `Ramp::grey(min: f32, max: f32) -> Ramp`;
+    `colour(&self, v: f32) -> [u8; 3]`
     (linear between stops, clamped at the ends; NaN is black).
   - `pub fn encode_png(raster: &Raster, ramp: &Ramp) -> Vec<u8>` (8-bit RGB).
-  - `pub fn write_png(path: &Path, raster: &Raster, ramp: &Ramp) -> std::io::Result<()>` (staged write).
+  - `pub fn write_png(path: &Path, raster: &Raster, ramp: &Ramp)`
+    `-> std::io::Result<()>` (staged write).
 
 - [ ] **Step 1: Write the failing tests:** `grey_ramp_maps_ends_and_middle`
   (0 → `[0,0,0]`, 1 → `[255,255,255]`, 0.5 → `[128,128,128]` with
-  `Ramp::grey(0.0, 1.0)`; values outside clamp), `a_png_decodes_to_its_size_and_colours`
+  `Ramp::grey(0.0, 1.0)`; values outside clamp),
+  `a_png_decodes_to_its_size_and_colours`
   (encode a 4×2 raster, decode with `png::Decoder`, check 4×2 RGB and
   the first pixel's colour).
 - [ ] **Step 2: Run, expect failure.**
@@ -506,7 +547,8 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 **Files:**
 
 - Modify: `crates/world/README.md`, `crates/catalogue/README.md`,
-  `crates/adapters/README.md` (create it if missing), `crates/timeline/README.md`
+  `crates/adapters/README.md` (create it if missing),
+  `crates/timeline/README.md`
   (mention the published hash), the parent design's Catalogue section
   only if a W1 call contradicts it.
 
@@ -519,4 +561,5 @@ section "W1 in detail". Parent: [architecture rewrite](../specs/2026-11-20-archi
 - [ ] **Step 2: Run `mise run ci`.** Expected: format, clippy, tier 1
   and tier 2 within budgets, markdownlint, all green. Fix anything red
   in the task that owns it.
-- [ ] **Step 3: Commit** `docs(world): document the grid, the catalogue and the store`.
+- [ ] **Step 3: Commit**
+  `docs(world): document the grid, the catalogue and the store`.
