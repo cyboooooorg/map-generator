@@ -335,8 +335,9 @@ low-mass rows this way:
   ages. This happens between the last mass that stops at 20 Gyr and the
   next (0.7-0.8 M☉ at [Fe/H] −1 and −0.5, 0.8-0.9 at 0, 0.9-1.0 at +0.5).
   Since each [Fe/H] chooses alone, the values are continuous as [Fe/H]
-  crosses a grid value (within 0.001 dex in log L for 0.85 and 0.95 M☉
-  from 0 to +0.001 and from −0.5 to −0.499).
+  crosses a grid value (measured within 0.001 dex, tested below
+  0.002 dex, in log L for 0.85 and 0.95 M☉ from 0 to +0.001 and from
+  −0.5 to −0.499).
 - **TAMS age**: at each bracketing [Fe/H], when both tracks around the mass
   reach the TAMS, linear in log t against log mass. When only the heavier
   one does (at t_u), log t is extrapolated against log mass from it and the
