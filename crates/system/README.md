@@ -138,7 +138,9 @@ for an index).
 
 A mass or metallicity outside the tables, a date before the ZAMS or after
 the main sequence (or 13.8 Gyr) is refused with the matching
-`SystemError`. Nodes: `system.star.{mass, metallicity, age}` (leaves,
+`SystemError`; a NaN input is refused with `system.not-a-number:
+<input>` (`present`, `host-mass` or `metallicity`), and an infinite one
+with the range errors. Nodes: `system.star.{mass, metallicity, age}` (leaves,
 `Input` or `Drawn`), `lifetime-end`, `radius`, `luminosity`,
 `effective-temperature` and `interior` (derived from the leaves), and per
 layer `system.star.layer-N.{outer-radius, mass, material, state,

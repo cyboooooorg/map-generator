@@ -72,6 +72,9 @@ pub(crate) fn star(
         Some(mass) => (mass, Provenance::Input),
         None => (drawn_mass, Provenance::Drawn),
     };
+    if mass_value.0.is_nan() {
+        return Err(SystemError::NotANumber { input: "host-mass" });
+    }
     if !(MIN_MASS.0..=MAX_MASS.0).contains(&mass_value.0) {
         return Err(SystemError::HostMassOutOfRange { mass: mass_value });
     }
@@ -79,6 +82,11 @@ pub(crate) fn star(
         Some(value) => (value, Provenance::Input),
         None => (drawn_metallicity, Provenance::Drawn),
     };
+    if metallicity_value.0.is_nan() {
+        return Err(SystemError::NotANumber {
+            input: "metallicity",
+        });
+    }
     if !(MIN_METALLICITY.0..=MAX_METALLICITY.0).contains(&metallicity_value.0) {
         return Err(SystemError::MetallicityOutOfRange {
             metallicity: metallicity_value,
@@ -95,7 +103,10 @@ pub(crate) fn star(
             Provenance::Drawn,
         ),
     };
-    if age_value.0.is_nan() || age_value.0 < life.zams.0 {
+    if age_value.0.is_nan() {
+        return Err(SystemError::NotANumber { input: "present" });
+    }
+    if age_value.0 < life.zams.0 {
         return Err(SystemError::PresentBeforeZams {
             present: age_value,
             zams: life.zams,
@@ -335,6 +346,54 @@ mod tests {
         assert!(
             matches!(error, SystemError::PresentBeforeZams { present, .. } if present.0 == 0.1)
         );
+    }
+
+    #[test]
+    fn a_nan_input_is_refused_by_name() {
+        let nan_error = |host, metallicity, present| {
+            star(host, metallicity, present, Seed::new(1), &mut Trace::new())
+                .err()
+                .unwrap()
+        };
+        assert_eq!(
+            nan_error(None, None, Some(Gyr(f64::NAN))),
+            SystemError::NotANumber { input: "present" }
+        );
+        assert_eq!(
+            nan_error(Some(SolarMass(f64::NAN)), None, None),
+            SystemError::NotANumber { input: "host-mass" }
+        );
+        assert_eq!(
+            nan_error(None, Some(Dex(f64::NAN)), None),
+            SystemError::NotANumber {
+                input: "metallicity"
+            }
+        );
+    }
+
+    #[test]
+    fn an_infinite_input_still_gives_the_range_errors() {
+        let error = |host, metallicity, present| {
+            star(host, metallicity, present, Seed::new(1), &mut Trace::new())
+                .err()
+                .unwrap()
+        };
+        assert!(matches!(
+            error(Some(SolarMass(f64::INFINITY)), None, None),
+            SystemError::HostMassOutOfRange { .. }
+        ));
+        assert!(matches!(
+            error(None, Some(Dex(f64::NEG_INFINITY)), None),
+            SystemError::MetallicityOutOfRange { .. }
+        ));
+        assert!(matches!(
+            error(None, None, Some(Gyr(f64::INFINITY))),
+            SystemError::PresentAfterLife { .. }
+        ));
+        assert!(matches!(
+            error(None, None, Some(Gyr(f64::NEG_INFINITY))),
+            SystemError::PresentBeforeZams { .. }
+        ));
     }
 
     #[test]
