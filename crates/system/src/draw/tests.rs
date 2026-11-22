@@ -119,7 +119,7 @@ fn asking(seed: u64, items: &[(&str, u32)]) -> Inputs {
 
 /// A star of `host` M☉, its light, the context of a forced `family`,
 /// drawn on the streams `draw_with` uses, and the trace holding the star.
-fn parts(seed: u64, host: f64, family: Family) -> (Star, Light, FamilyContext, Trace) {
+pub(super) fn parts(seed: u64, host: f64, family: Family) -> (Star, Light, FamilyContext, Trace) {
     let seed = Seed::new(seed);
     let mut trace = Trace::new();
     let star = star::star(Some(SolarMass(host)), None, None, seed, &mut trace).unwrap();
@@ -813,4 +813,8 @@ fn asked_planets_ignore_the_compact_edge() {
         .find(|p| p.asked == Some(id("jupiter-like")))
         .expect("the asked planet is placed");
     assert!(jupiter.trial.orbit.period.value().0 > COMPACT_OUTER_EDGE.0);
+    assert!(
+        placed.iter().any(|p| p.asked.is_none()),
+        "a drawn planet is placed beside the asked one"
+    );
 }

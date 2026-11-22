@@ -700,3 +700,60 @@ pub(crate) fn recheck(placed: &mut Vec<Placed>, rules: &Rules) {
     }
     placed.extend(ordered.into_iter().map(|(_, planet)| planet));
 }
+
+#[cfg(test)]
+mod chain_end_tests {
+    use std::cell::Cell;
+
+    use super::super::tests::parts;
+    use super::*;
+    use crate::families::tests::placed as test_planet;
+    use crate::stand_in::classify;
+
+    /// A compact family slot whose proposal lands past 1071 d ends the
+    /// chain: the slot gives `ChainEnds`, with no retry and no
+    /// classification.
+    #[test]
+    fn a_compact_slot_past_the_edge_ends_the_chain_without_a_retry() {
+        let (star, light, ctx, mut trace) = parts(7, 1.0, Family::Compact);
+        let system = System {
+            star: &star,
+            light: &light,
+            ctx: &ctx,
+            seed: Seed::new(7),
+        };
+        let ice_line = trace
+            .record(
+                Code::of(codes::ICE_LINE),
+                ctx.ice_line,
+                &[star.state.mass.node()],
+            )
+            .unwrap();
+        let calls = Cell::new(0_u32);
+        let classify = |trial: &Trial, trace: &Trace| {
+            calls.set(calls.get() + 1);
+            classify(trial, trace)
+        };
+        let placer = Placer {
+            system: &system,
+            ice_line,
+            rules: Rules {
+                host: ctx.host,
+                age: *star.age.value(),
+                sigma_e: k50_sigma_e(&ctx),
+                total: 4,
+            },
+            slope: None,
+            classify: &classify,
+        };
+        // The next period is at least 1.2 times 1000 d: past 1071 d on
+        // every try.
+        let a = orbit::semi_major_axis(Day(1000.0), ctx.host);
+        let placed = [test_planet(&mut trace, 1.0, a.0, 0.0, false)];
+        let filled = placer
+            .slot(Slot::Family(1), "slot-1".to_owned(), &placed, &mut trace)
+            .unwrap();
+        assert!(matches!(filled, Filled::ChainEnds));
+        assert_eq!(calls.get(), 0, "the classifier is never called");
+    }
+}
