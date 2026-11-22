@@ -4,4 +4,5 @@
 //! Values and their citations are in the study
 //! `docs/superpowers/studies/2026-11-22-relief/README.md`.
 
+pub mod crust;
 pub mod spectrum;
