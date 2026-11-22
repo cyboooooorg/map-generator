@@ -15,10 +15,14 @@
 //! share their trial streams). The orbit's period is the draw's (Kepler),
 //! never recomputed.
 //!
+//! The orbit's perihelion longitude draws from
+//! `system_seed.derive("orbit/<label>")`, where the label is the trial's
+//! (`earth-like`, `earth-like/2`, `slot-3`), not from the trial seed.
+//!
 //! Neither type is serialised.
 
-use science::units::{AstronomicalUnit, Dex, EarthMass, Gyr};
-use timeline::{Designation, Orbit, Seed, Spin, StellarSources, Traced};
+use science::units::{AstronomicalUnit, Dex, EarthMass, EarthRadius, Gyr, KilogramPerCubicMetre};
+use timeline::{Designation, Orbit, PlanetClass, Seed, Spin, StellarSources, Traced};
 
 use crate::ArchetypeId;
 
@@ -42,4 +46,18 @@ pub struct Placement {
     pub seed: Seed,
     pub spin: Spin,
     pub trial: Trial,
+}
+
+/// What `class_of` reads from a trial: the class and the bulk values the
+/// draw needs to place it.
+///
+/// It carries plain values, not traced ones, because `class_of` runs on a
+/// scratch trace whose node ids mean nothing in the draw's trace. The
+/// draw records the kept class as `system.draw.class`, from the trial's
+/// mass, orbit and flux nodes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrialOutcome {
+    pub class: PlanetClass,
+    pub radius: EarthRadius,
+    pub mean_density: KilogramPerCubicMetre,
 }

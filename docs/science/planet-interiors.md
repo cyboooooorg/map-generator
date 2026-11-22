@@ -3,7 +3,7 @@
 Seen from: the planet model of the generator. Its interior and heat are
 computed by the system engine (`crates/system/src/planet/`) with the laws
 of `crates/science/` (equations of state, hydrostatic structure, heat);
-it shows them nowhere yet. The envelope, giants, moons, ice shell and
+it shows them nowhere yet. The moons, ice shell and
 map of the earlier crate (`crates/mapgen/src/planet/`, tag
 `legacy-final`) are described where they have not been rewritten.
 
@@ -31,28 +31,178 @@ in the protoplanetary disc and solid planets form with a large share of
 ice. The model reads the system's ice line (see
 [How do asteroid belts form?](asteroid-belts.md) and
 [giant planet placement](giant-planet-placement.md)): beyond it, ices make
-50 to 67 % of the mass of the planets that formed there (Zeng et al.
-2019); the icy moons of the Solar System hold less, Ganymede and Titan
-about 40 to 50 %. Inside it, the water share is log-normal around
-0.27 % of the mass, Earth's bulk (Marty 2012). One planet in ten inside
-the line is drawn as if it had formed beyond it and migrated in.
+10 to 67 % of the mass of the planets that formed there (Marboeuf et al.
+2014; Zeng et al. 2019); the icy moons of the Solar System hold less,
+Ganymede and Titan about 40 to 50 %. Inside it, the water share is
+between 0.001 % and 1 % of the mass, Earth's bulk (0.27 %, Marty 2012)
+inside that range. One planet in ten inside the line is drawn as if it
+had formed beyond it and migrated in.
 
-**Iron.** The core's share of the iron and rock mass is drawn around
-0.32 (Plotnykov & Valencia 2020, inferred from the composition of stars:
-0.32, +0.14 and −0.12 at 68 %; Earth's is 0.325), with no dependence on
-the star's `[Fe/H]`, though Adibekyan et al. (2021) find the iron
-fraction of rocky planets rising with their star's. The earlier model's
-slope of 0.15 per dex and its Mercury-like planets with a stripped mantle
-are not in the new draw.
+**Iron.** The core's share of the iron and rock mass is drawn between 0
+and 0.8, with no dependence on the star's `[Fe/H]`, though Adibekyan et
+al. (2021) find the iron fraction of rocky planets rising with their
+star's. The earlier model's slope of 0.15 per dex and its Mercury-like
+planets with a stripped mantle are not in the new draw.
 
 **Core accretion.** A solid core that grows in the gas disc captures
-hydrogen and helium. Below about 0.5 Earth masses a body finishes forming
-after the disc is gone and keeps none (Mars). Between 0.5 and 5 Earth
-masses the chance to have gathered gas rises linearly; those that did hold
-a few percent of their mass in it (Lee & Chiang 2016). From about 10 Earth
-masses the core accretes gas faster than solids and runs away into a giant
-(Pollack et al. 1996): Uranus and Neptune hold 10 to 20 % of their mass in
-gas, Jupiter and Saturn 85 to 95 % (Guillot 2005, Helled et al. 2011).
+hydrogen and helium. Below 0.1 Earth masses a body is taken to keep
+none. Between 0.1 and 5 Earth masses the share captured rises steeply
+with the mass: at most $10^{-4}$ of the mass at 0.1 Earth masses, at most
+0.35 at 5 (Lammer et al. 2014). From about 10 Earth masses the core
+accretes gas faster than solids and runs away into a giant (Pollack et
+al. 1996): Uranus and Neptune hold 10 to 20 % of their mass in gas,
+Jupiter and Saturn 85 to 95 % (Guillot 2005, Helled et al. 2011).
+
+#### The draws and their bounds
+
+Every composition draw is uniform between the published bounds of the
+plausible physical range, log-uniform where the quantity spans decades,
+as the star's mass and metallicity are. The bounds are not the 68 %
+interval of an observed distribution: a generator that builds worlds
+wants the whole range a planet can take, not the middle of the planets
+seen so far, and a mixture of observed and uniform would need a share
+that no source gives. One uniform number per value, each from its own
+sub-seed, so changing one draw moves no other.
+
+| Draw | Shape | Bounds | Where they come from |
+| --- | --- | --- | --- |
+| Core mass fraction | uniform | 0 to 0.8 | 0: a planet may form without a metallic core (Elkins-Tanton & Seager 2008); 0.8: "what seems to be the maximum iron enrichment" (Plotnykov & Valencia 2020, abstract and Fig. 8) |
+| Water inside the ice line | log-uniform | $10^{-5}$ to $10^{-2}$ of the mass | Mercury's $10^{-5}$ is the driest of the Solar System's planets (Raymond et al. 2007, Table 1); less than 1 wt % expected inside the snow line (Izidoro & Piani 2022, p. 7) |
+| Water beyond the line, or migrated | uniform | 0.1 to 0.67 | 0.67: the ice fraction of icy planets is at most 2/3 (Zeng et al. 2019); 0.1: ices are 10 to 60 % of the planetesimals beyond the snow line (Marboeuf et al. 2014, p. 11-12) |
+| Migration chance | n/a | 0.1 | calibration, below |
+| Radiogenic abundance | uniform in dex | $-0.5$ to $+0.5$ of Earth's | 1 to 99 % range of [Eu/Mg] in the Hypatia catalogue, "conservative" (Nimmo et al. 2020, p. 5 and appendix p. 13) |
+
+**What the bounds do not say.** The lower core fraction of 0 is a
+theoretical floor, not an observation, though the fits of measured planets
+reach it within their error bars (Brinkman et al. 2024, Table 2); the
+upper 0.8 is an inference from a sample of about 60 planets, and the
+"super-Mercuries" have iron fractions of 59 to 71 % (Adibekyan et al.
+2021, Table S4) but 0.31 to 0.56 when the same planets are fitted again
+(Brinkman et al. 2024, Table 3, which finds no distinct population).
+Marboeuf's 0.1 counts all ices,
+not only water, so it is an upper estimate of the least water share. The
+radiogenic range is a percentile range of a stellar catalogue, not an
+absolute extreme; narrower samples give narrower ranges (Unterborn et al.
+2015: 59 to 251 % of the Sun's thorium in solar twins). The
+population-level cap of about 3 % water for super-Earths (Rogers et al.
+2024) is below the icy range; the draw does not apply it, since the
+bounds describe what one planet can be, not the population.
+
+**Observed distributions, kept for the galactic-map mode.** The earlier
+draws were these distributions; the code no longer holds them, and a
+future galactic-map mode that wants the planets seen so far would
+start from these parameters:
+
+- iron share: split normal, median 0.32 (−0.12, +0.14 at 68 %), inferred
+  from the composition of stars (Plotnykov & Valencia 2020; Earth's is
+  0.325); the abstract's fit of the planets themselves is 0.24 (+0.33,
+  −0.18);
+- water inside the ice line: log-normal around 0.27 % of the mass,
+  Earth's bulk (Marty 2012, 2700 ± 1350 ppm, read as one sigma of 0.5 in
+  the logarithm);
+- water of a planet formed beyond the line: 0.5 to 0.67 (Zeng et al.
+  2019), where the earlier model drew 0.2 to 0.5;
+- radiogenic abundance: 0.23 dex, derived from Nimmo et al. 2020;
+- envelope of a mini-Neptune: about 1 % of the mass with an intrinsic
+  scatter of 0.5 dex (Wolfgang & Lopez 2015).
+
+**Where the study is.** The bounds, with the page of every number and
+what was searched and not found, are in the
+[draw bounds study](../superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md).
+
+#### The envelope draw
+
+A planet's hydrogen and helium envelope is its mass fraction `f`, drawn
+for every planet from its own sub-seed, with one uniform number in every
+regime (so a planet's stream never depends on its mass). It is the
+primordial envelope: what the planet captured before the disc dispersed,
+before the loss of gas of the later pull requests. The bounds depend on
+the mass:
+
+| Mass | Draw | Bounds | Source |
+| --- | --- | --- | --- |
+| Under 0.1 $M_\oplus$ | none | n/a | calibration, below |
+| 0.1 to 5 $M_\oplus$ | log-uniform | the minimum and maximum of Lammer et al. 2014, at the mass; the maximum is capped at 0.20 | Lammer et al. 2014, Tables 1 to 3 |
+| 5 to 10 $M_\oplus$ | log-uniform | $8.7 \times 10^{-4}$ to 0.20 | the 5 $M_\oplus$ minimum; the cap |
+| 10 to 20 $M_\oplus$ (ice giants) | uniform | 0.09 to 0.20 | Helled et al. 2011, p. 8; the cap |
+| From 20 $M_\oplus$ (gas giants) | the heavy-element mass is log-uniform; $f = 1 - M_z/M$ | $M_z$ within a factor $1.82^2$ of $57.9\,(M/M_J)^{0.61}\,M_\oplus$, inside the cores of the giant tables | Thorngren et al. 2016, Sect. V.1; calibration, below |
+
+Lammer et al. (2014) model a rocky core of 0.1 to 5 $M_\oplus$ in a
+nebula at 1 au round a Sun-like star, over 12 cases each (dust depletion
+0.001 to 0.1, accretion rate $10^{-5}$ to $10^{-8}$ of the planet's mass
+per year). Their minimum and maximum envelope share, which the draw
+interpolates log-linearly in mass between the grid masses:
+
+| Core mass ($M_\oplus$) | Minimum | Maximum |
+| --- | --- | --- |
+| 0.1 | $4.4 \times 10^{-8}$ | $1.0 \times 10^{-4}$ |
+| 0.5 | $1.5 \times 10^{-6}$ | $5.9 \times 10^{-3}$ |
+| 1 | $8.1 \times 10^{-6}$ | $2.5 \times 10^{-2}$ |
+| 2 | $6.1 \times 10^{-5}$ | 0.11 |
+| 3 | $2.0 \times 10^{-4}$ | 0.33 |
+| 5 | $8.7 \times 10^{-4}$ | 0.35 |
+
+The grid is by core mass, and the draw reads it at the planet's total
+mass: the two differ by the envelope's share, at most 35 % (the 0.35
+maximum at 5 $M_\oplus$; 20 % under the cap below). No grid by total
+mass was found.
+
+The cap of 0.20 is the edge of the Lopez & Fortney (2014) tables, which
+size the envelope's radius (below): a larger share would have no
+radius. It truncates the maxima of 3 and 5 $M_\oplus$ (0.33 and 0.35)
+and replaces the 0.35 held up to 10 $M_\oplus$ and the 0.25 of Helled
+et al. for the ice giants. The 5 to 10 $M_\oplus$ range has no model
+above 5 $M_\oplus$ to bound it, only observed envelopes (Lopez & Fortney
+2014: 0.14 % to 37.5 % over their Table 1) and the change of regime they
+find near 10 $M_\oplus$.
+
+**Known jumps.** The ranges meet at the regime edges without matching.
+They are stated, not smoothed:
+
+- at 10 $M_\oplus$ the lowest drawn envelope goes from $8.7 \times
+  10^{-4}$ to 0.09, a jump in the draw, not in the radius;
+- at 20 $M_\oplus$ the draw goes from at most 0.20 to a gas giant's
+  $1 - M_z/M$. The fit's band at 20 $M_\oplus$ is 3.2 to 35.5
+  $M_\oplus$ of heavy elements, but the giant tables cover cores of 0 to
+  10 $M_\oplus$ at that mass, so the band is cut to 3.2 to 10 and the
+  envelope is 0.5 to 0.84. The jump is the user's decision (2026-11-21);
+- the radius jumps at 20 $M_\oplus$ too, where the model changes (20 mbar
+  against 1 bar, different cores): see "Mini-Neptunes and their
+  envelopes" and "Giants and the metallic hydrogen boundary".
+
+The radius is continuous at 1 $M_\oplus$ (below).
+
+**Calibrations of the draw.**
+
+- **No envelope under 0.1 $M_\oplus$.** The lowest mass that Lammer et
+  al. (2014) model with a captured envelope is 0.1 $M_\oplus$ (abstract).
+  A measured or modelled mass below which no hydrogen is captured was
+  searched: none; only Stoekl et al. (2015) say that around Mars's mass
+  the atmosphere changes fast and over short timescales. The earlier
+  model's cut at 0.5 $M_\oplus$ has no source either.
+- **Two sigma on the heavy-element mass.** Thorngren et al. (2016) give
+  the fit and its one-sigma scatter, the factor $10^\sigma = 1.82$
+  (Sect. V.1: $M_z = 57.9\,(\pm 7.03)\,M^{0.61 (\pm 0.08)}$, 47 planets of
+  20 $M_\oplus$ to 20 $M_J$), and no extreme. A published range of
+  heavy-element masses per planet mass was searched: none. For Jupiter
+  alone, 10 to 40 $M_\oplus$ is quoted (Guillot 1999, in Thorngren et al.
+  Table 1). The unit of $M$ is not stated in the sentence of the fit; it
+  is Jupiter masses, the only reading under which $M_z < M$ and the one
+  that matches their $Z_{pl}/Z_\star = 10\,(M_p/M_J)^{-0.5}$.
+- **Why uniform in $f$ for the ice giants.** Helled et al. (2011) give
+  heavy-element masses of 10.9 to 13.2 $M_\oplus$ (Uranus, 14.5 $M_\oplus$)
+  and 12.9 to 15.4 (Neptune, 17.1 $M_\oplus$), so 9 to 25 % of hydrogen
+  and helium (derived); nothing else bounds them, so the draw is uniform
+  between the lowest, 0.09, and the cap.
+- **The heavy-element mass stops at the highest tabulated core.** From
+  about 17.4 $M_J$ (5 545 $M_\oplus$), the low end of the two-sigma band,
+  $57.9\,(M/M_J)^{0.61} / 1.82^2$, exceeds 100 $M_\oplus$, the highest
+  core of the giant tables (Fortney et al. 2007). There the heavy-element
+  mass is 100 $M_\oplus$, both ends of the draw, so the draw never fails
+  inside the fit's range (up to 20 $M_J$): at 6 000 $M_\oplus$ the band
+  starts at 104.9 $M_\oplus$ and the envelope is $1 - 100/6000$. The
+  study's survey of giant tables (its Sect. 1.5) found no other with a
+  free core mass, so none with a core above 100 $M_\oplus$.
 
 ### From layers to radius
 
@@ -229,84 +379,223 @@ comes out right. Partial differentiation is the moons' track (T2).
   request. The thermal states come with the temperatures of a later pull
   request.
 
-The envelope, the giants and the partly differentiated moons below are
-still the earlier model's (tag `legacy-final`); they are rewritten as the
-tracks port them.
+The partly differentiated moons below are still the earlier model's (tag
+`legacy-final`); they are rewritten as the tracks port them. The envelope
+and the giants are rewritten, in the two sections that follow.
 
-**The envelope.** A hydrogen and helium envelope adds to the radius a
-thickness that Lopez & Fortney (2014) fit:
+#### Mini-Neptunes and their envelopes
+
+The code is `science::envelope` (the law, over the tables of
+`crates/science/data/`) and `system::planet::enveloped` (the layers). A
+planet with an envelope below 20 $M_\oplus$ is a rocky or icy core under
+a hydrogen-helium layer, and its radius is the core's plus the layer's
+thickness:
+
+- **The core** holds $(1 - f)\,M$, with its water a share of that mass,
+  and is built by the structure of the sections above, integrated at
+  zero surface pressure (see "Where it departs from the science"). A core
+  whose water is beyond the law of water is the condensed planet, as for
+  a planet without an envelope.
+- **The thickness** is read in Lopez & Fortney (2014), Tables 2 to 4:
+  the radius at 20 mbar of a planet over a rock and iron core, for the
+  solar-metallicity atmospheres at 100 Myr, 1 Gyr and 10 Gyr, at 0.1, 10
+  and 1000 times Earth's light, for masses of 1 to 20 $M_\oplus$ in eight
+  steps and envelopes of 0.01 % to 20 % in eleven. The model subtracts
+  from each table radius that model's core, $((1 - f)\,M)^{0.25}\,R_\oplus$
+  (their Eq. 1, good to about 2 % for an Earth-like core), and
+  interpolates the thickness linearly in the decimal logarithm of age,
+  light, mass and envelope share. Age and light are clamped to the grid.
+  The 100 Myr table is not monotone in the envelope share at its low
+  end: at 0.1 and 10 times Earth's light and 1 to 8.5 $M_\oplus$, the
+  radius at 0.01 % is larger than at 0.02 % (1.22 against 1.16
+  $R_\oplus$ at 1 $M_\oplus$ and 0.1 times Earth's light), as printed in
+  the source; the model keeps the printed values.
+  The light is the total of every star's, and the record of the thickness
+  cites each star's flux.
+- **The layer** is one gas layer of mass $f M$, the thickness above the
+  core. The tables' 20 mbar is the level that the radius refers to; the
+  radiative atmosphere above the convective envelope is not a layer of
+  its own.
+
+**Why the tables and not the fit.** Lopez & Fortney's own power law for
+the envelope's thickness (their Eq. 3) matches their full models to about
+0.1 dex and they say it is "not to be used in place of the full models":
+against their own tables it is off by 4 to 7 % on average and by up to
+35 % (study, Sect. 2.2). The fit of Chen & Rogers (2016) is tighter
+inside its range, but its range, 4 to 400 times Earth's light, excludes
+the planets of the habitable zone and beyond, and at Neptune's 0.0011
+times Earth's light it gives 18.8 $R_\oplus$ for Neptune.
+
+**Orders of magnitude.** A Neptune-mass planet with 15 % gas comes out
+27 475 km, 10.9 % above Neptune's 24 764 km (NASA fact sheet); the tables
+alone give +9 to +15 % at that gas share for solar metallicity (study,
+Sect. 4). The radius is continuous at 1 $M_\oplus$: 1.7799 to
+1.7837 $R_\oplus$ between 0.99 and 1.01 $M_\oplus$ (+0.2 %).
+
+**Calibrations of the envelope's thickness.**
+
+- **A planet under 1 $M_\oplus$ is read at 1 $M_\oplus$** (a plan call).
+  No model of Lopez & Fortney goes below 1 $M_\oplus$, and neither does
+  Chen & Rogers (2016), whose range is 1 to 20 $M_\oplus$ and
+  $10^{-4}$ to 0.2 of gas: no table or model below 1 $M_\oplus$ was found
+  in the study. The rule keeps the radius continuous at 1 $M_\oplus$ and
+  underestimates a light planet's envelope, whose thickness falls with
+  the mass (as $M^{-0.21}$ in their fit).
+- **Under $10^{-4}$ of gas the thickness at $10^{-4}$ is scaled by
+  $f/10^{-4}$**, linearly to zero without gas. The tables stop at
+  0.01 %; no model of a thinner envelope was found. The rule is
+  continuous at $10^{-4}$ and gives no thickness without gas. It never
+  gives a negative thickness: every node's radius exceeds its own core's
+  (the least margin is 0.0053 $R_\oplus$, at 20 $M_\oplus$, 0.01 %, 0.1
+  times Earth's light), and $M^{0.25}$ is convex in the logarithm of the
+  mass; along the envelope share the core's radius is concave in its
+  logarithm, and the gap that opens between two nodes stays under that
+  margin.
+
+#### Giants and the metallic hydrogen boundary
+
+The code is `science::giants` (the table), `science::hydrogen` (the
+boundary) and `system::planet::enveloped` (the layers). From 20 $M_\oplus$
+a planet is a giant (the lower edge of the Thorngren et al. 2016 sample,
+not a physical threshold: the earlier model's 30 $M_\oplus$ has no
+source).
+
+**The radius.** Fortney, Marley & Barnes (2007) give the radius, at 1 bar,
+of hydrogen-helium planets over a core of 50/50 ice and rock, at ages of
+1 Myr to 10 Gyr (nine, half a decade apart), at 0.02, 0.045, 0.1, 1 and
+9.5 au from a star of the Sun's luminosity, for cores of 0, 10, 25, 50
+and 100 $M_\oplus$ and masses of 10 to 3 594 $M_\oplus$. The model reads
+the 25 files of the authors' page (4 550 rows; provenance and checks in
+[GIANTS.md](../../crates/science/data/GIANTS.md)), not the three printed
+tables, since one printed value is a misprint (Table 4, 9.5 au, 25
+$M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at 3.16 Gyr and
+0.985 at 10 Gyr in the file).
+
+- A star of another luminosity is read at the flux-equivalent distance
+  $d_\mathrm{eq} = 1/\sqrt{F}$ au, $F$ the light received in Earth's. The
+  paper gives the idea (its Eq. 11); the exact use is a choice here.
+- The radius and the decimal logarithm of the luminosity are interpolated
+  linearly in the logarithms of mass, age and $d_\mathrm{eq}$ and linearly
+  in the core mass. Age and $d_\mathrm{eq}$ are clamped to the table's
+  axes; nothing is extrapolated.
+- The tables leave out some young, light, strongly irradiated models. A
+  corner of the interpolation without a row at the mass reads the nearest
+  older age that has one; with none, `giant` returns a typed error, never
+  a guess. The age actually read is part of the result.
+- The heavy-element mass of the draw is bounded to the cores that the
+  tables cover at the mass, at every distance and age after 0.1 Gyr
+  (`core_bounds`): 0 to 10 $M_\oplus$ from 12.92 to 21, 0 to 25 at 30 to
+  40, 0 to 50 at 60 to 100, 0 to 100 at 130 to 2 154, and 10 to 100 from
+  2 200 to 3 594 (the coreless file at 0.02 au stops at 2 154). This
+  makes the draw and the radius agree, so a drawn giant always has a
+  radius. From about 17.4 $M_J$ the fit's band lies above 100
+  $M_\oplus$ and the heavy-element mass is that highest core (see "The
+  envelope draw").
+- No inflation. The tables are the uninflated radius, and hot Jupiters
+  stay near 1 $R_J$ until the integrated structure of issue #621 (the
+  heating efficiency of Thorngren & Fortney 2018 is not a radius).
+
+**The core's radius** is Fortney et al.'s Eq. 7 (their coefficients as
+corrected in v4 of the paper) at an ice mass fraction of 0.5, the tables'
+own core, so that the radius, the core and the layers come from one
+model. It reproduces their Table 1: 2.462, 3.172 and 3.985 $R_\oplus$
+at 10, 31.6 and 100 $M_\oplus$ against 2.48, 3.23 and 4.03 (the paper
+gives 2.5 % on average, over 0.01 to 100 $M_\oplus$). The structure of
+the sections above is not used: giant cores of 10 to 100 $M_\oplus$ are
+beyond the pressures it is fitted to (issue #616).
+
+**Against Jupiter and Saturn** (tests of `science::giants`): Jupiter's
+mass with a 10 $M_\oplus$ core at 9.5 au and 4.5 Gyr gives 71 524 km,
++0.04 % of 71 492 km (NASA fact sheet); Saturn's with cores of 10 and
+25 $M_\oplus$ gives 62 504 and 56 715 km, either side of its 60 268 km
+(the core that fits lies between); a hot Jupiter with no core at
+0.045 au gives 1.1077 $R_J$ against 1.107 in the paper's Table 4. A
+drawn Jupiter of the engine's tests comes out 72 635 km (+1.6 %).
+
+**The metallic hydrogen boundary.** Hydrogen turns metallic over a range
+of pressures that the published work does not agree on: onset at 50 GPa
+(Wahl et al. 2017), critical point near 120 GPa (Morales et al. 2010),
+the "ionization boundary" near 100 GPa (1 Mbar) in the Juno-era models of
+Jupiter (Debras & Chabrier 2019), visible absorption near 150 GPa and
+metallic reflectivity near 200 GPa (Celliers et al. 2018). The two
+laboratory measurements differ by up to 95 GPa. The model takes one
+pressure, 100 GPa, and no temperature, as the boundary between a
+molecular layer and a metallic one.
+
+The pressure is located by an index-one polytrope of the whole giant,
+$P = K\rho^2$, with Hubbard's (2013) Eqs. 61 and 62:
 
 ```math
-R_\mathrm{env} = 2.06\,R_\oplus\, M^{-0.21} \left(\frac{f}{5\,\%}\right)^{0.59} S^{0.044} \left(\frac{t}{5\,\mathrm{Gyr}}\right)^{-0.11}
+\rho(r) = \rho_c\,\frac{\sin\xi}{\xi},\quad \xi = \frac{\pi r}{R},\quad
+\rho_c = \frac{\pi^2}{3}\,\bar\rho,\quad K = \frac{2 G R^2}{\pi}
 ```
 
-with $M$ the mass in Earth masses, $f$ the envelope's share of the mass,
-$S$ the light received (Earth's = 1) and $t$ the age. The age exponent is
-that of their solar-metallicity models (the text of the paper gives −0.11
-for them and −0.18 for the enhanced-opacity models the printed fit was
-made on).
+Pressure falls with $r$, so the radius of 100 GPa is found by bisection,
+and the mass inside it is $M(\sin\xi - \xi\cos\xi)/\pi$ (the same
+solution). The constants follow from the Lane-Emden solution, not from a
+printed value. For Jupiter's mass and radius the polytrope puts 0.1 and
+2 Mbar at 0.95 and 0.80 of the radius and 1 Mbar at 0.853, inside the
+0.80 to 0.93 that Debras & Chabrier give for their region of 0.1 to 2
+Mbar (the test checks that range).
 
-**In words.** A heavier planet squeezes its envelope; a thicker envelope
-swells it; more light and a younger age swell it a little. The relation
-holds on the grid it was fitted on (1 to 20 Earth masses, 0.1 to 1000
-times Earth's light, 0.1 to 10 Gyr) and the model clamps the mass, the
-light and the age to it. It extrapolates the envelope share beyond the
-grid's 20 % up to the 30 % it draws under 30 Earth masses, so that more
-gas makes a larger planet over every drawn share; a larger share, which
-only a request asks for, is sized as 30 %.
+A giant has this boundary only above 50 $M_\oplus$ and with a core under
+a quarter of its mass; every other planet with an envelope has one gas
+layer. The layers of a giant are then the core of the heavy-element mass,
+a metallic layer from the core to the boundary (its mass is the
+polytrope's mass inside the boundary minus the core's) and a molecular
+layer to the surface. A drawn Jupiter has a 10 $M_\oplus$ core to
+15 705 km, a metallic layer to 61 648 km (0.849 of the radius,
+276.3 $M_\oplus$) and a molecular one to 72 635 km (31.7 $M_\oplus$).
 
-**Orders of magnitude.** 2 % of a 5-Earth-mass core's mass in gas adds about
-0.9 $R_\oplus$, which is why most planets above 1.6 $R_\oplus$ are not
-rocky (Rogers 2015).
+The polytrope is checked against Jupiter only. For Saturn (95.1
+$M_\oplus$) and Neptune the same formulas put 1 Mbar at 0.68 and 0.70 of
+the radius, and no published pressure profile was found to check them;
+"a planet with a large core is not an n = 1 body", hence the 25 % rule.
+For a mini-Neptune the thin-shell estimate $P = G M_c M_e/(4\pi
+R_c^4)$ gives 0.3 Mbar at the base of a 5 % envelope on 5 $M_\oplus$ and
+1.3 Mbar at 10 % on 10 $M_\oplus$ (study, Sect. 5.2; unsourced beyond the
+hydrostatic relation): that estimate gives a base pressure, not a
+radius, so the model places no boundary there.
 
-**Heavy elements.** Their fit is made on envelopes of pure hydrogen and
-helium over rocky cores. A water-rich planet mixes heavy elements into
-its envelope (Uranus and Neptune hold them up to their outer layers:
-Helled et al. 2011; Nettelmann et al. 2013), which makes it denser and
-thinner. The model multiplies the thickness of every envelope, from a
-mini-Neptune's to an ice giant's, by a factor of the water share $w$
-that runs linearly from 1 for a dry planet to $h_N \approx 0.49$ at
-Neptune's 65 %:
+**The internal heat of a giant** is its table's internal luminosity $L$,
+interpolated like the radius, as the secular heat; the radiogenic heat is
+zero, since $L$ is the total the model carries (a `Definition:`); the tide
+is the usual one (see "The heat inside"), over the radius of the whole
+planet. One computation gives the radius and the heat. A drawn Jupiter
+loses $4.43 \times 10^{17}$ W. A giant whose radius leaves no thickness
+over its core (a table radius at or below the core's) is a typed error,
+not a clipped radius.
 
-```math
-R = R_\mathrm{solid} + R_\mathrm{env} \left(1 - (1 - h_N)\,\frac{w}{65\,\%}\right)
-```
+**Calibrations of the giants.**
 
-$h_N$ is set so that Neptune's composition (65 % water and ices, 15 %
-gas) at Neptune's mass, light and age gives Neptune's radius: its solid
-layers come out 2.91 $R_\oplus$, the fit's envelope 1.98 (Neptune would
-be 4.89 $R_\oplus$, 27 % too large, and Uranus 22 %), and 0.97 is left.
-
-**In words.** At a fixed composition a Neptune barely grows with its
-mass, because a heavier core squeezes its envelope; more gas or more
-light makes it larger. More water at the same gas share grows the
-solid layers but thins the envelope, and which wins depends on the gas:
-at 1 $S_\oplus$, 60 % water instead of none makes a planet with 2 % gas
-8 % smaller at 1 Earth mass but 12 % larger from 20; with 10 % gas, 25 %
-smaller at 1 Earth mass and 2 % at 20; with 30 % gas, 34 % smaller at 1
-Earth mass and still 7 % at 29.
-
-**Orders of magnitude.** Uranus, with Neptune's composition and 15 % less
-mass, comes out 3.80 $R_\oplus$ (3.98 observed, −4.5 %); Neptune 3.88
-(3.86). A law of the mass alone, $M^{0.59}$ (Chen & Kipping 2017, a fit
-to a population whose gas share grows with the mass), gave Uranus 3.52,
-11.6 % too small. A dry 12-Earth-mass planet with 5 % gas at 100 times
-Earth's light comes out 3.4 $R_\oplus$.
-
-**Giants.** A giant (10 Earth masses or more with at least 5 % gas) takes
-the generator's giant radius. Under 30 Earth masses (where the model's
-gas giants start, with 90 % gas and more) it is the same law as for any
-other planet, so the radius does not jump at 10 Earth masses or at 5 %
-gas. From 30 Earth masses, whatever the composition, and from half its
-mass in gas (a gas giant by its class, which under 30 Earth masses only
-a request makes), it goes through Neptune, Saturn and Jupiter (Chen &
-Kipping 2017) and is inflated when hot (Thorngren & Fortney 2018). The solid
-layers stay inside it, and the
-envelope fills the rest. A giant whose composition is not known (a
-world's giant neighbours, a giant world without a model) is sized as
-Neptune's composition at the coldest light of the grid up to Neptune's
-mass, then on the law through Neptune, Saturn and Jupiter, which carries
-a gas share growing with the mass.
+- **A giant heavier than 3 593.81 $M_\oplus$ is read at that mass.**
+  Giants are drawn up to about 13 $M_J$ (4 130 $M_\oplus$) and no table of
+  Fortney et al. goes beyond 11.3 $M_J$. The radius is nearly flat there:
+  1.055 to 1.023 $R_J$ from 2 154 to 3 594 $M_\oplus$ (their Table 4, 9.5
+  au, no core, 4.5 Gyr). A table of heavier giants was searched: none
+  (the study's Sect. 1.5 lists the newer and alternative tables).
+- **A giant's core is solid.** A placeholder: the state of a dilute
+  ice-rock core at tens of Mbar is not modelled until the temperature
+  profile of the later pull requests arrives, the same convention as the
+  imposed solid mantle of a rocky planet. A state of a giant's core
+  usable without a temperature profile was searched: none (Jupiter's may
+  be diluted over a large share of its radius, Wahl et al. 2017).
+- **The cores are bounded from the ages after 0.1 Gyr.** `core_bounds`
+  asks every distance to bracket the mass at every tabulated age after
+  0.1 Gyr, a modelling choice: the 0.1 Gyr block leaves out some light
+  irradiated models (at 0.02 au a 10 $M_\oplus$ core starts at 21.54
+  $M_\oplus$ there), and a corner without its row falls back to the next
+  age. Fortney et al. (2007) give no age from which their grid is
+  complete.
+- **The boundary at 100 GPa.** A single measured value was searched:
+  none; the published range is 50 to 200 GPa (above), the boundary has no
+  temperature, and 100 GPa is the one that the Jupiter models use.
+- **The boundary only above 50 $M_\oplus$.** The polytrope matches
+  Jupiter and is unvalidated for Saturn and Neptune; a published mass
+  above which a giant has a metallic layer was searched: none found.
+- **The boundary only under a quarter of the mass in the core.** A
+  published core share up to which an index-one polytrope holds was
+  searched: none found; the 25 % is the study's own proposal.
 
 **Partly differentiated moons.** A planet is fully differentiated: iron
 core, rock mantle, water on top. An icy moon may not be. Callisto's
@@ -454,6 +743,13 @@ time or its scaling with mass (see "Where it departs from the science").
 a small one loses it sooner, so an old Mars or Moon keeps little and a
 super-Earth keeps more than its share.
 
+**Giants and mini-Neptunes.** A giant's secular heat is the internal
+luminosity of the table that gives its radius (see "Giants and the
+metallic hydrogen boundary"); its radiogenic heat is zero, since that
+luminosity is the total the model carries. A mini-Neptune keeps the heat
+of its core's rock. Both have a tide over the radius of the whole planet,
+with the response of an enveloped body.
+
 **Tidal.** A host raises tides in a planet on an eccentric orbit, and
 friction turns them into heat (Peale, Cassen & Reynolds 1979):
 
@@ -477,8 +773,8 @@ from its composition, never from a class or a type name:
 | Rocky | the rest | $6 \times 10^{-3}$ | calibration: $k_2$ 0.3, $Q$ 50 (Henning et al. 2009) |
 
 The two thresholds are calibrations as well, kept from the earlier model.
-No planet is enveloped yet: the interior has no gas layer. A gas
-envelope dissipates little: Jupiter's $k_2/Q$ is about 1400 times
+A mini-Neptune or a giant is enveloped, over the radius of the whole
+planet. A gas envelope dissipates little: Jupiter's $k_2/Q$ is about 1400 times
 smaller than Io's. The rocky value is a model baseline for a cold
 planet, not a measurement: Io's measured 0.015 ± 0.003 is that of a
 partly molten body, and Earth's and Mars's, derived from Lainey (2016,
@@ -1061,18 +1357,88 @@ four are explained in "From layers to radius".
   mantle are taken as mass shares (the sources do not say). The iron mole
   fraction 0.12 becomes a mass share through molar masses computed from
   the table's $\rho_0$ and molar volumes, about 0.1 % off.
-- **Not modelled.** No gas envelope, no partial differentiation, no
-  dynamo, no ice shell over an ocean in the new interior; the earlier
-  model's versions of these are described above and below.
+- **Not modelled.** No partial differentiation, no dynamo, no ice shell
+  over an ocean in the new interior; the earlier model's versions of
+  these are described above and below.
+
+The envelopes, the giants and the draws of the planet model's second
+pull request add these:
+
+- **Mini-Neptune core at zero surface pressure.** The core is integrated
+  as a planet without an envelope, at zero pressure at its surface. Under
+  its gas the core's surface is at 0.3 to 2.9 Mbar by the thin-shell
+  estimate (5 % on 5 $M_\oplus$ to 20 % on 10 $M_\oplus$, study Sect. 5.2),
+  so it is built less compressed than it is, and the table's thickness
+  is taken over a core of $M^{0.25}$, a different model of the same
+  core. The sum mixes the two; its size was not computed.
+- **A water-rich core under a thickness computed for a dry core.**
+  Lopez & Fortney's cores are rock and iron. A planet whose core holds
+  water gets the thickness of a dry core of the same mass, and no
+  published rule for the effect was found: the earlier model thinned
+  the envelope by the water share, a rule fitted on Neptune alone, and
+  is not carried over. A Neptune-mass planet at 30 au lies beyond the
+  test system's ice line, so its water is a thin ice layer, not water
+  bound in the mantle, and it still lands at +10.9 %.
+- **One floor, 1 $M_\oplus$, for the tables.** A lighter planet with an
+  envelope reads the 1 $M_\oplus$ row (see the calibration above), and an
+  envelope under $10^{-4}$ is scaled down linearly. The draw reaches both
+  (under 1 $M_\oplus$ for the mass, under 3 for the share).
+- **A planet under 20 $M_\oplus$ with more than 20 % gas is refused**,
+  with a typed error, and `science::envelope` refuses a mass over 20
+  $M_\oplus$. No table covers 12 to 28 $M_\oplus$ with 20 to
+  60 % gas (study, Sect. 4): the draw does not go there, and the model
+  does not fill the gap with a fit. A third route, an integrated
+  structure, is issue #621.
+- **Two radius levels.** A mini-Neptune's radius is at 20 mbar (Lopez &
+  Fortney), a giant's at 1 bar (Fortney et al.), about nine scale heights
+  apart. At 20 $M_\oplus$ the radius changes model, the core changes
+  (rock and iron against 50/50 ice and rock) and the radius jumps; the
+  draw's envelope jumps there too (see "The envelope draw").
+- **No hot-Jupiter inflation.** The tables are the uninflated radius (1.1077
+  $R_J$ at 0.045 au, 4.5 Gyr, no core). Inflation waits for the
+  integrated structure (issue #621; user's decision, 2026-11-21).
+- **A giant's layers are a polytrope's.** The metallic boundary is found
+  by an index-one polytrope of the whole planet, validated against
+  Jupiter alone, and the layer masses mix its enclosed mass with the
+  tabulated core's. The core is compact; Jupiter's may be diluted over a
+  large share of the radius (7 to 25 $M_\oplus$, Wahl et al. 2017) and
+  Saturn's reaches 0.6 of its radius (Mankovich & Fuller 2021, 55.1
+  $M_\oplus$, of which 17.4 of ice and rock). No temperature enters the
+  boundary. The core's state, a gas layer's state when there is no
+  metallic layer, and an envelope's are imposed values, not computed.
+- **Steam worlds are left to the next pull request.** Water beyond the
+  range of `science::water` (above 355 K, which is the ice VI-VII-liquid
+  triple point, not a steam criterion) is recorded as such: the planet
+  that has a bulk is the condensed one (dry mass, dry radius, its
+  gravity and density), the water mass kept apart, and no radius of
+  steam or supercritical water is computed. The published criteria
+  (Turbet et al. 2020, Eqs. 2 and 3 up to a few percent of water;
+  Aguichine et al. 2021 from 10 %) need the climate of the 2d pull
+  request. A mini-Neptune with such water in its core is the condensed
+  planet's bulk plus its envelope, at the radius of core plus
+  envelope.
+- **The envelope is the primordial one.** The loss of gas after the disc
+  is the job of the escape pull request (2c), so an old, close-in
+  planet's drawn envelope is more than it keeps.
+- **The core of a light giant is bounded by the tables.** The
+  heavy-element mass is cut to the cores the tables cover (0 to 10
+  $M_\oplus$ at 20 $M_\oplus$), narrower than Thorngren's fit there.
 
 | What | Earlier model | Now | Source |
 | --- | --- | --- | --- |
 | Radius | Zeng et al. 2016 fit, uniform layers | integrated structure | prototype report |
 | Earth $C/MR^2$ | 0.354 | 0.330 | Williams 1994: 0.3307 |
 | Potassium-40 half-life | 1.248 Gyr | 1.277 Gyr | Dye 2012, Table 2 |
-| Iron share | normal, 0.325 + 0.15 per dex of `[Fe/H]`, σ 0.05 | split normal, median 0.32 (−0.12/+0.14), no slope | Plotnykov & Valencia 2020 |
-| Water beyond the ice line | uniform 0.2 to 0.5 | uniform 0.5 to 0.67 | Zeng et al. 2019 |
-| Radiogenic spread | 0.15 dex | 0.23 dex | Nimmo et al. 2020, derived |
+| Iron share | normal, 0.325 + 0.15 per dex of `[Fe/H]`, σ 0.05 | uniform 0 to 0.8, no slope | Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020 |
+| Water inside the ice line | log-normal around 0.27 % | log-uniform $10^{-5}$ to $10^{-2}$ | Raymond et al. 2007; Izidoro & Piani 2022 |
+| Water beyond the ice line | uniform 0.2 to 0.5 | uniform 0.1 to 0.67 | Marboeuf et al. 2014; Zeng et al. 2019 |
+| Radiogenic spread | 0.15 dex | uniform ±0.5 dex | Nimmo et al. 2020 |
+| Envelope, under 0.5 $M_\oplus$ | none | none under 0.1 $M_\oplus$, then Lammer et al.'s bounds | Lammer et al. 2014 |
+| Envelope, 0.5 to 10 $M_\oplus$ | chance (M − 0.5)/4.5, median 0.02 M/5, 0.5 dex, cap 0.3 | log-uniform between bounds, cap 0.20 | Lammer et al. 2014; Lopez & Fortney 2014 |
+| Envelope, 10 to 30 $M_\oplus$ | uniform 0.05 to 0.3 | uniform 0.09 to 0.20 up to 20 $M_\oplus$ | Helled et al. 2011 |
+| Giants | from 30 $M_\oplus$, core uniform 5 to 20, cap 0.1 M | from 20 $M_\oplus$, heavy-element mass log-uniform around the fit | Thorngren et al. 2016 |
+| Envelope thickness | power-law fit, thinned by the water share | Lopez & Fortney tables | Lopez & Fortney 2014 |
+| Giant radius | law through Neptune, Saturn and Jupiter, inflated when hot | Fortney et al. tables, uninflated | Fortney et al. 2007 |
 | Rocky tidal $k_2/Q$ | 0.015 (Io's) | $6 \times 10^{-3}$ | Henning et al. 2009 |
 | Earth radiogenic heat | 20 TW | 20.2 TW from abundances | Dye 2012 |
 
@@ -1120,6 +1486,23 @@ measurement; this is what was searched and not found.
   8 % for the upper mantle and 4 % for the lower one: the measured gaps
   of the recipe, not fits.
 
+**Calibrations of the draws, envelopes and giants.** Each is a choice, not
+a measurement. What was searched and not found is in the section of each:
+
+- **Migrated water-rich planets, one in ten:** above, with the
+  calibrations of the heat.
+- **No envelope under 0.1 $M_\oplus$** and **two sigma on the
+  heavy-element mass:** "The envelope draw".
+- **Planets under 1 $M_\oplus$ read at 1 $M_\oplus$** and **thickness
+  scaled linearly under $10^{-4}$ of gas:** "Mini-Neptunes and their
+  envelopes".
+- **Giants over 3 593.81 $M_\oplus$ read at that mass**, **the boundary of
+  metallic hydrogen at 100 GPa**, **only above 50 $M_\oplus$** and **only
+  with a core under 25 % of the mass:** "Giants and the metallic hydrogen
+  boundary".
+- **The envelope and icy thresholds of the tide** (0.1 % gas, 5 % water):
+  above, with the calibrations of the heat.
+
 **Secondary and partial reads.** Some values were read at second hand, to
 be replaced by a primary source when one is reached.
 
@@ -1138,40 +1521,17 @@ be replaced by a primary source when one is reached.
 those of the envelope, giants, moons, ice shell and map of the earlier crate.
 
 - **Calibrations.** Every constant marked "Calibration, no source" in the
-  code is a choice, not a measurement: the shares of the iron core and of
-  ice, the chance of keeping gas, the envelope share per mass, the iron
-  and water densities of the earlier model, its $k^{1.5}$ compression
+  code is a choice, not a measurement: the iron and water densities of the
+  earlier model, its $k^{1.5}$ compression
   of water, and the class thresholds that the table marks. The
   calibrations of the new interior and heat are listed above. Each names the
   bodies it reproduces.
-- **Heavy elements in the envelope are a calibration.** The factor of
-  the water share that thins an envelope is linear and set on Neptune
-  alone, and applies to every planet with an envelope. Uranus comes out
-  4.5 % small, since the model gives it Neptune's composition. With
-  10 % gas or more, a wet planet comes out smaller than a dry one of the
-  same mass and gas share (up to a third at 1 Earth mass), where water
-  should make it larger.
-- **The 30 Earth-mass line.** A giant's radius jumps there, from the
-  law of its composition to the law of the gas giants. The drawn
-  compositions jump there too (from at most 30 % gas to at least 90 %),
-  but the law of the gas giants does not read the composition. Cold,
-  the jump is 0.95 to 1.5 times (a dry planet with 5 % gas: 3.5 to
-  5.2 $R_\oplus$). A planet hot enough to be inflated (1 500 to 2 000 K)
-  also starts its inflation there, up to 1.9 times, so it jumps by
-  about 1.5 to 2.5 times; the old law already jumped by about 1.9 times
-  there. A requested body of half its mass in gas or more, a gas giant
-  by its class, takes the gas giants' law under 30 Earth masses too
-  (`M^0.59` below Neptune's mass), so its radius does not fall as its
-  mass crosses the line.
 - **Mini-Neptunes and the radius valley.** Photoevaporation now strips
   close-in envelopes (see [planet-atmospheres.md](planet-atmospheres.md)),
   and mini-Neptunes make 18.7 % of the planets (16.3 % of those within
   100 days; the census of 500 systems). The census still shows
   no dip between 1.5 and 2 $R_\oplus$ (Fulton et al. 2017), because the
   generator draws few planets that large; the doc reports it as measured.
-- **Envelope grid.** The envelope fit stops at 20 % of the mass; the
-  model extrapolates its `f^0.59` to the 30 % it draws, and sizes a
-  requested envelope of 30 to 50 % as 30 %.
 - **Round moons of drawn systems** go through `derive_moon_model` (see
   [planet-atmospheres.md](planet-atmospheres.md) and
   `docs/system-spec.md`, "Moons"); a moon too small to be round has no
@@ -1616,6 +1976,71 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
     (through Dehant et al. 2020, arXiv:1910.03899), Genova et al. 2019,
     Khan et al. 2023, Viswanathan et al. 2019, Shah et al. 2022, Lopes
     et al. 2023, and the NASA NSSDC and JPL fact sheets.
+
+99. Brinkman, C. et al. 2024, re-fit of the core mass fractions of rocky
+    planets, [arXiv:2409.08361](https://arxiv.org/abs/2409.08361), Tables 2
+    and 3.
+100. Celliers, P. M. et al. 2018, deuterium to 600 GPa, *Science* 361, 677,
+     [doi:10.1126/science.aat0970](https://doi.org/10.1126/science.aat0970)
+     (abstract).
+101. Debras, F. & Chabrier, G. 2019, models of Jupiter's interior, *The
+     Astrophysical Journal* 872,
+     [arXiv:1901.05697](https://arxiv.org/abs/1901.05697).
+102. Elkins-Tanton, L. T. & Seager, S. 2008, "Coreless terrestrial
+     exoplanets", [arXiv:0808.1908](https://arxiv.org/abs/0808.1908).
+103. Fortney, J. J., Marley, M. S. & Barnes, J. W. 2007, "Planetary radii
+     across five orders of magnitude in mass and stellar insolation:
+     application to transits", *The Astrophysical Journal* 659, 1661,
+     [doi:10.1086/512120](https://doi.org/10.1086/512120)
+     ([arXiv:astro-ph/0612671](https://arxiv.org/abs/astro-ph/0612671),
+     v4), and the 25 tables of the author's page, as kept in
+     [GIANTS.md](../../crates/science/data/GIANTS.md).
+104. Hubbard, W. B. 2013, index-one polytrope of Jupiter, *The
+     Astrophysical Journal* 768, 43,
+     [doi:10.1088/0004-637X/768/1/43](https://doi.org/10.1088/0004-637X/768/1/43),
+     Sect. III.3, Eqs. 61 and 62.
+105. Izidoro, A. & Piani, L. 2022, "Origin of water in the terrestrial
+     planets", [arXiv:2302.02674](https://arxiv.org/abs/2302.02674).
+106. Lammer, H. et al. 2014, "Origin and loss of nebula-captured hydrogen
+     envelopes from sub- to super-Earths in the habitable zone of Sun-like
+     stars", *Monthly Notices of the Royal Astronomical Society*,
+     [arXiv:1401.2765](https://arxiv.org/abs/1401.2765), Tables 1 to 3.
+107. Marboeuf, U. et al. 2014, "From stellar nebula to planetesimals",
+     *Astronomy & Astrophysics* 570, A35,
+     [arXiv:1407.7271](https://arxiv.org/abs/1407.7271).
+108. Morales, M. A. et al. 2010, liquid-liquid transition in hydrogen,
+     *Proceedings of the National Academy of Sciences* 107, 12799,
+     [doi:10.1073/pnas.1007309107](https://doi.org/10.1073/pnas.1007309107)
+     (abstract).
+109. Raymond, S. N., Quinn, T. & Lunine, J. I. 2007, *Astrobiology* 7,
+     [arXiv:astro-ph/0510285](https://arxiv.org/abs/astro-ph/0510285),
+     Table 1.
+110. Rogers, J. G., Dorn, C., Raj, A., Schlichting, H. E. & Young, E. D.
+     2024, "Most super-Earths have less than 3 % water",
+     [arXiv:2409.17394](https://arxiv.org/abs/2409.17394) (abstract).
+111. Stoekl, A. et al. 2015, atmospheres of Mars-mass planets,
+     [arXiv:1505.06859](https://arxiv.org/abs/1505.06859) (abstract).
+112. Thorngren, D. P., Fortney, J. J., Murray-Clay, R. A. & Lopez, E. D.
+     2016, "The mass-metallicity relation for giant planets", *The
+     Astrophysical Journal* 831, 64,
+     [arXiv:1511.07854](https://arxiv.org/abs/1511.07854), Sect. V.1.
+113. Wahl, S. M. et al. 2017, Jupiter's interior models, *Geophysical
+     Research Letters* 44, 4649,
+     [arXiv:1707.01997](https://arxiv.org/abs/1707.01997).
+114. Wolfgang, A. & Lopez, E. 2015, envelope fractions of sub-Neptunes,
+     [arXiv:1409.2982](https://arxiv.org/abs/1409.2982) (abstract).
+115. Also, as named in the text and listed in the studies: Chen & Rogers
+     2016 (arXiv:1603.06596), Helled et al. 2011 (arXiv:1010.5546), Lopez &
+     Fortney 2014 (arXiv:1311.0329), Mankovich & Fuller 2021
+     (arXiv:2104.13385), Turbet et al. 2020 and Aguichine et al. 2021 (steam
+     worlds), Guillot 1999, Unterborn et al. 2015 (arXiv:1505.00280).
+
+The values, tables and pages read for entries 99 to 115 are in the
+[draw bounds](../superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
+and
+[giants and envelopes](../superpowers/studies/2026-11-21-planet-model-2a/giants-and-envelopes.md)
+studies, which say, for each number, whether it was read in the paper or
+computed from what was read.
 
 The values, tables and pages read for each source of the integrated
 interior and heat (entries 75 to 98) are in the studies

@@ -5,6 +5,8 @@ use science::units::{Dex, Gyr, SolarMass};
 use std::fmt;
 use timeline::ContractError;
 
+use crate::ArchetypeId;
+
 /// Why the system engine cannot compute a system. Codes with parameters,
 /// in the style of [`ContractError`]. More variants arrive with the
 /// planet model, hence `non_exhaustive`.
@@ -25,6 +27,16 @@ pub enum SystemError {
     /// A stellar error that carries no present date (`BeforeZams`,
     /// `AfterTams`), kept as is by the `From<StellarError>` conversion.
     Stellar(StellarError),
+    /// An asked archetype does not fit in the system.
+    NoRoom { archetype: ArchetypeId },
+    /// An asked archetype names a host that disagrees with the others.
+    IncompatibleHost { archetype: ArchetypeId },
+    /// An asked archetype is not known (moons included: they are T2).
+    UnknownArchetype { archetype: ArchetypeId },
+    /// The request is a single body, which the system draw does not draw.
+    BodyRequestNotDrawn,
+    /// The request asks more planets than a system can hold.
+    TooManyPlanets { count: u64 },
 }
 
 impl fmt::Display for SystemError {
@@ -50,6 +62,17 @@ impl fmt::Display for SystemError {
                 present.0, end.0
             ),
             Self::Stellar(error) => write!(f, "system.stellar: {error}"),
+            Self::NoRoom { archetype } => {
+                write!(f, "system.no-room: {}", archetype.0.as_str())
+            }
+            Self::IncompatibleHost { archetype } => {
+                write!(f, "system.incompatible-host: {}", archetype.0.as_str())
+            }
+            Self::UnknownArchetype { archetype } => {
+                write!(f, "system.unknown-archetype: {}", archetype.0.as_str())
+            }
+            Self::BodyRequestNotDrawn => write!(f, "system.body-request-not-drawn"),
+            Self::TooManyPlanets { count } => write!(f, "system.too-many-planets: {count}"),
         }
     }
 }

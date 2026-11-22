@@ -151,12 +151,16 @@ impl Fraction {
     pub const SYMBOL: &'static str = "1";
 
     /// `Some` when `value` is finite and within 0 to 1 inclusive.
-    pub fn new(value: f64) -> Option<Self> {
-        (value.is_finite() && (0.0..=1.0).contains(&value)).then_some(Self(value))
+    pub const fn new(value: f64) -> Option<Self> {
+        if value.is_finite() && value >= 0.0 && value <= 1.0 {
+            Some(Self(value))
+        } else {
+            None
+        }
     }
 
     /// The share as a plain number.
-    pub fn get(self) -> f64 {
+    pub const fn get(self) -> f64 {
         self.0
     }
 }
