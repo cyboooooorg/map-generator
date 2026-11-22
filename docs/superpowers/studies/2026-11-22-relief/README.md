@@ -154,6 +154,12 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | Venus within 1 km of the mean | more than 80 % | Ford & Pettengill 1992 [V, abstract] |
 | H of the relief | 0.479, 0.53 | Landais et al. 2019 [V] |
 
+Departure: the land under 500 m (45-75 %, 56 % on ETOPO 2022) is not
+reachable without erosion and sedimentation, which build Earth's coastal
+plains and basins and come after W2. The Earth census prints the share
+and no longer asserts it; erosion's follow-up issue carries the
+criterion (`docs/science/mountains-and-gravity.md`, "Where it departs").
+
 ## Choices of the design (*my call*), not calibrations
 
 - One continental share per regime, constant (Earth's with plates,

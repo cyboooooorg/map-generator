@@ -451,6 +451,20 @@ Choices of the design:
   crust, the noise is low on the continental side of the crust line and
   high on the oceanic side, so the continental edge starts below the
   ocean floor next to it before the slope lifts it.
+- **The outer scale is per crust,** 4800 km on land and 1600 km on the
+  sea floor (ETOPO 2022), so the two crusts draw two noises; the crust
+  line cuts the land's.
+
+Departures not corrected in this step:
+
+- **No lowlands piling up near sea level.** On Earth 45-75 % of the land
+  stands under 500 m (56 % on ETOPO 2022): coastal plains, deltas and
+  sedimentary basins, built by erosion carrying the relief down and by
+  sedimentation filling the low ground. The relief has neither (they
+  come after W2), and no amplitude reproduces the pile-up: the land is
+  the upper part of a continental noise cut by the sea, and 19-28 % of it
+  stands under 500 m. The Earth census prints the share without asserting
+  it; erosion's follow-up issue carries the criterion.
 
 #### The legacy generator
 
