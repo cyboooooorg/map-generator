@@ -192,9 +192,12 @@ fn assert_valid(placed: &[Placed], ctx: &FamilyContext, what: &str) {
 /// Draws every family on every host for `seeds` seeds and checks each
 /// system; returns the axis ratios of adjacent cold giants (gas or ice
 /// giants, in order of distance) and the largest axis scaled to the Sun's
-/// ice line (`a × 2.7 au / ice line`), of every planet and of the giants.
-fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
+/// ice line (`a × 2.7 au / ice line`), of every planet and of the giants,
+/// then the number of compact planets, their longest period (d) and their
+/// largest scaled axis.
+fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64, usize, f64, f64) {
     let mut small_compact = 0_usize;
+    let (mut compact, mut longest, mut widest_compact) = (0_usize, 0.0_f64, 0.0_f64);
     let (mut ratios, mut widest, mut widest_giant) = (Vec::new(), 0.0_f64, 0.0_f64);
     for host in [0.08, 0.3, 0.8, 1.0, 2.0, 8.0] {
         for family in FAMILIES {
@@ -213,6 +216,11 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
                     );
                     if host == 0.08 {
                         small_compact += placed.len();
+                    }
+                    compact += placed.len();
+                    for p in &placed {
+                        longest = longest.max(p.trial.orbit.period.value().0);
+                        widest_compact = widest_compact.max(axis(p) * 2.7 / parts.2.ice_line.0);
                     }
                 }
                 let scale = 2.7 / parts.2.ice_line.0;
@@ -247,7 +255,14 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
         }
     }
     assert!(small_compact > 0, "no compact planet around 0.08 M☉");
-    (ratios, widest, widest_giant)
+    (
+        ratios,
+        widest,
+        widest_giant,
+        compact,
+        longest,
+        widest_compact,
+    )
 }
 
 #[test]
@@ -260,11 +275,12 @@ fn every_family_draws_on_every_host() {
 #[test]
 #[ignore = "heavy: full grid"]
 fn every_family_draws_on_every_host_full_grid() {
-    let (mut ratios, widest, widest_giant) = every_family_on_every_host(200);
+    let (mut ratios, widest, widest_giant, compact, longest, widest_compact) =
+        every_family_on_every_host(200);
     ratios.sort_by(f64::total_cmp);
     let median = ratios.get(ratios.len() / 2).copied().unwrap_or(f64::NAN);
     eprintln!(
-        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au (giants {widest_giant:.1} au)",
+        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au (giants {widest_giant:.1} au); compact planets {compact}, longest compact period {longest:.1} d, largest compact a × 2.7 au / ice line {widest_compact:.1} au",
         ratios.len()
     );
 }

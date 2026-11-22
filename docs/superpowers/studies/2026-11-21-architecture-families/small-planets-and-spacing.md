@@ -169,6 +169,9 @@ typical ratios of 1.5-2 (section 1.5) the last planet sits at roughly 35-
 640 d **(derived: 10 d x ratio^(N-1), ratio 1.5-2, N = 4-7)**, which is
 0.2-1.4 AU at one solar mass. Missing: the source for a cutoff.
 
+**Now used by the draw:** the chain ends at 1071 d, constant in days
+for every host (Weiss 2018 § IV step 5, #630).
+
 ### 1.4 Size and mass similarity of neighbours
 
 - Weiss 2018, 909 planets in 355 CKS multis (p2). Radius of neighbour

@@ -30,7 +30,7 @@ with probability 1/5 (a choice of what to draw, not a measurement):
 
 | Family | Planets | What it stands for |
 | --- | --- | --- |
-| Compact | 4 to 7 small planets, the innermost within 640 d | Kepler's multi-planet systems |
+| Compact | 4 to 7 small planets, the innermost within 640 d, the chain ending at 1071 d | Kepler's multi-planet systems |
 | Solar-like | 2 to 4 rocky planets inside the ice line, 1 to 4 giants beyond | The Solar System |
 | Hot Jupiter | One giant within 10 d, a distant giant in 7 systems of 10 | Dawson & Johnson 2018 |
 | Eccentric giants | 1 or 2 giants, 0 to 2 small planets inside them | Rosenthal et al. 2023, Zhu & Wu 2018 |
@@ -304,12 +304,21 @@ choices this draw makes where no source gives one:
   Used as a floor it keeps drawn systems on the stable side, but it is
   applied only to pairs of small planets with a drawn one, so two asked
   planets, and any pair with a giant, face only the two-planet floor.
-- **Compact chains can run far out.** Only the innermost compact planet
-  is bounded (640 d); the next ones follow by period ratio with no outer
-  edge. Over the test grid (200 seeds, six hosts, five families, the
-  tests' stand-in classifier), compact planets reach 505 au once scaled
-  to the Sun's ice line, around a 0.08 M☉ star (40 au there); every giant
-  stays within 30 au scaled.
+- **The compact edge is Kepler's detection limit.** A compact chain
+  ends at 1071 d, the longest period of a planet in the CKS multis
+  (Weiss et al. 2018 § IV, bootstrap step 5, which removes the planets
+  beyond it). That limit stands here for the edge of the population, and
+  it is the same number of days for every host: the study (§ 1.2,
+  derived from Mulders 2015) finds an edge scaling as $M^{1/3}$ in axis
+  is a constant period. No source measured the edge outside about 0.2 to
+  1.4 M☉. The first slot that lands beyond it, and every later slot, stay
+  empty and are not redrawn, so a chain that reaches the edge has fewer
+  planets than drawn. Over the test grid (200 seeds, six hosts of 0.08,
+  0.3, 0.8, 1.0, 2.0 and 8.0 M☉, five families, the tests' stand-in
+  classifier), 5556 compact planets are placed, the longest period is
+  1070.3 d and the farthest axis is 11.0 au once scaled to the Sun's ice
+  line, against 505 au before the edge; every giant stays within 30 au
+  scaled.
 - **A $K_{50}$ of 13 to 14 removes most near-3:2 pairs of 5 M⊕ or
   more.** A pair drawn 0 to 5 % wide of 3:2 (period ratio 1.5 to 1.575)
   sits at 12.5 to 14 mutual Hill radii for two 5 M⊕ planets around a
