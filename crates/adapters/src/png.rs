@@ -36,8 +36,8 @@ impl Ramp {
     /// The relief ramp of the exports, for heights in metres: deep sea to
     /// shallows in blues, lowlands green, then ochre, brown and snow.
     ///
-    /// Calibration: a cartographic hypsometric tint chosen for legibility,
-    /// not fitted to data; it carries no physics, only a display choice.
+    /// A display choice, not a physical value: a cartographic
+    /// hypsometric tint chosen for legibility.
     pub fn relief() -> Ramp {
         Ramp::new(vec![
             (-8000.0, [8, 29, 88]),

@@ -165,7 +165,8 @@ This document fixes W1 and the shape the others plug into.
     `(SystemId, EngineVersion)`.
   - `WorldCache`: `get` and `put` of a world, keyed by `WorldKey {
     system: SystemId, body: Designation, keyframe: u32, grid: u32,
-    engine: EngineVersion }`. `catalogue` cannot name `world::World`
+    engine: EngineVersion, world: EngineVersion }`.
+    `catalogue` cannot name `world::World`
     (dependency rule), so the trait has an associated `type World`; the
     fs adapter, which depends on `world`, fixes it to `world::World` and
     owns the codec *(my call)*.
@@ -177,8 +178,9 @@ This document fixes W1 and the shape the others plug into.
     not the requested cell size: two requests that give the same grid
     share a world *(my call)*.
 - **Invalidation.** A cache entry whose engine version differs from
-  `system::ENGINE_VERSION` is a miss, and is removed by the next
-  eviction; never read, never migrated.
+  `system::ENGINE_VERSION` (for a world, also its `world` version from
+  `world::ENGINE_VERSION`: eviction compares both) is a miss,
+  and is removed by the next eviction; never read, never migrated.
 - **Eviction policy** (domain, pure): given the entries (key, size in
   bytes, last use as a `u64` tick of a logical clock the fs store keeps
   in `<root>/cache/uses.json` and advances on every `put` and every
@@ -195,14 +197,15 @@ This document fixes W1 and the shape the others plug into.
   ```text
   <root>/systems/<id>/inputs.json        stored truth
   <root>/cache/<engine>/<id>/timelines.json
-  <root>/cache/<engine>/<id>/worlds/<designation>/<keyframe>-<grid>.world
+  <root>/cache/<engine>/<id>/worlds/<designation>/<keyframe>-<grid>-w<world>.world
   <root>/cache/uses.json                 last-use ticks
   ```
 
   writes staged in a temporary file then renamed; reads of a missing or
   corrupt cache entry are misses, never errors.
-- **World binary layout** (adapter): little-endian; magic `MGWORLD1`,
-  header (engine version, designation, date, grid `n`, field count),
+- **World binary layout** (adapter): little-endian; magic `MGWORLD2`,
+  header (system and world engine versions, designation, date, grid
+  `n`, field count),
   then per field its code, type and quantisation, then the cell values.
   Free to change, being a cache.
 

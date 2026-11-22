@@ -7,8 +7,8 @@ read and write files.
 
 ## Filesystem store
 
-`FsStore::new(root, budget)` (`DEFAULT_BUDGET` is 2 GiB) implements `SystemRepository`,
-`TimelineCache` and `WorldCache`. Layout under `root`:
+`FsStore::new(root, budget)` (`DEFAULT_BUDGET` is 2 GiB) implements
+`SystemRepository`, `TimelineCache` and `WorldCache`. Layout under `root`:
 
 ```text
 systems/<id>/inputs.json
@@ -28,17 +28,20 @@ is no lock, so two writers of one file race and the last rename wins.
 `evict` also deletes leftover `*.tmp` files under `cache/`. A cache hit
 never fails because `uses.json` could not be updated. `WorldCache::put`
 refuses a world that does not match its key (`StoreError::KeyMismatch`).
-A cache file that cannot
-be read or parsed is a miss. `cache/uses.json` holds a logical use
-counter (no wall clock); `FsStore::evict(current)` (a `catalogue::Engines`) deletes the entries of
-other engine versions (system, and world for worlds), then the least recently used ones until the cache
-fits `budget` bytes. World and timeline files are both listed. It also
-deletes the world files whose name is not of the form above (older layout) and the cache entries of any system whose `inputs.json` no longer
-exists, so removing a system frees its caches at the next eviction.
+A cache file that cannot be read or parsed is a miss. `cache/uses.json`
+holds a logical use counter (no wall clock); `FsStore::evict(current)`
+(a `catalogue::Engines`) deletes the entries of other engine versions
+(system, and world for worlds), then the least recently used ones until
+the cache fits `budget` bytes. World and timeline files are both listed.
+It also deletes the world files whose name is not of the form above
+(older layout) and the cache entries of any system whose `inputs.json`
+no longer exists, so removing a system frees its caches at the next
+eviction.
 
 A `.world` file is the binary layout of `encode`/`decode` (see
-`src/world_codec.rs`): magic `MGWORLD2` (an `MGWORLD1` file is a miss), then the system and world engine versions, then the little-endian header and
-fields. A truncated, corrupt or mismatching file is a cache miss.
+`src/world_codec.rs`): magic `MGWORLD2` (an `MGWORLD1` file is a miss),
+then the system and world engine versions, then the little-endian header
+and fields. A truncated, corrupt or mismatching file is a cache miss.
 A grid above `world::MAX_N` is refused on both sides: `put` errors and
 `decode` returns `Invalid`.
 
