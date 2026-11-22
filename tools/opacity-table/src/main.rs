@@ -378,8 +378,19 @@ const CONTINUA_DIR: &str = "crates/science/data";
 
 /// Temperatures, K, of the columns of `co2-cia.tsv`: a project choice
 /// that spans the roto-translational band's 200-800 K sets (and the
-/// dimer bands' 192-500 K ones).
+/// dimer bands' 192-500 K ones). The science crate holds the same list
+/// (`spectrum::CO2_CIA_K`); both check it against the file's header,
+/// which [`cia_header`] writes from this one.
 const CIA_TEMPERATURES_K: [f64; 4] = [200.0, 300.0, 450.0, 800.0];
+
+/// The first line of `co2-cia.tsv`: its columns, the temperatures named.
+fn cia_header() -> String {
+    CIA_TEMPERATURES_K
+        .iter()
+        .fold(String::from("# cell_start_cm"), |h, t| {
+            h + &format!(" k_{t}K")
+        })
+}
 
 /// Spacing, cm⁻¹, of the water continuum's nodes in `mt-ckd-water.tsv`,
 /// and the last of them.
@@ -416,12 +427,10 @@ fn write_continua(o: &Options) -> Result<(), String> {
     }
     write_file(&dir.join("mt-ckd-water.tsv"), &tsv)?;
 
-    let mut tsv = String::from(
-        "# cell_start_cm k_200K k_300K k_450K k_800K\n\
-         # HITRAN CO2-CO2_2024.cia binned on 20 cm-1 cells (trapezoid mean, nearest set per region):\n\
+    let mut tsv = cia_header() + "\n";
+    tsv += "# HITRAN CO2-CO2_2024.cia binned on 20 cm-1 cells (trapezoid mean, nearest set per region):\n\
          # cell start in cm-1; binary absorption coefficient in cm5 per molecule2 at 200, 300, 450 and 800 K.\n\
-         # Written by tools/opacity-table --continua.\n",
-    );
+         # Written by tools/opacity-table --continua.\n";
     let cells = cia.binned(20.0, &CIA_TEMPERATURES_K);
     for (start, k) in &cells {
         tsv += &format!(
@@ -550,6 +559,12 @@ fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_committed_cia_table_is_at_the_tools_temperatures() {
+        let committed = include_str!("../../../crates/science/data/co2-cia.tsv");
+        assert_eq!(committed.lines().next(), Some(super::cia_header().as_str()));
+    }
+
     use super::*;
 
     #[test]

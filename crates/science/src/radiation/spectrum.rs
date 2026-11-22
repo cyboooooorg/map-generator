@@ -354,11 +354,23 @@ pub(crate) const CO2_CIA_TOP_CM: f64 = 4500.0;
 /// Cells under 1e-50 cm⁵ at every temperature are left out (at Venus's
 /// 92 bar and 735 K they would add under 0.013 to the depth per `ln p`).
 static CO2_CIA: LazyLock<Vec<(f64, [f64; 4])>> = LazyLock::new(|| {
-    let rows: Vec<(f64, [f64; 4])> =
-        parse_rows::<5>(include_str!("../../data/co2-cia.tsv"), "co2-cia.tsv")
-            .into_iter()
-            .map(|r| (r[0], [r[1], r[2], r[3], r[4]]))
-            .collect();
+    let text = include_str!("../../data/co2-cia.tsv");
+    // The header names the columns' temperatures: a table written at other
+    // temperatures than [`CO2_CIA_K`] must not be read as these.
+    let header = CO2_CIA_K
+        .iter()
+        .fold(String::from("# cell_start_cm"), |h, t| {
+            h + &format!(" k_{t}K")
+        });
+    assert_eq!(
+        text.lines().next(),
+        Some(header.as_str()),
+        "co2-cia.tsv's columns are not at {CO2_CIA_K:?} K"
+    );
+    let rows: Vec<(f64, [f64; 4])> = parse_rows::<5>(text, "co2-cia.tsv")
+        .into_iter()
+        .map(|r| (r[0], [r[1], r[2], r[3], r[4]]))
+        .collect();
     assert!(
         rows.windows(2).all(|w| w[0].0 < w[1].0)
             && rows.iter().all(|(start, k)| {
