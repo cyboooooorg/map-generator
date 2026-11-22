@@ -32,9 +32,10 @@ pub fn persistence(hurst: f64) -> f64 {
 }
 
 /// Definition: the grid's Nyquist limit. Number of octaves from the
-/// circumference down to a wavelength of two cells, at least 1.
-pub fn octaves(circumference: Metre, cell: Metre) -> u32 {
-    let ratio = circumference.0 / (2.0 * cell.0);
+/// first octave's wavelength `longest` (the world passes the body's
+/// radius) down to a wavelength of two cells, at least 1.
+pub fn octaves(longest: Metre, cell: Metre) -> u32 {
+    let ratio = longest.0 / (2.0 * cell.0);
     if ratio < 1.0 {
         return 1;
     }

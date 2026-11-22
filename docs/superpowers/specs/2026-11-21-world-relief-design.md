@@ -142,7 +142,7 @@ A planet without `Surface` has no relief (an error the CLI reports).
    lacunarity 2 (Definition), persistence `2^-H`, H from the regime's
    analogue body (Plates: Earth; Stagnant, Episodic, HeatPipe: Mars;
    Venus has no measured H; the regime-to-body table is a declared
-   calibration), octaves from the planet's circumference down to two
+   calibration), octaves from the planet's radius down to two
    grid cells (Definition, the grid's Nyquist limit). One power law:
    the break Landais et al. measure near 10 km lies below the
    shortest wavelength of a 15 km grid (30 km). The continental share

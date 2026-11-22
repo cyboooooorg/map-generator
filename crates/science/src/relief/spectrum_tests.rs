@@ -10,8 +10,8 @@ fn persistence_follows_the_hurst_exponent() {
 
 #[test]
 fn octaves_reach_two_cells() {
-    // floor(log2(40 075 km / 30 km)) + 1 = 10 + 1.
-    assert_eq!(octaves(Metre(40_075e3), Metre(15e3)), 11);
+    // From Earth's radius: floor(log2(6371 km / 30 km)) + 1 = 7 + 1.
+    assert_eq!(octaves(Metre(6_371e3), Metre(15e3)), 8);
     assert_eq!(octaves(Metre(1e3), Metre(15e3)), 1);
 }
 

@@ -166,8 +166,8 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    relief takes: Earth with plates, Mars for a stagnant, episodic or
    heat-pipe lid (a calibration, below).
 2. **Continents.** A fractal noise over each cell's position on the
-   sphere, lacunarity 2, persistence $2^{-H}$, from one wavelength per
-   circumference down to two grid cells. $H$ is the analogue's measured
+   sphere, lacunarity 2, persistence $2^{-H}$, from a first wavelength
+   of the body's radius down to two grid cells. $H$ is the analogue's measured
    Hurst exponent above 10 km, 0.479 for Earth and 0.53 for Mars
    (Landais, Schmidt & Lovejoy 2019), where the legacy's persistence of
    0.5 meant $H = 1$, too smooth, and rounded its coasts. The crust line
