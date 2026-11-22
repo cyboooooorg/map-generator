@@ -68,11 +68,11 @@ fn the_continent_floor_step_is_airys() {
     let step = |a: &[f32]| f64::from(median(pick(a, true)) - median(pick(a, false)));
     // The noise is centred within each province, so the step between them
     // is Airy's alone (the medians differ from the means by a little).
+    // The wiring only: the platform is the science crate's Airy step of
+    // the analogue's crust (its value is pinned by the science tests).
     let platform = step(&h) - step(&noise);
-    // Airy: 34 km x (1 - 2830/3380) = 5.53 km (PREM mantle).
     let earth_crust = crust(Analogue::Earth);
     let airy = floating_height(&earth_crust, earth_crust.continental_thickness);
-    assert!((airy.0 - 5530.0).abs() < 10.0);
     assert!((platform - airy.0).abs() < 1000.0, "{platform}");
 }
 

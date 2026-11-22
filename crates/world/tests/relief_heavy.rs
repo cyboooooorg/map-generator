@@ -4,6 +4,7 @@
 
 use science::constants::{EARTH_MEAN_RADIUS, MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
 use science::relief::crust::{MARS_CRUST, floating_height};
+use science::relief::spectrum::{MAX_RELIEF_SCALE, relief_scale};
 use science::units::{EarthRadius, Fraction, Metre, MetrePerSecondSquared};
 use timeline::fixtures::{earth_like_fixture, leaf};
 use timeline::{PlanetState, Seed, TectonicRegime, Trace};
@@ -14,6 +15,31 @@ use world::stats::{area_mean, area_quantile};
 
 const SEEDS: [u64; 3] = [1, 2, 3];
 const CELL: Metre = Metre(60e3);
+
+/// Source: Mars's volumetric mean radius, 3389.5 km (NASA Mars Fact
+/// Sheet, <https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html>).
+const MARS_RADIUS: Metre = Metre(3389.5e3);
+
+/// Source: Venus's volumetric mean radius, 6051.8 km (NASA Venus Fact
+/// Sheet, <https://nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html>).
+const VENUS_RADIUS: Metre = Metre(6051.8e3);
+
+/// Source: Venus's equatorial surface gravity, 8.87 m/s^2 (NASA Venus
+/// Fact Sheet).
+const VENUS_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(8.87);
+
+/// Test input, not physics: a heavy rocky body, three standard gravities.
+/// No source in the catalogue or the timeline bounds the gravity of rocky
+/// planets; this is an input heavy enough that the relief scale shrinks
+/// the land well below Earth's while the ridges, not scaled by gravity,
+/// keep their swell.
+const HEAVY_GRAVITY: f64 = 3.0;
+
+/// Test input, not physics: a light rocky body, a fifth of standard
+/// gravity, chosen below `STANDARD_GRAVITY / MAX_RELIEF_SCALE` (0.40 g) so
+/// that the relief scale is at its cap, the tallest relief any gravity
+/// gives (the test checks it is).
+const LIGHT_GRAVITY: f64 = 0.2;
 
 fn body(
     trace: &mut Trace,
@@ -50,23 +76,28 @@ fn earth(trace: &mut Trace) -> PlanetState {
     )
 }
 
-/// Mars: volumetric mean radius 3389.5 km, mean surface gravity
-/// [`MARS_SURFACE_GRAVITY`] (NASA Mars Fact Sheet). A stagnant lid.
+/// Mars: [`MARS_RADIUS`], mean surface gravity [`MARS_SURFACE_GRAVITY`]
+/// (NASA Mars Fact Sheet). A stagnant lid.
 fn mars(trace: &mut Trace, ocean_share: Option<f64>) -> PlanetState {
     body(
         trace,
         TectonicRegime::Stagnant,
-        Metre(3389.5e3),
+        MARS_RADIUS,
         MARS_SURFACE_GRAVITY.0,
         ocean_share,
     )
 }
 
-/// Venus: volumetric mean radius 6051.8 km, equatorial gravity 8.87 m/s^2
-/// (NASA Planetary Fact Sheet, Venus page); no liquid, episodic
+/// Venus: [`VENUS_RADIUS`] and [`VENUS_GRAVITY`]; no liquid, episodic
 /// resurfacing.
 fn venus(trace: &mut Trace) -> PlanetState {
-    body(trace, TectonicRegime::Episodic, Metre(6051.8e3), 8.87, None)
+    body(
+        trace,
+        TectonicRegime::Episodic,
+        VENUS_RADIUS,
+        VENUS_GRAVITY.0,
+        None,
+    )
 }
 
 fn grid_of(state: &PlanetState) -> Grid {
@@ -118,15 +149,19 @@ fn earth_like_has_earths_hypsometry() {
     // ETOPO 2022 (NOAA NCEI, doi:10.25921/fd45-gt74), as the legacy test
     // (generation.rs:3202). Asserted: the land share is one minus the
     // ocean share, and over 70 % of the sea floor is deeper than 1 km.
+    // The 70 % floor is deliberately loose: it is the legacy's bound, set
+    // to catch a sea floor left shallow (the legacy's old ramp), not a fit
+    // to ETOPO's share. The share depends on the deep floor's depth, which
+    // W2 does not model yet (#317); a tighter bound would pin the code's
+    // current output rather than a source.
     // The other published shares are printed, not asserted, because W2
     // lacks the process that sets them (docs/science/mountains-and-gravity.md,
     // "Where it departs"):
     // - land under 500 m (45-75 %), above 2 km (4-15 %) and above 4 km
     //   (0.5-4 %): no erosion and sedimentation, which pile the lowlands up
-    //   near sea level and wear the high land down (follow-up issue: erosion
-    //   and sedimentation);
+    //   near sea level and wear the high land down (#635);
     // - sea floor deeper than 6 km (under 3 %): no sea-floor age-depth law
-    //   for the deep floor (follow-up issue: sea-floor age-depth).
+    //   for the deep floor (#317).
     let mut failures = Vec::new();
     for seed in SEEDS {
         let mut trace = Trace::new();
@@ -159,14 +194,16 @@ fn earth_like_has_earths_hypsometry() {
     assert!(failures.is_empty(), "{failures:?}");
 }
 
+/// A census, not a check: it prints the Mars-like highland share and
+/// asserts nothing, so it passes whatever the code does.
 #[test]
 #[ignore = "heavy: world at 60 km"]
-fn mars_like_keeps_its_highland_share() {
-    // Printed, not asserted. Highland share 0.58 (Mars's southern
-    // highlands, the science crate's continental share); the legacy test
-    // accepts 0.55-0.61 (generation.rs:3436). W2 lacks the dichotomy: the
-    // highlands are cut from the noise's area quantile, not placed as a
-    // hemispheric step (follow-up issue: the Mars dichotomy census).
+fn mars_like_highland_share_census() {
+    // Printed only, never asserted. Published highland share 0.58 (Mars's
+    // southern highlands, the science crate's continental share); the
+    // legacy test accepts 0.55-0.61 (generation.rs:3436). W2 lacks the
+    // dichotomy: the highlands are cut from the noise's area quantile, not
+    // placed as a hemispheric step, so the share misses (#636).
     // Definition: the world is wet (the crust step only exists with liquid,
     // as in the legacy test). The two crust levels are the area-weighted
     // medians of the lowland and highland populations (quantiles
@@ -183,7 +220,10 @@ fn mars_like_keeps_its_highland_share() {
         report(
             "mars",
             seed,
-            &format!("highland {highland:.3} (levels {low:.0} / {high:.0} m, step {step:.0} m)"),
+            &format!(
+                "highland {highland:.3} against 0.58 published, not asserted (#636) \
+                 (levels {low:.0} / {high:.0} m, step {step:.0} m)"
+            ),
         );
     }
 }
@@ -192,7 +232,12 @@ fn mars_like_keeps_its_highland_share() {
 #[ignore = "heavy: world at 60 km"]
 fn venus_like_is_unimodal() {
     // Ford & Pettengill 1992 (JGR 97 E8, doi:10.1029/92JE01165): 80 % of
-    // the surface of Venus lies within 1 km of the mean radius.
+    // the surface of Venus lies within 1 km of the mean radius. The bound
+    // is deliberately loose, a floor at the published share and not a band
+    // around it: W2 draws Venus's plains (DRY_PLAINS, calibrated on this
+    // share) but not its tesserae and rises, so the world may be flatter
+    // than Venus, and a band fitted to its output would pin the code
+    // rather than the source.
     let mut failures = Vec::new();
     for seed in SEEDS {
         let mut trace = Trace::new();
@@ -274,9 +319,11 @@ fn hurst(state: &PlanetState, seed: u64) -> (f64, Vec<f64>) {
 fn relief_has_its_analogues_hurst_exponent() {
     // Landais, Schmidt & Lovejoy 2019 (Icarus 319,
     // doi:10.1016/j.icarus.2018.07.005), Table 2: H above about 10 km is
-    // 0.479 on Earth and 0.53 on Mars. Earth's is asserted; Mars's is
-    // printed only: W2 lacks the dichotomy census (follow-up issue: the
-    // Mars dichotomy census), which sets the large-scale Mars fluctuation.
+    // 0.479 on Earth and 0.53 on Mars. Earth's is asserted (within 0.08,
+    // deliberately loose: three seeds of a 60 km world measure H over
+    // only four lags, so the estimate scatters); Mars's is printed only:
+    // W2 lacks the dichotomy (#636), which sets the large-scale Mars
+    // fluctuation.
     let mut failures = Vec::new();
     for seed in SEEDS {
         let mut trace = Trace::new();
@@ -294,8 +341,11 @@ fn relief_has_its_analogues_hurst_exponent() {
 #[test]
 #[ignore = "heavy: world at 60 km"]
 fn relief_never_saturates() {
-    // Earth-like at 3 g and Mars-like at 0.2 g (multiples of the standard
-    // gravity): every height stays within the +-25 km of the storage range.
+    // Earth-like at HEAVY_GRAVITY and Mars-like at LIGHT_GRAVITY (test
+    // inputs, multiples of the standard gravity): every height stays within
+    // the +-25 km of the storage range.
+    let light_gravity = MetrePerSecondSquared(LIGHT_GRAVITY * STANDARD_GRAVITY.0);
+    assert_eq!(relief_scale(light_gravity), MAX_RELIEF_SCALE);
     let mut failures = Vec::new();
     for seed in SEEDS {
         let mut trace = Trace::new();
@@ -303,14 +353,14 @@ fn relief_never_saturates() {
             &mut trace,
             TectonicRegime::Plates,
             EARTH_MEAN_RADIUS,
-            3.0 * STANDARD_GRAVITY.0,
+            HEAVY_GRAVITY * STANDARD_GRAVITY.0,
             Some(0.71),
         );
         let light = body(
             &mut trace,
             TectonicRegime::Stagnant,
-            Metre(3389.5e3),
-            0.2 * STANDARD_GRAVITY.0,
+            MARS_RADIUS,
+            light_gravity.0,
             None,
         );
         for (label, state) in [("earth 3 g", heavy), ("mars 0.2 g", light)] {
@@ -325,6 +375,8 @@ fn relief_never_saturates() {
     assert!(failures.is_empty(), "{failures:?}");
 }
 
+// Determinism lives in tier 3 until a shared reference system carries a
+// relief in tier 2 (#637).
 #[test]
 #[ignore = "heavy: world at 60 km"]
 fn same_seed_same_relief() {

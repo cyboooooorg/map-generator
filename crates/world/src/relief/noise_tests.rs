@@ -41,6 +41,9 @@ fn structure(seed: Seed, s: &Spectrum, d: f64) -> f64 {
         / f64::from(n)
 }
 
+/// Kept beside `plate_map_is_deterministic`: the plate map draws its own
+/// Perlin warps and never calls `fbm` or `ridged`, so this is the only
+/// tier-1 check of the noise's determinism (the whole relief's is tier 3).
 #[test]
 fn fbm_is_deterministic() {
     let s = spectrum(0.8);
