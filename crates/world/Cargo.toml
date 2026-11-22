@@ -11,3 +11,6 @@ noise.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+timeline = { workspace = true, features = ["fixtures"] }

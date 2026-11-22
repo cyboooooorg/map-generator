@@ -503,7 +503,7 @@ impl Subplates {
 }
 
 /// A uniform draw in `[0, 1)` from the top 53 bits of `h`.
-fn unit(h: u64) -> f64 {
+pub(crate) fn unit(h: u64) -> f64 {
     let bits = f64::MANTISSA_DIGITS;
     (h >> (u64::BITS - bits)) as f64 / (1u64 << bits) as f64
 }

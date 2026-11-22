@@ -10,7 +10,7 @@ use timeline::Seed;
 /// gradient noise), measured on the noise by the test
 /// `the_noise_constants_are_measured_on_the_noise`; a numerical
 /// normaliser, not a physical value.
-const PERLIN_RMS: f64 = 0.314;
+pub(crate) const PERLIN_RMS: f64 = 0.314;
 
 /// Definition: mean of `|n|` for one Perlin octave `n`, measured by the
 /// same test; a numerical normaliser, not a physical value.
