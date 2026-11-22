@@ -12,7 +12,7 @@ use crate::system::SystemCommand;
 
 /// The planetary-system generator.
 #[derive(Parser, Debug)]
-#[command(version, about)]
+#[command(version, about = "Draws planetary systems and explains their values")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
