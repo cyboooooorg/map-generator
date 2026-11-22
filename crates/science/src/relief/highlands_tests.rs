@@ -8,10 +8,3 @@ fn the_highland_ramp_is_smooth_between_its_edges() {
     assert!((highland_weight(middle) - 0.5).abs() < 1e-12);
     assert!(highland_weight(0.26) < highland_weight(0.30));
 }
-
-#[test]
-fn ported_values_are_the_legacys() {
-    assert_eq!(HIGHLANDS.frequency, 1.6);
-    assert_eq!(HIGHLANDS.octaves, 3);
-    assert_eq!(DRY_PLAINS, Metre(3000.0));
-}

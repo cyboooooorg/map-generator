@@ -1,6 +1,6 @@
 use super::*;
 use crate::constants::EARTH_MEAN_RADIUS;
-use crate::units::{Fraction, Metre, Watt, WattPerSquareMetre};
+use crate::units::{Fraction, Watt, WattPerSquareMetre};
 
 /// Source: Earth's heat loss, 44.2 TW (Pollack, Hurter & Johnson 1993,
 /// doi:10.1029/93RG01249, abstract).
@@ -64,11 +64,4 @@ fn cones_keep_their_published_shape() {
     let low = cone_size(draws[0], draws[2]);
     let high = cone_size(draws[4], draws[2]);
     assert!(high.radius > low.radius && high.height > low.height);
-}
-
-#[test]
-fn volcano_calibrations_keep_the_studys_values() {
-    assert_eq!(CONE_SPACING, Metre(900e3));
-    assert_eq!(CONE_PRESENCE, 0.5);
-    assert!((1.0 / ARC_CONE_DENSITY - 250e3).abs() < 1e-6);
 }

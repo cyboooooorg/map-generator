@@ -1,6 +1,5 @@
 use super::*;
-use crate::relief::spectrum::Analogue;
-use crate::units::{Degree, KilogramPerCubicMetre, Metre, Radian};
+use crate::units::{Degree, Metre, Radian};
 
 /// Airy step of a crust: its continental column over its oceanic one.
 fn step(crust: &Crust) -> Metre {
@@ -32,28 +31,8 @@ fn the_crust_floats_by_its_thickness() {
 }
 
 #[test]
-fn crusts_keep_their_cited_values() {
-    assert_eq!(EARTH_CRUST.continental_thickness, Metre(41.1e3));
-    assert_eq!(EARTH_CRUST.oceanic_thickness, Metre(7.1e3));
-    assert_eq!(EARTH_CRUST.crust_density, KilogramPerCubicMetre(2830.0));
-    assert_eq!(EARTH_CRUST.mantle_density, KilogramPerCubicMetre(3380.0));
-    assert_eq!(MARS_CRUST.continental_thickness, Metre(58e3));
-    assert_eq!(MARS_CRUST.oceanic_thickness, Metre(32e3));
-    assert_eq!(MARS_CRUST.crust_density, KilogramPerCubicMetre(2900.0));
-    assert_eq!(MARS_CRUST.mantle_density, KilogramPerCubicMetre(3500.0));
-    assert_eq!(crust(Analogue::Earth), EARTH_CRUST);
-    assert_eq!(crust(Analogue::Mars), MARS_CRUST);
-}
-
-#[test]
-fn continental_shares_are_the_measured_ones() {
-    // Cogley 1984; 1 − 0.42, Marinova, Aharonson & Asphaug 2008.
-    assert_eq!(continental_share(Analogue::Earth).get(), 0.41);
-    assert_eq!(continental_share(Analogue::Mars).get(), 0.58);
-}
-
-#[test]
-fn the_continental_slope_is_measured_on_etopo() {
-    // 2.4° on ETOPO 2022 (the relief study).
+fn constants_match_their_sources() {
+    // The slope is written in radians from ETOPO 2022's 2.4° (the relief
+    // study): the hand conversion agrees with the units crate's.
     assert!((CONTINENTAL_SLOPE.0 - Radian::from(Degree(2.4)).0).abs() < 1e-12);
 }

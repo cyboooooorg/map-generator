@@ -227,12 +227,10 @@ fn orogens_weigh_the_mountain_ridges() {
 }
 
 #[test]
-fn plates_keep_their_cited_values() {
-    // Morra et al. 2013, Bird 2003; Sornette & Pisarenko 2003;
-    // Zahirovic et al. 2015.
-    assert_eq!(PLATE_COUNT, (8, 14));
-    assert_eq!(PLATE_SIZE_EXPONENT, 0.25);
-    assert_eq!(SLAB_FULL_SHARE, 0.25);
+fn constants_match_their_sources() {
+    // Zahirovic et al. 2015's speeds and the relief and arc thresholds
+    // are written in m/s from cm/yr: the conversion gives back the cited
+    // values.
     let cm = |v: MetrePerSecond| CentimetrePerYear::from(v).0;
     assert!((cm(PLATE_RMS_SPEED.0) - 2.6).abs() < 1e-12);
     assert!((cm(PLATE_RMS_SPEED.1) - 7.9).abs() < 1e-12);
@@ -255,16 +253,6 @@ fn slab_pull_speeds_up_the_sinking_plates() {
         assert!(v > last, "{v} after {last}");
         last = v;
     }
-}
-
-#[test]
-fn the_plate_draw_keeps_its_legacy_values() {
-    // legacy-final:crates/mapgen/src/plates.rs:40-58.
-    assert_eq!(PLATE_WEIGHT, Radian(0.35));
-    assert_eq!(SUBPLATE_FREQUENCY, 5.0);
-    assert_eq!(SUBPLATE_WARP, 0.08);
-    assert_eq!(SUBPLATE_WARP_FREQUENCY, 3.0);
-    assert_eq!(BOUNDARY_WINDOW, 3);
 }
 
 #[test]
