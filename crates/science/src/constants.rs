@@ -1,7 +1,8 @@
 //! Sourced physical constants.
 
 use crate::units::{
-    Gyr, Kelvin, Kilogram, Metre, MetrePerSecondSquared, Second, Watt, WattPerSquareMetre,
+    Gyr, Kelvin, Kilogram, Metre, MetrePerSecond, MetrePerSecondSquared, Second, Watt,
+    WattPerSquareMetre,
 };
 
 /// Definition: IAU 2012 Resolution B2, 149 597 870 700 m exactly.
@@ -62,6 +63,10 @@ pub const DAY: Second = Second(86_400.0);
 
 /// Definition: days in a Julian year (IAU).
 pub const JULIAN_YEAR_DAYS: f64 = 365.25;
+
+/// Definition: a centimetre per Julian year in metres per second, 0.01 m
+/// over [`JULIAN_YEAR_DAYS`] days of [`DAY`].
+pub const CENTIMETRE_PER_YEAR: MetrePerSecond = MetrePerSecond(0.01 / (JULIAN_YEAR_DAYS * DAY.0));
 
 /// Definition: years in a gigayear (SI prefix).
 pub const YEARS_PER_GYR: f64 = 1e9;
