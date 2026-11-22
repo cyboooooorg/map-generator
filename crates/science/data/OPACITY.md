@@ -10,8 +10,8 @@ g-points, on a grid of pressure and temperature.
 `opacity-halved.bin` is the same table on 10 cm⁻¹ bins over 0-2500 cm⁻¹ at
 200-300 K, read only by the test `halving_bins_keeps_the_forcing`.
 `shortwave.bin` is the table of the star's near infrared that the Bond
-albedo absorbs (`crates/science/src/radiation/shortwave.rs`, task 7.6 of
-issue #523): the same lines and sets on the albedo's own spectral bands from
+albedo absorbs (read by the shortwave port, not in the science crate yet;
+task 7.6 of legacy issue #523): the same lines and sets on the albedo's own spectral bands from
 0.7 to 5 µm, with MT_CKD's water and CO₂ continua (see
 [Shortwave table](#shortwave-table)).
 
@@ -37,8 +37,10 @@ SHA-256 of the files:
 
 The line lists cannot be fetched again identically: HITRAN serves its
 current data, so a new download may differ from the one the tables were
-built from, and the tool does not check the inputs' hashes (those recorded
-under [Sources](#sources) are of the downloads of that day). Rebuilding
+built from. Neither the tool nor `fetch.sh` checks the line lists' or
+partition sums' hashes (those recorded under [Sources](#sources) are of
+the downloads of that day); `fetch.sh` checks only the three inputs of
+the continua (see [Continua](#continua)). Rebuilding
 gives a table close to these, not equal to them; keep these files as the
 reference and compare their hashes before replacing them.
 
@@ -51,7 +53,23 @@ cargo run --release -j 4 -p opacity-table -- \
   --bin-width 10 --top 2500 --temperatures 200,225,250,275,300 \
   --out crates/science/data/opacity-halved.bin
 cargo run --release -j 4 -p opacity-table -- --shortwave
+cargo run --release -j 4 -p opacity-table -- --continua
 ```
+
+The k-tables (`opacity.bin`, `opacity-halved.bin`) were not regenerated
+for the port: they are `legacy-final`'s files byte for byte. The two
+continuum files were: on 2026-11-22 the three continuum inputs were
+downloaded again by hand, with the URLs of `fetch.sh`, into a scratch
+`raw/` (all three matched the SHA-256 that `fetch.sh` checks), and
+
+```bash
+cargo run --release -j 4 -p opacity-table -- --continua \
+  --raw <scratch>/raw --out <scratch>/out/x
+cmp <scratch>/out/mt-ckd-water.tsv crates/science/data/mt-ckd-water.tsv
+cmp <scratch>/out/co2-cia.tsv crates/science/data/co2-cia.tsv
+```
+
+gave both committed files byte for byte.
 
 The raw downloads (about 80 MB) stay in `tools/opacity-table/raw/`, which
 is git-ignored.
@@ -219,8 +237,8 @@ is taken as zero at 0 cm⁻¹; elsewhere the coefficient is zero outside
 the block, a cell a block only partly covers counts the rest as zero,
 and a negative mean (the file's noise) counts as zero.
 
-`fetch.sh` checks the SHA-256 of the three inputs and fails on a
-mismatch.
+`fetch.sh` checks the SHA-256 of these three inputs (the two above and
+`contnm.f90`) and fails on a mismatch; it checks no line list.
 
 ## Shortwave table
 
@@ -228,7 +246,8 @@ mismatch.
 line lists, partition sums and line shapes as `opacity.bin`:
 
 - **Bins:** the bands of the Bond albedo's stellar spectrum
-  (`planet::albedo::spectrum`, 240 bands even in `ln λ` from 0.2 to
+  (the legacy `planet::albedo::spectrum`, to be ported with the
+  shortwave half; 240 bands even in `ln λ` from 0.2 to
   5 µm), from the one that holds 0.7 µm to 5 µm: 147 bins over
   2000-14 364 cm⁻¹, 27 to 193 cm⁻¹ wide. The science crate checks the
   table's edges against its bands when it loads it.

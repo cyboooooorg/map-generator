@@ -1,5 +1,5 @@
 //! The table's grid and its binary format (read by the science crate's
-//! `planet/ktable.rs`; documented in `crates/science/data/OPACITY.md`).
+//! `radiation/ktable.rs`; documented in `crates/science/data/OPACITY.md`).
 //!
 //! Little-endian throughout:
 //!
