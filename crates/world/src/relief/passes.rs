@@ -307,7 +307,9 @@ pub fn highlands(grid: &Grid, body: Seed) -> Vec<f32> {
 /// over the cells it is drawn on (so its highest crest is 1, and the
 /// highest summit stands [`MOUNTAIN_RELIEF`] above its plateau, as that
 /// height is defined), times `weight` (the orogeny of the plates, or
-/// [`highlands`] on a world without), times [`MOUNTAIN_RELIEF`] and
+/// [`highlands`] on a world without; on a plate world [`super::generate`]
+/// passes the orogeny of the continental cells only, 0 on oceanic crust,
+/// since an oceanic cell has no plateau to stand on), times [`MOUNTAIN_RELIEF`] and
 /// [`relief_scale`], in metres per cell. Uses
 /// `body.derive("relief.mountains")`.
 ///

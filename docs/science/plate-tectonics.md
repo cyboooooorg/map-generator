@@ -269,7 +269,9 @@ in `science::relief`, the pass in `world::relief`.
    $h$ the cell's height above the sea the model built before the plates
    raised it. Only continental cells are lifted: both elevations are
    those of continental plateaus, and an oceanic cell inside a range's
-   reach keeps its floor.
+   reach keeps its floor. The ridged mountains drawn on the ranges (the
+   summits above the plateau) follow the same rule: their weight is the
+   range's on continental cells and 0 on oceanic ones.
 7. **Rifts.** Under 100 km wide (Hopper & Buck 1996; Buck 2007).
 8. **Ridges.** Parsons & Sclater's $2.5 + 0.35\sqrt{t}$ km, the floor's
    age $t$ in Ma read from the distance and half the spreading rate (each

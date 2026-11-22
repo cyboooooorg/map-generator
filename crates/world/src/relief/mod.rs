@@ -72,7 +72,7 @@ pub fn generate(state: &PlanetState, seed: Seed, grid: &Grid) -> Result<Field, R
             &continental,
             forcing.ocean_share,
         );
-        (relief.orogeny, relief.arc)
+        (continental_only(&relief.orogeny, &continental), relief.arc)
     } else {
         (highlands(grid, seed), vec![0.0; grid.cell_count()])
     };
@@ -94,6 +94,24 @@ pub fn generate(state: &PlanetState, seed: Seed, grid: &Grid) -> Result<Field, R
             max: range,
         },
     })
+}
+
+/// The orogeny weight of the plates kept on the `continental` cells only,
+/// 0 elsewhere: the ridged mountains stand [`science::relief::highlands::MOUNTAIN_RELIEF`]
+/// above an orogen's plateau, which only continental crust has (the same
+/// rule as [`raise_orogens`]), so an oceanic cell inside a collision's
+/// reach keeps its floor.
+///
+/// # Panics
+///
+/// Panics when `orogeny` and `continental` differ in length.
+pub(crate) fn continental_only(orogeny: &[f32], continental: &[bool]) -> Vec<f32> {
+    assert_eq!(orogeny.len(), continental.len(), "one crust per cell");
+    orogeny
+        .iter()
+        .zip(continental)
+        .map(|(&w, &thick)| if thick { w } else { 0.0 })
+        .collect()
 }
 
 #[cfg(test)]

@@ -105,3 +105,13 @@ fn the_ocean_share_of_the_state_is_met_on_a_grid() {
     let cell = (0..v.len()).map(|k| grid.area(k)).fold(0.0, f64::max);
     assert!((below(&grid, v) - share.get()).abs() <= 2.0 * cell / total);
 }
+
+#[test]
+fn mountains_rise_on_continental_cells_only() {
+    let orogeny = [1.0_f32, 0.72, 0.5, 0.0];
+    let continental = [true, false, true, false];
+    assert_eq!(
+        continental_only(&orogeny, &continental),
+        vec![1.0, 0.0, 0.5, 0.0]
+    );
+}
