@@ -92,8 +92,9 @@ stirred-up orbits need more room.
   $P^{-0.9}$ above (EPOS I, Mulders et al. 2018). The next planets follow
   by period ratios from the same study: the log of the fractional
   separation of neighbours is normal, with no ratio below 1.2 (the "wall"
-  of Weiss et al. 2018). Near 29 % of planets sit just outside a 3:2 or 2:1
-  resonance (He et al. 2019, within 5 %).
+  of Weiss et al. 2018). The chain ends at the first planet that would
+  lie past 1071 d (Weiss et al. 2018). Near 29 % of planets sit just
+  outside a 3:2 or 2:1 resonance (He et al. 2019, within 5 %).
 - **Rocky planets of a solar-like system.** Masses 0.4 to 2.6 Earth masses
   and gaps drawn as a shifted Rayleigh in Hill radii, offset 3.5 and scale
   14.5 (Fang & Margot 2013; Raymond et al. 2006).
@@ -168,6 +169,7 @@ flowchart TD
     F --> G[Classify a circular trial]
     G --> H[Draw the eccentricity from the class]
     H --> I{Clear of the star, the Roche floor,\nevery neighbour and the hot-Jupiter zone?}
+    E -- compact proposal past 1071 d --> M[Chain ends: this slot and the later ones stay empty]
     I -- no, up to 20 tries --> E
     I -- yes --> J[Planet kept]
     J --> K[Final spacing re-check, sort by axis]
@@ -192,7 +194,9 @@ flowchart TD
    Jupiter's cleared zone; a drawn giant past $30\ \mathrm{au}\times
    a_{snow}/2.7\ \mathrm{au}$ is rejected too. A slot has 20 tries; a
    drawn slot that spends them stays empty, an asked archetype is refused
-   with `NoRoom`.
+   with `NoRoom`. A compact try whose period lies past 1071 d ends the
+   chain at once: its slot and every later slot stay empty, with no
+   retry.
 4. **Re-check.** Once every orbit is placed, $T_1$ is known and the
    pairs of small planets are checked again with the final $K_{50}$; of
    the outermost violating pair, the drawn planet placed later is dropped
@@ -304,21 +308,21 @@ choices this draw makes where no source gives one:
   Used as a floor it keeps drawn systems on the stable side, but it is
   applied only to pairs of small planets with a drawn one, so two asked
   planets, and any pair with a giant, face only the two-planet floor.
-- **The compact edge is Kepler's detection limit.** A compact chain
-  ends at 1071 d, the longest period of a planet in the CKS multis
-  (Weiss et al. 2018 § IV, bootstrap step 5, which removes the planets
-  beyond it). That limit stands here for the edge of the population, and
-  it is the same number of days for every host: the study (§ 1.2,
-  derived from Mulders 2015) finds an edge scaling as $M^{1/3}$ in axis
-  is a constant period. No source measured the edge outside about 0.2 to
-  1.4 M☉. The first slot that lands beyond it, and every later slot, stay
-  empty and are not redrawn, so a chain that reaches the edge has fewer
-  planets than drawn. Over the test grid (200 seeds, six hosts of 0.08,
-  0.3, 0.8, 1.0, 2.0 and 8.0 M☉, five families, the tests' stand-in
-  classifier), 5556 compact planets are placed, the longest period is
-  1070.3 d and the farthest axis is 11.0 au once scaled to the Sun's ice
-  line, against 505 au before the edge; every giant stays within 30 au
-  scaled.
+- **The compact edge is Kepler's detection limit.** A compact chain ends at
+  1071 d, the longest period of a planet in the CKS multis (Kepler, FGK-type
+  hosts; Weiss et al. 2018 § IV, bootstrap step 5, which removes the planets
+  beyond it). No source gives an outer edge of the compact population (study
+  `small-planets-and-spacing.md` § 1.3). Holding it at the same number of
+  days for every host is a choice (user decision, 2026-11-22), by analogy
+  with the inner edge: Mulders 2015 measured an inner edge scaling as
+  $M^{1/3}$ in axis, which is a constant period (study § 1.2). The first
+  slot that lands beyond it, and every later slot, stay empty and are not
+  redrawn, so a chain that reaches the edge has fewer planets than drawn.
+  Over the test grid (200 seeds, six hosts of 0.08, 0.3, 0.8, 1.0, 2.0 and
+  8.0 M☉, five families, the tests' stand-in classifier), 5556 compact
+  planets are placed, the longest period is 1070.3 d and the farthest axis
+  is 11.0 au once scaled to the Sun's ice line, against 505 au before the
+  edge; every giant stays within 30 au scaled.
 - **A $K_{50}$ of 13 to 14 removes most near-3:2 pairs of 5 M⊕ or
   more.** A pair drawn 0 to 5 % wide of 3:2 (period ratio 1.5 to 1.575)
   sits at 12.5 to 14 mutual Hill radii for two 5 M⊕ planets around a
@@ -400,6 +404,8 @@ DOIs were not re-checked for this article.
 20. Bryan, M. L. et al. 2018, Nature Astronomy,
     [arXiv:1712.00457](https://arxiv.org/abs/1712.00457); 2020, ApJ,
     [arXiv:2010.07315](https://arxiv.org/abs/2010.07315).
+21. Mulders, G. D., Pascucci, I. & Apai, D. 2015, ApJ 798, 112,
+    [arXiv:1406.7356](https://arxiv.org/abs/1406.7356).
 
 ## See also
 

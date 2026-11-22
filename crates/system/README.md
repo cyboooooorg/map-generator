@@ -38,7 +38,9 @@ runs on a scratch trace.
   mass and an axis, classifies a circular trial, draws the eccentricity
   from the class, and checks the star, the Roche floor, the spacing to
   every placed planet and the hot Jupiters' cleared zone. 20 tries per
-  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. More
+  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. A
+  compact try past 1071 d ends the chain: its slot and the later ones
+  stay empty, with no retry. More
   than 649 planets is `TooManyPlanets`, before any allocation.
 - **Streams.** The perihelion longitude draws from `orbit/<trial label>`;
   the body seed is `derive(<designation text>)`, the spin
