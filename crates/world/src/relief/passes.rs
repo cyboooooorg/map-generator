@@ -398,7 +398,9 @@ pub(crate) struct PlacedCone {
 /// band of `arcs` at random in their cell, so that the expected number per
 /// metre of arc is [`ARC_CONE_DENSITY`] whatever the band's width: a cell's
 /// presence is its weight times the density per area,
-/// `ARC_CONE_DENSITY / arc_band_width()`, times the cell's area.
+/// `ARC_CONE_DENSITY / arc_band_width()`, times the cell's area
+/// ([`Grid::area`] times the radius squared, so smaller corner cells get
+/// fewer cones).
 /// Their sizes are `cone_size` at standard gravity, both height and radius
 /// then scaled by [`relief_scale`] (the shape, so the aspect, is kept).
 pub(crate) fn cones(grid: &Grid, body: Seed, forcing: &Forcing, arcs: &[f32]) -> Vec<PlacedCone> {
@@ -445,11 +447,12 @@ pub(crate) fn cones(grid: &Grid, body: Seed, forcing: &Forcing, arcs: &[f32]) ->
             }
         }
     }
-    let side = cell_length(grid, forcing.radius);
+    let radius_squared = forcing.radius.0 * forcing.radius.0;
     let band = arc_band_width().0;
     for k in (0..grid.cell_count()).filter(|&k| arcs[k] > 0.0) {
         let label = format!("arc/{k}");
-        let expected = f64::from(arcs[k]) * ARC_CONE_DENSITY * side * side / band;
+        let area = grid.area(k) * radius_squared;
+        let expected = f64::from(arcs[k]) * ARC_CONE_DENSITY * area / band;
         if draw(&format!("{label}/present")) >= expected {
             continue;
         }
