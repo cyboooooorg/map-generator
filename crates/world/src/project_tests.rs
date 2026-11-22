@@ -138,7 +138,10 @@ fn an_odd_width_panics() {
 /// (issue #381): the mean, and the area share above zero, of a smooth
 /// relief-like field on `Grid::new(24)`, read from the grid cells and
 /// from rasters of 96 and 384 pixels. Raster rows are weighted by their
-/// band's area (`sin φ_top − sin φ_bottom`).
+/// band's area (`sin φ_top − sin φ_bottom`). The `2000·sin²(lat)` term
+/// gives the field a non-zero area mean, `2000/3 − 400` (the sine terms
+/// integrate to zero), so the mean check constrains something: the grid
+/// mean must match that analytic value too.
 ///
 /// A pixel averages the cells it covers, so for a smooth field a raster
 /// differs from the grid by the averaging error only, not by any
@@ -150,7 +153,8 @@ fn an_odd_width_panics() {
 fn two_widths_agree_on_area_statistics() {
     let h = |p: [f64; 3]| {
         let (lat, lon) = (p[2].asin(), p[1].atan2(p[0]));
-        (3000.0 * (3.0 * lon).sin() * lat.cos() + 1500.0 * lat.sin() - 400.0) as f32
+        (3000.0 * (3.0 * lon).sin() * lat.cos() + 1500.0 * lat.sin() + 2000.0 * lat.sin().powi(2)
+            - 400.0) as f32
     };
     let w = f32_world(24, |_, p| h(p));
     let g = w.grid();
@@ -165,6 +169,7 @@ fn two_widths_agree_on_area_statistics() {
         .sum::<f64>()
         / total;
 
+    let analytic_mean = 2000.0 / 3.0 - 400.0;
     let stats = |width: u32| {
         let r = project(&w, &id(), width).unwrap();
         let (mut sum, mut above, mut weight) = (0.0, 0.0, 0.0);
@@ -189,6 +194,10 @@ fn two_widths_agree_on_area_statistics() {
     let msg = format!(
         "grid ({grid_mean}, {grid_share}); 96 ({mean_a}, {share_a}); 384 ({mean_b}, {share_b}); \
          mean tol {mean_tol}"
+    );
+    assert!(
+        (grid_mean - analytic_mean).abs() < mean_tol,
+        "grid vs analytic mean: {msg}"
     );
     assert!(
         (mean_a - grid_mean).abs() < mean_tol,
