@@ -84,20 +84,27 @@ const CERES_CLEAR_SKY_OLR: f64 = 267.9;
 const CLEAR_SKY_OLR_TOLERANCE: f64 = 10.0;
 
 /// Calibration: a plausibility band for the forcing of a CO₂ doubling,
-/// W/m², not a like-for-like anchor. 3.7 W/m² is the IPCC TAR's best
-/// estimate, `5.35 ln 2` (Myhre, Highwood, Shine & Stordal 1998, Geophys.
-/// Res. Lett. 25, 2715, doi:10.1029/98GL01908): a global-mean, all-sky,
-/// stratosphere-adjusted forcing at the tropopause, where the test takes
-/// an instantaneous clear-sky change of the outgoing radiation of one
-/// column. The like-for-like quantity, the instantaneous clear-sky
-/// forcing at the top of the model for 287 to 574 ppm on the AFGL
-/// mid-latitude summer profile, is 2.80 W/m² (standard deviation 0.06)
-/// in the line-by-line codes of RTMIP (Collins et al. 2006, J. Geophys.
-/// Res. 111, D14317, doi:10.1029/2005JD006713, Table 8, case 2b-1a,
-/// "TOM ⟨F_lbl⟩"); the test column, with no ozone and a stratosphere
-/// isothermal at 217 K instead of the profile's warming one, gives
-/// 3.41 W/m², 0.61 above it. Which profile to anchor on is left to the
-/// pull request's calibration list.
+/// W/m², on the legacy test profile, not a like-for-like anchor. 3.7 W/m²
+/// is the IPCC TAR's best estimate, `5.35 ln 2` (Myhre, Highwood, Shine &
+/// Stordal 1998, Geophys. Res. Lett. 25, 2715, doi:10.1029/98GL01908): a
+/// global-mean, all-sky, stratosphere-adjusted forcing at the tropopause,
+/// where the test takes an instantaneous clear-sky change of the outgoing
+/// radiation of one column (3.41 W/m² for 280 to 560 ppm).
+///
+/// Known gap (issue #643): the like-for-like value, the instantaneous
+/// clear-sky forcing at the top of the model for 287 to 574 ppm on the
+/// AFGL mid-latitude summer profile (Anderson et al. 1986,
+/// AFGL-TR-86-0110), is 2.80 W/m² (standard deviation 0.06) in RTMIP's
+/// line-by-line codes (Collins et al. 2006, J. Geophys. Res. 111, D14317,
+/// doi:10.1029/2005JD006713, Table 8, case 2b-1a, "TOM ⟨F_lbl⟩"). On that
+/// profile, with RTMIP's 294 K surface, the column gives 3.01 W/m²,
+/// outside both Collins' 2.80 ± 0.12 (twice the line-by-line spread) and
+/// this band. The column departs from RTMIP's: it holds no ozone (RTMIP's
+/// holds the profile's O₃, §2.1, paragraph 15), N₂ stands in for the O₂
+/// RTMIP removes as CO₂ grows, and it sums 0-5000 cm⁻¹ where the
+/// line-by-line codes take 4-100 µm. Untested candidate causes: the
+/// missing ozone, the error of the k-distribution against line-by-line,
+/// and the table's CO₂ line shape or continuum.
 const DOUBLING_FORCING: f64 = 3.7;
 
 /// Calibration: the width of the plausibility band of
