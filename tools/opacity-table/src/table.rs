@@ -1,5 +1,5 @@
-//! The table's grid and its binary format (read by mapgen's
-//! `planet/ktable.rs`; documented in `crates/mapgen/data/OPACITY.md`).
+//! The table's grid and its binary format (read by the science crate's
+//! `planet/ktable.rs`; documented in `crates/science/data/OPACITY.md`).
 //!
 //! Little-endian throughout:
 //!

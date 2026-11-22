@@ -4,7 +4,7 @@
 //! reduced to g-points.
 //!
 //! ```text
-//! opacity-table [--shortwave] [--raw DIR] [--out FILE] [--bin-width CM]
+//! opacity-table [--shortwave | --continua] [--raw DIR] [--out FILE] [--bin-width CM]
 //!               [--top CM] [--temperatures K,K,…]
 //!               [--pressure-step DECADES] [--threads N]
 //! ```
@@ -12,7 +12,14 @@
 //! `--shortwave` builds the shortwave table instead (`shortwave.bin`):
 //! the bands of the albedo's stellar spectrum from 0.7 to 5 µm
 //! ([`shortwave_edges`]), with MT_CKD's water continuum binned in.
+//!
+//! `--continua` writes, instead of a table, the two text files the
+//! spectrum reads: `mt-ckd-water.tsv` (MT_CKD's water continuum at every
+//! 50 cm⁻¹) and `co2-cia.tsv` (HITRAN's CO₂–CO₂ collision-induced
+//! absorption on 20 cm⁻¹ cells), into `crates/science/data/` (or the
+//! directory of `--out`).
 
+mod cia;
 mod continuum;
 mod hitran;
 mod kdist;
@@ -129,8 +136,12 @@ struct Gas {
 struct Options {
     /// Whether to build the shortwave table ([`shortwave_edges`]).
     shortwave: bool,
+    /// Whether to write the continuum text files instead of a table.
+    continua: bool,
     raw: PathBuf,
     out: PathBuf,
+    /// Whether `--out` was given.
+    out_given: bool,
     bin_width_cm: f64,
     top_cm: f64,
     temperatures_k: Vec<f64>,
@@ -140,14 +151,17 @@ struct Options {
 
 fn options() -> Result<Options, String> {
     let shortwave = std::env::args().any(|a| a == "--shortwave");
+    let continua = std::env::args().any(|a| a == "--continua");
     let mut o = Options {
         shortwave,
+        continua,
         raw: PathBuf::from("tools/opacity-table/raw"),
         out: PathBuf::from(if shortwave {
             "crates/science/data/shortwave.bin"
         } else {
             "crates/science/data/opacity.bin"
         }),
+        out_given: false,
         bin_width_cm: 20.0,
         top_cm: if shortwave {
             *shortwave_edges().last().expect("edges")
@@ -162,13 +176,18 @@ fn options() -> Result<Options, String> {
         pressure_step: table::PRESSURE_STEP,
         threads: 4,
     };
-    let mut args = std::env::args().skip(1).filter(|a| a != "--shortwave");
+    let mut args = std::env::args()
+        .skip(1)
+        .filter(|a| a != "--shortwave" && a != "--continua");
     while let Some(flag) = args.next() {
         let value = args.next().ok_or(format!("{flag} needs a value"))?;
         let number = |v: &str| v.parse::<f64>().map_err(|e| format!("{v}: {e}"));
         match flag.as_str() {
             "--raw" => o.raw = value.into(),
-            "--out" => o.out = value.into(),
+            "--out" => {
+                o.out = value.into();
+                o.out_given = true;
+            }
             "--bin-width" => o.bin_width_cm = number(&value)?,
             "--top" => o.top_cm = number(&value)?,
             "--pressure-step" => o.pressure_step = number(&value)?,
@@ -353,8 +372,79 @@ fn main() {
     }
 }
 
+/// The directory of the continuum files: the default output directory,
+/// or the one `--out` names (its file name is then ignored).
+const CONTINUA_DIR: &str = "crates/science/data";
+
+/// Temperatures, K, of the columns of `co2-cia.tsv`: a project choice
+/// that spans the roto-translational band's 200-800 K sets (and the
+/// dimer bands' 192-500 K ones).
+const CIA_TEMPERATURES_K: [f64; 4] = [200.0, 300.0, 450.0, 800.0];
+
+/// Spacing, cm⁻¹, of the water continuum's nodes in `mt-ckd-water.tsv`,
+/// and the last of them.
+const WATER_NODES_CM: (f64, f64) = (50.0, 5000.0);
+
+/// Writes `mt-ckd-water.tsv` and `co2-cia.tsv` (`--continua`).
+fn write_continua(o: &Options) -> Result<(), String> {
+    let dir = if o.out_given {
+        o.out.parent().map(Path::to_path_buf).unwrap_or_default()
+    } else {
+        PathBuf::from(CONTINUA_DIR)
+    };
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let read = |name: &str| {
+        let path = o.raw.join(name);
+        std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    let nc = read("absco-ref_wv-mt-ckd.nc")?;
+    let water = netcdf::NetCdf::parse(&nc)
+        .and_then(|nc| continuum::WaterContinuum::from_netcdf(&nc))
+        .ok_or("absco-ref_wv-mt-ckd.nc: no water continuum")?;
+    let text = String::from_utf8(read("CO2-CO2_2024.cia")?).map_err(|e| e.to_string())?;
+    let cia = cia::Cia::parse(&text).ok_or("CO2-CO2_2024.cia: unreadable")?;
+
+    let mut tsv = String::from(
+        "# wavenumber_cm self_296K exponent foreign_296K\n\
+         # MT_CKD 4.3 water continuum (absco-ref_wv-mt-ckd.nc) at every 50 cm-1: wavenumber in cm-1;\n\
+         # self coefficient at 296 K and foreign coefficient at 296 K in cm2 per molecule per cm-1\n\
+         # (1013 mbar); self temperature exponent, dimensionless. Written by tools/opacity-table --continua.\n",
+    );
+    let nodes = water.nodes(WATER_NODES_CM.0, WATER_NODES_CM.1);
+    for (nu, own, exponent, foreign) in &nodes {
+        tsv += &format!("{nu:.1}\t{own:.3e}\t{exponent:.3}\t{foreign:.3e}\n");
+    }
+    write_file(&dir.join("mt-ckd-water.tsv"), &tsv)?;
+
+    let mut tsv = String::from(
+        "# cell_start_cm k_200K k_300K k_450K k_800K\n\
+         # HITRAN CO2-CO2_2024.cia binned on 20 cm-1 cells (trapezoid mean, nearest set per region):\n\
+         # cell start in cm-1; binary absorption coefficient in cm5 per molecule2 at 200, 300, 450 and 800 K.\n\
+         # Written by tools/opacity-table --continua.\n",
+    );
+    let cells = cia.binned(20.0, &CIA_TEMPERATURES_K);
+    for (start, k) in &cells {
+        tsv += &format!(
+            "{start:.1}\t{:.3e}\t{:.3e}\t{:.3e}\t{:.3e}\n",
+            k[0], k[1], k[2], k[3]
+        );
+    }
+    write_file(&dir.join("co2-cia.tsv"), &tsv)?;
+    eprintln!("{} water nodes, {} CIA cells", nodes.len(), cells.len());
+    Ok(())
+}
+
+fn write_file(path: &Path, text: &str) -> Result<(), String> {
+    std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    eprintln!("wrote {} ({} bytes)", path.display(), text.len());
+    Ok(())
+}
+
 fn run() -> Result<(), String> {
     let o = options()?;
+    if o.continua {
+        return write_continua(&o);
+    }
     let path = o.raw.join("contnm.f90");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let continuum = continuum::Co2Continuum::parse(&text)

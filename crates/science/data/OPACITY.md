@@ -153,7 +153,7 @@ and `cat raw/lines/co2_*.par`
   its share of the pressure, so that pure CO₂ (Venus, Mars, a thick CO₂
   air at the outer edge of the habitable zone) takes its self-broadened
   lines, some 1.3 times as wide as in air.
-- `mapgen` interpolates `ln k` linearly in `ln p` and in `T`. Past the
+- The science crate interpolates `ln k` linearly in `ln p` and in `T`. Past the
   grid it clamps the temperature, and scales `k` as `p` above 100 bar and
   below 1e-5 bar.
 
@@ -182,6 +182,32 @@ the continuum's 250 bins); `opacity-halved.bin` 1 204 292 bytes.
 `crates/science/src/radiation/ktable.rs` decodes and interpolates both this
 layout and the shortwave one below.
 
+## Continua
+
+Two text files hold the continua the spectrum reads beside the tables.
+`tools/opacity-table -- --continua` regenerates both from the raw
+downloads of `fetch.sh`, into this directory, and writes nothing else:
+
+- `mt-ckd-water.tsv`: MT_CKD 4.3's water continuum at every 50 cm⁻¹ from
+  0 to 5000 cm⁻¹ (101 rows): the file's own points at those wavenumbers,
+  not bin means (`self_absco_ref` at 296 K, `self_texp`,
+  `for_absco_ref` at 296 K, from `absco-ref_wv-mt-ckd.nc`, SHA-256 above),
+  printed to four significant digits.
+- `co2-cia.tsv`: HITRAN's CO₂–CO₂ collision-induced absorption,
+  `https://hitran.org/data/CIA/main/CO2-CO2_2024.cia` (HITRAN2024,
+  documented by Terragni et al. 2025 and `CIA_Readme_2024.pdf`; SHA-256
+  `9db0856cb008cb147728e3a945f818c60a02370442d492c38d7f8884c9cfadca`,
+  downloaded 2026-11-22). One row per 20 cm⁻¹ cell: the trapezoid mean of
+  the file's coefficient over the cell, at the 200, 300, 450 and 800 K
+  columns. Each of the file's bands (roto-translational 1-750 cm⁻¹,
+  dimers 1120-1850 cm⁻¹, 2510-2850, 2850-3250 and 3995-4500 cm⁻¹) takes
+  the set nearest each column's temperature, held at its warmest set
+  past it; a cell takes the first band it touches. Cells under
+  1e-50 cm⁵/molecule² at every temperature are left out.
+
+`fetch.sh` checks the SHA-256 of the three inputs and fails on a
+mismatch.
+
 ## Shortwave table
 
 `shortwave.bin` is built by `opacity-table --shortwave` from the same
@@ -190,8 +216,8 @@ line lists, partition sums and line shapes as `opacity.bin`:
 - **Bins:** the bands of the Bond albedo's stellar spectrum
   (`planet::albedo::spectrum`, 240 bands even in `ln λ` from 0.2 to
   5 µm), from the one that holds 0.7 µm to 5 µm: 147 bins over
-  2000-14 364 cm⁻¹, 27 to 193 cm⁻¹ wide. `mapgen` checks the table's
-  edges against its bands when it loads it.
+  2000-14 364 cm⁻¹, 27 to 193 cm⁻¹ wide. The science crate checks the
+  table's edges against its bands when it loads it.
 - **Grid:** the same 15 pressures and 4 sets; 13 temperatures, 150, 175,
   200, 225, 250, 275, 300, 325, 350, 400, 500, 650 and 900 K, so that the
   table stays under 2 MB.
@@ -200,9 +226,8 @@ line lists, partition sums and line shapes as `opacity.bin`:
   bin of the file's `self_absco_ref` and `for_absco_ref` and the
   coefficient-weighted mean of `self_texp` (read from
   `absco-ref_wv-mt-ckd.nc`, NetCDF classic).
-- **Not in it:** CO₂–CO₂ collision-induced absorption, which `mapgen`
-  takes from its longwave binning of HITRAN's `CO2-CO2_2024.cia`; ozone
-  and O₂.
+- **Not in it:** CO₂–CO₂ collision-induced absorption, which the science
+  crate takes from `co2-cia.tsv` (see Continua); ozone and O₂.
 
 Layout, little-endian, as `opacity.bin` but for these fields:
 
