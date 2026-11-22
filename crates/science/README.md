@@ -56,9 +56,9 @@ temperature (or, for water, along a path through the phase diagram):
   ice Ih, III, V, VI, VII, switching at the IAPWS 2011 triple points.
 
 `science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the
-melting pressures, the ice VI / ice VII boundary), each checked against its
-IAPWS verification table. Every value, its source and its fitted range are
-in the page [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
+melting, saturation and sublimation pressures, the ice VI / ice VII
+boundary), each checked against its IAPWS verification table. Every value,
+its source and its fitted range are in the page [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
 Limits to know: the laws are cold (no thermal pressure), the mantle has no
 transition-zone phases (-7.5 % / +3.5 % against PREM at 23.83 GPa), ices III,
 V and VI are 0 K curves, and water has nothing above 355 K.

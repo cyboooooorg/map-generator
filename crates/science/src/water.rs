@@ -7,6 +7,7 @@
 //! `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`,
 //! section 2.7.
 
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
 use crate::units::{Kelvin, KilogramPerCubicMetre, Pascal};
 
 /// Source: ice Ih - ice III - liquid triple point, 251.165 K (IAPWS
@@ -721,6 +722,149 @@ pub fn ice_vi_vii_pressure(t: Kelvin) -> Pascal {
     Pascal(0.5 * (low + high))
 }
 
+// ------------------------------------------- saturation and sublimation
+
+/// Source: critical temperature, 647.096 K (IAPWS R6-95(2018), eq. 1;
+/// IAPWS SR1-86(1992), section 2), where the saturation curve ends.
+pub const CRITICAL_POINT_TEMPERATURE: Kelvin = Kelvin(CRITICAL_TEMPERATURE);
+/// Source: critical pressure, 22.064 MPa (IAPWS SR1-86(1992), section 2,
+/// identical to the IAPS 1983 statement of the critical point).
+pub const CRITICAL_PRESSURE: Pascal = Pascal(22.064e6);
+
+/// Source: coefficients `a1` to `a6` of the vapour pressure over liquid
+/// water (IAPWS SR1-86(1992), eq. 1; Wagner and Pruss 1993,
+/// doi:10.1063/1.555926).
+const SATURATION_A: [f64; 6] = [
+    -7.859_517_83,
+    1.844_082_59,
+    -11.786_649_7,
+    22.680_741_1,
+    -15.961_871_9,
+    1.801_225_02,
+];
+/// Source: exponents of `tau` in the vapour pressure over liquid water,
+/// 1, 1.5, 3, 3.5, 4 and 7.5 (IAPWS SR1-86(1992), eq. 1).
+const SATURATION_N: [f64; 6] = [1.0, 1.5, 3.0, 3.5, 4.0, 7.5];
+
+/// Source: coefficients `a1` to `a3` of the sublimation pressure of ice Ih
+/// (IAPWS R14-08(2011), eq. 6; Wagner et al. 2011, doi:10.1063/1.3657937,
+/// Table 3).
+const SUBLIMATION_A: [f64; 3] = [-0.212_144_006e2, 0.273_203_819e2, -0.610_598_130e1];
+/// Source: exponents `b1` to `b3` of the sublimation pressure of ice Ih
+/// (IAPWS R14-08(2011), eq. 6; Wagner et al. 2011, Table 3).
+const SUBLIMATION_B: [f64; 3] = [0.333_333_333e-2, 0.120_666_667e1, 0.170_333_333e1];
+
+/// The sum `f = sum a_i tau^n_i` of the vapour pressure over liquid,
+/// `ln(p / pc) = (Tc / T) f` with `tau = 1 - T / Tc` (IAPWS SR1-86(1992),
+/// eq. 1), and its derivative `df / dtau`.
+fn saturation_sum(t_k: f64) -> (f64, f64) {
+    let tau = 1.0 - t_k / CRITICAL_TEMPERATURE;
+    let mut f = 0.0;
+    let mut slope = 0.0;
+    for (a, n) in SATURATION_A.iter().zip(SATURATION_N) {
+        f += a * tau.powf(n);
+        slope += a * n * tau.powf(n - 1.0);
+    }
+    (f, slope)
+}
+
+/// Vapour pressure over liquid water, Pa, at `t_k` (IAPWS SR1-86(1992),
+/// eq. 1), valid from 273.16 K to 647.096 K.
+fn saturation_pa(t_k: f64) -> f64 {
+    let (f, _) = saturation_sum(t_k);
+    CRITICAL_PRESSURE.0 * (CRITICAL_TEMPERATURE / t_k * f).exp()
+}
+
+/// Sublimation pressure of ice Ih, Pa, at `t_k`:
+/// `ln(p / pt) = theta^-1 sum a_i theta^b_i`, `theta = T / 273.16 K`
+/// (IAPWS R14-08(2011), eq. 6), valid from 50 K to 273.16 K. It is 0 at
+/// and below 0 K, where the equation has no value.
+fn sublimation_pa(t_k: f64) -> f64 {
+    if t_k.is_nan() || t_k <= 0.0 {
+        return 0.0;
+    }
+    let theta = t_k / TRIPLE_POINT_TEMPERATURE.0;
+    let mut sum = 0.0;
+    for (a, b) in SUBLIMATION_A.iter().zip(SUBLIMATION_B) {
+        sum += a * theta.powf(b);
+    }
+    TRIPLE_POINT_PRESSURE.0 * (sum / theta).exp()
+}
+
+/// Vapour pressure over liquid water at `t` (Wagner and Pruss 1993,
+/// IAPWS SR1-86(1992), eq. 1), valid from the triple point (273.16 K) to
+/// the critical point (647.096 K).
+pub fn saturation_pressure(t: Kelvin) -> Pascal {
+    Pascal(saturation_pa(t.0))
+}
+
+/// Sublimation pressure of ice Ih at `t` (Wagner et al. 2011, IAPWS
+/// R14-08(2011), eq. 6), valid from 50 K to the triple point; 0 at 0 K.
+pub fn sublimation_pressure(t: Kelvin) -> Pascal {
+    Pascal(sublimation_pa(t.0))
+}
+
+/// Pressure of water vapour in equilibrium with its condensate at `t`:
+/// [`vapour_saturation_bar`] in pascals.
+pub fn vapour_saturation_pressure(t: Kelvin) -> Pascal {
+    Pascal(vapour_saturation_bar(t.0) * PASCALS_PER_BAR)
+}
+
+/// Pressure of water vapour in equilibrium with its condensate at `t_k`,
+/// bar: the sublimation curve of ice Ih below the triple point, the
+/// saturation curve over liquid up to the critical point, and the
+/// critical pressure above it, where no liquid exists (the legacy clamp,
+/// `water_saturation_bar`). 0 at and below 0 K.
+pub(crate) fn vapour_saturation_bar(t_k: f64) -> f64 {
+    let pa = if t_k.is_nan() || t_k < TRIPLE_POINT_TEMPERATURE.0 {
+        sublimation_pa(t_k)
+    } else if t_k < CRITICAL_TEMPERATURE {
+        saturation_pa(t_k)
+    } else {
+        CRITICAL_PRESSURE.0
+    };
+    pa / PASCALS_PER_BAR
+}
+
+/// Molar latent heat of water, J/mol, at `t_k`, taken from the slope of
+/// [`vapour_saturation_bar`] by Clausius-Clapeyron for an ideal vapour over
+/// a condensate of negligible volume, `L = R T^2 d ln e_s / dT`
+/// (Pierrehumbert 2010, section 2.6), the derivative taken analytically
+/// from the equation of each branch: sublimation below the triple point,
+/// vaporisation above. The moist adiabat that uses it then agrees with the
+/// curve, as the legacy model's single latent heat did. Above the critical
+/// temperature it keeps its value there (the legacy clamp). The ideal-vapour
+/// form does not fall to zero at the critical point as the real latent heat
+/// does: it gives `-R Tc a1`, 42.3 kJ/mol.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the moist adiabat of the longwave column reads it"
+    )
+)]
+pub(crate) fn vapour_latent_j_mol(t_k: f64) -> f64 {
+    // A NaN temperature reads as 0 K, like the pressure's.
+    let t = if t_k.is_nan() {
+        0.0
+    } else {
+        t_k.clamp(0.0, CRITICAL_TEMPERATURE)
+    };
+    if t < TRIPLE_POINT_TEMPERATURE.0 {
+        // d ln p / dT = (1/Tt) sum a_i (b_i - 1) theta^(b_i - 2).
+        let theta = t / TRIPLE_POINT_TEMPERATURE.0;
+        let mut sum = 0.0;
+        for (a, b) in SUBLIMATION_A.iter().zip(SUBLIMATION_B) {
+            sum += a * (b - 1.0) * theta.powf(b);
+        }
+        MOLAR_GAS_CONSTANT * TRIPLE_POINT_TEMPERATURE.0 * sum
+    } else {
+        // d ln p / dT = -(Tc f) / T^2 - f'(tau) / T.
+        let (f, slope) = saturation_sum(t);
+        MOLAR_GAS_CONSTANT * (-CRITICAL_TEMPERATURE * f - t * slope)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -775,6 +919,67 @@ mod tests {
     /// triple point, a tenth of the 0.1 K resolution of the printed fit
     /// (four or five significant figures).
     const BOUNDARY_TOLERANCE: f64 = 0.01;
+
+    /// Source: IAPWS SR1-86(1992), Table 1: (T in K, vapour pressure in Pa)
+    /// at the triple point, the normal boiling point and the critical
+    /// point.
+    const SATURATION_CHECKS: [(f64, f64); 3] = [
+        (273.16, 611.657),
+        (373.124_3, 0.101_325e6),
+        (647.096, 22.064e6),
+    ];
+    /// Source: slope of the vapour pressure at the triple point,
+    /// 44.436 693 Pa/K (IAPWS SR1-86(1992), Table 1).
+    const SATURATION_SLOPE_AT_TRIPLE_POINT: f64 = 44.436_693;
+    /// Source: sublimation pressure of ice Ih, 8.947 35e-6 MPa at 230 K
+    /// (IAPWS R14-08(2011), Table 3; Wagner et al. 2011, section 3), in Pa.
+    const SUBLIMATION_CHECK: (f64, f64) = (230.0, 8.947_35);
+    /// Definition: relative tolerance against the eight printed digits of
+    /// the slope check.
+    const EIGHT_DIGITS: f64 = 1e-7;
+    /// Definition: relative tolerance at which the two curves must meet at
+    /// the triple point and the critical pressure be reached.
+    const FOUR_DIGITS: f64 = 1e-4;
+    /// Definition: temperatures past the critical point, K: just past it,
+    /// the hottest legacy steam case (1500 K) and twice that.
+    const PAST_THE_CRITICAL_POINT: [f64; 3] = [700.0, 1500.0, 3000.0];
+    /// Definition: a cold surface, 1 K, far below the 50 K floor of the
+    /// sublimation curve.
+    const COLD: f64 = 1.0;
+
+    /// Source: NIST Chemistry WebBook (SRD 69, Lemmon, McLinden and
+    /// Friend), saturation table of water at 300 K computed from IAPWS-95
+    /// (Wagner and Pruss 2002): specific enthalpies of the saturated liquid
+    /// 112.564 86 kJ/kg and vapour 2549.854 1 kJ/kg, here (T in K,
+    /// h' in J/kg, h'' in J/kg). Fetched 2026-11-22 from
+    /// <https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=SatP&TLow=300&THigh=300&TInc=1&TUnit=K&HUnit=kJ%2Fkg>.
+    const VAPORISATION_300_K: (f64, f64, f64) = (300.0, 112.564_86e3, 2_549.854_1e3);
+    /// Source: IAPWS R6-95(2018), Table 8: saturated liquid and vapour at
+    /// 275 K, h' = 0.775 972 202e1 kJ/kg, h'' = 0.250 428 995e4 kJ/kg, here
+    /// (T in K, h' in J/kg, h'' in J/kg).
+    const VAPORISATION_275_K: (f64, f64, f64) = (275.0, 0.775_972_202e4, 0.250_428_995e7);
+    /// Source: specific enthalpy of the saturated vapour at the triple
+    /// point, 2500.5e3 J/kg (IAPWS SR1-86(1992), Table 1), on the IAPWS-95
+    /// reference state (internal energy and entropy of the liquid zero at
+    /// the triple point).
+    const VAPOUR_ENTHALPY_AT_TRIPLE_POINT: f64 = 2500.5e3;
+    /// Source: specific enthalpy of ice Ih at the triple point,
+    /// -0.333 444 254 079e6 J/kg, with the IAPWS-95 value of `s0` (IAPWS
+    /// R10-06(2009), Table 6), on the same reference state as
+    /// [`VAPOUR_ENTHALPY_AT_TRIPLE_POINT`].
+    const ICE_ENTHALPY_AT_TRIPLE_POINT: f64 = -0.333_444_254_079e6;
+    /// Source: latent heat of sublimation of ice, J/mol, fitted to the
+    /// IAPWS-95 vapour and the Feistel and Wagner ice Ih Gibbs function:
+    /// `L = c0 + c1 T + c2 T^2 + c3 exp(-(T / c4)^2)`, T > 30 K, with
+    /// `[c0, c1, c2, c3, c4]` (Murphy and Koop 2005, Q. J. R. Meteorol. Soc.
+    /// 131, 1539, doi:10.1256/qj.04.94, eq. 5). Wagner et al. 2011 tabulate
+    /// no sublimation enthalpy.
+    const ICE_LATENT_FIT: [f64; 5] = [46_782.5, 35.892_5, -0.074_14, 541.5, 123.75];
+    /// Definition: temperature of the sublimation check, 250 K.
+    const ICE_LATENT_CHECK_TEMPERATURE: f64 = 250.0;
+    /// Definition: the stop tolerance of the plan on the latent heat taken
+    /// from the curve's slope, 2 %.
+    const LATENT_TOLERANCE: f64 = 0.02;
 
     fn close(a: f64, b: f64, tolerance: f64) -> bool {
         (a / b - 1.0).abs() < tolerance
@@ -840,5 +1045,96 @@ mod tests {
         );
         let p = ice_vi_vii_pressure(t);
         assert!(close(p.0, VI_VII_LIQUID_PRESSURE.0, SIX_DIGITS), "{p:?}");
+    }
+
+    #[test]
+    fn saturation_matches_iapws() {
+        for (t, p) in SATURATION_CHECKS {
+            let got = saturation_pressure(Kelvin(t));
+            assert!(close(got.0, p, SIX_DIGITS), "{t} K: {got:?}");
+        }
+        let triple = saturation_pressure(TRIPLE_POINT_TEMPERATURE);
+        assert!(
+            close(triple.0, TRIPLE_POINT_PRESSURE.0, FOUR_DIGITS),
+            "{triple:?}"
+        );
+        let critical = saturation_pressure(CRITICAL_POINT_TEMPERATURE);
+        assert!(
+            close(critical.0, CRITICAL_PRESSURE.0, FOUR_DIGITS),
+            "{critical:?}"
+        );
+    }
+
+    #[test]
+    fn sublimation_matches_iapws() {
+        let (t, p) = SUBLIMATION_CHECK;
+        let got = sublimation_pressure(Kelvin(t));
+        assert!(close(got.0, p, SIX_DIGITS), "{got:?}");
+        let triple = sublimation_pressure(TRIPLE_POINT_TEMPERATURE);
+        assert!(
+            close(triple.0, TRIPLE_POINT_PRESSURE.0, FOUR_DIGITS),
+            "{triple:?}"
+        );
+    }
+
+    #[test]
+    fn vapour_saturation_is_continuous() {
+        let ice = sublimation_pressure(TRIPLE_POINT_TEMPERATURE);
+        let liquid = saturation_pressure(TRIPLE_POINT_TEMPERATURE);
+        assert!(close(ice.0, liquid.0, FOUR_DIGITS), "{ice:?} {liquid:?}");
+        let joined = vapour_saturation_pressure(TRIPLE_POINT_TEMPERATURE);
+        assert!(close(joined.0, liquid.0, FOUR_DIGITS), "{joined:?}");
+        let critical = vapour_saturation_pressure(CRITICAL_POINT_TEMPERATURE);
+        assert!(
+            close(critical.0, CRITICAL_PRESSURE.0, FOUR_DIGITS),
+            "{critical:?}"
+        );
+        for t in PAST_THE_CRITICAL_POINT {
+            let p = vapour_saturation_pressure(Kelvin(t));
+            assert!(p.0.is_finite(), "{t} K: {p:?}");
+            assert_eq!(p, CRITICAL_PRESSURE, "{t} K");
+            assert!(vapour_latent_j_mol(t).is_finite(), "{t} K");
+        }
+        for t in [COLD, 0.0, -COLD, f64::NAN] {
+            let p = vapour_saturation_pressure(Kelvin(t));
+            assert!(p.0.is_finite() && p.0 >= 0.0, "{t} K: {p:?}");
+            assert!(vapour_latent_j_mol(t).is_finite(), "{t} K");
+        }
+    }
+
+    #[test]
+    fn latent_heat_is_the_curves_slope() {
+        // The slope at the triple point, p L / (R T^2), against IAPWS.
+        let t = TRIPLE_POINT_TEMPERATURE.0;
+        let slope = saturation_pressure(TRIPLE_POINT_TEMPERATURE).0 * vapour_latent_j_mol(t)
+            / (MOLAR_GAS_CONSTANT * t * t);
+        assert!(
+            close(slope, SATURATION_SLOPE_AT_TRIPLE_POINT, EIGHT_DIGITS),
+            "{slope}"
+        );
+        // Definition: the molar mass of IAPWS-95, R_m / R, kg/mol.
+        let molar_mass = MOLAR_GAS_CONSTANT / SPECIFIC_GAS_CONSTANT;
+        for (t, liquid, vapour) in [VAPORISATION_300_K, VAPORISATION_275_K] {
+            let latent = vapour_latent_j_mol(t);
+            let table = (vapour - liquid) * molar_mass;
+            assert!(
+                close(latent, table, LATENT_TOLERANCE),
+                "{t} K: {latent} against {table}"
+            );
+        }
+        let [c0, c1, c2, c3, c4] = ICE_LATENT_FIT;
+        let t = ICE_LATENT_CHECK_TEMPERATURE;
+        let fit = c0 + c1 * t + c2 * t * t + c3 * (-(t / c4).powi(2)).exp();
+        let latent = vapour_latent_j_mol(t);
+        assert!(
+            close(latent, fit, LATENT_TOLERANCE),
+            "{latent} against {fit}"
+        );
+        let below = vapour_latent_j_mol(TRIPLE_POINT_TEMPERATURE.0.next_down());
+        let table = (VAPOUR_ENTHALPY_AT_TRIPLE_POINT - ICE_ENTHALPY_AT_TRIPLE_POINT) * molar_mass;
+        assert!(
+            close(below, table, LATENT_TOLERANCE),
+            "{below} against {table}"
+        );
     }
 }

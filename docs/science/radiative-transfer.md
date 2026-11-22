@@ -148,6 +148,16 @@ the whole range up to the critical point, 647.096 K and 220.64 bar (IAPWS
 R6-95); below the triple point, the sublimation curve of ice Ih (Wagner
 et al. 2011, IAPWS R14-08(2011)).
 
+The moist adiabat takes its latent heat from the slope of the same curve,
+$L = R T^2\,d\ln e_s/dT$ (Clausius–Clapeyron for an ideal vapour over a
+condensate of negligible volume), so that the two always agree, as the
+legacy single latent heat made them. Against the tables it is within
+0.2 %: 43.99 kJ/mol at 300 K against 43.91 from IAPWS-95, and 51.14 kJ/mol
+at 250 K against 51.13 for ice (Murphy & Koop 2005, *Q. J. R. Meteorol.
+Soc.* 131, 1539, doi:10.1256/qj.04.94, their eq. 5). The ideal-vapour form
+does not fall to zero at the critical point as the real latent heat does:
+it holds 42.3 kJ/mol there and above.
+
 A real troposphere is not saturated up to its top. Manabe & Wetherald
 (1967) set the relative humidity to fall with the pressure $p$, from
 its surface value $RH_s$ (0.77, from their model), with $Q = p/p_s$:
