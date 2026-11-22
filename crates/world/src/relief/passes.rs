@@ -19,7 +19,7 @@ use science::relief::highlands::{DRY_PLAINS, HIGHLANDS, MOUNTAIN_RELIEF, highlan
 use science::relief::plates::arc_band_width;
 use science::relief::spectrum::{
     Analogue, Province, REFERENCE_WAVELENGTH, amplitude, analogue_relief_scale, hurst, octaves,
-    persistence, relief_scale,
+    outer_scale, persistence, relief_scale,
 };
 use science::relief::volcanoes::{
     ARC_CONE_DENSITY, CONE_PRESENCE, CONE_SPACING, Cone, EARTH_VOLCANIC_INTENSITY, cone_size,
@@ -30,10 +30,11 @@ use std::collections::BTreeSet;
 use std::f64::consts::{FRAC_PI_2, PI};
 use timeline::{PlanetState, Seed, TectonicRegime};
 
-/// Definition: the frequency of the first octave of the continents' noise
-/// on the unit sphere, a sampling choice: the first octave's wavelength is
-/// the radius of the body, and [`octaves`] is counted from it down to two
-/// cells.
+/// Definition: the frequency of the first octave of a noise without an
+/// outer scale (the mountains' ridged noise, and the continents' noise of
+/// an analogue whose [`outer_scale`] is unknown) on the unit sphere, a
+/// sampling choice: the first octave's wavelength is the radius of the
+/// body, and [`octaves`] is counted from it down to two cells.
 const BASE_FREQUENCY: f64 = 1.0;
 
 /// Definition: the most cells of which the noise's fluctuation is measured
@@ -138,9 +139,13 @@ fn displaced(p: [f64; 3], angle: f64) -> [f64; 3] {
 /// The noise of the continents in metres and the mask of the thick crust
 /// (continental, or highland, cells). Uses `seed` for the noise.
 ///
-/// The noise is the fBm of the analogue's Hurst exponent, of unit variance.
-/// The crust line is its area quantile that leaves [`continental_share`]
-/// of the area above it; the cells above are the thick crust.
+/// The noise is the fBm of the analogue's Hurst exponent, of unit variance,
+/// drawn per province ([`province_spectrum`]): its octaves start at the
+/// province's [`outer_scale`], beyond which the measured relief adds no
+/// variance. The crust line is the thick province's fBm cut at the area
+/// quantile that leaves [`continental_share`] of the area above it; the
+/// cells above are the thick crust, and take that fBm, the others the thin
+/// province's (the same field when both start at the same wavelength).
 ///
 /// On a world with liquid the noise is then centred within each province:
 /// the area-weighted mean of the province is subtracted from its cells, so
@@ -157,15 +162,15 @@ fn displaced(p: [f64; 3], angle: f64) -> [f64; 3] {
 /// times [`relief_scale`], not centred.
 pub(crate) fn continent_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Vec<f32>, Vec<bool>) {
     let h = hurst(forcing.analogue);
-    let spectrum = Spectrum {
-        hurst: h,
-        octaves: octaves(forcing.radius, Metre(cell_length(grid, forcing.radius))),
-        base_frequency: BASE_FREQUENCY,
+    let field = |province: Province| {
+        let spectrum = province_spectrum(grid, forcing, province);
+        let octs = Octaves::new(seed, &spectrum);
+        let unit: Vec<f32> = (0..grid.cell_count())
+            .map(|k| octs.fbm(grid.point(k)) as f32)
+            .collect();
+        (spectrum, octs, unit)
     };
-    let octs = Octaves::new(seed, &spectrum);
-    let unit: Vec<f32> = (0..grid.cell_count())
-        .map(|k| octs.fbm(grid.point(k)) as f32)
-        .collect();
+    let (thick_spectrum, thick_octs, unit) = field(Province::Thick);
     let share = continental_share(forcing.analogue).get();
     let line = area_quantile(grid, &unit, 1.0 - share);
     let mask: Vec<bool> = unit.iter().map(|&v| v > line).collect();
@@ -179,11 +184,20 @@ pub(crate) fn continent_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Ve
             .collect();
         return (noise, mask);
     }
-    let haar = haar_fluctuation(grid, &octs, forcing, h);
+    let (thin_octs, thin_unit) =
+        if province_spectrum(grid, forcing, Province::Thin) == thick_spectrum {
+            (None, None)
+        } else {
+            let (_, octs, unit) = field(Province::Thin);
+            (Some(octs), Some(unit))
+        };
+    let thin_octs = thin_octs.as_ref().unwrap_or(&thick_octs);
+    let thin_unit = thin_unit.as_deref().unwrap_or(&unit);
     let gravity = analogue_relief_scale(forcing.gravity, forcing.analogue);
-    let level = |province: Province| {
+    let level = |province: Province, octs: &Octaves, values: &[f32]| {
         let thick = province == Province::Thick;
-        let mean = province_mean(grid, &unit, &mask, thick);
+        let mean = province_mean(grid, values, &mask, thick);
+        let haar = haar_fluctuation(grid, octs, forcing, h);
         let scale = if haar > 0.0 {
             amplitude(forcing.analogue, province).0 * gravity / haar
         } else {
@@ -191,14 +205,33 @@ pub(crate) fn continent_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Ve
         };
         (mean, scale)
     };
-    let (thick, thin) = (level(Province::Thick), level(Province::Thin));
+    let thick = level(Province::Thick, &thick_octs, &unit);
+    let thin = level(Province::Thin, thin_octs, thin_unit);
     let noise = (0..grid.cell_count())
         .map(|k| {
-            let (mean, scale) = if mask[k] { thick } else { thin };
-            ((f64::from(unit[k]) - mean) * scale) as f32
+            let ((mean, scale), value) = if mask[k] {
+                (thick, unit[k])
+            } else {
+                (thin, thin_unit[k])
+            };
+            ((f64::from(value) - mean) * scale) as f32
         })
         .collect();
     (noise, mask)
+}
+
+/// The spectrum of the continents' fBm in `province`: the analogue's Hurst
+/// exponent, and octaves from the province's [`outer_scale`] (at most the
+/// body's radius, where a noise without an outer scale starts,
+/// [`BASE_FREQUENCY`]) down to two cells.
+pub(crate) fn province_spectrum(grid: &Grid, forcing: &Forcing, province: Province) -> Spectrum {
+    let longest = outer_scale(forcing.analogue, province)
+        .map_or(forcing.radius.0, |scale| scale.0.min(forcing.radius.0));
+    Spectrum {
+        hurst: hurst(forcing.analogue),
+        octaves: octaves(Metre(longest), Metre(cell_length(grid, forcing.radius))),
+        base_frequency: BASE_FREQUENCY * forcing.radius.0 / longest,
+    }
 }
 
 /// The area-weighted mean of `values` over the cells whose `mask` is `on`;

@@ -32,9 +32,10 @@ pub fn persistence(hurst: f64) -> f64 {
 }
 
 /// Definition: the grid's Nyquist limit. Number of octaves from the
-/// circumference down to a wavelength of two cells, at least 1.
-pub fn octaves(circumference: Metre, cell: Metre) -> u32 {
-    let ratio = circumference.0 / (2.0 * cell.0);
+/// longest wavelength (the first octave's, [`outer_scale`] for a relief
+/// noise) down to a wavelength of two cells, at least 1.
+pub fn octaves(longest: Metre, cell: Metre) -> u32 {
+    let ratio = longest.0 / (2.0 * cell.0);
     if ratio < 1.0 {
         return 1;
     }
@@ -72,6 +73,28 @@ pub fn amplitude(analogue: Analogue, province: Province) -> Metre {
         (Analogue::Earth, Province::Thick) => Metre(131.0),
         (Analogue::Earth, Province::Thin) => Metre(246.0),
         (Analogue::Mars, _) => Metre(233.0),
+    }
+}
+
+/// Source: the outer scale of the analogue's topography within a province,
+/// the lag at which the mean Haar fluctuation (the statistic of
+/// [`amplitude`]) stops growing and turns over, measured on whole meridian
+/// great circles by the study's `scripts/etopo_outer_scale.py` (ETOPO
+/// 2022, 0.1°) and `scripts/mola_outer_scale.py` (MOLA MEGDR, 0.25°),
+/// `docs/superpowers/studies/2026-11-22-relief/topography.md`. Earth's
+/// sea floor (windows deeper than 200 m) peaks at 607 m between 1.5 and
+/// 1.9 Mm, and its land (windows above 0 m) at 1002 m between 4.4 and
+/// 4.8 Mm: 1600 and 4800 km. `None` for Mars: its whole surface (the
+/// dichotomy is hemispheric) and its lowlands grow up to the last lag the
+/// windows allow; only its highlands level off, at about 1.0 km between
+/// 3.2 and 3.6 Mm, close to the radius (3.39 Mm) where an unbounded noise
+/// already starts. Beyond it the relief adds no variance: a relief noise's
+/// octaves start at this wavelength.
+pub fn outer_scale(analogue: Analogue, province: Province) -> Option<Metre> {
+    match (analogue, province) {
+        (Analogue::Earth, Province::Thick) => Some(Metre(4800e3)),
+        (Analogue::Earth, Province::Thin) => Some(Metre(1600e3)),
+        (Analogue::Mars, _) => None,
     }
 }
 

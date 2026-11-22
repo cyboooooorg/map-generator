@@ -101,6 +101,67 @@ The retained amplitude is a Haar fluctuation, not a standard deviation:
 the noise is scaled by measuring its own Haar fluctuation at the
 reference lag, never by equating the two.
 
+## Outer scale
+
+The fluctuation cannot grow forever: beyond some lag, the *outer scale*,
+the relief adds no variance, and a noise whose octaves start at one
+radius has too much of it at large scale (the first census's deep sea
+floor). I measured the same Haar statistic from 100 km to half the
+circumference, on whole meridian great circles (a meridian and its
+antimeridian, cyclic), whole surface and per province (windows wholly in
+it, as above) [V, measured, `scripts/etopo_outer_scale.py`,
+`scripts/mola_outer_scale.py`; n the number of windows]:
+
+| Lag (km) | Earth, all (m) | Earth, land (m) | n | Earth, sea floor (m) | n |
+| --- | --- | --- | --- | --- | --- |
+| 111 | 230 | 137 | 338 379 | 255 | 620 672 |
+| 400 | 481 | 272 | 292 887 | 423 | 567 637 |
+| 1001 | 846 | 471 | 225 794 | 567 | 483 559 |
+| 1401 | 1033 | 565 | 190 628 | 601 | 435 953 |
+| 1601 | 1115 | 605 | 174 647 | **607** | 413 522 |
+| 1801 | 1191 | 641 | 159 451 | 606 | 391 701 |
+| 2002 | 1263 | 674 | 144 930 | 603 | 371 258 |
+| 2802 | 1518 | 812 | 95 738 | 580 | 301 919 |
+| 3603 | 1732 | 942 | 53 504 | 567 | 245 960 |
+| 4403 | 1898 | 999 | 26 349 | 555 | 201 100 |
+| 4804 | 1963 | **1002** | 18 639 | 545 | 181 399 |
+| 5604 | 2056 | 950 | 8 526 | 519 | 146 877 |
+| 6405 | 2104 | 792 | 2 826 | 489 | 116 663 |
+| 8006 | **2127** | | 0 | 418 | 70 560 |
+| 12 009 | 2038 | | 0 | 374 | 17 171 |
+| 20 015 | 1663 | | 0 | | 0 |
+
+| Lag (km) | Mars, all (m) | Mars, highlands (m) | n | Mars, lowlands (m) | n |
+| --- | --- | --- | --- | --- | --- |
+| 118 | 253 | 286 | 535 590 | 94 | 307 976 |
+| 1006 | 851 | 703 | 438 583 | 278 | 201 730 |
+| 2011 | 1249 | 910 | 360 698 | 375 | 106 223 |
+| 3195 | 1527 | 1008 | 288 028 | 435 | 38 417 |
+| 3609 | 1603 | **1011** | 266 200 | 444 | 23 542 |
+| 4792 | 1818 | 980 | 208 391 | 539 | 947 |
+| 6389 | 2127 | 981 | 132 030 | | 0 |
+| 7986 | 2440 | 1005 | 66 613 | | 0 |
+| 10 648 | 2857 | 543 | 2 924 | | 0 |
+
+- **Earth's sea floor** levels off at 601-607 m from 1.4 to 2.0 Mm,
+  its maximum at 1.6-1.7 Mm, then falls: outer scale **1600 km**
+  [D, measured].
+- **Earth's land** levels off at 999-1002 m from 4.4 to 4.8 Mm, then
+  falls: outer scale **4800 km** [D, measured]. Few windows lie wholly on
+  land beyond 4 Mm (18 639 at 4.8 Mm against 338 379 at 111 km), so the
+  turnover rests on the largest continents (Eurasia, Africa, the Americas,
+  Antarctica's ice sheet).
+- **Earth's whole surface** grows to 2127 m at 8 Mm: it carries the
+  continent-ocean step, which the model builds apart (Airy), so it is not
+  the noise's outer scale.
+- **Mars** has none as a whole: the whole surface grows up to half the
+  circumference (the dichotomy is hemispheric), the lowlands as far as
+  their windows reach. The highlands alone level off near 1.0 km from 3.2
+  to 3.6 Mm, about Mars's radius (3.39 Mm), where a noise without outer
+  scale already starts.
+- The two Earth provinces disagree by a factor 3, so the outer scale is
+  kept per province, not one value per body.
+
 ## Coastlines
 
 The level set of a self-affine surface of Hurst exponent H has a fractal

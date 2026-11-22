@@ -166,13 +166,19 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    relief takes: Earth with plates, Mars for a stagnant, episodic or
    heat-pipe lid (a calibration, below).
 2. **Continents.** A fractal noise over each cell's position on the
-   sphere, lacunarity 2, persistence $2^{-H}$, from one wavelength per
-   circumference down to two grid cells. $H$ is the analogue's measured
-   Hurst exponent above 10 km, 0.479 for Earth and 0.53 for Mars
-   (Landais, Schmidt & Lovejoy 2019), where the legacy's persistence of
-   0.5 meant $H = 1$, too smooth, and rounded its coasts. The crust line
-   is the area quantile of the noise that leaves the analogue's
-   thick-crust share above it, 41 % (Cogley 1984) or 58 % (Marinova et
+   sphere, lacunarity 2, persistence $2^{-H}$, from the analogue's outer
+   scale down to two grid cells. The outer scale is the lag beyond which
+   the measured relief stops growing, per crust: on Earth 4800 km on land
+   and 1600 km on the sea floor (ETOPO 2022, the mean Haar fluctuation
+   peaks there and turns over), so each crust draws its own noise. Mars
+   has none (its whole surface and lowlands keep growing, the dichotomy
+   being hemispheric): its noise starts at one radius, as does any
+   body's whose radius is shorter than the outer scale. $H$ is the
+   analogue's measured Hurst exponent above 10 km, 0.479 for Earth and
+   0.53 for Mars (Landais, Schmidt & Lovejoy 2019), where the legacy's
+   persistence of 0.5 meant $H = 1$, too smooth, and rounded its coasts.
+   The crust line is the area quantile of the thick crust's noise that
+   leaves the analogue's thick-crust share above it, 41 % (Cogley 1984) or 58 % (Marinova et
    al. 2008). On a world with liquid the noise is then centred within
    each crust (its area-weighted mean removed), so that the step between
    the crusts is Airy's alone: the crust line cuts the noise itself, and
