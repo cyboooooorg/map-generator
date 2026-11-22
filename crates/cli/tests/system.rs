@@ -102,3 +102,38 @@ fn explain_errors_exit_1() {
         stderr(&output)
     );
 }
+
+#[test]
+fn a_negative_host_mass_reaches_the_draw() {
+    let output = run(&["--seed", "1", "--host-mass", "-1"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("system.host-mass-out-of-range"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn a_closed_pipe_is_not_a_panic() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_map-generator"))
+        .args(["system", "--seed", "35", "--archetype", "jupiter-like=1"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the binary runs");
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("the binary ends");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+}
+
+#[test]
+fn explain_a_code_held_by_no_field_names_its_dependents() {
+    let output = run(&["--seed", "1", "--explain", "system.draw.break-up-fraction"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("held by no field; values that depend on it: /"),
+        "{}",
+        stderr(&output)
+    );
+}

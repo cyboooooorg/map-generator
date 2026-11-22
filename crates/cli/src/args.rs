@@ -32,10 +32,10 @@ pub struct SystemArgs {
     #[arg(long)]
     pub seed: Option<u64>,
     /// The star's age in Gyr [default: drawn].
-    #[arg(long)]
+    #[arg(long, allow_negative_numbers = true)]
     pub present: Option<f64>,
     /// The host star's mass in M☉, 0.08-8 [default: drawn].
-    #[arg(long)]
+    #[arg(long, allow_negative_numbers = true)]
     pub host_mass: Option<f64>,
     /// The host star's metallicity in dex [default: drawn].
     #[arg(long, allow_negative_numbers = true)]
@@ -79,7 +79,8 @@ impl SystemArgs {
     pub fn inputs(&self, seed: Seed) -> Inputs {
         let mut archetypes = BTreeMap::new();
         for (id, count) in &self.archetypes {
-            *archetypes.entry(id.clone()).or_insert(0) += count;
+            let total: &mut u32 = archetypes.entry(id.clone()).or_insert(0);
+            *total = total.saturating_add(*count);
         }
         Inputs {
             schema: INPUTS_SCHEMA,
@@ -168,6 +169,31 @@ mod tests {
             panic!("a system request");
         };
         assert_eq!(request.archetypes, BTreeMap::from([(id("earth-like"), 3)]));
+    }
+
+    #[test]
+    fn repeated_archetype_counts_saturate() {
+        let args = system_args(&[
+            "--archetype",
+            "earth-like=4294967295",
+            "--archetype",
+            "earth-like=1",
+        ])
+        .unwrap();
+        let Request::System(request) = args.inputs(Seed::new(1)).request else {
+            panic!("a system request");
+        };
+        assert_eq!(
+            request.archetypes,
+            BTreeMap::from([(id("earth-like"), u32::MAX)])
+        );
+    }
+
+    #[test]
+    fn negative_numbers_reach_the_draw() {
+        let args = system_args(&["--present", "-1", "--host-mass", "-1"]).unwrap();
+        assert_eq!(args.present, Some(-1.0));
+        assert_eq!(args.host_mass, Some(-1.0));
     }
 
     #[test]

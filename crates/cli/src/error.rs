@@ -22,6 +22,8 @@ pub enum CliError {
     Explain(ExplainError),
     /// The OS gave no random source for the root seed.
     Seed(getrandom::Error),
+    /// The output could not be written to stdout.
+    Io(std::io::Error),
 }
 
 impl fmt::Display for CliError {
@@ -32,6 +34,7 @@ impl fmt::Display for CliError {
             Self::Json(error) => write!(f, "cli.json: {error}"),
             Self::Explain(error) => write!(f, "{error}"),
             Self::Seed(error) => write!(f, "cli.seed.unavailable: {error}"),
+            Self::Io(error) => write!(f, "cli.io: {error}"),
         }
     }
 }
@@ -65,5 +68,11 @@ impl From<getrandom::Error> for CliError {
 impl From<ExplainError> for CliError {
     fn from(error: ExplainError) -> Self {
         Self::Explain(error)
+    }
+}
+
+impl From<std::io::Error> for CliError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
     }
 }

@@ -19,7 +19,15 @@ pub enum ExplainError {
     /// The pointer leads to a value that has no cause tree.
     NotTraced { path: String },
     /// Several traced values share the code: pick one by pointer.
-    Ambiguous { code: String, pointers: Vec<String> },
+    Ambiguous {
+        code: String,
+        /// How many distinct cause trees hold the code.
+        trees: usize,
+        pointers: Vec<String>,
+        /// The pointers lead to values that depend on the code: no field
+        /// holds it itself.
+        indirect: bool,
+    },
 }
 
 impl fmt::Display for ExplainError {
@@ -29,12 +37,26 @@ impl fmt::Display for ExplainError {
             Self::NotTraced { path } => {
                 write!(f, "cli.explain.not-traced: {path} has no cause tree")
             }
-            Self::Ambiguous { code, pointers } => write!(
-                f,
-                "cli.explain.ambiguous: {code} is drawn {} times, pick one of: {}",
-                pointers.len(),
-                pointers.join(", ")
-            ),
+            Self::Ambiguous {
+                code,
+                trees,
+                pointers,
+                indirect,
+            } => {
+                let list = pointers.join(", ");
+                if *indirect {
+                    write!(
+                        f,
+                        "cli.explain.ambiguous: {code} is drawn {trees} times, held by no field; \
+                         values that depend on it: {list}"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "cli.explain.ambiguous: {code} is drawn {trees} times, pick one of: {list}"
+                    )
+                }
+            }
         }
     }
 }
@@ -122,31 +144,63 @@ fn explain_code(report: &Value, code: &str) -> Result<String, ExplainError> {
         0 => Err(not_found(code)),
         1 => Ok(trees.remove(0)),
         _ => {
+            let trees = trees.len();
             let mut pointers = Vec::new();
-            collect_pointers(report, code, None, "", &mut pointers);
+            collect_pointers(report, code, false, None, "", &mut pointers);
+            let indirect = pointers.is_empty();
+            if indirect {
+                collect_pointers(report, code, true, None, "", &mut pointers);
+            }
             Err(ExplainError::Ambiguous {
                 code: code.to_owned(),
+                trees,
                 pointers,
+                indirect,
             })
         }
     }
 }
 
-/// Walks the JSON depth-first and lists the traced values whose node has
-/// `code` in their own graph.
+/// Whether the tree of node `id` holds a node with `code`.
+fn tree_has(nodes: &[Value], id: usize, code: &str, seen: &mut BTreeSet<usize>) -> bool {
+    if !seen.insert(id) {
+        return false;
+    }
+    let Some(node) = nodes.get(id) else {
+        return false;
+    };
+    if node.get("code").and_then(Value::as_str) == Some(code) {
+        return true;
+    }
+    node.pointer("/origin/Derived/from")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|source| usize::try_from(source.as_u64()?).ok())
+        .any(|source| tree_has(nodes, source, code, seen))
+}
+
+/// Walks the JSON depth-first and lists the traced values whose own node
+/// has `code` or, with `depending`, whose tree holds a node with it.
 fn collect_pointers(
     value: &Value,
     code: &str,
+    depending: bool,
     graph: Option<&Vec<Value>>,
     pointer: &str,
     out: &mut Vec<String>,
 ) {
     if let (Some(nodes), Some(id)) = (graph, traced_node(value)) {
-        let found = nodes
-            .get(id)
-            .and_then(|node| node.get("code"))
-            .and_then(Value::as_str);
-        if found == Some(code) {
+        let found = if depending {
+            tree_has(nodes, id, code, &mut BTreeSet::new())
+        } else {
+            nodes
+                .get(id)
+                .and_then(|node| node.get("code"))
+                .and_then(Value::as_str)
+                == Some(code)
+        };
+        if found {
             out.push(pointer.to_owned());
         }
         return;
@@ -159,12 +213,26 @@ fn collect_pointers(
                     continue;
                 }
                 let key = key.replace('~', "~0").replace('/', "~1");
-                collect_pointers(child, code, graph, &format!("{pointer}/{key}"), out);
+                collect_pointers(
+                    child,
+                    code,
+                    depending,
+                    graph,
+                    &format!("{pointer}/{key}"),
+                    out,
+                );
             }
         }
         Value::Array(items) => {
             for (index, child) in items.iter().enumerate() {
-                collect_pointers(child, code, graph, &format!("{pointer}/{index}"), out);
+                collect_pointers(
+                    child,
+                    code,
+                    depending,
+                    graph,
+                    &format!("{pointer}/{index}"),
+                    out,
+                );
             }
         }
         _ => {}
@@ -291,6 +359,19 @@ mod tests {
             }
             other => panic!("expected Ambiguous, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_code_held_by_no_field_lists_its_dependents() {
+        let text = explain(&report_of(1), "system.draw.break-up-fraction")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            text.contains("held by no field; values that depend on it: /"),
+            "{text}"
+        );
+        assert!(!text.ends_with(": "), "{text}");
+        assert!(!text.contains(" 0 times"), "{text}");
     }
 
     #[test]

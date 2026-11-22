@@ -13,7 +13,8 @@ use crate::report;
 pub struct SystemCommand {
     #[command(flatten)]
     pub system: SystemArgs,
-    /// Explain one value of the draw, by its path in the output.
+    /// Explain one value: a JSON pointer into the output (e.g.
+    /// /planets/0/orbit/period) or a cause code (e.g. system.star.mass).
     #[arg(long)]
     pub explain: Option<String>,
 }
