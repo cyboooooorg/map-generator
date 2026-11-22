@@ -168,6 +168,8 @@ fewer volcanoes than its flux says.
 
 ## See also
 
+- [Relief study (W2) (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/20-relief-study):
+  where the relief's numbers come from, and how W2 departs.
 - The [relief study](../superpowers/studies/2026-11-22-relief/README.md)
   of the rewrite: every value, its source and the calibration list.
 - [Why are mountains lower on heavier planets?](mountains-and-gravity.md)

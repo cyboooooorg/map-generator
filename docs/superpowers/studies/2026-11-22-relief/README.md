@@ -225,11 +225,12 @@ volcanic province, and number 15 was not needed by Task 9.
 
 ## Open items
 
-- The three drafts and this study are to become one Wiki study, which
-  the pages will then cite; until then the pages cite this folder.
-- Earth's crust now stands 5.53 km above the thin crust (PREM's mantle)
-  against the legacy's 4.84 km: Task 9's ETOPO hypsometry test says
-  whether the relief still matches.
+- The study is condensed in the Wiki:
+  [Relief study (W2)](https://github.com/cyboooooorg/map-generator/wiki/20-relief-study).
+  The pages cite both.
+- Earth's crust stands 5.53 km above the thin crust (PREM's mantle)
+  against the legacy's 4.84 km. The ETOPO hypsometry is printed, not
+  asserted, in W2: see the departures in the science pages (#635, #317).
 - Earth's Haar fluctuation disagrees with Landais et al.'s figure by a
   factor 1.9; a note to the authors' data, or a reading of the published
   Icarus version, could settle it.

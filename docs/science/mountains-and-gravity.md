@@ -719,6 +719,8 @@ without it is 24-29 % at 350 km).
 
 ## See also
 
+- [Relief study (W2) (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/20-relief-study):
+  where the relief's numbers come from, and how W2 departs.
 - [05-relief (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/05-relief): the study of the
   relief, its noise and erosion.
 - [08-geology (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/08-geology): the geology

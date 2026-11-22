@@ -610,6 +610,8 @@ study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list
 
 ## See also
 
+- [Relief study (W2) (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/20-relief-study):
+  where the relief's numbers come from, and how W2 departs.
 - [08-geology (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/08-geology): the study behind
   the app's regimes, plates and drift, sections 1, 2, 4 and 8.
 - [How do impact craters form and fade?](impact-craters.md): how the regime
