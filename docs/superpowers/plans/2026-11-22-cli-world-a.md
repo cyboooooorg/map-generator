@@ -1,6 +1,9 @@
 # CLI world export, pull request A: implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps
+> use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire the store, a world-side engine version and the world
 export pipeline into the CLI crate, tested on fixture timelines, so that
@@ -347,7 +350,8 @@ nextest tiers, `mise run ci`.
   relief_previews` → passes; downscale one PNG with
   `sips -Z 800` into the scratchpad for the user, never read the full
   one.
-- [ ] **Step 4:** Commit `test(adapters): write relief previews of Earth, Mars and Venus`.
+- [ ] **Step 4:** Commit
+  `test(adapters): write relief previews of Earth, Mars and Venus`.
 
 ### Task 8: Documentation and CI
 
@@ -368,5 +372,5 @@ nextest tiers, `mise run ci`.
 - [ ] **Step 3:** Commit `docs: document the world engine version and the export`.
 
 Then `branch-reviewer` and `test-reviewer` on the whole branch, fixes,
-`mise run ci`, and `pr-shepherd` with `Refs #602` and `Refs #381` (the
-#381 criterion is carried by #602).
+`mise run ci`, and `pr-shepherd` with `Refs #602` and `Refs #381` (the #381
+criterion is carried by #602).
