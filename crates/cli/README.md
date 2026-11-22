@@ -1,7 +1,9 @@
 # `map-generator`: the command line
 
 The composition root: wires the adapters into the engines' ports and
-parses the command line. One command, `system`, so far:
+parses the command line. One command, `system`, so far. Run it from the
+workspace with `cargo run -q -p map-generator -- system …`, or install the
+binary with `cargo install --path crates/cli` and call `map-generator`:
 
 ```bash
 map-generator system [--seed N] [--present GYR] [--host-mass M]
@@ -32,11 +34,12 @@ stdout is one pretty-printed JSON document (`schema` 1):
 - `classifier`: `"stand-in"`. The planet classes are not printed yet; the
   draw uses a stand-in classifier until the planet engine's `class_of` is
   public (see the [system crate](../system/README.md));
-- `star`: the star's timeline, one keyframe at the present;
+- `star`: the star's timeline, one keyframe at the present. The keyframe
+  has its own `causes` graph, used by the `/star/...` pointers;
 - `planets`: the planets in the draw's order (closest first), each with its
   designation, seed, archetype, mass, orbit, spin and stellar sources;
-- `causes`: the cause graph of `planets`; the traced values hold ids of its
-  nodes.
+- `causes`: the cause graph of `planets` only (not of the star); the
+  traced values of the planets hold ids of its nodes.
 
 ## Explaining a value
 
@@ -59,7 +62,9 @@ nodes it comes from. A node already printed in the tree appears as
 `code (see above)`. Dimensionless values print without a unit.
 
 A code several values share (the flux of each planet) is ambiguous: the
-error lists the pointers to choose from.
+error lists the pointers to choose from. A code no field holds itself, only
+values that depend on it (`system.draw.break-up-fraction`), is reported as
+"held by no field" and lists those values instead.
 
 | Error | Meaning |
 | --- | --- |
@@ -71,9 +76,11 @@ error lists the pointers to choose from.
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Success |
+| 0 | Success (also when the reader closes stdout early) |
 | 1 | The command failed; stderr is `map-generator: <code>: <message>` |
 | 2 | Usage error (bad flag or malformed `ID=COUNT`) |
+
+A stdout write error other than a closed pipe exits 1 with `cli.io`.
 
 ## Ports
 
