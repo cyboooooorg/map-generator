@@ -147,17 +147,20 @@ fn subdirs(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
 
 /// Deletes the files under `<dir>/<engine>/<id>/worlds/<slug>/` whose
 /// name is not a world file of the current form: a cache entry of an
-/// older layout, never a valid one. The directories it leaves empty go
-/// too.
-fn remove_unparseable_worlds(dir: &Path) -> io::Result<()> {
-    for (_, engine_dir) in subdirs(dir)? {
-        for (_, id_dir) in subdirs(&engine_dir)? {
+/// older layout, never a valid one. Their keys leave the ledger, and the
+/// directories the sweep emptied go too (never one it did not touch).
+/// Returns whether the ledger changed.
+fn remove_unparseable_worlds(dir: &Path, uses: &mut Uses) -> io::Result<bool> {
+    let mut changed = false;
+    for (engine_name, engine_dir) in subdirs(dir)? {
+        for (id_name, id_dir) in subdirs(&engine_dir)? {
             let worlds = id_dir.join("worlds");
-            for (_, slug_dir) in subdirs(&worlds)? {
+            for (slug_name, slug_dir) in subdirs(&worlds)? {
+                let mut removed = false;
                 for file in fs::read_dir(&slug_dir)? {
                     let file = file?;
-                    let current = file
-                        .file_name()
+                    let name = file.file_name();
+                    let current = name
                         .to_str()
                         .is_some_and(|name| paths::parse_world_name(name).is_some());
                     if !current && file.file_type()?.is_file() {
@@ -166,16 +169,24 @@ fn remove_unparseable_worlds(dir: &Path) -> io::Result<()> {
                             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                             Err(error) => return Err(error),
                         }
+                        removed = true;
+                        if let Some(name) = name.to_str() {
+                            let key = format!("{engine_name}/{id_name}/worlds/{slug_name}/{name}");
+                            changed |= uses.uses.remove(&key).is_some();
+                        }
                     }
                 }
-                let _ = fs::remove_dir(&slug_dir);
+                if removed {
+                    // Each `remove_dir` only succeeds on an empty directory.
+                    let _ = fs::remove_dir(&slug_dir);
+                    let _ = fs::remove_dir(&worlds);
+                    let _ = fs::remove_dir(&id_dir);
+                    let _ = fs::remove_dir(&engine_dir);
+                }
             }
-            let _ = fs::remove_dir(&worlds);
-            let _ = fs::remove_dir(&id_dir);
         }
-        let _ = fs::remove_dir(&engine_dir);
     }
-    Ok(())
+    Ok(changed)
 }
 
 /// Deletes the `*.tmp` files under `dir`: staging files of a write that
@@ -329,7 +340,7 @@ impl FsStore {
     pub fn evict(&self, current: Engines) -> Result<Vec<CacheKey>, StoreError> {
         let mut uses = self.load_uses();
         remove_temporaries(&paths::cache_dir(&self.root))?;
-        remove_unparseable_worlds(&paths::cache_dir(&self.root))?;
+        let swept = remove_unparseable_worlds(&paths::cache_dir(&self.root), &mut uses)?;
         let (orphans, entries): (Vec<_>, Vec<_>) = self
             .entries(&uses)?
             .into_iter()
@@ -340,7 +351,7 @@ impl FsStore {
         for key in &gone {
             self.remove_entry(key, &mut uses)?;
         }
-        if !gone.is_empty() {
+        if swept || !gone.is_empty() {
             self.save_uses(&uses)?;
         }
         Ok(gone)

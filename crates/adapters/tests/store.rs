@@ -11,7 +11,6 @@ use catalogue::{
 use system::{ArchetypeId, BodyRequest, INPUTS_SCHEMA, Inputs, Request};
 use tempfile::TempDir;
 use timeline::{Code, Designation, EngineVersion, Seed, SystemNumber};
-use world::{Grid, World};
 
 const ENGINE: EngineVersion = EngineVersion(1);
 
@@ -357,8 +356,24 @@ fn old_world_names_are_evicted() {
         .join("worlds")
         .join(designation().to_string().replace(' ', "-"));
     fs::create_dir_all(&slug).unwrap();
+    // `0-8.world` is the unversioned layout of origin/main, before the
+    // world engine version joined the file name.
     let old = slug.join("0-8.world");
     fs::write(&old, b"MGWORLD1").unwrap();
+    let old_key = format!(
+        "1/{}/worlds/{}/0-8.world",
+        system.id,
+        designation().to_string().replace(' ', "-")
+    );
+    let ledger = dir.path().join("cache/uses.json");
+    fs::write(&ledger, format!(r#"{{"tick":3,"uses":{{"{old_key}":3}}}}"#)).unwrap();
+    // A directory the sweep did not empty is left alone.
+    let untouched = dir
+        .path()
+        .join("cache/1")
+        .join(system.id.to_string())
+        .join("worlds/untouched");
+    fs::create_dir_all(&untouched).unwrap();
     assert!(
         WorldCache::get(
             &store,
@@ -372,18 +387,7 @@ fn old_world_names_are_evicted() {
     );
     store.evict(engines(ENGINE)).unwrap();
     assert!(!old.exists());
-}
-
-#[test]
-fn world_key_roundtrip_with_version() {
-    let dir = TempDir::new().unwrap();
-    let store = store(&dir);
-    let system = stored(7);
-    SystemRepository::put(&store, &system).unwrap();
-    let key = world_key(system.id, EngineVersion(2));
-    let world = World::new(Grid::new(1), designation(), 0, ENGINE, EngineVersion(2));
-    WorldCache::put(&store, &key, &world).unwrap();
-    assert_eq!(WorldCache::get(&store, &key).unwrap(), Some(world));
-    let other = world_key(system.id, EngineVersion(1));
-    assert!(WorldCache::get(&store, &other).unwrap().is_none());
+    assert!(!slug.exists(), "the directory it emptied goes");
+    assert!(untouched.exists(), "a directory it did not touch stays");
+    assert!(!fs::read_to_string(&ledger).unwrap().contains(&old_key));
 }

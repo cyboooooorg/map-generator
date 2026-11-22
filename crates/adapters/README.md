@@ -34,7 +34,8 @@ holds a logical use counter (no wall clock); `FsStore::evict(current)`
 (system, and world for worlds), then the least recently used ones until
 the cache fits `budget` bytes. World and timeline files are both listed.
 It also deletes the world files whose name is not of the form above
-(older layout) and the cache entries of any system whose `inputs.json`
+(older layout, with their `uses.json` keys and the directories this
+leaves empty) and the cache entries of any system whose `inputs.json`
 no longer exists, so removing a system frees its caches at the next
 eviction.
 
