@@ -152,6 +152,67 @@ continents themselves and the sea floor look alike at any gravity.
 
 ### How it computes them
 
+#### The rewrite: `world::relief`
+
+The rewrite builds the relief of every planet whose keyframe has a
+surface on the cube-sphere grid, in metres, from the physical forcings
+of the timeline: radius, surface gravity, tectonic regime, heat flux and
+surface liquid. It never reads what the central object is. The laws and
+constants live in `science::relief`, the passes in `world::relief`; each
+number below and its source is in the [relief
+study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
+
+1. **Analogue.** The regime picks the body whose measured statistics the
+   relief takes: Earth with plates, Mars for a stagnant, episodic or
+   heat-pipe lid (a calibration, below).
+2. **Continents.** A fractal noise over each cell's position on the
+   sphere, lacunarity 2, persistence $2^{-H}$, from one wavelength per
+   circumference down to two grid cells. $H$ is the analogue's measured
+   Hurst exponent above 10 km, 0.479 for Earth and 0.53 for Mars
+   (Landais, Schmidt & Lovejoy 2019), where the legacy's persistence of
+   0.5 meant $H = 1$, too smooth, and rounded its coasts. The noise is
+   scaled so that its mean Haar fluctuation at 100 km matches the
+   analogue's: 219 m on Earth, 233 m on Mars, measured for this study on
+   ETOPO 2022 and the MOLA grid. The crust line is the area quantile of
+   the noise that leaves the analogue's thick-crust share above it, 41 %
+   (Cogley 1984) or 58 % (Marinova et al. 2008).
+3. **Floating crust.** Thick crust stands above thin crust by Airy's
+   balance (above), Earth's crusts (41.1 and 7.1 km, 2830 and
+   3300 kg/m³: 4.84 km) or Mars's (58 and 32 km, 2900 and 3500 kg/m³:
+   4.46 km). The step falls from the continent's edge at the continental
+   slope, 2.4°, the mean gradient of Earth's sea floor between 200 and
+   2500 m deep near land (ETOPO 2022, measured for the study), over a
+   distance to the crust line computed on the grid. The legacy shelf and
+   platform shaping is not ported.
+4. **Plates.** On a plate world, the boundaries add trenches, arcs,
+   rifts, ranges and ridges (see [Do all rocky planets have plate
+   tectonics?](plate-tectonics.md#the-rewrite-worldrelief-plates)).
+5. **Mountains.** A ridged noise on the same spectrum, weighted by the
+   plates' orogeny or, without plates, by the legacy highland provinces
+   (`HIGHLANDS`), and on a world without liquid the legacy's rolling
+   plains (`DRY_PLAINS_KM`), both ported as the calibrations they were.
+6. **Volcanoes.** Cones from the planet's heat flux (see [How tall do
+   volcanoes grow, and how many are there?](volcanoes.md)).
+7. **Gravity.** What loads the crust (mountains, boundary relief,
+   cones) is multiplied by the relief scale $\min(g_0/g, 2)$, $g_0$ the
+   standard gravity; the floating crust and the ridges are not.
+8. **Sea level.** The height below which `ocean_share` of the sphere's
+   area lies (an exact area-weighted quantile); heights are stored
+   relative to it. A world without liquid, or with a share of 0, is
+   measured from its area-weighted mean, the convention of Mars and
+   Venus. A share of 1 puts the sea above the highest cell.
+9. **Range.** Heights are stored in metres over ±25 km (Olympus Mons, the
+   tallest known relief, stands almost 22 km; Plescia 2004), a step
+   under a metre. The legacy `tanh` compression is gone.
+
+Published hypsometry is a test, never a curve imposed on the relief:
+Earth-like worlds are checked against ETOPO 2022 (29.1 % land; of the
+land 56 % under 500 m, 10.9 % above 2 km, 1.8 % above 4 km), Mars-like
+ones against the 58 % highland share, Venus-like ones against Ford &
+Pettengill's 80 % within 1 km of the mean.
+
+#### The legacy generator (`legacy-final`)
+
 ```mermaid
 flowchart LR
   C["Circumference"] --> G["Gravity<br/>mass–radius<br/>relation (Zeng 2016)"]
@@ -324,6 +385,45 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 
 ### Where it departs from the science
 
+#### The rewrite
+
+Calibrations (each with its `Calibration:` doc comment; what was
+searched is in the [relief
+study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list)):
+
+- **Regime to analogue.** Plates take Earth's statistics, every other
+  regime Mars's. No measured Hurst exponent exists for Venus, so a
+  Venus-like world takes Mars's *(a choice of the design)*; checked
+  against its unimodal hypsometry.
+- **Earth's mantle density, 3300 kg/m³.** The textbook value for
+  isostasy, not read on a primary source in the study; PREM's
+  uppermost mantle, about 3380 kg/m³, would raise the continents from
+  4.84 to 5.53 km above the thin crust. Checked against ETOPO 2022's
+  hypsometry.
+- **The relief scale stops at 2.** Olympus Mons over Everest is 2.49; the
+  cap of 2 is the legacy's, kept unless the user retains the ratio.
+- **Highlands and dry plains** (`HIGHLANDS`, `DRY_PLAINS_KM`): ported from
+  the legacy with their calibrations, below.
+- **Mountain onset and blend**, only if the Earth hypsometry test needs
+  them.
+
+Choices of the design:
+
+- **One thick-crust share per regime,** Earth's 41 % or Mars's 58 %,
+  whatever the planet's history (`surface.terrain` carries ages, not
+  crust).
+- **Crusts do not scale with the planet's mass:** a super-Earth with
+  plates gets Earth's crust.
+- **Every surface liquid alike:** water, hydrocarbons, nitrogen or lava
+  fill the relief by the same quantile.
+- **The amplitude is the whole surface's.** It mixes land and sea floor,
+  as the published measurement does; on Earth the land alone fluctuates
+  less (131 m at 100 km against 219 m). Landais et al.'s figure gives
+  Earth about 115 m at 100 km, half the recomputation (Mars agrees); the
+  study keeps the reproducible value.
+
+#### The legacy generator
+
 - **The relief scale stops at 2.** Mars's size would give 2.9 by $1/g$, and
   Olympus Mons stands 2.5 times as high as Everest (Plescia 2004). The cap
   keeps the summits of light worlds inside the elevation range (one unit is
@@ -474,6 +574,28 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
     1216–1219,
     [doi:10.1038/nature07070](https://doi.org/10.1038/nature07070)
     (abstract read): the northern lowlands "cover ∼42% of the surface".
+22. Landais, F., Schmidt, F. & Lovejoy, S. 2019, "Multifractal topography
+    of several planetary bodies in the Solar System", *Icarus* 319, 14–20,
+    [doi:10.1016/j.icarus.2018.07.005](https://doi.org/10.1016/j.icarus.2018.07.005),
+    preprint [arXiv:1805.11249](https://arxiv.org/abs/1805.11249) (read):
+    Table 2, Hurst exponents above and below 10 km.
+23. Aharonson, O., Zuber, M. T. & Rothman, D. H. 2001, "Statistics of
+    Mars' topography from the Mars Orbiter Laser Altimeter", *Journal of
+    Geophysical Research: Planets* 106, 23723–23735,
+    [doi:10.1029/2000JE001403](https://doi.org/10.1029/2000JE001403).
+24. NOAA National Centers for Environmental Information 2022, ETOPO 2022
+    Global Relief Model,
+    [doi:10.25921/fd45-gt74](https://doi.org/10.25921/fd45-gt74), and the
+    MGS MOLA gridded data record (MEGDR), NASA Planetary Data System:
+    hypsometry, Haar fluctuations and the continental slope, measured
+    for the relief study below.
+25. Wieczorek, M. A. 2007, "Gravity and topography of the terrestrial
+    planets", *Treatise on Geophysics* 10, 165–206,
+    [doi:10.1016/B978-044452748-6.00156-5](https://doi.org/10.1016/B978-044452748-6.00156-5):
+    Mars's crust and mantle densities, 2900 and 3500 kg/m³.
+26. Relief study of the rewrite, 2026-11-22:
+    [`docs/superpowers/studies/2026-11-22-relief/`](../superpowers/studies/2026-11-22-relief/README.md),
+    with its retained values, its scripts and its calibration list.
 
 ## See also
 
@@ -483,6 +605,7 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
   study, with the craters' gravity scaling.
 - The README's **Gravity modifier — landscape relief** (under
   Calculations) and **Elevation — continents, coasts and mountains**.
+- [How tall do volcanoes grow, and how many are there?](volcanoes.md)
 - [How do impact craters form and fade?](impact-craters.md),
   [Do all rocky planets have plate tectonics?](plate-tectonics.md) and
   [Why are small moons shaped like potatoes?](moon-shapes.md)

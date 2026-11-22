@@ -221,6 +221,45 @@ id that names it (`terran-past250ma-42`).
 
 ### How it computes them
 
+#### The rewrite: `world::relief` plates
+
+On a planet whose timeline regime is plates, the rewrite lays the
+legacy plate map (below) onto `world::Grid`, the same cube layout, for
+the present only (no drift yet). Its numbers come from the [relief
+study](../superpowers/studies/2026-11-22-relief/plates.md); the laws live
+in `science::relief`, the pass in `world::relief`.
+
+1. **Plates.** 8 to 14 plates, Morra et al.'s 8 large plates to Bird's
+   14, their areas drawn to follow the power law of Sornette & Pisarenko
+   (2003), a complementary cumulative exponent of 0.25.
+2. **Speeds.** From 2.6 cm/yr for a plate with no sinking edge to 7.9
+   cm/yr for one sinking along a quarter of its boundary or more, the
+   median RMS speeds of Zahirovic et al. (2015) over 200 Myr of
+   reconstructions.
+3. **Distance.** A neighbourhood pass on the grid gives every cell its
+   great-circle distance to the nearest boundary; each profile is a
+   function of that distance.
+4. **Trenches.** Depth 0.9–4.7 km and half-width (axis to the flexure's
+   zero) 31–93 km, the global array of Zhang et al. (2018).
+5. **Arcs.** Above the slab where it is 105 km deep (Syracuse & Abers
+   2006), at $105\ \text{km} / \tan \delta$ from the trench, $\delta$ the
+   slab's dip down to 125 km: 32° on average (Lallemand, Heuret &
+   Boutelier 2005), so about 170 km.
+6. **Ranges.** Over a continental margin, the Altiplano's 3.65 km over a
+   band 350–400 km wide (Allmendinger et al. 1997); in a collision, up to
+   Tibet's 5 km (Royden et al. 2008).
+7. **Rifts.** Under 100 km wide (Hopper & Buck 1996; Buck 2007).
+8. **Ridges.** Parsons & Sclater's $2.5 + 0.35\sqrt{t}$ km, the floor's
+   age $t$ in Ma read from the distance and the spreading rate, as in the
+   legacy.
+
+The boundary relief is scaled by gravity like the mountains (see [Why
+are mountains lower on heavier
+planets?](mountains-and-gravity.md#the-rewrite-worldrelief)); the ridges
+are not.
+
+#### The legacy generator (`legacy-final`)
+
 [`plates.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/plates.rs) builds the plates, and
 [`generation.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/generation.rs) adds their relief
 when the world's regime is plates. That regime is decided before the world
@@ -335,6 +374,32 @@ stagnant lid and liquid water (Foley & Smye 2018; the half is a calibration),
 and 0 for the other regimes and without liquid water.
 
 ### Where it departs from the science
+
+#### The rewrite
+
+Calibrations, each with what was searched in the [relief
+study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
+
+- **Plate sizes.** `PLATE_WEIGHT`, the spread of the plate centres, is
+  fitted to the 0.25 exponent of the area law, not sourced itself.
+- **The speed ramp.** Between no sinking edge and a quarter of the
+  boundary sinking, how the speed rises is a calibration; Zahirovic et
+  al.'s 4.4 cm/yr for plates sinking along less than a quarter is its
+  check.
+- **Convergence thresholds.** Relief grows from 0.5 to 5 cm/yr of
+  convergence, arcs from 2 cm/yr: no paper gives such thresholds.
+- **Island arcs** rise 3 km at their crest, the legacy's figure; no mean
+  profile of arcs was found.
+- **Collision width.** No single width of a collision orogen is
+  published; the profile lies between the Altiplano's 350–400 km and
+  Tibet's roughly 1000 km.
+- **Rift shoulders and axes** (0.5 km up, 1.5 km down) are bounded by
+  the 3 km that Buck (2007) calls the high end, nothing more.
+- **Trenches take the middle of their range** (2.8 km deep, 62 km wide)
+  rather than following the slab's age and dip (Jarrard 1986).
+- **The count does not depend on size,** as below.
+
+#### The legacy generator
 
 - **The size threshold is the app's choice.** A plate preset keeps its plates
   unless the world is dry or under 0.3 Earth masses (about 0.72 Earth radii,
@@ -452,6 +517,55 @@ and 0 for the other regimes and without liquid water.
 21. Foley, B. J. & Smye, A. J. 2018, "Carbon cycling and habitability of
     Earth-sized stagnant lid planets", *Astrobiology* 18, 873–896,
     [doi:10.1089/ast.2017.1695](https://doi.org/10.1089/ast.2017.1695).
+22. Morra, G., Seton, M., Quevedo, L. & Müller, R. D. 2013, "Organization
+    of the tectonic plates in the last 200 Myr", *Earth and Planetary
+    Science Letters* 373, 93–101,
+    [doi:10.1016/j.epsl.2013.04.020](https://doi.org/10.1016/j.epsl.2013.04.020).
+23. Sornette, D. & Pisarenko, V. 2003, "Fractal plate tectonics",
+    *Geophysical Research Letters* 30, 1105,
+    [doi:10.1029/2002GL015043](https://doi.org/10.1029/2002GL015043).
+24. Zahirovic, S., Müller, R. D., Seton, M. & Flament, N. 2015, "Tectonic
+    speed limits from plate kinematic reconstructions", *Earth and
+    Planetary Science Letters* 418, 40–52,
+    [doi:10.1016/j.epsl.2015.02.037](https://doi.org/10.1016/j.epsl.2015.02.037).
+25. Zhang, F., Lin, J., Zhou, Z., Yang, H. & Zhan, W. 2018, "Intra- and
+    intertrench variations in flexural bending of the Manila, Mariana and
+    global trenches", *Geophysical Journal International* 212, 1429–1449,
+    [doi:10.1093/gji/ggx488](https://doi.org/10.1093/gji/ggx488).
+26. Syracuse, E. M. & Abers, G. A. 2006, "Global compilation of
+    variations in slab depth beneath arc volcanoes and implications",
+    *Geochemistry, Geophysics, Geosystems* 7, Q05017,
+    [doi:10.1029/2005GC001045](https://doi.org/10.1029/2005GC001045).
+27. Lallemand, S., Heuret, A. & Boutelier, D. 2005, "On the relationships
+    between slab dip, back-arc stress, upper plate absolute motion, and
+    crustal nature in subduction zones", *Geochemistry, Geophysics,
+    Geosystems* 6, Q09006,
+    [doi:10.1029/2005GC000917](https://doi.org/10.1029/2005GC000917).
+28. England, P. & Katz, R. 2010, "Global systematics of arc volcano
+    position", *Nature* 468, E6–E7,
+    [doi:10.1038/nature09154](https://doi.org/10.1038/nature09154).
+29. Allmendinger, R. W., Jordan, T. E., Kay, S. M. & Isacks, B. L. 1997,
+    "The evolution of the Altiplano-Puna plateau of the Central Andes",
+    *Annual Review of Earth and Planetary Sciences* 25, 139–174,
+    [doi:10.1146/annurev.earth.25.1.139](https://doi.org/10.1146/annurev.earth.25.1.139).
+30. Royden, L. H., Burchfiel, B. C. & van der Hilst, R. D. 2008, "The
+    geological evolution of the Tibetan Plateau", *Science* 321,
+    1054–1058,
+    [doi:10.1126/science.1155371](https://doi.org/10.1126/science.1155371).
+31. Hopper, J. R. & Buck, W. R. 1996, "The effect of lower crustal flow on
+    continental extension and passive margin formation", *Journal of
+    Geophysical Research* 101, 20175–20194,
+    [doi:10.1029/96JB01644](https://doi.org/10.1029/96JB01644).
+32. Buck, W. R. 2007, "Dynamic processes in extensional and compressional
+    settings: the dynamics of continental breakup and extension",
+    *Treatise on Geophysics* 6, 335–376,
+    [doi:10.1016/B978-044452748-6.00110-3](https://doi.org/10.1016/B978-044452748-6.00110-3).
+33. Jarrard, R. D. 1986, "Relations among subduction parameters",
+    *Reviews of Geophysics* 24, 217–284,
+    [doi:10.1029/RG024i002p00217](https://doi.org/10.1029/RG024i002p00217).
+34. Relief study of the rewrite, 2026-11-22:
+    [plates and boundary relief](../superpowers/studies/2026-11-22-relief/plates.md),
+    with every value's source and the calibration list.
 
 ## See also
 

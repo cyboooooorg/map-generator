@@ -46,6 +46,8 @@ wants to understand it, and link back to those studies.
 - [How do impact craters form and fade?](impact-craters.md)
 - [Do all rocky planets have plate tectonics?](plate-tectonics.md)
 - [Why are mountains lower on heavier planets?](mountains-and-gravity.md)
+- [How tall do volcanoes grow, and how many are
+  there?](volcanoes.md)
 - [What colour would plants be under another star?](plant-colours.md)
 
 ## Writing an article
