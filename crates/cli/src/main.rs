@@ -3,6 +3,7 @@
 
 mod args;
 mod error;
+mod explain;
 mod report;
 mod system;
 

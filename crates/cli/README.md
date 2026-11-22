@@ -15,7 +15,7 @@ map-generator system [--seed N] [--present GYR] [--host-mass M]
 | `--host-mass M` | The host star's mass in solar masses, 0.08-8. Omitted: drawn |
 | `--metallicity DEX` | The host star's metallicity. Omitted: drawn |
 | `--archetype ID=COUNT` | Ask for planets of an archetype; repeatable, counts add up |
-| `--explain PATH` | Explain one value of the draw (not available yet) |
+| `--explain PATH` | Explain one value of the draw: a JSON pointer or a cause code (see below) |
 
 Without `--seed`, the root seed is drawn from the OS, the only random
 source of the program. It is printed on stderr
@@ -37,6 +37,35 @@ stdout is one pretty-printed JSON document (`schema` 1):
   designation, seed, archetype, mass, orbit, spin and stellar sources;
 - `causes`: the cause graph of `planets`; the traced values hold ids of its
   nodes.
+
+## Explaining a value
+
+`--explain PATH` prints the cause tree of one drawn value as text, not JSON.
+`PATH` is either a JSON pointer into the output, or a cause code:
+
+```bash
+map-generator system --seed 1 --explain /planets/0/orbit/period
+```
+
+```text
+system.draw.period = 5.350512601505564 d
+  system.draw.semi-major-axis = 0.10157348219710759 au [drawn]
+  system.star.mass = 4.883678834209888 Msun [drawn]
+```
+
+One line per node, indented by depth. A leaf ends with its provenance
+(`input`, `observed`, `drawn`, `imposed`); a derived node is followed by the
+nodes it comes from. A node already printed in the tree appears as
+`code (see above)`. Dimensionless values print without a unit.
+
+A code several values share (the flux of each planet) is ambiguous: the
+error lists the pointers to choose from.
+
+| Error | Meaning |
+| --- | --- |
+| `cli.explain.not-found` | No value at the pointer, or no node with the code |
+| `cli.explain.not-traced` | The pointer leads to a value with no cause tree (a designation, say) |
+| `cli.explain.ambiguous` | Several values share the code; the message lists their pointers |
 
 ## Exit codes
 

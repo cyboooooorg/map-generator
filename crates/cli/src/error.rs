@@ -6,6 +6,8 @@ use std::fmt;
 use system::SystemError;
 use timeline::ContractError;
 
+use crate::explain::ExplainError;
+
 /// A failed command. `Display` starts with the error's code.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -16,6 +18,8 @@ pub enum CliError {
     Contract(ContractError),
     /// The output could not be written as JSON.
     Json(serde_json::Error),
+    /// `--explain` could not explain the path.
+    Explain(ExplainError),
     /// The OS gave no random source for the root seed.
     Seed(getrandom::Error),
 }
@@ -26,6 +30,7 @@ impl fmt::Display for CliError {
             Self::System(error) => write!(f, "{error}"),
             Self::Contract(error) => write!(f, "cli.contract: {error}"),
             Self::Json(error) => write!(f, "cli.json: {error}"),
+            Self::Explain(error) => write!(f, "{error}"),
             Self::Seed(error) => write!(f, "cli.seed.unavailable: {error}"),
         }
     }
@@ -54,5 +59,11 @@ impl From<serde_json::Error> for CliError {
 impl From<getrandom::Error> for CliError {
     fn from(error: getrandom::Error) -> Self {
         Self::Seed(error)
+    }
+}
+
+impl From<ExplainError> for CliError {
+    fn from(error: ExplainError) -> Self {
+        Self::Explain(error)
     }
 }

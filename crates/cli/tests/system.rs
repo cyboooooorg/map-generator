@@ -79,3 +79,26 @@ fn an_omitted_seed_is_drawn_and_replayable() {
     assert_eq!(replay.stdout, drawn.stdout);
     assert_eq!(stderr(&replay), "");
 }
+
+#[test]
+fn explain_prints_a_tree() {
+    let output = run(&["--seed", "1", "--explain", "/planets/0/orbit/period"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        stdout(&output).starts_with("system.draw.period = "),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn explain_errors_exit_1() {
+    let output = run(&["--seed", "1", "--explain", "/planets/0/designation"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(stdout(&output), "");
+    assert!(
+        stderr(&output).starts_with("map-generator: cli.explain.not-traced"),
+        "{}",
+        stderr(&output)
+    );
+}
