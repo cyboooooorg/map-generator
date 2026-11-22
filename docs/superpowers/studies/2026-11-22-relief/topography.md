@@ -161,18 +161,17 @@ Rev. Geophys. 22, 101-122) [V, abstract].
 | Earth continental crust | 41.1 km | Christensen & Mooney 1995, area-weighted mean | [V, abstract] |
 | Earth continental crust density | 2830 kg/m³ | Christensen & Mooney 1995, "mean crustal density calculated from our model" | [V, abstract on the USGS publication page] |
 | Earth oceanic crust | 7.1 ± 0.8 km | White, McKenzie & O'Nions 1992 | [V, abstract] |
-| Earth upper mantle density | 3300 kg/m³ | the textbook isostasy value (Turcotte & Schubert) | [S]; PREM's lid is about 3380 kg/m³ [S, not opened] |
+| Earth upper mantle density | 3380 kg/m³ | PREM (Dziewonski & Anderson 1981), Table I: the LID, radius 6291.0-6346.6 km (depth 24.4-80 km), ρ = 2.6910 + 0.6924 x g/cm³ with x = r / 6371 km; 3.3807 g/cm³ at the top of the mantle, 3.3747 at 80 km | [V, Table I; the two values D] |
 | Mars modal crust, south / north | 58 / 32 km | Neumann et al. 2004 | [V, abstract] |
 | Mars mantle − crust density | 600 kg/m³ | Neumann et al. 2004 | [V, abstract] |
 | Mars crust / mantle density | 2900 / 3500 kg/m³ | Wieczorek 2007, Treatise on Geophysics 10.05, Fig. 11 caption (model parameters for Mars) | [V] |
 
-The Airy step `(t − t_o)(1 − ρc/ρm)` gives 4.84 km for Earth with
-3300 kg/m³, 5.53 km with PREM's 3380 [D]; Mars 4.46 km [D].
-
-The Earth mantle density is the one crust number without a primary
-source read: it goes to the calibration list (README), with PREM as the
-candidate source and the step's effect on the ETOPO hypsometry as the
-check.
+The Airy step `(t − t_o)(1 − ρc/ρm)` gives, for Earth,
+(41.1 − 7.1) × (1 − 2830 / 3380) = 34 × 0.16272 = 5.53 km [D]; for Mars
+(58 − 32) × (1 − 2900 / 3500) = 4.46 km [D]. The legacy's assumed
+3300 kg/m³ gave 4.84 km; it was replaced by PREM at the user's review
+(2026-11-22). PREM was read on an open copy of the paper (Harvard CfA,
+`lzeng/papers/PREM.pdf`); the IRIS table had refused access.
 
 ## Continental slope
 
@@ -209,8 +208,6 @@ over a 15 km grid; it sits inside Pratson & Haxby's regional range.
   Fig. 2, hence the recomputation.
 - Harris et al. 2014's slope statistics (paywalled); a global mean
   continental slope gradient in a primary source.
-- A primary source for Earth's upper mantle density read in this study
-  (PREM table at IRIS refused, Turcotte & Schubert not opened).
 - Mountain range widths and ridge spacing as global statistics (searched
   in the 2026-11-21 drafts): the ridged noise follows the same spectrum
   instead.
@@ -261,3 +258,7 @@ over a 15 km grid; it sits inside Pratson & Haxby's regional range.
 13. Pratson, L. F. & Haxby, W. F. 1996, "What is the slope of the U.S.
     continental slope?", *Geology* 24, 3-6,
     [doi:10.1130/0091-7613(1996)024<0003:WITSOT>2.3.CO;2](https://doi.org/10.1130/0091-7613(1996)024%3C0003:WITSOT%3E2.3.CO;2).
+14. Dziewonski, A. M. & Anderson, D. L. 1981, "Preliminary reference
+    Earth model", *Physics of the Earth and Planetary Interiors* 25,
+    297-356,
+    [doi:10.1016/0031-9201(81)90046-7](https://doi.org/10.1016/0031-9201(81)90046-7).

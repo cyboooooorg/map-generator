@@ -177,8 +177,9 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    the noise that leaves the analogue's thick-crust share above it, 41 %
    (Cogley 1984) or 58 % (Marinova et al. 2008).
 3. **Floating crust.** Thick crust stands above thin crust by Airy's
-   balance (above), Earth's crusts (41.1 and 7.1 km, 2830 and
-   3300 kg/m³: 4.84 km) or Mars's (58 and 32 km, 2900 and 3500 kg/m³:
+   balance (above), Earth's crusts (41.1 and 7.1 km, 2830 kg/m³, over
+   PREM's uppermost mantle, Dziewonski & Anderson 1981,
+   3380 kg/m³: 5.53 km) or Mars's (58 and 32 km, 2900 and 3500 kg/m³:
    4.46 km). The step falls from the continent's edge at the continental
    slope, 2.4°, the mean gradient of Earth's sea floor between 200 and
    2500 m deep near land (ETOPO 2022, measured for the study), over a
@@ -194,8 +195,9 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
 6. **Volcanoes.** Cones from the planet's heat flux (see [How tall do
    volcanoes grow, and how many are there?](volcanoes.md)).
 7. **Gravity.** What loads the crust (mountains, boundary relief,
-   cones) is multiplied by the relief scale $\min(g_0/g, 2)$, $g_0$ the
-   standard gravity; the floating crust and the ridges are not.
+   cones) is multiplied by the relief scale $\min(g_0/g, 2.49)$, $g_0$
+   the standard gravity, capped at Olympus Mons's relief over Everest's
+   height (22 / 8.849); the floating crust and the ridges are not.
 8. **Sea level.** The height below which `ocean_share` of the sphere's
    area lies (an exact area-weighted quantile); heights are stored
    relative to it. A world without liquid, or with a share of 0, is
@@ -395,13 +397,6 @@ study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list
   regime Mars's. No measured Hurst exponent exists for Venus, so a
   Venus-like world takes Mars's *(a choice of the design)*; checked
   against its unimodal hypsometry.
-- **Earth's mantle density, 3300 kg/m³.** The textbook value for
-  isostasy, not read on a primary source in the study; PREM's
-  uppermost mantle, about 3380 kg/m³, would raise the continents from
-  4.84 to 5.53 km above the thin crust. Checked against ETOPO 2022's
-  hypsometry.
-- **The relief scale stops at 2.** Olympus Mons over Everest is 2.49; the
-  cap of 2 is the legacy's, kept unless the user retains the ratio.
 - **Highlands and dry plains** (`HIGHLANDS`, `DRY_PLAINS_KM`): ported from
   the legacy with their calibrations, below.
 - **Mountain onset and blend**, only if the Earth hypsometry test needs
@@ -593,7 +588,12 @@ Choices of the design:
     planets", *Treatise on Geophysics* 10, 165–206,
     [doi:10.1016/B978-044452748-6.00156-5](https://doi.org/10.1016/B978-044452748-6.00156-5):
     Mars's crust and mantle densities, 2900 and 3500 kg/m³.
-26. Relief study of the rewrite, 2026-11-22:
+26. Dziewonski, A. M. & Anderson, D. L. 1981, "Preliminary reference
+    Earth model", *Physics of the Earth and Planetary Interiors* 25,
+    297–356,
+    [doi:10.1016/0031-9201(81)90046-7](https://doi.org/10.1016/0031-9201(81)90046-7)
+    (read): Table I, the density of the mantle lid, 3.38 g/cm³ at its top.
+27. Relief study of the rewrite, 2026-11-22:
     [`docs/superpowers/studies/2026-11-22-relief/`](../superpowers/studies/2026-11-22-relief/README.md),
     with its retained values, its scripts and its calibration list.
 

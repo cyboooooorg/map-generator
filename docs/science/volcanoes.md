@@ -111,7 +111,7 @@ study](../superpowers/studies/2026-11-22-relief/volcanoes.md)):
    after de Bremond d'Ars et al.
 4. **Shape.** Every cone has an aspect between 0.01 and 0.1 (Grosse &
    Kervyn 2018) and stands at most 8.4 km at standard gravity, scaled by
-   the relief scale $\min(g_0/g, 2)$ like the mountains.
+   the relief scale $\min(g_0/g, 2.49)$ like the mountains.
 
 ### Where it departs from the science
 

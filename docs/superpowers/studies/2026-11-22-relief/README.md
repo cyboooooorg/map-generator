@@ -87,7 +87,7 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `amplitude(Mars)` | 233 | m | Source | MOLA MEGDR, same statistic [V, measured, `scripts/mola_stats.py`]; Landais et al. Fig. 2 about 231 m |
 | `HEIGHT_RANGE` | 25 | km | Definition | the storage range; Olympus Mons's relief "almost 22 km" (Plescia 2004) [V, abstract] |
 | `STANDARD_GRAVITY` | 9.80665 | m/s² | Definition | CGPM 1901 |
-| `MAX_RELIEF_SCALE` | 2 (legacy) or 2.49 | — | Calibration, or Source if 2.49 | Olympus Mons 22 km / Everest 8.849 km = 2.49 [D]; see the calibration list |
+| `MAX_RELIEF_SCALE` | 2.49 | — | Source | Olympus Mons's relief, "almost 22 km" (Plescia 2004) [V, abstract], over Everest's 8.84886 km (China-Nepal survey, 2020) [S, press report]: 22 / 8.84886 = 2.486 [D]; Olympus Mons is measured over its surroundings, Everest above sea level, as in the legacy's doc comment; the legacy's 2 had no source |
 
 ### Crust (Task 3)
 
@@ -96,7 +96,7 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `EARTH_CRUST.continental_thickness` | 41.1 | km | Source | Christensen & Mooney 1995 [V, abstract] |
 | `EARTH_CRUST.oceanic_thickness` | 7.1 | km | Source | White, McKenzie & O'Nions 1992 [V, abstract] |
 | `EARTH_CRUST.crust_density` | 2830 | kg/m³ | Source | Christensen & Mooney 1995 [V, abstract on the USGS record] |
-| `EARTH_CRUST.mantle_density` | 3300 | kg/m³ | Calibration | textbook value [S]; PREM's lid about 3380 [S]; see the calibration list |
+| `EARTH_CRUST.mantle_density` | 3380 | kg/m³ | Source | PREM (Dziewonski & Anderson 1981), Table I, LID (radius 6291.0-6346.6 km, depth 24.4-80 km): ρ = 2.6910 + 0.6924 r/a g/cm³, 3.3807 at the top of the mantle (24.4 km), 3.3747 at 80 km [V, D]; Airy step 5.53 km |
 | `MARS_CRUST.continental_thickness` | 58 | km | Source | Neumann et al. 2004, southern modal thickness [V, abstract] |
 | `MARS_CRUST.oceanic_thickness` | 32 | km | Source | Neumann et al. 2004, northern modal thickness [V, abstract] |
 | `MARS_CRUST.crust_density` | 2900 | kg/m³ | Source | Wieczorek 2007, Fig. 11 caption [V] |
@@ -167,36 +167,37 @@ Each will carry a `Calibration:` doc comment, a calibration section in its
 | # | Calibration | Value (legacy unless said) | Fitted on, or to fit on | Searched and not found |
 | --- | --- | --- | --- | --- |
 | 1 | Regime to analogue body | Plates → Earth; Stagnant, Episodic, HeatPipe → Mars (Venus too) | Task 9: H, Mars highland share, Venus 80 % within 1 km | a measured H for Venus; crust shares of non-plate regimes |
-| 2 | Earth upper-mantle density | 3300 kg/m³ (Airy step 4.84 km) | ETOPO 2022 hypsometry (Task 9); PREM's 3380 would make it a source and the step 5.53 km | PREM table (IRIS refused), Turcotte & Schubert (not opened) |
-| 3 | Volcanic intensity curve | shape between Earth (0.087 W/m²) and a heat pipe (2.5 W/m² → 1); Earth's value 0.5 | nothing published; checked at its anchors (Task 4) | a law from heat flux to volcanic share or cone density (Kite et al. 2009, Crisp 1984, Moore & Webb 2013, Kankanamge & Moore 2019) |
-| 4 | `VOLCANIC_PROVINCE_SHARE` | 0.3 at intensity 1 | bounded by the Moon's 16-17 %, Mercury's about 18 %, Venus's 50-75 % [S] | Mars and Venus volcanic unit areas (Tanaka et al. 2014, Ivanov & Head 2011 tables) |
-| 5 | Cone size draw | how sizes are drawn inside 0.1-1000 km³ and H/WB 0.01-0.1 | Grosse & Kervyn's ranges | a global size distribution of volcanoes |
-| 6 | Isolated cone spacing and presence | one per 900 km cell, in half the cells | none | a global law (ten Brink 1991, Hahn & Byrne 2023 give local densities [S]) |
-| 7 | Arc cone density | one per 250 km of arc (200 km cell, 80 %) | regional 50-70 km [S] | de Bremond d'Ars et al.'s Gamma mean (full text refused) |
-| 8 | Island-arc uplift | 3 km at 120 km, sigma 60 km | none | arc edifice and forearc height statistics |
-| 9 | Collision orogen width | sigma 350 km (FWHM 583 km) | bounded by the Altiplano (350-400 km) and Tibet (about 1000 km [S]) | a published orogen width |
-| 10 | Rift shoulder and axis | +0.5 km at 120 km, −1.5 km at the axis | bounded by 0-3 km (Buck 2007) | typical shoulder uplift, axis depth statistics |
-| 11 | `RELIEF_SPEED`, `ARC_SPEED` | 0.5-5 cm/yr, 2 cm/yr | none | a convergence threshold for trenches, orogens, arcs (Jarrard 1986, Heuret & Lallemand 2005) |
-| 12 | `PLATE_WEIGHT` | 0.35 | to fit: Sornette & Pisarenko's µ = 0.25 and PB2002's areas | a source for the spread device itself (none expected) |
-| 13 | Slab-pull ramp | speed rise between 0 and 25 % subducting | Zahirovic et al.'s 4.4 cm/yr under 25 % as check point | a continuous law of speed against subducting share |
-| 14 | `MAX_RELIEF_SCALE` | 2 | none; the sourced ratio Olympus/Everest is 2.49, which would make it a source | — |
-| 15 | `HIGHLANDS` (ported) | frequency 1.6, 3 octaves, edge (0.23, 0.33) | about 9 % of the sphere, Venus's highland share (Ivanov & Head 2011) | already documented in legacy |
-| 16 | `DRY_PLAINS_KM` (ported) | 3 km per noise unit at Earth's gravity | Venus: more than 80 % within 1 km (79 % on `venus-like`) | already documented in legacy |
-| 17 | `MOUNTAIN_ONSET`, `MOUNTAIN_BLEND` (only if Task 9 needs them) | 0.28, 0.45 | ETOPO 2022 hypsometry | mountain range widths, ridge spacing |
+| 2 | Volcanic intensity curve | shape between Earth (0.087 W/m²) and a heat pipe (2.5 W/m² → 1); Earth's value 0.5 | nothing published; checked at its anchors (Task 4) | a law from heat flux to volcanic share or cone density (Kite et al. 2009, Crisp 1984, Moore & Webb 2013, Kankanamge & Moore 2019) |
+| 3 | `VOLCANIC_PROVINCE_SHARE` | 0.3 at intensity 1 | bounded by the Moon's 16-17 %, Mercury's about 18 %, Venus's 50-75 % [S] | Mars and Venus volcanic unit areas (Tanaka et al. 2014, Ivanov & Head 2011 tables) |
+| 4 | Cone size draw | how sizes are drawn inside 0.1-1000 km³ and H/WB 0.01-0.1 | Grosse & Kervyn's ranges | a global size distribution of volcanoes |
+| 5 | Isolated cone spacing and presence | one per 900 km cell, in half the cells | none | a global law (ten Brink 1991, Hahn & Byrne 2023 give local densities [S]) |
+| 6 | Arc cone density | one per 250 km of arc (200 km cell, 80 %) | regional 50-70 km [S] | de Bremond d'Ars et al.'s Gamma mean (full text refused) |
+| 7 | Island-arc uplift | 3 km at 120 km, sigma 60 km | none | arc edifice and forearc height statistics |
+| 8 | Collision orogen width | sigma 350 km (FWHM 583 km) | bounded by the Altiplano (350-400 km) and Tibet (about 1000 km [S]) | a published orogen width |
+| 9 | Rift shoulder and axis | +0.5 km at 120 km, −1.5 km at the axis | bounded by 0-3 km (Buck 2007) | typical shoulder uplift, axis depth statistics |
+| 10 | `RELIEF_SPEED`, `ARC_SPEED` | 0.5-5 cm/yr, 2 cm/yr | none | a convergence threshold for trenches, orogens, arcs (Jarrard 1986, Heuret & Lallemand 2005) |
+| 11 | `PLATE_WEIGHT` | 0.35 | to fit: Sornette & Pisarenko's µ = 0.25 and PB2002's areas | a source for the spread device itself (none expected) |
+| 12 | Slab-pull ramp | speed rise between 0 and 25 % subducting | Zahirovic et al.'s 4.4 cm/yr under 25 % as check point | a continuous law of speed against subducting share |
+| 13 | `HIGHLANDS` (ported) | frequency 1.6, 3 octaves, edge (0.23, 0.33) | about 9 % of the sphere, Venus's highland share (Ivanov & Head 2011) | already documented in legacy |
+| 14 | `DRY_PLAINS_KM` (ported) | 3 km per noise unit at Earth's gravity | Venus: more than 80 % within 1 km (79 % on `venus-like`) | already documented in legacy |
+| 15 | `MOUNTAIN_ONSET`, `MOUNTAIN_BLEND` (only if Task 9 needs them) | 0.28, 0.45 | ETOPO 2022 hypsometry | mountain range widths, ridge spacing |
 
 Left the list since the spec: the Andean uplift (now Allmendinger et
 al.), the arc position (slab depth and dip), `STAGE_MA` (the drift is not
-ported), the Gamma shape of arc spacing (random placement). Joined it:
-numbers 2, 5 and 14, unsourced numbers of the legacy that the drafts had
-not listed.
+ported), the Gamma shape of arc spacing (random placement), and, at the
+user's review (2026-11-22), Earth's upper-mantle density (now PREM) and
+`MAX_RELIEF_SCALE` (now the Olympus Mons / Everest ratio). Joined it:
+number 4, the cone size draw, which the drafts had not listed. Twelve
+firm calibrations remain, plus two legacy ones ported and one pair kept
+only if Task 9 needs it.
 
 ## Open items
 
 - The three drafts and this study are to become one Wiki study, which
   the pages will then cite; until then the pages cite this folder.
-- A primary read of PREM would turn calibration 2 into a source and move
-  the Earth step from 4.84 to 5.53 km: the user's decision, with Task 9's
-  hypsometry.
+- Earth's crust now stands 5.53 km above the thin crust (PREM's mantle)
+  against the legacy's 4.84 km: Task 9's ETOPO hypsometry test says
+  whether the relief still matches.
 - Earth's Haar fluctuation disagrees with Landais et al.'s figure by a
   factor 1.9; a note to the authors' data, or a reading of the published
   Icarus version, could settle it.
