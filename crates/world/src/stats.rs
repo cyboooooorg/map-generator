@@ -65,12 +65,14 @@ impl Ord for Key {
 /// Great-circle distance, in metres, from each cell to the nearest source
 /// cell: a multi-source Dijkstra over the neighbours, each edge being the
 /// arc between the two cell centres on a sphere of `radius`. Cells that no
-/// source reaches (no source at all) are infinite.
+/// source reaches (no source at all, or farther than `reach` when one is
+/// given: the pass stops expanding there) are infinite.
 ///
 /// # Panics
 ///
 /// Panics when `sources` does not hold one flag per cell.
-pub fn distance_to(grid: &Grid, radius: Metre, sources: &[bool]) -> Vec<f32> {
+pub fn distance_to(grid: &Grid, radius: Metre, sources: &[bool], reach: Option<Metre>) -> Vec<f32> {
+    let reach = reach.map_or(f64::INFINITY, |r| r.0);
     assert_eq!(sources.len(), grid.cell_count(), "one flag per cell");
     let mut best = vec![f64::INFINITY; sources.len()];
     let mut queue = BinaryHeap::new();
@@ -87,7 +89,7 @@ pub fn distance_to(grid: &Grid, radius: Metre, sources: &[bool]) -> Vec<f32> {
             let q = grid.point(j);
             let cos: f64 = p.iter().zip(q).map(|(a, b)| a * b).sum();
             let edge = radius.0 * cos.clamp(-1.0, 1.0).acos();
-            if d + edge < best[j] {
+            if d + edge <= reach && d + edge < best[j] {
                 best[j] = d + edge;
                 queue.push(Reverse((Key(d + edge), j)));
             }

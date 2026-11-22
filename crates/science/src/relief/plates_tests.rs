@@ -210,3 +210,78 @@ fn plates_keep_their_cited_values() {
     assert!((cm(RELIEF_SPEED.1) - 5.0).abs() < 1e-12);
     assert!((cm(ARC_SPEED) - 2.0).abs() < 1e-12);
 }
+
+#[test]
+fn slab_pull_speeds_up_the_sinking_plates() {
+    // Zahirovic et al. 2015: 2.6 cm/yr without a subducting edge, 7.9
+    // from a quarter of the perimeter subducting.
+    let cm = |share: f64| CentimetrePerYear::from(slab_pull_speed(share)).0;
+    assert!((cm(0.0) - 2.6).abs() < 1e-12);
+    assert!((cm(SLAB_FULL_SHARE) - 7.9).abs() < 1e-12);
+    assert!((cm(1.0) - 7.9).abs() < 1e-12);
+    let mut last = cm(0.0);
+    for i in 1..=10 {
+        let v = cm(f64::from(i) * SLAB_FULL_SHARE / 10.0);
+        assert!(v > last, "{v} after {last}");
+        last = v;
+    }
+}
+
+#[test]
+fn the_plate_draw_keeps_its_legacy_values() {
+    // legacy-final:crates/mapgen/src/plates.rs:40-58.
+    assert_eq!(PLATE_WEIGHT, Radian(0.35));
+    assert_eq!(SUBPLATE_FREQUENCY, 5.0);
+    assert_eq!(SUBPLATE_WARP, 0.08);
+    assert_eq!(SUBPLATE_WARP_FREQUENCY, 3.0);
+    assert_eq!(BOUNDARY_WINDOW, 3);
+}
+
+#[test]
+fn relief_strength_ramps_over_the_relief_speeds() {
+    // Closing kinds grow with convergence, parting kinds with spreading.
+    for kind in [Boundary::Collision, Boundary::Andean, Boundary::IslandArc] {
+        assert_eq!(relief_strength(kind, RELIEF_SPEED.0), 0.0);
+        assert_eq!(relief_strength(kind, RELIEF_SPEED.1), 1.0);
+        assert_eq!(relief_strength(kind, speed(-5.0)), 0.0);
+    }
+    for kind in [Boundary::Rift, Boundary::Ridge] {
+        assert_eq!(relief_strength(kind, speed(-5.0)), 1.0);
+        assert_eq!(relief_strength(kind, speed(5.0)), 0.0);
+    }
+    assert_eq!(relief_strength(Boundary::Transform, speed(5.0)), 0.0);
+}
+
+#[test]
+fn relief_levels_invert_the_strength() {
+    for kind in [Boundary::Collision, Boundary::Ridge] {
+        for i in 1..RELIEF_LEVELS {
+            let s = f64::from(i) / f64::from(RELIEF_LEVELS);
+            let v = relief_level(kind, s);
+            assert!((relief_strength(kind, v) - s).abs() < 1e-9, "{kind:?} {s}");
+        }
+        assert_eq!(relief_strength(kind, relief_level(kind, 1.0)), 1.0);
+    }
+    assert_eq!(RELIEF_LEVELS, 4);
+}
+
+#[test]
+fn profiles_vanish_beyond_their_reach() {
+    for kind in [
+        Boundary::Collision,
+        Boundary::Andean,
+        Boundary::IslandArc,
+        Boundary::Rift,
+        Boundary::Ridge,
+    ] {
+        let v = relief_level(kind, 1.0);
+        let reach = relief_reach(kind, v);
+        let peak = (-2000..=2000)
+            .map(|i| boundary_height(kind, Metre(f64::from(i) * 1e3), v).0.abs())
+            .fold(0.0, f64::max);
+        for d in [reach.0, -reach.0, 1.5 * reach.0] {
+            let h = boundary_height(kind, Metre(d), v).0.abs();
+            assert!(h < 1e-3 * peak, "{kind:?} at {d}: {h} of {peak}");
+        }
+    }
+}

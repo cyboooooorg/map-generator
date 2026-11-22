@@ -5,7 +5,7 @@ fn distances_follow_great_circles() {
     let grid = Grid::new(32);
     let mut sources = vec![false; grid.cell_count()];
     sources[0] = true;
-    let d = distance_to(&grid, Metre(1.0), &sources);
+    let d = distance_to(&grid, Metre(1.0), &sources, None);
     let p0 = grid.point(0);
     let anti = (0..grid.cell_count())
         .min_by(|&a, &b| {
@@ -43,4 +43,22 @@ fn area_mean_weights_by_area() {
     let grid = Grid::new(8);
     let v = vec![2.0f32; grid.cell_count()];
     assert!((area_mean(&grid, &v) - 2.0).abs() < 1e-6);
+}
+
+#[test]
+fn distances_stop_at_their_reach() {
+    let grid = Grid::new(32);
+    let mut sources = vec![false; grid.cell_count()];
+    sources[0] = true;
+    let all = distance_to(&grid, Metre(1.0), &sources, None);
+    let reach = Metre(1.0);
+    let near = distance_to(&grid, Metre(1.0), &sources, Some(reach));
+    for (a, b) in all.iter().zip(&near) {
+        if f64::from(*a) <= reach.0 {
+            assert_eq!(a, b);
+        } else {
+            assert_eq!(*b, f32::INFINITY);
+        }
+    }
+    assert!(near.iter().any(|d| d.is_infinite()));
 }

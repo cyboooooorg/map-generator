@@ -60,6 +60,42 @@ pub const PLATE_RMS_SPEED: (MetrePerSecond, MetrePerSecond) = (
 /// An `f64`, not a `Fraction`, to stay a plain constant.
 pub const SLAB_FULL_SHARE: f64 = 0.25;
 
+/// Calibration: largest weight of a plate centre, 0.35 rad: a plate of
+/// weight `w` reaches `w` farther than an unweighted one (a power
+/// diagram), so plates come in varied sizes. The legacy's
+/// (`legacy-final:crates/mapgen/src/plates.rs:49`), to fit on Sornette &
+/// Pisarenko's 0.25 exponent ([`PLATE_SIZE_EXPONENT`]) and PB2002's areas,
+/// not yet fitted; searched and not found: a
+/// source for the spread device itself (relief study, calibration 11,
+/// `docs/superpowers/studies/2026-11-22-relief/plates.md#plate-count-and-sizes`).
+pub const PLATE_WEIGHT: Radian = Radian(0.35);
+
+/// Definition: frequency of the subplate lattice on the unit sphere, 5
+/// cells per unit, about 300 subplates whose jagged outlines the plates
+/// follow: a discretisation of the plate outlines, the legacy's
+/// (`legacy-final:crates/mapgen/src/plates.rs:40`; relief study,
+/// plates.md, plate count and sizes).
+pub const SUBPLATE_FREQUENCY: f64 = 5.0;
+
+/// Definition: displacement of the subplate lookup on the unit sphere,
+/// 0.08, so subplate borders wander: part of the discretisation of the
+/// plate outlines, the legacy's (`legacy-final:crates/mapgen/src/plates.rs:44`;
+/// relief study, plates.md).
+pub const SUBPLATE_WARP: f64 = 0.08;
+
+/// Definition: frequency of the first octave of the subplate warp on the
+/// unit sphere, 3; the second is twice as fine and half as strong. Part
+/// of the discretisation of the plate outlines, the legacy's
+/// (`legacy-final:crates/mapgen/src/plates.rs:45`; relief study, plates.md).
+pub const SUBPLATE_WARP_FREQUENCY: f64 = 3.0;
+
+/// Definition: half-width, in grid cells, of the window the direction
+/// across a boundary is taken over: one neighbour gives only one of 8
+/// directions, which jump from cell to cell along a stepped boundary. A
+/// numerical device, the legacy's (`legacy-final:crates/mapgen/src/plates.rs:58`;
+/// relief study, plates.md).
+pub const BOUNDARY_WINDOW: u32 = 3;
+
 /// Source: depth of the top of the slab under the volcanic arc, 105 km,
 /// the global average of 72-173 km over 500 km arc segments (Syracuse &
 /// Abers 2006, doi:10.1029/2005GC001045).
@@ -190,6 +226,23 @@ pub fn ridge_depth(age: Gyr) -> Metre {
     RIDGE_CREST_DEPTH + Metre(RIDGE_SUBSIDENCE * ma.sqrt())
 }
 
+/// RMS surface speed of a plate subducting along `share` of its
+/// perimeter (slab pull): the bottom of [`PLATE_RMS_SPEED`] with no
+/// sinking edge, its top from [`SLAB_FULL_SHARE`] on.
+///
+/// Calibration: the rise between 0 and [`SLAB_FULL_SHARE`] is linear, the
+/// legacy's ramp (`legacy-final:crates/mapgen/src/plates.rs:1021`, its
+/// `sinking_speeds`). Zahirovic et al. (2015) give classes, not a law; their
+/// 4.4 cm/yr median under 25 % subducting is its check point. Searched
+/// and not found: a continuous law of speed against subducting share
+/// (relief study, calibration 12,
+/// `docs/superpowers/studies/2026-11-22-relief/plates.md#plate-speeds-and-slab-pull`).
+pub fn slab_pull_speed(share: f64) -> MetrePerSecond {
+    let (slow, fast) = PLATE_RMS_SPEED;
+    let ramp = (share / SLAB_FULL_SHARE).clamp(0.0, 1.0);
+    MetrePerSecond(slow.0 + (fast.0 - slow.0) * ramp)
+}
+
 /// Distance of the volcanic arc from the trench, where the slab is
 /// [`ARC_SLAB_DEPTH`] deep: `depth / tan(dip)` (England & Katz 2010,
 /// Fig. 1; Jarrard 1986), 168 km.
@@ -274,6 +327,68 @@ pub fn orogeny_weight(kind: Boundary, distance: Metre, convergence: MetrePerSeco
         _ => 0.0,
     };
     Fraction::new(closing(convergence.0) * shape).expect("a bump within 0 and 1")
+}
+
+/// Definition: number of levels the strength of a boundary is cut into.
+/// A boundary's relief is the integral over strength levels `t` of the
+/// full-strength profile at the distance to the boundary cells at least
+/// `t` strong, `∫₀¹ profile(d_{s≥t}) dt`; the world sums `RELIEF_LEVELS`
+/// terms of it, so a change of the nearest boundary cell moves the relief
+/// by at most `1 / RELIEF_LEVELS` of a peak. A discretisation, not a
+/// physical value.
+pub const RELIEF_LEVELS: u32 = 4;
+
+/// Definition: how many sigmas past its centre a bump of a boundary
+/// profile is cut, 3: the bump is then `e⁻⁹`, a ten-thousandth of its
+/// peak. A truncation of the distance pass (the legacy's was a fixed
+/// 3000 km, `MAX_BOUNDARY_KM`), not a physical value.
+pub const RELIEF_REACH_SIGMAS: f64 = 3.0;
+
+/// Strength of a boundary of kind `kind` whose plates close at
+/// `convergence` (negative where they part), in `[0, 1]`: closing kinds
+/// over [`RELIEF_SPEED`], rifts and ridges by their spreading over the
+/// same speeds, transforms none.
+pub fn relief_strength(kind: Boundary, convergence: MetrePerSecond) -> f64 {
+    match kind {
+        Boundary::Collision | Boundary::Andean | Boundary::IslandArc => closing(convergence.0),
+        Boundary::Rift | Boundary::Ridge => closing(-convergence.0),
+        Boundary::Transform => 0.0,
+    }
+}
+
+/// The convergence of a boundary of kind `kind` whose strength
+/// ([`relief_strength`]) is `strength`: the inverse of the smooth step,
+/// negative for parting kinds. The world gives each boundary cell the
+/// level nearest its strength (rounded, not floored, which halves the
+/// error) and builds each level's relief at this convergence.
+pub fn relief_level(kind: Boundary, strength: f64) -> MetrePerSecond {
+    let y = strength.clamp(0.0, 1.0);
+    // Inverse of 3t² - 2t³ on [0, 1].
+    let t = 0.5 - ((1.0 - 2.0 * y).asin() / 3.0).sin();
+    let speed = RELIEF_SPEED.0.0 + t * (RELIEF_SPEED.1.0 - RELIEF_SPEED.0.0);
+    match kind {
+        Boundary::Rift | Boundary::Ridge => MetrePerSecond(-speed),
+        _ => MetrePerSecond(speed),
+    }
+}
+
+/// Distance from a boundary of kind `kind` closing at `convergence`
+/// beyond which its profile ([`boundary_height`]) and weights are
+/// negligible: [`RELIEF_REACH_SIGMAS`] sigmas past the farthest bump, and
+/// for a ridge the distance at which the floor is [`RIDGE_FLOOR_AGE`] old.
+pub fn relief_reach(kind: Boundary, convergence: MetrePerSecond) -> Metre {
+    let n = RELIEF_REACH_SIGMAS;
+    match kind {
+        Boundary::Collision => COLLISION_SIGMA * n,
+        Boundary::Andean => andean_centre() + Metre(n * sigma(ANDEAN_WIDTH)),
+        Boundary::IslandArc => arc_distance() + ISLAND_ARC_SIGMA * n,
+        Boundary::Rift => RIFT_SHOULDER_DISTANCE + RIFT_SHOULDER_SIGMA * n,
+        Boundary::Ridge => {
+            let age = Second::from(Year::from(RIDGE_FLOOR_AGE));
+            Metre(age.0 * convergence.0.abs() / 2.0)
+        }
+        Boundary::Transform => Metre(0.0),
+    }
 }
 
 /// How far closing at `convergence` m/s has built its relief, over
