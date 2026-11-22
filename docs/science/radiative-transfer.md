@@ -88,8 +88,8 @@ less of it escapes. A greenhouse gas lowers the OLR for a given surface
 temperature.
 
 **Orders of magnitude.** Earth's clear-sky OLR is 264 W/m² in the CERES
-EBAF Ed2.8 technical note and 267-268 W/m² in Ed4 (Kato et al. 2018,
-cited by Wild et al. 2019).
+EBAF Ed2.8 technical note and 267.9 W/m² in Ed4, July 2005 to June 2015
+(Kato et al. 2018, Table 5; 265.4 in Ed2.8 over the same years).
 
 ### The temperature of the column
 
@@ -542,8 +542,16 @@ a literature check of every number and citation (the full audit is in the
 3.7 ± 0.6 W/m² (Myhre et al. 1998) compares an instantaneous, clear-sky
 change of the outgoing radiation at fixed temperatures with a
 global-mean, cloudy-sky, stratosphere-adjusted forcing at the tropopause,
-which is usually larger. It is a plausibility band. A like-for-like anchor
-is still to be found.
+which is usually larger. It is a plausibility band. The like-for-like
+quantity exists: the line-by-line codes of RTMIP give 2.80 W/m²
+(standard deviation 0.06) of instantaneous clear-sky forcing at the top
+of the model for 287 to 574 ppm on the AFGL mid-latitude summer profile
+(Collins et al. 2006, Table 8, case 2b-1a). The test column gives
+3.41 W/m² for 280 to 560 ppm, 0.61 above it, on a different profile: no
+ozone, and a stratosphere isothermal at 217 K where the mid-latitude
+summer's warms with height, whose emission grows with the CO₂ and lowers
+the forcing at the top. Anchoring the test on RTMIP needs the column on
+that profile; until then the band stays.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B), Manabe &
 Wetherald 1967 (equation 2), Pierrehumbert 2010 (equation 2.33), Bucholtz
@@ -567,119 +575,122 @@ uses them.
 5. Chase, M. W. 1998, *NIST-JANAF Thermochemical Tables*, 4th ed., *J.
    Phys. Chem. Ref. Data* Monograph 9, through the NIST WebBook
    (<https://webbook.nist.gov>).
-6. Courtin, R., Gautier, D., McKay, C. P. 1995, *Icarus* 114, 144 (cited
+6. Collins, W. D. et al. 2006, "Radiative forcing by well-mixed
+   greenhouse gases: estimates from climate models in the IPCC AR4",
+   *J. Geophys. Res.* 111, D14317, doi:10.1029/2005JD006713.
+7. Courtin, R., Gautier, D., McKay, C. P. 1995, *Icarus* 114, 144 (cited
    for the position of Titan's collision-induced bands; not retrieved for
    this article).
-7. Creecy, E. et al. 2021, *Geophys. Res. Lett.*,
+8. Creecy, E. et al. 2021, *Geophys. Res. Lett.*,
    doi:10.1029/2021GL095356.
-8. Dai, L. et al. 2022, *J. Geophys. Res. Planets* 127, e2021JE007060,
+9. Dai, L. et al. 2022, *J. Geophys. Res. Planets* 127, e2021JE007060,
    arXiv:2207.10238.
-9. Elsasser, W. M. 1942, *Heat Transfer by Infrared Radiation in the
+10. Elsasser, W. M. 1942, *Heat Transfer by Infrared Radiation in the
    Atmosphere*, Harvard Meteorological Studies 6 (no DOI).
-10. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
-11. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
+11. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
+12. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
     Geosci.* 6, 661, doi:10.1038/ngeo1892.
-12. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
+13. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
     arXiv:1503.04835.
-13. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
+14. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
     107949, doi:10.1016/j.jqsrt.2021.107949 (HITRAN2020), and Gordon, I. E.
     et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353, 109807,
     doi:10.1016/j.jqsrt.2026.109807 (HITRAN2024, the release the app
     reads).
-14. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
+15. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
     doi:10.1006/icar.1997.5773.
-15. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
+16. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
     *ApJ* 806, 216, doi:10.1088/0004-637X/806/2/216, arXiv:1505.03552.
-16. Haus, R. et al. 2016, *Icarus* 272, 178,
+17. Haus, R. et al. 2016, *Icarus* 272, 178,
     doi:10.1016/j.icarus.2016.02.048.
-17. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
+18. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
     doi:10.5194/acp-21-14927-2021.
-18. HITRAN collision-induced absorption, 2024 files:
+19. HITRAN collision-induced absorption, 2024 files:
     `CO2-CO2_2024.cia`, <https://hitran.org/cia/>, documented by Terragni,
     Gordon et al., "Collision Induced Absorption in HITRAN2024: Enhanced and
     Improved Data for Atmospheric and Astrophysical Applications", through
     <https://hitran.org/data/CIA/CIA_Readme_2024.pdf>.
-19. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
+20. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
     for the Thermodynamic Properties of Ordinary Water Substance*,
     <https://iapws.org/documents/release/IAPWS-95.download>.
-20. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
+21. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
     doi:10.3847/0004-6256/152/2/41, arXiv:1605.09788.
-21. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
-22. Kato, S. et al. 2018, *J. Climate* 31, 4501,
+22. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
+23. Kato, S. et al. 2018, *J. Climate* 31, 4501,
     doi:10.1175/JCLI-D-17-0523.1.
-23. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
+24. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
     doi:10.1029/2007JD008434.
-24. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
+25. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
     doi:10.1109/TGRS.2012.2227333.
-25. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
+26. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
     1923, doi:10.1175/JAS-D-22-0178.1.
-26. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
+27. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
     doi:10.1088/0004-637X/765/2/131, arXiv:1301.6674.
-27. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
+28. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
     doi:10.1029/90JD01945.
-28. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
+29. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
     greenhouse processes on Earth-like planets", *Nature* 504, 268,
     doi:10.1038/nature12827, arXiv:1312.3337.
-29. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
+30. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
     doi:10.1029/2011GL050053.
-30. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
+31. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
     doi:10.1175/JCLI-D-17-0208.1.
-31. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
+32. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
     doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2.
-32. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
+33. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
     doi:10.1126/science.11538492.
-33. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
+34. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
     doi:10.1175/1520-0469(1980)037<0630:TSATRT>2.0.CO;2.
-34. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
+35. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
     doi:10.1098/rsta.2011.0295. Release MT_CKD_H2O 4.3:
     <https://github.com/AER-RC/MT_CKD_H2O/releases/tag/4.3>.
-35. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
+36. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
     Res. Lett.* 25, 2715, doi:10.1029/98GL01908.
-36. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
+37. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
     doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2.
-37. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
+38. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
     doi:10.1029/2010JE003659.
-38. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
+39. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
     Cambridge University Press: §2.6 (phase change), §2.7 (the moist
     adiabat), §3.6 (the skin temperature).
-39. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
+40. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
     doi:10.1038/ngeo2020, arXiv:1312.6859.
-40. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
+41. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
     doi:10.1175/JCLI-D-21-0275.1.
-41. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
+42. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
     2261, doi:10.1175/1520-0477(1999)080<2261:AIUCFI>2.0.CO;2.
-42. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
+43. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
     293, doi:10.1016/j.jqsrt.2004.07.025.
-43. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
+44. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
     Pergamon (no DOI). Equation 1.87, as cited by Zuluaga, Sucerquia,
     Alvarado-Montes 2022, arXiv:2207.08636.
-44. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
+45. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
     doi:10.1002/2014RG000449.
-45. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
+46. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
     doi:10.1175/BAMS-D-12-00117.1.
-46. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
+47. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
     109595, doi:10.1016/j.jqsrt.2025.109595.
-47. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
-48. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
+48. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
+49. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
     Geophys. Res.* 94, 16287, doi:10.1029/JD094iD13p16287.
-49. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
+50. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
     doi:10.1073/pnas.0608561103.
-50. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
+51. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
     116265, doi:10.1016/j.icarus.2024.116265.
-51. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
+52. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
     doi:10.1175/JCLI-3299.1.
-52. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
+53. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
     doi:10.1063/1.555926 (the saturation equations of IAPWS
     SR1-86(1992)); Wagner, W., Riethmann, T., Feistel, R., Harvey, A. H.
     2011, *J. Phys. Chem. Ref. Data* 40, 043103, doi:10.1063/1.3657937
     (sublimation pressure of ice Ih, IAPWS R14-08(2011)).
-53. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
+54. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
     (cited for Kato et al.'s clear-sky OLR).
-54. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
+55. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
     doi:10.1175/1520-0469(1996)053<3084:ASCPFU>2.0.CO;2.
-55. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
+56. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
     doi:10.1063/1.555899.
-56. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
+57. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
 
 ## See also
 

@@ -16,6 +16,9 @@
 //! in `T`; past its edges the temperature is clamped and `k` scales as
 //! `p` (Lorentz).
 
+use super::fast_math;
+use super::spectrum::Level;
+
 /// Definition: the number of g-points per bin of the table files.
 pub(crate) const G: usize = 8;
 
@@ -191,6 +194,67 @@ impl Table {
             ],
             scale,
         )
+    }
+
+    /// The lines of one gas, of partial pressure `partial_bar` and molar
+    /// mass `molar_kg`, at `level` in the first `m` g-points (over the
+    /// bins) into `out`, per unit `ln p` (vertical optical depths), in
+    /// single precision: its set broadened by the air (`sets.0`) and its
+    /// set broadened by itself (`sets.1`), mixed by its share of the
+    /// pressure, each interpolated in `ln k` into `by_air` and `by_self`
+    /// with the logarithm of its column mass added, then summed. The level
+    /// must hold air (a positive pressure, temperature and gravity) and
+    /// the gas.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the slices are the caller's buffers, reused per level"
+    )]
+    pub(crate) fn lines(
+        &self,
+        level: &Level,
+        partial_bar: f64,
+        molar_kg: f64,
+        sets: (usize, usize),
+        m: usize,
+        by_air: &mut [f32],
+        by_self: &mut [f32],
+        out: &mut [f32],
+    ) {
+        let p = level.pressure_bar();
+        let t = level.temperature_k;
+        let (air_at, wa, scale) = self.corners(sets.0, p, t);
+        let (self_at, ws, _) = self.corners(sets.1, p, t);
+        let (wa, ws) = (wa.map(|w| w as f32), ws.map(|w| w as f32));
+        let mass = scale * level.mass_per_ln_p(partial_bar, molar_kg);
+        let share = (partial_bar / p).clamp(0.0, 1.0);
+        // `ln 0` is −∞, which `exp` takes to its floor.
+        let (air_ln, self_ln) = (
+            (mass * (1.0 - share)).ln() as f32,
+            (mass * share).ln() as f32,
+        );
+        let node = |at: usize| -> &[f32] { &self.ln_k[at..at + m] };
+        interpolate(&air_at.map(node), &wa, air_ln, by_air);
+        interpolate(&self_at.map(node), &ws, self_ln, by_self);
+        add_exp(by_air, by_self, out);
+    }
+}
+
+/// `ln k` of the four nodes `rows` weighted by `w`, plus `add`, into
+/// `out`. Each loop of [`Table::lines`] is a function of its own, whose
+/// slices the compiler knows apart, so that it takes vector instructions.
+#[inline(never)]
+fn interpolate(rows: &[&[f32]; 4], w: &[f32; 4], add: f32, out: &mut [f32]) {
+    let [r0, r1, r2, r3] = rows;
+    for ((((o, a), b), c), d) in out.iter_mut().zip(*r0).zip(*r1).zip(*r2).zip(*r3) {
+        *o = w[0] * a + w[1] * b + w[2] * c + w[3] * d + add;
+    }
+}
+
+/// `e^a + e^b`, into `out`.
+#[inline(never)]
+fn add_exp(a: &[f32], b: &[f32], out: &mut [f32]) {
+    for ((o, a), b) in out.iter_mut().zip(a).zip(b) {
+        *o = fast_math::exp(*a) + fast_math::exp(*b);
     }
 }
 
