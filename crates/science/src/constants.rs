@@ -1,9 +1,15 @@
 //! Sourced physical constants.
 
-use crate::units::{Gyr, Kelvin, Kilogram, Metre, Second, Watt, WattPerSquareMetre};
+use crate::units::{
+    Gyr, Kelvin, Kilogram, Metre, MetrePerSecondSquared, Second, Watt, WattPerSquareMetre,
+};
 
 /// Definition: IAU 2012 Resolution B2, 149 597 870 700 m exactly.
 pub const ASTRONOMICAL_UNIT: Metre = Metre(149_597_870_700.0);
+
+/// Definition: standard acceleration of gravity, 9.806 65 m/s2 exactly (CGPM
+/// 1901, 3rd General Conference on Weights and Measures).
+pub const STANDARD_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(9.806_65);
 
 /// Definition: IAU 2015 Resolution B3 nominal solar radius (Prša et al.
 /// 2016, AJ 152, 41).
