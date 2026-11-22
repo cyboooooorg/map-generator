@@ -21,6 +21,20 @@ const PERLIN_ABS_MEAN: f64 = 0.256;
 /// value.
 const PERLIN_ABS_STD: f64 = 0.182;
 
+/// The standard deviation, per unit of its value, of a legacy noise: a sum
+/// of `octaves` Perlin octaves of gain `gain` divided by the octaves' total
+/// amplitude `Σ gainⁱ` (the legacy's `fbm` normalisation). Its octaves are
+/// independent, each of root mean square [`PERLIN_RMS`], so the sum has
+/// the deviation `PERLIN_RMS · √(Σ gain²ⁱ) / Σ gainⁱ`. Multiplying a
+/// unit-variance fBm by it brings the fBm to the legacy's unit, where the
+/// legacy calibrations were fitted.
+pub(crate) fn legacy_unit(octaves: u32, gain: f64) -> f64 {
+    let weights: Vec<f64> = (0..octaves).map(|i| gain.powi(i as i32)).collect();
+    let total: f64 = weights.iter().sum();
+    let power: f64 = weights.iter().map(|w| w * w).sum();
+    PERLIN_RMS * power.sqrt() / total
+}
+
 /// The spectral shape of a noise field.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Spectrum {

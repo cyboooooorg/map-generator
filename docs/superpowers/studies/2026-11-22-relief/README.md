@@ -83,8 +83,12 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `LACUNARITY` | 2 | — | Definition | sampling choice: persistence `2^-H` keeps the spectrum |
 | `octaves` | circumference down to 2 cells | — | Definition | the grid's Nyquist limit |
 | `REFERENCE_WAVELENGTH` | 100 | km | Definition | the lag at which the amplitude is measured, above the 10-20 km break |
-| `amplitude(Earth)` | 219 | m | Source | ETOPO 2022, mean Haar fluctuation of north-south profiles at 100 km, whole surface [V, measured, `scripts/etopo_stats.py`] |
-| `amplitude(Mars)` | 233 | m | Source | MOLA MEGDR, same statistic [V, measured, `scripts/mola_stats.py`]; Landais et al. Fig. 2 about 231 m |
+| `amplitude(Earth, Thick)` | 131 | m | Source | ETOPO 2022, mean Haar fluctuation of north-south profiles at 100 km, windows wholly on land: 124 m at 89 km and 138 m at 111 km, interpolated log-log [V, measured, `scripts/etopo_haar_split.py`; `topography.md`] |
+| `amplitude(Earth, Thin)` | 246 | m | Source | same, windows wholly on the sea floor deeper than 200 m: 236 and 255 m [V, measured, `scripts/etopo_haar_split.py`] |
+| `amplitude(Mars, either)` | 233 | m | Source | MOLA MEGDR, same statistic, whole surface [V, measured, `scripts/mola_stats.py`]; Landais et al. Fig. 2 about 231 m |
+| Earth, whole surface (not used) | 219 | m | Source | ETOPO 2022, same statistic, whole surface [V, measured, `scripts/etopo_stats.py`] |
+| `analogue_gravity(Mars)` | 3.71 | m/s² | Source | NASA Mars Fact Sheet, equatorial surface gravity [V]; the gravity Mars's amplitude was measured at |
+| `analogue_gravity(Earth)` | 9.80665 | m/s² | Definition | `STANDARD_GRAVITY`, the reference of every Earth-measured height |
 | `HEIGHT_RANGE` | 25 | km | Definition | the storage range; Olympus Mons's relief "almost 22 km" (Plescia 2004) [V, abstract] |
 | `STANDARD_GRAVITY` | 9.80665 | m/s² | Definition | CGPM 1901 |
 | `MAX_RELIEF_SCALE` | 2.49 | — | Source | Olympus Mons's relief, "almost 22 km" (Plescia 2004) [V, abstract], over Everest's 8.84886 km (China-Nepal survey, 2020) [S, press report]: 22 / 8.84886 = 2.486 [D]; Olympus Mons is measured over its surroundings, Everest above sea level, as in the legacy's doc comment; the legacy's 2 had no source |
@@ -154,9 +158,13 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 - Crusts not scaled with the planet's mass.
 - Every surface liquid treated alike for the sea level.
 - Venus, and every regime without plates, takes Mars's H and amplitude.
-- The amplitude is the whole-surface fluctuation (land and sea floor
-  together), as Landais et al. measure it; the land-only value (131 m on
-  Earth) is the alternative if the relief comes out too rough on land.
+- The amplitude is taken per crust: on Earth the land windows' 131 m
+  on the continental crust and the sea-floor windows' 246 m on the
+  oceanic crust, the noise centred within each crust so the step between
+  them is Airy's alone; Mars and the worlds without liquid take the
+  whole surface's. (Until the census of Task 9 the whole-surface 219 m
+  was used, and the noise was scaled on the plain height difference over
+  the lag, not on the Haar fluctuation.)
 - Arc cones as random points in the arc band, after de Bremond d'Ars et
   al., instead of a Gamma law with parameters.
 
@@ -180,7 +188,7 @@ Each will carry a `Calibration:` doc comment, a calibration section in its
 | 11 | `PLATE_WEIGHT` | 0.35 | to fit: Sornette & Pisarenko's µ = 0.25 and PB2002's areas | a source for the spread device itself (none expected) |
 | 12 | Slab-pull ramp | speed rise between 0 and 25 % subducting | Zahirovic et al.'s 4.4 cm/yr under 25 % as check point | a continuous law of speed against subducting share |
 | 13 | `HIGHLANDS` (ported) | frequency 1.6, 3 octaves, edge (0.23, 0.33) | about 9 % of the sphere, Venus's highland share (Ivanov & Head 2011) | already documented in legacy |
-| 14 | `DRY_PLAINS_KM` (ported) | 3 km per noise unit at Earth's gravity | Venus: more than 80 % within 1 km (79 % on `venus-like`) | already documented in legacy |
+| 14 | `DRY_PLAINS_KM` (ported) | 3 km per unit of the legacy's five-octave noise (deviation 0.187 of a unit-variance fBm) at Earth's gravity | Venus: more than 80 % within 1 km (79 % on `venus-like`) | already documented in legacy |
 | 15 | `MOUNTAIN_ONSET`, `MOUNTAIN_BLEND` (only if Task 9 needs them) | 0.28, 0.45 | ETOPO 2022 hypsometry | mountain range widths, ridge spacing |
 
 Left the list since the spec: the Andean uplift (now Allmendinger et

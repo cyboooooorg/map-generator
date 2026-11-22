@@ -4,9 +4,13 @@ use crate::relief::ReliefError;
 use crate::stats::area_quantile;
 use science::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
 use science::relief::crust::{CONTINENTAL_SLOPE, crust, floating_height};
-use science::relief::spectrum::Analogue;
+use science::relief::highlands::DRY_PLAINS;
+use science::relief::spectrum::{
+    Analogue, Province, REFERENCE_WAVELENGTH, amplitude, analogue_relief_scale, hurst, relief_scale,
+};
 use science::relief::volcanoes::{CONE_ASPECT, CONE_HEIGHT_MAX, EARTH_HEAT_FLUX};
 use science::units::{Fraction, WattPerSquareMetre};
+use science::units::{Metre, MetrePerSecondSquared};
 use timeline::Seed;
 use timeline::fixtures::{earth_like_fixture, leaf};
 use timeline::{TectonicRegime, Trace};
@@ -54,7 +58,7 @@ fn the_continent_floor_step_is_airys() {
     let forcing = earth();
     let seed = Seed::new(2);
     let (h, mask) = continents(&grid, seed, &forcing);
-    let noise = continent_noise(&grid, seed.derive("relief.continents"), &forcing);
+    let (noise, _) = continent_noise(&grid, seed.derive("relief.continents"), &forcing);
     let pick = |a: &[f32], on: bool| -> Vec<f32> {
         (0..a.len())
             .filter(|&k| mask[k] == on)
@@ -62,8 +66,8 @@ fn the_continent_floor_step_is_airys() {
             .collect()
     };
     let step = |a: &[f32]| f64::from(median(pick(a, true)) - median(pick(a, false)));
-    // The continents are the high parts of the noise, so the noise alone
-    // already stands higher on them: what is Airy's is the step beyond it.
+    // The noise is centred within each province, so the step between them
+    // is Airy's alone (the medians differ from the means by a little).
     let platform = step(&h) - step(&noise);
     // Airy: 34 km x (1 - 2830/3380) = 5.53 km (PREM mantle).
     let earth_crust = crust(Analogue::Earth);
@@ -78,7 +82,7 @@ fn the_continental_edge_keeps_its_slope() {
     let forcing = earth();
     let seed = Seed::new(3);
     let (h, mask) = continents(&grid, seed, &forcing);
-    let noise = continent_noise(&grid, seed.derive("relief.continents"), &forcing);
+    let (noise, _) = continent_noise(&grid, seed.derive("relief.continents"), &forcing);
     let radius = forcing.radius.0;
     let slope = |a: &[f32], k: usize, j: usize| {
         let (p, q) = (grid.point(k), grid.point(j));
@@ -221,4 +225,141 @@ fn arc_cones_follow_their_density_per_length_of_arc() {
     let density = count as f64 / length;
     let ratio = density / ARC_CONE_DENSITY;
     assert!((0.5..=2.0).contains(&ratio), "{ratio}");
+}
+
+/// The unit fBm the continents' noise of `forcing` is drawn from, per cell:
+/// the octaves of [`continent_noise`], rebuilt.
+fn unit_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Octaves, Vec<f64>) {
+    let spectrum = Spectrum {
+        hurst: hurst(forcing.analogue),
+        octaves: octaves(forcing.radius, Metre(cell_length(grid, forcing.radius))),
+        base_frequency: BASE_FREQUENCY,
+    };
+    let octs = Octaves::new(seed, &spectrum);
+    let unit = (0..grid.cell_count())
+        .map(|k| f64::from(octs.fbm(grid.point(k)) as f32))
+        .collect();
+    (octs, unit)
+}
+
+/// The factor taking `unit` to `noise` over the cells of `mask` that are
+/// `on`, once the province's mean is removed: a least-squares slope.
+fn province_scale(unit: &[f64], noise: &[f32], mask: &[bool], on: bool) -> f64 {
+    let ks: Vec<usize> = (0..unit.len()).filter(|&k| mask[k] == on).collect();
+    let mean = ks.iter().map(|&k| unit[k]).sum::<f64>() / ks.len() as f64;
+    let (xy, xx) = ks.iter().fold((0.0, 0.0), |(xy, xx), &k| {
+        let x = unit[k] - mean;
+        (xy + x * f64::from(noise[k]), xx + x * x)
+    });
+    xy / xx
+}
+
+#[test]
+fn the_noise_is_centred_within_each_province() {
+    // The step between the crusts is Airy's alone: the noise has no mean
+    // on either province (Airy 1855; diagnosis of the relief amplitude).
+    let grid = Grid::new(24);
+    for seed in 1..4 {
+        let (noise, mask) = continent_noise(&grid, Seed::new(seed), &earth());
+        for on in [true, false] {
+            let mean = province_mean(&grid, &noise, &mask, on);
+            assert!(mean.abs() < 1.0, "seed {seed}, thick {on}: {mean} m");
+        }
+    }
+}
+
+#[test]
+fn the_noise_is_scaled_on_its_haar_fluctuation_per_province() {
+    // A small body, so that 40 km cells resolve the 100 km lag.
+    let grid = Grid::new(24);
+    let forcing = Forcing {
+        radius: Metre(600e3),
+        ..earth()
+    };
+    let seed = Seed::new(8);
+    let (octs, unit) = unit_noise(&grid, seed, &forcing);
+    // The study's statistic, measured here independently: the mean of
+    // |M2 - M1| over windows one lag long running north, each half
+    // averaged over 64 samples.
+    let lag = REFERENCE_WAVELENGTH.0;
+    let half_mean = |p: [f64; 3], from: f64| {
+        (0..64)
+            .map(|i| {
+                let along = from + (f64::from(i) + 0.5) * lag / 2.0 / 64.0;
+                octs.fbm(displaced(p, along / forcing.radius.0))
+            })
+            .sum::<f64>()
+            / 64.0
+    };
+    let windows: Vec<usize> = (0..grid.cell_count()).step_by(3).collect();
+    let haar = windows
+        .iter()
+        .map(|&k| {
+            let p = grid.point(k);
+            (half_mean(p, lag / 2.0) - half_mean(p, 0.0)).abs()
+        })
+        .sum::<f64>()
+        / windows.len() as f64;
+    let measured = haar_fluctuation(&grid, &octs, &forcing, hurst(forcing.analogue));
+    assert!(
+        (measured / haar - 1.0).abs() < 0.1,
+        "{measured} against {haar}"
+    );
+    // Each province gets its own measured amplitude (ETOPO 2022, land
+    // 131 m and sea floor 246 m at 100 km).
+    let (noise, mask) = continent_noise(&grid, seed, &forcing);
+    for (on, province) in [(true, Province::Thick), (false, Province::Thin)] {
+        let scale = province_scale(&unit, &noise, &mask, on);
+        let want = amplitude(Analogue::Earth, province).0 / haar;
+        assert!(
+            (scale / want - 1.0).abs() < 0.1,
+            "{province:?}: {scale} against {want}"
+        );
+    }
+}
+
+#[test]
+fn a_height_measured_on_mars_counts_gravity_once() {
+    // Mars's amplitude was measured at its own gravity (NASA Mars Fact
+    // Sheet, 3.71 m/s²): at 3.71 m/s² it is taken as is, at Earth's
+    // gravity divided by the relief scale of Mars, 2.49.
+    let grid = Grid::new(24);
+    let mars = |g: f64| Forcing {
+        gravity: MetrePerSecondSquared(g),
+        analogue: Analogue::Mars,
+        plates: false,
+        ..earth()
+    };
+    let seed = Seed::new(9);
+    let (own, _) = continent_noise(&grid, seed, &mars(3.71));
+    let (earthly, _) = continent_noise(&grid, seed, &mars(STANDARD_GRAVITY.0));
+    let want = analogue_relief_scale(STANDARD_GRAVITY, Analogue::Mars);
+    assert!((want - 1.0 / 2.49).abs() < 1e-12);
+    for (a, b) in own.iter().zip(&earthly).filter(|(a, _)| a.abs() > 1.0) {
+        assert!((f64::from(b / a) - want).abs() < 1e-4, "{a} {b}");
+    }
+}
+
+#[test]
+fn dry_plains_are_measured_in_the_legacy_noise_unit() {
+    // The legacy's 5-octave noise of gain 1/2, divided by 1.9375: its
+    // deviation per unit is 0.314 sqrt(1 + 1/4 + ... + 1/256) / 1.9375.
+    let legacy = 0.314 * (1.0f64 + 0.25 + 0.0625 + 0.015625 + 0.00390625).sqrt() / 1.9375;
+    assert!((legacy_unit(5, 0.5) - legacy).abs() < 1e-12);
+    assert!((legacy - 0.187).abs() < 1e-3, "{legacy}");
+    let grid = Grid::new(24);
+    let forcing = Forcing {
+        gravity: MetrePerSecondSquared(8.87),
+        analogue: Analogue::Mars,
+        plates: false,
+        ocean_share: None,
+        ..earth()
+    };
+    let seed = Seed::new(10);
+    let (_, unit) = unit_noise(&grid, seed, &forcing);
+    let (noise, _) = continent_noise(&grid, seed, &forcing);
+    let want = DRY_PLAINS.0 * legacy * relief_scale(forcing.gravity);
+    for (u, n) in unit.iter().zip(&noise).filter(|(u, _)| u.abs() > 0.1) {
+        assert!((f64::from(*n) / u / want - 1.0).abs() < 1e-4, "{n} {u}");
+    }
 }

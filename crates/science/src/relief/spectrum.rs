@@ -45,15 +45,54 @@ pub fn octaves(circumference: Metre, cell: Metre) -> u32 {
 /// the 10-20 km break of the spectrum.
 pub const REFERENCE_WAVELENGTH: Metre = Metre(100e3);
 
-/// Source: mean Haar fluctuation of the heights at a lag of
-/// [`REFERENCE_WAVELENGTH`]. Earth 219 m (ETOPO 2022, north-south
-/// profiles, whole surface), Mars 233 m (MOLA MEGDR, same statistic; Landais
-/// et al. 2019, Fig. 2, about 231 m). The noise is scaled to this statistic.
-pub fn amplitude(analogue: Analogue) -> Metre {
-    match analogue {
-        Analogue::Earth => Metre(219.0),
-        Analogue::Mars => Metre(233.0),
+/// The two provinces of a crust that floats at two thicknesses
+/// ([`super::crust::Crust`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Province {
+    /// The thick crust: continents, or highlands.
+    Thick,
+    /// The thin crust: ocean floor, or lowlands.
+    Thin,
+}
+
+/// Source: mean Haar fluctuation (the mean of `|M2 − M1|`, the two
+/// half-window means of a north-south profile) of the heights at a lag of
+/// [`REFERENCE_WAVELENGTH`], within one province, on the analogue body at
+/// its own gravity. Earth, measured on ETOPO 2022 in windows wholly on land
+/// (the thick crust) and wholly on the sea floor deeper than 200 m (the
+/// thin crust), interpolated log-log to 100 km between 89 and 111 km: land
+/// 131 m (124 and 138 m), sea floor 246 m (236 and 255 m). Mars, the whole
+/// surface of the MOLA MEGDR, 233 m (Landais et al. 2019, Fig. 2, about
+/// 231 m), for both provinces. The study's `scripts/etopo_haar_split.py`
+/// and `scripts/mola_stats.py`,
+/// `docs/superpowers/studies/2026-11-22-relief/topography.md`. The noise is
+/// scaled to this statistic, measured on the noise itself.
+pub fn amplitude(analogue: Analogue, province: Province) -> Metre {
+    match (analogue, province) {
+        (Analogue::Earth, Province::Thick) => Metre(131.0),
+        (Analogue::Earth, Province::Thin) => Metre(246.0),
+        (Analogue::Mars, _) => Metre(233.0),
     }
+}
+
+/// The surface gravity at which the analogue's relief was measured.
+/// Definition: Earth's is [`STANDARD_GRAVITY`], the gravity every
+/// Earth-measured height is referred to (its relief scale is then 1).
+/// Source: Mars's, 3.71 m/s² (equatorial surface gravity, NASA Mars Fact
+/// Sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html).
+pub fn analogue_gravity(analogue: Analogue) -> MetrePerSecondSquared {
+    match analogue {
+        Analogue::Earth => STANDARD_GRAVITY,
+        Analogue::Mars => MetrePerSecondSquared(3.71),
+    }
+}
+
+/// Factor on a height measured on the analogue body, for a body of surface
+/// gravity `gravity`: `relief_scale(g) / relief_scale(g_analogue)`, so
+/// that gravity is counted once. 1 at the analogue's own gravity; for
+/// Earth, [`relief_scale`] itself.
+pub fn analogue_relief_scale(gravity: MetrePerSecondSquared, analogue: Analogue) -> f64 {
+    relief_scale(gravity) / relief_scale(analogue_gravity(analogue))
 }
 
 /// Definition: the storage range of a height, 25 km; Olympus Mons, the

@@ -170,12 +170,22 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    circumference down to two grid cells. $H$ is the analogue's measured
    Hurst exponent above 10 km, 0.479 for Earth and 0.53 for Mars
    (Landais, Schmidt & Lovejoy 2019), where the legacy's persistence of
-   0.5 meant $H = 1$, too smooth, and rounded its coasts. The noise is
-   scaled so that its mean Haar fluctuation at 100 km matches the
-   analogue's: 219 m on Earth, 233 m on Mars, measured for this study on
-   ETOPO 2022 and the MOLA grid. The crust line is the area quantile of
-   the noise that leaves the analogue's thick-crust share above it, 41 %
-   (Cogley 1984) or 58 % (Marinova et al. 2008).
+   0.5 meant $H = 1$, too smooth, and rounded its coasts. The crust line
+   is the area quantile of the noise that leaves the analogue's
+   thick-crust share above it, 41 % (Cogley 1984) or 58 % (Marinova et
+   al. 2008). On a world with liquid the noise is then centred within
+   each crust (its area-weighted mean removed), so that the step between
+   the crusts is Airy's alone: the crust line cuts the noise itself, and
+   uncentred the continents would carry its upper part, about 2 km above
+   the ocean floor's, on top of the step. Each crust is then scaled so
+   that the noise's mean Haar fluctuation at 100 km, measured on the
+   noise itself, matches the analogue's there: on Earth 131 m on the
+   continents and 246 m on the ocean floor (ETOPO 2022, windows wholly on
+   land or wholly on the sea floor), on Mars 233 m on both (MOLA, whole
+   surface), all measured for this study. The Haar fluctuation is the
+   mean of $|M_2 - M_1|$, the means of the two halves of a window one lag
+   long; the plain height difference over the lag is about twice as
+   large on the same noise.
 3. **Floating crust.** Thick crust stands above thin crust by Airy's
    balance (above), Earth's crusts (41.1 and 7.1 km, 2830 kg/m³, over
    PREM's uppermost mantle, Dziewonski & Anderson 1981,
@@ -192,12 +202,20 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    plates' orogeny or, without plates, by the legacy highland provinces
    (`HIGHLANDS`), and on a world without liquid the legacy's rolling
    plains (`DRY_PLAINS_KM`), both ported as the calibrations they were.
+   Both keep the unit they were fitted in: the plains are 3 km per unit
+   of the legacy's five-octave noise, whose deviation is 0.187 of the
+   rewrite's unit-variance noise.
 6. **Volcanoes.** Cones from the planet's heat flux (see [How tall do
    volcanoes grow, and how many are there?](volcanoes.md)).
 7. **Gravity.** What loads the crust (mountains, boundary relief,
    cones) is multiplied by the relief scale $\min(g_0/g, 2.49)$, $g_0$
    the standard gravity, capped at Olympus Mons's relief over Everest's
-   height (22 / 8.849); the floating crust and the ridges are not.
+   height (22 / 8.849); the floating crust and the ridges are not. A
+   height measured on Mars (its noise amplitude) already stands at Mars's
+   gravity, 3.71 m/s² (NASA fact sheet): it is multiplied by the ratio of
+   the relief scales, $s(g) / s(g_\text{Mars})$, so gravity is counted
+   once. Mars sits at the cap, so this ratio is 1 at Mars's gravity and
+   below it.
 8. **Sea level.** The height below which `ocean_share` of the sphere's
    area lies (an exact area-weighted quantile); heights are stored
    relative to it. A world without liquid, or with a share of 0, is
@@ -411,11 +429,18 @@ Choices of the design:
   plates gets Earth's crust.
 - **Every surface liquid alike:** water, hydrocarbons, nitrogen or lava
   fill the relief by the same quantile.
-- **The amplitude is the whole surface's.** It mixes land and sea floor,
-  as the published measurement does; on Earth the land alone fluctuates
-  less (131 m at 100 km against 219 m). Landais et al.'s figure gives
-  Earth about 115 m at 100 km, half the recomputation (Mars agrees); the
-  study keeps the reproducible value.
+- **The amplitude is per crust, measured per surface.** Earth's land
+  and sea-floor values (131 and 246 m at 100 km) were measured in windows
+  wholly above sea level or wholly deeper than 200 m; the noise applies
+  them to the continental and oceanic crust, shelves included. Mars and
+  the worlds without liquid take the whole surface's (233 m on Mars).
+  Landais et al.'s figure gives Earth about 115 m at 100 km, near the
+  land value (Mars agrees with the recomputation); the study keeps the
+  reproducible values.
+- **Centring leaves the crusts' edges uneven.** Centred within each
+  crust, the noise is low on the continental side of the crust line and
+  high on the oceanic side, so the continental edge starts below the
+  ocean floor next to it before the slope lifts it.
 
 #### The legacy generator
 

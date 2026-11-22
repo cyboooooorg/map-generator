@@ -47,7 +47,9 @@ pub fn highland_weight(noise: f64) -> f64 {
 }
 
 /// Calibration: relief of a dry world's plains, 3 km per unit of the
-/// continents' noise at Earth's gravity, scaled as 1/g
+/// legacy's continents noise (five Perlin octaves of gain one half divided
+/// by their total amplitude, 1.9375; the world converts it to its own
+/// unit-variance noise) at Earth's gravity, scaled as 1/g
 /// ([`super::spectrum::relief_scale`]). With no sea to level them the
 /// plains of a dry world roll: Venus's lowlands and upland plains spread
 /// its unimodal hypsometry over about +-1 km, more than 80 % of the surface

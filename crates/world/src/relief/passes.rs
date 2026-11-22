@@ -10,7 +10,7 @@
 //! heat flux and the ocean share of a [`Forcing`].
 
 use super::ReliefError;
-use super::noise::{Octaves, PERLIN_RMS, Spectrum};
+use super::noise::{Octaves, Spectrum, legacy_unit};
 use super::plates::unit;
 use crate::grid::Grid;
 use crate::stats::{area_quantile, distance_to};
@@ -18,7 +18,8 @@ use science::relief::crust::{CONTINENTAL_SLOPE, continental_share, crust, floati
 use science::relief::highlands::{DRY_PLAINS, HIGHLANDS, MOUNTAIN_RELIEF, highland_weight};
 use science::relief::plates::arc_band_width;
 use science::relief::spectrum::{
-    Analogue, REFERENCE_WAVELENGTH, amplitude, hurst, octaves, persistence, relief_scale,
+    Analogue, Province, REFERENCE_WAVELENGTH, amplitude, analogue_relief_scale, hurst, octaves,
+    persistence, relief_scale,
 };
 use science::relief::volcanoes::{
     ARC_CONE_DENSITY, CONE_PRESENCE, CONE_SPACING, Cone, EARTH_VOLCANIC_INTENSITY, cone_size,
@@ -39,6 +40,23 @@ const BASE_FREQUENCY: f64 = 1.0;
 /// (a numerical budget, not a physical value); the cells are evenly
 /// strided over the grid.
 const FLUCTUATION_SAMPLES: usize = 2048;
+
+/// Definition: samples per cell length over which each half-window mean of
+/// the Haar fluctuation is taken, 4. The finest octave of the noise is two
+/// cells long, so it is sampled eight times per wavelength: a numerical
+/// quadrature of the noise's own resolution, not a physical value.
+const HAAR_SAMPLES_PER_CELL: f64 = 4.0;
+
+/// Definition: the octaves of the legacy's continents noise, 5, of gain
+/// one half (its `fbm` normalisation, a sum divided by
+/// `1 + 1/2 + 1/4 + 1/8 + 1/16 = 1.9375`;
+/// `legacy-final:crates/mapgen/src/generation.rs:1255-1275`), the noise
+/// [`DRY_PLAINS`] was fitted on. Its deviation per unit,
+/// [`legacy_unit`]`(5, 1/2) = 0.314 × √(Σ 4⁻ⁱ) / 1.9375 = 0.187`, is the
+/// unit the calibration is expressed in (the legacy's plains kept 0.3 of
+/// the three fine octaves, `PLAIN_ROUGHNESS`, not ported, which lowers it
+/// by 3 %, to 0.182).
+const LEGACY_PLAINS_OCTAVES: u32 = 5;
 
 /// The physical forcings the relief of a body is built from.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -117,19 +135,27 @@ fn displaced(p: [f64; 3], angle: f64) -> [f64; 3] {
     [0, 1, 2].map(|a| p[a] * c + t[a] / norm * s)
 }
 
-/// The continents' noise in metres: the fBm of the analogue's Hurst
-/// exponent, scaled so that its mean absolute fluctuation over a lag of
-/// [`REFERENCE_WAVELENGTH`] is [`amplitude`] (the statistic the relief study
-/// measured on ETOPO 2022 and MOLA), times [`relief_scale`] of the gravity.
-/// A dry world has no sea to level its plains: its noise is scaled by
-/// [`DRY_PLAINS`] per unit instead, times [`relief_scale`].
+/// The noise of the continents in metres and the mask of the thick crust
+/// (continental, or highland, cells). Uses `seed` for the noise.
 ///
-/// The fluctuation is measured on the noise itself, once per pass, over up
-/// to 2048 evenly strided cells (not derived analytically). On a grid too
-/// coarse to resolve the reference wavelength it is measured at a lag of
-/// two cells and carried to the reference by the spectrum's own law,
-/// `lag^H`.
-pub(crate) fn continent_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> Vec<f32> {
+/// The noise is the fBm of the analogue's Hurst exponent, of unit variance.
+/// The crust line is its area quantile that leaves [`continental_share`]
+/// of the area above it; the cells above are the thick crust.
+///
+/// On a world with liquid the noise is then centred within each province:
+/// the area-weighted mean of the province is subtracted from its cells, so
+/// that the step between the provinces is the Airy step of [`continents`]
+/// alone (the mask is the noise cut at its own quantile: uncentred, the
+/// thick crust would carry the upper part of the noise and add its mean
+/// to the step). Each province is then scaled so that the mean Haar
+/// fluctuation of the noise at [`REFERENCE_WAVELENGTH`] is the analogue's
+/// [`amplitude`] in that province, times [`analogue_relief_scale`] of the
+/// gravity (the amplitude was measured at the analogue's own gravity).
+///
+/// A dry world has no sea to level its plains, and no step: its noise is
+/// [`DRY_PLAINS`] per unit of the legacy's noise ([`LEGACY_PLAINS_OCTAVES`])
+/// times [`relief_scale`], not centred.
+pub(crate) fn continent_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Vec<f32>, Vec<bool>) {
     let h = hurst(forcing.analogue);
     let spectrum = Spectrum {
         hurst: h,
@@ -137,49 +163,101 @@ pub(crate) fn continent_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> Vec
         base_frequency: BASE_FREQUENCY,
     };
     let octs = Octaves::new(seed, &spectrum);
-    let scale = if forcing.ocean_share.is_none() {
-        DRY_PLAINS.0
-    } else {
-        amplitude_scale(grid, &octs, forcing, h)
-    } * relief_scale(forcing.gravity);
-    (0..grid.cell_count())
-        .map(|k| (octs.fbm(grid.point(k)) * scale) as f32)
-        .collect()
+    let unit: Vec<f32> = (0..grid.cell_count())
+        .map(|k| octs.fbm(grid.point(k)) as f32)
+        .collect();
+    let share = continental_share(forcing.analogue).get();
+    let line = area_quantile(grid, &unit, 1.0 - share);
+    let mask: Vec<bool> = unit.iter().map(|&v| v > line).collect();
+    if forcing.ocean_share.is_none() {
+        let scale = DRY_PLAINS.0
+            * legacy_unit(LEGACY_PLAINS_OCTAVES, persistence(1.0))
+            * relief_scale(forcing.gravity);
+        let noise = unit
+            .iter()
+            .map(|&v| (f64::from(v) * scale) as f32)
+            .collect();
+        return (noise, mask);
+    }
+    let haar = haar_fluctuation(grid, &octs, forcing, h);
+    let gravity = analogue_relief_scale(forcing.gravity, forcing.analogue);
+    let level = |province: Province| {
+        let thick = province == Province::Thick;
+        let mean = province_mean(grid, &unit, &mask, thick);
+        let scale = if haar > 0.0 {
+            amplitude(forcing.analogue, province).0 * gravity / haar
+        } else {
+            0.0
+        };
+        (mean, scale)
+    };
+    let (thick, thin) = (level(Province::Thick), level(Province::Thin));
+    let noise = (0..grid.cell_count())
+        .map(|k| {
+            let (mean, scale) = if mask[k] { thick } else { thin };
+            ((f64::from(unit[k]) - mean) * scale) as f32
+        })
+        .collect();
+    (noise, mask)
 }
 
-/// The factor taking the unit-variance fBm to the analogue's amplitude.
-fn amplitude_scale(grid: &Grid, octs: &Octaves, forcing: &Forcing, h: f64) -> f64 {
+/// The area-weighted mean of `values` over the cells whose `mask` is `on`;
+/// 0 when there are none.
+fn province_mean(grid: &Grid, values: &[f32], mask: &[bool], on: bool) -> f64 {
+    let (sum, area) =
+        (0..grid.cell_count())
+            .filter(|&k| mask[k] == on)
+            .fold((0.0, 0.0), |(s, a), k| {
+                let w = grid.area(k);
+                (s + w * f64::from(values[k]), a + w)
+            });
+    if area > 0.0 { sum / area } else { 0.0 }
+}
+
+/// The mean Haar fluctuation of the unit fBm `octs` at
+/// [`REFERENCE_WAVELENGTH`]: the mean of `|M2 − M1|`, `M1` and `M2` the
+/// means of the noise over the two halves of a window one lag long running
+/// north along the meridian, the relief study's statistic
+/// (`docs/superpowers/studies/2026-11-22-relief/scripts/etopo_haar_split.py`).
+/// Measured on the noise itself over up to [`FLUCTUATION_SAMPLES`] evenly
+/// strided windows, each half averaged over [`HAAR_SAMPLES_PER_CELL`]
+/// samples per cell length (not derived analytically). On a grid too coarse
+/// to resolve the reference wavelength it is measured at a lag of two cells
+/// and carried to the reference by the spectrum's own law, `lag^H`.
+pub(crate) fn haar_fluctuation(grid: &Grid, octs: &Octaves, forcing: &Forcing, h: f64) -> f64 {
     let cell = cell_length(grid, forcing.radius);
     let lag = REFERENCE_WAVELENGTH.0.max(2.0 * cell);
+    let half = lag / 2.0;
+    let samples = ((half / cell) * HAAR_SAMPLES_PER_CELL).ceil().max(1.0) as usize;
+    let mean = |p: [f64; 3], from: f64| {
+        (0..samples)
+            .map(|i| {
+                let along = from + (i as f64 + 0.5) * half / samples as f64;
+                octs.fbm(displaced(p, along / forcing.radius.0))
+            })
+            .sum::<f64>()
+            / samples as f64
+    };
     let step = (grid.cell_count() / FLUCTUATION_SAMPLES).max(1);
     let (sum, count) = (0..grid.cell_count())
         .step_by(step)
         .fold((0.0, 0.0), |(s, n), k| {
             let p = grid.point(k);
-            let q = displaced(p, lag / forcing.radius.0);
-            (s + (octs.fbm(q) - octs.fbm(p)).abs(), n + 1.0)
+            (s + (mean(p, half) - mean(p, 0.0)).abs(), n + 1.0)
         });
-    let measured = sum / count;
-    if measured <= 0.0 {
-        return 0.0;
-    }
-    amplitude(forcing.analogue).0 * (lag / REFERENCE_WAVELENGTH.0).powf(h) / measured
+    sum / count * (REFERENCE_WAVELENGTH.0 / lag).powf(h)
 }
 
 /// The continents of a body: its height in metres per cell, and the mask of
 /// the continental cells. Uses the seed `body.derive("relief.continents")`.
 ///
-/// The noise is cut at the crust line, the quantile of the noise that
-/// leaves [`continental_share`] of the area above it; a continental cell
-/// stands on the Airy platform, [`floating_height`] of the thick crust,
-/// reached from the coast at the slope [`CONTINENTAL_SLOPE`]; the sea floor
-/// is the datum, 0. The noise ([`continent_noise`]) is added everywhere. A
-/// dry world (no ocean) keeps only the noise, its plains.
+/// A continental cell (thick crust, [`continent_noise`]) stands on the
+/// Airy platform, [`floating_height`] of the thick crust, reached from the
+/// coast at the slope [`CONTINENTAL_SLOPE`]; the sea floor is the datum, 0.
+/// The noise, centred within each province, is added everywhere. A dry
+/// world (no ocean) keeps only the noise, its plains.
 pub fn continents(grid: &Grid, body: Seed, forcing: &Forcing) -> (Vec<f32>, Vec<bool>) {
-    let noise = continent_noise(grid, body.derive("relief.continents"), forcing);
-    let share = continental_share(forcing.analogue).get();
-    let line = area_quantile(grid, &noise, 1.0 - share);
-    let mask: Vec<bool> = noise.iter().map(|&v| v > line).collect();
+    let (noise, mask) = continent_noise(grid, body.derive("relief.continents"), forcing);
     if forcing.ocean_share.is_none() {
         return (noise, mask);
     }
@@ -219,13 +297,7 @@ pub fn highlands(grid: &Grid, body: Seed) -> Vec<f32> {
         body.derive("relief.mountains").derive("highlands"),
         &spectrum,
     );
-    let gain = persistence(spectrum.hurst);
-    let weights: Vec<f64> = (0..HIGHLANDS.octaves)
-        .map(|i| gain.powi(i as i32))
-        .collect();
-    let total: f64 = weights.iter().sum();
-    let power: f64 = weights.iter().map(|w| w * w).sum();
-    let legacy = PERLIN_RMS * power.sqrt() / total;
+    let legacy = legacy_unit(HIGHLANDS.octaves, persistence(spectrum.hurst));
     (0..grid.cell_count())
         .map(|k| highland_weight(octs.fbm(grid.point(k)) * legacy) as f32)
         .collect()
