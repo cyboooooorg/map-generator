@@ -1,7 +1,9 @@
 //! The command line: the flags, and their one conversion to `Inputs`.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
+use adapters::FsStore;
 use clap::{Parser, Subcommand};
 use science::units::{Dex, Gyr, SolarMass};
 use system::{ArchetypeId, INPUTS_SCHEMA, Inputs, Request, SystemRequest};
@@ -105,6 +107,85 @@ pub fn parse_archetype(text: &str) -> Result<(ArchetypeId, u32), String> {
         .parse::<u32>()
         .map_err(|error| format!("the count {count:?} is not a number: {error}"))?;
     Ok((ArchetypeId(code), count))
+}
+
+/// The options every command shares: where the store lives and how large
+/// its cache may grow.
+#[derive(clap::Args, Debug)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "flattened into Cli by the world command, pull request B"
+    )
+)]
+pub struct GlobalArgs {
+    /// The store's root directory.
+    #[arg(long, global = true, default_value = "map-generator-store")]
+    pub root: PathBuf,
+    /// The cache budget: bytes with an optional IEC suffix (KiB, MiB, GiB,
+    /// TiB), default 2 GiB.
+    #[arg(
+        long,
+        global = true,
+        value_name = "SIZE",
+        value_parser = parse_size,
+        default_value_t = catalogue::DEFAULT_BUDGET,
+        hide_default_value = true
+    )]
+    pub cache_budget: u64,
+}
+
+impl GlobalArgs {
+    /// The filesystem store these options describe.
+    #[expect(dead_code, reason = "called by the world command, pull request B")]
+    pub fn store(&self) -> FsStore {
+        FsStore::new(self.root.clone(), self.cache_budget)
+    }
+}
+
+/// Parses a size: a whole number of bytes with an optional IEC suffix
+/// (`KiB`, `MiB`, `GiB`, `TiB`). SI suffixes are refused, not guessed.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "used through GlobalArgs, flattened by pull request B"
+    )
+)]
+pub fn parse_size(text: &str) -> Result<u64, String> {
+    let digits_end = text
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(text.len());
+    let (digits, suffix) = text.split_at(digits_end);
+    if digits.is_empty() {
+        return Err(format!(
+            "expected a number of bytes with an optional suffix KiB, MiB, GiB or TiB, got {text:?}"
+        ));
+    }
+    let shift = match suffix {
+        "" => 0,
+        "KiB" => 10,
+        "MiB" => 20,
+        "GiB" => 30,
+        "TiB" => 40,
+        "KB" | "MB" | "GB" | "TB" | "K" | "M" | "G" | "T" => {
+            return Err(format!(
+                "unknown size suffix {suffix:?}: use KiB, MiB, GiB or TiB, not {suffix}"
+            ));
+        }
+        _ => {
+            return Err(format!(
+                "unknown size suffix {suffix:?}: use KiB, MiB, GiB or TiB"
+            ));
+        }
+    };
+    let count = digits
+        .parse::<u64>()
+        .map_err(|error| format!("the size {text:?} is not a number: {error}"))?;
+    count
+        .checked_mul(1 << shift)
+        .ok_or_else(|| format!("the size {text:?} does not fit in 64 bits"))
 }
 
 #[cfg(test)]
@@ -216,5 +297,42 @@ mod tests {
         let (a, b) = (args.root_seed().unwrap(), args.root_seed().unwrap());
         assert!(a.drawn && b.drawn);
         assert_ne!(a.seed, b.seed);
+    }
+
+    #[test]
+    fn sizes_take_iec_suffixes() {
+        assert_eq!(parse_size("1024"), Ok(1024));
+        assert_eq!(parse_size("1KiB"), Ok(1024));
+        assert_eq!(parse_size("3MiB"), Ok(3 << 20));
+        assert_eq!(parse_size("2GiB"), Ok(catalogue::DEFAULT_BUDGET));
+        assert_eq!(parse_size("1TiB"), Ok(1 << 40));
+        assert_eq!(parse_size("0"), Ok(0));
+    }
+
+    #[test]
+    fn si_suffixes_name_the_iec_one() {
+        assert!(parse_size("1MB").unwrap_err().contains("MiB"));
+    }
+
+    #[test]
+    fn malformed_sizes_are_errors() {
+        for bad in ["2 GiB", "1.5GiB", "GiB", "", "-1", "16777216TiB"] {
+            assert!(parse_size(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[derive(Parser)]
+    struct Probe {
+        #[command(flatten)]
+        g: GlobalArgs,
+    }
+
+    #[test]
+    fn global_args_default_and_override() {
+        let probe = Probe::try_parse_from(["probe"]).unwrap();
+        assert_eq!(probe.g.root, PathBuf::from("map-generator-store"));
+        assert_eq!(probe.g.cache_budget, catalogue::DEFAULT_BUDGET);
+        let probe = Probe::try_parse_from(["probe", "--cache-budget", "512MiB"]).unwrap();
+        assert_eq!(probe.g.cache_budget, 512 << 20);
     }
 }
