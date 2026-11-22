@@ -4,7 +4,8 @@
 //! Ported from `legacy-final:crates/mapgen/src/generation.rs` (the
 //! `HIGHLANDS` and `DRY_PLAINS_KM` constants); values and their calibration
 //! list: `docs/superpowers/studies/2026-11-22-relief/README.md`, numbers 13
-//! and 14; [`MOUNTAIN_RELIEF`] is not in the list yet.
+//! and 14; [`MOUNTAIN_RELIEF`] is a source, among the study's retained
+//! values.
 
 use super::plates::COLLISION_HEIGHT;
 use crate::units::Metre;

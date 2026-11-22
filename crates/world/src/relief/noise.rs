@@ -6,17 +6,18 @@ use ::noise::{NoiseFn, Perlin};
 use science::relief::spectrum::{LACUNARITY, persistence};
 use timeline::Seed;
 
-/// Definition: root mean square of one Perlin octave (the `noise` crate's
+/// Measured: root mean square of one Perlin octave (the `noise` crate's
 /// gradient noise), measured on the noise by the test
 /// `the_noise_constants_are_measured_on_the_noise`; a numerical
-/// normaliser, not a physical value.
+/// normaliser of the noise library, not a physical value nor an exact
+/// definition.
 pub(crate) const PERLIN_RMS: f64 = 0.314;
 
-/// Definition: mean of `|n|` for one Perlin octave `n`, measured by the
+/// Measured: mean of `|n|` for one Perlin octave `n`, measured by the
 /// same test; a numerical normaliser, not a physical value.
 const PERLIN_ABS_MEAN: f64 = 0.256;
 
-/// Definition: standard deviation of `|n|` for one Perlin octave `n`,
+/// Measured: standard deviation of `|n|` for one Perlin octave `n`,
 /// measured by the same test; a numerical normaliser, not a physical
 /// value.
 const PERLIN_ABS_STD: f64 = 0.182;
