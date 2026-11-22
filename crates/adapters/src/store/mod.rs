@@ -14,7 +14,7 @@
 //! file race to the rename, and the last one wins.) A cache file that cannot be read or parsed is a
 //! miss, never an error: the cache is regenerated from the inputs.
 
-mod paths;
+pub(crate) mod paths;
 mod uses;
 
 use std::fmt;

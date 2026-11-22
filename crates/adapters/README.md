@@ -47,6 +47,15 @@ through a `Ramp` (linear stops, `Ramp::grey` for a grey scale; NaN is
 black) and writes an 8-bit RGB PNG with the same staged write as the
 store.
 
+Export: `export(out, world, field, width, ramp)` projects `field` first
+(a missing field is `ExportError::World` and nothing is created), then
+writes `<out>/<slug>-<keyframe>.world` (the codec bytes) and
+`<out>/<slug>-<keyframe>-<field code>.png` (`width` by `width / 2` pixels),
+creating `out` when needed. `Ramp::relief()` is the hypsometric tint for
+heights in metres: blues under water, green at the coast, then ochre,
+brown and white at 6000 m. Errors display their code first
+(`export.io(..)` or the world error's own code).
+
 ## Ports
 
 None of its own: it implements the ports of the domain crates.

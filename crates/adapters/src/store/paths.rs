@@ -49,7 +49,7 @@ pub(super) fn worlds_dir(root: &Path, engine: EngineVersion, id: SystemId) -> Pa
 }
 
 /// The directory name of a body: its designation with `-` for spaces.
-pub(super) fn body_slug(body: &Designation) -> String {
+pub(crate) fn body_slug(body: &Designation) -> String {
     body.to_string().replace(' ', "-")
 }
 
