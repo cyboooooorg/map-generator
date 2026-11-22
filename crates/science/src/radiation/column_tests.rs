@@ -7,7 +7,8 @@
 use std::sync::LazyLock;
 
 use super::*;
-use crate::constants::{GRAVITATIONAL_CONSTANT, MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
+use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
+use crate::radiation::test_points::{MANABE_HUMIDITY, TITAN_GRAVITY, VENUS_GRAVITY};
 
 /// Definition: Earth's dry air of the test columns, bar: 0.78 of N₂, 0.21
 /// of O₂ and 400 ppm of CO₂ (the legacy `EARTH_AIR`; argon, which neither
@@ -23,34 +24,16 @@ const EARTH_AIR: PartialPressures = PartialPressures {
     o2: 0.21,
 };
 
-/// Source: the surface relative humidity of Manabe & Wetherald 1967
-/// (J. Atmos. Sci. 24, 241, doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2),
-/// 77 %, the legacy `RELATIVE_HUMIDITY` of a moist surface. The paper is
-/// not open; the value is confirmed indirectly by climlab's
-/// `ManabeWaterVapor` default (`relative_humidity=0.77`, "following
-/// Manabe 1967") and by arXiv:2006.03098 ("surface 77 %"), as the audit
-/// (Wiki study 19) records.
-const RELATIVE_HUMIDITY: f64 = 0.77;
-
 /// Definition: Earth's surface gravity of the test columns, the standard
 /// acceleration of gravity (the legacy took 9.81 m/s²).
 const EARTH: MetrePerSecondSquared = STANDARD_GRAVITY;
-
-/// Source: Venus's surface gravity, 8.87 m/s² (NASA Venus Fact Sheet,
-/// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html, "Surface
-/// gravity (mean)", read 2026-11-22).
-const VENUS: MetrePerSecondSquared = MetrePerSecondSquared(8.87);
 
 /// Definition: Mars's surface gravity of the test columns, the sourced
 /// `MARS_SURFACE_GRAVITY`, 3.73 m/s² (the legacy took 3.71).
 const MARS: MetrePerSecondSquared = MARS_SURFACE_GRAVITY;
 
-/// Source: Titan's surface gravity, `G M / R²` from its mass, 1345.5e20
-/// kg, and mean radius, 2575 km (NASA Saturnian Satellite Fact Sheet,
-/// nssdc.gsfc.nasa.gov/planetary/factsheet/saturniansatfact.html, read
-/// 2026-11-22): 1.354 m/s² (the legacy took 1.352).
-const TITAN: MetrePerSecondSquared =
-    MetrePerSecondSquared(GRAVITATIONAL_CONSTANT * 1345.5e20 / (2575e3 * 2575e3));
+const VENUS: MetrePerSecondSquared = VENUS_GRAVITY;
+const TITAN: MetrePerSecondSquared = TITAN_GRAVITY;
 
 /// Source: the Simpson–Nakajima limit, W/m², 282 line by line (Goldblatt,
 /// Robinson, Zahnle & Crisp 2013, *Nature Geosci.* 6, 661,
@@ -193,11 +176,11 @@ fn skin(t_eq_k: f64) -> Kelvin {
 }
 
 /// `gases` with the vapour of a moist surface at `temperature_k`:
-/// [`RELATIVE_HUMIDITY`] of saturation, at most `water_bar` (the legacy
+/// [`MANABE_HUMIDITY`] of saturation, at most `water_bar` (the legacy
 /// `with_vapour`).
 fn with_vapour(gases: PartialPressures, temperature_k: f64, water_bar: f64) -> PartialPressures {
     PartialPressures {
-        h2o: (RELATIVE_HUMIDITY * vapour_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
+        h2o: (MANABE_HUMIDITY * vapour_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
         ..gases
     }
 }

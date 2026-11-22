@@ -503,9 +503,12 @@ the Bond albedo follow in 2b-2.
     cloudiness, as coded in NCEP's physics; their second factor, a
     condensate over a saturation deficit, is replaced by the exponential.
     No dataset ties cloud cover to the column vapour in a form usable for
-    other planets. Earth's 1.26e-2 bar of vapour at 77 % relative humidity
-    is consistent with the saturation pressure at 288 K, but the 77 % needs a
-    source of its own.
+    other planets. Earth's 1.26e-2 bar of vapour is 77 % relative humidity
+    over the saturation pressure at 288 K, the rounded mean surface
+    temperature the tests take as their Earth case. The 77 % is the surface
+    relative humidity of Manabe & Wetherald 1967 (equation 2), the same
+    figure as the column's test profile; the paper is paywalled and the
+    value is confirmed indirectly (below).
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;

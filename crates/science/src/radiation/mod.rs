@@ -8,3 +8,5 @@ pub mod gases;
 pub(crate) mod ktable;
 pub(crate) mod methane;
 pub(crate) mod spectrum;
+#[cfg(test)]
+mod test_points;

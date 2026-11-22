@@ -5,9 +5,10 @@ use std::sync::LazyLock;
 
 use super::reference::*;
 use super::*;
-use crate::constants::{GRAVITATIONAL_CONSTANT, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
+use crate::constants::{STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::gases::H2O_MOLAR_MASS;
 use crate::radiation::ktable::{CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
+use crate::radiation::test_points::{self, EARTH_SURFACE_K, MANABE_HUMIDITY};
 use crate::water::vapour_saturation_bar;
 
 /// The table on bins half as wide (10 cm⁻¹) over 0-2500 cm⁻¹, at
@@ -39,25 +40,11 @@ const LEVELS_PER_DECADE: usize = 20;
 /// 1e-6 bar.
 const DECADES: usize = 6;
 
-/// Definition: the surface temperature of the test profile, K, Earth's
-/// mean surface temperature rounded (the U.S. Standard Atmosphere 1976
-/// takes 288.15 K at sea level).
-const EARTH_SURFACE_K: f64 = 288.0;
-
 /// Definition: the tropopause temperature of the test profile, K: the
 /// U.S. Standard Atmosphere 1976's isothermal layer from 11 km, 216.65 K
 /// as the audit (Wiki study 19) quotes it, rounded; the document itself
 /// was not read (the NASA scan has no text layer).
 const TROPOPAUSE_K: f64 = 217.0;
-
-/// Source: the surface relative humidity of Manabe & Wetherald 1967
-/// (J. Atmos. Sci. 24, 241, doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2),
-/// 77 %, held through the test profile's troposphere. The paper is not
-/// open; the value is confirmed indirectly by climlab's
-/// `ManabeWaterVapor` default (`relative_humidity=0.77`, "following
-/// Manabe 1967") and by arXiv:2006.03098 ("surface 77 %"), as the audit
-/// (Wiki study 19) records.
-const EARTH_HUMIDITY: f64 = 0.77;
 
 /// Definition: Earth's pre-industrial CO₂ of the test columns, ppm.
 const PREINDUSTRIAL_PPM: f64 = 280.0;
@@ -152,16 +139,8 @@ const STEAM_TOLERANCE: f64 = 1e-9;
 /// Definition: relative tolerance of a factor taken from logarithms.
 const SCALE_TOLERANCE: f64 = 1e-6;
 
-/// Source: Venus's surface gravity, 8.87 m/s² (NASA Venus Fact Sheet,
-/// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html, read
-/// 2026-11-22).
-const VENUS_GRAVITY: f64 = 8.87;
-
-/// Source: Titan's surface gravity, `G M / R²` from its mass, 1345.5e20
-/// kg, and mean radius, 2575 km (NASA Saturnian Satellite Fact Sheet,
-/// nssdc.gsfc.nasa.gov/planetary/factsheet/saturniansatfact.html, read
-/// 2026-11-22): 1.354 m/s².
-const TITAN_GRAVITY: f64 = GRAVITATIONAL_CONSTANT * 1345.5e20 / (2575e3 * 2575e3);
+const VENUS_GRAVITY: f64 = test_points::VENUS_GRAVITY.0;
+const TITAN_GRAVITY: f64 = test_points::TITAN_GRAVITY.0;
 
 /// Definition: a Venus-like surface level of the test cases, near the
 /// NASA Venus Fact Sheet's surface (737 K, 92 bar, 96.5 % CO₂, 3.5 % N₂,
@@ -342,7 +321,7 @@ fn olr_fixed_profile(profile: &[Point], gases: &PartialPressures) -> f64 {
 }
 
 fn earth_column() -> Vec<Point> {
-    earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, EARTH_HUMIDITY)
+    earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, MANABE_HUMIDITY)
 }
 
 fn earth_olr(co2_ppm: f64) -> f64 {
