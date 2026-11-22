@@ -81,21 +81,15 @@ pressure (Brent, 1e-10 relative); a phase transition ends a step exactly.
 converged answer. Below zero pressure the density is the zero-pressure one.
 
 ```rust
-use science::constants::EARTH_MASS;
-use science::eos::{core_alloy, mantle};
-use science::structure::{LayerSpec, integrate};
-use science::units::Pascal;
+use science::{constants::EARTH_MASS, eos::{core_alloy, mantle}, structure::{LayerSpec, integrate}, units::Pascal};
 
 // Earth: core mass fraction 0.325 (PREM), 1 bar at the surface.
 let (core, rock) = (core_alloy(), mantle());
-let earth = integrate(
-    &[
-        LayerSpec { mass: EARTH_MASS * 0.325, material: &core },
-        LayerSpec { mass: EARTH_MASS * 0.675, material: &rock },
-    ],
-    Pascal(1e5),
-)
-.expect("Earth integrates");
+let layers = [
+    LayerSpec { mass: EARTH_MASS * 0.325, material: &core },
+    LayerSpec { mass: EARTH_MASS * 0.675, material: &rock },
+];
+let earth = integrate(&layers, Pascal(1e5)).expect("Earth integrates");
 println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 ```
 
@@ -141,34 +135,16 @@ laws, tests and calibrations: [Mini-Neptunes](../../docs/science/planet-interior
 
 ## Relief
 
-`science::relief`: the laws and calibrated constants of a rocky body's
-height. Every number carries a `Source:`, `Calibration:` or `Definition:`
-doc comment (a tier-1 test fails otherwise); values and citations are in
-the [relief study](../../docs/superpowers/studies/2026-11-22-relief/README.md).
-
-- `spectrum`: the analogue's Hurst exponent, persistence, octaves down to
-  two cells, the Haar amplitude per province, the relief scale of gravity
-  (`min(g0 / g, 2.49)`) and `HEIGHT_RANGE`.
-- `crust`: Earth's and Mars's crusts, the thick-crust share, Airy's
-  floating height, the continental slope.
-- `plates`: plate counts, sizes and speeds, the boundary profiles
-  (trench, arc, rift, ridge, Andean plateau, collision range), the
-  strength levels and reaches of the world's distance passes, and the
-  Parsons & Sclater ridge depth.
-- `highlands`: the legacy highland provinces, the dry plains and
-  `MOUNTAIN_RELIEF`.
-- `volcanoes`: the heat-flux intensity and the cone sizes.
-
-Laws: [mountains and gravity](../../docs/science/mountains-and-gravity.md),
+`science::relief`: a rocky body's height. `spectrum` (Hurst exponent,
+Haar amplitude per province, gravity's relief scale), `crust` (Airy),
+`plates` (boundary profiles, ridge depth), `highlands`, `volcanoes`.
+Values: [relief study](../../docs/superpowers/studies/2026-11-22-relief/README.md);
+laws: [mountains and gravity](../../docs/science/mountains-and-gravity.md),
 [plate tectonics](../../docs/science/plate-tectonics.md),
 [volcanoes](../../docs/science/volcanoes.md).
 
 ## Dependencies
 
 `serde` (units serialise as bare numbers), and `serde_json` in tests. Nothing
-else: `tools/guardrails` lists the allowed external crates. The engines,
-`catalogue`, `adapters`, `cli` and `regression` may depend on it.
-
-The direction of dependencies is checked by `tools/guardrails`
-(`mise run test:tier1`). See the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md),
-section Architecture > Science.
+else. The engines, `catalogue`, `adapters`, `cli` and `regression` may depend
+on it; `tools/guardrails` checks both. Design: [Architecture > Science](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md).
