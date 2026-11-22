@@ -179,13 +179,6 @@ pub(crate) fn co2_saturation_bar(t_k: f64) -> f64 {
 /// the 12.73 kJ/mol of the NIST WebBook table, Span and Wagner 1996). It
 /// is kept because it is consistent with the curve used in the same
 /// adiabat and behaves as the legacy did (its single 16.6 kJ/mol mean).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the moist adiabat of the longwave column reads it"
-    )
-)]
 pub(crate) fn co2_latent_j_mol(t_k: f64) -> f64 {
     if t_k >= CO2.critical_temperature {
         0.0

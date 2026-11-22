@@ -75,6 +75,10 @@ pub(crate) struct Table {
     /// coefficient at 296 K, its temperature exponent, foreign coefficient
     /// at 296 K, cm² per molecule per cm⁻¹ at 1013 mbar. Empty for the
     /// longwave table, whose continuum `spectrum::MT_CKD` holds.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")
+    )]
     pub(crate) water_continuum: Vec<(f64, f64, f64)>,
 }
 

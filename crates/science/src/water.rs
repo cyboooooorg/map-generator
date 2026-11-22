@@ -836,13 +836,6 @@ pub(crate) fn vapour_saturation_bar(t_k: f64) -> f64 {
 /// temperature it keeps its value there (the legacy clamp). The ideal-vapour
 /// form does not fall to zero at the critical point as the real latent heat
 /// does: it gives `-R Tc a1`, 42.3 kJ/mol.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the moist adiabat of the longwave column reads it"
-    )
-)]
 pub(crate) fn vapour_latent_j_mol(t_k: f64) -> f64 {
     // A NaN temperature reads as 0 K, like the pressure's.
     let t = if t_k.is_nan() {
