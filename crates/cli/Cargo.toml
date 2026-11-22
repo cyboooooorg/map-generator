@@ -16,6 +16,10 @@ system.workspace = true
 world.workspace = true
 catalogue.workspace = true
 adapters.workspace = true
+clap.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

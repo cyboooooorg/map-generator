@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 /// Methods every configuration forbids: random sources outside the seed
 /// hierarchy, random hasher keys and the wall clock.
-pub const SHARED_METHODS: [&str; 11] = [
+pub const SHARED_METHODS: [&str; 13] = [
     "rand::rng",
     "rand::thread_rng",
     "rand::random",
@@ -20,6 +20,8 @@ pub const SHARED_METHODS: [&str; 11] = [
     "rand::SeedableRng::try_from_os_rng",
     "getrandom::fill",
     "getrandom::getrandom",
+    "getrandom::u32",
+    "getrandom::u64",
     "std::hash::RandomState::new",
     "std::time::SystemTime::now",
 ];

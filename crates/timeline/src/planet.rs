@@ -350,3 +350,45 @@ impl PlanetState {
         self.interior.validate()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Code, Provenance, Trace, TracedFields};
+
+    #[test]
+    fn orbit_and_spin_visit_every_traced_field() {
+        let mut trace = Trace::new();
+        let input = Provenance::Input;
+        let mut orbit = Orbit {
+            semi_major_axis: trace
+                .leaf(Code::of("orbit.a"), AstronomicalUnit(1.0), input)
+                .unwrap(),
+            eccentricity: trace
+                .leaf(Code::of("orbit.e"), Fraction::new(0.1).unwrap(), input)
+                .unwrap(),
+            period: trace.leaf(Code::of("orbit.p"), Day(365.0), input).unwrap(),
+            perihelion_longitude: trace
+                .leaf(Code::of("orbit.w"), Degree(10.0), input)
+                .unwrap(),
+        };
+        let mut spin = Spin {
+            rotation_period: trace.leaf(Code::of("spin.p"), Day(1.0), input).unwrap(),
+            obliquity: trace.leaf(Code::of("spin.o"), Degree(23.0), input).unwrap(),
+        };
+        let expected = [
+            orbit.semi_major_axis.node(),
+            orbit.eccentricity.node(),
+            orbit.period.node(),
+            orbit.perihelion_longitude.node(),
+            spin.rotation_period.node(),
+            spin.obliquity.node(),
+        ];
+        let mut seen = Vec::new();
+        orbit.for_each_node(&mut |id| seen.push(*id));
+        spin.for_each_node(&mut |id| seen.push(*id));
+        assert_eq!(seen, expected);
+        let graph = trace.freeze(&mut vec![orbit]).unwrap();
+        assert_eq!(graph.nodes.len(), 4);
+    }
+}
