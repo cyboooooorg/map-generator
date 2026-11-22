@@ -228,9 +228,13 @@ fn arc_cones_follow_their_density_per_length_of_arc() {
 }
 
 /// The unit fBm the continents' noise of `forcing` is drawn from, per cell:
-/// the octaves of the thick province in [`continent_noise`], rebuilt.
+/// the octaves of [`continent_noise`], rebuilt.
 fn unit_noise(grid: &Grid, seed: Seed, forcing: &Forcing) -> (Octaves, Vec<f64>) {
-    let spectrum = province_spectrum(grid, forcing, Province::Thick);
+    let spectrum = Spectrum {
+        hurst: hurst(forcing.analogue),
+        octaves: octaves(forcing.radius, Metre(cell_length(grid, forcing.radius))),
+        base_frequency: BASE_FREQUENCY,
+    };
     let octs = Octaves::new(seed, &spectrum);
     let unit = (0..grid.cell_count())
         .map(|k| f64::from(octs.fbm(grid.point(k)) as f32))
@@ -248,36 +252,6 @@ fn province_scale(unit: &[f64], noise: &[f32], mask: &[bool], on: bool) -> f64 {
         (xy + x * f64::from(noise[k]), xx + x * x)
     });
     xy / xx
-}
-
-#[test]
-fn the_noise_starts_at_the_outer_scale_of_its_province() {
-    // ETOPO 2022: land 4800 km, sea floor 1600 km (study,
-    // scripts/etopo_outer_scale.py). A first octave of frequency f on the
-    // unit sphere has the wavelength radius / f.
-    let grid = Grid::new(24);
-    let forcing = earth();
-    let cell = Metre(cell_length(&grid, forcing.radius));
-    for (province, km) in [(Province::Thick, 4800e3), (Province::Thin, 1600e3)] {
-        let spectrum = province_spectrum(&grid, &forcing, province);
-        let first = forcing.radius.0 / spectrum.base_frequency;
-        assert!((first - km).abs() < 1.0, "{province:?}: {first} m");
-        assert_eq!(spectrum.octaves, octaves(Metre(km), cell));
-    }
-    // Mars has no measured outer scale: the noise starts at the radius.
-    let mars = Forcing {
-        analogue: Analogue::Mars,
-        ..earth()
-    };
-    let spectrum = province_spectrum(&grid, &mars, Province::Thin);
-    assert_eq!(spectrum.base_frequency, BASE_FREQUENCY);
-    // A body smaller than the outer scale starts at its radius too.
-    let small = Forcing {
-        radius: Metre(600e3),
-        ..earth()
-    };
-    let spectrum = province_spectrum(&grid, &small, Province::Thick);
-    assert_eq!(spectrum.base_frequency, BASE_FREQUENCY);
 }
 
 #[test]

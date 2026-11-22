@@ -1,4 +1,4 @@
-"""MOLA MEGDR mean Haar fluctuation from 100 km to half the circumference, whole surface and per province.
+"""Measured, not used in W2 (see ../topography.md, "Outer scale"). MOLA MEGDR mean Haar fluctuation from 100 km to half the circumference, whole surface and per province.
 
 The outer scale of the topography is the lag beyond which the mean Haar
 fluctuation stops growing. Profiles are whole meridian great circles (a

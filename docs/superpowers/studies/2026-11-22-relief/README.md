@@ -43,7 +43,9 @@ relief code copies into its doc comments (`Source:`, `Calibration:`,
 ## Findings, by theme
 
 - [Topography](topography.md): spectrum (H), amplitude, coastlines,
-  hypsometry targets, continental share, crusts, continental slope.
+  hypsometry targets, continental share, crusts, continental slope, and
+  the outer scale of the topography (measured, not used in W2: it barely
+  changed the deep sea floor and broke Earth's H).
 - [Plates](plates.md): count, sizes, speeds, slab pull, trenches, arcs,
   rifts, orogens, ridges.
 - [Volcanoes](volcanoes.md): heat-flux anchors, intensity, provinces,
@@ -81,10 +83,7 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `hurst(Earth)` | 0.479 | — | Source | Landais, Schmidt & Lovejoy 2019, Table 2 (scales above 10 km) [V] |
 | `hurst(Mars)` | 0.53 | — | Source | same [V] |
 | `LACUNARITY` | 2 | — | Definition | sampling choice: persistence `2^-H` keeps the spectrum |
-| `octaves` | the first octave's wavelength down to 2 cells | — | Definition | the grid's Nyquist limit |
-| `outer_scale(Earth, Thick)` | 4800 | km | Source | ETOPO 2022, the lag at which the mean Haar fluctuation of windows wholly on land peaks (1002 m) and turns over [V, measured, `scripts/etopo_outer_scale.py`; `topography.md`] |
-| `outer_scale(Earth, Thin)` | 1600 | km | Source | same, windows wholly on the sea floor deeper than 200 m (607 m) [V, measured, `scripts/etopo_outer_scale.py`] |
-| `outer_scale(Mars, either)` | none | — | Source | MOLA MEGDR: the whole surface and the lowlands never turn over; the noise starts at the radius [V, measured, `scripts/mola_outer_scale.py`] |
+| `octaves` | circumference down to 2 cells | — | Definition | the grid's Nyquist limit |
 | `REFERENCE_WAVELENGTH` | 100 | km | Definition | the lag at which the amplitude is measured, above the 10-20 km break |
 | `amplitude(Earth, Thick)` | 131 | m | Source | ETOPO 2022, mean Haar fluctuation of north-south profiles at 100 km, windows wholly on land: 124 m at 89 km and 138 m at 111 km, interpolated log-log [V, measured, `scripts/etopo_haar_split.py`; `topography.md`] |
 | `amplitude(Earth, Thin)` | 246 | m | Source | same, windows wholly on the sea floor deeper than 200 m: 236 and 255 m [V, measured, `scripts/etopo_haar_split.py`] |

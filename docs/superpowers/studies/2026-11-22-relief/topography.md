@@ -101,7 +101,15 @@ The retained amplitude is a Haar fluctuation, not a standard deviation:
 the noise is scaled by measuring its own Haar fluctuation at the
 reference lag, never by equating the two.
 
-## Outer scale
+## Outer scale (measured, not used in W2)
+
+Status: measured, not used in W2. A commit that started each province's
+noise at these outer scales was tried and dropped: it barely changed the
+deep sea floor (the share deeper than 6 km stayed far above Earth's, so the
+cause is not the noise's large scales but the missing sea-floor age-depth
+law) and it broke Earth's Hurst exponent (H left the 0.479 +- 0.08 window).
+The noise therefore starts again at the circumference. The measurement
+stays here as a finding for a later track.
 
 The fluctuation cannot grow forever: beyond some lag, the *outer scale*,
 the relief adds no variance, and a noise whose octaves start at one

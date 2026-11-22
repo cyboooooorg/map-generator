@@ -10,28 +10,9 @@ fn persistence_follows_the_hurst_exponent() {
 
 #[test]
 fn octaves_reach_two_cells() {
-    // From Earth's outer scales down to two 15 km cells:
-    // floor(log2(4800 km / 30 km)) + 1 = 7 + 1, floor(log2(1600 / 30)) + 1
-    // = 5 + 1.
-    assert_eq!(octaves(Metre(4800e3), Metre(15e3)), 8);
-    assert_eq!(octaves(Metre(1600e3), Metre(15e3)), 6);
+    // floor(log2(40 075 km / 30 km)) + 1 = 10 + 1.
+    assert_eq!(octaves(Metre(40_075e3), Metre(15e3)), 11);
     assert_eq!(octaves(Metre(1e3), Metre(15e3)), 1);
-}
-
-#[test]
-fn outer_scales_are_where_the_haar_fluctuation_turns_over() {
-    // ETOPO 2022, scripts/etopo_outer_scale.py: land peaks at 4.8 Mm, the
-    // sea floor at 1.6 Mm; MOLA's whole surface and lowlands never turn.
-    assert_eq!(
-        outer_scale(Analogue::Earth, Province::Thick),
-        Some(Metre(4800e3))
-    );
-    assert_eq!(
-        outer_scale(Analogue::Earth, Province::Thin),
-        Some(Metre(1600e3))
-    );
-    assert_eq!(outer_scale(Analogue::Mars, Province::Thick), None);
-    assert_eq!(outer_scale(Analogue::Mars, Province::Thin), None);
 }
 
 #[test]

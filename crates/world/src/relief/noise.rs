@@ -43,8 +43,8 @@ pub struct Spectrum {
     pub hurst: f64,
     /// Number of octaves summed.
     pub octaves: u32,
-    /// Frequency of the first octave on the unit sphere: 1 makes its
-    /// wavelength the body's radius, `f` the radius over `f`.
+    /// Frequency of the first octave: one wavelength per circumference on
+    /// the unit sphere.
     pub base_frequency: f64,
 }
 
