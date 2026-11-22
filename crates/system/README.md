@@ -103,9 +103,9 @@ it wraps `ContractError` and the host errors of `science::stellar`.
 
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
   are the only stored truth.
-- `ENGINE_VERSION` (2 since the planet draw) is bumped whenever a
-  timeline or a world could change for the same inputs; it invalidates
-  the caches, which are never migrated.
+- `ENGINE_VERSION` (3 since compact chains end at 1071 d) is bumped
+  whenever a timeline or a world could change for the same inputs; it
+  invalidates the caches, which are never migrated.
 
 ## Ports
 

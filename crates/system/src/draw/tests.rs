@@ -1,12 +1,12 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
 
-use super::place::{MAX_PLANETS, Rules, System, place, probe_mass, recheck};
+use super::place::{Filled, MAX_PLANETS, Rules, System, fill_family, place, probe_mass, recheck};
 use super::*;
 use crate::ArchetypeId;
 use crate::families::table::SLOT_TRIES;
 use crate::families::tests::placed as test_planet;
-use crate::families::{Counts, FamilyContext, Placed};
+use crate::families::{COMPACT_OUTER_EDGE, Counts, FamilyContext, Placed};
 use crate::inputs::{BodyRequest, INPUTS_SCHEMA, SystemRequest};
 use crate::sources::{Light, light};
 use crate::spin;
@@ -194,6 +194,7 @@ fn assert_valid(placed: &[Placed], ctx: &FamilyContext, what: &str) {
 /// giants, in order of distance) and the largest axis scaled to the Sun's
 /// ice line (`a × 2.7 au / ice line`), of every planet and of the giants.
 fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
+    let mut small_compact = 0_usize;
     let (mut ratios, mut widest, mut widest_giant) = (Vec::new(), 0.0_f64, 0.0_f64);
     for host in [0.08, 0.3, 0.8, 1.0, 2.0, 8.0] {
         for family in FAMILIES {
@@ -203,6 +204,17 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
                 let placed = run(seed, &parts, &BTreeMap::new(), &model)
                     .unwrap_or_else(|error| panic!("{what}: {error}"));
                 assert_valid(&placed, &parts.2, &what);
+                if family == Family::Compact {
+                    assert!(
+                        placed
+                            .iter()
+                            .all(|p| p.trial.orbit.period.value().0 <= COMPACT_OUTER_EDGE.0),
+                        "{what}: past the compact edge"
+                    );
+                    if host == 0.08 {
+                        small_compact += placed.len();
+                    }
+                }
                 let scale = 2.7 / parts.2.ice_line.0;
                 widest = placed
                     .iter()
@@ -234,6 +246,7 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
             }
         }
     }
+    assert!(small_compact > 0, "no compact planet around 0.08 M☉");
     (ratios, widest, widest_giant)
 }
 
@@ -750,4 +763,38 @@ fn adding_a_hostless_archetype_keeps_the_star_family_and_slots() {
     }
     assert!(compared > 20, "{compared}");
     assert!(shared * 10 >= compared * 8, "{shared} of {compared}");
+}
+
+const SEED: u64 = 1;
+
+#[test]
+fn a_chain_end_stops_the_family_slots() {
+    let mut trace = Trace::new();
+    let p0 = test_planet(&mut trace, 1.0, 0.1, 0.0, false);
+    let p3 = test_planet(&mut trace, 1.0, 0.5, 0.0, false);
+    let calls = std::cell::RefCell::new(Vec::new());
+    let mut placed = Vec::new();
+    fill_family(4, &mut placed, |n, _| {
+        calls.borrow_mut().push(n);
+        Ok(match n {
+            0 => Filled::Planet(p0.clone()),
+            1 => Filled::Empty,
+            2 => Filled::ChainEnds,
+            _ => Filled::Planet(p3.clone()),
+        })
+    })
+    .unwrap();
+    assert_eq!(*calls.borrow(), [0, 1, 2]);
+    assert_eq!(placed.len(), 1);
+}
+
+#[test]
+fn asked_planets_ignore_the_compact_edge() {
+    let parts = parts(SEED, 1.0, Family::Compact);
+    let placed = run(SEED, &parts, &asked(&[("jupiter-like", 1)]), &model).unwrap();
+    let jupiter = placed
+        .iter()
+        .find(|p| p.asked == Some(id("jupiter-like")))
+        .expect("the asked planet is placed");
+    assert!(jupiter.trial.orbit.period.value().0 > COMPACT_OUTER_EDGE.0);
 }
