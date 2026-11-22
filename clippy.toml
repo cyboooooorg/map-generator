@@ -14,6 +14,8 @@ disallowed-methods = [
   { path = "rand::make_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "getrandom::fill", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "getrandom::getrandom", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "getrandom::u32", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
+  { path = "getrandom::u64", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "rand::SeedableRng::from_os_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "rand::SeedableRng::from_entropy", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
   { path = "rand::SeedableRng::try_from_os_rng", reason = "draw from a sub-seed of the system seed (Determinism and seeds)", allow-invalid = true },
