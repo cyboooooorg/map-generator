@@ -280,13 +280,26 @@ fn render_node(
     Some(())
 }
 
+/// A number for reading: plain up to a million and down to a thousandth,
+/// scientific with 5 significant digits (`1.1447e30`) beyond, so that a
+/// stellar mass in kilograms does not print thirty digits. Only the text
+/// is rounded; the JSON output keeps full precision.
+fn render_number(n: f64) -> String {
+    let magnitude = n.abs();
+    if magnitude >= 1e6 || (magnitude > 0.0 && magnitude < 1e-3) {
+        format!("{n:.4e}")
+    } else {
+        format!("{n}")
+    }
+}
+
 /// A node's value: a number with its unit (none for `1`), a code, a flag.
 fn render_value(value: &Value) -> Option<String> {
     if let Some(number) = value.get("Number") {
         let n = number.get("value")?.as_f64()?;
         return Some(match number.get("unit")?.as_str()? {
-            "1" | "" => format!("{n}"),
-            unit => format!("{n} {unit}"),
+            "1" | "" => render_number(n),
+            unit => format!("{} {unit}", render_number(n)),
         });
     }
     if let Some(code) = value.get("Code") {
@@ -305,6 +318,24 @@ mod tests {
 
     use super::*;
     use crate::report::report;
+
+    #[test]
+    fn numbers_read_plainly_or_in_scientific_notation() {
+        let cases = [
+            (1_144_684_557_374_294_400_000_000_000_000.0, "1.1447e30"),
+            (232_006_601.403_750_3, "2.3201e8"),
+            (999_999.0, "999999"),
+            (1e6, "1.0000e6"),
+            (0.001, "0.001"),
+            (0.0009, "9.0000e-4"),
+            (0.0, "0"),
+            (-2.5e7, "-2.5000e7"),
+            (5.350_512_601_505_564, "5.350512601505564"),
+        ];
+        for (n, text) in cases {
+            assert_eq!(render_number(n), text, "{n}");
+        }
+    }
 
     fn report_of(seed: u64) -> Value {
         let inputs = Inputs {
