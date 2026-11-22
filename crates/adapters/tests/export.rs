@@ -58,6 +58,7 @@ fn a_missing_field_creates_nothing() {
     assert!(!out.exists());
 }
 
+/// Pins a display choice (the colours of the ramp), not a published value.
 #[test]
 fn the_relief_ramp_is_blue_under_water_and_green_on_land() {
     let ramp = Ramp::relief();

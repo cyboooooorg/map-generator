@@ -148,7 +148,9 @@ fn an_odd_width_panics() {
 /// projection bias. The bounds are that error on this field: 1 % of the
 /// field's range for the mean, 0.01 for the share (the share also moves
 /// with the few pixels straddling the zero contour). Width against width
-/// is held to the same bounds.
+/// is held to the same bounds. The bounds are set from the measured gaps
+/// (mean about 0.01 % of the range, share about 1e-3) with margin, not
+/// from a source.
 #[test]
 fn two_widths_agree_on_area_statistics() {
     let h = |p: [f64; 3]| {
