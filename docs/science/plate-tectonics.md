@@ -236,17 +236,32 @@ in `science::relief`, the pass in `world::relief`.
    cm/yr for one sinking along a quarter of its boundary or more, the
    median RMS speeds of Zahirovic et al. (2015) over 200 Myr of
    reconstructions.
-3. **Distance.** A neighbourhood pass on the grid gives every cell its
-   great-circle distance to the nearest boundary; each profile is a
-   function of that distance.
+3. **Strength levels and distances.** Each boundary cell has a strength
+   in $[0, 1]$ from its convergence (or its spreading rate), rounded to
+   one of `RELIEF_LEVELS` = 4 levels. For each kind and each level, a
+   neighbourhood pass on the grid gives every cell its great-circle
+   distance to the boundary cells at least that strong, stopped at the
+   kind's reach (`relief_reach`: 3 sigmas past the farthest bump, a
+   truncation, not a physical value). A kind's relief is the sum over
+   levels of the profile at that level's distance and convergence, taking
+   the previous level's profile off: the discretised integral of the
+   profile over strength. It is continuous in every distance, so the
+   relief does not step from one cell to the next where the nearest
+   boundary cell changes; no statement below uses one nearest-boundary
+   distance.
 4. **Trenches.** Depth 0.9–4.7 km and half-width (axis to the flexure's
-   zero) 31–93 km, the global array of Zhang et al. (2018).
+   zero) 31–93 km, the global array of Zhang et al. (2018). A trench
+   takes its full depth on both sides of the boundary (the overriding and
+   the sinking plate): the flexure is symmetric about the axis, and the
+   side of a subduction only decides where the arc and the plateau stand.
 5. **Arcs.** Above the slab where it is 105 km deep (Syracuse & Abers
    2006), at $105\ \text{km} / \tan \delta$ from the trench, $\delta$ the
    slab's dip down to 125 km: 32° on average (Lallemand, Heuret &
    Boutelier 2005), so about 170 km.
 6. **Ranges.** Over a continental margin, the Altiplano's 3.65 km over a
-   band 350–400 km wide (Allmendinger et al. 1997); in a collision, up to
+   plateau 375 km wide (Allmendinger et al. 1997: 350–400 km) that
+   starts at the arc, not behind it (a modelling choice bounded by the
+   Altiplano, see the departures below); in a collision, up to
    Tibet's 5 km (Royden et al. 2008). Both are elevations above sea
    level, so a range lifts the column to them rather than adding them on
    top of the continent: a cell gains $w \cdot \max(0, E - h)$, $E$ the
@@ -257,8 +272,12 @@ in `science::relief`, the pass in `world::relief`.
    reach keeps its floor.
 7. **Rifts.** Under 100 km wide (Hopper & Buck 1996; Buck 2007).
 8. **Ridges.** Parsons & Sclater's $2.5 + 0.35\sqrt{t}$ km, the floor's
-   age $t$ in Ma read from the distance and the spreading rate, as in the
-   legacy.
+   age $t$ in Ma read from the distance and half the spreading rate (each
+   plate carries the new floor away at half of it). The ridge stands
+   above the floor 70 Ma old, 5.43 km deep, the age to which the relation
+   holds (`RIDGE_FLOOR_AGE`), not above the legacy's unsourced 4 km. A
+   ridge spreading slower than about 1.5 cm/yr has no relief: its
+   strength rounds to level 0 (see the departures).
 
 The boundary relief is scaled by gravity like the mountains (see [Why
 are mountains lower on heavier
@@ -387,8 +406,17 @@ and 0 for the other regimes and without liquid water.
 Calibrations, each with what was searched in the [relief
 study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
 
-- **Plate sizes.** `PLATE_WEIGHT`, the spread of the plate centres, is
-  fitted to the 0.25 exponent of the area law, not sourced itself.
+- **Plate sizes.** `PLATE_WEIGHT` (0.35), the spread of the plate centres,
+  is not fitted yet: the legacy's value is kept, and the 0.25 exponent
+  of the area law is its check, still to be measured.
+- **The Andean plateau** starts at the arc and is 375 km wide, the
+  middle of the Altiplano's 350–400 km (Allmendinger et al. 1997). Where
+  a plateau starts relative to the arc is a modelling choice bounded by
+  the Altiplano, not a published value; it is in the calibration list of
+  the study. The plateau and the arc apply on continental crust only.
+- **Strength levels** (`RELIEF_LEVELS` = 4) and **reach-limited
+  distances** (3 sigmas) are discretisations (`Definition:`), not
+  physics.
 - **The speed ramp.** Between no sinking edge and a quarter of the
   boundary sinking, how the speed rises is a calibration; Zahirovic et
   al.'s 4.4 cm/yr for plates sinking along less than a quarter is its
@@ -404,6 +432,10 @@ study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list
   the 3 km that Buck (2007) calls the high end, nothing more.
 - **Trenches take the middle of their range** (2.8 km deep, 62 km wide)
   rather than following the slab's age and dip (Jarrard 1986).
+- **Slow ridges have no relief.** A ridge spreading slower than about
+  1.5 cm/yr rounds to strength level 0 and gets none. Slow ridges such as
+  Gakkel (about 1 cm/yr) do have relief (a rift valley and flanks), so
+  this departs from the science; more levels would lower the threshold.
 - **The count does not depend on size,** as below.
 
 #### The legacy generator

@@ -110,8 +110,10 @@ study](../superpowers/studies/2026-11-22-relief/volcanoes.md)):
 3. **Arc cones.** Random points along the arcs of the plate boundaries,
    after de Bremond d'Ars et al.
 4. **Shape.** Every cone has an aspect between 0.01 and 0.1 (Grosse &
-   Kervyn 2018) and stands at most 8.4 km at standard gravity, scaled by
-   the relief scale $\min(g_0/g, 2.49)$ like the mountains.
+   Kervyn 2018) and stands at most 8.4 km at standard gravity (Olympus
+   Mons's 22 km at Mars's 3.73 m/s², the mean on NASA's fact sheet,
+   brought to 9.80665), scaled by the relief scale $\min(g_0/g, 2.49)$
+   like the mountains.
 
 ### Where it departs from the science
 

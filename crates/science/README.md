@@ -139,6 +139,30 @@ the 100 GPa metallic boundary of a giant. Data: [GIANTS.md](data/GIANTS.md);
 laws, tests and calibrations: [Mini-Neptunes](../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
 [Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary).
 
+## Relief
+
+`science::relief`: the laws and calibrated constants of a rocky body's
+height. Every number carries a `Source:`, `Calibration:` or `Definition:`
+doc comment (a tier-1 test fails otherwise); values and citations are in
+the [relief study](../../docs/superpowers/studies/2026-11-22-relief/README.md).
+
+- `spectrum`: the analogue's Hurst exponent, persistence, octaves down to
+  two cells, the Haar amplitude per province, the relief scale of gravity
+  (`min(g0 / g, 2.49)`) and `HEIGHT_RANGE`.
+- `crust`: Earth's and Mars's crusts, the thick-crust share, Airy's
+  floating height, the continental slope.
+- `plates`: plate counts, sizes and speeds, the boundary profiles
+  (trench, arc, rift, ridge, Andean plateau, collision range), the
+  strength levels and reaches of the world's distance passes, and the
+  Parsons & Sclater ridge depth.
+- `highlands`: the legacy highland provinces, the dry plains and
+  `MOUNTAIN_RELIEF`.
+- `volcanoes`: the heat-flux intensity and the cone sizes.
+
+Laws: [mountains and gravity](../../docs/science/mountains-and-gravity.md),
+[plate tectonics](../../docs/science/plate-tectonics.md),
+[volcanoes](../../docs/science/volcanoes.md).
+
 ## Dependencies
 
 `serde` (units serialise as bare numbers), and `serde_json` in tests. Nothing

@@ -130,7 +130,7 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | rift width | under 100 | km | Source | Hopper & Buck 1996 [V]; Buck 2007 [V] |
 | collision height | 5 | km | Source | Royden et al. 2008, Tibet [V]; an elevation above sea level, the column is lifted to it |
 | Andean uplift | 3.65 over 350-400 | km | Source | Allmendinger et al. 1997, Altiplano-Puna [V]; an elevation above sea level, as the collision height |
-| `ridge_depth` | 2.5 + 0.35 √(t / Ma) | km | Source | Parsons & Sclater 1977, 0-70 Ma [V, abstract] |
+| `ridge_depth` | 2.5 + 0.35 √(t / Ma) | km | Source | Parsons & Sclater 1977, 0-70 Ma [V, abstract]; ridges stand above the floor 70 Ma old (5.43 km), not the legacy's unsourced 4 km |
 
 ### Volcanoes (Task 4)
 
@@ -152,6 +152,14 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | Mars highland share | 0.58 | Marinova et al. 2008 [V, abstract] |
 | Venus within 1 km of the mean | more than 80 % | Ford & Pettengill 1992 [V, abstract] |
 | H of the relief | 0.479, 0.53 | Landais et al. 2019 [V] |
+
+W2 closes as it stands: the land under 500 m, above 2 km and above 4 km,
+the sea floor deeper than 6 km, the Mars highland share and Mars H are
+printed by the census, not asserted, each for a process W2 lacks (erosion
+and sedimentation, sea-floor age-depth, the Mars dichotomy). The values
+per seed are in `docs/science/mountains-and-gravity.md`, "W2 hypsometry
+departures", with the `COLLISION_SIGMA` fit table (the orogens' width does
+not set the land above 2 km).
 
 Departure: the land under 500 m (45-75 %, 56 % on ETOPO 2022) is not
 reachable without erosion and sedimentation, which build Earth's coastal
@@ -193,11 +201,13 @@ Each will carry a `Calibration:` doc comment, a calibration section in its
 | 8 | Collision orogen width | sigma 350 km (FWHM 583 km) | bounded by the Altiplano (350-400 km) and Tibet (about 1000 km [S]) | a published orogen width |
 | 9 | Rift shoulder and axis | +0.5 km at 120 km, −1.5 km at the axis | bounded by 0-3 km (Buck 2007) | typical shoulder uplift, axis depth statistics |
 | 10 | `RELIEF_SPEED`, `ARC_SPEED` | 0.5-5 cm/yr, 2 cm/yr | none | a convergence threshold for trenches, orogens, arcs (Jarrard 1986, Heuret & Lallemand 2005) |
-| 11 | `PLATE_WEIGHT` | 0.35 | to fit: Sornette & Pisarenko's µ = 0.25 and PB2002's areas | a source for the spread device itself (none expected) |
+| 11 | `PLATE_WEIGHT` | 0.35 | not fitted yet: the legacy's value is kept; Sornette & Pisarenko's µ = 0.25 and PB2002's areas stay the check to make | a source for the spread device itself (none expected) |
 | 12 | Slab-pull ramp | speed rise between 0 and 25 % subducting | Zahirovic et al.'s 4.4 cm/yr under 25 % as check point | a continuous law of speed against subducting share |
 | 13 | `HIGHLANDS` (ported) | frequency 1.6, 3 octaves, edge (0.23, 0.33) | about 9 % of the sphere, Venus's highland share (Ivanov & Head 2011) | already documented in legacy |
-| 14 | `DRY_PLAINS_KM` (ported) | 3 km per unit of the legacy's five-octave noise (deviation 0.187 of a unit-variance fBm) at Earth's gravity | Venus: more than 80 % within 1 km (79 % on `venus-like`) | already documented in legacy |
+| 14 | `DRY_PLAINS` (ported from the legacy's `DRY_PLAINS_KM`) | 3 km per unit of the legacy's five-octave noise, in the legacy noise unit (deviation 0.187 of a unit-variance fBm) at Earth's gravity | Venus: more than 80 % within 1 km (79 % on `venus-like`) | already documented in legacy |
 | 15 | `MOUNTAIN_ONSET`, `MOUNTAIN_BLEND` (only if Task 9 needs them) | 0.28, 0.45 | ETOPO 2022 hypsometry | mountain range widths, ridge spacing |
+| 16 | Andean plateau placement and width | starts at the arc, 375 km wide | bounded by the Altiplano's 350-400 km (Allmendinger et al. 1997) | where a plateau starts relative to its arc |
+| 17 | `RELIEF_LEVELS`, `RELIEF_REACH_SIGMAS` | 4 levels, 3 sigmas | `Definition:` discretisations, not physics; at 4 levels ridges under about 1.5 cm/yr get no relief | n/a |
 
 Left the list since the spec: the Andean uplift (now Allmendinger et
 al.), the arc position (slab depth and dip), `STAGE_MA` (the drift is not

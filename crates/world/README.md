@@ -24,6 +24,42 @@ object.
   `width x width/2`. Each pixel is the area-weighted mean of the cells in
   its footprint, or the weighted mode for a categorical field. Pure and
   deterministic; colours and PNG encoding live in `adapters`.
+- `relief::generate(state, seed, grid)`: the height field `relief.height`
+  of one body, in metres **above sea level** (see below).
+
+## Relief
+
+`relief::generate` builds the height of every cell from the physical
+forcings of a `PlanetState` (radius, surface gravity, tectonic regime,
+heat flux, liquid, ocean share) and a body `Seed`; it never reads what the
+central object is. Passes, in order, each drawing from its own label of
+the body seed (no shared stream):
+
+1. `continents` (`relief.continents`): fractal noise of the analogue's
+   Hurst exponent, the crust line (area quantile of the thick-crust
+   share), Airy's step between the crusts, the continental slope.
+2. Plates (`relief.plates`, plate worlds only): `PlateMap::draw` and
+   `PlateMap::relief` add trenches, arcs, rifts and ridges by boundary
+   strength levels; `raise_orogens` lifts continental columns to the
+   Andean plateau's or the collision range's elevation. Without plates,
+   `highlands` (`relief.mountains` / `highlands`) takes their place.
+3. `mountains` (`relief.mountains`): ridged noise weighted by the
+   orogeny, bounded at `MOUNTAIN_RELIEF`.
+4. `volcanoes` (`relief.volcanoes`): cones from the heat flux, and along
+   the arcs.
+5. Sea level: the area quantile that leaves `ocean_share` of the sphere
+   below it (the area mean on a world without liquid) is subtracted, so
+   0 m is the sea.
+
+The field is stored as `relief.height`, `u16` over plus or minus 25 km
+(`HEIGHT_RANGE`), a step under a metre. The same seed gives the same
+relief. The tier-3 census is `crates/world/tests/relief_heavy.rs`
+(`mise run test:heavy`): it asserts the land share, the sea floor over
+1 km, Venus within 1 km, no saturation, Earth's H and determinism, and
+prints the rest of Earth's hypsometry and Mars's highland share and H,
+which W2 does not model. The laws and the departures are in
+[mountains and gravity](../../docs/science/mountains-and-gravity.md) and
+[plate tectonics](../../docs/science/plate-tectonics.md).
 
 ## Ports
 
