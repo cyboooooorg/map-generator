@@ -6,6 +6,7 @@
 //! list: `docs/superpowers/studies/2026-11-22-relief/README.md`, numbers 13
 //! and 14; [`MOUNTAIN_RELIEF`] is not in the list yet.
 
+use super::plates::COLLISION_HEIGHT;
 use crate::units::Metre;
 
 /// The noise that places the highland provinces of a world without plates.
@@ -56,16 +57,18 @@ pub fn highland_weight(noise: f64) -> f64 {
 /// 1 km of its median, 2 km 85 % (relief study, calibration 14).
 pub const DRY_PLAINS: Metre = Metre(3000.0);
 
-/// Calibration: the height, per unit of the ridged noise at weight 1 and
-/// Earth's gravity, of the noise mountains: Everest's 8848.86 m (China and
-/// Nepal survey, 2020), the tallest mountain of the one body whose ranges
-/// are measured in full, over 3, the standard deviations at which the crests
-/// of the unit-variance ridged noise stand. A first value, to be replaced
-/// by the legacy's `MOUNTAIN_ONSET` and `MOUNTAIN_BLEND` if the hypsometry
-/// test of ETOPO 2022 needs them. Searched and not found: a law from the
-/// weight of a range to its height; to be added to the study's calibration
-/// list.
-pub const MOUNTAIN_RELIEF: Metre = Metre(8848.86 / 3.0);
+/// Source: the height of the highest summits above the plateau of their
+/// orogen, per unit of the ridged noise at weight 1 and Earth's gravity:
+/// Everest's 8848.86 m (China and Nepal survey, 2020; the study's value
+/// of `MAX_RELIEF_SCALE`) less the Tibetan plateau's mean height,
+/// [`COLLISION_HEIGHT`] (5 km, Royden, Burchfiel & van der Hilst 2008,
+/// doi:10.1126/science.1155371): 8848.86 - 5000 = 3848.86 m.
+pub const MOUNTAIN_RELIEF: Metre = Metre(EVEREST_HEIGHT.0 - COLLISION_HEIGHT.0);
+
+/// Source: the height of Everest above sea level, 8848.86 m (China and
+/// Nepal survey, 2020), the value [`super::spectrum::MAX_RELIEF_SCALE`]
+/// is derived from.
+const EVEREST_HEIGHT: Metre = Metre(8848.86);
 
 #[cfg(test)]
 #[path = "highlands_tests.rs"]

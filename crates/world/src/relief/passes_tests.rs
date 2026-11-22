@@ -184,3 +184,41 @@ fn a_dry_world_rolls_on_its_plains_and_the_highlands_gate_its_mountains() {
     assert!(m.iter().all(|&v| v >= 0.0));
     assert!(m.iter().zip(&weight).all(|(&v, &w)| w > 0.0 || v == 0.0));
 }
+
+#[test]
+fn arc_cones_follow_their_density_per_length_of_arc() {
+    use science::relief::plates::{ARC_SPEED, Boundary, arc_weight};
+    use science::relief::volcanoes::ARC_CONE_DENSITY;
+    use science::units::Metre;
+    // A small body, so that the cells (39 km) resolve the arc band.
+    let grid = Grid::new(24);
+    let forcing = Forcing {
+        radius: Metre(600e3),
+        heat_flux: WattPerSquareMetre(0.0),
+        ..earth()
+    };
+    // An arc along the equator: its weight from the distance to it.
+    let equator: Vec<bool> = (0..grid.cell_count())
+        .map(|k| grid.point(k)[2].abs() < 0.03)
+        .collect();
+    let distance = crate::stats::distance_to(&grid, forcing.radius, &equator, None);
+    // The arc stands `arc_distance` from the boundary, on its north side.
+    let arcs: Vec<f32> = (0..grid.cell_count())
+        .map(|k| {
+            if grid.point(k)[2] <= 0.0 {
+                return 0.0;
+            }
+            let d = Metre(f64::from(distance[k]));
+            arc_weight(Boundary::IslandArc, d, ARC_SPEED).get() as f32
+        })
+        .collect();
+    let seeds = 0..5;
+    let count: usize = seeds
+        .clone()
+        .map(|s| cones(&grid, Seed::new(s), &forcing, &arcs).len())
+        .sum();
+    let length = 2.0 * std::f64::consts::PI * forcing.radius.0 * seeds.count() as f64;
+    let density = count as f64 / length;
+    let ratio = density / ARC_CONE_DENSITY;
+    assert!((0.5..=2.0).contains(&ratio), "{ratio}");
+}

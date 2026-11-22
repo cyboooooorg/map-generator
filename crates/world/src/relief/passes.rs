@@ -16,6 +16,7 @@ use crate::grid::Grid;
 use crate::stats::{area_quantile, distance_to};
 use science::relief::crust::{CONTINENTAL_SLOPE, continental_share, crust, floating_height};
 use science::relief::highlands::{DRY_PLAINS, HIGHLANDS, MOUNTAIN_RELIEF, highland_weight};
+use science::relief::plates::arc_band_width;
 use science::relief::spectrum::{
     Analogue, REFERENCE_WAVELENGTH, amplitude, hurst, octaves, persistence, relief_scale,
 };
@@ -267,8 +268,10 @@ pub(crate) struct PlacedCone {
 /// The cones of a body: isolated ones on a lattice of [`CONE_SPACING`],
 /// present in [`CONE_PRESENCE`] of the cells at Earth's volcanic intensity
 /// (in proportion to the intensity, up to every cell), and arc cones in the
-/// band of `arcs` at [`ARC_CONE_DENSITY`] per metre of cell side, at random
-/// in the cell (an arc band several cells wide holds proportionally more).
+/// band of `arcs` at random in their cell, so that the expected number per
+/// metre of arc is [`ARC_CONE_DENSITY`] whatever the band's width: a cell's
+/// presence is its weight times the density per area,
+/// `ARC_CONE_DENSITY / arc_band_width()`, times the cell's area.
 /// Their sizes are `cone_size` at standard gravity, both height and radius
 /// then scaled by [`relief_scale`] (the shape, so the aspect, is kept).
 pub(crate) fn cones(grid: &Grid, body: Seed, forcing: &Forcing, arcs: &[f32]) -> Vec<PlacedCone> {
@@ -316,9 +319,10 @@ pub(crate) fn cones(grid: &Grid, body: Seed, forcing: &Forcing, arcs: &[f32]) ->
         }
     }
     let side = cell_length(grid, forcing.radius);
+    let band = arc_band_width().0;
     for k in (0..grid.cell_count()).filter(|&k| arcs[k] > 0.0) {
         let label = format!("arc/{k}");
-        let expected = f64::from(arcs[k]) * ARC_CONE_DENSITY * side;
+        let expected = f64::from(arcs[k]) * ARC_CONE_DENSITY * side * side / band;
         if draw(&format!("{label}/present")) >= expected {
             continue;
         }

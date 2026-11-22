@@ -285,3 +285,20 @@ fn profiles_vanish_beyond_their_reach() {
         }
     }
 }
+
+/// Definition: the step of the numerical integral, 1 km.
+const STEP: f64 = 1e3;
+
+#[test]
+fn the_arc_band_width_is_the_integral_of_the_arc_weight() {
+    // Rectangle rule over +-5 sigma, 1 km steps, at full speed.
+    let step = STEP;
+    let centre = arc_distance().0;
+    let sum: f64 = (-300..=300)
+        .map(|i| {
+            let d = Metre(centre + f64::from(i) * step);
+            arc_weight(Boundary::IslandArc, d, ARC_SPEED).get() * step
+        })
+        .sum();
+    assert!((sum / arc_band_width().0 - 1.0).abs() < 1e-3, "{sum}");
+}

@@ -317,6 +317,14 @@ pub fn arc_weight(kind: Boundary, distance: Metre, convergence: MetrePerSecond) 
     Fraction::new(weight).expect("a bump within 0 and 1")
 }
 
+/// Width of the volcanic arc: the integral of [`arc_weight`] across the
+/// arc at full strength, `∫ exp(-(x / σ)²) dx = σ √π` with σ
+/// [`ISLAND_ARC_SIGMA`]. Dividing a density per unit of arc length by it
+/// gives the density per unit of area at weight 1.
+pub fn arc_band_width() -> Metre {
+    ISLAND_ARC_SIGMA * std::f64::consts::PI.sqrt()
+}
+
 /// Weight of mountain ridges at `distance` from a boundary of kind `kind`:
 /// the shape of a collision range or of an Andean plateau, scaled by how
 /// fast the plates close ([`RELIEF_SPEED`]); zero elsewhere.
