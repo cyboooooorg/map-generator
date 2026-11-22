@@ -48,7 +48,8 @@ The share of a surface under volcanic provinces: the Moon's maria about
 than 65 % of them volcanic (Denevi et al. 2013) [S, the draft read the
 abstract; not re-read]; Venus's volcanic plains a half to three quarters
 [S]. They bound the legacy's 0.3 at full intensity by a factor of two;
-no source gives the share against intensity: a calibration.
+no source gives the share against intensity: a calibration. W2 draws no
+volcanic province, so this share is not ported (calibration 3).
 
 ## Cones
 

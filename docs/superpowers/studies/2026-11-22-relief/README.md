@@ -142,6 +142,10 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `CONE_HEIGHT_MAX` | 8.4 at standard gravity | km | Source | Plescia 2004's 22 km [V, abstract] × 3.73 / 9.80665 (NASA Mars fact sheet [V]; Weisskopf 1975) [D] |
 | arc cone placement | random points in the arc band | — | Definition | de Bremond d'Ars et al. 1995: spacing "corresponds to randomly generated points" [V, abstract]; replaces `ARC_SPACING_SHAPE` |
 
+Volcanic provinces are not drawn in W2: only the isolated cone lattice
+and the arc cones are, so the province share (calibration 3) is not
+ported.
+
 ### Test targets (Task 9)
 
 | Target | Value | Citation |
@@ -193,7 +197,7 @@ Each will carry a `Calibration:` doc comment, a calibration section in its
 | --- | --- | --- | --- | --- |
 | 1 | Regime to analogue body | Plates → Earth; Stagnant, Episodic, HeatPipe → Mars (Venus too) | Task 9: H, Mars highland share, Venus 80 % within 1 km | a measured H for Venus; crust shares of non-plate regimes |
 | 2 | Volcanic intensity curve | shape between Earth (0.087 W/m²) and a heat pipe (2.5 W/m² → 1); Earth's value 0.5 | nothing published; checked at its anchors (Task 4) | a law from heat flux to volcanic share or cone density (Kite et al. 2009, Crisp 1984, Moore & Webb 2013, Kankanamge & Moore 2019) |
-| 3 | `VOLCANIC_PROVINCE_SHARE` | 0.3 at intensity 1 | bounded by the Moon's 16-17 %, Mercury's about 18 %, Venus's 50-75 % [S] | Mars and Venus volcanic unit areas (Tanaka et al. 2014, Ivanov & Head 2011 tables) |
+| 3 | `VOLCANIC_PROVINCE_SHARE` (not ported: W2 draws no volcanic province) | 0.3 at intensity 1 | bounded by the Moon's 16-17 %, Mercury's about 18 %, Venus's 50-75 % [S] | Mars and Venus volcanic unit areas (Tanaka et al. 2014, Ivanov & Head 2011 tables) |
 | 4 | Cone size draw | how sizes are drawn inside 0.1-1000 km³ and H/WB 0.01-0.1 | Grosse & Kervyn's ranges | a global size distribution of volcanoes |
 | 5 | Isolated cone spacing and presence | one per 900 km cell, in half the cells | none | a global law (ten Brink 1991, Hahn & Byrne 2023 give local densities [S]) |
 | 6 | Arc cone density | one per 250 km of arc (200 km cell, 80 %) | regional 50-70 km [S] | de Bremond d'Ars et al.'s Gamma mean (full text refused) |
@@ -214,9 +218,10 @@ al.), the arc position (slab depth and dip), `STAGE_MA` (the drift is not
 ported), the Gamma shape of arc spacing (random placement), and, at the
 user's review (2026-11-22), Earth's upper-mantle density (now PREM) and
 `MAX_RELIEF_SCALE` (now the Olympus Mons / Everest ratio). Joined it:
-number 4, the cone size draw, which the drafts had not listed. Twelve
-firm calibrations remain, plus two legacy ones ported and one pair kept
-only if Task 9 needs it.
+number 4, the cone size draw, which the drafts had not listed. The code
+carries twelve firm calibrations (1, 2, 4 to 12 and 16) and the two
+legacy ones ported (13, 14); number 3 is not ported, since W2 draws no
+volcanic province, and number 15 was not needed by Task 9.
 
 ## Open items
 

@@ -91,7 +91,7 @@ the same ribbon (de Bremond d'Ars, Jaupart & Sparks 1995).
 
 ### What you see
 
-Cones on the relief of rocky worlds: scattered over volcanic provinces,
+Cones on the relief of rocky worlds: scattered over the whole surface,
 more of them the more heat the planet loses, and in a line behind the
 trenches of plate worlds. A cold planet has none away from its arcs.
 
@@ -105,8 +105,9 @@ study](../superpowers/studies/2026-11-22-relief/volcanoes.md)):
    sets a volcanic intensity from 0 to 1 along a declared curve through
    two anchors: Earth's flux, 0.087 W/m², and a heat pipe's, 2.5 W/m²,
    where it reaches 1.
-2. **Provinces and isolated cones.** Cones on a lattice, present in a
-   share of the cells that grows with the intensity.
+2. **Isolated cones.** Cones on a lattice over the whole surface,
+   present in a share of the cells that grows with the intensity. No
+   volcanic province (a plain of lava flows) is drawn yet.
 3. **Arc cones.** Random points along the arcs of the plate boundaries,
    after de Bremond d'Ars et al.
 4. **Shape.** Every cone has an aspect between 0.01 and 0.1 (Grosse &
@@ -121,9 +122,6 @@ Calibrations, each with its search in the [relief
 study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list):
 
 - **The intensity curve** between its anchors, and Earth's value on it.
-- **The share of the surface in volcanic provinces**, bounded by the
-  Moon's maria (16–17 %), Mercury's volcanic plains (about 18 %) and
-  Venus's (a half to three quarters), but not measured against a flux.
 - **How cone sizes are drawn** inside the published ranges.
 - **The spacing of isolated cones** and **the density of arc cones**: the
   arcs of Alaska carry one volcano every 50–70 km, a regional figure, not

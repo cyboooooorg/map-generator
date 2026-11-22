@@ -50,15 +50,6 @@ pub fn volcanic_intensity(flux: WattPerSquareMetre) -> Fraction {
     Fraction::new(intensity.min(1.0)).expect("an intensity within 0 and 1")
 }
 
-/// Calibration: share of the surface in volcanic provinces at a volcanic
-/// intensity of 1, 0.3, the legacy's; proportional to the intensity.
-/// Bounded by the Moon's maria (16-17 %), Mercury's volcanic plains (about
-/// 18 %) and Venus's (a half to three quarters); searched and not found:
-/// Mars and Venus volcanic unit areas against a flux (relief study,
-/// calibration 3,
-/// `docs/superpowers/studies/2026-11-22-relief/volcanoes.md#volcanic-provinces`).
-pub const VOLCANIC_PROVINCE_SHARE: f64 = 0.3;
-
 /// Source: aspect of a volcano, its height over its basal width, "mostly
 /// from 0.01 to 0.1" over 158 shield volcanoes (Grosse & Kervyn 2018,
 /// doi:10.1016/j.geomorph.2017.12.017).

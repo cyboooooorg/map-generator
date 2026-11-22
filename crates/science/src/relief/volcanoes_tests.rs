@@ -71,5 +71,4 @@ fn volcano_calibrations_keep_the_studys_values() {
     assert_eq!(CONE_SPACING, Metre(900e3));
     assert_eq!(CONE_PRESENCE, 0.5);
     assert!((1.0 / ARC_CONE_DENSITY - 250e3).abs() < 1e-6);
-    assert_eq!(VOLCANIC_PROVINCE_SHARE, 0.3);
 }
