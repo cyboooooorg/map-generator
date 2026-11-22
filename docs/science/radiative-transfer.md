@@ -145,7 +145,7 @@ saturation pressure $e_s(T)$. It follows the Clausius–Clapeyron law
 (Pierrehumbert 2010, §2.6) at moderate temperatures, and the exact
 saturation curve of IAPWS (Wagner & Pruß 1993, IAPWS SR1-86(1992)) over
 the whole range up to the critical point, 647.096 K and 220.64 bar (IAPWS
-R6-95); below the triple point, the sublimation curve of ice Ih (Wagner
+SR1-86(1992)); below the triple point, the sublimation curve of ice Ih (Wagner
 et al. 2011, IAPWS R14-08(2011)).
 
 The moist adiabat takes its latent heat from the slope of the same curve,
@@ -419,7 +419,7 @@ the generator:
 | Table | What it holds | Size |
 | --- | --- | --- |
 | `opacity.bin` | The infrared: CO₂ and water lines as 8 $g$-points in each 20 cm⁻¹ bin, on 15 pressures (1e-5 to 100 bar) and 16 temperatures (100 to 900 K), plus MT_CKD's CO₂ continuum | 3.8 MB |
-| `shortwave.bin` | The same lines and sets on the 147 albedo bands from 0.7 to 5 µm (2000 to 14 364 cm⁻¹), plus MT_CKD's water and CO₂ continua | 1.8 MB |
+| `shortwave.bin` (2b-2) | The same lines and sets on the 147 albedo bands from 0.7 to 5 µm (2000 to 14 364 cm⁻¹), plus MT_CKD's water and CO₂ continua | 1.8 MB |
 
 Their inputs, versions, download dates and checksums, the regeneration
 commands and the stale paths are in
@@ -434,6 +434,37 @@ the file to its four-digit rounding. The CIA table was rebuilt to 0.2 %
 on 109 of its 139 rows, the rest being small cells at region edges. The
 line part, 99.9 % of `opacity.bin`, cannot be rebuilt without the same
 HITRAN fetch.
+
+### Where the code lives
+
+The longwave half is in `science` (change 2b-1); the shortwave half and
+the Bond albedo follow in 2b-2.
+
+- `crates/science/src/radiation/`: `column` (the grid, the adiabats, the
+  skin temperature, the cloud greenhouse and `outgoing_longwave`),
+  `spectrum` (the 250 bins, the lines, the water and CO₂ continua and the
+  CO₂ pairs read from `co2-cia.tsv`), `ktable` (the reader of
+  `opacity.bin`), `methane` (the grey stand-in), `clouds` (the cloud
+  cover), `gases` (the partial pressures and the heat capacities) and
+  `fast_math` (the single-precision exponential of the sum).
+- `crates/science/src/water.rs` (the IAPWS saturation curve and latent
+  heat) and `crates/science/src/volatiles.rs` (the CO₂ and methane ones).
+- **The cache belongs to the caller.** `ColumnCache` holds the memo of the
+  last 1 024 columns solved and the single-precision workspace of the sum
+  (some 100 kB), and `outgoing_longwave` takes it by `&mut`. It replaces
+  the legacy thread-local memo and scratch: `science` keeps no global
+  state, and a caller runs one cache per thread of work. A cache hit
+  returns the bit-identical value of a fresh column.
+- **What 2b-1 ships:** the outgoing longwave radiation of a column, over
+  any surface from 1 K to above water's critical point, with the cloud
+  greenhouse, the falling humidity and the moist plateau. `opacity.bin`
+  and `co2-cia.tsv` come with it; `shortwave.bin` does not.
+- **What 2b-2 will ship:** the shortwave (the 240 bands, the two-stream
+  solution), the Bond albedo and `shortwave.bin`. The column's `levels`
+  and `Levels` types and `stratospheric_methane_bar` are already in
+  `column`, kept for it.
+- **Speed.** Against the legacy code, on 999 columns in a release build,
+  the median of 5 runs is 1.008 times the legacy time.
 
 ### Where it departs from the science
 
@@ -498,7 +529,8 @@ HITRAN fetch.
   $g$-point is merged, the 20 cm⁻¹ bin width and the sizes of the memos.
   Each has a convergence test: levels per decade against a grid 2.5 times
   finer (0.13-0.21 W/m²), the plateau grid against twice as many levels
-  (under 0.5 W/m²), the shortwave levels against 16 per decade (albedo under
+  (under 0.5 W/m²; a heavy test, run with `mise run test:heavy` and not in
+  CI), the shortwave levels against 16 per decade (albedo under
   1e-3, absorption under 1 W/m²), halving the bins (0.006 W/m² on the
   forcing). The tests compare the model with itself: they prove the
   numerics converge, not that the physics is right. No convergence test

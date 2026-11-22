@@ -205,6 +205,20 @@ downloads of `fetch.sh`, into this directory, and writes nothing else:
   past it; a cell takes the first band it touches. Cells under
   1e-50 cm⁵/molecule² at every temperature are left out.
 
+How the generator (`tools/opacity-table/src/cia.rs`) chooses the bands
+of the CO₂ file: the file stitches measurements and calculations that
+cover different bands at different temperatures, so the five regions
+above are fixed in the code, with the slack of 1 cm⁻¹ on each side to
+match a block to its region by its header's first and last wavenumber.
+A cell takes the first region it overlaps (the regions meet at
+2840-2860 cm⁻¹, where the earlier one wins). Within the region, at
+each of the four temperatures, it takes the block whose temperature is
+nearest, so a temperature past the block's warmest set uses that set.
+The roto-translational band starts at 1 cm⁻¹ in the file, and its curve
+is taken as zero at 0 cm⁻¹; elsewhere the coefficient is zero outside
+the block, a cell a block only partly covers counts the rest as zero,
+and a negative mean (the file's noise) counts as zero.
+
 `fetch.sh` checks the SHA-256 of the three inputs and fails on a
 mismatch.
 
