@@ -59,7 +59,9 @@ system.draw.period = 5.350512601505564 d
 One line per node, indented by depth. A leaf ends with its provenance
 (`input`, `observed`, `drawn`, `imposed`); a derived node is followed by the
 nodes it comes from. A node already printed in the tree appears as
-`code (see above)`. Dimensionless values print without a unit.
+`code (see above)`. Dimensionless values print without a unit. A value
+with `|x| >= 1e6` or `0 < |x| < 1e-3` prints in scientific notation with
+5 significant digits (`1.1447e30 kg`); the JSON output keeps full precision.
 
 A code several values share (the flux of each planet) is ambiguous: the
 error lists the pointers to choose from. A code no field holds itself, only
