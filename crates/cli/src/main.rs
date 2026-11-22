@@ -3,6 +3,7 @@
 
 mod args;
 mod error;
+mod report;
 mod system;
 
 use std::process::ExitCode;

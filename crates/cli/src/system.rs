@@ -5,6 +5,7 @@ use timeline::Seed;
 
 use crate::args::SystemArgs;
 use crate::error::CliError;
+use crate::report;
 
 /// `map-generator system`: the draw's flags and the explain option.
 #[derive(Args, Debug)]
@@ -18,6 +19,7 @@ pub struct SystemCommand {
 
 /// Runs the command and returns the text for stdout. `main` resolves the
 /// seed first, so this stays a function of its arguments.
-pub fn run(_command: &SystemCommand, _seed: Seed) -> Result<String, CliError> {
-    Ok(String::new())
+pub fn run(command: &SystemCommand, seed: Seed) -> Result<String, CliError> {
+    let report = report::report(&command.system.inputs(seed))?;
+    Ok(serde_json::to_string_pretty(&report)?)
 }

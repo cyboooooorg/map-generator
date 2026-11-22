@@ -76,10 +76,6 @@ impl SystemArgs {
     }
 
     /// The draw's inputs. Range checks stay in the draw, which owns them.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the draw calls it once the command is wired in")
-    )]
     pub fn inputs(&self, seed: Seed) -> Inputs {
         let mut archetypes = BTreeMap::new();
         for (id, count) in &self.archetypes {

@@ -36,8 +36,10 @@ mise install
 
 ## Usage
 
-The command line gains its first command (`map-generator system`) with
-slice 1. Until then, the tasks check the workspace:
+`map-generator system --seed 1` draws a planetary system and prints it as
+JSON (without `--seed`, the root seed is drawn and printed on stderr so the
+run can be replayed). Flags, output and exit codes:
+[`crates/cli/README.md`](crates/cli/README.md). The tasks check the workspace:
 
 | Task | What it does |
 | --- | --- |
