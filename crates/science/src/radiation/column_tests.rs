@@ -32,7 +32,12 @@ const EARTH: MetrePerSecondSquared = STANDARD_GRAVITY;
 /// `MARS_SURFACE_GRAVITY`, 3.73 m/s² (the legacy took 3.71).
 const MARS: MetrePerSecondSquared = MARS_SURFACE_GRAVITY;
 
+/// Definition: Venus's gravity of the test columns, the shared sourced
+/// value.
 const VENUS: MetrePerSecondSquared = VENUS_GRAVITY;
+
+/// Definition: Titan's gravity of the test columns, the shared sourced
+/// value.
 const TITAN: MetrePerSecondSquared = TITAN_GRAVITY;
 
 /// Source: the Simpson–Nakajima limit, W/m², 282 line by line (Goldblatt,

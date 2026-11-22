@@ -134,7 +134,12 @@ const STEAM_TOLERANCE: f64 = 1e-9;
 /// Definition: relative tolerance of a factor taken from logarithms.
 const SCALE_TOLERANCE: f64 = 1e-6;
 
+/// Definition: Venus's gravity of the test cases, m/s², the shared
+/// sourced value.
 const VENUS_GRAVITY: f64 = test_points::VENUS_GRAVITY.0;
+
+/// Definition: Titan's gravity of the test cases, m/s², the shared
+/// sourced value.
 const TITAN_GRAVITY: f64 = test_points::TITAN_GRAVITY.0;
 
 /// Definition: a Venus-like surface level of the test cases, near the
