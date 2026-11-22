@@ -7,6 +7,10 @@ publish = false
 [dependencies]
 timeline.workspace = true
 science.workspace = true
+noise.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+timeline = { workspace = true, features = ["fixtures"] }

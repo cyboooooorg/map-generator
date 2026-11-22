@@ -1,9 +1,22 @@
 //! Sourced physical constants.
 
-use crate::units::{Gyr, Kelvin, Kilogram, Metre, Second, Watt, WattPerSquareMetre};
+use crate::units::{
+    Gyr, Kelvin, Kilogram, Metre, MetrePerSecond, MetrePerSecondSquared, Second, Watt,
+    WattPerSquareMetre,
+};
 
 /// Definition: IAU 2012 Resolution B2, 149 597 870 700 m exactly.
 pub const ASTRONOMICAL_UNIT: Metre = Metre(149_597_870_700.0);
+
+/// Definition: standard acceleration of gravity, 9.806 65 m/s2 exactly (CGPM
+/// 1901, 3rd General Conference on Weights and Measures).
+pub const STANDARD_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(9.806_65);
+
+/// Source: Mars's mean surface gravity, 3.73 m/s² (NASA Mars Fact Sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html, "Surface gravity
+/// (mean)"). The sheet's other two values are surface accelerations,
+/// rotation included: 3.69 at the equator, 3.73 at the pole.
+pub const MARS_SURFACE_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(3.73);
 
 /// Definition: IAU 2015 Resolution B3 nominal solar radius (Prša et al.
 /// 2016, AJ 152, 41).
@@ -56,6 +69,10 @@ pub const DAY: Second = Second(86_400.0);
 
 /// Definition: days in a Julian year (IAU).
 pub const JULIAN_YEAR_DAYS: f64 = 365.25;
+
+/// Definition: a centimetre per Julian year in metres per second, 0.01 m
+/// over [`JULIAN_YEAR_DAYS`] days of [`DAY`].
+pub const CENTIMETRE_PER_YEAR: MetrePerSecond = MetrePerSecond(0.01 / (JULIAN_YEAR_DAYS * DAY.0));
 
 /// Definition: years in a gigayear (SI prefix).
 pub const YEARS_PER_GYR: f64 = 1e9;

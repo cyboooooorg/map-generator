@@ -152,6 +152,93 @@ continents themselves and the sea floor look alike at any gravity.
 
 ### How it computes them
 
+#### The rewrite: `world::relief`
+
+The rewrite builds the relief of every planet whose keyframe has a
+surface on the cube-sphere grid, in metres, from the physical forcings
+of the timeline: radius, surface gravity, tectonic regime, heat flux and
+surface liquid. It never reads what the central object is. The laws and
+constants live in `science::relief`, the passes in `world::relief`; each
+number below and its source is in the [relief
+study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
+
+1. **Analogue.** The regime picks the body whose measured statistics the
+   relief takes: Earth with plates, Mars for a stagnant, episodic or
+   heat-pipe lid (a calibration, below).
+2. **Continents.** A fractal noise over each cell's position on the
+   sphere, lacunarity 2, persistence $2^{-H}$, from a first wavelength
+   of the body's radius down to two grid cells. $H$ is the analogue's measured
+   Hurst exponent above 10 km, 0.479 for Earth and 0.53 for Mars
+   (Landais, Schmidt & Lovejoy 2019), where the legacy's persistence of
+   0.5 meant $H = 1$, too smooth, and rounded its coasts. The crust line
+   is the area quantile of the noise that leaves the analogue's
+   thick-crust share above it, 41 % (Cogley 1984) or 58 % (Marinova et
+   al. 2008). On a world with liquid the noise is then centred within
+   each crust (its area-weighted mean removed), so that the step between
+   the crusts is Airy's alone: the crust line cuts the noise itself, and
+   uncentred the continents would carry its upper part, about 2 km above
+   the ocean floor's, on top of the step. Each crust is then scaled so
+   that the noise's mean Haar fluctuation at 100 km, measured on the
+   noise itself, matches the analogue's there: on Earth 131 m on the
+   continents and 246 m on the ocean floor (ETOPO 2022, windows wholly on
+   land or wholly on the sea floor), on Mars 233 m on both (MOLA, whole
+   surface), all measured for this study. The Haar fluctuation is the
+   mean of $|M_2 - M_1|$, the means of the two halves of a window one lag
+   long; the plain height difference over the lag is about twice as
+   large on the same noise.
+3. **Floating crust.** Thick crust stands above thin crust by Airy's
+   balance (above), Earth's crusts (41.1 and 7.1 km, 2830 kg/m³, over
+   PREM's uppermost mantle, Dziewonski & Anderson 1981,
+   3380 kg/m³: 5.53 km) or Mars's (58 and 32 km, 2900 and 3500 kg/m³:
+   4.46 km). The step falls from the continent's edge at the continental
+   slope, 2.4°, the mean gradient of Earth's sea floor between 200 and
+   2500 m deep near land (ETOPO 2022, measured for the study), over a
+   distance to the crust line computed on the grid. The legacy shelf and
+   platform shaping is not ported.
+4. **Plates.** On a plate world, the boundaries add trenches, arcs,
+   rifts, ranges and ridges (see [Do all rocky planets have plate
+   tectonics?](plate-tectonics.md#the-rewrite-worldrelief-plates)).
+5. **Mountains.** A ridged noise on the same spectrum, weighted by the
+   plates' orogeny or, without plates, by the legacy highland provinces
+   (`HIGHLANDS`), and on a world without liquid the legacy's rolling
+   plains (`DRY_PLAINS`), both ported as the calibrations they were.
+   Both keep the unit they were fitted in: the plains are 3 km per unit
+   of the legacy's five-octave noise, whose deviation is 0.187 of the
+   rewrite's unit-variance noise. The ridged crests are divided by their
+   own maximum, so the highest summit stands `MOUNTAIN_RELIEF` (Everest
+   less the Tibetan plateau, 3.85 km at Earth's gravity) above its
+   plateau, as that height is defined.
+6. **Volcanoes.** Cones from the planet's heat flux (see [How tall do
+   volcanoes grow, and how many are there?](volcanoes.md)).
+7. **Gravity.** What loads the crust (mountains, boundary relief,
+   cones) is multiplied by the relief scale $\min(g_0/g, 2.49)$, $g_0$
+   the standard gravity, capped at Olympus Mons's relief over Everest's
+   height (22 / 8.849); the floating crust and the ridges are not. A
+   height measured on Mars (its noise amplitude) already stands at Mars's
+   gravity, 3.73 m/s² (its mean surface gravity, NASA fact sheet; the
+   same constant as the cones' Olympus Mons scaling): it is multiplied by the ratio of
+   the relief scales, $s(g) / s(g_\text{Mars})$, so gravity is counted
+   once. Mars sits at the cap, so this ratio is 1 at Mars's gravity and
+   below it.
+8. **Sea level.** The height below which `ocean_share` of the sphere's
+   area lies (an exact area-weighted quantile); heights are stored
+   relative to it. A world without liquid, or with a share of 0, is
+   measured from its area-weighted mean, the convention of Mars and
+   Venus. A share of 1 puts the sea above the highest cell.
+9. **Range.** Heights are stored in metres over ±25 km (Olympus Mons, the
+   tallest known relief, stands almost 22 km; Plescia 2004), a step
+   under a metre. The legacy `tanh` compression is gone.
+
+Published hypsometry is a test, never a curve imposed on the relief.
+Earth-like worlds are checked against ETOPO 2022 (29.1 % land, over 70 %
+of the sea floor deeper than 1 km), Venus-like ones against Ford &
+Pettengill's 80 % within 1 km of the mean. The land under 500 m, above
+2 km and above 4 km, the sea floor deeper than 6 km and the Mars highland
+share and H are printed, not asserted: W2 lacks the processes that set
+them ([W2 hypsometry departures](#w2-hypsometry-departures)).
+
+#### The legacy generator (`legacy-final`)
+
 ```mermaid
 flowchart LR
   C["Circumference"] --> G["Gravity<br/>mass–radius<br/>relation (Zeng 2016)"]
@@ -324,6 +411,134 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 
 ### Where it departs from the science
 
+#### The rewrite
+
+Calibrations (each with its `Calibration:` doc comment; what was
+searched is in the [relief
+study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list)):
+
+- **Regime to analogue.** Plates take Earth's statistics, every other
+  regime Mars's. No measured Hurst exponent exists for Venus, so a
+  Venus-like world takes Mars's *(a choice of the design)*; checked
+  against its unimodal hypsometry.
+- **Highlands and dry plains** (`HIGHLANDS`, `DRY_PLAINS`): ported from
+  the legacy with their calibrations, below.
+- **Mountain onset and blend**, only if the Earth hypsometry test needs
+  them.
+
+Choices of the design:
+
+- **One thick-crust share per regime,** Earth's 41 % or Mars's 58 %,
+  whatever the planet's history (`surface.terrain` carries ages, not
+  crust).
+- **Crusts do not scale with the planet's mass:** a super-Earth with
+  plates gets Earth's crust.
+- **Every surface liquid alike:** water, hydrocarbons, nitrogen or lava
+  fill the relief by the same quantile.
+- **The amplitude is per crust, measured per surface.** Earth's land
+  and sea-floor values (131 and 246 m at 100 km) were measured in windows
+  wholly above sea level or wholly deeper than 200 m; the noise applies
+  them to the continental and oceanic crust, shelves included. Mars and
+  the worlds without liquid take the whole surface's (233 m on Mars).
+  Landais et al.'s figure gives Earth about 115 m at 100 km, near the
+  land value (Mars agrees with the recomputation); the study keeps the
+  reproducible values.
+- **Centring leaves the crusts' edges uneven.** Centred within each
+  crust, the noise is low on the continental side of the crust line and
+  high on the oceanic side, so the continental edge starts below the
+  ocean floor next to it before the slope lifts it.
+
+More choices and departures of the rewrite:
+
+- **The Andean plateau starts at the arc and is 375 km wide.** The middle
+  of the Altiplano's 350-400 km (Allmendinger et al. 1997); where a
+  plateau starts relative to the arc is a modelling choice bounded by
+  the Altiplano, not a published value. It is in the study's calibration
+  list.
+- **The plateau and the arc apply on continental crust only,** and
+  orogen heights are elevations above sea level: a range lifts a column
+  to them (the weight times what is missing), it never adds them on top.
+- **Boundary relief uses strength levels** (`RELIEF_LEVELS` = 4) and
+  reach-limited distances (3 sigmas); a trench takes its full depth on
+  both sides of its boundary.
+- **Ridges stand above the floor 70 Ma old** (Parsons & Sclater 1977,
+  5.43 km), not the legacy's unsourced 4 km, and a ridge spreading slower
+  than about 1.5 cm/yr gets no relief, which Gakkel contradicts.
+- **`MOUNTAIN_RELIEF` is Everest minus Tibet** (8.849 km less
+  `COLLISION_HEIGHT` 5 km: 3.85 km); the ridged crests are bounded, the
+  highest summit standing exactly that above its plateau.
+- **The amplitude is the per-province Haar statistic**, the noise scaled
+  on its own measured fluctuation at 100 km; gravity then scales it
+  relative to the analogue's gravity (Earth 9.80665, Mars 3.73 m/s², the
+  mean on NASA's Mars fact sheet), counted once.
+- **`DRY_PLAINS` is in the legacy noise unit** (3 km per unit of its
+  five-octave noise, 0.187 of a unit-variance fBm), not in metres of the
+  rewrite's noise.
+- **`PLATE_WEIGHT` is not fitted yet** (see the plates page).
+
+#### W2 hypsometry departures
+
+The Earth census (seeds 1 to 3, 60 km cells, `mise run test:heavy`) prints
+these measures and asserts none of them; each is a process W2 does not
+model, and has its follow-up issue. ETOPO 2022 and the published target
+first.
+
+| Measure | Target | Seed 1 | Seed 2 | Seed 3 | Missing process |
+| --- | --- | --- | --- | --- | --- |
+| Land under 500 m | 45-75 % (56 %) | 20.2 % | 22.8 % | 21.1 % | erosion and sedimentation |
+| Land above 2 km | 4-15 % (10.85 %) | 28.8 % | 26.6 % | 24.2 % | erosion |
+| Land above 4 km | 0.5-4 % (1.77 %) | 6.5 % | 9.4 % | 6.3 % | erosion |
+| Sea floor deeper than 6 km | under 3 % (1.02 %) | 17.1 % | 16.8 % | 20.5 % | sea-floor age-depth |
+| Mars highland share | 0.55-0.61 | 0.509 | 0.508 | 0.523 | the Mars dichotomy |
+| Mars H | 0.53 | 0.434 | 0.472 | 0.456 | the Mars dichotomy |
+
+- **Lowlands and high land.** Coastal plains, deltas and basins pile up
+  near sea level because erosion carries the relief down and
+  sedimentation fills the low ground; the same erosion wears the high
+  land down. The relief has neither: its land is the upper part of a
+  continental noise cut by the sea, with the orogens lifted on top. The
+  follow-up is a neighbourhood erosion pass after W2.
+- **Deep sea floor.** Oceanic crust deepens with its age (Parsons &
+  Sclater 1977: 2.5 km at the ridge to 5.43 km at 70 Ma, flattening
+  beyond). W2 has the age only near ridges; elsewhere the floor is noise
+  at the Airy step under a sea level that sits on the continental
+  platform, and 17-20 % of it is deeper than 6 km. A sea-floor age-depth
+  law (an age field for the oceanic crust) is the follow-up. A cutoff of
+  the noise's large scales at the measured outer scale was tried and
+  dropped: it lowered the deep floor from 17-20 % to only 15-17.5 % and
+  broke Earth's H (0.36-0.41 against 0.479), see the study's
+  `topography.md`.
+- **Mars.** The southern highlands are a hemispheric step (the
+  dichotomy), which the area quantile of a noise does not reproduce:
+  the highland share falls short and the whole-surface H too. A census of
+  the dichotomy is the follow-up.
+
+Asserted and met: the land share (1 minus the ocean share), over 70 % of
+the sea floor deeper than 1 km (91 %), Venus-like worlds with over 80 %
+within 1 km (84-87 %), no saturation at 3 g and 0.2 g, Earth's H within
+0.08 of 0.479 (0.441-0.455), and the same seed giving the same relief.
+
+**`COLLISION_SIGMA` does not set the land above 2 km.** The orogen width
+is bounded by the Altiplano (350-400 km) and Tibet (about 1000 km), that
+is sigma 210-600 km. Land above 2 km, mean of seeds 1 to 3, target
+10.85 %:
+
+| sigma (km) | Seed 1 | Seed 2 | Seed 3 | Mean | Above 4 km, mean |
+| --- | --- | --- | --- | --- | --- |
+| 600 (upper bound) | 36.9 % | 32.1 % | 34.2 % | 34.4 % | 12.9 % |
+| 350 (kept) | 28.8 % | 23.1 % | 24.9 % | 25.6 % | 8.9 % |
+| 210 (lower bound) | 24.8 % | 18.9 % | 20.8 % | 21.5 % | 6.4 % |
+| 100 (out of bounds, probe) | 21.9 % | 15.8 % | 17.7 % | 18.5 % | 4.1 % |
+
+Even at 100 km the land above 2 km is 18.5 %: the width of the collision
+ranges is not what sets that share, the Andean plateaus, the continental
+noise and the continental margins carry it. The fit was dropped and
+`COLLISION_SIGMA` stays at 350 km (the table was measured before the
+noise's cutoff was dropped, with the cutoff on; the seeds' land above 2 km
+without it is 24-29 % at 350 km).
+
+#### The legacy generator
+
 - **The relief scale stops at 2.** Mars's size would give 2.9 by $1/g$, and
   Olympus Mons stands 2.5 times as high as Everest (Plescia 2004). The cap
   keeps the summits of light worlds inside the elevation range (one unit is
@@ -474,15 +689,45 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
     1216–1219,
     [doi:10.1038/nature07070](https://doi.org/10.1038/nature07070)
     (abstract read): the northern lowlands "cover ∼42% of the surface".
+22. Landais, F., Schmidt, F. & Lovejoy, S. 2019, "Multifractal topography
+    of several planetary bodies in the Solar System", *Icarus* 319, 14–20,
+    [doi:10.1016/j.icarus.2018.07.005](https://doi.org/10.1016/j.icarus.2018.07.005),
+    preprint [arXiv:1805.11249](https://arxiv.org/abs/1805.11249) (read):
+    Table 2, Hurst exponents above and below 10 km.
+23. Aharonson, O., Zuber, M. T. & Rothman, D. H. 2001, "Statistics of
+    Mars' topography from the Mars Orbiter Laser Altimeter", *Journal of
+    Geophysical Research: Planets* 106, 23723–23735,
+    [doi:10.1029/2000JE001403](https://doi.org/10.1029/2000JE001403).
+24. NOAA National Centers for Environmental Information 2022, ETOPO 2022
+    Global Relief Model,
+    [doi:10.25921/fd45-gt74](https://doi.org/10.25921/fd45-gt74), and the
+    MGS MOLA gridded data record (MEGDR), NASA Planetary Data System:
+    hypsometry, Haar fluctuations and the continental slope, measured
+    for the relief study below.
+25. Wieczorek, M. A. 2007, "Gravity and topography of the terrestrial
+    planets", *Treatise on Geophysics* 10, 165–206,
+    [doi:10.1016/B978-044452748-6.00156-5](https://doi.org/10.1016/B978-044452748-6.00156-5):
+    Mars's crust and mantle densities, 2900 and 3500 kg/m³.
+26. Dziewonski, A. M. & Anderson, D. L. 1981, "Preliminary reference
+    Earth model", *Physics of the Earth and Planetary Interiors* 25,
+    297–356,
+    [doi:10.1016/0031-9201(81)90046-7](https://doi.org/10.1016/0031-9201(81)90046-7)
+    (read): Table I, the density of the mantle lid, 3.38 g/cm³ at its top.
+27. Relief study of the rewrite, 2026-11-22:
+    [`docs/superpowers/studies/2026-11-22-relief/`](../superpowers/studies/2026-11-22-relief/README.md),
+    with its retained values, its scripts and its calibration list.
 
 ## See also
 
+- [Relief study (W2) (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/20-relief-study):
+  where the relief's numbers come from, and how W2 departs.
 - [05-relief (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/05-relief): the study of the
   relief, its noise and erosion.
 - [08-geology (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/08-geology): the geology
   study, with the craters' gravity scaling.
 - The README's **Gravity modifier — landscape relief** (under
   Calculations) and **Elevation — continents, coasts and mountains**.
+- [How tall do volcanoes grow, and how many are there?](volcanoes.md)
 - [How do impact craters form and fade?](impact-craters.md),
   [Do all rocky planets have plate tectonics?](plate-tectonics.md) and
   [Why are small moons shaped like potatoes?](moon-shapes.md)

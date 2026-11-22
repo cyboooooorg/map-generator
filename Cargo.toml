@@ -25,6 +25,7 @@ tempfile = "3.27.0"
 clap = { version = "4.6.9", features = ["derive"] }
 getrandom = "0.4.3"
 png = "0.18.1"
+noise = "0.9.0"
 
 # The draws of the engines: a seeded generator from the seed hierarchy.
 rand_core = "0.10.1"

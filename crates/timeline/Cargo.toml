@@ -8,6 +8,10 @@ publish = false
 science.workspace = true
 serde.workspace = true
 
+[features]
+# Structural fixtures for the tests of the crates that consume the contract.
+fixtures = []
+
 [dev-dependencies]
 serde_json.workspace = true
 

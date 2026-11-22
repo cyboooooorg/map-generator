@@ -5,8 +5,8 @@
 //! constants of [`crate::constants`]. Every unit serialises as a bare number.
 
 use crate::constants::{
-    ASTRONOMICAL_UNIT, DAY, DEGREES_PER_HALF_TURN, EARTH_EQUATORIAL_RADIUS, EARTH_MASS,
-    JULIAN_YEAR_DAYS, PASCALS_PER_BAR, SOLAR_IRRADIANCE, SOLAR_LUMINOSITY, SOLAR_MASS,
+    ASTRONOMICAL_UNIT, CENTIMETRE_PER_YEAR, DAY, DEGREES_PER_HALF_TURN, EARTH_EQUATORIAL_RADIUS,
+    EARTH_MASS, JULIAN_YEAR_DAYS, PASCALS_PER_BAR, SOLAR_IRRADIANCE, SOLAR_LUMINOSITY, SOLAR_MASS,
     SOLAR_RADIUS, YEARS_PER_GYR,
 };
 use serde::{Deserialize, Serialize};
@@ -88,6 +88,8 @@ unit!(/// Irradiance, watt per square metre.
     WattPerSquareMetre, "W/m2");
 unit!(/// Energy per unit area (fluence), joule per square metre.
     JoulePerSquareMetre, "J/m2");
+unit!(/// Speed, metre per second.
+    MetrePerSecond, "m/s");
 unit!(/// Acceleration, metre per second squared.
     MetrePerSecondSquared, "m/s2");
 unit!(/// Density, kilogram per cubic metre.
@@ -122,6 +124,8 @@ unit!(/// Time, Julian year of exactly 365.25 days.
     Year, "yr");
 unit!(/// Time, billion Julian years.
     Gyr, "Gyr");
+unit!(/// Speed, centimetre per Julian year (plate motions).
+    CentimetrePerYear, "cm/yr");
 unit!(/// Plane angle, degree.
     Degree, "deg");
 unit!(/// Logarithmic ratio, decimal exponent (dex).
@@ -138,6 +142,7 @@ convert!(Bar, Pascal, PASCALS_PER_BAR);
 convert!(Day, Second, DAY.0);
 convert!(Year, Second, JULIAN_YEAR_DAYS * DAY.0);
 convert!(Gyr, Year, YEARS_PER_GYR);
+convert!(CentimetrePerYear, MetrePerSecond, CENTIMETRE_PER_YEAR.0);
 convert!(Degree, Radian, std::f64::consts::PI / DEGREES_PER_HALF_TURN);
 
 /// A dimensionless share between 0 and 1 inclusive. The field is private:
@@ -231,6 +236,7 @@ mod tests {
         round_trip!(Year, Second);
         round_trip!(Gyr, Year);
         round_trip!(Degree, Radian);
+        round_trip!(CentimetrePerYear, MetrePerSecond);
     }
 
     #[test]
@@ -239,6 +245,17 @@ mod tests {
         assert_eq!(Second::from(Day(1.0)), DAY);
         assert_eq!(Kilogram::from(SolarMass(1.0)), SOLAR_MASS);
         assert!((Radian::from(Degree(180.0)).0 / std::f64::consts::PI - 1.0).abs() < TOLERANCE);
+        assert_eq!(
+            MetrePerSecond::from(CentimetrePerYear(1.0)),
+            CENTIMETRE_PER_YEAR
+        );
+    }
+
+    #[test]
+    fn a_centimetre_per_year_is_a_centimetre_per_julian_year() {
+        // 0.01 m over 365.25 days of 86 400 s.
+        let v = MetrePerSecond::from(CentimetrePerYear(1.0)).0;
+        assert!((v * 31_557_600.0 / 0.01 - 1.0).abs() < 1e-15);
     }
 
     #[test]
@@ -293,6 +310,8 @@ mod tests {
         assert_eq!(Kelvin::SYMBOL, "K");
         assert_eq!(WattPerSquareMetre::SYMBOL, "W/m2");
         assert_eq!(Gyr::SYMBOL, "Gyr");
+        assert_eq!(MetrePerSecond::SYMBOL, "m/s");
+        assert_eq!(CentimetrePerYear::SYMBOL, "cm/yr");
         assert_eq!(Fraction::SYMBOL, "1");
     }
 }

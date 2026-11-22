@@ -9,6 +9,8 @@ pub mod error;
 pub mod fields;
 pub mod grid;
 pub mod project;
+pub mod relief;
+pub mod stats;
 
 pub use error::WorldError;
 pub use fields::{Field, FieldId, Storage, Values, World};

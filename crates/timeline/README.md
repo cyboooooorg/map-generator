@@ -57,6 +57,13 @@ with parameters, never text): eccentricity below 1, interior layers
 strictly increasing in radius, finite numbers, at least one keyframe,
 dates strictly increasing, one kind of body per timeline.
 
+## Features
+
+`fixtures`: structural fixtures (`timeline::fixtures`, for example
+`earth_like_fixture` and `leaf`) for the tests of the crates that consume
+the contract. Enable it in `dev-dependencies` or a test crate, as `world`
+does: a production build does not need it.
+
 ## Left to later tracks
 
 The fields not in the contract yet are listed in the table of the

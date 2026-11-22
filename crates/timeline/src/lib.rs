@@ -9,6 +9,8 @@
 mod cause;
 mod designation;
 mod error;
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixtures;
 mod interior;
 mod keyframe;
 mod macros;

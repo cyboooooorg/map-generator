@@ -12,6 +12,7 @@ pub mod giants;
 pub mod heat;
 pub mod hydrogen;
 pub mod orbit;
+pub mod relief;
 pub mod stellar;
 pub mod structure;
 pub mod units;

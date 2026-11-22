@@ -17,12 +17,16 @@
     "docs/science/planet-interiors.md",
     "docs/science/system-architectures.md",
     "docs/science/star-structure.md",
+    "docs/science/volcanoes.md",
     "docs/superpowers/plans/2026-11-21-planet-interior.md",
     "docs/superpowers/studies/2026-11-21-planet-interior/*.md",
     "docs/superpowers/specs/2026-11-21-planet-model-pr2*-design.md",
     "docs/superpowers/plans/2026-11-21-planet-model-2a.md",
     "docs/superpowers/studies/2026-11-21-planet-model-2a/*.md",
     "docs/superpowers/specs/2026-11-21-world-catalogue-design.md",
-    "docs/superpowers/plans/2026-11-21-world-catalogue-*.md"
+    "docs/superpowers/plans/2026-11-21-world-catalogue-*.md",
+    "docs/superpowers/specs/2026-11-21-world-relief-design.md",
+    "docs/superpowers/plans/2026-11-22-world-relief.md",
+    "docs/superpowers/studies/2026-11-22-relief/*.md"
   ]
 }
