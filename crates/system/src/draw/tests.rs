@@ -1,12 +1,12 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
 
-use super::place::{MAX_PLANETS, Rules, System, place, probe_mass, recheck};
+use super::place::{Filled, MAX_PLANETS, Rules, System, fill_family, place, probe_mass, recheck};
 use super::*;
 use crate::ArchetypeId;
 use crate::families::table::SLOT_TRIES;
 use crate::families::tests::placed as test_planet;
-use crate::families::{Counts, FamilyContext, Placed};
+use crate::families::{COMPACT_OUTER_EDGE, Counts, FamilyContext, Placed};
 use crate::inputs::{BodyRequest, INPUTS_SCHEMA, SystemRequest};
 use crate::sources::{Light, light};
 use crate::spin;
@@ -14,7 +14,7 @@ use crate::star::Star;
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 use science::orbit::{self, Pair, TWO_PLANET_FLOOR};
-use science::units::{Dex, EarthMass, EarthRadius, KilogramPerCubicMetre, SolarMass};
+use science::units::{Dex, EarthMass, EarthRadius, SolarMass};
 use timeline::{Code, ContractError, Origin, PlanetClass, Provenance, Trace};
 
 const FAMILIES: [Family; 5] = [
@@ -25,35 +25,7 @@ const FAMILIES: [Family; 5] = [
     Family::Sparse,
 ];
 
-/// Source: the mean density of the Earth, 5 514 kg/m³ (NASA Earth fact
-/// sheet), to turn a test density into Earth radii.
-const EARTH_DENSITY: f64 = 5514.0;
-
-/// The test classifier: below 2 M⊕ rocky, below 10 a super-Earth, below
-/// 30 a mini-Neptune, else a gas giant (a hot Jupiter inside 0.1 au).
-/// Small planets: radius M^0.27, density 5 500 kg/m³; giants: radius
-/// from a density of 1 300 kg/m³.
-fn model(trial: &Trial, _: &Trace) -> Result<TrialOutcome, SystemError> {
-    let mass = trial.mass.value().0;
-    let a = trial.orbit.semi_major_axis.value().0;
-    let class = match mass {
-        m if m < 2.0 => PlanetClass::Rocky,
-        m if m < 10.0 => PlanetClass::SuperEarth,
-        m if m < 30.0 => PlanetClass::MiniNeptune,
-        _ if a < 0.1 => PlanetClass::HotJupiter,
-        _ => PlanetClass::GasGiant,
-    };
-    let (radius, density) = if mass < 30.0 {
-        (mass.powf(0.27), 5500.0)
-    } else {
-        ((mass * EARTH_DENSITY / 1300.0).cbrt(), 1300.0)
-    };
-    Ok(TrialOutcome {
-        class,
-        radius: EarthRadius(radius),
-        mean_density: KilogramPerCubicMetre(density),
-    })
-}
+use crate::stand_in::classify as model;
 
 fn system_inputs(seed: u64) -> Inputs {
     Inputs {
@@ -147,7 +119,7 @@ fn asking(seed: u64, items: &[(&str, u32)]) -> Inputs {
 
 /// A star of `host` M☉, its light, the context of a forced `family`,
 /// drawn on the streams `draw_with` uses, and the trace holding the star.
-fn parts(seed: u64, host: f64, family: Family) -> (Star, Light, FamilyContext, Trace) {
+pub(super) fn parts(seed: u64, host: f64, family: Family) -> (Star, Light, FamilyContext, Trace) {
     let seed = Seed::new(seed);
     let mut trace = Trace::new();
     let star = star::star(Some(SolarMass(host)), None, None, seed, &mut trace).unwrap();
@@ -220,8 +192,12 @@ fn assert_valid(placed: &[Placed], ctx: &FamilyContext, what: &str) {
 /// Draws every family on every host for `seeds` seeds and checks each
 /// system; returns the axis ratios of adjacent cold giants (gas or ice
 /// giants, in order of distance) and the largest axis scaled to the Sun's
-/// ice line (`a × 2.7 au / ice line`), of every planet and of the giants.
-fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
+/// ice line (`a × 2.7 au / ice line`), of every planet and of the giants,
+/// then the number of compact planets, their longest period (d) and their
+/// largest scaled axis.
+fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64, usize, f64, f64) {
+    let mut small_compact = 0_usize;
+    let (mut compact, mut longest, mut widest_compact) = (0_usize, 0.0_f64, 0.0_f64);
     let (mut ratios, mut widest, mut widest_giant) = (Vec::new(), 0.0_f64, 0.0_f64);
     for host in [0.08, 0.3, 0.8, 1.0, 2.0, 8.0] {
         for family in FAMILIES {
@@ -231,6 +207,22 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
                 let placed = run(seed, &parts, &BTreeMap::new(), &model)
                     .unwrap_or_else(|error| panic!("{what}: {error}"));
                 assert_valid(&placed, &parts.2, &what);
+                if family == Family::Compact {
+                    assert!(
+                        placed
+                            .iter()
+                            .all(|p| p.trial.orbit.period.value().0 <= COMPACT_OUTER_EDGE.0),
+                        "{what}: past the compact edge"
+                    );
+                    if host == 0.08 {
+                        small_compact += placed.len();
+                    }
+                    compact += placed.len();
+                    for p in &placed {
+                        longest = longest.max(p.trial.orbit.period.value().0);
+                        widest_compact = widest_compact.max(axis(p) * 2.7 / parts.2.ice_line.0);
+                    }
+                }
                 let scale = 2.7 / parts.2.ice_line.0;
                 widest = placed
                     .iter()
@@ -262,7 +254,15 @@ fn every_family_on_every_host(seeds: u64) -> (Vec<f64>, f64, f64) {
             }
         }
     }
-    (ratios, widest, widest_giant)
+    assert!(small_compact > 0, "no compact planet around 0.08 M☉");
+    (
+        ratios,
+        widest,
+        widest_giant,
+        compact,
+        longest,
+        widest_compact,
+    )
 }
 
 #[test]
@@ -275,11 +275,12 @@ fn every_family_draws_on_every_host() {
 #[test]
 #[ignore = "heavy: full grid"]
 fn every_family_draws_on_every_host_full_grid() {
-    let (mut ratios, widest, widest_giant) = every_family_on_every_host(200);
+    let (mut ratios, widest, widest_giant, compact, longest, widest_compact) =
+        every_family_on_every_host(200);
     ratios.sort_by(f64::total_cmp);
     let median = ratios.get(ratios.len() / 2).copied().unwrap_or(f64::NAN);
     eprintln!(
-        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au (giants {widest_giant:.1} au)",
+        "adjacent giant pairs {}, median a2/a1 {median:.2}, largest a × 2.7 au / ice line {widest:.1} au (giants {widest_giant:.1} au); compact planets {compact}, longest compact period {longest:.1} d, largest compact a × 2.7 au / ice line {widest_compact:.1} au",
         ratios.len()
     );
 }
@@ -778,4 +779,42 @@ fn adding_a_hostless_archetype_keeps_the_star_family_and_slots() {
     }
     assert!(compared > 20, "{compared}");
     assert!(shared * 10 >= compared * 8, "{shared} of {compared}");
+}
+
+const SEED: u64 = 1;
+
+#[test]
+fn a_chain_end_stops_the_family_slots() {
+    let mut trace = Trace::new();
+    let p0 = test_planet(&mut trace, 1.0, 0.1, 0.0, false);
+    let p3 = test_planet(&mut trace, 1.0, 0.5, 0.0, false);
+    let calls = std::cell::RefCell::new(Vec::new());
+    let mut placed = Vec::new();
+    fill_family(4, &mut placed, |n, _| {
+        calls.borrow_mut().push(n);
+        Ok(match n {
+            0 => Filled::Planet(p0.clone()),
+            1 => Filled::Empty,
+            2 => Filled::ChainEnds,
+            _ => Filled::Planet(p3.clone()),
+        })
+    })
+    .unwrap();
+    assert_eq!(*calls.borrow(), [0, 1, 2]);
+    assert_eq!(placed.len(), 1);
+}
+
+#[test]
+fn asked_planets_ignore_the_compact_edge() {
+    let parts = parts(SEED, 1.0, Family::Compact);
+    let placed = run(SEED, &parts, &asked(&[("jupiter-like", 1)]), &model).unwrap();
+    let jupiter = placed
+        .iter()
+        .find(|p| p.asked == Some(id("jupiter-like")))
+        .expect("the asked planet is placed");
+    assert!(jupiter.trial.orbit.period.value().0 > COMPACT_OUTER_EDGE.0);
+    assert!(
+        placed.iter().any(|p| p.asked.is_none()),
+        "a drawn planet is placed beside the asked one"
+    );
 }

@@ -13,6 +13,7 @@ use std::fmt;
 use timeline::StarState;
 
 mod compact;
+pub(crate) use compact::ends_chain;
 mod eccentric;
 mod hot_jupiter;
 pub(crate) mod laws;
@@ -23,10 +24,23 @@ pub(crate) mod table;
 pub(crate) mod tests;
 
 /// Definition: the longest period of a compact system's innermost
-/// planet (and of the family's support), 640 d, the top of EPOS I's
-/// outer extent of 35-640 d (study row 1). The study gives that range as
-/// an outcome of the fit, not as a cap: the draw uses it as one.
+/// planet, 640 d, the top of EPOS I's outer extent of 35-640 d (study
+/// row 1). The study gives that range as an outcome of the fit, not as a
+/// cap: the draw uses it as one. It bounds the innermost planet and is the
+/// family's period support in `possible`; the chain beyond is bounded by
+/// [`COMPACT_OUTER_EDGE`].
 const COMPACT_MAX_PERIOD: Day = Day(640.0);
+
+/// Source: Weiss et al. 2018 (CKS V, AJ 155, 48, arXiv:1706.06204), § IV,
+/// bootstrap step 5: "Remove any planets with orbital periods greater
+/// than 1071 days (the maximum observed orbital period of a planet in the
+/// CKS multis)": Kepler, FGK-type hosts. No source gives an outer edge of
+/// the compact population (study small-planets-and-spacing § 1.3).
+/// Holding it constant in days for every host is a choice (user
+/// decision, 2026-11-22), by analogy with the inner edge, whose M^(1/3)
+/// scaling in axis, a constant period, Mulders 2015 measured (study
+/// § 1.2). A compact chain ends at its first proposal beyond it.
+pub(crate) const COMPACT_OUTER_EDGE: Day = Day(1071.0);
 
 /// Source: Dawson & Johnson 2018, hot Jupiters up to 10 d (study G 1.1).
 const HOT_JUPITER_MAX_PERIOD: Day = Day(10.0);

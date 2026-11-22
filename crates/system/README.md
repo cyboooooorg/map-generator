@@ -15,6 +15,7 @@ request, the archetype targets, the present date.
 | `draw` | mapgen3 | `draw_with(inputs, trace, classify) -> Drawn`: the star, its system number, the family and one `Placement` per planet; a body request is `BodyRequestNotDrawn` |
 | `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn`; `families::table` holds every count range |
 | `spin` | mapgen3 | the primordial spin of a planet (period, obliquity) |
+| `stand_in` | mapgen3 | `classify`: a provisional classifier for `draw_with` (mass steps, one radius law), until `class_of` is public; used by the CLI and the tests |
 | `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
 | `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `heat`, `codes`: the composition and envelope draws, the structure (rocky, mini-Neptune, giant) and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
@@ -37,7 +38,9 @@ runs on a scratch trace.
   mass and an axis, classifies a circular trial, draws the eccentricity
   from the class, and checks the star, the Roche floor, the spacing to
   every placed planet and the hot Jupiters' cleared zone. 20 tries per
-  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. More
+  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. A
+  compact try past 1071 d ends the chain: its slot and the later ones
+  stay empty, with no retry. More
   than 649 planets is `TooManyPlanets`, before any allocation.
 - **Streams.** The perihelion longitude draws from `orbit/<trial label>`;
   the body seed is `derive(<designation text>)`, the spin
@@ -102,9 +105,9 @@ it wraps `ContractError` and the host errors of `science::stellar`.
 
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
   are the only stored truth.
-- `ENGINE_VERSION` (2 since the planet draw) is bumped whenever a
-  timeline or a world could change for the same inputs; it invalidates
-  the caches, which are never migrated.
+- `ENGINE_VERSION` (3 since compact chains end at 1071 d) is bumped
+  whenever a timeline or a world could change for the same inputs; it
+  invalidates the caches, which are never migrated.
 
 ## Ports
 

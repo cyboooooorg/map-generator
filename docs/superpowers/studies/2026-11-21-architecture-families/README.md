@@ -130,6 +130,8 @@ system.
 | Inclination | Rayleigh sigma 1.4 deg | He 2019, Xie 2016 (S 3.1) |
 | Outer extent | none fixed: follows from count and ratios (35-640 d) | spec's 0.3 AU has no source (S 1.3) |
 
+The draw now ends the chain at 1071 d (Weiss 2018 § IV step 5, #630).
+
 The masses row needs mapgen1's mass-radius relation to turn the radius
 scatter into a mass scatter; no source gives the scatter in mass.
 

@@ -307,7 +307,11 @@ version = "0.1.0"
 dependencies = [
  "adapters",
  "catalogue",
+ "clap",
+ "getrandom",
  "science",
+ "serde",
+ "serde_json",
  "system",
  "timeline",
  "world",

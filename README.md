@@ -36,8 +36,18 @@ mise install
 
 ## Usage
 
-The command line gains its first command (`map-generator system`) with
-slice 1. Until then, the tasks check the workspace:
+`map-generator system` draws a planetary system and prints it as JSON
+(without `--seed`, the root seed is drawn and printed on stderr so the run
+can be replayed):
+
+```bash
+cargo run -q -p map-generator -- system --seed 1
+cargo run -q -p map-generator -- system --seed 1 \
+  --explain /planets/0/orbit/period
+```
+
+Flags, output and exit codes: [`crates/cli/README.md`](crates/cli/README.md).
+The tasks check the workspace:
 
 | Task | What it does |
 | --- | --- |
@@ -53,9 +63,9 @@ Options after `--` go to nextest, for example
 
 ## Configuration
 
-None yet: generation settings arrive as inputs of the command line with
-slice 1. Tool versions are pinned in `mise.toml`; test tiers and their
-thread count in `.config/nextest.toml`.
+The system draw's inputs are the flags of `map-generator system` (seed,
+age, host mass, metallicity, archetypes). Tool versions are pinned in
+`mise.toml`; test tiers and their thread count in `.config/nextest.toml`.
 
 ## Crates
 
