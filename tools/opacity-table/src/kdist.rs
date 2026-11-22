@@ -16,7 +16,7 @@ pub const G: usize = 8;
 /// Edges of the g-intervals.
 pub const BOUNDS: [f64; G + 1] = [0.0, 0.3, 0.6, 0.8, 0.9, 0.96, 0.99, 0.998, 1.0];
 
-/// Weight of each g-point: its interval's width (mapgen reads them from
+/// Weight of each g-point: its interval's width (science reads them from
 /// the table's edges).
 #[cfg(test)]
 pub fn weights() -> [f64; G] {

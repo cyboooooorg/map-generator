@@ -132,7 +132,7 @@ impl Co2Continuum {
 /// coefficient at 296 K, its temperature exponent and the foreign
 /// coefficient at 296 K, cm² per molecule per cm⁻¹ at 1013 mbar (the
 /// file's `self_absco_ref`, `self_texp` and `for_absco_ref`, those
-/// `mapgen`'s longwave continuum reads). `mapgen` takes the absorption
+/// `science`'s longwave continuum reads). `science` takes the absorption
 /// per molecule as `mt_ckd_h2o_absco` does:
 /// `(C_s (296/T)^n e + C_f (p − e)) / p_ref × (296/T) × ν tanh(c₂ν/2T)`.
 pub struct WaterContinuum {

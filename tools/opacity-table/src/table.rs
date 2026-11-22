@@ -101,7 +101,7 @@ pub fn encode(k: f64) -> u16 {
     (((k.ln() - LN_K0) / LN_K_STEP).round() as i64 + 1).clamp(1, 65_535) as u16
 }
 
-/// The coefficient, m²/kg, of a code (as mapgen decodes it).
+/// The coefficient, m²/kg, of a code (as science decodes it).
 #[cfg(test)]
 pub fn decode(q: u16) -> f64 {
     if q == 0 {
@@ -127,7 +127,7 @@ pub struct Header {
     pub co2_continuum: Vec<(f64, f64)>,
     /// MT_CKD's water continuum of each bin of the shortwave table (see
     /// [`crate::continuum::WaterContinuum::bin`]); empty for the
-    /// longwave table, whose continuum `mapgen` holds.
+    /// longwave table, whose continuum `science` holds.
     pub water_continuum: Vec<(f64, f64, f64)>,
 }
 

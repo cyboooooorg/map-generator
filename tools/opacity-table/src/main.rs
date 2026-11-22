@@ -1,4 +1,4 @@
-//! Builds mapgen's correlated-k opacity table from HITRAN line lists (see
+//! Builds science's correlated-k opacity table from HITRAN line lists (see
 //! README.md): for each absorber set, pressure and temperature of the
 //! grid, the line-by-line absorption of every spectral bin, sorted and
 //! reduced to g-points.
@@ -47,7 +47,7 @@ const BAR_PER_ATM: f64 = 1.013_25;
 
 /// Distance from a line's centre beyond which it adds nothing, cm⁻¹: 25,
 /// MT_CKD's convention (Mlawer et al. 2012), for both gases; beyond it
-/// their continua take over (water's in mapgen, CO₂'s in the table, see
+/// their continua take over (water's in science, CO₂'s in the table, see
 /// [`continuum`]).
 const CUTOFF_CM: f64 = 25.0;
 
@@ -126,7 +126,7 @@ struct Gas {
     /// `(local number, molar mass, Q)` of each isotopologue.
     isotopologues: Vec<(u8, f64, PartitionSum)>,
     /// Mean molar mass of the gas at natural abundance, kg/mol (IUPAC
-    /// standard atomic weights, as mapgen's).
+    /// standard atomic weights, as science's).
     molar_kg: f64,
     /// What the lines lose under the cutoff (MT_CKD's convention for the
     /// gas, see [`lbl::Pedestal`]).
@@ -202,7 +202,7 @@ fn options() -> Result<Options, String> {
 }
 
 /// Shortest and longest wavelengths of the albedo's stellar spectrum, µm,
-/// and its number of bands, even in `ln λ` (`mapgen`'s
+/// and its number of bands, even in `ln λ` (`science`'s
 /// `planet::albedo::spectrum`, which checks the table's edges against
 /// its own).
 const SPECTRUM_UM: (f64, f64, usize) = (0.2, 5.0, 240);
