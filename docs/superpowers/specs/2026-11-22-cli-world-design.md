@@ -126,10 +126,13 @@ dev-dependency of `cli`), and pull request B passes `system::generate`.
   #381 on a hand-built world: area-weighted mean and land share of the
   projections at two widths agree with the grid's within the projection
   error.
-- Tier 1 for the pipeline on a fixture timeline and a small grid (no
-  real generation, a few hundred cells): first run generates and
-  stores, second run hits both caches (the producer is not called),
-  a budget of 0 evicts everything after export.
+- Tier 3 for the two pipeline runs that generate a world (a fixture
+  timeline and a small grid of a few hundred cells): first run
+  generates and stores, second run hits both caches (the producer is
+  not called), a budget of 0 evicts everything after export. Decided
+  by the user on 2026-11-22: no test generates a world outside tier 3.
+  The refusals (width, body, surface, present keyframe, producer
+  error) stay in tier 1: they stop before any generation.
 - Tier 3, adapters: PNG previews of the hand-built Earth, Mars and Venus
   states of `crates/world/tests/relief_heavy.rs` at 60 km, written
   under `target/relief-previews/` for a visual check before pull

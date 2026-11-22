@@ -243,6 +243,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "heavy: generates a world"]
     fn first_run_generates_then_second_hits_caches() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), u64::MAX);
@@ -288,6 +289,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "heavy: generates a world"]
     fn zero_budget_still_exports() {
         let dir = TempDir::new().unwrap();
         let store = FsStore::new(dir.path().join("store"), 0);
