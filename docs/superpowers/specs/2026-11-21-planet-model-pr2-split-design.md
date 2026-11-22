@@ -53,9 +53,9 @@ request.
 | PR | Content | Waits on |
 | --- | --- | --- |
 | 2a | The seven trace gaps of #617; #618 (wider draws); the envelope fraction draw; giant structure and radius | Nothing |
-| 2b | Radiative transfer in `science`: correlated-k spectral column, shortwave, albedo; `opacity.bin` and `shortwave.bin` with their generator and provenance; the #593 levers | Nothing (parallel to 2a) |
+| 2b | Radiative transfer in `science`: correlated-k spectral column, shortwave, the atmosphere's part of the albedo; `opacity.bin` and `shortwave.bin` with their generator and provenance; the in-column performance levers. Two PRs, longwave (2b-1) then shortwave (2b-2) | Nothing (parallel to 2a) |
 | 2c | Envelope escape (energy-limited); cosmic shoreline and non-thermal loss; outgassing and the pressure tree (SO2 wash-out); minimal tectonic regime and core, which outgassing reads | mapgen3's XUV pull request |
-| 2d | Global climate (condensation, maximum greenhouse, carbonate thermostat); surface liquids; the class; public `class_of` and `model`, wired into the draw | 2b and 2c |
+| 2d | Global climate (condensation, maximum greenhouse, carbonate thermostat) with the #593 levers; the surface cover of the albedo; surface liquids; the class; public `class_of` and `model`, wired into the draw | 2b and 2c |
 
 The model stays crate-private in `system` until 2d. PR 3 is unchanged:
 full regime, core and dynamo (Driscoll & Barnes 2015), terrain, life,
@@ -70,3 +70,11 @@ archetype targets, cross-field validation.
   radius (legacy values are checked, not copied).
 - 2b to 2d: each law is ported with its source and tests; missing
   science stops the work and gets a study first.
+
+## Amended 2026-11-22
+
+The #593 levers (the secant steps of #600, one maximum-greenhouse
+search per body) are climate-solver code: they move from 2b to 2d. 2b
+keeps the in-column levers. 2b takes only the atmosphere's part of the
+albedo; the surface cover moves to 2d. 2b is two pull requests. Design:
+[PR 2b](2026-11-22-planet-model-pr2b-radiative-design.md).
