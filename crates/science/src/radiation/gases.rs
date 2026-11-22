@@ -94,15 +94,4 @@ mod tests {
         };
         assert_eq!(gases.total(), 1.0);
     }
-
-    #[test]
-    fn partial_pressures_sum() {
-        let gases = PartialPressures {
-            n2: 0.78,
-            o2: 0.21,
-            co2: 0.01,
-            ..PartialPressures::default()
-        };
-        assert!((gases.total() - 1.0).abs() < 1e-12);
-    }
 }

@@ -83,9 +83,10 @@ pub(crate) const BIN_WIDTH_CM: f64 = 20.0;
 
 /// Definition: upper end of the spectrum, cm⁻¹, the top of
 /// `opacity.bin`: a black body at 640 K, the hottest steam column the
-/// legacy climate solved, emits 99.6 % of its flux below it (the test
-/// `planck_bins_sum_to_sigma_t4`); the rest goes to the tail band
-/// ([`TAIL`]).
+/// legacy climate solved, emits 99.6 % of its flux below it (0.38 % past
+/// it, audit, Wiki study 19); the rest goes to the tail band ([`TAIL`]),
+/// which the test `the_planck_spectrum_is_the_bins_and_their_rest` sums
+/// with the bins to `σT⁴`.
 pub(crate) const SPECTRUM_TOP_CM: f64 = 5000.0;
 
 /// Definition: number of bins over 0-[`SPECTRUM_TOP_CM`].

@@ -115,11 +115,6 @@ const LOGARITHMIC_SHARE: f64 = 0.15;
 /// measured 0.006.
 const HALVING_TOLERANCE: f64 = 0.1;
 
-/// Definition: share of `σT⁴` the bins may miss below
-/// [`SPECTRUM_TOP_CM`]: a black body at 640 K emits 0.38 % of its flux
-/// past it (audit, Wiki study 19).
-const BINS_SHARE_TOLERANCE: f64 = 5e-3;
-
 /// Definition: relative tolerance of two sums of the same terms in a
 /// different order, in `f64`.
 const SAME_SUM: f64 = 1e-12;
@@ -181,10 +176,6 @@ const GRID_TOP_BAR: f64 = 100.0;
 
 /// Definition: a trace of vapour, bar.
 const TRACE_BAR: f64 = 1e-6;
-
-/// Definition: temperatures, K, of the black-body bins test: cold,
-/// Earth's surface and the hottest steam column.
-const PLANCK_BINS_K: [f64; 3] = [100.0, 288.0, 640.0];
 
 /// Definition: temperatures, K, of the black-body bands test, from a
 /// frozen body to past the bins' reach.
@@ -351,10 +342,10 @@ fn venus_level() -> Level {
 
 #[test]
 fn the_table_is_on_the_models_bins() {
+    // The table's own layout is `ktable`'s test; here, that it is the
+    // spectrum's.
     let table = &*OPACITY;
     assert_eq!((table.bins, table.bin_width_cm), (BINS, BIN_WIDTH_CM));
-    let sum: f64 = weights().iter().sum();
-    assert!((sum - 1.0).abs() < SAME_SUM, "weights sum to {sum}");
     assert!(table.ln_k.iter().all(|k| k.is_finite()));
 }
 
@@ -432,8 +423,11 @@ fn lines_broaden_with_pressure_past_the_grid() {
     }
 }
 
+/// A plausibility band, not a like-for-like check (see
+/// [`DOUBLING_FORCING`]): the like-for-like RTMIP comparison fails, issue
+/// #643, which decides this test's fate.
 #[test]
-fn doubling_co2_forces_myhre() {
+fn doubling_co2_forcing_is_within_the_plausibility_band() {
     let forcing = doubling_forcing(PREINDUSTRIAL_PPM);
     assert!(
         (forcing - DOUBLING_FORCING).abs() <= DOUBLING_FORCING_TOLERANCE,
@@ -487,30 +481,6 @@ fn halving_bins_keeps_the_forcing() {
 }
 
 #[test]
-fn planck_bins_sum_to_sigma_t4() {
-    for t in PLANCK_BINS_K {
-        let sum: f64 = (0..BINS).map(|i| planck_bin_w_m2(i, t)).sum();
-        let black = STEFAN_BOLTZMANN * f64::powi(t, 4);
-        assert!(
-            (sum / black - 1.0).abs() < BINS_SHARE_TOLERANCE,
-            "at {t} K the bins hold {sum:.3} W/m², against σT⁴ = {black:.3}"
-        );
-    }
-}
-
-#[test]
-fn a_venus_level_absorbs_finitely_in_every_bin() {
-    let level = venus_level();
-    for i in 0..BINS {
-        let a = absorption_per_ln_p(i, &level);
-        let all = a.co2.iter().chain(&a.water).chain([&a.smooth]);
-        for x in all {
-            assert!(x.is_finite() && *x >= 0.0, "bin {i}: {a:?}");
-        }
-    }
-}
-
-#[test]
 fn the_spectrum_of_a_level_is_its_bins() {
     let [earth_k, earth_h2o, earth_ppm] = EARTH_LEVEL;
     let [titan_k, titan_n2, titan_ch4] = TITAN_LEVEL;
@@ -518,6 +488,7 @@ fn the_spectrum_of_a_level_is_its_bins() {
     let mut venus = venus_level();
     venus.gases.so2 = 0.0;
     let levels = [
+        venus_level(),
         Level {
             temperature_k: earth_k,
             gases: PartialPressures {
@@ -553,6 +524,8 @@ fn the_spectrum_of_a_level_is_its_bins() {
         absorption_spectrum(level, &mut spectrum);
         for i in 0..BINS {
             let one = absorption_per_ln_p(i, level);
+            let all = one.co2.iter().chain(&one.water).chain([&one.smooth]);
+            assert!(all.into_iter().all(|x| *x >= 0.0), "bin {i}: {one:?}");
             for g in 0..G {
                 assert!(close(spectrum.co2[i][g], one.co2[g]), "CO₂ bin {i}");
                 assert!(close(spectrum.water[i][g], one.water[g]), "water bin {i}");

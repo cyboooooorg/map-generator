@@ -506,26 +506,6 @@ fn the_fast_radiation_is_the_reference() {
 }
 
 #[test]
-fn venus_column_is_finite() {
-    let [surface, co2, _, _, t_eq] = VENUS_COLUMN;
-    let air = PartialPressures {
-        co2,
-        ..PartialPressures::default()
-    };
-    let venus = olr(
-        &air,
-        surface,
-        skin(t_eq),
-        VENUS,
-        Profile::CLIMATE,
-        &mut ColumnCache::default(),
-    );
-    println!("Venus column: {venus:.3} W/m²");
-    assert!(venus.is_finite() && venus > 0.0, "{venus}");
-    assert!(venus < STEFAN_BOLTZMANN * surface.powi(4), "{venus}");
-}
-
-#[test]
 fn a_cached_column_is_the_fresh_one() {
     let gases = with_vapour(EARTH_AIR, MOIST_SURFACE_K, f64::INFINITY);
     let skin = plateau_skin(SIMPSON_NAKAJIMA_W_M2);
@@ -584,15 +564,21 @@ fn extreme_surfaces_stay_finite() {
         co2,
         ..EARTH_AIR
     };
-    for (gases, surface, skin_k) in [
-        (EARTH_AIR, COLDEST_SURFACE_K, 0.0),
-        (steam_air, HOTTEST_SURFACE_K, steam_skin),
+    let [venus_surface, venus_co2, _, _, venus_eq] = VENUS_COLUMN;
+    let venus_air = PartialPressures {
+        co2: venus_co2,
+        ..PartialPressures::default()
+    };
+    for (gases, surface, skin_k, gravity) in [
+        (EARTH_AIR, COLDEST_SURFACE_K, 0.0, EARTH),
+        (steam_air, HOTTEST_SURFACE_K, steam_skin, EARTH),
+        (venus_air, venus_surface, skin(venus_eq).0, VENUS),
     ] {
         let olr = olr(
             &gases,
             surface,
             Kelvin(skin_k),
-            EARTH,
+            gravity,
             Profile::CLIMATE,
             cache,
         );
