@@ -13,13 +13,14 @@ read and write files.
 ```text
 systems/<id>/inputs.json
 cache/<engine>/<id>/timelines.json
-cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>.world
+cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>-w<world>.world
 cache/uses.json
 ```
 
 `<slug>` is the body's designation with `-` for spaces (`MGS-12345-b`),
 `<keyframe>` its index in the timeline and `<grid>` the cells per face
-side. Never write under `root` by hand: inputs are the only truth, the
+side, `<world>` the map generator version (`world::ENGINE_VERSION`) that
+made it. Never write under `root` by hand: inputs are the only truth, the
 rest is rebuilt.
 
 Writes are staged in `<file>.<pid>-<n>.tmp`, synced, then renamed; there
@@ -29,14 +30,14 @@ never fails because `uses.json` could not be updated. `WorldCache::put`
 refuses a world that does not match its key (`StoreError::KeyMismatch`).
 A cache file that cannot
 be read or parsed is a miss. `cache/uses.json` holds a logical use
-counter (no wall clock); `FsStore::evict(current)` deletes the entries of
-other engine versions, then the least recently used ones until the cache
+counter (no wall clock); `FsStore::evict(current)` (a `catalogue::Engines`) deletes the entries of
+other engine versions (system, and world for worlds), then the least recently used ones until the cache
 fits `budget` bytes. World and timeline files are both listed. It also
-deletes the cache entries of any system whose `inputs.json` no longer
+deletes the world files whose name is not of the form above (older layout) and the cache entries of any system whose `inputs.json` no longer
 exists, so removing a system frees its caches at the next eviction.
 
 A `.world` file is the binary layout of `encode`/`decode` (see
-`src/world_codec.rs`): magic `MGWORLD1`, then little-endian header and
+`src/world_codec.rs`): magic `MGWORLD2` (an `MGWORLD1` file is a miss), then the system and world engine versions, then the little-endian header and
 fields. A truncated, corrupt or mismatching file is a cache miss.
 A grid above `world::MAX_N` is refused on both sides: `put` errors and
 `decode` returns `Invalid`.

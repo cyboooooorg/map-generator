@@ -62,23 +62,34 @@ pub(super) fn parse_body_slug(slug: &str) -> Option<Designation> {
 pub(super) fn world_file(root: &Path, key: &WorldKey) -> PathBuf {
     worlds_dir(root, key.engine, key.system)
         .join(body_slug(&key.body))
-        .join(format!("{}-{}.world", key.keyframe, key.grid))
+        .join(format!(
+            "{}-{}-w{}.world",
+            key.keyframe, key.grid, key.world.0
+        ))
 }
 
-/// The file name of a world, without its directory.
-pub(super) fn parse_world_name(name: &str) -> Option<(u32, u32)> {
-    let (keyframe, grid) = name.strip_suffix(".world")?.split_once('-')?;
-    Some((keyframe.parse().ok()?, grid.parse().ok()?))
+/// The keyframe, grid and world engine version of a world file name
+/// (`<keyframe>-<grid>-w<world>.world`), without its directory. Any
+/// other form, such as the older `<keyframe>-<grid>.world`, is `None`.
+pub(super) fn parse_world_name(name: &str) -> Option<(u32, u32, u32)> {
+    let (keyframe, rest) = name.strip_suffix(".world")?.split_once('-')?;
+    let (grid, world) = rest.split_once("-w")?;
+    Some((
+        keyframe.parse().ok()?,
+        grid.parse().ok()?,
+        world.parse().ok()?,
+    ))
 }
 
 /// The key of a world file in `uses.json`: its path relative to `cache/`.
 pub(super) fn world_use_key(key: &WorldKey) -> String {
     format!(
-        "{}/{}/worlds/{}/{}-{}.world",
+        "{}/{}/worlds/{}/{}-{}-w{}.world",
         key.engine.0,
         key.system,
         body_slug(&key.body),
         key.keyframe,
-        key.grid
+        key.grid,
+        key.world.0
     )
 }

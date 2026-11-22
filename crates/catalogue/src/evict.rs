@@ -20,12 +20,30 @@ pub enum CacheKey {
     World(WorldKey),
 }
 
+/// The engine versions a cache is current for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Engines {
+    /// The system engine, which makes the timelines.
+    pub system: EngineVersion,
+    /// The map generator, which makes the worlds.
+    pub world: EngineVersion,
+}
+
 impl CacheKey {
     /// The engine version that produced the entry.
     pub fn engine(&self) -> EngineVersion {
         match self {
             CacheKey::Timelines { engine, .. } => *engine,
             CacheKey::World(key) => key.engine,
+        }
+    }
+
+    /// Whether the entry was made by the engines `current`: timelines
+    /// depend on the system engine, worlds on both.
+    pub fn is_current(&self, current: Engines) -> bool {
+        match self {
+            CacheKey::Timelines { engine, .. } => *engine == current.system,
+            CacheKey::World(key) => key.engine == current.system && key.world == current.world,
         }
     }
 }
@@ -39,13 +57,13 @@ pub struct CacheEntry {
     pub last_use: u64,
 }
 
-/// The keys to delete: every entry of another engine version (a cache
+/// The keys to delete: every entry of another engine version (system or world) (a cache
 /// is never migrated), then the current ones from the least recently
 /// used (ties by key order) until the bytes left are at most `budget`.
 /// Deterministic: the result depends only on the arguments.
-pub fn evict(entries: &[CacheEntry], current: EngineVersion, budget: u64) -> Vec<CacheKey> {
+pub fn evict(entries: &[CacheEntry], current: Engines, budget: u64) -> Vec<CacheKey> {
     let (mut kept, stale): (Vec<&CacheEntry>, Vec<&CacheEntry>) =
-        entries.iter().partition(|e| e.key.engine() == current);
+        entries.iter().partition(|e| e.key.is_current(current));
     let mut stale = stale;
     stale.sort_by(|a, b| a.key.cmp(&b.key));
     kept.sort_by(|a, b| a.last_use.cmp(&b.last_use).then_with(|| a.key.cmp(&b.key)));

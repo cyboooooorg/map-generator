@@ -13,8 +13,9 @@ object.
   `Grid::for_radius(radius, DEFAULT_CELL)` sizes a face from the body's
   radius (15 km cells, capped at `MAX_CELLS`, 8 M cells); the tier-2 grid
   is coarser. Areas sum to `4 pi`: weight every statistic by them.
-- `World`: a grid, the body's designation, a keyframe index, the engine
-  version and named fields. `World::insert` refuses a field of the wrong
+- `World`: a grid, the body's designation, a keyframe index, the system engine
+  version, the world engine version (`ENGINE_VERSION`, bumped by any change
+  to what the generator produces) and named fields. `World::insert` refuses a field of the wrong
   length, a duplicate code, or a storage mode that does not fit (`u16`
   storage needs finite values); errors
   are `WorldError` codes, never text. Fields are `f32`, `u16` or `u8`;

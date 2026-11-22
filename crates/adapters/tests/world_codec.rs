@@ -4,7 +4,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use adapters::{CodecError, FsStore, decode, encode};
-use catalogue::{CacheKey, StoredSystem, SystemId, SystemRepository, WorldCache, WorldKey};
+use catalogue::{
+    CacheKey, Engines, StoredSystem, SystemId, SystemRepository, WorldCache, WorldKey,
+};
 use system::{ArchetypeId, BodyRequest, INPUTS_SCHEMA, Inputs, Request};
 use tempfile::TempDir;
 use timeline::{Code, Designation, EngineVersion, Seed, SystemNumber};
@@ -61,6 +63,7 @@ fn key(system: SystemId) -> WorldKey {
         keyframe: 3,
         grid: 4,
         engine: ENGINE,
+        world: WORLD_ENGINE,
     }
 }
 
@@ -174,6 +177,11 @@ fn a_world_put_is_got_back() {
     assert_eq!(WorldCache::get(&store, &key).unwrap(), Some(world));
     let other = WorldKey {
         engine: EngineVersion(2),
+        ..key.clone()
+    };
+    assert!(WorldCache::get(&store, &other).unwrap().is_none());
+    let other = WorldKey {
+        world: EngineVersion(2),
         ..key
     };
     assert!(WorldCache::get(&store, &other).unwrap().is_none());
@@ -202,7 +210,12 @@ fn world_files_are_evicted_by_the_policy() {
     let key = key(system.id);
     WorldCache::put(&store, &key, &sample()).unwrap();
     assert_eq!(
-        store.evict(ENGINE).unwrap(),
+        store
+            .evict(Engines {
+                system: ENGINE,
+                world: WORLD_ENGINE
+            })
+            .unwrap(),
         vec![CacheKey::World(key.clone())]
     );
     assert!(WorldCache::get(&store, &key).unwrap().is_none());
@@ -225,6 +238,10 @@ fn a_world_put_under_another_key_is_refused() {
         },
         WorldKey {
             engine: EngineVersion(2),
+            ..good.clone()
+        },
+        WorldKey {
+            world: EngineVersion(2),
             ..good.clone()
         },
         WorldKey {

@@ -4,7 +4,7 @@
 //! ```text
 //! <root>/systems/<id>/inputs.json
 //! <root>/cache/<engine>/<id>/timelines.json
-//! <root>/cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>.world
+//! <root>/cache/<engine>/<id>/worlds/<slug>/<keyframe>-<grid>-w<world>.world
 //! <root>/cache/uses.json
 //! ```
 //!
@@ -25,8 +25,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use catalogue::{
-    CacheEntry, CacheKey, CatalogueError, StoredSystem, SystemId, SystemRepository, TimelineCache,
-    WorldCache, WorldKey,
+    CacheEntry, CacheKey, CatalogueError, Engines, StoredSystem, SystemId, SystemRepository,
+    TimelineCache, WorldCache, WorldKey,
 };
 use timeline::{EngineVersion, Timeline};
 
@@ -145,6 +145,39 @@ fn subdirs(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     Ok(found)
 }
 
+/// Deletes the files under `<dir>/<engine>/<id>/worlds/<slug>/` whose
+/// name is not a world file of the current form: a cache entry of an
+/// older layout, never a valid one. The directories it leaves empty go
+/// too.
+fn remove_unparseable_worlds(dir: &Path) -> io::Result<()> {
+    for (_, engine_dir) in subdirs(dir)? {
+        for (_, id_dir) in subdirs(&engine_dir)? {
+            let worlds = id_dir.join("worlds");
+            for (_, slug_dir) in subdirs(&worlds)? {
+                for file in fs::read_dir(&slug_dir)? {
+                    let file = file?;
+                    let current = file
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|name| paths::parse_world_name(name).is_some());
+                    if !current && file.file_type()?.is_file() {
+                        match fs::remove_file(file.path()) {
+                            Ok(()) => {}
+                            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                            Err(error) => return Err(error),
+                        }
+                    }
+                }
+                let _ = fs::remove_dir(&slug_dir);
+            }
+            let _ = fs::remove_dir(&worlds);
+            let _ = fs::remove_dir(&id_dir);
+        }
+        let _ = fs::remove_dir(&engine_dir);
+    }
+    Ok(())
+}
+
 /// Deletes the `*.tmp` files under `dir`: staging files of a write that
 /// was interrupted, never valid entries.
 fn remove_temporaries(dir: &Path) -> io::Result<()> {
@@ -223,7 +256,7 @@ impl FsStore {
                     };
                     for file in fs::read_dir(&slug_dir)? {
                         let file = file?;
-                        let Some((keyframe, grid)) =
+                        let Some((keyframe, grid, world)) =
                             file.file_name().to_str().and_then(paths::parse_world_name)
                         else {
                             continue;
@@ -234,6 +267,7 @@ impl FsStore {
                             keyframe,
                             grid,
                             engine,
+                            world: EngineVersion(world),
                         };
                         entries.push(CacheEntry {
                             bytes: file.metadata()?.len(),
@@ -286,13 +320,16 @@ impl FsStore {
     }
 
     /// Deletes the cache entries of the systems that are no longer
-    /// stored, then those that the policy picks for the engine version
+    /// stored, then those that the policy picks for the engine versions
     /// `current` and this store's budget, and the directories they leave
-    /// empty. Returns the keys it removed: the orphans first, then the
+    /// empty. Also deletes the world files whose name is not of the
+    /// current form (a cache entry of an older layout), which are not
+    /// returned. Returns the keys it removed: the orphans first, then the
     /// policy's picks in policy order.
-    pub fn evict(&self, current: EngineVersion) -> Result<Vec<CacheKey>, StoreError> {
+    pub fn evict(&self, current: Engines) -> Result<Vec<CacheKey>, StoreError> {
         let mut uses = self.load_uses();
         remove_temporaries(&paths::cache_dir(&self.root))?;
+        remove_unparseable_worlds(&paths::cache_dir(&self.root))?;
         let (orphans, entries): (Vec<_>, Vec<_>) = self
             .entries(&uses)?
             .into_iter()
@@ -316,6 +353,7 @@ fn world_matches(key: &WorldKey, world: &world::World) -> bool {
         && world.keyframe() == key.keyframe
         && world.grid().n() == key.grid
         && world.engine() == key.engine
+        && world.world_engine() == key.world
 }
 
 /// The system a cache entry belongs to.
