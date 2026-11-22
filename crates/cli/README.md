@@ -1,9 +1,17 @@
 # `map-generator`: the command line
 
 The composition root: wires the adapters into the engines' ports and
-parses the command line. It has no command yet; `system` (write a
-timeline as JSON, print cause trees with `--explain`) arrives with slice 1,
-PR 2.
+parses the command line. One command, `system`, so far:
+
+```bash
+map-generator system [--seed N] [--present GYR] [--host-mass M]
+    [--metallicity DEX] [--archetype ID=COUNT ...] [--explain PATH]
+```
+
+Without `--seed`, the root seed is drawn from the OS and printed on stderr
+so the run can be replayed. The flags are parsed and turned into the draw's
+inputs; the JSON output and `--explain` arrive with the next commits of the
+same pull request. A usage error exits 2, a failed command 1.
 
 ## Ports
 
