@@ -60,7 +60,8 @@ pub fn highland_weight(noise: f64) -> f64 {
 pub const DRY_PLAINS: Metre = Metre(3000.0);
 
 /// Source: the height of the highest summits above the plateau of their
-/// orogen, per unit of the ridged noise at weight 1 and Earth's gravity:
+/// orogen, per unit of the ridged crests divided by their maximum (so the
+/// highest crest is 1), at weight 1 and Earth's gravity:
 /// Everest's 8848.86 m (China and Nepal survey, 2020; the study's value
 /// of `MAX_RELIEF_SCALE`) less the Tibetan plateau's mean height,
 /// [`COLLISION_HEIGHT`] (5 km, Royden, Burchfiel & van der Hilst 2008,

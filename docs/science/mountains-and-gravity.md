@@ -204,7 +204,10 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    plains (`DRY_PLAINS_KM`), both ported as the calibrations they were.
    Both keep the unit they were fitted in: the plains are 3 km per unit
    of the legacy's five-octave noise, whose deviation is 0.187 of the
-   rewrite's unit-variance noise.
+   rewrite's unit-variance noise. The ridged crests are divided by their
+   own maximum, so the highest summit stands `MOUNTAIN_RELIEF` (Everest
+   less the Tibetan plateau, 3.85 km at Earth's gravity) above its
+   plateau, as that height is defined.
 6. **Volcanoes.** Cones from the planet's heat flux (see [How tall do
    volcanoes grow, and how many are there?](volcanoes.md)).
 7. **Gravity.** What loads the crust (mountains, boundary relief,

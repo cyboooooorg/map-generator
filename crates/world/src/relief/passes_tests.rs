@@ -4,7 +4,7 @@ use crate::relief::ReliefError;
 use crate::stats::area_quantile;
 use science::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
 use science::relief::crust::{CONTINENTAL_SLOPE, crust, floating_height};
-use science::relief::highlands::DRY_PLAINS;
+use science::relief::highlands::{DRY_PLAINS, MOUNTAIN_RELIEF};
 use science::relief::spectrum::{
     Analogue, Province, REFERENCE_WAVELENGTH, amplitude, analogue_relief_scale, hurst, relief_scale,
 };
@@ -362,4 +362,21 @@ fn dry_plains_are_measured_in_the_legacy_noise_unit() {
     for (u, n) in unit.iter().zip(&noise).filter(|(u, _)| u.abs() > 0.1) {
         assert!((f64::from(*n) / u / want - 1.0).abs() < 1e-4, "{n} {u}");
     }
+}
+
+#[test]
+fn the_highest_crest_stands_at_the_mountain_relief() {
+    // MOUNTAIN_RELIEF is the highest summit above its plateau (Everest less
+    // Tibet): the ridged term's maximum is 1.
+    let grid = Grid::new(24);
+    let forcing = earth();
+    let full = vec![1.0_f32; grid.cell_count()];
+    let m = mountains(&grid, Seed::new(11), &forcing, &full);
+    let top = f64::from(m.iter().copied().fold(0.0, f32::max));
+    let want = MOUNTAIN_RELIEF.0 * relief_scale(forcing.gravity);
+    assert!((top - want).abs() < 1.0, "{top} against {want}");
+    let half = vec![0.5_f32; grid.cell_count()];
+    let m = mountains(&grid, Seed::new(11), &forcing, &half);
+    let top = f64::from(m.iter().copied().fold(0.0, f32::max));
+    assert!((top - want / 2.0).abs() < 1.0, "{top}");
 }

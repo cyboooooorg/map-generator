@@ -303,9 +303,12 @@ pub fn highlands(grid: &Grid, body: Seed) -> Vec<f32> {
         .collect()
 }
 
-/// The mountains: ridged noise (crests only) times `weight` (the orogeny of
-/// the plates, or [`highlands`] on a world without), times
-/// [`MOUNTAIN_RELIEF`] and [`relief_scale`], in metres per cell. Uses
+/// The mountains: ridged noise (crests only) divided by its own maximum
+/// over the cells it is drawn on (so its highest crest is 1, and the
+/// highest summit stands [`MOUNTAIN_RELIEF`] above its plateau, as that
+/// height is defined), times `weight` (the orogeny of the plates, or
+/// [`highlands`] on a world without), times [`MOUNTAIN_RELIEF`] and
+/// [`relief_scale`], in metres per cell. Uses
 /// `body.derive("relief.mountains")`.
 ///
 /// # Panics
@@ -319,14 +322,23 @@ pub fn mountains(grid: &Grid, body: Seed, forcing: &Forcing, weight: &[f32]) -> 
         base_frequency: BASE_FREQUENCY,
     };
     let octs = Octaves::new(body.derive("relief.mountains"), &spectrum);
-    let scale = MOUNTAIN_RELIEF.0 * relief_scale(forcing.gravity);
-    (0..grid.cell_count())
+    let crests: Vec<f64> = (0..grid.cell_count())
         .map(|k| {
             if weight[k] <= 0.0 {
                 return 0.0;
             }
-            (octs.ridged(grid.point(k)).max(0.0) * f64::from(weight[k]) * scale) as f32
+            octs.ridged(grid.point(k)).max(0.0)
         })
+        .collect();
+    let peak = crests.iter().copied().fold(0.0, f64::max);
+    if peak <= 0.0 {
+        return vec![0.0; grid.cell_count()];
+    }
+    let scale = MOUNTAIN_RELIEF.0 * relief_scale(forcing.gravity) / peak;
+    crests
+        .iter()
+        .zip(weight)
+        .map(|(&c, &w)| (c * f64::from(w) * scale) as f32)
         .collect()
 }
 

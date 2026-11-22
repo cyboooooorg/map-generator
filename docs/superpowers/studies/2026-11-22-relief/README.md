@@ -92,7 +92,7 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `HEIGHT_RANGE` | 25 | km | Definition | the storage range; Olympus Mons's relief "almost 22 km" (Plescia 2004) [V, abstract] |
 | `STANDARD_GRAVITY` | 9.80665 | m/s² | Definition | CGPM 1901 |
 | `MAX_RELIEF_SCALE` | 2.49 | — | Source | Olympus Mons's relief, "almost 22 km" (Plescia 2004) [V, abstract], over Everest's 8.84886 km (China-Nepal survey, 2020) [S, press report]: 22 / 8.84886 = 2.486 [D]; Olympus Mons is measured over its surroundings, Everest above sea level, as in the legacy's doc comment; the legacy's 2 had no source |
-| `MOUNTAIN_RELIEF` | 3848.86 | m | Source | Everest 8848.86 m (China-Nepal survey, 2020) less the Tibetan plateau's 5 km (`COLLISION_HEIGHT`, Royden et al. 2008): the summits' height above their orogen's plateau, per unit of ridged noise at weight 1 (Task 7) |
+| `MOUNTAIN_RELIEF` | 3848.86 | m | Source | Everest 8848.86 m (China-Nepal survey, 2020) less the Tibetan plateau's 5 km (`COLLISION_HEIGHT`, Royden et al. 2008): the summits' height above their orogen's plateau, per unit of the ridged crests divided by their maximum, at weight 1 (Task 7) |
 
 ### Crust (Task 3)
 
