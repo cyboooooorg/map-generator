@@ -6,12 +6,12 @@ use science::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
 use science::relief::crust::{MARS_CRUST, floating_height};
 use science::relief::spectrum::{MAX_RELIEF_SCALE, relief_scale};
 use science::units::{Metre, MetrePerSecondSquared};
-use timeline::fixtures::{
+use timeline::{PlanetState, Seed, TectonicRegime, Trace};
+use world::Values;
+use world::fixtures::{
     MARS_RADIUS, earth_relief_fixture as earth, mars_relief_fixture as mars, relief_body as body,
     venus_relief_fixture as venus,
 };
-use timeline::{PlanetState, Seed, TectonicRegime, Trace};
-use world::Values;
 use world::grid::Grid;
 use world::relief::generate;
 use world::stats::{area_mean, area_quantile};

@@ -28,6 +28,13 @@ object.
 - `relief::generate(state, seed, grid)`: the height field `relief.height`
   of one body, in metres **above sea level** (see below).
 
+## Fixtures
+
+The `fixtures` feature adds `world::fixtures`: Earth, Mars and Venus
+reference bodies (published radius and gravity) for tests and previews.
+The heavy relief tests need it: run them from the workspace
+(`mise run test:heavy`), not with `-p world` alone.
+
 ## Engine version
 
 `ENGINE_VERSION` is the world engine version, stored in every world and in

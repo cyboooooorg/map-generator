@@ -7,6 +7,8 @@
 
 pub mod error;
 pub mod fields;
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixtures;
 pub mod grid;
 pub mod project;
 pub mod relief;

@@ -3,8 +3,8 @@
 
 use adapters::{Ramp, export};
 use science::units::Metre;
-use timeline::fixtures::{earth_relief_fixture, mars_relief_fixture, venus_relief_fixture};
 use timeline::{Designation, PlanetState, Seed, SystemNumber, Trace};
+use world::fixtures::{earth_relief_fixture, mars_relief_fixture, venus_relief_fixture};
 use world::relief::{HEIGHT, generate};
 use world::{FieldId, Grid, World};
 
