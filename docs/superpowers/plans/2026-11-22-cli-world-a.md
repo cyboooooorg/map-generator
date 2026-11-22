@@ -44,10 +44,12 @@ nextest tiers, `mise run ci`.
 ## Review Focus
 
 1. A world file left by `main` (`<k>-<g>.world`, magic `MGWORLD1`) in an
-   existing store: a miss, then removed as an orphan by `evict`, never
-   an error (Task 2, test `old_world_names_are_evicted`).
-2. `--body` naming a body absent from the system, or the star: a typed
-   error naming the designation, not a panic (Task 6).
+   existing store: a miss, then deleted by `evict`'s sweep, never an
+   error (Task 2, test `old_world_names_are_evicted`).
+2. `--body` naming a body absent from the system: a typed error naming
+   the designation, not a panic (Task 6). The star case (`NotAPlanet`)
+   needs a star timeline, which only the engine makes: pull request B
+   tests it on the tier-2 reference systems.
 3. A planet keyframe without a surface (a giant): `relief.no-surface`
    through `CliError`, nothing written to `--out` (Task 6).
 4. `--cache-budget 0`: the export still completes from the in-memory
@@ -86,7 +88,7 @@ nextest tiers, `mise run ci`.
   world with the first 8 bytes replaced by `b"MGWORLD1"` →
   `decode(..).is_err()`.
 - [ ] **Step 2:** `cargo nextest run -p adapters --test world_codec` →
-  fails to compile (`World::new` takes 4 arguments).
+  fails to compile (`World::new` takes 4 arguments, 5 supplied).
 - [ ] **Step 3:** Add the field, accessor, constant (re-exported from
   `world`'s root) and codec change; update the other `World::new` call
   sites (`fields_tests.rs`, `project_tests.rs`, codec decode).
@@ -132,13 +134,15 @@ nextest tiers, `mise run ci`.
   gone, since unparseable names under a system's worlds directory are
   removed with the directory sweep), `world_key_roundtrip_with_version`
   (put then get with `world: EngineVersion(2)`; get with
-  `EngineVersion(1)` is `None`).
+  `EngineVersion(1)` is `None`). Update the existing `WorldKey`
+  literals of both test files with `world: EngineVersion(1)`.
 - [ ] **Step 2:** `cargo nextest run -p catalogue -p adapters` → fails
   to compile.
 - [ ] **Step 3:** Implement. `world_matches` also compares
-  `world.world_engine() == key.world`. In `entries`, a file under a
-  `worlds/<slug>/` directory whose name does not parse is deleted (it
-  is a cache entry of an older layout), so Review Focus 1 holds.
+  `world.world_engine() == key.world`. `entries` stays read-only; a new
+  sweep in `FsStore::evict`, next to `remove_temporaries`, deletes every
+  file under a `worlds/<slug>/` directory whose name does not parse (a
+  cache entry of an older layout), so Review Focus 1 holds.
 - [ ] **Step 4:** `cargo nextest run -p catalogue -p adapters` → passes.
 - [ ] **Step 5:** Commit `feat(catalogue)!: key worlds by the world engine version`
   with footer `BREAKING CHANGE: world cache files are renamed; old ones
@@ -194,7 +198,8 @@ nextest tiers, `mise run ci`.
   `export.io(..)`, and the world error's own code. Files:
   `<out>/<slug>-<keyframe>.world` (codec bytes, written through
   `store::write_atomic`) and `<out>/<slug>-<keyframe>-<field code>.png`,
-  slug as `store::paths::body_slug` (make it `pub(crate)`).
+  slug as `store::paths::body_slug` (make `body_slug` `pub(crate)` and
+  declare `pub(crate) mod paths;` in `store/mod.rs`, private today).
 - `Ramp::relief() -> Ramp`, heights in metres: `-8000` `[8, 29, 88]`,
   `-200` `[44, 127, 184]`, `-0.5` `[161, 218, 236]`, `0` `[57, 135,
   64]`, `1000` `[201, 188, 109]`, `3000` `[140, 90, 50]`, `6000`
@@ -248,8 +253,10 @@ nextest tiers, `mise run ci`.
 
 **Interfaces:**
 
-- Consumes: Tasks 1-4; `catalogue::{StoredSystem, SystemId, WorldKey,
-  Engines, SystemRepository, TimelineCache, WorldCache}`;
+- Consumes: Tasks 1-4; `catalogue::{CacheKey, StoredSystem, SystemId,
+  WorldKey, Engines, SystemRepository, TimelineCache, WorldCache}`;
+  `adapters::{FsStore, StoreError, Exported, ExportError, Ramp,
+  export}`;
   `world::relief::{generate, HEIGHT}`; `system::ENGINE_VERSION`.
 - Produces:
 
@@ -298,9 +305,12 @@ nextest tiers, `mise run ci`.
 
 - [ ] **Step 1:** Tests in `world.rs` with a fixture producer (one
   planet timeline from `timeline::fixtures::earth_like_fixture` at
-  4.57 Gyr, designation `Designation::planet(SystemNumber::new(10_001)?,
-  1)`, plus a star-free set), `cell` 2000 km (about 150 cells), width
-  64, in a `TempDir`:
+  4.57 Gyr: `Timeline::new(designation, Seed::new(1),
+  system::ENGINE_VERSION, Gyr(4.57), vec![Keyframe::new(Gyr(4.57),
+  BodyState::Planet(state), &trace)?])`, designation
+  `Designation::planet(SystemNumber::new(10_001)?, 1)`; no star
+  timeline), `cell` 2000 km (`n = 5`, 150 cells), width 64, in a
+  `TempDir`:
   `first_run_generates_then_second_hits_caches` (second producer panics
   if called; `timelines_cached` and `world_cached` true; same exported
   bytes); `unknown_body_is_refused` (rank 2 → `NoSuchBody`, `out`
