@@ -140,7 +140,8 @@ Research task (opus). No Rust code.
     about 22 km, Plescia 2004).
   - `STANDARD_GRAVITY: MetrePerSecondSquared = 9.80665` in
     `science::constants` if absent (`Definition:` CGPM 1901).
-  - `pub const MAX_RELIEF_SCALE: f64 = 2.0` and
+  - `pub const MAX_RELIEF_SCALE: f64 = 2.49` (`Source:` the Olympus
+    Mons / Everest relief ratio, as written in the study) and
     `pub fn relief_scale(gravity: MetrePerSecondSquared) -> f64` =
     `min(STANDARD_GRAVITY / g, MAX_RELIEF_SCALE)` (port of
     `legacy-final:crates/mapgen/src/generation.rs:407-420`; Weisskopf
@@ -153,7 +154,7 @@ Research task (opus). No Rust code.
   1` = 11; `octaves(1 km, 15 km)` = 1); `analogues_keep_their_measured_hurst`
   (Earth 0.479, Mars 0.53); ported
   `relief_stands_as_one_over_gravity_up_to_a_cap` from
-  `generation.rs:3491` (9.80665 → 1, Mars 3.71 → 2.64 capped to 2,
+  `generation.rs:3491` (9.80665 → 1, Mars 3.71 → 2.64 capped to 2.49,
   19.6133 → 0.5).
 - [ ] **Step 2:** `cargo nextest run -p science relief::spectrum` →
   FAIL (module missing).
@@ -192,7 +193,8 @@ Research task (opus). No Rust code.
 - [ ] **Step 1: Write the failing tests**: port
   `the_crust_floats_by_its_thickness` (`generation.rs:3352`:
   `floating_height(EARTH_CRUST, continental)` between 3.5 and 6 km,
-  4.84 km with 41.1/7.1 km and 2830/3300 kg/m³; oceanic thickness → 0).
+  5.53 km with 41.1/7.1 km and 2830/3380 kg/m³, the mantle density
+  from PREM; oceanic thickness → 0).
 - [ ] **Step 2:** Run → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** `cargo nextest run -p science relief` and the
@@ -224,8 +226,12 @@ Research task (opus). No Rust code.
     through `ridge_depth` at the age `distance / convergence`;
     amplitudes without a source are the calibrations of the Task 1
     list.
-  - `pub const PLATE_COUNT: (u32, u32)`, `pub const PLATE_SPEED:
-    (MetrePerSecond, MetrePerSecond)`,
+  - `pub const PLATE_COUNT: (u32, u32) = (8, 14)` (Morra et al. 2013,
+    Bird 2003), `pub const PLATE_SPEED: (MetrePerSecond,
+    MetrePerSecond)`: Zahirovic et al. 2015's 2.6 and 7.9 cm/yr are RMS
+    speeds over a plate; store them as such (`PLATE_RMS_SPEED`) and
+    convert to an Euler rate per plate in Task 6, never copy them as
+    the pole's equatorial speed;
     `pub const PLATE_SIZE_EXPONENT: f64` (Sornette & Pisarenko 2003),
     `pub const SLAB_FULL_SHARE: f64` (0.25, Zahirovic et al. 2015;
     `f64` because `Fraction::new` is not `const`).
@@ -239,8 +245,9 @@ Research task (opus). No Rust code.
     1993) and a heat pipe 2.5 W/m² (Moore & Webb 2013) = 1.
   - `pub const CONE_ASPECT: (f64, f64)` (height/width 0.01-0.1,
     Grosse & Kervyn 2018), `pub const CONE_HEIGHT_MAX: Metre`,
-    `pub const ARC_SPACING_MEAN: Metre` and `ARC_SPACING_SHAPE: f64`
-    (Gamma, de Bremond d'Ars et al. 1995), `pub const CONE_SPACING: Metre`
+    `pub const ARC_CONE_DENSITY` (one per 250 km of arc, calibration;
+    cones placed at random in the arc band, de Bremond d'Ars et al.
+    1995), `pub const CONE_SPACING: Metre`
     and `VOLCANIC_PROVINCE_SHARE: f64` (calibrations).
 
 - [ ] **Step 1: Write the failing tests**:
@@ -389,8 +396,8 @@ Research task (opus). No Rust code.
   - `pub fn volcanoes(grid: &Grid, seed: Seed, forcing: &Forcing, arcs: &[f32])
     -> Vec<f32>`:
     isolated cones on a lattice of `CONE_SPACING` with presence from
-    the intensity, arc cones along `arcs` with Gamma spacing; cone
-    profile from `CONE_ASPECT`.
+    the intensity, arc cones at random in the `arcs` band at
+    `ARC_CONE_DENSITY`; cone profile from `CONE_ASPECT`.
   - `pub struct Forcing { pub radius: Metre, pub gravity: MetrePerSecondSquared,
     pub analogue: Analogue, pub plates: bool, pub heat_flux: WattPerSquareMetre,
     pub ocean_share: Option<Fraction> }`
@@ -403,7 +410,7 @@ Research task (opus). No Rust code.
   `Forcing`): `continental_share_lies_above_the_crust_line` (area of
   the mask = 0.41 ± one cell's share for Earth);
   `the_continent_floor_step_is_airys` (median continent − median floor
-  within 1 km of the Airy step, 4.84 km for Earth);
+  within 1 km of the Airy step, 5.53 km for Earth);
   `the_continental_edge_keeps_its_slope` (no neighbour pair across the
   edge steeper than `tan(CONTINENTAL_SLOPE)` plus the noise's own
   gradient); `volcanoes_keep_their_aspect`
@@ -495,7 +502,10 @@ Research task (opus). No Rust code.
   (the `relief` module), `crates/timeline/README.md` (the `fixtures`
   feature).
 
-- [ ] **Step 1:** Update the READMEs.
+- [ ] **Step 1:** Update the READMEs, and copy the study
+  `docs/superpowers/studies/2026-11-22-relief/` to a Wiki page (the
+  Wiki is a git repository: `map-generator.wiki.git`), linked from the
+  study README (CLAUDE.md: studies live in the Wiki).
 - [ ] **Step 2:** File the follow-up issues of the spec (craters on
   the cube grid; erosion as a neighbourhood pass after W3; a
   continental share driven by the planet's history; tier-3 relief
