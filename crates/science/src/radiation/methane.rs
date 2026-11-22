@@ -32,6 +32,16 @@ use super::gases::PartialPressures;
 /// It applies to the methane that radiates, the methane cold-trapped at
 /// the tropopause left out (the column), and saturates past
 /// [`CH4_SATURATION_BAR`].
+///
+/// It was fitted with the legacy methane sublimation line (9.1 kJ/mol from
+/// 90.7 K and 0.117 bar) and was not refitted to the port's
+/// (`crate::volatiles`, 9.7 kJ/mol from the equation of state's triple
+/// point). At the 68.95 K skin of the tests' Titan column (82 K
+/// equilibrium), methane's saturation falls from 2.60e-3 to 2.03e-3 bar
+/// (-22 %), and that column's outgoing radiation rises from 1.829 to
+/// 1.865 W/m² (+2.0 %; `column` test
+/// `a_column_without_co2_or_water_radiates_from_its_methane_or_ground`
+/// run with each curve).
 const CH4_OPACITY: f64 = 13.4;
 
 /// Calibration: methane, bar, past which its greenhouse saturates
