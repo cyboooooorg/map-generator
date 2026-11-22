@@ -40,7 +40,7 @@ citation to use: Wiki study 19,
   "from memory".
 - No `thread_local!`, no `HashMap`, no file, network, clock or process
   in `science` (root `clippy.toml`).
-- Data files are copied byte for byte from `legacy-final`; their
+- The `.bin` data files are copied byte for byte from `legacy-final`; their
   SHA-256 at `legacy-final`: `opacity.bin`
   `d5645512…ae7`, `opacity-halved.bin` `497afef8…c6ab1` (full hashes:
   the Wiki study, provenance section; check with `shasum -a 256`).
@@ -77,27 +77,29 @@ citation to use: Wiki study 19,
 
 ---
 
-### Task 1: Rebase check and constants
-
-The branch is already rebased on `origin/main` (d77874e6).
+### Task 1: Constants
 
 **Files:**
 
 - Modify: `crates/science/src/constants.rs`
-- Test: `crates/science/src/constants.rs` (existing inline tests, if any;
-  otherwise the guardrail)
+- Test: the guardrail `science_constants_are_sourced`
 
 **Interfaces:**
 
 - Produces in `science::constants` (all `f64`, each `Source:` CODATA
   2018 / SI 2019 exact or `Definition:`):
   `BOLTZMANN` 1.380_649e-23 J/K, `AVOGADRO` 6.022_140_76e23 /mol,
-  `MOLAR_GAS_CONSTANT` 8.314_462_618 J/(mol·K) (k·N_A, exact),
-  `SECOND_RADIATION_CONSTANT_CM_K` 1.438_776_877 cm·K (h c / k, exact),
+  `MOLAR_GAS_CONSTANT` 8.314_462_618_153_24 J/(mol·K) (k·N_A, exact),
+  `SECOND_RADIATION_CONSTANT_CM_K` 1.438_776_877 cm·K (h c / k, exact
+  to its printed digits),
   `STANDARD_GRAVITY` = `MetrePerSecondSquared(9.806_65)` (CGPM 1901,
   definition; replaces the legacy 9.81).
 
-- [ ] **Step 1:** Add the five constants with their doc comments.
+- [ ] **Step 1:** Add the five constants with their doc comments. They
+  replace the legacy duplicates (`SIGMA`, `R_GAS`, `PA_PER_BAR`,
+  `AVOGADRO`, `BOLTZMANN`, `C2_CM_K`, `EARTH_GRAVITY_M_S2`) in every
+  later task: one definition per constant, `STEFAN_BOLTZMANN` and
+  `PASCALS_PER_BAR` already exist.
 - [ ] **Step 2:** Run `cargo nextest run -p guardrails
   science_constants_are_sourced`. Expected: PASS.
 - [ ] **Step 3:** Commit `feat(science): add the radiation constants`.
@@ -124,9 +126,21 @@ The branch is already rebased on `origin/main` (d77874e6).
     IAPWS) above it (the legacy clamp at the critical point).
   - `pub(crate) fn vapour_saturation_bar(t_k: f64) -> f64`: the one
     implementation, on plain numbers; the typed functions wrap it.
+  - `pub(crate) fn vapour_latent_j_mol(t_k: f64) -> f64`: the molar
+    latent heat the moist adiabat uses (Task 8), from the same curve by
+    Clausius–Clapeyron for an ideal vapour over a condensate of
+    negligible volume, `L = R T² d ln e_s / dT` (Pierrehumbert 2010
+    §2.6), the derivative taken analytically from the equation of each
+    branch. The legacy model used one constant latent heat for both
+    the curve and the adiabat so that they agree; this keeps them
+    agreeing. Above the critical temperature it is the value at the
+    critical temperature (the legacy clamp). Record in the PR that the
+    ideal-vapour form does not fall to zero at the critical point as
+    the real latent heat does.
   - `pub const CRITICAL_PRESSURE: Pascal` (22.064 MPa, IAPWS R6-95)
-    and make the existing `CRITICAL_TEMPERATURE` public as
-    `pub const CRITICAL_TEMPERATURE: Kelvin`.
+    and a public `pub const CRITICAL_POINT_TEMPERATURE: Kelvin` (647.096 K)
+    next to the existing private `CRITICAL_TEMPERATURE: f64`, which
+    IAPWS-95 keeps using (`water.rs:48`).
 
 - [ ] **Step 1: Write the failing tests** `saturation_matches_iapws`,
   `sublimation_matches_iapws`, `vapour_saturation_is_continuous`:
@@ -137,7 +151,13 @@ The branch is already rebased on `origin/main` (d77874e6).
     relative of 611.657 Pa, and both curves meet there within 1e-4;
   - at the critical temperature, 22.064 MPa within 1e-4;
   - `vapour_saturation_pressure` at 700 K, 1500 K and 3000 K equals
-    `CRITICAL_PRESSURE` and is finite; at 1 K it is finite and >= 0.
+    `CRITICAL_PRESSURE` and is finite; at 1 K it is finite and >= 0;
+  - `latent_heat_is_the_curves_slope`: `vapour_latent_j_mol` at 300 K
+    within 2 % of the IAPWS-95 enthalpy of vaporisation at 300 K
+    (copy the value from the IAPWS-95
+    saturation table with `Source:`), and at 250 K within 2 %
+    of the sublimation enthalpy of ice Ih of Wagner et al. 2011 (their
+    table). Outside 2 %, stop and report.
 - [ ] **Step 2:** Run `cargo nextest run -p science water::`. Expected: the new
   tests FAIL (functions missing).
 - [ ] **Step 3:** Implement the functions above.
@@ -174,6 +194,7 @@ The branch is already rebased on `origin/main` (d77874e6).
   - `pub(crate) fn co2_latent_j_mol(t_k: f64) -> f64`.
   - `pub fn methane_saturation_pressure(t: Kelvin) -> Pascal`,
     `pub(crate) fn methane_saturation_bar(t_k: f64) -> f64`.
+  - `ATM_BAR` 1.013 25 (`Definition:` standard atmosphere).
   - Constants with the audit's citations: CO₂ triple 216.6 K /
     5.185 bar, critical 304.13 K / 73.77 bar, sublimation 26.1 kJ/mol
     (NIST); CH₄ triple 90.7 K / 0.117 bar, boiling 111.67 K, critical
@@ -185,10 +206,15 @@ The branch is already rebased on `origin/main` (d77874e6).
   `co2_curve_matches_nist` (the curve within 0.6 % of NIST/Span–Wagner
   1996 at 220, 250, 273.15 and 300 K, values copied from the NIST
   WebBook fluid table with `Source:`),
-  `co2_caps_at_its_triple_and_critical_points`,
-  `methane_boils_at_one_atmosphere` (101 325 Pa at 111.67 K within
-  1 %), and `partial_pressures_ignore_negative_parts`
-  (`total()` of `{co2: 1.0, h2o: -1e-12, ..}` is 1.0).
+  `co2_sublimes_at_one_atmosphere` (101 325 Pa at the sublimation
+  temperature the NIST WebBook gives for 1 atm, copied with `Source:`,
+  within 3 %), `co2_caps_at_its_triple_and_critical_points`,
+  `methane_follows_nist` (the curve passes through its triple and
+  boiling points by construction, so it is checked between and above
+  them: within 3 % of the NIST WebBook fluid table (cite the equation
+  of state the WebBook names) at 100 K and 150 K; outside, stop and
+  report), and `partial_pressures_ignore_negative_parts`
+  (`total()` of `{co2: 1.0, h2o: -1e-12, ch4: f64::NAN, ..}` is 1.0).
 - [ ] **Step 2:** Run `cargo nextest run -p science volatiles::
   radiation::gases`. Expected: FAIL.
 - [ ] **Step 3:** Port the laws; set `R` to `constants::MOLAR_GAS_CONSTANT` (the
@@ -223,7 +249,7 @@ The branch is already rebased on `origin/main` (d77874e6).
   gains: the SHA-256 of the three `.bin` files, the HITRAN release
   (HITRAN2024, Gordon et al. 2026, doi:10.1016/j.jqsrt.2026.109807),
   the generator's commit at which the tables were built (from
-  `git log legacy-final -- crates/mapgen/data/opacity.bin`), and a note
+  `git log -1 legacy-final -- crates/mapgen/data/opacity.bin`), and a note
   that the line lists cannot be fetched again identically.
 
 - [ ] **Step 1:** Copy the three files with `git show legacy-final:<path> >
@@ -286,8 +312,11 @@ The branch is already rebased on `origin/main` (d77874e6).
   Expected: `mt-ckd-water.tsv` equals the legacy `MT_CKD` array to its
   four printed digits on all 101 rows; `co2-cia.tsv` matches the legacy
   `CO2_CIA` within 0.2 % on at least 109 of 139 rows (the audit's
-  figure), the rest being edge cells under 1e-46. Write the comparison
-  in the task report.
+  figure), the rest being edge cells under 1e-46; its row count may
+  differ from 139. The generated files are the ones committed (the
+  provenance is the tool, not the legacy arrays). Write the comparison
+  in the task report. Task 6 cannot start without these files: if the
+  download is refused, stop here.
 - [ ] **Step 6:** Update the tool's README: every `crates/mapgen` path to
   `crates/science`, the `--continua` flag, the checksum check.
 - [ ] **Step 7:** Commit `feat(opacity-table): write the water continuum and CO2
@@ -325,13 +354,17 @@ The branch is already rebased on `origin/main` (d77874e6).
   HITRAN2024 (Terragni et al.) with its component sources; the
   g-split is `Calibration:` (Lacis & Oinas 1991 give the method only);
   `DIFFUSIVITY` cites Elsasser 1942 and Koll et al. 2023 Table 1.
+- The legacy duplicates of physical constants and molar masses use
+  Task 1's `constants` and Task 3's `gases` instead.
 
 - [ ] **Step 1: Port the 11 legacy tests** with their tolerances, the
   test helpers (`earth_profile`, `earth_air`, `doubling_forcing`) using
   `water::vapour_saturation_bar` and `STANDARD_GRAVITY`, and:
-  - `earth_clear_sky_olr`: the anchor becomes CERES EBAF clear-sky OLR
-    (Kato et al. 2018, doi:10.1175/JCLI-D-17-0523.1, the value and
-    window the audit gives, 264 to 268 W/m²), `Source:` on the constant;
+  - `earth_clear_sky_olr`: the anchor becomes the CERES EBAF Ed4
+    clear-sky OLR read in Kato et al. 2018 (doi:10.1175/JCLI-D-17-0523.1;
+    the audit found 266 to 268 W/m² for Ed4), `Source:` with its table;
+    the legacy ±10 W/m² tolerance stays, its doc saying it is the
+    single fixed profile's error budget, not a published one;
   - `doubling_co2_forces_myhre`: search for a published instantaneous
     clear-sky top-of-atmosphere forcing of a CO₂ doubling for a
     standard profile (for example the line-by-line results of
@@ -341,7 +374,11 @@ The branch is already rebased on `origin/main` (d77874e6).
     list;
   - the fixture's 77 % surface humidity cites Manabe & Wetherald 1967
     with the indirect confirmation the audit names, or is a
-    `Definition:` of the test profile.
+    `Definition:` of the test profile; the 217 K tropopause cites the
+    U.S. Standard Atmosphere 1976 (read its tropopause value there) or
+    is a `Definition:`;
+    the Venus and Titan level values cite the sources the audit gives
+    for them, or are `Definition:` of a test case.
 - [ ] **Step 2:** Run `cargo nextest run -p science radiation::spectrum`.
   Expected: FAIL.
 - [ ] **Step 3:** Port the code (Review Focus 5: keep the `p`-scaling past 100
@@ -369,7 +406,8 @@ The branch is already rebased on `origin/main` (d77874e6).
 
 - [ ] **Step 1: Write the failing tests** `a_dry_air_has_no_cloud`
   (h2o 0 gives 0), `earth_is_two_thirds_cloudy` (288 K, 77 % of the
-  saturation: within 0.64 to 0.71, the Stubenrauch range), and
+  saturation: within 0.65 to 0.71, Stubenrauch et al. 2013's
+  0.68 ± 0.03), and
   `cloud_cover_depends_on_more_than_vapour` (legacy test: same vapour,
   warmer air, less cover).
 - [ ] **Step 2:** Run `cargo nextest run -p science radiation::clouds`.
@@ -414,7 +452,12 @@ The branch is already rebased on `origin/main` (d77874e6).
   relative humidity cites Manabe & Wetherald 1967 eq. 2 with the
   audit's indirect confirmation and no longer credits Kopparapu; the
   CO₂ moist adiabat cites Kasting 1991 App. B as followed by Kopparapu
-  et al. 2013 §2.
+  et al. 2013 §2; `steam_cp` cites the NIST WebBook Shomate set and
+  says it is used below its 500 K validity (where it still gives
+  33.6 J/(mol·K) at 300 K, the audit's check).
+- The water moist adiabat takes its latent heat from
+  `water::vapour_latent_j_mol` (Task 2) in place of the legacy
+  `WATER_L_MOLAR` and `WATER_L_OVER_R` (`column.rs:97`, `:333-336`).
 
 - [ ] **Step 1: Port the 7 legacy tests** with the test helpers
   (`EARTH_AIR`, `with_vapour` at 77 %, `plateau_w_m2` with its 8
@@ -424,11 +467,12 @@ The branch is already rebased on `origin/main` (d77874e6).
     cache twice, then through a new cache, give bit-identical results;
     after 1 100 distinct columns, the first one recomputed is still
     bit-identical (Review Focus 4);
-  - `extreme_surfaces_stay_finite`: surfaces of 1 K and 3000 K with a
-    skin of 0 K, steam 70 bar plus CO₂ 6 bar, give finite positive
-    OLR below `σT⁴` (Review Focus 1-2);
-  - `a_negative_rounding_is_no_gas`: `h2o: -1e-12` gives the same OLR
-    as `h2o: 0.0` (Review Focus 3).
+  - `extreme_surfaces_stay_finite`: `EARTH_AIR` over a 1 K surface
+    with a skin of 0 K, and steam 70 bar plus CO₂ 6 bar over a 3000 K
+    surface with a skin of 250 K, give finite OLR, > 0 and <= `σT⁴`
+    (Review Focus 1-2);
+  - `a_negative_rounding_is_no_gas`: `h2o: -1e-12` and `ch4: f64::NAN`
+    give the same OLR as zero (Review Focus 3).
 - [ ] **Step 2:** Run `cargo nextest run -p science radiation::column`.
   Expected: FAIL.
 - [ ] **Step 3:** Port the code, the memo and scratch into `ColumnCache`.
@@ -449,12 +493,15 @@ The branch is already rebased on `origin/main` (d77874e6).
 
 **Files:** none committed (a scratch benchmark).
 
-- [ ] **Step 1:** In a scratch crate outside the repository, time 1 000
-  distinct columns (the nine cases of
-  `the_fast_radiation_is_the_reference`, swept in surface temperature)
-  through `legacy-final`'s `olr_w_m2` and through
-  `outgoing_longwave` with a fresh cache, release build, same machine,
-  median of 5 runs (method of the `generation-profiler` agent).
+- [ ] **Step 1:** Legacy `olr_w_m2` is `pub(crate)`, so time it from
+  inside its crate: in a scratch worktree of `legacy-final` (in the
+  session's scratchpad, never committed), add a temporary ignored test
+  that runs 1 000 distinct columns (the nine cases of
+  `the_fast_radiation_is_the_reference`, each swept over 111 surface
+  temperatures, so the memo never hits) and prints the time; run it
+  with `cargo test --release -- --ignored --nocapture`. Do the same with
+  a temporary ignored test in `science` calling `outgoing_longwave`
+  with one cache, not committed. Median of 5 runs each, same machine.
 - [ ] **Step 2:** Expected: the new column costs no more than 1.10 times
   the legacy one. Otherwise report the profile to the main session
   before going on.
