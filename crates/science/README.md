@@ -137,11 +137,11 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 
 ## Radiation
 
-`science::radiation::column::outgoing_longwave`: the outgoing infrared of a
-column, from its gases (correlated-k lines of `data/opacity.bin`, continua,
-clouds). The caller owns its memo (`ColumnCache`); nothing is global. Shortwave
-and albedo come later. See [OPACITY.md](data/OPACITY.md) and
-[radiative transfer](../../docs/science/radiative-transfer.md).
+`science::radiation::column`: `outgoing_longwave` (a column's infrared, from
+its gases: lines of `data/opacity.bin`, continua, clouds; the caller owns the
+`ColumnCache`) and `skin_temperature`; `radiation::clouds::cloud_cover`;
+`science::volatiles`: CO₂ and methane saturation. Shortwave comes later. See
+[OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
 
 ## Dependencies
 
