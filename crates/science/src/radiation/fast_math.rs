@@ -24,15 +24,15 @@ const LN_2_LOW: f32 = -2.121_944_4e-4;
 /// bits (the usual rounding trick of single precision).
 const ROUNDER: f32 = 12_582_912.0;
 
-/// Calibration: least argument of [`exp`], −87.3, the `ln` of the least
-/// normal `f32` (1.175e-38, so −87.34) rounded up; `e^x` is then about
-/// 1.2e-38, which stands for zero in a transmission or an opacity. No
-/// published value: it only keeps the result normal.
+/// Definition: least argument of [`exp`], −87.3, the `ln` of the least
+/// normal `f32` (1.175e-38, so −87.34) rounded up, fixed by the IEEE 754
+/// binary32 range; `e^x` is then about 1.2e-38, which stands for zero in a
+/// transmission or an opacity. It only keeps the result normal.
 const EXP_FLOOR: f32 = -87.3;
 
-/// Calibration: greatest argument of [`exp`], 88, under the overflow of
-/// an `f32` (`ln` of 3.4e38 is 88.72), rounded down. No published value:
-/// it only keeps the result finite.
+/// Definition: greatest argument of [`exp`], 88, under the overflow of
+/// an `f32` (`ln` of 3.4e38 is 88.72), rounded down, fixed by the IEEE 754
+/// binary32 range. It only keeps the result finite.
 const EXP_CEILING: f32 = 88.0;
 
 /// `e^x`, relative error under 3e-7, for `x` clamped to
@@ -89,15 +89,32 @@ const HALF_SQRT_2_BITS: u32 = 0x3f35_04f3;
 mod tests {
     use super::*;
 
-    /// Calibration: the range and step of the sweep of the `exp` test, a
+    /// Definition: the range and step of the sweep of the `exp` test, a
     /// little inside [`EXP_FLOOR`] and [`EXP_CEILING`], at a step that does
     /// not divide the period of the argument reduction.
     const EXP_SWEEP: (f64, f64, f64) = (-87.0, 87.0, 0.001_37);
 
-    /// Calibration: the range and ratio of the sweep of the `ln` test, from
+    /// Definition: the range and ratio of the sweep of the `ln` test, from
     /// the least normal `f32` (1.175e-38) up to 1e38, at a ratio that does
     /// not divide the powers of two.
     const LN_SWEEP: (f64, f64, f64) = (1.2e-38, 1e38, 1.000_731);
+
+    /// Definition: the relative error [`exp`] promises in its doc, 3e-7:
+    /// its Taylor remainder, 1.3e-7, with room for the rounding of single
+    /// precision (2⁻²⁴, 6e-8, per operation).
+    const EXP_TOLERANCE: f64 = 3e-7;
+
+    /// Definition: the error [`ln`] promises in its doc, 2e-7 relative to
+    /// `1 + |ln x|`.
+    const LN_TOLERANCE: f64 = 2e-7;
+
+    /// Definition: a bound just above the floor [`exp`] returns, `e^-87.3`
+    /// (1.2e-38): below it, a result is the floor.
+    const EXP_FLOOR_VALUE: f32 = 2e-38;
+
+    /// Definition: how far `ln 0` may sit from [`EXP_FLOOR`], 0.1: it is
+    /// the `ln` of the least normal `f32`, −87.34.
+    const LN_ZERO_TOLERANCE: f32 = 0.1;
 
     #[test]
     fn exp_is_the_librarys() {
@@ -109,9 +126,9 @@ mod tests {
             worst = worst.max((fast / exact - 1.0).abs());
             x += step;
         }
-        assert!(worst < 3e-7, "worst relative error {worst:e}");
-        assert!(exp(-1e9) > 0.0 && exp(-1e9) < 2e-38);
-        assert!(exp(f32::NEG_INFINITY) < 2e-38);
+        assert!(worst < EXP_TOLERANCE, "worst relative error {worst:e}");
+        assert!(exp(-1e9) > 0.0 && exp(-1e9) < EXP_FLOOR_VALUE);
+        assert!(exp(f32::NEG_INFINITY) < EXP_FLOOR_VALUE);
     }
 
     #[test]
@@ -124,7 +141,7 @@ mod tests {
             worst = worst.max((fast - exact).abs() / (1.0 + exact.abs()));
             x *= ratio;
         }
-        assert!(worst < 2e-7, "worst error {worst:e}");
-        assert!((ln(0.0) + 87.3).abs() < 0.1);
+        assert!(worst < LN_TOLERANCE, "worst error {worst:e}");
+        assert!((ln(0.0) - EXP_FLOOR).abs() < LN_ZERO_TOLERANCE);
     }
 }
