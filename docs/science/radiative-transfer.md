@@ -193,6 +193,51 @@ case", and rises again past about 1500 K through the 4 µm window
 below the plateau. It would need to absorb about 282 W/m², 17 % more light than
 Earth gets, to start running away.
 
+### Carbon dioxide and methane: saturation
+
+CO₂ condenses in the column of a thick, cold CO₂ air (the moist adiabat
+then follows CO₂, as water's does in a warm one) and on the ground of a
+cold body; methane condenses in Titan's air and is cold-trapped at its
+tropopause. Both follow the same construction as water
+(`science::volatiles`):
+
+- **From the triple to the critical point,** the vapour pressure
+  $p = p_c \exp\big(\tfrac{T_c}{T}\sum_i n_i\,\theta^{t_i}\big)$,
+  $\theta = 1 - T/T_c$, with the coefficients of CoolProp's saturation
+  ancillaries (Bell et al. 2014, read in CoolProp v6.6.0's fluid files):
+  six-term fits CoolProp made to the reference equations of state, Span &
+  Wagner 1996 for CO₂ (triple point 216.592 K, critical point 304.1282 K
+  and 73.773 bar) and Setzmann & Wagner 1991 for methane (triple point
+  90.6941 K and 0.11696 bar, critical point 190.564 K and 45.992 bar),
+  within 0.001 % and 0.004 % of them. They are not the papers' own
+  four-term ancillaries. Against the NIST WebBook's tables, which use the
+  same equations of state, the curves hold within 0.1 % (CO₂, 220 to
+  300 K) and 0.5 % (methane, 100 to 180 K). Past the critical point the
+  gas does not condense: the saturation is infinite.
+- **Below the triple point, CO₂** follows the sublimation equation of
+  Span & Wagner 1996 (their eq. 3.12),
+  $\ln(p/p_t) = \tfrac{T_t}{T}\,(a_1 x + a_2 x^{1.9} + a_3 x^{2.9})$,
+  $x = 1 - T/T_t$, $p_t$ = 0.51795 MPa, $a$ = −14.740846, 2.4327015,
+  −5.3061778. The paper is paywalled; the equation was read in two open
+  implementations that cite it, thermopack and MOOSE, which agree. It
+  gives 1.01325 bar at 194.6855 K, CO₂'s sublimation at 1 atm.
+- **Below the triple point, methane** follows Clausius–Clapeyron from its
+  triple point with a constant sublimation enthalpy, 9.7 kJ/mol
+  (Stephenson & Malanowski 1987 at 72 K, through the NIST WebBook):
+  neither CoolProp nor Setzmann & Wagner give a sublimation curve.
+
+The CO₂ moist adiabat takes its latent heat from the slope of the same
+curve, $L = R T^2\,d\ln p/dT$, as water's does. Below the triple point
+it is 26.13 kJ/mol at 207 K, against the 26.1 measured there
+(Stephenson & Malanowski 1987). Above it, the ideal-vapour form is a
+declared simplification (see below): 16.45 kJ/mol at 250 K, 29 % above
+the real enthalpy of vaporisation, 12.73 kJ/mol (NIST WebBook, Span &
+Wagner 1996).
+
+**Orders of magnitude.** CO₂ frost holds 8.4e-3 bar at 150 K, 3.7e-5 bar
+at 120 K and 1.3e-7 bar at 100 K. Methane ice at the 69 K skin of a body
+in equilibrium at 82 K, Titan's, holds 2.0e-3 bar.
+
 ### Which gases absorb, and where
 
 A grey gas, equally opaque in all colours, cannot hold Earth at 280 ppm,
@@ -430,8 +475,11 @@ continuum is MT_CKD 4.3 (`absco-ref_wv-mt-ckd.nc`) and the CO₂ continuum is
 LBLRTM's `contnm.f90` at commit `f66bb596` (MT_CKD 4.3). The CO₂ continuum
 tail of `opacity.bin` was rebuilt independently from that file, with no
 difference; the 101 water-continuum nodes of the infrared code agree with
-the file to its four-digit rounding. The CIA table was rebuilt to 0.2 %
-on 109 of its 139 rows, the rest being small cells at region edges. The
+the file to its four-digit rounding. The CIA table matches the legacy array
+to 0.2 % on 111 of its 139 rows. Of the other 28, most differ by under
+3 %, but an interior cell does too (1140 cm⁻¹, about 5 %), and the cells
+at the bands' edges by more (2500 cm⁻¹ about 12 %, 2840 and 3240 cm⁻¹ a
+third to a half). The
 line part, 99.9 % of `opacity.bin`, cannot be rebuilt without the same
 HITRAN fetch.
 
@@ -484,6 +532,18 @@ the Bond albedo follow in 2b-2.
   greenhouse effect", and do not use the Manabe–Wetherald profile (it
   appears only in their reference list). The app attributes the falling
   humidity to Manabe & Wetherald only.
+- **The ideal-vapour latent heat of CO₂.** The moist CO₂ adiabat takes
+  $L = R T^2\,d\ln p/dT$ from the saturation curve, which treats the
+  vapour as ideal. CO₂'s vapour is not ideal at its saturation pressures:
+  at 250 K this latent heat is 16.45 kJ/mol, 29 % above the real
+  enthalpy of vaporisation, 12.73 kJ/mol (NIST WebBook, Span & Wagner
+  1996). It is kept because it agrees with the curve the same adiabat
+  uses, as the legacy's single 16.6 kJ/mol did.
+- **Methane's sublimation line.** Below its triple point methane's
+  saturation follows a constant 9.7 kJ/mol (Stephenson & Malanowski
+  1987), not a fitted curve: neither CoolProp nor Setzmann & Wagner give
+  one. thermopack carries a sublimation equation credited to Lemmon 2002,
+  not read at its source and not adopted.
 - **Methane's grey stand-in.** Methane takes one grey optical depth over
   0-650 cm⁻¹, $\tau = k\,(uB)^{1/2}$, with $u$ its saturated amount, $B$
   the air it collides with and $k$ = 13.4. It was calibrated on Titan's
@@ -496,6 +556,10 @@ the Bond albedo follow in 2b-2.
   layer and the cold-trap construction that fixes it (the saturation
   pressure at the skin temperature, over the tropopause pressure) are the
   app's own model: each ingredient is sourced, the combination is not.
+  The opacity was fitted with the legacy methane sublimation line
+  (9.1 kJ/mol) and not refitted to the port's (9.7 kJ/mol): at the 69 K
+  skin of the tests' Titan column methane's saturation is 22 % lower,
+  and that column sends out 1.865 W/m² instead of 1.829.
 - **The cloud's water, the deck and the haze.** These are calibrations,
   not laws. What was searched and not found:
   - *Cloud cover.* The cover is $RH^{0.25}\,(1 - e^{-p_{H_2O}/p_c})$ with
@@ -548,6 +612,14 @@ a literature check of every number and citation (the full audit is in the
   and gave 367 bar at the critical point instead of 220.64. The app now
   uses the IAPWS saturation curve (Wagner & Pruß 1993; sublimation of
   ice Ih after Wagner et al. 2011 below the triple point).
+- **CO₂ and methane saturation.** The legacy drew both from values
+  quoted from memory: CO₂ by Clausius–Clapeyron from 216.6 K and
+  5.185 bar, with 26.1 kJ/mol below and a single 16.6 kJ/mol above;
+  methane with 9.1 kJ/mol below 90.7 K and 0.117 bar. The app now uses
+  the equations of state's vapour curves and CO₂'s sublimation equation
+  (above). Against the equation, the legacy's constant CO₂ line was
+  −1.3 % at 150 K, +19 % at 120 K and +77 % at 100 K; methane's new line
+  is 22 % lower at Titan's 69 K skin.
 - **Scope of the Bond albedo.** It takes one ground albedo. The cloud
   albedo is refitted in two steps: first the clear-sky top-of-atmosphere
   albedo of Earth, 0.149 (Stephens et al. 2015) to 0.156 (Kato et al.
@@ -617,128 +689,145 @@ uses them.
    doi:10.1016/j.jms.2017.11.005.
 3. Baranov, Y. I., Lafferty, W. J., Fraser, G. T. 2004, *J. Mol. Spectrosc.*
    228, 432, doi:10.1016/j.jms.2004.04.010.
-4. Boukrouche, R., Lichtenberg, T., Pierrehumbert, R. T. 2021, *ApJ* 919,
+4. Bell, I. H., Wronski, J., Quoilin, S., Lemort, V. 2014, *Ind. Eng.
+   Chem. Res.* 53, 2498, doi:10.1021/ie4033999 (CoolProp; its fluid files
+   `dev/fluids/CarbonDioxide.json` and `Methane.json` at v6.6.0 hold the
+   vapour-pressure ancillaries).
+5. Boukrouche, R., Lichtenberg, T., Pierrehumbert, R. T. 2021, *ApJ* 919,
    130, doi:10.3847/1538-4357/ac1345, arXiv:2107.14150.
-5. Bucholtz, A. 1995, *Appl. Opt.* 34, 2765, doi:10.1364/AO.34.002765.
-6. Chase, M. W. 1998, *NIST-JANAF Thermochemical Tables*, 4th ed., *J.
+6. Bucholtz, A. 1995, *Appl. Opt.* 34, 2765, doi:10.1364/AO.34.002765.
+7. Chase, M. W. 1998, *NIST-JANAF Thermochemical Tables*, 4th ed., *J.
    Phys. Chem. Ref. Data* Monograph 9, through the NIST WebBook
    (<https://webbook.nist.gov>).
-7. Collins, W. D. et al. 2006, "Radiative forcing by well-mixed
+8. Collins, W. D. et al. 2006, "Radiative forcing by well-mixed
    greenhouse gases: estimates from climate models in the IPCC AR4",
    *J. Geophys. Res.* 111, D14317, doi:10.1029/2005JD006713.
-8. Courtin, R., Gautier, D., McKay, C. P. 1995, *Icarus* 114, 144 (cited
+9. Courtin, R., Gautier, D., McKay, C. P. 1995, *Icarus* 114, 144 (cited
    for the position of Titan's collision-induced bands; not retrieved for
    this article).
-9. Creecy, E. et al. 2021, *Geophys. Res. Lett.*,
+10. Creecy, E. et al. 2021, *Geophys. Res. Lett.*,
    doi:10.1029/2021GL095356.
-10. Dai, L. et al. 2022, *J. Geophys. Res. Planets* 127, e2021JE007060,
+11. Dai, L. et al. 2022, *J. Geophys. Res. Planets* 127, e2021JE007060,
    arXiv:2207.10238.
-11. Elsasser, W. M. 1942, *Heat Transfer by Infrared Radiation in the
+12. Elsasser, W. M. 1942, *Heat Transfer by Infrared Radiation in the
    Atmosphere*, Harvard Meteorological Studies 6 (no DOI).
-12. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
-13. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
-    Geosci.* 6, 661, doi:10.1038/ngeo1892.
+13. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
 14. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
     arXiv:1503.04835.
-15. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
+15. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
+    Geosci.* 6, 661, doi:10.1038/ngeo1892.
+16. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
     107949, doi:10.1016/j.jqsrt.2021.107949 (HITRAN2020), and Gordon, I. E.
     et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353, 109807,
     doi:10.1016/j.jqsrt.2026.109807 (HITRAN2024, the release the app
     reads).
-16. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
+17. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
     doi:10.1006/icar.1997.5773.
-17. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
+18. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
     *ApJ* 806, 216, doi:10.1088/0004-637X/806/2/216, arXiv:1505.03552.
-18. Haus, R. et al. 2016, *Icarus* 272, 178,
+19. Haus, R. et al. 2016, *Icarus* 272, 178,
     doi:10.1016/j.icarus.2016.02.048.
-19. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
+20. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
     doi:10.5194/acp-21-14927-2021.
-20. HITRAN collision-induced absorption, 2024 files:
+21. HITRAN collision-induced absorption, 2024 files:
     `CO2-CO2_2024.cia`, <https://hitran.org/cia/>, documented by Terragni,
     Gordon et al., "Collision Induced Absorption in HITRAN2024: Enhanced and
     Improved Data for Atmospheric and Astrophysical Applications", through
     <https://hitran.org/data/CIA/CIA_Readme_2024.pdf>.
-21. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
+22. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
     for the Thermodynamic Properties of Ordinary Water Substance*,
     <https://iapws.org/documents/release/IAPWS-95.download>.
-22. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
+23. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
     doi:10.3847/0004-6256/152/2/41, arXiv:1605.09788.
-23. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
-24. Kato, S. et al. 2018, *J. Climate* 31, 4501,
+24. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
+25. Kato, S. et al. 2018, *J. Climate* 31, 4501,
     doi:10.1175/JCLI-D-17-0523.1.
-25. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
+26. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
     doi:10.1029/2007JD008434.
-26. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
+27. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
     doi:10.1109/TGRS.2012.2227333.
-27. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
+28. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
     1923, doi:10.1175/JAS-D-22-0178.1.
-28. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
+29. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
     doi:10.1088/0004-637X/765/2/131, arXiv:1301.6674.
-29. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
+30. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
     doi:10.1029/90JD01945.
-30. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
+31. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
     greenhouse processes on Earth-like planets", *Nature* 504, 268,
     doi:10.1038/nature12827, arXiv:1312.3337.
-31. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
+32. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
     doi:10.1029/2011GL050053.
-32. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
+33. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
     doi:10.1175/JCLI-D-17-0208.1.
-33. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
+34. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
     doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2.
-34. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
+35. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
     doi:10.1126/science.11538492.
-35. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
+36. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
     doi:10.1175/1520-0469(1980)037<0630:TSATRT>2.0.CO;2.
-36. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
+37. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
     doi:10.1098/rsta.2011.0295. Release MT_CKD_H2O 4.3:
     <https://github.com/AER-RC/MT_CKD_H2O/releases/tag/4.3>.
-37. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
+38. MOOSE, `modules/fluid_properties`, `CO2FluidProperties.C` and `.h`
+   (Span & Wagner 1996's sublimation equation and triple point),
+   `https://github.com/idaholab/moose`, commit `15eacf5e`.
+39. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
     Res. Lett.* 25, 2715, doi:10.1029/98GL01908.
-38. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
+40. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
     doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2.
-39. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
+41. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
     doi:10.1029/2010JE003659.
-40. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
+42. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
     Cambridge University Press: §2.6 (phase change), §2.7 (the moist
     adiabat), §3.6 (the skin temperature).
-41. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
+43. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
     doi:10.1038/ngeo2020, arXiv:1312.6859.
-42. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
+44. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
     doi:10.1175/JCLI-D-21-0275.1.
-43. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
+45. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
     2261, doi:10.1175/1520-0477(1999)080<2261:AIUCFI>2.0.CO;2.
-44. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
+46. Setzmann, U., Wagner, W. 1991, *J. Phys. Chem. Ref. Data* 20, 1061,
+   doi:10.1063/1.555898.
+47. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
     293, doi:10.1016/j.jqsrt.2004.07.025.
-45. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
+48. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
     Pergamon (no DOI). Equation 1.87, as cited by Zuluaga, Sucerquia,
     Alvarado-Montes 2022, arXiv:2207.08636.
-46. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
+49. Span, R., Wagner, W. 1996, *J. Phys. Chem. Ref. Data* 25, 1509,
+   doi:10.1063/1.555991.
+50. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
     doi:10.1002/2014RG000449.
-47. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
+51. Stephenson, R. M., Malanowski, S. 1987, *Handbook of the Thermodynamics
+   of Organic Compounds*, Springer, doi:10.1007/978-94-009-3173-2 (as
+   listed by the NIST Chemistry WebBook's phase-change data).
+52. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
     doi:10.1175/BAMS-D-12-00117.1.
-48. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
+53. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
     109595, doi:10.1016/j.jqsrt.2025.109595.
-49. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
-50. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
+54. thermopack, `fluids/CarbonDioxide.json` and `Methane.json`
+   (`sublimation_curve`), `https://github.com/thermotools/thermopack`,
+   commit `d68c794c`.
+55. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
+56. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
     Geophys. Res.* 94, 16287, doi:10.1029/JD094iD13p16287.
-51. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
+57. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
     doi:10.1073/pnas.0608561103.
-52. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
+58. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
     116265, doi:10.1016/j.icarus.2024.116265.
-53. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
+59. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
     doi:10.1175/JCLI-3299.1.
-54. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
+60. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
     doi:10.1063/1.555926 (the saturation equations of IAPWS
     SR1-86(1992)); Wagner, W., Riethmann, T., Feistel, R., Harvey, A. H.
     2011, *J. Phys. Chem. Ref. Data* 40, 043103, doi:10.1063/1.3657937
     (sublimation pressure of ice Ih, IAPWS R14-08(2011)).
-55. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
+61. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
     (cited for Kato et al.'s clear-sky OLR).
-56. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
+62. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
     doi:10.1175/1520-0469(1996)053<3084:ASCPFU>2.0.CO;2.
-57. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
+63. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
     doi:10.1063/1.555899.
-58. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
+64. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
 
 ## See also
 

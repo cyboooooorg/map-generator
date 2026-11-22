@@ -665,7 +665,10 @@ body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
 the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
 0.0606 bar, 29 kJ/mol; CH₄ 90.7 K, 0.117 bar, 9.1 kJ/mol; values from
-the NIST WebBook from memory, not checked). N₂'s curve is measured
+the NIST WebBook from memory, not checked). This is the legacy law; the
+rewrite replaces CO₂'s and methane's with `science::volatiles`, the
+equations of state's vapour curves and CO₂'s Span & Wagner sublimation
+equation (see [radiative-transfer.md](radiative-transfer.md#carbon-dioxide-and-methane-saturation)). N₂'s curve is measured
 (issue #529): triple point 63.14 K and 0.1253 bar (Angus, de Reuck et
 al. 1979 and Jacobsen, Stewart et al. 1986, through the NIST WebBook,
 checked), and below it the polynomial fits `ln p = Σ Aᵢ / Tⁱ` of Fray &
@@ -886,7 +889,9 @@ liquid water. Three rules bound it:
   (`atmosphere::methane_saturation_bar`: over its ice below its triple
   point, 90.7 K and 0.117 bar, over its liquid above with the mean latent
   heat joining the triple point to its normal boiling point, 111.67 K,
-  and none past its critical point, 190.56 K) and `x` = 0.5 the methane
+  and none past its critical point, 190.56 K; the legacy law, which the
+  rewrite replaces with `science::volatiles`, see
+  [radiative-transfer.md](radiative-transfer.md#carbon-dioxide-and-methane-saturation)) and `x` = 0.5 the methane
   share of a sea of methane, nitrogen and ethane (`SEA_METHANE_SHARE`,
   Raoult's law; Glein & Shock 2013 and Tan, Kargel & Marion 2013 find
   0.5 to 0.7, and Titan's near-surface air holds 45 to 50 % of pure
