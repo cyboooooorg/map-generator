@@ -3,8 +3,10 @@
 
 use std::fmt;
 
+use adapters::{ExportError, StoreError};
 use system::SystemError;
-use timeline::ContractError;
+use timeline::{ContractError, Designation};
+use world::relief::ReliefError;
 
 use crate::explain::ExplainError;
 
@@ -24,6 +26,18 @@ pub enum CliError {
     Seed(getrandom::Error),
     /// The output could not be written to stdout.
     Io(std::io::Error),
+    /// The store could not be read or written.
+    Store(StoreError),
+    /// The world could not be exported.
+    Export(ExportError),
+    /// The body's relief could not be built.
+    Relief(ReliefError),
+    /// The system has no such body.
+    NoSuchBody(Designation),
+    /// The body is a star: only planets have a surface to map.
+    NotAPlanet(Designation),
+    /// The body's timeline has no keyframe at its present.
+    NoPresentKeyframe(Designation),
 }
 
 impl fmt::Display for CliError {
@@ -35,6 +49,14 @@ impl fmt::Display for CliError {
             Self::Explain(error) => write!(f, "{error}"),
             Self::Seed(error) => write!(f, "cli.seed.unavailable: {error}"),
             Self::Io(error) => write!(f, "cli.io: {error}"),
+            Self::Store(error) => write!(f, "cli.store: {error}"),
+            Self::Export(error) => write!(f, "{error}"),
+            Self::Relief(error) => write!(f, "{error}"),
+            Self::NoSuchBody(body) => write!(f, "cli.world.no-such-body: {body}"),
+            Self::NotAPlanet(body) => write!(f, "cli.world.not-a-planet: {body}"),
+            Self::NoPresentKeyframe(body) => {
+                write!(f, "cli.world.no-present-keyframe: {body}")
+            }
         }
     }
 }
@@ -74,5 +96,23 @@ impl From<ExplainError> for CliError {
 impl From<std::io::Error> for CliError {
     fn from(error: std::io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl From<StoreError> for CliError {
+    fn from(error: StoreError) -> Self {
+        Self::Store(error)
+    }
+}
+
+impl From<ExportError> for CliError {
+    fn from(error: ExportError) -> Self {
+        Self::Export(error)
+    }
+}
+
+impl From<ReliefError> for CliError {
+    fn from(error: ReliefError) -> Self {
+        Self::Relief(error)
     }
 }

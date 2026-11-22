@@ -6,6 +6,7 @@ mod error;
 mod explain;
 mod report;
 mod system;
+mod world;
 
 use std::io::{self, ErrorKind, Write as _};
 use std::process::ExitCode;
