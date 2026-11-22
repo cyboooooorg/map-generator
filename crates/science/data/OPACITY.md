@@ -11,9 +11,9 @@ g-points, on a grid of pressure and temperature.
 200-300 K, read only by the test `halving_bins_keeps_the_forcing`.
 `shortwave.bin` is the table of the star's near infrared that the Bond
 albedo absorbs (read by the shortwave port, not in the science crate yet;
-task 7.6 of legacy issue #523): the same lines and sets on the albedo's own spectral bands from
-0.7 to 5 µm, with MT_CKD's water and CO₂ continua (see
-[Shortwave table](#shortwave-table)).
+task 7.6 of legacy issue #523): the same lines and sets on the albedo's
+own spectral bands from 0.7 to 5 µm, with MT_CKD's water and CO₂
+continua (see [Shortwave table](#shortwave-table)).
 
 Both are built by `tools/opacity-table` (see its README) and never by the
 generator.
