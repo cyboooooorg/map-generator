@@ -11,6 +11,7 @@ use timeline::{Code, Designation, EngineVersion, Seed, SystemNumber};
 use world::{Field, FieldId, Grid, MAX_N, Storage, Values, World};
 
 const ENGINE: EngineVersion = EngineVersion(1);
+const WORLD_ENGINE: EngineVersion = EngineVersion(1);
 
 fn designation() -> Designation {
     Designation::planet(SystemNumber::new(10_001).unwrap(), 1).unwrap()
@@ -25,9 +26,13 @@ fn field(values: Values, categorical: bool, storage: Storage) -> Field {
 }
 
 fn sample() -> World {
+    sample_with(ENGINE, WORLD_ENGINE)
+}
+
+fn sample_with(engine: EngineVersion, world_engine: EngineVersion) -> World {
     let grid = Grid::new(4);
     let cells = grid.cell_count();
-    let mut world = World::new(grid, designation(), 3, ENGINE);
+    let mut world = World::new(grid, designation(), 3, engine, world_engine);
     let heights: Vec<f32> = (0..cells).map(|k| k as f32 * 0.5 - 7.0).collect();
     let ids: Vec<u16> = (0..cells).map(|k| (k * 700) as u16).collect();
     let flags: Vec<u8> = (0..cells).map(|k| (k % 5) as u8).collect();
@@ -96,15 +101,25 @@ fn world_file(dir: &TempDir, id: SystemId) -> PathBuf {
 
 #[test]
 fn a_world_round_trips() {
-    let world = sample();
-    assert_eq!(decode(&encode(&world)).unwrap(), world);
+    let world = sample_with(EngineVersion(3), EngineVersion(7));
+    let decoded = decode(&encode(&world)).unwrap();
+    assert_eq!(decoded.engine(), EngineVersion(3));
+    assert_eq!(decoded.world_engine(), EngineVersion(7));
+    assert_eq!(decoded, world);
+}
+
+#[test]
+fn mgworld1_is_refused() {
+    let mut bytes = encode(&sample());
+    bytes[..8].copy_from_slice(b"MGWORLD1");
+    assert!(matches!(decode(&bytes), Err(CodecError::Magic)));
 }
 
 #[test]
 fn u16_storage_round_trips_within_one_step() {
     let (min, max) = (20.0_f32, 3000.0_f32);
     let grid = Grid::new(1);
-    let mut world = World::new(grid, designation(), 0, ENGINE);
+    let mut world = World::new(grid, designation(), 0, ENGINE, WORLD_ENGINE);
     let values = vec![20.0, 288.15, 3000.0, 20.0, 100.0, 2999.0];
     world
         .insert(
@@ -228,7 +243,7 @@ fn a_world_put_under_another_key_is_refused() {
 fn a_grid_above_the_cap_is_refused_on_both_sides() {
     // Decoding: the header of the sample with n patched to MAX_N + 1.
     let mut bytes = encode(&sample());
-    let n_at = 8 + 4 + 2 + designation().to_string().len() + 4;
+    let n_at = 8 + 4 + 4 + 2 + designation().to_string().len() + 4;
     bytes[n_at..n_at + 4].copy_from_slice(&(MAX_N + 1).to_le_bytes());
     assert!(matches!(decode(&bytes), Err(CodecError::Invalid(_))));
     bytes[n_at..n_at + 4].copy_from_slice(&0u32.to_le_bytes());
@@ -236,7 +251,7 @@ fn a_grid_above_the_cap_is_refused_on_both_sides() {
     // Caching: no unreadable file is written.
     let dir = TempDir::new().unwrap();
     let store = FsStore::new(dir.path().to_path_buf(), u64::MAX);
-    let big = World::new(Grid::new(MAX_N + 1), designation(), 3, ENGINE);
+    let big = World::new(Grid::new(MAX_N + 1), designation(), 3, ENGINE, WORLD_ENGINE);
     let key = WorldKey {
         grid: MAX_N + 1,
         ..key(system_id())

@@ -1,7 +1,8 @@
 //! The binary layout of a cached world, little-endian:
 //!
 //! ```text
-//! b"MGWORLD1"  u32 engine  u16 len + designation text  u32 keyframe
+//! b"MGWORLD2"  u32 engine  u32 world engine
+//! u16 len + designation text  u32 keyframe
 //! u32 grid n   u32 field count
 //! per field, in code order:
 //!   u16 len + code text, u8 type (0 F32, 1 U16, 2 U8),
@@ -18,10 +19,10 @@ use std::fmt;
 use timeline::{Code, Designation, EngineVersion};
 use world::{Field, FieldId, Grid, MAX_N, Storage, Values, World};
 
-/// The file magic. Change it (`MGWORLD2`, ...) whenever the layout above
+/// The file magic. Change it (`MGWORLD3`, ...) whenever the layout above
 /// changes: an old file then reads as another file (a cache miss), never
 /// as a damaged one.
-const MAGIC: &[u8; 8] = b"MGWORLD1";
+const MAGIC: &[u8; 8] = b"MGWORLD2";
 
 /// Why a world file could not be decoded.
 #[derive(Debug)]
@@ -69,6 +70,7 @@ pub fn encode(world: &World) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&world.engine().0.to_le_bytes());
+    out.extend_from_slice(&world.world_engine().0.to_le_bytes());
     put_text(&mut out, &world.body().to_string());
     out.extend_from_slice(&world.keyframe().to_le_bytes());
     out.extend_from_slice(&world.grid().n().to_le_bytes());
@@ -190,6 +192,7 @@ pub fn decode(bytes: &[u8]) -> Result<World, CodecError> {
         return Err(CodecError::Magic);
     }
     let engine = EngineVersion(r.u32()?);
+    let world_engine = EngineVersion(r.u32()?);
     let body: Designation = r.text()?.parse().map_err(|_| invalid("designation"))?;
     let keyframe = r.u32()?;
     let n = r.u32()?;
@@ -238,7 +241,7 @@ pub fn decode(bytes: &[u8]) -> Result<World, CodecError> {
         return Err(CodecError::Truncated);
     }
     let grid = Grid::new(n);
-    let mut world = World::new(grid, body, keyframe, engine);
+    let mut world = World::new(grid, body, keyframe, engine, world_engine);
     for header in headers {
         let values = match (header.kind, header.storage) {
             (0, Storage::U16 { min, max }) => {

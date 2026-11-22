@@ -9,7 +9,7 @@ fn id() -> FieldId {
 
 fn world_with(n: u32, values: Values, categorical: bool) -> World {
     let body = Designation::star(SystemNumber::new(12_345).unwrap());
-    let mut w = World::new(Grid::new(n), body, 0, EngineVersion(1));
+    let mut w = World::new(Grid::new(n), body, 0, EngineVersion(1), EngineVersion(1));
     w.insert(
         id(),
         Field {

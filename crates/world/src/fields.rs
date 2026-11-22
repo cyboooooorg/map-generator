@@ -84,17 +84,26 @@ pub struct World {
     body: Designation,
     keyframe: u32,
     engine: EngineVersion,
+    world_engine: EngineVersion,
     fields: BTreeMap<FieldId, Field>,
 }
 
 impl World {
-    /// An empty world for `body` at `keyframe`, made by `engine`.
-    pub fn new(grid: Grid, body: Designation, keyframe: u32, engine: EngineVersion) -> World {
+    /// An empty world for `body` at `keyframe`, made from a timeline of
+    /// the system engine `engine` by the map generator `world_engine`.
+    pub fn new(
+        grid: Grid,
+        body: Designation,
+        keyframe: u32,
+        engine: EngineVersion,
+        world_engine: EngineVersion,
+    ) -> World {
         World {
             grid,
             body,
             keyframe,
             engine,
+            world_engine,
             fields: BTreeMap::new(),
         }
     }
@@ -114,9 +123,14 @@ impl World {
         self.keyframe
     }
 
-    /// The engine version that made the world.
+    /// The system engine version of the timeline the world was built from.
     pub fn engine(&self) -> EngineVersion {
         self.engine
+    }
+
+    /// The version of the map generator that made the world.
+    pub fn world_engine(&self) -> EngineVersion {
+        self.world_engine
     }
 
     /// Adds a field.
