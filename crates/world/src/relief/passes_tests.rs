@@ -2,7 +2,7 @@ use super::*;
 use crate::grid::Grid;
 use crate::relief::ReliefError;
 use crate::stats::area_quantile;
-use science::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
+use science::constants::{EARTH_MEAN_RADIUS, MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
 use science::relief::crust::{CONTINENTAL_SLOPE, crust, floating_height};
 use science::relief::highlands::{DRY_PLAINS, MOUNTAIN_RELIEF};
 use science::relief::spectrum::{
@@ -319,9 +319,38 @@ fn the_noise_is_scaled_on_its_haar_fluctuation_per_province() {
 }
 
 #[test]
+fn orogens_lift_only_the_continental_crust() {
+    // A collision's elevation is a continental plateau's (Tibet, Royden et
+    // al. 2008): an oceanic cell under a range's weight keeps its floor.
+    let grid = Grid::new(4);
+    let n = grid.cell_count();
+    let continental: Vec<bool> = (0..n).map(|k| grid.point(k)[0] > 0.0).collect();
+    let mut h: Vec<f32> = continental
+        .iter()
+        .map(|&c| if c { 500.0 } else { -4000.0 })
+        .collect();
+    let before = h.clone();
+    raise_orogens(
+        &grid,
+        &mut h,
+        &vec![1.0; n],
+        &vec![5000.0; n],
+        &continental,
+        None,
+    );
+    for k in 0..n {
+        if continental[k] {
+            assert!(h[k] > before[k], "{k}: continental cell not lifted");
+        } else {
+            assert_eq!(h[k], before[k], "{k}: oceanic cell lifted");
+        }
+    }
+}
+
+#[test]
 fn a_height_measured_on_mars_counts_gravity_once() {
     // Mars's amplitude was measured at its own gravity (NASA Mars Fact
-    // Sheet, 3.71 m/s²): at 3.71 m/s² it is taken as is, at Earth's
+    // Sheet, mean surface gravity): there it is taken as is, at Earth's
     // gravity divided by the relief scale of Mars, 2.49.
     let grid = Grid::new(24);
     let mars = |g: f64| Forcing {
@@ -331,7 +360,7 @@ fn a_height_measured_on_mars_counts_gravity_once() {
         ..earth()
     };
     let seed = Seed::new(9);
-    let (own, _) = continent_noise(&grid, seed, &mars(3.71));
+    let (own, _) = continent_noise(&grid, seed, &mars(MARS_SURFACE_GRAVITY.0));
     let (earthly, _) = continent_noise(&grid, seed, &mars(STANDARD_GRAVITY.0));
     let want = analogue_relief_scale(STANDARD_GRAVITY, Analogue::Mars);
     assert!((want - 1.0 / 2.49).abs() < 1e-12);
@@ -401,7 +430,7 @@ fn orogens_raise_the_column_to_their_elevation_not_above_it() {
     let before = h.clone();
     let weight: Vec<f32> = (0..n).map(|k| [1.0, 0.5, 0.0][k % 3]).collect();
     let elevation = vec![5000.0_f32; n];
-    raise_orogens(&grid, &mut h, &weight, &elevation, None);
+    raise_orogens(&grid, &mut h, &weight, &elevation, &vec![true; n], None);
     for k in 0..n {
         let local = before[k] - sea;
         let want = before[k] + weight[k] * (5000.0 - local).max(0.0);
@@ -414,7 +443,14 @@ fn orogens_raise_the_column_to_their_elevation_not_above_it() {
     let mut high = vec![9000.0_f32; n];
     high[0] = -9000.0;
     let kept = high.clone();
-    raise_orogens(&grid, &mut high, &vec![1.0; n], &vec![1000.0; n], None);
+    raise_orogens(
+        &grid,
+        &mut high,
+        &vec![1.0; n],
+        &vec![1000.0; n],
+        &vec![true; n],
+        None,
+    );
     let sea = sea_level(&grid, &kept, None);
     for k in 1..n {
         if kept[k] - sea >= 1000.0 {

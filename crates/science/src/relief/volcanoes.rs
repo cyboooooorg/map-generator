@@ -5,7 +5,7 @@
 //! `docs/superpowers/studies/2026-11-22-relief/volcanoes.md`, and its
 //! calibration list (`README.md#final-calibration-list`).
 
-use crate::constants::STANDARD_GRAVITY;
+use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
 use crate::units::{Fraction, Metre, Watt, WattPerSquareMetre};
 use std::f64::consts::PI;
 
@@ -70,10 +70,10 @@ pub const CONE_VOLUME: (f64, f64) = (0.1e9, 1000e9);
 
 /// Source: the tallest a volcano stands at standard gravity, 8.4 km:
 /// Olympus Mons's relief, "almost 22 km" (Plescia 2004,
-/// doi:10.1029/2002JE002031), scaled by Mars's 3.73 m/s² (NASA Mars fact
-/// sheet) over standard gravity, relief standing as one over gravity
+/// doi:10.1029/2002JE002031), scaled by Mars's mean surface gravity
+/// ([`MARS_SURFACE_GRAVITY`], NASA Mars fact sheet) over standard gravity, relief standing as one over gravity
 /// (Weisskopf 1975). Mauna Loa's 9 km from the sea floor agrees.
-pub const CONE_HEIGHT_MAX: Metre = Metre(22e3 * 3.73 / STANDARD_GRAVITY.0);
+pub const CONE_HEIGHT_MAX: Metre = Metre(22e3 * MARS_SURFACE_GRAVITY.0 / STANDARD_GRAVITY.0);
 
 /// Calibration: spacing of isolated volcanoes, one at most per cell of
 /// 900 km, the legacy's lattice. Searched and not found: a global law of

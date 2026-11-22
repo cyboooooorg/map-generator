@@ -1,5 +1,5 @@
 use super::*;
-use crate::constants::STANDARD_GRAVITY;
+use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
 use crate::units::{Metre, MetrePerSecondSquared};
 
 #[test]
@@ -34,11 +34,9 @@ fn amplitudes_are_the_measured_haar_fluctuations_at_100_km() {
 
 #[test]
 fn gravity_is_counted_once_on_an_analogue_height() {
-    // NASA Mars Fact Sheet: 3.71 m/s².
-    assert_eq!(
-        analogue_gravity(Analogue::Mars),
-        MetrePerSecondSquared(3.71)
-    );
+    // NASA Mars Fact Sheet, mean surface gravity: 3.73 m/s².
+    assert_eq!(analogue_gravity(Analogue::Mars), MARS_SURFACE_GRAVITY);
+    assert_eq!(MARS_SURFACE_GRAVITY, MetrePerSecondSquared(3.73));
     assert_eq!(analogue_gravity(Analogue::Earth), STANDARD_GRAVITY);
     for analogue in [Analogue::Earth, Analogue::Mars] {
         let own = analogue_relief_scale(analogue_gravity(analogue), analogue);
@@ -57,7 +55,7 @@ fn gravity_is_counted_once_on_an_analogue_height() {
 #[test]
 fn relief_stands_as_one_over_gravity_up_to_a_cap() {
     assert_eq!(relief_scale(STANDARD_GRAVITY), 1.0);
-    assert_eq!(relief_scale(MetrePerSecondSquared(3.71)), MAX_RELIEF_SCALE);
+    assert_eq!(relief_scale(MARS_SURFACE_GRAVITY), MAX_RELIEF_SCALE);
     assert_eq!(MAX_RELIEF_SCALE, 2.49);
     assert!((relief_scale(MetrePerSecondSquared(19.6133)) - 0.5).abs() < 1e-12);
 }

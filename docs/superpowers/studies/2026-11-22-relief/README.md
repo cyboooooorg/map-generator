@@ -87,7 +87,7 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | `amplitude(Earth, Thin)` | 246 | m | Source | same, windows wholly on the sea floor deeper than 200 m: 236 and 255 m [V, measured, `scripts/etopo_haar_split.py`] |
 | `amplitude(Mars, either)` | 233 | m | Source | MOLA MEGDR, same statistic, whole surface [V, measured, `scripts/mola_stats.py`]; Landais et al. Fig. 2 about 231 m |
 | Earth, whole surface (not used) | 219 | m | Source | ETOPO 2022, same statistic, whole surface [V, measured, `scripts/etopo_stats.py`] |
-| `analogue_gravity(Mars)` | 3.71 | m/s² | Source | NASA Mars Fact Sheet, equatorial surface gravity [V]; the gravity Mars's amplitude was measured at |
+| `analogue_gravity(Mars)` = `MARS_SURFACE_GRAVITY` | 3.73 | m/s² | Source | NASA Mars Fact Sheet, "Surface gravity (mean)" [V] (the sheet gives 3.69 / 3.73 for the equatorial / polar surface acceleration; 3.71 is not on it); the gravity Mars's amplitude was measured at, shared with `CONE_HEIGHT_MAX` |
 | `analogue_gravity(Earth)` | 9.80665 | m/s² | Definition | `STANDARD_GRAVITY`, the reference of every Earth-measured height |
 | `HEIGHT_RANGE` | 25 | km | Definition | the storage range; Olympus Mons's relief "almost 22 km" (Plescia 2004) [V, abstract] |
 | `STANDARD_GRAVITY` | 9.80665 | m/s² | Definition | CGPM 1901 |

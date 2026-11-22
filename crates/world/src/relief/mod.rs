@@ -69,6 +69,7 @@ pub fn generate(state: &PlanetState, seed: Seed, grid: &Grid) -> Result<Field, R
             &mut height,
             &relief.orogeny,
             &relief.elevation,
+            &continental,
             forcing.ocean_share,
         );
         (relief.orogeny, relief.arc)

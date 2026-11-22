@@ -215,7 +215,8 @@ study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
    the standard gravity, capped at Olympus Mons's relief over Everest's
    height (22 / 8.849); the floating crust and the ridges are not. A
    height measured on Mars (its noise amplitude) already stands at Mars's
-   gravity, 3.71 m/s² (NASA fact sheet): it is multiplied by the ratio of
+   gravity, 3.73 m/s² (its mean surface gravity, NASA fact sheet; the
+   same constant as the cones' Olympus Mons scaling): it is multiplied by the ratio of
    the relief scales, $s(g) / s(g_\text{Mars})$, so gravity is counted
    once. Mars sits at the cap, so this ratio is 1 at Mars's gravity and
    below it.

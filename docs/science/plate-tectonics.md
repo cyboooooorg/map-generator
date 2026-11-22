@@ -252,7 +252,9 @@ in `science::relief`, the pass in `world::relief`.
    top of the continent: a cell gains $w \cdot \max(0, E - h)$, $E$ the
    published elevation, $w$ the range's weight there (1 at its crest) and
    $h$ the cell's height above the sea the model built before the plates
-   raised it.
+   raised it. Only continental cells are lifted: both elevations are
+   those of continental plateaus, and an oceanic cell inside a range's
+   reach keeps its floor.
 7. **Rifts.** Under 100 km wide (Hopper & Buck 1996; Buck 2007).
 8. **Ridges.** Parsons & Sclater's $2.5 + 0.35\sqrt{t}$ km, the floor's
    age $t$ in Ma read from the distance and the spreading rate, as in the

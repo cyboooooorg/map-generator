@@ -2,7 +2,7 @@
 //! the published statistics of Earth, Mars and Venus. The planetary values
 //! below are test inputs, not engine constants.
 
-use science::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
+use science::constants::{EARTH_MEAN_RADIUS, MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
 use science::relief::crust::{MARS_CRUST, floating_height};
 use science::units::{EarthRadius, Fraction, Metre, MetrePerSecondSquared};
 use timeline::fixtures::{earth_like_fixture, leaf};
@@ -50,14 +50,14 @@ fn earth(trace: &mut Trace) -> PlanetState {
     )
 }
 
-/// Mars: volumetric mean radius 3389.5 km, equatorial gravity 3.71 m/s^2
-/// (NASA Planetary Fact Sheet, Mars page). A stagnant lid.
+/// Mars: volumetric mean radius 3389.5 km, mean surface gravity
+/// [`MARS_SURFACE_GRAVITY`] (NASA Mars Fact Sheet). A stagnant lid.
 fn mars(trace: &mut Trace, ocean_share: Option<f64>) -> PlanetState {
     body(
         trace,
         TectonicRegime::Stagnant,
         Metre(3389.5e3),
-        3.71,
+        MARS_SURFACE_GRAVITY.0,
         ocean_share,
     )
 }

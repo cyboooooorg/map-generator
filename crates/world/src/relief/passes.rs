@@ -350,23 +350,36 @@ pub fn mountains(grid: &Grid, body: Seed, forcing: &Forcing, weight: &[f32]) -> 
 /// The sources give the orogens' elevations above sea level, so what is
 /// added is the lift from the local surface the model built, never a
 /// height on top of it: where `w` is 1 the column stands at `e`, and a
-/// column already higher is left alone.
+/// column already higher is left alone. Only the `continental` cells (the
+/// thick crust, [`continents`]) are lifted: the sources' elevations are
+/// those of continental plateaus (Tibet, the Altiplano), and an oceanic
+/// cell inside a collision's reach keeps its floor.
 ///
 /// # Panics
 ///
-/// Panics when `weight` or `elevation` does not hold one value per cell.
+/// Panics when `weight`, `elevation` or `continental` does not hold one
+/// value per cell.
 pub fn raise_orogens(
     grid: &Grid,
     height: &mut [f32],
     weight: &[f32],
     elevation: &[f32],
+    continental: &[bool],
     ocean_share: Option<Fraction>,
 ) {
     assert_eq!(weight.len(), height.len(), "one weight per cell");
     assert_eq!(elevation.len(), height.len(), "one elevation per cell");
+    assert_eq!(continental.len(), height.len(), "one crust per cell");
     let sea = sea_level(grid, height, ocean_share);
-    for ((h, &w), &e) in height.iter_mut().zip(weight).zip(elevation) {
-        *h += w * (e - (*h - sea)).max(0.0);
+    for (((h, &w), &e), &thick) in height
+        .iter_mut()
+        .zip(weight)
+        .zip(elevation)
+        .zip(continental)
+    {
+        if thick {
+            *h += w * (e - (*h - sea)).max(0.0);
+        }
     }
 }
 

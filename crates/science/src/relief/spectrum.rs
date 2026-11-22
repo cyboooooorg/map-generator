@@ -1,7 +1,7 @@
 //! The spectrum of a rocky relief: Hurst exponent, octaves, amplitude, and
 //! the scaling of relief with gravity.
 
-use crate::constants::STANDARD_GRAVITY;
+use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
 use crate::units::{Metre, MetrePerSecondSquared};
 
 /// The body whose measured relief a regime follows.
@@ -78,12 +78,11 @@ pub fn amplitude(analogue: Analogue, province: Province) -> Metre {
 /// The surface gravity at which the analogue's relief was measured.
 /// Definition: Earth's is [`STANDARD_GRAVITY`], the gravity every
 /// Earth-measured height is referred to (its relief scale is then 1).
-/// Source: Mars's, 3.71 m/s² (equatorial surface gravity, NASA Mars Fact
-/// Sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html).
+/// Mars's is [`MARS_SURFACE_GRAVITY`], its mean surface gravity.
 pub fn analogue_gravity(analogue: Analogue) -> MetrePerSecondSquared {
     match analogue {
         Analogue::Earth => STANDARD_GRAVITY,
-        Analogue::Mars => MetrePerSecondSquared(3.71),
+        Analogue::Mars => MARS_SURFACE_GRAVITY,
     }
 }
 

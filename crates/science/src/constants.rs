@@ -12,6 +12,12 @@ pub const ASTRONOMICAL_UNIT: Metre = Metre(149_597_870_700.0);
 /// 1901, 3rd General Conference on Weights and Measures).
 pub const STANDARD_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(9.806_65);
 
+/// Source: Mars's mean surface gravity, 3.73 m/s² (NASA Mars Fact Sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html, "Surface gravity
+/// (mean)"). The sheet's other two values are surface accelerations,
+/// rotation included: 3.69 at the equator, 3.73 at the pole.
+pub const MARS_SURFACE_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(3.73);
+
 /// Definition: IAU 2015 Resolution B3 nominal solar radius (Prša et al.
 /// 2016, AJ 152, 41).
 pub const SOLAR_RADIUS: Metre = Metre(6.957e8);
