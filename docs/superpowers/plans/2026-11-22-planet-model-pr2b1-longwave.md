@@ -186,39 +186,46 @@ citation to use: Wiki study 19,
     (J/(mol·K), `Source:` NIST WebBook Shomate / Chase 1998; legacy
     `column.rs` 71-76 with NH₃ **35.65**), one `pub const` per gas,
     names `N2_MOLAR_MASS`, …, `N2_HEAT_CAPACITY`, ….
-- Produces in `science::volatiles` (ported from
-  `legacy-final:…/atmosphere.rs` 595-960):
-  - `pub fn co2_saturation_pressure(t: Kelvin) -> Pascal` and plain
-    `pub(crate) fn co2_saturation_bar(t_k: f64) -> f64` (frost below
-    216.6 K, liquid to 304.13 K, infinite above, as legacy).
-  - `pub(crate) fn co2_latent_j_mol(t_k: f64) -> f64`.
-  - `pub fn methane_saturation_pressure(t: Kelvin) -> Pascal`,
+- Produces in `science::volatiles` (replacing the legacy
+  constant-latent-heat laws of `legacy-final:…/atmosphere.rs` 595-960,
+  spec decision 5):
+  - CO₂: the ancillary equations of Span & Wagner 1996
+    (doi:10.1063/1.555991): vapour pressure (triple to critical point),
+    sublimation pressure (below the triple point), with their
+    coefficients and reducing constants read in the paper.
+    `pub fn co2_saturation_pressure(t: Kelvin) -> Pascal`, plain
+    `pub(crate) fn co2_saturation_bar(t_k: f64) -> f64` (infinite above
+    the critical point, as legacy), and
+    `pub(crate) fn co2_latent_j_mol(t_k: f64) -> f64` from the curve's
+    slope by Clausius–Clapeyron, as `water::vapour_latent_j_mol` does
+    (zero above the critical point, as legacy).
+  - Methane: the ancillary vapour-pressure equation of Setzmann & Wagner
+    1991 (doi:10.1063/1.555898) from the triple to the critical point,
+    and below the triple point the sublimation equation that paper
+    gives, or, if it gives none, the sublimation enthalpy 9.7 kJ/mol
+    (Stephenson & Malanowski 1987, as listed by the NIST WebBook) with
+    Clausius–Clapeyron from the triple point.
+    `pub fn methane_saturation_pressure(t: Kelvin) -> Pascal`,
     `pub(crate) fn methane_saturation_bar(t_k: f64) -> f64`.
-  - `ATM_BAR` 1.013 25 (`Definition:` standard atmosphere).
-  - Constants with the audit's citations: CO₂ triple 216.6 K /
-    5.185 bar, critical 304.13 K / 73.77 bar, sublimation 26.1 kJ/mol
-    (NIST); CH₄ triple 90.7 K / 0.117 bar, boiling 111.67 K, critical
-    190.56 K; the CH₄ sublimation enthalpy: the audit found no NIST
-    entry at 9.1 kJ/mol, so take a NIST-listed value (9.2 to 10.0
-    kJ/mol range) with its exact citation, or stop.
+  - Check the two DOIs on Crossref before citing them.
 
 - [ ] **Step 1: Write the failing tests** in `volatiles_tests.rs`:
-  `co2_curve_matches_nist` (the curve within 0.6 % of NIST/Span–Wagner
-  1996 at 220, 250, 273.15 and 300 K, values copied from the NIST
-  WebBook fluid table with `Source:`),
-  `co2_sublimes_at_one_atmosphere` (101 325 Pa at the sublimation
-  temperature the NIST WebBook gives for 1 atm, copied with `Source:`,
-  within 3 %), `co2_caps_at_its_triple_and_critical_points`,
-  `methane_follows_nist` (the curve passes through its triple and
-  boiling points by construction, so it is checked between and above
-  them: within 3 % of the NIST WebBook fluid table (cite the equation
-  of state the WebBook names) at 100 K and 150 K; outside, stop and
-  report), and `partial_pressures_ignore_negative_parts`
+  `co2_follows_span_wagner` (the vapour pressure at 220, 250, 273.15 and
+  300 K and the sublimation pressure at two temperatures below the
+  triple point, against the tables of Span & Wagner 1996 or the NIST
+  WebBook, 0.1 %), `co2_sublimes_at_one_atmosphere` (Span & Wagner's
+  normal sublimation temperature, read in the paper),
+  `co2_latent_heat_is_the_curves_slope` (against the enthalpy of
+  vaporisation of Span & Wagner's table at 250 K, 2 %),
+  `co2_caps_at_its_triple_and_critical_points`, `methane_follows_nist`
+  (100 K, 130 K, 150 K and 180 K, against the NIST WebBook fluid table,
+  0.5 %), and `partial_pressures_ignore_negative_parts`
   (`total()` of `{co2: 1.0, h2o: -1e-12, ch4: f64::NAN, ..}` is 1.0).
+  Outside a tolerance, stop and report.
 - [ ] **Step 2:** Run `cargo nextest run -p science volatiles::
   radiation::gases`. Expected: FAIL.
-- [ ] **Step 3:** Port the laws; set `R` to `constants::MOLAR_GAS_CONSTANT` (the
-  legacy atmosphere used 8.314).
+- [ ] **Step 3:** Implement the laws; `R` is
+  `constants::MOLAR_GAS_CONSTANT` (the legacy atmosphere used 8.314).
 - [ ] **Step 4:** Run the same command. Expected: PASS.
 - [ ] **Step 5:** Commit `feat(science): add the partial pressures and the CO2
   and methane saturation`.

@@ -95,6 +95,12 @@ instead of carrying it over.
 4. **Values and citations** as the audit corrects them: NH₃ heat
    capacity 35.65 J/(mol·K), clear-sky air absorption 72-73 W/m², the
    DOIs and sections listed on the reference page.
+5. **CO₂ and methane saturation** follow the ancillary vapour-pressure,
+   sublimation and melting equations of their reference equations of
+   state: Span & Wagner 1996 for CO₂, Setzmann & Wagner 1991 for
+   methane (decided 2026-11-22 after the legacy constant-latent-heat
+   methane law missed NIST by +5.9 % at 150 K). CO₂'s latent heat in
+   the moist adiabat comes from the curve's slope, as water's does.
 
 ## PR 2b-1: the longwave column
 
