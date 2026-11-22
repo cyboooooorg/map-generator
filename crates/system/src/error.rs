@@ -15,6 +15,10 @@ use crate::ArchetypeId;
 pub enum SystemError {
     /// A violation of the timeline contract.
     Contract(ContractError),
+    /// An asked input is NaN, which no range can place. `input` is the
+    /// name of the command-line flag: `present`, `host-mass` or
+    /// `metallicity`. Infinities are not NaN and give the range errors.
+    NotANumber { input: &'static str },
     /// A host star outside the tables (0.08-8 M☉; above 8 see #615).
     HostMassOutOfRange { mass: SolarMass },
     /// A host metallicity outside the tables.
@@ -43,6 +47,7 @@ impl fmt::Display for SystemError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Contract(error) => write!(f, "system.contract: {error}"),
+            Self::NotANumber { input } => write!(f, "system.not-a-number: {input}"),
             Self::HostMassOutOfRange { mass } => write!(
                 f,
                 "system.host-mass-out-of-range: {} M☉ ({}-{}; above {} see #615)",
@@ -100,6 +105,12 @@ impl From<StellarError> for SystemError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_names_the_nan_input() {
+        let message = SystemError::NotANumber { input: "present" }.to_string();
+        assert_eq!(message, "system.not-a-number: present");
+    }
 
     #[test]
     fn display_names_the_issue_above_eight() {
