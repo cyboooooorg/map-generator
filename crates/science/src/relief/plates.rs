@@ -141,10 +141,13 @@ pub const ISLAND_ARC_SIGMA: Metre = Metre(60e3);
 /// ([`orogen_elevation`]).
 pub const ANDEAN_UPLIFT: Metre = Metre(3.65e3);
 
-/// Source: width of the Altiplano-Puna, 375 km, the middle of
-/// Allmendinger et al.'s (1997) 350-400 km; the full width of the
-/// plateau's bump at half its height. The plateau starts at the arc and
-/// spans this width inland ([`andean_centre`]).
+/// Calibration: width of the Andean plateau, 375 km, the middle of the
+/// Altiplano-Puna's 350-400 km (Allmendinger et al. 1997,
+/// doi:10.1146/annurev.earth.25.1.139), taken as the full width of the
+/// plateau's bump at half its height; the plateau starts at the arc and
+/// spans this width inland ([`andean_centre`]). Searched and not found:
+/// a width of Andean plateaus in general (relief study, calibration 16,
+/// `docs/superpowers/studies/2026-11-22-relief/plates.md#orogens`).
 pub const ANDEAN_WIDTH: Metre = Metre(375e3);
 
 /// Source: elevation of a collision range above sea level, 5 km, the
@@ -254,9 +257,13 @@ pub fn arc_distance() -> Metre {
     Metre(ARC_SLAB_DEPTH.0 / SLAB_DIP.0.tan())
 }
 
-/// Distance of the Andean plateau's middle from the trench: the arc plus
-/// half [`ANDEAN_WIDTH`], so the plateau is half its height at the arc,
-/// as the Altiplano lies behind the arc of the Western Cordillera.
+/// Calibration: distance of the Andean plateau's middle from the trench,
+/// the arc plus half [`ANDEAN_WIDTH`], so the plateau is half its height
+/// at the arc and spans its width inland, as the Altiplano lies behind the
+/// arc of the Western Cordillera. A placement bounded by Allmendinger et
+/// al.'s (1997) 350-400 km; searched and not found: where a plateau
+/// starts relative to its arc (relief study, calibration 16,
+/// `docs/superpowers/studies/2026-11-22-relief/plates.md#orogens`).
 pub fn andean_centre() -> Metre {
     arc_distance() + ANDEAN_WIDTH / 2.0
 }
