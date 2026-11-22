@@ -10,7 +10,10 @@
 //! classifies a circular trial, draws the eccentricity from the class,
 //! then checks the star, the Roche floor, the spacing to every placed
 //! planet and a hot Jupiter's clearing. A drawn slot that spends its
-//! [`SLOT_TRIES`] stays empty; an asked one is refused with `NoRoom`.
+//! [`SLOT_TRIES`] stays empty; an asked one is refused with `NoRoom`. A
+//! compact chain ends at its first proposal beyond 1071 d (Weiss et al.
+//! 2018): that slot and every later family slot stay empty, with no
+//! retry.
 //! Asked archetypes go first, so they never meet a drawn neighbour and
 //! are never moved. Rejected tries keep their nodes in the trace.
 //!
@@ -35,7 +38,9 @@ use crate::families::laws::{
     COMPANION_AXIS, SMALL_MASS_MAX, SMALL_MASS_MIN, eccentricity, ice_scale, k50_sigma_e,
 };
 use crate::families::table::SLOT_TRIES;
-use crate::families::{FULTON_OUTER_SUPPORT, Family, FamilyContext, Placed, SlotKind, propose};
+use crate::families::{
+    FULTON_OUTER_SUPPORT, Family, FamilyContext, Placed, SlotKind, ends_chain, propose,
+};
 use crate::random::{log_uniform, normal, uniform};
 use crate::sources::{Light, sources};
 use crate::star::Star;
@@ -161,8 +166,8 @@ pub(crate) fn place(
             };
             let slot = Slot::Asked(id, archetype);
             match placer.slot(slot, label, &placed, trace)? {
-                Some(planet) => placed.push(planet),
-                None => {
+                Filled::Planet(planet) => placed.push(planet),
+                Filled::Empty | Filled::ChainEnds => {
                     return Err(SystemError::NoRoom {
                         archetype: id.clone(),
                     });
@@ -173,15 +178,54 @@ pub(crate) fn place(
     if ctx.family == Family::Compact && slots > 0 {
         placer.slope = placer.slope(&placed, trace)?;
     }
-    for slot in 0..ctx.counts.small + ctx.counts.giants {
-        if let Some(planet) =
-            placer.slot(Slot::Family(slot), format!("slot-{slot}"), &placed, trace)?
-        {
-            placed.push(planet);
-        }
-    }
+    fill_family(
+        ctx.counts.small + ctx.counts.giants,
+        &mut placed,
+        |n, placed| placer.slot(Slot::Family(n), format!("slot-{n}"), placed, trace),
+    )?;
     recheck(&mut placed, &rules);
     Ok(placed)
+}
+
+/// What a slot gave: a planet, nothing (its tries are spent), or the end
+/// of the chain.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a transient return value, moved once"
+)]
+pub(super) enum Filled {
+    Planet(Placed),
+    Empty,
+    ChainEnds,
+}
+
+/// What a try gave: a kept trial, a rejection, or the end of the chain.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a transient return value, moved once"
+)]
+enum Try {
+    Kept(Trial, TrialOutcome),
+    Spent,
+    ChainEnds,
+}
+
+/// Fills family slots `0..count` in order: a planet is pushed, an empty
+/// slot skipped, and a chain end stops the loop, leaving every later slot
+/// empty.
+pub(super) fn fill_family(
+    count: u32,
+    placed: &mut Vec<Placed>,
+    mut slot: impl FnMut(u32, &[Placed]) -> Result<Filled, SystemError>,
+) -> Result<(), SystemError> {
+    for n in 0..count {
+        match slot(n, placed)? {
+            Filled::Planet(planet) => placed.push(planet),
+            Filled::Empty => {}
+            Filled::ChainEnds => break,
+        }
+    }
+    Ok(())
 }
 
 /// A slot: an asked archetype or a family slot (0-based, family slots
@@ -215,40 +259,43 @@ impl<C> Placer<'_, '_, C>
 where
     C: Fn(&Trial, &Trace) -> Result<TrialOutcome, SystemError>,
 {
-    /// Runs the tries of one slot on its streams; `None` when they are
-    /// spent.
+    /// Runs the tries of one slot on its streams; `Empty` when they are
+    /// spent, `ChainEnds` at the first try beyond a compact chain's edge.
     fn slot(
         &self,
         slot: Slot<'_>,
         label: String,
         placed: &[Placed],
         trace: &mut Trace,
-    ) -> Result<Option<Placed>, SystemError> {
+    ) -> Result<Filled, SystemError> {
         let seed = self.system.seed.derive(&format!("trial/{label}"));
         let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
         let mut longitudes =
             ChaCha8Rng::seed_from_u64(self.system.seed.derive(&format!("orbit/{label}")).get());
         for _ in 0..SLOT_TRIES {
-            if let Some((trial, outcome)) =
-                self.attempt(slot, seed, &mut rng, &mut longitudes, placed, trace)?
-            {
-                let asked = match slot {
-                    Slot::Asked(id, _) => Some(id.clone()),
-                    Slot::Family(_) => None,
-                };
-                return Ok(Some(Placed {
-                    trial,
-                    outcome,
-                    label,
-                    asked,
-                }));
+            match self.attempt(slot, seed, &mut rng, &mut longitudes, placed, trace)? {
+                Try::Kept(trial, outcome) => {
+                    let asked = match slot {
+                        Slot::Asked(id, _) => Some(id.clone()),
+                        Slot::Family(_) => None,
+                    };
+                    return Ok(Filled::Planet(Placed {
+                        trial,
+                        outcome,
+                        label,
+                        asked,
+                    }));
+                }
+                Try::Spent => {}
+                Try::ChainEnds => return Ok(Filled::ChainEnds),
             }
         }
-        Ok(None)
+        Ok(Filled::Empty)
     }
 
-    /// One try: `None` when it is rejected (or, for a drawn slot, when the
-    /// classifier fails).
+    /// One try: `Spent` when it is rejected (or, for a drawn slot, when the
+    /// classifier fails), `ChainEnds` when a compact proposal lies beyond
+    /// the edge.
     fn attempt(
         &self,
         slot: Slot<'_>,
@@ -257,7 +304,7 @@ where
         longitudes: &mut ChaCha8Rng,
         placed: &[Placed],
         trace: &mut Trace,
-    ) -> Result<Option<(Trial, TrialOutcome)>, SystemError> {
+    ) -> Result<Try, SystemError> {
         let ctx = self.system.ctx;
         let (proposed, provenance, archetype) = match slot {
             Slot::Asked(id, placement) => (
@@ -267,20 +314,23 @@ where
             ),
             Slot::Family(n) => {
                 let proposal = propose(ctx, n, rng, placed);
+                if ends_chain(ctx, &proposal) {
+                    return Ok(Try::ChainEnds);
+                }
                 // The rocky proposer's no-room fallback puts the planet past
                 // the ice line: the try is spent.
                 if ctx.family == Family::SolarLike
                     && proposal.kind == SlotKind::Small
                     && proposal.a.0 > ctx.ice_line.0
                 {
-                    return Ok(None);
+                    return Ok(Try::Spent);
                 }
                 // A drawn giant past Fulton's support, `30 au × ice line /
                 // 2.7 au` (G 3.1), spends the try.
                 if proposal.kind == SlotKind::Giant
                     && proposal.a.0 > FULTON_OUTER_SUPPORT.0 * ice_scale(ctx.ice_line)
                 {
-                    return Ok(None);
+                    return Ok(Try::Spent);
                 }
                 let mass = if ctx.family == Family::Compact {
                     self.compact_mass(rng)
@@ -305,7 +355,7 @@ where
         let outcome = match (self.classify)(&circular, trace) {
             Ok(outcome) => outcome,
             Err(error) if archetype.is_some() => return Err(error),
-            Err(_) => return Ok(None),
+            Err(_) => return Ok(Try::Spent),
         };
         // The class comes from the circular trial: its flux is the cause.
         let classified_flux = circular
@@ -320,10 +370,10 @@ where
         };
         let longitude = Degree(FULL_TURN.0 * uniform(longitudes));
         let Some(e) = Fraction::new(e).filter(|e| e.get() < 1.0) else {
-            return Ok(None);
+            return Ok(Try::Spent);
         };
         if !self.clear_of_the_star(proposed.a, e, &outcome) {
-            return Ok(None);
+            return Ok(Try::Spent);
         }
         let eccentricity = trace.leaf(Code::of(codes::ECCENTRICITY), e, e_provenance)?;
         let perihelion = trace.leaf(
@@ -352,12 +402,12 @@ where
         if !self.spaced(&trial, outcome.class, asked, placed)
             || !self.cleared(&trial, &outcome, placed)
         {
-            return Ok(None);
+            return Ok(Try::Spent);
         }
         let mut causes = vec![trial.mass.node(), trial.orbit.semi_major_axis.node()];
         causes.extend(classified_flux);
         trace.record(Code::of(codes::CLASS), outcome.class, &causes)?;
-        Ok(Some((trial, outcome)))
+        Ok(Try::Kept(trial, outcome))
     }
 
     /// An asked archetype's band and mass: the flux (or period)
@@ -649,4 +699,61 @@ pub(crate) fn recheck(placed: &mut Vec<Placed>, rules: &Rules) {
         }
     }
     placed.extend(ordered.into_iter().map(|(_, planet)| planet));
+}
+
+#[cfg(test)]
+mod chain_end_tests {
+    use std::cell::Cell;
+
+    use super::super::tests::parts;
+    use super::*;
+    use crate::families::tests::placed as test_planet;
+    use crate::stand_in::classify;
+
+    /// A compact family slot whose proposal lands past 1071 d ends the
+    /// chain: the slot gives `ChainEnds`, with no retry and no
+    /// classification.
+    #[test]
+    fn a_compact_slot_past_the_edge_ends_the_chain_without_a_retry() {
+        let (star, light, ctx, mut trace) = parts(7, 1.0, Family::Compact);
+        let system = System {
+            star: &star,
+            light: &light,
+            ctx: &ctx,
+            seed: Seed::new(7),
+        };
+        let ice_line = trace
+            .record(
+                Code::of(codes::ICE_LINE),
+                ctx.ice_line,
+                &[star.state.mass.node()],
+            )
+            .unwrap();
+        let calls = Cell::new(0_u32);
+        let classify = |trial: &Trial, trace: &Trace| {
+            calls.set(calls.get() + 1);
+            classify(trial, trace)
+        };
+        let placer = Placer {
+            system: &system,
+            ice_line,
+            rules: Rules {
+                host: ctx.host,
+                age: *star.age.value(),
+                sigma_e: k50_sigma_e(&ctx),
+                total: 4,
+            },
+            slope: None,
+            classify: &classify,
+        };
+        // The next period is at least 1.2 times 1000 d: past 1071 d on
+        // every try.
+        let a = orbit::semi_major_axis(Day(1000.0), ctx.host);
+        let placed = [test_planet(&mut trace, 1.0, a.0, 0.0, false)];
+        let filled = placer
+            .slot(Slot::Family(1), "slot-1".to_owned(), &placed, &mut trace)
+            .unwrap();
+        assert!(matches!(filled, Filled::ChainEnds));
+        assert_eq!(calls.get(), 0, "the classifier is never called");
+    }
 }

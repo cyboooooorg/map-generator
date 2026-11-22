@@ -374,3 +374,33 @@ fn sparse_planets_stay_between_the_star_and_the_survey_edge() {
         assert!((ECCENTRIC_GIANT_MASS.0..ECCENTRIC_GIANT_MASS.1).contains(&jupiters));
     }
 }
+
+#[test]
+fn compact_chains_end_beyond_1071_days() {
+    for host in [0.08, 1.0, 8.0] {
+        let mut ctx = context(Family::Compact, 0, false);
+        ctx.host = SolarMass(host);
+        let at = |days: f64| Proposal {
+            mass: ctx.system_mass,
+            a: orbit::semi_major_axis(Day(days), ctx.host),
+            kind: SlotKind::Small,
+        };
+        assert!(!ends_chain(&ctx, &at(1070.0)), "{host}");
+        assert!(!ends_chain(&ctx, &at(1071.0 * (1.0 - 1e-9))), "{host}");
+        assert!(ends_chain(&ctx, &at(1072.0)), "{host}");
+    }
+    for family in [
+        Family::SolarLike,
+        Family::HotJupiter,
+        Family::EccentricGiants,
+        Family::Sparse,
+    ] {
+        let ctx = context(family, 0, false);
+        let far = Proposal {
+            mass: ctx.system_mass,
+            a: orbit::semi_major_axis(Day(5_000.0), ctx.host),
+            kind: SlotKind::Small,
+        };
+        assert!(!ends_chain(&ctx, &far), "{family}");
+    }
+}

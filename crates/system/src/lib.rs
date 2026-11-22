@@ -33,4 +33,6 @@ use timeline::EngineVersion;
 ///
 /// 2: the system draw places planets (designations, body seeds, spins),
 /// so the same `Inputs` give another system.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(2);
+/// 3: a compact chain ends at 1071 d (#630), so compact systems lose
+/// their far planets.
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(3);

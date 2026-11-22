@@ -217,7 +217,8 @@ tools regenerate them.
 
 - **Family**, one of five, evenly (`Definition:`):
   1. compact: 4-7 small planets, similar sizes
-     ("peas in a pod", Weiss et al. 2018), near resonances;
+     ("peas in a pod", Weiss et al. 2018), near resonances; the chain
+     ends at 1071 d (Weiss et al. 2018 § IV);
   2. solar-like: rocky planets inside the ice line, giants beyond;
   3. hot Jupiter: one giant at a few days, no close companions, maybe a
      distant one;

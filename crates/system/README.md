@@ -38,7 +38,9 @@ runs on a scratch trace.
   mass and an axis, classifies a circular trial, draws the eccentricity
   from the class, and checks the star, the Roche floor, the spacing to
   every placed planet and the hot Jupiters' cleared zone. 20 tries per
-  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. More
+  slot: a drawn slot stays empty, an asked one fails with `NoRoom`. A
+  compact try past 1071 d ends the chain: its slot and the later ones
+  stay empty, with no retry. More
   than 649 planets is `TooManyPlanets`, before any allocation.
 - **Streams.** The perihelion longitude draws from `orbit/<trial label>`;
   the body seed is `derive(<designation text>)`, the spin
@@ -103,9 +105,9 @@ it wraps `ContractError` and the host errors of `science::stellar`.
 
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
   are the only stored truth.
-- `ENGINE_VERSION` (2 since the planet draw) is bumped whenever a
-  timeline or a world could change for the same inputs; it invalidates
-  the caches, which are never migrated.
+- `ENGINE_VERSION` (3 since compact chains end at 1071 d) is bumped
+  whenever a timeline or a world could change for the same inputs; it
+  invalidates the caches, which are never migrated.
 
 ## Ports
 
