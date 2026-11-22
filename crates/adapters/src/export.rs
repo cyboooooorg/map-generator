@@ -56,6 +56,11 @@ impl From<WorldError> for ExportError {
 /// through `ramp`) under `out`, creating it when missing.
 ///
 /// The projection is made first: when it fails, nothing is created.
+///
+/// # Panics
+///
+/// When `width` is zero or odd (the projection of [`world::project`]
+/// needs an even, non-zero width).
 pub fn export(
     out: &Path,
     world: &World,

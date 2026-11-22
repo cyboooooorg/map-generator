@@ -86,6 +86,10 @@ next pull request:
 | `--root PATH` | The store's root directory. Default `map-generator-store` |
 | `--cache-budget SIZE` | The cache budget in bytes, with `KiB`, `MiB`, `GiB` or `TiB`. Default 2 GiB. SI suffixes (`MB`) are refused |
 
+The pipeline refuses a PNG width that is odd or zero (`cli.world.width`)
+before touching the store, and stamps the world with the body timeline's
+engine version.
+
 ## Exit codes
 
 | Code | Meaning |

@@ -3,9 +3,10 @@
 
 use std::fmt;
 
-use adapters::{ExportError, StoreError};
+use adapters::{CodecError, ExportError, StoreError};
 use system::SystemError;
 use timeline::{ContractError, Designation};
+use world::WorldError;
 use world::relief::ReliefError;
 
 use crate::explain::ExplainError;
@@ -32,6 +33,12 @@ pub enum CliError {
     Export(ExportError),
     /// The body's relief could not be built.
     Relief(ReliefError),
+    /// A field was refused by the world; its text is the world's own code.
+    World(WorldError),
+    /// The world could not be quantised through the cache codec.
+    Codec(CodecError),
+    /// The PNG width is odd or zero.
+    Width(u32),
     /// The system has no such body.
     NoSuchBody(Designation),
     /// The body is a star: only planets have a surface to map.
@@ -52,6 +59,9 @@ impl fmt::Display for CliError {
             Self::Store(error) => write!(f, "cli.store: {error}"),
             Self::Export(error) => write!(f, "{error}"),
             Self::Relief(error) => write!(f, "{error}"),
+            Self::World(error) => write!(f, "{error}"),
+            Self::Codec(error) => write!(f, "cli.world.codec: {error}"),
+            Self::Width(width) => write!(f, "cli.world.width: {width} (even, above 0)"),
             Self::NoSuchBody(body) => write!(f, "cli.world.no-such-body: {body}"),
             Self::NotAPlanet(body) => write!(f, "cli.world.not-a-planet: {body}"),
             Self::NoPresentKeyframe(body) => {
@@ -114,5 +124,17 @@ impl From<ExportError> for CliError {
 impl From<ReliefError> for CliError {
     fn from(error: ReliefError) -> Self {
         Self::Relief(error)
+    }
+}
+
+impl From<WorldError> for CliError {
+    fn from(error: WorldError) -> Self {
+        Self::World(error)
+    }
+}
+
+impl From<CodecError> for CliError {
+    fn from(error: CodecError) -> Self {
+        Self::Codec(error)
     }
 }

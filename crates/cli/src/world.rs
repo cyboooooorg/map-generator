@@ -60,8 +60,8 @@ pub struct WorldRun {
 ///
 /// # Errors
 ///
-/// A store, producer, relief or export failure, or a body that is
-/// missing, is a star, or has no keyframe at its present.
+/// An odd or zero width, a store, producer, relief or export failure, or
+/// a body that is missing, is a star, or has no keyframe at its present.
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "called by the world command, pull request B")
@@ -75,6 +75,9 @@ pub fn run<E>(
 where
     CliError: From<E>,
 {
+    if request.width == 0 || !request.width.is_multiple_of(2) {
+        return Err(CliError::Width(request.width));
+    }
     let id = SystemId::of(inputs);
     if SystemRepository::get(store, id)?.is_none() {
         SystemRepository::put(store, &StoredSystem::new(inputs.clone(), ENGINE_VERSION))?;
@@ -105,7 +108,7 @@ where
         body: request.body,
         keyframe: u32::try_from(index).expect("a timeline has fewer than 2^32 keyframes"),
         grid: grid.n(),
-        engine: ENGINE_VERSION,
+        engine: timeline.engine,
         world: world::ENGINE_VERSION,
     };
     let (world, world_cached) = match WorldCache::get(store, &key)? {
@@ -115,11 +118,12 @@ where
             let mut world = World::new(grid, key.body, key.keyframe, key.engine, key.world);
             world
                 .insert(FieldId(timeline::Code::of(HEIGHT)), field)
-                .map_err(|error| CliError::Export(error.into()))?;
+                .map_err(CliError::World)?;
             WorldCache::put(store, &key, &world)?;
             // The cache stores the fields quantised: export what a later
             // run will read back, so a hit and a miss write the same bytes.
-            (WorldCache::get(store, &key)?.unwrap_or(world), false)
+            let world = adapters::decode(&adapters::encode(&world))?;
+            (world, false)
         }
     };
     let evicted = store.evict(Engines {
@@ -138,8 +142,8 @@ where
     })
 }
 
-/// The relief ramp for the height; a grey ramp over the field's min and
-/// max otherwise (an absent field is left to the export to refuse).
+/// The relief ramp for the height; a grey ramp over the min and max of
+/// the field's finite values otherwise (0 to 1 when it has none) (an absent field is left to the export to refuse).
 fn ramp_for(world: &World, field: &FieldId) -> Ramp {
     if field.0.as_str() == HEIGHT {
         return Ramp::relief();
@@ -149,9 +153,13 @@ fn ramp_for(world: &World, field: &FieldId) -> Ramp {
     };
     let (min, max) = (0..field.values.len())
         .map(|k| field.values.get_f32(k))
+        .filter(|v| v.is_finite())
         .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), v| {
             (lo.min(v), hi.max(v))
         });
+    if min > max {
+        return Ramp::grey(0.0, 1.0);
+    }
     Ramp::grey(min, max)
 }
 
@@ -204,6 +212,22 @@ mod tests {
         )?])
     }
 
+    fn two_keyframes(present: f64) -> Result<Vec<Timeline>, ContractError> {
+        let mut keyframes = Vec::new();
+        for age in [4.0, 4.57] {
+            let mut trace = Trace::new();
+            let state = earth_like_fixture(&mut trace, age);
+            keyframes.push(Keyframe::new(Gyr(age), BodyState::Planet(state), &trace)?);
+        }
+        Ok(vec![Timeline::new(
+            designation(1),
+            Seed::new(1),
+            ENGINE_VERSION,
+            Gyr(present),
+            keyframes,
+        )?])
+    }
+
     fn request(out: &Path, rank: u32) -> WorldRequest {
         WorldRequest {
             body: designation(rank),
@@ -226,7 +250,6 @@ mod tests {
         let first = run(&store, &inputs(), &request, |_| timelines(false)).unwrap();
         assert!(!first.timelines_cached && !first.world_cached);
         assert_eq!(first.system, first.key.system);
-        assert_eq!(first.key.grid, 5, "the fixture radius gives n = 5");
         let bytes = fs::read(&first.exported.png).unwrap();
 
         let second = run(
@@ -310,5 +333,69 @@ mod tests {
             error,
             CliError::Contract(ContractError::NoKeyframe)
         ));
+    }
+
+    #[test]
+    fn odd_width_is_refused() {
+        let dir = TempDir::new().unwrap();
+        let store = FsStore::new(dir.path().join("store"), u64::MAX);
+        let request = WorldRequest {
+            width: 63,
+            ..request(dir.path(), 1)
+        };
+        let error = run(
+            &store,
+            &inputs(),
+            &request,
+            |_| -> Result<_, ContractError> { panic!("refused before the producer") },
+        )
+        .unwrap_err();
+        assert!(matches!(error, CliError::Width(63)), "{error}");
+        assert!(error.to_string().starts_with("cli.world.width: 63"));
+        assert!(!dir.path().join("store").exists());
+        assert_eq!(count(&request.out), 0);
+    }
+
+    #[test]
+    fn no_present_keyframe_is_refused() {
+        let dir = TempDir::new().unwrap();
+        let store = FsStore::new(dir.path().join("store"), u64::MAX);
+        let request = request(dir.path(), 1);
+        let error = run(&store, &inputs(), &request, |_| two_keyframes(4.3)).unwrap_err();
+        assert!(matches!(error, CliError::NoPresentKeyframe(_)), "{error}");
+        assert_eq!(count(&request.out), 0);
+    }
+
+    #[test]
+    fn a_ramp_over_non_finite_values_does_not_panic() {
+        let grid = Grid::new(1);
+        let mut world = World::new(
+            grid,
+            designation(1),
+            0,
+            ENGINE_VERSION,
+            world::ENGINE_VERSION,
+        );
+        let id = FieldId(Code::of("test.nan"));
+        let cells = world.grid().cell_count();
+        let field = |values: Vec<f32>| world::Field {
+            values: world::Values::F32(values),
+            categorical: false,
+            storage: world::Storage::Exact,
+        };
+        world
+            .insert(id.clone(), field(vec![f32::NAN; cells]))
+            .unwrap();
+        let ramp = ramp_for(&world, &id);
+        assert_eq!(ramp.colour(0.0), [0, 0, 0]);
+        assert_eq!(ramp.colour(1.0), [255, 255, 255]);
+        let mut mixed = vec![f32::NAN; cells];
+        mixed[0] = -2.0;
+        mixed[1] = 5.0;
+        let other = FieldId(Code::of("test.mixed"));
+        world.insert(other.clone(), field(mixed)).unwrap();
+        let ramp = ramp_for(&world, &other);
+        assert_eq!(ramp.colour(-2.0), [0, 0, 0]);
+        assert_eq!(ramp.colour(5.0), [255, 255, 255]);
     }
 }

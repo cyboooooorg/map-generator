@@ -58,7 +58,9 @@ writes `<out>/<slug>-<keyframe>.world` (the codec bytes) and
 creating `out` when needed. `Ramp::relief()` is the hypsometric tint for
 heights in metres: blues under water, green at the coast, then ochre,
 brown and white at 6000 m. Errors display their code first
-(`export.io(..)` or the world error's own code).
+(`export.io(..)` or the world error's own code). `export` panics on a
+zero or odd `width`: callers check it (the CLI refuses it with
+`cli.world.width`).
 
 ## Ports
 
