@@ -27,7 +27,8 @@ use ::noise::{NoiseFn, Perlin};
 use science::relief::plates::{
     BOUNDARY_WINDOW, Boundary, PLATE_COUNT, PLATE_RMS_SPEED, PLATE_WEIGHT, RELIEF_LEVELS,
     RELIEF_SPEED, SUBPLATE_FREQUENCY, SUBPLATE_WARP, SUBPLATE_WARP_FREQUENCY, arc_weight,
-    boundary_height, orogeny_weight, relief_level, relief_reach, relief_strength, slab_pull_speed,
+    boundary_height, orogen_elevation, orogeny_weight, relief_level, relief_reach, relief_strength,
+    slab_pull_speed,
 };
 use science::relief::spectrum::relief_scale;
 use science::units::{Metre, MetrePerSecond, MetrePerSecondSquared};
@@ -105,6 +106,11 @@ const SUBDUCTIONS: [Boundary; 2] = [Boundary::Andean, Boundary::IslandArc];
 pub struct PlateRelief {
     /// Height added (negative: lowered), metres.
     pub height: Vec<f32>,
+    /// Elevation above sea level the orogen of the strongest orogeny
+    /// weight (a collision range or an Andean plateau) raises the column
+    /// to where that weight is 1, metres, 0 where none: an elevation, not
+    /// a height to add ([`orogen_elevation`], scaled by [`relief_scale`]).
+    pub elevation: Vec<f32>,
     /// Weight of a volcanic arc, in `[0, 1]`: where arc cones stand.
     pub arc: Vec<f32>,
     /// Weight of mountain ridges, in `[0, 1]`: collision ranges and
@@ -219,8 +225,10 @@ impl PlateMap {
     /// arc the plates that mostly override (whole plates, so the side never
     /// switches inside one); the trench is on both. The relief therefore
     /// steps only across plate boundaries and coastlines. Heights of
-    /// all kinds add up; the arc and orogeny weights take the strongest
-    /// kind. Heights are [`boundary_height`] scaled by [`relief_scale`],
+    /// all kinds add up; the orogens' elevations, the arc and orogeny
+    /// weights take the strongest kind, the elevation that of the kind
+    /// with the strongest orogeny. Heights are [`boundary_height`] and
+    /// elevations [`orogen_elevation`], scaled by [`relief_scale`],
     /// except the ridges' (thermal isostasy, the same at any gravity).
     pub fn relief(
         &self,
@@ -276,6 +284,7 @@ impl PlateMap {
         let scale = relief_scale(gravity);
         let mut out = PlateRelief {
             height: vec![0.0; n],
+            elevation: vec![0.0; n],
             arc: vec![0.0; n],
             orogeny: vec![0.0; n],
         };
@@ -338,7 +347,11 @@ impl PlateMap {
                         orogeny_weight(kind, d, hi).get() - orogeny_weight(kind, d, lo).get();
                 }
             }
+            let top = (orogen_elevation(kind).0 * gain) as f32;
             for k in 0..n {
+                if orogeny[k] as f32 > out.orogeny[k] {
+                    out.elevation[k] = top;
+                }
                 out.arc[k] = out.arc[k].max(arc[k] as f32);
                 out.orogeny[k] = out.orogeny[k].max(orogeny[k] as f32);
             }

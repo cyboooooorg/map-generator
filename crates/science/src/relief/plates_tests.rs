@@ -5,13 +5,21 @@ fn speed(cm_per_year: f64) -> MetrePerSecond {
     MetrePerSecond::from(CentimetrePerYear(cm_per_year))
 }
 
+/// The whole relief of a boundary at `d` on a surface at sea level: what
+/// it adds ([`boundary_height`]) and the lift of its orogen,
+/// [`orogeny_weight`] times [`orogen_elevation`].
+fn whole(kind: Boundary, d: Metre, convergence: MetrePerSecond) -> f64 {
+    boundary_height(kind, d, convergence).0
+        + orogeny_weight(kind, d, convergence).get() * orogen_elevation(kind).0
+}
+
 /// Heights of a profile from `from` to `to` km, every 0.5 km.
 fn profile(kind: Boundary, from: f64, to: f64, convergence: MetrePerSecond) -> Vec<(f64, f64)> {
     let steps = ((to - from) * 2.0) as usize;
     (0..=steps)
         .map(|i| {
             let d = from + i as f64 * 0.5;
-            (d, boundary_height(kind, Metre(d * 1e3), convergence).0)
+            (d, whole(kind, Metre(d * 1e3), convergence))
         })
         .collect()
 }
@@ -129,12 +137,34 @@ fn collisions_reach_tibets_height() {
     let width = (high[high.len() - 1] - high[0]) * 1e3;
     assert!((400e3..1000e3).contains(&width), "{width}");
     // Slower convergence, lower range; none below RELIEF_SPEED.
-    let slow = boundary_height(Boundary::Collision, Metre(0.0), speed(2.0)).0;
+    let slow = whole(Boundary::Collision, Metre(0.0), speed(2.0));
     assert!(slow > 0.0 && slow < top, "{slow}");
-    assert_eq!(
-        boundary_height(Boundary::Collision, Metre(0.0), RELIEF_SPEED.0),
-        Metre(0.0)
+    assert_eq!(whole(Boundary::Collision, Metre(0.0), RELIEF_SPEED.0), 0.0);
+}
+
+#[test]
+fn orogens_are_elevations_not_uplifts() {
+    // Royden et al. 2008 and Allmendinger et al. 1997 give elevations
+    // above sea level: the plateau is in `orogen_elevation` alone, and
+    // `boundary_height` adds none of it.
+    let v = RELIEF_SPEED.1;
+    for d in [0.0, andean_centre().0] {
+        assert_eq!(
+            boundary_height(Boundary::Collision, Metre(d), v),
+            Metre(0.0)
+        );
+    }
+    assert!(
+        boundary_height(Boundary::Andean, Metre(andean_centre().0), v)
+            .0
+            .abs()
+            < 1.0
     );
+    assert_eq!(orogen_elevation(Boundary::Andean), Metre(3.65e3));
+    assert_eq!(orogen_elevation(Boundary::Collision), Metre(5e3));
+    for kind in [Boundary::IslandArc, Boundary::Rift, Boundary::Ridge] {
+        assert_eq!(orogen_elevation(kind), Metre(0.0));
+    }
 }
 
 /// Ported from `legacy-final:crates/mapgen/src/plates.rs:1212`.
@@ -277,10 +307,10 @@ fn profiles_vanish_beyond_their_reach() {
         let v = relief_level(kind, 1.0);
         let reach = relief_reach(kind, v);
         let peak = (-2000..=2000)
-            .map(|i| boundary_height(kind, Metre(f64::from(i) * 1e3), v).0.abs())
+            .map(|i| whole(kind, Metre(f64::from(i) * 1e3), v).abs())
             .fold(0.0, f64::max);
         for d in [reach.0, -reach.0, 1.5 * reach.0] {
-            let h = boundary_height(kind, Metre(d), v).0.abs();
+            let h = whole(kind, Metre(d), v).abs();
             assert!(h < 1e-3 * peak, "{kind:?} at {d}: {h} of {peak}");
         }
     }

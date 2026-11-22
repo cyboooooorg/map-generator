@@ -134,9 +134,11 @@ pub const ISLAND_ARC_UPLIFT: Metre = Metre(3e3);
 /// calibration 7).
 pub const ISLAND_ARC_SIGMA: Metre = Metre(60e3);
 
-/// Source: mean elevation of the Altiplano-Puna, 3.65 km between 13 and
-/// 29°S (Allmendinger, Jordan, Kay & Isacks 1997, p. 142, after Isacks
-/// 1988, doi:10.1146/annurev.earth.25.1.139).
+/// Source: mean elevation of the Altiplano-Puna above sea level, 3.65 km
+/// between 13 and 29°S (Allmendinger, Jordan, Kay & Isacks 1997, p. 142,
+/// after Isacks 1988, doi:10.1146/annurev.earth.25.1.139). An elevation,
+/// not an uplift: the plateau raises the column to it
+/// ([`orogen_elevation`]).
 pub const ANDEAN_UPLIFT: Metre = Metre(3.65e3);
 
 /// Source: width of the Altiplano-Puna, 375 km, the middle of
@@ -145,9 +147,11 @@ pub const ANDEAN_UPLIFT: Metre = Metre(3.65e3);
 /// spans this width inland ([`andean_centre`]).
 pub const ANDEAN_WIDTH: Metre = Metre(375e3);
 
-/// Source: height of a collision range, 5 km, the Tibetan plateau's
-/// (Royden, Burchfiel & van der Hilst 2008, p. 1054,
-/// doi:10.1126/science.1155371): an upper bound for an orogen.
+/// Source: elevation of a collision range above sea level, 5 km, the
+/// Tibetan plateau's (Royden, Burchfiel & van der Hilst 2008, p. 1054,
+/// doi:10.1126/science.1155371): an upper bound for an orogen. An
+/// elevation, not an uplift: the range raises the column to it
+/// ([`orogen_elevation`]).
 pub const COLLISION_HEIGHT: Metre = Metre(5e3);
 
 /// Calibration: sigma of the collision range's bump, 350 km (full width
@@ -267,8 +271,8 @@ pub fn andean_centre() -> Metre {
 /// - Trench (Andean, island arc): [`TRENCH_DEPTH`] at the boundary, the
 ///   trench's axis, [`TRENCH_WIDTH`] wide.
 /// - Island arc: [`ISLAND_ARC_UPLIFT`] over the arc ([`arc_distance`]).
-/// - Andean: [`ANDEAN_UPLIFT`] over [`ANDEAN_WIDTH`] behind the arc.
-/// - Collision: [`COLLISION_HEIGHT`] over the boundary.
+/// - Andean plateau and collision range: nothing here; their heights are
+///   elevations above sea level, [`orogen_elevation`].
 /// - Rift: the axis [`RIFT_AXIS_DEPTH`] down, [`RIFT_WIDTH`] wide, between
 ///   shoulders [`RIFT_SHOULDER_HEIGHT`] up.
 /// - Ridge: the young floor above the floor [`RIDGE_FLOOR_AGE`] old, its
@@ -282,10 +286,8 @@ pub fn boundary_height(kind: Boundary, distance: Metre, convergence: MetrePerSec
     let closing = closing(convergence.0);
     let trench = TRENCH_DEPTH * (closing * bump(d, 0.0, sigma(TRENCH_WIDTH)));
     match kind {
-        Boundary::Collision => COLLISION_HEIGHT * orogeny_weight(kind, distance, convergence).get(),
-        Boundary::Andean => {
-            ANDEAN_UPLIFT * orogeny_weight(kind, distance, convergence).get() - trench
-        }
+        Boundary::Collision => Metre(0.0),
+        Boundary::Andean => Metre(0.0) - trench,
         Boundary::IslandArc => {
             let arc = bump(d, arc_distance().0, ISLAND_ARC_SIGMA.0);
             ISLAND_ARC_UPLIFT * (closing * arc) - trench
@@ -298,6 +300,21 @@ pub fn boundary_height(kind: Boundary, distance: Metre, convergence: MetrePerSec
         }
         Boundary::Ridge => ridge_height(d.abs(), -convergence.0),
         Boundary::Transform => Metre(0.0),
+    }
+}
+
+/// Elevation above sea level the orogen of a boundary of kind `kind`
+/// raises the column to, at Earth's gravity: [`COLLISION_HEIGHT`] for a
+/// collision, [`ANDEAN_UPLIFT`] for the Andean plateau, zero for the other
+/// kinds. Both sources give elevations above sea level, so the world lifts
+/// a cell by `w · max(0, elevation − h)`, `w` the [`orogeny_weight`] there
+/// and `h` the local height above the sea the model built: the full
+/// elevation where `w` is 1, and never a height on top of the platform.
+pub fn orogen_elevation(kind: Boundary) -> Metre {
+    match kind {
+        Boundary::Collision => COLLISION_HEIGHT,
+        Boundary::Andean => ANDEAN_UPLIFT,
+        _ => Metre(0.0),
     }
 }
 

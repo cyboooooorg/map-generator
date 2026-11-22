@@ -247,7 +247,12 @@ in `science::relief`, the pass in `world::relief`.
    Boutelier 2005), so about 170 km.
 6. **Ranges.** Over a continental margin, the Altiplano's 3.65 km over a
    band 350–400 km wide (Allmendinger et al. 1997); in a collision, up to
-   Tibet's 5 km (Royden et al. 2008).
+   Tibet's 5 km (Royden et al. 2008). Both are elevations above sea
+   level, so a range lifts the column to them rather than adding them on
+   top of the continent: a cell gains $w \cdot \max(0, E - h)$, $E$ the
+   published elevation, $w$ the range's weight there (1 at its crest) and
+   $h$ the cell's height above the sea the model built before the plates
+   raised it.
 7. **Rifts.** Under 100 km wide (Hopper & Buck 1996; Buck 2007).
 8. **Ridges.** Parsons & Sclater's $2.5 + 0.35\sqrt{t}$ km, the floor's
    age $t$ in Ma read from the distance and the spreading rate, as in the

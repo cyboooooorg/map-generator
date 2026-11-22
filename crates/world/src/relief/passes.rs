@@ -9,9 +9,9 @@
 //! radius, the gravity, the analogue body, the regime (plates or not), the
 //! heat flux and the ocean share of a [`Forcing`].
 
-use super::ReliefError;
 use super::noise::{Octaves, Spectrum, legacy_unit};
 use super::plates::unit;
+use super::{ReliefError, sea_level};
 use crate::grid::Grid;
 use crate::stats::{area_quantile, distance_to};
 use science::relief::crust::{CONTINENTAL_SLOPE, continental_share, crust, floating_height};
@@ -340,6 +340,34 @@ pub fn mountains(grid: &Grid, body: Seed, forcing: &Forcing, weight: &[f32]) -> 
         .zip(weight)
         .map(|(&c, &w)| (c * f64::from(w) * scale) as f32)
         .collect()
+}
+
+/// Raises the columns under the orogens towards their elevation above the
+/// sea: each cell gains `w · max(0, e − (height − sea))`, `w` its orogeny
+/// weight and `e` its orogen's elevation
+/// ([`super::PlateRelief::orogeny`] and [`super::PlateRelief::elevation`]),
+/// the sea the level that `ocean_share` sets on `height` ([`sea_level`]).
+/// The sources give the orogens' elevations above sea level, so what is
+/// added is the lift from the local surface the model built, never a
+/// height on top of it: where `w` is 1 the column stands at `e`, and a
+/// column already higher is left alone.
+///
+/// # Panics
+///
+/// Panics when `weight` or `elevation` does not hold one value per cell.
+pub fn raise_orogens(
+    grid: &Grid,
+    height: &mut [f32],
+    weight: &[f32],
+    elevation: &[f32],
+    ocean_share: Option<Fraction>,
+) {
+    assert_eq!(weight.len(), height.len(), "one weight per cell");
+    assert_eq!(elevation.len(), height.len(), "one elevation per cell");
+    let sea = sea_level(grid, height, ocean_share);
+    for ((h, &w), &e) in height.iter_mut().zip(weight).zip(elevation) {
+        *h += w * (e - (*h - sea)).max(0.0);
+    }
 }
 
 /// A volcano's cone and where its axis stands.

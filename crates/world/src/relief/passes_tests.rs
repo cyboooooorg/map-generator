@@ -380,3 +380,45 @@ fn the_highest_crest_stands_at_the_mountain_relief() {
     let top = f64::from(m.iter().copied().fold(0.0, f32::max));
     assert!((top - want / 2.0).abs() < 1.0, "{top}");
 }
+
+#[test]
+fn orogens_raise_the_column_to_their_elevation_not_above_it() {
+    // Tibet's 5 km is an elevation above sea level (Royden et al. 2008).
+    let grid = Grid::new(4);
+    let n = grid.cell_count();
+    // Half the area at -4 km, half at +1 km: a dry world's mean is the
+    // sea, so the halves stand at -2.5 and +2.5 km.
+    let mut h: Vec<f32> = (0..n)
+        .map(|k| {
+            if grid.point(k)[0] > 0.0 {
+                1000.0
+            } else {
+                -4000.0
+            }
+        })
+        .collect();
+    let sea = sea_level(&grid, &h, None);
+    let before = h.clone();
+    let weight: Vec<f32> = (0..n).map(|k| [1.0, 0.5, 0.0][k % 3]).collect();
+    let elevation = vec![5000.0_f32; n];
+    raise_orogens(&grid, &mut h, &weight, &elevation, None);
+    for k in 0..n {
+        let local = before[k] - sea;
+        let want = before[k] + weight[k] * (5000.0 - local).max(0.0);
+        assert!((h[k] - want).abs() < 1e-2, "{k}: {} against {want}", h[k]);
+        if weight[k] == 1.0 {
+            assert!((h[k] - sea - 5000.0).abs() < 1e-2);
+        }
+    }
+    // A column already above the elevation is left alone.
+    let mut high = vec![9000.0_f32; n];
+    high[0] = -9000.0;
+    let kept = high.clone();
+    raise_orogens(&grid, &mut high, &vec![1.0; n], &vec![1000.0; n], None);
+    let sea = sea_level(&grid, &kept, None);
+    for k in 1..n {
+        if kept[k] - sea >= 1000.0 {
+            assert_eq!(high[k], kept[k]);
+        }
+    }
+}

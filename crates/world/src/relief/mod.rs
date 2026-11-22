@@ -16,7 +16,7 @@ use std::fmt;
 use timeline::{PlanetState, Seed};
 
 pub use noise::{Octaves, Spectrum, fbm, ridged};
-pub use passes::{Forcing, continents, highlands, mountains, volcanoes};
+pub use passes::{Forcing, continents, highlands, mountains, raise_orogens, volcanoes};
 pub use plates::{PlateMap, PlateRelief};
 
 /// Why a body's relief cannot be built.
@@ -64,6 +64,13 @@ pub fn generate(state: &PlanetState, seed: Seed, grid: &Grid) -> Result<Field, R
         for (h, add) in height.iter_mut().zip(&relief.height) {
             *h += add;
         }
+        raise_orogens(
+            grid,
+            &mut height,
+            &relief.orogeny,
+            &relief.elevation,
+            forcing.ocean_share,
+        );
         (relief.orogeny, relief.arc)
     } else {
         (highlands(grid, seed), vec![0.0; grid.cell_count()])

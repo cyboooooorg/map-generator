@@ -126,8 +126,8 @@ One row per constant of plan Tasks 2-6. Tag: `Source`, `Calibration` or
 | trench width | 31-93 | km | Source | Zhang et al. 2018, X0, axis to zero crossing [V] |
 | value used inside each range | midpoint: 2.8 km, 62 km | — | Definition | the middle of a sourced range |
 | rift width | under 100 | km | Source | Hopper & Buck 1996 [V]; Buck 2007 [V] |
-| collision height | 5 | km | Source | Royden et al. 2008, Tibet [V] |
-| Andean uplift | 3.65 over 350-400 | km | Source | Allmendinger et al. 1997, Altiplano-Puna [V] |
+| collision height | 5 | km | Source | Royden et al. 2008, Tibet [V]; an elevation above sea level, the column is lifted to it |
+| Andean uplift | 3.65 over 350-400 | km | Source | Allmendinger et al. 1997, Altiplano-Puna [V]; an elevation above sea level, as the collision height |
 | `ridge_depth` | 2.5 + 0.35 √(t / Ma) | km | Source | Parsons & Sclater 1977, 0-70 Ma [V, abstract] |
 
 ### Volcanoes (Task 4)

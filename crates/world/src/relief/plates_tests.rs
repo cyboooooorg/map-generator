@@ -3,7 +3,7 @@ use crate::stats::distance_to;
 use science::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
 use science::relief::plates::{
     Boundary, PLATE_COUNT, PLATE_RMS_SPEED, RELIEF_LEVELS, RELIEF_SPEED, TRENCH_DEPTH,
-    TRENCH_WIDTH, boundary_height, relief_strength,
+    TRENCH_WIDTH, boundary_height, orogen_elevation, orogeny_weight, relief_strength,
 };
 
 /// A body of 306 km radius: on `Grid::new(GRID)` its cells are about
@@ -129,7 +129,7 @@ fn boundaries_raise_ranges_and_arcs_and_sink_trenches() {
     let relief = map.relief(&grid, radius, STANDARD_GRAVITY);
     // Each kind's relief apart (they add up): a trench next to a
     // collision range is still a trench.
-    let of = |kinds: &[Boundary]| map.relief_of(&grid, radius, STANDARD_GRAVITY, kinds).height;
+    let of = |kinds: &[Boundary]| whole(&map.relief_of(&grid, radius, STANDARD_GRAVITY, kinds));
     let subductions = of(&[Boundary::Andean, Boundary::IslandArc]);
     let collisions = of(&[Boundary::Collision]);
     let cells = classified(&grid, &map);
@@ -217,6 +217,14 @@ fn boundaries_raise_ranges_and_arcs_and_sink_trenches() {
     assert!(median < 0.05, "orogeny {median} on the median ridge cell");
 }
 
+/// The relief of the boundaries on a surface at sea level: what they add
+/// and the lift of their orogens, the orogeny weight times the elevation.
+fn whole(relief: &PlateRelief) -> Vec<f32> {
+    (0..relief.height.len())
+        .map(|k| relief.height[k] + relief.orogeny[k] * relief.elevation[k])
+        .collect()
+}
+
 /// The kinds of boundary that build relief.
 const RELIEF_KINDS: [Boundary; 5] = [
     Boundary::Collision,
@@ -234,8 +242,11 @@ fn profile(kind: Boundary, step: f64) -> (f64, f64) {
         let v = MetrePerSecond(RELIEF_SPEED.1.0 * f64::from(i) / 10.0);
         for j in -400..400 {
             let d = f64::from(j) * step / 4.0;
-            let a = boundary_height(kind, Metre(d), v).0;
-            let b = boundary_height(kind, Metre(d + step), v).0;
+            let at = |d: f64| {
+                boundary_height(kind, Metre(d), v).0
+                    + orogeny_weight(kind, Metre(d), v).get() * orogen_elevation(kind).0
+            };
+            let (a, b) = (at(d), at(d + step));
             peak = peak.max(a.abs());
             slope = slope.max((a - b).abs());
         }
@@ -272,10 +283,10 @@ fn steps(grid: &Grid, map: &PlateMap) -> Vec<(Boundary, bool)> {
     let mut found = Vec::new();
     for kind in RELIEF_KINDS {
         let bound = step_bound(grid, kind);
-        let relief = map.relief_of(grid, SMALL_RADIUS, STANDARD_GRAVITY, &[kind]);
+        let relief = whole(&map.relief_of(grid, SMALL_RADIUS, STANDARD_GRAVITY, &[kind]));
         for k in 0..grid.cell_count() {
             for j in grid.neighbours(k) {
-                if f64::from((relief.height[k] - relief.height[j]).abs()) > bound {
+                if f64::from((relief[k] - relief[j]).abs()) > bound {
                     let crosses =
                         map.plate[k] != map.plate[j] || map.continental[k] != map.continental[j];
                     found.push((kind, crosses));
