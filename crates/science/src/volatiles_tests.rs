@@ -29,10 +29,11 @@ const CO2_TABLE: [(f64, f64); 4] = [
 /// 19.234 kJ/mol, liquid volume 0.042075 l/mol, vapour volume
 /// 0.94353 l/mol (Span and Wagner 1996), read on 2026-11-22.
 const CO2_250_K: (f64, f64, f64, f64) = (6.5007e3, 19.234e3, 0.042_075e-3, 0.943_53e-3);
-/// Source: normal sublimation temperature of CO2, 194.6855 K at 1 atm,
-/// the value the literature gives (Wikipedia, "Carbon dioxide"; the NIST
-/// Span-Wagner correlation gives 194.673 K, NIST IR 8608, read in a
-/// search result only), 0.01 K apart.
+/// Definition: normal sublimation temperature of CO2 the test reads, 194.6855 K
+/// at 1 atm, checked at 1 % of the pressure (about 0.1 K). No primary source
+/// was reachable: the value is the one a secondary page gives as Span and
+/// Wagner 1996's (doi:10.1063/1.555991, paywalled, not read), and NIST IR 8608,
+/// which quotes 194.673 K for that correlation, could not be opened as text.
 const CO2_SUBLIMATION_1_ATM_K: f64 = 194.6855;
 /// Source: NIST Chemistry WebBook, fluid properties of methane, saturation
 /// table (Setzmann and Wagner 1991, doi:10.1063/1.555898), (T in K, p in

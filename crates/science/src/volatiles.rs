@@ -171,9 +171,14 @@ pub(crate) fn co2_saturation_bar(t_k: f64) -> f64 {
 /// [`crate::water::vapour_latent_j_mol`] does: the sublimation enthalpy
 /// below the triple point, the vaporisation above, 0 from the critical
 /// point up (the legacy clamp). The moist adiabat that uses it then agrees
-/// with the curve. CO2's vapour is not ideal at its saturation pressures
-/// (17.85 bar at 250 K): this is 16.4 kJ/mol there where the real
-/// enthalpy of vaporisation is 12.7 kJ/mol; the legacy mean was 16.6.
+/// with the curve.
+///
+/// This is the ideal-vapour latent heat, a declared simplification: CO2's
+/// vapour is not ideal at its saturation pressures, so it is about 29 %
+/// above the real enthalpy of vaporisation at 250 K (16.45 kJ/mol against
+/// the 12.73 kJ/mol of the NIST WebBook table, Span and Wagner 1996). It
+/// is kept because it is consistent with the curve used in the same
+/// adiabat and behaves as the legacy did (its single 16.6 kJ/mol mean).
 #[cfg_attr(
     not(test),
     expect(
