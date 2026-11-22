@@ -16,6 +16,7 @@ pub mod planet;
 mod random;
 mod sources;
 mod spin;
+pub mod stand_in;
 pub mod star;
 
 pub use archetype::ArchetypeId;

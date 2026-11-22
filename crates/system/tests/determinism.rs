@@ -5,42 +5,9 @@
 
 use std::collections::BTreeMap;
 
-use science::units::{Dex, EarthRadius, KilogramPerCubicMetre, SolarMass};
-use system::{
-    ArchetypeId, Drawn, INPUTS_SCHEMA, Inputs, Request, SystemError, SystemRequest, Trial,
-    TrialOutcome, draw_with,
-};
-use timeline::{Code, PlanetClass, Seed, Trace, fnv1a64};
-
-/// Source: the mean density of the Earth, 5 514 kg/m³ (NASA Earth fact
-/// sheet), to turn a test density into Earth radii.
-const EARTH_DENSITY: f64 = 5514.0;
-
-/// A stand-in for the planet model: below 2 M⊕ rocky, below 10 a
-/// super-Earth, below 30 a mini-Neptune, else a gas giant (a hot Jupiter
-/// inside 0.1 au); small planets of radius M^0.27, giants of density
-/// 1 300 kg/m³.
-fn model(trial: &Trial, _: &Trace) -> Result<TrialOutcome, SystemError> {
-    let mass = trial.mass.value().0;
-    let a = trial.orbit.semi_major_axis.value().0;
-    let class = match mass {
-        m if m < 2.0 => PlanetClass::Rocky,
-        m if m < 10.0 => PlanetClass::SuperEarth,
-        m if m < 30.0 => PlanetClass::MiniNeptune,
-        _ if a < 0.1 => PlanetClass::HotJupiter,
-        _ => PlanetClass::GasGiant,
-    };
-    let (radius, density) = if mass < 30.0 {
-        (mass.powf(0.27), 5500.0)
-    } else {
-        ((mass * EARTH_DENSITY / 1300.0).cbrt(), 1300.0)
-    };
-    Ok(TrialOutcome {
-        class,
-        radius: EarthRadius(radius),
-        mean_density: KilogramPerCubicMetre(density),
-    })
-}
+use science::units::{Dex, SolarMass};
+use system::{ArchetypeId, Drawn, INPUTS_SCHEMA, Inputs, Request, SystemRequest, draw_with};
+use timeline::{Code, Seed, Trace, fnv1a64};
 
 fn inputs(seed: u64, host: Option<f64>, archetypes: &[(&str, u32)]) -> Inputs {
     Inputs {
@@ -98,7 +65,7 @@ fn digest(drawn: &Drawn) -> u64 {
 }
 
 fn draw(inputs: &Inputs) -> Drawn {
-    draw_with(inputs, &mut Trace::new(), model).unwrap()
+    draw_with(inputs, &mut Trace::new(), system::stand_in::classify).unwrap()
 }
 
 /// Eight fixed requests: three free seeds, one per forced host class, an

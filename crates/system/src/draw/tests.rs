@@ -14,7 +14,7 @@ use crate::star::Star;
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 use science::orbit::{self, Pair, TWO_PLANET_FLOOR};
-use science::units::{Dex, EarthMass, EarthRadius, KilogramPerCubicMetre, SolarMass};
+use science::units::{Dex, EarthMass, EarthRadius, SolarMass};
 use timeline::{Code, ContractError, Origin, PlanetClass, Provenance, Trace};
 
 const FAMILIES: [Family; 5] = [
@@ -25,35 +25,7 @@ const FAMILIES: [Family; 5] = [
     Family::Sparse,
 ];
 
-/// Source: the mean density of the Earth, 5 514 kg/m³ (NASA Earth fact
-/// sheet), to turn a test density into Earth radii.
-const EARTH_DENSITY: f64 = 5514.0;
-
-/// The test classifier: below 2 M⊕ rocky, below 10 a super-Earth, below
-/// 30 a mini-Neptune, else a gas giant (a hot Jupiter inside 0.1 au).
-/// Small planets: radius M^0.27, density 5 500 kg/m³; giants: radius
-/// from a density of 1 300 kg/m³.
-fn model(trial: &Trial, _: &Trace) -> Result<TrialOutcome, SystemError> {
-    let mass = trial.mass.value().0;
-    let a = trial.orbit.semi_major_axis.value().0;
-    let class = match mass {
-        m if m < 2.0 => PlanetClass::Rocky,
-        m if m < 10.0 => PlanetClass::SuperEarth,
-        m if m < 30.0 => PlanetClass::MiniNeptune,
-        _ if a < 0.1 => PlanetClass::HotJupiter,
-        _ => PlanetClass::GasGiant,
-    };
-    let (radius, density) = if mass < 30.0 {
-        (mass.powf(0.27), 5500.0)
-    } else {
-        ((mass * EARTH_DENSITY / 1300.0).cbrt(), 1300.0)
-    };
-    Ok(TrialOutcome {
-        class,
-        radius: EarthRadius(radius),
-        mean_density: KilogramPerCubicMetre(density),
-    })
-}
+use crate::stand_in::classify as model;
 
 fn system_inputs(seed: u64) -> Inputs {
     Inputs {
