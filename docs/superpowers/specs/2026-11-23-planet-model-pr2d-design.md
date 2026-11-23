@@ -139,9 +139,10 @@ in legacy's order:
    destruction at a time `t` is the sum over the sources of each one's
    flux times its own Lyman α ratio at `t` (`science::xuv::ratio`,
    `integrated_ratio`, the law the timeline's fluence comes from); the
-   onset where supply overtakes destruction is found on that sum (the
-   analytic `age_below_ratio` for one source, a bisection for more).
-   With one source the result is legacy's. A test checks that the
+   onset where supply overtakes destruction is found on that sum by
+   bisection, for one source as for several. The history is the
+   rewrite's (a share of the ZAMS light times its `scale`, #622), so the
+   yield fitted on legacy's ratio is fitted again. A test checks that the
    destruction integrated from birth to the age matches the yield times
    the fluence the timeline carries
    (`StellarSources::band_total(|s| &s.lyman_alpha)`): one law, not a
@@ -149,9 +150,11 @@ in legacy's order:
    the whole destruction) was rejected: it loses the methane that
    gathers once the young star's Lyman α has faded.
 2. `reducing` and `without_co2_if_reducing` (l.1170, l.1217): a reducing
-   air is outgassed again without CO₂, and the escape rerun on it.
-   Legacy runs the whole `bare_air` twice; the port reruns only the
-   outgassing and the steps after it. Legacy also undoes the hold-back
+   air outgasses no CO₂. Legacy runs the whole `bare_air` twice; in the
+   rewrite the shoreline's share does not read the air's composition
+   and the photolysis reads only methane, so the port decides
+   `reducing` from the methane first and outgasses CO₂ at 0 when it
+   holds, in one pass, with the same values. Legacy also undoes the hold-back
    when the climate does not leave a Titan-like air (`bare`, `mod.rs`
    l.~873, `titan_like_air`): that fallback reads the climate and comes
    with 2d-3.

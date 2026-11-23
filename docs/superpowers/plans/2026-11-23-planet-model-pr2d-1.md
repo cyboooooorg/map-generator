@@ -40,9 +40,23 @@ Legacy paths below are under `legacy-final:crates/mapgen/src/planet/`:
   destruction at age `t` is summed over the sources: each source's
   present bolometric flux times its own Lyman α share at `t`, read from
   the same `science::xuv::History` the timeline's `lyman_alpha` fluence
-  comes from (`crates/system/src/sources.rs:88`, which multiplies by the
-  history's `scale`, ZAMS over present luminosity; legacy had no
-  scale). The rewrite's history wins over legacy's.
+  comes from (`crates/system/src/sources.rs:88`). Since #622 a band is
+  a share of the star's ZAMS luminosity (Lyman α 1.043e-4), turned into
+  a share of the present light by the history's `scale`; legacy's
+  ratio was a share of the present light. The rewrite's history wins,
+  so the yield fitted on legacy's ratio is fitted again (Task 1). The
+  onset is found by bisection whatever the number of sources: one code
+  path, no analytic branch for one star.
+- **The reducing air in one pass.** Legacy ran the escape twice
+  (`mod` l.~915-1075): once to see whether methane survives, then again
+  with no CO₂ outgassed. In the rewrite the shoreline's kept share does
+  not read the air's composition (`air.rs` `shoreline`: mass, radius,
+  XUV fluence, dynamo), and the photolysis reads only the methane, so
+  the second pass gives the first pass's methane and the same share.
+  The port decides `reducing` from the methane first, then outgasses
+  CO₂ at 0 when it holds: same values as legacy's rerun, every node
+  recorded once. `air()` takes a `hold_back: bool` (`bare` passes
+  `true`), which 2d-3's fallback will set to `false`.
 - **`condense`, the N₂ and SO₂ frost curves and `SEA_METHANE_SHARE`
   are not in 2d-1:** they read the surface temperature and the liquids
   (2d-2, 2d-3).
@@ -94,9 +108,12 @@ Legacy paths below are under `legacy-final:crates/mapgen/src/planet/`:
 4. **Two stars:** two identical sources at half the flux each destroy
    what one source does, and the onset is the same. (Task 3 test
    `two_half_sources_photolyse_like_one`.)
-5. **A reducing air with no outgassed CO₂:** no rerun, as legacy's
-   `out.co2 > 0.0` guard; the trees stay those of the single pass.
-   (Task 5 test `a_reducing_air_without_co2_runs_once`.)
+5. **A reducing air:** CO₂ is 0 in every node after the outgassing
+   (kept, trapped, frozen), the other gases keep the values a
+   non-reducing pass gives them, except SO₂, whose wash-out reads the
+   lighter column; `hold_back = false` outgasses CO₂ as usual. (Task 5
+   tests `titan_outgasses_no_co2` and
+   `a_held_back_air_differs_only_by_its_co2`.)
 
 ---
 
@@ -104,7 +121,8 @@ Legacy paths below are under `legacy-final:crates/mapgen/src/planet/`:
 
 **Files:**
 
-- Create: the Wiki page "22-air-chemistry-audit" in a scratchpad clone
+- Create: the Wiki page "23-air-chemistry-audit" (22 is taken by the
+  surface water study of #663) in a scratchpad clone
   of `https://github.com/cyboooooorg/map-generator.wiki.git` (pushed
   before the PR, by the main session)
 - Modify: `docs/science/planet-atmospheres.md` (the four sections above:
@@ -116,10 +134,11 @@ carry the number; say which):
 
 1. `CH4_PER_LYMAN_ALPHA_PHOTON` (13.9): Yung, Allen & Pinto 1984
    (ApJS 55, 465) in full. Was Titan's 5.6e4 g cm⁻² lost at today's
-   rate or over a history? Recompute the yield with the rewrite's
-   Lyman α history (`History::integrated_between`, with its `scale`)
-   over Titan's age at 9.58 AU, against the loss the paper gives. Whether
-   a yield above one is physical (photosensitised dissociation).
+   rate or over a history? Fit the yield again with the rewrite's
+   Lyman α history (`History::integrated_between`, ZAMS share times
+   `scale`, #622) over Titan's age at 9.58 AU, against the loss the
+   paper gives, and say how far it moves from legacy's 13.9. Whether a
+   yield above one is physical (photosensitised dissociation).
 2. `METHANE_SURVIVES_K` (150 K): a source for the temperature below
    which water stays too low for OH to oxidise methane; otherwise a
    calibration between Titan and Mars, with its section.
@@ -130,12 +149,17 @@ carry the number; say which):
    ratio is right; cite Atreya, Donahue & Kuhn 1978 or drop it for the
    stoichiometry alone (`Definition:`).
 5. Earth's N₂ target, 0.78 bar (a source), and the band the test keeps.
-6. The test fixtures: Titan as a planet trial (mass, core mass
-   fraction, water fraction, orbit, eccentricity), and Callisto if its
-   legacy test is kept, each with a source.
+6. The test fixtures: Titan and Callisto as planet trials (mass, core
+   mass fraction, water fraction, orbit, eccentricity), each with a
+   source. Both are moons; as planets they have no host plasma, which
+   legacy's non-thermal loss also ignored for them only through the
+   host (#658).
 7. The Planck constant (CODATA, exact) for the Lyman α photon energy
    `h c / λ` at 121.567 nm (the wavelength sourced), and the methane
    molecule mass from `CH4_MOLAR_MASS / AVOGADRO`.
+8. The onset bisection: its step count as a `Definition:` (the
+   tolerance in Gyr it guarantees on `[0, age]`), held by the stepwise
+   budget test of Task 3.
 
 Output: one table row per value (final value, prefix, source read),
 committed in the page and the Wiki study. Stop and report to the main
@@ -219,7 +243,9 @@ session at any GAP that stays open.
     to the supply, by bisection on `[0, age]` (the rate only falls after
     saturation; before the onset nothing gathers); the result is
     `supply · (age − onset) − methane_destroyed(…, onset, age)`, at least
-    0. Returns `outgassed` unchanged when it or `age` is 0.
+    0. Returns `outgassed` unchanged when it or `age` is 0. The
+    bisection's step count is a constant with the prefix of Task 1,
+    item 8.
 
 - [ ] **Step 1: Write the failing tests** (from `atm` l.1545-1640, values
       per Task 1):
@@ -273,7 +299,8 @@ session at any GAP that stays open.
 - [ ] **Step 2: Run** `cargo nextest run -p science photochemistry` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat(science): port the reducing air and the ammonia photochemistry`.
+- [ ] **Step 5: Commit** `feat(science): port the reducing air and the
+      ammonia photochemistry`.
 
 ### Task 5: The air steps in `system::planet::air` (opus)
 
@@ -289,31 +316,35 @@ session at any GAP that stays open.
 
 **Interfaces:**
 
-- Consumes: Tasks 2-4; `xuv::history(mass, metallicity, age)` per
-  source (`trial.sources`, `trial.metallicity`, `trial.age`), each
-  source's `flux` as `WattPerSquareMetre`;
+- Consumes: Tasks 2-4; `xuv::history(source.mass, trial.metallicity,
+  trial.age)` once per source per chain, its `StellarError` carried by a
+  new `InteriorError::Stellar(StellarError)` variant (the draw only
+  places main-sequence stars, so it is not expected); each source's
+  `flux` as `WattPerSquareMetre`;
   `trial.sources.equilibrium_k()` with the sources' `equilibrium` nodes
   as causes; `body.bulk().surface_gravity`.
-- Produces: `air()` returns `pub(crate) struct Air { pub atmosphere:
-  Atmosphere, pub water: Water, pub frozen_co2: Traced<Bar>, pub reducing:
-  Traced<bool> }`
-  instead of the tuple; `BareSurface` gains `frozen_co2` and
-  `reducing` (2d-3's carbon cycle and the reducing fallback read them).
-  In `air()`, after the SO₂ wash-out, in order:
-  1. `planet.air.photolysed.ch4` from the kept CH₄, the gravity, every
-     source's Lyman α flux and fluence nodes (the history's inputs), and
-     the age;
-  2. `planet.air.reducing` from it and the equilibrium nodes; if
-     reducing and the outgassed CO₂ is above 0, outgassing, shoreline
-     share, SO₂ wash-out and photolysis run again with CO₂ outgassed at
-     0 (`planet.air.outgassed.co2` recorded once, at 0, derived from the
-     reducing node; no node is recorded twice for one code in one
-     chain);
-  3. `planet.air.trapped.co2` and `planet.air.trapped.nh3`, the cap of
+- Produces: `air(…, hold_back: bool, trace)` returns `pub(crate) struct
+  Air { pub atmosphere: Atmosphere, pub water: Water, pub frozen_co2:
+  Traced<Bar>, pub reducing: Traced<bool> }` instead of the tuple;
+  `BareSurface` gains `frozen_co2` and `reducing` (2d-3's carbon cycle
+  and the reducing fallback read them). In `air()`, in order (decision
+  "The reducing air in one pass"):
+  1. outgassed CH₄, the shoreline share and the kept CH₄, as today;
+  2. `planet.air.photolysed.ch4` from the kept CH₄, the surface gravity
+     node, each source's `flux` and `mass` nodes, and the trial's
+     `metallicity` and `age` nodes (the inputs of the histories);
+  3. `planet.air.reducing` from it and the sources' `equilibrium`
+     nodes, `false` when `hold_back` is false;
+  4. the other outgassed gases; `planet.air.outgassed.co2` is 0 when
+     reducing and then cites the reducing node; kept gases and the SO₂
+     wash-out as today;
+  5. `planet.air.trapped.co2` and `planet.air.trapped.nh3`, the cap of
      Task 2 at the equilibrium temperature;
-     `planet.air.frozen-co2` = photolysed CO₂ − trapped CO₂;
-  4. `planet.air.photochemistry.n2`, `.nh3` (0), `.ch4`;
-  5. the pressure node from the final partials.
+     `planet.air.frozen-co2` = photolysed CO₂ − trapped CO₂ (the
+     photolysis leaves CO₂ as kept; legacy books all of it as frost, the
+     excess #590 tracks for small icy bodies under T2);
+  6. `planet.air.photochemistry.n2`, `.nh3` (0), `.ch4`;
+  7. the pressure node from the final partials.
   Each node cites the previous node of its gas and the step's own
   inputs, so a gas's tree reads outgassed → shoreline-kept → (SO₂-kept)
   → photolysed → trapped → photochemistry. `Water::keeping` in a runaway
@@ -322,17 +353,21 @@ session at any GAP that stays open.
 - [ ] **Step 1: Write the failing tests:**
       `earth_has_no_abiotic_methane_or_ammonia` (CH₄ and NH₃ below 1e-3
       bar, `atm` l.1522);
-      `earth_has_a_bar_of_nitrogen` with the band of Task 1 around
-      0.78 bar (retune `NITROGEN_RECYCLED_UNDER_PLATES` in
+      `earth_has_a_bar_of_nitrogen`, the existing 2c test, its band
+      narrowed to Task 1's around 0.78 bar (retune
+      `NITROGEN_RECYCLED_UNDER_PLATES` in
       `crates/science/src/outgassing.rs` and its calibration section if
       it misses; the retune goes in the PR description);
       `titan_keeps_its_methane` (CH₄ above 0.01 bar, the Task 1 fixture);
+      `callisto_loses_its_methane` (CH₄ below 1e-3 bar, `atm` l.1534);
       `titan_outgasses_no_co2` (reducing, CO₂ 0, its outgassed node
       derives from the reducing node);
-      `a_reducing_air_without_co2_runs_once` (Review Focus 5);
-      `venus_and_mars_keep_their_co2` (no trap above the CO₂ triple
-      point at their equilibrium; Venus's CO₂ and Mars's total as in
-      2c's tests);
+      `a_held_back_air_differs_only_by_its_co2` (Review Focus 5: Titan
+      with `hold_back` true and false);
+      `venus_and_mars_keep_their_co2` (Venus's equilibrium is above the
+      CO₂ triple point, so no cap; Mars's is below it, but its CO₂ stays
+      under the frost pressure, so the cap does not bite; Venus's CO₂ and
+      Mars's total as in 2c's tests, `frozen_co2` 0 for both);
       `each_partial_reads_in_chain_order` (the ancestry of each final
       partial contains its kept node and, for CH₄, the photolysed node;
       `frozen_co2` derives from the photolysed and trapped CO₂).
@@ -348,14 +383,14 @@ session at any GAP that stays open.
 
 - Modify: `docs/science/planet-atmospheres.md` ("How it computes them"
   of the four sections: rewrite paths and cause trees; "Where it
-  departs": the history's `scale`, several stars, no non-thermal loss
-  before the photolysis, `condense` and the fallback in 2d-3),
+  departs": the yield fitted again on the ZAMS-share history, several
+  stars, the reducing air in one pass, no non-thermal loss before the
+  photolysis, `condense` and the fallback in 2d-3),
   `crates/system/README.md` (the chain up to the photochemistry),
   `crates/science/README.md` if it lists modules.
 
-- [ ] **Step 1:** Update the pages and the `air.rs`, `bare.rs` and
-      `planet/mod.rs` module docs (the steps no longer "come with the
-      climate").
+- [ ] **Step 1:** Update the pages (the module docs of `air.rs`,
+      `bare.rs` and `planet/mod.rs` are Task 5's).
 - [ ] **Step 2: Run** `mise run ci` — PASS, tier budgets included.
 - [ ] **Step 3: Commit** `docs: describe the air's photochemistry`.
 
@@ -363,8 +398,9 @@ session at any GAP that stays open.
 
 - `branch-reviewer` and `test-reviewer` once on the whole branch, given
   this plan and the design; after fixes, `mise run ci` again.
-- Push Wiki study 22 and link it.
-- PR description: `Refs #602`, `Refs #659`, `Refs #592`; a heading
+- Push Wiki study 23 and link it.
+- PR description: `Refs #602`, `Refs #659`, `Refs #592`, `Refs #590`
+  (the frozen CO₂ booked as in legacy); a heading
   "Calibrations" listing every `Calibration:` added or retuned; a note
   that nothing generated changes (model private until 2d-4), so no
   `mise run test:heavy` output.
