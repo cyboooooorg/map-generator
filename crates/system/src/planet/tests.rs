@@ -1222,3 +1222,88 @@ fn the_volatile_scatter_is_recorded_as_drawn() {
         assert_eq!(leaf.value().0, 0.0);
     }
 }
+
+/// A Solar System body of the legacy reference table
+/// (`legacy-final:crates/mapgen/src/planet/reference.rs`), lit by the
+/// trial's Sun-like source at its semi-major axis.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ReferenceBody {
+    /// Mass, Earth masses.
+    pub mass: f64,
+    /// Iron share of the refractory (iron and rock) mass.
+    pub core_mass_fraction: f64,
+    /// Share of the mass in water.
+    pub water_fraction: f64,
+    /// Semi-major axis, au.
+    pub orbit: f64,
+    /// Orbital eccentricity.
+    pub eccentricity: f64,
+}
+
+/// Source: NASA planetary fact sheet (nssdc.gsfc.nasa.gov/planetary/factsheet):
+/// 0.0553 M_E at 0.387 au, eccentricity 0.2056; a core of about 70 % of the
+/// mass (Hauck et al. 2013, doi:10.1002/jgre.20091, core radius about
+/// 2020 km); dry, as legacy's reference table.
+pub(super) const MERCURY: ReferenceBody = ReferenceBody {
+    mass: 0.0553,
+    core_mass_fraction: 0.70,
+    water_fraction: 0.0,
+    orbit: 0.387,
+    eccentricity: 0.2056,
+};
+
+/// Source: NASA planetary fact sheet: 0.815 M_E at 0.723 au, eccentricity
+/// 0.0068; Earth-like, slightly less iron, core 0.31 (Aitta 2012, Icarus
+/// 218); dry, as legacy's reference table.
+pub(super) const VENUS: ReferenceBody = ReferenceBody {
+    mass: 0.815,
+    core_mass_fraction: 0.31,
+    water_fraction: 0.0,
+    orbit: 0.723,
+    eccentricity: 0.0068,
+};
+
+/// Source: NASA planetary fact sheet: 1 M_E at 1 au, eccentricity 0.0167;
+/// core 0.325 (Zeng, Sasselov & Jacobsen 2016,
+/// doi:10.3847/0004-637X/819/2/127); oceans 0.023 % of the mass, Charette
+/// & Smith 2010's 1.335e9 km³ (Oceanography 23(2)) at 1027 kg/m³,
+/// 1.37e21 kg over Earth's 5.972e24 kg. Its oceans only, unlike
+/// [`EARTH_WATER_FRACTION`], the bulk water held in the mantle too.
+pub(super) const EARTH: ReferenceBody = ReferenceBody {
+    mass: 1.0,
+    core_mass_fraction: 0.325,
+    water_fraction: 2.3e-4,
+    orbit: 1.0,
+    eccentricity: 0.0167,
+};
+
+/// Source: NASA planetary fact sheet: 0.107 M_E at 1.524 au, eccentricity
+/// 0.0934; a core of about 24 % (Stähler et al. 2021,
+/// doi:10.1126/science.abi7730, core radius about 1830 km); dry, as
+/// legacy's reference table.
+pub(super) const MARS: ReferenceBody = ReferenceBody {
+    mass: 0.107,
+    core_mass_fraction: 0.24,
+    water_fraction: 0.0,
+    orbit: 1.524,
+    eccentricity: 0.0934,
+};
+
+/// The trial of `body` around the trial's Sun-like source, and its
+/// composition set by hand: Earth's radiogenic abundance, no envelope, a
+/// dry planet inside the ice line (not migrated), no volatile scatter.
+pub(super) fn reference_trial(trace: &mut Trace, body: &ReferenceBody) -> (Trial, Drawn) {
+    let t = trial(trace, 1, body.mass, body.orbit, body.eccentricity);
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        body.core_mass_fraction,
+        body.water_fraction,
+        0.0,
+        Some(false),
+        0.0,
+        None,
+        None,
+    );
+    (t, drawn)
+}

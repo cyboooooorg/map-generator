@@ -1,0 +1,338 @@
+//! Tier 1: the water a planet keeps, the steam a runaway loses, the planet
+//! left after it and the tectonic regime, ported from
+//! `legacy-final:crates/mapgen/src/planet/regime.rs` (its tests) on the
+//! reference bodies of `planet/tests.rs`.
+
+use super::codes;
+use super::draws::Drawn;
+use super::enveloped::Body;
+use super::heat::heat;
+use super::interior::{Water as Held, interior};
+use super::regime::regime;
+use super::tests::{
+    EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, derived_from,
+    reference_trial, trial,
+};
+use super::water::{after_steam, water};
+use crate::Trial;
+use science::habitable::{OCEAN_MASS, runaway_flux};
+use science::units::{EarthFlux, Kelvin, Kilogram, Watt};
+use timeline::{Code, Heat, Provenance, StellarSources, TectonicRegime, Trace, Water};
+
+/// Source: Io in legacy's reference table: 0.0150 M_E (JPL satellite
+/// physical parameters, GM over Earth's), an Fe-FeS core up to 20 % of the
+/// mass (Anderson et al. 1996-2001, Galileo gravity), dry, at Jupiter's
+/// 5.2 au on a circular orbit around the Sun: its tide is set by hand
+/// below.
+const IO: ReferenceBody = ReferenceBody {
+    mass: 0.0150,
+    core_mass_fraction: 0.20,
+    water_fraction: 0.0,
+    orbit: 5.2,
+    eccentricity: 0.0,
+};
+
+/// Source: Io's tidal heating in legacy's test, 1e14 W, about 2.4 W/m²
+/// over Io's 4.17e13 m² (Moore & Webb 2013 take about 2.5 W/m² from
+/// Veeder et al. 2004).
+const IO_TIDE: f64 = 1.0e14;
+
+/// Source: the low end of Lainey et al. 2009 in legacy's test, 7.5e13 W,
+/// 1.79 W/m² over Io's 4.17e13 m².
+const IO_TIDE_LOW: f64 = 7.5e13;
+
+/// Source: the dry super-Earth of legacy's test, 5 M_E at 1.5 au with
+/// Earth's core and no water.
+const DRY_SUPER_EARTH: ReferenceBody = ReferenceBody {
+    mass: 5.0,
+    core_mass_fraction: EARTH_CORE_MASS_FRACTION,
+    water_fraction: 0.0,
+    orbit: 1.5,
+    eccentricity: 0.0,
+};
+
+/// Definition: a water world's water fraction for the tests, 0.5, the
+/// lower bound of Zeng et al. 2019's icy planets (a test choice).
+const WATER_WORLD_FRACTION: f64 = 0.5;
+
+/// Definition: two orbits of a runaway water world around the trial's
+/// Sun-like source, 0.4 au (403 K, past the 355 K where the water laws
+/// end) and 0.8 au (285 K, within them), both above the runaway limit.
+const HOT_ORBITS_AU: [f64; 2] = [0.4, 0.8];
+
+/// Definition: a relative step either side of a threshold, 1 %.
+const STEP: f64 = 0.01;
+
+/// Source: the coolest and hottest stars of the two-star case, 3000 K
+/// and 7000 K, inside Kopparapu et al. 2014's 2600 to 7200 K.
+const TWO_STARS_K: [f64; 2] = [3000.0, 7000.0];
+
+/// Source: the Sun's effective temperature, 5772 K (IAU 2015 Resolution
+/// B3), the trial's source.
+const SUN_TEFF: f64 = 5772.0;
+
+/// Definition: a numerical tolerance on a mass computed two ways, relative.
+const ROUNDING: f64 = 1e-12;
+
+/// The body, heat and water of `t` of composition `drawn`.
+fn derive(trace: &mut Trace, t: &Trial, drawn: &Drawn) -> (Body, Heat, Water) {
+    let body = interior(t, drawn, trace).unwrap();
+    let heat = heat(
+        t,
+        &body,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        trace,
+    )
+    .unwrap();
+    let w = water(t, drawn, &body, trace).unwrap();
+    (body, heat, w)
+}
+
+/// The water and regime of the reference `body`.
+fn reference(body: &ReferenceBody) -> (Water, TectonicRegime) {
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, body);
+    let (b, h, w) = derive(&mut trace, &t, &drawn);
+    let r = regime(&t, &b, &h, &w, &mut trace).unwrap();
+    (w, *r.value())
+}
+
+/// `t` lit by sources of the fluxes and effective temperatures `lights`
+/// instead of its own, each a copy of its source otherwise.
+fn lit(trace: &mut Trace, t: &Trial, lights: &[(f64, f64)]) -> Trial {
+    let sources = lights
+        .iter()
+        .map(|&(flux, teff)| {
+            let mut source = t.sources.primary().clone();
+            source.flux = trace
+                .leaf(Code::of("test.flux"), EarthFlux(flux), Provenance::Input)
+                .unwrap();
+            source.effective_temperature = trace
+                .leaf(Code::of("test.teff"), Kelvin(teff), Provenance::Input)
+                .unwrap();
+            source
+        })
+        .collect();
+    Trial {
+        sources: StellarSources::new(sources).unwrap(),
+        ..t.clone()
+    }
+}
+
+/// Whether Earth, lit by `lights`, runs away.
+fn runs_away(lights: &[(f64, f64)]) -> bool {
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &EARTH);
+    let t = lit(&mut trace, &t, lights);
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let w = water(&t, &drawn, &body, &mut trace).unwrap();
+    *w.runaway.value()
+}
+
+#[test]
+fn venus_ran_away_and_dried() {
+    let (w, _) = reference(&VENUS);
+    assert!(*w.runaway.value());
+    assert_eq!(w.inventory.value().0, 0.0);
+    // Given an Earth ocean, it would have lost it too.
+    let wet = ReferenceBody {
+        water_fraction: EARTH.water_fraction,
+        ..VENUS
+    };
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &wet);
+    let (_, _, w) = derive(&mut trace, &t, &drawn);
+    assert!(*w.runaway.value());
+    assert_eq!(w.inventory.value().0, 0.0);
+    // The inventory derives from the bulk water and the steam lost, which
+    // derives from the runaway, the radius, the mass and the XUV light.
+    let from = derived_from(&trace, w.inventory.node());
+    let lost = *from.last().unwrap();
+    assert_eq!(
+        trace.node(lost).unwrap().code,
+        Code::of(codes::WATER_STEAM_LOST)
+    );
+    let lost_from = derived_from(&trace, lost);
+    assert_eq!(lost_from[0], w.runaway.node());
+    assert!(lost_from.contains(&t.sources.primary().xuv.fluence.node()));
+    assert!(lost_from.contains(&drawn.water_fraction.node()));
+    assert!(!*w.boiled.value());
+}
+
+#[test]
+fn earth_keeps_its_ocean() {
+    let (w, _) = reference(&EARTH);
+    assert!(!*w.runaway.value());
+    let oceans = w.inventory.value().0 / OCEAN_MASS.0;
+    assert!((0.9..=1.1).contains(&oceans), "{oceans}");
+}
+
+#[test]
+fn the_solar_system_has_its_regimes() {
+    assert_eq!(reference(&EARTH).1, TectonicRegime::Plates);
+    assert_eq!(reference(&VENUS).1, TectonicRegime::Episodic);
+    assert_eq!(reference(&MARS).1, TectonicRegime::Stagnant);
+    assert_eq!(reference(&MERCURY).1, TectonicRegime::Stagnant);
+    // Io: an Io-mass rocky body with its tide set by hand.
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &IO);
+    let (body, h, w) = derive(&mut trace, &t, &drawn);
+    for tide in [IO_TIDE, IO_TIDE_LOW] {
+        let tidal = trace
+            .leaf(Code::of("test.tide"), Watt(tide), Provenance::Input)
+            .unwrap();
+        let h = Heat { tidal, ..h.clone() };
+        let r = regime(&t, &body, &h, &w, &mut trace).unwrap();
+        assert_eq!(*r.value(), TectonicRegime::HeatPipe, "{tide} W");
+        // A heat pipe reads the heat and the radius only.
+        assert_eq!(
+            derived_from(&trace, r.node()),
+            vec![
+                h.radiogenic.node(),
+                tidal.node(),
+                h.secular.node(),
+                body.bulk().radius.node()
+            ]
+        );
+    }
+    // Plates read the heat, the radius, the mass and the water.
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &EARTH);
+    let (body, h, w) = derive(&mut trace, &t, &drawn);
+    let r = regime(&t, &body, &h, &w, &mut trace).unwrap();
+    assert_eq!(trace.node(r.node()).unwrap().code, Code::of(codes::REGIME));
+    assert_eq!(
+        derived_from(&trace, r.node())[4..],
+        [t.mass.node(), w.inventory.node(), w.runaway.node()]
+    );
+}
+
+#[test]
+fn a_dry_super_earth_is_not_plated() {
+    let (w, r) = reference(&DRY_SUPER_EARTH);
+    assert!(!*w.runaway.value());
+    assert_ne!(r, TectonicRegime::Plates);
+}
+
+#[test]
+fn a_hot_water_world_runs_away_and_rebuilds() {
+    for au in HOT_ORBITS_AU {
+        let mut trace = Trace::new();
+        let t = trial(&mut trace, 1, 1.0, au, 0.0);
+        let drawn = Drawn::fixed(
+            &t,
+            &mut trace,
+            EARTH_CORE_MASS_FRACTION,
+            WATER_WORLD_FRACTION,
+            0.0,
+            Some(true),
+            0.0,
+            None,
+            None,
+        );
+        let (_, _, w) = derive(&mut trace, &t, &drawn);
+        assert!(*w.runaway.value(), "{au} au");
+        let total = Kilogram::from(*t.mass.value()).0;
+        let bulk = WATER_WORLD_FRACTION * total;
+        let kept = w.inventory.value().0;
+        assert!(kept > 0.0 && kept < bulk, "{au} au: {kept} of {bulk}");
+
+        let (t2, d2) = after_steam(&t, &drawn, &w, &mut trace)
+            .unwrap()
+            .expect("some steam was lost");
+        // The mass is the dry mass plus the water kept, and the water
+        // fraction what was kept of it.
+        let mass = Kilogram::from(*t2.mass.value()).0;
+        assert!((mass / (total - bulk + kept) - 1.0).abs() < ROUNDING);
+        let fraction = d2.water_fraction.value().get();
+        assert!((fraction / (kept / mass) - 1.0).abs() < ROUNDING);
+        assert_eq!(
+            derived_from(&trace, t2.mass.node()),
+            vec![
+                t.mass.node(),
+                drawn.water_fraction.node(),
+                w.inventory.node()
+            ]
+        );
+        assert_eq!(
+            derived_from(&trace, d2.water_fraction.node()),
+            vec![w.inventory.node(), t2.mass.node()]
+        );
+        assert_eq!(
+            trace.node(d2.water_fraction.node()).unwrap().code,
+            Code::of(codes::WATER_KEPT_FRACTION)
+        );
+        // The rest of the composition is kept.
+        assert_eq!(d2.core_mass_fraction, drawn.core_mass_fraction);
+        assert_eq!(d2.volatiles, drawn.volatiles);
+
+        // The body is built again, on either side of the water laws.
+        let (body, h, w2) = derive(&mut trace, &t2, &d2);
+        let Body::Rocky(rebuilt) = &body else {
+            panic!("{au} au: not rocky");
+        };
+        let beyond = matches!(rebuilt.water, Held::BeyondLaw { .. });
+        assert_eq!(
+            beyond,
+            au == HOT_ORBITS_AU[0],
+            "{au} au: {:?}",
+            rebuilt.water
+        );
+        regime(&t2, &body, &h, &w2, &mut trace).unwrap();
+    }
+}
+
+#[test]
+fn nothing_lost_rebuilds_nothing() {
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &EARTH);
+    let (_, _, w) = derive(&mut trace, &t, &drawn);
+    assert_eq!(after_steam(&t, &drawn, &w, &mut trace).unwrap(), None);
+}
+
+#[test]
+fn the_runaway_threshold_reads_every_source() {
+    // One source just above and just below its limit, against two
+    // identical sources of half its flux each.
+    let limit = runaway_flux(Kelvin(SUN_TEFF)).0;
+    for flux in [limit * (1.0 + STEP), limit * (1.0 - STEP)] {
+        let one = runs_away(&[(flux, SUN_TEFF)]);
+        let two = runs_away(&[(flux / 2.0, SUN_TEFF), (flux / 2.0, SUN_TEFF)]);
+        assert_eq!(one, flux > limit);
+        assert_eq!(two, one, "{flux}");
+    }
+
+    // A cool and a hot star at the same flux each: the sum of each flux
+    // over its own limit, not the limit at their flux-weighted temperature.
+    let [cool, hot] = TWO_STARS_K;
+    let inverse = 1.0 / runaway_flux(Kelvin(cool)).0 + 1.0 / runaway_flux(Kelvin(hot)).0;
+    let by_sum = 2.0 / inverse;
+    let blended = runaway_flux(Kelvin((cool + hot) / 2.0)).0;
+    assert!(
+        (by_sum / blended - 1.0).abs() > 2.0 * STEP,
+        "{by_sum} {blended}"
+    );
+    let total = (by_sum + blended) / 2.0;
+    assert_eq!(
+        runs_away(&[(total / 2.0, cool), (total / 2.0, hot)]),
+        total > by_sum
+    );
+
+    // The runaway derives from every source's flux and temperature.
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &EARTH);
+    let t = lit(&mut trace, &t, &[(total / 2.0, cool), (total / 2.0, hot)]);
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let w = water(&t, &drawn, &body, &mut trace).unwrap();
+    let light: Vec<_> = t
+        .sources
+        .iter()
+        .flat_map(|s| [s.flux.node(), s.effective_temperature.node()])
+        .collect();
+    assert_eq!(derived_from(&trace, w.runaway.node()), light);
+    assert_eq!(
+        trace.node(w.runaway.node()).unwrap().code,
+        Code::of(codes::WATER_RUNAWAY)
+    );
+}

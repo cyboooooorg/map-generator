@@ -35,7 +35,9 @@
 //! structure with the `science` integrator (a planet without an envelope,
 //! or a mini-Neptune's core), [`enveloped`] the mini-Neptunes and giants
 //! around it, [`escape`] what their envelope loses to the stars' XUV
-//! light, [`heat`] computes its internal heat.
+//! light, [`heat`] computes its internal heat, [`water`] the water it keeps
+//! under its stars' light and the planet left after a runaway's steam,
+//! [`regime`] its tectonic regime.
 //! Every value is recorded in the system's cause `Trace`, with the codes
 //! of [`codes`].
 
@@ -76,6 +78,16 @@ mod heat;
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
 mod interior;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod regime;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod water;
 
 #[cfg(test)]
 mod envelope_tests;
@@ -83,3 +95,5 @@ mod envelope_tests;
 mod escape_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod water_tests;
