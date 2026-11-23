@@ -14,12 +14,23 @@ const FIT_MIN: Kelvin = Kelvin(2_600.0);
 const FIT_MAX: Kelvin = Kelvin(7_200.0);
 
 /// Source: Earth's bulk water drawn at Marty 2012's 2700 ppm of the mass
-/// (Earth Planet. Sci. Lett. 313-314, 56, p. 18).
+/// (Earth Planet. Sci. Lett. 313-314, 56-66; arXiv:1405.6336 author
+/// copy, p. 18).
 const MARTY_BULK_WATER: f64 = 2.7e-3;
 
-/// Definition: the rounding of the ocean unit, Charette & Smith 2010's
-/// 1.37e21 kg rounded to 1.4e21 kg, 2.2 %, taken as 3 %.
-const OCEAN_ROUNDING: f64 = 0.03;
+/// Source: the volume of Earth's ocean, 1.332e9 km³ (Charette & Smith
+/// 2010, Oceanography 23(2), 112, doi:10.5670/oceanog.2010.51, Table 1),
+/// in m³.
+const CHARETTE_SMITH_OCEAN_VOLUME: f64 = 1.332e18;
+
+/// Source: a usual density of sea water, 1027 kg/m³ (the one the ocean
+/// unit's doc comment reads Charette & Smith's volume at).
+const SEA_WATER_DENSITY: f64 = 1_027.0;
+
+/// Definition: a test tolerance, relative, 3 %: it covers the two-digit
+/// rounding of Cowan & Abbot's 2.3e-4 (±0.05e-4, 2.2 %), the share's
+/// numerator, against an ocean mass computed from another source.
+const TWO_DIGIT_ROUNDING: f64 = 0.03;
 
 #[test]
 fn the_sun_runs_away_at_1_107() {
@@ -41,8 +52,13 @@ fn the_ocean_is_the_volume_of_earths_at_a_sea_water_density() {
 }
 
 #[test]
-fn an_earth_drawn_at_martys_bulk_water_gets_one_ocean() {
+fn an_earth_drawn_at_martys_bulk_water_holds_earths_ocean() {
+    // The share's numerator is Cowan & Abbot's ocean fraction; the ocean
+    // expected here is Charette & Smith's volume at a sea-water density.
     let surface = SURFACE_WATER_SHARE * MARTY_BULK_WATER * EARTH_MASS.0;
-    let oceans = surface / OCEAN_MASS.0;
-    assert!((oceans - 1.0).abs() < OCEAN_ROUNDING, "{oceans}");
+    let ocean = CHARETTE_SMITH_OCEAN_VOLUME * SEA_WATER_DENSITY;
+    assert!(
+        (surface / ocean - 1.0).abs() < TWO_DIGIT_ROUNDING,
+        "{surface} {ocean}"
+    );
 }

@@ -21,6 +21,7 @@ use super::tests::{
 use crate::Trial;
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, shoreline_kept};
 use science::units::{Bar, Kilogram, Metre};
+use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
 use timeline::{Atmosphere, Code, Gas, Provenance, TectonicRegime, Trace, Traced, Water};
 
 /// Definition: the surface pressure below which a world is airless, no
@@ -77,6 +78,10 @@ const EARTH_OCEANS_KG: f64 = 1.4e21;
 
 /// Definition: a relative tolerance on a value computed two ways.
 const ROUNDING: f64 = 1e-12;
+
+/// Definition: a relative tolerance on a mass solved back from a ratio
+/// of two pressures, 1e-9: the subtraction loses a few digits.
+const SOLVED: f64 = 1e-9;
 
 /// A planet up to its core, as the chain derives it before the air.
 struct Planet {
@@ -450,4 +455,15 @@ fn the_ice_is_the_water_at_the_surface() {
     let a = earth.air().0;
     let n2 = derived_from(&earth.trace, a.partial[&Gas::N2].node())[0];
     assert!(derived_from(&earth.trace, n2).contains(&earth.surface.node()));
+    // Its magnitude: CO2 and CH4 share every factor but their mass (both
+    // recycled alike under plates, no scatter), CH4 coming from the ice
+    // alone, so their ratio gives the ice back:
+    // `CO2 / CH4 = (ROCK_CO2 r + ICE_CO2 i) / (ICE_CH4 i)`.
+    let co2 = outgassed(&earth, &a.partial[&Gas::Co2]);
+    let ch4 = outgassed(&earth, &a.partial[&Gas::Ch4]);
+    let w = earth.drawn.water_fraction.value().get();
+    let refractory = (1.0 - w) * Kilogram::from(*earth.trial.mass.value()).0;
+    let ice = ROCK_CO2 * refractory / (ICE_CH4 * co2 / ch4 - ICE_CO2);
+    let surface = earth.surface.value().0;
+    assert!((ice / surface - 1.0).abs() < SOLVED, "{ice} {surface}");
 }
