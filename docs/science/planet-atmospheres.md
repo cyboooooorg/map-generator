@@ -918,8 +918,10 @@ part 1). Fitted on Yung et al.'s present rate with the rewrite's Lyman α
 history (a share of the ZAMS light times the history's `scale`, #622):
 for the 1 M☉, [Fe/H] 0 star at 4.6 Gyr, `scale` = 0.7081 and the
 present Lyman α share is 4.690e-6 of the present light, 3.91e11 photons
-cm⁻² s⁻¹ at 1 AU and 1.064e9 over Titan's sphere at 9.58 AU, so `Y =
-1.5e10 / 1.064e9 = 14.1`. Legacy's 13.9 came from the abstract's
+cm⁻² s⁻¹ at 1 AU and 1.066e9 over Titan's sphere at Saturn's 9.57 AU
+(1432.0e6 km, NASA Saturn fact sheet), so `Y = 1.5e10 / 1.066e9 =
+14.07`, 14.1 to the two digits of the rate (legacy's Titan cases put it
+at 9.58 AU, which gives 14.10). Legacy's 13.9 came from the abstract's
 5.6e4 g cm⁻² over 4.5 Gyr (1.48e10) and legacy's ratio, 0.25 % higher
 than the rewrite's; the age 4.57 Gyr or Yung et al.'s own distance
 (their attenuation 0.011, 9.53 AU) give 14.0, within the two digits of

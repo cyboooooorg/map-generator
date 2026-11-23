@@ -29,10 +29,11 @@ use crate::xuv::{History, LYMAN_ALPHA};
 /// Yung, Allen & Pinto 1984 (ApJS 55, 465, doi:10.1086/190963, Table 5B;
 /// full text read) give a net loss of 1.5e10 molecules cm⁻² s⁻¹; the
 /// rewrite's Sun (1 M☉, [Fe/H] 0, 4.6 Gyr, [`crate::xuv::history`]) sends
-/// 1.064e9 Lyman α photons cm⁻² s⁻¹ over the sphere of a body at 9.58 AU,
-/// hence 14.1 (`legacy-final` had 13.9 from the abstract's 1.48e10). Over
-/// one because Lyman α stands for all the light that destroys methane:
-/// Lyman α's own photolysis is 2.9e9 of the 1.5e10, and most of the rest
+/// 1.066e9 Lyman α photons cm⁻² s⁻¹ over the sphere of a body at Saturn's
+/// 9.57 AU, hence 14.07, 14.1 to the two digits of the rate
+/// (`legacy-final` had 13.9 from the abstract's 1.48e10). Over one
+/// because Lyman α stands for all the light that destroys methane: Lyman
+/// α's own photolysis is 2.9e9 of the 1.5e10, and most of the rest
 /// is the dissociation photosensitised by acetylene and diacetylene at
 /// 1600 to 2300 Å (their Table 2A, § VI e). That light comes from the
 /// photosphere and fades far less with age than Lyman α, so the law

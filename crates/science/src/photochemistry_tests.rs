@@ -14,10 +14,12 @@ const TITAN_GM: f64 = 8.978_137_10e12;
 /// al. 2018, Celest. Mech. 130, 22; read).
 const TITAN_RADIUS: f64 = 2.574_76e6;
 
-/// Definition: the orbit of `legacy-final`'s Titan cases, AU, the test
-/// geometry Yung et al.'s rate is fitted at (Saturn's mean distance is
-/// 9.57 AU; `docs/science/planet-atmospheres.md`, calibration of `Y`).
-const TITAN_ORBIT: f64 = 9.58;
+/// Source: Titan's orbit, Saturn's semi-major axis, 1432.0e6 km (NASA
+/// Saturn fact sheet) over the astronomical unit, 149.6e6 km: 9.57 AU,
+/// as the system's `TITAN` fixture; the geometry Yung et al.'s rate is
+/// fitted at (`docs/science/planet-atmospheres.md`, calibration of `Y`).
+/// `legacy-final`'s Titan cases used 9.58.
+const TITAN_ORBIT: f64 = 9.57;
 
 /// Definition: the age of the Sun the yield is fitted at, Gyr (the
 /// calibration of `Y` in `docs/science/planet-atmospheres.md`).
@@ -44,7 +46,7 @@ const BUDGET_STEPS: u32 = 200_000;
 const CLOSE_ORBIT: f64 = 0.05;
 
 /// Definition: the methane outgassed in `legacy-final`'s first Titan
-/// case, bar: enough to outlast the photolysis at 9.58 AU.
+/// case, bar: enough to outlast the photolysis at [`TITAN_ORBIT`].
 const TITAN_CH4: Bar = Bar(19.0);
 
 /// Definition: tolerance of the checks that hold to rounding.
