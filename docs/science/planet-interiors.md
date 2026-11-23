@@ -1216,11 +1216,11 @@ in `codes`). The draw takes the seed from its caller: the planet model
 will pass the body's seed, so each body depends on no other, and the
 class trial of the backward search the trial's seed.
 
-- **Iron.** The core's share of the refractory mass is $0.32 + \sigma z$,
-  $z$ a standard normal, with $\sigma$ = 0.12 below the median and 0.14
-  above (Plotnykov & Valencia 2020: 0.32 +0.14/−0.12, read as a median
-  and a 68 % interval), kept between 0 and 1. The earlier model's slope
-  of 0.15 per dex of `[Fe/H]` is gone: the new draw has none.
+- **Iron.** The core's share of the refractory mass is uniform from 0 to
+  0.8 (see [the draws and their bounds](#the-draws-and-their-bounds):
+  Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020). The earlier
+  model's slope of 0.15 per dex of `[Fe/H]` is gone: the new draw has
+  none.
 - **Water inside the ice line.** Log-uniform from $10^{-5}$ to
   $10^{-2}$ of the mass, the bulk water (see [the draws and their
   bounds](#the-draws-and-their-bounds)); Earth's is 2700 ppm (Marty
