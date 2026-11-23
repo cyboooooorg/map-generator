@@ -93,8 +93,9 @@ instead of carrying it over.
    index and King factor (He et al. 2021 and the per-gas sources it
    cites), not from the square of a static polarizability.
 4. **Values and citations** as the audit corrects them: NH₃ heat
-   capacity 35.65 J/(mol·K), clear-sky air absorption 72-73 W/m², the
-   DOIs and sections listed on the reference page.
+   capacity 35.65 J/(mol·K), clear-sky air absorption 72-73 W/m² (the
+   observed value; the test takes the window of "Rulings during 2b-2"),
+   the DOIs and sections listed on the reference page.
 5. **CO₂ and methane saturation** follow the ancillary vapour-pressure,
    sublimation and melting equations of their reference equations of
    state: Span & Wagner 1996 for CO₂, Setzmann & Wagner 1991 for
@@ -178,6 +179,9 @@ Its own `feat/` branch from `main` once 2b-1 is merged.
 
 ### 2b-2 calibration
 
+Superseded on 2026-11-23 for the clear-sky window: see "Rulings during
+2b-2 (2026-11-23)".
+
 - The clear sky has no free parameter: with Earth's ground albedo
   0.122, the clear-sky top-of-atmosphere albedo must fall in 0.149 to
   0.156 (Stephens et al. 2015; Kato et al. 2018). Outside it, the work
@@ -240,6 +244,28 @@ Calls made by the main session, not by the user; open to correction.
   citation or the calibration record of each. SO₂ is one of the seven
   gases of the column (its heat capacity and Rayleigh depth); its frost
   albedo is surface cover and stays out.
+
+## Rulings during 2b-2 (2026-11-23)
+
+The user's rulings after the diagnostic study of the port:
+
+- **The clear-sky window** is 0.1567 to 0.1707, not 0.149 to 0.156 (which
+  stay as the observed values): the observed albedo less the aerosols,
+  plus what the faithful port lacks. It supersedes "2b-2 calibration".
+- **The absorption test** takes 48 to 54 W/m² on 2.5 cm of water (the
+  NVAP mean of Kim & Ramanathan's global run; their 3.0 cm is the
+  sensitivity case of Table 2), plus the slope of the response to water.
+  It supersedes decision 4's 72-73 W/m², which stays as the observed
+  value (it holds the ozone, O₂ and aerosols).
+- **A faithful port**: a black-body Sun, no ozone, no O₂, no aerosols.
+  What it lacks is tracked in #653 (ozone, O₂) and #655 (the Sun's
+  spectrum, the two-stream closure).
+- **`CH4_NEAR_IR_HALF_BAR`** is refitted on McKay et al.'s 0.306 with a
+  sourced Titan.
+- **Rayleigh** has H₂O in the sum, and the King factors of NH₃ and SO₂
+  from Chong 2018.
+- **The haze** (`HAZE_ALBEDO`, `HAZE_ABSORPTION`) is not refitted: the
+  legacy values stay, and the refit is tracked in #656.
 
 ## Left to the builder
 

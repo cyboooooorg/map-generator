@@ -8,21 +8,7 @@ use std::sync::LazyLock;
 
 use super::*;
 use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
-use crate::radiation::test_points::{MANABE_HUMIDITY, TITAN_GRAVITY, VENUS_GRAVITY};
-
-/// Definition: Earth's dry air of the test columns, bar: 0.78 of N₂, 0.21
-/// of O₂ and 400 ppm of CO₂ (the legacy `EARTH_AIR`; argon, which neither
-/// absorbs nor changes the adiabat much, has no field). The air of the
-/// moist plateau.
-const EARTH_AIR: PartialPressures = PartialPressures {
-    n2: 0.78,
-    co2: 4e-4,
-    h2o: 0.0,
-    ch4: 0.0,
-    nh3: 0.0,
-    so2: 0.0,
-    o2: 0.21,
-};
+use crate::radiation::test_points::{EARTH_AIR, MANABE_HUMIDITY, TITAN_GRAVITY, VENUS_GRAVITY};
 
 /// Definition: Earth's surface gravity of the test columns, the standard
 /// acceleration of gravity (the legacy took 9.81 m/s²).

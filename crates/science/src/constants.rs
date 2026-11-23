@@ -87,6 +87,17 @@ pub const BOLTZMANN: f64 = 1.380_649e-23;
 /// Phys. 93, 025010; NIST CODATA value `N_A`).
 pub const AVOGADRO: f64 = 6.022_140_76e23;
 
+/// Source: Loschmidt constant `n0 = p0 / (k T0)` at 273.15 K and
+/// 101.325 kPa, 2.686 780 111e25 m^-3, exact (CODATA 2018, Tiesinga et al.
+/// 2021, Rev. Mod. Phys. 93, 025010; NIST CODATA value `n_0`, read on
+/// physics.nist.gov/cuu/Constants/ as `docs/science/radiative-transfer.md`
+/// cites it).
+pub const LOSCHMIDT: f64 = 2.686_780_111e25;
+
+/// Definition: speed of light in vacuum, 299 792 458 m/s exactly (SI,
+/// 17th CGPM 1983).
+pub const SPEED_OF_LIGHT: f64 = 299_792_458.0;
+
 /// Definition: molar gas constant `R = k N_A`, J/(mol K), exact
 /// (CODATA 2018 prints 8.314 462 618... J/(mol K)); the product of
 /// [`BOLTZMANN`] and [`AVOGADRO`] to its last digit.

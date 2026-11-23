@@ -250,10 +250,6 @@ fn radiating_methane_bar(gases: &PartialPressures, pressure_bar: f64, skin_k: f6
 /// air). The methane whose near-infrared bands take a share of the
 /// starlight before it reaches the troposphere (the anti-greenhouse of
 /// PR 2b-2).
-#[expect(
-    dead_code,
-    reason = "the methane anti-greenhouse of PR 2b-2 reads it; ported with the column"
-)]
 pub(crate) fn stratospheric_methane_bar(gases: &PartialPressures, skin_k: f64) -> f64 {
     let pressure = gases.total();
     if pressure <= 0.0 {
@@ -698,7 +694,6 @@ const SHORTWAVE_TOP_SHARE: f64 = 1e-2;
 /// A column's levels, as the shortwave reads them: each level's
 /// temperature and partial pressures from the surface up, and the span in
 /// `ln p` of each layer between two levels.
-#[expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")]
 pub(crate) struct Levels {
     pub(crate) levels: Vec<spectrum::Level>,
     pub(crate) spans: Vec<f64>,
@@ -710,7 +705,6 @@ pub(crate) struct Levels {
 /// the skin it sets, and the air above the tropopause absorbs next to
 /// none of the near infrared that CO₂ and water take). `None` without
 /// air.
-#[expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")]
 pub(crate) fn levels(
     gases: &PartialPressures,
     surface_k: f64,
