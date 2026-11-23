@@ -8,3 +8,4 @@ pub mod constants;
 pub mod deps;
 pub mod lints;
 pub mod readme;
+pub mod science_pages;

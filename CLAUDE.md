@@ -68,7 +68,11 @@ Claude and every agent:
    Its doc comment starts with `Source:` (the citation), `Calibration:`
    or `Definition:` (an exact definition or a unit conversion). A tier-1
    test fails otherwise.
-4. `branch-reviewer` flags any new number that is neither sourced nor
+4. **Every page of `docs/science/` lists its references** under a
+   non-empty `## Sources` heading. A tier-1 test fails otherwise; the
+   pages exempted for now are listed, with why, in
+   `tools/guardrails/src/science_pages.rs`.
+5. `branch-reviewer` flags any new number that is neither sourced nor
    calibrated, in the engines too.
 
 ## Tests
