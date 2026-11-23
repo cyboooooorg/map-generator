@@ -466,7 +466,7 @@ Waits for Task 1 and the user's ruling if Task 1 stopped.
 - [ ] **Step 1: Write the failing tests** (in `albedo_tests.rs`):
   - `earths_clear_sky_albedo_is_observed_less_what_is_missing`, a **stop
     test**: clouds 0, deck 0, Earth ground and air at 77 %:
-    `0.1565 <= bond_albedo <= 0.1707`. Decided by the user on
+    `0.1567 <= bond_albedo <= 0.1707`. Decided by the user on
     2026-11-23 after the diagnostic study (`diag-report.md`): the
     observed 0.149-0.156 (Stephens et al. 2015; Kato et al. 2018) less
     the aerosols' 0.017 ± 0.003 (Kim & Ramanathan 2008, Table 3b), plus

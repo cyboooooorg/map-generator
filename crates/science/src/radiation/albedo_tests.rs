@@ -35,10 +35,11 @@ use crate::water::vapour_saturation_bar;
 /// Matricardi 2020, doi:10.5194/gmd-13-6501-2020, Table 4) +0.0018; and
 /// the two-stream closure against exact radiative transfer (checked
 /// against Kokhanovsky, Mayer & Rozanov 2005, doi:10.1016/j.atmosres.2004.07.004)
-/// −0.0028. The sum runs from 0.1567 to 0.1707; the ruling took 0.1565.
+/// −0.0028. The terms sum to 0.1567 at the low end and 0.1707 at the
+/// high end.
 /// Issues #653 (ozone, O₂) and #655 (the Sun's spectrum, the closure)
 /// narrow it when they land. The port's 0.1701 lies at its top edge.
-const CLEAR_SKY_ALBEDO_LOW: f64 = 0.1565;
+const CLEAR_SKY_ALBEDO_LOW: f64 = 0.1567;
 
 /// Definition: the high end of the window of [`CLEAR_SKY_ALBEDO_LOW`].
 const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1707;
