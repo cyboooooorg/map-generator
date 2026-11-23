@@ -61,6 +61,18 @@ pub(crate) const TABLE_MASS_USED: &str = "planet.table-mass-used";
 pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";
 /// Mass of a mini-Neptune's hydrogen-helium envelope, `f M`.
 pub(crate) const ENVELOPE_MASS: &str = "planet.envelope.mass";
+/// Mass of the envelope lost to the XUV light of the stars over the
+/// planet's age, energy-limited (Owen & Wu 2017, eq. 19) on the formed
+/// body's radius and mass, capped by the envelope `f M`. Recorded only
+/// when it is not zero.
+pub(crate) const ENVELOPE_LOST: &str = "planet.envelope.lost";
+/// Envelope mass fraction of the planet once the escape has taken its
+/// share: `(f M - lost) / (M - lost)` for a mini-Neptune, 0 below
+/// `science::escape::MIN_ENVELOPE`; `1 - Mz / M'` for a giant.
+pub(crate) const ENVELOPE_KEPT_FRACTION: &str = "planet.envelope.kept-fraction";
+/// Mass of the planet once the escape has taken its share: `M - lost`, or
+/// `M - f M` for a mini-Neptune stripped of its whole envelope.
+pub(crate) const MASS_KEPT: &str = "planet.mass.kept";
 /// Thickness of a mini-Neptune's envelope, read in the Lopez & Fortney 2014
 /// tables, added to the radius of its core.
 pub(crate) const ENVELOPE_THICKNESS: &str = "planet.envelope.thickness";

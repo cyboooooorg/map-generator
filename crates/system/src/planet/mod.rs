@@ -34,7 +34,8 @@
 //! seed for `class_of`, the body seed for `model`), [`interior`] builds its
 //! structure with the `science` integrator (a planet without an envelope,
 //! or a mini-Neptune's core), [`enveloped`] the mini-Neptunes and giants
-//! around it, [`heat`] computes its internal heat.
+//! around it, [`escape`] what their envelope loses to the stars' XUV
+//! light, [`heat`] computes its internal heat.
 //! Every value is recorded in the system's cause `Trace`, with the codes
 //! of [`codes`].
 
@@ -64,6 +65,11 @@ mod enveloped;
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod escape;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod heat;
 #[cfg_attr(
     not(test),
@@ -73,5 +79,7 @@ mod interior;
 
 #[cfg(test)]
 mod envelope_tests;
+#[cfg(test)]
+mod escape_tests;
 #[cfg(test)]
 mod tests;

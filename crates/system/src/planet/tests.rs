@@ -23,11 +23,11 @@ const STANDARD_GRAVITY: f64 = 9.80665;
 
 /// Source: Marty 2012, bulk Earth water 2700 ppm of the mass (Earth
 /// Planet. Sci. Lett. 313, 56, p. 18).
-const EARTH_WATER_FRACTION: f64 = 2.7e-3;
+pub(super) const EARTH_WATER_FRACTION: f64 = 2.7e-3;
 
 /// Source: Wang et al. 2018 core mass fraction of Earth, as quoted by
 /// Plotnykov & Valencia 2020, 0.325.
-const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
+pub(super) const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
 
 /// Definition: a water world's water fraction for the tests, 0.5, the
 /// lower bound of Zeng et al. 2019's icy planets (a test choice).
@@ -50,7 +50,7 @@ fn leaf<T: NodeValueOf>(trace: &mut Trace, code: &'static str, value: T) -> Trac
 
 /// Builds a trial of `mass` Earth masses at `au` around one 1 solar-mass
 /// source, with the ice line at 2.7 au.
-fn trial(trace: &mut Trace, seed: u64, mass: f64, au: f64, ecc: f64) -> Trial {
+pub(super) fn trial(trace: &mut Trace, seed: u64, mass: f64, au: f64, ecc: f64) -> Trial {
     let source = StellarSource {
         flux: leaf(trace, "test.flux", EarthFlux(1.0 / (au * au))),
         // Source: 255 K at one Earth flux, the Bond albedo 0.3 of the
@@ -621,7 +621,7 @@ fn a_giant_above_the_tables_cites_the_mass_they_were_read_at() {
     assert!(read.contains(&t.age.node()));
 }
 
-fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
+pub(super) fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
     match &trace.node(node).unwrap().origin {
         Origin::Derived { from } => from.clone(),
         origin => panic!("{origin:?} is not derived"),
@@ -812,7 +812,7 @@ const EARTH_RADIUS_KM: f64 = 6_378.1;
 /// the solar system as Fortney et al. 2007 Table 4 takes it, 4.5 Gyr (study
 /// §1.6); a heavy-element core of 10 M_E, inside Wahl et al. 2017's 7 to
 /// 25 M_E (study §5.3).
-const JUPITER: (f64, f64, f64, f64) = (318.0, 5.2, 4.5, 10.0);
+pub(super) const JUPITER: (f64, f64, f64, f64) = (318.0, 5.2, 4.5, 10.0);
 
 /// Source: Neptune's mass, 17.1 M_E, at 30 au, with a 15 % envelope, the
 /// Lopez & Fortney 2014 column whose radius the study compares (§4).
@@ -832,7 +832,12 @@ fn km(radius: science::units::EarthRadius) -> f64 {
 
 /// A Jupiter trial: 318 M_E at 5.2 au, 4.5 Gyr, heavy mass 10 M_E.
 fn jupiter(trace: &mut Trace) -> (Trial, Drawn) {
-    let (mass, au, age, heavy) = JUPITER;
+    jupiter_at(trace, JUPITER.1)
+}
+
+/// Jupiter's mass, age and heavy mass at `au`.
+pub(super) fn jupiter_at(trace: &mut Trace, au: f64) -> (Trial, Drawn) {
+    let (mass, _, age, heavy) = JUPITER;
     let mut t = trial(trace, 1, mass, au, 0.0);
     t.age = leaf(trace, "test.age", Gyr(age));
     let drawn = Drawn::fixed(
