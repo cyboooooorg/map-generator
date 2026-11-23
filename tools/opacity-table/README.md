@@ -1,24 +1,16 @@
 # opacity-table
 
-> **Rewrite status.** The climate column that reads these tables is ported
-> into `crates/science` with slice 1 (#602, the planet model pull
-> request), together with the committed tables and `OPACITY.md`. Until
-> then the readers and the tables live at the tag `legacy-final`
-> (`crates/mapgen/src/planet/`, `crates/mapgen/data/`); this tool now
-> writes to `crates/science/data/` by default.
-
-Builds `crates/mapgen/data/opacity.bin`, and with `--shortwave`
-`crates/mapgen/data/shortwave.bin`. The second table covers the star's
+Builds `crates/science/data/opacity.bin`, and with `--shortwave`
+`crates/science/data/shortwave.bin`. The second table covers the star's
 near infrared on the Bond albedo's bands from 0.7 to 5 µm, with MT_CKD's
-water continuum binned in (`crates/mapgen/src/planet/shortwave.rs`).
+water continuum binned in. With `--continua` it writes instead the two
+text files of the continua, `mt-ckd-water.tsv` and `co2-cia.tsv`.
 
-`opacity.bin` is the correlated-k table of CO₂ and
-water line absorption, with MT_CKD's CO₂ continuum, that the climate column of `mapgen` reads
-(`crates/mapgen/src/planet/spectrum.rs`; both tables are decoded by
-`crates/mapgen/src/planet/ktable.rs`). The generator never runs this
-tool: the table is committed, and this tool only regenerates it. The
-table's provenance, layout and citations are in
-`crates/mapgen/data/OPACITY.md`.
+`opacity.bin` is the correlated-k table of CO₂ and water line
+absorption, with MT_CKD's CO₂ continuum, that the climate column of the
+`science` crate reads. The generator never runs this tool: the tables are
+committed, and this tool only regenerates them. Their provenance, layout
+and citations are in `crates/science/data/OPACITY.md`.
 
 ## Purpose
 
@@ -66,11 +58,18 @@ It fetches:
   for the same ids.
 - MT_CKD 4.3's water continuum coefficients,
   `https://raw.githubusercontent.com/AER-RC/MT_CKD_H2O/4.3/data/absco-ref_wv-mt-ckd.nc`
-  (kept for provenance: `spectrum.rs` holds the continuum, read from this
-  file in task 7.1).
+  (read by `--shortwave` and `--continua`).
 - MT_CKD 4.3's CO₂ continuum, in LBLRTM's `contnm.f90` at the commit
   MT_CKD 4.3 pins (`f66bb596`, SHA-256 checked by the script):
   `https://raw.githubusercontent.com/AER-RC/LBLRTM/f66bb596e1686e5ff162a6fadc014e91d3ce01d4/src/contnm.f90`.
+- HITRAN2024's CO₂–CO₂ collision-induced absorption,
+  `https://hitran.org/data/CIA/main/CO2-CO2_2024.cia` (read by
+  `--continua`).
+
+The script ends by checking the SHA-256 of `absco-ref_wv-mt-ckd.nc`,
+`contnm.f90` and `CO2-CO2_2024.cia` against the values it records
+(`shasum -a 256 -c`) and fails on a mismatch. HITRAN serves its current
+edition, so a changed CIA file means a new edition to review.
 
 ## Usage
 
@@ -83,7 +82,7 @@ cargo run --release -j 4 -p opacity-table -- \
   --out crates/science/data/opacity-halved.bin
 ```
 
-The first command writes `crates/mapgen/data/opacity.bin`; the second
+The first command writes `crates/science/data/opacity.bin`; the second
 writes the test-only table on bins half as wide, which the test
 `halving_bins_keeps_the_forcing` of `spectrum.rs` reads. Both take about
 three minutes on four threads.
@@ -95,24 +94,42 @@ cargo run --release -j 4 -p opacity-table -- --shortwave
 ```
 
 It writes `crates/science/data/shortwave.bin` in about four minutes on
-four threads; the albedo tests of `mapgen` check it.
+four threads; the albedo tests of `science` check it.
+
+To write the continuum files:
+
+```bash
+cargo run --release -j 4 -p opacity-table -- --continua
+```
+
+It needs only `absco-ref_wv-mt-ckd.nc` and `CO2-CO2_2024.cia` and takes
+a second. `crates/science/data/mt-ckd-water.tsv` holds MT_CKD's water
+continuum at every 50 cm⁻¹ from 0 to 5000 cm⁻¹ (the file's points, not
+bin means: `wavenumber_cm self_296K exponent foreign_296K`).
+`crates/science/data/co2-cia.tsv` holds the CO₂–CO₂ absorption, cm⁵ per
+molecule², averaged (trapezoid) over each 20 cm⁻¹ cell at 200, 300, 450
+and 800 K (`cell_start_cm k_200K k_300K k_450K k_800K`): each band of the
+file takes the set nearest each temperature, and cells under
+1e-50 cm⁵ at every temperature are left out. `--out FILE` redirects both
+files to the directory of `FILE`.
 
 Then run the spectrum and column tests of `science` (`mise run test:tier1`).
 
 ## Configuration
 
 | Option | Default | Meaning |
-|---|---|---|
+| --- | --- | --- |
+| `--continua` | off | Write `mt-ckd-water.tsv` and `co2-cia.tsv` instead of a table |
 | `--shortwave` | off | Build `shortwave.bin`: the albedo's bands over 0.7-5 µm, 13 temperatures, MT_CKD's water continuum |
 | `--raw DIR` | `tools/opacity-table/raw` | Where `fetch.sh` put the downloads |
-| `--out FILE` | `crates/mapgen/data/opacity.bin` (`shortwave.bin` with `--shortwave`) | The table to write |
+| `--out FILE` | `crates/science/data/opacity.bin` (`shortwave.bin` with `--shortwave`) | The table to write |
 | `--bin-width CM` | `20` | Width of a spectral bin, cm⁻¹ |
 | `--top CM` | `5000` | Upper end of the spectrum, cm⁻¹ |
 | `--temperatures K,…` | 16 values from 100 to 900 K (13 from 150 K with `--shortwave`) | Temperatures of the grid |
 | `--pressure-step DECADES` | `0.5` | Spacing of the pressure grid, 1e-5 to 100 bar |
 | `--threads N` | `4` | Worker threads |
 
-`mapgen` reads only the default bins (20 cm⁻¹ up to 5000 cm⁻¹) for its
+`science` reads only the default bins (20 cm⁻¹ up to 5000 cm⁻¹) for its
 column; the other options exist for the halved test table and for
 sensitivity checks.
 

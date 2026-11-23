@@ -665,7 +665,10 @@ body's equilibrium temperature frosts onto the ground until its partial
 pressure falls to its sublimation pressure, by Clausius–Clapeyron from
 the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
 0.0606 bar, 29 kJ/mol; CH₄ 90.7 K, 0.117 bar, 9.1 kJ/mol; values from
-the NIST WebBook from memory, not checked). N₂'s curve is measured
+the NIST WebBook from memory, not checked). This is the legacy law; the
+rewrite replaces CO₂'s and methane's with `science::volatiles`, the
+equations of state's vapour curves and CO₂'s Span & Wagner sublimation
+equation (see [radiative-transfer.md](radiative-transfer.md#carbon-dioxide-and-methane-saturation)). N₂'s curve is measured
 (issue #529): triple point 63.14 K and 0.1253 bar (Angus, de Reuck et
 al. 1979 and Jacobsen, Stewart et al. 1986, through the NIST WebBook,
 checked), and below it the polynomial fits `ln p = Σ Aᵢ / Tⁱ` of Fray &
@@ -810,138 +813,15 @@ surface balances what it absorbs, `σ T_eq⁴ + q`, with `T_eq` the
 equilibrium temperature under the body's derived Bond albedo
 (`planet::albedo`, issue #510: its oceans, land, ice, frost, clouds,
 Rayleigh scattering, methane haze and sulphuric deck, solved with the
-temperature as a fixed point) and `q` the internal heat flux. The
-column:
-
-- runs from the surface up a log-pressure grid (20 levels per decade,
-  to a thousandth of the surface pressure and at least to 1e-4 bar);
-- follows the dry adiabat of its mixture until its water vapour
-  saturates, then the moist pseudo-adiabat (Pierrehumbert 2010,
-  *Principles of Planetary Climate*, §2.7, eq. 2.33); past water's
-  critical point the vapour is a gas like the others. The heat
-  capacities are NIST's at 298 K, the steam's from the NIST Shomate
-  equation (it grows from 34 to 52 J/(mol·K) between 300 and 2000 K);
-- stops cooling at the skin temperature `T_eq / 2^¼`, a stratosphere
-  where the vapour keeps the mixing ratio of its cold trap;
-- sums its emission over the thermal spectrum (`planet::spectrum`): 250
-  bins of 20 cm⁻¹ from 0 to 5000 cm⁻¹, and a tail past it for the rest of
-  `σ T⁴`. In each bin every layer sends out its mean Planck flux with the
-  two-stream, non-scattering transmission of the layers above it, with the
-  diffusivity factor 1.66 (Elsasser), and the surface its own through the
-  whole column.
-
-**Absorbers** (`planet::spectrum`, issue #523). A grey optical depth
-closes the whole spectrum at once; real CO₂ absorbs in bands whose opaque
-part widens with the logarithm of its amount, which is why its forcing is
-logarithmic (Romps, Seeley & Edman 2022, doi:10.1175/JCLI-D-21-0275.1),
-and water leaves a window open between its rotation band and its
-vibration–rotation band. Three refits of a grey CO₂ law failed to hold
-Earth at 280 ppm, the outer edge, the moist plateau, Mars and Venus
-together, so the column takes each gas's absorption from its spectrum:
-
-- **CO₂ and water lines:** a correlated-k table built offline from the
-  HITRAN2024 line lists (Gordon et al. 2026) by `tools/opacity-table`
-  (`crates/mapgen/data/opacity.bin`, 3.8 MB; provenance, grid and
-  regeneration in `crates/mapgen/data/OPACITY.md`). Each bin holds 8
-  g-points on a grid of 15 pressures (1e-5 to 100 bar) and 16
-  temperatures (100 to 900 K), the lines Voigt-shaped to 25 cm⁻¹ with
-  their temperature dependence (strengths, hot bands, widths). Each gas
-  has a set broadened by air and one by itself (HITRAN's `γ_self`), mixed
-  by its share of the pressure, so pure CO₂ (Venus, Mars, a thick CO₂ air)
-  takes its self-broadened lines.
-- **CO₂ continuum:** MT_CKD 4.3's, the sub-Lorentzian far wings of CO₂'s
-  lines beyond the 25 cm⁻¹ cutoff (the χ factor of Perrin & Hartmann 1989
-  is built into it). Without them 8 bar of CO₂ at 1.70 AU sent out 94 W/m²
-  instead of 73.5 (Kopparapu et al. 2013: 67.4).
-- **Water continuum:** MT_CKD 4.3's self (as the vapour pressure squared)
-  and foreign (as the vapour times the other gases) continua (Mlawer et
-  al. 2012), which assume the same 25 cm⁻¹ cutoff.
-- **CO₂–CO₂ pairs:** HITRAN's collision-induced absorption (Karman et al.
-  2019), as the CO₂ density squared, not broadened.
-- **Methane:** its grey stand-in for Titan's collision-induced bands
-  (below), over 0-650 cm⁻¹ only, where those bands lie.
-
-CO₂ and water overlap at random within a bin (Lacis & Oinas 1991): the
-transmissions multiply. The lines take the pressure at each level, so
-`κ ∝ p` in their Lorentz wings, at Mars's millibars as at Venus's 92 bar;
-the column masses are `p / g` with the body's gravity.
-
-Checks of the radiation alone (tests of `planet::spectrum` and
-`planet::column`):
-
-| Check | Result | Bound |
-|---|---|---|
-| CO₂ doubling forcing, 280 to 560 ppm, Earth column | 3.32 W/m² | 3.7 ± 0.6 (Myhre et al. 1998) |
-| Forcing per doubling at 70, 280 and 1000 ppm | 2.97, 3.32, 3.68 W/m² | within 15 % of their mean |
-| Earth clear-sky OLR, 288 K, 77 % humidity, fixed profile | 258.2 W/m² | 265 ± 10 (Kiehl & Trenberth 1997) |
-| Moist plateau (runaway asymptote, mean over 500-640 K) | 283.5 W/m² | 282 ± 14 (Goldblatt et al. 2013) |
-| Plateau over 500-640 K / its peak (360 K) | within 0.2 % / +3.9 % | 1 % / at most +6 % |
-| Halving the bins | 0.01 W/m² on the forcing | under 0.1 |
-
-The column costs some 600 times the grey one per call; a draw of 20
-systems takes about 32 s, against 0.4 s on the grey column (issue #593
-holds the solver's redesign).
-
-**Cloud greenhouse** (`planet::column`, issue #523). The albedo's water
-clouds cover `f` of the sky (`albedo::cloud_cover`: Xu & Randall's
-`RH^0.25` times `1 − exp(−p_H₂O / 1e-2 bar)`, Earth's 0.67). That share
-radiates from a grey layer at the cloud top instead of the clear column
-below it:
-
-```text
-OLR = (1 − f) OLR_clear + f OLR_cloudy
-OLR_cloudy = above_c + seen_c (ε B(T_c) + (1 − ε) I_clear(p_c))
-```
-
-with `above_c` what the air above the top sends out, `seen_c` its
-transmission to space and `I_clear(p_c)` the clear column's upward flux
-at the top, band by band, so that the cloudy column needs no second sum.
-
-- The top sits at 0.589 of the surface pressure: ISCCP's global annual
-  mean cloud-top pressure, 580 mb (Rossow & Schiffer 1999, *BAMS* 80,
-  2261, §6a and Table 4), over Earth's mean surface pressure, 985.5 hPa
-  (Trenberth & Smith 2005; from memory, not checked).
-- The emissivity is `1 − exp(−1.66 τ_ir)` = 0.957, with ISCCP's mean
-  visible optical thickness 3.8 and its `τ_ir = τ / 2` (same paper, §5)
-  and the column's diffusivity 1.66.
-- Only water clouds count; a body without water vapour (Mars, Titan)
-  radiates as before. The moist plateau stays clear-sky and saturated, as
-  the line-by-line plateaus it is checked against are.
-- Check, at 280 ppm and 288 K with the falling humidity below: all-sky
-  OLR 236.8 W/m² against CERES EBAF's 240 ± 8 (Loeb et al. 2018),
-  clear-sky 270.9 against 267 ± 8, cloud effect 34.1 against 28 ± 8.
-  CERES samples its clear sky in cloud-free scenes, drier than the clear
-  sky of a cloudy air (Sohn & Bennartz 2008), hence the wider bounds.
-
-**Falling humidity** (`planet::column`, issue #523). Above a temperate
-surface (subcritical and below saturation, 77 % on a wet body) the
-troposphere's relative humidity falls with the pressure as Manabe &
-Wetherald 1967 set it, the profile of the habitable-zone models of
-Kasting et al. 1993 and Kopparapu et al. 2013:
-
-```text
-RH = RH_s (Q − 0.02) / (1 − 0.02),   Q = p / p_s
-```
-
-- The surface keeps its own humidity `RH_s`; the temperature still
-  follows the adiabats; above the cold trap the vapour keeps the mixing
-  ratio the profile leaves there.
-- Over a saturated or supercritical surface (a boiling ocean, a
-  runaway's steam) the column stays saturated, and the moist plateau is
-  computed saturated and clear, as Goldblatt et al. 2013 and Kopparapu
-  et al. 2013 take it.
-- **Runaway convention.** A drier column has no moist limit of its own:
-  its OLR keeps rising with the surface (414 W/m² at 340 K against about
-  290 saturated). A wet surface therefore runs away when what it absorbs
-  exceeds the most its *saturated* column sends out below water's
-  critical point, on its own air, skin and water supply
-  (`climate::wet_balance`, probed at 380 K and otherwise scanned); below
-  that, its balance is solved on the falling-humidity column. This is
-  Kasting's and Kopparapu's practice: a saturated troposphere for the
-  inner edge, Manabe & Wetherald's for temperate climates.
-- Check: Earth's clear-sky OLR is 270.9 W/m² at 280 ppm and 288 K,
-  against 267 ± 8 (CERES EBAF clear-sky); it was 253 with the
-  troposphere saturated above its condensation level.
+temperature as a fixed point) and `q` the internal heat flux. How the
+column computes its OLR (the adiabats, the skin temperature, the
+correlated-k spectrum of CO₂ and water, their continua, the CO₂ pairs,
+the cloud greenhouse, the falling humidity, the runaway convention and
+the checks against Earth, the moist plateau, Mars and Venus) is on its
+own page, [How does a planet's air set its outgoing heat and its
+albedo?](radiative-transfer.md). The climate prose below relies on
+its runaway convention: a wet surface runs away when what it absorbs
+exceeds the most its saturated column sends out.
 
 **Albedo of a water runaway** (`climate::absorbing`, issue #492). A body
 in a water runaway (by the insolation limit or a boil) that keeps steam
@@ -1009,7 +889,9 @@ liquid water. Three rules bound it:
   (`atmosphere::methane_saturation_bar`: over its ice below its triple
   point, 90.7 K and 0.117 bar, over its liquid above with the mean latent
   heat joining the triple point to its normal boiling point, 111.67 K,
-  and none past its critical point, 190.56 K) and `x` = 0.5 the methane
+  and none past its critical point, 190.56 K; the legacy law, which the
+  rewrite replaces with `science::volatiles`, see
+  [radiative-transfer.md](radiative-transfer.md#carbon-dioxide-and-methane-saturation)) and `x` = 0.5 the methane
   share of a sea of methane, nitrogen and ethane (`SEA_METHANE_SHARE`,
   Raoult's law; Glein & Shock 2013 and Tan, Kargel & Marion 2013 find
   0.5 to 0.7, and Titan's near-surface air holds 45 to 50 % of pure

@@ -3,7 +3,9 @@
 # HITRAN line lists of H2O and CO2 (main isotopologues, 0-14500 cm-1: the
 # longwave table's 0-5000 and the shortwave table's 2000-14400) through
 # HITRAN's public line-by-line API, the HITRAN partition sums (TIPS),
-# and MT_CKD 4.3's water continuum coefficients. Anonymous requests: no
+# MT_CKD 4.3's water continuum coefficients, and HITRAN's CO2-CO2
+# collision-induced absorption. The three files the continuum tables
+# are built from are checked against the SHA-256 recorded below. Anonymous requests: no
 # account, no personal data.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -45,3 +47,19 @@ done
 # continuum (BLOCK DATA BFCO2, XFACCO2, FRNCO2).
 [[ -s raw/contnm.f90 ]] || curl -sSL -A "$agent" -o raw/contnm.f90 \
   "https://raw.githubusercontent.com/AER-RC/LBLRTM/f66bb596e1686e5ff162a6fadc014e91d3ce01d4/src/contnm.f90"
+
+# HITRAN2024's CO2-CO2 collision-induced absorption, binned into
+# crates/science/data/co2-cia.tsv by `opacity-table --continua`.
+[[ -s raw/CO2-CO2_2024.cia ]] || curl -sSL -A "$agent" -o raw/CO2-CO2_2024.cia \
+  "https://hitran.org/data/CIA/main/CO2-CO2_2024.cia"
+
+# The inputs of the continuum tables, as downloaded on 2026-11-18 (MT_CKD)
+# and 2026-11-22 (CIA). A mismatch fails the script: HITRAN's server
+# serves its current edition, so a changed CIA file means a new edition
+# to review before the tables are regenerated.
+(cd raw && shasum -a 256 -c - <<'SUMS'
+69944eb8b045c268e2daeb2cddf536b99f9e9efe7e91c425067b46a5b287ddb3  absco-ref_wv-mt-ckd.nc
+643f4173063d51759a0ea9e5715d0fcbd4066902452a2a5e56f62d37de69bcf7  contnm.f90
+9db0856cb008cb147728e3a945f818c60a02370442d492c38d7f8884c9cfadca  CO2-CO2_2024.cia
+SUMS
+)

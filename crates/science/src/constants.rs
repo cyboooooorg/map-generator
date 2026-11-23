@@ -77,6 +77,27 @@ pub const CENTIMETRE_PER_YEAR: MetrePerSecond = MetrePerSecond(0.01 / (JULIAN_YE
 /// Definition: years in a gigayear (SI prefix).
 pub const YEARS_PER_GYR: f64 = 1e9;
 
+/// Source: Boltzmann constant, 1.380 649e-23 J/K, exact since the SI
+/// redefinition of 2019 (CODATA 2018, Tiesinga et al. 2021, Rev. Mod.
+/// Phys. 93, 025010; NIST CODATA value `k`).
+pub const BOLTZMANN: f64 = 1.380_649e-23;
+
+/// Source: Avogadro constant, 6.022 140 76e23 /mol, exact since the SI
+/// redefinition of 2019 (CODATA 2018, Tiesinga et al. 2021, Rev. Mod.
+/// Phys. 93, 025010; NIST CODATA value `N_A`).
+pub const AVOGADRO: f64 = 6.022_140_76e23;
+
+/// Definition: molar gas constant `R = k N_A`, J/(mol K), exact
+/// (CODATA 2018 prints 8.314 462 618... J/(mol K)); the product of
+/// [`BOLTZMANN`] and [`AVOGADRO`] to its last digit.
+pub const MOLAR_GAS_CONSTANT: f64 = 8.314_462_618_153_24;
+
+/// Source: second radiation constant `c2 = h c / k`, 1.438 776 877e-2 m K
+/// (exact, CODATA 2018, Tiesinga et al. 2021, Rev. Mod. Phys. 93, 025010;
+/// NIST CODATA value `c_2`), here in cm K for wavenumbers in cm^-1, to
+/// its printed digits.
+pub const SECOND_RADIATION_CONSTANT_CM_K: f64 = 1.438_776_877;
+
 /// Definition: pascals in a bar (exact, SI-accepted unit).
 pub const PASCALS_PER_BAR: f64 = 1e5;
 
@@ -109,8 +130,6 @@ mod tests {
         assert!((EARTH_MASS.0 / 5.972_2e24 - 1.0).abs() < 1e-4);
     }
 
-    /// Definition: exact SI 2019 value of the Boltzmann constant, J/K.
-    const BOLTZMANN: f64 = 1.380_649e-23;
     /// Definition: exact SI 2019 value of the Planck constant, J s.
     const PLANCK: f64 = 6.626_070_15e-34;
     /// Definition: exact SI value of the speed of light, m/s.
@@ -163,6 +182,14 @@ mod tests {
         let sigma = 2.0 * std::f64::consts::PI.powi(5) * BOLTZMANN.powi(4)
             / (15.0 * PLANCK.powi(3) * LIGHT_SPEED.powi(2));
         close(STEFAN_BOLTZMANN, sigma, 1e-9);
+    }
+
+    #[test]
+    fn the_gas_and_radiation_constants_follow_from_k_h_and_c() {
+        close(MOLAR_GAS_CONSTANT, BOLTZMANN * AVOGADRO, 1e-15);
+        // h c / k, in m K, converted to cm K.
+        let c2_cm_k = PLANCK * LIGHT_SPEED / BOLTZMANN * 100.0;
+        close(SECOND_RADIATION_CONSTANT_CM_K, c2_cm_k, 1e-9);
     }
 
     /// A consistency check between the stored irradiance and luminosity,

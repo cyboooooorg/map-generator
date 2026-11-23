@@ -51,6 +51,8 @@ wants to understand it, and link back to those studies.
 - [How tall do volcanoes grow, and how many are
   there?](volcanoes.md)
 - [What colour would plants be under another star?](plant-colours.md)
+- [How does a planet's air set its outgoing heat and its
+  albedo?](radiative-transfer.md)
 
 ## Writing an article
 

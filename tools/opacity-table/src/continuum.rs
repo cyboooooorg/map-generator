@@ -132,7 +132,7 @@ impl Co2Continuum {
 /// coefficient at 296 K, its temperature exponent and the foreign
 /// coefficient at 296 K, cm² per molecule per cm⁻¹ at 1013 mbar (the
 /// file's `self_absco_ref`, `self_texp` and `for_absco_ref`, those
-/// `mapgen`'s longwave continuum reads). `mapgen` takes the absorption
+/// `science`'s longwave continuum reads). `science` takes the absorption
 /// per molecule as `mt_ckd_h2o_absco` does:
 /// `(C_s (296/T)^n e + C_f (p − e)) / p_ref × (296/T) × ν tanh(c₂ν/2T)`.
 pub struct WaterContinuum {
@@ -155,6 +155,22 @@ impl WaterContinuum {
                 .map(|i| (nu[i], own[i], exponent[i], foreign[i]))
                 .collect(),
         })
+    }
+
+    /// The file's points at each multiple of `step_cm` from 0 to `top_cm`
+    /// (point values, not bin means): `(ν, C_s, n, C_f)`. A multiple the
+    /// file has no point at is left out.
+    pub fn nodes(&self, step_cm: f64, top_cm: f64) -> Vec<(f64, f64, f64, f64)> {
+        let count = (top_cm / step_cm).round() as usize;
+        (0..=count)
+            .filter_map(|i| {
+                let nu = i as f64 * step_cm;
+                self.points
+                    .iter()
+                    .find(|p| (p.0 - nu).abs() < 1e-6)
+                    .map(|&(_, s, n, f)| (nu, s, n, f))
+            })
+            .collect()
     }
 
     /// The bin from `lo` to `hi` cm⁻¹: the mean self coefficient of its
@@ -237,6 +253,24 @@ mod tests {
         assert!((exponent - 3.0).abs() < 1e-12);
         assert!((foreign / 2e-23 - 1.0).abs() < 1e-12);
         assert_eq!(w.bin(100.0, 120.0), (0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn water_nodes_are_the_files_points() {
+        // Points every 10 cm⁻¹ from −10 to 110; nodes every 50 from 0 to 100.
+        let w = WaterContinuum {
+            points: (-1..=11)
+                .map(|i| (i as f64 * 10.0, i as f64, 2.0 * i as f64, 3.0 * i as f64))
+                .collect(),
+        };
+        assert_eq!(
+            w.nodes(50.0, 100.0),
+            vec![
+                (0.0, 0.0, 0.0, 0.0),
+                (50.0, 5.0, 10.0, 15.0),
+                (100.0, 10.0, 20.0, 30.0)
+            ]
+        );
     }
 
     #[test]
