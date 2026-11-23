@@ -20,10 +20,11 @@ use super::codes;
 use super::envelope::envelope_fraction;
 use super::interior::InteriorError;
 use crate::Trial;
-use crate::random::uniform;
+use crate::random::{normal, uniform};
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
 use science::units::{Dex, EarthMass, Fraction};
+use science::volatiles::VOLATILE_SPREAD;
 use timeline::{Code, Provenance, Seed, Trace, Traced};
 
 /// Source: Elkins-Tanton & Seager 2008, "Coreless Terrestrial Exoplanets"
@@ -109,6 +110,25 @@ pub(crate) struct Drawn {
     /// A gas giant's total heavy-element mass, drawn; `None` below
     /// 20 M_E.
     pub heavy_mass: Option<Traced<EarthMass>>,
+    /// The scatter of each volatile budget around its rule.
+    pub volatiles: VolatileScatter,
+}
+
+/// The scatter of each volatile budget around its rule, dex: log-normal,
+/// `N(0, VOLATILE_SPREAD)` in dex, drawn in the order CO2, N2, S, CH4,
+/// NH3 from one sub-seed (`planet/volatiles`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct VolatileScatter {
+    /// CO2.
+    pub co2: Traced<Dex>,
+    /// N2.
+    pub n2: Traced<Dex>,
+    /// Sulfur.
+    pub s: Traced<Dex>,
+    /// CH4.
+    pub ch4: Traced<Dex>,
+    /// NH3.
+    pub nh3: Traced<Dex>,
 }
 
 impl Drawn {
@@ -141,6 +161,7 @@ pub(crate) struct Labels {
     pub water: &'static str,
     pub radiogenic: &'static str,
     pub envelope: &'static str,
+    pub volatiles: &'static str,
 }
 
 /// The labels of the engine.
@@ -149,6 +170,7 @@ pub(crate) const LABELS: Labels = Labels {
     water: "planet/water",
     radiogenic: "planet/radiogenic",
     envelope: "planet/envelope",
+    volatiles: "planet/volatiles",
 };
 
 /// Draws the composition of `trial` from `seed` and records it. The
@@ -169,6 +191,7 @@ pub(crate) fn draw_with(
     let water = water_draws(seed.derive(labels.water));
     let radiogenic = radiogenic_abundance(seed.derive(labels.radiogenic));
     let envelope = envelope_fraction(seed.derive(labels.envelope), *trial.mass.value())?;
+    let scatter = volatile_scatter(seed.derive(labels.volatiles));
     let migrated = (!beyond).then_some(water.migrated);
     let fraction = if beyond || water.migrated {
         water.icy
@@ -184,6 +207,7 @@ pub(crate) fn draw_with(
         migrated,
         radiogenic,
         (envelope.fraction, envelope.heavy_mass),
+        (scatter, Provenance::Drawn),
     )
 }
 
@@ -202,6 +226,7 @@ fn record(
     migrated: Option<bool>,
     radiogenic: f64,
     (envelope, heavy_mass): (f64, Option<EarthMass>),
+    (scatter, scatter_provenance): ([f64; 5], Provenance),
 ) -> Result<Drawn, InteriorError> {
     let cmf = Fraction::try_from(cmf).map_err(InteriorError::NotAFraction)?;
     let fraction = Fraction::try_from(water_fraction).map_err(InteriorError::NotAFraction)?;
@@ -235,6 +260,15 @@ fn record(
             Provenance::Drawn,
         )?,
     };
+    let mut scatter_leaf =
+        |code: &'static str, dex: f64| trace.leaf(Code::of(code), Dex(dex), scatter_provenance);
+    let volatiles = VolatileScatter {
+        co2: scatter_leaf(codes::VOLATILE_SCATTER_CO2, scatter[0])?,
+        n2: scatter_leaf(codes::VOLATILE_SCATTER_N2, scatter[1])?,
+        s: scatter_leaf(codes::VOLATILE_SCATTER_S, scatter[2])?,
+        ch4: scatter_leaf(codes::VOLATILE_SCATTER_CH4, scatter[3])?,
+        nh3: scatter_leaf(codes::VOLATILE_SCATTER_NH3, scatter[4])?,
+    };
     Ok(Drawn {
         core_mass_fraction,
         formed_beyond_ice_line,
@@ -247,6 +281,7 @@ fn record(
         )?,
         envelope_fraction,
         heavy_mass,
+        volatiles,
     })
 }
 
@@ -283,11 +318,19 @@ pub(crate) fn radiogenic_abundance(seed: Seed) -> f64 {
     )
 }
 
+/// The volatile scatter, dex, in the order CO2, N2, S, CH4, NH3: each
+/// `N(0, VOLATILE_SPREAD)`, two uniforms per number from one stream.
+pub(crate) fn volatile_scatter(seed: Seed) -> [f64; 5] {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
+    std::array::from_fn(|_| VOLATILE_SPREAD.0 * normal(&mut rng))
+}
+
 #[cfg(test)]
 impl Drawn {
     /// A composition set by hand for `trial`, for a test that needs Earth's
     /// or a given kind of planet; whether it formed beyond the ice line
-    /// still comes from the trial. `migrated` is `None` beyond the ice line.
+    /// still comes from the trial. `migrated` is `None` beyond the ice line;
+    /// a `None` scatter gives 0 dex, imposed.
     #[expect(clippy::too_many_arguments, reason = "one argument per drawn leaf")]
     pub(crate) fn fixed(
         trial: &Trial,
@@ -298,6 +341,7 @@ impl Drawn {
         migrated: Option<bool>,
         envelope_fraction: f64,
         heavy_mass: Option<EarthMass>,
+        scatter: Option<[f64; 5]>,
     ) -> Drawn {
         record(
             trial,
@@ -308,6 +352,7 @@ impl Drawn {
             migrated,
             radiogenic_abundance,
             (envelope_fraction, heavy_mass),
+            scatter.map_or(([0.0; 5], Provenance::Imposed), |s| (s, Provenance::Drawn)),
         )
         .unwrap()
     }

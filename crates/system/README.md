@@ -17,7 +17,7 @@ request, the archetype targets, the present date.
 | `spin` | mapgen3 | the primordial spin of a planet (period, obliquity) |
 | `stand_in` | mapgen3 | `classify`: a provisional classifier for `draw_with` (mass steps, one radius law), until `class_of` is public; used by the CLI and the tests |
 | `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
-| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `heat`, `codes`: the composition and envelope draws, the structure (rocky, mini-Neptune, giant) and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
+| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `heat`, `escape`, `water`, `regime`, `core`, `air`, `bare`, `codes`: `bare::bare` chains a trial in legacy's order from its draws, structure (rocky, mini-Neptune, giant), envelope escape and heat to, once the envelope is gone, its water, regime, core and bare air; no climate yet (#659), crate-internal until 2d (laws, sources and limits: [interiors](../../docs/science/planet-interiors.md), [atmospheres](../../docs/science/planet-atmospheres.md#the-chain-and-the-surface-classes)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
 The remaining doc-only module fixes its future signature in a `//!` comment.

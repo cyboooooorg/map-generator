@@ -1235,15 +1235,19 @@ class trial of the backward search the trial's seed.
   before the climate of the second pull request). The drawn $w$ is the
   bulk water. A dry planet's stays in its mantle, which weighs
   $(1 - c)(1 - w) M + w M$: hydrated silicate, whose ocean comes from
-  outgassing in the second pull request (Marty's 2700 ppm is the bulk
-  Earth's water, not its oceans'). A water world adds a water layer
+  outgassing (Marty's 2700 ppm is the bulk Earth's water, not its
+  oceans'). The planet model's water step (`system::planet::water`)
+  still takes the whole bulk water as its ocean: the share that reaches
+  the surface needs a study first (#663). A water world adds a water layer
   $w M$ on the isotherm of its equilibrium temperature, which stands for
   the surface temperature until then: the isotherm from 273.31 to 355 K,
   the melting curve colder. From 355 K, past the water laws, its water
   is kept as an inventory without a layer, outside the structure, until
-  the second pull request gives it a steam envelope (as the earlier model's
-  `steam_interior`, after Turbet et al. 2020); its surface gravity and
-  mean density are those of the condensed planet under it.
+  the climate gives it a steam envelope (as the earlier model's
+  `steam_interior`, after Turbet et al. 2020; #659); its surface gravity
+  and mean density are those of the condensed planet under it. Its
+  escape and the steam it loses read its whole mass, water included
+  (`Body::whole_mass`).
 - **Outputs.** Radius, surface gravity, mean density, the core, mantle
   and water masses, each shell's outer radius, mass, material and state,
   and the three heats. The structure node is the central pressure the

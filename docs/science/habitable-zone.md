@@ -267,6 +267,15 @@ The zone lives in [`star.rs`](https://github.com/cyboooooorg/map-generator/blob/
    like the climate, uses the mean light over the year, a little more
    than at the semi-major axis.
 
+**The rewrite.** The inner edge is `science::habitable::runaway_flux`,
+the same Kopparapu et al. (2014) fit for one Earth mass and one star,
+clamped to 2,600–7,200 K. A planet runs away
+(`system::planet::water`) when the sum of each source's flux over its
+own limit exceeds 1, so that two stars are never blended into one
+temperature (#592). The outer edge, the maximum greenhouse, comes with
+the climate. How the runaway takes the water: [Planet atmospheres,
+climate and surface](planet-atmospheres.md#runaway-greenhouse-water-kept-and-tectonic-regime).
+
 Trimmed, from `crates/mapgen/src/star.rs`:
 
 ```rust

@@ -61,6 +61,18 @@ pub(crate) const TABLE_MASS_USED: &str = "planet.table-mass-used";
 pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";
 /// Mass of a mini-Neptune's hydrogen-helium envelope, `f M`.
 pub(crate) const ENVELOPE_MASS: &str = "planet.envelope.mass";
+/// Mass of the envelope lost to the XUV light of the stars over the
+/// planet's age, energy-limited (Owen & Wu 2017, eq. 19) on the formed
+/// body's radius and mass, capped by the envelope `f M`. Recorded only
+/// when it is not zero.
+pub(crate) const ENVELOPE_LOST: &str = "planet.envelope.lost";
+/// Envelope mass fraction of the planet once the escape has taken its
+/// share: `(f M - lost) / (M - lost)` for a mini-Neptune, 0 below
+/// `science::escape::MIN_ENVELOPE`; `1 - Mz / M'` for a giant.
+pub(crate) const ENVELOPE_KEPT_FRACTION: &str = "planet.envelope.kept-fraction";
+/// Mass of the planet once the escape has taken its share: `M - lost`, or
+/// `M - f M` for a mini-Neptune stripped of its whole envelope.
+pub(crate) const MASS_KEPT: &str = "planet.mass.kept";
 /// Thickness of a mini-Neptune's envelope, read in the Lopez & Fortney 2014
 /// tables, added to the radius of its core.
 pub(crate) const ENVELOPE_THICKNESS: &str = "planet.envelope.thickness";
@@ -111,3 +123,110 @@ pub(crate) const HEAT_RADIOGENIC: &str = "planet.heat.radiogenic";
 pub(crate) const HEAT_TIDAL: &str = "planet.heat.tidal";
 /// Secular cooling power.
 pub(crate) const HEAT_SECULAR: &str = "planet.heat.secular";
+/// Scatter of the CO2 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_CO2: &str = "planet.volatiles.scatter.co2";
+/// Scatter of the N2 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_N2: &str = "planet.volatiles.scatter.n2";
+/// Scatter of the sulfur budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_S: &str = "planet.volatiles.scatter.s";
+/// Scatter of the CH4 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_CH4: &str = "planet.volatiles.scatter.ch4";
+/// Scatter of the NH3 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_NH3: &str = "planet.volatiles.scatter.nh3";
+/// Whether the planet's water ran away by insolation: the sum over its
+/// stars of each flux over the runaway greenhouse limit at that star's
+/// effective temperature exceeds 1 (#592). Derived from every source's
+/// flux and temperature.
+pub(crate) const WATER_RUNAWAY: &str = "planet.water.runaway";
+/// Water lost as steam in a runaway: 9 kg of water for each kg of hydrogen
+/// the energy-limited escape takes at the whole mass (the bulk's plus a
+/// water beyond the laws), capped by the bulk water. Recorded only in a
+/// runaway.
+pub(crate) const WATER_STEAM_LOST: &str = "planet.water.steam-lost";
+/// Water the planet keeps: its bulk water `w (1 - f) M`, less the steam
+/// lost in a runaway.
+pub(crate) const WATER_INVENTORY: &str = "planet.water.inventory";
+/// Whether the climate boiled the ocean: false, imposed, until the
+/// climate's boiling loop of the next pull request.
+pub(crate) const WATER_BOILED: &str = "planet.water.boiled";
+/// Mass of the planet once the steam is gone: its dry mass `(1 - w) M`
+/// plus the water kept.
+pub(crate) const MASS_AFTER_STEAM: &str = "planet.mass.after-steam";
+/// Water mass fraction of the planet once the steam is gone: the water
+/// kept over the mass after the steam.
+pub(crate) const WATER_KEPT_FRACTION: &str = "planet.water.kept-fraction";
+/// Tectonic regime: heat pipe, stagnant lid, plates or episodic, from the
+/// internal heat flux, the mass and the water kept.
+pub(crate) const REGIME: &str = "planet.regime";
+/// Cooling time of the iron core through the mantle, `ρ c r_c d / (3 k
+/// Nu)`, from the core's mass and outer radius, the planet's radius and
+/// the regime's Nusselt number (`science::dynamo::cooling_time`).
+pub(crate) const CORE_COOLING_TIME: &str = "planet.core.cooling-time";
+/// State of the iron core: none (no iron shell or no core mass), liquid,
+/// or frozen past `science::dynamo::CORE_FROZEN` cooling times.
+pub(crate) const CORE_STATE: &str = "planet.core.state";
+/// Whether a dynamo runs in the core, from its cooling time, the age and
+/// the regime (plates keep the thermal dynamo running).
+pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
+/// Surface equatorial dipole field of the core's dynamo; 0 T without one.
+pub(crate) const CORE_FIELD: &str = "planet.core.field";
+/// Partial pressure of N2 the interior brought up: the inventory at
+/// formation times its scatter, the regime's share, the share the water
+/// lets through and, under plates, what subduction leaves.
+pub(crate) const AIR_OUTGASSED_N2: &str = "planet.air.outgassed.n2";
+/// Partial pressure of CO2 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_CO2: &str = "planet.air.outgassed.co2";
+/// Partial pressure of water vapour before the escape: a runaway's whole
+/// water inventory, 0 bar otherwise (the oceans hold it).
+pub(crate) const AIR_OUTGASSED_H2O: &str = "planet.air.outgassed.h2o";
+/// Partial pressure of CH4 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_CH4: &str = "planet.air.outgassed.ch4";
+/// Partial pressure of NH3 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_NH3: &str = "planet.air.outgassed.nh3";
+/// Partial pressure of SO2 the interior brought up: its sulphur as SO2,
+/// the share that stays in the air, then as [`AIR_OUTGASSED_N2`].
+pub(crate) const AIR_OUTGASSED_SO2: &str = "planet.air.outgassed.so2";
+/// Partial pressure of O2 outgassed: 0 bar, imposed (life makes it).
+pub(crate) const AIR_OUTGASSED_O2: &str = "planet.air.outgassed.o2";
+/// Share of its air the planet keeps on the cosmic shoreline, from its
+/// escape velocity (the whole mass, the bulk's plus a water beyond the
+/// laws, and the bulk radius), the XUV fluence of its stars and its
+/// dynamo.
+pub(crate) const AIR_SHORELINE_KEPT: &str = "planet.air.shoreline-kept";
+/// Share of the SO2 the air keeps against its wash-out: wet or oxidising,
+/// a day and a half's worth; dry, in proportion to its column.
+pub(crate) const AIR_SO2_KEPT: &str = "planet.air.so2-kept";
+/// Partial pressure of N2 in the air: the outgassed one times the
+/// shoreline's share.
+pub(crate) const AIR_KEPT_N2: &str = "planet.air.kept.n2";
+/// Partial pressure of CO2 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_CO2: &str = "planet.air.kept.co2";
+/// Partial pressure of water vapour in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_H2O: &str = "planet.air.kept.h2o";
+/// Partial pressure of CH4 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_CH4: &str = "planet.air.kept.ch4";
+/// Partial pressure of NH3 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
+/// Partial pressure of SO2 in the air: the outgassed one times the
+/// shoreline's share and the share the wash-out leaves.
+pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
+/// Partial pressure of O2 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
+/// Surface pressure: the sum of the partial pressures.
+pub(crate) const AIR_PRESSURE: &str = "planet.air.pressure";
+
+/// The gases of the air, each with the code of its outgassed partial
+/// pressure and of its partial pressure in the air, in the contract's
+/// order.
+pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 7] = [
+    (timeline::Gas::N2, AIR_OUTGASSED_N2, AIR_KEPT_N2),
+    (timeline::Gas::Co2, AIR_OUTGASSED_CO2, AIR_KEPT_CO2),
+    (timeline::Gas::H2o, AIR_OUTGASSED_H2O, AIR_KEPT_H2O),
+    (timeline::Gas::Ch4, AIR_OUTGASSED_CH4, AIR_KEPT_CH4),
+    (timeline::Gas::Nh3, AIR_OUTGASSED_NH3, AIR_KEPT_NH3),
+    (timeline::Gas::So2, AIR_OUTGASSED_SO2, AIR_KEPT_SO2),
+    (timeline::Gas::O2, AIR_OUTGASSED_O2, AIR_KEPT_O2),
+];

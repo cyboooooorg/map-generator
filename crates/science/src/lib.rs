@@ -6,16 +6,21 @@
 //! README). The laws arrive with the pull requests that use them.
 
 pub mod constants;
+pub mod dynamo;
 pub mod envelope;
 pub mod eos;
+pub mod escape;
 pub mod giants;
+pub mod habitable;
 pub mod heat;
 pub mod hydrogen;
 pub mod orbit;
+pub mod outgassing;
 pub mod radiation;
 pub mod relief;
 pub mod stellar;
 pub mod structure;
+pub mod tectonics;
 pub mod units;
 pub mod volatiles;
 pub mod water;

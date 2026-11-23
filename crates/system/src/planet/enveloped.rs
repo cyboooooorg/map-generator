@@ -82,6 +82,33 @@ impl Body {
         }
     }
 
+    /// The whole planet's mass and the nodes it derives from: the bulk
+    /// mass plus the water beyond the laws ([`Water::BeyondLaw`]) when
+    /// the body has one, which the bulk leaves out. The one mass that
+    /// holds a planet's steam (`super::water::water`) and its air (the
+    /// shoreline of `super::air::air`). Both take the bulk's radius with
+    /// it, the condensed planet's for a water beyond the laws: the only
+    /// radius the rewrite has until PR 2d's steam envelope.
+    pub(crate) fn whole_mass(&self) -> (Kilogram, Vec<NodeId>) {
+        let bulk = self.bulk().mass;
+        let beyond = match self {
+            Self::Rocky(interior) | Self::MiniNeptune { core: interior, .. } => {
+                match interior.water {
+                    Water::BeyondLaw { mass, .. } => Some(mass),
+                    Water::InMantle | Water::Layer { .. } => None,
+                }
+            }
+            Self::Giant(_) => None,
+        };
+        let mut mass = Kilogram::from(*bulk.value());
+        let mut from = vec![bulk.node()];
+        if let Some(water) = beyond {
+            mass = Kilogram(mass.0 + water.value().0);
+            from.push(water.node());
+        }
+        (mass, from)
+    }
+
     /// The layers from the centre out: a rocky planet's shells, a
     /// mini-Neptune's core shells then its envelope, a giant's core then
     /// its hydrogen.
