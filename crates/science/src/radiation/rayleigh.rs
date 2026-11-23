@@ -385,6 +385,8 @@ mod tests {
     /// The page's own sigma(550) for each row, in 10^-27 cm², to its four
     /// printed digits (half a last digit is at most 0.043 %, of CO₂'s
     /// 11.64): the eight rows computed independently by the study's script.
+    /// The N₂, Ar, NH₃ and SO₂ rows pin the page's derivation, not
+    /// independent measurements; Bucholtz's air test covers N₂ and Ar.
     #[test]
     fn each_gas_scatters_as_the_reference_page_derives() {
         // Source: `docs/science/radiative-transfer.md`, "Per-gas data",
@@ -406,28 +408,23 @@ mod tests {
         }
     }
 
-    /// CO₂ scatters 2.51 times what N₂ does per molecule at 550 nm (the
-    /// page, from He et al. 2021); Kopparapu et al. 2013 (ApJ 765, 131,
-    /// §2.2.1) write "2.5 times better than air".
+    /// The per-molecule ratios to N₂ at 550 nm: CO₂ scatters 2.51 times
+    /// what N₂ does (the page, from He et al. 2021; Kopparapu et al. 2013,
+    /// ApJ 765, 131, §2.2.1, write "2.5 times better than air"), and O₂
+    /// 0.874 times (He et al. 2021, Table 2, whose O₂ value the page
+    /// reproduces exactly), not the audit's 0.973.
     #[test]
-    fn co2_scatters_two_and_a_half_times_nitrogen() {
+    fn co2_and_oxygen_scatter_as_nitrogen_does_times_their_ratios() {
         /// Source: the page's "Orders of magnitude", CO₂/N₂ = 2.51 (He et
         /// al. 2021), checked to its last printed digit.
-        const RATIO: f64 = 2.51;
-        let value = sigma(Gas::Co2, 550.0) / sigma(Gas::N2, 550.0);
-        assert!((value - RATIO).abs() < 0.01, "CO₂/N₂ {value}");
-    }
-
-    /// O₂ scatters 0.874 times what N₂ does per molecule at 550 nm (He et
-    /// al. 2021, Table 1 rows, whose O₂ value the page reproduces exactly
-    /// in Table 2), not the audit's 0.973.
-    #[test]
-    fn oxygen_scatters_a_little_less_than_nitrogen() {
+        const CO2_RATIO: f64 = 2.51;
         /// Source: the page's "Orders of magnitude", O₂/N₂ = 0.874 (He et
-        /// al. 2021), checked to its last printed digit.
-        const RATIO: f64 = 0.874;
-        let value = sigma(Gas::O2, 550.0) / sigma(Gas::N2, 550.0);
-        assert!((value - RATIO).abs() < 0.001, "O₂/N₂ {value}");
+        /// al. 2021, Table 2), checked to its last printed digit.
+        const O2_RATIO: f64 = 0.874;
+        let co2 = sigma(Gas::Co2, 550.0) / sigma(Gas::N2, 550.0);
+        assert!((co2 - CO2_RATIO).abs() < 0.01, "CO₂/N₂ {co2}");
+        let o2 = sigma(Gas::O2, 550.0) / sigma(Gas::N2, 550.0);
+        assert!((o2 - O2_RATIO).abs() < 0.001, "O₂/N₂ {o2}");
     }
 
     /// Bucholtz 1995 (Appl. Opt. 34, 2765, doi:10.1364/AO.34.002765):

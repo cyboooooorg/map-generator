@@ -19,7 +19,7 @@ use crate::radiation::test_points::{
 use crate::units::Bar;
 use crate::water::vapour_saturation_bar;
 
-/// Definition: the low end of the window of Earth's clear-sky albedo at
+/// Source: the low end of the window of Earth's clear-sky albedo at
 /// 77 % humidity, decided by the user on 2026-11-23 after the diagnostic
 /// study of PR 2b-2: the observed albedo less what the sky holds and the
 /// port does not, plus what the port lacks and the sky holds. The observed
@@ -41,7 +41,8 @@ use crate::water::vapour_saturation_bar;
 /// narrow it when they land. The port's 0.1701 lies at its top edge.
 const CLEAR_SKY_ALBEDO_LOW: f64 = 0.1567;
 
-/// Definition: the high end of the window of [`CLEAR_SKY_ALBEDO_LOW`].
+/// Source: the high end of the window of [`CLEAR_SKY_ALBEDO_LOW`], the
+/// sum of the same cited terms.
 const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1707;
 
 /// Source: the precipitable water of Kim & Ramanathan 2008's global run,
@@ -61,7 +62,7 @@ const SENSITIVITY_WATER_CM: [f64; 2] = [2.7, 3.3];
 /// way.
 const MORE_WATER_ABSORBED_W_M2: f64 = 3.0;
 
-/// Source: the tolerance of [`MORE_WATER_ABSORBED_W_M2`], W/m², approved
+/// Calibration: the tolerance of [`MORE_WATER_ABSORBED_W_M2`], W/m², approved
 /// by the user on 2026-11-23: the table's rounding to a tenth and the
 /// unstated sign of its two terms.
 const MORE_WATER_ABSORBED_TOLERANCE_W_M2: f64 = 1.0;
@@ -70,7 +71,7 @@ const MORE_WATER_ABSORBED_TOLERANCE_W_M2: f64 = 1.0;
 /// top, W/m²: Kim & Ramanathan 2008, Table 2, 0.2 for +-0.3 cm.
 const MORE_WATER_REFLECTED_W_M2: f64 = 0.4;
 
-/// Source: the tolerance of [`MORE_WATER_REFLECTED_W_M2`], W/m², approved
+/// Calibration: the tolerance of [`MORE_WATER_REFLECTED_W_M2`], W/m², approved
 /// by the user on 2026-11-23: the table's rounding to a tenth on each
 /// side.
 const MORE_WATER_REFLECTED_TOLERANCE_W_M2: f64 = 0.2;
@@ -353,6 +354,10 @@ fn more_water_absorbs_as_kim_and_ramanathan_say() {
     );
 }
 
+/// Earth's all-sky Bond albedo stays at CERES's 0.293. `CLOUD_ALBEDO` was
+/// fitted on 0.293, so this checks that calibration and is a net if the
+/// physics moves, not an independent check; the clear-sky window and the
+/// water tests are the independent ones.
 #[test]
 fn earth_keeps_its_bond_albedo() {
     let clouds = earth_clouds();

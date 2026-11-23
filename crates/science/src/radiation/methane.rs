@@ -214,7 +214,9 @@ mod tests {
     /// Methane above the tropopause takes a share of the starlight that
     /// grows with the methane let through the cold trap and saturates
     /// (legacy `stratospheric_methane_takes_a_share_of_the_light`, without
-    /// its `absorbed_w_m2` lines, which are Task 7's).
+    /// its `absorbed_w_m2` lines, which belong to the climate of 2d, and
+    /// its 0.2 to 0.4 window on the legacy Titan, which pinned the legacy's
+    /// own calibration).
     #[test]
     fn stratospheric_methane_takes_a_share_of_the_light() {
         let titan = PartialPressures {
@@ -226,8 +228,7 @@ mod tests {
         let skin = LEGACY_SKIN_K;
         assert_eq!(stratospheric_share_of(&dry, skin), 0.0);
         let share = stratospheric_share_of(&titan, skin);
-        // About McKay et al.'s 0.3 on Titan.
-        assert!((0.2..0.4).contains(&share), "{share}");
+        assert!(share > 0.0, "{share}");
         // A warmer tropopause lets more methane through: more of the light.
         assert!(stratospheric_share_of(&titan, skin + 3.0) > share);
         // Twenty-six bar of methane under a warm tropopause: saturated.
@@ -246,7 +247,10 @@ mod tests {
     /// reproduced by Robinson & Catling 2012, ApJ 757, 104, §4.3), half of
     /// which the stratosphere radiates up, gives 0.29. The sourced Titan's
     /// stratosphere takes it within 10 % and 15 %, and a column of methane
-    /// past saturation never more than half of the light.
+    /// past saturation never more than half of the light. The first
+    /// assertion checks the calibration of `CH4_NEAR_IR_HALF_BAR`, which
+    /// was fitted on 0.306: it is a net if the physics moves, not an
+    /// independent check. The 1.5 / 2.6 split is the independent one.
     #[test]
     fn the_methane_anti_greenhouse_matches_mckay() {
         let skin = skin_temperature(Kelvin(TITAN_EFFECTIVE_K));

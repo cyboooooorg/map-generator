@@ -3,29 +3,19 @@
 //! light's paths over a changing ground.
 
 use super::*;
-use crate::constants::STANDARD_GRAVITY;
+use crate::constants::{SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
 use crate::radiation::column::{Profile, levels};
 use crate::radiation::gases::PartialPressures;
+use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::starlight::star_bands;
-use crate::radiation::test_points::{EARTH_AIR, EARTH_SURFACE_K, MANABE_HUMIDITY};
+use crate::radiation::test_points::{
+    EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_SURFACE_K, MANABE_HUMIDITY,
+};
 use crate::water::vapour_saturation_bar;
-
-/// Definition: the Sun's effective temperature of the test bands, K,
-/// rounded (the bands' shape, not the exact star, is what the test
-/// reads).
-const SUN_K: f64 = 5772.0;
 
 /// Definition: no Rayleigh scattering, so that the paths' check reads the
 /// gases' absorption and the ground alone.
 const NO_RAYLEIGH: f64 = 0.0;
-
-/// Calibration: a Rayleigh optical depth at 550 nm that stands in, in
-/// this test only, for the law of PR 2b-2 Task 5 (`rayleigh_depth_550`):
-/// the legacy `RAYLEIGH_N2_550`, a bar of nitrogen under Earth's gravity
-/// (Bucholtz 1995, *Appl. Opt.* 34, 2765, doi:10.1364/AO.34.002765, as the
-/// legacy cites it). Only its being positive and Earth-like matters to
-/// the check.
-const EARTH_RAYLEIGH_550: f64 = 0.0965;
 
 #[test]
 fn the_table_is_on_the_albedo_bands() {
@@ -140,8 +130,8 @@ fn paths_do_not_depend_on_the_ground() {
         Profile::SHORTWAVE,
     )
     .expect("Earth's air makes a column");
-    let bands = star_bands(SUN_K).bands;
-    for rayleigh_550 in [NO_RAYLEIGH, EARTH_RAYLEIGH_550] {
+    let bands = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0).bands;
+    for rayleigh_550 in [NO_RAYLEIGH, rayleigh_depth_550(&air, STANDARD_GRAVITY.0)] {
         let paths = Paths::through(
             &Air {
                 haze: (0.0, 1.0),
@@ -152,7 +142,7 @@ fn paths_do_not_depend_on_the_ground() {
         );
         for cloud in [0.0, 0.5] {
             let mut last = f64::NEG_INFINITY;
-            for ground in [0.0, 0.122, 1.0] {
+            for ground in [0.0, EARTH_GROUND_ALBEDO, 1.0] {
                 let budget = paths.budget(ground, cloud);
                 assert!(
                     budget.albedo > last,
@@ -170,7 +160,7 @@ fn paths_do_not_depend_on_the_ground() {
                 "{rayleigh_550} {cloud}: {white:?}"
             );
         }
-        for ground in [0.0, 0.122, 1.0] {
+        for ground in [0.0, EARTH_GROUND_ALBEDO, 1.0] {
             let (clear, cloudy) = (paths.budget(ground, 0.0), paths.budget(ground, 0.5));
             assert!(
                 cloudy.albedo > clear.albedo,
