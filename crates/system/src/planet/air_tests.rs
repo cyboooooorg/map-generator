@@ -65,6 +65,14 @@ const NO_METHANE_OR_AMMONIA: f64 = 1e-3;
 /// `titan_keeps_its_methane`).
 const TITAN_METHANE_MIN: f64 = 0.01;
 
+/// Definition: legacy's test bound on the methane Titan's photolysis
+/// leaves, its stock on the ground and in the air before the climate
+/// condenses it, 1 bar (`legacy-final` `atmosphere.rs`,
+/// `titans_outgassing_outruns_its_photolysis`): a test choice, above the
+/// 0.07 bar its air holds today (Niemann et al. 2005), that fails when
+/// the onset or the yield drifts by an order of magnitude.
+const TITAN_METHANE_STOCK_MIN: f64 = 1.0;
+
 /// Source: Earth's SO2 is a trace, well below a ppm of its bar (NASA
 /// Earth fact sheet lists none): legacy's test bound, 1e-6 bar.
 const EARTH_SO2_MAX: f64 = 1e-6;
@@ -545,8 +553,22 @@ fn earth_has_no_abiotic_methane_or_ammonia() {
 
 #[test]
 fn titan_keeps_its_methane() {
-    let a = planet(&TITAN).air().0;
-    assert!(partial(&a, Gas::Ch4) > TITAN_METHANE_MIN, "{a:?}");
+    // Ported from legacy's `titans_outgassing_outruns_its_photolysis`:
+    // the supply overtakes the destruction, so the photolysis leaves a
+    // stock of over a bar, yet less than it was given (legacy's
+    // "outgassed" is the air past the shoreline, the photolysis's input).
+    // Legacy's bound on the air after the climate waits for 2d-3.
+    let mut titan = planet(&TITAN);
+    let a = titan.air().0;
+    let ch4 = &a.partial[&Gas::Ch4];
+    assert!(ch4.value().0 > TITAN_METHANE_MIN, "{a:?}");
+    let photolysed = ancestor(&titan.trace, ch4.node(), codes::AIR_PHOTOLYSED_CH4);
+    let left = number(&titan.trace, photolysed);
+    let given = number(&titan.trace, kept(&titan, Gas::Ch4, ch4));
+    assert!(
+        left > TITAN_METHANE_STOCK_MIN && left < given,
+        "{given} {left}"
+    );
 }
 
 #[test]
