@@ -321,8 +321,8 @@ here, with the part that uses it, rather than in
 [planet-interiors.md](planet-interiors.md), which stops at the layers.
 
 ```text
-co2 = 1e-4 refractory + 0.05 water        n2  = 2e-6 refractory + 1e-3 water
-s   = 2.5e-4 refractory (1 - cmf)         ch4 = 0.01 water,  nh3 = 0.01 water
+co2 = 1e-4 refractory + 0.12 water        n2  = 2e-6 refractory + 1.4e-3 water
+s   = 2.5e-4 refractory (1 - cmf)         ch4 = 7e-3 water,  nh3 = 7e-3 water
 ```
 
 `co2` and `n2` are masses of CO₂ and N₂, `s` of sulphur (SO₂ is twice it),
@@ -350,24 +350,32 @@ compilations), holds C 109 (+77/-39) ppm, N 2.01 (+1.42/-0.71) ppm and S
   (doi:10.1016/j.epsl.2011.10.040): the carbon that never degasses is
   inside the outgassed share below.
 
-**Ice.** Per kg of water: CO₂ 5 %, N₂ 0.1 %, CH₄ 1 %, NH₃ 1 % by mass,
-that is 2.0, 0.064, 1.1 and 1.06 % of the moles of water. Comet 67P's bulk
-ices are 4.7 ± 1.4, 0.089 ± 0.024, 0.34 ± 0.07 and 0.67 ± 0.20 % (Rubin et
-al. 2019, doi:10.1093/mnras/stz2086, Table 2), 11.5, 0.14, 0.30 and
-0.71 % by mass: the N₂ and NH₃ are within a factor 1.5, the CO₂ is 2.3
-times lower and the CH₄ 3 times higher. Comets span "less than 0.01 % to
-20 %" of water for their parent molecules (Bockelée-Morvan 2011,
-IAU Symp. 280). The ranges the legacy quoted from Mumma & Charnley 2011
-(doi:10.1146/annurev-astro-081309-130811) were not found in what was
-reached (its abstract only), so the four ice values are calibrations on
-one comet's order of magnitude until that review's table is read. Read in its
-place, Biver et al. 2022 (*Comets III*, arXiv:2207.04800, Table 3) print, as
-moles of water: CO₂ 4 to 30 %, "typically 5 to 30 %" (AKARI); CH₄ 0.15 to
-3 %, "typical abundances ~0.8 %"; NH₃ 0.1 to 5 %, "typical ~0.5 to 1 %"; N₂ only
-for 67P. The legacy 5 % of CO₂ by mass is 2 % of the moles, under the whole
-range: the mass and the mole ratios had been mixed. No median is printed
-([study 21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit)
-lists the proposed values, pending the user's decision).
+**Ice.** Per kg of water, by mass: CO₂ 12 %, N₂ 0.14 %, CH₄ 0.7 %, NH₃ 0.7 %
+(`ICE_CO2` 0.12, `ICE_N2` 1.4e-3, `ICE_CH4` 7e-3, `ICE_NH3` 7e-3), that is 4.9,
+0.09, 0.79 and 0.74 % of the moles of water. The legacy had 5, 0.1, 1 and 1 %
+by mass, which mixed mass and mole ratios: comet abundances are printed in
+moles of water, and the legacy's 5 % of CO₂ by mass is 2 % of the moles,
+under the whole printed range. They are converted with M / 18 here.
+
+Read: Biver et al. 2022 (*Comets III*, arXiv:2207.04800, Table 3, updated
+from Dello Russo et al. 2016 and Rubin et al. 2019) print, as moles of
+water: CO₂ 4 to 30 %, "typically 5 to 30 %" (AKARI); CH₄ 0.15 to 3 %,
+"typical abundances ~0.8 %"; NH₃ 0.1 to 5 %, "typical ~0.5 to 1 %"; N₂ only
+for 67P. Comet 67P's bulk ices (Rubin et al. 2019, doi:10.1093/mnras/stz2086,
+Table 2) are 4.7 ± 1.4, 0.34 ± 0.07, 0.67 ± 0.20 and 0.089 ± 0.024 %
+(CO₂, CH₄, NH₃, N₂), 11.5, 0.30, 0.71 and 0.14 % by mass.
+
+- `ICE_CH4` is `Source:` the typical 0.8 mole % (0.71 % by mass).
+- `ICE_NH3` is `Source:` the middle of the typical 0.5 to 1 % (0.75 mole %,
+  0.71 % by mass, also 67P's).
+- `ICE_CO2` is a `Calibration:`: no median is printed; 5 mole %, the low end
+  of the AKARI range and 67P's 4.7, is 12 % by mass.
+- `ICE_N2` is a `Calibration:` on 67P alone (0.089 mole %, 0.14 % by mass),
+  the only comet with a measured N₂.
+
+Mumma & Charnley 2011 (doi:10.1146/annurev-astro-081309-130811) could not be
+reached beyond its abstract; the review the values were checked in is Biver et
+al. ([study 21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit)).
 
 **Spread.** 0.3 dex is of the order of the uncertainty on Earth's own
 carbon and nitrogen budgets (-0.44/+0.23 dex for each in Wang et al.; the
