@@ -22,10 +22,10 @@ section "Pull request B".
 
 ## Start gate
 
-Tasks 1 and 2 need nothing new; tasks 3 to 5 need
-`system::generate(&Inputs) -> Result<Vec<Timeline>, SystemError>` on
-`main` (mapgen3, after mapgen1's planet PR 2d). Do not start before it
-is there, per the user's decision of 2026-11-23:
+Only tasks 3 to 5 call
+`system::generate(&Inputs) -> Result<Vec<Timeline>, SystemError>`
+(mapgen3, after mapgen1's planet PR 2d), but no task starts before it
+is on `main`, per the user's decision of 2026-11-23:
 
 ```bash
 git fetch origin
@@ -33,7 +33,7 @@ git grep -n 'pub fn generate(inputs: &Inputs)' origin/main -- crates/system/src
 git merge -m "chore: merge main into feat/cli-world-command" origin/main
 ```
 
-Message mapgen3 before step 1 (the CLI skeleton changes), and re-read
+Message mapgen3 before task 1 (the CLI skeleton changes), and re-read
 `world::relief::Forcing::read` (`crates/world/src/relief/passes.rs`):
 the relief reads `regime`, `heat`, `bulk` and `liquid.ocean_share`; if
 2d changed any of them, stop and tell the user.
@@ -50,13 +50,15 @@ the relief reads `regime`, `heat`, `bulk` and `liquid.ocean_share`; if
   (`#[ignore = "heavy: …"]`).
 - No number without `Source:`, `Calibration:` or `Definition:` outside
   test fixtures.
-- Commits: Conventional Commits, no emoji, footer `Refs: #602`.
+- Commits: Conventional Commits, no emoji, footer `Refs: #602`, then
+  the session's attribution trailers.
 
 ## Review Focus
 
-1. A malformed `--body` (`""`, `"B"`, `"b c"`, `"MGS 12345 b"`) must be
-   refused before the system engine runs, not after a long generation:
-   task 2 parses it with a placeholder number first.
+1. A malformed `--body` (`""`, `"b c"`, `"aa"`, `"MGS 12345 b"`) must
+   be refused before the system engine runs, not after a long
+   generation: task 2 parses it with a placeholder number first.
+   (`"B"` is left out: it becomes a valid star with track T7, #585.)
 2. `--body A` (the star) must exit 1 with `NotAPlanet`, never panic or
    write to `--out`: task 2.
 3. A drawn seed (no `--seed`) must print the same stderr notice as
@@ -64,8 +66,13 @@ the relief reads `regime`, `heat`, `bulk` and `liquid.ocean_share`; if
    task 3 (binary test).
 4. `--cache-budget` before the subcommand
    (`map-generator --cache-budget 1GiB world …`) must parse: task 1.
-5. A second identical run must hit both caches and say so in the JSON:
-   task 3 (tier 3).
+5. `--cell-km 0`, a negative or a `NaN` cell size must be a usage error:
+   today `Grid::for_radius` clamps 0 and negatives silently and turns
+   `NaN` into a grid of 0 cells (`crates/world/src/grid.rs:77`): task 3
+   (`parse_cell_km`).
+
+A second identical run hitting both caches is covered by task 3's
+tier-3 test.
 
 ---
 
@@ -75,13 +82,14 @@ the relief reads `regime`, `heat`, `bulk` and `liquid.ocean_share`; if
 
 - Modify: `crates/cli/src/args.rs` (`Cli`, `GlobalArgs`, `parse_size`,
   their tests)
-- Modify: `crates/cli/src/main.rs` (`dispatch`)
+- Modify: `crates/cli/src/main.rs` (`dispatch`, `announce`)
 
 **Interfaces:**
 
 - Produces: `Cli { global: GlobalArgs, command: Command }` with
   `#[command(flatten)] pub global: GlobalArgs`;
-  `pub fn announce(root: RootSeed)` in `args.rs`, which writes
+  `fn announce(root: RootSeed)` in `main.rs` (stderr stays in the
+  composition root), which writes
   `map-generator: seed {n} drawn; rerun with --seed {n}` to stderr when
   `root.drawn`, and nothing otherwise.
 
@@ -109,9 +117,10 @@ Replace the `Probe` struct test by the same defaults asserted on
 - [ ] **Step 3: Implement**: add the field, drop every
   `expect(dead_code)` / `cfg_attr(not(test), …)` on `GlobalArgs`,
   `store()` and `parse_size`; move the notice from `dispatch` into
-  `announce` and call it from the `System` arm. `store()` stays unused
-  until task 3: keep one `expect(dead_code, reason = "the world command,
-  task 3")` on it only.
+  `announce` and call it from the `System` arm. `Cli.global` and
+  `GlobalArgs::store` stay unread until task 3: keep
+  `expect(dead_code, reason = "read by the world command, task 3")` on
+  those two only.
 - [ ] **Step 4: Run** `cargo nextest run -p cli` — expected: PASS, and
   `cargo nextest run -p cli --test system` still passes (stderr
   notice unchanged).
@@ -128,8 +137,9 @@ Replace the `Probe` struct test by the same defaults asserted on
 
 - Consumes: `timeline::Designation: FromStr`, `SystemNumber::new`.
 - Produces: `WorldRequest.body: String`; new
-  `CliError::InvalidBody(String)` (code `cli.world.body`, a usage-like
-  failure, exit 1); `CliError::NoSuchBody(String)` now carries the
+  `CliError::InvalidBody(String)` (code `cli.world.invalid-body`, exit
+  1, like the other `cli.world.*` failures);
+  `CliError::NoSuchBody(String)` now carries the
   body text. `NotAPlanet` and `NoPresentKeyframe` keep the resolved
   `Designation`.
 
@@ -139,29 +149,42 @@ Replace the `Probe` struct test by the same defaults asserted on
 ```rust
 #[test]
 fn malformed_body_is_refused_before_the_engine_runs() {
-    for bad in ["", "B", "b c", "MGS 10001 b", "aa"] {
-        // store, request with body = bad
+    let dir = TempDir::new().unwrap();
+    let store = FsStore::new(dir.path().join("store"), u64::MAX);
+    for bad in ["", "b c", "aa", "MGS 10001 b"] {
+        let request = request(dir.path(), bad);
         let error = run(&store, &inputs(), &request, |_| -> Result<_, ContractError> {
             panic!("the engine must not run")
-        }).unwrap_err();
+        })
+        .unwrap_err();
         assert!(matches!(error, CliError::InvalidBody(_)), "{bad:?}: {error}");
     }
 }
 
 #[test]
 fn star_is_refused() {
-    // producer returns [star timeline (designation A of 10001), planet b]
-    let error = run(&store, &inputs(), &request_for("A"), star_and_planet).unwrap_err();
-    assert!(matches!(error, CliError::NotAPlanet(d) if d == Designation::star(number())));
+    let dir = TempDir::new().unwrap();
+    let store = FsStore::new(dir.path().join("store"), u64::MAX);
+    let request = request(dir.path(), "A");
+    let error = run(&store, &inputs(), &request, |_| star_and_planet()).unwrap_err();
+    assert!(
+        matches!(error, CliError::NotAPlanet(d) if d == Designation::star(number())),
+        "{error}"
+    );
     assert_eq!(count(&request.out), 0);
 }
 ```
 
-`unknown_body_is_refused` keeps its assertion with `body = "c"`;
-`request(out, rank)` becomes `request(out, body: &str)`. The star
-timeline is built in the test with `timeline::fixtures::leaf`, copying
-the Sun helper of `crates/timeline/src/keyframe_tests.rs:8` (nominal
-solar values, `StarPhase::MainSequence`).
+Test helpers: `number()` is `SystemNumber::new(10_001).unwrap()`;
+`request(out, rank)` becomes `request(out, body: &str)`. The existing
+fixture timeline is rank 1, so the tests that build its world now pass
+`"c"` and `unknown_body_is_refused` passes `"d"`.
+`star_and_planet() -> Result<Vec<Timeline>, ContractError>` returns a
+star timeline (`Designation::star(number())`, one keyframe at the
+present 4.57 Gyr) followed by `timelines(false)`; its `StarState` is
+built with `timeline::fixtures::leaf`, copying the Sun helper of
+`crates/timeline/src/keyframe_tests.rs:8` (nominal solar values,
+`StarPhase::MainSequence`).
 
 - [ ] **Step 2: Run** `cargo nextest run -p cli world::` — expected:
   FAIL (type mismatch on `body`).
@@ -197,26 +220,37 @@ Needs `system::generate` on `main` (start gate).
 pub struct WorldCommand {
     #[command(flatten)] pub system: SystemArgs,
     #[arg(long)] pub body: String,
-    #[arg(long, default_value_t = world::DEFAULT_CELL.0 / 1000.0)] pub cell_km: f64,
+    #[arg(long, default_value_t = world::DEFAULT_CELL.0 / 1000.0, value_parser = parse_cell_km)]
+    pub cell_km: f64,
     #[arg(long, default_value = "relief.height", value_parser = parse_field)] pub field: FieldId,
     #[arg(long, default_value_t = 2048)] pub width: u32,
     #[arg(long)] pub out: PathBuf,
 }
 pub fn command(command: &WorldCommand, global: &GlobalArgs, seed: Seed) -> Result<String, CliError>;
+/// A finite cell size above 0 km.
+pub fn parse_cell_km(text: &str) -> Result<f64, String>;
+/// A field code, through `Code::new` (the shape only; the export refuses
+/// a field the world lacks).
+pub fn parse_field(text: &str) -> Result<FieldId, String>;
 ```
+
+`WorldRequest.cell` is `Metre(cell_km * 1000.0)` (a unit conversion).
 
 `command` builds the `WorldRequest`, calls `run(&global.store(),
 &command.system.inputs(seed), &request, system::generate)` and returns
-the pretty JSON of `Summary { system, body, keyframe, grid, engine,
-world_engine, timelines_cached, world_cached, evicted: usize, world:
-PathBuf, png: PathBuf }` (`evicted` is a count: `CacheKey` is not
-serialisable, and the count is what a user reads; my call). The usage
+the pretty JSON of a `#[derive(Serialize)] Summary { system: SystemId,
+body: Designation, keyframe: u32, grid: u32, engine: EngineVersion,
+world_engine: EngineVersion, timelines_cached: bool, world_cached: bool,
+evicted: usize, world: PathBuf, png: PathBuf }`, filled from `WorldRun`
+(all these types serialise already). `evicted` is a count: `CacheKey`
+does not serialise, and the count is what a user reads (my call). The usage
 text of each flag states its default and unit as `SystemArgs` does.
 
 - [ ] **Step 1: Write the failing tests**: in `args.rs`, a tier-1 parse
   test asserting the defaults (`cell_km` 15.0, `field` `relief.height`,
-  `width` 2048) and that a missing `--body` or `--out` is
-  `ErrorKind::MissingRequiredArgument`. In `tests/world.rs`, tier 3
+  `width` 2048), that a missing `--body` or `--out` is
+  `ErrorKind::MissingRequiredArgument`, and that `--cell-km` `0`, `-1`,
+  `NaN` and `inf` are `ErrorKind::ValueValidation`. In `tests/world.rs`, tier 3
   (`#[ignore = "heavy: generates a world"]`), through the binary with a
   temp `--root` and `--out` and a small `--width 64`:
   - `exports_a_planet_then_hits_the_caches`: `--seed <S> --body b`
@@ -224,16 +258,19 @@ text of each flag states its default and unit as `SystemArgs` does.
     second run has both caches `true` and the same PNG bytes. Pick `S`
     once `generate` exists: the first seed whose `system` output has a
     planet `b` with a surface; write the seed and why in the test.
-  - `a_drawn_seed_is_announced`: no `--seed`, stderr matches
-    `seed \d+ drawn; rerun with --seed \d+`.
-  - `the_star_is_refused`: `--body A` exits 1, stderr has
-    `cli.world.not-a-planet`,
-    `--out` is empty.
+  - `a_drawn_seed_is_announced`: no `--seed`, stderr contains
+    `drawn; rerun with --seed` whatever the exit code (a drawn system
+    may have no planet `b`). No regex: the crate has no `regex`
+    dependency.
+  - `the_star_is_refused`: `--seed <S> --body A` exits 1, stderr has
+    `cli.world.not-a-planet`, `--out` is empty.
 - [ ] **Step 2: Run** `cargo nextest run -p cli` and
   `cargo nextest run -p cli --run-ignored only --test world` —
   expected: FAIL (no `world` subcommand).
 - [ ] **Step 3: Implement** the struct, `command`, `Summary` and the
-  dispatch arm (`announce(root)` then `world::command`).
+  dispatch arm (`announce(root)` then `world::command`). Update the
+  `Cli` `about` text and the `main.rs` module doc, which still say
+  `system` only.
 - [ ] **Step 4: Run** both commands again — expected: PASS; then
   `mise run ci` — expected: green within the tier budgets.
 - [ ] **Step 5: Commit** `feat(cli): add the world command`.
@@ -251,7 +288,8 @@ text of each flag states its default and unit as `SystemArgs` does.
   default, the body naming rule (body part, `A` is the star, multiple
   stars once #585 lands), the JSON summary fields, two copy-pasteable
   examples (`--seed 1 --body b --out out`, and with `--cache-budget
-  512MiB` before the subcommand), the new codes `cli.world.body`.
+  512MiB` before the subcommand), the new code
+  `cli.world.invalid-body`, and `--cell-km` refused at 0 or below.
 - [ ] **Step 2: Run** `mise run ci` — expected: markdownlint green.
 - [ ] **Step 3: Commit** `docs(cli): document the world command`.
 
