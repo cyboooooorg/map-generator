@@ -69,18 +69,19 @@ pub const RECYCLED_UNDER_PLATES: f64 = 0.63;
 
 /// Calibration: share of the nitrogen (N2 and NH3) plates outgas that
 /// subduction carries back: ammonium in clays and sediments rides the
-/// slabs down. Legacy fitted it on Earth's 0.78 bar of N2, a share by
-/// volume; the chain's pressures are weights, and Earth's N2 weighs
-/// 0.746 bar (study 23). Once the photochemistry turns the NH3 into N2,
-/// the rewrite's Earth has 0.804 bar of N2 (0.512 bar before it), within
-/// the 0.67 to 0.82 bar its test keeps, so the value stays. See the
-/// calibration on the page `docs/science/planet-atmospheres.md`
-/// (*Outgassing*, *Earth's N₂ target*). Goldblatt et al. 2009
-/// (doi:10.1038/ngeo692, abstract) and Johnson & Goldblatt 2015
-/// (doi:10.1016/j.earscirev.2015.05.006, abstract: the silicate Earth
-/// holds "7 +/- 4 times present atmospheric N") support a large return
-/// without giving one (study 21, part 5).
-pub const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8;
+/// slabs down. Fitted on the weight of Earth's N2, 0.746 bar (study 23 of
+/// the Wiki; legacy fitted 0.8 on 0.78 bar, a share by volume): the
+/// chain's N2 on Earth, its outgassed N2 plus the N2 its photolysed NH3
+/// makes, is proportional to the share kept, `1 - x` (0.804 bar at 0.8,
+/// 0.748 at 0.814 and 0.746 at 0.8145, by running the chain on the
+/// reference Earth), so `x = 1 - 0.2 × 0.746 / 0.804`, kept to four
+/// digits, 0.8145, which gives 0.7458 bar. See the calibration on the
+/// page `docs/science/planet-atmospheres.md` (*Outgassing*, *Earth's N₂
+/// target*). Goldblatt et al. 2009 (doi:10.1038/ngeo692, abstract) and
+/// Johnson & Goldblatt 2015 (doi:10.1016/j.earscirev.2015.05.006,
+/// abstract: the silicate Earth holds "7 +/- 4 times present atmospheric
+/// N") support a large return without giving one (study 21, part 5).
+pub const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8145;
 
 /// Definition: mass of SO2 per mass of sulphur, 64.07 / 32.06 = 1.998,
 /// rounded to 2 as in the legacy.

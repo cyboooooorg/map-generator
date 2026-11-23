@@ -41,10 +41,16 @@ const VENUS_N2: (f64, f64) = (1.0, 6.0);
 /// Source: Earth's N2 as a weight, 0.746 bar: dry air of 5.1352e18 kg
 /// (Trenberth & Smith 2005, J. Climate 18, 864, abstract), 78.08 % of it
 /// by volume at a mean molecular weight of 28.97 (NASA Earth fact sheet),
-/// on Earth's surface at 9.80665 m/s^2; the band 0.67 to 0.82 bar, about
-/// 10 % round it (study 23 of the Wiki; the 0.78 bar often quoted is the
-/// volume share of a bar, not a weight).
-const EARTH_N2: (f64, f64) = (0.67, 0.82);
+/// on Earth's surface at 9.80665 m/s^2 (study 23 of the Wiki; the 0.78
+/// bar often quoted is the volume share of a bar, not a weight).
+const EARTH_N2: f64 = 0.746;
+
+/// Definition: the test's own tolerance round [`EARTH_N2`], 10 %, no
+/// source: the chain is fitted on it
+/// (`science::outgassing::NITROGEN_RECYCLED_UNDER_PLATES`, 0.7458 bar),
+/// and the band lets an input of the reference Earth move without
+/// pinning the fit to its digits.
+const EARTH_N2_TOLERANCE: f64 = 0.1;
 
 /// Source: an abiotic Earth keeps no CH4 or NH3, and Callisto no CH4:
 /// legacy's test bound, 1e-3 bar (`legacy-final` `atmosphere.rs`,
@@ -232,7 +238,7 @@ fn venus_has_ninety_bars_of_co2() {
 fn earth_has_a_bar_of_nitrogen() {
     let a = planet(&EARTH).air().0;
     let n2 = partial(&a, Gas::N2);
-    assert!((EARTH_N2.0..=EARTH_N2.1).contains(&n2), "{a:?}");
+    assert!((n2 / EARTH_N2 - 1.0).abs() < EARTH_N2_TOLERANCE, "{a:?}");
 }
 
 #[test]
