@@ -15,7 +15,10 @@ use crate::{FigureError, svg};
 enum Stage {
     /// Zero-age main sequence.
     Zams,
-    /// Halfway between the ZAMS and the end of the main sequence.
+    /// Halfway between the ZAMS and the end of the main sequence. A star
+    /// that outlives the tables (below about 0.84 M☉ at solar metallicity,
+    /// `Lifetime::Beyond`) has their last age, 20 Gyr, for its end: the
+    /// curve is then at about 10 Gyr, not half its life.
     MidLife,
 }
 
@@ -100,7 +103,10 @@ fn panel(
         .bold_line_style(RGBColor(0xcc, 0xcc, 0xcc))
         .draw()
         .map_err(draw_error)?;
-    for (data, color, label) in [(zams, ZAMS_COLOR, "ZAMS"), (mid, MID_COLOR, "mid-life")] {
+    for (data, color, label) in [
+        (zams, ZAMS_COLOR, "ZAMS"),
+        (mid, MID_COLOR, "mid-life (10 Gyr below 0.84 M☉)"),
+    ] {
         chart
             .draw_series(LineSeries::new(
                 data.iter().map(|p| (p.0, pick(p))),
@@ -167,7 +173,7 @@ mod tests {
     fn the_curves_cover_the_mass_range() {
         for stage in STAGES {
             let s = series(stage);
-            assert!(s.len() >= 60, "{} points", s.len());
+            assert_eq!(s.len(), POINTS, "a mass was skipped");
             let (first, last) = (s[0].0, s[s.len() - 1].0);
             assert!((first - MIN_MASS).abs() < 1e-9, "starts at {first}");
             assert!((last - MAX_MASS).abs() < 1e-9, "ends at {last}");
