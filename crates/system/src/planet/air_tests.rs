@@ -601,13 +601,12 @@ fn titan_outgasses_no_co2() {
     let out = ancestor(&titan.trace, co2.node(), codes::AIR_OUTGASSED_CO2);
     assert_eq!(number(&titan.trace, out), 0.0);
     assert_eq!(derived_from(&titan.trace, out), vec![air.reducing.node()]);
-    // The reducing air reads the methane the photolysis left and the
-    // equilibrium temperature.
+    // The reducing air reads the very methane node the final CH4 derives
+    // from (one pass; the chain order is `each_partial_reads_in_chain_order`'s)
+    // and the equilibrium temperature.
     let from = derived_from(&titan.trace, air.reducing.node());
-    assert_eq!(
-        titan.trace.node(from[0]).unwrap().code,
-        Code::of(codes::AIR_PHOTOLYSED_CH4)
-    );
+    let ch4 = air.atmosphere.partial[&Gas::Ch4].node();
+    assert_eq!(from[0], derived_from(&titan.trace, ch4)[0]);
     assert!(from.contains(&titan.trial.sources.primary().equilibrium.node()));
 }
 
@@ -625,7 +624,8 @@ fn a_held_back_air_differs_only_by_its_co2() {
     }
     assert_eq!(held.atmosphere.partial[&Gas::Co2].value().0, 0.0);
     // Without the hold-back Titan outgasses CO2, and its cold traps it
-    // as frost.
+    // as frost. A structural check, no value: that the hold-back is what
+    // keeps the frost away, whatever its amount.
     assert!(free.frozen_co2.value().0 > 0.0, "{:?}", free.frozen_co2);
     assert_eq!(held.water, free.water);
 }
@@ -633,15 +633,10 @@ fn a_held_back_air_differs_only_by_its_co2() {
 #[test]
 fn venus_and_mars_keep_their_co2() {
     // Venus is above CO2's triple point, so no cap; Mars is below it,
-    // but its CO2 stays under the frost pressure.
+    // but its CO2 stays under the frost pressure. Their totals are
+    // `venus_has_ninety_bars_of_co2`'s and `mars_keeps_a_trace`'s.
     let venus = planet(&VENUS).air_held(true);
-    let a = &venus.atmosphere;
-    let t = total(a);
-    assert!((VENUS_TOTAL.0..=VENUS_TOTAL.1).contains(&t), "{a:?}");
-    assert!(partial(a, Gas::Co2) / t > VENUS_CO2_SHARE, "{a:?}");
     let mars = planet(&MARS).air_held(true);
-    let t = total(&mars.atmosphere);
-    assert!((MARS_TOTAL.0..=MARS_TOTAL.1).contains(&t), "{mars:?}");
     for air in [&venus, &mars] {
         assert!(!*air.reducing.value());
         assert_eq!(air.frozen_co2.value().0, 0.0, "{air:?}");
