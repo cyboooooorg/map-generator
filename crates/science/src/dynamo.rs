@@ -57,32 +57,43 @@ pub const INITIAL_EXCESS: f64 = 2_800.0;
 
 /// Calibration: cooling times after which the thermal dynamo of a body
 /// under a lid stops, its core-mantle flux below the adiabat (Nimmo &
-/// Stevenson 2000). Fitted on Mars's dynamo ending near 0.6 Gyr, 4.0 Ga
-/// ago (Lillis et al. 2013: between 4.0 and 4.1 Ga; Mittelholz et al.
-/// 2020 argue for a field near 3.7 Ga; both abstracts only; study 21,
-/// part 4). Set with a heat capacity of 800 J/(kg K).
-pub const THERMAL_DYNAMO_END: f64 = 0.075;
+/// Stevenson 2000). Fitted on Mars's dynamo ending 4.0 to 4.1 Ga ago,
+/// 0.47 to 0.57 Gyr after its formation (Lillis et al. 2013; Mittelholz
+/// et al. 2020 argue for a field near 3.7 Ga; both abstracts only; study
+/// 21, part 4): with the system engine's Mars (`τ` = 9.90 Gyr under a
+/// lid, [`CORE_HEAT_CAPACITY`] 840) it ends at 0.545 Gyr, 4.02 Ga ago.
+/// The legacy's 0.075, set with 800 J/(kg K) and its own interior, ends
+/// it at 0.74 Gyr here.
+pub const THERMAL_DYNAMO_END: f64 = 0.055;
 
 /// Calibration: cooling times after which an inner core grows (the
 /// centre reaches the liquidus). Fitted on Earth's inner core nucleating
-/// near 4.0 Gyr, about 0.5 Ga ago (Bono et al. 2019: 565 Ma; other work
+/// near 4.0 Gyr, about 0.57 Ga ago (Bono et al. 2019: 565 Ma; other work
 /// reaches 1 to 1.5 Ga; secondhand), Mercury's before 4.567 Gyr, Mars's
-/// and Venus's after (study 21, part 4). Set with a heat capacity of
-/// 800 J/(kg K).
-pub const INNER_CORE_START: f64 = 1.0;
+/// and Venus's after (study 21, part 4): with the system engine's Earth
+/// (`τ` = 4.88 Gyr under plates, [`CORE_HEAT_CAPACITY`] 840) it starts at
+/// 4.00 Gyr; Mercury's (`τ` = 3.18 Gyr) at 2.61 Gyr. The legacy's 1.0,
+/// set with 800 J/(kg K) and its own interior, starts it at 4.88 Gyr
+/// here, after today.
+pub const INNER_CORE_START: f64 = 0.82;
 
 /// Calibration: cooling times after which the core is solid throughout.
 /// Fitted on the Moon's core freezing near 3.3 Gyr, inside the 1 to
 /// 2.5 Ga window of a weak lunar field (Tikoo et al. 2017, secondhand),
 /// with Mercury's still liquid at 4.567 Gyr (Anderson et al. 2011; study
-/// 21, part 4). Set with a heat capacity of 800 J/(kg K).
-pub const CORE_FROZEN: f64 = 2.25;
+/// 21, part 4): a rocky body of the Moon's mass and 2 % core (`τ` =
+/// 1.58 Gyr under a lid, [`CORE_HEAT_CAPACITY`] 840) freezes at
+/// 3.31 Gyr, Mercury (`τ` = 3.18 Gyr) at 6.68 Gyr. The legacy's 2.25, set
+/// with 800 J/(kg K), freezes it at 3.55 Gyr here.
+pub const CORE_FROZEN: f64 = 2.1;
 
 /// Calibration: Nusselt number of the core's cooling through a mantle
 /// under plates, the convective speed-up over conduction across the
-/// whole mantle. Fitted on Earth's inner core starting near 4.0 Gyr; no
-/// paper sets a Nusselt number for a cooling law of this form (study 21,
-/// part 4).
+/// whole mantle. Fitted by the legacy on Earth's inner core starting
+/// near 4.0 Gyr, a target [`INNER_CORE_START`] now places; kept, it gives
+/// Earth a core heat flow of 11.6 TW today (5 to 15 TW, see
+/// [`INITIAL_EXCESS`]) and a surface field of 28 µT. No paper sets a
+/// Nusselt number for a cooling law of this form (study 21, part 4).
 pub const NUSSELT_PLATES: f64 = 50.0;
 
 /// Calibration: Nusselt number under an episodic regime, fitted on Venus
