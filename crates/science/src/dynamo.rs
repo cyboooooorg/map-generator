@@ -145,13 +145,28 @@ pub const DIPOLE_REMAINDER: f64 = 0.82;
 /// with `c` and `F = 1` is kept under it (study 21, part 4).
 pub const DEEP_DIPOLE_SHARE: f64 = 3.0e-4;
 
+/// The kind of dynamo a liquid core drives, which picks the share of
+/// its field that is the surface dipole (legacy `planet/core.rs`
+/// l.186-191: the thermal share whenever the thermal dynamo runs, the
+/// deep one otherwise).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dynamo {
+    /// Driven by the heat flux out of the top of the core: a dipolar
+    /// field. It wins when a compositional dynamo runs too (an inner
+    /// core growing under plates).
+    Thermal,
+    /// Driven by the light elements an inner core releases, under a
+    /// stably stratified top: a deep, mostly multipolar field.
+    Compositional,
+}
+
 /// The state of an iron core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CorePhase {
     /// At least partly liquid (an inner core may be growing).
     Liquid {
-        /// A dynamo runs in the core.
-        dynamo: bool,
+        /// The dynamo that runs in the core, if any.
+        dynamo: Option<Dynamo>,
     },
     /// Solid throughout: no dynamo.
     Frozen,
@@ -181,17 +196,20 @@ pub fn cooling_time(
 #[must_use]
 pub fn core_phase(age: Gyr, tau: Gyr, plates: bool) -> CorePhase {
     if tau.0 <= 0.0 {
-        return CorePhase::Liquid { dynamo: false };
+        return CorePhase::Liquid { dynamo: None };
     }
     let t = age.0 / tau.0;
     if t >= CORE_FROZEN {
         return CorePhase::Frozen;
     }
-    let thermal = plates || t < THERMAL_DYNAMO_END;
-    let compositional = t >= INNER_CORE_START;
-    CorePhase::Liquid {
-        dynamo: thermal || compositional,
-    }
+    let dynamo = if plates || t < THERMAL_DYNAMO_END {
+        Some(Dynamo::Thermal)
+    } else if t >= INNER_CORE_START {
+        Some(Dynamo::Compositional)
+    } else {
+        None
+    };
+    CorePhase::Liquid { dynamo }
 }
 
 /// The rms field inside a core of `core_density` losing `core_flux`
@@ -215,14 +233,14 @@ pub fn rms_field(
 
 /// The surface equatorial dipole field of a core of `core_density` and
 /// `core_radius`, of cooling time `tau`, in a planet of `planet_radius`
-/// at `age`, assuming a dynamo runs (the caller reads [`core_phase`]).
+/// at `age`, driven by `dynamo` (read from [`core_phase`]).
 ///
 /// The heat flux out of the core is `q = ρ c r_c ΔT₀ e^(-t/τ) / (3τ)`.
-/// A dynamo driven from the top of the core has the rms field of
+/// A [`Dynamo::Thermal`] has the rms field of
 /// [`rms_field`] with [`DYNAMO_EFFICIENCY`], of which
 /// [`DIPOLE_OVER_FIELD`] × [`RMS_TO_EQUATORIAL`] × [`DIPOLE_REMAINDER`]
-/// is the equatorial dipole at the core's surface; a `deep`
-/// compositional dynamo, under a stable top, has [`DEEP_DIPOLE_SHARE`]
+/// is the equatorial dipole at the core's surface; a
+/// [`Dynamo::Compositional`], under a stable top, has [`DEEP_DIPOLE_SHARE`]
 /// of the field taken with `F = 1` (the legacy's choice). The field falls
 /// as `(r_c / R)³` to the surface. Zero without a core or a cooling time.
 #[must_use]
@@ -232,7 +250,7 @@ pub fn surface_field(
     planet_radius: Metre,
     age: Gyr,
     tau: Gyr,
-    deep: bool,
+    dynamo: Dynamo,
 ) -> Tesla {
     if core_radius.0 <= 0.0 || tau.0 <= 0.0 {
         return Tesla(0.0);
@@ -245,13 +263,14 @@ pub fn surface_field(
         * (-age.0 / tau.0).exp()
         / (3.0 * tau_s);
     let flux = WattPerSquareMetre(flux);
-    let dipole = if deep {
-        rms_field(core_density, flux, 1.0).0 * DEEP_DIPOLE_SHARE
-    } else {
-        rms_field(core_density, flux, DYNAMO_EFFICIENCY).0
-            * DIPOLE_OVER_FIELD
-            * RMS_TO_EQUATORIAL
-            * DIPOLE_REMAINDER
+    let dipole = match dynamo {
+        Dynamo::Thermal => {
+            rms_field(core_density, flux, DYNAMO_EFFICIENCY).0
+                * DIPOLE_OVER_FIELD
+                * RMS_TO_EQUATORIAL
+                * DIPOLE_REMAINDER
+        }
+        Dynamo::Compositional => rms_field(core_density, flux, 1.0).0 * DEEP_DIPOLE_SHARE,
     };
     Tesla(dipole * (core_radius.0 / planet_radius.0).powi(3))
 }

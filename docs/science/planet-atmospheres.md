@@ -228,8 +228,10 @@ history.
 
 The rewrite ports the law to `science::dynamo`: `cooling_time`,
 `core_phase` (the regime enters as `plates`, true under plate tectonics),
-`rms_field` (the paper's eq. 2 with the efficiency `F` as an argument) and
-`surface_field`, which takes whether the dynamo is deep. The dipole share
+which gives the dynamo's kind (`Thermal`, which wins under plates when an
+inner core grows, or `Compositional`), `rms_field` (the paper's eq. 2 with
+the efficiency `F` as an argument) and `surface_field`, which takes that
+kind. The dipole share
 is the four factors below (`DYNAMO_EFFICIENCY`, `DIPOLE_OVER_FIELD`,
 `RMS_TO_EQUATORIAL`, `DIPOLE_REMAINDER`); the deep one stays
 `DEEP_DIPOLE_SHARE`, on the field taken with `F = 1`.

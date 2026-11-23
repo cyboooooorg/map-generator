@@ -86,42 +86,37 @@ fn the_cooling_time_is_the_lumped_law() {
 #[test]
 fn the_phases_follow_their_thresholds() {
     let at = |t: f64| TAU * t;
-    let liquid = |dynamo| CorePhase::Liquid { dynamo };
+    let thermal = CorePhase::Liquid {
+        dynamo: Some(Dynamo::Thermal),
+    };
+    let compositional = CorePhase::Liquid {
+        dynamo: Some(Dynamo::Compositional),
+    };
+    let none = CorePhase::Liquid { dynamo: None };
     // Under a lid: thermal dynamo, then none, then compositional, then frozen.
+    let lid = |t| core_phase(at(t), TAU, false);
+    assert_eq!(lid(THERMAL_DYNAMO_END - STEP), thermal);
+    assert_eq!(lid(THERMAL_DYNAMO_END + STEP), none);
+    assert_eq!(lid(INNER_CORE_START - STEP), none);
+    assert_eq!(lid(INNER_CORE_START + STEP), compositional);
+    assert_eq!(lid(CORE_FROZEN - STEP), compositional);
+    assert_eq!(lid(CORE_FROZEN + STEP), CorePhase::Frozen);
+    // Under plates the thermal dynamo runs until the core freezes, and
+    // keeps its dipole when an inner core grows (legacy: the thermal
+    // share whenever the thermal dynamo runs).
+    let plates = |t| core_phase(at(t), TAU, true);
+    assert_eq!(plates(THERMAL_DYNAMO_END + STEP), thermal);
+    assert_eq!(plates(INNER_CORE_START - STEP), thermal);
+    assert_eq!(plates(INNER_CORE_START + STEP), thermal);
+    assert_eq!(plates(CORE_FROZEN - STEP), thermal);
+    assert_eq!(plates(CORE_FROZEN + STEP), CorePhase::Frozen);
+}
+
+#[test]
+fn no_cooling_time_no_dynamo() {
     assert_eq!(
-        core_phase(at(THERMAL_DYNAMO_END - STEP), TAU, false),
-        liquid(true)
-    );
-    assert_eq!(
-        core_phase(at(THERMAL_DYNAMO_END + STEP), TAU, false),
-        liquid(false)
-    );
-    assert_eq!(
-        core_phase(at(INNER_CORE_START - STEP), TAU, false),
-        liquid(false)
-    );
-    assert_eq!(
-        core_phase(at(INNER_CORE_START + STEP), TAU, false),
-        liquid(true)
-    );
-    assert_eq!(core_phase(at(CORE_FROZEN - STEP), TAU, false), liquid(true));
-    assert_eq!(
-        core_phase(at(CORE_FROZEN + STEP), TAU, false),
-        CorePhase::Frozen
-    );
-    // Under plates the thermal dynamo runs until the core freezes.
-    assert_eq!(
-        core_phase(at(THERMAL_DYNAMO_END + STEP), TAU, true),
-        liquid(true)
-    );
-    assert_eq!(
-        core_phase(at(INNER_CORE_START - STEP), TAU, true),
-        liquid(true)
-    );
-    assert_eq!(core_phase(at(CORE_FROZEN - STEP), TAU, true), liquid(true));
-    assert_eq!(
-        core_phase(at(CORE_FROZEN + STEP), TAU, true),
-        CorePhase::Frozen
+        core_phase(TAU, Gyr(0.0), true),
+        CorePhase::Liquid { dynamo: None }
     );
 }
 
@@ -141,12 +136,12 @@ fn a_core_cools_monotonically() {
         }
         assert!(frozen, "the core freezes within {SPAN} cooling times");
     }
-    for deep in [false, true] {
+    for dynamo in [Dynamo::Thermal, Dynamo::Compositional] {
         let mut last = f64::INFINITY;
         for step in 0..=SAMPLES {
             let age = TAU * (f64::from(step) / f64::from(SAMPLES) * CORE_FROZEN);
-            let field = surface_field(DENSITY, CORE_RADIUS, PLANET_RADIUS, age, TAU, deep).0;
-            assert!(field > 0.0 && field < last, "{deep} {age:?} {field}");
+            let field = surface_field(DENSITY, CORE_RADIUS, PLANET_RADIUS, age, TAU, dynamo).0;
+            assert!(field > 0.0 && field < last, "{dynamo:?} {age:?} {field}");
             last = field;
         }
     }
@@ -154,8 +149,22 @@ fn a_core_cools_monotonically() {
 
 #[test]
 fn a_deep_dynamo_is_weaker() {
-    let dipolar = surface_field(DENSITY, CORE_RADIUS, PLANET_RADIUS, TAU, TAU, false);
-    let deep = surface_field(DENSITY, CORE_RADIUS, PLANET_RADIUS, TAU, TAU, true);
+    let dipolar = surface_field(
+        DENSITY,
+        CORE_RADIUS,
+        PLANET_RADIUS,
+        TAU,
+        TAU,
+        Dynamo::Thermal,
+    );
+    let deep = surface_field(
+        DENSITY,
+        CORE_RADIUS,
+        PLANET_RADIUS,
+        TAU,
+        TAU,
+        Dynamo::Compositional,
+    );
     assert!(deep < dipolar, "{deep:?} against {dipolar:?}");
 }
 
@@ -163,13 +172,13 @@ fn a_deep_dynamo_is_weaker() {
 fn no_core_no_field() {
     let none = Metre(0.0);
     let tau = cooling_time(DENSITY, none, PLANET_RADIUS, NUSSELT_LID);
-    for deep in [false, true] {
+    for dynamo in [Dynamo::Thermal, Dynamo::Compositional] {
         assert_eq!(
-            surface_field(DENSITY, none, PLANET_RADIUS, TAU, tau, deep),
+            surface_field(DENSITY, none, PLANET_RADIUS, TAU, tau, dynamo),
             Tesla(0.0)
         );
         assert_eq!(
-            surface_field(DENSITY, none, PLANET_RADIUS, TAU, TAU, deep),
+            surface_field(DENSITY, none, PLANET_RADIUS, TAU, TAU, dynamo),
             Tesla(0.0)
         );
     }
