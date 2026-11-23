@@ -599,8 +599,8 @@ superseded by the window the test takes, below). The observed clear-sky
 albedo holds the aerosols: CERES reflects 52.4 W/m² under clear
 skies, "an albedo of 0.149" (EBAF Ed2.7r; Stephens et al. 2015, §4,
 item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0, July 2005 to June 2015;
-Kato et al. 2018, Table 5). Stephens et al.'s own all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo
-of 0.154, not 0.149: the paper does not say how its 0.149 is formed. The
+Kato et al. 2018, Table 5). Stephens et al.'s own all-sky pair, 99.7
+W/m² for 0.293, makes their 52.4 an albedo of 0.154, not 0.149: the paper does not say how its 0.149 is formed. The
 aerosols reflect 5.9 ± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and
 §[52]), 0.017 ± 0.003 of albedo. Taken off:
 
