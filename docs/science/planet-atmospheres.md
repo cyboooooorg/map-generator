@@ -456,7 +456,7 @@ degassing, so 0.95 and 0.2 are calibrations):
 | Stagnant lid | 0.2 | Mars, Titan |
 
 **Under a deep ocean** (`released_under_ocean`), only a share of that
-reaches the air: `1 / (1 + (P_floor / 3 GPa)^4.1)`, with `P_floor` the
+reaches the air: `1 / (1 + (P_floor / 3.7 GPa)^4.1)`, with `P_floor` the
 weight of the water kept on the seafloor, `m_water g / (4π R²)`. The
 weight of a deep ocean curtails the decompression melting that outgasses
 the mantle (Kite & Ford 2018, ApJ 864, 75, doi:10.3847/1538-4357/aad6e0,
@@ -465,11 +465,16 @@ between 0.2 and 20 bar; checked), high-pressure ice at its base seals the
 rock (Noack et al. 2016, Icarus 277, 215, doi:10.1016/j.icarus.2016.05.009;
 the paper was not read, its companion abstract gives no single pressure),
 and the ices' own volatiles stay dissolved in the ocean or locked in
-clathrates. The 3 GPa and the power 4.1 are calibrations with no source:
+clathrates. The 3.7 GPa and the power 4.1 are calibrations with no source:
 Earth's ocean (0.03 GPa) changes nothing, Titan (1.0 GPa in the model),
 Ganymede (1.1 GPa) and Callisto keep 98 % or more of their air (the power
-4 left Ganymede 97.9 %), and a 1 M⊕ planet of 30 % water (17 GPa) lets
-out about 1e-3 of it, a few bar of CO₂ before the thermostat. A
+4 left Ganymede 97.9 %), and a 1 M⊕ planet of 30 % water lets out about
+1e-3 of it, a few bar of CO₂ before the thermostat. Legacy set the half
+point at 3 GPa, for a seafloor of 17 GPa under that planet; the rewrite's
+interior makes it smaller (1.143 R⊕ against 1.187) and its seafloor
+deeper (20.2 GPa), so the half point was retuned to keep the target:
+`P½ = 20.2 GPa / 999^(1/4.1) = 3.74 GPa`, rounded to 3.7 GPa (the planet
+then lets out 9.6e-4, Ganymede keeps 99.3 %). A
 runaway's steam weighs on the rock as its ocean did, so the share holds
 in a runaway too; the steam itself is not held back, by this share or by
 the regime's: it is the ocean, not a volatile of the mantle. The rewrite
@@ -480,7 +485,8 @@ the regime's share is the constant the system picks, `MOBILE_SHARE` or
 
 A known departure: Kite & Ford (Fig. 5) find that a stagnant-lid planet
 under a 3 GPa ocean does not melt at all, so 3 GPa is their full
-shutoff, not a half point. A shutoff there (tried with
+shutoff, not a half point; the retuned half point, 3.7 GPa, sits further
+past it than legacy's 3 GPa. A shutoff there (tried with
 `1 - (P / 3 GPa)^5`) keeps the icy moons and Earth but leaves the
 30 %-water planet no air at all, frozen at 257 K at 1 AU instead of an
 ocean world: its air would have to come from the volatiles dissolved in

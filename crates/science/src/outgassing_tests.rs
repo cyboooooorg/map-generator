@@ -21,6 +21,14 @@ const COLUMN_TOLERANCE: f64 = 0.01;
 /// formula (round-off only).
 const ROUND_OFF: f64 = 1e-12;
 
+/// Source: Ganymede's seafloor in the model, 1.1 GPa, and the share of
+/// its air it keeps, 98 % or more: the targets of
+/// [`SEAFLOOR_HALF_PRESSURE`] (`docs/science/planet-atmospheres.md`,
+/// "Under a deep ocean"; study 21, part 5).
+const GANYMEDE_SEAFLOOR: Bar = Bar(1.1e4);
+/// Source: see [`GANYMEDE_SEAFLOOR`].
+const ICY_MOON_KEPT: f64 = 0.98;
+
 /// Definition: a dry column above [`DRY_COLUMN`], 20 bar.
 const THICK_DRY: Bar = Bar(20.0);
 
@@ -44,6 +52,12 @@ fn half_is_released_under_the_half_pressure() {
     let by_hand = 1.0 / (1.0 + 2f64.powf(SEAFLOOR_STEEPNESS));
     assert!((deep / by_hand - 1.0).abs() < ROUND_OFF, "{deep}");
     assert!(deep < half);
+}
+
+#[test]
+fn an_icy_moon_keeps_its_air_under_its_ocean() {
+    let kept = released_under_ocean(GANYMEDE_SEAFLOOR).get();
+    assert!(kept >= ICY_MOON_KEPT, "{kept}");
 }
 
 #[test]

@@ -38,13 +38,20 @@ pub const MOBILE_SHARE: f64 = 0.95;
 pub const LID_SHARE: f64 = 0.2;
 
 /// Calibration: pressure at the floor of a water layer at which half of
-/// the volatiles reach the air, 3 GPa. Kite & Ford 2018 (ApJ 864, 75,
-/// doi:10.3847/1538-4357/aad6e0, Fig. 5) find 3 GPa a full shutoff of a
-/// stagnant lid's melting, not a half point: a shutoff there leaves a
-/// planet of 30 % water no air at all. Fitted so that Titan, Ganymede and
-/// Callisto keep 98 % or more of their air and a 1 M_earth planet of 30 %
-/// water (17 GPa) lets out about 1e-3 of it (study 21, part 5).
-pub const SEAFLOOR_HALF_PRESSURE: Bar = Bar(3.0e4);
+/// the volatiles reach the air, 3.7 GPa. Fitted so that a 1 M_earth planet
+/// of 30 % water at 1 au lets out about 1e-3 of its air (a few bar of CO2
+/// before the thermostat, within the 0.2 to 20 bar Kite & Ford 2018 find
+/// on waterworlds) while Titan, Ganymede (1.1 GPa) and Callisto keep 98 %
+/// or more of it. Retuned from legacy's 3 GPa for the rewrite's interior,
+/// which makes that planet smaller (1.143 R_earth against legacy's 1.187)
+/// and its seafloor deeper (P = 2.016e5 bar against 1.735e5): with
+/// `P / P½ = 999^(1/k)`, `k = 4.1`, `P½ = 2.016e5 / 5.39 = 3.74e4` bar,
+/// rounded to 3.7e4 (the planet then lets out 9.6e-4; Ganymede keeps
+/// 99.3 %). Kite & Ford 2018 (ApJ 864, 75, doi:10.3847/1538-4357/aad6e0,
+/// Fig. 5) find 3 GPa a full shutoff of a stagnant lid's melting, not a
+/// half point: a shutoff there leaves a planet of 30 % water no air at
+/// all (study 21, part 5).
+pub const SEAFLOOR_HALF_PRESSURE: Bar = Bar(3.7e4);
 
 /// Calibration: steepness `k` of the release across
 /// [`SEAFLOOR_HALF_PRESSURE`], `1 / (1 + (P / P½)^k)`: the least that
