@@ -138,22 +138,28 @@ pub(crate) const VOLATILE_SCATTER_NH3: &str = "planet.volatiles.scatter.nh3";
 /// effective temperature exceeds 1 (#592). Derived from every source's
 /// flux and temperature.
 pub(crate) const WATER_RUNAWAY: &str = "planet.water.runaway";
+/// Water at the surface of a planet whose water is bound in its mantle:
+/// `science::habitable::SURFACE_WATER_SHARE` of its bulk water
+/// `w (1 - f) M`, derived from the mass and the two fractions. A water
+/// world's surface water is its water layer (or its water beyond the
+/// laws), already recorded: no node of this code then.
+pub(crate) const WATER_SURFACE: &str = "planet.water.surface";
 /// Water lost as steam in a runaway: 9 kg of water for each kg of hydrogen
 /// the energy-limited escape takes at the whole mass (the bulk's plus a
-/// water beyond the laws), capped by the bulk water. Recorded only in a
-/// runaway.
+/// water beyond the laws), capped by the surface water. Recorded only in
+/// a runaway.
 pub(crate) const WATER_STEAM_LOST: &str = "planet.water.steam-lost";
-/// Water the planet keeps: its bulk water `w (1 - f) M`, less the steam
-/// lost in a runaway.
+/// Water the planet keeps at its surface: its surface water, less the
+/// steam lost in a runaway.
 pub(crate) const WATER_INVENTORY: &str = "planet.water.inventory";
 /// Whether the climate boiled the ocean: false, imposed, until the
 /// climate's boiling loop of the next pull request.
 pub(crate) const WATER_BOILED: &str = "planet.water.boiled";
-/// Mass of the planet once the steam is gone: its dry mass `(1 - w) M`
-/// plus the water kept.
+/// Mass of the planet once the steam is gone: its mass less the surface
+/// water lost, `M - (surface - kept)`; the mantle's water stays.
 pub(crate) const MASS_AFTER_STEAM: &str = "planet.mass.after-steam";
 /// Water mass fraction of the planet once the steam is gone: the water
-/// kept over the mass after the steam.
+/// left, `w M - (surface - kept)`, over the mass after the steam.
 pub(crate) const WATER_KEPT_FRACTION: &str = "planet.water.kept-fraction";
 /// Tectonic regime: heat pipe, stagnant lid, plates or episodic, from the
 /// internal heat flux, the mass and the water kept.

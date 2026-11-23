@@ -28,13 +28,19 @@ use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace,
 
 /// The air of the planet `trial` of composition `drawn`, both as they were
 /// before a runaway's steam loss (`super::escape::Escaped`), of body
-/// `body` after it, with its water `water`, its tectonic regime `regime`
-/// and its core `core`; and its water once the air is made. In order:
+/// `body` after it, with its surface water before its stars' light
+/// `surface` (`super::water::surface_water`), its water `water`, its
+/// tectonic regime `regime` and its core `core`; and its water once the
+/// air is made. In order:
 ///
 /// 1. **Outgassing** (`planet.air.outgassed.<gas>`, one node per gas):
 ///    the volatiles at formation ([`inventory`] of the refractory mass
-///    `(1 - w)(1 - f) M`, its silicate `(1 - cmf)` share and the ice
-///    `w (1 - f) M`, before the steam loss so that they keep their mass),
+///    `(1 - w)(1 - f) M`, its silicate `(1 - cmf)` share and the ice,
+///    the surface water `surface`, before the steam loss so that they
+///    keep their mass: the volatiles delivered with the water that is at
+///    the surface, a dry planet's share of its bulk water, a water world's
+///    whole water; legacy fed the ice term its ocean water, and the
+///    mantle's water is not ice),
 ///    each times `10^scatter`, weigh [`column_pressure`] on the body's
 ///    surface, times the regime's share ([`LID_SHARE`] for a stagnant lid,
 ///    [`MOBILE_SHARE`] otherwise), the share the water lets through
@@ -69,16 +75,21 @@ use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace,
 /// # Errors
 ///
 /// The errors of the trace.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one argument per step of the chain the air reads"
+)]
 pub(crate) fn air(
     trial: &Trial,
     drawn: &Drawn,
     body: &Body,
+    surface: Traced<Kilogram>,
     water: &Water,
     regime: &Traced<TectonicRegime>,
     core: &CoreRecord,
     trace: &mut Trace,
 ) -> Result<(Atmosphere, Water), InteriorError> {
-    let outgassed = outgassed(trial, drawn, body, water, regime, trace)?;
+    let outgassed = outgassed(trial, drawn, body, surface, water, regime, trace)?;
     let shoreline = shoreline(trial, body, core, trace)?;
     let share = shoreline.value().get();
     let runaway = *water.runaway.value();
@@ -165,6 +176,7 @@ fn outgassed(
     trial: &Trial,
     drawn: &Drawn,
     body: &Body,
+    surface: Traced<Kilogram>,
     water: &Water,
     regime: &Traced<TectonicRegime>,
     trace: &mut Trace,
@@ -179,7 +191,7 @@ fn outgassed(
     let cmf = drawn.core_mass_fraction.value().get();
     let planet = Kilogram::from(*trial.mass.value()) * (1.0 - f);
     let refractory = planet * (1.0 - w);
-    let rule = inventory(refractory, refractory * (1.0 - cmf), planet * w);
+    let rule = inventory(refractory, refractory * (1.0 - cmf), *surface.value());
 
     let mobile = match regime.value() {
         TectonicRegime::Stagnant => LID_SHARE,
@@ -198,13 +210,14 @@ fn outgassed(
     let released = mobile * released(body, water).get();
 
     // The nodes every volatile of the mantle derives from: the mass and
-    // composition of its inventory, the water that holds it back, the
-    // regime and the surface it weighs on.
-    let base: [NodeId; 8] = [
+    // composition of its inventory, the surface water its ice is, the
+    // water that holds it back, the regime and the surface it weighs on.
+    let base: [NodeId; 9] = [
         trial.mass.node(),
         drawn.envelope_fraction.node(),
         drawn.water_fraction.node(),
         drawn.core_mass_fraction.node(),
+        surface.node(),
         water.inventory.node(),
         regime.node(),
         bulk.surface_gravity.node(),

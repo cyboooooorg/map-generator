@@ -73,8 +73,9 @@ Thorngren et al. 2016 fit, inside the cores of the Fortney et al. 2007
 tables).
 
 `planet::interior` dispatches on the envelope. Without one, the layers
-are core alloy and mantle (holding a dry planet's water), plus a water
-world's water layer at the trial's equilibrium temperature, integrated at
+are core alloy and mantle (holding a dry planet's water, 0.085 of which
+`planet::water` puts at its surface), plus a water world's water layer
+(all at its surface) at the trial's equilibrium temperature, integrated at
 zero surface pressure with `science::structure`. A mini-Neptune is that
 core (mass `(1 - f) M`) plus the Lopez & Fortney 2014 thickness
 (`science::envelope`), under one gas layer. A giant (from 20 M⊕) takes its

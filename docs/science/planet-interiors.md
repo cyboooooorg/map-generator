@@ -1216,17 +1216,19 @@ in `codes`). The draw takes the seed from its caller: the planet model
 will pass the body's seed, so each body depends on no other, and the
 class trial of the backward search the trial's seed.
 
-- **Iron.** The core's share of the refractory mass is $0.32 + \sigma z$,
-  $z$ a standard normal, with $\sigma$ = 0.12 below the median and 0.14
-  above (Plotnykov & Valencia 2020: 0.32 +0.14/−0.12, read as a median
-  and a 68 % interval), kept between 0 and 1. The earlier model's slope
-  of 0.15 per dex of `[Fe/H]` is gone: the new draw has none.
-- **Water inside the ice line.** Log-normal around 2700 ppm of the mass,
-  Earth's bulk water (Marty 2012), with $\sigma_{\ln}$ = 0.5
-  (Calibration, derived from Marty's ±1350 ppm). A planet beyond the ice
-  line, or one in ten that migrated in (Calibration, as the earlier
-  model), is a water world and draws a uniform share between 0.5 and 0.67
-  instead (Zeng et al. 2019). The trace says why: a flag that the planet
+- **Iron.** The core's share of the refractory mass is uniform from 0 to
+  0.8 (see [the draws and their bounds](#the-draws-and-their-bounds):
+  Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020). The earlier
+  model's slope of 0.15 per dex of `[Fe/H]` is gone: the new draw has
+  none.
+- **Water inside the ice line.** Log-uniform from $10^{-5}$ to
+  $10^{-2}$ of the mass, the bulk water (see [the draws and their
+  bounds](#the-draws-and-their-bounds)); Earth's is 2700 ppm (Marty
+  2012), the reference the surface share is calibrated on. A planet
+  beyond the ice line, or one in ten that migrated in (Calibration, as
+  the earlier model), is a water world and draws a uniform share between
+  0.1 and 0.67 instead (Marboeuf et al. 2014; Zeng et al. 2019). The
+  trace says why: a flag that the planet
   formed beyond the ice line (from its orbit and the ice line) and a drawn
   migration flag, from which the water fraction derives.
 - **Radiogenic abundance.** Normal around Earth's, 0.23 dex.
@@ -1237,8 +1239,12 @@ class trial of the backward search the trial's seed.
   $(1 - c)(1 - w) M + w M$: hydrated silicate, whose ocean comes from
   outgassing (Marty's 2700 ppm is the bulk Earth's water, not its
   oceans'). The planet model's water step (`system::planet::water`)
-  still takes the whole bulk water as its ocean: the share that reaches
-  the surface needs a study first (#663). A water world adds a water layer
+  keeps a share of it at the surface, its ocean,
+  `science::habitable::SURFACE_WATER_SHARE` (0.085, Earth's ocean over
+  Marty's bulk water, a calibration; #663 and [surface
+  water](planet-atmospheres.md#surface-water)); the rest stays in the
+  mantle. A water world's water is not shared out: its layer, or its
+  water beyond the laws, is all at its surface. A water world adds a water layer
   $w M$ on the isotherm of its equilibrium temperature, which stands for
   the surface temperature until then: the isotherm from 273.31 to 355 K,
   the melting curve colder. From 355 K, past the water laws, its water
@@ -1496,9 +1502,6 @@ measurement; this is what was searched and not found.
   water-rich planets that formed beyond the ice line and migrated in was
   searched: none found (Luque & Pallé 2022 say they exist, with no
   fraction in the main text; heat study, section B7).
-- **Water spread $\sigma_{\ln}$ = 0.5**, derived from Marty's 2700 ±
-  1350 ppm read as one sigma (1350/2700, the small-spread approximation
-  of a log-normal).
 - **Twenty steps per layer.** Fitted on a $10^{-4}$ accuracy goal; ten
   steps give $1.03 \times 10^{-4}$ against a 1280-step reference.
 - **Test tolerances against PREM.** 1 % for the core (the study gives no

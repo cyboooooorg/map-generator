@@ -223,6 +223,69 @@ Mercury are stagnant; Io with 1e14 W of tidal heat is a heat pipe, and
 still is with 7.5e13 W (1.79 W/m², the low end of Lainey et al.); a dry
 5 M⊕ planet outside the runaway has no plates.
 
+### Surface water
+
+Legacy drew a planet's ocean directly (Earth's `water_fraction` was
+2.3e-4, its ocean). The rewrite draws the **bulk** water, the ocean plus
+the water bound in the mantle (log-uniform from 1e-5 to 1e-2 inside the
+ice line; Earth's is 2700 ppm, Marty 2012, the reference of the share,
+not the centre of the draw). The ocean is then a share of
+it (#663, `system::planet::water::surface_water`, node
+`planet.water.surface`):
+
+```text
+surface = s · w (1 - f) M      for a dry planet, its water in the mantle
+surface = its water layer      for a water world (or its water beyond the laws)
+s = ω_o / ω_⊕ = 2.3e-4 / 2.7e-3 = 0.085   (SURFACE_WATER_SHARE)
+```
+
+A water world's water is a layer of its structure, not hydrated rock
+([planet interiors](planet-interiors.md), "Water inside the ice line"):
+all of it is at its surface, and its node (`planet.water-layer-mass` or
+`planet.water-beyond-law`) is the surface water as it is. The runaway's
+steam is the surface water: `min(9 H, surface)` is lost, the mantle's
+water stays, and the mass after the steam is `M - (surface - kept)`
+(`after_steam`). The regime, the seafloor's hold on the outgassing
+(`released_under_ocean`) and the air's water read the water kept of the
+surface water, never the bulk.
+
+**Calibration.** `science::habitable::SURFACE_WATER_SHARE` is a
+`Calibration:`, the decision of #663 (option A of
+[study 22](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water)):
+Earth's ocean as a share of its mass, $\omega_o = 2.3 \times 10^{-4}$
+(Cowan & Abbot 2014, Table 1; 1.37e21 kg, the ocean alone, without the
+0.19 ocean of the continental crust, Korenaga et al. 2017, §2a), over
+Earth's bulk water, 2700 ppm (Marty 2012, arXiv author copy, p. 18:
+2700 ± 1350 ppm,
+"10 ± 5 ocean masses"). The same share for every mass and regime. Both
+numbers are `Source:` constants; the ratio is computed from them.
+Searched and not found (study 22): a measured or modelled surface share
+for any planet other than Earth with plates; a stagnant-lid water
+outgassing law as a function of mass (Dorn et al. 2018 is for CO₂, Tosi
+et al. 2017 for 1 M⊕ only); a share for heat-pipe or episodic planets.
+
+**Validation.** A planet drawn at Earth's 2700 ppm gets 0.98 ocean
+(units of 1.4e21 kg; the ocean's 1.37e21 kg exactly), the 0.9 to 1.1 of
+the targets above, and keeps plates; Venus given that water runs away and
+loses it; the reference Earth's air keeps 0.51 bar of N₂.
+
+**What the draw gives.** The draw is not centred on Earth: a dry 1 M⊕
+planet, its bulk water log-uniform from 1e-5 to 1e-2, keeps 0.004 to 3.6
+oceans at its surface, a median of about 0.12, and about 19 % of them
+hold at least one ocean ($w \ge 2.75 \times 10^{-3}$). Legacy drew the
+ocean itself, $10^{U(-4, -2.7)}$ of the mass: 0.43 to 8.5 oceans, a
+median of about 1.9. The median dry planet is some sixteen times drier
+at its surface than legacy's; the user confirmed this choice, the share
+and the draw as they are, on 2026-11-23.
+
+**Limitations.** The share rides on Marty's large bulk: other budgets
+give Earth 0.07 to about 0.6 (Ohtani 2021's small budget of 1 to 4
+oceans, Korenaga et al. 2017's mantle of 0.56 to 1.3 oceans). A stagnant
+lid outgasses less (about 0.02 to 0.05, derived from Tosi et al. 2017),
+and the share changes over a planet's life as the mantle degasses and
+regasses: both are #665, with the keyframes of T4. Whether a runaway
+outgasses more of its mantle than the share is left open.
+
 ## Core and dynamo
 
 `planet::core::core` (called by `planet_model`) gives the
@@ -390,6 +453,17 @@ rewrite gives a stripped mini-Neptune the volatiles of its whole formed
 composition, the condensed planet it kept, where legacy gave too few:
 it multiplied the shares per kg of the formed planet, envelope included,
 by the mass the escape left, taking the envelope off twice.
+
+The rewrite's ice is the **surface water** (`planet.water.surface`, see
+[Surface water](#surface-water)): a dry planet's ocean, the surface share
+of its bulk water, and a water world's whole water. It carries the
+volatiles delivered with the water that is at the surface. Legacy fed
+the ice term its drawn water, which was the ocean; the rewrite draws the
+bulk water, ten times Earth's ocean, and fed the whole of it to the ice
+term until #663, which raised the reference Earth's N₂ from 0.51 to
+1.28 bar and its CO₂ from 52 to 173 bar. Reading the surface water
+restores legacy's meaning: a port-fidelity fix, not a retune, and none
+of the constants above moved.
 
 **Rock.** The bulk silicate Earth, in Wang, Lineweaver & Ireland 2018
 (doi:10.1016/j.icarus.2017.08.024, Table 1, a concordance of three
@@ -2136,11 +2210,15 @@ another paper, from memory) is said where it is used.
 - Courtin, Gautier and McKay 1995, Titan's collision-induced
   bands.
 - Coustenis et al. 2010, doi:10.1016/j.icarus.2009.11.027, Titan's CO₂.
-- Cowan and Abbot 2014, doi:10.1088/0004-637X/781/1/27.
+- Cowan and Abbot 2014, doi:10.1088/0004-637X/781/1/27, Table 1:
+  Earth's ocean as a share of its mass.
 - Cruikshank et al. 1993, *Science* 261, 742, Triton's CO₂ ice.
 - de Kok et al. 2007, Titan's CO₂ from Cassini CIRS.
 - Dello Russo et al. 2016, cometary abundances, as updated in Biver et
   al. 2022.
+- Dorn, Noack and Rozel 2018, *A&A* 614, A18,
+  doi:10.1051/0004-6361/201731513, outgassing on stagnant-lid
+  super-Earths (abstract, through study 22).
 - Douté et al. 2001, *Icarus* 149, 107, Io's SO₂ frost.
 - Driscoll and Barnes 2015, doi:10.1089/ast.2015.1325.
 - Erkaev et al. 2007, energy-limited escape.
@@ -2200,6 +2278,9 @@ another paper, from memory) is said where it is used.
 - Kopparapu et al. 2014, doi:10.1088/2041-8205/787/2/L29, the
   runaway limit.
 - Korenaga 2010, plate tectonics against planet size.
+- Korenaga, Planavsky and Evans 2017, *Phil. Trans. R. Soc. A* 375,
+  20150393, doi:10.1098/rsta.2015.0393, §2a: Earth's water by
+  reservoir.
 - Krasnopolsky 2012, doi:10.1016/j.icarus.2011.10.019, Mars's SO₂
   limit.
 - Lacis et al. 2010, doi:10.1126/science.1190653.
@@ -2218,7 +2299,9 @@ another paper, from memory) is said where it is used.
 - Manabe and Wetherald 1967,
   doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2.
 - Marcq et al. 2008, Venus's SO₂ below the clouds.
-- Marty 2012, doi:10.1016/j.epsl.2011.10.040, carbon in the mantle.
+- Marty 2012, *Earth Planet. Sci. Lett.* 313-314, 56-66,
+  doi:10.1016/j.epsl.2011.10.040, carbon in the mantle; Earth's bulk
+  water, p. 18 of the arXiv author copy (arXiv:1405.6336).
 - McDonough 2003, *Treatise on Geochemistry* 2.15.
 - McEwen et al. 1998, *Science* 281, 87, Io's lavas.
 - McKay, Pollack and Courtin 1991,
@@ -2241,6 +2324,9 @@ another paper, from memory) is said where it is used.
 - Nimmo and Stevenson 2000, doi:10.1029/1999JE001216.
 - Noack et al. 2016, *Icarus* 277, 215,
   doi:10.1016/j.icarus.2016.05.009.
+- Ohtani 2021, *Annu. Rev. Earth Planet. Sci.* 49, 253,
+  doi:10.1146/annurev-earth-080320-062509, the large and small water
+  budgets (abstract, through study 22).
 - O'Reilly and Davies 1981, *Geophys. Res. Lett.* 8, 313.
 - Owen and Wu 2017, doi:10.3847/1538-4357/aa890a, eq. 19.
 - Pierrehumbert 2010, section 4.4.
@@ -2267,6 +2353,8 @@ another paper, from memory) is said where it is used.
   doi:10.1088/0004-637X/752/2/125.
 - Tobie, Lunine and Sotin 2006, *Nature* 440, 61,
   doi:10.1038/nature04497.
+- Tosi et al. 2017, *A&A* 605, A71, doi:10.1051/0004-6361/201730728,
+  the habitability of a stagnant-lid Earth (through study 22).
 - Tu et al. 2015, the saturation of a star's X-ray emission.
 - Turbet et al. 2020, *A&A* 638, A41, arXiv:1911.08878, Eq. 2 and
   Appendix C.

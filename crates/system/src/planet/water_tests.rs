@@ -10,11 +10,11 @@ use super::interior::{Water as Held, interior};
 use super::regime::regime;
 use super::tests::{
     EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, WATER_WORLD_FRACTION,
-    WET_VENUS, derive, derived_from, reference_trial, trial,
+    WET_VENUS, derive, derive_surface, derived_from, reference_trial, trial,
 };
-use super::water::{after_steam, water};
+use super::water::{after_steam, surface_water, water};
 use crate::Trial;
-use science::habitable::{OCEAN_MASS, runaway_flux};
+use science::habitable::{SURFACE_WATER_SHARE, runaway_flux};
 use science::units::{EarthFlux, Kelvin, Kilogram, Watt};
 use timeline::{Code, Heat, Provenance, StellarSources, TectonicRegime, Trace, Water};
 
@@ -106,7 +106,8 @@ fn runs_away(lights: &[(f64, f64)]) -> bool {
     let (t, drawn) = reference_trial(&mut trace, &EARTH);
     let t = lit(&mut trace, &t, lights);
     let body = interior(&t, &drawn, &mut trace).unwrap();
-    let w = water(&t, &drawn, &body, &mut trace).unwrap();
+    let surface = surface_water(&t, &drawn, &body, &mut trace).unwrap();
+    let w = water(&t, &body, surface, &mut trace).unwrap();
     *w.runaway.value()
 }
 
@@ -118,12 +119,14 @@ fn venus_ran_away_and_dried() {
     // Given an Earth ocean, it would have lost it too.
     let mut trace = Trace::new();
     let (t, drawn) = reference_trial(&mut trace, &WET_VENUS);
-    let (_, _, w) = derive(&mut trace, &t, &drawn);
+    let (_, _, w, surface) = derive_surface(&mut trace, &t, &drawn);
     assert!(*w.runaway.value());
     assert_eq!(w.inventory.value().0, 0.0);
-    // The inventory derives from the bulk water and the steam lost, which
-    // derives from the runaway, the radius, the mass and the XUV light.
+    // The inventory derives from the surface water and the steam lost,
+    // which derives from the runaway, the radius, the mass, the XUV light
+    // and the surface water: the steam is the ocean, not the mantle's water.
     let from = derived_from(&trace, w.inventory.node());
+    assert_eq!(from[0], surface.node());
     let lost = *from.last().unwrap();
     assert_eq!(
         trace.node(lost).unwrap().code,
@@ -132,16 +135,99 @@ fn venus_ran_away_and_dried() {
     let lost_from = derived_from(&trace, lost);
     assert_eq!(lost_from[0], w.runaway.node());
     assert!(lost_from.contains(&t.sources.primary().xuv.fluence.node()));
-    assert!(lost_from.contains(&drawn.water_fraction.node()));
+    assert!(lost_from.contains(&surface.node()));
     assert!(!*w.boiled.value());
 }
 
 #[test]
 fn earth_keeps_its_ocean() {
-    let (w, _) = reference(&EARTH);
+    // Earth drawn at its bulk water (Marty 2012) keeps its ocean, not its
+    // ten oceans of bulk water (the ocean's mass is
+    // `science::habitable`'s test).
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &EARTH);
+    let (_, _, w, surface) = derive_surface(&mut trace, &t, &drawn);
     assert!(!*w.runaway.value());
-    let oceans = w.inventory.value().0 / OCEAN_MASS.0;
-    assert!((0.9..=1.1).contains(&oceans), "{oceans}");
+    // The ocean is the surface water, the share of the bulk water derived
+    // from the mass and the two fractions; the rest stays in the mantle.
+    assert_eq!(w.inventory.value(), surface.value());
+    assert_eq!(
+        derived_from(&trace, w.inventory.node()),
+        vec![surface.node(), w.runaway.node()]
+    );
+    assert_eq!(
+        trace.node(surface.node()).unwrap().code,
+        Code::of(codes::WATER_SURFACE)
+    );
+    assert_eq!(
+        derived_from(&trace, surface.node()),
+        vec![
+            t.mass.node(),
+            drawn.water_fraction.node(),
+            drawn.envelope_fraction.node()
+        ]
+    );
+    let bulk = EARTH.water_fraction * Kilogram::from(*t.mass.value()).0;
+    assert!((surface.value().0 / (SURFACE_WATER_SHARE * bulk) - 1.0).abs() < ROUNDING);
+}
+
+#[test]
+fn a_dry_runaway_keeps_its_mantles_water() {
+    // Venus given Earth's bulk water loses its ocean, the surface share,
+    // to the steam; the mantle keeps the rest, and the planet left weighs
+    // it.
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &WET_VENUS);
+    let (_, _, w, surface) = derive_surface(&mut trace, &t, &drawn);
+    assert!(*w.runaway.value());
+    let (t2, d2) = after_steam(&t, &drawn, surface, &w, &mut trace)
+        .unwrap()
+        .expect("the ocean was lost");
+    let total = Kilogram::from(*t.mass.value()).0;
+    let bulk = WET_VENUS.water_fraction * total;
+    let lost = surface.value().0 - w.inventory.value().0;
+    assert!(lost > 0.0);
+    // The mass after the steam is the mass less the surface water lost.
+    let mass = Kilogram::from(*t2.mass.value()).0;
+    assert!((mass / (total - lost) - 1.0).abs() < ROUNDING, "{mass}");
+    // The water left is the bulk less what was lost: the mantle's
+    // `(1 - s)` of the bulk, plus what the surface kept.
+    let left = d2.water_fraction.value().get() * mass;
+    let mantle = (1.0 - SURFACE_WATER_SHARE) * bulk;
+    assert!(
+        (left / (mantle + w.inventory.value().0) - 1.0).abs() < ROUNDING,
+        "{left} {mantle}"
+    );
+}
+
+#[test]
+fn a_water_worlds_whole_water_is_at_its_surface() {
+    // Its water layer is its ocean: the surface share is a dry planet's.
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 1.0, 1.0, 0.0);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        WATER_WORLD_FRACTION,
+        0.0,
+        Some(true),
+        0.0,
+        None,
+        None,
+    );
+    let (body, _, w, surface) = derive_surface(&mut trace, &t, &drawn);
+    let Body::Rocky(interior) = &body else {
+        panic!("a water world without an envelope is rocky");
+    };
+    let Held::Layer { mass, .. } = interior.water else {
+        panic!("a water world at 1 au has a water layer");
+    };
+    assert_eq!(surface, mass);
+    assert!(!*w.runaway.value());
+    assert_eq!(w.inventory.value(), mass.value());
+    let bulk = WATER_WORLD_FRACTION * Kilogram::from(*t.mass.value()).0;
+    assert!((w.inventory.value().0 / bulk - 1.0).abs() < ROUNDING);
 }
 
 #[test]
@@ -207,14 +293,14 @@ fn a_hot_water_world_runs_away_and_rebuilds() {
             None,
             None,
         );
-        let (_, _, w) = derive(&mut trace, &t, &drawn);
+        let (_, _, w, surface) = derive_surface(&mut trace, &t, &drawn);
         assert!(*w.runaway.value(), "{au} au");
         let total = Kilogram::from(*t.mass.value()).0;
         let bulk = WATER_WORLD_FRACTION * total;
         let kept = w.inventory.value().0;
         assert!(kept > 0.0 && kept < bulk, "{au} au: {kept} of {bulk}");
 
-        let (t2, d2) = after_steam(&t, &drawn, &w, &mut trace)
+        let (t2, d2) = after_steam(&t, &drawn, surface, &w, &mut trace)
             .unwrap()
             .expect("some steam was lost");
         // The mass is the dry mass plus the water kept, and the water
@@ -225,15 +311,17 @@ fn a_hot_water_world_runs_away_and_rebuilds() {
         assert!((fraction / (kept / mass) - 1.0).abs() < ROUNDING);
         assert_eq!(
             derived_from(&trace, t2.mass.node()),
-            vec![
-                t.mass.node(),
-                drawn.water_fraction.node(),
-                w.inventory.node()
-            ]
+            vec![t.mass.node(), surface.node(), w.inventory.node()]
         );
         assert_eq!(
             derived_from(&trace, d2.water_fraction.node()),
-            vec![w.inventory.node(), t2.mass.node()]
+            vec![
+                t.mass.node(),
+                drawn.water_fraction.node(),
+                surface.node(),
+                w.inventory.node(),
+                t2.mass.node()
+            ]
         );
         assert_eq!(
             trace.node(d2.water_fraction.node()).unwrap().code,
@@ -263,8 +351,11 @@ fn a_hot_water_world_runs_away_and_rebuilds() {
 fn nothing_lost_rebuilds_nothing() {
     let mut trace = Trace::new();
     let (t, drawn) = reference_trial(&mut trace, &EARTH);
-    let (_, _, w) = derive(&mut trace, &t, &drawn);
-    assert_eq!(after_steam(&t, &drawn, &w, &mut trace).unwrap(), None);
+    let (_, _, w, surface) = derive_surface(&mut trace, &t, &drawn);
+    assert_eq!(
+        after_steam(&t, &drawn, surface, &w, &mut trace).unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -300,7 +391,8 @@ fn the_runaway_threshold_reads_every_source() {
     let (t, drawn) = reference_trial(&mut trace, &EARTH);
     let t = lit(&mut trace, &t, &[(total / 2.0, cool), (total / 2.0, hot)]);
     let body = interior(&t, &drawn, &mut trace).unwrap();
-    let w = water(&t, &drawn, &body, &mut trace).unwrap();
+    let surface = surface_water(&t, &drawn, &body, &mut trace).unwrap();
+    let w = water(&t, &body, surface, &mut trace).unwrap();
     let light: Vec<_> = t
         .sources
         .iter()

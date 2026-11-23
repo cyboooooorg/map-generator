@@ -141,18 +141,35 @@ fn every_surface_value_traces_back_to_the_trial() {
     }
 }
 
-/// Definition: a Mars at 0.7 au holding 5 % of its mass in water, a small
-/// runaway planet whose cosmic shoreline takes part of the vapour its
-/// steam loss left (a test choice).
+/// Definition: a Mars at 0.7 au that migrated in with 10 % of its mass
+/// in water, the least of a water world's draw (Marboeuf et al. 2014), a
+/// small runaway planet whose cosmic shoreline takes part of the vapour
+/// its steam loss left (a test choice). A water world, all of whose water
+/// is at its surface: the steam takes all of a dry Mars's surface share,
+/// and all of a water world's 5 %.
 const SMALL_WET_RUNAWAY: ReferenceBody = ReferenceBody {
     orbit: 0.7,
-    water_fraction: 0.05,
+    water_fraction: 0.1,
     ..MARS
 };
 
 #[test]
 fn the_shoreline_lightens_a_runaway_planet_again() {
-    let (t, b, trace) = reference(&SMALL_WET_RUNAWAY);
+    let body = SMALL_WET_RUNAWAY;
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, body.mass, body.orbit, body.eccentricity);
+    let d = Drawn::fixed(
+        &t,
+        &mut trace,
+        body.core_mass_fraction,
+        body.water_fraction,
+        0.0,
+        Some(true),
+        0.0,
+        None,
+        None,
+    );
+    let b = bare_with(&t, &d, &mut trace).unwrap();
     let s = b.surface.as_ref().unwrap();
     assert!(*s.water.runaway.value());
     // The water the air kept is the shoreline's share of the inventory.
@@ -163,7 +180,7 @@ fn the_shoreline_lightens_a_runaway_planet_again() {
     );
     // The planet weighs that water: its dry mass and the vapour kept.
     assert!(derived_from(&trace, b.trial.mass.node()).contains(&s.water.inventory.node()));
-    let dry = Kilogram::from(*t.mass.value()).0 * (1.0 - SMALL_WET_RUNAWAY.water_fraction);
+    let dry = Kilogram::from(*t.mass.value()).0 * (1.0 - body.water_fraction);
     let mass = Kilogram::from(*b.trial.mass.value()).0;
     assert!(
         ((dry + s.water.inventory.value().0) / mass - 1.0).abs() < 1e-12,
