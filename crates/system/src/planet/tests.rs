@@ -1155,12 +1155,12 @@ fn the_volatile_draw_leaves_the_other_draws_unchanged() {
 
 #[test]
 fn the_volatile_scatter_has_its_spread() {
-    /// Definition: seeds of the spread test; the standard error of a mean
-    /// is 0.3 / sqrt(2000) = 0.0067 dex, so the tolerance below is three
-    /// standard errors.
+    /// Definition: seeds of the spread test. At 2 000 draws of a normal of
+    /// sd 0.3 dex, the standard error of the mean is 0.3 / sqrt(2000) =
+    /// 0.0067 dex, that of the sd about 0.3 / sqrt(2 x 1999) = 0.0047 dex.
     const SEEDS: u64 = 2000;
     /// Definition: tolerance of the mean and the standard deviation, 0.02
-    /// dex, three standard errors at 2 000 draws.
+    /// dex: 3.0 standard errors for the mean, 4.2 for the sd.
     const TOLERANCE: f64 = 0.02;
     let mut columns = vec![Vec::new(); 5];
     for seed in 0..SEEDS {
@@ -1288,6 +1288,49 @@ pub(super) const MARS: ReferenceBody = ReferenceBody {
     orbit: 1.524,
     eccentricity: 0.0934,
 };
+
+/// Definition: Venus given Earth's oceans, a runaway planet that has water
+/// to lose (the reference Venus is dry; a test choice).
+pub(super) const WET_VENUS: ReferenceBody = ReferenceBody {
+    water_fraction: EARTH.water_fraction,
+    ..VENUS
+};
+
+/// The body, heat and water of `t` of composition `drawn`, as the chain
+/// derives them before the regime.
+pub(super) fn derive(
+    trace: &mut Trace,
+    t: &Trial,
+    drawn: &Drawn,
+) -> (Body, timeline::Heat, timeline::Water) {
+    let body = interior(t, drawn, trace).unwrap();
+    let h = heat::heat(
+        t,
+        &body,
+        &drawn.radiogenic_abundance,
+        &drawn.envelope_fraction,
+        trace,
+    )
+    .unwrap();
+    let w = super::water::water(t, drawn, &body, trace).unwrap();
+    (body, h, w)
+}
+
+/// `t` with its source's XUV fluence replaced by `fluence`, J/m².
+pub(super) fn with_fluence(trace: &mut Trace, t: &Trial, fluence: f64) -> Trial {
+    let mut source = t.sources.primary().clone();
+    source.xuv.fluence = trace
+        .leaf(
+            Code::of("test.xuv-fluence"),
+            JoulePerSquareMetre(fluence),
+            Provenance::Input,
+        )
+        .unwrap();
+    Trial {
+        sources: StellarSources::new(vec![source]).unwrap(),
+        ..t.clone()
+    }
+}
 
 /// The trial of `body` around the trial's Sun-like source, and its
 /// composition set by hand: Earth's radiogenic abundance, no envelope, a

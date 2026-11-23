@@ -6,11 +6,11 @@
 use super::codes;
 use super::core::{CoreRecord, core};
 use super::enveloped::Body;
-use super::heat::heat;
-use super::interior::{Interior, interior};
+use super::interior::Interior;
 use super::regime::regime;
-use super::tests::{EARTH, MARS, MERCURY, ReferenceBody, VENUS, derived_from, reference_trial};
-use super::water::water;
+use super::tests::{
+    EARTH, MARS, MERCURY, ReferenceBody, VENUS, derive, derived_from, reference_trial,
+};
 use crate::Trial;
 use science::dynamo::{NUSSELT_LID, NUSSELT_PLATES, cooling_time};
 use science::units::{Gyr, Kilogram, KilogramPerCubicMetre, Metre};
@@ -67,18 +67,12 @@ const MOON_FROZEN: (f64, f64) = (2.067, 3.567);
 
 /// The trial, interior and regime of the reference `body`, as the chain
 /// derives them.
-fn derive(trace: &mut Trace, body: &ReferenceBody) -> (Trial, Interior, Traced<TectonicRegime>) {
+fn reference_regime(
+    trace: &mut Trace,
+    body: &ReferenceBody,
+) -> (Trial, Interior, Traced<TectonicRegime>) {
     let (t, drawn) = reference_trial(trace, body);
-    let b = interior(&t, &drawn, trace).unwrap();
-    let h = heat(
-        &t,
-        &b,
-        &drawn.radiogenic_abundance,
-        &drawn.envelope_fraction,
-        trace,
-    )
-    .unwrap();
-    let w = water(&t, &drawn, &b, trace).unwrap();
+    let (b, h, w) = derive(trace, &t, &drawn);
     let r = regime(&t, &b, &h, &w, trace).unwrap();
     let Body::Rocky(interior) = b else {
         panic!("a reference body is rocky")
@@ -89,7 +83,7 @@ fn derive(trace: &mut Trace, body: &ReferenceBody) -> (Trial, Interior, Traced<T
 /// The core of the reference `body` at `age`, in its own regime.
 fn core_at(body: &ReferenceBody, age: Gyr) -> CoreRecord {
     let mut trace = Trace::new();
-    let (mut t, i, r) = derive(&mut trace, body);
+    let (mut t, i, r) = reference_regime(&mut trace, body);
     t.age = trace
         .leaf(Code::of("test.age"), age, Provenance::Input)
         .unwrap();
@@ -100,7 +94,7 @@ fn core_at(body: &ReferenceBody, age: Gyr) -> CoreRecord {
 /// `nusselt`, from the radius and mass of its iron core.
 fn tau_of(body: &ReferenceBody, nusselt: f64) -> Gyr {
     let mut trace = Trace::new();
-    let (_, i, _) = derive(&mut trace, body);
+    let (_, i, _) = reference_regime(&mut trace, body);
     let r_core = i
         .shells
         .iter()
@@ -187,7 +181,7 @@ fn no_iron_no_core() {
 #[test]
 fn the_trace_says_why_earth_has_a_field() {
     let mut trace = Trace::new();
-    let (t, i, r) = derive(&mut trace, &EARTH);
+    let (t, i, r) = reference_regime(&mut trace, &EARTH);
     let record = core(&t, &i, &r, &mut trace).unwrap();
     let code = |node| trace.node(node).unwrap().code.clone();
     assert_eq!(code(record.core.state.node()), Code::of(codes::CORE_STATE));

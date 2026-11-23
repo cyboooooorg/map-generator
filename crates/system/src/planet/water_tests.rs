@@ -6,12 +6,11 @@
 use super::codes;
 use super::draws::Drawn;
 use super::enveloped::Body;
-use super::heat::heat;
 use super::interior::{Water as Held, interior};
 use super::regime::regime;
 use super::tests::{
-    EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, derived_from,
-    reference_trial, trial,
+    EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, WATER_WORLD_FRACTION,
+    WET_VENUS, derive, derived_from, reference_trial, trial,
 };
 use super::water::{after_steam, water};
 use crate::Trial;
@@ -51,10 +50,6 @@ const DRY_SUPER_EARTH: ReferenceBody = ReferenceBody {
     eccentricity: 0.0,
 };
 
-/// Definition: a water world's water fraction for the tests, 0.5, the
-/// lower bound of Zeng et al. 2019's icy planets (a test choice).
-const WATER_WORLD_FRACTION: f64 = 0.5;
-
 /// Definition: two orbits of a runaway water world around the trial's
 /// Sun-like source, 0.4 au (403 K, past the 355 K where the water laws
 /// end) and 0.8 au (285 K, within them), both above the runaway limit.
@@ -73,21 +68,6 @@ const SUN_TEFF: f64 = 5772.0;
 
 /// Definition: a numerical tolerance on a mass computed two ways, relative.
 const ROUNDING: f64 = 1e-12;
-
-/// The body, heat and water of `t` of composition `drawn`.
-fn derive(trace: &mut Trace, t: &Trial, drawn: &Drawn) -> (Body, Heat, Water) {
-    let body = interior(t, drawn, trace).unwrap();
-    let heat = heat(
-        t,
-        &body,
-        &drawn.radiogenic_abundance,
-        &drawn.envelope_fraction,
-        trace,
-    )
-    .unwrap();
-    let w = water(t, drawn, &body, trace).unwrap();
-    (body, heat, w)
-}
 
 /// The water and regime of the reference `body`.
 fn reference(body: &ReferenceBody) -> (Water, TectonicRegime) {
@@ -136,12 +116,8 @@ fn venus_ran_away_and_dried() {
     assert!(*w.runaway.value());
     assert_eq!(w.inventory.value().0, 0.0);
     // Given an Earth ocean, it would have lost it too.
-    let wet = ReferenceBody {
-        water_fraction: EARTH.water_fraction,
-        ..VENUS
-    };
     let mut trace = Trace::new();
-    let (t, drawn) = reference_trial(&mut trace, &wet);
+    let (t, drawn) = reference_trial(&mut trace, &WET_VENUS);
     let (_, _, w) = derive(&mut trace, &t, &drawn);
     assert!(*w.runaway.value());
     assert_eq!(w.inventory.value().0, 0.0);

@@ -5,11 +5,13 @@ use std::collections::BTreeSet;
 use super::bare::{Bare, bare, bare_with};
 use super::codes;
 use super::draws::Drawn;
-use super::tests::{EARTH, MARS, ReferenceBody, VENUS, derived_from, reference_trial, trial};
+use super::tests::{
+    EARTH, MARS, ReferenceBody, WET_VENUS, derived_from, reference_trial, trial, with_fluence,
+};
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
-use science::units::{JoulePerSquareMetre, Kilogram};
-use timeline::{Code, NodeId, Origin, Provenance, Seed, StellarSources, Trace};
+use science::units::Kilogram;
+use timeline::{Code, NodeId, Origin, Seed, Trace};
 
 /// The bare planet of a trial of `mass` Earth masses at `au`, drawn from
 /// the seed `seed`.
@@ -58,10 +60,23 @@ fn the_same_seed_gives_the_same_bare_planet() {
 
 #[test]
 fn an_enveloped_planet_has_no_surface() {
-    // Definition: 10 M_E at 1 au, drawn as an ice giant (from 9 % of
-    // envelope, `envelope::ICE_GIANT_ENVELOPE_MIN`), of which the escape at
-    // 1 au leaves well above `MIN_ENVELOPE`.
-    let (b, _) = drawn(3, 10.0, 1.0);
+    // Definition: 10 M_E at 1 au with 20 % of envelope, set by hand, of
+    // which the escape at 1 au leaves well above `MIN_ENVELOPE` (a test
+    // choice).
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 10.0, 1.0, 0.0);
+    let d = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH.core_mass_fraction,
+        EARTH.water_fraction,
+        0.0,
+        Some(false),
+        0.2,
+        None,
+        None,
+    );
+    let b = bare_with(&t, &d, &mut trace).unwrap();
     assert!(b.drawn.envelope_fraction.value().get() >= MIN_ENVELOPE);
     assert!(b.surface.is_none());
 }
@@ -70,11 +85,7 @@ fn an_enveloped_planet_has_no_surface() {
 fn a_runaway_planet_is_lighter() {
     // As `venus_ran_away_and_dried`: the reference Venus holds no water
     // and would lose none; given Earth's ocean it loses it to the steam.
-    let wet = ReferenceBody {
-        water_fraction: EARTH.water_fraction,
-        ..VENUS
-    };
-    let (t, b, trace) = reference(&wet);
+    let (t, b, trace) = reference(&WET_VENUS);
     let surface = b.surface.as_ref().unwrap();
     assert!(*surface.water.runaway.value());
     assert!(b.trial.mass.value().0 < t.mass.value().0);
@@ -94,11 +105,7 @@ fn a_runaway_planet_is_lighter() {
 
 #[test]
 fn every_surface_value_traces_back_to_the_trial() {
-    let wet = ReferenceBody {
-        water_fraction: EARTH.water_fraction,
-        ..VENUS
-    };
-    for body in [EARTH, wet] {
+    for body in [EARTH, WET_VENUS] {
         let (t, b, trace) = reference(&body);
         let s = b.surface.as_ref().unwrap();
         let mut nodes = vec![
@@ -165,25 +172,15 @@ fn the_shoreline_lightens_a_runaway_planet_again() {
 }
 
 // The escape drops an envelope under its floor even without XUV light
-// (`escape::escaped`): such a planet has a surface.
+// (`escape_tests::a_wisp_of_envelope_is_dropped_without_xuv`): the chain
+// then goes on to the surface.
 #[test]
 fn a_wisp_of_envelope_leaves_a_surface() {
     let mut trace = Trace::new();
     // Definition: 5 M_E at 0.5 au with 0.05 % of envelope, half of
     // `MIN_ENVELOPE`, under no XUV light (a test choice).
     let t = trial(&mut trace, 1, 5.0, 0.5, 0.0);
-    let mut source = t.sources.primary().clone();
-    source.xuv.fluence = trace
-        .leaf(
-            Code::of("test.xuv-fluence"),
-            JoulePerSquareMetre(0.0),
-            Provenance::Input,
-        )
-        .unwrap();
-    let dark = Trial {
-        sources: StellarSources::new(vec![source]).unwrap(),
-        ..t
-    };
+    let dark = with_fluence(&mut trace, &t, 0.0);
     let d = Drawn::fixed(
         &dark,
         &mut trace,
@@ -196,6 +193,5 @@ fn a_wisp_of_envelope_leaves_a_surface() {
         None,
     );
     let b = bare_with(&dark, &d, &mut trace).unwrap();
-    assert_eq!(b.drawn.envelope_fraction.value().get(), 0.0);
     assert!(b.surface.is_some());
 }

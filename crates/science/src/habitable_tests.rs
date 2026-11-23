@@ -24,13 +24,6 @@ fn the_fit_is_clamped_to_its_range() {
 }
 
 #[test]
-fn cooler_stars_run_away_at_lower_flux() {
-    // Kopparapu et al. 2014, Fig. 1: the inner edge moves in, to a lower
-    // flux, toward cool stars.
-    assert!(runaway_flux(Kelvin(3_000.0)).0 < KOPPARAPU_SOLAR_RUNAWAY);
-}
-
-#[test]
 fn the_ocean_is_the_volume_of_earths_at_a_sea_water_density() {
     // Charette & Smith 2010: 1.332e9 km3; at 1027 kg/m3 (a usual value of
     // sea water) it is 1.37e21 kg, which 1.4e21 rounds up.

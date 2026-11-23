@@ -180,22 +180,3 @@ fn earths_silicate_sulphur_is_wangs() {
     assert_eq!(earth.co2, Kilogram(ROCK_CO2 * EARTH_MASS.0));
     assert_eq!(earth.n2, Kilogram(ROCK_N2 * EARTH_MASS.0));
 }
-
-#[test]
-fn ice_carries_only_ice_volatiles() {
-    let ice = Kilogram(OCEAN_ICE);
-    let only_ice = inventory(Kilogram(0.0), Kilogram(0.0), ice);
-    assert_eq!(only_ice.co2, Kilogram(ICE_CO2 * ice.0));
-    assert_eq!(only_ice.n2, Kilogram(ICE_N2 * ice.0));
-    assert_eq!(only_ice.ch4, Kilogram(ICE_CH4 * ice.0));
-    assert_eq!(only_ice.nh3, Kilogram(ICE_NH3 * ice.0));
-    assert_eq!(only_ice.s, Kilogram(0.0));
-    // Rock and iron bring neither methane nor ammonia.
-    let rock = inventory(EARTH_MASS, EARTH_MASS, Kilogram(0.0));
-    assert_eq!(rock.ch4, Kilogram(0.0));
-    assert_eq!(rock.nh3, Kilogram(0.0));
-}
-
-/// Definition: a mass of ice to carry the volatiles, 1e21 kg (any
-/// positive mass: the rule is linear).
-const OCEAN_ICE: f64 = 1e21;

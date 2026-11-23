@@ -12,20 +12,16 @@ use super::codes;
 use super::core::{CoreRecord, core};
 use super::draws::Drawn;
 use super::enveloped::Body;
-use super::heat::heat;
-use super::interior::{Water as Held, interior};
+use super::interior::Water as Held;
 use super::regime::regime;
 use super::tests::{
     EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, VENUS,
-    WATER_WORLD_FRACTION, derived_from, reference_trial, trial,
+    WATER_WORLD_FRACTION, derive, derived_from, reference_trial, trial, with_fluence,
 };
-use super::water::water;
 use crate::Trial;
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, shoreline_kept};
-use science::units::{Bar, JoulePerSquareMetre, Kilogram, Metre};
-use timeline::{
-    Atmosphere, Code, Gas, Provenance, StellarSources, TectonicRegime, Trace, Traced, Water,
-};
+use science::units::{Bar, Kilogram, Metre};
+use timeline::{Atmosphere, Code, Gas, Provenance, TectonicRegime, Trace, Traced, Water};
 
 /// Definition: the surface pressure below which a world is airless, no
 /// sky and no clouds, 1e-4 bar: legacy's `AIRLESS_BAR`
@@ -49,6 +45,14 @@ const EARTH_N2: (f64, f64) = (0.5, 1.2);
 /// Source: Earth's SO2 is a trace, well below a ppm of its bar (NASA
 /// Earth fact sheet lists none): legacy's test bound, 1e-6 bar.
 const EARTH_SO2_MAX: f64 = 1e-6;
+
+/// Source: Venus's SO2, about 150 ppm of 92 bar (Bertaux et al. 2007,
+/// Marcq et al. 2018): legacy's test band, 0.008 to 0.02 bar.
+const VENUS_SO2: (f64, f64) = (0.008, 0.02);
+
+/// Source: Mars's SO2 upper limit, about 0.3 ppb (Encrenaz et al. 2011):
+/// legacy's test bound, 1e-6 bar.
+const MARS_SO2_MAX: f64 = 1e-6;
 
 /// Source: Mars's surface pressure, about 6 mbar (NASA Mars fact sheet):
 /// legacy's test band, 2 to 50 mbar.
@@ -101,20 +105,11 @@ impl Planet {
     }
 }
 
-/// `t` of composition `drawn` up to its core. None of the planets here
-/// loses steam (the reference bodies that run away hold no water), so
-/// the body is the formed one.
-fn derive(mut trace: Trace, t: Trial, drawn: Drawn) -> Planet {
-    let body = interior(&t, &drawn, &mut trace).unwrap();
-    let h = heat(
-        &t,
-        &body,
-        &drawn.radiogenic_abundance,
-        &drawn.envelope_fraction,
-        &mut trace,
-    )
-    .unwrap();
-    let w = water(&t, &drawn, &body, &mut trace).unwrap();
+/// `t` of composition `drawn` up to its core, on its formed body: the
+/// reference bodies that run away hold no water, so lose no steam; a
+/// planet that does is read here before the chain rebuilds it.
+fn up_to_core(mut trace: Trace, t: Trial, drawn: Drawn) -> Planet {
+    let (body, h, w) = derive(&mut trace, &t, &drawn);
     let r = regime(&t, &body, &h, &w, &mut trace).unwrap();
     let Body::Rocky(rocky) = &body else {
         panic!("a planet with a surface is rocky")
@@ -135,7 +130,7 @@ fn derive(mut trace: Trace, t: Trial, drawn: Drawn) -> Planet {
 fn planet(body: &ReferenceBody) -> Planet {
     let mut trace = Trace::new();
     let (t, drawn) = reference_trial(&mut trace, body);
-    derive(trace, t, drawn)
+    up_to_core(trace, t, drawn)
 }
 
 /// The partial pressure of `gas`, bar.
@@ -182,6 +177,19 @@ fn earth_has_a_bar_of_nitrogen() {
 fn earths_air_keeps_no_sulphur_dioxide() {
     let a = planet(&EARTH).air().0;
     assert!(partial(&a, Gas::So2) < EARTH_SO2_MAX, "{a:?}");
+}
+
+#[test]
+fn venus_keeps_its_sulphur_dioxide() {
+    let a = planet(&VENUS).air().0;
+    let so2 = partial(&a, Gas::So2);
+    assert!((VENUS_SO2.0..=VENUS_SO2.1).contains(&so2), "{a:?}");
+}
+
+#[test]
+fn mars_keeps_little_sulphur_dioxide() {
+    let a = planet(&MARS).air().0;
+    assert!(partial(&a, Gas::So2) < MARS_SO2_MAX, "{a:?}");
 }
 
 #[test]
@@ -237,7 +245,7 @@ fn a_deep_ocean_holds_back_what_the_mantle_outgasses() {
         None,
         None,
     );
-    let deep = derive(trace, t, drawn);
+    let deep = up_to_core(trace, t, drawn);
     let share = released(&deep.body, &deep.water).get();
     assert!(
         (DEEP_RELEASED.0..=DEEP_RELEASED.1).contains(&share),
@@ -292,16 +300,7 @@ fn a_runaway_keeps_its_water_as_vapour() {
 #[test]
 fn no_xuv_keeps_the_whole_air() {
     let mut mars = planet(&MARS);
-    let mut source = mars.trial.sources.primary().clone();
-    source.xuv.fluence = mars
-        .trace
-        .leaf(
-            Code::of("test.xuv-fluence"),
-            JoulePerSquareMetre(0.0),
-            Provenance::Input,
-        )
-        .unwrap();
-    mars.trial.sources = StellarSources::new(vec![source]).unwrap();
+    mars.trial = with_fluence(&mut mars.trace, &mars.trial, 0.0);
     let a = mars.air().0;
     for (gas, p) in &a.partial {
         let out = outgassed(&mars, p);
@@ -335,7 +334,7 @@ fn each_partial_cites_its_outgassing_and_the_shoreline() {
             venus.core.dynamo.node(),
         ]
     );
-    assert_eq!(a.partial.len(), 7);
+    assert_eq!(a.partial.len(), codes::AIR_GASES.len());
     for (gas, p) in &a.partial {
         let from = derived_from(trace, p.node());
         let (_, outgassed, kept) = codes::AIR_GASES
@@ -380,7 +379,7 @@ fn a_hot_water_world_holds_its_air_with_its_whole_mass() {
         None,
         None,
     );
-    let mut p = derive(trace, t, drawn);
+    let mut p = up_to_core(trace, t, drawn);
     let Body::Rocky(rocky) = &p.body else {
         panic!("a planet with a surface is rocky")
     };

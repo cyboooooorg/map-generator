@@ -8,13 +8,13 @@ use super::enveloped::Body;
 use super::escape::{Escaped, escaped};
 use super::interior::interior;
 use super::tests::{
-    EARTH_CORE_MASS_FRACTION, EARTH_WATER_FRACTION, derived_from, jupiter_at, trial,
+    EARTH_CORE_MASS_FRACTION, EARTH_WATER_FRACTION, derived_from, jupiter_at, trial, with_fluence,
 };
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
 use science::giants::GAS_GIANT_MIN_MASS;
-use science::units::{EarthMass, JoulePerSquareMetre};
-use timeline::{Code, Provenance, StellarSources, Trace};
+use science::units::EarthMass;
+use timeline::{Code, Trace};
 
 /// Source: the mini-Neptune of the legacy tests, 5 M_E with 1 % of its
 /// mass in hydrogen and helium, the smallest envelope of Owen & Wu 2017's
@@ -52,22 +52,6 @@ fn formed(trace: &mut Trace, mass: f64, au: f64, envelope: f64) -> (Trial, Drawn
     );
     let body = interior(&t, &drawn, trace).unwrap();
     (t, drawn, body)
-}
-
-/// `t` with its source's XUV fluence replaced by `fluence`, J/m².
-fn with_fluence(trace: &mut Trace, t: &Trial, fluence: f64) -> Trial {
-    let mut source = t.sources.primary().clone();
-    source.xuv.fluence = trace
-        .leaf(
-            Code::of("test.xuv-fluence"),
-            JoulePerSquareMetre(fluence),
-            Provenance::Input,
-        )
-        .unwrap();
-    Trial {
-        sources: StellarSources::new(vec![source]).unwrap(),
-        ..t.clone()
-    }
 }
 
 /// The envelope mass of an escaped planet over the one it formed with.
