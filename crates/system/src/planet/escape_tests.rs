@@ -209,3 +209,36 @@ fn the_loss_never_exceeds_the_envelope() {
         }
     }
 }
+
+/// Definition: an envelope of 0.05 % of the mass, half of `MIN_ENVELOPE`
+/// (a test choice).
+const WISP: f64 = 5e-4;
+
+// Legacy `envelope_after_escape` applies the floor whatever the loss: a
+// drawn envelope under `MIN_ENVELOPE` is gone even without XUV light, and
+// the floor, not the escape, is its cause.
+#[test]
+fn a_wisp_of_envelope_is_dropped_without_xuv() {
+    let mut trace = Trace::new();
+    let (mass, _) = MINI_NEPTUNE;
+    let (t, drawn, body) = formed(&mut trace, mass, TEMPERATE_AU, WISP);
+    let dark = with_fluence(&mut trace, &t, 0.0);
+    let left = escaped(&dark, &drawn, body, &mut trace).unwrap();
+    assert!(matches!(left.body, Body::Rocky(_)), "{:?}", left.body);
+    assert_eq!(left.lost, None);
+    let fraction = left.drawn.envelope_fraction;
+    assert_eq!(fraction.value().get(), 0.0);
+    assert_eq!(
+        trace.node(fraction.node()).unwrap().code,
+        Code::of(codes::ENVELOPE_KEPT_FRACTION)
+    );
+    assert!(derived_from(&trace, fraction.node()).contains(&drawn.envelope_fraction.node()));
+    let kept = left.trial.mass.value().0;
+    let core = mass * (1.0 - WISP);
+    assert!(
+        (kept / core - 1.0).abs() < ROUNDING,
+        "{kept} against {core}"
+    );
+    let from = derived_from(&trace, left.trial.mass.node());
+    assert!(from.contains(&dark.mass.node()) && from.contains(&drawn.envelope_fraction.node()));
+}

@@ -49,9 +49,18 @@ pub(crate) struct Escaped {
 ///   kept mass `M'` (the same value, with its own cause), with the same
 ///   floor.
 ///
-/// When nothing is lost (no envelope, or no fluence) the body is returned
-/// as given and nothing is recorded; otherwise
-/// [`interior`](super::interior::interior) builds the body again.
+/// The floor applies whatever the loss, as in legacy
+/// (`envelope_after_escape`): a drawn envelope under [`MIN_ENVELOPE`] is
+/// gone even when no XUV light reaches the planet. No loss is recorded
+/// then (`lost` is `None`): the floor, not the escape, drops it, so the
+/// kept mass and fraction derive from the trial's mass and the drawn
+/// fraction alone; a zero-loss node would put the stars' light in the
+/// cause of a value it did not change.
+///
+/// Without an envelope, or when nothing is lost from an envelope at or
+/// above the floor, the body is returned as given and nothing is
+/// recorded; otherwise [`interior`](super::interior::interior) builds the
+/// body again.
 ///
 /// # Errors
 ///
@@ -70,7 +79,9 @@ pub(crate) fn escaped(
     let loss = energy_limited_loss(Metre::from(*radius.value()), total, fluence)
         .0
         .clamp(0.0, envelope.0);
-    if loss == 0.0 {
+    let left = (envelope.0 - loss) / (total.0 - loss);
+    let stripped = left < MIN_ENVELOPE;
+    if envelope.0 == 0.0 || (loss == 0.0 && !stripped) {
         return Ok(Escaped {
             trial: trial.clone(),
             drawn: *drawn,
@@ -78,31 +89,35 @@ pub(crate) fn escaped(
             lost: None,
         });
     }
-    let mut from: Vec<NodeId> = vec![radius.node(), mass.node()];
-    from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));
-    from.push(f.node());
-    let lost = trace.record(Code::of(codes::ENVELOPE_LOST), Kilogram(loss), &from)?;
-
-    let left = (envelope.0 - loss) / (total.0 - loss);
-    let stripped = left < MIN_ENVELOPE;
-    let kept_mass = if stripped {
-        trace.record(
-            Code::of(codes::MASS_KEPT),
-            *mass.value() * (1.0 - f.value().get()),
-            &[mass.node(), f.node(), lost.node()],
-        )?
+    let lost = if loss > 0.0 {
+        let mut from: Vec<NodeId> = vec![radius.node(), mass.node()];
+        from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));
+        from.push(f.node());
+        Some(trace.record(Code::of(codes::ENVELOPE_LOST), Kilogram(loss), &from)?)
     } else {
-        trace.record(
+        None
+    };
+    // The floor's cause: the mass, the drawn fraction and the loss if any.
+    let mut floored: Vec<NodeId> = vec![mass.node(), f.node()];
+    floored.extend(lost.map(|l| l.node()));
+
+    let kept_mass = match lost {
+        Some(lost) if !stripped => trace.record(
             Code::of(codes::MASS_KEPT),
             EarthMass::from(total - *lost.value()),
             &[mass.node(), lost.node()],
-        )?
+        )?,
+        _ => trace.record(
+            Code::of(codes::MASS_KEPT),
+            *mass.value() * (1.0 - f.value().get()),
+            &floored,
+        )?,
     };
     let kept_fraction = match (stripped, drawn.heavy_mass) {
         (true, _) => trace.record(
             Code::of(codes::ENVELOPE_KEPT_FRACTION),
             Fraction::new(0.0).expect("zero is a fraction"),
-            &[mass.node(), f.node(), lost.node()],
+            &floored,
         )?,
         (false, Some(heavy)) => trace.record(
             Code::of(codes::ENVELOPE_KEPT_FRACTION),
@@ -113,7 +128,7 @@ pub(crate) fn escaped(
         (false, None) => trace.record(
             Code::of(codes::ENVELOPE_KEPT_FRACTION),
             Fraction::try_from(left).map_err(InteriorError::NotAFraction)?,
-            &[mass.node(), f.node(), lost.node()],
+            &floored,
         )?,
     };
     let trial = Trial {
@@ -129,6 +144,6 @@ pub(crate) fn escaped(
         trial,
         drawn,
         body,
-        lost: Some(lost),
+        lost,
     })
 }

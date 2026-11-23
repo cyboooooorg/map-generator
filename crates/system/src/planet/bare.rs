@@ -70,10 +70,9 @@ pub(crate) fn bare(trial: &Trial, seed: Seed, trace: &mut Trace) -> Result<Bare,
 ///
 /// 1. its body ([`interior`]), the escape of its envelope ([`escaped`])
 ///    and its heat ([`heat`]) on the body that is left;
-/// 2. no surface when the planet kept an envelope: at or above
-///    [`MIN_ENVELOPE`] (legacy's test), or a thinner one no escape took
-///    (no XUV light), which keeps its enveloped body; a surface for a
-///    rocky body, which after the escape has no envelope at all;
+/// 2. no surface when the planet kept an envelope, at or above
+///    [`MIN_ENVELOPE`] (legacy's test); under it the escape left no
+///    envelope at all, even without XUV light, and a rocky body;
 /// 3. its water ([`water`]); after a runaway, the planet its steam left
 ///    ([`after_steam`]), its body and heat built again;
 /// 4. its regime ([`regime`]), its core ([`core`]) and its air ([`air`]),
@@ -105,7 +104,7 @@ pub(crate) fn bare_with(
     let escaped = escaped(trial, drawn, formed, trace)?;
     let formed_heat = heat_of(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
     let enveloped = escaped.drawn.envelope_fraction.value().get() >= MIN_ENVELOPE;
-    if enveloped || !matches!(escaped.body, Body::Rocky(_)) {
+    if enveloped {
         return Ok(Bare {
             trial: escaped.trial,
             drawn: escaped.drawn,

@@ -4,10 +4,12 @@ use std::collections::BTreeSet;
 
 use super::bare::{Bare, bare, bare_with};
 use super::codes;
+use super::draws::Drawn;
 use super::tests::{EARTH, MARS, ReferenceBody, VENUS, derived_from, reference_trial, trial};
+use crate::Trial;
 use science::escape::MIN_ENVELOPE;
-use science::units::Kilogram;
-use timeline::{Code, NodeId, Origin, Seed, Trace};
+use science::units::{JoulePerSquareMetre, Kilogram};
+use timeline::{Code, NodeId, Origin, Provenance, Seed, StellarSources, Trace};
 
 /// The bare planet of a trial of `mass` Earth masses at `au`, drawn from
 /// the seed `seed`.
@@ -19,7 +21,7 @@ fn drawn(seed: u64, mass: f64, au: f64) -> (Bare, Trace) {
 }
 
 /// The bare planet of the reference `body`, its composition set by hand.
-fn reference(body: &ReferenceBody) -> (crate::Trial, Bare, Trace) {
+fn reference(body: &ReferenceBody) -> (Trial, Bare, Trace) {
     let mut trace = Trace::new();
     let (t, d) = reference_trial(&mut trace, body);
     let b = bare_with(&t, &d, &mut trace).unwrap();
@@ -160,4 +162,40 @@ fn the_shoreline_lightens_a_runaway_planet_again() {
         ((dry + s.water.inventory.value().0) / mass - 1.0).abs() < 1e-12,
         "{mass}"
     );
+}
+
+// The escape drops an envelope under its floor even without XUV light
+// (`escape::escaped`): such a planet has a surface.
+#[test]
+fn a_wisp_of_envelope_leaves_a_surface() {
+    let mut trace = Trace::new();
+    // Definition: 5 M_E at 0.5 au with 0.05 % of envelope, half of
+    // `MIN_ENVELOPE`, under no XUV light (a test choice).
+    let t = trial(&mut trace, 1, 5.0, 0.5, 0.0);
+    let mut source = t.sources.primary().clone();
+    source.xuv.fluence = trace
+        .leaf(
+            Code::of("test.xuv-fluence"),
+            JoulePerSquareMetre(0.0),
+            Provenance::Input,
+        )
+        .unwrap();
+    let dark = Trial {
+        sources: StellarSources::new(vec![source]).unwrap(),
+        ..t
+    };
+    let d = Drawn::fixed(
+        &dark,
+        &mut trace,
+        EARTH.core_mass_fraction,
+        EARTH.water_fraction,
+        0.0,
+        Some(false),
+        5e-4,
+        None,
+        None,
+    );
+    let b = bare_with(&dark, &d, &mut trace).unwrap();
+    assert_eq!(b.drawn.envelope_fraction.value().get(), 0.0);
+    assert!(b.surface.is_some());
 }
