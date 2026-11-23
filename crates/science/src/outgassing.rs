@@ -69,9 +69,13 @@ pub const RECYCLED_UNDER_PLATES: f64 = 0.63;
 
 /// Calibration: share of the nitrogen (N2 and NH3) plates outgas that
 /// subduction carries back: ammonium in clays and sediments rides the
-/// slabs down. Fitted on Earth's 0.78 bar of N2, which holds once PR
-/// 2d's ammonia photochemistry turns the NH3 into N2 (#659): the bare air
-/// of PR 2c, before it, gives Earth 0.513 bar. Goldblatt et al. 2009
+/// slabs down. Legacy fitted it on Earth's 0.78 bar of N2, a share by
+/// volume; the chain's pressures are weights, and Earth's N2 weighs
+/// 0.746 bar (study 23). Once the photochemistry turns the NH3 into N2,
+/// the rewrite's Earth has 0.804 bar of N2 (0.512 bar before it), within
+/// the 0.67 to 0.82 bar its test keeps, so the value stays. See the
+/// calibration on the page `docs/science/planet-atmospheres.md`
+/// (*Outgassing*, *Earth's N₂ target*). Goldblatt et al. 2009
 /// (doi:10.1038/ngeo692, abstract) and Johnson & Goldblatt 2015
 /// (doi:10.1016/j.earscirev.2015.05.006, abstract: the silicate Earth
 /// holds "7 +/- 4 times present atmospheric N") support a large return
