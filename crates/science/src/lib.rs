@@ -16,6 +16,7 @@ pub mod heat;
 pub mod hydrogen;
 pub mod orbit;
 pub mod outgassing;
+pub mod photochemistry;
 pub mod radiation;
 pub mod relief;
 pub mod stellar;

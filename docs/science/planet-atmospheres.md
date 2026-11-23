@@ -940,7 +940,13 @@ meets the supply, methane gathers in the air and on the ground:
 CH₄ left = ∫ from t* to age of (S − D(t)) dt
 ```
 
-analytic, through the band integral of `xuv.rs`. This is Titan's
+through the band integral of `xuv.rs`; the onset `t*` is found by
+bisection on `[0, age]` (the destruction is constant while the star is
+saturated and only falls after). The rewrite's law
+(`science::photochemistry`, `methane_left`) sums the destruction of
+every star the planet sees, each with its present flux at the planet and
+its own Lyman α history; `legacy-final` had one star and an analytic
+onset. This is Titan's
 resupply: Tobie et al. explain its methane by outgassing from its
 interior, in episodes where the model spreads it evenly. Titan outgasses
 20.6 bar of methane in the model and keeps 6.3 bar of it on its ground

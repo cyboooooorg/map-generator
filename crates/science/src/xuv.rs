@@ -284,6 +284,19 @@ impl History {
         &self.corona
     }
 
+    /// The band's share of the star's present bolometric light at `age`
+    /// ([`ratio`] times [`History::scale`]), 0 for a coronal band while
+    /// the star has no corona: the integrand of
+    /// [`History::integrated_between`].
+    pub fn ratio_at(&self, band: Band, age: Gyr) -> f64 {
+        let outside = band.coronal && !self.corona.iter().any(|&(a, b)| (a..=b).contains(&age.0));
+        if outside {
+            0.0
+        } else {
+            ratio(band, self.mass, age) * self.scale
+        }
+    }
+
     /// Band energy a planet received between ages `from` and `to` (within
     /// 0 and the star's age), in units of the present bolometric flux,
     /// Gyr; a coronal band counts only while the star has a corona.
