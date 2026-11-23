@@ -182,7 +182,7 @@ Legacy got 48 W/m² for H₂O and CO₂.
   0.149-0.156 of Stephens et al. 2015 and Kato et al. 2018 includes
   aerosols, which reflect +5.9 W/m² of 341.8 (+0.017) in Kim &
   Ramanathan's Table 3b. Write the derivation on the page; Task 7's
-  `earths_clear_sky_albedo_is_observed_without_aerosols` uses the
+  `earths_clear_sky_albedo_is_observed_less_what_is_missing` uses the
   window the user approves (Step 3b).
 - [ ] **Stop test, Step 3b:** both windows change decisions of the spec
   ("2b-2 calibration": 0.149-0.156; decision 4: 72-73 W/m²). Bring the
@@ -464,25 +464,30 @@ Waits for Task 1 and the user's ruling if Task 1 stopped.
   / 4` (`Definition:`).
 
 - [ ] **Step 1: Write the failing tests** (in `albedo_tests.rs`):
-  - `earths_clear_sky_albedo_is_observed_without_aerosols`, a **stop
-    test**: clouds 0, deck 0,
-    Earth ground and air: `0.129 <= bond_albedo <= 0.142`, the window
-    the user approved on 2026-11-23 after Task 1b: the observed
-    0.149-0.156 (Stephens et al. 2015; Kato et al. 2018) less the
-    aerosols' 0.017 ± 0.003 (Kim & Ramanathan 2008, Table 3b).
-  - `earths_clear_sky_air_absorbs_what_satellites_see` — **stop test**:
+  - `earths_clear_sky_albedo_is_observed_less_what_is_missing`, a **stop
+    test**: clouds 0, deck 0, Earth ground and air at 77 %:
+    `0.1565 <= bond_albedo <= 0.1707`. Decided by the user on
+    2026-11-23 after the diagnostic study (`diag-report.md`): the
+    observed 0.149-0.156 (Stephens et al. 2015; Kato et al. 2018) less
+    the aerosols' 0.017 ± 0.003 (Kim & Ramanathan 2008, Table 3b), plus
+    what the faithful port lacks, each computed with its source: the
+    black-body Sun against TSIS-1 (Coddington et al. 2021) +0.0147, no
+    ozone at 300 ± 30 DU (Serdyuchenko et al. 2014) +0.0145 ± 0.0005,
+    no O₂ (Hogan & Matricardi 2020) +0.0018, the two-stream closure
+    against exact radiative transfer (Kokhanovsky et al. 2005) −0.0028.
+    Issues #653 and #655 narrow it when they land.
+  - `earths_clear_sky_air_absorbs_what_satellites_see`, a **stop
+    test**: the column's relative humidity set (uniform, the saturated
+    profile scaled) so that it holds 2.5 cm of precipitable water, the
+    NVAP global mean of Kim & Ramanathan's global run (2.45-2.53 cm);
     `absorbed_by_air × 340.25` within 48 to 54 W/m² (51 ± 3: water
-    about 50 of 341.8, Kim & Ramanathan 2008 §[51], plus CO₂ 1.0-1.6,
-    Kiehl & Trenberth 1997 Table 4, Hogan & Matricardi 2020 Table 4;
-    the ±3 of Kim & Ramanathan's total), approved by the user on
-    2026-11-23. The test sets the relative humidity so that the
-    column holds 3.0 cm of precipitable water, Kim & Ramanathan's
-    input (Table 2), not the 1.67 cm of 77 % over 288 K: it tests
-    the optics at equal water. The observed 72 ± 3
-    W/m² (Kim & Ramanathan 2008; CERES 73.0) includes ozone and
-    aerosols, which the model does not carry. Dry air (no H₂O,
-    no CO₂) absorbs
-    `< 1e-6` and reflects more.
+    about 50 of 341.8, §[51], plus CO₂ 1.0-1.6). Approved by the user
+    on 2026-11-23. Dry air (no H₂O, no CO₂) absorbs `< 1e-6` and
+    reflects more.
+  - `more_water_absorbs_as_kim_and_ramanathan_say`: from 2.7 to 3.3 cm,
+    the absorption rises by 3.0 ± 1.0 W/m² and the reflected flux at
+    the top by 0.4 ± 0.2 W/m² (Kim & Ramanathan 2008, Table 2, PW
+    3.0 ± 0.3). Approved by the user on 2026-11-23.
   - `earth_keeps_its_bond_albedo`: all-sky, `|a − 0.293| <= 0.0015`
     (Stephens et al. 2015 0.293; Kato et al. 2018 0.2915).
   - `an_m_stars_albedo_drops_more_than_a_g_stars` (legacy alb 1193 over
@@ -510,7 +515,7 @@ Waits for Task 1 and the user's ruling if Task 1 stopped.
   Expected: FAIL.
 - [ ] **Step 3:** Implement with a provisional `CLOUD_ALBEDO` (the
   legacy 0.252).
-- [ ] **Step 4:** Run `earths_clear_sky_albedo_is_observed_without_aerosols` and
+- [ ] **Step 4:** Run `earths_clear_sky_albedo_is_observed_less_what_is_missing` and
   `earths_clear_sky_air_absorbs_what_satellites_see`. If either fails,
   stop: report the clear-sky albedo, the absorbed W/m² and the
   Rayleigh, H₂O and CO₂ shares (budgets with each gas removed) to the
@@ -538,6 +543,15 @@ Waits for Task 1 and the user's ruling if Task 1 stopped.
   `docs/science/radiative-transfer.md` ("How it computes them" items 3-4
   l.443-455, "Where the code lives" l.486-516 with the new modules and
   the cache, the calibrations l.563-585, the changes l.624-640),
+  the diagnostic study's findings (`diag-report.md` of the SDD
+  workspace: the spectrum, ozone, O₂ and closure terms with their
+  sources, the equal-water absorption, the Manabe water cap) under
+  "Where it departs from the science", with links to #653, #654,
+  #655; correct the sentence that compares Kim & Ramanathan's
+  aerosol-free 0.133 with "a ground of 0.15" (that is Table 2's
+  sensitivity case, not the global run); "all eight gases enter the
+  Rayleigh sum" becomes seven (argon only checks dry air), with the
+  argon molar mass's source (CIAAW),
   `crates/science/data/OPACITY.md` ("Shortwave table" l.243: paths in
   `crates/science`), `docs/science/planet-atmospheres.md` (replace the
   shortwave and albedo-of-the-air paragraphs with a link to the
