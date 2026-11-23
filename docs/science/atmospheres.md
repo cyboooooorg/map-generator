@@ -348,6 +348,13 @@ Titan's lakes and seas are the darkest surfaces of its radar and
 near-infrared maps (Stofan et al. 2007 [22]; Brown et al. 2008 [23]).
 Their near-black brown is a calibration with those maps as its target.
 
+This section and the next describe the app before the rewrite. The
+rewrite computes the air from the planet instead: its envelope's
+escape, the gases its mantle outgasses, what the cosmic shoreline keeps
+and the SO₂ that water washes out (`system::planet`, laws in
+`science::escape` and `science::outgassing`); see [Planet atmospheres,
+climate and surface](planet-atmospheres.md#atmosphere).
+
 ### Where it departs from the science
 
 - **The pressure does not follow from the world.** The app draws it from

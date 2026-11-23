@@ -78,3 +78,19 @@ search per body) are climate-solver code: they move from 2b to 2d. 2b
 keeps the in-column levers. 2b takes only the atmosphere's part of the
 albedo; the surface cover moves to 2d. 2b is two pull requests. Design:
 [PR 2b](2026-11-22-planet-model-pr2b-radiative-design.md).
+
+## Amended 2026-11-23
+
+Decided with the user while planning 2c
+([plan](../plans/2026-11-23-planet-model-pr2c.md), audit: Wiki study 21):
+
+- The non-thermal loss and the moons' magnetospheric shield act only on
+  a moon of a giant: they wait for the moons, #658 under T2.
+- 2c also ports the water kept and the steam loss (`water`, `steam`,
+  the body derived again after a runaway, `Water::keeping`), and the
+  volatile inventory draw that outgassing reads, which 2a had not
+  ported.
+- Methane photolysis, the cold trap, photochemistry, the outgassing of
+  a reducing air and the `boils` loop go to 2d (#659).
+- The share of the bulk water that reaches the surface is missing
+  science, found after 2c's review: #663, before 2d wires the chain.

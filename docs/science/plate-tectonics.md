@@ -286,6 +286,16 @@ are mountains lower on heavier
 planets?](mountains-and-gravity.md#the-rewrite-worldrelief)); the ridges
 are not.
 
+#### The rewrite: the regime
+
+The timeline's regime comes from `system::planet::regime`, a port of the
+legacy rule with its calibrations in `science::tectonics`: a heat pipe
+above 1 W/m² of internal heat (`HEAT_PIPE_FLUX`), a stagnant lid below
+0.3 Earth masses (`PLATES_MIN_MASS`), plates when the planet kept its
+water and did not run away, episodic otherwise. Why each threshold, and
+what was searched: [Planet atmospheres, climate and
+surface](planet-atmospheres.md#runaway-greenhouse-water-kept-and-tectonic-regime).
+
 #### The legacy generator (`legacy-final`)
 
 [`plates.rs`](https://github.com/cyboooooorg/map-generator/blob/legacy-final/crates/mapgen/src/plates.rs) builds the plates, and
