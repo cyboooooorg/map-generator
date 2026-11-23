@@ -1313,11 +1313,15 @@ pub(super) const MARS: ReferenceBody = ReferenceBody {
 /// 0.022524) at Saturn's 9.57 au, eccentricity 0.052 (NASA planetary fact
 /// sheet: 1432.0e6 km over 149.6e6, Saturn's orbit); 45 % water by mass
 /// (Sohl et al. 2003, doi:10.1029/2003JE002044: 50 to 60 wt % rock and
-/// iron, via Mosqueira 2026, arXiv:2610.34081, Table A1); a chondritic
-/// rock of core 0.20, legacy's value (Kuskov & Kronrod, COSPAR 2006
-/// abstract: L/LL chondrite, Fe/Si 0.9 to 1.3). Study 23 of the Wiki.
+/// iron, via Mosqueira 2026, arXiv:2610.34081, Table A1). Its core,
+/// 0.20 of the rock, is not sourced: see the field. Study 23 of the Wiki.
 pub(super) const TITAN: ReferenceBody = ReferenceBody {
     mass: 0.0225,
+    // Definition: legacy's core fraction, kept by analogy as a test
+    // input. The rock is chondritic (Kuskov & Kronrod, COSPAR 2006
+    // abstract: L/LL chondrite, Fe/Si 0.9 to 1.3), but the Si content
+    // that would turn that Fe/Si into an iron share was not read (study
+    // 23, part 6).
     core_mass_fraction: 0.20,
     water_fraction: 0.45,
     orbit: 9.57,
@@ -1329,9 +1333,12 @@ pub(super) const TITAN: ReferenceBody = ReferenceBody {
 /// Jupiter's 5.20 au, eccentricity 0.049 (NASA planetary fact sheet:
 /// 778.5e6 km over 149.6e6); 50 % water by mass (Kuskov & Kronrod, COSPAR
 /// 2006 abstract: "total amount of H2O in Callisto is found to be 48-55
-/// wt%"); core 0.20 as [`TITAN`]. Study 23 of the Wiki.
+/// wt%"). Its core, 0.20 of the rock, is not sourced: see the field.
+/// Study 23 of the Wiki.
 pub(super) const CALLISTO: ReferenceBody = ReferenceBody {
     mass: 0.0180,
+    // Definition: legacy's core fraction, as [`TITAN`]'s, kept by
+    // analogy as a test input, not derived from a source.
     core_mass_fraction: 0.20,
     water_fraction: 0.50,
     orbit: 5.20,
