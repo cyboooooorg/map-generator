@@ -10,11 +10,17 @@
 //! `methane_photolysis`), which had one star; the law, its calibration and
 //! its departures are on the page `docs/science/planet-atmospheres.md`,
 //! *Methane photolysis*.
+//!
+//! It also holds what the photochemistry does to the air once the gases
+//! are known: whether methane survives the OH of water vapour (a
+//! temperature test), whether the air is reducing (Titan's), and the N₂
+//! that photolysed NH₃ leaves. See the page's *Reducing air* and
+//! *Photochemistry*.
 
 use crate::constants::{AVOGADRO, PASCALS_PER_BAR, PLANCK, SPEED_OF_LIGHT};
-use crate::radiation::gases::CH4_MOLAR_MASS;
+use crate::radiation::gases::{CH4_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS};
 use crate::units::{
-    Bar, Gyr, Kilogram, Metre, MetrePerSecondSquared, Second, WattPerSquareMetre, Year,
+    Bar, Gyr, Kelvin, Kilogram, Metre, MetrePerSecondSquared, Second, WattPerSquareMetre, Year,
 };
 use crate::xuv::{History, LYMAN_ALPHA};
 
@@ -45,6 +51,22 @@ pub const LYMAN_ALPHA_PHOTON_ENERGY: f64 = PLANCK * SPEED_OF_LIGHT / LYMAN_ALPHA
 /// Definition: mass of a methane molecule, its molar mass over the
 /// Avogadro constant (2.664e-26 kg).
 pub const CH4_MOLECULE_MASS: Kilogram = Kilogram(CH4_MOLAR_MASS / AVOGADRO);
+
+/// Calibration: equilibrium temperature under which methane survives, 150 K.
+/// Above it water vapour reaches the upper air, where its photolysis makes
+/// the OH that oxidises methane; below it the water is frozen out (ice
+/// sublimes at 6.1e-11 bar at 150 K, Feistel & Wagner 2007 via Lisse et al.
+/// 2021 supplement). No published threshold was found: it is set inside the
+/// window Titan (about 82 K, keeps its methane) to Mars (about 207 K, does
+/// not). See the calibration of `METHANE_SURVIVES` on the page
+/// `docs/science/planet-atmospheres.md`, *Photochemistry*.
+pub const METHANE_SURVIVES: Kelvin = Kelvin(150.0);
+
+/// Definition: mass of N₂ per mass of NH₃ photolysed, `2 NH₃ → N₂ + 3 H₂`:
+/// `M(N₂) / (2 M(NH₃))` (0.8224), the weight pressures being proportional
+/// to the masses. The process is Titan's N₂ from NH₃ (Atreya, Donahue &
+/// Kuhn 1978, Science 201, 611, doi:10.1126/science.201.4356.611).
+pub const N2_PER_NH3: f64 = N2_MOLAR_MASS / (2.0 * NH3_MOLAR_MASS);
 
 /// Definition: bisection steps that place the onset of the build-up, each
 /// halving the bracket `[0, age]`: 60 reach the f64 resolution (as
@@ -144,6 +166,24 @@ fn onset(gravity: MetrePerSecondSquared, sources: &[LymanSource], supply: f64, a
         }
     }
     Gyr(0.5 * (above + below))
+}
+
+/// Whether methane survives the OH of water vapour on a body of this
+/// `equilibrium` temperature: it does under [`METHANE_SURVIVES`].
+pub fn methane_survives(equilibrium: Kelvin) -> bool {
+    equilibrium < METHANE_SURVIVES
+}
+
+/// Whether the air is reducing, Titan's: `methane` is left in it and the
+/// body is cold enough for it to survive ([`methane_survives`]).
+pub fn reducing(methane: Bar, equilibrium: Kelvin) -> bool {
+    methane.0 > 0.0 && methane_survives(equilibrium)
+}
+
+/// The N₂ that `ammonia` (as a weight) leaves once photolysed,
+/// `2 NH₃ → N₂ + 3 H₂`, the hydrogen escaping: [`N2_PER_NH3`] of it.
+pub fn nitrogen_from_ammonia(ammonia: Bar) -> Bar {
+    Bar(ammonia.0 * N2_PER_NH3)
 }
 
 #[cfg(test)]

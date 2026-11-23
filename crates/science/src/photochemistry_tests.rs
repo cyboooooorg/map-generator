@@ -1,6 +1,7 @@
 use super::*;
 use crate::constants::{PASCALS_PER_BAR, SOLAR_IRRADIANCE};
-use crate::units::{Dex, Pascal, Second, SolarMass, Year};
+use crate::radiation::gases::{N2_MOLAR_MASS, NH3_MOLAR_MASS};
+use crate::units::{Dex, Kelvin, Pascal, Second, SolarMass, Year};
 use crate::xuv::{History, LYMAN_ALPHA, history};
 
 /// Source: Titan's mass parameter GM, 8978.137 10 km³/s², in m³/s² (JPL
@@ -186,4 +187,41 @@ fn two_half_sources_photolyse_like_one() {
     );
     assert!(whole > 0.0, "{whole}");
     assert!(relative(halves, whole) < ROUNDING, "{whole} {halves}");
+}
+
+/// Definition: the equilibrium temperature of a body at 1 AU under the
+/// Sun at albedo 0.3, K (the rewrite's `trial` helper uses the same
+/// 255 K); the equilibrium falls as the square root of the distance.
+const EQUILIBRIUM_AT_1_AU: f64 = 255.0;
+
+/// Definition: Titan's equilibrium temperature, K, from
+/// [`EQUILIBRIUM_AT_1_AU`] at [`TITAN_ORBIT`] (about 82.4 K).
+fn titan_equilibrium() -> Kelvin {
+    Kelvin(EQUILIBRIUM_AT_1_AU / TITAN_ORBIT.sqrt())
+}
+
+/// Definition: the N₂ a dry-air test starts with, bar.
+const START_N2: Bar = Bar(1.0);
+
+/// Definition: the NH₃ photolysed in the nitrogen test, bar.
+const PHOTOLYSED_NH3: Bar = Bar(34.0);
+
+#[test]
+fn photolysis_conserves_nitrogen() {
+    // Weight pressures: 34 bar of NH₃ weigh as 34 · 28.014 / (2 · 17.031)
+    // of N₂ (`2 NH₃ -> N₂ + 3 H₂`), 28.963 bar with the 1 bar already there.
+    let n2 = START_N2.0 + nitrogen_from_ammonia(PHOTOLYSED_NH3).0;
+    let expected = START_N2.0 + PHOTOLYSED_NH3.0 * N2_MOLAR_MASS / (2.0 * NH3_MOLAR_MASS);
+    assert!((n2 - expected).abs() < 1e-9, "{n2} bar against {expected}");
+    assert!((n2 - 28.963).abs() < 1e-3, "{n2} bar");
+}
+
+#[test]
+fn titans_air_is_reducing_and_earths_is_not() {
+    let methane = Bar(1.0);
+    assert!(methane_survives(titan_equilibrium()));
+    assert!(reducing(methane, titan_equilibrium()));
+    assert!(!methane_survives(Kelvin(EQUILIBRIUM_AT_1_AU)));
+    assert!(!reducing(methane, Kelvin(EQUILIBRIUM_AT_1_AU)));
+    assert!(!reducing(Bar(0.0), titan_equilibrium()));
 }
