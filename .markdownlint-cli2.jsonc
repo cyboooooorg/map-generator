@@ -12,6 +12,7 @@
     "crates/**/*.md",
     "tools/guardrails/**/*.md",
     "tools/stellar-grid/**/*.md",
+    "tools/figures/**/*.md",
     ".claude/agents/*.md",
     "docs/superpowers/plans/2026-11-20-rewrite-*.md",
     "docs/science/SUMMARY.md",

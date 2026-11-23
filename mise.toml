@@ -91,9 +91,14 @@ if printf '%s' "$log" | grep -q 'Rendering failed'; then
 fi
 '''
 
+[tasks."docs:figures"]
+description = "Draw the science book's figures into docs/science/figures (pass --check to only compare)"
+run = "cargo run -q -p figures --"
+
 [tasks."docs:check"]
-description = "Check the science book: every page in SUMMARY.md, no math fence left, the book builds, its links resolve"
+description = "Check the science book: every figure up to date, every page in SUMMARY.md, no math fence left, the book builds, its links resolve"
 run = [
+  "cargo run -q -p figures -- --check",
   '''
   fail=0
   for f in docs/science/*.md; do
