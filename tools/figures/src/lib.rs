@@ -1,6 +1,8 @@
 //! Figures of the science book (`docs/science`), drawn as SVG from the laws
 //! of the `science` crate. See README.md.
 
+mod stars;
+
 use std::error::Error;
 use std::fmt;
 use std::path::Path;
@@ -44,7 +46,10 @@ impl Error for FigureError {}
 
 /// Every figure of the book. Each one is added here by its own function.
 pub fn figures() -> Vec<Figure> {
-    Vec::new()
+    vec![Figure {
+        name: "main-sequence",
+        render: stars::main_sequence_figure,
+    }]
 }
 
 /// The figures whose file under `dir` is missing or differs from a fresh
@@ -84,13 +89,6 @@ pub fn write(dir: &Path) -> Result<Vec<&'static str>, FigureError> {
 /// Renders a `width` by `height` SVG through `draw`, after registering the
 /// committed font once: every figure draws through it, so none can measure
 /// text with a system font.
-#[cfg_attr(
-    not(test),
-    allow(
-        dead_code,
-        reason = "drawn through by the figures added after this one"
-    )
-)]
 pub(crate) fn svg(
     width: u32,
     height: u32,
