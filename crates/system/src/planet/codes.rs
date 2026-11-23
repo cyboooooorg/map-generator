@@ -157,3 +157,15 @@ pub(crate) const WATER_KEPT_FRACTION: &str = "planet.water.kept-fraction";
 /// Tectonic regime: heat pipe, stagnant lid, plates or episodic, from the
 /// internal heat flux, the mass and the water kept.
 pub(crate) const REGIME: &str = "planet.regime";
+/// Cooling time of the iron core through the mantle, `ρ c r_c d / (3 k
+/// Nu)`, from the core's mass and outer radius, the planet's radius and
+/// the regime's Nusselt number (`science::dynamo::cooling_time`).
+pub(crate) const CORE_COOLING_TIME: &str = "planet.core.cooling-time";
+/// State of the iron core: none (no iron shell or no core mass), liquid,
+/// or frozen past `science::dynamo::CORE_FROZEN` cooling times.
+pub(crate) const CORE_STATE: &str = "planet.core.state";
+/// Whether a dynamo runs in the core, from its cooling time, the age and
+/// the regime (plates keep the thermal dynamo running).
+pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
+/// Surface equatorial dipole field of the core's dynamo; 0 T without one.
+pub(crate) const CORE_FIELD: &str = "planet.core.field";

@@ -37,7 +37,7 @@
 //! around it, [`escape`] what their envelope loses to the stars' XUV
 //! light, [`heat`] computes its internal heat, [`water`] the water it keeps
 //! under its stars' light and the planet left after a runaway's steam,
-//! [`regime`] its tectonic regime.
+//! [`regime`] its tectonic regime, [`core`] its iron core and its dynamo.
 //! Every value is recorded in the system's cause `Trace`, with the codes
 //! of [`codes`].
 
@@ -48,6 +48,11 @@
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
 mod codes;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod core;
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
@@ -89,6 +94,8 @@ mod regime;
 )]
 mod water;
 
+#[cfg(test)]
+mod core_tests;
 #[cfg(test)]
 mod envelope_tests;
 #[cfg(test)]
