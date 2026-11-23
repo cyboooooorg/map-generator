@@ -253,7 +253,7 @@ numbers with `c = 800` and its own interior. With 840 and the system engine's
 structure, `τ` is 4.88 Gyr for Earth (plates), 20.9 for Venus (episodic), 9.90
 for Mars, 3.18 for Mercury and 1.58 for a rocky body of the Moon's mass and 2 %
 core (all three under a lid), about a fifth longer than the legacy's for
-Earth and Mars: the three thresholds were refitted on their targets (below),
+Earth and Mars: two of the three thresholds were refitted on their targets (below),
 the Nusselt numbers kept. `Nu` is the convective speed-up by regime: 50 for plates,
 10 for episodic, 5 for a
 stagnant lid or a heat pipe (calibrations on the bodies of the table below:
@@ -278,10 +278,10 @@ Stevenson 2000, doi:10.1029/1999JE001216). Under a lid:
 | Thermal | 0 | dipolar |
 | Flux below the adiabat | 0.055 τ | none |
 | Inner core growing | 0.82 τ | deep, compositional |
-| Frozen | 2.1 τ | none |
+| Frozen | 2.25 τ | none |
 
 **Calibration of the thresholds.** Each threshold is a share of `τ` fitted
-on one body, with the cooling times above (`c = 840`):
+on one body, checked with the cooling times above (`c = 840`):
 
 - `THERMAL_DYNAMO_END` 0.055 (legacy 0.075): Mars's dynamo ends at 0.545 Gyr,
   4.02 Ga ago, inside the 4.0 to 4.1 Ga of Lillis et al. 2013; the legacy
@@ -291,9 +291,10 @@ on one body, with the cooling times above (`c = 840`):
   4.00 Gyr, 0.57 Ga ago (Bono et al. 2019: 565 Ma), Mercury's at 2.61 Gyr,
   Mars's and Venus's after today; the legacy value started Earth's at
   4.88 Gyr, after today.
-- `CORE_FROZEN` 2.1 (legacy 2.25): the Moon's core freezes at 3.31 Gyr,
-  1.26 Ga ago, Mercury's at 6.68 Gyr; the legacy value froze the Moon's at
-  3.55 Gyr, 1.02 Ga ago, at the edge of the 1 to 2.5 Ga window.
+- `CORE_FROZEN` 2.25 (the legacy's, kept): the Moon's core freezes at
+  3.55 Gyr, 1.02 Ga ago, inside the 1 to 2.5 Ga window of Tikoo et al. 2017
+  (near its recent edge), Mercury's at 7.16 Gyr. Its target holds, so it
+  was not refitted.
 
 What was searched is in study 21, part 4; no paper gives these thresholds
 for a lumped law of this form. The system engine's test
@@ -346,7 +347,7 @@ Calibration targets, with the regimes of the previous section:
 | Mars | 0.3 Gyr | dynamo, 14 µT | magnetised old crust |
 | Mars | 4.567 Gyr | liquid core, no dynamo (ends at 0.55 Gyr) | none since 4.0 to 4.1 Ga (Lillis et al. 2013); a late field near 3.7 Ga from one crater (Mittelholz et al. 2020); both reached as abstracts only |
 | Venus | 4.567 Gyr | liquid core, no dynamo (ends near 1.15 Gyr) | none |
-| Moon | 4.567 Gyr | frozen core (at 3.3 Gyr), no dynamo | dynamo from 4.25 to at least 3.56 Ga, weak (about 5 µT) at 1 to 2.5 Ga (Weiss & Tikoo 2014; Tikoo et al. 2017; abstracts as quoted) |
+| Moon | 4.567 Gyr | frozen core (at 3.55 Gyr), no dynamo | dynamo from 4.25 to at least 3.56 Ga, weak (about 5 µT) at 1 to 2.5 Ga (Weiss & Tikoo 2014; Tikoo et al. 2017; abstracts as quoted) |
 
 The Moon's core is in fact still partly molten (Weber et al. 2011); the
 model freezes it, which only matters for its state, not its dynamo.

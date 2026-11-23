@@ -81,11 +81,12 @@ pub const INNER_CORE_START: f64 = 0.82;
 /// Fitted on the Moon's core freezing near 3.3 Gyr, inside the 1 to
 /// 2.5 Ga window of a weak lunar field (Tikoo et al. 2017, secondhand),
 /// with Mercury's still liquid at 4.567 Gyr (Anderson et al. 2011; study
-/// 21, part 4): a rocky body of the Moon's mass and 2 % core (`τ` =
-/// 1.58 Gyr under a lid, [`CORE_HEAT_CAPACITY`] 840) freezes at
-/// 3.31 Gyr, Mercury (`τ` = 3.18 Gyr) at 6.68 Gyr. The legacy's 2.25, set
-/// with 800 J/(kg K), freezes it at 3.55 Gyr here.
-pub const CORE_FROZEN: f64 = 2.1;
+/// 21, part 4). Set by the legacy with a heat capacity of 800 J/(kg K)
+/// and kept: with [`CORE_HEAT_CAPACITY`] 840, a rocky body of the Moon's
+/// mass and 2 % core (`τ` = 1.58 Gyr under a lid) freezes at 3.55 Gyr,
+/// 1.02 Ga ago, still inside the window, and Mercury (`τ` = 3.18 Gyr) at
+/// 7.16 Gyr.
+pub const CORE_FROZEN: f64 = 2.25;
 
 /// Calibration: Nusselt number of the core's cooling through a mantle
 /// under plates, the convective speed-up over conduction across the
