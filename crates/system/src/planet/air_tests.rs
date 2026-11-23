@@ -5,7 +5,7 @@
 //! tests, l.1358-1825) on the reference bodies of `planet/tests.rs`, with
 //! the targets of studies 21 and 23.
 
-use super::air::{Air, air, released};
+use super::air::{Air, air, histories, lyman_sources, released};
 use super::codes;
 use super::core::{CoreRecord, core};
 use super::draws::Drawn;
@@ -18,10 +18,18 @@ use super::tests::{
     with_fluence,
 };
 use crate::Trial;
+use crate::sources::{light, sources};
+use crate::star::star;
+use science::constants::PASCALS_PER_BAR;
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, shoreline_kept};
-use science::units::{Bar, Kilogram, Metre};
+use science::photochemistry::{
+    CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
+};
+use science::units::{Bar, Gyr, Kilogram, Metre, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
-use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace, Traced, Water};
+use timeline::{
+    Atmosphere, Code, Gas, NodeId, Provenance, Seed, TectonicRegime, Trace, Traced, Water,
+};
 
 /// Definition: the surface pressure below which a world is airless, no
 /// sky and no clouds, 1e-4 bar: legacy's `AIRLESS_BAR`
@@ -660,19 +668,6 @@ fn each_partial_reads_in_chain_order() {
         code(derived_from(trace, photolysed)[0]),
         Code::of(codes::AIR_KEPT_CH4)
     );
-    // The photolysis reads the gravity, the stars' flux and mass, and the
-    // metallicity and age their histories are built at.
-    let from = derived_from(trace, photolysed);
-    let source = titan.trial.sources.primary();
-    for node in [
-        titan.body.bulk().surface_gravity.node(),
-        source.flux.node(),
-        source.mass.node(),
-        titan.trial.metallicity.node(),
-        titan.trial.age.node(),
-    ] {
-        assert!(from.contains(&node), "{node:?}");
-    }
     // CO2: kept, then trapped.
     let co2 = partial(Gas::Co2);
     assert_eq!(code(co2), Code::of(codes::AIR_TRAPPED_CO2));
@@ -707,4 +702,71 @@ fn each_partial_reads_in_chain_order() {
     );
     let frozen = number(trace, kept_co2) - number(trace, co2);
     assert_eq!(air.frozen_co2.value().0, frozen);
+}
+
+// One code path: the photolysis reads the light the timeline carries. On
+// a Titan lit as the system lights a planet (the Sun's sources and the
+// star's age and metallicity on the trial, as `draw::place` builds
+// them), its node cites the stars' inputs, and the whole destruction it
+// computes from them is the yield times the Lyman α fluence the
+// timeline's sources hold.
+#[test]
+fn the_photolysis_reads_the_timelines_lyman_alpha() {
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &TITAN);
+    let sun = star(
+        Some(SolarMass(1.0)),
+        Some(*t.metallicity.value()),
+        Some(*t.age.value()),
+        Seed::new(1),
+        &mut trace,
+    )
+    .unwrap();
+    let lit = sources(
+        &sun,
+        &light(&sun).unwrap(),
+        &t.orbit.semi_major_axis,
+        &t.orbit.eccentricity,
+        &mut trace,
+    )
+    .unwrap();
+    let t = Trial {
+        sources: lit,
+        age: sun.age,
+        metallicity: sun.state.metallicity,
+        ..t
+    };
+    let mut titan = up_to_core(trace, t, drawn);
+    let a = titan.air().0;
+    let photolysed = ancestor(
+        &titan.trace,
+        a.partial[&Gas::Ch4].node(),
+        codes::AIR_PHOTOLYSED_CH4,
+    );
+    let from = derived_from(&titan.trace, photolysed);
+    let gravity = titan.body.bulk().surface_gravity;
+    let source = titan.trial.sources.primary();
+    for node in [
+        gravity.node(),
+        source.flux.node(),
+        source.mass.node(),
+        titan.trial.metallicity.node(),
+        titan.trial.age.node(),
+    ] {
+        assert!(from.contains(&node), "{node:?}");
+    }
+    let histories = histories(&titan.trial).unwrap();
+    let lyman = lyman_sources(&titan.trial, &histories);
+    let g = *gravity.value();
+    let destroyed = methane_destroyed(g, &lyman, Gyr(0.0), *titan.trial.age.value()).0;
+    let (_, fluence) = titan.trial.sources.band_total(|s| &s.lyman_alpha);
+    let expected = CH4_PER_LYMAN_ALPHA_PHOTON * fluence.0 / LYMAN_ALPHA_PHOTON_ENERGY
+        * CH4_MOLECULE_MASS.0
+        * g.0
+        / 4.0
+        / PASCALS_PER_BAR;
+    assert!(
+        (destroyed / expected - 1.0).abs() < ROUNDING,
+        "{destroyed} {expected}"
+    );
 }

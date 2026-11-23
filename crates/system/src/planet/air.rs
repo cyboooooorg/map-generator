@@ -469,21 +469,8 @@ fn photolysed(
     trace: &mut Trace,
 ) -> Result<Traced<Bar>, InteriorError> {
     let gravity = body.bulk().surface_gravity;
-    let (metallicity, age) = (*trial.metallicity.value(), *trial.age.value());
-    let histories = trial
-        .sources
-        .iter()
-        .map(|s| history(*s.mass.value(), metallicity, age))
-        .collect::<Result<Vec<History>, _>>()?;
-    let sources: Vec<LymanSource> = trial
-        .sources
-        .iter()
-        .zip(&histories)
-        .map(|(s, history)| LymanSource {
-            flux: WattPerSquareMetre::from(*s.flux.value()),
-            history,
-        })
-        .collect();
+    let histories = histories(trial)?;
+    let sources = lyman_sources(trial, &histories);
     let mut from = vec![kept.node(), gravity.node()];
     for s in trial.sources.iter() {
         from.extend([s.flux.node(), s.mass.node()]);
@@ -491,9 +478,39 @@ fn photolysed(
     from.extend([trial.metallicity.node(), trial.age.node()]);
     Ok(trace.record(
         Code::of(codes::AIR_PHOTOLYSED_CH4),
-        methane_left(*kept.value(), *gravity.value(), &sources, age),
+        methane_left(
+            *kept.value(),
+            *gravity.value(),
+            &sources,
+            *trial.age.value(),
+        ),
         &from,
     )?)
+}
+
+/// The high-energy history of each star of `trial`, built at its mass and
+/// the trial's metallicity and age, in the order of its sources.
+pub(super) fn histories(trial: &Trial) -> Result<Vec<History>, InteriorError> {
+    let (metallicity, age) = (*trial.metallicity.value(), *trial.age.value());
+    Ok(trial
+        .sources
+        .iter()
+        .map(|s| history(*s.mass.value(), metallicity, age))
+        .collect::<Result<Vec<History>, _>>()?)
+}
+
+/// The stars of `trial` as the photolysis reads them: each one's present
+/// flux at the planet and its `histories`.
+pub(super) fn lyman_sources<'a>(trial: &Trial, histories: &'a [History]) -> Vec<LymanSource<'a>> {
+    trial
+        .sources
+        .iter()
+        .zip(histories)
+        .map(|(s, history)| LymanSource {
+            flux: WattPerSquareMetre::from(*s.flux.value()),
+            history,
+        })
+        .collect()
 }
 
 /// The share of its air the planet keeps on the cosmic shoreline (step 2
