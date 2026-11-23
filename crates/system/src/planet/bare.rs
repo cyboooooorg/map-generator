@@ -1,14 +1,16 @@
 //! The planet chained from its draw to its bare air: the composition, the
 //! body, the escape of its envelope, its heat and, for a planet with a
-//! surface, its water, its tectonic regime, its core and the air it
-//! outgasses, before any climate. Ported from
+//! surface, its water, its tectonic regime, its core and its air: what it
+//! outgasses, what the cosmic shoreline keeps, the methane photolysis, the
+//! reducing air (its CO2 held back), the cold trap at the equilibrium
+//! temperature and the photochemistry, before any climate. Ported from
 //! `legacy-final:crates/mapgen/src/planet/mod.rs` (`chain`, l.480-640,
 //! and `bare_air`, l.895-1075), in their order.
 //!
 //! Not in this chain yet (#659): the climate and its boiling loop, the
-//! methane photolysis, the cold trap, the photochemistry and life; nor
-//! the non-thermal loss and a giant's magnetosphere over its moons
-//! (#658). PR 2d replaces the end of the chain with the climate.
+//! condensation it drives, the reducing-air fallback that reads it, and
+//! life; nor the non-thermal loss and a giant's magnetosphere over its
+//! moons (#658). PR 2d replaces the end of the chain with the climate.
 
 use super::air::air;
 use super::core::core;
@@ -21,6 +23,7 @@ use super::regime::regime;
 use super::water::{after_steam, surface_water, water};
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
+use science::units::Bar;
 use science::units::Kilogram;
 use timeline::{Atmosphere, Heat, Seed, TectonicRegime, Trace, Traced, Water};
 
@@ -53,6 +56,12 @@ pub(crate) struct BareSurface {
     /// cosmic shoreline kept.
     pub water: Water,
     pub atmosphere: Atmosphere,
+    /// The CO2 the cold trap froze out, which the climate's carbon cycle
+    /// reads.
+    pub frozen_co2: Traced<Bar>,
+    /// Whether the air is reducing, Titan's: its CO2 was held back. The
+    /// climate's fallback reads it.
+    pub reducing: Traced<bool>,
 }
 
 /// The planet `trial` drawn from `seed` ([`draw`]) and chained to its
@@ -77,9 +86,10 @@ pub(crate) fn bare(trial: &Trial, seed: Seed, trace: &mut Trace) -> Result<Bare,
 ///    bulk water, a water world's whole water) and the water its light
 ///    leaves of it ([`water`]); after a runaway, the planet its steam
 ///    left ([`after_steam`]), its body and heat built again;
-/// 4. its regime ([`regime`]), its core ([`core`]) and its air ([`air`]),
-///    the air reading the trial and composition from before the steam's
-///    loss so that the volatiles keep their mass;
+/// 4. its regime ([`regime`]), its core ([`core`]) and its air ([`air`],
+///    a reducing air's CO2 held back), the air reading the trial and
+///    composition from before the steam's loss so that the volatiles keep
+///    their mass;
 /// 5. after a runaway whose cosmic shoreline took some of the vapour, the
 ///    planet left once more ([`after_steam`] of the planet before the
 ///    steam with the water kept) and its body built again, keeping the
@@ -135,7 +145,7 @@ pub(crate) fn bare_with(
         };
     let r = regime(&t, &body, &heat, &w, trace)?;
     let k = core(&t, rocky(&body), &r, trace)?;
-    let (atmosphere, kept) = air(
+    let made = air(
         &escaped.trial,
         &escaped.drawn,
         &body,
@@ -143,8 +153,10 @@ pub(crate) fn bare_with(
         &w,
         &r,
         &k,
+        true,
         trace,
     )?;
+    let kept = made.water;
     if *kept.runaway.value()
         && kept.inventory.value().0 < w.inventory.value().0
         && let Some((left, left_drawn)) =
@@ -163,7 +175,9 @@ pub(crate) fn bare_with(
             regime: r,
             core: k.core,
             water: kept,
-            atmosphere,
+            atmosphere: made.atmosphere,
+            frozen_co2: made.frozen_co2,
+            reducing: made.reducing,
         }),
     })
 }

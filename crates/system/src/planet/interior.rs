@@ -28,6 +28,7 @@ use science::constants::GRAVITATIONAL_CONSTANT;
 use science::envelope::EnvelopeError;
 use science::eos::{EosError, MaterialEos, core_alloy, mantle, water, water_on_melting_curve};
 use science::giants::GiantError;
+use science::stellar::StellarError;
 use science::structure::{LayerSpec, Structure, StructureError, integrate};
 use science::units::{
     EarthMass, EarthRadius, FractionOutOfRange, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
@@ -105,6 +106,10 @@ pub(crate) enum InteriorError {
     NoEnvelope,
     Giant(GiantError),
     Envelope(EnvelopeError),
+    /// A star's high-energy history, which the methane photolysis reads,
+    /// has no answer at the trial's age (the draw places main-sequence
+    /// stars only, so it is not expected).
+    Stellar(StellarError),
 }
 
 impl std::fmt::Display for InteriorError {
@@ -118,6 +123,7 @@ impl std::fmt::Display for InteriorError {
             Self::NoEnvelope => write!(f, "interior-no-envelope"),
             Self::Giant(error) => write!(f, "interior-{error}"),
             Self::Envelope(error) => write!(f, "interior-{error}"),
+            Self::Stellar(error) => write!(f, "interior-stellar({error})"),
         }
     }
 }
@@ -151,6 +157,12 @@ impl From<GiantError> for InteriorError {
 impl From<EnvelopeError> for InteriorError {
     fn from(error: EnvelopeError) -> Self {
         Self::Envelope(error)
+    }
+}
+
+impl From<StellarError> for InteriorError {
+    fn from(error: StellarError) -> Self {
+        Self::Stellar(error)
     }
 }
 

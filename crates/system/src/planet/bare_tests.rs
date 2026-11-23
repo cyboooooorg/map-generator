@@ -1,17 +1,16 @@
 //! Tier 1: the planet chained from its draw to its bare air.
 
-use std::collections::BTreeSet;
-
 use super::bare::{Bare, bare, bare_with};
 use super::codes;
 use super::draws::Drawn;
 use super::tests::{
-    EARTH, MARS, ReferenceBody, WET_VENUS, derived_from, reference_trial, trial, with_fluence,
+    EARTH, MARS, ReferenceBody, WET_VENUS, ancestry, derived_from, reference_trial, trial,
+    with_fluence,
 };
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
 use science::units::Kilogram;
-use timeline::{Code, NodeId, Origin, Seed, Trace};
+use timeline::{Code, Seed, Trace};
 
 /// The bare planet of a trial of `mass` Earth masses at `au`, drawn from
 /// the seed `seed`.
@@ -28,22 +27,6 @@ fn reference(body: &ReferenceBody) -> (Trial, Bare, Trace) {
     let (t, d) = reference_trial(&mut trace, body);
     let b = bare_with(&t, &d, &mut trace).unwrap();
     (t, b, trace)
-}
-
-/// Every node `node` derives from, itself included, walking the
-/// `Origin::Derived` links back to the leaves.
-fn ancestry(trace: &Trace, node: NodeId) -> BTreeSet<NodeId> {
-    let mut seen = BTreeSet::new();
-    let mut stack = vec![node];
-    while let Some(id) = stack.pop() {
-        if !seen.insert(id) {
-            continue;
-        }
-        if let Origin::Derived { from } = &trace.node(id).unwrap().origin {
-            stack.extend(from.iter().copied());
-        }
-    }
-    seen
 }
 
 #[test]
@@ -114,6 +97,8 @@ fn every_surface_value_traces_back_to_the_trial() {
             ("core.field", s.core.field.node()),
             ("water.inventory", s.water.inventory.node()),
             ("air.pressure", s.atmosphere.surface_pressure.node()),
+            ("air.frozen-co2", s.frozen_co2.node()),
+            ("air.reducing", s.reducing.node()),
         ];
         // `water.boiled` stays an imposed leaf (false) until the climate's
         // boiling loop derives it (#659).

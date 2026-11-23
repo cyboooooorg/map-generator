@@ -1,13 +1,21 @@
 //! The air of a planet with a surface: what its interior outgasses, what
-//! the cosmic shoreline keeps of it, the water a runaway keeps as vapour
-//! and the SO2 its wash-out leaves. Ported from
+//! the cosmic shoreline keeps of it, the water a runaway keeps as vapour,
+//! the SO2 its wash-out leaves, what the stars' ultraviolet leaves of its
+//! methane, whether the air is reducing (and then outgasses no CO2), what
+//! the cold of its equilibrium temperature traps as gas and what the
+//! photochemistry makes of it. Ported from
 //! `legacy-final:crates/mapgen/src/planet/atmosphere.rs` (`outgassed`,
-//! `atmosphere`, `wash_out`), `planet/mod.rs` (`Water::keeping` in a
-//! runaway) and `planet/climate.rs` (`washed`); the laws are in
-//! `science::outgassing`, `science::volatiles` and `science::escape`.
+//! `atmosphere`, `wash_out`, `methane_photolysis`, `reducing`,
+//! `without_co2_if_reducing`, `cold_trap`, `photochemistry`),
+//! `planet/mod.rs` (`bare_air`, `Water::keeping` in a runaway) and
+//! `planet/climate.rs` (`washed`); the laws are in `science::outgassing`,
+//! `science::volatiles`, `science::escape` and `science::photochemistry`.
 //!
-//! The methane photolysis, the cold trap, the photochemistry and the
-//! climate's condensation come after, with the climate (#659).
+//! The climate's condensation (`condense`, the N2 and SO2 frost curves,
+//! the methane of the seas) and the reducing-air fallback, which read the
+//! surface temperature, come with the climate (#659). The non-thermal
+//! loss is not in the rewrite (#658): the photolysis reads the air the
+//! shoreline kept.
 
 use std::collections::BTreeMap;
 
@@ -22,16 +30,39 @@ use science::outgassing::{
     LID_SHARE, MOBILE_SHARE, NITROGEN_RECYCLED_UNDER_PLATES, RECYCLED_UNDER_PLATES, SO2_PER_S,
     SULPHUR_IN_AIR, column_pressure, released_under_ocean, so2_kept,
 };
-use science::units::{Bar, Fraction, Kilogram, Metre};
-use science::volatiles::inventory;
+use science::photochemistry::{
+    LymanSource, methane_left, methane_survives, nitrogen_from_ammonia, reducing,
+};
+use science::units::{Bar, Fraction, Kelvin, Kilogram, Metre, Pascal, WattPerSquareMetre};
+use science::volatiles::{ammonia_frost_pressure, co2_frost_pressure, inventory};
+use science::xuv::{History, history};
 use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace, Traced, Water};
+
+/// The air of a planet with a surface, and what its making leaves.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Air {
+    /// The air once the photochemistry has run.
+    pub atmosphere: Atmosphere,
+    /// The water once the air is made: in a runaway, the vapour the
+    /// cosmic shoreline kept.
+    pub water: Water,
+    /// The CO2 the cold trap froze out (`planet.air.frozen-co2`), which
+    /// the climate's carbon cycle reads.
+    pub frozen_co2: Traced<Bar>,
+    /// Whether the air is reducing, Titan's (`planet.air.reducing`): its
+    /// CO2 was then held back.
+    pub reducing: Traced<bool>,
+}
 
 /// The air of the planet `trial` of composition `drawn`, both as they were
 /// before a runaway's steam loss (`super::escape::Escaped`), of body
 /// `body` after it, with its surface water before its stars' light
 /// `surface` (`super::water::surface_water`), its water `water`, its
-/// tectonic regime `regime` and its core `core`; and its water once the
-/// air is made. In order:
+/// tectonic regime `regime` and its core `core`; a reducing air's CO2
+/// held back when `hold_back` (the climate's fallback runs it without).
+/// In order (legacy ran the escape twice to hold the CO2 back; the
+/// shoreline's share and the photolysis do not read the CO2, so one pass
+/// gives the same values):
 ///
 /// 1. **Outgassing** (`planet.air.outgassed.<gas>`, one node per gas):
 ///    the volatiles at formation ([`inventory`] of the refractory mass
@@ -50,7 +81,8 @@ use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace,
 ///    ([`SO2_PER_S`]), of which [`SULPHUR_IN_AIR`] stays. Water is vapour
 ///    only in a runaway, and then the whole inventory: it is the ocean,
 ///    not a volatile of the mantle, so neither the regime nor the
-///    seafloor holds it back. No O2 (imposed: life makes it).
+///    seafloor holds it back. No O2 (imposed: life makes it). The CH4
+///    comes first: the CO2 waits on the reducing air (step 4).
 /// 2. **Shoreline** (`planet.air.shoreline-kept`): the share
 ///    [`shoreline_kept`] at the escape velocity of the whole mass
 ///    ([`Body::whole_mass`]: the bulk mass plus a water beyond the laws)
@@ -61,20 +93,44 @@ use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace,
 ///    The escape velocity has no node (ledger ruling 1): the share
 ///    derives from the whole mass and the radius, the fluences and the
 ///    dynamo.
-/// 3. **Runaway**: the water inventory becomes the vapour kept, the
+/// 3. **Photolysis** (`planet.air.photolysed.ch4`): [`methane_left`] of
+///    the kept CH4 on the bulk surface gravity under every star's present
+///    flux and Lyman α history ([`history`] at the star's mass and the
+///    trial's metallicity and age), over the trial's age.
+/// 4. **Reducing air** (`planet.air.reducing`): [`reducing`] of the
+///    photolysed CH4 at the stars' equilibrium temperature
+///    (`StellarSources::equilibrium_k`, from each star's `equilibrium`
+///    node), false without `hold_back`. A reducing air outgasses no CO2:
+///    `planet.air.outgassed.co2` is then 0 bar, from the reducing node.
+///    The other gases are outgassed and kept as in steps 1 and 2.
+/// 5. **Runaway**: the water inventory becomes the vapour kept, the
 ///    inventory times the shoreline's share (`planet.water.inventory`,
 ///    from the inventory and the share); the caller derives the body
 ///    again from it. Out of a runaway the water is returned as given.
-/// 4. **Wash-out** (`planet.air.so2-kept`): [`so2_kept`], wet when the
+/// 6. **Wash-out** (`planet.air.so2-kept`): [`so2_kept`], wet when the
 ///    water keeps a wet balance (out of a runaway, some water kept),
-///    with the O2 and the surface pressure of the air before it; the SO2
-///    partial is the outgassed one times the shoreline's share and this
-///    one.
-/// 5. **Pressure** (`planet.air.pressure`): the sum of the partials.
+///    with the O2 and the surface pressure of the kept air before it; the
+///    SO2 partial is the outgassed one times the shoreline's share and
+///    this one.
+/// 7. **Cold trap** (`planet.air.trapped.co2`, `planet.air.trapped.nh3`):
+///    the CO2 and the NH3 (the photolysis leaves them as kept) capped by
+///    their frost pressure at the equilibrium temperature
+///    ([`co2_frost_pressure`], [`ammonia_frost_pressure`]), uncapped at
+///    or above their triple point. `planet.air.frozen-co2` is the
+///    photolysed CO2 less the trapped CO2: legacy books all of it as a
+///    frost, which overstates it on small icy bodies (#590).
+/// 8. **Photochemistry** (`planet.air.photochemistry.<gas>`): the trapped
+///    NH3 becomes N2 ([`nitrogen_from_ammonia`], added to the kept N2)
+///    and leaves 0 bar; the photolysed CH4 stays where it survives the OH
+///    of water vapour ([`methane_survives`] at the equilibrium
+///    temperature), 0 bar otherwise. H2O, SO2 and O2 stay as kept.
+/// 9. **Pressure** (`planet.air.pressure`): the sum of the final
+///    partials.
 ///
 /// # Errors
 ///
-/// The errors of the trace.
+/// The errors of the trace, and [`InteriorError::Stellar`] when a star
+/// has no high-energy history at the trial's age.
 #[expect(
     clippy::too_many_arguments,
     reason = "one argument per step of the chain the air reads"
@@ -87,27 +143,62 @@ pub(crate) fn air(
     water: &Water,
     regime: &Traced<TectonicRegime>,
     core: &CoreRecord,
+    hold_back: bool,
     trace: &mut Trace,
-) -> Result<(Atmosphere, Water), InteriorError> {
-    let outgassed = outgassed(trial, drawn, body, surface, water, regime, trace)?;
+) -> Result<Air, InteriorError> {
+    let volatiles = mantle(trial, drawn, body, surface, water, regime);
+    let ch4 = volatiles.record(Gas::Ch4, trace)?;
     let shoreline = shoreline(trial, body, core, trace)?;
     let share = shoreline.value().get();
     let runaway = *water.runaway.value();
-
-    let mut partial = BTreeMap::new();
-    for (gas, _, kept) in AIR_GASES {
-        if gas == Gas::So2 {
-            continue;
-        }
-        let out = outgassed[&gas];
-        let p = trace.record(
-            Code::of(kept),
+    let keep = |gas: Gas, out: Traced<Bar>, trace: &mut Trace| {
+        let (.., code) = AIR_GASES
+            .into_iter()
+            .find(|&(g, ..)| g == gas)
+            .expect("every gas of the air has its codes");
+        trace.record(
+            Code::of(code),
             Bar(out.value().0 * share),
             &[out.node(), shoreline.node()],
-        )?;
-        partial.insert(gas, p);
+        )
+    };
+
+    // Steps 1 to 4: the methane, what the light leaves of it, and whether
+    // the air is reducing.
+    let mut outgassed = BTreeMap::new();
+    let mut partial = BTreeMap::new();
+    outgassed.insert(Gas::Ch4, ch4);
+    partial.insert(Gas::Ch4, keep(Gas::Ch4, ch4, trace)?);
+    let photolysed = photolysed(trial, body, partial[&Gas::Ch4], trace)?;
+    let equilibrium = trial.sources.equilibrium_k();
+    let cold: Vec<NodeId> = trial.sources.iter().map(|s| s.equilibrium.node()).collect();
+    let mut from = vec![photolysed.node()];
+    from.extend(&cold);
+    let reducing = trace.record(
+        Code::of(codes::AIR_REDUCING),
+        hold_back && reducing(*photolysed.value(), equilibrium),
+        &from,
+    )?;
+    for gas in [Gas::N2, Gas::Co2, Gas::Nh3, Gas::So2] {
+        let p = if gas == Gas::Co2 && *reducing.value() {
+            trace.record(
+                Code::of(codes::AIR_OUTGASSED_CO2),
+                Bar(0.0),
+                &[reducing.node()],
+            )?
+        } else {
+            volatiles.record(gas, trace)?
+        };
+        outgassed.insert(gas, p);
+    }
+    outgassed.extend(water_and_oxygen(body, water, trace)?);
+    for (gas, out) in &outgassed {
+        if *gas != Gas::Ch4 && *gas != Gas::So2 {
+            partial.insert(*gas, keep(*gas, *out, trace)?);
+        }
     }
 
+    // Step 5: a runaway keeps its water as the vapour the shoreline kept.
     let kept_water = if runaway {
         Water {
             inventory: trace.record(
@@ -121,8 +212,8 @@ pub(crate) fn air(
         water.clone()
     };
 
-    // The SO2 the shoreline keeps, before its wash-out, weighs in the
-    // column the wash-out reads.
+    // Step 6: the SO2 the shoreline keeps, before its wash-out, weighs in
+    // the column the wash-out reads.
     let so2 = outgassed[&Gas::So2];
     let so2_before = so2.value().0 * share;
     let before: f64 = partial.values().map(|p| p.value().0).sum::<f64>() + so2_before;
@@ -142,19 +233,76 @@ pub(crate) fn air(
     )?;
     partial.insert(Gas::So2, p);
 
+    // Step 7: the cold trap, at the equilibrium temperature.
+    let trap = |code: &'static str,
+                frost: fn(Kelvin) -> Option<Pascal>,
+                kept: Traced<Bar>,
+                trace: &mut Trace| {
+        let gas = frost(equilibrium).map_or(*kept.value(), |cap| {
+            Bar(kept.value().0.min(Bar::from(cap).0))
+        });
+        let mut from = vec![kept.node()];
+        from.extend(&cold);
+        trace.record(Code::of(code), gas, &from)
+    };
+    let co2 = partial[&Gas::Co2];
+    let trapped_co2 = trap(codes::AIR_TRAPPED_CO2, co2_frost_pressure, co2, trace)?;
+    let trapped_nh3 = trap(
+        codes::AIR_TRAPPED_NH3,
+        ammonia_frost_pressure,
+        partial[&Gas::Nh3],
+        trace,
+    )?;
+    let frozen_co2 = trace.record(
+        Code::of(codes::AIR_FROZEN_CO2),
+        Bar(co2.value().0 - trapped_co2.value().0),
+        &[co2.node(), trapped_co2.node()],
+    )?;
+    partial.insert(Gas::Co2, trapped_co2);
+
+    // Step 8: the photochemistry.
+    let n2 = partial[&Gas::N2];
+    let n2 = trace.record(
+        Code::of(codes::AIR_PHOTOCHEMISTRY_N2),
+        Bar(n2.value().0 + nitrogen_from_ammonia(*trapped_nh3.value()).0),
+        &[n2.node(), trapped_nh3.node()],
+    )?;
+    partial.insert(Gas::N2, n2);
+    let nh3 = trace.record(
+        Code::of(codes::AIR_PHOTOCHEMISTRY_NH3),
+        Bar(0.0),
+        &[trapped_nh3.node()],
+    )?;
+    partial.insert(Gas::Nh3, nh3);
+    let mut from = vec![photolysed.node()];
+    from.extend(&cold);
+    let ch4 = trace.record(
+        Code::of(codes::AIR_PHOTOCHEMISTRY_CH4),
+        if methane_survives(equilibrium) {
+            *photolysed.value()
+        } else {
+            Bar(0.0)
+        },
+        &from,
+    )?;
+    partial.insert(Gas::Ch4, ch4);
+
+    // Step 9: the pressure.
     let from: Vec<NodeId> = partial.values().map(Traced::node).collect();
     let surface_pressure = trace.record(
         Code::of(codes::AIR_PRESSURE),
         Bar(partial.values().map(|p| p.value().0).sum()),
         &from,
     )?;
-    Ok((
-        Atmosphere {
+    Ok(Air {
+        atmosphere: Atmosphere {
             surface_pressure,
             partial,
         },
-        kept_water,
-    ))
+        water: kept_water,
+        frozen_co2,
+        reducing,
+    })
 }
 
 /// Share of what the mantle outgasses that reaches the air through the
@@ -171,16 +319,39 @@ pub(crate) fn released(body: &Body, water: &Water) -> Fraction {
     ))
 }
 
-/// The outgassed partial pressure of each gas (step 1 of [`air`]).
-fn outgassed(
+/// What the mantle outgasses (step 1 of [`air`]), each gas weighed but
+/// not yet recorded: the air records them in its own order.
+struct Volatiles {
+    /// Each gas, its partial pressure and the nodes it derives from.
+    gases: Vec<(Gas, Bar, Vec<NodeId>)>,
+}
+
+impl Volatiles {
+    /// Records the outgassed partial pressure of `gas`
+    /// (`planet.air.outgassed.<gas>`).
+    fn record(&self, gas: Gas, trace: &mut Trace) -> Result<Traced<Bar>, InteriorError> {
+        let (_, p, from) = self
+            .gases
+            .iter()
+            .find(|(g, ..)| *g == gas)
+            .expect("a volatile of the mantle");
+        let (_, code, _) = AIR_GASES
+            .into_iter()
+            .find(|&(g, ..)| g == gas)
+            .expect("every volatile is a gas of the air");
+        Ok(trace.record(Code::of(code), *p, from)?)
+    }
+}
+
+/// The volatiles of the mantle of `body`: N2, CO2, CH4, NH3 and SO2.
+fn mantle(
     trial: &Trial,
     drawn: &Drawn,
     body: &Body,
     surface: Traced<Kilogram>,
     water: &Water,
     regime: &Traced<TectonicRegime>,
-    trace: &mut Trace,
-) -> Result<BTreeMap<Gas, Traced<Bar>>, InteriorError> {
+) -> Volatiles {
     let bulk = body.bulk();
     let gravity = *bulk.surface_gravity.value();
     let radius = Metre::from(*bulk.radius.value());
@@ -236,24 +407,36 @@ fn outgassed(
             rest,
         ),
     ];
-    let mut out = BTreeMap::new();
-    for (gas, mass, dex, kept) in volatiles {
-        let code = AIR_GASES
-            .iter()
-            .find_map(|&(g, code, _)| (g == gas).then_some(code))
-            .expect("every volatile is a gas of the air");
-        // Definition: a scatter in dex multiplies by 10^dex.
-        let mass = mass * 10f64.powf(dex.value().0);
-        let mut from = base.to_vec();
-        from.push(dex.node());
-        let p = trace.record(Code::of(code), Bar(weight(mass) * released * kept), &from)?;
-        out.insert(gas, p);
-    }
+    let gases = volatiles
+        .into_iter()
+        .map(|(gas, mass, dex, kept)| {
+            // Definition: a scatter in dex multiplies by 10^dex.
+            let mass = mass * 10f64.powf(dex.value().0);
+            let mut from = base.to_vec();
+            from.push(dex.node());
+            (gas, Bar(weight(mass) * released * kept), from)
+        })
+        .collect();
+    Volatiles { gases }
+}
 
+/// The outgassed water vapour and O2 (step 1 of [`air`]): a runaway's
+/// whole water inventory, 0 bar otherwise; no O2, imposed.
+fn water_and_oxygen(
+    body: &Body,
+    water: &Water,
+    trace: &mut Trace,
+) -> Result<[(Gas, Traced<Bar>); 2], InteriorError> {
+    let bulk = body.bulk();
     let h2o = if *water.runaway.value() {
         trace.record(
             Code::of(codes::AIR_OUTGASSED_H2O),
-            Bar(weight(*water.inventory.value())),
+            Bar(column_pressure(
+                *water.inventory.value(),
+                *bulk.surface_gravity.value(),
+                Metre::from(*bulk.radius.value()),
+            )
+            .0),
             &[
                 water.runaway.node(),
                 water.inventory.node(),
@@ -268,14 +451,49 @@ fn outgassed(
             &[water.runaway.node()],
         )?
     };
-    out.insert(Gas::H2o, h2o);
     let o2 = trace.leaf(
         Code::of(codes::AIR_OUTGASSED_O2),
         Bar(0.0),
         Provenance::Imposed,
     )?;
-    out.insert(Gas::O2, o2);
-    Ok(out)
+    Ok([(Gas::H2o, h2o), (Gas::O2, o2)])
+}
+
+/// The CH4 the stars' ultraviolet leaves of the `kept` one (step 3 of
+/// [`air`]): each star's history is built at its mass and the trial's
+/// metallicity and age.
+fn photolysed(
+    trial: &Trial,
+    body: &Body,
+    kept: Traced<Bar>,
+    trace: &mut Trace,
+) -> Result<Traced<Bar>, InteriorError> {
+    let gravity = body.bulk().surface_gravity;
+    let (metallicity, age) = (*trial.metallicity.value(), *trial.age.value());
+    let histories = trial
+        .sources
+        .iter()
+        .map(|s| history(*s.mass.value(), metallicity, age))
+        .collect::<Result<Vec<History>, _>>()?;
+    let sources: Vec<LymanSource> = trial
+        .sources
+        .iter()
+        .zip(&histories)
+        .map(|(s, history)| LymanSource {
+            flux: WattPerSquareMetre::from(*s.flux.value()),
+            history,
+        })
+        .collect();
+    let mut from = vec![kept.node(), gravity.node()];
+    for s in trial.sources.iter() {
+        from.extend([s.flux.node(), s.mass.node()]);
+    }
+    from.extend([trial.metallicity.node(), trial.age.node()]);
+    Ok(trace.record(
+        Code::of(codes::AIR_PHOTOLYSED_CH4),
+        methane_left(*kept.value(), *gravity.value(), &sources, age),
+        &from,
+    )?)
 }
 
 /// The share of its air the planet keeps on the cosmic shoreline (step 2

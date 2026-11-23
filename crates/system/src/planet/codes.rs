@@ -205,8 +205,8 @@ pub(crate) const AIR_SHORELINE_KEPT: &str = "planet.air.shoreline-kept";
 /// Share of the SO2 the air keeps against its wash-out: wet or oxidising,
 /// a day and a half's worth; dry, in proportion to its column.
 pub(crate) const AIR_SO2_KEPT: &str = "planet.air.so2-kept";
-/// Partial pressure of N2 in the air: the outgassed one times the
-/// shoreline's share.
+/// Partial pressure of N2 the cosmic shoreline kept: the outgassed one
+/// times the shoreline's share.
 pub(crate) const AIR_KEPT_N2: &str = "planet.air.kept.n2";
 /// Partial pressure of CO2 in the air (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_CO2: &str = "planet.air.kept.co2";
@@ -217,16 +217,50 @@ pub(crate) const AIR_KEPT_CH4: &str = "planet.air.kept.ch4";
 /// Partial pressure of NH3 in the air (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
 /// Partial pressure of SO2 in the air: the outgassed one times the
-/// shoreline's share and the share the wash-out leaves.
+/// shoreline's share and the share the wash-out leaves; the air's, no
+/// later step changing it.
 pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
 /// Partial pressure of O2 in the air (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
+/// Partial pressure of CH4 the stars' ultraviolet leaves of the kept one
+/// (`science::photochemistry::methane_left`), from the surface gravity,
+/// each star's flux and history (its mass, the metallicity and the age).
+pub(crate) const AIR_PHOTOLYSED_CH4: &str = "planet.air.photolysed.ch4";
+/// Whether the air is reducing, Titan's: methane left by the photolysis
+/// and an equilibrium temperature cold enough for it to survive
+/// (`science::photochemistry::reducing`); always false when the chain
+/// does not hold a reducing air's CO2 back. A reducing air outgasses no
+/// CO2 ([`AIR_OUTGASSED_CO2`] is then 0 and derives from it).
+pub(crate) const AIR_REDUCING: &str = "planet.air.reducing";
+/// Partial pressure of CO2 the cold trap leaves as gas: the kept one,
+/// capped by the CO2 frost pressure at the equilibrium temperature below
+/// CO2's triple point (`science::volatiles::co2_frost_pressure`).
+pub(crate) const AIR_TRAPPED_CO2: &str = "planet.air.trapped.co2";
+/// Partial pressure of NH3 the cold trap leaves as gas (see
+/// [`AIR_TRAPPED_CO2`], `science::volatiles::ammonia_frost_pressure`).
+pub(crate) const AIR_TRAPPED_NH3: &str = "planet.air.trapped.nh3";
+/// CO2 the cold trap froze out, bar: the photolysed CO2 (the photolysis
+/// leaves it as kept) less the trapped one. Legacy books all of it as a
+/// frost, which overstates it on small icy bodies (#590).
+pub(crate) const AIR_FROZEN_CO2: &str = "planet.air.frozen-co2";
+/// Partial pressure of N2 once the photochemistry has run: the kept N2
+/// plus the N2 the trapped NH3 leaves once photolysed
+/// (`science::photochemistry::nitrogen_from_ammonia`).
+pub(crate) const AIR_PHOTOCHEMISTRY_N2: &str = "planet.air.photochemistry.n2";
+/// Partial pressure of NH3 once the photochemistry has run: 0 bar, all of
+/// the trapped NH3 photolysed to N2.
+pub(crate) const AIR_PHOTOCHEMISTRY_NH3: &str = "planet.air.photochemistry.nh3";
+/// Partial pressure of CH4 once the photochemistry has run: the photolysed
+/// CH4 where it survives the OH of water vapour, under the equilibrium
+/// temperature of `science::photochemistry::METHANE_SURVIVES`; 0 bar
+/// above it.
+pub(crate) const AIR_PHOTOCHEMISTRY_CH4: &str = "planet.air.photochemistry.ch4";
 /// Surface pressure: the sum of the partial pressures.
 pub(crate) const AIR_PRESSURE: &str = "planet.air.pressure";
 
 /// The gases of the air, each with the code of its outgassed partial
-/// pressure and of its partial pressure in the air, in the contract's
-/// order.
+/// pressure and of its partial pressure the shoreline kept, in the
+/// contract's order.
 pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 7] = [
     (timeline::Gas::N2, AIR_OUTGASSED_N2, AIR_KEPT_N2),
     (timeline::Gas::Co2, AIR_OUTGASSED_CO2, AIR_KEPT_CO2),

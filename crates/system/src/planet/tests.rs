@@ -622,6 +622,25 @@ fn a_giant_above_the_tables_cites_the_mass_they_were_read_at() {
     assert!(read.contains(&t.age.node()));
 }
 
+/// Every node `node` derives from, itself included, walking the
+/// `Origin::Derived` links back to the leaves.
+pub(super) fn ancestry(
+    trace: &Trace,
+    node: timeline::NodeId,
+) -> std::collections::BTreeSet<timeline::NodeId> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut stack = vec![node];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Origin::Derived { from } = &trace.node(id).unwrap().origin {
+            stack.extend(from.iter().copied());
+        }
+    }
+    seen
+}
+
 pub(super) fn derived_from(trace: &Trace, node: timeline::NodeId) -> Vec<timeline::NodeId> {
     match &trace.node(node).unwrap().origin {
         Origin::Derived { from } => from.clone(),
@@ -1289,6 +1308,36 @@ pub(super) const MARS: ReferenceBody = ReferenceBody {
     eccentricity: 0.0934,
 };
 
+/// Source: Titan, 0.0225 M_E (JPL satellite physical parameters, GM
+/// 8978.1371 km^3/s^2, over the IAU nominal Earth GM 3.986004e14 m^3/s^2:
+/// 0.022524) at Saturn's 9.57 au, eccentricity 0.052 (NASA planetary fact
+/// sheet: 1432.0e6 km over 149.6e6, Saturn's orbit); 45 % water by mass
+/// (Sohl et al. 2003, doi:10.1029/2003JE002044: 50 to 60 wt % rock and
+/// iron, via Mosqueira 2026, arXiv:2610.34081, Table A1); a chondritic
+/// rock of core 0.20, legacy's value (Kuskov & Kronrod, COSPAR 2006
+/// abstract: L/LL chondrite, Fe/Si 0.9 to 1.3). Study 23 of the Wiki.
+pub(super) const TITAN: ReferenceBody = ReferenceBody {
+    mass: 0.0225,
+    core_mass_fraction: 0.20,
+    water_fraction: 0.45,
+    orbit: 9.57,
+    eccentricity: 0.052,
+};
+
+/// Source: Callisto, 0.0180 M_E (JPL satellite physical parameters, GM
+/// 7179.2834 km^3/s^2, over the IAU nominal Earth GM: 0.018011) at
+/// Jupiter's 5.20 au, eccentricity 0.049 (NASA planetary fact sheet:
+/// 778.5e6 km over 149.6e6); 50 % water by mass (Kuskov & Kronrod, COSPAR
+/// 2006 abstract: "total amount of H2O in Callisto is found to be 48-55
+/// wt%"); core 0.20 as [`TITAN`]. Study 23 of the Wiki.
+pub(super) const CALLISTO: ReferenceBody = ReferenceBody {
+    mass: 0.0180,
+    core_mass_fraction: 0.20,
+    water_fraction: 0.50,
+    orbit: 5.20,
+    eccentricity: 0.049,
+};
+
 /// Definition: Venus given Earth's bulk water, so Earth's ocean share of
 /// it, a runaway planet that has water to lose (the reference Venus is
 /// dry; a test choice).
@@ -1350,17 +1399,18 @@ pub(super) fn with_fluence(trace: &mut Trace, t: &Trial, fluence: f64) -> Trial 
 }
 
 /// The trial of `body` around the trial's Sun-like source, and its
-/// composition set by hand: Earth's radiogenic abundance, no envelope, a
-/// dry planet inside the ice line (not migrated), no volatile scatter.
+/// composition set by hand: Earth's radiogenic abundance, no envelope,
+/// not migrated when it formed inside the ice line, no volatile scatter.
 pub(super) fn reference_trial(trace: &mut Trace, body: &ReferenceBody) -> (Trial, Drawn) {
     let t = trial(trace, 1, body.mass, body.orbit, body.eccentricity);
+    let inside = t.orbit.semi_major_axis.value().0 < t.ice_line.value().0;
     let drawn = Drawn::fixed(
         &t,
         trace,
         body.core_mass_fraction,
         body.water_fraction,
         0.0,
-        Some(false),
+        inside.then_some(false),
         0.0,
         None,
         None,
