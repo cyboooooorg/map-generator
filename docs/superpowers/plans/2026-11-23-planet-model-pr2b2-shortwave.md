@@ -466,14 +466,19 @@ Waits for Task 1 and the user's ruling if Task 1 stopped.
 - [ ] **Step 1: Write the failing tests** (in `albedo_tests.rs`):
   - `earths_clear_sky_albedo_is_observed_without_aerosols`, a **stop
     test**: clouds 0, deck 0,
-    Earth ground and air: `bond_albedo` within the clear-sky window
-    the user approved after Task 1b (the observed 0.149-0.156 of
-    Stephens et al. 2015 and Kato et al. 2018 includes aerosols; the
-    aerosol-free window Task 1b derives is about 0.017 lower).
+    Earth ground and air: `0.129 <= bond_albedo <= 0.142`, the window
+    the user approved on 2026-11-23 after Task 1b: the observed
+    0.149-0.156 (Stephens et al. 2015; Kato et al. 2018) less the
+    aerosols' 0.017 ± 0.003 (Kim & Ramanathan 2008, Table 3b).
   - `earths_clear_sky_air_absorbs_what_satellites_see` — **stop test**:
-    `absorbed_by_air × 340.25` within the H₂O + CO₂ window Task 1b
-    writes on the page, with its source in the test's doc (or the
-    reference the user chose if Task 1b stopped). The observed 72 ± 3
+    `absorbed_by_air × 340.25` within 48 to 54 W/m² (51 ± 3: water
+    about 50 of 341.8, Kim & Ramanathan 2008 §[51], plus CO₂ 1.0-1.6,
+    Kiehl & Trenberth 1997 Table 4, Hogan & Matricardi 2020 Table 4;
+    the ±3 of Kim & Ramanathan's total), approved by the user on
+    2026-11-23. The test sets the relative humidity so that the
+    column holds 3.0 cm of precipitable water, Kim & Ramanathan's
+    input (Table 2), not the 1.67 cm of 77 % over 288 K: it tests
+    the optics at equal water. The observed 72 ± 3
     W/m² (Kim & Ramanathan 2008; CERES 73.0) includes ozone and
     aerosols, which the model does not carry. Dry air (no H₂O,
     no CO₂) absorbs
