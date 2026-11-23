@@ -631,3 +631,47 @@ fn an_unknown_star_is_the_sun() {
         assert_eq!(budget(star), sun, "{star}");
     }
 }
+
+/// A gravity that is not finite or not positive is no air: the budget is
+/// that of a body without air over the same ground, clouds and deck, never
+/// the NaN that turned into an albedo of 0 and an absorption of 1.
+#[test]
+fn a_weightless_air_is_no_air() {
+    let below = under(0.3, 0.4, 0.2);
+    let airless = earth_budget(&PartialPressures::default(), EARTH_SURFACE_K, below);
+    for g in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        let b = shortwave_budget(
+            &earth_air(),
+            Kelvin(EARTH_SURFACE_K),
+            MetrePerSecondSquared(g),
+            SOLAR_EFFECTIVE_TEMPERATURE,
+            below,
+            &mut ShortwaveCache::default(),
+        );
+        assert!(
+            (b.bond_albedo.get() - airless.bond_albedo.get()).abs() < 1e-12
+                && (b.absorbed_by_air.get() - airless.absorbed_by_air.get()).abs() < 1e-12,
+            "gravity {g}: {b:?} against {airless:?}"
+        );
+    }
+}
+
+/// A star whose temperature is infinite is the Sun, as a NaN or a
+/// temperature that is not positive is.
+#[test]
+fn an_infinite_star_is_the_sun() {
+    let sun = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
+    let infinite = shortwave_budget(
+        &earth_air(),
+        Kelvin(EARTH_SURFACE_K),
+        STANDARD_GRAVITY,
+        Kelvin(f64::INFINITY),
+        clear(),
+        &mut ShortwaveCache::default(),
+    );
+    assert_eq!(sun, infinite);
+    assert_eq!(
+        star_bands(f64::INFINITY),
+        star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0)
+    );
+}

@@ -50,10 +50,10 @@ pub(crate) struct StarBands {
 }
 
 /// The light of a black body at `star_k` (a star of that effective
-/// temperature), by wavelength. A temperature that is not positive (or is
-/// NaN) is the Sun's.
+/// temperature), by wavelength. A temperature that is not positive or not
+/// finite (NaN, infinite) is the Sun's.
 pub(crate) fn star_bands(star_k: f64) -> StarBands {
-    let star_k = if star_k > 0.0 {
+    let star_k = if star_k > 0.0 && star_k.is_finite() {
         star_k
     } else {
         SOLAR_EFFECTIVE_TEMPERATURE.0

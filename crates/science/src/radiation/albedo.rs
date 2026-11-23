@@ -167,9 +167,11 @@ impl ShortwaveCache {
 /// [`Profile::SHORTWAVE`] says), the water clouds (their cover times
 /// [`CLOUD_ALBEDO`]) at their tops inside it, down to the ground; the
 /// deck's share of the disc then reflects [`DECK_ALBEDO`] over the rest.
-/// A star that is not positive (or NaN) is the Sun. A negative or NaN
-/// partial pressure counts as none; without air the ground's albedo
-/// comes back.
+/// A star whose temperature is not positive or not finite (NaN, infinite)
+/// is the Sun. A negative or NaN partial pressure counts as none; without
+/// air the ground's albedo comes back. A gravity that is not finite or not
+/// positive is no air: the budget is that of a body without air, the
+/// ground under the clouds and the deck.
 ///
 /// `cache` keeps the last airs' paths, keyed on the exact bits of their
 /// inputs: a hit returns the bits a fresh air gives.
@@ -188,7 +190,13 @@ pub fn shortwave_budget(
             absorbed_by_air: fraction(0.0),
         };
     }
-    let paths = cache.paths(gases, surface.0, gravity.0, star.0);
+    let weightless = !(gravity.0 > 0.0 && gravity.0.is_finite());
+    let paths = if weightless {
+        // No air: its gravity would only make the Rayleigh depth infinite.
+        cache.paths(&PartialPressures::default(), surface.0, 1.0, star.0)
+    } else {
+        cache.paths(gases, surface.0, gravity.0, star.0)
+    };
     let below = paths.budget(
         underneath.ground.get(),
         (underneath.clouds.get() * CLOUD_ALBEDO).clamp(0.0, 1.0),
@@ -202,8 +210,7 @@ pub fn shortwave_budget(
 
 /// `x` as a share, held within 0 to 1 against the rounding of the sums
 /// (a path that absorbs nothing leaves `1 - a - ground` a few ulps below
-/// zero). A NaN, which only a gravity that is not positive makes, reads
-/// as none.
+/// zero). A NaN reads as none.
 fn fraction(x: f64) -> Fraction {
     Fraction::new(x.clamp(0.0, 1.0))
         .unwrap_or_else(|| Fraction::new(0.0).expect("zero is a fraction"))
