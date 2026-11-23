@@ -75,7 +75,7 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 **Interfaces:**
 
 - Produces: `mise run docs:build` (book in `target/book`),
-  `mise run docs:check` (Task 2 appends the figures check to it).
+  `mise run docs:check` (Task 2 puts the figures check first in it).
 
 - [ ] **Step 1: Pin the tools.** Add mdBook, mdbook-katex, mdbook-mermaid
   and lychee to `[tools]` with exact versions (prebuilt binaries through
@@ -84,16 +84,19 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 - [ ] **Step 2: Write `book.toml`.** `src = "."`, `build-dir =
   "../../target/book"`, title "The science behind map-generator",
   `site-url = "/map-generator/"`, `git-repository-url` the repo,
-  preprocessors `katex` and `mermaid` (run `mdbook-mermaid install` once
-  and commit the files it adds).
+  preprocessors `katex` (with `throw-on-error = true`, so a formula
+  KaTeX cannot parse fails the build) and `mermaid` (run
+  `mdbook-mermaid install` once and commit the files it adds).
 - [ ] **Step 3: Write `SUMMARY.md`.** `[Introduction](README.md)`, then
   one part per `###` heading of `README.md` under `## Topics`, same
-  order, same link texts.
+  order, same link texts. A page missing from the README's topics is
+  added to both, under the heading that fits.
 - [ ] **Step 4: Convert the equations.** With a throwaway script (not
   committed): each ` ```math ` … ` ``` ` block becomes `$$` … `$$` at the
-  same indentation. Leave the nested example inside the ` ````markdown `
-  fence of `README.md` as an example of the new rule (`$$`), and update
-  the README's writing rule to say equations use `$…$` and `$$…$$`.
+  same indentation, including the example inside the ` ````markdown `
+  fence of `README.md`, and the README's writing rule then says
+  equations use `$…$` and `$$…$$`. Check in the built `index.html` that
+  this example still shows as code, not as a rendered formula.
 - [ ] **Step 5: Rewrite the outbound links.** Every relative link whose
   target lies outside `docs/science/` becomes an absolute GitHub link
   (Global Constraints); anchors are kept. Links between pages stay
@@ -101,15 +104,15 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 - [ ] **Step 6: Add the tasks.** `docs:build` runs `mdbook build
   docs/science`. `docs:check` runs, in order: a shell check that fails
   naming any `docs/science/*.md` (except `SUMMARY.md`) missing from
-  `SUMMARY.md` and any file still holding a ` ```math ` fence outside the
-  README example; `docs:build`; `lychee --offline --include-fragments
+  `SUMMARY.md` and any file still holding a ` ```math ` fence;
+  `docs:build`; `lychee --offline --include-fragments
   target/book`. Append `docs:check` to `[tasks.ci]` after `md:lint`.
   Shell code inline in `mise.toml` (no script under `tools/`: every
   directory there is a Cargo workspace member).
-- [ ] **Step 7: Verify.** `mise run docs:check` passes. Open
-  `target/book/star-types.html` and `planet-interiors.html` in a browser
-  (or grep the HTML): equations are KaTeX spans, no `$$` left; a Mermaid
-  page holds `<pre class="mermaid">`; no KaTeX error. Then add a dummy
+- [ ] **Step 7: Verify.** `mise run docs:check` passes. Grep
+  `target/book/star-types.html` and `planet-interiors.html`: equations
+  are KaTeX spans, no `$$` left; a Mermaid page holds
+  `<pre class="mermaid">`; no KaTeX error. Then add a dummy
   `docs/science/zz.md`: `docs:check` fails naming it; remove it.
   `mise run md:lint` passes.
 - [ ] **Step 8: Commit** `docs(science): build the science reference
@@ -136,11 +139,15 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 
   ```rust
   pub struct Figure { pub name: &'static str, pub render: fn() -> Result<String, FigureError> }
-  pub enum FigureError { Draw(String) }          // Display + Error
-  pub fn figures() -> Vec<Figure>                  // Tasks 3 and 4 push theirs here
-  pub fn stale(dir: &Path) -> Result<Vec<&'static str>, FigureError> // names whose file is missing or differs
-  pub fn register_font()                            // once, before any render
+  pub enum FigureError { Draw(String), Io(String) } // Display + Error
+  pub fn figures() -> Vec<Figure>                    // Tasks 3 and 4 add theirs here
+  pub fn stale(dir: &Path) -> Result<Vec<&'static str>, FigureError> // missing or different files
+  pub(crate) fn svg(width: u32, height: u32, draw: impl FnOnce(DrawingArea<SVGBackend, Shift>) -> Result<(), FigureError>) -> Result<String, FigureError>
   ```
+
+  `svg` registers the committed font once (`std::sync::Once`) and renders
+  into a string; every figure draws through it, so none can forget the
+  font.
 
 - CLI: `figures [--out DIR] [--check]`, default `DIR` =
   `docs/science/figures`. Without `--check`, writes every figure. With it,
@@ -150,15 +157,17 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
   with a test-only figure `fn sample() -> Result<String, FigureError>`
   drawing one line and a text label:
   - `rendering_twice_gives_the_same_bytes`: `sample()` twice, equal.
-  - `text_uses_the_committed_font`: the SVG names the registered family
-    and holds `<text`.
+  - `text_renders_without_a_system_font`: `sample()` is `Ok` and holds
+    `<text` (with `ab_glyph` and no font registered, plotters fails to
+    measure text, so this proves the committed font is used).
   - `a_missing_file_is_stale` and `a_changed_file_is_stale` (tempdir):
-    `stale` returns the name; `a_fresh_file_is_not_stale`: empty.
+    `stale` returns the name; `a_fresh_file_is_not_stale`: empty
+    (`tempfile` from `[workspace.dependencies]` as a dev-dependency).
   - `figure_names_are_unique`: over `figures()`.
 - [ ] **Step 2: Run** `cargo nextest run -p figures`: fails (no code).
-- [ ] **Step 3: Implement.** Render with `SVGBackend::with_string`;
-  `register_font` registers the committed OFL font (bytes by
-  `include_bytes!`) under the family `sans-serif` with
+- [ ] **Step 3: Implement.** `svg` renders with
+  `SVGBackend::with_string` and registers the committed OFL font (bytes
+  by `include_bytes!`) under the family `sans-serif` with
   `plotters::style::register_font`. Pick a sans-serif OFL font (e.g.
   Noto Sans or Source Sans 3), regular weight only. `main.rs` parses the
   two flags by hand like `tools/opacity-table`.
@@ -193,7 +202,10 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
   - `the_curves_cover_the_mass_range`: the sampled series (a private
     `fn series(age: Stage) -> Vec<(f64, f64, f64)>` of mass, luminosity,
     radius) spans 0.1 to 8 M☉ with at least 60 points, log-spaced.
-  - `luminosity_rises_with_mass`: strictly increasing along each series.
+  - `luminosity_rises_with_mass`: strictly increasing along each series
+    (physics: the main-sequence mass–luminosity relation). If it fails,
+    at the 0.30-0.35 M☉ seam for instance, stop and report it: do not
+    relax the test.
   - `the_figure_renders`: `main_sequence_figure()` is `Ok` and contains
     the label `Sun`.
 - [ ] **Step 2: Run:** fails.
@@ -208,7 +220,7 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
   `stellar::main_sequence` (YREC grid, `crates/science/data/STELLAR.md`
   as a GitHub link) and regenerated by `mise run docs:figures`.
 - [ ] **Step 6: Verify** `mise run ci` passes (includes `docs:check`).
-- [ ] **Step 7: Commit** `docs(science): draw the main sequence from
+- [ ] **Step 7: Commit** `feat(figures): draw the main sequence from
   the stellar grid`.
 
 ### Task 4: Giant-planet radius figure
@@ -223,8 +235,9 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 **Interfaces:**
 
 - Consumes: `science::giants::{giant, Giant, GiantError, JUPITER_RADIUS}`,
-  `science::constants::JUPITER_MASS_PARAMETER`, units `EarthMass`,
-  `EarthFlux`, `Gyr`, `Kilogram`, `Metre`.
+  `science::constants::JUPITER_MASS_PARAMETER` and the gravitational
+  constant of `science::constants`, units `EarthMass`, `EarthFlux`,
+  `Gyr`, `Kilogram`, `Metre`.
 - Produces: `fn giant_radius_figure() -> Result<String, FigureError>`,
   registered as `"giant-radius"`.
 
@@ -237,14 +250,17 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
   EarthFlux); one curve per core 0, 10 and 25 M⊕; masses log-spaced
   from 20 M⊕ to 3 000 M⊕. Axes in Jupiter units: mass via `Kilogram` and
   `JUPITER_MASS_PARAMETER / G`, radius via `JUPITER_RADIUS`. Jupiter and
-  Saturn points: masses and equatorial radii at 1 bar from the NASA
-  planetary fact sheets, as `const`s with `Source:` doc comments.
+  Saturn points: masses and radii from the NASA planetary fact sheets,
+  as `const`s with `Source:` doc comments, using the radius convention
+  (equatorial or mean) that Fortney et al. (2007) use when they compare
+  their models with Jupiter and Saturn. The caption states it, and that
+  the curves are at Jupiter's distance (Saturn sits at 9.6 au).
 - [ ] **Step 4: Run** the tests, then `mise run docs:figures`.
 - [ ] **Step 5: Embed** in `planet-interiors.md` with a caption naming
   `giants::giant`, Fortney et al. (2007) and the fact sheets (add them to
   the page's Sources if missing).
 - [ ] **Step 6: Verify** `mise run ci` passes.
-- [ ] **Step 7: Commit** `docs(science): draw giant radii from the
+- [ ] **Step 7: Commit** `feat(figures): draw giant radii from the
   Fortney grid`.
 
 ### Task 5: CI and deployment
@@ -264,7 +280,8 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 
 - [ ] **Step 1: `ci.yml`.** A `docs` output in `changes` matching
   `docs/science/**`, `tools/figures/**`, `crates/science/**`,
-  `mise.toml`, `.github/workflows/**`. Job `docs` (if that output is
+  `Cargo.toml`, `Cargo.lock`, `mise.toml`, `.github/workflows/**`.
+  Job `docs` (if that output is
   true): checkout, `jdx/mise-action@v5`, rust-cache like `tier1`,
   `mise run docs:check`. Add `docs` to `ci-ok.needs`.
 - [ ] **Step 2: `pages.yml`.** On push to `main` and
