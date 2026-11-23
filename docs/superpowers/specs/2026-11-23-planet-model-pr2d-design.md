@@ -117,9 +117,9 @@ the ice-crust law as a declared departure (#560).
 
 | PR | Content | Changes the generated systems |
 | --- | --- | --- |
-| 2d-1 Air | Frost curves (NH₃, N₂, SO₂) and `condense`; methane photolysis; cold trap; photochemistry; the reducing-air rerun | No |
-| 2d-2 Surface | Surface cover of the albedo; surface liquids; frost cover; volcanism for the snowball chance | No |
-| 2d-3 Climate | The solver with the #593 levers; snowball branches and their draw; `boils` loop; steam envelope | No |
+| 2d-1 Air | NH₃ frost curve; methane photolysis; cold trap; photochemistry; the reducing-air rerun | No |
+| 2d-2 Surface | Surface cover of the albedo; surface liquids; N₂ and SO₂ frost curves and frost cover; volcanism for the snowball chance | No |
+| 2d-3 Climate | The solver with the #593 levers and `condense`; snowball branches and their draw; the reducing-air fallback; `boils` loop; steam envelope | No |
 | 2d-4 Class and wiring | Life and oxygenation; class; public `class_of` and `model`; wiring; `ENGINE_VERSION` 4; tier-2 net | Yes |
 
 Each opens with its study (below), then ports test first. The design
@@ -132,15 +132,29 @@ From `atmosphere.rs` and `mod.rs` `bare_air` (l.~915-1075). The steps
 run inside the bare air, after the shoreline and before the climate,
 in legacy's order:
 
-1. `methane_photolysis` (l.1115) takes CH₄ by the Lyman α fluence. It
-   reads the fluence the timeline carries
-   (`StellarSources::band_total(|s| &s.lyman_alpha)`), summed over the
-   sources, instead of legacy's `xuv::integrated_ratio` on one star:
-   one code path for the fluence.
+1. `methane_photolysis` (l.1115): methane outgassed steadily over the
+   planet's age, destroyed at a rate set by the Lyman α light, gathers
+   only once the supply outruns the destruction. Legacy's law is ported,
+   extended to several stars (decided with the user on 2026-11-23): the
+   destruction at a time `t` is the sum over the sources of each one's
+   flux times its own Lyman α ratio at `t` (`science::xuv::ratio`,
+   `integrated_ratio`, the law the timeline's fluence comes from); the
+   onset where supply overtakes destruction is found on that sum (the
+   analytic `age_below_ratio` for one source, a bisection for more).
+   With one source the result is legacy's. A test checks that the
+   destruction integrated from birth to the age matches the yield times
+   the fluence the timeline carries
+   (`StellarSources::band_total(|s| &s.lyman_alpha)`): one law, not a
+   second path. Taking only the total fluence (methane outgassed minus
+   the whole destruction) was rejected: it loses the methane that
+   gathers once the young star's Lyman α has faded.
 2. `reducing` and `without_co2_if_reducing` (l.1170, l.1217): a reducing
    air is outgassed again without CO₂, and the escape rerun on it.
    Legacy runs the whole `bare_air` twice; the port reruns only the
-   outgassing and the steps after it.
+   outgassing and the steps after it. Legacy also undoes the hold-back
+   when the climate does not leave a Titan-like air (`bare`, `mod.rs`
+   l.~873, `titan_like_air`): that fallback reads the climate and comes
+   with 2d-3.
 3. `cold_trap` (l.1158) caps CO₂ and NH₃ at their frost curves at the
    equilibrium temperature.
 4. `photochemistry` (l.1252): NH₃ to N₂, CH₄ kept only below
@@ -153,9 +167,13 @@ the gas it changes with the previous node of that gas as its cause
 The frozen CO₂ (`photolysed.co2 - trapped.co2`) is recorded as its own
 node: the carbon cycle of 2d-3 reads it.
 
-The frost curves join `science::volatiles` beside the CO₂ and CH₄
-curves already there. The legacy `CO2_FROST` and `CH4_FROST` are not
-ported: the rewrite's curves replace them.
+The NH₃ frost curve joins `science::volatiles` beside the CO₂ and CH₄
+curves already there; the cold trap reads the CO₂ curve of
+`volatiles`. The legacy `CO2_FROST` and `CH4_FROST` are not ported:
+the rewrite's curves replace them. `condense` works at the surface
+temperature inside the climate's fixed point and reads the liquids
+(`frozen_share`, `sea_freezes_k`): it comes with 2d-3, and the N₂ and
+SO₂ frost curves with the frost cover of 2d-2.
 
 Tests: the legacy tests of these functions, and
 `earth_has_no_abiotic_methane_or_ammonia` (#659). The 2c review asked
@@ -269,8 +287,8 @@ section.
 | 2d-1 | `CH4_PER_LYMAN_ALPHA_PHOTON` 13.9 | Yung et al. 1984 read in full: Titan's methane loss over a constant or a decaying Lyman α, whether a yield above one is physical |
 | 2d-1 | `METHANE_SURVIVES_K` 150 | The temperature at which water reaches the upper air and OH oxidises methane |
 | 2d-1 | `NH3_FROST` curve | NH₃ triple point and sublimation enthalpy from NIST or Fray & Schmitt 2009 |
-| 2d-1 | N₂ frost fits, `NITROGEN_ALPHA_BETA_K` | Fray & Schmitt 2009 and Scott 1976 read, not through Lisse 2021 |
-| 2d-1 | `SEA_METHANE_SHARE` 0.5 | Glein & Shock 2013, Tan et al. 2013, Niemann et al. 2005 |
+| 2d-2 | N₂ frost fits, `NITROGEN_ALPHA_BETA_K` | Fray & Schmitt 2009 and Scott 1976 read, not through Lisse 2021 |
+| 2d-2 | `SEA_METHANE_SHARE` 0.5 | Glein & Shock 2013, Tan et al. 2013, Niemann et al. 2005 |
 | 2d-2 | Surface albedos (ocean 0.06, soil 0.25, regolith 0.11, ice 0.6, frost 0.75) | Read the cited sources or measured values; otherwise calibrations with their section |
 | 2d-2 | `SHIELD_BAR` 1e-4 | Whether any source sets the pressure that shields regolith |
 | 2d-2 | Ice line (`ICE_LINE_K`, `ICE_LINE_CONTRAST_K`, its form) | Budyko 1969, North 1975 |
