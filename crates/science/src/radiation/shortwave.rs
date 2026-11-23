@@ -299,10 +299,6 @@ impl Stack {
 /// Bond albedo of the sky over the ground) and absorbed by the air (its
 /// gases and haze); the rest is absorbed by the ground.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the star cache of PR 2b-2 Task 7 reads it")
-)]
 pub(crate) struct Budget {
     pub(crate) albedo: f64,
     pub(crate) air: f64,
@@ -415,10 +411,6 @@ fn piece_depth_fast(piece: &Piece, lower: f32, upper: f32) -> f64 {
 /// reflectance and transmission), its Rayleigh depth at 550 nm and its
 /// column ([`super::column::levels`], `None` without air); the
 /// ground and the clouds under it are the cover's ([`Paths::budget`]).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the star cache of PR 2b-2 Task 7 reads it")
-)]
 pub(crate) struct Air<'a> {
     pub(crate) haze: (f64, f64),
     pub(crate) rayleigh_550: f64,
@@ -432,10 +424,6 @@ pub(crate) struct Air<'a> {
 /// asks for the albedo of the same air under covers that change with its
 /// temperature, solves the air once ([`Paths::budget`] then costs a few
 /// operations per path).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the star cache of PR 2b-2 Task 7 reads it")
-)]
 #[derive(Clone, Debug)]
 pub(crate) struct Paths {
     paths: Vec<(f64, Stack, Stack)>,
@@ -445,10 +433,6 @@ impl Paths {
     /// The paths of `bands` (each band's `(550 nm / lambda)^4` and its
     /// share of the light, bluest first, as
     /// [`super::starlight::StarBands`] holds them) through `air`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the star cache of PR 2b-2 Task 7 reads it")
-    )]
     pub(crate) fn through(air: &Air, bands: &[(f64, f64)]) -> Paths {
         let (hr, ht) = air.haze;
         let top = Stack::EMPTY.over(hr, ht);
@@ -523,10 +507,6 @@ impl Paths {
     /// The [`Budget`] of these paths over a ground of albedo `ground`,
     /// with the water clouds' layer of reflectance `cloud` at the cloud
     /// tops.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the star cache of PR 2b-2 Task 7 reads it")
-    )]
     pub(crate) fn budget(&self, ground: f64, cloud: f64) -> Budget {
         let cloud = cloud.clamp(0.0, 1.0);
         let mut out = Budget {

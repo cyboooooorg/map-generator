@@ -273,10 +273,6 @@ impl Gas {
 /// mass (the page's `tau_R = sigma p / (mu m_u g)`). A negative or NaN
 /// part counts as none; no air gives 0. All seven gases scatter, water
 /// vapour included (legacy left it out).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the shortwave budget of PR 2b-2 Task 7 reads it")
-)]
 pub(crate) fn rayleigh_depth_550(gases: &PartialPressures, gravity_m_s2: f64) -> f64 {
     let parts = [
         (Gas::N2, gases.n2),

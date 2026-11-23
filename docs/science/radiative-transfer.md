@@ -802,6 +802,15 @@ the Bond albedo follow in 2b-2.
     relative humidity of Manabe & Wetherald 1967 (equation 2), the same
     figure as the column's test profile; the paper is paywalled and the
     value is confirmed indirectly (below).
+  - *Cloud albedo.* The water clouds reflect 0.276 of the light falling
+    on their share of the sky, fitted by bisection so that Earth's Bond
+    albedo is 0.293 (Stephens et al. 2015), over a ground of 0.122, the
+    77 % air over 288 K and the law's cloud cover of 0.682. No
+    observation gives a single cloud reflectance for one column. The fit
+    absorbs what the port lacks: the clear-sky terms of the measured Sun,
+    ozone and O₂ (#653, #655), the aerosols' reflection, and the column's
+    1.735 cm of water against 2.45 to 2.53 observed (#654). The legacy
+    fitted 0.252 on 0.30.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;

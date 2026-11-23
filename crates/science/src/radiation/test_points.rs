@@ -98,3 +98,14 @@ pub(super) const VENUS_SO2_BAR: f64 = VENUS_PRESSURE_BAR * 150e-6;
 /// "Global CH4 Monthly Means", page last updated 2026-11-19, read
 /// 2026-11-23), as a mixing ratio of 1.93637e-6 (the tests' 1.9 ppm).
 pub(super) const EARTH_METHANE_MIXING_RATIO: f64 = 1936.37e-9;
+
+/// Source: Earth's clear-sky surface albedo, the reflected over the
+/// incoming shortwave at the surface under clear skies of CERES EBAF
+/// Ed4.0, 29.8 / 243.8 W/m² = 0.122 (Kato et al. 2018, *J. Climate* 31,
+/// 4501, doi:10.1175/JCLI-D-17-0208.1, Table 5), the ground the shortwave
+/// tests put under Earth's air.
+pub(super) const EARTH_GROUND_ALBEDO: f64 = 0.122;
+
+/// Definition: the sunlight on Earth averaged over the globe, W/m², a
+/// quarter of `SOLAR_IRRADIANCE`: 340.25.
+pub(super) const EARTH_INCOMING_W_M2: f64 = crate::constants::SOLAR_IRRADIANCE.0 / 4.0;

@@ -705,13 +705,6 @@ pub(crate) struct Levels {
 /// the skin it sets, and the air above the tropopause absorbs next to
 /// none of the near infrared that CO₂ and water take). `None` without
 /// air.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the star cache of PR 2b-2 Task 7 builds its column"
-    )
-)]
 pub(crate) fn levels(
     gases: &PartialPressures,
     surface_k: f64,

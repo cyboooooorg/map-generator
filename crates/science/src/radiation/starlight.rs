@@ -52,10 +52,6 @@ pub(crate) struct StarBands {
 /// The light of a black body at `star_k` (a star of that effective
 /// temperature), by wavelength. A temperature that is not positive (or is
 /// NaN) is the Sun's.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the star cache of PR 2b-2 Task 7 reads it")
-)]
 pub(crate) fn star_bands(star_k: f64) -> StarBands {
     let star_k = if star_k > 0.0 {
         star_k

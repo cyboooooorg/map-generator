@@ -1,6 +1,7 @@
 //! Radiative transfer of a planetary atmosphere: the gases it holds, and
 //! the laws the longwave column is built on.
 
+pub mod albedo;
 pub mod clouds;
 pub mod column;
 pub(crate) mod fast_math;

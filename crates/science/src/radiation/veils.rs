@@ -11,7 +11,6 @@ use crate::units::{Bar, Fraction, Kelvin};
 /// value confirmed by the audit, Wiki study 19; the legacy's DOI was
 /// wrong; Pioneer Venus gave 0.80 +- 0.02, NASA's fact sheet 0.77). Its
 /// only body: the deck hides all below it.
-#[expect(dead_code, reason = "the shortwave budget of PR 2b-2 Task 7 reads it")]
 pub(crate) const DECK_ALBEDO: f64 = 0.76;
 
 /// Calibration: least SO₂, bar, that makes a sulphuric deck. Venus holds
@@ -62,12 +61,10 @@ const HAZE_CH4_PER_CO2: f64 = 0.2;
 /// bright ice below. What was searched and not found: the split between
 /// the two in any source (Li 2011, Creecy et al. 2021, Tomasko et al.
 /// 2008); it is a fit choice.
-#[expect(dead_code, reason = "the shortwave budget of PR 2b-2 Task 7 reads it")]
 pub(crate) const HAZE_ALBEDO: f64 = 0.25;
 
 /// Calibration: the share of the light falling on a thick methane haze
 /// that it absorbs, 0.55 (see [`HAZE_ALBEDO`]).
-#[expect(dead_code, reason = "the shortwave budget of PR 2b-2 Task 7 reads it")]
 pub(crate) const HAZE_ABSORPTION: f64 = 0.55;
 
 /// Share of the disc under a sulphuric acid deck, 0 to 1, over a surface
@@ -92,10 +89,6 @@ pub fn sulphuric_deck(surface: Kelvin, so2: Bar) -> Fraction {
 
 /// Strength of a methane haze in `gases`, 0 to 1 ([`HAZE_CH4_BAR`],
 /// [`HAZE_CH4_PER_CO2`]).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the shortwave budget of PR 2b-2 Task 7 reads it")
-)]
 pub(crate) fn haze(gases: &PartialPressures) -> f64 {
     let ch4 = gases.ch4.max(0.0);
     if ch4 <= 0.0 || ch4.is_nan() {
