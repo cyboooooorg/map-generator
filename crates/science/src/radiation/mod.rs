@@ -7,6 +7,7 @@ pub(crate) mod fast_math;
 pub mod gases;
 pub(crate) mod ktable;
 pub mod methane;
+pub(crate) mod rayleigh;
 pub(crate) mod shortwave;
 pub(crate) mod spectrum;
 pub(crate) mod starlight;
