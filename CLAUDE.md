@@ -68,7 +68,11 @@ Claude and every agent:
    Its doc comment starts with `Source:` (the citation), `Calibration:`
    or `Definition:` (an exact definition or a unit conversion). A tier-1
    test fails otherwise.
-4. `branch-reviewer` flags any new number that is neither sourced nor
+4. **Every page of `docs/science/` lists its references** under a
+   non-empty `## Sources` heading. A tier-1 test fails otherwise; the
+   pages exempted for now are listed, with why, in
+   `tools/guardrails/src/science_pages.rs`.
+5. `branch-reviewer` flags any new number that is neither sourced nor
    calibrated, in the engines too.
 
 ## Tests
@@ -83,9 +87,12 @@ Three tiers with budgets (the user's to change), split by
 | 3. Heavy | 15 km worlds, oracle, censuses, profiles | `#[ignore = "heavy: …"]` | None |
 
 - `mise run ci` runs what the pipeline runs (format, clippy, tiers 1 and
-  2 with their budgets, markdownlint): run it before every pull request.
+  2 with their budgets, markdownlint, `docs:check`): run it before every
+  pull request.
   `mise run web:check` covers the front-end; never run it in a worktree
   (no `npm ci` there on this machine).
+- A change to a law drawn by a figure regenerates it with
+  `mise run docs:figures`: CI fails on a stale figure.
 - No test generates a system or a world of its own outside tier 3:
   tier-2 tests assert on the shared reference systems.
 - Expected values come from sources, not from the code. A test that pins

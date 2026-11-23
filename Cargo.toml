@@ -26,6 +26,9 @@ clap = { version = "4.6.9", features = ["derive"] }
 getrandom = "0.4.3"
 png = "0.18.1"
 noise = "0.9.0"
+# Figures of the science book (tools/figures): SVG only, text through the
+# committed font (ab_glyph), no bitmap, no system font.
+plotters = { version = "0.3.7", default-features = false, features = ["svg_backend", "line_series", "point_series", "ab_glyph"] }
 
 # The draws of the engines: a seeded generator from the seed hierarchy.
 rand_core = "0.10.1"

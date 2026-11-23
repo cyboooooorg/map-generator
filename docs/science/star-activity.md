@@ -25,9 +25,9 @@ magnetised wind, so its rotation period grows with age. Gyrochronology
 fits this as a function of the colour $B-V$ and the age $t$ in Myr
 (Mamajek & Hillenbrand 2008, table 10):
 
-```math
+$$
 P = a\,(B-V-c)^{b}\,t^{n},\qquad a=0.407,\ b=0.325,\ c=0.495,\ n=0.566
-```
+$$
 
 - **In words**: at a given colour the period grows as the square root of
   the age, roughly; redder (cooler) stars turn more slowly at the same
@@ -57,18 +57,18 @@ The convective turnover time $\tau_c$ is how long a convective cell takes
 to rise and sink. Wright et al. (2018, eq. 6) calibrate it from the mass
 $M$ in solar masses, for $0.08 < M < 1.36$:
 
-```math
+$$
 \log_{10}\tau_c = 2.33 - 1.50\,M + 0.31\,M^2 \quad\text{(days)}
-```
+$$
 
 The Rossby number is $Ro = P/\tau_c$. The ratio of the X-ray to the
 bolometric luminosity, a measure of the dynamo, is flat below a
 saturation value and falls as a power of $Ro$ above it (Wright et al.
 2011, unbiased sample):
 
-```math
+$$
 \frac{L_X/L_{bol}}{(L_X/L_{bol})_{sat}} = \min\left(1,\ \left(\frac{Ro}{0.13}\right)^{-2.70}\right)
-```
+$$
 
 - **In words**: below $Ro = 0.13$ the dynamo is as strong as it gets; a
   star that turns ten times slower than that is 500 times quieter.
@@ -884,6 +884,6 @@ against the VizieR catalogue.
 
 - [What does a G-type star mean?](star-types.md): the star's type,
   temperature, mass and radius this article starts from.
-- [docs/system-spec.md](../system-spec.md): where the star's activity is
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): where the star's activity is
   stored in a system.
 - Issue #343: the living star, of which this model is part 1.

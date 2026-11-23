@@ -33,9 +33,9 @@ A star of luminosity $L$ spreads its light over a sphere. At a distance
 $d$, a planet gets the flux $S$, here in units of what Earth gets ($L$ in
 Sun luminosities, $d$ in astronomical units, AU):
 
-```math
+$$
 S = \frac{L}{d^2}
-```
+$$
 
 **In words.** Twice as far, four times less light.
 
@@ -50,9 +50,9 @@ Bond albedo) and radiates the rest as a black body over its whole surface.
 It settles at the equilibrium temperature $T_\text{eq}$, with $\sigma$ the
 Stefan–Boltzmann constant ($5.67\times10^{-8}$ W m⁻² K⁻⁴):
 
-```math
+$$
 T_\text{eq} = \left(\frac{S\,(1-A)}{4\sigma}\right)^{1/4}
-```
+$$
 
 The 4 is the ratio of the planet's surface to the disc it shows its star.
 
@@ -151,12 +151,12 @@ as a fit to the star's effective temperature $T_\text{eff}$, with
 $T_\star = T_\text{eff} - 5780$ K, for 2,600 to 7,200 K. The distance
 follows from $S = L/d^2$:
 
-```math
-S_\text{eff} = S_{\text{eff}\odot} + aT_\star + bT_\star^2 + cT_\star^3
-+ dT_\star^4,
+$$
+S_\text{eff} = S_{\text{eff}\odot} + aT_\star + bT_\star^2 + cT_\star^3 +
+dT_\star^4,
 \qquad
 d = \sqrt{\frac{L/L_\odot}{S_\text{eff}}}\ \text{AU}
-```
+$$
 
 The coefficients for a planet of one Earth mass (Kopparapu et al. 2014,
 Table 1; the $d$ of this table is a coefficient, not the distance):
@@ -403,5 +403,5 @@ every other planet, temperatures in kelvin scale as $S^{1/4}$.
   sets the zone.
 - [What colour would plants be under another star?](plant-colours.md):
   life in the zone of another star.
-- [docs/system-spec.md](../system-spec.md): where each planet type sits
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): where each planet type sits
   in a planetary system.

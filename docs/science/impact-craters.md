@@ -27,11 +27,11 @@ they came from was counted. Neukum, Ivanov & Hartmann (2001) fit the
 cumulative number $N_1$ of craters of 1 km or more per km² on a surface of
 age $T$ (in Ga, billions of years) with:
 
-```math
+$$
 N_1(T) = a\left(e^{bT} - 1\right) + c\,T,
 \quad a = 5.44\times10^{-14}\ \text{km}^{-2},\ b = 6.93\ \text{Ga}^{-1},
 \ c = 8.38\times10^{-4}\ \text{km}^{-2}\,\text{Ga}^{-1}
-```
+$$
 
 Marchi et al. (2009) quote the same coefficients from Neukum's earlier
 work, and fit the same function to their own model.
@@ -50,9 +50,9 @@ whole Moon (3.8 × 10⁷ km²) gets one crater of 1 km or more about every
 The sizes follow a power law. With $N(>D)$ the number of craters larger than
 $D$ per km²:
 
-```math
+$$
 N(>D) = N_1\,D^{-\beta}, \qquad \beta \approx 2 \quad (D \text{ in km})
-```
+$$
 
 **In words.** Each halving of the size gives about four times as many
 craters. Hartmann (2005) fits the lunar curve in pieces: a slope of −1.80
@@ -95,9 +95,9 @@ rock. O'Keefe & Ahrens (1993), from impact simulations, find the transition
 diameter $D_t$ for a crust of effective strength $Y$ and density $\rho$ under
 a gravity $g$:
 
-```math
+$$
 D_t = 9.0\,\frac{Y}{\rho\,g}
-```
+$$
 
 **In words.** The stronger the rock, the larger a crater it can hold up; the
 stronger the gravity, the sooner it collapses. For the same rock, $D_t$
@@ -119,11 +119,11 @@ How deep they are, on the Moon, for a diameter $D$ and a depth $d$ from the
 rim to the floor, both in km (Pike 1977, as given by Feoktistova & Ipatov
 2021):
 
-```math
+$$
 d = 0.196\,D^{1.01} \quad (D < 15\ \text{km}),
 \qquad
 d = 1.044\,D^{0.301} \quad (D \ge 15\ \text{km})
-```
+$$
 
 **In words.** Simple craters keep the same shape at every size. Complex
 craters barely get deeper as they widen: their collapse spreads them out.
@@ -165,9 +165,9 @@ impacts stir the ground and let it creep downhill, which smooths relief as
 heat spreads in a solid. With $h$ the height of the ground, $t$ the time and
 $\kappa$ a *topographic diffusivity*:
 
-```math
+$$
 \frac{\partial h}{\partial t} = \kappa\,\nabla^2 h
-```
+$$
 
 **In words.** Bumps flatten and hollows fill, the sharpest ones fastest. A
 feature fades once $\sqrt{\kappa t}$, the distance the creep reaches, is a
@@ -849,5 +849,5 @@ more are flooded flat at a date of that window and darkened.
   other way a surface is renewed.
 - [What decides whether a world has an atmosphere?](atmospheres.md): the air
   that screens small impactors.
-- The README's [Impact craters](../../README.md#impact-craters) and
-  [Epochs](../../README.md#epochs--a-surface-through-time) sections.
+- The README's [Impact craters](https://github.com/cyboooooorg/map-generator/blob/main/README.md#impact-craters) and
+  [Epochs](https://github.com/cyboooooorg/map-generator/blob/main/README.md#epochs--a-surface-through-time) sections.

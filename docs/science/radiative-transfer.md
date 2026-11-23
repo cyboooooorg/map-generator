@@ -28,9 +28,9 @@ the share $A$ of it, its Bond albedo, and has an internal heat flux $q$
 longwave radiation (OLR) of its column of air matches what it absorbs.
 With $\sigma$ the Stefan–Boltzmann constant:
 
-```math
+$$
 \text{OLR}(T_s) = \frac{S\,(1-A)}{4} + q
-```
+$$
 
 The 4 is the ratio of the planet's surface to the disc it shows its star.
 The equilibrium temperature $T_\text{eq}$ is the one a black body would
@@ -70,11 +70,11 @@ average of them (Elsasser 1942; Koll et al. 2023, who take the same 3/5).
 Each layer sends out its own Planck flux, and the layers above it dim that
 flux. Summed over the layers and over all the bands, this is the OLR.
 
-```math
-\text{OLR} = \sum_\text{bands} \left[\pi B_\nu(T_s)\,\mathcal{T}_{s}
-  + \sum_\text{layers}\pi B_\nu(T_i)\,\left(\mathcal{T}_{i-1}-\mathcal{T}_{i}\right)
+$$
+\text{OLR} = \sum_\text{bands} \left[\pi B_\nu(T_s)\,\mathcal{T}_{s} +
+  \sum_\text{layers}\pi B_\nu(T_i)\,\left(\mathcal{T}_{i-1}-\mathcal{T}_{i}\right)
   \right]
-```
+$$
 
 Here $B_\nu(T)$ is the Planck function, $\mathcal{T}_i$ the transmission
 to space from the top of layer $i$ (and $\mathcal{T}_s$ from the ground),
@@ -104,12 +104,12 @@ its latent heat, $R_a$ and $c_{pa}$ the gas constant and the heat capacity
 of the dry air, and $R_v$ the vapour's gas constant, the slope of
 temperature against the dry air's pressure $p_a$ is:
 
-```math
+$$
 \frac{d\ln T}{d\ln p_a} = \frac{R_a}{c_{pa}}\,
   \frac{1 + \dfrac{L\,r}{R_a T}}
-       {1 + \left(\dfrac{c_{pv}}{c_{pa}}
-          + \left(\dfrac{L}{R_v T} - 1\right)\dfrac{L}{c_{pa}T}\right) r}
-```
+       {1 + \left(\dfrac{c_{pv}}{c_{pa}} +
+          \left(\dfrac{L}{R_v T} - 1\right)\dfrac{L}{c_{pa}T}\right) r}
+$$
 
 Pierrehumbert's equation number for it (2.33) is quoted from a secondary
 source: the book itself was not opened for this article. The app writes the
@@ -129,9 +129,9 @@ Far above, the air stops cooling. A thin atmosphere that absorbs in the
 infrared is, high enough, at the skin temperature, where it radiates as
 much as it receives:
 
-```math
+$$
 T_\text{skin} = T_\text{eq}\,2^{-1/4} \approx 0.84\,T_\text{eq}
-```
+$$
 
 (Pierrehumbert 2010, §3.6). On Earth, the real tropopause sits at about
 0.1 bar, the pressure where the air turns transparent to the heat that
@@ -162,9 +162,9 @@ A real troposphere is not saturated up to its top. Manabe & Wetherald
 (1967) set the relative humidity to fall with the pressure $p$, from
 its surface value $RH_s$ (0.77, from their model), with $Q = p/p_s$:
 
-```math
+$$
 RH = RH_s\,\frac{Q - 0.02}{1 - 0.02}
-```
+$$
 
 The formula and the 0.77 are quoted from the climate model `climlab`, which
 follows Manabe & Wetherald, and from arXiv:2006.03098: the 1967 paper is
@@ -284,9 +284,9 @@ curve $k(g)$, with $g$ the cumulative share of the band, is smooth, and
 a few intervals of $g$ describe it. The transmission of an absorber
 amount $u$ then becomes a short sum:
 
-```math
+$$
 \mathcal{T}(u) = \int_0^1 e^{-k(g)\,u}\,dg \approx \sum_{i=1}^{G} w_i\,e^{-k_i u}
-```
+$$
 
 where $w_i$ is the weight (the width in $g$) of the $i$-th interval. When
 the sorted spectra of two gases overlap in a band, the app combines their
@@ -304,9 +304,9 @@ A cloud layer radiates as a grey body from its top. For a share $f$ of the
 sky covered by clouds whose top is at pressure $p_c$ and whose emissivity
 is $\varepsilon$:
 
-```math
+$$
 \text{OLR} = (1-f)\,\text{OLR}_\text{clear} + f\,\text{OLR}_\text{cloudy}
-```
+$$
 
 The clouds' top sits at 580 hPa, the global annual mean of the ISCCP
 cloud-top pressure (Rossow & Schiffer 1999, §6a and Table 4), that is
@@ -336,12 +336,12 @@ $\lambda = \sqrt{\gamma_1^2 - \gamma_2^2}$, the layer's reflectance and
 transmittance are (Meador & Weaver 1980, eqs. 25 and 26, quoted from the
 ECMWF `ecRad` code that implements them):
 
-```math
+$$
 R = \frac{\gamma_2\sinh\lambda\tau}
          {\lambda\cosh\lambda\tau + \gamma_1\sinh\lambda\tau},\qquad
 T = \frac{\lambda}
          {\lambda\cosh\lambda\tau + \gamma_1\sinh\lambda\tau}
-```
+$$
 
 Stacking the layers, each with its own absorption and scattering, gives
 the reflectance of the whole air over a surface of albedo $A_g$.
@@ -356,10 +356,10 @@ scattered more than the red. For a gas of refractive index $n$, with $N$
 the number density and $F_K$ the King factor that corrects for the
 molecule's shape (Sneep & Ubachs 2005; He et al. 2021):
 
-```math
+$$
 \sigma(\lambda) = \frac{24\pi^3}{\lambda^4 N^2}
   \left(\frac{n^2-1}{n^2+2}\right)^2 F_K
-```
+$$
 
 The optical depth of a column of pressure $p$ is then $\tau_R = \sigma\,p /
 (\mu\,m_u\,g)$, with $\mu$ the mean molecular mass of the gas, $m_u$ the
@@ -720,8 +720,8 @@ reads the forcings, never the central object's kind).
    clouds), and the column reads the temperature.
 
 Two tables hold the spectroscopy, built offline by
-[`tools/opacity-table`](../../tools/opacity-table/README.md) and never by
-the generator:
+[`tools/opacity-table`](https://github.com/cyboooooorg/map-generator/blob/main/tools/opacity-table/README.md)
+and never by the generator:
 
 | Table | What it holds | Size |
 | --- | --- | --- |
@@ -730,7 +730,7 @@ the generator:
 
 Their inputs, versions, download dates and checksums, the regeneration
 commands and the stale paths are in
-[`crates/science/data/OPACITY.md`](../../crates/science/data/OPACITY.md),
+[`crates/science/data/OPACITY.md`](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/OPACITY.md),
 which moves there with the port. The line lists are HITRAN2024 "as served"
 (a later fetch may differ: the checksums of the inputs tell), the water
 continuum is MT_CKD 4.3 (`absco-ref_wv-mt-ckd.nc`) and the CO₂ continuum is
@@ -1293,5 +1293,5 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
   absorption), kept until it is rewritten.
 - The audit of every number and citation of this page, in the Wiki:
   [Study: radiative transfer audit](https://github.com/cyboooooorg/map-generator/wiki/19-radiative-transfer-audit).
-- [`crates/science/data/OPACITY.md`](../../crates/science/data/OPACITY.md):
+- [`crates/science/data/OPACITY.md`](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/OPACITY.md):
   provenance of `opacity.bin` and `shortwave.bin`.

@@ -41,11 +41,11 @@ For a plant, what matters is the number of photons, not the power:
 A photon of wavelength $\lambda$ carries the energy $E$, with $h$ Planck's
 constant and $c$ the speed of light:
 
-```math
+$$
 E = \frac{hc}{\lambda},
 \qquad
 hc \approx 1240\ \text{eV nm}
-```
+$$
 
 **In words.** For the same power, red light brings more photons than
 blue, because each red photon carries less energy.
@@ -159,17 +159,17 @@ exported map, plants keep Earth's colours.
 Three pieces, all in the viewer:
 
 1. **How much of a biome is plants**
-   ([`vegetation.ts`](../../web/src/lib/vegetation.ts)): forest and
+   ([`vegetation.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/vegetation.ts)): forest and
    jungle 1, taiga 0.9, wetland 0.8, savanna, shrubland and plain 0.6,
    tundra 0.35, every other biome 0.
 2. **How far to recolour**, from the star's temperature
-   ([`PlanetView.ts`](../../web/src/lib/viewer/PlanetView.ts)): a "cool"
+   ([`PlanetView.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/PlanetView.ts)): a "cool"
    share rising from 0 at 4,900 K to 1 at 3,400 K, and a "hot" share
    rising from 0 at 5,772 K to 1 at 7,300 K. Between 4,900 and 5,772 K,
    K2V included, nothing changes: Kiang et al. (2007b) expect K2V planets
    to look "very similar to the Earth".
 3. **The recolouring** in the surface shader
-   ([`shaders.ts`](../../web/src/lib/viewer/shaders.ts)): the biome's
+   ([`shaders.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/shaders.ts)): the biome's
    colour is pulled towards a dark purple, about a third as bright, and
    then towards a gold as bright as the original, in proportion to its
    share of plants. The dark tint is that dim on purpose: such leaves

@@ -28,9 +28,9 @@ exchanging heat with its surroundings. While it is not saturated it cools
 at the *dry adiabatic lapse rate*, set by gravity $g$ and the heat capacity
 of air at constant pressure $c_p$:
 
-```math
+$$
 \Gamma_d = \frac{g}{c_p}
-```
+$$
 
 **In words.** Every kilometre a dry parcel rises, it loses the same number
 of degrees, whatever its starting temperature.
@@ -49,10 +49,10 @@ Air is saturated when the pressure of its water vapour reaches the
 saturation vapour pressure $e_\text{sat}$, which depends only on the
 temperature $T$ in °C (Roe 2005, eq. 1, after Bolton 1980):
 
-```math
+$$
 e_\text{sat}(T) = 6.112\,\exp\!\left(\frac{17.67\,T}{243.5 + T}\right)
 \ \text{hPa}
-```
+$$
 
 **In words.** The vapour air can hold grows steeply with temperature.
 Roe (2005) gives the rule of thumb: "a decrease of 10 °C halves the
@@ -69,9 +69,9 @@ of condensation is the upward speed $w$ times how fast the saturated
 vapour density $\rho q_\text{sat}$ falls with height $z$ (Roe 2005,
 eq. 5):
 
-```math
+$$
 C \simeq -w\,\frac{\partial(\rho q_\text{sat})}{\partial z}
-```
+$$
 
 Condensation releases latent heat, so a saturated parcel cools more slowly
 than a dry one. This *moist adiabatic lapse rate* is not a constant: it
@@ -465,7 +465,7 @@ were computed for this article from sources 1 to 3 and from the code.
 ## See also
 
 - [README, "Moisture — winds and rain
-  shadows"](../../README.md#moisture--winds-and-rain-shadows): the app's
+  shadows"](https://github.com/cyboooooorg/map-generator/blob/main/README.md#moisture--winds-and-rain-shadows): the app's
   moisture model in full.
 - [02-biome-banding (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/02-biome-banding),
   option D "Moisture transport": why dry interiors and moisture bands were

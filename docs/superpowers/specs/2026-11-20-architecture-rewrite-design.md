@@ -706,7 +706,8 @@ partly by CI:
 - The `science` crate's doc comments cite the same source and link to
   the page.
 - CI checks: the book builds, links resolve, markdownlint passes, and
-  every page has a non-empty References section.
+  every page has a non-empty `## Sources` section (a tier-1 test of
+  `tools/guardrails`).
 
 The legacy pages are rewritten to these rules as their laws are ported
 (Porting rule), not all at once.

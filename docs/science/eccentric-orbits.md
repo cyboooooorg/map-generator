@@ -28,13 +28,13 @@ the ellipse) and eccentricity $e$ is at a distance $r$ from its star when
 it is at an angle $f$ from its closest point (Murray & Dermott 1999;
 Méndez & Rivera-Valentín 2017):
 
-```math
+$$
 r = \frac{a\,(1 - e^2)}{1 + e\cos f},
 \qquad
 r_\text{peri} = a\,(1 - e),
 \qquad
 r_\text{apo} = a\,(1 + e)
-```
+$$
 
 **In words.** The closest point is the *periapsis* (the *perihelion* round
 the Sun), the farthest the *apoapsis* (the *aphelion*). An eccentricity of
@@ -53,11 +53,11 @@ The line from the star to the planet sweeps equal areas in equal times
 star's mass $M$ and the gravitational constant $G$ (the vis-viva equation,
 Murray & Dermott 1999):
 
-```math
+$$
 v^2 = G M \left(\frac{2}{r} - \frac{1}{a}\right),
 \qquad
 \frac{v_\text{peri}}{v_\text{apo}} = \frac{1 + e}{1 - e}
-```
+$$
 
 **In words.** Near the star the planet falls inwards and speeds up; far
 from it, it climbs outwards and slows down. It spends less of its year on
@@ -70,11 +70,11 @@ Where the planet is at a given time follows from Kepler's equation. The
 *mean anomaly* $M_a$ grows evenly with time, a full turn per year, and the
 *eccentric anomaly* $E$ solves (Méndez & Rivera-Valentín 2017):
 
-```math
+$$
 M_a = E - e\sin E,
 \qquad
 r = a\,(1 - e\cos E)
-```
+$$
 
 **In words.** There is no formula that gives the place directly from the
 date; the equation is solved step by step. It is what spaces the dots of
@@ -85,11 +85,11 @@ the figure above: crowded near the apoapsis, spread out near the periapsis.
 A star of luminosity $L$ gives a planet at distance $r$ a flux (Méndez &
 Rivera-Valentín 2017, eq. 1)
 
-```math
+$$
 F = \frac{L}{4\pi r^2},
 \qquad
 \frac{F_\text{peri}}{F_\text{apo}} = \left(\frac{1 + e}{1 - e}\right)^2
-```
+$$
 
 **In words.** Twice as close, four times the light. The swing grows fast
 with the eccentricity, because both the near and the far distance move.
@@ -104,9 +104,9 @@ Averaged over a whole year, the time the planet spends at each distance
 weighs the light it gets there. The mean flux is (Méndez &
 Rivera-Valentín 2017, eq. 14, "a well known expression"):
 
-```math
+$$
 \langle F \rangle = \frac{L}{4\pi a^2}\,\frac{1}{\sqrt{1 - e^2}}
-```
+$$
 
 **In words.** The planet spends less time near the star, but it gets so
 much more light there that the near part wins. The more eccentric the orbit,
@@ -122,10 +122,10 @@ converging to a value 90% that of a circular orbit": the mean distance,
 $a\,(1 + e^2/2)$, grows too, and the temperature goes as the fourth root
 of the flux. To fourth order (their eq. 16):
 
-```math
+$$
 \langle T_\text{eq} \rangle \approx T_\text{eq,circle}
 \left(1 - \frac{e^2}{16} - \frac{15\,e^4}{1024}\right)
-```
+$$
 
 **Orders of magnitude.** At $e = 0.2$ the mean equilibrium temperature is
 0.3 % below that of a circle, at $e = 0.6$ 2.4 % below, about 6 K for a
@@ -157,10 +157,10 @@ hemispheres.
 Kipping (2013) fitted the eccentricities of 396 planets found by radial
 velocities with a Beta distribution:
 
-```math
+$$
 p(e) \propto e^{a-1}\,(1 - e)^{b-1},
 \qquad a = 0.867 \pm 0.044,\quad b = 3.03 \pm 0.17
-```
+$$
 
 **In words.** Low eccentricities are the most common, but the tail is long:
 many planets have orbits far more stretched than any in the Solar System.
@@ -186,11 +186,11 @@ starting on a circle, inside a companion at $a_g$ with eccentricity $e_g$,
 the eccentricity grows and shrinks as (Thébault et al. 2006, eq. 1, after
 Heppenheimer 1978):
 
-```math
+$$
 e(t) = 2\,e_F\left|\sin\frac{u\,t}{2}\right|,
 \qquad
 e_F = \frac{5}{4}\,\frac{a}{a_g}\,\frac{e_g}{1 - e_g^2}
-```
+$$
 
 $e_F$ is the *forced eccentricity*; $u$ sets the period of the swing, and
 grows with the companion's mass. Thébault et al. (2006) write it for a
@@ -259,7 +259,7 @@ Laskar et al. 2004).
    are calmer, He et al. 2020); hot Jupiters get 0.
 6. **The viewer** solves Kepler's equation by Newton's method
    (`keplerPosition` in
-   [`starSystem.ts`](../../web/src/lib/viewer/starSystem.ts)) and gives the
+   [`starSystem.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/starSystem.ts)) and gives the
    speeds by the vis-viva equation (`orbitalSpeed`).
 
 The rules, trimmed (from
