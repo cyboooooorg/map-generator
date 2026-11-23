@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use guardrails::{clippy_config, constants, deps, lints, readme};
+use guardrails::{clippy_config, constants, deps, lints, readme, science_pages};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -50,6 +50,17 @@ fn science_constants_are_sourced() {
         constants::PREFIXES,
         missing.join("\n")
     );
+}
+
+#[test]
+fn science_pages_cite_their_sources() {
+    let exempt: Vec<&str> = science_pages::EXEMPT
+        .iter()
+        .map(|(page, _)| *page)
+        .collect();
+    let (missing, read) = science_pages::without_sources(&root().join("docs/science"), &exempt);
+    assert!(read > 0, "no page found under docs/science");
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
 }
 
 #[test]
