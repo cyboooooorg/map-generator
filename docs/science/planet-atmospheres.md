@@ -228,12 +228,13 @@ it, so it decays as `e^(-t/τ)` with
 τ = ρ_core c r_core d / (3 k Nu)
 ```
 
-where `d = R - r_core` is the mantle's thickness, `c = 800 J/(kg K)` and
-`k = 4 W/(m K)` (calibrations of the order of the iron-alloy and mantle values;
-Stevenson et al. 1983 were not reached, and the one core heat capacity read,
-Earth's 840 J/(kg K) in Christensen, Holzwarth & Reiners 2009, is 5 % higher),
-and `Nu` the
-convective speed-up by regime: 50 for plates, 10 for episodic, 5 for a
+where `d = R - r_core` is the mantle's thickness, `c = 840 J/(kg K)` (Earth's
+core, printed in Christensen, Holzwarth & Reiners 2009) and `k = 4 W/(m K)` (a
+calibration of the order of the mantle's value: Stevenson et al. 1983 were not
+reached). The calibrated `τ` thresholds below and the Nusselt numbers were set
+with `c = 800`, which makes `τ` 5 % shorter, and are rechecked against their
+targets with 840. `Nu` is the convective speed-up by regime: 50 for plates,
+10 for episodic, 5 for a
 stagnant lid or a heat pipe (calibrations on the bodies of the table below:
 Earth's inner core, Venus without a dynamo, Mars, Mercury and the Moon). The
 three levers:
@@ -268,18 +269,33 @@ only as quoted by other papers. The energy-flux scaling of Christensen 2010
 1), with the prefactor 0.63 of a dipolar dynamo (Christensen, Holzwarth
 & Reiners 2009, doi:10.1038/nature07626, p. 168, "the constant of
 proportionality as c = 0.63"; a multipolar
-one has 0.23, Christensen 2010, section 3.4). The paper's own form carries an
-efficiency `F` (0.52 for Earth's core with a constant flux, 0.27 with none at
-the top) and an ohmic share; both are set to 1 here and absorbed by the dipole
-share below. A share of it is the dipole at the core's surface: 0.067 for a
-dynamo driven from the top of the core, a calibration on Earth's 30 µT (the
-same paper finds a typical internal-to-dipole ratio of about 7 in its
-simulations, a share of 0.14, which the unit `F` above accounts for in part),
-3e-4 for a deep dynamo under a
-stably stratified top, whose field is multipolar and screened
-(Christensen 2006, doi:10.1038/nature05342), a calibration on Mercury's dipole.
-The factor `(r_core / R)³`
-carries it to the surface.
+one has 0.23, Christensen 2010, section 3.4). The paper's own form,
+`B² / 2µ₀ = c f_ohm ρ^(1/3) (F q)^(2/3)`, carries an efficiency `F`, 0.52 for
+Earth's core with a constant flux (0.27 with none at the top, p. 168), so the
+field goes as `F^(1/3)` = 0.80. The dipole share of a dynamo driven from the
+top of the core is the product of four factors:
+
+- `F^(1/3)` = 0.804 (`Source:` Christensen et al. 2009);
+- the dipole's share of the internal field, 1/7 = 0.143: "we find a typical
+  ratio B/B_dip of around seven for dynamos with an Earth-like magnetic power
+  spectrum" (same paper, pp. 168-169, the paragraph on the planetary data;
+  `Source:`);
+- 1/√2 = 0.707, from the rms of a dipole over a sphere to its equatorial value
+  (`Definition:`; the paper's 0.26 mT for Earth's core is the rms:
+  `0.26 mT × (3480 / 6371)³ / √2` = 30.0 µT);
+- a remainder of 0.82, a calibration fitted on Earth's 30 µT surface dipole
+  so that the product is the 0.067 the legacy used: `0.067 / (0.804 × 0.143 ×
+  0.707)` = 0.825. It holds what the legacy simplifies (the core's heat flow
+  against the paper's reference flux, the ohmic share).
+
+Using `F` itself instead of `F^(1/3)` would give 0.90, which is not the
+paper's law. The deep dynamo under a stably stratified top, whose field is
+multipolar and screened (Christensen 2006, doi:10.1038/nature05342), keeps
+one calibration, 3e-4, on Mercury's dipole: the same paper says its scaling
+law is "either hard to test or not applicable" at Mercury (a slow rotator
+that may be non-dipolar, below a stably stratified layer), so `F`, 1/7 and
+`c = 0.63` do not carry over. The factor `(r_core / R)³` carries the field to
+the surface.
 
 Calibration targets, with the regimes of the previous section:
 
@@ -344,7 +360,14 @@ times lower and the CH₄ 3 times higher. Comets span "less than 0.01 % to
 IAU Symp. 280). The ranges the legacy quoted from Mumma & Charnley 2011
 (doi:10.1146/annurev-astro-081309-130811) were not found in what was
 reached (its abstract only), so the four ice values are calibrations on
-one comet's order of magnitude until that review's table is read.
+one comet's order of magnitude until that review's table is read. Read in its
+place, Biver et al. 2022 (*Comets III*, arXiv:2207.04800, Table 3) print, as
+moles of water: CO₂ 4 to 30 %, "typically 5 to 30 %" (AKARI); CH₄ 0.15 to
+3 %, "typical abundances ~0.8 %"; NH₃ 0.1 to 5 %, "typical ~0.5 to 1 %"; N₂ only
+for 67P. The legacy 5 % of CO₂ by mass is 2 % of the moles, under the whole
+range: the mass and the mole ratios had been mixed. No median is printed
+([study 21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit)
+lists the proposed values, pending the user's decision).
 
 **Spread.** 0.3 dex is of the order of the uncertainty on Earth's own
 carbon and nitrogen budgets (-0.44/+0.23 dex for each in Wang et al.; the
@@ -1450,7 +1473,7 @@ branch is the only one (165 K at 1.6 AU, its CO₂ frosted out down to
 **Sulphur and SO₂.** Outgassed sulphur stays in the air as SO₂ only in
 share `SULPHUR_IN_AIR` (5e-5); over liquid water or with free oxygen above
 0.01 bar it is washed out to sulphate in about a day and a half
-(`WET_SO2_SHARE`, 4e-9 of the dry lifetime), and in a dry, oxygen-free air
+(`WET_SO2_SHARE`, 2.2e-9 of the dry lifetime), and in a dry, oxygen-free air
 its lifetime grows with the column (`DRY_COLUMN_BAR`, 10 bar). That gives
 Earth under 1e-6 bar of SO₂ (2e-11), Venus about 1e-2 bar (150 ppm of
 92 bar, inside the 130 ± 50 ppmv below the clouds) and Mars under its 0.3 ppb
@@ -1462,9 +1485,10 @@ reached) sets the numerator; the dry lifetime of Venus's SO₂ is 1.9 Myr in
 Fegley & Prinn 1989 (their abstract: the reaction with calcite removes all of
 it "in 1.9 Myr unless volcanism replenishes" it), not the 1 Myr the legacy
 remembered, and ten times that in Bullock & Grinspoon 2001
-(doi:10.1006/icar.2000.6570, as quoted). `WET_SO2_SHARE` keeps 4e-9, the 1 Myr
-end of 1.5 days over 1 to 19 Myr (2e-9 to 2e-10 for the longer ones), which no
-target discriminates; `OXIDISING_O2_BAR` (0.01 bar, a twentieth of Earth's O₂)
+(doi:10.1006/icar.2000.6570, as quoted). `WET_SO2_SHARE` is 2.2e-9, 1.5 days over the 1.9 Myr read in Fegley & Prinn
+(a calibration; with Bullock & Grinspoon's ten times longer lifetime it would
+be 2e-10, a factor-10 disagreement of the sources that no target
+discriminates); `OXIDISING_O2_BAR` (0.01 bar, a twentieth of Earth's O₂)
 is a calibration with no source found ([study
 21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit)).
 
