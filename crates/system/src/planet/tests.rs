@@ -31,12 +31,12 @@ pub(super) const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
 
 /// Definition: a water world's water fraction for the tests, 0.5, the
 /// lower bound of Zeng et al. 2019's icy planets (a test choice).
-const WATER_WORLD_FRACTION: f64 = 0.5;
+pub(super) const WATER_WORLD_FRACTION: f64 = 0.5;
 
 /// Definition: 0.4 au around the trial's Sun-like source, an equilibrium
 /// temperature of 255 / sqrt(0.4) = 403 K, above the 355 K where the water
 /// laws end (a test choice).
-const HOT_ORBIT_AU: f64 = 0.4;
+pub(super) const HOT_ORBIT_AU: f64 = 0.4;
 
 /// Definition: sampling tolerance of a share, a median or a moment over
 /// 10 000 draws, several standard errors (about 0.004 for a tail share).

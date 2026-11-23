@@ -139,8 +139,9 @@ pub(crate) const VOLATILE_SCATTER_NH3: &str = "planet.volatiles.scatter.nh3";
 /// flux and temperature.
 pub(crate) const WATER_RUNAWAY: &str = "planet.water.runaway";
 /// Water lost as steam in a runaway: 9 kg of water for each kg of hydrogen
-/// the energy-limited escape takes, capped by the bulk water. Recorded only
-/// in a runaway.
+/// the energy-limited escape takes at the whole mass (the bulk's plus a
+/// water beyond the laws), capped by the bulk water. Recorded only in a
+/// runaway.
 pub(crate) const WATER_STEAM_LOST: &str = "planet.water.steam-lost";
 /// Water the planet keeps: its bulk water `w (1 - f) M`, less the steam
 /// lost in a runaway.
@@ -191,8 +192,9 @@ pub(crate) const AIR_OUTGASSED_SO2: &str = "planet.air.outgassed.so2";
 /// Partial pressure of O2 outgassed: 0 bar, imposed (life makes it).
 pub(crate) const AIR_OUTGASSED_O2: &str = "planet.air.outgassed.o2";
 /// Share of its air the planet keeps on the cosmic shoreline, from its
-/// escape velocity (the bulk mass and radius), the XUV fluence of its
-/// stars and its dynamo.
+/// escape velocity (the whole mass, the bulk's plus a water beyond the
+/// laws, and the bulk radius), the XUV fluence of its stars and its
+/// dynamo.
 pub(crate) const AIR_SHORELINE_KEPT: &str = "planet.air.shoreline-kept";
 /// Share of the SO2 the air keeps against its wash-out: wet or oxidising,
 /// a day and a half's worth; dry, in proportion to its column.

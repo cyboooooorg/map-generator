@@ -13,15 +13,16 @@ use super::core::{CoreRecord, core};
 use super::draws::Drawn;
 use super::enveloped::Body;
 use super::heat::heat;
-use super::interior::interior;
+use super::interior::{Water as Held, interior};
 use super::regime::regime;
 use super::tests::{
-    EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, derived_from,
-    reference_trial,
+    EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, VENUS,
+    WATER_WORLD_FRACTION, derived_from, reference_trial, trial,
 };
 use super::water::water;
 use crate::Trial;
-use science::units::{Bar, JoulePerSquareMetre, Kilogram};
+use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, shoreline_kept};
+use science::units::{Bar, JoulePerSquareMetre, Kilogram, Metre};
 use timeline::{
     Atmosphere, Code, Gas, Provenance, StellarSources, TectonicRegime, Trace, Traced, Water,
 };
@@ -147,14 +148,17 @@ fn total(a: &Atmosphere) -> f64 {
     a.surface_pressure.value().0
 }
 
-/// The outgassed partial pressure a kept `partial` derives from, bar.
-fn outgassed(p: &Planet, partial: &Traced<Bar>) -> f64 {
-    let from = derived_from(&p.trace, partial.node());
-    let node = p.trace.node(from[0]).unwrap();
-    match &node.value {
+/// The number a node of `trace` holds.
+fn number(trace: &Trace, node: timeline::NodeId) -> f64 {
+    match &trace.node(node).unwrap().value {
         timeline::NodeValue::Number { value, .. } => *value,
         value => panic!("{value:?} is not a number"),
     }
+}
+
+/// The outgassed partial pressure a kept `partial` derives from, bar.
+fn outgassed(p: &Planet, partial: &Traced<Bar>) -> f64 {
+    number(&p.trace, derived_from(&p.trace, partial.node())[0])
 }
 
 #[test]
@@ -356,4 +360,75 @@ fn each_partial_cites_its_outgassing_and_the_shoreline() {
     assert_eq!(derived_from(trace, a.surface_pressure.node()), partials);
     let sum: f64 = a.partial.values().map(|p| p.value().0).sum();
     assert_eq!(total(&a), sum);
+}
+
+// Review M1: a hot water world, its water beyond the laws and recorded
+// apart from its condensed bulk, holds its steam and its air with its
+// whole mass, the bulk mass plus that water, at the condensed radius.
+#[test]
+fn a_hot_water_world_holds_its_air_with_its_whole_mass() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, 1.0, HOT_ORBIT_AU, 0.0);
+    let drawn = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        WATER_WORLD_FRACTION,
+        0.0,
+        Some(true),
+        0.0,
+        None,
+        None,
+    );
+    let mut p = derive(trace, t, drawn);
+    let Body::Rocky(rocky) = &p.body else {
+        panic!("a planet with a surface is rocky")
+    };
+    let Held::BeyondLaw { mass: beyond, .. } = rocky.water else {
+        panic!("{:?}", rocky.water)
+    };
+    let bulk = p.body.bulk().clone();
+    let whole = Kilogram(Kilogram::from(*bulk.mass.value()).0 + beyond.value().0);
+    let radius = Metre::from(*bulk.radius.value());
+    let (_, fluence) = p.trial.sources.band_total(|s| &s.xuv);
+    let xuv = p.trial.sources.primary().xuv.fluence.node();
+
+    // The steam lost: 9 kg of water per kg of hydrogen lost at the whole
+    // mass, capped by the bulk water.
+    assert!(*p.water.runaway.value());
+    let lost = *derived_from(&p.trace, p.water.inventory.node())
+        .last()
+        .unwrap();
+    assert_eq!(
+        p.trace.node(lost).unwrap().code,
+        Code::of(codes::WATER_STEAM_LOST)
+    );
+    let water = WATER_WORLD_FRACTION * Kilogram::from(*p.trial.mass.value()).0;
+    let steam = (WATER_PER_HYDROGEN * energy_limited_loss(radius, whole, fluence).0).min(water);
+    let value = number(&p.trace, lost);
+    assert!((value / steam - 1.0).abs() < ROUNDING, "{value} {steam}");
+    let from = derived_from(&p.trace, lost);
+    assert!(from.contains(&bulk.mass.node()) && from.contains(&beyond.node()));
+
+    // The shoreline: the escape velocity of the whole mass.
+    let a = p.air().0;
+    let shoreline = derived_from(&p.trace, a.partial[&Gas::Co2].node())[1];
+    let share = shoreline_kept(
+        escape_velocity(whole, radius),
+        fluence,
+        *p.core.dynamo.value(),
+    )
+    .get();
+    let value = number(&p.trace, shoreline);
+    assert!((value / share - 1.0).abs() < ROUNDING, "{value} {share}");
+    assert_eq!(
+        derived_from(&p.trace, shoreline),
+        vec![
+            bulk.mass.node(),
+            beyond.node(),
+            bulk.radius.node(),
+            xuv,
+            p.core.dynamo.node(),
+        ]
+    );
 }

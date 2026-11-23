@@ -26,10 +26,14 @@ use timeline::{Code, NodeId, Provenance, Trace, Water};
 /// Without a runaway it keeps it all. In a runaway the water is steam in
 /// the air, where the XUV light splits it and the hydrogen escapes at the
 /// energy-limited rate ([`energy_limited_loss`] at the body's radius and
-/// the trial's mass, under the XUV fluence of all its stars) with
+/// its whole mass, [`Body::whole_mass`], under the XUV fluence of all its
+/// stars) with
 /// [`WATER_PER_HYDROGEN`] kg of water for each kg of hydrogen: the steam
 /// lost (`planet.water.steam-lost`) is `min(9 H, water)`, and the
-/// inventory what is left. The oxygen left behind is not tracked.
+/// inventory what is left. The oxygen left behind is not tracked. For a
+/// water beyond the laws the whole mass holds the steam, at the condensed
+/// planet's radius: the only radius there is until PR 2d's steam
+/// envelope.
 ///
 /// `boiled` is false: the climate's boiling loop is the next pull request's.
 ///
@@ -61,13 +65,11 @@ pub(crate) fn water(
     ];
     let inventory = if *runaway.value() {
         let radius = body.bulk().radius;
+        let (mass, mass_from) = body.whole_mass();
         let (_, fluence) = trial.sources.band_total(|s| &s.xuv);
-        let hydrogen = energy_limited_loss(
-            Metre::from(*radius.value()),
-            Kilogram::from(*trial.mass.value()),
-            fluence,
-        );
-        let mut from: Vec<NodeId> = vec![runaway.node(), radius.node(), trial.mass.node()];
+        let hydrogen = energy_limited_loss(Metre::from(*radius.value()), mass, fluence);
+        let mut from: Vec<NodeId> = vec![runaway.node(), radius.node()];
+        from.extend(mass_from);
         from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));
         from.extend(&bulk_from[1..]);
         let lost = trace.record(

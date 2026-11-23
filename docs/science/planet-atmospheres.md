@@ -554,7 +554,13 @@ in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`. The
 rewrite ports both to `science::escape::{escape_velocity, shoreline_kept}`,
 the fluence in J/m² divided by `EARTH_XUV_FLUENCE`, with
 `SHORELINE_VELOCITY`, `SHORELINE_STEEPNESS` and `UNMAGNETISED_ESCAPE`;
-the exponent 4 (`SHORELINE_EXPONENT`) is the paper's.
+the exponent 4 (`SHORELINE_EXPONENT`) is the paper's. The rewrite's
+`v_esc` reads the whole mass (`Body::whole_mass`: the bulk mass plus a
+water beyond the laws, which the bulk leaves out), as legacy read the
+trial's mass, and the runaway's steam loss reads the same mass; both take
+the bulk radius, the condensed planet's for a water beyond the laws, the
+only radius there is until PR 2d's steam envelope.
+
 **Non-thermal loss** (`non_thermal_loss`, after the shoreline, on the whole
 stock, frosts to come included). A thin air is an atmosphere only if the body
 supplies it faster than it loses it. Inside a giant's magnetosphere (a moon of a

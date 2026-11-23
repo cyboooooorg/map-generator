@@ -46,11 +46,14 @@ use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace,
 ///    not a volatile of the mantle, so neither the regime nor the
 ///    seafloor holds it back. No O2 (imposed: life makes it).
 /// 2. **Shoreline** (`planet.air.shoreline-kept`): the share
-///    [`shoreline_kept`] at the escape velocity of the bulk mass and
-///    radius, under the XUV fluence of all the stars, with the dynamo;
-///    each partial (`planet.air.kept.<gas>`) is its outgassed one times
-///    that share. The escape velocity has no node (ledger ruling 1): the
-///    share derives from the bulk mass and radius, the fluences and the
+///    [`shoreline_kept`] at the escape velocity of the whole mass
+///    ([`Body::whole_mass`]: the bulk mass plus a water beyond the laws)
+///    and the bulk radius (the condensed planet's for a water beyond the
+///    laws, the only one until PR 2d's steam envelope), under the XUV
+///    fluence of all the stars, with the dynamo; each partial
+///    (`planet.air.kept.<gas>`) is its outgassed one times that share.
+///    The escape velocity has no node (ledger ruling 1): the share
+///    derives from the whole mass and the radius, the fluences and the
 ///    dynamo.
 /// 3. **Runaway**: the water inventory becomes the vapour kept, the
 ///    inventory times the shoreline's share (`planet.water.inventory`,
@@ -270,13 +273,11 @@ fn shoreline(
     core: &CoreRecord,
     trace: &mut Trace,
 ) -> Result<Traced<Fraction>, InteriorError> {
-    let bulk = body.bulk();
-    let velocity = escape_velocity(
-        Kilogram::from(*bulk.mass.value()),
-        Metre::from(*bulk.radius.value()),
-    );
+    let radius = body.bulk().radius;
+    let (mass, mut from) = body.whole_mass();
+    let velocity = escape_velocity(mass, Metre::from(*radius.value()));
     let (_, fluence) = trial.sources.band_total(|s| &s.xuv);
-    let mut from: Vec<NodeId> = vec![bulk.mass.node(), bulk.radius.node()];
+    from.push(radius.node());
     from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));
     from.push(core.dynamo.node());
     Ok(trace.record(
