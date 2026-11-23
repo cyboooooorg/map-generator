@@ -880,24 +880,56 @@ D = Y · S₀ I r(t) / 4 / E_γ
 ```
 
 with `S₀ = 1361 W/m²`, `I` the insolation, `E_γ` the energy of a Lyman α
-photon (121.6 nm, 1.634e-18 J) and `r(t)` the Lyman α share of the
+photon (`h c / λ` = 1.634e-18 J: the H I multiplet at 1215.6701 Å in
+vacuum, NIST Atomic Spectra Database, and the exact Planck constant of
+CODATA, 6.626 070 15e-34 J s) and `r(t)` the Lyman α share of the
 star's light: Ribas et al. 2005 (doi:10.1086/427977, their eq. 2,
 checked) fit `F = 19.2 τ^-0.72` erg s⁻¹ cm⁻² at 1 AU, 7.40e-5 of the
 solar constant at the end of saturation (0.1 Gyr) and 3.9e11 photons
 cm⁻² s⁻¹ today. The line saturates with the XUV (`saturation_gyr`, the
-same anchors) and decays as `t^-0.72` after. `Y = 13.9` methane
-molecules per Lyman α photon is a calibration on Titan: Yung, Allen &
-Pinto 1984 (ApJS 55, 465, doi:10.1086/190963; abstract checked) find
-that Titan "might have lost 5.6 × 10⁴ g cm⁻²" of methane, "the
-equivalent of 8 bars", over geologic time. Read as 4.5 Gyr at today's
-rate (an assumption, the full text was not read), that is 1.48e10
-molecules cm⁻² s⁻¹ against the 1.07e9 Lyman α photons cm⁻² s⁻¹ Titan
-gets on average. `Y` is over one because Lyman α stands for all the
-ultraviolet that destroys methane, the photolysis proper below 145 nm
-and the dissociation photosensitised by acetylene at longer
-wavelengths. At that rate Titan's air would lose its methane in a few
-tens of millions of years, as Tobie, Lunine & Sotin 2006 (Nature 440,
-61, doi:10.1038/nature04497; abstract checked) state.
+same anchors) and decays as `t^-0.72` after. A methane molecule weighs
+`CH4_MOLAR_MASS / AVOGADRO` = 2.664e-26 kg. `Y` is the number of methane
+molecules destroyed per Lyman α photon, fitted on Titan (below).
+Yung, Allen & Pinto 1984 (ApJS 55, 465, doi:10.1086/190963; full text
+read, the ADS scan) give Titan's present methane loss in their Table 5B:
+"net loss of parent molecules from atmosphere: CH₄ 1.5 × 10¹⁰"
+molecules cm⁻² s⁻¹, averaged over the globe. Their abstract's "5.6 ×
+10⁴ g cm⁻²", "the equivalent of 8 bars", is that rate held constant: "If
+the loss rates given in Table 5B were constant over the age of the solar
+system (4.5 billion yr), we would estimate accumulated losses of 5.6 ×
+10⁴ … g cm⁻²" (§ VI d, p. 500). `Y` is over one because Lyman α stands
+for all the ultraviolet that destroys methane: Lyman α's own photolysis
+(their reaction R5) is 2.9e9 of the 1.5e10; the rest is mostly the
+dissociation photosensitised by acetylene and diacetylene, which absorb
+at 1600 to 2300 Å, where the Sun sends 20 to 200 times more photons
+(their Table 2A and § II b: "C₂H₂ and C₄H₂ act as catalysts for
+collecting the solar energy needed for breaking CH₄ apart"; § VI e:
+"About 96 % of CH₄ dissociation (mostly by photosensitized processes)
+leads to production of higher hydrocarbons"). At that rate Titan's air
+would lose its methane in a few tens of millions of years, as Tobie,
+Lunine & Sotin 2006 (Nature 440, 61, doi:10.1038/nature04497; abstract
+checked) state.
+
+**Calibration of `Y`** (`CH4_PER_LYMAN_ALPHA_PHOTON`, 14.1; study 23 of
+the [Wiki](https://github.com/cyboooooorg/map-generator/wiki/23-air-chemistry-audit),
+part 1). Fitted on Yung et al.'s present rate with the rewrite's Lyman α
+history (a share of the ZAMS light times the history's `scale`, #622):
+for the 1 M☉, [Fe/H] 0 star at 4.6 Gyr, `scale` = 0.7081 and the
+present Lyman α share is 4.690e-6 of the present light, 3.91e11 photons
+cm⁻² s⁻¹ at 1 AU and 1.064e9 over Titan's sphere at 9.58 AU, so `Y =
+1.5e10 / 1.064e9 = 14.1`. Legacy's 13.9 came from the abstract's
+5.6e4 g cm⁻² over 4.5 Gyr (1.48e10) and legacy's ratio, 0.25 % higher
+than the rewrite's; the age 4.57 Gyr or Yung et al.'s own distance
+(their attenuation 0.011, 9.53 AU) give 14.0, within the two digits of
+the rate. Fitting the 5.6e4 g cm⁻² over the whole history instead would
+give 5.1; it is not done, since the paper computed that loss from
+today's rates. Searched and not found: a measured or compiled yield of
+methane destroyed per Lyman α photon for any other body or spectrum;
+Titan's methane destruction against the Sun's age (Yung et al. only
+extrapolate today's rate). Departure: the destruction is scaled by
+Lyman α's decay, whereas most of it is driven by 1600 to 2300 Å light
+from the photosphere, which fades far less with age; the law overstates
+the destruction round a young star.
 
 The supply is the methane outgassed (after escape), spread evenly over
 the system's age: `S = CH₄ / age`. While the destruction outruns it,
@@ -926,8 +958,8 @@ understate the destruction round red dwarfs, if anything).
 **Reducing air** (`reducing`, `without_co2_if_reducing`, issue #557).
 A body whose methane survives the ultraviolet (the air the photolysis
 leaves holds some) under an equilibrium temperature of 150 K (the line
-of *Photochemistry* below) has a reducing air. The chain first solves it
-without CO₂; it keeps that air if the climate then leaves a Titan's
+of *Photochemistry* below, a calibration) has a reducing air. The chain
+first solves it without CO₂; it keeps that air if the climate then leaves a Titan's
 dense, hazy air (`titan_like_air`: methane still in it, over methane's
 triple-point pressure of 0.1169 bar, the line of the hydrocarbon-world
 class), and is solved again with its CO₂ otherwise. Titan's interior holds CO₂,
@@ -962,7 +994,21 @@ the triple point (CO₂ 216.6 K, 5.185 bar, 26.1 kJ/mol; NH₃ 195.4 K,
 the NIST WebBook from memory, not checked). This is the legacy law; the
 rewrite replaces CO₂'s and methane's with `science::volatiles`, the
 equations of state's vapour curves and CO₂'s Span & Wagner sublimation
-equation (see [radiative-transfer.md](radiative-transfer.md#carbon-dioxide-and-methane-saturation)). N₂'s curve is measured
+equation (see [radiative-transfer.md](radiative-transfer.md#carbon-dioxide-and-methane-saturation)),
+and NH₃'s with values read (study 23, part 3): the triple point at
+195.49 K (Gao et al. 2023, J. Phys. Chem. Ref. Data 52,
+doi:10.1063/5.0128269, the reference equation of state; abstract) and
+0.06060 bar (Fonseca & Lobo 1989, through the NIST Chemistry WebBook),
+and below it Clausius–Clapeyron at the sublimation enthalpy of 31.2
+kJ/mol measured from 177 to 195 K (Overstreet & Giauque 1937, through
+the NIST WebBook). That curve follows the polynomial fit of Fray &
+Schmitt 2009 (NH3-1, as Lisse et al. 2021 reproduce it) within 1.5 %
+from 150 K to the triple point, and meets their data point of 1.27e-3
+bar at 162.39 K (as Blakley et al. 2024, *Planet. Space Sci.*,
+doi:10.1016/j.pss.2024.105863, quote it) within 5 %; at 80 to 120 K
+Blakley et al. measure pressures 1.5 times below Fray & Schmitt's
+extrapolation, and the constant enthalpy lies between the two.
+Legacy's 29 kJ/mol overstated the pressure four times at 100 K. N₂'s curve is measured
 (issue #529): triple point 63.14 K and 0.1253 bar (Angus, de Reuck et
 al. 1979 and Jacobsen, Stewart et al. 1986, through the NIST WebBook,
 checked), and below it the polynomial fits `ln p = Σ Aᵢ / Tⁱ` of Fray &
@@ -996,16 +1042,45 @@ frost (0.63, see *Volcanic SO₂*).
 
 **Photochemistry** (`photochemistry`, after the cold trap, on what is
 still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
-which escapes: `2 NH₃ → N₂ + 3 H₂`, the nitrogen conserved (Atreya,
-Donahue & Kuhn 1978, doi:10.1126/science.201.4356.611, on Titan's N₂ from
-NH₃; reference from memory, not checked). CH₄ survives only where the
-equilibrium temperature is under 150 K: there water is frozen out so deep
-that none reaches the upper air; above it, OH from water's photolysis
-oxidises the methane, which is set to zero (the CO₂ it would make is
-not added). The 150 K is a calibration with no source, between Titan
-(82 K, keeps its methane) and an abiotic Earth (255 K) or Mars (207 K).
-Life's methane is added later. Methane's photolysis by the ultraviolet
-comes before the cold trap (above).
+which escapes: `2 NH₃ → N₂ + 3 H₂`, the nitrogen conserved. Atreya,
+Donahue & Kuhn 1978 (*Science* 201, 611,
+doi:10.1126/science.201.4356.611; abstract read) find that "if NH₃
+outgassed from Titan it should have been converted to a dense N₂
+atmosphere during the lifetime of the satellite", about 20 bar; Yung et
+al. 1984 (§ VI d) find "no compelling evidence" for the warm early
+climate that conversion needs, so Titan's N₂ from its NH₃ is a
+departure the law keeps. The chain's partial pressures are weight
+pressures (`column_pressure`: mass times gravity over area), so the N₂
+gained is the NH₃ lost times the mass ratio `N2_PER_NH3` =
+`N2_MOLAR_MASS / (2 · NH3_MOLAR_MASS)` = 0.8224, a definition (legacy
+wrote 28/34, 0.13 % higher). CH₄ survives only where the equilibrium
+temperature is under 150 K: there water is frozen out so deep that none
+reaches the upper air (the sublimation pressure of ice is 6.1e-11 bar
+at 150 K, by Feistel & Wagner 2007 as Lisse et al. 2021 reproduce it);
+above it, OH from water's photolysis oxidises the methane, which is set
+to zero (the CO₂ it would make is not added). Life's methane is added
+later. Methane's photolysis by the ultraviolet comes before the cold
+trap (above).
+
+**Calibration of `METHANE_SURVIVES`** (150 K; study 23, part 2). Titan
+(about 82 K) keeps its methane, Mars (about 207 K) and an abiotic Earth
+(255 K) keep none; the ice's sublimation pressure is 2.2e-25 bar at
+82 K and 4.6e-6 bar at 207 K, so any line in between keeps the picture,
+and 150 K is kept from legacy. Searched and not found: a temperature, or
+an equilibrium temperature, at which abiotic methane stops being
+oxidised by the OH of water vapour; the studies of methane's lifetime
+are about Earth's oxidising air, and Yung et al. 1984 feed Titan's
+oxygen chemistry from an external flux of water (6.1e5 cm⁻² s⁻¹, Table
+5B), not from its own.
+
+**Earth's N₂ target** (study 23, part 5). The chain's N₂ is a weight,
+so its target is the weight of Earth's N₂: 78.08 % by volume with a
+mean molecular weight of 28.97 (NASA Earth fact sheet) is 0.7551 of the
+mass of the dry air, 5.1352e18 kg (Trenberth & Smith 2005, *J. Climate*
+18, 864, doi:10.1175/JCLI-3299.1; abstract), so 3.878e18 kg of N₂,
+which weighs 0.746 bar at 9.80665 m/s². The 0.78 bar quoted elsewhere
+is its share by volume times a bar. The test keeps 0.67 to 0.82 bar,
+0.746 within 10 %.
 
 Calibration targets, through the whole chain from the reference bodies'
 inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
@@ -1013,7 +1088,7 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
-| Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.78 bar N₂ |
+| Earth | 0.89 bar N₂, no CH₄ or NH₃ (45 bar CO₂ before the thermostat) | N₂ 0.5 to 1.2 bar; CH₄ and NH₃ under 1e-3 bar | 0.746 bar N₂ by weight (0.78 by volume) |
 | Mars | 0.006 bar (its CO₂ scaled to the real 6.1 mbar, `MARS_CO2_FACTOR`; 0.014 bar from the rule alone) | 0.002 to 0.05 bar | 0.006 bar |
 | Titan | 2.2 bar, 95 % N₂, 0.11 bar CH₄ after the climate (6.3 bar before it condenses) | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
@@ -2186,11 +2261,14 @@ another paper, from memory) is said where it is used.
   dipole.
 - Angus, de Reuck et al. 1979, nitrogen's triple point, through
   the NIST Chemistry WebBook.
-- Atreya, Donahue and Kuhn 1978,
+- Atreya, Donahue and Kuhn 1978, *Science* 201, 611,
   doi:10.1126/science.201.4356.611, Titan's N₂ from NH₃.
 - Baraffe et al. 2015, the luminosity of low-mass stars at the ZAMS.
 - Bertrand et al. 2022, *Icarus* 373, 114764, Triton.
 - Biver et al. 2022, *Comets III*, arXiv:2207.04800, Table 3.
+- Blakley et al. 2024, *Planet. Space Sci.*,
+  doi:10.1016/j.pss.2024.105863, arXiv:2403.09917, NH₃'s sublimation
+  pressure at 80 to 120 K.
 - Bono et al. 2019, the age of Earth's inner core.
 - Boukrouche, Lichtenberg and Pierrehumbert 2021,
   doi:10.3847/1538-4357/ac1345.
@@ -2224,11 +2302,17 @@ another paper, from memory) is said where it is used.
 - Erkaev et al. 2007, energy-limited escape.
 - Fegley and Prinn 1989, doi:10.1038/337055a0, Venus's SO₂ and
   calcite.
+- Feistel and Wagner 2007, *Geochim. Cosmochim. Acta* 71, 36, the
+  sublimation pressure of water ice, as Lisse et al. 2021 reproduce it.
 - Foley, Bercovici and Landuyt 2012, tectonics against
   planet size.
+- Fonseca and Lobo 1989, NH₃'s triple-point pressure, through the
+  NIST Chemistry WebBook.
 - Fray and Schmitt 2009, *Planet. Space Sci.* 57, 2053,
   doi:10.1016/j.pss.2009.09.011, sublimation pressures.
 - Fulton et al. 2017, the radius bins of the census.
+- Gao et al. 2023, *J. Phys. Chem. Ref. Data* 52,
+  doi:10.1063/5.0128269, NH₃'s triple-point temperature.
 - Giauque and Stephenson 1938, *J. Am. Chem. Soc.* 60, 1389,
   through the NIST Chemistry WebBook.
 - Giles et al. 2024, arXiv:2405.19253, Io's atmosphere from IRTF/TEXES
@@ -2317,17 +2401,22 @@ another paper, from memory) is said where it is used.
 - Nakajima, Hayashi and Abe 1992,
   doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2, the
   Simpson-Nakajima limit.
+- NASA NSSDC Earth fact sheet, the composition of Earth's air.
 - Neukum, Ivanov and Hartmann 2001, the crater
   chronology.
 - Niemann et al. 2005, Titan's air at the Huygens site.
 - Nimmo 2015, the core's heat flow.
 - Nimmo and Stevenson 2000, doi:10.1029/1999JE001216.
+- NIST Atomic Spectra Database, the H I Lyman α multiplet.
+- NIST CODATA, the Planck constant (exact).
 - Noack et al. 2016, *Icarus* 277, 215,
   doi:10.1016/j.icarus.2016.05.009.
 - Ohtani 2021, *Annu. Rev. Earth Planet. Sci.* 49, 253,
   doi:10.1146/annurev-earth-080320-062509, the large and small water
   budgets (abstract, through study 22).
 - O'Reilly and Davies 1981, *Geophys. Res. Lett.* 8, 313.
+- Overstreet and Giauque 1937, NH₃'s sublimation enthalpy, through
+  the NIST Chemistry WebBook.
 - Owen and Wu 2017, doi:10.3847/1538-4357/aa890a, eq. 19.
 - Pierrehumbert 2010, section 4.4.
 - Quirico et al. 1999, *Icarus* 139, 159, Triton's CO₂ ice.
@@ -2355,6 +2444,8 @@ another paper, from memory) is said where it is used.
   doi:10.1038/nature04497.
 - Tosi et al. 2017, *A&A* 605, A71, doi:10.1051/0004-6361/201730728,
   the habitability of a stagnant-lid Earth (through study 22).
+- Trenberth and Smith 2005, *J. Climate* 18, 864,
+  doi:10.1175/JCLI-3299.1, the mass of Earth's dry air.
 - Tu et al. 2015, the saturation of a star's X-ray emission.
 - Turbet et al. 2020, *A&A* 638, A41, arXiv:1911.08878, Eq. 2 and
   Appendix C.
@@ -2373,7 +2464,7 @@ another paper, from memory) is said where it is used.
 - Wolf and Toon 2014, doi:10.1089/ast.2013.1112.
 - Wright et al. 2011, *ApJ* 743, 48.
 - Yung, Allen and Pinto 1984, *ApJS* 55, 465,
-  doi:10.1086/190963.
+  doi:10.1086/190963, Titan's photochemistry, Tables 2A and 5B.
 - Zahnle and Catling 2017, *ApJ* 843, 122,
   doi:10.3847/1538-4357/aa7846, the cosmic shoreline.
 - Zahnle et al. 2003, doi:10.1016/S0019-1035(03)00048-4.
