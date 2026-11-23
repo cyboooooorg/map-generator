@@ -33,7 +33,7 @@ SHA-256 of the files:
 | --- | --- |
 | `opacity.bin` | `d5645512b269292e752745056643c0a4faf1e4dd658cb0ddc8c141cdaaee2ae7` |
 | `opacity-halved.bin` | `497afef8d6b3fce2b45a73449a766d3958f915de476a1ee3c69ad4644efc6ab1` |
-| `shortwave.bin` | `de6ffe0a5069fc6fcbde77badace9377b40095c3352d3ba385b4aea12b1c2380` (not in this directory yet: it comes with the shortwave port) |
+| `shortwave.bin` | `de6ffe0a5069fc6fcbde77badace9377b40095c3352d3ba385b4aea12b1c2380` |
 
 The line lists cannot be fetched again identically: HITRAN serves its
 current data, so a new download may differ from the one the tables were
