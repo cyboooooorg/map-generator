@@ -9,7 +9,7 @@ fn id() -> FieldId {
 
 fn world_with(n: u32, values: Values, categorical: bool) -> World {
     let body = Designation::star(SystemNumber::new(12_345).unwrap());
-    let mut w = World::new(Grid::new(n), body, 0, EngineVersion(1));
+    let mut w = World::new(Grid::new(n), body, 0, EngineVersion(1), EngineVersion(1));
     w.insert(
         id(),
         Field {
@@ -132,4 +132,91 @@ fn an_unknown_field_is_missing() {
 fn an_odd_width_panics() {
     let w = f32_world(4, |_, _| 0.0);
     let _ = project(&w, &id(), 7);
+}
+
+/// Two export widths of one world agree on area-weighted statistics
+/// (issue #381): the mean, and the area share above zero, of a smooth
+/// relief-like field on `Grid::new(24)`, read from the grid cells and
+/// from rasters of 96 and 384 pixels. Raster rows are weighted by their
+/// band's area (`sin φ_top − sin φ_bottom`). The `2000·sin²(lat)` term
+/// gives the field a non-zero area mean, `2000/3 − 400` (the sine terms
+/// integrate to zero), so the mean check constrains something: the grid
+/// mean must match that analytic value too.
+///
+/// A pixel averages the cells it covers, so for a smooth field a raster
+/// differs from the grid by the averaging error only, not by any
+/// projection bias. The bounds are that error on this field: 1 % of the
+/// field's range for the mean, 0.01 for the share (the share also moves
+/// with the few pixels straddling the zero contour). Width against width
+/// is held to the same bounds. The bounds are set from the measured gaps
+/// (mean about 0.01 % of the range, share about 1e-3) with margin, not
+/// from a source.
+#[test]
+fn two_widths_agree_on_area_statistics() {
+    let h = |p: [f64; 3]| {
+        let (lat, lon) = (p[2].asin(), p[1].atan2(p[0]));
+        (3000.0 * (3.0 * lon).sin() * lat.cos() + 1500.0 * lat.sin() + 2000.0 * lat.sin().powi(2)
+            - 400.0) as f32
+    };
+    let w = f32_world(24, |_, p| h(p));
+    let g = w.grid();
+    let values: Vec<f32> = (0..g.cell_count()).map(|k| h(g.point(k))).collect();
+    let range = f64::from(values.iter().copied().fold(f32::MIN, f32::max))
+        - f64::from(values.iter().copied().fold(f32::MAX, f32::min));
+    let grid_mean = f64::from(crate::stats::area_mean(g, &values));
+    let total: f64 = (0..g.cell_count()).map(|k| g.area(k)).sum();
+    let grid_share = (0..g.cell_count())
+        .filter(|&k| values[k] > 0.0)
+        .map(|k| g.area(k))
+        .sum::<f64>()
+        / total;
+
+    let analytic_mean = 2000.0 / 3.0 - 400.0;
+    let stats = |width: u32| {
+        let r = project(&w, &id(), width).unwrap();
+        let (mut sum, mut above, mut weight) = (0.0, 0.0, 0.0);
+        for j in 0..r.height {
+            let top = PI / 2.0 - PI * f64::from(j) / f64::from(r.height);
+            let bottom = PI / 2.0 - PI * f64::from(j + 1) / f64::from(r.height);
+            let row = top.sin() - bottom.sin();
+            for i in 0..r.width {
+                let v = f64::from(r.values[(j * r.width + i) as usize]);
+                sum += row * v;
+                if v > 0.0 {
+                    above += row;
+                }
+                weight += row;
+            }
+        }
+        (sum / weight, above / weight)
+    };
+    let (mean_a, share_a) = stats(96);
+    let (mean_b, share_b) = stats(384);
+    let mean_tol = 0.01 * range;
+    let msg = format!(
+        "grid ({grid_mean}, {grid_share}); 96 ({mean_a}, {share_a}); 384 ({mean_b}, {share_b}); \
+         mean tol {mean_tol}"
+    );
+    assert!(
+        (grid_mean - analytic_mean).abs() < mean_tol,
+        "grid vs analytic mean: {msg}"
+    );
+    assert!(
+        (mean_a - grid_mean).abs() < mean_tol,
+        "96 vs grid mean: {msg}"
+    );
+    assert!(
+        (mean_b - grid_mean).abs() < mean_tol,
+        "384 vs grid mean: {msg}"
+    );
+    assert!((mean_a - mean_b).abs() < mean_tol, "96 vs 384 mean: {msg}");
+    assert!(
+        (share_a - grid_share).abs() < 0.01,
+        "96 vs grid share: {msg}"
+    );
+    assert!(
+        (share_b - grid_share).abs() < 0.01,
+        "384 vs grid share: {msg}"
+    );
+    assert!((share_a - share_b).abs() < 0.01, "96 vs 384 share: {msg}");
 }

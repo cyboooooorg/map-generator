@@ -10,7 +10,7 @@ mod id;
 mod ports;
 mod stored;
 
-pub use evict::{CacheEntry, CacheKey, DEFAULT_BUDGET, evict};
+pub use evict::{CacheEntry, CacheKey, DEFAULT_BUDGET, Engines, evict};
 pub use id::{CatalogueError, SystemId};
 pub use ports::{SystemRepository, TimelineCache, WorldCache, WorldKey};
 pub use stored::StoredSystem;

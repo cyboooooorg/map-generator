@@ -3,8 +3,11 @@
 
 use std::fmt;
 
+use adapters::{CodecError, ExportError, StoreError};
 use system::SystemError;
-use timeline::ContractError;
+use timeline::{ContractError, Designation};
+use world::WorldError;
+use world::relief::ReliefError;
 
 use crate::explain::ExplainError;
 
@@ -24,6 +27,24 @@ pub enum CliError {
     Seed(getrandom::Error),
     /// The output could not be written to stdout.
     Io(std::io::Error),
+    /// The store could not be read or written.
+    Store(StoreError),
+    /// The world could not be exported.
+    Export(ExportError),
+    /// The body's relief could not be built.
+    Relief(ReliefError),
+    /// A field was refused by the world; its text is the world's own code.
+    World(WorldError),
+    /// The world could not be quantised through the cache codec.
+    Codec(CodecError),
+    /// The PNG width is odd or zero.
+    Width(u32),
+    /// The system has no such body.
+    NoSuchBody(Designation),
+    /// The body is a star: only planets have a surface to map.
+    NotAPlanet(Designation),
+    /// The body's timeline has no keyframe at its present.
+    NoPresentKeyframe(Designation),
 }
 
 impl fmt::Display for CliError {
@@ -35,6 +56,17 @@ impl fmt::Display for CliError {
             Self::Explain(error) => write!(f, "{error}"),
             Self::Seed(error) => write!(f, "cli.seed.unavailable: {error}"),
             Self::Io(error) => write!(f, "cli.io: {error}"),
+            Self::Store(error) => write!(f, "cli.store: {error}"),
+            Self::Export(error) => write!(f, "{error}"),
+            Self::Relief(error) => write!(f, "{error}"),
+            Self::World(error) => write!(f, "{error}"),
+            Self::Codec(error) => write!(f, "cli.world.codec: {error}"),
+            Self::Width(width) => write!(f, "cli.world.width: {width} (even, above 0)"),
+            Self::NoSuchBody(body) => write!(f, "cli.world.no-such-body: {body}"),
+            Self::NotAPlanet(body) => write!(f, "cli.world.not-a-planet: {body}"),
+            Self::NoPresentKeyframe(body) => {
+                write!(f, "cli.world.no-present-keyframe: {body}")
+            }
         }
     }
 }
@@ -74,5 +106,35 @@ impl From<ExplainError> for CliError {
 impl From<std::io::Error> for CliError {
     fn from(error: std::io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl From<StoreError> for CliError {
+    fn from(error: StoreError) -> Self {
+        Self::Store(error)
+    }
+}
+
+impl From<ExportError> for CliError {
+    fn from(error: ExportError) -> Self {
+        Self::Export(error)
+    }
+}
+
+impl From<ReliefError> for CliError {
+    fn from(error: ReliefError) -> Self {
+        Self::Relief(error)
+    }
+}
+
+impl From<WorldError> for CliError {
+    fn from(error: WorldError) -> Self {
+        Self::World(error)
+    }
+}
+
+impl From<CodecError> for CliError {
+    fn from(error: CodecError) -> Self {
+        Self::Codec(error)
     }
 }

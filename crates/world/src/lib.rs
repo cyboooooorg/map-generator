@@ -7,10 +7,19 @@
 
 pub mod error;
 pub mod fields;
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixtures;
 pub mod grid;
 pub mod project;
 pub mod relief;
 pub mod stats;
+
+use timeline::EngineVersion;
+
+/// Definition: the version of what the map generator produces, bumped by
+/// any change to it (a law, a field, a grid layout). Cached worlds of
+/// another version are never read.
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(1);
 
 pub use error::WorldError;
 pub use fields::{Field, FieldId, Storage, Values, World};

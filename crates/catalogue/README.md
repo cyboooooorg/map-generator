@@ -22,19 +22,22 @@ of its inputs (`CatalogueError::IdMismatch`), on `put` and on `get`.
 - `SystemRepository`: `put`, `get`, `list`, `remove` of stored systems.
 - `TimelineCache`: the timelines of a system for an engine version.
 - `WorldCache`: a world by `WorldKey` (system, body, keyframe index, grid
-  `n` after the cap, engine version). It has an associated `World` type
-  because this crate cannot name `world::World`; the adapter fixes it.
+  `n` after the cap, system engine version, world engine version). It
+  has an associated `World` type because this crate cannot name
+  `world::World`; the adapter fixes it.
 
 `SystemIndex` (the SQLite read model) comes with the server, track T10.
 
 ## Invalidation and eviction
 
 A cache entry of another engine version is a miss and is dropped at the
-next eviction; nothing is migrated. `evict(entries, current, budget)` is
-pure: it returns the keys to delete, stale engine versions first, then
-the least recently used (by a logical tick, never the wall clock) until
-the total fits `budget` bytes. `DEFAULT_BUDGET` is 2 GiB; the store takes
-the budget at construction and the CLI will expose it with W2.
+next eviction; nothing is migrated. `evict(entries, current, budget)`
+(`current` is `Engines`: the system and the world engine versions; a
+world is current when both match) is pure: it returns the keys to
+delete, stale engine versions first, then the least recently used (by a
+logical tick, never the wall clock) until the total fits `budget` bytes.
+`DEFAULT_BUDGET` is 2 GiB; the store takes the budget at
+construction and the CLI will expose it with W2.
 
 ## Dependencies
 

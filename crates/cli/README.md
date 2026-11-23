@@ -74,6 +74,22 @@ values that depend on it (`system.draw.break-up-fraction`), is reported as
 | `cli.explain.not-traced` | The pointer leads to a value with no cause tree (a designation, say) |
 | `cli.explain.ambiguous` | Several values share the code; the message lists their pointers |
 
+## World pipeline
+
+The crate holds the world pipeline (`src/world.rs`): it takes a stored
+system, builds or reads the cached timeline and world, and exports a world
+file and a PNG. Its store options arrive with the `world` command in the
+next pull request:
+
+| Flag | Meaning |
+| --- | --- |
+| `--root PATH` | The store's root directory. Default `map-generator-store` |
+| `--cache-budget SIZE` | The cache budget in bytes, with `KiB`, `MiB`, `GiB` or `TiB`. Default 2 GiB. SI suffixes (`MB`) are refused |
+
+The pipeline refuses a PNG width that is odd or zero (`cli.world.width`)
+before touching the store, and stamps the world with the body timeline's
+engine version.
+
 ## Exit codes
 
 | Code | Meaning |

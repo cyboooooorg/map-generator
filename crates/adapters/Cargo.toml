@@ -16,6 +16,7 @@ png.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+world = { workspace = true, features = ["fixtures"] }
 
 [lints]
 workspace = true

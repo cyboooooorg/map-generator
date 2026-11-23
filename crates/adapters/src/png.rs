@@ -33,6 +33,23 @@ impl Ramp {
         Ramp::new(vec![(min, [0, 0, 0]), (max, [255, 255, 255])])
     }
 
+    /// The relief ramp of the exports, for heights in metres: deep sea to
+    /// shallows in blues, lowlands green, then ochre, brown and snow.
+    ///
+    /// A display choice, not a physical value: a cartographic
+    /// hypsometric tint chosen for legibility.
+    pub fn relief() -> Ramp {
+        Ramp::new(vec![
+            (-8000.0, [8, 29, 88]),
+            (-200.0, [44, 127, 184]),
+            (-0.5, [161, 218, 236]),
+            (0.0, [57, 135, 64]),
+            (1000.0, [201, 188, 109]),
+            (3000.0, [140, 90, 50]),
+            (6000.0, [250, 250, 250]),
+        ])
+    }
+
     /// The colour of `v`; NaN is black.
     pub fn colour(&self, v: f32) -> [u8; 3] {
         if v.is_nan() {

@@ -9,6 +9,16 @@ timeline.workspace = true
 science.workspace = true
 noise.workspace = true
 
+[features]
+# Reference bodies (Earth, Mars, Venus) for tests and previews.
+fixtures = ["timeline/fixtures"]
+
+# The heavy relief tests read the reference bodies of `world::fixtures`:
+# `mise run test:heavy` builds the workspace, where adapters enables them.
+[[test]]
+name = "relief_heavy"
+required-features = ["fixtures"]
+
 [lints]
 workspace = true
 

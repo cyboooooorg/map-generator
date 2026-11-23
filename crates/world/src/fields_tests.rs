@@ -3,7 +3,7 @@ use timeline::SystemNumber;
 
 fn world() -> World {
     let body = Designation::star(SystemNumber::new(12_345).unwrap());
-    World::new(Grid::new(2), body, 0, EngineVersion(1))
+    World::new(Grid::new(2), body, 0, EngineVersion(1), EngineVersion(1))
 }
 
 fn id(text: &'static str) -> FieldId {
