@@ -10,7 +10,7 @@ g-points, on a grid of pressure and temperature.
 `opacity-halved.bin` is the same table on 10 cm⁻¹ bins over 0-2500 cm⁻¹ at
 200-300 K, read only by the test `halving_bins_keeps_the_forcing`.
 `shortwave.bin` is the table of the star's near infrared that the Bond
-albedo absorbs (read by the shortwave port, not in the science crate yet;
+albedo absorbs (read by `crates/science/src/radiation/shortwave.rs`;
 task 7.6 of legacy issue #523): the same lines and sets on the albedo's
 own spectral bands from 0.7 to 5 µm, with MT_CKD's water and CO₂
 continua (see [Shortwave table](#shortwave-table)).
@@ -246,8 +246,8 @@ and a negative mean (the file's noise) counts as zero.
 line lists, partition sums and line shapes as `opacity.bin`:
 
 - **Bins:** the bands of the Bond albedo's stellar spectrum
-  (the legacy `planet::albedo::spectrum`, to be ported with the
-  shortwave half; 240 bands even in `ln λ` from 0.2 to
+  (`crates/science/src/radiation/starlight.rs`, ported from the legacy
+  `planet::albedo::spectrum`; 240 bands even in `ln λ` from 0.2 to
   5 µm), from the one that holds 0.7 µm to 5 µm: 147 bins over
   2000-14 364 cm⁻¹, 27 to 193 cm⁻¹ wide. The science crate checks the
   table's edges against its bands when it loads it.

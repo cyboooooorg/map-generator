@@ -7,9 +7,8 @@ or an identifier lives in an engine; nothing here draws at random.
 
 Every constant has a doc comment starting with `Source:` (a citation),
 `Calibration:` (what it was fitted against, and how) or `Definition:` (an exact
-definition or a unit conversion). A test fails otherwise. Physics is ported from
-the tag `legacy-final` with its citation and its tests, never rewritten from
-memory.
+definition or a unit conversion); a test fails otherwise. Physics is ported from
+the tag `legacy-final` with its citation and tests, never rewritten from memory.
 
 ## Units
 
@@ -50,10 +49,9 @@ lower, split at 23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
 - `water_on_melting_curve()`, for colder bodies (Zeng and Sasselov 2013):
   ice Ih, III, V, VI, VII, switching at the IAPWS 2011 triple points.
 
-`science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the
-melting, saturation and sublimation pressures, the ice VI / ice VII
-boundary), each checked against its IAPWS table; values, sources and ranges
-are on [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
+`science::water` holds the laws (`liquid_pressure`, `ice_ih_density`, the melting,
+saturation and sublimation pressures, the ice VI / VII boundary), each checked
+against its IAPWS table; values and ranges: [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
 Limits: the laws are cold (no thermal pressure), the mantle has no
 transition-zone phases (-7.5 % / +3.5 % against PREM at 23.83 GPa), ices III,
 V and VI are 0 K curves, and water has nothing above 355 K.
@@ -137,11 +135,13 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 
 ## Radiation
 
-`science::radiation::column`: `outgoing_longwave` (a column's infrared, from
-its gases: lines of `data/opacity.bin`, continua, clouds; the caller owns the
-`ColumnCache`) and `skin_temperature`; `radiation::clouds::cloud_cover`;
-`science::volatiles`: CO₂ and methane saturation. Shortwave comes later. See
-[OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
+`science::radiation::column`: `outgoing_longwave` (a column's infrared: lines
+of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
+`skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂
+and methane saturation. Shortwave: `albedo::shortwave_budget` (Bond albedo and
+absorbed light; the caller owns the `ShortwaveCache`), `starlight`, `shortwave`
+(`data/shortwave.bin`), `rayleigh`, `veils`, `methane::stratospheric_share`.
+See [OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
 
 ## Dependencies
 
