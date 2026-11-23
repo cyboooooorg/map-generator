@@ -55,6 +55,22 @@ wants to understand it, and link back to those studies.
 - [How does a planet's air set its outgoing heat and its
   albedo?](radiative-transfer.md)
 
+## The site
+
+The articles are published at
+<https://cyboooooorg.github.io/map-generator/>, built with mdBook and
+deployed to GitHub Pages by `.github/workflows/pages.yml` on every push
+to `main`.
+
+- `mise run docs:build` builds the book into `target/book`.
+- `mise run docs:check` is what the `docs` CI job runs: every figure up to
+  date, every page listed in `SUMMARY.md`, the book builds, its links
+  resolve.
+- Figures are drawn by code, not by hand: `mise run docs:figures`
+  regenerates `figures/*.svg` (see the
+  [figures README](https://github.com/cyboooooorg/map-generator/blob/main/tools/figures/README.md)).
+  They are committed, and CI fails on a stale one.
+
 ## Writing an article
 
 ### File and title

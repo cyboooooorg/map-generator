@@ -88,7 +88,8 @@ Dependencies point inwards only; `tools/guardrails` checks it.
 
 - Design and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`.
 - Science reference: `docs/science/`, one page per model with its
-  sources (rewritten to the new rules as each law is ported).
+  sources (rewritten to the new rules as each law is ported), published
+  at <https://cyboooooorg.github.io/map-generator/>.
 - Studies written before decisions: the
   [Wiki](https://github.com/cyboooooorg/map-generator/wiki).
 - Backlog: the repository's issues, label `backlog`, roadmap #427.

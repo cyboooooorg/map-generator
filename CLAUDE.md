@@ -83,9 +83,12 @@ Three tiers with budgets (the user's to change), split by
 | 3. Heavy | 15 km worlds, oracle, censuses, profiles | `#[ignore = "heavy: …"]` | None |
 
 - `mise run ci` runs what the pipeline runs (format, clippy, tiers 1 and
-  2 with their budgets, markdownlint): run it before every pull request.
+  2 with their budgets, markdownlint, `docs:check`): run it before every
+  pull request.
   `mise run web:check` covers the front-end; never run it in a worktree
   (no `npm ci` there on this machine).
+- A change to a law drawn by a figure regenerates it with
+  `mise run docs:figures`: CI fails on a stale figure.
 - No test generates a system or a world of its own outside tier 3:
   tier-2 tests assert on the shared reference systems.
 - Expected values come from sources, not from the code. A test that pins
