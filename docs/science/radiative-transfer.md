@@ -594,15 +594,15 @@ builds by scaling the vapour; the 3.0 cm of their Table 2 is the
 sensitivity case. The response to water is a second test: from 2.7 to
 3.3 cm, +3.0 ± 1.0 W/m² absorbed and −0.4 ± 0.2 reflected.
 
-**Window of the aerosol-free clear-sky albedo** (the first reading,
-superseded by the window the test takes, below). The observed clear-sky
-albedo holds the aerosols: CERES reflects 52.4 W/m² under clear
-skies, "an albedo of 0.149" (EBAF Ed2.7r; Stephens et al. 2015, §4,
-item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0, July 2005 to June 2015;
-Kato et al. 2018, Table 5). Stephens et al.'s own all-sky pair, 99.7
-W/m² for 0.293, makes their 52.4 an albedo of 0.154, not 0.149: the paper does not say how its 0.149 is formed. The
-aerosols reflect 5.9 ± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and
-§[52]), 0.017 ± 0.003 of albedo. Taken off:
+**Window of the aerosol-free clear-sky albedo** (the first reading, superseded
+by the window the test takes, below). The observed clear-sky albedo holds the
+aerosols: CERES reflects 52.4 W/m² under clear skies, "an albedo of 0.149" (EBAF
+Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0,
+July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et al.'s own
+all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo of 0.154, not
+0.149: the paper does not say how its 0.149 is formed. The aerosols reflect 5.9
+± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[52]), 0.017 ± 0.003 of
+albedo. Taken off:
 
 - 0.149 to 0.156 less 0.017 gives 0.132 to 0.139;
 - 0.154 to 0.156 (the fluxes) less 0.017 gives 0.137 to 0.139;
