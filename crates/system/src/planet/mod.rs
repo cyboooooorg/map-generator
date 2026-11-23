@@ -47,6 +47,11 @@
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod air;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod codes;
 #[cfg_attr(
     not(test),
@@ -94,6 +99,8 @@ mod regime;
 )]
 mod water;
 
+#[cfg(test)]
+mod air_tests;
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]

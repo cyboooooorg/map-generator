@@ -169,3 +169,62 @@ pub(crate) const CORE_STATE: &str = "planet.core.state";
 pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
 /// Surface equatorial dipole field of the core's dynamo; 0 T without one.
 pub(crate) const CORE_FIELD: &str = "planet.core.field";
+/// Partial pressure of N2 the interior brought up: the inventory at
+/// formation times its scatter, the regime's share, the share the water
+/// lets through and, under plates, what subduction leaves.
+pub(crate) const AIR_OUTGASSED_N2: &str = "planet.air.outgassed.n2";
+/// Partial pressure of CO2 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_CO2: &str = "planet.air.outgassed.co2";
+/// Partial pressure of water vapour before the escape: a runaway's whole
+/// water inventory, 0 bar otherwise (the oceans hold it).
+pub(crate) const AIR_OUTGASSED_H2O: &str = "planet.air.outgassed.h2o";
+/// Partial pressure of CH4 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_CH4: &str = "planet.air.outgassed.ch4";
+/// Partial pressure of NH3 the interior brought up (see
+/// [`AIR_OUTGASSED_N2`]).
+pub(crate) const AIR_OUTGASSED_NH3: &str = "planet.air.outgassed.nh3";
+/// Partial pressure of SO2 the interior brought up: its sulphur as SO2,
+/// the share that stays in the air, then as [`AIR_OUTGASSED_N2`].
+pub(crate) const AIR_OUTGASSED_SO2: &str = "planet.air.outgassed.so2";
+/// Partial pressure of O2 outgassed: 0 bar, imposed (life makes it).
+pub(crate) const AIR_OUTGASSED_O2: &str = "planet.air.outgassed.o2";
+/// Share of its air the planet keeps on the cosmic shoreline, from its
+/// escape velocity (the bulk mass and radius), the XUV fluence of its
+/// stars and its dynamo.
+pub(crate) const AIR_SHORELINE_KEPT: &str = "planet.air.shoreline-kept";
+/// Share of the SO2 the air keeps against its wash-out: wet or oxidising,
+/// a day and a half's worth; dry, in proportion to its column.
+pub(crate) const AIR_SO2_KEPT: &str = "planet.air.so2-kept";
+/// Partial pressure of N2 in the air: the outgassed one times the
+/// shoreline's share.
+pub(crate) const AIR_KEPT_N2: &str = "planet.air.kept.n2";
+/// Partial pressure of CO2 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_CO2: &str = "planet.air.kept.co2";
+/// Partial pressure of water vapour in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_H2O: &str = "planet.air.kept.h2o";
+/// Partial pressure of CH4 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_CH4: &str = "planet.air.kept.ch4";
+/// Partial pressure of NH3 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
+/// Partial pressure of SO2 in the air: the outgassed one times the
+/// shoreline's share and the share the wash-out leaves.
+pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
+/// Partial pressure of O2 in the air (see [`AIR_KEPT_N2`]).
+pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
+/// Surface pressure: the sum of the partial pressures.
+pub(crate) const AIR_PRESSURE: &str = "planet.air.pressure";
+
+/// The gases of the air, each with the code of its outgassed partial
+/// pressure and of its partial pressure in the air, in the contract's
+/// order.
+pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 7] = [
+    (timeline::Gas::N2, AIR_OUTGASSED_N2, AIR_KEPT_N2),
+    (timeline::Gas::Co2, AIR_OUTGASSED_CO2, AIR_KEPT_CO2),
+    (timeline::Gas::H2o, AIR_OUTGASSED_H2O, AIR_KEPT_H2O),
+    (timeline::Gas::Ch4, AIR_OUTGASSED_CH4, AIR_KEPT_CH4),
+    (timeline::Gas::Nh3, AIR_OUTGASSED_NH3, AIR_KEPT_NH3),
+    (timeline::Gas::So2, AIR_OUTGASSED_SO2, AIR_KEPT_SO2),
+    (timeline::Gas::O2, AIR_OUTGASSED_O2, AIR_KEPT_O2),
+];
