@@ -333,6 +333,7 @@ fn an_earth_trial_has_earths_bulk_and_no_water_layer() {
         Some(false),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -410,6 +411,7 @@ fn a_hot_dry_planet_builds() {
         Some(false),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -429,6 +431,7 @@ fn a_hot_water_world_keeps_its_water_beyond_the_law() {
         0.0,
         Some(true),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -463,6 +466,7 @@ fn a_temperate_water_world_has_a_water_layer() {
         Some(true),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -494,6 +498,7 @@ fn heat_nodes_point_at_their_inputs() {
         0.1,
         Some(false),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -541,6 +546,7 @@ fn a_circular_orbit_has_no_tide() {
         0.0,
         Some(false),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -638,6 +644,7 @@ fn central_pressure_cites_every_input() {
             Some(true),
             0.0,
             None,
+            None,
         );
         let body = interior(&t, &drawn, &mut trace).unwrap();
         let interior = rocky_of(&body);
@@ -678,6 +685,7 @@ fn the_mantle_state_is_a_constant() {
         Some(false),
         0.0,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let interior = rocky_of(&body);
@@ -710,6 +718,7 @@ fn water_beyond_the_law_is_not_icy() {
             0.0,
             Some(migrated),
             envelope,
+            None,
             None,
         );
         let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -757,6 +766,7 @@ fn water_beyond_the_law_bulk_is_the_condensed_planet() {
         0.0,
         Some(true),
         0.0,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -834,6 +844,7 @@ fn jupiter(trace: &mut Trace) -> (Trial, Drawn) {
         None,
         1.0 - heavy / mass,
         Some(EarthMass(heavy)),
+        None,
     );
     (t, drawn)
 }
@@ -894,6 +905,7 @@ fn a_neptune_trial() {
         0.0,
         None,
         envelope,
+        None,
         None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
@@ -993,6 +1005,7 @@ fn regime_edges_are_finite_and_1_earth_mass_is_continuous() {
             Some(false),
             0.01,
             None,
+            None,
         );
         interior(&t, &drawn, &mut trace)
             .unwrap()
@@ -1024,6 +1037,7 @@ fn the_flux_record_cites_every_source() {
                 0.0,
                 Some(false),
                 0.01,
+                None,
                 None,
             );
             (t, d)
@@ -1067,6 +1081,7 @@ fn a_hot_mini_neptune_bulk_excludes_its_beyond_law_water() {
         Some(true),
         envelope,
         None,
+        None,
     );
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let Body::MiniNeptune {
@@ -1104,4 +1119,101 @@ fn a_hot_mini_neptune_bulk_excludes_its_beyond_law_water() {
     assert!((bulk.surface_gravity.value().0 / g - 1.0).abs() < 1e-9);
     let rho = kg / (4.0 / 3.0 * std::f64::consts::PI * r.powi(3));
     assert!((bulk.mean_density.value().0 / rho - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn the_volatile_draw_leaves_the_other_draws_unchanged() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 7, 1.0, 1.0, 0.0);
+    let base = draws::draw(t.seed, &t, &mut trace).unwrap();
+    let other = Labels {
+        volatiles: "planet/volatiles-other",
+        ..LABELS
+    };
+    let changed = draws::draw_with(t.seed, &t, &mut trace, &other).unwrap();
+    assert_eq!(
+        base.core_mass_fraction.value(),
+        changed.core_mass_fraction.value()
+    );
+    assert_eq!(base.water_fraction.value(), changed.water_fraction.value());
+    assert_eq!(
+        base.radiogenic_abundance.value(),
+        changed.radiogenic_abundance.value()
+    );
+    assert_eq!(
+        base.envelope_fraction.value(),
+        changed.envelope_fraction.value()
+    );
+    assert_ne!(base.volatiles.co2.value(), changed.volatiles.co2.value());
+    assert_ne!(base.volatiles.nh3.value(), changed.volatiles.nh3.value());
+}
+
+#[test]
+fn the_volatile_scatter_has_its_spread() {
+    /// Definition: seeds of the spread test; the standard error of a mean
+    /// is 0.3 / sqrt(2000) = 0.0067 dex, so the tolerance below is three
+    /// standard errors.
+    const SEEDS: u64 = 2000;
+    /// Definition: tolerance of the mean and the standard deviation, 0.02
+    /// dex, three standard errors at 2 000 draws.
+    const TOLERANCE: f64 = 0.02;
+    let mut columns = vec![Vec::new(); 5];
+    for seed in 0..SEEDS {
+        let scatter = draws::volatile_scatter(Seed::new(seed).derive(LABELS.volatiles));
+        for (column, value) in columns.iter_mut().zip(scatter) {
+            column.push(value);
+        }
+    }
+    for column in columns {
+        let n = column.len() as f64;
+        let mean = column.iter().sum::<f64>() / n;
+        let sd = (column.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
+        assert!(mean.abs() < TOLERANCE, "mean {mean}");
+        assert!(
+            (sd - science::volatiles::VOLATILE_SPREAD.0).abs() < TOLERANCE,
+            "sd {sd}"
+        );
+    }
+}
+
+#[test]
+fn the_volatile_scatter_is_recorded_as_drawn() {
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 5, 1.0, 1.0, 0.0);
+    let d = draws::draw(t.seed, &t, &mut trace).unwrap();
+    let v = d.volatiles;
+    for (leaf, code) in [
+        (v.co2, codes::VOLATILE_SCATTER_CO2),
+        (v.n2, codes::VOLATILE_SCATTER_N2),
+        (v.s, codes::VOLATILE_SCATTER_S),
+        (v.ch4, codes::VOLATILE_SCATTER_CH4),
+        (v.nh3, codes::VOLATILE_SCATTER_NH3),
+    ] {
+        let node = trace.node(leaf.node()).unwrap();
+        assert_eq!(node.code.as_str(), code);
+        assert_eq!(node.origin, Origin::Leaf(Provenance::Drawn));
+    }
+    let fixed = Drawn::fixed(
+        &t,
+        &mut trace,
+        0.3,
+        0.001,
+        0.0,
+        Some(false),
+        0.0,
+        None,
+        None,
+    );
+    for (leaf, code) in [
+        (fixed.volatiles.co2, codes::VOLATILE_SCATTER_CO2),
+        (fixed.volatiles.nh3, codes::VOLATILE_SCATTER_NH3),
+    ] {
+        assert_eq!(leaf.value().0, 0.0);
+        let node = trace.node(leaf.node()).unwrap();
+        assert_eq!(node.code.as_str(), code);
+        assert_eq!(node.origin, Origin::Leaf(Provenance::Imposed));
+    }
+    for leaf in [fixed.volatiles.n2, fixed.volatiles.s, fixed.volatiles.ch4] {
+        assert_eq!(leaf.value().0, 0.0);
+    }
 }

@@ -111,3 +111,13 @@ pub(crate) const HEAT_RADIOGENIC: &str = "planet.heat.radiogenic";
 pub(crate) const HEAT_TIDAL: &str = "planet.heat.tidal";
 /// Secular cooling power.
 pub(crate) const HEAT_SECULAR: &str = "planet.heat.secular";
+/// Scatter of the CO2 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_CO2: &str = "planet.volatiles.scatter.co2";
+/// Scatter of the N2 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_N2: &str = "planet.volatiles.scatter.n2";
+/// Scatter of the sulfur budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_S: &str = "planet.volatiles.scatter.s";
+/// Scatter of the CH4 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_CH4: &str = "planet.volatiles.scatter.ch4";
+/// Scatter of the NH3 budget around its rule, dex (drawn).
+pub(crate) const VOLATILE_SCATTER_NH3: &str = "planet.volatiles.scatter.nh3";
