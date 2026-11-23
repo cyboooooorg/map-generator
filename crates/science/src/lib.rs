@@ -8,6 +8,7 @@
 pub mod constants;
 pub mod envelope;
 pub mod eos;
+pub mod escape;
 pub mod giants;
 pub mod heat;
 pub mod hydrogen;

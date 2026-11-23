@@ -107,6 +107,11 @@ model ignores that, since a giant loses next to nothing at `η = 0.1`
 already. `energy_limited_loss_kg` gives `ΔM`; the water loss of the next
 section reuses it.
 
+The rewrite ports the law to `science::escape::energy_limited_loss`
+(typed radius, mass and fluence in J/m², uncapped), with `EFFICIENCY`,
+`MIN_ENVELOPE` and `WATER_PER_HYDROGEN`, the 9 kg of water per kg of
+hydrogen of the next section.
+
 `envelope_after_escape` caps the loss at the envelope, lowers the mass by
 what is lost, and sets the envelope to zero once it falls under 0.1 % of
 the mass (`MIN_ENVELOPE`): what is left is a thin atmosphere, not a
@@ -475,7 +480,11 @@ the Solar System bodies ([study
 21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit)):
 the line passes close to Mars, as in the paper, Titan keeps a bar, and `s` is
 small enough that Venus, which has no dynamo, keeps its air. Every gas is kept
-in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`.
+in the same share. `escape_velocity_km_s` gives `sqrt(2 G M / R)`. The
+rewrite ports both to `science::escape::{escape_velocity, shoreline_kept}`,
+the fluence in J/m² divided by `EARTH_XUV_FLUENCE`, with
+`SHORELINE_VELOCITY`, `SHORELINE_STEEPNESS` and `UNMAGNETISED_ESCAPE`;
+the exponent 4 (`SHORELINE_EXPONENT`) is the paper's.
 **Non-thermal loss** (`non_thermal_loss`, after the shoreline, on the whole
 stock, frosts to come included). A thin air is an atmosphere only if the body
 supplies it faster than it loses it. Inside a giant's magnetosphere (a moon of a
