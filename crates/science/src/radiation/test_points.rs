@@ -2,6 +2,7 @@
 //! once.
 
 use crate::constants::GRAVITATIONAL_CONSTANT;
+use crate::radiation::gases::PartialPressures;
 use crate::units::MetrePerSecondSquared;
 
 /// Source: Venus's surface gravity, 8.87 m/s² (NASA Venus Fact Sheet,
@@ -29,3 +30,17 @@ pub(super) const MANABE_HUMIDITY: f64 = 0.77;
 /// surface temperature rounded (the U.S. Standard Atmosphere 1976 takes
 /// 288.15 K at sea level).
 pub(super) const EARTH_SURFACE_K: f64 = 288.0;
+
+/// Definition: Earth's dry air of the test columns, bar: 0.78 of N₂, 0.21
+/// of O₂ and 400 ppm of CO₂ (the legacy `EARTH_AIR`; argon, which neither
+/// absorbs nor changes the adiabat much, has no field). The air of the
+/// moist plateau and of the shortwave paths.
+pub(super) const EARTH_AIR: PartialPressures = PartialPressures {
+    n2: 0.78,
+    co2: 4e-4,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.21,
+};

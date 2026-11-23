@@ -409,13 +409,6 @@ fn parse_rows<const N: usize>(text: &str, file: &str) -> Vec<[f64; N]> {
 /// Optical depth per `ln p` of CO₂–CO₂ pairs at `nu` cm⁻¹:
 /// `k(ν, T) n²` per metre of air (`n` the CO₂ number density), times the
 /// air's thickness per `ln p`, `k_B T / (m̄ g)`. Not broadened.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the shortwave of PR 2b-2 reads it; the tests' reference sum does now"
-    )
-)]
 pub(crate) fn co2_pairs(nu: f64, level: &Level) -> f64 {
     let co2 = level.gases.co2;
     if co2 <= 0.0 {
@@ -474,14 +467,7 @@ pub(crate) fn radiation_term(nu: f64, t_k: f64) -> f64 {
 /// ([`radiation_term`]), times the vapour's molecules per unit area per
 /// `ln p`, `e N_A / (M̄ g)`, so that the self part grows as `e²` and the
 /// foreign part as `e (p − e)`. The shortwave's binned coefficients
-/// (a later change) take it too.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the shortwave of PR 2b-2 reads it; the tests' reference sum does now"
-    )
-)]
+/// take it too ([`super::shortwave`]).
 pub(crate) fn water_continuum_depth(coefficients: (f64, f64, f64), nu: f64, level: &Level) -> f64 {
     let e = level.gases.h2o;
     if e <= 0.0 {
@@ -528,13 +514,6 @@ pub(crate) fn co2_continuum_per_molecule(
 /// pressure: it closes the windows of a thick CO₂ air (a vertical depth
 /// of about 7 at 1000 cm⁻¹ under 8 bar) and is negligible at Earth's
 /// 400 ppm outside the 15 µm band.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the shortwave of PR 2b-2 reads it; the tests' reference sum does now"
-    )
-)]
 pub(crate) fn co2_continuum_depth(
     coefficient: (f64, f64),
     t_eff_k: f64,

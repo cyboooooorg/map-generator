@@ -698,7 +698,6 @@ const SHORTWAVE_TOP_SHARE: f64 = 1e-2;
 /// A column's levels, as the shortwave reads them: each level's
 /// temperature and partial pressures from the surface up, and the span in
 /// `ln p` of each layer between two levels.
-#[expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")]
 pub(crate) struct Levels {
     pub(crate) levels: Vec<spectrum::Level>,
     pub(crate) spans: Vec<f64>,
@@ -710,7 +709,13 @@ pub(crate) struct Levels {
 /// the skin it sets, and the air above the tropopause absorbs next to
 /// none of the near infrared that CO₂ and water take). `None` without
 /// air.
-#[expect(dead_code, reason = "the shortwave of PR 2b-2 reads it")]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the star cache of PR 2b-2 Task 7 builds its column"
+    )
+)]
 pub(crate) fn levels(
     gases: &PartialPressures,
     surface_k: f64,
