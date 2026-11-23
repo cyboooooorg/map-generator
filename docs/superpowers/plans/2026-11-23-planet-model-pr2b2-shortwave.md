@@ -515,7 +515,8 @@ Waits for Task 1 and the user's ruling if Task 1 stopped.
   Expected: FAIL.
 - [ ] **Step 3:** Implement with a provisional `CLOUD_ALBEDO` (the
   legacy 0.252).
-- [ ] **Step 4:** Run `earths_clear_sky_albedo_is_observed_less_what_is_missing` and
+- [ ] **Step 4:** Run
+  `earths_clear_sky_albedo_is_observed_less_what_is_missing` and
   `earths_clear_sky_air_absorbs_what_satellites_see`. If either fails,
   stop: report the clear-sky albedo, the absorbed W/m² and the
   Rayleigh, H₂O and CO₂ shares (budgets with each gas removed) to the
