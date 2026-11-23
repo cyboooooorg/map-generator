@@ -1,6 +1,7 @@
 //! The volatiles a body is born with, and the saturation of the gases
 //! that condense on the surface or in the column: carbon dioxide and
-//! methane.
+//! methane, and the frost of carbon dioxide and ammonia that a cold
+//! trap reads ([`co2_frost_pressure`], [`ammonia_frost_pressure`]).
 //!
 //! **Inventory at formation** ([`inventory`]): the mass of CO2, N2,
 //! sulphur, CH4 and NH3 a body's rock and iron, silicate and ice carry by
@@ -212,6 +213,19 @@ const METHANE_VAPOUR_T: [f64; 6] = [0.935, 1.03, 1.204, 3.176, 5.616, 5.744];
 /// adopted here).
 const METHANE_SUBLIMATION_ENTHALPY: f64 = 9_700.0;
 
+/// Source: triple-point temperature of ammonia, 195.49 K (Gao et al. 2023,
+/// J. Phys. Chem. Ref. Data 52, doi:10.1063/5.0128269, abstract on the
+/// NIST page).
+const AMMONIA_TRIPLE_TEMPERATURE: f64 = 195.49;
+/// Source: triple-point pressure of ammonia, 0.06060 bar (Fonseca and Lobo
+/// 1989, via the NIST Chemistry WebBook phase-change page, data page
+/// read).
+const AMMONIA_TRIPLE_PA: f64 = 6_060.0;
+/// Source: sublimation enthalpy of ammonia, 31.2 kJ/mol (Overstreet and
+/// Giauque 1937, via the NIST Chemistry WebBook, 177 to 195 K, data page
+/// read). Held constant below the triple point.
+const AMMONIA_SUBLIMATION_ENTHALPY: f64 = 31_200.0;
+
 /// Definition: smallest temperature of the sublimation lines, 1 K, so that
 /// 0 K, a negative or a NaN temperature give a finite pressure.
 const FLOOR_TEMPERATURE: f64 = 1.0;
@@ -371,6 +385,28 @@ pub fn methane_saturation_pressure(t: Kelvin) -> Pascal {
 /// [`methane_saturation_pressure`] at `t_k` in bar.
 pub(crate) fn methane_saturation_bar(t_k: f64) -> f64 {
     METHANE.pressure_pa(t_k) / PASCALS_PER_BAR
+}
+
+/// Pressure of CO2 over its frost at `t`, the sublimation branch of the
+/// curve of [`co2_saturation_pressure`]; `None` at or above the triple
+/// point (216.592 K), where CO2 is no longer trapped as a solid. `t` is
+/// held at or above 1 K.
+pub fn co2_frost_pressure(t: Kelvin) -> Option<Pascal> {
+    (t.0 < CO2_TRIPLE_TEMPERATURE).then(|| Pascal(CO2.pressure_pa(t.0)))
+}
+
+/// Pressure of NH3 over its frost at `t`: Clausius-Clapeyron from the
+/// triple point (195.49 K, 0.06060 bar) with a constant enthalpy of
+/// 31.2 kJ/mol; `None` at or above the triple point. `t` is held at or
+/// above 1 K.
+pub fn ammonia_frost_pressure(t: Kelvin) -> Option<Pascal> {
+    if t.0 >= AMMONIA_TRIPLE_TEMPERATURE {
+        return None;
+    }
+    let t = t.0.max(FLOOR_TEMPERATURE);
+    let ln_ratio = -AMMONIA_SUBLIMATION_ENTHALPY / MOLAR_GAS_CONSTANT
+        * (1.0 / t - 1.0 / AMMONIA_TRIPLE_TEMPERATURE);
+    Some(Pascal(AMMONIA_TRIPLE_PA * ln_ratio.exp()))
 }
 
 #[cfg(test)]
