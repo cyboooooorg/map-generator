@@ -13,7 +13,8 @@ git-repository-url = "https://github.com/cyboooooorg/map-generator"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
 [preprocessor.katex]
-# A formula KaTeX cannot parse fails the build instead of printing red text.
+# Makes KaTeX report a formula it cannot parse. The build still succeeds:
+# the grep in `mise run docs:build` is what fails on the logged error.
 throw-on-error = true
 
 [preprocessor.mermaid]

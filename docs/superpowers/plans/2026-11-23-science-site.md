@@ -49,7 +49,8 @@ mise, GitHub Actions (`actions/upload-pages-artifact`,
 ## Review Focus
 
 1. A law that errors on part of a figure's range (`GiantError::OutOfTable`
-   below about 13 M⊕, `StellarError` at a range edge): the figure draws
+   below the table's lowest mass for the core, about 28 M⊕ for a core of
+   25 M⊕ (12.92 M⊕ for any core), `StellarError` at a range edge): the figure draws
    the valid part, never panics — test in Task 3 and Task 4.
 2. `figures --check` with a figure missing on disk, or stale: reports it
    by name and exits 1, writes nothing — test in Task 2.

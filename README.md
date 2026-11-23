@@ -51,11 +51,14 @@ The tasks check the workspace:
 
 | Task | What it does |
 | --- | --- |
-| `mise run ci` | Everything the pipeline runs but the front-end: format, clippy, tiers 1 and 2 with their budgets, markdownlint |
+| `mise run ci` | Everything the pipeline runs but the front-end: format, clippy, workflows, tiers 1 and 2 with their budgets, markdownlint, `docs:check` |
 | `mise run test:tier1` | Unit tests and architecture guardrails (budget 2 min) |
 | `mise run test:tier2` | Regression tests on shared reference systems (budget 8 min) |
 | `mise run test:heavy` | Tier 3: full-size worlds, oracle, censuses (release, no budget) |
 | `mise run fmt` | Format the code |
+| `mise run docs:build` | Build the science book (`docs/science`) into `target/book` |
+| `mise run docs:figures` | Redraw the book's SVG figures (`-- --check` only compares) |
+| `mise run docs:check` | Check the book: figures up to date, pages listed, equations that render on GitHub, build, links |
 | `mise run web:check` | Type-check and test the front-end |
 
 Options after `--` go to nextest, for example
@@ -82,6 +85,7 @@ Dependencies point inwards only; `tools/guardrails` checks it.
 | [`cli`](crates/cli/README.md) | The `map-generator` command, composition root |
 | [`regression`](crates/regression/README.md) | Tier-2 tests on shared reference systems |
 | [`tools/guardrails`](tools/guardrails/README.md) | Architecture checks and test budgets |
+| [`tools/figures`](tools/figures/README.md) | Offline drawer of the science book's SVG figures |
 | `tools/opacity-table` | Offline builder of the climate's opacity tables from HITRAN |
 
 ## Documentation
