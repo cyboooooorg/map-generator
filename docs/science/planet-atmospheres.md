@@ -961,6 +961,21 @@ departures: the outgassing is spread evenly over the age, and the
 larger Lyman α share of an M dwarf's light is not modelled (both
 understate the destruction round red dwarfs, if anything).
 
+**How the rewrite computes the photolysis** (`science::photochemistry::methane_left`;
+`system::planet::air`). The step reads the methane kept by the shoreline,
+the surface gravity and, per star, its flux at the planet and its Lyman α
+history, and records `planet.air.photolysed.ch4`. Its cause tree is the
+chain's: `planet.air.outgassed.ch4` (outgassing), then the shoreline's
+kept node (`planet.air.kept.ch4`, the SO₂ wash-out aside, which reads
+the kept air of another gas), then the photolysed node, which cites the
+kept methane, the gravity, each source's flux and mass, and the trial's
+metallicity and age. Nothing recomputes the destroyed amount to explain
+it. Where it departs from legacy: `Y` is fitted again, 14.1 for legacy's
+13.9, on the history of #622 (a share of the ZAMS light times the
+history's scale); the destruction is summed over every star the planet
+sees, where legacy had one; the onset is a 60-step bisection, not an
+analytic form; and no non-thermal loss precedes the photolysis (#658).
+
 **Reducing air** (`reducing`, `without_co2_if_reducing`, issue #557).
 A body whose methane survives the ultraviolet (the air the photolysis
 leaves holds some) under an equilibrium temperature of 150 K (the line
@@ -991,6 +1006,19 @@ nitrogen air is no Titan's: it keeps its CO₂ frost, as Triton's surface
 shows CO₂ ice (Cruikshank et al. 1993, Science 261, 742; Quirico et al.
 1999, Icarus 139, 159). The model's triton-likes freeze 6 to 32 bar of
 it under their nitrogen frost, far more than a surface veneer.
+
+**How the rewrite computes the reducing air** (`science::photochemistry::reducing`;
+`system::planet::air`). The air is solved in one pass: the step reads the
+methane the photolysis leaves and each star's equilibrium temperature,
+records `planet.air.reducing`, and the CO₂ is outgassed (or not) after
+that node, so a reducing air's `planet.air.outgassed.co2` cites the
+reducing node only. Legacy solved the air without CO₂, then solved it
+again with CO₂ when the climate did not leave a Titan's air. The
+rewrite has no climate yet: the test on the climate's result (the
+fallback to the air with CO₂, `titan_like_air`) is left to 2d-3 (#659),
+and until then a reducing air stays without CO₂. The frozen CO₂ is
+booked as legacy does, a frost of what the cold trap removes, which
+gives Callisto 5 bar of it (#590).
 
 **Cold trap** (`cold_trap`). A gas whose triple point lies above the
 body's equilibrium temperature frosts onto the ground until its partial
@@ -1046,6 +1074,18 @@ body's Bond albedo (`albedo::cover`: 0.75, covering the share
 `frost / 0.02 bar` of the disc), as does a heat pipe's volcanic SO₂
 frost (0.63, see *Volcanic SO₂*).
 
+**How the rewrite computes the cold trap** (`science::volatiles`,
+`co2_frost_pressure`, `ammonia_frost_pressure`; `system::planet::air`).
+Each gas of the kept air is held to its frost pressure at every star's
+equilibrium temperature; the step records `planet.air.trapped.co2` and
+`planet.air.trapped.nh3`, each citing the kept gas and the equilibria,
+and `planet.air.frozen-co2`, citing the kept and the trapped CO₂. What
+the trap leaves is what the photochemistry reads. Where it departs from
+legacy: the frost curves of CO₂ and ammonia are the sourced ones above;
+`condense` (the climate's condensation of water, methane and nitrogen at
+the surface temperature) is left to 2d-3, so the rewrite's air keeps
+them whole.
+
 **Photochemistry** (`photochemistry`, after the cold trap, on what is
 still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
 which escapes: `2 NH₃ → N₂ + 3 H₂`, the nitrogen conserved. Atreya,
@@ -1067,6 +1107,19 @@ above it, OH from water's photolysis oxidises the methane, which is set
 to zero (the CO₂ it would make is not added). Life's methane is added
 later. Methane's photolysis by the ultraviolet comes before the cold
 trap (above).
+
+**How the rewrite computes the photochemistry**
+(`science::photochemistry::nitrogen_from_ammonia`, `methane_survives`;
+`system::planet::air`). After the trap, the ammonia left becomes N₂ at
+`N2_PER_NH3` and methane is kept only under `METHANE_SURVIVES`. The
+nodes are `planet.air.photochemistry.n2` (citing the kept N₂ and the
+trapped NH₃), `.nh3` (the trapped NH₃) and `.ch4` (the photolysed
+methane and the equilibria); the partial pressures of the final air are
+these nodes and the trapped CO₂, so the whole tree reads
+outgassed, shoreline-kept, photolysed, trapped, photochemistry. Where it
+departs from legacy: `N2_PER_NH3` comes from the molar masses
+(0.8224, not 28/34), and the rewrite's Earth has 0.804 bar of N₂ (0.512
+before the photochemistry), inside the target below.
 
 **Calibration of `METHANE_SURVIVES`** (150 K; study 23, part 2). Titan
 (about 82 K) keeps its methane, Mars (about 207 K) and an abiotic Earth
