@@ -1,6 +1,7 @@
 //! Figures of the science book (`docs/science`), drawn as SVG from the laws
 //! of the `science` crate. See README.md.
 
+mod giants;
 mod stars;
 
 use std::error::Error;
@@ -46,10 +47,16 @@ impl Error for FigureError {}
 
 /// Every figure of the book. Each one is added here by its own function.
 pub fn figures() -> Vec<Figure> {
-    vec![Figure {
-        name: "main-sequence",
-        render: stars::main_sequence_figure,
-    }]
+    vec![
+        Figure {
+            name: "main-sequence",
+            render: stars::main_sequence_figure,
+        },
+        Figure {
+            name: "giant-radius",
+            render: giants::giant_radius_figure,
+        },
+    ]
 }
 
 /// The figures whose file under `dir` is missing or differs from a fresh

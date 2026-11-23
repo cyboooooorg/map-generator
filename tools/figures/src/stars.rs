@@ -100,10 +100,7 @@ fn panel(
         .bold_line_style(RGBColor(0xcc, 0xcc, 0xcc))
         .draw()
         .map_err(draw_error)?;
-    for (data, color, label) in [
-        (zams, ZAMS_COLOR, "ZAMS (age 0)"),
-        (mid, MID_COLOR, "mid-life"),
-    ] {
+    for (data, color, label) in [(zams, ZAMS_COLOR, "ZAMS"), (mid, MID_COLOR, "mid-life")] {
         chart
             .draw_series(LineSeries::new(
                 data.iter().map(|p| (p.0, pick(p))),
