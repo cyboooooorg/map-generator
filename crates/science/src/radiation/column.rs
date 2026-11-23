@@ -250,10 +250,6 @@ fn radiating_methane_bar(gases: &PartialPressures, pressure_bar: f64, skin_k: f6
 /// air). The methane whose near-infrared bands take a share of the
 /// starlight before it reaches the troposphere (the anti-greenhouse of
 /// PR 2b-2).
-#[expect(
-    dead_code,
-    reason = "the methane anti-greenhouse of PR 2b-2 reads it; ported with the column"
-)]
 pub(crate) fn stratospheric_methane_bar(gases: &PartialPressures, skin_k: f64) -> f64 {
     let pressure = gases.total();
     if pressure <= 0.0 {

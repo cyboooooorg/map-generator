@@ -6,9 +6,10 @@ pub mod column;
 pub(crate) mod fast_math;
 pub mod gases;
 pub(crate) mod ktable;
-pub(crate) mod methane;
+pub mod methane;
 pub(crate) mod shortwave;
 pub(crate) mod spectrum;
 pub(crate) mod starlight;
 #[cfg(test)]
 mod test_points;
+pub mod veils;

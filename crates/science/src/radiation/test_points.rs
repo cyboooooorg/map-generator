@@ -44,3 +44,57 @@ pub(super) const EARTH_AIR: PartialPressures = PartialPressures {
     so2: 0.0,
     o2: 0.21,
 };
+
+/// Source: Titan's surface pressure, 1.467 bar (1467 hPa; Fulchignoni et
+/// al. 2005, *Nature* 438, 785, doi:10.1038/nature04314, as the audit,
+/// Wiki study 19, confirms).
+pub(super) const TITAN_PRESSURE_BAR: f64 = 1.467;
+
+/// Source: Titan's surface temperature, 93.65 K (+-0.25 K; Fulchignoni et
+/// al. 2005, *Nature* 438, 785, doi:10.1038/nature04314, as the audit
+/// confirms).
+pub(super) const TITAN_SURFACE_K: f64 = 93.65;
+
+/// Source: the methane share of Titan's air near its surface, 5.65 % (+-
+/// 0.18 %; Niemann et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
+/// doi:10.1029/2010JE003659, as the audit confirms).
+pub(super) const TITAN_METHANE_SHARE: f64 = 0.0565;
+
+/// Source: Titan's effective temperature, 82 K (McKay, Pollack & Courtin
+/// 1991, *Science* 253, 1118, doi:10.1126/science.11538492, as the audit
+/// quotes it).
+pub(super) const TITAN_EFFECTIVE_K: f64 = 82.0;
+
+/// Definition: Titan's air at its surface: [`TITAN_METHANE_SHARE`] of methane, the
+/// rest nitrogen, under [`TITAN_PRESSURE_BAR`].
+pub(super) const TITAN_SURFACE_AIR: PartialPressures = PartialPressures {
+    n2: TITAN_PRESSURE_BAR * (1.0 - TITAN_METHANE_SHARE),
+    co2: 0.0,
+    h2o: 0.0,
+    ch4: TITAN_PRESSURE_BAR * TITAN_METHANE_SHARE,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 0.0,
+};
+
+/// Source: Venus's surface pressure, 92 bar (NASA Venus Fact Sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html, "Surface
+/// pressure", read 2026-11-23).
+pub(super) const VENUS_PRESSURE_BAR: f64 = 92.0;
+
+/// Source: Venus's mean surface temperature, 737 K (NASA Venus Fact
+/// Sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html,
+/// "Average temperature", read 2026-11-23).
+pub(super) const VENUS_SURFACE_K: f64 = 737.0;
+
+/// Source: the SO₂ of Venus's near-surface air, 150 ppm by volume (NASA
+/// Venus Fact Sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html,
+/// "Surface composition", read 2026-11-23), times [`VENUS_PRESSURE_BAR`]:
+/// 1.38e-2 bar.
+pub(super) const VENUS_SO2_BAR: f64 = VENUS_PRESSURE_BAR * 150e-6;
+
+/// Source: the global mean methane of Earth's air, 1936.37 ppb (August
+/// 2026; NOAA Global Monitoring Laboratory, gml.noaa.gov/ccgg/trends_ch4/,
+/// "Global CH4 Monthly Means", page last updated 2026-11-19, read
+/// 2026-11-23), as a mixing ratio of 1.93637e-6 (the tests' 1.9 ppm).
+pub(super) const EARTH_METHANE_MIXING_RATIO: f64 = 1936.37e-9;
