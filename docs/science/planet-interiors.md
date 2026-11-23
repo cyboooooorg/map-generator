@@ -108,7 +108,7 @@ start from these parameters:
 
 **Where the study is.** The bounds, with the page of every number and
 what was searched and not found, are in the
-[draw bounds study](../superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md).
+[draw bounds study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md).
 
 #### The envelope draw
 
@@ -216,11 +216,11 @@ integrator), `science::eos` and `science::water` (the materials).
 the mass inside, $P$ the pressure and $\rho(P)$ the density of the
 material at that pressure:
 
-```math
+$$
 \frac{dm}{dr} = 4\pi r^2 \rho, \qquad
 \frac{dP}{dr} = -\frac{G\,m\,\rho}{r^2}, \qquad
 C = \int_0^M \tfrac{2}{3}\, r^2\, dm
-```
+$$
 
 The model integrates outward from the centre with fourth-order
 Runge-Kutta, using $t = (m/M)^{1/3}$ as the variable, so that the centre
@@ -234,7 +234,7 @@ the radius and $C/MR^2$ within $10^{-4}$ of the converged answer for
 Earth and for 20 Earth masses (`STEPS_PER_LAYER`, a calibration,
 measured when the integrator was written against a 1280-step reference;
 the
-[prototype](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md),
+[prototype](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/prototype-report.md),
 which did not end steps at the phase changes, needed 160).
 
 **In words.** Squeeze the planet under its own weight, layer by layer,
@@ -253,8 +253,8 @@ reference density $\rho_0$, bulk modulus $K_0$ and its pressure
 derivative $K_0'$. A mix of minerals adds the volumes of its parts at
 equal pressure (Amagat's law), by mass share. The values are in
 `science::eos` and `science::water`, each with its source; the studies
-([equations of state](../superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
-[core and dynamo](../superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md))
+([equations of state](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
+[core and dynamo](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md))
 give the search behind them.
 
 | Layer | Material and law | $\rho_0$ (kg/m³), $K_0$ (GPa), $K_0'$ | Source |
@@ -466,10 +466,10 @@ of hydrogen-helium planets over a core of 50/50 ice and rock, at ages of
 9.5 au from a star of the Sun's luminosity, for cores of 0, 10, 25, 50
 and 100 $M_\oplus$ and masses of 10 to 3 594 $M_\oplus$. The model reads
 the 25 files of the authors' page (4 550 rows; provenance and checks in
-[GIANTS.md](../../crates/science/data/GIANTS.md)), not the three printed
-tables, since one printed value is a misprint (Table 4, 9.5 au, 25
-$M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at 3.16 Gyr and
-0.985 at 10 Gyr in the file).
+[GIANTS.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/GIANTS.md)),
+not the three printed tables, since one printed value is a misprint
+(Table 4, 9.5 au, 25 $M_\oplus$ core, 464 $M_\oplus$: 1.037 against 1.013 at
+3.16 Gyr and 0.985 at 10 Gyr in the file).
 
 - A star of another luminosity is read at the flux-equivalent distance
   $d_\mathrm{eq} = 1/\sqrt{F}$ au, $F$ the light received in Earth's. The
@@ -525,10 +525,10 @@ molecular layer and a metallic one.
 The pressure is located by an index-one polytrope of the whole giant,
 $P = K\rho^2$, with Hubbard's (2013) Eqs. 61 and 62:
 
-```math
+$$
 \rho(r) = \rho_c\,\frac{\sin\xi}{\xi},\quad \xi = \frac{\pi r}{R},\quad
 \rho_c = \frac{\pi^2}{3}\,\bar\rho,\quad K = \frac{2 G R^2}{\pi}
-```
+$$
 
 Pressure falls with $r$, so the radius of 100 GPa is found by bisection,
 and the mass inside it is $M(\sin\xi - \xi\cos\xi)/\pi$ (the same
@@ -616,9 +616,9 @@ which melted that much ice (Barr & Canup 2008 find that Callisto and
 Titan stayed partly differentiated only if they grew slowly enough to
 radiate most of it):
 
-```math
+$$
 s = \min\left(1,\ \frac{h\,\tfrac{3}{5}\,G M / R}{L_\mathrm{ice}}\right)
-```
+$$
 
 with $L_\mathrm{ice}$ = 333.6 kJ/kg the latent heat of ice (Feistel &
 Wagner 2006) and $h$ = 0.057, a calibration on Callisto and Titan.
@@ -672,9 +672,10 @@ core under water of 0.95 to 1).
 $C / (M R^2)$ of
 its layers, each of uniform density:
 
-```math
-\frac{C}{M R^2} = \frac{2}{5\,M R^2} \sum_i m_i \frac{r_i^5 - r_{i-1}^5}{r_i^3 - r_{i-1}^3}
-```
+$$
+\frac{C}{M R^2}
+  = \frac{2}{5\,M R^2} \sum_i m_i \frac{r_i^5 - r_{i-1}^5}{r_i^3 - r_{i-1}^3}
+$$
 
 0.4 for a uniform sphere, less the more the mass sits at the centre.
 Over the asked moons of seeds 1 to 20: Io 0.370 to 0.376 (0.378
@@ -703,9 +704,9 @@ et al. 2009, a K/U ratio, read in its abstract). Each isotope is carried
 to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704,
 14.05 and 1.277 Gyr; the earlier model used 1.248 Gyr for potassium-40):
 
-```math
+$$
 H = \sum_i p_i\, m_\mathrm{sil}\, a\, e^{\lambda_i (4.5673 - t)}
-```
+$$
 
 where $p_i$ is the isotope's power per kilogram today, $m_\mathrm{sil}$
 the silicate mass, $a$ the planet's abundance relative to Earth's,
@@ -730,10 +731,11 @@ silicate mass, which holds the heat, and lets it decay with
 age over a cooling time that grows as the area of the body, $R^2$ with
 $R^3 \propto M$:
 
-```math
-S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\, e^{4.5673/\tau_\oplus - t/\tau},
+$$
+S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\,
+  e^{4.5673/\tau_\oplus - t/\tau},
 \qquad \tau = \tau_\oplus \left(\frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\right)^{2/3}
-```
+$$
 
 with $S_\oplus$ = 26.5 TW and $\tau_\oplus$ = 10 Gyr. Both the
 10 Gyr and the exponent 2/3 are calibrations: no source gives a cooling
@@ -753,9 +755,9 @@ with the response of an enveloped body.
 **Tidal.** A host raises tides in a planet on an eccentric orbit, and
 friction turns them into heat (Peale, Cassen & Reynolds 1979):
 
-```math
+$$
 \dot E = \frac{21}{2}\,\frac{k_2}{Q}\,\frac{G M_h^2 R^5 n\, e^2}{a^6}
-```
+$$
 
 with $M_h$ the host's mass, $R$ the planet's radius, $a$ and $e$ its orbit's
 semi-major axis and eccentricity, $n$ its mean motion, and $k_2/Q$ the
@@ -802,9 +804,9 @@ period ratio lies within 1 % of 2. A pair merely near it is not locked:
 Dione and Rhea, at 1.67, are not. The host's tides push each moon
 outward with a torque
 
-```math
+$$
 T_i = \frac{3}{2}\,\frac{k_2}{Q}\bigg|_h\,\frac{G m_i^2 R_h^5}{a_i^6}
-```
+$$
 
 and the resonance locks each pair of neighbours together: they migrate
 as one, at the mean motion $\bar n = \sum n_i L_i / \sum L_i$ weighted by
@@ -812,9 +814,10 @@ their orbits' angular momenta $L_i = m_i n_i a_i^2$. What the torques
 pump into the two orbits and the orbits do not keep is dissipated by the
 eccentricity the resonance forces (Meyer & Wisdom 2007):
 
-```math
-\dot E = \sum_{i \in \text{pair}} n_i T_i - \bar n \sum_{i \in \text{pair}} T_i \;\ge 0
-```
+$$
+\dot E = \sum_{i \in \text{pair}} n_i T_i
+  - \bar n \sum_{i \in \text{pair}} T_i \;\ge 0
+$$
 
 Each pair's heat goes to its inner moon, as Meyer & Wisdom put all of
 the Enceladus–Dione pair's heat in Enceladus: the inner moon, closer to
@@ -836,9 +839,9 @@ resonance locking (Fuller, Luan & Quataert 2016): the host dissipates so
 that its innermost round moon migrates outward over the system's age,
 $a/\dot a = t$, which gives
 
-```math
+$$
 \frac{k_2}{Q}\bigg|_h = \frac{n a^8}{3\,t\,G m R_h^5}
-```
+$$
 
 for that moon's $m$, $a$ and $n$, at most the $3 \times 10^{-3}$ measured
 for Saturn at Titan's frequency (Lainey et al. 2020). One value per host,
@@ -918,19 +921,19 @@ $567/T$), so Fourier's law integrates to a shell of plane thickness
 $d_0$, which the sphere thins to $d$ (its base is smaller than its
 surface; Turcotte & Schubert 2014):
 
-```math
+$$
 d_0 = \frac{651\,\ln(T_b / T_s)}{q}, \qquad d = \frac{R\,d_0}{R + d_0}
-```
+$$
 
 with $T_s$ the surface temperature, $q$ the internal heat flux (radiogenic,
 tidal and secular), $R$ the radius and $T_b$ the melting point at the base
 (Hussmann, Sohl & Spohn 2006). Ice melts colder under pressure: the base
 follows the IAPWS melting curve of ice Ih (Wagner et al. 2011),
 
-```math
+$$
 \frac{p}{p_t} = 1 + \sum_{i=1}^{3} a_i \left(1 - \theta^{b_i}\right),
 \qquad \theta = \frac{T}{273.16\ \mathrm{K}}
-```
+$$
 
 with $p_t$ = 611.657 Pa, $a_i$ = 1 195 393.37, 80 818.3159, 3338.2686 and
 $b_i$ = 3, 25.75, 103.75, from 273.16 K at no pressure through about
@@ -967,9 +970,9 @@ the mean over the surface and its polar thickness the shell at the pole.
   dissipates, in the membrane limit, as $\Psi_A + \tfrac{9}{2}\Psi_C$
   (Beuthe 2013), averaged over longitude:
 
-  ```math
+  $$
   w(\mu) = 1 + \frac{-\tfrac{7}{2}\,a_{20} P_2(\mu) + \tfrac{7}{4}\,a_{40} P_4(\mu)}{\tfrac{11}{2}\,a_{00}}
-  ```
+  $$
 
   with $\mu$ the cosine of the colatitude and $a_{00} = 21/5$,
   $a_{20} = -33/7$, $a_{40} = 387/140$ (Beuthe 2013, table 1): 1.92
@@ -999,9 +1002,9 @@ which it freezes, along the liquidus of the water–ammonia phase diagram
 at low pressure (Leliwa-Kopystyński et al. 2002), a fit in the ammonia
 mass fraction $X$ of the liquid:
 
-```math
+$$
 T_\mathrm{liq} = 273 - 53.07\,X - 1651.4\,X^2 + 11842\,X^3 - 46269\,X^4 + 56695\,X^5
-```
+$$
 
 from 273 K for pure water through about 259 K at 10 % to about 175 K at
 the eutectic, a third of ammonia (176 K measured), below which no liquid
@@ -1020,9 +1023,9 @@ ocean with it.
 **Convection.** A thick shell convects under a stagnant lid. The ice
 creeps by diffusion, a Newtonian viscosity (Goldsby & Kohlstedt 2001):
 
-```math
+$$
 \eta = \frac{R\,T\,d^2}{84\,V_m\,D_0\,e^{-Q/RT}}
-```
+$$
 
 with $D_0$ = 9.1 × 10⁻⁴ m²/s, $Q$ = 59.4 kJ/mol, $V_m$ = 1.97 × 10⁻⁵
 m³/mol and a grain size $d$ of 30 mm, the low end of the 30 to 80 mm
@@ -1032,18 +1035,18 @@ takes the viscosity as $\sigma / 2\dot\varepsilon$, a calibration). The
 shell convects when its Rayleigh number with the viscosity at its base
 reaches the stagnant-lid onset (Solomatov 1995):
 
-```math
+$$
 Ra = \frac{\rho\,g\,\alpha\,\Delta T\,D^3}{\kappa\,\eta(T_b)} \ge 20.9\,\theta^4,
 \qquad \theta = \frac{Q\,\Delta T}{R\,T_b^2}
-```
+$$
 
 with $\alpha$ = 1.6 × 10⁻⁴ K⁻¹ and $\kappa = k / \rho c_p$, $c_p$ =
 2097 J kg⁻¹ K⁻¹ (Feistel & Wagner 2006). It then carries up into its lid
 a flux that does not depend on its thickness (Solomatov & Moresi 2000):
 
-```math
+$$
 q_c = 0.53\,k\left(\frac{R\,T_b^2}{Q}\right)^{4/3}\left(\frac{\rho\,g\,\alpha}{\kappa\,\eta(T_b)}\right)^{1/3}
-```
+$$
 
 taken at the base's temperature, which overestimates it a little. If
 $q_c$ is more than the internal heat supplies, the ocean freezes: down to
@@ -1994,7 +1997,7 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      [doi:10.1086/512120](https://doi.org/10.1086/512120)
      ([arXiv:astro-ph/0612671](https://arxiv.org/abs/astro-ph/0612671),
      v4), and the 25 tables of the author's page, as kept in
-     [GIANTS.md](../../crates/science/data/GIANTS.md).
+     [GIANTS.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/GIANTS.md).
 104. Hubbard, W. B. 2013, index-one polytrope of Jupiter, *The
      Astrophysical Journal* 768, 43,
      [doi:10.1088/0004-637X/768/1/43](https://doi.org/10.1088/0004-637X/768/1/43),
@@ -2036,19 +2039,19 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      worlds), Guillot 1999, Unterborn et al. 2015 (arXiv:1505.00280).
 
 The values, tables and pages read for entries 99 to 115 are in the
-[draw bounds](../superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
+[draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
 and
-[giants and envelopes](../superpowers/studies/2026-11-21-planet-model-2a/giants-and-envelopes.md)
+[giants and envelopes](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/giants-and-envelopes.md)
 studies, which say, for each number, whether it was read in the paper or
 computed from what was read.
 
 The values, tables and pages read for each source of the integrated
 interior and heat (entries 75 to 98) are in the studies
-([equations of state](../superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
-[core and dynamo](../superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md),
-[heat and composition](../superpowers/studies/2026-11-21-planet-interior/heat-and-composition.md))
+([equations of state](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md),
+[core and dynamo](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/core-and-dynamo.md),
+[heat and composition](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/heat-and-composition.md))
 and the
-[prototype report](../superpowers/studies/2026-11-21-planet-interior/prototype-report.md);
+[prototype report](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-interior/prototype-report.md);
 their source tables say how much of each paper was read.
 
 ## See also
@@ -2058,7 +2061,7 @@ their source tables say how much of each paper was read.
 - [Why does a world always show the same face to its
   host?](tidal-locking.md): the system's age, now drawn, sets how far
   locking has gone.
-- [docs/superpowers/specs/2026-11-11-physical-planet-model-design.md](../superpowers/specs/2026-11-11-physical-planet-model-design.md):
+- [docs/superpowers/specs/2026-11-11-physical-planet-model-design.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/specs/2026-11-11-physical-planet-model-design.md):
   the design of the model.
 
 For the atmosphere, climate and XUV history of a planet see

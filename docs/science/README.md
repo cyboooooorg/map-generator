@@ -42,6 +42,7 @@ wants to understand it, and link back to those studies.
 ### Planet view: the surface
 
 - [What decides whether a world has an atmosphere?](atmospheres.md)
+- [Planet atmospheres, climate and surface (part 2)](planet-atmospheres.md)
 - [How does axial tilt make climate zones and
   seasons?](axial-tilt-climate.md)
 - [Why is one side of a mountain range dry?](rain-shadows.md)
@@ -96,13 +97,14 @@ Every article has these sections, in this order:
 
 ### Equations
 
-- Display equations go in fenced `math` blocks, which GitHub renders:
+- Display equations go between `$$` lines, which GitHub and the
+  published site both render:
 
-  ````markdown
-  ```math
+  ```markdown
+  $$
   r_H = a\left(\frac{m}{3M}\right)^{1/3}
+  $$
   ```
-  ````
 
 - Inline symbols go between dollar signs: `$\rho_p$`.
 - Define every symbol in the sentence before the equation.

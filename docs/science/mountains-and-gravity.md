@@ -27,9 +27,9 @@ $\rho g h$. Rock holds only up to a certain stress, its strength $\sigma$;
 beyond it, it breaks and slides, or creeps and flows. The tallest column it
 can hold is therefore about
 
-```math
+$$
 h_\text{max} \approx \frac{\sigma}{\rho\,g}
-```
+$$
 
 **In words.** The same rock holds a mountain twice as high under half the
 gravity. Nothing else in the estimate depends on the planet: strength and
@@ -64,11 +64,11 @@ balances the range's weight (Airy 1855). For a range of height $h$ above
 crust of density $\rho_c$ over a mantle of density $\rho_m$, the root's
 depth $r$ follows from equal weights of the two columns:
 
-```math
+$$
 \rho_c\, g\, h = (\rho_m - \rho_c)\, g\, r
 \quad\Rightarrow\quad
 r = h\,\frac{\rho_c}{\rho_m - \rho_c}
-```
+$$
 
 **In words.** Gravity cancels out: isostasy says how deep the root goes,
 not how high the range can be. Its height is still limited by what the
@@ -83,9 +83,9 @@ a root 28 km deep.
 high a crust of thickness $t$ stands above a thinner one $t_o$: their tops
 differ by
 
-```math
+$$
 \Delta h = (t - t_o)\left(1 - \frac{\rho_c}{\rho_m}\right)
-```
+$$
 
 **In words.** A thick crust floats high, a thin one low, and gravity
 cancels out again. Earth's continental crust is 41.1 km thick on average,
@@ -160,7 +160,7 @@ of the timeline: radius, surface gravity, tectonic regime, heat flux and
 surface liquid. It never reads what the central object is. The laws and
 constants live in `science::relief`, the passes in `world::relief`; each
 number below and its source is in the [relief
-study](../superpowers/studies/2026-11-22-relief/README.md#retained-values).
+study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/README.md#retained-values).
 
 1. **Analogue.** The regime picks the body whose measured statistics the
    relief takes: Earth with plates, Mars for a stagnant, episodic or
@@ -415,7 +415,7 @@ median land height 0.33 km, 6.7 % of the land above 2 km, 1.3 % above 4 km.
 
 Calibrations (each with its `Calibration:` doc comment; what was
 searched is in the [relief
-study](../superpowers/studies/2026-11-22-relief/README.md#final-calibration-list)):
+study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/README.md#final-calibration-list)):
 
 - **Regime to analogue.** Plates take Earth's statistics, every other
   regime Mars's. No measured Hurst exponent exists for Venus, so a
@@ -714,7 +714,7 @@ without it is 24-29 % at 350 km).
     [doi:10.1016/0031-9201(81)90046-7](https://doi.org/10.1016/0031-9201(81)90046-7)
     (read): Table I, the density of the mantle lid, 3.38 g/cm³ at its top.
 27. Relief study of the rewrite, 2026-11-22:
-    [`docs/superpowers/studies/2026-11-22-relief/`](../superpowers/studies/2026-11-22-relief/README.md),
+    [`docs/superpowers/studies/2026-11-22-relief/`](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-22-relief/README.md),
     with its retained values, its scripts and its calibration list.
 
 ## See also

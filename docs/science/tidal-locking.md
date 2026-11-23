@@ -42,9 +42,9 @@ For a body of radius $R$, moment of inertia $I$ and initial spin rate
 $\omega$, on an orbit of semi-major axis $a$ round a host of mass $M$, the
 time to despin is (Gladman et al. 1996, as quoted by Thirouin et al. 2014):
 
-```math
+$$
 t_\text{lock} \approx \frac{\omega\,a^6\,I\,Q}{3\,G\,M^2\,k_2\,R^5}
-```
+$$
 
 $G$ is the gravitational constant. $Q$ measures how much tidal energy the
 body loses as heat each cycle (a low $Q$ loses more), and the Love number
@@ -52,9 +52,9 @@ $k_2$ how far it deforms. For a solid body of density $\rho$, surface
 gravity $g$ and rigidity $\mu$ (Thirouin et al. 2014, after Gladman et al.
 1996):
 
-```math
+$$
 k_2 \approx \frac{1.5}{1 + \dfrac{19\,\mu}{2\,\rho\,g\,R}}
-```
+$$
 
 **In words.** The time grows as the sixth power of the distance: a body
 twice as far out takes 64 times as long to lock. It shrinks as the square of
@@ -116,9 +116,9 @@ grows steadily with time and is what the spin follows. The host's direction
 seen from the body therefore drifts from the face that points to it on
 average by (Murray & Dermott 1999, ch. 2, the equation of the centre):
 
-```math
+$$
 \nu - M_a \approx 2e\,\sin M_a + \tfrac{5}{4}\,e^2 \sin 2M_a
-```
+$$
 
 where $e$ is the eccentricity.
 
@@ -171,9 +171,9 @@ mean motion $n$ round a star of mass $M$, with the modified quality factor
 $Q' = 3Q/2k_2$, the time to round the orbit is (Goldreich & Soter 1966,
 as written by Jackson, Greenberg & Barnes 2008):
 
-```math
+$$
 \tau_e = \frac{4}{63}\,Q'\,\frac{m}{M}\left(\frac{a}{R}\right)^5\frac{1}{n}
-```
+$$
 
 **In words.** It grows as the 6.5th power of the distance, against the
 sixth for the spin: the tides round an orbit a hundred thousand to a
@@ -369,7 +369,7 @@ obliquity to its orbit, so that its planet swings north and south in its
 sky; 0 for the others (a calibration with no source).
 
 **The libration.** The viewer places each body from `system.json`
-([systemSky.ts](../../web/src/lib/systemSky.ts)). A locked body turns
+([systemSky.ts](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/systemSky.ts)). A locked body turns
 steadily: its longitude 180° faces the point of its orbit at the mean
 anomaly, not the host itself, so the host is off by the true minus the mean
 anomaly. A body in 3:2 turns at 1.5 times the mean anomaly from its
@@ -390,8 +390,8 @@ export function libration(orbit: Orbit, days: number): number {
 }
 ```
 
-The dial ([rotationDial.ts](../../web/src/lib/rotationDial.ts), drawn by
-[viewer/rotationDial.ts](../../web/src/lib/viewer/rotationDial.ts)) reads
+The dial ([rotationDial.ts](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/rotationDial.ts), drawn by
+[viewer/rotationDial.ts](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/rotationDial.ts)) reads
 the host's bearing on the equator. It shows the exact amplitude
 (`librationAmplitude` in `systemSky.ts`, the greatest true minus mean
 anomaly from Kepler's equation: 28.9° at $e = 0.25$, against $2e = 28.6°$).
@@ -556,11 +556,11 @@ anomaly from Kepler's equation: 28.9° at $e = 0.25$, against $2e = 28.6°$).
   behind locked planets and their climate.
 - [11-moons (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/11-moons): locked moons and
   binaries.
-- [docs/backlog.md](../backlog.md), item 19: what the tides and moons
+- [docs/backlog.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/backlog.md), item 19: what the tides and moons
   fixes left open (higher resonances, a gradual capture, the slow-rotator
   climate of 3:2 worlds).
-- [The rotation dial spec](../superpowers/specs/2026-11-06-rotation-dial-design.md):
+- [The rotation dial spec](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/specs/2026-11-06-rotation-dial-design.md):
   the steady spin of locked bodies and how the dial shows the libration.
-- [docs/system-spec.md](../system-spec.md): how a body's spin is stored.
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): how a body's spin is stored.
 - [How many moons can a planet keep, and how large?](how-many-moons.md)
 - [What does an eccentric orbit change?](eccentric-orbits.md)

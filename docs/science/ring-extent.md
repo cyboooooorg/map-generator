@@ -26,9 +26,9 @@ planet's tides pull it apart inside the *fluid Roche limit*. For a planet
 of mean radius $R$ and mean density $\rho_p$, and particles of density
 $\rho_m$ (Murray & Dermott 1999):
 
-```math
+$$
 d_\text{fluid} \approx 2.44\,R\left(\frac{\rho_p}{\rho_m}\right)^{1/3}
-```
+$$
 
 **In words.** The denser the planet compared with the particles, the
 farther out its tides tear clumps apart. Inside that distance loose
@@ -104,9 +104,9 @@ it. A particle at the $m{:}(m-1)$ *inner Lindblad resonance* of a moon at
 $a_\text{moon}$ goes round $m$ times while the moon goes round $m-1$
 times. Kepler's third law puts it at
 
-```math
+$$
 a_\text{res} \approx a_\text{moon}\left(\frac{m-1}{m}\right)^{2/3}
-```
+$$
 
 **In words.** Each nudge comes at the same place of the particle's orbit,
 so the nudges add up instead of cancelling. At a strong resonance they
@@ -218,11 +218,11 @@ The resonance solves $m\,(\Omega - n_\text{moon}) = \kappa$ with the
 orbital and epicyclic frequencies to first order in $J_2$ (Murray &
 Dermott 1999):
 
-```math
+$$
 \Omega^2 = \frac{GM}{r^3}\left(1 + \frac{3}{2}\frac{J_2}{r^2}\right),
 \qquad
 \kappa^2 = \frac{GM}{r^3}\left(1 - \frac{3}{2}\frac{J_2}{r^2}\right)
-```
+$$
 
 with $r$ in the giant's radii. For Mimas at 185,539 km and Saturn's
 $J_2$ of 0.01633 it gives 117,532 km: 650 km outward of Kepler's value,
@@ -282,8 +282,8 @@ in (its equatorial radius, Saturn's 9.45 Earth radii), so the limit comes
 out in the rings' own unit: the conversion the table above makes. The
 viewer draws the main rings with `ringFragment` and the
 dust rings with `dustRingFragment`
-([`ringShaders.ts`](../../web/src/lib/viewer/ringShaders.ts)); the cards
-read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
+([`ringShaders.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/ringShaders.ts)); the cards
+read them through [`ringMoons.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/ringMoons.ts).
 
 ### Where it departs from the science
 
@@ -412,7 +412,7 @@ read them through [`ringMoons.ts`](../../web/src/lib/ringMoons.ts).
   app's rings, ring moons and dust rings.
 - [Why are ring moons so small?](ring-moons.md): the moons in and next to
   the rings, and the Roche zone they live in.
-- [docs/system-spec.md](../system-spec.md): rings and ring moons as parts
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): rings and ring moons as parts
   of a planetary system.
 - The README's **giant worlds** paragraph and its `[giant]` preset table,
   for the ring odds and the shaping rules.

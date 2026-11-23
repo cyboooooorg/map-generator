@@ -29,16 +29,16 @@ the two pulls and the frame's turning.
 
 The planet's share of the mass sets everything:
 
-```math
+$$
 \mu = \frac{m}{M + m}
-```
+$$
 
 - **L1 and L2** lie on either side of the planet, on the line to the star,
   at about the planet's Hill radius from it (Murray & Dermott 1999):
 
-  ```math
+  $$
   r_H \approx a\left(\frac{\mu}{3}\right)^{1/3}
-  ```
+  $$
 
 - **L3** lies on the planet's orbit, on the far side of the star.
 - **L4 and L5** lie on the orbit 60° ahead of and 60° behind the planet
@@ -66,19 +66,19 @@ point. Its motion has a fast period, close to the planet's year, and a
 slow one, the libration. For a planet with mean motion $n_p$ (its angle
 per unit time), the slow frequency is (Emery et al. 2015):
 
-```math
+$$
 \nu_l = n_p \sqrt{\frac{1 - \sqrt{1 - 27\mu(1-\mu)}}{2}}
 \;\approx\; n_p\sqrt{\frac{27\mu}{4}}
-```
+$$
 
 **In words.** The lighter the planet, the slower a trojan swings round
 its point. The inner square root must stay real: the motion is a loop only
 while $27\mu(1-\mu) < 1$. Solving for $\mu$ gives Routh's criterion
 (Routh 1874):
 
-```math
+$$
 \mu < \frac{1}{2}\left(1 - \sqrt{\frac{23}{27}}\right) \approx 0.0385
-```
+$$
 
 Above it, a body pushed off L4 or L5 drifts away: no trojans can last.
 
@@ -96,9 +96,9 @@ in the turning frame, is long along the orbit and narrow across it: a
 orbit (Christou et al. 2025, eq. 4, the classical result of Murray &
 Dermott 1999):
 
-```math
+$$
 \delta a_\text{max} \simeq \sqrt{\frac{8\mu}{3}}\;a
-```
+$$
 
 **In words.** A swarm of trojans is a thin, curved band along the orbit,
 centred on L4 or L5. Its width grows only as the square root of the
@@ -244,7 +244,7 @@ if mu >= ROUTH || perturbed {
 ```
 
 The star view places the points
-([`smallBodies.ts`](../../web/src/lib/viewer/smallBodies.ts)):
+([`smallBodies.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/smallBodies.ts)):
 
 ```ts
 export function lagrangePoints(a: number, mu: number): LagrangePoint[] {
@@ -387,4 +387,4 @@ plane.
   a giant shapes, the Hildas among them.
 - [How close can two planets orbit?](planet-spacing.md): the Hill radius
   and the spacing of planets.
-- [docs/system-spec.md](../system-spec.md): small bodies in a system.
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): small bodies in a system.

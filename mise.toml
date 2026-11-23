@@ -8,6 +8,14 @@ cargo-nextest = "0.9.152"
 "npm:markdownlint-cli2" = "0.24.1"
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
+# The science book (docs/science). mdBook 0.5 changed the preprocessor
+# protocol: mdbook-katex 0.10 and mdbook-mermaid 0.17 are built on it.
+# mdbook-katex publishes no binary for 0.10.0 itself; its prebuilt
+# binaries sit on the 0.10.0-alpha-binaries release.
+"github:rust-lang/mdBook" = "0.5.4"
+"github:lzanini/mdbook-katex" = "0.10.0-alpha-binaries"
+"github:badboy/mdbook-mermaid" = "0.17.1"
+lychee = "0.24.2"
 # The front-end (web/, paused during the engine phase of the rewrite)
 node = "26"
 
@@ -23,6 +31,7 @@ run = [
   "mise run test:tier1",
   "mise run test:tier2",
   "mise run md:lint",
+  "mise run docs:check",
 ]
 
 [tasks.fmt]
@@ -67,6 +76,43 @@ run = "eval cargo nextest run --profile heavy --release --workspace --run-ignore
 [tasks."md:lint"]
 description = "Lint the Markdown written for the rewrite (globs in .markdownlint-cli2.jsonc)"
 run = "markdownlint-cli2"
+
+[tasks."docs:build"]
+description = "Build the science book (docs/science) into target/book"
+# mdbook-katex logs a formula KaTeX rejects and keeps the source, so the
+# build succeeds; the log is what tells.
+run = '''
+log=$(mdbook build docs/science 2>&1) && status=0 || status=$?
+printf '%s\n' "$log"
+[ "$status" -eq 0 ] || exit "$status"
+if printf '%s' "$log" | grep -q 'Rendering failed'; then
+  echo "docs:build: KaTeX rejected a formula (see the warning above)" >&2
+  exit 1
+fi
+'''
+
+[tasks."docs:check"]
+description = "Check the science book: every page in SUMMARY.md, no math fence left, the book builds, its links resolve"
+run = [
+  '''
+  fail=0
+  for f in docs/science/*.md; do
+    name=${f##*/}
+    [ "$name" = SUMMARY.md ] && continue
+    if ! grep -q "($name[#)]" docs/science/SUMMARY.md; then
+      echo "docs:check: $f is not listed in docs/science/SUMMARY.md" >&2
+      fail=1
+    fi
+    if grep -q '^[[:space:]>]*```math' "$f"; then
+      echo "docs:check: $f holds a math fence: write the equation between double-dollar lines" >&2
+      fail=1
+    fi
+  done
+  exit $fail
+  ''',
+  "mise run docs:build",
+  "lychee --offline --include-fragments --no-progress --exclude-path target/book/404.html target/book",
+]
 
 [tasks."ci:actions"]
 description = "Lint the GitHub workflows"

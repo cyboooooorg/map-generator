@@ -30,12 +30,12 @@ on a day when the star stands over latitude $\delta$ (the star's
 *declination*), the sunlight averaged over the whole day, at the top of the
 atmosphere, is (Nadeau & McGehee 2021, eq. 45–47, after Sellers 1965):
 
-```math
+$$
 Q_\text{day} = \frac{S_0}{\pi}\left(\frac{a}{r}\right)^2
 \left(h_0\sin\varphi\sin\delta + \cos\varphi\cos\delta\sin h_0\right),
 \qquad
 \cos h_0 = -\tan\varphi\tan\delta
-```
+$$
 
 $S_0$ is the light the planet receives at its mean distance $a$ from the
 star, $r$ its distance that day, and $h_0$ the half-length of the day, as an
@@ -43,9 +43,9 @@ angle from noon to sunset (0 in polar night, $\pi$ in polar day). The
 declination follows the tilt $\varepsilon$ (the obliquity) and the planet's
 place on its orbit, its angle $\lambda$ from the spring equinox:
 
-```math
+$$
 \sin\delta = \sin\varepsilon\,\sin\lambda
-```
+$$
 
 **In words.** A latitude gets more light when the star is higher in its sky
 and when its day is longer. Through the year the star climbs to the tilt
@@ -83,13 +83,13 @@ receives over a year. With $y = \sin\varphi$ and $e$ the orbit's
 eccentricity, it splits into an amount and a shape (Nadeau & McGehee 2017,
 eq. 1–3):
 
-```math
+$$
 I(y) = \frac{Q_0}{\sqrt{1-e^2}}\; s(y, \varepsilon),
 \qquad
 s \approx 1 - \tfrac{5}{8}P_2(\cos\varepsilon)P_2(y)
 - \tfrac{9}{64}P_4(\cos\varepsilon)P_4(y)
 - \tfrac{65}{1024}P_6(\cos\varepsilon)P_6(y)
-```
+$$
 
 $Q_0 = S_0/4$ is the global mean over a circular orbit, and the $P_n$ are
 Legendre polynomials, with $P_2(x) = (3x^2-1)/2$. The shape $s$ averages to
@@ -437,7 +437,7 @@ from the code.
 
 ## See also
 
-- [README, "Temperature — axial tilt"](../../README.md#temperature--axial-tilt):
+- [README, "Temperature — axial tilt"](https://github.com/cyboooooorg/map-generator/blob/main/README.md#temperature--axial-tilt):
   the app's whole temperature chain.
 - [07-atmospheres (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/07-atmospheres),
   "Climate effects": heat transport and greenhouse on top of the rows.

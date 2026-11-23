@@ -52,9 +52,9 @@ light depends only on its temperature. Its light peaks at the wavelength
 $\lambda_\text{max}$, in nanometres, for a surface temperature $T$ in
 kelvins (Wien's law, Fraknoi et al. 2022, §5.2):
 
-```math
+$$
 \lambda_\text{max} \approx \frac{3\times10^{6}\ \text{nm K}}{T}
-```
+$$
 
 **In words.** The hotter the surface, the bluer the light. Blue light has
 the shorter wavelength, so it is the sign of a hotter star.
@@ -89,12 +89,12 @@ with $\sigma$ the Stefan–Boltzmann constant (Fraknoi et al. 2022, §5.2).
 A star of radius $R$ has a surface of $4\pi R^2$, so its luminosity $L$,
 the power it radiates, is:
 
-```math
+$$
 L = 4\pi R^2 \sigma T^4
 \qquad\Longleftrightarrow\qquad
 \frac{L}{L_\odot} = \left(\frac{R}{R_\odot}\right)^2
 \left(\frac{T}{T_\odot}\right)^4
-```
+$$
 
 **In words.** Twice the size gives four times the light; twice the
 temperature gives sixteen times. The temperature weighs much more.
@@ -112,9 +112,9 @@ sequence turns out to be a sequence of stellar masses" (Fraknoi et al.
 2022, §18.4). Luminosity grows with mass $M$ as a power law (Eker et al.
 2015):
 
-```math
+$$
 \frac{L}{L_\odot} \approx \left(\frac{M}{M_\odot}\right)^{\alpha}
-```
+$$
 
 **In words.** A little more mass gives a lot more light.
 
@@ -145,10 +145,10 @@ the Sun's mass stays on the main sequence for roughly 10 billion years
 (Fraknoi et al. 2022, §22.1). With that as the yardstick, a lifetime
 $\tau$ is:
 
-```math
+$$
 \tau \approx 10\ \text{Gyr}\ \frac{M/M_\odot}{L/L_\odot}
 \approx 10\ \text{Gyr}\left(\frac{M}{M_\odot}\right)^{1-\alpha}
-```
+$$
 
 Adams & Laughlin (1997) write it $\tau = 10^{10}$ yr $(M/M_\odot)^{-\alpha}$
 with $\alpha \approx 3$ to 4 for stars of low mass.
@@ -298,13 +298,13 @@ What the model gives for a few types:
 Light colours: linear RGB, the Sun white, as `light_colour` returns them.
 
 The star view draws its surface from the star's activity
-([`starSurface.ts`](../../web/src/lib/viewer/starSurface.ts); the science is
+([`starSurface.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/starSurface.ts); the science is
 in [star-activity.md](star-activity.md)): limb darkening from the
 temperature, and granules, spots and faculae only where the envelope is not
 radiative (below 7,200 K; hotter stars are smooth discs). There are no
 flares for now: they come back with ejections in the second part (#344).
 Its glow grows with the log of the luminosity, within bounds
-([`StarView.ts`](../../web/src/lib/viewer/StarView.ts)).
+([`StarView.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/StarView.ts)).
 
 ### Where it departs from the science
 
@@ -391,5 +391,5 @@ Its glow grows with the log of the luminosity, within bounds
   type of star can keep liquid water.
 - [What colour would plants be under another star?](plant-colours.md):
   what the colour of the light does to leaves.
-- [docs/system-spec.md](../system-spec.md): the star at the centre of a
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): the star at the centre of a
   planetary system.

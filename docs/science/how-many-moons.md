@@ -27,9 +27,9 @@ planet.
 A planet of mass $m$ on an orbit of semi-major axis $a$ round a star of mass
 $M$ controls a region of radius (Barnes & O'Brien 2002, eq. 5):
 
-```math
+$$
 r_H = a\left(\frac{m}{3M}\right)^{1/3}
-```
+$$
 
 Not all of it is safe. The outermost stable orbit "has been generally
 thought to lie between 1/3 and 1/2 the radius of the Hill sphere" (Barnes &
@@ -59,11 +59,11 @@ A body held together by its own gravity, of density $\rho_m$, is torn apart
 inside the Roche limit of a planet of radius $R$ and density $\rho_p$
 (Murray & Dermott 1999):
 
-```math
+$$
 d_\text{fluid} \approx 2.44\,R\left(\frac{\rho_p}{\rho_m}\right)^{1/3}
 \qquad
 d_\text{rigid} \approx 1.26\,R\left(\frac{\rho_p}{\rho_m}\right)^{1/3}
-```
+$$
 
 **In words.** A loose body (the fluid limit) must stay about two and a half
 planet radii out; a solid one, held by its strength too, can go closer.
@@ -78,9 +78,9 @@ densities). The Moon orbits twenty times farther out.
 A planet that turns in a time $T$ has a synchronous orbit, where a moon
 would go round in exactly one planetary day (Kepler's third law):
 
-```math
+$$
 a_\text{sync} = \left(\frac{G\,m\,T^2}{4\pi^2}\right)^{1/3}
-```
+$$
 
 Above it, the planet turns faster than the moon goes round, and its spin
 carries the tidal bulge ahead of the moon, which pulls the moon forwards
@@ -113,11 +113,11 @@ zone, a share $f$ of the Hill radius, spirals in at a rate that grows
 steeply with its mass. Setting its lifetime to the age $T$ of the system,
 Barnes & O'Brien (2002, eq. 8) get the heaviest moon that is still there:
 
-```math
+$$
 M_m \le \frac{2}{13}
 \left(\frac{(f\,a_p)^3}{3\,M_\star}\right)^{13/6}
 \frac{M_p^{8/3}\,Q_p}{3\,k_{2p}\,T\,R_p^5\sqrt{G}}
-```
+$$
 
 $a_p$ is the planet's orbital distance, $M_\star$ the star's mass, $M_p$,
 $R_p$, $Q_p$ and $k_{2p}$ the planet's mass, radius, tidal quality factor
@@ -163,9 +163,9 @@ systems stand apart: every other moon in the Solar System is below about
 The barycentre of a planet and a moon of mass ratio $q$ (moon over planet)
 at a distance $a$ lies at
 
-```math
+$$
 d_\text{bary} = a\,\frac{q}{1+q}
-```
+$$
 
 from the planet's centre.
 
@@ -213,9 +213,9 @@ their respective planet's mass (∼10⁻⁴)", from 1.1 × 10⁻⁴ to 2.5 × 10
 Canup & Ward (2006) explain it as a balance: the disk feeds the moons while
 its gas drags them into the planet, so
 
-```math
+$$
 \frac{M_T}{M_P} \sim 10^{-4}
-```
+$$
 
 where $M_T$ is the total mass of the regular moons and $M_P$ the planet's.
 The same process "could limit the largest moons of extrasolar Jupiter-mass
@@ -546,4 +546,4 @@ chain round it. Ring moons are drawn apart (see
   host?](tidal-locking.md)
 - [Why are ring moons so small?](ring-moons.md)
 - [Why are small moons shaped like potatoes?](moon-shapes.md)
-- [docs/system-spec.md](../system-spec.md): moons as bodies of a system.
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): moons as bodies of a system.

@@ -1,0 +1,20 @@
+[book]
+title = "The science behind map-generator"
+description = "One article per question a reader asks while looking at the app: the science, the equations, and how the app computes it."
+language = "en"
+src = "."
+
+[build]
+build-dir = "../../target/book"
+
+[output.html]
+site-url = "/map-generator/"
+git-repository-url = "https://github.com/cyboooooorg/map-generator"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[preprocessor.katex]
+# A formula KaTeX cannot parse fails the build instead of printing red text.
+throw-on-error = true
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

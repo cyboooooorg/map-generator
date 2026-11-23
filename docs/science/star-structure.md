@@ -92,7 +92,7 @@ The app does not solve the equations of stellar structure while it draws a
 star. It reads a table made once, offline, and interpolates in it, as
 `science::stellar` does. The tables, their sources and their measured
 errors are documented in
-[`crates/science/data/STELLAR.md`](../../crates/science/data/STELLAR.md).
+[`crates/science/data/STELLAR.md`](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/STELLAR.md).
 
 1. **From 0.3 to 8 M☉**, the table is a grid of 312 runs of YREC, a stellar
    evolution code (Pinsonneault 2025), at four metallicities
@@ -127,7 +127,7 @@ errors are documented in
 
 The 1 M☉ star at 4.57 Gyr is compared with the B23 standard solar model.
 Both are in the table of
-[STELLAR.md](../../crates/science/data/STELLAR.md#the-sun-yrec-against-b23):
+[STELLAR.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/STELLAR.md#the-sun-yrec-against-b23):
 
 | Quantity | App | B23 |
 | --- | --- | --- |
@@ -207,7 +207,7 @@ too deep. Below 0.30 M☉ the polytrope's density is within 4 % of YREC's to
 - [Why do some stars have spots, and how fast do they
   turn?](star-activity.md): what the convective envelope does at the
   surface.
-- [crates/science/data/STELLAR.md](../../crates/science/data/STELLAR.md):
+- [crates/science/data/STELLAR.md](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/data/STELLAR.md):
   every number of the tables, with the measured comparisons.
-- [docs/superpowers/specs/2026-11-21-system-draw-design.md](../superpowers/specs/2026-11-21-system-draw-design.md):
+- [docs/superpowers/specs/2026-11-21-system-draw-design.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/specs/2026-11-21-system-draw-design.md):
   the design of the star in the system engine.
