@@ -1,5 +1,15 @@
-//! Saturation of the gases that condense on the surface or in the column:
-//! carbon dioxide and methane.
+//! The volatiles a body is born with, and the saturation of the gases
+//! that condense on the surface or in the column: carbon dioxide and
+//! methane.
+//!
+//! **Inventory at formation** ([`inventory`]): the mass of CO2, N2,
+//! sulphur, CH4 and NH3 a body's rock and iron, silicate and ice carry by
+//! the rule alone, before the engine scatters each by `10^N(0,`
+//! [`VOLATILE_SPREAD`]`)`. Ported from the tag `legacy-final`
+//! (`planet/inputs.rs` l.215-248, 476-505) with the values of study
+//! [21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit),
+//! part 1; see `docs/science/planet-atmospheres.md`, "Volatile inventory
+//! at formation".
 //!
 //! Each curve is a vapour-pressure equation of the form
 //! `p = p_c exp(T_c / T sum n_i (1 - T/T_c)^t_i)` from the triple to the
@@ -25,7 +35,102 @@
 //! Clausius-Clapeyron from its triple point with a constant enthalpy.
 
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
-use crate::units::{Kelvin, Pascal};
+use crate::units::{Dex, Kelvin, Kilogram, Pascal};
+
+/// Calibration: kg of CO2 per kg of rock and iron, fitted on Venus's air,
+/// which has no thermostat: 92 bar of CO2 is about 1e-4 of the planet
+/// once 95 % is outgassed. The bulk silicate Earth holds 2.7 times more
+/// as CO2 (C 109 +77/-39 ppm, Wang, Lineweaver & Ireland 2018, Icarus
+/// 299, 460, doi:10.1016/j.icarus.2017.08.024, Table 1), within the "up
+/// to about 500 ppm carbon" of Marty 2012 (doi:10.1016/j.epsl.2011.10.040,
+/// abstract); the carbon that never degasses is in the outgassed and
+/// recycled shares of `outgassing` (study 21, part 1).
+pub const ROCK_CO2: f64 = 1e-4;
+
+/// Calibration: kg of N2 per kg of rock and iron, a value inside the
+/// spread of the two budgets read: 1.4e-6 from the primitive mantle's
+/// N 2.01 +1.42/-0.71 ppm (Wang et al. 2018, Table 1, times its 0.675),
+/// 4.5e-6 from the silicate Earth's 27 ± 16e18 kg (Johnson & Goldblatt
+/// 2015, doi:10.1016/j.earscirev.2015.05.006, abstract) (study 21,
+/// part 1).
+pub const ROCK_N2: f64 = 2e-6;
+
+/// Source: kg of sulphur per kg of silicate (mantle and crust), the bulk
+/// silicate Earth's 235 ± 38 ppm (Wang, Lineweaver & Ireland 2018,
+/// Table 1, a concordance of Lyubetskaya & Korenaga 2007, McDonough &
+/// Arevalo 2008 and Palme & O'Neill 2014), rounded to the 250 ppm of
+/// McDonough 2003 (Treatise on Geochemistry 2.15, the legacy's origin,
+/// primary not reached). The core keeps the rest of the planet's.
+pub const ROCK_S: f64 = 2.5e-4;
+
+/// Calibration: kg of CO2 per kg of ice, 5 % of the moles of water (times
+/// 44/18). Biver et al. 2022 (Comets III, arXiv:2207.04800, Table 3)
+/// print 4 to 30 mole %, "typically ranging from 5 to 30 %", and no
+/// median; 5 % is the low end and comet 67P's bulk 4.7 ± 1.4 (Rubin et
+/// al. 2019, doi:10.1093/mnras/stz2086, Table 2). The legacy 0.05 was
+/// 2 mole %, under every comet measured (study 21, part 1).
+pub const ICE_CO2: f64 = 0.12;
+
+/// Calibration: kg of N2 per kg of ice, comet 67P's bulk 0.089 ± 0.024
+/// mole % of water (Rubin et al. 2019, Table 2), times 28/18. 67P is the
+/// only comet with a measured N2 (Biver et al. 2022, Table 3).
+pub const ICE_N2: f64 = 1.4e-3;
+
+/// Source: kg of CH4 per kg of ice, the "typical abundances ~0.8 %" of
+/// the moles of water (Biver et al. 2022, Comets III, arXiv:2207.04800,
+/// Table 3 and its text, from Dello Russo et al. 2016), times 16/18.
+pub const ICE_CH4: f64 = 7e-3;
+
+/// Source: kg of NH3 per kg of ice, the middle of the "typical
+/// abundances ~0.5-1 %" of the moles of water (Biver et al. 2022,
+/// Table 3 and its text), 0.75 mole % times 17/18; also 67P's
+/// 0.67 ± 0.20 (Rubin et al. 2019).
+pub const ICE_NH3: f64 = 7e-3;
+
+/// Calibration: spread of each volatile around its rule, log-normal. Of
+/// the order of the uncertainty of Earth's own budgets (C and N
+/// -0.44/+0.23 dex around Wang et al. 2018's concordance, the two
+/// nitrogen budgets 0.5 dex apart); no study of the spread between
+/// planets found (study 21, part 1).
+pub const VOLATILE_SPREAD: Dex = Dex(0.3);
+
+/// The volatiles a body carries at formation, each as the mass of its own
+/// gas, except `s`, the mass of sulphur (it comes up as SO2).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Inventory {
+    /// Carbon dioxide.
+    pub co2: Kilogram,
+    /// Nitrogen.
+    pub n2: Kilogram,
+    /// Sulphur.
+    pub s: Kilogram,
+    /// Methane.
+    pub ch4: Kilogram,
+    /// Ammonia.
+    pub nh3: Kilogram,
+}
+
+/// The volatiles a body of `refractory` rock and iron, of which
+/// `silicate` is mantle and crust, and `ice` carries by the rule alone,
+/// without the scatter of [`VOLATILE_SPREAD`]:
+///
+/// ```text
+/// co2 = 1e-4 refractory + 0.12 ice     n2  = 2e-6 refractory + 1.4e-3 ice
+/// s   = 2.5e-4 silicate                ch4 = 7e-3 ice,   nh3 = 7e-3 ice
+/// ```
+///
+/// The caller passes the composition before any steam loss, so that the
+/// volatiles keep the mass the body formed with, as in the legacy (the
+/// runaway's loss of water does not take the ice's CO2 with it).
+pub fn inventory(refractory: Kilogram, silicate: Kilogram, ice: Kilogram) -> Inventory {
+    Inventory {
+        co2: Kilogram(ROCK_CO2 * refractory.0 + ICE_CO2 * ice.0),
+        n2: Kilogram(ROCK_N2 * refractory.0 + ICE_N2 * ice.0),
+        s: Kilogram(ROCK_S * silicate.0),
+        ch4: Kilogram(ICE_CH4 * ice.0),
+        nh3: Kilogram(ICE_NH3 * ice.0),
+    }
+}
 
 /// Source: critical temperature of CO2, 304.1282 K (Span and Wagner 1996,
 /// doi:10.1063/1.555991; as in CoolProp v6.6.0,

@@ -1,5 +1,6 @@
 use super::*;
-use crate::constants::MOLAR_GAS_CONSTANT;
+use crate::constants::{EARTH_MASS, MOLAR_GAS_CONSTANT};
+use crate::units::Kilogram;
 
 /// Definition: relative tolerance of the CO2 vapour pressure against the
 /// NIST WebBook table, 0.1 %.
@@ -152,3 +153,49 @@ fn methane_caps_and_freezes() {
         assert!(p.is_finite() && p >= 0.0, "{t} K: {p}");
     }
 }
+
+/// Source: core mass fraction of the Earth, 32.5 ± 0.3 wt%, the primitive
+/// mantle (the bulk silicate Earth) the other 67.5 wt% (Wang, Lineweaver
+/// & Ireland 2018, Icarus 299, 460, doi:10.1016/j.icarus.2017.08.024,
+/// arXiv:1708.08718, section 2.2 and Fig. 2).
+const EARTH_SILICATE_SHARE: f64 = 0.675;
+/// Source: sulphur in the primitive mantle, 235 ± 38 ppm by mass (Wang et
+/// al. 2018, Table 1, concordance of three compilations), in kg per kg.
+const WANG_SULPHUR: (f64, f64) = (235e-6, 38e-6);
+
+#[test]
+fn earths_silicate_sulphur_is_wangs() {
+    let silicate = Kilogram(EARTH_MASS.0 * EARTH_SILICATE_SHARE);
+    let core = Kilogram(EARTH_MASS.0 - silicate.0);
+    let earth = inventory(EARTH_MASS, silicate, Kilogram(0.0));
+    // The sulphur comes from the silicate alone, never from the core.
+    assert_eq!(earth.s, Kilogram(ROCK_S * silicate.0));
+    assert_eq!(
+        inventory(core, Kilogram(0.0), Kilogram(0.0)).s,
+        Kilogram(0.0)
+    );
+    let (centre, spread) = WANG_SULPHUR;
+    let ppm = earth.s.0 / silicate.0;
+    assert!((ppm - centre).abs() <= spread, "{ppm} kg/kg");
+    assert_eq!(earth.co2, Kilogram(ROCK_CO2 * EARTH_MASS.0));
+    assert_eq!(earth.n2, Kilogram(ROCK_N2 * EARTH_MASS.0));
+}
+
+#[test]
+fn ice_carries_only_ice_volatiles() {
+    let ice = Kilogram(OCEAN_ICE);
+    let only_ice = inventory(Kilogram(0.0), Kilogram(0.0), ice);
+    assert_eq!(only_ice.co2, Kilogram(ICE_CO2 * ice.0));
+    assert_eq!(only_ice.n2, Kilogram(ICE_N2 * ice.0));
+    assert_eq!(only_ice.ch4, Kilogram(ICE_CH4 * ice.0));
+    assert_eq!(only_ice.nh3, Kilogram(ICE_NH3 * ice.0));
+    assert_eq!(only_ice.s, Kilogram(0.0));
+    // Rock and iron bring neither methane nor ammonia.
+    let rock = inventory(EARTH_MASS, EARTH_MASS, Kilogram(0.0));
+    assert_eq!(rock.ch4, Kilogram(0.0));
+    assert_eq!(rock.nh3, Kilogram(0.0));
+}
+
+/// Definition: a mass of ice to carry the volatiles, 1e21 kg (any
+/// positive mass: the rule is linear).
+const OCEAN_ICE: f64 = 1e21;

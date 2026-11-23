@@ -342,7 +342,10 @@ s   = 2.5e-4 refractory (1 - cmf)         ch4 = 7e-3 water,  nh3 = 7e-3 water
 
 `co2` and `n2` are masses of CO₂ and N₂, `s` of sulphur (SO₂ is twice it),
 and `cmf` is the core mass fraction (the core keeps its sulphur). Each is
-multiplied by `10^N(0, 0.3)` (`VOLATILE_SPREAD_DEX`).
+multiplied by `10^N(0, 0.3)` (`VOLATILE_SPREAD_DEX`). The rewrite ports
+the rule without its scatter to `science::volatiles::inventory`, on the
+masses of rock and iron, of silicate and of ice (`VOLATILE_SPREAD` is the
+spread the engine draws), called on the composition before any steam loss.
 
 **Rock.** The bulk silicate Earth, in Wang, Lineweaver & Ireland 2018
 (doi:10.1016/j.icarus.2017.08.024, Table 1, a concordance of three
@@ -443,7 +446,11 @@ Ganymede (1.1 GPa) and Callisto keep 98 % or more of their air (the power
 out about 1e-3 of it, a few bar of CO₂ before the thermostat. A
 runaway's steam weighs on the rock as its ocean did, so the share holds
 in a runaway too; the steam itself is not held back, by this share or by
-the regime's: it is the ocean, not a volatile of the mantle.
+the regime's: it is the ocean, not a volatile of the mantle. The rewrite
+ports the weight to `science::outgassing::column_pressure` and the share
+to `released_under_ocean` (`SEAFLOOR_HALF_PRESSURE`, `SEAFLOOR_STEEPNESS`);
+the regime's share is the constant the system picks, `MOBILE_SHARE` or
+`LID_SHARE`.
 
 A known departure: Kite & Ford (Fig. 5) find that a stagnant-lid planet
 under a 3 GPa ocean does not melt at all, so 3 GPa is their full
@@ -1518,6 +1525,8 @@ be 2e-10, a factor-10 disagreement of the sources that no target
 discriminates); `OXIDISING_O2_BAR` (0.01 bar, a twentieth of Earth's O₂)
 is a calibration with no source found ([study
 21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit)).
+The rewrite ports the wash-out to `science::outgassing::so2_kept`, the share
+kept (`OXIDISING_O2`, `DRY_COLUMN`).
 
 **Surface liquid**, from the phase diagrams at the surface temperature
 and pressure, in this order:
