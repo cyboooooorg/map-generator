@@ -54,17 +54,21 @@ const HAZE_CH4_BAR: f64 = 0.01;
 const HAZE_CH4_PER_CO2: f64 = 0.2;
 
 /// Calibration: the share of the light falling on a thick methane haze
-/// that it reflects, 0.25 ([`HAZE_ABSORPTION`] is the share it absorbs),
-/// fitted on Titan's Bond albedo, 0.265 (Li et al. 2011, *GRL* 38,
-/// L23201, doi:10.1029/2011GL050053, the audit's corrected DOI and value,
-/// not 0.27): the orange haze absorbs most of the blue and hides the
-/// bright ice below. What was searched and not found: the split between
-/// the two in any source (Li 2011, Creecy et al. 2021, Tomasko et al.
-/// 2008); it is a fit choice.
+/// that it reflects, 0.25 ([`HAZE_ABSORPTION`] is the share it absorbs):
+/// the legacy values, fitted on Titan's Bond albedo taken as 0.27 under
+/// the legacy Rayleigh law (the polarizability rule, no water). They are
+/// not refitted in this port, which changed both the Rayleigh law and the
+/// reference (Li et al. 2011, *GRL* 38, L23201,
+/// doi:10.1029/2011GL050053, 0.265); the refit is tracked in issue #656
+/// and needs Titan's ground from the climate of 2d. The orange haze
+/// absorbs most of the blue and hides the bright ice below. What was
+/// searched and not found: the split between the two in any source (Li
+/// 2011, Creecy et al. 2021, Tomasko et al. 2008); it is a fit choice.
 pub(crate) const HAZE_ALBEDO: f64 = 0.25;
 
 /// Calibration: the share of the light falling on a thick methane haze
-/// that it absorbs, 0.55 (see [`HAZE_ALBEDO`]).
+/// that it absorbs, 0.55: the legacy value, not refitted (see
+/// [`HAZE_ALBEDO`] and issue #656).
 pub(crate) const HAZE_ABSORPTION: f64 = 0.55;
 
 /// Share of the disc under a sulphuric acid deck, 0 to 1, over a surface

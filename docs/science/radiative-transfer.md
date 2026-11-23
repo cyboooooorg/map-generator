@@ -569,15 +569,18 @@ continuum 1 to 2 (§[51]).
 **The app's Earth column.** `EARTH_AIR` (0.78 bar of N₂, 0.21 of O₂,
 400 ppm of CO₂) at 77 % relative humidity over 288 K, humidity falling as
 in Manabe & Wetherald (1967), holds 1.67 cm of precipitable water
-(converged on 300 levels per decade; 1.74 cm on the shortwave's own grid
+(converged on 300 levels per decade; 1.735 cm on the shortwave's own grid
 of three levels per decade with the column's logarithmic layer mean).
-Kim & Ramanathan's is 3.0 ± 0.3 cm: the app's column holds 56 % of it.
-A gap between the app's water absorption and their 50 W/m² is first a
-gap of humidity, then one of optics. The precipitable water of Kiehl &
+Kim & Ramanathan's global run takes the NVAP field, 2.5 cm (their 3.0 ±
+0.3 cm of Table 2 is the input of their sensitivity case); the app's
+column at 77 % holds 1.735 cm of it (issue #654). A gap between the
+app's water absorption and their 50 W/m² is first a gap of humidity,
+then one of optics. The precipitable water of Kiehl &
 Trenberth's U.S. Standard Atmosphere was not read.
 
-**Window of the H₂O and CO₂ absorption** (a candidate, for the user to
-approve before the test uses it). Kim & Ramanathan's water vapour, 50 of
+**Window of the H₂O and CO₂ absorption** (decided by the user on
+2026-11-23: 48 to 54 W/m² on 2.5 cm of water, with the slope test of
++0.6 cm). Kim & Ramanathan's water vapour, 50 of
 341.8, is 49.8 W/m² at 340.25; CO₂ adds 1.0 (Kiehl & Trenberth) to 1.6
 (Hogan & Matricardi): 50.8 to 51.4 W/m². Subtracting instead from Kim &
 Ramanathan's total the aerosols and Kiehl & Trenberth's ozone and O₂
@@ -585,15 +588,18 @@ Ramanathan's total the aerosols and Kiehl & Trenberth's ozone and O₂
 & Ramanathan's ±3 W/m² on the total as the tolerance, the window is 48
 to 54 W/m². Kiehl & Trenberth's older lines give 43.8 W/m² for the two
 gases; a window spanning both sources would run from 44 to 51, or 41 to
-54 with the same tolerance. Both are on a column holding 3.0 cm of
-water, not the app's 1.67.
+54 with the same tolerance. The window is for a column holding 2.5 cm of
+water (the NVAP mean of Kim & Ramanathan's global run), which the test
+builds by scaling the vapour; the 3.0 cm of their Table 2 is the
+sensitivity case. The response to water is a second test: from 2.7 to
+3.3 cm, +3.0 ± 1.0 W/m² absorbed and −0.4 ± 0.2 reflected.
 
-**Window of the aerosol-free clear-sky albedo** (a candidate, for the
-user to approve). The observed clear-sky albedo holds the aerosols:
-CERES reflects 52.4 W/m² under clear skies, "an albedo of 0.149" (EBAF
-Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156 (EBAF
-Ed4.0, July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et
-al.'s own all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo
+**Window of the aerosol-free clear-sky albedo** (the first reading,
+superseded by the window the test takes, below). The observed clear-sky
+albedo holds the aerosols: CERES reflects 52.4 W/m² under clear
+skies, "an albedo of 0.149" (EBAF Ed2.7r; Stephens et al. 2015, §4,
+item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0, July 2005 to June 2015;
+Kato et al. 2018, Table 5). Stephens et al.'s own all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo
 of 0.154, not 0.149: the paper does not say how its 0.149 is formed. The
 aerosols reflect 5.9 ± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and
 §[52]), 0.017 ± 0.003 of albedo. Taken off:
@@ -982,9 +988,11 @@ a literature check of every number and citation (the full audit is in the
   is 22 % lower at Titan's 69 K skin.
 - **Scope of the Bond albedo.** It takes one ground albedo. The cloud
   albedo is refitted in two steps: first the clear-sky top-of-atmosphere
-  albedo of Earth, 0.149 (Stephens et al. 2015) to 0.156 (Kato et al.
-  2018), which tests the ground, the Rayleigh scattering and the
-  absorption without the clouds; then the all-sky Bond albedo, 0.293
+  albedo of Earth, a window of 0.1567 to 0.1707 (the observed 0.149,
+  Stephens et al. 2015, to 0.156, Kato et al. 2018, less the aerosols,
+  plus what the port lacks; decided on 2026-11-23, see above), which tests
+  the ground, the Rayleigh scattering and the absorption without the
+  clouds; then the all-sky Bond albedo, 0.293
   (Stephens et al. 2015; Kato et al. 2018: 0.2915). The legacy fitted 0.30,
   a pre-satellite value, 0.007 to 0.01 too high.
 - **Rayleigh.** The cross-section of each gas comes from its refractive
@@ -999,8 +1007,18 @@ a literature check of every number and citation (the full audit is in the
   McKay et al.'s 0.306 within 1 %.
 - **Heat capacity of NH₃** is 35.65 J/(mol·K) (NIST Shomate), where the
   legacy had a transposed 35.06.
-- **Clear-sky air absorption** is checked against 72-73 W/m² (Kim &
-  Ramanathan 2008; CERES 73.0), not "about 70".
+- **Clear-sky air absorption** of water vapour and CO₂ is checked
+  against a window of 48 to 54 W/m² on 2.5 cm of water (the NVAP mean of
+  Kim & Ramanathan's 2008 global run; their 3.0 cm is the sensitivity
+  case of Table 2), plus the slope of the response to water, not "about
+  70". The observed 72-73 W/m² (Kim & Ramanathan; CERES 73.0) holds the
+  ozone, O₂ and aerosols the shortwave does not.
+- **The haze's reflection and absorption** (`HAZE_ALBEDO`,
+  `HAZE_ABSORPTION`) are the legacy values, fitted on Titan's Bond albedo
+  taken as 0.27 under the legacy Rayleigh law; they are not refitted in
+  this port, which changed the Rayleigh law and the reference (0.265).
+  The refit waits for Titan's ground from the climate of 2d (issue
+  #656).
 - **Citations** are corrected where they were wrong: the DOIs of Meador &
   Weaver 1980, Haus et al. 2016 and Li et al. 2011; the sections of
   Pierrehumbert 2010 (the skin temperature is §3.6, phase change §2.6);

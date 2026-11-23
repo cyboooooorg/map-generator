@@ -60,7 +60,8 @@ pub(crate) static SHORTWAVE: LazyLock<Table> = LazyLock::new(|| {
 /// transmission by at most half the square of their depth, 5e-3 of their
 /// weight; on Earth's air the legacy measured that it moves the Bond
 /// albedo by 2e-5 against a tolerance of 1e-2, and cuts the pairs of
-/// g-points to stack by a third (re-measured in PR 2b-2 Task 7).
+/// g-points to stack by a third; measured on this port, Earth's all-sky
+/// Bond albedo is 0.293094 without merging and 0.293080 with it (1.4e-5).
 const THIN: f64 = 0.1;
 
 /// The absorption of one level of the column, per unit `ln p` (vertical
