@@ -1157,9 +1157,14 @@ band, over the 240 bands of its Planck spectrum from 0.2 to 5 µm:
 
 Checks (tests):
 
-- Earth's clear-sky air at 288 K absorbs 48 W/m², within the 40-60
-  W/m² that water vapour, CO₂ and O₂ take of the observed 70 (Kim &
-  Ramanathan 2008: ozone about 13, aerosols about 7).
+- Earth's clear-sky air at 288 K absorbs 48 W/m² in water vapour and
+  CO₂, within the legacy's 40-60 W/m² window. Kim & Ramanathan (2008)
+  give 72.1 W/m² for the whole clear-sky absorption, of which aerosols
+  4.8 and water vapour about 50 (Table 3b, §[51]); they give no ozone
+  value. The legacy's "ozone about 13, aerosols about 7" is not in their
+  paper. Kiehl & Trenberth (1997, Table 4) give ozone 14, O₂ 2 and CO₂ 1
+  of their 60. See `radiative-transfer.md`, "Clear-sky absorption by
+  absorber".
 - The albedo at Kopparapu's maximum greenhouse (Earth at 1.70 AU, 8 bar
   of CO₂ over 273 K) is 0.455, against their 0.417 ± 0.04 (it was 0.499
   without absorption).
