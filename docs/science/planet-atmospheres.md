@@ -385,7 +385,11 @@ the rule without its scatter to `science::volatiles::inventory`, on the
 masses of rock and iron, of silicate and of ice (`VOLATILE_SPREAD` is the
 spread the engine draws), called on the composition before any steam loss, and the
 engine draws the scatter once per body from its own sub-seed
-(`Drawn::volatiles`), so adding a draw never moves another.
+(`Drawn::volatiles`), so adding a draw never moves another. The
+rewrite gives a stripped mini-Neptune the volatiles of its whole formed
+composition, the condensed planet it kept, where legacy gave too few:
+it multiplied the shares per kg of the formed planet, envelope included,
+by the mass the escape left, taking the envelope off twice.
 
 **Rock.** The bulk silicate Earth, in Wang, Lineweaver & Ireland 2018
 (doi:10.1016/j.icarus.2017.08.024, Table 1, a concordance of three
@@ -471,7 +475,7 @@ degassing, so 0.95 and 0.2 are calibrations):
 
 | Regime | Share outgassed | Calibrated on |
 |---|---|---|
-| Plates | 0.95, of which subduction returns 80 % of the nitrogen (N₂ and NH₃) and 63 % of the rest | Earth's N₂ once its NH₃ is photolysed (Goldblatt et al. 2009, doi:10.1038/ngeo692: about 0.5 times the air's nitrogen in the crust and more than 1.4 times in the mantle; abstract only). The 63 % has no source: Kelemen & Manning 2015 (doi:10.1073/pnas.1507889112, as quoted) find that "relatively little carbon" is recycled into the mantle, where older work put about half there, so it is high |
+| Plates | 0.95, of which subduction returns 80 % of the nitrogen (N₂ and NH₃) and 63 % of the rest | Earth's N₂ once its NH₃ is photolysed (Goldblatt et al. 2009, doi:10.1038/ngeo692: about 0.5 times the air's nitrogen in the crust and more than 1.4 times in the mantle; abstract only). The 0.78 bar fit holds once 2d's ammonia photochemistry runs (#659); the rewrite's bare air, before it, gives Earth 0.513 bar of N₂. The 63 % has no source: Kelemen & Manning 2015 (doi:10.1073/pnas.1507889112, as quoted) find that "relatively little carbon" is recycled into the mantle, where older work put about half there, so it is high |
 | Episodic lid | 0.95 | Venus's 90 bar of CO₂ |
 | Heat pipe | 0.95 | none (Io) |
 | Stagnant lid | 0.2 | Mars, Titan |
@@ -1718,7 +1722,8 @@ interior is heavier (cooling times about a fifth longer, a deeper seafloor),
 which moved three calibrated values (`THERMAL_DYNAMO_END` 0.075 to 0.055,
 `INNER_CORE_START` 1.0 to 0.82, `SEAFLOOR_HALF_PRESSURE` 30 to 37 kbar),
 kept `CORE_FROZEN` 2.25, set `CORE_HEAT_CAPACITY` to 840, split the dipole
-into four sourced factors, converted the ice volatiles from a mass to a
+into two sourced factors (`F^(1/3)`, `1/7`), a definition (`1/√2`) and
+a calibrated remainder (0.82), converted the ice volatiles from a mass to a
 mole basis and gave `WET_SO2_SHARE` its 2.2e-9.
 
 `planet_model` is the single place that chains the derivation, in this
