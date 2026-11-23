@@ -6,6 +6,7 @@
 //! README). The laws arrive with the pull requests that use them.
 
 pub mod constants;
+pub mod dynamo;
 pub mod envelope;
 pub mod eos;
 pub mod escape;
