@@ -876,14 +876,16 @@ absorbs all the Lyman α (photon-limited). The rate, in molecules per m²
 and second over the sphere, is
 
 ```text
-D = Y · S₀ I r(t) / 4 / E_γ
+D = Σ over the stars s of  Y · F_s r_s(t) / 4 / E_γ
 ```
 
-with `S₀ = 1361 W/m²`, `I` the insolation, `E_γ` the energy of a Lyman α
+with `F_s` the present bolometric flux of star `s` at the planet
+(`S₀ I` with `S₀ = 1361 W/m²` and `I` the insolation, for one Sun-like
+star, as `legacy-final` wrote it), `E_γ` the energy of a Lyman α
 photon (`h c / λ` = 1.634e-18 J: the H I multiplet at 1215.6701 Å in
 vacuum, NIST Atomic Spectra Database, and the exact Planck constant of
-CODATA, 6.626 070 15e-34 J s) and `r(t)` the Lyman α share of the
-star's light: Ribas et al. 2005 (doi:10.1086/427977, their eq. 2,
+CODATA, 6.626 070 15e-34 J s) and `r_s(t)` the Lyman α share of star
+`s`'s light, from its own history: Ribas et al. 2005 (doi:10.1086/427977, their eq. 2,
 checked) fit `F = 19.2 τ^-0.72` erg s⁻¹ cm⁻² at 1 AU, 7.40e-5 of the
 solar constant at the end of saturation (0.1 Gyr) and 3.9e11 photons
 cm⁻² s⁻¹ today. The line saturates with the XUV (`saturation_gyr`, the
@@ -948,13 +950,18 @@ every star the planet sees, each with its present flux at the planet and
 its own Lyman α history; `legacy-final` had one star and an analytic
 onset. This is Titan's
 resupply: Tobie et al. explain its methane by outgassing from its
-interior, in episodes where the model spreads it evenly. Titan outgasses
-20.6 bar of methane in the model and keeps 6.3 bar of it on its ground
-(the supply overtakes the destruction at about 1.2 Gyr), of which the
-climate leaves 0.11 bar in its air, the vapour of its seas (see
-**Methane** under the climate below). Ganymede and Callisto get 3.4
-times Titan's light per unit area and outgas 0.15 and 0.47 bar: the
-destruction outruns them at every age and they keep none. Destroyed
+interior, in episodes where the model spreads it evenly. In the
+rewrite's chain (the reference Titan round the Sun at 4.567 Gyr), Titan
+outgasses 14.4 bar of methane, keeps 14.36 bar past the shoreline, and
+the photolysis leaves 2.11 bar of it (the supply overtakes the
+destruction at about 2.06 Gyr); the climate, which condenses it onto
+the ground, comes in 2d-3. Callisto gets 3.4 times Titan's light per
+unit area and keeps 0.30 bar past the shoreline: the destruction
+outruns it at every age and it keeps none. `legacy-final`, with
+`Y` = 13.9 and its own history, had Titan outgas 20.6 bar and keep
+6.3 bar on its ground (onset about 1.2 Gyr), of which its climate left
+0.11 bar in the air, the vapour of its seas (see **Methane** under the
+climate below), and Ganymede and Callisto outgas 0.15 and 0.47 bar. Destroyed
 methane is gone: its hydrogen escapes and its carbon ends in heavier
 hydrocarbons on the ground, which the model does not carry. Two
 departures: the outgassing is spread evenly over the age, and the
@@ -1009,8 +1016,8 @@ it under their nitrogen frost, far more than a surface veneer.
 
 **How the rewrite computes the reducing air** (`science::photochemistry::reducing`;
 `system::planet::air`). The air is solved in one pass: the step reads the
-methane the photolysis leaves and each star's equilibrium temperature,
-records `planet.air.reducing`, and the CO₂ is outgassed (or not) after
+methane the photolysis leaves and the combined equilibrium temperature
+(`StellarSources::equilibrium_k`, as the cold trap below), records `planet.air.reducing`, and the CO₂ is outgassed (or not) after
 that node, so a reducing air's `planet.air.outgassed.co2` cites the
 reducing node only. Legacy solved the air without CO₂, then solved it
 again with CO₂ when the climate did not leave a Titan's air. The
@@ -1076,8 +1083,10 @@ frost (0.63, see *Volcanic SO₂*).
 
 **How the rewrite computes the cold trap** (`science::volatiles`,
 `co2_frost_pressure`, `ammonia_frost_pressure`; `system::planet::air`).
-Each gas of the kept air is held to its frost pressure at every star's
-equilibrium temperature; the step records `planet.air.trapped.co2` and
+Each gas of the kept air is held to its frost pressure at one combined
+equilibrium temperature, the fourth root of the sum of every star's
+`T_eq⁴` (`StellarSources::equilibrium_k`; one star's own with a single
+star), which the reducing test and the methane line read too; the step records `planet.air.trapped.co2` and
 `planet.air.trapped.nh3`, each citing the kept gas and the equilibria,
 and `planet.air.frozen-co2`, citing the kept and the trapped CO₂. What
 the trap leaves is what the photochemistry reads. Where it departs from
@@ -1168,6 +1177,12 @@ inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
 | Titan | 2.2 bar, 95 % N₂, 0.11 bar CH₄ after the climate (6.3 bar before it condenses) | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
+
+The Earth row is the rewrite's; the other results are `legacy-final`'s,
+after its climate where the row says so. The rewrite's chain, before
+the climate (2d-3), gives Venus 89.5 bar, 98 % CO₂ and 1.75 bar N₂;
+Titan 4.99 bar, of which 2.88 bar N₂ and 2.11 bar CH₄; Callisto
+0.060 bar of N₂ and no CH₄.
 
 As planets round the Sun, the reference moons above have a shortcoming,
 outside the targets: Ganymede keeps 0.016 bar of N₂ and Callisto, to
