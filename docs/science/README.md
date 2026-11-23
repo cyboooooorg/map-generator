@@ -42,6 +42,7 @@ wants to understand it, and link back to those studies.
 ### Planet view: the surface
 
 - [What decides whether a world has an atmosphere?](atmospheres.md)
+- [Planet atmospheres, climate and surface (part 2)](planet-atmospheres.md)
 - [How does axial tilt make climate zones and
   seasons?](axial-tilt-climate.md)
 - [Why is one side of a mountain range dry?](rain-shadows.md)
@@ -53,6 +54,22 @@ wants to understand it, and link back to those studies.
 - [What colour would plants be under another star?](plant-colours.md)
 - [How does a planet's air set its outgoing heat and its
   albedo?](radiative-transfer.md)
+
+## The site
+
+The articles are published at
+<https://cyboooooorg.github.io/map-generator/>, built with mdBook and
+deployed to GitHub Pages by `.github/workflows/pages.yml` on every push
+to `main`.
+
+- `mise run docs:build` builds the book into `target/book`.
+- `mise run docs:check` is what the `docs` CI job runs: every figure up to
+  date, every page listed in `SUMMARY.md`, the book builds, its links
+  resolve.
+- Figures are drawn by code, not by hand: `mise run docs:figures`
+  regenerates `figures/*.svg` (see the
+  [figures README](https://github.com/cyboooooorg/map-generator/blob/main/tools/figures/README.md)).
+  They are committed, and CI fails on a stale one.
 
 ## Writing an article
 
@@ -96,14 +113,20 @@ Every article has these sections, in this order:
 
 ### Equations
 
-- Display equations go in fenced `math` blocks, which GitHub renders:
+- Display equations go between `$$` lines, which GitHub and the
+  published site both render:
 
-  ````markdown
-  ```math
+  ```markdown
+  $$
   r_H = a\left(\frac{m}{3M}\right)^{1/3}
+  $$
   ```
-  ````
 
+- Two constraints keep GitHub rendering them, and `mise run docs:check`
+  enforces both. A line of the equation never starts with `- ` or `+ `
+  (GitHub reads it as a list item and the block is lost): end the previous
+  line with the operator. A block never sits in a list item: inside one,
+  write the formula on a single line, `$$...$$`.
 - Inline symbols go between dollar signs: `$\rho_p$`.
 - Define every symbol in the sentence before the equation.
 
@@ -138,7 +161,9 @@ Add a diagram whenever a picture explains faster than a paragraph.
 
 - Trim the excerpt to the lines that carry the idea, keep the source's
   names, and say which file it comes from.
-- Link source files with relative paths
-  (`../../crates/mapgen/src/rings.rs`), not line numbers, which drift.
+- Link source files with absolute GitHub `blob/main` URLs
+  (`https://github.com/cyboooooorg/map-generator/blob/main/crates/mapgen/src/rings.rs`),
+  not relative paths, which leave the book, and not line numbers, which
+  drift.
 - When the code changes the behaviour an article describes, update the
   article in the same change.

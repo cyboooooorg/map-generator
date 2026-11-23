@@ -27,18 +27,18 @@ $T$, molecules of mass $m$ move at a typical thermal speed $u$, with
 Boltzmann's constant $k$ and the gravitational constant $G$ (Gronoff et al.
 2020, eq. 1):
 
-```math
+$$
 v_\text{esc} = \sqrt{\frac{2 G M}{r}},
 \qquad
 u = \sqrt{\frac{2 k T}{m}}
-```
+$$
 
 Their ratio, squared, is the Jeans parameter: the gravitational energy of a
 molecule over its thermal energy (Gronoff et al. 2020):
 
-```math
+$$
 \lambda = \frac{G M m}{r\,k T} = \frac{v_\text{esc}^2}{u^2}
-```
+$$
 
 **In words.** The larger $\lambda$, the more tightly the gas is bound. It
 grows with the world's mass and with the molecule's mass, and falls with the
@@ -59,9 +59,9 @@ in the tail of their distribution of speeds, are fast enough to leave. The
 flux that escapes, for a density $N$ of molecules at the exobase, is
 (Gronoff et al. 2020, eq. 5):
 
-```math
+$$
 \Phi = N\,\frac{u}{2\sqrt{\pi}}\,(1 + \lambda)\,e^{-\lambda}
-```
+$$
 
 **In words.** Escape falls off exponentially with $\lambda$. A light gas
 on a warm, small world leaks steadily; a heavy gas on a large, cold one
@@ -94,9 +94,9 @@ starlight they get, the insolation $I$, and by their escape velocity. Those
 with atmospheres and those without "are neatly divided". "The dividing line
 goes as":
 
-```math
+$$
 I \propto v_\text{esc}^4
-```
+$$
 
 **In words.** A world four times closer to its star gets 16 times the light
 and needs twice the escape velocity to keep its air. Exoplanets with known
@@ -159,11 +159,11 @@ back the heat the ground radiates warms the surface to $T_s$ above it. The
 share of the surface's heat it holds back measures the greenhouse effect
 (Méndez & Rivera-Valentín 2017, eq. 5):
 
-```math
+$$
 T_\text{eq} = \left(\frac{(1 - A)\,F}{4\sigma}\right)^{1/4},
 \qquad
 g = 1 - \left(\frac{T_\text{eq}}{T_s}\right)^4
-```
+$$
 
 **In words.** $g = 0$ is no greenhouse at all; $g$ close to 1 means
 almost all the heat the ground radiates is caught on its way out.
@@ -298,7 +298,7 @@ let warming = planet.climate.temperature + planet.atmosphere.greenhouse;
 In the viewer, the halo's thickness and its optical depth grow with the
 pressure: `0.03 + 0.02 log10(1 + p)` of the radius, and a gas depth that
 goes as $p^{0.35}$, so dense atmospheres take the colour of their haze
-([`sky.ts`](../../web/src/lib/sky.ts)).
+([`sky.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/sky.ts)).
 
 The haze's own depth at the zenith is twice its density (0 to 1) up to
 0.5, the density of every look but one: Earth's 0.1, Venus's 0.3, a

@@ -70,9 +70,9 @@ born with several Earth masses and was depleted by a factor of about 1000
 An asteroid in a mean-motion resonance goes round the Sun $j$ times while
 Jupiter goes round $k$ times. Kepler's third law then puts it at
 
-```math
+$$
 a = a_J \left(\frac{k}{j}\right)^{2/3}
-```
+$$
 
 where $a_J$ is Jupiter's distance from the Sun.
 
@@ -160,10 +160,10 @@ chaotic. For a small body at distance $a$ near a planet of mass $m$ at
 distance $a_p$, round a star of mass $M$, this chaotic zone spans (Wisdom
 1980, coefficient from Duncan et al. 1989, both as given by Pu & Wu 2015)
 
-```math
+$$
 \frac{|a - a_p|}{(a + a_p)/2} \le 1.49\,\mu^{2/7},
 \qquad \mu = \frac{m}{M}
-```
+$$
 
 **In words.** A heavier planet clears a wider band round its orbit. A
 belt can only last outside that band, and outside the resonances that
@@ -270,7 +270,7 @@ Round the Sun, with the real planets, this gives a belt from 2.1 to
 Kuiper belt from 39.4 to 47.8 AU (the tests in `belts.rs`).
 
 The star view draws the points
-([`smallBodies.ts`](../../web/src/lib/viewer/smallBodies.ts)): 3000 for
+([`smallBodies.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/smallBodies.ts)): 3000 for
 an inner belt, 300 for the Hildas, 2500 for an outer belt and 1200 for a
 scattered disk, spread evenly in distance but for the gaps, each on a
 circular orbit tilted up to twice the belt's typical inclination.
@@ -402,4 +402,4 @@ the giant just outside the body's orbit.
   bodies in a giant's 1:1 resonance.
 - [How close can two planets orbit?](planet-spacing.md): the spacing that
   leaves a belt room.
-- [docs/system-spec.md](../system-spec.md): small bodies in a system.
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): small bodies in a system.

@@ -23,9 +23,9 @@ Close to a planet, its own gravity beats the star's tide. The size of
 that region is measured by its Hill radius: for a planet of mass $m$ at
 distance $a$ from a star of mass $M$ (Obertas et al. 2017),
 
-```math
+$$
 r_H = a\left(\frac{m}{3M}\right)^{1/3}
-```
+$$
 
 **In words.** The region a planet controls grows in proportion to its
 distance from the star, but only as the cube root of its mass: a planet a
@@ -41,11 +41,11 @@ To measure the gap between two neighbours, of masses $m_1$ and $m_2$ at
 distances $a_1 < a_2$, astronomers use their mutual Hill radius and count
 the gap in that unit, $K$ (Pu & Wu 2015, eq. 1 and 2):
 
-```math
+$$
 R_H = \frac{a_1 + a_2}{2}\left(\frac{m_1 + m_2}{3M}\right)^{1/3},
 \qquad
 K = \frac{a_2 - a_1}{R_H}
-```
+$$
 
 **In words.** $R_H$ is the Hill radius of a planet as heavy as the two
 together, halfway between them. $K$ says how many of those fit between the
@@ -74,11 +74,11 @@ energy and angular momentum forbids any close encounter, for ever, if the
 outer orbit is far enough out (Gladman 1993, in the form given by Obertas
 et al. 2017):
 
-```math
+$$
 a_2 > a_1\left(1 + 2\cdot 3^{1/6}\,(\mu_1 + \mu_2)^{1/3}\right)
 \quad\Longleftrightarrow\quad
 K > 2\sqrt{3} \approx 3.46
-```
+$$
 
 where $\mu_i = m_i / M$, to lowest order in the planets' masses.
 
@@ -96,9 +96,9 @@ With a third planet, no such proof exists, and simulations take over
 mass at equal spacings and timed the first close encounter. Its logarithm
 grows in step with the spacing (as reviewed by Obertas et al. 2017):
 
-```math
+$$
 \log_{10}\frac{t_c}{t_0} = b\,\Delta + c
-```
+$$
 
 Here $t_c$ is the time to the first close encounter, $t_0$ the inner
 planet's orbital period, $\Delta$ the spacing in mutual Hill radii, and
@@ -326,7 +326,7 @@ test in `system.rs`).
 
 ## See also
 
-- [docs/system-spec.md](../system-spec.md): spacing and order of the
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): spacing and order of the
   planets in a system.
 - [12-gas-giants (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/12-gas-giants): the
   study behind the giants, their Hill spheres and their spacing.

@@ -46,11 +46,11 @@ empty.
 Two planets of masses $m_1$ and $m_2$ around a star of mass $M$, at
 semi-major axes $a_1$ and $a_2$, are separated by
 
-```math
+$$
 \Delta = \frac{a_2 - a_1}{R_H},
 \qquad
 R_H = \left(\frac{m_1 + m_2}{3M}\right)^{1/3}\frac{a_1 + a_2}{2}
-```
+$$
 
 where $R_H$ is their mutual Hill radius (see [How close can two planets
 orbit?](planet-spacing.md)). For eccentric orbits, He et al. (2019, 2020)
@@ -70,10 +70,7 @@ Two stability rules decide whether a gap is enough:
 - Three planets or more have no such safe distance. Pu & Wu (2015, eq. 12
   and 14) fit the gap at which half of a population survives to age $t$:
 
-  ```math
-  K_{50} = 0.7\log_{10}\frac{t}{T_1} + 2.87
-         + \frac{\sigma_e}{0.01} + \frac{\sigma_{inc}}{0.04}
-  ```
+  $$K_{50} = 0.7\log_{10}\frac{t}{T_1} + 2.87 + \frac{\sigma_e}{0.01} + \frac{\sigma_{inc}}{0.04}$$
 
   with $T_1$ the innermost period and $\sigma_e$, $\sigma_{inc}$ the
   Rayleigh scales of the eccentricities and of the mutual inclinations
@@ -115,9 +112,9 @@ Nothing lives inside the star, or inside the Roche limit, where tides
 tear a fluid body apart. Rappaport et al. (2013) give the shortest
 surviving period of a fluid planet of density $\rho$:
 
-```math
+$$
 P_{\min} = 12.6\ \mathrm{h}\,\left(\frac{\rho}{1\ \mathrm{g\,cm^{-3}}}\right)^{-1/2}
-```
+$$
 
 **In words.** The denser the planet, the closer it can orbit; the host's
 mass drops out.
@@ -153,11 +150,12 @@ they are a separate track (#604).
 
 ### How it computes them
 
-The code is in [`crates/system/src/draw`](../../crates/system/src/draw/),
-[`families`](../../crates/system/src/families/),
-[`spin.rs`](../../crates/system/src/spin.rs) and
-[`orbit.rs`](../../crates/science/src/orbit.rs) (Kepler, ice line, Roche
-floor, Hill spacing, K50).
+The code is in [`crates/system/src/draw`](https://github.com/cyboooooorg/map-generator/tree/main/crates/system/src/draw),
+[`families`](https://github.com/cyboooooorg/map-generator/tree/main/crates/system/src/families),
+[`spin.rs`](https://github.com/cyboooooorg/map-generator/blob/main/crates/system/src/spin.rs)
+and
+[`orbit.rs`](https://github.com/cyboooooorg/map-generator/blob/main/crates/science/src/orbit.rs)
+(Kepler, ice line, Roche floor, Hill spacing, K50).
 
 ```mermaid
 flowchart TD
@@ -233,7 +231,7 @@ architecture), not the giants finally kept: a planned pair whose second
 giant found no room still draws its first from the multi-giant law.
 
 Every count range, the 1-in-10 above and the tries per slot live in one
-table, [`families/table.rs`](../../crates/system/src/families/table.rs).
+table, [`families/table.rs`](https://github.com/cyboooooorg/map-generator/blob/main/crates/system/src/families/table.rs).
 
 The contract for the other engines: the planet model reads a `Trial`
 through `classify`, which returns a `TrialOutcome` of plain values (class,
@@ -353,7 +351,7 @@ choices this draw makes where no source gives one:
 ## Sources
 
 The study
-[architecture families](../superpowers/studies/2026-11-21-architecture-families/README.md)
+[architecture families](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-architecture-families/README.md)
 gives the page of every number and how each paper was read (full text,
 abstract or second-hand). Papers are listed by their arXiv preprint; the
 DOIs were not re-checked for this article.
@@ -410,11 +408,11 @@ DOIs were not re-checked for this article.
 ## See also
 
 - The studies: [architecture
-  families](../superpowers/studies/2026-11-21-architecture-families/README.md)
-  and its [spin](../superpowers/studies/2026-11-21-architecture-families/spin.md).
+  families](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-architecture-families/README.md)
+  and its [spin](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-architecture-families/spin.md).
 - [How close can two planets orbit?](planet-spacing.md), [Why are giant
   planets far from their star, and what is a hot
   Jupiter?](giant-planet-placement.md) and [What does an eccentric orbit
   change?](eccentric-orbits.md).
 - The spec: [system draw at the
-  present](../superpowers/specs/2026-11-21-system-draw-design.md).
+  present](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/specs/2026-11-21-system-draw-design.md).

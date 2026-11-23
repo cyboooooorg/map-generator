@@ -24,18 +24,18 @@ solar nebula. Where the disk is clear enough for sunlight to reach it, its
 temperature $T$ at a distance $r$ from a star of luminosity $L$ is
 (Hayashi 1981, eq. 2.3):
 
-```math
+$$
 T = 280\,\text{K}\;\left(\frac{r}{1\,\text{AU}}\right)^{-1/2}
 \left(\frac{L}{L_\odot}\right)^{1/4}
-```
+$$
 
 Water ice condenses below 170 K. Setting $T = 170$ K gives the ice line:
 
-```math
+$$
 r_\text{ice} = \left(\frac{280}{170}\right)^2
 \sqrt{\frac{L}{L_\odot}}\;\text{AU}
 \approx 2.7\,\sqrt{\frac{L}{L_\odot}}\;\text{AU}
-```
+$$
 
 **In words.** The farther from the star, the colder the disk. Past a certain
 distance, water vapour freezes into grains of ice, and those grains add to
@@ -87,10 +87,10 @@ Surveys that measure the wobble of a star under the pull of its planets
 (radial velocities) count giant planets round Sun-like stars. Cumming et al.
 (2008) fitted how many there are by mass $M$ and orbital period $P$:
 
-```math
+$$
 dN = C\,M^{\alpha}\,P^{\beta}\;d\ln M\;d\ln P,
 \qquad \alpha = -0.31 \pm 0.2,\quad \beta = 0.26 \pm 0.1
-```
+$$
 
 **In words.** Light giants are more common than heavy ones, and giants on
 long orbits more common than on short ones. Counted in equal steps of the
@@ -116,10 +116,10 @@ the star's ratio of iron to hydrogen, relative to the Sun's. They found
 that the chance of forming a gas giant grows as "the square of the number
 of metal atoms":
 
-```math
+$$
 P_\text{giant} \propto \left(10^{[\text{Fe/H}]}\right)^2
 = 10^{\,2\,[\text{Fe/H}]}
-```
+$$
 
 **In words.** More metals in the star means more dust in its disk, so more
 material for cores. Twice the iron gives four times the chance.
@@ -137,10 +137,10 @@ from its star, "about seven stellar radii" (Lin et al. 1996). Kepler's third
 law gives its year, for a semi-major axis $a$ round a star of mass $M_\star$
 (Murray & Dermott 1999):
 
-```math
+$$
 \frac{P}{1\,\text{yr}} = \left(\frac{a}{1\,\text{AU}}\right)^{3/2}
 \left(\frac{M_\star}{M_\odot}\right)^{-1/2}
-```
+$$
 
 **In words.** Closer orbits are faster: the year shortens as the distance
 to the power 3/2.
@@ -195,12 +195,12 @@ it absorbs. For a flux $S$, in units of the flux Earth gets, and a Bond
 albedo $A$ (the share of the light it reflects), it is (Méndez &
 Rivera-Valentín 2017, eq. 4, for a fast-spinning body):
 
-```math
+$$
 T_\text{eq} = 278.5\,\text{K}\;(1 - A)^{1/4}
 \left(\frac{S}{S_\oplus}\right)^{1/4}
 \approx 255\,\text{K}\left(\frac{S}{S_\oplus}\right)^{1/4}
 \quad (A = 0.3)
-```
+$$
 
 **In words.** Doubling the starlight raises the temperature by only a fifth:
 it goes as the fourth root of the flux. With Earth's albedo, 0.3, Earth
@@ -501,6 +501,6 @@ at most 20 %, on a period of 1 to 10 days within 0.1 AU.
   eccentric giant stretches a world's orbit.
 - [Why are ring moons so small?](ring-moons.md): the rings and small moons
   of the app's giants.
-- [docs/system-spec.md](../system-spec.md): how a whole system places its
+- [docs/system-spec.md](https://github.com/cyboooooorg/map-generator/blob/main/docs/system-spec.md): how a whole system places its
   planets.
-- The README's **giants** paragraph: [README.md](../../README.md).
+- The README's **giants** paragraph: [README.md](https://github.com/cyboooooorg/map-generator/blob/main/README.md).

@@ -1,0 +1,16 @@
+[package]
+name = "figures"
+description = "Draws the figures of the science book (docs/science) as deterministic SVG from the science crate's laws"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+plotters.workspace = true
+science.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

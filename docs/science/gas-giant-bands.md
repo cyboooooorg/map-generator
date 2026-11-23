@@ -32,11 +32,11 @@ that travel east and west, and their energy piles up in zonal jets. That
 size is the Rhines scale, for winds of speed $U$ (Rhines 1975; Ingersoll
 et al. 2004):
 
-```math
+$$
 L_\beta = \left(\frac{U}{\beta}\right)^{1/2},
 \qquad
 \beta = \frac{2\Omega\cos\varphi}{a}
-```
+$$
 
 **In words.** Jets are about as wide as the Rhines scale. A faster spin or
 a smaller planet (a larger $\beta$) makes the jets narrower; faster winds
@@ -53,9 +53,9 @@ et al. 2004), $L_\beta$ is about 4,500 km at the equator, 3.6° of latitude.
 Counting how many jets of that width fit from pole to pole gives the number
 of jets (Showman et al. 2010, eq. 39):
 
-```math
+$$
 N_\text{jet} \sim \left(\frac{2\Omega a}{U}\right)^{1/2}
-```
+$$
 
 **In words.** The number of jets grows as the square root of the spin and
 of the size, and falls as the square root of the wind speed. Rapidly
@@ -253,11 +253,7 @@ of a giant (`Look::draw`), then samples it on every pixel:
    between 0.5 and 10 Gyr, or up to the lifetime of a shorter-lived star;
    4.6 Gyr, Jupiter's age, is the normalisation):
 
-   ```math
-   T_\text{int} = 107.2\,\text{K}
-   \left(\frac{M}{M_J}\right)^{0.5}
-   \left(\frac{t}{4.6\,\text{Gyr}}\right)^{-0.29}
-   ```
+   $$T_\text{int} = 107.2\,\text{K} \left(\frac{M}{M_J}\right)^{0.5} \left(\frac{t}{4.6\,\text{Gyr}}\right)^{-0.29}$$
 
    The exponents are a least-squares fit, in the logs, to the tables of
    Baraffe et al. (2003) for 1 to 10.5 Jupiter masses and 0.5 to 10 Gyr
@@ -373,14 +369,14 @@ at 18° to 45° S on half the ice giants. Hot giants get none.
 
 The viewer moves each band with its wind, read from `wind_profile` every
 2° of latitude (`giantColour` in
-[`shaders.ts`](../../web/src/lib/viewer/shaders.ts)). The fastest band goes
+[`shaders.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/shaders.ts)). The fastest band goes
 round in two minutes, the others in proportion. Each storm drifts whole at
 the wind of its centre, except the great spot (`world.json` stores its
 longitude and latitude in `great_spot_at`, and the viewer takes the storm
 nearest to it). It drifts westward at 3.5 % of the fastest band, the ratio
 of the real spot's 0.36° a day (Simon et al. 2018) to the 10.4° a day of
 Jupiter's 150 m/s. A giant not generated yet is drawn from its
-preview ([`previewTexture.ts`](../../web/src/lib/viewer/previewTexture.ts)):
+preview ([`previewTexture.ts`](https://github.com/cyboooooorg/map-generator/blob/main/web/src/lib/viewer/previewTexture.ts)):
 the zone, belt and polar colours between the band edges the generated giant
 will have, in linear colours like the globe's. A system saved before the
 edges were stored gets evenly spaced bands.
