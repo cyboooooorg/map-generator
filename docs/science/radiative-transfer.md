@@ -71,8 +71,8 @@ Each layer sends out its own Planck flux, and the layers above it dim that
 flux. Summed over the layers and over all the bands, this is the OLR.
 
 $$
-\text{OLR} = \sum_\text{bands} \left[\pi B_\nu(T_s)\,\mathcal{T}_{s}
-  + \sum_\text{layers}\pi B_\nu(T_i)\,\left(\mathcal{T}_{i-1}-\mathcal{T}_{i}\right)
+\text{OLR} = \sum_\text{bands} \left[\pi B_\nu(T_s)\,\mathcal{T}_{s} +
+  \sum_\text{layers}\pi B_\nu(T_i)\,\left(\mathcal{T}_{i-1}-\mathcal{T}_{i}\right)
   \right]
 $$
 
@@ -107,8 +107,8 @@ temperature against the dry air's pressure $p_a$ is:
 $$
 \frac{d\ln T}{d\ln p_a} = \frac{R_a}{c_{pa}}\,
   \frac{1 + \dfrac{L\,r}{R_a T}}
-       {1 + \left(\dfrac{c_{pv}}{c_{pa}}
-          + \left(\dfrac{L}{R_v T} - 1\right)\dfrac{L}{c_{pa}T}\right) r}
+       {1 + \left(\dfrac{c_{pv}}{c_{pa}} +
+          \left(\dfrac{L}{R_v T} - 1\right)\dfrac{L}{c_{pa}T}\right) r}
 $$
 
 Pierrehumbert's equation number for it (2.33) is quoted from a secondary

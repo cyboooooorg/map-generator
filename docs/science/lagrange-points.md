@@ -36,9 +36,7 @@ $$
 - **L1 and L2** lie on either side of the planet, on the line to the star,
   at about the planet's Hill radius from it (Murray & Dermott 1999):
 
-  $$
-  r_H \approx a\left(\frac{\mu}{3}\right)^{1/3}
-  $$
+  $$r_H \approx a\left(\frac{\mu}{3}\right)^{1/3}$$
 
 - **L3** lies on the planet's orbit, on the far side of the star.
 - **L4 and L5** lie on the orbit 60° ahead of and 60° behind the planet

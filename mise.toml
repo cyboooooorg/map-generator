@@ -10,8 +10,10 @@ actionlint = "1.7.12"
 shellcheck = "0.11.0"
 # The science book (docs/science). mdBook 0.5 changed the preprocessor
 # protocol: mdbook-katex 0.10 and mdbook-mermaid 0.17 are built on it.
-# mdbook-katex publishes no binary for 0.10.0 itself; its prebuilt
-# binaries sit on the 0.10.0-alpha-binaries release.
+# mdbook-katex publishes no binary for 0.10.0 itself: the pinned release
+# holds the 0.10.0-alpha binaries, built against mdbook-preprocessor 0.5.1
+# (each build warns about the version mismatch, harmlessly). It has no
+# linux-aarch64 asset, so the book builds on x86-64 Linux and macOS only.
 "github:rust-lang/mdBook" = "0.5.4"
 "github:lzanini/mdbook-katex" = "0.10.0-alpha-binaries"
 "github:badboy/mdbook-mermaid" = "0.17.1"
@@ -80,12 +82,13 @@ run = "markdownlint-cli2"
 [tasks."docs:build"]
 description = "Build the science book (docs/science) into target/book"
 # mdbook-katex logs a formula KaTeX rejects and keeps the source, so the
-# build succeeds; the log is what tells.
+# build succeeds (`throw-on-error` does not change that); the log is what
+# tells, and the grep below fails the task on it.
 run = '''
 log=$(mdbook build docs/science 2>&1) && status=0 || status=$?
 printf '%s\n' "$log"
 [ "$status" -eq 0 ] || exit "$status"
-if printf '%s' "$log" | grep -q 'Rendering failed'; then
+if printf '%s' "$log" | grep -qE 'Rendering failed|Unexpected rendering failure'; then
   echo "docs:build: KaTeX rejected a formula (see the warning above)" >&2
   exit 1
 fi
@@ -104,12 +107,25 @@ run = [
   for f in docs/science/*.md; do
     name=${f##*/}
     [ "$name" = SUMMARY.md ] && continue
-    if ! grep -q "($name[#)]" docs/science/SUMMARY.md; then
+    if ! grep -qF -e "($name)" -e "($name#" docs/science/SUMMARY.md; then
       echo "docs:check: $f is not listed in docs/science/SUMMARY.md" >&2
       fail=1
     fi
     if grep -q '^[[:space:]>]*```math' "$f"; then
       echo "docs:check: $f holds a math fence: write the equation between double-dollar lines" >&2
+      fail=1
+    fi
+    # GitHub does not render a display equation whose line starts with a
+    # list marker (`- ` or `+ `), nor a `$$` block indented in a list item.
+    if ! awk -v f="$f" '
+      /^[[:space:]>]*```/ { infence = !infence; next }
+      infence { next }
+      /^[[:space:]]+\$\$[[:space:]]*$/ {
+        printf "docs:check: %s:%d: indented $$ (a block in a list item does not render on GitHub): write the formula on one line, $$...$$\n", f, NR > "/dev/stderr"; bad = 1; next }
+      /^\$\$[[:space:]]*$/ { inmath = !inmath; next }
+      inmath && /^[[:space:]]*[-+][[:space:]]/ {
+        printf "docs:check: %s:%d: a math line starts with a list marker (GitHub reads a list item): end the previous line with the operator\n", f, NR > "/dev/stderr"; bad = 1 }
+      END { exit bad }' "$f"; then
       fail=1
     fi
   done

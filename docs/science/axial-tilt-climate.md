@@ -86,9 +86,9 @@ eq. 1–3):
 $$
 I(y) = \frac{Q_0}{\sqrt{1-e^2}}\; s(y, \varepsilon),
 \qquad
-s \approx 1 - \tfrac{5}{8}P_2(\cos\varepsilon)P_2(y)
-- \tfrac{9}{64}P_4(\cos\varepsilon)P_4(y)
-- \tfrac{65}{1024}P_6(\cos\varepsilon)P_6(y)
+s \approx 1 - \tfrac{5}{8}P_2(\cos\varepsilon)P_2(y) -
+\tfrac{9}{64}P_4(\cos\varepsilon)P_4(y) -
+\tfrac{65}{1024}P_6(\cos\varepsilon)P_6(y)
 $$
 
 $Q_0 = S_0/4$ is the global mean over a circular orbit, and the $P_n$ are

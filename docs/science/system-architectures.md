@@ -70,10 +70,7 @@ Two stability rules decide whether a gap is enough:
 - Three planets or more have no such safe distance. Pu & Wu (2015, eq. 12
   and 14) fit the gap at which half of a population survives to age $t$:
 
-  $$
-  K_{50} = 0.7\log_{10}\frac{t}{T_1} + 2.87
-         + \frac{\sigma_e}{0.01} + \frac{\sigma_{inc}}{0.04}
-  $$
+  $$K_{50} = 0.7\log_{10}\frac{t}{T_1} + 2.87 + \frac{\sigma_e}{0.01} + \frac{\sigma_{inc}}{0.04}$$
 
   with $T_1$ the innermost period and $\sigma_e$, $\sigma_{inc}$ the
   Rayleigh scales of the eccentricities and of the mutual inclinations

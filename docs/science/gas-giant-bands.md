@@ -253,11 +253,7 @@ of a giant (`Look::draw`), then samples it on every pixel:
    between 0.5 and 10 Gyr, or up to the lifetime of a shorter-lived star;
    4.6 Gyr, Jupiter's age, is the normalisation):
 
-   $$
-   T_\text{int} = 107.2\,\text{K}
-   \left(\frac{M}{M_J}\right)^{0.5}
-   \left(\frac{t}{4.6\,\text{Gyr}}\right)^{-0.29}
-   $$
+   $$T_\text{int} = 107.2\,\text{K} \left(\frac{M}{M_J}\right)^{0.5} \left(\frac{t}{4.6\,\text{Gyr}}\right)^{-0.29}$$
 
    The exponents are a least-squares fit, in the logs, to the tables of
    Baraffe et al. (2003) for 1 to 10.5 Jupiter masses and 0.5 to 10 Gyr

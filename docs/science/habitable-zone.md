@@ -152,8 +152,8 @@ $T_\star = T_\text{eff} - 5780$ K, for 2,600 to 7,200 K. The distance
 follows from $S = L/d^2$:
 
 $$
-S_\text{eff} = S_{\text{eff}\odot} + aT_\star + bT_\star^2 + cT_\star^3
-+ dT_\star^4,
+S_\text{eff} = S_{\text{eff}\odot} + aT_\star + bT_\star^2 + cT_\star^3 +
+dT_\star^4,
 \qquad
 d = \sqrt{\frac{L/L_\odot}{S_\text{eff}}}\ \text{AU}
 $$

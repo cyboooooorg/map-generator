@@ -122,6 +122,11 @@ Every article has these sections, in this order:
   $$
   ```
 
+- Two constraints keep GitHub rendering them, and `mise run docs:check`
+  enforces both. A line of the equation never starts with `- ` or `+ `
+  (GitHub reads it as a list item and the block is lost): end the previous
+  line with the operator. A block never sits in a list item: inside one,
+  write the formula on a single line, `$$...$$`.
 - Inline symbols go between dollar signs: `$\rho_p$`.
 - Define every symbol in the sentence before the equation.
 
@@ -156,7 +161,9 @@ Add a diagram whenever a picture explains faster than a paragraph.
 
 - Trim the excerpt to the lines that carry the idea, keep the source's
   names, and say which file it comes from.
-- Link source files with relative paths
-  (`../../crates/mapgen/src/rings.rs`), not line numbers, which drift.
+- Link source files with absolute GitHub `blob/main` URLs
+  (`https://github.com/cyboooooorg/map-generator/blob/main/crates/mapgen/src/rings.rs`),
+  not relative paths, which leave the book, and not line numbers, which
+  drift.
 - When the code changes the behaviour an article describes, update the
   article in the same change.
