@@ -47,7 +47,7 @@ pub(crate) struct Escaped {
 ///   `M - f M`, and the body is rebuilt rocky;
 /// - a giant keeps `1 - Mz / M'`, from its drawn heavy mass `Mz` and the
 ///   kept mass `M'` (the same value, with its own cause), with the same
-///   floor.
+///   floor, tested on that very fraction.
 ///
 /// The floor applies whatever the loss, as in legacy
 /// (`envelope_after_escape`): a drawn envelope under [`MIN_ENVELOPE`] is
@@ -79,7 +79,13 @@ pub(crate) fn escaped(
     let loss = energy_limited_loss(Metre::from(*radius.value()), total, fluence)
         .0
         .clamp(0.0, envelope.0);
-    let left = (envelope.0 - loss) / (total.0 - loss);
+    // The kept mass and fraction, computed once: the floor tests the
+    // fraction recorded.
+    let kept = EarthMass::from(Kilogram(total.0 - loss));
+    let left = match drawn.heavy_mass {
+        Some(heavy) => 1.0 - heavy.value().0 / kept.0,
+        None => (envelope.0 - loss) / (total.0 - loss),
+    };
     let stripped = left < MIN_ENVELOPE;
     if envelope.0 == 0.0 || (loss == 0.0 && !stripped) {
         return Ok(Escaped {
@@ -104,7 +110,7 @@ pub(crate) fn escaped(
     let kept_mass = match lost {
         Some(lost) if !stripped => trace.record(
             Code::of(codes::MASS_KEPT),
-            EarthMass::from(total - *lost.value()),
+            kept,
             &[mass.node(), lost.node()],
         )?,
         _ => trace.record(
@@ -121,8 +127,7 @@ pub(crate) fn escaped(
         )?,
         (false, Some(heavy)) => trace.record(
             Code::of(codes::ENVELOPE_KEPT_FRACTION),
-            Fraction::try_from(1.0 - heavy.value().0 / kept_mass.value().0)
-                .map_err(InteriorError::NotAFraction)?,
+            Fraction::try_from(left).map_err(InteriorError::NotAFraction)?,
             &[kept_mass.node(), heavy.node()],
         )?,
         (false, None) => trace.record(
