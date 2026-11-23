@@ -148,17 +148,16 @@ mod tests {
             .transform(FontTransform::None)
             .box_size("label")
             .expect("the registered font measures text");
-        assert!(width > 10 && height > 5, "{width}x{height}");
+        // Measured once from the committed Noto Sans 2.015: a different
+        // font file, or a system font taking over, changes the box. That
+        // the bytes are identical across platforms rests on
+        // `figures --check` in CI, not on this test.
+        assert_eq!((width, height), (23, 11));
     }
 
     #[test]
     fn rendering_twice_gives_the_same_bytes() {
         assert_eq!(sample().unwrap(), sample().unwrap());
-    }
-
-    #[test]
-    fn text_renders_without_a_system_font() {
-        assert!(sample().unwrap().contains("<text"));
     }
 
     fn only_figure() -> Vec<Figure> {

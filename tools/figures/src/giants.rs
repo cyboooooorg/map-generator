@@ -53,8 +53,10 @@ fn jupiter_mass() -> Kilogram {
 }
 
 /// Mass and radius in Jupiter masses and radii of the giants of a given
-/// core, log-spaced from 20 to 3 000 M⊕. A mass the tables refuse (below
-/// about 13 M⊕ for a core of 25 M⊕ at some age or distance) is skipped.
+/// core, log-spaced from 20 to 3 000 M⊕. A mass the tables refuse is
+/// skipped: below the lowest mass they hold for that core (about 28 M⊕ for
+/// a core of 25 M⊕; 12.92 M⊕ is the threshold for any core, see
+/// `core_bounds`).
 fn series(core: f64) -> Vec<(f64, f64)> {
     let flux = EarthFlux(1.0 / (DISTANCE_AU * DISTANCE_AU));
     (0..POINTS)
@@ -172,6 +174,27 @@ mod tests {
         for p in &s {
             assert!(p.0.is_finite() && p.1.is_finite() && p.1 > 0.0);
         }
+    }
+
+    #[test]
+    fn every_core_has_a_curve_from_the_lowest_mass() {
+        for core in [0.0, 10.0] {
+            let s = series(core);
+            assert!(!s.is_empty(), "no point for a core of {core} M⊕");
+            let first = s[0].0 * jupiter_mass().0 / Kilogram::from(EarthMass(1.0)).0;
+            assert!(
+                (first / MIN_MASS - 1.0).abs() < 1e-9,
+                "starts at {first} M⊕"
+            );
+        }
+    }
+
+    #[test]
+    fn the_reference_constants_agree_with_the_laws() {
+        // The mass of Jupiter from the fact sheet is the unit of the mass
+        // axis, and its radius that of the tables: both must match.
+        assert!((jupiter_mass().0 / JUPITER_MASS.0 - 1.0).abs() < 1e-3);
+        assert!((JUPITER_OBSERVED_RADIUS.0 / JUPITER_RADIUS.0 - 1.0).abs() < 1e-3);
     }
 
     #[test]
