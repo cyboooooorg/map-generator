@@ -85,9 +85,11 @@ pub const OCEAN_MASS: Kilogram = Kilogram(1.4e21);
 const EARTH_OCEAN_FRACTION: f64 = 2.3e-4;
 
 /// Source: Earth's bulk water as a share of its mass, 2700 ppm (Marty
-/// 2012, Earth Planet. Sci. Lett. 313-314, 56,
-/// doi:10.1016/j.epsl.2011.10.040, p. 18: 2700 ± 1350 ppm, "10 ± 5 ocean
-/// masses"), the median the engine draws a dry planet's water around.
+/// 2012, Earth Planet. Sci. Lett. 313-314, 56-66,
+/// doi:10.1016/j.epsl.2011.10.040; arXiv:1405.6336 author copy, p. 18:
+/// 2700 ± 1350 ppm, "10 ± 5 ocean masses"): Earth's bulk water, the
+/// reference the surface share is calibrated on (the engine draws a dry
+/// planet's water log-uniform from 1e-5 to 1e-2, not around it).
 const EARTH_BULK_WATER_FRACTION: f64 = 2.7e-3;
 
 /// Calibration: share of a rocky planet's bulk water that is at its

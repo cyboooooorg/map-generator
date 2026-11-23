@@ -1502,9 +1502,6 @@ measurement; this is what was searched and not found.
   water-rich planets that formed beyond the ice line and migrated in was
   searched: none found (Luque & Pallé 2022 say they exist, with no
   fraction in the main text; heat study, section B7).
-- **Water spread $\sigma_{\ln}$ = 0.5**, derived from Marty's 2700 ±
-  1350 ppm read as one sigma (1350/2700, the small-spread approximation
-  of a log-normal).
 - **Twenty steps per layer.** Fitted on a $10^{-4}$ accuracy goal; ten
   steps give $1.03 \times 10^{-4}$ against a 1280-step reference.
 - **Test tolerances against PREM.** 1 % for the core (the study gives no

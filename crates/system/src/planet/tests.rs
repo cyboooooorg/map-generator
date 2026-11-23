@@ -22,7 +22,8 @@ use timeline::{
 const STANDARD_GRAVITY: f64 = 9.80665;
 
 /// Source: Marty 2012, bulk Earth water 2700 ppm of the mass (Earth
-/// Planet. Sci. Lett. 313, 56, p. 18).
+/// Planet. Sci. Lett. 313-314, 56-66; arXiv:1405.6336 author copy,
+/// p. 18).
 pub(super) const EARTH_WATER_FRACTION: f64 = 2.7e-3;
 
 /// Source: Wang et al. 2018 core mass fraction of Earth, as quoted by

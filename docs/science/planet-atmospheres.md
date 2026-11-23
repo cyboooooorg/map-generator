@@ -195,58 +195,6 @@ sums the runaway greenhouse over every light source (#592: the threshold is
 reads `science::tectonics::{HEAT_PIPE_FLUX, PLATES_MIN_MASS}`. Neither
 recomputes a value to explain it: the cause tree is the computation's.
 
-### Surface water
-
-Legacy drew a planet's ocean directly (Earth's `water_fraction` was
-2.3e-4, its ocean). The rewrite draws the **bulk** water, the ocean plus
-the water bound in the mantle (log-uniform from 1e-5 to 1e-2 inside the
-ice line; Earth's is 2700 ppm, Marty 2012). The ocean is then a share of
-it (#663, `system::planet::water::surface_water`, node
-`planet.water.surface`):
-
-```text
-surface = s · w (1 - f) M      for a dry planet, its water in the mantle
-surface = its water layer      for a water world (or its water beyond the laws)
-s = ω_o / ω_⊕ = 2.3e-4 / 2.7e-3 = 0.085   (SURFACE_WATER_SHARE)
-```
-
-A water world's water is a layer of its structure, not hydrated rock
-([planet interiors](planet-interiors.md), "Water inside the ice line"):
-all of it is at its surface, and its node (`planet.water-layer-mass` or
-`planet.water-beyond-law`) is the surface water as it is. The runaway's
-steam is the surface water: `min(9 H, surface)` is lost, the mantle's
-water stays, and the mass after the steam is `M - (surface - kept)`
-(`after_steam`). The regime, the seafloor's hold on the outgassing
-(`released_under_ocean`) and the air's water read the water kept of the
-surface water, never the bulk.
-
-**Calibration.** `science::habitable::SURFACE_WATER_SHARE` is a
-`Calibration:`, the decision of #663 (option A of
-[study 22](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water)):
-Earth's ocean as a share of its mass, $\omega_o = 2.3 \times 10^{-4}$
-(Cowan & Abbot 2014, Table 1; 1.37e21 kg, the ocean alone, without the
-0.19 ocean of the continental crust, Korenaga et al. 2017, §2a), over
-Earth's bulk water, 2700 ppm (Marty 2012, p. 18: 2700 ± 1350 ppm,
-"10 ± 5 ocean masses"). The same share for every mass and regime. Both
-numbers are `Source:` constants; the ratio is computed from them.
-Searched and not found (study 22): a measured or modelled surface share
-for any planet other than Earth with plates; a stagnant-lid water
-outgassing law as a function of mass (Dorn et al. 2018 is for CO₂, Tosi
-et al. 2017 for 1 M⊕ only); a share for heat-pipe or episodic planets.
-
-**Validation.** A planet drawn at Earth's 2700 ppm gets 0.98 ocean
-(units of 1.4e21 kg; the ocean's 1.37e21 kg exactly), the 0.9 to 1.1 of
-the targets below, and keeps plates; Venus given that water runs away and
-loses it; the reference Earth's air keeps 0.51 bar of N₂.
-
-**Limitations.** The share rides on Marty's large bulk: other budgets
-give Earth 0.07 to about 0.6 (Ohtani 2021's small budget of 1 to 4
-oceans, Korenaga et al. 2017's mantle of 0.56 to 1.3 oceans). A stagnant
-lid outgasses less (about 0.02 to 0.05, derived from Tosi et al. 2017),
-and the share changes over a planet's life as the mantle degasses and
-regasses: both are #665, with the keyframes of T4. Whether a runaway
-outgasses more of its mantle than the share is left open.
-
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
 
@@ -274,6 +222,69 @@ is in runaway, loses even an Earth ocean and is episodic; Mars and
 Mercury are stagnant; Io with 1e14 W of tidal heat is a heat pipe, and
 still is with 7.5e13 W (1.79 W/m², the low end of Lainey et al.); a dry
 5 M⊕ planet outside the runaway has no plates.
+
+### Surface water
+
+Legacy drew a planet's ocean directly (Earth's `water_fraction` was
+2.3e-4, its ocean). The rewrite draws the **bulk** water, the ocean plus
+the water bound in the mantle (log-uniform from 1e-5 to 1e-2 inside the
+ice line; Earth's is 2700 ppm, Marty 2012, the reference of the share,
+not the centre of the draw). The ocean is then a share of
+it (#663, `system::planet::water::surface_water`, node
+`planet.water.surface`):
+
+```text
+surface = s · w (1 - f) M      for a dry planet, its water in the mantle
+surface = its water layer      for a water world (or its water beyond the laws)
+s = ω_o / ω_⊕ = 2.3e-4 / 2.7e-3 = 0.085   (SURFACE_WATER_SHARE)
+```
+
+A water world's water is a layer of its structure, not hydrated rock
+([planet interiors](planet-interiors.md), "Water inside the ice line"):
+all of it is at its surface, and its node (`planet.water-layer-mass` or
+`planet.water-beyond-law`) is the surface water as it is. The runaway's
+steam is the surface water: `min(9 H, surface)` is lost, the mantle's
+water stays, and the mass after the steam is `M - (surface - kept)`
+(`after_steam`). The regime, the seafloor's hold on the outgassing
+(`released_under_ocean`) and the air's water read the water kept of the
+surface water, never the bulk.
+
+**Calibration.** `science::habitable::SURFACE_WATER_SHARE` is a
+`Calibration:`, the decision of #663 (option A of
+[study 22](https://github.com/cyboooooorg/map-generator/wiki/22-surface-water)):
+Earth's ocean as a share of its mass, $\omega_o = 2.3 \times 10^{-4}$
+(Cowan & Abbot 2014, Table 1; 1.37e21 kg, the ocean alone, without the
+0.19 ocean of the continental crust, Korenaga et al. 2017, §2a), over
+Earth's bulk water, 2700 ppm (Marty 2012, arXiv author copy, p. 18:
+2700 ± 1350 ppm,
+"10 ± 5 ocean masses"). The same share for every mass and regime. Both
+numbers are `Source:` constants; the ratio is computed from them.
+Searched and not found (study 22): a measured or modelled surface share
+for any planet other than Earth with plates; a stagnant-lid water
+outgassing law as a function of mass (Dorn et al. 2018 is for CO₂, Tosi
+et al. 2017 for 1 M⊕ only); a share for heat-pipe or episodic planets.
+
+**Validation.** A planet drawn at Earth's 2700 ppm gets 0.98 ocean
+(units of 1.4e21 kg; the ocean's 1.37e21 kg exactly), the 0.9 to 1.1 of
+the targets above, and keeps plates; Venus given that water runs away and
+loses it; the reference Earth's air keeps 0.51 bar of N₂.
+
+**What the draw gives.** The draw is not centred on Earth: a dry 1 M⊕
+planet, its bulk water log-uniform from 1e-5 to 1e-2, keeps 0.004 to 3.6
+oceans at its surface, a median of about 0.12, and about 19 % of them
+hold at least one ocean ($w \ge 2.75 \times 10^{-3}$). Legacy drew the
+ocean itself, $10^{U(-4, -2.7)}$ of the mass: 0.43 to 8.5 oceans, a
+median of about 1.9. The median dry planet is some sixteen times drier
+at its surface than legacy's; the user confirmed this choice, the share
+and the draw as they are, on 2026-11-23.
+
+**Limitations.** The share rides on Marty's large bulk: other budgets
+give Earth 0.07 to about 0.6 (Ohtani 2021's small budget of 1 to 4
+oceans, Korenaga et al. 2017's mantle of 0.56 to 1.3 oceans). A stagnant
+lid outgasses less (about 0.02 to 0.05, derived from Tosi et al. 2017),
+and the share changes over a planet's life as the mantle degasses and
+regasses: both are #665, with the keyframes of T4. Whether a runaway
+outgasses more of its mantle than the share is left open.
 
 ## Core and dynamo
 
@@ -2288,8 +2299,9 @@ another paper, from memory) is said where it is used.
 - Manabe and Wetherald 1967,
   doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2.
 - Marcq et al. 2008, Venus's SO₂ below the clouds.
-- Marty 2012, doi:10.1016/j.epsl.2011.10.040, carbon in the mantle;
-  p. 18, Earth's bulk water.
+- Marty 2012, *Earth Planet. Sci. Lett.* 313-314, 56-66,
+  doi:10.1016/j.epsl.2011.10.040, carbon in the mantle; Earth's bulk
+  water, p. 18 of the arXiv author copy (arXiv:1405.6336).
 - McDonough 2003, *Treatise on Geochemistry* 2.15.
 - McEwen et al. 1998, *Science* 281, 87, Io's lavas.
 - McKay, Pollack and Courtin 1991,
