@@ -48,9 +48,11 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
   shield (`atm` l.322-548, `mod` l.471-489) wait for the moons, #658
   under T2. `methane_photolysis`, `cold_trap`, `photochemistry`, the
   outgassing redone for a reducing air (`atm` l.1115-1300) and the
-  `boils` loop (`mod` l.524-575) read the climate or sit after it: 2d.
-  The legacy Mars CO2 factor (`reference.rs:216`, a test fudge on an
-  unchecked 6.1 mbar) is not ported: it served the climate test.
+  `boils` loop (`mod` l.524-575) read the climate or sit after it: 2d,
+  listed in #659 (step 5 of #602). The legacy Mars CO2 factor
+  (`reference.rs:216`, a test fudge on an unchecked 6.1 mbar) is not
+  ported: it served the climate test; #659 holds that question too,
+  with the test `earth_has_no_abiotic_methane_or_ammonia`.
 - **In 2c:** `water()`, `steam()`, the body derived again after a
   runaway (`ran_after_steam`, `after_steam`, `mod` l.664-710) and
   `Water::keeping` after the shoreline (`mod` l.~930, l.577-590).
@@ -61,9 +63,10 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
   remainder 0.82; the ice volatiles read in Biver et al. 2022 (Comets
   III, arXiv:2207.04800) instead of the unreachable Mumma & Charnley
   2011 (Task 4 table).
-- **The runaway threshold under several stars** compares the total
-  flux with `runaway_flux` at the flux-weighted effective temperature
-  (`StellarSources::weighted`). Legacy had one star; T7 refines it.
+- **The runaway threshold under several stars** is the sum agreed on
+  #592: a planet runs away when `Σ flux_i / runaway_flux(Teff_i) > 1`,
+  each source with its own effective temperature, never one blended
+  `Teff`. With one source it is legacy's test.
 - **Cause trees, not one `Escape` quantity:** each gas's partial
   pressure derives from its outgassed node, the shoreline's kept share,
   and for SO2 the wash-out share; the surface pressure derives from the
@@ -118,9 +121,11 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
    rebuilt in the Fortney tables with its drawn heavy mass, its
    fraction `1 - Mz / M'` derived from the kept mass. (Task 6 test
    `a_close_giant_keeps_its_envelope`.)
-5. **Two stars:** the runaway threshold reads the weighted effective
-   temperature and the total flux; one source gives the legacy result.
-   (Task 7 test `the_runaway_threshold_reads_every_source`.)
+5. **Two stars:** the runaway threshold sums each source's flux over
+   its own limit (#592); two identical half-flux sources give the
+   result of one source, and a cool and a hot source differ from one
+   source at their weighted temperature. (Task 7 test
+   `the_runaway_threshold_reads_every_source`.)
 
 ---
 
@@ -158,8 +163,9 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
   `EARTH_XUV_FLUENCE`: equals `0.1 π R³ F / (G M)` evaluated by hand in
   the test, relative 1e-12); `the_loss_scales_as_r_cubed_over_m`;
   `no_fluence_no_loss` (0 J/m² gives 0 kg; `shoreline_kept` gives 1);
-  `earths_escape_velocity_is_11_2_km_s` (11.186 km/s within 0.5 %,
-  `Source:` the NASA Earth fact sheet value the page cites);
+  `earths_escape_velocity_is_11_2_km_s` (Earth's mass and mean radius
+  already in `science::constants` give the escape velocity the NASA
+  Earth fact sheet prints, read there, within 0.5 %);
   `the_shoreline_passes_half_at_its_line` (v = 6.5 km/s at Earth's
   fluence, magnetised: 0.5); `a_missing_dynamo_doubles_the_fluence`
   (unmagnetised at φ equals magnetised at 2φ).
@@ -244,11 +250,14 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
     `(r_c / R)³`; `deep` picks the deep-dipole share (legacy's choice, `cor`
     l.180-200)
 
-- [ ] **Step 1: Write the failing tests:** `the_flux_scaling_is_christensens` (a
-      test of `B` against the core field Christensen et al. 2009 print for Earth
-      if study 21 records one, else the formula evaluated by hand,
-      `Definition:`); `the_phases_follow_their_thresholds` (each threshold, both
-      sides); `a_core_cools_monotonically` (`surface_field` falls with age,
+- [ ] **Step 1: Write the failing tests:** `the_flux_scaling_is_christensens`
+      (`B` for a given `ρ`, `q` equals Christensen et al. 2009 eq. 2,
+      `sqrt(2 µ₀ c ρ^(1/3) (F q)^(2/3))`, evaluated by hand in the test);
+      `the_dipole_factors_multiply_to_earths_calibration` (`F^(1/3)` × 1/7 ×
+      1/√2 × `DIPOLE_REMAINDER` is 0.067 within 1 %, the legacy calibration
+      on Earth's 30 µT); `the_phases_follow_their_thresholds` (each
+      threshold, both sides); `a_core_cools_monotonically` (`surface_field`
+      falls with age,
       `core_phase` never returns from `Frozen`: legacy `cores_freeze_with_age`,
       `cor` l.258); `no_core_no_field` (zero core radius gives 0 T).
 - [ ] **Step 2: Run** `cargo nextest run -p science dynamo` — FAIL.
@@ -307,7 +316,8 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
 - [ ] **Step 1: Write the failing tests:** `earths_silicate_sulphur_is_wangs`
       (`inventory` of Earth's silicate mass gives `ROCK_S` × silicate, 235 ± 38
       ppm, Wang et al. 2018); `ice_carries_only_ice_volatiles` (no rock, no S);
-      `a_column_of_earths_air_is_a_bar` (the mass of Earth's atmosphere as
+      `a_column_of_earths_air_weighs_its_pressure` (the mass of Earth's
+      atmosphere as
       Trenberth & Smith 2005 print it, read in the paper, on Earth's gravity and
       radius: the mean surface pressure they give, within 1 %);
       `half_is_released_under_the_half_pressure`; `wash_out_shares` (legacy
@@ -346,9 +356,11 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
       sets differing only in `volatiles`: the core, water, radiogenic and
       envelope values are equal, the scatter differs);
       `the_volatile_scatter_has_its_spread` (2 000 seeds: mean 0 ± 0.02 dex,
-      standard deviation 0.3 ± 0.02, `Calibration:` the constant itself);
-      `volatile_draws_are_independent` (different labels, as
-      `different_labels_draw_independently`).
+      standard deviation 0.3 ± 0.02 for each gas: three standard errors at
+      2 000 draws, `Definition:` in the test);
+      `the_volatile_scatter_is_recorded_as_drawn` (five `Provenance::Drawn`
+      leaves with their codes; `Drawn::fixed` with `None` gives five 0 dex
+      `Imposed` leaves).
 - [ ] **Step 2: Run** `cargo nextest run -p system planet::tests` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS.
@@ -369,7 +381,8 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
   `Body::bulk`.
 - Produces:
   - `pub(crate) struct Escaped { pub trial: Trial, pub drawn: Drawn, pub body:
-    Body, pub lost: Traced<Kilogram> }`
+    Body, pub lost: Option<Traced<Kilogram>> }` (`None` when nothing was lost:
+    no node is recorded then)
   - `pub(crate) fn escaped(trial: &Trial, drawn: &Drawn, body: Body, trace: &mut
     Trace) -> Result<Escaped, InteriorError>` — port of `envelope_after_escape`
     (`esc` l.40-64): the loss on the formed body's radius and mass, clamped to
@@ -416,8 +429,8 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
 - Produces:
   - `pub(crate) fn water(trial: &Trial, drawn: &Drawn, body: &Body, trace: &mut
     Trace) -> Result<timeline::Water, InteriorError>` — port of `water` and
-    `steam` (`reg` l.86-121): `runaway` when the total flux exceeds
-    `runaway_flux` at the weighted effective temperature; then `inventory =
+    `steam` (`reg` l.86-121): `runaway` when `Σ flux_i / runaway_flux(Teff_i)`
+    over `trial.sources` exceeds 1 (#592); then `inventory =
     max(0, w M - 9 · loss)`, else `w M`; `boiled` false (the `boils` loop is
     2d). Codes `planet.water.runaway`, `planet.water.inventory`,
     `planet.water.steam-lost`.
@@ -426,9 +439,11 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
     InteriorError>` — port of `after_steam` (`mod` l.684-710): `None` when
     nothing was lost; else the mass less the lost water and the water fraction
     of what was kept, as derived nodes (`planet.mass.after-steam`,
-    `planet.water.kept-fraction`); the envelope fraction and the volatile
-    scatter keep their mass (the inventory rule reads masses, so nothing to
-    rescale).
+    `planet.water.kept-fraction`). The envelope fraction is 0 here (a
+    surface exists only below `MIN_ENVELOPE`, which Task 6 sets to 0). The
+    volatiles keep their mass as in legacy: Task 9 computes the inventory
+    from the composition before the steam loss (`Escaped.drawn`), never from
+    the kept water, which would drop the ice volatiles with the steam.
   - `pub(crate) fn regime(trial: &Trial, body: &Body, heat: &timeline::Heat,
     water: &timeline::Water, trace: &mut Trace) ->
     Result<Traced<TectonicRegime>, InteriorError>` — port of `regime` (`reg`
@@ -449,8 +464,10 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
       `timeline::Heat` built by hand, tidal 1e14 W and 7.5e13 W as legacy `reg`
       l.212, gives a heat pipe); `a_dry_super_earth_is_not_plated`;
       `a_hot_water_world_runs_away_and_rebuilds` (Review Focus 3);
-      `the_runaway_threshold_reads_every_source` (Review Focus 5: two sources at
-      0.5 the flux each equal one source).
+      `the_runaway_threshold_reads_every_source` (Review Focus 5: two
+      identical sources at half the flux each equal one source; a 3000 K and
+      a 7000 K source at the same total flux give `Σ flux_i / S_i`, not the
+      limit at their weighted temperature).
 - [ ] **Step 2: Run** `cargo nextest run -p system planet::water` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS.
@@ -467,18 +484,18 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
 
 **Interfaces:**
 
-- Consumes: `science::dynamo::*`, the iron layer of `Body::layers()` (material
-  `Material::Iron`, its `outer_radius` and `mass`), `Traced<TectonicRegime>`,
-  `trial.age`.
+- Consumes: `science::dynamo::*`, the rocky `Interior` (a surface, and so
+  this step, exists only below `MIN_ENVELOPE`, where the body is
+  `Body::Rocky`): its `core_mass` and the outer radius of its
+  `Material::Iron` shell, `Traced<TectonicRegime>`, `trial.age`.
 - Produces: `pub(crate) struct CoreRecord { pub core: timeline::Core, pub
-  dynamo: Traced<bool> }` and `pub(crate) fn core(trial: &Trial, body: &Body,
-  regime: &Traced<TectonicRegime>, trace: &mut Trace) -> Result<CoreRecord,
-  InteriorError>` — port of `core` (`cor` l.150-205): Nusselt by regime
-  (`NUSSELT_LID` for stagnant lid and heat pipe), `CoreState::None` and 0 T
-  without an iron layer; codes `planet.core.cooling-time`, `planet.core.state`,
-  `planet.core.dynamo`, `planet.core.field`. A giant or a mini-Neptune's core
-  gets `CoreState::None` here: its core state is `enveloped::GIANT_CORE_STATE`
-  and a surface only exists below `MIN_ENVELOPE`.
+  dynamo: Traced<bool> }` and `pub(crate) fn core(trial: &Trial, interior:
+  &Interior, regime: &Traced<TectonicRegime>, trace: &mut Trace) ->
+  Result<CoreRecord, InteriorError>` — port of `core` (`cor` l.150-205):
+  Nusselt by regime (`NUSSELT_LID` for stagnant lid and heat pipe); the
+  field is 0 T without a dynamo; `CoreState::None` and 0 T without an iron
+  shell or with a zero core mass fraction; codes `planet.core.cooling-time`,
+  `planet.core.state`, `planet.core.dynamo`, `planet.core.field`.
 
 - [ ] **Step 1: Write the failing tests** (from `cor` l.207-286, the targets of
       study 21): `the_solar_system_has_its_dynamos` (Earth field in [20, 70] µT;
@@ -507,8 +524,9 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
   fluence.
 - Produces: `pub(crate) fn air(trial: &Trial, drawn: &Drawn, body: &Body, water:
   &timeline::Water, regime: &Traced<TectonicRegime>, core: &CoreRecord, trace:
-  &mut Trace) -> Result<(Atmosphere, timeline::Water), InteriorError>` — in
-  order:
+  &mut Trace) -> Result<(Atmosphere, timeline::Water), InteriorError>`, where
+  `drawn` is the composition before the steam loss (`Escaped.drawn`, see
+  Task 7) and `body` the body after it — in order:
   1. outgassed partials (`atm` l.211-247), one node per gas
      `planet.air.outgassed.<gas>`, from the inventory (rule × `10^scatter`), the
      regime's share (`MOBILE_SHARE` or `LID_SHARE`), the ocean's release and the
@@ -525,14 +543,19 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
      partial }`.
 
 - [ ] **Step 1: Write the failing tests** (from `atm` l.1358-1810, the planets
-      only; targets as study 21 states them): `venus_has_ninety_bars_of_co2`
+      only; targets as study 21 states them). Legacy's `air_of` (`atm`
+      l.1312-1345) also ran the methane photolysis, the cold trap and the
+      photochemistry (2d): the targets below are the ones those steps leave
+      alone (CO2, N2, SO2); `earth_has_no_abiotic_methane_or_ammonia` waits
+      for them in 2d (Earth's bare air holds its ice CH4 and NH3 until
+      photolysis). `venus_has_ninety_bars_of_co2`
       (total in [60, 120] bar, CO2 above 90 %, N2 in [1, 6]);
       `earth_has_a_bar_of_nitrogen` (N2 in [0.5, 1.2]);
       `earths_air_keeps_no_sulphur_dioxide` (below 1e-6 bar);
       `mars_keeps_a_trace` (total in [0.002, 0.05] bar, without the legacy Mars
       factor); `mercury_is_airless` (below 1e-4 bar, the 2d class threshold
       `AIRLESS_BAR`, `Definition:` in the test);
-      `earth_has_no_abiotic_methane_or_ammonia`; `a_dynamo_shields_the_air`;
+      `a_dynamo_shields_the_air`;
       `a_deep_ocean_holds_back_what_the_mantle_outgasses` (Earth above 0.99999
       released, a 30 % water world in [5e-4, 2e-3]);
       `a_runaway_keeps_its_water_as_vapour`; `no_xuv_keeps_the_whole_air`
@@ -573,11 +596,13 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
 - [ ] **Step 1: Write the failing tests:**
       `the_same_seed_gives_the_same_bare_planet` (two runs, equal values);
       `an_enveloped_planet_has_no_surface` (a 10 M⊕ mini-Neptune at 1 AU);
-      `a_runaway_planet_is_lighter` (Venus: mass below the trial's, the mass
-      node derives from the steam loss);
-      `every_surface_value_traces_back_to_the_trial` (walk every node of
-      `BareSurface` to leaves: only `Input`, `Drawn`, `Observed` or `Imposed`
-      leaves, no orphan).
+      `a_runaway_planet_is_lighter` (Venus given Earth's water fraction
+      2.3e-4, as `venus_ran_away_and_dried`: the reference Venus holds none
+      and would lose nothing; mass below the trial's, the mass node derives
+      from the steam loss);
+      `every_surface_value_traces_back_to_the_trial` (each value of
+      `BareSurface` is a derived node whose ancestry reaches `trial.mass`:
+      no step recorded a fresh leaf for a computed value).
 - [ ] **Step 2: Run** `cargo nextest run -p system planet::bare` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS; `cargo nextest run --profile ci` within the tier-1
@@ -591,8 +616,7 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
 
 - Modify: `docs/science/planet-atmospheres.md` (each section's "How it computes
   them": rewrite paths, the cause trees), `crates/system/README.md` (the planet
-  chain up to the bare air), `crates/science/README.md` if it lists modules,
-  `.markdownlint-cli2.jsonc` (add this plan's path)
+  chain up to the bare air), `crates/science/README.md` if it lists modules
 
 - [ ] **Step 1:** Update the pages: each law points at its `science` item and
       its step at its `system` module; the departures from legacy (decisions
@@ -605,7 +629,8 @@ is `atmosphere.rs`, `inp` is `inputs.rs`, `mod` is `mod.rs`.
 - `branch-reviewer` and `test-reviewer` once on the whole branch, given
   this plan and the split design; after fixes, `mise run ci` again.
 - Push Wiki study 21 (written in the scratchpad clone) and link it.
-- PR description: `Refs #602`; a heading "Calibrations" listing every
+- PR description: `Refs #602`, `Refs #592` (the runaway sum),
+  `Refs #659`; a heading "Calibrations" listing every
   `Calibration:` constant added (from study 21's table) and any retune
   of Task 8; a note that nothing generated changes (model private
   until 2d), so no `mise run test:heavy` output.
