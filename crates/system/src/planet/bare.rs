@@ -18,7 +18,7 @@ use super::escape::escaped;
 use super::heat::heat;
 use super::interior::{Interior, InteriorError, interior};
 use super::regime::regime;
-use super::water::{after_steam, water};
+use super::water::{after_steam, surface_water, water};
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
 use science::units::Kilogram;
@@ -73,8 +73,10 @@ pub(crate) fn bare(trial: &Trial, seed: Seed, trace: &mut Trace) -> Result<Bare,
 /// 2. no surface when the planet kept an envelope, at or above
 ///    [`MIN_ENVELOPE`] (legacy's test); under it the escape left no
 ///    envelope at all, even without XUV light, and a rocky body;
-/// 3. its water ([`water`]); after a runaway, the planet its steam left
-///    ([`after_steam`]), its body and heat built again;
+/// 3. its surface water ([`surface_water`]: a share of a dry planet's
+///    bulk water, a water world's whole water) and the water its light
+///    leaves of it ([`water`]); after a runaway, the planet its steam
+///    left ([`after_steam`]), its body and heat built again;
 /// 4. its regime ([`regime`]), its core ([`core`]) and its air ([`air`]),
 ///    the air reading the trial and composition from before the steam's
 ///    loss so that the volatiles keep their mass;
@@ -115,9 +117,10 @@ pub(crate) fn bare_with(
         });
     }
 
-    let w = water(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
+    let surface = surface_water(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
+    let w = water(&escaped.trial, &escaped.body, surface, trace)?;
     let (mut t, mut d, mut body, heat) =
-        match after_steam(&escaped.trial, &escaped.drawn, &w, trace)? {
+        match after_steam(&escaped.trial, &escaped.drawn, surface, &w, trace)? {
             Some((t, d)) => {
                 let body = interior(&t, &d, trace)?;
                 let h = heat_of(&t, &d, &body, trace)?;
@@ -132,10 +135,20 @@ pub(crate) fn bare_with(
         };
     let r = regime(&t, &body, &heat, &w, trace)?;
     let k = core(&t, rocky(&body), &r, trace)?;
-    let (atmosphere, kept) = air(&escaped.trial, &escaped.drawn, &body, &w, &r, &k, trace)?;
+    let (atmosphere, kept) = air(
+        &escaped.trial,
+        &escaped.drawn,
+        &body,
+        surface,
+        &w,
+        &r,
+        &k,
+        trace,
+    )?;
     if *kept.runaway.value()
         && kept.inventory.value().0 < w.inventory.value().0
-        && let Some((left, left_drawn)) = after_steam(&escaped.trial, &escaped.drawn, &kept, trace)?
+        && let Some((left, left_drawn)) =
+            after_steam(&escaped.trial, &escaped.drawn, surface, &kept, trace)?
     {
         body = interior(&left, &left_drawn, trace)?;
         (t, d) = (left, left_drawn);

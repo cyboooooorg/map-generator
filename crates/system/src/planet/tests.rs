@@ -1265,14 +1265,13 @@ pub(super) const VENUS: ReferenceBody = ReferenceBody {
 
 /// Source: NASA planetary fact sheet: 1 M_E at 1 au, eccentricity 0.0167;
 /// core 0.325 (Zeng, Sasselov & Jacobsen 2016,
-/// doi:10.3847/0004-637X/819/2/127); oceans 0.023 % of the mass, Charette
-/// & Smith 2010's 1.335e9 km³ (Oceanography 23(2)) at 1027 kg/m³,
-/// 1.37e21 kg over Earth's 5.972e24 kg. Its oceans only, unlike
-/// [`EARTH_WATER_FRACTION`], the bulk water held in the mantle too.
+/// doi:10.3847/0004-637X/819/2/127); the bulk water of
+/// [`EARTH_WATER_FRACTION`] (Marty 2012), of which the surface share
+/// (`science::habitable::SURFACE_WATER_SHARE`) is its ocean.
 pub(super) const EARTH: ReferenceBody = ReferenceBody {
     mass: 1.0,
     core_mass_fraction: 0.325,
-    water_fraction: 2.3e-4,
+    water_fraction: EARTH_WATER_FRACTION,
     orbit: 1.0,
     eccentricity: 0.0167,
 };
@@ -1289,8 +1288,9 @@ pub(super) const MARS: ReferenceBody = ReferenceBody {
     eccentricity: 0.0934,
 };
 
-/// Definition: Venus given Earth's oceans, a runaway planet that has water
-/// to lose (the reference Venus is dry; a test choice).
+/// Definition: Venus given Earth's bulk water, so Earth's ocean share of
+/// it, a runaway planet that has water to lose (the reference Venus is
+/// dry; a test choice).
 pub(super) const WET_VENUS: ReferenceBody = ReferenceBody {
     water_fraction: EARTH.water_fraction,
     ..VENUS
@@ -1303,6 +1303,21 @@ pub(super) fn derive(
     t: &Trial,
     drawn: &Drawn,
 ) -> (Body, timeline::Heat, timeline::Water) {
+    let (body, h, w, _) = derive_surface(trace, t, drawn);
+    (body, h, w)
+}
+
+/// [`derive`], with the surface water the water derives from.
+pub(super) fn derive_surface(
+    trace: &mut Trace,
+    t: &Trial,
+    drawn: &Drawn,
+) -> (
+    Body,
+    timeline::Heat,
+    timeline::Water,
+    Traced<science::units::Kilogram>,
+) {
     let body = interior(t, drawn, trace).unwrap();
     let h = heat::heat(
         t,
@@ -1312,8 +1327,9 @@ pub(super) fn derive(
         trace,
     )
     .unwrap();
-    let w = super::water::water(t, drawn, &body, trace).unwrap();
-    (body, h, w)
+    let surface = super::water::surface_water(t, drawn, &body, trace).unwrap();
+    let w = super::water::water(t, &body, surface, trace).unwrap();
+    (body, h, w, surface)
 }
 
 /// `t` with its source's XUV fluence replaced by `fluence`, J/m².

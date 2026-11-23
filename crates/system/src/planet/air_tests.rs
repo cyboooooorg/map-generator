@@ -16,7 +16,7 @@ use super::interior::Water as Held;
 use super::regime::regime;
 use super::tests::{
     EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, VENUS,
-    WATER_WORLD_FRACTION, derive, derived_from, reference_trial, trial, with_fluence,
+    WATER_WORLD_FRACTION, derive_surface, derived_from, reference_trial, trial, with_fluence,
 };
 use crate::Trial;
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, shoreline_kept};
@@ -84,6 +84,7 @@ struct Planet {
     trial: Trial,
     drawn: Drawn,
     body: Body,
+    surface: Traced<Kilogram>,
     water: Water,
     regime: Traced<TectonicRegime>,
     core: CoreRecord,
@@ -96,6 +97,7 @@ impl Planet {
             &self.trial,
             &self.drawn,
             &self.body,
+            self.surface,
             &self.water,
             &self.regime,
             &self.core,
@@ -109,7 +111,7 @@ impl Planet {
 /// reference bodies that run away hold no water, so lose no steam; a
 /// planet that does is read here before the chain rebuilds it.
 fn up_to_core(mut trace: Trace, t: Trial, drawn: Drawn) -> Planet {
-    let (body, h, w) = derive(&mut trace, &t, &drawn);
+    let (body, h, w, surface) = derive_surface(&mut trace, &t, &drawn);
     let r = regime(&t, &body, &h, &w, &mut trace).unwrap();
     let Body::Rocky(rocky) = &body else {
         panic!("a planet with a surface is rocky")
@@ -120,6 +122,7 @@ fn up_to_core(mut trace: Trace, t: Trial, drawn: Drawn) -> Planet {
         trial: t,
         drawn,
         body,
+        surface,
         water: w,
         regime: r,
         core: k,
@@ -351,9 +354,11 @@ fn each_partial_cites_its_outgassing_and_the_shoreline() {
             assert_eq!(from.len(), 2, "{gas:?}");
         }
     }
-    // The outgassing derives from the regime.
+    // The outgassing derives from the regime, and from the surface water
+    // whose volatiles its ice term carries.
     let co2 = derived_from(trace, a.partial[&Gas::Co2].node())[0];
     assert!(derived_from(trace, co2).contains(&venus.regime.node()));
+    assert!(derived_from(trace, co2).contains(&venus.surface.node()));
     // The pressure is the sum of the partials, from them.
     let partials: Vec<_> = a.partial.values().map(Traced::node).collect();
     assert_eq!(derived_from(trace, a.surface_pressure.node()), partials);
@@ -430,4 +435,19 @@ fn a_hot_water_world_holds_its_air_with_its_whole_mass() {
             p.core.dynamo.node(),
         ]
     );
+}
+
+#[test]
+fn the_ice_is_the_water_at_the_surface() {
+    // A dry Earth's ice term carries the volatiles of its ocean, the
+    // surface share of its bulk water, not of the water in its mantle
+    // (legacy fed it the ocean): its N2 is the rock's and the ocean's.
+    let mut earth = planet(&EARTH);
+    assert_eq!(
+        earth.trace.node(earth.surface.node()).unwrap().code,
+        Code::of(codes::WATER_SURFACE)
+    );
+    let a = earth.air().0;
+    let n2 = derived_from(&earth.trace, a.partial[&Gas::N2].node())[0];
+    assert!(derived_from(&earth.trace, n2).contains(&earth.surface.node()));
 }
