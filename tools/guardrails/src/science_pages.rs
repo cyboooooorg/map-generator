@@ -14,11 +14,7 @@ pub const NOT_ARTICLES: [&str; 2] = ["README.md", "SUMMARY.md"];
 
 /// Articles allowed without the section for now, each with why. An entry
 /// that gains its section fails the check, so the list only shrinks.
-pub const EXEMPT: [(&str, &str); 1] = [(
-    "planet-atmospheres.md",
-    "its citations are inline; the planet model 2c branch rewrites them and \
-     gathers them into a Sources section",
-)];
+pub const EXEMPT: [(&str, &str); 0] = [];
 
 /// Whether `page` (Markdown) has a [`HEADING`] section holding at least
 /// one line of text other than a heading. The section ends at the next

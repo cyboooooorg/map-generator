@@ -110,7 +110,10 @@ section reuses it.
 The rewrite ports the law to `science::escape::energy_limited_loss`
 (typed radius, mass and fluence in J/m², uncapped), with `EFFICIENCY`,
 `MIN_ENVELOPE` and `WATER_PER_HYDROGEN`, the 9 kg of water per kg of
-hydrogen of the next section.
+hydrogen of the next section. The system engine's step is
+`system::planet::escape::escaped`: it reads the star's XUV history, applies
+the law to the formed body and returns the trial before and after the loss
+(the water step below needs the first), each value with its cause node.
 
 `envelope_after_escape` caps the loss at the envelope, lowers the mass by
 what is lost, and sets the envelope to zero once it falls under 0.1 % of
@@ -182,6 +185,15 @@ request's formation is
 read from them, and `drawn_mass_earth` stays the mass drawn. The cause
 tree shows the mass from the mass formed and the water kept, with the
 water formed and the water lost.
+
+The rewrite splits this section in two. `system::planet::water::water`
+sums the runaway greenhouse over every light source (#592: the threshold is
+`science::habitable::runaway_flux` at each star's effective temperature,
+`OCEAN_MASS` the ocean's unit), takes the steam's loss from
+`science::escape::energy_limited_loss` and records the water kept;
+`after_steam` derives the lighter body again. `system::planet::regime::regime`
+reads `science::tectonics::{HEAT_PIPE_FLUX, PLATES_MIN_MASS}`. Neither
+recomputes a value to explain it: the cause tree is the computation's.
 
 **Regime.** A labelled calibration, since the literature disagrees on the
 mass dependence (see [plate tectonics](plate-tectonics.md)):
@@ -371,7 +383,9 @@ and `cmf` is the core mass fraction (the core keeps its sulphur). Each is
 multiplied by `10^N(0, 0.3)` (`VOLATILE_SPREAD_DEX`). The rewrite ports
 the rule without its scatter to `science::volatiles::inventory`, on the
 masses of rock and iron, of silicate and of ice (`VOLATILE_SPREAD` is the
-spread the engine draws), called on the composition before any steam loss.
+spread the engine draws), called on the composition before any steam loss, and the
+engine draws the scatter once per body from its own sub-seed
+(`Drawn::volatiles`), so adding a draw never moves another.
 
 **Rock.** The bulk silicate Earth, in Wang, Lineweaver & Ireland 2018
 (doi:10.1016/j.icarus.2017.08.024, Table 1, a concordance of three
@@ -435,7 +449,14 @@ The audit behind this section and the next ones is
 partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
 and O₂ (`Gases`, with `total()`), in six steps, called in this order:
 `outgassed`, `atmosphere`, `non_thermal_loss`, `methane_photolysis`,
-`cold_trap`, `photochemistry`. The carbonate
+`cold_trap`, `photochemistry`. The rewrite has so far `outgassed`, the
+shoreline of `atmosphere` and the SO₂ wash-out: `system::planet::air::air`
+chains the outgassing (`science::outgassing`, the shares `MOBILE_SHARE`,
+`LID_SHARE`, `RECYCLED_UNDER_PLATES`, `NITROGEN_RECYCLED_UNDER_PLATES`), the
+cosmic shoreline (`science::escape::shoreline_kept`), the runaway's steam and
+the wash-out (`science::outgassing::so2_kept`) on the pre-steam trial and
+the post-steam body. The non-thermal loss waits for #658, the rest for the
+climate (#659). The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -1681,6 +1702,19 @@ earlier input of a body keeps its value.
 
 ## The chain and the surface classes
 
+The rewrite chains the first part of this derivation in
+`system::planet::bare::bare`: composition, interior, XUV fluence, escape,
+heat, then for a body that has lost its envelope the water, the regime, the
+core and the air, before any climate. The model is private until the
+climate step (2d) and nothing generated changes. Where it departs from the
+legacy, beyond the corrections named in each section: the rewrite's
+interior is heavier (cooling times about a fifth longer, a deeper seafloor),
+which moved three calibrated values (`THERMAL_DYNAMO_END` 0.075 to 0.055,
+`INNER_CORE_START` 1.0 to 0.82, `SEAFLOOR_HALF_PRESSURE` 30 to 37 kbar),
+kept `CORE_FROZEN` 2.25, set `CORE_HEAT_CAPACITY` to 840, split the dipole
+into four sourced factors, converted the ice volatiles from a mass to a
+mole basis and gave `WET_SO2_SHARE` its 2.2e-9.
+
 `planet_model` is the single place that chains the derivation, in this
 order: the interior from the drawn inputs, the XUV fluence, the envelope
 escape (the interior is derived again from what is left), the internal
@@ -2055,3 +2089,192 @@ What it shows, plainly (against the census of lot 1, the grey column):
   (39), lava 1.5 % (15) and hydrocarbons 0.7 % (7).
 - **Life** arises on 1.8 % of the planets with a surface (18, 11
   before), 1.5 % with oxygen (15, 7 before): more planets keep water.
+
+## Sources
+
+Every reference cited above, in alphabetical order. The venue and the
+DOI are the ones the text gives; an entry without them is cited without
+them above. How far each one was read (abstract only, as quoted by
+another paper, from memory) is said where it is used.
+
+- Anderson et al. 2011, doi:10.1126/science.1211001, Mercury's
+  dipole.
+- Angus, de Reuck et al. 1979, nitrogen's triple point, through
+  the NIST Chemistry WebBook.
+- Atreya, Donahue and Kuhn 1978,
+  doi:10.1126/science.201.4356.611, Titan's N₂ from NH₃.
+- Baraffe et al. 2015, the luminosity of low-mass stars at the ZAMS.
+- Bertrand et al. 2022, *Icarus* 373, 114764, Triton.
+- Biver et al. 2022, *Comets III*, arXiv:2207.04800, Table 3.
+- Bono et al. 2019, the age of Earth's inner core.
+- Boukrouche, Lichtenberg and Pierrehumbert 2021,
+  doi:10.3847/1538-4357/ac1345.
+- Bullock and Grinspoon 2001, doi:10.1006/icar.2000.6570,
+  Venus's SO₂.
+- Carlson 1999, *Science* 283, 820,
+  doi:10.1126/science.283.5403.820.
+- Charette and Smith 2010, doi:10.5670/oceanog.2010.51,
+  Table 1, the volume of Earth's ocean.
+- Charnay et al. 2013, doi:10.1002/jgrd.50808.
+- Christensen 2006, doi:10.1038/nature05342, the deep dynamo.
+- Christensen 2010, doi:10.1007/s11214-009-9553-2, the energy-flux
+  scaling of the field.
+- Christensen, Holzwarth and Reiners 2009,
+  doi:10.1038/nature07626.
+- Cooper et al. 2001, *Icarus* 149, 133, doi:10.1006/icar.2000.6498.
+- Courtin, Gautier and McKay 1995, Titan's collision-induced
+  bands.
+- Coustenis et al. 2010, doi:10.1016/j.icarus.2009.11.027, Titan's CO₂.
+- Cowan and Abbot 2014, doi:10.1088/0004-637X/781/1/27.
+- Cruikshank et al. 1993, *Science* 261, 742, Triton's CO₂ ice.
+- de Kok et al. 2007, Titan's CO₂ from Cassini CIRS.
+- Dello Russo et al. 2016, cometary abundances, as updated in Biver et
+  al. 2022.
+- Douté et al. 2001, *Icarus* 149, 107, Io's SO₂ frost.
+- Driscoll and Barnes 2015, doi:10.1089/ast.2015.1325.
+- Erkaev et al. 2007, energy-limited escape.
+- Fegley and Prinn 1989, doi:10.1038/337055a0, Venus's SO₂ and
+  calcite.
+- Foley, Bercovici and Landuyt 2012, tectonics against
+  planet size.
+- Fray and Schmitt 2009, *Planet. Space Sci.* 57, 2053,
+  doi:10.1016/j.pss.2009.09.011, sublimation pressures.
+- Fulton et al. 2017, the radius bins of the census.
+- Giauque and Stephenson 1938, *J. Am. Chem. Soc.* 60, 1389,
+  through the NIST Chemistry WebBook.
+- Giles et al. 2024, arXiv:2405.19253, Io's atmosphere from IRTF/TEXES
+  spectra.
+- Glein and Shock 2013, Titan's seas.
+- Goldblatt 2015, doi:10.1089/ast.2014.1268.
+- Goldblatt et al. 2009,
+  doi:10.1038/ngeo692, nitrogen and Earth's temperature.
+- Goldblatt, Robinson, Zahnle and Crisp 2013,
+  doi:10.1038/ngeo1892, the moist limit.
+- Gray and Nagel 1989, the limit of the convective envelope.
+- Hall et al. 1995 and 1998, the O₂ of Europa and Ganymede.
+- Hamano, Abe and Genda 2013, doi:10.1038/nature12163, the steam over a
+  magma ocean.
+- Hamano et al. 2015, doi:10.1088/0004-637X/806/2/216.
+- Hapke 1981, *JGR* 86, 3039.
+- Hoffman et al. 2017, doi:10.1126/sciadv.1600983.
+- Hörst, Vuitton and Yelle 2008, doi:10.1029/2008JE003135.
+- Howett et al. 2010, Enceladus's albedo.
+- Huebner, Keady and Lyon 1992, *Astrophys. Space Sci.*
+  195, 1, photo-ionisation rates.
+- Jackson, Davis and Wheatley 2012, *MNRAS* 422, 2024,
+  Table 2.
+- Johnson 1990, *Energetic Charged-Particle Interactions with
+  Atmospheres and Surfaces*.
+- Johnson et al. 2004, "Radiation effects on the surfaces of the
+  Galilean satellites", in *Jupiter: The Planet, Satellites and
+  Magnetosphere*, ch. 20.
+- Johnson and Goldblatt 2015, doi:10.1016/j.earscirev.2015.05.006,
+  Earth's nitrogen.
+- Johnstone et al. 2021, *A&A* 649, A96,
+  doi:10.1051/0004-6361/202038407.
+- Karkoschka 2001, albedos of the Uranian moons.
+- Kasting 1991, Appendix B, CO₂'s pseudo-adiabat.
+- Kelemen and Manning 2015, doi:10.1073/pnas.1507889112,
+  carbon recycling.
+- Kempf et al. 2010, Enceladus's plume fallout.
+- Kite and Ford 2018, *ApJ* 864, 75,
+  doi:10.3847/1538-4357/aad6e0, waterworlds.
+- Kite, Fegley, Schaefer and Gaidos 2016,
+  doi:10.3847/0004-637X/828/2/80.
+- Kite, Manga and Gaidos 2009,
+  doi:10.1088/0004-637X/700/2/1732, the outgassing of lids and plates.
+- Kivelson et al. 2004, in *Jupiter: The Planet, Satellites and
+  Magnetosphere*, ch. 21.
+- Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131.
+- Kopparapu et al. 2014, doi:10.1088/2041-8205/787/2/L29, the
+  runaway limit.
+- Korenaga 2010, plate tectonics against planet size.
+- Krasnopolsky 2012, doi:10.1016/j.icarus.2011.10.019, Mars's SO₂
+  limit.
+- Lacis et al. 2010, doi:10.1126/science.1190653.
+- Lainey et al. 2009, doi:10.1038/nature08108, Io's tidal
+  dissipation.
+- Lay, Hernlund and Buffett 2008, doi:10.1038/ngeo.2007.44,
+  the core's heat flow.
+- Lecavelier des Etangs 2007, energy-limited escape.
+- Lillis et al. 2013, Mars's dynamo.
+- Lisse et al. 2021, *Icarus* 356, 114072,
+  doi:10.1016/j.icarus.2020.114072, supplementary Table 2.
+- Lyons, Reinhard and Planavsky 2014,
+  doi:10.1038/nature13068, the Great Oxidation Event.
+- Mandt, Mousis, Lunine and Gautier 2014, *ApJ Letters*
+  788, L24, doi:10.1088/2041-8205/788/2/L24.
+- Manabe and Wetherald 1967,
+  doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2.
+- Marcq et al. 2008, Venus's SO₂ below the clouds.
+- Marty 2012, doi:10.1016/j.epsl.2011.10.040, carbon in the mantle.
+- McDonough 2003, *Treatise on Geochemistry* 2.15.
+- McEwen et al. 1998, *Science* 281, 87, Io's lavas.
+- McKay, Pollack and Courtin 1991,
+  doi:10.1126/science.11538492, Titan's greenhouse.
+- Mittelholz et al. 2020, a late field on Mars.
+- Moore et al. 1999, Callisto.
+- Moore and Webb 2013, doi:10.1038/nature12473, "Heat-pipe
+  Earth".
+- Mousis, Gautier and Bockelée-Morvan 2002, *Icarus* 156, 162,
+  doi:10.1006/icar.2001.6782.
+- Mumma and Charnley 2011,
+  doi:10.1146/annurev-astro-081309-130811.
+- Nakajima, Hayashi and Abe 1992,
+  doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2, the
+  Simpson-Nakajima limit.
+- Neukum, Ivanov and Hartmann 2001, the crater
+  chronology.
+- Niemann et al. 2005, Titan's air at the Huygens site.
+- Nimmo 2015, the core's heat flow.
+- Nimmo and Stevenson 2000, doi:10.1029/1999JE001216.
+- Noack et al. 2016, *Icarus* 277, 215,
+  doi:10.1016/j.icarus.2016.05.009.
+- O'Reilly and Davies 1981, *Geophys. Res. Lett.* 8, 313.
+- Owen and Wu 2017, doi:10.3847/1538-4357/aa890a, eq. 19.
+- Pierrehumbert 2010, section 4.4.
+- Quirico et al. 1999, *Icarus* 139, 159, Triton's CO₂ ice.
+- Ribas et al. 2005, *ApJ* 622, 680, doi:10.1086/427977, Table 5.
+- Robinson and Catling 2012, *ApJ* 757, 104, section 4.3.
+- Robinson and Catling 2014, doi:10.1038/ngeo2020, the
+  tropopause.
+- Rubin et al. 2019, doi:10.1093/mnras/stz2086, Table 2, comet 67P.
+- Schröder and Schmitt 2007, X-rays of A stars.
+- Scott 1976, nitrogen's alpha-beta transition.
+- Simonelli and Veverka 1988, Io's Bond albedo.
+- Spencer 1987, dark moons.
+- Stansberry, Pisano and Yelle 1996,
+  *Planet. Space Sci.* 44, 945, doi:10.1016/0032-0633(96)00001-3.
+- Stevenson, Spohn and Schubert 1983,
+  doi:10.1016/0019-1035(83)90241-5, the thermal history of the core.
+- Stewart, Jacobsen et al. 1986, nitrogen's properties
+  through the NIST Chemistry WebBook.
+- Tan, Kargel and Marion 2013, Titan's seas.
+- Thomas et al. 2004, *Jupiter*, ch. 23, Io's plasma loss.
+- Tikoo et al. 2017, the lunar dynamo.
+- Tobie, Gautier and Hersant 2012, *ApJ* 752, 125,
+  doi:10.1088/0004-637X/752/2/125.
+- Tobie, Lunine and Sotin 2006, *Nature* 440, 61,
+  doi:10.1038/nature04497.
+- Tu et al. 2015, the saturation of a star's X-ray emission.
+- Turbet et al. 2020, *A&A* 638, A41, arXiv:1911.08878, Eq. 2 and
+  Appendix C.
+- Veeder et al. 2004, Io's heat flow, as quoted by Moore and Webb
+  2013.
+- Verbiscer et al. 2007, Enceladus's E-ring fallout.
+- Veverka et al. 1991, albedos of the Uranian moons.
+- Wagman et al. 1979, NBS Chemical Thermodynamics Data Center, as
+  quoted by Giles et al. 2024.
+- Walker, Hays and Kasting 1981,
+  doi:10.1029/JC086iC10p09776, the carbonate thermostat.
+- Wang, Lineweaver and Ireland 2018,
+  doi:10.1016/j.icarus.2017.08.024, Table 1.
+- Weber et al. 2011, the Moon's core.
+- Weiss and Tikoo 2014, the lunar dynamo.
+- Wolf and Toon 2014, doi:10.1089/ast.2013.1112.
+- Wright et al. 2011, *ApJ* 743, 48.
+- Yung, Allen and Pinto 1984, *ApJS* 55, 465,
+  doi:10.1086/190963.
+- Zahnle and Catling 2017, *ApJ* 843, 122,
+  doi:10.3847/1538-4357/aa7846, the cosmic shoreline.
+- Zahnle et al. 2003, doi:10.1016/S0019-1035(03)00048-4.

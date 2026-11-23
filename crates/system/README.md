@@ -17,11 +17,11 @@ request, the archetype targets, the present date.
 | `spin` | mapgen3 | the primordial spin of a planet (period, obliquity) |
 | `stand_in` | mapgen3 | `classify`: a provisional classifier for `draw_with` (mass steps, one radius law), until `class_of` is public; used by the CLI and the tests |
 | `star` | mapgen3 | `star(...) -> Star`: the asked or drawn host, its values and its interior, traced |
-| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `heat`, `codes`: the composition and envelope draws, the structure (rocky, mini-Neptune, giant) and the internal heat of a trial, crate-internal until the chain uses them (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
+| `planet` | mapgen1 | `class_of`, `model` (signatures only); `draws`, `envelope`, `enveloped`, `interior`, `heat`, `escape`, `water`, `regime`, `core`, `air`, `bare`, `codes`: the chain from the draw to the bare air (below), crate-internal until `class_of` uses it (laws, sources and limits: [the science page](../../docs/science/planet-interiors.md)) |
 | `engine` | shared | `generate(inputs) -> Vec<Timeline>` (signature only) |
 
-The remaining doc-only module fixes its future signature in a `//!` comment.
-`SystemError`, the engine's error type, lives in `src/error.rs`.
+The doc-only module `engine` fixes its signature in a `//!` comment;
+`SystemError` is in `src/error.rs`.
 
 ## Planet draw
 
@@ -90,6 +90,17 @@ Every draw and constant carries its `Source:` or `Calibration:`. The laws,
 bounds, known jumps and limits are on the page
 [What are planets made of?](../../docs/science/planet-interiors.md#where-it-departs-from-the-science).
 
+## Planet chain up to the bare air
+
+`planet::bare::bare` runs the legacy's order: draws, interior, XUV fluence
+and envelope escape (`escape`), heat; then, once the envelope is gone,
+`water` (runaway summed over every star, steam loss, the lighter body),
+`regime`, `core` and `air` (outgassing, cosmic shoreline, SO2 wash-out), each
+value with its cause node, each law the `science` item of the same name.
+Not yet: non-thermal loss (#658), climate, cold trap, photochemistry and
+life (#659). Private until 2d: nothing generated changes. Retuned
+`Calibration:` constants and their targets: [planet atmospheres](../../docs/science/planet-atmospheres.md#core-and-dynamo).
+
 ## The seam
 
 The draw places orbits and produces a `Trial` per candidate body, with
@@ -98,31 +109,20 @@ trial becomes a `Placement` (designation, body seed, spin). The planet
 model runs on the placement and draws only from the body seed, never
 from `trial.seed`. The orbit's period is the draw's, never recomputed.
 
-`SystemError` (`error.rs`) is the error type of the engine, `non_exhaustive`;
-it wraps `ContractError` and the host errors of `science::stellar`.
-
 ## Versions
 
+- `EnvironmentSource` (galactic place, birth cluster) arrives with T6 (#608).
 - `INPUTS_SCHEMA` versions the shape of the stored `Inputs`. The inputs
   are the only stored truth.
 - `ENGINE_VERSION` (3 since compact chains end at 1071 d) is bumped
   whenever a timeline or a world could change for the same inputs; it
   invalidates the caches, which are never migrated.
 
-## Ports
-
-`EnvironmentSource` (the galactic place and birth cluster) arrives with
-the external events track (T6, #608).
-
 ## Dependencies
 
-`timeline`, `science`, `serde`, `rand_chacha` and `rand_core` (the
-seeded draws of `planet::draws`, always from a sub-seed of the seed the
-caller passes). Never `world`.
-
-The direction of dependencies is checked by `tools/guardrails`
-(`mise run test:tier1`). See the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md),
-section Architecture > System engine.
+`timeline`, `science`, `serde`, `rand_chacha` and `rand_core` (seeded
+draws, always from a sub-seed of the caller's seed). Never `world`. Checked
+by `tools/guardrails`; see the [architecture rewrite design](../../docs/superpowers/specs/2026-11-20-architecture-rewrite-design.md).
 
 ## Star
 
@@ -136,14 +136,10 @@ comes from the stellar models. The metallicity is uniform from -1 to
 capped at 13.8 Gyr. The class is not traced (the trace has no node type
 for an index).
 
-A mass or metallicity outside the tables, a date before the ZAMS or after
-the main sequence (or 13.8 Gyr) is refused with the matching
-`SystemError`; a NaN input is refused with `system.not-a-number:
-<input>` (`present`, `host-mass` or `metallicity`), and an infinite one
-with the range errors. Nodes: `system.star.{mass, metallicity, age}` (leaves,
-`Input` or `Drawn`), `lifetime-end`, `radius`, `luminosity`,
-`effective-temperature` and `interior` (derived from the leaves), and per
-layer `system.star.layer-N.{outer-radius, mass, material, state,
-transport}` (a segment cannot start with a digit). Layers are plasma, in
-metres and kilograms (the layer's own mass; a thin surface layer can weigh
-0 kg). The laws and sources are in `science::stellar`.
+A value outside the tables, a date before the ZAMS or after the main
+sequence (or 13.8 Gyr) is refused with the matching `SystemError`; a NaN
+input with `system.not-a-number: <input>`. Nodes: `system.star.{mass,
+metallicity, age}` (leaves), `lifetime-end`, `radius`, `luminosity`,
+`effective-temperature`, `interior`, and per layer `system.star.layer-N.
+{outer-radius, mass, material, state, transport}` (metres, kilograms). The
+laws and sources are in `science::stellar`.

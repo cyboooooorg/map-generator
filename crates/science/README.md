@@ -53,8 +53,8 @@ lower, split at 23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
 saturation and sublimation pressures, the ice VI / VII boundary), each checked
 against its IAPWS table; values and ranges: [What are planets made of?](../../docs/science/planet-interiors.md#from-layers-to-radius).
 Limits: the laws are cold (no thermal pressure), the mantle has no
-transition-zone phases (-7.5 % / +3.5 % against PREM at 23.83 GPa), ices III,
-V and VI are 0 K curves, and water has nothing above 355 K.
+transition-zone phases (-7.5 % / +3.5 % at 23.83 GPa), ices III, V and VI are
+0 K curves, and water has nothing above 355 K.
 
 ## Hydrostatic structure
 
@@ -86,10 +86,9 @@ let earth = integrate(&layers, Pascal(1e5)).expect("Earth integrates");
 println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 ```
 
-Against measured values (table on the page above): Earth R -0.29 %, C/MR^2 -0.24
-%; Venus, Mars, Mercury, the Moon, Ganymede and 5 M⊕ super-Earths (Zeng et al.)
-within 2 %. Titan's C/MR^2 is not reproduced. The core alloy, fitted to PREM
-(364 GPa), is used to 7.85 TPa: converged, not validated.
+Against measured values (table on the page above): Earth R -0.29 %, C/MR^2
+-0.24 %; the other bodies within 2 %, Titan's C/MR^2 not reproduced. The core
+alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 
 ## Internal heat
 
@@ -100,8 +99,7 @@ kind). Radiogenic power comes from the abundances of U, Th and K and the Dye
 tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants (U
 and Th abundances, cooling time and mass exponent, rocky and icy k2/Q) say what
 was searched and not found; the page [The heat
-inside](../../docs/science/planet-interiors.md#the-heat-inside) lists them under
-"Where it departs from the science".
+inside](../../docs/science/planet-interiors.md#the-heat-inside) lists them.
 
 ## Stars, light and orbits
 
@@ -112,6 +110,8 @@ M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`; see
 star's XUV and Lyman α history; see [XUV
 fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
+`science::{escape, dynamo, outgassing, volatiles}` (escape, core, outgassing):
+[planet atmospheres](../../docs/science/planet-atmospheres.md).
 
 ## Giants and envelopes
 
