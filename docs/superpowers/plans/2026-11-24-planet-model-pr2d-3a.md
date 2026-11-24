@@ -103,29 +103,27 @@ From the spec and study 25 (user decisions of 2026-11-24):
 
 Where the code contradicts the recon, the study or the spec:
 
-- **N₂ above its triple point.** The study's `condense` reads "the pure
-  gas's saturation pressure". The rewrite has only the Antoine fit
-  (`volatiles::nitrogen_vapour_pressure`, `pub(crate)`). It is 12.5 %
-  under the triple-point pressure, so `condense` would step at 63.14 K.
-  `planet-atmospheres.md` l.~1111 describes legacy's curve:
-  Clausius-Clapeyron through the triple point and NIST's normal boiling
-  point (77.355 K), infinite from the critical point (126.19 K). The
-  plan takes that curve (`nitrogen_saturation_pressure`, Task 3) and
-  removes the Antoine fit. `methane_freezes`, its only reader, reads the
-  new curve: one curve for one value. The two differ by about 4 % at
-  90.69 K (3.97 against 3.82 bar, derived). 2d-2's `methane_freezes`
-  bounds must still hold; if one fails, stop and report. **Open question
-  1** asks the user to confirm.
-- **Frozen for good.** `timeline::ClimateState` has only `Temperate`,
-  `Snowball` and `Runaway`. A body frozen with no CO₂ able to thaw it
-  (legacy: frozen, not a snowball) records `Temperate`. A derived flag,
-  `planet.climate.frozen` (no liquid water and below the melting point
-  of the stable ice), tells it apart. Changing the contract enum is a
-  `timeline` change across sessions. **Open question 2.**
+- **N₂ above its triple point** (user, 2026-11-24). The study's
+  `condense` reads "the pure gas's saturation pressure". The rewrite has
+  only the Antoine fit (`volatiles::nitrogen_vapour_pressure`,
+  `pub(crate)`), 12.5 % under the triple-point pressure, so `condense`
+  would step at 63.14 K. Legacy's Clausius-Clapeyron curve is not ported
+  either. Task 3 ports the ancillary vapour-pressure equation of the N₂
+  reference equation of state (Span, Lemmon, Jacobsen, Wagner & Yokozeki
+  2000, *J. Phys. Chem. Ref. Data* 29, 1361), with its triple and
+  critical points from the same paper, as `volatiles` already does for
+  CO₂ and CH₄. It replaces the Antoine fit, and `methane_freezes` reads
+  it: one curve for one value.
+- **Frozen for good** (user, 2026-11-24). A body frozen with no CO₂ able
+  to thaw it (legacy: frozen, not a snowball) records a new contract
+  variant, `ClimateState::Frozen => "frozen"`
+  (`crates/timeline/src/planet.rs:217`). mapgen2 and mapgen3 agree, and
+  nothing outside `timeline` matches on the enum. Task 9 adds it; there
+  is no separate `frozen` flag.
 - **Volcanic SO₂ frost** (legacy `volcanic_so2_frost_bar`, #525) has no
-  port in the rewrite. It needs the non-thermal loss of #658. The solver
-  takes `so2_frost: Bar`, and `settled` passes `Bar(0.0)` with a comment
-  naming the follow-up. **Open question 3** (file an issue under #658).
+  port in the rewrite: it needs the non-thermal loss of #658, and #678
+  tracks it. The solver takes `so2_frost: Bar`, and `settled` passes
+  `Bar(0.0)` with a code comment citing #678.
 - **The moist plateau** exists only as private helpers of
   `radiation/column_tests.rs` (`plateau_w_m2`, `plateau_skin`,
   `MOIST_PLATEAU_W_M2`). Task 5 makes them public in `science::balance`,
@@ -187,8 +185,9 @@ Where the code contradicts the recon, the study or the spec:
   `stellar/tables.rs` does.
 - New `system` code stays crate-private under the
   `#[cfg_attr(not(test), expect(dead_code, …))]` of `planet/mod.rs`. Do
-  not touch `crates/system/src/draw/**`, `placement.rs`, `timeline`,
-  `ENGINE_VERSION` or `draw_with`.
+  not touch `crates/system/src/draw/**`, `placement.rs`,
+  `ENGINE_VERSION` or `draw_with`. `timeline` changes only by the
+  `ClimateState::Frozen` variant (Task 9).
 - `crates/science/README.md` is at its 150-line cap (guardrail
   `readmes_stay_short`). New paragraphs replace or shorten text.
 - Tier 1 has 2 minutes of wall time on 4 threads, with the workspace
@@ -355,7 +354,8 @@ Where the code contradicts the recon, the study or the spec:
 - Modify: `crates/science/src/volatiles.rs` (the Antoine fit l.~482-500
   is replaced), `volatiles_tests.rs`,
   `crates/science/src/surface/liquids.rs` (`methane_freezes` reads the
-  new curve).
+  new curve), `docs/science/planet-atmospheres.md` (l.~1105-1115 and
+  l.~2226-2240: the liquid N₂ curve, and its `## Sources` entry).
 - Create: `crates/science/src/surface/condense.rs`,
   `crates/science/src/surface/condense_tests.rs`, and the `mod` lines in
   `surface/mod.rs`.
@@ -368,15 +368,19 @@ Where the code contradicts the recon, the study or the spec:
 - Produces:
   - `pub fn nitrogen_saturation_pressure(t: Kelvin) -> Pascal`:
     - the frost curve below `NITROGEN_TRIPLE_TEMPERATURE`;
-    - from there, Clausius-Clapeyron through the triple point and the
-      normal boiling point;
-    - `f64::INFINITY` at and above the critical point, as methane's
-      curve is.
+    - from there, the ancillary vapour-pressure equation of Span et al.
+      2000 (`ln(p/p_c) = (T_c/T) Σ Nᵢ θ^kᵢ`, `θ = 1 − T/T_c`, the form
+      and coefficients as the paper gives them);
+    - `f64::INFINITY` at and above the paper's critical temperature, as
+      methane's curve is.
 
-    `NITROGEN_NORMAL_BOILING` = `Kelvin(77.355)` and
-    `NITROGEN_CRITICAL_TEMPERATURE` = `Kelvin(126.19)` are `Source:`
-    NIST Chemistry WebBook (Jacobsen, Stewart et al. 1986). The latent
-    heat over R is a `Definition:`, the slope through the two points.
+    Its coefficients and exponents, `NITROGEN_CRITICAL_TEMPERATURE`,
+    `NITROGEN_CRITICAL_PRESSURE` and the paper's triple point are
+    `Source:` Span et al. 2000, with the table or equation number. Read
+    them in the paper, or in CoolProp's Nitrogen ancillary that credits
+    it and then checked against the paper. **If the paper cannot be
+    reached, the task stops and reports**: no value from memory or from
+    an uncredited copy.
   - `pub struct Condensed { pub air: PartialPressures, pub condensate:
     PartialPressures }`;
   - `pub fn condense(inventory: &PartialPressures, t: Kelvin) ->
@@ -396,15 +400,24 @@ Where the code contradicts the recon, the study or the spec:
     fallback", a `Definition:`).
 
 - [ ] **Step 1: Write the failing tests**
+  - `nitrogen_saturation_is_span_2000`: at four or more temperatures of
+    the paper's saturation table, normal boiling point (77.355 K,
+    0.101325 MPa) included, the curve is within the ancillary's stated
+    deviation (the paper's figure for it, quoted in the doc comment).
   - `nitrogen_saturation_joins_its_frost` (Review Focus 5):
-    - at `63.14 − 1e-9` K and at 63.14 K it gives 12 530 Pa within 1e-6
-      relative;
-    - at 77.355 K it gives 101 325 Pa within 1e-9 relative;
-    - it is infinite at 126.19 K;
-    - it rises strictly from 30 to 126 K in 0.1 K steps;
-    - at 90.69 K it is within 5 % of the Antoine fit's 3.82 bar
-      (Edejer & Thodos 1967), and the doc comment states the gap.
-  - The 2d-2 bounds of `methane_freezes` stay green, unchanged.
+    - the frost curve at `NITROGEN_TRIPLE_TEMPERATURE − 1e-9` K and the
+      vapour curve at that temperature agree within the frost fit's
+      deviation as study 24 and its doc comment state it. The two
+      triple points differ: the frost fit is pinned at 63.14 K and
+      12 530 Pa, Span et al. give about 63.151 K and 12.52 kPa. That
+      puts the join near 0.3 % (derived). The test names the frost fit's
+      figure; if the gap exceeds it, stop and report;
+    - it is infinite at the critical temperature;
+    - it rises strictly from 30 K to the critical point in 0.1 K steps;
+    - at 90.69 K, `methane_freezes`'s only point, print its gap to the
+      Antoine fit's 3.82 bar for the commit message.
+  - The 2d-2 bounds of `methane_freezes` stay green, unchanged. If one
+    fails, stop and report.
   - `titans_air_holds_its_sea_vapour` (study, "Condensation"), with N₂
     1.384 bar at 93.65 K:
     - an inventory of 1 bar of CH₄ keeps 0.0845 bar within 5e-4 in the
@@ -432,7 +445,10 @@ Where the code contradicts the recon, the study or the spec:
   liquids`. Expected: FAIL.
 
 - [ ] **Step 3: Implement** as specified. Remove the Antoine fit and its
-  constant. Update the doc comment of `methane_freezes`.
+  constant. Update the doc comment of `methane_freezes`. In
+  `planet-atmospheres.md`, replace the Antoine and NIST
+  Clausius-Clapeyron text with Span et al. 2000 and its deviation, and
+  add the paper to `## Sources`.
 
 - [ ] **Step 4: Run** the same command. Expected: PASS. Then
   `mise run ci`. Expected: green.
@@ -690,7 +706,7 @@ Where the code contradicts the recon, the study or the spec:
 
     `ClimateInputs::of(bare: &Bare, rotation: &Rotation) ->
     Option<ClimateInputs>` builds it, `None` without a surface.
-    `so2_frost` is `Bar(0.0)` (Decisions);
+    `so2_frost` is `Bar(0.0)` (#678);
   - `pub(crate) struct Numerics`, with one field per solver constant of
     the Global Constraints, `probe: Option<Kelvin>` and
     `greenhouse_once: bool`. `Numerics::DEFAULT` is built from the
@@ -852,7 +868,8 @@ Where the code contradicts the recon, the study or the spec:
 - Modify: `crates/system/src/planet/draws.rs` (`Labels.snowball`,
   `LABELS.snowball = "planet/snowball"`, `pub(crate) fn
   snowball_draw(seed: Seed) -> f64`; the test labels of `draw_with` gain
-  the field).
+  the field), `crates/timeline/src/planet.rs:217`,
+  `crates/timeline/src/keyframe_tests.rs:116`.
 
 **Interfaces:**
 
@@ -867,18 +884,22 @@ Where the code contradicts the recon, the study or the spec:
   - `pub(crate) struct Bistable { pub froze: Bar, pub still_frozen: Bar,
     pub thaw: Option<Bar>, pub chance: Fraction }`;
   - `branches(body) -> (Settle, Option<Bistable>)` (l.1861-1935);
+  - `ClimateState::Frozen => "frozen"` in `timeline::planet` (the
+    `contract_enum!` at l.217), with a line in
+    `keyframe_tests.rs::contract_enums_report_their_serialised_name`:
+    `ClimateState::Frozen` serialises as `"frozen"`;
   - `pub(crate) struct Solved { pub settle: Settle, pub state:
-    ClimateState, pub frozen: bool, pub bistable: Option<Bistable>, pub
-    snowball: bool }`;
+    ClimateState, pub bistable: Option<Bistable> }`;
   - `pub(crate) fn solve(inputs: &ClimateInputs, draw: f64) -> Solved`
     and `solve_with(inputs, draw, &Numerics) -> Solved`
     (`climate_over`, l.1475-1525):
     - `state` is `Runaway` when `runaway`;
     - it is `Snowball` when the body is bistable, `draw < chance`, the
       frozen branch is frozen over and the thaw is `Some`;
-    - it is `Temperate` otherwise;
-    - `frozen` is "no `Water` and `T` below
-      `water::melting_temperature(P)`".
+    - it is `Frozen` when the settled climate is frozen over (no
+      `Water` and `T` below `water::melting_temperature(P)`) and it is
+      not a snowball: past the outer edge, or bistable with no thaw;
+    - it is `Temperate` otherwise.
 
 - [ ] **Step 1: Write the failing tests**
   - `snowball_chance_follows_its_law` (Review Focus 4):
@@ -899,8 +920,8 @@ Where the code contradicts the recon, the study or the spec:
     - `solve(…, 0.0)` is `Snowball`, with no liquid, a Bond albedo
       above 0.5 and `T` under 260 K (legacy l.3752).
   - `far_planets_only_freeze` (legacy l.3706, Review Focus 1): Earth's
-    inputs at 5 and 10 AU are not bistable, and `solve(…, 0.0) ==
-    solve(…, 1.0)`.
+    inputs at 5 and 10 AU are not bistable, their state is `Frozen`, and
+    `solve(…, 0.0) == solve(…, 1.0)`.
 
 - [ ] **Step 2: Run** `cargo nextest run -p system climate draws`.
   Expected: FAIL.
@@ -939,7 +960,7 @@ Where the code contradicts the recon, the study or the spec:
 - Produces:
   - codes (`planet.climate.` prefix unless said):
     - `surface-temperature`, `equilibrium`, `bond-albedo`, `emissivity`,
-      `state`, `regulated`, `converged`, `frozen`;
+      `state`, `regulated`, `converged`;
     - for a bistable body: `thaws`, `thaw-co2`, `snowball-chance`,
       `snowball-draw`;
     - `air.<gas>` for the seven gases, and `air.pressure`;
@@ -948,7 +969,7 @@ Where the code contradicts the recon, the study or the spec:
     - `planet.surface.liquid`;
   - `pub(crate) struct Climate { pub global: GlobalClimate, pub
     emissivity: Traced<Fraction>, pub regulated: Traced<bool>, pub
-    converged: Traced<bool>, pub frozen: Traced<bool>, pub atmosphere:
+    converged: Traced<bool>, pub atmosphere:
     Atmosphere, pub condensate: BTreeMap<Gas, Traced<Bar>>, pub liquid:
     Option<Traced<LiquidKind>>, pub snowball: Option<SnowballNodes> }`
     and `pub(crate) struct SnowballNodes { pub thaws: Traced<bool>, pub
@@ -971,7 +992,7 @@ Where the code contradicts the recon, the study or the spec:
     - the draw is a drawn leaf;
     - `state` from `I` plus the chance and the draw;
     - `T` from `I` plus `state`;
-    - albedo, emissivity, regulated, converged and frozen from `[T] + I`;
+    - albedo, emissivity, regulated and converged from `[T] + I`;
     - `equilibrium` from the albedo and the fluxes;
     - `air.<gas>` from `[its bare partial, T]`, plus `outgassed_co2` and
       `frozen_co2` for CO₂ and the water inventory for H₂O;
@@ -1027,8 +1048,8 @@ Where the code contradicts the recon, the study or the spec:
     - `trace.graph().validate()` passes.
   - `an_unreachable_thaw_records_no_infinity` (Review Focus 3): `record`
     of a hand-built `Solved` with `Bistable { thaw: None, chance: 1 }`
-    records `thaws` false, no `thaw-co2`, and a chance of 1; the graph
-    validates.
+    records `thaws` false, no `thaw-co2`, a chance of 1 and the state
+    `frozen`; the graph validates.
   - `a_reducing_air_keeps_its_co2_only_when_titan_like`:
     - Titan keeps its held-back air;
     - for the other branch, find a reducing body whose climate air is
@@ -1181,19 +1202,19 @@ Where the code contradicts the recon, the study or the spec:
   `/private/tmp/claude-501/-Users-cyborg-Developer-map-generator/08fb1acd-12c9-400e-8804-e0196a1faf3c/scratchpad/wiki`,
   commits `f2babb9`, `c9c2d02` and `68f724f`). The hook blocks the push,
   so give the user the command.
-- [ ] Settle open questions 1 to 3 if Tasks 3, 10 and 7 met them.
 - [ ] Run CLAUDE.md's procedure on `5bb25e66..HEAD`:
   `branch-reviewer`, `test-reviewer` and `science-coherence-checker`,
   then `issue-auditor`.
 - [ ] Write the PR description:
   - `Closes #646`, `Closes #670`, `Closes #671` and `Closes #673`;
-  - `Refs #593`, `#595`, `#602`, `#659` and `#677`;
+  - `Refs #593`, `#595`, `#602`, `#659`, `#677` and `#678`;
   - `issue-auditor` decides between `Closes` and `Refs` for #672 and
     #675: the laws land, but nothing sets `locked` before #677;
   - a "Calibrations" heading with the ten numerical ones and the
     retargeted physical ones (`FROST_ALBEDO`, `SNOWBALL_WARM_BAR`,
     `STEAM_ALBEDO_BAR`, `THERMOSTAT_K`, `CH4_OPACITY`);
   - the measured outer-edge gaps;
-  - the tier-1 and heavy timings.
+  - the tier-1 and heavy timings;
+  - the new contract variant `ClimateState::Frozen`.
 
   Generated systems are unchanged, so there is no oracle run.
