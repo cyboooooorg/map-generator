@@ -74,3 +74,18 @@ fn wash_out_shares() {
     assert_eq!(so2_kept(false, OXIDISING_O2, Bar(1.0)).get(), WET_SO2_SHARE);
     assert_eq!(so2_kept(true, Bar(0.0), THICK_DRY).get(), WET_SO2_SHARE);
 }
+
+/// Definition: a mass of NH3 to decompose, 1e18 kg, a test input.
+const AMMONIA: Kilogram = Kilogram(1e18);
+
+#[test]
+fn decomposing_ammonia_keeps_its_nitrogen() {
+    // `2 NH3 -> N2 + 3 H2`: the N2 made and the NH3 left hold the
+    // nitrogen of the NH3 given, and the reaction progress is at most 1
+    // (Glein 2015 via Erkaev et al. 2020, eq. 42).
+    const { assert!(AMMONIA_DECOMPOSED > 0.0 && AMMONIA_DECOMPOSED <= 1.0) };
+    let d = decomposed(AMMONIA);
+    let back = d.n2.0 / N2_PER_NH3 + d.nh3.0;
+    assert!((back / AMMONIA.0 - 1.0).abs() < ROUND_OFF, "{d:?}");
+    assert!((d.nh3.0 / AMMONIA.0 - (1.0 - AMMONIA_DECOMPOSED)).abs() < ROUND_OFF);
+}

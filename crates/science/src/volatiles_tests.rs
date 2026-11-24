@@ -254,11 +254,11 @@ const WANG_SULPHUR: (f64, f64) = (235e-6, 38e-6);
 fn earths_silicate_sulphur_is_wangs() {
     let silicate = Kilogram(EARTH_MASS.0 * EARTH_SILICATE_SHARE);
     let core = Kilogram(EARTH_MASS.0 - silicate.0);
-    let earth = inventory(EARTH_MASS, silicate, Kilogram(0.0));
+    let earth = inventory(EARTH_MASS, silicate, Kilogram(0.0), false);
     // The sulphur comes from the silicate alone, never from the core.
     assert_eq!(earth.s, Kilogram(ROCK_S * silicate.0));
     assert_eq!(
-        inventory(core, Kilogram(0.0), Kilogram(0.0)).s,
+        inventory(core, Kilogram(0.0), Kilogram(0.0), false).s,
         Kilogram(0.0)
     );
     let (centre, spread) = WANG_SULPHUR;
@@ -509,4 +509,68 @@ fn boiling_caps_at_the_critical_point() {
     assert_eq!(ethane_boiling_temperature(Pascal(1e9)).0, ETHANE_CRITICAL_K);
     assert!(ethane_boiling_temperature(Pascal(1e5)).0 < mpa);
     assert!(mpa < ethane_boiling_temperature(Pascal(1e7)).0);
+}
+
+/// Source: Saturn's semi-major axis, 9.57 au (NASA planetary fact
+/// sheet: 1432.0 million km over 149.6), where the model places Titan.
+const SATURN: AstronomicalUnit = AstronomicalUnit(9.57);
+/// Definition: an orbit of 30 au, about Neptune's, where the Triton-like
+/// body of the planet tests forms (a test input).
+const NEPTUNE: AstronomicalUnit = AstronomicalUnit(30.0);
+
+/// Definition: a host of twice the Sun's ice line, a test input.
+const DOUBLE: f64 = 2.0;
+
+/// Definition: relative tolerance of a law checked against its own
+/// formula (round-off only).
+const ROUND_OFF: f64 = 1e-12;
+
+#[test]
+fn the_disc_is_the_average_discs_around_the_sun() {
+    // Öberg et al. 2011 eq. 1: 200 K at 1 au around a Sun-like star,
+    // `(r / 1 au)^-0.62` beyond.
+    let sun = ICE_LINE_OF_THE_SUN;
+    let at_one = disc_temperature(AstronomicalUnit(1.0), sun);
+    assert!((at_one.0 / DISC_TEMPERATURE_AT_ONE_AU.0 - 1.0).abs() < ROUND_OFF);
+    // The 30 K line, `(200 / 30)^(1 / 0.62)` au out.
+    let line = (DISC_TEMPERATURE_AT_ONE_AU.0 / NITROGEN_TRAPPING_TEMPERATURE.0)
+        .powf(1.0 / DISC_TEMPERATURE_INDEX);
+    let at_line = disc_temperature(AstronomicalUnit(line), sun);
+    assert!((at_line.0 / NITROGEN_TRAPPING_TEMPERATURE.0 - 1.0).abs() < ROUND_OFF);
+    // It scales with the host as the ice line does.
+    let far = disc_temperature(
+        AstronomicalUnit(SATURN.0 * DOUBLE),
+        AstronomicalUnit(sun.0 * DOUBLE),
+    );
+    let near = disc_temperature(SATURN, sun);
+    assert!((far.0 / near.0 - 1.0).abs() < ROUND_OFF);
+}
+
+#[test]
+fn titans_ice_holds_no_nitrogen_and_tritons_does() {
+    // Titan's building blocks lost their N2 (its 36Ar/14N, Mousis et al.
+    // 2009); Pluto's and, beyond Neptune, a captured Triton's formed cold
+    // enough to trap it (Glein 2023).
+    let sun = ICE_LINE_OF_THE_SUN;
+    assert!(!traps_nitrogen(disc_temperature(SATURN, sun)));
+    assert!(traps_nitrogen(disc_temperature(NEPTUNE, sun)));
+    assert!(!traps_nitrogen(disc_temperature(
+        AstronomicalUnit(1.0),
+        sun
+    )));
+}
+
+#[test]
+fn only_a_cold_ice_carries_its_nitrogen() {
+    let ice = Kilogram(EARTH_MASS.0);
+    let rock = Kilogram(EARTH_MASS.0);
+    let warm = inventory(rock, rock, ice, false);
+    let cold = inventory(rock, rock, ice, true);
+    assert_eq!(warm.n2, Kilogram(ROCK_N2 * rock.0));
+    assert_eq!(cold.n2, Kilogram(ROCK_N2 * rock.0 + ICE_N2 * ice.0));
+    // The gate is the N2's alone.
+    assert_eq!(
+        (warm.co2, warm.ch4, warm.nh3),
+        (cold.co2, cold.ch4, cold.nh3)
+    );
 }

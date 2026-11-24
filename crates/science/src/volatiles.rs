@@ -13,7 +13,10 @@
 //! (`planet/inputs.rs` l.215-248, 476-505) with the values of study
 //! [21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit),
 //! part 1; see `docs/science/planet-atmospheres.md`, "Volatile inventory
-//! at formation".
+//! at formation". The ice carries its N2 only where it formed colder
+//! than [`NITROGEN_TRAPPING_TEMPERATURE`] ([`traps_nitrogen`], on the
+//! disc's midplane temperature [`disc_temperature`]): study
+//! [28](https://github.com/cyboooooorg/map-generator/wiki/28-titan-nitrogen-audit).
 //!
 //! Each curve is a vapour-pressure equation of the form
 //! `p = p_c exp(T_c / T sum n_i (1 - T/T_c)^t_i)` from the triple to the
@@ -45,7 +48,8 @@
 //! Clausius-Clapeyron from its triple point with a constant enthalpy.
 
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
-use crate::units::{Dex, Kelvin, Kilogram, Pascal};
+use crate::orbit::ICE_LINE_OF_THE_SUN;
+use crate::units::{AstronomicalUnit, Dex, Kelvin, Kilogram, Pascal};
 
 /// Calibration: kg of CO2 per kg of rock and iron, fitted on Venus's air,
 /// which has no thermostat: 92 bar of CO2 is about 1e-4 of the planet
@@ -120,6 +124,49 @@ pub struct Inventory {
     pub nh3: Kilogram,
 }
 
+/// Source: the temperature under which ice traps N2, 30 K. Comet 67P's
+/// N2/CO "suggests that cometary grains formed at low-temperature
+/// conditions below ~30 kelvin" (Rubin et al. 2015, Science 348, 232,
+/// doi:10.1126/science.aaa6100, abstract); "Accretion of N2 can only
+/// occur at low temperatures (e.g., <30 K) because of the high volatility
+/// of N2" (Glein 2023, Icarus, arXiv:2306.06350, section 3.1). Titan's
+/// building blocks, heated to about 50 K in Saturn's subnebula, lost
+/// their N2 and kept their CH4 clathrate and NH3 hydrate (Mousis et al.
+/// 2009, ApJ 691, 1780, arXiv:0810.0308, section 3.1). Study 28.
+pub const NITROGEN_TRAPPING_TEMPERATURE: Kelvin = Kelvin(30.0);
+
+/// Source: midplane temperature at 1 au of the average protoplanetary
+/// disc, 200 K, the mean of a large sample of discs (Andrews & Williams
+/// 2007), as Öberg, Murray-Clay & Bergin 2011 (ApJL 743, L16,
+/// arXiv:1110.5567, eq. 1) adopt it to place the snowlines. Study 28.
+pub const DISC_TEMPERATURE_AT_ONE_AU: Kelvin = Kelvin(200.0);
+
+/// Source: power-law index `q` of the same profile, `T = T0 (r / 1 au)^-q`,
+/// 0.62 (Andrews & Williams 2007, as Öberg et al. 2011 eq. 1 adopt it).
+/// Study 28.
+pub const DISC_TEMPERATURE_INDEX: f64 = 0.62;
+
+/// Midplane temperature of the disc a body formed in, at its `orbit`
+/// around a host whose ice line is `ice_line`:
+/// `T0 (r / 1 au)^-q` ([`DISC_TEMPERATURE_AT_ONE_AU`],
+/// [`DISC_TEMPERATURE_INDEX`]), the radius `r` read in units of the
+/// host's ice line, `orbit × ICE_LINE_OF_THE_SUN / ice_line`: the disc
+/// scales with the host as the model's ice line does
+/// (`orbit::ice_line`), and around the Sun `r` is the orbit itself. Gives
+/// 200 K at 1 au, 49 K at Saturn's 9.57 au and 24 K at Neptune's 30 au.
+/// Takes positive distances.
+pub fn disc_temperature(orbit: AstronomicalUnit, ice_line: AstronomicalUnit) -> Kelvin {
+    let r = orbit.0 * ICE_LINE_OF_THE_SUN.0 / ice_line.0;
+    DISC_TEMPERATURE_AT_ONE_AU * r.powf(-DISC_TEMPERATURE_INDEX)
+}
+
+/// Whether ice that condensed in a disc at `disc` ([`disc_temperature`])
+/// trapped N2: under [`NITROGEN_TRAPPING_TEMPERATURE`]. Around the Sun,
+/// beyond 21.3 au: Neptune's and Pluto's ice did, Saturn's did not.
+pub fn traps_nitrogen(disc: Kelvin) -> bool {
+    disc.0 < NITROGEN_TRAPPING_TEMPERATURE.0
+}
+
 /// The volatiles a body of `refractory` rock and iron, of which
 /// `silicate` is mantle and crust, and `ice` carries by the rule alone,
 /// without the scatter of [`VOLATILE_SPREAD`]:
@@ -129,13 +176,23 @@ pub struct Inventory {
 /// s   = 2.5e-4 silicate                ch4 = 7e-3 ice,   nh3 = 7e-3 ice
 /// ```
 ///
+/// The ice's N2 only when `ice_traps_n2` ([`traps_nitrogen`]): ice
+/// formed warmer keeps its NH3 and CH4 but not its N2, as Titan's did
+/// (study 28).
+///
 /// The caller passes the composition before any steam loss, so that the
 /// volatiles keep the mass the body formed with, as in the legacy (the
 /// runaway's loss of water does not take the ice's CO2 with it).
-pub fn inventory(refractory: Kilogram, silicate: Kilogram, ice: Kilogram) -> Inventory {
+pub fn inventory(
+    refractory: Kilogram,
+    silicate: Kilogram,
+    ice: Kilogram,
+    ice_traps_n2: bool,
+) -> Inventory {
+    let ice_n2 = if ice_traps_n2 { ICE_N2 * ice.0 } else { 0.0 };
     Inventory {
         co2: Kilogram(ROCK_CO2 * refractory.0 + ICE_CO2 * ice.0),
-        n2: Kilogram(ROCK_N2 * refractory.0 + ICE_N2 * ice.0),
+        n2: Kilogram(ROCK_N2 * refractory.0 + ice_n2),
         s: Kilogram(ROCK_S * silicate.0),
         ch4: Kilogram(ICE_CH4 * ice.0),
         nh3: Kilogram(ICE_NH3 * ice.0),

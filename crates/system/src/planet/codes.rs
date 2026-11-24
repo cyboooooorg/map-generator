@@ -195,9 +195,19 @@ pub(crate) const CORE_STATE: &str = "planet.core.state";
 pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
 /// Surface equatorial dipole field of the core's dynamo; 0 T without one.
 pub(crate) const CORE_FIELD: &str = "planet.core.field";
+/// Midplane temperature of the disc the planet's ice formed in, from its
+/// semi-major axis and its host's ice line
+/// (`science::volatiles::disc_temperature`).
+pub(crate) const VOLATILES_DISC_TEMPERATURE: &str = "planet.volatiles.disc-temperature";
+/// Whether the planet's ice trapped N2 when it formed: a disc colder than
+/// `science::volatiles::NITROGEN_TRAPPING_TEMPERATURE`.
+pub(crate) const VOLATILES_ICE_TRAPS_N2: &str = "planet.volatiles.ice-traps-n2";
 /// Partial pressure of N2 the interior brought up: the inventory at
-/// formation times its scatter, the regime's share, the share the water
-/// lets through and, under plates, what subduction leaves.
+/// formation times its scatter (the ice's N2 only where it trapped some),
+/// plus the N2 of the NH3 the interior decomposed
+/// (`science::outgassing::decomposed`), times the regime's share, the
+/// share the water lets through and, under plates, what subduction
+/// leaves.
 pub(crate) const AIR_OUTGASSED_N2: &str = "planet.air.outgassed.n2";
 /// Partial pressure of CO2 the interior brought up (see
 /// [`AIR_OUTGASSED_N2`]).
