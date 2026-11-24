@@ -1446,7 +1446,20 @@ pull request add these:
   Aguichine et al. 2021 from 10 %) need the climate of the 2d pull
   request. A mini-Neptune with such water in its core is the condensed
   planet's bulk plus its envelope, at the radius of core plus
-  envelope.
+  envelope. Study 26
+  ([Wiki](https://github.com/cyboooooorg/map-generator/wiki/26-boiling-and-steam-audit),
+  for PR 2d-3b) read both: Turbet et al.'s Eq. 3 is stated valid to
+  27 kbar of steam (its structures reach 270 kbar), and their
+  `R_core + z` holds while the steam's base stays well under about
+  1e10 Pa, where MgSiO₃ starts to compress (their Appendix A);
+  Aguichine et al.'s fits cover water shares of 0.1 to 1 at irradiation
+  temperatures of 400 to 1300 K, about 4.3 S⊕ and more round a
+  Sun-like star. Neither covers a water-rich planet near the runaway
+  limit, such as the 4.78 M⊕ body of #492 (12 % water, 5.6e5 bar of
+  steam near 1 S⊕). PR 2d-3b keeps Turbet's equations with their
+  inputs clamped to the fit's grid, the core uncompressed by its steam:
+  a documented departure ([planet
+  atmospheres](planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26)).
 - **The envelope is the primordial one.** The loss of gas after the disc
   is the job of the escape pull request (2c), so an old, close-in
   planet's drawn envelope is more than it keeps.
@@ -2060,7 +2073,8 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      2016 (arXiv:1603.06596), Helled et al. 2011 (arXiv:1010.5546), Lopez &
      Fortney 2014 (arXiv:1311.0329), Mankovich & Fuller 2021
      (arXiv:2104.13385), Turbet et al. 2020 and Aguichine et al. 2021 (steam
-     worlds), Guillot 1999, Unterborn et al. 2015 (arXiv:1505.00280).
+     worlds; entries 118 and 119), Guillot 1999, Unterborn et al. 2015
+     (arXiv:1505.00280).
 116. NASA Space Science Data Coordinated Archive, Jupiter Fact Sheet: mass
      1,898.13 x 10^24 kg and equatorial radius at 1 bar 71,492 km,
      <https://nssdc.gsfc.nasa.gov/planetary/factsheet/jupiterfact.html>,
@@ -2069,6 +2083,18 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      568.32 x 10^24 kg and equatorial radius at 1 bar 60,268 km,
      <https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturnfact.html>,
      read 2026-11-23.
+118. Turbet, M., Bolmont, E., Ehrenreich, D. et al. 2020, "Revised
+     mass-radius relationships for water-rich rocky planets more
+     irradiated than the runaway greenhouse limit", *A&A* 638, A41,
+     [doi:10.1051/0004-6361/201937151](https://doi.org/10.1051/0004-6361/201937151),
+     [arXiv:1911.08878](https://arxiv.org/abs/1911.08878) (v3 read in
+     full, study 26).
+119. Aguichine, A., Mousis, O., Deleuil, M. & Marcq, E. 2021,
+     "Mass-radius relationships for irradiated ocean planets", *ApJ*
+     914, 84,
+     [doi:10.3847/1538-4357/abfa99](https://doi.org/10.3847/1538-4357/abfa99),
+     [arXiv:2105.01102](https://arxiv.org/abs/2105.01102) (read, study
+     26).
 
 The values, tables and pages read for entries 99 to 115 are in the
 [draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
