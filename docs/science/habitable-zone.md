@@ -139,7 +139,9 @@ Mars then got 0.75 × 0.43 = 0.32 times Earth's light today, which puts the
 | Maximum greenhouse | 1.67 AU | 1.70 AU |
 | Early Mars | 1.77 AU | 1.77 AU |
 
-Both columns are from Table 1 of Kopparapu et al. (2013). Kopparapu et al.
+Both columns are from Table 1 of Kopparapu et al. (2013). Their erratum
+(ApJ 770, 82, 2013) moves the maximum greenhouse back: it "should be
+1.67 AU, instead of 1.70 AU". Kopparapu et al.
 (2014) then took the 3D runaway limit of Leconte et al. (2013) as the
 conservative inner edge, scaled to every star.
 
@@ -167,6 +169,16 @@ Table 1; the $d$ of this table is a coefficient, not the distance):
 | Runaway greenhouse | 1.107 | 1.332e−4 | 1.58e−8 | −8.308e−12 | −1.931e−15 |
 | Maximum greenhouse | 0.356 | 6.171e−5 | 1.698e−9 | −3.198e−12 | −5.575e−16 |
 | Early Mars | 0.32 | 5.547e−5 | 1.526e−9 | −2.874e−12 | −5.011e−16 |
+
+The maximum-greenhouse row puts the Sun's outer edge at 1.676 AU. The
+same row has two earlier versions: Kopparapu et al. (2013, arXiv v2):
+0.3438, 5.8942e−5, 1.6558e−9, −3.0045e−12, −5.2983e−16 (1.70 AU); and
+their erratum's Table 3: 0.3507, 5.9578e−5, 1.6707e−9, −3.0058e−12,
+−5.1925e−16. The 2014 paper says the maximum-greenhouse coefficients
+are "same for all the planetary masses" and does not explain the
+change. The climate of the rewrite uses the 2014 row, like its
+runaway limit (study 25 of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/25-climate-solver-audit)).
 
 **In words.** A dimmer star's zone is closer in, as the square root of its
 luminosity. A cooler star's zone also sits at a lower flux. Its redder

@@ -103,8 +103,11 @@ study](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/s
 
 1. **Intensity.** The heat flux $F$ above, from the planet's keyframe,
    sets a volcanic intensity from 0 to 1 along a declared curve through
-   two anchors: Earth's flux, 0.087 W/m², and a heat pipe's, 2.5 W/m²,
-   where it reaches 1.
+   two anchors: Earth's flux, 0.087 W/m², and Io's, 2.5 W/m²
+   (`FULL_VOLCANISM_FLUX`), where volcanism is total and it reaches 1.
+   The regime calls a planet a heat pipe from 1 W/m² already
+   (`HEAT_PIPE_ONSET_FLUX`, see [plate tectonics](plate-tectonics.md)):
+   between the two a heat pipe reads an intensity under 1.
 2. **Isolated cones.** Cones on a lattice over the whole surface,
    present in a share of the cells that grows with the intensity. No
    volcanic province (a plain of lava flows) is drawn yet.

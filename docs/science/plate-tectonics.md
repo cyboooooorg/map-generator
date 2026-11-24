@@ -290,7 +290,8 @@ are not.
 
 The timeline's regime comes from `system::planet::regime`, a port of the
 legacy rule with its calibrations in `science::tectonics`: a heat pipe
-above 1 W/m² of internal heat (`HEAT_PIPE_FLUX`), a stagnant lid below
+above 1 W/m² of internal heat (`HEAT_PIPE_ONSET_FLUX`, the regime's
+onset), a stagnant lid below
 0.3 Earth masses (`PLATES_MIN_MASS`), plates when the planet kept its
 water and did not run away, episodic otherwise. Why each threshold, and
 what was searched: [Planet atmospheres, climate and
