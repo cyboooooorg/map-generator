@@ -9,13 +9,13 @@ use super::air::{Air, air, histories, lyman_sources, released};
 use super::codes;
 use super::core::{CoreRecord, core};
 use super::draws::Drawn;
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::interior::Water as Held;
 use super::regime::regime;
 use super::tests::{
     CALLISTO, EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, TITAN,
-    VENUS, WATER_WORLD_FRACTION, ancestry, derive_surface, derived_from, reference_trial, trial,
-    with_fluence,
+    VENUS, WATER_WORLD_FRACTION, ancestry, derive_surface, derived_from, larger_exposed,
+    reference_trial, trial, with_fluence,
 };
 use crate::Trial;
 use crate::sources::{light, sources};
@@ -148,6 +148,7 @@ impl Planet {
             &self.trial,
             &self.drawn,
             &self.body,
+            &self.body.exposed(),
             self.surface,
             &self.water,
             &self.regime,
@@ -766,4 +767,40 @@ fn the_photolysis_reads_the_timelines_lyman_alpha() {
         (destroyed / expected - 1.0).abs() < ROUNDING,
         "{destroyed} {expected}"
     );
+}
+
+#[test]
+fn the_shoreline_reads_the_exposed_body() {
+    let mut p = planet(&VENUS);
+    let exposed = p.body.exposed();
+    let larger = larger_exposed(&mut p.trace, &exposed);
+    let radius = larger.radius;
+    let mut share = |exposed: &Exposed| {
+        let made = air(
+            &p.trial,
+            &p.drawn,
+            &p.body,
+            exposed,
+            p.surface,
+            &p.water,
+            &p.regime,
+            &p.core,
+            true,
+            &mut p.trace,
+        )
+        .unwrap();
+        let co2 = kept(&p, Gas::Co2, &made.atmosphere.partial[&Gas::Co2]);
+        let node = derived_from(&p.trace, co2)[1];
+        assert_eq!(
+            p.trace.node(node).unwrap().code,
+            Code::of(codes::AIR_SHORELINE_KEPT)
+        );
+        (node, number(&p.trace, node))
+    };
+    let (_, small) = share(&exposed);
+    let (node, big) = share(&larger);
+    assert!(derived_from(&p.trace, node).contains(&radius.node()));
+    // The ancestry and the direction only: the kept share can saturate,
+    // so a larger radius may keep the same share, never more.
+    assert!(big <= small, "{big} > {small}");
 }

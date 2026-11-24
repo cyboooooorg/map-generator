@@ -117,6 +117,19 @@ pub(crate) const LAYER_STATE: &str = "planet.layer.state";
 /// it. Not a thermal state:
 /// the core's comes with the temperatures of a later pull request.
 pub(crate) const LAYER_STATE_BY_PRESSURE: &str = "planet.layer.state-by-pressure";
+/// Mass of a steam world with its steam envelope: the whole mass of the
+/// body it was made from (the bulk's plus a water beyond the laws), which
+/// the steam, the water the planet kept, makes up with its rock.
+pub(crate) const MASS_WITH_STEAM: &str = "planet.mass.with-steam";
+/// Temperature of a steam envelope, Turbet et al. 2020 Eq. 3
+/// (`science::steam::envelope`), from the core's shells, the steam and
+/// the fluxes of the sources.
+pub(crate) const STEAM_TEMPERATURE: &str = "planet.steam.temperature";
+/// Thickness of a steam envelope up to the transit radius, Turbet et al.
+/// 2020 Eq. 2 (`science::steam::envelope`), from the same inputs.
+pub(crate) const STEAM_THICKNESS: &str = "planet.steam.thickness";
+/// Radius of a steam world: its core's radius plus the steam's thickness.
+pub(crate) const RADIUS_STEAM: &str = "planet.radius.steam";
 /// Radiogenic heating power.
 pub(crate) const HEAT_RADIOGENIC: &str = "planet.heat.radiogenic";
 /// Tidal heating power.
@@ -152,8 +165,9 @@ pub(crate) const WATER_STEAM_LOST: &str = "planet.water.steam-lost";
 /// Water the planet keeps at its surface: its surface water, less the
 /// steam lost in a runaway.
 pub(crate) const WATER_INVENTORY: &str = "planet.water.inventory";
-/// Whether the climate boiled the ocean: false, imposed, until the
-/// climate's boiling loop of the next pull request.
+/// Whether the climate boiled the ocean: false, imposed, before the
+/// climate (`water`); derived from the boil loop's verdict once settled
+/// (`water::boiled`, `settled`).
 pub(crate) const WATER_BOILED: &str = "planet.water.boiled";
 /// Mass of the planet once the steam is gone: its mass less the surface
 /// water lost, `M - (surface - kept)`; the mantle's water stays.
@@ -317,6 +331,13 @@ pub(crate) const CLIMATE_SNOWBALL_DRAW: &str = "planet.climate.snowball-draw";
 /// recorded for a reducing body only, the test of the reducing-air
 /// fallback.
 pub(crate) const CLIMATE_TITAN_LIKE: &str = "planet.climate.titan-like";
+/// Whether the water the climate kept boils: no wet balance exists under
+/// its light, its air and its heat, its thermostat holding it or not. A
+/// flag.
+pub(crate) const CLIMATE_BOILS: &str = "planet.climate.boils";
+/// Whether a runaway's steam hides its surface: a runaway whose steam is
+/// supercritical at its base (`science::steam::hides_surface`).
+pub(crate) const CLIMATE_HIDES_SURFACE: &str = "planet.climate.hides-surface";
 /// Partial pressure of N2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_N2: &str = "planet.climate.air.n2";
 /// Partial pressure of CO2 in the air the climate leaves.

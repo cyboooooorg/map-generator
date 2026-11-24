@@ -2,13 +2,15 @@
 
 use super::codes;
 use super::draws::{self, Drawn, LABELS, Labels};
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::heat::{self, ENVELOPED_MIN_ENVELOPE, ICY_MIN_WATER};
 use super::interior::{Interior, Water, interior};
 use crate::Trial;
 use science::constants::EARTH_MEAN_RADIUS;
 use science::heat::TidalKind;
-use science::units::{AstronomicalUnit, Day, Degree, Dex, EarthMass, Fraction, Gyr, Kelvin};
+use science::units::{
+    AstronomicalUnit, Day, Degree, Dex, EarthMass, EarthRadius, Fraction, Gyr, Kelvin,
+};
 use science::units::{
     EarthFlux, JoulePerSquareMetre, SolarLuminosity, SolarMass, WattPerSquareMetre,
 };
@@ -700,7 +702,7 @@ fn central_pressure_cites_every_input() {
                     matches!(interior.water, Water::Layer { .. })
                 );
             }
-            Water::InMantle => panic!("a water world"),
+            Water::InMantle | Water::Steam { .. } => panic!("a water world"),
         }
     }
 }
@@ -1398,7 +1400,7 @@ pub(super) fn derive_surface(
     )
     .unwrap();
     let surface = super::water::surface_water(t, drawn, &body, trace).unwrap();
-    let w = super::water::water(t, &body, surface, trace).unwrap();
+    let w = super::water::water(t, &body.exposed(), surface, trace).unwrap();
     (body, h, w, surface)
 }
 
@@ -1436,4 +1438,64 @@ pub(super) fn reference_trial(trace: &mut Trace, body: &ReferenceBody) -> (Trial
         None,
     );
     (t, drawn)
+}
+
+/// [`reference_trial`]'s composition for a body of `mass` Earth masses at
+/// `au` with a core share `core` and a water share `water`, migrated in
+/// from beyond the ice line when it lies inside it: a water world, whose
+/// water is a layer of its own, all of it at its surface.
+pub(super) fn water_world_trial(
+    trace: &mut Trace,
+    mass: f64,
+    core: f64,
+    water: f64,
+    au: f64,
+) -> (Trial, Drawn) {
+    let t = trial(trace, 1, mass, au, 0.0);
+    let inside = t.orbit.semi_major_axis.value().0 < t.ice_line.value().0;
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        core,
+        water,
+        0.0,
+        inside.then_some(true),
+        0.0,
+        None,
+        None,
+    );
+    (t, drawn)
+}
+
+/// Definition: the factor of the larger radius of the exposed body in
+/// the radius tests (shoreline, steam loss), 1.2.
+pub(super) const LARGER_RADIUS: f64 = 1.2;
+
+/// `exposed` with a radius [`LARGER_RADIUS`] times larger, an input leaf
+/// of `trace`.
+pub(super) fn larger_exposed(trace: &mut Trace, exposed: &Exposed) -> Exposed {
+    let radius = trace
+        .leaf(
+            Code::of("test.radius"),
+            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
+            Provenance::Input,
+        )
+        .unwrap();
+    Exposed {
+        radius,
+        ..exposed.clone()
+    }
+}
+
+/// `t` with its source's effective temperature replaced by `teff`, as
+/// [`with_fluence`] replaces its fluence.
+pub(super) fn with_star(trace: &mut Trace, t: &Trial, teff: Kelvin) -> Trial {
+    let mut source = t.sources.primary().clone();
+    source.effective_temperature = trace
+        .leaf(Code::of("test.teff-star"), teff, Provenance::Input)
+        .unwrap();
+    Trial {
+        sources: StellarSources::new(vec![source]).unwrap(),
+        ..t.clone()
+    }
 }

@@ -1253,8 +1253,8 @@ class trial of the backward search the trial's seed.
   the surface temperature until then: the isotherm from 273.31 to 355 K,
   the melting curve colder. From 355 K, past the water laws, its water
   is kept as an inventory without a layer, outside the structure, until
-  the climate gives it a steam envelope (as the earlier model's
-  `steam_interior`, after Turbet et al. 2020; #659); its surface gravity
+  the climate gives it a steam envelope (`interior::steam_interior`,
+  after Turbet et al. 2020; #659); its surface gravity
   and mean density are those of the condensed planet under it. Its
   escape and the steam it loses read its whole mass, water included
   (`Body::whole_mass`).
@@ -1436,7 +1436,11 @@ pull request add these:
   $M_\oplus$, of which 17.4 of ice and rock). No temperature enters the
   boundary. The core's state, a gas layer's state when there is no
   metallic layer, and an envelope's are imposed values, not computed.
-- **Steam worlds are left to the next pull request.** Water beyond the
+- **Steam worlds.** `interior::steam_interior` puts the envelope of a
+  steam world on the iron and rock shells of its rock (the core, its
+  mass the whole less the steam, its radii the condensed structure's); a
+  dry body's rock shells give up the steam's mass (each scaled by `1 -
+  steam / rock`), so the shells add up to the whole. Water beyond the
   range of `science::water` (above 355 K, which is the ice VI-VII-liquid
   triple point, not a steam criterion) is recorded as such: the planet
   that has a bulk is the condensed one (dry mass, dry radius, its
@@ -1446,7 +1450,31 @@ pull request add these:
   Aguichine et al. 2021 from 10 %) need the climate of the 2d pull
   request. A mini-Neptune with such water in its core is the condensed
   planet's bulk plus its envelope, at the radius of core plus
-  envelope.
+  envelope. Study 26
+  ([Wiki](https://github.com/cyboooooorg/map-generator/wiki/26-boiling-and-steam-audit),
+  for PR 2d-3b) read both: Turbet et al.'s Eq. 3 is stated valid to
+  27 kbar of steam (its structures reach 270 kbar), and their
+  `R_core + z` holds while the steam's base stays well under about
+  1e10 Pa, where MgSiO₃ starts to compress (their Appendix A);
+  Aguichine et al.'s fits cover water shares of 0.1 to 1 at irradiation
+  temperatures of 400 to 1300 K, about 4.3 S⊕ and more round a
+  Sun-like star. Neither covers a water-rich planet near the runaway
+  limit, such as the 4.78 M⊕ body of #492 (12 % water, 5.6e5 bar of
+  steam near 1 S⊕). PR 2d-3b keeps Turbet's equations with their
+  inputs clamped to the fit's grid, the core uncompressed by its steam:
+  a documented departure ([planet
+  atmospheres](planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26)).
+  Decided with the user (2026-11-24): only a steam world (a runaway
+  whose steam weighs at least water's critical pressure) gets the
+  envelope and its radius;
+  its steam loss and cosmic shoreline read that radius in one pass, the
+  envelope computed on the water handed to the loss, a deliberate upper
+  bound of the loss.
+  Inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past
+  § 2.2's 27 kbar, the steam world is larger than its condensed twin
+  (a test on 5 M⊕ with 3 % water at 1 S⊕). The #492 body is outside it
+  and comes out at 1.643 R⊕ against its condensed twin's 1.655 R⊕: only
+  its radius above the dry core (1.454 R⊕) holds (Refs #684).
 - **The envelope is the primordial one.** The loss of gas after the disc
   is the job of the escape pull request (2c), so an old, close-in
   planet's drawn envelope is more than it keeps.
@@ -2060,7 +2088,8 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      2016 (arXiv:1603.06596), Helled et al. 2011 (arXiv:1010.5546), Lopez &
      Fortney 2014 (arXiv:1311.0329), Mankovich & Fuller 2021
      (arXiv:2104.13385), Turbet et al. 2020 and Aguichine et al. 2021 (steam
-     worlds), Guillot 1999, Unterborn et al. 2015 (arXiv:1505.00280).
+     worlds; entries 118 and 119), Guillot 1999, Unterborn et al. 2015
+     (arXiv:1505.00280).
 116. NASA Space Science Data Coordinated Archive, Jupiter Fact Sheet: mass
      1,898.13 x 10^24 kg and equatorial radius at 1 bar 71,492 km,
      <https://nssdc.gsfc.nasa.gov/planetary/factsheet/jupiterfact.html>,
@@ -2069,6 +2098,18 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      568.32 x 10^24 kg and equatorial radius at 1 bar 60,268 km,
      <https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturnfact.html>,
      read 2026-11-23.
+118. Turbet, M., Bolmont, E., Ehrenreich, D. et al. 2020, "Revised
+     mass-radius relationships for water-rich rocky planets more
+     irradiated than the runaway greenhouse limit", *A&A* 638, A41,
+     [doi:10.1051/0004-6361/201937151](https://doi.org/10.1051/0004-6361/201937151),
+     [arXiv:1911.08878](https://arxiv.org/abs/1911.08878) (v3 read in
+     full, study 26).
+119. Aguichine, A., Mousis, O., Deleuil, M. & Marcq, E. 2021,
+     "Mass-radius relationships for irradiated ocean planets", *ApJ*
+     914, 84,
+     [doi:10.3847/1538-4357/abfa99](https://doi.org/10.3847/1538-4357/abfa99),
+     [arXiv:2105.01102](https://arxiv.org/abs/2105.01102) (read, study
+     26).
 
 The values, tables and pages read for entries 99 to 115 are in the
 [draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)

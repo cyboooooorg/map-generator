@@ -34,26 +34,38 @@ use super::{
     THAW_STEPS,
 };
 use crate::Trial;
-use crate::planet::bare::bare_with;
+use crate::planet::bare::{Ground, bare_air, bare_with, formed, surface_pass};
+use crate::planet::codes;
+use crate::planet::draws::{Drawn, LABELS};
+use crate::planet::interior_tests::{AU_492, CORE_492, MASS_492, WATER_492};
+use crate::planet::settled::{Settled, settled_with};
+use crate::planet::settled_tests::{SMALL_MASS, nodes_of};
 use crate::planet::tests::{
     EARTH, EARTH_WATER_FRACTION, MARS, ReferenceBody, TITAN, reference_trial, with_fluence,
+    with_star,
 };
+use crate::planet::tests::{derived_from, trial, water_world_trial};
+use crate::planet::water::boiled;
 use science::balance::{
     EARTH_DRY_AIR, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE, absorbed,
     earth_moist_plateau, moist_plateau, skin,
 };
 use science::constants::{PASCALS_PER_BAR, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
-use science::habitable::{maximum_greenhouse_flux, runaway_flux};
+use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss};
+use science::habitable::{SURFACE_WATER_SHARE, maximum_greenhouse_flux, runaway_flux};
+use science::outgassing::column_pressure;
 use science::radiation::clouds::cloud_cover;
 use science::radiation::column::{ColumnCache, Profile, outgoing_longwave};
 use science::radiation::gases::PartialPressures;
 use science::surface::{
     ICE_COVERED_TEMPERATURE, Liquid, PHASE_BAND, methane_freezes, surface_vapour,
 };
-use science::units::{Bar, EarthFlux, Fraction, Kelvin, Pascal};
+use science::units::{
+    Bar, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
+};
 use science::volatiles::{NITROGEN_TRIPLE_TEMPERATURE, co2_saturation_pressure};
 use science::water::{CRITICAL_POINT_TEMPERATURE, melting_temperature};
-use timeline::{ClimateState, Provenance, Trace};
+use timeline::{ClimateState, Code, Gas, LiquidKind, Material, NodeValue, Provenance, Seed, Trace};
 
 /// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
 /// Resolution B3).
@@ -364,23 +376,6 @@ const EDGE_MARGIN_AU: f64 = 0.02;
 /// for the thaw, 0.65 to 0.977 (legacy's 1.0, 1.2, 1.4 and 1.5 AU over
 /// its 1.535 AU edge); 1.0 AU stays its own.
 const SNOWBALL_SHARES: [f64; 3] = [0.78, 0.91, 0.977];
-
-/// `t` with its source's effective temperature replaced by `teff`, as
-/// `with_fluence` replaces its fluence.
-fn with_star(trace: &mut Trace, t: &Trial, teff: Kelvin) -> Trial {
-    let mut source = t.sources.primary().clone();
-    source.effective_temperature = trace
-        .leaf(
-            timeline::Code::of("test.teff-heavy"),
-            teff,
-            Provenance::Input,
-        )
-        .unwrap();
-    Trial {
-        sources: timeline::StellarSources::new(vec![source]).unwrap(),
-        ..t.clone()
-    }
-}
 
 /// The climate inputs of `body` rebuilt from its trial at `au` round a
 /// star of `teff` (as legacy `reference.rs::derive_at`), not locked, at
@@ -1402,6 +1397,313 @@ fn a_planet_just_past_the_runaway_limit_runs_away_hot() {
     );
 }
 
+/// Source: an F0V star's effective temperature, 7220 K (Pecaut &
+/// Mamajek 2013, ApJS 208, 9, doi:10.1088/0067-0049/208/1/9, Table 5;
+/// legacy `classify.rs` `f0v_at`), past the 7200 K hot end of Kopparapu
+/// et al. 2014's fit, which `runaway_flux` clamps to.
+const F0V: Kelvin = Kelvin(7220.0);
+
+/// Definition: the flux of the boil tests, S⊕, round an [`F0V`] star,
+/// 1.2963: a test input just under its runaway limit
+/// (`runaway_flux(F0V)`, 1.29636 S⊕), in the band where the model boils
+/// under that limit. An Earth-like wet planet there with a tenth of its
+/// N₂ ([`TENTH_OF_N2`]) absorbs 300.785 W/m², past the 299.2 W/m² peak of
+/// its saturated column, while its thermostat still balances at 288 K on
+/// the climate's column; legacy's 1.28 S⊕ lies under the model's boil
+/// threshold (study 26, "The boil": the threshold sits about 15 % above
+/// Kopparapu et al. 2014's for the Sun, #680). The band widens when #680
+/// lowers the threshold.
+const F0V_BOILING_FLUX: f64 = 1.2963;
+
+/// Definition: the water share of the boil that escapes all its water,
+/// 3e-4 of the mass (legacy `a_boil_that_escapes_all_its_water_ends_dry`).
+const ESCAPING_WATER: f64 = 3.0e-4;
+
+/// Definition: the volatile scatter that cuts the N₂ to a tenth, dex, in
+/// the order CO₂, N₂, S, CH₄, NH₃: `log10(0.1) = -1` on N₂ (legacy
+/// `recondensed()`'s `N2_SHARE`, 0.1, so that the F star's Rayleigh
+/// scattering does not keep the first run from boiling, #522). Both boil
+/// tests take it: with the rule's N₂ the Bond albedo is 0.365 and the
+/// absorbed light 280 W/m², under the moist limit, at every flux under
+/// the runaway limit.
+const TENTH_OF_N2: [f64; 5] = [0.0, -1.0, 0.0, 0.0, 0.0];
+
+/// Definition: the leftover the steam run hands its recondensed water,
+/// 0.03 bar on the formed body (legacy `recondensed()`'s `left_bar`).
+const LEFTOVER: Bar = Bar(0.03);
+
+/// Definition: the XUV fluence of the recondensed boil, J/m², 2e14: a
+/// test input about 37 times under the Sun's scaled to
+/// [`F0V_BOILING_FLUX`] (7.3e15). At that one the steam run's `9 H` is
+/// 1.3e22 kg, so the water sized to leave [`LEFTOVER`] is 2.6 % of the
+/// mass, and the ice volatiles that come with it (2.7 bar of N₂) raise the
+/// Bond albedo to 0.42, out of the boil band. A smaller `9 H` leaves a
+/// planet of 7.2e-4 of water, near the 1e-3 whose first run boils in
+/// the band.
+const RECONDENSED_FLUENCE: f64 = 2.0e14;
+
+/// Definition: the rounds of the recondensed boil's water sizing, 3
+/// (legacy `recondensed()`): the body barely moves with its water.
+const SIZING_ROUNDS: usize = 3;
+
+/// Definition: the share of its formed water a recondensed boil keeps at
+/// most, 1e-3 (legacy `a_boil_whose_leftover_recondenses_keeps_its_ocean`).
+const RECONDENSED_SHARE: f64 = 1e-3;
+
+/// Definition: the cool small planet's orbit, 1.5 AU, and its water,
+/// 1e-3 of the mass (legacy `a_cool_small_planet_does_not_boil`).
+const COOL_SMALL: (f64, f64) = (1.5, 1.0e-3);
+
+/// Earth's composition with a water share `water` and a volatile
+/// `scatter`, at [`F0V_BOILING_FLUX`] round an [`F0V`] star (its orbit
+/// `flux^-½` AU), not migrated.
+fn f0v_earth(trace: &mut Trace, water: f64, scatter: Option<[f64; 5]>) -> (Trial, Drawn) {
+    let au = F0V_BOILING_FLUX.powf(-0.5);
+    let t = trial(trace, 1, EARTH.mass, au, 0.0);
+    let t = with_star(trace, &t, F0V);
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        EARTH.core_mass_fraction,
+        water,
+        0.0,
+        Some(false),
+        0.0,
+        None,
+        scatter,
+    );
+    (t, drawn)
+}
+
+/// The planet `t` of composition `d`, settled at Earth's obliquity with
+/// the snowball draw of seed 1.
+fn settle(trace: &mut Trace, t: &Trial, d: &Drawn) -> Settled {
+    let rot = rotation(trace, EARTH_OBLIQUITY, false);
+    settled_with(t, d, &rot, Seed::new(1).derive(LABELS.snowball), trace).unwrap()
+}
+
+#[test]
+#[ignore = "heavy: a full boil loop, the first and the steam runs, 10.8 s in release"]
+fn a_boil_that_escapes_all_its_water_ends_dry() {
+    assert!(F0V_BOILING_FLUX < runaway_flux(F0V).0);
+    let mut trace = Trace::new();
+    let (t, d) = f0v_earth(&mut trace, ESCAPING_WATER, Some(TENTH_OF_N2));
+    let s = settle(&mut trace, &t, &d);
+    let verdicts = nodes_of(&trace, codes::CLIMATE_BOILS);
+    assert_eq!(verdicts[0].1, NodeValue::Flag(true), "{verdicts:?}");
+    let water = &s.bare.surface.as_ref().unwrap().water;
+    assert!(*water.runaway.value() && *water.boiled.value(), "{water:?}");
+    assert_eq!(derived_from(&trace, water.boiled.node()), [verdicts[0].0]);
+    let c = s.climate.as_ref().unwrap();
+    assert_ne!(
+        c.liquid.map(|l| *l.value()),
+        Some(LiquidKind::Water),
+        "{c:?}"
+    );
+    assert_eq!(water.inventory.value().0, 0.0, "{water:?}");
+    assert_eq!(verdicts.len(), 1, "{verdicts:?}");
+}
+
+/// The bulk water share, under [`RECONDENSED_FLUENCE`], whose steam run hands [`LEFTOVER`] to its
+/// recondensed water: the surface water `9 H + L / k` (`L` the mass of
+/// [`LEFTOVER`] on the formed body, `H` its energy-limited hydrogen loss,
+/// `k` the cosmic shoreline's share of a first steam run) over
+/// [`SURFACE_WATER_SHARE`] of the mass, in [`SIZING_ROUNDS`] rounds.
+fn recondensing_water() -> f64 {
+    let mut water = ESCAPING_WATER;
+    for _ in 0..SIZING_ROUNDS {
+        let mut trace = Trace::new();
+        let (t, d) = f0v_earth(&mut trace, water, Some(TENTH_OF_N2));
+        let t = with_fluence(&mut trace, &t, RECONDENSED_FLUENCE);
+        let Ground::Formed(f) = formed(&t, &d, &mut trace).unwrap() else {
+            panic!("an Earth has a surface");
+        };
+        let exposed = f.body.exposed();
+        let (_, fluence) = f.trial.sources.band_total(|s| &s.xuv);
+        let hydrogen =
+            energy_limited_loss(Metre::from(*exposed.radius.value()), exposed.mass, fluence);
+        let verdict = trace
+            .leaf(Code::of("test.boils"), true, Provenance::Imposed)
+            .unwrap();
+        let steam = boiled(&f.trial, &exposed, f.surface, verdict, &mut trace).unwrap();
+        let ground = surface_pass(&f, steam, None, &mut trace).unwrap();
+        bare_air(&ground, true, &mut trace).unwrap();
+        let kept = nodes_of(&trace, codes::AIR_SHORELINE_KEPT);
+        let NodeValue::Number { value: share, .. } = kept.last().unwrap().1 else {
+            panic!("a share: {kept:?}");
+        };
+        let bulk = f.body.bulk();
+        let per_kg = column_pressure(
+            Kilogram(1.0),
+            *bulk.surface_gravity.value(),
+            Metre::from(*bulk.radius.value()),
+        );
+        let left = LEFTOVER.0 / per_kg.0;
+        let surface = WATER_PER_HYDROGEN * hydrogen.0 + left / share;
+        water = surface / (SURFACE_WATER_SHARE * Kilogram::from(EarthMass(EARTH.mass)).0);
+    }
+    water
+}
+
+#[test]
+#[ignore = "heavy: a full boil loop, three runs and the water sizing, 13.4 s in release"]
+fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
+    let mut trace = Trace::new();
+    let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(TENTH_OF_N2));
+    let t = with_fluence(&mut trace, &t, RECONDENSED_FLUENCE);
+    let Ground::Formed(f) = formed(&t, &d, &mut trace.clone()).unwrap() else {
+        panic!("an Earth has a surface");
+    };
+    let all = f.surface.value().0;
+    let s = settle(&mut trace, &t, &d);
+    let verdicts: Vec<_> = nodes_of(&trace, codes::CLIMATE_BOILS)
+        .into_iter()
+        .map(|(_, v)| v)
+        .collect();
+    assert_eq!(verdicts, [NodeValue::Flag(true), NodeValue::Flag(false)]);
+    let water = &s.bare.surface.as_ref().unwrap().water;
+    assert!(
+        *water.boiled.value() && !*water.runaway.value(),
+        "{water:?}"
+    );
+    let kept = water.inventory.value().0;
+    assert!(
+        kept > 0.0 && kept < RECONDENSED_SHARE * all,
+        "{kept} of {all}"
+    );
+    let c = s.climate.as_ref().unwrap();
+    assert_eq!(
+        c.liquid.map(|l| *l.value()),
+        Some(LiquidKind::Water),
+        "{c:?}"
+    );
+    assert!(derived_from(&trace, water.runaway.node()).contains(&water.inventory.node()));
+}
+
+#[test]
+#[ignore = "heavy: a full boil loop, 6.3 s at opt-level 0, 0.3 s in release"]
+fn a_cool_small_planet_does_not_boil() {
+    let mut trace = Trace::new();
+    let (au, w) = COOL_SMALL;
+    let (t, d) = water_world_trial(&mut trace, SMALL_MASS, EARTH.core_mass_fraction, w, au);
+    let Ground::Formed(f) = formed(&t, &d, &mut trace.clone()).unwrap() else {
+        panic!("a small planet has a surface");
+    };
+    let s = settle(&mut trace, &t, &d);
+    let water = &s.bare.surface.as_ref().unwrap().water;
+    assert!(
+        !*water.runaway.value() && !*water.boiled.value(),
+        "{water:?}"
+    );
+    assert_eq!(*water.inventory.value(), *f.surface.value());
+}
+
 const _: () = assert!(FINER_SCAN_RATIO < SCAN_RATIO);
 const _: () = assert!(FINER_THAW_STEPS > THAW_STEPS);
 const _: () = assert!(LIGHTER_DAMPING < ALBEDO_DAMPING);
+
+/// Source: an M9V star's effective temperature, 2400 K (Pecaut & Mamajek
+/// 2013, ApJS 208, 9, doi:10.1088/0067-0049/208/1/9, Table 5), the star of
+/// the #492 body; the cool end of Kopparapu et al. 2014's fit (2600 K),
+/// which `runaway_flux` clamps to.
+const M9V: Kelvin = Kelvin(2400.0);
+
+/// Definition: the steam over which a column is a deep supercritical one,
+/// 1e5 bar (legacy `the_492_super_earth_is_a_steam_world` and #438: the
+/// census's empty band runs from 1e3 to 1e5 bar).
+const DEEP_STEAM: Bar = Bar(1.0e5);
+
+/// Source: a steam world's surface, over 1000 K, under every source's
+/// post-runaway surface temperature: Barnes et al. 2013 (Astrobiology 13,
+/// 225, arXiv:1203.5104, about 1400 K), Kasting 1988 (Icarus 74, 472,
+/// about 1500 K) and Goldblatt et al. 2013 (Nature Geosci. 6, 661, about
+/// 1600 K), as study 26 § 4 cites them (legacy
+/// `the_492_super_earth_is_a_steam_world`'s bound: past the moist
+/// plateau, not held at water's critical point).
+const STEAM_WORLD_SURFACE: Kelvin = Kelvin(1000.0);
+
+/// Definition: the thick steam runaway of #438 (legacy `climate.rs`
+/// `a_thick_steam_runaway_settles_past_the_end_of_the_plateau`): 1 M⊕,
+/// a core share of 0.325, 30 % water, at 0.7 AU of the Sun.
+const THICK_STEAM: (f64, f64, f64, f64) = (1.0, 0.325, 0.3, 0.7);
+
+/// Source: the surface of a thick steam runaway past the plateau, 1500 to
+/// 2500 K: Kasting 1988 (*Icarus* 74, 472, doi:10.1016/0019-1035(88)90116-9;
+/// over 1500 K for a full ocean), Goldblatt et al. 2013 (*Nat. Geosci.*
+/// 6, 661, doi:10.1038/ngeo1892; a stable steam state from about
+/// 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K to 2451 K); study 26's
+/// window.
+const THICK_STEAM_WINDOW: (Kelvin, Kelvin) = (Kelvin(1500.0), Kelvin(2500.0));
+
+/// Whether `settled` stands under a steam envelope: its last shell is
+/// `Steam`.
+fn under_steam(settled: &Settled) -> bool {
+    settled
+        .bare
+        .body
+        .layers()
+        .last()
+        .is_some_and(|s| *s.material.value() == Material::Steam)
+}
+
+#[test]
+#[ignore = "heavy: a steam world settled, its pass on the envelope, 8.4 s at opt-level 0, 0.35 s in release"]
+fn the_492_super_earth_is_a_steam_world() {
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, MASS_492, CORE_492, WATER_492, AU_492);
+    let t = with_star(&mut trace, &t, M9V);
+    assert!(t.sources.total_flux().0 > runaway_flux(M9V).0);
+    let s = settle(&mut trace, &t, &d);
+    let hides = s.hides_surface.expect("a body with a surface is judged");
+    assert!(*hides.value());
+    let c = s.climate.as_ref().unwrap();
+    let h2o = *c.atmosphere.partial[&Gas::H2o].value();
+    let temperature = *c.global.surface_temperature.value();
+    assert!(h2o > DEEP_STEAM, "{h2o:?}");
+    assert!(temperature > STEAM_WORLD_SURFACE, "{temperature:?}");
+    assert!(under_steam(&s));
+    // Over the dry core under the steam (Turbet et al. 2020 § 3.1); the
+    // condensed twin is not a bound outside their grid (#684).
+    let layers = s.bare.body.layers();
+    let core = layers[layers.len() - 2];
+    assert!(EarthRadius::from(*core.outer_radius.value()).0 < s.bare.body.bulk().radius.value().0);
+    let code_of = |id| trace.node(id).unwrap().code.as_str().to_owned();
+    let lost = nodes_of(&trace, codes::WATER_STEAM_LOST);
+    let (last, _) = lost.last().expect("a runaway loses steam");
+    assert!(
+        derived_from(&trace, *last)
+            .into_iter()
+            .any(|id| code_of(id) == codes::RADIUS_STEAM)
+    );
+    let water = &s.bare.surface.as_ref().unwrap().water;
+    assert!(
+        derived_from(&trace, water.boiled.node())
+            .into_iter()
+            .any(|id| code_of(id) == codes::CLIMATE_BOILS)
+    );
+    let lines: Vec<_> = nodes_of(&trace, codes::CLIMATE_HIDES_SURFACE)
+        .into_iter()
+        .map(|(_, v)| v)
+        .collect();
+    assert_eq!(lines, [NodeValue::Flag(true), NodeValue::Flag(true)]);
+}
+
+#[test]
+#[ignore = "heavy: a thick steam runaway settled, its pass on the envelope, 7.4 s at opt-level 0, 0.34 s in release"]
+fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
+    let mut trace = Trace::new();
+    let (mass, core, water, au) = THICK_STEAM;
+    let (t, d) = water_world_trial(&mut trace, mass, core, water, au);
+    let s = settle(&mut trace, &t, &d);
+    let w = &s.bare.surface.as_ref().unwrap().water;
+    assert!(*w.runaway.value(), "{w:?}");
+    let c = s.climate.as_ref().unwrap();
+    let h2o = *c.atmosphere.partial[&Gas::H2o].value();
+    let temperature = *c.global.surface_temperature.value();
+    assert!(h2o > DEEP_STEAM, "{h2o:?}");
+    let (low, high) = THICK_STEAM_WINDOW;
+    assert!((low.0..=high.0).contains(&temperature.0), "{temperature:?}");
+    assert!(c.liquid.is_none(), "{c:?}");
+    assert!(*s.hides_surface.expect("judged").value());
+    assert!(under_steam(&s));
+}

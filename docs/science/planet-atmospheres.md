@@ -246,7 +246,11 @@ all of it is at its surface, and its node (`planet.water-layer-mass` or
 `planet.water-beyond-law`) is the surface water as it is. The runaway's
 steam is the surface water: `min(9 H, surface)` is lost, the mantle's
 water stays, and the mass after the steam is `M - (surface - kept)`
-(`after_steam`). The regime, the seafloor's hold on the outgassing
+(`after_steam`). A boil the climate forces (`water::boiled`) loses the
+same steam as the light's (one `steam_lost`) and derives `runaway` and
+`boiled` from the boil loop's verdict; a leftover that condenses back
+(`water::recondensed`) keeps the inventory and is no longer a runaway. The
+regime, the seafloor's hold on the outgassing
 (`released_under_ocean`) and the air's water read the water kept of the
 surface water, never the bulk.
 
@@ -640,9 +644,10 @@ the fluence in J/m² divided by `EARTH_XUV_FLUENCE`, with
 the exponent 4 (`SHORELINE_EXPONENT`) is the paper's. The rewrite's
 `v_esc` reads the whole mass (`Body::whole_mass`: the bulk mass plus a
 water beyond the laws, which the bulk leaves out), as legacy read the
-trial's mass, and the runaway's steam loss reads the same mass; both take
-the bulk radius, the condensed planet's for a water beyond the laws, the
-only radius there is until PR 2d's steam envelope.
+trial's mass, and the runaway's steam loss reads the same mass; both read
+them through `Body::exposed` (an `Exposed`: the radius and the whole mass),
+the bulk radius before the climate and the steam envelope's once the boil
+loop has one (PR 2d).
 
 **Non-thermal loss** (`non_thermal_loss`, after the shoreline, on the whole
 stock, frosts to come included). A thin air is an atmosphere only if the body
@@ -1583,7 +1588,7 @@ absorbs, scanned up from the black-body temperature in steps of at most
 3 % to the critical point. With none, the absorbed light and heat exceed
 the moist limit and the water runs away: the climate then puts all the
 body's water in the air at the temperature of `surface_temperature_k`,
-a placeholder the chain replaces when it boils the ocean. A runaway's steam is already in the gases and is kept as it is.
+a stand-in, as in legacy (`climate::wet_climate`, l.1212): a body without a balance boils (`climate::wet::boils`), and the chain runs its climate again on its steam, so this air is never the one a boiled body keeps. A runaway's steam is already in the gases and is kept as it is.
 
 **Carbonate thermostat.** On a planet with plates and water, weathering
 draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
@@ -2651,6 +2656,321 @@ it, read as `volatiles::methane_saturation_pressure` at the triple-point
 temperature: a `Definition:`, one code path); otherwise it is solved
 again with its CO₂. No new constant.
 
+### Boiling and the steam envelope of the rewrite (study 26)
+
+What PR 2d-3b ports, with the values study 26 of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/26-boiling-and-steam-audit)
+fixed before the code (2026-11-24): `boils` and its loop, the steam
+world line (`hides_surface`) and the steam envelope (`steam_interior`).
+The prose of [the chain](#the-chain-and-the-surface-classes) describes
+legacy; where they differ, this sub-section holds for the rewrite.
+
+#### The boil
+
+- **The criterion** (`Source:`). Kasting 1988 (*Icarus* 74, 472,
+  doi:10.1016/0019-1035(88)90116-9; read, Zenodo record 1253896) finds
+  the outgoing infrared of a saturated column "levels out at higher
+  surface temperatures at a value of about 310 W m⁻²" (§ 3a, Fig. 7a),
+  so that the solar constant a surface temperature needs, `S_eff =
+  F_IR / F_s`, has a maximum, 1.4 S₀ cloud-free (Fig. 7c): past it no
+  balance exists under the critical point and the surface jumps to
+  about 1500 K. Goldblatt et al. 2013 (accepted manuscript, read): "If
+  the net absorption of solar radiation exceeds this limit, then
+  surface temperatures will increase in a 'runaway greenhouse',
+  evaporating the entire ocean", the limit 282 W/m². So "no wet balance
+  under the moist limit" is the published criterion, with no
+  temperature condition (#442).
+- **The verdict** (`climate::wet::boils`). A body that keeps water out
+  of a runaway boils when `wet_balance` is `None` under the starlight
+  its Bond albedo lets in, the air its climate left and its surface's
+  emissivity, whether its thermostat holds it or not. The emissivity is
+  a departure from legacy: legacy passes an emissivity of 1.0; the
+  rewrite passes the emissivity the climate radiated under.
+- **Departure: a regulated climate is judged too** (user, 2026-11-24).
+  Legacy skipped a climate its carbonate thermostat holds
+  (`legacy-final:crates/mapgen/src/planet/mod.rs` l.524-537), taking
+  the thermostat's balance for a wet one. It is not one: the thermostat
+  (`climate::carbon::thermostat`, as legacy's) balances on the climate's
+  column (`Profile::CLIMATE`, cloudy, relative humidity 0.77) at 288 K,
+  while `wet_balance` first needs the saturated column (`Profile::SATURATED`)
+  to send out what the surface absorbs, the moist limit of Kasting 1988
+  and Goldblatt et al. 2013 above. The two part where the absorbed flux
+  lies between the saturated column's peak and what the climate's column
+  sends out at 288 K. Measured on an Earth with a tenth of its N₂ round a
+  7220 K star at 1.2963 S⊕: absorbed 300.785 W/m², the climate's column
+  at 288 K 300.785 W/m² (the thermostat's balance, CO₂ 2.6e-5 bar), the
+  saturated column 290.7 W/m² at 288 K and at most 299.17 W/m² (at
+  308 K), so no wet balance. By the sources such a body runs away; the
+  model boils it. The band is narrow, about 0.5 % under that star's
+  runaway flux (`runaway_flux(7220 K)`, 1.2964 S⊕); it widens when #680
+  lowers the model's threshold. The thermostat is not changed.
+- **Departure: the model's threshold is above Kopparapu's.** With
+  Earth's air, an Earth ocean, emissivity 1 and Bond albedo 0.306, the
+  model's boil threshold is an absorbed 299.43 W/m², 1.268 S⊕, against
+  Kopparapu et al. 2014's 1.107 S⊕ (`habitable::runaway_flux`, 1.106).
+  Cause: `wet_balance` needs the saturated column's outgoing radiation
+  to reach the absorbed flux, and that column peaks at 299.4 W/m² near
+  360 K before it falls to its 289.7 W/m² asymptote (the plateau); Kasting
+  1988 Fig. 7a puts the level near 310 W/m². About 7 of the 7.8 W/m² gap
+  between the threshold and a body at 1.2346 S⊕ (0.9 AU) is the wet
+  column's outgoing radiation lying 7 W/m² above CERES (#680). In the
+  chain `water()`'s runaway flag (`runaway_flux`, 1.106 S⊕) already
+  catches such planets before `boils` is asked; `boils` decides for the
+  bodies it passes. The tests therefore take Venus's orbit, where the
+  verdict does not depend on the gap.
+- **Internal heat** (`Source:`). Kasting 1988 § 3d treats the
+  difference between the outgoing infrared and the absorbed sunlight as
+  the accretional heat flux a surface temperature needs; about
+  150 W/m² of it runs a young Earth away under 0.7 S₀ (Fig. 13). Barnes
+  et al. 2013 (*Astrobiology* 13, 225, doi:10.1089/ast.2012.0851,
+  arXiv:1203.5104v2, read in UVic's repository) state the rule for any
+  source: if the energy
+  from "the Sun (Simpson, 1927), impacts (Abe and Matsui, 1988), or
+  tidal heating" exceeds the limit, "runaway heating of the surface
+  would ensue, causing evaporation of the entire ocean". The absorbed
+  light plus the internal heat is what `boils` weighs.
+- **The vapour bounded by the water** (`Definition:`, a mass balance:
+  the vapour cannot weigh more than the body's water, `m_w g / 4πR²`).
+  Kasting 1988 § 3a: a full ocean (1.4 × 10²⁴ g) gives 270 bar of steam;
+  "if the mass of the oceans was somewhat lower, the H₂O pressure at the
+  surface would vary smoothly from the saturated to the unsaturated
+  region, and the transition from a moist to a runaway greenhouse would
+  occur at a lower temperature". Boukrouche et al. 2021 (Fig. 9) find
+  the end of the plateau at about 1050 K under 10 bar and 1800 K under
+  260 to 295 bar: the thinner the steam, the sooner the column sends out
+  more than the limit. A trace of water therefore finds a balance (it
+  does not boil), all of it in the air.
+- **After the boil.** The steam escapes at the energy-limited rate, 9 kg
+  of water per kg of hydrogen (study 21, unchanged). In the rewrite
+  (`settled::settled_with`): a first run (`settled::run`: the surface
+  pass, the air, the climate and its reducing-air fallback) from the
+  water its light leaves (`water::water`), then its verdict
+  (`settled::verdict`, the `planet.climate.boils` node, which reads the
+  solver's settled state, never a second solve). No boil: that run
+  stands, and `planet.water.boiled` is recorded false from the verdict
+  (the imposed leaf of `water` is replaced). A boil: a run from the
+  steam forced on the formed planet's surface water (`water::boiled`,
+  runaway and boiled from the verdict), then `settled::after_boil`: a
+  steam run that kept no water stands; otherwise its leftover, condensed
+  again (`water::recondensed`, the runaway node from the leftover's
+  inventory), is run and judged, kept if it does not boil, the steam run
+  standing if it does. Each run's nodes stay in the trace. Hamano et al. 2013
+  (abstract read) split planets in two: "type I" keep their water as
+  oceans, "type II", inside a critical distance, are "desiccated by
+  hydrodynamic escape". Keeping the leftover as an ocean only if its own
+  air finds a wet balance follows the same criterion as the boil.
+  **Departure (user, 2026-11-24):** Goldblatt et al. 2013 find a cloud-free steam
+  atmosphere absorbing more than the limit at today's sunlight, "a
+  climate bistability": a body with a wet balance may also hold a stable
+  steam state. The model takes the wet branch whenever one exists; no
+  source says which branch a body that boiled takes back.
+- **No moist-greenhouse loss** (a departure kept by the user on
+  2026-11-24, unchanged from legacy):
+  Kasting 1988 § 4 finds the stratosphere wet past about 1.1 S₀ (a
+  mixing ratio over 10⁻³ loses Earth's oceans in under 4 Gyr); a body
+  that keeps a wet balance loses no water to escape in the model.
+
+#### The steam world line
+
+The rewrite's line is `science::steam::hides_surface` and
+`science::steam::STEAM_WORLD_MIN_BAR`.
+
+- **Water's critical point** (`Source:`, already in the rewrite):
+  `science::water::CRITICAL_PRESSURE`, 22.064 MPa, and
+  `CRITICAL_POINT_TEMPERATURE`, 647.096 K (IAPWS SR1-86(1992), section 2,
+  "Reference constants", read: identical to the IAPS 1983 statement).
+- **Why no surface shows** (`Source:`). Pierrehumbert 2023 (*ApJ* 944,
+  20, doi:10.3847/1538-4357/acafdf, arXiv:2212.02644, read § 1-2):
+  "once the ocean surface temperature exceeds the critical point, there
+  is no longer a distinction between the fluid and gaseous phase", the
+  atmosphere's adiabat continuing "seamlessly" into the supercritical
+  fluid. The column's base is supercritical when its pressure and its
+  temperature are both past the critical point.
+- **`STEAM_WORLD_MIN_BAR`: no source sets ten times the critical
+  pressure.** Legacy's line (2206.4 bar) rests on its own census (no
+  runaway between 1e3 and 1e5 bar), the old code's output, which cannot
+  be a calibration's target. Searched and not found: a pressure past
+  which a steam column is called a steam world, in Turbet et al. 2020,
+  Pierrehumbert 2023, Aguichine et al. 2021, Kasting 1988 and Goldblatt
+  et al. 2013. The line that follows from the sources is the critical
+  pressure itself, a `Definition:` (the base fluid supercritical); the
+  647 K condition then holds by construction, since a steam column's
+  surface is never colder than its saturation temperature, and stays
+  as a guard. **Decision (user, 2026-11-24):** `STEAM_WORLD_MIN_BAR`
+  is `science::water::CRITICAL_PRESSURE` (220.64 bar), a `Definition:`,
+  not ten times it. A runaway between 220.64 and 2206.4 bar becomes a
+  steam world; a boiled Earth that kept its 270 bar of ocean is one.
+- **Turbet's radius for steam worlds only** (user, 2026-11-24, as
+  legacy). Turbet et al. inflate the transit radius of every runaway
+  with water (on an Earth core, 320 to 370 km under 27 bar, 510 to
+  600 km under 270 bar, derived); the model's radius is the surface's,
+  so a runaway whose rock shows keeps its rock radius.
+
+#### The steam envelope (Turbet et al. 2020)
+
+Turbet et al. 2020 (*A&A* 638, A41, doi:10.1051/0004-6361/201937151,
+arXiv:1911.08878v3, read in full; v3 is the "final version published in
+A&A", with "small typos in Tables 1 and 2" corrected):
+
+The rewrite's laws are `science::steam::base_pressure` (C.9, C.10),
+`science::steam::steam_temperature` (Eq. 3), `science::steam::envelope`
+(Eq. 2, one call that returns the base pressure, the core's gravity, the
+temperature and the thickness) and `science::steam::THICKNESS_CAP`.
+
+- **Eq. 2** (`Source:`), printed as `z = (1 / (ln(x/(1−x) · g²/(4πG
+  P_t)) · R T/(M g)) − 1/R_core)⁻¹`, the same as Appendix C (C.8):
+  `1/z = M g / (R T ln(P_surf/P_t)) − 1/R_core`. It is not upside down
+  (v1, v2 and v3 read): the earlier note of this page was wrong.
+  `P_surf = x/(1−x) g²/(4πG)` (C.9, C.10), `x` the water's share of the
+  whole planet (Appendix D: `M_planet = M_core/(1−x)`), `g` and `R_core`
+  the core's. The paper uses `R` = 8.314, `M` = 1.8e-2 kg/mol and `G` =
+  6.67e-11; the rewrite's `MOLAR_GAS_CONSTANT`, `H2O_MOLAR_MASS`
+  (18.015e-3) and `GRAVITATIONAL_CONSTANT` change `z` by under 0.1 %.
+- **`P_transit` 0.1 Pa** (`Source:`, § 2.2: it "varies little across the
+  range of parameters we explored and is roughly equal to 10⁻¹ Pa").
+- **Eq. 3 and Table 2** (`Source:`), `log₁₀ T = β₁ + β₂x + β₃y + β₄z +
+  β₅xy + β₆y² + β₇x³ + β₈x²y + β₉xy² + β₁₀y⁴`, `x = (log₁₀ x_H₂O −
+  α₁)/α₂`, `y = (log₁₀ g − α₃)/α₄` (g in m/s²), `z = (log₁₀ S − α₅)/α₆`
+  (S in S⊕). Table 2 of v3, read digit by digit on the rendered page:
+  α = −3.550, 1.310, 1.099, 4.683e-1, 7.664e-1, 4.224e-1; β = 2.846,
+  1.555e-1, 8.777e-2, 6.045e-2, 1.143e-2, 1.736e-2, 1.859e-2, 4.314e-2,
+  3.393e-2, −1.034e-2. Legacy's `TURBET_ALPHA` and `TURBET_BETA` match.
+  v1 and v2 print α₁ = +3.550 and the α in another order: never use them.
+- **The clamps of Eq. 3's inputs** (`Source:` each bound). § 2.2: valid
+  "for irradiation from 1 to 30 S⊕ …, surface gravity from 0.2 to
+  6 g⊕, and water vapor pressure from 2.7 bar to 27 kbar". § 2.1: the
+  structures the fit was made on span 27 bar to 270 kbar of steam. The
+  rewrite keeps legacy's clamp of the water share to the shares whose
+  steam weighs 27 bar to 270 kbar: clamped at 27 kbar, a 4.78 M⊕ body
+  with 12 % water comes out 1.59 R⊕ (Zeng's Earth-like core
+  table, 1.48 R⊕), under the 1.64 R⊕ legacy gave it condensed, against
+  the paper's main
+  result (§ 3.1: steam planets have "a significantly larger radius than
+  in the condensed water configuration"). Clamped at 270 kbar it comes
+  out 1.68 R⊕ on Zeng's core, over that 1.64 R⊕: the choice restores
+  the paper's result there, but not on the rewrite's own core, where
+  the body is 1.643 R⊕ against its condensed twin's 1.655 R⊕
+  ([planet interiors](planet-interiors.md), Refs #684). Only the
+  temperature is clamped; Eq. 2 takes the planet's own share and
+  gravity.
+- **The stellar spectrum** (a departure, documented). Turbet et al.
+  2020 compute their fits with the model of Turbet et al. 2019 (§ 2.1:
+  "For more details on the model, we refer the reader to Appendix A of
+  Turbet et al. (2019)"). That appendix (*A&A* 628, A12,
+  doi:10.1051/0004-6361/201935585, arXiv:1906.03527, read) runs the
+  radiative transfer with "the Sun (assumed to be the host star)" at a
+  fixed zenith angle of 60°, and defines `S_eff = OLR / ((1 − A_p)
+  F⊕)`, `A_p` the planetary albedo under that light. Eq. 3's `S` is a
+  flux of Sun-like light: the 2020 paper gives no correction for other
+  stars (it applies its relations to TRAPPIST-1 in § 3.2, and says only
+  that the runaway limit depends on the host star, Appendix D step 3).
+  The rewrite feeds Eq. 3 the plain sum of its sources' fluxes
+  (`interior::steam_interior`, the trial's `sources.total_flux()`),
+  whatever their spectra, so a steam world round a cool star (the #492
+  body's 2400 K M9V) reads a fit made for the Sun's light.
+- **Calibration of the thickness cap** (the core's radius, legacy's
+  "Calibration, no source", kept). Eq. 2 has no finite `z` once
+  `R T ln(P_surf/P_t)/(M g) ≥ R_core`: the atmosphere is unbound (the
+  "U-shape" of § 3.1, where "efficient atmospheric escape mechanisms
+  should take place"; C.9 "does not hold for inflated atmospheres").
+  The cap `z ≤ R_core` binds from `R T ln/(M g) = R_core/2`, so it also
+  caps bound envelopes thicker than the core's radius. It binds in the
+  paper's own grid: on the worked example's core below (0.3 M⊕,
+  0.750 R⊕, 5 % water), Eq. 2 gives a bound `z` of 1.18 `R_core` at
+  10 S⊕ and 1.73 `R_core` at 30 S⊕, the cap binding from about 5.7 S⊕
+  (derived, with the rewrite's constants). Searched and not found: a published
+  thickness or radius past which a steam envelope stops being bound, in
+  Turbet et al. 2020, Aguichine et al. 2021 and Pierrehumbert 2023.
+- **The worked example** (§ 3.1): "a 0.3 M⊕ pure silicate core planet
+  (located just above the runaway greenhouse irradiation threshold) with
+  a 5 % water-to-rock ratio … the transit radius lies around 1.2 R⊕",
+  with about 2 m/s² there. With Zeng's MgSiO₃ table, the one
+  the paper points to (footnote 2; 0.750 R⊕ at 0.3 M⊕, interpolated),
+  Eqs. 2 and 3 give 1.23 R⊕ at
+  1 S⊕ (1.22 with `x` = 0.05/1.05) and 2.05 m/s² at that radius for
+  the whole planet's mass, 0.3/0.95 M⊕ (1.95 for the core alone;
+  derived): a tier-1 test with a source, independent of the model's
+  interior. Legacy's 1.17 R⊕ came from its own rock radius.
+- **Past the fit's water shares** (a departure, documented). Appendix A
+  holds `R = R_core + z` while the steam weighs "significantly lower than
+  the total mass" and its base pressure stays well under about 1e10 Pa,
+  where MgSiO₃ starts to compress. Aguichine et al. 2021 (*ApJ* 914, 84,
+  doi:10.3847/1538-4357/abfa99, arXiv:2105.01102, read; fits on Zenodo
+  4552188) cover water shares of
+  0.1 to 1, 1 to 20 M⊕ and `T_irr` 400 to 1300 K, with `T_irr = T_eff
+  √(R★/2a)` (Eq. 9), about 4.3 S⊕ and more round a Sun-like star: none
+  of their grid sits near the runaway limit. The #492 body (12 % water
+  near 1 S⊕, 5.6e5 bar of steam) is outside both papers. The rewrite
+  keeps Turbet's Eqs. 2 and 3 with the clamps above; Aguichine's fits
+  are left for later (an issue) for hot planets past 10 % water.
+- **The climate under the envelope.** The rewrite's climate reads the
+  bulk's gravity and radius (`ClimateInputs::of`). For a water world
+  past the laws (formed at 355 K or more, about 3.6 S⊕ and over) that
+  bulk is the dry one: Turbet's `g_core` and `R_core`, the gravity and
+  radius at the interior-atmosphere boundary where Eqs. 1 to 3 and C.9
+  set the surface, so not solving the climate again on the inflated
+  body is no departure at the surface. A steam world formed with a
+  water layer (under 355 K, as near the runaway limit) has the
+  condensed water world for its bulk: its climate reads the condensed
+  planet's gravity, not the core's. For the #492 body that is about
+  1.78 g⊕ (4.78 M⊕ at legacy's condensed 1.64 R⊕) against 1.93 g⊕ at
+  its core (4.22 M⊕ at Zeng's 1.48 R⊕), some 8 % lower (derived): a
+  documented departure. The gravity at the radiating level is lower
+  still (about 1.65 g⊕ for the #492 body, derived); the limiting
+  outgoing radiation is "only weakly dependent on gravity"
+  (Pierrehumbert 2023, after Pierrehumbert 2010), and Kopparapu et al.
+  2014 move the inner edge by about −10 % to +7 % from 0.1 to 5 M⊕
+  ([habitable zone](habitable-zone.md)): a few per cent at most. In
+  the rewrite, `settled::steam_world` keeps the kept run's climate
+  (`Settled::climate`) and solves none on the envelope.
+- **The steam loss on the inflated body** (user, 2026-11-24). The
+  envelope's radius depends on the water kept, which depends on the
+  loss. One pass, no fixed point: the envelope is computed on the water
+  handed to the loss (before it), and the energy-limited loss and the
+  cosmic shoreline read that radius and the whole mass. A larger
+  envelope than the water left would hold, so the loss is a deliberate
+  upper bound. Turbet et al. § 3.1 support reading the transit radius
+  (escape "can be very strong" at its low gravity); legacy read the
+  condensed body. After that loss the steam world line is read again
+  on the water kept (user, 2026-11-24): the envelope is built only if
+  the kept steam still weighs at least the critical pressure, otherwise
+  the planet is a runaway without an envelope. The climate is not
+  solved again, so its air holds more water vapour than the water kept
+  (a documented departure). The rewrite's steps, in
+  `settled::steam_world` after the boil loop: the line
+  (`record_hides_surface`) on the kept run's water, its climate's H₂O
+  and temperature; past it, `interior::steam_interior` on the ground's
+  surface water (the water handed to the loss); one more pass from the
+  same water entry (`water::water` for the light, `water::boiled` with
+  the first verdict), its `planet.water.steam-lost` and the cosmic
+  shoreline reading the inflated body (`Body::exposed`, through
+  `bare::surface_pass` and `bare::bare_air`), its `boiled` the kept
+  run's node; the line read again on that pass's water and air, with
+  the climate's temperature; past it again, `steam_interior` on the
+  water kept, over the rock that pass left. Two
+  `planet.climate.hides-surface` nodes, the last in
+  `Settled::hides_surface`.
+
+#### Test windows
+
+| Test | Bound | From |
+| --- | --- | --- |
+| Earth's air, an Earth ocean, 1.0 AU | does not boil | Earth keeps its oceans (observation) |
+| Same, at Venus's orbit, 0.723 AU (1.91 S⊕), `a_wet_venus_boils` | boils | Kasting 1988 § 3a, Fig. 7 (a wet Venus runs away); past Kopparapu et al. 2014's limit, 1.107 S⊕ (`habitable::runaway_flux`) |
+| A trace of water (1e-4 bar, 1e-9 of the mass) | does not boil | Kasting 1988 § 3a, Boukrouche et al. 2021 Fig. 9 (property) |
+| Thick steam (≥ 260 bar) past the limit; 30 % water at 0.7 AU, `a_thick_steam_runaway_settles_past_the_end_of_the_plateau` | 1500 to 2500 K, a steam world | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
+| Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
+| A steam world's radius | over its condensed radius, inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past § 2.2's 27 kbar | Turbet et al. 2020 § 3.1 (property) |
+| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
+| A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
+| A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
+| F0V (7220 K) at 1.2963 S⊕, a tenth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (300.8 W/m²) over the saturated column's peak (299.2 W/m²), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
+| Same, under an XUV fluence of 2e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band |
+
+The 1500 to 2500 K window extrapolates Boukrouche et al. 2021, who stop
+at 295 bar and find the plateau's end constant past it, to columns of
+1e5 bar.
+
 ## Life
 
 `life` decides from the climate whether life arose, and `oxygenate` gives
@@ -2740,7 +3060,7 @@ The first rule that holds wins:
 |---|---|---|
 | 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
-| 3 | `steam-world` | in water runaway, at least 2206 bar of steam (ten times water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
+| 3 | `steam-world` | in water runaway, at least 220.64 bar of steam (water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
 | 4 | `lava-world` | surface liquid is lava (at least 1673 K, no water kept) |
 | 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
@@ -2752,15 +3072,16 @@ The first rule that holds wins:
 A `steam-world` (issue #492) is a runaway whose water stands as a deep
 supercritical column over the rock. Above water's critical point there
 is no liquid–gas boundary, so no surface shows, lava or rock. The line
-of ten times the critical pressure (`STEAM_WORLD_MIN_BAR`) is a
+of ten times the critical pressure (`STEAM_WORLD_MIN_BAR`) was a
 calibration: in the census no runaway holds between 1e3 and 1e5 bar of
-steam, so it cuts through an empty band. A wet planet is never one.
+steam, so it cuts through an empty band. The rewrite takes the critical
+pressure itself (study 26). A wet planet is never one.
 Once the surface is known, the chain derives the interior again
 (`interior::steam_interior`): the water layer gives way to a `Steam`
 layer of the water kept, on top of the iron and rock. Its thickness
 comes from Turbet et al. 2020 (A&A 638, A41, arXiv:1911.08878): Eq. 2
 in the form of their Appendix C, for an isothermal envelope in
-hydrostatic balance. The printed Eq. 2 has `RT/(Mg)` upside down.
+hydrostatic balance; the printed Eq. 2 is the same law (study 26).
 
 ```text
 1/z = M g / (R T ln(P_surf / P_transit)) − 1/R_core
@@ -2777,8 +3098,12 @@ steam. `T` comes from their Eq. 3 and Table 2, a polynomial in
   structures the fit was made on (§2.1).
 
 §2.2 calls Eq. 3 valid only up to 27 kbar, but clamped there it puts a
-steam world below its condensed twin. The paper's own example comes back
-1.17 R⊕ (a 0.3 M⊕ silicate core with 5 % water; "around 1.2 R⊕").
+steam world below its condensed twin on Zeng's core (1.59 against
+1.64 R⊕); clamped at 270 kbar it is above it there (1.68 R⊕), though
+not on the rewrite's own core (1.643 against 1.655 R⊕, #684). The paper's own example comes back
+1.17 R⊕ on legacy's rock (a 0.3 M⊕ silicate core with 5 % water;
+"around 1.2 R⊕"), 1.23 R⊕ on the silicate core the paper used (study
+26).
 Density and gravity count the whole mass. The climate is not solved
 again under the new gravity, and the cause trees replay the surface on
 the interior from before the steam.
@@ -3093,6 +3418,10 @@ DOI are the ones the text gives; an entry without them is cited without
 them above. How far each one was read (abstract only, as quoted by
 another paper, from memory) is said where it is used.
 
+- Aguichine, Mousis, Deleuil and Marcq 2021, *ApJ* 914, 84,
+  doi:10.3847/1538-4357/abfa99, arXiv:2105.01102, irradiated ocean
+  planets, their grid and Eq. 9 (read; fits on Zenodo, record
+  4552188).
 - Anderson et al. 2011, doi:10.1126/science.1211001, Mercury's
   dipole.
 - Angus, de Reuck et al. 1979, nitrogen's triple point, through
@@ -3104,6 +3433,9 @@ another paper, from memory) is said where it is used.
   doi:10.1126/science.201.4356.611, Titan's N₂ from NH₃.
 - Bailey, Ahlsved and Meadows 2011, arXiv:1102.2554, Titan's surface
   albedo in the methane windows (read).
+- Barnes, Mullins, Goldblatt, Meadows, Kasting and Heller 2013,
+  *Astrobiology* 13, 225, doi:10.1089/ast.2012.0851, arXiv:1203.5104v2,
+  tidal heat as a runaway trigger, § 2 (read).
 - Baraffe et al. 2015, the luminosity of low-mass stars at the ZAMS.
 - Bertrand et al. 2022, *Icarus* 373, 114764, Triton.
 - Biver et al. 2022, *Comets III*, arXiv:2207.04800, Table 3.
@@ -3111,8 +3443,9 @@ another paper, from memory) is said where it is used.
   doi:10.1016/j.pss.2024.105863, arXiv:2403.09917, NH₃'s sublimation
   pressure at 80 to 120 K.
 - Bono et al. 2019, the age of Earth's inner core.
-- Boukrouche, Lichtenberg and Pierrehumbert 2021,
-  doi:10.3847/1538-4357/ac1345.
+- Boukrouche, Lichtenberg and Pierrehumbert 2021, *ApJ* 919, 130,
+  doi:10.3847/1538-4357/ac1345, arXiv:2107.14150, the end of the
+  plateau (Fig. 9) and the post-runaway equilibrium (§ 4.3; read).
 - Budyko 1969, *Tellus* 21, 611, doi:10.3402/tellusa.v21i5.10109, the
   ice cover's edge (read).
 - Bullock and Grinspoon 2001, doi:10.1006/icar.2000.6570,
@@ -3182,7 +3515,9 @@ another paper, from memory) is said where it is used.
 - Goldblatt et al. 2009,
   doi:10.1038/ngeo692, nitrogen and Earth's temperature.
 - Goldblatt, Robinson, Zahnle and Crisp 2013,
-  doi:10.1038/ngeo1892, the moist limit.
+  doi:10.1038/ngeo1892, the moist limit, the steam state and its
+  bistability (accepted manuscript, UVic repository, read); corrigendum
+  doi:10.1038/ngeo2296 (read: 286 W/m² absorbed, not 294).
 - Gray and Nagel 1989, the limit of the convective envelope.
 - Gurrola 1995, PhD thesis, Stanford University, Triton's surface
   pressure from the Voyager 2 radio occultation, 14 ± 1 µbar (not
@@ -3221,6 +3556,9 @@ another paper, from memory) is said where it is used.
 - Karkoschka 2001, albedos of the Uranian moons.
 - Karwat 1924, NH₃'s sublimation pressure at 162.39 K, through Fray
   and Schmitt 2009 as Blakley et al. 2024 quote it.
+- Kasting 1988, *Icarus* 74, 472, doi:10.1016/0019-1035(88)90116-9,
+  runaway and moist greenhouses, § 3a, 3d and 4, Figs. 4, 7 and 13
+  (read, Zenodo record 1253896).
 - Kasting 1991, Appendix B, CO₂'s pseudo-adiabat.
 - Kelemen and Manning 2015, doi:10.1073/pnas.1507889112,
   carbon recycling.
@@ -3334,6 +3672,9 @@ another paper, from memory) is said where it is used.
   doi:10.1029/2000JC000438, the albedo of Arctic sea ice (abstract
   read).
 - Pierrehumbert 2010, section 4.4.
+- Pierrehumbert 2023, *ApJ* 944, 20, doi:10.3847/1538-4357/acafdf,
+  arXiv:2212.02644, the supercritical column of a post-runaway
+  waterworld, § 1 and 2 (read).
 - Plaut et al. 2007, *Science* 316, 92, doi:10.1126/science.1139672,
   Mars's south polar layered deposits (abstract read).
 - Quirico et al. 1999, *Icarus* 139, 159, Triton's CO₂ ice.
@@ -3390,8 +3731,14 @@ another paper, from memory) is said where it is used.
 - Trenberth and Smith 2005, *J. Climate* 18, 864,
   doi:10.1175/JCLI-3299.1, the mass of Earth's dry air.
 - Tu et al. 2015, the saturation of a star's X-ray emission.
-- Turbet et al. 2020, *A&A* 638, A41, arXiv:1911.08878, Eq. 2 and
-  Appendix C.
+- Turbet, Bolmont, Ehrenreich, Gratier, Leconte, Selsis, Hara and
+  Lovis 2020, *A&A* 638, A41, doi:10.1051/0004-6361/201937151,
+  arXiv:1911.08878v3, Eqs. 2 and 3, Table 2, Appendices A, C and D (read
+  in full; v1 and v2 read for Eq. 2 and Table 2).
+- Turbet, Ehrenreich, Lovis, Bolmont and Fauchez 2019, *A&A* 628, A12,
+  doi:10.1051/0004-6361/201935585, arXiv:1906.03527, Appendix A (read):
+  the climate model behind Turbet et al. 2020's fits, run under the
+  Sun's light.
 - Tryka et al. 1993, "Spectroscopic determination of the phase
   composition and temperature of nitrogen ice on Triton", *Science*
   261, 751, doi:10.1126/science.261.5122.751 (abstract read); Tryka et
@@ -3436,6 +3783,10 @@ another paper, from memory) is said where it is used.
   L2, doi:10.1088/2041-8205/787/1/L2, arXiv:1404.4992 (read).
 - Yung, Allen and Pinto 1984, *ApJS* 55, 465,
   doi:10.1086/190963, Titan's photochemistry, Tables 2A and 5B.
+- Zeng, Sasselov and Jacobsen 2016, *ApJ* 819, 127,
+  doi:10.3847/0004-637X/819/2/127, the mass-radius tables of rocky
+  planets Turbet et al. build on (the MgSiO₃ and Earth-like tables of
+  the author's site, read).
 - Zahnle and Catling 2017, *ApJ* 843, 122,
   doi:10.3847/1538-4357/aa7846, the cosmic shoreline.
 - Zahnle et al. 2003, doi:10.1016/S0019-1035(03)00048-4.

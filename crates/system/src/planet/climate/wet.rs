@@ -4,8 +4,8 @@
 //! (`wet_balance`, `first_balance`, `wet_climate` and
 //! `collapsed_climate`, l.1109-1270).
 
-use super::Numerics;
 use super::body::ClimateBody;
+use super::{ClimateInputs, Numerics};
 use science::balance::{
     LEAST_EMISSIVITY, LEAST_STEP, OLR_FLOOR, OVERSHOOT, Point, absorbed, regula_falsi, skin,
     surface_temperature,
@@ -137,8 +137,10 @@ pub(crate) fn first_balance(
 /// water vapour follows its temperature: the coldest balance of
 /// [`wet_balance`]. Without one (a moist runaway), all of its water as
 /// vapour ([`ClimateBody::water_column`]) and the temperature
-/// [`surface_temperature`] gives it: a placeholder that 2d-3b's boiling
-/// loop replaces, since the body boils.
+/// [`surface_temperature`] gives it. As in legacy's `wet_climate`
+/// (l.1212) this is a stand-in: a body without a balance boils
+/// ([`boils`]), and `settled` runs the climate again on its steam, so
+/// this air is never the one a boiled body keeps.
 pub(crate) fn wet_climate(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
@@ -163,6 +165,52 @@ pub(crate) fn wet_climate(
         &mut body.columns,
     );
     (steam, t)
+}
+
+/// Whether a body that keeps water out of a runaway boils it (legacy
+/// `climate::boils`): under the light its `bond_albedo` lets in plus its
+/// internal heat, with `air` (the air its climate left) and its
+/// surface's `emissivity`, no wet balance exists ([`wet_balance`] is
+/// `None`).
+///
+/// Source: Kasting 1988 (Icarus 74, 472, doi:10.1016/0019-1035(88)90116-9,
+/// section 3a, a moist atmosphere that cannot radiate what it absorbs
+/// runs away, and section 3d, the internal (accretional) heat a surface
+/// temperature needs counts with the light, Fig. 13); Goldblatt et al.
+/// 2013 (Nature Geosci. 6, 661, doi:10.1038/ngeo1892, a runaway once the
+/// absorbed flux exceeds the moist limit); Barnes et al. 2013
+/// (Astrobiology 13, 225, doi:10.1089/ast.2012.0851, section 2, the rule
+/// for any heat source: the energy from the Sun, impacts or tidal heating
+/// past the limit evaporates the entire ocean). There is no temperature
+/// condition. The vapour is bounded by the water the body keeps
+/// ([`ClimateBody::water_column`]), so a trace of water cannot hold its
+/// outgoing radiation at the moist limit and does not boil (Kasting 1988
+/// section 3a; Boukrouche et al. 2021 Fig. 9).
+///
+/// Departures from legacy:
+///
+/// - the emissivity: legacy passes an emissivity of 1.0; the rewrite passes
+///   the surface's own `emissivity`, so the verdict reads the surface
+///   the climate radiated under;
+/// - a regulated climate is judged too (user decision, 2026-11-24).
+///   Legacy skipped it (`mod.rs` l.524-537), taking the thermostat's
+///   balance for a wet one, but the thermostat balances on the climate's
+///   column at 288 K ([`super::carbon::thermostat`]), not on the
+///   saturated one the moist limit reads: past the saturated column's
+///   peak a regulated climate runs away by the sources above
+///   (`docs/science/planet-atmospheres.md`, study 26, "The boil").
+pub(crate) fn boils(
+    inputs: &ClimateInputs,
+    air: &PartialPressures,
+    bond_albedo: Fraction,
+    emissivity: Fraction,
+) -> bool {
+    let mut body = ClimateBody::new(inputs, Numerics::DEFAULT);
+    if !body.wet() {
+        return false;
+    }
+    let light = body.starlight(bond_albedo);
+    wet_balance(&mut body, light, air, emissivity).is_none()
 }
 
 /// A collapsed climate: its air, its temperature, and the steps it took

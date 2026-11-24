@@ -1,15 +1,18 @@
 //! Tier 1: the body's albedo, the wet balance and the collapse of a CO₂
 //! the surface cannot keep.
 
+use super::ClimateInputs;
 use super::body::ClimateBody;
+use super::carbon::thermostat;
 use super::fixture::{earth, moved};
-use super::wet::{collapsed_climate, wet_balance};
+use super::wet::{boils, collapsed_climate, wet_balance};
 use super::{COLLAPSE_ITERATIONS, COLLAPSE_TOLERANCE, Light, Numerics};
 use science::balance::EARTH_DRY_AIR;
+use science::habitable::{OCEAN_MASS, runaway_flux};
 use science::radiation::albedo::{ShortwaveCache, shortwave_budget};
 use science::radiation::gases::PartialPressures;
 use science::surface::{ICE_COVERED_TEMPERATURE, surface_vapour};
-use science::units::{Bar, EarthFlux, Fraction, Kelvin};
+use science::units::{Bar, EarthFlux, Fraction, Kelvin, Kilogram};
 use science::volatiles::co2_saturation_pressure;
 
 /// Definition: the Bond albedo the tests take the light under, 0.3, a
@@ -192,4 +195,113 @@ fn collapse_iterations_is_converged() {
     assert!(c.iterations > 0, "nothing collapsed: {c:?}");
     assert!(c.iterations < COLLAPSE_ITERATIONS, "{c:?}");
     assert!(c.air.co2 <= kept * (1.0 + COLLAPSE_TOLERANCE), "{c:?}");
+}
+
+/// Source: Earth's Bond albedo, 0.306 (NASA Earth fact sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html).
+const EARTH_BOND: f64 = 0.306;
+
+/// Definition: the water of the trace test, 1e-4 bar of vapour, a test
+/// input far under what a wet balance needs to hold the moist limit
+/// (Kasting 1988 section 3a; Boukrouche et al. 2021 Fig. 9).
+const TRACE_WATER: Bar = Bar(1e-4);
+
+/// Definition: the tolerance of the column of the trace test, 1e-9 bar,
+/// the roundings of the inverse of `column_pressure`.
+const TRACE_TOLERANCE: f64 = 1e-9;
+
+/// Source: Venus's semi-major axis, 0.723 au (NASA Venus fact sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html): where a wet
+/// Earth runs away (Kasting 1988, Icarus 74, 472, section 3a and Fig. 7:
+/// the saturated column's outgoing radiation levels out near 310 W/m²,
+/// far under what a wet Venus absorbs).
+const VENUS_ORBIT: f64 = 0.723;
+
+/// The verdict on `inputs` of Earth's air, Bond albedo and a surface
+/// radiating as a black body.
+fn boils_earth(inputs: &ClimateInputs) -> bool {
+    boils(
+        inputs,
+        &EARTH_DRY_AIR,
+        Fraction::new(EARTH_BOND).unwrap(),
+        Fraction::new(1.0).unwrap(),
+    )
+}
+
+/// `inputs` of Earth keeping its present ocean, not run away.
+fn with_ocean(mut inputs: ClimateInputs) -> ClimateInputs {
+    inputs.water = OCEAN_MASS;
+    inputs.runaway = false;
+    inputs
+}
+
+#[test]
+fn earth_keeps_its_ocean_at_one_au() {
+    // An observation: Earth's oceans have not boiled.
+    assert!(!boils_earth(&with_ocean(earth())));
+}
+
+#[test]
+fn a_wet_venus_boils() {
+    let inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
+    // Past Kopparapu et al. 2014's limit for the Sun (1.107 S⊕).
+    let flux: f64 = inputs.sources.iter().map(|s| s.flux.0).sum();
+    let limit = runaway_flux(inputs.sources[0].effective_temperature).0;
+    assert!(flux > limit, "{flux} S⊕ against the limit {limit} S⊕");
+    assert!(boils_earth(&inputs));
+}
+
+#[test]
+fn a_runaway_does_not_boil_again() {
+    let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
+    inputs.runaway = true;
+    assert!(!boils_earth(&inputs));
+}
+
+#[test]
+fn a_regulated_climate_with_a_wet_balance_does_not_boil() {
+    // Earth at 1 AU under its carbonate thermostat: the verdict reads the
+    // air the thermostat left, and a wet balance exists under it. Being
+    // regulated is not what keeps it from boiling: a regulated climate
+    // whose saturated column cannot send out what it absorbs boils
+    // (`heavy_tests::a_boil_that_escapes_all_its_water_ends_dry`).
+    let inputs = with_ocean(earth());
+    let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
+    let bond = Fraction::new(EARTH_BOND).unwrap();
+    let black = Fraction::new(1.0).unwrap();
+    let light = body.starlight(bond);
+    let (air, _, regulated) = thermostat(&mut body, light, &inputs.air, black);
+    assert!(regulated, "{air:?}");
+    assert!(!boils(&inputs, &air, bond, black));
+}
+
+#[test]
+fn a_trace_of_water_does_not_boil() {
+    // Kasting 1988 section 3a: too little vapour cannot hold the
+    // outgoing radiation at the moist limit.
+    let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
+    let area = 4.0 * std::f64::consts::PI * inputs.radius.0 * inputs.radius.0;
+    inputs.water = Kilogram(TRACE_WATER.0 * 1e5 * area / inputs.gravity.0);
+    let column = ClimateBody::new(&inputs, Numerics::DEFAULT)
+        .water_column()
+        .0;
+    assert!((column - TRACE_WATER.0).abs() < TRACE_TOLERANCE, "{column}");
+    assert!(!boils_earth(&inputs));
+}
+
+#[test]
+fn two_half_suns_boil_as_one() {
+    // The verdict reads the sum of the fluxes (`ClimateBody::starlight`)
+    // under an albedo that is an input: this guards that sum.
+    let split = |au: f64| {
+        let mut inputs = with_ocean(moved(&earth(), au));
+        let half = Light {
+            flux: EarthFlux(inputs.sources[0].flux.0 / 2.0),
+            ..inputs.sources[0]
+        };
+        inputs.sources = vec![half, half];
+        inputs
+    };
+    assert!(boils_earth(&split(VENUS_ORBIT)));
+    assert!(!boils_earth(&split(1.0)));
 }

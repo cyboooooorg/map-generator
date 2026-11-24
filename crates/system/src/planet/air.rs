@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use super::codes::{self, AIR_GASES};
 use super::core::CoreRecord;
 use super::draws::Drawn;
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::interior::InteriorError;
 use crate::Trial;
 use science::escape::{escape_velocity, shoreline_kept};
@@ -91,10 +91,11 @@ pub(crate) struct Air {
 ///    comes first: the CO2 waits on the reducing air (step 4).
 /// 2. **Shoreline** (`planet.air.shoreline-kept`): the share
 ///    [`shoreline_kept`] at the escape velocity of the whole mass
-///    ([`Body::whole_mass`]: the bulk mass plus a water beyond the laws)
-///    and the bulk radius (the condensed planet's for a water beyond the
-///    laws, the only one until PR 2d's steam envelope), under the XUV
-///    fluence of all the stars, with the dynamo; each partial
+///    and the radius of the [`Exposed`] view: the bulk's, with the bulk
+///    mass plus a water beyond the laws ([`Body::whole_mass`]); for a
+///    steam world's pass on its envelope (`settled::steam_world`), the
+///    envelope's radius and its whole mass, core and steam; under the
+///    XUV fluence of all the stars, with the dynamo. Each partial
 ///    (`planet.air.kept.<gas>`) is its outgassed one times that share.
 ///    The escape velocity has no node (ledger ruling 1): the share
 ///    derives from the whole mass and the radius, the fluences and the
@@ -145,6 +146,7 @@ pub(crate) fn air(
     trial: &Trial,
     drawn: &Drawn,
     body: &Body,
+    exposed: &Exposed,
     surface: Traced<Kilogram>,
     water: &Water,
     regime: &Traced<TectonicRegime>,
@@ -154,7 +156,7 @@ pub(crate) fn air(
 ) -> Result<Air, InteriorError> {
     let volatiles = mantle(trial, drawn, body, surface, water, regime);
     let ch4 = volatiles.record(Gas::Ch4, trace)?;
-    let shoreline = shoreline(trial, body, core, trace)?;
+    let shoreline = shoreline(trial, exposed, core, trace)?;
     let share = shoreline.value().get();
     let runaway = *water.runaway.value();
     let keep = |gas: Gas, out: Traced<Bar>, trace: &mut Trace| {
@@ -524,13 +526,13 @@ pub(super) fn lyman_sources<'a>(trial: &Trial, histories: &'a [History]) -> Vec<
 /// of [`air`]).
 fn shoreline(
     trial: &Trial,
-    body: &Body,
+    exposed: &Exposed,
     core: &CoreRecord,
     trace: &mut Trace,
 ) -> Result<Traced<Fraction>, InteriorError> {
-    let radius = body.bulk().radius;
-    let (mass, mut from) = body.whole_mass();
-    let velocity = escape_velocity(mass, Metre::from(*radius.value()));
+    let radius = exposed.radius;
+    let mut from = exposed.mass_from.clone();
+    let velocity = escape_velocity(exposed.mass, Metre::from(*radius.value()));
     let (_, fluence) = trial.sources.band_total(|s| &s.xuv);
     from.push(radius.node());
     from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));

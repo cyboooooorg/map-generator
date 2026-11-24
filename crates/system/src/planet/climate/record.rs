@@ -10,8 +10,9 @@ use crate::planet::bare::Bare;
 use crate::planet::codes;
 use crate::planet::interior::InteriorError;
 use science::radiation::gases::PartialPressures;
+use science::steam::hides_surface;
 use science::surface::Liquid;
-use science::units::{Bar, Fraction};
+use science::units::{Bar, Fraction, Kelvin};
 use std::collections::BTreeMap;
 use timeline::{
     Atmosphere, Code, Gas, GlobalClimate, LiquidKind, NodeId, Provenance, Trace, Traced,
@@ -324,6 +325,71 @@ pub(crate) fn record_titan_like(
     Ok(trace.record(
         Code::of(codes::CLIMATE_TITAN_LIKE),
         science::surface::titan_like_air(air),
+        &from,
+    )?)
+}
+
+/// Whether the water the climate kept boils (`verdict`, from
+/// [`super::wet::boils`]), recorded as `planet.climate.boils` from the
+/// climate's Bond albedo and emissivity, each partial of its
+/// atmosphere, the water's runaway and inventory, the three heats, the
+/// bulk's radius and gravity, and each source's flux and effective
+/// temperature: everything the verdict reads.
+///
+/// # Errors
+///
+/// The errors of the trace.
+pub(crate) fn record_boils(
+    climate: &Climate,
+    bare: &Bare,
+    verdict: bool,
+    trace: &mut Trace,
+) -> Result<Traced<bool>, InteriorError> {
+    let surface = bare
+        .surface
+        .as_ref()
+        .expect("only a planet with a surface has a climate");
+    let bulk = bare.body.bulk();
+    let mut from = vec![climate.global.bond_albedo.node(), climate.emissivity.node()];
+    from.extend(climate.atmosphere.partial.values().map(Traced::node));
+    from.extend([
+        surface.water.runaway.node(),
+        surface.water.inventory.node(),
+        bare.heat.radiogenic.node(),
+        bare.heat.tidal.node(),
+        bare.heat.secular.node(),
+        bulk.radius.node(),
+        bulk.surface_gravity.node(),
+    ]);
+    for s in bare.trial.sources.iter() {
+        from.extend([s.flux.node(), s.effective_temperature.node()]);
+    }
+    Ok(trace.record(Code::of(codes::CLIMATE_BOILS), verdict, &from)?)
+}
+
+/// Whether a runaway's steam hides its surface
+/// ([`science::steam::hides_surface`]), recorded as
+/// `planet.climate.hides-surface` from the runaway flag, the H₂O partial
+/// and the surface temperature (no partial: 0 bar, from the other two).
+/// It takes nodes, not a [`Climate`], so that the steam pass can read the
+/// line a second time on the air it re-runs.
+///
+/// # Errors
+///
+/// The errors of the trace.
+pub(crate) fn record_hides_surface(
+    runaway: Traced<bool>,
+    h2o: Option<Traced<Bar>>,
+    temperature: Traced<Kelvin>,
+    trace: &mut Trace,
+) -> Result<Traced<bool>, InteriorError> {
+    let steam = h2o.map_or(Bar(0.0), |h| *h.value());
+    let mut from = vec![runaway.node()];
+    from.extend(h2o.map(|h| h.node()));
+    from.push(temperature.node());
+    Ok(trace.record(
+        Code::of(codes::CLIMATE_HIDES_SURFACE),
+        hides_surface(*runaway.value(), steam, *temperature.value()),
         &from,
     )?)
 }

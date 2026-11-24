@@ -278,7 +278,39 @@ settles, not a law); the laws it calls stay in `science`.
 - **The steam envelope** (`hides_surface`, `interior::steam_interior`):
   a water world past the water laws gets its steam envelope and its
   radius (#492), and the steam loss and shoreline read that body
-  instead of the condensed radius.
+  instead of the condensed radius. Decided with the user on 2026-11-24
+  after study 26:
+  - `STEAM_WORLD_MIN_BAR` is water's critical pressure,
+    `science::water::CRITICAL_PRESSURE` (220.64 bar), a `Definition:`,
+    not legacy's ten times it; the 647 K condition stays as a guard.
+  - Only a steam world (`hides_surface`) gets Turbet et al. 2020's
+    envelope and radius, as in legacy; any other runaway keeps its rock
+    radius.
+  - The steam loss and the cosmic shoreline read the inflated body in
+    one pass, which resolves the circularity (the radius depends on the
+    water kept, the water kept on the loss): the envelope is computed
+    on the water handed to the loss, then the loss reads that radius
+    and the whole mass. No fixed point; documented as a deliberate
+    upper bound of the loss. After that loss the steam world line is
+    read again on the water kept: the envelope is built only if the
+    kept steam still weighs at least the critical pressure, otherwise
+    the planet is a runaway without an envelope (user, 2026-11-24).
+  - The climate is not solved again on the inflated body, nor after
+    the loss above: its air holds more vapour than the water kept, a
+    documented departure. For a water world past the laws the climate
+    already reads the dry bulk's gravity and radius, which are Turbet's
+    `g_core` and `R_core`, where the paper sets the surface (Eqs. 1
+    and 3, C.9): no departure at the surface. A steam world formed
+    with a water layer (under 355 K, as near the runaway limit) reads
+    the condensed planet's gravity instead: about 1.78 against
+    1.93 g⊕ for the #492 body, some 8 % lower, a documented departure.
+    The radiating level's lower gravity (about 1.65 g⊕ for #492) is
+    not seen either, a few per cent of the moist limit at most.
+  - Kept as documented departures, issues filed separately: the wet
+    branch is taken when a stable steam state coexists (Goldblatt et
+    al. 2013's bistability), no moist-greenhouse water loss (Kasting
+    1988 § 4), Aguichine et al. 2021 for hot planets past 10 % water.
+  - One new calibration: the envelope's thickness cap (`R_core`).
 - **Mars's test air:** the climate bound on Mars (214 ± 5 K, the NASA
   fact sheet's average temperature) runs on a surface pressure from a
   cited source (for example the Viking or MSL REMS annual mean), set in
