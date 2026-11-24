@@ -1757,12 +1757,13 @@ CERES value, the Bond albedo inside the 0.29 to 0.31 target.
   by 24 %, since `P₂` keeps 0.375 at the pole where the exact value is
   0; at 90° by 2 %. Searched and not found: a published error for a
   polar cap share.
-- *Limits* (left to 2d-3). The shape holds for a spin period much
+- *Limits*. The shape holds for a spin period much
   shorter than the year; eccentricity only scales the magnitude, by
   `(1 − e²)^(−1/2)`, and leaves the distribution `s(x, β)` unchanged
   (Nadeau & McGehee 2017, eqs. 1 and 2). A slow or tidally locked
   rotator (Mercury and Venus count as slow) has no zonal annual mean
-  and needs another weighting. Between 47° and 63° of obliquity (117°
+  and needs another weighting: a locked one uses `locked_sunlit_ice`
+  (see "Tidally locked rotators"); a slow unlocked one is not handled. Between 47° and 63° of obliquity (117°
   to 133°) the insolation takes a "W" shape that the degree two misses;
   the degree six is the first to catch it.
 
@@ -1810,8 +1811,8 @@ the violet to green bands, and with it an emissivity of 0.59 ± 0.16 at
 et al. 2017, *Icarus* 287, 207, doi:10.1016/j.icarus.2016.11.012; read
 in arXiv:1604.06129). 0.75 lies inside Pluto's range and 1.4 σ under
 Triton's; Triton's temperature rests on the pair it forms with
-`N2_ICE_EMISSIVITY` (0.89), which is left as it is until the climate of
-2d-3 can refit both on Triton. Searched and not found: a bolometric
+`N2_ICE_EMISSIVITY`, 0.80 since 2d-3a (see "Calibration of
+`FROST_ALBEDO` and the N₂ ice emissivity"). Searched and not found: a bolometric
 Bond albedo of either body. Study 25 keeps 0.75 with a new target,
 Triton's 38 ± 1 K under an N₂ emissivity of 0.80 (issue #673; see "The
 climate solver of the rewrite" below).
@@ -2017,7 +2018,7 @@ Where it departs:
 
 **Emissivity** (`climate::emissivity`, `N2_ICE_EMISSIVITY`, issue #529).
 The surface radiates as a black body except under nitrogen frost, which
-radiates with an emissivity of 0.89 over the share of the disc its own
+radiates with an emissivity of `N2_ICE_EMISSIVITY` (0.80, `frost_emissivity`) over the share of the disc its own
 amount covers (`frost / 0.02 bar` of N₂ alone: the most volatile frost
 condenses last and lies over the others, as Triton's N₂ lies over its
 CO₂). A grey surface sends out `ε σ T⁴`: `surface_temperature_k` and the
@@ -2025,7 +2026,7 @@ wet balance take the column's outgoing radiation times `ε`, as through a
 transparent air, which holds over a nitrogen frost (its vapour is at
 most 0.125 bar). The emissivity is solved in the same fixed point as the
 albedo, damped the same way, and stored with the climate so that it
-reproduces (worlds stored before it read 1). 0.89 is a calibration on
+reproduces (worlds stored before it read 1). The legacy's 0.89 was a calibration on
 Triton (above); Stansberry, Pisano & Yelle 1996 (*Planet. Space Sci.*
 44, 945, doi:10.1016/0032-0633(96)00001-3, abstract checked) compute
 0.85 for β-N₂ of 1 cm grains and 0.40 for 1 mm grains (α-N₂ 0.30 and

@@ -47,11 +47,28 @@ pub const REGOLITH_ALBEDO: f64 = 0.11;
 pub const ICE_ALBEDO: f64 = 0.6;
 
 /// Calibration: the albedo of the N2, CH4 and CO2 frosts, 0.75, fitted on
-/// Pluto, 0.72 +- 0.07 (Buratti et al. 2017, *Icarus* 287,
-/// doi:10.1016/j.icarus.2016.11.012). Triton's, 0.82 +- 0.05 (Hillier et
-/// al. 1990), is 1.4 sigma above it: the pair with the N2 ice's emissivity
-/// is refitted with the climate, in 2d-3. Study 24, section 4.
+/// Triton's N2 ice at 38 +- 1 K (Tryka et al. 1993, *Science* 261, 751,
+/// and 1994, *Icarus* 112, 513), given [`N2_ICE_EMISSIVITY`]: at the
+/// orbit-mean flux of 1.508 W/m2 (NASA Neptune Fact Sheet) the balance
+/// `eps sigma T^4 = (1 - A) F / 4` gives `A` = 0.749 and 37.97 K for
+/// 0.75. Hillier et al. 1990 (*Science* 250, 419) give 0.82 +- 0.05 and
+/// Hillier et al. 1991 (*J. Geophys. Res.* 96) a bolometric 0.85 +- 0.05
+/// with an emissivity of 0.46 +- 0.16 at 37.7 K: the pair misses them by
+/// 1.4 to 2 sigma. Pluto's 0.72 +- 0.07 (Buratti et al. 2017, *Icarus*
+/// 287, doi:10.1016/j.icarus.2016.11.012) holds the albedo, Triton the
+/// temperature. Searched and not found: a bolometric albedo and an
+/// emissivity of Triton measured apart from this balance (issue #673;
+/// `docs/science/planet-atmospheres.md`, "Calibration of `FROST_ALBEDO`
+/// and the N2 ice emissivity").
 pub const FROST_ALBEDO: f64 = 0.75;
+
+/// Source: the emissivity of N2 ice, 0.80: Lellouch et al. 2011 (*Icarus*
+/// 214, 701) for large grains, as Meza et al. 2019 (arXiv:1903.02315,
+/// section 4) adopt it for Triton and Pluto, whose occultations constrain
+/// only `(1 - A) / eps`. Stansberry, Pisano & Yelle 1996 (*Planet. Space
+/// Sci.* 44, 945) give pure beta-N2 0.85 at 1 cm grains and 0.40 at 1 mm.
+/// One value for alpha- and beta-N2. Issue #673.
+pub const N2_ICE_EMISSIVITY: f64 = 0.80;
 
 /// Calibration: the albedo of the SO2 frost, 0.63, the legacy's fit on
 /// Io's Bond albedo (Simonelli & Veverka 1988, from memory, not checked),
@@ -100,6 +117,13 @@ pub const ICE_LINE_CONTRAST: Kelvin = Kelvin(42.0);
 /// that mean. The start of the frozen branch of 2d-3.
 pub const ICE_COVERED_TEMPERATURE: Kelvin =
     Kelvin(ICE_LINE_TEMPERATURE.0 - ICE_LINE_CONTRAST.0 / 3.0);
+
+/// Definition: the mean surface temperature over which a body keeps no
+/// ice, `ICE_LINE_TEMPERATURE + 2/3 ICE_LINE_CONTRAST`, about 296 K: its
+/// poles reach the ice line at that mean ([`ice_line_share`] is 0 from
+/// there). Legacy's `ICE_FREE_K`.
+pub const ICE_FREE_TEMPERATURE: Kelvin =
+    Kelvin(ICE_LINE_TEMPERATURE.0 + 2.0 / 3.0 * ICE_LINE_CONTRAST.0);
 
 /// Source: the mean thickness of Antarctica's ice with its shelves, 1937 m
 /// (Bedmap2, Fretwell et al. 2013, *The Cryosphere* 7, 375,
@@ -171,6 +195,33 @@ pub fn frost_cover(frost: &PartialPressures) -> Fraction {
     share(frost.total() / FROST_LAYER.0)
 }
 
+/// Emissivity of a surface with `frost` (bar, gas by gas) on its ground:
+/// [`N2_ICE_EMISSIVITY`] over the share of its disc that its nitrogen
+/// frost covers ([`frost_cover`] of N2 alone), 1 elsewhere. Rock, water
+/// ice and the other frosts radiate close to a black body; nitrogen, the
+/// most volatile frost, condenses last and lies over the others. The
+/// result is `1 - (1 - N2_ICE_EMISSIVITY) * share`.
+pub fn frost_emissivity(frost: &PartialPressures) -> Fraction {
+    let nitrogen = PartialPressures {
+        n2: frost.n2.max(0.0),
+        ..PartialPressures::default()
+    };
+    share(1.0 - (1.0 - N2_ICE_EMISSIVITY) * frost_cover(&nitrogen).get())
+}
+
+/// Share of the light that falls on the ice of a tidally locked body
+/// whose ice covers the area share `area`: `max(0, 2a - 1)^2`. A locked
+/// rotator receives `4 mu` of the mean light on its day side (`mu` the
+/// cosine of the angle from the substellar point, Lambert's law) and
+/// none at night; its ice forms from the antistellar point, so the ice
+/// of share `a` covers the night side and `2a - 1` of the day side's
+/// area, at a light `(2a - 1)^2` (`Definition:`, derived; see
+/// `docs/science/planet-atmospheres.md`, "Tidally locked rotators").
+pub fn locked_sunlit_ice(area: Fraction) -> Fraction {
+    let beyond = (2.0 * area.get() - 1.0).max(0.0);
+    share(beyond * beyond)
+}
+
 /// Share of the annual-mean light that falls on the polar caps beyond
 /// `x = edge` (`x` the sine of the latitude, the caps' area share being
 /// `1 - edge`), on a rapid rotator of `obliquity`: the integral of the
@@ -183,8 +234,8 @@ pub fn frost_cover(frost: &PartialPressures) -> Fraction {
 /// 125129, doi:10.1016/j.jmaa.2021.125129, Theorem 1.1 and eq. 39,
 /// `A2 = -5/8`). The truncation at `P2` overstates Earth's cap by 4.4 %
 /// (0.0026 of the disc; derived by integrating their eq. 1); the shape
-/// holds for a spin period much shorter than the year, so a slow or
-/// tidally locked rotator is out of scope (2d-3). See
+/// holds for a spin period much shorter than the year: a tidally locked
+/// rotator uses [`locked_sunlit_ice`] instead. See
 /// `docs/science/planet-atmospheres.md`, "Ice weighted by sunlight".
 pub fn sunlit_cap(edge: f64, obliquity: Radian) -> Fraction {
     let c = obliquity.0.cos();
@@ -207,6 +258,8 @@ pub fn sunlit_cap(edge: f64, obliquity: Radian) -> Fraction {
 ///   caps receive at `obliquity` ([`sunlit_cap`]).
 /// - The frost lies over the ocean's ice and the land, [`frost_cover`] of
 ///   the disc; the SO2 frost takes its part of that share.
+/// - On a tidally `locked` body the ice is weighted by
+///   [`locked_sunlit_ice`] of its area share instead.
 /// - The rest is bare land.
 pub fn cover(
     t: Kelvin,
@@ -214,6 +267,7 @@ pub fn cover(
     radius: Metre,
     frost: &PartialPressures,
     obliquity: Radian,
+    locked: bool,
 ) -> Cover {
     let (sea, ice, sunlit) = if water.0 > 0.0 {
         let rho = ice_ih_density(
@@ -226,7 +280,11 @@ pub fn cover(
         (
             ocean_fraction(water.0 / OCEAN_MASS.0).get(),
             line * reach,
-            sunlit_cap(1.0 - line, obliquity).get() * reach,
+            if locked {
+                locked_sunlit_ice(Fraction::new(line).expect("a share")).get()
+            } else {
+                sunlit_cap(1.0 - line, obliquity).get()
+            } * reach,
         )
     } else {
         (0.0, 0.0, 0.0)

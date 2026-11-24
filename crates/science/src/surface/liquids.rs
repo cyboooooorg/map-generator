@@ -11,9 +11,9 @@
 //! the temperature the climate solves for.
 
 use super::cover::{FROST_LAYER, share};
-use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STEFAN_BOLTZMANN};
 use crate::radiation::gases::PartialPressures;
-use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal};
+use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal, WattPerSquareMetre};
 use crate::volatiles::{
     ETHANE_TRIPLE_TEMPERATURE, METHANE_TRIPLE_TEMPERATURE, NITROGEN_TRIPLE_TEMPERATURE,
     co2_frost_pressure, ethane_boiling_temperature, methane_saturation_bar,
@@ -92,6 +92,15 @@ const ETHANE_FUSION_ENTHALPY: f64 = 2_790.0;
 /// interaction parameter was found. See `docs/science/atmospheres.md`.
 const METHANE_EXCESS_W_OVER_R: f64 = 75.3;
 
+/// Temperature of the substellar point of a tidally locked body that
+/// absorbs `absorbed` (W/m2, the mean over its disc, under its own
+/// albedo): `(4 absorbed / sigma)^(1/4)`, Kite et al. 2016 (*ApJ* 828,
+/// 80, arXiv:1606.06740, eq. 1), `sqrt(2)` times the equilibrium
+/// temperature (`Definition:`, derived).
+pub fn substellar_temperature(absorbed: WattPerSquareMetre) -> Kelvin {
+    Kelvin((4.0 * absorbed.0 / STEFAN_BOLTZMANN).powf(0.25))
+}
+
 /// A liquid on a body's surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Liquid {
@@ -116,7 +125,9 @@ pub(super) fn bar(p: Pascal) -> f64 {
 /// diagrams, each window holding its lower edge and leaving out its upper
 /// one:
 ///
-/// - lava from [`LAVA_TEMPERATURE`] on a body that has kept no water
+/// - lava from [`LAVA_TEMPERATURE`], read on the hotter of `t` and the
+///   `substellar` temperature of a tidally locked body
+///   ([`substellar_temperature`]; `None` for any other), on a body that has kept no water
 ///   (with water on top, its steam or supercritical fluid covers the
 ///   rock: Hamano, Abe & Genda 2013, doi:10.1038/nature12163);
 /// - water from the melting of the stable ice to the boiling point at the total
@@ -135,6 +146,7 @@ pub fn liquid(
     water: Kilogram,
     runaway: bool,
     condensate: &PartialPressures,
+    substellar: Option<Kelvin>,
 ) -> Option<Liquid> {
     let pressure = Pascal(air.total() * PASCALS_PER_BAR);
     let water_on_top = water.0 > 0.0;
@@ -142,7 +154,8 @@ pub fn liquid(
         boiling_temperature(pressure)
             .is_some_and(|boils| t.0 >= melting_temperature(pressure).0 && t.0 < boils.0)
     };
-    if t.0 >= LAVA_TEMPERATURE.0 && !water_on_top {
+    let hottest = substellar.map_or(t.0, |ss| t.0.max(ss.0));
+    if hottest >= LAVA_TEMPERATURE.0 && !water_on_top {
         Some(Liquid::Lava)
     } else if water_on_top && !runaway && water_window() {
         Some(Liquid::Water)
