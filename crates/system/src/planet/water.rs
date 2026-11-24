@@ -9,7 +9,7 @@
 
 use super::codes;
 use super::draws::Drawn;
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::interior::{InteriorError, Water as Held};
 use crate::Trial;
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss};
@@ -68,23 +68,24 @@ pub(crate) fn surface_water(
 /// Without a runaway it keeps its surface water. In a runaway that water
 /// is steam in the air (the mantle's water stays where it is), where the
 /// XUV light splits it and the hydrogen escapes at the energy-limited
-/// rate ([`energy_limited_loss`] at the body's radius and its whole mass,
-/// [`Body::whole_mass`], under the XUV fluence of all its stars) with
+/// rate ([`energy_limited_loss`] at the radius and the whole mass of
+/// `exposed`, [`Body::exposed`], under the XUV fluence of all its stars) with
 /// [`WATER_PER_HYDROGEN`] kg of water for each kg of hydrogen: the steam
 /// lost (`planet.water.steam-lost`) is `min(9 H, surface)`, and the
 /// inventory what is left. The oxygen left behind is not tracked. For a
-/// water beyond the laws the whole mass holds the steam, at the condensed
-/// planet's radius: the only radius there is until PR 2d's steam
-/// envelope.
+/// water beyond the laws the whole mass holds the steam; the radius is
+/// the one `exposed` carries (the condensed planet's before the climate,
+/// a steam envelope's after it).
 ///
-/// `boiled` is false: the climate's boiling loop is the next pull request's.
+/// `boiled` is false, imposed, before the climate; once settled the
+/// boil loop derives it ([`boiled`]).
 ///
 /// # Errors
 ///
 /// The errors of the trace.
 pub(crate) fn water(
     trial: &Trial,
-    body: &Body,
+    exposed: &Exposed,
     surface: Traced<Kilogram>,
     trace: &mut Trace,
 ) -> Result<Water, InteriorError> {
@@ -100,24 +101,8 @@ pub(crate) fn water(
         .collect();
     let runaway = trace.record(Code::of(codes::WATER_RUNAWAY), pressure > 1.0, &light)?;
     let inventory = if *runaway.value() {
-        let radius = body.bulk().radius;
-        let (mass, mass_from) = body.whole_mass();
-        let (_, fluence) = trial.sources.band_total(|s| &s.xuv);
-        let hydrogen = energy_limited_loss(Metre::from(*radius.value()), mass, fluence);
-        let mut from: Vec<NodeId> = vec![runaway.node(), radius.node()];
-        from.extend(mass_from);
-        from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));
-        from.push(surface.node());
-        let lost = trace.record(
-            Code::of(codes::WATER_STEAM_LOST),
-            Kilogram((WATER_PER_HYDROGEN * hydrogen.0).min(surface.value().0)),
-            &from,
-        )?;
-        trace.record(
-            Code::of(codes::WATER_INVENTORY),
-            Kilogram(surface.value().0 - lost.value().0),
-            &[surface.node(), lost.node()],
-        )?
+        let lost = steam_lost(trial, exposed, surface, runaway, trace)?;
+        inventory_after(surface, lost, trace)?
     } else {
         trace.record(
             Code::of(codes::WATER_INVENTORY),
@@ -130,6 +115,90 @@ pub(crate) fn water(
         inventory,
         runaway,
         boiled,
+    })
+}
+
+/// The steam a runaway loses (`planet.water.steam-lost`) and, from it, the
+/// inventory it leaves ([`WATER_INVENTORY`](codes::WATER_INVENTORY)):
+/// `min(9 H, surface)`, `H` the energy-limited hydrogen loss at the
+/// radius and whole mass of `exposed`. One code path for the loss, shared
+/// by [`water`] and [`boiled`].
+fn steam_lost(
+    trial: &Trial,
+    exposed: &Exposed,
+    surface: Traced<Kilogram>,
+    runaway: Traced<bool>,
+    trace: &mut Trace,
+) -> Result<Traced<Kilogram>, InteriorError> {
+    let (_, fluence) = trial.sources.band_total(|s| &s.xuv);
+    let hydrogen = energy_limited_loss(Metre::from(*exposed.radius.value()), exposed.mass, fluence);
+    let mut from: Vec<NodeId> = vec![runaway.node(), exposed.radius.node()];
+    from.extend(exposed.mass_from.iter().copied());
+    from.extend(trial.sources.iter().map(|s| s.xuv.fluence.node()));
+    from.push(surface.node());
+    Ok(trace.record(
+        Code::of(codes::WATER_STEAM_LOST),
+        Kilogram((WATER_PER_HYDROGEN * hydrogen.0).min(surface.value().0)),
+        &from,
+    )?)
+}
+
+/// What a steam loss leaves of the surface water.
+fn inventory_after(
+    surface: Traced<Kilogram>,
+    lost: Traced<Kilogram>,
+    trace: &mut Trace,
+) -> Result<Traced<Kilogram>, InteriorError> {
+    Ok(trace.record(
+        Code::of(codes::WATER_INVENTORY),
+        Kilogram(surface.value().0 - lost.value().0),
+        &[surface.node(), lost.node()],
+    )?)
+}
+
+/// The water of a planet whose ocean the climate boiled: the steam forced
+/// (legacy `regime::steam`), whatever its light. Runaway and boiled both
+/// derive from the boil loop's `verdict`; the steam lost is that of
+/// [`water`] ([`steam_lost`]), at the radius and mass of `exposed`.
+///
+/// # Errors
+///
+/// The errors of the trace.
+pub(crate) fn boiled(
+    trial: &Trial,
+    exposed: &Exposed,
+    surface: Traced<Kilogram>,
+    verdict: Traced<bool>,
+    trace: &mut Trace,
+) -> Result<Water, InteriorError> {
+    let runaway = trace.record(Code::of(codes::WATER_RUNAWAY), true, &[verdict.node()])?;
+    let lost = steam_lost(trial, exposed, surface, runaway, trace)?;
+    let inventory = inventory_after(surface, lost, trace)?;
+    let boiled = trace.record(Code::of(codes::WATER_BOILED), true, &[verdict.node()])?;
+    Ok(Water {
+        inventory,
+        runaway,
+        boiled,
+    })
+}
+
+/// The water of a boil whose leftover condensed back: `left`'s inventory
+/// and `boiled`, no longer a runaway (`planet.water.runaway`, derived from
+/// the inventory and the runaway it replaces).
+///
+/// # Errors
+///
+/// The errors of the trace.
+pub(crate) fn recondensed(left: &Water, trace: &mut Trace) -> Result<Water, InteriorError> {
+    let runaway = trace.record(
+        Code::of(codes::WATER_RUNAWAY),
+        false,
+        &[left.inventory.node(), left.runaway.node()],
+    )?;
+    Ok(Water {
+        inventory: left.inventory,
+        runaway,
+        boiled: left.boiled,
     })
 }
 

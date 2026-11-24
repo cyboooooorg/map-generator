@@ -72,6 +72,16 @@ pub(crate) enum Body {
     Giant(GiantRecord),
 }
 
+/// What escape reads of a planet: the radius it loses its air from and
+/// the whole mass that holds it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Exposed {
+    pub radius: Traced<EarthRadius>,
+    pub mass: Kilogram,
+    /// The nodes `mass` derives from.
+    pub mass_from: Vec<NodeId>,
+}
+
 impl Body {
     /// The bulk of the whole planet.
     pub(crate) fn bulk(&self) -> &Bulk {
@@ -86,9 +96,9 @@ impl Body {
     /// mass plus the water beyond the laws ([`Water::BeyondLaw`]) when
     /// the body has one, which the bulk leaves out. The one mass that
     /// holds a planet's steam (`super::water::water`) and its air (the
-    /// shoreline of `super::air::air`). Both take the bulk's radius with
-    /// it, the condensed planet's for a water beyond the laws: the only
-    /// radius the rewrite has until PR 2d's steam envelope.
+    /// shoreline of `super::air::air`). Both read it through
+    /// [`Body::exposed`], with a radius that a steam envelope may
+    /// replace.
     pub(crate) fn whole_mass(&self) -> (Kilogram, Vec<NodeId>) {
         let bulk = self.bulk().mass;
         let beyond = match self {
@@ -107,6 +117,16 @@ impl Body {
             from.push(water.node());
         }
         (mass, from)
+    }
+
+    /// The bulk's radius and [`Body::whole_mass`]: what escape reads.
+    pub(crate) fn exposed(&self) -> Exposed {
+        let (mass, mass_from) = self.whole_mass();
+        Exposed {
+            radius: self.bulk().radius,
+            mass,
+            mass_from,
+        }
     }
 
     /// The layers from the centre out: a rocky planet's shells, a

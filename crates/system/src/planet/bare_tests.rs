@@ -101,8 +101,8 @@ fn every_surface_value_traces_back_to_the_trial() {
             ("air.outgassed-co2", s.outgassed_co2.node()),
             ("air.reducing", s.reducing.node()),
         ];
-        // `water.boiled` stays an imposed leaf (false) until the climate's
-        // boiling loop derives it (#659).
+        // `water.boiled` stays an imposed leaf (false) until `settled`
+        // derives it from the boil loop's verdict.
         nodes.extend(
             s.atmosphere
                 .partial

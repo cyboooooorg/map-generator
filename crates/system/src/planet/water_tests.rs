@@ -5,18 +5,18 @@
 
 use super::codes;
 use super::draws::Drawn;
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::interior::{Water as Held, interior};
 use super::regime::regime;
 use super::tests::{
     EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, WATER_WORLD_FRACTION,
-    WET_VENUS, derive, derive_surface, derived_from, reference_trial, trial,
+    WET_VENUS, derive, derive_surface, derived_from, reference_trial, trial, with_fluence,
 };
-use super::water::{after_steam, surface_water, water};
+use super::water::{after_steam, boiled, recondensed, surface_water, water};
 use crate::Trial;
 use science::habitable::{SURFACE_WATER_SHARE, runaway_flux};
-use science::units::{EarthFlux, Kelvin, Kilogram, Watt};
-use timeline::{Code, Heat, Provenance, StellarSources, TectonicRegime, Trace, Water};
+use science::units::{EarthFlux, EarthRadius, Kelvin, Kilogram, Watt};
+use timeline::{Code, Heat, Provenance, StellarSources, TectonicRegime, Trace, Traced, Water};
 
 /// Source: Io in legacy's reference table: 0.0150 M_E (JPL satellite
 /// physical parameters, GM over Earth's), an Fe-FeS core up to 20 % of the
@@ -107,7 +107,7 @@ fn runs_away(lights: &[(f64, f64)]) -> bool {
     let t = lit(&mut trace, &t, lights);
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let surface = surface_water(&t, &drawn, &body, &mut trace).unwrap();
-    let w = water(&t, &body, surface, &mut trace).unwrap();
+    let w = water(&t, &body.exposed(), surface, &mut trace).unwrap();
     *w.runaway.value()
 }
 
@@ -392,7 +392,7 @@ fn the_runaway_threshold_reads_every_source() {
     let t = lit(&mut trace, &t, &[(total / 2.0, cool), (total / 2.0, hot)]);
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let surface = surface_water(&t, &drawn, &body, &mut trace).unwrap();
-    let w = water(&t, &body, surface, &mut trace).unwrap();
+    let w = water(&t, &body.exposed(), surface, &mut trace).unwrap();
     let light: Vec<_> = t
         .sources
         .iter()
@@ -402,5 +402,101 @@ fn the_runaway_threshold_reads_every_source() {
     assert_eq!(
         trace.node(w.runaway.node()).unwrap().code,
         Code::of(codes::WATER_RUNAWAY)
+    );
+}
+
+/// Definition: the XUV fluence of the steam tests, J/m², far under
+/// `WET_VENUS`'s own: at its own fluence its 9 H exceeds its whole ocean
+/// and both losses are capped at the surface water, which would hide
+/// their dependence on the radius.
+const LOW_FLUENCE: f64 = 1.0e13;
+
+/// Definition: the factor of the larger radius of the steam tests.
+const LARGER_RADIUS: f64 = 1.2;
+
+/// `WET_VENUS` under [`LOW_FLUENCE`], its body and surface water, and the
+/// radius `LARGER_RADIUS` times larger.
+fn wet_venus_low() -> (Trace, Trial, Body, Traced<Kilogram>, Exposed, Exposed) {
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &WET_VENUS);
+    let t = with_fluence(&mut trace, &t, LOW_FLUENCE);
+    let body = interior(&t, &drawn, &mut trace).unwrap();
+    let surface = surface_water(&t, &drawn, &body, &mut trace).unwrap();
+    let exposed = body.exposed();
+    let radius = trace
+        .leaf(
+            Code::of("test.radius"),
+            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
+            Provenance::Input,
+        )
+        .unwrap();
+    let larger = Exposed {
+        radius,
+        ..exposed.clone()
+    };
+    (trace, t, body, surface, exposed, larger)
+}
+
+/// The steam lost by `w`, the last node its inventory derives from.
+fn lost_by(trace: &Trace, w: &Water) -> f64 {
+    let id = *derived_from(trace, w.inventory.node()).last().unwrap();
+    let node = trace.node(id).unwrap();
+    assert_eq!(node.code, Code::of(codes::WATER_STEAM_LOST));
+    match &node.value {
+        timeline::NodeValue::Number { value, .. } => *value,
+        value => panic!("{value:?} is not a number"),
+    }
+}
+
+#[test]
+fn a_boil_forces_the_steam() {
+    let (mut trace, t, _, surface, exposed, _) = wet_venus_low();
+    let by_light = water(&t, &exposed, surface, &mut trace).unwrap();
+    assert!(*by_light.runaway.value());
+    let lost = lost_by(&trace, &by_light);
+    assert!(0.0 < lost && lost < surface.value().0, "precondition");
+    let verdict = trace
+        .leaf(Code::of("test.verdict"), true, Provenance::Input)
+        .unwrap();
+    let w = boiled(&t, &exposed, surface, verdict, &mut trace).unwrap();
+    assert!(*w.runaway.value() && *w.boiled.value());
+    assert_eq!(derived_from(&trace, w.runaway.node()), [verdict.node()]);
+    assert_eq!(derived_from(&trace, w.boiled.node()), [verdict.node()]);
+    assert_eq!(
+        trace.node(w.boiled.node()).unwrap().code,
+        Code::of(codes::WATER_BOILED)
+    );
+    // One code path: the forced steam loses what the light's does.
+    assert_eq!(lost_by(&trace, &w), lost);
+}
+
+#[test]
+fn a_larger_radius_loses_more_steam() {
+    let (mut trace, t, _, surface, exposed, larger) = wet_venus_low();
+    let small = water(&t, &exposed, surface, &mut trace).unwrap();
+    let big = water(&t, &larger, surface, &mut trace).unwrap();
+    let (a, b) = (lost_by(&trace, &small), lost_by(&trace, &big));
+    assert!(
+        b < surface.value().0,
+        "precondition: the larger is uncapped"
+    );
+    // Owen & Wu 2017 eq. 19: the energy-limited loss grows as R^3 / M.
+    assert!((b / a - LARGER_RADIUS.powi(3)).abs() < 1e-9, "{}", b / a);
+}
+
+#[test]
+fn a_leftover_condenses_back() {
+    let (mut trace, t, _, surface, exposed, _) = wet_venus_low();
+    let verdict = trace
+        .leaf(Code::of("test.verdict"), true, Provenance::Input)
+        .unwrap();
+    let steam = boiled(&t, &exposed, surface, verdict, &mut trace).unwrap();
+    let w = recondensed(&steam, &mut trace).unwrap();
+    assert!(!*w.runaway.value() && *w.boiled.value());
+    assert_eq!(w.inventory, steam.inventory);
+    assert_eq!(w.boiled, steam.boiled);
+    assert_eq!(
+        derived_from(&trace, w.runaway.node()),
+        [steam.inventory.node(), steam.runaway.node()]
     );
 }

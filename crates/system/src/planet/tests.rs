@@ -1398,7 +1398,7 @@ pub(super) fn derive_surface(
     )
     .unwrap();
     let surface = super::water::surface_water(t, drawn, &body, trace).unwrap();
-    let w = super::water::water(t, &body, surface, trace).unwrap();
+    let w = super::water::water(t, &body.exposed(), surface, trace).unwrap();
     (body, h, w, surface)
 }
 

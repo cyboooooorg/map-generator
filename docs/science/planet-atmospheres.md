@@ -246,7 +246,11 @@ all of it is at its surface, and its node (`planet.water-layer-mass` or
 `planet.water-beyond-law`) is the surface water as it is. The runaway's
 steam is the surface water: `min(9 H, surface)` is lost, the mantle's
 water stays, and the mass after the steam is `M - (surface - kept)`
-(`after_steam`). The regime, the seafloor's hold on the outgassing
+(`after_steam`). A boil the climate forces (`water::boiled`) loses the
+same steam as the light's (one `steam_lost`) and derives `runaway` and
+`boiled` from the boil loop's verdict; a leftover that condenses back
+(`water::recondensed`) keeps the inventory and is no longer a runaway. The
+regime, the seafloor's hold on the outgassing
 (`released_under_ocean`) and the air's water read the water kept of the
 surface water, never the bulk.
 
@@ -640,9 +644,10 @@ the fluence in J/m² divided by `EARTH_XUV_FLUENCE`, with
 the exponent 4 (`SHORELINE_EXPONENT`) is the paper's. The rewrite's
 `v_esc` reads the whole mass (`Body::whole_mass`: the bulk mass plus a
 water beyond the laws, which the bulk leaves out), as legacy read the
-trial's mass, and the runaway's steam loss reads the same mass; both take
-the bulk radius, the condensed planet's for a water beyond the laws, the
-only radius there is until PR 2d's steam envelope.
+trial's mass, and the runaway's steam loss reads the same mass; both read
+them through `Body::exposed` (an `Exposed`: the radius and the whole mass),
+the bulk radius before the climate and the steam envelope's once the boil
+loop has one (PR 2d).
 
 **Non-thermal loss** (`non_thermal_loss`, after the shoreline, on the whole
 stock, frosts to come included). A thin air is an atmosphere only if the body

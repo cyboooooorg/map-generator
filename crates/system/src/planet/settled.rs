@@ -10,13 +10,14 @@
 //! and the steam envelope (2d-3b), life, the class, the volcanic SO2
 //! frost (#678) and the non-thermal loss (#658).
 
-use super::bare::{Bare, Ground, bare_air, bare_ground};
+use super::bare::{Bare, Ground, bare_air, formed, surface_pass};
 use super::climate::ClimateInputs;
 use super::climate::Rotation;
 use super::climate::branches::solve;
 use super::climate::record::{Climate, record, record_titan_like};
 use super::draws::{LABELS, draw, snowball_draw};
 use super::interior::InteriorError;
+use super::water::water;
 use crate::Trial;
 use science::units::Bar;
 use timeline::{Seed, Trace};
@@ -50,7 +51,7 @@ pub(crate) fn settled(
 }
 
 /// The planet `trial` of composition `drawn`, chained to its air
-/// ([`bare_ground`], then [`bare_air`] with a reducing air's CO2 held
+/// ([`formed`], [`water`], [`surface_pass`], then [`bare_air`] with a reducing air's CO2 held
 /// back) and settled under `rotation`, with the snowball draw of
 /// `snowball`.
 ///
@@ -71,14 +72,17 @@ pub(crate) fn settled_with(
     snowball: Seed,
     trace: &mut Trace,
 ) -> Result<Settled, InteriorError> {
-    let ground = match bare_ground(trial, drawn, trace)? {
+    let ground = match formed(trial, drawn, trace)? {
         Ground::Enveloped(bare) => {
             return Ok(Settled {
                 bare: *bare,
                 climate: None,
             });
         }
-        Ground::Surfaced(ground) => ground,
+        Ground::Formed(f) => {
+            let w = water(&f.trial, &f.body.exposed(), f.surface, trace)?;
+            surface_pass(&f, w, None, trace)?
+        }
     };
     let draw = snowball_draw(snowball);
     let held = bare_air(&ground, true, trace)?;

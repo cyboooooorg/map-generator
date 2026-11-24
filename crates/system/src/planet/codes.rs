@@ -152,8 +152,9 @@ pub(crate) const WATER_STEAM_LOST: &str = "planet.water.steam-lost";
 /// Water the planet keeps at its surface: its surface water, less the
 /// steam lost in a runaway.
 pub(crate) const WATER_INVENTORY: &str = "planet.water.inventory";
-/// Whether the climate boiled the ocean: false, imposed, until the
-/// climate's boiling loop of the next pull request.
+/// Whether the climate boiled the ocean: false, imposed, before the
+/// climate (`water`); derived from the boil loop's verdict once settled
+/// (`water::boiled`, `settled`).
 pub(crate) const WATER_BOILED: &str = "planet.water.boiled";
 /// Mass of the planet once the steam is gone: its mass less the surface
 /// water lost, `M - (surface - kept)`; the mantle's water stays.

@@ -17,7 +17,7 @@
 use super::air::air;
 use super::core::{CoreRecord, core};
 use super::draws::{Drawn, draw};
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::escape::escaped;
 use super::heat::heat;
 use super::interior::{Interior, InteriorError, interior};
@@ -113,21 +113,45 @@ pub(crate) fn bare_with(
     drawn: &Drawn,
     trace: &mut Trace,
 ) -> Result<Bare, InteriorError> {
-    match bare_ground(trial, drawn, trace)? {
+    match formed(trial, drawn, trace)? {
         Ground::Enveloped(bare) => Ok(*bare),
-        Ground::Surfaced(ground) => bare_air(&ground, true, trace),
+        Ground::Formed(f) => {
+            let w = water(&f.trial, &f.body.exposed(), f.surface, trace)?;
+            let ground = surface_pass(&f, w, None, trace)?;
+            bare_air(&ground, true, trace)
+        }
     }
 }
 
-/// What [`bare_ground`] leaves: a planet that kept an envelope, whole, or
-/// the ground of a planet with a surface, before its air.
+/// What [`formed`] leaves: a planet that kept an envelope, whole, or a
+/// planet with a surface, up to its surface water.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Ground {
     /// A planet that kept an envelope: it has no surface to make an air
     /// for.
     Enveloped(Box<Bare>),
-    /// A planet with a surface, up to its core.
-    Surfaced(Box<Surfaced>),
+    /// A planet with a surface, before its water.
+    Formed(Box<Formed>),
+}
+
+/// What runs once for a planet with a surface: steps 1 to 3 of
+/// [`bare_with`] up to its surface water. The water it keeps, and what
+/// follows, depend on the steam envelope the climate may force
+/// ([`surface_pass`]).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Formed {
+    /// The trial after the escape of the envelope.
+    pub trial: Trial,
+    /// The composition at the same step.
+    pub drawn: Drawn,
+    /// The body of `trial` and `drawn`.
+    pub body: Body,
+    /// The heat of `body`.
+    pub heat: Heat,
+    /// The envelope the escape took; `None` when it took none.
+    pub envelope_lost: Option<Traced<Kilogram>>,
+    /// The surface water before the stars' light.
+    pub surface: Traced<Kilogram>,
 }
 
 /// The ground of a planet with a surface: everything the chain derives
@@ -152,76 +176,109 @@ pub(super) struct Surfaced {
     regime: Traced<TectonicRegime>,
     volcanism: Traced<Fraction>,
     core: CoreRecord,
+    /// What the cosmic shoreline reads of the planet: the radius it
+    /// loses its air from and the whole mass that holds it.
+    exposed: Exposed,
 }
 
 /// The planet `trial` of composition `drawn`, chained in legacy's order
-/// up to its air (steps 1 to 3 of [`bare_with`], then the regime, its
-/// volcanism and its core of step 4): a planet that kept an envelope whole, the ground of
-/// the others for [`bare_air`].
+/// up to its surface water (steps 1 to 3 of [`bare_with`]): a planet that
+/// kept an envelope whole, the others as [`Formed`].
 ///
 /// # Errors
 ///
 /// The errors of each step.
-pub(super) fn bare_ground(
+pub(super) fn formed(
     trial: &Trial,
     drawn: &Drawn,
     trace: &mut Trace,
 ) -> Result<Ground, InteriorError> {
-    let heat_of = |trial: &Trial, drawn: &Drawn, body: &Body, trace: &mut Trace| {
-        heat(
-            trial,
-            body,
-            &drawn.radiogenic_abundance,
-            &drawn.envelope_fraction,
-            trace,
-        )
-    };
-    let formed = interior(trial, drawn, trace)?;
-    let escaped = escaped(trial, drawn, formed, trace)?;
-    let formed_heat = heat_of(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
-    let enveloped = escaped.drawn.envelope_fraction.value().get() >= MIN_ENVELOPE;
-    if enveloped {
+    let body = interior(trial, drawn, trace)?;
+    let escaped = escaped(trial, drawn, body, trace)?;
+    let heat = heat(
+        &escaped.trial,
+        &escaped.body,
+        &escaped.drawn.radiogenic_abundance,
+        &escaped.drawn.envelope_fraction,
+        trace,
+    )?;
+    if escaped.drawn.envelope_fraction.value().get() >= MIN_ENVELOPE {
         return Ok(Ground::Enveloped(Box::new(Bare {
             trial: escaped.trial,
             drawn: escaped.drawn,
             body: escaped.body,
-            heat: formed_heat,
+            heat,
             envelope_lost: escaped.lost,
             surface: None,
         })));
     }
-
     let surface = surface_water(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
-    let w = water(&escaped.trial, &escaped.body, surface, trace)?;
-    let (t, d, body, heat) = match after_steam(&escaped.trial, &escaped.drawn, surface, &w, trace)?
-    {
-        Some((t, d)) => {
-            let body = interior(&t, &d, trace)?;
-            let h = heat_of(&t, &d, &body, trace)?;
-            (t, d, body, h)
-        }
-        None => (
-            escaped.trial.clone(),
-            escaped.drawn,
-            escaped.body,
-            formed_heat,
-        ),
-    };
-    let regime = regime(&t, &body, &heat, &w, trace)?;
-    let volcanism = volcanism(&body, &heat, &regime, trace)?;
-    let core = core(&t, rocky(&body), &regime, trace)?;
-    Ok(Ground::Surfaced(Box::new(Surfaced {
-        before: (escaped.trial, escaped.drawn),
-        after: (t, d),
-        body,
+    Ok(Ground::Formed(Box::new(Formed {
+        trial: escaped.trial,
+        drawn: escaped.drawn,
+        body: escaped.body,
         heat,
         envelope_lost: escaped.lost,
         surface,
-        water: w,
+    })))
+}
+
+/// The ground of the planet `formed` left once its water is `water`
+/// (steps 3 to 4 of [`bare_with`], up to the core): after a runaway, the
+/// planet its steam left ([`after_steam`]), its body and heat built
+/// again; then its regime, its volcanism and its core. Repeatable: the
+/// climate's boiling loop runs it again from a forced steam or a
+/// recondensed water.
+///
+/// Escape (the shoreline in [`bare_air`]) reads `exposed` when given,
+/// otherwise the body this pass built.
+///
+/// # Errors
+///
+/// The errors of each step.
+pub(super) fn surface_pass(
+    formed: &Formed,
+    water: Water,
+    exposed: Option<&Exposed>,
+    trace: &mut Trace,
+) -> Result<Surfaced, InteriorError> {
+    let (t, d, body, heat) =
+        match after_steam(&formed.trial, &formed.drawn, formed.surface, &water, trace)? {
+            Some((t, d)) => {
+                let body = interior(&t, &d, trace)?;
+                let h = heat(
+                    &t,
+                    &body,
+                    &d.radiogenic_abundance,
+                    &d.envelope_fraction,
+                    trace,
+                )?;
+                (t, d, body, h)
+            }
+            None => (
+                formed.trial.clone(),
+                formed.drawn,
+                formed.body.clone(),
+                formed.heat.clone(),
+            ),
+        };
+    let regime = regime(&t, &body, &heat, &water, trace)?;
+    let volcanism = volcanism(&body, &heat, &regime, trace)?;
+    let core = core(&t, rock_of(&body), &regime, trace)?;
+    let exposed = exposed.cloned().unwrap_or_else(|| body.exposed());
+    Ok(Surfaced {
+        before: (formed.trial.clone(), formed.drawn),
+        after: (t, d),
+        body,
+        heat,
+        envelope_lost: formed.envelope_lost,
+        surface: formed.surface,
+        water,
         regime,
         volcanism,
         core,
-    })))
+        exposed,
+    })
 }
 
 /// The air of `ground` (the rest of steps 4 and 5 of [`bare_with`]): [`air`] (a
@@ -244,6 +301,7 @@ pub(super) fn bare_air(
         before_trial,
         before_drawn,
         &ground.body,
+        &ground.exposed,
         ground.surface,
         &ground.water,
         &ground.regime,
@@ -284,7 +342,7 @@ pub(super) fn bare_air(
 /// The interior of a body without an envelope: [`interior`] builds a
 /// rocky one whenever the envelope fraction is 0, which the escape and
 /// [`after_steam`] keep for a planet with a surface.
-fn rocky(body: &Body) -> &Interior {
+pub(super) fn rock_of(body: &Body) -> &Interior {
     match body {
         Body::Rocky(interior) => interior,
         _ => unreachable!("a planet with a surface has no envelope, so a rocky body"),

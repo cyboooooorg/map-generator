@@ -9,7 +9,7 @@ use super::air::{Air, air, histories, lyman_sources, released};
 use super::codes;
 use super::core::{CoreRecord, core};
 use super::draws::Drawn;
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::interior::Water as Held;
 use super::regime::regime;
 use super::tests::{
@@ -25,7 +25,7 @@ use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, 
 use science::photochemistry::{
     CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
 };
-use science::units::{Bar, Gyr, Kilogram, Metre, SolarMass};
+use science::units::{Bar, EarthRadius, Gyr, Kilogram, Metre, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
 use timeline::{
     Atmosphere, Code, Gas, NodeId, Provenance, Seed, TectonicRegime, Trace, Traced, Water,
@@ -148,6 +148,7 @@ impl Planet {
             &self.trial,
             &self.drawn,
             &self.body,
+            &self.body.exposed(),
             self.surface,
             &self.water,
             &self.regime,
@@ -766,4 +767,51 @@ fn the_photolysis_reads_the_timelines_lyman_alpha() {
         (destroyed / expected - 1.0).abs() < ROUNDING,
         "{destroyed} {expected}"
     );
+}
+
+/// Definition: the factor of the larger radius of the exposed body, 1.2.
+const LARGER_RADIUS: f64 = 1.2;
+
+#[test]
+fn the_shoreline_reads_the_exposed_body() {
+    let mut p = planet(&VENUS);
+    let exposed = p.body.exposed();
+    let radius = p
+        .trace
+        .leaf(
+            Code::of("test.radius"),
+            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
+            Provenance::Input,
+        )
+        .unwrap();
+    let larger = Exposed {
+        radius,
+        ..exposed.clone()
+    };
+    let mut share = |exposed: &Exposed| {
+        let made = air(
+            &p.trial,
+            &p.drawn,
+            &p.body,
+            exposed,
+            p.surface,
+            &p.water,
+            &p.regime,
+            &p.core,
+            true,
+            &mut p.trace,
+        )
+        .unwrap();
+        let co2 = kept(&p, Gas::Co2, &made.atmosphere.partial[&Gas::Co2]);
+        let node = derived_from(&p.trace, co2)[1];
+        assert_eq!(
+            p.trace.node(node).unwrap().code,
+            Code::of(codes::AIR_SHORELINE_KEPT)
+        );
+        (node, number(&p.trace, node))
+    };
+    let (_, small) = share(&exposed);
+    let (node, big) = share(&larger);
+    assert!(derived_from(&p.trace, node).contains(&radius.node()));
+    assert!(big <= small, "{big} > {small}");
 }
