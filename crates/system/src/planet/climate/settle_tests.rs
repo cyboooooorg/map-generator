@@ -1,7 +1,7 @@
 //! Tier 1: the settle of the albedo and emissivity, and the condensation
-//! fixed point inside it, on Mars, a dry Earth, a cold methane world, a
-//! hot rock and a Triton-like body; the convergence of their numerical
-//! constants.
+//! fixed point inside it, on Mars, a dry Earth, a hot rock and a
+//! Triton-like body; the convergence of their numerical constants. The
+//! cold methane world of #443 is tier 3 (about 13 s at opt-level 0).
 
 use super::body::ClimateBody;
 use super::fixture::{earth, mars, moved, titan};
@@ -253,6 +253,7 @@ pub(super) fn cold_methane_world() -> ClimateInputs {
 }
 
 #[test]
+#[ignore = "heavy: the cold methane world of #443 settled, about 13 s at opt-level 0"]
 fn a_methane_greenhouse_cannot_warm_a_cold_world() {
     let cold = cold_methane_world();
     let c = settled(&cold, Numerics::DEFAULT);
@@ -299,8 +300,8 @@ fn a_triton_like_body_settles() {
 
 /// The moves of `inputs`'s temperature under the finer tolerances of
 /// study 25 ("Solver constants"), and the check that doubling the caps
-/// changes nothing.
-fn assert_converged(inputs: &ClimateInputs) {
+/// changes nothing; the climate settled with the solver's constants.
+fn assert_converged(inputs: &ClimateInputs) -> Settle {
     let base = settled(inputs, Numerics::DEFAULT);
     assert!(base.converged, "{base:?}");
     let d = Numerics::DEFAULT;
@@ -343,12 +344,19 @@ fn assert_converged(inputs: &ClimateInputs) {
         ..d
     };
     assert_eq!(settled(inputs, doubled), base);
+    base
 }
 
 #[test]
 fn the_fixed_points_are_converged() {
     assert_converged(&imposed_mars());
-    assert_converged(&triton_like());
+    // The condensation loop of a Triton-like body runs and stops by its
+    // tolerance, under its cap (study 25, "Solver constants").
+    let triton = assert_converged(&triton_like());
+    assert!(
+        triton.iterations > 0 && triton.iterations < CONDENSE_ITERATIONS,
+        "{triton:?}"
+    );
     let titan = settled(&titan(), Numerics::DEFAULT);
     assert!(titan.converged, "{titan:?}");
     assert!(titan.iterations < CONDENSE_ITERATIONS, "{titan:?}");

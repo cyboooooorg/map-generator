@@ -9,6 +9,14 @@
 //! `mise run test:heavy -- climate` runs them. A bound that fails is
 //! reported with its numbers, never retuned.
 //!
+//! The convergence rows that run under 1 s are kept here on purpose
+//! only when they run past about 3 s at opt-level 0 (tier 1's profile):
+//! `collapse_tolerance_is_converged` (3.2 s), `scan_ratio_is_converged`
+//! (5.8 s), `census_182_d` (13 s), `albedo_damping_is_converged` and
+//! `a_planet_just_past_the_runaway_limit_runs_away_hot` (about 20 s);
+//! the condensation loop of a Triton-like body runs in 0.1 s and is
+//! checked in tier 1 (`the_fixed_points_are_converged`).
+//!
 //! Covered elsewhere (tier 3, `branches_tests.rs` and `settled_tests.rs`):
 //! Earth's snowball share against Hoffman et al. 2017
 //! (`earth_snowballs_as_often_as_hoffman_dates`), and "same planet, same
@@ -22,8 +30,8 @@ use super::settle_tests::{cold_methane_world, settled, triton_like};
 use super::wet::{collapsed_climate, wet_balance, wet_climate};
 use super::wet_tests::{COLLAPSE_ORBIT, EARTH_SURFACE, TEST_ALBEDO, modern_air};
 use super::{
-    ALBEDO_DAMPING, ALBEDO_TOLERANCE_K, COLLAPSE_TOLERANCE, CONDENSE_ITERATIONS, ClimateInputs,
-    Numerics, SCAN_RATIO, THAW_STEPS,
+    ALBEDO_DAMPING, ALBEDO_TOLERANCE_K, COLLAPSE_TOLERANCE, ClimateInputs, Numerics, SCAN_RATIO,
+    THAW_STEPS,
 };
 use crate::Trial;
 use crate::planet::bare::bare_with;
@@ -561,17 +569,6 @@ fn one_greenhouse_search_on_a_condensing_air() {
     );
 }
 
-#[test]
-#[ignore = "heavy: the condensation loop of a Triton-like body, checked beside the other convergence rows"]
-fn condense_iterations_is_converged_on_triton() {
-    let c = settled(&triton_like(), Numerics::DEFAULT);
-    assert!(c.converged, "{c:?}");
-    assert!(
-        c.iterations > 0 && c.iterations < CONDENSE_ITERATIONS,
-        "{c:?}"
-    );
-}
-
 /// The first balance of `inputs` under [`TEST_ALBEDO`] at 288 K's
 /// emissivity, with `numerics`, in kelvin.
 fn first_balance(inputs: &ClimateInputs, numerics: Numerics) -> Option<f64> {
@@ -637,6 +634,10 @@ fn plateau_surfaces_are_converged() {
 #[test]
 #[ignore = "heavy: two collapses of an Earth at 1.6 AU"]
 fn collapse_tolerance_is_converged() {
+    // The tolerance of the collapse (`COLLAPSE_TOLERANCE`): a finer one
+    // moves the temperature under `COLLAPSE_MOVE_K`. The iteration cap
+    // of the same collapse is held in tier 1
+    // (`wet_tests::collapse_iterations_is_converged`).
     let inputs = moved(&earth(), COLLAPSE_ORBIT);
     let collapse = |tolerance: f64| {
         let mut body = ClimateBody::new(

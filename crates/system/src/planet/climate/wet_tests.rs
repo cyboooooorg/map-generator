@@ -176,7 +176,8 @@ fn a_collapse_keeps_what_the_surface_holds() {
 #[test]
 fn collapse_iterations_is_converged() {
     // The frozen branch's start: a body covered in ice, all its carbon in
-    // the air.
+    // the air. This holds the iteration cap (`COLLAPSE_ITERATIONS`); the
+    // tolerance is held in tier 3 (`collapse_tolerance_is_converged`).
     let inputs = moved(&earth(), COLLAPSE_ORBIT);
     let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
     let air = PartialPressures {
