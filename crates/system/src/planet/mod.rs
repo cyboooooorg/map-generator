@@ -57,10 +57,10 @@
 //! reducing-air fallback (the air made again with its CO2 when the climate
 //! leaves no Titan-like air), and the boil loop (a wet planet with no wet
 //! balance boils: run again from the steam forced on its ocean, its
-//! leftover condensed again when that run does not boil). `settled` is a
-//! separate step, not wired into the generation chain yet (2d-4), so that
-//! `bare` keeps its cost. What remains: the steam envelope (2d-3b), life,
-//! the class (#659). Every value is recorded in the system's cause `Trace`, with
+//! leftover condensed again when that run does not boil), then the steam
+//! world (its envelope and its inflated radius). `settled` is a separate
+//! step, not wired into the generation chain yet (2d-4), so that `bare`
+//! keeps its cost. What remains: life, the class (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which
