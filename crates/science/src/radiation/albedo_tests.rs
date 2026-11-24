@@ -12,10 +12,10 @@ use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::shortwave::{Air, Budget, Paths};
 use crate::radiation::starlight::star_bands;
 use crate::radiation::test_points::{
-    EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_INCOMING_W_M2, EARTH_SURFACE_K, MANABE_HUMIDITY,
-    TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY, VENUS_PRESSURE_BAR,
-    VENUS_SURFACE_K,
+    EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_INCOMING_W_M2, EARTH_SURFACE_K, TITAN_GRAVITY,
+    TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY, VENUS_PRESSURE_BAR, VENUS_SURFACE_K,
 };
+use crate::surface::RELATIVE_HUMIDITY;
 use crate::units::Bar;
 use crate::water::vapour_saturation_bar;
 
@@ -179,9 +179,9 @@ fn earth_air_at(humidity: f64) -> PartialPressures {
     }
 }
 
-/// Earth's air at [`MANABE_HUMIDITY`], the path the climate takes.
+/// Earth's air at [`RELATIVE_HUMIDITY`], the path the climate takes.
 fn earth_air() -> PartialPressures {
-    earth_air_at(MANABE_HUMIDITY)
+    earth_air_at(RELATIVE_HUMIDITY)
 }
 
 /// Earth's cloud cover from the law the climate calls.
@@ -384,7 +384,7 @@ fn an_m_stars_albedo_drops_more_than_a_g_stars() {
     let thick = PartialPressures {
         n2: 1.0,
         co2: 1.0,
-        h2o: MANABE_HUMIDITY * vapour_saturation_bar(COLD_SURFACE_K),
+        h2o: RELATIVE_HUMIDITY * vapour_saturation_bar(COLD_SURFACE_K),
         ..PartialPressures::default()
     };
     for (air, t) in [(earth_air(), EARTH_SURFACE_K), (thick, COLD_SURFACE_K)] {

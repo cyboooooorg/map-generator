@@ -8,9 +8,8 @@ use crate::radiation::column::{Profile, levels};
 use crate::radiation::gases::PartialPressures;
 use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::starlight::star_bands;
-use crate::radiation::test_points::{
-    EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_SURFACE_K, MANABE_HUMIDITY,
-};
+use crate::radiation::test_points::{EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_SURFACE_K};
+use crate::surface::RELATIVE_HUMIDITY;
 use crate::water::vapour_saturation_bar;
 
 /// Definition: no Rayleigh scattering, so that the paths' check reads the
@@ -120,7 +119,7 @@ fn the_fast_depth_is_the_depth() {
 #[test]
 fn paths_do_not_depend_on_the_ground() {
     let air = PartialPressures {
-        h2o: MANABE_HUMIDITY * vapour_saturation_bar(EARTH_SURFACE_K),
+        h2o: RELATIVE_HUMIDITY * vapour_saturation_bar(EARTH_SURFACE_K),
         ..EARTH_AIR
     };
     let column = levels(
