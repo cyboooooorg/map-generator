@@ -48,16 +48,21 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
   `LID_SHARE / MOBILE_SHARE` (`science::outgassing`, 0.2 / 0.95) under
   a stagnant lid, 1 otherwise. It uses no new number. Legacy's
   `interim::volcanism` is not ported. 2d-3 divides by
-  `EARTH_VOLCANIC_INTENSITY` and refits `SNOWBALL_WARM_BAR`.
+  `EARTH_VOLCANIC_INTENSITY` and refits `SNOWBALL_WARM_BAR`. A heat
+  pipe has no special case (legacy set it to 1). The regime classes a
+  heat pipe from 1 W/m² (`tectonics::HEAT_PIPE_FLUX`), but the law only
+  reaches 1 at 2.5 W/m² (`volcanoes::HEAT_PIPE_FLUX`), so a heat pipe
+  reads 0.83 to 1. The mismatch is #670.
 - **#656 stays open:** no sourced broadband Titan ground albedo exists
   (study 24; comment on #656).
 - **Ice sheets are ice.** The ice reach spreads the water inventory
-  as ice: `inventory / (ρ_ice · 4πR² · ICE_SHEET)`. `ρ_ice` is
-  `water::ice_ih_density` at 273.15 K and 101 325 Pa (IAPWS, about
-  917 kg/m³). Legacy used liquid water at 1000 kg/m³ over Earth's area,
-  scaled by `R⁻²`, and that density had no source. The function reads
-  the planet's radius in metres, so no Earth-area constant is needed,
-  and `OCEAN_LAYER_KM` is not ported.
+  as ice: `inventory / (ρ_ice · 4πR² · ICE_SHEET_THICKNESS)`. `ρ_ice`
+  is `water::ice_ih_density` at one standard atmosphere (101 325 Pa, a
+  `Definition:`) and at `ice_ih_melting_temperature` of that pressure
+  (IAPWS, about 917 kg/m³). Legacy used liquid water at 1000 kg/m³
+  over Earth's area, scaled by `R⁻²`, and that density had no source.
+  The function reads the planet's radius in metres, so no Earth-area
+  constant is needed, and `OCEAN_LAYER_KM` is not ported.
 - **`condense` is 2d-3's.** `frost` and `liquid` take the condensate
   (the part of N₂ and CH₄ that the air cannot hold) as an argument.
 - **The cloud cover stays out of `Cover`.** The caller builds
@@ -66,6 +71,16 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
 - **One relative humidity.** `surface::RELATIVE_HUMIDITY` (0.77) is the
   public constant. `radiation/test_points.rs`'s `MANABE_HUMIDITY` is
   removed and its users read the public one.
+- **Water melts on the IAPWS curve.** The water window is
+  `[ice_ih_melting_temperature(P), boiling_temperature(P))`, both from
+  `science::water`. Legacy's `ICE_MELTS_K` (273.15 K, uncited) is not
+  ported.
+- **Names.** Legacy's `_K` and `_BAR` suffixes go, since the typed
+  units carry them. The new names are `LAVA_TEMPERATURE`,
+  `ICE_LINE_TEMPERATURE`, `ICE_LINE_CONTRAST`,
+  `ICE_COVERED_TEMPERATURE`, `SHIELD_PRESSURE`, `FROST_LAYER`,
+  `ICE_SHEET_THICKNESS` and `PHASE_BAND`. The lists below give each
+  constant's legacy name.
 
 ## Global Constraints
 
@@ -131,10 +146,11 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
    1` within 1e-12, and `so2_frost ≤ frost`. Test:
    `cover_shares_sum_to_one` (Task 2), swept over 0 to 10 oceans, 40 to
    400 K and 0 to 10 bar of frost.
-4. **A surface at a liquid's triple point or right at a boundary**
-   (Lava at exactly `LAVA_K`, water at 273.15 K, pressure exactly the
-   water triple pressure): one defined answer, the order of legacy's
-   tests. Test: `liquid_boundaries_are_inclusive_below` (Task 3).
+4. **A surface right at a liquid's boundary.** Lava at exactly
+   `LAVA_TEMPERATURE`, water at exactly its melting or boiling
+   temperature, and an air below the water triple pressure each get one
+   defined answer, in the order of legacy's tests. Test:
+   `liquid_boundaries_are_inclusive_below` (Task 3).
 5. **A stagnant lid or a heat pipe** gets the right regime share, and
    the volcanic node derives from the heat, the radius and the regime.
    Test: `volcanism_reads_the_regime` (Task 4).
@@ -147,7 +163,8 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
 
 - Modify: `crates/science/src/volatiles.rs`,
   `crates/science/src/volatiles_tests.rs`, `crates/science/src/water.rs`
-  and its tests file.
+  (its inline `mod tests`, l.~862). Make `METHANE_TRIPLE_TEMPERATURE`
+  `pub(crate)` for Task 3.
 
 **Interfaces:**
 
@@ -180,13 +197,21 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
     - the curve is strictly decreasing and positive from 63.1 K down to
       2.0 K, in 0.1 K steps;
     - it is `None` at 63.14 K.
-  - `nitrogen_vapour_meets_its_triple_point`: the Antoine curve at
-    63.14 K is within 1 % of 12 530 Pa (NIST), and at 77.35 K within 1 %
-    of 101 325 Pa (the normal boiling point, NIST).
+  - `nitrogen_vapour_follows_its_antoine_fit`:
+    - at 77.355 K it is within 5 % of 101 325 Pa (NIST's normal boiling
+      point);
+    - it is strictly increasing from 63.14 to 126 K.
+
+    The fit is not pinned to the triple point. Computed by hand, it
+    gives 0.967 bar at 77.355 K (4.5 % low) and 0.110 bar at 63.14 K
+    (12 % low). Its only reader is `methane_freezes`, at the methane
+    triple point (90.69 K). The doc comment states the fit's accuracy.
+    If 5 % fails, stop and report. Do not pin or refit it.
   - `sulphur_dioxide_frost_holds_from_io_to_its_triple_point`:
     - the pressure at `197.64 − 1e-9` K is 1 670 Pa within 1e-6
       relative;
-    - it is strictly increasing over 50 to 197 K;
+    - it is strictly increasing over 10 to 197 K, and finite and
+      positive at 10 K;
     - at 115 K it is within a factor of 1.2 of Wagman's
       `1.516e8 exp(−4510/T)` bar (study 24; Fray & Schmitt's fit sits a
       factor of 2 higher, as the page says).
@@ -239,7 +264,11 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
 - Modify: `crates/science/src/lib.rs` (`pub mod surface`),
   `crates/science/src/radiation/test_points.rs` and
   `crates/science/src/radiation/clouds.rs` (`MANABE_HUMIDITY` replaced
-  by `surface::RELATIVE_HUMIDITY`).
+  by `surface::RELATIVE_HUMIDITY`). `test_points` goes from
+  `pub(super)` to `pub(crate)` (module and the constants the surface
+  tests read: `EARTH_AIR`, `EARTH_SURFACE_K`, `TITAN_SURFACE_AIR`,
+  `TITAN_SURFACE_K`, `TITAN_PRESSURE_BAR`, `TITAN_METHANE_SHARE`,
+  `VENUS_*`), still `#[cfg(test)]`.
 
 **Interfaces:**
 
@@ -262,17 +291,23 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
   - `pub fn ice_line_share(t: Kelvin) -> Fraction`;
   - `pub fn frost_cover(frost: &PartialPressures) -> Fraction`;
   - `pub fn ground_albedo(cover: &Cover, air: Bar) -> Fraction`;
-  - `pub const ICE_COVERED: Kelvin`, the start of 2d-3's frozen branch.
-  - Constants, with the values and prefixes of study 24:
+  - `pub const ICE_COVERED_TEMPERATURE: Kelvin`, which is
+    `ICE_LINE_TEMPERATURE − ICE_LINE_CONTRAST / 3` (about 254 K, a
+    `Definition:`; legacy `ICE_COVERED_K`), the start of 2d-3's frozen
+    branch.
+  - Constants, with the values and prefixes of study 24 (legacy name in
+    brackets):
     - `OCEAN_ALBEDO` 0.06, `SOIL_ALBEDO` 0.25, `REGOLITH_ALBEDO` 0.11,
       `ICE_ALBEDO` 0.6, `FROST_ALBEDO` 0.75 (Pluto, see the decisions),
-      `SO2_FROST_ALBEDO` 0.63;
-    - `SHIELD` = `Bar(1e-4)`, `FROST_LAYER` = `Bar(0.02)`;
-    - `ICE_LINE` 268.15 K, `ICE_LINE_CONTRAST` 42 K;
-    - `ICE_SHEET` = `Metre(1940.0)` (Fretwell 1937 m, as study 24
-      rounds it; keep the study's value);
-    - `EARTH_OCEAN_COVER` 0.71 (named so, to avoid the private
-      `habitable::EARTH_OCEAN_FRACTION`).
+      `SO2_FROST_ALBEDO` 0.63 (the same names);
+    - `SHIELD_PRESSURE` = `Bar(1e-4)` [`SHIELD_BAR`], `FROST_LAYER` =
+      `Bar(0.02)` [`FROST_LAYER_BAR`];
+    - `ICE_LINE_TEMPERATURE` = `Kelvin(268.15)` [`ICE_LINE_K`],
+      `ICE_LINE_CONTRAST` = `Kelvin(42.0)` [`ICE_LINE_CONTRAST_K`];
+    - `ICE_SHEET_THICKNESS` = `Metre(1940.0)` [`ICE_SHEET_KM`]: the
+      page's 1.94 km, rounded from Fretwell et al.'s 1937 m;
+    - `EARTH_OCEAN_COVER` 0.71 [`EARTH_OCEAN_FRACTION`], renamed so it
+      does not clash with the private `habitable::EARTH_OCEAN_FRACTION`.
 
 - [ ] **Step 1: Write the failing tests** (ported from `albedo`, legacy
   line numbers in brackets)
@@ -301,15 +336,15 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
       1e-12;
     - at 1 bar, the ground albedo is within 1e-3 of `SOIL_ALBEDO`.
   - `frost_brightens_a_body_in_proportion_to_its_amount` [849]:
-    - half of `FROST_LAYER` of N₂ gives `frost == 0.5` and
-      `land == 0.5`;
+    - dry, at 40 K: half of `FROST_LAYER` of N₂ gives `frost == 0.5`
+      and `land == 0.5`;
     - the ground albedo grows with the frost;
     - `FROST_LAYER` and 10 bar give the same albedo, equal to
       `FROST_ALBEDO`;
     - 10 bar of SO₂ gives `so2_frost == 1` and the ground albedo
       `SO2_FROST_ALBEDO`;
-    - over Earth's water at 288 K, a quarter of the layer gives
-      `frost == 0.25` and `ocean + ice + land == 0.75`.
+    - over 1 `OCEAN_MASS` at 40 K, a quarter of the layer of N₂ gives
+      `ice == 0.75` and `ocean == 0` (the legacy assertion).
   - `earth_keeps_its_bond_albedo` [1228], an observation:
     - Earth at 288 K: the Earth air of `radiation::test_points` with
       `surface_vapour(288 K, …)`, 1 `OCEAN_MASS` at Earth's mean radius;
@@ -328,9 +363,9 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
 
 - [ ] **Step 3: Implement** the port of `albedo` l.481-563 with the
   decisions above:
-  - `reach = min(water / (ρ_ice · 4πR² · ICE_SHEET), 1)`;
+  - `reach = min(water / (ρ_ice · 4πR² · ICE_SHEET_THICKNESS), 1)`;
   - `oceans = water / OCEAN_MASS`;
-  - the shield is `1 − exp(−air / SHIELD)`;
+  - the shield is `1 − exp(−air / SHIELD_PRESSURE)`;
   - the land albedo is `REGOLITH + (SOIL − REGOLITH) · shield`;
   - the mix follows `albedo` l.721-756:
     `ocean·OCEAN + land·land_albedo + ice·ICE + (frost − so2)·FROST +
@@ -356,7 +391,8 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
 **Interfaces:**
 
 - Consumes:
-  - Task 1's curves;
+  - Task 1's curves, including `water::boiling_temperature`, and
+    `water::ice_ih_melting_temperature`;
   - `volatiles::methane_saturation_bar`, `co2_frost_pressure`, and the
     methane triple point (`pub(crate)`);
   - `cover::FROST_LAYER`.
@@ -376,8 +412,10 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
   - `pub fn frost(condensate: &PartialPressures, frozen_co2: Bar,
     so2_frost: Bar, t: Kelvin, air: &PartialPressures) ->
     PartialPressures`;
-  - the constants `LAVA` 1673 K and `SEA_METHANE_SHARE` 0.5 (study 24
-    prefixes), plus the constants listed in the Global Constraints.
+  - the constants `LAVA_TEMPERATURE` 1673 K [`LAVA_K`] and
+    `SEA_METHANE_SHARE` 0.5 (study 24 prefixes), plus the constants
+    listed in the Global Constraints (`PHASE_BAND` = `Kelvin(1.0)`
+    [`PHASE_BAND_K`]).
 
 - [ ] **Step 1: Write the failing tests** (ported from `climate`, with
   the condensate given as input in place of `condense`)
@@ -385,8 +423,9 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
     - at 94 K, N₂ 1.5 bar and CH₄ 0.003 bar give no hydrocarbons;
     - Titan's air (`radiation::test_points`, 93.65 K) with CH₄ at
       `methane_sea_vapour(93.65 K)` gives `Hydrocarbons`;
-    - Titan's observed CH₄ share, 5.65 % (Niemann et al. 2010), lies
-      within 0.03 to 0.06.
+    - the share `methane_sea_vapour(94 K) / (1.45 bar +
+      methane_sea_vapour(94 K))` lies within 0.03 to 0.06, around
+      Titan's observed 5.65 % (Niemann et al. 2010).
   - `nitrogen_keeps_methane_liquid_below_its_triple_point` [2902]:
     - the bounds of `methane_freezes`: 75 to 78 K at 0 bar, 67 to 71 K
       at 1.45 bar, the floor at 100 bar in 66 to 69 K;
@@ -417,10 +456,12 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
     - Titan at 93.65 K gives `Hydrocarbons`;
     - Venus at 737 K (dry, 92 bar) gives none.
   - `liquid_boundaries_are_inclusive_below` (Review Focus 4):
-    - a dry body at exactly `LAVA` gives `Lava`;
-    - water at exactly 273.15 K, and at a total pressure exactly the
-      water triple pressure, gives `Water`;
-    - water at the boiling temperature gives none.
+    - a dry body at exactly `LAVA_TEMPERATURE` gives `Lava`;
+    - water under 1 bar of N₂ gives `Water` at exactly
+      `ice_ih_melting_temperature(1 bar)`, none 0.01 K below it, and
+      none at exactly `boiling_temperature(1 bar)`;
+    - water under an air below `TRIPLE_POINT_PRESSURE` gives none at
+      any temperature from 200 to 400 K.
   - `frozen_frost_melts_back`: `frozen_share(melts − 1 K, melts)` is 1,
     `frozen_share(melts, melts)` is 0, and
     `melting(5 bar, frozen 0.5)` is `0.5 · FROST_LAYER`.
@@ -439,8 +480,12 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
     `condense` call).
 
   The liquidus solve (`ln x + W(1−x)²/T = −L(1/T − 1/Tm)`) uses
-  bisection with a step count that is a `Definition:`. Water boils at
-  `water::boiling_temperature(total pressure)`.
+  bisection with a step count that is a `Definition:`. Water is liquid
+  on `[ice_ih_melting_temperature(P), boiling_temperature(P))`, where
+  `P` is the total pressure (see the decisions). In `frost`, a CO₂ or
+  SO₂ frost curve that returns `None` (at or above its triple point)
+  counts as an infinite sublimation pressure, so the frost all goes
+  back to the air, as legacy's `cap(INFINITY, T)` does.
 
 - [ ] **Step 4: Run** the same command. Expected: PASS. Then run
   `mise run ci`. Expected: green.
@@ -470,20 +515,26 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
   InteriorError>`:
   - the value is `volcanic_intensity(heat_flux(radiogenic + tidal +
     secular, R))`, times `LID_SHARE / MOBILE_SHARE` under
-    `TectonicRegime::Stagnant`, and times 1 otherwise;
+    `TectonicRegime::Stagnant`, and times 1 otherwise (heat pipes
+    included, see the decisions and #670);
   - the node derives from the three heat nodes, the radius node and the
     regime node.
 
-- [ ] **Step 1: Write the failing tests**
-  - `volcanism_reads_the_regime` (Review Focus 5): on the chain fixtures
-    of `planet/tests.rs`, for each planet with a surface, the recorded
-    value equals the formula above computed from its `Bare` heat and
-    radius, within 1e-12. The node's causes are exactly the five nodes.
-  - Mars (stagnant) has a lower intensity than Earth (plates).
-  - Io has intensity 1 if the fixtures hold a heat pipe; otherwise
-    check the heat pipe on a constructed `Heat` above `HEAT_PIPE_FLUX`.
-  - `regime` gives the same regimes as before on every fixture (the
-    existing tests stay green).
+- [ ] **Step 1: Write the failing tests** (in `volcanism_tests.rs`, with
+  the `trial(trace, seed, mass, au, ecc)` fixture of `planet/tests.rs`)
+  - `volcanism_reads_the_regime` (Review Focus 5):
+    - an Earth (1 M⊕, 1 AU) and a Mars (0.107 M⊕, below
+      `PLATES_MIN_MASS`, 1.52 AU), through `bare`. Assert the
+      precondition first: their regimes are `Plates` and `Stagnant`;
+    - each recorded value equals the formula above, computed from the
+      `Bare` heat and radius, within 1e-12;
+    - the node's causes are exactly the five nodes;
+    - the Mars has a lower intensity than the Earth.
+  - `a_heat_pipe_reads_the_law`: on a constructed `Heat` whose flux is
+    3 W/m² with the regime `HeatPipe`, the intensity is 1. At 1.5 W/m²
+    it is `volcanic_intensity(1.5 W/m²)`, below 1.
+  - The existing `regime` tests stay green: the shared `heat_flux` gives
+    the same flux.
 
 - [ ] **Step 2: Run** `cargo nextest run -p system planet`. Expected:
   FAIL.
@@ -509,7 +560,10 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
   `planet-atmospheres.md`:
   - `FROST_ALBEDO` on Pluto, with Triton's gap and the 2d-3 refit;
   - the ice-density reach;
-  - volcanism B;
+  - the IAPWS melting and boiling window, in place of 273.15 K and
+    Clausius-Clapeyron;
+  - the accuracy of the N₂ Antoine fit (Task 1);
+  - volcanism B, with the heat-pipe gap of #670;
   - `RELATIVE_HUMIDITY` public;
   - a "Where the code lives" line for `science::surface`.
 
@@ -527,11 +581,19 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
 
 ### Before the PR (main session)
 
-- [ ] Push Wiki study 24. The hook blocks the push, so give the user
-  the command: `git -C <scratchpad>/wiki push`.
+- [ ] Push Wiki study 24 (clone commit 7a9348d). The hook blocks the
+  push, so give the user the command: `git -C
+  /private/tmp/claude-501/-Users-cyborg-Developer-map-generator/c5de5b2a-0805-47b0-b53d-47ef8dc824df/scratchpad/wiki
+  push`.
 - [ ] Run CLAUDE.md's "Before opening a pull request" procedure:
   `branch-reviewer` and `test-reviewer` on `45cbf8a8..HEAD`, then
   `science-coherence-checker` and `issue-auditor`.
-- [ ] Write the PR description: `Refs #602`, `Refs #656`,
-  and a "Calibrations" heading listing the kept calibrations (none new).
+- [ ] Write the PR description:
+  - `Refs #602` and `Refs #656`;
+  - a "Calibrations" heading listing the kept calibrations (none new);
+  - the values that differ from legacy and will reach the generated
+    systems in 2d-4: `LAVA_TEMPERATURE`, `ICE_SHEET_THICKNESS`, the ice
+    density of the reach, the IAPWS melting and boiling, and volcanism
+    B.
+
   Generated systems are unchanged, so there is no oracle run.
