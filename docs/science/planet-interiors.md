@@ -1384,18 +1384,61 @@ stay lava.
 ### Classes
 
 The class is read off the result, in this order; the first rule that holds
-wins.
+wins. The table gives legacy's rules (tag `legacy-final`) and the source
+of each threshold as
+[study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit)
+checked it, before the rewrite ports them in planet PR 2d-4.
 
-| Class | Rule | Source of the threshold |
+| Class | Rule (legacy) | Source of the threshold |
 | --- | --- | --- |
-| Giant: gas giant | at least 10 Earth masses and 5 % gas; at least 50 % of the mass in gas | calibration (parts Jupiter and Saturn from Uranus and Neptune) |
-| Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012 |
-| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016, doi:10.1051/0004-6361/201528065 |
+| Giant: gas giant | at least 10 Earth masses and 5 % gas; at least 50 % of the mass in gas | calibrations, no source (below) |
+| Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012, § 3: "P < 10 d and M sin i > 0.1 MJup" |
+| Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016 put the desert "below ~5–10 d" for 0.03 to 0.3 MJup |
 | Giant: ice giant | a giant with less than 50 % gas | same calibration |
-| Mini-Neptune | at least 0.1 % gas and 1.6 $R_\oplus$ or more | Rogers 2015; the gas share is a calibration |
+| Mini-Neptune | at least 0.1 % gas and 1.6 $R_\oplus$ or more | Rogers 2015 (§ 4.1: a transition at 1.48 $R_\oplus$, 1.59 at 95 % confidence); the gas share is the escape's `MIN_ENVELOPE` |
 | Ice world | at least 5 % water and ices | calibration (Europa about 8 %, Earth 0.02 %) |
-| Super-Earth | 1.25 $R_\oplus$ or more | Borucki et al. 2011 |
+| Super-Earth | 1.25 $R_\oplus$ or more | Borucki et al. 2011: "Earth-size (Rp < 1.25 R⊕)" |
 | Rocky | the rest | |
+
+What the study found, line by line:
+
+- **The giants.** Legacy's 10 $M_\oplus$ cites Pollack et al. 1996,
+  whose abstract gives no critical core mass; Lopez & Fortney 2014 (p. 8)
+  give the "fundamental change ... around ~10 M⊕", which the rewrite
+  already reads as the edge of the mini-Neptunes' envelope draw
+  (`MINI_NEPTUNE_MAX_MASS`). No source gives a share of hydrogen and
+  helium that parts gas giants from ice giants: Helled et al. 2020 only
+  say that the ice giants' compositions "are not dominated by" it. The
+  rewrite already parts them at 20 $M_\oplus$, the lower bound of the
+  sample of Thorngren et al. 2016 (the user's decision of 2026-11-21,
+  `science::giants::GAS_GIANT_MIN_MASS`), and its envelope draw gives a
+  20 $M_\oplus$ giant about 46 % of gas at the fit's centre. Legacy's
+  50 % line would make half of those ice giants. Study 27 recommends the
+  body kinds the chain already decides: a gas giant is a `Body::Giant`
+  (20 $M_\oplus$ and up), an ice giant a `Body::MiniNeptune` of
+  10 $M_\oplus$ or more, so no second constant holds either line.
+- **The hot giants.** Wright et al. 2012 define a hot Jupiter by its
+  period under 10 days and a mass over 0.1 $M_J$ (about 32 $M_\oplus$),
+  "not ... presumed 'ice giants' with M < 0.1MJup". The rewrite's gas
+  giants start at 20 $M_\oplus$: a 20 to 32 $M_\oplus$ giant within
+  10 days is a hot Jupiter for the model and would be a hot Neptune for
+  Wright.
+- **The mini-Neptune.** Rogers 2015 is a statement on a population, the
+  Kepler planets within 50 days that have measured masses; the 1.6
+  $R_\oplus$ is the 95 % upper bound of its transition. Fulton et al.
+  2017 find the gap between 1.5 and 2.0 $R_\oplus$, and Lopez & Fortney
+  2014 suggest 1.75 $R_\oplus$. The model knows the envelope itself:
+  a body that keeps at least 0.1 % of its mass in gas has no surface in
+  the rewrite, so legacy's rule would give a rocky class to a body with
+  no ground under 1.6 $R_\oplus$. The study leaves the radius rule to the
+  user.
+- **The ice world.** No source sets a share of water that makes an ice
+  world: Europa holds 6 to 9 % of ice and water by mass (Kuskov &
+  Kronrod 2005, as a 2025 review quotes them), and the definitions found
+  are by volume of the crust. The 5 % is the calibration the rewrite
+  already has for the tides (`ICY_MIN_WATER`), which legacy said is the
+  same share; the class reads that one.
+- **The super-Earth.** Borucki et al. 2011 say what legacy cites.
 
 ## In the app
 
