@@ -1437,3 +1437,43 @@ pub(super) fn reference_trial(trace: &mut Trace, body: &ReferenceBody) -> (Trial
     );
     (t, drawn)
 }
+
+/// [`reference_trial`]'s composition for a body of `mass` Earth masses at
+/// `au` with a core share `core` and a water share `water`, migrated in
+/// from beyond the ice line when it lies inside it: a water world, whose
+/// water is a layer of its own, all of it at its surface.
+pub(super) fn water_world_trial(
+    trace: &mut Trace,
+    mass: f64,
+    core: f64,
+    water: f64,
+    au: f64,
+) -> (Trial, Drawn) {
+    let t = trial(trace, 1, mass, au, 0.0);
+    let inside = t.orbit.semi_major_axis.value().0 < t.ice_line.value().0;
+    let drawn = Drawn::fixed(
+        &t,
+        trace,
+        core,
+        water,
+        0.0,
+        inside.then_some(true),
+        0.0,
+        None,
+        None,
+    );
+    (t, drawn)
+}
+
+/// `t` with its source's effective temperature replaced by `teff`, as
+/// [`with_fluence`] replaces its fluence.
+pub(super) fn with_star(trace: &mut Trace, t: &Trial, teff: Kelvin) -> Trial {
+    let mut source = t.sources.primary().clone();
+    source.effective_temperature = trace
+        .leaf(Code::of("test.teff-star"), teff, Provenance::Input)
+        .unwrap();
+    Trial {
+        sources: StellarSources::new(vec![source]).unwrap(),
+        ..t.clone()
+    }
+}

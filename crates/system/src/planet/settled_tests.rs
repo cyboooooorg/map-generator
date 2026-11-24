@@ -6,7 +6,7 @@
 //! bistable solve. The bistable Earth takes about a minute at opt-level 0
 //! (the snowball branches), so its tests are tier 3.
 
-use super::bare::{Bare, bare_with};
+use super::bare::{Bare, Ground, bare_with, formed};
 use super::climate::Rotation;
 use super::climate::branches::{Bistable, Solved, solve};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
@@ -15,14 +15,16 @@ use super::climate::{ClimateInputs, Numerics};
 use super::codes;
 use super::draws::LABELS;
 use super::draws::draw;
-use super::settled::{Settled, climate_of, settled, settled_with};
+use super::settled::{Settled, after_boil, climate_of, run, settled, settled_with};
 use super::tests::{
-    EARTH, MARS, MERCURY, ReferenceBody, TITAN, VENUS, ancestry, derived_from, reference_trial,
+    EARTH, MARS, MERCURY, ReferenceBody, TITAN, VENUS, WET_VENUS, ancestry, derived_from,
+    reference_trial, water_world_trial,
 };
+use super::water::water;
 use science::constants::STEFAN_BOLTZMANN;
 use science::radiation::gases::PartialPressures;
 use science::surface::{condense, titan_like_air};
-use science::units::{Bar, Degree, EarthFlux, Fraction, Kelvin, WattPerSquareMetre};
+use science::units::{Bar, Degree, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre};
 use std::collections::BTreeSet;
 use timeline::{
     ClimateState, Code, Gas, LiquidKind, NodeId, NodeValue, Origin, Provenance, Seed, Trace,
@@ -237,7 +239,7 @@ fn air_of(climate: &Climate) -> PartialPressures {
 }
 
 /// Every node of `trace` recorded under `code`, in order.
-fn nodes_of(trace: &Trace, code: &str) -> Vec<(NodeId, NodeValue)> {
+pub(super) fn nodes_of(trace: &Trace, code: &str) -> Vec<(NodeId, NodeValue)> {
     (0..trace.len())
         .map(|i| serde_json::from_value::<NodeId>(i.into()).unwrap())
         .filter_map(|id| {
@@ -360,7 +362,8 @@ fn titan_on_its_measured_air() -> (Bare, Rotation, Trace) {
 #[test]
 fn titan_has_its_seas() {
     let (bare, rot, mut trace) = titan_on_its_measured_air();
-    let (c, air) = climate_of(&bare, &rot, DRAW, &mut trace).unwrap();
+    let (c, _, settle) = climate_of(&bare, &rot, DRAW, &mut trace).unwrap();
+    let air = settle.air;
     let t = c.global.surface_temperature.value().0;
     assert!(
         (t - TITAN_SURFACE.0).abs() <= TITAN_WINDOW.0,
@@ -761,4 +764,106 @@ fn the_steam_world_line_records_its_causes() {
     let mut expected = vec![runaway.node(), temperature.node()];
     expected.sort();
     assert_eq!(from, expected);
+}
+
+/// The one `planet.climate.boils` node of `trace`, false, and the settled
+/// water's `boiled`, false and derived from it alone.
+fn assert_one_false_verdict(settled: &Settled, trace: &Trace, name: &str) {
+    let verdicts = nodes_of(trace, codes::CLIMATE_BOILS);
+    assert_eq!(verdicts.len(), 1, "{name}: {verdicts:?}");
+    assert_eq!(verdicts[0].1, NodeValue::Flag(false), "{name}");
+    let water = &settled.bare.surface.as_ref().unwrap().water;
+    assert!(!*water.boiled.value(), "{name}");
+    assert_eq!(
+        trace.node(water.boiled.node()).unwrap().code.as_str(),
+        codes::WATER_BOILED,
+        "{name}"
+    );
+    assert_eq!(
+        derived_from(trace, water.boiled.node()),
+        [verdicts[0].0],
+        "{name}"
+    );
+}
+
+#[test]
+fn a_runaway_by_light_does_not_boil() {
+    // A wet Venus runs away under its light (Kopparapu et al. 2014): its
+    // water is steam already, so the verdict is false and the light's
+    // runaway stands.
+    let (venus, _, trace) = settled_of(&WET_VENUS, NO_ICE_OBLIQUITY);
+    assert_one_false_verdict(&venus, &trace, "wet Venus");
+    let water = &venus.bare.surface.as_ref().unwrap().water;
+    assert!(*water.runaway.value());
+    let runaway = nodes_of(&trace, codes::WATER_RUNAWAY);
+    assert_eq!(runaway.len(), 1, "{runaway:?}");
+    assert_eq!(water.runaway.node(), runaway[0].0);
+}
+
+#[test]
+fn a_dry_body_does_not_boil() {
+    // Mercury has no water to boil: one run, one verdict, false.
+    let (mercury, _, trace) = settled_of(&MERCURY, NO_ICE_OBLIQUITY);
+    assert_one_false_verdict(&mercury, &trace, "Mercury");
+    assert_eq!(
+        nodes_of(&trace, codes::CLIMATE_SURFACE_TEMPERATURE).len(),
+        1
+    );
+}
+
+#[test]
+fn a_dry_steam_run_is_not_condensed() {
+    // A steam run that kept no water has nothing to condense again: it
+    // stands as it is, and no second run is judged.
+    let mut trace = Trace::new();
+    let (t, d) = reference_trial(&mut trace, &WET_VENUS);
+    let rot = rotation(&mut trace, NO_ICE_OBLIQUITY, false);
+    let Ground::Formed(f) = formed(&t, &d, &mut trace).unwrap() else {
+        panic!("a wet Venus has a surface");
+    };
+    let w = water(&f.trial, &f.body.exposed(), f.surface, &mut trace).unwrap();
+    let mut steam = run(&f, w, &rot, DRAW, &mut trace).unwrap();
+    // Its air is not reducing: the air with its CO2 held back stands.
+    assert!(steam.hold_back);
+    let dry = trace
+        .leaf(Code::of("test.dry"), Kilogram(0.0), Provenance::Imposed)
+        .unwrap();
+    steam.bare.surface.as_mut().unwrap().water.inventory = dry;
+    let before = trace.len();
+    let kept = after_boil(&f, steam.clone(), &rot, DRAW, &mut trace).unwrap();
+    assert_eq!(kept, steam);
+    assert_eq!(trace.len(), before);
+    assert!(nodes_of(&trace, codes::CLIMATE_BOILS).is_empty());
+}
+
+/// Definition: the cool small planet and the temperate one, 0.2 M⊕
+/// (legacy `a_cool_small_planet_does_not_boil` and
+/// `a_trace_of_water_does_not_boil_a_temperate_planet`).
+pub(super) const SMALL_MASS: f64 = 0.2;
+
+/// Definition: the temperate planet's orbit, 1.2 AU, and its trace of
+/// water, 1e-9 of the mass (legacy
+/// `a_trace_of_water_does_not_boil_a_temperate_planet`).
+const TEMPERATE_TRACE: (f64, f64) = (1.2, 1.0e-9);
+
+/// Definition: the temperature a temperate planet stays under, 400 K
+/// (legacy `a_trace_of_water_does_not_boil_a_temperate_planet`).
+const TEMPERATE_BOUND: Kelvin = Kelvin(400.0);
+
+#[test]
+fn a_trace_of_water_does_not_boil_a_temperate_planet() {
+    // Its vapour is bounded by the water it has, so it cannot hold its
+    // outgoing radiation at the moist limit (Kasting 1988 section 3a).
+    let mut trace = Trace::new();
+    let (au, w) = TEMPERATE_TRACE;
+    let (t, d) = water_world_trial(&mut trace, SMALL_MASS, EARTH.core_mass_fraction, w, au);
+    let rot = rotation(&mut trace, EARTH_OBLIQUITY, false);
+    let s = settled_with(&t, &d, &rot, snowball(), &mut trace).unwrap();
+    let water = &s.bare.surface.as_ref().unwrap().water;
+    assert!(
+        !*water.runaway.value() && !*water.boiled.value(),
+        "{water:?}"
+    );
+    let temperature = *climate(&s).global.surface_temperature.value();
+    assert!(temperature < TEMPERATE_BOUND, "{temperature:?}");
 }

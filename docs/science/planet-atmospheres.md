@@ -2681,11 +2681,29 @@ legacy; where they differ, this sub-section holds for the rewrite.
   under the moist limit" is the published criterion, with no
   temperature condition (#442).
 - **The verdict** (`climate::wet::boils`). A body that keeps water out
-  of a runaway and that its thermostat does not hold (`regulated`
-  false) boils when `wet_balance` is `None` under the starlight its Bond
-  albedo lets in, the air its climate left and its surface's emissivity.
-  Decision B2, a departure from legacy: legacy passes an emissivity of
-  1.0; the rewrite passes the emissivity the climate radiated under.
+  of a runaway boils when `wet_balance` is `None` under the starlight
+  its Bond albedo lets in, the air its climate left and its surface's
+  emissivity, whether its thermostat holds it or not. Decision B2, a
+  departure from legacy: legacy passes an emissivity of 1.0; the
+  rewrite passes the emissivity the climate radiated under.
+- **Departure: a regulated climate is judged too** (user, 2026-11-24).
+  Legacy skipped a climate its carbonate thermostat holds
+  (`legacy-final:crates/mapgen/src/planet/mod.rs` l.524-537), taking
+  the thermostat's balance for a wet one. It is not one: the thermostat
+  (`climate::carbon::thermostat`, as legacy's) balances on the climate's
+  column (`Profile::CLIMATE`, cloudy, relative humidity 0.77) at 288 K,
+  while `wet_balance` first needs the saturated column (`Profile::SATURATED`)
+  to send out what the surface absorbs, the moist limit of Kasting 1988
+  and Goldblatt et al. 2013 above. The two part where the absorbed flux
+  lies between the saturated column's peak and what the climate's column
+  sends out at 288 K. Measured on an Earth with a tenth of its N₂ round a
+  7220 K star at 1.2963 S⊕: absorbed 300.785 W/m², the climate's column
+  at 288 K 300.785 W/m² (the thermostat's balance, CO₂ 2.6e-5 bar), the
+  saturated column 290.7 W/m² at 288 K and at most 299.17 W/m² (at
+  308 K), so no wet balance. By the sources such a body runs away; the
+  model boils it. The band is narrow, about 0.5 % under that star's
+  runaway flux (`runaway_flux(7220 K)`, 1.2964 S⊕); it widens when #680
+  lowers the model's threshold. The thermostat is not changed.
 - **Departure: the model's threshold is above Kopparapu's.** With
   Earth's air, an Earth ocean, emissivity 1 and Bond albedo 0.306, the
   model's boil threshold is an absorbed 299.43 W/m², 1.268 S⊕, against
@@ -2723,7 +2741,20 @@ legacy; where they differ, this sub-section holds for the rewrite.
   more than the limit. A trace of water therefore finds a balance (it
   does not boil), all of it in the air.
 - **After the boil.** The steam escapes at the energy-limited rate, 9 kg
-  of water per kg of hydrogen (study 21, unchanged). Hamano et al. 2013
+  of water per kg of hydrogen (study 21, unchanged). In the rewrite
+  (`settled::settled_with`): a first run (`settled::run`: the surface
+  pass, the air, the climate and its reducing-air fallback) from the
+  water its light leaves (`water::water`), then its verdict
+  (`settled::verdict`, the `planet.climate.boils` node, which reads the
+  solver's settled state, never a second solve). No boil: that run
+  stands, and `planet.water.boiled` is recorded false from the verdict
+  (the imposed leaf of `water` is replaced). A boil: a run from the
+  steam forced on the formed planet's surface water (`water::boiled`,
+  runaway and boiled from the verdict), then `settled::after_boil`: a
+  steam run that kept no water stands; otherwise its leftover, condensed
+  again (`water::recondensed`, the runaway node from the leftover's
+  inventory), is run and judged, kept if it does not boil, the steam run
+  standing if it does. Each run's nodes stay in the trace. Hamano et al. 2013
   (abstract read) split planets in two: "type I" keep their water as
   oceans, "type II", inside a critical distance, are "desiccated by
   hydrodynamic escape". Keeping the leftover as an ocean only if its own
@@ -2896,7 +2927,9 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
 | A steam world's radius | over its condensed radius | Turbet et al. 2020 § 3.1 (property) |
 | The #492 body | steam world, over 1e5 bar, over 1000 K, steam radius over condensed | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
-| F0V at 1.28 S⊕ ends dry | boils under its insolation limit | property: absorbed light over the body's own plateau; "kept 0" is the model's escape (tier-2 net) |
+| A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
+| F0V (7220 K) at 1.2963 S⊕, a tenth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (300.8 W/m²) over the saturated column's peak (299.2 W/m²), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
+| Same, under an XUV fluence of 2e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band |
 
 The 1500 to 2500 K window extrapolates Boukrouche et al. 2021, who stop
 at 295 bar and find the plateau's end constant past it, to columns of

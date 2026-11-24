@@ -1,26 +1,32 @@
-//! The planet chained from its draw to its climate: [`bare_with`]'s
-//! ground and air, then the climate the solver settles on them
-//! ([`climate::branches::solve`]) recorded in the cause trace
-//! ([`climate::record::record`]), and the reducing-air fallback that reads
-//! it. A separate step, so that `bare` and `bare_with` keep their cost and
+//! The planet chained from its draw to its climate: [`formed`]'s ground,
+//! then runs from a water entry to a climate ([`run`]: the surface pass,
+//! the air of [`bare_air`], the climate the solver settles on it,
+//! [`climate::branches::solve`], recorded in the cause trace,
+//! [`climate::record::record`], and the reducing-air fallback that reads
+//! it), and the boil loop that judges them ([`verdict`], [`after_boil`]).
+//! A separate step, so that `bare` and `bare_with` keep their cost and
 //! their tests do not run the climate. Ported from
-//! `legacy-final:crates/mapgen/src/planet/mod.rs` (`bare`, l.880-893).
+//! `legacy-final:crates/mapgen/src/planet/mod.rs` (`chain`, l.517-571,
+//! and `bare`, l.880-893).
 //!
-//! Not wired into the generation chain yet (2d-4). Not in it: `boils`
-//! and the steam envelope (2d-3b), life, the class, the volcanic SO2
-//! frost (#678) and the non-thermal loss (#658).
+//! Not wired into the generation chain yet (2d-4). Not in it: the steam
+//! envelope (2d-3b), life, the class, the volcanic SO2 frost (#678) and
+//! the non-thermal loss (#658).
 
-use super::bare::{Bare, Ground, bare_air, formed, surface_pass};
+use super::bare::{Bare, Formed, Ground, bare_air, formed, surface_pass};
 use super::climate::ClimateInputs;
 use super::climate::Rotation;
 use super::climate::branches::solve;
-use super::climate::record::{Climate, record, record_titan_like};
+use super::climate::record::{Climate, record, record_boils, record_titan_like};
+use super::climate::settle::Settle;
+use super::climate::wet::boils;
+use super::codes;
 use super::draws::{LABELS, draw, snowball_draw};
 use super::interior::InteriorError;
-use super::water::water;
+use super::water::{boiled, recondensed, water};
 use crate::Trial;
 use science::units::Bar;
-use timeline::{Seed, Trace};
+use timeline::{Code, Seed, Trace, Traced, Water};
 
 use super::draws::Drawn;
 
@@ -31,6 +37,26 @@ pub(crate) struct Settled {
     pub bare: Bare,
     /// The climate; `None` for a planet that kept an envelope.
     pub climate: Option<Climate>,
+    /// Whether a runaway's steam hides its surface; `None` until the
+    /// steam envelope reads it (2d-3b, next task).
+    pub hides_surface: Option<Traced<bool>>,
+}
+
+/// One run of the planet from a water entry to its climate: the surface
+/// pass, the air, the climate and its reducing-air fallback (legacy
+/// `Ran::bare`).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Run {
+    /// The planet and the air its climate was solved on.
+    pub bare: Bare,
+    /// The climate, recorded.
+    pub climate: Climate,
+    /// What the climate was solved from.
+    pub inputs: ClimateInputs,
+    /// The settled state the solver found, which [`verdict`] reads.
+    pub settle: Settle,
+    /// Whether its air held its CO2 back (the fallback's choice).
+    pub hold_back: bool,
 }
 
 /// The planet `trial` drawn from `seed` ([`draw`]), chained to its bare
@@ -50,17 +76,20 @@ pub(crate) fn settled(
     settled_with(trial, &drawn, rotation, seed.derive(LABELS.snowball), trace)
 }
 
-/// The planet `trial` of composition `drawn`, chained to its air
-/// ([`formed`], [`water`], [`surface_pass`], then [`bare_air`] with a reducing air's CO2 held
-/// back) and settled under `rotation`, with the snowball draw of
-/// `snowball`.
+/// The planet `trial` of composition `drawn`, chained to its climate
+/// under `rotation`, with the snowball draw of `snowball`, and judged by
+/// the boil loop (legacy `chain`, l.517-571):
 ///
-/// A reducing air whose climate leaves no Titan-like air (a Triton's thin
-/// nitrogen, `titan_like_air`) keeps its CO2: the air is made again
-/// without holding it back ([`bare_air`], on the same ground) and the
-/// climate settled again (legacy `mod` l.889-893). The first pass's
-/// nodes stay in the trace, as 2c's rebuilt bodies do; the
-/// `planet.climate.titan-like` node records the decision.
+/// 1. the ground ([`formed`]); a planet that kept an envelope stops there;
+/// 2. a first [`run`] from the water its light leaves ([`water`]), and
+///    its [`verdict`];
+/// 3. no boil: that run stands, its `boiled` recorded false from the
+///    verdict (the imposed leaf of [`water`] is replaced);
+/// 4. a boil: a run from the steam forced on the ground's water
+///    ([`boiled`], runaway and boiled from the verdict), then
+///    [`after_boil`].
+///
+/// Each run's nodes stay in the trace, as 2c's rebuilt bodies do.
 ///
 /// # Errors
 ///
@@ -72,54 +101,154 @@ pub(crate) fn settled_with(
     snowball: Seed,
     trace: &mut Trace,
 ) -> Result<Settled, InteriorError> {
-    let ground = match formed(trial, drawn, trace)? {
+    let f = match formed(trial, drawn, trace)? {
         Ground::Enveloped(bare) => {
             return Ok(Settled {
                 bare: *bare,
                 climate: None,
+                hides_surface: None,
             });
         }
-        Ground::Formed(f) => {
-            let w = water(&f.trial, &f.body.exposed(), f.surface, trace)?;
-            surface_pass(&f, w, None, trace)?
-        }
+        Ground::Formed(f) => f,
     };
     let draw = snowball_draw(snowball);
-    let held = bare_air(&ground, true, trace)?;
-    let (climate, air) = climate_of(&held, rotation, draw, trace)?;
-    let surface = held.surface.as_ref().expect("a ground has a surface");
-    if !*surface.reducing.value() {
-        return Ok(Settled {
-            bare: held,
-            climate: Some(climate),
-        });
-    }
-    let titan_like = record_titan_like(&climate, &air, &surface.reducing, trace)?;
-    if *titan_like.value() {
-        return Ok(Settled {
-            bare: held,
-            climate: Some(climate),
-        });
-    }
-    let bare = bare_air(&ground, false, trace)?;
-    let (climate, _) = climate_of(&bare, rotation, draw, trace)?;
+    let light = water(&f.trial, &f.body.exposed(), f.surface, trace)?;
+    let first = run(&f, light, rotation, draw, trace)?;
+    let v = verdict(&first, trace)?;
+    let kept = if *v.value() {
+        let steam = boiled(&f.trial, &f.body.exposed(), f.surface, v, trace)?;
+        let steam = run(&f, steam, rotation, draw, trace)?;
+        after_boil(&f, steam, rotation, draw, trace)?
+    } else {
+        let mut first = first;
+        let not_boiled = trace.record(Code::of(codes::WATER_BOILED), false, &[v.node()])?;
+        first
+            .bare
+            .surface
+            .as_mut()
+            .expect("a run has a surface")
+            .water
+            .boiled = not_boiled;
+        first
+    };
     Ok(Settled {
-        bare,
-        climate: Some(climate),
+        bare: kept.bare,
+        climate: Some(kept.climate),
+        hides_surface: None,
     })
 }
 
-/// The climate of `bare` under `rotation` and the air it leaves: solved
-/// ([`solve`]) and recorded ([`record`]). `ClimateInputs::of` takes no
-/// SO2 frost: the volcanic SO2 frost has no port (#678).
+/// One run of the planet `formed` from the water entry `water` under
+/// `rotation` and the snowball draw `draw`: the surface pass
+/// ([`surface_pass`]), the air with a reducing air's CO2 held back
+/// ([`bare_air`]) and its climate ([`climate_of`]).
+///
+/// A reducing air whose climate leaves no Titan-like air (a Triton's thin
+/// nitrogen, `titan_like_air`) keeps its CO2: the air is made again
+/// without holding it back ([`bare_air`], on the same ground) and the
+/// climate settled again (legacy `mod` l.889-893). The first pass's
+/// nodes stay in the trace; the `planet.climate.titan-like` node records
+/// the decision.
+///
+/// # Errors
+///
+/// The errors of each step.
+pub(super) fn run(
+    formed: &Formed,
+    water: Water,
+    rotation: &Rotation,
+    draw: f64,
+    trace: &mut Trace,
+) -> Result<Run, InteriorError> {
+    let ground = surface_pass(formed, water, None, trace)?;
+    let held = bare_air(&ground, true, trace)?;
+    let (climate, inputs, settle) = climate_of(&held, rotation, draw, trace)?;
+    let surface = held.surface.as_ref().expect("a ground has a surface");
+    let keeps_held = !*surface.reducing.value()
+        || *record_titan_like(&climate, &settle.air, &surface.reducing, trace)?.value();
+    if keeps_held {
+        return Ok(Run {
+            bare: held,
+            climate,
+            inputs,
+            settle,
+            hold_back: true,
+        });
+    }
+    let bare = bare_air(&ground, false, trace)?;
+    let (climate, inputs, settle) = climate_of(&bare, rotation, draw, trace)?;
+    Ok(Run {
+        bare,
+        climate,
+        inputs,
+        settle,
+        hold_back: false,
+    })
+}
+
+/// The run's verdict: [`boils`] of its settled state (its air, Bond
+/// albedo and emissivity, read from the solver's [`Settle`], not solved
+/// again; a regulated climate is judged too), recorded
+/// ([`record_boils`]).
+///
+/// # Errors
+///
+/// The errors of the trace.
+pub(super) fn verdict(run: &Run, trace: &mut Trace) -> Result<Traced<bool>, InteriorError> {
+    let s = &run.settle;
+    let verdict = boils(&run.inputs, &s.air, s.bond_albedo, s.emissivity);
+    record_boils(&run.climate, &run.bare, verdict, trace)
+}
+
+/// What follows a boil (legacy `chain`, l.556-570): the `steam` run
+/// stands when it kept no water; otherwise its leftover, condensed again
+/// ([`recondensed`]), is run, and kept if that run does not boil (its
+/// [`verdict`]), the steam standing if it does.
+///
+/// # Errors
+///
+/// The errors of each step.
+pub(super) fn after_boil(
+    formed: &Formed,
+    steam: Run,
+    rotation: &Rotation,
+    draw: f64,
+    trace: &mut Trace,
+) -> Result<Run, InteriorError> {
+    let left = &steam
+        .bare
+        .surface
+        .as_ref()
+        .expect("a run has a surface")
+        .water;
+    if left.inventory.value().0 <= 0.0 {
+        return Ok(steam);
+    }
+    let condensed = recondensed(left, trace)?;
+    let wet = run(formed, condensed, rotation, draw, trace)?;
+    if *verdict(&wet, trace)?.value() {
+        Ok(steam)
+    } else {
+        Ok(wet)
+    }
+}
+
+/// The climate of `bare` under `rotation`: solved ([`solve`]) and recorded
+/// ([`record`]), with the inputs it was solved from and the settled state
+/// the solver found. `ClimateInputs::of` takes no SO2 frost: the volcanic
+/// SO2 frost has no port (#678).
+///
+/// # Errors
+///
+/// The errors of the trace.
 pub(crate) fn climate_of(
     bare: &Bare,
     rotation: &Rotation,
     draw: f64,
     trace: &mut Trace,
-) -> Result<(Climate, science::radiation::gases::PartialPressures), InteriorError> {
+) -> Result<(Climate, ClimateInputs, Settle), InteriorError> {
     let inputs = ClimateInputs::of(bare, rotation, Bar(0.0)).expect("a ground has a surface");
     let solved = solve(&inputs, draw);
     let climate = record(&solved, bare, rotation, draw, trace)?;
-    Ok((climate, solved.settle.air))
+    Ok((climate, inputs, solved.settle))
 }

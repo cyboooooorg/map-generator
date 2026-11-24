@@ -53,12 +53,14 @@
 //! of its albedo and emissivity, the temperate and frozen branches, the
 //! snowball chance and the state its draw finds, and [`climate::record`],
 //! which records the settled climate in the cause trace), and [`settled`]
-//! chains it after [`bare`]: the ground and the air, the climate, and the
+//! chains it after [`bare`]: the ground and the air, the climate, the
 //! reducing-air fallback (the air made again with its CO2 when the climate
-//! leaves no Titan-like air). `settled` is a separate step, not wired into
-//! the generation chain yet (2d-4), so that `bare` keeps its cost. What
-//! remains: the boiling loop and the steam envelope (2d-3b), life, the
-//! class (#659). Every value is recorded in the system's cause `Trace`, with
+//! leaves no Titan-like air), and the boil loop (a wet planet with no wet
+//! balance boils: run again from the steam forced on its ocean, its
+//! leftover condensed again when that run does not boil). `settled` is a
+//! separate step, not wired into the generation chain yet (2d-4), so that
+//! `bare` keeps its cost. What remains: the steam envelope (2d-3b), life,
+//! the class (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which

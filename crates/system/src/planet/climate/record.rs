@@ -331,7 +331,7 @@ pub(crate) fn record_titan_like(
 
 /// Whether the water the climate kept boils (`verdict`, from
 /// [`super::wet::boils`]), recorded as `planet.climate.boils` from the
-/// climate's `regulated`, Bond albedo and emissivity, each partial of its
+/// climate's Bond albedo and emissivity, each partial of its
 /// atmosphere, the water's runaway and inventory, the three heats, the
 /// bulk's radius and gravity, and each source's flux and effective
 /// temperature: everything the verdict reads.
@@ -339,10 +339,6 @@ pub(crate) fn record_titan_like(
 /// # Errors
 ///
 /// The errors of the trace.
-#[expect(
-    dead_code,
-    reason = "consumed by `settled`, the next task of the boiling plan"
-)]
 pub(crate) fn record_boils(
     climate: &Climate,
     bare: &Bare,
@@ -354,11 +350,7 @@ pub(crate) fn record_boils(
         .as_ref()
         .expect("only a planet with a surface has a climate");
     let bulk = bare.body.bulk();
-    let mut from = vec![
-        climate.regulated.node(),
-        climate.global.bond_albedo.node(),
-        climate.emissivity.node(),
-    ];
+    let mut from = vec![climate.global.bond_albedo.node(), climate.emissivity.node()];
     from.extend(climate.atmosphere.partial.values().map(Traced::node));
     from.extend([
         surface.water.runaway.node(),
@@ -389,7 +381,7 @@ pub(crate) fn record_boils(
     not(test),
     expect(
         dead_code,
-        reason = "consumed by `settled`, the next task of the boiling plan"
+        reason = "consumed by `settled`'s steam envelope, a later task of the boiling plan"
     )
 )]
 pub(crate) fn record_hides_surface(

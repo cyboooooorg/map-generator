@@ -168,8 +168,7 @@ pub(crate) fn wet_climate(
 }
 
 /// Whether a body that keeps water out of a runaway boils it (legacy
-/// `climate::boils`): its thermostat does not hold it (`regulated`
-/// false) and, under the light its `bond_albedo` lets in plus its
+/// `climate::boils`): under the light its `bond_albedo` lets in plus its
 /// internal heat, with `air` (the air its climate left) and its
 /// surface's `emissivity`, no wet balance exists ([`wet_balance`] is
 /// `None`).
@@ -186,25 +185,26 @@ pub(crate) fn wet_climate(
 /// outgoing radiation at the moist limit and does not boil (Kasting 1988
 /// section 3a; Boukrouche et al. 2021 Fig. 9).
 ///
-/// Departure from legacy, decision B2: legacy passes an emissivity of
-/// 1.0; the rewrite passes the surface's own `emissivity`, so the verdict
-/// reads the surface the climate radiated under.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`, the next task of the boiling plan"
-    )
-)]
+/// Departures from legacy:
+///
+/// - decision B2: legacy passes an emissivity of 1.0; the rewrite passes
+///   the surface's own `emissivity`, so the verdict reads the surface
+///   the climate radiated under;
+/// - a regulated climate is judged too (user decision, 2026-11-24).
+///   Legacy skipped it (`mod.rs` l.524-537), taking the thermostat's
+///   balance for a wet one, but the thermostat balances on the climate's
+///   column at 288 K ([`super::carbon::thermostat`]), not on the
+///   saturated one the moist limit reads: past the saturated column's
+///   peak a regulated climate runs away by the sources above
+///   (`docs/science/planet-atmospheres.md`, study 26, "The boil").
 pub(crate) fn boils(
     inputs: &ClimateInputs,
     air: &PartialPressures,
     bond_albedo: Fraction,
     emissivity: Fraction,
-    regulated: bool,
 ) -> bool {
     let mut body = ClimateBody::new(inputs, Numerics::DEFAULT);
-    if regulated || !body.wet() {
+    if !body.wet() {
         return false;
     }
     let light = body.starlight(bond_albedo);

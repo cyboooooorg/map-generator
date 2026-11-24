@@ -3,6 +3,7 @@
 
 use super::ClimateInputs;
 use super::body::ClimateBody;
+use super::carbon::thermostat;
 use super::fixture::{earth, moved};
 use super::wet::{boils, collapsed_climate, wet_balance};
 use super::{COLLAPSE_ITERATIONS, COLLAPSE_TOLERANCE, Light, Numerics};
@@ -217,14 +218,13 @@ const TRACE_TOLERANCE: f64 = 1e-9;
 const VENUS_ORBIT: f64 = 0.723;
 
 /// The verdict on `inputs` of Earth's air, Bond albedo and a surface
-/// radiating as a black body, `regulated` or not.
-fn boils_earth(inputs: &ClimateInputs, regulated: bool) -> bool {
+/// radiating as a black body.
+fn boils_earth(inputs: &ClimateInputs) -> bool {
     boils(
         inputs,
         &EARTH_DRY_AIR,
         Fraction::new(EARTH_BOND).unwrap(),
         Fraction::new(1.0).unwrap(),
-        regulated,
     )
 }
 
@@ -238,7 +238,7 @@ fn with_ocean(mut inputs: ClimateInputs) -> ClimateInputs {
 #[test]
 fn earth_keeps_its_ocean_at_one_au() {
     // An observation: Earth's oceans have not boiled.
-    assert!(!boils_earth(&with_ocean(earth()), false));
+    assert!(!boils_earth(&with_ocean(earth())));
 }
 
 #[test]
@@ -248,22 +248,31 @@ fn a_wet_venus_boils() {
     let flux: f64 = inputs.sources.iter().map(|s| s.flux.0).sum();
     let limit = runaway_flux(inputs.sources[0].effective_temperature).0;
     assert!(flux > limit, "{flux} S⊕ against the limit {limit} S⊕");
-    assert!(boils_earth(&inputs, false));
+    assert!(boils_earth(&inputs));
 }
 
 #[test]
 fn a_runaway_does_not_boil_again() {
     let mut inputs = with_ocean(moved(&earth(), VENUS_ORBIT));
     inputs.runaway = true;
-    assert!(!boils_earth(&inputs, false));
+    assert!(!boils_earth(&inputs));
 }
 
 #[test]
-fn a_regulated_climate_does_not_boil() {
-    assert!(!boils_earth(
-        &with_ocean(moved(&earth(), VENUS_ORBIT)),
-        true
-    ));
+fn a_regulated_climate_with_a_wet_balance_does_not_boil() {
+    // Earth at 1 AU under its carbonate thermostat: the verdict reads the
+    // air the thermostat left, and a wet balance exists under it. Being
+    // regulated is not what keeps it from boiling: a regulated climate
+    // whose saturated column cannot send out what it absorbs boils
+    // (`heavy_tests::a_boil_that_escapes_all_its_water_ends_dry`).
+    let inputs = with_ocean(earth());
+    let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
+    let bond = Fraction::new(EARTH_BOND).unwrap();
+    let black = Fraction::new(1.0).unwrap();
+    let light = body.starlight(bond);
+    let (air, _, regulated) = thermostat(&mut body, light, &inputs.air, black);
+    assert!(regulated, "{air:?}");
+    assert!(!boils(&inputs, &air, bond, black));
 }
 
 #[test]
@@ -277,7 +286,7 @@ fn a_trace_of_water_does_not_boil() {
         .water_column()
         .0;
     assert!((column - TRACE_WATER.0).abs() < TRACE_TOLERANCE, "{column}");
-    assert!(!boils_earth(&inputs, false));
+    assert!(!boils_earth(&inputs));
 }
 
 #[test]
@@ -293,6 +302,6 @@ fn two_half_suns_boil_as_one() {
         inputs.sources = vec![half, half];
         inputs
     };
-    assert!(boils_earth(&split(VENUS_ORBIT), false));
-    assert!(!boils_earth(&split(1.0), false));
+    assert!(boils_earth(&split(VENUS_ORBIT)));
+    assert!(!boils_earth(&split(1.0)));
 }
