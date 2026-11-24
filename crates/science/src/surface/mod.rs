@@ -8,5 +8,7 @@
 //! and no solver.
 
 mod cover;
+mod liquids;
 
 pub use cover::*;
+pub use liquids::*;
