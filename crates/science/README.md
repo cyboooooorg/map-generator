@@ -120,9 +120,13 @@ and `core_bounds` read the Fortney et al. 2007 tables; `ice_rock_core_radius`
 is their Eq. 7. `science::envelope`: `envelope_thickness` is Lopez & Fortney
 2014 (1 to 20 M⊕, 1e-4 to 0.2 of H/He, 20 mbar) minus their core; the 1 M⊕ and
 1e-4 rules are calibrated. `science::hydrogen`: `polytrope_radius_at` places
-the 100 GPa metallic boundary of a giant. Data: [GIANTS.md](data/GIANTS.md);
+the 100 GPa metallic boundary of a giant. `science::steam`: a runaway's
+steam envelope, Turbet et al. 2020's Eqs. 2 and 3 (`envelope`,
+`base_pressure`, `steam_temperature`; the thickness cap is calibrated),
+and the steam world line (`hides_surface`). Data: [GIANTS.md](data/GIANTS.md);
 laws, tests and calibrations: [Mini-Neptunes](../../docs/science/planet-interiors.md#mini-neptunes-and-their-envelopes),
-[Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary).
+[Giants](../../docs/science/planet-interiors.md#giants-and-the-metallic-hydrogen-boundary),
+[Steam](../../docs/science/planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26).
 
 ## Relief
 

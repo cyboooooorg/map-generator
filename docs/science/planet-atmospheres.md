@@ -2716,6 +2716,9 @@ legacy; where they differ, this sub-section holds for the rewrite.
 
 #### The steam world line
 
+The rewrite's line is `science::steam::hides_surface` and
+`science::steam::STEAM_WORLD_MIN_BAR`.
+
 - **Water's critical point** (`Source:`, already in the rewrite):
   `science::water::CRITICAL_PRESSURE`, 22.064 MPa, and
   `CRITICAL_POINT_TEMPERATURE`, 647.096 K (IAPWS SR1-86(1992), section 2,
@@ -2752,6 +2755,11 @@ legacy; where they differ, this sub-section holds for the rewrite.
 Turbet et al. 2020 (*A&A* 638, A41, doi:10.1051/0004-6361/201937151,
 arXiv:1911.08878v3, read in full; v3 is the "final version published in
 A&A", with "small typos in Tables 1 and 2" corrected):
+
+The rewrite's laws are `science::steam::base_pressure` (C.9, C.10),
+`science::steam::steam_temperature` (Eq. 3), `science::steam::envelope`
+(Eq. 2, one call that returns the base pressure, the core's gravity, the
+temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 
 - **Eq. 2** (`Source:`), printed as `z = (1 / (ln(x/(1−x) · g²/(4πG
   P_t)) · R T/(M g)) − 1/R_core)⁻¹`, the same as Appendix C (C.8):
