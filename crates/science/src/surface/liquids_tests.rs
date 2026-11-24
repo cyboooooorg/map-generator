@@ -382,3 +382,31 @@ fn frost_at_triple(air: &PartialPressures) -> PartialPressures {
         air,
     )
 }
+
+/// Definition: 3000 bar (300 MPa), where ice III is the stable ice.
+const ICE_III_AIR_BAR: f64 = 3000.0;
+/// Definition: 254 K, under the ice III melting temperature at 300 MPa
+/// (254.96 K, IAPWS R14-08(2011), eq. 2).
+const BELOW_ICE_III_MELTING_K: Kelvin = Kelvin(254.0);
+/// Definition: 256 K, over the same melting temperature.
+const ABOVE_ICE_III_MELTING_K: Kelvin = Kelvin(256.0);
+
+/// Issue #671: under 300 MPa the stable ice is III, which melts at
+/// 254.96 K, so water at 254 K is frozen (the floor of ice Ih, 251.165 K,
+/// called it liquid).
+#[test]
+fn water_under_ice_iii_pressure_freezes() {
+    let air = PartialPressures {
+        n2: ICE_III_AIR_BAR,
+        ..PartialPressures::default()
+    };
+    let water = oceans(1.0);
+    assert_ne!(
+        liquid(BELOW_ICE_III_MELTING_K, &air, water, false, &none()),
+        Some(Liquid::Water)
+    );
+    assert_eq!(
+        liquid(ABOVE_ICE_III_MELTING_K, &air, water, false, &none()),
+        Some(Liquid::Water)
+    );
+}

@@ -19,7 +19,7 @@ use crate::volatiles::{
     co2_frost_pressure, ethane_boiling_temperature, methane_saturation_bar,
     nitrogen_vapour_pressure, sulphur_dioxide_frost_pressure,
 };
-use crate::water::{boiling_temperature, ice_ih_melting_temperature};
+use crate::water::{boiling_temperature, melting_temperature};
 
 /// Source: the temperature from which a rocky surface is molten, 1673 K:
 /// Kite, Fegley, Schaefer & Gaidos 2016 (*ApJ* 828, 80,
@@ -118,8 +118,8 @@ fn bar(p: Pascal) -> f64 {
 /// - lava from [`LAVA_TEMPERATURE`] on a body that has kept no water
 ///   (with water on top, its steam or supercritical fluid covers the
 ///   rock: Hamano, Abe & Genda 2013, doi:10.1038/nature12163);
-/// - water from the melting of ice Ih to the boiling point at the total
-///   pressure (IAPWS, [`ice_ih_melting_temperature`],
+/// - water from the melting of the stable ice to the boiling point at the total
+///   pressure (IAPWS, [`melting_temperature`] of the stable ice,
 ///   [`boiling_temperature`]), above water's triple-point pressure, with
 ///   water kept out of a runaway;
 /// - hydrocarbons from the sea's freezing point ([`sea_freezes`]) to
@@ -128,13 +128,6 @@ fn bar(p: Pascal) -> f64 {
 /// - nitrogen where nitrogen condenses above its triple point without a
 ///   methane sea (under it, a frost, [`frost`]);
 /// - none otherwise.
-///
-/// Limit: above 208.6 MPa, `ice_ih_melting_temperature` stays at the
-/// Ih-III-liquid triple point (251.165 K), the floor of ice Ih; the
-/// denser ices III, V and VI melt higher (ice VI at 273 to 355 K), so
-/// water between 252 and 273 K under that pressure reads liquid
-/// although a denser ice is stable. Issue #671 reads the melting curve
-/// of the stable ice.
 pub fn liquid(
     t: Kelvin,
     air: &PartialPressures,
@@ -146,7 +139,7 @@ pub fn liquid(
     let water_on_top = water.0 > 0.0;
     let water_window = || {
         boiling_temperature(pressure)
-            .is_some_and(|boils| t.0 >= ice_ih_melting_temperature(pressure).0 && t.0 < boils.0)
+            .is_some_and(|boils| t.0 >= melting_temperature(pressure).0 && t.0 < boils.0)
     };
     if t.0 >= LAVA_TEMPERATURE.0 && !water_on_top {
         Some(Liquid::Lava)

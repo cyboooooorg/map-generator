@@ -2147,27 +2147,25 @@ and pressure, in this order:
   for longer, even with a larger initial amount of water", under its
   steam, until escape dries it; the model shows that planet's steam, not
   its magma;
-- `water` between the melting temperature of ice Ih and water's boiling
-  point at the surface pressure (`water::ice_ih_melting_temperature` and
-  `water::boiling_temperature`, both IAPWS, 373.1 K at 1 atm, the
-  boiling point meeting the critical point), above the triple-point
-  pressure, with water kept out of a runaway; legacy's 273.15 K
-  (`ICE_MELTS_K`, uncited) and its Clausius–Clapeyron boiling point are
-  not ported, and a pressure under the triple point has no boiling
-  point, so no liquid water. Limit: above 208.6 MPa (about 2 086 bar)
-  the melting temperature stays at the Ih–III–liquid point, 251.165 K,
-  the floor of ice Ih, while the denser ices III, V and VI melt higher
-  (ice VI at 273 to 355 K): water between 252 and 273 K under that
-  pressure reads liquid where a denser ice is stable. Issue #671 reads
-  the melting curve of the stable ice (2d-3a, study 25): IAPWS
-  R14-08(2011) gives ice III `π = 1 − 0.299948 (1 − θ⁶⁰)` (eq. 2,
-  `T*` 251.165 K, `p*` 208.566 MPa, to 256.164 K) and ice V
-  `π = 1 − 1.18721 (1 − θ⁸)` (eq. 3, `T*` 256.164 K, `p*` 350.1 MPa,
-  to 273.31 K), 3 % in pressure, checked against its Table 3 (268.685
-  MPa at 254 K, 479.640 MPa at 265 K); the ice in equilibrium with the
-  liquid is Ih to 208.566 MPa, III to 350.1 MPa, V to 632.4 MPa, VI to
-  2216 MPa (Table 1), and eqs. 2 to 4 invert in closed form,
-  `θ = (1 − (1 − π)/a)^(1/b)`;
+- `water` between the melting temperature of the stable ice
+  (`water::melting_temperature`) and water's boiling point at the
+  surface pressure (`water::boiling_temperature`, IAPWS, 373.1 K at
+  1 atm, the boiling point meeting the critical point), above the
+  triple-point pressure, with water kept out of a runaway; legacy's
+  273.15 K (`ICE_MELTS_K`, uncited) and its Clausius–Clapeyron boiling
+  point are not ported, and a pressure under the triple point has no
+  boiling point, so no liquid water. The melting curve is that of the
+  ice in equilibrium with the liquid (issue #671, study 25): IAPWS
+  R14-08(2011) Table 1 gives Ih to 208.566 MPa, III to 350.1 MPa, V to
+  632.4 MPa, VI to 2216 MPa. Ice III is
+  `π = 1 − 0.299948 (1 − θ⁶⁰)` (eq. 2, `T*` 251.165 K, `p*` 208.566 MPa,
+  to 256.164 K) and ice V `π = 1 − 1.18721 (1 − θ⁸)` (eq. 3, `T*`
+  256.164 K, `p*` 350.1 MPa, to 273.31 K), 3 % in pressure, checked
+  against its Table 3 (268.685 MPa at 254 K, 479.640 MPa at 265 K);
+  eqs. 2 to 4 invert in closed form, `θ = (1 − (1 − π)/a)^(1/b)`.
+  Limit: ice VII (eq. 5) is not ported, a choice: above 2216 MPa the
+  melting temperature is held at 355 K, the ice VI - ice VII - liquid
+  point;
 - `hydrocarbons` between the freezing point of the sea
   (`surface::sea_freezes`) and ethane's
   boiling point at the surface pressure (`volatiles::ethane_boiling_temperature`,
