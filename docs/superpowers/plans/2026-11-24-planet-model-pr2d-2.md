@@ -63,6 +63,19 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
   over Earth's area, scaled by `R⁻²`, and that density had no source.
   The function reads the planet's radius in metres, so no Earth-area
   constant is needed, and `OCEAN_LAYER_KM` is not ported.
+- **Ice weighted by sunlight** (decided on 2026-11-24 after Task 2's
+  stop, option A). Counted by area, Earth's ground came out at 0.165
+  against CERES clear-sky 0.122, and its Bond albedo at 0.314.
+  `Cover` keeps the area shares, which the map will read. A field
+  `ice_sunlit` holds the ice share weighted by the annual-mean
+  insolation `S(x) = 1 + s₂ P₂(x)`: `((1 − x_s) + (s₂/2)(x_s − x_s³))`,
+  times the reach, times `(1 − frost)`. Here `x_s = 1 − ice_line_share`
+  and `s₂` is a function of the obliquity, as sourced in the study
+  addendum. `ground_albedo` mixes `ice_sunlit`, the frost, and the rest
+  split between ocean and land in their area ratio. `cover` takes the
+  obliquity in `Radian`. Estimated by hand for Earth: ice 0.06, ground
+  0.144, Bond 0.304. A tidally locked or slow rotator is 2d-3's to
+  handle.
 - **`condense` is 2d-3's.** `frost` and `liquid` take the condensate
   (the part of N₂ and CH₄ that the air cannot hold) as an argument.
 - **The cloud cover stays out of `Cover`.** The caller builds
@@ -285,8 +298,13 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
     pub so2_frost: Fraction }` (`so2_frost` is the part of `frost` that
     is SO₂);
   - `pub fn cover(t: Kelvin, water: Kilogram, radius: Metre,
-    frost: &PartialPressures) -> Cover` (water is 0 when the planet is
-    dry or in runaway: the caller decides);
+    frost: &PartialPressures, obliquity: Radian) -> Cover`. The water is
+    0 when the planet is dry or in runaway: the caller decides. `Cover`
+    also carries `ice_sunlit: Fraction` (see "Ice weighted by
+    sunlight");
+  - `pub fn sunlit_cap(edge: f64, obliquity: Radian) -> Fraction`, the
+    insolation-weighted share of the two polar caps poleward of
+    `x = edge`;
   - `pub fn ocean_fraction(oceans: f64) -> Fraction`;
   - `pub fn ice_line_share(t: Kelvin) -> Fraction`;
   - `pub fn frost_cover(frost: &PartialPressures) -> Fraction`;
@@ -347,10 +365,17 @@ and `docs/science/planet-atmospheres.md` "Climate and surface liquid"
       `ice == 0.75` and `ocean == 0` (the legacy assertion).
   - `earth_keeps_its_bond_albedo` [1228], an observation:
     - Earth at 288 K: the Earth air of `radiation::test_points` with
-      `surface_vapour(288 K, …)`, 1 `OCEAN_MASS` at Earth's mean radius;
+      `surface_vapour(288 K, …)`, 1 `OCEAN_MASS` at Earth's mean radius,
+      at Earth's obliquity (the study addendum's value);
     - `Underneath { ground: ground_albedo(…), clouds:
       cloud_cover(288 K, h2o), deck: sulphuric_deck(…) }`;
     - the Bond albedo is in 0.29 to 0.31.
+  - `sunlight_weights_the_caps`:
+    - `sunlit_cap(0, β)` is 1 and `sunlit_cap(1, β)` is 0 for every β;
+    - at Earth's obliquity, `sunlit_cap(0.898)` is below the area share
+      0.102 (about 0.06);
+    - at 90° obliquity the cap is above its area share;
+    - Earth's `ice_sunlit` at 288 K is below its `ice`.
   - `cover_shares_sum_to_one` (Review Focus 3).
   - `no_frost_divides_nothing` (Review Focus 2): an empty frost gives
     `so2_frost == 0` and `frost == 0`, with no NaN.
