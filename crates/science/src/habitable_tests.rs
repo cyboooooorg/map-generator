@@ -37,6 +37,70 @@ fn the_sun_runs_away_at_1_107() {
     assert_eq!(runaway_flux(Kelvin(5_780.0)).0, KOPPARAPU_SOLAR_RUNAWAY);
 }
 
+/// Source: the maximum greenhouse flux of a Sun-like star in Kopparapu et
+/// al. 2014, Table 1, column `S_eff,sun` of the maximum greenhouse, for
+/// 1 M_earth.
+const KOPPARAPU_SOLAR_OUTER: f64 = 0.356;
+
+/// Source: the Sun's effective temperature in IAU 2015 Resolution B3,
+/// 5772 K.
+const IAU_SUN_TEMPERATURE: Kelvin = Kelvin(5_772.0);
+
+/// Source: the outer edge round the Sun, 1.676 AU, of study 25 (Wiki,
+/// 25-climate-solver-audit) from Kopparapu et al. 2014; the edge is
+/// `1 / sqrt(S)` for a solar luminosity.
+const STUDY_OUTER_EDGE_AU: f64 = 1.676;
+
+/// Definition: the tolerance on that edge, 0.002 AU, the rounding of the
+/// study's three-digit figure and of the Sun's temperature.
+const OUTER_EDGE_TOLERANCE_AU: f64 = 0.002;
+
+/// Source: the flux of a 3300 K star, 0.2411, the published coefficients
+/// of Kopparapu et al. 2014, Table 1 (maximum greenhouse), evaluated by
+/// hand at `T = 3300 - 5780 K`.
+const KOPPARAPU_OUTER_AT_3300: f64 = 0.2411;
+
+/// Definition: the tolerance on that hand evaluation, 5e-4, its four
+/// digits.
+const HAND_EVALUATION_TOLERANCE: f64 = 5e-4;
+
+#[test]
+fn the_outer_edge_is_kopparapus() {
+    assert!((maximum_greenhouse_flux(Kelvin(5_780.0)).0 - KOPPARAPU_SOLAR_OUTER).abs() < 1e-12);
+    let edge = 1.0 / maximum_greenhouse_flux(IAU_SUN_TEMPERATURE).0.sqrt();
+    assert!(
+        (edge - STUDY_OUTER_EDGE_AU).abs() < OUTER_EDGE_TOLERANCE_AU,
+        "{edge}"
+    );
+    let cool = maximum_greenhouse_flux(Kelvin(3_300.0)).0;
+    assert!(
+        (cool - KOPPARAPU_OUTER_AT_3300).abs() < HAND_EVALUATION_TOLERANCE,
+        "{cool}"
+    );
+
+    // Definition: the fit's range in 100 K steps, 2600 to 7200 K.
+    let mut previous = 0.0;
+    for step in 0..=46 {
+        let teff = Kelvin(FIT_MIN.0 + 100.0 * f64::from(step));
+        let outer = maximum_greenhouse_flux(teff).0;
+        assert!(outer > previous, "not rising at {teff:?}");
+        assert!(
+            outer < runaway_flux(teff).0,
+            "not below the runaway at {teff:?}"
+        );
+        previous = outer;
+    }
+
+    assert_eq!(
+        maximum_greenhouse_flux(Kelvin(2_000.0)),
+        maximum_greenhouse_flux(FIT_MIN)
+    );
+    assert_eq!(
+        maximum_greenhouse_flux(Kelvin(9_000.0)),
+        maximum_greenhouse_flux(FIT_MAX)
+    );
+}
+
 #[test]
 fn the_fit_is_clamped_to_its_range() {
     assert_eq!(runaway_flux(Kelvin(2_000.0)), runaway_flux(FIT_MIN));

@@ -8,6 +8,12 @@
 //! paper's mass correction is not applied. See
 //! `docs/science/habitable-zone.md`.
 //!
+//! **Outer edge** (same paper, same table, maximum-greenhouse fit): the
+//! flux below which no amount of CO2 keeps a planet's water liquid,
+//! `S = 0.356 + a T + b T² + c T³ + d T⁴` with the same `T` and range.
+//! [`maximum_greenhouse_flux`] is the published fit; the model's own edge
+//! is measured against it, never set from it (departure #595).
+//!
 //! **Surface water** ([`SURFACE_WATER_SHARE`]): a planet whose water is
 //! bound in its mantle keeps that share of it at its surface, Earth's
 //! ocean over Earth's bulk water, the same for every planet (study
@@ -68,6 +74,43 @@ pub fn runaway_flux(effective_temperature: Kelvin) -> EarthFlux {
             + COEFFICIENT_B * t * t
             + COEFFICIENT_C * t.powi(3)
             + COEFFICIENT_D * t.powi(4),
+    )
+}
+
+/// Source: the solar-type maximum greenhouse flux, in units of Earth's,
+/// Kopparapu et al. 2014, Table 1, `S_eff,sun` of the maximum greenhouse.
+const OUTER_SOLAR_FLUX: f64 = 0.356;
+
+/// Source: coefficient `a` of the maximum greenhouse fit, Kopparapu et
+/// al. 2014, Table 1.
+const OUTER_A: f64 = 6.171e-5;
+
+/// Source: coefficient `b` of the maximum greenhouse fit, Kopparapu et
+/// al. 2014, Table 1.
+const OUTER_B: f64 = 1.698e-9;
+
+/// Source: coefficient `c` of the maximum greenhouse fit, Kopparapu et
+/// al. 2014, Table 1.
+const OUTER_C: f64 = -3.198e-12;
+
+/// Source: coefficient `d` of the maximum greenhouse fit, Kopparapu et
+/// al. 2014, Table 1.
+const OUTER_D: f64 = -5.575e-16;
+
+/// The flux, in units of Earth's, below which a planet lit by one star of
+/// this effective temperature freezes whatever its CO2: the maximum
+/// greenhouse, the outer edge of the habitable zone. The temperature is
+/// clamped to the fit's range, as for [`runaway_flux`]. It is below the
+/// runaway flux at every temperature of the range.
+#[must_use]
+pub fn maximum_greenhouse_flux(effective_temperature: Kelvin) -> EarthFlux {
+    let t = effective_temperature.0.clamp(FIT_MIN, FIT_MAX) - FIT_ORIGIN;
+    EarthFlux(
+        OUTER_SOLAR_FLUX
+            + OUTER_A * t
+            + OUTER_B * t * t
+            + OUTER_C * t.powi(3)
+            + OUTER_D * t.powi(4),
     )
 }
 
