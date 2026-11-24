@@ -92,8 +92,18 @@ From the spec and the user (2026-11-24):
   light's or the boil's water entry, the surface pass and the air are
   run once more with the loss and the shoreline reading that inflated
   body (a deliberate upper bound of the loss). The climate is not
-  solved again. The final body is the rock that run left under the
-  envelope of the water it kept.
+  solved again.
+- **The line read again after the loss** (user, 2026-11-24, on the plan
+  review's SF-2; replaces the plan's first B6): the steam world line is
+  read once more on the water that re-run kept (its air's H₂O, the
+  climate's surface temperature). The envelope is built only if the
+  kept steam still weighs at least 220.64 bar; otherwise the planet is
+  a runaway without an envelope. The climate's air then holds more
+  vapour than the water kept: a documented departure.
+- **The climate of a layer-born steam world** (plan review SF-3; page
+  and spec corrected in `8ae09b3f` and `2baca3a7`): a steam world
+  formed with a water layer reads the condensed planet's gravity in its
+  climate (#492: about 1.78 against 1.93 g⊕), a documented departure.
 - **Departures kept, issues filed:** #684 (Aguichine et al. 2021 past
   10 % water), #685 (no moist-greenhouse loss), #686 (the wet branch
   under the boil's bistability). Earlier: #594 (Venus pin, 2d-4), #659
@@ -102,30 +112,38 @@ From the spec and the user (2026-11-24):
 Builder's decisions (settled by this plan, listed for the user in the
 hand-off):
 
-- **B1. `boiled` before the climate.** `water` records
-  `planet.water.boiled` false derived from the runaway node (the light
-  alone boils nothing), not an imposed leaf. `settled` records the
-  final one from the verdict. A settled planet thus holds two
-  `planet.water.boiled` nodes, as 2c's rebuilt bodies hold two radii.
+- **B1. `boiled` before the climate** (plan review SF-6): `water` keeps
+  `planet.water.boiled` as an imposed leaf (false), as in 2c: before the
+  climate nothing is decided. It is derived only where it is decided:
+  `water::boiled` from the verdict, and `settled` from the verdict.
+  `bare_tests.rs:104-105` keeps its assertion; its comment names
+  `settled`.
 - **B2. The emissivity of `boils`.** It is the settled climate's own
   (`Settle::emissivity`), not legacy's 1.0, so that the verdict is the
   climate's own wet balance at its settled state. The frost
-  emissivity is 1 on any surface without frost, so this differs from
-  legacy only on a frosted surface, where no boil happens.
+  emissivity is below 1 only under N₂ frost
+  (`science/src/surface/cover.rs:205`), where no boil happens. Written
+  on the page under "The boil" as a departure from legacy's 1.0
+  (Task 3).
 - **B3. The core under the steam.** The core is the iron and rock
-  shells. Its radius is the last of them. Its mass is the whole mass
-  less the steam, so that Turbet's `x = steam / M_planet` holds for a
-  dry planet whose ocean the mantle's mass already counts. Legacy took
-  the layers below the water and their sum. The core keeps the radii
-  of the condensed structure (uncompressed by its steam, the
-  documented departure); `structure` and `central_pressure` stay the
-  rock's.
+  shells; its radius is the last of them; its mass `M_core` is the
+  whole mass less the steam, so that Turbet's `x = steam / M_planet`.
+  For a water-layer or beyond-the-law body this is legacy's core (the
+  layers below the water). For a dry body (`Water::InMantle`) the rock
+  shells already hold the steam's mass (`interior.rs:272-277`): the
+  steam comes out of them, each rock (mantle) shell's mass recorded
+  again times `1 − steam / Σ rock shells`, so that the core's shells
+  sum to `M_core` and the shells with the steam to the whole (plan
+  review SF-1). The core keeps the radii of the condensed structure
+  (uncompressed by its steam, the documented departure); `structure`
+  and `central_pressure` stay the rock's.
 - **B4. Several stars:** Eq. 3's `S` is the sum of the sources' fluxes.
-- **B5. The steam layer:** material `Steam`, state `Gas`, a new
+- **B5. The steam layer:** material `Steam`, state `Gas` (a
+  supercritical column, recorded as gas), a new
   `interior::Water::Steam { mass }` variant counted in the bulk.
-- **B6. After the steam run:** the line is not read again. A steam world
-  whose kept water falls to 0 keeps its rock (no envelope). The
-  `Bare.heat` is the rebuilt body's, as `bare_air` keeps it.
+- **B6. After the steam run:** replaced by the user's decision above
+  (the line read again). The `Bare.heat` is the re-run's rebuilt body's,
+  as `bare_air` keeps it.
 
 ## Global Constraints
 
@@ -142,8 +160,9 @@ hand-off):
   line under its own heading in the PR description.
 - One code path per value: the verdict reads the climate's settled
   values and calls `wet_balance`, never a second climate solve; the
-  envelope's temperature and thickness are recorded once by the
-  computation that derives them.
+  envelope's base pressure, gravity, temperature and thickness come
+  from one call (`science::steam::envelope`) and are recorded from its
+  result.
 - The domain emits codes, never text: new codes go in
   `system/src/planet/codes.rs` as `&'static str`.
 - Tests: tier 1 budget 2 min (now about 39 s). A test whose expected
@@ -155,6 +174,10 @@ hand-off):
   end-of-branch agents review once.
 - Docs: `docs/science` pages name the rewrite's functions; the task that
   adds a function updates its page section.
+- Stop rules ("Rules for the build"): a sourced bound that fails (the
+  0.9 AU boil, the 1500-2500 K window, a first run that does not boil
+  where a test needs it) stops the task, which reports the gap. No
+  window is widened and no test input is moved to make it pass.
 - Commits: Conventional Commits, the footer of the session (two lines,
   `Co-Authored-By` and `Claude-Session`).
 
@@ -166,8 +189,11 @@ hand-off):
 2. **A boil that escapes all its water:** no third run, a dry runaway,
    one verdict node. Task 4, `a_boil_that_escapes_all_its_water_ends_dry`
    (tier 3) and the unit test `a_dry_steam_run_is_not_condensed` (tier 1).
-3. **A steam world left with no water after its steam run:** the rock,
-   unchanged, no zero-thickness layer. Task 5,
+3. **A steam world whose loss leaves too little steam:** under the line
+   after the one-pass loss, it is a runaway without envelope, its
+   second line node false; with no steam at all, `steam_interior`
+   gives the rock unchanged. Task 6,
+   `a_steam_world_that_loses_its_steam_keeps_its_rock`, and Task 5,
    `no_steam_leaves_the_rock_as_it_is`.
 4. **The line itself:** 220.64 bar and 647.096 K exactly is a steam
    world (`>=`); a hair under either is not. Task 1,
@@ -203,8 +229,9 @@ hand-off):
   - `const STEAM_PRESSURE_RANGE: (Pascal, Pascal)` = 2.7e6 and 2.7e10
     (`Source:` § 2.1, the structures' 27 bar to 270 kbar; the comment
     says why not § 2.2's 27 kbar, per the study page);
-  - `const THICKNESS_CAP: f64 = 1.0`, in core radii (`Calibration:`
-    with what was searched, a link to the page section);
+  - `const THICKNESS_CAP: f64 = 1.0`, in core radii (`Calibration:`:
+    it caps unbound envelopes and bound ones thicker than the core's
+    radius, with what was searched, a link to the page section);
   - `const STEAM_WORLD_MIN_BAR: Bar` = `CRITICAL_PRESSURE` over
     `PASCALS_PER_BAR` (`Definition:`, the base fluid supercritical;
     Pierrehumbert 2023 § 1);
@@ -215,13 +242,31 @@ hand-off):
     `S` and `g` clamped to their ranges, the share clamped to the shares
     whose `base_pressure` at the clamped `g` lies in
     `STEAM_PRESSURE_RANGE` (legacy `steam_temperature_k`, l.252);
-  - `fn steam_thickness(core_mass: Kilogram, core_radius: Metre,
-    water_share: Fraction, insolation: EarthFlux) -> Metre`: Eq. 2 as
-    `1/z = M g / (R T ln(P_surf/P_t)) − 1/R_core`, `g = G M_core /
-    R_core²`, `M` = `radiation::gases::H2O_MOLAR_MASS`, `R` =
-    `constants::MOLAR_GAS_CONSTANT`; 0 when the share is 0 or
+  - one call for the envelope (plan review BL-2), so that the system
+    records each value from it without computing any again:
+
+    ```rust
+    pub struct Envelope {
+        /// The steam's weight at the core, `base_pressure`.
+        pub base_pressure: Pascal,
+        /// The core's gravity, `G M_core / R_core²`.
+        pub core_gravity: MetrePerSecondSquared,
+        /// Eq. 3's temperature, `steam_temperature`.
+        pub temperature: Kelvin,
+        /// Eq. 2's thickness, capped.
+        pub thickness: Metre,
+    }
+    pub fn envelope(core_mass: Kilogram, core_radius: Metre,
+        water_share: Fraction, insolation: EarthFlux) -> Envelope;
+    ```
+
+    Eq. 2 as `1/z = M g / (R T ln(P_surf/P_t)) − 1/R_core`, `M` =
+    `radiation::gases::H2O_MOLAR_MASS`, `R` =
+    `constants::MOLAR_GAS_CONSTANT`; thickness 0 when the share is 0 or
     `P_surf <= P_t`; `THICKNESS_CAP × R_core` when `(1/z) R_core <= 1`
-    (legacy `turbet_thickness`, l.303);
+    (legacy `turbet_thickness`, l.303), which caps both unbound
+    envelopes and bound ones past `R_core`. It calls `base_pressure` and
+    `steam_temperature` once each;
   - `fn hides_surface(runaway: bool, steam: Bar, surface: Kelvin) ->
     bool`: `runaway && steam >= STEAM_WORLD_MIN_BAR && surface >=
     water::CRITICAL_POINT_TEMPERATURE`.
@@ -233,33 +278,41 @@ hand-off):
     0.3 M⊕ and 0.750 R⊕ (test constants, `Source:` Zeng's MgSiO₃
     mass-radius table that Turbet et al.'s footnote 2 names, 0.750 R⊕
     at 0.3 M⊕ interpolated, study 26), share 0.05, 1 S⊕:
-    - `(R_core + z) / R⊕` lies in [1.14, 1.26] (§ 3.1, "around
-      1.2 R⊕"; the window is the test's ±5 %, a `Definition:`; the
-      laws give 1.23);
-    - `G (0.3 M⊕ / 0.95) / (R_core + z)²` lies in [1.8, 2.2] m/s²
-      (§ 3.1, "∼2 m s⁻²", ±10 %).
+    - `(R_core + envelope(..).thickness) / R⊕` lies in [1.14, 1.26]
+      (§ 3.1, "around 1.2 R⊕"; the window is the test's ±5 %, a
+      `Definition:`; the laws give 1.23);
+    - `G (0.3 M⊕ / 0.95) / (R_core + z)²`, the whole planet's mass,
+      lies in [1.8, 2.2] m/s² (§ 3.1, "∼2 m s⁻²", ±10 %; the laws give
+      2.05, 1.95 for the core alone: the test comment says so, as the
+      page does).
   - `the_base_pressure_is_the_weight_of_the_steam`: for that core and
     share, `base_pressure` equals
     `outgassing::column_pressure(m_w, g, R_core)` with `m_w = x/(1−x)
-    M_core`, within 1e-12 relative (a mass balance).
+    M_core`, within 1e-12 relative (a mass balance); `envelope`'s
+    `base_pressure`, `core_gravity` and `temperature` equal the
+    separate laws' results exactly (one path).
   - `the_temperature_stays_on_the_fit_grid`: `steam_temperature` at
     0.5 S⊕ equals that at 1 S⊕, at 100 S⊕ that at 30; at 0.1 g⊕ that
     at 0.2 g⊕, at 10 g⊕ that at 6; at a share of 0.9 on 1 g⊕ that at
     the share whose base pressure is 2.7e10 Pa.
-  - `no_steam_has_no_envelope`: share 0 gives 0 m; a share whose base
-    pressure is under 0.1 Pa gives 0 m.
-  - `an_unbound_envelope_is_capped_at_the_core_radius`: the worked
-    example's core and share at 10 and at 30 S⊕ gives exactly
-    `R_core` (Eq. 2 has no finite `z` there).
+  - `no_steam_has_no_envelope`: share 0 gives a 0 m thickness; a share
+    whose base pressure is under 0.1 Pa gives 0 m.
+  - `a_thickness_past_the_core_radius_is_capped` (plan review SF-4):
+    the worked example's core and share at 10 and at 30 S⊕ gives
+    exactly `R_core`. Eq. 2 is bound there (`R T ln/(M g)` about 0.54
+    and 0.63 `R_core`) but its `z`, about 1.18 and 1.73 `R_core`,
+    exceeds the core's radius; the cap binds from about 5.7 S⊕
+    (`docs/science/planet-atmospheres.md`, corrected in `8ae09b3f`).
   - `the_envelope_thickens_with_the_water`: a 5 M⊕ core of 1.6 R⊕
     (a test input, `Definition:`) at 1 S⊕, shares 1e-5, 1e-4, 1e-3,
     0.01, 0.05, 0.1, 0.2: the thickness never falls, and grows while
     under the cap (legacy `interior.rs` :738).
   - `the_steam_world_line_is_the_critical_point`:
     `STEAM_WORLD_MIN_BAR` is 220.64 bar within 1e-12;
-    `hides_surface(true, 220.64 bar, 647.096 K)` is true;
-    `(true, 220.63, 647.096)`, `(true, 220.64, 647.09)` and
-    `(false, 1e5, 2000)` are false.
+    `hides_surface(true, STEAM_WORLD_MIN_BAR,
+    CRITICAL_POINT_TEMPERATURE)` is true (the constants themselves,
+    not literals); 0.01 bar under the line, or 0.01 K under the
+    temperature, is false; `(false, 1e5 bar, 2000 K)` is false.
 
 - [ ] **Step 2: Run** `cargo nextest run -p science steam`. Expected:
   FAIL (no module).
@@ -272,7 +325,7 @@ hand-off):
   docs: in `planet-atmospheres.md`'s study 26 sub-section, name
   `science::steam::{hides_surface, STEAM_WORLD_MIN_BAR}` under "The
   steam world line" and `science::steam::{base_pressure,
-  steam_temperature, steam_thickness, THICKNESS_CAP}` under "The steam
+  steam_temperature, envelope, THICKNESS_CAP}` under "The steam
   envelope"; add the module to `crates/science/README.md`. Run
   `mise run ci`. Expected: green.
 
@@ -285,13 +338,14 @@ hand-off):
 
 - Modify: `crates/system/src/planet/enveloped.rs` (`Exposed`,
   `Body::exposed`; the `whole_mass` doc l.86-91),
-  `crates/system/src/planet/water.rs` (signature of `water`, `boiled`
-  derived, new `boiled`, new `recondensed`),
+  `crates/system/src/planet/water.rs` (signature of `water`, new
+  `boiled`, new `recondensed`),
   `crates/system/src/planet/air.rs` (`air` and `shoreline` read an
   `&Exposed`; doc l.92-96), `crates/system/src/planet/bare.rs` (split),
   `crates/system/src/planet/codes.rs` (`WATER_BOILED` doc),
   `crates/system/src/planet/tests.rs` (`derive_surface`),
-  `bare_tests.rs`, `water_tests.rs`, `air_tests.rs` (call sites).
+  `bare_tests.rs` (the comment of l.104-105 only), `water_tests.rs`,
+  `air_tests.rs` (call sites).
 - Docs: `docs/science/planet-atmospheres.md` l.~643-645 (the "only
   radius until PR 2d" note) and l.~247-249 (`after_steam` in the
   rewrite: add the forced entry).
@@ -319,8 +373,8 @@ hand-off):
 - Produces in `water.rs`:
   - `water(trial: &Trial, exposed: &Exposed, surface: Traced<Kilogram>,
     trace) -> Result<Water, InteriorError>`: as now, reading
-    `exposed`; `boiled` is `trace.record(WATER_BOILED, false,
-    &[runaway.node()])` (decision B1). The loss moves to a private
+    `exposed`; `boiled` stays the imposed leaf (decision B1). The loss
+    moves to a private
     `steam_lost(trial, exposed, surface, runaway, trace) ->
     Result<Traced<Kilogram>, _>` (the `WATER_STEAM_LOST` and
     `WATER_INVENTORY` records), shared with `boiled`.
@@ -358,27 +412,30 @@ hand-off):
   `bare_ground` is removed: `bare_with` is `formed`, then
   `water(&f.trial, &f.body.exposed(), f.surface, trace)`, then
   `surface_pass(&f, w, None, trace)`, then `bare_air(&g, true, trace)`.
-  The nodes come in the same order as before; only the `boiled` node
-  changes (derived instead of imposed). `settled_with` switches to
-  `formed`, `water` and `surface_pass` the same way, its behaviour
-  unchanged. `rocky` (bare.rs) becomes `pub(super)` for Task 6.
+  The nodes come in the same order and with the same values as
+  before. `settled_with` switches to `formed`, `water` and
+  `surface_pass` the same way, its behaviour unchanged. `bare::rocky`
+  is renamed `rock_of` (it collides with `interior::rocky`) and becomes
+  `pub(super)` for Task 6.
 
 - [ ] **Step 1: Write the failing tests:**
-  - In `bare_tests.rs`, `every_surface_value_traces_back_to_the_trial`:
-    replace the comment of l.104-105 with an assertion. `water.boiled`
-    is derived (`derived_from`), false, and its ancestry holds the
-    runaway node (the light, not the mass).
-  - In `water_tests.rs`:
-    - `a_boil_forces_the_steam`: `WET_VENUS`'s reference trial, body
-      and surface water, a verdict leaf true. `boiled(...)` is runaway
-      and boiled, both nodes derived from the verdict, and its
-      inventory equals that of `water(...)` on the same body (which
-      runs away by its light: the same loss, one code path);
-    - `a_larger_radius_loses_more_steam`: `water` of `WET_VENUS` with
-      its `exposed()` and with the same `Exposed` at 1.2 times the
-      radius (a new leaf): the second loses more (the loss grows as
-      `R³`, Owen & Wu 2017 eq. 19), the ratio 1.728 within 1e-9 while
-      under the surface water;
+  - In `bare_tests.rs`, l.104-105 keep their meaning: the comment says
+    `water.boiled` stays an imposed leaf until `settled` derives it.
+  - In `water_tests.rs`, on `WET_VENUS` with its XUV fluence lowered by
+    `tests::with_fluence` (`tests.rs:1406`; a `Definition:` test input)
+    so that `9 H` at 1.2 times its radius stays under its surface water
+    (plan review BL-1: at its own fluence it loses its whole ocean and
+    both losses are capped). Each test asserts that precondition first:
+    - `a_boil_forces_the_steam`: a verdict leaf true. `boiled(...)` is
+      runaway and boiled, both nodes derived from the verdict; its
+      `planet.water.steam-lost` is positive, under the surface water,
+      and equals that of `water(...)` on the same body (which runs away
+      by its light: the same loss, one code path);
+    - `a_larger_radius_loses_more_steam`: `water` with the body's
+      `exposed()` and with the same `Exposed` at 1.2 times the radius
+      (a new leaf): the steam lost grows as `R³` (Owen & Wu 2017
+      eq. 19, `energy_limited_loss ∝ R³/M`), the ratio 1.728 within
+      1e-9;
     - `a_leftover_condenses_back`: `recondensed` of a boiled water
       keeps its inventory and `boiled`; its runaway is false and
       derived from the inventory.
@@ -392,9 +449,10 @@ hand-off):
 
 - [ ] **Step 3: Implement** the interfaces. Update the docs named above.
   In `codes.rs`, `WATER_BOILED` reads "Whether the climate boiled the
-  ocean: false from the light's runaway before the climate, then the
-  verdict of the boil loop (`settled`)". In `water.rs`, drop the "next
-  pull request" sentences (l.~76-80).
+  ocean: false, imposed, before the climate (`water`); derived from the
+  boil loop's verdict once settled (`water::boiled`, `settled`)". In
+  `water.rs`, the doc of `water` says the same instead of "the next
+  pull request's" (l.~80).
 
 - [ ] **Step 4: Run** `cargo nextest run -p system planet`. Expected:
   PASS, every 2c and 2d test unchanged. Then `mise run ci`. Expected:
@@ -412,14 +470,15 @@ hand-off):
   (`record_boils`, `record_hides_surface`), `codes.rs`
   (`CLIMATE_BOILS`, `CLIMATE_HIDES_SURFACE`).
 - Docs: `planet-atmospheres.md`, study 26 "The boil" (name
-  `climate::wet::boils`); l.~1586 ("a placeholder the chain replaces
+  `climate::wet::boils`; add decision B2 as a departure from legacy's
+  emissivity 1.0); l.~1586 ("a placeholder the chain replaces
   when it boils the ocean") rewritten as the `wet_climate` decision
   above.
 
 **Interfaces:**
 
 - Consumes: `wet_balance(&mut ClimateBody, starlight, &air, emissivity)`,
-  `ClimateBody::{new, starlight, water_column}`, `Numerics::DEFAULT`,
+  `ClimateBody::{new, wet, starlight, water_column}`, `Numerics::DEFAULT`,
   `science::steam::hides_surface` (Task 1).
 - Produces in `wet.rs`:
 
@@ -443,17 +502,26 @@ hand-off):
     albedo and emissivity, each partial of its atmosphere, the water's
     runaway and inventory, the three heats, the bulk's radius and
     gravity, each source's flux and effective temperature;
-  - `record_hides_surface(water: &Water, climate: &Climate, trace) ->
+  - `record_hides_surface(runaway: Traced<bool>, h2o:
+    Option<Traced<Bar>>, temperature: Traced<Kelvin>, trace) ->
     Result<Traced<bool>, InteriorError>`: code `CLIMATE_HIDES_SURFACE`
     (`"planet.climate.hides-surface"`), value `science::steam::
-    hides_surface(runaway, h2o partial, surface temperature)`, from
-    those three nodes (no H₂O partial: 0 bar, from the other two).
+    hides_surface(runaway, h2o, temperature)`, from those nodes (no H₂O
+    partial: 0 bar, from the other two). It takes nodes, not a
+    `Climate`, so that Task 6 reads the line a second time on the
+    re-run's air.
 
 - [ ] **Step 1: Write the failing tests** in `wet_tests.rs`, on
-  `fixture::earth()` with `air` = `balance::EARTH_DRY_AIR` plus
-  4e-4 bar of CO₂ (as 2d-3a's measured-air tests), `water` =
+  `fixture::earth()` with `air` = `balance::EARTH_DRY_AIR` as it is
+  (0.78 bar N₂, 0.21 bar O₂, 4e-4 bar CO₂, no H₂O: the measured air of
+  2d-3a's tests; legacy's test had no O₂), `water` =
   `habitable::OCEAN_MASS`, the Bond albedo 0.306 (NASA fact sheet,
-  `Source:`), emissivity 1, not regulated:
+  `Source:`), emissivity 1, not regulated. The 0.9 AU case has a thin
+  margin (about 291 W/m² absorbed against a plateau of about
+  282-284 W/m², some 3 %): if `earth_boils_at_0_9_au` or
+  `earth_keeps_its_ocean_at_one_au` fails, stop and report the
+  absorbed flux and the plateau; do not move the distance, the albedo
+  or the air.
   - `earth_keeps_its_ocean_at_one_au`: `boils` is false (Earth keeps
     its oceans, an observation);
   - `earth_boils_at_0_9_au`: on `fixture::moved(.., 0.9)` it is true
@@ -464,23 +532,27 @@ hand-off):
   - `a_regulated_climate_does_not_boil`: the 0.9 AU inputs, regulated:
     false;
   - `a_trace_of_water_does_not_boil`: the 0.9 AU inputs with the water
-    that weighs 1e-4 bar (`water_column` asserted under 2e-4 bar):
-    false (Kasting 1988 § 3a; Boukrouche et al. 2021 Fig. 9);
+    `m = 1e-4 bar × 4π R² / g` on the fixture's gravity and radius (the
+    inverse of `column_pressure`; `water_column` asserted 1e-4 bar
+    within 1e-9): false (Kasting 1988 § 3a; Boukrouche et al. 2021
+    Fig. 9);
   - `two_half_suns_boil_as_one`: the 0.9 AU inputs with their source
     split in two of half the flux, same temperature: true; at 1 AU:
-    false.
+    false. It holds by construction (`ClimateBody::starlight` sums the
+    fluxes and the albedo is an input); the test comment says it guards
+    that sum.
   In `settled_tests.rs` (where the record tests live),
-  `the_steam_world_line_records_its_causes`: on a hand-made `Water`
-  and `Climate` (leaves), the node is true at 300 bar and 700 K and
-  derives from the three nodes.
+  `the_steam_world_line_records_its_causes`: on leaves (runaway true,
+  300 bar, 700 K) the node is true and derives from the three; without
+  an H₂O node it is false and derives from the other two.
 
-- [ ] **Step 2: Run** `cargo nextest run -p system climate::wet`.
-  Expected: FAIL.
+- [ ] **Step 2: Run** `cargo nextest run -p system climate::wet
+  the_steam_world_line_records_its_causes`. Expected: FAIL.
 
-- [ ] **Step 3: Implement** `boils`: `!regulated && !inputs.runaway &&
-  inputs.water.0 > 0.0`, then `wet_balance` on a fresh
-  `ClimateBody::new(inputs, Numerics::DEFAULT)` under
-  `body.starlight(bond_albedo)` is `None`. Then the two records and
+- [ ] **Step 3: Implement** `boils`: on a fresh
+  `ClimateBody::new(inputs, Numerics::DEFAULT)`, `!regulated &&
+  body.wet()`, then `wet_balance` under `body.starlight(bond_albedo)`
+  is `None`. Then the two records and
   codes, and the `wet_climate` doc (decision above, citing legacy
   l.1212).
 
@@ -500,9 +572,9 @@ hand-off):
   `pub(super) fn water_world_trial(trace, mass, core, water, au) ->
   (Trial, Drawn)`, `reference_trial`'s composition with `migrated:
   Some(true)` inside the ice line), `climate/heavy_tests.rs` (use the
-  moved
-  helper; the new tier-3 tests), `planet/mod.rs` (module doc: what
-  remains).
+  moved helper; the new tier-3 tests), `planet/mod.rs` (module doc:
+  what remains), `crates/system/README.md` (the `planet` row, l.20:
+  one clause for the boil loop).
 - Docs: `planet-atmospheres.md` study 26 "After the boil": the loop in
   the rewrite's words (`settled_with`'s runs, `water::boiled`,
   `water::recondensed`, the verdict node).
@@ -517,6 +589,7 @@ hand-off):
   /// One run of the planet from a water entry to its climate: the
   /// surface pass, the air, the climate and its reducing-air fallback
   /// (legacy `Ran::bare`).
+  #[derive(Clone, Debug, PartialEq)]
   struct Run {
       bare: Bare,
       climate: Climate,
@@ -583,12 +656,23 @@ hand-off):
     the class (model output; class in 2d-4). If no flux under the
     limit boils in the rewrite, the task reports it and stops.
   - `a_boil_whose_leftover_recondenses_keeps_its_ocean` (legacy :652,
-    :664): the same star and flux, the water set (as legacy's
-    `recondensed()`, three rounds of `energy_limited_loss` on the
-    rewrite's body) so that the steam run leaves 0.03 bar. Assert: the
-    settled water is boiled and not runaway, `0 < kept < 1e-3` of the
-    water formed, a water liquid, two verdict nodes (true then false),
-    and the runaway node derived from the leftover's inventory.
+    :664; plan review SF-7): the same star and flux, Earth's
+    composition with its N₂ cut to a tenth (`Drawn::fixed`'s scatter
+    `[0, -1, 0, 0, 0]` dex, order CO₂, N₂, S, CH₄, NH₃), as legacy did
+    so that the F star's Rayleigh scattering does not keep the first
+    run from boiling (#522). The water is sized on the rewrite's
+    entries: the leftover `recondensed` receives (after the steam
+    run's energy-limited loss and its shoreline) weighs 0.03 bar. So
+    the surface water is `9 H + L / k`, `L` the mass of 0.03 bar on the
+    formed body, `H` its `energy_limited_loss`, `k` the
+    `planet.air.shoreline-kept` share of a first steam run, and the
+    bulk water fraction that surface water over
+    `SURFACE_WATER_SHARE × M`; three rounds, as legacy's
+    `recondensed()`, since the body barely moves. Assert: the first
+    verdict is true (if not, stop and report); the settled water is
+    boiled and not runaway, `0 < kept < 1e-3` of the water formed, a
+    water liquid, two verdict nodes (true then false), and the runaway
+    node derived from the leftover's inventory.
   - `a_cool_small_planet_does_not_boil` (legacy :523): 0.2 M⊕ at
     1.5 AU, 1e-3 of water: not runaway, not boiled, the inventory is
     the surface water.
@@ -603,8 +687,8 @@ hand-off):
 - [ ] **Step 3: Implement** `Run`, `run`, `verdict` and the loop.
   The reducing-air fallback stays inside `run`, as now. The settled
   value of `boiled` replaces the run's (`bare.surface.water.boiled`).
-  Rewrite the `settled.rs` header (no "Not in it: `boils`") and the
-  `planet/mod.rs` doc ("What remains").
+  Rewrite the `settled.rs` header (no "Not in it: `boils`"), the
+  `planet/mod.rs` doc ("What remains") and the README row.
 
 - [ ] **Step 4: Run** both commands. Expected: PASS. Record each new
   test's time. Then `mise run ci`. Expected: green.
@@ -624,12 +708,13 @@ hand-off):
   interior tests live elsewhere (follow the module's pattern).
 - Docs: `docs/science/planet-interiors.md`, the "Steam worlds are left
   to the next pull request" bullet: retitle it (steam worlds) and name
-  `interior::steam_interior` and decision B3.
+  `interior::steam_interior` and decision B3; l.~1250-1260 (water
+  beyond the law, `steam_interior` as #659's): now this PR's.
 
 **Interfaces:**
 
-- Consumes: Task 1's `steam_temperature`, `steam_thickness`,
-  `base_pressure`.
+- Consumes: Task 1's `envelope` (one call; every node below is
+  recorded from its fields), Task 4's `water_world_trial`.
 - Produces in `interior.rs`:
 
   ```rust
@@ -639,9 +724,10 @@ hand-off):
 
   /// The interior of a steam world (legacy `interior::steam_interior`,
   /// l.344): the iron and rock shells of `rock` under a steam envelope
-  /// of `steam` (decision B3), its thickness from
-  /// `science::steam::steam_thickness` under the sum of `trial`'s
-  /// fluxes. `rock` unchanged when `steam` is 0.
+  /// of `steam` (decision B3: a dry body's rock shells give up the
+  /// steam's mass), its thickness from `science::steam::envelope`
+  /// under the sum of `trial`'s fluxes. `rock` unchanged when `steam`
+  /// is 0.
   pub(crate) fn steam_interior(rock: &Interior, steam: Traced<Kilogram>,
       trial: &Trial, hides: Traced<bool>, trace: &mut Trace)
       -> Result<Interior, InteriorError>;
@@ -649,18 +735,20 @@ hand-off):
 
   Records: `planet.mass.with-steam` (the whole mass, from the rock's
   whole-mass nodes), `planet.steam.temperature`,
-  `planet.steam.thickness` (from the core's shells, the steam, the
-  fluxes), `planet.radius.steam` (`R_core + z`), `SURFACE_GRAVITY` and
-  `MEAN_DENSITY` of the whole mass at that radius, and one
-  `ShellRecord` (`LAYER_*` codes: outer radius, mass, material
+  `planet.steam.thickness` (both from the core's shells, the steam,
+  the fluxes, with the values of the one `envelope` call),
+  `planet.radius.steam` (`R_core + z`), `SURFACE_GRAVITY` and
+  `MEAN_DENSITY` of the whole mass at that radius, for a dry body each
+  rock shell's mass again (`LAYER_MASS`, from the shell and the steam),
+  and one `ShellRecord` (`LAYER_*` codes: outer radius, mass, material
   `Steam`, state `Gas` from `hides`). `water` is `Water::Steam`.
 
 - [ ] **Step 1: Write the failing tests** (tier 1), on the #492 body
-  built by hand: 4.78 M⊕, core fraction 1.06/4.22 of the refractory
-  mass, water 0.56/4.78, `migrated: Some(true)`, at 1 AU of the Sun
-  (a water layer under 355 K; test inputs, `Definition:` from issue
-  #492's composition), `interior(..)` for the rock, the whole layer
-  as steam, `hides` a true leaf:
+  from `water_world_trial`: 4.78 M⊕, core fraction 1.06/4.22 of the
+  refractory mass, water 0.56/4.78, at 1 AU of the Sun (a water layer
+  under 355 K; test inputs, `Definition:` from issue #492's
+  composition), `interior(..)` for the rock, the whole layer as steam,
+  `hides` a true leaf:
   - `steam_replaces_the_condensed_water_layer` (legacy :762, Review
     Focus 5): shell materials are Iron or Rock then one last Steam, no
     Water or Ice; the shells' masses sum to 4.78 M⊕ within 1e-9
@@ -673,6 +761,12 @@ hand-off):
     each source's flux.
   - `no_steam_leaves_the_rock_as_it_is` (Review Focus 3): a 0 kg steam
     leaf gives back `rock` (`assert_eq!`).
+  - `a_dry_planets_steam_comes_out_of_its_mantle` (plan review SF-1):
+    the reference `EARTH`'s rock (`Water::InMantle`) under the steam of
+    its whole surface water (`surface_water`, a boiled Earth that kept
+    its ocean): the shells are Iron or Rock then one Steam; the core
+    shells sum to the whole less the steam, and all shells to the
+    whole, within 1e-9 relative; the radius exceeds the rock's.
 
 - [ ] **Step 2: Run** `cargo nextest run -p system steam`. Expected:
   FAIL.
@@ -693,11 +787,13 @@ hand-off):
 
 - Modify: `crates/system/src/planet/settled.rs`, `settled_tests.rs`,
   `climate/heavy_tests.rs`, `enveloped.rs` and `air.rs` docs (the
-  radius escape reads), `water.rs` doc of `water` (l.~72-78).
+  radius escape reads), `water.rs` doc of `water` (l.~72-78),
+  `crates/system/README.md` (the `planet` row: the steam envelope).
 - Docs: `planet-atmospheres.md`, study 26 "The steam loss on the
-  inflated body" and "The climate under the envelope": name the
-  rewrite's steps; the class table's line on `steam-world` stays
-  (2d-4 writes the class).
+  inflated body" and "The climate under the envelope" (already
+  corrected for the line read again and the layer-born departure in
+  `8ae09b3f`): name the rewrite's steps; the class table's line on
+  `steam-world` stays (2d-4 writes the class).
 
 **Interfaces:**
 
@@ -709,22 +805,37 @@ hand-off):
   world):
 
   ```text
-  hides = record_hides_surface(kept water, kept climate)
-  if hides:
-    inflated = steam_interior(rocky(f.body), f.surface, f.trial, hides)
-    w = entry again with Body::Rocky(inflated).exposed()
-    g = surface_pass(f, w, Some(&inflated exposed))
-    bare = bare_air(g, kept.hold_back)              // no climate
-    bare.body = Rocky(steam_interior(rocky(bare.body),
-                      bare water inventory, bare.trial, hides))
-  Settled { bare, climate: kept.climate, hides_surface: Some(hides) }
+  hides = record_hides_surface(kept water, kept climate's H2O, its T)
+  if !hides: Settled { bare: kept.bare, climate, hides_surface: Some(hides) }
+  inflated = steam_interior(rock_of(f.body), f.surface, f.trial, hides)
+  w = entry again with Body::Rocky(inflated).exposed()
+  g = surface_pass(f, w, Some(&inflated exposed))
+  bare = bare_air(g, kept.hold_back)                 // no climate
+  bare.surface.water.boiled = kept's boiled           // the verdict's node
+  still = record_hides_surface(bare water, bare air's H2O, climate's T)
+  if still:
+    bare.body = Rocky(steam_interior(rock_of(bare.body),
+                      bare water inventory, bare.trial, still))
+  Settled { bare, climate: kept.climate, hides_surface: Some(still) }
   ```
 
 - [ ] **Step 1: Write the failing tests.** Tier 1, in
   `settled_tests.rs`:
-  - `thin_steam_over_rock_stays_a_runaway` (legacy :1037): `WET_VENUS`
+  - `thin_steam_over_rock_stays_a_runaway` (legacy :1037; plan review
+    SF-5): a body that keeps thin steam, `WET_VENUS` with its XUV
+    fluence lowered by `with_fluence` (a `Definition:` test input) so
+    that its bare air keeps `0 < H₂O < 220.64` bar, asserted first. It
     settles with `hides_surface` false, no `Steam` shell, its body the
     rock of its run.
+  - `a_steam_world_that_loses_its_steam_keeps_its_rock` (Review Focus
+    3, the user's decision on SF-2): drive the steps after the loop
+    (a private `fn steam_world(f, kept: Run, entry, trace)` split out
+    as Task 4's `after_boil` is) on a kept run whose climate is past
+    the line but whose re-run keeps steam under 220.64 bar (the
+    `WET_VENUS` run of the test above, its climate's H₂O node and
+    temperature node replaced by leaves of 300 bar and 700 K). The
+    second `planet.climate.hides-surface` node is false,
+    `hides_surface` is that node, and no `Steam` shell is built.
   Tier 3, in `climate/heavy_tests.rs` (`#[ignore = "heavy: …"]` with
   the measured time):
   - `the_492_super_earth_is_a_steam_world` (legacy :921): the #492
@@ -734,14 +845,19 @@ hand-off):
     (Turbet et al. 2020 § 3.1); the last shell `Steam`; the radius over
     the kept run's condensed radius; the final `planet.water.steam-lost`
     derives from a `planet.radius.steam` node (the loss read the
-    inflated body). Not asserted (model output, no tier-2 path): 1.61
-    R⊕, 1679 K, the condensed 1.6-1.7 R⊕.
+    inflated body); the settled `water.boiled` derives from a
+    `planet.climate.boils` node (plan review BL-3); both
+    `planet.climate.hides-surface` nodes are true. Not asserted (model
+    output, no tier-2 path): 1.61 R⊕, 1679 K, the condensed
+    1.6-1.7 R⊕, Teq 258-280 K.
   - `a_thick_steam_runaway_settles_past_the_end_of_the_plateau`
     (legacy `climate.rs` :3978, #438): 1 M⊕, core 0.325, 30 % water
     (`water_world_trial`, migrated), 0.7 AU of the Sun. Assert:
     runaway; H₂O over 1e5 bar; the surface in [1500, 2500] K (Kasting
     1988, Goldblatt et al. 2013, Boukrouche et al. 2021 § 4.3, the
-    study's window); no liquid; a steam world.
+    study's window); no liquid; a steam world. If the temperature falls
+    outside the window, stop and report it (a sourced bound): do not
+    widen it.
 
 - [ ] **Step 2: Run** `cargo nextest run -p system settled` and
   `cargo nextest run -p system --run-ignored only steam`. Expected:
@@ -749,7 +865,9 @@ hand-off):
 
 - [ ] **Step 3: Implement** the steam world steps. Keep `entry` as a
   small private enum (`Light`, `Boiled(Traced<bool>)`) so the second
-  call reuses the first verdict. Update the docs named above: the
+  call reuses the first verdict. Document on `Settled` that a steam
+  world's climate is the kept run's, whose air holds more vapour than
+  the water kept (the user's decision on SF-2). Update the docs named above: the
   enveloped `whole_mass` and the air's shoreline now say a steam
   world's escape reads its envelope.
 
@@ -790,9 +908,9 @@ hand-off):
   its expectation was set against legacy's 2206 bar line, which the
   user replaced by 220.64 bar; no source says a hot Europa is no steam
   world.
-- The pins of #492 (1.61 R⊕, 1679 K, condensed 1.6-1.7 R⊕) and the F0V
-  "kept 0": the model's output, for a tier-2 net that cannot reach
-  `settled` before 2d-4.
+- The pins of #492 (1.61 R⊕, 1679 K, condensed 1.6-1.7 R⊕, Teq
+  258-280 K under an M9V star) and the F0V "kept 0": the model's
+  output, for a tier-2 net that cannot reach `settled` before 2d-4.
 - `interim.rs` :1088, :1132 (viewer) and the census example: not in
   the engines.
 
@@ -800,7 +918,9 @@ hand-off):
 
 End-of-branch agents in parallel (branch-reviewer, test-reviewer,
 science-coherence-checker), then issue-auditor with their reports and
-the draft PR text. The PR text: `Refs #659`, `Refs #594`, the three
+the draft PR text. The PR text: `Refs #659`, `Refs #594`, `Refs #602`
+(slice 1's tracker, as the earlier 2d PRs, if issue-auditor agrees),
+the three
 departures (#684, #685, #686), the one calibration under its heading,
 "Nothing generated changes; ENGINE_VERSION stays 3" with the finding
 above, and the heavy output.
