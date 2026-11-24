@@ -46,6 +46,11 @@ pub(crate) struct Air {
     /// The water once the air is made: in a runaway, the vapour the
     /// cosmic shoreline kept.
     pub water: Water,
+    /// The CO2 outgassed (`planet.air.outgassed.co2`), before the cosmic
+    /// shoreline and the cold trap: the carbon inventory weathering and
+    /// volcanoes trade with the air, which the climate's carbon cycle
+    /// reads (legacy `CarbonCycle::inventory_bar`).
+    pub outgassed_co2: Traced<Bar>,
     /// The CO2 the cold trap froze out (`planet.air.frozen-co2`), which
     /// the climate's carbon cycle reads.
     pub frozen_co2: Traced<Bar>,
@@ -300,6 +305,7 @@ pub(crate) fn air(
             partial,
         },
         water: kept_water,
+        outgassed_co2: outgassed[&Gas::Co2],
         frozen_co2,
         reducing,
     })

@@ -46,9 +46,12 @@
 //! draw, interior, escape and heat; for a planet without an envelope, its
 //! water, the planet a runaway's steam left (body and heat built again),
 //! regime, core and air, and after a runaway whose shoreline took vapour,
-//! the body built once more for the water kept. The climate, the
-//! condensation it drives and what follows it come with the next pull
-//! requests (#659). Every value is recorded in the system's cause `Trace`, with
+//! the body built once more for the water kept. [`climate`] holds the
+//! first part of the climate solver (the body it settles, its albedo,
+//! its wet balance, the collapse of its CO₂, the carbonate thermostat
+//! and the maximum greenhouse), not chained yet; the rest of the
+//! climate, the condensation it drives and what follows it come with the
+//! next pull requests (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which
@@ -63,6 +66,11 @@ mod air;
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
 mod bare;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
+mod climate;
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")

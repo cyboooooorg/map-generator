@@ -60,6 +60,10 @@ pub(crate) struct BareSurface {
     /// cosmic shoreline kept.
     pub water: Water,
     pub atmosphere: Atmosphere,
+    /// The CO2 outgassed before the shoreline and the cold trap
+    /// (`planet.air.outgassed.co2`): the carbon inventory of the
+    /// climate's carbon cycle.
+    pub outgassed_co2: Traced<Bar>,
     /// The CO2 the cold trap froze out, which the climate's carbon cycle
     /// reads.
     pub frozen_co2: Traced<Bar>,
@@ -182,6 +186,7 @@ pub(crate) fn bare_with(
             core: k.core,
             water: kept,
             atmosphere: made.atmosphere,
+            outgassed_co2: made.outgassed_co2,
             frozen_co2: made.frozen_co2,
             reducing: made.reducing,
         }),

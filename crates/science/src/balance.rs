@@ -102,7 +102,7 @@ pub const HOTTEST: Kelvin = Kelvin(1.0e6);
 /// Definition: the least emissivity a surface radiates with, 0.01, a
 /// guard against a division by zero; every surface the model makes
 /// radiates with more (frost emissivity, `science::surface`).
-const LEAST_EMISSIVITY: f64 = 0.01;
+pub const LEAST_EMISSIVITY: f64 = 0.01;
 
 /// A point of a function solved for: its argument and its value.
 #[derive(Clone, Copy, Debug, PartialEq)]
