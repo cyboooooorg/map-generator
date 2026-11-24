@@ -10,7 +10,7 @@ use super::bare::{Bare, bare_with};
 use super::climate::Rotation;
 use super::climate::branches::{Bistable, Solved, solve};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
-use super::climate::record::{Climate, record};
+use super::climate::record::{Climate, record, record_hides_surface};
 use super::climate::{ClimateInputs, Numerics};
 use super::codes;
 use super::draws::LABELS;
@@ -719,4 +719,46 @@ fn earth_twice_is_the_same_earth() {
     assert_eq!(first, second);
     assert_eq!(trace.len(), copy.len());
     assert!(first.climate.as_ref().unwrap().snowball.is_some());
+}
+
+#[test]
+fn the_steam_world_line_records_its_causes() {
+    let mut trace = Trace::new();
+    let runaway = trace
+        .leaf(Code::of("test.runaway"), true, Provenance::Input)
+        .unwrap();
+    // Source: the steam line is 10 times water's critical pressure,
+    // 220.64 bar, so 300 bar is past it; 700 K is past the critical
+    // 647.096 K (IAPWS 2007).
+    let h2o = trace
+        .leaf(Code::of("test.h2o"), Bar(300.0), Provenance::Input)
+        .unwrap();
+    let temperature = trace
+        .leaf(
+            Code::of("test.temperature"),
+            Kelvin(700.0),
+            Provenance::Input,
+        )
+        .unwrap();
+
+    let hides = record_hides_surface(runaway, Some(h2o), temperature, &mut trace).unwrap();
+    assert!(*hides.value());
+    assert_eq!(
+        trace.node(hides.node()).unwrap().code.as_str(),
+        codes::CLIMATE_HIDES_SURFACE
+    );
+    let mut from = derived_from(&trace, hides.node());
+    from.sort();
+    let mut expected = vec![runaway.node(), h2o.node(), temperature.node()];
+    expected.sort();
+    assert_eq!(from, expected);
+
+    // No H₂O node: 0 bar, which hides nothing, from the other two.
+    let bare = record_hides_surface(runaway, None, temperature, &mut trace).unwrap();
+    assert!(!*bare.value());
+    let mut from = derived_from(&trace, bare.node());
+    from.sort();
+    let mut expected = vec![runaway.node(), temperature.node()];
+    expected.sort();
+    assert_eq!(from, expected);
 }

@@ -1588,7 +1588,7 @@ absorbs, scanned up from the black-body temperature in steps of at most
 3 % to the critical point. With none, the absorbed light and heat exceed
 the moist limit and the water runs away: the climate then puts all the
 body's water in the air at the temperature of `surface_temperature_k`,
-a placeholder the chain replaces when it boils the ocean. A runaway's steam is already in the gases and is kept as it is.
+a stand-in, as in legacy (`climate::wet_climate`, l.1212): a body without a balance boils (`climate::wet::boils`), and the chain runs its climate again on its steam, so this air is never the one a boiled body keeps. A runaway's steam is already in the gases and is kept as it is.
 
 **Carbonate thermostat.** On a planet with plates and water, weathering
 draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
@@ -2680,6 +2680,26 @@ legacy; where they differ, this sub-section holds for the rewrite.
   evaporating the entire ocean", the limit 282 W/m². So "no wet balance
   under the moist limit" is the published criterion, with no
   temperature condition (#442).
+- **The verdict** (`climate::wet::boils`). A body that keeps water out
+  of a runaway and that its thermostat does not hold (`regulated`
+  false) boils when `wet_balance` is `None` under the starlight its Bond
+  albedo lets in, the air its climate left and its surface's emissivity.
+  Decision B2, a departure from legacy: legacy passes an emissivity of
+  1.0; the rewrite passes the emissivity the climate radiated under.
+- **Departure: the model's threshold is above Kopparapu's.** With
+  Earth's air, an Earth ocean, emissivity 1 and Bond albedo 0.306, the
+  model's boil threshold is an absorbed 299.43 W/m², 1.268 S⊕, against
+  Kopparapu et al. 2014's 1.107 S⊕ (`habitable::runaway_flux`, 1.106).
+  Cause: `wet_balance` needs the saturated column's outgoing radiation
+  to reach the absorbed flux, and that column peaks at 299.4 W/m² near
+  360 K before it falls to its 289.7 W/m² asymptote (the plateau); Kasting
+  1988 Fig. 7a puts the level near 310 W/m². About 7 of the 7.8 W/m² gap
+  between the threshold and a body at 1.2346 S⊕ (0.9 AU) is the wet
+  column's outgoing radiation lying 7 W/m² above CERES (#680). In the
+  chain `water()`'s runaway flag (`runaway_flux`, 1.106 S⊕) already
+  catches such planets before `boils` is asked; `boils` decides for the
+  bodies it passes. The tests therefore take Venus's orbit, where the
+  verdict does not depend on the gap.
 - **Internal heat** (`Source:`). Kasting 1988 § 3d treats the
   difference between the outgoing infrared and the absorbed sunlight as
   the accretional heat flux a surface temperature needs; about
@@ -2870,7 +2890,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | Test | Bound | From |
 | --- | --- | --- |
 | Earth's air, an Earth ocean, 1.0 AU | does not boil | Earth keeps its oceans (observation) |
-| Same, 0.9 AU (1.23 S⊕) | boils | Kopparapu et al. 2014's runaway limit round the Sun, 1.107 S⊕ (`habitable::runaway_flux`) |
+| Same, at Venus's orbit, 0.723 AU (1.91 S⊕), `a_wet_venus_boils` | boils | Kasting 1988 § 3a, Fig. 7 (a wet Venus runs away); past Kopparapu et al. 2014's limit, 1.107 S⊕ (`habitable::runaway_flux`) |
 | A trace of water (1e-4 bar, 1e-9 of the mass) | does not boil | Kasting 1988 § 3a, Boukrouche et al. 2021 Fig. 9 (property) |
 | Thick steam (≥ 260 bar) past the limit | 1500 to 2500 K | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |

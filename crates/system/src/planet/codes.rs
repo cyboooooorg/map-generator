@@ -318,6 +318,23 @@ pub(crate) const CLIMATE_SNOWBALL_DRAW: &str = "planet.climate.snowball-draw";
 /// recorded for a reducing body only, the test of the reducing-air
 /// fallback.
 pub(crate) const CLIMATE_TITAN_LIKE: &str = "planet.climate.titan-like";
+/// Whether the water the climate kept boils: the body is not regulated and
+/// no wet balance exists under its light, its air and its heat. A flag.
+#[expect(
+    dead_code,
+    reason = "consumed by `settled`, the next task of the boiling plan"
+)]
+pub(crate) const CLIMATE_BOILS: &str = "planet.climate.boils";
+/// Whether a runaway's steam hides its surface: a runaway whose steam is
+/// supercritical at its base (`science::steam::hides_surface`).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by `settled`, the next task of the boiling plan"
+    )
+)]
+pub(crate) const CLIMATE_HIDES_SURFACE: &str = "planet.climate.hides-surface";
 /// Partial pressure of N2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_N2: &str = "planet.climate.air.n2";
 /// Partial pressure of CO2 in the air the climate leaves.
