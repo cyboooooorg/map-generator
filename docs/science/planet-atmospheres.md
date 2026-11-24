@@ -2900,7 +2900,9 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
   outgoing radiation is "only weakly dependent on gravity"
   (Pierrehumbert 2023, after Pierrehumbert 2010), and Kopparapu et al.
   2014 move the inner edge by about −10 % to +7 % from 0.1 to 5 M⊕
-  ([habitable zone](habitable-zone.md)): a few per cent at most.
+  ([habitable zone](habitable-zone.md)): a few per cent at most. In
+  the rewrite, `settled::steam_world` keeps the kept run's climate
+  (`Settled::climate`) and solves none on the envelope.
 - **The steam loss on the inflated body** (user, 2026-11-24). The
   envelope's radius depends on the water kept, which depends on the
   loss. One pass, no fixed point: the envelope is computed on the water
@@ -2914,7 +2916,20 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
   the kept steam still weighs at least the critical pressure, otherwise
   the planet is a runaway without an envelope. The climate is not
   solved again, so its air holds more water vapour than the water kept
-  (a documented departure).
+  (a documented departure). The rewrite's steps, in
+  `settled::steam_world` after the boil loop: the line
+  (`record_hides_surface`) on the kept run's water, its climate's H₂O
+  and temperature; past it, `interior::steam_interior` on the ground's
+  surface water (the water handed to the loss); one more pass from the
+  same water entry (`water::water` for the light, `water::boiled` with
+  the first verdict), its `planet.water.steam-lost` and the cosmic
+  shoreline reading the inflated body (`Body::exposed`, through
+  `bare::surface_pass` and `bare::bare_air`), its `boiled` the kept
+  run's node; the line read again on that pass's water and air, with
+  the climate's temperature; past it again, `steam_interior` on the
+  water kept, over the rock that pass left. Two
+  `planet.climate.hides-surface` nodes, the last in
+  `Settled::hides_surface`.
 
 #### Test windows
 
@@ -2923,10 +2938,11 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | Earth's air, an Earth ocean, 1.0 AU | does not boil | Earth keeps its oceans (observation) |
 | Same, at Venus's orbit, 0.723 AU (1.91 S⊕), `a_wet_venus_boils` | boils | Kasting 1988 § 3a, Fig. 7 (a wet Venus runs away); past Kopparapu et al. 2014's limit, 1.107 S⊕ (`habitable::runaway_flux`) |
 | A trace of water (1e-4 bar, 1e-9 of the mass) | does not boil | Kasting 1988 § 3a, Boukrouche et al. 2021 Fig. 9 (property) |
-| Thick steam (≥ 260 bar) past the limit | 1500 to 2500 K | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
+| Thick steam (≥ 260 bar) past the limit; 30 % water at 0.7 AU, `a_thick_steam_runaway_settles_past_the_end_of_the_plateau` | 1500 to 2500 K, a steam world | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
-| A steam world's radius | over its condensed radius | Turbet et al. 2020 § 3.1 (property) |
-| The #492 body | steam world, over 1e5 bar, over 1000 K, steam radius over condensed | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
+| A steam world's radius | over its condensed radius, inside Turbet's grid | Turbet et al. 2020 § 3.1 (property) |
+| The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
+| A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
 | F0V (7220 K) at 1.2963 S⊕, a tenth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (300.8 W/m²) over the saturated column's peak (299.2 W/m²), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
 | Same, under an XUV fluence of 2e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band |

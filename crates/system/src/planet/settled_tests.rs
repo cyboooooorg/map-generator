@@ -4,7 +4,8 @@
 //! Tier 1 holds the cheap bodies (Venus, Mercury, Mars, Titan on its
 //! measured air, a Triton-like body) and the checks that read no
 //! bistable solve. The bistable Earth takes about a minute at opt-level 0
-//! (the snowball branches), so its tests are tier 3.
+//! (the snowball branches), so its tests are tier 3; so are the thin
+//! steam Venus's (about 7 s each, a wet Venus's climate).
 
 use super::bare::{Bare, Ground, bare_with, formed};
 use super::climate::Rotation;
@@ -13,21 +14,26 @@ use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, 
 use super::climate::record::{Climate, record, record_hides_surface};
 use super::climate::{ClimateInputs, Numerics};
 use super::codes;
-use super::draws::LABELS;
-use super::draws::draw;
-use super::settled::{Settled, after_boil, climate_of, run, settled, settled_with};
+use super::draws::{Drawn, LABELS, draw};
+use super::enveloped::Body;
+use super::settled::{
+    Entry, Settled, after_boil, climate_of, run, settled, settled_with, steam_world,
+};
 use super::tests::{
     EARTH, MARS, MERCURY, ReferenceBody, TITAN, VENUS, WET_VENUS, ancestry, derived_from,
-    reference_trial, water_world_trial,
+    reference_trial, water_world_trial, with_fluence,
 };
 use super::water::water;
+use crate::Trial;
 use science::constants::STEFAN_BOLTZMANN;
 use science::radiation::gases::PartialPressures;
+use science::steam::STEAM_WORLD_MIN_BAR;
 use science::surface::{condense, titan_like_air};
 use science::units::{Bar, Degree, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre};
 use std::collections::BTreeSet;
 use timeline::{
-    ClimateState, Code, Gas, LiquidKind, NodeId, NodeValue, Origin, Provenance, Seed, Trace,
+    ClimateState, Code, Gas, LiquidKind, Material, NodeId, NodeValue, Origin, Provenance, Seed,
+    Trace,
 };
 
 /// Definition: the seed of the tests, whose snowball draw
@@ -866,4 +872,93 @@ fn a_trace_of_water_does_not_boil_a_temperate_planet() {
     );
     let temperature = *climate(&s).global.surface_temperature.value();
     assert!(temperature < TEMPERATE_BOUND, "{temperature:?}");
+}
+
+/// Definition: the XUV fluence of the thin-steam Venus, 1e14 J/m², a test
+/// input about a hundred times under the Sun's at Venus (1.08e16): its
+/// escape leaves about 180 bar of its 220 bar of steam, under the steam
+/// world line ([`STEAM_WORLD_MIN_BAR`]) and over none.
+const THIN_STEAM_FLUENCE: f64 = 1.0e14;
+
+/// Definition: the H₂O of a hand-made climate past the steam world line,
+/// 300 bar, over [`STEAM_WORLD_MIN_BAR`] (220.64 bar; a test input).
+const PAST_LINE_H2O: Bar = Bar(300.0);
+
+/// Definition: the temperature of a hand-made climate past the steam
+/// world line, 700 K, over water's critical 647.096 K (IAPWS 2007; a test
+/// input).
+const PAST_LINE_T: Kelvin = Kelvin(700.0);
+
+/// The wet Venus under [`THIN_STEAM_FLUENCE`], formed, and the rotation
+/// it is settled under.
+fn thin_steam_venus(trace: &mut Trace) -> (Trial, Drawn, Rotation) {
+    let (t, d) = reference_trial(trace, &WET_VENUS);
+    let t = with_fluence(trace, &t, THIN_STEAM_FLUENCE);
+    let rot = rotation(trace, NO_ICE_OBLIQUITY, false);
+    (t, d, rot)
+}
+
+/// Whether `body` has a `Steam` shell.
+fn has_steam(body: &Body) -> bool {
+    body.layers()
+        .iter()
+        .any(|s| *s.material.value() == Material::Steam)
+}
+
+#[test]
+#[ignore = "heavy: a wet Venus settled, 7.1 s at opt-level 0, 0.3 s in release"]
+fn thin_steam_over_rock_stays_a_runaway() {
+    // Legacy `thin_steam_over_rock_stays_a_runaway_greenhouse`: a runaway
+    // whose steam weighs less than water's critical pressure keeps a
+    // visible surface (Pierrehumbert 2023 § 1): no envelope.
+    let mut trace = Trace::new();
+    let (t, d, rot) = thin_steam_venus(&mut trace);
+    let s = settled_with(&t, &d, &rot, snowball(), &mut trace).unwrap();
+    let surface = s.bare.surface.as_ref().unwrap();
+    let h2o = *surface.atmosphere.partial[&Gas::H2o].value();
+    assert!(h2o.0 > 0.0 && h2o < STEAM_WORLD_MIN_BAR, "{h2o:?}");
+    assert!(*surface.water.runaway.value());
+    let hides = s.hides_surface.expect("a body with a surface is judged");
+    assert!(!*hides.value());
+    assert_eq!(
+        trace.node(hides.node()).unwrap().code.as_str(),
+        codes::CLIMATE_HIDES_SURFACE
+    );
+    // The body of its run: no steam envelope was built.
+    assert!(!has_steam(&s.bare.body));
+    assert!(nodes_of(&trace, codes::RADIUS_STEAM).is_empty());
+}
+
+#[test]
+#[ignore = "heavy: a wet Venus run and its pass on the envelope, 7.1 s at opt-level 0, 0.3 s in release"]
+fn a_steam_world_that_loses_its_steam_keeps_its_rock() {
+    // Past the line on the kept climate, the loss on the inflated body
+    // leaves steam under the line: the line read again says no, and no
+    // envelope is built (study 26, the user's decision on SF-2).
+    let mut trace = Trace::new();
+    let (t, d, rot) = thin_steam_venus(&mut trace);
+    let Ground::Formed(f) = formed(&t, &d, &mut trace).unwrap() else {
+        panic!("a wet Venus has a surface");
+    };
+    let light = water(&f.trial, &f.body.exposed(), f.surface, &mut trace).unwrap();
+    let mut kept = run(&f, light, &rot, DRAW, &mut trace).unwrap();
+    let h2o = trace
+        .leaf(Code::of("test.h2o"), PAST_LINE_H2O, Provenance::Input)
+        .unwrap();
+    let temperature = trace
+        .leaf(Code::of("test.temperature"), PAST_LINE_T, Provenance::Input)
+        .unwrap();
+    kept.climate.atmosphere.partial.insert(Gas::H2o, h2o);
+    kept.climate.global.surface_temperature = temperature;
+    let s = steam_world(&f, kept, Entry::Light, &mut trace).unwrap();
+    let lines = nodes_of(&trace, codes::CLIMATE_HIDES_SURFACE);
+    assert_eq!(
+        lines.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>(),
+        [NodeValue::Flag(true), NodeValue::Flag(false)]
+    );
+    let hides = s.hides_surface.expect("judged");
+    assert_eq!(hides.node(), lines[1].0);
+    let h2o = *s.bare.surface.as_ref().unwrap().atmosphere.partial[&Gas::H2o].value();
+    assert!(h2o < STEAM_WORLD_MIN_BAR, "{h2o:?}");
+    assert!(!has_steam(&s.bare.body));
 }

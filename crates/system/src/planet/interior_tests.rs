@@ -12,19 +12,19 @@ use science::units::{EarthMass, EarthRadius, Kilogram, Metre};
 use timeline::{Code, Material, NodeId, Provenance, Trace, Traced};
 
 /// Definition: the mass of the body of issue #492, 4.78 M_E.
-const MASS_492: f64 = 4.78;
+pub(super) const MASS_492: f64 = 4.78;
 
 /// Definition: its core's share of the refractory mass, 1.06 / 4.22 (issue
 /// #492's composition).
-const CORE_492: f64 = 1.06 / 4.22;
+pub(super) const CORE_492: f64 = 1.06 / 4.22;
 
 /// Definition: its water's share of the mass, 0.56 / 4.78 (issue #492's
 /// composition).
-const WATER_492: f64 = 0.56 / 4.78;
+pub(super) const WATER_492: f64 = 0.56 / 4.78;
 
 /// Definition: its distance from the Sun, 1 au, under which its water is a
 /// layer (below 355 K; a test choice).
-const AU_492: f64 = 1.0;
+pub(super) const AU_492: f64 = 1.0;
 
 /// Definition: a body inside the grid of Turbet et al. 2020 § 3.1 (steam
 /// weighing 27 bar to 270 kbar, 1 to 30 S_E, 0.2 to 6 g_E): 5 M_E with 3 %

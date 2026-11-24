@@ -73,9 +73,11 @@ pub(crate) fn surface_water(
 /// [`WATER_PER_HYDROGEN`] kg of water for each kg of hydrogen: the steam
 /// lost (`planet.water.steam-lost`) is `min(9 H, surface)`, and the
 /// inventory what is left. The oxygen left behind is not tracked. For a
-/// water beyond the laws the whole mass holds the steam; the radius is
-/// the one `exposed` carries (the condensed planet's before the climate,
-/// a steam envelope's after it).
+/// water beyond the laws the whole mass holds the steam. The radius and
+/// mass are the ones `exposed` carries: the condensed planet's before the
+/// climate; for a steam world, the pass on its envelope
+/// (`super::settled::steam_world`) gives the inflated body's, the
+/// envelope's radius and the core and steam's mass.
 ///
 /// `boiled` is false, imposed, before the climate; once settled the
 /// boil loop derives it ([`boiled`]).

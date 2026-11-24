@@ -37,6 +37,7 @@ use crate::Trial;
 use crate::planet::bare::{Ground, bare_air, bare_with, formed, surface_pass};
 use crate::planet::codes;
 use crate::planet::draws::{Drawn, LABELS};
+use crate::planet::interior_tests::{AU_492, CORE_492, MASS_492, WATER_492};
 use crate::planet::settled::{Settled, settled_with};
 use crate::planet::settled_tests::{SMALL_MASS, nodes_of};
 use crate::planet::tests::{
@@ -59,10 +60,12 @@ use science::radiation::gases::PartialPressures;
 use science::surface::{
     ICE_COVERED_TEMPERATURE, Liquid, PHASE_BAND, methane_freezes, surface_vapour,
 };
-use science::units::{Bar, EarthFlux, EarthMass, Fraction, Kelvin, Kilogram, Metre, Pascal};
+use science::units::{
+    Bar, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
+};
 use science::volatiles::{NITROGEN_TRIPLE_TEMPERATURE, co2_saturation_pressure};
 use science::water::{CRITICAL_POINT_TEMPERATURE, melting_temperature};
-use timeline::{ClimateState, Code, LiquidKind, NodeValue, Provenance, Seed, Trace};
+use timeline::{ClimateState, Code, Gas, LiquidKind, Material, NodeValue, Provenance, Seed, Trace};
 
 /// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
 /// Resolution B3).
@@ -1599,3 +1602,111 @@ fn a_cool_small_planet_does_not_boil() {
 const _: () = assert!(FINER_SCAN_RATIO < SCAN_RATIO);
 const _: () = assert!(FINER_THAW_STEPS > THAW_STEPS);
 const _: () = assert!(LIGHTER_DAMPING < ALBEDO_DAMPING);
+
+/// Source: an M9V star's effective temperature, 2400 K (Pecaut & Mamajek
+/// 2013, ApJS 208, 9, doi:10.1088/0067-0049/208/1/9, Table 5), the star of
+/// the #492 body; the cool end of Kopparapu et al. 2014's fit (2600 K),
+/// which `runaway_flux` clamps to.
+const M9V: Kelvin = Kelvin(2400.0);
+
+/// Definition: the steam over which a column is a deep supercritical one,
+/// 1e5 bar (legacy `the_492_super_earth_is_a_steam_world` and #438: the
+/// census's empty band runs from 1e3 to 1e5 bar).
+const DEEP_STEAM: Bar = Bar(1.0e5);
+
+/// Source: a steam world's surface, over 1000 K (Turbet et al. 2020,
+/// A&A 638, A41, arXiv:1911.08878, § 3.1, as study 26's test windows
+/// cite it; legacy `the_492_super_earth_is_a_steam_world`'s bound: past
+/// the moist plateau, not held at water's critical point).
+const STEAM_WORLD_SURFACE: Kelvin = Kelvin(1000.0);
+
+/// Definition: the thick steam runaway of #438 (legacy `climate.rs`
+/// `a_thick_steam_runaway_settles_past_the_end_of_the_plateau`): 1 M⊕,
+/// a core share of 0.325, 30 % water, at 0.7 AU of the Sun.
+const THICK_STEAM: (f64, f64, f64, f64) = (1.0, 0.325, 0.3, 0.7);
+
+/// Source: the surface of a thick steam runaway past the plateau, 1500 to
+/// 2500 K: Kasting 1988 (*Icarus* 74, 472, doi:10.1016/0019-1035(88)90116-9;
+/// over 1500 K for a full ocean), Goldblatt et al. 2013 (*Nat. Geosci.*
+/// 6, 661, doi:10.1038/ngeo1892; a stable steam state from about
+/// 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K to 2451 K); study 26's
+/// window.
+const THICK_STEAM_WINDOW: (Kelvin, Kelvin) = (Kelvin(1500.0), Kelvin(2500.0));
+
+/// Whether `settled` stands under a steam envelope: its last shell is
+/// `Steam`.
+fn under_steam(settled: &Settled) -> bool {
+    settled
+        .bare
+        .body
+        .layers()
+        .last()
+        .is_some_and(|s| *s.material.value() == Material::Steam)
+}
+
+#[test]
+#[ignore = "heavy: a steam world settled, its pass on the envelope, 8.4 s at opt-level 0, 0.35 s in release"]
+fn the_492_super_earth_is_a_steam_world() {
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, MASS_492, CORE_492, WATER_492, AU_492);
+    let t = with_star(&mut trace, &t, M9V);
+    assert!(t.sources.total_flux().0 > runaway_flux(M9V).0);
+    let s = settle(&mut trace, &t, &d);
+    let hides = s.hides_surface.expect("a body with a surface is judged");
+    assert!(*hides.value());
+    let c = s.climate.as_ref().unwrap();
+    let h2o = *c.atmosphere.partial[&Gas::H2o].value();
+    let temperature = *c.global.surface_temperature.value();
+    println!(
+        "#492 b: {temperature:?}, {h2o:?}, {:?}",
+        s.bare.body.bulk().radius
+    );
+    assert!(h2o > DEEP_STEAM, "{h2o:?}");
+    assert!(temperature > STEAM_WORLD_SURFACE, "{temperature:?}");
+    assert!(under_steam(&s));
+    // Over the dry core under the steam (Turbet et al. 2020 § 3.1); the
+    // condensed twin is not a bound outside their grid (#684).
+    let layers = s.bare.body.layers();
+    let core = layers[layers.len() - 2];
+    assert!(EarthRadius::from(*core.outer_radius.value()).0 < s.bare.body.bulk().radius.value().0);
+    let code_of = |id| trace.node(id).unwrap().code.as_str().to_owned();
+    let lost = nodes_of(&trace, codes::WATER_STEAM_LOST);
+    let (last, _) = lost.last().expect("a runaway loses steam");
+    assert!(
+        derived_from(&trace, *last)
+            .into_iter()
+            .any(|id| code_of(id) == codes::RADIUS_STEAM)
+    );
+    let water = &s.bare.surface.as_ref().unwrap().water;
+    assert!(
+        derived_from(&trace, water.boiled.node())
+            .into_iter()
+            .any(|id| code_of(id) == codes::CLIMATE_BOILS)
+    );
+    let lines: Vec<_> = nodes_of(&trace, codes::CLIMATE_HIDES_SURFACE)
+        .into_iter()
+        .map(|(_, v)| v)
+        .collect();
+    assert_eq!(lines, [NodeValue::Flag(true), NodeValue::Flag(true)]);
+}
+
+#[test]
+#[ignore = "heavy: a thick steam runaway settled, its pass on the envelope, 7.4 s at opt-level 0, 0.34 s in release"]
+fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
+    let mut trace = Trace::new();
+    let (mass, core, water, au) = THICK_STEAM;
+    let (t, d) = water_world_trial(&mut trace, mass, core, water, au);
+    let s = settle(&mut trace, &t, &d);
+    let w = &s.bare.surface.as_ref().unwrap().water;
+    assert!(*w.runaway.value(), "{w:?}");
+    let c = s.climate.as_ref().unwrap();
+    let h2o = *c.atmosphere.partial[&Gas::H2o].value();
+    let temperature = *c.global.surface_temperature.value();
+    println!("30 % water at 0.7 AU: {temperature:?}, {h2o:?}");
+    assert!(h2o > DEEP_STEAM, "{h2o:?}");
+    let (low, high) = THICK_STEAM_WINDOW;
+    assert!((low.0..=high.0).contains(&temperature.0), "{temperature:?}");
+    assert!(c.liquid.is_none(), "{c:?}");
+    assert!(*s.hides_surface.expect("judged").value());
+    assert!(under_steam(&s));
+}

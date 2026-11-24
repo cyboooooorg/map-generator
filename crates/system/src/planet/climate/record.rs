@@ -377,13 +377,6 @@ pub(crate) fn record_boils(
 /// # Errors
 ///
 /// The errors of the trace.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`'s steam envelope, a later task of the boiling plan"
-    )
-)]
 pub(crate) fn record_hides_surface(
     runaway: Traced<bool>,
     h2o: Option<Traced<Bar>>,

@@ -97,8 +97,10 @@ impl Body {
     /// the body has one, which the bulk leaves out. The one mass that
     /// holds a planet's steam (`super::water::water`) and its air (the
     /// shoreline of `super::air::air`). Both read it through
-    /// [`Body::exposed`], with a radius that a steam envelope may
-    /// replace.
+    /// [`Body::exposed`]; a steam world's pass on its envelope
+    /// (`super::settled::steam_world`) reads the exposed view of its
+    /// inflated body, whose bulk mass is the core and the steam
+    /// ([`Water::Steam`]) at the envelope's radius.
     pub(crate) fn whole_mass(&self) -> (Kilogram, Vec<NodeId>) {
         let bulk = self.bulk().mass;
         let beyond = match self {

@@ -91,10 +91,11 @@ pub(crate) struct Air {
 ///    comes first: the CO2 waits on the reducing air (step 4).
 /// 2. **Shoreline** (`planet.air.shoreline-kept`): the share
 ///    [`shoreline_kept`] at the escape velocity of the whole mass
-///    ([`Body::whole_mass`]: the bulk mass plus a water beyond the laws)
-///    and the radius of the [`Exposed`] view (the bulk's, or the steam
-///    envelope's once the climate has one), under the XUV
-///    fluence of all the stars, with the dynamo; each partial
+///    and the radius of the [`Exposed`] view: the bulk's, with the bulk
+///    mass plus a water beyond the laws ([`Body::whole_mass`]); for a
+///    steam world's pass on its envelope (`settled::steam_world`), the
+///    envelope's radius and its whole mass, core and steam; under the
+///    XUV fluence of all the stars, with the dynamo. Each partial
 ///    (`planet.air.kept.<gas>`) is its outgassed one times that share.
 ///    The escape velocity has no node (ledger ruling 1): the share
 ///    derives from the whole mass and the radius, the fluences and the
