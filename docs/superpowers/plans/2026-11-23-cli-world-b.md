@@ -295,12 +295,22 @@ text of each flag states its default and unit as `SystemArgs` does.
 
 ### Task 5: Oracle, projections, review, pull request
 
-- [ ] **Step 1:** `branch-reviewer` and `test-reviewer` on the branch,
-  with this plan and the spec; fix, re-run `mise run ci`.
-- [ ] **Step 2:** `mise run test:heavy`; `world-coherence-checker` on
+Follows CLAUDE.md, "Before opening a pull request" (#668), read from
+`main` at execution time in case it changed again.
+
+- [ ] **Step 1:** `mise run ci`.
+- [ ] **Step 2:** In parallel, each given the branch, this plan and the
+  spec, not conclusions: `branch-reviewer` and `test-reviewer` (the
+  branch changes tests). `science-coherence-checker` is not needed: the
+  branch touches no law, `crates/science`, `docs/science` or study.
+  Then `issue-auditor`, last, with their reports and the draft PR text.
+- [ ] **Step 3:** Fix the findings on the branch, re-run `mise run ci`;
+  file the issues the audit found missing (`issue-writer`), post its
+  comments, put its keywords in the PR text (`Refs #602`).
+- [ ] **Step 4:** `mise run test:heavy`; `world-coherence-checker` on
   the oracle's seeds; downscaled 2:1 projections (`sips -Z 800`) of a
   few bodies (one Earth-like, one Mars-like, one without plates).
-- [ ] **Step 3:** Develop cycle (CLAUDE.md step 2, warn mapgen1 and
-  mapgen3 first), then `pr-shepherd` opens the pull request with
-  `Refs #602` and the heavy output pasted; the user looks at the
-  projections before approving the merge.
+- [ ] **Step 5:** Develop cycle (CLAUDE.md step 2, warn mapgen1 and
+  mapgen3 first), then `pr-shepherd` opens the pull request with the
+  heavy output pasted; the user looks at the projections before
+  approving the merge.
