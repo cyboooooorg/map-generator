@@ -390,7 +390,7 @@ climate and surface](planet-atmospheres.md#atmosphere).
   asymmetry of Titan's lakes (Aharonson et al. 2009 [14]). The edge of the
   band is a straight line of latitude.
 - **Nitrogen and ethane keep methane liquid, by a simple rule.** Pure
-  methane freezes at 90.67 K, but a sea under a nitrogen air is a
+  methane freezes at 90.6941 K (`volatiles::METHANE_TRIPLE_TEMPERATURE`; legacy had 90.67 K), but a sea under a nitrogen air is a
   mixture: N₂ dissolves in liquid methane, methane's photolysis makes
   ethane, and the mixture freezes lower. Thompson, Zollweg & Gabis 1992
   [15] find that methane condensing under Titan's air holds 16 to 30 %
@@ -398,15 +398,15 @@ climate and surface](planet-atmospheres.md#atmosphere).
   Leachman 2019 [16] measured two liquids freezing at 71.5 K (61.0 %
   methane, 25.6 % ethane, 13.4 % N₂) and 74.0 K (46.9 %, 45.3 %, 7.9 %),
   more than 15 K below the pure ices (compositions read in their NASA
-  manuscript, NTRS 20180008677). The app (`methane_freezes_k`,
-  `hydrocarbon_freezes_k`, issue #530) takes the N₂ in the sea as half of
+  manuscript, NTRS 20180008677). The app (`surface::methane_freezes`,
+  `surface::hydrocarbon_freezes`, issue #530) takes the N₂ in the sea as half of
   Raoult's law at the surface's N₂ partial pressure and methane's triple
   point (nitrogen's vapour pressure from NIST's Antoine fit), at most
   30 %, its methane as the half the climate's air keeps over it
   (`SEA_METHANE_SHARE`), and the rest as ethane; the sea freezes at the
   higher of two liquidus: ethane's, an ideal solution's (the
   Schröder–van Laar equation, with ethane's triple point, 90.4 K
-  (`ETHANE_TRIPLE_K`), and the 2.79 kJ/mol (`ETHANE_FUSION_L_OVER_R`)
+  (`volatiles::ETHANE_TRIPLE_TEMPERATURE`), and the 2.79 kJ/mol (`ETHANE_FUSION_ENTHALPY`)
   Domalski & Hearing give for melting the solid below its
   plastic phase, through NIST), and methane's, a regular solution's
   (methane's enthalpy of fusion, 0.939 kJ/mol, and an interaction
@@ -418,12 +418,12 @@ climate and surface](planet-atmospheres.md#atmosphere).
   of the sea's fixed half of methane: the nitrogen dissolved in the sea
   takes the place of ethane, not of methane, so it lowers the freezing
   point only by diluting the ethane, until the ethane liquidus falls
-  under methane's (from about 2 bar of N₂). It is a simple fit, not the full phase
+  under methane's (from about 1.6 bar of N₂). It is a simple fit, not the full phase
   diagram: it does not resolve the solid solutions or the ternary
   eutectic, and the sea's composition is fixed, not tracked. Where nitrogen
   itself condenses (below about 84 K under 2 bar of it), the sea is
   nitrogen-rich and stays liquid down to nitrogen's triple point,
-  63.14 K (`sea_freezes_k`, issue #524); nitrogen condensed with no
+  63.14 K (`surface::sea_freezes`, issue #524); nitrogen condensed with no
   methane is a sea of its own (`nitrogen`), and below its triple point
   a frost. Liquid methane
   is stable under any air above its triple-point pressure (0.1169 bar,

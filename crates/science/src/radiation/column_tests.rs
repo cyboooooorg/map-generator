@@ -8,7 +8,8 @@ use std::sync::LazyLock;
 
 use super::*;
 use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
-use crate::radiation::test_points::{EARTH_AIR, MANABE_HUMIDITY, TITAN_GRAVITY, VENUS_GRAVITY};
+use crate::radiation::test_points::{EARTH_AIR, TITAN_GRAVITY, VENUS_GRAVITY};
+use crate::surface::RELATIVE_HUMIDITY;
 
 /// Definition: Earth's surface gravity of the test columns, the standard
 /// acceleration of gravity (the legacy took 9.81 m/s²).
@@ -167,11 +168,11 @@ fn skin(t_eq_k: f64) -> Kelvin {
 }
 
 /// `gases` with the vapour of a moist surface at `temperature_k`:
-/// [`MANABE_HUMIDITY`] of saturation, at most `water_bar` (the legacy
+/// [`RELATIVE_HUMIDITY`] of saturation, at most `water_bar` (the legacy
 /// `with_vapour`).
 fn with_vapour(gases: PartialPressures, temperature_k: f64, water_bar: f64) -> PartialPressures {
     PartialPressures {
-        h2o: (MANABE_HUMIDITY * vapour_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
+        h2o: (RELATIVE_HUMIDITY * vapour_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
         ..gases
     }
 }

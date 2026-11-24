@@ -267,3 +267,153 @@ fn earths_silicate_sulphur_is_wangs() {
     assert_eq!(earth.co2, Kilogram(ROCK_CO2 * EARTH_MASS.0));
     assert_eq!(earth.n2, Kilogram(ROCK_N2 * EARTH_MASS.0));
 }
+
+/// Source: triple-point pressure of nitrogen, 0.1253 bar (Angus, de Reuck
+/// et al. 1979, via the NIST Chemistry WebBook; study 24).
+const NITROGEN_TRIPLE_PA: f64 = 12_530.0;
+/// Source: the beta-N2 fit `N2-2` at the triple point, 0.1215 bar, and at
+/// 37.2 K, 1.36e-5 bar (Fray and Schmitt 2009 through Lisse et al. 2021,
+/// Table 2; study 24, finding 1).
+const NITROGEN_BETA_READS: (f64, f64) = (0.1215, 1.36e-5);
+/// Source: surface pressure of Triton's N2 air, 14 +/- 1 ubar, 1.4e-5 bar,
+/// from the Voyager 2 radio occultation of 1989 (Gurrola 1995, Stanford
+/// PhD thesis, not reached; refining the 1.6 +/- 0.3 Pa of Tyler et al.
+/// 1989, Science 246, 1466; both as quoted by Sicardy et al. 2024,
+/// arXiv:2402.02476). The source gives no temperature with it: the test
+/// reads it at [`TRITON_FROST_K`], where the beta curve puts it.
+const TRITON_FROST_BAR: f64 = 1.4e-5;
+/// Definition: temperature of Triton's frost, 37.2 K.
+const TRITON_FROST_K: f64 = 37.2;
+/// Definition: absolute tolerance on Triton's pressure, 0.05e-5 bar.
+const TRITON_TOLERANCE_BAR: f64 = 0.05e-5;
+/// Definition: relative tolerance of the beta fit scaled to the triple
+/// point, 1 %.
+const BETA_SCALED_TOLERANCE: f64 = 1e-2;
+/// Definition: coldest temperature, 2 K, and step, 0.1 K, of the
+/// monotony check of the nitrogen frost.
+const NITROGEN_SWEEP_FLOOR_K: f64 = 2.0;
+/// Definition: warmest temperature of the sweep, 63.1 K, under the triple
+/// point.
+const NITROGEN_SWEEP_CEILING_K: f64 = 63.1;
+/// Definition: see [`NITROGEN_SWEEP_FLOOR_K`].
+const NITROGEN_SWEEP_STEP_K: f64 = 0.1;
+/// Definition: alpha-beta transition of nitrogen, 35.61 K (Scott 1976, as
+/// quoted by Tegler et al. 2019).
+const NITROGEN_TRANSITION_K: f64 = 35.61;
+/// Source: normal boiling point of nitrogen, 77.355 K, at 101 325 Pa
+/// (NIST Chemistry WebBook).
+const NITROGEN_NORMAL_BOILING: (f64, f64) = (77.355, 101_325.0);
+/// Definition: tolerance of the Antoine fit at the normal boiling point,
+/// 5 % (the fit is 4.5 % low there).
+const ANTOINE_TOLERANCE: f64 = 5e-2;
+/// Source: validity of the Antoine fit of nitrogen, 63.14 to 126 K (Edejer
+/// and Thodos 1967, via the NIST Chemistry WebBook).
+const ANTOINE_RANGE_K: (f64, f64) = (63.14, 126.0);
+
+#[test]
+fn nitrogen_frost_follows_fray_and_schmitt() {
+    let triple = nitrogen_frost_pressure(Kelvin(63.14 * (1.0 - JUST_UNDER))).unwrap();
+    assert!(close(triple.0, NITROGEN_TRIPLE_PA, 1e-6));
+    assert!(nitrogen_frost_pressure(Kelvin(63.14)).is_none());
+
+    let scale = NITROGEN_TRIPLE_PA / PASCALS_PER_BAR / NITROGEN_BETA_READS.0;
+    let p = nitrogen_frost_pressure(Kelvin(TRITON_FROST_K)).unwrap().0 / PASCALS_PER_BAR;
+    assert!(
+        close(p, NITROGEN_BETA_READS.1 * scale, BETA_SCALED_TOLERANCE),
+        "{p}"
+    );
+    assert!((p - TRITON_FROST_BAR).abs() <= TRITON_TOLERANCE_BAR, "{p}");
+
+    let below = nitrogen_frost_pressure(Kelvin(NITROGEN_TRANSITION_K - 1e-9)).unwrap();
+    let at = nitrogen_frost_pressure(Kelvin(NITROGEN_TRANSITION_K)).unwrap();
+    assert!(close(below.0, at.0, 1e-6));
+
+    let mut previous = f64::INFINITY;
+    let mut t = NITROGEN_SWEEP_CEILING_K;
+    while t >= NITROGEN_SWEEP_FLOOR_K - 1e-9 {
+        let p = nitrogen_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(p > 0.0 && p < previous, "{t} K: {p}");
+        previous = p;
+        t -= NITROGEN_SWEEP_STEP_K;
+    }
+}
+
+#[test]
+fn nitrogen_vapour_follows_its_antoine_fit() {
+    let (t, p) = NITROGEN_NORMAL_BOILING;
+    let fit = nitrogen_vapour_pressure(Kelvin(t)).0;
+    assert!(close(fit, p, ANTOINE_TOLERANCE), "{fit} Pa at {t} K");
+    let mut previous = 0.0;
+    let mut t = ANTOINE_RANGE_K.0;
+    while t <= ANTOINE_RANGE_K.1 {
+        let p = nitrogen_vapour_pressure(Kelvin(t)).0;
+        assert!(p > previous, "{t} K");
+        previous = p;
+        t += 0.5;
+    }
+}
+
+/// Definition: coldest temperature, 10 K, of the sulphur dioxide sweep.
+const SO2_SWEEP_FLOOR_K: f64 = 10.0;
+/// Definition: warmest temperature of the sweep, 197 K, under the triple
+/// point.
+const SO2_SWEEP_CEILING_K: f64 = 197.0;
+/// Source: Wagman 1979, `P = 1.516e8 exp(-4510 K / T)` bar (as quoted by
+/// Giles et al. 2024, eq. 1; study 24, finding 2): prefactor.
+const WAGMAN_BAR: f64 = 1.516e8;
+/// Source: the exponent of the same law, 4510 K.
+const WAGMAN_EXPONENT_K: f64 = 4510.0;
+/// Definition: temperature of the Io check, 115 K (study 24, finding 2).
+const IO_FROST_K: f64 = 115.0;
+/// Definition: factor between the anchored curve and Wagman's own at
+/// 115 K, 1.2 (study 24: 1.3e-9 against 1.4e-9 bar).
+const WAGMAN_FACTOR: f64 = 1.2;
+
+#[test]
+fn sulphur_dioxide_frost_holds_from_io_to_its_triple_point() {
+    let triple = SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE;
+    let p = sulphur_dioxide_frost_pressure(Kelvin(triple.0 - 1e-9)).unwrap();
+    assert!(close(p.0, SULPHUR_DIOXIDE_TRIPLE_PRESSURE.0, 1e-6));
+    assert!(sulphur_dioxide_frost_pressure(triple).is_none());
+
+    let mut previous = 0.0;
+    let mut t = SO2_SWEEP_FLOOR_K;
+    while t <= SO2_SWEEP_CEILING_K {
+        let p = sulphur_dioxide_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(p.is_finite() && p > previous, "{t} K: {p}");
+        previous = p;
+        t += 1.0;
+    }
+
+    let ours = sulphur_dioxide_frost_pressure(Kelvin(IO_FROST_K))
+        .unwrap()
+        .0
+        / PASCALS_PER_BAR;
+    let wagman = WAGMAN_BAR * (-WAGMAN_EXPONENT_K / IO_FROST_K).exp();
+    let ratio = ours / wagman;
+    assert!(
+        ratio < WAGMAN_FACTOR && ratio > 1.0 / WAGMAN_FACTOR,
+        "{ratio}"
+    );
+}
+
+/// Source: normal boiling point of ethane, 184.6 K (NIST Chemistry
+/// WebBook).
+const ETHANE_NORMAL_BOILING_K: f64 = 184.6;
+/// Source: critical temperature of ethane, 305.3 K (NIST Chemistry
+/// WebBook).
+const ETHANE_CRITICAL_K: f64 = 305.3;
+
+#[test]
+fn boiling_caps_at_the_critical_point() {
+    let normal = ethane_boiling_temperature(Pascal(101_325.0)).0;
+    assert!((normal - ETHANE_NORMAL_BOILING_K).abs() < 0.01, "{normal}");
+    let mpa = ethane_boiling_temperature(Pascal(1e6)).0;
+    assert!(
+        mpa > ETHANE_NORMAL_BOILING_K && mpa <= ETHANE_CRITICAL_K,
+        "{mpa}"
+    );
+    assert_eq!(ethane_boiling_temperature(Pascal(1e9)).0, ETHANE_CRITICAL_K);
+    assert!(ethane_boiling_temperature(Pascal(1e5)).0 < mpa);
+    assert!(mpa < ethane_boiling_temperature(Pascal(1e7)).0);
+}

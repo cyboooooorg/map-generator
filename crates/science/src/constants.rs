@@ -1,7 +1,7 @@
 //! Sourced physical constants.
 
 use crate::units::{
-    Gyr, Kelvin, Kilogram, Metre, MetrePerSecond, MetrePerSecondSquared, Second, Watt,
+    Gyr, Kelvin, Kilogram, Metre, MetrePerSecond, MetrePerSecondSquared, Pascal, Second, Watt,
     WattPerSquareMetre,
 };
 
@@ -11,6 +11,10 @@ pub const ASTRONOMICAL_UNIT: Metre = Metre(149_597_870_700.0);
 /// Definition: standard acceleration of gravity, 9.806 65 m/s2 exactly (CGPM
 /// 1901, 3rd General Conference on Weights and Measures).
 pub const STANDARD_GRAVITY: MetrePerSecondSquared = MetrePerSecondSquared(9.806_65);
+
+/// Definition: one standard atmosphere, 101 325 Pa exactly (10th CGPM,
+/// 1954; BIPM, SI Brochure), the pressure of a normal boiling point.
+pub(crate) const STANDARD_ATMOSPHERE: Pascal = Pascal(101_325.0);
 
 /// Source: Mars's mean surface gravity, 3.73 m/s² (NASA Mars Fact Sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html, "Surface gravity

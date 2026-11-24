@@ -7,7 +7,7 @@
 //! `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`,
 //! section 2.7.
 
-use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
 use crate::units::{Kelvin, KilogramPerCubicMetre, Pascal};
 
 /// Source: ice Ih - ice III - liquid triple point, 251.165 K (IAPWS
@@ -511,10 +511,6 @@ pub fn liquid_pressure(t: Kelvin, rho: KilogramPerCubicMetre) -> Pascal {
 
 // ------------------------------------------------------------------ ice Ih
 
-/// Source: normal pressure p0 = 101 325 Pa, the reference of the pressure
-/// polynomials (IAPWS R10-06(2009), Table 1).
-const NORMAL_PRESSURE: f64 = 101_325.0;
-
 /// Source: `g01` to `g04`, J/kg, the pressure coefficients of `g0(p)`
 /// (IAPWS R10-06(2009), Table 2); `g00` drops out of the density.
 const G0: [f64; 4] = [
@@ -609,7 +605,7 @@ impl Complex {
 pub fn ice_ih_density(t: Kelvin, p: Pascal) -> KilogramPerCubicMetre {
     let pt = TRIPLE_POINT_PRESSURE.0;
     let tau = Complex::real(t.0 / TRIPLE_POINT_TEMPERATURE.0);
-    let excess = (p.0 - NORMAL_PRESSURE) / pt;
+    let excess = (p.0 - STANDARD_ATMOSPHERE.0) / pt;
     // g0_p = sum over k = 1..4 of k g0k / pt (pi - pi0)^(k - 1).
     let (mut g0_p, mut order, mut power) = (0.0, 1.0, 1.0);
     for coefficient in G0 {
@@ -798,6 +794,30 @@ pub fn saturation_pressure(t: Kelvin) -> Pascal {
     Pascal(saturation_pa(t.0))
 }
 
+/// Boiling temperature of water at pressure `p`: the inverse of
+/// [`saturation_pressure`] by bisection on the triple point to the critical
+/// point (the same IAPWS curve, no second one). `None` under the
+/// triple-point pressure, where water does not boil; the critical
+/// temperature at and above the critical pressure.
+pub fn boiling_temperature(p: Pascal) -> Option<Kelvin> {
+    if p.0 < TRIPLE_POINT_PRESSURE.0 {
+        return None;
+    }
+    if p.0 >= CRITICAL_PRESSURE.0 {
+        return Some(CRITICAL_POINT_TEMPERATURE);
+    }
+    let (mut cold, mut warm) = (TRIPLE_POINT_TEMPERATURE.0, CRITICAL_POINT_TEMPERATURE.0);
+    for _ in 0..BISECTIONS {
+        let mid = 0.5 * (cold + warm);
+        if saturation_pressure(Kelvin(mid)).0 < p.0 {
+            cold = mid;
+        } else {
+            warm = mid;
+        }
+    }
+    Some(Kelvin(0.5 * (cold + warm)))
+}
+
 /// Sublimation pressure of ice Ih at `t` (Wagner et al. 2011, IAPWS
 /// R14-08(2011), eq. 6), valid from 50 K to the triple point; 0 at 0 K.
 pub fn sublimation_pressure(t: Kelvin) -> Pascal {
@@ -861,6 +881,39 @@ pub(crate) fn vapour_latent_j_mol(t_k: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Source: normal boiling point of water, 373.124 K at 101 325 Pa
+    /// (IAPWS SR1-86(1992), Table 1 of the saturation line).
+    const NORMAL_BOILING: (f64, f64) = (373.124, 101_325.0);
+    /// Definition: tolerance on the normal boiling point, 0.01 K.
+    const NORMAL_BOILING_TOLERANCE: f64 = 0.01;
+    /// Definition: pressures, Pa, of the round trip: 1 kPa, 100 kPa,
+    /// 10 MPa.
+    const BOILING_ROUND_TRIP: [f64; 3] = [1e3, 1e5, 1e7];
+
+    #[test]
+    fn water_boils_at_its_normal_point() {
+        let t = boiling_temperature(Pascal(NORMAL_BOILING.1)).unwrap();
+        assert!(
+            (t.0 - NORMAL_BOILING.0).abs() < NORMAL_BOILING_TOLERANCE,
+            "{}",
+            t.0
+        );
+        assert!(boiling_temperature(Pascal(TRIPLE_POINT_PRESSURE.0 * 0.999)).is_none());
+        assert_eq!(
+            boiling_temperature(CRITICAL_PRESSURE),
+            Some(CRITICAL_POINT_TEMPERATURE)
+        );
+        assert_eq!(
+            boiling_temperature(Pascal(2.0 * CRITICAL_PRESSURE.0)),
+            Some(CRITICAL_POINT_TEMPERATURE)
+        );
+        for p in BOILING_ROUND_TRIP {
+            let t = boiling_temperature(Pascal(p)).unwrap();
+            let back = saturation_pressure(t).0;
+            assert!(((back - p) / p).abs() < 1e-9, "{p} Pa -> {back}");
+        }
+    }
 
     /// Source: IAPWS R6-95(2018), Table 7: (T in K, rho in kg/m3, p in Pa)
     /// in the single-phase region.
@@ -1021,7 +1074,7 @@ mod tests {
 
     #[test]
     fn ice_ih_melts_at_its_normal_melting_point_at_one_atmosphere() {
-        let t = ice_ih_melting_temperature(Pascal(NORMAL_PRESSURE));
+        let t = ice_ih_melting_temperature(STANDARD_ATMOSPHERE);
         assert!(close(t.0, NORMAL_MELTING_TEMPERATURE, SIX_DIGITS), "{t:?}");
         assert_eq!(
             ice_ih_melting_temperature(Pascal(0.0)),

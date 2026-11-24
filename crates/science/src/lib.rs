@@ -21,6 +21,7 @@ pub mod radiation;
 pub mod relief;
 pub mod stellar;
 pub mod structure;
+pub mod surface;
 pub mod tectonics;
 pub mod units;
 pub mod volatiles;

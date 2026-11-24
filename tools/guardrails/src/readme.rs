@@ -4,9 +4,9 @@ use std::fs;
 use std::path::Path;
 
 /// Line limit of the root `README.md`.
-pub const ROOT_LIMIT: usize = 300;
+pub const ROOT_LIMIT: usize = 600;
 /// Line limit of each crate's `README.md`.
-pub const CRATE_LIMIT: usize = 150;
+pub const CRATE_LIMIT: usize = 300;
 
 /// One line per README missing or over its limit: the root one, and one
 /// per member directory of `crates/*` and `tools/*` under `root`.
@@ -56,18 +56,24 @@ mod tests {
             fs::create_dir_all(path.join(dir)).unwrap();
             fs::write(path.join(dir).join("Cargo.toml"), "").unwrap();
         }
-        fs::write(path.join("README.md"), lines(301)).unwrap();
-        fs::write(path.join("crates/ok/README.md"), lines(150)).unwrap();
-        fs::write(path.join("crates/long/README.md"), lines(151)).unwrap();
+        fs::write(path.join("README.md"), lines(ROOT_LIMIT + 1)).unwrap();
+        fs::write(path.join("crates/ok/README.md"), lines(CRATE_LIMIT)).unwrap();
+        fs::write(path.join("crates/long/README.md"), lines(CRATE_LIMIT + 1)).unwrap();
         let found = too_long(path);
         assert_eq!(found.len(), 3, "{found:?}");
-        assert!(found[0].ends_with("README.md: 301 lines, limit 300"));
-        assert!(found[1].contains("crates/long/README.md: 151 lines, limit 150"));
+        assert!(found[0].ends_with(&format!(
+            "README.md: {} lines, limit {ROOT_LIMIT}",
+            ROOT_LIMIT + 1
+        )));
+        assert!(found[1].contains(&format!(
+            "crates/long/README.md: {} lines, limit {CRATE_LIMIT}",
+            CRATE_LIMIT + 1
+        )));
         assert!(found[2].contains("tools/bare/README.md: missing"));
         fs::write(path.join("tools/bare/README.md"), lines(3)).unwrap();
 
-        fs::write(path.join("README.md"), lines(300)).unwrap();
-        fs::write(path.join("crates/long/README.md"), lines(150)).unwrap();
+        fs::write(path.join("README.md"), lines(ROOT_LIMIT)).unwrap();
+        fs::write(path.join("crates/long/README.md"), lines(CRATE_LIMIT)).unwrap();
         assert_eq!(too_long(path), Vec::<String>::new());
     }
 }

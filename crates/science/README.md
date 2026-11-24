@@ -133,6 +133,13 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 [mountains and gravity](../../docs/science/mountains-and-gravity.md),
 [plate tectonics](../../docs/science/plate-tectonics.md), [volcanoes](../../docs/science/volcanoes.md).
 
+## Surface
+
+`science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
+`RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
+and nitrogen seas included). Values:
+[planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
+
 ## Radiation
 
 `science::radiation::column`: `outgoing_longwave` (a column's infrared: lines

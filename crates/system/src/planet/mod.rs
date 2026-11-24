@@ -112,6 +112,11 @@ mod regime;
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod volcanism;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod water;
 
 #[cfg(test)]
@@ -126,5 +131,7 @@ mod envelope_tests;
 mod escape_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod volcanism_tests;
 #[cfg(test)]
 mod water_tests;

@@ -164,6 +164,11 @@ pub(crate) const WATER_KEPT_FRACTION: &str = "planet.water.kept-fraction";
 /// Tectonic regime: heat pipe, stagnant lid, plates or episodic, from the
 /// internal heat flux, the mass and the water kept.
 pub(crate) const REGIME: &str = "planet.regime";
+/// Volcanic intensity the snowball chance reads, from 0 to 1: the law of
+/// `science::relief::volcanoes` at the internal heat flux, scaled by
+/// `LID_SHARE / MOBILE_SHARE` under a stagnant lid. Derived from the
+/// three heat sources, the radius and the regime.
+pub(crate) const SURFACE_VOLCANISM: &str = "planet.surface.volcanism";
 /// Cooling time of the iron core through the mantle, `ρ c r_c d / (3 k
 /// Nu)`, from the core's mass and outer radius, the planet's radius and
 /// the regime's Nusselt number (`science::dynamo::cooling_time`).

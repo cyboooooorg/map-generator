@@ -8,7 +8,8 @@ use super::*;
 use crate::constants::{STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::gases::H2O_MOLAR_MASS;
 use crate::radiation::ktable::{CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
-use crate::radiation::test_points::{self, EARTH_SURFACE_K, MANABE_HUMIDITY};
+use crate::radiation::test_points::{self, EARTH_SURFACE_K};
+use crate::surface::RELATIVE_HUMIDITY;
 use crate::water::vapour_saturation_bar;
 
 /// The table on bins half as wide (10 cm⁻¹) over 0-2500 cm⁻¹, at
@@ -317,7 +318,7 @@ fn olr_fixed_profile(profile: &[Point], gases: &PartialPressures) -> f64 {
 }
 
 fn earth_column() -> Vec<Point> {
-    earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, MANABE_HUMIDITY)
+    earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, RELATIVE_HUMIDITY)
 }
 
 fn earth_olr(co2_ppm: f64) -> f64 {

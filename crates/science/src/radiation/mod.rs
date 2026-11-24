@@ -13,5 +13,5 @@ pub(crate) mod shortwave;
 pub(crate) mod spectrum;
 pub(crate) mod starlight;
 #[cfg(test)]
-mod test_points;
+pub(crate) mod test_points;
 pub mod veils;
