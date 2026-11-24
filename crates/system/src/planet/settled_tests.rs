@@ -150,6 +150,35 @@ const EARTH_CLOUDS_WINDOW: f64 = 0.03;
 /// 1998, doi:10.1029/98GL01908).
 const PREINDUSTRIAL_CO2: Bar = Bar(2.8e-4);
 
+/// Source: Earth's surface pressure, 1.014 bar (NASA Earth fact sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html; as
+/// `docs/science/atmospheres.md`).
+const EARTH_PRESSURE: f64 = 1.014;
+
+/// Source: the share of N₂ in Earth's dry air by volume, 78.08 % (NASA
+/// Earth fact sheet, as `docs/science/radiative-transfer.md`, "Dry air of
+/// 78.08 % N₂, 20.95 % O₂, 9340 ppm Ar").
+const EARTH_N2_SHARE: f64 = 0.7808;
+
+/// Source: the share of O₂ in Earth's dry air by volume, 20.95 % (NASA
+/// Earth fact sheet, as [`EARTH_N2_SHARE`]).
+const EARTH_O2_SHARE: f64 = 0.2095;
+
+/// Earth's measured air as an imposed test input, without its CO₂ (the
+/// test sets it) and without its argon, which the column has no field for
+/// (9340 ppm, 0.9 % of the pressure): [`EARTH_N2_SHARE`] and
+/// [`EARTH_O2_SHARE`] of [`EARTH_PRESSURE`]. `balance::EARTH_DRY_AIR` is
+/// legacy's rounded 0.78 and 0.21 bar, a `Definition:`, not this air.
+const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
+    n2: EARTH_PRESSURE * EARTH_N2_SHARE,
+    co2: 0.0,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: EARTH_PRESSURE * EARTH_O2_SHARE,
+};
+
 /// Source: the two temperatures that bound Earth's preindustrial
 /// surface, 286 K and 290 K (Myhre et al. 1998 with the thermostat's 288
 /// K: legacy `earth_holds_its_preindustrial_co2`).
@@ -568,15 +597,14 @@ fn a_reducing_air_keeps_its_co2_only_when_titan_like() {
     assert!(!titan_like_air(&air_of(climate(&triton))));
 }
 
-/// The temperature of the wet climate of `inputs` with `co2` of CO₂
-/// under the settled albedo and emissivity of `c`.
-fn wet_temperature(inputs: &ClimateInputs, c: &Climate, co2: f64) -> f64 {
+/// The temperature of the wet climate of `inputs` under `air`, at the
+/// settled albedo and emissivity of `c`.
+fn wet_temperature(inputs: &ClimateInputs, c: &Climate, air: &PartialPressures) -> f64 {
     use super::climate::body::ClimateBody;
     use super::climate::wet::wet_climate;
     let mut body = ClimateBody::new(inputs, Numerics::DEFAULT);
     let starlight = body.starlight(*c.global.bond_albedo.value());
-    let air = PartialPressures { co2, ..air_of(c) };
-    wet_climate(&mut body, starlight, &air, *c.emissivity.value())
+    wet_climate(&mut body, starlight, air, *c.emissivity.value())
         .1
         .0
 }
@@ -585,6 +613,7 @@ fn wet_temperature(inputs: &ClimateInputs, c: &Climate, co2: f64) -> f64 {
 #[ignore = "heavy: a bistable Earth settles in about a minute at opt-level 0 (the snowball branches), and the CO₂ bounds solve a wet climate sixty times"]
 fn earth_has_its_climate() {
     use super::climate::body::ClimateBody;
+    use super::climate::carbon::thermostat;
     let (earth, rot, _) = settled_of(&EARTH, EARTH_OBLIQUITY);
     let c = climate(&earth);
     let t = temperature(&earth);
@@ -618,9 +647,16 @@ fn earth_has_its_climate() {
         "{clouds}"
     );
 
-    // 280 ppm under its own albedo gives 286 to 290 K, and the
-    // thermostat's CO₂ lies between those that give 286 and 290 K.
-    let preindustrial = wet_temperature(&inputs, c, PREINDUSTRIAL_CO2.0);
+    // Earth's measured air (Refs #659: 2d-4 gives the reference Earth its
+    // oxygen from life and solves its climate again on it, so that the
+    // reference Earth reaches this air). 280 ppm under its own albedo
+    // gives 286 to 290 K, and the thermostat's CO₂ lies between the CO₂s
+    // that give 286 and 290 K, all on that one air.
+    let measured = |co2: f64| PartialPressures {
+        co2,
+        ..EARTH_MEASURED_AIR
+    };
+    let preindustrial = wet_temperature(&inputs, c, &measured(PREINDUSTRIAL_CO2.0));
     assert!(
         (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&preindustrial),
         "{preindustrial} K"
@@ -629,7 +665,7 @@ fn earth_has_its_climate() {
         let (mut low, mut high) = (CO2_BRACKET.0.ln(), CO2_BRACKET.1.ln());
         for _ in 0..CO2_STEPS {
             let mid = 0.5 * (low + high);
-            if wet_temperature(&inputs, c, mid.exp()) < target {
+            if wet_temperature(&inputs, c, &measured(mid.exp())) < target {
                 low = mid;
             } else {
                 high = mid;
@@ -641,7 +677,24 @@ fn earth_has_its_climate() {
         co2_for(PREINDUSTRIAL_RANGE.0.0),
         co2_for(PREINDUSTRIAL_RANGE.1.0),
     );
-    assert!((cold..=warm).contains(&co2), "{co2} outside {cold}..{warm}");
+    let on_measured_air = ClimateInputs {
+        air: measured(inputs.air.co2),
+        ..inputs.clone()
+    };
+    let mut body = ClimateBody::new(&on_measured_air, Numerics::DEFAULT);
+    let starlight = body.starlight(*c.global.bond_albedo.value());
+    let (kept, held, regulated) = thermostat(
+        &mut body,
+        starlight,
+        &measured(on_measured_air.air.co2),
+        *c.emissivity.value(),
+    );
+    assert!(regulated, "{held:?}");
+    assert!(
+        (cold..=warm).contains(&kept.co2),
+        "{} outside {cold}..{warm}",
+        kept.co2
+    );
 
     // Earth is bistable, with a share of its history frozen as dated.
     let snowball = c.snowball.as_ref().expect("Earth is bistable");
