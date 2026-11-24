@@ -1,7 +1,9 @@
 //! The volatiles a body is born with, and the saturation of the gases
 //! that condense on the surface or in the column: carbon dioxide and
 //! methane, and the frost of carbon dioxide and ammonia that a cold
-//! trap reads ([`co2_frost_pressure`], [`ammonia_frost_pressure`]).
+//! trap reads ([`co2_frost_pressure`], [`ammonia_frost_pressure`],
+//! [`nitrogen_frost_pressure`], [`sulphur_dioxide_frost_pressure`]), the
+//! vapour of liquid nitrogen and the boiling of ethane.
 //!
 //! **Inventory at formation** ([`inventory`]): the mass of CO2, N2,
 //! sulphur, CH4 and NH3 a body's rock and iron, silicate and ice carry by
@@ -189,7 +191,7 @@ const METHANE_CRITICAL_PRESSURE_PA: f64 = 4_599_200.0;
 /// Source: triple-point temperature of methane, 90.6941 K (Setzmann and
 /// Wagner 1991, doi:10.1063/1.555898; as in CoolProp v6.6.0,
 /// `dev/fluids/Methane.json`, `pS.Tmin`).
-const METHANE_TRIPLE_TEMPERATURE: f64 = 90.6941;
+pub(crate) const METHANE_TRIPLE_TEMPERATURE: f64 = 90.6941;
 /// Source: coefficients `n_i` of the vapour pressure of methane (same form
 /// as [`CO2_VAPOUR_N`]): CoolProp's ancillary fit to the Setzmann and
 /// Wagner 1991 equation of state (Bell et al. 2014, doi:10.1021/ie4033999),
@@ -407,6 +409,151 @@ pub fn ammonia_frost_pressure(t: Kelvin) -> Option<Pascal> {
     let ln_ratio = -AMMONIA_SUBLIMATION_ENTHALPY / MOLAR_GAS_CONSTANT
         * (1.0 / t - 1.0 / AMMONIA_TRIPLE_TEMPERATURE);
     Some(Pascal(AMMONIA_TRIPLE_PA * ln_ratio.exp()))
+}
+
+/// Source: triple-point temperature of nitrogen, 63.14 K (Angus, de
+/// Reuck et al. 1979, via the NIST Chemistry WebBook; study 24,
+/// finding 1).
+pub const NITROGEN_TRIPLE_TEMPERATURE: Kelvin = Kelvin(63.14);
+/// Source: triple-point pressure of nitrogen, 0.1253 bar (Angus, de
+/// Reuck et al. 1979, via the NIST Chemistry WebBook; study 24, finding
+/// 1), in Pa.
+pub const NITROGEN_TRIPLE_PRESSURE: Pascal = Pascal(12_530.0);
+/// Source: alpha-beta transition of solid nitrogen at low pressure,
+/// 35.61 K (Scott 1976, Phys. Rep. 27, 89, as quoted by Tegler et al.
+/// 2019; study 24, finding 1).
+pub const NITROGEN_ALPHA_BETA: Kelvin = Kelvin(35.61);
+/// Source: coefficients `A0` to `A5` of `ln(p / 1 bar) = sum A_i / T^i`
+/// for cubic alpha-N2, fit `N2-1` of Fray and Schmitt 2009 (Planet.
+/// Space Sci. 57, 2053, doi:10.1016/j.pss.2009.09.011), as printed in
+/// Table 2 of Lisse et al. 2021 (Icarus 356, 114072,
+/// doi:10.1016/j.icarus.2020.114072); study 24, finding 1.
+const NITROGEN_ALPHA_FIT: [f64; 6] = [12.40, -807.4, -3926.0, 62_970.0, -463_300.0, 1_325_000.0];
+/// Source: the same for hexagonal beta-N2, fit `N2-2` (Fray and Schmitt
+/// 2009, via Table 2 of Lisse et al. 2021); study 24, finding 1.
+const NITROGEN_BETA_FIT: [f64; 6] = [8.514, -458.4, -19_870.0, 480_000.0, -4_524_000.0, 0.0];
+/// Definition: coldest temperature, 10 K, at which the alpha fit is
+/// read; colder, the curve carries on with its slope at 10 K (a constant
+/// enthalpy), because the polynomial turns over under about 6 K.
+const NITROGEN_FIT_FLOOR: f64 = 10.0;
+
+/// `sum A_i x^i` and its derivative in `x`, by Horner's rule.
+fn polynomial(coefficients: &[f64], x: f64) -> (f64, f64) {
+    coefficients
+        .iter()
+        .rev()
+        .fold((0.0, 0.0), |(value, slope), &a| {
+            (value * x + a, slope * x + value)
+        })
+}
+
+/// Pressure of N2 over its frost at `t`: the beta fit of Fray and
+/// Schmitt 2009 (`N2-2`) from the triple point (63.14 K, 12 530 Pa) down
+/// to the alpha-beta transition (35.61 K), the alpha fit (`N2-1`) below
+/// it, each pinned to the curve above it so that the curve is
+/// continuous, and the alpha slope carried on under 10 K. The beta fit
+/// is pinned by about 3 % and the alpha fit by about 2.6 %. `None` at or
+/// above the triple point. `t` is held at or above 1 K.
+pub fn nitrogen_frost_pressure(t: Kelvin) -> Option<Pascal> {
+    if t.0 >= NITROGEN_TRIPLE_TEMPERATURE.0 {
+        return None;
+    }
+    let ln = |fit: &[f64], t: f64| polynomial(fit, 1.0 / t).0;
+    let beta =
+        |t: f64| ln(&NITROGEN_BETA_FIT, t) - ln(&NITROGEN_BETA_FIT, NITROGEN_TRIPLE_TEMPERATURE.0);
+    let alpha = |t: f64| {
+        ln(&NITROGEN_ALPHA_FIT, t) - ln(&NITROGEN_ALPHA_FIT, NITROGEN_ALPHA_BETA.0)
+            + beta(NITROGEN_ALPHA_BETA.0)
+    };
+    let t = t.0.max(FLOOR_TEMPERATURE);
+    let ln_ratio = if t >= NITROGEN_ALPHA_BETA.0 {
+        beta(t)
+    } else if t >= NITROGEN_FIT_FLOOR {
+        alpha(t)
+    } else {
+        let floor = 1.0 / NITROGEN_FIT_FLOOR;
+        let slope = polynomial(&NITROGEN_ALPHA_FIT, floor).1;
+        alpha(NITROGEN_FIT_FLOOR) + slope * (1.0 / t - floor)
+    };
+    Some(Pascal(NITROGEN_TRIPLE_PRESSURE.0 * ln_ratio.exp()))
+}
+
+/// Source: constants `A`, `B`, `C` of the Antoine equation of liquid
+/// nitrogen, `log10(p / 1 bar) = A - B / (T - C)`, 63.14 to 126 K
+/// (Edejer and Thodos 1967, via the NIST Chemistry WebBook; study 24,
+/// finding 1).
+const NITROGEN_ANTOINE: [f64; 3] = [3.7362, 264.651, 6.788];
+
+/// Pressure of liquid nitrogen at its saturation, from the Antoine fit
+/// of Edejer and Thodos 1967, valid from 63.14 to 126 K. The fit is not
+/// pinned to the triple point: it falls 4.5 % under the normal boiling
+/// point (101 325 Pa at 77.355 K) and 12 % under the triple-point
+/// pressure. Its only reader sits at the methane triple point, 90.69 K.
+pub fn nitrogen_vapour_pressure(t: Kelvin) -> Pascal {
+    let [a, b, c] = NITROGEN_ANTOINE;
+    Pascal(10f64.powf(a - b / (t.0 - c)) * PASCALS_PER_BAR)
+}
+
+/// Source: triple-point temperature of sulphur dioxide, 197.64 K
+/// (Giauque and Stephenson 1938, via the NIST Chemistry WebBook; study
+/// 24, finding 2).
+pub const SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE: Kelvin = Kelvin(197.64);
+/// Source: triple-point pressure of sulphur dioxide, 0.0167 bar
+/// (Giauque and Stephenson 1938, via the NIST Chemistry WebBook; study
+/// 24, finding 2), in Pa.
+pub const SULPHUR_DIOXIDE_TRIPLE_PRESSURE: Pascal = Pascal(1_670.0);
+/// Source: `L / R` of the sublimation of sulphur dioxide, 4510 K, from
+/// `P = 1.516e8 exp(-4510 K / T)` bar (Wagman 1979, NBS Chemical
+/// Thermodynamic Tables, as quoted by Giles et al. 2024, eq. 1,
+/// arXiv:2405.19253); study 24, finding 2.
+const SULPHUR_DIOXIDE_SUBLIMATION_L_OVER_R: f64 = 4510.0;
+
+/// Pressure of SO2 over its frost at `t`: Wagman's slope (`L / R` =
+/// 4510 K) anchored at the triple point (197.64 K, 1 670 Pa); `None` at
+/// or above the triple point. Used below the triple point down to Io's
+/// frost; Wagman's fitting range is not published. `t` is held at or
+/// above 1 K.
+pub fn sulphur_dioxide_frost_pressure(t: Kelvin) -> Option<Pascal> {
+    if t.0 >= SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE.0 {
+        return None;
+    }
+    let t = t.0.max(FLOOR_TEMPERATURE);
+    let ln_ratio = -SULPHUR_DIOXIDE_SUBLIMATION_L_OVER_R
+        * (1.0 / t - 1.0 / SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE.0);
+    Some(Pascal(SULPHUR_DIOXIDE_TRIPLE_PRESSURE.0 * ln_ratio.exp()))
+}
+
+/// Source: normal boiling point of ethane, 184.6 K (average of 23
+/// values, NIST Chemistry WebBook phase-change data; study 24, finding
+/// 9).
+const ETHANE_BOILING_TEMPERATURE: f64 = 184.6;
+/// Source: enthalpy of vaporisation of ethane, 14.703 kJ/mol at 184.1 K
+/// (Witt and Kemp 1937, via the NIST Chemistry WebBook; study 24,
+/// finding 9), rounded to 14.7 kJ/mol and held constant.
+const ETHANE_VAPORISATION_ENTHALPY: f64 = 14_700.0;
+/// Source: critical temperature of ethane, 305.3 K (average of 41
+/// values, NIST Chemistry WebBook; study 24, finding 9).
+const ETHANE_CRITICAL_TEMPERATURE: f64 = 305.3;
+/// Source: triple-point temperature of ethane, 90.4 K (Lemmon et al.
+/// 2013; study 24, finding 9).
+pub const ETHANE_TRIPLE_TEMPERATURE: Kelvin = Kelvin(90.4);
+/// Definition: one standard atmosphere, 101 325 Pa, the pressure of the
+/// normal boiling point.
+const STANDARD_ATMOSPHERE: f64 = 101_325.0;
+
+/// Boiling temperature of ethane at pressure `p`: Clausius-Clapeyron
+/// from the normal boiling point (184.6 K at 101 325 Pa) with a constant
+/// enthalpy of 14.7 kJ/mol, capped at the critical temperature (305.3
+/// K). A pressure at or under zero reads as the smallest positive `f64`.
+pub fn ethane_boiling_temperature(p: Pascal) -> Kelvin {
+    let ratio = p.0.max(f64::MIN_POSITIVE) / STANDARD_ATMOSPHERE;
+    let inverse = 1.0 / ETHANE_BOILING_TEMPERATURE
+        - ratio.ln() * MOLAR_GAS_CONSTANT / ETHANE_VAPORISATION_ENTHALPY;
+    if inverse <= 1.0 / ETHANE_CRITICAL_TEMPERATURE {
+        Kelvin(ETHANE_CRITICAL_TEMPERATURE)
+    } else {
+        Kelvin(1.0 / inverse)
+    }
 }
 
 #[cfg(test)]
