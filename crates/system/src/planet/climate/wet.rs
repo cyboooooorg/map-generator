@@ -175,11 +175,13 @@ pub(crate) fn wet_climate(
 ///
 /// Source: Kasting 1988 (Icarus 74, 472, doi:10.1016/0019-1035(88)90116-9,
 /// section 3a, a moist atmosphere that cannot radiate what it absorbs
-/// runs away, and section 3d, its ocean boils); Goldblatt et al. 2013
-/// (Nature Geosci. 6, 661, doi:10.1038/ngeo1892, a runaway once the
+/// runs away, and section 3d, the internal (accretional) heat a surface
+/// temperature needs counts with the light, Fig. 13); Goldblatt et al.
+/// 2013 (Nature Geosci. 6, 661, doi:10.1038/ngeo1892, a runaway once the
 /// absorbed flux exceeds the moist limit); Barnes et al. 2013
-/// (Astrobiology 13, 225, doi:10.1089/ast.2012.0851, a planet in a
-/// runaway greenhouse loses its ocean). There is no temperature
+/// (Astrobiology 13, 225, doi:10.1089/ast.2012.0851, section 2, the rule
+/// for any heat source: the energy from the Sun, impacts or tidal heating
+/// past the limit evaporates the entire ocean). There is no temperature
 /// condition. The vapour is bounded by the water the body keeps
 /// ([`ClimateBody::water_column`]), so a trace of water cannot hold its
 /// outgoing radiation at the moist limit and does not boil (Kasting 1988
@@ -187,7 +189,7 @@ pub(crate) fn wet_climate(
 ///
 /// Departures from legacy:
 ///
-/// - decision B2: legacy passes an emissivity of 1.0; the rewrite passes
+/// - the emissivity: legacy passes an emissivity of 1.0; the rewrite passes
 ///   the surface's own `emissivity`, so the verdict reads the surface
 ///   the climate radiated under;
 /// - a regulated climate is judged too (user decision, 2026-11-24).

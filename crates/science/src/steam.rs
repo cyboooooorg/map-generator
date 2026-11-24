@@ -63,7 +63,10 @@ pub const GRAVITY_RANGE: (MetrePerSecondSquared, MetrePerSecondSquared) = (
 /// Pa). § 2.2 states Eq. 3 valid to 27 kbar only, but clamped there a
 /// 4.78 M⊕ body with 12 % water comes out smaller than the same water
 /// condensed, against the paper's own result (§ 3.1); up to the simulated
-/// 270 kbar the polynomial is still on its grid (study 26).
+/// 270 kbar the polynomial is still on its grid (study 26). The 270 kbar
+/// choice restores the paper's result on Zeng's core (1.68 against
+/// 1.64 R⊕), not on the rewrite's (1.643 against its condensed twin's
+/// 1.655 R⊕, #684).
 pub const STEAM_PRESSURE_RANGE: (Pascal, Pascal) = (Pascal(2.7e6), Pascal(2.7e10));
 
 /// Calibration: the steam envelope's thickness is capped at this many

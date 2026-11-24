@@ -1436,8 +1436,9 @@ pull request add these:
   $M_\oplus$, of which 17.4 of ice and rock). No temperature enters the
   boundary. The core's state, a gas layer's state when there is no
   metallic layer, and an envelope's are imposed values, not computed.
-- **Steam worlds.** `interior::steam_interior` (decision B3) puts the
-  envelope of a steam world on the iron and rock shells of its rock; a
+- **Steam worlds.** `interior::steam_interior` puts the envelope of a
+  steam world on the iron and rock shells of its rock (the core, its
+  mass the whole less the steam, its radii the condensed structure's); a
   dry body's rock shells give up the steam's mass (each scaled by `1 -
   steam / rock`), so the shells add up to the whole. Water beyond the
   range of `science::water` (above 355 K, which is the ice VI-VII-liquid
@@ -1469,7 +1470,8 @@ pull request add these:
   its steam loss and cosmic shoreline read that radius in one pass, the
   envelope computed on the water handed to the loss, a deliberate upper
   bound of the loss.
-  Inside Turbet's grid the steam world is larger than its condensed twin
+  Inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past
+  § 2.2's 27 kbar, the steam world is larger than its condensed twin
   (a test on 5 M⊕ with 3 % water at 1 S⊕). The #492 body is outside it
   and comes out at 1.643 R⊕ against its condensed twin's 1.655 R⊕: only
   its radius above the dry core (1.454 R⊕) holds (Refs #684).

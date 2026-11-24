@@ -2683,8 +2683,8 @@ legacy; where they differ, this sub-section holds for the rewrite.
 - **The verdict** (`climate::wet::boils`). A body that keeps water out
   of a runaway boils when `wet_balance` is `None` under the starlight
   its Bond albedo lets in, the air its climate left and its surface's
-  emissivity, whether its thermostat holds it or not. Decision B2, a
-  departure from legacy: legacy passes an emissivity of 1.0; the
+  emissivity, whether its thermostat holds it or not. The emissivity is
+  a departure from legacy: legacy passes an emissivity of 1.0; the
   rewrite passes the emissivity the climate radiated under.
 - **Departure: a regulated climate is judged too** (user, 2026-11-24).
   Legacy skipped a climate its carbonate thermostat holds
@@ -2846,8 +2846,28 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
   table, 1.48 R⊕), under the 1.64 R⊕ legacy gave it condensed, against
   the paper's main
   result (§ 3.1: steam planets have "a significantly larger radius than
-  in the condensed water configuration"). Only the temperature is
-  clamped; Eq. 2 takes the planet's own share and gravity.
+  in the condensed water configuration"). Clamped at 270 kbar it comes
+  out 1.68 R⊕ on Zeng's core, over that 1.64 R⊕: the choice restores
+  the paper's result there, but not on the rewrite's own core, where
+  the body is 1.643 R⊕ against its condensed twin's 1.655 R⊕
+  ([planet interiors](planet-interiors.md), Refs #684). Only the
+  temperature is clamped; Eq. 2 takes the planet's own share and
+  gravity.
+- **The stellar spectrum** (a departure, documented). Turbet et al.
+  2020 compute their fits with the model of Turbet et al. 2019 (§ 2.1:
+  "For more details on the model, we refer the reader to Appendix A of
+  Turbet et al. (2019)"). That appendix (*A&A* 628, A12,
+  doi:10.1051/0004-6361/201935585, arXiv:1906.03527, read) runs the
+  radiative transfer with "the Sun (assumed to be the host star)" at a
+  fixed zenith angle of 60°, and defines `S_eff = OLR / ((1 − A_p)
+  F⊕)`, `A_p` the planetary albedo under that light. Eq. 3's `S` is a
+  flux of Sun-like light: the 2020 paper gives no correction for other
+  stars (it applies its relations to TRAPPIST-1 in § 3.2, and says only
+  that the runaway limit depends on the host star, Appendix D step 3).
+  The rewrite feeds Eq. 3 the plain sum of its sources' fluxes
+  (`interior::steam_interior`, the trial's `sources.total_flux()`),
+  whatever their spectra, so a steam world round a cool star (the #492
+  body's 2400 K M9V) reads a fit made for the Sun's light.
 - **Calibration of the thickness cap** (the core's radius, legacy's
   "Calibration, no source", kept). Eq. 2 has no finite `z` once
   `R T ln(P_surf/P_t)/(M g) ≥ R_core`: the atmosphere is unbound (the
@@ -2940,7 +2960,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | A trace of water (1e-4 bar, 1e-9 of the mass) | does not boil | Kasting 1988 § 3a, Boukrouche et al. 2021 Fig. 9 (property) |
 | Thick steam (≥ 260 bar) past the limit; 30 % water at 0.7 AU, `a_thick_steam_runaway_settles_past_the_end_of_the_plateau` | 1500 to 2500 K, a steam world | Kasting 1988 (over 1500 K for a full ocean), Goldblatt et al. 2013 (a stable steam state from about 1600 K), Boukrouche et al. 2021 § 4.3 (1835 K under 311 W/m² incoming, 2364 to 2451 K under 1343 W/m², 260 bar) |
 | Turbet's worked example | 1.2 R⊕ ± 5 % on Zeng's 0.750 R⊕ core ("around"; the fit errs by up to about 10 %) | Turbet et al. 2020 § 3.1 |
-| A steam world's radius | over its condensed radius, inside Turbet's grid | Turbet et al. 2020 § 3.1 (property) |
+| A steam world's radius | over its condensed radius, inside the structures of Turbet's § 2.1 (27 bar to 270 kbar), past § 2.2's 27 kbar | Turbet et al. 2020 § 3.1 (property) |
 | The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
@@ -3040,7 +3060,7 @@ The first rule that holds wins:
 |---|---|---|
 | 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
-| 3 | `steam-world` | in water runaway, at least 2206 bar of steam (ten times water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
+| 3 | `steam-world` | in water runaway, at least 220.64 bar of steam (water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
 | 4 | `lava-world` | surface liquid is lava (at least 1673 K, no water kept) |
 | 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
@@ -3078,7 +3098,9 @@ steam. `T` comes from their Eq. 3 and Table 2, a polynomial in
   structures the fit was made on (§2.1).
 
 §2.2 calls Eq. 3 valid only up to 27 kbar, but clamped there it puts a
-steam world below its condensed twin. The paper's own example comes back
+steam world below its condensed twin on Zeng's core (1.59 against
+1.64 R⊕); clamped at 270 kbar it is above it there (1.68 R⊕), though
+not on the rewrite's own core (1.643 against 1.655 R⊕, #684). The paper's own example comes back
 1.17 R⊕ on legacy's rock (a 0.3 M⊕ silicate core with 5 % water;
 "around 1.2 R⊕"), 1.23 R⊕ on the silicate core the paper used (study
 26).
@@ -3713,6 +3735,10 @@ another paper, from memory) is said where it is used.
   Lovis 2020, *A&A* 638, A41, doi:10.1051/0004-6361/201937151,
   arXiv:1911.08878v3, Eqs. 2 and 3, Table 2, Appendices A, C and D (read
   in full; v1 and v2 read for Eq. 2 and Table 2).
+- Turbet, Ehrenreich, Lovis, Bolmont and Fauchez 2019, *A&A* 628, A12,
+  doi:10.1051/0004-6361/201935585, arXiv:1906.03527, Appendix A (read):
+  the climate model behind Turbet et al. 2020's fits, run under the
+  Sun's light.
 - Tryka et al. 1993, "Spectroscopic determination of the phase
   composition and temperature of nitrogen ice on Triton", *Science*
   261, 751, doi:10.1126/science.261.5122.751 (abstract read); Tryka et

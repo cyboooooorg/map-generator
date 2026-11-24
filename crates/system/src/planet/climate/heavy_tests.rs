@@ -1407,7 +1407,7 @@ const F0V: Kelvin = Kelvin(7220.0);
 /// 1.2963: a test input just under its runaway limit
 /// (`runaway_flux(F0V)`, 1.29636 S⊕), in the band where the model boils
 /// under that limit. An Earth-like wet planet there with a tenth of its
-/// N₂ ([`TENTH_OF_N2`]) absorbs 300.7 W/m², past the 299.2 W/m² peak of
+/// N₂ ([`TENTH_OF_N2`]) absorbs 300.785 W/m², past the 299.2 W/m² peak of
 /// its saturated column, while its thermostat still balances at 288 K on
 /// the climate's column; legacy's 1.28 S⊕ lies under the model's boil
 /// threshold (study 26, "The boil": the threshold sits about 15 % above
@@ -1613,10 +1613,13 @@ const M9V: Kelvin = Kelvin(2400.0);
 /// census's empty band runs from 1e3 to 1e5 bar).
 const DEEP_STEAM: Bar = Bar(1.0e5);
 
-/// Source: a steam world's surface, over 1000 K (Turbet et al. 2020,
-/// A&A 638, A41, arXiv:1911.08878, § 3.1, as study 26's test windows
-/// cite it; legacy `the_492_super_earth_is_a_steam_world`'s bound: past
-/// the moist plateau, not held at water's critical point).
+/// Source: a steam world's surface, over 1000 K, under every source's
+/// post-runaway surface temperature: Barnes et al. 2013 (Astrobiology 13,
+/// 225, arXiv:1203.5104, about 1400 K), Kasting 1988 (Icarus 74, 472,
+/// about 1500 K) and Goldblatt et al. 2013 (Nature Geosci. 6, 661, about
+/// 1600 K), as study 26 § 4 cites them (legacy
+/// `the_492_super_earth_is_a_steam_world`'s bound: past the moist
+/// plateau, not held at water's critical point).
 const STEAM_WORLD_SURFACE: Kelvin = Kelvin(1000.0);
 
 /// Definition: the thick steam runaway of #438 (legacy `climate.rs`

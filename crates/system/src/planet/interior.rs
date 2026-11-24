@@ -469,9 +469,11 @@ fn water_law(t: Kelvin) -> Result<Option<(MaterialEos, bool)>, InteriorError> {
 /// the one call.
 ///
 /// The water layer of `rock`, if any, gives way to the steam, the water
-/// the runaway kept. A dry body's water is in its rock shells (decision
-/// B3): each gives up its share, its mass scaled by `1 - steam / (the
-/// rock shells' mass)`, so the shells add up to the whole. The bulk is
+/// the runaway kept. The core is the iron and rock shells, its mass the
+/// whole less the steam (so that Turbet's `x` is the steam's share of the
+/// whole), its radii the condensed structure's. A dry body's water is in
+/// its rock shells: each gives up its share, its mass scaled by `1 -
+/// steam / (the rock shells' mass)`, so the shells add up to the whole. The bulk is
 /// the core's shells and the steam (the whole mass of a dry body) at
 /// the radius of the core plus the thickness. `rock` is returned as it is
 /// when `steam` is 0.

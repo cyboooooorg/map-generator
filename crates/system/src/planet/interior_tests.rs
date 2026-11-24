@@ -26,8 +26,9 @@ pub(super) const WATER_492: f64 = 0.56 / 4.78;
 /// layer (below 355 K; a test choice).
 pub(super) const AU_492: f64 = 1.0;
 
-/// Definition: a body inside the grid of Turbet et al. 2020 § 3.1 (steam
-/// weighing 27 bar to 270 kbar, 1 to 30 S_E, 0.2 to 6 g_E): 5 M_E with 3 %
+/// Definition: a body inside the structures of Turbet et al. 2020 § 2.1
+/// (steam weighing 27 bar to 270 kbar), past § 2.2's 27 kbar, and inside
+/// § 2.2's 1 to 30 S_E and 0.2 to 6 g_E: 5 M_E with 3 %
 /// water at 1 au (1 S_E, its lower edge). Its water is a layer, which a
 /// condensed twin needs; at 10 S_E its water would be beyond the laws and
 /// the rewrite's interior builds no twin. Its steam weighs about 10^5 bar
@@ -97,7 +98,8 @@ fn check_bulk(steamy: &Interior) {
 
 #[test]
 fn a_steam_world_is_larger_than_its_condensed_twin() {
-    // Turbet et al. 2020 § 3.1, inside its grid.
+    // Turbet et al. 2020 § 3.1, inside the structures of its § 2.1
+    // (27 bar to 270 kbar), past § 2.2's 27 kbar.
     let mut trace = Trace::new();
     let (mass, core, water) = GRID;
     let (t, d) = water_world_trial(&mut trace, mass, core, water, AU_492);
