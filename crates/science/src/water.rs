@@ -7,7 +7,7 @@
 //! `docs/superpowers/studies/2026-11-21-planet-interior/equations-of-state.md`,
 //! section 2.7.
 
-use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
 use crate::units::{Kelvin, KilogramPerCubicMetre, Pascal};
 
 /// Source: ice Ih - ice III - liquid triple point, 251.165 K (IAPWS
@@ -511,10 +511,6 @@ pub fn liquid_pressure(t: Kelvin, rho: KilogramPerCubicMetre) -> Pascal {
 
 // ------------------------------------------------------------------ ice Ih
 
-/// Source: normal pressure p0 = 101 325 Pa, the reference of the pressure
-/// polynomials (IAPWS R10-06(2009), Table 1).
-const NORMAL_PRESSURE: f64 = 101_325.0;
-
 /// Source: `g01` to `g04`, J/kg, the pressure coefficients of `g0(p)`
 /// (IAPWS R10-06(2009), Table 2); `g00` drops out of the density.
 const G0: [f64; 4] = [
@@ -609,7 +605,7 @@ impl Complex {
 pub fn ice_ih_density(t: Kelvin, p: Pascal) -> KilogramPerCubicMetre {
     let pt = TRIPLE_POINT_PRESSURE.0;
     let tau = Complex::real(t.0 / TRIPLE_POINT_TEMPERATURE.0);
-    let excess = (p.0 - NORMAL_PRESSURE) / pt;
+    let excess = (p.0 - STANDARD_ATMOSPHERE.0) / pt;
     // g0_p = sum over k = 1..4 of k g0k / pt (pi - pi0)^(k - 1).
     let (mut g0_p, mut order, mut power) = (0.0, 1.0, 1.0);
     for coefficient in G0 {
@@ -1078,7 +1074,7 @@ mod tests {
 
     #[test]
     fn ice_ih_melts_at_its_normal_melting_point_at_one_atmosphere() {
-        let t = ice_ih_melting_temperature(Pascal(NORMAL_PRESSURE));
+        let t = ice_ih_melting_temperature(STANDARD_ATMOSPHERE);
         assert!(close(t.0, NORMAL_MELTING_TEMPERATURE, SIX_DIGITS), "{t:?}");
         assert_eq!(
             ice_ih_melting_temperature(Pascal(0.0)),

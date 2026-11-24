@@ -37,7 +37,7 @@
 //! which neither CoolProp nor Setzmann and Wagner give one, follows
 //! Clausius-Clapeyron from its triple point with a constant enthalpy.
 
-use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
 use crate::units::{Dex, Kelvin, Kilogram, Pascal};
 
 /// Calibration: kg of CO2 per kg of rock and iron, fitted on Venus's air,
@@ -452,7 +452,7 @@ fn polynomial(coefficients: &[f64], x: f64) -> (f64, f64) {
 /// to the alpha-beta transition (35.61 K), the alpha fit (`N2-1`) below
 /// it, each pinned to the curve above it so that the curve is
 /// continuous, and the alpha slope carried on under 10 K. The beta fit
-/// is pinned by about 3 % and the alpha fit by about 2.6 %. `None` at or
+/// is pinned by about 3 % and the alpha fit by about 2.8 %. `None` at or
 /// above the triple point. `t` is held at or above 1 K.
 pub fn nitrogen_frost_pressure(t: Kelvin) -> Option<Pascal> {
     if t.0 >= NITROGEN_TRIPLE_TEMPERATURE.0 {
@@ -487,9 +487,12 @@ const NITROGEN_ANTOINE: [f64; 3] = [3.7362, 264.651, 6.788];
 /// Pressure of liquid nitrogen at its saturation, from the Antoine fit
 /// of Edejer and Thodos 1967, valid from 63.14 to 126 K. The fit is not
 /// pinned to the triple point: it falls 4.5 % under the normal boiling
-/// point (101 325 Pa at 77.355 K) and 12 % under the triple-point
-/// pressure. Its only reader sits at the methane triple point, 90.69 K.
-pub fn nitrogen_vapour_pressure(t: Kelvin) -> Pascal {
+/// point (101 325 Pa at 77.355 K) and 12.5 % under the triple-point
+/// pressure. Valid from 63.14 to 126 K only: under `C` = 6.788 K the
+/// denominator vanishes and the curve is neither finite nor monotonic.
+/// Its only reader is `methane_freezes`, at the methane triple point,
+/// 90.69 K.
+pub(crate) fn nitrogen_vapour_pressure(t: Kelvin) -> Pascal {
     let [a, b, c] = NITROGEN_ANTOINE;
     Pascal(10f64.powf(a - b / (t.0 - c)) * PASCALS_PER_BAR)
 }
@@ -537,16 +540,13 @@ const ETHANE_CRITICAL_TEMPERATURE: f64 = 305.3;
 /// Source: triple-point temperature of ethane, 90.4 K (Lemmon et al.
 /// 2013; study 24, finding 9).
 pub const ETHANE_TRIPLE_TEMPERATURE: Kelvin = Kelvin(90.4);
-/// Definition: one standard atmosphere, 101 325 Pa, the pressure of the
-/// normal boiling point.
-const STANDARD_ATMOSPHERE: f64 = 101_325.0;
 
 /// Boiling temperature of ethane at pressure `p`: Clausius-Clapeyron
 /// from the normal boiling point (184.6 K at 101 325 Pa) with a constant
 /// enthalpy of 14.7 kJ/mol, capped at the critical temperature (305.3
 /// K). A pressure at or under zero reads as the smallest positive `f64`.
 pub fn ethane_boiling_temperature(p: Pascal) -> Kelvin {
-    let ratio = p.0.max(f64::MIN_POSITIVE) / STANDARD_ATMOSPHERE;
+    let ratio = p.0.max(f64::MIN_POSITIVE) / STANDARD_ATMOSPHERE.0;
     let inverse = 1.0 / ETHANE_BOILING_TEMPERATURE
         - ratio.ln() * MOLAR_GAS_CONSTANT / ETHANE_VAPORISATION_ENTHALPY;
     if inverse <= 1.0 / ETHANE_CRITICAL_TEMPERATURE {

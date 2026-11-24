@@ -10,7 +10,7 @@
 //! the air cannot hold, is an input: the climate that condenses it is
 //! not here.
 
-use super::cover::FROST_LAYER;
+use super::cover::{FROST_LAYER, share};
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
 use crate::radiation::gases::PartialPressures;
 use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal};
@@ -102,12 +102,6 @@ pub enum Liquid {
     Lava,
 }
 
-/// `x` as a share, held within 0 to 1; a NaN reads as none.
-fn share(x: f64) -> Fraction {
-    Fraction::new(if x.is_nan() { 0.0 } else { x.clamp(0.0, 1.0) })
-        .expect("a clamped finite value is a fraction")
-}
-
 fn bar(p: Pascal) -> f64 {
     p.0 / PASCALS_PER_BAR
 }
@@ -131,6 +125,13 @@ fn bar(p: Pascal) -> f64 {
 /// - nitrogen where nitrogen condenses above its triple point without a
 ///   methane sea (under it, a frost, [`frost`]);
 /// - none otherwise.
+///
+/// Limit: above 208.6 MPa, `ice_ih_melting_temperature` stays at the
+/// Ih-III-liquid triple point (251.165 K), the floor of ice Ih; the
+/// denser ices III, V and VI melt higher (ice VI at 273 to 355 K), so
+/// water between 252 and 273 K under that pressure reads liquid
+/// although a denser ice is stable. Issue #671 reads the melting curve
+/// of the stable ice.
 pub fn liquid(
     t: Kelvin,
     air: &PartialPressures,

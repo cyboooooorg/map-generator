@@ -81,8 +81,8 @@ println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 ```
 
 Against measured values (table on the page above): Earth R -0.29 %, C/MR^2
--0.24 %; the other bodies within 2 %. The core alloy is used to 7.85 TPa:
-converged, not validated.
+-0.24 %; the other bodies within 2 %, Titan's C/MR^2 not reproduced. The core
+alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 
 ## Internal heat
 
@@ -127,11 +127,10 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 
 ## Surface
 
-`science::surface`: `cover` (open ocean, land, ice, frost; the ice also
-weighted by sunlight) and `ground_albedo`, the public `RELATIVE_HUMIDITY`,
-and `liquids` (`liquid`, `frost`, `melting`, the freezing of methane and
-nitrogen seas). Water melts and boils on the IAPWS curves of `water`.
-Values: [planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
+`science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
+`RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
+and nitrogen seas included). Values:
+[planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
 
 ## Radiation
 

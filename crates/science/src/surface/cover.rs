@@ -7,13 +7,14 @@
 //! [`ground_albedo`], `radiation::clouds::cloud_cover` and
 //! `radiation::veils::sulphuric_deck`.
 
+use crate::constants::STANDARD_ATMOSPHERE;
 use crate::habitable::OCEAN_MASS;
 use crate::radiation::gases::PartialPressures;
-use crate::units::{Bar, Fraction, Kelvin, Kilogram, Metre, Pascal, Radian};
+use crate::units::{Bar, Fraction, Kelvin, Kilogram, Metre, Radian};
 use crate::water::{ice_ih_density, ice_ih_melting_temperature, vapour_saturation_bar};
 
 /// Source: the surface relative humidity over the oceans, 77 %: Dai 2006
-/// (*J. Climate* 19, 3589, doi:10.1175/JCLI3815.1, abstract), a mean of
+/// (*J. Climate* 19, 3589, doi:10.1175/JCLI3816.1, abstract), a mean of
 /// 75 % to 80 % over most oceans and 70 % to 80 % over most land, from
 /// over 15 000 stations and ships (1976 to 2005); Manabe & Wetherald
 /// 1967 (*J. Atmos. Sci.* 24, 241) took 0.77, read through the codes of
@@ -52,8 +53,11 @@ pub const ICE_ALBEDO: f64 = 0.6;
 /// is refitted with the climate, in 2d-3. Study 24, section 4.
 pub const FROST_ALBEDO: f64 = 0.75;
 
-/// Calibration: the albedo of the SO2 frost, 0.63, the legacy's fit (issue
-/// #669 follows it up). Study 24 lists no measurement.
+/// Calibration: the albedo of the SO2 frost, 0.63, the legacy's fit on
+/// Io's Bond albedo (Simonelli & Veverka 1988, from memory, not checked),
+/// the albedo of a disc nearly all frost. Giles et al. 2024 fit Io's
+/// frost with a Bond albedo of 0.565 (their Fig. 3, study 24, open
+/// questions): issue #669 follows it up.
 pub const SO2_FROST_ALBEDO: f64 = 0.63;
 
 /// Calibration: the pressure above which an air shields a regolith from
@@ -64,18 +68,22 @@ pub const SO2_FROST_ALBEDO: f64 = 0.63;
 /// Study 24, section 5.
 pub const SHIELD_PRESSURE: Bar = Bar(1e-4);
 
-/// Calibration: the frost that covers a whole disc, 0.02 bar of gas (a
-/// layer a few micrometres thick over a body's area). Fitted on Triton
-/// and Pluto, whose discs are all frost under 14 to 30 microbar; the
-/// legacy's value. Study 24 searched and found no measure of a frost's
-/// coverage as a function of its amount.
+/// Calibration: the frost that covers a whole disc, 0.02 bar of gas: a
+/// column of 2 000 Pa, about 200 kg/m2 under Earth's gravity (0.2 m of
+/// ice), 0.7 m of CO2 frost on Io's or 2.5 m of N2 frost on Triton's.
+/// The legacy's value, set on the CO2 frost its Io then froze out of its
+/// air (0.013 bar, two thirds of its disc). Triton's 0.36 bar covers the
+/// whole disc with any value under that, and Europa's 2e-4 bar is left
+/// to its water ice, so neither constrains it. Not studied: the legacy's
+/// calibration is kept, with no source for a frost's coverage as a
+/// function of its amount (see the page, "Frost layer").
 pub const FROST_LAYER: Bar = Bar(0.02);
 
 /// Calibration: the temperature under which the ice reaches the equator's
 /// edge of the ice line, -5 C (268.15 K), fitted on Earth's ice and
 /// seasonal sea ice, a tenth of its disc (Antarctica 2.7 % of the surface,
 /// Bedmap2, Fretwell et al. 2013; sea ice 6.7 %, NSIDC), against
-/// Budyko's -10 C (1969) for the permanent cap. Study 24, section 6.
+/// -10 C for the permanent cap (North et al. 1981, from Budyko's rule). Study 24, section 6.
 pub const ICE_LINE_TEMPERATURE: Kelvin = Kelvin(268.15);
 
 /// Source: the pole-to-equator contrast of the temperature, 42 K: North,
@@ -103,11 +111,6 @@ pub const ICE_SHEET_THICKNESS: Metre = Metre(1940.0);
 /// Earth's 510.06e6 km2, 0.709. Study 24, section 7.
 pub const EARTH_OCEAN_COVER: f64 = 0.71;
 
-/// Definition: one standard atmosphere, 101 325 Pa, the pressure at which
-/// the ice that makes the sheets is taken (its density at its melting
-/// point).
-const STANDARD_ATMOSPHERE: Pascal = Pascal(101_325.0);
-
 /// What covers a body's surface, as shares of its disc. The shares sum
 /// to 1. The cloud cover is not here.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,7 +132,7 @@ pub struct Cover {
 }
 
 /// `x` as a share, held within 0 to 1; a NaN reads as none.
-fn share(x: f64) -> Fraction {
+pub(super) fn share(x: f64) -> Fraction {
     Fraction::new(if x.is_nan() { 0.0 } else { x.clamp(0.0, 1.0) })
         .expect("a clamped finite value is a fraction")
 }
