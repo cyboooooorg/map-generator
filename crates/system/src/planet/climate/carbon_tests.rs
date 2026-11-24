@@ -51,7 +51,7 @@ fn earth_under_test_albedo(
 fn the_thermostat_holds_earth_at_288_k() {
     let inputs = earth();
     let (mut body, light, e) = earth_under_test_albedo(&inputs, Numerics::DEFAULT);
-    let (air, t, regulated) = thermostat(&mut body, light, e);
+    let (air, t, regulated) = thermostat(&mut body, light, &inputs.air, e);
     assert!(regulated, "{air:?} at {t:?}");
     assert!((t.0 - EARTH_SURFACE.0).abs() < HELD.0, "{t:?}");
     let most = body.greenhouse_co2();
@@ -67,7 +67,7 @@ fn the_thermostat_holds_earth_at_288_k() {
 fn the_thermostat_tolerance_is_converged() {
     let inputs = earth();
     let (mut body, light, e) = earth_under_test_albedo(&inputs, Numerics::DEFAULT);
-    let (_, t, _) = thermostat(&mut body, light, e);
+    let (_, t, _) = thermostat(&mut body, light, &inputs.air, e);
     // The maximum greenhouse does not read the thermostat's tolerance:
     // the finer solve keeps the one found.
     let finer = Numerics {
@@ -76,7 +76,7 @@ fn the_thermostat_tolerance_is_converged() {
     };
     let (mut fine, light, e) = earth_under_test_albedo(&inputs, finer);
     fine.greenhouse = body.greenhouse;
-    let (_, u, _) = thermostat(&mut fine, light, e);
+    let (_, u, _) = thermostat(&mut fine, light, &inputs.air, e);
     assert!((t.0 - u.0).abs() < THERMOSTAT_MOVE.0, "{t:?} against {u:?}");
 }
 

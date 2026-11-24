@@ -21,14 +21,18 @@ use science::units::{Bar, Fraction, Kelvin, WattPerSquareMetre};
 const TRACE_CO2_SHARE: f64 = 1.0 / (1u64 << 60) as f64;
 
 /// The air, temperature and regulation of `body` under `starlight` (W/m²,
-/// after its albedo), its surface radiating with `emissivity`, when its
-/// carbonate thermostat (Walker, Hays & Kasting 1981,
+/// after its albedo), its surface radiating with `emissivity`, its air
+/// `air` (its inventory, or what a colder surface leaves of it once its
+/// nitrogen and methane condense), when its carbonate thermostat (Walker, Hays & Kasting 1981,
 /// doi:10.1029/JC086iC10p09776) sets its CO₂ so that its surface is at
 /// [`THERMOSTAT_K`], the vapour taken at that temperature
 /// ([`surface_vapour`] of its [`ClimateBody::water_column`]).
 ///
 /// The CO₂ ranges up to its maximum greenhouse
 /// ([`ClimateBody::greenhouse_co2`]):
+///
+/// The maximum greenhouse stays the one searched on the inventory air,
+/// whatever `air` (#593 lever 2).
 ///
 /// - if even that leaves the surface colder than the thermostat, the
 ///   planet takes it, and on a surface too cold to keep it the CO₂ frosts
@@ -43,13 +47,14 @@ const TRACE_CO2_SHARE: f64 = 1.0 / (1u64 << 60) as f64;
 pub(crate) fn thermostat(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
+    air: &PartialPressures,
     emissivity: Fraction,
 ) -> (PartialPressures, Kelvin, bool) {
     let most = body.greenhouse_co2().0;
     let water = body.water_column();
     let i = body.inputs;
     let numerics = body.numerics;
-    let air = i.air;
+    let air = *air;
     let at_target = PartialPressures {
         h2o: surface_vapour(THERMOSTAT_K, water).0,
         ..air

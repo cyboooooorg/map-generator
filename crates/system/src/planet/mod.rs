@@ -48,10 +48,10 @@
 //! regime, core and air, and after a runaway whose shoreline took vapour,
 //! the body built once more for the water kept. [`climate`] holds the
 //! first part of the climate solver (the body it settles, its albedo,
-//! its wet balance, the collapse of its CO₂, the carbonate thermostat
-//! and the maximum greenhouse), not chained yet; the rest of the
-//! climate, the condensation it drives and what follows it come with the
-//! next pull requests (#659). Every value is recorded in the system's cause `Trace`, with
+//! its wet balance, the collapse of its CO₂, the carbonate thermostat,
+//! the maximum greenhouse, and the fixed points of its condensation and
+//! of its albedo and emissivity), not chained yet; the rest of the
+//! climate and what follows it come with the next pull requests (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which

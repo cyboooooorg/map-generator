@@ -27,19 +27,11 @@ pub(crate) struct ClimateBody<'a> {
     pub inputs: &'a ClimateInputs,
     pub numerics: Numerics,
     /// The CO₂ of the frozen branch, bar; `None` elsewhere.
-    #[cfg_attr(
-        test,
-        expect(dead_code, reason = "read by the frozen branch, next commit")
-    )]
     pub co2: Option<Bar>,
     /// The CO₂ of the maximum greenhouse, once found
     /// ([`ClimateBody::greenhouse_co2`]).
     pub greenhouse: Option<Bar>,
     /// The moist plateau, once found ([`ClimateBody::plateau`]).
-    #[cfg_attr(
-        test,
-        expect(dead_code, reason = "read by the runaway's albedo, next commit")
-    )]
     pub plateau: Option<WattPerSquareMetre>,
     pub columns: ColumnCache,
     pub shortwave: ShortwaveCache,
@@ -165,10 +157,6 @@ impl<'a> ClimateBody<'a> {
     /// dry air with its water, on its gravity and the saturated column,
     /// started from Earth's) where it exceeds Earth's air's
     /// ([`earth_moist_plateau`]); Earth's air's otherwise. Found once.
-    #[cfg_attr(
-        test,
-        expect(dead_code, reason = "read by the fixed point, next commit")
-    )]
     pub(crate) fn plateau(&mut self) -> WattPerSquareMetre {
         if let Some(p) = self.plateau {
             return p;
@@ -203,10 +191,6 @@ impl<'a> ClimateBody<'a> {
     /// vapour; `derived` otherwise.
     ///
     /// [`plateau`]: ClimateBody::plateau
-    #[cfg_attr(
-        test,
-        expect(dead_code, reason = "read by the fixed point, next commit")
-    )]
     pub(crate) fn runaway_albedo(&mut self, derived: Fraction) -> Fraction {
         let i = self.inputs;
         let share = steam_share(Bar(i.air.h2o)).get();

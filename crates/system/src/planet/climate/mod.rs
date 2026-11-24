@@ -17,7 +17,9 @@
 //!   albedo, emissivity, frost and moist plateau at a temperature;
 //! - [`wet`]: the coldest balance of a surface whose vapour follows its
 //!   temperature, and the collapse of a CO₂ its surface cannot keep;
-//! - [`carbon`]: the carbonate thermostat and the maximum greenhouse.
+//! - [`carbon`]: the carbonate thermostat and the maximum greenhouse;
+//! - [`settle`]: the fixed points of the condensation of its air and of
+//!   its albedo and emissivity, from a warm or an ice-covered start.
 //!
 //! The solver's own numerical constants (its loops, not its laws) are
 //! here, each a `Definition:` or a `Calibration:` held by the convergence
@@ -33,12 +35,15 @@
 
 pub(crate) mod body;
 pub(crate) mod carbon;
+pub(crate) mod settle;
 pub(crate) mod wet;
 
 #[cfg(test)]
 mod carbon_tests;
 #[cfg(test)]
 mod fixture;
+#[cfg(test)]
+mod settle_tests;
 #[cfg(test)]
 mod wet_tests;
 
