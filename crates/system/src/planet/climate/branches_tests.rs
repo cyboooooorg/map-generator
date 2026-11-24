@@ -13,14 +13,16 @@ use timeline::ClimateState;
 /// `SNOWBALL_WARM_BAR` (refit)").
 const HOFFMAN_SHARE: (f64, f64) = (0.013, 0.016);
 
-/// Definition: the least Bond albedo of a snowball, 0.5: an ocean under
-/// ice reflects more than it absorbs (the brief's bound, legacy's
-/// `a_snowball_keeps_its_ocean_frozen`).
+/// Definition: a test tolerance, the test's own bound on a snowball's
+/// Bond albedo, 0.5: an ocean under ice reflects more than it absorbs.
+/// Not a measured albedo: the bound of legacy's
+/// `a_snowball_keeps_its_ocean_frozen`, kept by the brief.
 const SNOWBALL_LEAST_ALBEDO: f64 = 0.5;
 
-/// Definition: the warmest mean surface of a snowball, 260 K, well under
-/// the melting of ice (the brief's bound, legacy's
-/// `a_snowball_keeps_its_ocean_frozen`).
+/// Definition: a test tolerance, the test's own bound on a snowball's
+/// mean surface, 260 K, well under the melting of ice. Not a measured
+/// temperature: the bound of legacy's `a_snowball_keeps_its_ocean_frozen`,
+/// kept by the brief.
 const SNOWBALL_WARMEST_K: f64 = 260.0;
 
 /// Definition: an orbit past Earth's outer edge, 5 AU (legacy's

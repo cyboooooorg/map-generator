@@ -51,14 +51,16 @@ const VENUS_WINDOW: Kelvin = Kelvin(5.0);
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html).
 const VENUS_BOND: f64 = 0.76;
 
-/// Definition: the window on [`VENUS_BOND`], 0.05.
+/// Definition: a test tolerance, the test's own window on
+/// [`VENUS_BOND`], 0.05; not a measured uncertainty.
 const VENUS_BOND_WINDOW: f64 = 0.05;
 
 /// Source: Mercury's Bond albedo, 0.088 (NASA Mercury fact sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/mercuryfact.html).
 const MERCURY_BOND: f64 = 0.088;
 
-/// Definition: the window on [`MERCURY_BOND`], 0.04.
+/// Definition: a test tolerance, the test's own window on
+/// [`MERCURY_BOND`], 0.04; not a measured uncertainty.
 const MERCURY_BOND_WINDOW: f64 = 0.04;
 
 /// Definition: how far an airless body sits from its equilibrium
@@ -66,8 +68,9 @@ const MERCURY_BOND_WINDOW: f64 = 0.04;
 /// `an_airless_body_sits_at_its_equilibrium_temperature`).
 const AIRLESS_WINDOW: Kelvin = Kelvin(1.0);
 
-/// Definition: the agreement of two ways of reading the same light, a
-/// relative 1e-9 (legacy `the_solar_system_has_its_albedos`).
+/// Definition: a test tolerance, the test's own window on the agreement
+/// of two ways of reading the same light, a relative 1e-9 (legacy
+/// `the_solar_system_has_its_albedos`).
 const SAME_LIGHT: f64 = 1e-9;
 
 /// Source: Titan's surface pressure, 1.467 bar (1467 hPa; Fulchignoni et
@@ -125,13 +128,15 @@ const DRAW: f64 = 0.5;
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html).
 const EARTH_BOND: f64 = 0.306;
 
-/// Definition: the window on [`EARTH_BOND`], 0.03.
+/// Definition: a test tolerance, the test's own window on
+/// [`EARTH_BOND`], 0.03; not a measured uncertainty.
 const EARTH_BOND_WINDOW: f64 = 0.03;
 
 /// Source: Earth's surface temperature, 288 K (NASA Earth fact sheet).
 const EARTH_SURFACE: Kelvin = Kelvin(288.0);
 
-/// Definition: the window on [`EARTH_SURFACE`], 6 K.
+/// Definition: a test tolerance, the test's own window on
+/// [`EARTH_SURFACE`], 6 K; not a measured uncertainty.
 const EARTH_WINDOW: Kelvin = Kelvin(6.0);
 
 /// Definition: the CO₂ under which the thermostat keeps an Earth whose
@@ -143,7 +148,8 @@ const EARTH_CO2_BOUND: f64 = 0.01;
 /// ISCCP and MODIS, as `science::radiation::clouds`).
 const EARTH_CLOUDS: f64 = 0.68;
 
-/// Definition: the window on [`EARTH_CLOUDS`], 0.03.
+/// Definition: a test tolerance, the test's own window on
+/// [`EARTH_CLOUDS`], 0.03; not a measured uncertainty.
 const EARTH_CLOUDS_WINDOW: f64 = 0.03;
 
 /// Source: Earth's preindustrial CO₂, 280 ppm, 2.8e-4 bar (Myhre et al.
@@ -179,9 +185,12 @@ const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     o2: EARTH_PRESSURE * EARTH_O2_SHARE,
 };
 
-/// Source: the two temperatures that bound Earth's preindustrial
-/// surface, 286 K and 290 K (Myhre et al. 1998 with the thermostat's 288
-/// K: legacy `earth_holds_its_preindustrial_co2`).
+/// Definition: a test tolerance, legacy's window on Earth's
+/// preindustrial surface, 286 K to 290 K: the thermostat's 288 K ± 2 K
+/// (legacy `earth_holds_its_preindustrial_co2`). Not a measured range:
+/// Myhre et al. 1998 (doi:10.1029/98GL01908) give the 280 ppm of CO₂,
+/// not this window, and no published preindustrial global mean surface
+/// temperature with its uncertainty was found to replace it.
 const PREINDUSTRIAL_RANGE: (Kelvin, Kelvin) = (Kelvin(286.0), Kelvin(290.0));
 
 /// Definition: the bracket of the search for the CO₂ that gives a

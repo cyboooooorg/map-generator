@@ -41,12 +41,14 @@ const MARS_WINDOW: Kelvin = Kelvin(5.0);
 /// Source: Mars's Bond albedo, 0.250 (NASA Mars fact sheet).
 const MARS_BOND: f64 = 0.250;
 
-/// Definition: the window on Mars's Bond albedo, 0.05, a test tolerance
-/// for a model whose ground is one regolith.
+/// Definition: a test tolerance, the test's own window on Mars's Bond
+/// albedo, 0.05, for a model whose ground is one regolith; not a
+/// measured uncertainty.
 const MARS_BOND_WINDOW: f64 = 0.05;
 
-/// Definition: the relative agreement of one sun and two half suns,
-/// 1e-9, a few roundings through the fixed point (Review Focus 2).
+/// Definition: a test tolerance, the test's own window on the relative
+/// agreement of one sun and two half suns, 1e-9: a few roundings
+/// through the fixed point (Review Focus 2).
 const SAME_LIGHT: f64 = 1e-9;
 
 /// Definition: the census case of issue #443 (seed 182's planet d,

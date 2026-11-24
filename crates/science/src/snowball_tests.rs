@@ -47,18 +47,22 @@ fn snowball_chance_follows_its_law() {
 /// "Calibration of `SNOWBALL_WARM_BAR` (refit)").
 const HOFFMAN_SHARE: (f64, f64) = (0.013, 0.016);
 
-/// Definition: the extra CO₂ the reference Earth at 1 AU needs to thaw,
-/// 0.1788 bar, as the climate solver measured it for the fit of
-/// [`SNOWBALL_WARM_BAR`] (its `Calibration:`); the tier-3 test
-/// `earth_snowballs_as_often_as_hoffman_dates` holds it on the solve.
+/// Definition: a test input, the extra CO₂ to thaw that the tier-3 test
+/// `earth_snowballs_as_often_as_hoffman_dates` measures on the reference
+/// Earth at 1 AU (0.178762 bar, kept to the 0.1788 bar of the fit of
+/// [`SNOWBALL_WARM_BAR`]). Not a fact of Earth: the tier-1 test checks
+/// only the arithmetic of the law on it.
 const EARTH_THAW_EXTRA: Bar = Bar(0.1788);
 
-/// Definition: the reference Earth's recorded volcanic intensity,
-/// 0.506064, as measured for the fit of [`SNOWBALL_WARM_BAR`].
+/// Definition: a test input, the reference Earth's recorded volcanic
+/// intensity, 0.506064, that the same tier-3 test reads, as the fit of
+/// [`SNOWBALL_WARM_BAR`] took it.
 const EARTH_VOLCANISM: f64 = 0.506064;
 
 #[test]
 fn the_warm_bar_gives_earth_its_dated_share() {
+    // The arithmetic of the law at the fit's inputs; that the solver
+    // still measures them is the tier-3 test's.
     let chance = snowball_chance(Some(EARTH_THAW_EXTRA), fraction(EARTH_VOLCANISM)).get();
     assert!(
         (HOFFMAN_SHARE.0..=HOFFMAN_SHARE.1).contains(&chance),

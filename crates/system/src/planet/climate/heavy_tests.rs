@@ -242,10 +242,11 @@ const ARCHEAN_N2: [f64; 2] = [2.0, 3.0];
 /// the mass (legacy).
 const WET_WATER_FRACTION: f64 = 0.01;
 
-/// Source: the temperature window of a thermostat-held Earth under
-/// 2 to 3 bar of nitrogen, 282 to 294 K (legacy
-/// `an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate`: the
-/// thermostat's 288 K ± 6 K).
+/// Definition: a test tolerance, legacy's window on a thermostat-held
+/// Earth under 2 to 3 bar of nitrogen, 282 to 294 K: the thermostat's
+/// 288 K ± 6 K (legacy
+/// `an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate`). Not a
+/// measured range.
 const ARCHEAN_WINDOW: (f64, f64) = (282.0, 294.0);
 
 /// Source: the Sun at 2.5 Ga gave 0.82 of today's light (Gough 1981,
@@ -264,9 +265,14 @@ const ARCHEAN_AIRS: [f64; 2] = [0.99, 1.99];
 /// 400 K, and its 40 bisection steps (legacy).
 const ARCHEAN_SEARCH: (f64, f64, usize) = (200.0, 400.0, 40);
 
-/// Source: the warming from doubling the nitrogen, 3 to 6 K: +7 K in
-/// the GCM of Charnay et al. 2013 (§5.2), +4 to 5 K in the 1-D model of
-/// Goldblatt et al. 2009 (doi:10.1038/ngeo692); the bound is legacy's.
+/// Source: the warming from doubling the nitrogen in a 1-D column with
+/// its clouds held fixed, 3 to 6 K: the 1-D range of 4 to 5 K (the
+/// 4.4 K of the clear-sky 1-D model of Goldblatt et al. 2009,
+/// doi:10.1038/ngeo692, as Charnay et al. 2013, §5.2, and
+/// `docs/science/planet-atmospheres.md`, "Thick nitrogen", quote it)
+/// widened by legacy's 1 K on either side. The +7 K of Charnay et al.
+/// 2013's GCM, whose clouds follow the surface, lies outside it on
+/// purpose: the test holds the cloud cover fixed.
 const ARCHEAN_WARMING: (f64, f64) = (3.0, 6.0);
 
 /// Definition: the orbits of the temperate Earth, as a share of its

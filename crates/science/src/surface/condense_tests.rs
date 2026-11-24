@@ -18,16 +18,6 @@ const SUM_TOLERANCE: f64 = 1e-12;
 /// Definition: an inventory of methane that floods a surface, 1 bar.
 const FLOODING_CH4: Bar = Bar(1.0);
 
-/// Source: the cap on Titan's methane over its seas at 93.65 K, 0.0845 bar,
-/// derived in study 25, "Condensation at the surface"
-/// (`docs/science/planet-atmospheres.md`), from `SEA_METHANE_SHARE` and
-/// methane's saturation (Setzmann and Wagner 1991): Titan's measured
-/// 0.0829 +- 0.0026 bar (Niemann et al. 2010) sits 0.6 sigma under it.
-const TITAN_SEA_CAP: Bar = Bar(0.0845);
-
-/// Definition: the rounding of [`TITAN_SEA_CAP`], 5e-4 bar.
-const TITAN_CAP_TOLERANCE: f64 = 5e-4;
-
 /// Definition: the legacy test's methane-ice inventory, N2 1e-3 bar and
 /// CH4 1 bar, at 50 K, far under any sea's freezing point.
 const ICE_INVENTORY: PartialPressures = PartialPressures {
@@ -90,17 +80,20 @@ fn parts(p: &PartialPressures) -> [f64; 7] {
 
 /// Titan's seas (study 25, "Condensation at the surface"; the 2d-2
 /// carry-over): with more methane than its air holds over a sea, the air
-/// keeps the sea's vapour and the rest is the sea; its measured methane
-/// is under that cap and condenses nothing; its nitrogen never condenses.
+/// keeps the sea's vapour ([`methane_sea_vapour`], 0.0845 bar at
+/// 93.65 K) and the rest is the sea; its measured methane (0.0829 ±
+/// 0.0026 bar, Niemann et al. 2010) is under that cap and condenses
+/// nothing; its nitrogen never condenses.
 #[test]
 fn titans_air_holds_its_sea_vapour() {
     let t = Kelvin(TITAN_SURFACE_K);
     let flooded = titan_inventory(FLOODING_CH4.0);
     let Condensed { air, condensate } = condense(&flooded, t);
     println!("Titan, 1 bar of CH4 at 93.65 K: air {air:?}, condensate {condensate:?}");
+    let cap = methane_sea_vapour(t).0;
     assert!(
-        (air.ch4 - TITAN_SEA_CAP.0).abs() <= TITAN_CAP_TOLERANCE,
-        "{}",
+        (air.ch4 - cap).abs() <= TIGHT * cap,
+        "{} against {cap}",
         air.ch4
     );
     assert!(
