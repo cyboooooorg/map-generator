@@ -113,15 +113,17 @@ port what the climate needs for ordinary planets (frost tables,
 volcanism, the snowball draw) and life with oxygenation, and to leave
 the ice-crust law as a declared departure (#560).
 
-## The four pull requests
+## The pull requests
 
 | PR | Content | Changes the generated systems |
 | --- | --- | --- |
 | 2d-1 Air | NH₃ frost curve; methane photolysis; cold trap; photochemistry; the reducing-air rerun | No |
 | 2d-2 Surface | Surface cover of the albedo; surface liquids; N₂ and SO₂ frost curves and frost cover; volcanism for the snowball chance | No |
-| 2d-3 Climate | The solver with the #593 levers and `condense`; snowball branches and their draw; the reducing-air fallback; `boils` loop; steam envelope | No |
+| 2d-3a Climate solver | The solver with the #593 levers and `condense`; the outer-edge fit; snowball branches and their draw; the reducing-air fallback | No |
+| 2d-3b Boiling and steam | `boils` loop; `Water.boiled` derived; steam envelope (Turbet 2020) | No |
 | 2d-4 Class and wiring | Life and oxygenation; class; public `class_of` and `model`; wiring; `ENGINE_VERSION` 4; tier-2 net | Yes |
 
+2d-3 was split into 2d-3a and 2d-3b on 2026-11-24 (see 2d-3 below).
 Each opens with its study (below), then ports test first. The design
 document travels with 2d-1; each later pull request writes its own plan
 from it.
@@ -213,6 +215,40 @@ on Titan's ground albedo, which the surface cover gives: 2d-2 takes it
 if its study finds a sourced ground albedo for Titan.
 
 ### 2d-3: the climate
+
+Split in two with the user on 2026-11-24, after the 2d-3 recon found
+three laws the rewrite lacks (the Kopparapu outer-edge fit, `condense`,
+the Turbet 2020 steam envelope):
+
+- **2d-3a, the solver:** wet balance, the albedo and emissivity fixed
+  point, `condense`, collapse, thermostat, maximum greenhouse with the
+  outer-edge fit, snowball branches and their draw, the reducing-air
+  fallback, the #646 refit and the #673 Triton refit. Study 25.
+- **2d-3b, boiling and steam:** the `boils` loop (`Water.boiled`
+  derived, a forced-steam entry to `water`), `hides_surface` and the
+  steam envelope with its radius. Its own study (Kasting 1988, Turbet
+  2020).
+
+Decisions taken with the user on 2026-11-24 for 2d-3a:
+
+- **#670:** the two heat-pipe fluxes mean different things and are
+  renamed, the law unchanged: `HEAT_PIPE_ONSET_FLUX` (1 W/m², the
+  regime's onset, a calibration) and `FULL_VOLCANISM_FLUX` (2.5 W/m²,
+  Io's flux, where volcanism is total). A heat pipe between the two
+  reads an intensity below 1.
+- **#671:** the melting curves of ices III and V (IAPWS R14-08, eqs. 2
+  and 3) are ported, and the surface window reads the melting curve of
+  the ice stable at the surface pressure.
+- **#672 and #675:** a tidally locked rotator takes the substellar
+  distribution, both for the sunlit share of the ice and for the
+  lava-world threshold (Kite et al. 2016's substellar temperature); a
+  fast rotator keeps the zonal form and the mean. The rotation criterion
+  is sourced in study 25.
+- **The spin as an input:** `class_of(&Trial)` has no spin (it is drawn
+  after the class, from the designation's seed), and tidal locking comes
+  with #604. The solver therefore takes the obliquity and a "locked"
+  flag as parameters; 2d-4 decides where `class_of` gets them, so that
+  `class_of` and `model` still give the same answer.
 
 From `climate.rs` l.1-2423: `wet_balance`, `first_balance` (the #600
 secant scan), `settle` and `settle_steps` (the #600 secant step of the
