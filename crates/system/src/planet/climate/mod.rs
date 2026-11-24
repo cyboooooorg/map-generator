@@ -19,7 +19,10 @@
 //!   temperature, and the collapse of a CO₂ its surface cannot keep;
 //! - [`carbon`]: the carbonate thermostat and the maximum greenhouse;
 //! - [`settle`]: the fixed points of the condensation of its air and of
-//!   its albedo and emissivity, from a warm or an ice-covered start.
+//!   its albedo and emissivity, from a warm or an ice-covered start;
+//! - [`branches`]: the temperate and frozen branches, the CO₂ that thaws
+//!   a snowball, its chance (`science::snowball`) and the state the
+//!   snowball draw finds the body in.
 //!
 //! The solver's own numerical constants (its loops, not its laws) are
 //! here, each a `Definition:` or a `Calibration:` held by the convergence
@@ -34,10 +37,13 @@
 //! the star.
 
 pub(crate) mod body;
+pub(crate) mod branches;
 pub(crate) mod carbon;
 pub(crate) mod settle;
 pub(crate) mod wet;
 
+#[cfg(test)]
+mod branches_tests;
 #[cfg(test)]
 mod carbon_tests;
 #[cfg(test)]

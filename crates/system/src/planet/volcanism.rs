@@ -18,8 +18,9 @@ use timeline::{Code, Heat, TectonicRegime, Trace, Traced};
 ///
 /// A heat pipe has no special case (decision B of the 2d-2 plan): the
 /// regime classes it from 1 W/m2, the law only reaches 1 at 2.5 W/m2, so
-/// a heat pipe reads 0.83 to 1 (issue #670). 2d-3 divides this value by
-/// `EARTH_VOLCANIC_INTENSITY` and refits the snowball bar.
+/// a heat pipe reads 0.83 to 1 (issue #670). The snowball chance
+/// (`science::snowball::snowball_chance`) divides this value by
+/// `EARTH_VOLCANIC_INTENSITY`.
 ///
 /// The node derives from the three heat sources, the radius and the
 /// regime.

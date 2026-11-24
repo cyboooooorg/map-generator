@@ -2452,14 +2452,38 @@ the extra CO₂ the reference Earth at 1 AU needs to thaw, computed by
 the code; with legacy's 0.091 bar, about 6.4 bar (derived), eight
 times 0.8 bar. Decided with the user on 2026-11-24: the dated episodes
 only, so snowballs become about seven times rarer near 1 AU than in
-legacy. A tier-1 test holds Earth's chance in 0.013 to 0.016.
+legacy. Refitted in 2d-3a on the rewrite's solver: the reference Earth
+at 1 AU freezes with 0.0020 bar of CO₂ and thaws at 0.1809 bar, so
+`d⊕` = 0.1789 bar, twice legacy's 0.091 bar; with its recorded
+volcanism 0.506 (`rate⊕` 1.012), `W` = 12.45, kept to three figures as
+**12.5 bar**, which gives Earth a chance of 0.0139. That is twice the
+6.4 bar expected from legacy's `d⊕`, inside the 3 to 13 bar the plan
+allowed. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
+holds Earth's chance in 0.013 to 0.016 on the full solve (65 s at the
+tier-1 opt-level); a tier-1 test of `science::snowball` holds the
+arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
-so 6.4 bar is about 130 My of today's outgassing per temperate phase.
+so 6.4 bar would be about 130 My of today's outgassing per temperate
+phase, and 12.5 bar is about 250 My.
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
 the chance 1 is recorded without it.
+
+The states of the rewrite (`system::planet::climate::branches`,
+`timeline::ClimateState`): `Runaway` when the water ran away;
+`Snowball` when the body is bistable, its draw falls under the chance,
+and its frozen branch is frozen over with a thaw; `Frozen` for a body
+with water, frozen over, which no CO₂ it can hold thaws: bistable with
+no thaw, or, with plates, frozen on its only branch past the outer
+edge; `Temperate` otherwise. The plates condition is legacy's (its
+`frozen` note, `explain.rs`): without a carbonate thermostat no CO₂
+builds up to a thaw, and the cold has another cause, so Titan, its
+water ice under a methane sea, stays `Temperate`. "Frozen over" reads
+the melting curve of the stable ice at the surface pressure
+(`water::melting_temperature`), as `liquid` does, not legacy's
+273.15 K (#671).
 
 #### Calibration of `CH4_OPACITY` (issue #646, refit)
 

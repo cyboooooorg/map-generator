@@ -50,7 +50,8 @@
 //! first part of the climate solver (the body it settles, its albedo,
 //! its wet balance, the collapse of its CO₂, the carbonate thermostat,
 //! the maximum greenhouse, and the fixed points of its condensation and
-//! of its albedo and emissivity), not chained yet; the rest of the
+//! of its albedo and emissivity, the temperate and frozen branches, the
+//! snowball chance and the state its draw finds), not chained yet; the rest of the
 //! climate and what follows it come with the next pull requests (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 

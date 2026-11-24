@@ -20,6 +20,7 @@ pub mod outgassing;
 pub mod photochemistry;
 pub mod radiation;
 pub mod relief;
+pub mod snowball;
 pub mod stellar;
 pub mod structure;
 pub mod surface;

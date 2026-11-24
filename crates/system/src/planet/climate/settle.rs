@@ -371,10 +371,6 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
 /// [`ICE_COVERED_TEMPERATURE`], with that CO₂ in place of its own
 /// ([`ClimateBody::co2`], restored after). The maximum greenhouse and the
 /// moist plateau found on the inventory air are kept (#593 lever 2).
-#[cfg_attr(
-    test,
-    expect(dead_code, reason = "read by the snowball branches, next commit")
-)]
 pub(crate) fn frozen_at(body: &mut ClimateBody, co2: Bar) -> Settle {
     let held = body.co2.replace(co2);
     let air = inventory(body);

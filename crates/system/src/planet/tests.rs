@@ -168,6 +168,19 @@ fn different_labels_draw_independently() {
 }
 
 #[test]
+fn the_snowball_draw_is_a_seed_draw() {
+    let seed = Seed::new(7);
+    let draw = draws::snowball_draw(seed.derive(LABELS.snowball));
+    assert!(draw > 0.0 && draw < 1.0);
+    assert_eq!(draw, draws::snowball_draw(seed.derive(LABELS.snowball)));
+    assert_ne!(
+        draw,
+        draws::snowball_draw(Seed::new(43).derive(LABELS.snowball))
+    );
+    assert_ne!(draw, draws::snowball_draw(seed.derive(LABELS.water)));
+}
+
+#[test]
 fn the_trace_says_why_a_planet_is_a_water_world() {
     let mut trace = Trace::new();
     let t = trial(&mut trace, 3, 1.0, 1.0, 0.0);

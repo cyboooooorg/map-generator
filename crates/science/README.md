@@ -111,7 +111,7 @@ star's XUV and Lyman α history; see [XUV
 fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
 `science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
-photochemistry}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
+photochemistry, snowball}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
 
 ## Giants and envelopes
 
