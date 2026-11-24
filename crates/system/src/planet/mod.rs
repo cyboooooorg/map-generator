@@ -51,8 +51,14 @@
 //! its wet balance, the collapse of its CO₂, the carbonate thermostat,
 //! the maximum greenhouse, and the fixed points of its condensation and
 //! of its albedo and emissivity, the temperate and frozen branches, the
-//! snowball chance and the state its draw finds), not chained yet; the rest of the
-//! climate and what follows it come with the next pull requests (#659). Every value is recorded in the system's cause `Trace`, with
+//! snowball chance and the state its draw finds, and [`climate::record`],
+//! which records the settled climate in the cause trace), and [`settled`]
+//! chains it after [`bare`]: the ground and the air, the climate, and the
+//! reducing-air fallback (the air made again with its CO2 when the climate
+//! leaves no Titan-like air). `settled` is a separate step, not wired into
+//! the generation chain yet (2d-4), so that `bare` keeps its cost. What
+//! remains: the boiling loop and the steam envelope (2d-3b), life, the
+//! class (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which
@@ -121,6 +127,11 @@ mod regime;
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod settled;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod volcanism;
 #[cfg_attr(
     not(test),
@@ -138,6 +149,8 @@ mod core_tests;
 mod envelope_tests;
 #[cfg(test)]
 mod escape_tests;
+#[cfg(test)]
+mod settled_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

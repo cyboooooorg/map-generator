@@ -275,3 +275,83 @@ pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 7] = [
     (timeline::Gas::So2, AIR_OUTGASSED_SO2, AIR_KEPT_SO2),
     (timeline::Gas::O2, AIR_OUTGASSED_O2, AIR_KEPT_O2),
 ];
+
+/// Surface temperature the climate settles at, from the light of every
+/// star, the air, the water, the heat, the body, the rotation and the
+/// state.
+pub(crate) const CLIMATE_SURFACE_TEMPERATURE: &str = "planet.climate.surface-temperature";
+/// Equilibrium temperature of the light the surface took: from the Bond
+/// albedo and the flux of every star.
+pub(crate) const CLIMATE_EQUILIBRIUM: &str = "planet.climate.equilibrium";
+/// Bond albedo the surface absorbed its light under, settled with the
+/// temperature.
+pub(crate) const CLIMATE_BOND_ALBEDO: &str = "planet.climate.bond-albedo";
+/// Emissivity the surface radiated under (the frosts' on its ground),
+/// settled with the temperature.
+pub(crate) const CLIMATE_EMISSIVITY: &str = "planet.climate.emissivity";
+/// Whether the carbonate thermostat holds the temperature.
+pub(crate) const CLIMATE_REGULATED: &str = "planet.climate.regulated";
+/// Whether the fixed points of the albedo and of the condensation
+/// settled within the solver's tolerance.
+pub(crate) const CLIMATE_CONVERGED: &str = "planet.climate.converged";
+/// The state the climate is found in: temperate, snowball, frozen or
+/// runaway. Derived from the inputs and, on a bistable body, from the
+/// snowball chance and its draw.
+pub(crate) const CLIMATE_STATE: &str = "planet.climate.state";
+/// CO2 the temperate branch of a bistable body holds, with which it also
+/// freezes.
+pub(crate) const CLIMATE_FROZE_CO2: &str = "planet.climate.froze-co2";
+/// Whether some CO2 the bistable body can hold thaws its frozen branch.
+/// A flag, because a thaw out of reach has no finite CO2 to record.
+pub(crate) const CLIMATE_THAWS: &str = "planet.climate.thaws";
+/// The least CO2 known to thaw the frozen branch; recorded only when
+/// [`CLIMATE_THAWS`] is true.
+pub(crate) const CLIMATE_THAW_CO2: &str = "planet.climate.thaw-co2";
+/// The share of its history a bistable body spends frozen: from the
+/// thaw (when it has one), the CO2 it froze with and the volcanism.
+pub(crate) const CLIMATE_SNOWBALL_CHANCE: &str = "planet.climate.snowball-chance";
+/// The snowball draw, uniform in (0, 1), from the `planet/snowball`
+/// sub-seed; recorded only for a bistable body.
+pub(crate) const CLIMATE_SNOWBALL_DRAW: &str = "planet.climate.snowball-draw";
+/// Whether the climate's air is a Titan's (`science::surface::titan_like_air`):
+/// recorded for a reducing body only, the test of the reducing-air
+/// fallback.
+pub(crate) const CLIMATE_TITAN_LIKE: &str = "planet.climate.titan-like";
+/// Partial pressure of N2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_N2: &str = "planet.climate.air.n2";
+/// Partial pressure of CO2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_CO2: &str = "planet.climate.air.co2";
+/// Partial pressure of water vapour in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_H2O: &str = "planet.climate.air.h2o";
+/// Partial pressure of CH4 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_CH4: &str = "planet.climate.air.ch4";
+/// Partial pressure of NH3 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_NH3: &str = "planet.climate.air.nh3";
+/// Partial pressure of SO2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_SO2: &str = "planet.climate.air.so2";
+/// Partial pressure of O2 in the air the climate leaves.
+pub(crate) const CLIMATE_AIR_O2: &str = "planet.climate.air.o2";
+/// Surface pressure of the air the climate leaves: the sum of its
+/// partial pressures.
+pub(crate) const CLIMATE_AIR_PRESSURE: &str = "planet.climate.air.pressure";
+/// N2 on the ground at the surface temperature (liquid or frost);
+/// recorded when positive.
+pub(crate) const CLIMATE_CONDENSATE_N2: &str = "planet.climate.condensate.n2";
+/// CH4 on the ground at the surface temperature (a sea or a frost);
+/// recorded when positive.
+pub(crate) const CLIMATE_CONDENSATE_CH4: &str = "planet.climate.condensate.ch4";
+/// What fills the oceans, from the phase diagrams: recorded when there is
+/// a liquid.
+pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
+
+/// The gases of the air the climate leaves, each with the code of its
+/// partial pressure, in the contract's order.
+pub(crate) const CLIMATE_AIR_GASES: [(timeline::Gas, &str); 7] = [
+    (timeline::Gas::N2, CLIMATE_AIR_N2),
+    (timeline::Gas::Co2, CLIMATE_AIR_CO2),
+    (timeline::Gas::H2o, CLIMATE_AIR_H2O),
+    (timeline::Gas::Ch4, CLIMATE_AIR_CH4),
+    (timeline::Gas::Nh3, CLIMATE_AIR_NH3),
+    (timeline::Gas::So2, CLIMATE_AIR_SO2),
+    (timeline::Gas::O2, CLIMATE_AIR_O2),
+];

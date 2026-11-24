@@ -13,7 +13,8 @@
 //!
 //! The climate's condensation (`condense`, the N2 and SO2 frost curves,
 //! the methane of the seas) and the reducing-air fallback, which read the
-//! surface temperature, come with the climate (#659). The non-thermal
+//! surface temperature, are the climate's (`super::climate`, chained by
+//! `super::settled`). The non-thermal
 //! loss is not in the rewrite (#658): the photolysis reads the air the
 //! shoreline kept.
 

@@ -22,7 +22,8 @@
 //!   its albedo and emissivity, from a warm or an ice-covered start;
 //! - [`branches`]: the temperate and frozen branches, the CO₂ that thaws
 //!   a snowball, its chance (`science::snowball`) and the state the
-//!   snowball draw finds the body in.
+//!   snowball draw finds the body in;
+//! - [`record`]: the settled climate in the cause trace, node by node.
 //!
 //! The solver's own numerical constants (its loops, not its laws) are
 //! here, each a `Definition:` or a `Calibration:` held by the convergence
@@ -39,6 +40,7 @@
 pub(crate) mod body;
 pub(crate) mod branches;
 pub(crate) mod carbon;
+pub(crate) mod record;
 pub(crate) mod settle;
 pub(crate) mod wet;
 
@@ -47,7 +49,7 @@ mod branches_tests;
 #[cfg(test)]
 mod carbon_tests;
 #[cfg(test)]
-mod fixture;
+pub(crate) mod fixture;
 #[cfg(test)]
 mod settle_tests;
 #[cfg(test)]

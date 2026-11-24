@@ -7,13 +7,15 @@
 //! `legacy-final:crates/mapgen/src/planet/mod.rs` (`chain`, l.480-640,
 //! and `bare_air`, l.895-1075), in their order.
 //!
-//! Not in this chain yet (#659): the climate and its boiling loop, the
-//! condensation it drives, the reducing-air fallback that reads it, and
-//! life; nor the non-thermal loss and a giant's magnetosphere over its
-//! moons (#658). PR 2d replaces the end of the chain with the climate.
+//! Not in this chain: the climate, which [`super::settled`] chains after
+//! it (the condensation it drives, and the reducing-air fallback that
+//! reads it, which calls [`bare_air`] again on the same ground); the
+//! boiling loop and life (#659); the non-thermal loss and a giant's
+//! magnetosphere over its moons (#658). PR 2d replaces the end of the
+//! chain with the climate.
 
 use super::air::air;
-use super::core::core;
+use super::core::{CoreRecord, core};
 use super::draws::{Drawn, draw};
 use super::enveloped::Body;
 use super::escape::escaped;
@@ -111,6 +113,60 @@ pub(crate) fn bare_with(
     drawn: &Drawn,
     trace: &mut Trace,
 ) -> Result<Bare, InteriorError> {
+    match bare_ground(trial, drawn, trace)? {
+        Ground::Enveloped(bare) => Ok(*bare),
+        Ground::Surfaced(ground) => bare_air(&ground, true, trace),
+    }
+}
+
+/// What [`bare_ground`] leaves: a planet that kept an envelope, whole, or
+/// the ground of a planet with a surface, before its air.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Ground {
+    /// A planet that kept an envelope: it has no surface to make an air
+    /// for.
+    Enveloped(Box<Bare>),
+    /// A planet with a surface, up to its core.
+    Surfaced(Box<Surfaced>),
+}
+
+/// The ground of a planet with a surface: everything the chain derives
+/// before its air, which [`bare_air`] reads once or twice (the climate's
+/// reducing-air fallback runs it again without rebuilding the ground).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Surfaced {
+    /// The trial and composition before a runaway's steam loss: the air
+    /// reads them so that the volatiles keep their mass.
+    before: (Trial, Drawn),
+    /// The trial and composition after the steam's first loss.
+    after: (Trial, Drawn),
+    /// The body of `after`.
+    body: Body,
+    /// The heat of `after`.
+    heat: Heat,
+    envelope_lost: Option<Traced<Kilogram>>,
+    /// The surface water before the stars' light.
+    surface: Traced<Kilogram>,
+    /// The water the stars' light leaves of it.
+    water: Water,
+    regime: Traced<TectonicRegime>,
+    volcanism: Traced<Fraction>,
+    core: CoreRecord,
+}
+
+/// The planet `trial` of composition `drawn`, chained in legacy's order
+/// up to its air (steps 1 to 3 of [`bare_with`], then the regime, its
+/// volcanism and its core of step 4): a planet that kept an envelope whole, the ground of
+/// the others for [`bare_air`].
+///
+/// # Errors
+///
+/// The errors of each step.
+pub(super) fn bare_ground(
+    trial: &Trial,
+    drawn: &Drawn,
+    trace: &mut Trace,
+) -> Result<Ground, InteriorError> {
     let heat_of = |trial: &Trial, drawn: &Drawn, body: &Body, trace: &mut Trace| {
         heat(
             trial,
@@ -125,51 +181,83 @@ pub(crate) fn bare_with(
     let formed_heat = heat_of(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
     let enveloped = escaped.drawn.envelope_fraction.value().get() >= MIN_ENVELOPE;
     if enveloped {
-        return Ok(Bare {
+        return Ok(Ground::Enveloped(Box::new(Bare {
             trial: escaped.trial,
             drawn: escaped.drawn,
             body: escaped.body,
             heat: formed_heat,
             envelope_lost: escaped.lost,
             surface: None,
-        });
+        })));
     }
 
     let surface = surface_water(&escaped.trial, &escaped.drawn, &escaped.body, trace)?;
     let w = water(&escaped.trial, &escaped.body, surface, trace)?;
-    let (mut t, mut d, mut body, heat) =
-        match after_steam(&escaped.trial, &escaped.drawn, surface, &w, trace)? {
-            Some((t, d)) => {
-                let body = interior(&t, &d, trace)?;
-                let h = heat_of(&t, &d, &body, trace)?;
-                (t, d, body, h)
-            }
-            None => (
-                escaped.trial.clone(),
-                escaped.drawn,
-                escaped.body,
-                formed_heat,
-            ),
-        };
-    let r = regime(&t, &body, &heat, &w, trace)?;
-    let v = volcanism(&body, &heat, &r, trace)?;
-    let k = core(&t, rocky(&body), &r, trace)?;
-    let made = air(
-        &escaped.trial,
-        &escaped.drawn,
-        &body,
+    let (t, d, body, heat) = match after_steam(&escaped.trial, &escaped.drawn, surface, &w, trace)?
+    {
+        Some((t, d)) => {
+            let body = interior(&t, &d, trace)?;
+            let h = heat_of(&t, &d, &body, trace)?;
+            (t, d, body, h)
+        }
+        None => (
+            escaped.trial.clone(),
+            escaped.drawn,
+            escaped.body,
+            formed_heat,
+        ),
+    };
+    let regime = regime(&t, &body, &heat, &w, trace)?;
+    let volcanism = volcanism(&body, &heat, &regime, trace)?;
+    let core = core(&t, rocky(&body), &regime, trace)?;
+    Ok(Ground::Surfaced(Box::new(Surfaced {
+        before: (escaped.trial, escaped.drawn),
+        after: (t, d),
+        body,
+        heat,
+        envelope_lost: escaped.lost,
         surface,
-        &w,
-        &r,
-        &k,
-        true,
+        water: w,
+        regime,
+        volcanism,
+        core,
+    })))
+}
+
+/// The air of `ground` (the rest of steps 4 and 5 of [`bare_with`]): [`air`] (a
+/// reducing air's CO2 held back when `hold_back`), then, after a runaway
+/// whose cosmic shoreline took some of the vapour, the planet left once
+/// more and its body built again, keeping the heat of the first loss. The
+/// ground is not rebuilt: the climate's fallback calls this a second time
+/// on the same ground.
+///
+/// # Errors
+///
+/// The errors of each step.
+pub(super) fn bare_air(
+    ground: &Surfaced,
+    hold_back: bool,
+    trace: &mut Trace,
+) -> Result<Bare, InteriorError> {
+    let (before_trial, before_drawn) = &ground.before;
+    let made = air(
+        before_trial,
+        before_drawn,
+        &ground.body,
+        ground.surface,
+        &ground.water,
+        &ground.regime,
+        &ground.core,
+        hold_back,
         trace,
     )?;
     let kept = made.water;
+    let (mut t, mut d) = ground.after.clone();
+    let mut body = ground.body.clone();
     if *kept.runaway.value()
-        && kept.inventory.value().0 < w.inventory.value().0
+        && kept.inventory.value().0 < ground.water.inventory.value().0
         && let Some((left, left_drawn)) =
-            after_steam(&escaped.trial, &escaped.drawn, surface, &kept, trace)?
+            after_steam(before_trial, before_drawn, ground.surface, &kept, trace)?
     {
         body = interior(&left, &left_drawn, trace)?;
         (t, d) = (left, left_drawn);
@@ -178,12 +266,12 @@ pub(crate) fn bare_with(
         trial: t,
         drawn: d,
         body,
-        heat,
-        envelope_lost: escaped.lost,
+        heat: ground.heat.clone(),
+        envelope_lost: ground.envelope_lost,
         surface: Some(BareSurface {
-            regime: r,
-            volcanism: v,
-            core: k.core,
+            regime: ground.regime,
+            volcanism: ground.volcanism,
+            core: ground.core.core.clone(),
             water: kept,
             atmosphere: made.atmosphere,
             outgassed_co2: made.outgassed_co2,

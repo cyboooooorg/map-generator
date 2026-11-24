@@ -123,7 +123,9 @@ pub(crate) fn solve(inputs: &ClimateInputs, draw: f64) -> Solved {
 /// under the ice and the volcanoes build the CO₂ up to just short of the
 /// thaw, or to the maximum greenhouse where none thaws it). Its state:
 ///
-/// - `Runaway` when the water ran away;
+/// - `Runaway` when the water ran away and the body keeps some (a dry
+///   body past its star's limit has no water to run away: it is
+///   temperate, as legacy's dry bodies are);
 /// - `Snowball` on the frozen branch, frozen over, with a thaw;
 /// - `Frozen` for a body with water, frozen over, which no CO₂ it can
 ///   hold thaws: on the frozen branch with no thaw, or, with plates,
@@ -137,7 +139,7 @@ pub(crate) fn solve_with(inputs: &ClimateInputs, draw: f64, numerics: &Numerics)
     let mut body = ClimateBody::new(inputs, *numerics);
     let (warm, bistable) = branches(&mut body);
     let (settle, state) = match bistable {
-        _ if inputs.runaway => (warm, ClimateState::Runaway),
+        _ if inputs.runaway && inputs.water.0 > 0.0 => (warm, ClimateState::Runaway),
         Some(b) if draw < b.chance.get() => {
             let frozen = frozen_at(&mut body, b.still_frozen);
             let state = match (frozen_over(&frozen), b.thaw) {
