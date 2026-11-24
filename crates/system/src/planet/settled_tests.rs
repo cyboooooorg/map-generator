@@ -461,12 +461,15 @@ fn the_climate_records_its_causes() {
             assert!(nodes_of(&trace, absent).is_empty(), "{name}: {absent}");
         }
 
-        // The temperature follows every source's flux and temperature,
-        // and what the body is made of.
+        // The temperature follows every source's flux, temperature and
+        // equilibrium temperature (the warm start), and what the body is
+        // made of.
         let from = ancestry(&trace, c.global.surface_temperature.node());
+        let direct = derived_from(&trace, c.global.surface_temperature.node());
         for s in settled.bare.trial.sources.iter() {
             assert!(from.contains(&s.flux.node()), "{name}");
             assert!(from.contains(&s.effective_temperature.node()), "{name}");
+            assert!(direct.contains(&s.equilibrium.node()), "{name}");
         }
         for node in [
             surface.water.inventory.node(),

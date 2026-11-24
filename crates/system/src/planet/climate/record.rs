@@ -83,7 +83,9 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 /// snowball draw `draw` (uniform in (0, 1), a drawn leaf recorded only for
 /// a bistable body). `I`, the inputs every node derives from, are:
 ///
-/// - each source's flux and effective temperature;
+/// - each source's flux, effective temperature and equilibrium
+///   temperature (the warm start of the fixed point reads it,
+///   `settle::warm_start`);
 /// - the bare air's partial pressures;
 /// - the water inventory and whether it ran away;
 /// - the three heats;
@@ -133,7 +135,11 @@ pub(crate) fn record(
     let fluxes: Vec<NodeId> = bare.trial.sources.iter().map(|s| s.flux.node()).collect();
     let mut inputs = Vec::new();
     for s in bare.trial.sources.iter() {
-        inputs.extend([s.flux.node(), s.effective_temperature.node()]);
+        inputs.extend([
+            s.flux.node(),
+            s.effective_temperature.node(),
+            s.equilibrium.node(),
+        ]);
     }
     inputs.extend(surface.atmosphere.partial.values().map(Traced::node));
     inputs.extend([
