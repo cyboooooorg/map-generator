@@ -152,6 +152,8 @@ mod envelope_tests;
 #[cfg(test)]
 mod escape_tests;
 #[cfg(test)]
+mod interior_tests;
+#[cfg(test)]
 mod settled_tests;
 #[cfg(test)]
 mod tests;

@@ -1253,8 +1253,8 @@ class trial of the backward search the trial's seed.
   the surface temperature until then: the isotherm from 273.31 to 355 K,
   the melting curve colder. From 355 K, past the water laws, its water
   is kept as an inventory without a layer, outside the structure, until
-  the climate gives it a steam envelope (as the earlier model's
-  `steam_interior`, after Turbet et al. 2020; #659); its surface gravity
+  the climate gives it a steam envelope (`interior::steam_interior`,
+  after Turbet et al. 2020; #659); its surface gravity
   and mean density are those of the condensed planet under it. Its
   escape and the steam it loses read its whole mass, water included
   (`Body::whole_mass`).
@@ -1436,7 +1436,10 @@ pull request add these:
   $M_\oplus$, of which 17.4 of ice and rock). No temperature enters the
   boundary. The core's state, a gas layer's state when there is no
   metallic layer, and an envelope's are imposed values, not computed.
-- **Steam worlds are left to the next pull request.** Water beyond the
+- **Steam worlds.** `interior::steam_interior` (decision B3) puts the
+  envelope of a steam world on the iron and rock shells of its rock; a
+  dry body's rock shells give up the steam's mass (each scaled by `1 -
+  steam / rock`), so the shells add up to the whole. Water beyond the
   range of `science::water` (above 355 K, which is the ice VI-VII-liquid
   triple point, not a steam criterion) is recorded as such: the planet
   that has a bulk is the condensed one (dry mass, dry radius, its
@@ -1466,6 +1469,10 @@ pull request add these:
   its steam loss and cosmic shoreline read that radius in one pass, the
   envelope computed on the water handed to the loss, a deliberate upper
   bound of the loss.
+  Inside Turbet's grid the steam world is larger than its condensed twin
+  (a test on 5 M⊕ with 3 % water at 1 S⊕). The #492 body is outside it
+  and comes out at 1.643 R⊕ against its condensed twin's 1.655 R⊕: only
+  its radius above the dry core (1.454 R⊕) holds (Refs #684).
 - **The envelope is the primordial one.** The loss of gas after the disc
   is the job of the escape pull request (2c), so an old, close-in
   planet's drawn envelope is more than it keeps.

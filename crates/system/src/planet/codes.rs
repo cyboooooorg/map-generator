@@ -117,6 +117,47 @@ pub(crate) const LAYER_STATE: &str = "planet.layer.state";
 /// it. Not a thermal state:
 /// the core's comes with the temperatures of a later pull request.
 pub(crate) const LAYER_STATE_BY_PRESSURE: &str = "planet.layer.state-by-pressure";
+/// Mass of a steam world with its steam envelope: the whole mass of the
+/// body it was made from (the bulk's plus a water beyond the laws), which
+/// the steam, the water the planet kept, makes up with its rock.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by `settled`'s steam world, a later task"
+    )
+)]
+pub(crate) const MASS_WITH_STEAM: &str = "planet.mass.with-steam";
+/// Temperature of a steam envelope, Turbet et al. 2020 Eq. 3
+/// (`science::steam::envelope`), from the core's shells, the steam and
+/// the fluxes of the sources.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by `settled`'s steam world, a later task"
+    )
+)]
+pub(crate) const STEAM_TEMPERATURE: &str = "planet.steam.temperature";
+/// Thickness of a steam envelope up to the transit radius, Turbet et al.
+/// 2020 Eq. 2 (`science::steam::envelope`), from the same inputs.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by `settled`'s steam world, a later task"
+    )
+)]
+pub(crate) const STEAM_THICKNESS: &str = "planet.steam.thickness";
+/// Radius of a steam world: its core's radius plus the steam's thickness.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by `settled`'s steam world, a later task"
+    )
+)]
+pub(crate) const RADIUS_STEAM: &str = "planet.radius.steam";
 /// Radiogenic heating power.
 pub(crate) const HEAT_RADIOGENIC: &str = "planet.heat.radiogenic";
 /// Tidal heating power.

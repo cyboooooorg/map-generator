@@ -105,7 +105,7 @@ impl Body {
             Self::Rocky(interior) | Self::MiniNeptune { core: interior, .. } => {
                 match interior.water {
                     Water::BeyondLaw { mass, .. } => Some(mass),
-                    Water::InMantle | Water::Layer { .. } => None,
+                    Water::InMantle | Water::Layer { .. } | Water::Steam { .. } => None,
                 }
             }
             Self::Giant(_) => None,

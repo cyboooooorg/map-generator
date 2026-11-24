@@ -700,7 +700,7 @@ fn central_pressure_cites_every_input() {
                     matches!(interior.water, Water::Layer { .. })
                 );
             }
-            Water::InMantle => panic!("a water world"),
+            Water::InMantle | Water::Steam { .. } => panic!("a water world"),
         }
     }
 }

@@ -43,7 +43,7 @@ pub(crate) fn surface_water(
         Body::Giant(_) => Held::InMantle,
     };
     match held {
-        Held::Layer { mass, .. } | Held::BeyondLaw { mass, .. } => Ok(mass),
+        Held::Layer { mass, .. } | Held::BeyondLaw { mass, .. } | Held::Steam { mass } => Ok(mass),
         Held::InMantle => Ok(trace.record(
             Code::of(codes::WATER_SURFACE),
             bulk_water(trial, drawn) * SURFACE_WATER_SHARE,
