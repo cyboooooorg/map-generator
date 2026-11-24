@@ -137,8 +137,8 @@ in legacy's order:
    only once the supply outruns the destruction. Legacy's law is ported,
    extended to several stars (decided with the user on 2026-11-23): the
    destruction at a time `t` is the sum over the sources of each one's
-   flux times its own Lyman α ratio at `t` (`science::xuv::ratio`,
-   `integrated_ratio`, the law the timeline's fluence comes from); the
+   flux times its own Lyman α ratio at `t` (as built: `History::ratio_at`,
+   `History::integrated_between`, the law the timeline's fluence comes from); the
    onset where supply overtakes destruction is found on that sum by
    bisection, for one source as for several. The history is the
    rewrite's (a share of the ZAMS light times its `scale`, #622), so the
@@ -154,7 +154,8 @@ in legacy's order:
    rewrite the shoreline's share does not read the air's composition
    and the photolysis reads only methane, so the port decides
    `reducing` from the methane first and outgasses CO₂ at 0 when it
-   holds, in one pass, with the same values. Legacy also undoes the hold-back
+   holds, in one pass, with the same values (but for SO₂ on a dry body,
+   whose wash-out reads the lighter column). Legacy also undoes the hold-back
    when the climate does not leave a Titan-like air (`bare`, `mod.rs`
    l.~873, `titan_like_air`): that fallback reads the climate and comes
    with 2d-3.
@@ -167,7 +168,8 @@ Their cause nodes join the per-gas trees 2c records: each step records
 the gas it changes with the previous node of that gas as its cause
 (`outgassed` → `shoreline-kept` → `SO₂-kept` → `photolysed` →
 `trapped` → `photochemistry`), so a gas's tree reads in chain order.
-The frozen CO₂ (`photolysed.co2 - trapped.co2`) is recorded as its own
+The frozen CO₂ (`kept.co2 - trapped.co2`; the photolysis leaves CO₂ as kept)
+is recorded as its own
 node: the carbon cycle of 2d-3 reads it.
 
 The NH₃ frost curve joins `science::volatiles` beside the CO₂ and CH₄
@@ -180,9 +182,11 @@ SO₂ frost curves with the frost cover of 2d-2.
 
 Tests: the legacy tests of these functions, and
 `earth_has_no_abiotic_methane_or_ammonia` (#659). The 2c review asked
-to recheck Earth's N₂ against 0.78 bar once the ammonia photochemistry
-exists (`NITROGEN_RECYCLED_UNDER_PLATES`, comment on #659): done here,
-retuning the constant with its calibration section if it misses.
+to recheck Earth's N₂ against its target once the ammonia photochemistry
+exists (`NITROGEN_RECYCLED_UNDER_PLATES`, comment on #659): done here: the
+target is 0.746 bar by weight (0.78 is the volume
+share), and the constant was refitted from 0.8 to 0.8145 (Earth 0.7458
+bar), with its calibration section.
 
 ### 2d-2: the surface
 

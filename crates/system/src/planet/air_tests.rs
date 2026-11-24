@@ -610,8 +610,10 @@ fn titan_outgasses_no_co2() {
     assert!(from.contains(&titan.trial.sources.primary().equilibrium.node()));
 }
 
-// Review Focus 5: the hold-back changes the outgassed CO2 alone; every
-// other gas, the photolysis and the rest of the chain read the same.
+// Review Focus 5: on a wet body (Titan) the hold-back changes the
+// outgassed CO2 alone; every other gas, the photolysis and the rest of
+// the chain read the same. A dry body's SO2 wash-out reads the lighter
+// column, so its SO2 differs.
 #[test]
 fn a_held_back_air_differs_only_by_its_co2() {
     let held = planet(&TITAN).air_held(true);

@@ -528,13 +528,15 @@ partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, S
 and O₂ (`Gases`, with `total()`), in six steps, called in this order:
 `outgassed`, `atmosphere`, `non_thermal_loss`, `methane_photolysis`,
 `cold_trap`, `photochemistry`. The rewrite has so far `outgassed`, the
-shoreline of `atmosphere` and the SO₂ wash-out: `system::planet::air::air`
-chains the outgassing (`science::outgassing`, the shares `MOBILE_SHARE`,
+shoreline of `atmosphere`, the SO₂ wash-out, `methane_photolysis`,
+`cold_trap` and `photochemistry` (with the reducing air's CO₂ hold-back):
+`system::planet::air::air` chains the outgassing (`science::outgassing`, the shares `MOBILE_SHARE`,
 `LID_SHARE`, `RECYCLED_UNDER_PLATES`, `NITROGEN_RECYCLED_UNDER_PLATES`), the
 cosmic shoreline (`science::escape::shoreline_kept`), the runaway's steam and
 the wash-out (`science::outgassing::so2_kept`) on the pre-steam trial and
-the post-steam body. The non-thermal loss waits for #658, the rest for the
-climate (#659). The carbonate
+the post-steam body, then the photolysis, the reducing test, the cold trap
+and the photochemistry. The non-thermal loss waits for #658;
+`condense`, the fallback and the climate wait for #659. The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -1045,9 +1047,9 @@ doi:10.1063/5.0128269, the reference equation of state; abstract) and
 and below it Clausius–Clapeyron at the sublimation enthalpy of 31.2
 kJ/mol measured from 177 to 195 K (Overstreet & Giauque 1937, through
 the NIST WebBook). That curve follows the polynomial fit of Fray &
-Schmitt 2009 (NH3-1, as Lisse et al. 2021 reproduce it) within 1.5 %
+Schmitt 2009 (NH3-1, as Lisse et al. 2021 reproduce it) within 2 %
 from 150 K to the triple point, and meets their data point of 1.27e-3
-bar at 162.39 K (as Blakley et al. 2024, *Planet. Space Sci.*,
+bar at 162.39 K (Karwat 1924, through Fray & Schmitt 2009, as Blakley et al. 2024, *Planet. Space Sci.*,
 doi:10.1016/j.pss.2024.105863, quote it) within 5 %; at 80 to 120 K
 Blakley et al. measure pressures 1.5 times below Fray & Schmitt's
 extrapolation, and the constant enthalpy lies between the two.
@@ -1085,7 +1087,7 @@ frost (0.63, see *Volcanic SO₂*).
 
 **How the rewrite computes the cold trap** (`science::volatiles`,
 `co2_frost_pressure`, `ammonia_frost_pressure`; `system::planet::air`).
-Each gas of the kept air is held to its frost pressure at one combined
+The CO₂ and the NH₃ of the kept air are each held to their frost pressure at one combined
 equilibrium temperature, the fourth root of the sum of every star's
 `T_eq⁴` (`StellarSources::equilibrium_k`; one star's own with a single
 star), which the reducing test and the methane line read too; the step records `planet.air.trapped.co2` and
@@ -1126,8 +1128,9 @@ trap (above).
 nodes are `planet.air.photochemistry.n2` (citing the kept N₂ and the
 trapped NH₃), `.nh3` (the trapped NH₃) and `.ch4` (the photolysed
 methane and the equilibria); the partial pressures of the final air are
-these nodes and the trapped CO₂, so the whole tree reads
-outgassed, shoreline-kept, photolysed, trapped, photochemistry. Where it
+these nodes and the trapped CO₂, so each gas's tree reads in
+chain order (outgassed, shoreline-kept, then photolysed, trapped or
+photochemistry, as the gas goes through them). Where it
 departs from legacy: `N2_PER_NH3` comes from the molar masses
 (0.8224, not 28/34), and the rewrite's Earth has 0.7458 bar of N₂ (0.475
 before the photochemistry), the target below, on which
@@ -1169,7 +1172,8 @@ giving one (study 21, part 5). The test keeps Earth's N₂ within 10 % of
 0.746 bar: the target is sourced, the 10 % is the test's own tolerance.
 
 Calibration targets, through the whole chain from the reference bodies'
-inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr:
+inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr (the
+Earth row and the rewrite's values below it are at 4.567 Gyr):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|

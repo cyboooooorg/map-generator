@@ -14,8 +14,10 @@ only in a cold air), each gas with its cause tree.
 **Architecture:** The laws go to `science` (the NH₃ frost curve and a
 CO₂ frost reading in `volatiles`, a new `photochemistry` module for the
 photolysis, the reducing test and the NH₃ and methane rules). The steps
-go into `system::planet::air`, after the SO₂ wash-out and before the
-pressure node, so `bare` returns the air the climate of 2d-3 will
+go into `system::planet::air`: the photolysis and the reducing test
+before the other gases are outgassed, the cold trap and the
+photochemistry after the SO₂ wash-out, and before the pressure node, so `bare`
+returns the air the climate of 2d-3 will
 read. Nothing is public and nothing generated changes: no engine
 version bump.
 
@@ -111,7 +113,8 @@ Legacy paths below are under `legacy-final:crates/mapgen/src/planet/`:
 5. **A reducing air:** CO₂ is 0 in every node after the outgassing
    (kept, trapped, frozen), the other gases keep the values a
    non-reducing pass gives them, except SO₂, whose wash-out reads the
-   lighter column; `hold_back = false` outgasses CO₂ as usual. (Task 5
+   lighter column on a dry body (a wet one reads the same); `hold_back =
+   false` outgasses CO₂ as usual. (Task 5
    tests `titan_outgasses_no_co2` and
    `a_held_back_air_differs_only_by_its_co2`.)
 
@@ -136,7 +139,8 @@ carry the number; say which):
    (ApJS 55, 465) in full. Was Titan's 5.6e4 g cm⁻² lost at today's
    rate or over a history? Fit the yield again with the rewrite's
    Lyman α history (`History::integrated_between`, ZAMS share times
-   `scale`, #622) over Titan's age at 9.58 AU, against the loss the
+   `scale`, #622) over Titan's age at 9.57 AU (as built; legacy's 9.58 AU
+   gives 14.10), against the loss the
    paper gives, and say how far it moves from legacy's 13.9. Whether a
    yield above one is physical (photosensitised dissociation).
 2. `METHANE_SURVIVES_K` (150 K): a source for the temperature below
@@ -148,7 +152,9 @@ carry the number; say which):
    weight pressures (`air.rs` `outgassed`: `weight(mass)`), so a mass
    ratio is right; cite Atreya, Donahue & Kuhn 1978 or drop it for the
    stoichiometry alone (`Definition:`).
-5. Earth's N₂ target, 0.78 bar (a source), and the band the test keeps.
+5. Earth's N₂ target, 0.746 bar by weight (a source; 0.78 is the volume
+   share), and the band the test keeps. As built: the constant was
+   refitted from 0.8 to 0.8145 (Earth 0.7458 bar).
 6. The test fixtures: Titan and Callisto as planet trials (mass, core
    mass fraction, water fraction, orbit, eccentricity), each with a
    source. Both are moons; as planets they have no host plasma, which
@@ -250,12 +256,12 @@ session at any GAP that stays open.
 - [ ] **Step 1: Write the failing tests** (from `atm` l.1545-1640, values
       per Task 1):
       `titan_loses_methane_at_the_rate_of_yung_1984` (the present rate at
-      9.58 AU around a 1 M☉, 4.6 Gyr history, in molecules cm⁻² s⁻¹,
+      9.57 AU (as built) around a 1 M☉, 4.6 Gyr history, in molecules cm⁻² s⁻¹,
       equals Task 1's target within 1 %);
       `photolysis_matches_a_stepwise_budget` (legacy's five cases
-      `(9.58, 1.0, 4.6, 19.0)`, `(9.58, 1.0, 4.6, 3.0)`,
+      `(9.57, 1.0, 4.6, 19.0)`, `(9.57, 1.0, 4.6, 3.0)`,
       `(5.2, 1.0, 4.6, 0.5)`, `(1.0, 0.3, 8.0, 300.0)`,
-      `(9.58, 1.0, 0.05, 19.0)` as (AU, M☉, Gyr, bar), against a
+      `(9.57, 1.0, 0.05, 19.0)` as (AU, M☉, Gyr, bar), against a
       200 000-step integration of `supply − rate(t)` clamped at 0,
       within `1e-3 · ch4`);
       `the_whole_destruction_matches_the_timelines_fluence`
@@ -291,8 +297,8 @@ session at any GAP that stays open.
 
 - [ ] **Step 1: Write the failing tests:**
       `photolysis_conserves_nitrogen` (34 bar NH₃ and 1 bar N₂ give
-      29 bar N₂ within 1e-9, if Task 1 keeps the weight-pressure
-      ratio; otherwise Task 1's value);
+      28.963 bar N₂ within 1e-9 (as built: the molar masses, 28.014 /
+      (2 × 17.031), not 28/34));
       `titans_air_is_reducing_and_earths_is_not` (Titan's equilibrium of
       Task 1 with 1 bar of methane is reducing; 255 K is not; no methane
       is never reducing).
@@ -340,7 +346,7 @@ session at any GAP that stays open.
      wash-out as today;
   5. `planet.air.trapped.co2` and `planet.air.trapped.nh3`, the cap of
      Task 2 at the equilibrium temperature;
-     `planet.air.frozen-co2` = photolysed CO₂ − trapped CO₂ (the
+     `planet.air.frozen-co2` = kept CO₂ − trapped CO₂ (the
      photolysis leaves CO₂ as kept; legacy books all of it as frost, the
      excess #590 tracks for small icy bodies under T2);
   6. `planet.air.photochemistry.n2`, `.nh3` (0), `.ch4`;
@@ -354,7 +360,8 @@ session at any GAP that stays open.
       `earth_has_no_abiotic_methane_or_ammonia` (CH₄ and NH₃ below 1e-3
       bar, `atm` l.1522);
       `earth_has_a_bar_of_nitrogen`, the existing 2c test, its band
-      narrowed to Task 1's around 0.78 bar (retune
+      narrowed to Task 1's around 0.746 bar by weight (as built: retuned
+      to 0.8145, Earth 0.7458 bar; retune
       `NITROGEN_RECYCLED_UNDER_PLATES` in
       `crates/science/src/outgassing.rs` and its calibration section if
       it misses; the retune goes in the PR description);

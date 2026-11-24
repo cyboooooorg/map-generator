@@ -208,19 +208,19 @@ pub(crate) const AIR_SO2_KEPT: &str = "planet.air.so2-kept";
 /// Partial pressure of N2 the cosmic shoreline kept: the outgassed one
 /// times the shoreline's share.
 pub(crate) const AIR_KEPT_N2: &str = "planet.air.kept.n2";
-/// Partial pressure of CO2 in the air (see [`AIR_KEPT_N2`]).
+/// Partial pressure of CO2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_CO2: &str = "planet.air.kept.co2";
-/// Partial pressure of water vapour in the air (see [`AIR_KEPT_N2`]).
+/// Partial pressure of water vapour the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_H2O: &str = "planet.air.kept.h2o";
-/// Partial pressure of CH4 in the air (see [`AIR_KEPT_N2`]).
+/// Partial pressure of CH4 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_CH4: &str = "planet.air.kept.ch4";
-/// Partial pressure of NH3 in the air (see [`AIR_KEPT_N2`]).
+/// Partial pressure of NH3 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
 /// Partial pressure of SO2 in the air: the outgassed one times the
 /// shoreline's share and the share the wash-out leaves; the air's, no
 /// later step changing it.
 pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
-/// Partial pressure of O2 in the air (see [`AIR_KEPT_N2`]).
+/// Partial pressure of O2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
 /// Partial pressure of CH4 the stars' ultraviolet leaves of the kept one
 /// (`science::photochemistry::methane_left`), from the surface gravity,
