@@ -2703,12 +2703,13 @@ legacy; where they differ, this sub-section holds for the rewrite.
   oceans, "type II", inside a critical distance, are "desiccated by
   hydrodynamic escape". Keeping the leftover as an ocean only if its own
   air finds a wet balance follows the same criterion as the boil.
-  **Simplification:** Goldblatt et al. 2013 find a cloud-free steam
+  **Departure (user, 2026-11-24):** Goldblatt et al. 2013 find a cloud-free steam
   atmosphere absorbing more than the limit at today's sunlight, "a
   climate bistability": a body with a wet balance may also hold a stable
   steam state. The model takes the wet branch whenever one exists; no
   source says which branch a body that boiled takes back.
-- **No moist-greenhouse loss** (a departure, unchanged from legacy):
+- **No moist-greenhouse loss** (a departure kept by the user on
+  2026-11-24, unchanged from legacy):
   Kasting 1988 § 4 finds the stratosphere wet past about 1.1 S₀ (a
   mixing ratio over 10⁻³ loses Earth's oceans in under 4 Gyr); a body
   that keeps a wet balance loses no water to escape in the model.
@@ -2735,8 +2736,16 @@ legacy; where they differ, this sub-section holds for the rewrite.
   et al. 2013. The line that follows from the sources is the critical
   pressure itself, a `Definition:` (the base fluid supercritical); the
   647 K condition then holds by construction, since a steam column's
-  surface is never colder than its saturation temperature. The choice
-  between the two is the user's (study 26).
+  surface is never colder than its saturation temperature, and stays
+  as a guard. **Decision (user, 2026-11-24):** `STEAM_WORLD_MIN_BAR`
+  is `science::water::CRITICAL_PRESSURE` (220.64 bar), a `Definition:`,
+  not ten times it. A runaway between 220.64 and 2206.4 bar becomes a
+  steam world; a boiled Earth that kept its 270 bar of ocean is one.
+- **Turbet's radius for steam worlds only** (user, 2026-11-24, as
+  legacy). Turbet et al. inflate the transit radius of every runaway
+  with water (on an Earth core, 320 to 370 km under 27 bar, 510 to
+  600 km under 270 bar, derived); the model's radius is the surface's,
+  so a runaway whose rock shows keeps its rock radius.
 
 #### The steam envelope (Turbet et al. 2020)
 
@@ -2805,7 +2814,7 @@ A&A", with "small typos in Tables 1 and 2" corrected):
   of their grid sits near the runaway limit. The #492 body (12 % water
   near 1 S⊕, 5.6e5 bar of steam) is outside both papers. The rewrite
   keeps Turbet's Eqs. 2 and 3 with the clamps above; Aguichine's fits
-  are a later step for hot planets past 10 % water.
+  are left for later (an issue) for hot planets past 10 % water.
 - **The climate under the envelope.** The rewrite's climate already
   runs on the dry bulk of a water world past the laws (its gravity and
   radius, `ClimateInputs::of`): that is Turbet's `g_core` and
@@ -2818,6 +2827,15 @@ A&A", with "small typos in Tables 1 and 2" corrected):
   (Pierrehumbert 2023, after Pierrehumbert 2010), and Kopparapu et al.
   2014 move the inner edge by about −10 % to +7 % from 0.1 to 5 M⊕
   ([habitable zone](habitable-zone.md)): a few per cent at most.
+- **The steam loss on the inflated body** (user, 2026-11-24). The
+  envelope's radius depends on the water kept, which depends on the
+  loss. One pass, no fixed point: the envelope is computed on the water
+  handed to the loss (before it), and the energy-limited loss and the
+  cosmic shoreline read that radius and the whole mass. A larger
+  envelope than the water left would hold, so the loss is a deliberate
+  upper bound. Turbet et al. § 3.1 support reading the transit radius
+  (escape "can be very strong" at its low gravity); legacy read the
+  condensed body.
 
 #### Test windows
 
@@ -2937,9 +2955,10 @@ The first rule that holds wins:
 A `steam-world` (issue #492) is a runaway whose water stands as a deep
 supercritical column over the rock. Above water's critical point there
 is no liquid–gas boundary, so no surface shows, lava or rock. The line
-of ten times the critical pressure (`STEAM_WORLD_MIN_BAR`) is a
+of ten times the critical pressure (`STEAM_WORLD_MIN_BAR`) was a
 calibration: in the census no runaway holds between 1e3 and 1e5 bar of
-steam, so it cuts through an empty band. A wet planet is never one.
+steam, so it cuts through an empty band. The rewrite takes the critical
+pressure itself (study 26). A wet planet is never one.
 Once the surface is known, the chain derives the interior again
 (`interior::steam_interior`): the water layer gives way to a `Steam`
 layer of the water kept, on top of the iron and rock. Its thickness

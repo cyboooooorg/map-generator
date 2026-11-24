@@ -1460,6 +1460,12 @@ pull request add these:
   inputs clamped to the fit's grid, the core uncompressed by its steam:
   a documented departure ([planet
   atmospheres](planet-atmospheres.md#boiling-and-the-steam-envelope-of-the-rewrite-study-26)).
+  Decided with the user (2026-11-24): only a steam world (a runaway
+  whose steam weighs at least water's critical pressure) gets the
+  envelope and its radius;
+  its steam loss and cosmic shoreline read that radius in one pass, the
+  envelope computed on the water handed to the loss, a deliberate upper
+  bound of the loss.
 - **The envelope is the primordial one.** The loss of gas after the disc
   is the job of the escape pull request (2c), so an old, close-in
   planet's drawn envelope is more than it keeps.
