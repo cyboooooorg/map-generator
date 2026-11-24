@@ -1212,6 +1212,102 @@ air's nitrogen in the mantle, which supports a large return without
 giving one (study 21, part 5). The test keeps Earth's N₂ within 10 % of
 0.746 bar: the target is sourced, the 10 % is the test's own tolerance.
 
+**Titan's nitrogen** (study 28 of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/28-titan-nitrogen-audit),
+issue #679). Titan's N₂ is 1.384 bar: 1.467 bar at the surface
+(Fulchignoni et al. 2005, doi:10.1038/nature04314) less its 5.65 % of CH₄
+(Niemann et al. 2010, doi:10.1029/2010JE003659). Titan accreted almost
+none of it as N₂: its ³⁶Ar/¹⁴N is more than five orders of magnitude
+under the Sun's (Niemann et al. 2005, as Mousis et al. 2009, ApJ 691,
+1780, doi:10.1088/0004-637X/691/2/1780, arXiv:0810.0308, § 1, quote it),
+"an indication that only an unsubstantial amount of N₂ could have been
+accreted", argon being trapped in ice at colder temperatures than N₂
+(Scherf et al. 2020, *Space Sci. Rev.* 216, 123,
+doi:10.1007/s11214-020-00752-0, arXiv:2011.00973, § 3; read). Its
+¹⁴N/¹⁵N, 167.7, points to ammonia ice (Mandt et al. 2014, as Scherf et
+al. summarise it), with perhaps up to half from organics (Miller et al.
+2019, same). The building blocks lost their N₂ in Saturn's subnebula at
+about 50 K and kept their CH₄ clathrate and NH₃ hydrate (Mousis et al.
+2009, § 3.1; Anderson, Mousis & Ronnet 2021, arXiv:2102.03230,
+abstract).
+
+The rewrite's chain gave the reference Titan 2.876 bar of N₂ (4.99 bar
+in all, 3.15 after `condense`, and a climate at 104.8 K), 99.8 % of it
+from comet 67P's N₂ ice (`ICE_N2` on its 6.05e22 kg of water, times
+`LID_SHARE`), 0.005 bar from its rock, and nothing from its NH₃, which
+the cold trap freezes at 82 K. Its inputs are not the cause (the core
+fraction from 0.10 to 0.40 moves the N₂ by under 6 %). Two laws make
+Titan's N₂ from its ammonia instead:
+
+- **The ice-N₂ gate** (`science::volatiles::traps_nitrogen`,
+  `disc_temperature`). Ice traps N₂ only when it forms under 30 K
+  (`NITROGEN_TRAPPING_TEMPERATURE`): comet 67P's N₂/CO "suggests that
+  cometary grains formed at low-temperature conditions below ~30 kelvin"
+  (Rubin et al. 2015, *Science* 348, 232, doi:10.1126/science.aaa6100,
+  abstract), and "Accretion of N₂ can only occur at low temperatures
+  (e.g., <30 K)" (Glein 2023, *Icarus*, arXiv:2306.06350, § 3.1; read),
+  which Pluto's N₂ needs. The temperature is the disc's where the ice
+  formed, not today's equilibrium (which would put the line past 72 au
+  and strip Pluto): the average midplane profile `T = 200 K (r / 1 au)^-0.62`
+  (Andrews & Williams 2007, *ApJ* 659, 705, as Öberg, Murray-Clay &
+  Bergin 2011, *ApJL* 743, L16, arXiv:1110.5567, eq. 1, adopt it;
+  `DISC_TEMPERATURE_AT_ONE_AU`, `DISC_TEMPERATURE_INDEX`), the radius
+  read in units of the host's ice line (`r = a × 2.7 au / ice_line`) so
+  that the disc scales with the host as the model's ice line does. Around
+  the Sun the line falls at 21.3 au: Saturn's ice (49 K) and Jupiter's
+  (72 K) carry no N₂, Neptune's (24 K) and Pluto's (20 K) do. Earth's
+  ocean, from a 200 K disc, carries none either: its nitrogen is
+  chondritic (Marty 2012). The chain records the disc's temperature
+  (`planet.volatiles.disc-temperature`) and the gate
+  (`planet.volatiles.ice-traps-n2`), from which the outgassed N₂
+  derives.
+- **The NH₃ the interior decomposes** (`science::outgassing::decomposed`,
+  `AMMONIA_DECOMPOSED`). Glein 2015 (*Icarus* 250, 570,
+  doi:10.1016/j.icarus.2015.01.001) builds Titan's N₂ from the NH₃ its
+  interior decomposes, `2 NH₃ → N₂ + 3 H₂`, outgassed as N₂:
+  `n_N2 = ε (ξ/2) (n_NH3/n_H2O) (f_H2O/µ_H2O) M`, with an outgassing
+  efficiency `ε` of 0.8 to 4.8 % from Titan's argon and a reaction
+  progress `ξ ≤ 1` (Erkaev et al. 2020, MNRAS, arXiv:2010.12342, eqs.
+  41-42 and Table 2, read; Glein's paper itself not reached). The model's
+  `ε` is the regime's share times the share under the ocean; the new law
+  sends `ξ` of the NH₃ the interior brings up to the air as N₂ (at
+  `N2_PER_NH3` of its mass), the rest going on as NH₃ to the cold trap
+  and the photochemistry. Above NH₃'s triple point the photochemistry
+  makes the same N₂ of it, so the law changes nothing there.
+
+**Calibration of `AMMONIA_DECOMPOSED`** (`ξ` = 0.117; study 28). Fitted
+on Titan's 1.384 bar: the reference Titan's N₂ is its rock's 0.005 bar
+plus `ξ` times the 11.806 bar of N₂ its 14.356 bar of kept NH₃ would
+make, so `ξ = 1.379 / 11.806 = 0.1168`, kept to three digits (1.386 bar).
+The model's `ε ξ`, 0.2 × 0.117 = 2.3 %, sits inside the 0.8 to 4.8 %
+Glein's `ε` gives at `ξ = 1`: a consistency, not a source. Searched and
+not found: a measured or bounded `ξ` other than Glein's `ξ ≤ 1` (Scherf
+et al. 2020, Erkaev et al. 2020, Glein 2023). Left out of the fit:
+Titan's escape. Erkaev et al. 2020 (Table 3) find Titan lost 0.48 to
+0.62 times its present air for a slowly rotating young Sun, up to 2.22
+for a moderate one and 15.7 for a fast one, where the model's shoreline
+takes 0.4 % of it; with that loss `ξ` would be 0.17 to 0.38. The
+non-thermal loss waits for #658.
+
+**Effect on the reference bodies** (the bare air before the climate,
+before and after). Titan: N₂ 2.876 to 1.386 bar, CH₄ unchanged (2.11 bar
+photolysed), 4.99 to 3.50 bar in all; on the chain's own air its climate
+settles at 93.89 K and 1.473 bar with 0.087 bar of CH₄ over its seas
+(measured 93.65 ± 0.25 K, 1.467 bar, 0.083 bar), where it settled at
+104.84 K and 3.15 bar. Earth: its ocean's N₂ ice was 8.85 % of its N₂,
+0.7458 to 0.6799 bar; `NITROGEN_RECYCLED_UNDER_PLATES`, fitted on that
+target, is refitted (above). Callisto: 0.060 to 0.029 bar. A Triton-like
+body (0.0036 M⊕ at 30 au) keeps its ice N₂ and gains its NH₃'s, 0.338 to
+0.500 bar; its climate, set by the N₂ frost, does not move (38.17 K).
+Venus and Mars carry no ice and do not move.
+
+Departures: the disc profile is an average of observed discs, not the
+Sun's, and its water snowline (135 K, Öberg et al. Table 1) falls at
+1.9 au where the model's ice line is 2.7 au: the two lines come from
+different sources. A body is placed in the disc at its present orbit,
+as the ice line places it. Titan's organics (Miller et al. 2019) are not
+a nitrogen source of the model.
+
 Calibration targets, through the whole chain from the reference bodies'
 inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr (the
 Earth row and the rewrite's values below it are at 4.567 Gyr):
