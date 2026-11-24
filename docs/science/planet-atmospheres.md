@@ -727,7 +727,7 @@ O₂ of an icy surface is not modelled. An air that outlasts its loss
 keeps all of it, the loss being then a share of a large column. Since
 the step comes before the cold trap, a frost of an exhausted gas is gone
 too: Ganymede and Callisto no longer have the CO₂ frost that brightened
-them (`climate::frost` reads what the cold trap froze out of what is
+them (`surface::frost` reads what the cold trap froze out of what is
 left), and the carbon cycle's inventory is what is left of their CO₂.
 
 A moon of a giant meets its giant's plasma in two places. The
@@ -814,7 +814,7 @@ air    = P_SO₂(2^(1/4) · T_eq)                 at most the frost
   factor of 20 (7.9e3 to 1.5e5 kg/s, 0.017 to 0.33 bar of frost); a
   shorter one leaves its low-sulphur draws half bare, dark and warm
   enough to breathe more than 1e-8 bar. The climate
-  reads it as a frost (`climate::frost`, where the surface keeps it under
+  reads it as a frost (`surface::frost`, where the surface keeps it under
   SO₂'s sublimation pressure), with its own albedo, `SO2_FROST_ALBEDO`
   = 0.63, **calibration** on Io's Bond albedo (Simonelli & Veverka
   1988, from memory, not checked) for a disc nearly all frost (Giles et
@@ -1072,8 +1072,8 @@ checked), and below it the polynomial fits `ln p = Σ Aᵢ / Tⁱ` of Fray &
 Schmitt 2009 (*Planet. Space Sci.* 57, 2053,
 doi:10.1016/j.pss.2009.09.011), as Lisse et al. 2021 (*Icarus* 356,
 114072, doi:10.1016/j.icarus.2020.114072, supplementary Table 2)
-reproduce them (`N2_ALPHA_FIT`, `N2_BETA_FIT`): β-N₂ from the triple
-point down to the α–β transition at 35.61 K (`NITROGEN_ALPHA_BETA_K`),
+reproduce them (`NITROGEN_ALPHA_FIT`, `NITROGEN_BETA_FIT`): β-N₂ from the triple
+point down to the α–β transition at 35.61 K (`NITROGEN_ALPHA_BETA`),
 α-N₂ below. Study 24 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/24-surface-cover-audit)
 (part 1) read the coefficients again in the arXiv copy of Lisse et al.
@@ -1087,16 +1087,17 @@ not read: the phase is read off the values (the `N2-2` fit gives 0.1215
 bar at the triple point, within 3 % of NIST's 0.1253, the `N2-1` fit
 0.317 bar; their slopes give 6.7 to 7.0 kJ/mol over 36 to 60 K for
 `N2-2` and 7.6 kJ/mol over 20 to 35 K for `N2-1`, derived), and the
-two meet within 2.8 % at 35.61 K (derived). The transition, 35.61 K, is
+two raw fits are 2.8 % apart at 35.61 K (derived). The transition, 35.61 K, is
 Scott 1976 (*Phys. Rep.* 27, 89, doi:10.1016/0370-1573(76)90032-6;
 closed, not read), as Tegler et al. 2019 (arXiv:1905.13250, read) quote
 it: "In pure N2, this α β transition occurs at 35.61 K (Scott 1976)".
 The thermometric measurement of Lipiński et al. 2007 (*Int. J.
 Thermophys.* 28, 1904, doi:10.1007/s10765-007-0267-y; closed, its
 35.620 K seen only in a search summary) agrees to 0.01 K. Each fit is
-pinned to the curve above it (the β fit to
-NIST's triple point, 3 % higher; the α fit to the β curve at the
-transition), and under 10 K, where the α polynomial turns
+pinned to the curve above it (the β fit scaled by about 3.1 % to
+NIST's triple point, 0.1253 / 0.1215 bar; the α fit pinned to that
+scaled β curve at the transition, which moves it by about 6.1 %,
+derived), and under 10 K, where the α polynomial turns
 over, the curve goes on with its slope there. It gives 1.4e-5 bar at
 37.2 K: Triton's N₂ ice, at 37 to 38 K, is β-N₂. This freezes Titan's
 NH₃ (its CO₂ is not outgassed: *Reducing air* above). Above the triple point the
@@ -1106,7 +1107,8 @@ which the climate sets. Water is left to the climate, and so are methane
 temperature they condense at, so the climate condenses them at the
 temperature it solves for (`condense`; nitrogen over its own ice, with
 activity 1, its liquid above 63.14 K up to its critical point,
-126.19 K, through its normal boiling point, 77.34 K). The CO₂ the cold trap froze out stays on the ground as a
+126.19 K, through its normal boiling point, 77.355 K, NIST Chemistry
+WebBook). The CO₂ the cold trap froze out stays on the ground as a
 frost wherever the surface is cold enough to keep it (below CO₂'s
 triple point, beyond what the air can take back at the surface's
 sublimation pressure), and the frosts of N₂, CH₄ and CO₂ brighten the
@@ -1265,7 +1267,7 @@ masses, ice shares and orbits):
 | Ganymede, Callisto | exospheres of 3e-12 bar (CO₂), 116.6 K, Bond albedo 0.19 (alone, out of resonance, Ganymede keeps one old unit, Callisto's; in its chain, 0.45 and 102 to 108 K, see "Icy albedo") | exospheres of 1e-12 (O₂) and 7.5e-12 bar (CO₂); Bond albedo about 0.4 and 0.2 |
 | Io | heat pipe, 9.3e-10 bar of SO₂ over its SO₂ frost (N₂ and CO₂ an exosphere of 3e-12 bar), 105.2 K, Bond albedo 0.63 | heat pipe, SO₂ of about 1e-9 bar, Bond albedo 0.63 under SO₂ frost |
 | Europa | exosphere of 3e-12 bar (CO₂), 96.1 K, Bond albedo 0.63 | exosphere of about 1e-12 bar (O₂), Bond albedo about 0.62 to 0.68 |
-| Triton | 1.7e-5 bar of N₂ over its frost at 37.5 K, Bond albedo 0.75 | about 1.4e-5 bar of N₂ at 38 K, Bond albedo about 0.75 |
+| Triton | 1.7e-5 bar of N₂ over its frost at 37.5 K, Bond albedo 0.75 | 14 ± 1 µbar (1.4e-5 bar) of N₂ (Gurrola 1995, refining Tyler et al. 1989) at 38 K (Tyler et al. 1989), Bond albedo 0.82 ± 0.05 (Hillier et al. 1990) |
 | Moon | 1e-12 bar | airless |
 
 Over five seeds Titan ranges from 1.1 to 8.7 bar (its volatiles scatter
@@ -1278,7 +1280,11 @@ temperature under the reference albedo 0.3, 47 K, and kept 1.9e-3 bar),
 and its emissivity (`N2_ICE_EMISSIVITY`, see *Climate and surface
 liquid*). The curve and the emissivity were set together (issue #529):
 Fray & Schmitt's β-N₂ curve puts the observed 14 µbar at 37.2 K, within
-a kelvin of the observed 38 K, and the emissivity 0.89 centres the
+a kelvin of the observed 38 K (the 14 ± 1 µbar of the Voyager 2 radio
+occultation, Gurrola 1995, a Stanford PhD thesis not reached, refining
+the 1.6 ± 0.3 Pa of Tyler et al. 1989, *Science* 246, 1466,
+doi:10.1126/science.246.4936.1466, whose abstract, read, also gives the
+38 K; both as Sicardy et al. 2024, arXiv:2402.02476, quote them, read), and the emissivity 0.89 centres the
 `triton-like` archetype between them: 37.2 to 37.6 K and 1.40e-5 to
 1.77e-5 bar of N₂ over seeds 1 to 40 (median 37.4 K and 1.57e-5 bar).
 Before, with N₂ ice a black body and the curve 6.3 kJ/mol from memory,
@@ -1555,9 +1561,13 @@ fixed relative humidity of Manabe & Wetherald 1967 (*J. Atmos. Sci.*
 abstract read, the full text refused to scripts), as the codes that
 implement their profile take it (konrad's `Manabe67`, `rh_surface=0.77`;
 climlab's `FixedRelativeHumidity`, `relative_humidity=0.77`). The
-saturation is Clausius–Clapeyron from water's triple point (273.16 K,
-611.657 Pa) with a mean latent heat of 2.4e6 J/kg, capped at the
-critical point (647 K), and never more than the body's whole water
+saturation is `water::vapour_saturation_bar`: the sublimation curve of
+ice Ih below the triple point (273.16 K, 611.657 Pa; Wagner et al.
+2011, IAPWS R14-08(2011), eq. 6), the saturation curve over liquid from
+the triple point to the critical point (Wagner & Pruss 1993, IAPWS
+SR1-86(1992), eq. 1), and the critical pressure, 22.064 MPa (IAPWS
+SR1-86(1992)), above the critical temperature (647.096 K); and never
+more than the body's whole water
 would weigh as vapour (`m_water g / (4π R²)`): a trace of water cannot
 put a hundred bar of steam in the air. The temperature and the vapour
 are solved together (`wet_balance`): the coldest surface temperature
@@ -1736,12 +1746,12 @@ CERES value, the Bond albedo inside the 0.29 to 0.31 target.
 - *Earth's numbers* (derived). At β = 23.44°, `s₂ = −0.477`; the −0.482
   of North's energy-balance models is the same term at β = 23°
   (Nadeau & McGehee 2021, § 6.1). At 288 K (`x_s = 0.898`) the cap
-  covers 10.2 % of the area and receives 6.06 % of the light, 0.59 of
+  covers 10.2 % of the area and receives 6.07 % of the light, 0.59 of
   its area share.
 - *Truncation at `P₂`*. Nadeau & McGehee 2021 find the second degree
   "sufficient for Earth's obliquity", and the series slow to converge
   at the poles, without a figure for a polar cap. Integrating their
-  eq. (1) numerically (derived): Earth's cap receives 5.80 % of the
+  eq. (1) numerically (derived): Earth's cap receives 5.82 % of the
   light, so `P₂` overstates it by 4.4 % (0.0026 of the disc); at β = 0°
   by 24 %, since `P₂` keeps 0.375 at the pole where the exact value is
   0; at 90° by 2 %. Searched and not found: a published error for a
@@ -1791,7 +1801,7 @@ of a mix of sea ice and snow.
 
 **Calibration of `FROST_ALBEDO`** (0.75, kept, flagged by study 24).
 Fitted on Pluto, 0.72 ± 0.07, with Triton's gap stated in the doc
-comment (below). It was fitted on the two bodies covered in frost. Legacy remembered Triton's
+comment (below); Triton is not part of the fit. Legacy remembered Triton's
 Bond albedo as about 0.75; Hillier et al. 1990 (*Science* 250, 419,
 doi:10.1126/science.250.4979.419; abstract read) give 0.82 ± 0.05 in
 the violet to green bands, and with it an emissivity of 0.59 ± 0.16 at
@@ -2119,7 +2129,11 @@ and pressure, in this order:
   "Katz et al. (2003) recommends a parameterization that yields 1673 K
   for T_lo" on KLB-1 peridotite (their appendix). Legacy's 1400 K, "the
   basalt solidus", is not in the paper: it is the low end of the range
-  of their vapour-pressure fit ("1400K < T < 2800K", their eq. 12). A body
+  of their vapour-pressure fit ("1400K < T < 2800K", their eq. 12).
+  Kite et al. set 1673 K on the substellar temperature; the model
+  compares it with the mean surface temperature, as legacy did, which is
+  colder than the substellar one and so counts fewer lava worlds (issue
+  #675). A body
   with water on top is never a lava world: Hamano, Abe & Genda 2013
   (*Nature* 497, 607, doi:10.1038/nature12163; abstract read, PubMed)
   find that a planet inside a critical distance keeps "a magma ocean …
@@ -2177,7 +2191,7 @@ and pressure, in this order:
 - `nitrogen` where nitrogen condenses above its triple point (63.14 K)
   with no methane liquid: under its boiling point at its partial
   pressure and its critical point, 126.19 K (`condense`); under its
-  triple point it is a frost (`climate::frost`). The look draws no
+  triple point it is a frost (`surface::frost`). The look draws no
   nitrogen sea: the map of such a body is its icy surface;
 - `none` otherwise.
 
@@ -2485,6 +2499,11 @@ the world the planet renders (part 3a; issue #424 replaces it):
 
 ## Census
 
+This census was run on legacy, at lot 3C-2, with the lava-world
+threshold at 1400 K; the class table (*The chain and the surface
+classes*) now takes 1673 K (`LAVA_TEMPERATURE`), so its `lava-world`
+count and median are legacy's, not the rewrite's.
+
 Measured, not tuned: `cargo run --release -p mapgen --example planet_census
 -- 500` draws systems of seeds 1 to 500 and derives every planet through
 `body_model`. The medians of temperature and pressure are over the
@@ -2766,6 +2785,9 @@ another paper, from memory) is said where it is used.
   super-Earths (abstract, through study 22).
 - Douté et al. 2001, *Icarus* 149, 107, Io's SO₂ frost.
 - Driscoll and Barnes 2015, doi:10.1089/ast.2015.1325.
+- Edejer and Thodos 1967, *J. Chem. Eng. Data* 12(2), 206,
+  doi:10.1021/je60033a014, the Antoine fit of liquid nitrogen's vapour
+  pressure, 63.14 to 126 K, through the NIST Chemistry WebBook.
 - Erkaev et al. 2007, energy-limited escape.
 - Fegley and Prinn 1989, doi:10.1038/337055a0, Venus's SO₂ and
   calcite.
@@ -2797,6 +2819,9 @@ another paper, from memory) is said where it is used.
 - Goldblatt, Robinson, Zahnle and Crisp 2013,
   doi:10.1038/ngeo1892, the moist limit.
 - Gray and Nagel 1989, the limit of the convective envelope.
+- Gurrola 1995, PhD thesis, Stanford University, Triton's surface
+  pressure from the Voyager 2 radio occultation, 14 ± 1 µbar (not
+  reached; as Sicardy et al. 2024 quote it).
 - Hall et al. 1995 and 1998, the O₂ of Europa and Ganymede.
 - Hamano, Abe and Genda 2013, *Nature* 497, 607, doi:10.1038/nature12163,
   the steam over a magma ocean (abstract read).
@@ -2944,6 +2969,8 @@ another paper, from memory) is said where it is used.
 - Schröder and Schmitt 2007, X-rays of A stars.
 - Scott 1976, *Phys. Rep.* 27, 89, doi:10.1016/0370-1573(76)90032-6,
   nitrogen's alpha-beta transition (closed; through Tegler et al. 2019).
+- Sicardy et al. 2024, arXiv:2402.02476 (accepted by *A&A*), Triton's
+  air from occultations 1989 to 2022 (read).
 - Simonelli and Veverka 1988, Io's Bond albedo.
 - Spencer 1987, dark moons.
 - Stansberry, Pisano and Yelle 1996,
@@ -2970,6 +2997,9 @@ another paper, from memory) is said where it is used.
 - Tu et al. 2015, the saturation of a star's X-ray emission.
 - Turbet et al. 2020, *A&A* 638, A41, arXiv:1911.08878, Eq. 2 and
   Appendix C.
+- Tyler et al. 1989, *Science* 246, 1466,
+  doi:10.1126/science.246.4936.1466, Voyager 2's radio occultation of
+  Triton: 1.6 ± 0.3 Pa and 38 K (abstract read).
 - Veeder et al. 2004, Io's heat flow, as quoted by Moore and Webb
   2013.
 - Verbiscer et al. 2007, Enceladus's E-ring fallout.
@@ -2978,6 +3008,11 @@ another paper, from memory) is said where it is used.
   through the NIST Chemistry WebBook.
 - Wagman et al. 1979, NBS Chemical Thermodynamics Data Center, as
   quoted by Giles et al. 2024.
+- Wagner and Pruss 1993, IAPWS SR1-86(1992), the vapour pressure over
+  liquid water and its critical pressure, as `crates/science/src/water.rs`
+  cites it.
+- Wagner et al. 2011, IAPWS R14-08(2011), eq. 6, the sublimation
+  pressure of ice Ih, as `crates/science/src/water.rs` cites it.
 - Walker, Hays and Kasting 1981,
   doi:10.1029/JC086iC10p09776, the carbonate thermostat.
 - Wang, Lineweaver and Ireland 2018,

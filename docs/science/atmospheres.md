@@ -418,7 +418,7 @@ climate and surface](planet-atmospheres.md#atmosphere).
   of the sea's fixed half of methane: the nitrogen dissolved in the sea
   takes the place of ethane, not of methane, so it lowers the freezing
   point only by diluting the ethane, until the ethane liquidus falls
-  under methane's (from about 2 bar of N₂). It is a simple fit, not the full phase
+  under methane's (from about 1.6 bar of N₂). It is a simple fit, not the full phase
   diagram: it does not resolve the solid solutions or the ternary
   eutectic, and the sea's composition is fixed, not tracked. Where nitrogen
   itself condenses (below about 84 K under 2 bar of it), the sea is
