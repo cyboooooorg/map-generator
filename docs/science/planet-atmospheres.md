@@ -1040,9 +1040,11 @@ methane the photolysis leaves and the combined equilibrium temperature
 that node, so a reducing air's `planet.air.outgassed.co2` cites the
 reducing node only. Legacy solved the air without CO₂, then solved it
 again with CO₂ when the climate did not leave a Titan's air. The
-rewrite has no climate yet: the test on the climate's result (the
-fallback to the air with CO₂, `titan_like_air`) is left to 2d-3 (#659),
-and until then a reducing air stays without CO₂. The frozen CO₂ is
+rewrite does the same in `system::planet::settled`: the test on the
+climate's result (the fallback to the air with CO₂, `titan_like_air`)
+exists, but `settled` is not wired into generation until 2d-4 (#659), so
+the planets the engine produces still keep a reducing air without CO₂
+until then. The frozen CO₂ is
 booked as legacy does, a frost of what the cold trap removes, which
 gives Callisto 5 bar of it (#590).
 
@@ -1493,9 +1495,10 @@ find it at 282 W/m² line by line, Boukrouche, Lichtenberg & Pierrehumbert
 2021 (doi:10.3847/1538-4357/ac1345, §III.1 read in arXiv 2107.14150) at
 283 W/m² and Hamano et al. 2015 (doi:10.1088/0004-637X/806/2/216) at
 280 W/m². Line-by-line curves rise to a maximum near 350-400 K and fall
-a few per cent to the asymptote (Goldblatt et al. 2013, Fig. 2). The
+a few per cent to the asymptote (Goldblatt et al. 2013, Fig. 2). Legacy's
 spectral column does the same over Earth's air, saturated: 294.6 W/m² at
-360 K, then 283.4 to 283.9 W/m² over 500-640 K. `MOIST_PLATEAU_W_M2` is
+360 K, then 283.4 to 283.9 W/m² over 500-640 K (legacy's column; the
+rewrite's plateau is 2.2 % higher and its own peak was not measured). `MOIST_PLATEAU_W_M2` is
 that asymptote, 283.5 W/m² in legacy (the rewrite's plateau is 289.7 W/m²,
 +2.2 %, see "The runaway branch" below), computed once on a finer grid (80 levels per
 decade, converged to 0.5 W/m²); it moves by under 2 % with CO₂ up to
@@ -2040,8 +2043,9 @@ Triton (above); Stansberry, Pisano & Yelle 1996 (*Planet. Space Sci.*
 0.85 for β-N₂ of 1 cm grains and 0.40 for 1 mm grains (α-N₂ 0.30 and
 0.11), and Bertrand et al. 2022 (*Icarus* 373, 114764) model Triton
 with 0.8: the calibration sits just above the coarse-grained end, a
-lower value warming the model's Triton, under its frost albedo of 0.75,
-past 38 K. One value serves α- and β-N₂. The rewrite takes 0.80 and
+lower value warmed legacy's model of Triton, under its frost albedo of
+0.75, past 38 K (the rewrite's pair, 0.75 and 0.80, gives 37.97 K without
+internal heat, see below). One value serves α- and β-N₂. The rewrite takes 0.80 and
 refits the pair on Triton's temperature (study 25; see "The climate
 solver of the rewrite" below).
 
@@ -2075,6 +2079,18 @@ two steps between settled climates, from about 62 to 74 K and over about
 (its near-infrared absorption) makes it bistable there, whatever the
 phase change.
 
+The rewrite's climate does not smooth that step away: across nitrogen's
+triple point its sweep jumps by 3.4 K, from 59.77 K (frost) at flux
+0.006861 to 63.15 K (liquid) at 0.006878, +0.24 % of flux. It is a
+bistability, as the runaway edge's step is (#523): the nitrogen frost
+(Bond albedo 0.754, emissivity 0.80) and the liquid under it (0.616,
+1.00) are both stable at one flux, and the warm start picks the branch.
+The absorbed light rises by the factor the emissivity and the
+temperature raise `ε T⁴`, about 1.55, which is why a jump the sweep lets
+through must change the phase (tier-3 test
+`the_fixed_point_converges_across_the_nitrogen_triple_point`). Legacy's
+1 K band has no source (study 25).
+
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
 that keeps water has two climates when the ice-albedo feedback makes it
 bistable: the temperate one, started from a warm planet with no ice, and
@@ -2088,15 +2104,15 @@ its maximum greenhouse where none thaws it, less what its cold surface
 frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
-`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (12.5 bar in the
+`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (12.4 bar in the
 rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (legacy's 0.8 bar gave Earth, which it remembered frozen about a tenth
 of its history, a chance of 0.1: on the spectral column Earth at 1 AU
 needed 0.091 bar more CO₂ to thaw, a chance of 0.102; 0.031 bar on the
 grey column. Study 25 found the dated snowballs are 1.4 % of Earth's
-history, not a tenth; the rewrite refits `W` to 12.5 bar and Earth's
-chance is 0.0139, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
+history, not a tenth; the rewrite refits `W` to 12.4 bar and Earth's
+chance is 0.0140, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
 CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
 about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
 warms the ice to a thaw), the frozen state is for good: the planet is
@@ -2250,7 +2266,7 @@ of state (Span et al. 2000, eq. 4, from Nowak et al. 1997b,
 read in the paper. The paper says it represents the measured vapour
 pressures "well within their uncertainties" (typically under 0.015 %,
 0.075 % at the triple point); against the paper's saturation table it
-is within 0.02 % from 63.151 to 120 K, normal boiling point (77.355 K,
+is within 0.021 % from 63.151 to 120 K (the largest, +0.0201 %, is at 70 K), normal boiling point (77.355 K,
 101 325 Pa) included. It replaces the Antoine fit of Edejer & Thodos
 1967, 12.5 % under the triple-point pressure, which would have made
 `condense` step there; at methane's triple point, the one value
@@ -2317,7 +2333,7 @@ their measured air (see "Test air and Solar System bounds" below):
 | Body | Result | Target | Observed |
 |---|---|---|---|
 | Earth | 288 K, water, regulated, thermostat CO₂ 1.986e-3 bar, Bond albedo 0.2953; 287.11 K at 280 ppm on the measured air | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
-| Venus | 577 K, none | measured: pinned at 577 ± 5 K, none | 737 K |
+| Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 104.8 K | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
@@ -2385,6 +2401,28 @@ put the edge at 1.535 AU, +19.2 % in flux over the 2014 fit round the
 Sun, +21.0 % at 4500 K and +16.4 % at 3300 K (derived; +23 %, +25 % and
 +20 % over the 2013 v2 set); the rewrite's gap is measured by that
 test, and the departure and the search for its cause stay in #595.
+
+#### The maximum greenhouse on a condensing air (#593 lever 2)
+
+The carbonate thermostat searches the maximum greenhouse once per body,
+on the inventory air, and keeps it whatever air the condensation loop
+then holds (`Numerics::greenhouse_once`, on by default). Legacy searched
+it again on each air (`climate.rs` l.1975-1983 rebuilds the body with
+the condensed gases and a fresh cache): with the numerics off, the
+rewrite does the same (`ClimateBody::greenhouse_co2(air)`, tier-3 test
+`one_greenhouse_search_on_a_condensing_air`). The departure is measured
+on the reference Earth under Titan's measured 2.11 bar of methane, at
+Titan's 9.57 AU, where the methane condenses: the two searches give
+14.2 and 52.0 bar, yet the settled climate is the same, 88.419345 K both
+ways (a gap of 4e-11 K), frozen, and the outer edge is 1.6465 AU both
+ways (a gap under 0.0001 AU). No regulated body can have a condensing
+air: the thermostat holds 288 K, above the critical points of methane
+(190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
+2000), so the condensation loop's last pass is solved on the inventory
+air. A condensed air reaches the thermostat only in the loop's
+intermediate steps and where the thermostat fails, far out and frozen,
+where the CO₂ collapses to what the frost keeps whatever the cap it
+starts from.
 
 #### Condensation at the surface
 
@@ -2454,7 +2492,8 @@ an emissivity of Triton measured apart from this balance.
   Searched and not found: the vapour column at the runaway limit as a
   number, in Kopparapu et al. 2013 and 2014 and Goldblatt et al. 2013.
 - `RUNAWAY_PROBE_K` (380 K) is a shortcut that changes no result, a
-  `Definition:` near the column's own maximum (294.6 W/m² at 360 K);
+  `Definition:` near legacy's column maximum (294.6 W/m² at 360 K; the
+  rewrite's own peak was not measured, and no result depends on it);
   legacy's citation of Goldblatt et al. 2013 "Fig. 1" was wrong (that
   figure shows spectra; the OLR curves are their Figs. 2 and 4).
 - **Calibration of `THERMOSTAT_K`** (288 K, kept): Earth's "Average
@@ -2478,10 +2517,11 @@ the code; with legacy's 0.091 bar, about 6.4 bar (derived), eight
 times 0.8 bar. Decided with the user on 2026-11-24: the dated episodes
 only, so snowballs become about seven times rarer near 1 AU than in
 legacy. Refitted in 2d-3a on the rewrite's solver: the reference Earth
-at 1 AU freezes with 0.0020 bar of CO₂ and thaws at 0.1807 bar, so
-`d⊕` = 0.1788 bar, twice legacy's 0.091 bar; with its recorded
-volcanism 0.506 (`rate⊕` 1.012), `W` = 12.44, kept to three figures as
-**12.5 bar**, which gives Earth a chance of 0.0139. That is twice the
+at 1 AU freezes with 0.001986 bar of CO₂ and thaws at 0.180748 bar (13
+thaw steps), so `d⊕` = 0.1788 bar (0.178762), twice legacy's 0.091 bar;
+with its recorded volcanism 0.506064 (`rate⊕` 1.012128), `W` = 12.44,
+kept to three figures as **12.4 bar**, which gives Earth a chance of
+0.01404. That is twice the
 6.4 bar expected from legacy's `d⊕`, inside the 3 to 13 bar the plan
 allowed. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
 holds Earth's chance in 0.013 to 0.016 on the full solve (65 s at the
@@ -2490,7 +2530,7 @@ arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar would be about 130 My of today's outgassing per temperate
-phase, and 12.5 bar is about 250 My.
+phase, and 12.4 bar is about 250 My.
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
@@ -2557,6 +2597,12 @@ discretisation is a `Calibration:` held by a convergence test.
 | `GREENHOUSE_DECADES` | 4 | Definition | the reference maxima lie inside the range | 1 |
 | `GREENHOUSE_STEPS` | 18 | Calibration | at 30 steps the outer edge moves under 0.001 AU | 3 |
 
+The study's criterion for `THERMOSTAT_TOLERANCE` also asked that Earth's
+CO₂ move under 0.1 % at a tenth of it. The test holds the temperature
+only (under 0.01 K); the tolerance is itself 1e-3 in `ln CO₂`, so the
+criterion on the CO₂ is the tolerance's own definition, and the
+temperature is what the test can show.
+
 #### Tidally locked rotators (issues #672 and #675)
 
 The solver takes a "locked" flag with the obliquity. A locked rotator
@@ -2591,7 +2637,10 @@ solar days is zonal for any non-locked rotator, so the flag is
   Mars's equilibrium temperature), so the bound is 214 ± 5 K, `Source:`
   the fact sheet (decided with the user on 2026-11-24).
 - **Earth** 288 K (fact sheet), **Titan** 93.65 ± 0.25 K (Fulchignoni
-  et al. 2005), **Venus** pinned at 577 ± 5 K (#594).
+  et al. 2005), **Venus** Bond albedo 0.76 ± 0.05 (NASA Venus fact sheet) and no
+  liquid, held in tier 1. The model's own 577 K is not a source: it is
+  pinned as a regression net in tier 2 once 2d-4 makes the chain
+  reachable from `crates/regression` (#594).
 
 #### The reducing-air fallback
 
@@ -3147,6 +3196,10 @@ another paper, from memory) is said where it is used.
   doi:10.1029/RG021i008p01743, surface albedos (abstract read).
 - Hillier et al. 1990, *Science* 250, 419,
   doi:10.1126/science.250.4979.419, Triton's Bond albedo (abstract read).
+- Hillier, Helfenstein, Verbiscer and Veverka 1991, "Voyager
+  photometry of Triton: haze and surface photometric properties", *J.
+  Geophys. Res.* 96, doi:10.1029/91JA01736, Triton's bolometric albedo
+  and emissivity (abstract read).
 - Hoffman et al. 2017, doi:10.1126/sciadv.1600983.
 - Hörst, Vuitton and Yelle 2008, doi:10.1029/2008JE003135.
 - Howett et al. 2010, Enceladus's albedo.
@@ -3182,7 +3235,7 @@ another paper, from memory) is said where it is used.
   Magnetosphere*, ch. 21.
 - Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131.
 - Kopparapu et al. 2014, doi:10.1088/2041-8205/787/2/L29, the
-  runaway limit.
+  runaway limit and the maximum-greenhouse row (the outer edge).
 - Korenaga 2010, plate tectonics against planet size.
 - Korenaga, Planavsky and Evans 2017, *Phil. Trans. R. Soc. A* 375,
   20150393, doi:10.1098/rsta.2015.0393, §2a: Earth's water by
@@ -3217,12 +3270,19 @@ another paper, from memory) is said where it is used.
 - Marty 2012, *Earth Planet. Sci. Lett.* 313-314, 56-66,
   doi:10.1016/j.epsl.2011.10.040, carbon in the mantle; Earth's bulk
   water, p. 18 of the arXiv author copy (arXiv:1405.6336).
+- Lellouch, Stansberry, Emery, Grundy and Cruikshank 2011, "Thermal
+  properties of Pluto's and Charon's surfaces from Spitzer
+  observations", *Icarus* 214, 701-716, the N₂ ice emissivity 0.8 (not
+  read; cited through Meza et al. 2019).
 - McDonough 2003, *Treatise on Geochemistry* 2.15.
 - McEwen et al. 1998, *Science* 281, 87, Io's lavas.
 - McGehee and Lehman 2012, *SIAM J. Appl. Dyn. Syst.* 11(2), 684,
   the annual insolation integral (cited by Nadeau and McGehee).
 - McKay, Pollack and Courtin 1991,
   doi:10.1126/science.11538492, Titan's greenhouse.
+- Meza et al. 2019, "Pluto's lower atmosphere and pressure evolution
+  from ground-based stellar occultations, 1988-2016", *A&A* 625, A42,
+  doi:10.1051/0004-6361/201834281, arXiv:1903.02315 (§ 4 read).
 - Mittelholz et al. 2020, a late field on Mars.
 - Moore et al. 1999, Callisto.
 - Moore and Webb 2013, doi:10.1038/nature12473, "Heat-pipe
@@ -3242,7 +3302,10 @@ another paper, from memory) is said where it is used.
   Simpson-Nakajima limit.
 - NASA NSSDC Earth fact sheet, the composition of Earth's air and its
   mean radius; the Moon, Mercury and Mars fact sheets, their Bond albedos
-  (read).
+  (read); the Mars fact sheet also for its air (6.36 mb, 95.1 % CO₂,
+  2.59 % N₂, 0.16 % O₂) and its "Average temperature: ~214 K" (read,
+  May 2025); the Venus fact sheet for its Bond albedo; the Neptune fact
+  sheet for Triton's orbit-mean flux (1.508 W/m²) (read).
 - Neukum, Ivanov and Hartmann 2001, the crater
   chronology.
 - Niemann et al. 2010, *J. Geophys. Res.* 115, E12006,
@@ -3285,6 +3348,15 @@ another paper, from memory) is said where it is used.
 - Schröder and Schmitt 2007, X-rays of A stars.
 - Scott 1976, *Phys. Rep.* 27, 89, doi:10.1016/0370-1573(76)90032-6,
   nitrogen's alpha-beta transition (closed; through Tegler et al. 2019).
+- Setzmann and Wagner 1991, "A New Equation of State and Tables of
+  Thermodynamic Properties for Methane Covering the Range from the
+  Melting Line to 625 K at Pressures up to 1000 MPa", *J. Phys. Chem.
+  Ref. Data* 20, 1061-1155, doi:10.1063/1.555898, methane's critical
+  point, triple point and saturation curve (as `volatiles.rs` and
+  `volatiles_tests.rs` cite it).
+- Showman, Wordsworth, Merlis and Kaspi 2013, "Atmospheric circulation
+  of terrestrial exoplanets", in *Comparative Climatology of Terrestrial
+  Planets* (Arizona Space Science Series), arXiv:1306.2418, § 2 (read).
 - Sicardy et al. 2024, arXiv:2402.02476 (accepted by *A&A*), Triton's
   air from occultations 1989 to 2022 (read).
 - Simonelli and Veverka 1988, Io's Bond albedo.
@@ -3320,6 +3392,11 @@ another paper, from memory) is said where it is used.
 - Tu et al. 2015, the saturation of a star's X-ray emission.
 - Turbet et al. 2020, *A&A* 638, A41, arXiv:1911.08878, Eq. 2 and
   Appendix C.
+- Tryka et al. 1993, "Spectroscopic determination of the phase
+  composition and temperature of nitrogen ice on Triton", *Science*
+  261, 751, doi:10.1126/science.261.5122.751 (abstract read); Tryka et
+  al. 1994, "Temperature of nitrogen ice on Pluto and its implications
+  for flux measurements", *Icarus* 112, 513-527 (abstract read).
 - Tyler et al. 1989, *Science* 246, 1466,
   doi:10.1126/science.246.4936.1466, Voyager 2's radio occultation of
   Triton: 1.6 ± 0.3 Pa and 38 K (abstract read).
@@ -3335,7 +3412,8 @@ another paper, from memory) is said where it is used.
   liquid water and its critical pressure, as `crates/science/src/water.rs`
   cites it.
 - Wagner et al. 2011, IAPWS R14-08(2011), eq. 6, the sublimation
-  pressure of ice Ih, as `crates/science/src/water.rs` cites it.
+  pressure of ice Ih, and eqs. 2 and 3, the melting curves of ices III
+  and V, as `crates/science/src/water.rs` cites it.
 - Walker, Hays and Kasting 1981,
   doi:10.1029/JC086iC10p09776, the carbonate thermostat.
 - Wang, Lineweaver and Ireland 2018,
@@ -3344,12 +3422,18 @@ another paper, from memory) is said where it is used.
   of a rapid rotator (cited by Nadeau and McGehee).
 - Warren 1982, *Rev. Geophys.* 20, 67, doi:10.1029/RG020i001p00067,
   the optical properties of snow (abstract read).
+- Way et al. 2016, "Was Venus the first habitable world of our solar
+  system?", *Geophys. Res. Lett.* 43, doi:10.1002/2016GL069790,
+  arXiv:1608.00706 (abstract read).
 - Weber et al. 2011, the Moon's core.
 - Weiss and Tikoo 2014, the lunar dynamo.
 - Witt and Kemp 1937, *J. Am. Chem. Soc.* 59, 273, ethane's enthalpy
   of vaporisation, through the NIST Chemistry WebBook.
 - Wolf and Toon 2014, doi:10.1089/ast.2013.1112.
 - Wright et al. 2011, *ApJ* 743, 48.
+- Yang, Boué, Fabrycky and Abbot 2014, "Strong dependence of the inner
+  edge of the habitable zone on planetary rotation rate", *ApJ* 787,
+  L2, doi:10.1088/2041-8205/787/1/L2, arXiv:1404.4992 (read).
 - Yung, Allen and Pinto 1984, *ApJS* 55, 465,
   doi:10.1086/190963, Titan's photochemistry, Tables 2A and 5B.
 - Zahnle and Catling 2017, *ApJ* 843, 122,

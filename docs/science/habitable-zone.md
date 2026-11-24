@@ -120,7 +120,8 @@ flowchart LR
 But CO₂ also scatters starlight back to space, "2.5 times better than
 air" (Kopparapu et al. 2013). Past about 8 bar of CO₂, adding more cools
 the planet more than it warms it. That maximum greenhouse sets the outer
-edge at 1.70 AU from the Sun (Kopparapu et al. 2013).
+edge at 1.70 AU from the Sun in their 2013 paper, 1.67 AU in its erratum
+and 1.68 AU in their 2014 fit (see below).
 
 ### The optimistic edges: recent Venus and early Mars
 
