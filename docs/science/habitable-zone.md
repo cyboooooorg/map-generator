@@ -180,6 +180,13 @@ change. The climate of the rewrite uses the 2014 row, like its
 runaway limit (study 25 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/25-climate-solver-audit)).
 
+The rewrite's climate solver does not reproduce the fit: its outer edge
+sits 22.9 % above it in flux round the Sun (1.513 AU; 0.4367 against
+0.3555 S⊕), 24.0 % above at 4500 K and 19.9 % at 3300 K, measured by a
+heavy test against the 2014 row. Legacy's column put the Sun's edge at
+1.535 AU. The gap is a documented departure, not a bound; issue #595
+holds the search for its cause.
+
 **In words.** A dimmer star's zone is closer in, as the square root of its
 luminosity. A cooler star's zone also sits at a lower flux. Its redder
 light is scattered less by the air, and water and CO₂ absorb more of it in

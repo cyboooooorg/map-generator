@@ -137,8 +137,17 @@ study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 
 `science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
 `RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
-and nitrogen seas included). Values:
+and nitrogen seas included); `surface::condense`: `condense` keeps in the air
+what a gas's saturation allows at a temperature (nitrogen, then methane) and
+returns the condensate. Values:
 [planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
+
+## Radiative balance
+
+`science::balance`: the radiative balance of one column (`surface_temperature`
+and its root finders), the moist plateau of Earth's air and the runaway
+albedo. `science::snowball`: `SNOWBALL_WARM_BAR` and the snowball chance. The
+solver that uses them is `system::planet::climate`.
 
 ## Radiation
 

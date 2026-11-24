@@ -537,7 +537,9 @@ cosmic shoreline (`science::escape::shoreline_kept`), the runaway's steam and
 the wash-out (`science::outgassing::so2_kept`) on the pre-steam trial and
 the post-steam body, then the photolysis, the reducing test, the cold trap
 and the photochemistry. The non-thermal loss waits for #658;
-`condense`, the fallback and the climate wait for #659. The carbonate
+the fallback and the climate are the solver's (2d-3a, see "The climate
+solver of the rewrite" below), and the climate is solved again after
+oxygenation in 2d-4 (#659). The carbonate
 thermostat of the climate takes Earth's CO₂ away afterwards, and life
 adds the oxygen.
 
@@ -1127,9 +1129,9 @@ star), which the reducing test and the methane line read too; the step records `
 and `planet.air.frozen-co2`, citing the kept and the trapped CO₂. What
 the trap leaves is what the photochemistry reads. Where it departs from
 legacy: the frost curves of CO₂ and ammonia are the sourced ones above;
-`condense` (the climate's condensation of water, methane and nitrogen at
-the surface temperature) is left to 2d-3, so the rewrite's air keeps
-them whole.
+`condense` (the climate's condensation of methane and nitrogen at the
+surface temperature, `science::surface::condense`) belongs to the climate
+solver of 2d-3a, so the air of this section keeps them whole.
 
 **Photochemistry** (`photochemistry`, after the cold trap, on what is
 still gas). The star's ultraviolet photolyses NH₃ into N₂ and hydrogen,
@@ -1211,7 +1213,7 @@ Earth row and the rewrite's values below it are at 4.567 Gyr):
 |---|---|---|---|
 | Venus | 87 bar, 98 % CO₂, 1.7 bar N₂ | 60 to 120 bar, CO₂ over 90 %, N₂ 1 to 6 bar | 92 bar, 96.5 % CO₂, about 3 bar N₂ |
 | Earth | 0.7458 bar N₂, no CH₄ or NH₃ (52 bar CO₂ before the thermostat) | N₂ 0.746 bar within 10 %; CH₄ and NH₃ under 1e-3 bar | 0.746 bar N₂ by weight (0.78 by volume) |
-| Mars | 0.006 bar (its CO₂ scaled to the real 6.1 mbar, `MARS_CO2_FACTOR`; 0.014 bar from the rule alone) | 0.002 to 0.05 bar | 0.006 bar |
+| Mars | 0.006 bar (legacy scaled its CO₂ to the real 6.1 mbar with `MARS_CO2_FACTOR`, not ported; 0.014 bar from the rule alone) | 0.002 to 0.05 bar | 0.006 bar |
 | Titan | 2.2 bar, 95 % N₂, 0.11 bar CH₄ after the climate (6.3 bar before it condenses) | 0.5 to 5 bar; CH₄ over 0.01 bar | 1.5 bar, about 5 % CH₄ |
 | Ganymede, Callisto | no CH₄ (0.15 and 0.47 bar before photolysis) | CH₄ under 1e-3 bar | airless |
 | Mercury, Moon | under 1e-8 bar | under 1e-4 bar | exospheres |
@@ -1285,8 +1287,8 @@ a kelvin of the observed 38 K (the 14 ± 1 µbar of the Voyager 2 radio
 occultation, Gurrola 1995, a Stanford PhD thesis not reached, refining
 the 1.6 ± 0.3 Pa of Tyler et al. 1989, *Science* 246, 1466,
 doi:10.1126/science.246.4936.1466, whose abstract, read, also gives the
-38 K; both as Sicardy et al. 2024, arXiv:2402.02476, quote them, read), and the emissivity 0.89 centres the
-`triton-like` archetype between them: 37.2 to 37.6 K and 1.40e-5 to
+38 K; both as Sicardy et al. 2024, arXiv:2402.02476, quote them, read), and legacy's emissivity 0.89 centred the
+`triton-like` archetype between them (the rewrite takes 0.80, see "Calibration of `FROST_ALBEDO`" below): 37.2 to 37.6 K and 1.40e-5 to
 1.77e-5 bar of N₂ over seeds 1 to 40 (median 37.4 K and 1.57e-5 bar).
 Before, with N₂ ice a black body and the curve 6.3 kJ/mol from memory,
 it ranged from 35.4 to 37.0 K and 1.04e-5 to 2.52e-5 bar. That range
@@ -1494,7 +1496,8 @@ find it at 282 W/m² line by line, Boukrouche, Lichtenberg & Pierrehumbert
 a few per cent to the asymptote (Goldblatt et al. 2013, Fig. 2). The
 spectral column does the same over Earth's air, saturated: 294.6 W/m² at
 360 K, then 283.4 to 283.9 W/m² over 500-640 K. `MOIST_PLATEAU_W_M2` is
-that asymptote, 283.5 W/m², computed once on a finer grid (80 levels per
+that asymptote, 283.5 W/m² in legacy (the rewrite's plateau is 289.7 W/m²,
++2.2 %, see "The runaway branch" below), computed once on a finer grid (80 levels per
 decade, converged to 0.5 W/m²); it moves by under 2 % with CO₂ up to
 1e-2 bar and with one to three times Earth's nitrogen. The old Eddington core
 (`T⁴ = T_eq⁴ (1 + ¾ τ) + q/σ`) had no plateau: its moist OLR peaked at
@@ -1611,16 +1614,20 @@ spectral column sends out. Three things in the model cap it:
 
 Kopparapu et al. 2013 (doi:10.1088/0004-637X/765/2/131) find the same
 mechanism and put its edge at 1.70 AU round the Sun (0.343 S⊕). The model
-lands closer in: for an Earth the outer edge, the last orbit with liquid
-water, is 1.535 AU (0.424 S⊕, +24 %), and round 4500 K and 3300 K stars
-its flux is 25 % and 20 % above their fit (the edge was 1.47 AU before
-the near-infrared absorption, 1.78 AU on the grey column). Two measured
-parts make the gap: the thick CO₂ column sends out too much, 73.5 W/m²
+lands closer in. Legacy's column put the outer edge of an Earth, the last
+orbit with liquid water, at 1.535 AU (0.424 S⊕, +24 % over the 2013
+fit), and round 4500 K and 3300 K stars 25 % and 20 % above it (1.47 AU
+before the near-infrared absorption, 1.78 AU on the grey column). The
+rewrite's solver measures the edge against Kopparapu et al. 2014's fit
+(tier-3 test `outer_edge_against_kopparapu_2014`): 1.513 AU round the
+Sun, +22.9 % in flux (0.4367 against 0.3555 S⊕) at 5772 K, +24.0 % at
+4500 K and +19.9 % at 3300 K, falling with the star's temperature as the
+fit does. The gap is a documented departure (#595), not a bound. Two
+parts of legacy's gap were measured: the thick CO₂ column sends out too much, 73.5 W/m²
 under 8 bar at 1.70 AU against Kopparapu's 67.4, so it needs less light
 to stay warm; and the albedo at their maximum greenhouse is 0.455
-against their 0.417. Neither is tuned away: the edge tests pin what the
-model reaches (1.535 ± 0.005 AU, +25 % and +20 % ± 1 %), so that a
-change shows, and issue #595 holds the search for the missing physics
+against their 0.417. Neither is tuned away: legacy's tests pinned what its model reached
+(1.535 ± 0.005 AU), the rewrite measures the gap instead, and issue #595 holds the search for the missing physics
 (the CO₂ far-wing shape against MT_CKD, CO₂ ice clouds, the 0-D
 column's stratosphere, the HITRAN versions). If the maximum is not
 enough, the planet keeps the CO₂ of its maximum greenhouse and is
@@ -1862,10 +1869,11 @@ value to take.
 [radiative-transfer.md](radiative-transfer.md#the-shortwave-half-the-bond-albedo)
 and ported in `science::radiation::{albedo, shortwave}`.
 
-The outer edge moved from 1.47 to 1.535 AU round the Sun; the K and M
-edges' fluxes from +43 % and +47 % to +25 % and +20 % of Kopparapu's.
-The edge tests are frozen there; issue #595 holds the rest of the gap
-(see **Carbonate thermostat** above).
+In legacy the outer edge moved from 1.47 to 1.535 AU round the Sun; the K
+and M edges' fluxes from +43 % and +47 % to +25 % and +20 % of
+Kopparapu's 2013 fit. The rewrite's own measure against the 2014 fit is
+in "The outer edge" below; issue #595 holds the rest of the gap (see
+**Carbonate thermostat** above).
 
 **Icy albedo from surface age** (`albedo::icy_unit_albedo`, climate
 pass lot 3C-1, goal 4). The exposed water ice of an ice crust darkens
@@ -2039,7 +2047,8 @@ solver of the rewrite" below).
 
 **Phase changes and convergence** (`Climate::converged`,
 `climate::PHASE_BAND_K`, issue #562). Two phase changes were steps
-inside the fixed points: nitrogen frost (emissivity 0.89) becomes a
+inside the fixed points: nitrogen frost (emissivity 0.80; 0.89 in
+legacy) becomes a
 black-body liquid at its triple point, 63.14 K, and methane's air halves
 when its ice melts into a sea (`surface::sea_freezes`). A surface just under
 such a point warmed over it and one just over it cooled under it, so the
@@ -2079,24 +2088,28 @@ its maximum greenhouse where none thaws it, less what its cold surface
 frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
-`d / (d + 0.8 bar × v / v⊕)`: the share of its history it spends frozen,
+`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (12.5 bar in the
+rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
-(legacy's calibration; study 25 found the dated snowballs are 1.4 % of
-Earth's history, not a tenth, and refits it below; 0.8 bar gives
-Earth, which legacy remembered frozen about a tenth of its history, a
-chance of 0.1: on the spectral column Earth at 1 AU needs 0.091 bar more
-CO₂ to thaw, a chance of 0.102; 0.031 bar on the grey column). Where no
+(legacy's 0.8 bar gave Earth, which it remembered frozen about a tenth
+of its history, a chance of 0.1: on the spectral column Earth at 1 AU
+needed 0.091 bar more CO₂ to thaw, a chance of 0.102; 0.031 bar on the
+grey column. Study 25 found the dated snowballs are 1.4 % of Earth's
+history, not a tenth; the rewrite refits `W` to 12.5 bar and Earth's
+chance is 0.0139, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
 CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
 about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
 warms the ice to a thaw), the frozen state is for good: the planet is
-frozen but not a snowball, and its card says so (the `frozen` note). So snowballs are rare near S = 1, likelier towards the
+frozen but not a snowball (`ClimateState::Frozen` in the rewrite; the
+`frozen` note in legacy). So snowballs are rare near S = 1, likelier towards the
 outer edge of the habitable zone and on planets that outgas little, and
 `--snowball yes|no` pins the state. A snowball is drawn with the `frozen`
 look and keeps its relief and coastlines; no sulphuric cloud forms in its
 cold air. On the sweep of an Earth-like planet round the Sun (`climate_sweep
 sweep`) the warm branch runs from the runaway at about 0.95 AU to the
-outer edge at 1.535 AU (288 K, the thermostat's, with 0.47 bar of CO₂ at
-1.2 AU, 2.8 bar at 1.4 AU and 5.7 bar at 1.5 AU), beyond which the frozen
+outer edge at 1.535 AU in legacy (288 K, the thermostat's, with 0.47 bar
+of CO₂ at 1.2 AU, 2.8 bar at 1.4 AU and 5.7 bar at 1.5 AU; the rewrite's
+edge is at 1.513 AU), beyond which the frozen
 branch is the only one (165 K at 1.6 AU, its CO₂ frosted out down to
 0.06 bar; 152 K at 1.8 AU).
 
@@ -2284,51 +2297,63 @@ renamed in 2d-3a, the law unchanged (issue #670; they were both named
 the ground albedo: `cover` (takes the obliquity), `ground_albedo`,
 `ice_line_share`, `sunlit_cap`, `ocean_fraction`, `frost_cover`,
 `surface_vapour` and the public `RELATIVE_HUMIDITY`, which replaces the
-test-only `MANABE_HUMIDITY` of `radiation`. `science::surface::liquids`
+test-only `MANABE_HUMIDITY` of `radiation`. `science::surface::condense`
+holds the condensation of nitrogen and methane at the surface temperature.
+`science::balance` holds the radiative balance of one column, its root
+finders, the moist plateau and the runaway albedo, and `science::snowball`
+the warm bar and the chance. The solver itself is
+`system::planet::climate`, run by the chain step `planet::settled`.
+`science::surface::liquids`
 holds the surface liquid and the frosts. The cloud cover stays out of
 `Cover`: the caller builds `Underneath { ground, clouds, deck }` from
 `ground_albedo`, `radiation::clouds::cloud_cover` and
 `veils::sulphuric_deck`. `system::planet::volcanism` holds the
 volcanic intensity.
 
-Calibration targets, through the whole chain from the reference bodies'
-inputs round the Sun at 4.6 Gyr:
+Calibration targets of the rewrite's climate solver (2d-3a), on the
+reference bodies round the Sun at 4.6 Gyr; Earth, Mars and Titan on
+their measured air (see "Test air and Solar System bounds" below):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, 1.2e-4 bar of CO₂; 289.5 K at 280 ppm | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ within the CO₂ the model maps 286-290 K to (3.7e-5 to 3.7e-4 bar) | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, thermostat CO₂ 1.986e-3 bar, Bond albedo 0.2953; 287.11 K at 280 ppm on the measured air | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | measured: pinned at 577 ± 5 K, none | 737 K |
-| Mars | 214.5 K (T_eq 210.3 K) under 6.4 mbar, none | 210 ± 5 K, none | about 210 K |
-| Titan | 99 K, hydrocarbons (2.2 bar); `titan-like` 93.7 K | 94 ± 8 K, hydrocarbons; `titan-like` 93.7 ± 1 K | 94 K, methane and ethane lakes |
-| Mercury | 435 K, its equilibrium temperature | within 1 K of it | airless |
+| Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
+| Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 104.8 K | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
 
-On the spectral column (issue #523) Earth's thermostat needs 1.2e-4 bar
-of CO₂ (2.3e-3 bar on the grey column of commit 3c47979), under the
-real 280 ppm: Earth is 1.5 K warm. 280 ppm under Earth's own albedo give
-289.5 K, 1.5 K over the thermostat's 288 K, and the model's CO₂ moves
-Earth by only about 1.8 K per factor e, so the thermostat goes down a
-factor 2.3 to shed it. The cause is the clouds' longwave effect: 34
-W/m² in the column against 28 W/m² measured (CERES), while its clear
-sky is 4 W/m² over CERES's, so its all-sky OLR is 3 W/m² under the
-measured 240 W/m². The check bounds Earth at 280 ppm (286-290 K) and
-asks the thermostat's CO₂ to lie within what the model's own CO₂
-sensitivity maps 286-290 K to (3.7e-5 to 3.7e-4 bar); nothing is tuned
-to close the bias.
-Venus reaches 577 K under its 85 bar of CO₂ and its Bond albedo 0.76
-(739 K on the grey column, whose CO₂ opacity was calibrated on it): the
-infrared opacity of its H₂SO₄ clouds and its SO₂ are not modelled, and
-the hot bands of the line list above 700 K are unchecked (issue #594;
-the spectral column before the CO₂ continuum gave 451 K). The reference Mars takes the real 6.1 mbar of CO₂
-(`MARS_CO2_FACTOR`; the volatile rule alone gives it 14 mbar) and
-reaches 214.5 K over an equilibrium temperature of 210.3 K: any
-greenhouse puts it over the 210 K mean surface temperature observed
-(legacy's figure; the NASA fact sheet gives ~214 K, see study 25),
-which a uniform 1-D surface cannot reach (the real surface radiates more
-than `σ T_mean⁴` for its uneven temperatures); `mars-like`, with 4.8
-mbar, reaches 215 K too on the distance sweep (`climate_sweep sweep`),
-and 213.3 to 214.1 K under 5.7 to 5.9 mbar over seeds 1 to 40 of
-`archetype_census`, where `venus-like` reaches 552 to 601 K (median
-575 K) under 75 to 98 bar.
+The reference Titan settles at 104.8 K because of its upstream nitrogen
+inventory (2.876 bar against 1.384 bar measured, +11.2 K; #679), so the
+climate is tested on Titan's measured air, not on the reference trial.
+Earth's O₂ comes from life, which the chain adds later: its reference air
+has none, and the climate is solved again after oxygenation in 2d-4
+(#659), so the 280 ppm check runs on Earth's measured air (N₂ 78.08 %,
+O₂ 20.95 % of 1.014 bar). Dry bodies are never a runaway: Mercury and a
+dry Venus are `Temperate`.
+
+Known gap: the wet column's clear-sky outgoing radiation on Earth's
+measured air is 274.9 W/m² against CERES's 267.9 W/m², +7 W/m² (#680).
+The reference Earth, whose air lacks oxygen, runs 283.84 K at 280 ppm
+(+2.7 K from the missing O₂, +0.5 K from the nitrogen, +1.4 to 2 K from
+the IAPWS saturation curve of the column, and a cloud longwave effect of
+31.1 W/m² against 34.0 W/m² in legacy).
+
+Legacy's results, for history: Earth 288 K with 1.2e-4 bar of CO₂ and
+289.5 K at 280 ppm (the thermostat needed a factor 2.3 less CO₂ than
+Earth has, from the clouds' longwave effect of 34 W/m² against 28 W/m²
+measured by CERES), Mars 214.5 K under `MARS_CO2_FACTOR`'s 6.1 mbar
+against an observed 210 K it took as target (the NASA fact sheet gives
+about 214 K, see study 25), Titan 99 K, `titan-like` 93.7 K. Legacy's
+`mars-like` reached 215 K on the distance sweep and 213.3 to 214.1 K
+over seeds 1 to 40, and `venus-like` 552 to 601 K (median 575 K) under
+75 to 98 bar. Venus reaches 577 K under its 85 bar of CO₂ and its Bond
+albedo 0.76 (739 K on the grey column, whose CO₂ opacity was calibrated
+on it): the infrared opacity of its H₂SO₄ clouds and its SO₂ are not
+modelled, and the hot bands of the line list above 700 K are unchecked
+(issue #594; the spectral column before the CO₂ continuum gave 451 K).
+A uniform 1-D surface cannot reach Mars's mean temperature below its
+equilibrium temperature: any greenhouse puts it over (the real surface
+radiates more than `σ T_mean⁴` for its uneven temperatures).
 
 ### The climate solver of the rewrite (study 25)
 
@@ -2601,8 +2626,9 @@ oxygen oxidises.
 `Surface.gases` is that air after life, but `Surface.climate` was solved
 with the air before it, methane included: removing a greenhouse gas
 would cool the surface a little, and the temperature is not solved
-again. A known simplification; on Earth the model's abiotic air has no
-methane anyway, so Earth's 288 K does not move.
+again. This simplification is dropped in 2d-4, which solves the climate
+again after oxygenation (spec 2d, #659); until then it holds. Earth's
+O₂ comes from life, so the climate of 2d-3a runs on an air without it.
 
 | Case | Result |
 |---|---|
