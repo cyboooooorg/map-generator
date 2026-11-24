@@ -94,10 +94,14 @@ pub(crate) const COLLAPSE_TOLERANCE: f64 = 1e-4;
 /// `collapse_iterations_is_converged`).
 pub(crate) const COLLAPSE_ITERATIONS: usize = 100;
 
-/// Calibration: the bisection steps of the thaw search, 12 (legacy
-/// `THAW_STEPS`). Study 25 ("Solver constants"): at 16 steps Earth's
-/// thaw CO₂ moves under 0.1 %, a convergence test in tier 3.
-pub(crate) const THAW_STEPS: usize = 12;
+/// Calibration: the bisection steps of the thaw search, 13 (legacy
+/// `THAW_STEPS` was 12). Study 25 ("Solver constants"): at 16 steps
+/// Earth's thaw CO₂ must move under 0.1 %, held by a convergence test in
+/// tier 3 (`thaw_steps_is_converged`). Measured on the reference Earth:
+/// 0.180932 bar at 12 steps (+0.165 % against 16), 0.180748 at 13
+/// (+0.063 %), 0.180657 at 14, 0.180634 at 16, 0.180625 at 19: 13 is the
+/// least count that holds the row.
+pub(crate) const THAW_STEPS: usize = 13;
 
 /// Calibration: the move of the surface temperature, K, under which the
 /// albedo's fixed point has settled, 0.1 K (legacy `ALBEDO_TOLERANCE_K`).

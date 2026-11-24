@@ -20,8 +20,8 @@ use crate::units::{Bar, Fraction};
 /// to 0.016; the Sturtian and Marinoan glaciations, 63 My over 4.6 Gyr,
 /// Hoffman et al. 2017, *Sci. Adv.* 3, e1600983, Table 1). Method:
 /// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25), to three figures, with
-/// `d⊕` = 0.1789 bar the extra CO₂ the reference Earth at 1 AU needs to
-/// thaw (thaw 0.1809 bar, froze 0.0020 bar, measured by the climate
+/// `d⊕` = 0.1788 bar the extra CO₂ the reference Earth at 1 AU needs to
+/// thaw (thaw 0.1807 bar, froze 0.0020 bar, measured by the climate
 /// solver of `system`) and `rate⊕` = 0.506064 / 0.5 = 1.0121, its
 /// recorded volcanic intensity over [`EARTH_VOLCANIC_INTENSITY`];
 /// Earth's chance is then 0.0139. Searched and not found: a snowball

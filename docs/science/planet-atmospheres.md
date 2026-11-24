@@ -2453,9 +2453,9 @@ the code; with legacy's 0.091 bar, about 6.4 bar (derived), eight
 times 0.8 bar. Decided with the user on 2026-11-24: the dated episodes
 only, so snowballs become about seven times rarer near 1 AU than in
 legacy. Refitted in 2d-3a on the rewrite's solver: the reference Earth
-at 1 AU freezes with 0.0020 bar of CO₂ and thaws at 0.1809 bar, so
-`d⊕` = 0.1789 bar, twice legacy's 0.091 bar; with its recorded
-volcanism 0.506 (`rate⊕` 1.012), `W` = 12.45, kept to three figures as
+at 1 AU freezes with 0.0020 bar of CO₂ and thaws at 0.1807 bar, so
+`d⊕` = 0.1788 bar, twice legacy's 0.091 bar; with its recorded
+volcanism 0.506 (`rate⊕` 1.012), `W` = 12.44, kept to three figures as
 **12.5 bar**, which gives Earth a chance of 0.0139. That is twice the
 6.4 bar expected from legacy's `d⊕`, inside the 3 to 13 bar the plan
 allowed. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
@@ -2523,7 +2523,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `COLLAPSE_ITERATIONS` | 100 | Definition | a collapsing Earth at 1.6 AU settles under it | 1 |
 | `COLLAPSE_TOLERANCE` | 1e-4 | Calibration | at 1e-5 the temperature moves under 0.01 K | 3 |
 | `PHASE_BAND` | 1 K | Calibration | Titan-like and Triton-like sweeps settle across their points | 3 |
-| `THAW_STEPS` | 12 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % | 3 |
+| `THAW_STEPS` | 13 | Calibration | at 16 steps Earth's thaw CO₂ moves under 0.1 % (measured: +0.165 % at 12 steps, +0.063 % at 13, 0.180932, 0.180748 and 0.180634 bar at 12, 13 and 16) | 3 |
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
 | `ALBEDO_DAMPING` | 0.5 | Definition | at 0.25 the converged climates agree | 3 |
