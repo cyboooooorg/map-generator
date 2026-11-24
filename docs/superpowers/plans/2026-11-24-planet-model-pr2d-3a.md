@@ -407,11 +407,11 @@ Where the code contradicts the recon, the study or the spec:
   - `nitrogen_saturation_joins_its_frost` (Review Focus 5):
     - the frost curve at `NITROGEN_TRIPLE_TEMPERATURE − 1e-9` K and the
       vapour curve at that temperature agree within the frost fit's
-      deviation as study 24 and its doc comment state it. The two
-      triple points differ: the frost fit is pinned at 63.14 K and
-      12 530 Pa, Span et al. give about 63.151 K and 12.52 kPa. That
-      puts the join near 0.3 % (derived). The test names the frost fit's
-      figure; if the gap exceeds it, stop and report;
+      deviation as study 24 and its doc comment state it. The frost fit
+      is pinned at its own triple point (63.14 K, 12 530 Pa); read
+      Span et al.'s triple point in the paper and report the gap
+      between the two (no figure is assumed here). The test names the
+      frost fit's figure; if the gap exceeds it, stop and report;
     - it is infinite at the critical temperature;
     - it rises strictly from 30 K to the critical point in 0.1 K steps;
     - at 90.69 K, `methane_freezes`'s only point, print its gap to the
