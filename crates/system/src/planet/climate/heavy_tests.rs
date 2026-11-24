@@ -1,0 +1,1298 @@
+//! Tier 3: the climate solver against the outer edge of the habitable
+//! zone, the convergence of its numerical constants (study 25, "Solver
+//! constants", the rows marked tier 3), and the legacy climate tests that
+//! solve a bistable Earth or sweep a body's light.
+//!
+//! Ported from `legacy-final:crates/mapgen/src/planet/climate.rs`
+//! (`mod tests`), with the bounds unchanged except where the plan's
+//! Decisions changed them. Every test here is `#[ignore = "heavy: …"]`;
+//! `mise run test:heavy -- climate` runs them. A bound that fails is
+//! reported with its numbers, never retuned.
+//!
+//! Covered elsewhere (tier 3, `branches_tests.rs` and `settled_tests.rs`):
+//! Earth's snowball share against Hoffman et al. 2017
+//! (`earth_snowballs_as_often_as_hoffman_dates`), and "same planet, same
+//! answer" on a bistable body (`earth_twice_is_the_same_earth`).
+
+use super::body::ClimateBody;
+use super::branches::{Solved, frozen_over, solve, solve_with};
+use super::fixture::{EARTH_OBLIQUITY, earth, moved, rotation, titan};
+use super::settle::Settle;
+use super::settle_tests::{cold_methane_world, settled, triton_like};
+use super::wet::{collapsed_climate, wet_balance, wet_climate};
+use super::wet_tests::{COLLAPSE_ORBIT, EARTH_SURFACE, TEST_ALBEDO, modern_air};
+use super::{
+    ALBEDO_DAMPING, ALBEDO_TOLERANCE_K, COLLAPSE_TOLERANCE, CONDENSE_ITERATIONS, ClimateInputs,
+    Numerics, SCAN_RATIO, THAW_STEPS,
+};
+use crate::Trial;
+use crate::planet::bare::bare_with;
+use crate::planet::tests::{
+    EARTH, EARTH_WATER_FRACTION, MARS, ReferenceBody, TITAN, reference_trial, with_fluence,
+};
+use science::balance::{
+    EARTH_DRY_AIR, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, TOLERANCE, absorbed,
+    earth_moist_plateau, moist_plateau, skin,
+};
+use science::constants::{PASCALS_PER_BAR, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
+use science::habitable::{maximum_greenhouse_flux, runaway_flux};
+use science::radiation::clouds::cloud_cover;
+use science::radiation::column::{ColumnCache, Profile, outgoing_longwave};
+use science::radiation::gases::PartialPressures;
+use science::surface::{
+    ICE_COVERED_TEMPERATURE, Liquid, PHASE_BAND, methane_freezes, surface_vapour,
+};
+use science::units::{Bar, EarthFlux, Fraction, Kelvin, Pascal};
+use science::volatiles::{NITROGEN_TRIPLE_TEMPERATURE, co2_saturation_pressure};
+use science::water::{CRITICAL_POINT_TEMPERATURE, melting_temperature};
+use timeline::{ClimateState, Provenance, Trace};
+
+/// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
+/// Resolution B3).
+const SUN: Kelvin = Kelvin(5772.0);
+
+/// Definition: the cooler stars of the outer-edge test, 4500 K and
+/// 3300 K (legacy `the_outer_edge_follows_the_star`), inside the fit of
+/// Kopparapu et al. 2014 (2600 to 7200 K).
+const COOL_STARS: [Kelvin; 2] = [Kelvin(4500.0), Kelvin(3300.0)];
+
+/// Definition: the bounds of the outer-edge search, 1 and 3 AU (legacy
+/// `outer_edge_au`): an Earth wet at the first and frozen at the second.
+const EDGE_BRACKET_AU: (f64, f64) = (1.0, 3.0);
+
+/// Definition: the share of its runaway orbit at which the outer-edge
+/// search starts for a star whose limit lies past 1 AU, 1.001 (the least
+/// step of `science::balance`'s bracket, `LEAST_STEP`).
+const PAST_RUNAWAY: f64 = 1.001;
+
+/// Definition: the bisection steps of the outer-edge search, 12 (legacy
+/// `outer_edge_au`): `2 / 2¹²` = 0.0005 AU.
+const EDGE_STEPS: usize = 12;
+
+/// Definition: the largest move of the Sun's outer edge, AU, that
+/// #593's lever 2 and a finer maximum greenhouse may make, 0.001: two
+/// steps of [`EDGE_STEPS`] (study 25, "Solver constants" and #593's
+/// acceptance condition).
+const EDGE_MOVE_AU: f64 = 0.001;
+
+/// Definition: a snowball draw over any chance, 1: the temperate branch
+/// wherever there is one.
+const WARM_DRAW: f64 = 1.0;
+
+/// Definition: a snowball draw under any chance, 0: the frozen branch
+/// wherever there is one.
+const COLD_DRAW: f64 = 0.0;
+
+/// Definition: the finer steps of the maximum greenhouse's search, 30
+/// (study 25, "Solver constants": at 30 the outer edge moves under
+/// 0.001 AU).
+const FINER_GREENHOUSE_STEPS: usize = 30;
+
+/// Definition: the finer ratio of the wet balance's scan, 1.01 (study 25,
+/// "Solver constants": the same first balance as at [`SCAN_RATIO`]).
+const FINER_SCAN_RATIO: f64 = 1.01;
+
+/// Definition: the flux, against the runaway limit `S_rg`, at which the
+/// scan ratio is compared, 0.9, 0.95 and 0.99 (study 25, "Solver
+/// constants").
+const SCAN_FRACTIONS: [f64; 3] = [0.9, 0.95, 0.99];
+
+/// Definition: the finer plateau surfaces, every 10 K from 500 to 700 K
+/// (study 25, "Solver constants").
+const FINER_PLATEAU: (f64, f64, f64) = (500.0, 700.0, 10.0);
+
+/// Definition: the most the moist plateau may move on finer surfaces,
+/// 0.5 W/m² (study 25, "Solver constants").
+const PLATEAU_MOVE: f64 = 0.5;
+
+/// Definition: the finer collapse tolerance, 1e-5 (study 25, "Solver
+/// constants").
+const FINER_COLLAPSE: f64 = 1e-5;
+
+/// Definition: the most the temperature may move at the finer collapse
+/// tolerance, 0.01 K (study 25, "Solver constants").
+const COLLAPSE_MOVE_K: f64 = 0.01;
+
+/// Definition: the finer thaw bisection, 16 steps (study 25, "Solver
+/// constants").
+const FINER_THAW_STEPS: usize = 16;
+
+/// Definition: the most Earth's thaw CO₂ may move, as a share of
+/// itself, at the finer thaw bisection, 0.1 % (study 25, "Solver
+/// constants").
+const THAW_MOVE: f64 = 1e-3;
+
+/// Definition: the lighter damping of the albedo's fixed point, 0.25
+/// (study 25, "Solver constants").
+const LIGHTER_DAMPING: f64 = 0.25;
+
+/// Definition: the least light of the sweeps' three-kelvin span: a sweep
+/// must start 3 K under its phase point and end 3 K over it (legacy
+/// `settles_across`).
+const SPAN_K: f64 = 3.0;
+
+/// Definition: the climates a sweep takes, 200 (legacy
+/// `the_fixed_point_converges_across_*`).
+const SWEEP_COUNT: usize = 200;
+
+/// Definition: the thin nitrogen air of the methane sweep, 0.1 bar
+/// (legacy `thin_titan`): a gas down to nitrogen's triple point, so that
+/// the sweep crosses the methane sea's freezing point alone.
+const THIN_N2: Bar = Bar(0.1);
+
+/// Definition: the nitrogen air of the nitrogen sweep, 0.5 bar (legacy
+/// `nitrogen_world`), a Triton-like body: Titan without its methane.
+const NITROGEN_WORLD_N2: Bar = Bar(0.5);
+
+/// Definition: the light, against Titan's, over which the thin Titan's
+/// surface spans the methane sea's freezing point ± 3 K. Legacy's
+/// 0.7 to 1.3 reached 77.8 K on the rewrite's column, 1 K short of
+/// 78.7 K; 1.5 reaches 79.7 K (measured, as legacy widened its nitrogen
+/// sweep when its column changed, issue #523).
+const METHANE_SWEEP: (f64, f64) = (0.7, 1.5);
+
+/// Definition: the light, against Titan's, over which the nitrogen
+/// world's surface spans nitrogen's triple point ± 3 K. Legacy's 0.7 to
+/// 1.25 starts at 64.7 K on the rewrite's column, over the 60.1 K the
+/// sweep must start under; 0.55 to 0.85 spans 57.9 to 67.5 K (measured).
+const NITROGEN_SWEEP: (f64, f64) = (0.55, 0.85);
+
+/// Definition: the most the nitrogen sweep's temperature may jump
+/// between two neighbours, 1 K (legacy `the_fixed_point_converges_across_
+/// the_nitrogen_triple_point`).
+const NITROGEN_JUMP_K: f64 = 1.0;
+
+/// Definition: the climates that must fall in the methane sea's melting
+/// band, 20 (legacy).
+const BAND_CLIMATES: usize = 20;
+
+/// Definition: the steps of the runaway edge sweep, as flux over `S_rg`:
+/// 0.98, 0.99 and 1.0 on the temperate branch (wet), 1.001, 1.01 and
+/// 1.02 on the steam branch (legacy
+/// `the_runaway_edge_steps_only_by_the_branches_albedos`, issue #523).
+const EDGE_SWEEP: ([f64; 3], [f64; 3]) = ([0.98, 0.99, 1.0], [1.001, 1.01, 1.02]);
+
+/// Definition: the most the temperature, taken with the flux's own `S^¼`
+/// out, may move between neighbours of a branch, and the most the step
+/// at the limit may differ from the albedos' alone, 0.5 K (legacy).
+const BRANCH_STEP_K: f64 = 0.5;
+
+/// Definition: the least a runaway's albedo falls under the wet
+/// branch's, 0.03 (legacy): the step is real.
+const BRANCH_ALBEDO_STEP: f64 = 0.03;
+
+/// Definition: the census case of #443 (legacy `census_182_d`): its
+/// equilibrium temperature, K, at the settled albedo.
+const CENSUS_EQUILIBRIUM: (f64, f64) = (110.0, 120.0);
+
+/// Definition: the census case's nitrogen over its seas, bar (legacy
+/// `census_182_d`).
+const CENSUS_N2: (f64, f64) = (4.0, 5.0);
+
+/// Definition: the census case's methane over its seas, bar (legacy
+/// `census_182_d`).
+const CENSUS_CH4: (f64, f64) = (0.5, 5.0);
+
+/// Definition: the census case's surface, under 150 K (legacy).
+const CENSUS_SURFACE_K: f64 = 150.0;
+
+/// Definition: the orbit of the thermostat's CO₂ test, 1.3 AU (legacy
+/// `the_thermostat_never_exceeds_the_outgassed_co2`): inside the outer
+/// edge.
+const THERMOSTAT_ORBIT: f64 = 1.3;
+
+/// Definition: the orbit past the outer edge, 2 AU (legacy).
+const PAST_EDGE_ORBIT: f64 = 2.0;
+
+/// Definition: the orbit of the scarce-CO₂ test, 1.6 AU (legacy).
+const SCARCE_ORBIT: f64 = 1.6;
+
+/// Definition: the share of its CO₂ the scarce Earth keeps, 1e-4
+/// (legacy).
+const SCARCE_SHARE: f64 = 1e-4;
+
+/// Definition: the room the CO₂ of a frozen air has over what its ground
+/// keeps, 0.1 % (legacy `1.001`).
+const KEPT_ROOM: f64 = 1.001;
+
+/// Source: Archean nitrogen, 2 to 3 bar (Goldblatt et al. 2009,
+/// doi:10.1038/ngeo692; Charnay et al. 2013, doi:10.1016/j.epsl.2013.
+/// 03.047), and the two water inventories of legacy's test, Earth's and
+/// 1 % of the mass.
+const ARCHEAN_N2: [f64; 2] = [2.0, 3.0];
+
+/// Definition: the second water inventory of the nitrogen test, 1 % of
+/// the mass (legacy).
+const WET_WATER_FRACTION: f64 = 0.01;
+
+/// Source: the temperature window of a thermostat-held Earth under
+/// 2 to 3 bar of nitrogen, 282 to 294 K (legacy
+/// `an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate`: the
+/// thermostat's 288 K ± 6 K).
+const ARCHEAN_WINDOW: (f64, f64) = (282.0, 294.0);
+
+/// Source: the Sun at 2.5 Ga gave 0.82 of today's light (Gough 1981,
+/// doi:10.1007/BF00151270).
+const FAINT_SUN: f64 = 0.82;
+
+/// Source: the CO₂ of the late Archean test, 10 mbar (Charnay et al.
+/// 2013, §5.2).
+const ARCHEAN_CO2: f64 = 0.010;
+
+/// Source: the late Archean air, 1 and 2 bar of nitrogen less the 10 mbar
+/// of CO₂ (Charnay et al. 2013, §5.2: "from 1 to 2 bar of N₂").
+const ARCHEAN_AIRS: [f64; 2] = [0.99, 1.99];
+
+/// Definition: the bounds of the column's temperature search, 200 and
+/// 400 K, and its 40 bisection steps (legacy).
+const ARCHEAN_SEARCH: (f64, f64, usize) = (200.0, 400.0, 40);
+
+/// Source: the late Archean surface, 270 to 290 K (legacy bound; Goldblatt
+/// et al. 2009, doi:10.1038/ngeo692).
+const ARCHEAN_SURFACE: (f64, f64) = (270.0, 290.0);
+
+/// Source: the warming from doubling the nitrogen, 3 to 6 K: +7 K in
+/// the GCM of Charnay et al. 2013 (§5.2), +4 to 5 K in the 1-D model of
+/// Goldblatt et al. 2009 (doi:10.1038/ngeo692); the bound is legacy's.
+const ARCHEAN_WARMING: (f64, f64) = (3.0, 6.0);
+
+/// Definition: the orbits of the temperate Earth, as a share of its
+/// outer edge, which stand in for legacy's 1.4, 1.5, 1.6, 1.8 and 2.5 AU
+/// against the 1.535 AU edge (#523): 0.9, 0.98 inside, 1.02, 1.2 and 1.6
+/// outside.
+const EDGE_SHARES: [f64; 5] = [0.9, 0.98, 1.02, 1.2, 1.6];
+
+/// Definition: the freezing of the temperate Earth, 273 K (legacy): the
+/// least temperature of a wet orbit and the most of a frozen one.
+const FREEZING_K: f64 = 273.0;
+
+/// Definition: the room a colder orbit has over a nearer one, 0.05 K
+/// (legacy: a numerical tolerance of the monotonic fall).
+const FALL_ROOM_K: f64 = 0.05;
+
+/// Definition: the CO₂ of the air before the climate in the build-up
+/// test, a tenth of a bar (legacy `co2_builds_up_past_the_outgassed_
+/// snapshot`).
+const SNAPSHOT_CO2: Bar = Bar(0.1);
+
+/// Definition: a carbon inventory under the thermostat's need, half a
+/// bar (legacy).
+const SMALL_INVENTORY: Bar = Bar(0.5);
+
+/// Definition: where the build-up test's snowball stands, as a share of
+/// the way between the orbits that bound it: 1.2 AU in legacy; here the
+/// snowball's orbit is one with a thaw, found by the scan of
+/// [`edge_scan`].
+const HALF: f64 = 0.5;
+
+/// Definition: the orbits of the dry acid air, from 0.8 AU in 61 steps
+/// of 0.02 AU (legacy `a_dry_acid_air_settles_through_the_deck_onset`).
+const ACID_ORBITS: (f64, f64, usize) = (0.8, 0.02, 60);
+
+/// Definition: the dry acid air: 3 bar of nitrogen, 0.05 bar of CO₂ and
+/// 0.02 bar of SO₂ (legacy).
+const ACID_AIR: PartialPressures = PartialPressures {
+    n2: 3.0,
+    co2: 0.05,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.02,
+    o2: 0.0,
+};
+
+/// Definition: the band the deck's onset falls in, 263 to 330 K, and the
+/// least orbits near it, 3 (legacy).
+const ACID_BAND: (f64, f64, usize) = (263.0, 330.0, 3);
+
+/// Definition: the largest gap between the equilibrium of the derived
+/// albedo and of the settled one, 0.1 K (legacy).
+const ACID_GAP_K: f64 = 0.1;
+
+/// Definition: the runaway test's water, 1 % of Earth's mass (legacy
+/// `a_planet_just_past_the_runaway_limit_runs_away_hot`).
+const RUNAWAY_WATER: f64 = 0.01;
+
+/// Definition: the XUV fluence of the runaway test, 0 J/m²: no escape,
+/// as legacy's test keeps the water of its inventory in the air (the
+/// chain's escape strips this body of all its water).
+const NO_ESCAPE: f64 = 0.0;
+
+/// Definition: the flux of the runaway test, 1.01 times its star's
+/// runaway limit (legacy).
+const RUNAWAY_OVER: f64 = 1.01;
+
+/// Definition: the margin a runaway keeps over water's critical
+/// temperature, 100 K (legacy).
+const RUNAWAY_MARGIN_K: f64 = 100.0;
+
+/// Definition: the relative agreement of the snowball's CO₂ with what
+/// the thermostat reaches, 1 % (legacy).
+const REACHED_AGREEMENT: f64 = 0.01;
+
+/// Definition: the snowballs that test must see, 2 (legacy).
+const SNOWBALLS_SEEN: usize = 2;
+
+/// Definition: the room the CO₂ of a body frozen for good has over its
+/// cap, 1.0001 (legacy).
+const CAP_ROOM: f64 = 1.0001;
+
+/// Definition: the margin an inside orbit keeps from its edge, AU, 0.02:
+/// forty bisection steps of [`EDGE_STEPS`].
+const EDGE_MARGIN_AU: f64 = 0.02;
+
+/// Definition: the shares of the edge at which the snowball tests look
+/// for the thaw, 0.65 to 0.977 (legacy's 1.0, 1.2, 1.4 and 1.5 AU over
+/// its 1.535 AU edge); 1.0 AU stays its own.
+const SNOWBALL_SHARES: [f64; 3] = [0.78, 0.91, 0.977];
+
+/// `t` with its source's effective temperature replaced by `teff`, as
+/// `with_fluence` replaces its fluence.
+fn with_star(trace: &mut Trace, t: &Trial, teff: Kelvin) -> Trial {
+    let mut source = t.sources.primary().clone();
+    source.effective_temperature = trace
+        .leaf(
+            timeline::Code::of("test.teff-heavy"),
+            teff,
+            Provenance::Input,
+        )
+        .unwrap();
+    Trial {
+        sources: timeline::StellarSources::new(vec![source]).unwrap(),
+        ..t.clone()
+    }
+}
+
+/// The climate inputs of `body` rebuilt from its trial at `au` round a
+/// star of `teff` (as legacy `reference.rs::derive_at`), not locked, at
+/// Earth's obliquity.
+fn inputs_at(body: &ReferenceBody, au: f64, teff: Kelvin) -> ClimateInputs {
+    inputs_from(body, au, teff, None)
+}
+
+/// [`inputs_at`] with the XUV fluence of its star replaced by `fluence`,
+/// J/m², when given (`with_fluence`).
+fn inputs_from(body: &ReferenceBody, au: f64, teff: Kelvin, fluence: Option<f64>) -> ClimateInputs {
+    let body = ReferenceBody { orbit: au, ..*body };
+    let mut trace = Trace::new();
+    let (t, d) = reference_trial(&mut trace, &body);
+    let mut t = with_star(&mut trace, &t, teff);
+    if let Some(fluence) = fluence {
+        t = with_fluence(&mut trace, &t, fluence);
+    }
+    let bare = bare_with(&t, &d, &mut trace).unwrap();
+    let spin = rotation(&mut trace, EARTH_OBLIQUITY, false);
+    ClimateInputs::of(&bare, &spin, Bar(0.0)).expect("the body has a surface")
+}
+
+/// Earth's inputs at `au` round the Sun.
+fn earth_at(au: f64) -> ClimateInputs {
+    inputs_at(&EARTH, au, SUN)
+}
+
+/// `inputs` of a body lit by one star, its flux replaced by `flux` and
+/// its equilibrium temperature scaled as `flux^¼` (a `Definition:`, the
+/// trial's own scaling).
+fn lit(inputs: &ClimateInputs, flux: f64) -> ClimateInputs {
+    assert_eq!(inputs.sources.len(), 1);
+    let mut lit = inputs.clone();
+    let source = &mut lit.sources[0];
+    let ratio = flux / source.flux.0;
+    source.flux = EarthFlux(flux);
+    source.equilibrium = Kelvin(source.equilibrium.0 * ratio.powf(0.25));
+    lit
+}
+
+/// Whether Earth on its temperate branch keeps liquid water at `au`
+/// round a star of `teff`.
+fn wet_at(teff: Kelvin, au: f64, numerics: &Numerics) -> bool {
+    let solved = solve_with(&inputs_at(&EARTH, au, teff), WARM_DRAW, numerics);
+    solved.settle.liquid == Some(Liquid::Water)
+}
+
+/// The outer edge of Earth's habitable zone round a star of `teff`, AU:
+/// the largest orbit at which it keeps liquid water, bisected in
+/// [`EDGE_STEPS`] steps (legacy `outer_edge_au`).
+fn outer_edge_au(teff: Kelvin, numerics: &Numerics) -> f64 {
+    // A star cooler than the Sun has its runaway limit under one Earth
+    // flux (Kopparapu et al. 2014): Earth rebuilt at 1 AU round it is a
+    // runaway with no water, so the search starts just past the orbit of
+    // that limit, where the water is kept.
+    let runaway_orbit = runaway_flux(teff).0.powf(-0.5) * PAST_RUNAWAY;
+    let (mut wet, mut dry) = (EDGE_BRACKET_AU.0.max(runaway_orbit), EDGE_BRACKET_AU.1);
+    assert!(wet_at(teff, wet, numerics), "{teff:?}: frozen at {wet} AU");
+    assert!(!wet_at(teff, dry, numerics), "{teff:?}: wet at {dry} AU");
+    for _ in 0..EDGE_STEPS {
+        let mid = 0.5 * (wet + dry);
+        if wet_at(teff, mid, numerics) {
+            wet = mid;
+        } else {
+            dry = mid;
+        }
+    }
+    wet
+}
+
+/// The orbit-mean flux of an orbit, in units of Earth's.
+fn flux_at(au: f64) -> f64 {
+    1.0 / (au * au)
+}
+
+#[test]
+#[ignore = "heavy: three bisections of the outer edge, 14 bistable-Earth climates each"]
+fn the_outer_edge_against_kopparapu_2014() {
+    // #595: the model's outer edge round the Sun, 4500 K and 3300 K
+    // against the maximum greenhouse of Kopparapu et al. 2014 (their
+    // Table 1 fit, `science::habitable::maximum_greenhouse_flux`). No
+    // bound is frozen on the gap: it goes to the PR and #595.
+    let mut last = (f64::INFINITY, f64::INFINITY);
+    for teff in [SUN, COOL_STARS[0], COOL_STARS[1]] {
+        let edge = outer_edge_au(teff, &Numerics::DEFAULT);
+        let flux = flux_at(edge);
+        let fit = maximum_greenhouse_flux(teff).0;
+        println!(
+            "{teff:?}: edge {edge:.4} AU, S {flux:.4} against {fit:.4} (S/S_fit - 1 = {:+.4})",
+            flux / fit - 1.0
+        );
+        assert!(
+            edge > EDGE_BRACKET_AU.0 && edge < EDGE_BRACKET_AU.1,
+            "{edge}"
+        );
+        assert!(flux < last.0, "{teff:?}: {flux} after {}", last.0);
+        assert!(fit < last.1, "{teff:?}: the fit {fit} after {}", last.1);
+        last = (flux, fit);
+    }
+}
+
+#[test]
+#[ignore = "heavy: two bisections of the Sun's outer edge, 14 bistable-Earth climates each"]
+fn one_greenhouse_search_per_body_moves_no_edge() {
+    // #593 lever 2's acceptance condition: where nothing condenses
+    // (Earth), searching the maximum greenhouse once per body moves no
+    // edge.
+    let once = outer_edge_au(SUN, &Numerics::DEFAULT);
+    let each = outer_edge_au(
+        SUN,
+        &Numerics {
+            greenhouse_once: false,
+            ..Numerics::DEFAULT
+        },
+    );
+    println!("edge {once:.4} AU once, {each:.4} AU at each call");
+    assert!((once - each).abs() <= EDGE_MOVE_AU, "{once} against {each}");
+}
+
+#[test]
+#[ignore = "heavy: a wet body with plates under a condensing air, solved twice"]
+fn one_greenhouse_search_on_a_condensing_air() {
+    // #593 lever 2 where N₂ and CH₄ condense: Earth at Titan's distance
+    // under Titan's methane, a wet body with plates whose thermostat
+    // reads the maximum greenhouse on the condensed air each step. The
+    // gap is reported, not bounded.
+    let base = moved(&earth(), TITAN.orbit);
+    let like = ClimateInputs {
+        air: PartialPressures {
+            ch4: titan().air.ch4,
+            ..base.air
+        },
+        ..base
+    };
+    let run = |once: bool| {
+        solve_with(
+            &like,
+            WARM_DRAW,
+            &Numerics {
+                greenhouse_once: once,
+                ..Numerics::DEFAULT
+            },
+        )
+    };
+    let (kept, again) = (run(true), run(false));
+    println!(
+        "Titan-like: {:.3} K once, {:.3} K at each call (gap {:+.3} K); CO2 {:.4e} and {:.4e} \
+         bar; {:?} and {:?}",
+        kept.settle.temperature.0,
+        again.settle.temperature.0,
+        kept.settle.temperature.0 - again.settle.temperature.0,
+        kept.settle.air.co2,
+        again.settle.air.co2,
+        kept.state,
+        again.state
+    );
+    assert!(kept.settle.converged && again.settle.converged);
+    assert!(kept.settle.condensate.n2 > 0.0 || kept.settle.condensate.ch4 > 0.0);
+}
+
+#[test]
+#[ignore = "heavy: the condensation loop of a Triton-like body, checked beside the other convergence rows"]
+fn condense_iterations_is_converged_on_triton() {
+    let c = settled(&triton_like(), Numerics::DEFAULT);
+    assert!(c.converged, "{c:?}");
+    assert!(
+        c.iterations > 0 && c.iterations < CONDENSE_ITERATIONS,
+        "{c:?}"
+    );
+}
+
+/// The first balance of `inputs` under [`TEST_ALBEDO`] at 288 K's
+/// emissivity, with `numerics`, in kelvin.
+fn first_balance(inputs: &ClimateInputs, numerics: Numerics) -> Option<f64> {
+    let air = modern_air(inputs);
+    let mut body = ClimateBody::new(inputs, numerics);
+    let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
+    let e = body.emissivity_at(EARTH_SURFACE, &air);
+    wet_balance(&mut body, light, &air, e).map(|(_, t)| t.0)
+}
+
+#[test]
+#[ignore = "heavy: wet balances at four orbits, twice"]
+fn scan_ratio_is_converged() {
+    let limit = runaway_flux(SUN).0;
+    let mut bodies = vec![earth()];
+    bodies.extend(SCAN_FRACTIONS.map(|f| lit(&earth(), f * limit)));
+    let finer = Numerics {
+        scan_ratio: FINER_SCAN_RATIO,
+        ..Numerics::DEFAULT
+    };
+    for inputs in &bodies {
+        let (a, b) = (
+            first_balance(inputs, Numerics::DEFAULT),
+            first_balance(inputs, finer),
+        );
+        match (a, b) {
+            (None, None) => {}
+            (Some(a), Some(b)) => assert!(
+                (a - b).abs() < TOLERANCE.0,
+                "flux {:?}: {a} against {b}",
+                inputs.sources[0].flux
+            ),
+            _ => panic!("flux {:?}: {a:?} against {b:?}", inputs.sources[0].flux),
+        }
+    }
+}
+
+#[test]
+#[ignore = "heavy: the moist plateau's column on twenty-one surfaces"]
+fn plateau_surfaces_are_converged() {
+    let (low, high, step) = FINER_PLATEAU;
+    let surfaces: Vec<Kelvin> = (0..=((high - low) / step).round() as usize)
+        .map(|i| Kelvin(low + step * i as f64))
+        .collect();
+    assert!(surfaces.len() > PLATEAU_SURFACES.len());
+    let finer = moist_plateau(
+        &EARTH_DRY_AIR,
+        Bar(f64::INFINITY),
+        STANDARD_GRAVITY,
+        Profile::PLATEAU,
+        &surfaces,
+        SIMPSON_NAKAJIMA_W_M2,
+        &mut ColumnCache::default(),
+    );
+    let plateau = earth_moist_plateau();
+    println!("plateau {plateau:?}, on finer surfaces {finer:?}");
+    assert!(
+        (finer.0 - plateau.0).abs() < PLATEAU_MOVE,
+        "{finer:?} {plateau:?}"
+    );
+}
+
+#[test]
+#[ignore = "heavy: two collapses of an Earth at 1.6 AU"]
+fn collapse_tolerance_is_converged() {
+    let inputs = moved(&earth(), COLLAPSE_ORBIT);
+    let collapse = |tolerance: f64| {
+        let mut body = ClimateBody::new(
+            &inputs,
+            Numerics {
+                collapse_tolerance: tolerance,
+                ..Numerics::DEFAULT
+            },
+        );
+        let air = PartialPressures {
+            co2: inputs.carbon.0,
+            ..inputs.air
+        };
+        let albedo = body.derived_albedo(ICE_COVERED_TEMPERATURE, &air);
+        let e = body.emissivity_at(ICE_COVERED_TEMPERATURE, &air);
+        let light = body.starlight(albedo);
+        collapsed_climate(&mut body, light, &air, e)
+    };
+    let (a, b) = (collapse(COLLAPSE_TOLERANCE), collapse(FINER_COLLAPSE));
+    println!("collapse: {:?} against {:?}", a.temperature, b.temperature);
+    assert!(
+        (a.temperature.0 - b.temperature.0).abs() < COLLAPSE_MOVE_K,
+        "{a:?} {b:?}"
+    );
+}
+
+#[test]
+#[ignore = "heavy: two bistable-Earth solves, at 12 and 16 thaw steps"]
+fn thaw_steps_is_converged() {
+    let inputs = earth();
+    let thaw = |steps: usize| {
+        solve_with(
+            &inputs,
+            WARM_DRAW,
+            &Numerics {
+                thaw_steps: steps,
+                ..Numerics::DEFAULT
+            },
+        )
+        .bistable
+        .and_then(|b| b.thaw)
+        .expect("Earth's CO₂ thaws it")
+        .0
+    };
+    let (a, b) = (thaw(THAW_STEPS), thaw(FINER_THAW_STEPS));
+    println!(
+        "thaw CO2 {a:.6} bar at {THAW_STEPS} steps, {b:.6} at {FINER_THAW_STEPS} \
+         ({:+.4} %)",
+        100.0 * (a / b - 1.0)
+    );
+    assert!((a / b - 1.0).abs() < THAW_MOVE, "{a} against {b}");
+}
+
+#[test]
+#[ignore = "heavy: the reference climates settled twice"]
+fn albedo_damping_is_converged() {
+    let lighter = Numerics {
+        albedo_damping: LIGHTER_DAMPING,
+        ..Numerics::DEFAULT
+    };
+    let bodies = [
+        ("Earth", earth()),
+        ("Mars", super::settle_tests::imposed_mars()),
+        ("a Triton-like body", triton_like()),
+        ("Titan", titan()),
+    ];
+    for (name, inputs) in &bodies {
+        let (a, b) = (settled(inputs, Numerics::DEFAULT), settled(inputs, lighter));
+        println!(
+            "{name}: {:.3} K against {:.3} K",
+            a.temperature.0, b.temperature.0
+        );
+        assert!(a.converged && b.converged, "{name}: {a:?} {b:?}");
+        assert!(
+            (a.temperature.0 - b.temperature.0).abs() <= ALBEDO_TOLERANCE_K.0,
+            "{name}: {a:?} {b:?}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "heavy: two bisections of the Sun's outer edge"]
+fn greenhouse_steps_is_converged() {
+    let base = outer_edge_au(SUN, &Numerics::DEFAULT);
+    let finer = outer_edge_au(
+        SUN,
+        &Numerics {
+            greenhouse_steps: FINER_GREENHOUSE_STEPS,
+            ..Numerics::DEFAULT
+        },
+    );
+    println!("edge {base:.4} AU, {finer:.4} AU at {FINER_GREENHOUSE_STEPS} steps");
+    assert!(
+        (base - finer).abs() <= EDGE_MOVE_AU,
+        "{base} against {finer}"
+    );
+}
+
+/// Titan's body under `air`, its light scaled by each of `count` factors
+/// from `low` to `high`: the flux and the settled climate.
+fn sweep_of(
+    inputs: &ClimateInputs,
+    air: PartialPressures,
+    (low, high): (f64, f64),
+) -> Vec<(f64, Settle)> {
+    let base = ClimateInputs {
+        air,
+        ..inputs.clone()
+    };
+    let flux = base.sources[0].flux.0;
+    (0..SWEEP_COUNT)
+        .map(|i| {
+            let f = low + (high - low) * i as f64 / (SWEEP_COUNT - 1) as f64;
+            let at = lit(&base, flux * f);
+            (flux * f, settled(&at, Numerics::DEFAULT))
+        })
+        .collect()
+}
+
+/// Review Focus 5: across `threshold_k`, every climate of `sweep` settled
+/// and its temperature rises with the flux, with no jump over
+/// `most_jump_k` between neighbours (legacy `settles_across`).
+fn settles_across(sweep: &[(f64, Settle)], threshold_k: f64, most_jump_k: f64) {
+    let (first, last) = (&sweep[0].1, &sweep[sweep.len() - 1].1);
+    assert!(
+        first.temperature.0 <= threshold_k - SPAN_K && last.temperature.0 >= threshold_k + SPAN_K,
+        "the sweep spans {:.2} to {:.2} K, not {threshold_k:.2} ± {SPAN_K} K",
+        first.temperature.0,
+        last.temperature.0
+    );
+    for (flux, c) in sweep {
+        assert!(c.converged, "{flux:.6}: {c:?}");
+    }
+    for pair in sweep.windows(2) {
+        let ((f0, a), (f1, b)) = (&pair[0], &pair[1]);
+        let step = b.temperature.0 - a.temperature.0;
+        assert!(
+            step > -ALBEDO_TOLERANCE_K.0 && step < most_jump_k,
+            "{f0:.6} -> {f1:.6}: {:.3} -> {:.3} K ({a:?} {b:?})",
+            a.temperature.0,
+            b.temperature.0
+        );
+    }
+}
+
+#[test]
+#[ignore = "heavy: 200 climates of a methane world across its sea's freezing point"]
+fn the_fixed_point_converges_across_the_methane_freezing_point() {
+    let reference = titan();
+    let air = PartialPressures {
+        n2: THIN_N2.0,
+        ..reference.air
+    };
+    let freezes = methane_freezes(THIN_N2).0;
+    let sweep = sweep_of(&reference, air, METHANE_SWEEP);
+    settles_across(&sweep, freezes, f64::INFINITY);
+    let melting = sweep
+        .iter()
+        .filter(|(_, c)| (freezes - PHASE_BAND.0..freezes).contains(&c.temperature.0))
+        .count();
+    println!("{melting} climates in the melting band under {freezes:.2} K");
+    assert!(melting >= BAND_CLIMATES, "{melting} climates in the band");
+}
+
+#[test]
+#[ignore = "heavy: 200 climates of a nitrogen world across its triple point"]
+fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
+    let reference = titan();
+    let air = PartialPressures {
+        n2: NITROGEN_WORLD_N2.0,
+        ch4: 0.0,
+        ..reference.air
+    };
+    let sweep = sweep_of(&reference, air, NITROGEN_SWEEP);
+    settles_across(&sweep, NITROGEN_TRIPLE_TEMPERATURE.0, NITROGEN_JUMP_K);
+}
+
+#[test]
+#[ignore = "heavy: seven settled Earths across the runaway limit"]
+fn the_runaway_edge_steps_only_by_the_branches_albedos() {
+    // Issue #523, ruling of the climate pass lot 3C-2: Earth's inventory
+    // (its water kept, no escape) swept in steps of 1 % of flux across its
+    // star's runaway limit `S_rg`, on the temperate branch below (wet) and
+    // the steam branch above (its whole ocean in the air). The step at
+    // `S_rg` is the bifurcation between the two branches, physics rather
+    // than a defect: on each branch the equilibrium temperature is
+    // continuous in the flux, and across `S_rg` it jumps by the change of
+    // albedo between the branches, `T_eq ∝ (S (1 − A))^¼`, and by nothing
+    // else.
+    let limit = runaway_flux(SUN).0;
+    let base = earth_at((EDGE_SWEEP.0[0] * limit).powf(-0.5));
+    assert!(!base.runaway && base.water.0 > 0.0, "{base:?}");
+    // (flux over `S_rg`, equilibrium temperature, Bond albedo)
+    let at = |f: f64| {
+        let mut inputs = lit(&base, f * limit);
+        if f > 1.0 {
+            inputs.runaway = true;
+            inputs.air.h2o = ClimateBody::new(&inputs, Numerics::DEFAULT)
+                .water_column()
+                .0;
+        }
+        let c = settled(&inputs, Numerics::DEFAULT);
+        (f, c.equilibrium.0, c.bond_albedo.get())
+    };
+    let temperate: Vec<_> = EDGE_SWEEP.0.into_iter().map(at).collect();
+    let steam: Vec<_> = EDGE_SWEEP.1.into_iter().map(at).collect();
+    for branch in [&temperate, &steam] {
+        for pair in branch.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            let (ta, tb) = (a.1 / a.0.powf(0.25), b.1 / b.0.powf(0.25));
+            assert!(
+                (tb - ta).abs() < BRANCH_STEP_K,
+                "{:.3} -> {:.3} S_rg: {ta:.2} -> {tb:.2} K",
+                a.0,
+                b.0
+            );
+        }
+    }
+    let (wet, hot) = (temperate[2], steam[0]);
+    let expected = wet.1 * (hot.0 / wet.0 * (1.0 - hot.2) / (1.0 - wet.2)).powf(0.25);
+    println!(
+        "edge: A {:.4} -> {:.4}, T_eq {:.2} -> {:.2} K (albedo alone {expected:.2} K)",
+        wet.2, hot.2, wet.1, hot.1
+    );
+    assert!(
+        (hot.1 - expected).abs() < BRANCH_STEP_K,
+        "{:.2} K vs {expected:.2} K",
+        hot.1
+    );
+    // The branches differ in albedo: the step is real, not zero.
+    assert!(hot.2 < wet.2 - BRANCH_ALBEDO_STEP, "{wet:?} {hot:?}");
+}
+
+#[test]
+#[ignore = "heavy: the census case of #443 on its measured inputs"]
+fn census_182_d() {
+    // The system draw of seed 182 is not wired to the planet chain yet
+    // (2d-4): the case is solved on its census inputs, those of
+    // `a_methane_greenhouse_cannot_warm_a_cold_world`, and held to
+    // legacy's other bounds: T_eq about 114.5 K, 4.4 bar of N₂ and
+    // 0.9 bar of methane over its seas.
+    let c = settled(&cold_methane_world(), Numerics::DEFAULT);
+    println!("{c:?}");
+    assert!(
+        (CENSUS_EQUILIBRIUM.0..CENSUS_EQUILIBRIUM.1).contains(&c.equilibrium.0),
+        "{c:?}"
+    );
+    assert!((CENSUS_N2.0..CENSUS_N2.1).contains(&c.air.n2), "{c:?}");
+    assert!((CENSUS_CH4.0..CENSUS_CH4.1).contains(&c.air.ch4), "{c:?}");
+    assert!(c.equilibrium.0 < CENSUS_SURFACE_K && c.temperature.0 < CENSUS_SURFACE_K);
+    assert_ne!(c.liquid, Some(Liquid::Water), "{c:?}");
+}
+
+/// The air of `c` in bar of CO₂ the ground keeps at its temperature
+/// (legacy `co2_saturation_bar`).
+fn kept_co2(c: &Settle) -> f64 {
+    Bar::from(co2_saturation_pressure(c.temperature)).0
+}
+
+#[test]
+#[ignore = "heavy: Earth solved at 1.3, 2 and 1.6 AU, the last with a scarce CO₂"]
+fn the_thermostat_never_exceeds_the_outgassed_co2() {
+    // Inside the outer edge, before where the build-up of a cold planet's
+    // CO₂ (issue #522) may take its air past what it outgassed: the
+    // thermostat holds 288 K on a few bar of the outgassed.
+    let inside = earth_at(THERMOSTAT_ORBIT);
+    let c = solve(&inside, WARM_DRAW).settle;
+    assert!(c.air.co2 <= inside.air.co2, "{c:?} {:?}", inside.air);
+    if !c.regulated {
+        // Short of CO₂: all of it is in the air, and the water is liquid
+        // only while the surface stays above its melting curve.
+        assert_eq!(c.air.co2, inside.air.co2, "{c:?}");
+        let melts = melting_temperature(Pascal(c.air.total() * PASCALS_PER_BAR)).0;
+        assert_eq!(
+            c.liquid == Some(Liquid::Water),
+            c.temperature.0 >= melts,
+            "{c:?}"
+        );
+    }
+    // Past the outer edge no CO₂ is enough: the planet freezes, and its
+    // air keeps only the CO₂ its frozen surface does not frost out (#522).
+    let past = earth_at(PAST_EDGE_ORBIT);
+    let c = solve(&past, WARM_DRAW).settle;
+    assert!(c.air.co2 <= past.air.co2, "{c:?}");
+    assert!(c.air.co2 <= kept_co2(&c) * KEPT_ROOM, "{c:?}");
+    assert!(!c.regulated, "{c:?}");
+    assert_eq!(c.liquid, None, "{c:?}");
+    // With a ten-thousandth of its CO₂ the thermostat runs out: it puts
+    // all of it in the air, and the water freezes.
+    let d = earth_at(SCARCE_ORBIT);
+    let scarce = ClimateInputs {
+        air: PartialPressures {
+            co2: d.air.co2 * SCARCE_SHARE,
+            ..d.air
+        },
+        carbon: Bar(d.air.co2 * SCARCE_SHARE),
+        ..d
+    };
+    let c = settled(&scarce, Numerics::DEFAULT);
+    assert!(c.air.co2 <= scarce.air.co2, "{c:?}");
+    assert!(!c.regulated, "{c:?}");
+    assert_eq!(c.liquid, None, "{c:?}");
+}
+
+#[test]
+#[ignore = "heavy: four temperate Earths under thick nitrogen, with two water inventories"]
+fn an_earth_with_two_or_three_bar_of_nitrogen_stays_temperate() {
+    // Archean Earth may have held 2 to 3 bar of N₂ (Goldblatt et al. 2009;
+    // Charnay et al. 2013): the thermostat still holds it, with Earth's
+    // water and with 1 % of its mass in water.
+    for water_fraction in [EARTH_WATER_FRACTION, WET_WATER_FRACTION] {
+        for n2 in ARCHEAN_N2 {
+            let body = ReferenceBody {
+                water_fraction,
+                ..EARTH
+            };
+            let inputs = inputs_at(&body, 1.0, SUN);
+            let thick = ClimateInputs {
+                air: PartialPressures { n2, ..inputs.air },
+                ..inputs
+            };
+            let c = settled(&thick, Numerics::DEFAULT);
+            assert!(c.regulated, "{n2} bar, {water_fraction}: {c:?}");
+            assert!(
+                (ARCHEAN_WINDOW.0..=ARCHEAN_WINDOW.1).contains(&c.temperature.0),
+                "{n2} bar, {water_fraction}: {c:?}"
+            );
+            assert_eq!(c.liquid, Some(Liquid::Water), "{c:?}");
+            assert!(c.air.co2 > 0.0, "{c:?}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "heavy: two bisections of a fixed-cloud column, 40 steps each"]
+fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
+    // Charnay et al. 2013 (§5.2): the Sun at 2.5 Ga, 10 mbar of CO₂, the
+    // air from 1 to 2 bar of N₂: +7 K in their GCM, +4 to 5 K in the 1-D
+    // model of Goldblatt et al. 2009. Their CO₂ held fixed, no
+    // thermostat, and Earth's albedo (0.3): this checks the column's
+    // greenhouse, so the ice-albedo feedback is left out. Goldblatt's
+    // clouds are in that albedo and do not change with the surface, so
+    // the balance holds the cloud cover fixed, at that of the 1-bar air's
+    // own climate: the clear sky with that share of cloudy sky,
+    // `(1 − f₀) OLR_clear + f₀ OLR_cloudy`.
+    let faint = lit(&earth(), FAINT_SUN * earth().sources[0].flux.0);
+    let air = |n2: f64| PartialPressures {
+        n2,
+        co2: ARCHEAN_CO2,
+        ..PartialPressures::default()
+    };
+    let mut body = ClimateBody::new(&faint, Numerics::DEFAULT);
+    let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
+    let water = body.water_column();
+    let black = Fraction::new(1.0).unwrap();
+    let free = wet_climate(&mut body, light, &air(ARCHEAN_AIRS[0]), black).1;
+    let cover = |t: f64| cloud_cover(Kelvin(t), surface_vapour(Kelvin(t), water)).get();
+    let fixed = cover(free.0);
+    let (floor, ceiling, steps) = ARCHEAN_SEARCH;
+    let mut cache = ColumnCache::default();
+    let mut temperature = |n2: f64| {
+        let gases = air(n2);
+        let take = absorbed(light, &gases, faint.heat_flux).0;
+        let skin = skin(light);
+        let mut excess = |t: f64| {
+            let wet = PartialPressures {
+                h2o: surface_vapour(Kelvin(t), water).0,
+                ..gases
+            };
+            let mut at = |profile| {
+                outgoing_longwave(&wet, Kelvin(t), skin, faint.gravity, profile, &mut cache).0
+            };
+            let (clear, all) = (at(Profile::CLEAR), at(Profile::CLIMATE));
+            let f = cover(t);
+            let olr = if f > 0.0 {
+                clear + fixed / f * (all - clear)
+            } else {
+                clear
+            };
+            olr - take
+        };
+        let (mut low, mut high) = (floor, ceiling);
+        assert!(excess(low) < 0.0 && excess(high) > 0.0);
+        for _ in 0..steps {
+            let mid = 0.5 * (low + high);
+            if excess(mid) < 0.0 {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+        0.5 * (low + high)
+    };
+    let (t1, t2) = (temperature(ARCHEAN_AIRS[0]), temperature(ARCHEAN_AIRS[1]));
+    println!(
+        "late Archean: {t1:.1} K (cover {fixed:.3} of the {:.1} K climate), +{:.1} K with \
+         twice the N₂",
+        free.0,
+        t2 - t1
+    );
+    assert!(
+        (ARCHEAN_SURFACE.0..=ARCHEAN_SURFACE.1).contains(&t1),
+        "{t1}"
+    );
+    let warming = t2 - t1;
+    assert!(
+        (ARCHEAN_WARMING.0..=ARCHEAN_WARMING.1).contains(&warming),
+        "{t1} -> {t2}"
+    );
+}
+
+/// The Sun's outer edge for Earth, and the orbits of the temperate-Earth
+/// tests measured from it.
+fn edge_orbit(edge: f64, share: f64) -> f64 {
+    edge * share
+}
+
+#[test]
+#[ignore = "heavy: the Sun's outer edge, then six Earths around it"]
+fn an_earth_track_planet_stays_temperate_to_the_maximum_greenhouse() {
+    // The outer edge of the Sun's habitable zone: an Earth on its
+    // temperate branch builds up its CO₂ and keeps liquid water to its
+    // edge, and freezes beyond it. Colder the farther, with no step but
+    // the edge. The orbits measured in the edge test replace legacy's
+    // 1.5 AU: 1 AU, 0.9 and 0.98 of the edge inside, 1.02, 1.2 and 1.6
+    // of it outside.
+    let edge = outer_edge_au(SUN, &Numerics::DEFAULT);
+    let mut orbits = vec![1.0];
+    orbits.extend(EDGE_SHARES.map(|s| edge_orbit(edge, s)));
+    let mut last = f64::INFINITY;
+    for au in orbits {
+        let solved = solve(&earth_at(au), WARM_DRAW);
+        let c = &solved.settle;
+        println!(
+            "{au:.3} AU: {:.1} K, CO₂ {:.3e} bar, {:?}, regulated {}",
+            c.temperature.0, c.air.co2, c.liquid, c.regulated
+        );
+        if au <= edge - EDGE_MARGIN_AU {
+            assert!(c.temperature.0 >= FREEZING_K, "{au} AU: {c:?}");
+            assert_eq!(c.liquid, Some(Liquid::Water), "{au} AU: {c:?}");
+        } else {
+            assert!(c.temperature.0 < FREEZING_K, "{au} AU: {c:?}");
+        }
+        assert_ne!(solved.state, ClimateState::Snowball, "{au} AU");
+        assert!(
+            c.temperature.0 <= last + FALL_ROOM_K,
+            "{au} AU: {c:?} after {last}"
+        );
+        last = c.temperature.0;
+    }
+}
+
+/// The orbits at which the snowball tests look: 1 AU and
+/// [`SNOWBALL_SHARES`] of the Sun's outer edge `edge`.
+fn edge_scan(edge: f64) -> Vec<f64> {
+    let mut orbits = vec![1.0];
+    orbits.extend(SNOWBALL_SHARES.map(|s| edge_orbit(edge, s)));
+    orbits
+}
+
+#[test]
+#[ignore = "heavy: the Sun's outer edge, then Earth at 1.5 AU and at its snowball orbits"]
+fn co2_builds_up_past_the_outgassed_snapshot() {
+    // Inside the outer edge, an air that holds a tenth of a bar of CO₂
+    // before the climate (what escape and the cold trap left of it):
+    // weathering slows and volcanoes give it more, up to the thermostat,
+    // within the carbon inventory and the maximum greenhouse, past which
+    // CO₂ condensing aloft and its scattering cool more than they warm.
+    let edge = outer_edge_au(SUN, &Numerics::DEFAULT);
+    // Legacy's orbit, 1.5 AU against a 1.535 AU edge, held the thermostat
+    // at 288 K; on the rewrite's column the carbonate thermostat runs
+    // out of CO₂ short of the edge (at the edge less 0.02 AU the
+    // maximum greenhouse leaves the surface at about 285.6 K, wet but not
+    // regulated), so the orbit is the farthest of the scan round the
+    // measured edge where it still regulates.
+    let (au, snapshot, c) = edge_scan(edge)
+        .into_iter()
+        .chain([edge - EDGE_MARGIN_AU])
+        .rev()
+        .map(|au| {
+            let near = earth_at(au);
+            let snapshot = ClimateInputs {
+                air: PartialPressures {
+                    co2: SNAPSHOT_CO2.0,
+                    ..near.air
+                },
+                ..near
+            };
+            let c = settled(&snapshot, Numerics::DEFAULT);
+            println!(
+                "{au:.3} AU: {:.2} K, regulated {}",
+                c.temperature.0, c.regulated
+            );
+            (au, snapshot, c)
+        })
+        .find(|(_, _, c)| c.regulated)
+        .expect("an orbit whose thermostat holds");
+    println!("{au:.3} AU of an edge at {edge:.3} AU");
+    let cap = ClimateBody::new(&snapshot, Numerics::DEFAULT)
+        .greenhouse_co2()
+        .0;
+    assert!(c.air.co2 > SNAPSHOT_CO2.0, "{c:?}");
+    assert!(
+        c.air.co2 <= snapshot.carbon.0,
+        "{c:?} {:?}",
+        snapshot.carbon
+    );
+    assert!(cap < snapshot.carbon.0, "{cap} {:?}", snapshot.carbon);
+    assert!(c.air.co2 <= cap, "{c:?} {cap}");
+    // A smaller inventory stops it short of the thermostat.
+    let small = ClimateInputs {
+        carbon: SMALL_INVENTORY,
+        ..snapshot
+    };
+    let c = settled(&small, Numerics::DEFAULT);
+    assert!(c.air.co2 <= SMALL_INVENTORY.0, "{c:?}");
+    assert!(!c.regulated, "{c:?}");
+    // A snowball builds its CO₂ up past what it froze with, the same
+    // whatever draw made it one: the nearest orbit of the scan with a
+    // frozen branch that a CO₂ thaws.
+    let (orbit, warm) = edge_scan(edge)
+        .into_iter()
+        .map(|au| (au, solve(&earth_at(au), WARM_DRAW)))
+        .find(|(_, s)| s.bistable.is_some_and(|b| b.thaw.is_some()))
+        .expect("an orbit with a snowball");
+    let inputs = earth_at(orbit);
+    let chance = warm.bistable.unwrap().chance.get();
+    let frozen = solve(&inputs, HALF * chance);
+    let pinned = solve(&inputs, COLD_DRAW);
+    assert_eq!(frozen.settle, pinned.settle);
+    assert_eq!(frozen.state, ClimateState::Snowball, "{frozen:?}");
+    assert!(
+        frozen.settle.air.co2 > warm.settle.air.co2,
+        "{frozen:?} {warm:?}"
+    );
+    assert!(frozen.settle.air.co2 <= inputs.carbon.0, "{frozen:?}");
+}
+
+#[test]
+#[ignore = "heavy: the Sun's outer edge, then the bistable Earths round it"]
+fn a_frozen_state_no_co2_thaws_is_no_snowball() {
+    // Drawn frozen where no CO₂ up to its maximum greenhouse thaws it, a
+    // body stays frozen for good, so it is no snowball (whose card
+    // promises a thaw). Where some CO₂ thaws it, a frozen draw is a
+    // snowball. The orbits are those of the scan round the measured edge.
+    let edge = outer_edge_au(SUN, &Numerics::DEFAULT);
+    let mut orbits = edge_scan(edge);
+    orbits.push(edge - EDGE_MARGIN_AU);
+    let (mut no_thaw, mut thaws) = (None, None);
+    for au in orbits {
+        let solved = solve(&earth_at(au), COLD_DRAW);
+        let Some(b) = solved.bistable else { continue };
+        println!(
+            "{au:.3} AU: thaw {:?}, froze {:?}, {:?}, {:.1} K",
+            b.thaw, b.froze, solved.state, solved.settle.temperature.0
+        );
+        match b.thaw {
+            None => no_thaw = no_thaw.or(Some(solved)),
+            Some(_) => thaws = thaws.or(Some(solved)),
+        }
+    }
+    let frozen = no_thaw.expect("a bistable orbit no CO₂ thaws");
+    assert!(frozen_over(&frozen.settle), "{frozen:?}");
+    assert_eq!(frozen.state, ClimateState::Frozen, "{frozen:?}");
+    let snowball = thaws.expect("a bistable orbit a CO₂ thaws");
+    assert_eq!(snowball.state, ClimateState::Snowball, "{snowball:?}");
+}
+
+#[test]
+#[ignore = "heavy: sixty-one dry settles under a sulphuric deck"]
+fn a_dry_acid_air_settles_through_the_deck_onset() {
+    // A dry air rich in SO₂ makes a sulphuric deck once warm: its albedo
+    // climbs from the bare ground's to the deck's as it warms, which must
+    // leave a fixed point the albedo settles on (a step would swing
+    // between a warm deckless and a cold decked climate).
+    let mars = inputs_at(&MARS, 1.0, SUN);
+    let dry = ClimateInputs {
+        air: ACID_AIR,
+        water: science::units::Kilogram(0.0),
+        runaway: false,
+        carbon: Bar(ACID_AIR.co2),
+        ..mars
+    };
+    let (start, step, count) = ACID_ORBITS;
+    let mut near = 0;
+    for i in 0..=count {
+        let au = start + step * i as f64;
+        let inputs = lit(&dry, flux_at(au));
+        let c = settled(&inputs, Numerics::DEFAULT);
+        if (ACID_BAND.0..=ACID_BAND.1).contains(&c.temperature.0) {
+            near += 1;
+        }
+        let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
+        let derived = body.derived_albedo(c.temperature, &c.air);
+        let mut t_eq = |a: Fraction| (body.starlight(a).0 / STEFAN_BOLTZMANN).powf(0.25);
+        let gap = (t_eq(derived) - t_eq(c.bond_albedo)).abs();
+        assert!(
+            gap < ACID_GAP_K,
+            "{au} AU: {c:?}, derived albedo {derived:?}"
+        );
+    }
+    assert!(near >= ACID_BAND.2, "too few orbits near the onset: {near}");
+}
+
+#[test]
+#[ignore = "heavy: the Sun's outer edge and Earth at four orbits"]
+fn snowballs_are_rare_near_earth_and_common_near_the_edge() {
+    // Earth spent about a hundredth of its history in snowball states
+    // (Hoffman et al. 2017, doi:10.1126/sciadv.1600983): near, in 0.013 to
+    // 0.016 (as `earth_snowballs_as_often_as_hoffman_dates`), far above it
+    // near the edge, and no temperate state past the edge to be drawn
+    // from: it freezes for good whatever the draw.
+    let edge = outer_edge_au(SUN, &Numerics::DEFAULT);
+    let chance = |au: f64| {
+        solve(&earth_at(au), WARM_DRAW)
+            .bistable
+            .map(|b| b.chance.get())
+    };
+    let near = chance(1.0).expect("Earth at 1 AU is bistable");
+    let far_orbit = edge_orbit(edge, SNOWBALL_SHARES[2]);
+    let far = chance(far_orbit).expect("bistable near the edge");
+    println!("chance at 1.0 AU {near:.4}, at {far_orbit:.3} AU {far:.4}; edge {edge:.3} AU");
+    assert!((0.013..=0.016).contains(&near), "{near}");
+    assert!(far > near, "{far} vs {near}");
+    let beyond = solve(&earth_at(edge_orbit(edge, EDGE_SHARES[3])), WARM_DRAW);
+    assert_eq!(beyond.bistable, None);
+    assert_eq!(beyond.state, ClimateState::Frozen, "{beyond:?}");
+}
+
+#[test]
+#[ignore = "heavy: the Sun's outer edge, then up to four frozen branches"]
+fn a_snowball_holds_the_co2_its_thermostat_reaches() {
+    // Frozen, weathering stops and volcanoes build the CO₂ up to what
+    // thaws the ice, or, where none within reach does, to the most its
+    // column lets warm (the maximum greenhouse; issue #522).
+    let edge = outer_edge_au(SUN, &Numerics::DEFAULT);
+    let mut seen = 0;
+    for au in edge_scan(edge) {
+        let inputs = earth_at(au);
+        let Solved {
+            settle: c,
+            state,
+            bistable,
+        } = solve(&inputs, COLD_DRAW);
+        let Some(b) = bistable else { continue };
+        let cap = ClimateBody::new(&inputs, Numerics::DEFAULT)
+            .greenhouse_co2()
+            .0;
+        let reached = b.thaw.map_or(cap, |t| t.0.min(cap));
+        println!(
+            "{au:.3} AU: CO₂ {:.4} bar, thaw {:?}, cap {cap:.4}, {state:?}, {:.1} K",
+            c.air.co2, b.thaw, c.temperature.0
+        );
+        assert!(frozen_over(&c), "{au} AU: {c:?}");
+        if state == ClimateState::Snowball {
+            seen += 1;
+            assert!(
+                (c.air.co2 / reached - 1.0).abs() < REACHED_AGREEMENT,
+                "{au} AU: {c:?}"
+            );
+        } else {
+            // Frozen for good: what the cap leaves in the air over so
+            // cold a surface, the rest frosted onto the ground.
+            assert!(c.air.co2 <= cap * CAP_ROOM, "{au} AU: {c:?}");
+            assert!(c.air.co2 <= kept_co2(&c) * KEPT_ROOM, "{au} AU: {c:?}");
+        }
+    }
+    assert!(seen >= SNOWBALLS_SEEN, "too few snowballs: {seen}");
+}
+
+#[test]
+#[ignore = "heavy: a wet Earth just past its runaway limit"]
+fn a_planet_just_past_the_runaway_limit_runs_away_hot() {
+    // An Earth with 1 % of its mass in water at 1.01 times its star's
+    // runaway limit: its water runs away and its surface settles well
+    // above water's critical point, not on it.
+    let body = ReferenceBody {
+        water_fraction: RUNAWAY_WATER,
+        ..EARTH
+    };
+    let au = (RUNAWAY_OVER * runaway_flux(SUN).0).powf(-0.5);
+    let inputs = inputs_from(&body, au, SUN, Some(NO_ESCAPE));
+    assert!(inputs.runaway, "{inputs:?}");
+    assert!(inputs.water.0 > 0.0, "{inputs:?}");
+    let solved = solve(&inputs, WARM_DRAW);
+    let t = solved.settle.temperature.0;
+    println!("runaway at {au:.4} AU: {t:.1} K, {:?}", solved.state);
+    assert_eq!(solved.state, ClimateState::Runaway, "{solved:?}");
+    assert!(
+        t > CRITICAL_POINT_TEMPERATURE.0 + RUNAWAY_MARGIN_K,
+        "{solved:?}"
+    );
+}
+
+const _: () = assert!(FINER_SCAN_RATIO < SCAN_RATIO);
+const _: () = assert!(FINER_THAW_STEPS > THAW_STEPS);
+const _: () = assert!(LIGHTER_DAMPING < ALBEDO_DAMPING);

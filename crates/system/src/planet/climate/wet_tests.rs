@@ -14,11 +14,11 @@ use science::volatiles::co2_saturation_pressure;
 
 /// Definition: the Bond albedo the tests take the light under, 0.3, a
 /// test input (Earth's is 0.306, NASA Earth fact sheet).
-const TEST_ALBEDO: f64 = 0.3;
+pub(super) const TEST_ALBEDO: f64 = 0.3;
 
 /// Source: Earth's average surface temperature, 288 K (NASA Earth fact
 /// sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html).
-const EARTH_SURFACE: Kelvin = Kelvin(288.0);
+pub(super) const EARTH_SURFACE: Kelvin = Kelvin(288.0);
 
 /// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
 /// Resolution B3).
@@ -57,11 +57,11 @@ const THICK_CO2: Bar = Bar(10.0);
 /// Definition: 1.6 au, study 25's collapsing Earth (`docs/science/
 /// planet-atmospheres.md`: its frozen branch "165 K at 1.6 AU, its CO₂
 /// frosted out"), a test input.
-const COLLAPSE_ORBIT: f64 = 1.6;
+pub(super) const COLLAPSE_ORBIT: f64 = 1.6;
 
 /// Earth's bare air with today's CO₂, 400 ppm ([`EARTH_DRY_AIR`]), for the
 /// balances of a temperate Earth.
-fn modern_air(inputs: &super::ClimateInputs) -> PartialPressures {
+pub(super) fn modern_air(inputs: &super::ClimateInputs) -> PartialPressures {
     PartialPressures {
         co2: EARTH_DRY_AIR.co2,
         ..inputs.air

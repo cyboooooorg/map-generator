@@ -500,8 +500,7 @@ impl Profile {
     };
 
     /// [`Profile::CLIMATE`] under a clear sky.
-    #[cfg(test)]
-    pub(crate) const CLEAR: Profile = Profile {
+    pub const CLEAR: Profile = Profile {
         sky: Sky::Clear,
         ..Profile::CLIMATE
     };

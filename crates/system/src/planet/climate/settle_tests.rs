@@ -115,7 +115,7 @@ const TRITON_N2: Bar = Bar(10.0);
 
 /// Source: Triton's surface temperature, 37 to 39 K (38 ± 1 K, Tryka et
 /// al. 1993, *Science* 261, 751, and 1994, *Icarus* 112, 513).
-const TRITON_RANGE: (Kelvin, Kelvin) = (Kelvin(37.0), Kelvin(39.0));
+pub(super) const TRITON_RANGE: (Kelvin, Kelvin) = (Kelvin(37.0), Kelvin(39.0));
 
 /// Definition: the finer tolerances of the convergence tests, a tenth of
 /// [`TOLERANCE`] and of [`BRACKET_TOLERANCE`] and [`ALBEDO_TOLERANCE_K`]
@@ -127,14 +127,14 @@ const TENTH: f64 = 0.1;
 const FINER_ALBEDO: Kelvin = Kelvin(0.01);
 
 /// The climate of `inputs` settled from its warm start with `numerics`.
-fn settled(inputs: &ClimateInputs, numerics: Numerics) -> Settle {
+pub(super) fn settled(inputs: &ClimateInputs, numerics: Numerics) -> Settle {
     let mut body = ClimateBody::new(inputs, numerics);
     let start = warm_start(&mut body);
     settle(&mut body, start)
 }
 
 /// Mars's inputs under the imposed air of [`MARS_AIR`].
-fn imposed_mars() -> ClimateInputs {
+pub(super) fn imposed_mars() -> ClimateInputs {
     ClimateInputs {
         air: MARS_AIR,
         ..mars()
@@ -146,7 +146,7 @@ fn imposed_mars() -> ClimateInputs {
 /// with an air of [`TRITON_N2`] of N₂ alone, no carbon and no internal
 /// heat (Triton's, a few mW/m², would not move a frost balanced on
 /// 0.1 W/m² of light; none keeps the case on its light alone).
-fn triton_like() -> ClimateInputs {
+pub(super) fn triton_like() -> ClimateInputs {
     let earth = earth();
     let sun = earth.sources[0];
     let flux = EarthFlux::from(TRITON_FLUX);
@@ -233,10 +233,10 @@ fn no_water_no_ocean() {
     assert!(!c.regulated, "{c:?}");
 }
 
-#[test]
-fn a_methane_greenhouse_cannot_warm_a_cold_world() {
-    let earth = earth();
-    let cold = ClimateInputs {
+/// The census case of #443 (legacy `cold_methane_world`): a cold, wet
+/// body round an F star, under a thick nitrogen and methane air.
+pub(super) fn cold_methane_world() -> ClimateInputs {
+    ClimateInputs {
         sources: vec![Light {
             flux: COLD_FLUX,
             effective_temperature: COLD_STAR,
@@ -248,8 +248,13 @@ fn a_methane_greenhouse_cannot_warm_a_cold_world() {
         plates: false,
         heat_flux: COLD_HEAT,
         frozen_co2: Bar(0.0),
-        ..earth
-    };
+        ..earth()
+    }
+}
+
+#[test]
+fn a_methane_greenhouse_cannot_warm_a_cold_world() {
+    let cold = cold_methane_world();
     let c = settled(&cold, Numerics::DEFAULT);
     assert!(c.temperature.0 < COLD_BOUND.0, "{c:?}");
     assert_ne!(c.liquid, Some(Liquid::Water), "{c:?}");

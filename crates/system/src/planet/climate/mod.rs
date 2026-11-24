@@ -51,6 +51,8 @@ mod carbon_tests;
 #[cfg(test)]
 pub(crate) mod fixture;
 #[cfg(test)]
+mod heavy_tests;
+#[cfg(test)]
 mod settle_tests;
 #[cfg(test)]
 mod wet_tests;
