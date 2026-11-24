@@ -295,9 +295,16 @@ come from sources (the Solar System's measured temperatures, Kopparapu
 ### 2d-4: life, class and wiring
 
 - **Life** (`life.rs`): `life()` and `oxygenate()`, a `life_draw` in the
-  seed hierarchy, after the climate. Oxygenation changes the air
-  recorded in `PlanetState`, not the climate (legacy's declared
-  simplification, kept and stated).
+  seed hierarchy, after the climate. Oxygenation changes the air, and
+  the climate is solved again on the oxygenated air (one more settle).
+  Legacy's declared simplification (the climate solved on the air
+  before life) is dropped, decided on 2026-11-24 in 2d-3a: without its
+  O₂ the reference Earth's air is 0.75 bar, 283.8 K at 280 ppm of CO₂
+  against 286 to 290 K (Myhre et al. 1998), and its thermostat needs
+  about 2 000 ppm. With N₂ 0.78 and O₂ 0.21 bar the solver gives
+  286.9 K. 2d-3a tests that check on Earth's measured air; 2d-4 makes
+  the reference Earth reach it and updates `docs/science` (section
+  Life of `planet-atmospheres.md`).
 - **Class** (`classify.rs`): the 14 classes of `timeline::PlanetClass`
   in legacy's order (giants, mini-Neptune, the surface classes, ice
   world, volcanic, super-Earth, rocky). `AIRLESS_BAR` is not a class
