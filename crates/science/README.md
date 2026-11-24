@@ -110,7 +110,7 @@ M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`; see
 star's XUV and Lyman α history; see [XUV
 fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
-`science::{escape, dynamo, outgassing, volatiles, habitable, tectonics, surface,
+`science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
 photochemistry}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
 
 ## Giants and envelopes
@@ -132,6 +132,13 @@ amplitude per province, gravity's relief scale), `crust` (Airy), `plates`
 study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 [mountains and gravity](../../docs/science/mountains-and-gravity.md),
 [plate tectonics](../../docs/science/plate-tectonics.md), [volcanoes](../../docs/science/volcanoes.md).
+
+## Surface
+
+`science::surface`: `cover` and `ground_albedo` (ocean, land, ice, frost),
+`RELATIVE_HUMIDITY`, and `liquid`, `frost`, `melting` (the freezing of methane
+and nitrogen seas included). Values:
+[planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
 
 ## Radiation
 
