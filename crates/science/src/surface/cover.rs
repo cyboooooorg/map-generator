@@ -64,8 +64,9 @@ pub const FROST_ALBEDO: f64 = 0.75;
 
 /// Source: the emissivity of N2 ice, 0.80: Lellouch et al. 2011 (*Icarus*
 /// 214, 701) for large grains, as Meza et al. 2019 (arXiv:1903.02315,
-/// section 4) adopt it for Triton and Pluto, whose occultations constrain
-/// only `(1 - A) / eps`. Stansberry, Pisano & Yelle 1996 (*Planet. Space
+/// section 4) quote it and adopt it for Pluto, whose occultations
+/// constrain only `(1 - A) / eps` (Lellouch et al. itself not read; the
+/// rewrite takes the value for Triton too). Stansberry, Pisano & Yelle 1996 (*Planet. Space
 /// Sci.* 44, 945) give pure beta-N2 0.85 at 1 cm grains and 0.40 at 1 mm.
 /// One value for alpha- and beta-N2. Issue #673.
 pub const N2_ICE_EMISSIVITY: f64 = 0.80;

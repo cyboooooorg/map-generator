@@ -671,7 +671,7 @@ fn collapse_tolerance_is_converged() {
 }
 
 #[test]
-#[ignore = "heavy: two bistable-Earth solves, at 12 and 16 thaw steps"]
+#[ignore = "heavy: two bistable-Earth solves, at 13 and 16 thaw steps"]
 fn thaw_steps_is_converged() {
     let inputs = earth();
     let thaw = |steps: usize| {

@@ -249,6 +249,14 @@ fn under_light(
 /// start the fixed point under too thin a cloud cover. Earth's 255 K is
 /// where this start begins, not the balance it settles on.
 ///
+/// A departure from legacy (`climate.rs` l.2146-2157), in the starting
+/// point only: legacy passed the reference albedo through
+/// `under_albedo`, so that a runaway that keeps steam took it blended
+/// towards its runaway albedo ([`ClimateBody::runaway_albedo`]); this
+/// start takes the stars' light at the reference albedo as it is. The
+/// fixed point ([`settle`]) blends every step after it, so the converged
+/// climate does not depend on it.
+///
 /// [`Light::equilibrium`]: super::Light::equilibrium
 pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
     let light: f64 = body

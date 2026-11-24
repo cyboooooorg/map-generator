@@ -390,14 +390,17 @@ fn nitrogen_saturation_joins_its_frost() {
     let frost = nitrogen_saturation_pressure(Kelvin(switch.0 - JUST_UNDER_K)).0;
     let liquid = nitrogen_saturation_pressure(switch).0;
     let join = (liquid - frost).abs() / frost;
-    // The bound is how far the two sourced triple points disagree, in
-    // pressure and in temperature: the frost is pinned at Angus et al.
-    // 1979's point (63.14 K, 12 530 Pa), the liquid is Span et al. 2000's
-    // curve through theirs (63.151 K, 12 523 Pa). Read along the Span
-    // curve, Angus's point sits off it by the curve's own miss of Angus's
-    // pressure at Span's triple temperature, plus the curve's change over
-    // the 0.011 K between the two triple temperatures. The join cannot be
-    // sharper than the sources disagree.
+    // The frost is pinned at Angus et al. 1979's triple point (63.14 K,
+    // 12 530 Pa), the liquid is Span et al. 2000's curve through theirs
+    // (63.151 K, 12 523 Pa). The bound is built from the same terms as
+    // the join (the curve's miss of Angus's pressure at Span's triple
+    // temperature, plus the curve's change over the 0.011 K between the
+    // two triple temperatures), so it holds by construction, to second
+    // order: it does not test the sources' disagreement (their triple
+    // pressures are 0.056 % apart; the rest of the 0.27 % is the curve's
+    // slope). What it catches is a change of either curve, the frost's or
+    // the liquid's, that opens the join past them (user decision, Task
+    // 3).
     let at_span = nitrogen_saturation_pressure(SPAN_TRIPLE_TEMPERATURE).0;
     let pressures = (at_span - NITROGEN_TRIPLE_PRESSURE.0).abs() / NITROGEN_TRIPLE_PRESSURE.0;
     let temperatures = (at_span - liquid).abs() / at_span;

@@ -13,10 +13,10 @@ use std::f64::consts::PI;
 /// its surface (Pollack, Hurter & Johnson 1993, doi:10.1029/93RG01249).
 pub const EARTH_HEAT_FLUX: WattPerSquareMetre = WattPerSquareMetre(0.087);
 
-/// Source: Io's flux, where volcanism is total. Heat flux of a heat-pipe planet, 2.5 W/m², Io's, "about 40
-/// times Earth's heat flux" carried through volcanism (Moore & Webb 2013,
-/// p. 501, doi:10.1038/nature12473): the flux at which volcanism is
-/// total.
+/// Source: Io's flux, where volcanism is total: the heat flux of a
+/// heat-pipe planet, 2.5 W/m², Io's, "about 40 times Earth's heat flux"
+/// carried through volcanism (Moore & Webb 2013, p. 501,
+/// doi:10.1038/nature12473): the flux at which volcanism is total.
 pub const FULL_VOLCANISM_FLUX: WattPerSquareMetre = WattPerSquareMetre(2.5);
 
 /// Calibration: volcanic intensity at [`EARTH_HEAT_FLUX`], 0.5, the

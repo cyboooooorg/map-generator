@@ -8,8 +8,9 @@
 
 use crate::units::{EarthMass, WattPerSquareMetre};
 
-/// Calibration: the regime's onset. Internal heat flux above which a body loses its heat
-/// through volcanic heat pipes rather than by plates or conduction. No
+/// Calibration: the regime's onset, the internal heat flux above which
+/// a body loses its heat through volcanic heat pipes rather than by
+/// plates or conduction. No
 /// paper searched sets such a threshold. Moore & Webb 2013 ("Heat-pipe
 /// Earth", Nature 501, 501, doi:10.1038/nature12473) take Io as the
 /// heat-pipe body of today, carrying about 2.5 W/m², some 40 times

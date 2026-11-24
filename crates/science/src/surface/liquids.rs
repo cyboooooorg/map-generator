@@ -93,8 +93,8 @@ const ETHANE_FUSION_ENTHALPY: f64 = 2_790.0;
 const METHANE_EXCESS_W_OVER_R: f64 = 75.3;
 
 /// Temperature of the substellar point of a tidally locked body that
-/// absorbs `absorbed` (W/m2, the mean over its disc, under its own
-/// albedo): `(4 absorbed / sigma)^(1/4)`, Kite et al. 2016 (*ApJ* 828,
+/// absorbs `absorbed` (W/m2, the mean over its whole sphere, `(1 - A)
+/// S / 4`, under its own albedo `A`): `(4 absorbed / sigma)^(1/4)`, Kite et al. 2016 (*ApJ* 828,
 /// 80, arXiv:1606.06740, eq. 1), `sqrt(2)` times the equilibrium
 /// temperature (`Definition:`, derived).
 pub fn substellar_temperature(absorbed: WattPerSquareMetre) -> Kelvin {
