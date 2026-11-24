@@ -70,9 +70,11 @@ pub const STEAM_PRESSURE_RANGE: (Pascal, Pascal) = (Pascal(2.7e6), Pascal(2.7e10
 /// core radii. Eq. 2 has no finite thickness once `R T ln(P_surf/P_t) /
 /// (M g)` reaches the core's radius (an unbound envelope, the "U-shape"
 /// of Turbet et al. § 3.1; C.9 "does not hold for inflated
-/// atmospheres"); the cap binds from half of it, so it also caps bound
-/// envelopes thicker than the core's radius (the worked example's core
-/// past about 5.7 S⊕). Legacy's value, kept. Searched and not found: a
+/// atmospheres"). The cap binds once Eq. 2's thickness reaches
+/// `THICKNESS_CAP × R_core`, that is once `R T ln(P_surf/P_t) / (M g)`
+/// reaches `THICKNESS_CAP / (1 + THICKNESS_CAP)` of the core's radius
+/// (half of it at 1), so it also caps bound envelopes thicker than the
+/// cap (the worked example's core past about 5.7 S⊕). Legacy's value, kept. Searched and not found: a
 /// published thickness or radius past which a steam envelope stops being
 /// bound, in Turbet et al. 2020, Aguichine et al. 2021 and Pierrehumbert
 /// 2023 (`docs/science/planet-atmospheres.md`, "The steam envelope
@@ -168,29 +170,40 @@ pub struct Envelope {
 /// mass of water, `g` the core's gravity, `P_surf` the [`base_pressure`],
 /// `P_t` the [`TRANSIT_PRESSURE`] and `T` the [`steam_temperature`]
 /// (clamped to its grid; Eq. 2 itself takes the planet's own share and
-/// gravity). The thickness is 0 without steam or when `P_surf <= P_t`,
-/// and `THICKNESS_CAP × R_core` when `(1/z) R_core <= 1`, which caps
-/// both unbound envelopes and bound ones past the core's radius. Ported
-/// from legacy `turbet_thickness` (`legacy-final`, `planet/interior.rs`).
+/// gravity). The thickness is 0 without steam, when `P_surf <= P_t` or
+/// on an empty core (no mass or no radius, legacy's guard; its gravity
+/// and base pressure are then 0, so every field stays finite), and `THICKNESS_CAP × R_core` when
+/// `(1/z) R_core THICKNESS_CAP <= 1`, which caps both unbound envelopes
+/// and bound ones past the cap. Ported from legacy `turbet_thickness`
+/// (`legacy-final`, `planet/interior.rs`).
 pub fn envelope(
     core_mass: Kilogram,
     core_radius: Metre,
     water_share: Fraction,
     insolation: EarthFlux,
 ) -> Envelope {
-    let core_gravity = MetrePerSecondSquared(
-        GRAVITATIONAL_CONSTANT * core_mass.0 / (core_radius.0 * core_radius.0),
-    );
-    let base_pressure = base_pressure(water_share, core_gravity);
+    let empty_core = core_mass.0 <= 0.0 || core_radius.0 <= 0.0;
+    let core_gravity = if empty_core {
+        MetrePerSecondSquared(0.0)
+    } else {
+        MetrePerSecondSquared(
+            GRAVITATIONAL_CONSTANT * core_mass.0 / (core_radius.0 * core_radius.0),
+        )
+    };
+    let base_pressure = if empty_core {
+        Pascal(0.0)
+    } else {
+        base_pressure(water_share, core_gravity)
+    };
     let temperature = steam_temperature(water_share, core_gravity, insolation);
     let depth = (base_pressure.0 / TRANSIT_PRESSURE.0).ln();
-    let thickness = if water_share.get() <= 0.0 || depth <= 0.0 {
+    let thickness = if empty_core || water_share.get() <= 0.0 || depth <= 0.0 {
         Metre(0.0)
     } else {
         let inverse = H2O_MOLAR_MASS * core_gravity.0
             / (MOLAR_GAS_CONSTANT * temperature.0 * depth)
             - 1.0 / core_radius.0;
-        if inverse * core_radius.0 <= 1.0 {
+        if inverse * core_radius.0 * THICKNESS_CAP <= 1.0 {
             core_radius * THICKNESS_CAP
         } else {
             Metre(1.0 / inverse)

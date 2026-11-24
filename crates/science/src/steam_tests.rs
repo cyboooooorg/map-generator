@@ -181,6 +181,21 @@ fn no_steam_has_no_envelope() {
 }
 
 #[test]
+fn an_empty_core_has_no_envelope() {
+    let (mass, radius) = core(EXAMPLE_CORE_MASS, EXAMPLE_CORE_RADII);
+    for (core_mass, core_radius) in [(Kilogram(0.0), radius), (mass, Metre(0.0))] {
+        let steam = envelope(core_mass, core_radius, share(EXAMPLE_SHARE), EXAMPLE_FLUX);
+        assert_eq!(steam.thickness, Metre(0.0), "{steam:?}");
+        assert!(
+            steam.base_pressure.0.is_finite()
+                && steam.core_gravity.0.is_finite()
+                && steam.temperature.0.is_finite(),
+            "{steam:?}"
+        );
+    }
+}
+
+#[test]
 fn a_thickness_past_the_core_radius_is_capped() {
     let (mass, radius) = core(EXAMPLE_CORE_MASS, EXAMPLE_CORE_RADII);
     for flux in CAPPED_FLUXES {

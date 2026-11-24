@@ -120,43 +120,15 @@ pub(crate) const LAYER_STATE_BY_PRESSURE: &str = "planet.layer.state-by-pressure
 /// Mass of a steam world with its steam envelope: the whole mass of the
 /// body it was made from (the bulk's plus a water beyond the laws), which
 /// the steam, the water the planet kept, makes up with its rock.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`'s steam world, a later task"
-    )
-)]
 pub(crate) const MASS_WITH_STEAM: &str = "planet.mass.with-steam";
 /// Temperature of a steam envelope, Turbet et al. 2020 Eq. 3
 /// (`science::steam::envelope`), from the core's shells, the steam and
 /// the fluxes of the sources.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`'s steam world, a later task"
-    )
-)]
 pub(crate) const STEAM_TEMPERATURE: &str = "planet.steam.temperature";
 /// Thickness of a steam envelope up to the transit radius, Turbet et al.
 /// 2020 Eq. 2 (`science::steam::envelope`), from the same inputs.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`'s steam world, a later task"
-    )
-)]
 pub(crate) const STEAM_THICKNESS: &str = "planet.steam.thickness";
 /// Radius of a steam world: its core's radius plus the steam's thickness.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`'s steam world, a later task"
-    )
-)]
 pub(crate) const RADIUS_STEAM: &str = "planet.radius.steam";
 /// Radiogenic heating power.
 pub(crate) const HEAT_RADIOGENIC: &str = "planet.heat.radiogenic";
@@ -365,13 +337,6 @@ pub(crate) const CLIMATE_TITAN_LIKE: &str = "planet.climate.titan-like";
 pub(crate) const CLIMATE_BOILS: &str = "planet.climate.boils";
 /// Whether a runaway's steam hides its surface: a runaway whose steam is
 /// supercritical at its base (`science::steam::hides_surface`).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `settled`'s steam envelope, a later task of the boiling plan"
-    )
-)]
 pub(crate) const CLIMATE_HIDES_SURFACE: &str = "planet.climate.hides-surface";
 /// Partial pressure of N2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_N2: &str = "planet.climate.air.n2";
