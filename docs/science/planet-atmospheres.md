@@ -2789,9 +2789,12 @@ A&A", with "small typos in Tables 1 and 2" corrected):
   `R T ln(P_surf/P_t)/(M g) ≥ R_core`: the atmosphere is unbound (the
   "U-shape" of § 3.1, where "efficient atmospheric escape mechanisms
   should take place"; C.9 "does not hold for inflated atmospheres").
-  The cap `z ≤ R_core` binds from `R T ln/(M g) = R_core/2`. It binds in
-  the paper's own grid: a 0.3 M⊕ silicate core with 5 % water reaches
-  1.30 R_core at 30 S⊕ (derived). Searched and not found: a published
+  The cap `z ≤ R_core` binds from `R T ln/(M g) = R_core/2`, so it also
+  caps bound envelopes thicker than the core's radius. It binds in the
+  paper's own grid: on the worked example's core below (0.3 M⊕,
+  0.750 R⊕, 5 % water), Eq. 2 gives a bound `z` of 1.18 `R_core` at
+  10 S⊕ and 1.73 `R_core` at 30 S⊕, the cap binding from about 5.7 S⊕
+  (derived, with the rewrite's constants). Searched and not found: a published
   thickness or radius past which a steam envelope stops being bound, in
   Turbet et al. 2020, Aguichine et al. 2021 and Pierrehumbert 2023.
 - **The worked example** (§ 3.1): "a 0.3 M⊕ pure silicate core planet
@@ -2800,8 +2803,9 @@ A&A", with "small typos in Tables 1 and 2" corrected):
   with about 2 m/s² there. With Zeng's MgSiO₃ table, the one
   the paper points to (footnote 2; 0.750 R⊕ at 0.3 M⊕, interpolated),
   Eqs. 2 and 3 give 1.23 R⊕ at
-  1 S⊕ (1.22 with `x` = 0.05/1.05) and 1.95 m/s² at that radius
-  (derived): a tier-1 test with a source, independent of the model's
+  1 S⊕ (1.22 with `x` = 0.05/1.05) and 2.05 m/s² at that radius for
+  the whole planet's mass, 0.3/0.95 M⊕ (1.95 for the core alone;
+  derived): a tier-1 test with a source, independent of the model's
   interior. Legacy's 1.17 R⊕ came from its own rock radius.
 - **Past the fit's water shares** (a departure, documented). Appendix A
   holds `R = R_core + z` while the steam weighs "significantly lower than
@@ -2815,14 +2819,20 @@ A&A", with "small typos in Tables 1 and 2" corrected):
   near 1 S⊕, 5.6e5 bar of steam) is outside both papers. The rewrite
   keeps Turbet's Eqs. 2 and 3 with the clamps above; Aguichine's fits
   are left for later (an issue) for hot planets past 10 % water.
-- **The climate under the envelope.** The rewrite's climate already
-  runs on the dry bulk of a water world past the laws (its gravity and
-  radius, `ClimateInputs::of`): that is Turbet's `g_core` and
-  `R_core`, the gravity and radius at the interior-atmosphere boundary
-  where Eqs. 1 to 3 and C.9 set the surface. Not solving the climate
-  again on the inflated body is therefore not a departure at the
-  surface. The gravity at the radiating level is lower (about 1.65 g⊕
-  for the #492 body against 1.93 at its core, derived); the limiting
+- **The climate under the envelope.** The rewrite's climate reads the
+  bulk's gravity and radius (`ClimateInputs::of`). For a water world
+  past the laws (formed at 355 K or more, about 3.6 S⊕ and over) that
+  bulk is the dry one: Turbet's `g_core` and `R_core`, the gravity and
+  radius at the interior-atmosphere boundary where Eqs. 1 to 3 and C.9
+  set the surface, so not solving the climate again on the inflated
+  body is no departure at the surface. A steam world formed with a
+  water layer (under 355 K, as near the runaway limit) has the
+  condensed water world for its bulk: its climate reads the condensed
+  planet's gravity, not the core's. For the #492 body that is about
+  1.78 g⊕ (4.78 M⊕ at legacy's condensed 1.64 R⊕) against 1.93 g⊕ at
+  its core (4.22 M⊕ at Zeng's 1.48 R⊕), some 8 % lower (derived): a
+  documented departure. The gravity at the radiating level is lower
+  still (about 1.65 g⊕ for the #492 body, derived); the limiting
   outgoing radiation is "only weakly dependent on gravity"
   (Pierrehumbert 2023, after Pierrehumbert 2010), and Kopparapu et al.
   2014 move the inner edge by about −10 % to +7 % from 0.1 to 5 M⊕
@@ -2835,7 +2845,12 @@ A&A", with "small typos in Tables 1 and 2" corrected):
   envelope than the water left would hold, so the loss is a deliberate
   upper bound. Turbet et al. § 3.1 support reading the transit radius
   (escape "can be very strong" at its low gravity); legacy read the
-  condensed body.
+  condensed body. After that loss the steam world line is read again
+  on the water kept (user, 2026-11-24): the envelope is built only if
+  the kept steam still weighs at least the critical pressure, otherwise
+  the planet is a runaway without an envelope. The climate is not
+  solved again, so its air holds more water vapour than the water kept
+  (a documented departure).
 
 #### Test windows
 
