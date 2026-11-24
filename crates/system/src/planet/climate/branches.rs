@@ -83,7 +83,8 @@ pub(crate) fn branches(body: &mut ClimateBody) -> (Settle, Option<Bistable>) {
     if thawed(body, froze) {
         return (warm, None);
     }
-    let most = body.greenhouse_co2();
+    let inventory = body.inputs.air;
+    let most = body.greenhouse_co2(&inventory);
     let (still_frozen, thaw) = if most.0 <= froze.0 || !thawed(body, most) {
         (Bar(most.0.max(froze.0)), None)
     } else {

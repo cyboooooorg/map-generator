@@ -29,10 +29,10 @@ const TRACE_CO2_SHARE: f64 = 1.0 / (1u64 << 60) as f64;
 /// ([`surface_vapour`] of its [`ClimateBody::water_column`]).
 ///
 /// The CO₂ ranges up to its maximum greenhouse
-/// ([`ClimateBody::greenhouse_co2`]):
-///
-/// The maximum greenhouse stays the one searched on the inventory air,
-/// whatever `air` (#593 lever 2).
+/// ([`ClimateBody::greenhouse_co2`] of `air`: the one searched on the
+/// inventory air whatever `air`, #593 lever 2, unless the numerics say
+/// `greenhouse_once` is off, when it is searched again on `air` as
+/// legacy did):
 ///
 /// - if even that leaves the surface colder than the thermostat, the
 ///   planet takes it, and on a surface too cold to keep it the CO₂ frosts
@@ -50,7 +50,7 @@ pub(crate) fn thermostat(
     air: &PartialPressures,
     emissivity: Fraction,
 ) -> (PartialPressures, Kelvin, bool) {
-    let most = body.greenhouse_co2().0;
+    let most = body.greenhouse_co2(air).0;
     let water = body.water_column();
     let i = body.inputs;
     let numerics = body.numerics;
@@ -130,8 +130,9 @@ pub(crate) fn thermostat(
     (regulated, t, true)
 }
 
-/// The CO₂ of the warmest climate of `body` within the most its air can
-/// hold, its carbon inventory and never less than its air holds (Kasting
+/// The CO₂ of the warmest climate of `body` under `air` within the most
+/// its air can hold, its carbon inventory and never less than its
+/// inventory air holds (Kasting
 /// et al. 1993, doi:10.1006/icar.1993.1010, the maximum greenhouse): the
 /// amount at which a surface at [`THERMOSTAT_K`] gains most, the light
 /// it absorbs under the albedo that CO₂ derives
@@ -139,11 +140,12 @@ pub(crate) fn thermostat(
 /// its column sends out under the [`skin`] of that light. A golden-section
 /// search in `ln CO₂` over the numerics' `greenhouse_decades` under the
 /// most, `greenhouse_steps` steps; the end of the range when the gain
-/// still grows there. Searched on the body's inventory air (#593
-/// lever 2). Where CO₂ condenses in the column its greenhouse flattens
+/// still grows there. Its other gases are `air`'s, the vapour taken at
+/// [`THERMOSTAT_K`] (legacy searched it on the air of the body it was
+/// given, a condensed one included, `climate.rs` l.1975-1983). Where CO₂ condenses in the column its greenhouse flattens
 /// and its scattering wins: the maximum Kopparapu et al. 2013
 /// (doi:10.1088/0004-637X/765/2/131) find near 8 bar.
-pub(crate) fn maximum_greenhouse(body: &mut ClimateBody) -> Bar {
+pub(crate) fn maximum_greenhouse(body: &mut ClimateBody, air: &PartialPressures) -> Bar {
     let i = body.inputs;
     let most = i.carbon.0.max(i.air.co2).max(0.0);
     if most <= 0.0 {
@@ -153,7 +155,7 @@ pub(crate) fn maximum_greenhouse(body: &mut ClimateBody) -> Bar {
     let water = body.water_column();
     let at_target = PartialPressures {
         h2o: surface_vapour(THERMOSTAT_K, water).0,
-        ..i.air
+        ..*air
     };
     let mut gain = |ln_co2: f64| {
         let gases = PartialPressures {

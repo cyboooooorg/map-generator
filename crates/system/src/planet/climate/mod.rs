@@ -288,8 +288,8 @@ pub(crate) struct Numerics {
     pub probe: Option<Kelvin>,
     /// Whether the maximum greenhouse is searched once per body, on its
     /// inventory air, and kept (#593 lever 2); `false` searches it again
-    /// at each call, legacy's cost, for the test that proves the outer
-    /// edge does not move.
+    /// on each condensed air the thermostat is given, as legacy did, for
+    /// the tier-3 test that measures the departure.
     pub greenhouse_once: bool,
 }
 

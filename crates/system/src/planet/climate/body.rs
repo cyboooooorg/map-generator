@@ -210,16 +210,22 @@ impl<'a> ClimateBody<'a> {
         Fraction::new(a.clamp(0.0, 1.0)).expect("a blend of fractions is a fraction")
     }
 
-    /// The CO₂ of its maximum greenhouse ([`maximum_greenhouse`]),
-    /// searched once on its inventory air and kept (#593 lever 2), or at
-    /// each call when the numerics say `greenhouse_once` is off.
-    pub(crate) fn greenhouse_co2(&mut self) -> Bar {
-        if self.numerics.greenhouse_once
-            && let Some(co2) = self.greenhouse
-        {
+    /// The CO₂ of its maximum greenhouse under `air`
+    /// ([`maximum_greenhouse`]): the one searched once on its inventory
+    /// air and kept, whatever `air` (#593 lever 2). When the numerics say
+    /// `greenhouse_once` is off, an `air` other than the inventory (the
+    /// air a colder surface leaves once its nitrogen and methane
+    /// condense) is searched again at each call, as legacy rebuilt the
+    /// body on the condensed air (`climate.rs` l.1975-1983).
+    pub(crate) fn greenhouse_co2(&mut self, air: &PartialPressures) -> Bar {
+        let inventory = self.inputs.air;
+        if !self.numerics.greenhouse_once && *air != inventory {
+            return maximum_greenhouse(self, air);
+        }
+        if let Some(co2) = self.greenhouse {
             return co2;
         }
-        let co2 = maximum_greenhouse(self);
+        let co2 = maximum_greenhouse(self, &inventory);
         self.greenhouse = Some(co2);
         co2
     }

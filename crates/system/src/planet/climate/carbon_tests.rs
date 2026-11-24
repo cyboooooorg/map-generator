@@ -54,7 +54,7 @@ fn the_thermostat_holds_earth_at_288_k() {
     let (air, t, regulated) = thermostat(&mut body, light, &inputs.air, e);
     assert!(regulated, "{air:?} at {t:?}");
     assert!((t.0 - EARTH_SURFACE.0).abs() < HELD.0, "{t:?}");
-    let most = body.greenhouse_co2();
+    let most = body.greenhouse_co2(&inputs.air);
     assert!(air.co2 <= most.0, "{air:?} over {most:?}");
     assert!(
         most.0 <= inputs.carbon.0,
@@ -86,7 +86,7 @@ fn the_maximum_greenhouse_lies_inside_its_range() {
     let most = inputs.carbon.0.max(inputs.air.co2);
     let search = |numerics: Numerics| {
         let mut body = ClimateBody::new(&inputs, numerics);
-        maximum_greenhouse(&mut body)
+        maximum_greenhouse(&mut body, &inputs.air)
     };
     let co2 = search(Numerics::DEFAULT);
     let wider = search(Numerics {

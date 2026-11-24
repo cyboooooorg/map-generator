@@ -469,63 +469,96 @@ fn the_outer_edge_against_kopparapu_2014() {
     }
 }
 
-#[test]
-#[ignore = "heavy: two bisections of the Sun's outer edge, 14 bistable-Earth climates each"]
-fn one_greenhouse_search_per_body_moves_no_edge() {
-    // #593 lever 2's acceptance condition: where nothing condenses
-    // (Earth), searching the maximum greenhouse once per body moves no
-    // edge.
-    let once = outer_edge_au(SUN, &Numerics::DEFAULT);
-    let each = outer_edge_au(
-        SUN,
-        &Numerics {
-            greenhouse_once: false,
-            ..Numerics::DEFAULT
-        },
-    );
-    println!("edge {once:.4} AU once, {each:.4} AU at each call");
-    assert!((once - each).abs() <= EDGE_MOVE_AU, "{once} against {each}");
+/// The outer edge of `inputs`, a body at 1 AU moved out ([`moved`]), AU:
+/// the largest orbit at which it keeps liquid water on its temperate
+/// branch, bisected in [`EDGE_STEPS`] steps within [`EDGE_BRACKET_AU`].
+fn moved_edge_au(inputs: &ClimateInputs, numerics: &Numerics) -> f64 {
+    let wet = |au: f64| {
+        solve_with(&moved(inputs, au), WARM_DRAW, numerics)
+            .settle
+            .liquid
+            == Some(Liquid::Water)
+    };
+    let (mut wet_au, mut dry_au) = EDGE_BRACKET_AU;
+    assert!(wet(wet_au), "frozen at {wet_au} AU");
+    assert!(!wet(dry_au), "wet at {dry_au} AU");
+    for _ in 0..EDGE_STEPS {
+        let mid = 0.5 * (wet_au + dry_au);
+        if wet(mid) {
+            wet_au = mid;
+        } else {
+            dry_au = mid;
+        }
+    }
+    wet_au
 }
 
 #[test]
-#[ignore = "heavy: a wet body with plates under a condensing air, solved twice"]
+#[ignore = "heavy: two bisections of a methane Earth's outer edge, and its climate at Titan's orbit twice"]
 fn one_greenhouse_search_on_a_condensing_air() {
-    // #593 lever 2 where N₂ and CH₄ condense: Earth at Titan's distance
-    // under Titan's methane, a wet body with plates whose thermostat
-    // reads the maximum greenhouse on the condensed air each step. The
-    // gap is reported, not bounded.
-    let base = moved(&earth(), TITAN.orbit);
+    // #593 lever 2: the maximum greenhouse searched once on the inventory
+    // air, against legacy's search again on each condensed air the
+    // thermostat is given (`greenhouse_once: false`), on Earth under
+    // Titan's methane, a wet body with plates. A regulated surface sits
+    // at `THERMOSTAT_K`, above the critical points of methane and
+    // nitrogen, so the air it keeps condenses nothing: a condensed air
+    // reaches the thermostat only on the way (the condensation's steps)
+    // and where it fails, frozen far out. There the two searches differ;
+    // the climate's gap is reported, and the edge held to #593's
+    // acceptance condition.
     let like = ClimateInputs {
         air: PartialPressures {
             ch4: titan().air.ch4,
-            ..base.air
+            ..earth().air
         },
-        ..base
+        ..earth()
     };
-    let run = |once: bool| {
-        solve_with(
-            &like,
-            WARM_DRAW,
-            &Numerics {
-                greenhouse_once: once,
-                ..Numerics::DEFAULT
-            },
-        )
+    let each = Numerics {
+        greenhouse_once: false,
+        ..Numerics::DEFAULT
     };
-    let (kept, again) = (run(true), run(false));
+    let far = moved(&like, TITAN.orbit);
+    let (kept, again) = (
+        solve_with(&far, WARM_DRAW, &Numerics::DEFAULT),
+        solve_with(&far, WARM_DRAW, &each),
+    );
+    let condensed = kept.settle.air;
+    let on_inventory = ClimateBody::new(&far, Numerics::DEFAULT).greenhouse_co2(&condensed);
+    let on_condensed = ClimateBody::new(&far, each).greenhouse_co2(&condensed);
     println!(
-        "Titan-like: {:.3} K once, {:.3} K at each call (gap {:+.3} K); CO2 {:.4e} and {:.4e} \
-         bar; {:?} and {:?}",
+        "at {} AU: {:.6} K once, {:.6} K at each call (gap {:+.3e} K), CO2 {:.4e} and {:.4e} \
+         bar, {:?} and {:?}; methane frost {:.4} bar; the maximum greenhouse {:.4} bar on the \
+         inventory, {:.4} bar on the condensed air",
+        TITAN.orbit,
         kept.settle.temperature.0,
         again.settle.temperature.0,
         kept.settle.temperature.0 - again.settle.temperature.0,
         kept.settle.air.co2,
         again.settle.air.co2,
         kept.state,
-        again.state
+        again.state,
+        kept.settle.condensate.ch4,
+        on_inventory.0,
+        on_condensed.0
     );
     assert!(kept.settle.converged && again.settle.converged);
-    assert!(kept.settle.condensate.n2 > 0.0 || kept.settle.condensate.ch4 > 0.0);
+    assert!(kept.settle.condensate.ch4 > 0.0, "{kept:?}");
+    assert!(
+        on_inventory != on_condensed,
+        "the search at each call reads the inventory air: {on_inventory:?}"
+    );
+    let (edge, legacy) = (
+        moved_edge_au(&like, &Numerics::DEFAULT),
+        moved_edge_au(&like, &each),
+    );
+    println!(
+        "outer edge {edge:.4} AU once, {legacy:.4} AU at each call (gap {:+.4} AU)",
+        edge - legacy
+    );
+    assert!(
+        (edge - legacy).abs() <= EDGE_MOVE_AU,
+        "{edge} against {legacy}"
+    );
 }
 
 #[test]
@@ -1167,7 +1200,7 @@ fn co2_builds_up_past_the_outgassed_snapshot() {
         .expect("an orbit whose thermostat holds");
     println!("{au:.3} AU of an edge at {edge:.3} AU");
     let cap = ClimateBody::new(&snapshot, Numerics::DEFAULT)
-        .greenhouse_co2()
+        .greenhouse_co2(&snapshot.air)
         .0;
     assert!(c.air.co2 > SNAPSHOT_CO2.0, "{c:?}");
     assert!(
@@ -1314,7 +1347,7 @@ fn a_snowball_holds_the_co2_its_thermostat_reaches() {
         } = solve(&inputs, COLD_DRAW);
         let Some(b) = bistable else { continue };
         let cap = ClimateBody::new(&inputs, Numerics::DEFAULT)
-            .greenhouse_co2()
+            .greenhouse_co2(&inputs.air)
             .0;
         let reached = b.thaw.map_or(cap, |t| t.0.min(cap));
         println!(
