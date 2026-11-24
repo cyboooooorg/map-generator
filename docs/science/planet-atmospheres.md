@@ -817,7 +817,9 @@ air    = P_SO₂(2^(1/4) · T_eq)                 at most the frost
   reads it as a frost (`climate::frost`, where the surface keeps it under
   SO₂'s sublimation pressure), with its own albedo, `SO2_FROST_ALBEDO`
   = 0.63, **calibration** on Io's Bond albedo (Simonelli & Veverka
-  1988, from memory, not checked) for a disc nearly all frost: darker
+  1988, from memory, not checked) for a disc nearly all frost (Giles et
+  al. 2024 fit Io's frost with a Bond albedo of 0.565, their Fig. 3: issue
+  #669 follows it up): darker
   than the N₂, CH₄ and CO₂ frosts' 0.75, Io's frost being mixed with its
   sulphur and silicate deposits. Under 0.75 the frost's dayside would
   lie near 103 K and breathe 4e-11 bar.
@@ -1376,7 +1378,7 @@ liquid water. Three rules bound it:
   last one found, from the black body's up to the coldest balance), the
   air keeps at most the vapour of a Titan sea, `x p_sat(T_s)`, or of
   methane ice, `p_sat(T_s)`, under the sea's freezing point
-  (`sea_freezes_k`; activity 1 over a pure solid, issue #530): `p_sat`
+  (`surface::sea_freezes`; activity 1 over a pure solid, issue #530): `p_sat`
   the saturation pressure of pure methane
   (`atmosphere::methane_saturation_bar`: over its ice below its triple
   point, 90.7 K and 0.117 bar, over its liquid above with the mean latent
@@ -1454,7 +1456,7 @@ Table 4 at 90.69 K), and Glein & Shock put the polar seas under the
 Huygens air at "62.4 % CH₄, 22.9 % C₂H₆, 12.4 % N₂, and 2.3 % C₃H₈"
 (§ 5), 63 to 77 % if the lakes buffer the air. Half methane sits
 inside that range; the model's Titan sea (half methane, 19 % N₂, 31 %
-ethane, `methane_freezes_k`) holds more ethane than Glein & Shock's.
+ethane, `surface::methane_freezes`) holds more ethane than Glein & Shock's.
 Departure: Raoult's law ties the two numbers, whereas a non-ideal sea
 (Glein & Shock's van Laar model) holds more methane than its air's
 relative humidity; and the Huygens site is an equatorial plain, drier
@@ -1617,7 +1619,7 @@ allows (`collapsed_climate`). If no CO₂ at all is still too warm, the
 planet is hotter. Only a temperature reached is `regulated`.
 The grid's `carbon_cycle` is unchanged; part 3 aligns them.
 
-**Bond albedo** (`albedo::cover`, `albedo::bond_albedo`, issue #510). The
+**Bond albedo** (`surface::cover`, `radiation::albedo::shortwave_budget`, issue #510). The
 albedo is no longer Earth's 0.3 for everyone: it follows what covers the
 disc, and the climate and the albedo are solved together as a fixed point
 (`Context::with_albedo` turns an albedo into the equilibrium temperature
@@ -1635,8 +1637,9 @@ this ground (the water clouds, Rayleigh scattering, the absorption of the
 star's light, the methane haze and the sulphuric acid deck) lives in
 [radiative-transfer.md](radiative-transfer.md#the-shortwave-half-the-bond-albedo),
 with its sources, calibrations and departures, and in
-`science::radiation::albedo`. The surface cover above stays here until the
-global climate is ported.
+`science::radiation::albedo`. The surface cover above lives in
+`science::surface`; the global climate that solves it with the temperature
+is not ported yet.
 
 **The surface cover's values** (study 24 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/24-surface-cover-audit),
@@ -1669,8 +1672,11 @@ far:
   doi:10.1126/science.1139672; abstract read) sound Mars's south polar
   layered deposits to more than 3.7 km, 1.6e6 km³ in all; their mean
   thickness and area were not reached. A thicker sheet covers less: a
-  nearly dry body whitens 23 % less of its disc than at 1.5 km.
-- *Equator-to-mean contrast, 42 K* (`ICE_LINE_CONTRAST`, `Source:`).
+  nearly dry body whitens about 16 % less of its disc than at 1.5 km:
+  the thickness alone gives 23 % less, and the reach also changes
+  density, from legacy's 1000 kg/m³ of liquid to 917 kg/m³ of ice Ih
+  (`1500 · 1000 / (1940 · 917) = 0.84`, derived).
+- *Pole-to-equator contrast, 42 K* (`ICE_LINE_CONTRAST`, `Source:`).
   North, Cahalan & Coakley 1981 (*Rev. Geophys. Space Phys.* 19, 91,
   doi:10.1029/RG019i001p00091; full text read) write Earth's annual
   mean temperature `T(x) = T₀ + T₂ P₂(x)` and take "the observed value
@@ -1680,7 +1686,10 @@ far:
   the review is by the same author. The disc colder than the ice line
   then follows by definition: `1 − x_s`, with
   `x_s² = 1/3 + (T_mean − T_ice) / 42 K` (`ice_line_share`,
-  `Definition:`, the disc being uniform in `x`).
+  `Definition:`, the disc being uniform in `x`). The whole disc is under
+  ice once `x_s` reaches 0, at a mean of `T_ice − 42 K / 3`, about 254 K
+  (`ICE_COVERED_TEMPERATURE`, `Definition:`, where 2d-3's frozen branch
+  starts).
 
 **Calibration of the ice line** (`ICE_LINE_TEMPERATURE`, −5 °C, kept). Budyko
 1969 (*Tellus* 21, 611, doi:10.3402/tellusa.v21i5.10109; full text
@@ -1708,7 +1717,10 @@ the integral of `P₂`; `sunlit_cap`). `Cover` keeps both: `ice`, by area,
 which the map will read, and `ice_sunlit`, the share the ground albedo
 mixes, times the reach and `(1 − frost)`. Counted by area, Earth's ground came out at 0.165
 against the 0.122 of CERES under clear skies, its Bond albedo at 0.314
-against 0.29 to 0.31.
+against 0.29 to 0.31. Counted by sunlight, Earth's ground is 0.1445
+(derived, from the code's own cover: the cap receives 6.07 % of the
+light) and its Bond albedo 0.304: the ground is still 0.023 over the
+CERES value, the Bond albedo inside the 0.29 to 0.31 target.
 
 - *The coefficient* (`Source:`). Nadeau & McGehee 2021 (*J. Math. Anal.
   Appl.*, 125129, doi:10.1016/j.jmaa.2021.125129; full text read in
@@ -1791,6 +1803,22 @@ Triton's; Triton's temperature rests on the pair it forms with
 2d-3 can refit both on Triton. Searched and not found: a bolometric
 Bond albedo of either body.
 
+**Calibration of `FROST_LAYER`** (0.02 bar, kept from legacy, not
+studied in 2d-2). The frost that covers a whole disc, as a column of
+gas: 0.02 bar is 2 000 Pa, 204 kg/m² under Earth's gravity (about 0.2 m
+of ice, derived), 0.7 m of CO₂ frost under Io's gravity and 2.5 m of N₂
+frost under Triton's (legacy's figures, checked by the same arithmetic).
+Legacy set it on the CO₂ frost its Io then froze out of its air, 0.013
+bar covering two thirds of the disc, a Bond albedo of 0.56 (a calibration
+"on the moons, no source"); that air is gone and Io's frost is now the
+SO₂ of its volcanoes, whose amount is calibrated against this layer (see
+the SO₂ frost above). Triton's 0.36 bar of N₂ frost covers all of the
+disc with any value under that, and Europa's 2e-4 bar of CO₂ frost is
+left to its water ice, so neither constrains it. Not studied: study 24
+did not search for a measure of a frost's coverage as a function of its
+amount, and the legacy calibration is kept (open gap, listed in the
+study).
+
 **Calibration of `SHIELD_PRESSURE`** (1e-4 bar, kept). Searched and not
 found: a surface pressure or column above which an air shields a
 regolith from the solar wind and micrometeoroids; the space-weathering
@@ -1813,7 +1841,7 @@ These are spectral and local; a broadband value would need the
 spectrum of the light that reaches Titan's ground, which the model does
 not compute. The model's Titan ground stays the soil's 0.25, above
 every one of them, and the haze refit of #656 stays open: the cover now
-exists (`surface::cover::ground_albedo`), but it has no sourced Titan
+exists (`surface::ground_albedo`), but it has no sourced Titan
 value to take.
 
 **The air's absorption of starlight** is described in
@@ -1997,7 +2025,7 @@ past 38 K. One value serves α- and β-N₂.
 `climate::PHASE_BAND_K`, issue #562). Two phase changes were steps
 inside the fixed points: nitrogen frost (emissivity 0.89) becomes a
 black-body liquid at its triple point, 63.14 K, and methane's air halves
-when its ice melts into a sea (`sea_freezes_k`). A surface just under
+when its ice melts into a sea (`surface::sea_freezes`). A surface just under
 such a point warmed over it and one just over it cooled under it, so the
 fixed point had no solution there and cycled until its step limit,
 silently. Both now pass from one phase to the other over the last 1 K
@@ -2105,7 +2133,12 @@ and pressure, in this order:
   pressure, with water kept out of a runaway; legacy's 273.15 K
   (`ICE_MELTS_K`, uncited) and its Clausius–Clapeyron boiling point are
   not ported, and a pressure under the triple point has no boiling
-  point, so no liquid water;
+  point, so no liquid water. Limit: above 208.6 MPa (about 2 086 bar)
+  the melting temperature stays at the Ih–III–liquid point, 251.165 K,
+  the floor of ice Ih, while the denser ices III, V and VI melt higher
+  (ice VI at 273 to 355 K): water between 252 and 273 K under that
+  pressure reads liquid where a denser ice is stable. Issue #671 reads
+  the melting curve of the stable ice;
 - `hydrocarbons` between the freezing point of the sea
   (`surface::sea_freezes`) and ethane's
   boiling point at the surface pressure (`volatiles::ethane_boiling_temperature`,
@@ -2114,6 +2147,15 @@ and pressure, in this order:
   14.703 kJ/mol of Witt & Kemp 1937 at 184.1 K; capped at its critical
   point, 305.3 ± 0.3 K, NIST's average of 41 values: all read on the
   NIST Chemistry WebBook's ethane phase-change page, study 24, part 9),
+  with ethane's triple point at 90.4 K (Lemmon et al. 2013, as
+  Richardson, Hartwig & Leachman 2019 quote it, checked in legacy; the
+  NIST WebBook's fusion entry gives 90.341 K, Atake & Chihara 1976), the
+  enthalpy of melting of the ethane solid a cold liquid freezes into,
+  2.79 kJ/mol at 89.5 K (Domalski & Hearing 1996, through NIST; the
+  fusion alone is 0.583 kJ/mol, Atake & Chihara 1976) and methane's
+  enthalpy of fusion, 0.9392 kJ/mol (Vogt & Pitzer 1976, as NIST gives
+  it): none of these papers was re-read here, the values are those of
+  legacy and of the NIST pages study 24 read,
   where there is enough methane to condense:
   the air's methane reaches the vapour of a Titan sea at the surface
   temperature, half of pure methane's saturation pressure
@@ -2140,10 +2182,11 @@ and pressure, in this order:
 - `none` otherwise.
 
 The laws live in `science::surface::liquids` (`liquid`, `frost`,
-`melting`, `frozen_share`). Three departures from legacy: the liquidus
-of methane and nitrogen (`hydrocarbon_freezes`) is solved in closed
-form, as legacy does, since `ln x + W(1 − x)²/T = −L (1/T − 1/T_m)` is
-linear in `1/T`, with L/R taken from the exact gas constant
+`melting`, `frozen_share`). The liquidus of methane and nitrogen
+(`hydrocarbon_freezes`) is solved in closed form, which is legacy's own
+method, not a departure (the plan asked for a bisection): `ln x +
+W(1 − x)²/T = −L (1/T − 1/T_m)` is linear in `1/T`. Three departures
+from legacy: L/R is taken from the exact gas constant
 (`MOLAR_GAS_CONSTANT`, under 0.01 % from legacy's 8.314); the
 condensate (the part of N₂ and CH₄ the air cannot hold) is an argument
 of `liquid` and `frost`, since `condense` is 2d-3's, so Titan's seas
@@ -2182,7 +2225,7 @@ stagnant lid, 1 otherwise. It adds no number, and legacy's
 (`volcanoes::HEAT_PIPE_FLUX`), so a heat pipe reads 0.83 to 1 (0.90 at
 1.5 W/m²). The mismatch is issue #670.
 
-**Where the code lives.** `science::surface::cover` holds the cover and
+**Where the code lives.** `science::surface` holds, in its `cover` module, the cover and
 the ground albedo: `cover` (takes the obliquity), `ground_albedo`,
 `ice_line_share`, `sunlit_cap`, `ocean_fraction`, `frost_cover`,
 `surface_vapour` and the public `RELATIVE_HUMIDITY`, which replaces the
@@ -2320,7 +2363,7 @@ The first rule that holds wins:
 | 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 |
 | 2 | `mini-neptune` | envelope of at least 0.1 % and radius of at least 1.6 R⊕ |
 | 3 | `steam-world` | in water runaway, at least 2206 bar of steam (ten times water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
-| 4 | `lava-world` | surface liquid is lava (at least 1400 K, no water kept) |
+| 4 | `lava-world` | surface liquid is lava (at least 1673 K, no water kept) |
 | 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
 | 7 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept |
@@ -2671,6 +2714,9 @@ another paper, from memory) is said where it is used.
   dipole.
 - Angus, de Reuck et al. 1979, nitrogen's triple point, through
   the NIST Chemistry WebBook.
+- Atake and Chihara 1976, ethane's triple point (90.341 K) and
+  enthalpy of fusion (0.583 kJ/mol), through the NIST Chemistry
+  WebBook.
 - Atreya, Donahue and Kuhn 1978, *Science* 201, 611,
   doi:10.1126/science.201.4356.611, Titan's N₂ from NH₃.
 - Bailey, Ahlsved and Meadows 2011, arXiv:1102.2554, Titan's surface
@@ -2713,6 +2759,8 @@ another paper, from memory) is said where it is used.
 - de Kok et al. 2007, Titan's CO₂ from Cassini CIRS.
 - Dello Russo et al. 2016, cometary abundances, as updated in Biver et
   al. 2022.
+- Domalski and Hearing 1996, the enthalpy of melting of ethane (2.79
+  kJ/mol at 89.5 K), through the NIST Chemistry WebBook.
 - Dorn, Noack and Rozel 2018, *A&A* 614, A18,
   doi:10.1051/0004-6361/201731513, outgassing on stagnant-lid
   super-Earths (abstract, through study 22).
@@ -2806,6 +2854,8 @@ another paper, from memory) is said where it is used.
 - Lay, Hernlund and Buffett 2008, doi:10.1038/ngeo.2007.44,
   the core's heat flow.
 - Lecavelier des Etangs 2007, energy-limited escape.
+- Lemmon et al. 2013, ethane's triple point (90.4 K), as Richardson,
+  Hartwig and Leachman 2019 quote it (not re-read).
 - Lillis et al. 2013, Mars's dynamo.
 - Lipiński et al. 2007, *Int. J. Thermophys.* 28, 1904,
   doi:10.1007/s10765-007-0267-y, nitrogen's alpha-beta transition
@@ -2924,6 +2974,8 @@ another paper, from memory) is said where it is used.
   2013.
 - Verbiscer et al. 2007, Enceladus's E-ring fallout.
 - Veverka et al. 1991, albedos of the Uranian moons.
+- Vogt and Pitzer 1976, methane's enthalpy of fusion (0.9392 kJ/mol),
+  through the NIST Chemistry WebBook.
 - Wagman et al. 1979, NBS Chemical Thermodynamics Data Center, as
   quoted by Giles et al. 2024.
 - Walker, Hays and Kasting 1981,
