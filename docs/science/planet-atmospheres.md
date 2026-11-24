@@ -1108,8 +1108,8 @@ which the climate sets. Water is left to the climate, and so are methane
 temperature they condense at, so the climate condenses them at the
 temperature it solves for (`condense`; nitrogen over its own ice, with
 activity 1, its liquid above 63.14 K up to its critical point,
-126.19 K, through its normal boiling point, 77.355 K, NIST Chemistry
-WebBook). The CO₂ the cold trap froze out stays on the ground as a
+126.192 K, Span et al. 2000; see *The nitrogen vapour curves* below).
+The CO₂ the cold trap froze out stays on the ground as a
 frost wherever the surface is cold enough to keep it (below CO₂'s
 triple point, beyond what the air can take back at the surface's
 sublimation pressure), and the frosts of N₂, CH₄ and CO₂ brighten the
@@ -2223,17 +2223,41 @@ two freezing points (71.5 K and 74.0 K) hold to 2 K (71.51 K and 74.51
 K).
 
 **The nitrogen vapour curves** (`volatiles::nitrogen_frost_pressure`,
-`nitrogen_vapour_pressure`; study 24). The frost is the N₂-1 / N₂-2
-polynomial fit of Fray & Schmitt 2009 as Lisse et al. 2021 give it in
-their Table 2, pinned to the triple point (63.14 K, 12 530 Pa) and
-switching phase at 35.61 K (Scott 1976, via Tegler et al. 2019), with a
-10 K floor (`Definition:`); it gives Triton's 37.2 K a pressure of
-1.40e-5 bar against the 1.4e-5 bar observed. The liquid is the Antoine
-equation of Edejer & Thodos 1967 (via the NIST WebBook), whose fit
-range stops below the triple point: it is 4.5 % low at the normal
-boiling point (77.355 K, 0.955 atm) and 12.5 % low at the triple point.
-That is the accuracy of the fit, kept by design, and no pressure that
-the model asks for needs better. The SO₂ frost
+`nitrogen_saturation_pressure`; study 24, plan 2d-3a). The frost is the
+N₂-1 / N₂-2 polynomial fit of Fray & Schmitt 2009 as Lisse et al. 2021
+give it in their Table 2, pinned to the triple point (63.14 K, 12 530
+Pa) and switching phase at 35.61 K (Scott 1976, via Tegler et al.
+2019), with a 10 K floor (`Definition:`); it gives Triton's 37.2 K a
+pressure of 1.40e-5 bar against the 1.4e-5 bar observed. The liquid,
+from 63.14 K to the critical point (126.192 K, 3.3958 MPa), is the
+ancillary vapour-pressure equation of the nitrogen reference equation
+of state (Span et al. 2000, eq. 4, from Nowak et al. 1997b,
+`ln(p/p_c) = (T_c/T)(N₁θ + N₂θ^1.5 + N₃θ^2.5 + N₄θ^5)`, `θ = 1 − T/T_c`),
+read in the paper. The paper says it represents the measured vapour
+pressures "well within their uncertainties" (typically under 0.015 %,
+0.075 % at the triple point); against the paper's saturation table it
+is within 0.02 % from 63.151 to 120 K, normal boiling point (77.355 K,
+101 325 Pa) included. It replaces the Antoine fit of Edejer & Thodos
+1967, 12.5 % under the triple-point pressure, which would have made
+`condense` step there; at methane's triple point, the one value
+`methane_freezes` reads, the change is +0.09 % (3.8235 bar against
+3.8200).
+
+The two branches meet with a step: at 63.14 K the liquid curve gives
+12 496 Pa, 0.27 % under the frost's 12 530 Pa (derived). The cause is
+the triple point. The frost is pinned at Angus et al. 1979's (63.14 K,
+12 530 Pa); Span et al. adopt Nowak et al. 1997b's ITS-90 measurement,
+63.151 ± 0.003 K and 12.523 ± 0.010 kPa, and their curve passes there.
+The pressures differ by 0.056 %, but the temperatures by 0.011 K, over
+which the liquid curve falls 0.20 %; the curve also misses its own
+triple pressure by 0.010 %. The switch stays at Angus's temperature,
+where the frost fit is pinned, by decision (2026-11-24); the step is a
+known departure, and `nitrogen_saturation_joins_its_frost` holds it
+under the disagreement of the two sourced triple points (in pressure
+and along the curve between the two temperatures, 0.268 %). Just under 63.14 K (about the last hundredth of a kelvin,
+derived from the frost's slope) the frost is above the liquid's value
+at 63.14 K, so the curve is not monotonic there; read on a 0.1 K grid
+it rises. The SO₂ frost
 (`sulphur_dioxide_frost_pressure`, Wagman 1979 via Giles 2024, anchored
 at Giauque & Stephenson 1938's 197.64 K and 1 670 Pa) is 10 % under
 Wagman's value at 115 K.
@@ -3011,7 +3035,8 @@ another paper, from memory) is said where it is used.
 - Driscoll and Barnes 2015, doi:10.1089/ast.2015.1325.
 - Edejer and Thodos 1967, *J. Chem. Eng. Data* 12(2), 206,
   doi:10.1021/je60033a014, the Antoine fit of liquid nitrogen's vapour
-  pressure, 63.14 to 126 K, through the NIST Chemistry WebBook.
+  pressure, 63.14 to 126 K, through the NIST Chemistry WebBook; replaced
+  by Span et al. 2000, quoted for the comparison.
 - Erkaev et al. 2007, energy-limited escape.
 - Fegley and Prinn 1989, doi:10.1038/337055a0, Venus's SO₂ and
   calcite.
@@ -3196,6 +3221,13 @@ another paper, from memory) is said where it is used.
 - Sicardy et al. 2024, arXiv:2402.02476 (accepted by *A&A*), Triton's
   air from occultations 1989 to 2022 (read).
 - Simonelli and Veverka 1988, Io's Bond albedo.
+- Span, Lemmon, Jacobsen, Wagner and Yokozeki 2000, "A reference
+  equation of state for the thermodynamic properties of nitrogen for
+  temperatures from 63.151 to 1000 K and pressures to 2200 MPa", *J.
+  Phys. Chem. Ref. Data* 29, 1361, doi:10.1063/1.1349047 (read in full
+  in the NIST reprint): the critical point (Sec. 2.1, eq. 2), the triple
+  point (Sec. 2.2, eq. 3), the vapour-pressure ancillary (Sec. 2.6,
+  eq. 4) and the saturation tables (pp. 1405-1407).
 - Spencer 1987, dark moons.
 - Stansberry, Pisano and Yelle 1996,
   *Planet. Space Sci.* 44, 945, doi:10.1016/0032-0633(96)00001-3.

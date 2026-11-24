@@ -7,8 +7,8 @@
 //! [24](https://github.com/cyboooooorg/map-generator/wiki/24-surface-cover-audit)
 //! and the rewrite's phase curves (`science::water`, IAPWS;
 //! `science::volatiles`). The condensate, the part of the N2 and CH4 that
-//! the air cannot hold, is an input: the climate that condenses it is
-//! not here.
+//! the air cannot hold, is an input: `condense` makes it, at
+//! the temperature the climate solves for.
 
 use super::cover::{FROST_LAYER, share};
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
@@ -17,7 +17,7 @@ use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal};
 use crate::volatiles::{
     ETHANE_TRIPLE_TEMPERATURE, METHANE_TRIPLE_TEMPERATURE, NITROGEN_TRIPLE_TEMPERATURE,
     co2_frost_pressure, ethane_boiling_temperature, methane_saturation_bar,
-    nitrogen_vapour_pressure, sulphur_dioxide_frost_pressure,
+    nitrogen_saturation_pressure, sulphur_dioxide_frost_pressure,
 };
 use crate::water::{boiling_temperature, melting_temperature};
 
@@ -105,7 +105,8 @@ pub enum Liquid {
     Lava,
 }
 
-fn bar(p: Pascal) -> f64 {
+/// `p` in bar.
+pub(super) fn bar(p: Pascal) -> f64 {
     p.0 / PASCALS_PER_BAR
 }
 
@@ -178,14 +179,17 @@ pub fn sea_freezes(air_n2: Bar, condensate: &PartialPressures) -> Kelvin {
 /// ethane and the nitrogen dissolved in it ([`hydrocarbon_freezes`]).
 ///
 /// The sea's nitrogen mole fraction is [`NITROGEN_RAOULT_SHARE`] of
-/// Raoult's law at `n2` and methane's triple point
-/// ([`nitrogen_vapour_pressure`]), at most [`MAX_NITROGEN_IN_LIQUID`];
+/// Raoult's law at `n2` and methane's triple point (liquid nitrogen's
+/// saturation there, [`nitrogen_saturation_pressure`], Span et al. 2000:
+/// 3.824 bar), at most [`MAX_NITROGEN_IN_LIQUID`];
 /// its methane [`SEA_METHANE_SHARE`]; the rest ethane, which methane's
 /// photolysis makes on any methane world. The methane share is fixed, so
 /// the methane liquidus is a floor (about 68 K): the dissolved nitrogen
 /// replaces ethane, and lowers the freezing point only by diluting it.
 pub fn methane_freezes(n2: Bar) -> Kelvin {
-    let saturation = bar(nitrogen_vapour_pressure(Kelvin(METHANE_TRIPLE_TEMPERATURE)));
+    let saturation = bar(nitrogen_saturation_pressure(Kelvin(
+        METHANE_TRIPLE_TEMPERATURE,
+    )));
     let nitrogen = (NITROGEN_RAOULT_SHARE * n2.0.max(0.0) / saturation).min(MAX_NITROGEN_IN_LIQUID);
     let ethane = (1.0 - SEA_METHANE_SHARE - nitrogen).max(0.0);
     hydrocarbon_freezes(nitrogen, ethane)

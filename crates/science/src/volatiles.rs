@@ -3,7 +3,8 @@
 //! methane, and the frost of carbon dioxide and ammonia that a cold
 //! trap reads ([`co2_frost_pressure`], [`ammonia_frost_pressure`],
 //! [`nitrogen_frost_pressure`], [`sulphur_dioxide_frost_pressure`]), the
-//! vapour of liquid nitrogen and the boiling of ethane.
+//! saturation of nitrogen ([`nitrogen_saturation_pressure`]) and the
+//! boiling of ethane.
 //!
 //! **Inventory at formation** ([`inventory`]): the mass of CO2, N2,
 //! sulphur, CH4 and NH3 a body's rock and iron, silicate and ice carry by
@@ -29,6 +30,12 @@
 //! `max_abserror_percentage`. They are not the papers' own four-term
 //! ancillaries. The papers are paywalled; the check tables of the tests are
 //! the NIST WebBook's, which use the same equations of state.
+//!
+//! Nitrogen's liquid curve is the paper's own four-term ancillary (Span,
+//! Lemmon, Jacobsen, Wagner and Yokozeki 2000, doi:10.1063/1.1349047,
+//! eq. 4, from Nowak et al. 1997b), read in the paper, and its check
+//! table the paper's saturation table. Below its triple point nitrogen
+//! follows the frost fits of Fray and Schmitt 2009.
 //!
 //! Below the triple point, CO2 follows the sublimation equation of Span
 //! and Wagner 1996 (their eq. 3.12), read in two open implementations that
@@ -277,18 +284,23 @@ const METHANE: Curve = Curve {
     sublimation: Sublimation::ConstantEnthalpy(METHANE_SUBLIMATION_ENTHALPY),
 };
 
+/// `(f, df/dT)` of `f = T_c / T sum n_i theta^t_i`, `theta = 1 - T / T_c`,
+/// at `t_k` under the critical temperature `tc`.
+fn vapour_sum(tc: f64, n: &[f64], t: &[f64], t_k: f64) -> (f64, f64) {
+    let theta = 1.0 - t_k / tc;
+    let (mut sum, mut slope) = (0.0, 0.0);
+    for (n, t) in n.iter().zip(t) {
+        sum += n * theta.powf(*t);
+        slope -= n * t * theta.powf(t - 1.0) / tc;
+    }
+    (tc / t_k * sum, -tc / (t_k * t_k) * sum + tc / t_k * slope)
+}
+
 impl Curve {
     /// `(f, df/dT)` of `f = T_c / T sum n_i theta^t_i` at `t_k` between
-    /// the triple and the critical point.
+    /// the triple and the critical point ([`vapour_sum`]).
     fn vapour_sum(&self, t_k: f64) -> (f64, f64) {
-        let tc = self.critical_temperature;
-        let theta = 1.0 - t_k / tc;
-        let (mut sum, mut slope) = (0.0, 0.0);
-        for (n, t) in self.n.iter().zip(self.t) {
-            sum += n * theta.powf(t);
-            slope -= n * t * theta.powf(t - 1.0) / tc;
-        }
-        (tc / t_k * sum, -tc / (t_k * t_k) * sum + tc / t_k * slope)
+        vapour_sum(self.critical_temperature, &self.n, &self.t, t_k)
     }
 
     /// `(ln p, d ln p / dT)` below the triple point, `p` in Pa, at `t_k`
@@ -480,23 +492,54 @@ pub fn nitrogen_frost_pressure(t: Kelvin) -> Option<Pascal> {
     Some(Pascal(NITROGEN_TRIPLE_PRESSURE.0 * ln_ratio.exp()))
 }
 
-/// Source: constants `A`, `B`, `C` of the Antoine equation of liquid
-/// nitrogen, `log10(p / 1 bar) = A - B / (T - C)`, 63.14 to 126 K
-/// (Edejer and Thodos 1967, via the NIST Chemistry WebBook; study 24,
-/// finding 1).
-const NITROGEN_ANTOINE: [f64; 3] = [3.7362, 264.651, 6.788];
+/// Source: critical temperature of nitrogen, 126.192 K (Span, Lemmon,
+/// Jacobsen, Wagner and Yokozeki 2000, J. Phys. Chem. Ref. Data 29, 1361,
+/// doi:10.1063/1.1349047, Sec. 2.1, eq. 2, p. 1366, adopted from Nowak et
+/// al. 1997b): from it up, nitrogen does not condense.
+pub const NITROGEN_CRITICAL_TEMPERATURE: Kelvin = Kelvin(126.192);
+/// Source: critical pressure of nitrogen, 3.3958 MPa (Span et al. 2000,
+/// doi:10.1063/1.1349047, Sec. 2.1, eq. 2, p. 1366), the `p_c` of their
+/// vapour-pressure equation.
+pub const NITROGEN_CRITICAL_PRESSURE: Pascal = Pascal(3_395_800.0);
+/// Source: coefficients `N1` to `N4` of the vapour pressure of nitrogen,
+/// `ln(p / p_c) = T_c / T sum N_i theta^k_i`, `theta = 1 - T / T_c`
+/// (Span et al. 2000, doi:10.1063/1.1349047, Sec. 2.6, eq. 4, p. 1368,
+/// from Nowak et al. 1997b), read on the paper's page.
+const NITROGEN_VAPOUR_N: [f64; 4] = [-6.124_452_84, 1.263_272_20, -0.765_910_082, -1.775_705_64];
+/// Source: exponents `k_i` of the same equation, 1, 1.5, 2.5 and 5
+/// (Span et al. 2000, eq. 4).
+const NITROGEN_VAPOUR_T: [f64; 4] = [1.0, 1.5, 2.5, 5.0];
 
-/// Pressure of liquid nitrogen at its saturation, from the Antoine fit
-/// of Edejer and Thodos 1967, valid from 63.14 to 126 K. The fit is not
-/// pinned to the triple point: it falls 4.5 % under the normal boiling
-/// point (101 325 Pa at 77.355 K) and 12.5 % under the triple-point
-/// pressure. Valid from 63.14 to 126 K only: under `C` = 6.788 K the
-/// denominator vanishes and the curve is neither finite nor monotonic.
-/// Its only reader is `methane_freezes`, at the methane triple point,
-/// 90.69 K.
-pub(crate) fn nitrogen_vapour_pressure(t: Kelvin) -> Pascal {
-    let [a, b, c] = NITROGEN_ANTOINE;
-    Pascal(10f64.powf(a - b / (t.0 - c)) * PASCALS_PER_BAR)
+/// Pressure of nitrogen in equilibrium with its condensate at `t`: its
+/// frost ([`nitrogen_frost_pressure`]) below [`NITROGEN_TRIPLE_TEMPERATURE`]
+/// (63.14 K, Angus et al. 1979); from there, the ancillary vapour-pressure
+/// equation of Span et al. 2000 (eq. 4, doi:10.1063/1.1349047), which
+/// "represents the experimental values well within their uncertainties"
+/// (0.015 % typically, 0.075 % at the triple point; Sec. 2.3 and 2.6);
+/// infinite at and above the critical point (126.192 K), where nitrogen
+/// does not condense.
+///
+/// The two branches meet with a step: at 63.14 K the liquid curve is
+/// 0.27 % under the frost's 12 530 Pa. Its cause is the triple point:
+/// Span et al. put it at 63.151 K and 12 523 Pa (Nowak et al. 1997b,
+/// ITS-90), 0.011 K over Angus's, and the liquid curve falls 0.2 % over
+/// those 0.011 K. The switch stays at Angus's point, where the frost fit
+/// is pinned, by decision (plan 2d-3a); the step is within how far the
+/// two sourced triple points disagree. See
+/// `docs/science/planet-atmospheres.md`, "The nitrogen vapour curves".
+pub fn nitrogen_saturation_pressure(t: Kelvin) -> Pascal {
+    if t.0 >= NITROGEN_CRITICAL_TEMPERATURE.0 {
+        return Pascal(f64::INFINITY);
+    }
+    nitrogen_frost_pressure(t).unwrap_or_else(|| {
+        let sum = vapour_sum(
+            NITROGEN_CRITICAL_TEMPERATURE.0,
+            &NITROGEN_VAPOUR_N,
+            &NITROGEN_VAPOUR_T,
+            t.0,
+        );
+        Pascal(NITROGEN_CRITICAL_PRESSURE.0 * sum.0.exp())
+    })
 }
 
 /// Source: triple-point temperature of sulphur dioxide, 197.64 K

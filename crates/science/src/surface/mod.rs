@@ -1,4 +1,5 @@
-//! The surface of a planet: what covers it and how bright its ground is.
+//! The surface of a planet: what condenses on it, what covers it and how
+//! bright its ground is.
 //!
 //! Ported from `legacy-final` (`planet/albedo.rs`, `cover` and the ground
 //! of `shortwave_budget`) with the values of study
@@ -7,8 +8,10 @@
 //! liquid". The laws take a temperature, a water inventory and a radius,
 //! and no solver.
 
+mod condense;
 mod cover;
 mod liquids;
 
+pub use condense::*;
 pub use cover::*;
 pub use liquids::*;

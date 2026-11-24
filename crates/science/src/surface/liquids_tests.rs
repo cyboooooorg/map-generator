@@ -11,7 +11,7 @@ use crate::radiation::test_points::{
     VENUS_SURFACE_K,
 };
 use crate::volatiles::{
-    SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE, nitrogen_frost_pressure, nitrogen_vapour_pressure,
+    SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE, nitrogen_frost_pressure, nitrogen_saturation_pressure,
     sulphur_dioxide_frost_pressure,
 };
 use crate::water::{TRIPLE_POINT_PRESSURE, boiling_temperature, ice_ih_melting_temperature};
@@ -180,7 +180,7 @@ fn a_pure_nitrogen_sea_is_nitrogen() {
     };
     let warm = NITROGEN_SEA_K;
     let air = PartialPressures {
-        n2: bar(nitrogen_vapour_pressure(warm)),
+        n2: bar(nitrogen_saturation_pressure(warm)),
         ..PartialPressures::default()
     };
     assert_eq!(
@@ -210,7 +210,7 @@ fn condensed_nitrogen_keeps_the_sea_liquid() {
         ..PartialPressures::default()
     };
     let air = PartialPressures {
-        n2: bar(nitrogen_vapour_pressure(t)),
+        n2: bar(nitrogen_saturation_pressure(t)),
         ch4: methane_sea_vapour(t).0,
         ..PartialPressures::default()
     };
