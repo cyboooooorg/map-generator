@@ -375,6 +375,27 @@ regression net.
   returns the class, the radius and the mean density as plain values
   (split design). **`model`** runs the same chain on the real trace and
   builds `PlanetState`. One private `chain` serves both.
+- **Seeds and spin** (decided by the user on 2026-11-24, with mapgen3's
+  agreement): `class_of` and `model` both draw the chain from the
+  trial's seed (`placement.trial.seed` in `model`; the trial labels are
+  unique per slot, `<id>/<k>` and `slot-<n>`). The spin of every planet
+  is drawn from the trial's seed too (`draw/mod.rs`, instead of the body
+  seed), so the chain calls the same `spin::spin` to get the obliquity
+  its climate reads (#677); `locked` stays false until #604. The
+  generated spins change. `placement.rs`'s doc and `spin.rs`'s are
+  corrected.
+- **Life contract** (agreed with mapgen2 and mapgen3 on 2026-11-24):
+  `timeline::Surface.life` becomes `Traced<Biosphere>`, with `enum
+  Biosphere { Lifeless, Anoxic, Oxidising, Modern }` (kebab-case),
+  replacing `struct Life { arose, oxygenated }`: one node whose parents
+  are the liquid, the age and the life draw. The climate is solved again
+  on an oxidising air (CH₄ removed) as on a modern one (O₂ added); the
+  steam envelope stays after the loss (`after_steam`'s `debug_assert`).
+- **Titan's N₂ (#679)** is fixed in its own pull request
+  (`fix/titan-nitrogen-inventory`), merged before 2d-4's; 2d-4 rebases
+  on it. Titan's climate test then runs on the chain's own air, and the
+  bound on Titan's total pressure (1.467 bar) goes to 2d-4's
+  settled-climate test.
 - **Wiring:** `cli`, `regression` and the determinism tests pass
   `planet::class_of` to `draw_with`. The `stand_in` module stays for the
   draw's unit tests.
