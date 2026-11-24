@@ -15,10 +15,9 @@ the tag `legacy-final` with its citation and tests, never rewritten from memory.
 `science::units` holds one newtype per unit, over a public `f64` (`Kelvin`,
 `Metre`, `AstronomicalUnit`, `SolarMass`, `Gyr`, ...). Each serialises as a bare
 number, adds and subtracts within its own type, multiplies and divides by an
-`f64`, and carries its `SYMBOL`. `Fraction` (0 to 1 inclusive) keeps its field
-private and rejects out-of-range values, also when deserialised. A field stores
-the unit the domain thinks in (au for an orbit, solar masses for a star); `From`
-converts both ways between such a unit and its SI one. `EarthRadius` is the IAU
+`f64`, and carries its `SYMBOL`. `Fraction` (0 to 1 inclusive) rejects
+out-of-range values, also when deserialised. A field stores the unit the domain
+thinks in; `From` converts both ways to the SI one. `EarthRadius` is the IAU
 nominal equatorial radius (6378.1 km): a law fitted against the mean radius
 (6371 km) converts explicitly.
 
@@ -35,11 +34,9 @@ Moritz 2000); `EarthRadius` stays the IAU equatorial.
 
 `science::eos` gives density against pressure at the reference temperature (for
 water, along a path through the phase diagram): `Eos` (`Vinet`,
-`BirchMurnaghan3`, `BirchMurnaghan2`) with `pressure(rho)` and `density(p)`
-(safeguarded Newton, bracketed between `rho0` and `100 rho0`, or the pressure
-maximum of a third-order form with `K0' < 4`); `Mix` (mass shares added by
-volume at equal pressure); `MaterialEos`, phases ordered by pressure, the last
-unbounded, built by `MaterialEos::new` so that a run-time material fits. The
+`BirchMurnaghan3`, `BirchMurnaghan2`) with `pressure(rho)` and `density(p)`;
+`Mix` (mass shares added by volume at equal pressure); `MaterialEos`, phases
+ordered by pressure, built by `MaterialEos::new`. The
 materials are `core_alloy()` (Valencia et al. 2006), `mantle()` (upper and
 lower, split at 23.83 GPa), `ice_vii()` (Seager et al. 2007), and for water:
 
@@ -62,16 +59,13 @@ transition-zone phases (-7.5 % / +3.5 % at 23.83 GPa), ices III, V and VI are
 hydrostatic equilibrium from its layers, centre out (`LayerSpec`: a mass and a
 borrowed `MaterialEos`; zero-mass layers are skipped). It returns a `Structure`:
 the surface radius, the normalised moment of inertia `C/MR^2`, the `Shell`s (one
-per layer and phase present, so a phase change inside a layer is a shell
-boundary) and the `Sample`s (radius, enclosed mass, density, pressure at the
-centre and at the end of every step). Errors: `NoMass`, `NotFinite`,
-`NoConvergence`, `Eos`.
+per layer and phase present) and the `Sample`s (radius, enclosed mass, density,
+pressure at every step). Errors: `NoMass`, `NotFinite`, `NoConvergence`, `Eos`.
 
 The method is the planet-interior study's prototype (`solve.py`): fourth order
-Runge-Kutta in `t = (m/M)^(1/3)`, shooting on the central pressure (Brent, 1e-10
-relative); a phase transition ends a step exactly. `STEPS_PER_LAYER` (20, a
-calibration) keeps R and C/MR^2 within 1e-4 of the converged answer. Below zero
-pressure the density is the zero-pressure one.
+Runge-Kutta in `t = (m/M)^(1/3)`, shooting on the central pressure (Brent); a
+phase transition ends a step exactly. `STEPS_PER_LAYER` (20, a calibration)
+keeps R and C/MR^2 within 1e-4 of the converged answer.
 
 ```rust
 use science::{constants::EARTH_MASS, eos::{core_alloy, mantle}, structure::{LayerSpec, integrate}, units::Pascal};
@@ -87,8 +81,8 @@ println!("R = {} m, C/MR^2 = {}", earth.radius.0, earth.moment_of_inertia);
 ```
 
 Against measured values (table on the page above): Earth R -0.29 %, C/MR^2
--0.24 %; the other bodies within 2 %, Titan's C/MR^2 not reproduced. The core
-alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
+-0.24 %; the other bodies within 2 %. The core alloy is used to 7.85 TPa:
+converged, not validated.
 
 ## Internal heat
 
@@ -96,10 +90,8 @@ alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 `k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
 kind). Radiogenic power comes from the abundances of U, Th and K and the Dye
 2012 half-lives; secular cooling scales Earth's 26.5 TW by the silicate mass;
-tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants (U
-and Th abundances, cooling time and mass exponent, rocky and icy k2/Q) say what
-was searched and not found; the page [The heat
-inside](../../docs/science/planet-interiors.md#the-heat-inside) lists them.
+tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants
+are listed in [The heat inside](../../docs/science/planet-interiors.md#the-heat-inside).
 
 ## Stars, light and orbits
 
@@ -132,6 +124,14 @@ amplitude per province, gravity's relief scale), `crust` (Airy), `plates`
 study](../../docs/superpowers/studies/2026-11-22-relief/README.md). Laws:
 [mountains and gravity](../../docs/science/mountains-and-gravity.md),
 [plate tectonics](../../docs/science/plate-tectonics.md), [volcanoes](../../docs/science/volcanoes.md).
+
+## Surface
+
+`science::surface`: `cover` (open ocean, land, ice, frost; the ice also
+weighted by sunlight) and `ground_albedo`, the public `RELATIVE_HUMIDITY`,
+and `liquids` (`liquid`, `frost`, `melting`, the freezing of methane and
+nitrogen seas). Water melts and boils on the IAPWS curves of `water`.
+Values: [planet atmospheres](../../docs/science/planet-atmospheres.md#climate-and-surface-liquid).
 
 ## Radiation
 

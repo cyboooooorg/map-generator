@@ -1626,8 +1626,9 @@ the column absorbs at). The disc is split, planet-wide, into open ocean
 body, shielded from space weathering by `1 - exp(-p / 1e-4 bar)`), water
 ice and snow (0.6, from the ice line at -5 °C and the equator-to-pole
 contrast of an Earth-like planet, `ice_line_share`, as far as the body's
-water reaches as ice sheets once spread over its area: 1.5 km in legacy,
-1.94 km in the rewrite), frosts of N₂, CH₄ and
+water reaches as ice sheets: see "The ice reach" below), weighted by the
+light it receives, not by its area (see "Ice weighted by sunlight"),
+frosts of N₂, CH₄ and
 CO₂ (0.75, the share `frost / 0.02 bar` of the disc, all frosts together)
 and of volcanic SO₂ (0.63, its part of that share). What the air adds over
 this ground (the water clouds, Rayleigh scattering, the absorption of the
@@ -1654,13 +1655,13 @@ far:
   calibration). The Moon's Bond albedo, 0.11 (NASA NSSDC Moon fact
   sheet, read). Departure: Mercury's is 0.068 on its fact sheet (read;
   legacy remembered 0.09), so the model's Mercury is brighter by 0.04.
-- *Earth's ocean share, 0.71* (`EARTH_OCEAN_FRACTION`, `Source:`).
+- *Earth's ocean share, 0.71* (`EARTH_OCEAN_COVER`, `Source:`).
   Charette & Smith 2010 (*Oceanography* 23(2), 112,
   doi:10.5670/oceanog.2010.51; full text read, Table 1) put the ocean
   at 361.84e6 km², 0.709 of Earth's 510.06e6 km² (`4π R²` with the
   volumetric mean radius 6371.0 km of the NASA Earth fact sheet;
   derived).
-- *Ice sheet thickness, 1.94 km* (`ICE_SHEET_KM`, `Source:`, was 1.5 km
+- *Ice sheet thickness, 1.94 km* (`ICE_SHEET_THICKNESS`, `Source:`, was 1.5 km
   from memory). The mean thickness of Antarctica's ice, shelves
   included, 1937 m (Fretwell et al. 2013, Bedmap2, *The Cryosphere* 7,
   375, doi:10.5194/tc-7-375-2013; full text read, Table 7; 2126 m
@@ -1669,7 +1670,7 @@ far:
   layered deposits to more than 3.7 km, 1.6e6 km³ in all; their mean
   thickness and area were not reached. A thicker sheet covers less: a
   nearly dry body whitens 23 % less of its disc than at 1.5 km.
-- *Equator-to-mean contrast, 42 K* (`ICE_LINE_CONTRAST_K`, `Source:`).
+- *Equator-to-mean contrast, 42 K* (`ICE_LINE_CONTRAST`, `Source:`).
   North, Cahalan & Coakley 1981 (*Rev. Geophys. Space Phys.* 19, 91,
   doi:10.1029/RG019i001p00091; full text read) write Earth's annual
   mean temperature `T(x) = T₀ + T₂ P₂(x)` and take "the observed value
@@ -1681,7 +1682,7 @@ far:
   `x_s² = 1/3 + (T_mean − T_ice) / 42 K` (`ice_line_share`,
   `Definition:`, the disc being uniform in `x`).
 
-**Calibration of the ice line** (`ICE_LINE_K`, −5 °C, kept). Budyko
+**Calibration of the ice line** (`ICE_LINE_TEMPERATURE`, −5 °C, kept). Budyko
 1969 (*Tellus* 21, 611, doi:10.3402/tellusa.v21i5.10109; full text
 read) lets the ice cover extend over the area "with temperature equal
 to or lower than the temperature observed now at 72°N", the mean
@@ -1703,7 +1704,9 @@ receives less than that share of the light, so the ground albedo counts
 the ice by the annual-mean insolation `S(x) = 1 + s₂ P₂(x)` (mean 1 over
 the disc), not by area. The ice's sunlit share is then
 `∫_{x_s}^{1} S dx = (1 − x_s) + (s₂/2)(x_s − x_s³)` (`Definition:`,
-the integral of `P₂`). Counted by area, Earth's ground came out at 0.165
+the integral of `P₂`; `sunlit_cap`). `Cover` keeps both: `ice`, by area,
+which the map will read, and `ice_sunlit`, the share the ground albedo
+mixes, times the reach and `(1 − frost)`. Counted by area, Earth's ground came out at 0.165
 against the 0.122 of CERES under clear skies, its Bond albedo at 0.314
 against 0.29 to 0.31.
 
@@ -1740,6 +1743,17 @@ against 0.29 to 0.31.
   to 133°) the insolation takes a "W" shape that the degree two misses;
   the degree six is the first to catch it.
 
+**The ice reach** (`surface::cover`, decision of 2026-11-24). The water
+inventory spreads as ice over the whole body, to the share
+`inventory / (ρ_ice · 4π R² · ICE_SHEET_THICKNESS)`, capped at 1. The
+ice is ice: `ρ_ice` is `water::ice_ih_density` at one standard
+atmosphere (101 325 Pa, a `Definition:`) and at the melting temperature
+of ice Ih at that pressure (`water::ice_ih_melting_temperature`, IAPWS),
+about 917 kg/m³. Legacy spread liquid water at 1000 kg/m³ over Earth's
+area scaled by `R⁻²`, a density with no source; the function now reads
+the planet's radius in metres, so no Earth-area constant is needed and
+legacy's `OCEAN_LAYER_KM` is not ported.
+
 **Calibration of `ocean_fraction`** (kept). `1 − exp(−k oceans)` with
 `k = −ln(1 − 0.71)`: the sea level of a body follows its hypsometry,
 which the planet model does not draw. Searched and not found: a
@@ -1764,7 +1778,8 @@ in its abstract. Searched and not found: a planet-wide broadband albedo
 of a mix of sea ice and snow.
 
 **Calibration of `FROST_ALBEDO`** (0.75, kept, flagged by study 24).
-Fitted on the two bodies covered in frost. Legacy remembered Triton's
+Fitted on Pluto, 0.72 ± 0.07, with Triton's gap stated in the doc
+comment (below). It was fitted on the two bodies covered in frost. Legacy remembered Triton's
 Bond albedo as about 0.75; Hillier et al. 1990 (*Science* 250, 419,
 doi:10.1126/science.250.4979.419; abstract read) give 0.82 ± 0.05 in
 the violet to green bands, and with it an emissivity of 0.59 ± 0.16 at
@@ -1776,7 +1791,7 @@ Triton's; Triton's temperature rests on the pair it forms with
 2d-3 can refit both on Triton. Searched and not found: a bolometric
 Bond albedo of either body.
 
-**Calibration of `SHIELD_BAR`** (1e-4 bar, kept). Searched and not
+**Calibration of `SHIELD_PRESSURE`** (1e-4 bar, kept). Searched and not
 found: a surface pressure or column above which an air shields a
 regolith from the solar wind and micrometeoroids; the space-weathering
 studies a search returned (lunar sputtering, nanophase iron) treat
@@ -1797,7 +1812,9 @@ phase. Disc-wide fits through the methane windows give 0.108 ± 0.009 at
 These are spectral and local; a broadband value would need the
 spectrum of the light that reaches Titan's ground, which the model does
 not compute. The model's Titan ground stays the soil's 0.25, above
-every one of them, and the haze refit of #656 stays open.
+every one of them, and the haze refit of #656 stays open: the cover now
+exists (`surface::cover::ground_albedo`), but it has no sourced Titan
+value to take.
 
 **The air's absorption of starlight** is described in
 [radiative-transfer.md](radiative-transfer.md#the-shortwave-half-the-bond-albedo)
@@ -2064,7 +2081,7 @@ kept (`OXIDISING_O2`, `DRY_COLUMN`).
 **Surface liquid**, from the phase diagrams at the surface temperature
 and pressure, in this order:
 
-- `lava` from 1673 K in the rewrite (`LAVA_K`, `Source:`; 1400 K in
+- `lava` from 1673 K in the rewrite (`LAVA_TEMPERATURE`, `Source:`; 1400 K in
   legacy; study 24, part 9), on a body that has kept no water. Kite,
   Fegley, Schaefer & Gaidos 2016 (*ApJ* 828, 80,
   doi:10.3847/0004-637X/828/2/80; full text read in arXiv:1606.06740)
@@ -2081,13 +2098,18 @@ and pressure, in this order:
   for longer, even with a larger initial amount of water", under its
   steam, until escape dries it; the model shows that planet's steam, not
   its magma;
-- `water` between 273.15 K and water's boiling point at the surface
-  pressure (the same Clausius–Clapeyron, 373 K at 1 atm, capped at the
-  critical point), above the triple-point pressure, with water kept out
-  of a runaway;
+- `water` between the melting temperature of ice Ih and water's boiling
+  point at the surface pressure (`water::ice_ih_melting_temperature` and
+  `water::boiling_temperature`, both IAPWS, 373.1 K at 1 atm, the
+  boiling point meeting the critical point), above the triple-point
+  pressure, with water kept out of a runaway; legacy's 273.15 K
+  (`ICE_MELTS_K`, uncited) and its Clausius–Clapeyron boiling point are
+  not ported, and a pressure under the triple point has no boiling
+  point, so no liquid water;
 - `hydrocarbons` between the freezing point of the sea
-  (`sea_freezes_k`) and ethane's
-  boiling point at the surface pressure (Clausius–Clapeyron from 184.6 K
+  (`surface::sea_freezes`) and ethane's
+  boiling point at the surface pressure (`volatiles::ethane_boiling_temperature`,
+  Clausius–Clapeyron from 184.6 K
   at 1 atm, NIST's average of 23 values, ± 0.6 K; with 14.7 kJ/mol, the
   14.703 kJ/mol of Witt & Kemp 1937 at 184.1 K; capped at its critical
   point, 305.3 ± 0.3 K, NIST's average of 41 values: all read on the
@@ -2095,11 +2117,11 @@ and pressure, in this order:
   where there is enough methane to condense:
   the air's methane reaches the vapour of a Titan sea at the surface
   temperature, half of pure methane's saturation pressure
-  (`methane_sea_vapour_bar`), so that a trace of methane makes no lake
+  (`surface::methane_sea_vapour`), so that a trace of methane makes no lake
   and none forms past methane's critical point (190.56 K). The sea
   freezes at methane's freezing point lowered by the nitrogen of the air
   dissolved in it and the ethane methane's photolysis makes
-  (`methane_freezes_k`: about 76 K with no N₂, about 69 K under Titan's
+  (`surface::methane_freezes`: about 76 K with no N₂, about 69 K under Titan's
   1.45 bar, see [atmospheres.md](atmospheres.md)); where
   nitrogen itself condenses (`condense`), the air holds pure nitrogen's
   saturation and the sea it condenses into is nitrogen-rich, liquid down
@@ -2116,6 +2138,60 @@ and pressure, in this order:
   triple point it is a frost (`climate::frost`). The look draws no
   nitrogen sea: the map of such a body is its icy surface;
 - `none` otherwise.
+
+The laws live in `science::surface::liquids` (`liquid`, `frost`,
+`melting`, `frozen_share`). Three departures from legacy: the liquidus
+of methane and nitrogen (`hydrocarbon_freezes`) is solved in closed
+form, as legacy does, since `ln x + W(1 − x)²/T = −L (1/T − 1/T_m)` is
+linear in `1/T`, with L/R taken from the exact gas constant
+(`MOLAR_GAS_CONSTANT`, under 0.01 % from legacy's 8.314); the
+condensate (the part of N₂ and CH₄ the air cannot hold) is an argument
+of `liquid` and `frost`, since `condense` is 2d-3's, so Titan's seas
+need the condensate to be given; and the methane triple point is
+`volatiles`' 90.6941 K, not legacy's 90.67 K. Richardson et al. 2019's
+two freezing points (71.5 K and 74.0 K) hold to 2 K (71.51 K and 74.51
+K).
+
+**The nitrogen vapour curves** (`volatiles::nitrogen_frost_pressure`,
+`nitrogen_vapour_pressure`; study 24). The frost is the N₂-1 / N₂-2
+polynomial fit of Fray & Schmitt 2009 as Lisse et al. 2021 give it in
+their Table 2, pinned to the triple point (63.14 K, 12 530 Pa) and
+switching phase at 35.61 K (Scott 1976, via Tegler et al. 2019), with a
+10 K floor (`Definition:`); it gives Triton's 37.2 K a pressure of
+1.40e-5 bar against the 1.4e-5 bar observed. The liquid is the Antoine
+equation of Edejer & Thodos 1967 (via the NIST WebBook), whose fit
+range stops below the triple point: it is 4.5 % low at the normal
+boiling point (77.355 K, 0.955 atm) and 12.5 % low at the triple point.
+That is the accuracy of the fit, kept by design, and no pressure that
+the model asks for needs better. The SO₂ frost
+(`sulphur_dioxide_frost_pressure`, Wagman 1979 via Giles 2024, anchored
+at Giauque & Stephenson 1938's 197.64 K and 1 670 Pa) is 10 % under
+Wagman's value at 115 K.
+
+**Volcanism for the snowball chance** (`planet::volcanism`, option B of
+2026-11-24). The intensity the chance reads is
+`volcanic_intensity(heat_flux)` of `science::relief::volcanoes`, times
+`LID_SHARE / MOBILE_SHARE` (`science::outgassing`, 0.2 / 0.95) under a
+stagnant lid, 1 otherwise. It adds no number, and legacy's
+`interim::volcanism` is not ported. The bare chain records it as
+`SURFACE_VOLCANISM` right after the regime: Earth 0.506, Mars 0.079.
+2d-3 divides it by `EARTH_VOLCANIC_INTENSITY` and refits
+`SNOWBALL_WARM_BAR`, the 0.8 bar above. A heat pipe has no special case
+(legacy set it to 1): the regime classes one from 1 W/m²
+(`tectonics::HEAT_PIPE_FLUX`) but the law reaches 1 only at 2.5 W/m²
+(`volcanoes::HEAT_PIPE_FLUX`), so a heat pipe reads 0.83 to 1 (0.90 at
+1.5 W/m²). The mismatch is issue #670.
+
+**Where the code lives.** `science::surface::cover` holds the cover and
+the ground albedo: `cover` (takes the obliquity), `ground_albedo`,
+`ice_line_share`, `sunlit_cap`, `ocean_fraction`, `frost_cover`,
+`surface_vapour` and the public `RELATIVE_HUMIDITY`, which replaces the
+test-only `MANABE_HUMIDITY` of `radiation`. `science::surface::liquids`
+holds the surface liquid and the frosts. The cloud cover stays out of
+`Cover`: the caller builds `Underneath { ground, clouds, deck }` from
+`ground_albedo`, `radiation::clouds::cloud_cover` and
+`veils::sulphuric_deck`. `system::planet::volcanism` holds the
+volcanic intensity.
 
 Calibration targets, through the whole chain from the reference bodies'
 inputs round the Sun at 4.6 Gyr:
@@ -2378,8 +2454,8 @@ mass loss. The census counts the runaways by their source
 (`Water::boiled`) and by decade of their steam column, with the steam
 worlds apart, the wet planets left past 647 K because their boil was not
 kept, the snowballs by insolation and the methane worlds. It took 428 s
-on four threads (`RAYON_NUM_THREADS=4`; about 0.85 s a system, issue
-#593 holds the column's cost).
+on four threads (`RAYON_NUM_THREADS=4`; about 0.85 s a
+system, the column's cost is issue #593).
 
 ```text
 500 systems, 1552 planets

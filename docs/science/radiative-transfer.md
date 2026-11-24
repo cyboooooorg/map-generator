@@ -710,8 +710,10 @@ reads the forcings, never the central object's kind).
    numbers (`Underneath`): the ground albedo, the share of the sky under
    water clouds and the share of the disc under a sulphuric deck. The
    albedo comes back with the share of the light the air absorbs
-   (`ShortwaveBudget`). The surface cover (ice line, frost, icy age, ocean
-   fraction, ice sheets) comes with the global climate, in a later change.
+   (`ShortwaveBudget`). The surface cover (ice line, frost, ocean
+   fraction, ice sheets) is `science::surface::cover`, and its
+   `ground_albedo` gives the first number
+   ([planet-atmospheres.md](planet-atmospheres.md#climate-and-surface-liquid)).
    For Earth, the ground albedo is the clear-sky surface albedo of CERES
    EBAF Ed4: 29.8 / 243.8 = 0.122 (Kato et al. 2018, Table 5). The air's
    cloud, haze and deck terms then add to it.
@@ -1017,8 +1019,10 @@ a literature check of every number and citation (the full audit is in the
   `HAZE_ABSORPTION`) are the legacy values, fitted on Titan's Bond albedo
   taken as 0.27 under the legacy Rayleigh law; they are not refitted in
   this port, which changed the Rayleigh law and the reference (0.265).
-  The refit waits for Titan's ground from the climate of 2d (issue
-  #656).
+  The cover now exists (`science::surface::cover::ground_albedo`), but
+  no sourced broadband Titan ground albedo does (study 24, Wiki page
+  `24-surface-cover-audit`; the Huygens spectra are local and
+  spectral), so the refit stays open (issue #656).
 - **Citations** are corrected where they were wrong: the DOIs of Meador &
   Weaver 1980, Haus et al. 2016 and Li et al. 2011; the sections of
   Pierrehumbert 2010 (the skin temperature is §3.6, phase change §2.6);
