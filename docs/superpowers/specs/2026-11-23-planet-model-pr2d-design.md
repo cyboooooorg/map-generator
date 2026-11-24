@@ -242,8 +242,9 @@ Decisions taken with the user on 2026-11-24 for 2d-3a:
 - **#672 and #675:** a tidally locked rotator takes the substellar
   distribution, both for the sunlit share of the ice and for the
   lava-world threshold (Kite et al. 2016's substellar temperature); a
-  fast rotator keeps the zonal form and the mean. The rotation criterion
-  is sourced in study 25.
+  fast rotator keeps the zonal form and the mean. No sourced rotation
+  criterion was found (study 25), so the solver keeps the locked flag
+  only.
 - **The spin as an input:** `class_of(&Trial)` has no spin (it is drawn
   after the class, from the designation's seed), and tidal locking comes
   with #604. The solver therefore takes the obliquity and a "locked"
@@ -278,19 +279,26 @@ settles, not a law); the laws it calls stay in `science`.
   a water world past the water laws gets its steam envelope and its
   radius (#492), and the steam loss and shoreline read that body
   instead of the condensed radius.
-- **Mars's test air:** the climate bound on Mars (210 ± 5 K) runs on a
-  surface pressure from a cited source (for example the Viking or MSL
-  REMS annual mean), set in the test as an imposed input. Legacy's
+- **Mars's test air:** the climate bound on Mars (214 ± 5 K, the NASA
+  fact sheet's average temperature) runs on a surface pressure from a
+  cited source (for example the Viking or MSL REMS annual mean), set in
+  the test as an imposed input. Legacy's
   `MARS_CO2_FACTOR` (from memory) is not ported.
-- **Venus:** the pinned 577 K test is ported as is (#594).
+- **Venus:** the tier-1 test keeps the sourced checks (Bond albedo
+  0.76 ± 0.05, no liquid). The 577 K pin is the model's own output
+  (#594): it goes to the tier-2 net in 2d-4, because `settled` is not
+  reachable from `crates/regression` before then.
 - **#646:** `CH4_OPACITY` is refitted on Titan with the new methane
   curve here, since 2d-3 is the column's first caller.
 
 Tests: the 56 legacy climate tests, the slow ones under
 `#[ignore = "heavy: …"]` (`the_outer_edge_follows_the_star`, the
-Kopparapu edges, `census_182_d`, the Titan sweeps). Expected values
-come from sources (the Solar System's measured temperatures, Kopparapu
-2013's edges); a pinned value stays only as a tier-2 regression net.
+Kopparapu edge, `census_182_d`, the Titan sweeps). Expected values
+come from sources (the Solar System's measured temperatures); the
+outer edge is checked against Kopparapu 2014's fit in a tier-3 test,
+and the measured gap (+22.9 % in flux round the Sun) is a documented
+departure (#595), not a bound; a pinned value stays only as a tier-2
+regression net.
 
 ### 2d-4: life, class and wiring
 
@@ -375,7 +383,7 @@ rewrite's value holds.
 | #659 | Steps in 2d-1 and 2d-3, closed by 2d-4 | The deferred steps |
 | #654 | No | Changes the humidity profile and the cloud fit: its own study and pull request; 2d uses 0.77, the path the cloud fit was made on |
 | #655 | No | A stellar spectral library: its own study and data |
-| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d ports the pinned Venus test as is |
+| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d keeps Venus's sourced checks in tier 1 and pins the 577 K in tier 2 (2d-4) |
 | #647 | No | Declared simplification; to check against #595 later |
 | #648 | Its labelling rule only, for 2d's solver constants | The column-top convergence test stays with the column |
 | #649, #650 | No | Opacity data provenance |
