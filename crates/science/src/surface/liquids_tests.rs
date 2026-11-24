@@ -77,67 +77,97 @@ fn a_trace_of_methane_makes_no_lake() {
         liquid(TITAN_SEA_K, &trace, dry(), false, &none()),
         Some(Liquid::Hydrocarbons)
     );
-    // Titan's air holds the vapour of its seas.
+}
+
+/// Titan's air holds the vapour of its seas: they are liquid at the
+/// surface temperature Huygens measured, 93.65 K (Fulchignoni et al.
+/// 2005), above the freezing point of the sea under its 1.45 bar of N2.
+#[test]
+fn titans_seas_are_liquid_at_its_surface_temperature() {
     let titan = PartialPressures {
         ch4: methane_sea_vapour(Kelvin(TITAN_SURFACE_K)).0,
         ..TITAN_SURFACE_AIR
     };
+    assert!(methane_freezes(TITAN_N2).0 < TITAN_SURFACE_K);
     assert_eq!(
         liquid(Kelvin(TITAN_SURFACE_K), &titan, dry(), false, &none()),
         Some(Liquid::Hydrocarbons)
     );
-    // Its methane share, against Titan's 5.65 % (Niemann et al. 2010).
+}
+
+/// Titan's methane share over a sea, against 5.65 % (Niemann et al.
+/// 2010).
+#[test]
+fn the_vapour_of_a_sea_gives_titans_methane_share() {
     let vapour = methane_sea_vapour(TITAN_SEA_K).0;
     let share = vapour / (TITAN_N2.0 + vapour);
     println!("Titan's CH4 share over a sea at 94 K: {share:.4}");
     assert!((0.03..0.06).contains(&share), "{share}");
 }
 
+/// The more nitrogen the air dissolves in the sea, the lower its freezing
+/// point (issue #524).
 #[test]
-fn nitrogen_keeps_methane_liquid_below_its_triple_point() {
-    // No nitrogen: a sea of half methane, half ethane, liquid down to
-    // about 77 K.
-    let bare = methane_freezes(Bar(0.0)).0;
-    // Titan's 1.45 bar of N2: about a fifth of the liquid, and less
-    // ethane, down to about 69 K.
-    let titan = methane_freezes(TITAN_N2).0;
-    // More nitrogen, colder liquid, down to the cap, where methane
-    // freezes first.
+fn nitrogen_lowers_the_freezing_of_methane() {
+    let freezes = |n2: f64| methane_freezes(Bar(n2)).0;
+    println!(
+        "methane_freezes: 0 bar {:.3} K, 1.45 bar {:.3} K, 100 bar {:.3} K",
+        freezes(0.0),
+        freezes(TITAN_N2.0),
+        freezes(100.0)
+    );
+    let mut last = freezes(0.0);
+    for n2 in [0.5, TITAN_N2.0, 3.0] {
+        assert!(freezes(n2) < last, "{n2} bar: {} >= {last}", freezes(n2));
+        last = freezes(n2);
+    }
+}
+
+/// Once the sea holds `MAX_NITROGEN_IN_LIQUID` of nitrogen no more
+/// dissolves: its freezing point stops falling.
+#[test]
+fn dissolved_nitrogen_has_a_floor() {
     let floor = methane_freezes(Bar(100.0)).0;
-    println!("methane_freezes: 0 bar {bare:.3} K, 1.45 bar {titan:.3} K, 100 bar {floor:.3} K");
-    assert!((75.0..78.0).contains(&bare), "{bare}");
-    assert!((67.0..71.0).contains(&titan), "{titan}");
-    assert!(methane_freezes(Bar(0.5)).0 > titan);
-    assert!(methane_freezes(Bar(10.0)).0 < titan);
     let cap = hydrocarbon_freezes(
         MAX_NITROGEN_IN_LIQUID,
         1.0 - SEA_METHANE_SHARE - MAX_NITROGEN_IN_LIQUID,
     )
     .0;
     assert!((floor - cap).abs() < TIGHT, "{floor} {cap}");
-    assert!((66.0..69.0).contains(&floor), "{floor}");
-    // A Titan at 89 K under 1 bar of N2 keeps its lakes.
-    let air = PartialPressures {
-        n2: 1.0,
-        ch4: methane_sea_vapour(Kelvin(89.0)).0,
-        ..PartialPressures::default()
+    assert!((methane_freezes(Bar(1000.0)).0 - floor).abs() < TIGHT);
+}
+
+/// The ethane of the sea dilutes its methane: it freezes under the pure
+/// methane triple point, with or without nitrogen.
+#[test]
+fn a_methane_sea_freezes_below_pure_methane() {
+    for n2 in [0.0, TITAN_N2.0, 100.0] {
+        let freezes = methane_freezes(Bar(n2)).0;
+        assert!(freezes < METHANE_TRIPLE_TEMPERATURE, "{n2} bar: {freezes}");
+    }
+}
+
+/// A sea is liquid over its freezing point and not under it, with or
+/// without the nitrogen of the air.
+#[test]
+fn a_methane_sea_is_liquid_over_its_freezing_point() {
+    let sea_at = |n2: f64, t: f64| {
+        let air = PartialPressures {
+            n2,
+            ch4: methane_sea_vapour(Kelvin(t)).0,
+            ..PartialPressures::default()
+        };
+        liquid(Kelvin(t), &air, dry(), false, &seas())
     };
-    assert_eq!(
-        liquid(Kelvin(89.0), &air, dry(), false, &seas()),
-        Some(Liquid::Hydrocarbons)
-    );
-    // Without nitrogen its ethane keeps it liquid at 89 K too, but not at
-    // 75 K.
-    let thin = PartialPressures { n2: 0.0, ..air };
-    assert_eq!(
-        liquid(Kelvin(89.0), &thin, dry(), false, &seas()),
-        Some(Liquid::Hydrocarbons)
-    );
-    let cold = PartialPressures {
-        ch4: methane_sea_vapour(Kelvin(75.0)).0,
-        ..thin
-    };
-    assert_eq!(liquid(Kelvin(75.0), &cold, dry(), false, &seas()), None);
+    for n2 in [0.0, 1.0] {
+        let freezes = methane_freezes(Bar(n2)).0;
+        assert_eq!(
+            sea_at(n2, freezes + 0.5),
+            Some(Liquid::Hydrocarbons),
+            "{n2} bar"
+        );
+        assert_eq!(sea_at(n2, freezes - 0.5), None, "{n2} bar");
+    }
 }
 
 /// Nitrogen alone, condensed above its triple point: a sea of liquid
@@ -207,10 +237,6 @@ fn ethane_lowers_the_liquidus() {
     // Without ethane or nitrogen, pure methane's triple point.
     let pure = hydrocarbon_freezes(0.0, 0.0).0;
     assert!((pure - METHANE_TRIPLE_TEMPERATURE).abs() < TIGHT, "{pure}");
-    // A sea under Titan's air, with its ethane, stays liquid well under
-    // the binary rule's 77.6 K.
-    let titan = methane_freezes(TITAN_N2).0;
-    assert!(titan < 72.0, "{titan}");
 }
 
 #[test]
@@ -329,7 +355,10 @@ fn frozen_frost_melts_back() {
 }
 
 /// Io's SO2 frost under an air at its sublimation pressure stays whole;
-/// above the frost's triple point it all goes back to the air.
+/// above the frost's triple point it all goes back to the air. The 1 bar
+/// of CO2 frost of `frost_at_triple` goes back too, for another reason:
+/// at 197.64 K CO2's sublimation pressure exceeds that 1 bar, so the
+/// air takes all of it.
 #[test]
 fn io_keeps_its_so2_frost() {
     let t = IO_SURFACE_K;

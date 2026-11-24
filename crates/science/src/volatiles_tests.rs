@@ -367,9 +367,10 @@ const WAGMAN_FACTOR: f64 = 1.2;
 
 #[test]
 fn sulphur_dioxide_frost_holds_from_io_to_its_triple_point() {
-    let p = sulphur_dioxide_frost_pressure(Kelvin(197.64 - 1e-9)).unwrap();
-    assert!(close(p.0, 1_670.0, 1e-6));
-    assert!(sulphur_dioxide_frost_pressure(Kelvin(197.64)).is_none());
+    let triple = SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE;
+    let p = sulphur_dioxide_frost_pressure(Kelvin(triple.0 - 1e-9)).unwrap();
+    assert!(close(p.0, SULPHUR_DIOXIDE_TRIPLE_PRESSURE.0, 1e-6));
+    assert!(sulphur_dioxide_frost_pressure(triple).is_none());
 
     let mut previous = 0.0;
     let mut t = SO2_SWEEP_FLOOR_K;

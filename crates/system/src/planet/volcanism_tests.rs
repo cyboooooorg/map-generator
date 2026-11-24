@@ -1,4 +1,9 @@
 //! Tier 1: the volcanic intensity recorded in the bare chain.
+//!
+//! These tests check the wiring and the cause nodes: the composition of
+//! two sourced laws (`heat_flux`, `volcanic_intensity`) and the regime
+//! shares, read in the order the trace records. They do not check a
+//! published value: the laws' own tests do.
 
 use super::bare::bare_with;
 use super::codes;

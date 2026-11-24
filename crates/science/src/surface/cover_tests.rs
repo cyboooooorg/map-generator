@@ -22,8 +22,9 @@ fn earth_obliquity() -> Radian {
 /// Definition: the tolerance of an identity.
 const TIGHT: f64 = 1e-12;
 
-/// Definition: a surface air thin enough to leave a regolith unshielded
-/// by half, 1e-5 bar (a tenth of `SHIELD_PRESSURE`).
+/// Definition: a surface air thin enough to leave a regolith almost
+/// unshielded, 1e-5 bar (a tenth of `SHIELD_PRESSURE`): the shield is
+/// `1 - e^-0.1`, about 9.5 %.
 const THIN_AIR: Bar = Bar(1e-5);
 
 /// Definition: the temperature of a cold airless body of the tests, K.
@@ -62,6 +63,10 @@ fn nitrogen(bar: f64) -> PartialPressures {
 fn earth_has_seventy_one_percent_of_ocean() {
     assert!((ocean_fraction(1.0).get() - EARTH_OCEAN_COVER).abs() < TIGHT);
     assert_eq!(ocean_fraction(0.0).get(), 0.0);
+    // Legacy's two bounds: the cover rises with the water and a drowned
+    // world is all ocean.
+    assert!(ocean_fraction(0.1).get() < ocean_fraction(1.0).get());
+    assert!(ocean_fraction(10.0).get() > 0.99999);
 }
 
 #[test]
@@ -86,7 +91,9 @@ fn ice_cover_grows_as_the_planet_cools() {
     }
     let earth = ice(EARTH_SURFACE_K);
     println!("Earth's ice at 288 K: {earth:.4}");
-    // Observation: Earth's ice and snow, about a tenth of its disc.
+    // Observation: Earth's ice and snow, about a tenth of its disc:
+    // Antarctica 2.7 % (Bedmap2, Fretwell et al. 2013) and sea ice 6.7 %
+    // (NSIDC), study 24, section 6. The band is the test's tolerance.
     assert!((0.06..=0.14).contains(&earth), "{earth}");
     for t in [200.0, 230.0, 240.0, 250.0] {
         assert!(ice(t) > 0.999, "{t}: {}", ice(t));
@@ -116,7 +123,12 @@ fn bond_albedo_clear(cover: &Cover, air: &PartialPressures, t: f64) -> f64 {
 #[test]
 fn a_nearly_dry_planet_whitens_only_its_poles() {
     // Mars-like: a few thousandths of an ocean at 210 K make polar caps,
-    // not a white disc; a snowball Earth is white all over.
+    // not a white disc; a snowball Earth is white all over. The cap
+    // bound (`ice < 0.02`) is the test's own definition of a cap: the
+    // page has no measured share for it. The Bond albedo band is centred
+    // on Mars's 0.250 (NASA Mars Fact Sheet), its width the test's
+    // tolerance.
+    // Mars's 6 mbar of CO2, NASA Mars Fact Sheet.
     let air = PartialPressures {
         co2: 6e-3,
         ..PartialPressures::default()
@@ -296,6 +308,15 @@ fn no_frost_divides_nothing() {
     );
     assert_eq!(wet.so2_frost.get(), 0.0);
     assert!(ground_albedo(&wet, Bar(1.0)).get().is_finite());
+    // A fully iced disc divides nothing either.
+    let iced = cover(
+        Kelvin(200.0),
+        oceans(5.0),
+        EARTH_MEAN_RADIUS,
+        &no_frost(),
+        earth_obliquity(),
+    );
+    assert!(ground_albedo(&iced, Bar(1.0)).get().is_finite());
 }
 
 #[test]
@@ -304,7 +325,7 @@ fn surface_vapour_is_capped_by_the_water() {
     let saturation = vapour_saturation_bar(EARTH_SURFACE_K);
     let got = surface_vapour(t, Bar(10.0)).0;
     assert!(
-        (got - 0.77 * saturation).abs() < TIGHT * saturation,
+        (got - RELATIVE_HUMIDITY * saturation).abs() < TIGHT * saturation,
         "{got}"
     );
     assert_eq!(surface_vapour(t, Bar(1e-6)).0, 1e-6);
@@ -332,16 +353,4 @@ fn sunlight_weights_the_caps() {
         earth_obliquity(),
     );
     assert!(c.ice_sunlit.get() < c.ice.get(), "{c:?}");
-}
-
-#[test]
-fn a_fully_iced_disc_has_no_nan() {
-    let c = cover(
-        Kelvin(200.0),
-        oceans(5.0),
-        EARTH_MEAN_RADIUS,
-        &no_frost(),
-        earth_obliquity(),
-    );
-    assert!(ground_albedo(&c, Bar(1.0)).get().is_finite());
 }
