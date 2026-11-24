@@ -36,17 +36,6 @@ const SEED: u64 = 1;
 /// weights only the light on ice caps: 0 degrees.
 const NO_ICE_OBLIQUITY: Degree = Degree(0.0);
 
-/// Source: Venus's surface temperature on the model's spectral column
-/// under its 85 bar of CO₂ and its Bond albedo of 0.76: 577 K. The
-/// measured 737 K (NASA Venus fact sheet) lies higher by the infrared
-/// opacity of its H₂SO₄ clouds and its SO₂, which the model does not
-/// carry (#594); the bound pins what the model reaches. Legacy
-/// `the_solar_system_has_its_climates`, issue #523.
-const VENUS_SURFACE: Kelvin = Kelvin(577.0);
-
-/// Definition: the window on [`VENUS_SURFACE`], 5 K (#594, ported as is).
-const VENUS_WINDOW: Kelvin = Kelvin(5.0);
-
 /// Source: Venus's Bond albedo, 0.76 (NASA Venus fact sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html).
 const VENUS_BOND: f64 = 0.76;
@@ -279,15 +268,13 @@ fn settled_draws_then_settles_from_its_snowball_seed() {
     assert_eq!(whole, parts);
 }
 
+// The model's own 577 K for Venus (#594) is not a source: it is a pin of
+// the code's output, so it belongs to the tier-2 net, added in 2d-4
+// because `settled` is not reachable from crates/regression before then.
 #[test]
-fn venus_is_pinned_where_the_column_puts_it() {
+fn venus_is_bright_and_has_no_liquid() {
     let (venus, ..) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
     let c = climate(&venus);
-    let t = temperature(&venus);
-    assert!(
-        (t - VENUS_SURFACE.0).abs() <= VENUS_WINDOW.0,
-        "{t} K, {c:?}"
-    );
     assert!(c.liquid.is_none(), "{c:?}");
     assert!(
         (albedo(&venus) - VENUS_BOND).abs() <= VENUS_BOND_WINDOW,
