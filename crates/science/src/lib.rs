@@ -5,6 +5,7 @@
 //! belong to the engines. Every constant cites its source (see the crate
 //! README). The laws arrive with the pull requests that use them.
 
+pub mod balance;
 pub mod constants;
 pub mod dynamo;
 pub mod envelope;

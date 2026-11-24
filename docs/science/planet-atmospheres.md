@@ -2410,10 +2410,17 @@ an emissivity of Triton measured apart from this balance.
 - `A_rg = 1 − 4 F/(S_rg S₀)` is a `Definition:`, with `S₀` the
   rewrite's `SOLAR_IRRADIANCE` (1361 W/m², IAU 2015 B3); legacy's
   `REFERENCE_ALBEDO` (0.3, which rebuilt `S₀` from Earth's 255 K as
-  1369.9 W/m²) is not ported. Round the Sun `A_rg` is 0.247 (derived).
+  1369.9 W/m²) is not ported. Round the Sun `A_rg` is about 0.23 on the
+  rewrite's plateau, `balance::earth_moist_plateau` (289.7 W/m²; study 25
+  derived 0.247 on legacy's 283.5 W/m²). These albedos follow from the
+  plateau and are not test targets: the tests hold the binding identity
+  and the plateau against Goldblatt et al. 2013 (282 ± 14 W/m²).
 - `RUNAWAY_ALBEDO` (0, 0.9) is a guard (`Definition:`): over the fit's
-  2600 to 7200 K, `A_rg` runs from 0.087 to 0.357 on the 283.5 W/m²
-  plateau (derived).
+  2600 to 7200 K, `A_rg` runs from about 0.07 to 0.34 on the 289.7 W/m²
+  plateau (derived; 0.087 to 0.357 on legacy's 283.5 W/m²).
+- **Departure from legacy:** the rewrite's moist plateau, 289.7 W/m², is
+  2.2 % above legacy's 283.5 W/m²; both sit inside Goldblatt et al.
+  2013's band of 282 ± 14 W/m² (5 %).
 - **Calibration of `STEAM_ALBEDO_BAR`** (1 bar, kept). Kopparapu et al.
   2013 reach the moist limit "at a surface temperature of 340 K" and
   the albedo's minimum "at a surface temperature of 400 K" (§ III.1);
