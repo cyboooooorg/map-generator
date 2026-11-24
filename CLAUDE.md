@@ -136,6 +136,24 @@ the pull requests being tried, rebuilt from `main` at every cycle.
    git push --force-with-lease origin origin/main:develop
    ```
 
+Before opening a pull request, at the end of the branch:
+
+1. Run `mise run ci`.
+2. Run the end-of-branch agents in parallel, each given the branch and
+   its spec or plan, not your conclusions:
+   - `branch-reviewer`, always;
+   - `test-reviewer`, when the branch adds or changes tests;
+   - `science-coherence-checker`, when the branch touches
+     `crates/science`, a law in an engine, `docs/science/` or a Wiki
+     study;
+   - `issue-auditor`, always, last, given the other reports and the
+     draft PR text too.
+3. Fix the findings on the branch, then re-run `mise run ci` (not a new
+   review, unless a fix changes the design). File the issues the audit
+   found missing (`issue-writer`), post its comments, put its closing
+   keywords in the PR text.
+4. Then open the pull request (`pr-shepherd`).
+
 Rules that follow from it:
 
 - `develop` is rewritten at every cycle: never base a branch on it, never
@@ -209,6 +227,8 @@ agents:
 | `branch-syncer` | Merge `main` into open branches and run `mise run ci` | sonnet, medium |
 | `branch-reviewer` | Review a whole branch before its PR (read-only) | opus, high |
 | `test-reviewer` | Check a branch's tests: tiers, duplicates, sources, budgets | sonnet, medium |
+| `science-coherence-checker` | Check code, `docs/science` and Wiki agree before a PR | opus, high |
+| `issue-auditor` | Check no issue was forgotten before a PR (read-only) | sonnet, medium |
 | `develop-rebuilder` | Rebuild `develop` from `main` with the listed PRs | sonnet, low |
 | `generation-profiler` | Time and profile generation before and after | sonnet, medium |
 | `world-coherence-checker` | The oracle: legacy against new, by distributions | sonnet, medium |
@@ -260,8 +280,8 @@ otherwise):
 - implementers run on sonnet; opus only for a task the plan marks as hard
   (physics, formats, concurrency) or for `science-fixer`;
 - no review subagent after each task: the implementer runs `mise run ci`,
-  and `branch-reviewer` and `test-reviewer` review the whole branch once,
-  before the PR;
+  and the end-of-branch agents (Branches and pull requests) review the
+  whole branch once, before the PR;
 - after a fix following that review, re-run `mise run ci`, not a new full
   review, unless the fix changes the design;
 - recon goes to `codebase-mapper`, never to `Explore` or `general-purpose`.
