@@ -157,10 +157,19 @@ const METHANE_SWEEP: (f64, f64) = (0.7, 1.5);
 /// sweep must start under; 0.55 to 0.85 spans 57.9 to 67.5 K (measured).
 const NITROGEN_SWEEP: (f64, f64) = (0.55, 0.85);
 
-/// Definition: the most the nitrogen sweep's temperature may jump
-/// between two neighbours, 1 K (legacy `the_fixed_point_converges_across_
-/// the_nitrogen_triple_point`).
+/// Definition: the most the nitrogen sweep's temperature may step
+/// between two neighbours away from its triple point, 1 K (legacy's
+/// number, `PHASE_BAND`'s width; the jump across the point is held by
+/// [`PHASE_RATIO_TOLERANCE`] instead).
 const NITROGEN_JUMP_K: f64 = 1.0;
+
+/// Definition: the relative agreement, 1 %, of the ratio of the light two
+/// adjacent climates absorb with the ratio of their `ε T⁴` across the
+/// nitrogen triple point: the thin air's column carries the surface's
+/// `ε σ T⁴` to space up to the share its own emission changes between
+/// the phases, which is far under 1 %. Measured: absorbed ×1.5556
+/// against `ε T⁴` ×1.5580, 0.15 % apart.
+const PHASE_RATIO_TOLERANCE: f64 = 0.01;
 
 /// Definition: the climates that must fall in the methane sea's melting
 /// band, 20 (legacy).
@@ -246,10 +255,6 @@ const ARCHEAN_AIRS: [f64; 2] = [0.99, 1.99];
 /// Definition: the bounds of the column's temperature search, 200 and
 /// 400 K, and its 40 bisection steps (legacy).
 const ARCHEAN_SEARCH: (f64, f64, usize) = (200.0, 400.0, 40);
-
-/// Source: the late Archean surface, 270 to 290 K (legacy bound; Goldblatt
-/// et al. 2009, doi:10.1038/ngeo692).
-const ARCHEAN_SURFACE: (f64, f64) = (270.0, 290.0);
 
 /// Source: the warming from doubling the nitrogen, 3 to 6 K: +7 K in
 /// the GCM of Charnay et al. 2013 (§5.2), +4 to 5 K in the 1-D model of
@@ -718,10 +723,20 @@ fn sweep_of(
         .collect()
 }
 
+/// A climate of a sweep: its flux and its settle.
+type Point<'a> = (f64, &'a Settle);
+
 /// Review Focus 5: across `threshold_k`, every climate of `sweep` settled
 /// and its temperature rises with the flux, with no jump over
-/// `most_jump_k` between neighbours (legacy `settles_across`).
-fn settles_across(sweep: &[(f64, Settle)], threshold_k: f64, most_jump_k: f64) {
+/// `most_jump_k` between neighbours (legacy `settles_across`), except a
+/// jump `explained` says the phases alone account for. Returns how many
+/// jumps it let through.
+fn settles_across(
+    sweep: &[(f64, Settle)],
+    threshold_k: f64,
+    most_jump_k: f64,
+    explained: &dyn Fn(Point<'_>, Point<'_>) -> bool,
+) -> usize {
     let (first, last) = (&sweep[0].1, &sweep[sweep.len() - 1].1);
     assert!(
         first.temperature.0 <= threshold_k - SPAN_K && last.temperature.0 >= threshold_k + SPAN_K,
@@ -732,9 +747,14 @@ fn settles_across(sweep: &[(f64, Settle)], threshold_k: f64, most_jump_k: f64) {
     for (flux, c) in sweep {
         assert!(c.converged, "{flux:.6}: {c:?}");
     }
+    let mut jumps = 0;
     for pair in sweep.windows(2) {
         let ((f0, a), (f1, b)) = (&pair[0], &pair[1]);
         let step = b.temperature.0 - a.temperature.0;
+        if step >= most_jump_k && explained((*f0, a), (*f1, b)) {
+            jumps += 1;
+            continue;
+        }
         assert!(
             step > -ALBEDO_TOLERANCE_K.0 && step < most_jump_k,
             "{f0:.6} -> {f1:.6}: {:.3} -> {:.3} K ({a:?} {b:?})",
@@ -742,6 +762,7 @@ fn settles_across(sweep: &[(f64, Settle)], threshold_k: f64, most_jump_k: f64) {
             b.temperature.0
         );
     }
+    jumps
 }
 
 #[test]
@@ -754,7 +775,7 @@ fn the_fixed_point_converges_across_the_methane_freezing_point() {
     };
     let freezes = methane_freezes(THIN_N2).0;
     let sweep = sweep_of(&reference, air, METHANE_SWEEP);
-    settles_across(&sweep, freezes, f64::INFINITY);
+    settles_across(&sweep, freezes, f64::INFINITY, &|_, _| false);
     let melting = sweep
         .iter()
         .filter(|(_, c)| (freezes - PHASE_BAND.0..freezes).contains(&c.temperature.0))
@@ -766,14 +787,60 @@ fn the_fixed_point_converges_across_the_methane_freezing_point() {
 #[test]
 #[ignore = "heavy: 200 climates of a nitrogen world across its triple point"]
 fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
+    // Every climate of the sweep converges, and away from the triple point
+    // adjacent climates stay within NITROGEN_JUMP_K. Across it there is a
+    // jump, and it is a bistability, as the runaway edge's step is
+    // (#523): nitrogen frost (Bond albedo 0.754, emissivity 0.80) and the
+    // melting frost or liquid nitrogen under it (albedo 0.616, emissivity
+    // 1.00) are both stable fixed points at one flux, and the branch the
+    // fixed point reaches depends on its warm start. Measured on the
+    // 200-point sweep: 59.769 K (frost) at flux 0.006861 against 63.153 K
+    // (liquid) at 0.006878, +0.24 % of flux, with the same flux settling
+    // at 63.094 K from the warm state and the warm flux at 59.804 K from
+    // the cold one; the absorbed light rises by a factor 1.55 and so does
+    // ε T⁴ ((0.9983 / 0.80) (63.094 / 59.769)⁴). So a jump the sweep
+    // lets through must change the phase, and the absorbed flux must
+    // rise as ε T⁴ does, within PHASE_RATIO_TOLERANCE.
     let reference = titan();
     let air = PartialPressures {
         n2: NITROGEN_WORLD_N2.0,
         ch4: 0.0,
         ..reference.air
     };
+    let base = ClimateInputs {
+        air,
+        ..reference.clone()
+    };
     let sweep = sweep_of(&reference, air, NITROGEN_SWEEP);
-    settles_across(&sweep, NITROGEN_TRIPLE_TEMPERATURE.0, NITROGEN_JUMP_K);
+    let absorbed_by = |c: &Settle| {
+        let mut body = ClimateBody::new(&base, Numerics::DEFAULT);
+        let light = body.starlight(c.bond_albedo);
+        absorbed(light, &c.air, base.heat_flux).0
+    };
+    let explained = |(f0, a): Point<'_>, (f1, b): Point<'_>| {
+        let phase = a.liquid.is_none() != b.liquid.is_none();
+        let light = absorbed_by(b) / absorbed_by(a);
+        let emitted = (b.emissivity.get() * b.temperature.0.powi(4))
+            / (a.emissivity.get() * a.temperature.0.powi(4));
+        println!(
+            "jump {f0:.6} -> {f1:.6}: {:.3} -> {:.3} K, albedo {:.4} -> {:.4}, emissivity \
+             {:.4} -> {:.4}, absorbed x{light:.4}, e T^4 x{emitted:.4}",
+            a.temperature.0,
+            b.temperature.0,
+            a.bond_albedo.get(),
+            b.bond_albedo.get(),
+            a.emissivity.get(),
+            b.emissivity.get()
+        );
+        phase && (light / emitted - 1.0).abs() <= PHASE_RATIO_TOLERANCE
+    };
+    let jumps = settles_across(
+        &sweep,
+        NITROGEN_TRIPLE_TEMPERATURE.0,
+        NITROGEN_JUMP_K,
+        &explained,
+    );
+    assert!(jumps <= 1, "{jumps} explained jumps");
 }
 
 #[test]
@@ -999,10 +1066,12 @@ fn doubling_the_nitrogen_warms_a_late_archean_earth_by_a_few_kelvin() {
         free.0,
         t2 - t1
     );
-    assert!(
-        (ARCHEAN_SURFACE.0..=ARCHEAN_SURFACE.1).contains(&t1),
-        "{t1}"
-    );
+    // The 1-bar temperature is printed, not bounded: legacy's 270-290 K
+    // window had no published source (Goldblatt et al. 2009 and Charnay
+    // et al. 2013 give the warming, not the absolute value). The column
+    // puts it about 3.5 K under legacy's 275.4 K because of the IAPWS
+    // saturation curve (272.8 K with legacy's constant-L curve swapped in,
+    // see the column issue).
     let warming = t2 - t1;
     assert!(
         (ARCHEAN_WARMING.0..=ARCHEAN_WARMING.1).contains(&warming),
