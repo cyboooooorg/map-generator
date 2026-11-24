@@ -2442,6 +2442,8 @@ another paper, from memory) is said where it is used.
 - Johnstone et al. 2021, *A&A* 649, A96,
   doi:10.1051/0004-6361/202038407.
 - Karkoschka 2001, albedos of the Uranian moons.
+- Karwat 1924, NH₃'s sublimation pressure at 162.39 K, through Fray
+  and Schmitt 2009 as Blakley et al. 2024 quote it.
 - Kasting 1991, Appendix B, CO₂'s pseudo-adiabat.
 - Kelemen and Manning 2015, doi:10.1073/pnas.1507889112,
   carbon recycling.
