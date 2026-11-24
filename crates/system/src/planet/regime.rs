@@ -6,8 +6,9 @@ use super::codes;
 use super::enveloped::Body;
 use super::interior::InteriorError;
 use crate::Trial;
+use science::relief::volcanoes::heat_flux;
 use science::tectonics::{HEAT_PIPE_FLUX, PLATES_MIN_MASS};
-use science::units::Metre;
+use science::units::{Metre, Watt};
 use timeline::{Code, Heat, NodeId, TectonicRegime, Trace, Traced, Water};
 
 /// The tectonic regime of the planet `trial` of body `body`, internal
@@ -36,17 +37,17 @@ pub(crate) fn regime(
     trace: &mut Trace,
 ) -> Result<Traced<TectonicRegime>, InteriorError> {
     let radius = body.bulk().radius;
-    let r = Metre::from(*radius.value()).0;
-    let power = heat.radiogenic.value().0 + heat.tidal.value().0 + heat.secular.value().0;
-    // Definition: the area of a sphere, 4 π R².
-    let flux = power / (4.0 * std::f64::consts::PI * r * r);
+    let flux = heat_flux(
+        Watt(heat.radiogenic.value().0 + heat.tidal.value().0 + heat.secular.value().0),
+        Metre::from(*radius.value()),
+    );
     let mut from: Vec<NodeId> = vec![
         heat.radiogenic.node(),
         heat.tidal.node(),
         heat.secular.node(),
         radius.node(),
     ];
-    let regime = if flux > HEAT_PIPE_FLUX.0 {
+    let regime = if flux.0 > HEAT_PIPE_FLUX.0 {
         TectonicRegime::HeatPipe
     } else {
         from.push(trial.mass.node());

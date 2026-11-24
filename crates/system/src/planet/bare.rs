@@ -20,11 +20,12 @@ use super::escape::escaped;
 use super::heat::heat;
 use super::interior::{Interior, InteriorError, interior};
 use super::regime::regime;
+use super::volcanism::volcanism;
 use super::water::{after_steam, surface_water, water};
 use crate::Trial;
 use science::escape::MIN_ENVELOPE;
-use science::units::Bar;
 use science::units::Kilogram;
+use science::units::{Bar, Fraction};
 use timeline::{Atmosphere, Heat, Seed, TectonicRegime, Trace, Traced, Water};
 
 /// A planet from its draw to its bare air.
@@ -51,6 +52,9 @@ pub(crate) struct Bare {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BareSurface {
     pub regime: Traced<TectonicRegime>,
+    /// The volcanic intensity the snowball chance reads
+    /// ([`volcanism`]).
+    pub volcanism: Traced<Fraction>,
     pub core: timeline::Core,
     /// The water once the air is made: in a runaway, the vapour the
     /// cosmic shoreline kept.
@@ -144,6 +148,7 @@ pub(crate) fn bare_with(
             ),
         };
     let r = regime(&t, &body, &heat, &w, trace)?;
+    let v = volcanism(&body, &heat, &r, trace)?;
     let k = core(&t, rocky(&body), &r, trace)?;
     let made = air(
         &escaped.trial,
@@ -173,6 +178,7 @@ pub(crate) fn bare_with(
         envelope_lost: escaped.lost,
         surface: Some(BareSurface {
             regime: r,
+            volcanism: v,
             core: k.core,
             water: kept,
             atmosphere: made.atmosphere,
