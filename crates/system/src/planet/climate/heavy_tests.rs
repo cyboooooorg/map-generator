@@ -1500,9 +1500,8 @@ fn a_boil_that_escapes_all_its_water_ends_dry() {
         Some(LiquidKind::Water),
         "{c:?}"
     );
-    if water.inventory.value().0 == 0.0 {
-        assert_eq!(verdicts.len(), 1, "{verdicts:?}");
-    }
+    assert_eq!(water.inventory.value().0, 0.0, "{water:?}");
+    assert_eq!(verdicts.len(), 1, "{verdicts:?}");
 }
 
 /// The bulk water share, under [`RECONDENSED_FLUENCE`], whose steam run hands [`LEFTOVER`] to its
@@ -1657,10 +1656,6 @@ fn the_492_super_earth_is_a_steam_world() {
     let c = s.climate.as_ref().unwrap();
     let h2o = *c.atmosphere.partial[&Gas::H2o].value();
     let temperature = *c.global.surface_temperature.value();
-    println!(
-        "#492 b: {temperature:?}, {h2o:?}, {:?}",
-        s.bare.body.bulk().radius
-    );
     assert!(h2o > DEEP_STEAM, "{h2o:?}");
     assert!(temperature > STEAM_WORLD_SURFACE, "{temperature:?}");
     assert!(under_steam(&s));
@@ -1702,7 +1697,6 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
     let c = s.climate.as_ref().unwrap();
     let h2o = *c.atmosphere.partial[&Gas::H2o].value();
     let temperature = *c.global.surface_temperature.value();
-    println!("30 % water at 0.7 AU: {temperature:?}, {h2o:?}");
     assert!(h2o > DEEP_STEAM, "{h2o:?}");
     let (low, high) = THICK_STEAM_WINDOW;
     assert!((low.0..=high.0).contains(&temperature.0), "{temperature:?}");

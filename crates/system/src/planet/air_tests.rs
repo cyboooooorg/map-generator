@@ -14,8 +14,8 @@ use super::interior::Water as Held;
 use super::regime::regime;
 use super::tests::{
     CALLISTO, EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, TITAN,
-    VENUS, WATER_WORLD_FRACTION, ancestry, derive_surface, derived_from, reference_trial, trial,
-    with_fluence,
+    VENUS, WATER_WORLD_FRACTION, ancestry, derive_surface, derived_from, larger_exposed,
+    reference_trial, trial, with_fluence,
 };
 use crate::Trial;
 use crate::sources::{light, sources};
@@ -25,7 +25,7 @@ use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, 
 use science::photochemistry::{
     CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
 };
-use science::units::{Bar, EarthRadius, Gyr, Kilogram, Metre, SolarMass};
+use science::units::{Bar, Gyr, Kilogram, Metre, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
 use timeline::{
     Atmosphere, Code, Gas, NodeId, Provenance, Seed, TectonicRegime, Trace, Traced, Water,
@@ -769,25 +769,12 @@ fn the_photolysis_reads_the_timelines_lyman_alpha() {
     );
 }
 
-/// Definition: the factor of the larger radius of the exposed body, 1.2.
-const LARGER_RADIUS: f64 = 1.2;
-
 #[test]
 fn the_shoreline_reads_the_exposed_body() {
     let mut p = planet(&VENUS);
     let exposed = p.body.exposed();
-    let radius = p
-        .trace
-        .leaf(
-            Code::of("test.radius"),
-            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
-            Provenance::Input,
-        )
-        .unwrap();
-    let larger = Exposed {
-        radius,
-        ..exposed.clone()
-    };
+    let larger = larger_exposed(&mut p.trace, &exposed);
+    let radius = larger.radius;
     let mut share = |exposed: &Exposed| {
         let made = air(
             &p.trial,
@@ -813,5 +800,7 @@ fn the_shoreline_reads_the_exposed_body() {
     let (_, small) = share(&exposed);
     let (node, big) = share(&larger);
     assert!(derived_from(&p.trace, node).contains(&radius.node()));
+    // The ancestry and the direction only: the kept share can saturate,
+    // so a larger radius may keep the same share, never more.
     assert!(big <= small, "{big} > {small}");
 }

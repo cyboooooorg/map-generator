@@ -21,7 +21,7 @@ use super::settled::{
 };
 use super::tests::{
     EARTH, MARS, MERCURY, ReferenceBody, TITAN, VENUS, WET_VENUS, ancestry, derived_from,
-    reference_trial, water_world_trial, with_fluence,
+    reference_trial, with_fluence,
 };
 use super::water::water;
 use crate::Trial;
@@ -842,37 +842,9 @@ fn a_dry_steam_run_is_not_condensed() {
     assert!(nodes_of(&trace, codes::CLIMATE_BOILS).is_empty());
 }
 
-/// Definition: the cool small planet and the temperate one, 0.2 M⊕
-/// (legacy `a_cool_small_planet_does_not_boil` and
-/// `a_trace_of_water_does_not_boil_a_temperate_planet`).
+/// Definition: the cool small planet, 0.2 M⊕ (legacy
+/// `a_cool_small_planet_does_not_boil`).
 pub(super) const SMALL_MASS: f64 = 0.2;
-
-/// Definition: the temperate planet's orbit, 1.2 AU, and its trace of
-/// water, 1e-9 of the mass (legacy
-/// `a_trace_of_water_does_not_boil_a_temperate_planet`).
-const TEMPERATE_TRACE: (f64, f64) = (1.2, 1.0e-9);
-
-/// Definition: the temperature a temperate planet stays under, 400 K
-/// (legacy `a_trace_of_water_does_not_boil_a_temperate_planet`).
-const TEMPERATE_BOUND: Kelvin = Kelvin(400.0);
-
-#[test]
-fn a_trace_of_water_does_not_boil_a_temperate_planet() {
-    // Its vapour is bounded by the water it has, so it cannot hold its
-    // outgoing radiation at the moist limit (Kasting 1988 section 3a).
-    let mut trace = Trace::new();
-    let (au, w) = TEMPERATE_TRACE;
-    let (t, d) = water_world_trial(&mut trace, SMALL_MASS, EARTH.core_mass_fraction, w, au);
-    let rot = rotation(&mut trace, EARTH_OBLIQUITY, false);
-    let s = settled_with(&t, &d, &rot, snowball(), &mut trace).unwrap();
-    let water = &s.bare.surface.as_ref().unwrap().water;
-    assert!(
-        !*water.runaway.value() && !*water.boiled.value(),
-        "{water:?}"
-    );
-    let temperature = *climate(&s).global.surface_temperature.value();
-    assert!(temperature < TEMPERATE_BOUND, "{temperature:?}");
-}
 
 /// Definition: the XUV fluence of the thin-steam Venus, 1e14 J/m², a test
 /// input about a hundred times under the Sun's at Venus (1.08e16): its

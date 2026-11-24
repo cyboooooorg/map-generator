@@ -2,13 +2,15 @@
 
 use super::codes;
 use super::draws::{self, Drawn, LABELS, Labels};
-use super::enveloped::Body;
+use super::enveloped::{Body, Exposed};
 use super::heat::{self, ENVELOPED_MIN_ENVELOPE, ICY_MIN_WATER};
 use super::interior::{Interior, Water, interior};
 use crate::Trial;
 use science::constants::EARTH_MEAN_RADIUS;
 use science::heat::TidalKind;
-use science::units::{AstronomicalUnit, Day, Degree, Dex, EarthMass, Fraction, Gyr, Kelvin};
+use science::units::{
+    AstronomicalUnit, Day, Degree, Dex, EarthMass, EarthRadius, Fraction, Gyr, Kelvin,
+};
 use science::units::{
     EarthFlux, JoulePerSquareMetre, SolarLuminosity, SolarMass, WattPerSquareMetre,
 };
@@ -1463,6 +1465,26 @@ pub(super) fn water_world_trial(
         None,
     );
     (t, drawn)
+}
+
+/// Definition: the factor of the larger radius of the exposed body in
+/// the radius tests (shoreline, steam loss), 1.2.
+pub(super) const LARGER_RADIUS: f64 = 1.2;
+
+/// `exposed` with a radius [`LARGER_RADIUS`] times larger, an input leaf
+/// of `trace`.
+pub(super) fn larger_exposed(trace: &mut Trace, exposed: &Exposed) -> Exposed {
+    let radius = trace
+        .leaf(
+            Code::of("test.radius"),
+            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
+            Provenance::Input,
+        )
+        .unwrap();
+    Exposed {
+        radius,
+        ..exposed.clone()
+    }
 }
 
 /// `t` with its source's effective temperature replaced by `teff`, as

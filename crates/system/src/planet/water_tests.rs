@@ -9,13 +9,14 @@ use super::enveloped::{Body, Exposed};
 use super::interior::{Water as Held, interior};
 use super::regime::regime;
 use super::tests::{
-    EARTH, EARTH_CORE_MASS_FRACTION, MARS, MERCURY, ReferenceBody, VENUS, WATER_WORLD_FRACTION,
-    WET_VENUS, derive, derive_surface, derived_from, reference_trial, trial, with_fluence,
+    EARTH, EARTH_CORE_MASS_FRACTION, LARGER_RADIUS, MARS, MERCURY, ReferenceBody, VENUS,
+    WATER_WORLD_FRACTION, WET_VENUS, derive, derive_surface, derived_from, larger_exposed,
+    reference_trial, trial, with_fluence,
 };
 use super::water::{after_steam, boiled, recondensed, surface_water, water};
 use crate::Trial;
 use science::habitable::{SURFACE_WATER_SHARE, runaway_flux};
-use science::units::{EarthFlux, EarthRadius, Kelvin, Kilogram, Watt};
+use science::units::{EarthFlux, Kelvin, Kilogram, Watt};
 use timeline::{Code, Heat, Provenance, StellarSources, TectonicRegime, Trace, Traced, Water};
 
 /// Source: Io in legacy's reference table: 0.0150 M_E (JPL satellite
@@ -411,9 +412,6 @@ fn the_runaway_threshold_reads_every_source() {
 /// their dependence on the radius.
 const LOW_FLUENCE: f64 = 1.0e13;
 
-/// Definition: the factor of the larger radius of the steam tests.
-const LARGER_RADIUS: f64 = 1.2;
-
 /// `WET_VENUS` under [`LOW_FLUENCE`], its body and surface water, and the
 /// radius `LARGER_RADIUS` times larger.
 fn wet_venus_low() -> (Trace, Trial, Body, Traced<Kilogram>, Exposed, Exposed) {
@@ -423,17 +421,7 @@ fn wet_venus_low() -> (Trace, Trial, Body, Traced<Kilogram>, Exposed, Exposed) {
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let surface = surface_water(&t, &drawn, &body, &mut trace).unwrap();
     let exposed = body.exposed();
-    let radius = trace
-        .leaf(
-            Code::of("test.radius"),
-            EarthRadius(exposed.radius.value().0 * LARGER_RADIUS),
-            Provenance::Input,
-        )
-        .unwrap();
-    let larger = Exposed {
-        radius,
-        ..exposed.clone()
-    };
+    let larger = larger_exposed(&mut trace, &exposed);
     (trace, t, body, surface, exposed, larger)
 }
 
