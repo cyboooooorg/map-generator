@@ -8,7 +8,7 @@
 
 use crate::units::{EarthMass, WattPerSquareMetre};
 
-/// Calibration: internal heat flux above which a body loses its heat
+/// Calibration: the regime's onset. Internal heat flux above which a body loses its heat
 /// through volcanic heat pipes rather than by plates or conduction. No
 /// paper searched sets such a threshold. Moore & Webb 2013 ("Heat-pipe
 /// Earth", Nature 501, 501, doi:10.1038/nature12473) take Io as the
@@ -18,7 +18,7 @@ use crate::units::{EarthMass, WattPerSquareMetre};
 /// of its range; Lainey et al. 2009 (doi:10.1038/nature08108) is not
 /// reached beyond its abstract record, so its figure is not used. See
 /// `docs/science/planet-atmospheres.md`.
-pub const HEAT_PIPE_FLUX: WattPerSquareMetre = WattPerSquareMetre(1.0);
+pub const HEAT_PIPE_ONSET_FLUX: WattPerSquareMetre = WattPerSquareMetre(1.0);
 
 /// Calibration: smallest mass of a planet with plate tectonics, the
 /// geometric mean of Mars (0.107 M⊕, a stagnant lid) and Venus (0.815

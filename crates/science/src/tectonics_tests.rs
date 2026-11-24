@@ -21,7 +21,7 @@ fn io_is_a_heat_pipe_even_at_the_low_end_of_its_flux() {
     const IO: f64 = 2.5;
     /// Source: Earth's mean flux, Io's over 40 (Moore & Webb 2013).
     const EARTH: f64 = IO / 40.0;
-    let threshold = HEAT_PIPE_FLUX.0;
+    let threshold = HEAT_PIPE_ONSET_FLUX.0;
     assert!(threshold < IO / 2.0);
     assert!(threshold > 10.0 * EARTH);
 }
