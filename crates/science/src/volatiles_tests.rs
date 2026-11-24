@@ -275,8 +275,12 @@ const NITROGEN_TRIPLE_PA: f64 = 12_530.0;
 /// 37.2 K, 1.36e-5 bar (Fray and Schmitt 2009 through Lisse et al. 2021,
 /// Table 2; study 24, finding 1).
 const NITROGEN_BETA_READS: (f64, f64) = (0.1215, 1.36e-5);
-/// Source: pressure of Triton's N2 frost, 1.4e-5 bar at 37.2 K (Tyler et
-/// al. 1989, as quoted by study 24).
+/// Source: surface pressure of Triton's N2 air, 14 +/- 1 ubar, 1.4e-5 bar,
+/// from the Voyager 2 radio occultation of 1989 (Gurrola 1995, Stanford
+/// PhD thesis, not reached; refining the 1.6 +/- 0.3 Pa of Tyler et al.
+/// 1989, Science 246, 1466; both as quoted by Sicardy et al. 2024,
+/// arXiv:2402.02476). The source gives no temperature with it: the test
+/// reads it at [`TRITON_FROST_K`], where the beta curve puts it.
 const TRITON_FROST_BAR: f64 = 1.4e-5;
 /// Definition: temperature of Triton's frost, 37.2 K.
 const TRITON_FROST_K: f64 = 37.2;

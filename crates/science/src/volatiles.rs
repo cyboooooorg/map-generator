@@ -452,8 +452,10 @@ fn polynomial(coefficients: &[f64], x: f64) -> (f64, f64) {
 /// to the alpha-beta transition (35.61 K), the alpha fit (`N2-1`) below
 /// it, each pinned to the curve above it so that the curve is
 /// continuous, and the alpha slope carried on under 10 K. The beta fit
-/// is pinned by about 3 % and the alpha fit by about 2.8 %. `None` at or
-/// above the triple point. `t` is held at or above 1 K.
+/// is scaled by about 3.1 % (0.1253 / 0.1215 bar at the triple point);
+/// the alpha fit, pinned to that scaled curve at 35.61 K, moves by about
+/// 6.1 % (the two raw fits are 2.8 % apart there). `None` at or above
+/// the triple point. `t` is held at or above 1 K.
 pub fn nitrogen_frost_pressure(t: Kelvin) -> Option<Pascal> {
     if t.0 >= NITROGEN_TRIPLE_TEMPERATURE.0 {
         return None;
@@ -514,8 +516,8 @@ const SULPHUR_DIOXIDE_SUBLIMATION_L_OVER_R: f64 = 4510.0;
 /// Pressure of SO2 over its frost at `t`: Wagman's slope (`L / R` =
 /// 4510 K) anchored at the triple point (197.64 K, 1 670 Pa); `None` at
 /// or above the triple point. Used below the triple point down to Io's
-/// frost; Wagman's fitting range is not published. `t` is held at or
-/// above 1 K.
+/// frost; Wagman's fitting range is not stated here (an NBS report not
+/// reached). `t` is held at or above 1 K.
 pub fn sulphur_dioxide_frost_pressure(t: Kelvin) -> Option<Pascal> {
     if t.0 >= SULPHUR_DIOXIDE_TRIPLE_TEMPERATURE.0 {
         return None;

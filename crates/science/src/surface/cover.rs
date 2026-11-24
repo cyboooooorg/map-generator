@@ -76,7 +76,8 @@ pub const SHIELD_PRESSURE: Bar = Bar(1e-4);
 /// whole disc with any value under that, and Europa's 2e-4 bar is left
 /// to its water ice, so neither constrains it. Not studied: the legacy's
 /// calibration is kept, with no source for a frost's coverage as a
-/// function of its amount (see the page, "Frost layer").
+/// function of its amount (`docs/science/planet-atmospheres.md`,
+/// "Calibration of `FROST_LAYER`").
 pub const FROST_LAYER: Bar = Bar(0.02);
 
 /// Calibration: the temperature under which the ice reaches the equator's

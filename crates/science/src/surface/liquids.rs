@@ -27,7 +27,10 @@ use crate::water::{boiling_temperature, ice_ih_melting_temperature};
 /// magma worlds the planets with a substellar temperature over 1673 K,
 /// hot enough to melt peridotite, and take 1673 K for the edge of a magma
 /// pool ("Katz et al. (2003) recommends a parameterization that yields
-/// 1673 K for T_lo"). Study 24, section 9.
+/// 1673 K for T_lo"). Kite et al. set it on the substellar temperature;
+/// [`liquid`] compares it with the surface temperature it is given, the
+/// body's mean one, as legacy did: colder than the substellar one, it
+/// counts fewer lava worlds (issue #675). Study 24, section 9.
 pub const LAVA_TEMPERATURE: Kelvin = Kelvin(1673.0);
 
 /// Source: the methane over a Titan sea as a share of pure methane's
