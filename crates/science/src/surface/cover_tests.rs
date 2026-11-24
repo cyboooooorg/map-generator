@@ -45,6 +45,7 @@ fn dry(t: f64) -> Cover {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     )
 }
 
@@ -78,6 +79,7 @@ fn ice_cover_grows_as_the_planet_cools() {
             EARTH_MEAN_RADIUS,
             &no_frost(),
             earth_obliquity(),
+            false,
         )
         .ice
         .get()
@@ -139,6 +141,7 @@ fn a_nearly_dry_planet_whitens_only_its_poles() {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     );
     println!("0.005 oceans at 210 K: ice {:.5}", caps.ice.get());
     assert!(caps.ice.get() > 0.0 && caps.ice.get() < 0.02, "{caps:?}");
@@ -151,6 +154,7 @@ fn a_nearly_dry_planet_whitens_only_its_poles() {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     );
     assert_eq!(full.ice.get(), 1.0);
 }
@@ -164,6 +168,7 @@ fn ice_reach_scales_with_area() {
             Metre(radius),
             &no_frost(),
             earth_obliquity(),
+            false,
         )
         .ice
         .get()
@@ -197,6 +202,7 @@ fn frost_brightens_a_body_in_proportion_to_its_amount() {
             EARTH_MEAN_RADIUS,
             frost,
             earth_obliquity(),
+            false,
         )
     };
     let half = at(&nitrogen(FROST_LAYER.0 / 2.0));
@@ -224,6 +230,7 @@ fn frost_brightens_a_body_in_proportion_to_its_amount() {
         EARTH_MEAN_RADIUS,
         &nitrogen(FROST_LAYER.0 / 4.0),
         earth_obliquity(),
+        false,
     );
     assert!((iced.ice.get() - 0.75).abs() < TIGHT, "{iced:?}");
     assert_eq!(iced.ocean.get(), 0.0);
@@ -244,6 +251,7 @@ fn earth_keeps_its_bond_albedo() {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     );
     println!(
         "Earth: ice {:.4}, sunlit ice {:.4}, ground {:.4}",
@@ -285,6 +293,7 @@ fn cover_shares_sum_to_one() {
                     EARTH_MEAN_RADIUS,
                     &mix,
                     earth_obliquity(),
+                    false,
                 );
                 let sum = c.ocean.get() + c.land.get() + c.ice.get() + c.frost.get();
                 assert!((sum - 1.0).abs() < TIGHT, "{t} K {water} {frost}: {c:?}");
@@ -305,6 +314,7 @@ fn no_frost_divides_nothing() {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     );
     assert_eq!(wet.so2_frost.get(), 0.0);
     assert!(ground_albedo(&wet, Bar(1.0)).get().is_finite());
@@ -315,6 +325,7 @@ fn no_frost_divides_nothing() {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     );
     assert!(ground_albedo(&iced, Bar(1.0)).get().is_finite());
 }
@@ -351,6 +362,99 @@ fn sunlight_weights_the_caps() {
         EARTH_MEAN_RADIUS,
         &no_frost(),
         earth_obliquity(),
+        false,
     );
     assert!(c.ice_sunlit.get() < c.ice.get(), "{c:?}");
+}
+
+/// Source: Triton's orbit-mean solar flux, 1.508 W/m2 (NASA Neptune Fact
+/// Sheet).
+const TRITON_FLUX: f64 = 1.508;
+
+/// Source: the temperature of Triton's N2 ice, 38 +- 1 K (Tryka et al.
+/// 1993, *Science* 261, 751).
+const TRITON_ICE_K: f64 = 38.0;
+
+/// Source: the tolerance on Triton's ice temperature, 1 K (Tryka et al.
+/// 1993).
+const TRITON_ICE_SIGMA_K: f64 = 1.0;
+
+/// Definition: the temperature of the locked-rotator test, 270 K, over
+/// `ICE_COVERED_TEMPERATURE` and under `ICE_FREE_TEMPERATURE`.
+const COLD_EARTH_K: f64 = 270.0;
+
+/// Definition: the 270 K ice line of Earth, worked by hand from
+/// `x^2 = 1/3 + (270 - 268.15) / 42`: `1 - sqrt(x^2) = 0.385687`.
+const COLD_EARTH_ICE_LINE: f64 = 0.385_687;
+
+/// Definition: the zonal sunlit ice share of Earth at 270 K, worked by
+/// hand from `(1 - e) + (s2 / 2)(e - e^3)` with `e = 0.614313`, `s2 =
+/// -(5/16)(3 cos^2(23.439281 deg) - 1) = -0.476662`: 0.294529.
+const COLD_EARTH_ZONAL_SUNLIT: f64 = 0.294_529;
+
+/// Definition: the tolerance of the hand-worked values, 1e-5.
+const HAND_WORKED: f64 = 1e-5;
+
+#[test]
+fn nitrogen_frost_radiates_less_than_a_black_body() {
+    assert_eq!(frost_emissivity(&no_frost()).get(), 1.0);
+    assert!((frost_emissivity(&nitrogen(FROST_LAYER.0)).get() - N2_ICE_EMISSIVITY).abs() < TIGHT);
+    assert!((N2_ICE_EMISSIVITY - 0.80).abs() < TIGHT);
+    // Half the layer covers half the disc: 1 - 0.2 / 2.
+    assert!((frost_emissivity(&nitrogen(FROST_LAYER.0 / 2.0)).get() - 0.90).abs() < TIGHT);
+    let co2 = PartialPressures {
+        co2: 10.0,
+        ..PartialPressures::default()
+    };
+    assert_eq!(frost_emissivity(&co2).get(), 1.0);
+}
+
+#[test]
+fn triton_frost_balances_at_38_k() {
+    // eps sigma T^4 = (1 - A) F / 4 for the orbit-mean flux.
+    let t = ((1.0 - FROST_ALBEDO) * TRITON_FLUX
+        / (4.0 * N2_ICE_EMISSIVITY * crate::constants::STEFAN_BOLTZMANN))
+        .powf(0.25);
+    assert!((t - TRITON_ICE_K).abs() <= TRITON_ICE_SIGMA_K, "{t}");
+}
+
+#[test]
+fn a_locked_body_freezes_from_its_night_side() {
+    let f = |a: f64| locked_sunlit_ice(Fraction::new(a).unwrap()).get();
+    assert_eq!(f(0.0), 0.0);
+    assert_eq!(f(0.5), 0.0);
+    assert!((f(0.75) - 0.25).abs() < TIGHT);
+    assert_eq!(f(1.0), 1.0);
+    let at = |t: f64, locked: bool| {
+        cover(
+            Kelvin(t),
+            oceans(1.0),
+            EARTH_MEAN_RADIUS,
+            &no_frost(),
+            earth_obliquity(),
+            locked,
+        )
+    };
+    let zonal = at(COLD_EARTH_K, false);
+    let locked = at(COLD_EARTH_K, true);
+    assert!(
+        (zonal.ice.get() - COLD_EARTH_ICE_LINE).abs() < HAND_WORKED,
+        "{zonal:?}"
+    );
+    assert_eq!(locked.ice, zonal.ice);
+    assert_eq!(locked.ice_sunlit.get(), 0.0);
+    assert!(
+        (zonal.ice_sunlit.get() - COLD_EARTH_ZONAL_SUNLIT).abs() < HAND_WORKED,
+        "{zonal:?}"
+    );
+    // Under the ice-covered temperature both are white.
+    let white = ICE_COVERED_TEMPERATURE.0 - 4.0;
+    assert_eq!(at(white, true).ice_sunlit.get(), 1.0);
+    assert_eq!(at(white, false).ice_sunlit.get(), 1.0);
+}
+
+#[test]
+fn the_ice_free_temperature_is_where_the_ice_line_vanishes() {
+    assert!((ICE_FREE_TEMPERATURE.0 - 296.15).abs() < TIGHT);
+    assert_eq!(ice_line_share(ICE_FREE_TEMPERATURE).get(), 0.0);
 }

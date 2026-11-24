@@ -113,15 +113,17 @@ port what the climate needs for ordinary planets (frost tables,
 volcanism, the snowball draw) and life with oxygenation, and to leave
 the ice-crust law as a declared departure (#560).
 
-## The four pull requests
+## The pull requests
 
 | PR | Content | Changes the generated systems |
 | --- | --- | --- |
 | 2d-1 Air | NH₃ frost curve; methane photolysis; cold trap; photochemistry; the reducing-air rerun | No |
 | 2d-2 Surface | Surface cover of the albedo; surface liquids; N₂ and SO₂ frost curves and frost cover; volcanism for the snowball chance | No |
-| 2d-3 Climate | The solver with the #593 levers and `condense`; snowball branches and their draw; the reducing-air fallback; `boils` loop; steam envelope | No |
+| 2d-3a Climate solver | The solver with the #593 levers and `condense`; the outer-edge fit; snowball branches and their draw; the reducing-air fallback | No |
+| 2d-3b Boiling and steam | `boils` loop; `Water.boiled` derived; steam envelope (Turbet 2020) | No |
 | 2d-4 Class and wiring | Life and oxygenation; class; public `class_of` and `model`; wiring; `ENGINE_VERSION` 4; tier-2 net | Yes |
 
+2d-3 was split into 2d-3a and 2d-3b on 2026-11-24 (see 2d-3 below).
 Each opens with its study (below), then ports test first. The design
 document travels with 2d-1; each later pull request writes its own plan
 from it.
@@ -214,6 +216,41 @@ if its study finds a sourced ground albedo for Titan.
 
 ### 2d-3: the climate
 
+Split in two with the user on 2026-11-24, after the 2d-3 recon found
+three laws the rewrite lacks (the Kopparapu outer-edge fit, `condense`,
+the Turbet 2020 steam envelope):
+
+- **2d-3a, the solver:** wet balance, the albedo and emissivity fixed
+  point, `condense`, collapse, thermostat, maximum greenhouse with the
+  outer-edge fit, snowball branches and their draw, the reducing-air
+  fallback, the #646 refit and the #673 Triton refit. Study 25.
+- **2d-3b, boiling and steam:** the `boils` loop (`Water.boiled`
+  derived, a forced-steam entry to `water`), `hides_surface` and the
+  steam envelope with its radius. Its own study (Kasting 1988, Turbet
+  2020).
+
+Decisions taken with the user on 2026-11-24 for 2d-3a:
+
+- **#670:** the two heat-pipe fluxes mean different things and are
+  renamed, the law unchanged: `HEAT_PIPE_ONSET_FLUX` (1 W/m², the
+  regime's onset, a calibration) and `FULL_VOLCANISM_FLUX` (2.5 W/m²,
+  Io's flux, where volcanism is total). A heat pipe between the two
+  reads an intensity below 1.
+- **#671:** the melting curves of ices III and V (IAPWS R14-08, eqs. 2
+  and 3) are ported, and the surface window reads the melting curve of
+  the ice stable at the surface pressure.
+- **#672 and #675:** a tidally locked rotator takes the substellar
+  distribution, both for the sunlit share of the ice and for the
+  lava-world threshold (Kite et al. 2016's substellar temperature); a
+  fast rotator keeps the zonal form and the mean. No sourced rotation
+  criterion was found (study 25), so the solver keeps the locked flag
+  only.
+- **The spin as an input:** `class_of(&Trial)` has no spin (it is drawn
+  after the class, from the designation's seed), and tidal locking comes
+  with #604. The solver therefore takes the obliquity and a "locked"
+  flag as parameters; 2d-4 decides where `class_of` gets them, so that
+  `class_of` and `model` still give the same answer.
+
 From `climate.rs` l.1-2423: `wet_balance`, `first_balance` (the #600
 secant scan), `settle` and `settle_steps` (the #600 secant step of the
 albedo fixed point), `under_albedo` (condensation), `collapsed_climate`,
@@ -242,26 +279,40 @@ settles, not a law); the laws it calls stay in `science`.
   a water world past the water laws gets its steam envelope and its
   radius (#492), and the steam loss and shoreline read that body
   instead of the condensed radius.
-- **Mars's test air:** the climate bound on Mars (210 ± 5 K) runs on a
-  surface pressure from a cited source (for example the Viking or MSL
-  REMS annual mean), set in the test as an imposed input. Legacy's
+- **Mars's test air:** the climate bound on Mars (214 ± 5 K, the NASA
+  fact sheet's average temperature) runs on a surface pressure from a
+  cited source (for example the Viking or MSL REMS annual mean), set in
+  the test as an imposed input. Legacy's
   `MARS_CO2_FACTOR` (from memory) is not ported.
-- **Venus:** the pinned 577 K test is ported as is (#594).
+- **Venus:** the tier-1 test keeps the sourced checks (Bond albedo
+  0.76 ± 0.05, no liquid). The 577 K pin is the model's own output
+  (#594): it goes to the tier-2 net in 2d-4, because `settled` is not
+  reachable from `crates/regression` before then.
 - **#646:** `CH4_OPACITY` is refitted on Titan with the new methane
   curve here, since 2d-3 is the column's first caller.
 
 Tests: the 56 legacy climate tests, the slow ones under
 `#[ignore = "heavy: …"]` (`the_outer_edge_follows_the_star`, the
-Kopparapu edges, `census_182_d`, the Titan sweeps). Expected values
-come from sources (the Solar System's measured temperatures, Kopparapu
-2013's edges); a pinned value stays only as a tier-2 regression net.
+Kopparapu edge, `census_182_d`, the Titan sweeps). Expected values
+come from sources (the Solar System's measured temperatures); the
+outer edge is checked against Kopparapu 2014's fit in a tier-3 test,
+and the measured gap (+22.9 % in flux round the Sun) is a documented
+departure (#595), not a bound; a pinned value stays only as a tier-2
+regression net.
 
 ### 2d-4: life, class and wiring
 
 - **Life** (`life.rs`): `life()` and `oxygenate()`, a `life_draw` in the
-  seed hierarchy, after the climate. Oxygenation changes the air
-  recorded in `PlanetState`, not the climate (legacy's declared
-  simplification, kept and stated).
+  seed hierarchy, after the climate. Oxygenation changes the air, and
+  the climate is solved again on the oxygenated air (one more settle).
+  Legacy's declared simplification (the climate solved on the air
+  before life) is dropped, decided on 2026-11-24 in 2d-3a: without its
+  O₂ the reference Earth's air is 0.75 bar, 283.8 K at 280 ppm of CO₂
+  against 286 to 290 K (Myhre et al. 1998), and its thermostat needs
+  about 2 000 ppm. With N₂ 0.78 and O₂ 0.21 bar the solver gives
+  286.9 K. 2d-3a tests that check on Earth's measured air; 2d-4 makes
+  the reference Earth reach it and updates `docs/science` (section
+  Life of `planet-atmospheres.md`).
 - **Class** (`classify.rs`): the 14 classes of `timeline::PlanetClass`
   in legacy's order (giants, mini-Neptune, the surface classes, ice
   world, volcanic, super-Earth, rocky). `AIRLESS_BAR` is not a class
@@ -332,7 +383,7 @@ rewrite's value holds.
 | #659 | Steps in 2d-1 and 2d-3, closed by 2d-4 | The deferred steps |
 | #654 | No | Changes the humidity profile and the cloud fit: its own study and pull request; 2d uses 0.77, the path the cloud fit was made on |
 | #655 | No | A stellar spectral library: its own study and data |
-| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d ports the pinned Venus test as is |
+| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d keeps Venus's sourced checks in tier 1 and pins the 577 K in tier 2 (2d-4) |
 | #647 | No | Declared simplification; to check against #595 later |
 | #648 | Its labelling rule only, for 2d's solver constants | The column-top convergence test stays with the column |
 | #649, #650 | No | Opacity data provenance |

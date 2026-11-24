@@ -98,6 +98,7 @@ fn every_surface_value_traces_back_to_the_trial() {
             ("water.inventory", s.water.inventory.node()),
             ("air.pressure", s.atmosphere.surface_pressure.node()),
             ("air.frozen-co2", s.frozen_co2.node()),
+            ("air.outgassed-co2", s.outgassed_co2.node()),
             ("air.reducing", s.reducing.node()),
         ];
         // `water.boiled` stays an imposed leaf (false) until the climate's

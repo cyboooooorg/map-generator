@@ -22,19 +22,10 @@ pub(crate) const TITAN_GRAVITY: MetrePerSecondSquared =
 /// 288.15 K at sea level).
 pub(crate) const EARTH_SURFACE_K: f64 = 288.0;
 
-/// Definition: Earth's dry air of the test columns, bar: 0.78 of N₂, 0.21
-/// of O₂ and 400 ppm of CO₂ (the legacy `EARTH_AIR`; argon, which neither
-/// absorbs nor changes the adiabat much, has no field). The air of the
-/// moist plateau and of the shortwave paths.
-pub(crate) const EARTH_AIR: PartialPressures = PartialPressures {
-    n2: 0.78,
-    co2: 4e-4,
-    h2o: 0.0,
-    ch4: 0.0,
-    nh3: 0.0,
-    so2: 0.0,
-    o2: 0.21,
-};
+/// Definition: Earth's dry air of the test columns, the balance's
+/// [`crate::balance::EARTH_DRY_AIR`]: the air of the moist plateau and of
+/// the shortwave paths.
+pub(crate) const EARTH_AIR: PartialPressures = crate::balance::EARTH_DRY_AIR;
 
 /// Source: Titan's surface pressure, 1.467 bar (1467 hPa; Fulchignoni et
 /// al. 2005, *Nature* 438, 785, doi:10.1038/nature04314, as the audit,

@@ -13,7 +13,8 @@
 //!
 //! The climate's condensation (`condense`, the N2 and SO2 frost curves,
 //! the methane of the seas) and the reducing-air fallback, which read the
-//! surface temperature, come with the climate (#659). The non-thermal
+//! surface temperature, are the climate's (`super::climate`, chained by
+//! `super::settled`). The non-thermal
 //! loss is not in the rewrite (#658): the photolysis reads the air the
 //! shoreline kept.
 
@@ -46,6 +47,11 @@ pub(crate) struct Air {
     /// The water once the air is made: in a runaway, the vapour the
     /// cosmic shoreline kept.
     pub water: Water,
+    /// The CO2 outgassed (`planet.air.outgassed.co2`), before the cosmic
+    /// shoreline and the cold trap: the carbon inventory weathering and
+    /// volcanoes trade with the air, which the climate's carbon cycle
+    /// reads (legacy `CarbonCycle::inventory_bar`).
+    pub outgassed_co2: Traced<Bar>,
     /// The CO2 the cold trap froze out (`planet.air.frozen-co2`), which
     /// the climate's carbon cycle reads.
     pub frozen_co2: Traced<Bar>,
@@ -300,6 +306,7 @@ pub(crate) fn air(
             partial,
         },
         water: kept_water,
+        outgassed_co2: outgassed[&Gas::Co2],
         frozen_co2,
         reducing,
     })

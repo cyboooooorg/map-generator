@@ -1,6 +1,9 @@
 use super::*;
 use crate::fixtures::{earth_like_fixture, frac, interior, leaf};
-use crate::{Code, Gas, NodeValueOf, PlanetClass, RadialSample, RadialSamples, Renewal, StarPhase};
+use crate::{
+    ClimateState, Code, Gas, NodeValueOf, PlanetClass, RadialSample, RadialSamples, Renewal,
+    StarPhase,
+};
 use science::units::{
     Dex, Kelvin, KilogramPerCubicMetre, Metre, Pascal, SolarLuminosity, SolarMass, SolarRadius,
 };
@@ -123,6 +126,10 @@ fn contract_enums_report_their_serialised_name() {
         "\"heat-pipe\""
     );
     assert_eq!(serde_json::to_string(&Gas::Co2).unwrap(), "\"co2\"");
+    assert_eq!(
+        serde_json::to_string(&ClimateState::Frozen).unwrap(),
+        "\"frozen\""
+    );
 }
 
 fn sample_at(radius: f64, density: f64) -> RadialSample {

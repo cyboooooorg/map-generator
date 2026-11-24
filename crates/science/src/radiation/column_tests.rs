@@ -1,15 +1,17 @@
 //! Tests of the longwave column, ported from `legacy-final`'s
 //! `planet/column.rs` with their tolerances, with the helpers they read
-//! from its `planet/climate.rs` (`EARTH_AIR`, `with_vapour`,
-//! `plateau_w_m2`, `plateau_skin_k`), and the cache and edge-case tests of
-//! the port.
-
-use std::sync::LazyLock;
+//! on the moist plateau of `crate::balance` (legacy `planet/climate.rs`'s
+//! `plateau_w_m2` and `plateau_skin_k`), and the cache and edge-case tests
+//! of the port.
 
 use super::*;
+use crate::balance::{self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau};
 use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
-use crate::radiation::test_points::{EARTH_AIR, TITAN_GRAVITY, VENUS_GRAVITY};
-use crate::surface::RELATIVE_HUMIDITY;
+use crate::radiation::test_points::{
+    EARTH_AIR, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY,
+};
+use crate::surface::surface_vapour;
+use crate::units::Bar;
 
 /// Definition: Earth's surface gravity of the test columns, the standard
 /// acceleration of gravity (the legacy took 9.81 m/s²).
@@ -27,33 +29,11 @@ const VENUS: MetrePerSecondSquared = VENUS_GRAVITY;
 /// value.
 const TITAN: MetrePerSecondSquared = TITAN_GRAVITY;
 
-/// Source: the Simpson–Nakajima limit, W/m², 282 line by line (Goldblatt,
-/// Robinson, Zahnle & Crisp 2013, *Nature Geosci.* 6, 661,
-/// doi:10.1038/ngeo1892, Fig. 2: "the Simpson-Nakajima radiation limit
-/// emerges as 282 W m-2"); Boukrouche, Lichtenberg & Pierrehumbert 2021
-/// (*ApJ* 919, 130, §III.1) find 283 and Hamano et al. 2015 (*ApJ* 806,
-/// 216, §3) 280 (audit, Wiki study 19). The anchor of the moist plateau,
-/// and the start of its fixed point.
-const SIMPSON_NAKAJIMA_W_M2: f64 = 282.0;
-
 /// Calibration: how far the column's moist plateau may stray from
 /// [`SIMPSON_NAKAJIMA_W_M2`], W/m², 5 %, the legacy's band: it covers the
 /// 280-283 of the three line-by-line models; the width itself is a choice
 /// (audit, Wiki study 19).
 const PLATEAU_TOLERANCE_W_M2: f64 = 14.0;
-
-/// Definition: surfaces, K, over which the moist plateau averages the
-/// moist column: 500 to 640 K every 20 K, past the curve's maximum (the
-/// legacy `PLATEAU_SURFACES_K`).
-const PLATEAU_SURFACES_K: [f64; 8] = [500.0, 520.0, 540.0, 560.0, 580.0, 600.0, 620.0, 640.0];
-
-/// Definition: most steps of the plateau's fixed point with its skin (the
-/// legacy's eight).
-const PLATEAU_ITERATIONS: usize = 8;
-
-/// Definition: the change of the plateau, W/m², under which its fixed
-/// point has settled.
-const PLATEAU_SETTLED_W_M2: f64 = 0.01;
 
 /// Calibration: how far the plateau may move with the CO₂ and the
 /// nitrogen, a share, 3 %: the legacy's bound on the claim that the moist
@@ -62,7 +42,7 @@ const PLATEAU_SETTLED_W_M2: f64 = 0.01;
 const PLATEAU_GASES_SHARE: f64 = 0.03;
 
 /// Calibration: how flat the moist column must stay over
-/// [`PLATEAU_SURFACES_K`] around the plateau, a share, 1 %: the legacy's
+/// [`PLATEAU_SURFACES`] around the plateau, a share, 1 %: the legacy's
 /// bound; Boukrouche et al. 2021 (§III.1) find it flat from 300 to 1050 K
 /// under 10 bar of steam, without a number for the flatness.
 const RUNAWAY_FLAT_SHARE: f64 = 0.01;
@@ -94,6 +74,51 @@ const PLATEAU_CO2_BAR: [f64; 3] = [4e-4, 1e-3, 1e-2];
 
 /// Definition: the nitrogen, bar, of [`PLATEAU_CO2_BAR`]'s test.
 const PLATEAU_N2_BAR: [f64; 3] = [0.78, 1.56, 2.34];
+
+/// Source: Mars's surface air, bar: 6.36 mbar at mean radius, 95.1 % of
+/// CO₂, 2.59 % of N₂ and 0.16 % of O₂ (NASA Mars Fact Sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html, read for study
+/// 25: CO₂ 6.05 mbar, N₂ 0.165 mbar, O₂ 0.010 mbar, derived; argon has
+/// no field).
+const MARS_SURFACE_AIR: PartialPressures = PartialPressures {
+    n2: 6.36e-3 * 0.0259,
+    co2: 6.36e-3 * 0.951,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: 6.36e-3 * 0.0016,
+};
+
+/// Source: Mars's mean surface temperature, K, "Average temperature:
+/// ~214 K" (NASA Mars Fact Sheet, read for study 25).
+const MARS_SURFACE_K: f64 = 214.0;
+
+/// Source: Mars's black-body temperature, K, 209.8 (NASA Mars Fact Sheet,
+/// "Black-body temperature"), the effective temperature its skin is taken
+/// from.
+const MARS_EFFECTIVE_K: f64 = 209.8;
+
+/// Definition: the relative tolerance of a column under the climate's sky
+/// against the clear one when no water clouds form, the sums' rounding.
+const CLOUDLESS_TOLERANCE: f64 = 1e-9;
+
+/// Definition: the steam, bar, of the steam plateau test (the legacy's 10
+/// bar, the column Boukrouche et al. 2021, §III.1, find flat up to about
+/// 1050 K).
+const THIN_STEAM_BAR: f64 = 10.0;
+
+/// Definition: a surface, K, on the plateau of 10 bar of steam, under the
+/// 1050 K where Boukrouche et al. 2021 (§III.1) see it end (the legacy's
+/// 680 K).
+const THIN_STEAM_SURFACE_K: f64 = 680.0;
+
+/// Calibration: how far the steam column may stray from
+/// [`SIMPSON_NAKAJIMA_W_M2`] on its plateau, a share, 10 %: the legacy's
+/// bound; Boukrouche et al. 2021 (§III.1) find the radiation flat without
+/// a number for the flatness, and the three line-by-line plateaus span
+/// 280 to 283 W/m² (Wiki study 19).
+const THIN_STEAM_SHARE: f64 = 0.1;
 
 /// Definition: a Titan-like column of the test cases, near the Huygens
 /// surface (93.65 K, 1467 hPa, Fulchignoni et al. 2005, Nature 438, 785,
@@ -167,21 +192,19 @@ fn skin(t_eq_k: f64) -> Kelvin {
     skin_temperature(Kelvin(t_eq_k))
 }
 
-/// `gases` with the vapour of a moist surface at `temperature_k`:
-/// [`RELATIVE_HUMIDITY`] of saturation, at most `water_bar` (the legacy
-/// `with_vapour`).
-fn with_vapour(gases: PartialPressures, temperature_k: f64, water_bar: f64) -> PartialPressures {
+/// `gases` with the vapour of a moist surface at `temperature_k`, with
+/// all the water it can hold ([`surface_vapour`]).
+fn moist(gases: PartialPressures, temperature_k: f64) -> PartialPressures {
     PartialPressures {
-        h2o: (RELATIVE_HUMIDITY * vapour_saturation_bar(temperature_k)).min(water_bar.max(0.0)),
+        h2o: surface_vapour(Kelvin(temperature_k), Bar(f64::INFINITY)).0,
         ..gases
     }
 }
 
-/// The skin temperature of the surface solves (`T_eq / 2^¼`) for a body
-/// that absorbs `absorbed_w_m2`: `T_eq = (absorbed / σ)^¼` (the legacy
-/// `plateau_skin_k`).
-fn plateau_skin(absorbed_w_m2: f64) -> Kelvin {
-    skin((absorbed_w_m2 / STEFAN_BOLTZMANN).powf(0.25))
+/// The skin of the moist plateau's own body ([`balance::skin`] of
+/// [`earth_moist_plateau`]).
+fn plateau_skin() -> Kelvin {
+    balance::skin(earth_moist_plateau())
 }
 
 /// The outgoing radiation, W/m², of `gases` over `surface_k` under
@@ -197,65 +220,13 @@ fn olr(
     outgoing_longwave(gases, Kelvin(surface_k), skin, gravity, profile, cache).0
 }
 
-/// The moist plateau, W/m², of the `dry` air over a saturated surface on
-/// `gravity` and `profile`: the mean outgoing radiation over
-/// [`PLATEAU_SURFACES_K`] under the skin of a body that absorbs it, the
-/// two solved together by a fixed-point iteration from `start` (the
-/// legacy `plateau_w_m2`).
-fn plateau_w_m2(
-    dry: &PartialPressures,
-    gravity: MetrePerSecondSquared,
-    profile: Profile,
-    start: f64,
-    cache: &mut ColumnCache,
-) -> f64 {
-    let mut asymptote = |skin: Kelvin| {
-        let sum: f64 = PLATEAU_SURFACES_K
-            .iter()
-            .map(|&t| {
-                olr(
-                    &with_vapour(*dry, t, f64::INFINITY),
-                    t,
-                    skin,
-                    gravity,
-                    profile,
-                    cache,
-                )
-            })
-            .sum();
-        sum / PLATEAU_SURFACES_K.len() as f64
-    };
-    let mut plateau = start;
-    for _ in 0..PLATEAU_ITERATIONS {
-        let next = asymptote(plateau_skin(plateau));
-        let settled = (next - plateau).abs() < PLATEAU_SETTLED_W_M2;
-        plateau = next;
-        if settled {
-            break;
-        }
-    }
-    plateau
-}
-
-/// The column's own moist plateau, W/m², on Earth's air (the legacy
-/// `MOIST_PLATEAU_W_M2`).
-static MOIST_PLATEAU_W_M2: LazyLock<f64> = LazyLock::new(|| {
-    plateau_w_m2(
-        &EARTH_AIR,
-        EARTH,
-        Profile::PLATEAU,
-        SIMPSON_NAKAJIMA_W_M2,
-        &mut ColumnCache::default(),
-    )
-});
-
 /// Outgoing radiation of `air` over a moist surface at `t`, under the
 /// plateau's skin, on Earth.
 fn moist_olr(air: PartialPressures, t: f64, cache: &mut ColumnCache) -> f64 {
     olr(
-        &with_vapour(air, t, f64::INFINITY),
+        &moist(air, t),
         t,
-        plateau_skin(*MOIST_PLATEAU_W_M2),
+        plateau_skin(),
         EARTH,
         Profile::SATURATED,
         cache,
@@ -266,9 +237,9 @@ fn moist_olr(air: PartialPressures, t: f64, cache: &mut ColumnCache) -> f64 {
 /// `t`, under the plateau's skin, on `levels` levels per decade.
 fn moist_olr_on(t: f64, levels: f64, cache: &mut ColumnCache) -> f64 {
     olr(
-        &with_vapour(EARTH_AIR, t, f64::INFINITY),
+        &moist(EARTH_AIR, t),
         t,
-        plateau_skin(*MOIST_PLATEAU_W_M2),
+        plateau_skin(),
         EARTH,
         Profile::PLATEAU.on(levels),
         cache,
@@ -277,10 +248,10 @@ fn moist_olr_on(t: f64, levels: f64, cache: &mut ColumnCache) -> f64 {
 
 #[test]
 fn the_moist_plateau_is_goldblatts() {
-    let plateau = *MOIST_PLATEAU_W_M2;
+    let plateau = earth_moist_plateau().0;
     println!("moist plateau {plateau:.2} W/m²");
     assert!(
-        (plateau - SIMPSON_NAKAJIMA_W_M2).abs() <= PLATEAU_TOLERANCE_W_M2,
+        (plateau - SIMPSON_NAKAJIMA_W_M2.0).abs() <= PLATEAU_TOLERANCE_W_M2,
         "{plateau} W/m²"
     );
 }
@@ -312,8 +283,8 @@ fn the_runaway_anchor_is_flat() {
     // of its asymptote, the plateau, over 500-640 K, and the maximum
     // stands at most 6 % above it.
     let cache = &mut ColumnCache::default();
-    let plateau = *MOIST_PLATEAU_W_M2;
-    for t in PLATEAU_SURFACES_K {
+    let plateau = earth_moist_plateau().0;
+    for t in PLATEAU_SURFACES.map(|t| t.0) {
         let olr = moist_olr_on(t, PLATEAU_LEVELS_PER_DECADE, cache);
         println!("anchor at {t} K: {olr:.2} W/m²");
         assert!(
@@ -339,13 +310,13 @@ fn the_runaway_anchor_is_flat() {
 #[ignore = "heavy: the plateau on two grids, about 10 s in a debug build"]
 fn the_plateaus_grid_is_converged() {
     let cache = &mut ColumnCache::default();
-    let skin = plateau_skin(*MOIST_PLATEAU_W_M2);
+    let skin = plateau_skin();
     let mut mean = |levels: f64| {
-        PLATEAU_SURFACES_K
+        PLATEAU_SURFACES
             .iter()
-            .map(|&t| moist_olr_on(t, levels, cache))
+            .map(|t| moist_olr_on(t.0, levels, cache))
             .sum::<f64>()
-            / PLATEAU_SURFACES_K.len() as f64
+            / PLATEAU_SURFACES.len() as f64
     };
     let (plateau, fine) = (
         mean(PLATEAU_LEVELS_PER_DECADE),
@@ -406,8 +377,8 @@ fn the_fast_radiation_is_the_reference() {
     // The single-precision sum over the open bins against the
     // double-precision one over every band, on columns from Titan to
     // Venus and a steam runaway.
-    let moist = |t: f64| with_vapour(EARTH_AIR, t, f64::INFINITY);
-    let plateau_skin = plateau_skin(*MOIST_PLATEAU_W_M2).0;
+    let moist = |t: f64| moist(EARTH_AIR, t);
+    let plateau_skin = plateau_skin().0;
     let [(t0, s0), (t1, s1), (t2, s2)] = EARTH_CASES_K;
     let [p0, p1] = PLATEAU_CASES_K;
     let [steam, steam_co2, steam_k, steam_skin] = STEAM_COLUMN;
@@ -499,8 +470,8 @@ fn the_fast_radiation_is_the_reference() {
 
 #[test]
 fn a_cached_column_is_the_fresh_one() {
-    let gases = with_vapour(EARTH_AIR, MOIST_SURFACE_K, f64::INFINITY);
-    let skin = plateau_skin(SIMPSON_NAKAJIMA_W_M2);
+    let gases = moist(EARTH_AIR, MOIST_SURFACE_K);
+    let skin = balance::skin(SIMPSON_NAKAJIMA_W_M2);
     let column = |surface_k: f64, profile: Profile, cache: &mut ColumnCache| {
         olr(&gases, surface_k, skin, EARTH, profile, cache).to_bits()
     };
@@ -609,4 +580,61 @@ fn a_negative_rounding_is_no_gas() {
         cache,
     );
     assert_eq!(dirty.to_bits(), clean.to_bits(), "{dirty} vs {clean}");
+}
+
+#[test]
+fn mars_and_titan_have_no_cloud_greenhouse() {
+    // Their airs hold no water, so the climate's column, cloudy where
+    // water clouds form, is the clear one (legacy l.2628), at their
+    // measured surface temperatures.
+    let cache = &mut ColumnCache::default();
+    for (name, air, surface, effective, gravity) in [
+        (
+            "Mars",
+            MARS_SURFACE_AIR,
+            MARS_SURFACE_K,
+            MARS_EFFECTIVE_K,
+            MARS,
+        ),
+        (
+            "Titan",
+            TITAN_SURFACE_AIR,
+            TITAN_SURFACE_K,
+            TITAN_EFFECTIVE_K,
+            TITAN,
+        ),
+    ] {
+        let skin = skin(effective);
+        let clear = olr(&air, surface, skin, gravity, Profile::CLEAR, cache);
+        let all = olr(&air, surface, skin, gravity, Profile::CLIMATE, cache);
+        println!("{name}: clear {clear:.4}, all sky {all:.4} W/m²");
+        assert!(
+            (all / clear - 1.0).abs() < CLOUDLESS_TOLERANCE,
+            "{name}: {all} vs {clear}"
+        );
+    }
+}
+
+#[test]
+fn thin_steam_stays_on_the_plateau_at_680_k() {
+    // 10 bar of pure steam: the column is still on the plateau at 680 K
+    // (legacy l.4207; its scan for where the plateau ends asserted
+    // nothing and is not ported).
+    let steam = PartialPressures {
+        h2o: THIN_STEAM_BAR,
+        ..PartialPressures::default()
+    };
+    let olr = olr(
+        &steam,
+        THIN_STEAM_SURFACE_K,
+        Kelvin(0.0),
+        EARTH,
+        Profile::SATURATED,
+        &mut ColumnCache::default(),
+    );
+    println!("10 bar of steam at 680 K: {olr:.2} W/m²");
+    assert!(
+        (olr / SIMPSON_NAKAJIMA_W_M2.0 - 1.0).abs() < THIN_STEAM_SHARE,
+        "{olr} W/m²"
+    );
 }

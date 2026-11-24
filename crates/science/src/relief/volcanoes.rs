@@ -13,11 +13,11 @@ use std::f64::consts::PI;
 /// its surface (Pollack, Hurter & Johnson 1993, doi:10.1029/93RG01249).
 pub const EARTH_HEAT_FLUX: WattPerSquareMetre = WattPerSquareMetre(0.087);
 
-/// Source: heat flux of a heat-pipe planet, 2.5 W/m², Io's, "about 40
-/// times Earth's heat flux" carried through volcanism (Moore & Webb 2013,
-/// p. 501, doi:10.1038/nature12473): the flux at which volcanism is
-/// total.
-pub const HEAT_PIPE_FLUX: WattPerSquareMetre = WattPerSquareMetre(2.5);
+/// Source: Io's flux, where volcanism is total: the heat flux of a
+/// heat-pipe planet, 2.5 W/m², Io's, "about 40 times Earth's heat flux"
+/// carried through volcanism (Moore & Webb 2013, p. 501,
+/// doi:10.1038/nature12473): the flux at which volcanism is total.
+pub const FULL_VOLCANISM_FLUX: WattPerSquareMetre = WattPerSquareMetre(2.5);
 
 /// Calibration: volcanic intensity at [`EARTH_HEAT_FLUX`], 0.5, the
 /// legacy's (the middle of the range its worlds drew from). Searched and
@@ -36,7 +36,7 @@ pub fn heat_flux(total: Watt, radius: Metre) -> WattPerSquareMetre {
 /// Volcanic intensity, from 0 (no volcanism) to 1 (a heat pipe), of a
 /// surface losing `flux`. Calibration (relief study, calibration 2): a
 /// power law `I = 0.5 (F / F⊕)^k` through Earth's flux at
-/// [`EARTH_VOLCANIC_INTENSITY`] and [`HEAT_PIPE_FLUX`] at 1,
+/// [`EARTH_VOLCANIC_INTENSITY`] and [`FULL_VOLCANISM_FLUX`] at 1,
 /// `k = ln 2 / ln(2.5 / 0.087) = 0.206`, capped at 1. The legacy's square
 /// root reached 1 at four times Earth's flux, below the heat pipe; no law
 /// is published (see [`EARTH_VOLCANIC_INTENSITY`]).
@@ -45,7 +45,7 @@ pub fn volcanic_intensity(flux: WattPerSquareMetre) -> Fraction {
         return Fraction::new(0.0).expect("zero is a fraction");
     }
     let exponent =
-        (1.0 / EARTH_VOLCANIC_INTENSITY).ln() / (HEAT_PIPE_FLUX.0 / EARTH_HEAT_FLUX.0).ln();
+        (1.0 / EARTH_VOLCANIC_INTENSITY).ln() / (FULL_VOLCANISM_FLUX.0 / EARTH_HEAT_FLUX.0).ln();
     let intensity = EARTH_VOLCANIC_INTENSITY * (flux.0 / EARTH_HEAT_FLUX.0).powf(exponent);
     Fraction::new(intensity.min(1.0)).expect("an intensity within 0 and 1")
 }

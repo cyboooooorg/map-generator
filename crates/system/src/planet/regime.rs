@@ -7,7 +7,7 @@ use super::enveloped::Body;
 use super::interior::InteriorError;
 use crate::Trial;
 use science::relief::volcanoes::heat_flux;
-use science::tectonics::{HEAT_PIPE_FLUX, PLATES_MIN_MASS};
+use science::tectonics::{HEAT_PIPE_ONSET_FLUX, PLATES_MIN_MASS};
 use science::units::{Metre, Watt};
 use timeline::{Code, Heat, NodeId, TectonicRegime, Trace, Traced, Water};
 
@@ -15,7 +15,7 @@ use timeline::{Code, Heat, NodeId, TectonicRegime, Trace, Traced, Water};
 /// heat `heat` and water `water`; a calibration of the Solar System
 /// (`science::tectonics`):
 ///
-/// - a heat pipe above [`HEAT_PIPE_FLUX`] of internal heat, the total
+/// - a heat pipe above [`HEAT_PIPE_ONSET_FLUX`] of internal heat, the total
 ///   power over `4 π R²` (Io);
 /// - a stagnant lid below [`PLATES_MIN_MASS`] (Mars, Mercury, the Moon);
 /// - plates when the planet kept water and did not run away (Earth): a
@@ -47,7 +47,7 @@ pub(crate) fn regime(
         heat.secular.node(),
         radius.node(),
     ];
-    let regime = if flux.0 > HEAT_PIPE_FLUX.0 {
+    let regime = if flux.0 > HEAT_PIPE_ONSET_FLUX.0 {
         TectonicRegime::HeatPipe
     } else {
         from.push(trial.mass.node());

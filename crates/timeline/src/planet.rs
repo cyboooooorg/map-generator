@@ -216,10 +216,15 @@ traced_fields!(Atmosphere {
 });
 
 contract_enum! {
-    /// The global state of the climate.
+    /// The global state of the climate: temperate (the warm branch, or
+    /// a body with no water to freeze), a snowball (frozen over until
+    /// volcanic CO₂ thaws it), frozen for good (a body with water,
+    /// frozen over, which no CO₂ it can hold thaws) or a runaway
+    /// greenhouse.
     ClimateState {
         Temperate => "temperate",
         Snowball => "snowball",
+        Frozen => "frozen",
         Runaway => "runaway",
     }
 }

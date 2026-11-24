@@ -22,8 +22,8 @@ fn volcanism_meets_its_anchors() {
     // Earth (Pollack et al. 1993) at its calibrated value, a heat pipe
     // (Moore & Webb 2013) at 1.
     assert!((intensity(EARTH_HEAT_FLUX.0) - EARTH_VOLCANIC_INTENSITY).abs() < 1e-12);
-    assert!((intensity(HEAT_PIPE_FLUX.0) - 1.0).abs() < 1e-12);
-    assert_eq!(intensity(10.0 * HEAT_PIPE_FLUX.0), 1.0);
+    assert!((intensity(FULL_VOLCANISM_FLUX.0) - 1.0).abs() < 1e-12);
+    assert_eq!(intensity(10.0 * FULL_VOLCANISM_FLUX.0), 1.0);
     assert_eq!(intensity(0.0), 0.0);
     assert_eq!(intensity(-1.0), 0.0);
     // Monotonic between them.

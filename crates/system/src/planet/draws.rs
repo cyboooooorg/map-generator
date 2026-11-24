@@ -1,6 +1,7 @@
 //! The draws of a planet's composition, each from its own sub-seed of the
 //! seed the caller passes (`planet/cmf`, `planet/water`,
-//! `planet/radiogenic`), so that changing one draw never moves another.
+//! `planet/radiogenic`, `planet/envelope`, `planet/volatiles`,
+//! `planet/snowball`), so that changing one draw never moves another.
 //! `class_of` will pass the trial seed, `model` the body seed.
 //!
 //! Why a planet is a water world is recorded beside its water: a flag
@@ -162,6 +163,7 @@ pub(crate) struct Labels {
     pub radiogenic: &'static str,
     pub envelope: &'static str,
     pub volatiles: &'static str,
+    pub snowball: &'static str,
 }
 
 /// The labels of the engine.
@@ -171,6 +173,7 @@ pub(crate) const LABELS: Labels = Labels {
     radiogenic: "planet/radiogenic",
     envelope: "planet/envelope",
     volatiles: "planet/volatiles",
+    snowball: "planet/snowball",
 };
 
 /// Draws the composition of `trial` from `seed` and records it. The
@@ -316,6 +319,16 @@ pub(crate) fn radiogenic_abundance(seed: Seed) -> f64 {
         -RADIOGENIC_HALF_RANGE_DEX,
         RADIOGENIC_HALF_RANGE_DEX,
     )
+}
+
+/// The snowball draw: one uniform number in the open interval (0, 1),
+/// which the climate of a bistable planet compares with its snowball
+/// chance (`science::snowball::snowball_chance`): frozen when the draw is
+/// under it. The caller passes `seed.derive(LABELS.snowball)`. It reads
+/// nothing of the trace, so the same planet gets the same answer.
+pub(crate) fn snowball_draw(seed: Seed) -> f64 {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
+    uniform(&mut rng)
 }
 
 /// The volatile scatter, dex, in the order CO2, N2, S, CH4, NH3: each

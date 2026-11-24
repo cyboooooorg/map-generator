@@ -300,15 +300,48 @@ const NITROGEN_SWEEP_STEP_K: f64 = 0.1;
 /// Definition: alpha-beta transition of nitrogen, 35.61 K (Scott 1976, as
 /// quoted by Tegler et al. 2019).
 const NITROGEN_TRANSITION_K: f64 = 35.61;
-/// Source: normal boiling point of nitrogen, 77.355 K, at 101 325 Pa
-/// (NIST Chemistry WebBook).
-const NITROGEN_NORMAL_BOILING: (f64, f64) = (77.355, 101_325.0);
-/// Definition: tolerance of the Antoine fit at the normal boiling point,
-/// 5 % (the fit is 4.5 % low there).
-const ANTOINE_TOLERANCE: f64 = 5e-2;
-/// Source: validity of the Antoine fit of nitrogen, 63.14 to 126 K (Edejer
-/// and Thodos 1967, via the NIST Chemistry WebBook).
-const ANTOINE_RANGE_K: (f64, f64) = (63.14, 126.0);
+/// Source: Span, Lemmon, Jacobsen, Wagner & Yokozeki 2000 (J. Phys.
+/// Chem. Ref. Data 29, 1361, doi:10.1063/1.1349047), the tables
+/// "Thermodynamic properties of nitrogen on the saturation line as a
+/// function of temperature" (pp. 1405-1406) and "of pressure" (p. 1407,
+/// for the normal boiling point): (T in K, p in MPa), computed from
+/// their equation of state.
+const SPAN_TABLE: [(f64, f64); 6] = [
+    (63.151, 0.012_523),
+    (70.0, 0.038_54),
+    (77.355, 0.101_325),
+    (90.0, 0.360_46),
+    (100.0, 0.778_27),
+    (120.0, 2.510_58),
+];
+/// Source: relative uncertainty of the vapour pressures of Nowak et al.
+/// 1997b at the triple point, 0.075 %, the largest the paper states for
+/// them (Span et al. 2000, Sec. 2.3, p. 1367; "typically less than
+/// 0.015 %" elsewhere). The ancillary equation "represents the
+/// experimental values well within their uncertainties along the entire
+/// coexistence curve" (Sec. 2.6, p. 1368); the paper gives no other
+/// figure for it.
+const SPAN_TOLERANCE: f64 = 7.5e-4;
+/// Source: triple-point temperature of nitrogen, 63.151 K (Span et al.
+/// 2000, Sec. 2.2, eq. 3, p. 1367, adopted from Nowak et al. 1997b,
+/// ITS-90).
+const SPAN_TRIPLE_TEMPERATURE: Kelvin = Kelvin(63.151);
+/// Source: triple-point pressure of nitrogen, 12.523 kPa (Span et al.
+/// 2000, Sec. 2.2, eq. 3, p. 1367, adopted from Nowak et al. 1997b).
+const SPAN_TRIPLE_PRESSURE: Pascal = Pascal(12_523.0);
+/// Definition: an offset, 1e-9 K, under the switch from the frost to the
+/// liquid curve, to read the frost's side of the join.
+const JUST_UNDER_K: f64 = 1e-9;
+/// Definition: coldest temperature, 30 K, and step, 0.1 K, of the
+/// monotony check of the whole nitrogen saturation curve.
+const SATURATION_SWEEP_FLOOR_K: f64 = 30.0;
+/// Definition: see [`SATURATION_SWEEP_FLOOR_K`].
+const SATURATION_SWEEP_STEP_K: f64 = 0.1;
+/// Source: constants `A`, `B`, `C` of the Antoine fit of liquid nitrogen
+/// that the Span curve replaces, `log10(p / 1 bar) = A - B / (T - C)`
+/// (Edejer and Thodos 1967, via the NIST Chemistry WebBook), read only to
+/// print the change at methane's triple point.
+const EDEJER_THODOS: [f64; 3] = [3.7362, 264.651, 6.788];
 
 #[test]
 fn nitrogen_frost_follows_fray_and_schmitt() {
@@ -339,18 +372,78 @@ fn nitrogen_frost_follows_fray_and_schmitt() {
 }
 
 #[test]
-fn nitrogen_vapour_follows_its_antoine_fit() {
-    let (t, p) = NITROGEN_NORMAL_BOILING;
-    let fit = nitrogen_vapour_pressure(Kelvin(t)).0;
-    assert!(close(fit, p, ANTOINE_TOLERANCE), "{fit} Pa at {t} K");
-    let mut previous = 0.0;
-    let mut t = ANTOINE_RANGE_K.0;
-    while t <= ANTOINE_RANGE_K.1 {
-        let p = nitrogen_vapour_pressure(Kelvin(t)).0;
-        assert!(p > previous, "{t} K");
-        previous = p;
-        t += 0.5;
+fn nitrogen_saturation_is_span_2000() {
+    for (t, mpa) in SPAN_TABLE {
+        let p = nitrogen_saturation_pressure(Kelvin(t)).0;
+        let table = mpa * 1e6;
+        println!(
+            "N2 at {t} K: {p:.2} Pa against {table:.2} Pa ({:+.4} %)",
+            100.0 * (p / table - 1.0)
+        );
+        assert!(close(p, table, SPAN_TOLERANCE), "{p} Pa at {t} K");
     }
+}
+
+#[test]
+fn nitrogen_saturation_joins_its_frost() {
+    let switch = NITROGEN_TRIPLE_TEMPERATURE;
+    let frost = nitrogen_saturation_pressure(Kelvin(switch.0 - JUST_UNDER_K)).0;
+    let liquid = nitrogen_saturation_pressure(switch).0;
+    let join = (liquid - frost).abs() / frost;
+    // The frost is pinned at Angus et al. 1979's triple point (63.14 K,
+    // 12 530 Pa), the liquid is Span et al. 2000's curve through theirs
+    // (63.151 K, 12 523 Pa). The bound is built from the same terms as
+    // the join (the curve's miss of Angus's pressure at Span's triple
+    // temperature, plus the curve's change over the 0.011 K between the
+    // two triple temperatures), so it holds by construction, to second
+    // order: it does not test the sources' disagreement (their triple
+    // pressures are 0.056 % apart; the rest of the 0.27 % is the curve's
+    // slope). What it catches is a change of either curve, the frost's or
+    // the liquid's, that opens the join past them (user decision, Task
+    // 3).
+    let at_span = nitrogen_saturation_pressure(SPAN_TRIPLE_TEMPERATURE).0;
+    let pressures = (at_span - NITROGEN_TRIPLE_PRESSURE.0).abs() / NITROGEN_TRIPLE_PRESSURE.0;
+    let temperatures = (at_span - liquid).abs() / at_span;
+    let bound = pressures + temperatures;
+    let sourced =
+        (SPAN_TRIPLE_PRESSURE.0 - NITROGEN_TRIPLE_PRESSURE.0).abs() / NITROGEN_TRIPLE_PRESSURE.0;
+    println!(
+        "N2 join at {} K: frost {frost:.2} Pa, liquid {liquid:.2} Pa, {:.4} %; \
+         bound {:.4} % (pressures {:.4} %, temperatures {:.4} %); triple \
+         pressures {:.4} % apart",
+        switch.0,
+        100.0 * join,
+        100.0 * bound,
+        100.0 * pressures,
+        100.0 * temperatures,
+        100.0 * sourced,
+    );
+    assert!(join <= bound, "join {join} over {bound}");
+
+    let critical = nitrogen_saturation_pressure(NITROGEN_CRITICAL_TEMPERATURE).0;
+    assert!(critical.is_infinite() && critical > 0.0, "{critical}");
+
+    let mut previous = 0.0;
+    let mut step = 0.0;
+    loop {
+        let t = SATURATION_SWEEP_FLOOR_K + step * SATURATION_SWEEP_STEP_K;
+        if t >= NITROGEN_CRITICAL_TEMPERATURE.0 {
+            break;
+        }
+        let p = nitrogen_saturation_pressure(Kelvin(t)).0;
+        assert!(p.is_finite() && p > previous, "{t} K: {p} <= {previous}");
+        previous = p;
+        step += 1.0;
+    }
+
+    let t = METHANE_TRIPLE_TEMPERATURE;
+    let span = nitrogen_saturation_pressure(Kelvin(t)).0 / PASCALS_PER_BAR;
+    let [a, b, c] = EDEJER_THODOS;
+    let antoine = 10f64.powf(a - b / (t - c));
+    println!(
+        "N2 at {t} K: Span {span:.4} bar, Antoine {antoine:.4} bar ({:+.3} %)",
+        100.0 * (span / antoine - 1.0)
+    );
 }
 
 /// Definition: coldest temperature, 10 K, of the sulphur dioxide sweep.

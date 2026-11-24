@@ -269,10 +269,14 @@ give the search behind them.
 | Ice VII | Vinet | 1460, 14.3771, 6.57972 | Seager et al. 2007, section 3.3 |
 
 The boundaries between phases of water are the melting curves of ices
-Ih and VI and the three triple points (208.566 MPa at 251.165 K,
-350.1 MPa and 632.4 MPa at 273.31 K, 2216 MPa at 355 K), from the IAPWS
+Ih and VI and the triple points of the liquid (208.566 MPa at 251.165 K,
+350.1 MPa at 256.164 K, 632.4 MPa at 273.31 K, 2216 MPa at 355 K), from the IAPWS
 release R14-08 (2011) of Wagner et al., and the ice VI to ice VII
-boundary of the AQUA model (Haldemann et al. 2020, eq. 22). A water
+boundary of the AQUA model (Haldemann et al. 2020, eq. 22). The surface
+liquid also reads the melting curves of ices III and V (IAPWS R14-08,
+eqs. 2 and 3; study 25 of the Wiki and
+[the surface liquid](planet-atmospheres.md#climate-and-surface-liquid)).
+A water
 layer follows one of two paths, chosen by its temperature $T$:
 
 - **273.31 K ≤ $T$ < 355 K:** the isotherm at $T$. Liquid water up to

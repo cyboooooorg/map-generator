@@ -7,19 +7,19 @@
 //! [24](https://github.com/cyboooooorg/map-generator/wiki/24-surface-cover-audit)
 //! and the rewrite's phase curves (`science::water`, IAPWS;
 //! `science::volatiles`). The condensate, the part of the N2 and CH4 that
-//! the air cannot hold, is an input: the climate that condenses it is
-//! not here.
+//! the air cannot hold, is an input: `condense` makes it, at
+//! the temperature the climate solves for.
 
 use super::cover::{FROST_LAYER, share};
-use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR};
+use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STEFAN_BOLTZMANN};
 use crate::radiation::gases::PartialPressures;
-use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal};
+use crate::units::{Bar, Fraction, Kelvin, Kilogram, Pascal, WattPerSquareMetre};
 use crate::volatiles::{
     ETHANE_TRIPLE_TEMPERATURE, METHANE_TRIPLE_TEMPERATURE, NITROGEN_TRIPLE_TEMPERATURE,
     co2_frost_pressure, ethane_boiling_temperature, methane_saturation_bar,
-    nitrogen_vapour_pressure, sulphur_dioxide_frost_pressure,
+    nitrogen_saturation_pressure, sulphur_dioxide_frost_pressure,
 };
-use crate::water::{boiling_temperature, ice_ih_melting_temperature};
+use crate::water::{boiling_temperature, melting_temperature};
 
 /// Source: the temperature from which a rocky surface is molten, 1673 K:
 /// Kite, Fegley, Schaefer & Gaidos 2016 (*ApJ* 828, 80,
@@ -92,6 +92,15 @@ const ETHANE_FUSION_ENTHALPY: f64 = 2_790.0;
 /// interaction parameter was found. See `docs/science/atmospheres.md`.
 const METHANE_EXCESS_W_OVER_R: f64 = 75.3;
 
+/// Temperature of the substellar point of a tidally locked body that
+/// absorbs `absorbed` (W/m2, the mean over its whole sphere, `(1 - A)
+/// S / 4`, under its own albedo `A`): `(4 absorbed / sigma)^(1/4)`, Kite et al. 2016 (*ApJ* 828,
+/// 80, arXiv:1606.06740, eq. 1), `sqrt(2)` times the equilibrium
+/// temperature (`Definition:`, derived).
+pub fn substellar_temperature(absorbed: WattPerSquareMetre) -> Kelvin {
+    Kelvin((4.0 * absorbed.0 / STEFAN_BOLTZMANN).powf(0.25))
+}
+
 /// A liquid on a body's surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Liquid {
@@ -105,7 +114,8 @@ pub enum Liquid {
     Lava,
 }
 
-fn bar(p: Pascal) -> f64 {
+/// `p` in bar.
+pub(super) fn bar(p: Pascal) -> f64 {
     p.0 / PASCALS_PER_BAR
 }
 
@@ -115,11 +125,13 @@ fn bar(p: Pascal) -> f64 {
 /// diagrams, each window holding its lower edge and leaving out its upper
 /// one:
 ///
-/// - lava from [`LAVA_TEMPERATURE`] on a body that has kept no water
+/// - lava from [`LAVA_TEMPERATURE`], read on the hotter of `t` and the
+///   `substellar` temperature of a tidally locked body
+///   ([`substellar_temperature`]; `None` for any other), on a body that has kept no water
 ///   (with water on top, its steam or supercritical fluid covers the
 ///   rock: Hamano, Abe & Genda 2013, doi:10.1038/nature12163);
-/// - water from the melting of ice Ih to the boiling point at the total
-///   pressure (IAPWS, [`ice_ih_melting_temperature`],
+/// - water from the melting of the stable ice to the boiling point at the total
+///   pressure (IAPWS, [`melting_temperature`] of the stable ice,
 ///   [`boiling_temperature`]), above water's triple-point pressure, with
 ///   water kept out of a runaway;
 /// - hydrocarbons from the sea's freezing point ([`sea_freezes`]) to
@@ -128,27 +140,22 @@ fn bar(p: Pascal) -> f64 {
 /// - nitrogen where nitrogen condenses above its triple point without a
 ///   methane sea (under it, a frost, [`frost`]);
 /// - none otherwise.
-///
-/// Limit: above 208.6 MPa, `ice_ih_melting_temperature` stays at the
-/// Ih-III-liquid triple point (251.165 K), the floor of ice Ih; the
-/// denser ices III, V and VI melt higher (ice VI at 273 to 355 K), so
-/// water between 252 and 273 K under that pressure reads liquid
-/// although a denser ice is stable. Issue #671 reads the melting curve
-/// of the stable ice.
 pub fn liquid(
     t: Kelvin,
     air: &PartialPressures,
     water: Kilogram,
     runaway: bool,
     condensate: &PartialPressures,
+    substellar: Option<Kelvin>,
 ) -> Option<Liquid> {
     let pressure = Pascal(air.total() * PASCALS_PER_BAR);
     let water_on_top = water.0 > 0.0;
     let water_window = || {
         boiling_temperature(pressure)
-            .is_some_and(|boils| t.0 >= ice_ih_melting_temperature(pressure).0 && t.0 < boils.0)
+            .is_some_and(|boils| t.0 >= melting_temperature(pressure).0 && t.0 < boils.0)
     };
-    if t.0 >= LAVA_TEMPERATURE.0 && !water_on_top {
+    let hottest = substellar.map_or(t.0, |ss| t.0.max(ss.0));
+    if hottest >= LAVA_TEMPERATURE.0 && !water_on_top {
         Some(Liquid::Lava)
     } else if water_on_top && !runaway && water_window() {
         Some(Liquid::Water)
@@ -185,14 +192,17 @@ pub fn sea_freezes(air_n2: Bar, condensate: &PartialPressures) -> Kelvin {
 /// ethane and the nitrogen dissolved in it ([`hydrocarbon_freezes`]).
 ///
 /// The sea's nitrogen mole fraction is [`NITROGEN_RAOULT_SHARE`] of
-/// Raoult's law at `n2` and methane's triple point
-/// ([`nitrogen_vapour_pressure`]), at most [`MAX_NITROGEN_IN_LIQUID`];
+/// Raoult's law at `n2` and methane's triple point (liquid nitrogen's
+/// saturation there, [`nitrogen_saturation_pressure`], Span et al. 2000:
+/// 3.824 bar), at most [`MAX_NITROGEN_IN_LIQUID`];
 /// its methane [`SEA_METHANE_SHARE`]; the rest ethane, which methane's
 /// photolysis makes on any methane world. The methane share is fixed, so
 /// the methane liquidus is a floor (about 68 K): the dissolved nitrogen
 /// replaces ethane, and lowers the freezing point only by diluting it.
 pub fn methane_freezes(n2: Bar) -> Kelvin {
-    let saturation = bar(nitrogen_vapour_pressure(Kelvin(METHANE_TRIPLE_TEMPERATURE)));
+    let saturation = bar(nitrogen_saturation_pressure(Kelvin(
+        METHANE_TRIPLE_TEMPERATURE,
+    )));
     let nitrogen = (NITROGEN_RAOULT_SHARE * n2.0.max(0.0) / saturation).min(MAX_NITROGEN_IN_LIQUID);
     let ethane = (1.0 - SEA_METHANE_SHARE - nitrogen).max(0.0);
     hydrocarbon_freezes(nitrogen, ethane)
