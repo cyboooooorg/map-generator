@@ -48,10 +48,10 @@ fn snowball_chance_follows_its_law() {
 const HOFFMAN_SHARE: (f64, f64) = (0.013, 0.016);
 
 /// Definition: the extra CO₂ the reference Earth at 1 AU needs to thaw,
-/// 0.1789 bar, as the climate solver measured it for the fit of
+/// 0.1788 bar, as the climate solver measured it for the fit of
 /// [`SNOWBALL_WARM_BAR`] (its `Calibration:`); the tier-3 test
 /// `earth_snowballs_as_often_as_hoffman_dates` holds it on the solve.
-const EARTH_THAW_EXTRA: Bar = Bar(0.1789);
+const EARTH_THAW_EXTRA: Bar = Bar(0.1788);
 
 /// Definition: the reference Earth's recorded volcanic intensity,
 /// 0.506064, as measured for the fit of [`SNOWBALL_WARM_BAR`].

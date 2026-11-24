@@ -15,21 +15,22 @@ use crate::relief::volcanoes::EARTH_VOLCANIC_INTENSITY;
 use crate::units::{Bar, Fraction};
 
 /// Calibration: the CO₂ Earth's volcanism gives the air over one
-/// temperate phase between two snowballs, 12.5 bar. Target: Earth's
+/// temperate phase between two snowballs, 12.4 bar. Target: Earth's
 /// dated share of its history in snowball states, `f⊕` = 0.014 (0.013
 /// to 0.016; the Sturtian and Marinoan glaciations, 63 My over 4.6 Gyr,
 /// Hoffman et al. 2017, *Sci. Adv.* 3, e1600983, Table 1). Method:
-/// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25), to three figures, with
-/// `d⊕` = 0.1788 bar the extra CO₂ the reference Earth at 1 AU needs to
-/// thaw (thaw 0.1807 bar, froze 0.0020 bar, measured by the climate
-/// solver of `system`) and `rate⊕` = 0.506064 / 0.5 = 1.0121, its
-/// recorded volcanic intensity over [`EARTH_VOLCANIC_INTENSITY`];
-/// Earth's chance is then 0.0139. Searched and not found: a snowball
-/// frequency for another planet. Study:
+/// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25) = 12.44, to three figures,
+/// with `d⊕` = 0.1788 bar the extra CO₂ the reference Earth at 1 AU
+/// needs to thaw (thaw 0.180748 bar less froze 0.001986 bar, 0.178762,
+/// measured by the climate solver of `system` at its 13 thaw steps) and
+/// `rate⊕` = 0.506064 / 0.5 = 1.0121, its recorded volcanic intensity
+/// over [`EARTH_VOLCANIC_INTENSITY`]; Earth's chance is then 0.0140.
+/// Searched and not found: a snowball frequency for another planet.
+/// Study:
 /// [25](https://github.com/cyboooooorg/map-generator/wiki/25-climate-solver-audit),
 /// `docs/science/planet-atmospheres.md`, "Calibration of
 /// `SNOWBALL_WARM_BAR` (refit)".
-pub const SNOWBALL_WARM_BAR: Bar = Bar(12.5);
+pub const SNOWBALL_WARM_BAR: Bar = Bar(12.4);
 
 /// The share of its history a bistable planet spends frozen, from the
 /// CO₂ it needs `extra` above what it froze with to thaw (`thaw − froze`;
