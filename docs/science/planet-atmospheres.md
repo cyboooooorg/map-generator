@@ -4357,7 +4357,8 @@ at 295 bar and find the plateau's end constant past it, to columns of
 `life` decides from the climate whether life arose, and `oxygenate` gives
 the air of a world with oxygenic life its oxygen. The values below come
 from [study 27](https://github.com/cyboooooorg/map-generator/wiki/27-life-and-class-audit),
-which read the sources and lists the choices left to the user.
+which read the sources; the user decided its open choices on
+2026-11-24.
 
 **When life can arise.** Life is possible when the surface liquid is
 water now and the system is at least `LIFE_MIN_GYR` old. It then arises
@@ -4378,8 +4379,9 @@ the snowball draw), is below `LIFE_CHANCE`.
   2016, reinterpreted as deformation by Allwood et al. 2018). The
   molecular clock puts the last universal common ancestor at 4.2 Ga
   (4.09 to 4.33; Moody et al. 2024, abstract), 0.24 to 0.48 Gyr after
-  formation. Legacy's 1.0 Gyr was a calibration with no source; study 27
-  recommends 1.17 Gyr, 4.567 minus Javaux's 3.4 Ga, a `Source:`.
+  formation. Legacy's 1.0 Gyr was a calibration with no source; the
+  rewrite takes 1.17 Gyr, 4.567 minus Javaux's 3.4 Ga, a `Source:`
+  (decided 2026-11-24): the time by which Earth certainly had life.
 - The literature counts the time life took from when the planet became
   habitable (Spiegel & Turner 2012: "after the young planet had cooled
   to the point that it could support water-based organisms"; Lineweaver
@@ -4411,22 +4413,30 @@ to 2.27 Gyr after the CAIs: `OXYGEN_AFTER_GYR` = 2.2 Gyr is a
   (Myr) ago" (p. 307), about 3.97 Gyr after formation.
 
 Legacy's single step to modern O₂ at 2.2 Gyr gives a Proterozoic world
-modern air for 1.8 Gyr. Study 27 recommends two steps: at 2.2 Gyr the air
-turns oxidising (the methane goes, the O₂ stays under 0.1 % of modern,
-taken as none), and at about 4.0 Gyr it reaches modern O₂; the user
-decides.
+modern air for 1.8 Gyr. The rewrite takes two steps (decided
+2026-11-24), so a living planet has three states of air:
 
-**The oxygenated air.** Its O₂ is `O2_PER_N2` of its N₂: 0.2682, the
-ratio of the mole fractions of O₂ (0.209 390) and N₂ (0.780 848) in the
-reference dry air of the CIPM-2007 formula (Picard et al. 2008, Table 1),
-a `Source:`; legacy's 0.27 rounded 0.21 over 0.78. The ratio to N₂ is
-the model's choice of how Earth's air carries over to another planet:
+- before `OXYGEN_AFTER_GYR` (2.2 Gyr), the air life found;
+- from 2.2 Gyr, an oxidising air: the methane is gone (Zahnle, Claire &
+  Catling 2006 tie the GOE to the collapse of methane) and the O₂ is
+  under 0.1 % of modern, taken as none (a declared simplification inside
+  the paper's bound, not a calibration);
+- from `MODERN_OXYGEN_AFTER_GYR`, 4.0 Gyr (3.97: 4.567 Ga minus the
+  "about 600 million years" of p. 307, a `Source:`), modern O₂.
+
+**The oxygenated air.** From 4.0 Gyr its O₂ is `O2_PER_N2` of its N₂:
+0.2682, the ratio of the mole fractions of O₂ (0.209 390) and N₂
+(0.780 848) in the reference dry air of the CIPM-2007 formula (Picard
+et al. 2008, Table 1), a `Source:`, computed in `science` from those two
+shares, which the tests read too; legacy's 0.27 rounded 0.21 over
+0.78. The ratio to N₂ is the model's choice of how Earth's air carries over to another planet:
 the O₂ of a planet is set by its biology and its sinks, which the model
 does not have. The methane is removed: in an oxygenated air OH destroys
 it within 9.1 ± 0.9 years (Prather, Holmes & Hsu 2012), and what is left
 is a steady state of the biological and other fluxes (Zahnle, Claire &
 Catling 2006), 1.9 ppm on today's Earth (NOAA GML). The model has no
-such flux, so the methane is zero.
+such flux, so the methane is zero from the oxidising step on (a
+`Definition:` of the model's scope).
 
 **The climate solved again.** The climate is solved again on the
 oxygenated air: climate, life, oxygenation, climate (decided on
@@ -4445,6 +4455,7 @@ O₂; the climate does, through the pressure.
 | Earth, life draw 0, 4.6 Gyr | life, O₂ at 0.2682 of the N₂, no CH₄, climate solved again |
 | Earth at 0.5 Gyr | no life |
 | Earth at 1.5 Gyr | life, no oxygen yet |
+| Earth at 3.0 Gyr | life, an oxidising air: no CH₄, no O₂ |
 | Earth, life draw 0.99 | habitable, lifeless |
 | Venus, Mars | no life, whatever the draw (no liquid water) |
 
@@ -4503,14 +4514,14 @@ The first rule that holds wins:
 
 | Order | Class | Rule |
 | --- | --- | --- |
-| 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | giant rules of part 1 (study 27 recommends the rewrite's body kinds instead, see [What are planets made of?](planet-interiors.md#classes)) |
-| 2 | `mini-neptune` | envelope of at least 0.1 % (`MIN_ENVELOPE`) and radius of at least 1.6 R⊕ (Rogers 2015) |
+| 1 | `hot-jupiter`, `gas-giant`, `ice-giant` | the body kinds the chain decides: a gas giant is a `Body::Giant` (20 M⊕ and up), an ice giant a `Body::MiniNeptune` of at least 10 M⊕ (`MINI_NEPTUNE_MAX_MASS`); hot within 10 days (Wright et al. 2012); see [What are planets made of?](planet-interiors.md#classes) |
+| 2 | `mini-neptune` | a `Body::MiniNeptune` under 10 M⊕ (it kept at least 0.1 % of its mass in gas, `MIN_ENVELOPE`); no radius rule |
 | 3 | `steam-world` | in water runaway, at least 220.64 bar of steam (water's critical pressure) and a surface at 647 K or more (`climate::hides_surface`) |
 | 4 | `lava-world` | surface liquid is lava (at least 1673 K, no water kept) |
 | 5 | `runaway-greenhouse` | in runaway (the insolation is over the runaway limit, or the climate boiled the ocean) and the air is over 1 bar |
 | 6 | `hydrocarbon-world` | surface liquid is hydrocarbons and the air is over methane's triple-point pressure (0.117 bar) |
-| 7 | `ocean-world` | surface liquid is water and at least 10 Earth oceans are kept (legacy; study 27 recommends Cowan & Abbot 2014's basin capacity, below) |
-| 8 | `ice-world` | at least 5 % water and ices, and at least 0.01 Earth ocean kept at the surface |
+| 7 | `ocean-world` | surface liquid is water and the oceans kept exceed the basins' capacity, `3.7 (R/R⊕)² (g⊕/g)` Earth oceans (Cowan & Abbot 2014, below) |
+| 8 | `ice-world` | at least 5 % water and ices (`ICY_MIN_WATER`, the tides' line), and at least 0.01 Earth ocean kept at the surface (`ICE_WORLD_MIN_OCEANS`) |
 | 9 | `volcanic-world` | a solid surface in the heat-pipe regime, none of the classes above, no ice world |
 | 10 | `super-earth`, `rocky` | radius of at least 1.25 R⊕ (Borucki et al. 2011), rocky below |
 
@@ -4577,8 +4588,9 @@ Earth oceans, about 3.7 at Earth's mass and gravity. Their headline
 too, which the model's surface water does not: it is not the line. With
 the basin capacity, a `Source:`, more planets become ocean worlds than
 with 10 (from 3.7 instead of 10 oceans on an Earth). The paper assumes
-plate tectonics; study 27 recommends it for every regime and leaves the
-choice to the user.
+plate tectonics; the rewrite applies it in every regime (decided
+2026-11-24): the basins' depth is set by isostasy under gravity (Eq. 6),
+not by plate motion.
 
 **The dense air.** `DENSE_AIR_BAR` is 1 bar, for the runaway greenhouse
 (Venus has 92 bar; a runaway that lost its air is a bare rock). No

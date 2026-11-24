@@ -340,15 +340,37 @@ regression net.
   Legacy's declared simplification (the climate solved on the air
   before life) is dropped, decided on 2026-11-24 in 2d-3a: without its
   O₂ the reference Earth's air is 0.75 bar, 283.8 K at 280 ppm of CO₂
-  against 286 to 290 K (Myhre et al. 1998), and its thermostat needs
-  about 2 000 ppm. With N₂ 0.78 and O₂ 0.21 bar the solver gives
+  (Myhre et al. 1998 give the 280 ppm; the 286 to 290 K window is the
+  tests' definition, legacy's 288 ± 2 K, not Myhre's), and its
+  thermostat needs about 2 000 ppm. With N₂ 0.78 and O₂ 0.21 bar the solver gives
   286.9 K. 2d-3a tests that check on Earth's measured air; 2d-4 makes
   the reference Earth reach it and updates `docs/science` (section
   Life of `planet-atmospheres.md`).
+- **Life's values** (study 27, decided by the user on 2026-11-24):
+  `LIFE_MIN_GYR` 1.17 Gyr (`Source:` Javaux 2019's 3.4 Ga against
+  Connelly et al. 2012's 4.567 Ga); `LIFE_CHANCE` 1/3 (`Definition:`,
+  a game choice). Oxygen in two steps, so a living planet's air has
+  three states: the air life found; from `OXYGEN_AFTER_GYR` 2.2 Gyr an
+  oxidising air, no CH₄ and O₂ taken as none (Lyons et al. 2014
+  pp. 307, 311, 314); from 4.0 Gyr modern O₂ (Lyons p. 307, about
+  600 Myr ago). The third state changes `timeline::Life`, agreed with
+  the other sessions. The modern air holds `O2_PER_N2` × N₂, the ratio
+  computed in `science` from the CIPM-2007 shares (Picard et al. 2008,
+  `Source:`), and no CH₄ (`Definition:`).
 - **Class** (`classify.rs`): the 14 classes of `timeline::PlanetClass`
   in legacy's order (giants, mini-Neptune, the surface classes, ice
   world, volcanic, super-Earth, rocky). `AIRLESS_BAR` is not a class
-  threshold; it stays a test definition (#659).
+  threshold; it stays a test definition (#659). Decided on 2026-11-24
+  (study 27): the giants and the mini-Neptune read the body kinds the
+  chain decides, no legacy envelope line: a gas giant is a
+  `Body::Giant` (20 M⊕ and up), an ice giant a `Body::MiniNeptune` at or
+  above `MINI_NEPTUNE_MAX_MASS`, a mini-Neptune one under it (legacy's
+  1.6 R⊕ rule dropped); hot within 10 days (Wright et al. 2012), with
+  the one 20 M⊕ line. The ocean world takes Cowan & Abbot 2014's basin
+  capacity, `3.7 (R/R⊕)² (g⊕/g)` Earth oceans, in every regime. The
+  ice world reads `ICY_MIN_WATER`; `METHANE_TRIPLE_BAR` is the rewrite's
+  methane saturation at its triple point. Two new calibrations:
+  `DENSE_AIR_BAR` (1 bar) and `ICE_WORLD_MIN_OCEANS` (0.01).
 - **`class_of`** runs the chain on a scratch clone of the trace and
   returns the class, the radius and the mean density as plain values
   (split design). **`model`** runs the same chain on the real trace and
@@ -389,9 +411,9 @@ section.
 | 2d-3 | `RUNAWAY_ALBEDO` bounds, `STEAM_ALBEDO_BAR`, `STEAM_WORLD_MIN_BAR` | Their reason, or a calibration section each |
 | 2d-3 | `boils` | Kasting 1988 read |
 | 2d-3 | Solver constants (tolerances, step counts, `SCAN_RATIO`, `RUNAWAY_PROBE_K`, `PLATEAU_SURFACES_K`, `THERMOSTAT_TOLERANCE`, `GREENHOUSE_*`, `THAW_STEPS`, `ALBEDO_*`, `COLLAPSE_*`, `CONDENSE_ITERATIONS`) | Labelled by the rule of #648 (a guard is a `Definition:`, a discretisation a `Calibration:` held by a convergence test); a convergence test each, tier 3 if slow |
-| 2d-4 | `LIFE_MIN_GYR` 1 Gyr | The oldest evidence of life after a planet's formation |
-| 2d-4 | `OXYGEN_AFTER_GYR` 2.2, `O2_PER_N2` | Lyons, Reinhard & Planavsky 2014 read in full; the O₂ ratio as an Earth calibration |
-| 2d-4 | `GAS_GIANT_MIN_ENVELOPE`, `MINI_NEPTUNE_MIN_ENVELOPE`, `ICE_WORLD_MIN_WATER`, `DENSE_AIR_BAR`, `OCEAN_WORLD_OCEANS` | A source each, or a calibration section; Cowan & Abbot 2014 read |
+| 2d-4 | `LIFE_MIN_GYR` 1 Gyr | The oldest evidence of life after a planet's formation. Done, study 27: 1.17 Gyr, `Source:` |
+| 2d-4 | `OXYGEN_AFTER_GYR` 2.2, `O2_PER_N2` | Lyons, Reinhard & Planavsky 2014 read in full; the O₂ ratio as an Earth calibration. Done, study 27: 2.2 Gyr kept, modern O₂ at 4.0 Gyr, the ratio a `Source:` (CIPM-2007) |
+| 2d-4 | `GAS_GIANT_MIN_ENVELOPE`, `MINI_NEPTUNE_MIN_ENVELOPE`, `ICE_WORLD_MIN_WATER`, `DENSE_AIR_BAR`, `OCEAN_WORLD_OCEANS` | A source each, or a calibration section; Cowan & Abbot 2014 read. Done, study 27: the envelope lines replaced by the body kinds, the ice world on `ICY_MIN_WATER`, the ocean world on Cowan & Abbot's capacity; `DENSE_AIR_BAR` stays a calibration |
 
 `LIFE_CHANCE` (1/3) is a game choice made with the user on 2026-11-12:
 it is a `Definition:` that says so, not a result of science.
