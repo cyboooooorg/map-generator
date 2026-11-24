@@ -98,6 +98,10 @@ pub const LOSCHMIDT: f64 = 2.686_780_111e25;
 /// 17th CGPM 1983).
 pub const SPEED_OF_LIGHT: f64 = 299_792_458.0;
 
+/// Definition: Planck constant, 6.626 070 15e-34 J s exactly since the SI
+/// redefinition of 2019 (CODATA 2022; NIST CODATA value `h`).
+pub const PLANCK: f64 = 6.626_070_15e-34;
+
 /// Definition: molar gas constant `R = k N_A`, J/(mol K), exact
 /// (CODATA 2018 prints 8.314 462 618... J/(mol K)); the product of
 /// [`BOLTZMANN`] and [`AVOGADRO`] to its last digit.

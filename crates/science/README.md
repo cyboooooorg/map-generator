@@ -110,8 +110,8 @@ M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`; see
 star's XUV and Lyman α history; see [XUV
 fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
-`science::{escape, dynamo, outgassing, volatiles, habitable, tectonics}`:
-[planet atmospheres](../../docs/science/planet-atmospheres.md).
+`science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
+photochemistry}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
 
 ## Giants and envelopes
 

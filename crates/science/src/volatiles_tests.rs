@@ -65,6 +65,93 @@ fn close(a: f64, b: f64, tolerance: f64) -> bool {
     ((a - b) / b).abs() <= tolerance
 }
 
+/// Definition: relative tolerance of the ammonia frost at its triple
+/// point, 1e-6.
+const AMMONIA_TRIPLE_TOLERANCE: f64 = 1e-6;
+/// Source: triple-point pressure of ammonia, 0.06060 bar (Fonseca and Lobo
+/// 1989, via the NIST Chemistry WebBook phase-change page).
+const AMMONIA_TRIPLE_BAR: f64 = 0.060_60;
+/// Source: triple-point temperature of ammonia, 195.49 K (Gao et al. 2023,
+/// doi:10.1063/5.0128269).
+const AMMONIA_TRIPLE_K: f64 = 195.49;
+/// Source: ammonia frost points (T in K, p in bar, relative tolerance):
+/// 1.27e-3 bar at 162.39 K (Karwat 1924, via Fray and Schmitt 2009, quoted
+/// by Blakley et al. 2024 section 1) within 5 %, and 8.26e-3 bar at 177 K
+/// (Fray and Schmitt 2009 fit NH3-1, via Lisse et al. 2021 supplement
+/// Table 2) within 2 %.
+const AMMONIA_FROST_POINTS: [(f64, f64, f64); 2] =
+    [(162.39, 1.27e-3, 5e-2), (177.0, 8.26e-3, 2e-2)];
+/// Definition: relative tolerance of two reads of the same curve, 1e-12
+/// (the bar round trip changes the last bit).
+const SAME_CURVE_TOLERANCE: f64 = 1e-12;
+/// Definition: temperatures of the CO2 comparison, 150 K and 200 K, both
+/// under the triple point.
+const CO2_FROST_CHECKS_K: [f64; 2] = [150.0, 200.0];
+/// Definition: coldest temperature of the cap check, 10 K.
+const FROST_CAP_FLOOR_K: f64 = 10.0;
+/// Definition: step of the cap check, 0.5 K.
+const FROST_CAP_STEP_K: f64 = 0.5;
+/// Definition: relative gap under the triple point where the frost is read,
+/// 1e-9.
+const JUST_UNDER: f64 = 1e-9;
+
+#[test]
+fn ammonia_frost_meets_its_triple_point() {
+    let p = ammonia_frost_pressure(Kelvin(AMMONIA_TRIPLE_K * (1.0 - JUST_UNDER))).unwrap();
+    assert!(close(
+        p.0 / PASCALS_PER_BAR,
+        AMMONIA_TRIPLE_BAR,
+        AMMONIA_TRIPLE_TOLERANCE
+    ));
+}
+
+#[test]
+fn ammonia_frost_follows_its_source() {
+    for (t, bar, tolerance) in AMMONIA_FROST_POINTS {
+        let p = ammonia_frost_pressure(Kelvin(t)).unwrap();
+        assert!(
+            close(p.0 / PASCALS_PER_BAR, bar, tolerance),
+            "{t} K: {}",
+            p.0
+        );
+    }
+}
+
+#[test]
+fn co2_frost_is_the_co2_curve_below_its_triple_point() {
+    for t in CO2_FROST_CHECKS_K {
+        let frost = co2_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(close(
+            frost,
+            co2_saturation_pressure(Kelvin(t)).0,
+            SAME_CURVE_TOLERANCE
+        ));
+    }
+}
+
+#[test]
+fn the_frost_cap_holds_from_10_k_to_the_triple_point() {
+    type Frost = fn(Kelvin) -> Option<Pascal>;
+    let gases: [(Frost, f64); 2] = [
+        (co2_frost_pressure, CO2_TRIPLE_TEMPERATURE),
+        (ammonia_frost_pressure, AMMONIA_TRIPLE_TEMPERATURE),
+    ];
+    for (frost, triple) in gases {
+        let mut previous = 0.0;
+        let mut t = FROST_CAP_FLOOR_K;
+        while t < triple * (1.0 - JUST_UNDER) {
+            let p = frost(Kelvin(t)).unwrap().0;
+            assert!(p.is_finite() && p > previous, "{t} K: {p} after {previous}");
+            previous = p;
+            t += FROST_CAP_STEP_K;
+        }
+        let top = frost(Kelvin(triple * (1.0 - JUST_UNDER))).unwrap().0;
+        assert!(top.is_finite() && top > previous);
+        assert!(frost(Kelvin(triple)).is_none());
+        assert!(frost(Kelvin(triple + FROST_CAP_STEP_K)).is_none());
+    }
+}
+
 #[test]
 fn co2_follows_span_wagner() {
     for (t, bar) in CO2_TABLE {

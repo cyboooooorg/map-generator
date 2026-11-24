@@ -1,13 +1,11 @@
-//! Tier 1: the air of a planet, its outgassing, the cosmic shoreline and
-//! the SO2 wash-out, ported from
+//! Tier 1: the air of a planet, its outgassing, the cosmic shoreline, the
+//! SO2 wash-out, the methane photolysis, the reducing air, the cold trap
+//! and the photochemistry, ported from
 //! `legacy-final:crates/mapgen/src/planet/atmosphere.rs` (its planet
 //! tests, l.1358-1825) on the reference bodies of `planet/tests.rs`, with
-//! the targets of study 21. Legacy's `air_of` also ran the methane
-//! photolysis, the cold trap and the photochemistry, which come with the
-//! climate (#659): only the gases those steps leave alone are asserted
-//! here (CO2, N2, SO2 and the totals they make).
+//! the targets of studies 21 and 23.
 
-use super::air::{air, released};
+use super::air::{Air, air, histories, lyman_sources, released};
 use super::codes;
 use super::core::{CoreRecord, core};
 use super::draws::Drawn;
@@ -15,14 +13,23 @@ use super::enveloped::Body;
 use super::interior::Water as Held;
 use super::regime::regime;
 use super::tests::{
-    EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, VENUS,
-    WATER_WORLD_FRACTION, derive_surface, derived_from, reference_trial, trial, with_fluence,
+    CALLISTO, EARTH, EARTH_CORE_MASS_FRACTION, HOT_ORBIT_AU, MARS, MERCURY, ReferenceBody, TITAN,
+    VENUS, WATER_WORLD_FRACTION, ancestry, derive_surface, derived_from, reference_trial, trial,
+    with_fluence,
 };
 use crate::Trial;
+use crate::sources::{light, sources};
+use crate::star::star;
+use science::constants::PASCALS_PER_BAR;
 use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, shoreline_kept};
-use science::units::{Bar, Kilogram, Metre};
+use science::photochemistry::{
+    CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
+};
+use science::units::{Bar, Gyr, Kilogram, Metre, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
-use timeline::{Atmosphere, Code, Gas, Provenance, TectonicRegime, Trace, Traced, Water};
+use timeline::{
+    Atmosphere, Code, Gas, NodeId, Provenance, Seed, TectonicRegime, Trace, Traced, Water,
+};
 
 /// Definition: the surface pressure below which a world is airless, no
 /// sky and no clouds, 1e-4 bar: legacy's `AIRLESS_BAR`
@@ -39,9 +46,40 @@ const VENUS_CO2_SHARE: f64 = 0.9;
 /// Source: see [`VENUS_TOTAL`].
 const VENUS_N2: (f64, f64) = (1.0, 6.0);
 
-/// Source: Earth's N2, 0.78 bar (NASA Earth fact sheet): legacy's test
-/// band, 0.5 to 1.2 bar, before the carbonate thermostat takes the CO2.
-const EARTH_N2: (f64, f64) = (0.5, 1.2);
+/// Source: Earth's N2 as a weight, 0.746 bar: dry air of 5.1352e18 kg
+/// (Trenberth & Smith 2005, J. Climate 18, 864, abstract), 78.08 % of it
+/// by volume at a mean molecular weight of 28.97 (NASA Earth fact sheet),
+/// on Earth's surface at 9.80665 m/s^2 (study 23 of the Wiki; the 0.78
+/// bar often quoted is the volume share of a bar, not a weight).
+const EARTH_N2: f64 = 0.746;
+
+/// Definition: the test's own tolerance round [`EARTH_N2`], 10 %, no
+/// source: the chain is fitted on it
+/// (`science::outgassing::NITROGEN_RECYCLED_UNDER_PLATES`, 0.7458 bar),
+/// and the band lets an input of the reference Earth move without
+/// pinning the fit to its digits.
+const EARTH_N2_TOLERANCE: f64 = 0.1;
+
+/// Source: an abiotic Earth keeps no CH4 or NH3, and Callisto no CH4:
+/// legacy's test bound, 1e-3 bar (`legacy-final` `atmosphere.rs`,
+/// `earth_has_no_abiotic_methane_or_ammonia` and
+/// `ganymede_and_callisto_lose_their_methane_to_photolysis`), Earth's
+/// 1.9 ppm of CH4 being life's.
+const NO_METHANE_OR_AMMONIA: f64 = 1e-3;
+
+/// Source: Titan's CH4, about 5 % of its 1.47 bar at the surface
+/// (Niemann et al. 2005, Nature 438, 779, Huygens GCMS): legacy's test
+/// bound, 0.01 bar (`legacy-final` `atmosphere.rs`,
+/// `titan_keeps_its_methane`).
+const TITAN_METHANE_MIN: f64 = 0.01;
+
+/// Definition: legacy's test bound on the methane Titan's photolysis
+/// leaves, its stock on the ground and in the air before the climate
+/// condenses it, 1 bar (`legacy-final` `atmosphere.rs`,
+/// `titans_outgassing_outruns_its_photolysis`): a test choice, above the
+/// 0.07 bar its air holds today (Niemann et al. 2005), that fails when
+/// the onset or the yield drifts by an order of magnitude.
+const TITAN_METHANE_STOCK_MIN: f64 = 1.0;
 
 /// Source: Earth's SO2 is a trace, well below a ppm of its bar (NASA
 /// Earth fact sheet lists none): legacy's test bound, 1e-6 bar.
@@ -96,8 +134,16 @@ struct Planet {
 }
 
 impl Planet {
-    /// The air of the planet, recorded in its trace.
+    /// The air of the planet, recorded in its trace, a reducing air's CO2
+    /// held back as the chain does.
     fn air(&mut self) -> (Atmosphere, Water) {
+        let a = self.air_held(true);
+        (a.atmosphere, a.water)
+    }
+
+    /// The air of the planet, a reducing air's CO2 held back when
+    /// `hold_back`.
+    fn air_held(&mut self, hold_back: bool) -> Air {
         air(
             &self.trial,
             &self.drawn,
@@ -106,6 +152,7 @@ impl Planet {
             &self.water,
             &self.regime,
             &self.core,
+            hold_back,
             &mut self.trace,
         )
         .unwrap()
@@ -159,9 +206,38 @@ fn number(trace: &Trace, node: timeline::NodeId) -> f64 {
     }
 }
 
-/// The outgassed partial pressure a kept `partial` derives from, bar.
-fn outgassed(p: &Planet, partial: &Traced<Bar>) -> f64 {
-    number(&p.trace, derived_from(&p.trace, partial.node())[0])
+/// The node of code `code` that `node` is or derives from; the latest
+/// recorded when there are several.
+fn ancestor(trace: &Trace, node: NodeId, code: &'static str) -> NodeId {
+    ancestry(trace, node)
+        .into_iter()
+        .rev()
+        .find(|&n| trace.node(n).unwrap().code == Code::of(code))
+        .unwrap_or_else(|| panic!("{node:?} does not derive from {code}"))
+}
+
+/// The codes of the outgassed and kept partial pressures of `gas`.
+fn codes_of(gas: Gas) -> (&'static str, &'static str) {
+    let (_, outgassed, kept) = codes::AIR_GASES
+        .into_iter()
+        .find(|(g, ..)| *g == gas)
+        .unwrap();
+    (outgassed, kept)
+}
+
+/// The outgassed partial pressure of `gas` the final `partial` derives
+/// from, bar.
+fn outgassed(p: &Planet, gas: Gas, partial: &Traced<Bar>) -> f64 {
+    number(
+        &p.trace,
+        ancestor(&p.trace, partial.node(), codes_of(gas).0),
+    )
+}
+
+/// The partial pressure of `gas` the shoreline kept, which the final
+/// `partial` derives from.
+fn kept(p: &Planet, gas: Gas, partial: &Traced<Bar>) -> NodeId {
+    ancestor(&p.trace, partial.node(), codes_of(gas).1)
 }
 
 #[test]
@@ -178,7 +254,7 @@ fn venus_has_ninety_bars_of_co2() {
 fn earth_has_a_bar_of_nitrogen() {
     let a = planet(&EARTH).air().0;
     let n2 = partial(&a, Gas::N2);
-    assert!((EARTH_N2.0..=EARTH_N2.1).contains(&n2), "{a:?}");
+    assert!((n2 / EARTH_N2 - 1.0).abs() < EARTH_N2_TOLERANCE, "{a:?}");
 }
 
 #[test]
@@ -226,7 +302,7 @@ fn a_dynamo_shields_the_air() {
     let bare = shielded(false, &mut mars);
     let kept = shielded(true, &mut mars);
     let co2 = &kept.partial[&Gas::Co2];
-    let out = outgassed(&mars, co2);
+    let out = outgassed(&mars, Gas::Co2, co2);
     let (a, b) = (total(&bare), total(&kept));
     assert!(out > 0.0);
     assert!(b > a && a > 0.0, "{a} {b}");
@@ -291,7 +367,7 @@ fn a_runaway_keeps_its_water_as_vapour() {
     assert_eq!(from[0], earth.water.inventory.node());
     let shoreline = derived_from(&earth.trace, vapour.node())[1];
     assert_eq!(from[1], shoreline);
-    let share = vapour.value().0 / outgassed(&earth, vapour);
+    let share = vapour.value().0 / outgassed(&earth, Gas::H2o, vapour);
     let kept = w.inventory.value().0;
     assert!((kept / (EARTH_OCEANS_KG * share) - 1.0).abs() < ROUNDING);
     assert!(kept <= EARTH_OCEANS_KG);
@@ -311,10 +387,11 @@ fn no_xuv_keeps_the_whole_air() {
     mars.trial = with_fluence(&mut mars.trace, &mars.trial, 0.0);
     let a = mars.air().0;
     for (gas, p) in &a.partial {
-        let out = outgassed(&mars, p);
-        assert!(out.is_finite() && p.value().0.is_finite(), "{gas:?}");
+        let out = outgassed(&mars, *gas, p);
+        let kept = number(&mars.trace, kept(&mars, *gas, p));
+        assert!(out.is_finite() && kept.is_finite(), "{gas:?}");
         if *gas != Gas::So2 {
-            assert_eq!(p.value().0, out, "{gas:?}");
+            assert_eq!(kept, out, "{gas:?}");
         }
     }
     assert!(partial(&a, Gas::Co2) > 0.0);
@@ -327,7 +404,8 @@ fn each_partial_cites_its_outgassing_and_the_shoreline() {
     let a = venus.air().0;
     let trace = &venus.trace;
     let code = |id| trace.node(id).unwrap().code.clone();
-    let shoreline = derived_from(trace, a.partial[&Gas::Co2].node())[1];
+    let co2 = kept(&venus, Gas::Co2, &a.partial[&Gas::Co2]);
+    let shoreline = derived_from(trace, co2)[1];
     assert_eq!(code(shoreline), Code::of(codes::AIR_SHORELINE_KEPT));
     // The shoreline's share derives from the bulk mass and radius, the
     // XUV fluence and the dynamo (ledger ruling 1: no escape velocity
@@ -344,12 +422,9 @@ fn each_partial_cites_its_outgassing_and_the_shoreline() {
     );
     assert_eq!(a.partial.len(), codes::AIR_GASES.len());
     for (gas, p) in &a.partial {
-        let from = derived_from(trace, p.node());
-        let (_, outgassed, kept) = codes::AIR_GASES
-            .into_iter()
-            .find(|(g, ..)| g == gas)
-            .unwrap();
-        assert_eq!(code(p.node()), Code::of(kept), "{gas:?}");
+        let (outgassed, _) = codes_of(*gas);
+        let kept = kept(&venus, *gas, p);
+        let from = derived_from(trace, kept);
         assert_eq!(code(from[0]), Code::of(outgassed), "{gas:?}");
         assert_eq!(from[1], shoreline, "{gas:?}");
         if *gas == Gas::So2 {
@@ -361,7 +436,7 @@ fn each_partial_cites_its_outgassing_and_the_shoreline() {
     }
     // The outgassing derives from the regime, and from the surface water
     // whose volatiles its ice term carries.
-    let co2 = derived_from(trace, a.partial[&Gas::Co2].node())[0];
+    let co2 = derived_from(trace, co2)[0];
     assert!(derived_from(trace, co2).contains(&venus.regime.node()));
     assert!(derived_from(trace, co2).contains(&venus.surface.node()));
     // The pressure is the sum of the partials, from them.
@@ -421,7 +496,11 @@ fn a_hot_water_world_holds_its_air_with_its_whole_mass() {
 
     // The shoreline: the escape velocity of the whole mass.
     let a = p.air().0;
-    let shoreline = derived_from(&p.trace, a.partial[&Gas::Co2].node())[1];
+    let shoreline = ancestor(
+        &p.trace,
+        a.partial[&Gas::Co2].node(),
+        codes::AIR_SHORELINE_KEPT,
+    );
     let share = shoreline_kept(
         escape_velocity(whole, radius),
         fluence,
@@ -453,17 +532,238 @@ fn the_ice_is_the_water_at_the_surface() {
         Code::of(codes::WATER_SURFACE)
     );
     let a = earth.air().0;
-    let n2 = derived_from(&earth.trace, a.partial[&Gas::N2].node())[0];
+    let n2 = ancestor(
+        &earth.trace,
+        a.partial[&Gas::N2].node(),
+        codes::AIR_OUTGASSED_N2,
+    );
     assert!(derived_from(&earth.trace, n2).contains(&earth.surface.node()));
     // Its magnitude: CO2 and CH4 share every factor but their mass (both
     // recycled alike under plates, no scatter), CH4 coming from the ice
     // alone, so their ratio gives the ice back:
     // `CO2 / CH4 = (ROCK_CO2 r + ICE_CO2 i) / (ICE_CH4 i)`.
-    let co2 = outgassed(&earth, &a.partial[&Gas::Co2]);
-    let ch4 = outgassed(&earth, &a.partial[&Gas::Ch4]);
+    let co2 = outgassed(&earth, Gas::Co2, &a.partial[&Gas::Co2]);
+    let ch4 = outgassed(&earth, Gas::Ch4, &a.partial[&Gas::Ch4]);
     let w = earth.drawn.water_fraction.value().get();
     let refractory = (1.0 - w) * Kilogram::from(*earth.trial.mass.value()).0;
     let ice = ROCK_CO2 * refractory / (ICE_CH4 * co2 / ch4 - ICE_CO2);
     let surface = earth.surface.value().0;
     assert!((ice / surface - 1.0).abs() < SOLVED, "{ice} {surface}");
+}
+
+#[test]
+fn earth_has_no_abiotic_methane_or_ammonia() {
+    let a = planet(&EARTH).air().0;
+    let (ch4, nh3) = (partial(&a, Gas::Ch4), partial(&a, Gas::Nh3));
+    assert!(ch4 < NO_METHANE_OR_AMMONIA, "{a:?}");
+    assert!(nh3 < NO_METHANE_OR_AMMONIA, "{a:?}");
+}
+
+#[test]
+fn titan_keeps_its_methane() {
+    // Ported from legacy's `titans_outgassing_outruns_its_photolysis`:
+    // the supply overtakes the destruction, so the photolysis leaves a
+    // stock of over a bar, yet less than it was given (legacy's
+    // "outgassed" is the air past the shoreline, the photolysis's input).
+    // Legacy's bound on the air after the climate waits for 2d-3.
+    let mut titan = planet(&TITAN);
+    let a = titan.air().0;
+    let ch4 = &a.partial[&Gas::Ch4];
+    assert!(ch4.value().0 > TITAN_METHANE_MIN, "{a:?}");
+    let photolysed = ancestor(&titan.trace, ch4.node(), codes::AIR_PHOTOLYSED_CH4);
+    let left = number(&titan.trace, photolysed);
+    let given = number(&titan.trace, kept(&titan, Gas::Ch4, ch4));
+    assert!(
+        left > TITAN_METHANE_STOCK_MIN && left < given,
+        "{given} {left}"
+    );
+}
+
+#[test]
+fn callisto_loses_its_methane() {
+    // Its outgassing cannot keep up with the Sun's ultraviolet at 5.2 au,
+    // which destroys methane over three times faster than at Titan.
+    let mut callisto = planet(&CALLISTO);
+    let a = callisto.air().0;
+    let ch4 = &a.partial[&Gas::Ch4];
+    assert!(ch4.value().0 < NO_METHANE_OR_AMMONIA, "{a:?}");
+    assert!(outgassed(&callisto, Gas::Ch4, ch4) > 0.0, "{a:?}");
+}
+
+#[test]
+fn titan_outgasses_no_co2() {
+    let mut titan = planet(&TITAN);
+    let air = titan.air_held(true);
+    assert!(*air.reducing.value());
+    let co2 = &air.atmosphere.partial[&Gas::Co2];
+    assert_eq!(co2.value().0, 0.0);
+    assert_eq!(air.frozen_co2.value().0, 0.0);
+    let out = ancestor(&titan.trace, co2.node(), codes::AIR_OUTGASSED_CO2);
+    assert_eq!(number(&titan.trace, out), 0.0);
+    assert_eq!(derived_from(&titan.trace, out), vec![air.reducing.node()]);
+    // The reducing air reads the very methane node the final CH4 derives
+    // from (one pass; the chain order is `each_partial_reads_in_chain_order`'s)
+    // and the equilibrium temperature.
+    let from = derived_from(&titan.trace, air.reducing.node());
+    let ch4 = air.atmosphere.partial[&Gas::Ch4].node();
+    assert_eq!(from[0], derived_from(&titan.trace, ch4)[0]);
+    assert!(from.contains(&titan.trial.sources.primary().equilibrium.node()));
+}
+
+// Review Focus 5: on a wet body (Titan) the hold-back changes the
+// outgassed CO2 alone; every other gas, the photolysis and the rest of
+// the chain read the same. A dry body's SO2 wash-out reads the lighter
+// column, so its SO2 differs.
+#[test]
+fn a_held_back_air_differs_only_by_its_co2() {
+    let held = planet(&TITAN).air_held(true);
+    let free = planet(&TITAN).air_held(false);
+    assert!(*held.reducing.value() && !*free.reducing.value());
+    for (gas, p) in &held.atmosphere.partial {
+        if *gas != Gas::Co2 {
+            assert_eq!(p.value(), free.atmosphere.partial[gas].value(), "{gas:?}");
+        }
+    }
+    assert_eq!(held.atmosphere.partial[&Gas::Co2].value().0, 0.0);
+    // Without the hold-back Titan outgasses CO2, and its cold traps it
+    // as frost. A structural check, no value: that the hold-back is what
+    // keeps the frost away, whatever its amount.
+    assert!(free.frozen_co2.value().0 > 0.0, "{:?}", free.frozen_co2);
+    assert_eq!(held.water, free.water);
+}
+
+#[test]
+fn venus_and_mars_keep_their_co2() {
+    // Venus is above CO2's triple point, so no cap; Mars is below it,
+    // but its CO2 stays under the frost pressure. Their totals are
+    // `venus_has_ninety_bars_of_co2`'s and `mars_keeps_a_trace`'s.
+    let venus = planet(&VENUS).air_held(true);
+    let mars = planet(&MARS).air_held(true);
+    for air in [&venus, &mars] {
+        assert!(!*air.reducing.value());
+        assert_eq!(air.frozen_co2.value().0, 0.0, "{air:?}");
+    }
+}
+
+#[test]
+fn each_partial_reads_in_chain_order() {
+    let mut titan = planet(&TITAN);
+    let air = titan.air_held(false);
+    let trace = &titan.trace;
+    let code = |id| trace.node(id).unwrap().code.clone();
+    // Every final partial derives from the one the shoreline kept.
+    for (gas, p) in &air.atmosphere.partial {
+        kept(&titan, *gas, p);
+    }
+    let partial = |gas| air.atmosphere.partial[&gas].node();
+    // CH4: kept, photolysed, then the photochemistry.
+    let ch4 = partial(Gas::Ch4);
+    assert_eq!(code(ch4), Code::of(codes::AIR_PHOTOCHEMISTRY_CH4));
+    let photolysed = derived_from(trace, ch4)[0];
+    assert_eq!(code(photolysed), Code::of(codes::AIR_PHOTOLYSED_CH4));
+    assert_eq!(
+        code(derived_from(trace, photolysed)[0]),
+        Code::of(codes::AIR_KEPT_CH4)
+    );
+    // CO2: kept, then trapped.
+    let co2 = partial(Gas::Co2);
+    assert_eq!(code(co2), Code::of(codes::AIR_TRAPPED_CO2));
+    let kept_co2 = derived_from(trace, co2)[0];
+    assert_eq!(code(kept_co2), Code::of(codes::AIR_KEPT_CO2));
+    // NH3: kept, trapped, then the photochemistry, whose N2 it feeds.
+    let nh3 = partial(Gas::Nh3);
+    assert_eq!(code(nh3), Code::of(codes::AIR_PHOTOCHEMISTRY_NH3));
+    let trapped_nh3 = derived_from(trace, nh3)[0];
+    assert_eq!(code(trapped_nh3), Code::of(codes::AIR_TRAPPED_NH3));
+    assert_eq!(
+        code(derived_from(trace, trapped_nh3)[0]),
+        Code::of(codes::AIR_KEPT_NH3)
+    );
+    let n2 = partial(Gas::N2);
+    assert_eq!(code(n2), Code::of(codes::AIR_PHOTOCHEMISTRY_N2));
+    let from = derived_from(trace, n2);
+    assert_eq!(code(from[0]), Code::of(codes::AIR_KEPT_N2));
+    assert_eq!(from[1], trapped_nh3);
+    // The others stay as the shoreline and the wash-out kept them.
+    for (gas, code_of) in [
+        (Gas::H2o, codes::AIR_KEPT_H2O),
+        (Gas::So2, codes::AIR_KEPT_SO2),
+        (Gas::O2, codes::AIR_KEPT_O2),
+    ] {
+        assert_eq!(code(partial(gas)), Code::of(code_of), "{gas:?}");
+    }
+    // The frozen CO2 is the photolysed (kept) CO2 less the trapped CO2.
+    assert_eq!(
+        derived_from(trace, air.frozen_co2.node()),
+        vec![kept_co2, co2]
+    );
+    let frozen = number(trace, kept_co2) - number(trace, co2);
+    assert_eq!(air.frozen_co2.value().0, frozen);
+}
+
+// One code path: the photolysis reads the light the timeline carries. On
+// a Titan lit as the system lights a planet (the Sun's sources and the
+// star's age and metallicity on the trial, as `draw::place` builds
+// them), its node cites the stars' inputs, and the whole destruction it
+// computes from them is the yield times the Lyman α fluence the
+// timeline's sources hold.
+#[test]
+fn the_photolysis_reads_the_timelines_lyman_alpha() {
+    let mut trace = Trace::new();
+    let (t, drawn) = reference_trial(&mut trace, &TITAN);
+    let sun = star(
+        Some(SolarMass(1.0)),
+        Some(*t.metallicity.value()),
+        Some(*t.age.value()),
+        Seed::new(1),
+        &mut trace,
+    )
+    .unwrap();
+    let lit = sources(
+        &sun,
+        &light(&sun).unwrap(),
+        &t.orbit.semi_major_axis,
+        &t.orbit.eccentricity,
+        &mut trace,
+    )
+    .unwrap();
+    let t = Trial {
+        sources: lit,
+        age: sun.age,
+        metallicity: sun.state.metallicity,
+        ..t
+    };
+    let mut titan = up_to_core(trace, t, drawn);
+    let a = titan.air().0;
+    let photolysed = ancestor(
+        &titan.trace,
+        a.partial[&Gas::Ch4].node(),
+        codes::AIR_PHOTOLYSED_CH4,
+    );
+    let from = derived_from(&titan.trace, photolysed);
+    let gravity = titan.body.bulk().surface_gravity;
+    let source = titan.trial.sources.primary();
+    for node in [
+        gravity.node(),
+        source.flux.node(),
+        source.mass.node(),
+        titan.trial.metallicity.node(),
+        titan.trial.age.node(),
+    ] {
+        assert!(from.contains(&node), "{node:?}");
+    }
+    let histories = histories(&titan.trial).unwrap();
+    let lyman = lyman_sources(&titan.trial, &histories);
+    let g = *gravity.value();
+    let destroyed = methane_destroyed(g, &lyman, Gyr(0.0), *titan.trial.age.value()).0;
+    let (_, fluence) = titan.trial.sources.band_total(|s| &s.lyman_alpha);
+    let expected = CH4_PER_LYMAN_ALPHA_PHOTON * fluence.0 / LYMAN_ALPHA_PHOTON_ENERGY
+        * CH4_MOLECULE_MASS.0
+        * g.0
+        / 4.0
+        / PASCALS_PER_BAR;
+    assert!(
+        (destroyed / expected - 1.0).abs() < ROUNDING,
+        "{destroyed} {expected}"
+    );
 }

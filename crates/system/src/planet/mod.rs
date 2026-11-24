@@ -38,14 +38,17 @@
 //! light, [`heat`] computes its internal heat, [`water`] the water it keeps
 //! under its stars' light and the planet left after a runaway's steam,
 //! [`regime`] its tectonic regime, [`core`] its iron core and its dynamo,
-//! [`air`] the air it outgasses and the cosmic shoreline keeps. [`bare`]
-//! chains them in legacy's order, from the draw to the bare air, before
-//! any climate: draw, interior, escape and heat; for a planet without an
-//! envelope, its water, the planet a runaway's steam left (body and heat
-//! built again), regime, core and air, and after a runaway whose
-//! shoreline took vapour, the body built once more for the water kept.
-//! The climate and what follows it come with the next pull request
-//! (#659). Every value is recorded in the system's cause `Trace`, with
+//! [`air`] the air it outgasses and the cosmic shoreline keeps, what the
+//! stars' ultraviolet leaves of its methane, whether it is reducing (its
+//! CO2 then held back), what the cold of its equilibrium temperature
+//! traps and what the photochemistry makes of it. [`bare`] chains them in
+//! legacy's order, from the draw to the bare air, before any climate:
+//! draw, interior, escape and heat; for a planet without an envelope, its
+//! water, the planet a runaway's steam left (body and heat built again),
+//! regime, core and air, and after a runaway whose shoreline took vapour,
+//! the body built once more for the water kept. The climate, the
+//! condensation it drives and what follows it come with the next pull
+//! requests (#659). Every value is recorded in the system's cause `Trace`, with
 //! the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which
