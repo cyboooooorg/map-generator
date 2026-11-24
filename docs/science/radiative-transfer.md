@@ -823,7 +823,7 @@ the Bond albedo are there too (change 2b-2).
   not read at its source and not adopted.
 - **Methane's grey stand-in.** Methane takes one grey optical depth over
   0-650 cm⁻¹, $\tau = k\,(uB)^{1/2}$, with $u$ its saturated amount, $B$
-  the air it collides with and $k$ = 13.4. It was calibrated on Titan's
+  the air it collides with and $k$ = 15.1. It was calibrated on Titan's
   surface, 93.65 ± 0.25 K at 1467 hPa (Fulchignoni et al. 2005), with 5.65 %
   of methane at the surface (Niemann et al. 2010) and the greenhouse of
   +21 K and anti-greenhouse of −9 K of McKay et al. (1991).
@@ -833,10 +833,11 @@ the Bond albedo are there too (change 2b-2).
   layer and the cold-trap construction that fixes it (the saturation
   pressure at the skin temperature, over the tropopause pressure) are the
   app's own model: each ingredient is sourced, the combination is not.
-  The opacity was fitted with the legacy methane sublimation line
-  (9.1 kJ/mol) and not refitted to the port's (9.7 kJ/mol): at the 69 K
-  skin of the tests' Titan column methane's saturation is 22 % lower,
-  and that column sends out 1.865 W/m² instead of 1.829.
+  The legacy value, 13.4, was fitted with the legacy methane sublimation
+  line (9.1 kJ/mol); with the port's (9.7 kJ/mol) methane's saturation is
+  22 % lower at the 69 K skin of the tests' Titan column, which cooled to
+  91.24 K. It was refitted to 15.1 on that column (#646; see
+  `planet-atmospheres.md`, "Calibration of `CH4_OPACITY`").
 - **The cloud's water, the deck and the haze.** These are calibrations,
   not laws. What was searched and not found:
   - *Cloud cover.* The cover is $RH^{0.25}\,(1 - e^{-p_{H_2O}/p_c})$ with

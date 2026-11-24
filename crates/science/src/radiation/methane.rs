@@ -11,22 +11,37 @@ use crate::units::{Fraction, Kelvin};
 
 /// Calibration: grey opacity of methane at 1 bar in 1 bar of air, the
 /// square root of its amount times the air's (see [`depth`]); the
-/// spectral column takes it over 0-650 cm⁻¹ only (`spectrum`). Fitted in
-/// the legacy on Titan's surface, 93.65 ± 0.25 K at 1467 hPa (Fulchignoni
-/// et al. 2005, *Nature* 438, 785, doi:10.1038/nature04314), under the
-/// anti-greenhouse anchored on McKay, Pollack & Courtin 1991 (legacy
-/// issue #563): the legacy `titan-like` archetype reached 92.4 to 94.5 K
-/// (mean 93.69 K) and 5.5 to 5.9 % of methane (mean 5.71 %, against the
-/// 5.65 % near Titan's surface, Niemann et al. 2010, *J. Geophys. Res.
-/// Planets* 115, E12006, doi:10.1029/2010JE003659) over seeds 1 to 40,
-/// on the spectral column. Titan's real greenhouse is mostly
-/// collision-induced (N₂–N₂, N₂–CH₄, N₂–H₂) and warms it by 21 K (McKay,
-/// Pollack & Courtin 1991, *Science* 253, 1118,
-/// doi:10.1126/science.11538492, abstract read); this opacity carries all
-/// of it, the nitrogen's own included, the haze's 9 K of cooling being
-/// the anti-greenhouse's. That is why it keeps the square root of the
-/// air's pressure: collision-induced absorption grows with the nitrogen
-/// faster than line broadening does, not slower.
+/// spectral column takes it over 0-650 cm⁻¹ only (`spectrum`). Fitted on
+/// Titan's surface, 93.65 ± 0.25 K at 1467 hPa (Fulchignoni et al. 2005,
+/// *Nature* 438, 785, doi:10.1038/nature04314), on the sourced column of
+/// `radiation::test_points`: 1.467 bar, 5.65 % of methane (Niemann et al.
+/// 2010, *J. Geophys. Res. Planets* 115, E12006,
+/// doi:10.1029/2010JE003659), the light of an 82 K effective temperature
+/// (McKay, Pollack & Courtin 1991) on Titan's gravity, no internal heat,
+/// a black surface, the port's methane sublimation line
+/// (`crate::volatiles`, 9.7 kJ/mol from the equation of state's triple
+/// point) and the anti-greenhouse of [`CH4_NEAR_IR_HALF_BAR`]
+/// (`crate::balance::surface_temperature`). Method (issue #646, study 25,
+/// `docs/science/planet-atmospheres.md`, "Calibration of `CH4_OPACITY`"):
+/// the constant was bisected, the column solved at each step, until it
+/// gave 93.65 K to three figures of the opacity: 13.4 gave 91.24 K, 16
+/// gave 94.83 K, 14.7 93.06 K, 15.35 93.95 K, 15.0 93.47 K, 15.2
+/// 93.74 K, 15.1 93.60 K (15.13 93.645 K, 15.14 93.658 K). The tier-1
+/// test `titans_column_sits_at_its_measured_surface` holds the column at
+/// 93.65 ± 0.25 K. The same 94 K is McKay, Pollack & Courtin 1991's
+/// budget (*Science* 253, 1118, doi:10.1126/science.11538492): an 82 K
+/// effective temperature, +21 K of greenhouse, −9 K of anti-greenhouse.
+///
+/// The old value, 13.4, was fitted in the legacy with the legacy methane
+/// sublimation line (9.1 kJ/mol from 90.7 K and 0.117 bar), on the
+/// legacy `titan-like` archetype over seeds 1 to 40 (92.4 to 94.5 K);
+/// the port's line lets 22 % less methane past the cold trap at the
+/// column's 68.95 K skin, so the column cooled to 91.24 K. Titan's real
+/// greenhouse is mostly collision-induced (N₂–N₂, N₂–CH₄, N₂–H₂); this
+/// opacity carries all of it, the nitrogen's own included, the haze's
+/// 9 K of cooling being the anti-greenhouse's. That is why it keeps the
+/// square root of the air's pressure: collision-induced absorption grows
+/// with the nitrogen faster than line broadening does, not slower.
 ///
 /// What was searched and not found: a grey or band opacity of Titan's
 /// CIA greenhouse usable as one number; the sourced route is HITRAN's
@@ -34,17 +49,7 @@ use crate::units::{Fraction, Kelvin};
 /// It applies to the methane that radiates, the methane cold-trapped at
 /// the tropopause left out (the column), and saturates past
 /// [`CH4_SATURATION_BAR`].
-///
-/// It was fitted with the legacy methane sublimation line (9.1 kJ/mol from
-/// 90.7 K and 0.117 bar) and was not refitted to the port's
-/// (`crate::volatiles`, 9.7 kJ/mol from the equation of state's triple
-/// point). At the 68.95 K skin of the tests' Titan column (82 K
-/// equilibrium), methane's saturation falls from 2.60e-3 to 2.03e-3 bar
-/// (-22 %), and that column's outgoing radiation rises from 1.829 to
-/// 1.865 W/m² (+2.0 %; `column` test
-/// `a_column_without_co2_or_water_radiates_from_its_methane_or_ground`
-/// run with each curve).
-const CH4_OPACITY: f64 = 13.4;
+const CH4_OPACITY: f64 = 15.1;
 
 /// Calibration: methane, bar, past which its greenhouse saturates
 /// ([`depth`]): the amount `u` its opacity counts grows as

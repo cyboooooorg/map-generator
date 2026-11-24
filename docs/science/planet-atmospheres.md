@@ -1365,9 +1365,9 @@ about 0.3), and so does a runaway whose escape took all its water
 cm⁻¹ only (Courtin, Gautier & McKay 1995 place Titan's N₂–N₂ and CH₄–N₂
 collision-induced bands there), `τ = k (u B)^½` with `u` its saturated
 amount and `B` the air it collides with (see **Methane** below), and
-`k` = 13.4 (`CH4_OPACITY`), calibrated on Titan's 93.7 K (14.3 on the grey
-column, 7.75 before #563, 6.0 before #530, 3.3 before #443, 3.4 before
-#441). A spectral Titan is left for later.
+`k` = 15.1 (`CH4_OPACITY`), calibrated on Titan's 93.65 K (13.4 before
+#646, with the legacy methane line, 14.3 on the grey column, 7.75 before
+#563, 6.0 before #530, 3.3 before #443, 3.4 before #441). A spectral Titan is left for later.
 
 Titan's real greenhouse is mostly collision-induced absorption by N₂,
 CH₄ and H₂, which warms it by 21 K, while its haze cools it by 9 K
@@ -1406,7 +1406,7 @@ liquid water. Three rules bound it:
 - *Saturation.* The amount the opacity counts is
   `u = p / (1 + p / 0.01 bar)` (`CH4_SATURATION_BAR`), and the pressure
   it collides with counts the methane as `u`:
-  `τ = 13.4 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
+  `τ = 15.1 (u (P − p + u))^½`. Past Titan's amounts its bands are opaque
   at their centres, and more methane only widens their wings (the
   logarithmic forcing of a saturated band, Pierrehumbert 2010, §4.4); a
   body at 90 to 120 K radiates at 25 to 60 µm, where methane has no
@@ -2472,6 +2472,15 @@ make the same 94 K. Method: bisect the opacity until that column
 gives 93.65 K, three figures; a tier-1 test holds the column at
 93.65 ± 0.25 K, and the generated Titan through the chain is a
 validation (94 ± 8 K), no longer the target.
+
+Result: 15.1, from 13.4. The bisection, on the column through
+`balance::surface_temperature`: 13.4 gave 91.24 K, 16 gave 94.83 K,
+14.7 gave 93.06 K, 15.35 gave 93.95 K, 15.0 gave 93.47 K, 15.2 gave
+93.74 K, 15.1 gives 93.60 K (15.13 and 15.14 bracket 93.65 K at the
+fourth figure). `titans_column_sits_at_its_measured_surface` (tier 1)
+holds it. Searched and not found: a grey or band opacity of Titan's
+collision-induced greenhouse usable as one number; HITRAN's N₂–N₂ and
+N₂–CH₄ CIA tables would replace the fit, and were not extracted.
 
 #### Solver constants (rule of #648)
 

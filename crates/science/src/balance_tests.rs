@@ -7,7 +7,7 @@ use super::*;
 use crate::constants::SOLAR_EFFECTIVE_TEMPERATURE;
 use crate::orbit::EARTH_EQUILIBRIUM;
 use crate::radiation::test_points::{
-    EARTH_SURFACE_K, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR,
+    EARTH_SURFACE_K, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
 };
 
 /// Definition: the thin air of the greenhouse test, bar: 1 of N₂ and
@@ -73,6 +73,11 @@ const TRACE_STEAM: Bar = Bar(1e-9);
 /// Definition: how far the albedo under a trace of steam may be from the
 /// derived one: the trace's share, 1e-9, rounded up.
 const TRACE_TOLERANCE: f64 = 1e-8;
+
+/// Source: the uncertainty, K, of Titan's surface temperature, +-0.25 K
+/// (Fulchignoni et al. 2005, *Nature* 438, 785,
+/// doi:10.1038/nature04314).
+const TITAN_SURFACE_TOLERANCE_K: f64 = 0.25;
 
 /// Definition: the tolerance of `steam_share(1 bar)` against `1 − e⁻¹`,
 /// the rounding of an exponential.
@@ -233,6 +238,29 @@ fn iterations_is_converged() {
         assert!(root.x.is_finite(), "{name}: {root:?}");
         assert!(root.iterations < ITERATIONS, "{name}: {root:?}");
     }
+}
+
+#[test]
+fn titans_column_sits_at_its_measured_surface() {
+    // Issue #646: the sourced column of `test_points` (1.467 bar, 5.65 %
+    // of methane, an effective temperature of 82 K, Titan's gravity, no
+    // heat, a black surface) under the anti-greenhouse of its
+    // stratosphere sits at Titan's measured surface.
+    let t = surface_temperature(
+        starlight_of(Kelvin(TITAN_EFFECTIVE_K)),
+        &TITAN_SURFACE_AIR,
+        WattPerSquareMetre(0.0),
+        black(),
+        TITAN_GRAVITY,
+        SOLVER,
+        &mut ColumnCache::default(),
+    )
+    .0;
+    println!("Titan's column: {t:.3} K against {TITAN_SURFACE_K} K");
+    assert!(
+        (t - TITAN_SURFACE_K).abs() <= TITAN_SURFACE_TOLERANCE_K,
+        "{t} K against {TITAN_SURFACE_K} +- {TITAN_SURFACE_TOLERANCE_K} K"
+    );
 }
 
 #[test]
