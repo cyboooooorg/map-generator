@@ -2328,11 +2328,15 @@ their erratum (ApJ 770, 82, Table 3: 0.3507, 5.9578e-5, 1.6707e-9,
 −3.0058e-12, −5.1925e-16; "should be 1.67 AU, instead of 1.70 AU").
 The albedo at the maximum greenhouse round the Sun, 0.417, exists only
 as their Fig. 5b (planetary albedo against CO₂, a 273 K surface,
-minimum near 8 bar), digitised by legacy; the test keeps it with
-± 0.04. The model's edge (1.535 AU, frozen by the user on #523) is
-+19.2 % in flux over the 2014 fit round the Sun, +21.0 % at 4500 K and
-+16.4 % at 3300 K (derived; +23 %, +25 % and +20 % over the 2013 v2
-set).
+minimum near 8 bar), digitised by legacy. Decided with the user on
+2026-11-24: the edge is tested against the 2014 fit in a tier-3 heavy
+test, and the measured gap is a documented departure, not a bound
+frozen on the code's output; legacy's pre-erratum bounds (the 0.42
+albedo, 1.535 AU) are not ported as bounds. Legacy's spectral column
+put the edge at 1.535 AU, +19.2 % in flux over the 2014 fit round the
+Sun, +21.0 % at 4500 K and +16.4 % at 3300 K (derived; +23 %, +25 % and
++20 % over the 2013 v2 set); the rewrite's gap is measured by that
+test, and the departure and the search for its cause stay in #595.
 
 #### Condensation at the surface
 
@@ -2344,7 +2348,8 @@ methane ice, `SEA_METHANE_SHARE` over a sea, ramped over `PHASE_BAND`.
 A `Definition:` (phase equilibrium and Raoult's law); its one number
 is `SEA_METHANE_SHARE`. CO₂ is lowered to its saturation by the
 collapse, and NH₃ is frozen by the cold trap at the equilibrium
-temperature only, as in legacy. Titan's methane, 0.0829 ± 0.0026 bar,
+temperature only, as in legacy (kept by the user's decision of
+2026-11-24: no NH₃ liquid curve is in `science`). Titan's methane, 0.0829 ± 0.0026 bar,
 sits 0.6 σ under the cap at 93.65 K, 0.0845 bar (derived): a Titan
 whose inventory exceeds the cap gets seas and an air of 0.0845 bar,
 inside the measurement; the tests give Titan an inventory, not its
@@ -2373,7 +2378,8 @@ doi:10.1029/91JA01736; abstract records), are missed by 1.4 to 2 σ:
 Pluto wins the albedo (0.72 ± 0.07, Buratti et al. 2017), Triton the
 temperature. Pluto with the pair sits at 36.3 K under its 2015 flux
 (1.26 W/m², Meza et al.), against their 37.0 to 37.3 K and Tryka et
-al. 1994's 40 ± 2 K. Searched and not found: a bolometric albedo and
+al. 1994's 40 ± 2 K. The pair was chosen with the user on
+2026-11-24. Searched and not found: a bolometric albedo and
 an emissivity of Triton measured apart from this balance.
 
 #### The runaway branch
@@ -2414,7 +2420,9 @@ Table 1; derived). With the rewrite's volcanism (Earth 0.506 over
 `EARTH_VOLCANIC_INTENSITY` 0.5), `W = d⊕ (1 − f⊕) / (1.012 f⊕)`, `d⊕`
 the extra CO₂ the reference Earth at 1 AU needs to thaw, computed by
 the code; with legacy's 0.091 bar, about 6.4 bar (derived), eight
-times 0.8 bar. A tier-1 test holds Earth's chance in 0.013 to 0.016.
+times 0.8 bar. Decided with the user on 2026-11-24: the dated episodes
+only, so snowballs become about seven times rarer near 1 AU than in
+legacy. A tier-1 test holds Earth's chance in 0.013 to 0.016.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar is about 130 My of today's outgassing per temperate phase.
@@ -2492,8 +2500,8 @@ solar days is zonal for any non-locked rotator, so the flag is
   0.165 mbar, O₂ 0.010 mbar, derived; argon has no field). Legacy's
   `MARS_CO2_FACTOR` is not ported. The fact sheet gives "Average
   temperature: ~214 K"; no source for the legacy 210 K was found (it is
-  Mars's equilibrium temperature): the bound is a question for the
-  user (214 ± 5 K proposed).
+  Mars's equilibrium temperature), so the bound is 214 ± 5 K, `Source:`
+  the fact sheet (decided with the user on 2026-11-24).
 - **Earth** 288 K (fact sheet), **Titan** 93.65 ± 0.25 K (Fulchignoni
   et al. 2005), **Venus** pinned at 577 ± 5 K (#594).
 
