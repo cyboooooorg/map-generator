@@ -1697,6 +1697,49 @@ read: "about 9 percent" of the ocean). Searched and not found: a
 single annual-mean share of Earth's disc under ice and snow, and an
 energy-balance ice line fitted to it.
 
+**Ice weighted by sunlight** (decision of 2026-11-24, study 24 of the
+Wiki, planet PR 2d-2). A cap over the polar share `1 − x_s` of the area
+receives less than that share of the light, so the ground albedo counts
+the ice by the annual-mean insolation `S(x) = 1 + s₂ P₂(x)` (mean 1 over
+the disc), not by area. The ice's sunlit share is then
+`∫_{x_s}^{1} S dx = (1 − x_s) + (s₂/2)(x_s − x_s³)` (`Definition:`,
+the integral of `P₂`). Counted by area, Earth's ground came out at 0.165
+against the 0.122 of CERES under clear skies, its Bond albedo at 0.314
+against 0.29 to 0.31.
+
+- *The coefficient* (`Source:`). Nadeau & McGehee 2021 (*J. Math. Anal.
+  Appl.*, 125129, doi:10.1016/j.jmaa.2021.125129; full text read in
+  arXiv:1810.10081) expand the annual-mean insolation of a rapid
+  rotator, normalised to a global mean of 1, as
+  `s(x, β) = Σ A₂ₙ P₂ₙ(cos β) P₂ₙ(x)` (Theorem 1.1), with `A₂ = −5/8`
+  (eq. 39 writes `1 − (5/8) P₂(cos β) P₂(x)`). So
+  `s₂ = −(5/8) P₂(cos β)`: −0.625 at 0°, +0.3125 at 90°. Nadeau &
+  McGehee 2017 (*Icarus* 291, 46, doi:10.1016/j.icarus.2017.01.040;
+  full text read in arXiv:1510.04542) give the same first term. Both
+  start from the integral of Ward 1974 and McGehee & Lehman 2012 (not
+  read, cited by them).
+- *Earth's numbers* (derived). At β = 23.44°, `s₂ = −0.477`; the −0.482
+  of North's energy-balance models is the same term at β = 23°
+  (Nadeau & McGehee 2021, § 6.1). At 288 K (`x_s = 0.898`) the cap
+  covers 10.2 % of the area and receives 6.06 % of the light, 0.59 of
+  its area share.
+- *Truncation at `P₂`*. Nadeau & McGehee 2021 find the second degree
+  "sufficient for Earth's obliquity", and the series slow to converge
+  at the poles, without a figure for a polar cap. Integrating their
+  eq. (1) numerically (derived): Earth's cap receives 5.80 % of the
+  light, so `P₂` overstates it by 4.4 % (0.0026 of the disc); at β = 0°
+  by 24 %, since `P₂` keeps 0.375 at the pole where the exact value is
+  0; at 90° by 2 %. Searched and not found: a published error for a
+  polar cap share.
+- *Limits* (left to 2d-3). The shape holds for a spin period much
+  shorter than the year; eccentricity only scales the magnitude, by
+  `(1 − e²)^(−1/2)`, and leaves the distribution `s(x, β)` unchanged
+  (Nadeau & McGehee 2017, eqs. 1 and 2). A slow or tidally locked
+  rotator (Mercury and Venus count as slow) has no zonal annual mean
+  and needs another weighting. Between 47° and 63° of obliquity (117°
+  to 133°) the insolation takes a "W" shape that the degree two misses;
+  the degree six is the first to catch it.
+
 **Calibration of `ocean_fraction`** (kept). `1 − exp(−k oceans)` with
 `k = −ln(1 − 0.71)`: the sea level of a body follows its hypsometry,
 which the planet model does not draw. Searched and not found: a
@@ -2709,6 +2752,8 @@ another paper, from memory) is said where it is used.
   water, p. 18 of the arXiv author copy (arXiv:1405.6336).
 - McDonough 2003, *Treatise on Geochemistry* 2.15.
 - McEwen et al. 1998, *Science* 281, 87, Io's lavas.
+- McGehee and Lehman 2012, *SIAM J. Appl. Dyn. Syst.* 11(2), 684,
+  the annual insolation integral (cited by Nadeau and McGehee).
 - McKay, Pollack and Courtin 1991,
   doi:10.1126/science.11538492, Titan's greenhouse.
 - Mittelholz et al. 2020, a late field on Mars.
@@ -2719,6 +2764,12 @@ another paper, from memory) is said where it is used.
   doi:10.1006/icar.2001.6782.
 - Mumma and Charnley 2011,
   doi:10.1146/annurev-astro-081309-130811.
+- Nadeau and McGehee 2017, *Icarus* 291, 46,
+  doi:10.1016/j.icarus.2017.01.040, the mean annual insolation by
+  latitude (read in arXiv:1510.04542).
+- Nadeau and McGehee 2021, *J. Math. Anal. Appl.*, 125129,
+  doi:10.1016/j.jmaa.2021.125129, the Legendre series of the annual
+  insolation (read in arXiv:1810.10081).
 - Nakajima, Hayashi and Abe 1992,
   doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2, the
   Simpson-Nakajima limit.
@@ -2803,6 +2854,8 @@ another paper, from memory) is said where it is used.
   doi:10.1029/JC086iC10p09776, the carbonate thermostat.
 - Wang, Lineweaver and Ireland 2018,
   doi:10.1016/j.icarus.2017.08.024, Table 1.
+- Ward 1974, *J. Geophys. Res.* 79(24), 3375, the annual insolation
+  of a rapid rotator (cited by Nadeau and McGehee).
 - Warren 1982, *Rev. Geophys.* 20, 67, doi:10.1029/RG020i001p00067,
   the optical properties of snow (abstract read).
 - Weber et al. 2011, the Moon's core.
