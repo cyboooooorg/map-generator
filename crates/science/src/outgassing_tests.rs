@@ -159,9 +159,9 @@ fn earths_air_weighs_its_argon() {
 }
 
 #[test]
-fn a_lid_degasses_its_argon_as_it_does_its_volatiles() {
-    // Marty 2012's 0.41 under plates, scaled for a lid by the ratio the
-    // outgassing already takes, `LID_SHARE / MOBILE_SHARE`.
+fn a_lid_degasses_lid_share_over_mobile_share_of_the_plates_argon() {
+    // Marty 2012's 0.41 under plates, scaled for a lid by
+    // `LID_SHARE / MOBILE_SHARE`.
     assert_eq!(
         argon_degassed_share(false).get(),
         ARGON_DEGASSED_UNDER_PLATES

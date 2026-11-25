@@ -168,7 +168,9 @@ const EARTH_AR_TOLERANCE: f64 = 0.1;
 /// Source: Venus's Ar-40, (1.61 ± 0.54)e16 kg (Kaula 1999, Icarus 139,
 /// 32, as Warren & Kite 2023, PNAS 120, e2209751120, quote it), 4.03e17
 /// mol, and study 29's tolerance, a factor 2 (Kaula's ±34 % and the
-/// spread of the potassium).
+/// spread of the potassium). Not an independent check of the episodic
+/// lid's share: putting the episodic lid with the stagnant one rests on
+/// Venus's Ar-40 (`argon_degassed_share`).
 const VENUS_AR_MOL: (f64, f64) = (4.03e17, 2.0);
 
 /// Source: Titan's Ar-40, 3.39 ± 0.12e-5 of its air (Niemann et al. 2010,

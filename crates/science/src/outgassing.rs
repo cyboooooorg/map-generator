@@ -238,12 +238,19 @@ pub fn argon_mass(amount: Mole) -> Kilogram {
 }
 
 /// Share of the Ar-40 made that reaches the air: [`ARGON_DEGASSED_UNDER_PLATES`]
-/// under plates and heat pipes; under a `lid` (stagnant or episodic), that
-/// share scaled by [`LID_SHARE`] over [`MOBILE_SHARE`], the ratio by which
-/// the outgassing already scales a lid (0.0863). Argon then goes the way
-/// of every outgassed gas: [`released_under_ocean`], then the shoreline;
-/// subduction does not recycle it (0.41 is already what stays in the
-/// air).
+/// under plates and heat pipes; under a `lid`, that share scaled by
+/// [`LID_SHARE`] over [`MOBILE_SHARE`] (0.0863), so it inherits those two
+/// calibrations. For a stagnant lid that is the ratio by which the
+/// outgassing scales the lid's other volatiles. The caller also passes an
+/// episodic lid as a lid, a documented choice: its other volatiles take
+/// [`MOBILE_SHARE`] (Venus's CO2 and N2 came out early), but its Ar-40
+/// came out through the lid of its later Gyr (Sasaki & Tajika 1995:
+/// Venus's long-term degassing is a quarter of Earth's, read from its
+/// Ar-40). The choice rests on Venus's Ar-40, so Venus does not check it
+/// independently. See `docs/science/planet-atmospheres.md`, "Argon".
+/// Argon then goes the way of every outgassed gas:
+/// [`released_under_ocean`], then the shoreline; subduction does not
+/// recycle it (0.41 is already what stays in the air).
 pub fn argon_degassed_share(lid: bool) -> Fraction {
     let share = if lid {
         ARGON_DEGASSED_UNDER_PLATES * LID_SHARE / MOBILE_SHARE

@@ -500,9 +500,11 @@ fn mantle(
 /// Ar-40 its mantle made over the trial's age ([`radiogenic_argon`] of the
 /// interior's mantle mass, the mass the heat's potassium is in, and the
 /// drawn radiogenic abundance, `10^dex`), times the share that reaches
-/// the air under the regime ([`argon_degassed_share`]: a stagnant or
-/// episodic lid degasses less) and the share the water lets through
-/// ([`released`]). A giant, which has no mantle of its own, makes none.
+/// the air under the regime ([`argon_degassed_share`]: a stagnant lid
+/// degasses less, and so, by a documented choice, does an episodic lid,
+/// though its other volatiles take the plates' share in `mantle`) and the
+/// share the water lets through ([`released`]). A giant, which has no
+/// mantle of its own, makes none.
 fn argon(
     trial: &Trial,
     drawn: &Drawn,
@@ -525,6 +527,9 @@ fn argon(
         Body::Giant(_) => return (Gas::Ar, Bar(0.0), from),
     };
     from.insert(0, mantle.node());
+    // An episodic lid degasses its argon as a stagnant one (Venus's Ar-40
+    // came out through the lid of its later Gyr), not as its CO2 and N2:
+    // see `argon_degassed_share`.
     let lid = matches!(
         regime.value(),
         TectonicRegime::Stagnant | TectonicRegime::Episodic

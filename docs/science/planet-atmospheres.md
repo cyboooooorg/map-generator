@@ -1583,14 +1583,18 @@ no melting history, so it takes the ratio:
 | Regime | Share of the ⁴⁰Ar made that reaches the air | Tag |
 | --- | --- | --- |
 | Plates, heat pipe | 0.41 | Source: Marty 2012, p. 15 (1.6e18 of 3.9e18 mol) |
-| Stagnant lid, episodic lid | 0.41 × `LID_SHARE` / `MOBILE_SHARE` = 0.0863 | Definition: the ratio by which the outgassing already scales a lid (`volcanism.rs` scales the intensity the same way) |
+| Stagnant lid | 0.41 × `LID_SHARE` / `MOBILE_SHARE` = 0.0863 | Definition: the ratio by which the outgassing scales a stagnant lid's other volatiles (`volcanism.rs` scales the intensity the same way); it inherits the calibrations `LID_SHARE` and `MOBILE_SHARE` |
+| Episodic lid | 0.0863, as a stagnant lid | A documented choice, not the outgassing's ratio: the episodic lid's other volatiles take `MOBILE_SHARE`, its ⁴⁰Ar the lid's share (below) |
 
-The episodic lid takes the lid's share although its CO₂ takes the plates'
-(*Outgassing*): Venus's 90 bar of CO₂ came out early, its ⁴⁰Ar through the lid
-of its later Gyr. With the plates' share Venus would hold 3.4 times its measured
-⁴⁰Ar (*Checks* below); with the lid's it holds 0.69 times, inside the
-measurement's 1σ. A share fitted on Venus (0.12 with the model's potassium)
-would be a new calibration; the ratio adds none. In the code:
+The episodic lid takes the lid's share although its CO₂ and N₂ take the
+plates' (*Outgassing*): Venus's 90 bar of CO₂ came out early, its ⁴⁰Ar through
+the lid of its later Gyr. This is a choice, and its reason is Venus's ⁴⁰Ar
+itself (Sasaki & Tajika 1995 read the quarter of Earth's degassing from it):
+with the plates' share Venus would hold 3.4 times its measured ⁴⁰Ar (*Checks*
+below); with the lid's it holds 0.69 times, inside the measurement's 1σ. The
+Venus check is therefore not independent of the choice. A share fitted on Venus
+(0.12 with the model's potassium) would be a new calibration; the ratio adds
+none of its own, and inherits `LID_SHARE` and `MOBILE_SHARE`. In the code:
 `science::outgassing::argon_degassed_share`, `ARGON_DEGASSED_UNDER_PLATES`.
 
 The ⁴⁰Ar then goes the way of every outgassed gas: its mass, 39.95 g/mol per
@@ -1858,6 +1862,9 @@ that wires the chain bumps it.
 - The law has no melting history: the share is Earth's, scaled for a lid by the
   outgassing's own ratio. A Venus or a Mars whose volcanism stopped early would
   hold less.
+- An episodic lid degasses its argon as a stagnant lid and its other volatiles
+  as plates: a choice drawn from Venus's ⁴⁰Ar, so the Venus test
+  (`venus_titan_and_mars_hold_their_argon`) does not check it independently.
 - The potassium is Earth's for every body, scaled with U and Th by one
   abundance; Venus's and Mars's K/U, measured by landers and orbiters, were not
   read.
