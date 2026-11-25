@@ -37,6 +37,7 @@ pub fn allowed() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
         ("guardrails", set(&[])),
         ("opacity-table", set(&[])),
         ("stellar-spectra", set(&[])),
+        ("rfmip-shortwave", set(&[])),
         ("figures", set(&["science"])),
     ])
 }
