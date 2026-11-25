@@ -82,10 +82,13 @@ pub(crate) struct Settle {
 /// One end of the bracket of the albedo's fixed point: the albedo and
 /// emissivity a climate was solved under, the push it derives, its
 /// surface temperature, and that climate (`P`, a [`Pass`] in [`settle`]).
+/// `used` is the radiative equilibrium `T_eq ε^-¼` of its albedo and
+/// emissivity, the line along which a positive push moves the next step.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct End<P> {
     pub albedo: f64,
     pub emissivity: f64,
+    pub used: f64,
     pub push: f64,
     pub temperature: f64,
     pub climate: P,
@@ -144,6 +147,17 @@ impl<P: Copy> Bracket<P> {
     /// Whether both sides are known.
     pub(crate) fn closed_in(&self) -> bool {
         self.up.is_some() && self.down.is_some()
+    }
+
+    /// Whether both sides are known and each pushes towards the other: the
+    /// end that pushes up (to a warmer radiative equilibrium) is the
+    /// colder in `used`. Only such a bracket holds a fixed point the
+    /// iteration reaches, or a jump it cycles across; one whose ends push
+    /// apart holds an unstable root or jump the iteration leaves.
+    pub(crate) fn attracts(&self) -> bool {
+        self.up
+            .zip(self.down)
+            .is_some_and(|((up, _), (down, _))| up.used < down.used)
     }
 
     /// The next step once both sides are known, or the colder end when
@@ -387,13 +401,14 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
 /// used), but at least the numerics' `albedo_damping` of the way and
 /// never past the derived light, the damping halving after each step
 /// whose push turns back, so that a swing settles (#593: the secant saves
-/// about half the steps). Once the push has turned back, the fixed point
+/// about half the steps). Once the push has turned back with each end
+/// pushing towards the other ([`Bracket::attracts`]), the fixed point
 /// lies between the last albedo that pushes up and the last that pushes
 /// down, and each step goes to the zero of the push the Illinois rule
 /// (Dowell & Jarratt 1971, as [`regula_falsi`] applies it) puts between
-/// them (#729: the secant alone, at the
-/// full way, kept a climate cycling between a warm and a collapsed side
-/// for all its steps). It goes on until the temperature moves less than
+/// them (#729: the secant alone, at the full way, kept a climate cycling
+/// between a warm and a collapsed side for all its steps); a bracket
+/// whose ends push apart is dropped and the plain step goes on. It goes on until the temperature moves less than
 /// the numerics' `albedo_tolerance` and the push is under it too, at most
 /// `albedo_iterations` steps, or until the bracket is narrower than the
 /// numerics' `albedo_bracket` in both the albedo and the emissivity
@@ -445,6 +460,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         let end = End {
             albedo,
             emissivity,
+            used,
             push,
             temperature: t.0,
             climate: pass,
@@ -460,6 +476,12 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
             bracket.take(end);
         }
         previous = Some(end);
+        // A bracket whose ends push apart holds a root or a jump the
+        // iteration leaves (a bistable body's unstable state): the plain
+        // step goes on from here, as it did before #729.
+        if bracket.closed_in() && !bracket.attracts() {
+            bracket = Bracket::default();
+        }
         match bracket.next(numerics.albedo_bracket) {
             Some(Next::Closed(cold)) => {
                 (albedo, emissivity, pass) = (cold.albedo, cold.emissivity, cold.climate);
@@ -470,6 +492,8 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
                 albedo: a,
                 emissivity: e,
             }) => {
+                before = Some(Point { x: used, f: push });
+                moved = push;
                 last = t.0;
                 (albedo, emissivity) = (a, e);
                 pass = under_albedo(body, fraction(albedo), fraction(emissivity));

@@ -314,7 +314,7 @@ fn a_triton_like_body_settles() {
 /// changes nothing; the climate settled with the solver's constants.
 fn assert_converged(inputs: &ClimateInputs) -> Settle {
     let base = settled(inputs, Numerics::DEFAULT);
-    assert!(base.converged, "{base:?}");
+    assert!(base.converged && !base.cycles, "{base:?}");
     let d = Numerics::DEFAULT;
     let finer = Numerics {
         solver: science::balance::Solver {
@@ -411,34 +411,46 @@ fn a_triton_like_body_keeps_its_argon_as_frost() {
     assert!(share < TRITON_ARGON_SHARE, "{share}");
 }
 
-/// Drives a [`Bracket`] over a synthetic `push` of the albedo (its
-/// temperature `temperature`), from an end at `up` that pushes up and one
-/// at `down` that pushes down, as `settle` does once its push turned back:
-/// each step takes the albedo it gives, until its push is under
-/// `settled` or the bracket closes. The albedo reached, whether it
-/// closed, the temperature of its end, and the steps.
-fn drive(
-    push: impl Fn(f64) -> f64,
-    temperature: impl Fn(f64) -> f64,
-    up: f64,
-    down: f64,
-    settled: f64,
-) -> (f64, bool, f64, usize) {
-    let end = |albedo: f64| End {
+/// The end at `albedo` of a synthetic climate: emissivity 1, its radiative
+/// equilibrium falling as its albedo rises (`used`, any decreasing map),
+/// its `push` and `temperature`.
+fn synthetic_end(
+    albedo: f64,
+    push: &impl Fn(f64) -> f64,
+    temperature: &impl Fn(f64) -> f64,
+) -> End<()> {
+    End {
         albedo,
         emissivity: 1.0,
+        used: -albedo,
         push: push(albedo),
         temperature: temperature(albedo),
         climate: (),
-    };
+    }
+}
+
+/// Drives a [`Bracket`] over a synthetic `push` of the albedo (a positive
+/// push asks for a warmer, so darker, climate) from the ends at `a` and
+/// `b`, as `settle` does once its push turned back: each step takes the
+/// albedo it gives, until its push is under `settled` or the bracket
+/// closes. The albedo reached, whether it closed, the temperature of its
+/// end, and the steps.
+fn drive(
+    push: impl Fn(f64) -> f64,
+    temperature: impl Fn(f64) -> f64,
+    a: f64,
+    b: f64,
+    settled: f64,
+) -> (f64, bool, f64, usize) {
     let mut bracket = Bracket::default();
-    bracket.take(end(up));
-    bracket.take(end(down));
+    bracket.take(synthetic_end(a, &push, &temperature));
+    bracket.take(synthetic_end(b, &push, &temperature));
+    assert!(bracket.attracts(), "the ends push towards each other");
     for steps in 1..=ALBEDO_ITERATIONS {
         match bracket.next(ALBEDO_BRACKET).expect("both ends are known") {
             Next::Closed(cold) => return (cold.albedo, true, cold.temperature, steps),
             Next::Step { albedo, .. } => {
-                let here = end(albedo);
+                let here = synthetic_end(albedo, &push, &temperature);
                 if here.push.abs() < settled {
                     return (albedo, false, here.temperature, steps);
                 }
@@ -451,13 +463,17 @@ fn drive(
 
 #[test]
 fn a_bracketed_push_with_a_root_settles_on_it() {
-    // A smooth push with its zero at 0.29, curved so that the line between
-    // the ends misses it and the Illinois rule has to halve a weight.
+    // A smooth push with its zero at 0.29, darker below it and brighter
+    // above, curved so that the line between the ends misses it and the
+    // Illinois rule has to halve a weight.
     let root = 0.29;
-    let push = |a: f64| (root - a) * (1.0 + 40.0 * (a - root).powi(2)) + 0.5 * (root - a).powi(2);
-    let (albedo, closed, _, steps) = drive(push, |_| 280.0, 0.279, 0.296, 1e-12);
+    let push = |a: f64| (a - root) * (1.0 + 40.0 * (a - root).powi(2)) + 0.5 * (a - root).powi(2);
+    // Settled under a push of 1e-4 (in albedo here): `settle`'s 0.1 K over
+    // a push of about 100 K per unit of albedo, a hundred times the
+    // bracket's width, so a smooth root settles before the bracket closes.
+    let (albedo, closed, _, steps) = drive(push, |_| 280.0, 0.279, 0.296, 1e-4);
     assert!(
-        !closed && (albedo - root).abs() < 1e-9,
+        !closed && (albedo - root).abs() < 1e-4,
         "{albedo} after {steps}"
     );
     assert!(steps < 20, "{steps} steps");
@@ -465,16 +481,29 @@ fn a_bracketed_push_with_a_root_settles_on_it() {
 
 #[test]
 fn a_bracketed_jump_closes_on_its_cold_side() {
-    // #729's cycle: under 0.29 the climate is warm and pushes the albedo
-    // up, above it the CO₂ collapses and the push turns down. No push is
-    // ever under the tolerance: the bracket closes on the jump, at the
-    // collapsed (colder) end, in about as many steps as a bisection.
+    // #729's cycle: under 0.29 the climate is warm and derives a brighter
+    // albedo (its push is negative), above it the CO₂ collapses and it
+    // derives a darker one. No push is ever under the tolerance: the
+    // bracket closes on the jump, at the collapsed (colder) end, in about
+    // as many steps as a bisection.
     let jump = 0.29;
-    let push = |a: f64| if a < jump { 0.01 } else { -0.02 };
+    let push = |a: f64| if a < jump { -0.02 } else { 0.01 };
     let temperature = |a: f64| if a < jump { 277.0 } else { 188.0 };
     let (albedo, closed, t, steps) = drive(push, temperature, 0.279, 0.296, 1e-12);
     assert!(closed, "{albedo} after {steps}");
     assert_eq!(t, 188.0);
     assert!(albedo >= jump && albedo - jump < ALBEDO_BRACKET, "{albedo}");
     assert!(steps <= 40, "{steps} steps");
+}
+
+#[test]
+fn a_bracket_whose_ends_push_apart_is_not_kept() {
+    // A bistable body's unstable state: darker than 0.29 it warms
+    // further, brighter it cools further. Its ends push apart, so
+    // `settle` drops the bracket and the plain step leaves the root.
+    let push = |a: f64| 0.29 - a;
+    let mut bracket = Bracket::default();
+    bracket.take(synthetic_end(0.279, &push, &|_| 280.0));
+    bracket.take(synthetic_end(0.296, &push, &|_| 280.0));
+    assert!(bracket.closed_in() && !bracket.attracts());
 }

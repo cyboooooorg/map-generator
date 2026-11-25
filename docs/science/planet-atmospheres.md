@@ -3490,11 +3490,15 @@ last step landed on.
 The rewrite keeps the bracket the fixed point has once its push turns
 back: the last albedo that pushes up and the last that pushes down. Each
 further step goes to the zero of the push between them by the Illinois
-rule (Dowell and Jarratt 1971, as `regula_falsi` applies it). Where a fixed point exists the push reaches it as before; a fixed
-point that never brackets takes the same steps as legacy, to the last
-bit (Earth and Titan, measured). Where the bracket narrows to
-`ALBEDO_BRACKET` in both the albedo and the emissivity without the
-temperature settling, the climate has a
+rule (Dowell and Jarratt 1971, as `regula_falsi` applies it). The
+bracket is kept only while its ends push towards each other: one whose
+ends push apart holds an unstable state of a bistable body, which the
+plain step leaves as before. Where a fixed point exists inside the
+bracket, the push reaches it by those steps; a fixed point that never
+brackets takes the same steps as legacy, to the last bit (Earth and
+Titan, measured). Where the bracket narrows to `ALBEDO_BRACKET` in both
+the albedo and the emissivity without the temperature settling, the
+climate has a
 jump and no fixed point: it is stored on its colder side, the one a
 cooling planet reaches, with `converged: false` and the cause node
 `planet.climate.cycles` true (decided with the user, 2026-11-26, after
