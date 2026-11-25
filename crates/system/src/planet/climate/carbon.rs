@@ -49,9 +49,10 @@ const TRACE_CO2_SHARE: f64 = 1.0 / (1u64 << 60) as f64;
 /// that air's surface [`absorbed`] (the methane anti-greenhouse takes a
 /// share of the light that more CO₂ dilutes) against what its column
 /// sends out, the same function [`surface_temperature`] reads. Legacy
-/// took the light absorbed once, on `air` (its inventory's CO₂): under
-/// methane its regulated surface then fell to the dew point of its
-/// vapour, not [`THERMOSTAT_K`] (#681).
+/// took the light absorbed once, on `air` (the air's CO₂ before the
+/// thermostat, 52 bar for the reference Earth): under methane its
+/// regulated surface then fell to the dew point of its vapour, not
+/// [`THERMOSTAT_K`] (#681).
 pub(crate) fn thermostat(
     body: &mut ClimateBody,
     starlight: WattPerSquareMetre,
