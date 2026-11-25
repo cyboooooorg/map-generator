@@ -438,6 +438,11 @@ pub(crate) const LIFE_AIR_CH4: &str = "planet.life.air.ch4";
 /// Surface pressure of the air life has oxygenated: the sum of its
 /// partial pressures.
 pub(crate) const LIFE_AIR_PRESSURE: &str = "planet.life.air.pressure";
+/// The class of the planet: the first rule of the table that holds,
+/// from the nodes the rules up to that one read (mass, period, the steam
+/// line, the liquid, the runaway, the air, the water, the bulk's radius
+/// and gravity, the water fraction, the regime).
+pub(crate) const CLASS: &str = "planet.class";
 
 /// The gases of the air the climate leaves, each with the code of its
 /// partial pressure, in the contract's order.

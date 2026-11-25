@@ -15,7 +15,9 @@ use timeline::{Code, Heat, Trace, Traced};
 /// body without an envelope respond to tides as an icy one, 0.05. Searched:
 /// a published threshold of the tidal response against the composition;
 /// none found (study `heat-and-composition.md` section A4). From legacy:
-/// Europa (about 8 % water) is icy, Io and Earth (0.02 %) are rocky.
+/// Europa (about 8 % water) is icy, Io and Earth (0.02 %) are rocky. The
+/// ice world class reads it too (`classify`), from the kept planet's
+/// water share.
 pub(crate) const ICY_MIN_WATER: f64 = 0.05;
 
 /// Calibration: least share of the mass in hydrogen and helium that makes

@@ -35,6 +35,7 @@ use super::{
 };
 use crate::Trial;
 use crate::planet::bare::{Ground, bare_air, bare_with, formed, surface_pass};
+use crate::planet::classify::classify;
 use crate::planet::codes;
 use crate::planet::draws::{Drawn, LABELS};
 use crate::planet::interior_tests::{AU_492, CORE_492, MASS_492, WATER_492};
@@ -65,7 +66,9 @@ use science::units::{
 };
 use science::volatiles::{NITROGEN_TRIPLE_TEMPERATURE, co2_saturation_pressure};
 use science::water::{CRITICAL_POINT_TEMPERATURE, melting_temperature};
-use timeline::{ClimateState, Code, Gas, LiquidKind, Material, NodeValue, Provenance, Seed, Trace};
+use timeline::{
+    ClimateState, Code, Gas, LiquidKind, Material, NodeValue, PlanetClass, Provenance, Seed, Trace,
+};
 
 /// Source: the Sun's nominal effective temperature, 5772 K (IAU 2015
 /// Resolution B3).
@@ -1741,6 +1744,11 @@ fn a_boil_that_escapes_all_its_water_ends_dry() {
     );
     assert_eq!(water.inventory.value().0, 0.0, "{water:?}");
     assert_eq!(verdicts.len(), 1, "{verdicts:?}");
+    // A runaway with the air it has left: dry, and a greenhouse over 1 bar.
+    assert_eq!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::RunawayGreenhouse
+    );
 }
 
 /// The bulk water share, under [`RECONDENSED_FLUENCE`], whose steam run hands [`LEFTOVER`] to its
@@ -1817,6 +1825,11 @@ fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
         "{c:?}"
     );
     assert!(derived_from(&trace, water.runaway.node()).contains(&water.inventory.node()));
+    // No runaway kept: the ocean it keeps is no runaway greenhouse.
+    assert_ne!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::RunawayGreenhouse
+    );
 }
 
 #[test]
@@ -1895,6 +1908,10 @@ fn the_492_super_earth_is_a_steam_world() {
     let s = settle(&mut trace, &t, &d);
     let hides = s.hides_surface.expect("a body with a surface is judged");
     assert!(*hides.value());
+    assert_eq!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::SteamWorld
+    );
     let c = s.climate.as_ref().unwrap();
     let h2o = *c.atmosphere.partial[&Gas::H2o].value();
     let temperature = *c.global.surface_temperature.value();
@@ -2175,4 +2192,87 @@ fn the_reference_earth_lives_and_reaches_its_climate() {
         (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&preindustrial),
         "{preindustrial} K, {c:?}"
     );
+}
+
+#[test]
+#[ignore = "heavy: a wet Earth-mass water world settled, one bistable solve"]
+fn a_migrated_water_world_in_the_habitable_zone_is_an_ocean_world() {
+    // 1 M_E, 30 % water (some 1300 oceans), at 1 au, the volatiles of its
+    // ice without their scatter: the ocean keeps most of them out of the
+    // air (legacy `classify.rs` l.428).
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, 1.0, EARTH.core_mass_fraction, 0.3, 1.0);
+    let s = settle(&mut trace, &t, &d);
+    let c = s.climate.as_ref().unwrap();
+    assert_eq!(
+        c.liquid.map(|l| *l.value()),
+        Some(LiquidKind::Water),
+        "{c:?}"
+    );
+    assert_eq!(
+        *classify(&t, &s, &mut trace).unwrap().value(),
+        PlanetClass::OceanWorld
+    );
+}
+
+/// Source: a K5V star's effective temperature, 4440 K, and its
+/// luminosity, `10^-0.76` = 0.174 L_sun (Pecaut & Mamajek 2013, ApJS 208,
+/// 9, doi:10.1088/0067-0049/208/1/9, Table 5, in the version of
+/// Mamajek's "A Modern Mean Dwarf Stellar Color and Effective Temperature
+/// Sequence").
+const K5V: (Kelvin, f64) = (Kelvin(4440.0), 0.174);
+
+/// Definition: the orbit of the K5V bodies, 0.4 au (legacy
+/// `a_runaway_weighs_the_water_its_own_pass_kept`), near their cosmic
+/// shoreline.
+const K5V_ORBIT_AU: f64 = 0.4;
+
+/// Definition: the K5V bodies' water, 10 % of the mass, and core share
+/// 0.25 (legacy).
+const K5V_WATER: (f64, f64) = (0.1, 0.25);
+
+#[test]
+#[ignore = "heavy: three runaway bodies settled with their pass on the envelope"]
+fn a_runaway_weighs_the_water_its_own_pass_kept() {
+    // A runaway's kept pass loses more of its steam to the cosmic
+    // shoreline than the energy-limited escape it was handed: the class
+    // is read on the pass that was kept, and a steam world's layers sum to
+    // its whole mass (#513; legacy `classify.rs` l.704). The bodies are
+    // those of the legacy test: 0.3 and 0.6 M_E with 10 % of water at
+    // 0.4 au round a K5V star, and the #492 super-Earth.
+    let (teff, luminosity) = K5V;
+    let (water, core) = K5V_WATER;
+    // The trial's flux is `au^-2` S_E: the K5V's flux at 0.4 au.
+    let equivalent_au = K5V_ORBIT_AU / luminosity.sqrt();
+    let mut bodies = Vec::new();
+    for mass in [0.3, 0.6] {
+        let mut trace = Trace::new();
+        let (t, d) = water_world_trial(&mut trace, mass, core, water, equivalent_au);
+        let t = with_star(&mut trace, &t, teff);
+        bodies.push((trace, t, d));
+    }
+    let mut trace = Trace::new();
+    let (t, d) = water_world_trial(&mut trace, MASS_492, CORE_492, WATER_492, AU_492);
+    let t = with_star(&mut trace, &t, M9V);
+    bodies.push((trace, t, d));
+    let mut hidden = false;
+    for (mut trace, t, d) in bodies {
+        let s = settle(&mut trace, &t, &d);
+        let water = &s.bare.surface.as_ref().unwrap().water;
+        assert!(*water.runaway.value(), "{water:?}");
+        let class = *classify(&t, &s, &mut trace).unwrap().value();
+        if *s.hides_surface.unwrap().value() {
+            hidden = true;
+            assert_eq!(class, PlanetClass::SteamWorld);
+            let layers: f64 = s.bare.body.layers().iter().map(|l| l.mass.value().0).sum();
+            let whole = s.bare.body.whole_mass().0.0;
+            assert!(
+                (layers - whole).abs() <= 1e-9 * whole,
+                "{layers} vs {whole}"
+            );
+        } else {
+            assert_ne!(class, PlanetClass::SteamWorld);
+        }
+    }
+    assert!(hidden, "no steam world hides its surface");
 }

@@ -932,14 +932,13 @@ fn a_jupiter_trial() {
     assert_eq!(heat.radiogenic.value().0, 0.0);
 }
 
-#[test]
-fn a_neptune_trial() {
-    let (mass, au, envelope) = NEPTUNE;
-    let mut trace = Trace::new();
-    let t = trial(&mut trace, 1, mass, au, 0.0);
+/// Neptune's mass and envelope at `au`.
+pub(super) fn neptune_at(trace: &mut Trace, au: f64) -> (Trial, Drawn) {
+    let (mass, _, envelope) = NEPTUNE;
+    let t = trial(trace, 1, mass, au, 0.0);
     let drawn = Drawn::fixed(
         &t,
-        &mut trace,
+        trace,
         EARTH_CORE_MASS_FRACTION,
         EARTH_WATER_FRACTION,
         0.0,
@@ -948,6 +947,14 @@ fn a_neptune_trial() {
         None,
         None,
     );
+    (t, drawn)
+}
+
+#[test]
+fn a_neptune_trial() {
+    let mut trace = Trace::new();
+    let (mass, au, envelope) = NEPTUNE;
+    let (t, drawn) = neptune_at(&mut trace, au);
     let body = interior(&t, &drawn, &mut trace).unwrap();
     let ratio = km(*body.bulk().radius.value()) / NEPTUNE_RADIUS_KM;
     let (low, high) = NEPTUNE_RADIUS_RANGE;

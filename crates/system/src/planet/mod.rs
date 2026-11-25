@@ -87,6 +87,11 @@ mod boil_off;
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod classify;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod climate;
 #[cfg_attr(
     not(test),
@@ -160,6 +165,8 @@ mod air_tests;
 mod bare_tests;
 #[cfg(test)]
 mod boil_off_tests;
+#[cfg(test)]
+mod classify_tests;
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]
