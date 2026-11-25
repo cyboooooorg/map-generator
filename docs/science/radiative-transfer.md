@@ -179,8 +179,9 @@ $$
 
 The formula and the 0.77 are quoted from the climate model `climlab`, which
 follows Manabe & Wetherald, and from arXiv:2006.03098: the 1967 paper is
-not open, and its equation number was not checked. Kluft et al. (2019,
-§2b) give the same profile as Manabe & Wetherald's "Eq. (3)" and note
+not open. Kluft et al. (2019, §2b) give the same profile as Manabe &
+Wetherald's "Eq. (3)", the number the page and the code now cite (they
+said equation 2 before study 32), and note
 that it "differs from the observed mean state of humidity mostly through
 the lack of a secondary peak in the upper troposphere".
 
@@ -894,7 +895,7 @@ the Bond albedo are there too (change 2b-2).
     other planets. Earth's 1.26e-2 bar of vapour is 77 % relative humidity
     over the saturation pressure at 288 K, the rounded mean surface
     temperature the tests take as their Earth case. The 77 % is the surface
-    relative humidity of Manabe & Wetherald 1967 (equation 2), the same
+    relative humidity of Manabe & Wetherald 1967 (equation 3), the same
     figure as the column's test profile; the paper is paywalled and the
     value is confirmed indirectly (below).
   - *Cloud albedo.* The water clouds reflect 0.276 of the light falling
@@ -981,9 +982,10 @@ the Bond albedo are there too (change 2b-2).
     more than the Clough 1989 continuum and HITRAN 2000 of Kim &
     Ramanathan. No source was read for either size.
 - **The Manabe–Wetherald water cap.** The falling humidity
-  $RH(Q) = RH_s\,(Q - 0.02)/0.98$ (equation 2 of Manabe & Wetherald 1967,
-  as `column.rs` cites it) stays below $RH_s$ at every level above the
-  ground. On the model's moist adiabat at 288 K, $RH_s$ → 1 holds 2.47
+  $RH(Q) = RH_s\,(Q - 0.02)/0.98$ (equation 3 of Manabe & Wetherald 1967,
+  as Kluft et al. 2019 number it and `column.rs` cites it) stays below
+  $RH_s$ at every level above the ground. On the model's moist adiabat
+  at 288 K, $RH_s$ → 1 holds 2.47
   cm, 78 % of the saturated column's 3.165 cm. The jump from 2.47 to 3.165
   cm at $RH_s$ = 1 is the code's: `column::levels` builds any saturated
   surface as a fully saturated column (after Kopparapu et al. 2013 for
@@ -1239,7 +1241,7 @@ column at 288 K:
   20-level grid adds about 0.3 W/m² (0.15 K) under the clouds.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B), Manabe &
-Wetherald 1967 (equation 2), Pierrehumbert 2010 (equation 2.33), the CRC
+Wetherald 1967 (equation 3), Pierrehumbert 2010 (equation 2.33), the CRC
 polarizabilities and Sobolev 1975 are behind paywalls or out of print. For
 each but the CRC, the audit found an indirect confirmation, named above
 (Kopparapu et al. 2013 for the first; `climlab` and arXiv:2006.03098 for
