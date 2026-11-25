@@ -1138,7 +1138,24 @@ its own code (diagnostics, nothing fitted on them):
 
 A column of water vapour and CO₂ alone should therefore send out about
 275 to 283 W/m² at 280 ppm: the column's 274.69 W/m² lies at the bottom
-of that range, not above it. Two direct checks agree:
+of that range, not above it.
+
+The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
+holds it there. It builds the window from the table: 268.1 − 2.2 +
+3.64 (Hogan & Matricardi) + 1.76 (Myhre et al. 1998's
+$5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
+4.2 to 10 and a black ground from 0 to 1.6, widened by CERES's
+uncertainty (0.75 % of 268.1 and 2.75 W/m², in quadrature: 3.4 W/m²):
+272.1 to 286.3 W/m². It runs the climate's own clear column
+(`Profile::CLEAR`) on Earth's measured air (78.08 % N₂ and 20.95 % O₂ of
+1.014 bar, NASA's fact sheet), 280 ppm, 77 % surface humidity at 288 K,
+under the skin of CERES's all-sky 240.1 W/m² (214.4 K): 274.72 W/m². It
+replaces `earth_clear_sky_olr`, which ran a fixed 6.5 K/km profile with a
+uniform 77 % humidity, 11 W/m² darker than the climate's, against
+267.9 ± 10 W/m² (a calibrated tolerance). The window narrows when the
+column gains ozone and methane.
+
+Two direct checks agree:
 
 - **On reanalysis profiles.** On the 100 RFMIP profiles (ERA-Interim,
   2014, weighted to the global mean; Pincus et al. 2016), LBLRTM gives

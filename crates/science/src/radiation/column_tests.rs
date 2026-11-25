@@ -6,9 +6,10 @@
 
 use super::*;
 use crate::balance::{self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau};
-use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
+use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::test_points::{
-    EARTH_AIR, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY,
+    EARTH_AIR, EARTH_MEASURED_AIR, EARTH_PRESSURE_BAR, EARTH_SURFACE_K, TITAN_EFFECTIVE_K,
+    TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY,
 };
 use crate::surface::surface_vapour;
 use crate::units::Bar;
@@ -186,6 +187,72 @@ const DISTINCT_STEP_K: f64 = 0.01;
 
 /// Definition: a caller's rounding of a vapour pressure, bar.
 const ROUNDING_BAR: f64 = -1e-12;
+
+/// Source: Earth's clear-sky outgoing longwave radiation, the cloud-free
+/// scenes of CERES EBAF Ed4.0, July 2005 to June 2015: 268.1 W/m² (CERES
+/// EBAF Ed4.0 Data Quality Summary, NASA Langley, 2018, Table 6-1;
+/// `docs/science/radiative-transfer.md`, study 32).
+const CERES_CLEAR_SKY_W_M2: f64 = 268.1;
+
+/// Source: Earth's all-sky outgoing longwave radiation over the same
+/// years, 240.1 W/m² (CERES EBAF Ed4.0 Data Quality Summary, Table 6-1):
+/// what Earth emits, whose effective temperature sets the test's skin.
+const CERES_ALL_SKY_W_M2: f64 = 240.1;
+
+/// Source: the clear sky of the same air with its clouds removed (the
+/// "total-region" clear sky a column model computes) minus that of the
+/// cloud-free scenes, −2.2 W/m² (Loeb et al. 2020, *J. Climate* 33, 61,
+/// doi:10.1175/JCLI-D-19-0381.1, Table 3: 265.9 against 268.1).
+const TOTAL_REGION_W_M2: f64 = -2.2;
+
+/// Source: what methane, N₂O, CFC-11 (with the other halocarbons as its
+/// equivalent), CFC-12, N₂ and O₂ take from Earth's clear-sky outgoing
+/// radiation, each removed from a present-day atmosphere: 1.5, 1.5, 0.22,
+/// 0.17, 0.15 and 0.096 W/m² (Hogan & Matricardi 2020, *Geosci. Model
+/// Dev.* 13, 6501, doi:10.5194/gmd-13-6501-2020, Table 4, line by line).
+/// The column holds none of them as absorbers.
+const MINOR_GASES_W_M2: f64 = 1.5 + 1.5 + 0.22 + 0.17 + 0.15 + 0.096;
+
+/// Source: what ozone takes from Earth's outgoing radiation, W/m², from
+/// 2.7 % of the 155 W/m² greenhouse under all skies (Schmidt et al. 2010,
+/// *J. Geophys. Res.* 115, D20106, doi:10.1029/2010JD014287, Table 1,
+/// removed alone), to 10 W/m² under a clear sky with its overlaps (Kiehl
+/// & Trenberth 1997, *BAMS* 78, 197, Table 3). No global-mean
+/// line-by-line clear-sky value was found (study 32); the column holds no
+/// ozone.
+const OZONE_W_M2: (f64, f64) = (0.027 * 155.0, 10.0);
+
+/// Source: the mean global CO₂ of CERES's years, July 2005 to June 2015,
+/// about 389 ppm (NOAA Global Monitoring Laboratory, global annual means,
+/// `co2_annmean_gl.txt`, 378.98 ppm in 2005 to 399.65 ppm in 2015, read
+/// 2026-11-25).
+const CERES_CO2_PPM: f64 = 389.0;
+
+/// Source: the CO₂ forcing coefficient, `ΔF = 5.35 ln(C / C₀)` W/m²
+/// (Myhre, Highwood, Shine & Stordal 1998, *Geophys. Res. Lett.* 25,
+/// 2715, doi:10.1029/98GL01908): the radiation the column gains at
+/// 280 ppm over CERES's [`CERES_CO2_PPM`], 1.76 W/m².
+const MYHRE_CO2_W_M2: f64 = 5.35;
+
+/// Source: the most a black ground adds over a real one: the clear-sky
+/// net longwave at the surface, 398.2 − 317.2 W/m² (Loeb et al. 2020,
+/// Table 3, up and down, total region), times the 2 % a surface of
+/// emissivity 0.98 (the RFMIP profiles' surfaces, Pincus et al. 2016,
+/// *Geosci. Model Dev.* 9, 3447) does not emit; an upper bound, part of
+/// it being absorbed on the way up.
+const BLACK_GROUND_W_M2: f64 = (1.0 - 0.98) * (398.2 - 317.2);
+
+/// Source: CERES's uncertainty, the calibration's 0.75 % (1σ) and the
+/// 2.75 W/m² of the scene identification, combined in quadrature (CERES
+/// EBAF Ed4.0 Data Quality Summary, §4.4).
+const CERES_UNCERTAINTY: (f64, f64) = (0.0075, 2.75);
+
+/// Definition: Earth's preindustrial CO₂ of the CERES test, 280 ppm of
+/// the dry air (Myhre et al. 1998).
+const PREINDUSTRIAL_PPM: f64 = 280.0;
+
+/// Definition: parts per million.
+const PER_MILLION: f64 = 1e-6;
 
 /// The skin temperature of a body of equilibrium temperature `t_eq_k`.
 fn skin(t_eq_k: f64) -> Kelvin {
@@ -637,4 +704,45 @@ fn thin_steam_stays_on_the_plateau_at_680_k() {
         (olr / SIMPSON_NAKAJIMA_W_M2.0 - 1.0).abs() < THIN_STEAM_SHARE,
         "{olr} W/m²"
     );
+}
+
+/// Earth's measured air at `co2_ppm` of its dry air, with the vapour of
+/// a surface at `surface_k` ([`surface_vapour`] of an ocean).
+fn earth_at(co2_ppm: f64, surface_k: f64) -> PartialPressures {
+    PartialPressures {
+        co2: co2_ppm * PER_MILLION * EARTH_PRESSURE_BAR,
+        ..moist(EARTH_MEASURED_AIR, surface_k)
+    }
+}
+
+/// The skin of Earth: [`skin_temperature`] of the effective temperature
+/// of CERES's all-sky outgoing radiation, 254.9 K.
+fn earth_skin() -> Kelvin {
+    skin((CERES_ALL_SKY_W_M2 / STEFAN_BOLTZMANN).powf(0.25))
+}
+
+#[test]
+fn earths_clear_sky_column_is_ceres_like_for_like() {
+    // The climate's own clear column on Earth's measured air at 288 K and
+    // 280 ppm, against CERES's clear sky made like for like (study 32):
+    // the clear sky of the same air without its clouds, plus what the
+    // gases the column lacks take, plus the radiation 280 ppm of CO₂
+    // gives back over CERES's 389, plus at most a black ground; within
+    // CERES's uncertainty.
+    let co2 = MYHRE_CO2_W_M2 * (CERES_CO2_PPM / PREINDUSTRIAL_PPM).ln();
+    let base = CERES_CLEAR_SKY_W_M2 + TOTAL_REGION_W_M2 + MINOR_GASES_W_M2 + co2;
+    let (calibration, scene) = CERES_UNCERTAINTY;
+    let uncertainty = (calibration * CERES_CLEAR_SKY_W_M2).hypot(scene);
+    let low = base + OZONE_W_M2.0 - uncertainty;
+    let high = base + OZONE_W_M2.1 + BLACK_GROUND_W_M2 + uncertainty;
+    let olr = olr(
+        &earth_at(PREINDUSTRIAL_PPM, EARTH_SURFACE_K),
+        EARTH_SURFACE_K,
+        earth_skin(),
+        EARTH,
+        Profile::CLEAR,
+        &mut ColumnCache::default(),
+    );
+    println!("Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2}");
+    assert!((low..=high).contains(&olr), "{olr} against {low} to {high}");
 }

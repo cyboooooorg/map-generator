@@ -91,3 +91,27 @@ pub(crate) const EARTH_GROUND_ALBEDO: f64 = 0.122;
 /// Definition: the sunlight on Earth averaged over the globe, W/m², a
 /// quarter of `SOLAR_IRRADIANCE`: 340.25.
 pub(crate) const EARTH_INCOMING_W_M2: f64 = crate::constants::SOLAR_IRRADIANCE.0 / 4.0;
+
+/// Source: Earth's mean surface pressure, 1.014 bar (NASA Earth fact
+/// sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html, as
+/// `system`'s settled tests take it).
+pub(crate) const EARTH_PRESSURE_BAR: f64 = 1.014;
+
+/// Source: the shares of N₂ and O₂ in Earth's dry air by volume, 78.08 %
+/// and 20.95 % (NASA Earth fact sheet, "78.08 % N₂, 20.95 % O₂, 9340 ppm
+/// Ar").
+pub(crate) const EARTH_N2_O2_SHARES: (f64, f64) = (0.7808, 0.2095);
+
+/// Definition: Earth's measured air as a test input, without its CO₂ and
+/// water (the tests set them) and without its argon, which the column has
+/// no field for: [`EARTH_N2_O2_SHARES`] of [`EARTH_PRESSURE_BAR`].
+/// [`EARTH_AIR`] is legacy's rounded 0.78 and 0.21 bar, not this air.
+pub(crate) const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
+    n2: EARTH_PRESSURE_BAR * EARTH_N2_O2_SHARES.0,
+    co2: 0.0,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: EARTH_PRESSURE_BAR * EARTH_N2_O2_SHARES.1,
+};
