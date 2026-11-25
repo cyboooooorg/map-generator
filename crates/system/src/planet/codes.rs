@@ -336,6 +336,10 @@ pub(crate) const CLIMATE_EQUILIBRIUM: &str = "planet.climate.equilibrium";
 /// Bond albedo the surface absorbed its light under, settled with the
 /// temperature.
 pub(crate) const CLIMATE_BOND_ALBEDO: &str = "planet.climate.bond-albedo";
+/// Ozone column the air's O2 holds under one star's light, which that
+/// light crosses in the Bond albedo: from the bare air's O2 and the
+/// star's effective temperature. One per star, recorded when positive.
+pub(crate) const CLIMATE_OZONE_COLUMN: &str = "planet.climate.ozone-column";
 /// Emissivity the surface radiated under (the frosts' on its ground),
 /// settled with the temperature.
 pub(crate) const CLIMATE_EMISSIVITY: &str = "planet.climate.emissivity";

@@ -6,14 +6,20 @@
 //! cloud tops ([`CLOUD_TOP_SHARE`] of the surface pressure): CO2's and
 //! water's lines and continua absorb from 0.7 um to 5 um, Rayleigh
 //! scattering is shared among the pieces by their mass, and each piece is
-//! a two-stream layer ([`layer`]), stacked by adding ([`Stack`]).
+//! a two-stream layer ([`layer`]), stacked by adding ([`Stack`]). Above
+//! them all, the air's ozone ([`Air::ozone`]) is a pure absorber whose
+//! cross-sections take each band's light from 0.2 to 1.1 um
+//! ([`super::ozone`]).
 //!
 //! Within a band, CO2's and water's g-points overlap at random, as in
 //! the longwave column (Lacis & Oinas 1991, *JGR* 96, 9027): each pair
 //! of g-points is a stack of its own, weighted by the product of their
 //! weights. The g-points of a gas whose whole column is thin (slant
 //! depth under [`THIN`]) are merged into one first, which leaves their
-//! mean transmission unchanged to the square of their depth.
+//! mean transmission unchanged to the square of their depth. Ozone's
+//! g-points ([`super::ozone::CROSS_SECTIONS`], merged by the same rule)
+//! overlap the gases' at random too: each pair's stack under each of
+//! ozone's.
 
 use std::sync::LazyLock;
 
@@ -21,6 +27,7 @@ use super::column::{CLOUD_TOP_SHARE, Levels};
 use super::fast_math;
 use super::gases::{CO2_MOLAR_MASS, H2O_MOLAR_MASS};
 use super::ktable::{CO2_SELF_SET, CO2_SET, G, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
+use super::ozone::{CROSS_SECTIONS, OZONE_LAYER_K};
 use super::spectrum::{self, DIFFUSIVITY, Level};
 use super::starlight::{BANDS, band_edge_m};
 
@@ -409,14 +416,91 @@ fn piece_depth_fast(piece: &Piece, lower: f32, upper: f32) -> f64 {
     f64::from(span * mean)
 }
 
-/// What the air alone sets of the light's way: its methane haze (its
-/// reflectance and transmission), its Rayleigh depth at 550 nm and its
-/// column ([`super::column::levels`], `None` without air); the
-/// ground and the clouds under it are the cover's ([`Paths::budget`]).
+/// What the air alone sets of the light's way: its ozone column, its
+/// methane haze (its reflectance and transmission), its Rayleigh depth
+/// at 550 nm and its column ([`super::column::levels`], `None` without
+/// air); the ground and the clouds under it are the cover's
+/// ([`Paths::budget`]).
 pub(crate) struct Air<'a> {
+    /// Ozone's vertical column, molecules per cm²
+    /// ([`super::ozone::molecules_per_cm2`]), a pure absorber above the
+    /// haze and the column at [`OZONE_LAYER_K`].
+    pub(crate) ozone: f64,
     pub(crate) haze: (f64, f64),
     pub(crate) rayleigh_550: f64,
     pub(crate) column: Option<&'a Levels>,
+}
+
+/// Ozone's points in one band: the weight of each and the stack of its
+/// layer (a pure absorber, which reflects nothing), the g-points of
+/// [`CROSS_SECTIONS`] at [`OZONE_LAYER_K`] whose slant depth through the
+/// column is under [`THIN`] merged into one, as a gas's are
+/// ([`Points::merge`]). One point of no depth without ozone.
+struct Ozone {
+    points: [(f64, Stack); G + 1],
+    count: usize,
+}
+
+impl Ozone {
+    /// The points of band `band` (bluest first) under a column of
+    /// `column` molecules per cm²; `None` without ozone, or in a band
+    /// where it absorbs nothing.
+    fn of(band: usize, column: f64) -> Option<Ozone> {
+        let table = &*CROSS_SECTIONS;
+        let sigma = table.at(OZONE_LAYER_K).get(band)?;
+        if column.is_nan() || column <= 0.0 || sigma.iter().all(|s| *s <= 0.0) {
+            return None;
+        }
+        let mut out = Ozone {
+            points: [(0.0, Stack::EMPTY); G + 1],
+            count: 0,
+        };
+        let (mut thin_weight, mut thin_depth) = (0.0, 0.0);
+        for (s, w) in sigma.iter().zip(&table.weights) {
+            let depth = s * column;
+            if DIFFUSIVITY * depth > THIN {
+                out.points[out.count] = (*w, Self::stack(depth));
+                out.count += 1;
+            } else {
+                thin_weight += w;
+                thin_depth += w * depth;
+            }
+        }
+        if thin_weight > 0.0 {
+            out.points[out.count] = (thin_weight, Self::stack(thin_depth / thin_weight));
+            out.count += 1;
+        }
+        Some(out)
+    }
+
+    /// The stack of a pure absorber of vertical depth `depth`.
+    fn stack(depth: f64) -> Stack {
+        let (r, t) = layer(depth, 0.0);
+        Stack::EMPTY.over(r, t)
+    }
+
+    /// Pushes onto `paths` the path of weight `weight` through `above`
+    /// and `below` under each of these points.
+    fn push(&self, paths: &mut Vec<(f64, Stack, Stack)>, weight: f64, above: Stack, below: Stack) {
+        for (w, ozone) in &self.points[..self.count] {
+            paths.push((weight * w, ozone.then(above), below));
+        }
+    }
+}
+
+/// Pushes the path of weight `weight` through `above` and `below` onto
+/// `paths`, under `ozone`'s points when the band has some.
+fn push(
+    paths: &mut Vec<(f64, Stack, Stack)>,
+    ozone: Option<&Ozone>,
+    weight: f64,
+    above: Stack,
+    below: Stack,
+) {
+    match ozone {
+        Some(o) => o.push(paths, weight, above, below),
+        None => paths.push((weight, above, below)),
+    }
 }
 
 /// The light's paths through an air ([`Air`]), whatever the ground and
@@ -441,13 +525,18 @@ impl Paths {
         let column = air.column.filter(|c| !c.spans.is_empty());
         let Some(levels) = column else {
             // No air: the Rayleigh layer (none, or a trace) over the clouds.
-            let paths = bands
-                .iter()
-                .map(|&(scale, weight)| {
-                    let (r, t) = layer(0.0, air.rayleigh_550 * scale);
-                    (weight, top.over(r, t), Stack::EMPTY)
-                })
-                .collect();
+            let mut paths = Vec::with_capacity(bands.len());
+            for (i, &(scale, weight)) in bands.iter().enumerate() {
+                let (r, t) = layer(0.0, air.rayleigh_550 * scale);
+                let ozone = Ozone::of(i, air.ozone);
+                push(
+                    &mut paths,
+                    ozone.as_ref(),
+                    weight,
+                    top.over(r, t),
+                    Stack::EMPTY,
+                );
+            }
             return Paths { paths };
         };
         let table = &*SHORTWAVE;
@@ -479,9 +568,10 @@ impl Paths {
         };
         let mut paths = Vec::with_capacity(bands.len() * 4);
         for (i, &(scale, weight)) in bands.iter().enumerate() {
+            let ozone = Ozone::of(i, air.ozone);
             if i < first_absorbed {
                 let (above, below) = stacks(&|_| 0.0, scale);
-                paths.push((weight, above, below));
+                push(&mut paths, ozone.as_ref(), weight, above, below);
                 continue;
             }
             let bin = bands.len() - 1 - i;
@@ -499,7 +589,7 @@ impl Paths {
             for (wc, dc) in co2.points() {
                 for (ww, dw) in water.points() {
                     let (above, below) = stacks(&|k| dc[k] + dw[k] + smooth[k], scale);
-                    paths.push((weight * wc * ww, above, below));
+                    push(&mut paths, ozone.as_ref(), weight * wc * ww, above, below);
                 }
             }
         }

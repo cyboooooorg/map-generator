@@ -134,7 +134,7 @@ impl Spectra {
 /// Checks a table's `bands` line (`bands`, their number, their first
 /// and last edges, m) against [`BANDS`], [`FROM_M`] and [`TO_M`]: a table
 /// built on other bands is a bug of the build, and panics with its line.
-fn check_layout(fields: &[&str], n: usize) {
+pub(crate) fn check_layout(fields: &[&str], n: usize) {
     let parsed: Option<(usize, f64, f64)> = (|| {
         Some((
             fields.get(1)?.parse().ok()?,

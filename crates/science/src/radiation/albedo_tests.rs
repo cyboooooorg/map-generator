@@ -4,10 +4,12 @@
 //! clear and cloudy sky against the satellites and the cache's.
 
 use super::*;
-use crate::constants::{SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
+use crate::constants::{EARTH_MEAN_RADIUS, SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
+use crate::habitable::OCEAN_MASS;
 use crate::radiation::clouds::cloud_cover;
 use crate::radiation::column::{Levels, Profile, STEAM_MAX_BAR, levels};
 use crate::radiation::gases::{H2O_MOLAR_MASS, PartialPressures};
+use crate::radiation::ozone::{EARTH_OZONE_COLUMN, molecules_per_cm2, ozone_column};
 use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::shortwave::{Air, Budget, Paths};
 use crate::radiation::starlight::{BANDS, SOLAR_METALLICITY, SPECTRA, measured_sun, star_bands};
@@ -15,8 +17,8 @@ use crate::radiation::test_points::{
     EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_INCOMING_W_M2, EARTH_SURFACE_K, TITAN_GRAVITY,
     TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY, VENUS_PRESSURE_BAR, VENUS_SURFACE_K,
 };
-use crate::surface::RELATIVE_HUMIDITY;
-use crate::units::{Bar, Dex};
+use crate::surface::{RELATIVE_HUMIDITY, cover, ground_albedo};
+use crate::units::{Bar, Degree, Dex, DobsonUnit, Radian};
 use crate::water::vapour_saturation_bar;
 
 /// Calibration: how far Earth's clear-sky albedo under the table's Sun may
@@ -71,6 +73,24 @@ const EARTH_BOND_ALBEDO: f64 = 0.293;
 /// [`EARTH_BOND_ALBEDO`], half the gap between Stephens et al.'s 0.293 and
 /// Kato et al.'s 0.2915: the cloud albedo is fitted on it to three digits.
 const EARTH_BOND_TOLERANCE: f64 = 0.0015;
+
+/// Source: Earth's mean obliquity at J2000, 23.439 281 degrees (IAU 2006,
+/// Capitaine, Wallace & Chapront 2003, doi:10.1051/0004-6361:20031539),
+/// as the cover's tests take it.
+const EARTH_OBLIQUITY_DEGREES: f64 = 23.439_281;
+
+/// Calibration: the window of the clear-sky light Earth's ozone takes,
+/// W/m² of 340.25, 10 to 14, decided by the user with study 34's outline
+/// (2026-11-25). The upper end is Kiehl & Trenberth 1997's (Table 4,
+/// *Bull. Am. Meteorol. Soc.* 78, 197, doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2):
+/// 14 W/m² of 342 for ozone under clear skies, 13.9 at 340.25. The lower
+/// end is study 34's probe, 10.84 W/m² under the measured Sun with
+/// Serdyuchenko et al.'s cross-sections, rounded down: not a source.
+/// Searched and not found: a global-mean line-by-line value of ozone's
+/// shortwave absorption with current cross-sections and a measured Sun
+/// (Kim & Ramanathan 2008 give none apart; Hogan & Matricardi 2020 give
+/// the well-mixed gases only). See `docs/science/ozone.md`, "In the app".
+const OZONE_CLEAR_SKY_W_M2: (f64, f64) = (10.0, 14.0);
 
 /// Definition: the M dwarf of Kopparapu et al. 2013's comparison, K (their
 /// coolest star, 2600 K, is redder still; 3300 K is the legacy test's).
@@ -168,6 +188,7 @@ fn earth_clouds() -> Fraction {
 fn earth_budget(gases: &PartialPressures, surface_k: f64, below: Underneath) -> ShortwaveBudget {
     shortwave_budget(
         gases,
+        ozone_of(gases, SOLAR_EFFECTIVE_TEMPERATURE),
         Kelvin(surface_k),
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
@@ -175,6 +196,13 @@ fn earth_budget(gases: &PartialPressures, surface_k: f64, below: Underneath) -> 
         below,
         &mut ShortwaveCache::default(),
     )
+}
+
+/// The ozone column of `gases` under a star at `star`, the law the climate
+/// calls ([`ozone_column`]): Earth's 300 DU for an air with O₂ under the
+/// Sun.
+fn ozone_of(gases: &PartialPressures, star: Kelvin) -> DobsonUnit {
+    ozone_column(Bar(gases.o2), star)
 }
 
 /// Earth's clear sky over its ground.
@@ -266,13 +294,15 @@ fn earth_clear_sky_holding(water_cm: f64) -> Budget {
     )
 }
 
-/// The clear sky over Earth's ground of `air` in `column` under `light`.
+/// The clear sky over Earth's ground of `air` in `column` under `light`
+/// (a Sun's), with the ozone the air's O₂ holds under the Sun.
 fn clear_sky_through(
     air: &PartialPressures,
     column: Option<&Levels>,
     light: &[(f64, f64)],
 ) -> Budget {
     let through = Air {
+        ozone: molecules_per_cm2(ozone_of(air, SOLAR_EFFECTIVE_TEMPERATURE)),
         haze: (0.0, 1.0),
         rayleigh_550: rayleigh_depth_550(air, STANDARD_GRAVITY.0),
         column,
@@ -283,14 +313,15 @@ fn clear_sky_through(
 #[test]
 fn dry_air_absorbs_nothing_and_reflects_more() {
     // The total the air absorbs has no test of its own until the column
-    // holds ozone and O₂ (#653, #715): the line-by-line reference holds
+    // holds O₂'s bands too (#653, #715): the line-by-line reference holds
     // them. Its responses to CO₂ and water are tested on RFMIP's field
-    // (`rfmip_tests.rs`). Without vapour or CO₂ the air absorbs nothing,
-    // and reflects more.
+    // (`rfmip_tests.rs`), ozone's share below. Without vapour, CO₂ or O₂
+    // (hence ozone) the air absorbs nothing, and reflects more.
     let wet = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
     let dry = PartialPressures {
         h2o: 0.0,
         co2: 0.0,
+        o2: 0.0,
         ..earth_air()
     };
     let none = earth_budget(&dry, EARTH_SURFACE_K, clear());
@@ -318,26 +349,85 @@ fn more_water_reflects_less_as_kim_and_ramanathan_say() {
     );
 }
 
-/// Earth's all-sky Bond albedo stays at CERES's 0.293. `CLOUD_ALBEDO` was
-/// fitted on 0.293, so this checks that calibration and is a net if the
+/// Earth's ground as the climate covers it at 288 K: one ocean of water
+/// on a body of Earth's mean radius at Earth's obliquity, not locked, no
+/// frost ([`cover`], [`ground_albedo`]; 0.1445, its ice weighted by
+/// sunlight).
+fn earth_cover_ground() -> Fraction {
+    let air = earth_air();
+    let covered = cover(
+        Kelvin(EARTH_SURFACE_K),
+        OCEAN_MASS,
+        EARTH_MEAN_RADIUS,
+        &PartialPressures::default(),
+        Radian::from(Degree(EARTH_OBLIQUITY_DEGREES)),
+        false,
+    );
+    ground_albedo(&covered, Bar(air.total()))
+}
+
+/// Earth's all-sky Bond albedo over the ground the climate gives it stays
+/// at CERES's 0.293. `CLOUD_ALBEDO` was fitted on 0.293 over that ground
+/// (issue #705), so this checks that calibration and is a net if the
 /// physics moves, not an independent check; the measured Sun's clear
-/// sky, the water's reflection and RFMIP's line-by-line responses are the
-/// independent ones.
+/// sky, ozone's absorption, the water's reflection and RFMIP's
+/// line-by-line responses are the independent ones.
 #[test]
 fn earth_keeps_its_bond_albedo() {
     let clouds = earth_clouds();
+    let ground = earth_cover_ground();
     let a = earth_budget(
         &earth_air(),
         EARTH_SURFACE_K,
-        Underneath { clouds, ..clear() },
+        Underneath {
+            ground,
+            clouds,
+            deck: share(0.0),
+        },
     )
     .bond_albedo
     .get();
     println!(
-        "Earth's Bond albedo at 288 K: {a:.4} under {:.4} of cloud",
-        clouds.get()
+        "Earth's Bond albedo at 288 K: {a:.5} under {:.4} of cloud over a ground of {:.4}",
+        clouds.get(),
+        ground.get()
     );
     assert!((a - EARTH_BOND_ALBEDO).abs() <= EARTH_BOND_TOLERANCE, "{a}");
+}
+
+/// Earth's ozone takes 10 to 14 W/m² of the measured Sun's light under
+/// clear skies ([`OZONE_CLEAR_SKY_W_M2`]): its clear sky with its 300 DU
+/// against the same sky without.
+#[test]
+fn earths_ozone_takes_its_share_of_the_measured_sun() {
+    let air = earth_air();
+    let column = levels(
+        &air,
+        EARTH_SURFACE_K,
+        STANDARD_GRAVITY.0,
+        Profile::SHORTWAVE,
+    );
+    let sun = measured_sun();
+    let absorbed = |ozone: DobsonUnit| {
+        let through = Air {
+            ozone: molecules_per_cm2(ozone),
+            haze: (0.0, 1.0),
+            rayleigh_550: rayleigh_depth_550(&air, STANDARD_GRAVITY.0),
+            column: column.as_ref(),
+        };
+        Paths::through(&through, &sun)
+            .budget(EARTH_GROUND_ALBEDO, 0.0)
+            .air
+            * EARTH_INCOMING_W_M2
+    };
+    let ozone = ozone_of(&air, SOLAR_EFFECTIVE_TEMPERATURE);
+    assert_eq!(ozone, EARTH_OZONE_COLUMN);
+    let share = absorbed(ozone) - absorbed(DobsonUnit(0.0));
+    println!("Earth's ozone takes {share:.2} W/m² of the measured Sun under clear skies");
+    assert!(
+        (OZONE_CLEAR_SKY_W_M2.0..=OZONE_CLEAR_SKY_W_M2.1).contains(&share),
+        "{share} W/m²"
+    );
 }
 
 /// An M dwarf's light is redder: more of it falls in the near infrared,
@@ -359,6 +449,7 @@ fn an_m_stars_albedo_drops_more_than_a_g_stars() {
             let light = star_bands(star_k, SOLAR_METALLICITY);
             let budget = |column: Option<&Levels>| -> Budget {
                 let through = Air {
+                    ozone: molecules_per_cm2(ozone_of(&air, Kelvin(star_k))),
                     haze: (0.0, 1.0),
                     rayleigh_550: rayleigh_depth_550(&air, STANDARD_GRAVITY.0),
                     column,
@@ -408,6 +499,7 @@ fn titans_air_is_brighter_than_earths() {
     let mut cache = ShortwaveCache::default();
     let titan = shortwave_budget(
         &TITAN_SURFACE_AIR,
+        ozone_of(&TITAN_SURFACE_AIR, SOLAR_EFFECTIVE_TEMPERATURE),
         Kelvin(TITAN_SURFACE_K),
         TITAN_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
@@ -491,6 +583,7 @@ fn the_budget_stays_in_bounds() {
                 for deck in [0.0, 0.5, 1.0] {
                     let b = shortwave_budget(
                         &air,
+                        ozone_of(&air, SOLAR_EFFECTIVE_TEMPERATURE),
                         Kelvin(t),
                         gravity,
                         SOLAR_EFFECTIVE_TEMPERATURE,
@@ -521,6 +614,7 @@ fn a_cached_budget_is_the_fresh_one() {
     let budget = |air: &PartialPressures, t: f64, cache: &mut ShortwaveCache| {
         shortwave_budget(
             air,
+            ozone_of(air, SOLAR_EFFECTIVE_TEMPERATURE),
             Kelvin(t),
             STANDARD_GRAVITY,
             SOLAR_EFFECTIVE_TEMPERATURE,
@@ -565,6 +659,7 @@ fn the_shortwave_column_is_converged() {
     let budget = |profile: Profile| {
         let column = levels(&air, EARTH_SURFACE_K, STANDARD_GRAVITY.0, profile);
         let through = Air {
+            ozone: molecules_per_cm2(ozone_of(&air, SOLAR_EFFECTIVE_TEMPERATURE)),
             haze: (0.0, 1.0),
             rayleigh_550: rayleigh_depth_550(&air, STANDARD_GRAVITY.0),
             column: column.as_ref(),
@@ -593,6 +688,7 @@ fn an_unknown_star_is_the_sun() {
     let budget = |star: f64| {
         shortwave_budget(
             &earth_air(),
+            ozone_of(&earth_air(), Kelvin(star)),
             Kelvin(EARTH_SURFACE_K),
             STANDARD_GRAVITY,
             Kelvin(star),
@@ -617,6 +713,7 @@ fn a_weightless_air_is_no_air() {
     for g in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         let b = shortwave_budget(
             &earth_air(),
+            ozone_of(&earth_air(), SOLAR_EFFECTIVE_TEMPERATURE),
             Kelvin(EARTH_SURFACE_K),
             MetrePerSecondSquared(g),
             SOLAR_EFFECTIVE_TEMPERATURE,
@@ -639,6 +736,7 @@ fn an_infinite_star_is_the_sun() {
     let sun = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
     let infinite = shortwave_budget(
         &earth_air(),
+        ozone_of(&earth_air(), Kelvin(f64::INFINITY)),
         Kelvin(EARTH_SURFACE_K),
         STANDARD_GRAVITY,
         Kelvin(f64::INFINITY),

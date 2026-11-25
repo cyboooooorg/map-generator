@@ -12,6 +12,7 @@ use science::habitable::{OCEAN_MASS, runaway_flux};
 use science::radiation::albedo::{ShortwaveCache, shortwave_budget};
 use science::radiation::column::{Profile, outgoing_longwave};
 use science::radiation::gases::PartialPressures;
+use science::radiation::ozone::ozone_column;
 use science::surface::{ICE_COVERED_TEMPERATURE, surface_vapour};
 use science::units::{Bar, EarthFlux, Fraction, Kelvin, Kilogram};
 use science::volatiles::co2_saturation_pressure;
@@ -85,17 +86,23 @@ pub(super) fn modern_air(inputs: &super::ClimateInputs) -> PartialPressures {
 
 #[test]
 fn the_albedo_is_the_flux_weighted_budgets() {
+    // Earth's air with its O₂, so that each star's light crosses the
+    // ozone that star's ultraviolet makes of it.
     let mut inputs = earth();
+    inputs.air.o2 = EARTH_DRY_AIR.o2;
     let base = inputs.sources[0];
+    let o2 = Bar(inputs.air.o2);
     inputs.sources = vec![
         Light {
             flux: EarthFlux(TWO_FLUXES[0]),
             effective_temperature: SUN,
+            ozone: ozone_column(o2, SUN),
             ..base
         },
         Light {
             flux: EarthFlux(TWO_FLUXES[1]),
             effective_temperature: RED_DWARF,
+            ozone: ozone_column(o2, RED_DWARF),
             ..base
         },
     ];
@@ -111,6 +118,7 @@ fn the_albedo_is_the_flux_weighted_budgets() {
     let mut budget = |star: Kelvin| {
         shortwave_budget(
             &air,
+            ozone_column(Bar(air.o2), star),
             EARTH_SURFACE,
             inputs.gravity,
             star,

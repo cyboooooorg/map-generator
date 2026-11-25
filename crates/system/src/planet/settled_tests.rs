@@ -12,7 +12,7 @@ use super::climate::Rotation;
 use super::climate::branches::{Bistable, Solved, solve};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
 use super::climate::record::{Climate, record, record_hides_surface};
-use super::climate::{ClimateInputs, Numerics};
+use super::climate::{ClimateInputs, Light, Numerics};
 use super::codes;
 use super::draws::{Drawn, LABELS, draw};
 use super::enveloped::Body;
@@ -27,9 +27,12 @@ use super::water::water;
 use crate::Trial;
 use science::constants::STEFAN_BOLTZMANN;
 use science::radiation::gases::PartialPressures;
+use science::radiation::ozone::ozone_column;
 use science::steam::STEAM_WORLD_MIN_BAR;
 use science::surface::{condense, titan_like_air};
-use science::units::{Bar, Degree, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre};
+use science::units::{
+    Bar, Degree, DobsonUnit, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre,
+};
 use std::collections::BTreeSet;
 use timeline::{
     ClimateState, Code, Gas, LiquidKind, Material, NodeId, NodeValue, Origin, Provenance, Seed,
@@ -459,6 +462,7 @@ fn the_climate_records_its_causes() {
             codes::CLIMATE_CONDENSATE_N2,
             codes::CLIMATE_CONDENSATE_CH4,
             codes::SURFACE_LIQUID,
+            codes::CLIMATE_OZONE_COLUMN,
         ] {
             assert!(nodes_of(&trace, absent).is_empty(), "{name}: {absent}");
         }
@@ -521,6 +525,55 @@ fn the_climate_records_its_causes() {
     }
 }
 
+/// An air with O₂ records the ozone column each star's light crosses,
+/// the column the solve took, from the O₂ and the star's temperature; the
+/// Bond albedo derives from it. Mars's bare air given Earth's O₂, an input
+/// of the test (the reference bodies hold none until planet PR 2d-4).
+#[test]
+fn an_oxygen_air_records_its_ozone() {
+    let mut trace = Trace::new();
+    let (t, d) = reference_trial(&mut trace, &MARS);
+    let rot = rotation(&mut trace, MARS_OBLIQUITY, false);
+    let mut bare = bare_with(&t, &d, &mut trace).unwrap();
+    let o2 = trace
+        .leaf(
+            Code::of("test.o2"),
+            Bar(EARTH_PRESSURE * EARTH_O2_SHARE),
+            Provenance::Input,
+        )
+        .unwrap();
+    let surface = bare.surface.as_mut().unwrap();
+    surface.atmosphere.partial.insert(Gas::O2, o2);
+    let inputs = ClimateInputs::of(&bare, &rot, Bar(0.0)).unwrap();
+    let solved = solve(&inputs, DRAW);
+    let c = record(&solved, &inputs, &bare, &rot, DRAW, &mut trace).unwrap();
+    let ozone = nodes_of(&trace, codes::CLIMATE_OZONE_COLUMN);
+    assert_eq!(ozone.len(), bare.trial.sources.len());
+    let star = bare
+        .trial
+        .sources
+        .iter()
+        .next()
+        .unwrap()
+        .effective_temperature;
+    let expected = ozone_column(*o2.value(), *star.value());
+    assert!(expected.0 > 0.0);
+    assert_eq!(
+        ozone[0].1,
+        NodeValue::Number {
+            value: expected.0,
+            unit: DobsonUnit::SYMBOL.into()
+        }
+    );
+    assert_eq!(inputs.sources[0].ozone, expected);
+    let from = derived_from(&trace, ozone[0].0);
+    for node in [o2.node(), star.node()] {
+        assert!(from.contains(&node), "{node:?} missing from {from:?}");
+    }
+    let albedo = derived_from(&trace, c.global.bond_albedo.node());
+    assert!(albedo.contains(&ozone[0].0), "{albedo:?}");
+}
+
 #[test]
 fn an_unreachable_thaw_records_no_infinity() {
     let mut trace = Trace::new();
@@ -540,7 +593,7 @@ fn an_unreachable_thaw_records_no_infinity() {
         }),
         ..solve(&inputs, DRAW)
     };
-    let c = record(&solved, &bare, &rot, DRAW, &mut trace).unwrap();
+    let c = record(&solved, &inputs, &bare, &rot, DRAW, &mut trace).unwrap();
     let nodes = c.snowball.as_ref().expect("a bistable body");
     assert_eq!(*nodes.froze.value(), FROZE);
     assert!(!nodes.thaws.value());
@@ -612,12 +665,17 @@ fn a_reducing_air_keeps_its_co2_only_when_titan_like() {
 }
 
 /// The temperature of the wet climate of `inputs` under `air`, at the
-/// settled albedo and emissivity of `c`.
-fn wet_temperature(inputs: &ClimateInputs, c: &Climate, air: &PartialPressures) -> f64 {
+/// Bond `albedo` and the settled emissivity of `c`.
+fn wet_temperature(
+    inputs: &ClimateInputs,
+    albedo: Fraction,
+    c: &Climate,
+    air: &PartialPressures,
+) -> f64 {
     use super::climate::body::ClimateBody;
     use super::climate::wet::wet_climate;
     let mut body = ClimateBody::new(inputs, Numerics::DEFAULT);
-    let starlight = body.starlight(*c.global.bond_albedo.value());
+    let starlight = body.starlight(albedo);
     wet_climate(&mut body, starlight, air, *c.emissivity.value())
         .1
         .0
@@ -643,6 +701,7 @@ fn earth_has_its_climate() {
     assert!(*c.regulated.value(), "{c:?}");
     assert_eq!(*c.global.state.value(), ClimateState::Temperate, "{c:?}");
     let co2 = c.atmosphere.partial[&Gas::Co2].value().0;
+    println!("reference Earth: {t} K, thermostat CO₂ {co2} bar");
     assert!(co2 < EARTH_CO2_BOUND, "{co2} bar");
     assert!(
         (albedo(&earth) - EARTH_BOND).abs() <= EARTH_BOND_WINDOW,
@@ -663,14 +722,42 @@ fn earth_has_its_climate() {
 
     // Earth's measured air (Refs #659: 2d-4 gives the reference Earth its
     // oxygen from life and solves its climate again on it, so that the
-    // reference Earth reaches this air). 280 ppm under its own albedo
+    // reference Earth reaches this air). 280 ppm under that air's albedo
     // gives 286 to 290 K, and the thermostat's CO₂ lies between the CO₂s
-    // that give 286 and 290 K, all on that one air.
+    // that give 286 and 290 K, all on that one air. Its O₂ holds the ozone
+    // the reference air, without O₂, lacks (`ozone_column`, #705): its
+    // Bond albedo is the climate's at the reference Earth's temperature,
+    // with that ozone, its own dry gases and the reference Earth's
+    // vapour and CO₂.
     let measured = |co2: f64| PartialPressures {
         co2,
         ..EARTH_MEASURED_AIR
     };
-    let preindustrial = wet_temperature(&inputs, c, &measured(PREINDUSTRIAL_CO2.0));
+    let inputs = ClimateInputs {
+        sources: inputs
+            .sources
+            .iter()
+            .map(|light| Light {
+                ozone: ozone_column(Bar(EARTH_MEASURED_AIR.o2), light.effective_temperature),
+                ..*light
+            })
+            .collect(),
+        ..inputs
+    };
+    let albedo = ClimateBody::new(&inputs, Numerics::DEFAULT).derived_albedo(
+        Kelvin(t),
+        &PartialPressures {
+            h2o: air.h2o,
+            ..measured(air.co2)
+        },
+    );
+    println!(
+        "measured air: Bond albedo {} (the reference Earth's {})",
+        albedo.get(),
+        c.global.bond_albedo.value().get()
+    );
+    let preindustrial = wet_temperature(&inputs, albedo, c, &measured(PREINDUSTRIAL_CO2.0));
+    println!("measured air at 280 ppm: {preindustrial} K");
     assert!(
         (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&preindustrial),
         "{preindustrial} K"
@@ -679,7 +766,7 @@ fn earth_has_its_climate() {
         let (mut low, mut high) = (CO2_BRACKET.0.ln(), CO2_BRACKET.1.ln());
         for _ in 0..CO2_STEPS {
             let mid = 0.5 * (low + high);
-            if wet_temperature(&inputs, c, &measured(mid.exp())) < target {
+            if wet_temperature(&inputs, albedo, c, &measured(mid.exp())) < target {
                 low = mid;
             } else {
                 high = mid;
@@ -696,7 +783,7 @@ fn earth_has_its_climate() {
         ..inputs.clone()
     };
     let mut body = ClimateBody::new(&on_measured_air, Numerics::DEFAULT);
-    let starlight = body.starlight(*c.global.bond_albedo.value());
+    let starlight = body.starlight(albedo);
     let (kept, held, regulated) = thermostat(
         &mut body,
         starlight,

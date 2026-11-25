@@ -685,7 +685,9 @@ absorbs is absorbed by the planet, so it counts as absorbed, not reflected.
 This is why a red star's planet, whose light is mostly near infrared, has
 a lower albedo: Kopparapu et al. (2013, §4.1) credit it to "the minimal
 amount of Rayleigh scattering and the high near-IR absorption". Blue light
-is only scattered here: ozone is not modelled.
+is scattered here, and ultraviolet and visible light are absorbed by the
+ozone an oxygen air holds, above the air ([ozone.md](ozone.md)); O₂'s own
+bands are not modelled.
 
 **Orders of magnitude.** Earth's clear-sky air absorbs 72 ± 3 W/m² of the
 340 that reach it, with its ozone and aerosols (Kim & Ramanathan 2008);
@@ -772,8 +774,8 @@ water and CO₂ alone and found none that fits: RFMIP-IRF's (Pincus et al.
 Matricardi 2020) gives each gas's spectra, not its absorbed flux; ICRCCM
 (Fouquart et al. 1991) has water-only line-by-line cases, but with 1982
 lines, at fixed zenith angles the column cannot take. So the total has
-no test until the column holds ozone and O₂ (#653): then it is compared
-with LBLRTM on RFMIP's field (#715). Meanwhile:
+no test until the column holds O₂ too (ozone's shortwave is in, #653):
+then it is compared with LBLRTM on RFMIP's field (#715). Meanwhile:
 
 - Earth's Bond albedo test guards the shortwave budget, and the
   clear-sky albedo under the measured Sun (TSIS-1) holds the table's Sun;
@@ -832,9 +834,9 @@ reflect 5.9 ± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[54]), 0.017 �
 Kim & Ramanathan's own sky without aerosols reflects 45.5 of 341.8 W/m²,
 0.133. The 0.15 ± 0.02 of Table 2 is the surface albedo of their
 sensitivity case, not the ground of that global run, which was not read.
-The observed albedo also holds the light that ozone absorbs before it is reflected;
-the app holds no ozone, and no source read gives that share of the
-reflection.
+The observed albedo also holds the light that ozone absorbs before it is
+reflected; the app's ozone takes it (300 DU over Earth's air), but no
+source read gives that share of the reflection to compare.
 
 **The window the clear-sky test took** (decided by the user on
 2026-11-23, retired on 2026-11-25). The window was the observed albedo
@@ -845,9 +847,10 @@ source: observed 0.149 (Stephens et al. 2015) to 0.156 (Kato et al.
 model Sun against the measured one. The user retired it with study 35:
 two of its terms were the port's own measurements, and the one test
 left on the clear sky compares the table's Sun with the measured one on
-the same column (TSIS-1, within 0.003: 0.1579 against 0.1556), which
-needs no window. The clear-sky total comes back with ozone and O₂
-(#653), against LBLRTM on RFMIP's field (#715).
+the same column (TSIS-1, within 0.003: 0.1579 against 0.1556 then,
+0.1403 against 0.1411 since Earth's air holds its 300 DU of ozone),
+which needs no window. The clear-sky total comes back with O₂ (#653),
+against LBLRTM on RFMIP's field (#715).
 
 **Clouds, hazes and decks.** The clouds of water cover 0.67 of Earth's sky
 by the MODIS cloud mask (King et al. 2013); the GEWEX assessment gives
@@ -871,13 +874,14 @@ CH₄/CO₂ ratio of 0.2.
   is not given as a number in the text read.
 - The **Bond albedo of Titan and of Venus** depends on the source: Venus
   0.76 from Haus et al. (2016), 0.80 ± 0.02 from Pioneer Venus.
-- **Ozone, O₂ absorption and aerosols** are not modelled in the
-  shortwave (issue #653): together about 21 W/m² of Earth's clear-sky
-  absorption (ozone 13.9 and O₂ 2.0 from Kiehl & Trenberth 1997,
-  aerosols 4.8 from Kim & Ramanathan 2008, scaled to 340.25), and the
-  aerosols' 0.017 of albedo. Study 34 reads the ozone column against O₂ and the
-  star, the optics of ozone and O₂ and the aerosols, and measures their
-  effect on Earth's column: see [ozone.md](ozone.md).
+- **O₂ absorption and aerosols** are not modelled in the shortwave
+  (issue #653): together about 7 W/m² of Earth's clear-sky absorption
+  (O₂ 2.0 from Kiehl & Trenberth 1997, aerosols 4.8 from Kim &
+  Ramanathan 2008, scaled to 340.25), and the aerosols' 0.017 of albedo
+  (a departure, decided 2026-11-25). Ozone's shortwave is (study 34): its
+  column against the star is a calibration, and its 300 DU take
+  10.83 W/m² of the measured Sun in Earth's clear sky, against Kiehl &
+  Trenberth's 13.9 (older cross-sections): see [ozone.md](ozone.md).
 - **CO₂'s share** of the clear-sky absorption was read in two sources
   only, 1.0 and 1.6 W/m², on different profiles and spectroscopy; no
   global-mean line-by-line split of the absorption by gas was found
@@ -955,13 +959,16 @@ reads the forcings, never the central object's kind).
    For Earth, the ground albedo is the clear-sky surface albedo of CERES
    EBAF Ed4: 29.8 / 243.8 = 0.122 (Kato et al. 2018, Table 5). The cover
    of the same Earth gives 0.1445 with the ice weighted by sunlight
-   (0.165 counted by area, the old figure), 0.023 over it, and a Bond
-   albedo of 0.304. The air's cloud, haze and deck terms then add to it.
+   (0.165 counted by area, the old figure), 0.023 over it, and gave a
+   Bond albedo of 0.304 under the cloud albedo fitted over 0.122. Since
+   #705 the cloud albedo is fitted over that cover with Earth's ozone
+   (0.322), which gives 0.2929. The air's cloud, haze and deck terms then
+   add to it.
 5. **The balance** is solved for the surface temperature with the Bond
    albedo as a fixed point: the albedo reads the column (its humidity, its
    clouds), and the column reads the temperature.
 
-Two tables hold the spectroscopy, built offline by
+Three tables hold the spectroscopy, built offline by
 [`tools/opacity-table`](https://github.com/cyboooooorg/map-generator/blob/main/tools/opacity-table/README.md)
 and never by the generator:
 
@@ -969,6 +976,7 @@ and never by the generator:
 | --- | --- | --- |
 | `opacity.bin` | The infrared: CO₂ and water lines as 8 $g$-points in each 20 cm⁻¹ bin, on 15 pressures (1e-5 to 100 bar) and 16 temperatures (100 to 900 K), plus MT_CKD's CO₂ continuum | 3.8 MB |
 | `shortwave.bin` (2b-2) | The same lines and sets on the 147 albedo bands from 0.7 to 5 µm (2000 to 14 364 cm⁻¹), plus MT_CKD's water and CO₂ continua | 1.8 MB |
+| `ozone.tsv` (#653) | Ozone's cross-sections (Serdyuchenko et al. 2014) at 223 and 233 K as 8 $g$-points on each of the 240 albedo bands, 0.2 to 1.1 µm | 27 kB |
 
 Their inputs, versions, download dates and checksums, the regeneration
 commands and the stale paths are in
@@ -1004,8 +1012,10 @@ the Bond albedo are there too (change 2b-2).
   `data/shortwave.bin`, the two-stream layers, their stacks and `Paths`,
   the light's paths through an air), `rayleigh` (the per-gas refractive
   indices and King factors), `veils` (the sulphuric deck and the methane
-  haze), `albedo` (`Underneath`, `ShortwaveBudget`, `ShortwaveCache` and
-  `shortwave_budget`, with `CLOUD_ALBEDO`), and `methane`'s
+  haze), `ozone` (`ozone_column` and the cross-sections of
+  `data/ozone.tsv`, the layer above the air), `albedo` (`Underneath`,
+  `ShortwaveBudget`, `ShortwaveCache` and `shortwave_budget`, with
+  `CLOUD_ALBEDO`), and `methane`'s
   `stratospheric_share` (the anti-greenhouse of the methane haze).
 - `crates/science/src/water.rs` (the IAPWS saturation curve and latent
   heat) and `crates/science/src/volatiles.rs` (the CO₂ and methane ones).
@@ -1090,19 +1100,24 @@ the Bond albedo are there too (change 2b-2).
     figure as the column's test profile, which the paper takes from
     observed hemispheric means (read in study 33; *Water: saturation,
     humidity and the limit*).
-  - *Cloud albedo.* The water clouds reflect 0.296 of the light falling
+  - *Cloud albedo.* The water clouds reflect 0.322 of the light falling
     on their share of the sky, fitted by bisection so that Earth's Bond
-    albedo is 0.293 (Stephens et al. 2015), over a ground of 0.122, the
-    77 % air over 288 K, the law's cloud cover of 0.682 and the Sun of the
-    table of spectra. No observation gives a single cloud reflectance for
-    one column. The fit absorbs what the port lacks: the clear-sky terms
-    of ozone and O₂ (#653) and of the model Sun against the measured one,
-    the aerosols' reflection, and the sunlight the column's 1.735 cm of
-    water leaves unabsorbed against the 2.4 cm a single column needs for
-    the observed field (#654, study 33): about 0.0025 of Bond albedo
-    (interpolated between measured runs). It was 0.276 under the
-    black-body Sun (#655); #705 refits it on the climate's own ground.
-    The legacy fitted 0.252 on 0.30.
+    albedo is 0.293 (Stephens et al. 2015; 0.32233, kept 0.322, gives
+    0.29286), over the ground Earth's own cover gives it at 288 K, 0.1445,
+    the 77 % air over 288 K with its 300 DU of ozone, the law's cloud
+    cover of 0.682 and the Sun of the table of spectra (#705, decided
+    2026-11-25: over CERES's 0.122 the climate's Earth came out at 0.304
+    whatever the air held). No observation gives a single cloud
+    reflectance for one column. The fit absorbs what the port lacks: O₂'s
+    bands (#653) and the model Sun against the measured one, the aerosols'
+    reflection, and the sunlight the column's 1.735 cm of water leaves
+    unabsorbed against the 2.4 cm a single column needs for the observed
+    field (#654, study 33): about 0.0025 of Bond albedo (interpolated
+    between measured runs). It was 0.296 over 0.122 without ozone under
+    the table's Sun, and 0.276 under the black-body Sun (#655). The
+    legacy fitted 0.252 on 0.30. A body without O₂ holds no ozone and
+    comes out brighter under it than under 0.296: the reference Earth,
+    without O₂ until planet PR 2d-4, has 0.3070.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;
@@ -1132,15 +1147,17 @@ the Bond albedo are there too (change 2b-2).
     scaled to the data at 2600-2730 nm, about 2 % of the light (a choice
     of the study, not a source). Study 35 re-measured these numbers and
     the error for other hosts.
-  - *No ozone.* With 300 DU (Kim & Ramanathan 2008, Table 2) as a pure
-    absorber above the column, with the cross-sections of Serdyuchenko et
-    al. (2014) at 223 K and TSIS-1: 0.1409 (−0.0145), the ozone absorbing
-    10.8 W/m² of 340.25 (Kiehl & Trenberth's 13.9, scaled, uses older
-    cross-sections). ±30 DU moves the top of the atmosphere by ±0.17 W/m²
-    in the study and by 0.2 in Kim & Ramanathan's Table 2. Ozone with the
-    black-body Sun also reaches 0.1412, but the air then absorbs 67 W/m²:
-    ozone alone fixes the albedo for the wrong reason, and the spectrum
-    has to change with it. Issue #653.
+  - *No ozone* (in the app since #653's first pull request). With 300 DU
+    (Kim & Ramanathan 2008, Table 2) as a pure absorber above the
+    column, with the cross-sections of Serdyuchenko et al. (2014) at
+    223 K and TSIS-1: 0.1409 (−0.0145) in the study's probe, 0.1411 in
+    the app, the ozone absorbing 10.8 W/m² of 340.25 (10.83 in the app;
+    Kiehl & Trenberth's 13.9, scaled, uses older cross-sections). ±30 DU
+    moves the top of the atmosphere by ±0.17 W/m² in the study and by
+    0.2 in Kim & Ramanathan's Table 2. Ozone with the black-body Sun
+    also reaches 0.1412, but the air then absorbs 67 W/m²: ozone alone
+    fixes the albedo for the wrong reason, and the spectrum has to change
+    with it. Issue #653.
   - *No O₂.* Hogan & Matricardi (2020, Table 4) give 1.25 W/m² at the top
     of the atmosphere over a daytime mean of 680.5, that is −0.0018.
     Their N₂ collision-induced absorption, 0.062 W/m², is negligible.
@@ -1340,8 +1357,8 @@ a literature check of every number and citation (the full audit is in the
   retired on 2026-11-25 with issue #655, until the total is compared with
   LBLRTM, #715): its responses to CO₂ and to water are checked against
   LBLRTM on RFMIP's field instead, not "about 70". The observed 72-73
-  W/m² (Kim & Ramanathan; CERES 73.0) holds the ozone, O₂ and aerosols
-  the shortwave does not.
+  W/m² (Kim & Ramanathan; CERES 73.0) holds the O₂ and aerosols the
+  shortwave does not, and the ozone it holds over an oxygen air.
 - **The haze's reflection and absorption** (`HAZE_ALBEDO`,
   `HAZE_ABSORPTION`) are the legacy values, fitted on Titan's Bond albedo
   taken as 0.27 under the legacy Rayleigh law; they are not refitted in
@@ -1508,7 +1525,11 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   the observed 0.2915 to 0.293, about 1.9 to 2.5 K at the column's own
   cloudy-sky slope, 2.0 W/m²/K (1.98 from 284 to 290 K; Koll & Cronin
   2018's clear-sky 2.2 W/m²/K gives 1.7 to 2.2 K); the 20-level grid
-  adds about 0.3 W/m² (0.15 K) under the clouds.
+  adds about 0.3 W/m² (0.15 K) under the clouds. Since #705 the cloud
+  albedo is fitted with ozone over the climate's own ground: Earth's
+  measured air, with its ozone, has a Bond albedo of 0.2913 at 288 K
+  and its 280 ppm climate is 288.02 K (`earth_has_its_climate`); the
+  reference Earth without O₂ has 0.3070.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B),
 Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev

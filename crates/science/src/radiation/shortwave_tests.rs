@@ -6,6 +6,7 @@ use super::*;
 use crate::constants::{SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
 use crate::radiation::column::{Profile, levels};
 use crate::radiation::gases::PartialPressures;
+use crate::radiation::ozone::{EARTH_OZONE_COLUMN, molecules_per_cm2};
 use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::starlight::{SOLAR_METALLICITY, star_bands};
 use crate::radiation::test_points::{EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_SURFACE_K};
@@ -115,7 +116,7 @@ fn the_fast_depth_is_the_depth() {
 /// reflected or absorbed by the air (`albedo + air = 1`, an identity of
 /// the adding method); the albedo grows with the ground's and with the
 /// clouds' reflectance, and the air absorbs a share of the light, with
-/// or without Rayleigh scattering.
+/// or without Rayleigh scattering, with or without its ozone.
 #[test]
 fn paths_do_not_depend_on_the_ground() {
     let air = PartialPressures {
@@ -130,9 +131,16 @@ fn paths_do_not_depend_on_the_ground() {
     )
     .expect("Earth's air makes a column");
     let bands = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY).bands;
-    for rayleigh_550 in [NO_RAYLEIGH, rayleigh_depth_550(&air, STANDARD_GRAVITY.0)] {
+    let ozone = molecules_per_cm2(EARTH_OZONE_COLUMN);
+    let cases = [
+        (NO_RAYLEIGH, 0.0),
+        (rayleigh_depth_550(&air, STANDARD_GRAVITY.0), 0.0),
+        (rayleigh_depth_550(&air, STANDARD_GRAVITY.0), ozone),
+    ];
+    for (rayleigh_550, ozone) in cases {
         let paths = Paths::through(
             &Air {
+                ozone,
                 haze: (0.0, 1.0),
                 rayleigh_550,
                 column: Some(&column),

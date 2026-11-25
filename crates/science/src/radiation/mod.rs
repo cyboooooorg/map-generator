@@ -8,6 +8,7 @@ pub(crate) mod fast_math;
 pub mod gases;
 pub(crate) mod ktable;
 pub mod methane;
+pub mod ozone;
 pub(crate) mod rayleigh;
 #[cfg(test)]
 mod rfmip_tests;

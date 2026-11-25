@@ -4,10 +4,10 @@
 
 use crate::ContractError;
 use science::units::{
-    AstronomicalUnit, Bar, Day, Degree, Dex, EarthFlux, EarthMass, EarthRadius, Fraction, Gyr,
-    JoulePerSquareMetre, Kelvin, Kilogram, KilogramPerCubicMetre, Metre, MetrePerSecondSquared,
-    Pascal, Radian, Second, SolarLuminosity, SolarMass, SolarRadius, Tesla, Watt,
-    WattPerSquareMetre, Year,
+    AstronomicalUnit, Bar, Day, Degree, Dex, DobsonUnit, EarthFlux, EarthMass, EarthRadius,
+    Fraction, Gyr, JoulePerSquareMetre, Kelvin, Kilogram, KilogramPerCubicMetre, Metre,
+    MetrePerSecondSquared, Pascal, Radian, Second, SolarLuminosity, SolarMass, SolarRadius, Tesla,
+    Watt, WattPerSquareMetre, Year,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
@@ -135,6 +135,7 @@ number_node_value!(
     Gyr,
     Degree,
     Dex,
+    DobsonUnit,
 );
 
 impl NodeValueOf for Fraction {

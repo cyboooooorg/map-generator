@@ -2,9 +2,11 @@
 
 Seen from: the Bond albedo and the outgoing heat of a rocky planet whose
 air holds oxygen (the `Oxidising` and `Modern` biospheres of planet PR
-2d-4). Nothing of this page is in the app yet: it is the study behind
-issues #653 (ozone, O₂ and aerosols in the shortwave) and #704 (ozone in
-the longwave), [Wiki study 34](https://github.com/cyboooooorg/map-generator/wiki/34-ozone-oxygen-aerosols-audit).
+2d-4). It is the study behind issues #653 (ozone, O₂ and aerosols in
+the shortwave) and #704 (ozone in the longwave),
+[Wiki study 34](https://github.com/cyboooooorg/map-generator/wiki/34-ozone-oxygen-aerosols-audit).
+Ozone's shortwave is in the app (see [In the app](#in-the-app)); its
+longwave and O₂'s bands are not yet.
 
 ## Short answer
 
@@ -107,9 +109,13 @@ al. 2013, Table 2; Atmos 1-D model; DU converted here):
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | $T_\text{eff}$ (K) | 7000 | 6750 | 6500 | 6250 | 6000 | 5800 | 5750 | 5500 | 5250 | 5000 | 4750 | 4500 | 4250 |
 | O₃ (DU) | 447 | 409 | 357 | 309 | 272 | 197 | 190 | 119 | 153 | 123 | 97 | 97 | 130 |
-| Ratio to the Sun | 2.27 | 2.08 | 1.81 | 1.57 | 1.38 | 1 | 0.96 | 0.60 | 0.78 | 0.62 | 0.49 | 0.49 | 0.66 |
+| Ratio to the Sun | 2.26 | 2.08 | 1.81 | 1.57 | 1.38 | 1 | 0.96 | 0.60 | 0.77 | 0.62 | 0.49 | 0.49 | 0.66 |
 
-The grid is not monotonic below the G stars. For M dwarfs the column
+The ratios are the table's columns in cm⁻² over the Sun's 5.3e18 (the
+app's calibration 1 takes them so; the DU row is rounded). The table
+gives the Sun no temperature: the 5800 K above is this page's, and the
+app places the Sun at its nominal 5772 K. The grid is not monotonic
+below the G stars. For M dwarfs the column
 depends on the star's activity more than on its temperature: Segura et
 al. (2005, Table 2) find 164 DU around the active AD Leo (3400 K) and
 484 DU around GJ 643, but 45 to 119 DU around quiescent model M dwarfs of
@@ -235,12 +241,56 @@ surface albedo raised to reproduce Earth.
 
 ### What it does now
 
-Nothing of this page. The shortwave absorbs in water vapour and CO₂
-only, from 0.7 µm redward (`shortwave.bin`); the longwave holds water
-and CO₂; O₂ enters only through its Rayleigh scattering and as a
-broadener. `CLOUD_ALBEDO` (0.276) is fitted on Earth's Bond albedo with
-the absorbers the column has, and so absorbs what it lacks. See
+**Ozone's shortwave** (`science::radiation::ozone`, issues #653 and
+#705):
+
+- **The column.** `ozone_column(o2, star)` gives an air's ozone in
+  Dobson units from its O₂ and its host's effective temperature:
+  calibration 1 below (`Calibration:`). The climate computes it once
+  per star (`system::planet::climate::Light::ozone`), passes it to
+  `albedo::shortwave_budget`, and records it as
+  `planet.climate.ozone-column` (one node per star, when positive) from
+  the bare air's O₂ and the star's temperature; the Bond albedo derives
+  from it. The reference bodies hold no O₂ until planet PR 2d-4, so they
+  hold no ozone yet.
+- **The cross-sections.** Serdyuchenko et al. 2014's file, 213 to
+  1100 nm at 223 and 233 K, reduced to the k-tables' eight g-points on
+  each of the albedo's 240 bands (sorted samples, means over the
+  g-intervals) by `tools/opacity-table --ozone` into
+  `crates/science/data/ozone.tsv` (provenance, SHA-256 and terms in
+  `crates/science/data/OPACITY.md`). A band holds no ozone past 1.1 µm
+  (the file's end) and takes the first band's values before 213 nm.
+- **The layer.** In every band, the column at 223 K lies on top of the
+  air as a pure absorber (`shortwave::Paths::through`): each g-point
+  `g` is a layer of slant depth $D\,\sigma_g N$ ($D$ = 1.66, $N$ the
+  column in molecules per cm², one Dobson unit 2.687e16), of weight
+  $w_g$, placed above the band's paths; g-points whose depth is under
+  0.1 are merged, as for the gases. Without ozone the paths are the same
+  as before, bit for bit.
+
+The longwave still holds water and CO₂ only, and O₂ enters only through
+its Rayleigh scattering and as a broadener (its bands are the third pull
+request of the plan below). `CLOUD_ALBEDO` (0.322) is fitted on Earth's
+Bond albedo with ozone in, over the climate's own ground (calibration 2
+below). See
 [radiative-transfer.md](radiative-transfer.md#where-it-departs-from-the-science).
+
+**Measured** (Earth's air at 77 % over 288 K, 340.25 W/m²; table Sun the
+app's table of spectra at 5772 K, TSIS-1 the measured Sun of the tests):
+
+| Sun | Ozone | Clear-sky albedo (ground 0.122) | Clear-sky air absorbs | All-sky Bond albedo, climate's ground 0.1445, `CLOUD_ALBEDO` 0.296 |
+| --- | --- | --- | --- | --- |
+| Table | none | 0.1579 | 50.73 W/m² | 0.3038 |
+| Table | 300 DU | 0.1403 | 63.39 | 0.2814 |
+| TSIS-1 | none | 0.1556 | 50.56 | not run |
+| TSIS-1 | 300 DU | 0.1411 | 61.39 | not run |
+
+Ozone takes 10.83 W/m² of the clear-sky light under TSIS-1 and 12.67
+under the table's Sun, against Kiehl & Trenberth 1997's 13.9 (older
+cross-sections). With the 233 K cross-sections instead of 223 K it
+absorbs 0.33 % more, a single pass measured on the table's Sun. With
+0.322 the climate's Earth (ground 0.1445, clouds 0.682) has a Bond
+albedo of 0.2929.
 
 ### What the study measured
 
@@ -281,10 +331,10 @@ Coddington et al. 2021). Measured, 340.25 W/m²:
   albedo falls by 0.0033 at 3400 K, 0.0109 at 4500 K, 0.0334 at 5772 K
   and 0.0539 at 6500 K.
 
-### Where it would depart
+### Where it departs
 
-These are the departures an implementation would carry; none is in the
-code yet.
+The departures of ozone's shortwave are in the code; those of its
+longwave, of O₂'s bands and the aerosols' are the plan's (below).
 
 **Decided with the user (2026-11-25).** The measured Sun (#655) lands
 before ozone's shortwave; #705 refits `CLOUD_ALBEDO` over the climate's
@@ -306,7 +356,12 @@ O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
   An air without O₂ holds none.
 - **A pure absorber above the air**, at one temperature (223 K): ozone
   lies above 80 to 90 % of the air's mass at 225 to 232 K. The probe
-  bounds the error at 0.0003 of albedo.
+  bounds the error at 0.0003 of albedo; 233 K absorbs 0.33 % more.
+- **One column per star.** Around several stars, each star's light
+  crosses the column its own temperature gives (`Light::ozone`), as if
+  each star alone made the planet's ozone; the air holds one column in
+  reality, made by the stars' ultraviolet together. No source treats a
+  planet of two hosts.
 - **No ozone heating.** Ozone's absorption warms the stratosphere; the
   column's stratosphere is isothermal at its skin temperature, 214 K for
   Earth, colder than the 225 to 232 K of the ozone layer. Its 9.6 µm
@@ -323,6 +378,51 @@ O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
   volcanism): the schemes that exist need winds, seas and soils, and
   their sources elsewhere are "virtually unknown" (Way et al. 2017,
   §4.6). The aerosols' effect on Earth stays inside `CLOUD_ALBEDO`.
+
+## Calibrations
+
+### Calibration 1: the column (`ozone_column`)
+
+What: 300 DU (NASA Ozone Watch; Kim & Ramanathan 2008, Table 2) times
+the ratio of the host's column to the Sun's at present O₂: Rugheimer et
+al. 2013's Table 2 over 4250 to 7000 K, Segura et al. 2005's quiescent
+M dwarfs at 3100, 3400 and 3650 K (1.2e18, 2.4e18 and 3.2e18 over their
+Sun's 8.4e18 cm⁻²), the Sun at 5772 K, linear in temperature between
+points and held past the ends; none without O₂. Searched and not found:
+a column law in both O₂ and the star's ultraviolet, a 3-D model of a
+host other than the Sun, and one 1-D grid over all the hosts whose Sun
+gives the observed 300 DU (Rugheimer et al.'s gives 197 DU; Segura et
+al.'s gives 313 DU but holds M dwarfs only), hence the ratios. The column does not follow the amount
+of O₂ (the app's oxygen airs are `Modern`). Decided with the user on
+2026-11-25. Tests: the column at each grid point of both tables and at
+the Sun (`the_column_follows_rugheimers_and_seguras_ratios`).
+
+### Calibration 2: `CLOUD_ALBEDO` (0.296 to 0.322)
+
+The method is unchanged: bisection to three digits on Earth's Bond
+albedo, 0.293 (Stephens et al. 2015, cited in
+[radiative-transfer.md](radiative-transfer.md#sources)). The inputs change (#705, decided
+2026-11-25): the climate's own ground, 0.1445 (one ocean at 288 K,
+Earth's obliquity, the ice weighted by sunlight), instead of CERES's
+0.122, and the 300 DU of Earth's O₂. Fit 0.32233, kept 0.322, which gives
+0.29286. It was 0.296 (ground 0.122, no ozone, table Sun). It moves
+the calibrations fitted through the climate's Earth:
+`SNOWBALL_WARM_BAR` 10.2 to 10.1 bar
+([planet-atmospheres.md](planet-atmospheres.md#calibration-of-snowball_warm_bar-refit)).
+The O₂-free bodies (all of them until planet PR 2d-4) hold no ozone,
+so they come out brighter than before: the planet of the boil tests
+went from 0.340 to 0.3515, and the tests moved it to half Earth's mass
+to keep it in the boil band.
+
+### Calibration 3: the test window of ozone's clear-sky share (10 to 14 W/m²)
+
+`earths_ozone_takes_its_share_of_the_measured_sun` holds the light the
+300 DU take from TSIS-1 under clear skies in 10 to 14 W/m² of 340.25
+(decided with the user, 2026-11-25). The upper end is Kiehl & Trenberth
+1997's 14 W/m² of 342 (13.9 at 340.25); the lower end is the study's
+probe, 10.84, rounded down, not a source. Searched and not found: a
+global-mean line-by-line value of ozone's shortwave absorption with
+current cross-sections and a measured Sun. Measured: 10.83 W/m².
 
 ## Sources
 

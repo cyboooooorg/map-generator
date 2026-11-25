@@ -362,6 +362,6 @@ pub(crate) fn climate_of(
 ) -> Result<(Climate, ClimateInputs, Settle), InteriorError> {
     let inputs = ClimateInputs::of(bare, rotation, Bar(0.0)).expect("a ground has a surface");
     let solved = solve(&inputs, draw);
-    let climate = record(&solved, bare, rotation, draw, trace)?;
+    let climate = record(&solved, &inputs, bare, rotation, draw, trace)?;
     Ok((climate, inputs, solved.settle))
 }

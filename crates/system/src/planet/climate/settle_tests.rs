@@ -11,6 +11,7 @@ use super::{
 };
 use science::balance::{BRACKET_TOLERANCE, TOLERANCE};
 use science::radiation::gases::PartialPressures;
+use science::radiation::ozone::ozone_column;
 use science::surface::Liquid;
 use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
 
@@ -251,6 +252,7 @@ pub(super) fn cold_methane_world() -> ClimateInputs {
             effective_temperature: COLD_STAR,
             metallicity: COLD_METALLICITY,
             equilibrium: COLD_EQUILIBRIUM,
+            ozone: ozone_column(Bar(COLD_AIR.o2), COLD_STAR),
         }],
         air: COLD_AIR,
         water: COLD_WATER,

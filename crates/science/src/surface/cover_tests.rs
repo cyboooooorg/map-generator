@@ -6,6 +6,7 @@ use super::*;
 use crate::constants::{EARTH_MEAN_RADIUS, SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
 use crate::radiation::albedo::{ShortwaveCache, Underneath, shortwave_budget};
 use crate::radiation::clouds::cloud_cover;
+use crate::radiation::ozone::ozone_column;
 use crate::radiation::starlight::SOLAR_METALLICITY;
 use crate::radiation::test_points::{EARTH_AIR, EARTH_SURFACE_K};
 use crate::radiation::veils::sulphuric_deck;
@@ -109,6 +110,7 @@ fn ice_cover_grows_as_the_planet_cools() {
 fn bond_albedo_clear(cover: &Cover, air: &PartialPressures, t: f64) -> f64 {
     shortwave_budget(
         air,
+        ozone_column(Bar(air.o2), SOLAR_EFFECTIVE_TEMPERATURE),
         Kelvin(t),
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
@@ -263,6 +265,7 @@ fn earth_keeps_its_bond_albedo() {
     );
     let bond = shortwave_budget(
         &air,
+        ozone_column(Bar(air.o2), SOLAR_EFFECTIVE_TEMPERATURE),
         t,
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
