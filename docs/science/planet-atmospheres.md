@@ -112,8 +112,9 @@ The rewrite ports the law to `science::escape::energy_limited_loss`
 `MIN_ENVELOPE` and `WATER_PER_HYDROGEN`, the 9 kg of water per kg of
 hydrogen of the next section. The system engine's step is
 `system::planet::escape::escaped`: it reads the star's XUV history, applies
-the law to the formed body and returns the trial before and after the loss
-(the water step below needs the first), each value with its cause node.
+the law to the body the boil-off left (next section) and returns the trial
+before and after the loss (the water step below needs the first), each
+value with its cause node.
 
 `envelope_after_escape` caps the loss at the envelope, lowers the mass by
 what is lost, and sets the envelope to zero once it falls under 0.1 % of
@@ -139,12 +140,14 @@ least half; Earth, Uranus and Neptune are unchanged.
 
 ### Boil-off and core-powered mass loss (study 30)
 
-The XUV law above is the model's only loss of a nebular envelope. Two
-more losses are driven by the star's bolometric light, not its XUV, so
-they act round a host without a corona too (an A star). This section is
-the study of issue #697
-([study 30](https://github.com/cyboooooorg/map-generator/wiki/30-core-powered-loss-audit));
-the law it proposes is not in the code yet.
+Before the XUV law above, a nebular envelope loses what the star's
+bolometric light boils off. Two losses are driven by that light, not
+the XUV, so they act round a host without a corona too (an A star). This
+section is the study of issue #697
+([study 30](https://github.com/cyboooooorg/map-generator/wiki/30-core-powered-loss-audit))
+and the law the rewrite implements from it:
+`science::escape::boil_off_ceiling`, chained by
+`system::planet::boil_off::boiled_off`.
 
 **Model.** When the disc goes, a young planet that fills its Bondi
 sphere loses its outer layers as an isothermal Parker wind, cools and
@@ -192,44 +195,75 @@ started with below 20 %:
 radiative layer alone. Photoevaporation "should start right after
 boil-off around 1 Myr" (Tang et al. 2024, § 3.3).
 
-**The law proposed.** One bolometric law, then the XUV law, never two
-bolometric ones (the same outflow would be counted twice):
+**The law.** One bolometric law, then the XUV law, never two
+bolometric ones (the same outflow would be counted twice): Gupta &
+Schlichting's slow loss is not added on top of the ceiling.
 
 1. `science::escape::boil_off_ceiling(core_mass, flux)`: Table 2,
-   bilinear in `log M_c` and `log F` of `log f`.
-2. In the chain, after the body is formed on its drawn envelope and
-   before `escaped`: an envelope above the ceiling is cut to it, the body
-   built again, the ceiling and the boiled-off mass recorded with their
-   causes. Not read from 20 M⊕ (the grid's end; the giants are #497).
-3. Then the XUV escape and `MIN_ENVELOPE`, as above.
+   bilinear in `log M_c` and `log F` of `log f`, so it reads the table's
+   cells back exactly:
+
+   ```text
+   log c = Σ w_ij log f_ij,   w bilinear in (log M_c, log F)
+   ```
+
+2. In the chain (`system::planet::bare::formed`), after the body is
+   formed on its drawn envelope `f` and before `escaped`: when `f > c`
+   the fraction left is `c`, the mass `M_c / (1 − c)`, and the body is
+   built again. The ceiling (`planet.envelope.boil-off-ceiling`, from the
+   mass without the envelope and the bolometric flux), the fraction left
+   (`planet.envelope.after-boil-off`), the mass left
+   (`planet.mass.after-boil-off`) and the envelope boiled off
+   (`planet.envelope.boiled-off`) are recorded with their causes; when
+   `f ≤ c` nothing is recorded. Only a mini-Neptune is read: not from
+   20 M⊕ (`GAS_GIANT_MIN_MASS`, the grid's end; the giants are #497).
+3. Then the XUV escape and `MIN_ENVELOPE` (kept at 1e-3), as above, on
+   what is left.
 
 The core mass is the mass without the envelope; the flux is the present
-bolometric flux of all stars, the only one the timeline holds (the boil-off
-happens about 1 Myr after the disc, before the ZAMS the stellar tracks
-start at). The alternative, Gupta & Schlichting 2020's evolution over the
-age in place of the ceiling, strips the same reference planets and gives
-the share of super-Earths growing with age that the ceiling lacks, but
-starts from a state Tang et al. show overestimates the later loss, and
-its rates are disputed by orders of magnitude (Misener et al. 2025;
-Modirrousta-Galian & Korenaga 2026).
+bolometric flux of all stars, the only one the timeline holds (the
+boil-off happens about 1 Myr after the disc, before the ZAMS the stellar
+tracks start at; #700 tracks the flux at disc dispersal). The
+alternative, Gupta & Schlichting 2020's evolution over the age in place
+of the ceiling, strips the same reference planets and gives the share of
+super-Earths growing with age that the ceiling lacks, but starts from a
+state Tang et al. show overestimates the later loss, and its rates are
+disputed by orders of magnitude (Misener et al. 2025; Modirrousta-Galian
+& Korenaga 2026).
 
-**Calibration.** Two values no source gives, searched in study 30:
+**Calibration.** Two values no source gives, searched in study 30 (no
+published ceiling off Tang et al.'s grid, no value for their "−"):
 
-- Off the grid (below 1.5 M⊕, below 1 F⊕, above 1 000 F⊕), the end
-  segments of each axis extended in log-log, as `science::xuv`'s
-  saturation. The physics fixes the direction (lighter and hotter planets
-  lose more, Owen & Wu 2016), not the slope. Clamping at the edges
-  instead changes none of the 22 reference outcomes.
-- A "−" cell reads 0.20, the highest envelope drawn below 20 M⊕: a
-  ceiling there never cuts a draw.
+- `OFF_GRID`: off the grid (below 1.5 M⊕, below 1 F⊕, above 20 M⊕ or
+  1 000 F⊕), the end segment of each axis is extended in log-log from the
+  grid's edge, as `science::xuv`'s saturation. The physics fixes the
+  direction (lighter and hotter planets lose more, Owen & Wu 2016), not
+  the slope. Off both axes at once the two extensions add, without the
+  bilinear cross term: with it, a 0.3 M⊕ core would be given back 1 % of
+  envelope at 2 300 F⊕, the cross term of the cell (1.5 to 2.4 M⊕, 300 to
+  1 000 F⊕) growing with both distances. Clamping at the edges instead
+  changes none of the 22 reference outcomes; it keeps more on Earth
+  (1.18 % against 0.48 %) and on ref 8's hot Neptunes (2.6 % and 7.3 %
+  against 0.28 % and 2.6 %).
+- `NO_BOIL_OFF`: a "−" cell reads 0.20, the highest envelope drawn below
+  20 M⊕ (Lopez & Fortney 2014's last column): a ceiling there never cuts
+  a draw.
 
-A "0" cell reads 1e-7, a definition: every neighbour is under
-`MIN_ENVELOPE`, so the value decides nothing.
+`NOTHING_LEFT`: a "0" cell reads 1e-7, a definition: every neighbour is
+under `MIN_ENVELOPE` (the starred cells are 2 to 6 × 10⁻⁶), so the value
+decides nothing. A ceiling read above one is one.
 
-**Validation** (study 30, derived from the table):
+**Validation** (study 30, derived from the table; the tests of
+`science::escape` and `system::planet::boil_off` check each line):
 
+- The 32 numeric cells of Table 2 read back to 1e-12; the 14 "−" cells
+  are at least 0.20; the 3 "0" cells and the three starred ones are under
+  `MIN_ENVELOPE`. Wherever the ceiling lies between 1e-5 and 0.15, it
+  falls with the flux and rises with the core mass, on and off the grid.
 - The largest core the ceiling strips (under `MIN_ENVELOPE`) is 1.37 M⊕
-  at 10 F⊕, 2.97 M⊕ at 100 F⊕ and 6.31 M⊕ at 1 000 F⊕: `R ∝ F^0.081`.
+  at 10 F⊕, 2.02 M⊕ at 30 F⊕, 2.97 M⊕ at 100 F⊕ and 6.31 M⊕ at
+  1 000 F⊕: with `R ∝ M^(1/4)` (Lopez & Fortney 2014, eq. 1),
+  `R ∝ F^0.081` from 30 to 1 000 F⊕.
   Measured: `α = 0.069 (+0.019/−0.023)` (Berger et al. 2023), 0.08
   predicted for core-powered loss (Rogers et al. 2021). Round one star,
   −0.108 in period against −0.09 (+0.02/−0.04) (Van Eylen et al. 2018)
@@ -239,22 +273,36 @@ A "0" cell reads 1e-7, a definition: every neighbour is under
   adds to it.
 - Earth (1 M⊕, 1 F⊕): ceiling 0.48 %, so a nebular envelope above it is
   trimmed but not removed; Earth's bareness comes from capturing little
-  (Lammer et al. 2014), not from this law.
+  (Lammer et al. 2014), not from this law. In the chain, an Earth at
+  1 au with Lammer et al.'s largest envelope, 2.5 %, keeps 0.40 % after
+  the boil-off and the XUV escape (2.29 % before the boil-off was
+  chained).
 - HD 56414 b, a Neptune of an 8 500 K A star at 274 F⊕ (Giacalone et al.
   2022), keeps 2.6 % at 8 M⊕ and 13 % at 14 M⊕: consistent with its
-  existence.
+  existence. With Lopez & Fortney 2014's envelopes at 420 Myr, the
+  ceiling's envelope reaches its 3.71 ± 0.20 R⊕ from a core of about
+  10 M⊕ (3.74 R⊕), 5.1 R⊕ at 14 M⊕ and 3.1 R⊕ at 8 M⊕: the law puts its
+  core in the upper half of Giacalone et al.'s range.
+- A planet of an A star without XUV, a 1.92 M⊕ core with 2.74 % at
+  802 F⊕ (ref 8 d), is rocky after the chain; before the boil-off was
+  chained it kept its 2.74 %.
 - The reference systems: four placements lose their envelope, ref 6 c, d
   and ref 8 d, e (cores of 0.57 to 3.7 M⊕ at 228 to 802 F⊕ round A
   stars, envelopes of 0.1 to 3.9 %, ceilings under 2e-5); ref 8's hot
   Neptunes and ref 7's earth-like planet keep theirs.
 
 **Limitations.** Tang et al.'s grid is for rocky cores round a Sun-like
-star at constant flux; icy cores are more fragile. The present flux
-stands for the flux at disc dispersal. The near-ultraviolet escape of
-hot stars (Balmer-driven, García Muñoz & Schneider 2019), which strips
-Neptunes of A stars within 0.1 AU (Giacalone et al. 2022), is a separate
-channel the model lacks. The energy-limited rate of Owen & Schlichting
-2024 (eq. 17) divides the law above by 4 for the same `η`.
+star at constant flux; icy cores are more fragile, and the model reads
+the mass without the envelope, water included, as the rocky core. Next
+to the "−" cells the calibration sits under a published value (13 M⊕:
+"−" at 30 F⊕, 23.49 % at 100 F⊕), so near 12 M⊕ and 30 to 47 F⊕ the
+ceiling rises with the flux from 0.196 to 0.20 and can trim a 20 % draw
+by under 2 % of itself. The present flux stands for the flux at disc
+dispersal. The near-ultraviolet escape of hot stars (Balmer-driven,
+García Muñoz & Schneider 2019), which strips Neptunes of A stars within
+0.1 AU (Giacalone et al. 2022), is a separate channel the model lacks
+(#701). The energy-limited rate of Owen & Schlichting 2024 (eq. 17)
+divides the XUV law by 4 for the same `η` (#702).
 
 ## Runaway greenhouse, water kept and tectonic regime
 
@@ -3923,6 +3971,9 @@ another paper, from memory) is said where it is used.
 - Lisse et al. 2021, *Icarus* 356, 114072,
   doi:10.1016/j.icarus.2020.114072, supplementary Table 2 (read, and
   its appendix Table 2 in arXiv:2009.02277).
+- Lopez and Fortney 2014, *ApJ* 792, 1, arXiv:1311.0329, eq. 1 (a
+  rocky core's radius, `R ∝ M^(1/4)`) and Tables 2 to 4 (the envelope's
+  thickness, through `science::envelope`).
 - Lora and Ádámkovics 2017, arXiv:1610.06277, Titan's near-surface
   methane humidity (read).
 - Lyons, Reinhard and Planavsky 2014,

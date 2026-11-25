@@ -61,6 +61,21 @@ pub(crate) const TABLE_MASS_USED: &str = "planet.table-mass-used";
 pub(crate) const BOLOMETRIC_FLUX: &str = "planet.bolometric-flux";
 /// Mass of a mini-Neptune's hydrogen-helium envelope, `f M`.
 pub(crate) const ENVELOPE_MASS: &str = "planet.envelope.mass";
+/// The largest envelope mass fraction a mini-Neptune keeps after the
+/// boil-off, read in Tang, Fortney & Murray-Clay 2024's Table 2
+/// (`science::escape::boil_off_ceiling`) at its mass without the envelope
+/// and its bolometric flux. Recorded only when it cuts the envelope.
+pub(crate) const BOIL_OFF_CEILING: &str = "planet.envelope.boil-off-ceiling";
+/// Envelope mass fraction of a mini-Neptune once the boil-off has cut it
+/// to its ceiling, from the drawn fraction and the ceiling. Recorded only
+/// when the ceiling cuts it.
+pub(crate) const ENVELOPE_AFTER_BOIL_OFF: &str = "planet.envelope.after-boil-off";
+/// Mass of a mini-Neptune once the boil-off has cut its envelope:
+/// `M_c / (1 - c)`, its mass without the envelope under the fraction left.
+pub(crate) const MASS_AFTER_BOIL_OFF: &str = "planet.mass.after-boil-off";
+/// Mass of the envelope the boil-off took: the trial's mass less the mass
+/// after the boil-off. Recorded only when it is not zero.
+pub(crate) const ENVELOPE_BOILED_OFF: &str = "planet.envelope.boiled-off";
 /// Mass of the envelope lost to the XUV light of the stars over the
 /// planet's age, energy-limited (Owen & Wu 2017, eq. 19) on the formed
 /// body's radius and mass, capped by the envelope `f M`. Recorded only

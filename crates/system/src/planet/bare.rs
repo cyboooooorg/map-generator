@@ -1,11 +1,12 @@
 //! The planet chained from its draw to its bare air: the composition, the
-//! body, the escape of its envelope, its heat and, for a planet with a
+//! body, the boil-off and the escape of its envelope, its heat and, for a planet with a
 //! surface, its water, its tectonic regime, its core and its air: what it
 //! outgasses, what the cosmic shoreline keeps, the methane photolysis, the
 //! reducing air (its CO2 held back), the cold trap at the equilibrium
 //! temperature and the photochemistry, before any climate. Ported from
 //! `legacy-final:crates/mapgen/src/planet/mod.rs` (`chain`, l.480-640,
-//! and `bare_air`, l.895-1075), in their order.
+//! and `bare_air`, l.895-1075), in their order, with the boil-off of
+//! study 30 (not in legacy) between the body and the escape.
 //!
 //! Not in this chain: the climate, which [`super::settled`] chains after
 //! it (the condensation it drives, and the reducing-air fallback that
@@ -15,6 +16,7 @@
 //! chain with the climate.
 
 use super::air::air;
+use super::boil_off::boiled_off;
 use super::core::{CoreRecord, core};
 use super::draws::{Drawn, draw};
 use super::enveloped::{Body, Exposed};
@@ -33,8 +35,8 @@ use timeline::{Atmosphere, Heat, Seed, TectonicRegime, Trace, Traced, Water};
 /// A planet from its draw to its bare air.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Bare {
-    /// The trial at the mass the planet kept: after the escape of its
-    /// envelope and, in a runaway, after the steam it lost.
+    /// The trial at the mass the planet kept: after the boil-off and the
+    /// escape of its envelope and, in a runaway, after the steam it lost.
     pub trial: Trial,
     /// The composition the planet kept, at the same steps as `trial`.
     pub drawn: Drawn,
@@ -44,7 +46,9 @@ pub(crate) struct Bare {
     /// first loss left: the cosmic shoreline's later loss keeps it
     /// (legacy `mod` l.577-590).
     pub heat: Heat,
-    /// The envelope the escape took; `None` when it took none.
+    /// The envelope the XUV escape took; `None` when it took none. What
+    /// the boil-off took before it is in the trace
+    /// (`planet.envelope.boiled-off`), in the ancestry of `trial.mass`.
     pub envelope_lost: Option<Traced<Kilogram>>,
     /// The surface; `None` for a planet that kept an envelope.
     pub surface: Option<BareSurface>,
@@ -87,7 +91,8 @@ pub(crate) fn bare(trial: &Trial, seed: Seed, trace: &mut Trace) -> Result<Bare,
 
 /// The planet `trial` of composition `drawn`, chained in legacy's order:
 ///
-/// 1. its body ([`interior`]), the escape of its envelope ([`escaped`])
+/// 1. its body ([`interior`]), the boil-off of its envelope down to its
+///    ceiling ([`boiled_off`]), the escape of what is left ([`escaped`])
 ///    and its heat ([`heat`]) on the body that is left;
 /// 2. no surface when the planet kept an envelope, at or above
 ///    [`MIN_ENVELOPE`] (legacy's test); under it the escape left no
@@ -140,7 +145,7 @@ pub(super) enum Ground {
 /// ([`surface_pass`]).
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Formed {
-    /// The trial after the escape of the envelope.
+    /// The trial after the boil-off and the escape of the envelope.
     pub trial: Trial,
     /// The composition at the same step.
     pub drawn: Drawn,
@@ -194,7 +199,8 @@ pub(super) fn formed(
     trace: &mut Trace,
 ) -> Result<Ground, InteriorError> {
     let body = interior(trial, drawn, trace)?;
-    let escaped = escaped(trial, drawn, body, trace)?;
+    let boiled = boiled_off(trial, drawn, body, trace)?;
+    let escaped = escaped(&boiled.trial, &boiled.drawn, boiled.body, trace)?;
     let heat = heat(
         &escaped.trial,
         &escaped.body,
