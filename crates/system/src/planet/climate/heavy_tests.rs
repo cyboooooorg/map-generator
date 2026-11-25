@@ -1433,15 +1433,18 @@ const TENTH_OF_N2: [f64; 5] = [0.0, -1.0, 0.0, 0.0, 0.0];
 /// 0.03 bar on the formed body (legacy `recondensed()`'s `left_bar`).
 const LEFTOVER: Bar = Bar(0.03);
 
-/// Definition: the XUV fluence of the recondensed boil, J/m², 2e14: a
-/// test input about 37 times under the Sun's scaled to
+/// Definition: the XUV fluence of the recondensed boil, J/m², 1e14: a
+/// test input about 73 times under the Sun's scaled to
 /// [`F0V_BOILING_FLUX`] (7.3e15). At that one the steam run's `9 H` is
 /// 1.3e22 kg, so the water sized to leave [`LEFTOVER`] is 2.6 % of the
 /// mass, and the ice volatiles that come with it (2.7 bar of N₂) raise the
 /// Bond albedo to 0.42, out of the boil band. A smaller `9 H` leaves a
-/// planet of 7.2e-4 of water, near the 1e-3 whose first run boils in
-/// the band.
-const RECONDENSED_FLUENCE: f64 = 2.0e14;
+/// planet of less water, near the 1e-3 whose first run boils in the band.
+/// It was 2e14 (7.2e-4 of water) until the air gained its argon (#694):
+/// with Earth's 0.013 bar of argon on the case's tenth of its N₂, that
+/// planet's first run no longer boils (checked by zeroing the argon);
+/// at 1e14 it boils.
+const RECONDENSED_FLUENCE: f64 = 1.0e14;
 
 /// Definition: the rounds of the recondensed boil's water sizing, 3
 /// (legacy `recondensed()`): the body barely moves with its water.
@@ -1547,7 +1550,7 @@ fn recondensing_water() -> f64 {
 }
 
 #[test]
-#[ignore = "heavy: a full boil loop, three runs and the water sizing, 13.4 s in release"]
+#[ignore = "heavy: a full boil loop, three runs and the water sizing, 4.3 s in release"]
 fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
     let mut trace = Trace::new();
     let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(TENTH_OF_N2));

@@ -306,3 +306,29 @@ fn a_runaways_light_follows_its_steam_down_to_none() {
     let blend = DERIVED_ALBEDO + (moist - DERIVED_ALBEDO) * steam_share(TRACE_STEAM).get();
     assert!((blend - DERIVED_ALBEDO).abs() < TRACE_TOLERANCE, "{blend}");
 }
+
+/// Source: how much Earth's argon may warm it, 0.2 K: study 29's bound,
+/// over its +0.07 to +0.11 K scaled from Goldblatt et al. 2009's doubled
+/// N₂ (argon, 0.0127 bar, broadens less than N₂).
+const EARTH_ARGON_WARMING_K: f64 = 0.2;
+
+/// Source: Earth's argon as a weight, 0.0127 bar (study 29, derived from
+/// the NASA Earth fact sheet's 9340 ppm and Trenberth & Smith 2005).
+const EARTH_ARGON_BAR: f64 = 0.0127;
+
+#[test]
+fn earths_argon_warms_its_column_little() {
+    // Earth's dry air under Earth's light, with and without its argon:
+    // the argon weighs, broadens as air and steepens the dry slope.
+    let without = earth_surface(&EARTH_DRY_AIR, WattPerSquareMetre(0.0));
+    let with = earth_surface(
+        &PartialPressures {
+            ar: EARTH_ARGON_BAR,
+            ..EARTH_DRY_AIR
+        },
+        WattPerSquareMetre(0.0),
+    );
+    let warming = with - without;
+    println!("Earth's dry column: {without:.3} K, with its argon {with:.3} K ({warming:+.3} K)");
+    assert!((0.0..EARTH_ARGON_WARMING_K).contains(&warming), "{warming}");
+}

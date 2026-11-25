@@ -1,6 +1,7 @@
-//! The air of a planet with a surface: what its interior outgasses, what
-//! the cosmic shoreline keeps of it, the water a runaway keeps as vapour,
-//! the SO2 its wash-out leaves, what the stars' ultraviolet leaves of its
+//! The air of a planet with a surface: what its interior outgasses (its
+//! radiogenic argon too, study 29), what the cosmic shoreline keeps of
+//! it, the water a runaway keeps as vapour, the SO2 its wash-out leaves,
+//! what the stars' ultraviolet leaves of its
 //! methane, whether the air is reducing (and then outgasses no CO2), what
 //! the cold of its equilibrium temperature traps as gas and what the
 //! photochemistry makes of it. Ported from
@@ -11,9 +12,9 @@
 //! `planet/climate.rs` (`washed`); the laws are in `science::outgassing`,
 //! `science::volatiles`, `science::escape` and `science::photochemistry`.
 //!
-//! The climate's condensation (`condense`, the N2 and SO2 frost curves,
-//! the methane of the seas) and the reducing-air fallback, which read the
-//! surface temperature, are the climate's (`super::climate`, chained by
+//! The climate's condensation (`condense`, the N2, SO2 and argon frost
+//! curves, the methane of the seas) and the reducing-air fallback, which
+//! read the surface temperature, are the climate's (`super::climate`, chained by
 //! `super::settled`). The non-thermal
 //! loss is not in the rewrite (#658): the photolysis reads the air the
 //! shoreline kept.
@@ -29,7 +30,8 @@ use crate::Trial;
 use science::escape::{escape_velocity, shoreline_kept};
 use science::outgassing::{
     LID_SHARE, MOBILE_SHARE, NITROGEN_RECYCLED_UNDER_PLATES, RECYCLED_UNDER_PLATES, SO2_PER_S,
-    SULPHUR_IN_AIR, column_pressure, decomposed, released_under_ocean, so2_kept,
+    SULPHUR_IN_AIR, argon_degassed_share, argon_mass, column_pressure, decomposed,
+    radiogenic_argon, released_under_ocean, so2_kept,
 };
 use science::photochemistry::{
     LymanSource, methane_left, methane_survives, nitrogen_from_ammonia, reducing,
@@ -94,8 +96,13 @@ pub(crate) struct Air {
 ///    ([`SO2_PER_S`]), of which [`SULPHUR_IN_AIR`] stays. Water is vapour
 ///    only in a runaway, and then the whole inventory: it is the ocean,
 ///    not a volatile of the mantle, so neither the regime nor the
-///    seafloor holds it back. No O2 (imposed: life makes it). The CH4
-///    comes first: the CO2 waits on the reducing air (step 4).
+///    seafloor holds it back. No O2 (imposed: life makes it). Argon is
+///    the Ar-40 the mantle's potassium made ([`radiogenic_argon`] of the
+///    interior's mantle mass, the radiogenic abundance and the age, the
+///    heat's), times its own share ([`argon_degassed_share`], under a
+///    stagnant or episodic lid less) instead of the regime's, and the
+///    share the water lets through; subduction does not recycle it. The
+///    CH4 comes first: the CO2 waits on the reducing air (step 4).
 /// 2. **Shoreline** (`planet.air.shoreline-kept`): the share
 ///    [`shoreline_kept`] at the escape velocity of the whole mass
 ///    and the radius of the [`Exposed`] view: the bulk's, with the bulk
@@ -137,7 +144,8 @@ pub(crate) struct Air {
 ///    NH3 becomes N2 ([`nitrogen_from_ammonia`], added to the kept N2)
 ///    and leaves 0 bar; the photolysed CH4 stays where it survives the OH
 ///    of water vapour ([`methane_survives`] at the equilibrium
-///    temperature), 0 bar otherwise. H2O, SO2 and O2 stay as kept.
+///    temperature), 0 bar otherwise. H2O, SO2, O2 and Ar stay as kept:
+///    argon's frost is the climate's (`science::surface::condense`).
 /// 9. **Pressure** (`planet.air.pressure`): the sum of the final
 ///    partials.
 ///
@@ -195,7 +203,7 @@ pub(crate) fn air(
         hold_back && reducing(*photolysed.value(), equilibrium),
         &from,
     )?;
-    for gas in [Gas::N2, Gas::Co2, Gas::Nh3, Gas::So2] {
+    for gas in [Gas::N2, Gas::Co2, Gas::Nh3, Gas::So2, Gas::Ar] {
         let p = if gas == Gas::Co2 && *reducing.value() {
             trace.record(
                 Code::of(codes::AIR_OUTGASSED_CO2),
@@ -385,7 +393,8 @@ fn ice_traps_nitrogen(trial: &Trial, trace: &mut Trace) -> Result<Traced<bool>, 
 
 /// The volatiles of the mantle of `body`: N2, CO2, CH4, NH3 and SO2, the
 /// ice's N2 only when `traps`; the NH3 that the interior decomposes
-/// ([`decomposed`]) comes up as N2.
+/// ([`decomposed`]) comes up as N2; and its radiogenic argon
+/// ([`argon`]).
 fn mantle(
     trial: &Trial,
     drawn: &Drawn,
@@ -475,7 +484,7 @@ fn mantle(
             rest,
         ),
     ];
-    let gases = volatiles
+    let mut gases: Vec<(Gas, Bar, Vec<NodeId>)> = volatiles
         .into_iter()
         .map(|(gas, mass, own, kept)| {
             let mut from = base.to_vec();
@@ -483,7 +492,55 @@ fn mantle(
             (gas, Bar(weight(mass) * released * kept), from)
         })
         .collect();
+    gases.push(argon(trial, drawn, body, water, regime));
     Volatiles { gases }
+}
+
+/// The radiogenic argon of `body` (step 1 of [`air`]), weighed: the
+/// Ar-40 its mantle made over the trial's age ([`radiogenic_argon`] of the
+/// interior's mantle mass, the mass the heat's potassium is in, and the
+/// drawn radiogenic abundance, `10^dex`), times the share that reaches
+/// the air under the regime ([`argon_degassed_share`]: a stagnant or
+/// episodic lid degasses less) and the share the water lets through
+/// ([`released`]). A giant, which has no mantle of its own, makes none.
+fn argon(
+    trial: &Trial,
+    drawn: &Drawn,
+    body: &Body,
+    water: &Water,
+    regime: &Traced<TectonicRegime>,
+) -> (Gas, Bar, Vec<NodeId>) {
+    let bulk = body.bulk();
+    let abundance = drawn.radiogenic_abundance;
+    let mut from = vec![
+        abundance.node(),
+        trial.age.node(),
+        regime.node(),
+        water.inventory.node(),
+        bulk.surface_gravity.node(),
+        bulk.radius.node(),
+    ];
+    let mantle = match body {
+        Body::Rocky(interior) | Body::MiniNeptune { core: interior, .. } => interior.mantle_mass,
+        Body::Giant(_) => return (Gas::Ar, Bar(0.0), from),
+    };
+    from.insert(0, mantle.node());
+    let lid = matches!(
+        regime.value(),
+        TectonicRegime::Stagnant | TectonicRegime::Episodic
+    );
+    let made = radiogenic_argon(
+        *mantle.value(),
+        10f64.powf(abundance.value().0),
+        *trial.age.value(),
+    );
+    let share = argon_degassed_share(lid).get() * released(body, water).get();
+    let weight = column_pressure(
+        argon_mass(made) * share,
+        *bulk.surface_gravity.value(),
+        Metre::from(*bulk.radius.value()),
+    );
+    (Gas::Ar, weight, from)
 }
 
 /// The outgassed water vapour and O2 (step 1 of [`air`]): a runaway's

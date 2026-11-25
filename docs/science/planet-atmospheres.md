@@ -1470,10 +1470,12 @@ and aphelion 30.34 AU).
 
 Study 29 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/29-argon-audit),
-for issue #694, prepares argon for the chain. The column carries argon
-(`PartialPressures.ar`) and `science` makes it (`science::outgassing`); the
-chain does not outgas it yet. This section is the law, with its sources and
-its checks; the partials stay weights (*Earth's N₂ target*).
+for issue #694, gives the chain its argon: `science::outgassing` makes it,
+`system::planet::air` outgasses it (`planet.air.outgassed.ar`, then
+`planet.air.kept.ar`), the column carries it (`PartialPressures.ar`) and the
+climate condenses it (`planet.climate.air.ar`, `planet.climate.condensate.ar`).
+This section is the law, with its sources, its checks and what the chain gives;
+the partials stay weights (*Earth's N₂ target*).
 
 **Earth's argon, measured.** Argon is 9340 ppm of the dry air by volume (NASA
 Earth fact sheet, read; Picard et al. 2008, *Metrologia* 45, 149,
@@ -1803,26 +1805,50 @@ the test checks the chain, as the N₂ test does); Venus within a factor of 2 of
 factor of 3 of 1.12e16 mol (its rock's potassium is not Earth's, and its ocean
 and shoreline are the model's); Mars as a departure, under its measured ⁴⁰Ar.
 
+**In the chain.** `system::planet::air` outgasses the argon at step 1 of the
+air: `radiogenic_argon` of the interior's mantle mass (the mass the heat's
+potassium is in, a dry planet's mantle water included, as the heat takes it),
+the drawn radiogenic abundance (`10^dex`) and the trial's age, times
+`argon_degassed_share` (a lid for a stagnant or an episodic regime) and
+`released_under_ocean`, weighed by `column_pressure`; the shoreline keeps its
+share as of every gas, and no later step of the air changes it. Its node cites
+the mantle mass, the abundance, the age, the regime, the water and the bulk's
+gravity and radius. On the reference bodies (tests `earth_weighs_its_argon`,
+`venus_titan_and_mars_hold_their_argon`): Earth 0.01294 bar (+1.9 % on 0.0127
+bar), Venus 2.80e17 mol (0.70 of Kaula's), Titan 5.09e15 mol (0.45), Mars
+2.08e14 mol (0.019, the departure below): the hand values of the table above
+within 2 % (the chain's Earth has its own radius, gravity and mantle). The
+climate's Triton-like body (`triton_like`, 1.8 Pa of argon, test
+`a_triton_like_body_keeps_its_argon_as_frost`) settles at 37.97 K with 0.38
+µbar of argon in its air, 1.7 % of it, the rest frost.
+
 **In the climate column.** Argon weighs: on Earth 0.0127 bar, 1.29 % of the air.
 It joins the column's partial pressures as a gas of 39.95 g/mol that absorbs
 nothing, broadens the lines of CO₂ and water less than N₂ does (0.78 of N₂ for
 CO₂, about 0.37 of air for water), has the heat capacity of a monatomic gas,
 20.786 J/(mol·K) = 5/2 R, and scatters light as `rayleigh.rs` already knows (see
 [radiative transfer](radiative-transfer.md#which-gases-absorb-and-where), where
-the values and their sources are). On Earth at 280 ppm, from published numbers
-only: doubling N₂, about +0.78 bar, warms the late Archean Earth by 4.4 °C in
-Goldblatt et al. 2009 and 3 to 7 K in the models quoted under *Thick nitrogen*;
+the values and their sources are; the code since study 29). On Earth at 280
+ppm, from published numbers only: doubling N₂, about +0.78 bar, warms the late
+Archean Earth by 4.4 °C in Goldblatt et al. 2009 and 3 to 7 K in the models
+quoted under *Thick nitrogen*;
 argon's 0.0127 bar, at most equally efficient, is +0.07 to +0.11 K by
 proportion, and less with its weaker broadening (derived). Argon does not close
 the gap between the reference Earth's 285.07 K and the 286 to 290 K window: it
-is missing from the weight of the air, not from its climate.
+is missing from the weight of the air, not from its climate. The code agrees:
+Earth's dry column (`EARTH_DRY_AIR` under Earth's light, test
+`earths_argon_warms_its_column_little`) warms by 0.005 K with its 0.0127 bar of
+argon, and the reference Earth, held by the carbonate thermostat at 288 K,
+does not move.
 
 **Contract.** The timeline's air is a map of the gases (`timeline::planet::Gas`,
 `#[non_exhaustive]`, kebab-case) with `surface_pressure` the sum of the
 partials. Argon enters it as `Ar` (`"ar"`): the sum of the partials stays the
 surface pressure, and the map and the viewer read Earth's third gas and Mars's
 third gas. No crate outside `system` reads the air today, so the change is
-additive; the engine version invalidates the stored timelines.
+additive. The planet chain is not wired into the system draw yet (#659): the
+regression goldens do not move and `system::ENGINE_VERSION` stays; the draw
+that wires the chain bumps it.
 
 **Departures.**
 
@@ -1838,14 +1864,21 @@ additive; the engine version invalidates the stored timelines.
   to 1.2522 Gyr (decided 2026-11-25). Not a departure any more.
 - The shoreline takes the same share of argon as of the early air; on Mars it
   leaves 0.019 of the measured ⁴⁰Ar, where MAVEN's 66 % loss would leave about
-  1.3 times it (derived: 0.0863 × 4.885e17 × 0.34 = 1.43e16 mol).
-- Primordial ³⁶Ar and ³⁸Ar are left out: half of Venus's argon, 6 mbar in all.
+  1.3 times it (derived: 0.0863 × 4.885e17 × 0.34 = 1.43e16 mol). The test
+  holds Mars under its measured ⁴⁰Ar; a time-resolved escape is issue #699.
+- Primordial ³⁶Ar and ³⁸Ar are left out: half of Venus's argon, 6 mbar in all;
+  with the argon of the ices (study 28's gate), issue #698.
 - Argon's frost takes activity 1, the most argon of the three pictures of
   a minor volatile over N₂ ice; Raoult's law would keep a few 1e-5 of it
   in the air. Under 50 K its curve rests on two data sets, and its two
   fits part by a factor 1.6 at 38 K; under 26 K it carries on the slope.
 - The column treats the partials, weights, as shares of the moles (existing
   convention): argon's 1.29 % by weight is 0.93 % by volume.
+- The column counts argon as air in the lines' broadening (0.78 of N₂ for CO₂,
+  about 0.37 of air for water, measured): 0.2 % and 0.6 % too much foreign
+  broadening on Earth ([radiative transfer](radiative-transfer.md)).
+- An argon frost is not on the ground's frost (`frost_cover`,
+  `frost_emissivity`), and a liquid argon is not a surface liquid of the model.
 - The published Venus share of 24 % (O'Rourke & Korenaga 2015, "assuming an
   Earth-like K abundance", as Warren & Kite 2023 quote it) is twice what the
   law's production needs (0.12); their potassium and mantle mass were not read.
@@ -3513,7 +3546,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
 | F0V (7220 K) at 1.2963 S⊕, a tenth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (300.8 W/m²) over the saturated column's peak (299.2 W/m²), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
-| Same, under an XUV fluence of 2e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band |
+| Same, under an XUV fluence of 1e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band (2e14 until the air's argon, #694, took the first run out of it) |
 
 The 1500 to 2500 K window extrapolates Boukrouche et al. 2021, who stop
 at 295 bar and find the plateau's end constant past it, to columns of

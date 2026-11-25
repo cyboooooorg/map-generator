@@ -366,3 +366,41 @@ fn the_fixed_points_are_converged() {
     assert!(titan.converged, "{titan:?}");
     assert!(titan.iterations < CONDENSE_ITERATIONS, "{titan:?}");
 }
+
+/// Source: the argon a Triton made into its air, 1.8 Pa, the upper end
+/// of study 29b's 1.3 to 1.8 Pa ("Checks on the cold bodies"), in bar.
+const TRITON_ARGON: Bar = Bar(1.8e-5);
+
+/// Source: the largest share of a Triton-like air its argon may hold,
+/// 5 %: study 29's check, twice the 2.5 % the two frost fits allow at
+/// activity 1 (study 29b).
+const TRITON_ARGON_SHARE: f64 = 0.05;
+
+/// A Triton-like body keeps its argon as frost: the air holds argon's
+/// frost pressure at the settled temperature (activity 1), a small share
+/// of the N₂ air, and the rest lies on the ground (study 29b).
+#[test]
+fn a_triton_like_body_keeps_its_argon_as_frost() {
+    let bare = triton_like();
+    let inputs = ClimateInputs {
+        air: PartialPressures {
+            ar: TRITON_ARGON.0,
+            ..bare.air
+        },
+        ..bare
+    };
+    let c = settled(&inputs, Numerics::DEFAULT);
+    assert!(c.converged, "{c:?}");
+    let frost = science::volatiles::argon_frost_pressure(c.temperature)
+        .expect("under argon's triple point")
+        .0
+        / science::constants::PASCALS_PER_BAR;
+    assert!((c.air.ar / frost - 1.0).abs() < 1e-9, "{c:?} {frost:e}");
+    assert!(c.condensate.ar > 0.0, "{c:?}");
+    let share = c.air.ar / c.air.total();
+    println!(
+        "Triton-like: {:.3} K, {:.3e} bar of Ar, {share:.4} of the air",
+        c.temperature.0, c.air.ar
+    );
+    assert!(share < TRITON_ARGON_SHARE, "{share}");
+}
