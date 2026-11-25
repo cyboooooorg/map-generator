@@ -17,7 +17,8 @@ scattering reflects mostly the blue, and water vapour absorbs mostly in
 the near-infrared bands. Swapping the black body for a real spectrum
 lowers Earth's Bond albedo by about 0.01. Once the Sun's error is absorbed
 by the cloud fit, what is left matters most for the coolest M dwarfs,
-whose planets a black body makes too dark by 0.02 to 0.03.
+whose planets a black body made too dark by 0.02 to 0.03. The app now
+reads a table of model spectra by temperature and metallicity.
 
 ## The science
 
@@ -167,21 +168,60 @@ states a licence beyond asking to be cited.
 
 ### What you see
 
-The Bond albedo of the planet card and the temperature it gives. Today
-every star is a black body.
+The Bond albedo of the planet card and the temperature it gives: a
+planet round a cool M dwarf reflects less than one round the Sun, and one
+round an A star more, by the star's spectrum and not only by its
+temperature.
 
 ### How it computes them
 
-`science::radiation::starlight::star_bands` splits the star's light over
-240 bands, even in $\ln\lambda$ from 0.2 to 5 µm, each weighted by the
-Planck function at its centre, and the shortwave
-(`science::radiation::albedo::shortwave_budget`) follows each band
-through the air. The cloud albedo (`albedo::CLOUD_ALBEDO`, 0.276) is
-fitted on Earth's Bond albedo under that black-body Sun.
+`science::radiation::starlight::star_bands(teff, metallicity)` splits the
+star's light over 240 bands, even in $\ln\lambda$ from 0.2 to 5 µm, from
+the table `crates/science/data/stellar-spectra.tsv`. The table holds the
+band shares of PHOENIX-ACES-AGSS-COND-2011 spectra from 2300 to 12 000 K
+and ATLAS9 spectra from 13 000 to 27 000 K, at [M/H] −1, −0.5, 0 and +0.5,
+one surface gravity per temperature (the main sequence's).
+`tools/stellar-spectra` builds it from the downloaded spectra; the
+spectra themselves are not in the repository, and
+`crates/science/data/SPECTRA.md` gives their sources, terms, checksums
+and method. The shares are interpolated linearly in temperature and
+metallicity; a star outside the table takes its edge, and every star the
+system engine draws lies inside. The Sun is the table's 5772 K, [M/H] 0
+interpolation, like any other star.
+
+The shortwave (`science::radiation::albedo::shortwave_budget`) takes the
+star's temperature and metallicity and follows each band through the air.
+The climate gives each star the planet's metallicity (the stars of a
+system share one) and weights the stars' albedos by their flux (#592).
+The cloud albedo (`albedo::CLOUD_ALBEDO`) is fitted on Earth's Bond
+albedo under the table's Sun: 0.298 (0.276 under the black body).
+
+The tests hold the table's Sun against the measured one, TSIS-1 HSRS
+(Coddington et al. 2021): it removes at least 80 % of the black body's
+excess below 400 and 300 nm (82 % measured), and Earth's clear-sky
+albedo under it lies within 0.003 of its value under TSIS-1 (0.1577
+against 0.1554). Both tolerances are calibrations on study 35's
+measurements, decided by the user on 2026-11-25. Other tests: every row
+sums to 1, a row rebuilt from its neighbours lights Earth's clear sky
+alike, and the albedo rises from 2600 to 7200 K (Kopparapu et al. 2013,
+§4.1).
+
+### Decisions
+
+Decided by the user on 2026-11-25 (study 35): PHOENIX below 12 000 K and
+ATLAS9 above; the Sun from the table, one code path, with TSIS-1 as the
+tests' reference; the binned shares shipped with their citations, never
+the spectra; metallicity read now. The light outside 0.2-5 µm of hot
+hosts has its own issue.
 
 ### Where it departs from the science
 
-- **The black body.** Issue #655. Study 35 measured, on main:
+- **Model spectra.** The table's Sun is 0.0023 brighter than the
+  measured one in Earth's clear sky. No measured M-dwarf spectrum
+  covering 0.2-5 µm was compared, and ATLAS9 and PHOENIX differ by 0.004
+  to 0.008 of Earth's cloudy albedo at 3500-3750 K.
+- **What the black body was.** Study 35 measured it, on main before the
+  change:
   - Earth's clear sky (77 %, ground 0.122): 0.1701 under the black body,
     0.1554 under TSIS-1 continued past 2730 nm (by the PHOENIX Sun or by
     the black body, within 0.0001), 0.1577 under PHOENIX; the air absorbs
@@ -192,8 +232,17 @@ fitted on Earth's Bond albedo under that black-body Sun.
   - The reference Earth (`earth_has_its_climate`, held at 288 K by the
     thermostat): its Bond albedo 0.2953 becomes 0.2852 under TSIS-1, and
     its climate at 280 ppm warms from 287.11 to 289.04 K. With the cloud
-    albedo refitted (0.3014) it is 0.2960 and 287.01 K: once refitted,
-    the spectrum leaves Earth almost where it is.
+    albedo refitted (0.3014) it is 0.2960 and 287.01 K.
+- **After the change**, measured: the reference Earth's Bond albedo is
+  0.2957 at 288 K and its climate at 280 ppm 287.06 K (−0.06 K). Its
+  snowball chance fell from 0.0140 to 0.0117 under the old
+  `SNOWBALL_WARM_BAR`, refitted to 10.3 bar (0.0140 again; see [Planet
+  atmospheres](planet-atmospheres.md), "Calibration of
+  `SNOWBALL_WARM_BAR`").
+- **Earth's clear-sky absorption at 2.5 cm of water** is 55.63 W/m² under
+  the table's Sun, above the 48-54 W/m² window from Kim & Ramanathan
+  (2008); the black-body Sun passed it. Open (see [How does a planet's
+  air set its outgoing heat and its albedo?](radiative-transfer.md)).
 - **All the light in 0.2-5 µm.** For hosts above about 10 000 K most of
   the light lies at shorter wavelengths, and the bands take it all
   (above).

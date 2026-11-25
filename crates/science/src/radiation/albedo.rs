@@ -16,45 +16,49 @@ use super::rayleigh::rayleigh_depth_550;
 use super::shortwave::{Air, Paths};
 use super::starlight::{StarBands, star_bands};
 use super::veils::{DECK_ALBEDO, HAZE_ABSORPTION, HAZE_ALBEDO, haze};
-use crate::units::{Fraction, Kelvin, MetrePerSecondSquared};
+use crate::units::{Dex, Fraction, Kelvin, MetrePerSecondSquared};
 
 #[cfg(test)]
 #[path = "albedo_tests.rs"]
 mod tests;
 
 /// Calibration: albedo of the tops of a water cloud layer, as the
-/// reflectance of the cloud cover's share of the disc, 0.276. Fitted on
+/// reflectance of the cloud cover's share of the disc, 0.298. Fitted on
 /// Earth's Bond albedo, 0.293 (CERES; Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018,
 /// doi:10.1175/JCLI-D-17-0208.1, give 0.2915), by bisection to three
-/// digits (0.2758 before rounding; 0.29308 with 0.276) over Earth's
+/// digits (0.29806 before rounding; 0.29297 with 0.298) over Earth's
 /// inputs: a ground of 0.122 (CERES EBAF Ed4.0 clear-sky surface, Kato et
 /// al. 2018, Table 5), its dry air with 400 ppm of CO₂ at 77 % relative
 /// humidity over 288 K (Manabe & Wetherald 1967), the cloud cover the law
 /// gives it, 0.682 ([`super::clouds::cloud_cover`]), standard gravity and
-/// the Sun at 5772 K. What was searched and not found: a single cloud
-/// reflectance for a one-column model, which no observation gives (a
-/// thick cloud reflects 0.5 to 0.7; Earth's cover counts thin clouds
+/// the Sun at 5772 K and solar metallicity from the table of spectra
+/// ([`super::starlight::star_bands`]; it was 0.276 under the black-body
+/// Sun, issue #655, study 35). What was searched and not found: a single
+/// cloud reflectance for a one-column model, which no observation gives
+/// (a thick cloud reflects 0.5 to 0.7; Earth's cover counts thin clouds
 /// too). The legacy took 0.252, fitted on 0.30 over its own cover.
 ///
 /// The fit absorbs what the port lacks. In the clear sky, the port is
-/// brighter than the observed aerosol-free sky by its black-body Sun,
-/// its missing ozone and O₂ (issues #653 and #655, about +0.03 together)
-/// and darker by the aerosols' reflection it does not carry (about
-/// 0.017); and Earth's column at 77 % holds 1.735 cm of water against the
-/// 2.45 to 2.53 observed (issue #654). The clouds' reflectance makes up
-/// the rest: refit it when any of these lands. See
+/// brighter than the observed aerosol-free sky by its missing ozone and
+/// O₂ (issue #653, about +0.016 together) and its model Sun (+0.0023
+/// against TSIS-1), and darker by the aerosols' reflection it does not
+/// carry (about 0.017); and Earth's column at 77 % holds 1.735 cm of
+/// water against the 2.45 to 2.53 observed (issue #654). The clouds'
+/// reflectance makes up the rest: refit it when any of these lands (#705
+/// refits it on the climate's own ground). See
 /// `docs/science/radiative-transfer.md`, "The cloud's water, the deck and
 /// the haze".
-pub(crate) const CLOUD_ALBEDO: f64 = 0.276;
+pub(crate) const CLOUD_ALBEDO: f64 = 0.298;
 
 /// Definition: airs a [`ShortwaveCache`] remembers, the legacy memo's size
 /// (a numerical choice with no source: audit, Wiki study 19).
 const REMEMBERED_AIRS: usize = 32;
 
 /// The inputs of an air's paths, as bits: the seven partial pressures,
-/// the surface temperature, the gravity and the star's temperature.
-type AirKey = [u64; 10];
+/// the surface temperature, the gravity, and the star's temperature and
+/// metallicity.
+type AirKey = [u64; 11];
 
 /// What lies under the air: the ground's albedo, the share of the sky
 /// under water clouds, and the share of the disc under a sulphuric deck
@@ -84,14 +88,15 @@ pub struct ShortwaveBudget {
 
 /// What [`shortwave_budget`] keeps between calls, owned by the caller:
 /// the last [`REMEMBERED_AIRS`] airs and their light's paths, the oldest
-/// replaced first (allocated on first use), and the last star's bands.
+/// replaced first (allocated on first use), and the last star's bands
+/// (keyed on its temperature and metallicity).
 /// One cache per thread of work; a hit returns the bits a fresh air
 /// gives.
 #[derive(Default)]
 pub struct ShortwaveCache {
     airs: Vec<(AirKey, Paths)>,
     next: usize,
-    star: Option<(u64, StarBands)>,
+    star: Option<([u64; 2], StarBands)>,
 }
 
 impl std::fmt::Debug for ShortwaveCache {
@@ -105,14 +110,16 @@ impl std::fmt::Debug for ShortwaveCache {
 
 impl ShortwaveCache {
     /// The light's paths through `gases` over a surface at `surface_k` on
-    /// a body of gravity `gravity_m_s2` under a star of `star_k`: its
-    /// haze, its Rayleigh depth and its column, whatever lies beneath.
+    /// a body of gravity `gravity_m_s2` under a star of `star_k` and
+    /// metallicity `star_dex`: its haze, its Rayleigh depth and its
+    /// column, whatever lies beneath.
     fn paths(
         &mut self,
         gases: &PartialPressures,
         surface_k: f64,
         gravity_m_s2: f64,
         star_k: f64,
+        star_dex: f64,
     ) -> &Paths {
         let key: AirKey = [
             gases.n2,
@@ -125,14 +132,16 @@ impl ShortwaveCache {
             surface_k,
             gravity_m_s2,
             star_k,
+            star_dex,
         ]
         .map(f64::to_bits);
         if let Some(i) = self.airs.iter().position(|(k, _)| *k == key) {
             return &self.airs[i].1;
         }
+        let star_key = [star_k.to_bits(), star_dex.to_bits()];
         let star = match &mut self.star {
-            Some((bits, bands)) if *bits == star_k.to_bits() => bands,
-            slot => &slot.insert((star_k.to_bits(), star_bands(star_k))).1,
+            Some((bits, bands)) if *bits == star_key => bands,
+            slot => &slot.insert((star_key, star_bands(star_k, star_dex))).1,
         };
         let h = haze(gases);
         let column = levels(gases, surface_k, gravity_m_s2, Profile::SHORTWAVE);
@@ -156,7 +165,9 @@ impl ShortwaveCache {
     }
 }
 
-/// Where the light of a star at `star` goes on a body of surface gravity
+/// Where the light of a star at `star` of metallicity `metallicity`
+/// ([M/H]; its spectrum, [`super::starlight::star_bands`]) goes on a body
+/// of surface gravity
 /// `gravity` whose air `gases` lies over a surface at `surface` with
 /// `underneath` below it: the share reflected (its Bond albedo) and the
 /// share its air absorbs.
@@ -168,7 +179,8 @@ impl ShortwaveCache {
 /// [`CLOUD_ALBEDO`]) at their tops inside it, down to the ground; the
 /// deck's share of the disc then reflects [`DECK_ALBEDO`] over the rest.
 /// A star whose temperature is not positive or not finite (NaN, infinite)
-/// is the Sun. A negative or NaN partial pressure counts as none; without
+/// is at the Sun's temperature, a metallicity that is not finite the
+/// Sun's. A negative or NaN partial pressure counts as none; without
 /// air the ground's albedo comes back. A gravity that is not finite or not
 /// positive is no air: the budget is that of a body without air, the
 /// ground under the clouds and the deck.
@@ -180,6 +192,7 @@ pub fn shortwave_budget(
     surface: Kelvin,
     gravity: MetrePerSecondSquared,
     star: Kelvin,
+    metallicity: Dex,
     underneath: Underneath,
     cache: &mut ShortwaveCache,
 ) -> ShortwaveBudget {
@@ -193,9 +206,15 @@ pub fn shortwave_budget(
     let weightless = !(gravity.0 > 0.0 && gravity.0.is_finite());
     let paths = if weightless {
         // No air: its gravity would only make the Rayleigh depth infinite.
-        cache.paths(&PartialPressures::default(), surface.0, 1.0, star.0)
+        cache.paths(
+            &PartialPressures::default(),
+            surface.0,
+            1.0,
+            star.0,
+            metallicity.0,
+        )
     } else {
-        cache.paths(gases, surface.0, gravity.0, star.0)
+        cache.paths(gases, surface.0, gravity.0, star.0, metallicity.0)
     };
     let below = paths.budget(
         underneath.ground.get(),

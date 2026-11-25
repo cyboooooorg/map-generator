@@ -623,15 +623,17 @@ source (departures below). The terms:
 
 - observed 0.149 (Stephens et al. 2015) to 0.156 (Kato et al. 2018);
 - less the aerosols' 0.017 ± 0.003, that is 0.020 at the most;
-- plus the black-body Sun against the measured one, +0.0147;
+- plus the model Sun against the measured one, +0.0023 (the PHOENIX
+  Sun of the table of spectra against TSIS-1, study 35; it was the
+  black body's +0.0147 before issue #655);
 - plus the missing ozone, +0.0145 ± 0.0005 (0.0140 at the low end);
 - plus the missing O₂, +0.0018;
 - less the two-stream closure, which reflects too little, −0.0028.
 
-They sum to 0.1567 at the low end (0.149 − 0.020 + 0.0147 + 0.0140 +
-0.0018 − 0.0028) and 0.1707 at the high end. The port gives 0.1701, at
-the top of it. Issues #653 (ozone, O₂) and #655 (the Sun's spectrum, the
-closure) narrow it when they land.
+They sum to 0.1443 at the low end (0.149 − 0.020 + 0.0023 + 0.0140 +
+0.0018 − 0.0028) and 0.1583 at the high end. The port gives 0.1577, near
+the top of it (0.1701 under the black-body Sun, in a window of 0.1567 to
+0.1707). Issue #653 (ozone, O₂) narrows it when it lands.
 
 **Clouds, hazes and decks.** The clouds of water cover 0.67 of Earth's sky
 by the MODIS cloud mask (King et al. 2013); the GEWEX assessment gives
@@ -851,15 +853,17 @@ the Bond albedo are there too (change 2b-2).
     relative humidity of Manabe & Wetherald 1967 (equation 2), the same
     figure as the column's test profile; the paper is paywalled and the
     value is confirmed indirectly (below).
-  - *Cloud albedo.* The water clouds reflect 0.276 of the light falling
+  - *Cloud albedo.* The water clouds reflect 0.298 of the light falling
     on their share of the sky, fitted by bisection so that Earth's Bond
     albedo is 0.293 (Stephens et al. 2015), over a ground of 0.122, the
-    77 % air over 288 K and the law's cloud cover of 0.682. No
-    observation gives a single cloud reflectance for one column. The fit
-    absorbs what the port lacks: the clear-sky terms of the measured Sun,
-    ozone and O₂ (#653, #655), the aerosols' reflection, and the column's
-    1.735 cm of water against 2.45 to 2.53 observed (#654). The legacy
-    fitted 0.252 on 0.30.
+    77 % air over 288 K, the law's cloud cover of 0.682 and the Sun of the
+    table of spectra. No observation gives a single cloud reflectance for
+    one column. The fit absorbs what the port lacks: the clear-sky terms
+    of ozone and O₂ (#653) and of the model Sun against the measured one,
+    the aerosols' reflection, and the column's 1.735 cm of water against
+    2.45 to 2.53 observed (#654). It was 0.276 under the black-body Sun
+    (#655); #705 refits it on the climate's own ground. The legacy fitted
+    0.252 on 0.30.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;
@@ -872,20 +876,23 @@ the Bond albedo are there too (change 2b-2).
     the Huygens DISR aerosol model (Tomasko et al. 2008) and the newer
     Bond albedo of Creecy et al. (2021).
 - **What Earth's clear sky shows the port lacks.** The port's clear-sky
-  Bond albedo for Earth's air over a ground of 0.122 is 0.1701 and its air
-  absorbs 48.41 W/m². The diagnostic study of the port found four causes,
-  each computed with the full model and a source:
-  - *The Sun is a 5772 K black body* (`starlight::star_bands`, as in the
-    legacy). A black body puts 12.3 % of the 0.2-5 µm light below 400 nm
+  Bond albedo for Earth's air over a ground of 0.122 was 0.1701 and its
+  air absorbed 48.41 W/m² under the black-body Sun; under the table of
+  spectra (issue #655) they are 0.1577 and 51.23 W/m². The diagnostic
+  study of the port found four causes, each computed with the full model
+  and a source:
+  - *The Sun was a 5772 K black body* (`starlight::star_bands`, as in the
+    legacy; since #655 the table of spectra, [Is a star's light a black
+    body?](stellar-spectra.md), whose Sun gives 0.1577, 0.0023 above
+    TSIS-1). A black body puts 12.3 % of the 0.2-5 µm light below 400 nm
     and 3.0 % below 300 nm, where the measured Sun (TSIS-1 HSRS,
     Coddington et al. 2021) puts 8.2 % and 1.0 %. Rayleigh scattering is
     strongest there. With TSIS-1 on the same 240 bands the clear-sky
     albedo is 0.1554 (−0.0147) and the air absorbs 51.06 W/m². TSIS-1
     ends at 2730 nm; the study continued it with a 5772 K black body
     scaled to the data at 2600-2730 nm, about 2 % of the light (a choice
-    of the study, not a source). Issue #655; study 35 re-measured these
-    numbers and the error for other hosts: [Is a star's light a black
-    body?](stellar-spectra.md).
+    of the study, not a source). Study 35 re-measured these numbers and
+    the error for other hosts.
   - *No ozone.* With 300 DU (Kim & Ramanathan 2008, Table 2) as a pure
     absorber above the column, with the cross-sections of Serdyuchenko et
     al. (2014) at 223 K and TSIS-1: 0.1409 (−0.0145), the ozone absorbing
@@ -921,11 +928,13 @@ the Bond albedo are there too (change 2b-2).
   Forsythe et al. 2014). Issue #654. The absorption tests therefore scale
   the saturated shortwave column's vapour level by level to a given water,
   which tests the optics and leaves the humidity to #654:
-  - At 2.5 cm the air absorbs 52.70 W/m² (window 48-54, from Kim &
-    Ramanathan's 50 W/m² of water at NVAP's 2.45-2.53 cm, plus CO₂'s 1.0
-    to 1.6). With the measured Sun the study gives 55.2 to 56.4 W/m² at
-    2.45-2.53 cm, 1.2 to 2.4 above the window: the black body passes it
-    and the measured Sun does not (#655).
+  - At 2.5 cm the air absorbs 55.63 W/m² under the table's Sun (window
+    48-54, from Kim & Ramanathan's 50 W/m² of water at NVAP's 2.45-2.53
+    cm, plus CO₂'s 1.0 to 1.6): above the window. The black-body Sun gave
+    52.70 and passed it; the measured Sun gives 55.2 to 56.4 at
+    2.45-2.53 cm, and 54.92 at the 2.38 cm one column needs to carry the
+    field's absorbed sunlight (study 33). The window is open (#655, the
+    follow-up of study 33).
   - From 2.7 to 3.3 cm the absorption rises by 2.937 W/m² (3.0 ± 1.0,
     from Kim & Ramanathan's Table 2: 1.3 + 0.2 per 0.3 cm) and the
     reflected light falls by 0.338 W/m² (0.4 ± 0.2). The response to
@@ -995,7 +1004,7 @@ a literature check of every number and citation (the full audit is in the
   is 22 % lower at Titan's 69 K skin.
 - **Scope of the Bond albedo.** It takes one ground albedo. The cloud
   albedo is refitted in two steps: first the clear-sky top-of-atmosphere
-  albedo of Earth, a window of 0.1567 to 0.1707 (the observed 0.149,
+  albedo of Earth, a window of 0.1443 to 0.1583 (the observed 0.149,
   Stephens et al. 2015, to 0.156, Kato et al. 2018, less the aerosols,
   plus what the port lacks; decided on 2026-11-23, see above), which tests
   the ground, the Rayleigh scattering and the absorption without the

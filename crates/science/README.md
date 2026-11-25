@@ -159,9 +159,13 @@ solver that uses them is `system::planet::climate`.
 of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
 `skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂
 and methane saturation. Shortwave: `albedo::shortwave_budget` (Bond albedo and
-absorbed light; the caller owns the `ShortwaveCache`), `starlight`, `shortwave`
-(`data/shortwave.bin`), `rayleigh`, `veils`, `methane::stratospheric_share`.
-See [OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
+absorbed light, for a star's temperature and metallicity; the caller owns the
+`ShortwaveCache`), `starlight` (the star's spectrum, from
+`data/stellar-spectra.tsv`), `shortwave` (`data/shortwave.bin`), `rayleigh`,
+`veils`, `methane::stratospheric_share`. See [OPACITY.md](data/OPACITY.md),
+[SPECTRA.md](data/SPECTRA.md), [radiative
+transfer](../../docs/science/radiative-transfer.md), [stellar
+spectra](../../docs/science/stellar-spectra.md).
 
 ## Dependencies
 

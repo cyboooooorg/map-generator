@@ -142,6 +142,8 @@ pub(crate) fn record(
             s.equilibrium.node(),
         ]);
     }
+    // The stars' spectra take the trial's metallicity (the shortwave).
+    inputs.push(bare.trial.metallicity.node());
     inputs.extend(surface.atmosphere.partial.values().map(Traced::node));
     inputs.extend([
         surface.water.inventory.node(),

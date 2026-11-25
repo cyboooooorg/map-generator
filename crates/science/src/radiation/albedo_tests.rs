@@ -10,13 +10,13 @@ use crate::radiation::column::{Levels, Profile, STEAM_MAX_BAR, levels};
 use crate::radiation::gases::{H2O_MOLAR_MASS, PartialPressures};
 use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::shortwave::{Air, Budget, Paths};
-use crate::radiation::starlight::star_bands;
+use crate::radiation::starlight::{SOLAR_METALLICITY, SPECTRA, star_bands};
 use crate::radiation::test_points::{
     EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_INCOMING_W_M2, EARTH_SURFACE_K, TITAN_GRAVITY,
     TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY, VENUS_PRESSURE_BAR, VENUS_SURFACE_K,
 };
 use crate::surface::RELATIVE_HUMIDITY;
-use crate::units::Bar;
+use crate::units::{Bar, Dex};
 use crate::water::vapour_saturation_bar;
 
 /// Source: the low end of the window of Earth's clear-sky albedo at
@@ -27,23 +27,56 @@ use crate::water::vapour_saturation_bar;
 /// (CERES EBAF Ed4.0, Kato et al. 2018, doi:10.1175/JCLI-D-17-0208.1,
 /// Table 5); less the aerosols' 0.017 +- 0.003 (5.9 +- 1 of 341.8 W/m²,
 /// Kim & Ramanathan 2008, doi:10.1029/2007JD008434, Table 3b and §[52]);
-/// plus what the faithful port lacks, each computed by the study with its
-/// source: the black-body Sun against the measured TSIS-1 HSRS spectrum
-/// (Coddington et al. 2021, doi:10.1029/2020GL091709) +0.0147; no ozone,
+/// plus what the port lacks or adds, each computed with its source: the
+/// table's Sun (PHOENIX, study 35) against the measured TSIS-1 HSRS
+/// spectrum (Coddington et al. 2021, doi:10.1029/2020GL091709) +0.0023
+/// (it was the black body's +0.0147 before issue #655); no ozone,
 /// 300 +- 30 DU with the cross-sections of Serdyuchenko et al. 2014
 /// (doi:10.5194/amt-7-625-2014) +0.0145 +- 0.0005; no O₂ (Hogan &
 /// Matricardi 2020, doi:10.5194/gmd-13-6501-2020, Table 4) +0.0018; and
 /// the two-stream closure against exact radiative transfer (checked
 /// against Kokhanovsky, Mayer & Rozanov 2005, doi:10.1016/j.atmosres.2004.07.004)
-/// −0.0028. The terms sum to 0.1567 at the low end and 0.1707 at the
-/// high end.
-/// Issues #653 (ozone, O₂) and #655 (the Sun's spectrum, the closure)
-/// narrow it when they land. The port's 0.1701 lies at its top edge.
-const CLEAR_SKY_ALBEDO_LOW: f64 = 0.1567;
+/// −0.0028. The terms sum to 0.1443 at the low end and 0.1583 at the
+/// high end. Issue #653 (ozone, O₂) narrows it when it lands. The port's
+/// 0.1577 lies near its top edge.
+const CLEAR_SKY_ALBEDO_LOW: f64 = 0.1443;
 
 /// Source: the high end of the window of [`CLEAR_SKY_ALBEDO_LOW`], the
 /// sum of the same cited terms.
-const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1707;
+const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1583;
+
+/// Source: Earth's clear-sky albedo at 77 % humidity over its ground
+/// under the measured Sun, TSIS-1 HSRS (Coddington et al. 2021,
+/// doi:10.1029/2020GL091709) binned on the bands by study 35 (Wiki
+/// `35-stellar-spectra-audit`, section 1), continued past 2730 nm by a
+/// 5772 K black body scaled to the data (0.1555 when continued by the
+/// PHOENIX Sun): the same shortwave with the measured spectrum.
+const TSIS_CLEAR_SKY_ALBEDO: f64 = 0.1554;
+
+/// Calibration: how far Earth's clear-sky albedo under the table's Sun may
+/// lie from [`TSIS_CLEAR_SKY_ALBEDO`], 0.003: the PHOENIX Sun's 0.0023,
+/// measured by study 35, rounded up; decided by the user on 2026-11-25.
+/// No source gives a model library's error against the measured Sun on a
+/// planet's albedo.
+const TSIS_CLEAR_SKY_TOLERANCE: f64 = 0.003;
+
+/// Definition: the coolest and hottest stars of Kopparapu et al. 2013's
+/// comparison, K (§4.1: 2600 to 7200 K), between which the albedo falls
+/// from F to M hosts.
+const KOPPARAPU_K: (f64, f64) = (2600.0, 7200.0);
+
+/// Calibration: how far Earth's clear-sky albedo under a row of the table
+/// of spectra may lie from its value under that row rebuilt from its two
+/// neighbours, 0.001: a tenth of what the black body moved Earth's
+/// cloudy albedo by (0.0104, study 35). Study 35 measured 0.0036 at most
+/// over gaps of 600 K (at 2600 K), 0.0001 at 3300 K; the table's steps
+/// are 100 to 1000 K.
+const INTERPOLATED_ALBEDO: f64 = 0.001;
+
+/// Definition: how much more a row rebuilt over two steps of the table
+/// errs than the table between two rows, 4: a linear interpolation errs
+/// as the square of its step, and the rebuilt row spans two.
+const TWO_STEPS: f64 = 4.0;
 
 /// Source: the precipitable water of Kim & Ramanathan 2008's global run,
 /// cm: the NVAP water field (§[22]), whose global mean is 2.45 (heritage
@@ -197,6 +230,7 @@ fn earth_budget(gases: &PartialPressures, surface_k: f64, below: Underneath) -> 
         Kelvin(surface_k),
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
+        Dex(SOLAR_METALLICITY),
         below,
         &mut ShortwaveCache::default(),
     )
@@ -288,8 +322,11 @@ fn earth_clear_sky_holding(water_cm: f64) -> Budget {
         rayleigh_550: rayleigh_depth_550(&air, STANDARD_GRAVITY.0),
         column: Some(&column),
     };
-    Paths::through(&through, &star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0).bands)
-        .budget(EARTH_GROUND_ALBEDO, 0.0)
+    Paths::through(
+        &through,
+        &star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY).bands,
+    )
+    .budget(EARTH_GROUND_ALBEDO, 0.0)
 }
 
 #[test]
@@ -391,7 +428,7 @@ fn an_m_stars_albedo_drops_more_than_a_g_stars() {
         let clouds = cloud_cover(Kelvin(t), Bar(air.h2o)).get();
         let column = levels(&air, t, STANDARD_GRAVITY.0, Profile::SHORTWAVE);
         let drop = |star_k: f64| {
-            let light = star_bands(star_k);
+            let light = star_bands(star_k, SOLAR_METALLICITY);
             let budget = |column: Option<&Levels>| -> Budget {
                 let through = Air {
                     haze: (0.0, 1.0),
@@ -446,6 +483,7 @@ fn titans_air_is_brighter_than_earths() {
         Kelvin(TITAN_SURFACE_K),
         TITAN_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
+        Dex(SOLAR_METALLICITY),
         clear(),
         &mut cache,
     )
@@ -527,6 +565,7 @@ fn the_budget_stays_in_bounds() {
                         Kelvin(t),
                         gravity,
                         SOLAR_EFFECTIVE_TEMPERATURE,
+                        Dex(SOLAR_METALLICITY),
                         under(g, clouds, deck),
                         &mut cache,
                     );
@@ -556,6 +595,7 @@ fn a_cached_budget_is_the_fresh_one() {
             Kelvin(t),
             STANDARD_GRAVITY,
             SOLAR_EFFECTIVE_TEMPERATURE,
+            Dex(SOLAR_METALLICITY),
             below,
             cache,
         )
@@ -592,7 +632,7 @@ fn a_cached_budget_is_the_fresh_one() {
 fn the_shortwave_column_is_converged() {
     let air = earth_air();
     let clouds = earth_clouds().get();
-    let light = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0);
+    let light = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY);
     let budget = |profile: Profile| {
         let column = levels(&air, EARTH_SURFACE_K, STANDARD_GRAVITY.0, profile);
         let through = Air {
@@ -627,6 +667,7 @@ fn an_unknown_star_is_the_sun() {
             Kelvin(EARTH_SURFACE_K),
             STANDARD_GRAVITY,
             Kelvin(star),
+            Dex(SOLAR_METALLICITY),
             below,
             &mut ShortwaveCache::default(),
         )
@@ -650,6 +691,7 @@ fn a_weightless_air_is_no_air() {
             Kelvin(EARTH_SURFACE_K),
             MetrePerSecondSquared(g),
             SOLAR_EFFECTIVE_TEMPERATURE,
+            Dex(SOLAR_METALLICITY),
             below,
             &mut ShortwaveCache::default(),
         );
@@ -671,12 +713,109 @@ fn an_infinite_star_is_the_sun() {
         Kelvin(EARTH_SURFACE_K),
         STANDARD_GRAVITY,
         Kelvin(f64::INFINITY),
+        Dex(SOLAR_METALLICITY),
         clear(),
         &mut ShortwaveCache::default(),
     );
     assert_eq!(sun, infinite);
     assert_eq!(
-        star_bands(f64::INFINITY),
-        star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0)
+        star_bands(f64::INFINITY, SOLAR_METALLICITY),
+        star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY)
     );
+}
+
+/// Earth's clear sky over its ground at 77 % humidity under `light`.
+fn earth_clear_sky_under(light: &[(f64, f64)]) -> Budget {
+    let air = earth_air();
+    let column = levels(
+        &air,
+        EARTH_SURFACE_K,
+        STANDARD_GRAVITY.0,
+        Profile::SHORTWAVE,
+    );
+    let through = Air {
+        haze: (0.0, 1.0),
+        rayleigh_550: rayleigh_depth_550(&air, STANDARD_GRAVITY.0),
+        column: column.as_ref(),
+    };
+    Paths::through(&through, light).budget(EARTH_GROUND_ALBEDO, 0.0)
+}
+
+#[test]
+fn the_tables_sun_lights_earth_as_the_measured_sun() {
+    let light = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY);
+    let a = earth_clear_sky_under(&light.bands).albedo;
+    println!("Earth's clear sky under the table's Sun: {a:.4} (TSIS-1 {TSIS_CLEAR_SKY_ALBEDO})");
+    assert!(
+        (a - TSIS_CLEAR_SKY_ALBEDO).abs() <= TSIS_CLEAR_SKY_TOLERANCE,
+        "{a}"
+    );
+}
+
+#[test]
+fn the_albedo_falls_from_f_to_m_hosts() {
+    // Kopparapu et al. 2013, §4.1: at equal flux, the albedo of an
+    // Earth-like planet is higher round an F star and lower round an M
+    // star. Every row of the table between their coolest and hottest stars.
+    let s = &*SPECTRA;
+    let solar = s
+        .metallicities
+        .iter()
+        .position(|m| *m == SOLAR_METALLICITY)
+        .expect("a solar row");
+    let albedos: Vec<(f64, f64)> = s
+        .temperatures
+        .iter()
+        .filter(|t| (KOPPARAPU_K.0..=KOPPARAPU_K.1).contains(*t))
+        .map(|t| {
+            (
+                *t,
+                earth_clear_sky_under(&star_bands(*t, s.metallicities[solar]).bands).albedo,
+            )
+        })
+        .collect();
+    for pair in albedos.windows(2) {
+        assert!(pair[0].1 < pair[1].1, "{pair:?}");
+    }
+}
+
+#[test]
+fn a_row_rebuilt_from_its_neighbours_lights_earth_alike() {
+    // Every interior row at the Sun's metallicity, interpolated linearly
+    // from the rows on either side: over two steps, it errs [`TWO_STEPS`]
+    // times what the table errs between two rows.
+    let s = &*SPECTRA;
+    let solar = s
+        .metallicities
+        .iter()
+        .position(|m| *m == SOLAR_METALLICITY)
+        .expect("a solar row");
+    let rows = &s.shares[solar];
+    let t = &s.temperatures;
+    let bands = |shares: &[f64]| -> Vec<(f64, f64)> {
+        let total: f64 = shares.iter().sum();
+        star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY)
+            .bands
+            .iter()
+            .zip(shares)
+            .map(|(b, x)| (b.0, x / total))
+            .collect()
+    };
+    let mut worst = (0.0, 0.0);
+    for i in 1..t.len() - 1 {
+        let f = (t[i] - t[i - 1]) / (t[i + 1] - t[i - 1]);
+        let rebuilt: Vec<f64> = rows[i - 1]
+            .iter()
+            .zip(&rows[i + 1])
+            .map(|(a, b)| (1.0 - f) * a + f * b)
+            .collect();
+        let gap = (earth_clear_sky_under(&bands(&rows[i])).albedo
+            - earth_clear_sky_under(&bands(&rebuilt)).albedo)
+            .abs();
+        if gap > worst.1 {
+            worst = (t[i], gap);
+        }
+    }
+    println!("worst rebuilt row: {} K, {:.5}", worst.0, worst.1);
+    assert!(worst.1 <= TWO_STEPS * INTERPOLATED_ALBEDO, "{worst:?}");
 }

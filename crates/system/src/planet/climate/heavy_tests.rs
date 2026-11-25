@@ -1432,15 +1432,17 @@ const TENTH_OF_N2: [f64; 5] = [0.0, -1.0, 0.0, 0.0, 0.0];
 /// 0.03 bar on the formed body (legacy `recondensed()`'s `left_bar`).
 const LEFTOVER: Bar = Bar(0.03);
 
-/// Definition: the XUV fluence of the recondensed boil, J/m², 2e14: a
-/// test input about 37 times under the Sun's scaled to
+/// Definition: the XUV fluence of the recondensed boil, J/m², 1e14: a
+/// test input about 73 times under the Sun's scaled to
 /// [`F0V_BOILING_FLUX`] (7.3e15). At that one the steam run's `9 H` is
-/// 1.3e22 kg, so the water sized to leave [`LEFTOVER`] is 2.6 % of the
-/// mass, and the ice volatiles that come with it (2.7 bar of N₂) raise the
-/// Bond albedo to 0.42, out of the boil band. A smaller `9 H` leaves a
-/// planet of 7.2e-4 of water, near the 1e-3 whose first run boils in
-/// the band.
-const RECONDENSED_FLUENCE: f64 = 2.0e14;
+/// about 6.5e21 kg, and the water sized to leave [`LEFTOVER`] is 3.6e-4
+/// of the mass, whose first run boils in the band (Bond albedo 0.339).
+/// It was 2e14 under the black-body star; the stellar spectra of #655
+/// raise this F star's planet's albedo by about 0.007 (0.324 to 0.330
+/// at 2e14), which took the 2e14 planet, with its larger water and ice
+/// volatiles, out of the band (its first run absorbed 295.3 W/m² and
+/// did not boil).
+const RECONDENSED_FLUENCE: f64 = 1.0e14;
 
 /// Definition: the rounds of the recondensed boil's water sizing, 3
 /// (legacy `recondensed()`): the body barely moves with its water.

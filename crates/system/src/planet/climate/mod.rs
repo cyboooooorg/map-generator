@@ -62,8 +62,8 @@ use science::balance::{SOLVER, Solver};
 use science::radiation::gases::PartialPressures;
 use science::relief::volcanoes::heat_flux;
 use science::units::{
-    Bar, Degree, EarthFlux, Fraction, Kelvin, Kilogram, Metre, MetrePerSecondSquared, Radian, Watt,
-    WattPerSquareMetre,
+    Bar, Degree, Dex, EarthFlux, Fraction, Kelvin, Kilogram, Metre, MetrePerSecondSquared, Radian,
+    Watt, WattPerSquareMetre,
 };
 use timeline::{Atmosphere, Gas, TectonicRegime, Traced};
 
@@ -153,6 +153,10 @@ pub(crate) struct Light {
     /// The star's effective temperature, which sets the shortwave budget
     /// and the runaway limit.
     pub effective_temperature: Kelvin,
+    /// The star's metallicity [M/H], which shapes its spectrum in the
+    /// shortwave budget with its temperature (the trial's: the stars of a
+    /// system share one, as their activity histories do).
+    pub metallicity: Dex,
     /// The equilibrium temperature from this star alone, at the
     /// timeline's reference albedo: the warm start of the fixed point.
     pub equilibrium: Kelvin,
@@ -221,6 +225,7 @@ impl ClimateInputs {
                 .map(|s| Light {
                     flux: *s.flux.value(),
                     effective_temperature: *s.effective_temperature.value(),
+                    metallicity: *bare.trial.metallicity.value(),
                     equilibrium: *s.equilibrium.value(),
                 })
                 .collect(),

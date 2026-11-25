@@ -97,9 +97,17 @@ fn the_albedo_is_the_flux_weighted_budgets() {
     let under = body.underneath(EARTH_SURFACE, &air);
     let mut cache = ShortwaveCache::default();
     let mut budget = |star: Kelvin| {
-        shortwave_budget(&air, EARTH_SURFACE, inputs.gravity, star, under, &mut cache)
-            .bond_albedo
-            .get()
+        shortwave_budget(
+            &air,
+            EARTH_SURFACE,
+            inputs.gravity,
+            star,
+            base.metallicity,
+            under,
+            &mut cache,
+        )
+        .bond_albedo
+        .get()
     };
     let (sun, red) = (budget(SUN), budget(RED_DWARF));
     assert_ne!(sun, red, "the two stars must be told apart");
