@@ -257,6 +257,7 @@ fn partial_pressures(atmosphere: &Atmosphere) -> PartialPressures {
         nh3: p(Gas::Nh3),
         so2: p(Gas::So2),
         o2: p(Gas::O2),
+        ar: p(Gas::Ar),
     }
 }
 

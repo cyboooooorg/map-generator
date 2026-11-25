@@ -76,7 +76,8 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
         Gas::Nh3 => air.nh3,
         Gas::So2 => air.so2,
         Gas::O2 => air.o2,
-        _ => unreachable!("the air has seven gases"),
+        Gas::Ar => air.ar,
+        _ => unreachable!("the air has eight gases"),
     }
 }
 
@@ -110,9 +111,10 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 ///   from the water inventory); the pressure from the partials;
 /// - each condensate from its bare partial and the temperature;
 /// - the liquid from the temperature, the pressure, the water inventory,
-///   whether it ran away and whether the body is locked, and the
-///   condensates; for a locked body also from each source's flux and the
-///   albedo (the substellar temperature).
+///   whether it ran away and whether the body is locked, and the N2 and
+///   CH4 condensates (not the argon frost, which it does not read); for a
+///   locked body also from each source's flux and the albedo (the
+///   substellar temperature).
 ///
 /// # Errors
 ///
@@ -252,6 +254,7 @@ pub(crate) fn record(
     for (gas, code) in [
         (Gas::N2, codes::CLIMATE_CONDENSATE_N2),
         (Gas::Ch4, codes::CLIMATE_CONDENSATE_CH4),
+        (Gas::Ar, codes::CLIMATE_CONDENSATE_AR),
     ] {
         let amount = partial(&settle.condensate, gas);
         if amount > 0.0 {
@@ -276,7 +279,14 @@ pub(crate) fn record(
                 surface.water.runaway.node(),
                 rotation.locked.node(),
             ];
-            from.extend(condensate.values().map(Traced::node));
+            // The liquid reads the N2 and CH4 on the ground, not the
+            // argon frost (`science::surface::liquid`).
+            from.extend(
+                condensate
+                    .iter()
+                    .filter(|(gas, _)| **gas != Gas::Ar)
+                    .map(|(_, p)| p.node()),
+            );
             if *rotation.locked.value() {
                 from.extend(&fluxes);
                 from.push(bond_albedo.node());

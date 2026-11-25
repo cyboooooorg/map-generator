@@ -17,8 +17,9 @@ use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
 /// Source: Mars's air, 6.36 mbar of 95.1 % CO₂, 2.59 % N₂ and 0.16 % O₂
 /// (NASA Mars fact sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/
 /// marsfact.html): 6.05 mbar of CO₂, 0.165 mbar of N₂ and 0.010 mbar of
-/// O₂, imposed (study 25, "Test air and Solar System bounds"; argon has
-/// no field).
+/// O₂, imposed (study 25, "Test air and Solar System bounds"), and its
+/// 1.93 % of argon-40, 0.123 mbar (Mahaffy et al. 2013, Science 341, 263,
+/// abstract, as study 29 reads it).
 const MARS_AIR: PartialPressures = PartialPressures {
     n2: 0.165e-3,
     co2: 6.05e-3,
@@ -27,6 +28,7 @@ const MARS_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 0.010e-3,
+    ar: 0.123e-3,
 };
 
 /// Source: Mars's average surface temperature, ~214 K (NASA Mars fact
@@ -75,6 +77,7 @@ const COLD_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 2.4e-4,
     o2: 0.0,
+    ar: 0.0,
 };
 
 /// Definition: the census case of #443: the water it keeps, kg, a test
@@ -367,4 +370,42 @@ fn the_fixed_points_are_converged() {
     let titan = settled(&titan(), Numerics::DEFAULT);
     assert!(titan.converged, "{titan:?}");
     assert!(titan.iterations < CONDENSE_ITERATIONS, "{titan:?}");
+}
+
+/// Source: the argon a Triton made into its air, 1.8 Pa, the upper end
+/// of study 29b's 1.3 to 1.8 Pa ("Checks on the cold bodies"), in bar.
+const TRITON_ARGON: Bar = Bar(1.8e-5);
+
+/// Definition: the test's margin on the share of a Triton-like air its
+/// argon may hold, 5 %, twice the 2.5 % that study 29b's check finds the
+/// two frost fits allow at activity 1 (the margin study 29b proposed).
+const TRITON_ARGON_SHARE: f64 = 0.05;
+
+/// A Triton-like body keeps its argon as frost: the air holds argon's
+/// frost pressure at the settled temperature (activity 1), a small share
+/// of the N₂ air, and the rest lies on the ground (study 29b).
+#[test]
+fn a_triton_like_body_keeps_its_argon_as_frost() {
+    let bare = triton_like();
+    let inputs = ClimateInputs {
+        air: PartialPressures {
+            ar: TRITON_ARGON.0,
+            ..bare.air
+        },
+        ..bare
+    };
+    let c = settled(&inputs, Numerics::DEFAULT);
+    assert!(c.converged, "{c:?}");
+    let frost = science::volatiles::argon_frost_pressure(c.temperature)
+        .expect("under argon's triple point")
+        .0
+        / science::constants::PASCALS_PER_BAR;
+    assert!((c.air.ar / frost - 1.0).abs() < 1e-9, "{c:?} {frost:e}");
+    assert!(c.condensate.ar > 0.0, "{c:?}");
+    let share = c.air.ar / c.air.total();
+    println!(
+        "Triton-like: {:.3} K, {:.3e} bar of Ar, {share:.4} of the air",
+        c.temperature.0, c.air.ar
+    );
+    assert!(share < TRITON_ARGON_SHARE, "{share}");
 }

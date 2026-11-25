@@ -7,9 +7,10 @@ use super::carbon::thermostat;
 use super::fixture::{earth, moved};
 use super::wet::{boils, collapsed_climate, wet_balance};
 use super::{COLLAPSE_ITERATIONS, COLLAPSE_TOLERANCE, Light, Numerics};
-use science::balance::EARTH_DRY_AIR;
+use science::balance::{EARTH_DRY_AIR, TOLERANCE, absorbed, skin};
 use science::habitable::{OCEAN_MASS, runaway_flux};
 use science::radiation::albedo::{ShortwaveCache, shortwave_budget};
+use science::radiation::column::{Profile, outgoing_longwave};
 use science::radiation::gases::PartialPressures;
 use science::surface::{ICE_COVERED_TEMPERATURE, surface_vapour};
 use science::units::{Bar, EarthFlux, Fraction, Kelvin, Kilogram};
@@ -61,6 +62,17 @@ const THICK_CO2: Bar = Bar(10.0);
 /// planet-atmospheres.md`: its frozen branch "165 K at 1.6 AU, its CO₂
 /// frosted out"), a test input.
 pub(super) const COLLAPSE_ORBIT: f64 = 1.6;
+
+/// Definition: 0.05 bar of methane, a test input: in Earth's air, some
+/// 6 mbar of it above the 0.1 bar tropopause, against the 1.3 mbar at
+/// which its stratosphere takes half its most (`CH4_NEAR_IR_HALF_BAR`),
+/// so that the vapour's dilution still moves its share of the light.
+const WARM_METHANE: Bar = Bar(0.05);
+
+/// Definition: 0.7 au, a test input: Earth's air with [`WARM_METHANE`]
+/// there keeps a warm, wet balance (some 296 K and 20 mbar of vapour)
+/// under [`TEST_ALBEDO`], just short of its runaway (at 0.65 au).
+const WARM_METHANE_ORBIT: f64 = 0.7;
 
 /// Earth's bare air with today's CO₂, 400 ppm ([`EARTH_DRY_AIR`]), for the
 /// balances of a temperate Earth.
@@ -132,6 +144,42 @@ fn a_thick_nitrogen_earth_keeps_a_balance() {
     let e = body.emissivity_at(EARTH_SURFACE, &air);
     let balance = wet_balance(&mut body, light, &air, e);
     assert!(balance.is_some(), "{THICK_N2:?} of N₂ runs away");
+}
+
+#[test]
+fn a_wet_methane_balance_is_its_own_airs() {
+    // #681: a warm, wet Earth under methane, whose stratosphere takes a
+    // share of the light that the vapour dilutes. The balance's
+    // definition: on the air it returns, its vapour held, the column sends
+    // out at least what that air's surface absorbs at the temperature it
+    // returns, and less one solver tolerance below.
+    let inputs = moved(&earth(), WARM_METHANE_ORBIT);
+    let start = PartialPressures {
+        ch4: WARM_METHANE.0,
+        ..modern_air(&inputs)
+    };
+    let mut body = ClimateBody::new(&inputs, Numerics::DEFAULT);
+    let light = body.starlight(Fraction::new(TEST_ALBEDO).unwrap());
+    let e = body.emissivity_at(EARTH_SURFACE, &start);
+    let (air, t) = wet_balance(&mut body, light, &start, e).expect("a balance");
+    let mut excess = |x: f64| {
+        e.get()
+            * outgoing_longwave(
+                &air,
+                Kelvin(x),
+                skin(light),
+                inputs.gravity,
+                Profile::CLIMATE,
+                &mut body.columns,
+            )
+            .0
+            - absorbed(light, &air, inputs.heat_flux).0
+    };
+    let (at, below) = (excess(t.0), excess(t.0 - TOLERANCE.0));
+    assert!(
+        at >= 0.0 && below < 0.0,
+        "{t:?} under {air:?}: {at} and {below} W/m²"
+    );
 }
 
 #[test]

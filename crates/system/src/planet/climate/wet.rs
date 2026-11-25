@@ -33,9 +33,13 @@ fn with_vapour(air: &PartialPressures, t: f64, water: Bar) -> PartialPressures {
 /// [`ClimateBody::water_column`]) and the temperature at which the
 /// climate's column ([`Profile::CLIMATE`]) over the surface, times its
 /// `emissivity`, sends out what the surface [`absorbed`] plus its
-/// internal heat. A cooling planet stops at the first such temperature
-/// above its grey-body one (the vapour only lowers the outgoing
-/// radiation, so no colder surface balances).
+/// internal heat, both on those gases: the vapour dilutes the methane
+/// whose stratosphere takes a share of the light, so the light absorbed
+/// is that air's, as [`surface_temperature`] reads it (#681; legacy took
+/// it once, on `air`). A cooling planet stops at the first such
+/// temperature above the grey body of the dry air, which absorbs least
+/// (the vapour only lowers the outgoing radiation and raises the light
+/// absorbed, so no colder surface balances).
 ///
 /// `None` when the water runs away: the grey body is already at water's
 /// critical point, or no surface below it balances with its troposphere
@@ -53,41 +57,37 @@ pub(crate) fn wet_balance(
     let numerics = body.numerics;
     let water = body.water_column();
     let (heat, gravity) = (body.inputs.heat_flux, body.inputs.gravity);
-    let absorbed = absorbed(starlight, air, heat).0;
+    // The dry air absorbs least: its vapour only dilutes the methane whose
+    // stratosphere takes a share of the light (#681).
+    let dry = PartialPressures { h2o: 0.0, ..*air };
+    let least = absorbed(starlight, &dry, heat).0;
     let skin = skin(starlight);
     let e = emissivity.get().clamp(LEAST_EMISSIVITY, 1.0);
-    let bare = (absorbed / (e * STEFAN_BOLTZMANN)).powf(0.25);
+    let bare = (least / (e * STEFAN_BOLTZMANN)).powf(0.25);
     if bare >= CRITICAL_POINT_TEMPERATURE.0 {
         return None;
     }
     let columns = &mut body.columns;
     let mut excess_of = |t: f64, profile: Profile| {
         let gases = with_vapour(air, t, water);
-        e * outgoing_longwave(&gases, Kelvin(t), skin, gravity, profile, columns).0 - absorbed
+        e * outgoing_longwave(&gases, Kelvin(t), skin, gravity, profile, columns).0
+            - absorbed(starlight, &gases, heat).0
     };
     let probe_holds = numerics
         .probe
         .is_some_and(|p| excess_of(p.0, Profile::SATURATED) >= 0.0);
     if !probe_holds {
-        first_balance(
-            |t| excess_of(t, Profile::SATURATED),
-            absorbed,
-            bare,
-            &numerics,
-        )?;
+        first_balance(|t| excess_of(t, Profile::SATURATED), least, bare, &numerics)?;
     }
-    let t = first_balance(
-        |t| excess_of(t, Profile::CLIMATE),
-        absorbed,
-        bare,
-        &numerics,
-    )?;
+    let t = first_balance(|t| excess_of(t, Profile::CLIMATE), least, bare, &numerics)?;
     Some((with_vapour(air, t, water), Kelvin(t)))
 }
 
 /// The first surface temperature, K, from `bare` up to water's critical
-/// point, at which `excess` (outgoing less `absorbed`, W/m²) reaches
+/// point, at which `excess` (outgoing less absorbed, W/m²) reaches
 /// zero; `None` if none (legacy `first_balance`, the scan of #600).
+/// `absorbed` (W/m², the least the surface absorbs over the scan) only
+/// scales its steps.
 ///
 /// Each step goes up by the `T⁴` step of `science::balance::bracket_up`,
 /// or by the secant through the last two points where that goes further

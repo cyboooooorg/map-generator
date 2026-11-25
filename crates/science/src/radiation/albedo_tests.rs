@@ -210,9 +210,10 @@ fn precipitable_cm(column: &Levels) -> f64 {
 /// Earth's shortwave column at [`EARTH_SURFACE_K`] holding `water_cm` of
 /// precipitable water at one relative humidity throughout: the saturated
 /// column (3.165 cm) with every level's vapour times one factor, found by bisection
-/// (the diagnostic study's column, which leaves the humidity profile to
-/// issue #654 and tests the optics at equal water). Returns the surface
-/// air and the column.
+/// (the diagnostic study's column, which tests the optics at equal water;
+/// the humidity profile was settled by Wiki study 33, issue #654, and a
+/// test on the RFMIP field is to replace this column, issue #715).
+/// Returns the surface air and the column.
 fn earth_column_holding(water_cm: f64) -> (PartialPressures, Levels) {
     let saturated = earth_air_at(1.0);
     let scaled = |factor: f64| {
@@ -436,6 +437,7 @@ fn no_air_returns_the_ground() {
             nh3: p,
             so2: p,
             o2: p,
+            ar: p,
         };
         for g in GROUNDS {
             let bare = earth_budget(&none, EARTH_SURFACE_K, under(g, 0.0, 0.0));

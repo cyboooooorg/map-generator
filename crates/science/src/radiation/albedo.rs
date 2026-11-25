@@ -46,7 +46,9 @@ mod tests;
 /// O₂ (issue #653, about +0.016 together) and its model Sun (+0.0023
 /// against TSIS-1), and darker by the aerosols' reflection it does not
 /// carry (about 0.017); and Earth's column at 77 % holds 1.735 cm of
-/// water against the 2.45 to 2.53 observed (issue #654). The clouds'
+/// water, what one column needs for the observed field's outgoing
+/// longwave, where its absorbed sunlight would need about 2.4 cm: about
+/// 0.0025 of Bond albedo (Wiki study 33, issue #654). The clouds'
 /// reflectance makes up the rest: refit it when any of these lands (#705
 /// refits it on the climate's own ground). See
 /// `docs/science/radiative-transfer.md`, "The cloud's water, the deck and
@@ -57,7 +59,7 @@ pub(crate) const CLOUD_ALBEDO: f64 = 0.296;
 /// (a numerical choice with no source: audit, Wiki study 19).
 const REMEMBERED_AIRS: usize = 32;
 
-/// The inputs of an air's paths, as bits: the seven partial pressures,
+/// The inputs of an air's paths, as bits: the eight partial pressures,
 /// the surface temperature, the gravity, and the star's temperature and
 /// metallicity.
 type AirKey = [u64; 11];
@@ -131,6 +133,7 @@ impl ShortwaveCache {
             gases.nh3,
             gases.so2,
             gases.o2,
+            gases.ar,
             surface_k,
             gravity_m_s2,
             star_k,

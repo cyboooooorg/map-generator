@@ -330,6 +330,7 @@ const ACID_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.02,
     o2: 0.0,
+    ar: 0.0,
 };
 
 /// Definition: the band the deck's onset falls in, 263 to 330 K, and the
@@ -1563,7 +1564,7 @@ fn recondensing_water() -> f64 {
 }
 
 #[test]
-#[ignore = "heavy: a full boil loop, three runs and the water sizing, 13.4 s in release"]
+#[ignore = "heavy: a full boil loop, three runs and the water sizing, 4.3 s in release"]
 fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
     let mut trace = Trace::new();
     let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(TENTH_OF_N2));

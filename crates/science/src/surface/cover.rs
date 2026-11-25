@@ -17,9 +17,10 @@ use crate::water::{ice_ih_density, ice_ih_melting_temperature, vapour_saturation
 /// (*J. Climate* 19, 3589, doi:10.1175/JCLI3816.1, abstract), a mean of
 /// 75 % to 80 % over most oceans and 70 % to 80 % over most land, from
 /// over 15 000 stations and ships (1976 to 2005); Manabe & Wetherald
-/// 1967 (*J. Atmos. Sci.* 24, 241) took 0.77, read through the codes of
-/// konrad (`Manabe67`) and climlab (`FixedRelativeHumidity`). Study 24,
-/// section 8.
+/// 1967 (*J. Atmos. Sci.* 24, 241, eq. 2, read in the scan GFDL hosts,
+/// Wiki study 33) took 0.77, fitted to observed hemispheric means of
+/// relative humidity (their Fig. 3), as konrad (`Manabe67`) and climlab
+/// (`FixedRelativeHumidity`) take it. Study 24, section 8.
 pub const RELATIVE_HUMIDITY: f64 = 0.77;
 
 /// Source: the albedo of the ocean under isotropic light, 0.06: Payne
