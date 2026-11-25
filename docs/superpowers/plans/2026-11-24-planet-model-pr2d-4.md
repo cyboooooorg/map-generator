@@ -1020,8 +1020,10 @@ D2 and D5 by mapgen3), as proposed except D5's alias:
     condition): for every placement whose model has a surface, its
     class has `!is_giant` (the three giant classes, with a comment
     naming `spin::is_giant`), and every logged read for its trial seed
-    with `Some(obliquity)` equals `placement.spin.obliquity.value()`
-    bit for bit (`assert_eq!` on the `f64`);
+    is `Some(obliquity)` with `obliquity.value().to_bits() ==
+    placement.spin.obliquity.value().to_bits()`; for every giant
+    placement every logged read is `None`. One assertion covers
+    `!is_giant` and B2 (the obliquity does not depend on the radius);
   - `every_trial_seed_is_unique`: within each system, the placements'
     `trial.seed`s are distinct;
   - `the_reference_planets_are_pinned`: per system and designation,
