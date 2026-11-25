@@ -875,7 +875,9 @@ CH₄/CO₂ ratio of 0.2.
   shortwave (issue #653): together about 21 W/m² of Earth's clear-sky
   absorption (ozone 13.9 and O₂ 2.0 from Kiehl & Trenberth 1997,
   aerosols 4.8 from Kim & Ramanathan 2008, scaled to 340.25), and the
-  aerosols' 0.017 of albedo.
+  aerosols' 0.017 of albedo. Study 34 reads the ozone column against O₂ and the
+  star, the optics of ozone and O₂ and the aerosols, and measures their
+  effect on Earth's column: see [ozone.md](ozone.md).
 - **CO₂'s share** of the clear-sky absorption was read in two sources
   only, 1.0 and 1.6 W/m², on different profiles and spectroscopy; no
   global-mean line-by-line split of the absorption by gas was found
