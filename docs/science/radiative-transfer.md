@@ -286,7 +286,7 @@ column's vapour, one column gives the profiles' mean OLR at about
 radiation is weighted by area and is convex in the water (the dry
 subtropics send out the most, study 32); the absorbed sunlight is
 concave in the water but weighted by the light, which falls mostly on
-the wet tropics. **No single humidity carries both**: about 1.75 cm for
+the wet tropics. **No single humidity carries both**: about 1.76 cm for
 the longwave, about 2.4 cm for the absorbed sunlight. The app's Earth
 column, 1.67 cm converged (1.735 cm on the shortwave's grid), sits on
 the longwave's value. Applied to the observed field, the app's optics
@@ -297,17 +297,21 @@ below), inside its 48 to 54.
 **What the profile does and does not set.** On the mean temperature
 profile, Manabe & Wetherald's line and the observed mean humidity hold
 nearly the same water (1.94 against 2.00 cm). They differ aloft: the
-RFMIP mean relative humidity (over liquid above 273.16 K, over ice
-below) is 0.75 to 0.79 from $Q$ = 0.9 to 1, 0.52 at 0.75, 0.43 to 0.45
+RFMIP mean relative humidity (over liquid above 273.16 K and over ice
+below, on Murphy & Koop 2005's eqs. 10 and 7) is 0.75 to 0.79 from
+$Q$ = 0.9 to 1, 0.52 at 0.75, 0.43 to 0.45
 from 0.65 to 0.35, 0.45 to 0.48 at 0.25 to 0.3; the line gives 0.69 to
 0.77, 0.57, 0.50 down to 0.26, then 0.22 to 0.18. The observed humidity
-on the app's own column at 288 K holds 1.72 to 1.74 cm, 0.03 cm more
-than the line, and sends out 3.2 W/m² less in clear skies (measured).
-The rest of the gap between 2.00 and 1.72 cm is the temperature: the
+on the app's own column at 288 K holds 1.744 cm on the climate's grid
+(20 levels per decade), 0.03 cm more than the line's 1.712 (1.814
+against 1.735 on the shortwave's grid), and sends out 3.2 W/m² less in
+clear skies (measured). The rest of the gap between 2.00 and 1.74 cm is
+the temperature: the
 moist adiabat from 288 K reaches 253.6 K at half the surface pressure,
 the mean of the RFMIP profiles 257.9 K, which averages warm tropical
 and cold polar columns. The water's scale height says the same: 2.1 to
-2.5 km in the AFGL reference atmospheres (Anderson et al. 1986; the
+2.5 km in the AFGL reference atmospheres but the sub-arctic winter's
+3.51 km (Anderson et al. 1986; the
 U.S. Standard holds 1.44 cm over 288.2 K), 2.2 km for the RFMIP
 profiles, 1.7 km for the app's column (all derived: the column's water
 over its surface vapour density).
@@ -715,7 +719,7 @@ Kim & Ramanathan's global run takes the NVAP field, 2.45 to 2.53 cm
 (their 3.0 ± 0.3 cm of Table 2 is the input of their sensitivity case).
 That field is not one column: a single column absorbs the field's
 sunlight-weighted 52.19 W/m² at about 2.4 cm, and sends out its mean
-OLR at about 1.75 cm (study 33, *How much water one column holds*).
+OLR at about 1.76 cm (study 33, *How much water one column holds*).
 The app's 1.735 cm absorbs 48.41 W/m² in clear skies (measured), 3.8
 less than the field. Kiehl & Trenberth's U.S. Standard Atmosphere holds
 1.44 cm in the AFGL file (derived; the paper does not give it).
@@ -818,7 +822,8 @@ CH₄/CO₂ ratio of 0.2.
   found. Methane, N₂O and the halocarbons take 3.6 W/m² (Hogan &
   Matricardi 2020, line by line).
 - **Which saturation Manabe & Wetherald's humidity refers to** below
-  0 °C: the 1967 paper was not read, and its implementations differ
+  0 °C: the 1967 paper, read in study 33, names none ("the saturation
+  vapor pressure of water vapor"), and its implementations differ
   (see *Water: saturation, humidity and the limit*). Over liquid water,
   Earth's column sends out 2.9 W/m² less.
 - **Why the clouds' longwave effect is too large** in the column
@@ -1020,7 +1025,8 @@ the Bond albedo are there too (change 2b-2).
     ozone and O₂ (#653, #655), the aerosols' reflection, and the
     sunlight the column's 1.735 cm of water leaves unabsorbed against
     the 2.4 cm a single column needs for the observed field (#654, study
-    33): about 0.0025 of Bond albedo (measured). The legacy fitted 0.252
+    33): about 0.0025 of Bond albedo (interpolated between measured
+    runs). The legacy fitted 0.252
     on 0.30.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
@@ -1080,7 +1086,7 @@ the Bond albedo are there too (change 2b-2).
   2.45 to 2.53 cm observed (NVAP heritage 24.5 mm and NVAP-M 25.3 mm,
   Forsythe et al. 2014). Issue #654. Study 33 found the comparison is not
   like for like: one column carries the observed field's outgoing
-  longwave at about 1.75 cm and its absorbed sunlight at about 2.4 cm
+  longwave at about 1.76 cm and its absorbed sunlight at about 2.4 cm
   (*How much water one column holds*). The app's column is right for the
   longwave and holds about 0.65 cm too little for the shortwave: its air
   absorbs 3.8 W/m² less than the field would (48.41 against 52.19,
@@ -1092,7 +1098,7 @@ the Bond albedo are there too (change 2b-2).
   window of study 32. Decided with the user (2026-11-25): the column
   keeps Manabe & Wetherald's line and 77 % for both halves, with no
   separate shortwave water; a test of the shortwave on the RFMIP field
-  waits for study 35. The absorption tests scale the saturated shortwave
+  waits for study 35 (#715). The absorption tests scale the saturated shortwave
   column's vapour level by level to a given water, which tests the
   optics:
   - At 2.5 cm the air absorbs 52.70 W/m² (window 48-54, from Kim &
@@ -1121,9 +1127,11 @@ the Bond albedo are there too (change 2b-2).
   cm at $RH_s$ = 1 is the code's: `column::levels` builds any saturated
   surface as a fully saturated column (after Kopparapu et al. 2013 for
   moist and runaway airs), where the formula itself is continuous. A
-  bisection on the falling profile cannot reach 3.0 cm for this reason.
-  Issue #654. For Earth the cap does not bind: the observed mean
-  relative humidity peaks at 0.79 near the ground (RFMIP, study 33).
+  bisection on the falling profile cannot reach 3.0 cm for this reason
+  (issue #654, closed by study 33). Earth needs no $RH_s$ near 1: the
+  observed mean relative humidity near the ground, 0.79 at 0.95 of the
+  surface pressure (RFMIP, study 33), is only a little wetter than the
+  line's 0.73 there.
 - **The methane anti-greenhouse.** The share of the star's light that the
   methane of the stratosphere absorbs, `methane::stratospheric_share`,
   takes its near-infrared half-saturation, `CH4_NEAR_IR_HALF_BAR`, from a
@@ -1419,15 +1427,16 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   2018's clear-sky 2.2 W/m²/K gives 1.7 to 2.2 K); the 20-level grid
   adds about 0.3 W/m² (0.15 K) under the clouds.
 
-**Sources the audit could not read.** Kasting 1991 (Appendix B), Manabe &
-Wetherald 1967 (equation 2), Pierrehumbert 2010 (equation 2.33), the CRC
-polarizabilities and Sobolev 1975 are behind paywalls or out of print. For
-each but the CRC, the audit found an indirect confirmation, named above
-(Kopparapu et al. 2013 for the first; `climlab` and arXiv:2006.03098 for
-the second; a search result of arXiv:2210.05963 for the third; Zuluaga et
-al. 2022 for the last), and the article says so where it uses them; the
-page no longer relies on the CRC polarizabilities. Bucholtz 1995's tables, missing
-from the audit, were read later on the publisher's page (Tables 1 to 5).
+**Sources the audit could not read.** Kasting 1991 (Appendix B),
+Pierrehumbert 2010 (equation 2.33), the CRC polarizabilities and Sobolev
+1975 are behind paywalls or out of print. For each but the CRC, the
+audit found an indirect confirmation, named above (Kopparapu et al. 2013
+for the first; a search result of arXiv:2210.05963 for the second;
+Zuluaga et al. 2022 for the last), and the article says so where it
+uses them. Manabe & Wetherald 1967, once in this list, was read in
+study 33. The page no longer relies on the CRC polarizabilities. Bucholtz
+1995's tables, missing from the audit, were read later on the
+publisher's page (Tables 1 to 5).
 
 ## Sources
 
@@ -1536,7 +1545,8 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
     doi:10.5194/acp-21-14927-2021.
 38. Held, I. M., Soden, B. J. 2006, *J. Climate* 19, 5686,
     doi:10.1175/JCLI3990.1 (read in the copy at
-    <https://www.image.ucar.edu/idag/Papers/Held_hydro.pdf>: §2, Fig. 2a).
+    <https://www.image.ucar.edu/idag/Papers/Held_hydro.pdf>: eq. 1, §2,
+    Fig. 2a).
 39. Heng, K., Mendonça, J. M., Lee, J.-M. 2014, arXiv:1405.0026 (the table
     of two-stream closures).
 40. HITRAN collision-induced absorption, 2024 files:
@@ -1607,7 +1617,9 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
     `https://github.com/idaholab/moose`, commit `15eacf5e`.
 66. Murphy, D. M., Koop, T. 2005, *Q. J. R. Meteorol. Soc.* 131, 1539,
     doi:10.1256/qj.04.94 (as Kluft et al. 2019 and Gettelman et al. 2006
-    use it; the study's scratch runs took its eqs. 7 and 10).
+    use it; the study's scratch runs took its eqs. 7 and 10, the
+    saturation over ice and over liquid of the RFMIP relative humidity in
+    study 33; eq. 5 for the latent heat).
 67. Murphy, W. F. 1977, *J. Chem. Phys.* 67, 5877, doi:10.1063/1.434794
     (abstract, through Crossref).
 68. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.

@@ -26,7 +26,7 @@ mod tests;
 /// reflectance of the cloud cover's share of the disc, 0.276. Fitted on
 /// Earth's Bond albedo, 0.293 (CERES; Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018,
-/// doi:10.1175/JCLI-D-17-0208.1, give 0.2915), by bisection to three
+/// doi:10.1175/JCLI-D-17-0523.1, give 0.2915), by bisection to three
 /// digits (0.2758 before rounding; 0.29308 with 0.276) over Earth's
 /// inputs: a ground of 0.122 (CERES EBAF Ed4.0 clear-sky surface, Kato et
 /// al. 2018, Table 5), its dry air with 400 ppm of CO₂ at 77 % relative

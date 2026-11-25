@@ -3895,8 +3895,9 @@ another paper, from memory) is said where it is used.
 - Mandt, Mousis, Lunine and Gautier 2014, *ApJ Letters*
   788, L24, doi:10.1088/2041-8205/788/2/L24.
 - Manabe and Wetherald 1967, *J. Atmos. Sci.* 24, 241,
-  doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2 (abstract read;
-  the surface humidity 0.77 through the konrad and climlab codes).
+  doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2 (read in study 33
+  in the scan GFDL hosts: eq. 2, the surface humidity 0.77 fitted to
+  observed hemispheric means, Fig. 3).
 - Marcq et al. 2008, Venus's SO₂ below the clouds.
 - Marty 2012, *Earth Planet. Sci. Lett.* 313-314, 56-66,
   doi:10.1016/j.epsl.2011.10.040, carbon in the mantle; Earth's bulk
