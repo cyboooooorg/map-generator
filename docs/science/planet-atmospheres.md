@@ -2514,16 +2514,21 @@ has none, and the climate is solved again after oxygenation in 2d-4
 O₂ 20.95 % of 1.014 bar). Dry bodies are never a runaway: Mercury and a
 dry Venus are `Temperate`.
 
-Known gap: the wet column's clear-sky outgoing radiation on Earth's
-measured air is 274.9 W/m² against CERES's 267.9 W/m², +7 W/m² (#680).
-Study 32 found the comparison is not like for like: the column holds
-water vapour and CO₂ only, and the ozone, methane, N₂O and halocarbons
-it lacks account for 8 to 14 W/m² more (see
+The wet column against CERES (#680, study 32): on Earth's measured air
+at 288 K and 280 ppm the clear column sends out 274.72 W/m² on `main`
+(274.63 since the phase step of the moist adiabat was split), which
+looked 7 W/m² brighter than CERES's 267.9 W/m². The +7 W/m² is not an
+excess of the column: the comparison is not like for like. The column
+holds water vapour and CO₂ only; the ozone, methane, N₂O and
+halocarbons it lacks account for 8 to 14 W/m², and like for like it
+should send out 275.5 to 282.9 W/m², 0.85 W/m² above what it does (see
 [Earth's longwave against CERES (study 32)](#earths-longwave-against-ceres-study-32)).
-The reference Earth, whose air lacks oxygen, runs 283.84 K at 280 ppm
-(+2.7 K from the missing O₂, +0.5 K from the nitrogen, +1.4 to 2 K from
-the IAPWS saturation curve of the column, and a cloud longwave effect of
-31.1 W/m² against 34.0 W/m² in legacy).
+Its clouds take out 32.91 W/m² at 288 K on `main` (33.38 since the
+split), against CERES's 25.7 to 28.0 W/m² and legacy's 34.0 W/m². The
+reference Earth, whose air lacks oxygen, runs 283.84 K at 280 ppm (+2.7 K
+from the missing O₂, +0.5 K from the nitrogen, +1.4 to 2 K from the
+IAPWS saturation curve of the column); its cold bias comes mostly from
+its Bond albedo (the shortwave), not from the longwave.
 
 Legacy's results, for history: Earth 288 K with 1.2e-4 bar of CO₂ and
 289.5 K at 280 ppm (the thermostat needed a factor 2.3 less CO₂ than
@@ -2828,39 +2833,45 @@ Study 32 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/32-longwave-against-ceres-audit)
 (2026-11-25, issue #680) asked why the climate's column sends out
 7 W/m² more than CERES's clear sky, and whether that makes the
-reference Earth (285.82 K at 280 ppm in PR 2d-4) too cold. The details
+reference Earth (285.82 K at 280 ppm in planet PR 2d-4) too cold. The details
 and the measurements are in
 [the radiative transfer page](radiative-transfer.md#where-it-departs-from-the-science);
 for the climate:
 
 - **The column's water is not too dry.** Without its clouds the column
-  sends out 274.69 W/m² at 288 K and 280 ppm. With the gases it lacks
-  (ozone 4 to 10 W/m², Schmidt et al. 2010 and Kiehl & Trenberth 1997;
-  methane, N₂O and halocarbons 3.6 W/m², Hogan & Matricardi 2020), the
-  CO₂ of CERES's years (1.75 W/m²) and the clear sky of a column model
-  (Loeb et al. 2020's 265.9 W/m²), the like-for-like level is about
-  275 to 283 W/m². On the 100 RFMIP reanalysis profiles the column is
-  1.1 to 2.0 W/m² darker than the mean of their own outgoing
+  sends out 274.63 W/m² at 288 K and 280 ppm (274.72 before the phase
+  step was split), under the 214.51 K skin of CERES's all-sky emission.
+  With the gases it lacks (ozone 4 to 10 W/m², Schmidt et al. 2010 and
+  Kiehl & Trenberth 1997; methane, N₂O and halocarbons 3.6 W/m², Hogan
+  & Matricardi 2020), the CO₂ of CERES's years (1.75 W/m²) and the
+  clear sky of a column model (Loeb et al. 2020's 265.9 W/m²), the
+  like-for-like level is 275.5 to 282.9 W/m²: the column lies 0.85 W/m²
+  under it, inside only the window widened by CERES's uncertainty
+  (272.1 to 286.3 W/m²). On the 100 RFMIP reanalysis profiles the
+  column is 1.0 to 1.9 W/m² darker than the mean of their own outgoing
   radiation with the same two gases. Moistening the upper air to bring
   the clear sky to 267.9 W/m² would hide the missing gases in the
   water, and is not recommended.
-- **Its clouds are too dark in the infrared**: 32.91 W/m² of longwave
-  effect against CERES's 25.7 (the same air without its clouds; Loeb et
-  al. 2020) to 28.0 W/m² (cloud-free scenes). At 389 ppm the two errors
-  cancel: the cloudy column sends out 240.44 W/m² against CERES's
-  240.1 W/m².
+- **Its clouds are too dark in the infrared**: 33.38 W/m² of longwave
+  effect at 288 K and 280 ppm (32.91 before the split) against CERES's
+  25.7 (the same air without its clouds; Loeb et al. 2020) to 28.0 W/m²
+  (cloud-free scenes). At 389 ppm the two errors cancel: the missing
+  gases make the cloudy column send out about 7.6 W/m² too much, its
+  clouds (32.98 W/m² at 389 ppm) 7.3 W/m² too little, and it sends out
+  239.90 W/m² (240.46 before the split) against CERES's 240.1 W/m².
 - **The cold reference Earth** is then not the longwave's doing. Its
   Bond albedo, 0.304 to 0.306, against the observed 0.2915 to 0.293
-  (CERES), lets in 3.7 to 4.9 W/m² less, about 1.7 to 2.2 K at
-  2.2 W/m²/K (Koll & Cronin 2018, Earth's clear-sky feedback within
-  10 %); the shortwave's missing ozone and aerosols are #653.
+  (CERES), lets in 3.7 to 4.9 W/m² less, about 1.9 to 2.5 K at the
+  column's cloudy-sky slope, 2.0 W/m²/K (the table below); the
+  shortwave's missing ozone and aerosols are #653.
 - **A numerical step, now split.** The moist adiabat's latent heat
   jumps at 273.16 K inside a step of the grid, so the cloudy column's
   outgoing radiation ran as a sawtooth in the surface temperature, up
   to 1.2 W/m² (0.89 W/m² at 288 K against a grid 16 times finer). The
   step is now split at 273.16 K (radiative transfer page, *The phase
   step of the moist adiabat*): the cloudy column at 288 K sends out
-  0.57 W/m² less, at 285.82 K 0.07 W/m² more. It was not the cause of
+  0.57 W/m² less, at 285.82 K (the reference Earth in planet PR 2d-4)
+  0.07 W/m² more. It was not the cause of
   #681: the regulated Earth under Titan's methane stays at 284.0103 K
   after the split. That temperature is the dew point of the vapour the
   thermostat sets at 288 K, the floor of the surface's root search,
@@ -2868,24 +2879,26 @@ for the climate:
   on the air before its CO₂ is regulated (its methane's anti-greenhouse
   then takes less), and the regulated air absorbs 29 W/m² less.
 
-What each change would do to the reference Earth at 280 ppm, estimated
-with the column's own cloudy-sky slope, 2.0 W/m²/K (measured from 284
-to 290 K; Koll & Cronin's clear-sky 2.2 W/m²/K gives the same within
-10 %), not run:
+What each change would do to the reference Earth at 280 ppm (285.82 K
+in planet PR 2d-4), estimated, not run, with one slope for every row:
+the column's own cloudy-sky slope, 2.0 W/m²/K (1.98 on Earth's column
+from 284 to 290 K since the split, 2.02 before). Koll & Cronin 2018's
+clear-sky 2.2 W/m²/K would make each change about 10 % smaller.
 
 | Change | Cloudy-sky W/m² | Temperature |
 | --- | --- | --- |
-| Ozone, methane, N₂O and halocarbons in the column | −7.6 (Schmidt et al. 2010, Table 1: 4.9 % of 155) | about +3.5 K |
-| Clouds' longwave effect brought from 32.91 to 25.7 W/m² | +7.2 | about −3.3 K |
-| Bond albedo from 0.304-0.306 to 0.2915-0.293 | +3.7 to +4.9 absorbed | about +1.7 to +2.2 K |
+| Ozone, methane, N₂O and halocarbons in the column | −7.6 (Schmidt et al. 2010, Table 1: 4.9 % of 155) | about +3.8 K |
+| Clouds' longwave effect brought from 32.48 (the column at 285.82 K) to 25.7 W/m² | +6.8 | about −3.4 K |
+| Bond albedo from 0.304-0.306 to 0.2915-0.293 | +3.7 to +4.9 absorbed | about +1.9 to +2.5 K |
 | The phase step split at 273.16 K (done) | +0.07 at 285.82 K | about −0.03 K |
-| Humidity over liquid water below 0 °C (not recommended until the 1967 convention is read) | −2.56 | about +1.3 K |
+| Humidity over liquid water below 0 °C (not recommended until the 1967 convention is read) | −2.56 (study 32, at 288 K) | about +1.3 K |
 
 The first two go together: refitting the clouds alone would cool Earth
-by 3.3 K. Venus (supercritical, 85 bar of CO₂), Mars (6.36 mbar, below
+by 3.4 K. Venus (supercritical, 85 bar of CO₂), Mars (6.36 mbar, below
 273.16 K at every level) and Titan (no water) do not cross the phase
 step; ozone and methane in the longwave would warm a body only where
-its air holds them (Titan's methane is already in the column).
+its air holds them (Titan's methane is already in the column, as the
+grey stand-in of its collision-induced greenhouse).
 
 ### Boiling and the steam envelope of the rewrite (study 26)
 

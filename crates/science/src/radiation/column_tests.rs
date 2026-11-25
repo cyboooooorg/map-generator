@@ -211,7 +211,10 @@ const TOTAL_REGION_W_M2: f64 = -2.2;
 /// radiation, each removed from a present-day atmosphere: 1.5, 1.5, 0.22,
 /// 0.17, 0.15 and 0.096 W/m² (Hogan & Matricardi 2020, *Geosci. Model
 /// Dev.* 13, 6501, doi:10.5194/gmd-13-6501-2020, Table 4, line by line).
-/// The column holds none of them as absorbers.
+/// The column has no opacity for N₂O, the halocarbons, N₂ or O₂; its only
+/// methane opacity is the grey stand-in of Titan's collision-induced
+/// greenhouse (`radiation::methane`), and Earth's test air holds no
+/// methane, so none of these absorbs in the test.
 const MINOR_GASES_W_M2: f64 = 1.5 + 1.5 + 0.22 + 0.17 + 0.15 + 0.096;
 
 /// Source: what ozone takes from Earth's outgoing radiation, W/m², from
@@ -243,9 +246,11 @@ const MYHRE_CO2_W_M2: f64 = 5.35;
 /// it being absorbed on the way up.
 const BLACK_GROUND_W_M2: f64 = (1.0 - 0.98) * (398.2 - 317.2);
 
-/// Source: CERES's uncertainty, the calibration's 0.75 % (1σ) and the
-/// 2.75 W/m² of the scene identification, combined in quadrature (CERES
-/// EBAF Ed4.0 Data Quality Summary, §4.4).
+/// Source: the two terms of CERES's uncertainty, the calibration's 0.75 %
+/// (1σ) and the 2.75 W/m² of the scene identification (CERES EBAF Ed4.0
+/// Data Quality Summary, §4.4). The summary gives them apart; the test
+/// combines them in quadrature itself, as independent errors: 3.4 W/m²
+/// on 268.1 W/m².
 const CERES_UNCERTAINTY: (f64, f64) = (0.0075, 2.75);
 
 /// Definition: the surface temperatures, K, over which the smoothness
@@ -739,8 +744,9 @@ fn earth_at(co2_ppm: f64, surface_k: f64) -> PartialPressures {
     }
 }
 
-/// The skin of Earth: [`skin_temperature`] of the effective temperature
-/// of CERES's all-sky outgoing radiation, 254.9 K.
+/// The skin of Earth: [`skin_temperature`] (`2^-¼` of it) of the
+/// effective temperature of CERES's all-sky outgoing radiation,
+/// `(240.1 / σ)^¼` = 255.09 K: 214.51 K, the skin the test columns use.
 fn earth_skin() -> Kelvin {
     skin((CERES_ALL_SKY_W_M2 / STEFAN_BOLTZMANN).powf(0.25))
 }

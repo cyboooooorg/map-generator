@@ -700,18 +700,23 @@ CH₄/CO₂ ratio of 0.2.
   global-mean line-by-line split of the absorption by gas was found
   (Ramanathan & Vogelmann 1997, *Ambio* 26, 38, could not be opened).
   The share of the reflected light that ozone removes was not found.
-- **Ozone, methane and N₂O are not modelled in the infrared either.**
-  Ozone's share of Earth's clear-sky outgoing radiation is 4 to
-  10 W/m² across the sources read (Schmidt et al. 2010, all sky; Kiehl
-  & Trenberth 1997, clear sky, on one profile); no global-mean
-  line-by-line value with ozone removed was found. Methane, N₂O and the
-  halocarbons take 3.6 W/m² (Hogan & Matricardi 2020, line by line).
+- **Ozone, N₂O and the halocarbons are not modelled in the infrared
+  either, and methane only as a stand-in.** The column's one methane
+  opacity is the grey stand-in of Titan's collision-induced greenhouse
+  (`radiation::methane`, a calibration on Titan), not methane's bands;
+  Earth's test air holds no methane. Ozone's share of Earth's clear-sky
+  outgoing radiation is 4 to 10 W/m² across the sources read (Schmidt
+  et al. 2010, all sky; Kiehl & Trenberth 1997, clear sky, on one
+  profile); no global-mean line-by-line value with ozone removed was
+  found. Methane, N₂O and the halocarbons take 3.6 W/m² (Hogan &
+  Matricardi 2020, line by line).
 - **Which saturation Manabe & Wetherald's humidity refers to** below
   0 °C: the 1967 paper was not read, and its implementations differ
   (see *Water: saturation, humidity and the limit*). Over liquid water,
   Earth's column sends out 2.9 W/m² less.
 - **Why the clouds' longwave effect is too large** in the column
-  (32.9 W/m² against CERES's 25.7 to 28.0): see study 32 below.
+  (33.4 W/m² at 288 K against CERES's 25.7 to 28.0): see study 32
+  below.
 
 ## In the app
 
@@ -1159,9 +1164,9 @@ continuum. Issue #643 tracks it.
 
 **Earth's outgoing longwave against CERES (study 32, issue #680).** The
 climate's column for Earth (288 K, 280 ppm of CO₂, Earth's measured air,
-77 % relative humidity at the surface, skin 214.4 K) sends out
-274.69 W/m² under a clear sky and 241.79 W/m² under its clouds (before
-the phase step above was split; 274.63 and 241.25 W/m² since). Against
+77 % relative humidity at the surface, skin 214.51 K) sends out
+274.63 W/m² under a clear sky and 241.25 W/m² under its clouds (274.72
+and 241.81 W/m² before the phase step above was split). Against
 CERES's 267.9 W/m² the clear sky looked 7 W/m² too bright. The
 comparison is not like for like. The study (Wiki,
 [32-longwave-against-ceres-audit](https://github.com/cyboooooorg/map-generator/wiki/32-longwave-against-ceres-audit))
@@ -1177,20 +1182,26 @@ its own code (diagnostics, nothing fitted on them):
 | CO₂ from about 389 ppm (July 2005 to June 2015, NOAA) to 280 ppm | +1.75 | the column |
 | A black surface, where RFMIP's surfaces have an emissivity of 0.98 | at most +1.6 | 2 % of the clear-sky net surface flux, 81.0 W/m² (Loeb et al. 2020, Table 3) |
 
-A column of water vapour and CO₂ alone should therefore send out about
-275 to 283 W/m² at 280 ppm: the column's 274.69 W/m² lies at the bottom
-of that range, not above it.
+A column of water vapour and CO₂ alone should therefore send out 275.5
+to 282.9 W/m² at 280 ppm (the sum of the table). The column's
+274.63 W/m² (274.72 before the split) lies 0.85 W/m² under that range,
+not above it: it falls inside only the window widened by CERES's
+uncertainty, below.
 
 The test `earths_clear_sky_column_is_ceres_like_for_like` (tier 1)
 holds it there. It builds the window from the table: 268.1 − 2.2 +
 3.64 (Hogan & Matricardi) + 1.76 (Myhre et al. 1998's
 $5.35 \ln(389/280)$ for the CO₂ of CERES's years, NOAA), plus ozone from
 4.2 to 10 and a black ground from 0 to 1.6, widened by CERES's
-uncertainty (0.75 % of 268.1 and 2.75 W/m², in quadrature: 3.4 W/m²):
+uncertainty (0.75 % of 268.1 and 2.75 W/m², the two terms of the data
+quality summary, combined here in quadrature: 3.4 W/m²):
 272.1 to 286.3 W/m². It runs the climate's own clear column
 (`Profile::CLEAR`) on Earth's measured air (78.08 % N₂ and 20.95 % O₂ of
-1.014 bar, NASA's fact sheet), 280 ppm, 77 % surface humidity at 288 K,
-under the skin of CERES's all-sky 240.1 W/m² (214.4 K): 274.63 W/m². It
+1.014 bar, rounded from NASA's fact sheet), 280 ppm, 77 % surface
+humidity at 288 K, under the skin of CERES's all-sky 240.1 W/m²: the
+column's `skin_temperature`, `2^-¼` of the effective temperature
+$(240.1/\sigma)^{1/4} = 255.09$ K, 214.51 K. It gives 274.63 W/m² (274.72
+before the split), inside the window but under its nominal part. It
 replaces `earth_clear_sky_olr`, which ran a fixed 6.5 K/km profile with a
 uniform 77 % humidity, 11 W/m² darker than the climate's, against
 267.9 ± 10 W/m² (a calibrated tolerance). The window narrows when the
@@ -1199,15 +1210,18 @@ column gains ozone and methane.
 Two direct checks agree:
 
 - **On reanalysis profiles.** On the 100 RFMIP profiles (ERA-Interim,
-  2014, weighted to the global mean; Pincus et al. 2016), LBLRTM gives
-  263.20 W/m² with all the gases (Pincus et al. 2019, Table 1). The
-  column's radiation code on the same profiles with water vapour and CO₂
-  only (397.5 ppm) gives 274.95 to 275.85 W/m² (air or skin temperature
-  at the ground), 11.8 to 12.7 W/m² more: the gases and the surface of
-  the table above. The climate's column at their mean surface
-  temperature (288.52 K) and CO₂ gives 273.87 W/m², 1.1 to 2.0 W/m²
-  under the mean of the profiles: its wet profile carries the global mean
-  of the outgoing radiation, slightly dark.
+  2014, weighted to the global mean; Pincus et al. 2016), RRTMGP's
+  reference fluxes for RFMIP (the file read, in the Sources) give
+  263.53 W/m² with all the gases, as study 32 takes them (LBLRTM gives
+  263.20, Pincus et al. 2019, Table 1). The column's radiation code on
+  the same profiles with water vapour and CO₂ only (397.5 ppm) gives
+  274.95 to 275.85 W/m² (air or skin temperature at the ground), 11.4 to
+  12.3 W/m² more: the gases and the surface of the table above. The
+  climate's column at their mean surface temperature (288.52 K) and CO₂,
+  under the 214.51 K skin, gives 273.99 W/m² (273.91 before the split;
+  274.53 under a 216.65 K skin), 1.0 to 1.9 W/m² under the mean of the
+  profiles: its wet profile carries the global mean of the outgoing
+  radiation, slightly dark.
 - **One mean profile is not the mean.** The profiles' mean temperature
   and mean vapour, radiated once, give 269.77 W/m², 6.1 W/m² under the
   mean of their outgoing radiation: the radiation is convex in the
@@ -1220,8 +1234,10 @@ Two direct checks agree:
   U.S. Standard Atmosphere, with all the gases, gave them 262 W/m²
   against ERBE's 265, and they dried its troposphere by 12 %.
 
-What moves the column (clear sky, then cloudy, W/m²), measured on Earth's
-column at 288 K:
+What moves the column (clear sky, then cloudy, W/m²), measured by
+study 32 on Earth's column at 288 K before the phase step was split,
+under a 214.4 K skin (the test's 214.51 K moves each by about
+0.03 W/m² at most):
 
 | Change | Clear | Cloudy |
 | --- | --- | --- |
@@ -1248,25 +1264,33 @@ column at 288 K:
   284.3 ppm on the RFMIP profiles is 1.45 W/m² in the column and
   1.35 W/m² in RRTMGP's reference fluxes for RFMIP (+7 %, as in #643's
   +7.5 %).
-- **The clouds' longwave effect** is 32.91 W/m² in the column
-  (emissivity 0.957, top at 0.589 of the surface pressure), against 25.7
-  (CERES, the same air without its clouds) or 28.0 (cloud-free scenes):
-  +4.9 to +7.2 W/m². Splitting the clouds into ISCCP's four types
+- **The clouds' longwave effect** is 33.38 W/m² in the column at 288 K
+  and 280 ppm (emissivity 0.957, top at 0.589 of the surface pressure;
+  32.91 before the phase step was split, at the low side of its
+  sawtooth; 32.48 at 285.82 K), against 25.7 (CERES, the same air
+  without its clouds) or 28.0 (cloud-free scenes): +5.4 to +7.7 W/m².
+  Splitting the clouds into ISCCP's four types
   (Rossow & Schiffer 1999, Table 4) does not help: placed at their top pressures
   they give 42.9 W/m², at their top temperatures 36.3 W/m². Why ISCCP's
   clouds in a mean column take out more than CERES measures was not
   found; candidates are the emissivity of thin cirrus averaged over a
   spread of optical depths, and the moister air above real clouds (Loeb
   et al. 2020).
-- **Earth's balance.** At 389 ppm the cloudy column sends out
-  240.44 W/m², against CERES's 240.1: the gases the column lacks (about
-  −7.6 W/m² under clouds, Schmidt et al. 2010's "all others" removed)
-  and the clouds' extra effect (+7.2 against 25.7) cancel. The reference
-  Earth's 285.82 K at 280 ppm (PR 2d-4) therefore does not come from the
-  column: at a Bond albedo of 0.304 to 0.306 (above; issue #680) Earth
-  absorbs 3.7 to 4.9 W/m² less than at the observed 0.2915 to 0.293,
-  about 1.7 to 2.2 K at the 2.2 W/m²/K of Koll & Cronin (2018); the
-  20-level grid adds about 0.3 W/m² (0.15 K) under the clouds.
+- **Earth's balance.** At 389 ppm and 288 K the cloudy column sends out
+  239.90 W/m² (240.46 before the split), against CERES's 240.1. Two
+  errors of opposite sign cancel in it. The gases the column lacks make
+  it send out about 7.6 W/m² too much under clouds (Schmidt et al.
+  2010's "all others" removed). Its clouds take out 32.98 W/m² at
+  389 ppm against CERES's 25.7, 7.3 W/m² too much. The two leave
+  +0.3 W/m², 240.4 W/m² expected; the column sends out 0.5 W/m² less
+  than that and 0.2 W/m² less than CERES, well inside CERES's 3.4 W/m².
+  The reference Earth's 285.82 K at 280 ppm (in planet PR 2d-4)
+  therefore does not come from the column: at a Bond albedo of 0.304 to
+  0.306 (above; issue #680) Earth absorbs 3.7 to 4.9 W/m² less than at
+  the observed 0.2915 to 0.293, about 1.9 to 2.5 K at the column's own
+  cloudy-sky slope, 2.0 W/m²/K (1.98 from 284 to 290 K; Koll & Cronin
+  2018's clear-sky 2.2 W/m²/K gives 1.7 to 2.2 K); the 20-level grid
+  adds about 0.3 W/m² (0.15 K) under the clouds.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B), Manabe &
 Wetherald 1967 (equation 3), Pierrehumbert 2010 (equation 2.33), the CRC
