@@ -281,10 +281,11 @@ against RFMIP's line-by-line fluxes.
     the table's Sun (taken). With the black body's 0.276 kept, the
     table's Sun gives 0.2835.
   - The reference Earth (`earth_has_its_climate`, held at 288 K by the
-    thermostat) on main after #711: its Bond albedo is 0.2960 and its
-    climate at 280 ppm 287.13 K.
-- **After the change**, measured: the reference Earth's Bond albedo is
-  0.2956 at 288 K and its climate at 280 ppm 287.20 K (+0.07 K). Its
+    thermostat) on main with Earth's argon (#694, `6ff2480e`): its Bond
+    albedo is 0.2965 and its climate at 280 ppm 287.20 K.
+- **After the change**, measured on the same main: the reference Earth's
+  Bond albedo is 0.2961 at 288 K and its climate at 280 ppm 287.27 K
+  (+0.07 K). Its
   snowball chance fell from 0.0140 to 0.0117 under the old
   `SNOWBALL_WARM_BAR`, refitted to 10.3 bar (0.0140 again; see [Planet
   atmospheres](planet-atmospheres.md), "Calibration of
