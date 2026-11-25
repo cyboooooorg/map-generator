@@ -8,7 +8,7 @@
 //! section A.
 
 use crate::constants::GRAVITATIONAL_CONSTANT;
-use crate::units::{Gyr, Kilogram, Metre, Watt};
+use crate::units::{Gyr, Kilogram, Metre, Mole, Watt};
 use std::f64::consts::LN_2;
 
 /// Source: mass of Earth's bulk silicate part, 4.03e24 kg (Dye 2012,
@@ -73,6 +73,15 @@ const THORIUM_ABUNDANCE: f64 = 80e-9;
 /// share: the heat follows it linearly.
 const POTASSIUM_ABUNDANCE: f64 = 280e-6;
 
+/// Source: share of potassium's atoms that are K-40, 0.011668 %
+/// (Naumenko et al. 2013, as the DDEP evaluation of 2025 takes it: X.
+/// Mougeot, ICRM 2025 poster, HAL cea-05087440, read).
+pub const K40_ATOM_SHARE: f64 = 1.1668e-4;
+/// Source: standard atomic weight of potassium, 39.0983 g/mol, in kg/mol
+/// (IUPAC 2021 standard atomic weights, Prohaska et al. 2022, Pure Appl.
+/// Chem. 94, 573, doi:10.1515/pac-2019-0603).
+pub const POTASSIUM_MOLAR_MASS: f64 = 39.0983e-3;
+
 /// Definition: each heat-producing isotope with its present power per
 /// kilogram of Earth's silicate part, W/kg, and its half-life: the
 /// abundance of the element times the heat per kilogram of element (times
@@ -96,6 +105,23 @@ const ISOTOPES: [(f64, Gyr); 4] = [
 /// 2012, Table 7).
 pub fn earth_radiogenic_power() -> Watt {
     Watt(ISOTOPES.iter().map(|(p, _)| p).sum::<f64>() * EARTH_SILICATE_MASS.0)
+}
+
+/// K-40 a body's silicate part has lost to decay since it formed, mol:
+/// the potassium of the heat (`POTASSIUM_ABUNDANCE` of Earth's silicate
+/// part, times the `abundance` at formation, Earth = 1, as [`radiogenic`]
+/// takes it) times [`K40_ATOM_SHARE`] over [`POTASSIUM_MOLAR_MASS`], over
+/// the `silicate` mass, carried to formation by its decay and decayed
+/// over `age`: `c_K x40 / m_K M a e^(lambda t_earth) (1 - e^(-lambda t))`,
+/// `lambda = ln 2 / HALF_LIFE_K40`. The heat's convention: a body forms
+/// with the K-40 Earth had at its formation. None at a negative age.
+pub fn potassium_40_decayed(silicate: Kilogram, abundance: f64, age: Gyr) -> Mole {
+    let lambda = LN_2 / HALF_LIFE_K40.0;
+    let at_formation = POTASSIUM_ABUNDANCE * K40_ATOM_SHARE / POTASSIUM_MOLAR_MASS
+        * silicate.0
+        * abundance
+        * (lambda * EARTH_AGE.0).exp();
+    Mole(at_formation * -(-lambda * age.0.max(0.0)).exp_m1())
 }
 
 /// Source: Earth's total surface heat flow, 46.7 TW (Davies & Davies 2010,

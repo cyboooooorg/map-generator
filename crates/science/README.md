@@ -95,7 +95,8 @@ alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 `science::heat`: `radiogenic`, `secular` and `tidal` power, and
 `k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
 kind). Radiogenic power comes from the abundances of U, Th and K and the Dye
-2012 half-lives; secular cooling scales Earth's 26.5 TW by the silicate mass;
+2012 half-lives (K-40's is DDEP 2025's, which the air's argon shares:
+`potassium_40_decayed`); secular cooling scales Earth's 26.5 TW by the silicate mass;
 tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants (U
 and Th abundances, cooling time and mass exponent, rocky and icy k2/Q) say what
 was searched and not found; the page [The heat
@@ -110,6 +111,8 @@ M☉ and [Fe/H] −1 to +0.5, from the tables of `data/`; see
 star's XUV and Lyman α history; see [XUV
 fluence](../../docs/science/planet-atmospheres.md#xuv-fluence).
 `science::orbit`: Kepler, flux, ice line, Roche period, Hill spacing floors.
+`science::outgassing` also makes the air's argon (`radiogenic_argon`,
+`argon_degassed_share`).
 `science::{escape, dynamo, outgassing, volatiles, habitable, tectonics,
 photochemistry, snowball}`: [planet atmospheres](../../docs/science/planet-atmospheres.md).
 

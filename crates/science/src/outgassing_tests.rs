@@ -1,5 +1,7 @@
 use super::*;
 use crate::constants::{EARTH_MEAN_RADIUS, STANDARD_GRAVITY};
+use crate::heat::{EARTH_AGE, EARTH_SILICATE_MASS};
+use crate::units::Gyr;
 
 /// Source: total mean mass of Earth's atmosphere, 5.1480e18 kg
 /// (Trenberth & Smith 2005, J. Climate 18, 864-875,
@@ -88,4 +90,88 @@ fn decomposing_ammonia_keeps_its_nitrogen() {
     let back = d.n2.0 / N2_PER_NH3 + d.nh3.0;
     assert!((back / AMMONIA.0 - 1.0).abs() < ROUND_OFF, "{d:?}");
     assert!((d.nh3.0 / AMMONIA.0 - (1.0 - AMMONIA_DECOMPOSED)).abs() < ROUND_OFF);
+}
+
+/// Source: the branches of K-40 to Ar-40 (DDEP evaluation of 2025, X.
+/// Mougeot, ICRM 2025 poster, HAL cea-05087440): electron capture to the
+/// 1461 keV level of Ar-40, 10.34 %, to its ground state, 0.098 %, and
+/// beta+, 0.00103 %, in percent.
+const DDEP_ARGON_BRANCHES: [f64; 3] = [10.34, 0.098, 0.00103];
+
+/// Source: the Ar-40 made in Earth's silicate part over 4.5 Gyr, 3.9 ±
+/// 0.9e18 mol, from 280 ± 60 ppm of potassium (Marty 2012, EPSL 313-314,
+/// 56, arXiv:1405.6336, p. 15), as its 1σ ends.
+const MARTY_ARGON_MADE: (f64, f64) = (3.0e18, 4.8e18);
+
+/// Source: the Ar-40 the law makes on Earth, 4.053e18 mol: study 29's
+/// own computation of the same formula from DDEP 2025's decay data
+/// (`docs/science/planet-atmospheres.md`, "Argon"), to its four digits.
+const STUDY_ARGON_MADE: f64 = 4.053e18;
+
+/// Definition: the tolerance on [`STUDY_ARGON_MADE`], half its last digit
+/// and the rounding of the inputs the study printed, 0.5 %.
+const STUDY_TOLERANCE: f64 = 5e-3;
+
+/// Source: Earth's argon as a weight, 0.0127 bar: 9340 ppm of the dry
+/// air by volume (NASA Earth fact sheet) is 1.288 % of its 5.1352e18 kg
+/// (Trenberth & Smith 2005) at 39.95 against 28.97 g/mol, 6.61e16 kg on
+/// a sphere of 6371 km at 9.80665 m/s² (study 29, derived).
+const EARTH_ARGON: Bar = Bar(0.0127);
+
+/// Definition: the test's tolerance round [`EARTH_ARGON`], 10 %, study
+/// 29's: the share degassed is fitted on Earth's air (Marty's mass
+/// balance), so the test checks the chain, as the N2 test does.
+const EARTH_ARGON_TOLERANCE: f64 = 0.1;
+
+#[test]
+fn argon_40_takes_ddeps_branches() {
+    let sum: f64 = DDEP_ARGON_BRANCHES.iter().sum::<f64>() / 100.0;
+    assert!((ARGON_40_BRANCH / sum - 1.0).abs() < 1e-4, "{sum}");
+}
+
+#[test]
+fn earths_rock_made_martys_argon() {
+    let made = radiogenic_argon(EARTH_SILICATE_MASS, 1.0, EARTH_AGE).0;
+    assert!(
+        (MARTY_ARGON_MADE.0..=MARTY_ARGON_MADE.1).contains(&made),
+        "{made}"
+    );
+    assert!(
+        (made / STUDY_ARGON_MADE - 1.0).abs() < STUDY_TOLERANCE,
+        "{made}"
+    );
+    // Twice the rock, twice the abundance: four times the argon; none at
+    // formation.
+    let more = radiogenic_argon(EARTH_SILICATE_MASS * 2.0, 2.0, EARTH_AGE).0;
+    assert!((more / made - 4.0).abs() < ROUND_OFF, "{more}");
+    assert_eq!(radiogenic_argon(EARTH_SILICATE_MASS, 1.0, Gyr(0.0)).0, 0.0);
+}
+
+#[test]
+fn earths_air_weighs_its_argon() {
+    let made = radiogenic_argon(EARTH_SILICATE_MASS, 1.0, EARTH_AGE);
+    let air = argon_mass(made) * argon_degassed_share(false).get();
+    let p = column_pressure(air, STANDARD_GRAVITY, EARTH_MEAN_RADIUS).0;
+    assert!(
+        (p / EARTH_ARGON.0 - 1.0).abs() < EARTH_ARGON_TOLERANCE,
+        "{p}"
+    );
+}
+
+#[test]
+fn a_lid_degasses_its_argon_as_it_does_its_volatiles() {
+    // Marty 2012's 0.41 under plates, scaled for a lid by the ratio the
+    // outgassing already takes, `LID_SHARE / MOBILE_SHARE`.
+    assert_eq!(
+        argon_degassed_share(false).get(),
+        ARGON_DEGASSED_UNDER_PLATES
+    );
+    let lid = argon_degassed_share(true).get();
+    let ratio = ARGON_DEGASSED_UNDER_PLATES * LID_SHARE / MOBILE_SHARE;
+    assert!((lid / ratio - 1.0).abs() < ROUND_OFF, "{lid}");
+    /// Source: study 29's lid share, 0.0863, to its last printed digit
+    /// (`docs/science/planet-atmospheres.md`, "Argon", the table of the
+    /// share degassed).
+    const STUDY_LID_SHARE: f64 = 0.0863;
+    assert!((lid - STUDY_LID_SHARE).abs() < 5e-5, "{lid}");
 }

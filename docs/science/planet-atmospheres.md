@@ -1470,9 +1470,9 @@ and aphelion 30.34 AU).
 
 Study 29 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/29-argon-audit),
-for issue #694, prepares argon for the chain. The code does not carry it yet:
-the air has no argon field, and the reference Earth's air is its N₂ and O₂
-by weight. This section is the law the code will port, with its sources and
+for issue #694, prepares argon for the chain. The column carries argon
+(`PartialPressures.ar`) and `science` makes it (`science::outgassing`); the
+chain does not outgas it yet. This section is the law, with its sources and
 its checks; the partials stay weights (*Earth's N₂ target*).
 
 **Earth's argon, measured.** Argon is 9340 ppm of the dry air by volume (NASA
@@ -1549,7 +1549,11 @@ at its formation is Earth's at its own (the heat's convention,
 Earth (4.03e24 kg of silicate, 4.5673 Gyr) it is 4.053e18 mol, 1.006e-6 mol per
 kg of silicate (derived; Marty 2012, p. 15: 3.9 ± 0.9e18 mol over 4.5 Gyr from
 280 ± 60 ppm). With the former `HALF_LIFE_K40`, 1.277 Gyr, it would be
-3.842e18 mol (−5 %).
+3.842e18 mol (−5 %). In the code: `science::heat::potassium_40_decayed` (the
+heat's `POTASSIUM_ABUNDANCE`, `K40_ATOM_SHARE` and `POTASSIUM_MOLAR_MASS`)
+times `science::outgassing::ARGON_40_BRANCH` is `radiogenic_argon`; the test
+`earths_rock_made_martys_argon` holds it within 0.5 % of 4.053e18 mol and
+inside Marty's 1σ.
 
 **The share degassed.** Marty 2012 (p. 15) puts 1.6e18 of the 3.9e18 mol in the
 air, at most 3.5e17 mol in the continents (Arevalo et al. 2009), and the rest,
@@ -1581,7 +1585,8 @@ The episodic lid takes the lid's share although its CO₂ takes the plates'
 of its later Gyr. With the plates' share Venus would hold 3.4 times its measured
 ⁴⁰Ar (*Checks* below); with the lid's it holds 0.69 times, inside the
 measurement's 1σ. A share fitted on Venus (0.12 with the model's potassium)
-would be a new calibration; the ratio adds none.
+would be a new calibration; the ratio adds none. In the code:
+`science::outgassing::argon_degassed_share`, `ARGON_DEGASSED_UNDER_PLATES`.
 
 The ⁴⁰Ar then goes the way of every outgassed gas: its mass, 39.95 g/mol per
 mole, weighs `P = m g / (4π R²)` (`column_pressure`), a deep ocean lets out the
