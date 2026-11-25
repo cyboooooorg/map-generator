@@ -283,14 +283,27 @@ Coddington et al. 2021). Measured, 340.25 W/m²:
 
 ### Where it would depart
 
-These are the departures an implementation would carry, decided in the
-study; none is in the code yet.
+These are the departures an implementation would carry; none is in the
+code yet.
 
-- **The column.** Calibration: no source gives the column against O₂
-  and the star together for the Sun at the observed 300 DU. The study
-  proposes an ozone column for a `Modern` air from Rugheimer et al.
-  2013's ratio to their Sun at the host's temperature, times Earth's
-  300 DU, and none for an anoxic air.
+**Decided with the user (2026-11-25).** The measured Sun (#655) lands
+before ozone's shortwave; #705 refits `CLOUD_ALBEDO` over the climate's
+own ground (0.1445), not 0.122; the column is calibration 1 below; the
+`Oxidising` air of planet PR 2d-4 keeps no O₂, so no ozone (an issue
+tracks it); the aerosols are a departure (below); the work goes in three
+pull requests: ozone's shortwave with the #705 refit, ozone's longwave
+with the methane and N₂O of #703 (one rebuild of `opacity.bin`), and
+O₂'s bands. The order of the radiation studies' pull requests is 33, 35,
+34, 36.
+
+- **The column (calibration 1, decided).** No source gives the column
+  against O₂ and the star together for the Sun at the observed 300 DU.
+  An oxygen (`Modern`) air holds 300 DU times the ratio of Rugheimer et
+  al. 2013's column at the host's temperature to their Sun's,
+  interpolated between 4250 and 7000 K; below 4250 K, the ratios of
+  Segura et al. 2005's quiescent M dwarfs to their Sun (45, 89 and 119
+  of 313 DU at 3100, 3400 and 3650 K); held at the ends of the range.
+  An air without O₂ holds none.
 - **A pure absorber above the air**, at one temperature (223 K): ozone
   lies above 80 to 90 % of the air's mass at 225 to 232 K. The probe
   bounds the error at 0.0003 of albedo.
@@ -303,8 +316,13 @@ study; none is in the code yet.
 - **O₂ bands outside the table.** `shortwave.bin` starts at 0.7 µm
   (14 364 cm⁻¹): the A band and the 1.27 µm band fall inside it, the B
   and γ bands and the visible collision pairs do not.
-- **No background aerosol.** No source gives one for a planet the app
-  draws; its effect on Earth stays inside `CLOUD_ALBEDO`.
+- **No background aerosol (a departure, decided 2026-11-25).** Earth's
+  aerosols reflect 5.9 W/m² and absorb 4.8 under clear skies (Kim &
+  Ramanathan 2008), but no source gives a background aerosol for a
+  planet the app draws from what it knows (its oceans, deserts or
+  volcanism): the schemes that exist need winds, seas and soils, and
+  their sources elsewhere are "virtually unknown" (Way et al. 2017,
+  §4.6). The aerosols' effect on Earth stays inside `CLOUD_ALBEDO`.
 
 ## Sources
 
