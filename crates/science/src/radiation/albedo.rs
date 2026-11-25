@@ -26,7 +26,7 @@ mod tests;
 /// reflectance of the cloud cover's share of the disc, 0.276. Fitted on
 /// Earth's Bond albedo, 0.293 (CERES; Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018,
-/// doi:10.1175/JCLI-D-17-0208.1, give 0.2915), by bisection to three
+/// doi:10.1175/JCLI-D-17-0523.1, give 0.2915), by bisection to three
 /// digits (0.2758 before rounding; 0.29308 with 0.276) over Earth's
 /// inputs: a ground of 0.122 (CERES EBAF Ed4.0 clear-sky surface, Kato et
 /// al. 2018, Table 5), its dry air with 400 ppm of CO₂ at 77 % relative
@@ -41,8 +41,10 @@ mod tests;
 /// brighter than the observed aerosol-free sky by its black-body Sun,
 /// its missing ozone and O₂ (issues #653 and #655, about +0.03 together)
 /// and darker by the aerosols' reflection it does not carry (about
-/// 0.017); and Earth's column at 77 % holds 1.735 cm of water against the
-/// 2.45 to 2.53 observed (issue #654). The clouds' reflectance makes up
+/// 0.017); and Earth's column at 77 % holds 1.735 cm of water, what one
+/// column needs for the observed field's outgoing longwave, where its
+/// absorbed sunlight would need about 2.4 cm: about 0.0025 of Bond
+/// albedo (Wiki study 33, issue #654). The clouds' reflectance makes up
 /// the rest: refit it when any of these lands. See
 /// `docs/science/radiative-transfer.md`, "The cloud's water, the deck and
 /// the haze".

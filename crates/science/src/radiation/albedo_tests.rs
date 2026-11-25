@@ -24,7 +24,7 @@ use crate::water::vapour_saturation_bar;
 /// study of PR 2b-2: the observed albedo less what the sky holds and the
 /// port does not, plus what the port lacks and the sky holds. The observed
 /// 0.149 (Stephens et al. 2015, doi:10.1002/2014RG000449, §4) to 0.156
-/// (CERES EBAF Ed4.0, Kato et al. 2018, doi:10.1175/JCLI-D-17-0208.1,
+/// (CERES EBAF Ed4.0, Kato et al. 2018, doi:10.1175/JCLI-D-17-0523.1,
 /// Table 5); less the aerosols' 0.017 +- 0.003 (5.9 +- 1 of 341.8 W/m²,
 /// Kim & Ramanathan 2008, doi:10.1029/2007JD008434, Table 3b and §[52]);
 /// plus what the faithful port lacks, each computed by the study with its
@@ -50,6 +50,8 @@ const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1707;
 /// NVAP) to 2.53 (NVAP-M, 1988-2009) cm (Forsythe, Vonder Haar & Cronk
 /// 2014, NOAA ESRL Global Monitoring Annual Conference, pp. 6 and 18),
 /// rounded. Their 3.0 cm of Table 2 is the sensitivity case's input.
+/// It is the field's mean, not the water one column needs (about 2.4 cm
+/// for the field's absorbed sunlight, Wiki study 33).
 const NVAP_WATER_CM: f64 = 2.5;
 
 /// Source: the columns of Kim & Ramanathan 2008's sensitivity to the
@@ -235,9 +237,10 @@ fn precipitable_cm(column: &Levels) -> f64 {
 /// Earth's shortwave column at [`EARTH_SURFACE_K`] holding `water_cm` of
 /// precipitable water at one relative humidity throughout: the saturated
 /// column (3.165 cm) with every level's vapour times one factor, found by bisection
-/// (the diagnostic study's column, which leaves the humidity profile to
-/// issue #654 and tests the optics at equal water). Returns the surface
-/// air and the column.
+/// (the diagnostic study's column, which tests the optics at equal water;
+/// the humidity profile was settled by Wiki study 33, issue #654, and a
+/// test on the RFMIP field is to replace this column, issue #715).
+/// Returns the surface air and the column.
 fn earth_column_holding(water_cm: f64) -> (PartialPressures, Levels) {
     let saturated = earth_air_at(1.0);
     let scaled = |factor: f64| {
