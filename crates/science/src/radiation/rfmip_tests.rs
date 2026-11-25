@@ -28,14 +28,25 @@ const PA_PER_BAR: f64 = 1e5;
 /// Definition: mole fraction per ppmv, a unit conversion.
 const PER_PPMV: f64 = 1e-6;
 
-/// Definition: the RFMIP-IRF experiments the tests take (indices of
-/// `expt`, named by the RFMIP file's `expt_label`): present day, 0.5 and 8 times
-/// its CO₂, pre-industrial CO₂, +4 K, +4 K at constant relative humidity.
+/// Definition: the index of the present-day experiment in the RFMIP
+/// files (`expt`, named by their `expt_label`).
 const PRESENT_DAY: usize = 0;
+
+/// Definition: the index of the experiment at 0.5 times present-day CO₂.
 const HALF_CO2: usize = 4;
+
+/// Definition: the index of the experiment at 8 times present-day CO₂.
 const EIGHT_CO2: usize = 7;
+
+/// Definition: the index of the experiment at pre-industrial CO₂.
 const PRE_INDUSTRIAL_CO2: usize = 8;
+
+/// Definition: the index of the experiment 4 K warmer at present-day
+/// water.
 const WARMER: usize = 13;
+
+/// Definition: the index of the experiment 4 K warmer at constant
+/// relative humidity.
 const WARMER_MOISTER: usize = 14;
 
 /// Source: RRTMGP's error on the sunlight the air gains from
@@ -175,12 +186,21 @@ impl Field {
     }
 }
 
-/// The columns of a site's levels: present-day temperature and water,
-/// +4 K temperature and water, +4 K at constant relative humidity water.
+/// Definition: the column of a site's levels holding the present-day
+/// temperature.
 const T_PRESENT: usize = 1;
+
+/// Definition: the column holding the present-day water.
 const X_PRESENT: usize = 2;
+
+/// Definition: the column holding the temperature at +4 K.
 const T_WARMER: usize = 3;
+
+/// Definition: the column holding the water at +4 K.
 const X_WARMER: usize = 4;
+
+/// Definition: the column holding the water at +4 K at constant relative
+/// humidity.
 const X_WARMER_MOISTER: usize = 5;
 
 /// The column's and the references' change from experiment `from` to
