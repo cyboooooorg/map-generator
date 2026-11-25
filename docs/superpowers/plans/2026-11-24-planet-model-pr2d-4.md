@@ -124,9 +124,10 @@ ledger):
   `science::classes::HOT_GIANT_MAX_PERIOD`, whose doc cites Wright et
   al. 2012 § 3 (read in full in study 27: a hot Jupiter has a period
   under 10 days) and names Dawson & Johnson 2018's review, which uses
-  the same 10 d line. `families/mod.rs` keeps its name through
-  `pub(crate) use science::classes::HOT_GIANT_MAX_PERIOD as
-  HOT_JUPITER_MAX_PERIOD;` (one line in mapgen3's zone, D5). A giant
+  the same 10 d line. No alias (D5, mapgen3): the definition at
+  `families/mod.rs:46` is removed and its three uses read
+  `science::classes::HOT_GIANT_MAX_PERIOD` by that name
+  (`families/mod.rs:114`, `families/laws.rs:11` and `:344`). A giant
   the hot-Jupiter family places is then a `HotJupiter` by construction.
 - **Tier placement (B1, user 2026-11-25).** No build profile changes.
   The tests that draw whole systems with the real classifier move to
@@ -244,12 +245,13 @@ the user above, B11 is replaced by the report's class):
   `regression/tests/determinism.rs:6-9` already says, in a fix commit
   on the branch.
 
-New decisions for the user (in the hand-off):
+Decisions D1 to D5, decided on 2026-11-25 (D1, D3, D4 by the user;
+D2 and D5 by mapgen3), as proposed except D5's alias:
 
 - **D1. How the CLI's drawing tests reach tier 2.** The `cli` package
   has only a binary target (`crates/cli/Cargo.toml:8-10`), so
   `crates/regression` cannot call it, and `CARGO_BIN_EXE_map-generator`
-  exists only in the CLI's own integration tests. Proposed: give `cli`
+  exists only in the CLI's own integration tests. Decided: give `cli`
   a library target (`src/lib.rs` holding today's modules and a `pub fn
   dispatch(cli: &Cli) -> Result<String, CliError>`; `main.rs` keeps
   `main`, the stderr notice and the exit codes). The drawing tests of
@@ -264,11 +266,11 @@ New decisions for the user (in the hand-off):
   drawn-seed notice, the bytes of a seed) keep only what needs the
   binary and become tier 3 (`#[ignore = "heavy: draws a system with
   the planet model through the binary"]`); their JSON assertions move
-  to tier 2 through `dispatch`. Alternative: keep the binary tests in
+  to tier 2 through `dispatch`. Rejected: keep the binary tests in
   tier 1 on `stand_in` through a hidden CLI flag (a test-only option in
   the user's interface: not recommended).
 - **D2. The obliquity `class_of` read, for mapgen3's tier-2 test.**
-  `class_of` returns plain values only. Proposed: `pub fn
+  `class_of` returns plain values only. Decided: `pub fn
   planet::class_read(trial, trace) -> Result<ClassRead, SystemError>`
   with `pub struct ClassRead { pub outcome: TrialOutcome, pub
   obliquity: Option<Degree> }` (`None` without a surface); `class_of`
@@ -277,12 +279,12 @@ New decisions for the user (in the hand-off):
   type `TrialOutcome` (`placement.rs`, mapgen3's).
 - **D3. What the report carries per planet.** "Each planet's class" and
   a census of climates and biospheres need the model, not only the
-  draw: proposed, `PlanetDraw` gains `state: PlanetState` (the model's,
+  draw: decided, `PlanetDraw` gains `state: PlanetState` (the model's,
   on the eccentric trial: its class, climate, liquid, biosphere), so
   `--explain` reaches every node and the census reads the JSON; the
   draw's class stays in `causes` (`system.draw.class`). This runs the
   chain a second time per planet in the CLI (draw, then `model`).
-  Alternative: only `class` (the model's `Traced<PlanetClass>`) and a
+  Rejected: only `class` (the model's `Traced<PlanetClass>`) and a
   separate census command later.
 - **D4. The tier-3 numbers are not pins.** `CLAUDE.md` allows a test
   that pins the code's output only in tier 2. Kept in tier 3 (B9 no),
@@ -290,8 +292,10 @@ New decisions for the user (in the hand-off):
   heavy tests (`println!`, visible in `mise run test:heavy`) and
   recorded in #594 and #684, not asserted. The two heavy settled tests
   assert behaviour, not values, and stay as they are.
-- **D5. `families/mod.rs` reads the science constant** (S5): one line
-  in mapgen3's zone, to agree with them before Task 2.
+- **D5. `families` reads the science constant** (S5), agreed by
+  mapgen3 without an alias: `HOT_JUPITER_MAX_PERIOD` disappears, its
+  three uses are renamed `HOT_GIANT_MAX_PERIOD` (imported from
+  `science::classes`), and no test ties two names.
 
 ## Global Constraints
 
@@ -301,8 +305,8 @@ New decisions for the user (in the hand-off):
   (`regression` may depend on `cli`: it is a test-only crate).
 - `crates/system/src/draw/**`: only `draw/mod.rs` (the spin seed line
   and its doc) and the one draw test of B4. `placement.rs`: doc only.
-  `archetype.rs`: untouched. `families/mod.rs`: the one line of S5
-  (D5). `spin.rs`: B2, the seed and its docs, `is_giant` `pub(crate)`.
+  `archetype.rs`: untouched. `families/mod.rs` and `families/laws.rs`:
+  the rename of S5 (D5). `spin.rs`: B2, the seed and its docs, `is_giant` `pub(crate)`.
 - Every number in `science` (and every new number in the engines and
   tests) has a doc comment starting with `Source:`, `Calibration:` or
   `Definition:`. Two new calibrations, no more: `DENSE_AIR_BAR`,
@@ -424,8 +428,6 @@ New decisions for the user (in the hand-off):
 
 ### Task 2: Life and class laws in `science` (opus)
 
-Before it starts, the main session has mapgen3's agreement on D5.
-
 **Files:**
 
 - Create: `crates/science/src/life.rs`, `crates/science/src/life_tests.rs`,
@@ -434,8 +436,11 @@ Before it starts, the main session has mapgen3's agreement on D5.
   (the triple-point pressure public, below),
   `crates/science/src/surface/condense.rs:~88` (`titan_like_air` reads
   it), `crates/science/src/outgassing.rs` (`column_mass`),
-  `crates/system/src/families/mod.rs:45-46` (S5: the `use` line in
-  place of the constant), `crates/science/README.md`, the two
+  `crates/system/src/families/mod.rs` (S5, D5: the definition at
+  l.45-46 removed, l.114 reads `HOT_GIANT_MAX_PERIOD`),
+  `crates/system/src/families/laws.rs` (l.11 imports
+  `science::classes::HOT_GIANT_MAX_PERIOD` instead of the family's
+  constant, l.344 reads it), `crates/science/README.md`, the two
   `docs/science` sections (name the functions; "Life" gains the
   sentence of S8: the second solve takes no boil verdict, the class and
   the surface read the second climate, the biosphere the first).
@@ -512,10 +517,7 @@ Before it starts, the main session has mapgen3's agreement on D5.
     is Titan-like, a hair under is not;
   - `column_mass_inverts_column_pressure`: `column_pressure(
     column_mass(p, g, r), g, r)` equals `p` within 1e-12 for Earth's
-    1 bar, g and radius;
-  - in `system`'s families tests (tier 1, no draw):
-    `the_hot_jupiter_family_ends_at_the_hot_class_line`:
-    `HOT_JUPITER_MAX_PERIOD == science::classes::HOT_GIANT_MAX_PERIOD`.
+    1 bar, g and radius.
 - [ ] **Step 2: Run** `cargo nextest run -p science life classes
   condense`. Expected: FAIL (no modules).
 - [ ] **Step 3: Implement** the interfaces. Doc comments quote the page
@@ -1133,8 +1135,7 @@ Start only once `fix/titan-nitrogen-inventory` is merged into `main`:
 - **Before Task 1:** `generation-profiler` on the reference systems
   with the `main` binary (stand-in classifier), for the "before" of
   #593. mapgen3 agreed to B2 and B4; tell them the spin conditions are
-  in Tasks 1 and 9, and get their agreement on D5 (the
-  `families/mod.rs` line) before Task 2.
+  in Tasks 1 and 9; D2 and D5 are agreed.
 - **After Task 4 or Task 7:** tell mapgen2 what `ocean_share` now means
   (the share under water, ice-covered sea included) and that
   non-water liquids carry an imposed 0 (B6).
