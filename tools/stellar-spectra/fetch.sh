@@ -43,6 +43,11 @@ for z in m10 m05 p00 p05; do
   done
 done
 
+# The measured Sun, TSIS-1 HSRS at 1 nm (Coddington et al. 2021), from LISIRD:
+# the tests' reference Sun (crates/science/data/tsis-sun.tsv).
+mkdir -p raw/tsis
+get "https://lasp.colorado.edu/lisird/latis/dap/tsis1_hsrs_1nm.csv" raw/tsis/tsis1_hsrs_1nm.csv
+
 # The files as downloaded on 2026-11-25 (SHA256SUMS). A mismatch fails the
 # script: a changed file is a new release to review before the table is
 # regenerated.

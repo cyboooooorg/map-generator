@@ -38,6 +38,26 @@ const M_PER_ANGSTROM: f64 = 1e-10;
 /// 0.5 dex step.
 const ATLAS_GRAVITY: &str = "g40";
 
+/// Definition: metres per nanometre, a unit conversion.
+const M_PER_NM: f64 = 1e-9;
+
+/// Definition: the second radiation constant `h c / k`, m K (CODATA 2018,
+/// exact from the defined constants).
+const SECOND_RADIATION_M_K: f64 = 1.438_776_877e-2;
+
+/// Definition: the Sun's effective temperature, K, IAU 2015 Resolution
+/// B3: the black body that continues TSIS-1 past its last wavelength.
+const SUN_K: f64 = 5772.0;
+
+/// Definition: the stretch of TSIS-1 the continuation is scaled to, nm:
+/// its last 130 nm (a choice of study 35; the continuation carries about
+/// 2 % of the 0.2-5 µm light, and continuing with the PHOENIX Sun
+/// instead moves the shares below 400 and 300 nm by 1e-4).
+const TSIS_TAIL_NM: (f64, f64) = (2600.0, 2730.0);
+
+/// Definition: the step of the continuation's samples, m.
+const CONTINUATION_STEP_M: f64 = 1e-9;
+
 /// Definition: the hottest PHOENIX row, K; ATLAS9 takes over above it.
 const PHOENIX_TOP_K: f64 = 12_000.0;
 
@@ -55,27 +75,22 @@ struct Row {
     shares: Vec<f64>,
 }
 
-/// The band holding `lambda_m`, or `None` outside 0.2-5 µm. The bands
-/// are even in `ln lambda`, as `starlight::band_edge_m` makes them.
-fn band_of(lambda_m: f64) -> Option<usize> {
-    if !(FROM_M..TO_M).contains(&lambda_m) {
-        return None;
-    }
+/// The wavelength, m, of the `e`-th edge of the bands (0 to [`BANDS`]),
+/// even in `ln lambda` as `starlight::band_edge_m` makes them.
+fn band_edge_m(e: usize) -> f64 {
     let step = (TO_M / FROM_M).ln() / BANDS as f64;
-    // Truncation toward zero is the floor for a non-negative ratio.
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a band index from a non-negative ratio below BANDS"
-    )]
-    let band = ((lambda_m / FROM_M).ln() / step) as usize;
-    Some(band.min(BANDS - 1))
+    FROM_M * (step * e as f64).exp()
 }
 
 /// Each band's share of a spectrum sampled at `lambda_m` (increasing) with
-/// flux density `flux` per unit wavelength: each sample weighs its flux
-/// times its cell, half the distance to each neighbour. An error when the
-/// samples do not span 0.2-5 µm.
+/// flux density `flux` per unit wavelength. Each sample stands for its
+/// cell, from halfway to the previous sample to halfway to the next (the
+/// end samples' cells stop at them), at its flux density; a cell that
+/// straddles band edges is shared between the bands by the length that
+/// falls in each. Sharing by overlap keeps a coarse grid (ATLAS9's 20 to
+/// 200 Å steps against bands of 13 to 340 Å) from handing a whole cell to
+/// the band of its centre, which made the shares saw-toothed. An error
+/// when the samples do not span 0.2-5 µm.
 fn bin(lambda_m: &[f64], flux: &[f64]) -> Result<Vec<f64>, String> {
     let n = lambda_m.len();
     if n != flux.len() || n < 2 {
@@ -88,14 +103,39 @@ fn bin(lambda_m: &[f64], flux: &[f64]) -> Result<Vec<f64>, String> {
             lambda_m[n - 1]
         ));
     }
+    bin_cells(lambda_m, flux)
+}
+
+/// [`bin`] without its check of the span: the light of the cells that
+/// fall in 0.2-5 µm, normalised to 1.
+fn bin_cells(lambda_m: &[f64], flux: &[f64]) -> Result<Vec<f64>, String> {
+    let n = lambda_m.len();
+    let edges: Vec<f64> = (0..=BANDS).map(band_edge_m).collect();
     let mut shares = vec![0.0; BANDS];
     for i in 0..n {
-        let Some(band) = band_of(lambda_m[i]) else {
-            continue;
+        let low = if i == 0 {
+            lambda_m[0]
+        } else {
+            0.5 * (lambda_m[i - 1] + lambda_m[i])
         };
-        let low = lambda_m[i.saturating_sub(1)];
-        let high = lambda_m[(i + 1).min(n - 1)];
-        shares[band] += flux[i] * 0.5 * (high - low);
+        let high = if i == n - 1 {
+            lambda_m[n - 1]
+        } else {
+            0.5 * (lambda_m[i] + lambda_m[i + 1])
+        };
+        let (low, high) = (low.max(FROM_M), high.min(TO_M));
+        if high <= low {
+            continue;
+        }
+        // The first band whose top lies above the cell's bottom.
+        let mut band = edges[1..].partition_point(|top| *top <= low);
+        while band < BANDS && edges[band] < high {
+            let overlap = high.min(edges[band + 1]) - low.max(edges[band]);
+            if overlap > 0.0 {
+                shares[band] += flux[i] * overlap;
+            }
+            band += 1;
+        }
     }
     let total: f64 = shares.iter().sum();
     if !(total > 0.0 && total.is_finite()) || shares.iter().any(|s| *s < 0.0) {
@@ -227,6 +267,78 @@ fn atlas(dir: &Path) -> Result<Vec<Row>, String> {
     Ok(rows)
 }
 
+/// A black body's spectral radiance at `lambda_m` and `t_k`, up to a
+/// constant factor.
+fn planck(lambda_m: f64, t_k: f64) -> f64 {
+    lambda_m.powi(-5) / ((SECOND_RADIATION_M_K / (lambda_m * t_k)).exp() - 1.0)
+}
+
+/// The measured Sun on the bands: TSIS-1 HSRS at 1 nm resolution
+/// (Coddington et al. 2021), each sample a cell as [`bin`] takes it,
+/// continued past its last wavelength (2730 nm) to 5 µm by a 5772 K black
+/// body scaled to the data over [`TSIS_TAIL_NM`]. The data begin at
+/// 202 nm: the first band's 200-202 nm holds nothing (about 1e-5 of the
+/// light).
+fn tsis(path: &Path) -> Result<Vec<f64>, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut lambda_m = Vec::new();
+    let mut flux = Vec::new();
+    for line in text.lines().skip(1) {
+        let mut fields = line.split(',');
+        let mut next = || -> Result<f64, String> {
+            fields
+                .next()
+                .ok_or_else(|| format!("TSIS-1: short line {line}"))?
+                .trim()
+                .parse()
+                .map_err(|e| format!("TSIS-1: {line}: {e}"))
+        };
+        lambda_m.push(next()? * M_PER_NM);
+        flux.push(next()?);
+    }
+    let last = *lambda_m.last().ok_or("TSIS-1: no data")?;
+    let (from, to) = (TSIS_TAIL_NM.0 * M_PER_NM, TSIS_TAIL_NM.1 * M_PER_NM);
+    let (mut data, mut body) = (0.0, 0.0);
+    for (l, f) in lambda_m.iter().zip(&flux) {
+        if (from..=to).contains(l) {
+            data += f;
+            body += planck(*l, SUN_K);
+        }
+    }
+    let scale = data / body;
+    let mut l = last + CONTINUATION_STEP_M;
+    while l < TO_M + CONTINUATION_STEP_M {
+        lambda_m.push(l);
+        flux.push(scale * planck(l, SUN_K));
+        l += CONTINUATION_STEP_M;
+    }
+    bin_cells(&lambda_m, &flux)
+}
+
+/// The line that carries the bands' layout, which the science crate
+/// checks against its own: their number and their edges, m.
+fn bands_line() -> String {
+    format!("bands\t{BANDS}\t{FROM_M:e}\t{TO_M:e}\n")
+}
+
+/// The measured Sun's file: its comment header, the bands' line and its
+/// 240 shares.
+fn write_sun(shares: &[f64]) -> String {
+    let mut out = String::from(
+        "# The measured Sun on the shortwave's bands (tools/stellar-spectra, see\n\
+         # crates/science/data/SPECTRA.md): TSIS-1 HSRS at 1 nm (Coddington, O. M. et al.\n\
+         # 2021, Geophys. Res. Lett. 48, e2020GL091709, doi:10.1029/2020GL091709; LISIRD\n\
+         # tsis1_hsrs_1nm.csv), continued past 2730 nm by a 5772 K black body scaled to\n\
+         # the data over 2600-2730 nm. The tests' reference Sun, never the generator's.\n\
+         # columns: share_1 ... share_240, bluest first\n",
+    );
+    out.push_str(&bands_line());
+    let row: Vec<String> = shares.iter().map(|x| format!("{x:.6e}")).collect();
+    out.push_str(&row.join("\t"));
+    out.push('\n');
+    out
+}
+
 /// The table: its comment header, then one row per spectrum, by [M/H]
 /// then T_eff.
 fn write_table(rows: &[Row]) -> String {
@@ -244,6 +356,7 @@ fn write_table(rows: &[Row]) -> String {
          # the band's integral of the flux over the 0.2-5 um integral.\n\
          # columns: metallicity_dex teff_k logg source share_1 ... share_240\n",
     );
+    out.push_str(&bands_line());
     for row in rows {
         let _ = write!(
             out,
@@ -261,12 +374,17 @@ fn write_table(rows: &[Row]) -> String {
 fn run() -> Result<(), String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut raw = root.join("raw");
-    let mut out = root.join("../../crates/science/data/stellar-spectra.tsv");
+    let data = root.join("../../crates/science/data");
+    let mut out = data.join("stellar-spectra.tsv");
+    let mut sun_out = data.join("tsis-sun.tsv");
+    let mut check = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--raw" => raw = PathBuf::from(args.next().ok_or("--raw takes a directory")?),
             "--out" => out = PathBuf::from(args.next().ok_or("--out takes a file")?),
+            "--sun" => sun_out = PathBuf::from(args.next().ok_or("--sun takes a file")?),
+            "--check" => check = true,
             other => return Err(format!("unknown argument {other}")),
         }
     }
@@ -277,8 +395,24 @@ fn run() -> Result<(), String> {
             .total_cmp(&b.metallicity)
             .then(a.teff.total_cmp(&b.teff))
     });
-    std::fs::write(&out, write_table(&rows)).map_err(|e| format!("{}: {e}", out.display()))?;
-    eprintln!("{} rows written to {}", rows.len(), out.display());
+    let table = write_table(&rows);
+    let sun = write_sun(&tsis(&raw.join("tsis/tsis1_hsrs_1nm.csv"))?);
+    for (path, text) in [(&out, &table), (&sun_out, &sun)] {
+        if check {
+            let committed =
+                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            if &committed != text {
+                return Err(format!(
+                    "{} differs from what the spectra give",
+                    path.display()
+                ));
+            }
+            eprintln!("{} is up to date", path.display());
+        } else {
+            std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+            eprintln!("{} written", path.display());
+        }
+    }
     Ok(())
 }
 
@@ -308,6 +442,29 @@ mod tests {
         let ratio = (TO_M / FROM_M).powf(1.0 / BANDS as f64);
         for pair in shares.windows(2) {
             assert!((pair[1] / pair[0] / ratio - 1.0).abs() < 1e-3, "{pair:?}");
+        }
+    }
+
+    #[test]
+    fn a_coarse_grid_fills_each_band_by_its_width() {
+        // Definition: a flat F_lambda on a grid even in lambda with two to
+        // three samples per band near 1 µm (ATLAS9's coarseness): sharing
+        // the cells by overlap gives each band its width, where handing
+        // each cell to the band of its centre made a sawtooth.
+        let step = 0.004e-6;
+        let lambda: Vec<f64> = (0..1500).map(|i| 0.19e-6 + step * f64::from(i)).collect();
+        let flux = vec![1.0; lambda.len()];
+        let shares = bin(&lambda, &flux).unwrap();
+        let width: Vec<f64> = (0..BANDS)
+            .map(|b| band_edge_m(b + 1) - band_edge_m(b))
+            .collect();
+        let total: f64 = width.iter().sum();
+        for (b, (s, w)) in shares.iter().zip(&width).enumerate() {
+            assert!(
+                (s / (w / total) - 1.0).abs() < 1e-9,
+                "band {b}: {s} {}",
+                w / total
+            );
         }
     }
 

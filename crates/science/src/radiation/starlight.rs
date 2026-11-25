@@ -74,11 +74,17 @@ impl Spectra {
     /// bug of the build, and panics with its line number.
     fn parse(text: &str) -> Spectra {
         let mut rows: Vec<(f64, f64, [f64; BANDS])> = Vec::new();
+        let mut layout = false;
         for (n, line) in text.lines().enumerate() {
             if line.starts_with('#') || line.trim().is_empty() {
                 continue;
             }
             let fields: Vec<&str> = line.split('\t').collect();
+            if fields[0] == "bands" {
+                check_layout(&fields, n);
+                layout = true;
+                continue;
+            }
             assert_eq!(
                 fields.len(),
                 4 + BANDS,
@@ -96,6 +102,7 @@ impl Spectra {
             }
             rows.push((number(fields[0]), number(fields[1]), shares));
         }
+        assert!(layout, "stellar-spectra.tsv: no bands line");
         let mut metallicities: Vec<f64> = rows.iter().map(|r| r.0).collect();
         metallicities.sort_by(f64::total_cmp);
         metallicities.dedup();
@@ -122,6 +129,54 @@ impl Spectra {
             shares,
         }
     }
+}
+
+/// Checks a table's `bands` line (`bands`, their number, their first
+/// and last edges, m) against [`BANDS`], [`FROM_M`] and [`TO_M`]: a table
+/// built on other bands is a bug of the build, and panics with its line.
+fn check_layout(fields: &[&str], n: usize) {
+    let parsed: Option<(usize, f64, f64)> = (|| {
+        Some((
+            fields.get(1)?.parse().ok()?,
+            fields.get(2)?.parse().ok()?,
+            fields.get(3)?.parse().ok()?,
+        ))
+    })();
+    assert_eq!(
+        parsed,
+        Some((BANDS, FROM_M, TO_M)),
+        "line {}: the table's bands are not the shortwave's",
+        n + 1
+    );
+}
+
+/// The measured Sun's shares on the bands (`crates/science/data/tsis-sun.tsv`,
+/// TSIS-1 HSRS, Coddington et al. 2021, binned by `tools/stellar-spectra`),
+/// as [`StarBands::bands`] holds them: the tests' reference Sun.
+#[cfg(test)]
+pub(crate) fn measured_sun() -> Vec<(f64, f64)> {
+    let text = include_str!("../../data/tsis-sun.tsv");
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.starts_with('#') && !l.trim().is_empty());
+    let (n, layout) = lines.next().expect("a bands line");
+    check_layout(&layout.split('\t').collect::<Vec<_>>(), n);
+    let (_, row) = lines.next().expect("a row of shares");
+    let shares: Vec<f64> = row
+        .split('\t')
+        .map(|x| x.parse().expect("a share"))
+        .collect();
+    assert_eq!(shares.len(), BANDS);
+    let total: f64 = shares.iter().sum();
+    shares
+        .iter()
+        .enumerate()
+        .map(|(i, share)| {
+            let lambda = (band_edge_m(i) * band_edge_m(i + 1)).sqrt();
+            ((REFERENCE_M / lambda).powi(4), share / total)
+        })
+        .collect()
 }
 
 /// The table, parsed once.

@@ -31,15 +31,6 @@ const TABLE_DEX: (f64, f64) = (-1.0, 0.5);
 /// its centre lies below the cut).
 const CUTS_M: [f64; 2] = [0.4e-6, 0.3e-6];
 
-/// Source: the measured Sun's shares of its 0.2-5 µm light below 400 and
-/// 300 nm on these bands: TSIS-1 HSRS (Coddington et al. 2021,
-/// doi:10.1029/2020GL091709, LISIRD `tsis1_hsrs_1nm.csv`), binned by
-/// study 35 (Wiki `35-stellar-spectra-audit`, section 1) and continued
-/// past 2730 nm by a 5772 K black body scaled to the data at 2600-2730 nm
-/// (about 2 % of the light; continued by the PHOENIX Sun instead, the
-/// shares move by 0.0001).
-const TSIS_SHARES: [f64; 2] = [0.0819, 0.0103];
-
 /// Calibration: the share of the black body's excess over the measured Sun
 /// below 400 nm and below 300 nm that the table's Sun must remove, 0.80:
 /// what the PHOENIX Sun removes, measured by study 35 ((12.31 − 8.92) /
@@ -48,9 +39,11 @@ const TSIS_SHARES: [f64; 2] = [0.0819, 0.0103];
 /// model library's error against the measured Sun in this range.
 const GAP_CLOSED: f64 = 0.80;
 
-/// Definition: the tolerance of the sums, a few rounding steps of the
-/// table's five digits over 240 bands.
-const SUM_TOLERANCE: f64 = 1e-3;
+/// Definition: the tolerance of each row's sum, 1e-4: the table writes
+/// five significant digits, so each share is off by at most 5e-6 of
+/// itself, and the 240 shares of a row sum within 5e-6 of 1 (measured:
+/// 4.8e-6 at most).
+const SUM_TOLERANCE: f64 = 1e-4;
 
 /// Definition: metres per centimetre, a unit conversion.
 const M_PER_CM: f64 = 1e-2;
@@ -158,13 +151,21 @@ fn a_red_star_puts_its_light_in_the_infrared() {
 }
 
 #[test]
+#[should_panic(expected = "the table's bands are not the shortwave's")]
+fn a_table_on_other_bands_is_refused() {
+    check_layout(&["bands", "240", "2e-7", "4e-6"], 0);
+}
+
+#[test]
 fn the_suns_ultraviolet_closes_the_black_bodys_gap() {
     // The table's Sun against the measured Sun and the black body of its
     // temperature, the light below 400 and 300 nm (study 35).
     let sun = star_bands(SUN_K, SOLAR_METALLICITY).bands;
     let body = black_body(SUN_K);
-    for (cut, measured) in CUTS_M.into_iter().zip(TSIS_SHARES) {
+    let tsis = measured_sun();
+    for cut in CUTS_M {
         let (model, black) = (share_below(&sun, cut), share_below(&body, cut));
+        let measured = share_below(&tsis, cut);
         let closed = (black - model) / (black - measured);
         println!(
             "below {:.0} nm: black body {black:.4}, table {model:.4}, TSIS-1 {measured:.4}: \
