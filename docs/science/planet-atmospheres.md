@@ -3495,10 +3495,11 @@ jump and no fixed point: it is stored on its colder side, the one a
 cooling planet reaches, with `converged: false` and the cause node
 `planet.climate.cycles` true (decided with the user, 2026-11-26).
 
-**Departure.** Limit cycles between a warm and a glaciated state near
-the outer edge are published for the carbonate-silicate cycle at low
-outgassing: Kadoya and Tajika 2014, Menou 2015 and Haqq-Misra et al.
-2016. The cycle here is the static analogue of those. A climate that
+**Departure.** Kadoya and Tajika 2014, Menou 2015 and Haqq-Misra et al.
+2016 find limit cycles in time near the outer edge: the carbonate-silicate
+cycle at low outgassing swings a planet between a warm and a glaciated
+state over millions of years. A solver with no fixed point is the static
+analogue of those limit cycles, not the same thing. A climate that
 spends part of its time on each side has a time-averaged state that a
 future law would rest on these papers for. The rewrite draws no share
 of time: the cold side and the `cycles` flag say that no stable warm

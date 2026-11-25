@@ -1756,7 +1756,8 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
     assert!(under_steam(&s));
 }
 
-/// An orbit just past a methane Earth's outer edge (1.4355 AU) where the
+/// An orbit just past a methane Earth's outer edge (1.4355 AU, measured by
+/// `one_greenhouse_search_on_a_condensing_air` on #729's branch) where the
 /// albedo's fixed point has none (#729): a warm climate at its maximum
 /// greenhouse derives a Rayleigh albedo that collapses its CO₂, and the
 /// collapsed climate derives one that warms it back.

@@ -80,30 +80,52 @@ pub(crate) struct Settle {
 }
 
 /// One end of the bracket of the albedo's fixed point: the albedo and
-/// emissivity a climate was solved under, the push it derives, and that
-/// climate.
+/// emissivity a climate was solved under, the push it derives, its
+/// surface temperature, and that climate (`P`, a [`Pass`] in [`settle`]).
 #[derive(Clone, Copy, Debug)]
-struct End {
-    albedo: f64,
-    emissivity: f64,
-    push: f64,
-    pass: Pass,
+pub(crate) struct End<P> {
+    pub albedo: f64,
+    pub emissivity: f64,
+    pub push: f64,
+    pub temperature: f64,
+    pub climate: P,
+}
+
+/// What the bracket of the albedo's fixed point gives next.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Next<P> {
+    /// The albedo and emissivity of the next step: the zero of the push on
+    /// the line between the two ends, by the Illinois rule.
+    Step { albedo: f64, emissivity: f64 },
+    /// The bracket is narrower than the width it was asked for: the
+    /// climate jumps there, and this is its colder end.
+    Closed(End<P>),
 }
 
 /// The bracket of the albedo's fixed point once its push has turned back:
 /// the last end that pushes up (`up`, a push of zero included) and the
 /// last that pushes down, each with the push the Illinois rule weighs it
 /// by (halved each time the other end is replaced twice in a row).
-#[derive(Clone, Copy, Debug, Default)]
-struct Bracket {
-    up: Option<(End, f64)>,
-    down: Option<(End, f64)>,
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Bracket<P> {
+    up: Option<(End<P>, f64)>,
+    down: Option<(End<P>, f64)>,
     last_up: Option<bool>,
 }
 
-impl Bracket {
+impl<P: Copy> Default for Bracket<P> {
+    fn default() -> Self {
+        Bracket {
+            up: None,
+            down: None,
+            last_up: None,
+        }
+    }
+}
+
+impl<P: Copy> Bracket<P> {
     /// Takes `end` as the new end on its side.
-    fn take(&mut self, end: End) {
+    pub(crate) fn take(&mut self, end: End<P>) {
         let up = end.push >= 0.0;
         if self.last_up == Some(up) {
             let kept = if up { &mut self.down } else { &mut self.up };
@@ -119,9 +141,28 @@ impl Bracket {
         self.last_up = Some(up);
     }
 
-    /// The two ends with their weights, once both sides are known.
-    fn ends(&self) -> Option<((End, f64), (End, f64))> {
-        self.up.zip(self.down)
+    /// Whether both sides are known.
+    pub(crate) fn closed_in(&self) -> bool {
+        self.up.is_some() && self.down.is_some()
+    }
+
+    /// The next step once both sides are known, or the colder end when
+    /// the two ends are under `width` apart in albedo; `None` before.
+    pub(crate) fn next(&self, width: f64) -> Option<Next<P>> {
+        let ((up, w_up), (down, w_down)) = self.up.zip(self.down)?;
+        if (up.albedo - down.albedo).abs() < width {
+            let cold = if down.temperature < up.temperature {
+                down
+            } else {
+                up
+            };
+            return Some(Next::Closed(cold));
+        }
+        let share = w_up / (w_up - w_down);
+        Some(Next::Step {
+            albedo: up.albedo + share * (down.albedo - up.albedo),
+            emissivity: up.emissivity + share * (down.emissivity - up.emissivity),
+        })
     }
 }
 
@@ -352,8 +393,10 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
 /// the numerics' `albedo_tolerance` and the push is under it too, at most
 /// `albedo_iterations` steps, or until the bracket is narrower than the
 /// numerics' `albedo_bracket` without settling: the climate jumps there
-/// and has no fixed point, so it cycles (Menou 2015, Haqq-Misra et al.
-/// 2016 find such cycles near the outer edge); the climate is then the
+/// and has no fixed point, so it cycles, the static analogue of the
+/// limit cycles in time that Kadoya and Tajika 2014, Menou 2015 and
+/// Haqq-Misra et al. 2016 find near the outer edge
+/// (`docs/science/planet-atmospheres.md`, #729); the climate is then the
 /// colder end's (the one a cooling planet reaches), not converged, and
 /// [`Settle::cycles`].
 ///
@@ -379,7 +422,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
     let mut moved = 0.0;
     let mut before: Option<Point> = None;
     let mut bracket = Bracket::default();
-    let mut previous: Option<End> = None;
+    let mut previous: Option<End<Pass>> = None;
     let mut cycles = false;
     while steps < numerics.albedo_iterations {
         let t = pass.temperature;
@@ -398,11 +441,12 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
             albedo,
             emissivity,
             push,
-            pass,
+            temperature: t.0,
+            climate: pass,
         };
         // The push turned back: the step before and this one bracket the
         // fixed point; from then on every step is an end of the bracket.
-        if bracket.ends().is_some() {
+        if bracket.closed_in() {
             bracket.take(end);
         } else if before.is_some_and(|b| (b.f >= 0.0) != (push >= 0.0)) {
             if let Some(first) = previous {
@@ -411,25 +455,23 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
             bracket.take(end);
         }
         previous = Some(end);
-        if let Some(((up, w_up), (down, w_down))) = bracket.ends() {
-            if (up.albedo - down.albedo).abs() < numerics.albedo_bracket {
-                let cold = if down.pass.temperature.0 < up.pass.temperature.0 {
-                    down
-                } else {
-                    up
-                };
-                (albedo, emissivity, pass) = (cold.albedo, cold.emissivity, cold.pass);
+        match bracket.next(numerics.albedo_bracket) {
+            Some(Next::Closed(cold)) => {
+                (albedo, emissivity, pass) = (cold.albedo, cold.emissivity, cold.climate);
                 cycles = true;
                 break;
             }
-            // The zero of the push on the line between the two ends.
-            let share = w_up / (w_up - w_down);
-            last = t.0;
-            albedo = up.albedo + share * (down.albedo - up.albedo);
-            emissivity = up.emissivity + share * (down.emissivity - up.emissivity);
-            pass = under_albedo(body, fraction(albedo), fraction(emissivity));
-            steps += 1;
-            continue;
+            Some(Next::Step {
+                albedo: a,
+                emissivity: e,
+            }) => {
+                last = t.0;
+                (albedo, emissivity) = (a, e);
+                pass = under_albedo(body, fraction(albedo), fraction(emissivity));
+                steps += 1;
+                continue;
+            }
+            None => {}
         }
         // A push back the way the last step came: the fixed point is
         // between them, and the next steps go half as far.
