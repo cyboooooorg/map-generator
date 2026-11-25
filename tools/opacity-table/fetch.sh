@@ -4,9 +4,10 @@
 # longwave table's 0-5000 and the shortwave table's 2000-14400) through
 # HITRAN's public line-by-line API, the HITRAN partition sums (TIPS),
 # MT_CKD 4.3's water continuum coefficients, and HITRAN's CO2-CO2
-# collision-induced absorption. The three files the continuum tables
-# are built from are checked against the SHA-256 recorded below. Anonymous requests: no
-# account, no personal data.
+# collision-induced absorption, and Serdyuchenko et al.'s ozone
+# cross-sections (IUP Bremen). The three files the continuum tables are
+# built from and the ozone file are checked against the SHA-256 recorded
+# below. Anonymous requests: no account, no personal data.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p raw/lines raw/q
@@ -53,13 +54,22 @@ done
 [[ -s raw/CO2-CO2_2024.cia ]] || curl -sSL -A "$agent" -o raw/CO2-CO2_2024.cia \
   "https://hitran.org/data/CIA/main/CO2-CO2_2024.cia"
 
-# The inputs of the continuum tables, as downloaded on 2026-11-18 (MT_CKD)
-# and 2026-11-22 (CIA). A mismatch fails the script: HITRAN's server
-# serves its current edition, so a changed CIA file means a new edition
-# to review before the tables are regenerated.
+# Ozone's cross-sections of Serdyuchenko et al. (2014), IUP Bremen (the
+# "ASCII data, version 25.07.2012" of its O3 spectra page), reduced into
+# crates/science/data/ozone.tsv by `opacity-table --ozone`.
+[[ -s raw/serdyuchenkogorshelev5digits.dat ]] || curl -sSL -A "$agent" \
+  -o raw/serdyuchenkogorshelev5digits.dat \
+  "https://www.iup.uni-bremen.de/gruppen/molspec/downloads/serdyuchenkogorshelev5digits.dat"
+
+# The inputs of the continuum tables, as downloaded on 2026-11-18
+# (MT_CKD) and 2026-11-22 (CIA), and the ozone file (2026-11-25). A
+# mismatch fails the script: HITRAN's server serves its current edition,
+# so a changed CIA file means a new edition to review before the tables
+# are regenerated.
 (cd raw && shasum -a 256 -c - <<'SUMS'
 69944eb8b045c268e2daeb2cddf536b99f9e9efe7e91c425067b46a5b287ddb3  absco-ref_wv-mt-ckd.nc
 643f4173063d51759a0ea9e5715d0fcbd4066902452a2a5e56f62d37de69bcf7  contnm.f90
 9db0856cb008cb147728e3a945f818c60a02370442d492c38d7f8884c9cfadca  CO2-CO2_2024.cia
+4dfbf021b746512c192df5f0d43c54cee6ea3b4365bb490bcf6ed347f0ce7092  serdyuchenkogorshelev5digits.dat
 SUMS
 )
