@@ -64,6 +64,7 @@ pub(crate) const TITAN_SURFACE_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 0.0,
+    ar: 0.0,
 };
 
 /// Source: Venus's surface pressure, 92 bar (NASA Venus Fact Sheet,
@@ -111,8 +112,10 @@ pub(crate) const EARTH_PRESSURE_BAR: f64 = 1.014;
 pub(crate) const EARTH_N2_O2_SHARES: (f64, f64) = (0.7808, 0.2095);
 
 /// Definition: Earth's measured air as a test input, without its CO₂ and
-/// water (the tests set them) and without its argon, which the column has
-/// no field for: [`EARTH_N2_O2_SHARES`] of [`EARTH_PRESSURE_BAR`].
+/// water (the tests set them) and, as study 32 measured it, without its
+/// argon (`ar` is zero: the column now has a field for it, and the
+/// 9340 ppm are not put in it here): [`EARTH_N2_O2_SHARES`] of
+/// [`EARTH_PRESSURE_BAR`].
 /// [`EARTH_AIR`] is legacy's rounded 0.78 and 0.21 bar, not this air.
 pub(crate) const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     n2: EARTH_PRESSURE_BAR * EARTH_N2_O2_SHARES.0,
@@ -122,4 +125,5 @@ pub(crate) const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: EARTH_PRESSURE_BAR * EARTH_N2_O2_SHARES.1,
+    ar: 0.0,
 };

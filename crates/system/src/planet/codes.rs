@@ -227,6 +227,12 @@ pub(crate) const AIR_OUTGASSED_NH3: &str = "planet.air.outgassed.nh3";
 pub(crate) const AIR_OUTGASSED_SO2: &str = "planet.air.outgassed.so2";
 /// Partial pressure of O2 outgassed: 0 bar, imposed (life makes it).
 pub(crate) const AIR_OUTGASSED_O2: &str = "planet.air.outgassed.o2";
+/// Partial pressure of Ar-40 outgassed: the argon the mantle's potassium
+/// made over the age (`science::outgassing::radiogenic_argon`, from the
+/// mantle's mass and the radiogenic abundance), times the share it
+/// degasses under the regime (`argon_degassed_share`, less under a
+/// stagnant or episodic lid) and the share the water lets through.
+pub(crate) const AIR_OUTGASSED_AR: &str = "planet.air.outgassed.ar";
 /// Share of its air the planet keeps on the cosmic shoreline, from its
 /// escape velocity (the whole mass, the bulk's plus a water beyond the
 /// laws, and the bulk radius), the XUV fluence of its stars and its
@@ -252,6 +258,9 @@ pub(crate) const AIR_KEPT_NH3: &str = "planet.air.kept.nh3";
 pub(crate) const AIR_KEPT_SO2: &str = "planet.air.kept.so2";
 /// Partial pressure of O2 the cosmic shoreline kept (see [`AIR_KEPT_N2`]).
 pub(crate) const AIR_KEPT_O2: &str = "planet.air.kept.o2";
+/// Partial pressure of Ar the cosmic shoreline kept (see [`AIR_KEPT_N2`]);
+/// the air's, no later step changing it.
+pub(crate) const AIR_KEPT_AR: &str = "planet.air.kept.ar";
 /// Partial pressure of CH4 the stars' ultraviolet leaves of the kept one
 /// (`science::photochemistry::methane_left`), from the surface gravity,
 /// each star's flux and history (its mass, the metallicity and the age).
@@ -291,7 +300,7 @@ pub(crate) const AIR_PRESSURE: &str = "planet.air.pressure";
 /// The gases of the air, each with the code of its outgassed partial
 /// pressure and of its partial pressure the shoreline kept, in the
 /// contract's order.
-pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 7] = [
+pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 8] = [
     (timeline::Gas::N2, AIR_OUTGASSED_N2, AIR_KEPT_N2),
     (timeline::Gas::Co2, AIR_OUTGASSED_CO2, AIR_KEPT_CO2),
     (timeline::Gas::H2o, AIR_OUTGASSED_H2O, AIR_KEPT_H2O),
@@ -299,6 +308,7 @@ pub(crate) const AIR_GASES: [(timeline::Gas, &str, &str); 7] = [
     (timeline::Gas::Nh3, AIR_OUTGASSED_NH3, AIR_KEPT_NH3),
     (timeline::Gas::So2, AIR_OUTGASSED_SO2, AIR_KEPT_SO2),
     (timeline::Gas::O2, AIR_OUTGASSED_O2, AIR_KEPT_O2),
+    (timeline::Gas::Ar, AIR_OUTGASSED_AR, AIR_KEPT_AR),
 ];
 
 /// Surface temperature the climate settles at, from the light of every
@@ -363,6 +373,9 @@ pub(crate) const CLIMATE_AIR_NH3: &str = "planet.climate.air.nh3";
 pub(crate) const CLIMATE_AIR_SO2: &str = "planet.climate.air.so2";
 /// Partial pressure of O2 in the air the climate leaves.
 pub(crate) const CLIMATE_AIR_O2: &str = "planet.climate.air.o2";
+/// Partial pressure of Ar in the air the climate leaves: at most its
+/// frost's or liquid's pressure at the surface temperature.
+pub(crate) const CLIMATE_AIR_AR: &str = "planet.climate.air.ar";
 /// Surface pressure of the air the climate leaves: the sum of its
 /// partial pressures.
 pub(crate) const CLIMATE_AIR_PRESSURE: &str = "planet.climate.air.pressure";
@@ -372,13 +385,18 @@ pub(crate) const CLIMATE_CONDENSATE_N2: &str = "planet.climate.condensate.n2";
 /// CH4 on the ground at the surface temperature (a sea or a frost);
 /// recorded when positive.
 pub(crate) const CLIMATE_CONDENSATE_CH4: &str = "planet.climate.condensate.ch4";
+/// Ar on the ground at the surface temperature (a frost, or a liquid
+/// above its triple point, 83.806 K, when the air holds more argon than
+/// the liquid's vapour pressure); recorded when positive. Not a surface
+/// liquid, and left out of the ground's frost.
+pub(crate) const CLIMATE_CONDENSATE_AR: &str = "planet.climate.condensate.ar";
 /// What fills the oceans, from the phase diagrams: recorded when there is
 /// a liquid.
 pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
 
 /// The gases of the air the climate leaves, each with the code of its
 /// partial pressure, in the contract's order.
-pub(crate) const CLIMATE_AIR_GASES: [(timeline::Gas, &str); 7] = [
+pub(crate) const CLIMATE_AIR_GASES: [(timeline::Gas, &str); 8] = [
     (timeline::Gas::N2, CLIMATE_AIR_N2),
     (timeline::Gas::Co2, CLIMATE_AIR_CO2),
     (timeline::Gas::H2o, CLIMATE_AIR_H2O),
@@ -386,4 +404,5 @@ pub(crate) const CLIMATE_AIR_GASES: [(timeline::Gas, &str); 7] = [
     (timeline::Gas::Nh3, CLIMATE_AIR_NH3),
     (timeline::Gas::So2, CLIMATE_AIR_SO2),
     (timeline::Gas::O2, CLIMATE_AIR_O2),
+    (timeline::Gas::Ar, CLIMATE_AIR_AR),
 ];

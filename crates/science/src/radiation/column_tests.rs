@@ -80,8 +80,9 @@ const PLATEAU_N2_BAR: [f64; 3] = [0.78, 1.56, 2.34];
 /// Source: Mars's surface air, bar: 6.36 mbar at mean radius, 95.1 % of
 /// CO₂, 2.59 % of N₂ and 0.16 % of O₂ (NASA Mars Fact Sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html, read for study
-/// 25: CO₂ 6.05 mbar, N₂ 0.165 mbar, O₂ 0.010 mbar, derived; argon has
-/// no field).
+/// 25: CO₂ 6.05 mbar, N₂ 0.165 mbar, O₂ 0.010 mbar, derived), and 1.93 %
+/// of argon-40 (Mahaffy et al. 2013, Science 341, 263, abstract, as
+/// study 29 reads it: 0.123 mbar).
 const MARS_SURFACE_AIR: PartialPressures = PartialPressures {
     n2: 6.36e-3 * 0.0259,
     co2: 6.36e-3 * 0.951,
@@ -90,6 +91,7 @@ const MARS_SURFACE_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 6.36e-3 * 0.0016,
+    ar: 6.36e-3 * 0.0193,
 };
 
 /// Source: Mars's mean surface temperature, K, "Average temperature:
@@ -733,6 +735,45 @@ fn thin_steam_stays_on_the_plateau_at_680_k() {
         (olr / SIMPSON_NAKAJIMA_W_M2.0 - 1.0).abs() < THIN_STEAM_SHARE,
         "{olr} W/m²"
     );
+}
+
+/// Argon's heat capacity, 5/2 R (Chase 1998 through the NIST WebBook),
+/// sets the dry slope `d ln T / d ln p = R / c_p` of pure argon at 2/5,
+/// and Earth's argon, 0.93 % of its dry air's moles, lowers the air's
+/// heat capacity from 29.18 to 29.09 J/(mol·K) (study 29, derived from
+/// the NIST heat capacities at the fact sheet's volume shares).
+#[test]
+fn argon_has_a_monatomic_gass_heat_capacity() {
+    /// Definition: a monatomic ideal gas, `c_p = 5/2 R`, so `R / c_p`.
+    const MONATOMIC_SLOPE: f64 = 0.4;
+    let argon = DryAir::of(
+        &PartialPressures {
+            ar: 1.0,
+            ..PartialPressures::default()
+        },
+        BARE_SURFACE_K,
+    );
+    let slope = MOLAR_GAS_CONSTANT / argon.cp;
+    assert!((slope / MONATOMIC_SLOPE - 1.0).abs() < 1e-4, "{slope}");
+
+    // Source: dry air, NASA Earth fact sheet: 78.08 % N₂, 20.95 % O₂,
+    // 9340 ppm Ar, 420 ppm CO₂, by volume.
+    let air = PartialPressures {
+        n2: 0.7808,
+        o2: 0.2095,
+        ar: 9340e-6,
+        co2: 420e-6,
+        ..PartialPressures::default()
+    };
+    /// Source: study 29's heat capacity of Earth's dry air with its
+    /// argon, 29.09 J/(mol·K) (`docs/science/radiative-transfer.md`, on
+    /// argon's heat capacity), within 0.1 %: its last printed digit and
+    /// the code's heat capacities, rounded at 298.15 K.
+    const EARTH_DRY_CP: f64 = 29.09;
+    let cp = DryAir::of(&air, BARE_SURFACE_K).cp;
+    assert!((cp / EARTH_DRY_CP - 1.0).abs() < 1e-3, "{cp}");
+    let without = DryAir::of(&PartialPressures { ar: 0.0, ..air }, BARE_SURFACE_K).cp;
+    assert!(without > cp, "{without} {cp}");
 }
 
 /// Earth's measured air at `co2_ppm` of its dry air, with the vapour of

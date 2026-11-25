@@ -15,23 +15,15 @@ use std::f64::consts::PI;
 
 use crate::constants::{AVOGADRO, LOSCHMIDT, PASCALS_PER_BAR, SPEED_OF_LIGHT};
 use crate::radiation::gases::{
-    CH4_MOLAR_MASS, CO2_MOLAR_MASS, H2O_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS, O2_MOLAR_MASS,
-    PartialPressures, SO2_MOLAR_MASS,
+    AR_MOLAR_MASS, CH4_MOLAR_MASS, CO2_MOLAR_MASS, H2O_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS,
+    O2_MOLAR_MASS, PartialPressures, SO2_MOLAR_MASS,
 };
 
-/// A gas that scatters: the seven of [`PartialPressures`], and argon,
-/// which has no field and serves only the dry-air check.
+/// A gas that scatters: the eight of [`PartialPressures`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Gas {
     N2,
     O2,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "only the dry-air check against Bucholtz 1995 reads it"
-        )
-    )]
     Ar,
     Co2,
     Ch4,
@@ -75,11 +67,6 @@ const O2_KING: [f64; 3] = [1.09, 1.385e-11, 1.448e-20];
 /// doi:10.1364/JOSA.54.001362, abstract); its King factor is 1, an atom
 /// (He et al. 2021, §2.3): A, B, C.
 const AR_INDEX: [f64; 3] = [643.2135, 286_060.21, 144.0];
-
-/// Source: molar mass of Ar, 39.95 g/mol, in kg/mol (CIAAW abridged
-/// standard atomic weights 2024, after the IUPAC Atomic Weights 2021,
-/// ciaaw.org/abridged-atomic-weights.htm, read 2026-11-23).
-const AR_MOLAR_MASS: f64 = 39.95e-3;
 
 /// Source: CO₂, `n - 1 = 1.1427e3 sum_i a_i / (b_i^2 - nu^2)`, nu in
 /// cm^-1, 15 °C and 1013.25 hPa (He et al. 2021, Table 1, after
@@ -271,8 +258,8 @@ impl Gas {
 /// Rayleigh optical depth at 550 nm of the whole air above the surface,
 /// `sum_i sigma_i(550) p_i N_A / (g mu)`, with `mu` the column's mean molar
 /// mass (the page's `tau_R = sigma p / (mu m_u g)`). A negative or NaN
-/// part counts as none; no air gives 0. All seven gases scatter, water
-/// vapour included (legacy left it out).
+/// part counts as none; no air gives 0. All eight gases scatter, water
+/// vapour included (legacy left it out) and argon (study 29).
 pub(crate) fn rayleigh_depth_550(gases: &PartialPressures, gravity_m_s2: f64) -> f64 {
     let parts = [
         (Gas::N2, gases.n2),
@@ -282,6 +269,7 @@ pub(crate) fn rayleigh_depth_550(gases: &PartialPressures, gravity_m_s2: f64) ->
         (Gas::H2o, gases.h2o),
         (Gas::Nh3, gases.nh3),
         (Gas::So2, gases.so2),
+        (Gas::Ar, gases.ar),
     ]
     .map(|(gas, bar)| {
         (
@@ -463,6 +451,41 @@ mod tests {
         /// optical depth at 550 nm.
         const BUCHOLTZ_DEPTH: f64 = 0.0972;
         close(depth, BUCHOLTZ_DEPTH, 6e-3, "dry air depth at 550 nm");
+    }
+
+    /// The column's own sum counts Earth's argon: the dry air of the fact
+    /// sheet by volume at 1013.25 hPa, as [`PartialPressures`], scatters
+    /// Bucholtz's 0.0972 within the same 0.6 % as `earths_air_is_bucholtzs`
+    /// (the page's derivation gives -0.4 %; without its argon the column
+    /// scatters about 0.8 % less, study 29).
+    #[test]
+    fn the_columns_sum_scatters_with_its_argon() {
+        /// Definition: standard sea-level pressure, 1013.25 hPa, bar.
+        const SURFACE_BAR: f64 = 1.013_25;
+        // Source: dry air, NASA Earth fact sheet as the page reads it:
+        // 78.08 % N₂, 20.95 % O₂, 9340 ppm Ar, 420 ppm CO₂.
+        let shares = [0.7808, 0.2095, 9340e-6, 420e-6];
+        let total: f64 = shares.iter().sum();
+        let [n2, o2, ar, co2] = shares.map(|x| x / total * SURFACE_BAR);
+        let air = PartialPressures {
+            n2,
+            o2,
+            ar,
+            co2,
+            ..PartialPressures::default()
+        };
+        let depth = rayleigh_depth_550(&air, STANDARD_GRAVITY.0);
+        /// Source: Bucholtz 1995, Table 4, U.S. Standard Atmosphere 1962,
+        /// optical depth at 550 nm.
+        const BUCHOLTZ_DEPTH: f64 = 0.0972;
+        close(
+            depth,
+            BUCHOLTZ_DEPTH,
+            6e-3,
+            "the column's dry air at 550 nm",
+        );
+        let without = rayleigh_depth_550(&PartialPressures { ar: 0.0, ..air }, STANDARD_GRAVITY.0);
+        assert!(depth > without, "{depth} {without}");
     }
 
     /// The depth counts the molecules of the column, `p / (g mu)`: double

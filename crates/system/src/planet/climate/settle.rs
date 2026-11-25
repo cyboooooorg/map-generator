@@ -61,7 +61,7 @@ pub(crate) struct Settle {
     /// Whether the albedo's fixed point and the last condensation in it
     /// settled.
     pub converged: bool,
-    /// The N₂ and CH₄ on its ground at its temperature ([`condense`] of
+    /// The N₂, CH₄ and Ar on its ground at its temperature ([`condense`] of
     /// its inventory).
     pub condensate: PartialPressures,
     /// The liquid on its surface ([`liquid`]).

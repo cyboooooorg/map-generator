@@ -7,8 +7,11 @@
 //! `docs/superpowers/studies/2026-11-21-planet-interior/heat-and-composition.md`
 //! section A.
 
-use crate::constants::GRAVITATIONAL_CONSTANT;
-use crate::units::{Gyr, Kilogram, Metre, Watt};
+use crate::constants::{
+    AVOGADRO, DAY, ELECTRON_MASS_ENERGY_KEV, GRAVITATIONAL_CONSTANT, JOULES_PER_KEV,
+    JULIAN_YEAR_DAYS, YEARS_PER_GYR,
+};
+use crate::units::{Gyr, Kilogram, Metre, Mole, Watt};
 use std::f64::consts::LN_2;
 
 /// Source: mass of Earth's bulk silicate part, 4.03e24 kg (Dye 2012,
@@ -31,9 +34,16 @@ pub const HALF_LIFE_U235: Gyr = Gyr(0.704);
 /// Source: Th-232 half-life, 14.05 Gyr (Dye 2012, Table 2, lambda 1.563e-18
 /// /s).
 pub const HALF_LIFE_TH232: Gyr = Gyr(14.05);
-/// Source: K-40 half-life, 1.277 Gyr (Dye 2012, Table 2, lambda 17.200e-18
-/// /s). The commonly quoted 1.248 Gyr is not in a source read.
-pub const HALF_LIFE_K40: Gyr = Gyr(1.277);
+/// Source: K-40 half-life, 1.2522(27) Gyr (DDEP evaluation of 2025, X.
+/// Mougeot, ICRM 2025 poster, HAL cea-05087440, read), the newest
+/// evaluation, which the argon of the air shares
+/// (`docs/science/planet-atmospheres.md`, "Argon"). Every evaluation of
+/// Schaen et al. 2020 (GSA Bulletin 133, 461, Table 1) gives 1.2505 to
+/// 1.2688 Gyr; ENSDF 2017's 1.2480 Gyr is the "commonly quoted" one. Dye
+/// 2012's 1.277 Gyr (Table 2, lambda 17.200e-18 /s), taken before, was
+/// 0.6 % (Min et al. 2000's 1.2688) to 2.3 % (ENSDF 2017's) longer than
+/// each of them, 2.0 % longer than DDEP 2025's.
+pub const HALF_LIFE_K40: Gyr = Gyr(1.2522);
 
 /// Source: heat per kilogram of element, W/kg, uranium (Dye 2012, Table 3:
 /// 98.5 uW/kg).
@@ -41,9 +51,41 @@ const HEAT_PER_KG_U: f64 = 98.5e-6;
 /// Source: heat per kilogram of element, W/kg, thorium (Dye 2012, Table 3:
 /// 26.3 uW/kg).
 const HEAT_PER_KG_TH: f64 = 26.3e-6;
-/// Source: heat per kilogram of element, W/kg, potassium (Dye 2012, Table 3:
-/// 3.33e-3 uW/kg).
-const HEAT_PER_KG_K: f64 = 3.33e-9;
+/// Source: the branches of K-40's decay, each as its share of the decays
+/// and the energy it leaves in the rock, keV (DDEP evaluation of 2025,
+/// LNE-LNHB table of K-40, X. Mougeot, read on lnhb.fr; to be cited as
+/// Mougeot et al. 2026, Metrologia 63, 019001,
+/// doi:10.1088/1681-7575/ae3733): beta- to Ca-40, 89.56 %, its electron's
+/// mean energy 582.898 keV (the antineutrino carries the rest out of the
+/// planet); electron capture to Ar-40's 1460 keV level, 10.34 %, the
+/// level's gamma transition, 1460.851 keV (the neutrino's 43.55 keV
+/// leaves); beta+, 0.00103 %, the positron's mean 251.757 keV and its
+/// annihilation, twice [`ELECTRON_MASS_ENERGY_KEV`]. The capture to
+/// Ar-40's ground state (0.098 %) leaves only argon's atomic relaxation,
+/// as every capture does: at most its K shell's 3.2 keV (the K-beta
+/// X-ray's 3.1905 keV) on 10.44 % of the decays, under 0.05 % of the
+/// heat, left out.
+const K40_DECAY_HEAT_KEV: [(f64, f64); 3] = [
+    (0.8956, 582.898),
+    (0.1034, 1460.851),
+    (1.03e-5, 251.757 + 2.0 * ELECTRON_MASS_ENERGY_KEV),
+];
+
+/// Definition: heat per kilogram of element, W/kg, potassium: its K-40
+/// atoms ([`K40_ATOM_SHARE`] times [`AVOGADRO`] over
+/// [`POTASSIUM_MOLAR_MASS`], 1.7972e21 per kg, as DDEP prints 1.7972e18
+/// per g), times the decay constant `ln 2 / HALF_LIFE_K40` over a Julian
+/// year (DDEP prints 17.541e-18 /s), times the heat of a decay,
+/// [`K40_DECAY_HEAT_KEV`] (673.1 keV): 3.400e-9 W/kg. Dye 2012's 3.33e-3
+/// uW/kg (Table 3), taken until the half-life moved to DDEP's (#694), is
+/// the same product on his decay constant, 17.200e-18 /s, 2 % slower
+/// (test `potassiums_heat_is_dyes_on_ddeps_decay_constant`).
+const HEAT_PER_KG_K: f64 = K40_ATOM_SHARE * AVOGADRO / POTASSIUM_MOLAR_MASS * LN_2
+    / (HALF_LIFE_K40.0 * YEARS_PER_GYR * JULIAN_YEAR_DAYS * DAY.0)
+    * (K40_DECAY_HEAT_KEV[0].0 * K40_DECAY_HEAT_KEV[0].1
+        + K40_DECAY_HEAT_KEV[1].0 * K40_DECAY_HEAT_KEV[1].1
+        + K40_DECAY_HEAT_KEV[2].0 * K40_DECAY_HEAT_KEV[2].1)
+    * JOULES_PER_KEV;
 
 /// Source: share of uranium's heat made by U-238, 0.958 (derived from Dye
 /// 2012, Table 2: 95.13 uW/kg of isotope and its abundance; the study reads
@@ -66,6 +108,16 @@ const THORIUM_ABUNDANCE: f64 = 80e-9;
 /// study), inside Dye 2012, Table 7 (140-420 ug/g). It is the sensitive
 /// share: the heat follows it linearly.
 const POTASSIUM_ABUNDANCE: f64 = 280e-6;
+
+/// Source: share of potassium's atoms that are K-40, 0.011668 %
+/// (Naumenko et al. 2013, as the DDEP evaluation of 2025 takes it: X.
+/// Mougeot, ICRM 2025 poster, HAL cea-05087440, read).
+pub const K40_ATOM_SHARE: f64 = 1.1668e-4;
+/// Source: standard atomic weight of potassium, 39.0983(1), in kg/mol
+/// (CIAAW, the potassium page of ciaaw.org, read for study 29; the IUPAC
+/// value of Prohaska et al. 2022, Pure Appl. Chem. 94, 573,
+/// doi:10.1515/pac-2019-0603, which it publishes).
+pub const POTASSIUM_MOLAR_MASS: f64 = 39.0983e-3;
 
 /// Definition: each heat-producing isotope with its present power per
 /// kilogram of Earth's silicate part, W/kg, and its half-life: the
@@ -90,6 +142,23 @@ const ISOTOPES: [(f64, Gyr); 4] = [
 /// 2012, Table 7).
 pub fn earth_radiogenic_power() -> Watt {
     Watt(ISOTOPES.iter().map(|(p, _)| p).sum::<f64>() * EARTH_SILICATE_MASS.0)
+}
+
+/// K-40 a body's silicate part has lost to decay since it formed, mol:
+/// the potassium of the heat (`POTASSIUM_ABUNDANCE` of Earth's silicate
+/// part, times the `abundance` at formation, Earth = 1, as [`radiogenic`]
+/// takes it) times [`K40_ATOM_SHARE`] over [`POTASSIUM_MOLAR_MASS`], over
+/// the `silicate` mass, carried to formation by its decay and decayed
+/// over `age`: `c_K x40 / m_K M a e^(lambda t_earth) (1 - e^(-lambda t))`,
+/// `lambda = ln 2 / HALF_LIFE_K40`. The heat's convention: a body forms
+/// with the K-40 Earth had at its formation. None at a negative age.
+pub fn potassium_40_decayed(silicate: Kilogram, abundance: f64, age: Gyr) -> Mole {
+    let lambda = LN_2 / HALF_LIFE_K40.0;
+    let at_formation = POTASSIUM_ABUNDANCE * K40_ATOM_SHARE / POTASSIUM_MOLAR_MASS
+        * silicate.0
+        * abundance
+        * (lambda * EARTH_AGE.0).exp();
+    Mole(at_formation * -(-lambda * age.0.max(0.0)).exp_m1())
 }
 
 /// Source: Earth's total surface heat flow, 46.7 TW (Davies & Davies 2010,
@@ -233,6 +302,59 @@ mod tests {
             let later = isotope_term(i, 1.0 + half_life.0);
             assert!((later / now - 0.5).abs() < 1e-12, "isotope {i}");
         }
+    }
+
+    #[test]
+    fn potassium_40_decays_with_ddeps_half_life() {
+        /// Source: K-40 half-life, 1.2522(27) Gyr (DDEP evaluation of
+        /// 2025, X. Mougeot, ICRM 2025 poster, HAL cea-05087440), the
+        /// newest evaluation; Schaen et al. 2020 (GSA Bulletin 133, 461,
+        /// Table 1) give 1.2505 to 1.2688 Gyr for the others.
+        const DDEP_2025: f64 = 1.2522;
+        // Potassium's heat at formation over today's is `2^(t_earth /
+        // t_half)`, the inverse of the share of K-40 left today.
+        let ratio = isotope_term(3, 0.0) / isotope_term(3, EARTH_AGE.0);
+        let expected = 2f64.powf(EARTH_AGE.0 / DDEP_2025);
+        assert!((ratio / expected - 1.0).abs() < 1e-12, "{ratio} {expected}");
+    }
+
+    #[test]
+    fn potassiums_heat_is_dyes_on_ddeps_decay_constant() {
+        /// Source: heat of potassium, 3.33e-3 uW/kg of element (Dye 2012,
+        /// Treatise on Geophysics 2nd ed., vol. 13, Table 3), in W/kg.
+        const DYE_HEAT: f64 = 3.33e-9;
+        /// Source: K-40's decay constant in Dye 2012, Table 2, 17.200e-18
+        /// /s.
+        const DYE_LAMBDA: f64 = 17.200e-18;
+        /// Source: K-40's decay constant in the DDEP evaluation of 2025,
+        /// 17.541(38)e-18 /s (LNE-LNHB table of K-40, X. Mougeot, read).
+        const DDEP_LAMBDA: f64 = 17.541e-18;
+        /// Definition: the tolerance, twice the rounding of Dye's three
+        /// printed digits (0.15 %): his heat per decay may differ from
+        /// DDEP 2025's by no more than that for the two to agree.
+        const DYE_DIGITS: f64 = 3e-3;
+        // Dye's heat carried to DDEP's decay constant: 3.396e-9 W/kg.
+        let expected = DYE_HEAT * DDEP_LAMBDA / DYE_LAMBDA;
+        assert!(
+            (HEAT_PER_KG_K / expected - 1.0).abs() < DYE_DIGITS,
+            "{HEAT_PER_KG_K:e} against {expected:e}"
+        );
+
+        /// Source: the beta- activity of natural potassium, 28.23(6) per
+        /// second and gram (DDEP evaluation of 2025, X. Mougeot, ICRM 2025
+        /// poster, HAL cea-05087440, read: the recommended value of 44
+        /// measurements), per kilogram.
+        const DDEP_BETA_ACTIVITY: f64 = 28.23e3;
+        /// Source: its uncertainty, 0.06 per second and gram, as a share.
+        const DDEP_BETA_SPREAD: f64 = 0.06 / 28.23;
+        // The decays the heat counts, through the beta- branch.
+        let beta = K40_ATOM_SHARE * AVOGADRO / POTASSIUM_MOLAR_MASS * LN_2
+            / (HALF_LIFE_K40.0 * YEARS_PER_GYR * JULIAN_YEAR_DAYS * DAY.0)
+            * K40_DECAY_HEAT_KEV[0].0;
+        assert!(
+            (beta / DDEP_BETA_ACTIVITY - 1.0).abs() < DDEP_BETA_SPREAD,
+            "{beta}"
+        );
     }
 
     #[test]

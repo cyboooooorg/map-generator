@@ -607,3 +607,127 @@ fn only_a_cold_ice_carries_its_nitrogen() {
         (cold.co2, cold.ch4, cold.nh3)
     );
 }
+
+/// Source: argon's triple point, 83.806 K and 68 891 Pa (Tegeler, Span &
+/// Wagner 1999, J. Phys. Chem. Ref. Data 28, 779, doi:10.1063/1.556037,
+/// as Xiao et al. 2025 and CoolProp's `Argon.json` take it).
+const ARGON_TRIPLE: (f64, f64) = (83.806, 68_891.0);
+
+/// Source: argon's frost at Triton's 37.2 K, 0.0219 Pa: Xiao,
+/// Sriskandaruban & Maynard-Casely 2025 (Int. J. Thermophys. 46, 14,
+/// doi:10.1007/s10765-024-03469-2), eq. 55, computed by hand in study 29b
+/// (`docs/science/planet-atmospheres.md`, "Argon's frost"), to its three
+/// printed digits.
+const ARGON_FROST_TRITON: (f64, f64) = (37.2, 0.0219);
+
+/// Definition: the tolerance of a value printed to three digits, 0.5 %.
+const THREE_DIGITS: f64 = 5e-3;
+
+/// Source: Fray & Schmitt 2009's fit `Ar-1` of solid argon's
+/// sublimation pressure, `ln(p / 1 bar) = sum A_i / T^i`, `A_0` to `A_4`
+/// (Planet. Space Sci. 57, 2053, doi:10.1016/j.pss.2009.09.011, as Table 2
+/// of Lisse et al. 2021, arXiv:2009.02277, reprints it): the cross-check
+/// of Xiao et al.'s curve.
+const FRAY_SCHMITT_ARGON: [f64; 5] = [10.69, -893.2, -3567.0, 65_740.0, -428_000.0];
+
+/// Definition: the test's margins between the two fits, chosen over how
+/// far they part (derived from the two formulas): from Triton's and
+/// Pluto's ices up to the triple point a factor 1.7, over the 1.64 at
+/// 37 K (study 29b's table: 1.63 at 37.2 K, 1.58 at 38 K, 1.18 at 50 K);
+/// above 65 K, where both rest on many data sets, 2 %, over the largest
+/// gap, 1.7 % near 75 K (1 % at 70 K).
+const FIT_SPREAD: [(f64, f64); 2] = [(37.0, 1.7), (65.0, 1.02)];
+
+/// Source: argon's normal boiling point, 87.28 K at 1 atm (Gosman et al.
+/// 1969, through the NIST Chemistry WebBook, as study 29b reads it), and
+/// the tolerance of CoolProp's ancillary there, 0.5 % (it gives 1.011
+/// bar).
+const ARGON_BOILING: (f64, f64) = (87.28, 101_325.0);
+
+/// Source: argon's critical temperature, 150.687 K (Tegeler et al. 1999,
+/// as CoolProp's `Argon.json` gives it).
+const ARGON_CRITICAL_K: f64 = 150.687;
+
+/// Definition: temperatures under the fit's 26 K where the carried slope
+/// is read, K.
+const COLDER_K: [f64; 4] = [20.0, 25.0, 10.0, 15.0];
+
+fn fray_schmitt_argon(t: f64) -> f64 {
+    let inverse = 1.0 / t;
+    let ln_bar = FRAY_SCHMITT_ARGON
+        .iter()
+        .rev()
+        .fold(0.0, |sum, a| sum * inverse + a);
+    ln_bar.exp() * PASCALS_PER_BAR
+}
+
+#[test]
+fn argon_frost_is_xiao_et_al_s() {
+    let (tt, pt) = ARGON_TRIPLE;
+    let triple = argon_frost_pressure(Kelvin(tt * (1.0 - JUST_UNDER)))
+        .unwrap()
+        .0;
+    assert!(close(triple, pt, 1e-6), "{triple}");
+    assert!(argon_frost_pressure(Kelvin(tt)).is_none());
+    let (t, p) = ARGON_FROST_TRITON;
+    let triton = argon_frost_pressure(Kelvin(t)).unwrap().0;
+    assert!(close(triton, p, THREE_DIGITS), "{triton}");
+}
+
+#[test]
+fn argon_frost_agrees_with_fray_and_schmitt() {
+    let (tt, _) = ARGON_TRIPLE;
+    for (from, spread) in FIT_SPREAD {
+        let mut t = from;
+        while t < tt {
+            let ratio = fray_schmitt_argon(t) / argon_frost_pressure(Kelvin(t)).unwrap().0;
+            assert!(
+                ratio < spread && ratio > 1.0 / spread,
+                "{t} K: {ratio} against {spread}"
+            );
+            t += 0.5;
+        }
+    }
+}
+
+#[test]
+fn argon_frost_carries_its_slope_under_26_k() {
+    // Definition: the curve is read down to 26 K, the low end of Xiao et
+    // al.'s fit, and carries on there with a constant `d ln p / d(1/T)`.
+    let ln = |t: f64| argon_frost_pressure(Kelvin(t)).unwrap().0.ln();
+    let floor = ARGON_FIT_FLOOR;
+    assert!(close(ln(floor * (1.0 - JUST_UNDER)), ln(floor), 1e-6));
+    let slope = |a: f64, b: f64| (ln(a) - ln(b)) / (1.0 / a - 1.0 / b);
+    let [a, b, c, d] = COLDER_K;
+    assert!(close(slope(a, b), slope(c, d), 1e-9));
+    assert!(close(slope(a, b), slope(floor - 1e-4, floor - 2e-4), 1e-3));
+    for t in [0.0, -1.0, f64::NAN] {
+        let p = argon_frost_pressure(Kelvin(t)).unwrap().0;
+        assert!(p.is_finite() && p >= 0.0, "{t}: {p}");
+    }
+}
+
+#[test]
+fn argon_saturation_joins_its_liquid() {
+    let (tt, pt) = ARGON_TRIPLE;
+    let frost = argon_saturation_pressure(Kelvin(tt * (1.0 - JUST_UNDER))).0;
+    let liquid = argon_saturation_pressure(Kelvin(tt)).0;
+    assert!(close(liquid, frost, JOIN_TOLERANCE), "{frost} {liquid}");
+    assert!(close(liquid, pt, JOIN_TOLERANCE), "{liquid}");
+    let (t, p) = ARGON_BOILING;
+    let boiling = argon_saturation_pressure(Kelvin(t)).0;
+    assert!(close(boiling, p, THREE_DIGITS), "{boiling}");
+    assert!(
+        argon_saturation_pressure(Kelvin(ARGON_CRITICAL_K))
+            .0
+            .is_infinite()
+    );
+    let mut t = COLDER_K[0];
+    let mut last = 0.0;
+    while t < ARGON_CRITICAL_K {
+        let p = argon_saturation_pressure(Kelvin(t)).0;
+        assert!(p > last, "{t} K");
+        last = p;
+        t += 0.25;
+    }
+}

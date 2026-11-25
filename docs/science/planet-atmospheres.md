@@ -532,8 +532,9 @@ The audit behind this section and the next ones is
 ## Atmosphere
 
 `planet::atmosphere` (called by `planet_model`) gives the
-partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
-and O₂ (`Gases`, with `total()`), in six steps, called in this order:
+partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂,
+O₂ and Ar (`Gases`, with `total()`; the argon since study 29, see
+*Argon (study 29)* below), in six steps, called in this order:
 `outgassed`, `atmosphere`, `non_thermal_loss`, `methane_photolysis`,
 `cold_trap`, `photochemistry`. The rewrite has so far `outgassed`, the
 shoreline of `atmosphere`, the SO₂ wash-out, `methane_photolysis`,
@@ -1465,6 +1466,465 @@ no emissivity fits into 1e-5 to 2e-5 bar. It now draws what Neptune
 itself receives over its orbit, 0.00109 to 0.00113 (perihelion 29.80
 and aphelion 30.34 AU).
 
+### Argon (study 29)
+
+Study 29 of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/29-argon-audit),
+for issue #694, gives the chain its argon: `science::outgassing` makes it,
+`system::planet::air` outgasses it (`planet.air.outgassed.ar`, then
+`planet.air.kept.ar`), the column carries it (`PartialPressures.ar`) and the
+climate condenses it (`planet.climate.air.ar`, `planet.climate.condensate.ar`).
+This section is the law, with its sources, its checks and what the chain gives;
+the partials stay weights (*Earth's N₂ target*).
+
+**Earth's argon, measured.** Argon is 9340 ppm of the dry air by volume (NASA
+Earth fact sheet, read; Picard et al. 2008, *Metrologia* 45, 149,
+doi:10.1088/0026-1394/45/2/004, adopt a remeasured argon fraction in the
+CIPM-2007 density formula, abstract only). With the air's mean molecular weight,
+28.97, and argon's standard atomic weight, 39.95 (CIAAW 2024), argon is 1.288 %
+of the dry air's mass, 5.1352e18 kg (Trenberth & Smith 2005): 6.61e16 kg,
+1.656e18 mol, which weighs 0.0127 bar at 9.80665 m/s² on a 6371 km sphere
+(derived). The air's ⁴⁰Ar/³⁶Ar is 298.6 (Lee et al. 2006, *GCA* 70, 4507,
+doi:10.1016/j.gca.2006.06.1563, as Avice & Marty 2020, p. 24 of
+arXiv:2003.11431, quote it; its uncertainty was not read) and its ³⁸Ar/³⁶Ar
+0.188 (Marty 2012, p. 9 of arXiv:1405.6336). ⁴⁰Ar is then 99.60 % of the air's
+argon, 1.649e18 mol (Marty 2012, p. 15, gives 1.6e18 mol after Ozima & Podosek
+2002), and ³⁶Ar 5.5e15 mol. The air's argon is radiogenic: the ⁴⁰Ar that the
+decay of ⁴⁰K made in the rock.
+
+**The decay of ⁴⁰K.** ⁴⁰K decays to ⁴⁰Ca (β⁻) or to ⁴⁰Ar (electron capture and
+β⁺). The evaluations, as the decay constants in 1e-10 per year (Schaen et al.
+2020, *GSA Bulletin* 133, 461, doi:10.1130/B35560.1, Table 1, read in the HAL
+copy hal-02903663):
+
+| Evaluation | λ to ⁴⁰Ar | λ to ⁴⁰Ca | λ total | Half-life (derived) | Share to ⁴⁰Ar (derived) |
+| --- | --- | --- | --- | --- | --- |
+| Steiger & Jäger 1977 | 0.581 | 4.962 | 5.543 | 1.2505 Gyr | 10.48 % |
+| Min et al. 2000 | 0.580 ± 0.007 | 4.884 ± 0.049 | 5.463 ± 0.107 | 1.2688 Gyr | 10.62 % |
+| Renne et al. 2011 | 0.5757 ± 0.016 (as printed) | 4.9548 ± 0.0134 | 5.531 ± 0.0135 | 1.2532 Gyr | 10.41 % |
+| DDEP 2025 (Mougeot) | | | | 1.2522 ± 0.0027 Gyr | 10.439 % |
+
+The DDEP evaluation of 2025 (X. Mougeot, ICRM 2025 poster, HAL cea-05087440,
+read) gives the half-life 1.2522(27) Gyr and the branches β⁻ 89.56(7) %,
+electron capture to ⁴⁰Ar's 1461 keV level 10.34(7) %, to its ground state
+0.098(25) %, β⁺ 0.00103(13) %: 10.439 % to ⁴⁰Ar (derived, the sum). It lists
+ENSDF 2017's 1.2480(30) Gyr, DDEP 2009's 1.2504(30) and DDEP 1998's 1.265(13),
+and takes ⁴⁰K as 0.011668(8) % of potassium's atoms (Naumenko et al. 2013, as
+the poster quotes it), so 2.9843e-3 mol of ⁴⁰K per kg of potassium (derived with
+potassium's standard atomic weight, 39.0983(1), CIAAW). The law takes the DDEP
+2025 values: the newest evaluation, and the one whose ground-state branch, the
+source of the old disagreement, was measured since (Kossert et al. 2022, as the
+poster cites it). The code's `HALF_LIFE_K40` took 1.277 Gyr (Dye 2012's λ
+17.200e-18 per s), longer than every one of them, by 0.6 % (Min et al. 2000) to
+2.3 % (ENSDF 2017) and by 2.0 % than DDEP 2025's, until the argon's branch
+(#694) set it to DDEP's 1.2522 Gyr (decided 2026-11-25): the heat and the argon
+read one value. Potassium's heat per kilogram, Dye's 3.33e-3 µW/kg on his λ, is
+derived since from DDEP's decay data on the same λ, 3.400e-3 µW/kg (*The heat
+inside* in [planet interiors](planet-interiors.md#the-heat-inside)). Earth's
+radiogenic power today moves from 20.18 to 20.25 TW (+0.39 %, potassium's
+share); at formation it is 104.1 TW against 100.8 before the branch (+3.2 %),
+and 62.2 against 60.6 TW at 1 Gyr (+2.6 %) (from the code's isotopes).
+
+**Earth's potassium.** The heat of the model takes 280 ppm of potassium in
+Earth's silicate part (`POTASSIUM_ABUNDANCE`, Arevalo, McDonough & Luong 2009;
+280 ± 60 ppm at 1σ as Marty 2012, p. 15, quotes it). Other estimates: Wang,
+Lineweaver & Ireland 2018 (*Icarus* 299, 460, doi:10.1016/j.icarus.2017.08.024,
+arXiv:1708.08718, Table 1, read) average three primitive-mantle models
+(Lyubetskaya & Korenaga 2007, McDonough & Arevalo 2008, Palme & O'Neill 2014)
+into 237 ± 25 ppm, and quote the first two as 190 ± 76 and 240 ± 48 ppm (p. 4);
+Jochum et al. 1983's K/U of about 12 000 gives 250 ppm and Albarède 1998 allows
+a factor of two (both as Marty 2012, p. 15, quotes them); Farcy, Arevalo &
+McDonough 2020 (*JGR Solid Earth*, doi:10.1029/2020JB020245, abstract) find a
+MORB K/U of 13 900 ± 200. The spread, 190 to 280 ppm, is the main uncertainty of
+the law, as large as the share degassed.
+
+**⁴⁰Ar produced.** A body whose silicate part has the mass `M`, the radiogenic
+abundance `a` of the heat (Earth = 1, the same draw `radiogenic_abundance` that
+scales U, Th and K together) and the age `t` has made, since it formed,
+
+$$
+n_{40}(t) = b \, a \, \frac{c_K x_{40}}{m_K} \, M \,
+  e^{\lambda t_\oplus} \left(1 - e^{-\lambda t}\right)
+$$
+
+moles of ⁴⁰Ar, with `b` = 0.10439 the share to ⁴⁰Ar, `c_K` = 280e-6 the
+potassium of Earth's silicate part, `x₄₀/m_K` = 2.9843e-3 mol of ⁴⁰K per kg of
+potassium, `λ = ln 2 / 1.2522 Gyr` and `t⊕` = 4.5673 Gyr: the ⁴⁰K a body holds
+at its formation is Earth's at its own (the heat's convention,
+`science::heat::radiogenic`), and the share `1 − e^{−λt}` of it has decayed. On
+Earth (4.03e24 kg of silicate, 4.5673 Gyr) it is 4.053e18 mol, 1.006e-6 mol per
+kg of silicate (derived; Marty 2012, p. 15: 3.9 ± 0.9e18 mol over 4.5 Gyr from
+280 ± 60 ppm). With the former `HALF_LIFE_K40`, 1.277 Gyr, it would be
+3.842e18 mol (−5 %). In the code: `science::heat::potassium_40_decayed` (the
+heat's `POTASSIUM_ABUNDANCE`, `K40_ATOM_SHARE` and `POTASSIUM_MOLAR_MASS`)
+times `science::outgassing::ARGON_40_BRANCH` is `radiogenic_argon`; the test
+`earths_rock_made_martys_argon` holds it within 0.5 % of 4.053e18 mol and
+inside Marty's 1σ.
+
+**The share degassed.** Marty 2012 (p. 15) puts 1.6e18 of the 3.9e18 mol in the
+air, at most 3.5e17 mol in the continents (Arevalo et al. 2009), and the rest,
+about half, still in the mantle (Allègre, Hofmann & O'Nions 1996, *GRL* 23,
+3555, doi:10.1029/96GL03373, abstract: about half of the ⁴⁰Ar is retained in the
+solid Earth). The share in the air is 1.6 / 3.9 = 0.41, and 1.649 / 4.053 =
+0.407 with the law's own production (derived). Argon needs this share of its
+own: the mantle's primordial volatiles came out early, most of them in the first
+magma ocean and the first Gyr of melting, while ⁴⁰Ar was made over the whole
+life of the rock, and a volatile made late comes out only through the melting of
+the later Gyr. Venus shows it: more CO₂ and N₂ than Earth, a quarter of its ⁴⁰Ar
+(Sasaki & Tajika 1995, AIP Conf. Proc., doi:10.1063/1.48741, abstract: the
+long-term degassing of Venus and Mars is 1/4 and 1/20 of Earth's, from the ⁴⁰Ar
+of each air over the planet's mass). The models that follow argon degas it with
+the melt: the air's ⁴⁰Ar grows as the mantle's ⁴⁰Ar times the share of the
+mantle melted per unit time (O'Rourke & Korenaga 2015, as Krissansen-Totton,
+Fortney & Nimmo 2021, *PSJ* 2, 216, doi:10.3847/PSJ/ac2580, Appendix A.3, write
+it; on Mars, with a crustal production rate and a share of the melt degassed of
+0.3 to 1.0, Lichtenegger et al. 2022, arXiv:2105.09789, eq. 32). The model has
+no melting history, so it takes the ratio:
+
+| Regime | Share of the ⁴⁰Ar made that reaches the air | Tag |
+| --- | --- | --- |
+| Plates, heat pipe | 0.41 | Source: Marty 2012, p. 15 (1.6e18 of 3.9e18 mol) |
+| Stagnant lid | 0.41 × `LID_SHARE` / `MOBILE_SHARE` = 0.0863 | Definition: the ratio by which the outgassing scales a stagnant lid's other volatiles (`volcanism.rs` scales the intensity the same way); it inherits the calibrations `LID_SHARE` and `MOBILE_SHARE` |
+| Episodic lid | 0.0863, as a stagnant lid | A documented choice, not the outgassing's ratio: the episodic lid's other volatiles take `MOBILE_SHARE`, its ⁴⁰Ar the lid's share (below) |
+
+The episodic lid takes the lid's share although its CO₂ and N₂ take the
+plates' (*Outgassing*): Venus's 90 bar of CO₂ came out early, its ⁴⁰Ar through
+the lid of its later Gyr. This is a choice, and its reason is Venus's ⁴⁰Ar
+itself (Sasaki & Tajika 1995 read the quarter of Earth's degassing from it):
+with the plates' share Venus would hold 3.4 times its measured ⁴⁰Ar (*Checks*
+below); with the lid's it holds 0.69 times, inside the measurement's 1σ. The
+Venus check is therefore not independent of the choice. A share fitted on Venus
+(0.12 with the model's potassium) would be a new calibration; the ratio adds
+none of its own, and inherits `LID_SHARE` and `MOBILE_SHARE`. In the code:
+`science::outgassing::argon_degassed_share`, `ARGON_DEGASSED_UNDER_PLATES`.
+
+The ⁴⁰Ar then goes the way of every outgassed gas: its mass, 39.95 g/mol per
+mole, weighs `P = m g / (4π R²)` (`column_pressure`), a deep ocean lets out the
+share `released_under_ocean`, and the cosmic shoreline keeps the share
+`shoreline_kept`. It is not recycled by subduction (the
+`*_RECYCLED_UNDER_PLATES` shares are for the volatiles that the crust binds; the
+share 0.41 is already what stays in the air), it condenses only as the frost
+of a body colder than its triple point (*Argon's frost* below), and the
+photochemistry does not touch it.
+
+**Primordial argon.** ³⁶Ar and ³⁸Ar came with the planet, from the solar nebula,
+the solar wind or the ices. On Earth they are 0.4 % of the air's argon, on Mars
+0.05 % (⁴⁰Ar/³⁶Ar of about 1900, below), on Titan 0.6 % (below); only Venus
+holds as much of them as of ⁴⁰Ar (⁴⁰Ar/³⁶Ar 1.11, below), and its whole argon is
+6 mbar of its 92 bar. Venus's ³⁶Ar per kg of planet is about 70 times Earth's
+(3.3e17 mol over 4.87e24 kg against 5.5e15 over 5.97e24, derived), which no rule
+of composition the model knows explains (Avice et al. 2022 review the solar-wind
+and cometary hypotheses). The ices are the other source: comet 67P's argon is
+5.8 ± 2.2e-6 of its water by number, its ³⁶Ar/N₂ 5.5 ± 1.5e-3 (Rubin et al.
+2018, *Sci. Adv.* 4, eaar6297, doi:10.1126/sciadv.aar6297, Table 2, read;
+Balsiger et al. 2015, *Sci. Adv.* 1, e1500377, doi:10.1126/sciadv.1500377, read:
+³⁶Ar/N₂ 9.1 ± 0.3e-3, the two "closely correlated owing to their similar
+volatility", and ³⁶Ar/³⁸Ar 5.4 ± 1.4), so 1.29e-5 kg of argon per kg of ice
+(derived). Argon and N₂ leave the same ices together (Mousis et al. 2009, § 3.1:
+planetesimals warmed to about 50 K release CO, Ar and N₂), so argon would join
+study 28's gate: the same disc profile, the same 30 K (*Titan's nitrogen*).
+Scherf et al. 2020 (§ 3) write instead that argon is trapped at colder
+temperatures than N₂; the comet's correlated N₂ and argon, read above, disagree.
+Titan's ³⁶Ar/¹⁴N, 1.1e-7 (derived from Niemann et al. 2010's ³⁶Ar, below, and
+its N₂), is four orders of magnitude under 67P's ³⁶Ar/N₂ (2.75e-3 per nitrogen
+atom), as the gate wants: Titan's ice held no N₂ and no argon.
+
+The primordial argon is left out of the first step: it is climatically nothing
+(0.05 mbar on Earth, under 3 mbar on Venus) and Venus's cannot be predicted. An
+ice argon would condense on the cold bodies by the frost law below, as the
+radiogenic argon does.
+
+**Argon's frost** (study 29b of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/29b-argon-frost)). A
+body colder than argon's triple point holds its argon as frost wherever the
+frost's vapour pressure is under the argon's weight. Its triple point is 83.806
+K and 68 891 Pa (Tegeler, Span & Wagner 1999, *J. Phys. Chem. Ref. Data* 28,
+779, doi:10.1063/1.556037; the 68 891 Pa as CoolProp's `Argon.json` gives
+Tegeler et al.'s triple point in its melting line, `p_0` at `T_0` = 83.8058 K,
+read; Xiao et al. 2025 print 0.0689 MPa and 83.806 K; CoolProp's saturated state
+at 83.806 K is 68 892 Pa; the NIST WebBook lists 83.8 K and 0.689 bar after
+Gosman, McCarty et al. 1969). Two fits of the measured sublimation pressures
+were read:
+
+- Xiao, Sriskandaruban & Maynard-Casely 2025 (*Int. J. Thermophys.* 46, 14,
+  doi:10.1007/s10765-024-03469-2, eq. 55, read in the Research Square preprint):
+  `p = p_t exp[(T_t / T)(e₁ θ + e₂ θ^1.5 + e₃ θ⁵)]`, `θ = 1 − T / T_t`, `e₁ =
+  −10.763`, `e₂ = −1.526`, `e₃ = −0.4245`, valid from 26 to 83.806 K. It is
+  fitted to the same data as their solid equation of state (their Table 6:
+  Ancsin 1973, Boato et al. 1961, Chen et al. 1971 and 1978, Clark et al. 1951,
+  Flubacher et al. 1961, Freeman & Halsey 1956, Lee et al. 1970, Leming &
+  Pollack 1970 from 26 K, Levenson 1967 from 24 to 31 K, Regnier 1972), whose
+  sublimation pressure is good to 1 % above 50 K; under 50 K only Leming &
+  Pollack's and Levenson's points exist, the latter read from a plot and 100 %
+  off, and the authors call for "more reliable sublimation measurements at T <
+  50 K".
+- Fray & Schmitt 2009's `Ar-1`, `ln(p / 1 bar) = Σ Aᵢ / Tⁱ` with `A₀` to `A₄` =
+  10.69, −893.2, −3567, 65 740, −428 000, as Table 2 of Lisse et al. 2021
+  reprints it (read in arXiv:2009.02277), the compilation the model already
+  reads for N₂'s frost. It gives 0.688 bar at the triple point; its range was
+  not read.
+
+The two agree within 1 % at 70 K and 5 % at 60 K, and part below: the Fray &
+Schmitt curve is 18 % higher at 50 K, 58 % at 38 K, 2.4 times at 30 K (derived).
+At the 37 to 39 K of Triton's and Pluto's ices argon's frost holds 0.019 to
+0.078 Pa (Xiao) or 0.031 to 0.12 Pa (Fray & Schmitt); the 1.6 between them is
+the uncertainty there. The law takes Xiao et al.'s: newer, fitted to every data
+set with a stated range that covers those ices, and anchored on the triple point
+of the fluid's reference equation. Under 26 K it carries on the slope at 26 K,
+as N₂'s does under 10 K: the 26 K is a `Source:` (the fit's stated lower bound),
+the slope carried under it a `Definition:`. Above the triple point the liquid's
+curve is CoolProp's ancillary of Tegeler et al.'s equation (`ANCILLARIES.pS` of
+`Argon.json`, read: `p = p_c exp[(T_c / T) Σ nᵢ θᵢ^tᵢ]`, `θ = 1 − T / T_c`,
+`T_c` = 150.687 K, `p_c` = 4.863 MPa, its largest error against the equation
+0.0077 %), 68 892 Pa at the triple point and 1.011 bar at the normal boiling
+point, 87.28 K (Gosman et al. 1969, through the WebBook; 0.23 % under 1 atm);
+above `T_c` argon does not condense.
+
+Argon's heat of sublimation is not needed by the law: the fits are its curve.
+Their slope, by Clausius-Clapeyron for an ideal vapour, `L = R T² d ln p / dT`,
+is 7.9 to 8.1 kJ/mol over 26 to 84 K for Fray & Schmitt's and 7.5 to 8.7 kJ/mol
+for Xiao et al.'s (derived). A Clausius-Clapeyron curve from the triple point
+with a constant sourced `L` would be a `Definition:` built on `Source:` values,
+as NH₃'s and SO₂'s frosts are in the code, and is the fallback where no fit
+exists; for argon, with `L` = 7.9 kJ/mol (Fray & Schmitt's slope at the triple
+point), it would give 0.080 Pa at 38 K, 1.29 times Fray & Schmitt's curve and
+2.04 times Xiao et al.'s there (derived with R = 8.3145 J/(mol·K), `T_t` =
+83.806 K, `p_t` = 68 891 Pa). Xiao et al.'s Figure 8 plots Chen et al. 1978's
+heats of sublimation as −6.0 to −6.4 kJ/mol, which is not the slope of their own
+eq. 55; that figure is not used.
+
+In the code: `science::volatiles::argon_frost_pressure` (eq. 55, the slope
+carried on under 26 K) and `argon_saturation_pressure` (the frost, then the
+liquid ancillary, infinite from `ARGON_CRITICAL_TEMPERATURE`). Tests: eq. 55
+gives the triple pressure at the triple point and 0.0219 Pa at 37.2 K; Fray &
+Schmitt's `Ar-1` stays within a factor 1.7 of it from 37 K up and within 2 %
+from 65 K up (the largest gap there is 1.7 %, near 75 K: the 2 % is the test's
+choice; study 29b's 1 % is the tolerance of `condense` on eq. 55's 0.0219 Pa at
+37.2 K, below, not of this agreement); the liquid gives 1.011 bar at 87.28 K
+(0.23 % under 1 atm) and meets the frost at the triple point within 0.002 %.
+
+**Argon with the N₂ frost.** In the climate, `condense` caps each condensing gas
+at its activity times its saturation pressure: N₂ at activity 1 over its frost,
+CH₄ at its share of a sea (Raoult's law) or 1 over its own ice. Argon joins it
+as a third gas on the same path. Three pictures of a minor volatile over an N₂
+ice are in the literature (Lellouch et al. 2010, *A&A* 512, L8, arXiv:1003.2866,
+§ 3, read): an ideal solid solution, where the gas's pressure is its mole
+fraction in the ice times its pure vapour pressure (Raoult's law); pure deposits
+of the less volatile ice, segregated as the N₂ sublimates, whose vapour is the
+pure one (Stansberry et al. 1996 for Pluto's CH₄, as Lellouch et al. quote it);
+and a "detailed balancing layer", in which the air's mixing ratio is that of the
+ice reservoir (Trafton 1990, Trafton et al. 1998, as quoted). On Triton,
+Raoult's law puts CO and CH₄ 1 and 3 orders of magnitude under what the air
+holds; the measured CO fits the detailed balancing (Lellouch et al. 2010). Argon
+and N₂ form solid solutions, mutually soluble near the solidus and less so as
+the temperature falls, with a miscibility gap of two hexagonal phases whose
+critical point is near 56 K (Barrett & Meyer 1965, *J. Chem. Phys.* 42, 107,
+doi:10.1063/1.1695654; Yantsevich, Prokhvatilov & Krupskii 1986,
+doi:10.1063/10.0031462; abstracts). The law takes argon at activity 1 over its
+own frost, as CH₄ over its ice: the same rule, no new number, and the most argon
+of the three pictures. Raoult's law would leave in the air a few 1e-5 of the
+activity-1 argon, the detailed balancing about 2e-3 of it (derived below). In
+the code `science::surface::condense` caps argon third, after N₂ and CH₄, at
+`argon_saturation_pressure` and lays the rest in `Condensed.condensate`; the
+climate's fixed point calls it at each step, so argon follows the temperature
+with N₂. The cold trap at the equilibrium temperature does not read argon, and
+the frost of the ground (`surface::frost`, hence `frost_cover` and
+`frost_emissivity`) leaves it out: a few grams per square metre on Triton,
+nothing a disc's albedo or emissivity would show. A liquid argon (it needs,
+between 83.8 and 150.7 K, more argon in the air than the liquid's vapour
+pressure, 0.689 bar at the triple point rising to 48.6 bar at 150.7 K) is not a
+surface liquid of the model either.
+
+**Checks on the cold bodies.** At the N₂ ice temperature that its air sets, by
+the N₂ curve of the code, and with the law's argon (8.68e-8 mol per kg of
+silicate under a lid at 4.5673 Gyr, silicate 0.5 to 0.7 of the mass, an
+assumption for the check):
+
+| Body | Mass, radius (fact sheet) | N₂ air | N₂ ice | Argon made into the air | Argon's frost (Xiao; Fray & Schmitt) | Argon in the air, activity 1 | Raoult; detailed balancing | Observed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Triton | 2.14e22 kg, 1353.4 km | 14 µbar | 37.2 K | 1.3 to 1.8 Pa | 0.022; 0.036 Pa | 0.22 to 0.36 µbar, 1.6 to 2.5 % | 7e-7 Pa; 4e-5 Pa | no noble gas measured |
+| Pluto | 1.303e22 kg, 1188 km | about 13 µbar | 37.1 K | 0.8 to 1.1 Pa | 0.020; 0.033 Pa | 0.20 to 0.33 µbar, 1.5 to 2.5 % | about 5e-7 Pa; 3e-5 Pa | Ar I 1048 Å under 0.14 R (3σ) |
+| The model's Triton-like body (study 28) | 0.0036 M⊕ at 30 au | 25 µbar | 38.17 K | about 1.3 to 1.8 Pa | 0.044; 0.070 Pa | 0.44 to 0.70 µbar, 1.8 to 2.8 % | | |
+
+Triton's 14 µbar is Voyager's (see *Moons* above); Pluto's is the fact sheet's
+"~13 microbar" (read). The Raoult and detailed-balancing columns take an N₂
+reservoir of 0.34 to 0.5 bar, the ice N₂ of study 28's Triton-like body (argon's
+mole fraction 2e-5 to 3e-5). In every picture the frost takes almost all the
+argon: the air holds at most 0.36 µbar of the 1.3 to 1.8 Pa made. New Horizons'
+Alice saw no argon at Pluto: 0.14 R at 1048 Å (3σ) is 1.8e15 cm⁻² of argon above
+the 480 km where methane turns the line opaque, but in a Pluto atmosphere of
+small eddy mixing (Young et al. 2018) the line stays under that limit "even if
+the density of argon and (molecular) nitrogen were equal at Pluto's surface"
+(Steffl et al. 2020, *AJ* 159, 274, doi:10.3847/1538-3881/ab8d1c, § 5.2, read):
+the limit does not bound the surface's argon. Triton's argon was never measured
+(Zhang 2024, arXiv:2410.04595, a review: "the lack of ... data on noble gases
+such as argon"); a Voyager ultraviolet limit was not found. Mousis et al. 2013
+(*Icarus* 225, 856, doi:10.1016/j.icarus.2013.03.008, arXiv:1303.4595, read)
+found with Fray & Schmitt's fits that pure argon ice condenses at about 39.5 K
+on Pluto at its protosolar share of the air, and that on Triton, at 38 K,
+condensation "would largely remove" the noble gases from the air: the same frost
+the law gives.
+
+**Escape.** Argon is too heavy for Jeans escape. Mars lost it to sputtering by
+the ions of its own upper air, which takes the lighter ³⁶Ar more than ³⁸Ar:
+Curiosity measured ³⁶Ar/³⁸Ar 4.2 ± 0.1 against about 5.3 to 5.5 for the
+primordial ratio, which needs at least half and perhaps 85 to 95 % of the argon
+lost (Atreya et al. 2013, *GRL* 40, 5605, doi:10.1002/2013GL057763, abstract);
+MAVEN's ³⁸Ar/³⁶Ar above the homopause "require that 66% of the atmospheric argon
+has been lost to space" (Jakosky et al. 2017, *Science* 355, 1408,
+doi:10.1126/science.aai7721, abstract); Hutchins & Jakosky 1996 (*JGR* 101,
+14933, doi:10.1029/96JE00860, abstract) found more than 85 % of the outgassed
+³⁶Ar sputtered; Lichtenegger et al. 2022 (arXiv:2105.09789, read) model the
+sputtering from the pick-up ions. The model's laws carry argon without a new
+one: the shoreline takes the same share of every gas, and the non-thermal loss
+of the moons (#658) weighs a gas by `m v_esc² / 2`, which counts argon's mass.
+The shoreline takes too much of it on Mars: the reference Mars keeps about 0.5 %
+of its air (`(2 × 0.4306 / 0.3578)^6` ≈ 194 against 1, derived from the law),
+while its argon lost 66 % to 95 % of itself, and its ⁴⁰Ar came out after most of
+the early escape (*Departures*).
+
+**Checks on bodies.** The law above, run by hand on the reference bodies' inputs
+at 4.5673 Gyr (silicate `(1 − f)(1 − w)(1 − cmf) M`, as `air.rs` builds it; the
+ocean's and the shoreline's shares by hand from their laws, at the Sun's present
+light, the planets without a dynamo), against the measured ⁴⁰Ar:
+
+| Body | Silicate (kg) | ⁴⁰Ar made (mol) | Share, then ocean and shoreline | ⁴⁰Ar in the air (mol) | Measured (mol) | Model / measured |
+| --- | --- | --- | --- | --- | --- | --- |
+| Earth | 4.031e24 | 4.053e18 | 0.41 | 1.662e18 | 1.649e18 | 1.01 |
+| Venus | 3.358e24 | 3.378e18 | 0.0863, shoreline about 0.96 | 2.8e17 | 4.03 ± 1.35e17 | 0.69 |
+| Mars | 4.857e23 | 4.885e17 | 0.0863, shoreline about 0.005 | 2e14 | 1.11e16 | 0.02 |
+| Titan | 5.912e22 | 5.947e16 | 0.0863, ocean 0.991, shoreline 0.9964 | 5.07e15 | 1.121e16 | 0.45 |
+
+The measured column, all derived from the sources: Earth above. Venus holds
+(1.61 ± 0.54)e16 kg of ⁴⁰Ar (Kaula 1999, *Icarus* 139, 32, as Warren & Kite
+2023, *PNAS* 120, e2209751120, doi:10.1073/pnas.2209751120, quote it; read),
+4.03e17 mol; Avice et al. 2022 (*Space Sci. Rev.* 218, 60,
+doi:10.1007/s11214-022-00929-9, arXiv:2210.03176, Table 1, read) give ⁴⁰Ar 31
+(+20/−10) ppm, ³⁶Ar 30 (+20/−10) ppm, ⁴⁰Ar/³⁶Ar 1.11 ± 0.02 and ³⁸Ar/³⁶Ar 0.183
+± 0.003, which over the fact sheet's 4.8e20 kg of air at 43.45 g/mol is 3.4 (2.3
+to 5.6)e17 mol; its 70 ppm of argon weighs 6.0 mbar. Mars's air is 2.5e16 kg at
+43.49 g/mol (NASA Mars fact sheet, read), 1.93 % of it ⁴⁰Ar with ⁴⁰Ar/³⁶Ar 1.9 ±
+0.3e3 (Mahaffy et al. 2013, *Science* 341, 263, doi:10.1126/science.1237966,
+abstract), so 1.11e16 mol, 0.11 mbar. Titan's ⁴⁰Ar is 3.39 ± 0.12e-5 of its air
+and its ³⁶Ar 2.1 ± 0.8e-7 (Niemann et al. 2010, eq. 10 and 7, read in the NASA
+author copy), over 9.04e18 kg of air (1.467 bar over its 1.352 m/s² and 2574.7
+km) at 27.34 g/mol (*Titan's nitrogen*), so 1.121e16 mol, 0.07 mbar; Niemann et
+al. add that a rock like Earth's, as degassed, would have given about 0.05 %
+(Owen 1982, as they quote it): Titan degassed less than Earth, as the lid's
+share says.
+
+Tolerances the tests can take from the sources: Earth within 10 % of 0.0127 bar
+(Marty's ±0.9e18 on 3.9e18 is ±23 %, but the share is fitted on Earth's air, so
+the test checks the chain, as the N₂ test does); Venus within a factor of 2 of
+4.03e17 mol (Kaula's ±34 % and the spread of the potassium); Titan within a
+factor of 3 of 1.12e16 mol (its rock's potassium is not Earth's, and its ocean
+and shoreline are the model's); Mars as a departure, under its measured ⁴⁰Ar.
+
+**In the chain.** `system::planet::air` outgasses the argon at step 1 of the
+air: `radiogenic_argon` of the interior's mantle mass (the mass the heat's
+potassium is in, a dry planet's mantle water included, as the heat takes it),
+the drawn radiogenic abundance (`10^dex`) and the trial's age, times
+`argon_degassed_share` (a lid for a stagnant or an episodic regime) and
+`released_under_ocean`, weighed by `column_pressure`; the shoreline keeps its
+share as of every gas, and no later step of the air changes it. Its node cites
+the mantle mass, the abundance, the age, the regime, the water and the bulk's
+gravity and radius. On the reference bodies (tests `earth_weighs_its_argon`,
+`venus_titan_and_mars_hold_their_argon`): Earth 0.01294 bar (+1.9 % on 0.0127
+bar), Venus 2.80e17 mol (0.70 of Kaula's), Titan 5.09e15 mol (0.45), Mars
+2.08e14 mol (0.019, the departure below): the hand values of the table above
+within 2 % (the chain's Earth has its own radius, gravity and mantle). The
+climate's Triton-like body (`triton_like`, 1.8 Pa of argon, test
+`a_triton_like_body_keeps_its_argon_as_frost`) settles at 37.97 K with 0.38
+µbar of argon in its air, 1.7 % of it, the rest frost.
+
+**In the climate column.** Argon weighs: on Earth 0.0127 bar, 1.29 % of the air.
+It joins the column's partial pressures as a gas of 39.95 g/mol that absorbs
+nothing, counts as air in the broadening of the lines (measured, it broadens
+CO₂'s and water's less than N₂ does, 0.78 of N₂ for CO₂ and about 0.37 of air
+for water: a departure below), has the heat capacity of a monatomic gas,
+20.786 J/(mol·K) = 5/2 R, and scatters light as `rayleigh.rs` already knows (see
+[radiative transfer](radiative-transfer.md#which-gases-absorb-and-where), where
+the values and their sources are; the code since study 29). On Earth at 280
+ppm, from published numbers only: doubling N₂, about +0.78 bar, warms the late
+Archean Earth by 4.4 °C in Goldblatt et al. 2009 and 3 to 7 K in the models
+quoted under *Thick nitrogen*;
+argon's 0.0127 bar, at most equally efficient, is +0.07 to +0.11 K by
+proportion, and less with its weaker broadening (derived). Argon does not close
+the gap between the reference Earth's 285.07 K and the 286 to 290 K window: it
+is missing from the weight of the air, not from its climate.
+
+The code, on Earth's measured air at 280 ppm in the wet climate of the settled
+reference Earth (the air of `earth_has_its_climate`, release build, measured
+2026-11-25 with a probe, not a test): its argon, 9340 ppm by volume of 1.014
+bar, warms it by +0.125 K, from 287.050 to 287.175 K, a little above the +0.07
+to +0.11 K estimated above. Added to the air without argon, 0.0127 bar of argon
+warms it by +0.168 K and 0.0127 bar of N₂ by +0.150 K: argon warms 1.12 times as
+much as N₂. Both add the same broadening, since the code counts argon as air,
+and argon's lower heat capacity (20.786 against N₂'s 29.12 J/(mol·K)) steepens
+the dry slope: with N₂'s heat capacity given to argon, the same probe gives
++0.120 K. The measured weaker broadening of argon, left out (a departure below),
+would pull the other way; no source was read that orders the two effects. A
+tier-1 test, `argon_warms_as_air_broadens_and_its_slope_steepens`
+(`science::balance`), keeps the two parts apart on a wet column with fixed
+inputs (Earth's measured air at 280 ppm, Earth's equilibrium starlight, a black
+surface, the standard gravity; not the settled reference Earth), where it finds
+the same +0.150, +0.120 and +0.167 K. It guards that, with argon given N₂'s heat
+capacity (a test-only override of the column), argon warms, and at most as much
+as N₂ (`Source:` argon broadens CO₂'s and water's lines at most as N₂ does,
+Reichle 1969 and Claveau & Valentin 2009; equal here since the code counts it as
+air); and that argon's own heat capacity warms it more than N₂'s (`Definition:`
+the dry lapse is `g / c_p` per kilogram, and argon's 520 J/(kg·K) is half N₂'s
+1040). A change that gave argon a broadening above N₂'s, or lost its heat
+capacity, fails it. On that Earth the model's doubled N₂ (+0.78 bar) warms by
++7.49 K, above Goldblatt et al. 2009's 4.4 K and the 3 to 7 K quoted under
+*Thick nitrogen* (late Archean Earths, under a fainter Sun and more CO₂, not
+this one). Earth's dry column (`EARTH_DRY_AIR`, no water vapour, test
+`earths_argon_warms_its_column_little`) warms by only 0.005 K with 0.0127 bar of
+argon: without the water's feedback it is about 12 times less sensitive
+(doubling its N₂ gives +0.37 K), so that test holds an upper bound only. The
+reference Earth, held by the carbonate thermostat at 288 K, does not move.
+
+**Contract.** The timeline's air is a map of the gases (`timeline::planet::Gas`,
+`#[non_exhaustive]`, kebab-case) with `surface_pressure` the sum of the
+partials. Argon enters it as `Ar` (`"ar"`): the sum of the partials stays the
+surface pressure, and the map and the viewer, once they read the air, will find
+Earth's and Mars's third gas. No crate outside `system` reads the air today, so
+the change is additive. The planet chain is not wired into the system draw yet
+(#659): the regression goldens do not move and `system::ENGINE_VERSION` stays;
+the draw that wires the chain bumps it.
+
+**Departures.**
+
+- The law has no melting history: the share is Earth's, scaled for a lid by the
+  outgassing's own ratio. A Venus or a Mars whose volcanism stopped early would
+  hold less.
+- An episodic lid degasses its argon as a stagnant lid and its other volatiles
+  as plates: a choice drawn from Venus's ⁴⁰Ar, so the Venus test
+  (`venus_titan_and_mars_hold_their_argon`) does not check it independently.
+- The potassium is Earth's for every body, scaled with U and Th by one
+  abundance; Venus's and Mars's K/U, measured by landers and orbiters, were not
+  read.
+- The shoreline takes the same share of argon as of the early air; on Mars it
+  leaves 0.019 of the measured ⁴⁰Ar, where MAVEN's 66 % loss would leave about
+  1.3 times it (derived: 0.0863 × 4.885e17 × 0.34 = 1.43e16 mol). The test
+  holds Mars under its measured ⁴⁰Ar; a time-resolved escape is issue #699.
+- Primordial ³⁶Ar and ³⁸Ar are left out: half of Venus's argon, 6 mbar in all;
+  with the argon of the ices (study 28's gate), issue #698.
+- Argon's frost takes activity 1, the most argon of the three pictures of
+  a minor volatile over N₂ ice; Raoult's law would keep a few 1e-5 of it
+  in the air. Under 50 K its curve rests on two data sets, and its two
+  fits part by a factor 1.6 at 38 K; under 26 K it carries on the slope.
+- The column treats the partials, weights, as shares of the moles (existing
+  convention): argon's 1.29 % by weight is 0.93 % by volume.
+- The column counts argon as air in the lines' broadening (0.78 of N₂ for CO₂,
+  about 0.37 of air for water, measured): 0.2 % and 0.6 % too much foreign
+  broadening on Earth ([radiative transfer](radiative-transfer.md)).
+- An argon frost is not on the ground's frost (`frost_cover`,
+  `frost_emissivity`), and a liquid argon is not a surface liquid of the model.
+- The published Venus share of 24 % (O'Rourke & Korenaga 2015, "assuming an
+  Earth-like K abundance", as Warren & Kite 2023 quote it) is twice what the
+  law's production needs (0.12); their potassium and mantle mass were not read.
+
 ## Climate and surface liquid
 
 `planet::climate` (called by `planet_model`) gives the mean
@@ -1677,9 +2137,11 @@ continua grow as the product of the absorber and its partner, the CO₂
 pairs as the CO₂ density squared. The knees and broadening shares of the
 grey laws (`BROADENING_KNEE_BAR`, `LOCAL_KNEE_BAR`,
 `WATER_FOREIGN_BROADENING`, issues #440 and #441) are gone with them.
-Methane's stand-in keeps the whole pressure, its own counted as the
-saturated amount `u` (see **Methane** above): it stands for Titan's
-collision-induced greenhouse, which grows with the nitrogen faster than
+Argon counts as air in the broadening, although it broadens less than N₂
+(0.78 of N₂ for CO₂, about 0.37 of air for water, measured): a departure
+(*Argon (study 29)* above). Methane's stand-in keeps the whole pressure, its
+own counted as the saturated amount `u` (see **Methane** above): it stands for
+Titan's collision-induced greenhouse, which grows with the nitrogen faster than
 line broadening.
 
 **Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar) and no
@@ -2808,8 +3270,10 @@ solar days is zonal for any non-locked rotator, so the flag is
 - **Mars**: "6.36 mb at mean radius (variable from 4.0 to 8.7 mb
   depending on season)", 95.1 % CO₂, 2.59 % N₂, 0.16 % O₂ (NASA Mars
   fact sheet, read, May 2025), imposed in the test (CO₂ 6.05 mbar, N₂
-  0.165 mbar, O₂ 0.010 mbar, derived; argon has no field). Legacy's
-  `MARS_CO2_FACTOR` is not ported. The fact sheet gives "Average
+  0.165 mbar, O₂ 0.010 mbar, derived), with its argon, 1.93 % by volume
+  (Mahaffy et al. 2013), 0.123 mbar as the column takes its shares (the
+  *Argon (study 29)* section's 0.11 mbar is the same argon by weight).
+  Legacy's `MARS_CO2_FACTOR` is not ported. The fact sheet gives "Average
   temperature: ~214 K"; no source for the legacy 210 K was found (it is
   Mars's equilibrium temperature), so the bound is 214 ± 5 K, `Source:`
   the fact sheet (decided with the user on 2026-11-24).
@@ -3215,7 +3679,7 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
 | F0V (7220 K) at 1.2963 S⊕, a tenth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (300.8 W/m²) over the saturated column's peak (299.2 W/m²), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
-| Same, under an XUV fluence of 2e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band |
+| Same, under an XUV fluence of 1e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band (2e14 until the air's argon, #694, took the first run out of it) |
 
 The 1500 to 2500 K window extrapolates Boukrouche et al. 2021, who stop
 at 295 bar and find the plateau's end constant past it, to columns of
@@ -3672,6 +4136,11 @@ another paper, from memory) is said where it is used.
   doi:10.3847/1538-4357/abfa99, arXiv:2105.01102, irradiated ocean
   planets, their grid and Eq. 9 (read; fits on Zenodo, record
   4552188).
+- Albarède 1998, Earth's potassium possibly off by a factor of two (as
+  Marty 2012, p. 15, quotes it).
+- Allègre, Hofmann and O'Nions 1996, *Geophys. Res. Lett.* 23, 3555,
+  doi:10.1029/96GL03373, about half of Earth's ⁴⁰Ar still in the solid
+  Earth (abstract read).
 - Anderson et al. 2011, doi:10.1126/science.1211001, Mercury's
   dipole.
 - Anderson, Mousis and Ronnet 2021, *PSJ*, arXiv:2102.03230, Titan's
@@ -3681,17 +4150,38 @@ another paper, from memory) is said where it is used.
   temperature profile (as Öberg et al. 2011 adopt it).
 - Angus, de Reuck et al. 1979, nitrogen's triple point, through
   the NIST Chemistry WebBook.
+- Arevalo, McDonough and Luong 2009, *Earth Planet. Sci. Lett.* 278,
+  361, potassium of the silicate Earth, 280 ± 60 ppm at 1σ (as Marty
+  2012, p. 15, quotes it), and the continents' ⁴⁰Ar.
 - Atake and Chihara 1976, ethane's triple point (90.341 K) and
   enthalpy of fusion (0.583 kJ/mol), through the NIST Chemistry
   WebBook.
 - Atreya, Donahue and Kuhn 1978, *Science* 201, 611,
   doi:10.1126/science.201.4356.611, Titan's N₂ from NH₃.
+- Atreya, Trainer, Franz, Wong et al. 2013, *Geophys. Res. Lett.* 40,
+  5605, doi:10.1002/2013GL057763, Mars's ³⁶Ar/³⁸Ar and its argon loss
+  (abstract read).
+- Avice and Marty 2020, *Space Sci. Rev.* 216, 36,
+  doi:10.1007/s11214-020-00655-0, arXiv:2003.11431, the air's ⁴⁰Ar/³⁶Ar
+  (read).
+- Avice, Parai, Jacobson, Labidi et al. 2022, *Space Sci. Rev.* 218,
+  60, doi:10.1007/s11214-022-00929-9, arXiv:2210.03176, Venus's argon,
+  Table 1 (read).
 - Bailey, Ahlsved and Meadows 2011, arXiv:1102.2554, Titan's surface
   albedo in the methane windows (read).
+- Balsiger, Altwegg, Bar-Nun, Berthelier et al. 2015, *Sci. Adv.* 1,
+  e1500377, doi:10.1126/sciadv.1500377, argon in comet 67P (read in
+  PMC4643765).
 - Barnes, Mullins, Goldblatt, Meadows, Kasting and Heller 2013,
   *Astrobiology* 13, 225, doi:10.1089/ast.2012.0851, arXiv:1203.5104v2,
   tidal heat as a runaway trigger, § 2 (read).
 - Baraffe et al. 2015, the luminosity of low-mass stars at the ZAMS.
+- Barrett and Meyer 1965, *J. Chem. Phys.* 42, 107,
+  doi:10.1063/1.1695654, the argon-nitrogen phase diagram (abstract
+  read).
+- Bell, Wronski, Quoilin and Lemort 2014, *Ind. Eng. Chem. Res.* 53,
+  2498, doi:10.1021/ie4033999, CoolProp, whose saturation ancillaries
+  give argon's liquid vapour pressure.
 - Bertrand et al. 2022, *Icarus* 373, 114764, Triton.
 - Biver et al. 2022, *Comets III*, arXiv:2207.04800, Table 3.
 - Blakley et al. 2024, *Planet. Space Sci.*,
@@ -3716,11 +4206,20 @@ another paper, from memory) is said where it is used.
   doi:10.5670/oceanog.2010.51, Table 1, the volume and area of Earth's
   ocean (read).
 - Charnay et al. 2013, doi:10.1002/jgrd.50808.
+- Chen, Aziz and Lim 1971, *Can. J. Phys.* 49, 1569,
+  doi:10.1139/p71-183, the vapour pressure of solid argon (record only).
 - Christensen 2006, doi:10.1038/nature05342, the deep dynamo.
 - Christensen 2010, doi:10.1007/s11214-009-9553-2, the energy-flux
   scaling of the field.
 - Christensen, Holzwarth and Reiners 2009,
   doi:10.1038/nature07626.
+- CIAAW, *Abridged standard atomic weights* 2024, argon's 39.95 g/mol
+  (as radiative-transfer.md reads it), and the potassium page of
+  ciaaw.org, potassium's standard atomic weight 39.0983(1) (read for
+  study 29).
+- CoolProp, `dev/fluids/Argon.json` (read 2026-11-25): Tegeler et al.
+  1999's triple and critical points and the ancillary `pS` of argon's
+  liquid vapour pressure (its largest error 0.0077 %).
 - Cooper et al. 2001, *Icarus* 149, 133, doi:10.1006/icar.2000.6498.
 - Courtin, Gautier and McKay 1995, Titan's collision-induced
   bands.
@@ -3739,6 +4238,8 @@ another paper, from memory) is said where it is used.
   doi:10.1051/0004-6361/201731513, outgassing on stagnant-lid
   super-Earths (abstract, through study 22).
 - Douté et al. 2001, *Icarus* 149, 107, Io's SO₂ frost.
+- Drii and Rabinovich 1966, argon's liquid vapour pressure (Antoine fit,
+  83.78 to 150.72 K), through the NIST Chemistry WebBook (read).
 - Driscoll and Barnes 2015, doi:10.1089/ast.2015.1325.
 - Edejer and Thodos 1967, *J. Chem. Eng. Data* 12(2), 206,
   doi:10.1021/je60033a014, the Antoine fit of liquid nitrogen's vapour
@@ -3748,6 +4249,8 @@ another paper, from memory) is said where it is used.
 - Erkaev, Scherf, Thaller, Lammer, Mezentsev, Ivanov and Mandt 2020,
   *MNRAS*, arXiv:2010.12342, Titan's N₂ escape and Glein 2015's mass
   balance (read).
+- Farcy, Arevalo and McDonough 2020, *J. Geophys. Res. Solid Earth*,
+  doi:10.1029/2020JB020245, the K/U of the MORB source (abstract read).
 - Fegley and Prinn 1989, doi:10.1038/337055a0, Venus's SO₂ and
   calcite.
 - Feistel and Wagner 2007, *Geochim. Cosmochim. Acta* 71, 36, the
@@ -3760,7 +4263,8 @@ another paper, from memory) is said where it is used.
   al. 2020, Table 2, tabulate them).
 - Fray and Schmitt 2009, *Planet. Space Sci.* 57, 2053,
   doi:10.1016/j.pss.2009.09.011, sublimation pressures (closed; its
-  Table 2 read as Lisse et al. 2021 reproduce it).
+  Table 2 read as Lisse et al. 2021 reproduce it, N₂ and argon's
+  `Ar-1`).
 - Fretwell et al. 2013, *The Cryosphere* 7, 375,
   doi:10.5194/tc-7-375-2013, Bedmap2 (read).
 - Fulchignoni et al. 2005, *Nature* 438, 785, doi:10.1038/nature04314,
@@ -3786,6 +4290,8 @@ another paper, from memory) is said where it is used.
   doi:10.1038/ngeo1892, the moist limit, the steam state and its
   bistability (accepted manuscript, UVic repository, read); corrigendum
   doi:10.1038/ngeo2296 (read: 286 W/m² absorbed, not 294).
+- Gosman, McCarty et al. 1969, argon's triple point, 83.8 K and 0.689
+  bar, through the NIST Chemistry WebBook (read).
 - Gray and Nagel 1989, the limit of the convective envelope.
 - Gurrola 1995, PhD thesis, Stanford University, Triton's surface
   pressure from the Voyager 2 radio occultation, 14 ± 1 µbar (not
@@ -3814,13 +4320,20 @@ another paper, from memory) is said where it is used.
 - Howett et al. 2010, Enceladus's albedo.
 - Huebner, Keady and Lyon 1992, *Astrophys. Space Sci.*
   195, 1, photo-ionisation rates.
+- Hutchins and Jakosky 1996, *J. Geophys. Res.* 101, 14933,
+  doi:10.1029/96JE00860, Mars's argon sputtered (abstract read).
 - Ida and Lin 2005, *ApJ* 626, 1045, doi:10.1086/429953,
   arXiv:astro-ph/0502566, eq. 4 and the text of eq. 12: the ice line of
   Hayashi's thin disc at 170 K.
 - Jackson, Davis and Wheatley 2012, *MNRAS* 422, 2024,
   Table 2.
+- Jakosky, Slipski, Benna, Mahaffy et al. 2017, *Science* 355, 1408,
+  doi:10.1126/science.aai7721, 66 % of Mars's argon lost (abstract
+  read).
 - Jin et al. 2004, *Geophys. Res. Lett.* 31(22), doi:10.1029/2004GL021180,
   ocean surface albedo (abstract read).
+- Jochum et al. 1983, a silicate Earth K/U of about 12 000 (as Marty
+  2012, p. 15, quotes it).
 - Johnson 1990, *Energetic Charged-Particle Interactions with
   Atmospheres and Surfaces*.
 - Johnson et al. 2004, "Radiation effects on the surfaces of the
@@ -3837,6 +4350,8 @@ another paper, from memory) is said where it is used.
   runaway and moist greenhouses, § 3a, 3d and 4, Figs. 4, 7 and 13
   (read, Zenodo record 1253896).
 - Kasting 1991, Appendix B, CO₂'s pseudo-adiabat.
+- Kaula 1999, *Icarus* 139, 32, Venus's ⁴⁰Ar, (1.61 ± 0.54)e16 kg (as
+  Warren and Kite 2023 quote it).
 - Kelemen and Manning 2015, doi:10.1073/pnas.1507889112,
   carbon recycling.
 - Kempf et al. 2010, Enceladus's plume fallout.
@@ -3863,23 +4378,44 @@ another paper, from memory) is said where it is used.
 - Korenaga, Planavsky and Evans 2017, *Phil. Trans. R. Soc. A* 375,
   20150393, doi:10.1098/rsta.2015.0393, §2a: Earth's water by
   reservoir.
+- Kossert et al. 2022, *Appl. Radiat. Isot.* 188, 110362, the
+  electron-capture branch of ⁴⁰K (as Mougeot 2025 cites it).
 - Krasnopolsky 2012, doi:10.1016/j.icarus.2011.10.019, Mars's SO₂
   limit.
+- Krissansen-Totton, Fortney and Nimmo 2021, *Planet. Sci. J.* 2, 216,
+  doi:10.3847/PSJ/ac2580, the argon degassing law of their Appendix A.3
+  (read, open access).
 - Lacis et al. 2010, doi:10.1126/science.1190653.
 - Lainey et al. 2009, doi:10.1038/nature08108, Io's tidal
   dissipation.
 - Lay, Hernlund and Buffett 2008, doi:10.1038/ngeo.2007.44,
   the core's heat flow.
 - Lecavelier des Etangs 2007, energy-limited escape.
+- Lee, Marti, Severinghaus, Kawamura et al. 2006, *Geochim. Cosmochim.
+  Acta* 70, 4507, doi:10.1016/j.gca.2006.06.1563, the air's argon
+  isotopes (as Avice and Marty 2020 quote it).
+- Lellouch, de Bergh, Sicardy, Ferron and Käufl 2010, *Astron.
+  Astrophys.* 512, L8, doi:10.1051/0004-6361/201014339, arXiv:1003.2866,
+  Triton's CO and the pictures of surface-atmosphere exchange, § 3
+  (read).
+- Leming and Pollack 1970, Lee, Fuks and Bigeleisen 1970, Levenson
+  1967, Chen et al. 1978, Ancsin 1973, Boato et al. 1961, Clark et al.
+  1951, Flubacher et al. 1961, Freeman and Halsey 1956, Regnier 1972:
+  argon's sublimation pressures (as Xiao et al. 2025, Table 6, list
+  them).
 - Lemmon et al. 2013, ethane's triple point (90.4 K), as Richardson,
   Hartwig and Leachman 2019 quote it (not re-read).
+- Lichtenegger, Dyadechkin, Scherf, Lammer et al. 2022,
+  arXiv:2105.09789, Mars's non-thermal escape and its argon isotopes,
+  eq. 32 (read).
 - Lillis et al. 2013, Mars's dynamo.
 - Lipiński et al. 2007, *Int. J. Thermophys.* 28, 1904,
   doi:10.1007/s10765-007-0267-y, nitrogen's alpha-beta transition
   (closed).
 - Lisse et al. 2021, *Icarus* 356, 114072,
   doi:10.1016/j.icarus.2020.114072, supplementary Table 2 (read, and
-  its appendix Table 2 in arXiv:2009.02277).
+  its appendix Table 2 in arXiv:2009.02277, argon's row read
+  2026-11-25).
 - Loeb et al. 2020, *J. Climate* 33, 61, doi:10.1175/JCLI-D-19-0381.1,
   Table 3, CERES's clear sky of the same air without its clouds
   (read; study 32).
@@ -3887,6 +4423,12 @@ another paper, from memory) is said where it is used.
   methane humidity (read).
 - Lyons, Reinhard and Planavsky 2014,
   doi:10.1038/nature13068, the Great Oxidation Event.
+- Lyubetskaya and Korenaga 2007; McDonough and Arevalo 2008; Palme and
+  O'Neill 2014: models of the primitive mantle's potassium (as Wang,
+  Lineweaver and Ireland 2018 combine them).
+- Mahaffy, Webster, Atreya, Franz et al. 2013, *Science* 341, 263,
+  doi:10.1126/science.1237966, Mars's air from Curiosity (abstract
+  read).
 - Mandt, Mousis, Lunine and Gautier 2014, *ApJ Letters*
   788, L24, doi:10.1088/2041-8205/788/2/L24.
 - Manabe and Wetherald 1967, *J. Atmos. Sci.* 24, 241,
@@ -3896,7 +4438,8 @@ another paper, from memory) is said where it is used.
 - Marty 2012, *Earth Planet. Sci. Lett.* 313-314, 56-66,
   doi:10.1016/j.epsl.2011.10.040, carbon in the mantle; Earth's bulk
   water, p. 18 of the arXiv author copy (arXiv:1405.6336); Earth's
-  nitrogen chondritic (as cited by Scherf et al. 2020, § 1).
+  nitrogen chondritic (as cited by Scherf et al. 2020, § 1); the air's
+  ³⁸Ar/³⁶Ar (p. 9) and the ⁴⁰Ar mass balance (p. 15, read).
 - Lellouch, Stansberry, Emery, Grundy and Cruikshank 2011, "Thermal
   properties of Pluto's and Charon's surfaces from Spitzer
   observations", *Icarus* 214, 701-716, the N₂ ice emissivity 0.8 (not
@@ -3910,12 +4453,24 @@ another paper, from memory) is said where it is used.
 - Meza et al. 2019, "Pluto's lower atmosphere and pressure evolution
   from ground-based stellar occultations, 1988-2016", *A&A* 625, A42,
   doi:10.1051/0004-6361/201834281, arXiv:1903.02315 (§ 4 read).
+- Min, Mundil, Renne and Ludwig 2000; Renne, Balco, Ludwig, Mundil and
+  Min 2011; Steiger and Jäger 1977: the decay constants of ⁴⁰K (as
+  Schaen et al. 2020, Table 1, tabulate them).
 - Mittelholz et al. 2020, a late field on Mars.
 - Moore et al. 1999, Callisto.
 - Moore and Webb 2013, doi:10.1038/nature12473, "Heat-pipe
   Earth".
 - Miller et al. 2019, organic nitrogen in Titan's N₂ (as Scherf et al.
   2020 summarise it).
+- Mougeot 2025, DDEP evaluation of ⁴⁰K, ICRM 2025 poster, HAL
+  cea-05087440, the half-life 1.2522(27) Gyr and the branches (read).
+- Mougeot et al. 2026, *Metrologia* 63, 019001,
+  doi:10.1088/1681-7575/ae3733, the DDEP evaluation of ⁴⁰K as the
+  LNE-LNHB table of ⁴⁰K publishes it (read on lnhb.fr; the paper itself
+  was not read): the decay energies of potassium's heat.
+- Mousis, Lunine, Mandt et al. 2013, *Icarus* 225, 856,
+  doi:10.1016/j.icarus.2013.03.008, arXiv:1303.4595, noble gases in
+  Pluto's air and their condensation (read).
 - Mousis, Lunine, Thomas et al. 2009, *ApJ* 691, 1780,
   doi:10.1088/0004-637X/691/2/1780, arXiv:0810.0308, the clathration of
   Titan's building blocks (read).
@@ -3937,14 +4492,21 @@ another paper, from memory) is said where it is used.
   (read); the Mars fact sheet also for its air (6.36 mb, 95.1 % CO₂,
   2.59 % N₂, 0.16 % O₂) and its "Average temperature: ~214 K" (read,
   May 2025); the Venus fact sheet for its Bond albedo; the Neptune fact
-  sheet for Triton's orbit-mean flux (1.508 W/m²) (read).
+  sheet for Triton's orbit-mean flux (1.508 W/m²) (read); the Earth,
+  Venus and Mars fact sheets for their argon, the mass and the mean
+  molecular weight of their air, the Pluto fact sheet for its mass,
+  radius and air, the Neptunian satellite fact sheet for Triton's mass
+  and radius (read 2026-11-25).
+- Naumenko et al. 2013, *Geochim. Cosmochim. Acta* 122, 353, ⁴⁰K's
+  share of potassium (as Mougeot 2025 quotes it).
 - Neukum, Ivanov and Hartmann 2001, the crater
   chronology.
 - Niemann et al. 2005, *Nature* 438, 779, Titan's ³⁶Ar/¹⁴N (as
   Mousis et al. 2009 quote it).
 - Niemann et al. 2010, *J. Geophys. Res.* 115, E12006,
   doi:10.1029/2010JE003659, Titan's methane at the Huygens site
-  (abstract read; supersedes their 2005 results).
+  (abstract read; supersedes their 2005 results); its argon, eq. 7 and
+  10 and § 4.5 (read in the NASA author copy, NTRS 20110008599).
 - Nimmo 2015, the core's heat flow.
 - Nimmo and Stevenson 2000, doi:10.1029/1999JE001216.
 - NIST Atomic Spectra Database, the H I Lyman α multiplet.
@@ -3954,6 +4516,9 @@ another paper, from memory) is said where it is used.
 - North, Cahalan and Coakley 1981, *Rev. Geophys. Space Phys.* 19, 91,
   doi:10.1029/RG019i001p00091, energy balance climate models (read).
 - NSIDC, the sea ice pages (quick facts; sea ice), read 2026-11-24.
+- O'Rourke and Korenaga 2015, *Icarus* 260, 128, Venus's argon
+  degassing (as Warren and Kite 2023 and Krissansen-Totton et al. 2021
+  quote it).
 - Ohtani 2021, *Annu. Rev. Earth Planet. Sci.* 49, 253,
   doi:10.1146/annurev-earth-080320-062509, the large and small water
   budgets (abstract, through study 22).
@@ -3963,13 +4528,20 @@ another paper, from memory) is said where it is used.
 - O'Reilly and Davies 1981, *Geophys. Res. Lett.* 8, 313.
 - Overstreet and Giauque 1937, NH₃'s sublimation enthalpy, through
   the NIST Chemistry WebBook.
+- Owen 1982, Titan's ⁴⁰Ar for an Earth-like rock (as Niemann et al.
+  2010 quote it).
 - Owen and Wu 2017, doi:10.3847/1538-4357/aa890a, eq. 19.
+- Ozima and Podosek 2002, *Noble Gas Geochemistry*, the air's 1.6e18
+  mol of ⁴⁰Ar (as Marty 2012, p. 15, quotes it).
 - Payne 1972, *J. Atmos. Sci.* 29, 959,
   doi:10.1175/1520-0469(1972)029<0959:AOTSS>2.0.CO;2, the albedo of
   the sea (abstract read).
 - Perovich et al. 2002, *J. Geophys. Res.* 107(C10),
   doi:10.1029/2000JC000438, the albedo of Arctic sea ice (abstract
   read).
+- Picard, Davis, Gläser and Fujii 2008, *Metrologia* 45, 149,
+  doi:10.1088/0026-1394/45/2/004, the CIPM-2007 air density formula and
+  its argon (abstract read).
 - Pierrehumbert 2010, section 4.4.
 - Pierrehumbert 2023, *ApJ* 944, 20, doi:10.3847/1538-4357/acafdf,
   arXiv:2212.02644, the supercritical column of a post-runaway
@@ -3987,6 +4559,14 @@ another paper, from memory) is said where it is used.
 - Rubin et al. 2015, *Science* 348, 232, doi:10.1126/science.aaa6100,
   N₂ in comet 67P and its formation under about 30 K (abstract read).
 - Rubin et al. 2019, doi:10.1093/mnras/stz2086, Table 2, comet 67P.
+- Rubin, Altwegg, Balsiger, Bar-Nun et al. 2018, *Sci. Adv.* 4,
+  eaar6297, doi:10.1126/sciadv.aar6297, the noble gases of comet 67P,
+  Table 2 (read in PMC6031375).
+- Sasaki and Tajika 1995, AIP Conf. Proc., doi:10.1063/1.48741, the
+  long-term degassing of Venus and Mars from their ⁴⁰Ar (abstract read).
+- Schaen, Jicha, Hodges, Vermeesch et al. 2020, *GSA Bulletin* 133,
+  461, doi:10.1130/B35560.1, Table 1, the ⁴⁰K decay constants (read in
+  HAL hal-02903663).
 - Scherf, Lammer, Erkaev, Mandt, Thaller and Marty 2020, *Space Sci.
   Rev.* 216, 123, doi:10.1007/s11214-020-00752-0, arXiv:2011.00973,
   nitrogen atmospheres of the icy bodies, Titan's § 3 (read).
@@ -4023,7 +4603,11 @@ another paper, from memory) is said where it is used.
   eq. 4) and the saturation tables (pp. 1405-1407).
 - Spencer 1987, dark moons.
 - Stansberry, Pisano and Yelle 1996,
-  *Planet. Space Sci.* 44, 945, doi:10.1016/0032-0633(96)00001-3.
+  *Planet. Space Sci.* 44, 945, doi:10.1016/0032-0633(96)00001-3;
+  Pluto's pure CH₄ deposits (as Lellouch et al. 2010 quote it).
+- Steffl, Young, Strobel et al. 2020, *Astron. J.* 159, 274,
+  doi:10.3847/1538-3881/ab8d1c, Pluto's ultraviolet airglow and its
+  argon limit, § 5.2 (read).
 - Stevenson, Spohn and Schubert 1983,
   doi:10.1016/0019-1035(83)90241-5, the thermal history of the core.
 - Stewart, Jacobsen et al. 1986, nitrogen's properties
@@ -4031,6 +4615,9 @@ another paper, from memory) is said where it is used.
 - Tan, Kargel and Marion 2013, *Icarus* 222, 53,
   doi:10.1016/j.icarus.2012.10.032, Titan's seas (closed; through Glein
   and Shock 2013, Table 4).
+- Tegeler, Span and Wagner 1999, *J. Phys. Chem. Ref. Data* 28, 779,
+  doi:10.1063/1.556037, argon's reference equation of state, its triple
+  point (as Xiao et al. 2025 and CoolProp take it).
 - Tegler et al. 2019, arXiv:1905.13250, nitrogen's alpha-beta
   transition as Scott 1976 gives it (read).
 - Thomas et al. 2004, *Jupiter*, ch. 23, Io's plasma loss.
@@ -4041,6 +4628,8 @@ another paper, from memory) is said where it is used.
   doi:10.1038/nature04497.
 - Tosi et al. 2017, *A&A* 605, A71, doi:10.1051/0004-6361/201730728,
   the habitability of a stagnant-lid Earth (through study 22).
+- Trafton 1990; Trafton, Matson and Stansberry 1998: the detailed
+  balancing layer (as Lellouch et al. 2010 quote them).
 - Trenberth and Smith 2005, *J. Climate* 18, 864,
   doi:10.1175/JCLI-3299.1, the mass of Earth's dry air.
 - Tu et al. 2015, the saturation of a star's X-ray emission.
@@ -4077,11 +4666,15 @@ another paper, from memory) is said where it is used.
 - Walker, Hays and Kasting 1981,
   doi:10.1029/JC086iC10p09776, the carbonate thermostat.
 - Wang, Lineweaver and Ireland 2018,
-  doi:10.1016/j.icarus.2017.08.024, Table 1.
+  doi:10.1016/j.icarus.2017.08.024, Table 1; its potassium, Table 1
+  and p. 4 (read in arXiv:1708.08718).
 - Ward 1974, *J. Geophys. Res.* 79(24), 3375, the annual insolation
   of a rapid rotator (cited by Nadeau and McGehee).
 - Warren 1982, *Rev. Geophys.* 20, 67, doi:10.1029/RG020i001p00067,
   the optical properties of snow (abstract read).
+- Warren and Kite 2023, *Proc. Natl. Acad. Sci.* 120, e2209751120,
+  doi:10.1073/pnas.2209751120, Venus's ⁴⁰Ar and its degassing (read in
+  PMC10089166).
 - Way et al. 2016, "Was Venus the first habitable world of our solar
   system?", *Geophys. Res. Lett.* 43, doi:10.1002/2016GL069790,
   arXiv:1608.00706 (abstract read).
@@ -4091,9 +4684,18 @@ another paper, from memory) is said where it is used.
   of vaporisation, through the NIST Chemistry WebBook.
 - Wolf and Toon 2014, doi:10.1089/ast.2013.1112.
 - Wright et al. 2011, *ApJ* 743, 48.
+- Xiao, Sriskandaruban and Maynard-Casely 2025, *Int. J. Thermophys.*
+  46, 14, doi:10.1007/s10765-024-03469-2, solid argon's equation of
+  state and its sublimation pressure, eq. 55 (read in the Research
+  Square preprint rs-5370077).
 - Yang, Boué, Fabrycky and Abbot 2014, "Strong dependence of the inner
   edge of the habitable zone on planetary rotation rate", *ApJ* 787,
   L2, doi:10.1088/2041-8205/787/1/L2, arXiv:1404.4992 (read).
+- Yantsevich, Prokhvatilov and Krupskii 1986, doi:10.1063/10.0031462,
+  N₂-Ar solid solutions (abstract read).
+- Young, Kammer, Steffl et al. 2018, *Icarus* 300, 174,
+  doi:10.1016/j.icarus.2017.09.006, Pluto's atmosphere from the solar
+  occultation (as Steffl et al. 2020 quote it).
 - Yung, Allen and Pinto 1984, *ApJS* 55, 465,
   doi:10.1086/190963, Titan's photochemistry, Tables 2A and 5B.
 - Zeng, Sasselov and Jacobsen 2016, *ApJ* 819, 127,
@@ -4103,3 +4705,8 @@ another paper, from memory) is said where it is used.
 - Zahnle and Catling 2017, *ApJ* 843, 122,
   doi:10.3847/1538-4357/aa7846, the cosmic shoreline.
 - Zahnle et al. 2003, doi:10.1016/S0019-1035(03)00048-4.
+- Zhang 2024, arXiv:2410.04595, a review of the atmospheres of the
+  moons and Pluto, the lack of noble-gas data on Triton (read).
+- Ziegler, Mullins et al. 1962, Georgia Institute of Technology,
+  Project A-460, Technical Report 2, argon's sublimation below one
+  atmosphere (record only, listed by the NIST Chemistry WebBook).
