@@ -147,10 +147,13 @@ impl<P: Copy> Bracket<P> {
     }
 
     /// The next step once both sides are known, or the colder end when
-    /// the two ends are under `width` apart in albedo; `None` before.
+    /// the two ends are under `width` apart in both albedo and emissivity
+    /// (each step moves both); `None` before.
     pub(crate) fn next(&self, width: f64) -> Option<Next<P>> {
         let ((up, w_up), (down, w_down)) = self.up.zip(self.down)?;
-        if (up.albedo - down.albedo).abs() < width {
+        if (up.albedo - down.albedo).abs() < width
+            && (up.emissivity - down.emissivity).abs() < width
+        {
             let cold = if down.temperature < up.temperature {
                 down
             } else {
@@ -386,13 +389,15 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
 /// whose push turns back, so that a swing settles (#593: the secant saves
 /// about half the steps). Once the push has turned back, the fixed point
 /// lies between the last albedo that pushes up and the last that pushes
-/// down, and each step goes to the zero of the push the Illinois rule of
-/// [`regula_falsi`] puts between them (#729: the secant alone, at the
+/// down, and each step goes to the zero of the push the Illinois rule
+/// (Dowell & Jarratt 1971, as [`regula_falsi`] applies it) puts between
+/// them (#729: the secant alone, at the
 /// full way, kept a climate cycling between a warm and a collapsed side
 /// for all its steps). It goes on until the temperature moves less than
 /// the numerics' `albedo_tolerance` and the push is under it too, at most
 /// `albedo_iterations` steps, or until the bracket is narrower than the
-/// numerics' `albedo_bracket` without settling: the climate jumps there
+/// numerics' `albedo_bracket` in both the albedo and the emissivity
+/// without settling: the climate jumps there
 /// and has no fixed point, so it cycles, the static analogue of the
 /// limit cycles in time that Kadoya and Tajika 2014, Menou 2015 and
 /// Haqq-Misra et al. 2016 find near the outer edge

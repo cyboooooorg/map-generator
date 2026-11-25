@@ -3249,7 +3249,9 @@ on the reference Earth under Titan's measured 2.11 bar of methane, at
 Titan's 9.57 AU, where the methane condenses: the two searches give
 14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
-ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below).
+ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below;
+1.4443 AU once the stellar spectra of #730 came in, and 1.4355 AU since
+#729, below).
 No regulated body can have a condensing air: the thermostat holds
 288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
@@ -3292,7 +3294,8 @@ of CO₂) absorbed 126.8 W/m² (the diagnosis of issue #681); the surface
 then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
 AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
-at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU. The old
+at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU (1.4355 AU
+since #730 and #729). The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3487,13 +3490,15 @@ last step landed on.
 The rewrite keeps the bracket the fixed point has once its push turns
 back: the last albedo that pushes up and the last that pushes down. Each
 further step goes to the zero of the push between them by the Illinois
-rule. Where a fixed point exists the push reaches it as before; a fixed
+rule (Dowell and Jarratt 1971, as `regula_falsi` applies it). Where a fixed point exists the push reaches it as before; a fixed
 point that never brackets takes the same steps as legacy, to the last
 bit (Earth and Titan, measured). Where the bracket narrows to
-`ALBEDO_BRACKET` without the temperature settling, the climate has a
+`ALBEDO_BRACKET` in both the albedo and the emissivity without the
+temperature settling, the climate has a
 jump and no fixed point: it is stored on its colder side, the one a
 cooling planet reaches, with `converged: false` and the cause node
-`planet.climate.cycles` true (decided with the user, 2026-11-26).
+`planet.climate.cycles` true (decided with the user, 2026-11-26, after
+study 25: the study does not cover it).
 
 **Departure.** Kadoya and Tajika 2014, Menou 2015 and Haqq-Misra et al.
 2016 find limit cycles in time near the outer edge: the carbonate-silicate
