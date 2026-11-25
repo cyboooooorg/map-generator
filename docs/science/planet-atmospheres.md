@@ -1511,15 +1511,18 @@ electron capture to ⁴⁰Ar's 1461 keV level 10.34(7) %, to its ground state
 ENSDF 2017's 1.2480(30) Gyr, DDEP 2009's 1.2504(30) and DDEP 1998's 1.265(13),
 and takes ⁴⁰K as 0.011668(8) % of potassium's atoms (Naumenko et al. 2013, as
 the poster quotes it), so 2.9843e-3 mol of ⁴⁰K per kg of potassium (derived with
-potassium's 39.0983 g/mol). The law takes the DDEP 2025 values: the newest
+potassium's standard atomic weight, 39.0983(1), CIAAW). The law takes the DDEP 2025 values: the newest
 evaluation, and the one whose ground-state branch, the source of the old
 disagreement, was measured since (Kossert et al. 2022, as the poster cites it).
 The code's `HALF_LIFE_K40` took 1.277 Gyr (Dye 2012's λ 17.200e-18 per s), 2 %
 longer than all of them, until the argon's branch (#694) set it to DDEP's
-1.2522 Gyr: the heat and the argon read one value. Earth's radiogenic power
-today does not move (the heat is carried back from today); at formation it is
-2.2 % higher, 103.1 TW against 100.8, and 1.7 % higher at 1 Gyr (derived from
-the code's isotopes).
+1.2522 Gyr: the heat and the argon read one value. Potassium's heat per
+kilogram, Dye's 3.33e-3 µW/kg on his λ, is derived since from DDEP's decay data
+on the same λ, 3.400e-3 µW/kg (*The heat inside* in
+[planet interiors](planet-interiors.md#the-heat-inside)). Earth's radiogenic
+power today moves from 20.18 to 20.25 TW (+0.39 %, potassium's share); at
+formation it is 104.1 TW against 100.8 before the branch (+3.2 %), and 62.2
+against 60.6 TW at 1 Gyr (+2.6 %) (from the code's isotopes).
 
 **Earth's potassium.** The heat of the model takes 280 ppm of potassium in
 Earth's silicate part (`POTASSIUM_ABUNDANCE`, Arevalo, McDonough & Luong 2009;
@@ -4075,7 +4078,9 @@ another paper, from memory) is said where it is used.
 - Christensen, Holzwarth and Reiners 2009,
   doi:10.1038/nature07626.
 - CIAAW, *Abridged standard atomic weights* 2024, argon's 39.95 g/mol
-  (as radiative-transfer.md reads it).
+  (as radiative-transfer.md reads it), and the potassium page of
+  ciaaw.org, potassium's standard atomic weight 39.0983(1) (read for
+  study 29).
 - CoolProp, `dev/fluids/Argon.json` (read 2026-11-25): Tegeler et al.
   1999's triple and critical points and the ancillary `pS` of argon's
   liquid vapour pressure (its largest error 0.0077 %).
@@ -4312,6 +4317,10 @@ another paper, from memory) is said where it is used.
   2020 summarise it).
 - Mougeot 2025, DDEP evaluation of ⁴⁰K, ICRM 2025 poster, HAL
   cea-05087440, the half-life 1.2522(27) Gyr and the branches (read).
+- Mougeot et al. 2026, *Metrologia* 63, 019001,
+  doi:10.1088/1681-7575/ae3733, the DDEP evaluation of ⁴⁰K as the
+  LNE-LNHB table of ⁴⁰K publishes it (read on lnhb.fr; the paper itself
+  was not read): the decay energies of potassium's heat.
 - Mousis, Lunine, Mandt et al. 2013, *Icarus* 225, 856,
   doi:10.1016/j.icarus.2013.03.008, arXiv:1303.4595, noble gases in
   Pluto's air and their condensation (read).

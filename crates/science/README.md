@@ -95,9 +95,10 @@ alloy (PREM, 364 GPa) is used to 7.85 TPa: converged, not validated.
 `science::heat`: `radiogenic`, `secular` and `tidal` power, and
 `k2_over_q(TidalKind)` (rocky, icy, enveloped; the system engine picks the
 kind). Radiogenic power comes from the abundances of U, Th and K and the Dye
-2012 half-lives (K-40's is DDEP 2025's, which the air's argon shares:
-`potassium_40_decayed`); secular cooling scales Earth's 26.5 TW by the
-silicate mass;
+2012 half-lives and heats (K-40's half-life is DDEP 2025's, which the air's
+argon shares, `potassium_40_decayed`, and potassium's heat per kilogram is
+derived from DDEP 2025's decay data); secular cooling scales Earth's 26.4 TW
+by the silicate mass;
 tidal heat is Peale, Cassen and Reynolds (1979). The `Calibration:` constants (U
 and Th abundances, cooling time and mass exponent, rocky and icy k2/Q) say what
 was searched and not found; the page [The heat

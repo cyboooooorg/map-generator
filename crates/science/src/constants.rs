@@ -120,6 +120,18 @@ pub const SECOND_RADIATION_CONSTANT_CM_K: f64 = 1.438_776_877;
 /// Definition: pascals in a bar (exact, SI-accepted unit).
 pub const PASCALS_PER_BAR: f64 = 1e5;
 
+/// Definition: joules in a kiloelectronvolt, a thousand times the
+/// elementary charge 1.602 176 634e-19 C, exact since the SI
+/// redefinition of 2019 (CODATA 2018, Tiesinga et al. 2021, Rev. Mod.
+/// Phys. 93, 025010; NIST CODATA value `e`).
+pub const JOULES_PER_KEV: f64 = 1.602_176_634e-16;
+
+/// Source: the electron's mass energy, 510.998 950 00 keV (CODATA 2018,
+/// Tiesinga et al. 2021, Rev. Mod. Phys. 93, 025010; NIST CODATA value
+/// `m_e c^2`): what each of the two photons of a positron's annihilation
+/// at rest carries.
+pub const ELECTRON_MASS_ENERGY_KEV: f64 = 510.998_95;
+
 /// Definition: degrees in a half turn, so that a degree is pi/180 rad.
 pub const DEGREES_PER_HALF_TURN: f64 = 180.0;
 

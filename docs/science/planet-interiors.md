@@ -714,8 +714,9 @@ body gets which law).
 **Radiogenic.** Uranium-238 and -235, thorium-232 and potassium-40 decay
 and heat the rock. Each isotope's power per kilogram of silicate today is
 the abundance of its element in Earth's silicate part, times the heat
-per kilogram of the element (Dye 2012, Table 3: U 98.5, Th 26.3 and K
-$3.33 \times 10^{-3}$ µW/kg), times the isotope's share of the element
+per kilogram of the element (Dye 2012, Table 3: U 98.5 and Th 26.3
+µW/kg; K $3.400 \times 10^{-3}$ µW/kg, derived below), times the
+isotope's share of the element
 (U-238: 0.958, derived in the heat study). The abundances are 20 ng/g
 for uranium and 80 ng/g for thorium, calibrations inside the published
 models (see "Where it departs from the science"), and 280 µg/g for potassium (Arevalo
@@ -737,18 +738,45 @@ $\lambda_i = \ln 2 / t_{1/2,i}$, $t$ the age in Gyr and 4.5673 Gyr Earth's
 age (Connelly et al. 2012, read in its abstract). Earth's silicate mass
 is $4.03 \times 10^{24}$ kg (Dye 2012, Table 7).
 
+**Potassium's heat, derived.** Potassium's heat per kilogram is the
+product of its ⁴⁰K atoms, their decay constant and the heat of a decay,
+all from the DDEP evaluation of 2025 (the LNE-LNHB table of ⁴⁰K, read,
+Mougeot et al. 2026), so that it shares the half-life the argon reads:
+
+$$
+h_K = \frac{x_{40} N_A}{m_K} \, \frac{\ln 2}{t_{1/2}} \sum_b P_b E_b
+$$
+
+with $x_{40}$ = 0.011668 % of the atoms (Naumenko et al. 2013, as DDEP
+takes it), $m_K$ = 39.0983 g/mol (CIAAW), $t_{1/2}$ = 1.2522 Gyr of
+Julian years (λ = 17.541e-18 /s), and for each branch its share and the
+energy it leaves in the rock: β⁻ 89.56 % with its electron's mean
+582.898 keV (the antineutrino leaves the planet), capture to ⁴⁰Ar's
+level 10.34 % with the 1460.851 keV transition (the neutrino leaves),
+β⁺ 0.00103 % with its positron's mean 251.757 keV and the two 511 keV
+photons of its annihilation. The capture to the ground state and the
+atomic relaxation after each capture leave at most argon's K-shell 3.2
+keV on 10.44 % of the decays, under 0.05 %: left out. That is 673.1 keV
+a decay and $h_K = 3.400 \times 10^{-9}$ W/kg. Dye 2012's $3.33 \times
+10^{-3}$ µW/kg, taken until #694, is the same product on his λ,
+17.200e-18 /s: carried to DDEP's λ it is $3.396 \times 10^{-9}$, 0.1 %
+from the derived value (test `potassiums_heat_is_dyes_on_ddeps_decay_constant`,
+which also checks the β⁻ activity, 28.233 per second and gram, against
+DDEP's measured 28.23 ± 0.06). Earth's radiogenic power today moves
+from 20.18 to 20.25 TW (+0.39 %), at formation from 103.1 to 104.1 TW.
+
 **In words.** The younger the planet, the more heat; the isotopes with
 short half-lives dominate early.
 
-**Orders of magnitude.** Earth makes 20.2 TW today: uranium-238 38 %,
-thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
+**Orders of magnitude.** Earth makes 20.3 TW today (20.25): uranium-238
+38 %, thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
 models span 11 to 38 TW (Dye 2012). The abundance $a$ is drawn around 1
 with a spread of 0.23 dex (Nimmo et al. 2020, derived in the heat
 study); the earlier model drew 0.15 dex.
 
 **Secular cooling.** A planet also loses the heat it was born with: its
 mantle and core cool. Earth loses 46.7 TW through its surface (Davies &
-Davies 2010), so 26.5 TW beyond its radiogenic 20.2 (the model's 46.7 TW
+Davies 2010), so 26.4 TW beyond its radiogenic 20.3 (the model's 46.7 TW
 total is that split, by construction). The model scales that by the
 silicate mass, which holds the heat, and lets it decay with
 age over a cooling time that grows as the area of the body, $R^2$ with
@@ -760,7 +788,7 @@ S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\,
 \qquad \tau = \tau_\oplus \left(\frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\right)^{2/3}
 $$
 
-with $S_\oplus$ = 26.5 TW and $\tau_\oplus$ = 10 Gyr. Both the
+with $S_\oplus$ = 26.4 TW and $\tau_\oplus$ = 10 Gyr. Both the
 10 Gyr and the exponent 2/3 are calibrations: no source gives a cooling
 time or its scaling with mass (see "Where it departs from the science").
 
@@ -1502,7 +1530,7 @@ pull request add these:
 | Envelope thickness | power-law fit, thinned by the water share | Lopez & Fortney tables | Lopez & Fortney 2014 |
 | Giant radius | law through Neptune, Saturn and Jupiter, inflated when hot | Fortney et al. tables, uninflated | Fortney et al. 2007 |
 | Rocky tidal $k_2/Q$ | 0.015 (Io's) | $6 \times 10^{-3}$ | Henning et al. 2009 |
-| Earth radiogenic heat | 20 TW | 20.2 TW from abundances | Dye 2012 |
+| Earth radiogenic heat | 20 TW | 20.3 TW from abundances | Dye 2012; DDEP 2025 for potassium |
 
 **Calibrations of the interior and the heat.** Each is a choice, not a
 measurement; this is what was searched and not found.
@@ -2117,6 +2145,21 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
 120. Mougeot, X. 2025, "Decay data evaluation of ⁴⁰K", DDEP, poster at
      ICRM 2025, HAL cea-05087440 (read): the half-life of potassium-40,
      1.2522(27) Gyr, and its branches (study 29 of the Wiki, issue #694).
+121. Mougeot, X. et al. 2026, *Metrologia* 63, 019001,
+     [doi:10.1088/1681-7575/ae3733](https://dx.doi.org/10.1088/1681-7575/ae3733),
+     the DDEP evaluation of ⁴⁰K as the LNE-LNHB table publishes it
+     (*Table de Radionucléides*, ⁴⁰K, 2025, read on lnhb.fr, which asks
+     to be cited so; the paper itself was not read): the branches, the
+     mean β⁻ and β⁺ energies, the 1460.851 keV transition and the decay
+     constant 17.541e-18 /s, for potassium's heat per kilogram.
+122. CIAAW, standard atomic weight of potassium, 39.0983(1) (ciaaw.org,
+     read for study 29).
+123. Tiesinga et al. 2021, "CODATA recommended values of the
+     fundamental physical constants: 2018", *Rev. Mod. Phys.* 93,
+     025010: the elementary charge and the electron's mass energy.
+124. Naumenko et al. 2013, *Geochim. Cosmochim. Acta* 122, 353:
+     ⁴⁰K, 0.011668 % of potassium's atoms (as the DDEP evaluation of
+     2025 takes it).
 
 The values, tables and pages read for entries 99 to 115 are in the
 [draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
