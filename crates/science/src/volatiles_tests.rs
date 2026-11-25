@@ -1,6 +1,6 @@
 use super::*;
 use crate::constants::{EARTH_MASS, MOLAR_GAS_CONSTANT};
-use crate::units::Kilogram;
+use crate::units::{Kilogram, SolarLuminosity};
 
 /// Definition: relative tolerance of the CO2 vapour pressure against the
 /// NIST WebBook table, 0.1 %.
@@ -254,11 +254,11 @@ const WANG_SULPHUR: (f64, f64) = (235e-6, 38e-6);
 fn earths_silicate_sulphur_is_wangs() {
     let silicate = Kilogram(EARTH_MASS.0 * EARTH_SILICATE_SHARE);
     let core = Kilogram(EARTH_MASS.0 - silicate.0);
-    let earth = inventory(EARTH_MASS, silicate, Kilogram(0.0));
+    let earth = inventory(EARTH_MASS, silicate, Kilogram(0.0), false);
     // The sulphur comes from the silicate alone, never from the core.
     assert_eq!(earth.s, Kilogram(ROCK_S * silicate.0));
     assert_eq!(
-        inventory(core, Kilogram(0.0), Kilogram(0.0)).s,
+        inventory(core, Kilogram(0.0), Kilogram(0.0), false).s,
         Kilogram(0.0)
     );
     let (centre, spread) = WANG_SULPHUR;
@@ -509,4 +509,101 @@ fn boiling_caps_at_the_critical_point() {
     assert_eq!(ethane_boiling_temperature(Pascal(1e9)).0, ETHANE_CRITICAL_K);
     assert!(ethane_boiling_temperature(Pascal(1e5)).0 < mpa);
     assert!(mpa < ethane_boiling_temperature(Pascal(1e7)).0);
+}
+
+/// Source: Saturn's semi-major axis, 9.57 au (NASA planetary fact
+/// sheet: 1432.0 million km over 149.6), where the model places Titan.
+const SATURN: AstronomicalUnit = AstronomicalUnit(9.57);
+/// Definition: an orbit of 30 au, about Neptune's, where the Triton-like
+/// body of the planet tests forms (a test input).
+const NEPTUNE: AstronomicalUnit = AstronomicalUnit(30.0);
+/// Definition: an orbit of 40 au, about Pluto's (a test input).
+const PLUTO: AstronomicalUnit = AstronomicalUnit(40.0);
+
+/// Definition: the Sun's luminosity, the unit of the scale.
+const SUN: SolarLuminosity = SolarLuminosity(1.0);
+/// Definition: a host as faint as an M dwarf, 1 % of the Sun's light (a
+/// test input).
+const M_DWARF: SolarLuminosity = SolarLuminosity(0.01);
+/// Definition: a host as bright as an F star, three times the Sun's
+/// light (a test input).
+const F_STAR: SolarLuminosity = SolarLuminosity(3.0);
+
+/// Source: the luminosity power of a disc's temperature at a fixed
+/// distance, 1/4: an optically thin disc lit by its star has
+/// `T⁴ ∝ L a⁻²` (Hayashi 1981, Prog. Theor. Phys. Suppl. 70, 35, eq. 2.3,
+/// as Kennedy & Kenyon 2008, ApJ 673, doi:10.1086/524130, p. 3, and Ida
+/// & Lin 2005, ApJ 626, 1045, doi:10.1086/429953, eq. 4, quote it).
+const HAYASHI_POWER: f64 = 0.25;
+
+/// Definition: relative tolerance of a law checked against its own
+/// formula (round-off only).
+const ROUND_OFF: f64 = 1e-12;
+
+/// Definition: radius of the disc around `host` where it is `t`, from
+/// the published form `T = 200 K (L / L☉)^¼ (r / 1 au)^-0.62` (Andrews &
+/// Williams 2007 via Öberg et al. 2011 eq. 1, Hayashi 1981 eq. 2.3),
+/// solved for `r`: the test's own inverse of the law.
+fn radius_at(t: f64, host: SolarLuminosity) -> AstronomicalUnit {
+    AstronomicalUnit((200.0 * host.0.powf(HAYASHI_POWER) / t).powf(1.0 / 0.62))
+}
+
+#[test]
+fn the_disc_is_the_average_discs_around_the_sun() {
+    // Öberg et al. 2011 eq. 1: 200 K at 1 au around a Sun-like star,
+    // `(r / 1 au)^-0.62` beyond.
+    let at_one = disc_temperature(AstronomicalUnit(1.0), SUN);
+    assert!((at_one.0 / 200.0 - 1.0).abs() < ROUND_OFF);
+    // The 30 K line lies `(200 / 30)^(1 / 0.62)` = 21.3 au out.
+    let line = radius_at(30.0, SUN);
+    assert!((line.0 - 21.32).abs() < 0.01, "{line:?}");
+    let at_line = disc_temperature(line, SUN);
+    assert!((at_line.0 / NITROGEN_TRAPPING_TEMPERATURE.0 - 1.0).abs() < ROUND_OFF);
+}
+
+#[test]
+fn a_brighter_host_heats_its_disc_as_hayashis() {
+    // At a fixed distance the disc is `(L / L☉)^¼` times the Sun's
+    // (Hayashi 1981 eq. 2.3), so its N2 line moves as
+    // `L^(1 / (4 × 0.62))`: 3.33 au round an M dwarf of 0.01 L☉, 33.2 au
+    // round an F star of 3 L☉.
+    for (host, line_au) in [(M_DWARF, 3.333), (F_STAR, 33.22)] {
+        let at_saturn = disc_temperature(SATURN, host).0 / disc_temperature(SATURN, SUN).0;
+        assert!((at_saturn / host.0.powf(HAYASHI_POWER) - 1.0).abs() < ROUND_OFF);
+        let line = radius_at(30.0, host);
+        assert!((line.0 / line_au - 1.0).abs() < 1e-3, "{line:?}");
+        let moved = line.0 / radius_at(30.0, SUN).0;
+        assert!((moved / host.0.powf(1.0 / (4.0 * 0.62)) - 1.0).abs() < ROUND_OFF);
+        let at_line = disc_temperature(line, host);
+        assert!((at_line.0 / NITROGEN_TRAPPING_TEMPERATURE.0 - 1.0).abs() < ROUND_OFF);
+    }
+}
+
+#[test]
+fn titans_ice_holds_no_nitrogen_and_tritons_does() {
+    // Titan's building blocks lost their N2 (its 36Ar/14N, Mousis et al.
+    // 2009); Pluto's and, beyond Neptune, a captured Triton's formed cold
+    // enough to trap it (Glein 2023).
+    assert!(!traps_nitrogen(disc_temperature(SATURN, SUN)));
+    assert!(traps_nitrogen(disc_temperature(NEPTUNE, SUN)));
+    assert!(traps_nitrogen(disc_temperature(PLUTO, SUN)));
+    assert!(!traps_nitrogen(disc_temperature(
+        AstronomicalUnit(1.0),
+        SUN
+    )));
+}
+
+#[test]
+fn only_a_cold_ice_carries_its_nitrogen() {
+    let ice = Kilogram(EARTH_MASS.0);
+    let rock = Kilogram(EARTH_MASS.0);
+    let warm = inventory(rock, rock, ice, false);
+    let cold = inventory(rock, rock, ice, true);
+    assert_eq!(warm.n2, Kilogram(ROCK_N2 * rock.0));
+    assert_eq!(cold.n2, Kilogram(ROCK_N2 * rock.0 + ICE_N2 * ice.0));
+    // The gate is the N2's alone.
+    assert_eq!(
+        (warm.co2, warm.ch4, warm.nh3),
+        (cold.co2, cold.ch4, cold.nh3)
+    );
 }

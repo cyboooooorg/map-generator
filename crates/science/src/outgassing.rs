@@ -17,11 +17,17 @@
 //! [`SULPHUR_IN_AIR`] stays in the air; a wet or oxidising air washes it
 //! out, a dry one keeps it in proportion to its column ([`so2_kept`]).
 //!
+//! **Ammonia.** Of the NH3 the interior brings up, [`AMMONIA_DECOMPOSED`]
+//! comes up as N2, decomposed in the interior ([`decomposed`]): Titan's
+//! nitrogen (Glein 2015, study
+//! [28](https://github.com/cyboooooorg/map-generator/wiki/28-titan-nitrogen-audit)).
+//!
 //! Ported from the tag `legacy-final` (`planet/atmosphere.rs` l.24-124,
 //! 182-280) with the values and citations of study
 //! [21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit),
 //! parts 5 and 6; see `docs/science/planet-atmospheres.md`, "Atmosphere".
 
+use crate::photochemistry::N2_PER_NH3;
 use crate::units::{Bar, Fraction, Kilogram, Metre, MetrePerSecondSquared, Pascal};
 
 /// Calibration: share of each volatile that plates, an episodic lid
@@ -72,16 +78,42 @@ pub const RECYCLED_UNDER_PLATES: f64 = 0.63;
 /// slabs down. Fitted on the weight of Earth's N2, 0.746 bar (study 23 of
 /// the Wiki; legacy fitted 0.8 on 0.78 bar, a share by volume): the
 /// chain's N2 on Earth, its outgassed N2 plus the N2 its photolysed NH3
-/// makes, is proportional to the share kept, `1 - x` (0.804 bar at 0.8,
-/// 0.748 at 0.814 and 0.746 at 0.8145, by running the chain on the
-/// reference Earth), so `x = 1 - 0.2 × 0.746 / 0.804`, kept to four
-/// digits, 0.8145, which gives 0.7458 bar. See the calibration on the
+/// makes, is proportional to the share kept, `1 - x`. Study 23 fitted
+/// 0.8145 (legacy's 0.8 gave 0.804 bar); once Earth's ocean carried no N2
+/// ice (`volatiles::traps_nitrogen`, study 28) 0.8145 gave 0.6799 bar,
+/// so `x = 1 - 0.1855 × 0.746 / 0.6799`, kept to four digits, 0.7965,
+/// which gives 0.7458 bar, by running the chain on the reference Earth.
+/// See the calibration on the
 /// page `docs/science/planet-atmospheres.md` (*Outgassing*, *Earth's N₂
 /// target*). Goldblatt et al. 2009 (doi:10.1038/ngeo692, abstract) and
 /// Johnson & Goldblatt 2015 (doi:10.1016/j.earscirev.2015.05.006,
 /// abstract: the silicate Earth holds "7 +/- 4 times present atmospheric
 /// N") support a large return without giving one (study 21, part 5).
-pub const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.8145;
+pub const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.7965;
+
+/// Calibration: share `ξ` of the NH3 a body brings up that its interior
+/// decomposes to N2 before it reaches the air (`2 NH3 → N2 + 3 H2`, the
+/// reaction progress of Glein 2015, Icarus 250, 570,
+/// doi:10.1016/j.icarus.2015.01.001, eq. as quoted by Erkaev et al. 2020,
+/// MNRAS, arXiv:2010.12342, eq. 42: `ξ ≤ 1`). Fitted on Titan's N2 as a
+/// weight, 1.418 bar: 1.467 bar (Fulchignoni et al. 2005) times the mass
+/// share of N2 in an air of 5.65 % CH4 by volume (Niemann et al. 2010),
+/// the chain's partials being weights. The reference Titan's N2 is its
+/// rock's 0.005 bar plus `ξ` times the 11.807 bar of N2 its kept NH3
+/// would make, so `ξ = 1.413 / 11.807 = 0.1197`, kept to three digits
+/// (1.422 bar). The fit absorbs the reference Titan's inputs, its 45 %
+/// water among them (Fortes 2012's interiors hold 21 to 36 %, as Erkaev
+/// et al. 2020, Table 2, tabulate them). Titan's own N2 came from NH3
+/// (14N/15N, Mandt et al. 2014; Scherf et al. 2020,
+/// doi:10.1007/s11214-020-00752-0, section 3), not from N2 ice
+/// (`volatiles::traps_nitrogen`); no measured `ξ` was found, and the N2
+/// Titan lost to space, which the model's escape does not take, is not
+/// in the fit: for an atmosphere outgassed after formation, 0.48 to 0.62
+/// times its present air for a slowly rotating young Sun, 0.48 to 2.02
+/// for a moderate or fast one (Erkaev et al. 2020, Table 3), which would
+/// raise `ξ` to 0.18 to 0.36. See the calibration on the page
+/// `docs/science/planet-atmospheres.md` (*Titan's nitrogen*) and study 28.
+pub const AMMONIA_DECOMPOSED: f64 = 0.120;
 
 /// Definition: mass of SO2 per mass of sulphur, 64.07 / 32.06 = 1.998,
 /// rounded to 2 as in the legacy.
@@ -161,6 +193,26 @@ pub fn so2_kept(wet: bool, o2: Bar, total: Bar) -> Fraction {
         (total.0.max(0.0) / DRY_COLUMN.0).min(1.0)
     };
     Fraction::new(kept).expect("a share in 0 to 1 for finite pressures")
+}
+
+/// What the interior brings up of a mass of NH3: N2 and the NH3 left.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Decomposed {
+    /// The N2 the decomposed NH3 makes.
+    pub n2: Kilogram,
+    /// The NH3 left whole.
+    pub nh3: Kilogram,
+}
+
+/// `ammonia` brought up from the interior once [`AMMONIA_DECOMPOSED`] of
+/// it is decomposed: that share becomes N2 at `N2_PER_NH3` of its mass
+/// (`2 NH3 → N2 + 3 H2`, the hydrogen lost), the rest stays NH3, which the
+/// cold trap and the photochemistry read as before.
+pub fn decomposed(ammonia: Kilogram) -> Decomposed {
+    Decomposed {
+        n2: Kilogram(ammonia.0 * AMMONIA_DECOMPOSED * N2_PER_NH3),
+        nh3: Kilogram(ammonia.0 * (1.0 - AMMONIA_DECOMPOSED)),
+    }
 }
 
 #[cfg(test)]

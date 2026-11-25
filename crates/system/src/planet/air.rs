@@ -29,13 +29,15 @@ use crate::Trial;
 use science::escape::{escape_velocity, shoreline_kept};
 use science::outgassing::{
     LID_SHARE, MOBILE_SHARE, NITROGEN_RECYCLED_UNDER_PLATES, RECYCLED_UNDER_PLATES, SO2_PER_S,
-    SULPHUR_IN_AIR, column_pressure, released_under_ocean, so2_kept,
+    SULPHUR_IN_AIR, column_pressure, decomposed, released_under_ocean, so2_kept,
 };
 use science::photochemistry::{
     LymanSource, methane_left, methane_survives, nitrogen_from_ammonia, reducing,
 };
-use science::units::{Bar, Fraction, Kelvin, Kilogram, Metre, Pascal, WattPerSquareMetre};
-use science::volatiles::{ammonia_frost_pressure, co2_frost_pressure, inventory};
+use science::units::{Bar, Dex, Fraction, Kelvin, Kilogram, Metre, Pascal, WattPerSquareMetre};
+use science::volatiles::{
+    ammonia_frost_pressure, co2_frost_pressure, disc_temperature, inventory, traps_nitrogen,
+};
 use science::xuv::{History, history};
 use timeline::{Atmosphere, Code, Gas, NodeId, Provenance, TectonicRegime, Trace, Traced, Water};
 
@@ -77,8 +79,13 @@ pub(crate) struct Air {
 ///    keep their mass: the volatiles delivered with the water that is at
 ///    the surface, a dry planet's share of its bulk water, a water world's
 ///    whole water; legacy fed the ice term its ocean water, and the
-///    mantle's water is not ice),
-///    each times `10^scatter`, weigh [`column_pressure`] on the body's
+///    mantle's water is not ice; the ice's N2 only where it formed cold
+///    enough to trap it, `planet.volatiles.ice-traps-n2`, [`traps_nitrogen`]
+///    of the disc's temperature at the orbit,
+///    `planet.volatiles.disc-temperature`, [`disc_temperature`]),
+///    each times `10^scatter`, the share of the NH3 the interior
+///    decomposes coming up as N2 ([`decomposed`]), weigh
+///    [`column_pressure`] on the body's
 ///    surface, times the regime's share ([`LID_SHARE`] for a stagnant lid,
 ///    [`MOBILE_SHARE`] otherwise), the share the water lets through
 ///    ([`released`]) and, under plates, what subduction leaves
@@ -154,7 +161,8 @@ pub(crate) fn air(
     hold_back: bool,
     trace: &mut Trace,
 ) -> Result<Air, InteriorError> {
-    let volatiles = mantle(trial, drawn, body, surface, water, regime);
+    let traps = ice_traps_nitrogen(trial, trace)?;
+    let volatiles = mantle(trial, drawn, body, surface, water, regime, traps);
     let ch4 = volatiles.record(Gas::Ch4, trace)?;
     let shoreline = shoreline(trial, exposed, core, trace)?;
     let share = shoreline.value().get();
@@ -352,7 +360,32 @@ impl Volatiles {
     }
 }
 
-/// The volatiles of the mantle of `body`: N2, CO2, CH4, NH3 and SO2.
+/// Whether the ice of `trial` trapped N2 when it formed
+/// (`planet.volatiles.ice-traps-n2`): [`traps_nitrogen`] at the disc's
+/// temperature at its orbit (`planet.volatiles.disc-temperature`,
+/// [`disc_temperature`] of the semi-major axis and the host's
+/// luminosity). The host is the primary source, whose mass places the
+/// ice line; its luminosity is the present one, the only one the
+/// timeline holds, as Hayashi 1981 took the Sun's today's for its young
+/// disc (`docs/science/giant-planet-placement.md`).
+fn ice_traps_nitrogen(trial: &Trial, trace: &mut Trace) -> Result<Traced<bool>, InteriorError> {
+    let a = trial.orbit.semi_major_axis;
+    let luminosity = trial.sources.primary().luminosity;
+    let disc = trace.record(
+        Code::of(codes::VOLATILE_DISC_TEMPERATURE),
+        disc_temperature(*a.value(), *luminosity.value()),
+        &[a.node(), luminosity.node()],
+    )?;
+    Ok(trace.record(
+        Code::of(codes::VOLATILE_ICE_TRAPS_N2),
+        traps_nitrogen(*disc.value()),
+        &[disc.node()],
+    )?)
+}
+
+/// The volatiles of the mantle of `body`: N2, CO2, CH4, NH3 and SO2, the
+/// ice's N2 only when `traps`; the NH3 that the interior decomposes
+/// ([`decomposed`]) comes up as N2.
 fn mantle(
     trial: &Trial,
     drawn: &Drawn,
@@ -360,6 +393,7 @@ fn mantle(
     surface: Traced<Kilogram>,
     water: &Water,
     regime: &Traced<TectonicRegime>,
+    traps: Traced<bool>,
 ) -> Volatiles {
     let bulk = body.bulk();
     let gravity = *bulk.surface_gravity.value();
@@ -371,7 +405,12 @@ fn mantle(
     let cmf = drawn.core_mass_fraction.value().get();
     let planet = Kilogram::from(*trial.mass.value()) * (1.0 - f);
     let refractory = planet * (1.0 - w);
-    let rule = inventory(refractory, refractory * (1.0 - cmf), *surface.value());
+    let rule = inventory(
+        refractory,
+        refractory * (1.0 - cmf),
+        *surface.value(),
+        *traps.value(),
+    );
 
     let mobile = match regime.value() {
         TectonicRegime::Stagnant => LID_SHARE,
@@ -404,25 +443,43 @@ fn mantle(
         bulk.radius.node(),
     ];
     let scatter = &drawn.volatiles;
+    // Definition: a scatter in dex multiplies by 10^dex.
+    let scattered = |mass: Kilogram, dex: Traced<Dex>| mass * 10f64.powf(dex.value().0);
+    // The NH3 the interior decomposes comes up as N2, with the N2 itself.
+    let ammonia = decomposed(scattered(rule.nh3, scatter.nh3));
+    let n2 = scattered(rule.n2, scatter.n2) + ammonia.n2;
     let volatiles = [
-        (Gas::N2, rule.n2, scatter.n2, nitrogen),
-        (Gas::Co2, rule.co2, scatter.co2, rest),
-        (Gas::Ch4, rule.ch4, scatter.ch4, rest),
-        (Gas::Nh3, rule.nh3, scatter.nh3, nitrogen),
+        (
+            Gas::N2,
+            n2,
+            vec![scatter.n2.node(), traps.node(), scatter.nh3.node()],
+            nitrogen,
+        ),
+        (
+            Gas::Co2,
+            scattered(rule.co2, scatter.co2),
+            vec![scatter.co2.node()],
+            rest,
+        ),
+        (
+            Gas::Ch4,
+            scattered(rule.ch4, scatter.ch4),
+            vec![scatter.ch4.node()],
+            rest,
+        ),
+        (Gas::Nh3, ammonia.nh3, vec![scatter.nh3.node()], nitrogen),
         (
             Gas::So2,
-            rule.s * (SO2_PER_S * SULPHUR_IN_AIR),
-            scatter.s,
+            scattered(rule.s * (SO2_PER_S * SULPHUR_IN_AIR), scatter.s),
+            vec![scatter.s.node()],
             rest,
         ),
     ];
     let gases = volatiles
         .into_iter()
-        .map(|(gas, mass, dex, kept)| {
-            // Definition: a scatter in dex multiplies by 10^dex.
-            let mass = mass * 10f64.powf(dex.value().0);
+        .map(|(gas, mass, own, kept)| {
             let mut from = base.to_vec();
-            from.push(dex.node());
+            from.extend(own);
             (gas, Bar(weight(mass) * released * kept), from)
         })
         .collect();

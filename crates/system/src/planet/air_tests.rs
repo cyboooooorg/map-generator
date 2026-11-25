@@ -25,6 +25,7 @@ use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, 
 use science::photochemistry::{
     CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
 };
+use science::radiation::gases::{CH4_MOLAR_MASS, N2_MOLAR_MASS};
 use science::units::{Bar, Gyr, Kilogram, Metre, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
 use timeline::{
@@ -72,6 +73,42 @@ const NO_METHANE_OR_AMMONIA: f64 = 1e-3;
 /// bound, 0.01 bar (`legacy-final` `atmosphere.rs`,
 /// `titan_keeps_its_methane`).
 const TITAN_METHANE_MIN: f64 = 0.01;
+
+/// Source: Titan's surface pressure, 1.467 bar (Fulchignoni et al. 2005,
+/// Nature 438, 785, doi:10.1038/nature04314).
+const TITAN_SURFACE_PRESSURE: f64 = 1.467;
+
+/// Source: Titan's CH4 at the surface, 5.65 % by volume (Niemann et al.
+/// 2010, J. Geophys. Res. 115, E12006, doi:10.1029/2010JE003659), the
+/// rest N2 (98.4 % N2 in the lower stratosphere, Niemann et al. 2010 as
+/// Scherf et al. 2020 quote it; the traces are left out).
+const TITAN_METHANE_BY_VOLUME: f64 = 0.0565;
+
+/// Definition: Titan's N2 as a weight, about 1.418 bar: the chain's
+/// partial pressures are weights (`column_pressure`, study 23), so the
+/// measured pressure [`TITAN_SURFACE_PRESSURE`] times the mass share of
+/// N2 in an air of [`TITAN_METHANE_BY_VOLUME`] CH4,
+/// `(1 - x) M_N2 / ((1 - x) M_N2 + x M_CH4)`, with the molar masses of
+/// `science::radiation::gases`. The surface's composition stands for the
+/// column's (study 28 of the Wiki).
+const TITAN_N2: f64 = TITAN_SURFACE_PRESSURE * (1.0 - TITAN_METHANE_BY_VOLUME) * N2_MOLAR_MASS
+    / ((1.0 - TITAN_METHANE_BY_VOLUME) * N2_MOLAR_MASS + TITAN_METHANE_BY_VOLUME * CH4_MOLAR_MASS);
+
+/// Definition: a tolerance round [`TITAN_N2`], 10 %, as
+/// [`EARTH_N2_TOLERANCE`]: not a fit, a test choice round a value the
+/// chain is fitted on (`science::outgassing::AMMONIA_DECOMPOSED`), so
+/// that an input of the reference Titan can move without pinning the fit
+/// to its digits.
+const TITAN_N2_TOLERANCE: f64 = 0.1;
+
+/// Definition: legacy's own test band on Titan's surface pressure, 0.5
+/// to 5 bar round its 1.467 bar (`legacy-final` `atmosphere.rs`,
+/// `titan_keeps_a_thick_nitrogen_atmosphere`), a test choice that legacy
+/// read after the climate, not a published range. Read here on the bare
+/// air's N2 and photolysed CH4, which hold more than the air after the
+/// climate (its seas' methane not yet condensed), so the upper bound
+/// holds a fortiori after it.
+const TITAN_TOTAL: (f64, f64) = (0.5, 5.0);
 
 /// Definition: legacy's test bound on the methane Titan's photolysis
 /// leaves, its stock on the ground and in the air before the climate
@@ -578,6 +615,41 @@ fn titan_keeps_its_methane() {
         left > TITAN_METHANE_STOCK_MIN && left < given,
         "{given} {left}"
     );
+}
+
+#[test]
+fn titan_holds_its_nitrogen() {
+    // Titan's N2 comes from its NH3, the share its interior decomposes,
+    // not from N2 ice: its ice formed too warm to trap any (study 28).
+    let mut titan = planet(&TITAN);
+    let a = titan.air().0;
+    let n2 = partial(&a, Gas::N2);
+    assert!((n2 / TITAN_N2 - 1.0).abs() < TITAN_N2_TOLERANCE, "{a:?}");
+    // The bare air, its N2 and the methane the photolysis left (over
+    // `TITAN_METHANE_STOCK_MIN`, `titan_keeps_its_methane`), before the
+    // climate condenses the seas.
+    let ch4 = &a.partial[&Gas::Ch4];
+    let photolysed = number(
+        &titan.trace,
+        ancestor(&titan.trace, ch4.node(), codes::AIR_PHOTOLYSED_CH4),
+    );
+    let bare = n2 + photolysed;
+    assert!((TITAN_TOTAL.0..=TITAN_TOTAL.1).contains(&bare), "{a:?}");
+    // The outgassed N2 cites the gate, which reads the disc's
+    // temperature at the orbit and the host's luminosity.
+    let gate = ancestor(
+        &titan.trace,
+        a.partial[&Gas::N2].node(),
+        codes::VOLATILE_ICE_TRAPS_N2,
+    );
+    assert_eq!(
+        titan.trace.node(gate).unwrap().value,
+        timeline::NodeValue::Flag(false)
+    );
+    let disc = derived_from(&titan.trace, gate);
+    let disc_from = derived_from(&titan.trace, disc[0]);
+    assert!(disc_from.contains(&titan.trial.orbit.semi_major_axis.node()));
+    assert!(disc_from.contains(&titan.trial.sources.primary().luminosity.node()));
 }
 
 #[test]

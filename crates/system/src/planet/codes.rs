@@ -195,9 +195,19 @@ pub(crate) const CORE_STATE: &str = "planet.core.state";
 pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
 /// Surface equatorial dipole field of the core's dynamo; 0 T without one.
 pub(crate) const CORE_FIELD: &str = "planet.core.field";
+/// Midplane temperature of the disc the planet's ice formed in, from its
+/// semi-major axis and its host's luminosity
+/// (`science::volatiles::disc_temperature`).
+pub(crate) const VOLATILE_DISC_TEMPERATURE: &str = "planet.volatiles.disc-temperature";
+/// Whether the planet's ice trapped N2 when it formed: a disc colder than
+/// `science::volatiles::NITROGEN_TRAPPING_TEMPERATURE`.
+pub(crate) const VOLATILE_ICE_TRAPS_N2: &str = "planet.volatiles.ice-traps-n2";
 /// Partial pressure of N2 the interior brought up: the inventory at
-/// formation times its scatter, the regime's share, the share the water
-/// lets through and, under plates, what subduction leaves.
+/// formation times its scatter (the ice's N2 only where it trapped some),
+/// plus the N2 of the NH3 the interior decomposed
+/// (`science::outgassing::decomposed`), times the regime's share, the
+/// share the water lets through and, under plates, what subduction
+/// leaves.
 pub(crate) const AIR_OUTGASSED_N2: &str = "planet.air.outgassed.n2";
 /// Partial pressure of CO2 the interior brought up (see
 /// [`AIR_OUTGASSED_N2`]).
@@ -208,8 +218,9 @@ pub(crate) const AIR_OUTGASSED_H2O: &str = "planet.air.outgassed.h2o";
 /// Partial pressure of CH4 the interior brought up (see
 /// [`AIR_OUTGASSED_N2`]).
 pub(crate) const AIR_OUTGASSED_CH4: &str = "planet.air.outgassed.ch4";
-/// Partial pressure of NH3 the interior brought up (see
-/// [`AIR_OUTGASSED_N2`]).
+/// Partial pressure of NH3 the interior brought up: the NH3 left once
+/// the share the interior decomposes has come up as N2
+/// (`science::outgassing::decomposed`), then as [`AIR_OUTGASSED_N2`].
 pub(crate) const AIR_OUTGASSED_NH3: &str = "planet.air.outgassed.nh3";
 /// Partial pressure of SO2 the interior brought up: its sulphur as SO2,
 /// the share that stays in the air, then as [`AIR_OUTGASSED_N2`].

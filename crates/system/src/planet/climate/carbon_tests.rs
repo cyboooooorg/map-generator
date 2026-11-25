@@ -31,9 +31,15 @@ const THERMOSTAT_MOVE: Kelvin = Kelvin(0.01);
 /// [`GREENHOUSE_DECADES`].
 const WIDER_DECADES: f64 = GREENHOUSE_DECADES + 1.0;
 
-/// Definition: how far the wider search may move the maximum, 0.2 % of
-/// the CO₂: the golden section's resolution, 0.618¹⁸ of five decades.
-const GREENHOUSE_MOVE: f64 = 2e-3;
+/// Definition: how far the wider search may move the maximum, 1 % of the
+/// CO₂. The golden section's resolution is 0.2 % (0.618¹⁸ of five
+/// decades), but the gain is flat at its top and the pick wanders more:
+/// on the reference Earth, searches of 4 to 5 decades in steps of 0.1
+/// return 8.069 to 8.102 bar, 0.4 % apart, on `main` (81844560) as after
+/// #679, where a change of 7e-6 bar in Earth's N₂ moved the five-decade
+/// pick from 8.077 to 8.094 bar. A maximum outside the range would move
+/// it by decades. The noisy search is issue #689.
+const GREENHOUSE_MOVE: f64 = 1e-2;
 
 /// Earth at 1 au under [`TEST_ALBEDO`]: its body, the light and the
 /// emissivity of its surface at 288 K.
