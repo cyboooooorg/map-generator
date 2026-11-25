@@ -3,7 +3,7 @@
 //! Ported from `legacy-final:crates/mapgen/src/planet/classify.rs`
 //! (`mod tests`) and re-sourced; what is not ported is listed in the
 //! report of the task. The classes that need a bistable solve are tier 3
-//! (`climate::heavy_tests`).
+//! (`climate::heavy_tests`), as are the two water worlds here over 5 s.
 
 use super::classify::{BodyKind, ClassView, SurfaceView, class, classify};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, rotation};
@@ -333,6 +333,7 @@ fn an_enveloped_planet_is_a_mini_neptune() {
 }
 
 #[test]
+#[ignore = "heavy: a water world settled, 7.6 s at opt-level 0"]
 fn a_planet_that_lost_its_water_is_not_an_ice_world() {
     // The case of #452 (0.22 M_E, 37 % water, hot): at 0.6 au it keeps
     // under 0.01 ocean and gives no runaway class, so only its bulk made
@@ -347,6 +348,7 @@ fn a_planet_that_lost_its_water_is_not_an_ice_world() {
 }
 
 #[test]
+#[ignore = "heavy: a water world settled, 6.3 s at opt-level 0"]
 fn a_cold_icy_planet_stays_an_ice_world() {
     let mut trace = Trace::new();
     let (t, d) = water_world_trial(&mut trace, 0.5, EARTH_CORE_MASS_FRACTION, 0.3, 4.0);

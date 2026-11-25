@@ -1725,7 +1725,7 @@ fn settle(trace: &mut Trace, t: &Trial, d: &Drawn) -> Settled {
 }
 
 #[test]
-#[ignore = "heavy: a full boil loop, the first and the steam runs, 10.8 s in release"]
+#[ignore = "heavy: a full boil loop, the first and the steam runs, 127 s in release"]
 fn a_boil_that_escapes_all_its_water_ends_dry() {
     assert!(F0V_BOILING_FLUX < runaway_flux(F0V).0);
     let mut trace = Trace::new();
