@@ -1754,17 +1754,9 @@ draws CO₂ down faster when it is warm and volcanoes give it back (Walker,
 Hays & Kasting 1981, doi:10.1029/JC086iC10p09776). The model sets the CO₂
 so that a surface at `THERMOSTAT_K`, 288 K (a calibration on Earth), the
 vapour taken at that temperature, sends out what it absorbs (solved in
-`ln CO₂`). Each CO₂ tried is weighed on its own air, both what its
-surface absorbs and what its column sends out: the methane
-anti-greenhouse (above) takes a share of the light that grows as less
-CO₂ dilutes the methane, and the surface temperature of the regulated
-air reads the same share (`science::balance::absorbed`, issue #681).
-Legacy took the absorbed light once, on the air before the thermostat
-(its inventory's CO₂): a regulated body under methane then absorbed
-less than the thermostat had balanced, and its surface fell to the
-floor of the solver, the dew point of its vapour (284.01 K for the
-reference Earth under Titan's 2.11 bar of methane at 1 AU, against
-288 K now; Earth's own air, without methane, is unchanged). It can build the CO₂ up past what the air held before the
+`ln CO₂`; the rewrite weighs each CO₂ on its own absorbed light, see
+"The absorbed light of the thermostat and the wet balance (issue #681)"
+below). It can build the CO₂ up past what the air held before the
 climate (what escape and the cold trap left of it), since weathering
 slows and the volcanoes keep giving: up to the planet's carbon inventory
 (all it outgassed, `CarbonCycle::inventory_bar`), at most its maximum
@@ -2592,16 +2584,72 @@ on the reference Earth under Titan's measured 2.11 bar of methane, at
 Titan's 9.57 AU, where the methane condenses: the two searches give
 14.2 and 52.0 bar, yet the settled climate is the same, 88.419440 K both
 ways (a gap of 2e-11 K), frozen, and the outer edge is 1.4326 AU both
-ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, when the
-regulated surfaces of this methane Earth fell to 284.01 K, the dew point
-of their vapour, and stayed wet farther out). No regulated body can have a condensing
-air: the thermostat holds 288 K, above the critical points of methane
+ways (a gap under 0.0001 AU; 1.6465 AU before issue #681, see below).
+No regulated body can have a condensing air: the thermostat holds
+288 K, above the critical points of methane
 (190.564 K, Setzmann & Wagner 1991) and nitrogen (126.192 K, Span et al.
 2000), so the condensation loop's last pass is solved on the inventory
 air. A condensed air reaches the thermostat only in the loop's
 intermediate steps and where the thermostat fails, far out and frozen,
 where the CO₂ collapses to what the frost keeps whatever the cap it
 starts from.
+
+#### The absorbed light of the thermostat and the wet balance (issue #681)
+
+The light a surface absorbs depends on its air: the methane
+anti-greenhouse (above, `science::balance::absorbed`) takes a share
+`0.5 m / (m + h)` of it, `m` the methane above the tropopause, which
+falls as the rest of the air dilutes the methane. Legacy took that light
+once per solve, on the air it was given, while the solve then varied
+the air: the thermostat varies its CO₂ (`climate.rs` l.2279), the wet
+balance its vapour (`wet_balance`). The rewrite weighs each candidate
+on its own air, with the same function `surface_temperature` reads, so
+that the air returned balances its own light:
+
+- `carbon::thermostat`: each CO₂ tried, both ends of the search
+  included, is weighed on its own air (the vapour at `THERMOSTAT_K`).
+  Legacy weighed them all against the light of the air before the
+  thermostat, whose CO₂ is far more (52 bar for the reference Earth,
+  distinct from the carbon inventory `CarbonCycle::inventory_bar` it
+  is capped by) and dilutes the methane more.
+- `wet::wet_balance`: each surface temperature tried is weighed on the
+  air with its own vapour. The scan starts from the grey body of the
+  dry air, which absorbs least, so that it stays a lower bound.
+
+Without methane the share is nil, the light does not depend on the air,
+and nothing moves: Earth's own air gives the same climates to the last
+digit (288.000000 K and 1.986e-3 bar of CO₂ at 1 AU).
+
+Measured on the reference Earth under Titan's 2.11 bar of methane
+(`solve_with`, warm draw): legacy's thermostat balanced 288 K against
+155.7 W/m² absorbed on the 52 bar air, while the regulated air (0.31 bar
+of CO₂) absorbed 126.8 W/m² (the diagnosis of issue #681); the surface
+then fell to the floor of the surface solver, the dew point of its
+vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
+AU (3.95 bar of CO₂) and 288.0004 K at 1.3 AU (7.74 bar), and is frozen
+at 1.6 AU. Its outer edge moves in from 1.6465 to 1.4326 AU. The old
+edge came from the top end of the search: from about 1.43 to 1.65 AU
+even the most CO₂ sends out more from a 288 K surface than the air with
+that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
+so the thermostat should give way to the collapse, but the light of the
+52 bar air (58.4 W/m²) still exceeded it and the body was called
+regulated; the dew-point floor then hid how cold its regulated air
+really was, and kept it wet.
+
+The wet balance's error grows with the vapour and the methane: under
+0.05 bar of methane at 0.7 AU (a test input) the balance moves from
+295.727 to 296.161 K (21.7 mbar of vapour); with Titan's methane and
+1 bar of CO₂ at 0.6 AU, from 325.829 to 326.299 K (0.11 bar of vapour);
+on the 52 bar air with Titan's methane at 1 AU, from 436.849 to
+438.155 K (5.4 bar of vapour). Before, the air returned sent out 0.91,
+0.21 and 2.08 W/m² less than it absorbed at the temperature returned.
+Tier-1 tests: `the_thermostat_holds_a_methane_earth_at_its_target`,
+`a_wet_methane_balance_is_its_own_airs`.
+
+Limitation: `balance::surface_root` still returns its lower bound (the
+grey body or the dew point) without saying so when the column already
+sends out more there; a regulated surface off `THERMOSTAT_K` would go
+unnoticed (issue #706).
 
 #### Condensation at the surface
 
