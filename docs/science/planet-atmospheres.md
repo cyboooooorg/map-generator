@@ -1512,8 +1512,12 @@ the poster quotes it), so 2.9843e-3 mol of ⁴⁰K per kg of potassium (derived 
 potassium's 39.0983 g/mol). The law takes the DDEP 2025 values: the newest
 evaluation, and the one whose ground-state branch, the source of the old
 disagreement, was measured since (Kossert et al. 2022, as the poster cites it).
-The code's `HALF_LIFE_K40`, 1.277 Gyr (Dye 2012's λ 17.200e-18 per s), is 2 %
-longer than all of them (*Departures* below).
+The code's `HALF_LIFE_K40` took 1.277 Gyr (Dye 2012's λ 17.200e-18 per s), 2 %
+longer than all of them, until the argon's branch (#694) set it to DDEP's
+1.2522 Gyr: the heat and the argon read one value. Earth's radiogenic power
+today does not move (the heat is carried back from today); at formation it is
+2.2 % higher, 103.1 TW against 100.8, and 1.7 % higher at 1 Gyr (derived from
+the code's isotopes).
 
 **Earth's potassium.** The heat of the model takes 280 ppm of potassium in
 Earth's silicate part (`POTASSIUM_ABUNDANCE`, Arevalo, McDonough & Luong 2009;
@@ -1544,8 +1548,8 @@ at its formation is Earth's at its own (the heat's convention,
 `science::heat::radiogenic`), and the share `1 − e^{−λt}` of it has decayed. On
 Earth (4.03e24 kg of silicate, 4.5673 Gyr) it is 4.053e18 mol, 1.006e-6 mol per
 kg of silicate (derived; Marty 2012, p. 15: 3.9 ± 0.9e18 mol over 4.5 Gyr from
-280 ± 60 ppm). With `HALF_LIFE_K40` as it is, 1.277 Gyr, it would be 3.842e18
-mol (−5 %).
+280 ± 60 ppm). With the former `HALF_LIFE_K40`, 1.277 Gyr, it would be
+3.842e18 mol (−5 %).
 
 **The share degassed.** Marty 2012 (p. 15) puts 1.6e18 of the 3.9e18 mol in the
 air, at most 3.5e17 mol in the continents (Arevalo et al. 2009), and the rest,
@@ -1805,10 +1809,10 @@ additive; the engine version invalidates the stored timelines.
 - The potassium is Earth's for every body, scaled with U and Th by one
   abundance; Venus's and Mars's K/U, measured by landers and orbiters, were not
   read.
-- `HALF_LIFE_K40` (1.277 Gyr, from Dye 2012's λ) is 2 % longer than the DDEP
+- `HALF_LIFE_K40` was 1.277 Gyr (Dye 2012's λ), 2 % longer than the DDEP
   2025 evaluation (1.2522 Gyr) and every evaluation of Schaen et al.'s table;
-  the heat and the argon must read one value (decided 2026-11-25: the
-  argon's branch corrects it to 1.2522 Gyr).
+  the heat and the argon read one value, so the argon's branch corrected it
+  to 1.2522 Gyr (decided 2026-11-25). Not a departure any more.
 - The shoreline takes the same share of argon as of the early air; on Mars it
   leaves 0.019 of the measured ⁴⁰Ar, where MAVEN's 66 % loss would leave about
   1.3 times it (derived: 0.0863 × 4.885e17 × 0.34 = 1.43e16 mol).

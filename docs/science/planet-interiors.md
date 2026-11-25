@@ -720,8 +720,12 @@ $3.33 \times 10^{-3}$ µW/kg), times the isotope's share of the element
 for uranium and 80 ng/g for thorium, calibrations inside the published
 models (see "Where it departs from the science"), and 280 µg/g for potassium (Arevalo
 et al. 2009, a K/U ratio, read in its abstract). Each isotope is carried
-to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704,
-14.05 and 1.277 Gyr; the earlier model used 1.248 Gyr for potassium-40):
+to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704
+and 14.05 Gyr; for potassium-40 the DDEP evaluation of 2025, 1.2522 Gyr,
+Mougeot 2025, which the argon of the air shares, see
+[planet atmospheres](planet-atmospheres.md#argon-study-29); Dye 2012's
+1.277 Gyr, taken until #694, was 2 % longer than every evaluation, and
+the earlier model used 1.248 Gyr):
 
 $$
 H = \sum_i p_i\, m_\mathrm{sil}\, a\, e^{\lambda_i (4.5673 - t)}
@@ -1486,7 +1490,7 @@ pull request add these:
 | --- | --- | --- | --- |
 | Radius | Zeng et al. 2016 fit, uniform layers | integrated structure | prototype report |
 | Earth $C/MR^2$ | 0.354 | 0.330 | Williams 1994: 0.3307 |
-| Potassium-40 half-life | 1.248 Gyr | 1.277 Gyr | Dye 2012, Table 2 |
+| Potassium-40 half-life | 1.248 Gyr | 1.2522 Gyr (1.277 until #694) | DDEP 2025 (Mougeot 2025); Dye 2012, Table 2 |
 | Iron share | normal, 0.325 + 0.15 per dex of `[Fe/H]`, σ 0.05 | uniform 0 to 0.8, no slope | Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020 |
 | Water inside the ice line | log-normal around 0.27 % | log-uniform $10^{-5}$ to $10^{-2}$ | Raymond et al. 2007; Izidoro & Piani 2022 |
 | Water beyond the ice line | uniform 0.2 to 0.5 | uniform 0.1 to 0.67 | Marboeuf et al. 2014; Zeng et al. 2019 |
@@ -2110,6 +2114,9 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      [doi:10.3847/1538-4357/abfa99](https://doi.org/10.3847/1538-4357/abfa99),
      [arXiv:2105.01102](https://arxiv.org/abs/2105.01102) (read, study
      26).
+120. Mougeot, X. 2025, "Decay data evaluation of ⁴⁰K", DDEP, poster at
+     ICRM 2025, HAL cea-05087440 (read): the half-life of potassium-40,
+     1.2522(27) Gyr, and its branches (study 29 of the Wiki, issue #694).
 
 The values, tables and pages read for entries 99 to 115 are in the
 [draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)

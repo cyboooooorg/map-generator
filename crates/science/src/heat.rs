@@ -31,9 +31,15 @@ pub const HALF_LIFE_U235: Gyr = Gyr(0.704);
 /// Source: Th-232 half-life, 14.05 Gyr (Dye 2012, Table 2, lambda 1.563e-18
 /// /s).
 pub const HALF_LIFE_TH232: Gyr = Gyr(14.05);
-/// Source: K-40 half-life, 1.277 Gyr (Dye 2012, Table 2, lambda 17.200e-18
-/// /s). The commonly quoted 1.248 Gyr is not in a source read.
-pub const HALF_LIFE_K40: Gyr = Gyr(1.277);
+/// Source: K-40 half-life, 1.2522(27) Gyr (DDEP evaluation of 2025, X.
+/// Mougeot, ICRM 2025 poster, HAL cea-05087440, read), the newest
+/// evaluation, which the argon of the air shares
+/// (`docs/science/planet-atmospheres.md`, "Argon"). Every evaluation of
+/// Schaen et al. 2020 (GSA Bulletin 133, 461, Table 1) gives 1.2505 to
+/// 1.2688 Gyr; ENSDF 2017's 1.2480 Gyr is the "commonly quoted" one. Dye
+/// 2012's 1.277 Gyr (Table 2, lambda 17.200e-18 /s), taken before, was 2 %
+/// longer than all of them.
+pub const HALF_LIFE_K40: Gyr = Gyr(1.2522);
 
 /// Source: heat per kilogram of element, W/kg, uranium (Dye 2012, Table 3:
 /// 98.5 uW/kg).
@@ -233,6 +239,20 @@ mod tests {
             let later = isotope_term(i, 1.0 + half_life.0);
             assert!((later / now - 0.5).abs() < 1e-12, "isotope {i}");
         }
+    }
+
+    #[test]
+    fn potassium_40_decays_with_ddeps_half_life() {
+        /// Source: K-40 half-life, 1.2522(27) Gyr (DDEP evaluation of
+        /// 2025, X. Mougeot, ICRM 2025 poster, HAL cea-05087440), the
+        /// newest evaluation; Schaen et al. 2020 (GSA Bulletin 133, 461,
+        /// Table 1) give 1.2505 to 1.2688 Gyr for the others.
+        const DDEP_2025: f64 = 1.2522;
+        // Potassium's heat at formation over today's is the share of K-40
+        // that has decayed since, `2^(t_earth / t_half)`.
+        let ratio = isotope_term(3, 0.0) / isotope_term(3, EARTH_AGE.0);
+        let expected = 2f64.powf(EARTH_AGE.0 / DDEP_2025);
+        assert!((ratio / expected - 1.0).abs() < 1e-12, "{ratio} {expected}");
     }
 
     #[test]
