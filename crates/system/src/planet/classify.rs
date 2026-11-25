@@ -104,6 +104,7 @@ enum Read {
 ///    [`ICE_WORLD_MIN_OCEANS`] kept;
 /// 5. a volcanic world: the heat-pipe regime;
 /// 6. a super-Earth from [`SUPER_EARTH_MIN_RADIUS`], rocky below.
+#[cfg(test)]
 pub(crate) fn class(view: &ClassView) -> PlanetClass {
     decide(view).0
 }

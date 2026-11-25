@@ -420,7 +420,8 @@ pub(crate) const CLIMATE_CONDENSATE_AR: &str = "planet.climate.condensate.ar";
 /// a liquid.
 pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
 /// The share of the surface under water: the sea term of the cover
-/// law, recorded when the liquid is water.
+/// law, recorded when the liquid is water; an imposed 0 for the other
+/// liquids (no sea level reads them yet).
 pub(crate) const SURFACE_OCEAN_SHARE: &str = "planet.surface.ocean-share";
 /// What life has made of the planet (`timeline::Biosphere`), from the
 /// liquid (or, without one, the climate's state), the age and the life
@@ -438,6 +439,17 @@ pub(crate) const LIFE_AIR_CH4: &str = "planet.life.air.ch4";
 /// Surface pressure of the air life has oxygenated: the sum of its
 /// partial pressures.
 pub(crate) const LIFE_AIR_PRESSURE: &str = "planet.life.air.pressure";
+/// Whether the planet is tidally locked, which the climate reads: an
+/// imposed `false` until the tidal evolution of the spin (#604).
+pub(crate) const SPIN_LOCKED: &str = "planet.spin.locked";
+/// The radial samples of the interior: an imposed empty list until a
+/// planet's temperature profile exists (a sample needs a temperature).
+pub(crate) const INTERIOR_SAMPLES: &str = "planet.interior.samples";
+/// The mass of the liquid at the surface when it is not water: the column
+/// mass of its condensate's partial pressure on the ground (hydrocarbons,
+/// nitrogen), an imposed 0 for lava. Water's inventory is the water's own
+/// node.
+pub(crate) const LIQUID_INVENTORY: &str = "planet.surface.liquid-inventory";
 /// The class of the planet: the first rule of the table that holds,
 /// from the nodes the rules up to that one read (mass, period, the steam
 /// line, the liquid, the runaway, the air, the water, the bulk's radius

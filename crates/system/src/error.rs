@@ -6,6 +6,7 @@ use std::fmt;
 use timeline::ContractError;
 
 use crate::ArchetypeId;
+use crate::planet::InteriorError;
 
 /// Why the system engine cannot compute a system. Codes with parameters,
 /// in the style of [`ContractError`]. More variants arrive with the
@@ -41,6 +42,8 @@ pub enum SystemError {
     BodyRequestNotDrawn,
     /// The request asks more planets than a system can hold.
     TooManyPlanets { count: u64 },
+    /// The planet chain could not compute a planet.
+    Planet(InteriorError),
 }
 
 impl fmt::Display for SystemError {
@@ -78,6 +81,7 @@ impl fmt::Display for SystemError {
             }
             Self::BodyRequestNotDrawn => write!(f, "system.body-request-not-drawn"),
             Self::TooManyPlanets { count } => write!(f, "system.too-many-planets: {count}"),
+            Self::Planet(error) => write!(f, "system.planet: {error}"),
         }
     }
 }
@@ -99,6 +103,12 @@ impl From<StellarError> for SystemError {
             }
             other => Self::Stellar(other),
         }
+    }
+}
+
+impl From<InteriorError> for SystemError {
+    fn from(error: InteriorError) -> Self {
+        Self::Planet(error)
     }
 }
 
