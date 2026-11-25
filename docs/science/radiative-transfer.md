@@ -171,19 +171,32 @@ it holds 42.3 kJ/mol there and above.
 
 A real troposphere is not saturated up to its top. Manabe & Wetherald
 (1967) set the relative humidity to fall with the pressure $p$, from
-its surface value $RH_s$ (0.77, fitted to observed hemispheric
-means), with $Q = p/p_s$:
+its surface value $RH_s$, with $Q = p/p_s$ (their eq. 2):
 
 $$
 RH = RH_s\,\frac{Q - 0.02}{1 - 0.02}
 $$
 
-The formula is the paper's eq. 2 (read in the scan GFDL hosts, study
-33; its eq. 3 is a floor on the stratosphere's mixing ratio). Kluft et
-al. (2019, §2b) give the same profile as Manabe & Wetherald's "Eq. (3)",
-a numbering the page followed for a while after study 32, and note
-that it "differs from the observed mean state of humidity mostly through
-the lack of a secondary peak in the upper troposphere".
+They chose the line to fit observed hemispheric means of relative
+humidity, Telegadas & London (1954) in the upper troposphere and
+Murgatroyd (1960) in the lower one, with Mastenbrook's (1963)
+stratospheric soundings (their Fig. 3), and took $RH_s$ = 0.77, "the
+relative humidity at the earth's surface". Below $Q$ = 0.02 the line
+turns negative; they floor the mixing ratio at 3 × 10⁻⁶ g/g, the dry
+stratosphere of Mastenbrook (1963) and Houghton (1963) (their eq. 3).
+Their troposphere follows a critical lapse rate of 6.5 K/km, and their
+$e_s(T)$ is "the saturation vapor pressure of water vapor", with no word
+on ice. (Read in the scan GFDL hosts, `sm6701.pdf`, by optical character
+recognition, study 33; earlier pages quoted the formula from `climlab`
+and arXiv:2006.03098.) The app's column keeps the line but ends it at
+its cold trap instead of the 3 × 10⁻⁶ floor and follows the moist
+adiabat instead of 6.5 K/km.
+
+Kluft et al. (2019, §2b) give the same profile as Manabe & Wetherald's
+"Eq. (3)", a numbering the page followed for a while after study 32
+(the paper's eq. 3 is the floor above), and note that it "differs from
+the observed mean state of humidity mostly through the lack of a
+secondary peak in the upper troposphere".
 
 Below 0 °C the relative humidity needs a saturation curve, and the
 implementations of the profile do not take the same one: `climlab`
@@ -218,6 +231,98 @@ case", and rises again past about 1500 K through the 4 µm window
 **Orders of magnitude.** An Earth that absorbs 240 W/m² is about 40 W/m²
 below the plateau. It would need to absorb about 282 W/m², 17 % more light than
 Earth gets, to start running away.
+
+### How much water one column holds
+
+**The observed column.** Earth's precipitable water, the vapour of the
+whole column (1 kg/m² is 1 mm), averaged over the globe and all skies:
+
+| Data | Period | Global mean | Source |
+| --- | --- | --- | --- |
+| NVAP (heritage) | 1988-2001 | 24.5 mm | Forsythe et al. 2014 |
+| NVAP-M Climate | 1988-2009 | 25.3 mm | Forsythe et al. 2014 |
+| ERA-40 | 1979-2001 analyses | 24.9 mm (derived) | Trenberth & Smith 2005 |
+| ERA-Interim, RFMIP's 100 profiles weighted to the globe | 2014 | 24.6 mm (derived) | Pincus et al. 2016 |
+
+Trenberth & Smith give the mass of the vapour, 1.27 × 10¹⁶ kg, over a
+globe of 5.10 × 10¹⁴ m² (derived: 24.9 kg/m²); its share of the surface
+pressure runs from 2.33 hPa in December to 2.62 hPa in July. The RFMIP
+value is the profiles' weighted mean, computed here from the files of
+Pincus et al. 2016. The GEWEX water vapour assessment compares 28
+records (Trent et al. 2024): those built on microwave sounders lie
+within −2.8 % to +4.3 % of the ensemble mean, the infrared and
+near-infrared ones are the driest. A record made only in clear skies
+misses the moister air of cloudy scenes: a clear-sky bias of about 10 %
+(Sohn & Bennartz 2008), −0.9 kg/m² on average from ERA5 (Falk et al.
+2022; both as Trent et al. 2024, §5, summarise them). The observed all-sky
+mean is 2.45 to 2.53 cm; a clear-sky mean about 0.1 to 0.25 cm less.
+
+Kim & Ramanathan's (2008) 3.0 ± 0.3 cm is not an observed mean. It is a
+line of their Table 2, the inputs of a sensitivity test on one standard
+case (clear sky, ozone 300 DU, ground 0.15, aerosol depth 0.18); their
+global runs read the NVAP-NG fields of 2000 and 2001 (§[25]), whose
+mean they do not print.
+
+**One column is not the mean of the columns.** The saturation pressure
+grows exponentially with temperature, so the warm, wet tropics hold far
+more water than a column at the mean temperature does. Measured on the
+100 RFMIP profiles (study 33; the app's code for the radiation, H₂O and
+CO₂ only, a ground of 0.122 and the app's one solar geometry):
+
+| Column | Water | Clear-sky OLR | Sunlight the air absorbs |
+| --- | --- | --- | --- |
+| The 100 profiles, each radiated, weighted by area | 2.47 cm | 274.95 W/m² | 49.45 W/m² |
+| The same, weighted by the sunlight each receives | 2.75 cm | | 52.19 W/m² |
+| Mean temperature and mean vapour on $p/p_s$, radiated once | 2.43-2.46 cm | 268.91 | 52.50 |
+| Mean temperature and mean relative humidity | 2.00-2.02 cm | 272.12 | 49.83 |
+| Manabe & Wetherald's humidity on that mean temperature | 1.94 cm | | |
+
+(The OLR at RFMIP's 397.5 ppm of CO₂, the absorption at 400 ppm; the
+sunlight each profile receives is RFMIP's solar constant times the
+cosine of its zenith angle, 335.2 W/m² on average.) Scaling the mean
+column's vapour, one column gives the profiles' mean OLR at about
+1.76 cm, and their sunlight-weighted absorption at about 2.38 cm
+(interpolated between 0.6, 0.8 and 1.0 times its vapour). The outgoing
+radiation is weighted by area and is convex in the water (the dry
+subtropics send out the most, study 32); the absorbed sunlight is
+concave in the water but weighted by the light, which falls mostly on
+the wet tropics. **No single humidity carries both**: about 1.75 cm for
+the longwave, about 2.4 cm for the absorbed sunlight. The app's Earth
+column, 1.67 cm converged (1.735 cm on the shortwave's grid), sits on
+the longwave's value. Applied to the observed field, the app's optics
+absorb 52.19 W/m², 0.8 to 1.4 W/m² over Kim & Ramanathan's 50 W/m² of
+water plus CO₂'s 1.0 to 1.6 (*Window of the H₂O and CO₂ absorption*,
+below), inside its 48 to 54.
+
+**What the profile does and does not set.** On the mean temperature
+profile, Manabe & Wetherald's line and the observed mean humidity hold
+nearly the same water (1.94 against 2.00 cm). They differ aloft: the
+RFMIP mean relative humidity (over liquid above 273.16 K, over ice
+below) is 0.75 to 0.79 from $Q$ = 0.9 to 1, 0.52 at 0.75, 0.43 to 0.45
+from 0.65 to 0.35, 0.45 to 0.48 at 0.25 to 0.3; the line gives 0.69 to
+0.77, 0.57, 0.50 down to 0.26, then 0.22 to 0.18. The observed humidity
+on the app's own column at 288 K holds 1.72 to 1.74 cm, 0.03 cm more
+than the line, and sends out 3.2 W/m² less in clear skies (measured).
+The rest of the gap between 2.00 and 1.72 cm is the temperature: the
+moist adiabat from 288 K reaches 253.6 K at half the surface pressure,
+the mean of the RFMIP profiles 257.9 K, which averages warm tropical
+and cold polar columns. The water's scale height says the same: 2.1 to
+2.5 km in the AFGL reference atmospheres (Anderson et al. 1986; the
+U.S. Standard holds 1.44 cm over 288.2 K), 2.2 km for the RFMIP
+profiles, 1.7 km for the app's column (all derived: the column's water
+over its surface vapour density).
+
+**At other temperatures.** At fixed relative humidity the column's
+water follows the saturation pressure, about 7 % per kelvin in the
+lower troposphere; the global column water of the AR4 models rises
+7.5 % per kelvin of surface warming (Held & Soden 2006, Fig. 2a), and
+"climate models tend to maintain a fixed tropospheric relative humidity
+as they warm". The app's column holds 0.35 cm at 270 K, 0.88 at 280 K,
+1.71 at 288 K, 2.95 at 295 K and 4.32 at 300 K (measured): 8.3 % per
+kelvin from 280 to 288 K and 7.8 % from 288 to 295 K (derived). The
+convexity above was measured on today's Earth only: no source gives
+how a single column's effective water departs from a field's mean in
+another climate.
 
 ### Carbon dioxide and methane: saturation
 
@@ -555,11 +660,11 @@ whole observed absorption. What the sources read give:
 - Kim & Ramanathan (2008), global annual clear skies under 341.8 W/m²
   (S₀ = 1367, Fig. 8 caption): the air absorbs 72.1 W/m², the top of the
   atmosphere reflects 51.4 and the surface absorbs 218.3 (Table 3b, case
-  `MACR_BL`; §[51]: 72.1 ± 3). The aerosols add 4.8 W/m² to the
-  absorption and 5.9 to the reflection (Table 3b, ARF columns; §[51]:
-  aerosol absorption "4 to 5 W m⁻²"; §[52]: 5.9 ± 1 at the top). Water
+  `MACR_BL`; §[53]: 72.1 ± 3). The aerosols add 4.8 W/m² to the
+  absorption and 5.9 to the reflection (Table 3b, ARF columns; §[53]:
+  aerosol absorption "4 to 5 W m⁻²"; §[54]: 5.9 ± 1 at the top). Water
   vapour "accounts for about 50 W m⁻²" of the absorption, against 43 in
-  IPCC (2001) (§[51]), the gap put down to the HITRAN 2000 lines and the
+  IPCC (2001) (§[53]), the gap put down to the HITRAN 2000 lines and the
   continuum. The paper gives no separate value for ozone, O₂ or CO₂. Its
   gases are water vapour, ozone, oxygen and CO₂ from HITRAN 2000 (§[21]);
   its inputs, with their errors, are a total ozone of 300 ± 30 DU, a
@@ -599,19 +704,21 @@ Scaled to the app's 340.25 W/m² as shares of each source's insolation:
 
 The two estimates of water vapour differ by their lines: Kim &
 Ramanathan's HITRAN 2000 adds 3 to 4 W/m² over the earlier lists and the
-continuum 1 to 2 (§[51]).
+continuum 1 to 2 (§[53]).
 
 **The app's Earth column.** `EARTH_AIR` (0.78 bar of N₂, 0.21 of O₂,
 400 ppm of CO₂) at 77 % relative humidity over 288 K, humidity falling as
 in Manabe & Wetherald (1967), holds 1.67 cm of precipitable water
 (converged on 300 levels per decade; 1.735 cm on the shortwave's own grid
 of three levels per decade with the column's logarithmic layer mean).
-Kim & Ramanathan's global run takes the NVAP field, 2.5 cm (their 3.0 ±
-0.3 cm of Table 2 is the input of their sensitivity case); the app's
-column at 77 % holds 1.735 cm of it (issue #654). A gap between the
-app's water absorption and their 50 W/m² is first a gap of humidity,
-then one of optics. The precipitable water of Kiehl &
-Trenberth's U.S. Standard Atmosphere was not read.
+Kim & Ramanathan's global run takes the NVAP field, 2.45 to 2.53 cm
+(their 3.0 ± 0.3 cm of Table 2 is the input of their sensitivity case).
+That field is not one column: a single column absorbs the field's
+sunlight-weighted 52.19 W/m² at about 2.4 cm, and sends out its mean
+OLR at about 1.75 cm (study 33, *How much water one column holds*).
+The app's 1.735 cm absorbs 48.41 W/m² in clear skies (measured), 3.8
+less than the field. Kiehl & Trenberth's U.S. Standard Atmosphere holds
+1.44 cm in the AFGL file (derived; the paper does not give it).
 
 **Window of the H₂O and CO₂ absorption** (decided by the user on
 2026-11-23: 48 to 54 W/m² on 2.5 cm of water, with the slope test of
@@ -636,7 +743,7 @@ Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0
 July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et al.'s own
 all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo of 0.154, not
 0.149: the paper does not say how its 0.149 is formed. The aerosols reflect 5.9
-± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[52]), 0.017 ± 0.003 of
+± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[54]), 0.017 ± 0.003 of
 albedo. Taken off:
 
 - 0.149 to 0.156 less 0.017 gives 0.132 to 0.139;
@@ -901,17 +1008,20 @@ the Bond albedo are there too (change 2b-2).
     over the saturation pressure at 288 K, the rounded mean surface
     temperature the tests take as their Earth case. The 77 % is the surface
     relative humidity of Manabe & Wetherald 1967 (equation 2), the same
-    figure as the column's test profile; the paper is paywalled and the
-    value is confirmed indirectly (below).
+    figure as the column's test profile, which the paper takes from
+    observed hemispheric means (read in study 33; *Water: saturation,
+    humidity and the limit*).
   - *Cloud albedo.* The water clouds reflect 0.276 of the light falling
     on their share of the sky, fitted by bisection so that Earth's Bond
     albedo is 0.293 (Stephens et al. 2015), over a ground of 0.122, the
     77 % air over 288 K and the law's cloud cover of 0.682. No
     observation gives a single cloud reflectance for one column. The fit
     absorbs what the port lacks: the clear-sky terms of the measured Sun,
-    ozone and O₂ (#653, #655), the aerosols' reflection, and the column's
-    1.735 cm of water against 2.45 to 2.53 observed (#654). The legacy
-    fitted 0.252 on 0.30.
+    ozone and O₂ (#653, #655), the aerosols' reflection, and the
+    sunlight the column's 1.735 cm of water leaves unabsorbed against
+    the 2.4 cm a single column needs for the observed field (#654, study
+    33): about 0.0025 of Bond albedo (measured). The legacy fitted 0.252
+    on 0.30.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;
@@ -968,9 +1078,20 @@ the Bond albedo are there too (change 2b-2).
 - **Earth's water.** The climate puts 1.735 cm of precipitable water in
   Earth's column at 77 % (the shortwave grid; 1.67 cm converged), against
   2.45 to 2.53 cm observed (NVAP heritage 24.5 mm and NVAP-M 25.3 mm,
-  Forsythe et al. 2014). Issue #654. The absorption tests therefore scale
-  the saturated shortwave column's vapour level by level to a given water,
-  which tests the optics and leaves the humidity to #654:
+  Forsythe et al. 2014). Issue #654. Study 33 found the comparison is not
+  like for like: one column carries the observed field's outgoing
+  longwave at about 1.75 cm and its absorbed sunlight at about 2.4 cm
+  (*How much water one column holds*). The app's column is right for the
+  longwave and holds about 0.65 cm too little for the shortwave: its air
+  absorbs 3.8 W/m² less than the field would (48.41 against 52.19,
+  measured), but only about 0.0025 of it reaches the Bond albedo (the
+  rest is light the ground would have absorbed), and the climate reads
+  only the Bond albedo (`shortwave_budget`'s `absorbed_by_air` feeds no
+  engine). Moistening the whole column to 2.5 cm would darken its
+  clear-sky OLR by 6.9 W/m² at 288 K (measured), out of the like-for-like
+  window of study 32. The absorption tests scale the saturated shortwave
+  column's vapour level by level to a given water, which tests the
+  optics:
   - At 2.5 cm the air absorbs 52.70 W/m² (window 48-54, from Kim &
     Ramanathan's 50 W/m² of water at NVAP's 2.45-2.53 cm, plus CO₂'s 1.0
     to 1.6). With the measured Sun the study gives 55.2 to 56.4 W/m² at
@@ -981,11 +1102,13 @@ the Bond albedo are there too (change 2b-2).
     reflected light falls by 0.338 W/m² (0.4 ± 0.2). The response to
     water matches.
   - The 3.0 cm of Table 2 is the input of their sensitivity case, not the
-    water of their global run (NVAP-NG, 2.45-2.53 cm, §[22]). Two biases
-    are not quantified: a field average of a concave function lies below
-    its value at the mean water, and MT_CKD 4.3's continuum may absorb
-    more than the Clough 1989 continuum and HITRAN 2000 of Kim &
-    Ramanathan. No source was read for either size.
+    water of their global run (NVAP-NG, 2.45-2.53 cm, §[25]). The field
+    average of a concave function lies below its value at the mean water:
+    on RFMIP's profiles, by 3.05 W/m² weighted by area (49.45 against
+    52.50 at the mean vapour), but the sunlight falls mostly on the wet
+    tropics and weighting by it gives back 2.74 (52.19, study 33). Whether
+    MT_CKD 4.3's continuum absorbs more than the Clough 1989 continuum and
+    HITRAN 2000 of Kim & Ramanathan is still not quantified.
 - **The Manabe–Wetherald water cap.** The falling humidity
   $RH(Q) = RH_s\,(Q - 0.02)/0.98$ (equation 2 of Manabe & Wetherald 1967,
   as `column.rs` cites it; Kluft et al. 2019 number it 3) stays below
@@ -996,7 +1119,8 @@ the Bond albedo are there too (change 2b-2).
   surface as a fully saturated column (after Kopparapu et al. 2013 for
   moist and runaway airs), where the formula itself is continuous. A
   bisection on the falling profile cannot reach 3.0 cm for this reason.
-  Issue #654.
+  Issue #654. For Earth the cap does not bind: the observed mean
+  relative humidity peaks at 0.79 near the ground (RFMIP, study 33).
 - **The methane anti-greenhouse.** The share of the star's light that the
   methane of the stratosphere absorbs, `methane::stratospheric_share`,
   takes its near-infrared half-saturation, `CH4_NEAR_IR_HALF_BAR`, from a
@@ -1381,122 +1505,131 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
     arXiv:2207.10238.
 26. Elsasser, W. M. 1942, *Heat Transfer by Infrared Radiation in the
     Atmosphere*, Harvard Meteorological Studies 6 (no DOI).
-27. Forsythe, J. M., Vonder Haar, T. H., Cronk, H. Q. 2014, NOAA ESRL Global
+27. Falk, U., Schröder, M. et al. 2022, *Climate Assessment Report*, ESA
+    Water Vapour CCI, D5.1 v3.1 (the clear-sky bias from ERA5, as
+    summarised by Trent et al. 2024, §5; not opened).
+28. Forsythe, J. M., Vonder Haar, T. H., Cronk, H. Q. 2014, NOAA ESRL Global
     Monitoring Annual Conference slides on NVAP-M (global mean
     precipitable water 25.3 mm, heritage NVAP 24.5 mm).
-28. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
-29. Gettelman, A. et al. 2006, *J. Climate* 19, 6104,
+29. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
+30. Gettelman, A. et al. 2006, *J. Climate* 19, 6104,
     doi:10.1175/JCLI3956.1 (read in the copy at `opensky.ucar.edu`).
-30. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
+31. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
     arXiv:1503.04835.
-31. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
+32. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
     Geosci.* 6, 661, doi:10.1038/ngeo1892.
-32. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
+33. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
     107949, doi:10.1016/j.jqsrt.2021.107949 (HITRAN2020), and Gordon, I. E.
     et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353, 109807,
     doi:10.1016/j.jqsrt.2026.109807 (HITRAN2024, the release the app
     reads).
-33. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
+34. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
     doi:10.1006/icar.1997.5773.
-34. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
+35. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
     *ApJ* 806, 216, doi:10.1088/0004-637X/806/2/216, arXiv:1505.03552.
-35. Haus, R. et al. 2016, *Icarus* 272, 178,
+36. Haus, R. et al. 2016, *Icarus* 272, 178,
     doi:10.1016/j.icarus.2016.02.048.
-36. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
+37. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
     doi:10.5194/acp-21-14927-2021.
-37. Heng, K., Mendonça, J. M., Lee, J.-M. 2014, arXiv:1405.0026 (the table
+38. Held, I. M., Soden, B. J. 2006, *J. Climate* 19, 5686,
+    doi:10.1175/JCLI3990.1 (read in the copy at
+    <https://www.image.ucar.edu/idag/Papers/Held_hydro.pdf>: §2, Fig. 2a).
+39. Heng, K., Mendonça, J. M., Lee, J.-M. 2014, arXiv:1405.0026 (the table
     of two-stream closures).
-38. HITRAN collision-induced absorption, 2024 files:
+40. HITRAN collision-induced absorption, 2024 files:
     `CO2-CO2_2024.cia`, <https://hitran.org/cia/>, documented by Terragni,
     Gordon et al., "Collision Induced Absorption in HITRAN2024: Enhanced and
     Improved Data for Atmospheric and Astrophysical Applications", through
     <https://hitran.org/data/CIA/CIA_Readme_2024.pdf>.
-39. Hogan, R. J., Matricardi, M. 2020, *Geosci. Model Dev.* 13, 6501,
+41. Hogan, R. J., Matricardi, M. 2020, *Geosci. Model Dev.* 13, 6501,
     doi:10.5194/gmd-13-6501-2020.
-40. Hohm, U. 1994, *Chem. Phys.* 179, 533,
+42. Hohm, U. 1994, *Chem. Phys.* 179, 533,
     doi:10.1016/0301-0104(94)87028-4 (closed access; not opened).
-41. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
+43. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
     for the Thermodynamic Properties of Ordinary Water Substance*,
     <https://iapws.org/documents/release/IAPWS-95.download>.
-42. IAPWS R9-97, *Release on the Refractive Index of Ordinary Water
+44. IAPWS R9-97, *Release on the Refractive Index of Ordinary Water
     Substance as a Function of Wavelength, Temperature and Pressure*, 1997,
     <https://iapws.org/technical-guidance/release/Rindex>.
-43. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
+45. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
     doi:10.3847/0004-6256/152/2/41, arXiv:1605.09788.
-44. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
-45. Kato, S. et al. 2018, *J. Climate* 31, 4501,
+46. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
+47. Kato, S. et al. 2018, *J. Climate* 31, 4501,
     doi:10.1175/JCLI-D-17-0523.1.
-46. Kiehl, J. T., Trenberth, K. E. 1997, *Bull. Am. Meteorol. Soc.* 78,
+48. Kiehl, J. T., Trenberth, K. E. 1997, *Bull. Am. Meteorol. Soc.* 78,
     197, doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2 (read on
     2026-11-23 in an archived course copy, web.archive.org snapshot
     20260623155323 of `www.geo.utexas.edu/courses/387H/PAPERS/kiehl.pdf`).
-47. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
+49. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
     doi:10.1029/2007JD008434 (read on 2026-11-23 in the copy at
     `ramanathan.ucsd.edu/wp-content/uploads/sites/460/2017/10/pr157.pdf`).
-48. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
+50. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
     doi:10.1109/TGRS.2012.2227333.
-49. Kluft, L., Dacie, S., Buehler, S. A., Schmidt, H., Stevens, B. 2019,
+51. Kluft, L., Dacie, S., Buehler, S. A., Schmidt, H., Stevens, B. 2019,
     *J. Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1 (read in the
     MPG.PuRe copy, item 3012704).
-50. Kokhanovsky, A. A., Mayer, B., Rozanov, V. V. 2005, *Atmos. Res.* 73, 37,
+52. Kokhanovsky, A. A., Mayer, B., Rozanov, V. V. 2005, *Atmos. Res.* 73, 37,
     doi:10.1016/j.atmosres.2004.07.004.
-51. Koll, D. D. B., Cronin, T. W. 2018, *Proc. Natl. Acad. Sci.* 115,
+53. Koll, D. D. B., Cronin, T. W. 2018, *Proc. Natl. Acad. Sci.* 115,
     10293, doi:10.1073/pnas.1809868115 (read on PMC, PMC6187190).
-52. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
+54. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
     1923, doi:10.1175/JAS-D-22-0178.1.
-53. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
+55. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
     doi:10.1088/0004-637X/765/2/131, arXiv:1301.6674.
-54. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
+56. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
     doi:10.1029/90JD01945.
-55. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
+57. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
     greenhouse processes on Earth-like planets", *Nature* 504, 268,
     doi:10.1038/nature12827, arXiv:1312.3337.
-56. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
+58. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
     doi:10.1029/2011GL050053.
-57. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
+59. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
     doi:10.1175/JCLI-D-17-0208.1.
-58. Loeb, N. G. et al. 2020, *J. Climate* 33, 61,
+60. Loeb, N. G. et al. 2020, *J. Climate* 33, 61,
     doi:10.1175/JCLI-D-19-0381.1 (read in NTRS 20205002167; Table 3).
-59. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
-    doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2.
-60. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
+61. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
+    doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2 (read in the scan
+    GFDL hosts, `sm6701.pdf`, by optical character recognition: eqs. 2
+    and 3, Fig. 3, with its sources Telegadas & London 1954, Murgatroyd
+    1960, Mastenbrook 1963 and Houghton 1963, which were not opened).
+62. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
     doi:10.1126/science.11538492.
-61. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
+63. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
     doi:10.1175/1520-0469(1980)037<0630:TSATRT>2.0.CO;2.
-62. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
+64. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
     doi:10.1098/rsta.2011.0295. Release MT_CKD_H2O 4.3:
     <https://github.com/AER-RC/MT_CKD_H2O/releases/tag/4.3>.
-63. MOOSE, `modules/fluid_properties`, `CO2FluidProperties.C` and `.h`
+65. MOOSE, `modules/fluid_properties`, `CO2FluidProperties.C` and `.h`
     (Span & Wagner 1996's sublimation equation and triple point),
     `https://github.com/idaholab/moose`, commit `15eacf5e`.
-64. Murphy, D. M., Koop, T. 2005, *Q. J. R. Meteorol. Soc.* 131, 1539,
+66. Murphy, D. M., Koop, T. 2005, *Q. J. R. Meteorol. Soc.* 131, 1539,
     doi:10.1256/qj.04.94 (as Kluft et al. 2019 and Gettelman et al. 2006
     use it; the study's scratch runs took its eqs. 7 and 10).
-65. Murphy, W. F. 1977, *J. Chem. Phys.* 67, 5877, doi:10.1063/1.434794
+67. Murphy, W. F. 1977, *J. Chem. Phys.* 67, 5877, doi:10.1063/1.434794
     (abstract, through Crossref).
-66. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
+68. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
     Res. Lett.* 25, 2715, doi:10.1029/98GL01908.
-67. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
+69. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
     doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2.
-68. NASA Goddard, *Earth Fact Sheet* (D. R. Williams),
+70. NASA Goddard, *Earth Fact Sheet* (D. R. Williams),
     <https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html>
     (mean surface pressure, 1.014 bar; dry-air composition, "Major:
     78.08% Nitrogen (N2), 20.95% Oxygen (O2)", "Argon (Ar) - 9340" ppm;
     read 2026-11-23).
-69. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
+71. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
     doi:10.1029/2010JE003659.
-70. NOAA Global Monitoring Laboratory, global annual mean CO₂ (X. Lan et
+72. NOAA Global Monitoring Laboratory, global annual mean CO₂ (X. Lan et
     al.), `co2_annmean_gl.txt`, <https://gml.noaa.gov/ccgg/trends/>, read
     2026-11-25 (378.98 ppm in 2005 to 399.65 ppm in 2015).
-71. Peck, E. R., Fisher, D. J. 1964, *J. Opt. Soc. Am.* 54, 1362,
+73. Peck, E. R., Fisher, D. J. 1964, *J. Opt. Soc. Am.* 54, 1362,
     doi:10.1364/JOSA.54.001362 (abstract).
-72. Peck, E. R., Khanna, B. N. 1966, *J. Opt. Soc. Am.* 56, 1059,
+74. Peck, E. R., Khanna, B. N. 1966, *J. Opt. Soc. Am.* 56, 1059,
     doi:10.1364/JOSA.56.001059 (abstract; pressure from the
     refractiveindex.info entry `main/N2/Peck-15C`).
-73. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
+75. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
     Cambridge University Press: §2.6 (phase change), §2.7 (the moist
     adiabat), §3.6 (the skin temperature).
-74. Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci. Model Dev.* 9,
+76. Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci. Model Dev.* 9,
     3447, doi:10.5194/gmd-9-3447-2016 (the RFMIP profiles, read in
     `multiple_input4MIPs_radiation_RFMIP_UColorado-RFMIP-1-2_none.nc` of
     <https://github.com/earth-system-radiation/rrtmgp-data>, commit
@@ -1505,67 +1638,73 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
     with the RRTMGP reference fluxes
     `rlu_Efx_RTE-RRTMGP-181204_rad-irf_r1i1p1f1_gn.nc`, SHA-256
     `254569d9bb0934fb510306c3e22e13ea826bd918727b477fc20600213923493c`).
-75. Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J. Adv. Model. Earth
+77. Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J. Adv. Model. Earth
     Syst.* 11, 3074, doi:10.1029/2019MS001621 (read on PMC, PMC6900118;
     Table 1).
-76. Ranjan, S., Sasselov, D. D. 2017, *Astrobiology* 17, 169,
+78. Ranjan, S., Sasselov, D. D. 2017, *Astrobiology* 17, 169,
     doi:10.1089/ast.2016.1519, arXiv:1610.06223.
-77. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
+79. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
     doi:10.1038/ngeo2020, arXiv:1312.6859.
-78. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
+80. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
     doi:10.1175/JCLI-D-21-0275.1.
-79. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
+81. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
     2261, doi:10.1175/1520-0477(1999)080<2261:AIUCFI>2.0.CO;2.
-80. Schmidt, G. A., Ruedy, R. A., Miller, R. L., Lacis, A. A. 2010, *J.
+82. Schmidt, G. A., Ruedy, R. A., Miller, R. L., Lacis, A. A. 2010, *J.
     Geophys. Res.* 115, D20106, doi:10.1029/2010JD014287 (read in the NASA
     GISS copy; Table 1).
-81. Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W., Burrows, J. P.
+83. Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W., Burrows, J. P.
     2014, *Atmos. Meas. Tech.* 7, 625, doi:10.5194/amt-7-625-2014.
-82. Setzmann, U., Wagner, W. 1991, *J. Phys. Chem. Ref. Data* 20, 1061,
+84. Setzmann, U., Wagner, W. 1991, *J. Phys. Chem. Ref. Data* 20, 1061,
     doi:10.1063/1.555898.
-83. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
+85. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
     293, doi:10.1016/j.jqsrt.2004.07.025.
-84. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
+86. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
     Pergamon (no DOI). Equation 1.87, as cited by Zuluaga, Sucerquia,
     Alvarado-Montes 2022, arXiv:2207.08636.
-85. Span, R., Wagner, W. 1996, *J. Phys. Chem. Ref. Data* 25, 1509,
+87. Sohn, B.-J., Bennartz, R. 2008, *J. Geophys. Res.* 113, D20107,
+    doi:10.1029/2008JD010053 (the clear-sky bias of about 10 %, as
+    Trent et al. 2024 quote it; not opened).
+88. Span, R., Wagner, W. 1996, *J. Phys. Chem. Ref. Data* 25, 1509,
     doi:10.1063/1.555991.
-86. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
+89. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
     doi:10.1002/2014RG000449.
-87. Stephenson, R. M., Malanowski, S. 1987, *Handbook of the Thermodynamics
+90. Stephenson, R. M., Malanowski, S. 1987, *Handbook of the Thermodynamics
     of Organic Compounds*, Springer, doi:10.1007/978-94-009-3173-2 (as
     listed by the NIST Chemistry WebBook's phase-change data).
-88. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
+91. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
     doi:10.1175/BAMS-D-12-00117.1.
-89. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
+92. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
     109595, doi:10.1016/j.jqsrt.2025.109595.
-90. Thalman, R., Zarzana, K. J., Tolbert, M. A., Volkamer, R. 2014, *J. Quant.
+93. Thalman, R., Zarzana, K. J., Tolbert, M. A., Volkamer, R. 2014, *J. Quant.
     Spectrosc. Radiat. Transf.* 147, 171, doi:10.1016/j.jqsrt.2014.05.030
     (closed access; not opened).
-91. thermopack, `fluids/CarbonDioxide.json` and `Methane.json`
+94. thermopack, `fluids/CarbonDioxide.json` and `Methane.json`
     (`sublimation_curve`), `https://github.com/thermotools/thermopack`,
     commit `d68c794c`.
-92. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
-93. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
+95. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
+96. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
     Geophys. Res.* 94, 16287, doi:10.1029/JD094iD13p16287.
-94. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
+97. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
     doi:10.1073/pnas.0608561103.
-95. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
+98. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
     116265, doi:10.1016/j.icarus.2024.116265.
-96. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
+99. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
     doi:10.1175/JCLI-3299.1.
-97. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
+100. Trent, T. et al. 2024, *Atmos. Chem. Phys.* 24, 9667,
+    doi:10.5194/acp-24-9667-2024 (the GEWEX water vapour assessment,
+    read: §§4-5).
+101. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
     doi:10.1063/1.555926 (the saturation equations of IAPWS
     SR1-86(1992)); Wagner, W., Riethmann, T., Feistel, R., Harvey, A. H.
     2011, *J. Phys. Chem. Ref. Data* 40, 043103, doi:10.1063/1.3657937
     (sublimation pressure of ice Ih, IAPWS R14-08(2011)).
-98. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
+102. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
     (cited for Kato et al.'s clear-sky OLR).
-99. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
+103. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
     doi:10.1175/1520-0469(1996)053<3084:ASCPFU>2.0.CO;2.
-100. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
+104. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
      doi:10.1063/1.555899.
-101. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
+105. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
 
 ## See also
 

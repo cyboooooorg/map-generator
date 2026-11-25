@@ -1728,10 +1728,15 @@ holds "a mean value of 75%–80% over most oceans in all seasons" (Dai
 2006, *J. Climate* 19, 3589, doi:10.1175/JCLI3816.1; abstract read,
 15 000 stations and ships, 1976-2005). 0.77 is the surface value of the
 fixed relative humidity of Manabe & Wetherald 1967 (*J. Atmos. Sci.*
-24, 241, doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2; the
-abstract read, the full text refused to scripts), as the codes that
+24, 241, doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2; read in
+study 33 from the scan GFDL hosts: their eq. 2, the surface value fitted
+to observed hemispheric means), as the codes that
 implement their profile take it (konrad's `Manabe67`, `rh_surface=0.77`;
-climlab's `FixedRelativeHumidity`, `relative_humidity=0.77`). The
+climlab's `FixedRelativeHumidity`, `relative_humidity=0.77`). How much
+water that profile puts in Earth's column, and why one column holds
+less than the observed 2.45 to 2.53 cm, is in
+[radiative transfer](radiative-transfer.md), *How much water one column
+holds* (study 33, issue #654). The
 saturation is `water::vapour_saturation_bar`: the sublimation curve of
 ice Ih below the triple point (273.16 K, 611.657 Pa; Wagner et al.
 2011, IAPWS R14-08(2011), eq. 6), the saturation curve over liquid from
