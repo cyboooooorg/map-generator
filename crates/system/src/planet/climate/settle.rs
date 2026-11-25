@@ -72,6 +72,57 @@ pub(crate) struct Settle {
     /// The steps of the albedo's fixed point: under the numerics'
     /// `albedo_iterations` when it settled.
     pub steps: usize,
+    /// Whether the albedo's fixed point has none: its bracket closed on a
+    /// jump of the climate (#729), which then cycles between the climates
+    /// on either side of it; the climate is the colder of the two, and
+    /// not converged.
+    pub cycles: bool,
+}
+
+/// One end of the bracket of the albedo's fixed point: the albedo and
+/// emissivity a climate was solved under, the push it derives, and that
+/// climate.
+#[derive(Clone, Copy, Debug)]
+struct End {
+    albedo: f64,
+    emissivity: f64,
+    push: f64,
+    pass: Pass,
+}
+
+/// The bracket of the albedo's fixed point once its push has turned back:
+/// the last end that pushes up (`up`, a push of zero included) and the
+/// last that pushes down, each with the push the Illinois rule weighs it
+/// by (halved each time the other end is replaced twice in a row).
+#[derive(Clone, Copy, Debug, Default)]
+struct Bracket {
+    up: Option<(End, f64)>,
+    down: Option<(End, f64)>,
+    last_up: Option<bool>,
+}
+
+impl Bracket {
+    /// Takes `end` as the new end on its side.
+    fn take(&mut self, end: End) {
+        let up = end.push >= 0.0;
+        if self.last_up == Some(up) {
+            let kept = if up { &mut self.down } else { &mut self.up };
+            if let Some((_, weight)) = kept {
+                *weight *= 0.5;
+            }
+        }
+        if up {
+            self.up = Some((end, end.push));
+        } else {
+            self.down = Some((end, end.push));
+        }
+        self.last_up = Some(up);
+    }
+
+    /// The two ends with their weights, once both sides are known.
+    fn ends(&self) -> Option<((End, f64), (End, f64))> {
+        self.up.zip(self.down)
+    }
 }
 
 /// The equilibrium temperature of a surface that takes `starlight`,
@@ -292,9 +343,19 @@ pub(crate) fn warm_start(body: &mut ClimateBody) -> (Fraction, Fraction) {
 /// used), but at least the numerics' `albedo_damping` of the way and
 /// never past the derived light, the damping halving after each step
 /// whose push turns back, so that a swing settles (#593: the secant saves
-/// about half the steps). It goes on until the temperature moves less
-/// than the numerics' `albedo_tolerance` and the push is under it too,
-/// at most `albedo_iterations` steps.
+/// about half the steps). Once the push has turned back, the fixed point
+/// lies between the last albedo that pushes up and the last that pushes
+/// down, and each step goes to the zero of the push the Illinois rule of
+/// [`regula_falsi`] puts between them (#729: the secant alone, at the
+/// full way, kept a climate cycling between a warm and a collapsed side
+/// for all its steps). It goes on until the temperature moves less than
+/// the numerics' `albedo_tolerance` and the push is under it too, at most
+/// `albedo_iterations` steps, or until the bracket is narrower than the
+/// numerics' `albedo_bracket` without settling: the climate jumps there
+/// and has no fixed point, so it cycles (Menou 2015, Haqq-Misra et al.
+/// 2016 find such cycles near the outer edge); the climate is then the
+/// colder end's (the one a cooling planet reaches), not converged, and
+/// [`Settle::cycles`].
 ///
 /// The climate keeps the albedo and emissivity it was solved under, so
 /// that it reproduces; it is not a snowball (the frozen branch is drawn
@@ -317,6 +378,9 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
     let mut damping = numerics.albedo_damping;
     let mut moved = 0.0;
     let mut before: Option<Point> = None;
+    let mut bracket = Bracket::default();
+    let mut previous: Option<End> = None;
+    let mut cycles = false;
     while steps < numerics.albedo_iterations {
         let t = pass.temperature;
         let derived = body.derived_albedo(t, &pass.air).get();
@@ -329,6 +393,43 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         if (t.0 - last).abs() < tolerance && push.abs() < tolerance {
             settled = true;
             break;
+        }
+        let end = End {
+            albedo,
+            emissivity,
+            push,
+            pass,
+        };
+        // The push turned back: the step before and this one bracket the
+        // fixed point; from then on every step is an end of the bracket.
+        if bracket.ends().is_some() {
+            bracket.take(end);
+        } else if before.is_some_and(|b| (b.f >= 0.0) != (push >= 0.0)) {
+            if let Some(first) = previous {
+                bracket.take(first);
+            }
+            bracket.take(end);
+        }
+        previous = Some(end);
+        if let Some(((up, w_up), (down, w_down))) = bracket.ends() {
+            if (up.albedo - down.albedo).abs() < numerics.albedo_bracket {
+                let cold = if down.pass.temperature.0 < up.pass.temperature.0 {
+                    down
+                } else {
+                    up
+                };
+                (albedo, emissivity, pass) = (cold.albedo, cold.emissivity, cold.pass);
+                cycles = true;
+                break;
+            }
+            // The zero of the push on the line between the two ends.
+            let share = w_up / (w_up - w_down);
+            last = t.0;
+            albedo = up.albedo + share * (down.albedo - up.albedo);
+            emissivity = up.emissivity + share * (down.emissivity - up.emissivity);
+            pass = under_albedo(body, fraction(albedo), fraction(emissivity));
+            steps += 1;
+            continue;
         }
         // A push back the way the last step came: the fixed point is
         // between them, and the next steps go half as far.
@@ -371,6 +472,7 @@ pub(crate) fn settle(body: &mut ClimateBody, start: (Fraction, Fraction)) -> Set
         liquid: liquid(t, &pass.air, i.water, i.runaway, &condensate, substellar),
         iterations: pass.iterations,
         steps,
+        cycles,
     }
 }
 

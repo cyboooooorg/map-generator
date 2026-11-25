@@ -29,6 +29,8 @@ pub(crate) struct Climate {
     pub regulated: Traced<bool>,
     /// Whether the fixed points settled within the solver's tolerance.
     pub converged: Traced<bool>,
+    /// Whether the albedo's fixed point has none and the climate cycles.
+    pub cycles: Traced<bool>,
     /// The air the climate leaves.
     pub atmosphere: Atmosphere,
     /// The N2 and CH4 on the ground, recorded when positive.
@@ -103,8 +105,8 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 ///   volcanism; the draw is a drawn leaf;
 /// - the state from `I`, plus the chance and the draw on a bistable body;
 /// - the temperature from `I` and the state;
-/// - the albedo, the emissivity, `regulated` and `converged` from the
-///   temperature and `I`;
+/// - the albedo, the emissivity, `regulated`, `converged` and `cycles`
+///   from the temperature and `I`;
 /// - the equilibrium temperature from the albedo and the fluxes;
 /// - each partial pressure from its bare partial and the temperature
 ///   (the CO2 also from the CO2 outgassed and frozen, the vapour also
@@ -217,6 +219,7 @@ pub(crate) fn record(
     )?;
     let regulated = trace.record(Code::of(codes::CLIMATE_REGULATED), settle.regulated, &from)?;
     let converged = trace.record(Code::of(codes::CLIMATE_CONVERGED), settle.converged, &from)?;
+    let cycles = trace.record(Code::of(codes::CLIMATE_CYCLES), settle.cycles, &from)?;
     let mut from = vec![bond_albedo.node()];
     from.extend(&fluxes);
     let equilibrium = trace.record(
@@ -305,6 +308,7 @@ pub(crate) fn record(
         emissivity,
         regulated,
         converged,
+        cycles,
         atmosphere: Atmosphere {
             surface_pressure,
             partial: partials,

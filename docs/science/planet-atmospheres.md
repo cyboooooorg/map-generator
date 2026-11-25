@@ -3468,6 +3468,44 @@ holds it. Searched and not found: a grey or band opacity of Titan's
 collision-induced greenhouse usable as one number; HITRAN's N₂–N₂ and
 N₂–CH₄ CIA tables would replace the fit, and were not extracted.
 
+#### A climate with no fixed point (#729)
+
+Just past a methane Earth's outer edge the albedo's fixed point has no
+solution. At 1.44 AU, from its warm start, the climate jumps between
+three states: the thermostat (288 K, 15.2 bar of CO₂), the warm balance
+at the maximum greenhouse (277 K, 15.8 bar) and a collapse (188 K,
+0.57 bar). The CO₂ of a warm climate raises the albedo it derives (its
+Rayleigh scattering) past the light at which its CO₂ frosts out; the
+collapsed climate derives a lower albedo, which brings the CO₂ back.
+The collapse is a jump in the light: from the maximum greenhouse its
+fixed point either stops at a warm balance or falls to the cold one.
+Legacy's step (the secant of #593, between half the way and the whole
+way to the albedo derived) kept the full step inside that cycle, so the
+fixed point ran to `ALBEDO_ITERATIONS` and kept whichever climate its
+last step landed on.
+
+The rewrite keeps the bracket the fixed point has once its push turns
+back: the last albedo that pushes up and the last that pushes down. Each
+further step goes to the zero of the push between them by the Illinois
+rule. Where a fixed point exists the push reaches it as before; a fixed
+point that never brackets takes the same steps as legacy, to the last
+bit (Earth and Titan, measured). Where the bracket narrows to
+`ALBEDO_BRACKET` without the temperature settling, the climate has a
+jump and no fixed point: it is stored on its colder side, the one a
+cooling planet reaches, with `converged: false` and the cause node
+`planet.climate.cycles` true (decided with the user, 2026-11-26).
+
+**Departure.** Limit cycles between a warm and a glaciated state near
+the outer edge are published for the carbonate-silicate cycle at low
+outgassing: Kadoya and Tajika 2014, Menou 2015 and Haqq-Misra et al.
+2016. The cycle here is the static analogue of those. A climate that
+spends part of its time on each side has a time-averaged state that a
+future law would rest on these papers for. The rewrite draws no share
+of time: the cold side and the `cycles` flag say that no stable warm
+state is claimed. The edge of a methane Earth moves from 1.4443 to
+1.4355 AU with it (measured, `one_greenhouse_search_on_a_condensing_air`),
+and that test went from 833 s to 74 s (release).
+
 #### Solver constants (rule of #648)
 
 A guard (a cap on steps, a search range, a start or a damping that
@@ -3489,6 +3527,7 @@ discretisation is a `Calibration:` held by a convergence test.
 | `ALBEDO_ITERATIONS` | 200 | Definition | the reference climates settle under it | 1 |
 | `ALBEDO_TOLERANCE_K` | 0.1 K | Calibration | at 0.01 K the reference climates move under 0.1 K | 1 |
 | `ALBEDO_DAMPING` | 0.5 | Definition | at 0.25 the converged climates agree | 3 |
+| `ALBEDO_BRACKET` | 1e-6 in albedo | Definition | a cycling climate stops on its cold side within 40 steps (#729) | 3 |
 | `CONDENSE_ITERATIONS` | 100 | Definition | Titan and Triton settle under it | 1 |
 | `THERMOSTAT_TOLERANCE` | 1e-3 in ln CO₂ | Calibration | at 1e-4 Earth moves under 0.01 K | 1 |
 | `GREENHOUSE_DECADES` | 4 | Definition | the reference maxima lie inside the range | 1 |
@@ -4582,6 +4621,10 @@ another paper, from memory) is said where it is used.
   the steam over a magma ocean (abstract read).
 - Hamano et al. 2015, doi:10.1088/0004-637X/806/2/216.
 - Hapke 1981, *JGR* 86, 3039.
+- Haqq-Misra, Kopparapu, Batalha, Harman and Kasting 2016, *ApJ* 827,
+  120, doi:10.3847/0004-637X/827/2/120, limit cycles near the outer
+  edge of the habitable zone (cited for the departure of #729; title
+  and venue checked, not read).
 - Hayashi 1981, *Prog. Theor. Phys. Suppl.* 70, 35,
   doi:10.1143/PTPS.70.35, eq. 2.3, the thin disc's `T ∝ L^¼` (not
   reached; as Ida & Lin 2005 and Kennedy & Kenyon 2008 quote it).
@@ -4624,6 +4667,10 @@ another paper, from memory) is said where it is used.
   Earth's nitrogen.
 - Johnstone et al. 2021, *A&A* 649, A96,
   doi:10.1051/0004-6361/202038407.
+- Kadoya and Tajika 2014, *ApJ* 790, 107,
+  doi:10.1088/0004-637X/790/2/107, the climate of Earth-like planets
+  across the habitable zone with volcanic CO₂ degassing (cited for the
+  departure of #729; title and venue checked, not read).
 - Karkoschka 2001, albedos of the Uranian moons.
 - Karwat 1924, NH₃'s sublimation pressure at 162.39 K, through Fray
   and Schmitt 2009 as Blakley et al. 2024 quote it.
@@ -4739,6 +4786,10 @@ another paper, from memory) is said where it is used.
   the annual insolation integral (cited by Nadeau and McGehee).
 - McKay, Pollack and Courtin 1991,
   doi:10.1126/science.11538492, Titan's greenhouse.
+- Menou 2015, *Earth Planet. Sci. Lett.* 429, 20,
+  doi:10.1016/j.epsl.2015.07.046, climate stability of habitable
+  Earth-like planets (cited for the departure of #729; title and venue
+  checked, not read).
 - Meza et al. 2019, "Pluto's lower atmosphere and pressure evolution
   from ground-based stellar occultations, 1988-2016", *A&A* 625, A42,
   doi:10.1051/0004-6361/201834281, arXiv:1903.02315 (§ 4 read).

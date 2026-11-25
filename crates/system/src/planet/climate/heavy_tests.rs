@@ -1755,3 +1755,37 @@ fn a_thick_steam_runaway_settles_past_the_end_of_the_plateau() {
     assert!(*s.hides_surface.expect("judged").value());
     assert!(under_steam(&s));
 }
+
+/// An orbit just past a methane Earth's outer edge (1.4355 AU) where the
+/// albedo's fixed point has none (#729): a warm climate at its maximum
+/// greenhouse derives a Rayleigh albedo that collapses its CO₂, and the
+/// collapsed climate derives one that warms it back.
+const CYCLING_AU: f64 = 1.44;
+
+/// Definition: the most albedo steps the cycling orbit may take before
+/// its bracket closes, 40: the bracket narrows from the swing (about
+/// 0.02 in albedo) to [`super::ALBEDO_BRACKET`] in about 15 halvings;
+/// before #729 it ran to the 200 of [`super::ALBEDO_ITERATIONS`].
+const CYCLING_STEPS: usize = 40;
+
+#[test]
+#[ignore = "heavy: a methane Earth just past its outer edge, a cycling climate"]
+fn a_climate_with_no_fixed_point_stops_on_its_cold_side() {
+    let like = ClimateInputs {
+        air: PartialPressures {
+            ch4: titan().air.ch4,
+            ..earth().air
+        },
+        ..earth()
+    };
+    let solved = solve_with(&moved(&like, CYCLING_AU), WARM_DRAW, &Numerics::DEFAULT);
+    let c = &solved.settle;
+    println!(
+        "{CYCLING_AU} AU: {:.3} K, CO2 {:.4} bar, {} steps, cycles {}, converged {}",
+        c.temperature.0, c.air.co2, c.steps, c.cycles, c.converged
+    );
+    assert!(c.cycles && !c.converged, "{c:?}");
+    assert!(c.steps <= CYCLING_STEPS, "{} steps", c.steps);
+    // The colder side: frozen over, its thermostat lost.
+    assert!(frozen_over(c) && !c.regulated, "{c:?}");
+}
