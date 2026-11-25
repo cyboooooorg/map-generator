@@ -203,6 +203,37 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give.
 - **The temperature grid** of `opacity.bin` starts at 100 K; Titan's
   column runs from 69 to 94 K and takes 100 K lines.
 
+## Decisions (user, 2026-11-25)
+
+- **Earth's methane and N₂O** get a study of their own first, for a law
+  of the gases life makes. No imposed value.
+- **The N₂ and O₂ pairs ship first, alone**, as the first pull request of
+  issue #703.
+- **Titan's grey stand-in is replaced by the pairs** (N₂-N₂, N₂-CH₄,
+  CH₄-CH₄), accepting 92.30 K against the measured 93.65 K: the test is
+  widened, and what is missing is named (N₂-H₂ pairs, methane's own lines,
+  the haze's infrared). `CH4_OPACITY` and `CH4_SATURATION_BAR` go.
+- **Methane's lines now, N₂O's later.** Ozone's longwave (issue #704,
+  study 34) joins the lines work, so `opacity.bin` is rebuilt once.
+- **Methane's near infrared** in `shortwave.bin` is a separate issue,
+  after #655.
+- **Tolerance of the line-by-line tests:** no worse than RRTMGP against
+  the same line-by-line references, gas by gas, on RFMIP's step from
+  pre-industrial to present day: methane 0.563 against 0.613 W/m²
+  (−8.2 %), N₂O 0.180 against 0.204 (−11.8 %), from the RFMIP fluxes of
+  Pincus et al. 2016 and 2020, tagged `Source:`.
+
+  Before fixing it, CKDMIP was checked for a published forcing error of a
+  k-distribution that would apply directly. Hogan & Matricardi 2020 give
+  only that RRTMG underestimates the longwave forcing of cutting methane
+  to 350 ppb by about a factor of two (fixed in RRTMGP), and that its
+  shortwave forcing by CO₂ and methane is 25 % to 45 % low. Hogan &
+  Matricardi 2022 (ecCKD) show the longwave forcing errors only in their
+  Fig. 6, and in the text say the 32-term models capture them
+  "accurately"; their 16-term model overestimates N₂O's shortwave
+  forcing by about a factor of two. Neither gives a longwave figure per
+  gas that applies to the column, so the RRTMGP figures were chosen.
+
 ## What we do not know
 
 - A global-mean, line-by-line clear-sky removal of methane and N₂O at
@@ -243,22 +274,27 @@ missing N₂-O₂ roto-translational band, which HITRAN does not give.
 8. Hogan, R. J., Matricardi, M. 2020, "Evaluating and improving the
    treatment of gases in radiation schemes: the Correlated K-Distribution
    Model Intercomparison Project (CKDMIP)", *Geosci. Model Dev.* 13, 6501,
-   doi:10.5194/gmd-13-6501-2020 (read; Tables 2 and 4 in their
-   spreadsheets).
-9. Höpfner, M., Milz, M., Buehler, S., Orphal, J., Stiller, G. 2012, "The
-   natural greenhouse effect of atmospheric oxygen (O₂) and nitrogen
-   (N₂)", *Geophys. Res. Lett.* 39, L10706, doi:10.1029/2012GL051409
-   (author copy read, Table 1).
-10. Karman, T. et al. 2019, "Update of the HITRAN collision-induced
+   doi:10.5194/gmd-13-6501-2020 (read, with Tables 2 and 4 in their
+   spreadsheets and the evaluation of RRTMG).
+9. Hogan, R. J., Matricardi, M. 2022, "A tool for generating fast
+   k-distribution gas-optics models for weather and climate
+   applications", *J. Adv. Model. Earth Syst.* 14, e2022MS003033,
+   doi:10.1029/2022MS003033 (Reading repository copy read: its forcing
+   evaluation and conclusions).
+10. Höpfner, M., Milz, M., Buehler, S., Orphal, J., Stiller, G. 2012,
+    "The natural greenhouse effect of atmospheric oxygen (O₂) and nitrogen
+    (N₂)", *Geophys. Res. Lett.* 39, L10706, doi:10.1029/2012GL051409
+    (author copy read, Table 1).
+11. Karman, T. et al. 2019, "Update of the HITRAN collision-induced
     absorption section", *Icarus* 328, 160,
     doi:10.1016/j.icarus.2019.02.034 (not read; the files' own
     references were).
-11. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
+12. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
     doi:10.1029/90JD01945.
-12. Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci. Model Dev.* 9,
+13. Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci. Model Dev.* 9,
     3447, doi:10.5194/gmd-9-3447-2016 (RFMIP profiles and RRTMGP fluxes,
     `earth-system-radiation/rrtmgp-data` at `dd983b15`).
-13. Pincus, R. et al. 2020, "Benchmark calculations of radiative forcing
+14. Pincus, R. et al. 2020, "Benchmark calculations of radiative forcing
     by greenhouse gases", *J. Geophys. Res. Atmos.* 125, e2020JD033483,
     doi:10.1029/2020JD033483 (the text was not reached; its line-by-line
     fluxes were read in `RobertPincus/rfmip-benchmark-paper-figures` at
