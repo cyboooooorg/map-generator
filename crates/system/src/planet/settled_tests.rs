@@ -434,6 +434,7 @@ fn the_climate_records_its_causes() {
             (codes::CLIMATE_EMISSIVITY, c.emissivity.node()),
             (codes::CLIMATE_REGULATED, c.regulated.node()),
             (codes::CLIMATE_CONVERGED, c.converged.node()),
+            (codes::CLIMATE_CYCLES, c.cycles.node()),
             (
                 codes::CLIMATE_AIR_PRESSURE,
                 c.atmosphere.surface_pressure.node(),

@@ -348,6 +348,10 @@ pub(crate) const CLIMATE_REGULATED: &str = "planet.climate.regulated";
 /// Whether the fixed points of the albedo and of the condensation
 /// settled within the solver's tolerance.
 pub(crate) const CLIMATE_CONVERGED: &str = "planet.climate.converged";
+/// Whether the albedo's fixed point has none: the climate jumps between
+/// a warm and a colder side and cycles (#729); the temperature is the
+/// colder side's.
+pub(crate) const CLIMATE_CYCLES: &str = "planet.climate.cycles";
 /// The state the climate is found in: temperate, snowball, frozen or
 /// runaway. Derived from the inputs and, on a bistable body, from the
 /// snowball chance and its draw.

@@ -121,6 +121,19 @@ pub(crate) const ALBEDO_ITERATIONS: usize = 200;
 /// the converged climates agree, tier 3).
 pub(crate) const ALBEDO_DAMPING: f64 = 0.5;
 
+/// Definition: the width, in Bond albedo and in emissivity (both
+/// fractions, which the fixed point moves together), under which the
+/// bracket of the albedo's fixed point is closed without a settled
+/// climate, 1e-6 (#729):
+/// a stop tolerance, not physics. Once the push has turned back, the
+/// fixed point lies between an albedo that pushes up and one that pushes
+/// down; a bracket this narrow that has not settled holds a jump of the
+/// climate (no fixed point, the climate cycles), not a root. At 1e-6 the
+/// radiative temperature moves by about `T Δa / (4 (1 − a))`, 1e-4 K at
+/// 288 K, a thousandth of [`ALBEDO_TOLERANCE_K`]; the emissivity's,
+/// `T Δε / (4 ε)`, is as small.
+pub(crate) const ALBEDO_BRACKET: f64 = 1e-6;
+
 /// Definition: the most steps of the condensation's fixed point, 100
 /// (legacy `CONDENSE_ITERATIONS`), a cap Titan and Triton settle under
 /// (study 25, "Solver constants").
@@ -290,6 +303,8 @@ pub(crate) struct Numerics {
     pub albedo_iterations: usize,
     /// [`ALBEDO_DAMPING`].
     pub albedo_damping: f64,
+    /// [`ALBEDO_BRACKET`].
+    pub albedo_bracket: f64,
     /// [`CONDENSE_ITERATIONS`].
     pub condense_iterations: usize,
     /// [`THERMOSTAT_TOLERANCE`].
@@ -321,6 +336,7 @@ impl Numerics {
         albedo_tolerance: ALBEDO_TOLERANCE_K,
         albedo_iterations: ALBEDO_ITERATIONS,
         albedo_damping: ALBEDO_DAMPING,
+        albedo_bracket: ALBEDO_BRACKET,
         condense_iterations: CONDENSE_ITERATIONS,
         thermostat_tolerance: THERMOSTAT_TOLERANCE,
         greenhouse_steps: GREENHOUSE_STEPS,
