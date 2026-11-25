@@ -1397,7 +1397,7 @@ their hot Jupiters within the same `HOT_GIANT_MAX_PERIOD`.
 | --- | --- | --- |
 | Giant: gas giant | a `Body::Giant`: 20 $M_\oplus$ or more, with an envelope | Thorngren et al. 2016's sample bound (`GAS_GIANT_MIN_MASS`, the user's decision of 2026-11-21) |
 | Giant: hot Jupiter | a gas giant with a period of 10 days or less | Wright et al. 2012, § 3: "P < 10 d" |
-| Giant: ice giant | a `Body::MiniNeptune` of 10 $M_\oplus$ or more | Lopez & Fortney 2014 p. 8 (`MINI_NEPTUNE_MAX_MASS`) |
+| Giant: ice giant | a `Body::MiniNeptune` drawn at 10 $M_\oplus$ or more (the trial's mass, see below) | Lopez & Fortney 2014 p. 8 (`MINI_NEPTUNE_MAX_MASS`) |
 | Giant: hot Neptune | an ice giant with a period of 10 days or less (the sparse "Neptune desert") | Wright et al. 2012; Mazeh, Holczer & Faigler 2016 put the desert "below ~5–10 d" |
 | Mini-Neptune | a `Body::MiniNeptune` under 10 $M_\oplus$: it kept at least 0.1 % of its mass in gas | `MIN_ENVELOPE`, a calibration of the escape |
 | Ice world | at least 5 % water and ices, and 0.01 Earth ocean kept at the surface | `ICY_MIN_WATER`, the tides' calibration; `ICE_WORLD_MIN_OCEANS`, a calibration (#452) |
@@ -1419,6 +1419,16 @@ Legacy's rules, and why the rewrite departs from them:
   half of those ice giants. The class reads the body kinds the chain
   already decides, so no second constant holds either line, and the
   5 % and 50 % lines are gone.
+- **Which mass the 10 $M_\oplus$ line reads.** The trial's mass, the
+  one the envelope draw read to choose its regime: the line splits the
+  draw's regimes (Lammer's grid and the mini-Neptunes below, the ice
+  giants' 9 to 20 % above), so a planet drawn an ice giant's envelope is
+  classed an ice giant. The bulk would not do: when a hot core's water
+  is beyond the laws, the bulk is the condensed planet without that
+  water, and a 13.5 $M_\oplus$ water-rich hot Neptune would read
+  6.7 $M_\oplus$ and become a mini-Neptune. The mass kept after escape
+  would not either: the escape thins the envelope the draw gave, it does
+  not redraw its regime.
 - **The hot giants.** Wright et al. 2012 define a hot Jupiter by its
   period under 10 days and a mass over 0.1 $M_J$ (about 32 $M_\oplus$),
   "not ... presumed 'ice giants' with M < 0.1MJup". The rewrite keeps

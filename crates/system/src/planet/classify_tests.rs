@@ -12,8 +12,9 @@ use super::draws::{Drawn, LABELS};
 use super::heat::ICY_MIN_WATER;
 use super::settled::{Settled, settled_with};
 use super::tests::{
-    CALLISTO, EARTH_CORE_MASS_FRACTION, EARTH_WATER_FRACTION, MARS, MERCURY, ReferenceBody, VENUS,
-    jupiter_at, neptune_at, reference_trial, trial, water_world_trial,
+    CALLISTO, EARTH_CORE_MASS_FRACTION, EARTH_WATER_FRACTION, HOT_ORBIT_AU, MARS, MERCURY,
+    ReferenceBody, VENUS, WATER_WORLD_FRACTION, jupiter_at, neptune_at, reference_trial, trial,
+    water_world_trial,
 };
 use crate::Trial;
 use science::classes::{
@@ -245,16 +246,13 @@ fn the_solar_system_classifies_as_itself() {
 fn the_class_records_the_nodes_its_rules_read() {
     let mut trace = Trace::new();
     let (t, d) = neptune_at(&mut trace, 30.0);
-    let (class, settled) = class_of(&mut trace, &t, &d, NO_OBLIQUITY);
+    let (class, _) = class_of(&mut trace, &t, &d, NO_OBLIQUITY);
     assert_eq!(class, PlanetClass::IceGiant);
     let nodes = super::settled_tests::nodes_of(&trace, codes::CLASS);
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].1, NodeValue::Code(Code::of("ice-giant")));
     let from = super::tests::derived_from(&trace, nodes[0].0);
-    assert_eq!(
-        from,
-        [settled.bare.body.bulk().mass.node(), t.orbit.period.node()]
-    );
+    assert_eq!(from, [t.mass.node(), t.orbit.period.node()]);
 }
 
 #[test]
@@ -289,6 +287,43 @@ fn a_close_ice_giant_is_a_hot_neptune() {
         class_of(&mut trace, &t, &d, NO_OBLIQUITY).0,
         PlanetClass::IceGiant
     );
+}
+
+/// Definition: a water world drawn above the ice giants' line, 12 Earth
+/// masses, with a tenth of it in gas (inside the ice giants' envelope
+/// draw, 0.09 to 0.20 of the mass).
+const BEYOND_LAW_GIANT: (f64, f64) = (12.0, 0.1);
+
+#[test]
+fn a_giant_whose_water_is_beyond_the_laws_stays_a_giant() {
+    use super::enveloped::Body;
+    // Task 6b: the 10 M_E line splits the envelope draw's regimes, which
+    // read the trial's mass; the class reads the same mass, not the
+    // condensed bulk (here (1 - 0.5) 0.9 12 + 1.2 = 6.6 M_E).
+    let (mass, envelope) = BEYOND_LAW_GIANT;
+    let mut trace = Trace::new();
+    let t = trial(&mut trace, 1, mass, HOT_ORBIT_AU, 0.0);
+    let d = Drawn::fixed(
+        &t,
+        &mut trace,
+        EARTH_CORE_MASS_FRACTION,
+        WATER_WORLD_FRACTION,
+        0.0,
+        Some(true),
+        envelope,
+        None,
+        None,
+    );
+    let (class, settled) = class_of(&mut trace, &t, &d, NO_OBLIQUITY);
+    let Body::MiniNeptune { bulk, .. } = &settled.bare.body else {
+        panic!("{:?}", settled.bare.body);
+    };
+    assert!(bulk.mass.value().0 < TEN, "{:?}", bulk.mass);
+    assert!(t.orbit.period.value().0 > HOT_GIANT_MAX_PERIOD.0);
+    assert_eq!(class, PlanetClass::IceGiant);
+    let nodes = super::settled_tests::nodes_of(&trace, codes::CLASS);
+    let from = super::tests::derived_from(&trace, nodes[0].0);
+    assert_eq!(from, [t.mass.node(), t.orbit.period.node()]);
 }
 
 /// A planet of `mass` Earth masses with `envelope` of it in gas, Earth's

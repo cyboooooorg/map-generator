@@ -8,7 +8,8 @@
 //! the surface classes").
 //!
 //! One code path per value: the class reads `Settled.hides_surface`, the
-//! climate's liquid and air, and the water's runaway and inventory; it
+//! climate's liquid and air, the water's runaway and inventory, and the
+//! trial's mass, the one the envelope draw chose its regime on; it
 //! computes only the basin capacity and the period test.
 
 use super::envelope::MINI_NEPTUNE_MAX_MASS;
@@ -44,7 +45,8 @@ pub(crate) enum BodyKind {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ClassView {
     pub kind: BodyKind,
-    /// The bulk's (kept) mass.
+    /// The trial's mass, the one the envelope draw read to choose its
+    /// regime (`envelope::envelope_fraction`), not the condensed bulk's.
     pub mass: EarthMass,
     /// The trial orbit's period.
     pub period: Day,
@@ -93,7 +95,10 @@ enum Read {
 /// "within" are `>=` and `<=`, "over" and "exceed" are `>`.
 ///
 /// 1. a giant: a gas giant (`Giant`) or an ice giant (a `MiniNeptune` of
-///    at least [`MINI_NEPTUNE_MAX_MASS`]); hot within
+///    at least [`MINI_NEPTUNE_MAX_MASS`], on the trial's mass: the line
+///    splits the envelope draw's regimes, which read that mass, so a
+///    planet drawn an ice giant's envelope is classed one, whatever its
+///    escape or its water beyond the laws leave in the bulk); hot within
 ///    [`HOT_GIANT_MAX_PERIOD`]: a hot Jupiter or a hot Neptune;
 /// 2. a mini-Neptune: the rest of the `MiniNeptune`s;
 /// 3. with a surface: a steam world, a lava world, a runaway greenhouse
@@ -226,7 +231,7 @@ pub(crate) fn classify(
         });
     let view = ClassView {
         kind,
-        mass: *bulk.mass.value(),
+        mass: *trial.mass.value(),
         period: *trial.orbit.period.value(),
         surface,
     };
@@ -234,7 +239,7 @@ pub(crate) fn classify(
     let mut from: Vec<NodeId> = Vec::new();
     for read in reads {
         let nodes: Vec<NodeId> = match read {
-            Read::Mass => vec![bulk.mass.node()],
+            Read::Mass => vec![trial.mass.node()],
             Read::Period => vec![trial.orbit.period.node()],
             Read::Hides => settled.hides_surface.iter().map(Traced::node).collect(),
             Read::Liquid => settled.climate.iter().map(liquid_node).collect(),
