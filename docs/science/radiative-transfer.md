@@ -1019,21 +1019,31 @@ the Bond albedo are there too (change 2b-2).
   forcing). The tests compare the model with itself: they prove the
   numerics converge, not that the physics is right. No convergence test
   yet covers the column's top share. The 0.13-0.21 W/m² hold for the
-  clear column: under its clouds, Earth's column at 288 K moves by
-  0.89 W/m² against 320 levels per decade, through the phase step below
-  (study 32).
-- **The phase step of the moist adiabat.** The latent heat of the moist
-  adiabat jumps from vaporisation to sublimation at 273.16 K (the slope
-  of the IAPWS curve, above). The midpoint step that crosses 273.16 K is
-  not split there, as the step that first saturates is: when the
-  surface warms, the step's midpoint passes 273.16 K and the whole
-  troposphere above it jumps colder, by up to 0.4 K. The outgoing
-  radiation of Earth's column then runs as a sawtooth with a period of
-  about 4 K of surface temperature: ±0.2 W/m² under a clear sky, up to
-  1.2 W/m² under the clouds, whose tops sit above the step and move
-  with it. On
-  Earth's air the jump falls between 288.00 and 288.25 K, at the
-  thermostat's 288 K (study 32, issue #680; measured, not yet fixed).
+  clear column. Under its clouds, Earth's column at 288 K moved by
+  0.89 W/m² against 320 levels per decade before the phase step below
+  was split; since, 20 levels per decade stand 0.11 to 0.13 W/m² above
+  320 under a clear sky and 0.29 to 0.33 W/m² under the clouds, from
+  284 to 290 K, and 50 levels within 0.05 W/m² (study 32, measured).
+- **The phase step of the moist adiabat** (study 32, issues #680 and
+  #681). The latent heat of the moist adiabat jumps from vaporisation
+  to sublimation at 273.16 K (the slope of the IAPWS curve, above).
+  Before study 32 the midpoint step that crossed 273.16 K took the phase
+  of its midpoint for its whole span: when the surface warmed, the
+  midpoint passed 273.16 K and the troposphere above jumped colder by up
+  to 0.4 K. Earth's outgoing radiation ran as a sawtooth with a period
+  of about 4 K of surface temperature, ±0.2 W/m² under a clear sky and
+  up to 1.2 W/m² under the clouds, whose tops sit above the step; the
+  jump fell between 288.00 and 288.25 K, at the thermostat's 288 K. The
+  step that crosses 273.16 K is now split there (`saturated_step`, the
+  triple point a `Definition:`), as the step that first saturates is:
+  over liquid up to where the liquid step alone reaches 273.16 K, over
+  ice above. The test `earths_column_is_smooth_in_its_surface` sweeps
+  Earth's column from 284 to 292 K by 0.25 K: every step rises, and the
+  rise changes by at most 10 % from one step to the next (it changed by
+  32 % under a clear sky before the split, and by 1.3 % since). At 288 K
+  the column sends out 274.63 W/m² under a clear sky (274.72 before) and
+  241.25 W/m² under its clouds (241.81 before); at 285.82 K, 236.95
+  (236.89 before). It does not explain issue #681 (see there).
 
 **Changes from the legacy model.** The port changes these on purpose, after
 a literature check of every number and citation (the full audit is in the
@@ -1120,7 +1130,8 @@ continuum. Issue #643 tracks it.
 **Earth's outgoing longwave against CERES (study 32, issue #680).** The
 climate's column for Earth (288 K, 280 ppm of CO₂, Earth's measured air,
 77 % relative humidity at the surface, skin 214.4 K) sends out
-274.69 W/m² under a clear sky and 241.79 W/m² under its clouds. Against
+274.69 W/m² under a clear sky and 241.79 W/m² under its clouds (before
+the phase step above was split; 274.63 and 241.25 W/m² since). Against
 CERES's 267.9 W/m² the clear sky looked 7 W/m² too bright. The
 comparison is not like for like. The study (Wiki,
 [32-longwave-against-ceres-audit](https://github.com/cyboooooorg/map-generator/wiki/32-longwave-against-ceres-audit))
@@ -1149,7 +1160,7 @@ uncertainty (0.75 % of 268.1 and 2.75 W/m², in quadrature: 3.4 W/m²):
 272.1 to 286.3 W/m². It runs the climate's own clear column
 (`Profile::CLEAR`) on Earth's measured air (78.08 % N₂ and 20.95 % O₂ of
 1.014 bar, NASA's fact sheet), 280 ppm, 77 % surface humidity at 288 K,
-under the skin of CERES's all-sky 240.1 W/m² (214.4 K): 274.72 W/m². It
+under the skin of CERES's all-sky 240.1 W/m² (214.4 K): 274.63 W/m². It
 replaces `earth_clear_sky_olr`, which ran a fixed 6.5 K/km profile with a
 uniform 77 % humidity, 11 W/m² darker than the climate's, against
 267.9 ± 10 W/m² (a calibrated tolerance). The window narrows when the
@@ -1224,8 +1235,8 @@ column at 288 K:
   Earth's 285.82 K at 280 ppm (PR 2d-4) therefore does not come from the
   column: at a Bond albedo of 0.304 to 0.306 (above; issue #680) Earth
   absorbs 3.7 to 4.9 W/m² less than at the observed 0.2915 to 0.293,
-  about 1.7 to 2.2 K at the 2.2 W/m²/K of Koll & Cronin (2018), and the
-  20-level grid adds 0.26 W/m² (0.1 K) at 285.8 K.
+  about 1.7 to 2.2 K at the 2.2 W/m²/K of Koll & Cronin (2018); the
+  20-level grid adds about 0.3 W/m² (0.15 K) under the clouds.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B), Manabe &
 Wetherald 1967 (equation 2), Pierrehumbert 2010 (equation 2.33), the CRC

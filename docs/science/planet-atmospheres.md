@@ -2854,12 +2854,19 @@ for the climate:
   (CERES), lets in 3.7 to 4.9 W/m² less, about 1.7 to 2.2 K at
   2.2 W/m²/K (Koll & Cronin 2018, Earth's clear-sky feedback within
   10 %); the shortwave's missing ozone and aerosols are #653.
-- **A numerical step.** The moist adiabat's latent heat jumps at
-  273.16 K inside a step of the grid, so the cloudy column's outgoing
-  radiation runs as a sawtooth in the surface temperature, up to
-  1.2 W/m² (0.89 W/m² at 288 K against a grid 16 times finer, 0.26 at
-  285.82 K, 0.1 K). It falls between 288.00 and 288.25 K, at the
-  thermostat's target; whether it explains #681 was not checked.
+- **A numerical step, now split.** The moist adiabat's latent heat
+  jumps at 273.16 K inside a step of the grid, so the cloudy column's
+  outgoing radiation ran as a sawtooth in the surface temperature, up
+  to 1.2 W/m² (0.89 W/m² at 288 K against a grid 16 times finer). The
+  step is now split at 273.16 K (radiative transfer page, *The phase
+  step of the moist adiabat*): the cloudy column at 288 K sends out
+  0.57 W/m² less, at 285.82 K 0.07 W/m² more. It was not the cause of
+  #681: the regulated Earth under Titan's methane stays at 284.0103 K
+  after the split. That temperature is the dew point of the vapour the
+  thermostat sets at 288 K, the floor of the surface's root search,
+  reached because the thermostat weighs the light the surface absorbs
+  on the air before its CO₂ is regulated (its methane's anti-greenhouse
+  then takes less), and the regulated air absorbs 29 W/m² less.
 
 What each change would do to the reference Earth at 280 ppm, estimated
 with the column's own cloudy-sky slope, 2.0 W/m²/K (measured from 284
@@ -2871,7 +2878,7 @@ to 290 K; Koll & Cronin's clear-sky 2.2 W/m²/K gives the same within
 | Ozone, methane, N₂O and halocarbons in the column | −7.6 (Schmidt et al. 2010, Table 1: 4.9 % of 155) | about +3.5 K |
 | Clouds' longwave effect brought from 32.91 to 25.7 W/m² | +7.2 | about −3.3 K |
 | Bond albedo from 0.304-0.306 to 0.2915-0.293 | +3.7 to +4.9 absorbed | about +1.7 to +2.2 K |
-| The phase step split at 273.16 K | −0.26 at 285.82 K | about +0.1 K |
+| The phase step split at 273.16 K (done) | +0.07 at 285.82 K | about −0.03 K |
 | Humidity over liquid water below 0 °C (not recommended until the 1967 convention is read) | −2.56 | about +1.3 K |
 
 The first two go together: refitting the clouds alone would cool Earth

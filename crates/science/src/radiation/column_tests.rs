@@ -254,6 +254,23 @@ const PREINDUSTRIAL_PPM: f64 = 280.0;
 /// Definition: parts per million.
 const PER_MILLION: f64 = 1e-6;
 
+/// Definition: the surface temperatures, K, over which the smoothness
+/// test sweeps Earth's column, 284 to 292 K: the climate's thermostat
+/// (288 K) and the reference Earth's 285.8 K inside, the 273.16 K level
+/// sweeping 1.5 km of its troposphere.
+const SMOOTH_RANGE_K: (f64, f64) = (284.0, 292.0);
+
+/// Definition: the step, K, of the smoothness test, and how much the
+/// rise of the column's outgoing radiation over one step may differ from
+/// the rise over the next, as a share of the larger. A smooth emission
+/// changes its rise little from one step to the next: as `T⁴`, by `3/T`
+/// per kelvin, 0.26 % over 0.25 K at 288 K. A step of the integration
+/// whose phase is wrong over part of its span makes an error of the first
+/// order in the step (the latent heat jumps by fusion's 6 kJ/mol), so the
+/// surface that moves that span across 273.16 K changes the rise by a
+/// share of itself; 10 % lies between the two.
+const SMOOTH_STEP: (f64, f64) = (0.25, 0.1);
+
 /// The skin temperature of a body of equilibrium temperature `t_eq_k`.
 fn skin(t_eq_k: f64) -> Kelvin {
     skin_temperature(Kelvin(t_eq_k))
@@ -745,4 +762,50 @@ fn earths_clear_sky_column_is_ceres_like_for_like() {
     );
     println!("Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2}");
     assert!((low..=high).contains(&olr), "{olr} against {low} to {high}");
+}
+
+/// The rises of the column's outgoing radiation, W/m², over steps of
+/// [`SMOOTH_STEP`] across [`SMOOTH_RANGE_K`].
+fn rises(profile: Profile, cache: &mut ColumnCache) -> Vec<f64> {
+    let (from, to) = SMOOTH_RANGE_K;
+    let step = SMOOTH_STEP.0;
+    let n = ((to - from) / step).round() as usize;
+    let olrs: Vec<f64> = (0..=n)
+        .map(|i| {
+            let t = from + i as f64 * step;
+            olr(
+                &earth_at(PREINDUSTRIAL_PPM, t),
+                t,
+                earth_skin(),
+                EARTH,
+                profile,
+                cache,
+            )
+        })
+        .collect();
+    olrs.windows(2).map(|w| w[1] - w[0]).collect()
+}
+
+#[test]
+fn earths_column_is_smooth_in_its_surface() {
+    // The outgoing radiation rises with the surface (Koll & Cronin 2018,
+    // doi:10.1073/pnas.1809868115) and, smooth in it, by about as much
+    // over each step as over the next: a step of the moist adiabat whose
+    // latent heat switches phase inside its span (study 32) makes the
+    // rise jump where the surface moves that span across 273.16 K.
+    let share = SMOOTH_STEP.1;
+    let cache = &mut ColumnCache::default();
+    for profile in [Profile::CLEAR, Profile::CLIMATE] {
+        let rises = rises(profile, cache);
+        let worst = rises
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs() / w[0].abs().max(w[1].abs()))
+            .fold(0.0, f64::max);
+        println!("{profile:?}: rises {rises:.3?}, most change {worst:.4}");
+        assert!(
+            rises.iter().all(|&r| r > 0.0),
+            "{profile:?} falls: {rises:?}"
+        );
+        assert!(worst <= share, "{profile:?}: a rise changes by {worst:.3}");
+    }
 }
