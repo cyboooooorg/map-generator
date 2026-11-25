@@ -952,6 +952,10 @@ fn venus_titan_and_mars_hold_their_argon() {
         "Mars: {n:.3e} mol of Ar-40, {:.3} of the measured",
         n / MARS_AR_MOL
     );
+    // Under the measured only: the chain keeps about 0.019 of it, the
+    // departure #699. A band around 0.019 would pin the code's output,
+    // which only tier 2 may do, and tier 2 cannot reach these reference
+    // bodies before the chain is in the draw (#659).
     assert!(n > 0.0 && n < MARS_AR_MOL, "{n:e}");
 }
 

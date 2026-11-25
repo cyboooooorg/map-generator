@@ -371,9 +371,9 @@ fn the_fixed_points_are_converged() {
 /// of study 29b's 1.3 to 1.8 Pa ("Checks on the cold bodies"), in bar.
 const TRITON_ARGON: Bar = Bar(1.8e-5);
 
-/// Source: the largest share of a Triton-like air its argon may hold,
-/// 5 %: study 29's check, twice the 2.5 % the two frost fits allow at
-/// activity 1 (study 29b).
+/// Definition: the test's margin on the share of a Triton-like air its
+/// argon may hold, 5 %, twice the 2.5 % that study 29b's check finds the
+/// two frost fits allow at activity 1 (the margin study 29b proposed).
 const TRITON_ARGON_SHARE: f64 = 0.05;
 
 /// A Triton-like body keeps its argon as frost: the air holds argon's

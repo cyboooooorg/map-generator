@@ -630,11 +630,12 @@ const THREE_DIGITS: f64 = 5e-3;
 /// of Xiao et al.'s curve.
 const FRAY_SCHMITT_ARGON: [f64; 5] = [10.69, -893.2, -3567.0, 65_740.0, -428_000.0];
 
-/// Source: how far the two fits part from Triton's and Pluto's ices up
-/// to the triple point, a factor 1.64 at 37 K (study 29b: 1.63 at 37.2 K,
-/// 1.58 at 38 K, 1.18 at 50 K), so 1.7; and above 65 K, where both rest
-/// on many data sets, within 2 % (study 29b: 1 % at 70 K, the largest gap
-/// 1.7 % near 75 K, derived from the two formulas).
+/// Definition: the test's margins between the two fits, chosen over how
+/// far they part (derived from the two formulas): from Triton's and
+/// Pluto's ices up to the triple point a factor 1.7, over the 1.64 at
+/// 37 K (study 29b's table: 1.63 at 37.2 K, 1.58 at 38 K, 1.18 at 50 K);
+/// above 65 K, where both rest on many data sets, 2 %, over the largest
+/// gap, 1.7 % near 75 K (1 % at 70 K).
 const FIT_SPREAD: [(f64, f64); 2] = [(37.0, 1.7), (65.0, 1.02)];
 
 /// Source: argon's normal boiling point, 87.28 K at 1 atm (Gosman et al.
