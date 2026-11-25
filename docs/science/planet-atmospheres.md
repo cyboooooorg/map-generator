@@ -292,7 +292,9 @@ decides nothing. A ceiling read above one is one.
   existence. With Lopez & Fortney 2014's envelopes at 420 Myr, the
   ceiling's envelope reaches its 3.71 ± 0.20 R⊕ from a core of about
   10 M⊕ (3.74 R⊕), 5.1 R⊕ at 14 M⊕ and 3.1 R⊕ at 8 M⊕: the law puts its
-  core in the upper half of Giacalone et al.'s range.
+  core in the upper half of Giacalone et al.'s range. The test checks
+  both ends: the 8 M⊕ core is not above 3.91 R⊕, the 14 M⊕ core not
+  below 3.51 R⊕.
 - A planet of an A star without XUV, a 1.92 M⊕ core with 2.74 % at
   802 F⊕ (ref 8 d), is rocky after the chain; before the boil-off was
   chained it kept its 2.74 %.

@@ -188,9 +188,9 @@ const CORE_RADIUS_EXPONENT: f64 = 0.25;
 /// law gives `a ∝ P^(2/3)`, so `F ∝ P^(−4/3)`.
 const FLUX_PER_PERIOD: f64 = -4.0 / 3.0;
 
-/// Source: the fluxes over which study 30 measures the slope of the
+/// Definition: the fluxes over which study 30 measures the slope of the
 /// stripping line, 30 and 1 000 F⊕, the rows of Tang et al.'s Table 2
-/// where a core of 2 to 6 M⊕ is stripped.
+/// where a core of 2 to 6 M⊕ is stripped (the study's chosen range).
 const SLOPE_FLUXES: (f64, f64) = (30.0, 1000.0);
 
 /// Source: HD 56414 b (Giacalone et al. 2022, ApJL,
@@ -228,6 +228,12 @@ const SWEEP_CORES: (f64, f64) = (0.5, 40.0);
 /// Definition: the fluxes of the monotony sweep, F⊕: from a tenth of the
 /// grid's lowest flux to ten times its highest.
 const SWEEP_FLUXES: (f64, f64) = (0.1, 1e4);
+
+/// Definition: points `(core mass M⊕, flux F⊕)` off both axes of Tang et
+/// al.'s grid, each lighter and more irradiated than the "0" cell at
+/// 1.5 M⊕ and 1 000 F⊕ ([`TANG_NOTHING_LEFT`]), from just off the corner
+/// to two decades past it.
+const LIGHTER_AND_HOTTER_THAN_BARE: [(f64, f64); 3] = [(0.3, 3e3), (1.0, 1e4), (1.4, 1e5)];
 
 /// Definition: samples per decade of the monotony sweep.
 const SAMPLES_PER_DECADE: f64 = 20.0;
@@ -318,10 +324,15 @@ fn the_ceiling_falls_with_flux_and_rises_with_core_mass() {
 
 #[test]
 fn a_light_core_far_off_the_grid_stays_bare() {
-    // Off both axes the end segments are extended from the grid's edge:
-    // a light core under a light far above 1 000 F⊕ is not given back an
-    // envelope (Owen & Wu 2016: lighter and hotter planets lose more).
-    for (core, flux) in [(0.3, 3e3), (1.0, 1e4), (1.4, 1e5)] {
+    // The physics' direction, not a calibrated value: a planet lighter
+    // and more irradiated than one that keeps nothing keeps nothing too
+    // (Owen & Wu 2016, conclusion 5: mass loss is more severe for lower
+    // core masses and stronger irradiation; Tang et al. 2024, § 3.3).
+    // Every point is lighter than 1.5 M⊕ and hotter than 1 000 F⊕, where
+    // Table 2 reads "0". The points lie off both axes, so the test also
+    // guards the corner rule of the off-grid extension (calibration 1):
+    // with the bilinear cross term, 0.3 M⊕ at 3 000 F⊕ would read 3.6 %.
+    for (core, flux) in LIGHTER_AND_HOTTER_THAN_BARE {
         let read = ceiling(core, flux);
         assert!(read < MIN_ENVELOPE, "{core} M⊕, {flux} F⊕: {read}");
     }
@@ -349,16 +360,6 @@ fn the_stripping_line_has_the_radius_valleys_slope() {
 }
 
 #[test]
-fn earth_at_one_au_keeps_some_hydrogen() {
-    // Tang et al.'s lightest, coolest cell keeps 1.18 %; extended to 1 M⊕
-    // the boil-off does not strip Earth at 1 au: its bareness comes from
-    // capturing little (Lammer et al. 2014), not from this law.
-    let read = ceiling(1.0, 1.0);
-    assert!(read >= MIN_ENVELOPE, "{read}");
-    assert!(read < ceiling(1.5, 1.0), "{read}");
-}
-
-#[test]
 fn hd_56414_b_keeps_a_neptunes_envelope() {
     // The Neptune of an A star at 274 F⊕ exists: for some core in
     // Giacalone et al.'s range, the envelope the ceiling leaves reaches
@@ -382,10 +383,18 @@ fn hd_56414_b_keeps_a_neptunes_envelope() {
         .expect("inside the tables");
         core.powf(CORE_RADIUS_EXPONENT) + thickness.0
     };
-    let reached = radius(high);
+    // The radius is continuous in the core: some core in the range
+    // reaches the measured interval when the lightest core's radius is
+    // not above its top and the heaviest's not below its foot. A ceiling
+    // far too generous fails the first bound, one too strict the second.
+    let (measured, sigma) = p.radius;
+    let (smallest, largest) = (radius(low), radius(high));
     assert!(
-        reached >= p.radius.0 - p.radius.1,
-        "{reached} R⊕ at {high} M⊕ against {:?}",
-        p.radius
+        smallest <= measured + sigma,
+        "{smallest} R⊕ at {low} M⊕ against {measured} ± {sigma}"
+    );
+    assert!(
+        largest >= measured - sigma,
+        "{largest} R⊕ at {high} M⊕ against {measured} ± {sigma}"
     );
 }
