@@ -898,7 +898,11 @@ CH₄/CO₂ ratio of 0.2.
   et al. 2010, all sky; Kiehl & Trenberth 1997, clear sky, on one
   profile); no global-mean line-by-line value with ozone removed was
   found. Methane, N₂O and the halocarbons take 3.6 W/m² (Hogan &
-  Matricardi 2020, line by line).
+  Matricardi 2020, line by line). Study 36 (issue #703) weighs each
+  one, and the N₂ and O₂ pairs, and finds that HITRAN's nitrogen and
+  methane pairs would replace Titan's grey stand-in: see
+  [Which gases does the infrared column still
+  miss?](longwave-absorbers.md).
 - **Which saturation Manabe & Wetherald's humidity refers to** below
   0 °C: the 1967 paper, read in study 33, names none ("the saturation
   vapor pressure of water vapor"), and its implementations differ
@@ -1850,6 +1854,9 @@ publisher's page (Tables 1 to 5).
 - [What is the habitable zone?](habitable-zone.md): the edges that this
   page's plateau and maximum greenhouse produce.
 - [What decides whether a world has an atmosphere?](atmospheres.md)
+- [Which gases does the infrared column still
+  miss?](longwave-absorbers.md): methane, N₂O, halocarbons and the
+  collision-induced pairs the column lacks (study 36).
 - [Planet atmospheres](planet-atmospheres.md): the legacy description of
   the same chain (climate column, absorbers, albedo, near-infrared
   absorption), kept until it is rewritten.

@@ -55,6 +55,8 @@ wants to understand it, and link back to those studies.
 - [What colour would plants be under another star?](plant-colours.md)
 - [How does a planet's air set its outgoing heat and its
   albedo?](radiative-transfer.md)
+- [Which gases does the infrared column still
+  miss?](longwave-absorbers.md)
 
 ## The site
 

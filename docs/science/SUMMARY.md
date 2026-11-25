@@ -41,3 +41,4 @@
 - [What colour would plants be under another star?](plant-colours.md)
 - [How does a planet's air set its outgoing heat and its albedo?](radiative-transfer.md)
 - [How much ozone does an oxygen air hold, and what light does it take?](ozone.md)
+- [Which gases does the infrared column still miss?](longwave-absorbers.md)
