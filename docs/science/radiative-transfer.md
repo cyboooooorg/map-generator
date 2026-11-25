@@ -1037,15 +1037,43 @@ the Bond albedo are there too (change 2b-2).
   up to 1.2 W/m² under the clouds, whose tops sit above the step; the
   jump fell between 288.00 and 288.25 K, at the thermostat's 288 K. The
   step that crosses 273.16 K is now split there (`saturated_step`, the
-  triple point a `Definition:`), as the step that first saturates is:
-  over liquid up to where the liquid step alone reaches 273.16 K, over
-  ice above. The test `earths_column_is_smooth_in_its_surface` sweeps
-  Earth's column from 284 to 292 K by 0.25 K: every step rises, and the
-  rise changes by at most 10 % from one step to the next (it changed by
-  32 % under a clear sky before the split, and by 1.3 % since). At 288 K
-  the column sends out 274.63 W/m² under a clear sky (274.72 before) and
-  241.25 W/m² under its clouds (241.81 before); at 285.82 K, 236.95
-  (236.89 before). It does not explain issue #681 (see there).
+  triple point a `Source:`, IAPWS R10-06(2009)), as the step that first
+  saturates is: over liquid up to where the liquid step alone reaches
+  273.16 K, over ice above. The test
+  `earths_column_is_smooth_in_its_surface` sweeps Earth's column from
+  284 to 292 K by 0.25 K: every step rises, and the rise changes by at
+  most 10 % from one step to the next. With the split reverted it
+  fails: under a clear sky the rise falls from 0.609 to 0.414 W/m²
+  between 288.00 and 288.25 K (a change of 32 %), and under the clouds
+  the radiation falls, by 0.641 W/m² (192 %). With the split, the rise
+  changes by 1.3 % clear and 1.4 % cloudy.
+
+  Earth's column (Earth's measured air, 280 ppm, 77 % surface humidity,
+  under the skin of CERES's all-sky 240.1 W/m², `2^-¼` of its 255.09 K:
+  214.51 K), W/m², before the split and since:
+
+  | Surface | Clear before | Clear since | Cloudy before | Cloudy since |
+  | --- | --- | --- | --- | --- |
+  | 285.82 K (the reference Earth in planet PR 2d-4) | 269.42 | 269.43 | 236.89 | 236.95 |
+  | 288 K | 274.72 | 274.63 | 241.81 | 241.25 |
+
+  The clouds' longwave effect at 288 K is 33.38 W/m² since the split,
+  32.91 before (at 288.00 K the old step sat on the low side of the
+  sawtooth). It does not explain issue #681 (see there).
+
+  *Calibration of the test's 10 %* (`SMOOTH_RISE_CHANGE`). It bounds
+  the model's own numerics: the source read for the physics (Koll &
+  Cronin 2018) says only that the radiation rises with the surface, and
+  no published tolerance on a column model's smoothness was found in
+  the sources read; no dedicated search was made. The bound is placed
+  between two measured ends: a smooth `T⁴` changes its rise by 0.26 %
+  per 0.25 K at 288 K and the split column by 1.3 to 1.4 %, the unsplit
+  column by 32 % (clear) and 192 % (cloudy); 10 % sits a factor 7 above
+  the first and 3 under the second. It is not derived from the fusion
+  share of the latent heat (6.01 on 45 kJ/mol, about 13 %): a
+  mis-phased step shifts the column above by a jump that does not
+  shrink with the sweep's step, while the rise does, so the change of
+  the rise depends on the sweep's step as well.
 
 **Changes from the legacy model.** The port changes these on purpose, after
 a literature check of every number and citation (the full audit is in the
