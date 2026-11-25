@@ -725,8 +725,8 @@ to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704
 and 14.05 Gyr; for potassium-40 the DDEP evaluation of 2025, 1.2522 Gyr,
 Mougeot 2025, which the argon of the air shares, see
 [planet atmospheres](planet-atmospheres.md#argon-study-29); Dye 2012's
-1.277 Gyr, taken until #694, was 2 % longer than every evaluation, and
-the earlier model used 1.248 Gyr):
+1.277 Gyr, taken until #694, was 0.6 to 2.3 % longer than every
+evaluation, and the earlier model used 1.248 Gyr):
 
 $$
 H = \sum_i p_i\, m_\mathrm{sil}\, a\, e^{\lambda_i (4.5673 - t)}

@@ -385,8 +385,10 @@ pub(crate) const CLIMATE_CONDENSATE_N2: &str = "planet.climate.condensate.n2";
 /// CH4 on the ground at the surface temperature (a sea or a frost);
 /// recorded when positive.
 pub(crate) const CLIMATE_CONDENSATE_CH4: &str = "planet.climate.condensate.ch4";
-/// Ar on the ground at the surface temperature (a frost); recorded when
-/// positive. Not a surface liquid, and left out of the ground's frost.
+/// Ar on the ground at the surface temperature (a frost, or a liquid
+/// above its triple point, 83.806 K, when the air holds more argon than
+/// the liquid's vapour pressure); recorded when positive. Not a surface
+/// liquid, and left out of the ground's frost.
 pub(crate) const CLIMATE_CONDENSATE_AR: &str = "planet.climate.condensate.ar";
 /// What fills the oceans, from the phase diagrams: recorded when there is
 /// a liquid.

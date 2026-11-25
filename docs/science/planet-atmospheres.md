@@ -532,8 +532,8 @@ The audit behind this section and the next ones is
 ## Atmosphere
 
 `planet::atmosphere` (called by `planet_model`) gives the
-partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂
-and O₂ (`Gases`, with `total()`; argon is not carried yet, see
+partial pressures at the surface, in bar, of N₂, CO₂, H₂O, CH₄, NH₃, SO₂,
+O₂ and Ar (`Gases`, with `total()`; the argon since study 29, see
 *Argon (study 29)* below), in six steps, called in this order:
 `outgassed`, `atmosphere`, `non_thermal_loss`, `methane_photolysis`,
 `cold_trap`, `photochemistry`. The rewrite has so far `outgassed`, the
@@ -1511,18 +1511,19 @@ electron capture to ⁴⁰Ar's 1461 keV level 10.34(7) %, to its ground state
 ENSDF 2017's 1.2480(30) Gyr, DDEP 2009's 1.2504(30) and DDEP 1998's 1.265(13),
 and takes ⁴⁰K as 0.011668(8) % of potassium's atoms (Naumenko et al. 2013, as
 the poster quotes it), so 2.9843e-3 mol of ⁴⁰K per kg of potassium (derived with
-potassium's standard atomic weight, 39.0983(1), CIAAW). The law takes the DDEP 2025 values: the newest
-evaluation, and the one whose ground-state branch, the source of the old
-disagreement, was measured since (Kossert et al. 2022, as the poster cites it).
-The code's `HALF_LIFE_K40` took 1.277 Gyr (Dye 2012's λ 17.200e-18 per s), 2 %
-longer than all of them, until the argon's branch (#694) set it to DDEP's
-1.2522 Gyr: the heat and the argon read one value. Potassium's heat per
-kilogram, Dye's 3.33e-3 µW/kg on his λ, is derived since from DDEP's decay data
-on the same λ, 3.400e-3 µW/kg (*The heat inside* in
-[planet interiors](planet-interiors.md#the-heat-inside)). Earth's radiogenic
-power today moves from 20.18 to 20.25 TW (+0.39 %, potassium's share); at
-formation it is 104.1 TW against 100.8 before the branch (+3.2 %), and 62.2
-against 60.6 TW at 1 Gyr (+2.6 %) (from the code's isotopes).
+potassium's standard atomic weight, 39.0983(1), CIAAW). The law takes the DDEP
+2025 values: the newest evaluation, and the one whose ground-state branch, the
+source of the old disagreement, was measured since (Kossert et al. 2022, as the
+poster cites it). The code's `HALF_LIFE_K40` took 1.277 Gyr (Dye 2012's λ
+17.200e-18 per s), longer than every one of them, by 0.6 % (Min et al. 2000) to
+2.3 % (ENSDF 2017) and by 2.0 % than DDEP 2025's, until the argon's branch
+(#694) set it to DDEP's 1.2522 Gyr (decided 2026-11-25): the heat and the argon
+read one value. Potassium's heat per kilogram, Dye's 3.33e-3 µW/kg on his λ, is
+derived since from DDEP's decay data on the same λ, 3.400e-3 µW/kg (*The heat
+inside* in [planet interiors](planet-interiors.md#the-heat-inside)). Earth's
+radiogenic power today moves from 20.18 to 20.25 TW (+0.39 %, potassium's
+share); at formation it is 104.1 TW against 100.8 before the branch (+3.2 %),
+and 62.2 against 60.6 TW at 1 Gyr (+2.6 %) (from the code's isotopes).
 
 **Earth's potassium.** The heat of the model takes 280 ppm of potassium in
 Earth's silicate part (`POTASSIUM_ABUNDANCE`, Arevalo, McDonough & Luong 2009;
@@ -1831,8 +1832,9 @@ climate's Triton-like body (`triton_like`, 1.8 Pa of argon, test
 
 **In the climate column.** Argon weighs: on Earth 0.0127 bar, 1.29 % of the air.
 It joins the column's partial pressures as a gas of 39.95 g/mol that absorbs
-nothing, broadens the lines of CO₂ and water less than N₂ does (0.78 of N₂ for
-CO₂, about 0.37 of air for water), has the heat capacity of a monatomic gas,
+nothing, counts as air in the broadening of the lines (measured, it broadens
+CO₂'s and water's less than N₂ does, 0.78 of N₂ for CO₂ and about 0.37 of air
+for water: a departure below), has the heat capacity of a monatomic gas,
 20.786 J/(mol·K) = 5/2 R, and scatters light as `rayleigh.rs` already knows (see
 [radiative transfer](radiative-transfer.md#which-gases-absorb-and-where), where
 the values and their sources are; the code since study 29). On Earth at 280
@@ -1851,11 +1853,11 @@ does not move.
 **Contract.** The timeline's air is a map of the gases (`timeline::planet::Gas`,
 `#[non_exhaustive]`, kebab-case) with `surface_pressure` the sum of the
 partials. Argon enters it as `Ar` (`"ar"`): the sum of the partials stays the
-surface pressure, and the map and the viewer read Earth's third gas and Mars's
-third gas. No crate outside `system` reads the air today, so the change is
-additive. The planet chain is not wired into the system draw yet (#659): the
-regression goldens do not move and `system::ENGINE_VERSION` stays; the draw
-that wires the chain bumps it.
+surface pressure, and the map and the viewer, once they read the air, will find
+Earth's and Mars's third gas. No crate outside `system` reads the air today, so
+the change is additive. The planet chain is not wired into the system draw yet
+(#659): the regression goldens do not move and `system::ENGINE_VERSION` stays;
+the draw that wires the chain bumps it.
 
 **Departures.**
 
@@ -1868,10 +1870,6 @@ that wires the chain bumps it.
 - The potassium is Earth's for every body, scaled with U and Th by one
   abundance; Venus's and Mars's K/U, measured by landers and orbiters, were not
   read.
-- `HALF_LIFE_K40` was 1.277 Gyr (Dye 2012's λ), 2 % longer than the DDEP
-  2025 evaluation (1.2522 Gyr) and every evaluation of Schaen et al.'s table;
-  the heat and the argon read one value, so the argon's branch corrected it
-  to 1.2522 Gyr (decided 2026-11-25). Not a departure any more.
 - The shoreline takes the same share of argon as of the early air; on Mars it
   leaves 0.019 of the measured ⁴⁰Ar, where MAVEN's 66 % loss would leave about
   1.3 times it (derived: 0.0863 × 4.885e17 × 0.34 = 1.43e16 mol). The test
@@ -2105,10 +2103,11 @@ continua grow as the product of the absorber and its partner, the CO₂
 pairs as the CO₂ density squared. The knees and broadening shares of the
 grey laws (`BROADENING_KNEE_BAR`, `LOCAL_KNEE_BAR`,
 `WATER_FOREIGN_BROADENING`, issues #440 and #441) are gone with them.
-Argon, once the air carries it, will broaden less than N₂ (*Argon (study
-29)* above). Methane's stand-in keeps the whole pressure, its own counted
-as the saturated amount `u` (see **Methane** above): it stands for Titan's
-collision-induced greenhouse, which grows with the nitrogen faster than
+Argon counts as air in the broadening, although it broadens less than N₂
+(0.78 of N₂ for CO₂, about 0.37 of air for water, measured): a departure
+(*Argon (study 29)* above). Methane's stand-in keeps the whole pressure, its
+own counted as the saturated amount `u` (see **Methane** above): it stands for
+Titan's collision-induced greenhouse, which grows with the nitrogen faster than
 line broadening.
 
 **Thick nitrogen.** At 1 AU with modern CO₂ (4e-4 bar) and no
@@ -3227,8 +3226,10 @@ solar days is zonal for any non-locked rotator, so the flag is
 - **Mars**: "6.36 mb at mean radius (variable from 4.0 to 8.7 mb
   depending on season)", 95.1 % CO₂, 2.59 % N₂, 0.16 % O₂ (NASA Mars
   fact sheet, read, May 2025), imposed in the test (CO₂ 6.05 mbar, N₂
-  0.165 mbar, O₂ 0.010 mbar, derived; argon has no field). Legacy's
-  `MARS_CO2_FACTOR` is not ported. The fact sheet gives "Average
+  0.165 mbar, O₂ 0.010 mbar, derived), with its argon, 1.93 % by volume
+  (Mahaffy et al. 2013), 0.123 mbar as the column takes its shares (the
+  *Argon (study 29)* section's 0.11 mbar is the same argon by weight).
+  Legacy's `MARS_CO2_FACTOR` is not ported. The fact sheet gives "Average
   temperature: ~214 K"; no source for the legacy 210 K was found (it is
   Mars's equilibrium temperature), so the bound is 214 ± 5 K, `Source:`
   the fact sheet (decided with the user on 2026-11-24).

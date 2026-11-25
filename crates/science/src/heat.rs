@@ -40,8 +40,9 @@ pub const HALF_LIFE_TH232: Gyr = Gyr(14.05);
 /// (`docs/science/planet-atmospheres.md`, "Argon"). Every evaluation of
 /// Schaen et al. 2020 (GSA Bulletin 133, 461, Table 1) gives 1.2505 to
 /// 1.2688 Gyr; ENSDF 2017's 1.2480 Gyr is the "commonly quoted" one. Dye
-/// 2012's 1.277 Gyr (Table 2, lambda 17.200e-18 /s), taken before, was 2 %
-/// longer than all of them.
+/// 2012's 1.277 Gyr (Table 2, lambda 17.200e-18 /s), taken before, was
+/// 0.6 % (Min et al. 2000's 1.2688) to 2.3 % (ENSDF 2017's) longer than
+/// each of them, 2.0 % longer than DDEP 2025's.
 pub const HALF_LIFE_K40: Gyr = Gyr(1.2522);
 
 /// Source: heat per kilogram of element, W/kg, uranium (Dye 2012, Table 3:
