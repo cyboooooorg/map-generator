@@ -8,8 +8,9 @@ use super::*;
 use crate::balance::{self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau};
 use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::test_points::{
-    EARTH_AIR, EARTH_MEASURED_AIR, EARTH_PRESSURE_BAR, EARTH_SURFACE_K, TITAN_EFFECTIVE_K,
-    TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY,
+    EARTH_AIR, EARTH_MEASURED_AIR, EARTH_PRESSURE_BAR, EARTH_SURFACE_K, PER_MILLION,
+    PREINDUSTRIAL_PPM, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
+    VENUS_GRAVITY,
 };
 use crate::surface::surface_vapour;
 use crate::units::Bar;
@@ -246,13 +247,6 @@ const BLACK_GROUND_W_M2: f64 = (1.0 - 0.98) * (398.2 - 317.2);
 /// 2.75 W/m² of the scene identification, combined in quadrature (CERES
 /// EBAF Ed4.0 Data Quality Summary, §4.4).
 const CERES_UNCERTAINTY: (f64, f64) = (0.0075, 2.75);
-
-/// Definition: Earth's preindustrial CO₂ of the CERES test, 280 ppm of
-/// the dry air (Myhre et al. 1998).
-const PREINDUSTRIAL_PPM: f64 = 280.0;
-
-/// Definition: parts per million.
-const PER_MILLION: f64 = 1e-6;
 
 /// Definition: the surface temperatures, K, over which the smoothness
 /// test sweeps Earth's column, 284 to 292 K: the climate's thermostat

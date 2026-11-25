@@ -8,7 +8,7 @@ use super::*;
 use crate::constants::{STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::gases::H2O_MOLAR_MASS;
 use crate::radiation::ktable::{CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
-use crate::radiation::test_points::{self, EARTH_SURFACE_K};
+use crate::radiation::test_points::{self, EARTH_SURFACE_K, PER_MILLION, PREINDUSTRIAL_PPM};
 use crate::surface::RELATIVE_HUMIDITY;
 use crate::water::vapour_saturation_bar;
 
@@ -47,14 +47,8 @@ const DECADES: usize = 6;
 /// was not read (the NASA scan has no text layer).
 const TROPOPAUSE_K: f64 = 217.0;
 
-/// Definition: Earth's pre-industrial CO₂ of the test columns, ppm.
-const PREINDUSTRIAL_PPM: f64 = 280.0;
-
 /// Definition: O₂'s mole fraction in the test columns' dry air, rounded.
 const O2_SHARE: f64 = 0.21;
-
-/// Definition: parts per million.
-const PER_MILLION: f64 = 1e-6;
 
 /// Calibration: a plausibility band for the forcing of a CO₂ doubling,
 /// W/m², on the legacy test profile, not a like-for-like anchor. 3.7 W/m²

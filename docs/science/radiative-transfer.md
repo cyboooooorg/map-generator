@@ -1456,7 +1456,8 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
     doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2.
 68. NASA Goddard, *Earth Fact Sheet* (D. R. Williams),
     <https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html>
-    (dry-air composition, read 2026-11-23).
+    (mean surface pressure, 1.014 bar; dry-air composition, 78.084 % N₂,
+    20.946 % O₂, 9340 ppm Ar; read 2026-11-23).
 69. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
     doi:10.1029/2010JE003659.
 70. NOAA Global Monitoring Laboratory, global annual mean CO₂ (X. Lan et

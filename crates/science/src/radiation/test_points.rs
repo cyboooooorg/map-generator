@@ -22,6 +22,13 @@ pub(crate) const TITAN_GRAVITY: MetrePerSecondSquared =
 /// 288.15 K at sea level).
 pub(crate) const EARTH_SURFACE_K: f64 = 288.0;
 
+/// Definition: Earth's pre-industrial CO₂ of the test columns, 280 ppm of
+/// the dry air (the reference of Myhre et al. 1998's CO₂ forcing).
+pub(crate) const PREINDUSTRIAL_PPM: f64 = 280.0;
+
+/// Definition: parts per million.
+pub(crate) const PER_MILLION: f64 = 1e-6;
+
 /// Definition: Earth's dry air of the test columns, the balance's
 /// [`crate::balance::EARTH_DRY_AIR`]: the air of the moist plateau and of
 /// the shortwave paths.
@@ -98,8 +105,10 @@ pub(crate) const EARTH_INCOMING_W_M2: f64 = crate::constants::SOLAR_IRRADIANCE.0
 pub(crate) const EARTH_PRESSURE_BAR: f64 = 1.014;
 
 /// Source: the shares of N₂ and O₂ in Earth's dry air by volume, 78.08 %
-/// and 20.95 % (NASA Earth fact sheet, "78.08 % N₂, 20.95 % O₂, 9340 ppm
-/// Ar").
+/// and 20.95 %, rounded from the NASA Earth fact sheet's 78.084 % N₂ and
+/// 20.946 % O₂ (with 9340 ppm of argon; the page
+/// [`EARTH_PRESSURE_BAR`] cites), as `docs/science/radiative-transfer.md`'s
+/// Rayleigh check takes them.
 pub(crate) const EARTH_N2_O2_SHARES: (f64, f64) = (0.7808, 0.2095);
 
 /// Definition: Earth's measured air as a test input, without its CO₂ and
