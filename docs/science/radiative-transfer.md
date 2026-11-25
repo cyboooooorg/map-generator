@@ -1005,7 +1005,7 @@ the Bond albedo are there too (change 2b-2).
     diffuse geometry is not the cause: it is the exact set-up for a Bond
     albedo, and a single direct beam at μ₀ = 2/3 (the insolation-weighted
     angle, Cronin 2014) falls 0.0075 below the exact value. The error of
-    treating Rayleigh light as scalar was not quantified. Issue #TBD-closure.
+    treating Rayleigh light as scalar was not quantified. Issue #727.
   - *Together:* 0.1701 − 0.0147 − 0.0145 − 0.0018 + 0.0028 ≈ 0.142, at the
     top of the aerosol-free window (0.129-0.142). The window the test
     took, now retired, is above.
