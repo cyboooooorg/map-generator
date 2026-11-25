@@ -87,6 +87,7 @@ fn partial(air: &PartialPressures, gas: Gas) -> f64 {
 /// - each source's flux, effective temperature and equilibrium
 ///   temperature (the warm start of the fixed point reads it,
 ///   `settle::warm_start`);
+/// - the trial's metallicity (the stars' spectra, `Light::metallicity`);
 /// - the bare air's partial pressures;
 /// - the water inventory and whether it ran away;
 /// - the three heats;

@@ -821,7 +821,7 @@ fn the_fixed_point_converges_across_the_methane_freezing_point() {
 
 #[test]
 #[ignore = "heavy: 200 climates of a nitrogen world across its triple point"]
-fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
+fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // Every climate of the sweep converges, and away from the triple point
     // adjacent climates stay within NITROGEN_JUMP_K. Across it there is a
     // jump, and it is a bistability, as the runaway edge's step is
@@ -858,8 +858,11 @@ fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
         absorbed(light, &c.air, base.heat_flux).0
     };
     let explained = |(f0, a): Point<'_>, (f1, b): Point<'_>| {
-        // The frost branch: no liquid, and the surface radiates as N₂ ice.
-        let frost = |c: &Settle| c.liquid.is_none() && c.emissivity.get() == N2_ICE_EMISSIVITY;
+        // The frost branch: no liquid, and the surface radiates nearer N₂
+        // ice's emissivity than the liquid's 1 (the melting frost's climbs
+        // from one to the other across the melting band).
+        let frost =
+            |c: &Settle| c.liquid.is_none() && c.emissivity.get() < 0.5 * (N2_ICE_EMISSIVITY + 1.0);
         let phase = frost(a) != frost(b);
         let light = absorbed_by(b) / absorbed_by(a);
         let emitted = (b.emissivity.get() * b.temperature.0.powi(4))
@@ -1413,8 +1416,9 @@ const F0V: Kelvin = Kelvin(7220.0);
 /// Definition: the flux of the boil tests, S⊕, round an [`F0V`] star,
 /// 1.2963: a test input just under its runaway limit
 /// (`runaway_flux(F0V)`, 1.29636 S⊕), in the band where the model boils
-/// under that limit. An Earth-like wet planet there with a tenth of its
-/// N₂ ([`TENTH_OF_N2`]) absorbs 300.785 W/m², past the 299.2 W/m² peak of
+/// under that limit. The escaping boil's planet there (3e-4 of water, a
+/// tenth of its N₂, [`TENTH_OF_N2`]) absorbs 290.5 W/m² (Bond albedo
+/// 0.341, under the stellar spectra of #655) and boils: past the peak of
 /// its saturated column, while its thermostat still balances at 288 K on
 /// the climate's column; legacy's 1.28 S⊕ lies under the model's boil
 /// threshold (study 26, "The boil": the threshold sits about 15 % above
@@ -1430,9 +1434,9 @@ const ESCAPING_WATER: f64 = 3.0e-4;
 /// the order CO₂, N₂, S, CH₄, NH₃: `log10(0.1) = -1` on N₂ (legacy
 /// `recondensed()`'s `N2_SHARE`, 0.1, so that the F star's Rayleigh
 /// scattering does not keep the first run from boiling, #522). Both boil
-/// tests take it: with the rule's N₂ the Bond albedo is 0.365 and the
-/// absorbed light 280 W/m², under the moist limit, at every flux under
-/// the runaway limit.
+/// tests take it: with the rule's N₂ the escaping boil's planet has a
+/// Bond albedo of 0.368 and absorbs 278.7 W/m² (under the stellar
+/// spectra of #655), under the moist limit, and does not boil.
 const TENTH_OF_N2: [f64; 5] = [0.0, -1.0, 0.0, 0.0, 0.0];
 
 /// Definition: the leftover the steam run hands its recondensed water,
@@ -1441,14 +1445,18 @@ const LEFTOVER: Bar = Bar(0.03);
 
 /// Definition: the XUV fluence of the recondensed boil, J/m², 1e14: a
 /// test input about 73 times under the Sun's scaled to
-/// [`F0V_BOILING_FLUX`] (7.3e15). At that one the steam run's `9 H` is
-/// about 6.5e21 kg, and the water sized to leave [`LEFTOVER`] is 3.6e-4
-/// of the mass, whose first run boils in the band (Bond albedo 0.339).
-/// It was 2e14 under the black-body star; the stellar spectra of #655
-/// raise this F star's planet's albedo by about 0.007 (0.324 to 0.330
-/// at 2e14), which took the 2e14 planet, with its larger water and ice
-/// volatiles, out of the band (its first run absorbed 295.3 W/m² and
-/// did not boil).
+/// [`F0V_BOILING_FLUX`] (7.3e15). The water is sized so that the steam
+/// run's `9 H` (about 6.5e21 kg at this fluence) leaves [`LEFTOVER`]:
+/// 3.6e-4 of the mass. The planet's first run then lies in the boil band:
+/// Bond albedo 0.339, 291.4 W/m² absorbed, and it boils. A larger fluence
+/// sizes more water, with more ice volatiles and a higher albedo, and
+/// takes the first run out of the band. It was 2e14 (7.2e-4 of water)
+/// until two changes each took that planet out of the band, and each
+/// found it boiling again at 1e14: the stellar spectra of #655 (they
+/// raise this F star's planet's albedo by about 0.007, 0.324 to 0.330 at
+/// 2e14, and its first run absorbed 295.3 W/m² and did not boil), and
+/// the argon of #694 (Earth's 0.013 bar of argon on the case's tenth of
+/// its N₂; checked by zeroing the argon).
 const RECONDENSED_FLUENCE: f64 = 1.0e14;
 
 /// Definition: the rounds of the recondensed boil's water sizing, 3
