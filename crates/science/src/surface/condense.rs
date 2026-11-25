@@ -1,5 +1,5 @@
-//! The nitrogen and methane that condense on a body's surface at the
-//! temperature the climate solves for, and the air they leave.
+//! The nitrogen, methane and argon that condense on a body's surface at
+//! the temperature the climate solves for, and the air they leave.
 //!
 //! Ported from `legacy-final` (`planet/atmosphere.rs` l.760-885:
 //! `Condensable`, `CONDENSING`, `methane_activity`, `condense`,
@@ -8,13 +8,16 @@
 //! of legacy's Clausius-Clapeyron; Setzmann and Wagner 1991 for methane)
 //! and the sea of `super::liquids`. Study
 //! [25](https://github.com/cyboooooorg/map-generator/wiki/25-climate-solver-audit),
-//! "Condensation at the surface"; see `docs/science/planet-atmospheres.md`.
+//! "Condensation at the surface"; argon, which legacy did not have, from
+//! study [29b](https://github.com/cyboooooorg/map-generator/wiki/29b-argon-frost);
+//! see `docs/science/planet-atmospheres.md`.
 
 use super::liquids::{SEA_METHANE_SHARE, bar, frozen_share, sea_freezes};
 use crate::radiation::gases::PartialPressures;
 use crate::units::{Bar, Kelvin};
 use crate::volatiles::{
-    METHANE_TRIPLE_TEMPERATURE, methane_saturation_bar, nitrogen_saturation_pressure,
+    METHANE_TRIPLE_TEMPERATURE, argon_saturation_pressure, methane_saturation_bar,
+    nitrogen_saturation_pressure,
 };
 
 /// What a surface leaves of an inventory of gases: the air and the
@@ -23,7 +26,7 @@ use crate::volatiles::{
 pub struct Condensed {
     /// The gases left in the air.
     pub air: PartialPressures,
-    /// The N2 and CH4 on the ground, as a liquid or a frost.
+    /// The N2, CH4 and Ar on the ground, as a liquid or a frost.
     pub condensate: PartialPressures,
 }
 
@@ -39,7 +42,11 @@ pub struct Condensed {
 ///   ice (a pure solid, issue #530), ramped by [`frozen_share`] over the
 ///   last `PHASE_BAND` under the sea's freezing point ([`sea_freezes`],
 ///   which reads the nitrogen the air keeps and condenses): a numerical
-///   smoothing without which the climate's fixed point cycles (#562).
+///   smoothing without which the climate's fixed point cycles (#562);
+/// - then argon, with activity 1 over its own frost or liquid (the rule
+///   of methane over its ice: the most argon of the three pictures of a
+///   minor volatile over N2 ice, Lellouch et al. 2010; study 29b), under
+///   [`argon_saturation_pressure`].
 ///
 /// CO2, H2O, NH3, SO2 and O2 pass through: CO2 collapses in the climate,
 /// NH3 is frozen by the cold trap. Past a gas's critical point its
@@ -61,10 +68,15 @@ pub fn condense(inventory: &PartialPressures, t: Kelvin) -> Condensed {
         condensate.ch4 = air.ch4 - ch4;
         air.ch4 = ch4;
     }
+    let ar = bar(argon_saturation_pressure(t));
+    if air.ar > ar {
+        condensate.ar = air.ar - ar;
+        air.ar = ar;
+    }
     Condensed { air, condensate }
 }
 
-/// `air` with its N2 and CH4 set to what their `inventory` (bar, in the
+/// `air` with its N2, CH4 and Ar set to what their `inventory` (bar, in the
 /// air and on the ground) leaves in the air at `t` ([`condense`]): the
 /// air a climate solved at a temperature close to `t`, made to agree
 /// with it exactly. The other gases of `air` pass through.
@@ -77,6 +89,7 @@ pub fn condensed_air(
     PartialPressures {
         n2: kept.n2,
         ch4: kept.ch4,
+        ar: kept.ar,
         ..*air
     }
 }

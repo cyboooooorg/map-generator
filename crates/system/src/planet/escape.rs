@@ -1,12 +1,14 @@
 //! What a planet's hydrogen-helium envelope loses to its stars' X-ray and
 //! extreme-ultraviolet (XUV) light over its age, and the body that is
 //! left: the energy-limited escape of Owen & Wu 2017 (eq. 19,
-//! [`energy_limited_loss`]) on the formed body, capped by the envelope.
-//! Ported from `legacy-final:crates/mapgen/src/planet/escape.rs`
+//! [`energy_limited_loss`]) on the body the boil-off left
+//! ([`super::boil_off`]), capped by the envelope. Ported from
+//! `legacy-final:crates/mapgen/src/planet/escape.rs`
 //! (`envelope_after_escape`).
 //!
-//! The loss is taken at the radius of the formed body, before the loss:
-//! an upper bound, the planet shrinking as it thins (as in legacy).
+//! The loss is taken at the radius of the body the boil-off left, before
+//! the loss: an upper bound, the planet shrinking as it thins (as in
+//! legacy).
 
 use super::codes;
 use super::draws::Drawn;
@@ -28,17 +30,18 @@ pub(crate) struct Escaped {
     /// lost. The water fraction (of the planet without its envelope)
     /// stays.
     pub drawn: Drawn,
-    /// The body built again at the kept mass and envelope, or the formed
-    /// body when nothing was lost.
+    /// The body built again at the kept mass and envelope, or the body the
+    /// boil-off left when nothing was lost.
     pub body: Body,
     /// The envelope lost (`planet.envelope.lost`); `None`, and no node
     /// recorded, when nothing was lost.
     pub lost: Option<Traced<Kilogram>>,
 }
 
-/// The planet `trial` of composition `drawn` and formed `body` once its
-/// envelope `f M` has lost [`energy_limited_loss`] at the body's radius
-/// and the trial's mass, under the XUV fluence of all its stars, capped to
+/// The planet `trial` of composition `drawn` and `body` (the body the
+/// boil-off left, [`super::boil_off::boiled_off`]) once its envelope
+/// `f M` has lost [`energy_limited_loss`] at the body's radius and the
+/// trial's mass, under the XUV fluence of all its stars, capped to
 /// `[0, f M]`:
 ///
 /// - the kept mass is `M - lost`;

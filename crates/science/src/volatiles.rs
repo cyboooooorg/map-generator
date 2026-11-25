@@ -440,7 +440,7 @@ pub(crate) fn co2_saturation_bar(t_k: f64) -> f64 {
 /// Molar latent heat of CO2, J/mol, at `t_k`, taken from the slope of
 /// [`co2_saturation_bar`] by Clausius-Clapeyron for an ideal vapour over a
 /// condensate of negligible volume, `L = R T^2 d ln p / dT`, as
-/// [`crate::water::vapour_latent_j_mol`] does: the slope of the
+/// [`crate::water::vapour_latent_j_mol_over`] does: the slope of the
 /// sublimation equation below the triple point, of the vapour curve
 /// above, 0 from the critical point up (the legacy clamp). The moist adiabat that uses it then agrees
 /// with the curve.
@@ -605,6 +605,108 @@ pub fn nitrogen_saturation_pressure(t: Kelvin) -> Pascal {
             t.0,
         );
         Pascal(NITROGEN_CRITICAL_PRESSURE.0 * sum.0.exp())
+    })
+}
+
+/// Source: triple-point temperature of argon, 83.806 K (Tegeler, Span and
+/// Wagner 1999, J. Phys. Chem. Ref. Data 28, 779, doi:10.1063/1.556037, as
+/// Xiao et al. 2025 and CoolProp's `dev/fluids/Argon.json` take it; the
+/// NIST WebBook lists 83.8 K).
+pub const ARGON_TRIPLE_TEMPERATURE: Kelvin = Kelvin(83.806);
+/// Source: triple-point pressure of argon, 68 891 Pa (Tegeler et al. 1999,
+/// as CoolProp v6.6.0's `dev/fluids/Argon.json` gives it in its melting
+/// line, `ANCILLARIES.melting_line.parts[0].p_0`, at `T_0` = 83.8058 K,
+/// read). Xiao et al. 2025 print eq. 55's `p_t` as 0.0689 MPa; CoolProp's
+/// saturated state at 83.806 K is 68 892 Pa, the WebBook's 0.689 bar.
+pub const ARGON_TRIPLE_PRESSURE: Pascal = Pascal(68_891.0);
+/// Source: coefficients `e_1` to `e_3` of solid argon's sublimation
+/// pressure, `ln(p / p_t) = T_t / T sum e_i theta^k_i`, `theta = 1 - T /
+/// T_t` (Xiao, Sriskandaruban and Maynard-Casely 2025, Int. J. Thermophys.
+/// 46, 14, doi:10.1007/s10765-024-03469-2, eq. 55, read in the Research
+/// Square preprint): fitted from 26 K to the triple point to the data of
+/// their Table 6, within 1 % above 50 K. Study 29b of the Wiki.
+const ARGON_SUBLIMATION_E: [f64; 3] = [-10.763, -1.526, -0.4245];
+/// Source: exponents `k_i` of the same equation, 1, 1.5 and 5 (Xiao et
+/// al. 2025, eq. 55; the 3/2 checked on the rendered page, study 29b).
+const ARGON_SUBLIMATION_K: [f64; 3] = [1.0, 1.5, 5.0];
+/// Source: the coldest temperature of Xiao et al. 2025's eq. 55, 26 K
+/// (their stated range, 26 to 83.806 K). The slope `d ln p / d(1/T)` at
+/// 26 K that [`argon_frost_pressure`] carries on below it (a constant
+/// enthalpy, as N2's under 10 K) is a definition, not part of the
+/// source.
+const ARGON_FIT_FLOOR: f64 = 26.0;
+/// Source: critical temperature of argon, 150.687 K (Tegeler et al. 1999,
+/// doi:10.1063/1.556037; as in CoolProp's `dev/fluids/Argon.json`,
+/// `ANCILLARIES.pS.T_r`): from it up, argon does not condense.
+pub const ARGON_CRITICAL_TEMPERATURE: Kelvin = Kelvin(150.687);
+/// Source: critical pressure of argon, 4.863 MPa (Tegeler et al. 1999; as
+/// in CoolProp's `Argon.json`, `ANCILLARIES.pS.reducing_value`).
+const ARGON_CRITICAL_PRESSURE_PA: f64 = 4_863_000.0;
+/// Source: coefficients `n_i` of liquid argon's vapour pressure, `ln(p /
+/// p_c) = T_c / T sum n_i theta^t_i`, `theta = 1 - T / T_c`: CoolProp's
+/// ancillary fit to the Tegeler et al. 1999 equation of state (Bell et al.
+/// 2014, doi:10.1021/ie4033999), its largest error 0.0077 %, read in
+/// CoolProp's `dev/fluids/Argon.json`, `ANCILLARIES.pS.n`, for study 29b.
+const ARGON_VAPOUR_N: [f64; 6] = [
+    1.274_555_697_445_016,
+    -6.537_350_082_824_229,
+    2.399_257_221_641_530_4,
+    -2.853_795_528_373_302,
+    -1.426_048_092_269_855_3,
+    -1.286_572_414_817_829_2,
+];
+/// Source: exponents `t_i` of the same fit (as [`ARGON_VAPOUR_N`],
+/// `ANCILLARIES.pS.t`).
+const ARGON_VAPOUR_T: [f64; 6] = [0.841, 0.944, 2.449, 2.797, 6.335, 10.499];
+
+/// Pressure of argon over its frost at `t`: eq. 55 of Xiao et al. 2025
+/// from the triple point (83.806 K, 68 891 Pa) down to 26 K, the slope
+/// `d ln p / d(1/T)` at 26 K carried on below; `None` at or above the
+/// triple point. `t` is held at or above 1 K. At Triton's 37.2 K it is
+/// 0.0219 Pa; Fray and Schmitt 2009's fit `Ar-1` is 1.6 times that there
+/// (study 29b) and within 1.7 % of it above 65 K (derived from the two
+/// formulas).
+pub fn argon_frost_pressure(t: Kelvin) -> Option<Pascal> {
+    if t.0 >= ARGON_TRIPLE_TEMPERATURE.0 {
+        return None;
+    }
+    let fit = |t: f64| {
+        vapour_sum(
+            ARGON_TRIPLE_TEMPERATURE.0,
+            &ARGON_SUBLIMATION_E,
+            &ARGON_SUBLIMATION_K,
+            t,
+        )
+    };
+    let t = t.0.max(FLOOR_TEMPERATURE);
+    let ln_ratio = if t >= ARGON_FIT_FLOOR {
+        fit(t).0
+    } else {
+        let (at, slope) = fit(ARGON_FIT_FLOOR);
+        // `d ln p / d(1/T) = -T^2 d ln p / dT`, held constant.
+        at - ARGON_FIT_FLOOR * ARGON_FIT_FLOOR * slope * (1.0 / t - 1.0 / ARGON_FIT_FLOOR)
+    };
+    Some(Pascal(ARGON_TRIPLE_PRESSURE.0 * ln_ratio.exp()))
+}
+
+/// Pressure of argon in equilibrium with its condensate at `t`: its frost
+/// ([`argon_frost_pressure`]) below [`ARGON_TRIPLE_TEMPERATURE`]; from
+/// there, CoolProp's ancillary of the Tegeler et al. 1999 vapour pressure
+/// (68 892 Pa at the triple point, 0.002 % over the frost's; 1.011 bar at
+/// the normal boiling point, 87.28 K, 0.23 % under 1 atm); infinite at and above the critical
+/// point (150.687 K), where argon does not condense.
+pub fn argon_saturation_pressure(t: Kelvin) -> Pascal {
+    if t.0 >= ARGON_CRITICAL_TEMPERATURE.0 {
+        return Pascal(f64::INFINITY);
+    }
+    argon_frost_pressure(t).unwrap_or_else(|| {
+        let sum = vapour_sum(
+            ARGON_CRITICAL_TEMPERATURE.0,
+            &ARGON_VAPOUR_N,
+            &ARGON_VAPOUR_T,
+            t.0,
+        );
+        Pascal(ARGON_CRITICAL_PRESSURE_PA * sum.0.exp())
     })
 }
 

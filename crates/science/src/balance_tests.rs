@@ -306,3 +306,159 @@ fn a_runaways_light_follows_its_steam_down_to_none() {
     let blend = DERIVED_ALBEDO + (moist - DERIVED_ALBEDO) * steam_share(TRACE_STEAM).get();
     assert!((blend - DERIVED_ALBEDO).abs() < TRACE_TOLERANCE, "{blend}");
 }
+
+/// Source: how much Earth's argon may warm it, 0.2 K: study 29's bound,
+/// over its +0.07 to +0.11 K scaled from Goldblatt et al. 2009's doubled
+/// N₂ (argon, 0.0127 bar, broadens less than N₂). An upper bound only:
+/// that window is for a wet climate, and this dry column, without the
+/// water's feedback, is about 12 times less sensitive (+0.005 K for the
+/// argon, +0.37 K for doubled N₂; the wet Earth at 280 ppm gives +0.125 K
+/// for its argon, `docs/science/planet-atmospheres.md`, "Argon").
+const EARTH_ARGON_WARMING_K: f64 = 0.2;
+
+/// Source: Earth's argon as a weight, 0.0127 bar (study 29, derived from
+/// the NASA Earth fact sheet's 9340 ppm and Trenberth & Smith 2005).
+const EARTH_ARGON_BAR: f64 = 0.0127;
+
+#[test]
+fn earths_argon_warms_its_column_little() {
+    // Earth's dry air under Earth's light, with and without its argon:
+    // the argon weighs, broadens as air and steepens the dry slope.
+    let without = earth_surface(&EARTH_DRY_AIR, WattPerSquareMetre(0.0));
+    let with = earth_surface(
+        &PartialPressures {
+            ar: EARTH_ARGON_BAR,
+            ..EARTH_DRY_AIR
+        },
+        WattPerSquareMetre(0.0),
+    );
+    let warming = with - without;
+    println!("Earth's dry column: {without:.3} K, with its argon {with:.3} K ({warming:+.3} K)");
+    // An upper bound only (see `EARTH_ARGON_WARMING_K`).
+    assert!(warming < EARTH_ARGON_WARMING_K, "{warming}");
+}
+
+/// Source: Earth's surface pressure, 1.014 bar (NASA Earth fact sheet,
+/// nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html).
+const EARTH_PRESSURE_BAR: f64 = 1.014;
+
+/// Source: Earth's dry air by volume, 78.08 % N₂ and 20.95 % O₂ (NASA
+/// Earth fact sheet), and its preindustrial CO₂, 280 ppm, 2.8e-4 bar
+/// (Myhre et al. 1998, doi:10.1029/98GL01908): Earth's measured air at
+/// 280 ppm, without its argon (the checks add it), bar.
+const EARTH_MEASURED_AIR_NO_AR: PartialPressures = PartialPressures {
+    n2: EARTH_PRESSURE_BAR * 0.7808,
+    co2: 2.8e-4,
+    h2o: 0.0,
+    ch4: 0.0,
+    nh3: 0.0,
+    so2: 0.0,
+    o2: EARTH_PRESSURE_BAR * 0.2095,
+    ar: 0.0,
+};
+
+/// Definition: the solver of the wet checks, [`SOLVER`] narrowed to
+/// 1e-5 K, so that its width is far under the hundredths of a kelvin the
+/// checks compare.
+const FINE_SOLVER: Solver = Solver {
+    tolerance: Kelvin(1e-5),
+    ..SOLVER
+};
+
+/// The surface temperature, K, of a wet Earth under `dry` air: the
+/// column's balance with its vapour following the surface
+/// ([`surface_vapour`] with all the water it can hold), on Earth's
+/// starlight ([`earth_light`]), a black surface and the standard gravity,
+/// solved from the grey body up by [`bracket_up`] and [`regula_falsi`]
+/// with [`FINE_SOLVER`], on a fresh cache. These are fixed inputs, not
+/// the settled reference Earth of `system` (its albedo, emissivity and
+/// clouds).
+fn wet_earth(dry: &PartialPressures) -> f64 {
+    let light = earth_light();
+    let absorbed = absorbed(light, dry, WattPerSquareMetre(0.0)).0;
+    let sky = skin(light);
+    let mut cache = ColumnCache::default();
+    let mut excess = |t: f64| {
+        let gases = PartialPressures {
+            h2o: surface_vapour(Kelvin(t), Bar(f64::INFINITY)).0,
+            ..*dry
+        };
+        outgoing_longwave(
+            &gases,
+            Kelvin(t),
+            sky,
+            STANDARD_GRAVITY,
+            Profile::CLIMATE,
+            &mut cache,
+        )
+        .0 - absorbed
+    };
+    let bare = (absorbed / STEFAN_BOLTZMANN).powf(0.25);
+    let start = Point {
+        x: bare,
+        f: excess(bare),
+    };
+    let (low, high) = bracket_up(&mut excess, absorbed, start);
+    regula_falsi(
+        excess,
+        low,
+        high,
+        FINE_SOLVER.tolerance.0,
+        FINE_SOLVER.iterations,
+    )
+    .x
+}
+
+/// The warming, K, of the wet Earth when its air gains `added`, with
+/// argon's molar heat capacity `argon_cp` in the column.
+fn warming(added: PartialPressures, argon_cp: f64) -> f64 {
+    use crate::radiation::column::AR_HEAT_CAPACITY_OVERRIDE;
+    AR_HEAT_CAPACITY_OVERRIDE.with(|c| c.set(Some(argon_cp)));
+    let base = wet_earth(&EARTH_MEASURED_AIR_NO_AR);
+    let more = wet_earth(&PartialPressures {
+        n2: EARTH_MEASURED_AIR_NO_AR.n2 + added.n2,
+        ar: EARTH_MEASURED_AIR_NO_AR.ar + added.ar,
+        ..EARTH_MEASURED_AIR_NO_AR
+    });
+    AR_HEAT_CAPACITY_OVERRIDE.with(|c| c.set(None));
+    more - base
+}
+
+/// On a wet Earth at 280 ppm (fixed inputs, see [`wet_earth`]), Earth's
+/// 0.0127 bar of argon against as much N₂, with two checks that keep
+/// apart what each part of the column does with the argon:
+///
+/// 1. With argon given N₂'s heat capacity, only the radiation tells the
+///    two apart, and argon warms, at most as much as N₂:
+///    `0 < ΔT(Ar) <= ΔT(N₂)`. Source: argon broadens CO₂'s and water's
+///    lines at most as N₂ does (0.78 of N₂ for CO₂, Reichle 1969; about
+///    0.37 of air for water, Claveau & Valentin 2009; study 29). The
+///    column counts it as air (a departure), so equality is allowed.
+/// 2. With argon's own heat capacity, it warms more than with N₂'s.
+///    Definition: the dry adiabatic lapse is `g / c_p` per unit mass
+///    (`R / c_p` in `d ln T / d ln p` per mole), and argon's `c_p` is
+///    below N₂'s, 20.786 against 29.12 J/(mol·K), 520 against 1040
+///    J/(kg·K) (Chase 1998 via the NIST WebBook): the steeper slope warms
+///    the surface under the same emission.
+#[test]
+fn argon_warms_as_air_broadens_and_its_slope_steepens() {
+    let argon = PartialPressures {
+        ar: EARTH_ARGON_BAR,
+        ..PartialPressures::default()
+    };
+    let nitrogen = PartialPressures {
+        n2: EARTH_ARGON_BAR,
+        ..PartialPressures::default()
+    };
+    let n2_cp = crate::radiation::gases::N2_HEAT_CAPACITY;
+    let ar_cp = crate::radiation::gases::AR_HEAT_CAPACITY;
+    let with_n2 = warming(nitrogen, ar_cp);
+    let as_n2 = warming(argon, n2_cp);
+    let own = warming(argon, ar_cp);
+    println!(
+        "wet Earth at 280 ppm, +{EARTH_ARGON_BAR} bar: N₂ {with_n2:+.4} K, \
+         argon with N₂'s cp {as_n2:+.4} K, argon {own:+.4} K"
+    );
+    assert!(as_n2 > 0.0 && as_n2 <= with_n2, "{as_n2} against {with_n2}");
+    assert!(own > as_n2, "{own} against {as_n2}");
+}
