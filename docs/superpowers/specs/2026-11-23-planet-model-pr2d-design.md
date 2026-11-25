@@ -249,7 +249,8 @@ Decisions taken with the user on 2026-11-24 for 2d-3a:
   after the class, from the designation's seed), and tidal locking comes
   with #604. The solver therefore takes the obliquity and a "locked"
   flag as parameters; 2d-4 decides where `class_of` gets them, so that
-  `class_of` and `model` still give the same answer.
+  `class_of` and `model` give the same answer on the same trial (see
+  "Same trial, same answer").
 
 From `climate.rs` l.1-2423: `wet_balance`, `first_balance` (the #600
 secant scan), `settle` and `settle_steps` (the #600 secant step of the
@@ -318,8 +319,10 @@ settles, not a law); the laws it calls stay in `science`.
   `MARS_CO2_FACTOR` (from memory) is not ported.
 - **Venus:** the tier-1 test keeps the sourced checks (Bond albedo
   0.76 ± 0.05, no liquid). The 577 K pin is the model's own output
-  (#594): it goes to the tier-2 net in 2d-4, because `settled` is not
-  reachable from `crates/regression` before then.
+  (#594). `settled` is not reachable from `crates/regression` with a
+  fixed composition, so the pin stays a tier-3 test (`#[ignore =
+  "heavy: …"]`), as do #492's values and the two heavy settled tests
+  (user, 2026-11-25); the tier definitions do not change.
 - **#646:** `CH4_OPACITY` is refitted on Titan with the new methane
   curve here, since 2d-3 is the column's first caller.
 
@@ -398,10 +401,22 @@ regression net.
   settled-climate test.
 - **Wiring:** `cli`, `regression` and the determinism tests pass
   `planet::class_of` to `draw_with`. The `stand_in` module stays for the
-  draw's unit tests.
+  draw's unit tests. The tests that draw whole systems with the real
+  classifier (`system/tests/determinism.rs`, the CLI's drawing tests)
+  move to tier 2, into `crates/regression`; no build profile changes
+  (user, 2026-11-25). The CLI's system report prints each planet's
+  class in place of its `classifier` field.
 - **Tier-2 net:** `REFERENCE_SEEDS` is filled, and the shared reference
-  systems get assertions on their planets' classes, climates and
-  liquids, pinned as a regression net.
+  systems get assertions on their planets' classes, climates, liquids
+  and biospheres, pinned as a regression net. It also counts the
+  reference planets whose class changes between the draw (circular
+  trial) and the model (eccentric trial), and the living planets whose
+  second climate has no liquid water.
+- **Develop cycle** (user, 2026-11-25): no world exists yet
+  (`system::generate` is a later step), so the cycle delivers a census
+  of classes, climates and biospheres from the CLI report on the
+  oracle's seeds, before and after and against legacy, with the
+  timings. No 2:1 projections.
 - **Timing:** `generation-profiler` measures the draw of the reference
   systems before and after, on the same inputs. The result goes in the
   PR description, with the share of the column in it.
@@ -458,7 +473,7 @@ rewrite's value holds.
 | #659 | Steps in 2d-1 and 2d-3, closed by 2d-4 | The deferred steps |
 | #654 | No | Changes the humidity profile and the cloud fit: its own study and pull request; 2d uses 0.77, the path the cloud fit was made on |
 | #655 | No | A stellar spectral library: its own study and data |
-| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d keeps Venus's sourced checks in tier 1 and pins the 577 K in tier 2 (2d-4) |
+| #594, #643 | No | Missing opacities and a forcing bias in `science::radiation`; 2d keeps Venus's sourced checks in tier 1 and pins the 577 K in a tier-3 test (2d-4) |
 | #647 | No | Declared simplification; to check against #595 later |
 | #648 | Its labelling rule only, for 2d's solver constants | The column-top convergence test stays with the column |
 | #649, #650 | No | Opacity data provenance |
@@ -474,10 +489,16 @@ open to the user's correction):
   returns is the one after the `boils` loop and the steam envelope. No
   cheaper path skips the climate: one chain serves `class_of` and
   `model`.
-- **Same planet, same answer.** Every draw (snowball, life) derives from
-  the planet's seed, never from the trace: `class_of` on its scratch
-  trace and `model` on the real one draw the same values and give the
-  same class, radius and density. A tier-1 test checks it.
+- **Same trial, same answer** (reworded by the user on 2026-11-25).
+  Every draw (snowball, life) derives from the trial's seed, never from
+  the trace: `class_of` on its scratch trace and `model` on the real one
+  draw the same values and give the same class, radius and density for
+  the same trial. The draw classifies the circular trial (`e = 0`),
+  while `model` runs on `placement.trial`, the drawn eccentric orbit and
+  its higher mean flux: for an eccentric planet the two may differ. A
+  tier-1 test checks equality at `e = 0`; tier 2 counts and pins the
+  reference planets whose class changes. A follow-up issue asks the
+  draw to classify the eccentric trial again.
 - **Several stars.** The shortwave budget is computed per source at its
   own effective temperature, with the ground and clouds of the current
   surface, and the absorbed light is the flux-weighted sum; the
