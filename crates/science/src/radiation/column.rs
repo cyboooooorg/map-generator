@@ -500,15 +500,13 @@ impl Sky {
 /// Source: the floor of the troposphere's relative humidity profile, as
 /// a share of the surface pressure: `RH_s (Q − 0.02) / (1 − 0.02)`,
 /// Manabe & Wetherald 1967 (*J. Atmos. Sci.* 24, 241,
-/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2), their eq. 3 as
-/// Kluft et al. 2019 (*J. Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1,
-/// §2b) number it (study 32; it was cited as eq. 2 before). The paper is
-/// not open; the profile is confirmed indirectly by climlab's
-/// `ManabeWaterVapor` (`RH_s ((Q − 0.02)/(1 − 0.02))`, "following Manabe
-/// 1967"), by Kluft et al. 2019 and by arXiv:2006.03098, as the audits
-/// (Wiki studies 19 and 32) record. Below 0 °C the column refers the
-/// humidity to ice; climlab refers it to liquid water and Kluft et al. to
-/// a mix (study 32): which one the 1967 paper took was not found.
+/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2), their eq. 2,
+/// read in the scan GFDL hosts (Wiki study 33; Kluft et al. 2019, *J.
+/// Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1, §2b, number it 3,
+/// which is the paper's stratospheric floor). Below 0 °C the column
+/// refers the humidity to ice; climlab refers it to liquid water and
+/// Kluft et al. to a mix (study 32); the 1967 paper speaks only of "the
+/// saturation vapor pressure of water vapor".
 const HUMIDITY_FLOOR_SHARE: f64 = 0.02;
 
 /// Relative humidity of the troposphere at `share` of the surface
