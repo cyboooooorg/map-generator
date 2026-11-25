@@ -883,7 +883,9 @@ the Bond albedo are there too (change 2b-2).
     albedo is 0.1554 (−0.0147) and the air absorbs 51.06 W/m². TSIS-1
     ends at 2730 nm; the study continued it with a 5772 K black body
     scaled to the data at 2600-2730 nm, about 2 % of the light (a choice
-    of the study, not a source). Issue #655.
+    of the study, not a source). Issue #655; study 35 re-measured these
+    numbers and the error for other hosts: [Is a star's light a black
+    body?](stellar-spectra.md).
   - *No ozone.* With 300 DU (Kim & Ramanathan 2008, Table 2) as a pure
     absorber above the column, with the cross-sections of Serdyuchenko et
     al. (2014) at 223 K and TSIS-1: 0.1409 (−0.0145), the ozone absorbing

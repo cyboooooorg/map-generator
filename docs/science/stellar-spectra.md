@@ -1,0 +1,248 @@
+# Is a star's light a black body?
+
+Seen from: the planet card (the Bond albedo and the surface temperature
+of every body lit by a star), through the shortwave half of the climate
+([How does a planet's air set its outgoing heat and its
+albedo?](radiative-transfer.md)).
+
+## Short answer
+
+Not quite. A star's surface glows roughly like a black body at its
+effective temperature, but its own atmosphere takes light out where its
+atoms and molecules absorb. The measured Sun gives a third less light
+below 400 nm than a black body of its temperature. In an M dwarf,
+molecular bands carve the red and near infrared into peaks and
+troughs. A planet's air cares about both: Rayleigh
+scattering reflects mostly the blue, and water vapour absorbs mostly in
+the near-infrared bands. Swapping the black body for a real spectrum
+lowers Earth's Bond albedo by about 0.01. Once the Sun's error is absorbed
+by the cloud fit, what is left matters most for the coolest M dwarfs,
+whose planets a black body makes too dark by 0.02 to 0.03.
+
+## The science
+
+### What a black body gets wrong
+
+A star's effective temperature $T_\text{eff}$ is defined by its
+bolometric flux, $\sigma T_\text{eff}^4$; nothing makes its spectrum a
+Planck curve. The Sun, measured from orbit by TSIS-1 (the TSIS-1 Hybrid
+Solar Reference Spectrum, HSRS, 202 to 2730 nm; Coddington et al. 2021),
+puts 8.2 % of its 0.2-5 µm light below 400 nm and 1.0 % below 300 nm. A
+black body at the Sun's 5772 K (IAU 2015 Resolution B3) puts 12.3 % and
+3.0 % there (study 35, measured on the bands of the app below). The
+deficit is the absorption of the star's own atmosphere: the lines of a
+star depend first on its temperature, and in M stars below 3500 K the
+molecular bands of titanium oxide and other molecules are very strong
+(Fraknoi et al. 2022, §17.3; see [What does a G-type star
+mean?](star-types.md)).
+
+The weight that matters for a planet's albedo is the light's Rayleigh
+weight, the band-averaged $(550\,\text{nm}/\lambda)^4$. On the bands of
+the app (study 35):
+
+| Star | Black body | Spectrum | Spectrum used |
+| --- | --- | --- | --- |
+| Sun, 5772 K | 1.728 | 1.186 | TSIS-1 HSRS, continued past 2730 nm |
+| Sun, 5772 K | 1.728 | 1.267 | PHOENIX, interpolated between 5700 and 5800 K |
+| K dwarf, 4500 K | 0.683 | 0.429 | PHOENIX, log g 4.5 |
+| M dwarf, 3300 K | 0.202 | 0.139 | PHOENIX, log g 5.0 |
+| Late M dwarf, 2600 K | 0.080 | 0.048 | PHOENIX, log g 5.0 |
+| A star, 10000 K | 7.72 | 6.94 | ATLAS9 (Castelli & Kurucz 2003), log g 4.0 |
+| B star, 27000 K | 19.0 | 20.0 | ATLAS9, log g 4.0 |
+
+A real star of every type below about 15 000 K is redder than its black
+body for scattering; the hottest are slightly bluer. The PHOENIX model of
+the Sun closes 85 % of the gap between the black body and the measured
+Sun (1.267 against 1.186).
+
+### Where the near infrared falls
+
+At 2600 K PHOENIX puts 86 % of the light beyond 1 µm against 81 % for the
+black body, but the planet's air absorbs 125 W/m² of Earth's
+340.25 W/m² against 136 under the black body: more of the light falls
+between the planet's absorption bands. Study 35 did not split the
+star's bands by molecule. The black body overstates the near-infrared
+absorption of the coolest stars' planets and understates their albedo.
+At 3300 K the spectrum is again more absorbed than the black body (113
+against 109 W/m²).
+
+### The effect on a planet's albedo
+
+The published climate studies with model or observed spectra all find a
+planet's Bond albedo falling from F to M hosts at equal flux: through
+Rayleigh scattering, weaker in red light, and through the near-infrared
+absorption of water and CO₂ (Kopparapu et al. 2013, §4.1, with the
+BT-Settl grid between 2600 and 7200 K; Shields et al. 2013, Table 2,
+with the F2V HD 128167, the Sun, the K2V HD 22049 and the M dwarf AD
+Leo). Shields et al. find 0.329,
+0.319, 0.302 and 0.234 for an Earth-like ocean planet with clouds round
+the four stars, and 0.193, 0.142, 0.119 and 0.074 with Rayleigh scattering
+alone. None of the papers read quantifies the error of a black body
+against the spectrum as a function of $T_\text{eff}$. Wordsworth et al.
+(2010, §3.1) say only that AD Leo gives lower albedos than the 3700 K
+black body of Kasting et al. (1993), mixing a change of spectrum with one
+of temperature.
+
+Study 35 measured that error with the app's own shortwave on Earth's air
+(77 % humidity over 288 K, its cloud cover 0.682, a ground of 0.122).
+First with the clouds of today, then with the cloud albedo refitted on
+Earth's 0.293 under each Sun, so that the Sun's own error is absorbed:
+
+| $T_\text{eff}$ (K) | Black body | Spectrum, clouds refitted | Black body less spectrum |
+| --- | --- | --- | --- |
+| 2400 | 0.186 | 0.214 | −0.028 |
+| 2600 | 0.192 | 0.210 | −0.018 |
+| 3000 | 0.205 | 0.214 | −0.009 |
+| 3300 | 0.215 | 0.221 | −0.006 |
+| 3600 | 0.224 | 0.228 | −0.004 |
+| 4000 | 0.237 | 0.235 | +0.001 |
+| 4500 | 0.252 | 0.250 | +0.002 |
+| 5000 | 0.268 | 0.267 | +0.001 |
+| 5772 | 0.293 | 0.293 | 0 (the fit) |
+| 6500 | 0.317 | 0.318 | −0.001 |
+| 7200 | 0.340 | 0.337 | +0.003 |
+| 8000 | 0.365 | 0.360 | +0.006 |
+| 10 000 | 0.420 | 0.410 | +0.010 |
+| 12 000 | 0.462 | 0.457 | +0.005 |
+| 15 000 | 0.505 | 0.505 | +0.001 |
+| 20 000 | 0.547 | 0.554 | −0.007 |
+| 27 000 | 0.576 | 0.591 | −0.015 |
+
+PHOENIX spectra to 12 000 K, ATLAS9 above, solar metallicity; the clouds
+refitted on the PHOENIX Sun (0.298). A Bond albedo 0.02 too low gives a
+planet at Earth's flux 6.8 W/m² too much; at the climate's slope of about
+2 W/m² per kelvin (study 32), about 3 K.
+
+Metallicity moves the spectrum as much as the coolest M dwarfs' error:
+at 5800 K, [M/H] = −1 raises the cloudy albedo by 0.009 and +0.5 lowers
+it by 0.005; at 3300 K, by 0.002 each way. Surface gravity hardly
+matters (log g 4.0 against 4.5 at 5800 K, and 4.5 against 5.0 at 3300 K:
+under 0.0005).
+
+### Light outside the bands
+
+The bands run from 0.2 to 5 µm and their weights sum to 1: all the
+star's light is put in them. A black body at 5772 K has 99.3 % of its
+light there, but one at 27 000 K only 32 %, and at 15 000 K 73 %; the
+ATLAS9 B star at 27 000 K has 27 %. The rest is far ultraviolet, which
+the upper air absorbs (O₂ and ozone on Earth). For B and late A hosts the
+light's share outside the bands matters more than its shape inside them.
+
+### Spectral libraries
+
+The app draws main-sequence hosts from 0.08 to 8 M☉ at [Fe/H] −1 to
++0.5: 2340 to about 27 000 K. The libraries read for study 35:
+
+| Library | T_eff (K) | [M/H] | 0.2-5 µm | Terms stated |
+| --- | --- | --- | --- | --- |
+| PHOENIX-ACES-AGSS-COND-2011 (Husser et al. 2013) | 2300-7000 by 100, 7000-12 000 by 200 | −4 to +1 (by 0.5 from −2) | yes (500 Å to 5.5 µm) | citation only |
+| BT-Settl, AGSS2009 grid (Allard et al. 2012), through the SVO server | 400-70 000 (uneven) | −4 to +0.5 | yes | none found |
+| ATLAS9 `ck04models` (Castelli & Kurucz 2003), STScI | 3500-50 000 | −2.5 to +0.5 | yes (0.1-10 µm, coarse) | none found |
+| MUSCLES, Mega-MUSCLES (France et al. 2016; Wilson et al. 2025) | 23 M and K dwarfs, 2600-5200 | the stars' | observed to 0.57 µm, PHOENIX beyond | CC BY 4.0 (MAST) |
+| CALSPEC (Bohlin, Gordon & Tremblay 2014) | standards (G dwarfs P330E, P177D; Vega) | the stars' | observed to about 2.5 µm, model beyond | citation only |
+| TSIS-1 HSRS (Coddington et al. 2021) | the Sun | solar | 202-2730 nm, 0.3 % from 460 to 2365 nm, 1.3 % outside | none found; paper CC BY |
+
+PHOENIX covers the hosts up to 12 000 K at the stellar tables' four
+metallicities; ATLAS9 or BT-Settl the rest. PHOENIX and ATLAS9 agree on
+the cloudy albedo within 0.0014 at 10 000 and 12 000 K. Below 4000 K
+they part by 0.004 to 0.008, and ATLAS9 has no model below 3500 K.
+MUSCLES's spectra beyond 0.57 µm are PHOENIX models, so they cannot
+check PHOENIX where an M dwarf's light lies; its observed ultraviolet
+matters for photochemistry, not for the albedo. None of the libraries
+states a licence beyond asking to be cited.
+
+### What we do not know
+
+- How much of a late M dwarf's albedo error survives in a thick or dry
+  air: study 35 measured Earth's air only. Kopparapu et al. (2013, §4.1)
+  say both effects grow with a denser atmosphere.
+- The model spectra's own error. PHOENIX's Sun puts 8.9 % below 400 nm
+  and 1.4 % below 300 nm against TSIS-1's 8.2 % and 1.0 %; for M dwarfs
+  no measured spectrum covering 0.2-5 µm was compared in this study.
+- The ultraviolet of M dwarfs' chromospheres, absent from photospheric
+  models, is under 0.5 % of their 0.2-5 µm light at 3600 K and below: it
+  matters for photochemistry, not for the albedo.
+
+## In the app
+
+### What you see
+
+The Bond albedo of the planet card and the temperature it gives. Today
+every star is a black body.
+
+### How it computes them
+
+`science::radiation::starlight::star_bands` splits the star's light over
+240 bands, even in $\ln\lambda$ from 0.2 to 5 µm, each weighted by the
+Planck function at its centre, and the shortwave
+(`science::radiation::albedo::shortwave_budget`) follows each band
+through the air. The cloud albedo (`albedo::CLOUD_ALBEDO`, 0.276) is
+fitted on Earth's Bond albedo under that black-body Sun.
+
+### Where it departs from the science
+
+- **The black body.** Issue #655. Study 35 measured, on main:
+  - Earth's clear sky (77 %, ground 0.122): 0.1701 under the black body,
+    0.1554 under TSIS-1 continued past 2730 nm (by the PHOENIX Sun or by
+    the black body, within 0.0001), 0.1577 under PHOENIX; the air absorbs
+    48.41, 50.91 and 51.23 W/m².
+  - Earth's cloudy sky at the fit point: 0.2931, 0.2812 and 0.2827. The
+    cloud albedo that gives 0.293 again is 0.301 (TSIS-1) or 0.298
+    (PHOENIX).
+  - The reference Earth (`earth_has_its_climate`, held at 288 K by the
+    thermostat): its Bond albedo 0.2953 becomes 0.2852 under TSIS-1, and
+    its climate at 280 ppm warms from 287.11 to 289.04 K. With the cloud
+    albedo refitted (0.3014) it is 0.2960 and 287.01 K: once refitted,
+    the spectrum leaves Earth almost where it is.
+- **All the light in 0.2-5 µm.** For hosts above about 10 000 K most of
+  the light lies at shorter wavelengths, and the bands take it all
+  (above).
+
+## Sources
+
+1. Allard, F., Homeier, D., Freytag, B. 2012, *Phil. Trans. R. Soc. A*
+   370, 2765, doi:10.1098/rsta.2011.0269 (BT-Settl, the AGSS2009 grid
+   listed by the SVO theoretical spectra server).
+2. Bohlin, R. C., Gordon, K. D., Tremblay, P.-E. 2014, *Publ. Astron.
+   Soc. Pac.* 126, 711, doi:10.1086/677655 (CALSPEC).
+3. Castelli, F., Kurucz, R. L. 2003, in *Modelling of Stellar
+   Atmospheres*, IAU Symp. 210, A20, arXiv:astro-ph/0405087 (the
+   `ck04models` grid of the STScI reference atlases, its `AA_README`).
+4. Coddington, O. M., Richard, E. C., Harber, D. et al. 2021,
+   *Geophys. Res. Lett.* 48, e2020GL091709, doi:10.1029/2020GL091709
+   (TSIS-1 HSRS, through LISIRD `tsis1_hsrs_1nm.csv`).
+5. Fraknoi, A., Morrison, D., Wolff, S. C. et al. 2022, *Astronomy 2e*,
+   OpenStax, §17.3.
+6. France, K., Loyd, R. O. P., Youngblood, A. et al. 2016, *Astrophys.
+   J.* 820, 89, doi:10.3847/0004-637X/820/2/89 (MUSCLES; HLSP
+   doi:10.17909/T9DG6F, CC BY 4.0).
+7. Husser, T.-O., Wende-von Berg, S., Dreizler, S. et al. 2013,
+   *Astron. Astrophys.* 553, A6, doi:10.1051/0004-6361/201219058
+   (PHOENIX-ACES-AGSS-COND-2011, Tables 1 and 2; HiRes files from
+   `ftp.gwdg.de/pub/misc/phoenix/HiResFITS`).
+8. IAU 2015 Resolution B3, nominal solar effective temperature 5772 K.
+9. Kasting, J. F., Whitmire, D. P., Reynolds, R. T. 1993, *Icarus* 101,
+   108, doi:10.1006/icar.1993.1010 (as cited by Wordsworth et al. 2010;
+   not read).
+10. Kopparapu, R. K., Ramirez, R., Kasting, J. F. et al. 2013,
+    *Astrophys. J.* 765, 131, doi:10.1088/0004-637X/765/2/131, §4.1
+    (read on arXiv:1301.6674v2).
+11. Shields, A. L., Meadows, V. S., Bitz, C. M. et al. 2013,
+    *Astrobiology* 13, 715, doi:10.1089/ast.2012.0961, §2.4.1 and
+    Table 2 (read on arXiv:1305.6926).
+12. Wilson, D. J. et al. 2025, *Astrophys. J.* 978, 85,
+    doi:10.3847/1538-4357/ad9251 (Mega-MUSCLES).
+13. Wordsworth, R. D., Forget, F., Selsis, F. et al. 2010, *Astron.
+    Astrophys.* 522, A22, doi:10.1051/0004-6361/201015053, §3.1 (read
+    on arXiv:1005.5098).
+14. Study 35, *Stellar spectra against the black body*, in the Wiki:
+    [35-stellar-spectra-audit](https://github.com/cyboooooorg/map-generator/wiki/35-stellar-spectra-audit).
+
+## See also
+
+- [How does a planet's air set its outgoing heat and its
+  albedo?](radiative-transfer.md): the shortwave these spectra feed.
+- [What does a G-type star mean?](star-types.md): the temperature scale
+  of the hosts.
+- [What is the habitable zone?](habitable-zone.md): Kopparapu's edges,
+  computed with stellar spectra.
