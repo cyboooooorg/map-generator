@@ -152,7 +152,9 @@ pub const DISC_TEMPERATURE_INDEX: f64 = 0.62;
 /// [`DISC_TEMPERATURE_INDEX`]), the radius `r` read in units of the
 /// host's ice line, `orbit × ICE_LINE_OF_THE_SUN / ice_line`: the disc
 /// scales with the host as the model's ice line does
-/// (`orbit::ice_line`), and around the Sun `r` is the orbit itself. Gives
+/// (`orbit::ice_line`), a modelling choice with no source (Öberg et al.
+/// say only that a more luminous star heats its disc further), and
+/// around the Sun `r` is the orbit itself. Gives
 /// 200 K at 1 au, 49 K at Saturn's 9.57 au and 24 K at Neptune's 30 au.
 /// Takes positive distances.
 pub fn disc_temperature(orbit: AstronomicalUnit, ice_line: AstronomicalUnit) -> Kelvin {

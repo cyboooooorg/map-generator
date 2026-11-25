@@ -38,7 +38,7 @@ const WIDER_DECADES: f64 = GREENHOUSE_DECADES + 1.0;
 /// return 8.069 to 8.102 bar, 0.4 % apart, on `main` (81844560) as after
 /// #679, where a change of 7e-6 bar in Earth's N₂ moved the five-decade
 /// pick from 8.077 to 8.094 bar. A maximum outside the range would move
-/// it by decades.
+/// it by decades. The noisy search is issue #689.
 const GREENHOUSE_MOVE: f64 = 1e-2;
 
 /// Earth at 1 au under [`TEST_ALBEDO`]: its body, the light and the

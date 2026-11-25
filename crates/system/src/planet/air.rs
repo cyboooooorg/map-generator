@@ -367,12 +367,12 @@ impl Volatiles {
 fn ice_traps_nitrogen(trial: &Trial, trace: &mut Trace) -> Result<Traced<bool>, InteriorError> {
     let (a, line) = (trial.orbit.semi_major_axis, trial.ice_line);
     let disc = trace.record(
-        Code::of(codes::VOLATILES_DISC_TEMPERATURE),
+        Code::of(codes::VOLATILE_DISC_TEMPERATURE),
         disc_temperature(*a.value(), *line.value()),
         &[a.node(), line.node()],
     )?;
     Ok(trace.record(
-        Code::of(codes::VOLATILES_ICE_TRAPS_N2),
+        Code::of(codes::VOLATILE_ICE_TRAPS_N2),
         traps_nitrogen(*disc.value()),
         &[disc.node()],
     )?)

@@ -332,7 +332,7 @@ fn mercury_sits_at_its_equilibrium_temperature() {
 /// methane inventory above what the air keeps (an imposed test input, as
 /// Mars's air is; #679: the reference trial's 2d-2 air held 2.876 bar of
 /// N₂ against the measured 1.384 bar, which settled it at 104.8 K; it now
-/// holds 1.386 bar, and 2d-4 moves this test onto the chain's own air).
+/// holds 1.422 bar, and 2d-4 moves this test onto the chain's own air).
 fn titan_on_its_measured_air() -> (Bare, Rotation, Trace) {
     let mut trace = Trace::new();
     let (t, d) = reference_trial(&mut trace, &TITAN);

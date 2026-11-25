@@ -528,16 +528,19 @@ const ROUND_OFF: f64 = 1e-12;
 #[test]
 fn the_disc_is_the_average_discs_around_the_sun() {
     // Öberg et al. 2011 eq. 1: 200 K at 1 au around a Sun-like star,
-    // `(r / 1 au)^-0.62` beyond.
+    // `(r / 1 au)^-0.62` beyond. The anchor is the paper's; the two
+    // checks after it are consistency checks of the law against its own
+    // form, no published value.
     let sun = ICE_LINE_OF_THE_SUN;
     let at_one = disc_temperature(AstronomicalUnit(1.0), sun);
     assert!((at_one.0 / DISC_TEMPERATURE_AT_ONE_AU.0 - 1.0).abs() < ROUND_OFF);
-    // The 30 K line, `(200 / 30)^(1 / 0.62)` au out.
+    // Consistency: the 30 K line lies `(200 / 30)^(1 / 0.62)` au out.
     let line = (DISC_TEMPERATURE_AT_ONE_AU.0 / NITROGEN_TRAPPING_TEMPERATURE.0)
         .powf(1.0 / DISC_TEMPERATURE_INDEX);
     let at_line = disc_temperature(AstronomicalUnit(line), sun);
     assert!((at_line.0 / NITROGEN_TRAPPING_TEMPERATURE.0 - 1.0).abs() < ROUND_OFF);
-    // It scales with the host as the ice line does.
+    // Consistency: the disc scales with the host as the model's ice line
+    // does (a modelling choice, no source).
     let far = disc_temperature(
         AstronomicalUnit(SATURN.0 * DOUBLE),
         AstronomicalUnit(sun.0 * DOUBLE),

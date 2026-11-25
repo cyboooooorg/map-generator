@@ -95,20 +95,25 @@ pub const NITROGEN_RECYCLED_UNDER_PLATES: f64 = 0.7965;
 /// decomposes to N2 before it reaches the air (`2 NH3 → N2 + 3 H2`, the
 /// reaction progress of Glein 2015, Icarus 250, 570,
 /// doi:10.1016/j.icarus.2015.01.001, eq. as quoted by Erkaev et al. 2020,
-/// MNRAS, arXiv:2010.12342, eq. 42: `ξ ≤ 1`). Fitted on Titan's N2, 1.384
-/// bar (1.467 bar, Fulchignoni et al. 2005, less its 5.65 % CH4, Niemann
-/// et al. 2010): the reference Titan's N2 is its rock's 0.005 bar plus
-/// `ξ` times the 11.81 bar of N2 its kept NH3 would make, so
-/// `ξ = 1.379 / 11.81 = 0.1168`, kept to three digits. Titan's own N2
-/// came from NH3 (14N/15N, Mandt et al. 2014; Scherf et al. 2020,
+/// MNRAS, arXiv:2010.12342, eq. 42: `ξ ≤ 1`). Fitted on Titan's N2 as a
+/// weight, 1.418 bar: 1.467 bar (Fulchignoni et al. 2005) times the mass
+/// share of N2 in an air of 5.65 % CH4 by volume (Niemann et al. 2010),
+/// the chain's partials being weights. The reference Titan's N2 is its
+/// rock's 0.005 bar plus `ξ` times the 11.807 bar of N2 its kept NH3
+/// would make, so `ξ = 1.413 / 11.807 = 0.1197`, kept to three digits
+/// (1.422 bar). The fit absorbs the reference Titan's inputs, its 45 %
+/// water among them (Fortes 2012's interiors hold 21 to 36 %, as Erkaev
+/// et al. 2020, Table 2, tabulate them). Titan's own N2 came from NH3
+/// (14N/15N, Mandt et al. 2014; Scherf et al. 2020,
 /// doi:10.1007/s11214-020-00752-0, section 3), not from N2 ice
-/// (`volatiles::traps_nitrogen`); no measured `ξ` was found, and the
-/// N2 Titan lost to space (0.5 to 2.2 times its present air for a slow to
-/// moderate young Sun, Erkaev et al. 2020, Table 3), which the model's
-/// escape does not take, is not in the fit. See the calibration on the
-/// page `docs/science/planet-atmospheres.md` (*Titan's nitrogen*) and
-/// study 28.
-pub const AMMONIA_DECOMPOSED: f64 = 0.117;
+/// (`volatiles::traps_nitrogen`); no measured `ξ` was found, and the N2
+/// Titan lost to space, which the model's escape does not take, is not
+/// in the fit: for an atmosphere outgassed after formation, 0.48 to 0.62
+/// times its present air for a slowly rotating young Sun, 0.48 to 2.02
+/// for a moderate or fast one (Erkaev et al. 2020, Table 3), which would
+/// raise `ξ` to 0.18 to 0.36. See the calibration on the page
+/// `docs/science/planet-atmospheres.md` (*Titan's nitrogen*) and study 28.
+pub const AMMONIA_DECOMPOSED: f64 = 0.120;
 
 /// Definition: mass of SO2 per mass of sulphur, 64.07 / 32.06 = 1.998,
 /// rounded to 2 as in the legacy.

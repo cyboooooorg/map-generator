@@ -1201,20 +1201,22 @@ which weighs 0.746 bar at 9.80665 m/s². The 0.78 bar quoted elsewhere
 is its share by volume times a bar.
 
 **Calibration of `NITROGEN_RECYCLED_UNDER_PLATES`** (0.7965; studies 23,
-part 5, and 28). Legacy's 0.8 gave the rewrite's Earth 0.804 bar of N₂, 7.8 %
-over the target. The chain's N₂ on Earth is proportional to the share
-kept, `1 − x` (0.804 bar at 0.8, 0.748 at 0.814, 0.746 at 0.8145, by
-running the chain on the reference Earth), so `x = 1 − 0.2 × 0.746 /
-0.804`; four digits, 0.8145, give 0.7458 bar, 0.746 to the three digits
-of the target. Earth's total moves from 52.83 to 52.77 bar (its CO₂,
-52.03 bar before the thermostat, does not move); no other reference
-body has plates. Searched and not found: a measured share of the
+part 5, and 28). Study 23 fitted it first: legacy's 0.8 gave the
+rewrite's Earth 0.804 bar of N₂, 7.8 % over the target; the chain's N₂ on
+Earth was proportional to the share kept, `1 − x` (0.804 bar at 0.8,
+0.748 at 0.814, 0.746 at 0.8145, by running the chain on the reference
+Earth), so `x = 1 − 0.2 × 0.746 / 0.804`; four digits, 0.8145, gave
+0.7458 bar, 0.746 to the three digits of the target, and Earth's total
+moved from 52.83 to 52.77 bar (its CO₂, 52.03 bar before the thermostat,
+did not move). The current value, 0.7965, is the refit below; no other
+reference body has plates. Searched and not found: a measured share of the
 outgassed nitrogen that subduction returns. Goldblatt et al. 2009
 (doi:10.1038/ngeo692, abstract) and Johnson & Goldblatt 2015
 (doi:10.1016/j.earscirev.2015.05.006, abstract) put several times the
 air's nitrogen in the mantle, which supports a large return without
 giving one (study 21, part 5). The test keeps Earth's N₂ within 10 % of
 0.746 bar: the target is sourced, the 10 % is the test's own tolerance.
+
 **Refit (study 28, #679).** Earth's ocean, formed in a 200 K disc, no
 longer carries N₂ ice (*Titan's nitrogen* below), which was 8.85 % of its
 N₂: 0.8145 gave 0.6799 bar, still inside the 10 %, but off the target the
@@ -1225,9 +1227,13 @@ all of it into N₂).
 
 **Titan's nitrogen** (study 28 of the
 [Wiki](https://github.com/cyboooooorg/map-generator/wiki/28-titan-nitrogen-audit),
-issue #679). Titan's N₂ is 1.384 bar: 1.467 bar at the surface
-(Fulchignoni et al. 2005, doi:10.1038/nature04314) less its 5.65 % of CH₄
-(Niemann et al. 2010, doi:10.1029/2010JE003659). Titan accreted almost
+issue #679). Titan's air is 1.467 bar at the surface (Fulchignoni et al.
+2005, doi:10.1038/nature04314), 5.65 % of it CH₄ by volume (Niemann et
+al. 2010, doi:10.1029/2010JE003659), so 1.384 bar of N₂ by volume and,
+the chain's partials being weights (*Earth's N₂ target*), 1.418 bar by
+weight: 1.467 bar times the mass share of N₂, `0.9435 × 28.014 /
+(0.9435 × 28.014 + 0.0565 × 16.043)` = 0.9669, the surface's composition
+standing for the column's; its CH₄ weighs 0.049 bar. Titan accreted almost
 none of it as N₂: its ³⁶Ar/¹⁴N is more than five orders of magnitude
 under the Sun's (Niemann et al. 2005, as Mousis et al. 2009, ApJ 691,
 1780, doi:10.1088/0004-637X/691/2/1780, arXiv:0810.0308, § 1, quote it),
@@ -1247,7 +1253,7 @@ in all, 3.15 after `condense`, and a climate at 104.8 K), 99.8 % of it
 from comet 67P's N₂ ice (`ICE_N2` on its 6.05e22 kg of water, times
 `LID_SHARE`), 0.005 bar from its rock, and nothing from its NH₃, which
 the cold trap freezes at 82 K. Its inputs are not the cause (the core
-fraction from 0.10 to 0.40 moves the N₂ by under 6 %). Two laws make
+fraction from 0.10 to 0.40 moves the N₂ by −2.6 % to +5.6 %). Two laws make
 Titan's N₂ from its ammonia instead:
 
 - **The ice-N₂ gate** (`science::volatiles::traps_nitrogen`,
@@ -1264,11 +1270,13 @@ Titan's N₂ from its ammonia instead:
   Bergin 2011, *ApJL* 743, L16, arXiv:1110.5567, eq. 1, adopt it;
   `DISC_TEMPERATURE_AT_ONE_AU`, `DISC_TEMPERATURE_INDEX`), the radius
   read in units of the host's ice line (`r = a × 2.7 au / ice_line`) so
-  that the disc scales with the host as the model's ice line does. Around
+  that the disc scales with the host as the model's ice line does, a
+  modelling choice with no source (Öberg et al. say only that "a more
+  luminous star will heat the disk further"). Around
   the Sun the line falls at 21.3 au: Saturn's ice (49 K) and Jupiter's
   (72 K) carry no N₂, Neptune's (24 K) and Pluto's (20 K) do. Earth's
   ocean, from a 200 K disc, carries none either: its nitrogen is
-  chondritic (Marty 2012). The chain records the disc's temperature
+  chondritic (Marty 2012, as cited by Scherf et al. 2020, § 1). The chain records the disc's temperature
   (`planet.volatiles.disc-temperature`) and the gate
   (`planet.volatiles.ice-traps-n2`), from which the outgassed N₂
   derives.
@@ -1286,38 +1294,51 @@ Titan's N₂ from its ammonia instead:
   and the photochemistry. Above NH₃'s triple point the photochemistry
   makes the same N₂ of it, so the law changes nothing there.
 
-**Calibration of `AMMONIA_DECOMPOSED`** (`ξ` = 0.117; study 28). Fitted
-on Titan's 1.384 bar: the reference Titan's N₂ is its rock's 0.005 bar
-plus `ξ` times the 11.806 bar of N₂ its 14.356 bar of kept NH₃ would
-make, so `ξ = 1.379 / 11.806 = 0.1168`, kept to three digits (1.386 bar).
-The model's `ε ξ`, 0.2 × 0.117 = 2.3 %, sits inside the 0.8 to 4.8 %
-Glein's `ε` gives at `ξ = 1`: a consistency, not a source. Searched and
-not found: a measured or bounded `ξ` other than Glein's `ξ ≤ 1` (Scherf
-et al. 2020, Erkaev et al. 2020, Glein 2023). Left out of the fit:
-Titan's escape. Erkaev et al. 2020 (Table 3) find Titan lost 0.48 to
-0.62 times its present air for a slowly rotating young Sun, up to 2.22
-for a moderate one and 15.7 for a fast one, where the model's shoreline
-takes 0.4 % of it; with that loss `ξ` would be 0.17 to 0.38. The
-non-thermal loss waits for #658.
+**Calibration of `AMMONIA_DECOMPOSED`** (`ξ` = 0.120; study 28). Fitted
+on Titan's N₂ by weight, 1.418 bar: the reference Titan's N₂ is its
+rock's 0.005 bar plus `ξ` times the 11.807 bar of N₂ its 14.356 bar of
+kept NH₃ would make, so `ξ = 1.413 / 11.807 = 0.1197`, kept to three
+digits (1.422 bar). The fit absorbs the reference Titan's inputs, its
+45 % water among them (Sohl et al. 2003; Fortes 2012's interiors hold 21
+to 36 %, as Erkaev et al. 2020, Table 2, tabulate them). The model's
+`ε ξ`, 0.2 × 0.120 = 2.4 %, sits inside the 0.8 to 4.8 % Glein's `ε`
+gives at `ξ = 1`: a consistency, not a source. Searched and not found: a
+measured or bounded `ξ` other than Glein's `ξ ≤ 1` (Scherf et al. 2020,
+Erkaev et al. 2020, Glein 2023). Left out of the fit: Titan's escape.
+For an atmosphere outgassed after Titan formed, as Glein's is, Erkaev et
+al. 2020 (Table 3) find Titan lost 0.48 to 0.62 times its present air
+for a slowly rotating young Sun and 0.48 to 2.02 for a moderate or fast
+one (2.22 and 15.73 are their losses for an air present from the
+start), where the model's shoreline takes 0.4 % of it; with that loss `ξ`
+would be 0.18 to 0.36. The non-thermal loss waits for #658.
 
 **Effect on the reference bodies** (the bare air before the climate,
-before and after). Titan: N₂ 2.876 to 1.386 bar, CH₄ unchanged (2.11 bar
-photolysed), 4.99 to 3.50 bar in all; on the chain's own air its climate
-settles at 93.89 K and 1.473 bar with 0.087 bar of CH₄ over its seas
-(measured 93.65 ± 0.25 K, 1.467 bar, 0.083 bar), where it settled at
-104.84 K and 3.15 bar. Earth: its ocean's N₂ ice was 8.85 % of its N₂,
+before and after). Titan: N₂ 2.876 to 1.422 bar, CH₄ unchanged (2.11 bar
+photolysed), 4.99 to 3.54 bar in all; on the chain's own air its climate
+settles at 94.24 K and 1.512 bar, where it settled at 104.84 K and
+3.15 bar (measured 93.65 ± 0.25 K and 1.467 bar). Its seas hold
+hydrocarbons, and its air keeps 0.091 bar of CH₄: the climate caps the
+CH₄ at its activity times its saturation pressure (`condense`), a
+partial pressure, which compares with the 0.083 bar measured by volume,
+while its N₂ is a weight; the measured air by weight is 1.418 bar of N₂
+and 0.049 bar of CH₄. Earth: its ocean's N₂ ice was 8.85 % of its N₂,
 0.7458 to 0.6799 bar; `NITROGEN_RECYCLED_UNDER_PLATES`, fitted on that
-target, is refitted (above). Callisto: 0.060 to 0.029 bar. A Triton-like
+target, is refitted (above). Callisto: 0.060 to 0.030 bar. A Triton-like
 body (0.0036 M⊕ at 30 au) keeps its ice N₂ and gains its NH₃'s, 0.338 to
-0.500 bar; its climate, set by the N₂ frost, does not move (38.17 K).
+0.504 bar; its climate, set by the N₂ frost, does not move (38.17 K).
 Venus and Mars carry no ice and do not move.
 
 Departures: the disc profile is an average of observed discs, not the
 Sun's, and its water snowline (135 K, Öberg et al. Table 1) falls at
 1.9 au where the model's ice line is 2.7 au: the two lines come from
-different sources. A body is placed in the disc at its present orbit,
-as the ice line places it. Titan's organics (Miller et al. 2019) are not
-a nitrogen source of the model.
+different sources. The disc's scaling with the host is a modelling
+choice with no source. A body is placed in the disc at its present
+orbit, as the ice line places it, so a water world that migrated in from
+beyond the ice line (`Drawn::is_water_world`) has its ice gated at its
+present, warmer orbit and carries no N₂ ice. `ξ` is fitted on one body
+and absorbs its inputs (its 45 % water). The climate's CH₄ is a partial
+pressure where its N₂ is a weight. Titan's organics (Miller et al. 2019)
+are not a nitrogen source of the model.
 
 Calibration targets, through the whole chain from the reference bodies'
 inputs (volatiles of the rule, no scatter) round the Sun at 4.6 Gyr (the
@@ -1335,9 +1356,9 @@ Earth row and the rewrite's values below it are at 4.567 Gyr):
 The Earth row is the rewrite's; the other results are `legacy-final`'s,
 after its climate where the row says so. The rewrite's chain, before
 the climate (2d-3), gives Venus 89.5 bar, 98 % CO₂ and 1.75 bar N₂;
-Titan 3.50 bar, of which 1.386 bar N₂ and 2.11 bar CH₄ (4.99 bar and
-2.88 bar of N₂ before #679); Callisto 0.029 bar of N₂ and no CH₄. Titan's
-target in the rewrite is its N₂, 1.384 bar within 10 %, and its bare N₂
+Titan 3.54 bar, of which 1.422 bar N₂ and 2.11 bar CH₄ (4.99 bar and
+2.88 bar of N₂ before #679); Callisto 0.030 bar of N₂ and no CH₄. Titan's
+target in the rewrite is its N₂ by weight, 1.418 bar within 10 %, and its bare N₂
 and photolysed CH₄ within legacy's 0.5 to 5 bar (*Titan's nitrogen*).
 
 As planets round the Sun, the reference moons above have a shortcoming,
@@ -2451,14 +2472,14 @@ their measured air (see "Test air and Solar System bounds" below):
 | Earth | 288 K, water, regulated, thermostat CO₂ 1.986e-3 bar, Bond albedo 0.2953; 287.11 K at 280 ppm on the measured air | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
-| Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 93.89 K on the chain's own air (104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
+| Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 94.24 K on the chain's own air (104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
 | Mercury | its equilibrium temperature, dry, temperate | within 1 K of it | airless |
 
 The reference Titan settled at 104.8 K because of its upstream nitrogen
 inventory (2.876 bar against 1.384 bar measured, +11.2 K; #679), so the
 climate is tested on Titan's measured air, not on the reference trial.
-Since #679 (*Titan's nitrogen*) the chain gives it 1.386 bar of N₂ and it
-settles at 93.89 K, 1.473 bar, with 0.087 bar of CH₄ over its seas; 2d-4
+Since #679 (*Titan's nitrogen*) the chain gives it 1.422 bar of N₂ and it
+settles at 94.24 K, 1.512 bar, with 0.091 bar of CH₄ over its seas; 2d-4
 moves the test onto the chain's own air.
 Earth's O₂ comes from life, which the chain adds later: its reference air
 has none, and the climate is solved again after oxygenation in 2d-4
@@ -3617,6 +3638,8 @@ another paper, from memory) is said where it is used.
   planet size.
 - Fonseca and Lobo 1989, NH₃'s triple-point pressure, through the
   NIST Chemistry WebBook.
+- Fortes 2012, Titan's interior models (their water shares as Erkaev et
+  al. 2020, Table 2, tabulate them).
 - Fray and Schmitt 2009, *Planet. Space Sci.* 57, 2053,
   doi:10.1016/j.pss.2009.09.011, sublimation pressures (closed; its
   Table 2 read as Lisse et al. 2021 reproduce it).
@@ -3734,7 +3757,8 @@ another paper, from memory) is said where it is used.
 - Marcq et al. 2008, Venus's SO₂ below the clouds.
 - Marty 2012, *Earth Planet. Sci. Lett.* 313-314, 56-66,
   doi:10.1016/j.epsl.2011.10.040, carbon in the mantle; Earth's bulk
-  water, p. 18 of the arXiv author copy (arXiv:1405.6336).
+  water, p. 18 of the arXiv author copy (arXiv:1405.6336); Earth's
+  nitrogen chondritic (as cited by Scherf et al. 2020, § 1).
 - Lellouch, Stansberry, Emery, Grundy and Cruikshank 2011, "Thermal
   properties of Pluto's and Charon's surfaces from Spitzer
   observations", *Icarus* 214, 701-716, the N₂ ice emissivity 0.8 (not
@@ -3843,6 +3867,9 @@ another paper, from memory) is said where it is used.
 - Sicardy et al. 2024, arXiv:2402.02476 (accepted by *A&A*), Triton's
   air from occultations 1989 to 2022 (read).
 - Simonelli and Veverka 1988, Io's Bond albedo.
+- Sohl et al. 2003, *J. Geophys. Res.*
+  108, doi:10.1029/2003JE002044, Titan's rock and iron, 50 to 60 wt %
+  (as Mosqueira 2026, arXiv:2610.34081, Table A1, tabulates it).
 - Span, Lemmon, Jacobsen, Wagner and Yokozeki 2000, "A reference
   equation of state for the thermodynamic properties of nitrogen for
   temperatures from 63.151 to 1000 K and pressures to 2200 MPa", *J.
