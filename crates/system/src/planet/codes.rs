@@ -419,6 +419,9 @@ pub(crate) const CLIMATE_CONDENSATE_AR: &str = "planet.climate.condensate.ar";
 /// What fills the oceans, from the phase diagrams: recorded when there is
 /// a liquid.
 pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
+/// The share of the surface under water: the sea term of the cover
+/// law, recorded when the liquid is water.
+pub(crate) const SURFACE_OCEAN_SHARE: &str = "planet.surface.ocean-share";
 
 /// The gases of the air the climate leaves, each with the code of its
 /// partial pressure, in the contract's order.

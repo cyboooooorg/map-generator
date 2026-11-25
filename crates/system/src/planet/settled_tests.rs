@@ -11,7 +11,7 @@ use super::bare::{Bare, Ground, bare_with, formed};
 use super::climate::Rotation;
 use super::climate::branches::{Bistable, Solved, solve};
 use super::climate::fixture::{EARTH_OBLIQUITY, MARS_OBLIQUITY, TITAN_OBLIQUITY, rotation};
-use super::climate::record::{Climate, record, record_hides_surface};
+use super::climate::record::{Climate, record, record_hides_surface, sea_share};
 use super::climate::{ClimateInputs, Light, Numerics};
 use super::codes;
 use super::draws::{Drawn, LABELS, draw};
@@ -26,10 +26,11 @@ use super::tests::{
 use super::water::water;
 use crate::Trial;
 use science::constants::STEFAN_BOLTZMANN;
+use science::habitable::OCEAN_MASS;
 use science::radiation::gases::PartialPressures;
 use science::radiation::ozone::ozone_column;
 use science::steam::STEAM_WORLD_MIN_BAR;
-use science::surface::{condense, titan_like_air};
+use science::surface::{condense, ocean_fraction, titan_like_air};
 use science::units::{
     Bar, Degree, DobsonUnit, EarthFlux, Fraction, Kelvin, Kilogram, WattPerSquareMetre,
 };
@@ -1027,4 +1028,58 @@ fn a_steam_world_that_loses_its_steam_keeps_its_rock() {
     let h2o = *s.bare.surface.as_ref().unwrap().atmosphere.partial[&Gas::H2o].value();
     assert!(h2o < STEAM_WORLD_MIN_BAR, "{h2o:?}");
     assert!(!has_steam(&s.bare.body));
+}
+
+#[test]
+fn a_wet_surface_records_its_sea_share() {
+    // Titan's water inventory with a water liquid node recorded for the
+    // test: the recorder reads only the inventory and the liquid kind.
+    let (titan, _, mut trace) = settled_of(&TITAN, TITAN_OBLIQUITY);
+    let water = &titan.bare.surface.as_ref().unwrap().water;
+    assert!(water.inventory.value().0 > 0.0);
+    let liquid = trace
+        .record(
+            Code::of(codes::SURFACE_LIQUID),
+            LiquidKind::Water,
+            &[water.inventory.node()],
+        )
+        .unwrap();
+    let share = sea_share(water, Some(&liquid), &mut trace)
+        .unwrap()
+        .expect("water is the liquid");
+    assert_eq!(
+        share.value().get(),
+        ocean_fraction(water.inventory.value().0 / OCEAN_MASS.0).get()
+    );
+    let mut from = derived_from(&trace, share.node());
+    from.sort();
+    let mut expected = vec![water.inventory.node(), liquid.node()];
+    expected.sort();
+    assert_eq!(from, expected);
+    assert_eq!(
+        trace.node(share.node()).unwrap().code.as_str(),
+        codes::SURFACE_OCEAN_SHARE
+    );
+
+    // A sea of another liquid has no sea share.
+    let methane = trace
+        .record(
+            Code::of(codes::SURFACE_LIQUID),
+            LiquidKind::Hydrocarbons,
+            &[water.inventory.node()],
+        )
+        .unwrap();
+    assert!(
+        sea_share(water, Some(&methane), &mut trace)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn a_surface_without_liquid_has_no_sea_share() {
+    let (mut venus, _, mut trace) = settled_of(&VENUS, NO_ICE_OBLIQUITY);
+    assert!(climate(&venus).liquid.is_none());
+    let water = venus.bare.surface.take().unwrap().water;
+    assert!(sea_share(&water, None, &mut trace).unwrap().is_none());
 }
