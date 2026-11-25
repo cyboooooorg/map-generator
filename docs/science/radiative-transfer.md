@@ -1293,7 +1293,7 @@ under a 214.4 K skin (the test's 214.51 K moves each by about
   adds about 0.3 W/m² (0.15 K) under the clouds.
 
 **Sources the audit could not read.** Kasting 1991 (Appendix B), Manabe &
-Wetherald 1967 (equation 3), Pierrehumbert 2010 (equation 2.33), the CRC
+Wetherald 1967 (equation 2), Pierrehumbert 2010 (equation 2.33), the CRC
 polarizabilities and Sobolev 1975 are behind paywalls or out of print. For
 each but the CRC, the audit found an indirect confirmation, named above
 (Kopparapu et al. 2013 for the first; `climlab` and arXiv:2006.03098 for
