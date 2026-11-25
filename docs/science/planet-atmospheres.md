@@ -1851,11 +1851,27 @@ quoted under *Thick nitrogen*;
 argon's 0.0127 bar, at most equally efficient, is +0.07 to +0.11 K by
 proportion, and less with its weaker broadening (derived). Argon does not close
 the gap between the reference Earth's 285.07 K and the 286 to 290 K window: it
-is missing from the weight of the air, not from its climate. The code agrees:
-Earth's dry column (`EARTH_DRY_AIR` under Earth's light, test
-`earths_argon_warms_its_column_little`) warms by 0.005 K with its 0.0127 bar of
-argon, and the reference Earth, held by the carbonate thermostat at 288 K,
-does not move.
+is missing from the weight of the air, not from its climate.
+
+The code, on Earth's measured air at 280 ppm in the wet climate of the settled
+reference Earth (the air of `earth_has_its_climate`, release build, measured
+2026-11-25 with a probe, not a test): its argon, 9340 ppm by volume of 1.014
+bar, warms it by +0.125 K, from 287.050 to 287.175 K, a little above the +0.07
+to +0.11 K estimated above. Added to the air without argon, 0.0127 bar of argon
+warms it by +0.168 K and 0.0127 bar of N₂ by +0.150 K: argon warms 1.12 times as
+much as N₂. Both add the same broadening, since the code counts argon as air,
+and argon's lower heat capacity (20.786 against N₂'s 29.12 J/(mol·K)) steepens
+the dry slope: with N₂'s heat capacity given to argon, the same probe gives
++0.120 K. The measured weaker broadening of argon, left out (a departure below),
+would pull the other way; no source was read that orders the two effects. On
+that Earth the model's doubled N₂ (+0.78 bar) warms by +7.49 K, above Goldblatt
+et al. 2009's 4.4 K and the 3 to 7 K quoted under *Thick nitrogen* (late Archean
+Earths, under a fainter Sun and more CO₂, not this one). Earth's dry column
+(`EARTH_DRY_AIR`, no water vapour, test `earths_argon_warms_its_column_little`)
+warms by only 0.005 K with 0.0127 bar of argon: without the water's feedback it
+is about 12 times less sensitive (doubling its N₂ gives +0.37 K), so that test
+holds an upper bound only. The reference Earth, held by the carbonate thermostat
+at 288 K, does not move.
 
 **Contract.** The timeline's air is a map of the gases (`timeline::planet::Gas`,
 `#[non_exhaustive]`, kebab-case) with `surface_pressure` the sum of the

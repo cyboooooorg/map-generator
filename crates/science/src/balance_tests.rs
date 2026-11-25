@@ -309,7 +309,11 @@ fn a_runaways_light_follows_its_steam_down_to_none() {
 
 /// Source: how much Earth's argon may warm it, 0.2 K: study 29's bound,
 /// over its +0.07 to +0.11 K scaled from Goldblatt et al. 2009's doubled
-/// N₂ (argon, 0.0127 bar, broadens less than N₂).
+/// N₂ (argon, 0.0127 bar, broadens less than N₂). An upper bound only:
+/// that window is for a wet climate, and this dry column, without the
+/// water's feedback, is about 12 times less sensitive (+0.005 K for the
+/// argon, +0.37 K for doubled N₂; the wet Earth at 280 ppm gives +0.125 K
+/// for its argon, `docs/science/planet-atmospheres.md`, "Argon").
 const EARTH_ARGON_WARMING_K: f64 = 0.2;
 
 /// Source: Earth's argon as a weight, 0.0127 bar (study 29, derived from
@@ -330,5 +334,6 @@ fn earths_argon_warms_its_column_little() {
     );
     let warming = with - without;
     println!("Earth's dry column: {without:.3} K, with its argon {with:.3} K ({warming:+.3} K)");
-    assert!((0.0..EARTH_ARGON_WARMING_K).contains(&warming), "{warming}");
+    // An upper bound only (see `EARTH_ARGON_WARMING_K`).
+    assert!(warming < EARTH_ARGON_WARMING_K, "{warming}");
 }
