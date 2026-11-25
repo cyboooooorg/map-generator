@@ -112,8 +112,9 @@ The rewrite ports the law to `science::escape::energy_limited_loss`
 `MIN_ENVELOPE` and `WATER_PER_HYDROGEN`, the 9 kg of water per kg of
 hydrogen of the next section. The system engine's step is
 `system::planet::escape::escaped`: it reads the star's XUV history, applies
-the law to the formed body and returns the trial before and after the loss
-(the water step below needs the first), each value with its cause node.
+the law to the body the boil-off left (next section) and returns the trial
+before and after the loss (the water step below needs the first), each
+value with its cause node.
 
 `envelope_after_escape` caps the loss at the envelope, lowers the mass by
 what is lost, and sets the envelope to zero once it falls under 0.1 % of
@@ -136,6 +137,190 @@ envelope it is stripped at 0.05 AU and keeps about a third of it at
 times higher, stripped it); Jupiter at
 0.05 AU keeps over 99 % of its envelope; 5 M⊕ with 1 % at 0.5 AU keeps at
 least half; Earth, Uranus and Neptune are unchanged.
+
+### Boil-off and core-powered mass loss (study 30)
+
+Before the XUV law above, a nebular envelope loses what the star's
+bolometric light boils off. Two losses are driven by that light, not
+the XUV, so they act round a host without a corona too (an A star). This
+section is the study of issue #697
+([study 30](https://github.com/cyboooooorg/map-generator/wiki/30-core-powered-loss-audit))
+and the law the rewrite implements from it:
+`science::escape::boil_off_ceiling`, chained by
+`system::planet::boil_off::boiled_off`.
+
+**Model.** When the disc goes, a young planet that fills its Bondi
+sphere loses its outer layers as an isothermal Parker wind, cools and
+shrinks to about a tenth of the Bondi radius within about a million
+years: the *boil-off* (Owen & Wu 2016; Ginzburg, Schlichting & Sari
+2016). What is left can keep losing gas for gigayears, lifted by the
+heat of the core and the envelope: *core-powered mass loss* (Ginzburg,
+Schlichting & Sari 2018; Gupta & Schlichting 2019, 2020). The rate is
+the smaller of an energy-limited and a Bondi-limited one (Gupta &
+Schlichting 2019, eqs. 5, 6 and 8):
+
+```text
+Ṁ_E = L / (g R_c)
+Ṁ_B = 4π R_s² c_s ρ_rcb exp(−G M_p / (c_s² R_rcb)),   R_s = G M_p / (2 c_s²)
+L   = 64π σ T_eq⁴ R'_B / (3 κ ρ_rcb),   R'_B = ((γ−1)/γ) G M_c µ / (k_B T_eq)
+```
+
+with `c_s = (k_B T_eq / µ)^(1/2)`, `κ` the opacity at the
+radiative-convective boundary (Freedman et al. 2008, 500 to 2 000 K) and
+`T_eq` the zero-albedo equilibrium temperature. Integrated over the age,
+it puts the largest stripped core at `R ∝ P^(−1/9)`, the radius valley's
+slope (study 30 reproduces it: −0.110 from 8 to 64 days round the Sun).
+
+The two are one outflow, bolometrically heated above the
+radiative-convective boundary, with different starting states (Owen &
+Schlichting 2024, § 2). Tang, Fortney & Murray-Clay 2024 run both in one
+evolution model with a self-consistent start, and find that after the
+boil-off the core-powered stage removes at most 0.1 % of the H/He mass
+fraction over 3 Gyr, against about 10 % in the boil-off (abstract and
+§ 3.5). Their Table 2, the largest H/He fraction a planet keeps after the
+boil-off, whatever it started with below 20 %:
+
+| Flux (F⊕) | 1.5 M⊕ | 2.4 | 3.6 | 5.5 | 8.5 | 13 | 20 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1.18 % | 3.38 % | 8.62 % | − | − | − | − |
+| 3 | 0.49 % | 1.79 % | 4.93 % | 14.64 %\*\* | − | − | − |
+| 10 | 0.14 % | 0.77 % | 2.56 % | 8.85 % | − | − | − |
+| 30 | 0.02 % | 0.25 % | 1.17 % | 4.44 % | 16.75 %\*\* | − | − |
+| 100 | 2 × 10⁻⁶\* | 0.03 % | 0.30 % | 1.67 % | 7.21 % | 23.49 %\*\* | − |
+| 300 | 0 | 6 × 10⁻⁶\* | 0.04 % | 0.53 % | 3.14 % | 11.13 %\*\* | − |
+| 1000 | 0 | 0 | 4 × 10⁻⁶\* | 0.04 % | 0.73 % | 4.04 % | 13.50 %\*\* |
+
+"−" is "zero or very slight mass loss". The starred values (\*:
+2 × 10⁻⁶, 6 × 10⁻⁶ and 4 × 10⁻⁶) are planets that lost the whole
+envelope, the value a radiative layer alone. The double-starred ones
+(\*\*, above 10 %) were started from a larger envelope than the
+default 10 % to find the largest one kept. Photoevaporation "should
+start right after boil-off around 1 Myr" (Tang et al. 2024, § 3.3).
+
+**The law.** One bolometric law, then the XUV law, never two
+bolometric ones (the same outflow would be counted twice): Gupta &
+Schlichting's slow loss is not added on top of the ceiling.
+
+1. `science::escape::boil_off_ceiling(core_mass, flux)`: Table 2,
+   bilinear in `log M_c` and `log F` of `log f`, so it reads the table's
+   cells back exactly:
+
+   ```text
+   log c = Σ w_ij log f_ij,   w bilinear in (log M_c, log F)
+   ```
+
+2. In the chain (`system::planet::bare::formed`), after the body is
+   formed on its drawn envelope `f` and before `escaped`: when `f > c`
+   the fraction left is `c`, the mass `M_c / (1 − c)`, and the body is
+   built again. The ceiling (`planet.envelope.boil-off-ceiling`, from the
+   mass without the envelope and the bolometric flux), the fraction left
+   (`planet.envelope.after-boil-off`), the mass left
+   (`planet.mass.after-boil-off`) and the envelope boiled off
+   (`planet.envelope.boiled-off`) are recorded with their causes; when
+   `f ≤ c` nothing is recorded. The planet carries the envelope boiled
+   off (`envelope_boiled`) next to the one the XUV escape took
+   (`envelope_lost`), so that an explanation reaches both. Only a
+   mini-Neptune is read: not from 20 M⊕ (`GAS_GIANT_MIN_MASS`, the
+   grid's end; the giants are #497).
+3. Then the XUV escape and `MIN_ENVELOPE` (kept at 1e-3), as above, on
+   what is left.
+
+The core mass is the mass without the envelope; the flux is the present
+bolometric flux of all stars, the only one the timeline holds (the
+boil-off happens about 1 Myr after the disc, before the ZAMS the stellar
+tracks start at; #700 tracks the flux at disc dispersal). The
+alternative, Gupta & Schlichting 2020's evolution over the age in place
+of the ceiling, strips the same reference planets and gives the share of
+super-Earths growing with age that the ceiling lacks, but starts from a
+state Tang et al. show overestimates the later loss, and its rates are
+disputed by orders of magnitude (Misener et al. 2025; Modirrousta-Galian
+& Korenaga 2026).
+
+**Calibration.** Two values no source gives, searched in study 30 (no
+published ceiling off Tang et al.'s grid, no value for their "−"):
+
+- The off-grid extension (`science::escape`'s `log_log_read`, study 30's
+  new calibration 1): off the grid (below 1.5 M⊕, below 1 F⊕, above
+  20 M⊕ or 1 000 F⊕), the end segment of each axis is extended in log-log
+  from the grid's edge, as `science::xuv`'s saturation. The physics fixes
+  the direction (lighter and hotter planets lose more, Owen & Wu 2016,
+  conclusion 5), not the slope. Off both axes at once the two axis
+  extensions add, without the bilinear cross term: a corner rule chosen
+  at review (2026-11-25), part of this calibration and not a new one.
+  With the cross term, which grows with both distances, a 0.3 M⊕ core
+  would be given back 3.6 % of envelope at 3 000 F⊕ (and a 0.2 M⊕ core
+  1.9 % at 2 300 F⊕), next to a cell (1.5 to 2.4 M⊕, 300 to 1 000 F⊕)
+  that keeps nothing at its four corners; without it, the ceiling there
+  stays at the corner's 1e-7. Clamping at the edges instead changes none
+  of the 22 reference outcomes; it keeps more on Earth (1.18 % against
+  0.48 %) and on ref 8's hot Neptunes (2.6 % and 7.3 % against 0.28 %
+  and 2.6 %).
+- `NO_BOIL_OFF`: a "−" cell reads 0.20, the highest envelope drawn below
+  20 M⊕ (Lopez & Fortney 2014's last column): a ceiling there never cuts
+  a draw.
+
+`NOTHING_LEFT`: a "0" cell reads 1e-7, a definition: every neighbour is
+under `MIN_ENVELOPE` (the starred cells are 2 to 6 × 10⁻⁶), so the value
+decides nothing. A ceiling read above one is one.
+
+**Validation** (study 30, derived from the table; the tests of
+`science::escape` and `system::planet::boil_off` check each line):
+
+- The 32 numeric cells of Table 2 read back to 1e-12; the 14 "−" cells
+  are at least 0.20; the 3 "0" cells and the three starred ones are under
+  `MIN_ENVELOPE`. Wherever the ceiling lies between 1e-5 and 0.15, it
+  falls with the flux and rises with the core mass, on and off the grid.
+- The largest core the ceiling strips (under `MIN_ENVELOPE`) is 1.37 M⊕
+  at 10 F⊕, 2.02 M⊕ at 30 F⊕, 2.97 M⊕ at 100 F⊕ and 6.31 M⊕ at
+  1 000 F⊕: with `R ∝ M^(1/4)` (Lopez & Fortney 2014, eq. 1),
+  `R ∝ F^0.081` from 30 to 1 000 F⊕.
+  Measured: `α = 0.069 (+0.019/−0.023)` (Berger et al. 2023), 0.08
+  predicted for core-powered loss (Rogers et al. 2021). Round one star,
+  −0.108 in period against −0.09 (+0.02/−0.04) (Van Eylen et al. 2018)
+  and −0.10 ± 0.03 (Petigura et al. 2022). The line sits at 1.1 R⊕
+  (10 F⊕) to 1.6 R⊕ (1 000 F⊕), under the observed valley (about 1.9 R⊕
+  at 10 days): the boil-off "cannot by itself form a pronounced radius
+  gap", the XUV law adds to it.
+- Earth (1 M⊕, 1 F⊕): ceiling 0.48 %, so a nebular envelope above it is
+  trimmed but not removed; Earth's bareness comes from capturing little
+  (Lammer et al. 2014), not from this law. In the chain, an Earth at
+  1 au with Lammer et al.'s largest envelope, 2.5 %, keeps 0.40 % after
+  the boil-off and the XUV escape (2.29 % before the boil-off was
+  chained).
+- HD 56414 b, a Neptune of an 8 500 K A star at 274 F⊕ (Giacalone et al.
+  2022), keeps 2.6 % at 8 M⊕ and 13 % at 14 M⊕: consistent with its
+  existence. With Lopez & Fortney 2014's envelopes at 420 Myr, the
+  ceiling's envelope reaches its 3.71 ± 0.20 R⊕ from a core of about
+  10 M⊕ (3.74 R⊕), 5.1 R⊕ at 14 M⊕ and 3.1 R⊕ at 8 M⊕: the law puts its
+  core in the upper half of Giacalone et al.'s range. The test checks
+  both ends: the 8 M⊕ core is not above 3.91 R⊕, the 14 M⊕ core not
+  below 3.51 R⊕.
+- A planet of an A star without XUV, a 1.92 M⊕ core with 2.74 % at
+  802 F⊕ (ref 8 d), is rocky after the chain; before the boil-off was
+  chained it kept its 2.74 %.
+- The reference systems: four placements lose their envelope, ref 6 c, d
+  and ref 8 d, e (cores of 0.57 to 3.7 M⊕ at 228 to 802 F⊕ round A
+  stars, envelopes of 0.1 to 3.9 %, ceilings under 2e-5); ref 8's hot
+  Neptunes and ref 7's earth-like planet keep theirs.
+
+**Limitations.** Tang et al.'s grid is for rocky cores round a Sun-like
+star at constant flux; icy cores are more fragile, and the model reads
+the mass without the envelope, water included, as the rocky core. Tang
+et al. do not say whether their fraction is of the planet's mass or of
+the core's; the model reads it as of the planet's (the mass left is
+`M_c / (1 − c)`). Next to the "−" cells the calibration sits under a
+published value (13 M⊕: "−" at 30 F⊕, 23.49 % at 100 F⊕), so in the
+cell from 8.5 to 13 M⊕ and 30 to 100 F⊕ the ceiling rises with the
+flux for cores from 12.15 to 13 M⊕, against the physics' direction. It
+is lowest there at 12.15 M⊕ and 30 F⊕, 0.194, where it trims a 20 %
+draw by about 2.8 % of itself; the flux where it reaches 0.20 depends
+on the core (about 40 F⊕ at 12.5 M⊕, 32 F⊕ at 12.8 M⊕; under about
+12.2 M⊕ it stays under 0.20 up to 100 F⊕). The present flux stands for
+the flux at disc dispersal. The near-ultraviolet escape of hot stars
+(Balmer-driven, García Muñoz & Schneider 2019), which strips Neptunes of
+A stars within 0.1 AU (Giacalone et al. 2022), is a separate channel the
+model lacks (#701). The energy-limited rate of Owen & Schlichting 2024 (eq. 17)
+divides the XUV law by 4 for the same `η` (#702).
 
 ## Runaway greenhouse, water kept and tectonic regime
 
@@ -3727,9 +3912,11 @@ earlier input of a body keeps its value.
 ## The chain and the surface classes
 
 The rewrite chains the first part of this derivation in
-`system::planet::bare::bare`: composition, interior, XUV fluence, escape,
-heat, then for a body that has lost its envelope the water, the regime, the
-core and the air, before any climate. The model is private until the
+`system::planet::bare::bare`: composition, interior, the boil-off of a
+mini-Neptune's envelope down to its ceiling (new to the rewrite, see
+[Boil-off and core-powered mass loss](#boil-off-and-core-powered-mass-loss-study-30)),
+XUV fluence, escape, heat, then for a body that has lost its envelope the
+water, the regime, the core and the air, before any climate. The model is private until the
 climate step (2d) and nothing generated changes. Where it departs from the
 legacy, beyond the corrections named in each section: the rewrite's
 interior is heavier (cooling times about a fifth longer, a deeper seafloor),
@@ -4182,6 +4369,8 @@ another paper, from memory) is said where it is used.
 - Bell, Wronski, Quoilin and Lemort 2014, *Ind. Eng. Chem. Res.* 53,
   2498, doi:10.1021/ie4033999, CoolProp, whose saturation ancillaries
   give argon's liquid vapour pressure.
+- Berger, Schlieder, Huber and Barclay 2023, arXiv:2302.00009, the
+  radius valley's slope with insolation and stellar mass (abstract read).
 - Bertrand et al. 2022, *Icarus* 373, 114764, Triton.
 - Biver et al. 2022, *Comets III*, arXiv:2207.04800, Table 3.
 - Blakley et al. 2024, *Planet. Space Sci.*,
@@ -4265,17 +4454,31 @@ another paper, from memory) is said where it is used.
   doi:10.1016/j.pss.2009.09.011, sublimation pressures (closed; its
   Table 2 read as Lisse et al. 2021 reproduce it, N₂ and argon's
   `Ar-1`).
+- Freedman, Marley and Lodders 2008, *ApJS* 174, 504, the opacity at
+  the radiative-convective boundary (as Ginzburg et al. 2018 eq. 9 print
+  it).
 - Fretwell et al. 2013, *The Cryosphere* 7, 375,
   doi:10.5194/tc-7-375-2013, Bedmap2 (read).
 - Fulchignoni et al. 2005, *Nature* 438, 785, doi:10.1038/nature04314,
   Titan's surface temperature and pressure.
 - Fulton et al. 2017, the radius bins of the census.
+- García Muñoz and Schneider 2019, *ApJL*, doi:10.3847/2041-8213/ab498d,
+  arXiv:1910.00267, Balmer-driven escape round hot stars (abstract
+  read).
 - Gao et al. 2023, *J. Phys. Chem. Ref. Data* 52,
   doi:10.1063/5.0128269, NH₃'s triple-point temperature.
+- Giacalone et al. 2022, *ApJL*, doi:10.3847/2041-8213/ac80f4,
+  arXiv:2208.06396, HD 56414 b, a Neptune of an A star (read).
 - Giauque and Stephenson 1938, *J. Am. Chem. Soc.* 60, 1389,
   through the NIST Chemistry WebBook.
 - Giles et al. 2024, arXiv:2405.19253, Io's atmosphere from IRTF/TEXES
   spectra.
+- Ginzburg, Schlichting and Sari 2016, *ApJ* 825, 29,
+  doi:10.3847/0004-637X/825/1/29, arXiv:1512.07925, the boil-off as
+  spontaneous mass loss (read).
+- Ginzburg, Schlichting and Sari 2018, *MNRAS* 476, 759,
+  doi:10.1093/mnras/sty290, arXiv:1708.01621, core-powered mass loss
+  (read).
 - Glein 2015, *Icarus* 250, 570, doi:10.1016/j.icarus.2015.01.001,
   Titan's N₂ from the NH₃ its interior decomposes (not reached; its
   equations as Erkaev et al. 2020 print them).
@@ -4293,6 +4496,11 @@ another paper, from memory) is said where it is used.
 - Gosman, McCarty et al. 1969, argon's triple point, 83.8 K and 0.689
   bar, through the NIST Chemistry WebBook (read).
 - Gray and Nagel 1989, the limit of the convective envelope.
+- Gupta and Schlichting 2019, *MNRAS* 487, 24, doi:10.1093/mnras/stz1230,
+  arXiv:1811.03202, core-powered mass loss and the valley's slope
+  (read).
+- Gupta and Schlichting 2020, *MNRAS*, doi:10.1093/mnras/staa315,
+  arXiv:1907.03732, its dependence on the host (read).
 - Gurrola 1995, PhD thesis, Stanford University, Triton's surface
   pressure from the Voyager 2 radio occultation, 14 ± 1 µbar (not
   reached; as Sicardy et al. 2024 quote it).
@@ -4388,6 +4596,10 @@ another paper, from memory) is said where it is used.
 - Lacis et al. 2010, doi:10.1126/science.1190653.
 - Lainey et al. 2009, doi:10.1038/nature08108, Io's tidal
   dissipation.
+- Lammer et al. 2014, *MNRAS*, arXiv:1401.2765, nebula-captured
+  hydrogen envelopes of 0.1 to 5 M⊕: Tables 1 to 3 (the largest
+  envelope of a 1 M⊕ core, 2.5 % of the planet's mass, Table 1) and
+  Table 5 (read).
 - Lay, Hernlund and Buffett 2008, doi:10.1038/ngeo.2007.44,
   the core's heat flow.
 - Lecavelier des Etangs 2007, energy-limited escape.
@@ -4419,6 +4631,9 @@ another paper, from memory) is said where it is used.
 - Loeb et al. 2020, *J. Climate* 33, 61, doi:10.1175/JCLI-D-19-0381.1,
   Table 3, CERES's clear sky of the same air without its clouds
   (read; study 32).
+- Lopez and Fortney 2014, *ApJ* 792, 1, arXiv:1311.0329, eq. 1 (a
+  rocky core's radius, `R ∝ M^(1/4)`) and Tables 2 to 4 (the envelope's
+  thickness, through `science::envelope`).
 - Lora and Ádámkovics 2017, arXiv:1610.06277, Titan's near-surface
   methane humidity (read).
 - Lyons, Reinhard and Planavsky 2014,
@@ -4456,7 +4671,13 @@ another paper, from memory) is said where it is used.
 - Min, Mundil, Renne and Ludwig 2000; Renne, Balco, Ludwig, Mundil and
   Min 2011; Steiger and Jäger 1977: the decay constants of ⁴⁰K (as
   Schaen et al. 2020, Table 1, tabulate them).
+- Misener, Schulik, Schlichting and Owen 2025, *ApJ*,
+  doi:10.3847/1538-4357/ada777, arXiv:2405.15221, the non-isothermal
+  core-powered wind (abstract read).
 - Mittelholz et al. 2020, a late field on Mars.
+- Modirrousta-Galian and Korenaga 2026, *Icarus* 444, 116827,
+  doi:10.1016/j.icarus.2025.116827, arXiv:2509.16046, the energy-limited
+  cap of core-powered loss (abstract read).
 - Moore et al. 1999, Callisto.
 - Moore and Webb 2013, doi:10.1038/nature12473, "Heat-pipe
   Earth".
@@ -4530,6 +4751,10 @@ another paper, from memory) is said where it is used.
   the NIST Chemistry WebBook.
 - Owen 1982, Titan's ⁴⁰Ar for an Earth-like rock (as Niemann et al.
   2010 quote it).
+- Owen and Schlichting 2024, *MNRAS*, arXiv:2308.00020, photoevaporation
+  against core-powered loss (§ 1 to 4 read).
+- Owen and Wu 2016, *ApJ* 817, 107, doi:10.3847/0004-637X/817/2/107,
+  arXiv:1506.02049, the boil-off (read).
 - Owen and Wu 2017, doi:10.3847/1538-4357/aa890a, eq. 19.
 - Ozima and Podosek 2002, *Noble Gas Geochemistry*, the air's 1.6e18
   mol of ⁴⁰Ar (as Marty 2012, p. 15, quotes it).
@@ -4539,6 +4764,8 @@ another paper, from memory) is said where it is used.
 - Perovich et al. 2002, *J. Geophys. Res.* 107(C10),
   doi:10.1029/2000JC000438, the albedo of Arctic sea ice (abstract
   read).
+- Petigura et al. 2022, *AJ*, doi:10.3847/1538-3881/ac51e3,
+  arXiv:2201.10020, the radius gap against stellar mass (abstract read).
 - Picard, Davis, Gläser and Fujii 2008, *Metrologia* 45, 149,
   doi:10.1088/0026-1394/45/2/004, the CIPM-2007 air density formula and
   its argon (abstract read).
@@ -4556,6 +4783,9 @@ another paper, from memory) is said where it is used.
 - Robinson and Catling 2012, *ApJ* 757, 104, section 4.3.
 - Robinson and Catling 2014, doi:10.1038/ngeo2020, the
   tropopause.
+- Rogers, Gupta, Owen and Schlichting 2021, *MNRAS* 508, 5886,
+  doi:10.1093/mnras/stab2897, arXiv:2105.03443, the valley's slopes
+  predicted by each loss (read in part).
 - Rubin et al. 2015, *Science* 348, 232, doi:10.1126/science.aaa6100,
   N₂ in comet 67P and its formation under about 30 K (abstract read).
 - Rubin et al. 2019, doi:10.1093/mnras/stz2086, Table 2, comet 67P.
@@ -4615,6 +4845,8 @@ another paper, from memory) is said where it is used.
 - Tan, Kargel and Marion 2013, *Icarus* 222, 53,
   doi:10.1016/j.icarus.2012.10.032, Titan's seas (closed; through Glein
   and Shock 2013, Table 4).
+- Tang, Fortney and Murray-Clay 2024, arXiv:2410.08577, boil-off and
+  the core-powered loss after it, Table 2 (read).
 - Tegeler, Span and Wagner 1999, *J. Phys. Chem. Ref. Data* 28, 779,
   doi:10.1063/1.556037, argon's reference equation of state, its triple
   point (as Xiao et al. 2025 and CoolProp take it).
@@ -4649,6 +4881,9 @@ another paper, from memory) is said where it is used.
 - Tyler et al. 1989, *Science* 246, 1466,
   doi:10.1126/science.246.4936.1466, Voyager 2's radio occultation of
   Triton: 1.6 ± 0.3 Pa and 38 K (abstract read).
+- Van Eylen et al. 2018, *MNRAS*, doi:10.1093/mnras/sty1783,
+  arXiv:1710.05398, the valley's slope with period (abstract and
+  conclusions read).
 - Veeder et al. 2004, Io's heat flow, as quoted by Moore and Webb
   2013.
 - Verbiscer et al. 2007, Enceladus's E-ring fallout.
