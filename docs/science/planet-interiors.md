@@ -116,8 +116,10 @@ A planet's hydrogen and helium envelope is its mass fraction `f`, drawn
 for every planet from its own sub-seed, with one uniform number in every
 regime (so a planet's stream never depends on its mass). It is the
 primordial envelope: what the planet captured before the disc dispersed,
-before the loss of gas of the later pull requests. The bounds depend on
-the mass:
+before the loss of gas of the later pull requests. It is applied at the
+planet's final mass, which for a planet that finished after the gas is
+more than it held (see "Planets that finish after the gas (study 31)"
+below). The bounds depend on the mass:
 
 | Mass | Draw | Bounds | Source |
 | --- | --- | --- | --- |
@@ -203,6 +205,168 @@ The radius is continuous at 1 $M_\oplus$ (below).
   starts at 104.9 $M_\oplus$ and the envelope is $1 - 100/6000$. The
   study's survey of giant tables (its Sect. 1.5) found no other with a
   free core mass, so none with a core above 100 $M_\oplus$.
+
+#### Planets that finish after the gas (study 31)
+
+**What the draw assumes.** Lammer et al. (2014) model a core already
+grown to its final mass inside the nebula. The draw gives that envelope
+to every planet of 0.1 to 5 $M_\oplus$, so no drawn planet can have
+finished forming after the gas disc dispersed, as Earth did. A drawn
+Earth at 1 au keeps a mini-Neptune's envelope about one draw in three
+(an estimate from the draw's bounds, not run per seed; issue #696). This
+section is the study of that gap; **the code does not model it**. The
+user decided (2026-11-25) to record a departure and adopt no law; what
+follows is the outline a future law would rest on.
+
+**When discs go.** The share of young stars with a disc falls with age:
+half lose it in about 3 Myr and essentially all in about 6 Myr (Haisch
+et al. 2001); an exponential with an e-folding time of 2.5 Myr, about
+1.2 Myr above 1.3 $M_\odot$ (Mamajek 2009). Gas accretion stops before
+the dust clears, 2.3 against 2.9 Myr (Fedele et al. 2010). Pfalzner et
+al. (2026) fit the lifetimes with a Weibull distribution by host mass;
+for stars born with a disc ($f_\mathrm{init} = 80\,\%$, their Table 2):
+
+| Host mass ($M_\odot$) | $k$ | $\lambda$ (Myr) | Median (Myr) |
+| --- | --- | --- | --- |
+| 0.01 to 0.2 | 2.03 | 10.21 | 8.52 |
+| 0.2 to 1.0 | 2.55 | 9.40 | 8.14 |
+| 1.0 to 3.0 | 1.73 | 6.10 | 4.93 |
+
+Discs disperse up to twice as fast above 2 $M_\odot$ (Ribas et al.
+2015). The medians differ from Mamajek's 1.7 Myr by a factor 3 to 5,
+from revised cluster ages and the shape of the fit. (The 1.7 Myr is the
+half-life of Mamajek's exponential, derived: 2.5 Myr times $\ln 2$.)
+
+**When rocky planets finish.** Embryos of about 0.1 $M_\oplus$ grow in
+about 1 Myr (Kenyon & Bromley 2006); the giant impacts that merge them
+start once the gas no longer damps their orbits, and last tens of Myr.
+From protoplanets at about 1 au, the growth time is
+$(0.73 \pm 0.74) \times 10^8$ yr (Kokubo & Genda 2010, Table 1).
+Earth's last core formation was 30 to 100 Myr after the first solids
+(Hf-W, Kleine et al. 2009, as Raymond et al. 2014 quote it), its
+Moon-forming impact at $95 \pm 32$ Myr (Jacobson et al. 2014).
+Proto-Earth held 0.53 to 0.58 $M_\oplus$ when the disc dispersed at
+about 4 Myr (Lammer et al. 2020b, Icarus 339, from atmospheric noble
+gases, as Lammer et al. 2021 quote it). Mars finished within
+about 5 Myr, inside the gas (Dauphas & Pourmand 2011, as Raymond et al.
+2014 and Lammer et al. 2021 quote it); Venus perhaps too (Lammer et al.
+2020), so that both that and the $p_\mathrm{late}$ of 0.96 below give a
+bare Venus. Raymond, Scalo & Meadows (2007, § 3.2) find habitable-zone
+planets forming in a few Myr round 0.2 $M_\odot$ stars and in 20 to 50
+Myr round Sun-like ones, fitted by $t_G \propto (\Sigma v)^{-1}$.
+
+**The envelope of a late planet.** What a growing planet captures and
+keeps after the boil-off is small: 0.0035 % of Earth's mass for
+proto-Earth (Lammer et al. 2021, p. 24), about 30 times (derived) under
+the stripping threshold of the escape law. In a gas-poor nebula, cores lighter than
+1 to 2 $M_\oplus$ do not accrete enough gas to look enveloped (Lee &
+Connors 2021). Had proto-Earth held more than 0.7 $M_\oplus$ in the
+disc, it would have kept at least 0.0042 $M_\oplus$ of hydrogen and
+become "sub-Neptune-like" (Lammer et al. 2021, p. 28). A planet that
+finished after the gas has, for the model, no envelope.
+
+**No sourced probability.** No paper read gives the probability that a
+rocky planet of given mass, orbit and host finished after the gas.
+Raymond et al. (2014, § 7.1) leave open how many terrestrial planets go
+through a phase of giant impacts at all. Owen & Wu (2017) say bare
+planets beyond 30 to 60 days, if abundant, need a population "born
+bare". The numbers that exist are for orbits under 100 days and depend
+on a model: 20 % of Kepler planets "intrinsically rocky" (Neil & Rogers
+2020), 57 to 74 % of close-in planets with a giant impact after the gas
+in simulations (Izidoro et al. 2022; derived from the shares with no
+giant impact after the gas). They disagree with the law below, which puts
+close-in planets in the gas because they grow fast, where Izidoro et al.
+find the gas damps their giant impacts until it goes. Neil & Rogers's
+born-rocky share falls with period (0.35 at 10 days to 0.14 at 100
+days, derived) while the law rises with the orbit. And Cloutier & Menou
+(2020) find rocky planets dominant round mid-M dwarfs, where reading B
+below gives fewer late planets at a fixed orbit.
+
+**What a calibration would rest on.** If $T_d$ is the disc lifetime
+(the Weibull above) and $T_G$ the time the giant impacts end, a planet
+finished after the gas with the probability
+
+$$
+p_\mathrm{late} = P(T_G > T_d)
+= \int_0^\infty f_d(t)
+\left[1 - \Phi\left(\frac{\ln t - \ln \tilde T_G}{\sigma}\right)\right] dt,
+$$
+
+with $T_G$ log-normal: $\sigma = 0.84$ and a median of 51 Myr at
+1 $M_\oplus$, 1 au and 1 $M_\odot$, from Kokubo & Genda's mean and
+spread (derived), scaled by Raymond, Scalo & Meadows (2007)'s
+$t_G \propto (\Sigma v)^{-1}$. Kokubo & Genda's time is for a whole
+system (its largest planet is 1.18 $M_\oplus$ at 0.79 au); moved to
+1 $M_\oplus$ at 1 au with the scaling below it would be about 108 Myr
+(derived). The 51 Myr is kept because Raymond et al. (2007, Fig. 5: 50
+Myr) and Raymond et al. (2014, Table 1: about 50 Myr) give the same for
+Earth. Read with their assumption that a planet's mass is that of its
+annulus, $\Sigma \propto M_p\,a^{-2}$:
+
+$$
+\tilde T_G = 51\ \mathrm{Myr}
+\left(\frac{M_p}{M_\oplus}\right)^{-1}
+\left(\frac{a}{1\ \mathrm{au}}\right)^{5/2}
+\left(\frac{M_\star}{M_\odot}\right)^{-1/2},
+$$
+
+which gives back their habitable-zone fit, $t_G \propto M_\star^{3/2}$,
+with $a_\mathrm{HZ} \propto M_\star^2$ and $M_p \propto M_\star^3$ (their
+$\alpha = h = 1$). The alternative, reading A, takes their disc profile
+instead of the planet's mass, $\Sigma \propto a^{-1} M_\star$, and gives
+$t_G \propto a^{3/2} M_\star^{-3/2}$; B is recommended because it reads
+the planet's mass, which the model draws, where A reads only the orbit
+and the host.
+
+The disc and completion constants are sourced; four things are
+calibrations, which a law would have to label: (1) the construction
+$p_\mathrm{late} = P(T_G > T_d)$, with the two times taken as
+independent and every planet as going through giant impacts; (2) the
+51 Myr anchor, and Raymond et al.'s scaling used away from the
+habitable zone and with the annulus's mass; (3) the domain, 0.1 to
+5 $M_\oplus$ inside the ice line, where the sources apply; (4) hosts
+above 3 $M_\odot$ read with the 1.0 to 3.0 $M_\odot$ bin, the bins taken
+as steps. It gives (derived), for a 1 $M_\odot$ host read with the 1.0
+to 3.0 $M_\odot$ bin:
+
+| Planet | $\tilde T_G$ | $p_\mathrm{late}$ |
+| --- | --- | --- |
+| Earth (1 $M_\oplus$, 1 au) | 51 Myr | 0.99 |
+| Venus (0.815 $M_\oplus$, 0.723 au) | 28 Myr | 0.96 |
+| 1 $M_\oplus$ at 0.4 au, Sun | 5.2 Myr | 0.54 |
+| 1 $M_\oplus$ at 0.2 au, Sun | 0.92 Myr | 0.08 |
+| 5 $M_\oplus$ at 1 au, Sun | 10 Myr | 0.78 |
+
+With the 0.2 to 1.0 $M_\odot$ bin for the same host, the values are
+0.978 for Earth, 0.34 at 0.4 au, 0.02 at 0.2 au and 0.62 for 5
+$M_\oplus$ at 1 au (derived).
+
+Mars comes out late (its 0.107 $M_\oplus$ is a stranded embryo, outside
+the annulus assumption) but is bare either way: the largest envelope
+the draw gives it, about $1.2 \times 10^{-4}$ (derived), is under the stripping
+threshold.
+
+**How it would join the draw.** One code path: the envelope draw takes
+$p_\mathrm{late}$ from a law in `science`, draws a second uniform number
+from the same sub-seed as the first, in every regime (so the stream never
+depends on the mass), and compares it only for 0.1 to 5 $M_\oplus$
+inside the ice line (otherwise an ice giant at 20 au would lose its
+envelope): it returns 0 when that number is under $p_\mathrm{late}$, the
+Lammer value of today otherwise. Study 30 (core-powered loss, issue #697)
+neither runs on an in-gas branch nor reads a disc lifetime: its
+decisions are Tang et al. 2024's boil-off ceiling at today's flux, with
+the flux at dispersal left to #700. If a law came, that ceiling would act
+only on planets that formed in the gas, and a disc-lifetime law shared
+with #700 would be open.
+
+**Limitations.** The disc lifetimes are dust measures and gas goes
+first; no fit covers hosts above 3 $M_\odot$; the gas damps giant
+impacts until it goes, which a timescale comparison ignores close in;
+the share of planets that grow as "giant embryos" inside the gas,
+without giant impacts, is unknown; metallicity enters only through the
+planet's mass. The full study, its alternatives and the open decisions
+are in
+[31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit).
 
 ### From layers to radius
 
@@ -1510,6 +1674,14 @@ pull request add these:
 - **The envelope is the primordial one.** The loss of gas after the disc
   is the job of the escape pull request (2c), so an old, close-in
   planet's drawn envelope is more than it keeps.
+- **Every drawn planet finishes inside the gas.** The draw gives each
+  planet of 0.1 to 5 $M_\oplus$ the envelope of a core fully grown in
+  the nebula; none finishes after the disc, as Earth did. A drawn Earth
+  at 1 au keeps a mini-Neptune's envelope about one draw in three (an
+  estimate, not run per seed). No sourced probability of late formation
+  exists. Decided with the user (2026-11-25): a departure, no law
+  adopted; what a calibration would rest on is in "Planets that finish
+  after the gas (study 31)" (issue #696).
 - **The core of a light giant is bounded by the tables.** The
   heavy-element mass is cut to the cores the tables cover (0 to 10
   $M_\oplus$ at 20 $M_\oplus$), narrower than Thorngren's fit there.
@@ -2160,6 +2332,98 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
 124. Naumenko et al. 2013, *Geochim. Cosmochim. Acta* 122, 353:
      ⁴⁰K, 0.011668 % of potassium's atoms (as the DDEP evaluation of
      2025 takes it).
+125. Haisch, K. E., Lada, E. A. & Lada, C. J. 2001, "Disk frequencies and
+     lifetimes in young clusters", *ApJ* 553, L153,
+     [doi:10.1086/320685](https://doi.org/10.1086/320685),
+     [arXiv:astro-ph/0104347](https://arxiv.org/abs/astro-ph/0104347) (read,
+     study 31).
+126. Mamajek, E. E. 2009, "Initial conditions of planet formation: lifetimes
+     of primordial disks", *AIP Conference Proceedings* 1158,
+     [doi:10.1063/1.3215910](https://doi.org/10.1063/1.3215910),
+     [arXiv:0906.5011](https://arxiv.org/abs/0906.5011) (read, study 31).
+127. Fedele, D., van den Ancker, M. E., Henning, Th., Jayawardhana, R. &
+     Oliveira, J. M. 2010, "Timescale of mass accretion in pre-main-sequence
+     stars", *A&A* 510, A72,
+     [doi:10.1051/0004-6361/200912810](https://doi.org/10.1051/0004-6361/200912810),
+     [arXiv:0911.3320](https://arxiv.org/abs/0911.3320) (abstract, study
+     31).
+128. Ribas, Á., Bouy, H. & Merín, B. 2015, "Protoplanetary disk lifetimes vs
+     stellar mass and possible implications for giant planet populations",
+     *A&A* 576, A52,
+     [doi:10.1051/0004-6361/201424846](https://doi.org/10.1051/0004-6361/201424846),
+     [arXiv:1502.00631](https://arxiv.org/abs/1502.00631) (read, study 31).
+129. Pfalzner, S., Dincer, F., van der Marel, N. & Wagner, F. W. 2026, "Disc
+     lifetime distribution as a function of the mass of host star", *ApJ*
+     (accepted), Table 2,
+     [arXiv:2604.25277](https://arxiv.org/abs/2604.25277) (read, study 31).
+130. Kenyon, S. J. & Bromley, B. C. 2006, "Terrestrial planet formation. I.
+     The transition from oligarchic growth to chaotic growth", *AJ* 131,
+     1837, [doi:10.1086/499807](https://doi.org/10.1086/499807),
+     [arXiv:astro-ph/0503568](https://arxiv.org/abs/astro-ph/0503568) (read,
+     study 31).
+131. Kokubo, E. & Genda, H. 2010, "Formation of terrestrial planets from
+     protoplanets under a realistic accretion condition", *ApJL* 714, L21,
+     Table 1,
+     [doi:10.1088/2041-8205/714/1/L21](https://doi.org/10.1088/2041-8205/714/1/L21),
+     [arXiv:1003.4384](https://arxiv.org/abs/1003.4384) (read, study 31).
+132. Raymond, S. N., Scalo, J. & Meadows, V. S. 2007, "A decreased
+     probability of habitable planet formation around low-mass stars",
+     *ApJ* 669, 606, § 3.2 and Fig. 5,
+     [doi:10.1086/521587](https://doi.org/10.1086/521587),
+     [arXiv:0707.1711](https://arxiv.org/abs/0707.1711) (read, study 31).
+133. Raymond, S. N., Kokubo, E., Morbidelli, A., Morishima, R. & Walsh, K.
+     J. 2014, "Terrestrial planet formation at home and abroad", *Protostars
+     and Planets VI*,
+     [doi:10.2458/azu_uapress_9780816531240-ch026](https://doi.org/10.2458/azu_uapress_9780816531240-ch026),
+     [arXiv:1312.1689](https://arxiv.org/abs/1312.1689) (read, study 31;
+     Kleine et al. 2009 and Dauphas & Pourmand 2011 as quoted there).
+134. Jacobson, S. A. et al. 2014, "Highly siderophile elements in Earth's
+     mantle as a clock for the Moon-forming impact", *Nature* 508, 84,
+     [doi:10.1038/nature13172](https://doi.org/10.1038/nature13172),
+     [arXiv:1504.01421](https://arxiv.org/abs/1504.01421) (read, study 31).
+135. Lammer, H. et al. 2020, "Loss and fractionation of noble gas isotopes
+     and moderately volatile elements from planetary embryos and early
+     Venus, Earth and Mars", *Space Science Reviews* 216, 74,
+     [doi:10.1007/s11214-020-00701-x](https://doi.org/10.1007/s11214-020-00701-x),
+     [arXiv:2011.01064](https://arxiv.org/abs/2011.01064) (read, study 31).
+136. Lammer, H., Brasser, R., Johansen, A., Scherf, M. & Leitzinger, M.
+     2021, "Formation of Venus, Earth and Mars: constrained by isotopes",
+     *Space Science Reviews* 217, 7,
+     [doi:10.1007/s11214-020-00778-4](https://doi.org/10.1007/s11214-020-00778-4),
+     [arXiv:2102.06173](https://arxiv.org/abs/2102.06173) (read, study 31).
+137. Lee, E. J. & Connors, N. J. 2021, "Primordial radius gap and
+     potentially broad core mass distributions of super-Earths and
+     sub-Neptunes", *ApJ* 908, 32,
+     [doi:10.3847/1538-4357/abd6c7](https://doi.org/10.3847/1538-4357/abd6c7),
+     [arXiv:2008.01105](https://arxiv.org/abs/2008.01105) (read, study 31).
+138. Owen, J. E. & Wu, Y. 2017, "The evaporation valley in the Kepler
+     planets", *ApJ* 847, 29, § 4.7,
+     [doi:10.3847/1538-4357/aa890a](https://doi.org/10.3847/1538-4357/aa890a),
+     [arXiv:1705.10810](https://arxiv.org/abs/1705.10810) (read, study 31).
+139. Neil, A. R. & Rogers, L. A. 2020, "A joint mass-radius-period
+     distribution of exoplanets", *ApJ* 891, 12, Table 1,
+     [doi:10.3847/1538-4357/ab6a92](https://doi.org/10.3847/1538-4357/ab6a92),
+     [arXiv:1911.03582](https://arxiv.org/abs/1911.03582) (read, study 31).
+140. Izidoro, A., Schlichting, H. E., Isella, A. et al. 2022, "The exoplanet
+     radius valley from gas-driven planet migration and breaking of resonant
+     chains", *ApJL* 939, L19,
+     [doi:10.3847/2041-8213/ac990d](https://doi.org/10.3847/2041-8213/ac990d),
+     [arXiv:2210.05595](https://arxiv.org/abs/2210.05595) (read, study 31).
+141. Cloutier, R. & Menou, K. 2020, "Evolution of the radius valley around
+     low mass stars from Kepler and K2", *AJ* 159, 211, Table 6,
+     [doi:10.3847/1538-3881/ab8237](https://doi.org/10.3847/1538-3881/ab8237),
+     [arXiv:1912.02170](https://arxiv.org/abs/1912.02170) (abstract and §
+     6.2 and Table 6, study 31).
+142. Lammer, H., Leitzinger, M., Scherf, M. et al. 2020b, "Constraining the
+     early evolution of Venus and Earth through atmospheric Ar, Ne isotope
+     and bulk K/U ratios", *Icarus* 339, 113551,
+     [doi:10.1016/j.icarus.2019.113551](https://doi.org/10.1016/j.icarus.2019.113551)
+     (record only, as Lammer et al. 2021 quote it, study 31).
+
+The values, tables and pages read for entries 125 to 142 are in
+[31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit),
+which says, for each number, the page it was read on or how it was
+derived.
 
 The values, tables and pages read for entries 99 to 115 are in the
 [draw bounds](https://github.com/cyboooooorg/map-generator/blob/main/docs/superpowers/studies/2026-11-21-planet-model-2a/draw-bounds.md)
