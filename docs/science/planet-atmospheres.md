@@ -1863,15 +1863,26 @@ much as N₂. Both add the same broadening, since the code counts argon as air,
 and argon's lower heat capacity (20.786 against N₂'s 29.12 J/(mol·K)) steepens
 the dry slope: with N₂'s heat capacity given to argon, the same probe gives
 +0.120 K. The measured weaker broadening of argon, left out (a departure below),
-would pull the other way; no source was read that orders the two effects. On
-that Earth the model's doubled N₂ (+0.78 bar) warms by +7.49 K, above Goldblatt
-et al. 2009's 4.4 K and the 3 to 7 K quoted under *Thick nitrogen* (late Archean
-Earths, under a fainter Sun and more CO₂, not this one). Earth's dry column
-(`EARTH_DRY_AIR`, no water vapour, test `earths_argon_warms_its_column_little`)
-warms by only 0.005 K with 0.0127 bar of argon: without the water's feedback it
-is about 12 times less sensitive (doubling its N₂ gives +0.37 K), so that test
-holds an upper bound only. The reference Earth, held by the carbonate thermostat
-at 288 K, does not move.
+would pull the other way; no source was read that orders the two effects. A
+tier-1 test, `argon_warms_as_air_broadens_and_its_slope_steepens`
+(`science::balance`), keeps the two parts apart on a wet column with fixed
+inputs (Earth's measured air at 280 ppm, Earth's equilibrium starlight, a black
+surface, the standard gravity; not the settled reference Earth), where it finds
+the same +0.150, +0.120 and +0.167 K. It guards that, with argon given N₂'s heat
+capacity (a test-only override of the column), argon warms, and at most as much
+as N₂ (`Source:` argon broadens CO₂'s and water's lines at most as N₂ does,
+Reichle 1969 and Claveau & Valentin 2009; equal here since the code counts it as
+air); and that argon's own heat capacity warms it more than N₂'s (`Definition:`
+the dry lapse is `g / c_p` per kilogram, and argon's 520 J/(kg·K) is half N₂'s
+1040). A change that gave argon a broadening above N₂'s, or lost its heat
+capacity, fails it. On that Earth the model's doubled N₂ (+0.78 bar) warms by
++7.49 K, above Goldblatt et al. 2009's 4.4 K and the 3 to 7 K quoted under
+*Thick nitrogen* (late Archean Earths, under a fainter Sun and more CO₂, not
+this one). Earth's dry column (`EARTH_DRY_AIR`, no water vapour, test
+`earths_argon_warms_its_column_little`) warms by only 0.005 K with 0.0127 bar of
+argon: without the water's feedback it is about 12 times less sensitive
+(doubling its N₂ gives +0.37 K), so that test holds an upper bound only. The
+reference Earth, held by the carbonate thermostat at 288 K, does not move.
 
 **Contract.** The timeline's air is a map of the gases (`timeline::planet::Gas`,
 `#[non_exhaustive]`, kebab-case) with `surface_pressure` the sum of the

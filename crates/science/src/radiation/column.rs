@@ -68,6 +68,35 @@ use crate::water::{CRITICAL_POINT_TEMPERATURE, vapour_latent_j_mol, vapour_satur
 #[path = "column_tests.rs"]
 mod tests;
 
+/// Argon's molar heat capacity as the column reads it,
+/// [`AR_HEAT_CAPACITY`]. Outside `cfg(test)` this is the constant and
+/// the only code path.
+#[cfg(not(test))]
+fn ar_heat_capacity() -> f64 {
+    AR_HEAT_CAPACITY
+}
+
+/// Argon's molar heat capacity as the column reads it, test builds only:
+/// [`AR_HEAT_CAPACITY`], unless a test on this thread set
+/// [`AR_HEAT_CAPACITY_OVERRIDE`] to tell the lapse rate's part of
+/// argon's warming from its broadening's.
+#[cfg(test)]
+fn ar_heat_capacity() -> f64 {
+    AR_HEAT_CAPACITY_OVERRIDE
+        .with(std::cell::Cell::get)
+        .unwrap_or(AR_HEAT_CAPACITY)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test builds only: a molar heat capacity, J/(mol·K), that the
+    /// column takes for argon instead of [`AR_HEAT_CAPACITY`] on this
+    /// thread while it is set. A test that sets it uses a fresh
+    /// [`ColumnCache`] for each value and clears it after.
+    pub(crate) static AR_HEAT_CAPACITY_OVERRIDE: std::cell::Cell<Option<f64>> =
+        const { std::cell::Cell::new(None) };
+}
+
 /// Definition: water's critical temperature, K ([`CRITICAL_POINT_TEMPERATURE`]):
 /// above it no liquid exists, and the vapour is a gas like the others.
 const WATER_CRITICAL_K: f64 = CRITICAL_POINT_TEMPERATURE.0;
@@ -294,7 +323,7 @@ impl DryAir {
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
                 + g.o2 * O2_HEAT_CAPACITY
-                + g.ar * AR_HEAT_CAPACITY)
+                + g.ar * ar_heat_capacity())
                 / pressure
         } else {
             N2_HEAT_CAPACITY
@@ -344,7 +373,7 @@ impl DryAir {
                 + g.nh3 * NH3_HEAT_CAPACITY
                 + g.so2 * SO2_HEAT_CAPACITY
                 + g.o2 * O2_HEAT_CAPACITY
-                + g.ar * AR_HEAT_CAPACITY)
+                + g.ar * ar_heat_capacity())
                 / others
         } else {
             N2_HEAT_CAPACITY
