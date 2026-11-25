@@ -167,10 +167,13 @@ const EARTH_N2_SHARE: f64 = 0.7808;
 /// Earth fact sheet, as [`EARTH_N2_SHARE`]).
 const EARTH_O2_SHARE: f64 = 0.2095;
 
+/// Source: the share of argon in Earth's dry air by volume, 9340 ppm
+/// (NASA Earth fact sheet, as [`EARTH_N2_SHARE`]).
+const EARTH_AR_SHARE: f64 = 9340e-6;
+
 /// Earth's measured air as an imposed test input, without its CO₂ (the
-/// test sets it) and without its argon, which the column has no field for
-/// (9340 ppm, 0.9 % of the pressure): [`EARTH_N2_SHARE`] and
-/// [`EARTH_O2_SHARE`] of [`EARTH_PRESSURE`]. `balance::EARTH_DRY_AIR` is
+/// test sets it): [`EARTH_N2_SHARE`], [`EARTH_O2_SHARE`] and
+/// [`EARTH_AR_SHARE`] of [`EARTH_PRESSURE`]. `balance::EARTH_DRY_AIR` is
 /// legacy's rounded 0.78 and 0.21 bar, a `Definition:`, not this air.
 const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     n2: EARTH_PRESSURE * EARTH_N2_SHARE,
@@ -180,6 +183,7 @@ const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: EARTH_PRESSURE * EARTH_O2_SHARE,
+    ar: EARTH_PRESSURE * EARTH_AR_SHARE,
 };
 
 /// Definition: a test tolerance, legacy's window on Earth's
@@ -241,6 +245,7 @@ fn air_of(climate: &Climate) -> PartialPressures {
         nh3: p(Gas::Nh3),
         so2: p(Gas::So2),
         o2: p(Gas::O2),
+        ar: p(Gas::Ar),
     }
 }
 

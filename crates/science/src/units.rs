@@ -130,6 +130,8 @@ unit!(/// Plane angle, degree.
     Degree, "deg");
 unit!(/// Logarithmic ratio, decimal exponent (dex).
     Dex, "dex");
+unit!(/// Amount of substance, mole.
+    Mole, "mol");
 
 convert!(AstronomicalUnit, Metre, ASTRONOMICAL_UNIT.0);
 convert!(SolarMass, Kilogram, SOLAR_MASS.0);

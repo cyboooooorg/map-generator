@@ -52,9 +52,9 @@ pub(crate) const CLOUD_ALBEDO: f64 = 0.276;
 /// (a numerical choice with no source: audit, Wiki study 19).
 const REMEMBERED_AIRS: usize = 32;
 
-/// The inputs of an air's paths, as bits: the seven partial pressures,
+/// The inputs of an air's paths, as bits: the eight partial pressures,
 /// the surface temperature, the gravity and the star's temperature.
-type AirKey = [u64; 10];
+type AirKey = [u64; 11];
 
 /// What lies under the air: the ground's albedo, the share of the sky
 /// under water clouds, and the share of the disc under a sulphuric deck
@@ -122,6 +122,7 @@ impl ShortwaveCache {
             gases.nh3,
             gases.so2,
             gases.o2,
+            gases.ar,
             surface_k,
             gravity_m_s2,
             star_k,

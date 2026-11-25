@@ -126,6 +126,8 @@ fn contract_enums_report_their_serialised_name() {
         "\"heat-pipe\""
     );
     assert_eq!(serde_json::to_string(&Gas::Co2).unwrap(), "\"co2\"");
+    assert_eq!(serde_json::to_string(&Gas::Ar).unwrap(), "\"ar\"");
+    assert_eq!(serde_json::from_str::<Gas>("\"ar\"").unwrap().code(), "ar");
     assert_eq!(
         serde_json::to_string(&ClimateState::Frozen).unwrap(),
         "\"frozen\""

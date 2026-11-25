@@ -56,8 +56,8 @@
 use std::sync::LazyLock;
 
 use super::gases::{
-    CH4_MOLAR_MASS, CO2_MOLAR_MASS, H2O_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS, O2_MOLAR_MASS,
-    PartialPressures, SO2_MOLAR_MASS,
+    AR_MOLAR_MASS, CH4_MOLAR_MASS, CO2_MOLAR_MASS, H2O_MOLAR_MASS, N2_MOLAR_MASS, NH3_MOLAR_MASS,
+    O2_MOLAR_MASS, PartialPressures, SO2_MOLAR_MASS,
 };
 pub(crate) use super::ktable::G;
 use super::ktable::{CO2_SELF_SET, CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
@@ -134,7 +134,8 @@ impl Level {
             + g.ch4.max(0.0) * CH4_MOLAR_MASS
             + g.nh3.max(0.0) * NH3_MOLAR_MASS
             + g.so2.max(0.0) * SO2_MOLAR_MASS
-            + g.o2.max(0.0) * O2_MOLAR_MASS)
+            + g.o2.max(0.0) * O2_MOLAR_MASS
+            + g.ar.max(0.0) * AR_MOLAR_MASS)
             / p
     }
 
