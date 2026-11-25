@@ -68,6 +68,12 @@ pub const SOLAR_MASS: Kilogram = Kilogram(SOLAR_MASS_PARAMETER / GRAVITATIONAL_C
 /// [`GRAVITATIONAL_CONSTANT`].
 pub const EARTH_MASS: Kilogram = Kilogram(EARTH_MASS_PARAMETER / GRAVITATIONAL_CONSTANT);
 
+/// Source: Earth's core mass fraction, 0.325 of its mass (Wang et al. 2018,
+/// as quoted by Plotnykov & Valencia 2020, MNRAS 499, 932,
+/// arXiv:2010.06480; Zeng, Sasselov & Jacobsen 2016,
+/// doi:10.3847/0004-637X/819/2/127, Table 1).
+pub const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
+
 /// Definition: the day of 86 400 SI seconds (IAU and SI).
 pub const DAY: Second = Second(86_400.0);
 

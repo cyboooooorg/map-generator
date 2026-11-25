@@ -144,6 +144,17 @@ interpolates log-linearly in mass between the grid masses:
 | 3 | $2.0 \times 10^{-4}$ | 0.33 |
 | 5 | $8.7 \times 10^{-4}$ | 0.35 |
 
+**An asked archetype.** A planet asked as `earth-like` draws none of
+this: its envelope is 0, an input in the trace, as are Earth's core
+(0.325) and bulk water (Marty 2012's 2700 ppm, one ocean at the
+surface). Lammer et al. (2014) keep a nebular envelope round a 1
+$M_\oplus$ core at 1 au in 8 of their 12 cases, but take Earth's lack of
+one ("for the Earth there is no evidence that it was surrounded by a
+dense hydrogen envelope since the past 3.5 Gyr") as the constraint on
+its nebula: the archetype promises that Earth, not a drawn planet of its
+mass. Legacy's other pins of `earth-like` (life, the temperate branch,
+CO₂, N₂, NH₃, radiogenic abundance) are not ported yet (#695).
+
 The grid is by core mass, and the draw reads it at the planet's total
 mass: the two differ by the envelope's share, at most 35 % (the 0.35
 maximum at 5 $M_\oplus$; 20 % under the cap below). No grid by total

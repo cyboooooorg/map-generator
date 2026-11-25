@@ -10,7 +10,7 @@ request, the archetype targets, the present date.
 | Module | Owner | Content |
 | --- | --- | --- |
 | `inputs` | shared | `Inputs`, `Request`, `SystemRequest`, `BodyRequest` |
-| `archetype` | mapgen3, mapgen1 | `ArchetypeId`; placement half (draw), targets half (planet model) |
+| `archetype` | mapgen3, mapgen1 | `ArchetypeId`; placement half (draw), composition half (`composition(id)`, read by the planet chain: the values an archetype imposes replace the draws as input leaves; `earth-like` only so far, #695), targets half (planet model) |
 | `placement` | shared | `Trial`, `Placement`, `TrialOutcome`: the seam (the outcome holds plain values, since `class_of` runs on a scratch trace) |
 | `draw` | mapgen3 | `draw_with(inputs, trace, classify) -> Drawn`: the star, its system number, the family and one `Placement` per planet; a body request is `BodyRequestNotDrawn` |
 | `families` | mapgen3 | `Family`: the five system architectures, untraced engine data carried by `Drawn`; `families::table` holds every count range |

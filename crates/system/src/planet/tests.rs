@@ -23,14 +23,16 @@ use timeline::{
 /// 9.80665 m/s^2.
 const STANDARD_GRAVITY: f64 = 9.80665;
 
-/// Source: Marty 2012, bulk Earth water 2700 ppm of the mass (Earth
-/// Planet. Sci. Lett. 313-314, 56-66; arXiv:1405.6336 author copy,
-/// p. 18).
-pub(super) const EARTH_WATER_FRACTION: f64 = 2.7e-3;
+/// Source: Marty 2012, bulk Earth water 2700 ppm of the mass
+/// (`science::habitable::EARTH_BULK_WATER_FRACTION`, which the earth-like
+/// archetype imposes too).
+pub(super) const EARTH_WATER_FRACTION: f64 = science::habitable::EARTH_BULK_WATER_FRACTION;
 
 /// Source: Wang et al. 2018 core mass fraction of Earth, as quoted by
-/// Plotnykov & Valencia 2020, 0.325.
-pub(super) const EARTH_CORE_MASS_FRACTION: f64 = 0.325;
+/// Plotnykov & Valencia 2020, 0.325
+/// (`science::constants::EARTH_CORE_MASS_FRACTION`, which the earth-like
+/// archetype imposes too).
+pub(super) const EARTH_CORE_MASS_FRACTION: f64 = science::constants::EARTH_CORE_MASS_FRACTION;
 
 /// Definition: a water world's water fraction for the tests, 0.5, the
 /// lower bound of Zeng et al. 2019's icy planets (a test choice).
@@ -1312,7 +1314,7 @@ pub(super) const VENUS: ReferenceBody = ReferenceBody {
 /// (`science::habitable::SURFACE_WATER_SHARE`) is its ocean.
 pub(super) const EARTH: ReferenceBody = ReferenceBody {
     mass: 1.0,
-    core_mass_fraction: 0.325,
+    core_mass_fraction: EARTH_CORE_MASS_FRACTION,
     water_fraction: EARTH_WATER_FRACTION,
     orbit: 1.0,
     eccentricity: 0.0167,

@@ -13,12 +13,22 @@
 //! - `targets` is filled by mapgen1: the planet's inputs, the
 //!   present-day targets and their tolerances.
 //!
+//! Beside the placement, [`composition`] gives what an archetype imposes
+//! on its planet's composition ([`ArchetypeComposition`]), read only by
+//! the planet chain (`planet::draws`): each value it sets replaces the
+//! draw as an input leaf, on `class_of`'s path and `model`'s alike. Only
+//! `earth-like` sets one so far (#695): Earth's core, its bulk water and
+//! no envelope. Legacy's other pins of `earth-like.toml` (life, snowball,
+//! CO2, N2, NH3, radiogenic, age) are not ported yet.
+//!
 //! The backward search moves only the planet's own inputs and records an
 //! unreachable target as an outcome with its cause, never as a silent
 //! miss.
 
 use std::collections::BTreeMap;
 
+use science::constants::EARTH_CORE_MASS_FRACTION;
+use science::habitable::EARTH_BULK_WATER_FRACTION;
 use science::units::{Day, Degree, EarthFlux, EarthMass, Gyr, SolarMass};
 use serde::{Deserialize, Serialize};
 use timeline::Code;
@@ -47,6 +57,31 @@ pub struct ArchetypePlacement {
     /// The host the archetype names; `None` leaves the star free.
     pub host: Option<Host>,
 }
+
+/// What an archetype imposes on its planet's composition: the half of an
+/// archetype that the planet chain reads. `None` leaves the value drawn.
+/// A value set is recorded as a `Provenance::Input` leaf in place of the
+/// draw (whose sub-seed is still derived, so the other draws do not
+/// move).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ArchetypeComposition {
+    /// Core mass fraction of the planet without its water.
+    pub core_mass_fraction: Option<f64>,
+    /// Water mass fraction of the planet without its envelope, held in
+    /// its mantle: a planet that sets it formed dry, inside the ice line,
+    /// and did not migrate (its migration flag is an input `false`).
+    pub water_fraction: Option<f64>,
+    /// Primordial hydrogen-helium envelope mass fraction of the planet.
+    pub envelope_fraction: Option<f64>,
+}
+
+/// Source: Lammer et al. 2014, MNRAS (arXiv:1401.2765), in their
+/// discussion of Table 5: "for the Earth there is no evidence that it was
+/// surrounded by a dense hydrogen envelope since the past 3.5 Gyr"; they
+/// take that lack of an envelope as the constraint on Earth's nebula
+/// (`docs/science/planet-interiors.md`, "The envelope draw"). The
+/// earth-like planet's envelope, none.
+const EARTH_ENVELOPE_FRACTION: f64 = 0.0;
 
 /// The orbit band of an archetype.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -263,6 +298,30 @@ pub fn placement(id: &ArchetypeId) -> Option<&'static ArchetypePlacement> {
         .map(|(_, placement)| placement)
 }
 
+/// The compositions archetypes impose, by id; an archetype absent here
+/// draws its whole composition.
+static COMPOSITIONS: [(&str, ArchetypeComposition); 1] = [(
+    // Earth's: its core (`EARTH_CORE_MASS_FRACTION`), its bulk water
+    // (Marty 2012, `EARTH_BULK_WATER_FRACTION`, of which the surface
+    // share is one Earth ocean) and no envelope. Legacy-final
+    // archetypes/earth-like.toml pinned the same three.
+    "earth-like",
+    ArchetypeComposition {
+        core_mass_fraction: Some(EARTH_CORE_MASS_FRACTION),
+        water_fraction: Some(EARTH_BULK_WATER_FRACTION),
+        envelope_fraction: Some(EARTH_ENVELOPE_FRACTION),
+    },
+)];
+
+/// The composition a planet archetype imposes; `None` when it imposes
+/// none (every value drawn), or for a moon or an unknown id.
+pub fn composition(id: &ArchetypeId) -> Option<&'static ArchetypeComposition> {
+    COMPOSITIONS
+        .iter()
+        .find(|(name, _)| *name == id.0.as_str())
+        .map(|(_, composition)| composition)
+}
+
 /// The host mass and date that the asked archetypes and the request
 /// settle on. Archetypes with a count of 0 are skipped; two that name
 /// different host masses are refused. A mass or date the request names
@@ -349,6 +408,17 @@ mod tests {
         assert_eq!(earth.mass, mass(1.0, 1.0));
         assert_eq!(earth.host.unwrap().mass, SolarMass(1.0));
         assert_eq!(earth.host.unwrap().age, Some(Gyr(4.57)));
+    }
+
+    #[test]
+    fn only_earth_like_imposes_a_composition() {
+        let earth = composition(&id("earth-like")).unwrap();
+        assert_eq!(earth.core_mass_fraction, Some(EARTH_CORE_MASS_FRACTION));
+        assert_eq!(earth.water_fraction, Some(EARTH_BULK_WATER_FRACTION));
+        assert_eq!(earth.envelope_fraction, Some(0.0));
+        for name in IDS.iter().filter(|&&n| n != "earth-like") {
+            assert!(composition(&id(name)).is_none(), "{name}");
+        }
     }
 
     #[test]

@@ -1,9 +1,11 @@
 //! Tier 1: the chain behind `class_of` and `model`, on cheap trials: the
 //! same trial gives the same answer on both paths, an eccentric placement
 //! is modelled on its own orbit, a giant has no surface, an asked
-//! obliquity reaches both paths, the state holds what the chain recorded.
-//! Tier 3: every state is finite on extreme inputs.
+//! obliquity and an asked composition reach both paths, the state holds
+//! what the chain recorded. Tier 3: every state is finite on extreme
+//! inputs, an asked earth-like has a surface at 1 au.
 
+use super::bare::{Ground, formed};
 use super::chain::{Chained, Spun, chain_with, state_of};
 use super::climate::fixture::rotation;
 use super::draws::{Drawn, draw};
@@ -311,6 +313,97 @@ fn an_asked_obliquity_reaches_both_paths() {
             "{spun:?}"
         );
     }
+}
+
+/// Definition: the earth-like trial, 1 Earth mass at 1 au (the
+/// archetype's mass and its one Earth flux round the trial's Sun-like
+/// source).
+const EARTH_LIKE: (f64, f64) = (1.0, 1.0);
+
+/// The earth-like trial of `mass` Earth masses at `au`, and the same trial
+/// unasked.
+fn earth_like_at(trace: &mut Trace, mass: f64, au: f64) -> (Trial, Trial) {
+    let free = trial(trace, HOT_SEED, mass, au, 0.0);
+    let t = Trial {
+        archetype: Some(ArchetypeId(Code::of("earth-like"))),
+        ..free.clone()
+    };
+    (t, free)
+}
+
+/// Asserts that `drawn` holds the composition earth-like imposes, as
+/// input leaves.
+fn assert_asked(trace: &Trace, drawn: &Drawn) {
+    let asked = archetype::composition(&ArchetypeId(Code::of("earth-like")))
+        .expect("earth-like asks a composition");
+    for (leaf, value) in [
+        (drawn.core_mass_fraction, asked.core_mass_fraction),
+        (drawn.water_fraction, asked.water_fraction),
+        (drawn.envelope_fraction, asked.envelope_fraction),
+    ] {
+        assert_eq!(Some(leaf.value().get()), value, "{leaf:?}");
+        assert_eq!(
+            trace.node(leaf.node()).unwrap().origin,
+            Origin::Leaf(Provenance::Input),
+            "{leaf:?}"
+        );
+    }
+    let migrated = drawn.migrated.expect("inside the ice line");
+    assert!(!*migrated.value());
+    assert_eq!(
+        trace.node(migrated.node()).unwrap().origin,
+        Origin::Leaf(Provenance::Input)
+    );
+}
+
+/// `class_of`'s path and `model`'s on the asked trial `t`: the same
+/// composition, so a surface on both (a body without an envelope has
+/// one, by the class's table) and the same class.
+fn assert_both_paths(trace: &mut Trace, t: &Trial) {
+    let read = class_read(t, trace).unwrap();
+    assert!(read.obliquity.is_some(), "{read:?}");
+    let placement = placed(t, &read.outcome, trace);
+    let state = model(&placement, trace).unwrap();
+    assert!(state.surface.is_some(), "{:?}", state.class);
+    assert_eq!(state.envelope_fraction.value().get(), 0.0);
+    assert_eq!(
+        trace.node(state.envelope_fraction.node()).unwrap().origin,
+        Origin::Leaf(Provenance::Input)
+    );
+    assert_eq!(*state.class.value(), read.outcome.class);
+}
+
+#[test]
+fn an_asked_composition_reaches_both_paths() {
+    // At 1 M_E and 1 au: the draws give way to the archetype's inputs,
+    // and the ground keeps a surface.
+    let (mass, au) = EARTH_LIKE;
+    let mut trace = Trace::new();
+    let (t, free) = earth_like_at(&mut trace, mass, au);
+    // Unasked, the envelope is drawn: Lammer's grid at 1 M_E starts
+    // above 0.
+    let unasked = draw(free.seed, &free, &mut trace).unwrap();
+    assert!(unasked.envelope_fraction.value().get() > 0.0);
+    let drawn = draw(t.seed, &t, &mut trace).unwrap();
+    assert_asked(&trace, &drawn);
+    assert!(matches!(
+        formed(&t, &drawn, &mut trace).unwrap(),
+        Ground::Formed(_)
+    ));
+    // Both paths, on the hot orbit that settles in seconds (a 1 au Earth
+    // is a bistable solve: tier 3, below).
+    let mut trace = Trace::new();
+    let (t, _) = earth_like_at(&mut trace, mass, HOT_ORBIT_AU);
+    assert_both_paths(&mut trace, &t);
+}
+
+#[test]
+#[ignore = "heavy: a bistable Earth solved on both paths, 160 s at opt-level 0"]
+fn an_asked_earth_like_has_a_surface_at_one_au() {
+    let (mass, au) = EARTH_LIKE;
+    let mut trace = Trace::new();
+    let (t, _) = earth_like_at(&mut trace, mass, au);
+    assert_both_paths(&mut trace, &t);
 }
 
 #[test]

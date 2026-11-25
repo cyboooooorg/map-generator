@@ -16,11 +16,20 @@
 //!
 //! The draw parameters live here, not in `science`: they are properties of
 //! how the engine draws a planet, not laws of physics.
+//!
+//! An asked archetype's composition (`archetype::composition`, the
+//! trial's `archetype`) replaces the draws it sets: the core mass
+//! fraction, the water fraction (with the migration flag an input `false`
+//! inside the ice line) and the envelope fraction become
+//! `Provenance::Input` leaves. Their sub-seeds are still derived and
+//! drawn, so the other draws do not move; `class_of` and `model` read the
+//! same trial, so the same composition.
 
 use super::codes;
 use super::envelope::envelope_fraction;
 use super::interior::InteriorError;
 use crate::Trial;
+use crate::archetype::{self, ArchetypeComposition};
 use crate::random::{normal, uniform};
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
@@ -83,7 +92,8 @@ const RADIOGENIC_HALF_RANGE_DEX: f64 = 0.5;
 
 /// The composition a trial draws. The core mass fraction, the water
 /// fraction, the migration flag, the radiogenic abundance and, below
-/// 20 M_E, the envelope fraction are drawn leaves of the trace.
+/// 20 M_E, the envelope fraction are drawn leaves of the trace, or input
+/// leaves when the trial's archetype imposes them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Drawn {
     /// Core mass fraction of the planet without its water: the core is
@@ -197,11 +207,32 @@ pub(crate) fn draw_with(
     let radiogenic = radiogenic_abundance(seed.derive(labels.radiogenic));
     let envelope = envelope_fraction(seed.derive(labels.envelope), *trial.mass.value())?;
     let scatter = volatile_scatter(seed.derive(labels.volatiles));
-    let migrated = (!beyond).then_some(water.migrated);
-    let fraction = if beyond || water.migrated {
-        water.icy
-    } else {
-        water.dry
+    let asked = trial.archetype.as_ref().and_then(archetype::composition);
+    let pick = |asked: Option<f64>, drawn: f64| {
+        asked.map_or((drawn, Provenance::Drawn), |v| (v, Provenance::Input))
+    };
+    let cmf = pick(asked.and_then(|a| a.core_mass_fraction), cmf);
+    let (fraction, migrated) = match asked.and_then(|a: &ArchetypeComposition| a.water_fraction) {
+        // An asked water is held in the mantle: the planet did not migrate.
+        Some(w) => (
+            (w, Provenance::Input),
+            (!beyond).then_some((false, Provenance::Input)),
+        ),
+        None => {
+            let fraction = if beyond || water.migrated {
+                water.icy
+            } else {
+                water.dry
+            };
+            (
+                (fraction, Provenance::Drawn),
+                (!beyond).then_some((water.migrated, Provenance::Drawn)),
+            )
+        }
+    };
+    let envelope = match asked.and_then(|a| a.envelope_fraction) {
+        Some(f) => ((f, Provenance::Input), None),
+        None => ((envelope.fraction, Provenance::Drawn), envelope.heavy_mass),
     };
     record(
         trial,
@@ -211,7 +242,7 @@ pub(crate) fn draw_with(
         fraction,
         migrated,
         radiogenic,
-        (envelope.fraction, envelope.heavy_mass),
+        envelope,
         (scatter, Provenance::Drawn),
     )
 }
@@ -221,32 +252,35 @@ fn formed_beyond_ice_line(trial: &Trial) -> bool {
     trial.orbit.semi_major_axis.value().0 >= trial.ice_line.value().0
 }
 
+/// A value and the provenance of its leaf: drawn, or asked by the
+/// archetype (an input).
+type Leaf<T> = (T, Provenance);
+
 #[expect(clippy::too_many_arguments, reason = "one argument per drawn leaf")]
 fn record(
     trial: &Trial,
     trace: &mut Trace,
     beyond: bool,
-    cmf: f64,
-    water_fraction: f64,
-    migrated: Option<bool>,
+    (cmf, cmf_provenance): Leaf<f64>,
+    (water_fraction, water_provenance): Leaf<f64>,
+    migrated: Option<Leaf<bool>>,
     radiogenic: f64,
-    (envelope, heavy_mass): (f64, Option<EarthMass>),
+    ((envelope, envelope_provenance), heavy_mass): (Leaf<f64>, Option<EarthMass>),
     (scatter, scatter_provenance): ([f64; 5], Provenance),
 ) -> Result<Drawn, InteriorError> {
     let cmf = Fraction::try_from(cmf).map_err(InteriorError::NotAFraction)?;
     let fraction = Fraction::try_from(water_fraction).map_err(InteriorError::NotAFraction)?;
     let core_mass_fraction =
-        trace.leaf(Code::of(codes::CORE_MASS_FRACTION), cmf, Provenance::Drawn)?;
+        trace.leaf(Code::of(codes::CORE_MASS_FRACTION), cmf, cmf_provenance)?;
     let formed_beyond_ice_line = trace.record(
         Code::of(codes::FORMED_BEYOND_ICE_LINE),
         beyond,
         &[trial.orbit.semi_major_axis.node(), trial.ice_line.node()],
     )?;
     let migrated = migrated
-        .map(|m| trace.leaf(Code::of(codes::MIGRATED), m, Provenance::Drawn))
+        .map(|(m, provenance)| trace.leaf(Code::of(codes::MIGRATED), m, provenance))
         .transpose()?;
-    let water_fraction =
-        trace.leaf(Code::of(codes::WATER_FRACTION), fraction, Provenance::Drawn)?;
+    let water_fraction = trace.leaf(Code::of(codes::WATER_FRACTION), fraction, water_provenance)?;
     let heavy_mass = heavy_mass
         .map(|m| trace.leaf(Code::of(codes::HEAVY_MASS), m, Provenance::Drawn))
         .transpose()?;
@@ -262,7 +296,7 @@ fn record(
         None => trace.leaf(
             Code::of(codes::ENVELOPE_FRACTION),
             envelope,
-            Provenance::Drawn,
+            envelope_provenance,
         )?,
     };
     let mut scatter_leaf =
@@ -373,11 +407,11 @@ impl Drawn {
             trial,
             trace,
             formed_beyond_ice_line(trial),
-            core_mass_fraction,
-            water_fraction,
-            migrated,
+            (core_mass_fraction, Provenance::Drawn),
+            (water_fraction, Provenance::Drawn),
+            migrated.map(|m| (m, Provenance::Drawn)),
             radiogenic_abundance,
-            (envelope_fraction, heavy_mass),
+            ((envelope_fraction, Provenance::Drawn), heavy_mass),
             scatter.map_or(([0.0; 5], Provenance::Imposed), |s| (s, Provenance::Drawn)),
         )
         .unwrap()
