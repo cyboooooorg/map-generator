@@ -46,9 +46,11 @@ pub(crate) struct Bare {
     /// first loss left: the cosmic shoreline's later loss keeps it
     /// (legacy `mod` l.577-590).
     pub heat: Heat,
-    /// The envelope the XUV escape took; `None` when it took none. What
-    /// the boil-off took before it is in the trace
-    /// (`planet.envelope.boiled-off`), in the ancestry of `trial.mass`.
+    /// The envelope the boil-off took (`planet.envelope.boiled-off`);
+    /// `None` when its ceiling cut nothing.
+    pub envelope_boiled: Option<Traced<Kilogram>>,
+    /// The envelope the XUV escape took after the boil-off
+    /// (`planet.envelope.lost`); `None` when it took none.
     pub envelope_lost: Option<Traced<Kilogram>>,
     /// The surface; `None` for a planet that kept an envelope.
     pub surface: Option<BareSurface>,
@@ -153,7 +155,10 @@ pub(super) struct Formed {
     pub body: Body,
     /// The heat of `body`.
     pub heat: Heat,
-    /// The envelope the escape took; `None` when it took none.
+    /// The envelope the boil-off took; `None` when its ceiling cut
+    /// nothing.
+    pub envelope_boiled: Option<Traced<Kilogram>>,
+    /// The envelope the XUV escape took; `None` when it took none.
     pub envelope_lost: Option<Traced<Kilogram>>,
     /// The surface water before the stars' light.
     pub surface: Traced<Kilogram>,
@@ -173,6 +178,7 @@ pub(super) struct Surfaced {
     body: Body,
     /// The heat of `after`.
     heat: Heat,
+    envelope_boiled: Option<Traced<Kilogram>>,
     envelope_lost: Option<Traced<Kilogram>>,
     /// The surface water before the stars' light.
     surface: Traced<Kilogram>,
@@ -214,6 +220,7 @@ pub(super) fn formed(
             drawn: escaped.drawn,
             body: escaped.body,
             heat,
+            envelope_boiled: boiled.boiled,
             envelope_lost: escaped.lost,
             surface: None,
         })));
@@ -224,6 +231,7 @@ pub(super) fn formed(
         drawn: escaped.drawn,
         body: escaped.body,
         heat,
+        envelope_boiled: boiled.boiled,
         envelope_lost: escaped.lost,
         surface,
     })))
@@ -277,6 +285,7 @@ pub(super) fn surface_pass(
         after: (t, d),
         body,
         heat,
+        envelope_boiled: formed.envelope_boiled,
         envelope_lost: formed.envelope_lost,
         surface: formed.surface,
         water,
@@ -331,6 +340,7 @@ pub(super) fn bare_air(
         drawn: d,
         body,
         heat: ground.heat.clone(),
+        envelope_boiled: ground.envelope_boiled,
         envelope_lost: ground.envelope_lost,
         surface: Some(BareSurface {
             regime: ground.regime,

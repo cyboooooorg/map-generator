@@ -215,8 +215,11 @@ Schlichting's slow loss is not added on top of the ceiling.
    (`planet.envelope.after-boil-off`), the mass left
    (`planet.mass.after-boil-off`) and the envelope boiled off
    (`planet.envelope.boiled-off`) are recorded with their causes; when
-   `f ≤ c` nothing is recorded. Only a mini-Neptune is read: not from
-   20 M⊕ (`GAS_GIANT_MIN_MASS`, the grid's end; the giants are #497).
+   `f ≤ c` nothing is recorded. The planet carries the envelope boiled
+   off (`envelope_boiled`) next to the one the XUV escape took
+   (`envelope_lost`), so that an explanation reaches both. Only a
+   mini-Neptune is read: not from 20 M⊕ (`GAS_GIANT_MIN_MASS`, the
+   grid's end; the giants are #497).
 3. Then the XUV escape and `MIN_ENVELOPE` (kept at 1e-3), as above, on
    what is left.
 

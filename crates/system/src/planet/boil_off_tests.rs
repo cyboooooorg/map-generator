@@ -37,6 +37,12 @@ const TEMPERATE_NEPTUNE: (f64, f64, f64) = (8.5, 10.0, 0.20);
 /// relative.
 const ROUNDING: f64 = 1e-12;
 
+/// Definition: a numerical tolerance on a mass lost, the difference of two
+/// masses computed two ways, relative: the round-off of the masses
+/// (`ROUNDING`) grows by the ratio of the mass to the mass lost, up to
+/// 1e3 for the envelopes here.
+const DIFFERENCE_ROUNDING: f64 = 1e-9;
+
 /// A dry planet whose core (its mass without the envelope) is `core` M⊕,
 /// under `flux` F⊕ from the trial's Sun-like source, with the envelope
 /// fraction `envelope` (Earth's core and water fractions).
@@ -79,6 +85,37 @@ fn a_close_planet_of_an_a_star_boils_bare() {
         .any(|id| trace.node(id).unwrap().code == Code::of(codes::BOIL_OFF_CEILING));
     assert!(ceiling, "the stripped fraction derives from the ceiling");
     assert!(b.envelope_lost.is_none(), "no XUV, no XUV loss");
+
+    // The planet carries the envelope boiled off: the drawn mass less the
+    // mass left under the ceiling, `M − M_c / (1 − c)`, with its cause.
+    let boiled = b.envelope_boiled.expect("the boil-off cut the envelope");
+    let c = boil_off_ceiling(EarthMass(core), EarthFlux(flux)).get();
+    let expected = lit.mass.value().0 - core / (1.0 - c);
+    let recorded = EarthMass::from(*boiled.value()).0;
+    assert!(
+        (recorded / expected - 1.0).abs() < DIFFERENCE_ROUNDING,
+        "{recorded} against {expected}"
+    );
+    assert_eq!(
+        trace.node(boiled.node()).unwrap().code,
+        Code::of(codes::ENVELOPE_BOILED_OFF)
+    );
+    let causes = ancestry(&trace, boiled.node());
+    for (cause, what) in [
+        (lit.mass.node(), "the drawn mass"),
+        (drawn.envelope_fraction.node(), "the drawn envelope"),
+    ] {
+        assert!(
+            causes.contains(&cause),
+            "the envelope boiled off cites {what}"
+        );
+    }
+    assert!(
+        causes
+            .iter()
+            .any(|&id| trace.node(id).unwrap().code == Code::of(codes::BOIL_OFF_CEILING)),
+        "the envelope boiled off cites the ceiling"
+    );
 }
 
 #[test]
@@ -127,7 +164,7 @@ fn the_cut_envelope_derives_from_the_core_and_the_flux() {
     let lost = t.mass.value().0 - mass;
     let recorded = EarthMass::from(*boiled.value()).0;
     assert!(
-        (recorded / lost - 1.0).abs() < 1e-9,
+        (recorded / lost - 1.0).abs() < DIFFERENCE_ROUNDING,
         "{recorded} against {lost}"
     );
 
