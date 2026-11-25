@@ -1037,7 +1037,17 @@ D2 and D5 by mapgen3), as proposed except D5's alias:
     planet whose biosphere is not `Lifeless` had liquid water in its
     first climate (the life node's parent) and has a climate; the
     number whose second climate has no liquid water is printed and
-    pinned.
+    pinned;
+  - `boiled_off_placements_end_bare` (study 30, #697, added
+    2026-11-25): reference 6 c and d and reference 8 d and e end with
+    no envelope (kept fraction under `MIN_ENVELOPE`), from Tang,
+    Fortney & Murray-Clay 2024's ceiling as study 30 derives it for
+    those placements (an expected value from the study, not a pin);
+    each one's `envelope_boiled` is `Some` and reachable from the
+    planet's outputs;
+  - the earth-like test of Task 6b (reference 7's earth-like planet has
+    a surface) folds into the shared `references()` here (ruling of
+    2026-11-25: it alone took 138 s of tier 2).
 - [ ] **Step 2: Run** `mise run test:tier2`. Expected: PASS, under
   480 s; over it, stop and report (test-reviewer proposes, the user
   decides).
