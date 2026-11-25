@@ -57,6 +57,7 @@ pub(crate) const TITAN_SURFACE_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 0.0,
+    ar: 0.0,
 };
 
 /// Source: Venus's surface pressure, 92 bar (NASA Venus Fact Sheet,

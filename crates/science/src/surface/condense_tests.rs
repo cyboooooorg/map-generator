@@ -28,6 +28,7 @@ const ICE_INVENTORY: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 0.0,
+    ar: 0.0,
 };
 /// Definition: see [`ICE_INVENTORY`].
 const ICE_K: Kelvin = Kelvin(50.0);
@@ -192,6 +193,7 @@ fn condensed_air_changes_only_what_condenses() {
         nh3: 0.004,
         so2: 0.005,
         o2: 0.006,
+        ar: 0.0,
     };
     let inventory = titan_inventory(FLOODING_CH4.0);
     let t = Kelvin(TITAN_SURFACE_K);

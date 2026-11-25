@@ -330,6 +330,7 @@ const ACID_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.02,
     o2: 0.0,
+    ar: 0.0,
 };
 
 /// Definition: the band the deck's onset falls in, 263 to 330 K, and the

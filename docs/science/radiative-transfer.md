@@ -128,7 +128,9 @@ where N₂'s is 29.12. With the slope written per mole, $d\ln T/d\ln p =
 R/c_p$ is 2/5 for pure argon against 0.286 for N₂; Earth's argon, 0.93 %
 of the moles, lowers the dry air's heat capacity from 29.18 to 29.09
 J/(mol·K) and steepens the dry slope by 0.3 % (derived from the same NIST
-values of N₂, O₂ and Ar at their volume shares).
+values of N₂, O₂ and Ar at their volume shares). The column's dry air
+counts it so (`AR_HEAT_CAPACITY`), with the other gases' heat capacities
+at their partial pressures.
 
 **In words.** Condensation warms the rising air, so a moist air cools more
 slowly with height than a dry one. Where the vapour is a large share of
@@ -295,11 +297,12 @@ bands:
   297.6 K, read in the HAL copy) are 0.29 to 0.51 of HITRAN's air widths of
   the same lines, 0.37 on average (derived; the air widths from HITRAN's
   line-by-line service, read 2026-11-25). Argon, 0.9 % of Earth's air by
-  volume, is not in the column yet (study 29, see
-  [planet atmospheres](planet-atmospheres.md#argon-study-29)): it will
-  count as air in the broadening and in the water's foreign continuum,
-  which overstates its broadening by about 0.2 of its share for CO₂ and 0.6
-  of it for water (see the departures).
+  volume, is in the column since study 29 (see
+  [planet atmospheres](planet-atmospheres.md#argon-study-29)): it counts
+  as air in the broadening and in the water's foreign continuum (the
+  level's pressure less its water), which overstates its broadening by
+  about 0.2 of its share for CO₂ and 0.6 of it for water (see the
+  departures).
 
 ### The correlated-k method
 
@@ -405,10 +408,11 @@ Cuthbertson 1914, p. 5), that is, to the Loschmidt density of an ideal
 gas. In the formulas, $\nu$ is the wavenumber in cm⁻¹, $s$ the wavenumber
 in µm⁻¹ and $f = c/\lambda$ the frequency in s⁻¹; $\sigma(550)$ is
 computed from each row with the formula above, in $10^{-27}$ cm² per
-molecule. Seven gases enter the Rayleigh sum, H₂O included (legacy left
-it out). Argon, in the table for the dry-air check below, is not one of
-them yet (study 29 adds it with argon's partial pressure): its molar
-mass, 39.95 g/mol, is the CIAAW abridged standard atomic weight (2024,
+molecule. Eight gases enter the Rayleigh sum, H₂O included (legacy left
+it out), and argon with its partial pressure since study 29 (the test
+`the_columns_sum_scatters_with_its_argon` checks the column's own sum on
+Bucholtz's 0.0972). Argon's molar mass, 39.95 g/mol, also weighs the
+levels of the column; it is the CIAAW abridged standard atomic weight (2024,
 after the IUPAC Atomic Weights 2021, read 2026-11-23). Bucholtz's 0.0972
 is for an air with its argon: without it, Earth's column scatters about
 0.8 % less (0.93 % of the molecules at 0.86 of N₂'s cross-section,
@@ -1004,8 +1008,8 @@ the Bond albedo are there too (change 2b-2).
   forcing). The tests compare the model with itself: they prove the
   numerics converge, not that the physics is right. No convergence test
   yet covers the column's top share.
-- **Argon (study 29, not in the code yet).** The column will count argon
-  as air in the lines' widths and in the water's foreign continuum, where
+- **Argon (study 29).** The column counts argon as air in the lines'
+  widths and in the water's foreign continuum, where
   it broadens CO₂'s lines 0.78 times as much as N₂ and water's about 0.37
   times as much as air (*Which gases absorb, and where*). On Earth that
   overstates the foreign broadening by about 0.2 % for CO₂ and 0.6 % for

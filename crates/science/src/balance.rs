@@ -329,9 +329,11 @@ pub const PLATEAU_SETTLED: WattPerSquareMetre = WattPerSquareMetre(0.01);
 pub const SIMPSON_NAKAJIMA_W_M2: WattPerSquareMetre = WattPerSquareMetre(282.0);
 
 /// Definition: Earth's dry air, bar: 0.78 of N₂, 0.21 of O₂ and 400 ppm
-/// of CO₂ (the legacy `EARTH_AIR`; argon, which neither absorbs nor
-/// changes the adiabat much, has no field). The air of Earth's moist
-/// plateau ([`earth_moist_plateau`]) and of the radiation tests.
+/// of CO₂ (the legacy `EARTH_AIR`). Its argon is left at 0, as legacy
+/// had it: argon neither absorbs nor changes the adiabat much (study 29:
+/// under 0.1 K on Earth), and the moist plateau and the radiation tests
+/// keep the air they were checked on. The air of Earth's moist plateau
+/// ([`earth_moist_plateau`]) and of the radiation tests.
 pub const EARTH_DRY_AIR: PartialPressures = PartialPressures {
     n2: 0.78,
     co2: 4e-4,
@@ -340,6 +342,7 @@ pub const EARTH_DRY_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 0.21,
+    ar: 0.0,
 };
 
 /// The moist plateau, W/m², of the `dry` air over a saturated surface,

@@ -161,6 +161,9 @@ of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
 and methane saturation. Shortwave: `albedo::shortwave_budget` (Bond albedo and
 absorbed light; the caller owns the `ShortwaveCache`), `starlight`, `shortwave`
 (`data/shortwave.bin`), `rayleigh`, `veils`, `methane::stratospheric_share`.
+`radiation::gases::PartialPressures` holds the eight gases of a column (N₂,
+CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar); argon absorbs nothing, weighs, scatters,
+has a monatomic heat capacity and broadens the lines as air does.
 See [OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
 
 ## Dependencies

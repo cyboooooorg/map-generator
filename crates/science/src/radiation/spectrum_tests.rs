@@ -277,6 +277,7 @@ fn olr_bins(
             nh3: gases.nh3 * share,
             so2: gases.so2 * share,
             o2: gases.o2 * share,
+            ar: gases.ar * share,
         };
         g.h2o = point.vapour_bar;
         Level {
@@ -569,4 +570,42 @@ fn the_planck_spectrum_is_the_bins_and_their_rest() {
             "{t} K: {sum} vs {black}"
         );
     }
+}
+
+/// The level weighs its argon: Earth's dry air of the fact sheet, its
+/// argon included, has the U.S. Standard Atmosphere's mean molar mass,
+/// 28.964 g/mol ([`DRY_AIR_R`]'s), within 0.1 %; without its argon it is
+/// 0.3 % lighter. Pure argon weighs its CIAAW 39.95 g/mol.
+#[test]
+fn a_level_weighs_its_argon() {
+    /// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's
+    /// dry air, 28.964 g/mol (NASA-TM-X-74335, as [`DRY_AIR_R`] cites
+    /// it), kg/mol.
+    const DRY_AIR_MOLAR_MASS: f64 = 28.964e-3;
+    let level = |gases| Level {
+        temperature_k: EARTH_SURFACE_K,
+        gases,
+        gravity_m_s2: EARTH_GRAVITY,
+    };
+    // Source: dry air, NASA Earth fact sheet: 78.08 % N₂, 20.95 % O₂,
+    // 9340 ppm Ar, 420 ppm CO₂, by volume.
+    let air = PartialPressures {
+        n2: 0.7808,
+        o2: 0.2095,
+        ar: 9340e-6,
+        co2: 420e-6,
+        ..PartialPressures::default()
+    };
+    let mass = level(air).molar_mass_kg();
+    assert!((mass / DRY_AIR_MOLAR_MASS - 1.0).abs() < 1e-3, "{mass}");
+    let without = level(PartialPressures { ar: 0.0, ..air }).molar_mass_kg();
+    assert!(
+        (without / DRY_AIR_MOLAR_MASS - 1.0).abs() > 2e-3,
+        "{without}"
+    );
+    let argon = level(PartialPressures {
+        ar: 1.0,
+        ..PartialPressures::default()
+    });
+    assert!((argon.molar_mass_kg() - crate::radiation::gases::AR_MOLAR_MASS).abs() < 1e-15);
 }

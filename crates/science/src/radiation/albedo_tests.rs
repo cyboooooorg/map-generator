@@ -471,6 +471,7 @@ fn no_air_returns_the_ground() {
             nh3: p,
             so2: p,
             o2: p,
+            ar: p,
         };
         for g in GROUNDS {
             let bare = earth_budget(&none, EARTH_SURFACE_K, under(g, 0.0, 0.0));

@@ -17,8 +17,9 @@ use science::units::{Bar, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
 /// Source: Mars's air, 6.36 mbar of 95.1 % CO₂, 2.59 % N₂ and 0.16 % O₂
 /// (NASA Mars fact sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/
 /// marsfact.html): 6.05 mbar of CO₂, 0.165 mbar of N₂ and 0.010 mbar of
-/// O₂, imposed (study 25, "Test air and Solar System bounds"; argon has
-/// no field).
+/// O₂, imposed (study 25, "Test air and Solar System bounds"), and its
+/// 1.93 % of argon-40, 0.123 mbar (Mahaffy et al. 2013, Science 341, 263,
+/// abstract, as study 29 reads it).
 const MARS_AIR: PartialPressures = PartialPressures {
     n2: 0.165e-3,
     co2: 6.05e-3,
@@ -27,6 +28,7 @@ const MARS_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 0.0,
     o2: 0.010e-3,
+    ar: 0.123e-3,
 };
 
 /// Source: Mars's average surface temperature, ~214 K (NASA Mars fact
@@ -75,6 +77,7 @@ const COLD_AIR: PartialPressures = PartialPressures {
     nh3: 0.0,
     so2: 2.4e-4,
     o2: 0.0,
+    ar: 0.0,
 };
 
 /// Definition: the census case of #443: the water it keeps, kg, a test
