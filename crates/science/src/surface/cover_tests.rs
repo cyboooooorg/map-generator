@@ -6,9 +6,10 @@ use super::*;
 use crate::constants::{EARTH_MEAN_RADIUS, SOLAR_EFFECTIVE_TEMPERATURE, STANDARD_GRAVITY};
 use crate::radiation::albedo::{ShortwaveCache, Underneath, shortwave_budget};
 use crate::radiation::clouds::cloud_cover;
+use crate::radiation::starlight::SOLAR_METALLICITY;
 use crate::radiation::test_points::{EARTH_AIR, EARTH_SURFACE_K};
 use crate::radiation::veils::sulphuric_deck;
-use crate::units::Degree;
+use crate::units::{Degree, Dex};
 
 /// Source: Earth's mean obliquity at J2000, 84 381.406 arcseconds, the
 /// IAU 2006 value (Capitaine, Wallace & Chapront 2003,
@@ -111,6 +112,7 @@ fn bond_albedo_clear(cover: &Cover, air: &PartialPressures, t: f64) -> f64 {
         Kelvin(t),
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
+        Dex(SOLAR_METALLICITY),
         Underneath {
             ground: ground_albedo(cover, Bar(air.total())),
             clouds: Fraction::new(0.0).unwrap(),
@@ -264,6 +266,7 @@ fn earth_keeps_its_bond_albedo() {
         t,
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
+        Dex(SOLAR_METALLICITY),
         Underneath {
             ground: ground_albedo(&c, Bar(air.total())),
             clouds: cloud_cover(t, h2o),

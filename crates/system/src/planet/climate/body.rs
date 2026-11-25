@@ -120,7 +120,7 @@ impl<'a> ClimateBody<'a> {
     }
 
     /// Its Bond albedo at `t` under `air`: the [`shortwave_budget`] at
-    /// each star's temperature over the same [`Underneath`]
+    /// each star's temperature and metallicity over the same [`Underneath`]
     /// ([`ClimateBody::underneath`]), weighted by the stars' flux (#592).
     pub(crate) fn derived_albedo(&mut self, t: Kelvin, air: &PartialPressures) -> Fraction {
         let under = self.underneath(t, air);
@@ -136,6 +136,7 @@ impl<'a> ClimateBody<'a> {
                     t,
                     i.gravity,
                     s.effective_temperature,
+                    s.metallicity,
                     under,
                     &mut self.shortwave,
                 );

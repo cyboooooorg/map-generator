@@ -12,7 +12,7 @@ use super::{
 use science::balance::{BRACKET_TOLERANCE, TOLERANCE};
 use science::radiation::gases::PartialPressures;
 use science::surface::Liquid;
-use science::units::{Bar, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
+use science::units::{Bar, Dex, EarthFlux, Kelvin, Kilogram, WattPerSquareMetre};
 
 /// Source: Mars's air, 6.36 mbar of 95.1 % CO₂, 2.59 % N₂ and 0.16 % O₂
 /// (NASA Mars fact sheet, nssdc.gsfc.nasa.gov/planetary/factsheet/
@@ -238,6 +238,10 @@ fn no_water_no_ocean() {
     assert!(!c.regulated, "{c:?}");
 }
 
+/// Definition: the metallicity of the census case's F star, dex: the
+/// legacy case carries none, so the Sun's ([M/H] = 0).
+const COLD_METALLICITY: Dex = Dex(0.0);
+
 /// The census case of #443 (legacy `cold_methane_world`): a cold, wet
 /// body round an F star, under a thick nitrogen and methane air.
 pub(super) fn cold_methane_world() -> ClimateInputs {
@@ -245,6 +249,7 @@ pub(super) fn cold_methane_world() -> ClimateInputs {
         sources: vec![Light {
             flux: COLD_FLUX,
             effective_temperature: COLD_STAR,
+            metallicity: COLD_METALLICITY,
             equilibrium: COLD_EQUILIBRIUM,
         }],
         air: COLD_AIR,

@@ -10,64 +10,49 @@ use crate::radiation::column::{Levels, Profile, STEAM_MAX_BAR, levels};
 use crate::radiation::gases::{H2O_MOLAR_MASS, PartialPressures};
 use crate::radiation::rayleigh::rayleigh_depth_550;
 use crate::radiation::shortwave::{Air, Budget, Paths};
-use crate::radiation::starlight::star_bands;
+use crate::radiation::starlight::{BANDS, SOLAR_METALLICITY, SPECTRA, measured_sun, star_bands};
 use crate::radiation::test_points::{
     EARTH_AIR, EARTH_GROUND_ALBEDO, EARTH_INCOMING_W_M2, EARTH_SURFACE_K, TITAN_GRAVITY,
     TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY, VENUS_PRESSURE_BAR, VENUS_SURFACE_K,
 };
 use crate::surface::RELATIVE_HUMIDITY;
-use crate::units::Bar;
+use crate::units::{Bar, Dex};
 use crate::water::vapour_saturation_bar;
 
-/// Source: the low end of the window of Earth's clear-sky albedo at
-/// 77 % humidity, decided by the user on 2026-11-23 after the diagnostic
-/// study of PR 2b-2: the observed albedo less what the sky holds and the
-/// port does not, plus what the port lacks and the sky holds. The observed
-/// 0.149 (Stephens et al. 2015, doi:10.1002/2014RG000449, §4) to 0.156
-/// (CERES EBAF Ed4.0, Kato et al. 2018, doi:10.1175/JCLI-D-17-0523.1,
-/// Table 5); less the aerosols' 0.017 +- 0.003 (5.9 +- 1 of 341.8 W/m²,
-/// Kim & Ramanathan 2008, doi:10.1029/2007JD008434, Table 3b and §[52]);
-/// plus what the faithful port lacks, each computed by the study with its
-/// source: the black-body Sun against the measured TSIS-1 HSRS spectrum
-/// (Coddington et al. 2021, doi:10.1029/2020GL091709) +0.0147; no ozone,
-/// 300 +- 30 DU with the cross-sections of Serdyuchenko et al. 2014
-/// (doi:10.5194/amt-7-625-2014) +0.0145 +- 0.0005; no O₂ (Hogan &
-/// Matricardi 2020, doi:10.5194/gmd-13-6501-2020, Table 4) +0.0018; and
-/// the two-stream closure against exact radiative transfer (checked
-/// against Kokhanovsky, Mayer & Rozanov 2005, doi:10.1016/j.atmosres.2004.07.004)
-/// −0.0028. The terms sum to 0.1567 at the low end and 0.1707 at the
-/// high end.
-/// Issues #653 (ozone, O₂) and #655 (the Sun's spectrum, the closure)
-/// narrow it when they land. The port's 0.1701 lies at its top edge.
-const CLEAR_SKY_ALBEDO_LOW: f64 = 0.1567;
+/// Calibration: how far Earth's clear-sky albedo under the table's Sun may
+/// lie from its value under the measured Sun (TSIS-1 HSRS, Coddington et
+/// al. 2021, doi:10.1029/2020GL091709, `data/tsis-sun.tsv`), 0.003: the
+/// PHOENIX Sun's 0.0023, measured by study 35, rounded up; decided by the
+/// user on 2026-11-25. Searched and not found: a model library's error
+/// against the measured Sun on a planet's albedo (study 35, Wiki
+/// `35-stellar-spectra-audit`).
+const TSIS_CLEAR_SKY_TOLERANCE: f64 = 0.003;
 
-/// Source: the high end of the window of [`CLEAR_SKY_ALBEDO_LOW`], the
-/// sum of the same cited terms.
-const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1707;
+/// Definition: the coolest and hottest stars of Kopparapu et al. 2013's
+/// comparison, K (§4.1: 2600 to 7200 K), between which the albedo falls
+/// from F to M hosts.
+const KOPPARAPU_K: (f64, f64) = (2600.0, 7200.0);
 
-/// Source: the precipitable water of Kim & Ramanathan 2008's global run,
-/// cm: the NVAP water field (§[22]), whose global mean is 2.45 (heritage
-/// NVAP) to 2.53 (NVAP-M, 1988-2009) cm (Forsythe, Vonder Haar & Cronk
-/// 2014, NOAA ESRL Global Monitoring Annual Conference, pp. 6 and 18),
-/// rounded. Their 3.0 cm of Table 2 is the sensitivity case's input.
-/// It is the field's mean, not the water one column needs (about 2.4 cm
-/// for the field's absorbed sunlight, Wiki study 33).
-const NVAP_WATER_CM: f64 = 2.5;
+/// Calibration: how far Earth's clear-sky albedo under a row of the table
+/// of spectra may lie from its value under that row rebuilt from its two
+/// neighbours, 0.001: a tenth of what the black body moved Earth's
+/// cloudy albedo by (0.0104, study 35). Study 35 measured 0.0036 at most
+/// over gaps of 600 K (at 2600 K), 0.0001 at 3300 K; the table's steps
+/// are 100 to 1000 K.
+const INTERPOLATED_ALBEDO: f64 = 0.001;
+
+/// Definition: how much more a row rebuilt over two steps of the table
+/// errs than the table between two rows, 4: a linear interpolation errs
+/// as the square of its step, and the rebuilt row spans two.
+const TWO_STEPS: f64 = 4.0;
+
+/// Definition: the hottest PHOENIX row of the table, K
+/// (`crates/science/data/SPECTRA.md`); ATLAS9 rows lie above it.
+const PHOENIX_TOP_K: f64 = 12_000.0;
 
 /// Source: the columns of Kim & Ramanathan 2008's sensitivity to the
 /// precipitable water, 3.0 +- 0.3 cm (doi:10.1029/2007JD008434, Table 2).
 const SENSITIVITY_WATER_CM: [f64; 2] = [2.7, 3.3];
-
-/// Source: what 0.6 cm more water adds to the clear sky's absorption,
-/// W/m²: Kim & Ramanathan 2008, Table 2, +-0.3 cm moves the surface's net
-/// flux by 1.3 and the top's by 0.2, so the air's absorption by 1.5 each
-/// way.
-const MORE_WATER_ABSORBED_W_M2: f64 = 3.0;
-
-/// Calibration: the tolerance of [`MORE_WATER_ABSORBED_W_M2`], W/m², approved
-/// by the user on 2026-11-23: the table's rounding to a tenth and the
-/// unstated sign of its two terms.
-const MORE_WATER_ABSORBED_TOLERANCE_W_M2: f64 = 1.0;
 
 /// Source: what 0.6 cm more water takes from the light reflected at the
 /// top, W/m²: Kim & Ramanathan 2008, Table 2, 0.2 for +-0.3 cm.
@@ -77,19 +62,6 @@ const MORE_WATER_REFLECTED_W_M2: f64 = 0.4;
 /// by the user on 2026-11-23: the table's rounding to a tenth on each
 /// side.
 const MORE_WATER_REFLECTED_TOLERANCE_W_M2: f64 = 0.2;
-
-/// Source: the low end of the window of the clear-sky absorption by
-/// water vapour and CO₂, W/m² at 340.25, approved by the user on
-/// 2026-11-23: 51 +- 3, water about 50 of 341.8 (Kim & Ramanathan 2008,
-/// §[51]) plus CO₂ 1.0 to 1.6 (Kiehl & Trenberth 1997,
-/// doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2, Table 4; Hogan &
-/// Matricardi 2020, doi:10.5194/gmd-13-6501-2020, Table 4), with the +-3
-/// of Kim & Ramanathan's total. See `docs/science/radiative-transfer.md`,
-/// "Window of the H₂O and CO₂ absorption".
-const CLEAR_SKY_ABSORBED_LOW_W_M2: f64 = 48.0;
-
-/// Source: the high end of the window of [`CLEAR_SKY_ABSORBED_LOW_W_M2`].
-const CLEAR_SKY_ABSORBED_HIGH_W_M2: f64 = 54.0;
 
 /// Source: Earth's Bond albedo, 0.293 (CERES, Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018 give 0.2915).
@@ -199,6 +171,7 @@ fn earth_budget(gases: &PartialPressures, surface_k: f64, below: Underneath) -> 
         Kelvin(surface_k),
         STANDARD_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
+        Dex(SOLAR_METALLICITY),
         below,
         &mut ShortwaveCache::default(),
     )
@@ -282,49 +255,39 @@ fn earth_column_holding(water_cm: f64) -> (PartialPressures, Levels) {
     (air, column)
 }
 
-/// The clear sky of Earth over its ground under the Sun, through the
-/// column of [`earth_column_holding`] `water_cm`.
+/// The clear sky of Earth over its ground under the table's Sun, through
+/// the column of [`earth_column_holding`] `water_cm`.
 fn earth_clear_sky_holding(water_cm: f64) -> Budget {
     let (air, column) = earth_column_holding(water_cm);
+    clear_sky_through(
+        &air,
+        Some(&column),
+        &star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY).bands,
+    )
+}
+
+/// The clear sky over Earth's ground of `air` in `column` under `light`.
+fn clear_sky_through(
+    air: &PartialPressures,
+    column: Option<&Levels>,
+    light: &[(f64, f64)],
+) -> Budget {
     let through = Air {
         haze: (0.0, 1.0),
-        rayleigh_550: rayleigh_depth_550(&air, STANDARD_GRAVITY.0),
-        column: Some(&column),
+        rayleigh_550: rayleigh_depth_550(air, STANDARD_GRAVITY.0),
+        column,
     };
-    Paths::through(&through, &star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0).bands)
-        .budget(EARTH_GROUND_ALBEDO, 0.0)
+    Paths::through(&through, light).budget(EARTH_GROUND_ALBEDO, 0.0)
 }
 
 #[test]
-fn earths_clear_sky_albedo_is_observed_less_what_is_missing() {
-    let budget = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
-    let a = budget.bond_albedo.get();
-    println!(
-        "Earth clear sky at 77 %: albedo {a:.4}, absorbed {:.2} W/m²",
-        budget.absorbed_by_air.get() * EARTH_INCOMING_W_M2
-    );
-    assert!(
-        (CLEAR_SKY_ALBEDO_LOW..=CLEAR_SKY_ALBEDO_HIGH).contains(&a),
-        "{a}"
-    );
-}
-
-#[test]
-fn earths_clear_sky_air_absorbs_what_satellites_see() {
-    let budget = earth_clear_sky_holding(NVAP_WATER_CM);
-    let absorbed = budget.air * EARTH_INCOMING_W_M2;
-    let manabe = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
-    println!(
-        "Earth clear sky at {NVAP_WATER_CM} cm: absorbed {absorbed:.2} W/m², albedo {:.4}; \
-         at 77 % {:.2} W/m²",
-        budget.albedo,
-        manabe.absorbed_by_air.get() * EARTH_INCOMING_W_M2,
-    );
-    assert!(
-        (CLEAR_SKY_ABSORBED_LOW_W_M2..=CLEAR_SKY_ABSORBED_HIGH_W_M2).contains(&absorbed),
-        "{absorbed} W/m²"
-    );
-    // Without vapour or CO₂ the air absorbs nothing, and reflects more.
+fn dry_air_absorbs_nothing_and_reflects_more() {
+    // The total the air absorbs has no test of its own until the column
+    // holds ozone and O₂ (#653, #715): the line-by-line reference holds
+    // them. Its responses to CO₂ and water are tested on RFMIP's field
+    // (`rfmip_tests.rs`). Without vapour or CO₂ the air absorbs nothing,
+    // and reflects more.
+    let wet = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
     let dry = PartialPressures {
         h2o: 0.0,
         co2: 0.0,
@@ -333,23 +296,21 @@ fn earths_clear_sky_air_absorbs_what_satellites_see() {
     let none = earth_budget(&dry, EARTH_SURFACE_K, clear());
     assert!(none.absorbed_by_air.get() < 1e-6, "{none:?}");
     assert!(
-        none.bond_albedo.get() > budget.albedo,
-        "{none:?} {budget:?}"
+        none.bond_albedo.get() > wet.bond_albedo.get(),
+        "{none:?} {wet:?}"
     );
 }
 
 #[test]
-fn more_water_absorbs_as_kim_and_ramanathan_say() {
+fn more_water_reflects_less_as_kim_and_ramanathan_say() {
+    // Only the light reflected at the top: what the air absorbs as its
+    // water grows is tested against LBLRTM on RFMIP's field
+    // (`rfmip_tests::moister_air_absorbs_as_line_by_line`).
     let [less, more] = SENSITIVITY_WATER_CM.map(earth_clear_sky_holding);
-    let absorbed = (more.air - less.air) * EARTH_INCOMING_W_M2;
     let reflected = (less.albedo - more.albedo) * EARTH_INCOMING_W_M2;
     println!(
-        "from {} to {} cm: absorbed +{absorbed:.3} W/m², reflected −{reflected:.3} W/m²",
+        "from {} to {} cm: reflected −{reflected:.3} W/m²",
         SENSITIVITY_WATER_CM[0], SENSITIVITY_WATER_CM[1]
-    );
-    assert!(
-        (absorbed - MORE_WATER_ABSORBED_W_M2).abs() <= MORE_WATER_ABSORBED_TOLERANCE_W_M2,
-        "{absorbed} W/m²"
     );
     assert!(
         (reflected - MORE_WATER_REFLECTED_W_M2).abs() <= MORE_WATER_REFLECTED_TOLERANCE_W_M2,
@@ -359,8 +320,9 @@ fn more_water_absorbs_as_kim_and_ramanathan_say() {
 
 /// Earth's all-sky Bond albedo stays at CERES's 0.293. `CLOUD_ALBEDO` was
 /// fitted on 0.293, so this checks that calibration and is a net if the
-/// physics moves, not an independent check; the clear-sky window and the
-/// water tests are the independent ones.
+/// physics moves, not an independent check; the measured Sun's clear
+/// sky, the water's reflection and RFMIP's line-by-line responses are the
+/// independent ones.
 #[test]
 fn earth_keeps_its_bond_albedo() {
     let clouds = earth_clouds();
@@ -394,7 +356,7 @@ fn an_m_stars_albedo_drops_more_than_a_g_stars() {
         let clouds = cloud_cover(Kelvin(t), Bar(air.h2o)).get();
         let column = levels(&air, t, STANDARD_GRAVITY.0, Profile::SHORTWAVE);
         let drop = |star_k: f64| {
-            let light = star_bands(star_k);
+            let light = star_bands(star_k, SOLAR_METALLICITY);
             let budget = |column: Option<&Levels>| -> Budget {
                 let through = Air {
                     haze: (0.0, 1.0),
@@ -449,6 +411,7 @@ fn titans_air_is_brighter_than_earths() {
         Kelvin(TITAN_SURFACE_K),
         TITAN_GRAVITY,
         SOLAR_EFFECTIVE_TEMPERATURE,
+        Dex(SOLAR_METALLICITY),
         clear(),
         &mut cache,
     )
@@ -531,6 +494,7 @@ fn the_budget_stays_in_bounds() {
                         Kelvin(t),
                         gravity,
                         SOLAR_EFFECTIVE_TEMPERATURE,
+                        Dex(SOLAR_METALLICITY),
                         under(g, clouds, deck),
                         &mut cache,
                     );
@@ -560,6 +524,7 @@ fn a_cached_budget_is_the_fresh_one() {
             Kelvin(t),
             STANDARD_GRAVITY,
             SOLAR_EFFECTIVE_TEMPERATURE,
+            Dex(SOLAR_METALLICITY),
             below,
             cache,
         )
@@ -596,7 +561,7 @@ fn a_cached_budget_is_the_fresh_one() {
 fn the_shortwave_column_is_converged() {
     let air = earth_air();
     let clouds = earth_clouds().get();
-    let light = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0);
+    let light = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY);
     let budget = |profile: Profile| {
         let column = levels(&air, EARTH_SURFACE_K, STANDARD_GRAVITY.0, profile);
         let through = Air {
@@ -631,6 +596,7 @@ fn an_unknown_star_is_the_sun() {
             Kelvin(EARTH_SURFACE_K),
             STANDARD_GRAVITY,
             Kelvin(star),
+            Dex(SOLAR_METALLICITY),
             below,
             &mut ShortwaveCache::default(),
         )
@@ -654,6 +620,7 @@ fn a_weightless_air_is_no_air() {
             Kelvin(EARTH_SURFACE_K),
             MetrePerSecondSquared(g),
             SOLAR_EFFECTIVE_TEMPERATURE,
+            Dex(SOLAR_METALLICITY),
             below,
             &mut ShortwaveCache::default(),
         );
@@ -675,12 +642,129 @@ fn an_infinite_star_is_the_sun() {
         Kelvin(EARTH_SURFACE_K),
         STANDARD_GRAVITY,
         Kelvin(f64::INFINITY),
+        Dex(SOLAR_METALLICITY),
         clear(),
         &mut ShortwaveCache::default(),
     );
     assert_eq!(sun, infinite);
     assert_eq!(
-        star_bands(f64::INFINITY),
-        star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0)
+        star_bands(f64::INFINITY, SOLAR_METALLICITY),
+        star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY)
     );
+}
+
+/// Earth's clear sky over its ground at 77 % humidity under `light`.
+fn earth_clear_sky_under(light: &[(f64, f64)]) -> Budget {
+    let air = earth_air();
+    let column = levels(
+        &air,
+        EARTH_SURFACE_K,
+        STANDARD_GRAVITY.0,
+        Profile::SHORTWAVE,
+    );
+    clear_sky_through(&air, column.as_ref(), light)
+}
+
+#[test]
+fn the_tables_sun_lights_earth_as_the_measured_sun() {
+    let light = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY);
+    let a = earth_clear_sky_under(&light.bands).albedo;
+    let measured = earth_clear_sky_under(&measured_sun()).albedo;
+    println!("Earth's clear sky under the table's Sun: {a:.4} (TSIS-1 {measured:.4})");
+    assert!((a - measured).abs() <= TSIS_CLEAR_SKY_TOLERANCE, "{a}");
+}
+
+#[test]
+fn the_albedo_falls_from_f_to_m_hosts() {
+    // Kopparapu et al. 2013, §4.1: at equal flux, the albedo of an
+    // Earth-like planet is higher round an F star and lower round an M
+    // star. Every row of the table between their coolest and hottest stars.
+    let s = &*SPECTRA;
+    let solar = s
+        .metallicities
+        .iter()
+        .position(|m| *m == SOLAR_METALLICITY)
+        .expect("a solar row");
+    let albedos: Vec<(f64, f64)> = s
+        .temperatures
+        .iter()
+        .filter(|t| (KOPPARAPU_K.0..=KOPPARAPU_K.1).contains(*t))
+        .map(|t| {
+            (
+                *t,
+                earth_clear_sky_under(&star_bands(*t, s.metallicities[solar]).bands).albedo,
+            )
+        })
+        .collect();
+    for pair in albedos.windows(2) {
+        assert!(pair[0].1 < pair[1].1, "{pair:?}");
+    }
+}
+
+#[test]
+fn a_row_rebuilt_from_its_neighbours_lights_earth_alike() {
+    // Every interior row, at every metallicity, interpolated linearly from
+    // the rows on either side in temperature, and every interior
+    // metallicity from the metallicities on either side: over two steps,
+    // it errs [`TWO_STEPS`] times what the table errs between two rows.
+    // The rebuilt rows cross PHOENIX's log g switches (3900 to 4000 K,
+    // 6300 to 6400 K) and the seam between PHOENIX and ATLAS9 (12 000 to
+    // 13 000 K).
+    let s = &*SPECTRA;
+    let t = &s.temperatures;
+    let m = &s.metallicities;
+    let albedo = |shares: &[f64]| -> f64 {
+        let total: f64 = shares.iter().sum();
+        let light: Vec<(f64, f64)> = star_bands(SOLAR_EFFECTIVE_TEMPERATURE.0, SOLAR_METALLICITY)
+            .bands
+            .iter()
+            .zip(shares)
+            .map(|(b, x)| (b.0, x / total))
+            .collect();
+        earth_clear_sky_under(&light).albedo
+    };
+    let mix = |a: &[f64; BANDS], b: &[f64; BANDS], f: f64| -> Vec<f64> {
+        a.iter()
+            .zip(b)
+            .map(|(a, b)| (1.0 - f) * a + f * b)
+            .collect()
+    };
+    let direct: Vec<Vec<f64>> = s
+        .shares
+        .iter()
+        .map(|row| row.iter().map(|x| albedo(x)).collect())
+        .collect();
+    let mut worst = (0.0, 0.0, 0.0);
+    let mut phoenix = (0.0, 0.0, 0.0);
+    for (mi, rows) in s.shares.iter().enumerate() {
+        for i in 1..t.len() - 1 {
+            let f = (t[i] - t[i - 1]) / (t[i + 1] - t[i - 1]);
+            let gap = (direct[mi][i] - albedo(&mix(&rows[i - 1], &rows[i + 1], f))).abs();
+            if t[i + 1] <= PHOENIX_TOP_K && gap > phoenix.2 {
+                phoenix = (m[mi], t[i], gap);
+            }
+            if gap > worst.2 {
+                worst = (m[mi], t[i], gap);
+            }
+        }
+    }
+    let in_temperature = worst;
+    let mut in_metallicity = 0.0_f64;
+    for mi in 1..m.len() - 1 {
+        let f = (m[mi] - m[mi - 1]) / (m[mi + 1] - m[mi - 1]);
+        for i in 0..t.len() {
+            let rebuilt = mix(&s.shares[mi - 1][i], &s.shares[mi + 1][i], f);
+            let gap = (direct[mi][i] - albedo(&rebuilt)).abs();
+            in_metallicity = in_metallicity.max(gap);
+            if gap > worst.2 {
+                worst = (m[mi], t[i], gap);
+            }
+        }
+    }
+    println!(
+        "worst rebuilt row: {} dex, {} K, {:.5}; in temperature {in_temperature:?}, within \
+         PHOENIX {phoenix:?}; in metallicity {in_metallicity:.5}",
+        worst.0, worst.1, worst.2
+    );
+    assert!(worst.2 <= TWO_STEPS * INTERPOLATED_ALBEDO, "{worst:?}");
 }

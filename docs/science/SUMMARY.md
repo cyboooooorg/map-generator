@@ -7,6 +7,7 @@
 # Star view
 
 - [What does a G-type star mean?](star-types.md)
+- [Is a star's light a black body?](stellar-spectra.md)
 - [What is inside a star?](star-structure.md)
 - [What is the habitable zone?](habitable-zone.md)
 - [How do asteroid belts form?](asteroid-belts.md)

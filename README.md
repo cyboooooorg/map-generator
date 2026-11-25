@@ -87,6 +87,8 @@ Dependencies point inwards only; `tools/guardrails` checks it.
 | [`tools/guardrails`](tools/guardrails/README.md) | Architecture checks and test budgets |
 | [`tools/figures`](tools/figures/README.md) | Offline drawer of the science book's SVG figures |
 | `tools/opacity-table` | Offline builder of the climate's opacity tables from HITRAN |
+| [`tools/stellar-spectra`](tools/stellar-spectra/README.md) | Offline builder of the shortwave's table of stellar spectra |
+| [`tools/rfmip-shortwave`](tools/rfmip-shortwave/README.md) | Offline builder of the RFMIP clear-sky field the shortwave is tested on |
 
 ## Documentation
 

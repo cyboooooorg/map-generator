@@ -165,13 +165,17 @@ solver that uses them is `system::planet::climate`.
 of `data/opacity.bin`, continua, clouds; the caller owns the `ColumnCache`) and
 `skin_temperature`; `radiation::clouds::cloud_cover`; `science::volatiles`: CO₂,
 methane, nitrogen and argon saturation. Shortwave: `albedo::shortwave_budget`
-(Bond albedo and absorbed light; the caller owns the `ShortwaveCache`),
-`starlight`, `shortwave`
-(`data/shortwave.bin`), `rayleigh`, `veils`, `methane::stratospheric_share`.
+(Bond albedo and absorbed light, for a star's temperature and metallicity; the
+caller owns the `ShortwaveCache`), `starlight` (the star's spectrum, from
+`data/stellar-spectra.tsv`), `shortwave` (`data/shortwave.bin`), `rayleigh`,
+`veils`, `methane::stratospheric_share`.
 `radiation::gases::PartialPressures` holds the eight gases of a column (N₂,
 CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar); argon absorbs nothing, weighs, scatters,
 has a monatomic heat capacity and broadens the lines as air does.
-See [OPACITY.md](data/OPACITY.md), [radiative transfer](../../docs/science/radiative-transfer.md).
+See [OPACITY.md](data/OPACITY.md), [SPECTRA.md](data/SPECTRA.md),
+[RFMIP.md](data/RFMIP.md) (the field the shortwave is tested on), [radiative
+transfer](../../docs/science/radiative-transfer.md), [stellar
+spectra](../../docs/science/stellar-spectra.md).
 
 ## Dependencies
 

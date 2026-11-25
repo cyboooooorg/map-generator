@@ -2428,7 +2428,8 @@ spectral column sends out. Three things in the model cap it:
   (`climate::tropopause_k`, the skin temperature `T_eff 2^-¼` of the
   climate's own albedo) cold-traps it;
 - its Rayleigh scattering keeps growing with the column, averaged over
-  the star's black-body spectrum (`albedo::spectrum`), while its
+  the star's spectrum (the legacy's black body, `albedo::spectrum`; the
+  rewrite's table of model spectra, `starlight::star_bands`), while its
   near-infrared absorption (`planet::shortwave`) takes back part of what
   it reflects. A red star's light scatters less and falls more in the
   absorption bands, so the maximum holds at a lower flux.
@@ -2901,12 +2902,14 @@ The rewrite's climate does not smooth that step away: across nitrogen's
 triple point its sweep jumps by 3.4 K, from 59.77 K (frost) at flux
 0.006861 to 63.15 K (liquid) at 0.006878, +0.24 % of flux. It is a
 bistability, as the runaway edge's step is (#523): the nitrogen frost
-(Bond albedo 0.754, emissivity 0.80) and the liquid under it (0.616,
-1.00) are both stable at one flux, and the warm start picks the branch.
-The absorbed light rises by the factor the emissivity and the
-temperature raise `ε T⁴`, about 1.55, which is why a jump the sweep lets
-through must change the phase (tier-3 test
-`the_fixed_point_converges_across_the_nitrogen_triple_point`). Legacy's
+(Bond albedo 0.754, emissivity 0.80) and the melting frost or liquid
+under it (0.613 to 0.616, 1.00) are both stable at one flux, and the
+warm start picks the branch. The absorbed light rises by the factor the
+emissivity and the temperature raise `ε T⁴`, about 1.56, which is why a
+jump the sweep lets through must leave the frost (under the stellar
+spectra of #655 it lands on the melting frost at 63.13 K, just below the
+triple point; tier-3 test
+`the_fixed_point_converges_until_the_nitrogen_frost_melts`). Legacy's
 1 K band has no source (study 25).
 
 **Branches and snowballs** (`climate::climate`, `snowball_chance`). A body
@@ -2922,14 +2925,14 @@ its maximum greenhouse where none thaws it, less what its cold surface
 frosts out (issue #522).
 Where both exist the planet is a snowball (`Climate::snowball`) when its
 formation draw `PlanetInputs::snowball_draw`, uniform in `[0, 1]`, is under
-`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (12.4 bar in the
+`d / (d + W v / v⊕)`, with `W` = `SNOWBALL_WARM_BAR` (10.2 bar in the
 rewrite, 0.8 bar in legacy): the share of its history it spends frozen,
 with `d` the CO₂ that thaws it and `v / v⊕` its volcanism against Earth's
 (legacy's 0.8 bar gave Earth, which it remembered frozen about a tenth
 of its history, a chance of 0.1: on the spectral column Earth at 1 AU
 needed 0.091 bar more CO₂ to thaw, a chance of 0.102; 0.031 bar on the
 grey column. Study 25 found the dated snowballs are 1.4 % of Earth's
-history, not a tenth; the rewrite refits `W` to 12.4 bar and Earth's
+history, not a tenth; the rewrite refits `W` to 10.2 bar and Earth's
 chance is 0.0140, see "Calibration of `SNOWBALL_WARM_BAR`" below). Where no
 CO₂ up to its maximum greenhouse thaws it (the chance is then 1, from
 about 1.4 AU for an Earth-like planet round the Sun: an icy body's cold column condenses and scatters its CO₂ before it
@@ -3409,17 +3412,22 @@ legacy. Refitted in 2d-3a on the rewrite's solver: the reference Earth
 at 1 AU freezes with 0.001986 bar of CO₂ and thaws at 0.180748 bar (13
 thaw steps), so `d⊕` = 0.1788 bar (0.178762), twice legacy's 0.091 bar;
 with its recorded volcanism 0.506064 (`rate⊕` 1.012128), `W` = 12.44,
-kept to three figures as **12.4 bar**, which gives Earth a chance of
+kept to three figures as 12.4 bar, which gave Earth a chance of
 0.01404. That is twice the
 6.4 bar expected from legacy's `d⊕`, inside the 3 to 13 bar the plan
-allowed. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
+allowed. Refitted again with the stellar spectra of issue #655 (study
+35), with the cloud albedo refitted on the table's Sun (0.296) and
+Earth's argon (#694): the reference Earth then freezes with 0.002058 bar
+and thaws at 0.148885 bar, so `d⊕` = 0.1468 bar (0.146828) and `W` =
+10.22, kept as **10.2 bar**, which gives Earth a chance of 0.0140 (it
+fell to 0.01168 under 12.4 bar). #705's refit of the cloud albedo will move it again. The tier-3 test `earth_snowballs_as_often_as_hoffman_dates`
 holds Earth's chance in 0.013 to 0.016 on the full solve (65 s at the
 tier-1 opt-level); a tier-1 test of `science::snowball` holds the
 arithmetic of the fit on the measured `d⊕` and `rate⊕`.
 Hoffman et al. quote Walker et al. 1981: "Even the present rate of
 release would yield 1 bar of carbon dioxide in only 20 million years",
 so 6.4 bar would be about 130 My of today's outgassing per temperate
-phase, and 12.4 bar is about 250 My.
+phase, and 10.2 bar is about 200 My.
 Searched and not found: a snowball frequency for another planet, and
 the length of the Paleoproterozoic snowballs. Where no CO₂ thaws the
 body, `thaw_bar` is infinite and the trace takes no non-finite value:
@@ -3928,8 +3936,8 @@ temperature and the thickness) and `science::steam::THICKNESS_CAP`.
 | The #492 body, round a 2400 K star at 1 S⊕, `the_492_super_earth_is_a_steam_world` | steam world, over 1e5 bar, over 1000 K, the last shell steam, the radius over its dry core's (outside Turbet's grid its condensed twin is larger, #684), the last steam loss read on the envelope's radius | the class is the model's; 1.61 R⊕ and 1679 K are the old code's output (tier-2 net only) |
 | A wet Venus under an XUV fluence of 1e14 J/m², `thin_steam_over_rock_stays_a_runaway` | a runaway under 220.64 bar of steam, no envelope | Pierrehumbert 2023 § 1 (no surface hides under the critical pressure); legacy `thin_steam_over_rock_stays_a_runaway_greenhouse` |
 | A regulated Earth at 1.0 AU, `a_regulated_climate_with_a_wet_balance_does_not_boil` | does not boil | Earth keeps its oceans (observation); the thermostat's air has a wet balance |
-| F0V (7220 K) at 1.2963 S⊕, a tenth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (300.8 W/m²) over the saturated column's peak (299.2 W/m²), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
-| Same, under an XUV fluence of 1e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band (2e14 until the air's argon, #694, took the first run out of it) |
+| F0V (7220 K) at 1.2963 S⊕, a hundredth of the N₂, `a_boil_that_escapes_all_its_water_ends_dry` | the first run boils, regulated, under the runaway flux (1.2964 S⊕) | property: absorbed light (291.0 W/m²) over the saturated column's peak (289.9 W/m²; at a tenth of the N₂, Earth's argon raises it to 292.3, #694), Kasting 1988, Goldblatt et al. 2013; legacy's 1.28 S⊕ lies under the model's threshold; "kept 0" is the model's escape (tier-2 net) |
+| Same, under an XUV fluence of 1e14 J/m², water sized to leave 0.03 bar, `a_boil_whose_leftover_recondenses_keeps_its_ocean` | boils, then keeps an ocean under 1e-3 of its water | property: the leftover's own wet balance (Hamano et al. 2013's type I); the fluence is a test input so that the planet stays dry enough to sit in the band (2e14 until the air's argon, #694, took the first run out of it; the N₂ cut to a hundredth keeps it there with the stellar spectra of #655) |
 
 The 1500 to 2500 K window extrapolates Boukrouche et al. 2021, who stop
 at 295 bar and find the plateau's end constant past it, to columns of

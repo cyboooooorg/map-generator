@@ -9,6 +9,8 @@ pub mod gases;
 pub(crate) mod ktable;
 pub mod methane;
 pub(crate) mod rayleigh;
+#[cfg(test)]
+mod rfmip_tests;
 pub(crate) mod shortwave;
 pub(crate) mod spectrum;
 pub(crate) mod starlight;

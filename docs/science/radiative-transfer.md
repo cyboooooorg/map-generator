@@ -760,30 +760,70 @@ less than the field. Kiehl & Trenberth's U.S. Standard Atmosphere holds
 1.44 cm in the AFGL file (derived; the paper does not give it).
 
 **Window of the H₂O and CO₂ absorption** (decided by the user on
-2026-11-23: 48 to 54 W/m² on 2.5 cm of water, with the slope test of
-+0.6 cm). Kim & Ramanathan's water vapour, 50 of
-341.8, is 49.8 W/m² at 340.25; CO₂ adds 1.0 (Kiehl & Trenberth) to 1.6
-(Hogan & Matricardi): 50.8 to 51.4 W/m². Subtracting instead from Kim &
-Ramanathan's total the aerosols and Kiehl & Trenberth's ozone and O₂
-(or Hogan & Matricardi's O₂) leaves 51.1 (50.3) W/m², the same. With Kim
-& Ramanathan's ±3 W/m² on the total as the tolerance, the window is 48
-to 54 W/m². Kiehl & Trenberth's older lines give 43.8 W/m² for the two
-gases; a window spanning both sources would run from 44 to 51, or 41 to
-54 with the same tolerance. The window is for a column holding 2.5 cm of
-water (the NVAP mean of Kim & Ramanathan's global run), which the test
-builds by scaling the vapour; the 3.0 cm of their Table 2 is the
-sensitivity case. The response to water is a second test: from 2.7 to
-3.3 cm, +3.0 ± 1.0 W/m² absorbed and −0.4 ± 0.2 reflected.
+2026-11-23, retired on 2026-11-25 with issue #655). The window was 48 to
+54 W/m² on 2.5 cm of water: Kim & Ramanathan's water vapour, "about" 50
+of 341.8, is 49.8 W/m² at 340.25; CO₂ adds 1.0 (Kiehl & Trenberth) to 1.6
+(Hogan & Matricardi); their ±3 W/m² on the total was the tolerance. It
+rested on a rounded figure of one model, not on a line-by-line
+reference. Under the table's Sun (#655) the column absorbs 55.63 W/m² at
+2.5 cm, above it. Study 35 then searched a line-by-line reference on
+water and CO₂ alone and found none that fits: RFMIP-IRF's (Pincus et al.
+2016) experiments never remove water, ozone or O₂; CKDMIP (Hogan &
+Matricardi 2020) gives each gas's spectra, not its absorbed flux; ICRCCM
+(Fouquart et al. 1991) has water-only line-by-line cases, but with 1982
+lines, at fixed zenith angles the column cannot take. So the total has
+no test until the column holds ozone and O₂ (#653): then it is compared
+with LBLRTM on RFMIP's field (#715). Meanwhile:
+
+- Earth's Bond albedo test guards the shortwave budget, and the
+  clear-sky albedo under the measured Sun (TSIS-1) holds the table's Sun;
+- the column's responses to CO₂ and to water are tested on RFMIP's 51
+  sunlit profiles against LBLRTM, differences of experiments that change
+  only CO₂ or only water, so that the gases the column lacks cancel
+  (`radiation::rfmip_tests`, profiles `crates/science/data/rfmip-profiles.tsv`,
+  see `crates/science/data/RFMIP.md`; the references' six values are
+  quoted, their files' licence keeping derived data out). From
+  pre-industrial to present-day CO₂ the column gains 0.208 W/m², LBLRTM
+  0.201 and RRTMGP 0.168: within RRTMGP's error (0.033, the tolerance).
+  From 0.5 to 8 times present-day CO₂ it gains 2.154, LBLRTM 2.077 and
+  RRTMGP 2.139: 0.076 off, worse than RRTMGP's 0.062. From +4 K to +4 K
+  at constant relative humidity, the water alone, it gains 3.955, LBLRTM
+  4.210 and RRTMGP 4.165: 6 % short, against RRTMGP's 1 %. Both
+  tolerances are calibrations (below). The column takes its fixed slant,
+  not each site's zenith angle.
+
+Kim & Ramanathan's Table 2 stays a test for the light reflected at the
+top: from 2.7 to 3.3 cm, −0.4 ± 0.2 W/m². Its absorbed half (+3.0 ± 1.0)
+is no longer tested: the line-by-line response to water above replaces
+it (decided by the user on 2026-11-25).
+
+**Calibrations of the RFMIP tolerances** (study 35). The user's rule
+is that the column does no worse than RRTMGP against LBLRTM. It holds
+for present-day CO₂, whose tolerance is RRTMGP's error, a sourced value.
+It does not hold for the two others, whose tolerances are calibrations:
+the column's measured error plus RRTMGP's, so that the tests guard the
+column against getting worse, at the scale of the best band model's own
+error, without hiding its present departure:
+
+- `CO2_RANGE_TOLERANCE_W_M2`, 0.14: 0.0763 + 0.0622 W/m², rounded up;
+- `WATER_TOLERANCE_W_M2`, 0.30: 0.2550 + 0.0445 W/m², rounded up. The
+  column's 6 % shortfall on water is a known departure with an issue of
+  its own.
+
+Searched and not found: a published bound on a band model's shortwave
+error against line-by-line for a 16-fold change of CO₂, and a
+line-by-line reference on water alone that the column can take (the
+reasons above).
 
 **Window of the aerosol-free clear-sky albedo** (the first reading, superseded
-by the window the test takes, below). The observed clear-sky albedo holds the
-aerosols: CERES reflects 52.4 W/m² under clear skies, "an albedo of 0.149" (EBAF
-Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0,
-July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et al.'s own
-all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo of 0.154, not
-0.149: the paper does not say how its 0.149 is formed. The aerosols reflect 5.9
-± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[54]), 0.017 ± 0.003 of
-albedo. Taken off:
+by the window the test took, below, now retired). The observed clear-sky albedo
+holds the aerosols: CERES reflects 52.4 W/m² under clear skies, "an albedo of
+0.149" (EBAF Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156
+(EBAF Ed4.0, July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et
+al.'s own all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo of
+0.154, not 0.149: the paper does not say how its 0.149 is formed. The aerosols
+reflect 5.9 ± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[54]), 0.017 ±
+0.003 of albedo. Taken off:
 
 - 0.149 to 0.156 less 0.017 gives 0.132 to 0.139;
 - 0.154 to 0.156 (the fluxes) less 0.017 gives 0.137 to 0.139;
@@ -796,23 +836,18 @@ The observed albedo also holds the light that ozone absorbs before it is reflect
 the app holds no ozone, and no source read gives that share of the
 reflection.
 
-**The window the clear-sky test takes** (decided by the user on
-2026-11-23, after the diagnostic study of the port). The faithful port
-lacks what the observation holds, so the window is the observed albedo
+**The window the clear-sky test took** (decided by the user on
+2026-11-23, retired on 2026-11-25). The window was the observed albedo
 less the aerosols plus what the port lacks, each term computed with its
-source (departures below). The terms:
-
-- observed 0.149 (Stephens et al. 2015) to 0.156 (Kato et al. 2018);
-- less the aerosols' 0.017 ± 0.003, that is 0.020 at the most;
-- plus the black-body Sun against the measured one, +0.0147;
-- plus the missing ozone, +0.0145 ± 0.0005 (0.0140 at the low end);
-- plus the missing O₂, +0.0018;
-- less the two-stream closure, which reflects too little, −0.0028.
-
-They sum to 0.1567 at the low end (0.149 − 0.020 + 0.0147 + 0.0140 +
-0.0018 − 0.0028) and 0.1707 at the high end. The port gives 0.1701, at
-the top of it. Issues #653 (ozone, O₂) and #655 (the Sun's spectrum, the
-closure) narrow it when they land.
+source: observed 0.149 (Stephens et al. 2015) to 0.156 (Kato et al.
+2018); less the aerosols' 0.017 ± 0.003; plus the missing ozone, +0.0145
+± 0.0005, and O₂, +0.0018; less the two-stream closure, −0.0028; plus the
+model Sun against the measured one. The user retired it with study 35:
+two of its terms were the port's own measurements, and the one test
+left on the clear sky compares the table's Sun with the measured one on
+the same column (TSIS-1, within 0.003: 0.1579 against 0.1556), which
+needs no window. The clear-sky total comes back with ozone and O₂
+(#653), against LBLRTM on RFMIP's field (#715).
 
 **Clouds, hazes and decks.** The clouds of water cover 0.67 of Earth's sky
 by the MODIS cloud mask (King et al. 2013); the GEWEX assessment gives
@@ -896,8 +931,10 @@ reads the forcings, never the central object's kind).
    transmission; the layers' mean Planck fluxes are summed with the
    diffusivity 1.66.
 3. **The shortwave.** 240 bands, even in $\ln\lambda$, from 0.2 to 5 µm,
-   weighted by the star's Planck spectrum (its effective temperature,
-   5772 K for the Sun, IAU 2015 B3, Prša et al. 2016). The column has 3
+   weighted by the star's spectrum from the table of model spectra
+   (`data/stellar-spectra.tsv`, by its effective temperature and
+   metallicity; the Sun is 5772 K, IAU 2015 B3, Prša et al. 2016; see
+   [Stellar spectra](stellar-spectra.md)). The column has 3
    levels per decade up to 1 % of the surface pressure, clear. Each layer
    takes its absorption and its Rayleigh depth together in the two-stream
    solution above; the clouds sit at their ISCCP tops inside the column, so
@@ -961,7 +998,7 @@ the Bond albedo are there too (change 2b-2).
   cover), `gases` (the partial pressures and the heat capacities) and
   `fast_math` (the single-precision exponential of the sum).
 - The shortwave, in the same directory: `starlight` (the 240 bands and
-  the star's Planck weights), `shortwave` (the reader of
+  the star's weights from the table of spectra), `shortwave` (the reader of
   `data/shortwave.bin`, the two-stream layers, their stacks and `Paths`,
   the light's paths through an air), `rayleigh` (the per-gas refractive
   indices and King factors), `veils` (the sulphuric deck and the methane
@@ -1051,18 +1088,19 @@ the Bond albedo are there too (change 2b-2).
     figure as the column's test profile, which the paper takes from
     observed hemispheric means (read in study 33; *Water: saturation,
     humidity and the limit*).
-  - *Cloud albedo.* The water clouds reflect 0.276 of the light falling
+  - *Cloud albedo.* The water clouds reflect 0.296 of the light falling
     on their share of the sky, fitted by bisection so that Earth's Bond
     albedo is 0.293 (Stephens et al. 2015), over a ground of 0.122, the
-    77 % air over 288 K and the law's cloud cover of 0.682. No
-    observation gives a single cloud reflectance for one column. The fit
-    absorbs what the port lacks: the clear-sky terms of the measured Sun,
-    ozone and O₂ (#653, #655), the aerosols' reflection, and the
-    sunlight the column's 1.735 cm of water leaves unabsorbed against
-    the 2.4 cm a single column needs for the observed field (#654, study
-    33): about 0.0025 of Bond albedo (interpolated between measured
-    runs). The legacy fitted 0.252
-    on 0.30.
+    77 % air over 288 K, the law's cloud cover of 0.682 and the Sun of the
+    table of spectra. No observation gives a single cloud reflectance for
+    one column. The fit absorbs what the port lacks: the clear-sky terms
+    of ozone and O₂ (#653) and of the model Sun against the measured one,
+    the aerosols' reflection, and the sunlight the column's 1.735 cm of
+    water leaves unabsorbed against the 2.4 cm a single column needs for
+    the observed field (#654, study 33): about 0.0025 of Bond albedo
+    (interpolated between measured runs). It was 0.276 under the
+    black-body Sun (#655); #705 refits it on the climate's own ground.
+    The legacy fitted 0.252 on 0.30.
   - *Sulphuric deck.* The deck appears from 1e-3 bar of SO₂ in a surface
     above 273.15 K, over a share of the disc that grows over 40 K. The
     sourced route is the binary H₂SO₄–H₂O condensation (Zeleznik 1991;
@@ -1075,18 +1113,23 @@ the Bond albedo are there too (change 2b-2).
     the Huygens DISR aerosol model (Tomasko et al. 2008) and the newer
     Bond albedo of Creecy et al. (2021).
 - **What Earth's clear sky shows the port lacks.** The port's clear-sky
-  Bond albedo for Earth's air over a ground of 0.122 is 0.1701 and its air
-  absorbs 48.41 W/m². The diagnostic study of the port found four causes,
-  each computed with the full model and a source:
-  - *The Sun is a 5772 K black body* (`starlight::star_bands`, as in the
-    legacy). A black body puts 12.3 % of the 0.2-5 µm light below 400 nm
+  Bond albedo for Earth's air over a ground of 0.122 was 0.1701 and its
+  air absorbed 48.41 W/m² under the black-body Sun; under the table of
+  spectra (issue #655) they are 0.1577 and 51.23 W/m². The diagnostic
+  study of the port found four causes, each computed with the full model
+  and a source:
+  - *The Sun was a 5772 K black body* (`starlight::star_bands`, as in the
+    legacy; since #655 the table of spectra, [Is a star's light a black
+    body?](stellar-spectra.md), whose Sun gives 0.1577, 0.0023 above
+    TSIS-1). A black body puts 12.3 % of the 0.2-5 µm light below 400 nm
     and 3.0 % below 300 nm, where the measured Sun (TSIS-1 HSRS,
     Coddington et al. 2021) puts 8.2 % and 1.0 %. Rayleigh scattering is
     strongest there. With TSIS-1 on the same 240 bands the clear-sky
     albedo is 0.1554 (−0.0147) and the air absorbs 51.06 W/m². TSIS-1
     ends at 2730 nm; the study continued it with a 5772 K black body
     scaled to the data at 2600-2730 nm, about 2 % of the light (a choice
-    of the study, not a source). Issue #655.
+    of the study, not a source). Study 35 re-measured these numbers and
+    the error for other hosts.
   - *No ozone.* With 300 DU (Kim & Ramanathan 2008, Table 2) as a pure
     absorber above the column, with the cross-sections of Serdyuchenko et
     al. (2014) at 223 K and TSIS-1: 0.1409 (−0.0145), the ozone absorbing
@@ -1112,10 +1155,10 @@ the Bond albedo are there too (change 2b-2).
     diffuse geometry is not the cause: it is the exact set-up for a Bond
     albedo, and a single direct beam at μ₀ = 2/3 (the insolation-weighted
     angle, Cronin 2014) falls 0.0075 below the exact value. The error of
-    treating Rayleigh light as scalar was not quantified. Issue #655.
+    treating Rayleigh light as scalar was not quantified. Issue #727.
   - *Together:* 0.1701 − 0.0147 − 0.0145 − 0.0018 + 0.0028 ≈ 0.142, at the
     top of the aerosol-free window (0.129-0.142). The window the test
-    takes is above.
+    took, now retired, is above.
 - **Earth's water.** The climate puts 1.735 cm of precipitable water in
   Earth's column at 77 % (the shortwave grid; 1.67 cm converged), against
   2.45 to 2.53 cm observed (NVAP heritage 24.5 mm and NVAP-M 25.3 mm,
@@ -1132,19 +1175,15 @@ the Bond albedo are there too (change 2b-2).
   clear-sky OLR by 6.9 W/m² at 288 K (measured), out of the like-for-like
   window of study 32. Decided with the user (2026-11-25): the column
   keeps Manabe & Wetherald's line and 77 % for both halves, with no
-  separate shortwave water; a test of the shortwave on the RFMIP field
-  waits for study 35 (#715). The absorption tests scale the saturated shortwave
+  separate shortwave water; the shortwave is tested on the RFMIP field against line-by-line
+  (above, study 35). The absorption tests scale the saturated shortwave
   column's vapour level by level to a given water, which tests the
   optics:
-  - At 2.5 cm the air absorbs 52.70 W/m² (window 48-54, from Kim &
-    Ramanathan's 50 W/m² of water at NVAP's 2.45-2.53 cm, plus CO₂'s 1.0
-    to 1.6). With the measured Sun the study gives 55.2 to 56.4 W/m² at
-    2.45-2.53 cm, 1.2 to 2.4 above the window: the black body passes it
-    and the measured Sun does not (#655).
-  - From 2.7 to 3.3 cm the absorption rises by 2.937 W/m² (3.0 ± 1.0,
-    from Kim & Ramanathan's Table 2: 1.3 + 0.2 per 0.3 cm) and the
-    reflected light falls by 0.338 W/m² (0.4 ± 0.2). The response to
-    water matches.
+  - At 2.5 cm the air absorbs 55.80 W/m² under the table's Sun, above
+    the retired 48-54 window (above); the black-body Sun gave 52.70.
+  - From 2.7 to 3.3 cm the absorption rises by 3.031 W/m² (Kim &
+    Ramanathan's Table 2: 3.0, 1.3 + 0.2 per 0.3 cm; no longer tested)
+    and the reflected light falls by 0.350 W/m² (0.4 ± 0.2, tested).
   - The 3.0 cm of Table 2 is the input of their sensitivity case, not the
     water of their global run (NVAP-NG, 2.45-2.53 cm, §[25]). The field
     average of a concave function lies below its value at the mean water:
@@ -1279,12 +1318,7 @@ a literature check of every number and citation (the full audit is in the
   −1.3 % at 150 K, +19 % at 120 K and +77 % at 100 K; methane's new line
   is 22 % lower at Titan's 69 K skin.
 - **Scope of the Bond albedo.** It takes one ground albedo. The cloud
-  albedo is refitted in two steps: first the clear-sky top-of-atmosphere
-  albedo of Earth, a window of 0.1567 to 0.1707 (the observed 0.149,
-  Stephens et al. 2015, to 0.156, Kato et al. 2018, less the aerosols,
-  plus what the port lacks; decided on 2026-11-23, see above), which tests
-  the ground, the Rayleigh scattering and the absorption without the
-  clouds; then the all-sky Bond albedo, 0.293
+  albedo is fitted on the all-sky Bond albedo, 0.293
   (Stephens et al. 2015; Kato et al. 2018: 0.2915). The legacy fitted 0.30,
   a pre-satellite value, 0.007 to 0.01 too high.
 - **Rayleigh.** The cross-section of each gas comes from its refractive
@@ -1299,12 +1333,13 @@ a literature check of every number and citation (the full audit is in the
   McKay et al.'s 0.306 within 1 %.
 - **Heat capacity of NH₃** is 35.65 J/(mol·K) (NIST Shomate), where the
   legacy had a transposed 35.06.
-- **Clear-sky air absorption** of water vapour and CO₂ is checked
-  against a window of 48 to 54 W/m² on 2.5 cm of water (the NVAP mean of
-  Kim & Ramanathan's 2008 global run; their 3.0 cm is the sensitivity
-  case of Table 2), plus the slope of the response to water, not "about
-  70". The observed 72-73 W/m² (Kim & Ramanathan; CERES 73.0) holds the
-  ozone, O₂ and aerosols the shortwave does not.
+- **Clear-sky air absorption** of water vapour and CO₂ is no longer
+  checked against a window (it was 48 to 54 W/m² on 2.5 cm of water,
+  retired on 2026-11-25 with issue #655, until the total is compared with
+  LBLRTM, #715): its responses to CO₂ and to water are checked against
+  LBLRTM on RFMIP's field instead, not "about 70". The observed 72-73
+  W/m² (Kim & Ramanathan; CERES 73.0) holds the ozone, O₂ and aerosols
+  the shortwave does not.
 - **The haze's reflection and absorption** (`HAZE_ALBEDO`,
   `HAZE_ABSORPTION`) are the legacy values, fitted on Titan's Bond albedo
   taken as 0.27 under the legacy Rayleigh law; they are not refitted in
@@ -1575,133 +1610,135 @@ publisher's page (Tables 1 to 5).
 30. Forsythe, J. M., Vonder Haar, T. H., Cronk, H. Q. 2014, NOAA ESRL Global
     Monitoring Annual Conference slides on NVAP-M (global mean
     precipitable water 25.3 mm, heritage NVAP 24.5 mm).
-31. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
-32. Gettelman, A. et al. 2006, *J. Climate* 19, 6104,
+31. Fouquart, Y., Bonnel, B., Ramaswamy, V. 1991, *J. Geophys. Res.* 96,
+    8955, doi:10.1029/90JD00290 (ICRCCM shortwave, Tables 1, 3 and 4).
+32. Fulchignoni, M. et al. 2005, *Nature* 438, 785 (no DOI checked).
+33. Gettelman, A. et al. 2006, *J. Climate* 19, 6104,
     doi:10.1175/JCLI3956.1 (read in the copy at `opensky.ucar.edu`).
-33. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
+34. Goldblatt, C. 2015, *Astrobiology* 15, 362, doi:10.1089/ast.2014.1268,
     arXiv:1503.04835.
-34. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
+35. Goldblatt, C., Robinson, T. D., Zahnle, K. J., Crisp, D. 2013, *Nature
     Geosci.* 6, 661, doi:10.1038/ngeo1892.
-35. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
+36. Gordon, I. E. et al. 2022, *J. Quant. Spectrosc. Radiat. Transf.* 277,
     107949, doi:10.1016/j.jqsrt.2021.107949 (HITRAN2020), and Gordon, I. E.
     et al. 2026, *J. Quant. Spectrosc. Radiat. Transf.* 353, 109807,
     doi:10.1016/j.jqsrt.2026.109807 (HITRAN2024, the release the app
     reads).
-36. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
+37. Gruszka, M., Borysow, A. 1997, *Icarus* 129, 172,
     doi:10.1006/icar.1997.5773.
-37. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
+38. Hamano, K., Kawahara, H., Abe, Y., Onishi, M., Hashimoto, G. L. 2015,
     *ApJ* 806, 216, doi:10.1088/0004-637X/806/2/216, arXiv:1505.03552.
-38. Haus, R. et al. 2016, *Icarus* 272, 178,
+39. Haus, R. et al. 2016, *Icarus* 272, 178,
     doi:10.1016/j.icarus.2016.02.048.
-39. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
+40. He, Q. et al. 2021, *Atmos. Chem. Phys.* 21, 14927,
     doi:10.5194/acp-21-14927-2021.
-40. Held, I. M., Soden, B. J. 2006, *J. Climate* 19, 5686,
+41. Held, I. M., Soden, B. J. 2006, *J. Climate* 19, 5686,
     doi:10.1175/JCLI3990.1 (read in the copy at
     <https://www.image.ucar.edu/idag/Papers/Held_hydro.pdf>: eq. 1, §2,
     Fig. 2a).
-41. Heng, K., Mendonça, J. M., Lee, J.-M. 2014, arXiv:1405.0026 (the table
+42. Heng, K., Mendonça, J. M., Lee, J.-M. 2014, arXiv:1405.0026 (the table
     of two-stream closures).
-42. HITRAN line-by-line service, <https://hitran.org/lbl/>, the water lines
+43. HITRAN line-by-line service, <https://hitran.org/lbl/>, the water lines
     of 1190-1420 cm⁻¹ (main isotopologue), their air widths, read
     2026-11-25.
-43. HITRAN collision-induced absorption, 2024 files:
+44. HITRAN collision-induced absorption, 2024 files:
     `CO2-CO2_2024.cia`, <https://hitran.org/cia/>, documented by Terragni,
     Gordon et al., "Collision Induced Absorption in HITRAN2024: Enhanced and
     Improved Data for Atmospheric and Astrophysical Applications", through
     <https://hitran.org/data/CIA/CIA_Readme_2024.pdf>.
-44. Hogan, R. J., Matricardi, M. 2020, *Geosci. Model Dev.* 13, 6501,
+45. Hogan, R. J., Matricardi, M. 2020, *Geosci. Model Dev.* 13, 6501,
     doi:10.5194/gmd-13-6501-2020.
-45. Hohm, U. 1994, *Chem. Phys.* 179, 533,
+46. Hohm, U. 1994, *Chem. Phys.* 179, 533,
     doi:10.1016/0301-0104(94)87028-4 (closed access; not opened).
-46. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
+47. IAPWS R6-95 (2016 revision), *Release on the IAPWS Formulation 1995
     for the Thermodynamic Properties of Ordinary Water Substance*,
     <https://iapws.org/documents/release/IAPWS-95.download>.
-47. IAPWS R9-97, *Release on the Refractive Index of Ordinary Water
+48. IAPWS R9-97, *Release on the Refractive Index of Ordinary Water
     Substance as a Function of Wavelength, Temperature and Pressure*, 1997,
     <https://iapws.org/technical-guidance/release/Rindex>.
-48. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
+49. IAU 2015 Resolution B3; Prša, A. et al. 2016, *Astron. J.* 152, 41,
     doi:10.3847/0004-6256/152/2/41, arXiv:1605.09788.
-49. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
-50. Kato, S. et al. 2018, *J. Climate* 31, 4501,
+50. Kasting, J. F. 1991, *Icarus* 94, 1, doi:10.1016/0019-1035(91)90137-I.
+51. Kato, S. et al. 2018, *J. Climate* 31, 4501,
     doi:10.1175/JCLI-D-17-0523.1.
-51. Kiehl, J. T., Trenberth, K. E. 1997, *Bull. Am. Meteorol. Soc.* 78,
+52. Kiehl, J. T., Trenberth, K. E. 1997, *Bull. Am. Meteorol. Soc.* 78,
     197, doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2 (read on
     2026-11-23 in an archived course copy, web.archive.org snapshot
     20260623155323 of `www.geo.utexas.edu/courses/387H/PAPERS/kiehl.pdf`).
-52. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
+53. Kim, D., Ramanathan, V. 2008, *J. Geophys. Res.* 113, D02203,
     doi:10.1029/2007JD008434 (read on 2026-11-23 in the copy at
     `ramanathan.ucsd.edu/wp-content/uploads/sites/460/2017/10/pr157.pdf`).
-53. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
+54. King, M. D. et al. 2013, *IEEE Trans. Geosci. Remote Sens.* 51, 3826,
     doi:10.1109/TGRS.2012.2227333.
-54. Kluft, L., Dacie, S., Buehler, S. A., Schmidt, H., Stevens, B. 2019,
+55. Kluft, L., Dacie, S., Buehler, S. A., Schmidt, H., Stevens, B. 2019,
     *J. Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1 (read in the
     MPG.PuRe copy, item 3012704).
-55. Kokhanovsky, A. A., Mayer, B., Rozanov, V. V. 2005, *Atmos. Res.* 73, 37,
+56. Kokhanovsky, A. A., Mayer, B., Rozanov, V. V. 2005, *Atmos. Res.* 73, 37,
     doi:10.1016/j.atmosres.2004.07.004.
-56. Koll, D. D. B., Cronin, T. W. 2018, *Proc. Natl. Acad. Sci.* 115,
+57. Koll, D. D. B., Cronin, T. W. 2018, *Proc. Natl. Acad. Sci.* 115,
     10293, doi:10.1073/pnas.1809868115 (read on PMC, PMC6187190).
-57. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
+58. Koll, D. D. B., Jeevanjee, N., Lutsko, N. J. 2023, *J. Atmos. Sci.* 80,
     1923, doi:10.1175/JAS-D-22-0178.1.
-58. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
+59. Kopparapu, R. K. et al. 2013, *ApJ* 765, 131,
     doi:10.1088/0004-637X/765/2/131, arXiv:1301.6674.
-59. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
+60. Lacis, A. A., Oinas, V. 1991, *J. Geophys. Res.* 96, 9027,
     doi:10.1029/90JD01945.
-60. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
+61. Leconte, J. et al. 2013, "Increased insolation threshold for runaway
     greenhouse processes on Earth-like planets", *Nature* 504, 268,
     doi:10.1038/nature12827, arXiv:1312.3337.
-61. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
+62. Li, L. et al. 2011, *Geophys. Res. Lett.* 38, L23201,
     doi:10.1029/2011GL050053.
-62. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
+63. Loeb, N. G. et al. 2018, *J. Climate* 31, 895,
     doi:10.1175/JCLI-D-17-0208.1.
-63. Loeb, N. G. et al. 2020, *J. Climate* 33, 61,
+64. Loeb, N. G. et al. 2020, *J. Climate* 33, 61,
     doi:10.1175/JCLI-D-19-0381.1 (read in NTRS 20205002167; Table 3).
-64. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
+65. Manabe, S., Wetherald, R. T. 1967, *J. Atmos. Sci.* 24, 241,
     doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2 (read in the scan
     GFDL hosts, `sm6701.pdf`, by optical character recognition: eqs. 2
     and 3, Fig. 3, with its sources Telegadas & London 1954, Murgatroyd
     1960, Mastenbrook 1963 and Houghton 1963, which were not opened).
-65. McCubbin, T. K., Mooney, T. R. 1968, *J. Quant. Spectrosc. Radiat.
+66. McCubbin, T. K., Mooney, T. R. 1968, *J. Quant. Spectrosc. Radiat.
     Transf.* 8, 1255 (as Reichle 1969 quotes it).
-66. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
+67. McKay, C. P., Pollack, J. B., Courtin, R. 1991, *Science* 253, 1118,
     doi:10.1126/science.11538492.
-67. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
+68. Meador, W. E., Weaver, W. R. 1980, *J. Atmos. Sci.* 37, 630,
     doi:10.1175/1520-0469(1980)037<0630:TSATRT>2.0.CO;2.
-68. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
+69. Mlawer, E. J. et al. 2012, *Phil. Trans. R. Soc. A* 370, 2520,
     doi:10.1098/rsta.2011.0295. Release MT_CKD_H2O 4.3:
     <https://github.com/AER-RC/MT_CKD_H2O/releases/tag/4.3>.
-69. MOOSE, `modules/fluid_properties`, `CO2FluidProperties.C` and `.h`
+70. MOOSE, `modules/fluid_properties`, `CO2FluidProperties.C` and `.h`
     (Span & Wagner 1996's sublimation equation and triple point),
     `https://github.com/idaholab/moose`, commit `15eacf5e`.
-70. Murphy, D. M., Koop, T. 2005, *Q. J. R. Meteorol. Soc.* 131, 1539,
+71. Murphy, D. M., Koop, T. 2005, *Q. J. R. Meteorol. Soc.* 131, 1539,
     doi:10.1256/qj.04.94 (as Kluft et al. 2019 and Gettelman et al. 2006
     use it; the study's scratch runs took its eqs. 7 and 10, the
     saturation over ice and over liquid of the RFMIP relative humidity in
     study 33; eq. 5 for the latent heat).
-71. Murphy, W. F. 1977, *J. Chem. Phys.* 67, 5877, doi:10.1063/1.434794
+72. Murphy, W. F. 1977, *J. Chem. Phys.* 67, 5877, doi:10.1063/1.434794
     (abstract, through Crossref).
-72. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
+73. Myhre, G., Highwood, E. J., Shine, K. P., Stordal, F. 1998, *Geophys.
     Res. Lett.* 25, 2715, doi:10.1029/98GL01908.
-73. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
+74. Nakajima, S., Hayashi, Y.-Y., Abe, Y. 1992, *J. Atmos. Sci.* 49, 2256,
     doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2.
-74. NASA Goddard, *Earth Fact Sheet* (D. R. Williams),
+75. NASA Goddard, *Earth Fact Sheet* (D. R. Williams),
     <https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html>
     (mean surface pressure, 1.014 bar; dry-air composition, "Major:
     78.08% Nitrogen (N2), 20.95% Oxygen (O2)", "Argon (Ar) - 9340" ppm;
     read 2026-11-23).
-75. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
+76. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
     doi:10.1029/2010JE003659.
-76. NOAA Global Monitoring Laboratory, global annual mean CO₂ (X. Lan et
+77. NOAA Global Monitoring Laboratory, global annual mean CO₂ (X. Lan et
     al.), `co2_annmean_gl.txt`, <https://gml.noaa.gov/ccgg/trends/>, read
     2026-11-25 (378.98 ppm in 2005 to 399.65 ppm in 2015).
-77. Peck, E. R., Fisher, D. J. 1964, *J. Opt. Soc. Am.* 54, 1362,
+78. Peck, E. R., Fisher, D. J. 1964, *J. Opt. Soc. Am.* 54, 1362,
     doi:10.1364/JOSA.54.001362 (abstract).
-78. Peck, E. R., Khanna, B. N. 1966, *J. Opt. Soc. Am.* 56, 1059,
+79. Peck, E. R., Khanna, B. N. 1966, *J. Opt. Soc. Am.* 56, 1059,
     doi:10.1364/JOSA.56.001059 (abstract; pressure from the
     refractiveindex.info entry `main/N2/Peck-15C`).
-79. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
+80. Pierrehumbert, R. T. 2010, *Principles of Planetary Climate*,
     Cambridge University Press: §2.6 (phase change), §2.7 (the moist
     adiabat), §3.6 (the skin temperature).
-80. Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci. Model Dev.* 9,
+81. Pincus, R., Forster, P. M., Stevens, B. 2016, *Geosci. Model Dev.* 9,
     3447, doi:10.5194/gmd-9-3447-2016 (the RFMIP profiles, read in
     `multiple_input4MIPs_radiation_RFMIP_UColorado-RFMIP-1-2_none.nc` of
     <https://github.com/earth-system-radiation/rrtmgp-data>, commit
@@ -1710,77 +1747,77 @@ publisher's page (Tables 1 to 5).
     with the RRTMGP reference fluxes
     `rlu_Efx_RTE-RRTMGP-181204_rad-irf_r1i1p1f1_gn.nc`, SHA-256
     `254569d9bb0934fb510306c3e22e13ea826bd918727b477fc20600213923493c`).
-81. Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J. Adv. Model. Earth
+82. Pincus, R., Mlawer, E. J., Delamere, J. S. 2019, *J. Adv. Model. Earth
     Syst.* 11, 3074, doi:10.1029/2019MS001621 (read on PMC, PMC6900118;
     Table 1).
-82. Ranjan, S., Sasselov, D. D. 2017, *Astrobiology* 17, 169,
+83. Ranjan, S., Sasselov, D. D. 2017, *Astrobiology* 17, 169,
     doi:10.1089/ast.2016.1519, arXiv:1610.06223.
-83. Reichle, H. G. 1969, *The Effect of Several Infrared Transparent
+84. Reichle, H. G. 1969, *The Effect of Several Infrared Transparent
     Broadening Gases on the Absorption of Infrared Radiation in the 15 µm
     Band of Carbon Dioxide*, PhD thesis, University of Michigan, NASA
     contract NASr-54(03), NTRS 19690019487 (read).
-84. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
+85. Robinson, T. D., Catling, D. C. 2014, *Nature Geosci.* 7, 12,
     doi:10.1038/ngeo2020, arXiv:1312.6859.
-85. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
+86. Romps, D. M., Seeley, J. T., Edman, J. P. 2022, *J. Climate* 35, 4027,
     doi:10.1175/JCLI-D-21-0275.1.
-86. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
+87. Rossow, W. B., Schiffer, R. A. 1999, *Bull. Am. Meteorol. Soc.* 80,
     2261, doi:10.1175/1520-0477(1999)080<2261:AIUCFI>2.0.CO;2.
-87. Schmidt, G. A., Ruedy, R. A., Miller, R. L., Lacis, A. A. 2010, *J.
+88. Schmidt, G. A., Ruedy, R. A., Miller, R. L., Lacis, A. A. 2010, *J.
     Geophys. Res.* 115, D20106, doi:10.1029/2010JD014287 (read in the NASA
     GISS copy; Table 1).
-88. Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W., Burrows, J. P.
+89. Serdyuchenko, A., Gorshelev, V., Weber, M., Chehade, W., Burrows, J. P.
     2014, *Atmos. Meas. Tech.* 7, 625, doi:10.5194/amt-7-625-2014.
-89. Setzmann, U., Wagner, W. 1991, *J. Phys. Chem. Ref. Data* 20, 1061,
+90. Setzmann, U., Wagner, W. 1991, *J. Phys. Chem. Ref. Data* 20, 1061,
     doi:10.1063/1.555898.
-90. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
+91. Sneep, M., Ubachs, W. 2005, *J. Quant. Spectrosc. Radiat. Transf.* 92,
     293, doi:10.1016/j.jqsrt.2004.07.025.
-91. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
+92. Sobolev, V. V. 1975, *Light Scattering in Planetary Atmospheres*,
     Pergamon (no DOI). Equation 1.87, as cited by Zuluaga, Sucerquia,
     Alvarado-Montes 2022, arXiv:2207.08636.
-92. Sohn, B.-J., Bennartz, R. 2008, *J. Geophys. Res.* 113, D20107,
+93. Sohn, B.-J., Bennartz, R. 2008, *J. Geophys. Res.* 113, D20107,
     doi:10.1029/2008JD010053 (the clear-sky bias of about 10 %, as
     Trent et al. 2024 quote it; not opened).
-93. Span, R., Wagner, W. 1996, *J. Phys. Chem. Ref. Data* 25, 1509,
+94. Span, R., Wagner, W. 1996, *J. Phys. Chem. Ref. Data* 25, 1509,
     doi:10.1063/1.555991.
-94. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
+95. Stephens, G. L. et al. 2015, *Rev. Geophys.* 53, 141,
     doi:10.1002/2014RG000449.
-95. Stephenson, R. M., Malanowski, S. 1987, *Handbook of the Thermodynamics
+96. Stephenson, R. M., Malanowski, S. 1987, *Handbook of the Thermodynamics
     of Organic Compounds*, Springer, doi:10.1007/978-94-009-3173-2 (as
     listed by the NIST Chemistry WebBook's phase-change data).
-96. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
+97. Stubenrauch, C. J. et al. 2013, *Bull. Am. Meteorol. Soc.* 94, 1031,
     doi:10.1175/BAMS-D-12-00117.1.
-97. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
+98. Terragni, J. et al. 2025, *J. Quant. Spectrosc. Radiat. Transf.* 346,
     109595, doi:10.1016/j.jqsrt.2025.109595.
-98. Thalman, R., Zarzana, K. J., Tolbert, M. A., Volkamer, R. 2014, *J. Quant.
+99. Thalman, R., Zarzana, K. J., Tolbert, M. A., Volkamer, R. 2014, *J. Quant.
     Spectrosc. Radiat. Transf.* 147, 171, doi:10.1016/j.jqsrt.2014.05.030
     (closed access; not opened).
-99. thermopack, `fluids/CarbonDioxide.json` and `Methane.json`
+100. thermopack, `fluids/CarbonDioxide.json` and `Methane.json`
     (`sublimation_curve`), `https://github.com/thermotools/thermopack`,
     commit `d68c794c`.
-100. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
-101. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
+101. Tomasko, M. G. et al. 2008, *Planet. Space Sci.* 56, 669.
+102. Toon, O. B., McKay, C. P., Ackerman, T. P., Santhanam, K. 1989, *J.
      Geophys. Res.* 94, 16287, doi:10.1029/JD094iD13p16287.
-102. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
+103. Trainer, M. G. et al. 2006, *Proc. Natl. Acad. Sci.* 103, 18035,
      doi:10.1073/pnas.0608561103.
-103. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
+104. Tran, H., Hartmann, J.-M., Rambinison, Turbet, M. 2024, *Icarus* 422,
      116265, doi:10.1016/j.icarus.2024.116265.
-104. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
+105. Trenberth, K. E., Smith, L. 2005, *J. Climate* 18, 864,
      doi:10.1175/JCLI-3299.1.
-105. Trent, T. et al. 2024, *Atmos. Chem. Phys.* 24, 9667,
+106. Trent, T. et al. 2024, *Atmos. Chem. Phys.* 24, 9667,
      doi:10.5194/acp-24-9667-2024 (the GEWEX water vapour assessment,
      read: §§4-5).
-106. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
+107. Wagner, W., Pruß, A. 1993, *J. Phys. Chem. Ref. Data* 22, 783,
      doi:10.1063/1.555926 (the saturation equations of IAPWS
      SR1-86(1992)); Wagner, W., Riethmann, T., Feistel, R., Harvey, A. H.
      2011, *J. Phys. Chem. Ref. Data* 40, 043103, doi:10.1063/1.3657937
      (sublimation pressure of ice Ih, IAPWS R14-08(2011)).
-107. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
+108. Wild, M. et al. 2019, *Clim. Dyn.*, doi:10.1007/s00382-018-4413-y
      (cited for Kato et al.'s clear-sky OLR).
-108. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
+109. Xu, K.-M., Randall, D. A. 1996, *J. Atmos. Sci.* 53, 3084,
      doi:10.1175/1520-0469(1996)053<3084:ASCPFU>2.0.CO;2.
-109. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
+110. Zeleznik, F. J. 1991, *J. Phys. Chem. Ref. Data* 20, 1157,
      doi:10.1063/1.555899.
-110. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
+111. Zuluaga, J. I. et al. 2022, arXiv:2207.08636 (for Sobolev's relation).
 
 ## See also
 

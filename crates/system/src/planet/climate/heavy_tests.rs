@@ -58,7 +58,7 @@ use science::radiation::clouds::cloud_cover;
 use science::radiation::column::{ColumnCache, Profile, outgoing_longwave};
 use science::radiation::gases::PartialPressures;
 use science::surface::{
-    ICE_COVERED_TEMPERATURE, Liquid, PHASE_BAND, methane_freezes, surface_vapour,
+    ICE_COVERED_TEMPERATURE, Liquid, N2_ICE_EMISSIVITY, PHASE_BAND, methane_freezes, surface_vapour,
 };
 use science::units::{
     Bar, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
@@ -822,7 +822,7 @@ fn the_fixed_point_converges_across_the_methane_freezing_point() {
 
 #[test]
 #[ignore = "heavy: 200 climates of a nitrogen world across its triple point"]
-fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
+fn the_fixed_point_converges_until_the_nitrogen_frost_melts() {
     // Every climate of the sweep converges, and away from the triple point
     // adjacent climates stay within NITROGEN_JUMP_K. Across it there is a
     // jump, and it is a bistability, as the runaway edge's step is
@@ -835,8 +835,13 @@ fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
     // at 63.094 K from the warm state and the warm flux at 59.804 K from
     // the cold one; the absorbed light rises by a factor 1.55 and so does
     // ε T⁴ ((0.9983 / 0.80) (63.094 / 59.769)⁴). So a jump the sweep
-    // lets through must change the phase, and the absorbed flux must
-    // rise as ε T⁴ does, within PHASE_RATIO_TOLERANCE.
+    // lets through must leave the frost (to the melting frost or the
+    // liquid), and the absorbed flux must rise as ε T⁴ does, within
+    // PHASE_RATIO_TOLERANCE. Under the stellar spectra of #655 the jump
+    // lands on the melting frost below the triple point: 59.681 K at
+    // 0.006795 against 63.133 K at 0.006812 (albedo 0.7527 to 0.6130,
+    // emissivity 0.8000 to 0.9998, absorbed x1.5626 against ε T⁴
+    // x1.5650).
     let reference = titan();
     let air = PartialPressures {
         n2: NITROGEN_WORLD_N2.0,
@@ -854,7 +859,12 @@ fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
         absorbed(light, &c.air, base.heat_flux).0
     };
     let explained = |(f0, a): Point<'_>, (f1, b): Point<'_>| {
-        let phase = a.liquid.is_none() != b.liquid.is_none();
+        // The frost branch: no liquid, and the surface radiates nearer N₂
+        // ice's emissivity than the liquid's 1 (the melting frost's climbs
+        // from one to the other across the melting band).
+        let frost =
+            |c: &Settle| c.liquid.is_none() && c.emissivity.get() < 0.5 * (N2_ICE_EMISSIVITY + 1.0);
+        let phase = frost(a) != frost(b);
         let light = absorbed_by(b) / absorbed_by(a);
         let emitted = (b.emissivity.get() * b.temperature.0.powi(4))
             / (a.emissivity.get() * a.temperature.0.powi(4));
@@ -1407,10 +1417,13 @@ const F0V: Kelvin = Kelvin(7220.0);
 /// Definition: the flux of the boil tests, S⊕, round an [`F0V`] star,
 /// 1.2963: a test input just under its runaway limit
 /// (`runaway_flux(F0V)`, 1.29636 S⊕), in the band where the model boils
-/// under that limit. An Earth-like wet planet there with a tenth of its
-/// N₂ ([`TENTH_OF_N2`]) absorbs 300.785 W/m², past the 299.2 W/m² peak of
-/// its saturated column, while its thermostat still balances at 288 K on
-/// the climate's column; legacy's 1.28 S⊕ lies under the model's boil
+/// under that limit. The escaping boil's planet there (3e-4 of water, a
+/// hundredth of its N₂, [`HUNDREDTH_OF_N2`]) absorbs 291.03 W/m² (Bond
+/// albedo 0.340) against its saturated column's peak of 289.94 W/m², and
+/// boils (a margin of 1.1 W/m²), while its thermostat still balances at
+/// 288 K on the climate's column. The flux cannot rise (the runaway
+/// limit caps it), so the band is held by the N₂; legacy's 1.28 S⊕ lies
+/// under the model's boil
 /// threshold (study 26, "The boil": the threshold sits about 15 % above
 /// Kopparapu et al. 2014's for the Sun, #680). The band widens when #680
 /// lowers the threshold.
@@ -1420,14 +1433,37 @@ const F0V_BOILING_FLUX: f64 = 1.2963;
 /// 3e-4 of the mass (legacy `a_boil_that_escapes_all_its_water_ends_dry`).
 const ESCAPING_WATER: f64 = 3.0e-4;
 
-/// Definition: the volatile scatter that cuts the N₂ to a tenth, dex, in
-/// the order CO₂, N₂, S, CH₄, NH₃: `log10(0.1) = -1` on N₂ (legacy
-/// `recondensed()`'s `N2_SHARE`, 0.1, so that the F star's Rayleigh
-/// scattering does not keep the first run from boiling, #522). Both boil
-/// tests take it: with the rule's N₂ the Bond albedo is 0.365 and the
-/// absorbed light 280 W/m², under the moist limit, at every flux under
-/// the runaway limit.
-const TENTH_OF_N2: [f64; 5] = [0.0, -1.0, 0.0, 0.0, 0.0];
+/// Definition: the volatile scatter that cuts the N₂ to a hundredth, dex,
+/// in the order CO₂, N₂, S, CH₄, NH₃: `log10(0.01) = -2` on N₂, a test
+/// input that puts both boil tests' first runs in the boil band. Legacy
+/// `recondensed()` cut it to a tenth (`N2_SHARE`, 0.1, so that the F
+/// star's Rayleigh scattering does not keep the first run from boiling,
+/// #522). The absorbed light hardly moves with the N₂ (291.0 W/m² at a
+/// tenth and at a hundredth): the dry gas sets the saturated column's
+/// peak instead, through the air's mean molar mass, which sets how much
+/// vapour a column of given pressure holds. Earth's 0.0129 bar of argon
+/// (#694, 40 g/mol) on a tenth of the N₂ raises that peak from 290.85 to
+/// 292.31 W/m² (the same pressure of N₂ only to 291.12; with argon given
+/// N₂'s molar mass, argon and N₂ match, and with N₂'s heat capacity the
+/// argon still raises it by 1.46 W/m²), above the 290.88 W/m² the planet
+/// absorbs: a tenth no longer boils. Measured on the merged branch
+/// (stellar spectra of #655, argon of #694), the first runs' peak against
+/// their absorbed light, W/m²:
+///
+/// | N₂ cut | escaping boil | recondensed boil |
+/// | --- | --- | --- |
+/// | a tenth (−1) | 292.31 against 290.88: no boil | 293.16 against 291.72: no boil |
+/// | 10^−1.3 | 290.72 against 291.10: boils | 291.43 against 292.09: boils |
+/// | 10^−1.6 | 290.15 against 291.08: boils | 290.68 against 292.13: boils |
+/// | a hundredth (−2) | 289.94 against 291.03: boils | 290.32 against 292.12: boils |
+///
+/// A hundredth gives margins of 1.1 and 1.8 W/m², near the most the cut
+/// can give (the column's peak with no N₂ but its argon tends to about
+/// 289.7 W/m²). With the rule's N₂ the escaping boil's planet has a Bond
+/// albedo of 0.368 and absorbs 278.7 W/m² (measured before the argon,
+/// which only raises the peak), far under the moist limit, and does not
+/// boil.
+const HUNDREDTH_OF_N2: [f64; 5] = [0.0, -2.0, 0.0, 0.0, 0.0];
 
 /// Definition: the leftover the steam run hands its recondensed water,
 /// 0.03 bar on the formed body (legacy `recondensed()`'s `left_bar`).
@@ -1435,15 +1471,23 @@ const LEFTOVER: Bar = Bar(0.03);
 
 /// Definition: the XUV fluence of the recondensed boil, J/m², 1e14: a
 /// test input about 73 times under the Sun's scaled to
-/// [`F0V_BOILING_FLUX`] (7.3e15). At that one the steam run's `9 H` is
-/// 1.3e22 kg, so the water sized to leave [`LEFTOVER`] is 2.6 % of the
-/// mass, and the ice volatiles that come with it (2.7 bar of N₂) raise the
-/// Bond albedo to 0.42, out of the boil band. A smaller `9 H` leaves a
-/// planet of less water, near the 1e-3 whose first run boils in the band.
-/// It was 2e14 (7.2e-4 of water) until the air gained its argon (#694):
-/// with Earth's 0.013 bar of argon on the case's tenth of its N₂, that
-/// planet's first run no longer boils (checked by zeroing the argon);
-/// at 1e14 it boils.
+/// [`F0V_BOILING_FLUX`] (7.3e15). The water is sized so that the steam
+/// run's `9 H` (about 6.5e21 kg at this fluence) leaves [`LEFTOVER`]:
+/// 3.6e-4 of the mass. The planet's first run then lies in the boil band:
+/// Bond albedo 0.338, 292.12 W/m² absorbed against its saturated
+/// column's peak of 290.32 W/m² under [`HUNDREDTH_OF_N2`], and it boils;
+/// its recondensed run (Bond albedo 0.353, 285.4 W/m²) keeps too little
+/// water to boil. A larger fluence
+/// sizes more water, with more ice volatiles and a higher albedo, and
+/// takes the first run out of the band. It was 2e14 (7.2e-4 of water)
+/// until two changes each took that planet out of the band, and each
+/// found it boiling again at 1e14: the stellar spectra of #655 (they
+/// raise this F star's planet's albedo by about 0.007, 0.324 to 0.330 at
+/// 2e14, and its first run absorbed 295.3 W/m² and did not boil), and
+/// the argon of #694 (Earth's 0.013 bar of argon on the case's tenth of
+/// its N₂; checked by zeroing the argon). After the two met, 1e14 no
+/// longer boiled at a tenth of the N₂ either: the cut to a hundredth
+/// ([`HUNDREDTH_OF_N2`]) holds the band instead of a smaller fluence.
 const RECONDENSED_FLUENCE: f64 = 1.0e14;
 
 /// Definition: the rounds of the recondensed boil's water sizing, 3
@@ -1491,7 +1535,7 @@ fn settle(trace: &mut Trace, t: &Trial, d: &Drawn) -> Settled {
 fn a_boil_that_escapes_all_its_water_ends_dry() {
     assert!(F0V_BOILING_FLUX < runaway_flux(F0V).0);
     let mut trace = Trace::new();
-    let (t, d) = f0v_earth(&mut trace, ESCAPING_WATER, Some(TENTH_OF_N2));
+    let (t, d) = f0v_earth(&mut trace, ESCAPING_WATER, Some(HUNDREDTH_OF_N2));
     let s = settle(&mut trace, &t, &d);
     let verdicts = nodes_of(&trace, codes::CLIMATE_BOILS);
     assert_eq!(verdicts[0].1, NodeValue::Flag(true), "{verdicts:?}");
@@ -1517,7 +1561,7 @@ fn recondensing_water() -> f64 {
     let mut water = ESCAPING_WATER;
     for _ in 0..SIZING_ROUNDS {
         let mut trace = Trace::new();
-        let (t, d) = f0v_earth(&mut trace, water, Some(TENTH_OF_N2));
+        let (t, d) = f0v_earth(&mut trace, water, Some(HUNDREDTH_OF_N2));
         let t = with_fluence(&mut trace, &t, RECONDENSED_FLUENCE);
         let Ground::Formed(f) = formed(&t, &d, &mut trace).unwrap() else {
             panic!("an Earth has a surface");
@@ -1553,7 +1597,7 @@ fn recondensing_water() -> f64 {
 #[ignore = "heavy: a full boil loop, three runs and the water sizing, 4.3 s in release"]
 fn a_boil_whose_leftover_recondenses_keeps_its_ocean() {
     let mut trace = Trace::new();
-    let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(TENTH_OF_N2));
+    let (t, d) = f0v_earth(&mut trace, recondensing_water(), Some(HUNDREDTH_OF_N2));
     let t = with_fluence(&mut trace, &t, RECONDENSED_FLUENCE);
     let Ground::Formed(f) = formed(&t, &d, &mut trace.clone()).unwrap() else {
         panic!("an Earth has a surface");
