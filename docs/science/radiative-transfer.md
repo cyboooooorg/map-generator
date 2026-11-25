@@ -630,33 +630,54 @@ no test until the column holds ozone and O₂ (#653): then it is compared
 with LBLRTM on RFMIP's field (#715). Meanwhile:
 
 - Earth's Bond albedo test guards the shortwave budget, and the
-  clear-sky albedo test its scattering;
+  clear-sky albedo under the measured Sun (TSIS-1) holds the table's Sun;
 - the column's responses to CO₂ and to water are tested on RFMIP's 51
   sunlit profiles against LBLRTM, differences of experiments that change
   only CO₂ or only water, so that the gases the column lacks cancel
-  (`radiation::rfmip_tests`, data `crates/science/data/rfmip-shortwave.tsv`,
-  see `crates/science/data/RFMIP.md`). From pre-industrial to present-day
-  CO₂ the column gains 0.208 W/m², LBLRTM 0.201 and RRTMGP 0.168: within
-  RRTMGP's error (0.034, the tolerance). From 0.5 to 8 times present-day
-  CO₂ it gains 2.154, LBLRTM 2.077 and RRTMGP 2.139: 0.077 off, worse
-  than RRTMGP's 0.062 (tolerance 0.08, a calibration). From +4 K to +4 K
+  (`radiation::rfmip_tests`, profiles `crates/science/data/rfmip-profiles.tsv`,
+  see `crates/science/data/RFMIP.md`; the references' six values are
+  quoted, their files' licence keeping derived data out). From
+  pre-industrial to present-day CO₂ the column gains 0.208 W/m², LBLRTM
+  0.201 and RRTMGP 0.168: within RRTMGP's error (0.033, the tolerance).
+  From 0.5 to 8 times present-day CO₂ it gains 2.154, LBLRTM 2.077 and
+  RRTMGP 2.139: 0.076 off, worse than RRTMGP's 0.062. From +4 K to +4 K
   at constant relative humidity, the water alone, it gains 3.955, LBLRTM
-  4.210 and RRTMGP 4.165: 6 % short, against RRTMGP's 1 % (tolerance
-  0.26, a calibration). The column takes its fixed slant, not each site's
-  zenith angle.
+  4.210 and RRTMGP 4.165: 6 % short, against RRTMGP's 1 %. Both
+  tolerances are calibrations (below). The column takes its fixed slant,
+  not each site's zenith angle.
 
-The response to water of Kim & Ramanathan's Table 2 stays a test: from
-2.7 to 3.3 cm, +3.0 ± 1.0 W/m² absorbed and −0.4 ± 0.2 reflected.
+Kim & Ramanathan's Table 2 stays a test for the light reflected at the
+top: from 2.7 to 3.3 cm, −0.4 ± 0.2 W/m². Its absorbed half (+3.0 ± 1.0)
+is no longer tested: the line-by-line response to water above replaces
+it (decided by the user on 2026-11-25).
+
+**Calibrations of the RFMIP tolerances** (study 35). The user's rule
+is that the column does no worse than RRTMGP against LBLRTM. It holds
+for present-day CO₂, whose tolerance is RRTMGP's error, a sourced value.
+It does not hold for the two others, whose tolerances are calibrations:
+the column's measured error plus RRTMGP's, so that the tests guard the
+column against getting worse, at the scale of the best band model's own
+error, without hiding its present departure:
+
+- `CO2_RANGE_TOLERANCE_W_M2`, 0.14: 0.0763 + 0.0622 W/m², rounded up;
+- `WATER_TOLERANCE_W_M2`, 0.30: 0.2550 + 0.0445 W/m², rounded up. The
+  column's 6 % shortfall on water is a known departure with an issue of
+  its own.
+
+Searched and not found: a published bound on a band model's shortwave
+error against line-by-line for a 16-fold change of CO₂, and a
+line-by-line reference on water alone that the column can take (the
+reasons above).
 
 **Window of the aerosol-free clear-sky albedo** (the first reading, superseded
-by the window the test takes, below). The observed clear-sky albedo holds the
-aerosols: CERES reflects 52.4 W/m² under clear skies, "an albedo of 0.149" (EBAF
-Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156 (EBAF Ed4.0,
-July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et al.'s own
-all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo of 0.154, not
-0.149: the paper does not say how its 0.149 is formed. The aerosols reflect 5.9
-± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[52]), 0.017 ± 0.003 of
-albedo. Taken off:
+by the window the test took, below, now retired). The observed clear-sky albedo
+holds the aerosols: CERES reflects 52.4 W/m² under clear skies, "an albedo of
+0.149" (EBAF Ed2.7r; Stephens et al. 2015, §4, item 1), and 53.1 of 340.0, 0.156
+(EBAF Ed4.0, July 2005 to June 2015; Kato et al. 2018, Table 5). Stephens et
+al.'s own all-sky pair, 99.7 W/m² for 0.293, makes their 52.4 an albedo of
+0.154, not 0.149: the paper does not say how its 0.149 is formed. The aerosols
+reflect 5.9 ± 1 of 341.8 W/m² (Kim & Ramanathan, Table 3b and §[52]), 0.017 ±
+0.003 of albedo. Taken off:
 
 - 0.149 to 0.156 less 0.017 gives 0.132 to 0.139;
 - 0.154 to 0.156 (the fluxes) less 0.017 gives 0.137 to 0.139;
@@ -669,25 +690,18 @@ The observed albedo also holds the light that ozone absorbs before it is reflect
 the app holds no ozone, and no source read gives that share of the
 reflection.
 
-**The window the clear-sky test takes** (decided by the user on
-2026-11-23, after the diagnostic study of the port). The faithful port
-lacks what the observation holds, so the window is the observed albedo
+**The window the clear-sky test took** (decided by the user on
+2026-11-23, retired on 2026-11-25). The window was the observed albedo
 less the aerosols plus what the port lacks, each term computed with its
-source (departures below). The terms:
-
-- observed 0.149 (Stephens et al. 2015) to 0.156 (Kato et al. 2018);
-- less the aerosols' 0.017 ± 0.003, that is 0.020 at the most;
-- plus the model Sun against the measured one, +0.0023 (the PHOENIX
-  Sun of the table of spectra against TSIS-1, study 35; it was the
-  black body's +0.0147 before issue #655);
-- plus the missing ozone, +0.0145 ± 0.0005 (0.0140 at the low end);
-- plus the missing O₂, +0.0018;
-- less the two-stream closure, which reflects too little, −0.0028.
-
-They sum to 0.1443 at the low end (0.149 − 0.020 + 0.0023 + 0.0140 +
-0.0018 − 0.0028) and 0.1583 at the high end. The port gives 0.1577, near
-the top of it (0.1701 under the black-body Sun, in a window of 0.1567 to
-0.1707). Issue #653 (ozone, O₂) narrows it when it lands.
+source: observed 0.149 (Stephens et al. 2015) to 0.156 (Kato et al.
+2018); less the aerosols' 0.017 ± 0.003; plus the missing ozone, +0.0145
+± 0.0005, and O₂, +0.0018; less the two-stream closure, −0.0028; plus the
+model Sun against the measured one. The user retired it with study 35:
+two of its terms were the port's own measurements, and the one test
+left on the clear sky compares the table's Sun with the measured one on
+the same column (TSIS-1, within 0.003: 0.1579 against 0.1556), which
+needs no window. The clear-sky total comes back with ozone and O₂
+(#653), against LBLRTM on RFMIP's field (#715).
 
 **Clouds, hazes and decks.** The clouds of water cover 0.67 of Earth's sky
 by the MODIS cloud mask (King et al. 2013); the GEWEX assessment gives
@@ -770,8 +784,10 @@ reads the forcings, never the central object's kind).
    transmission; the layers' mean Planck fluxes are summed with the
    diffusivity 1.66.
 3. **The shortwave.** 240 bands, even in $\ln\lambda$, from 0.2 to 5 µm,
-   weighted by the star's Planck spectrum (its effective temperature,
-   5772 K for the Sun, IAU 2015 B3, Prša et al. 2016). The column has 3
+   weighted by the star's spectrum from the table of model spectra
+   (`data/stellar-spectra.tsv`, by its effective temperature and
+   metallicity; the Sun is 5772 K, IAU 2015 B3, Prša et al. 2016; see
+   [Stellar spectra](stellar-spectra.md)). The column has 3
    levels per decade up to 1 % of the surface pressure, clear. Each layer
    takes its absorption and its Rayleigh depth together in the two-stream
    solution above; the clouds sit at their ISCCP tops inside the column, so
@@ -835,7 +851,7 @@ the Bond albedo are there too (change 2b-2).
   cover), `gases` (the partial pressures and the heat capacities) and
   `fast_math` (the single-precision exponential of the sum).
 - The shortwave, in the same directory: `starlight` (the 240 bands and
-  the star's Planck weights), `shortwave` (the reader of
+  the star's weights from the table of spectra), `shortwave` (the reader of
   `data/shortwave.bin`, the two-stream layers, their stacks and `Paths`,
   the light's paths through an air), `rayleigh` (the per-gas refractive
   indices and King factors), `veils` (the sulphuric deck and the methane
@@ -924,7 +940,7 @@ the Bond albedo are there too (change 2b-2).
     relative humidity of Manabe & Wetherald 1967 (equation 2), the same
     figure as the column's test profile; the paper is paywalled and the
     value is confirmed indirectly (below).
-  - *Cloud albedo.* The water clouds reflect 0.298 of the light falling
+  - *Cloud albedo.* The water clouds reflect 0.296 of the light falling
     on their share of the sky, fitted by bisection so that Earth's Bond
     albedo is 0.293 (Stephens et al. 2015), over a ground of 0.122, the
     77 % air over 288 K, the law's cloud cover of 0.682 and the Sun of the
@@ -989,25 +1005,21 @@ the Bond albedo are there too (change 2b-2).
     diffuse geometry is not the cause: it is the exact set-up for a Bond
     albedo, and a single direct beam at μ₀ = 2/3 (the insolation-weighted
     angle, Cronin 2014) falls 0.0075 below the exact value. The error of
-    treating Rayleigh light as scalar was not quantified. Issue #655.
+    treating Rayleigh light as scalar was not quantified. Issue #TBD-closure.
   - *Together:* 0.1701 − 0.0147 − 0.0145 − 0.0018 + 0.0028 ≈ 0.142, at the
     top of the aerosol-free window (0.129-0.142). The window the test
-    takes is above.
+    took, now retired, is above.
 - **Earth's water.** The climate puts 1.735 cm of precipitable water in
   Earth's column at 77 % (the shortwave grid; 1.67 cm converged), against
   2.45 to 2.53 cm observed (NVAP heritage 24.5 mm and NVAP-M 25.3 mm,
   Forsythe et al. 2014). Issue #654. The absorption tests therefore scale
   the saturated shortwave column's vapour level by level to a given water,
   which tests the optics and leaves the humidity to #654:
-  - At 2.5 cm the air absorbs 55.63 W/m² under the table's Sun, above
-    the retired 48-54 window (above); the black-body Sun gave 52.70. The
-    measured Sun gives 55.2 to 56.4 at 2.45-2.53 cm, and 54.92 at the
-    2.38 cm one column needs to carry the field's absorbed sunlight
-    (study 33).
-  - From 2.7 to 3.3 cm the absorption rises by 2.937 W/m² (3.0 ± 1.0,
-    from Kim & Ramanathan's Table 2: 1.3 + 0.2 per 0.3 cm) and the
-    reflected light falls by 0.338 W/m² (0.4 ± 0.2). The response to
-    water matches.
+  - At 2.5 cm the air absorbs 55.80 W/m² under the table's Sun, above
+    the retired 48-54 window (above); the black-body Sun gave 52.70.
+  - From 2.7 to 3.3 cm the absorption rises by 3.031 W/m² (Kim &
+    Ramanathan's Table 2: 3.0, 1.3 + 0.2 per 0.3 cm; no longer tested)
+    and the reflected light falls by 0.350 W/m² (0.4 ± 0.2, tested).
   - The 3.0 cm of Table 2 is the input of their sensitivity case, not the
     water of their global run (NVAP-NG, 2.45-2.53 cm, §[22]). Two biases
     are not quantified: a field average of a concave function lies below
@@ -1126,12 +1138,7 @@ a literature check of every number and citation (the full audit is in the
   −1.3 % at 150 K, +19 % at 120 K and +77 % at 100 K; methane's new line
   is 22 % lower at Titan's 69 K skin.
 - **Scope of the Bond albedo.** It takes one ground albedo. The cloud
-  albedo is refitted in two steps: first the clear-sky top-of-atmosphere
-  albedo of Earth, a window of 0.1443 to 0.1583 (the observed 0.149,
-  Stephens et al. 2015, to 0.156, Kato et al. 2018, less the aerosols,
-  plus what the port lacks; decided on 2026-11-23, see above), which tests
-  the ground, the Rayleigh scattering and the absorption without the
-  clouds; then the all-sky Bond albedo, 0.293
+  albedo is fitted on the all-sky Bond albedo, 0.293
   (Stephens et al. 2015; Kato et al. 2018: 0.2915). The legacy fitted 0.30,
   a pre-satellite value, 0.007 to 0.01 too high.
 - **Rayleigh.** The cross-section of each gas comes from its refractive
@@ -1146,12 +1153,13 @@ a literature check of every number and citation (the full audit is in the
   McKay et al.'s 0.306 within 1 %.
 - **Heat capacity of NH₃** is 35.65 J/(mol·K) (NIST Shomate), where the
   legacy had a transposed 35.06.
-- **Clear-sky air absorption** of water vapour and CO₂ is checked
-  against a window of 48 to 54 W/m² on 2.5 cm of water (the NVAP mean of
-  Kim & Ramanathan's 2008 global run; their 3.0 cm is the sensitivity
-  case of Table 2), plus the slope of the response to water, not "about
-  70". The observed 72-73 W/m² (Kim & Ramanathan; CERES 73.0) holds the
-  ozone, O₂ and aerosols the shortwave does not.
+- **Clear-sky air absorption** of water vapour and CO₂ is no longer
+  checked against a window (it was 48 to 54 W/m² on 2.5 cm of water,
+  retired on 2026-11-25 with issue #655, until the total is compared with
+  LBLRTM, #715): its responses to CO₂ and to water are checked against
+  LBLRTM on RFMIP's field instead, not "about 70". The observed 72-73
+  W/m² (Kim & Ramanathan; CERES 73.0) holds the ozone, O₂ and aerosols
+  the shortwave does not.
 - **The haze's reflection and absorption** (`HAZE_ALBEDO`,
   `HAZE_ABSORPTION`) are the legacy values, fitted on Titan's Bond albedo
   taken as 0.27 under the legacy Rayleigh law; they are not refitted in

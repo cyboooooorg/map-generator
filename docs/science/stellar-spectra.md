@@ -48,7 +48,7 @@ the app (study 35):
 | K dwarf, 4500 K | 0.683 | 0.429 | PHOENIX, log g 4.5 |
 | M dwarf, 3300 K | 0.202 | 0.139 | PHOENIX, log g 5.0 |
 | Late M dwarf, 2600 K | 0.080 | 0.048 | PHOENIX, log g 5.0 |
-| A star, 10000 K | 7.72 | 6.94 | ATLAS9 (Castelli & Kurucz 2003), log g 4.0 |
+| A star, 10000 K | 7.72 | 6.96 | PHOENIX, log g 4.0 |
 | B star, 27000 K | 19.0 | 20.0 | ATLAS9, log g 4.0 |
 
 A real star of every type below about 15 000 K is redder than its black
@@ -59,7 +59,7 @@ Sun (1.267 against 1.186).
 ### Where the near infrared falls
 
 At 2600 K PHOENIX puts 86 % of the light beyond 1 µm against 81 % for the
-black body, but the planet's air absorbs 125 W/m² of Earth's
+black body (study 35, on the app's bands), but the planet's air absorbs 125 W/m² of Earth's
 340.25 W/m² against 136 under the black body: more of the light falls
 between the planet's absorption bands. Study 35 did not split the
 star's bands by molecule. The black body overstates the near-infrared
@@ -110,11 +110,12 @@ Earth's 0.293 under each Sun, so that the Sun's own error is absorbed:
 | 27 000 | 0.576 | 0.591 | −0.015 |
 
 PHOENIX spectra to 12 000 K, ATLAS9 above, solar metallicity; the clouds
-refitted on the PHOENIX Sun (0.298). A Bond albedo 0.02 too low gives a
+refitted on the PHOENIX Sun (0.296), the black body's on its own (0.274). A Bond albedo 0.02 too low gives a
 planet at Earth's flux 6.8 W/m² too much; at the climate's slope of about
 2 W/m² per kelvin (study 32), about 3 K.
 
-Metallicity moves the spectrum as much as the coolest M dwarfs' error:
+Metallicity moves the spectrum as much as the mid-M dwarfs' error (0.009
+at 3000 K):
 at 5800 K, [M/H] = −1 raises the cloudy albedo by 0.009 and +0.5 lowers
 it by 0.005; at 3300 K, by 0.002 each way. Surface gravity hardly
 matters (log g 4.0 against 4.5 at 5800 K, and 4.5 against 5.0 at 3300 K:
@@ -126,8 +127,10 @@ The bands run from 0.2 to 5 µm and their weights sum to 1: all the
 star's light is put in them. A black body at 5772 K has 99.3 % of its
 light there, but one at 27 000 K only 32 %, and at 15 000 K 73 %; the
 ATLAS9 B star at 27 000 K has 27 %. The rest is far ultraviolet, which
-the upper air absorbs (O₂ and ozone on Earth). For B and late A hosts the
-light's share outside the bands matters more than its shape inside them.
+the upper air absorbs (O₂ and ozone on Earth). A black body keeps 93.2 %
+of its light in the bands at 10 000 K and 51.9 % at 20 000 K: above about
+20 000 K, for B hosts, most of the light lies outside the bands, and its
+share there matters more than its shape inside them.
 
 ### Spectral libraries
 
@@ -194,17 +197,56 @@ star's temperature and metallicity and follows each band through the air.
 The climate gives each star the planet's metallicity (the stars of a
 system share one) and weights the stars' albedos by their flux (#592).
 The cloud albedo (`albedo::CLOUD_ALBEDO`) is fitted on Earth's Bond
-albedo under the table's Sun: 0.298 (0.276 under the black body).
+albedo under the table's Sun: 0.296 (0.276 under the black body).
 
 The tests hold the table's Sun against the measured one, TSIS-1 HSRS
-(Coddington et al. 2021): it removes at least 80 % of the black body's
-excess below 400 and 300 nm (82 % measured), and Earth's clear-sky
-albedo under it lies within 0.003 of its value under TSIS-1 (0.1577
-against 0.1554). Both tolerances are calibrations on study 35's
-measurements, decided by the user on 2026-11-25. Other tests: every row
-sums to 1, a row rebuilt from its neighbours lights Earth's clear sky
-alike, and the albedo rises from 2600 to 7200 K (Kopparapu et al. 2013,
-§4.1).
+(Coddington et al. 2021), binned on the same bands by the same tool and
+committed as `crates/science/data/tsis-sun.tsv` (the tests' reference,
+never the generator's): it removes at least 80 % of the black body's
+excess below 400 and 300 nm (82 % and 83 % measured), and Earth's
+clear-sky albedo under it lies within 0.003 of its value under TSIS-1
+(0.1579 against 0.1556), both computed in the tests. Other tests: every
+row sums to 1 within 1e-4, the table's bands are the shortwave's, a row
+rebuilt from its neighbours in temperature (across PHOENIX's surface
+gravity switches and the seam with ATLAS9) or in metallicity lights
+Earth's clear sky alike, and the albedo rises from 2600 to 7200 K
+(Kopparapu et al. 2013, §4.1).
+
+### Calibrations
+
+Study 35 searched for each of these and found no published value; each
+is fitted on its own measurement, decided by the user on 2026-11-25:
+
+- `GAP_CLOSED`, 0.80 (`starlight_tests.rs`): the share of the black
+  body's excess over TSIS-1 below 400 and 300 nm the table's Sun must
+  remove; measured 0.822 and 0.830. Searched and not found: a published
+  accuracy of a model library's solar ultraviolet against TSIS-1 on a
+  planet's bands.
+- `TSIS_CLEAR_SKY_TOLERANCE`, 0.003 (`albedo_tests.rs`): how far Earth's
+  clear-sky albedo under the table's Sun may lie from its value under
+  TSIS-1; measured 0.0023. Searched and not found: a model library's
+  error against the measured Sun on a planet's albedo.
+- `INTERPOLATED_ALBEDO`, 0.001, times `TWO_STEPS` 4 for a row rebuilt
+  over two steps (`albedo_tests.rs`): the error of the linear
+  interpolation of the shares on Earth's clear-sky albedo; measured
+  0.0019 at most over two steps (at 13 000 K, [M/H] −1, and at 7400 K,
+  +0.5, within PHOENIX; 0.0015 in metallicity). Searched and not found: a
+  published interpolation error of a spectral grid on a planet's albedo.
+- `CO2_RANGE_TOLERANCE_W_M2` and `WATER_TOLERANCE_W_M2`
+  (`rfmip_tests.rs`): see [How does a planet's air set its outgoing heat
+  and its albedo?](radiative-transfer.md), "Calibrations of the RFMIP
+  tolerances".
+- `CLOUD_ALBEDO`, 0.296 (`albedo.rs`): refitted on Earth's Bond albedo
+  0.293 under the table's Sun. The refit was forced: with the black
+  body's 0.276 the table's Sun gives Earth 0.2835, outside the 0.0015 of
+  the Bond albedo test (`EARTH_BOND_TOLERANCE`). Searched and not found:
+  a single cloud reflectance for a one-column model (see
+  [radiative-transfer.md](radiative-transfer.md), "The cloud's water,
+  the deck and the haze").
+- `SNOWBALL_WARM_BAR`, 10.3 bar (`snowball.rs`): refitted on Earth's
+  dated snowball share under the new cloud albedo (see [Planet
+  atmospheres](planet-atmospheres.md), "Calibration of
+  `SNOWBALL_WARM_BAR` (refit)").
 
 ### Decisions
 
@@ -219,7 +261,11 @@ against RFMIP's line-by-line fluxes.
 ### Where it departs from the science
 
 - **Model spectra.** The table's Sun is 0.0023 brighter than the
-  measured one in Earth's clear sky. No measured M-dwarf spectrum
+  measured one in Earth's clear sky. The table interpolates linearly
+  across PHOENIX's surface-gravity switches (log g 5.0 to 4.5 between
+  3900 and 4000 K, 4.5 to 4.0 between 6300 and 6400 K) and the seam with
+  ATLAS9 (12 000 to 13 000 K); the rebuilt-row test bounds what that
+  costs Earth's clear sky (0.0019 at most over two steps). No measured M-dwarf spectrum
   covering 0.2-5 µm was compared, and ATLAS9 and PHOENIX differ by 0.004
   to 0.008 of Earth's cloudy albedo at 3500-3750 K.
 - **What the black body was.** Study 35 measured it, on main before the
@@ -227,21 +273,23 @@ against RFMIP's line-by-line fluxes.
   - Earth's clear sky (77 %, ground 0.122): 0.1701 under the black body,
     0.1554 under TSIS-1 continued past 2730 nm (by the PHOENIX Sun or by
     the black body, within 0.0001), 0.1577 under PHOENIX; the air absorbs
-    48.41, 50.91 and 51.23 W/m².
-  - Earth's cloudy sky at the fit point: 0.2931, 0.2812 and 0.2827. The
-    cloud albedo that gives 0.293 again is 0.301 (TSIS-1) or 0.298
-    (PHOENIX).
+    48.41, 50.91 and 51.23 W/m². After the binning by overlap and the
+    moist adiabat's split at the triple point (#711), TSIS-1 gives 0.1556
+    and the table's Sun 0.1579.
+  - The cloud albedo that gives Earth's 0.293, re-measured on this
+    branch: 0.274 under the black body, 0.300 under TSIS-1, 0.296 under
+    the table's Sun (taken). With the black body's 0.276 kept, the
+    table's Sun gives 0.2835.
   - The reference Earth (`earth_has_its_climate`, held at 288 K by the
-    thermostat): its Bond albedo 0.2953 becomes 0.2852 under TSIS-1, and
-    its climate at 280 ppm warms from 287.11 to 289.04 K. With the cloud
-    albedo refitted (0.3014) it is 0.2960 and 287.01 K.
+    thermostat) on main after #711: its Bond albedo is 0.2960 and its
+    climate at 280 ppm 287.13 K.
 - **After the change**, measured: the reference Earth's Bond albedo is
-  0.2957 at 288 K and its climate at 280 ppm 287.06 K (−0.06 K). Its
+  0.2956 at 288 K and its climate at 280 ppm 287.20 K (+0.07 K). Its
   snowball chance fell from 0.0140 to 0.0117 under the old
   `SNOWBALL_WARM_BAR`, refitted to 10.3 bar (0.0140 again; see [Planet
   atmospheres](planet-atmospheres.md), "Calibration of
   `SNOWBALL_WARM_BAR`").
-- **Earth's clear-sky absorption at 2.5 cm of water** is 55.63 W/m² under
+- **Earth's clear-sky absorption at 2.5 cm of water** is 55.80 W/m² under
   the table's Sun, above the 48-54 W/m² window built on Kim & Ramanathan
   (2008)'s rounded "about 50" for water; the black-body Sun passed it.
   The user retired the window on 2026-11-25: no line-by-line reference on
@@ -252,7 +300,7 @@ against RFMIP's line-by-line fluxes.
   does a planet's air set its outgoing heat and its
   albedo?](radiative-transfer.md), "Window of the H₂O and CO₂
   absorption").
-- **All the light in 0.2-5 µm.** For hosts above about 10 000 K most of
+- **All the light in 0.2-5 µm.** For hosts above about 20 000 K most of
   the light lies at shorter wavelengths, and the bands take it all
   (above).
 

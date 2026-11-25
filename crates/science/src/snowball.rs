@@ -19,9 +19,9 @@ use crate::units::{Bar, Fraction};
 /// dated share of its history in snowball states, `f⊕` = 0.014 (0.013
 /// to 0.016; the Sturtian and Marinoan glaciations, 63 My over 4.6 Gyr,
 /// Hoffman et al. 2017, *Sci. Adv.* 3, e1600983, Table 1). Method:
-/// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25) = 10.32, to three figures,
-/// with `d⊕` = 0.1483 bar the extra CO₂ the reference Earth at 1 AU
-/// needs to thaw (thaw 0.150365 bar less froze 0.002039 bar, 0.148326,
+/// `W = d⊕ (1 − f⊕) / (rate⊕ f⊕)` (study 25) = 10.29, to three figures,
+/// with `d⊕` = 0.1479 bar the extra CO₂ the reference Earth at 1 AU
+/// needs to thaw (thaw 0.150135 bar less froze 0.002205 bar, 0.147930,
 /// measured by the climate solver of `system` at its 13 thaw steps,
 /// under the stellar spectra of issue #655; it was 0.1788 bar and `W`
 /// 12.4 bar under the black-body Sun) and

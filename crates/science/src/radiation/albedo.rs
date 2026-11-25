@@ -23,21 +23,23 @@ use crate::units::{Dex, Fraction, Kelvin, MetrePerSecondSquared};
 mod tests;
 
 /// Calibration: albedo of the tops of a water cloud layer, as the
-/// reflectance of the cloud cover's share of the disc, 0.298. Fitted on
+/// reflectance of the cloud cover's share of the disc, 0.296. Fitted on
 /// Earth's Bond albedo, 0.293 (CERES; Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018,
-/// doi:10.1175/JCLI-D-17-0208.1, give 0.2915), by bisection to three
-/// digits (0.29806 before rounding; 0.29297 with 0.298) over Earth's
+/// doi:10.1175/JCLI-D-17-0523.1, give 0.2915), by bisection to three
+/// digits (0.29633 before rounding; 0.29285 with 0.296) over Earth's
 /// inputs: a ground of 0.122 (CERES EBAF Ed4.0 clear-sky surface, Kato et
 /// al. 2018, Table 5), its dry air with 400 ppm of CO₂ at 77 % relative
 /// humidity over 288 K (Manabe & Wetherald 1967), the cloud cover the law
 /// gives it, 0.682 ([`super::clouds::cloud_cover`]), standard gravity and
 /// the Sun at 5772 K and solar metallicity from the table of spectra
-/// ([`super::starlight::star_bands`]; it was 0.276 under the black-body
-/// Sun, issue #655, study 35). What was searched and not found: a single
-/// cloud reflectance for a one-column model, which no observation gives
-/// (a thick cloud reflects 0.5 to 0.7; Earth's cover counts thin clouds
-/// too). The legacy took 0.252, fitted on 0.30 over its own cover.
+/// ([`super::starlight::star_bands`]). The refit was forced: it was 0.276
+/// under the black-body Sun (issue #655, study 35), and with 0.276 the
+/// table's Sun gives Earth 0.2835, outside the 0.0015 of the Bond albedo
+/// test (`EARTH_BOND_TOLERANCE`). What was searched and not found: a
+/// single cloud reflectance for a one-column model, which no observation
+/// gives (a thick cloud reflects 0.5 to 0.7; Earth's cover counts thin
+/// clouds too). The legacy took 0.252, fitted on 0.30 over its own cover.
 ///
 /// The fit absorbs what the port lacks. In the clear sky, the port is
 /// brighter than the observed aerosol-free sky by its missing ozone and
@@ -48,8 +50,8 @@ mod tests;
 /// reflectance makes up the rest: refit it when any of these lands (#705
 /// refits it on the climate's own ground). See
 /// `docs/science/radiative-transfer.md`, "The cloud's water, the deck and
-/// the haze".
-pub(crate) const CLOUD_ALBEDO: f64 = 0.298;
+/// the haze", and `docs/science/stellar-spectra.md`, "Calibrations".
+pub(crate) const CLOUD_ALBEDO: f64 = 0.296;
 
 /// Definition: airs a [`ShortwaveCache`] remembers, the legacy memo's size
 /// (a numerical choice with no source: audit, Wiki study 19).
