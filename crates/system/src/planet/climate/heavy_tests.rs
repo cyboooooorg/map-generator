@@ -58,7 +58,7 @@ use science::radiation::clouds::cloud_cover;
 use science::radiation::column::{ColumnCache, Profile, outgoing_longwave};
 use science::radiation::gases::PartialPressures;
 use science::surface::{
-    ICE_COVERED_TEMPERATURE, Liquid, PHASE_BAND, methane_freezes, surface_vapour,
+    ICE_COVERED_TEMPERATURE, Liquid, N2_ICE_EMISSIVITY, PHASE_BAND, methane_freezes, surface_vapour,
 };
 use science::units::{
     Bar, EarthFlux, EarthMass, EarthRadius, Fraction, Kelvin, Kilogram, Metre, Pascal,
@@ -834,8 +834,13 @@ fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
     // at 63.094 K from the warm state and the warm flux at 59.804 K from
     // the cold one; the absorbed light rises by a factor 1.55 and so does
     // ε T⁴ ((0.9983 / 0.80) (63.094 / 59.769)⁴). So a jump the sweep
-    // lets through must change the phase, and the absorbed flux must
-    // rise as ε T⁴ does, within PHASE_RATIO_TOLERANCE.
+    // lets through must leave the frost (to the melting frost or the
+    // liquid), and the absorbed flux must rise as ε T⁴ does, within
+    // PHASE_RATIO_TOLERANCE. Under the stellar spectra of #655 the jump
+    // lands on the melting frost below the triple point: 59.681 K at
+    // 0.006795 against 63.133 K at 0.006812 (albedo 0.7527 to 0.6130,
+    // emissivity 0.8000 to 0.9998, absorbed x1.5626 against ε T⁴
+    // x1.5650).
     let reference = titan();
     let air = PartialPressures {
         n2: NITROGEN_WORLD_N2.0,
@@ -853,7 +858,9 @@ fn the_fixed_point_converges_across_the_nitrogen_triple_point() {
         absorbed(light, &c.air, base.heat_flux).0
     };
     let explained = |(f0, a): Point<'_>, (f1, b): Point<'_>| {
-        let phase = a.liquid.is_none() != b.liquid.is_none();
+        // The frost branch: no liquid, and the surface radiates as N₂ ice.
+        let frost = |c: &Settle| c.liquid.is_none() && c.emissivity.get() == N2_ICE_EMISSIVITY;
+        let phase = frost(a) != frost(b);
         let light = absorbed_by(b) / absorbed_by(a);
         let emitted = (b.emissivity.get() * b.temperature.0.powi(4))
             / (a.emissivity.get() * a.temperature.0.powi(4));
