@@ -20,7 +20,7 @@ the kind of the central object.
   since the star's birth in J/m²; `band_total` sums them).
 - `StarState`, `PlanetState` (and their parts: `Orbit`, `Spin`, `Bulk`,
   `Composition`, `Heat`, `Surface`, `Atmosphere`, `GlobalClimate`,
-  `SurfaceLiquid`, `Terrain`, `Life`): the state of a body at a date.
+  `SurfaceLiquid`, `Terrain`, `Biosphere`): the state of a body at a date.
   A giant has no `Surface`. An `Atmosphere` holds its surface pressure and
   a partial pressure per `Gas` (N₂, CO₂, H₂O, CH₄, NH₃, SO₂, O₂, Ar), whose
   sum is the surface pressure.
