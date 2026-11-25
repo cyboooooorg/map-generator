@@ -78,13 +78,6 @@ const INTERPOLATED_ALBEDO: f64 = 0.001;
 /// as the square of its step, and the rebuilt row spans two.
 const TWO_STEPS: f64 = 4.0;
 
-/// Source: the precipitable water of Kim & Ramanathan 2008's global run,
-/// cm: the NVAP water field (§[22]), whose global mean is 2.45 (heritage
-/// NVAP) to 2.53 (NVAP-M, 1988-2009) cm (Forsythe, Vonder Haar & Cronk
-/// 2014, NOAA ESRL Global Monitoring Annual Conference, pp. 6 and 18),
-/// rounded. Their 3.0 cm of Table 2 is the sensitivity case's input.
-const NVAP_WATER_CM: f64 = 2.5;
-
 /// Source: the columns of Kim & Ramanathan 2008's sensitivity to the
 /// precipitable water, 3.0 +- 0.3 cm (doi:10.1029/2007JD008434, Table 2).
 const SENSITIVITY_WATER_CM: [f64; 2] = [2.7, 3.3];
@@ -108,19 +101,6 @@ const MORE_WATER_REFLECTED_W_M2: f64 = 0.4;
 /// by the user on 2026-11-23: the table's rounding to a tenth on each
 /// side.
 const MORE_WATER_REFLECTED_TOLERANCE_W_M2: f64 = 0.2;
-
-/// Source: the low end of the window of the clear-sky absorption by
-/// water vapour and CO₂, W/m² at 340.25, approved by the user on
-/// 2026-11-23: 51 +- 3, water about 50 of 341.8 (Kim & Ramanathan 2008,
-/// §[51]) plus CO₂ 1.0 to 1.6 (Kiehl & Trenberth 1997,
-/// doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2, Table 4; Hogan &
-/// Matricardi 2020, doi:10.5194/gmd-13-6501-2020, Table 4), with the +-3
-/// of Kim & Ramanathan's total. See `docs/science/radiative-transfer.md`,
-/// "Window of the H₂O and CO₂ absorption".
-const CLEAR_SKY_ABSORBED_LOW_W_M2: f64 = 48.0;
-
-/// Source: the high end of the window of [`CLEAR_SKY_ABSORBED_LOW_W_M2`].
-const CLEAR_SKY_ABSORBED_HIGH_W_M2: f64 = 54.0;
 
 /// Source: Earth's Bond albedo, 0.293 (CERES, Stephens et al. 2015,
 /// doi:10.1002/2014RG000449; Kato et al. 2018 give 0.2915).
@@ -344,21 +324,13 @@ fn earths_clear_sky_albedo_is_observed_less_what_is_missing() {
 }
 
 #[test]
-fn earths_clear_sky_air_absorbs_what_satellites_see() {
-    let budget = earth_clear_sky_holding(NVAP_WATER_CM);
-    let absorbed = budget.air * EARTH_INCOMING_W_M2;
-    let manabe = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
-    println!(
-        "Earth clear sky at {NVAP_WATER_CM} cm: absorbed {absorbed:.2} W/m², albedo {:.4}; \
-         at 77 % {:.2} W/m²",
-        budget.albedo,
-        manabe.absorbed_by_air.get() * EARTH_INCOMING_W_M2,
-    );
-    assert!(
-        (CLEAR_SKY_ABSORBED_LOW_W_M2..=CLEAR_SKY_ABSORBED_HIGH_W_M2).contains(&absorbed),
-        "{absorbed} W/m²"
-    );
-    // Without vapour or CO₂ the air absorbs nothing, and reflects more.
+fn dry_air_absorbs_nothing_and_reflects_more() {
+    // The total the air absorbs has no test of its own until the column
+    // holds ozone and O₂ (#653, #715): the line-by-line reference holds
+    // them. Its responses to CO₂ and water are tested on RFMIP's field
+    // (`rfmip_tests.rs`). Without vapour or CO₂ the air absorbs nothing,
+    // and reflects more.
+    let wet = earth_budget(&earth_air(), EARTH_SURFACE_K, clear());
     let dry = PartialPressures {
         h2o: 0.0,
         co2: 0.0,
@@ -367,8 +339,8 @@ fn earths_clear_sky_air_absorbs_what_satellites_see() {
     let none = earth_budget(&dry, EARTH_SURFACE_K, clear());
     assert!(none.absorbed_by_air.get() < 1e-6, "{none:?}");
     assert!(
-        none.bond_albedo.get() > budget.albedo,
-        "{none:?} {budget:?}"
+        none.bond_albedo.get() > wet.bond_albedo.get(),
+        "{none:?} {wet:?}"
     );
 }
 

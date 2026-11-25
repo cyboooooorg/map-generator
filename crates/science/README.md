@@ -163,7 +163,8 @@ absorbed light, for a star's temperature and metallicity; the caller owns the
 `ShortwaveCache`), `starlight` (the star's spectrum, from
 `data/stellar-spectra.tsv`), `shortwave` (`data/shortwave.bin`), `rayleigh`,
 `veils`, `methane::stratospheric_share`. See [OPACITY.md](data/OPACITY.md),
-[SPECTRA.md](data/SPECTRA.md), [radiative
+[SPECTRA.md](data/SPECTRA.md), [RFMIP.md](data/RFMIP.md) (the field the
+shortwave is tested on), [radiative
 transfer](../../docs/science/radiative-transfer.md), [stellar
 spectra](../../docs/science/stellar-spectra.md).
 

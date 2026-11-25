@@ -212,7 +212,9 @@ Decided by the user on 2026-11-25 (study 35): PHOENIX below 12 000 K and
 ATLAS9 above; the Sun from the table, one code path, with TSIS-1 as the
 tests' reference; the binned shares shipped with their citations, never
 the spectra; metallicity read now. The light outside 0.2-5 µm of hot
-hosts has its own issue.
+hosts has its own issue. Then, for the clear-sky absorption
+window: retired, and the column's responses to CO₂ and water tested
+against RFMIP's line-by-line fluxes.
 
 ### Where it departs from the science
 
@@ -240,9 +242,16 @@ hosts has its own issue.
   atmospheres](planet-atmospheres.md), "Calibration of
   `SNOWBALL_WARM_BAR`").
 - **Earth's clear-sky absorption at 2.5 cm of water** is 55.63 W/m² under
-  the table's Sun, above the 48-54 W/m² window from Kim & Ramanathan
-  (2008); the black-body Sun passed it. Open (see [How does a planet's
-  air set its outgoing heat and its albedo?](radiative-transfer.md)).
+  the table's Sun, above the 48-54 W/m² window built on Kim & Ramanathan
+  (2008)'s rounded "about 50" for water; the black-body Sun passed it.
+  The user retired the window on 2026-11-25: no line-by-line reference on
+  water and CO₂ alone exists, and the total is compared with LBLRTM on
+  RFMIP's field once the column holds ozone and O₂ (#653, #715). Earth's
+  Bond albedo test still guards the budget; the column's responses to
+  CO₂ and to water are tested against LBLRTM on RFMIP's field (see [How
+  does a planet's air set its outgoing heat and its
+  albedo?](radiative-transfer.md), "Window of the H₂O and CO₂
+  absorption").
 - **All the light in 0.2-5 µm.** For hosts above about 10 000 K most of
   the light lies at shorter wavelengths, and the bands take it all
   (above).
