@@ -25,8 +25,8 @@ use science::escape::{WATER_PER_HYDROGEN, energy_limited_loss, escape_velocity, 
 use science::photochemistry::{
     CH4_MOLECULE_MASS, CH4_PER_LYMAN_ALPHA_PHOTON, LYMAN_ALPHA_PHOTON_ENERGY, methane_destroyed,
 };
-use science::radiation::gases::{CH4_MOLAR_MASS, N2_MOLAR_MASS};
-use science::units::{Bar, Gyr, Kilogram, Metre, SolarMass};
+use science::radiation::gases::{AR_MOLAR_MASS, CH4_MOLAR_MASS, N2_MOLAR_MASS};
+use science::units::{Bar, Gyr, Kilogram, Metre, Pascal, SolarMass};
 use science::volatiles::{ICE_CH4, ICE_CO2, ROCK_CO2};
 use timeline::{
     Atmosphere, Code, Gas, NodeId, Provenance, Seed, TectonicRegime, Trace, Traced, Water,
@@ -153,6 +153,39 @@ const EARTH_OCEANS_KG: f64 = 1.4e21;
 
 /// Definition: a relative tolerance on a value computed two ways.
 const ROUNDING: f64 = 1e-12;
+
+/// Source: Earth's argon as a weight, 0.0127 bar: 9340 ppm of the dry
+/// air by volume (NASA Earth fact sheet) is 1.288 % of its 5.1352e18 kg
+/// (Trenberth & Smith 2005) at 39.95 against 28.97 g/mol, on Earth's
+/// surface (study 29 of the Wiki, derived).
+const EARTH_AR: f64 = 0.0127;
+
+/// Definition: study 29's tolerance round [`EARTH_AR`], 10 %: the share
+/// degassed is fitted on Earth's air (Marty 2012's mass balance), so the
+/// test checks the chain, as [`EARTH_N2_TOLERANCE`] does.
+const EARTH_AR_TOLERANCE: f64 = 0.1;
+
+/// Source: Venus's Ar-40, (1.61 ± 0.54)e16 kg (Kaula 1999, Icarus 139,
+/// 32, as Warren & Kite 2023, PNAS 120, e2209751120, quote it), 4.03e17
+/// mol, and study 29's tolerance, a factor 2 (Kaula's ±34 % and the
+/// spread of the potassium). Not an independent check of the episodic
+/// lid's share: putting the episodic lid with the stagnant one rests on
+/// Venus's Ar-40 (`argon_degassed_share`).
+const VENUS_AR_MOL: (f64, f64) = (4.03e17, 2.0);
+
+/// Source: Titan's Ar-40, 3.39 ± 0.12e-5 of its air (Niemann et al. 2010,
+/// J. Geophys. Res. 115, E12006, eq. 10) over its 9.04e18 kg at 27.34
+/// g/mol, 1.121e16 mol (study 29, derived), and study 29's tolerance, a
+/// factor 3 (its rock's potassium is not Earth's, its ocean and shoreline
+/// are the model's).
+const TITAN_AR_MOL: (f64, f64) = (1.121e16, 3.0);
+
+/// Source: Mars's Ar-40, 1.93 % of its 2.5e16 kg of air at 43.49 g/mol
+/// (Mahaffy et al. 2013, Science 341, 263, abstract; NASA Mars fact
+/// sheet), 1.11e16 mol (study 29, derived). The chain keeps about 0.02 of
+/// it: the shoreline takes the same share of the argon as of the early
+/// air, a departure (#699).
+const MARS_AR_MOL: f64 = 1.11e16;
 
 /// Definition: a relative tolerance on a mass solved back from a ratio
 /// of two pressures, 1e-9: the subtraction loses a few digits.
@@ -762,6 +795,7 @@ fn each_partial_reads_in_chain_order() {
         (Gas::H2o, codes::AIR_KEPT_H2O),
         (Gas::So2, codes::AIR_KEPT_SO2),
         (Gas::O2, codes::AIR_KEPT_O2),
+        (Gas::Ar, codes::AIR_KEPT_AR),
     ] {
         assert_eq!(code(partial(gas)), Code::of(code_of), "{gas:?}");
     }
@@ -875,4 +909,91 @@ fn the_shoreline_reads_the_exposed_body() {
     // The ancestry and the direction only: the kept share can saturate,
     // so a larger radius may keep the same share, never more.
     assert!(big <= small, "{big} > {small}");
+}
+
+/// The moles of argon in the air `a` of the planet `p`: its partial
+/// pressure, a weight, over the bulk surface at the bulk gravity,
+/// `P 4 pi R^2 / (g M_Ar)` (the inverse of `column_pressure`).
+fn argon_moles(p: &Planet, a: &Atmosphere) -> f64 {
+    let bulk = p.body.bulk();
+    let radius = Metre::from(*bulk.radius.value()).0;
+    let pascals = Pascal::from(Bar(partial(a, Gas::Ar))).0;
+    pascals * 4.0 * std::f64::consts::PI * radius * radius
+        / (bulk.surface_gravity.value().0 * AR_MOLAR_MASS)
+}
+
+#[test]
+fn earth_weighs_its_argon() {
+    let a = planet(&EARTH).air().0;
+    let ar = partial(&a, Gas::Ar);
+    println!("Earth's argon: {ar:.5} bar");
+    assert!((ar / EARTH_AR - 1.0).abs() < EARTH_AR_TOLERANCE, "{a:?}");
+}
+
+#[test]
+fn venus_titan_and_mars_hold_their_argon() {
+    for (name, body, (measured, factor)) in [
+        ("Venus", &VENUS, VENUS_AR_MOL),
+        ("Titan", &TITAN, TITAN_AR_MOL),
+    ] {
+        let mut p = planet(body);
+        let a = p.air().0;
+        let n = argon_moles(&p, &a);
+        println!(
+            "{name}: {n:.3e} mol of Ar-40, {:.2} of the measured",
+            n / measured
+        );
+        assert!(n > measured / factor && n < measured * factor, "{n:e}");
+    }
+    let mut mars = planet(&MARS);
+    let a = mars.air().0;
+    let n = argon_moles(&mars, &a);
+    println!(
+        "Mars: {n:.3e} mol of Ar-40, {:.3} of the measured",
+        n / MARS_AR_MOL
+    );
+    // Under the measured only: the chain keeps about 0.019 of it, the
+    // departure #699. A band around 0.019 would pin the code's output,
+    // which only tier 2 may do, and tier 2 cannot reach these reference
+    // bodies before the chain is in the draw (#659).
+    assert!(n > 0.0 && n < MARS_AR_MOL, "{n:e}");
+}
+
+#[test]
+fn argon_comes_from_the_mantle_the_heat_reads() {
+    let mut earth = planet(&EARTH);
+    let a = earth.air().0;
+    let ar = &a.partial[&Gas::Ar];
+    let out = ancestor(&earth.trace, ar.node(), codes::AIR_OUTGASSED_AR);
+    let from = derived_from(&earth.trace, out);
+    let Body::Rocky(interior) = &earth.body else {
+        panic!("a planet with a surface is rocky")
+    };
+    for node in [
+        interior.mantle_mass.node(),
+        earth.drawn.radiogenic_abundance.node(),
+        earth.trial.age.node(),
+        earth.regime.node(),
+        earth.water.inventory.node(),
+    ] {
+        assert!(from.contains(&node), "{node:?}");
+    }
+    // A stagnant lid degasses 0.2 / 0.95 of what plates do; nothing else
+    // of the argon reads the regime.
+    let plates = number(&earth.trace, out);
+    earth.regime = earth
+        .trace
+        .leaf(
+            Code::of("test.regime"),
+            TectonicRegime::Stagnant,
+            Provenance::Input,
+        )
+        .unwrap();
+    let a = earth.air().0;
+    let lid = outgassed(&earth, Gas::Ar, &a.partial[&Gas::Ar]);
+    let ratio = science::outgassing::LID_SHARE / science::outgassing::MOBILE_SHARE;
+    assert!(
+        (lid / plates / ratio - 1.0).abs() < ROUNDING,
+        "{lid} {plates}"
+    );
 }

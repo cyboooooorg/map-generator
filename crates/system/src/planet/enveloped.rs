@@ -156,6 +156,13 @@ pub(crate) struct EnvelopeRecord {
     pub thickness: Traced<EarthRadius>,
     /// The envelope as a layer: its mass is [`Self::mass`].
     pub layer: ShellRecord,
+    /// The planet's mass without its envelope, `(1 - f) M`
+    /// (`planet.mass-without-envelope`): the core the boil-off ceiling
+    /// reads.
+    pub mass_without: Traced<EarthMass>,
+    /// The bolometric flux the envelope's thickness was read under
+    /// (`planet.bolometric-flux`), which the boil-off ceiling reads too.
+    pub flux: Traced<EarthFlux>,
 }
 
 /// A giant.
@@ -324,6 +331,8 @@ fn mini_neptune(trial: &Trial, drawn: &Drawn, trace: &mut Trace) -> Result<Body,
             mass: envelope_mass,
             thickness,
             layer,
+            mass_without: core_mass,
+            flux,
         },
         bulk,
     })

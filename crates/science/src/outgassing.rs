@@ -17,6 +17,13 @@
 //! [`SULPHUR_IN_AIR`] stays in the air; a wet or oxidising air washes it
 //! out, a dry one keeps it in proportion to its column ([`so2_kept`]).
 //!
+//! **Argon.** A body's rock makes Ar-40 from its K-40 over its life
+//! ([`radiogenic_argon`], DDEP 2025's decay data on the heat's
+//! potassium), of which [`ARGON_DEGASSED_UNDER_PLATES`] reaches the air,
+//! less under a lid ([`argon_degassed_share`]); then the water and the
+//! shoreline take their shares, as of every gas (study
+//! [29](https://github.com/cyboooooorg/map-generator/wiki/29-argon-audit)).
+//!
 //! **Ammonia.** Of the NH3 the interior brings up, [`AMMONIA_DECOMPOSED`]
 //! comes up as N2, decomposed in the interior ([`decomposed`]): Titan's
 //! nitrogen (Glein 2015, study
@@ -27,8 +34,10 @@
 //! [21](https://github.com/cyboooooorg/map-generator/wiki/21-escape-outgassing-audit),
 //! parts 5 and 6; see `docs/science/planet-atmospheres.md`, "Atmosphere".
 
+use crate::heat::potassium_40_decayed;
 use crate::photochemistry::N2_PER_NH3;
-use crate::units::{Bar, Fraction, Kilogram, Metre, MetrePerSecondSquared, Pascal};
+use crate::radiation::gases::AR_MOLAR_MASS;
+use crate::units::{Bar, Fraction, Gyr, Kilogram, Metre, MetrePerSecondSquared, Mole, Pascal};
 
 /// Calibration: share of each volatile that plates, an episodic lid
 /// (Venus's resurfacing) and heat pipes (Io) bring up over a body's life:
@@ -193,6 +202,62 @@ pub fn so2_kept(wet: bool, o2: Bar, total: Bar) -> Fraction {
         (total.0.max(0.0) / DRY_COLUMN.0).min(1.0)
     };
     Fraction::new(kept).expect("a share in 0 to 1 for finite pressures")
+}
+
+/// Source: share of the decays of K-40 that make Ar-40, 0.10439: electron
+/// capture to the 1461 keV level of Ar-40, 10.34 %, to its ground state,
+/// 0.098 %, and beta+, 0.00103 % (DDEP evaluation of 2025, X. Mougeot,
+/// ICRM 2025 poster, HAL cea-05087440, read), summed; the rest, 89.56 %,
+/// decays to Ca-40.
+pub const ARGON_40_BRANCH: f64 = 0.10439;
+
+/// Source: share of the Ar-40 that a body's rock made that reaches its air
+/// under plates and heat pipes, 0.41: Earth's air holds 1.6e18 of the
+/// 3.9e18 mol its silicate part made over 4.5 Gyr (Marty 2012, EPSL
+/// 313-314, 56, arXiv:1405.6336, p. 15; about half retained in the solid
+/// Earth, Allègre, Hofmann & O'Nions 1996, GRL 23, 3555, abstract). Argon
+/// needs a share of its own: made over the rock's whole life, it comes
+/// out only with the melting of the later Gyr, while the primordial
+/// volatiles came out early. See `docs/science/planet-atmospheres.md`,
+/// "Argon".
+pub const ARGON_DEGASSED_UNDER_PLATES: f64 = 0.41;
+
+/// Ar-40 a body's rock has made since it formed: [`ARGON_40_BRANCH`] of
+/// the K-40 of its `silicate` part, of radiogenic `abundance` (Earth = 1),
+/// that decayed over `age` (`crate::heat::potassium_40_decayed`, the
+/// heat's potassium and half-life). On Earth, 4.05e18 mol (Marty 2012:
+/// 3.9 ± 0.9e18).
+pub fn radiogenic_argon(silicate: Kilogram, abundance: f64, age: Gyr) -> Mole {
+    Mole(ARGON_40_BRANCH * potassium_40_decayed(silicate, abundance, age).0)
+}
+
+/// Mass of an `amount` of argon at its standard atomic weight,
+/// [`AR_MOLAR_MASS`].
+pub fn argon_mass(amount: Mole) -> Kilogram {
+    Kilogram(amount.0 * AR_MOLAR_MASS)
+}
+
+/// Share of the Ar-40 made that reaches the air: [`ARGON_DEGASSED_UNDER_PLATES`]
+/// under plates and heat pipes; under a `lid`, that share scaled by
+/// [`LID_SHARE`] over [`MOBILE_SHARE`] (0.0863), so it inherits those two
+/// calibrations. For a stagnant lid that is the ratio by which the
+/// outgassing scales the lid's other volatiles. The caller also passes an
+/// episodic lid as a lid, a documented choice: its other volatiles take
+/// [`MOBILE_SHARE`] (Venus's CO2 and N2 came out early), but its Ar-40
+/// came out through the lid of its later Gyr (Sasaki & Tajika 1995:
+/// Venus's long-term degassing is a quarter of Earth's, read from its
+/// Ar-40). The choice rests on Venus's Ar-40, so Venus does not check it
+/// independently. See `docs/science/planet-atmospheres.md`, "Argon".
+/// Argon then goes the way of every outgassed gas:
+/// [`released_under_ocean`], then the shoreline; subduction does not
+/// recycle it (0.41 is already what stays in the air).
+pub fn argon_degassed_share(lid: bool) -> Fraction {
+    let share = if lid {
+        ARGON_DEGASSED_UNDER_PLATES * LID_SHARE / MOBILE_SHARE
+    } else {
+        ARGON_DEGASSED_UNDER_PLATES
+    };
+    Fraction::new(share).expect("a share in 0 to 1")
 }
 
 /// What the interior brings up of a mass of NH3: N2 and the NH3 left.

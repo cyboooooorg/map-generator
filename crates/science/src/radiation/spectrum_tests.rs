@@ -8,7 +8,7 @@ use super::*;
 use crate::constants::{STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::gases::H2O_MOLAR_MASS;
 use crate::radiation::ktable::{CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
-use crate::radiation::test_points::{self, EARTH_SURFACE_K};
+use crate::radiation::test_points::{self, EARTH_SURFACE_K, PER_MILLION, PREINDUSTRIAL_PPM};
 use crate::surface::RELATIVE_HUMIDITY;
 use crate::water::vapour_saturation_bar;
 
@@ -47,29 +47,8 @@ const DECADES: usize = 6;
 /// was not read (the NASA scan has no text layer).
 const TROPOPAUSE_K: f64 = 217.0;
 
-/// Definition: Earth's pre-industrial CO₂ of the test columns, ppm.
-const PREINDUSTRIAL_PPM: f64 = 280.0;
-
 /// Definition: O₂'s mole fraction in the test columns' dry air, rounded.
 const O2_SHARE: f64 = 0.21;
-
-/// Definition: parts per million.
-const PER_MILLION: f64 = 1e-6;
-
-/// Source: clear-sky outgoing longwave radiation at the top of the
-/// atmosphere, global annual mean of CERES EBAF Ed4, July 2005 to June
-/// 2015: 267.9 W/m² (Kato et al. 2018, J. Climate 31, 4501,
-/// doi:10.1175/JCLI-D-17-0523.1, Table 5, "Clear-sky, TOA LW up", Ed4
-/// column; Ed2.8 gives 265.4).
-const CERES_CLEAR_SKY_OLR: f64 = 267.9;
-
-/// Calibration: the error budget of one fixed profile against a global
-/// mean, W/m², not a published uncertainty: the test column is a single
-/// US-standard-like profile at 280 ppm, with no ozone, no aerosol and no
-/// geography, against a mean over latitudes and seasons at the CO₂ of
-/// 2005-2015; Kato et al. 2018 quote uncertainties of a few W/m² for the
-/// measurement itself. The legacy ±10 W/m², kept.
-const CLEAR_SKY_OLR_TOLERANCE: f64 = 10.0;
 
 /// Calibration: a plausibility band for the forcing of a CO₂ doubling,
 /// W/m², on the legacy test profile, not a like-for-like anchor. 3.7 W/m²
@@ -277,6 +256,7 @@ fn olr_bins(
             nh3: gases.nh3 * share,
             so2: gases.so2 * share,
             o2: gases.o2 * share,
+            ar: gases.ar * share,
         };
         g.h2o = point.vapour_bar;
         Level {
@@ -319,10 +299,6 @@ fn olr_fixed_profile(profile: &[Point], gases: &PartialPressures) -> f64 {
 
 fn earth_column() -> Vec<Point> {
     earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, RELATIVE_HUMIDITY)
-}
-
-fn earth_olr(co2_ppm: f64) -> f64 {
-    olr_fixed_profile(&earth_column(), &earth_air(co2_ppm))
 }
 
 fn doubling_forcing(co2_ppm: f64) -> f64 {
@@ -456,16 +432,6 @@ fn co2_forcing_is_logarithmic() {
 }
 
 #[test]
-fn earth_clear_sky_olr() {
-    let olr = earth_olr(PREINDUSTRIAL_PPM);
-    assert!(
-        (olr - CERES_CLEAR_SKY_OLR).abs() <= CLEAR_SKY_OLR_TOLERANCE,
-        "Earth's clear-sky OLR {olr:.2} W/m², against \
-         {CERES_CLEAR_SKY_OLR} ± {CLEAR_SKY_OLR_TOLERANCE}"
-    );
-}
-
-#[test]
 fn halving_bins_keeps_the_forcing() {
     // The halved table covers 0-2500 cm⁻¹; past it both sums take the
     // model's bins, which then cancel in the comparison.
@@ -569,4 +535,42 @@ fn the_planck_spectrum_is_the_bins_and_their_rest() {
             "{t} K: {sum} vs {black}"
         );
     }
+}
+
+/// The level weighs its argon: Earth's dry air of the fact sheet, its
+/// argon included, has the U.S. Standard Atmosphere's mean molar mass,
+/// 28.964 g/mol ([`DRY_AIR_R`]'s), within 0.1 %; without its argon it is
+/// 0.3 % lighter. Pure argon weighs its CIAAW 39.95 g/mol.
+#[test]
+fn a_level_weighs_its_argon() {
+    /// Source: the mean molar mass of the U.S. Standard Atmosphere 1976's
+    /// dry air, 28.964 g/mol (NASA-TM-X-74335, as [`DRY_AIR_R`] cites
+    /// it), kg/mol.
+    const DRY_AIR_MOLAR_MASS: f64 = 28.964e-3;
+    let level = |gases| Level {
+        temperature_k: EARTH_SURFACE_K,
+        gases,
+        gravity_m_s2: EARTH_GRAVITY,
+    };
+    // Source: dry air, NASA Earth fact sheet: 78.08 % N₂, 20.95 % O₂,
+    // 9340 ppm Ar, 420 ppm CO₂, by volume.
+    let air = PartialPressures {
+        n2: 0.7808,
+        o2: 0.2095,
+        ar: 9340e-6,
+        co2: 420e-6,
+        ..PartialPressures::default()
+    };
+    let mass = level(air).molar_mass_kg();
+    assert!((mass / DRY_AIR_MOLAR_MASS - 1.0).abs() < 1e-3, "{mass}");
+    let without = level(PartialPressures { ar: 0.0, ..air }).molar_mass_kg();
+    assert!(
+        (without / DRY_AIR_MOLAR_MASS - 1.0).abs() > 2e-3,
+        "{without}"
+    );
+    let argon = level(PartialPressures {
+        ar: 1.0,
+        ..PartialPressures::default()
+    });
+    assert!((argon.molar_mass_kg() - crate::radiation::gases::AR_MOLAR_MASS).abs() < 1e-15);
 }

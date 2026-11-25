@@ -878,14 +878,19 @@ body gets which law).
 **Radiogenic.** Uranium-238 and -235, thorium-232 and potassium-40 decay
 and heat the rock. Each isotope's power per kilogram of silicate today is
 the abundance of its element in Earth's silicate part, times the heat
-per kilogram of the element (Dye 2012, Table 3: U 98.5, Th 26.3 and K
-$3.33 \times 10^{-3}$ µW/kg), times the isotope's share of the element
+per kilogram of the element (Dye 2012, Table 3: U 98.5 and Th 26.3
+µW/kg; K $3.400 \times 10^{-3}$ µW/kg, derived below), times the
+isotope's share of the element
 (U-238: 0.958, derived in the heat study). The abundances are 20 ng/g
 for uranium and 80 ng/g for thorium, calibrations inside the published
 models (see "Where it departs from the science"), and 280 µg/g for potassium (Arevalo
 et al. 2009, a K/U ratio, read in its abstract). Each isotope is carried
-to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704,
-14.05 and 1.277 Gyr; the earlier model used 1.248 Gyr for potassium-40):
+to the planet's age by its half-life (Dye 2012, Table 2: 4.468, 0.704
+and 14.05 Gyr; for potassium-40 the DDEP evaluation of 2025, 1.2522 Gyr,
+Mougeot 2025, which the argon of the air shares, see
+[planet atmospheres](planet-atmospheres.md#argon-study-29); Dye 2012's
+1.277 Gyr, taken until #694, was 0.6 to 2.3 % longer than every
+evaluation, and the earlier model used 1.248 Gyr):
 
 $$
 H = \sum_i p_i\, m_\mathrm{sil}\, a\, e^{\lambda_i (4.5673 - t)}
@@ -897,18 +902,45 @@ $\lambda_i = \ln 2 / t_{1/2,i}$, $t$ the age in Gyr and 4.5673 Gyr Earth's
 age (Connelly et al. 2012, read in its abstract). Earth's silicate mass
 is $4.03 \times 10^{24}$ kg (Dye 2012, Table 7).
 
+**Potassium's heat, derived.** Potassium's heat per kilogram is the
+product of its ⁴⁰K atoms, their decay constant and the heat of a decay,
+all from the DDEP evaluation of 2025 (the LNE-LNHB table of ⁴⁰K, read,
+Mougeot et al. 2026), so that it shares the half-life the argon reads:
+
+$$
+h_K = \frac{x_{40} N_A}{m_K} \, \frac{\ln 2}{t_{1/2}} \sum_b P_b E_b
+$$
+
+with $x_{40}$ = 0.011668 % of the atoms (Naumenko et al. 2013, as DDEP
+takes it), $m_K$ = 39.0983 g/mol (CIAAW), $t_{1/2}$ = 1.2522 Gyr of
+Julian years (λ = 17.541e-18 /s), and for each branch its share and the
+energy it leaves in the rock: β⁻ 89.56 % with its electron's mean
+582.898 keV (the antineutrino leaves the planet), capture to ⁴⁰Ar's
+level 10.34 % with the 1460.851 keV transition (the neutrino leaves),
+β⁺ 0.00103 % with its positron's mean 251.757 keV and the two 511 keV
+photons of its annihilation. The capture to the ground state and the
+atomic relaxation after each capture leave at most argon's K-shell 3.2
+keV on 10.44 % of the decays, under 0.05 %: left out. That is 673.1 keV
+a decay and $h_K = 3.400 \times 10^{-9}$ W/kg. Dye 2012's $3.33 \times
+10^{-3}$ µW/kg, taken until #694, is the same product on his λ,
+17.200e-18 /s: carried to DDEP's λ it is $3.396 \times 10^{-9}$, 0.1 %
+from the derived value (test `potassiums_heat_is_dyes_on_ddeps_decay_constant`,
+which also checks the β⁻ activity, 28.233 per second and gram, against
+DDEP's measured 28.23 ± 0.06). Earth's radiogenic power today moves
+from 20.18 to 20.25 TW (+0.39 %), at formation from 103.1 to 104.1 TW.
+
 **In words.** The younger the planet, the more heat; the isotopes with
 short half-lives dominate early.
 
-**Orders of magnitude.** Earth makes 20.2 TW today: uranium-238 38 %,
-thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
+**Orders of magnitude.** Earth makes 20.3 TW today (20.25): uranium-238
+38 %, thorium-232 42 %, potassium-40 19 %, uranium-235 2 %. The published
 models span 11 to 38 TW (Dye 2012). The abundance $a$ is drawn around 1
 with a spread of 0.23 dex (Nimmo et al. 2020, derived in the heat
 study); the earlier model drew 0.15 dex.
 
 **Secular cooling.** A planet also loses the heat it was born with: its
 mantle and core cool. Earth loses 46.7 TW through its surface (Davies &
-Davies 2010), so 26.5 TW beyond its radiogenic 20.2 (the model's 46.7 TW
+Davies 2010), so 26.4 TW beyond its radiogenic 20.3 (the model's 46.7 TW
 total is that split, by construction). The model scales that by the
 silicate mass, which holds the heat, and lets it decay with
 age over a cooling time that grows as the area of the body, $R^2$ with
@@ -920,7 +952,7 @@ S = S_\oplus\, \frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\,
 \qquad \tau = \tau_\oplus \left(\frac{m_\mathrm{sil}}{m_{\mathrm{sil},\oplus}}\right)^{2/3}
 $$
 
-with $S_\oplus$ = 26.5 TW and $\tau_\oplus$ = 10 Gyr. Both the
+with $S_\oplus$ = 26.4 TW and $\tau_\oplus$ = 10 Gyr. Both the
 10 Gyr and the exponent 2/3 are calibrations: no source gives a cooling
 time or its scaling with mass (see "Where it departs from the science").
 
@@ -1658,7 +1690,7 @@ pull request add these:
 | --- | --- | --- | --- |
 | Radius | Zeng et al. 2016 fit, uniform layers | integrated structure | prototype report |
 | Earth $C/MR^2$ | 0.354 | 0.330 | Williams 1994: 0.3307 |
-| Potassium-40 half-life | 1.248 Gyr | 1.277 Gyr | Dye 2012, Table 2 |
+| Potassium-40 half-life | 1.248 Gyr | 1.2522 Gyr (1.277 until #694) | DDEP 2025 (Mougeot 2025); Dye 2012, Table 2 |
 | Iron share | normal, 0.325 + 0.15 per dex of `[Fe/H]`, σ 0.05 | uniform 0 to 0.8, no slope | Elkins-Tanton & Seager 2008; Plotnykov & Valencia 2020 |
 | Water inside the ice line | log-normal around 0.27 % | log-uniform $10^{-5}$ to $10^{-2}$ | Raymond et al. 2007; Izidoro & Piani 2022 |
 | Water beyond the ice line | uniform 0.2 to 0.5 | uniform 0.1 to 0.67 | Marboeuf et al. 2014; Zeng et al. 2019 |
@@ -1670,7 +1702,7 @@ pull request add these:
 | Envelope thickness | power-law fit, thinned by the water share | Lopez & Fortney tables | Lopez & Fortney 2014 |
 | Giant radius | law through Neptune, Saturn and Jupiter, inflated when hot | Fortney et al. tables, uninflated | Fortney et al. 2007 |
 | Rocky tidal $k_2/Q$ | 0.015 (Io's) | $6 \times 10^{-3}$ | Henning et al. 2009 |
-| Earth radiogenic heat | 20 TW | 20.2 TW from abundances | Dye 2012 |
+| Earth radiogenic heat | 20 TW | 20.3 TW from abundances | Dye 2012; DDEP 2025 for potassium |
 
 **Calibrations of the interior and the heat.** Each is a choice, not a
 measurement; this is what was searched and not found.
@@ -2282,95 +2314,113 @@ those of the envelope, giants, moons, ice shell and map of the earlier crate.
      [doi:10.3847/1538-4357/abfa99](https://doi.org/10.3847/1538-4357/abfa99),
      [arXiv:2105.01102](https://arxiv.org/abs/2105.01102) (read, study
      26).
-120. Haisch, K. E., Lada, E. A. & Lada, C. J. 2001, "Disk frequencies and
+120. Mougeot, X. 2025, "Decay data evaluation of ⁴⁰K", DDEP, poster at
+     ICRM 2025, HAL cea-05087440 (read): the half-life of potassium-40,
+     1.2522(27) Gyr, and its branches (study 29 of the Wiki, issue #694).
+121. Mougeot, X. et al. 2026, *Metrologia* 63, 019001,
+     [doi:10.1088/1681-7575/ae3733](https://dx.doi.org/10.1088/1681-7575/ae3733),
+     the DDEP evaluation of ⁴⁰K as the LNE-LNHB table publishes it
+     (*Table de Radionucléides*, ⁴⁰K, 2025, read on lnhb.fr, which asks
+     to be cited so; the paper itself was not read): the branches, the
+     mean β⁻ and β⁺ energies, the 1460.851 keV transition and the decay
+     constant 17.541e-18 /s, for potassium's heat per kilogram.
+122. CIAAW, standard atomic weight of potassium, 39.0983(1) (ciaaw.org,
+     read for study 29).
+123. Tiesinga et al. 2021, "CODATA recommended values of the
+     fundamental physical constants: 2018", *Rev. Mod. Phys.* 93,
+     025010: the elementary charge and the electron's mass energy.
+124. Naumenko et al. 2013, *Geochim. Cosmochim. Acta* 122, 353:
+     ⁴⁰K, 0.011668 % of potassium's atoms (as the DDEP evaluation of
+     2025 takes it).
+125. Haisch, K. E., Lada, E. A. & Lada, C. J. 2001, "Disk frequencies and
      lifetimes in young clusters", *ApJ* 553, L153,
      [doi:10.1086/320685](https://doi.org/10.1086/320685),
      [arXiv:astro-ph/0104347](https://arxiv.org/abs/astro-ph/0104347) (read,
      study 31).
-121. Mamajek, E. E. 2009, "Initial conditions of planet formation: lifetimes
+126. Mamajek, E. E. 2009, "Initial conditions of planet formation: lifetimes
      of primordial disks", *AIP Conference Proceedings* 1158,
      [doi:10.1063/1.3215910](https://doi.org/10.1063/1.3215910),
      [arXiv:0906.5011](https://arxiv.org/abs/0906.5011) (read, study 31).
-122. Fedele, D., van den Ancker, M. E., Henning, Th., Jayawardhana, R. &
+127. Fedele, D., van den Ancker, M. E., Henning, Th., Jayawardhana, R. &
      Oliveira, J. M. 2010, "Timescale of mass accretion in pre-main-sequence
      stars", *A&A* 510, A72,
      [doi:10.1051/0004-6361/200912810](https://doi.org/10.1051/0004-6361/200912810),
      [arXiv:0911.3320](https://arxiv.org/abs/0911.3320) (abstract, study
      31).
-123. Ribas, Á., Bouy, H. & Merín, B. 2015, "Protoplanetary disk lifetimes vs
+128. Ribas, Á., Bouy, H. & Merín, B. 2015, "Protoplanetary disk lifetimes vs
      stellar mass and possible implications for giant planet populations",
      *A&A* 576, A52,
      [doi:10.1051/0004-6361/201424846](https://doi.org/10.1051/0004-6361/201424846),
      [arXiv:1502.00631](https://arxiv.org/abs/1502.00631) (read, study 31).
-124. Pfalzner, S., Dincer, F., van der Marel, N. & Wagner, F. W. 2026, "Disc
+129. Pfalzner, S., Dincer, F., van der Marel, N. & Wagner, F. W. 2026, "Disc
      lifetime distribution as a function of the mass of host star", *ApJ*
      (accepted), Table 2,
      [arXiv:2604.25277](https://arxiv.org/abs/2604.25277) (read, study 31).
-125. Kenyon, S. J. & Bromley, B. C. 2006, "Terrestrial planet formation. I.
+130. Kenyon, S. J. & Bromley, B. C. 2006, "Terrestrial planet formation. I.
      The transition from oligarchic growth to chaotic growth", *AJ* 131,
      1837, [doi:10.1086/499807](https://doi.org/10.1086/499807),
      [arXiv:astro-ph/0503568](https://arxiv.org/abs/astro-ph/0503568) (read,
      study 31).
-126. Kokubo, E. & Genda, H. 2010, "Formation of terrestrial planets from
+131. Kokubo, E. & Genda, H. 2010, "Formation of terrestrial planets from
      protoplanets under a realistic accretion condition", *ApJL* 714, L21,
      Table 1,
      [doi:10.1088/2041-8205/714/1/L21](https://doi.org/10.1088/2041-8205/714/1/L21),
      [arXiv:1003.4384](https://arxiv.org/abs/1003.4384) (read, study 31).
-127. Raymond, S. N., Scalo, J. & Meadows, V. S. 2007, "A decreased
+132. Raymond, S. N., Scalo, J. & Meadows, V. S. 2007, "A decreased
      probability of habitable planet formation around low-mass stars",
      *ApJ* 669, 606, § 3.2 and Fig. 5,
      [doi:10.1086/521587](https://doi.org/10.1086/521587),
      [arXiv:0707.1711](https://arxiv.org/abs/0707.1711) (read, study 31).
-128. Raymond, S. N., Kokubo, E., Morbidelli, A., Morishima, R. & Walsh, K.
+133. Raymond, S. N., Kokubo, E., Morbidelli, A., Morishima, R. & Walsh, K.
      J. 2014, "Terrestrial planet formation at home and abroad", *Protostars
      and Planets VI*,
      [doi:10.2458/azu_uapress_9780816531240-ch026](https://doi.org/10.2458/azu_uapress_9780816531240-ch026),
      [arXiv:1312.1689](https://arxiv.org/abs/1312.1689) (read, study 31;
      Kleine et al. 2009 and Dauphas & Pourmand 2011 as quoted there).
-129. Jacobson, S. A. et al. 2014, "Highly siderophile elements in Earth's
+134. Jacobson, S. A. et al. 2014, "Highly siderophile elements in Earth's
      mantle as a clock for the Moon-forming impact", *Nature* 508, 84,
      [doi:10.1038/nature13172](https://doi.org/10.1038/nature13172),
      [arXiv:1504.01421](https://arxiv.org/abs/1504.01421) (read, study 31).
-130. Lammer, H. et al. 2020, "Loss and fractionation of noble gas isotopes
+135. Lammer, H. et al. 2020, "Loss and fractionation of noble gas isotopes
      and moderately volatile elements from planetary embryos and early
      Venus, Earth and Mars", *Space Science Reviews* 216, 74,
      [doi:10.1007/s11214-020-00701-x](https://doi.org/10.1007/s11214-020-00701-x),
      [arXiv:2011.01064](https://arxiv.org/abs/2011.01064) (read, study 31).
-131. Lammer, H., Brasser, R., Johansen, A., Scherf, M. & Leitzinger, M.
+136. Lammer, H., Brasser, R., Johansen, A., Scherf, M. & Leitzinger, M.
      2021, "Formation of Venus, Earth and Mars: constrained by isotopes",
      *Space Science Reviews* 217, 7,
      [doi:10.1007/s11214-020-00778-4](https://doi.org/10.1007/s11214-020-00778-4),
      [arXiv:2102.06173](https://arxiv.org/abs/2102.06173) (read, study 31).
-132. Lee, E. J. & Connors, N. J. 2021, "Primordial radius gap and
+137. Lee, E. J. & Connors, N. J. 2021, "Primordial radius gap and
      potentially broad core mass distributions of super-Earths and
      sub-Neptunes", *ApJ* 908, 32,
      [doi:10.3847/1538-4357/abd6c7](https://doi.org/10.3847/1538-4357/abd6c7),
      [arXiv:2008.01105](https://arxiv.org/abs/2008.01105) (read, study 31).
-133. Owen, J. E. & Wu, Y. 2017, "The evaporation valley in the Kepler
+138. Owen, J. E. & Wu, Y. 2017, "The evaporation valley in the Kepler
      planets", *ApJ* 847, 29, § 4.7,
      [doi:10.3847/1538-4357/aa890a](https://doi.org/10.3847/1538-4357/aa890a),
      [arXiv:1705.10810](https://arxiv.org/abs/1705.10810) (read, study 31).
-134. Neil, A. R. & Rogers, L. A. 2020, "A joint mass-radius-period
+139. Neil, A. R. & Rogers, L. A. 2020, "A joint mass-radius-period
      distribution of exoplanets", *ApJ* 891, 12, Table 1,
      [doi:10.3847/1538-4357/ab6a92](https://doi.org/10.3847/1538-4357/ab6a92),
      [arXiv:1911.03582](https://arxiv.org/abs/1911.03582) (read, study 31).
-135. Izidoro, A., Schlichting, H. E., Isella, A. et al. 2022, "The exoplanet
+140. Izidoro, A., Schlichting, H. E., Isella, A. et al. 2022, "The exoplanet
      radius valley from gas-driven planet migration and breaking of resonant
      chains", *ApJL* 939, L19,
      [doi:10.3847/2041-8213/ac990d](https://doi.org/10.3847/2041-8213/ac990d),
      [arXiv:2210.05595](https://arxiv.org/abs/2210.05595) (read, study 31).
-136. Cloutier, R. & Menou, K. 2020, "Evolution of the radius valley around
+141. Cloutier, R. & Menou, K. 2020, "Evolution of the radius valley around
      low mass stars from Kepler and K2", *AJ* 159, 211, Table 6,
      [doi:10.3847/1538-3881/ab8237](https://doi.org/10.3847/1538-3881/ab8237),
      [arXiv:1912.02170](https://arxiv.org/abs/1912.02170) (abstract and §
      6.2 and Table 6, study 31).
-137. Lammer, H., Leitzinger, M., Scherf, M. et al. 2020b, "Constraining the
+142. Lammer, H., Leitzinger, M., Scherf, M. et al. 2020b, "Constraining the
      early evolution of Venus and Earth through atmospheric Ar, Ne isotope
      and bulk K/U ratios", *Icarus* 339, 113551,
      [doi:10.1016/j.icarus.2019.113551](https://doi.org/10.1016/j.icarus.2019.113551)
      (record only, as Lammer et al. 2021 quote it, study 31).
 
-The values, tables and pages read for entries 120 to 137 are in
+The values, tables and pages read for entries 125 to 142 are in
 [31-late-formation-audit (Wiki)](https://github.com/cyboooooorg/map-generator/wiki/31-late-formation-audit),
 which says, for each number, the page it was read on or how it was
 derived.
