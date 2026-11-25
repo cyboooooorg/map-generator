@@ -62,7 +62,7 @@ const REMEMBERED_AIRS: usize = 32;
 /// The inputs of an air's paths, as bits: the eight partial pressures,
 /// the surface temperature, the gravity, and the star's temperature and
 /// metallicity.
-type AirKey = [u64; 11];
+type AirKey = [u64; 12];
 
 /// What lies under the air: the ground's albedo, the share of the sky
 /// under water clouds, and the share of the disc under a sulphuric deck
