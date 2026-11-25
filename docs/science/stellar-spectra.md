@@ -243,8 +243,9 @@ is fitted on its own measurement, decided by the user on 2026-11-25:
   a single cloud reflectance for a one-column model (see
   [radiative-transfer.md](radiative-transfer.md), "The cloud's water,
   the deck and the haze").
-- `SNOWBALL_WARM_BAR`, 10.3 bar (`snowball.rs`): refitted on Earth's
-  dated snowball share under the new cloud albedo (see [Planet
+- `SNOWBALL_WARM_BAR`, 10.2 bar (`snowball.rs`): refitted on Earth's
+  dated snowball share under the new cloud albedo and Earth's argon
+  (`d⊕` 0.1468 bar, `W` 10.22) (see [Planet
   atmospheres](planet-atmospheres.md), "Calibration of
   `SNOWBALL_WARM_BAR` (refit)").
 
@@ -287,7 +288,7 @@ against RFMIP's line-by-line fluxes.
   Bond albedo is 0.2961 at 288 K and its climate at 280 ppm 287.27 K
   (+0.07 K). Its
   snowball chance fell from 0.0140 to 0.0117 under the old
-  `SNOWBALL_WARM_BAR`, refitted to 10.3 bar (0.0140 again; see [Planet
+  `SNOWBALL_WARM_BAR`, refitted to 10.2 bar (0.0140 again; see [Planet
   atmospheres](planet-atmospheres.md), "Calibration of
   `SNOWBALL_WARM_BAR`").
 - **Earth's clear-sky absorption at 2.5 cm of water** is 55.80 W/m² under
