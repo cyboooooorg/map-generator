@@ -3350,9 +3350,11 @@ earlier input of a body keeps its value.
 ## The chain and the surface classes
 
 The rewrite chains the first part of this derivation in
-`system::planet::bare::bare`: composition, interior, XUV fluence, escape,
-heat, then for a body that has lost its envelope the water, the regime, the
-core and the air, before any climate. The model is private until the
+`system::planet::bare::bare`: composition, interior, the boil-off of a
+mini-Neptune's envelope down to its ceiling (new to the rewrite, see
+[Boil-off and core-powered mass loss](#boil-off-and-core-powered-mass-loss-study-30)),
+XUV fluence, escape, heat, then for a body that has lost its envelope the
+water, the regime, the core and the air, before any climate. The model is private until the
 climate step (2d) and nothing generated changes. Where it departs from the
 legacy, beyond the corrections named in each section: the rewrite's
 interior is heavier (cooling times about a fifth longer, a deeper seafloor),

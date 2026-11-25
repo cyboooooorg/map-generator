@@ -77,9 +77,9 @@ pub(crate) const MASS_AFTER_BOIL_OFF: &str = "planet.mass.after-boil-off";
 /// after the boil-off. Recorded only when it is not zero.
 pub(crate) const ENVELOPE_BOILED_OFF: &str = "planet.envelope.boiled-off";
 /// Mass of the envelope lost to the XUV light of the stars over the
-/// planet's age, energy-limited (Owen & Wu 2017, eq. 19) on the formed
-/// body's radius and mass, capped by the envelope `f M`. Recorded only
-/// when it is not zero.
+/// planet's age, energy-limited (Owen & Wu 2017, eq. 19) on the radius
+/// and mass of the body the boil-off left, capped by the envelope `f M`.
+/// Recorded only when it is not zero.
 pub(crate) const ENVELOPE_LOST: &str = "planet.envelope.lost";
 /// Envelope mass fraction of the planet once the escape has taken its
 /// share: `(f M - lost) / (M - lost)` for a mini-Neptune, 0 below
