@@ -1,18 +1,29 @@
-//! Builds `crates/science/data/rfmip-shortwave.tsv` from the RFMIP-IRF
-//! profiles and the clear-sky shortwave fluxes of LBLRTM and RTE-RRTMGP
-//! that `fetch.sh` downloads (see README.md): the field the science
-//! crate's shortwave is tested on, and the absorbed sunlight of each
-//! experiment by the line-by-line reference and by RRTMGP.
+//! Builds `crates/science/data/rfmip-profiles.tsv` from the RFMIP-IRF
+//! profiles that `fetch.sh` downloads (see README.md): the field the
+//! science crate's shortwave is tested on. From the clear-sky shortwave
+//! fluxes of LBLRTM and RTE-RRTMGP it prints the three weighted
+//! differences the tests quote (`science::radiation::rfmip_tests`), and
+//! writes nothing of them: those files' licence (CC BY-NC-SA 4.0) keeps
+//! their derived data out of the repository.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-/// Definition: the experiments of RFMIP-IRF the table keeps (indices of
+/// Definition: the experiments of RFMIP-IRF the tests take (indices of
 /// `expt` in the RFMIP files, named by their `expt_label`): present day,
-/// 0.5, 2, 4 and 8 times its CO₂, pre-industrial CO₂, +4 K, and +4 K at
+/// 0.5 and 8 times its CO₂, pre-industrial CO₂, +4 K, and +4 K at
 /// constant relative humidity.
-const EXPERIMENTS: [usize; 8] = [0, 4, 5, 2, 7, 8, 13, 14];
+const EXPERIMENTS: [usize; 6] = [0, 4, 7, 8, 13, 14];
+
+/// Definition: the differences the tests quote, as (from, to)
+/// experiments: pre-industrial to present-day CO₂, 0.5 to 8 times
+/// present-day CO₂, +4 K to +4 K at constant relative humidity.
+const DIFFERENCES: [(&str, usize, usize); 3] = [
+    ("pre-industrial to present-day CO2", 8, 0),
+    ("0.5x to 8x CO2", 4, 7),
+    ("+4 K to +4 K at constant RH", 13, 14),
+];
 
 /// Definition: the experiments whose profiles the table holds: present
 /// day (its temperatures and water serve the CO₂ experiments, which
@@ -20,6 +31,31 @@ const EXPERIMENTS: [usize; 8] = [0, 4, 5, 2, 7, 8, 13, 14];
 const PRESENT_DAY: usize = 0;
 const WARMER: usize = 13;
 const WARMER_MOISTER: usize = 14;
+
+/// The table's header: what it holds, its licence (the profiles' only,
+/// not the code's), its attribution and the changes made.
+const HEADER: &str = "\
+# RFMIP-IRF clear-sky field: the atmospheric conditions of RFMIP's rad-irf
+# experiment, built by tools/rfmip-shortwave (map-generator).
+# Attribution: Pincus, R., Forster, P. M., Stevens, B. 2016, The Radiative
+# Forcing Model Intercomparison Project (RFMIP), Geosci. Model Dev. 9, 3447,
+# doi:10.5194/gmd-9-3447-2016; dataset input4MIPs.CMIP6.RFMIP.UColorado.
+# UColorado-RFMIP-1-2 (v20190401, hdl:21.14100/f379c294-f7bb-442d-bca7-64661d60780e),
+# University of Colorado.
+# Licence of this file (its data only, not the repository's code): the source
+# file says its data are licensed under a Creative Commons Attribution \"Share
+# Alike\" 4.0 International License, while its link points to CC BY 4.0; the
+# stricter reading is taken: CC BY-SA 4.0,
+# https://creativecommons.org/licenses/by-sa/4.0/. No warranty, as the source
+# states.
+# Changes made: the 51 sunlit sites of 100 only; the sunlight at the top made
+# from total_solar_irradiance and solar_zenith_angle; weights renormalised over
+# all 100 sites; water vapour moved from the layers to the levels (linear in
+# ln p); rounded. Details: crates/science/data/RFMIP.md.
+# X expt co2_ppmv (carbon_dioxide_GM)
+# S site weight insolation_w_m2 surface_albedo (sunlit sites; weights over all)
+# L p_pa t_k x_h2o t_k(+4K) x_h2o(+4K) x_h2o(+4K const RH), surface first
+";
 
 /// The text view of one OPeNDAP variable: its dimensions and its values,
 /// row-major.
@@ -146,7 +182,7 @@ fn interpolate(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     ys[ys.len() - 1]
 }
 
-fn run(raw: &Path, out: &Path) -> Result<(), String> {
+fn run(raw: &Path, out: &Path, fluxes: bool) -> Result<(), String> {
     let input = read(
         raw,
         "multiple_input4MIPs_radiation_RFMIP_UColorado-RFMIP-1-2_none.txt",
@@ -181,38 +217,27 @@ fn run(raw: &Path, out: &Path) -> Result<(), String> {
         .ok_or("no level")?;
 
     let mut text = String::new();
-    text.push_str(
-        "# RFMIP-IRF clear-sky shortwave field (rad-irf), built by tools/rfmip-shortwave\n\
-         # from the RFMIP profiles (Pincus, R., Forster, P. M., Stevens, B. 2016, Geosci.\n\
-         # Model Dev. 9, 3447, doi:10.5194/gmd-9-3447-2016; input4MIPs\n\
-         # UColorado-RFMIP-1-2) and the fluxes of LBLRTM-12-8 (AER) and\n\
-         # RTE-RRTMGP-181204 (Pincus, Mlawer, Delamere 2019, J. Adv. Model. Earth\n\
-         # Syst. 11, 3074, doi:10.1029/2019MS001621) on ESGF (CMIP6 terms of use: cite).\n\
-         # Provenance, checksums and method: crates/science/data/RFMIP.md.\n\
-         # E expt co2_ppmv lblrtm_absorbed_w_m2 rrtmgp_absorbed_w_m2 (all sites, weighted)\n\
-         # S site weight insolation_w_m2 surface_albedo (sunlit sites; weights over all)\n\
-         # L p_pa t_k x_h2o t_k(+4K) x_h2o(+4K) x_h2o(+4K const RH), surface first\n",
-    );
-    let fluxes: Vec<[BTreeMap<String, Variable>; 2]> = ["LBLRTM-12-8", "RTE-RRTMGP-181204"]
-        .iter()
-        .map(|m| -> Result<_, String> {
+    text.push_str(HEADER);
+    for e in EXPERIMENTS {
+        text.push_str(&format!("X\t{e}\t{}\n", co2.values[e]));
+    }
+    if fluxes {
+        let read_model = |m: &str| -> Result<[BTreeMap<String, Variable>; 2], String> {
             Ok([
                 read(raw, &format!("rsd_Efx_{m}_rad-irf_r1i1p1f1_gn.txt"))?,
                 read(raw, &format!("rsu_Efx_{m}_rad-irf_r1i1p1f1_gn.txt"))?,
             ])
-        })
-        .collect::<Result<_, _>>()?;
-    for e in EXPERIMENTS {
-        let mut row = format!("E\t{e}\t{}", co2.values[e]);
-        for [d, u] in &fluxes {
+        };
+        println!("weighted absorbed sunlight, W/m² (not written to the table):");
+        for m in ["LBLRTM-12-8", "RTE-RRTMGP-181204"] {
+            let [d, u] = read_model(m)?;
             let (rsd, rsu) = (d.get("rsd").ok_or("no rsd")?, u.get("rsu").ok_or("no rsu")?);
-            row.push_str(&format!(
-                "\t{:.4}",
-                absorbed(rsd, rsu, weights, top, surface, e)
-            ));
+            for (name, from, to) in DIFFERENCES {
+                let change = absorbed(rsd, rsu, weights, top, surface, to)
+                    - absorbed(rsd, rsu, weights, top, surface, from);
+                println!("  {m}, {name}: {change:.4}");
+            }
         }
-        text.push_str(&row);
-        text.push('\n');
     }
     let mut sunlit = 0;
     for (s, w) in weights.iter().enumerate() {
@@ -257,19 +282,21 @@ fn run(raw: &Path, out: &Path) -> Result<(), String> {
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut raw = root.join("raw");
-    let mut out = root.join("../../crates/science/data/rfmip-shortwave.tsv");
+    let mut out = root.join("../../crates/science/data/rfmip-profiles.tsv");
+    let mut fluxes = true;
     let mut args = env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--raw" => raw = PathBuf::from(args.next().unwrap_or_default()),
             "--out" => out = PathBuf::from(args.next().unwrap_or_default()),
+            "--no-fluxes" => fluxes = false,
             _ => {
-                eprintln!("usage: rfmip-shortwave [--raw DIR] [--out FILE]");
+                eprintln!("usage: rfmip-shortwave [--raw DIR] [--out FILE] [--no-fluxes]");
                 process::exit(2);
             }
         }
     }
-    if let Err(e) = run(&raw, &out) {
+    if let Err(e) = run(&raw, &out, fluxes) {
         eprintln!("rfmip-shortwave: {e}");
         process::exit(1);
     }

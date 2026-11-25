@@ -1,21 +1,29 @@
-# RFMIP-IRF clear-sky shortwave field (rad-irf), built by tools/rfmip-shortwave
-# from the RFMIP profiles (Pincus, R., Forster, P. M., Stevens, B. 2016, Geosci.
-# Model Dev. 9, 3447, doi:10.5194/gmd-9-3447-2016; input4MIPs
-# UColorado-RFMIP-1-2) and the fluxes of LBLRTM-12-8 (AER) and
-# RTE-RRTMGP-181204 (Pincus, Mlawer, Delamere 2019, J. Adv. Model. Earth
-# Syst. 11, 3074, doi:10.1029/2019MS001621) on ESGF (CMIP6 terms of use: cite).
-# Provenance, checksums and method: crates/science/data/RFMIP.md.
-# E expt co2_ppmv lblrtm_absorbed_w_m2 rrtmgp_absorbed_w_m2 (all sites, weighted)
+# RFMIP-IRF clear-sky field: the atmospheric conditions of RFMIP's rad-irf
+# experiment, built by tools/rfmip-shortwave (map-generator).
+# Attribution: Pincus, R., Forster, P. M., Stevens, B. 2016, The Radiative
+# Forcing Model Intercomparison Project (RFMIP), Geosci. Model Dev. 9, 3447,
+# doi:10.5194/gmd-9-3447-2016; dataset input4MIPs.CMIP6.RFMIP.UColorado.
+# UColorado-RFMIP-1-2 (v20190401, hdl:21.14100/f379c294-f7bb-442d-bca7-64661d60780e),
+# University of Colorado.
+# Licence of this file (its data only, not the repository's code): the source
+# file says its data are licensed under a Creative Commons Attribution "Share
+# Alike" 4.0 International License, while its link points to CC BY 4.0; the
+# stricter reading is taken: CC BY-SA 4.0,
+# https://creativecommons.org/licenses/by-sa/4.0/. No warranty, as the source
+# states.
+# Changes made: the 51 sunlit sites of 100 only; the sunlight at the top made
+# from total_solar_irradiance and solar_zenith_angle; weights renormalised over
+# all 100 sites; water vapour moved from the layers to the levels (linear in
+# ln p); rounded. Details: crates/science/data/RFMIP.md.
+# X expt co2_ppmv (carbon_dioxide_GM)
 # S site weight insolation_w_m2 surface_albedo (sunlit sites; weights over all)
 # L p_pa t_k x_h2o t_k(+4K) x_h2o(+4K) x_h2o(+4K const RH), surface first
-E	0	397.54697	72.0515	71.8394
-E	4	142.1585	71.5164	71.3922
-E	5	568.634	72.2970	72.0599
-E	2	1137.268	72.8716	72.6532
-E	7	2274.536	73.5936	73.5316
-E	8	284.317	71.8506	71.6715
-E	13	397.54697	72.1493	71.9867
-E	14	397.54697	76.3591	76.1520
+X	0	397.54697
+X	4	142.1585
+X	7	2274.536
+X	8	284.317
+X	13	397.54697
+X	14	397.54697
 S	0	0.01300722	757.3546	0.174187
 L	85296.32	296.90692	1.864327e-2	300.90692	1.864327e-2	2.382859e-2
 L	85094.17	294.9432	1.860916e-2	298.9432	1.860916e-2	2.379661e-2

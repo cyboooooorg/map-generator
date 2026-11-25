@@ -1,8 +1,10 @@
 # rfmip-shortwave
 
-Builds `crates/science/data/rfmip-shortwave.tsv`, the RFMIP-IRF
-clear-sky field and its line-by-line shortwave fluxes, which the science
-crate's tests read (`science::radiation::rfmip_tests`). The generator
+Builds `crates/science/data/rfmip-profiles.tsv`, the RFMIP-IRF
+clear-sky field (CC BY-SA 4.0, the file's data only), which the science
+crate's tests read (`science::radiation::rfmip_tests`), and prints the
+six weighted line-by-line and RRTMGP values the tests quote. Nothing
+derived from the flux files (CC BY-NC-SA 4.0) is written. The generator
 never runs this tool: the table is committed, and the tool only
 regenerates it. Provenance, terms and method:
 `crates/science/data/RFMIP.md`.
@@ -38,8 +40,12 @@ tools/rfmip-shortwave/fetch.sh
 cargo run --release -p rfmip-shortwave
 ```
 
-Options: `--raw DIR` (default `tools/rfmip-shortwave/raw`) and `--out
-FILE` (default `crates/science/data/rfmip-shortwave.tsv`).
+It writes the table and prints the six values; compare them with the
+`Source:` constants of `crates/science/src/radiation/rfmip_tests.rs`.
+
+Options: `--raw DIR` (default `tools/rfmip-shortwave/raw`), `--out FILE`
+(default `crates/science/data/rfmip-profiles.tsv`) and `--no-fluxes`
+(write the table without reading the flux files).
 
 ## Configuration
 

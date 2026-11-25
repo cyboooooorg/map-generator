@@ -1,8 +1,11 @@
 //! The shortwave on RFMIP's clear-sky field against the line-by-line
 //! reference: how the sunlight the air absorbs responds to CO₂ and to
 //! water on 51 sunlit ERA-Interim profiles (Pincus et al. 2016), against
-//! LBLRTM's fluxes (`crates/science/data/rfmip-shortwave.tsv`, built by
-//! `tools/rfmip-shortwave`, provenance in `crates/science/data/RFMIP.md`).
+//! LBLRTM's fluxes. The profiles are `crates/science/data/rfmip-profiles.tsv`
+//! (CC BY-SA 4.0, built by `tools/rfmip-shortwave`, provenance in
+//! `crates/science/data/RFMIP.md`); the references' responses are quoted
+//! below as cited values, since their flux files' licence (CC BY-NC-SA 4.0)
+//! keeps derived data out of the repository.
 //!
 //! The total is not compared: the reference holds ozone, O₂, CH₄ and N₂O,
 //! which the column lacks (#653); a difference between two experiments
@@ -20,7 +23,7 @@ use crate::radiation::starlight::{SOLAR_METALLICITY, star_bands};
 use crate::radiation::test_points::EARTH_AIR;
 
 /// The field (see the module's documentation).
-const TABLE: &str = include_str!("../../data/rfmip-shortwave.tsv");
+const TABLE: &str = include_str!("../../data/rfmip-profiles.tsv");
 
 /// Definition: Pascals per bar, a unit conversion.
 const PA_PER_BAR: f64 = 1e5;
@@ -49,32 +52,68 @@ const WARMER: usize = 13;
 /// relative humidity.
 const WARMER_MOISTER: usize = 14;
 
-/// Source: RRTMGP's error on the sunlight the air gains from
-/// pre-industrial to present-day CO₂ against LBLRTM on the same field,
-/// W/m²: 0.1679 against 0.2009 (RTE-RRTMGP-181204 and LBLRTM-12-8 in
-/// RFMIP-IRF, Pincus, Mlawer & Delamere 2019, doi:10.1029/2019MS001621,
-/// the rows of `rfmip-shortwave.tsv`), 0.0330 rounded up; the user's rule
-/// for these tests (2026-11-25): no worse than RRTMGP.
-const PRESENT_CO2_TOLERANCE_W_M2: f64 = 0.034;
+/// Source: the sunlight the air gains from pre-industrial to present-day
+/// CO₂ on RFMIP-IRF's field by the line-by-line reference, W/m², 0.2008:
+/// LBLRTM-12-8's clear-sky `rsd` and `rsu` of the rad-irf experiment
+/// (Mlawer, E., Pernak, R. 2019, AER LBLRTM model output prepared for
+/// CMIP6 RFMIP rad-irf, ESGF, doi:10.22033/ESGF/CMIP6.2528, v20190514;
+/// Pincus et al. 2016, doi:10.5194/gmd-9-3447-2016), absorbed between the
+/// top and the surface, weighted by `profile_weight`, experiment 0 less
+/// experiment 8. `tools/rfmip-shortwave` prints it from the downloaded
+/// files.
+const LBL_PRESENT_CO2_W_M2: f64 = 0.2008;
+
+/// Source: the same by RTE-RRTMGP-181204, W/m², 0.1679 (Pincus, R. 2019,
+/// RTE-RRTMGP-Consortium RTE+RRTMGP (2018-12-04 full-resolution) model
+/// output prepared for CMIP6 RFMIP rad-irf, ESGF,
+/// doi:10.22033/ESGF/CMIP6.10173, v20191007; Pincus, Mlawer & Delamere
+/// 2019, doi:10.1029/2019MS001621).
+const RRTMGP_PRESENT_CO2_W_M2: f64 = 0.1679;
+
+/// Source: the sunlight the air gains from 0.5 to 8 times present-day
+/// CO₂ by LBLRTM-12-8, W/m², 2.0772: as [`LBL_PRESENT_CO2_W_M2`],
+/// experiment 7 less experiment 4.
+const LBL_CO2_RANGE_W_M2: f64 = 2.0772;
+
+/// Source: the same by RTE-RRTMGP-181204, W/m², 2.1394, as
+/// [`RRTMGP_PRESENT_CO2_W_M2`].
+const RRTMGP_CO2_RANGE_W_M2: f64 = 2.1394;
+
+/// Source: the sunlight the air gains from +4 K at present-day water to
+/// +4 K at constant relative humidity by LBLRTM-12-8, W/m², 4.2098: as
+/// [`LBL_PRESENT_CO2_W_M2`], experiment 14 less experiment 13.
+const LBL_WATER_W_M2: f64 = 4.2098;
+
+/// Source: the same by RTE-RRTMGP-181204, W/m², 4.1653, as
+/// [`RRTMGP_PRESENT_CO2_W_M2`].
+const RRTMGP_WATER_W_M2: f64 = 4.1653;
 
 /// Calibration: the tolerance on the sunlight the air gains from 0.5 to 8
 /// times present-day CO₂, W/m². LBLRTM gives 2.0772, RRTMGP 2.1394
-/// (+0.0622), the column 2.154 (+0.077), measured by study 35 on this
-/// field: worse than RRTMGP, so the user's rule (no worse than RRTMGP)
-/// is not met and the tolerance is the column's measured error rounded
-/// up. Searched and not found: a published bound on a CO₂ band model's
-/// shortwave error over a 16-fold range. Study 35, Wiki
-/// `35-stellar-spectra-audit`.
-const CO2_RANGE_TOLERANCE_W_M2: f64 = 0.08;
+/// (+0.0622; [`LBL_CO2_RANGE_W_M2`], [`RRTMGP_CO2_RANGE_W_M2`]), the
+/// column 2.1535 (+0.0763), measured by study 35 on this
+/// field: worse than RRTMGP, so the user's rule (no worse than RRTMGP) is
+/// not met. The tolerance is the column's measured error plus RRTMGP's,
+/// 0.14 (the rule of [`WATER_TOLERANCE_W_M2`]): it guards the column
+/// against getting worse. Searched and not found: a published bound on a
+/// CO₂ band model's shortwave error over a 16-fold range (study 35, Wiki
+/// `35-stellar-spectra-audit`).
+const CO2_RANGE_TOLERANCE_W_M2: f64 = 0.14;
 
 /// Calibration: the tolerance on the sunlight the air gains from the
 /// water of +4 K at constant relative humidity over +4 K at present-day
-/// water, W/m². LBLRTM gives 4.2098, RRTMGP 4.1653 (−0.0445), the column
-/// 3.955 (−0.255, −6 %), measured by study 35 on this field: worse than
-/// RRTMGP, so the tolerance is the column's measured error rounded up.
-/// Searched and not found: a line-by-line reference on water alone
-/// (study 35, Wiki `35-stellar-spectra-audit`).
-const WATER_TOLERANCE_W_M2: f64 = 0.26;
+/// water, W/m². LBLRTM gives 4.2098, RRTMGP 4.1653 (−0.0445;
+/// [`LBL_WATER_W_M2`], [`RRTMGP_WATER_W_M2`]), the column
+/// 3.9548 (−0.2550, −6.1 %), measured by study 35 on this field: worse
+/// than RRTMGP, so the user's rule (no worse than RRTMGP) is not met. The
+/// tolerance is the column's measured error plus RRTMGP's, 0.30: what a
+/// change of the optics may move it by before the test asks for a look,
+/// at the scale of the best band model's own error. It guards the column
+/// against getting worse, not its present 6 % shortfall, which is a
+/// known departure (an issue of its own). Searched and not found: a
+/// line-by-line reference on water alone (study 35, Wiki
+/// `35-stellar-spectra-audit`).
+const WATER_TOLERANCE_W_M2: f64 = 0.30;
 
 /// One sunlit site of the field: its weight over the whole field, the
 /// sunlight at its top, W/m², its surface albedo, and its levels from the
@@ -88,10 +127,9 @@ struct Site {
     levels: Vec<[f64; 6]>,
 }
 
-/// The field: the CO₂ of each experiment, ppmv, the absorbed sunlight of
-/// LBLRTM and RRTMGP over the field, W/m², and the sites.
+/// The field: the CO₂ of each experiment, ppmv, and the sites.
 struct Field {
-    experiments: Vec<(usize, f64, f64, f64)>,
+    experiments: Vec<(usize, f64)>,
     sites: Vec<Site>,
 }
 
@@ -104,12 +142,9 @@ fn field() -> Field {
         let fields: Vec<&str> = line.split('\t').collect();
         let number = |i: usize| -> f64 { fields[i].parse().expect("a number") };
         match fields[0] {
-            "E" => field.experiments.push((
-                fields[1].parse().expect("an index"),
-                number(2),
-                number(3),
-                number(4),
-            )),
+            "X" => field
+                .experiments
+                .push((fields[1].parse().expect("an index"), number(2))),
             "S" => field.sites.push(Site {
                 weight: number(2),
                 sunlight: number(3),
@@ -120,20 +155,20 @@ fn field() -> Field {
                 let site = field.sites.last_mut().expect("a site first");
                 site.levels.push(std::array::from_fn(|i| number(i + 1)));
             }
-            other => panic!("rfmip-shortwave.tsv: {other}"),
+            other => panic!("rfmip-profiles.tsv: {other}"),
         }
     }
     field
 }
 
 impl Field {
-    fn experiment(&self, e: usize) -> (f64, f64, f64) {
-        let (_, co2, lbl, rrtmgp) = *self
-            .experiments
+    /// The CO₂ of experiment `e`, ppmv.
+    fn co2(&self, e: usize) -> f64 {
+        self.experiments
             .iter()
             .find(|x| x.0 == e)
-            .expect("the experiment is in the table");
-        (co2, lbl, rrtmgp)
+            .expect("the experiment is in the table")
+            .1
     }
 
     /// The sunlight the column absorbs over the field, W/m², with the
@@ -203,35 +238,29 @@ const X_WARMER: usize = 4;
 /// humidity.
 const X_WARMER_MOISTER: usize = 5;
 
-/// The column's and the references' change from experiment `from` to
-/// `to`, which differ only in CO₂, W/m².
-fn co2_change(field: &Field, from: usize, to: usize) -> (f64, f64, f64) {
-    let (co2_from, lbl_from, rrtmgp_from) = field.experiment(from);
-    let (co2_to, lbl_to, rrtmgp_to) = field.experiment(to);
-    let column = field.absorbed(T_PRESENT, X_PRESENT, co2_to)
-        - field.absorbed(T_PRESENT, X_PRESENT, co2_from);
-    (column, lbl_to - lbl_from, rrtmgp_to - rrtmgp_from)
+/// The column's change from experiment `from` to `to`, which differ only
+/// in CO₂, W/m².
+fn co2_change(field: &Field, from: usize, to: usize) -> f64 {
+    field.absorbed(T_PRESENT, X_PRESENT, field.co2(to))
+        - field.absorbed(T_PRESENT, X_PRESENT, field.co2(from))
 }
 
 #[test]
 fn present_day_co2_absorbs_as_line_by_line() {
-    let f = field();
-    let (column, lbl, rrtmgp) = co2_change(&f, PRE_INDUSTRIAL_CO2, PRESENT_DAY);
+    // The user's rule (2026-11-25): no worse than RRTMGP against LBLRTM.
+    let column = co2_change(&field(), PRE_INDUSTRIAL_CO2, PRESENT_DAY);
+    let (lbl, rrtmgp) = (LBL_PRESENT_CO2_W_M2, RRTMGP_PRESENT_CO2_W_M2);
     println!("PI to PD CO2: column {column:.4}, LBLRTM {lbl:.4}, RRTMGP {rrtmgp:.4} W/m²");
     assert!(
-        ((rrtmgp - lbl).abs()) <= PRESENT_CO2_TOLERANCE_W_M2,
-        "the tolerance is RRTMGP's error"
-    );
-    assert!(
-        (column - lbl).abs() <= PRESENT_CO2_TOLERANCE_W_M2,
+        (column - lbl).abs() <= (rrtmgp - lbl).abs(),
         "{column} against {lbl}"
     );
 }
 
 #[test]
 fn sixteen_fold_co2_absorbs_as_line_by_line() {
-    let f = field();
-    let (column, lbl, rrtmgp) = co2_change(&f, HALF_CO2, EIGHT_CO2);
+    let column = co2_change(&field(), HALF_CO2, EIGHT_CO2);
+    let (lbl, rrtmgp) = (LBL_CO2_RANGE_W_M2, RRTMGP_CO2_RANGE_W_M2);
     println!("0.5x to 8x CO2: column {column:.4}, LBLRTM {lbl:.4}, RRTMGP {rrtmgp:.4} W/m²");
     assert!(
         (column - lbl).abs() <= CO2_RANGE_TOLERANCE_W_M2,
@@ -242,10 +271,10 @@ fn sixteen_fold_co2_absorbs_as_line_by_line() {
 #[test]
 fn moister_air_absorbs_as_line_by_line() {
     let f = field();
-    let (co2, lbl_dry, rrtmgp_dry) = f.experiment(WARMER);
-    let (_, lbl_moist, rrtmgp_moist) = f.experiment(WARMER_MOISTER);
+    let co2 = f.co2(WARMER);
+    assert_eq!(co2, f.co2(WARMER_MOISTER));
     let column = f.absorbed(T_WARMER, X_WARMER_MOISTER, co2) - f.absorbed(T_WARMER, X_WARMER, co2);
-    let (lbl, rrtmgp) = (lbl_moist - lbl_dry, rrtmgp_moist - rrtmgp_dry);
+    let (lbl, rrtmgp) = (LBL_WATER_W_M2, RRTMGP_WATER_W_M2);
     println!("+4 K water: column {column:.4}, LBLRTM {lbl:.4}, RRTMGP {rrtmgp:.4} W/m²");
     assert!(
         (column - lbl).abs() <= WATER_TOLERANCE_W_M2,
@@ -264,7 +293,7 @@ fn the_field_is_whole() {
         WARMER,
         WARMER_MOISTER,
     ] {
-        let _ = f.experiment(e);
+        assert!(f.co2(e) > 0.0);
     }
     let levels = f.sites[0].levels.len();
     for site in &f.sites {

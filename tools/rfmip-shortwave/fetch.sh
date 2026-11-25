@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Downloads what crates/science/data/rfmip-shortwave.tsv is built from into
+# Downloads what crates/science/data/rfmip-profiles.tsv and the RFMIP tests'
+# quoted reference values are built from into
 # raw/ (git-ignored, about 11 MB): the RFMIP-IRF atmospheric profiles
 # (input4MIPs UColorado-RFMIP-1-2, Pincus et al. 2016) and the clear-sky
 # shortwave fluxes of the rad-irf experiment computed by LBLRTM-12-8 (the
