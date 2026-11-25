@@ -1019,7 +1019,10 @@ D2 and D5 by mapgen3), as proposed except D5's alias:
   - `the_obliquity_class_of_read_is_the_placements` (mapgen3's
     condition): for every placement whose model has a surface, its
     class has `!is_giant` (the three giant classes, with a comment
-    naming `spin::is_giant`), and every logged read for its trial seed
+    naming `spin::is_giant`), and every logged read for its trial (the
+    closure logs `(trial.seed, mass bits, semi-major-axis bits,
+    ClassRead)` and the test keeps the reads whose mass and axis equal
+    the placement's trial: the rejected tries of a slot share its seed)
     is `Some(obliquity)` with `obliquity.value().to_bits() ==
     placement.spin.obliquity.value().to_bits()`; for every giant
     placement every logged read is `None`. One assertion covers
