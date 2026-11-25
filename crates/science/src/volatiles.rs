@@ -48,8 +48,7 @@
 //! Clausius-Clapeyron from its triple point with a constant enthalpy.
 
 use crate::constants::{MOLAR_GAS_CONSTANT, PASCALS_PER_BAR, STANDARD_ATMOSPHERE};
-use crate::orbit::ICE_LINE_OF_THE_SUN;
-use crate::units::{AstronomicalUnit, Dex, Kelvin, Kilogram, Pascal};
+use crate::units::{AstronomicalUnit, Dex, Kelvin, Kilogram, Pascal, SolarLuminosity};
 
 /// Calibration: kg of CO2 per kg of rock and iron, fitted on Venus's air,
 /// which has no thermostat: 92 bar of CO2 is about 1e-4 of the planet
@@ -146,25 +145,33 @@ pub const DISC_TEMPERATURE_AT_ONE_AU: Kelvin = Kelvin(200.0);
 /// Study 28.
 pub const DISC_TEMPERATURE_INDEX: f64 = 0.62;
 
+/// Source: power of the host's luminosity in a disc's temperature at a
+/// fixed distance, 1/4: an optically thin disc lit by its star has
+/// `T = 280 K (r / 1 au)^-½ (L / L☉)^¼` (Hayashi 1981, Prog. Theor. Phys.
+/// Suppl. 70, 35, doi:10.1143/PTPS.70.35, eq. 2.3, not reached; as Ida &
+/// Lin 2005, ApJ 626, 1045, doi:10.1086/429953, eq. 4, and
+/// Kennedy & Kenyon 2008, ApJ 673, doi:10.1086/524130, p. 3, "T⁴_disk ∝
+/// L⋆ a⁻²", quote it; read). The same law places the model's ice line
+/// (`orbit::ICE_LINE_OF_THE_SUN`). Study 28.
+pub const DISC_LUMINOSITY_INDEX: f64 = 0.25;
+
 /// Midplane temperature of the disc a body formed in, at its `orbit`
-/// around a host whose ice line is `ice_line`:
-/// `T0 (r / 1 au)^-q` ([`DISC_TEMPERATURE_AT_ONE_AU`],
-/// [`DISC_TEMPERATURE_INDEX`]), the radius `r` read in units of the
-/// host's ice line, `orbit × ICE_LINE_OF_THE_SUN / ice_line`: the disc
-/// scales with the host as the model's ice line does
-/// (`orbit::ice_line`), a modelling choice with no source (Öberg et al.
-/// say only that a more luminous star heats its disc further), and
-/// around the Sun `r` is the orbit itself. Gives
+/// around a host of `luminosity`:
+/// `T0 (L / L☉)^¼ (r / 1 au)^-q` ([`DISC_TEMPERATURE_AT_ONE_AU`],
+/// [`DISC_LUMINOSITY_INDEX`], [`DISC_TEMPERATURE_INDEX`]): the average
+/// disc's profile around a Sun-like star (Öberg et al. 2011 eq. 1),
+/// heated by a brighter host as Hayashi's thin disc is. Around the Sun,
 /// 200 K at 1 au, 49 K at Saturn's 9.57 au and 24 K at Neptune's 30 au.
-/// Takes positive distances.
-pub fn disc_temperature(orbit: AstronomicalUnit, ice_line: AstronomicalUnit) -> Kelvin {
-    let r = orbit.0 * ICE_LINE_OF_THE_SUN.0 / ice_line.0;
-    DISC_TEMPERATURE_AT_ONE_AU * r.powf(-DISC_TEMPERATURE_INDEX)
+/// Takes positive distances and luminosities.
+pub fn disc_temperature(orbit: AstronomicalUnit, luminosity: SolarLuminosity) -> Kelvin {
+    DISC_TEMPERATURE_AT_ONE_AU
+        * (luminosity.0.powf(DISC_LUMINOSITY_INDEX) * orbit.0.powf(-DISC_TEMPERATURE_INDEX))
 }
 
 /// Whether ice that condensed in a disc at `disc` ([`disc_temperature`])
 /// trapped N2: under [`NITROGEN_TRAPPING_TEMPERATURE`]. Around the Sun,
-/// beyond 21.3 au: Neptune's and Pluto's ice did, Saturn's did not.
+/// beyond 21.3 au: Neptune's and Pluto's ice did, Saturn's did not; the
+/// line moves as `L^(1 / (4 × 0.62))` with the host's luminosity.
 pub fn traps_nitrogen(disc: Kelvin) -> bool {
     disc.0 < NITROGEN_TRAPPING_TEMPERATURE.0
 }

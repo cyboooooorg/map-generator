@@ -363,13 +363,18 @@ impl Volatiles {
 /// Whether the ice of `trial` trapped N2 when it formed
 /// (`planet.volatiles.ice-traps-n2`): [`traps_nitrogen`] at the disc's
 /// temperature at its orbit (`planet.volatiles.disc-temperature`,
-/// [`disc_temperature`] of the semi-major axis and the ice line).
+/// [`disc_temperature`] of the semi-major axis and the host's
+/// luminosity). The host is the primary source, whose mass places the
+/// ice line; its luminosity is the present one, the only one the
+/// timeline holds, as Hayashi 1981 took the Sun's today's for its young
+/// disc (`docs/science/giant-planet-placement.md`).
 fn ice_traps_nitrogen(trial: &Trial, trace: &mut Trace) -> Result<Traced<bool>, InteriorError> {
-    let (a, line) = (trial.orbit.semi_major_axis, trial.ice_line);
+    let a = trial.orbit.semi_major_axis;
+    let luminosity = trial.sources.primary().luminosity;
     let disc = trace.record(
         Code::of(codes::VOLATILE_DISC_TEMPERATURE),
-        disc_temperature(*a.value(), *line.value()),
-        &[a.node(), line.node()],
+        disc_temperature(*a.value(), *luminosity.value()),
+        &[a.node(), luminosity.node()],
     )?;
     Ok(trace.record(
         Code::of(codes::VOLATILE_ICE_TRAPS_N2),

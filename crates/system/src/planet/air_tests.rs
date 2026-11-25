@@ -636,7 +636,7 @@ fn titan_holds_its_nitrogen() {
     let bare = n2 + photolysed;
     assert!((TITAN_TOTAL.0..=TITAN_TOTAL.1).contains(&bare), "{a:?}");
     // The outgassed N2 cites the gate, which reads the disc's
-    // temperature at the orbit and the ice line.
+    // temperature at the orbit and the host's luminosity.
     let gate = ancestor(
         &titan.trace,
         a.partial[&Gas::N2].node(),
@@ -649,7 +649,7 @@ fn titan_holds_its_nitrogen() {
     let disc = derived_from(&titan.trace, gate);
     let disc_from = derived_from(&titan.trace, disc[0]);
     assert!(disc_from.contains(&titan.trial.orbit.semi_major_axis.node()));
-    assert!(disc_from.contains(&titan.trial.ice_line.node()));
+    assert!(disc_from.contains(&titan.trial.sources.primary().luminosity.node()));
 }
 
 #[test]

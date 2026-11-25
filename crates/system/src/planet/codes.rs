@@ -196,7 +196,7 @@ pub(crate) const CORE_DYNAMO: &str = "planet.core.dynamo";
 /// Surface equatorial dipole field of the core's dynamo; 0 T without one.
 pub(crate) const CORE_FIELD: &str = "planet.core.field";
 /// Midplane temperature of the disc the planet's ice formed in, from its
-/// semi-major axis and its host's ice line
+/// semi-major axis and its host's luminosity
 /// (`science::volatiles::disc_temperature`).
 pub(crate) const VOLATILE_DISC_TEMPERATURE: &str = "planet.volatiles.disc-temperature";
 /// Whether the planet's ice trapped N2 when it formed: a disc colder than

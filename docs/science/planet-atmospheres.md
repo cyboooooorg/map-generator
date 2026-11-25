@@ -1268,18 +1268,45 @@ Titan's N₂ from its ammonia instead:
   and strip Pluto): the average midplane profile `T = 200 K (r / 1 au)^-0.62`
   (Andrews & Williams 2007, *ApJ* 659, 705, as Öberg, Murray-Clay &
   Bergin 2011, *ApJL* 743, L16, arXiv:1110.5567, eq. 1, adopt it;
-  `DISC_TEMPERATURE_AT_ONE_AU`, `DISC_TEMPERATURE_INDEX`), the radius
-  read in units of the host's ice line (`r = a × 2.7 au / ice_line`) so
-  that the disc scales with the host as the model's ice line does, a
-  modelling choice with no source (Öberg et al. say only that "a more
-  luminous star will heat the disk further"). Around
-  the Sun the line falls at 21.3 au: Saturn's ice (49 K) and Jupiter's
-  (72 K) carry no N₂, Neptune's (24 K) and Pluto's (20 K) do. Earth's
-  ocean, from a 200 K disc, carries none either: its nitrogen is
-  chondritic (Marty 2012, as cited by Scherf et al. 2020, § 1). The chain records the disc's temperature
-  (`planet.volatiles.disc-temperature`) and the gate
+  `DISC_TEMPERATURE_AT_ONE_AU`, `DISC_TEMPERATURE_INDEX`), for a
+  Sun-like star. Another host heats its disc as Hayashi's thin disc
+  does, `T ∝ L^¼` at a fixed distance (Hayashi 1981, *Prog. Theor. Phys.
+  Suppl.* 70, 35, eq. 2.3, not reached; as Ida & Lin 2005, eq. 4, and
+  Kennedy & Kenyon 2008, p. 3, "T⁴_disk ∝ L⋆ a⁻²", quote it, read;
+  `DISC_LUMINOSITY_INDEX`): `T = 200 K (L / L☉)^¼ (r / 1 au)^-0.62`.
+  Öberg et al. say only that "a more luminous star will heat the disk
+  further"; the power is Hayashi's. Around the Sun the N₂ line falls at
+  21.3 au: Saturn's ice (49 K) and Jupiter's (72 K) carry no N₂,
+  Neptune's (24 K) and Pluto's (20 K) do. It moves with the host as
+  `L^(1 / (4 × 0.62))`: 3.3 au round a host of 0.01 L☉, 33 au round one
+  of 3 L☉. The gate reads the host's present luminosity (the primary
+  source, whose mass places the ice line), the only one the timeline
+  holds, as Hayashi took the young Sun's at today's "for simplicity"
+  ([giant planet placement](giant-planet-placement.md)). Earth's ocean,
+  from a 200 K disc, carries none either: its nitrogen is chondritic
+  (Marty 2012, as cited by Scherf et al. 2020, § 1). The chain records
+  the disc's temperature (`planet.volatiles.disc-temperature`, from the
+  semi-major axis and the host's luminosity) and the gate
   (`planet.volatiles.ice-traps-n2`), from which the outgassed N₂
   derives.
+
+  **Two discs, two epochs.** The model's ice line, 2.7 au round the Sun
+  (`orbit::ICE_LINE_OF_THE_SUN`), is where Hayashi's thin disc, lit at
+  the main-sequence luminosity, reaches water's 170 K (Ida & Lin 2005,
+  eq. 4 and the text of eq. 12, "T = 170(a/a_ice)^-1/2 K"; Kennedy &
+  Kenyon 2008, Fig. 1, "a at Tmid = 170 K"). The gate's disc is the
+  observed average midplane, colder: 108 K at 2.7 au, its water snowline
+  (135 K, Öberg et al. Table 1) at 1.9 au. The two do not contradict
+  each other: a disc's snow line moves inward as it ages, and Kennedy &
+  Kenyon's crosses "the canonical distance of 2.7 AU at 5 × 10⁵ yr" for
+  the Sun, their snow line differing from Ida & Lin's because the latter
+  "is based on the main-sequence luminosity [...] and an optically thin
+  disk" (p. 3). The ice line places where a giant's core gathers ice;
+  the gate asks how cold the ice was when it formed, which the colder,
+  observed midplane answers. Anchored on the ice line instead (170 K at
+  2.7 au), the N₂ line would fall at 44 au with the profile's slope (86
+  au with Hayashi's), and Pluto's and Triton's ice would lose the N₂
+  they hold (study 28).
 - **The NH₃ the interior decomposes** (`science::outgassing::decomposed`,
   `AMMONIA_DECOMPOSED`). Glein 2015 (*Icarus* 250, 570,
   doi:10.1016/j.icarus.2015.01.001) builds Titan's N₂ from the NH₃ its
@@ -1329,10 +1356,10 @@ body (0.0036 M⊕ at 30 au) keeps its ice N₂ and gains its NH₃'s, 0.338 to
 Venus and Mars carry no ice and do not move.
 
 Departures: the disc profile is an average of observed discs, not the
-Sun's, and its water snowline (135 K, Öberg et al. Table 1) falls at
-1.9 au where the model's ice line is 2.7 au: the two lines come from
-different sources. The disc's scaling with the host is a modelling
-choice with no source. A body is placed in the disc at its present
+Sun's. It reads the host's present luminosity, not the one at the
+formation of its ice: a young star is brighter (Kennedy & Kenyon 2008
+follow it on pre-main-sequence tracks), and a host that has left the
+main sequence would heat the disc of its planets' past. A body is placed in the disc at its present
 orbit, as the ice line places it, so a water world that migrated in from
 beyond the ice line (`Drawn::is_water_world`) has its ice gated at its
 present, warmer orbit and carries no N₂ ice. `ξ` is fitted on one body
@@ -3677,6 +3704,9 @@ another paper, from memory) is said where it is used.
   the steam over a magma ocean (abstract read).
 - Hamano et al. 2015, doi:10.1088/0004-637X/806/2/216.
 - Hapke 1981, *JGR* 86, 3039.
+- Hayashi 1981, *Prog. Theor. Phys. Suppl.* 70, 35,
+  doi:10.1143/PTPS.70.35, eq. 2.3, the thin disc's `T ∝ L^¼` (not
+  reached; as Ida & Lin 2005 and Kennedy & Kenyon 2008 quote it).
 - Henderson-Sellers and Wilson 1983, *Rev. Geophys.* 21, 1743,
   doi:10.1029/RG021i008p01743, surface albedos (abstract read).
 - Hillier et al. 1990, *Science* 250, 419,
@@ -3690,6 +3720,9 @@ another paper, from memory) is said where it is used.
 - Howett et al. 2010, Enceladus's albedo.
 - Huebner, Keady and Lyon 1992, *Astrophys. Space Sci.*
   195, 1, photo-ionisation rates.
+- Ida and Lin 2005, *ApJ* 626, 1045, doi:10.1086/429953,
+  arXiv:astro-ph/0502566, eq. 4 and the text of eq. 12: the ice line of
+  Hayashi's thin disc at 170 K.
 - Jackson, Davis and Wheatley 2012, *MNRAS* 422, 2024,
   Table 2.
 - Jin et al. 2004, *Geophys. Res. Lett.* 31(22), doi:10.1029/2004GL021180,
@@ -3713,6 +3746,9 @@ another paper, from memory) is said where it is used.
 - Kelemen and Manning 2015, doi:10.1073/pnas.1507889112,
   carbon recycling.
 - Kempf et al. 2010, Enceladus's plume fallout.
+- Kennedy and Kenyon 2008, *ApJ* 673, doi:10.1086/524130,
+  arXiv:0710.1065, p. 3 and Fig. 1: the snow line at 170 K moving inward
+  with time, and why it differs from Ida & Lin's.
 - Kite and Ford 2018, *ApJ* 864, 75,
   doi:10.3847/1538-4357/aad6e0, waterworlds.
 - Kite, Fegley, Schaefer and Gaidos 2016, *ApJ* 828, 80,
