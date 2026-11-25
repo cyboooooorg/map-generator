@@ -1089,7 +1089,10 @@ the Bond albedo are there too (change 2b-2).
   only the Bond albedo (`shortwave_budget`'s `absorbed_by_air` feeds no
   engine). Moistening the whole column to 2.5 cm would darken its
   clear-sky OLR by 6.9 W/m² at 288 K (measured), out of the like-for-like
-  window of study 32. The absorption tests scale the saturated shortwave
+  window of study 32. Decided with the user (2026-11-25): the column
+  keeps Manabe & Wetherald's line and 77 % for both halves, with no
+  separate shortwave water; a test of the shortwave on the RFMIP field
+  waits for study 35. The absorption tests scale the saturated shortwave
   column's vapour level by level to a given water, which tests the
   optics:
   - At 2.5 cm the air absorbs 52.70 W/m² (window 48-54, from Kim &

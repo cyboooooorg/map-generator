@@ -500,10 +500,13 @@ impl Sky {
 /// Source: the floor of the troposphere's relative humidity profile, as
 /// a share of the surface pressure: `RH_s (Q − 0.02) / (1 − 0.02)`,
 /// Manabe & Wetherald 1967 (*J. Atmos. Sci.* 24, 241,
-/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2), their eq. 2,
-/// read in the scan GFDL hosts (Wiki study 33; Kluft et al. 2019, *J.
-/// Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1, §2b, number it 3,
-/// which is the paper's stratospheric floor). Below 0 °C the column
+/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2, eq. 2, read in
+/// the scan GFDL hosts, Wiki study 33). They fit the line to observed
+/// hemispheric means of relative humidity (their Fig. 3) and floor the
+/// stratosphere's mixing ratio at 3e-6 g/g (their eq. 3); this column
+/// ends the line at its cold trap instead. Kluft et al. 2019 (*J.
+/// Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1, §2b) number the line
+/// 3, which is the paper's stratospheric floor. Below 0 °C the column
 /// refers the humidity to ice; climlab refers it to liquid water and
 /// Kluft et al. to a mix (study 32); the 1967 paper speaks only of "the
 /// saturation vapor pressure of water vapor".

@@ -50,6 +50,8 @@ const CLEAR_SKY_ALBEDO_HIGH: f64 = 0.1707;
 /// NVAP) to 2.53 (NVAP-M, 1988-2009) cm (Forsythe, Vonder Haar & Cronk
 /// 2014, NOAA ESRL Global Monitoring Annual Conference, pp. 6 and 18),
 /// rounded. Their 3.0 cm of Table 2 is the sensitivity case's input.
+/// It is the field's mean, not the water one column needs (about 2.4 cm
+/// for the field's absorbed sunlight, Wiki study 33).
 const NVAP_WATER_CM: f64 = 2.5;
 
 /// Source: the columns of Kim & Ramanathan 2008's sensitivity to the
