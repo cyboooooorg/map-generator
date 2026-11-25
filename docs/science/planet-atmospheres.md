@@ -3145,7 +3145,7 @@ their measured air (see "Test air and Solar System bounds" below):
 
 | Body | Result | Target | Observed |
 |---|---|---|---|
-| Earth | 288 K, water, regulated, thermostat CO₂ 1.986e-3 bar, Bond albedo 0.2953; 287.11 K at 280 ppm on the measured air | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
+| Earth | 288 K, water, regulated, thermostat CO₂ 2.114e-3 bar, Bond albedo 0.2965; 287.20 K at 280 ppm on the measured air | 288 ± 6 K, water, regulated; 286-290 K at 280 ppm, and the thermostat's CO₂ between the CO₂ that gives 286 K and 290 K | 288 K, 280 ppm before industry |
 | Venus | 577 K, none | Bond albedo 0.76 ± 0.05 and no liquid (tier 1); the 577 K pin, the model's output (#594), moves to the tier-2 net in 2d-4 | 737 K |
 | Mars | 214.06 K (T_eq 209.90 K), Bond albedo 0.2487, no liquid, on the imposed 6.36 mbar air | 214 ± 5 K, none | about 214 K |
 | Titan | 93.86 K on the measured air, hydrocarbons; the reference Titan settles at 94.24 K on the chain's own air (104.8 K before #679) | 94 ± 8 K, hydrocarbons | 94 K, methane and ethane lakes |
@@ -3275,7 +3275,7 @@ that the air returned balances its own light:
 
 Without methane the share is nil, the light does not depend on the air,
 and nothing moves: Earth's own air gives the same climates to the last
-digit (288.000000 K and 1.986e-3 bar of CO₂ at 1 AU).
+digit (288.000012 K and 2.114e-3 bar of CO₂ at 1 AU).
 
 Measured on the reference Earth under Titan's 2.11 bar of methane
 (`solve_with`, warm draw): legacy's thermostat balanced 288 K against
@@ -3283,8 +3283,8 @@ Measured on the reference Earth under Titan's 2.11 bar of methane
 of CO₂) absorbed 126.8 W/m² (the diagnosis of issue #681); the surface
 then fell to the floor of the surface solver, the dew point of its
 vapour, 284.0103 K, at 1, 1.3 and 1.6 AU. Now it sits at 288.0000 K at 1
-AU (3.95 bar of CO₂) and 288.0004 K at 1.3 AU (7.74 bar), and is frozen
-at 1.6 AU. Its outer edge moves in from 1.6465 to 1.4326 AU. The old
+AU (3.94 bar of CO₂) and 288.0004 K at 1.3 AU (7.73 bar), and is frozen
+at 1.6 AU. Its outer edge moves in from 1.6470 to 1.4331 AU. The old
 edge came from the top end of the search: from about 1.43 to 1.65 AU
 even the most CO₂ sends out more from a 288 K surface than the air with
 that CO₂ absorbs (at 1.6 AU under a 0.3 albedo, 57.6 against 51.0 W/m²),
@@ -3295,10 +3295,10 @@ really was, and kept it wet.
 
 The wet balance's error grows with the vapour and the methane: under
 0.05 bar of methane at 0.7 AU (a test input) the balance moves from
-295.727 to 296.161 K (21.7 mbar of vapour); with Titan's methane and
-1 bar of CO₂ at 0.6 AU, from 325.829 to 326.299 K (0.11 bar of vapour);
-on the 52 bar air with Titan's methane at 1 AU, from 436.849 to
-438.155 K (5.4 bar of vapour). Before, the air returned sent out 0.91,
+296.071 to 296.546 K (22.2 mbar of vapour); with Titan's methane and
+1 bar of CO₂ at 0.6 AU, from 325.918 to 326.391 K (0.11 bar of vapour);
+on the 52 bar air with Titan's methane at 1 AU, from 436.853 to
+438.218 K (5.4 bar of vapour). Before, the air returned sent out 0.93,
 0.21 and 2.08 W/m² less than it absorbed at the temperature returned.
 Tier-1 tests: `the_thermostat_holds_a_methane_earth_at_its_target`,
 `a_wet_methane_balance_is_its_own_airs`.

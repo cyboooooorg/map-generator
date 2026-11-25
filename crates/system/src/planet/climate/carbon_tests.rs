@@ -74,7 +74,7 @@ fn the_thermostat_holds_earth_at_288_k() {
 #[test]
 fn the_thermostat_holds_a_methane_earth_at_its_target() {
     // #681: Earth under Titan's methane, whose stratosphere sends back
-    // more of the light on the regulated air (4.20 bar of CO₂ here, 3.95
+    // more of the light on the regulated air (4.19 bar of CO₂ here, 3.94
     // bar in the full solve at 1 AU) than on the air before the
     // thermostat (52 bar), which dilutes it. The thermostat's
     // definition: a regulated surface sits at `THERMOSTAT_K`, within the
