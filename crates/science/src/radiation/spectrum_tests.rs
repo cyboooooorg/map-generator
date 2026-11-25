@@ -8,7 +8,7 @@ use super::*;
 use crate::constants::{STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::gases::H2O_MOLAR_MASS;
 use crate::radiation::ktable::{CO2_SET, Table, WATER_FOREIGN_SET, WATER_SELF_SET};
-use crate::radiation::test_points::{self, EARTH_SURFACE_K};
+use crate::radiation::test_points::{self, EARTH_SURFACE_K, PER_MILLION, PREINDUSTRIAL_PPM};
 use crate::surface::RELATIVE_HUMIDITY;
 use crate::water::vapour_saturation_bar;
 
@@ -47,29 +47,8 @@ const DECADES: usize = 6;
 /// was not read (the NASA scan has no text layer).
 const TROPOPAUSE_K: f64 = 217.0;
 
-/// Definition: Earth's pre-industrial CO₂ of the test columns, ppm.
-const PREINDUSTRIAL_PPM: f64 = 280.0;
-
 /// Definition: O₂'s mole fraction in the test columns' dry air, rounded.
 const O2_SHARE: f64 = 0.21;
-
-/// Definition: parts per million.
-const PER_MILLION: f64 = 1e-6;
-
-/// Source: clear-sky outgoing longwave radiation at the top of the
-/// atmosphere, global annual mean of CERES EBAF Ed4, July 2005 to June
-/// 2015: 267.9 W/m² (Kato et al. 2018, J. Climate 31, 4501,
-/// doi:10.1175/JCLI-D-17-0523.1, Table 5, "Clear-sky, TOA LW up", Ed4
-/// column; Ed2.8 gives 265.4).
-const CERES_CLEAR_SKY_OLR: f64 = 267.9;
-
-/// Calibration: the error budget of one fixed profile against a global
-/// mean, W/m², not a published uncertainty: the test column is a single
-/// US-standard-like profile at 280 ppm, with no ozone, no aerosol and no
-/// geography, against a mean over latitudes and seasons at the CO₂ of
-/// 2005-2015; Kato et al. 2018 quote uncertainties of a few W/m² for the
-/// measurement itself. The legacy ±10 W/m², kept.
-const CLEAR_SKY_OLR_TOLERANCE: f64 = 10.0;
 
 /// Calibration: a plausibility band for the forcing of a CO₂ doubling,
 /// W/m², on the legacy test profile, not a like-for-like anchor. 3.7 W/m²
@@ -321,10 +300,6 @@ fn earth_column() -> Vec<Point> {
     earth_profile(EARTH_SURFACE_K, TROPOPAUSE_K, RELATIVE_HUMIDITY)
 }
 
-fn earth_olr(co2_ppm: f64) -> f64 {
-    olr_fixed_profile(&earth_column(), &earth_air(co2_ppm))
-}
-
 fn doubling_forcing(co2_ppm: f64) -> f64 {
     let profile = earth_column();
     olr_fixed_profile(&profile, &earth_air(co2_ppm))
@@ -453,16 +428,6 @@ fn co2_forcing_is_logarithmic() {
             "forcing per doubling {forcings:?} strays from {mean:.3}"
         );
     }
-}
-
-#[test]
-fn earth_clear_sky_olr() {
-    let olr = earth_olr(PREINDUSTRIAL_PPM);
-    assert!(
-        (olr - CERES_CLEAR_SKY_OLR).abs() <= CLEAR_SKY_OLR_TOLERANCE,
-        "Earth's clear-sky OLR {olr:.2} W/m², against \
-         {CERES_CLEAR_SKY_OLR} ± {CLEAR_SKY_OLR_TOLERANCE}"
-    );
 }
 
 #[test]

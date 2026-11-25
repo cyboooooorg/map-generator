@@ -440,7 +440,7 @@ pub(crate) fn co2_saturation_bar(t_k: f64) -> f64 {
 /// Molar latent heat of CO2, J/mol, at `t_k`, taken from the slope of
 /// [`co2_saturation_bar`] by Clausius-Clapeyron for an ideal vapour over a
 /// condensate of negligible volume, `L = R T^2 d ln p / dT`, as
-/// [`crate::water::vapour_latent_j_mol`] does: the slope of the
+/// [`crate::water::vapour_latent_j_mol_over`] does: the slope of the
 /// sublimation equation below the triple point, of the vapour curve
 /// above, 0 from the critical point up (the legacy clamp). The moist adiabat that uses it then agrees
 /// with the curve.

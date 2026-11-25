@@ -6,9 +6,11 @@
 
 use super::*;
 use crate::balance::{self, PLATEAU_SURFACES, SIMPSON_NAKAJIMA_W_M2, earth_moist_plateau};
-use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY};
+use crate::constants::{MARS_SURFACE_GRAVITY, STANDARD_GRAVITY, STEFAN_BOLTZMANN};
 use crate::radiation::test_points::{
-    EARTH_AIR, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K, VENUS_GRAVITY,
+    EARTH_AIR, EARTH_MEASURED_AIR, EARTH_PRESSURE_BAR, EARTH_SURFACE_K, PER_MILLION,
+    PREINDUSTRIAL_PPM, TITAN_EFFECTIVE_K, TITAN_GRAVITY, TITAN_SURFACE_AIR, TITAN_SURFACE_K,
+    VENUS_GRAVITY,
 };
 use crate::surface::surface_vapour;
 use crate::units::Bar;
@@ -186,6 +188,100 @@ const DISTINCT_STEP_K: f64 = 0.01;
 
 /// Definition: a caller's rounding of a vapour pressure, bar.
 const ROUNDING_BAR: f64 = -1e-12;
+
+/// Source: Earth's clear-sky outgoing longwave radiation, the cloud-free
+/// scenes of CERES EBAF Ed4.0, July 2005 to June 2015: 268.1 W/m² (CERES
+/// EBAF Ed4.0 Data Quality Summary, NASA Langley, 2018, Table 6-1;
+/// `docs/science/radiative-transfer.md`, study 32).
+const CERES_CLEAR_SKY_W_M2: f64 = 268.1;
+
+/// Source: Earth's all-sky outgoing longwave radiation over the same
+/// years, 240.1 W/m² (CERES EBAF Ed4.0 Data Quality Summary, Table 6-1):
+/// what Earth emits, whose effective temperature sets the test's skin.
+const CERES_ALL_SKY_W_M2: f64 = 240.1;
+
+/// Source: the clear sky of the same air with its clouds removed (the
+/// "total-region" clear sky a column model computes) minus that of the
+/// cloud-free scenes, −2.2 W/m² (Loeb et al. 2020, *J. Climate* 33, 61,
+/// doi:10.1175/JCLI-D-19-0381.1, Table 3: 265.9 against 268.1).
+const TOTAL_REGION_W_M2: f64 = -2.2;
+
+/// Source: what methane, N₂O, CFC-11 (with the other halocarbons as its
+/// equivalent), CFC-12, N₂ and O₂ take from Earth's clear-sky outgoing
+/// radiation, each removed from a present-day atmosphere: 1.5, 1.5, 0.22,
+/// 0.17, 0.15 and 0.096 W/m² (Hogan & Matricardi 2020, *Geosci. Model
+/// Dev.* 13, 6501, doi:10.5194/gmd-13-6501-2020, Table 4, line by line).
+/// The column has no opacity for N₂O, the halocarbons, N₂ or O₂; its only
+/// methane opacity is the grey stand-in of Titan's collision-induced
+/// greenhouse (`radiation::methane`), and Earth's test air holds no
+/// methane, so none of these absorbs in the test.
+const MINOR_GASES_W_M2: f64 = 1.5 + 1.5 + 0.22 + 0.17 + 0.15 + 0.096;
+
+/// Source: what ozone takes from Earth's outgoing radiation, W/m², from
+/// 2.7 % of the 155 W/m² greenhouse under all skies (Schmidt et al. 2010,
+/// *J. Geophys. Res.* 115, D20106, doi:10.1029/2010JD014287, Table 1,
+/// removed alone), to 10 W/m² under a clear sky with its overlaps (Kiehl
+/// & Trenberth 1997, *BAMS* 78, 197, Table 3). No global-mean
+/// line-by-line clear-sky value was found (study 32); the column holds no
+/// ozone.
+const OZONE_W_M2: (f64, f64) = (0.027 * 155.0, 10.0);
+
+/// Source: the mean global CO₂ of CERES's years, July 2005 to June 2015,
+/// about 389 ppm (NOAA Global Monitoring Laboratory, global annual means,
+/// `co2_annmean_gl.txt`, 378.98 ppm in 2005 to 399.65 ppm in 2015, read
+/// 2026-11-25).
+const CERES_CO2_PPM: f64 = 389.0;
+
+/// Source: the CO₂ forcing coefficient, `ΔF = 5.35 ln(C / C₀)` W/m²
+/// (Myhre, Highwood, Shine & Stordal 1998, *Geophys. Res. Lett.* 25,
+/// 2715, doi:10.1029/98GL01908): the radiation the column gains at
+/// 280 ppm over CERES's [`CERES_CO2_PPM`], 1.76 W/m².
+const MYHRE_CO2_W_M2: f64 = 5.35;
+
+/// Source: the most a black ground adds over a real one: the clear-sky
+/// net longwave at the surface, 398.2 − 317.2 W/m² (Loeb et al. 2020,
+/// Table 3, up and down, total region), times the 2 % a surface of
+/// emissivity 0.98 (the RFMIP profiles' surfaces, Pincus et al. 2016,
+/// *Geosci. Model Dev.* 9, 3447) does not emit; an upper bound, part of
+/// it being absorbed on the way up.
+const BLACK_GROUND_W_M2: f64 = (1.0 - 0.98) * (398.2 - 317.2);
+
+/// Source: the two terms of CERES's uncertainty, the calibration's 0.75 %
+/// (1σ) and the 2.75 W/m² of the scene identification (CERES EBAF Ed4.0
+/// Data Quality Summary, §4.4). The summary gives them apart; the test
+/// combines them in quadrature itself, as independent errors: 3.4 W/m²
+/// on 268.1 W/m².
+const CERES_UNCERTAINTY: (f64, f64) = (0.0075, 2.75);
+
+/// Definition: the surface temperatures, K, over which the smoothness
+/// test sweeps Earth's column, 284 to 292 K: the climate's thermostat
+/// (288 K) and the reference Earth's 285.82 K in planet PR 2d-4 inside,
+/// the 273.16 K level sweeping 1.5 km of its troposphere.
+const SMOOTH_RANGE_K: (f64, f64) = (284.0, 292.0);
+
+/// Definition: the step, K, of the smoothness test's surfaces, a
+/// quarter of a kelvin: a 4 K sawtooth (study 32) spans 16 of them.
+const SMOOTH_STEP_K: f64 = 0.25;
+
+/// Calibration: how much the rise of the column's outgoing radiation over
+/// one [`SMOOTH_STEP_K`] may differ from the rise over the next, as a
+/// share of the larger. It bounds the model's own numerics: no published
+/// tolerance on a column model's smoothness was found in the sources
+/// read (Koll & Cronin 2018 say only that the radiation rises), so the
+/// bound is placed between two measured ends (study 32,
+/// `docs/science/radiative-transfer.md`, "The phase step of the moist
+/// adiabat"). A smooth emission changes its rise little from one step to
+/// the next: as `T⁴`, by `3/T` per kelvin, 0.26 % over 0.25 K at 288 K;
+/// the column, with its humidity and clouds, by 1.3 % clear and 1.4 %
+/// cloudy after the split. A step whose phase is wrong over part of its
+/// span shifts the whole column above by a share of the step's lapse
+/// (the latent heat jumps by fusion's 6.01 kJ/mol on 45 kJ/mol), a jump
+/// that does not shrink with the sweep's step while the rise does: before
+/// the split the rise changed by 32 % clear and 192 % cloudy. 10 % sits a
+/// factor 7 above the first and 3 under the second. Not derived from the
+/// fusion share: the change of the rise scales as the jump over the
+/// sweep's step, so a share of the latent heat alone does not set it.
+const SMOOTH_RISE_CHANGE: f64 = 0.1;
 
 /// The skin temperature of a body of equilibrium temperature `t_eq_k`.
 fn skin(t_eq_k: f64) -> Kelvin {
@@ -637,4 +733,92 @@ fn thin_steam_stays_on_the_plateau_at_680_k() {
         (olr / SIMPSON_NAKAJIMA_W_M2.0 - 1.0).abs() < THIN_STEAM_SHARE,
         "{olr} W/m²"
     );
+}
+
+/// Earth's measured air at `co2_ppm` of its dry air, with the vapour of
+/// a surface at `surface_k` ([`surface_vapour`] of an ocean).
+fn earth_at(co2_ppm: f64, surface_k: f64) -> PartialPressures {
+    PartialPressures {
+        co2: co2_ppm * PER_MILLION * EARTH_PRESSURE_BAR,
+        ..moist(EARTH_MEASURED_AIR, surface_k)
+    }
+}
+
+/// The skin of Earth: [`skin_temperature`] (`2^-¼` of it) of the
+/// effective temperature of CERES's all-sky outgoing radiation,
+/// `(240.1 / σ)^¼` = 255.09 K: 214.51 K, the skin the test columns use.
+fn earth_skin() -> Kelvin {
+    skin((CERES_ALL_SKY_W_M2 / STEFAN_BOLTZMANN).powf(0.25))
+}
+
+#[test]
+fn earths_clear_sky_column_is_ceres_like_for_like() {
+    // The climate's own clear column on Earth's measured air at 288 K and
+    // 280 ppm, against CERES's clear sky made like for like (study 32):
+    // the clear sky of the same air without its clouds, plus what the
+    // gases the column lacks take, plus the radiation 280 ppm of CO₂
+    // gives back over CERES's 389, plus at most a black ground; within
+    // CERES's uncertainty.
+    let co2 = MYHRE_CO2_W_M2 * (CERES_CO2_PPM / PREINDUSTRIAL_PPM).ln();
+    let base = CERES_CLEAR_SKY_W_M2 + TOTAL_REGION_W_M2 + MINOR_GASES_W_M2 + co2;
+    let (calibration, scene) = CERES_UNCERTAINTY;
+    let uncertainty = (calibration * CERES_CLEAR_SKY_W_M2).hypot(scene);
+    let low = base + OZONE_W_M2.0 - uncertainty;
+    let high = base + OZONE_W_M2.1 + BLACK_GROUND_W_M2 + uncertainty;
+    let olr = olr(
+        &earth_at(PREINDUSTRIAL_PPM, EARTH_SURFACE_K),
+        EARTH_SURFACE_K,
+        earth_skin(),
+        EARTH,
+        Profile::CLEAR,
+        &mut ColumnCache::default(),
+    );
+    println!("Earth's clear sky {olr:.2} W/m², like for like {low:.2} to {high:.2}");
+    assert!((low..=high).contains(&olr), "{olr} against {low} to {high}");
+}
+
+/// The rises of the column's outgoing radiation, W/m², over steps of
+/// [`SMOOTH_STEP_K`] across [`SMOOTH_RANGE_K`].
+fn rises(profile: Profile, cache: &mut ColumnCache) -> Vec<f64> {
+    let (from, to) = SMOOTH_RANGE_K;
+    let step = SMOOTH_STEP_K;
+    let n = ((to - from) / step).round() as usize;
+    let olrs: Vec<f64> = (0..=n)
+        .map(|i| {
+            let t = from + i as f64 * step;
+            olr(
+                &earth_at(PREINDUSTRIAL_PPM, t),
+                t,
+                earth_skin(),
+                EARTH,
+                profile,
+                cache,
+            )
+        })
+        .collect();
+    olrs.windows(2).map(|w| w[1] - w[0]).collect()
+}
+
+#[test]
+fn earths_column_is_smooth_in_its_surface() {
+    // The outgoing radiation rises with the surface (Koll & Cronin 2018,
+    // doi:10.1073/pnas.1809868115) and, smooth in it, by about as much
+    // over each step as over the next: a step of the moist adiabat whose
+    // latent heat switches phase inside its span (study 32) makes the
+    // rise jump where the surface moves that span across 273.16 K.
+    let share = SMOOTH_RISE_CHANGE;
+    let cache = &mut ColumnCache::default();
+    for profile in [Profile::CLEAR, Profile::CLIMATE] {
+        let rises = rises(profile, cache);
+        let worst = rises
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs() / w[0].abs().max(w[1].abs()))
+            .fold(0.0, f64::max);
+        println!("{profile:?}: rises {rises:.3?}, most change {worst:.4}");
+        assert!(
+            rises.iter().all(|&r| r > 0.0),
+            "{profile:?} falls: {rises:?}"
+        );
+        assert!(worst <= share, "{profile:?}: a rise changes by {worst:.3}");
+    }
 }
