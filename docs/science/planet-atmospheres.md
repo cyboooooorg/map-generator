@@ -237,17 +237,22 @@ disputed by orders of magnitude (Misener et al. 2025; Modirrousta-Galian
 **Calibration.** Two values no source gives, searched in study 30 (no
 published ceiling off Tang et al.'s grid, no value for their "−"):
 
-- `OFF_GRID`: off the grid (below 1.5 M⊕, below 1 F⊕, above 20 M⊕ or
-  1 000 F⊕), the end segment of each axis is extended in log-log from the
-  grid's edge, as `science::xuv`'s saturation. The physics fixes the
-  direction (lighter and hotter planets lose more, Owen & Wu 2016), not
-  the slope. Off both axes at once the two extensions add, without the
-  bilinear cross term: with it, a 0.3 M⊕ core would be given back 1 % of
-  envelope at 2 300 F⊕, the cross term of the cell (1.5 to 2.4 M⊕, 300 to
-  1 000 F⊕) growing with both distances. Clamping at the edges instead
-  changes none of the 22 reference outcomes; it keeps more on Earth
-  (1.18 % against 0.48 %) and on ref 8's hot Neptunes (2.6 % and 7.3 %
-  against 0.28 % and 2.6 %).
+- The off-grid extension (`science::escape`'s `log_log_read`, study 30's
+  new calibration 1): off the grid (below 1.5 M⊕, below 1 F⊕, above
+  20 M⊕ or 1 000 F⊕), the end segment of each axis is extended in log-log
+  from the grid's edge, as `science::xuv`'s saturation. The physics fixes
+  the direction (lighter and hotter planets lose more, Owen & Wu 2016,
+  conclusion 5), not the slope. Off both axes at once the two axis
+  extensions add, without the bilinear cross term: a corner rule chosen
+  at review (2026-11-25), part of this calibration and not a new one.
+  With the cross term, which grows with both distances, a 0.3 M⊕ core
+  would be given back 3.6 % of envelope at 3 000 F⊕ (and a 0.2 M⊕ core
+  1.9 % at 2 300 F⊕), next to a cell (1.5 to 2.4 M⊕, 300 to 1 000 F⊕)
+  that keeps nothing at its four corners; without it, the ceiling there
+  stays at the corner's 1e-7. Clamping at the edges instead changes none
+  of the 22 reference outcomes; it keeps more on Earth (1.18 % against
+  0.48 %) and on ref 8's hot Neptunes (2.6 % and 7.3 % against 0.28 %
+  and 2.6 %).
 - `NO_BOIL_OFF`: a "−" cell reads 0.20, the highest envelope drawn below
   20 M⊕ (Lopez & Fortney 2014's last column): a ceiling there never cuts
   a draw.

@@ -127,29 +127,6 @@ pub const NO_BOIL_OFF: f64 = crate::envelope::HIGHEST_TABULATED.get();
 /// are 2 to 6 × 10⁻⁶), so the value decides no stripping (study 30).
 pub const NOTHING_LEFT: f64 = 1.0e-7;
 
-/// How [`boil_off_ceiling`] reads a point off Tang et al. 2024's grid.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OffGrid {
-    /// The end segment of each axis extended in log-log from the grid's
-    /// edge.
-    Extend,
-    /// The value at the nearest edge of the grid.
-    Clamp,
-}
-
-/// Calibration: off Tang et al. 2024's grid (below 1.5 M⊕, below 1 F⊕,
-/// above 20 M⊕ or 1 000 F⊕), the end segment of each axis is extended in
-/// log-log from the grid's edge ([`OffGrid::Extend`]), as [`crate::xuv`]
-/// extends its saturation anchors. The physics fixes the direction
-/// (lighter and hotter planets lose more, Owen & Wu 2016), not the slope;
-/// no published value off the grid was found in study 30. Clamping at
-/// the edges instead changes none of the 22 reference placements'
-/// outcomes; it keeps more envelope on Earth (1.18 % against 0.48 %) and
-/// on the hottest Neptunes
-/// ([planet-atmospheres](../../../docs/science/planet-atmospheres.md#boil-off-and-core-powered-mass-loss-study-30),
-/// calibration).
-pub const OFF_GRID: OffGrid = OffGrid::Extend;
-
 /// Definition: mass of water whose hydrogen is one unit of mass of
 /// hydrogen, by stoichiometry: H₂O is 18 for 2 of hydrogen.
 pub const WATER_PER_HYDROGEN: f64 = 9.0;
@@ -243,13 +220,12 @@ pub fn shoreline_kept(
 /// `log M_c` and `log F` of `log f`.
 ///
 /// Off the grid (below 1.5 M⊕, below 1 F⊕, above 20 M⊕ or 1 000 F⊕) the
-/// end segment of each axis is extended in log-log from the grid's edge
-/// ([`OFF_GRID`]); off both axes the two extensions add, without
-/// the bilinear cross term, which would give an envelope back to a light
-/// core far above 1 000 F⊕. A ceiling read above one is one: a share is at
-/// most the whole planet. A core of no mass keeps nothing; a planet under
-/// no light keeps everything (the limits of the extension). Takes finite
-/// inputs.
+/// end segment of each axis is extended in log-log from the grid's edge,
+/// a calibration (`log_log_read`); off both axes the two extensions add,
+/// without the bilinear cross term. A ceiling read above one is one: a
+/// share is at most the whole planet. A core of no mass keeps nothing; a
+/// planet under no light keeps everything (the limits of the extension).
+/// Takes finite inputs.
 ///
 /// The ceiling stands for the boil-off and the core-powered loss after
 /// it, which Tang et al. find removes at most 0.1 % more (§ 3.5): one
@@ -269,6 +245,24 @@ pub fn boil_off_ceiling(core_mass: EarthMass, flux: EarthFlux) -> Fraction {
 /// interpolation of the cell holding the point; outside, the same cell's
 /// formula read at the point clamped to the grid, plus the cell's slope
 /// along each axis times the distance off the grid on that axis.
+///
+/// Calibration: the extension off Tang et al. 2024's grid (below 1.5 M⊕,
+/// below 1 F⊕, above 20 M⊕ or 1 000 F⊕), study 30's new calibration 1.
+/// The end segment of each axis is extended in log-log from the grid's
+/// edge, as [`crate::xuv`] extends its saturation anchors. The physics
+/// fixes the direction (lighter and hotter planets lose more, Owen & Wu
+/// 2016, conclusion 5; Tang et al. 2024, § 3.3), not the slope; no
+/// published value off the grid was found in study 30. Off both axes at
+/// once the two axis extensions add, without the bilinear cross term:
+/// chosen at review, part of this calibration and not one of its own. The
+/// cross term grows with both distances and would give a light core an
+/// envelope back far above 1 000 F⊕ (3.6 % at 0.3 M⊕ and 3 000 F⊕, next
+/// to a cell whose four corners keep nothing). Clamping at the edges
+/// instead, the alternative, changes none of the 22 reference placements'
+/// outcomes; it keeps more envelope on Earth (1.18 % against 0.48 %) and
+/// on the hottest Neptunes
+/// ([planet-atmospheres](../../../docs/science/planet-atmospheres.md#boil-off-and-core-powered-mass-loss-study-30),
+/// calibration).
 fn log_log_read(x: f64, y: f64) -> f64 {
     let masses = BOIL_OFF_CORE_MASSES.map(f64::ln);
     let fluxes = BOIL_OFF_FLUXES.map(f64::ln);
@@ -286,14 +280,11 @@ fn log_log_read(x: f64, y: f64) -> f64 {
             + (1.0 - u) * v * corner(0, 1)
             + u * v * corner(1, 1)
     };
-    match OFF_GRID {
-        // The cell's formula is linear in each axis: read at `(x, yc)` it
-        // is the edge value plus the mass slope times the distance, and
-        // likewise in flux. Inside the grid, `(x, y) = (xc, yc)` and this
-        // is the bilinear interpolation itself.
-        OffGrid::Extend => cell_at(x, yc) + cell_at(xc, y) - cell_at(xc, yc),
-        OffGrid::Clamp => cell_at(xc, yc),
-    }
+    // The cell's formula is linear in each axis: read at `(x, yc)` it is
+    // the edge value plus the mass slope times the distance, and likewise
+    // in flux. Inside the grid, `(x, y) = (xc, yc)` and this is the
+    // bilinear interpolation itself.
+    cell_at(x, yc) + cell_at(xc, y) - cell_at(xc, yc)
 }
 
 /// The index `i` of the segment `[grid[i], grid[i + 1]]` holding `x`, a
