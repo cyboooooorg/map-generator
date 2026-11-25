@@ -2120,3 +2120,59 @@ fn collapse_step_is_converged() {
         }
     }
 }
+
+/// Definition: a life draw under any chance of life, 0 (legacy
+/// `earth_has_oxygenic_life`).
+const LIVING_DRAW: f64 = 0.0;
+
+#[test]
+#[ignore = "heavy: the bistable Earth settled, then solved twice more on its oxygenated air, about 243 s at opt-level 0, 8.3 s in release"]
+fn the_reference_earth_lives_and_reaches_its_climate() {
+    use crate::planet::climate::fixture::EARTH_OBLIQUITY as OBLIQUITY;
+    use crate::planet::draws::snowball_draw;
+    use crate::planet::life::living;
+    use crate::planet::settled::climate_of;
+    use crate::planet::settled_tests::{PREINDUSTRIAL_CO2, PREINDUSTRIAL_RANGE};
+    use science::life::O2_PER_N2;
+    use timeline::Biosphere;
+
+    let mut trace = Trace::new();
+    let (t, d) = reference_trial(&mut trace, &EARTH);
+    let rot = rotation(&mut trace, OBLIQUITY, false);
+    let seed = Seed::new(1).derive(LABELS.snowball);
+    let settled = settled_with(&t, &d, &rot, seed, &mut trace).unwrap();
+    let snowball = snowball_draw(seed);
+    let life = living(settled, &t.age, LIVING_DRAW, &rot, snowball, &mut trace).unwrap();
+    assert_eq!(*life.life.unwrap().value(), Biosphere::Modern);
+    // The stop rule of the plan: the climate the class reads, solved
+    // again on the oxygenated air, is Earth's preindustrial one.
+    let second = life.settled.climate.as_ref().unwrap();
+    let t2 = second.global.surface_temperature.value().0;
+    assert!(
+        (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&t2),
+        "{t2} K, {second:?}"
+    );
+    let mut bare = life.settled.bare.clone();
+    let air = &mut bare.surface.as_mut().unwrap().atmosphere;
+    let (n2, o2) = (
+        air.partial[&Gas::N2].value().0,
+        air.partial[&Gas::O2].value().0,
+    );
+    assert_eq!(o2, O2_PER_N2 * n2);
+    assert_eq!(air.partial[&Gas::Ch4].value().0, 0.0);
+
+    // The oxygenated air with Earth's preindustrial CO₂, solved. The
+    // carbonate thermostat rebuilds the CO₂ from the carbon inventory
+    // (`ClimateInputs::carbon`), so the air's CO₂ is a starting point:
+    // this is the second solve again, which the 280 ppm do not move.
+    let co2 = trace
+        .leaf(Code::of("test.co2"), PREINDUSTRIAL_CO2, Provenance::Input)
+        .unwrap();
+    air.partial.insert(Gas::Co2, co2);
+    let (c, ..) = climate_of(&bare, &rot, snowball, &mut trace).unwrap();
+    let preindustrial = c.global.surface_temperature.value().0;
+    assert!(
+        (PREINDUSTRIAL_RANGE.0.0..=PREINDUSTRIAL_RANGE.1.0).contains(&preindustrial),
+        "{preindustrial} K, {c:?}"
+    );
+}

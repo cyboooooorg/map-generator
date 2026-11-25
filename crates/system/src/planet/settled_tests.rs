@@ -155,7 +155,7 @@ const EARTH_CLOUDS_WINDOW: f64 = 0.03;
 
 /// Source: Earth's preindustrial CO₂, 280 ppm, 2.8e-4 bar (Myhre et al.
 /// 1998, doi:10.1029/98GL01908).
-const PREINDUSTRIAL_CO2: Bar = Bar(2.8e-4);
+pub(super) const PREINDUSTRIAL_CO2: Bar = Bar(2.8e-4);
 
 /// Source: Earth's surface pressure, 1.014 bar (NASA Earth fact sheet,
 /// nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html; as
@@ -196,7 +196,7 @@ const EARTH_MEASURED_AIR: PartialPressures = PartialPressures {
 /// Myhre et al. 1998 (doi:10.1029/98GL01908) give the 280 ppm of CO₂,
 /// not this window, and no published preindustrial global mean surface
 /// temperature with its uncertainty was found to replace it.
-const PREINDUSTRIAL_RANGE: (Kelvin, Kelvin) = (Kelvin(286.0), Kelvin(290.0));
+pub(super) const PREINDUSTRIAL_RANGE: (Kelvin, Kelvin) = (Kelvin(286.0), Kelvin(290.0));
 
 /// Definition: the bracket of the search for the CO₂ that gives a
 /// temperature, 1e-6 to 1e-2 bar, and its 30 bisection steps (legacy).

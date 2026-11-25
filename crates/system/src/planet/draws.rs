@@ -164,6 +164,7 @@ pub(crate) struct Labels {
     pub envelope: &'static str,
     pub volatiles: &'static str,
     pub snowball: &'static str,
+    pub life: &'static str,
 }
 
 /// The labels of the engine.
@@ -174,6 +175,7 @@ pub(crate) const LABELS: Labels = Labels {
     envelope: "planet/envelope",
     volatiles: "planet/volatiles",
     snowball: "planet/snowball",
+    life: "planet/life",
 };
 
 /// Draws the composition of `trial` from `seed` and records it. The
@@ -327,6 +329,17 @@ pub(crate) fn radiogenic_abundance(seed: Seed) -> f64 {
 /// under it. The caller passes `seed.derive(LABELS.snowball)`. It reads
 /// nothing of the trace, so the same planet gets the same answer.
 pub(crate) fn snowball_draw(seed: Seed) -> f64 {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
+    uniform(&mut rng)
+}
+
+/// The life draw: one uniform number in the open interval (0, 1), which
+/// the life stage compares with its chance (`science::life::stage`):
+/// life arose where it could when the draw is under
+/// `science::life::LIFE_CHANCE`. The caller passes
+/// `seed.derive(LABELS.life)`. It reads nothing of the trace, so the same
+/// planet gets the same answer.
+pub(crate) fn life_draw(seed: Seed) -> f64 {
     let mut rng = ChaCha8Rng::seed_from_u64(seed.get());
     uniform(&mut rng)
 }

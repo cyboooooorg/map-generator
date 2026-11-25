@@ -61,7 +61,9 @@
 //! leftover condensed again when that run does not boil), then the steam
 //! world (its envelope and its inflated radius). `settled` is a separate
 //! step, not wired into the generation chain yet (2d-4), so that `bare`
-//! keeps its cost. What remains: life, the class (#659). Every value is
+//! keeps its cost. [`life`] follows it: the life stage of the settled
+//! planet, the air it oxygenated and the climate solved again on that air.
+//! What remains: the class (#659). Every value is
 //! recorded in the system's cause `Trace`, with the codes of [`codes`].
 
 // The slice is consumed by the planet chain (`class_of`, `model`), which
@@ -130,6 +132,11 @@ mod interior;
     not(test),
     expect(dead_code, reason = "consumed by the planet chain, next pull request")
 )]
+mod life;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by the planet chain, next pull request")
+)]
 mod regime;
 #[cfg_attr(
     not(test),
@@ -161,6 +168,8 @@ mod envelope_tests;
 mod escape_tests;
 #[cfg(test)]
 mod interior_tests;
+#[cfg(test)]
+mod life_tests;
 #[cfg(test)]
 mod settled_tests;
 #[cfg(test)]

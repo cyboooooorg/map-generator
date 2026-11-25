@@ -318,7 +318,7 @@ impl ClimateInputs {
 }
 
 /// The partial pressures of `atmosphere`, bar; a gas it lacks is none.
-fn partial_pressures(atmosphere: &Atmosphere) -> PartialPressures {
+pub(crate) fn partial_pressures(atmosphere: &Atmosphere) -> PartialPressures {
     let p = |gas: Gas| atmosphere.partial.get(&gas).map_or(0.0, |p| p.value().0);
     PartialPressures {
         n2: p(Gas::N2),

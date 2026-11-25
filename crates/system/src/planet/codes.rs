@@ -422,6 +422,22 @@ pub(crate) const SURFACE_LIQUID: &str = "planet.surface.liquid";
 /// The share of the surface under water: the sea term of the cover
 /// law, recorded when the liquid is water.
 pub(crate) const SURFACE_OCEAN_SHARE: &str = "planet.surface.ocean-share";
+/// What life has made of the planet (`timeline::Biosphere`), from the
+/// liquid (or, without one, the climate's state), the age and the life
+/// draw (`science::life::stage`); recorded for a planet with a surface.
+pub(crate) const LIFE: &str = "planet.life";
+/// The life draw, uniform in (0, 1), from the `planet/life` sub-seed.
+pub(crate) const LIFE_DRAW: &str = "planet.life.draw";
+/// Partial pressure of O2 in the air life has oxygenated
+/// (`science::life::oxygenate`): `O2_PER_N2` times the N2 for a modern
+/// biosphere, the bare air's O2 for an oxidising one.
+pub(crate) const LIFE_AIR_O2: &str = "planet.life.air.o2";
+/// Partial pressure of CH4 in the air life has oxygenated: 0 bar, the
+/// methane oxidised.
+pub(crate) const LIFE_AIR_CH4: &str = "planet.life.air.ch4";
+/// Surface pressure of the air life has oxygenated: the sum of its
+/// partial pressures.
+pub(crate) const LIFE_AIR_PRESSURE: &str = "planet.life.air.pressure";
 
 /// The gases of the air the climate leaves, each with the code of its
 /// partial pressure, in the contract's order.

@@ -4448,8 +4448,13 @@ Earth that air has no O₂: 0.75 bar, 283.8 K at 280 ppm of CO₂, and its
 thermostat needs about 2 000 ppm. On Earth's measured air (N₂ 78.08 %,
 O₂ 20.95 % of 1.014 bar) the solver gives 287.1 K at 280 ppm, inside
 the 286 to 290 K window of the tests (a test definition: Myhre et al.
-1998 give the 280 ppm, not a temperature). The second solve is what
-brings the reference Earth onto that air. The class does not read the
+1998 give the 280 ppm, not a temperature). The second solve brings the
+reference Earth part of the way: its oxygenated air holds 0.746 bar of
+N₂ and 0.200 bar of O₂ (0.946 bar, no argon), and settles at 287.6 K
+with its thermostat's 990 ppm of CO₂, inside the window; at 280 ppm
+under that albedo it gives 285.1 K, 0.9 K under it (measured
+2026-11-25, `the_reference_earth_lives_and_reaches_its_climate`). The
+class does not read the
 O₂; the climate does, through the pressure. The second solve takes no
 boil verdict (a declared simplification): the class and the surface
 liquid read the second climate, the biosphere the first.
