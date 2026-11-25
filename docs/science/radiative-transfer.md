@@ -1197,7 +1197,7 @@ uncertainty (0.75 % of 268.1 and 2.75 W/m², the two terms of the data
 quality summary, combined here in quadrature: 3.4 W/m²):
 272.1 to 286.3 W/m². It runs the climate's own clear column
 (`Profile::CLEAR`) on Earth's measured air (78.08 % N₂ and 20.95 % O₂ of
-1.014 bar, rounded from NASA's fact sheet), 280 ppm, 77 % surface
+1.014 bar, NASA's fact sheet), 280 ppm, 77 % surface
 humidity at 288 K, under the skin of CERES's all-sky 240.1 W/m²: the
 column's `skin_temperature`, `2^-¼` of the effective temperature
 $(240.1/\sigma)^{1/4} = 255.09$ K, 214.51 K. It gives 274.63 W/m² (274.72
@@ -1480,8 +1480,9 @@ from the audit, were read later on the publisher's page (Tables 1 to 5).
     doi:10.1175/1520-0469(1992)049<2256:ASOTGE>2.0.CO;2.
 68. NASA Goddard, *Earth Fact Sheet* (D. R. Williams),
     <https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html>
-    (mean surface pressure, 1.014 bar; dry-air composition, 78.084 % N₂,
-    20.946 % O₂, 9340 ppm Ar; read 2026-11-23).
+    (mean surface pressure, 1.014 bar; dry-air composition, "Major:
+    78.08% Nitrogen (N2), 20.95% Oxygen (O2)", "Argon (Ar) - 9340" ppm;
+    read 2026-11-23).
 69. Niemann, H. B. et al. 2010, *J. Geophys. Res. Planets* 115, E12006,
     doi:10.1029/2010JE003659.
 70. NOAA Global Monitoring Laboratory, global annual mean CO₂ (X. Lan et

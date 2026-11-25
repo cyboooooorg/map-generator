@@ -2523,8 +2523,9 @@ holds water vapour and CO₂ only; the ozone, methane, N₂O and
 halocarbons it lacks account for 8 to 14 W/m², and like for like it
 should send out 275.5 to 282.9 W/m², 0.85 W/m² above what it does (see
 [Earth's longwave against CERES (study 32)](#earths-longwave-against-ceres-study-32)).
-Its clouds take out 32.91 W/m² at 288 K on `main` (33.38 since the
-split), against CERES's 25.7 to 28.0 W/m² and legacy's 34.0 W/m². The
+Its clouds take out 33.38 W/m² at 288 K since the split (32.91 on
+`main`), 5.4 to 7.7 W/m² more than CERES's 25.7 to 28.0 W/m², and
+legacy's took out 34.0 W/m². The
 reference Earth, whose air lacks oxygen, runs 283.84 K at 280 ppm (+2.7 K
 from the missing O₂, +0.5 K from the nitrogen, +1.4 to 2 K from the
 IAPWS saturation curve of the column); its cold bias comes mostly from
@@ -2855,7 +2856,7 @@ for the climate:
 - **Its clouds are too dark in the infrared**: 33.38 W/m² of longwave
   effect at 288 K and 280 ppm (32.91 before the split) against CERES's
   25.7 (the same air without its clouds; Loeb et al. 2020) to 28.0 W/m²
-  (cloud-free scenes). At 389 ppm the two errors cancel: the missing
+  (cloud-free scenes), 5.4 to 7.7 W/m² too much. At 389 ppm the two errors cancel: the missing
   gases make the cloudy column send out about 7.6 W/m² too much, its
   clouds (32.98 W/m² at 389 ppm) 7.3 W/m² too little, and it sends out
   239.90 W/m² (240.46 before the split) against CERES's 240.1 W/m².
@@ -2880,7 +2881,9 @@ for the climate:
   then takes less), and the regulated air absorbs 29 W/m² less.
 
 What each change would do to the reference Earth at 280 ppm (285.82 K
-in planet PR 2d-4), estimated, not run, with one slope for every row:
+in planet PR 2d-4), estimated, not run, from the column in that state
+(hence the clouds row starts from its 32.48 W/m² at 285.82 K, not the
+33.38 at 288 K), with one slope for every row:
 the column's own cloudy-sky slope, 2.0 W/m²/K (1.98 on Earth's column
 from 284 to 290 K since the split, 2.02 before). Koll & Cronin 2018's
 clear-sky 2.2 W/m²/K would make each change about 10 % smaller.

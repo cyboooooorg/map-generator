@@ -105,10 +105,9 @@ pub(crate) const EARTH_INCOMING_W_M2: f64 = crate::constants::SOLAR_IRRADIANCE.0
 pub(crate) const EARTH_PRESSURE_BAR: f64 = 1.014;
 
 /// Source: the shares of N₂ and O₂ in Earth's dry air by volume, 78.08 %
-/// and 20.95 %, rounded from the NASA Earth fact sheet's 78.084 % N₂ and
-/// 20.946 % O₂ (with 9340 ppm of argon; the page
-/// [`EARTH_PRESSURE_BAR`] cites), as `docs/science/radiative-transfer.md`'s
-/// Rayleigh check takes them.
+/// and 20.95 % (NASA Earth fact sheet, the page [`EARTH_PRESSURE_BAR`]
+/// cites: "Major: 78.08% Nitrogen (N2), 20.95% Oxygen (O2)", with "Argon
+/// (Ar) - 9340" ppm among the minor gases).
 pub(crate) const EARTH_N2_O2_SHARES: (f64, f64) = (0.7808, 0.2095);
 
 /// Definition: Earth's measured air as a test input, without its CO₂ and
