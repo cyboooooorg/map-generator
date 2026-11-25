@@ -1030,13 +1030,26 @@ fn a_steam_world_that_loses_its_steam_keeps_its_rock() {
     assert!(!has_steam(&s.bare.body));
 }
 
+/// Definition: a water inventory of 0.7 Earth oceans, a test value
+/// (the recorder reads only the inventory and the liquid kind).
+const TEST_WATER: Kilogram = Kilogram(0.7 * OCEAN_MASS.0);
+
 #[test]
 fn a_wet_surface_records_its_sea_share() {
-    // Titan's water inventory with a water liquid node recorded for the
-    // test: the recorder reads only the inventory and the liquid kind.
-    let (titan, _, mut trace) = settled_of(&TITAN, TITAN_OBLIQUITY);
-    let water = &titan.bare.surface.as_ref().unwrap().water;
-    assert!(water.inventory.value().0 > 0.0);
+    let mut trace = Trace::new();
+    let leaf = |trace: &mut Trace, code: &'static str, kg: Kilogram| {
+        trace.leaf(Code::of(code), kg, Provenance::Input).unwrap()
+    };
+    let flag = |trace: &mut Trace, code: &'static str| {
+        trace
+            .leaf(Code::of(code), false, Provenance::Input)
+            .unwrap()
+    };
+    let water = timeline::Water {
+        inventory: leaf(&mut trace, "test.inventory", TEST_WATER),
+        runaway: flag(&mut trace, "test.runaway"),
+        boiled: flag(&mut trace, "test.boiled"),
+    };
     let liquid = trace
         .record(
             Code::of(codes::SURFACE_LIQUID),
@@ -1044,12 +1057,12 @@ fn a_wet_surface_records_its_sea_share() {
             &[water.inventory.node()],
         )
         .unwrap();
-    let share = sea_share(water, Some(&liquid), &mut trace)
+    let share = sea_share(&water, Some(&liquid), &mut trace)
         .unwrap()
         .expect("water is the liquid");
     assert_eq!(
         share.value().get(),
-        ocean_fraction(water.inventory.value().0 / OCEAN_MASS.0).get()
+        ocean_fraction(TEST_WATER.0 / OCEAN_MASS.0).get()
     );
     let mut from = derived_from(&trace, share.node());
     from.sort();
@@ -1070,7 +1083,7 @@ fn a_wet_surface_records_its_sea_share() {
         )
         .unwrap();
     assert!(
-        sea_share(water, Some(&methane), &mut trace)
+        sea_share(&water, Some(&methane), &mut trace)
             .unwrap()
             .is_none()
     );
