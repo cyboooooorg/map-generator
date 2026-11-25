@@ -17,12 +17,15 @@ const EARTH_AGES: [Gyr; 4] = [Gyr(0.5), Gyr(1.5), Gyr(3.0), Gyr(4.6)];
 /// Source: the page's age of today's Earth, 4.6 Gyr ("Life", its table).
 const TODAY: Gyr = Gyr(4.6);
 
-/// Source: the page's ratio of the CIPM shares, 0.2682
-/// (`docs/science/planet-atmospheres.md`, "The oxygenated air").
-const PAGE_O2_PER_N2: f64 = 0.2682;
+/// Definition: the ratio by weight of O₂ to N₂ in the CIPM-2007 air,
+/// from its mole fractions and the molar masses (the page's partial
+/// pressures are weights: a gas's mass share times the pressure).
+fn cipm_mass_ratio() -> f64 {
+    (CIPM_O2_SHARE * O2_MOLAR_MASS) / (CIPM_N2_SHARE * N2_MOLAR_MASS)
+}
 
-/// Definition: the page quotes the ratio to four places, 1e-4.
-const PAGE_PLACES: f64 = 1e-4;
+/// Definition: the two sides are the same product, equal to rounding, 1e-12.
+const RATIO_PLACES: f64 = 1e-12;
 
 /// Definition: an air for the oxygen steps, N₂ 0.78, CH₄ 1e-3, no O₂,
 /// CO₂ 4e-4 bar (an early Earth's shape, for the law only).
@@ -80,11 +83,13 @@ fn no_water_no_life() {
 }
 
 #[test]
-fn o2_per_n2_is_the_cipm_ratio() {
+fn o2_per_n2_is_the_cipm_ratio_by_weight() {
     assert!(
-        (O2_PER_N2 - PAGE_O2_PER_N2).abs() < PAGE_PLACES,
+        (O2_PER_N2 - cipm_mass_ratio()).abs() < RATIO_PLACES,
         "{O2_PER_N2}"
     );
+    // About 0.306, not the 0.2682 of the mole fractions.
+    assert!((0.30..0.31).contains(&O2_PER_N2), "{O2_PER_N2}");
 }
 
 #[test]

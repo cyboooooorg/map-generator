@@ -10,7 +10,7 @@
 //! "Life". The engine draws the life draw from the planet's seed; this
 //! module only reads it.
 
-use crate::radiation::gases::PartialPressures;
+use crate::radiation::gases::{N2_MOLAR_MASS, O2_MOLAR_MASS, PartialPressures};
 use crate::units::Gyr;
 
 /// Source: the oldest generally accepted evidence of life after Earth
@@ -51,11 +51,15 @@ pub const CIPM_N2_SHARE: f64 = 0.780_848;
 /// CIPM-2007 formula, 0.209 390 (Picard et al. 2008, Table 1).
 pub const CIPM_O2_SHARE: f64 = 0.209_390;
 
-/// Definition: the O₂ of a modern living air per bar of its N₂, the ratio
-/// of [`CIPM_O2_SHARE`] to [`CIPM_N2_SHARE`], 0.2682: Earth's air carried
+/// Definition: the O₂ of a modern living air per bar of its N₂, by
+/// weight: the CIPM shares times the molar masses,
+/// `(O2 share × O2_MOLAR_MASS) / (N2 share × N2_MOLAR_MASS)`, about 0.306.
+/// The chain's partial pressures are weights (a gas's mass share times the
+/// surface pressure), so the mole-fraction ratio, 0.2682, would give the
+/// reference Earth 0.200 bar of O₂ instead of 0.228. Earth's air carried
 /// over to another planet by its nitrogen. Page:
 /// `docs/science/planet-atmospheres.md`, "The oxygenated air".
-pub const O2_PER_N2: f64 = CIPM_O2_SHARE / CIPM_N2_SHARE;
+pub const O2_PER_N2: f64 = (CIPM_O2_SHARE * O2_MOLAR_MASS) / (CIPM_N2_SHARE * N2_MOLAR_MASS);
 
 /// Where a planet's life stands, and so its air.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

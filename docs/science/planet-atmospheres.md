@@ -4427,11 +4427,15 @@ modern air for 1.8 Gyr. The rewrite takes two steps (decided
   "about 600 million years" of p. 307, a `Source:`), modern O₂.
 
 **The oxygenated air.** From 4.0 Gyr its O₂ is `O2_PER_N2` of its N₂:
-0.2682, the ratio of the mole fractions of O₂ (0.209 390) and N₂
-(0.780 848) in the reference dry air of the CIPM-2007 formula (Picard
-et al. 2008, Table 1), a `Source:`, computed in `science` from those two
-shares, which the tests read too; legacy's 0.27 rounded 0.21 over
-0.78. The ratio to N₂ is the model's choice of how Earth's air carries over to another planet:
+0.306, the ratio by weight of O₂ to N₂ in the reference dry air of the
+CIPM-2007 formula: the mole fractions of O₂ (0.209 390) and N₂
+(0.780 848) (Picard et al. 2008, Table 1) times the molar masses
+(31.998 and 28.014 g/mol), a `Definition:` computed in `science`, which
+the tests recompute. It is a weight because the chain's partial
+pressures are weights (a gas's mass share times the surface pressure,
+see "Earth's N₂ target"): the ratio of the mole fractions, 0.2682, would
+give the reference Earth 0.200 bar of O₂ instead of 0.228. Legacy's 0.27
+rounded 0.21 over 0.78, by volume. The ratio to N₂ is the model's choice of how Earth's air carries over to another planet:
 the O₂ of a planet is set by its biology and its sinks, which the model
 does not have. The methane is removed: in an oxygenated air OH destroys
 it within 9.1 ± 0.9 years (Prather, Holmes & Hsu 2012), and what is left
@@ -4450,10 +4454,10 @@ O₂ 20.95 % of 1.014 bar) the solver gives 287.1 K at 280 ppm, inside
 the 286 to 290 K window of the tests (a test definition: Myhre et al.
 1998 give the 280 ppm, not a temperature). The second solve brings the
 reference Earth part of the way: its oxygenated air holds 0.746 bar of
-N₂ and 0.200 bar of O₂ (0.946 bar, no argon), and settles at 287.6 K
-with its thermostat's 990 ppm of CO₂, inside the window; at 280 ppm
-under that albedo it gives 285.1 K, 0.9 K under it (measured
-2026-11-25, `the_reference_earth_lives_and_reaches_its_climate`). The
+N₂ and 0.228 bar of O₂ (0.974 bar, no argon), and settles at 288.4 K
+with its thermostat's 906 ppm of CO₂, inside the window; at 280 ppm
+under that albedo it gives 285.8 K, 0.2 K under it (measured
+2026-11-25, with the O₂ counted by weight, `the_reference_earth_lives_and_reaches_its_climate`). The
 class does not read the
 O₂; the climate does, through the pressure. The second solve takes no
 boil verdict (a declared simplification): the class and the surface
@@ -4461,7 +4465,7 @@ liquid read the second climate, the biosphere the first.
 
 | Case | Result |
 | --- | --- |
-| Earth, life draw 0, 4.6 Gyr | life, O₂ at 0.2682 of the N₂, no CH₄, climate solved again |
+| Earth, life draw 0, 4.6 Gyr | life, O₂ at 0.306 of the N₂ by weight, no CH₄, climate solved again |
 | Earth at 0.5 Gyr | no life |
 | Earth at 1.5 Gyr | life, no oxygen yet |
 | Earth at 3.0 Gyr | life, an oxidising air: no CH₄, no O₂ |
