@@ -2976,12 +2976,22 @@ has none, and the climate is solved again after oxygenation in 2d-4
 O₂ 20.95 % of 1.014 bar). Dry bodies are never a runaway: Mercury and a
 dry Venus are `Temperate`.
 
-Known gap: the wet column's clear-sky outgoing radiation on Earth's
-measured air is 274.9 W/m² against CERES's 267.9 W/m², +7 W/m² (#680).
-The reference Earth, whose air lacks oxygen, runs 283.84 K at 280 ppm
-(+2.7 K from the missing O₂, +0.5 K from the nitrogen, +1.4 to 2 K from
-the IAPWS saturation curve of the column, and a cloud longwave effect of
-31.1 W/m² against 34.0 W/m² in legacy).
+The wet column against CERES (#680, study 32): on Earth's measured air
+at 288 K and 280 ppm the clear column sends out 274.72 W/m² on `main`
+(274.63 since the phase step of the moist adiabat was split), which
+looked 7 W/m² brighter than CERES's 267.9 W/m². The +7 W/m² is not an
+excess of the column: the comparison is not like for like. The column
+holds water vapour and CO₂ only; the ozone, methane, N₂O and
+halocarbons it lacks account for 8 to 14 W/m², and like for like it
+should send out 275.5 to 282.9 W/m², 0.85 W/m² above what it does (see
+[Earth's longwave against CERES (study 32)](#earths-longwave-against-ceres-study-32)).
+Its clouds take out 33.38 W/m² at 288 K since the split (32.91 on
+`main`), 5.4 to 7.7 W/m² more than CERES's 25.7 to 28.0 W/m², and
+legacy's took out 34.0 W/m². The
+reference Earth, whose air lacks oxygen, runs 283.84 K at 280 ppm (+2.7 K
+from the missing O₂, +0.5 K from the nitrogen, +1.4 to 2 K from the
+IAPWS saturation curve of the column); its cold bias comes mostly from
+its Bond albedo (the shortwave), not from the longwave.
 
 Legacy's results, for history: Earth 288 K with 1.2e-4 bar of CO₂ and
 289.5 K at 280 ppm (the thermostat needed a factor 2.3 less CO₂ than
@@ -3282,6 +3292,81 @@ it, read as `volatiles::methane_saturation_pressure` at the triple-point
 temperature: a `Definition:`, one code path); otherwise it is solved
 again with its CO₂. No new constant.
 
+#### Earth's longwave against CERES (study 32)
+
+Study 32 of the
+[Wiki](https://github.com/cyboooooorg/map-generator/wiki/32-longwave-against-ceres-audit)
+(2026-11-25, issue #680) asked why the climate's column sends out
+7 W/m² more than CERES's clear sky, and whether that makes the
+reference Earth (285.82 K at 280 ppm in planet PR 2d-4) too cold. The details
+and the measurements are in
+[the radiative transfer page](radiative-transfer.md#where-it-departs-from-the-science);
+for the climate:
+
+- **The column's water is not too dry.** Without its clouds the column
+  sends out 274.63 W/m² at 288 K and 280 ppm (274.72 before the phase
+  step was split), under the 214.51 K skin of CERES's all-sky emission.
+  With the gases it lacks (ozone 4 to 10 W/m², Schmidt et al. 2010 and
+  Kiehl & Trenberth 1997; methane, N₂O and halocarbons 3.6 W/m², Hogan
+  & Matricardi 2020), the CO₂ of CERES's years (1.75 W/m²) and the
+  clear sky of a column model (Loeb et al. 2020's 265.9 W/m²), the
+  like-for-like level is 275.5 to 282.9 W/m²: the column lies 0.85 W/m²
+  under it, inside only the window widened by CERES's uncertainty
+  (272.1 to 286.3 W/m²). On the 100 RFMIP reanalysis profiles the
+  column is 1.0 to 1.9 W/m² darker than the mean of their own outgoing
+  radiation with the same two gases. Moistening the upper air to bring
+  the clear sky to 267.9 W/m² would hide the missing gases in the
+  water, and is not recommended.
+- **Its clouds are too dark in the infrared**: 33.38 W/m² of longwave
+  effect at 288 K and 280 ppm (32.91 before the split) against CERES's
+  25.7 (the same air without its clouds; Loeb et al. 2020) to 28.0 W/m²
+  (cloud-free scenes), 5.4 to 7.7 W/m² too much. At 389 ppm the two errors cancel: the missing
+  gases make the cloudy column send out about 7.6 W/m² too much, its
+  clouds (32.98 W/m² at 389 ppm) 7.3 W/m² too little, and it sends out
+  239.90 W/m² (240.46 before the split) against CERES's 240.1 W/m².
+- **The cold reference Earth** is then not the longwave's doing. Its
+  Bond albedo, 0.304 to 0.306, against the observed 0.2915 to 0.293
+  (CERES), lets in 3.7 to 4.9 W/m² less, about 1.9 to 2.5 K at the
+  column's cloudy-sky slope, 2.0 W/m²/K (the table below); the
+  shortwave's missing ozone and aerosols are #653.
+- **A numerical step, now split.** The moist adiabat's latent heat
+  jumps at 273.16 K inside a step of the grid, so the cloudy column's
+  outgoing radiation ran as a sawtooth in the surface temperature, up
+  to 1.2 W/m² (0.89 W/m² at 288 K against a grid 16 times finer). The
+  step is now split at 273.16 K (radiative transfer page, *The phase
+  step of the moist adiabat*): the cloudy column at 288 K sends out
+  0.57 W/m² less, at 285.82 K (the reference Earth in planet PR 2d-4)
+  0.07 W/m² more. It was not the cause of
+  #681: the regulated Earth under Titan's methane stays at 284.0103 K
+  after the split. That temperature is the dew point of the vapour the
+  thermostat sets at 288 K, the floor of the surface's root search,
+  reached because the thermostat weighs the light the surface absorbs
+  on the air before its CO₂ is regulated (its methane's anti-greenhouse
+  then takes less), and the regulated air absorbs 29 W/m² less.
+
+What each change would do to the reference Earth at 280 ppm (285.82 K
+in planet PR 2d-4), estimated, not run, from the column in that state
+(hence the clouds row starts from its 32.48 W/m² at 285.82 K, not the
+33.38 at 288 K), with one slope for every row:
+the column's own cloudy-sky slope, 2.0 W/m²/K (1.98 on Earth's column
+from 284 to 290 K since the split, 2.02 before). Koll & Cronin 2018's
+clear-sky 2.2 W/m²/K would make each change about 10 % smaller.
+
+| Change | Cloudy-sky W/m² | Temperature |
+| --- | --- | --- |
+| Ozone, methane, N₂O and halocarbons in the column | −7.6 (Schmidt et al. 2010, Table 1: 4.9 % of 155) | about +3.8 K |
+| Clouds' longwave effect brought from 32.48 (the column at 285.82 K) to 25.7 W/m² | +6.8 | about −3.4 K |
+| Bond albedo from 0.304-0.306 to 0.2915-0.293 | +3.7 to +4.9 absorbed | about +1.9 to +2.5 K |
+| The phase step split at 273.16 K (done) | +0.07 at 285.82 K | about −0.03 K |
+| Humidity over liquid water below 0 °C (not recommended until the 1967 convention is read) | −2.56 (study 32, at 288 K) | about +1.3 K |
+
+The first two go together: refitting the clouds alone would cool Earth
+by 3.4 K. Venus (supercritical, 85 bar of CO₂), Mars (6.36 mbar, below
+273.16 K at every level) and Titan (no water) do not cross the phase
+step; ozone and methane in the longwave would warm a body only where
+its air holds them (Titan's methane is already in the column, as the
+grey stand-in of its collision-induced greenhouse).
+
 ### Boiling and the steam envelope of the rewrite (study 26)
 
 What PR 2d-3b ports, with the values study 26 of the
@@ -3339,7 +3424,10 @@ legacy; where they differ, this sub-section holds for the rewrite.
   360 K before it falls to its 289.7 W/m² asymptote (the plateau); Kasting
   1988 Fig. 7a puts the level near 310 W/m². About 7 of the 7.8 W/m² gap
   between the threshold and a body at 1.2346 S⊕ (0.9 AU) is the wet
-  column's outgoing radiation lying 7 W/m² above CERES (#680). In the
+  column's outgoing radiation lying 7 W/m² above CERES (#680), which
+  study 32 traces to the absorbers the column lacks (ozone, methane,
+  N₂O), not to its water; how much of them a hot, wet column would keep
+  was not studied. In the
   chain `water()`'s runaway flag (`runaway_flux`, 1.106 S⊕) already
   catches such planets before `boils` is asked; `boils` decides for the
   bodies it passes. The tests therefore take Venus's orbit, where the
@@ -4111,6 +4199,9 @@ another paper, from memory) is said where it is used.
   Pluto's Bond albedo (read in arXiv:1604.06129).
 - Carlson 1999, *Science* 283, 820,
   doi:10.1126/science.283.5403.820.
+- CERES Science Team 2018, *CERES_EBAF_Ed4.0 Data Quality Summary*,
+  Table 6-1 and § 4.4, Earth's outgoing longwave 2005-2015 and its
+  uncertainty (read; study 32).
 - Charette and Smith 2010, *Oceanography* 23(2), 112,
   doi:10.5670/oceanog.2010.51, Table 1, the volume and area of Earth's
   ocean (read).
@@ -4223,6 +4314,9 @@ another paper, from memory) is said where it is used.
   and emissivity (abstract read).
 - Hoffman et al. 2017, doi:10.1126/sciadv.1600983.
 - Hörst, Vuitton and Yelle 2008, doi:10.1029/2008JE003135.
+- Hogan and Matricardi 2020, *Geosci. Model Dev.* 13, 6501,
+  doi:10.5194/gmd-13-6501-2020, Table 4, the longwave of each
+  minor gas by line-by-line (read; study 32).
 - Howett et al. 2010, Enceladus's albedo.
 - Huebner, Keady and Lyon 1992, *Astrophys. Space Sci.*
   195, 1, photo-ionisation rates.
@@ -4264,6 +4358,9 @@ another paper, from memory) is said where it is used.
 - Kennedy and Kenyon 2008, *ApJ* 673, doi:10.1086/524130,
   arXiv:0710.1065, p. 3 and Fig. 1: the snow line at 170 K moving inward
   with time, and why it differs from Ida & Lin's.
+- Kiehl and Trenberth 1997, *Bull. Am. Meteorol. Soc.* 78, 197,
+  doi:10.1175/1520-0477(1997)078<0197:EAGMEB>2.0.CO;2, Table 3, the
+  clear-sky longwave by gas (read; study 32).
 - Kite and Ford 2018, *ApJ* 864, 75,
   doi:10.3847/1538-4357/aad6e0, waterworlds.
 - Kite, Fegley, Schaefer and Gaidos 2016, *ApJ* 828, 80,
@@ -4272,6 +4369,8 @@ another paper, from memory) is said where it is used.
   doi:10.1088/0004-637X/700/2/1732, the outgassing of lids and plates.
 - Kivelson et al. 2004, in *Jupiter: The Planet, Satellites and
   Magnetosphere*, ch. 21.
+- Koll and Cronin 2018, *PNAS* 115, 10293, doi:10.1073/pnas.1809868115,
+  Earth's clear-sky feedback near 2.2 W/m²/K (read; study 32).
 - Kopparapu et al. 2013, doi:10.1088/0004-637X/765/2/131.
 - Kopparapu et al. 2014, doi:10.1088/2041-8205/787/2/L29, the
   runaway limit and the maximum-greenhouse row (the outer edge).
@@ -4317,6 +4416,9 @@ another paper, from memory) is said where it is used.
   doi:10.1016/j.icarus.2020.114072, supplementary Table 2 (read, and
   its appendix Table 2 in arXiv:2009.02277, argon's row read
   2026-11-25).
+- Loeb et al. 2020, *J. Climate* 33, 61, doi:10.1175/JCLI-D-19-0381.1,
+  Table 3, CERES's clear sky of the same air without its clouds
+  (read; study 32).
 - Lora and Ádámkovics 2017, arXiv:1610.06277, Titan's near-surface
   methane humidity (read).
 - Lyons, Reinhard and Planavsky 2014,
@@ -4444,6 +4546,9 @@ another paper, from memory) is said where it is used.
 - Pierrehumbert 2023, *ApJ* 944, 20, doi:10.3847/1538-4357/acafdf,
   arXiv:2212.02644, the supercritical column of a post-runaway
   waterworld, § 1 and 2 (read).
+- Pincus, Forster and Stevens 2016, *Geosci. Model Dev.* 9, 3447,
+  doi:10.5194/gmd-9-3447-2016, the 100 RFMIP profiles (read in
+  RRTMGP's data; study 32).
 - Plaut et al. 2007, *Science* 316, 92, doi:10.1126/science.1139672,
   Mars's south polar layered deposits (abstract read).
 - Quirico et al. 1999, *Icarus* 139, 159, Triton's CO₂ ice.
@@ -4465,6 +4570,9 @@ another paper, from memory) is said where it is used.
 - Scherf, Lammer, Erkaev, Mandt, Thaller and Marty 2020, *Space Sci.
   Rev.* 216, 123, doi:10.1007/s11214-020-00752-0, arXiv:2011.00973,
   nitrogen atmospheres of the icy bodies, Titan's § 3 (read).
+- Schmidt, Ruedy, Miller and Lacis 2010, *JGR* 115, D20106,
+  doi:10.1029/2010JD014287, Table 1, the greenhouse by absorber
+  (read; study 32).
 - Schröder and Keller 2008, *Planet. Space Sci.* 56, 753,
   doi:10.1016/j.pss.2007.10.011, the Huygens landing site's reflectance
   (read in arXiv:1702.00653).

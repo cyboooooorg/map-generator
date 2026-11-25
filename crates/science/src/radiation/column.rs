@@ -62,7 +62,10 @@ use super::spectrum::{
 use crate::constants::{MOLAR_GAS_CONSTANT, STEFAN_BOLTZMANN};
 use crate::units::{Kelvin, MetrePerSecondSquared, WattPerSquareMetre};
 use crate::volatiles::{co2_latent_j_mol, co2_saturation_bar, methane_saturation_bar};
-use crate::water::{CRITICAL_POINT_TEMPERATURE, vapour_latent_j_mol, vapour_saturation_bar};
+use crate::water::{
+    CRITICAL_POINT_TEMPERATURE, Condensate, TRIPLE_POINT_TEMPERATURE, vapour_latent_j_mol_over,
+    vapour_saturation_bar, vapour_saturation_bar_over,
+};
 
 #[cfg(test)]
 #[path = "column_tests.rs"]
@@ -432,35 +435,72 @@ fn co2_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64) -> f64 {
     )
 }
 
-/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on water's
-/// moist pseudo-adiabat (`saturated`, [`pseudo_adiabat`] with the IAPWS
-/// saturation and its latent heat, [`vapour_latent_j_mol`]) or on the dry
-/// adiabat of air holding `vapour_share` of vapour (mole fraction).
-fn lapse(
-    air: &DryAir,
-    temperature_k: f64,
-    pressure_bar: f64,
-    saturated: bool,
-    vapour_share: f64,
-) -> f64 {
+/// `d T / d ln p`, K, at `temperature_k` on the dry adiabat of air
+/// holding `vapour_share` of unsaturated vapour (mole fraction). A
+/// saturated step takes water's moist pseudo-adiabat instead
+/// ([`saturated_step`], the one place that chooses its condensate).
+fn lapse(air: &DryAir, temperature_k: f64, vapour_share: f64) -> f64 {
     let t = temperature_k;
-    if !saturated && vapour_share <= 0.0 {
+    if vapour_share <= 0.0 {
         return t * MOLAR_GAS_CONSTANT / air.cp;
     }
-    let cp_v = steam_cp(t);
-    if saturated {
-        pseudo_adiabat(
-            t,
-            pressure_bar,
-            vapour_saturation_bar(t),
-            vapour_latent_j_mol(t),
-            air.cp,
-            cp_v,
-        )
-    } else {
-        let cp = (1.0 - vapour_share) * air.cp + vapour_share * cp_v;
-        t * MOLAR_GAS_CONSTANT / cp
+    let cp = (1.0 - vapour_share) * air.cp + vapour_share * steam_cp(t);
+    t * MOLAR_GAS_CONSTANT / cp
+}
+
+/// `d T / d ln p`, K, at `temperature_k` and `pressure_bar` on water's
+/// moist pseudo-adiabat over `condensate` ([`pseudo_adiabat`] with its
+/// IAPWS curve and latent heat, [`vapour_saturation_bar_over`] and
+/// [`vapour_latent_j_mol_over`]).
+fn water_lapse(air: &DryAir, temperature_k: f64, pressure_bar: f64, condensate: Condensate) -> f64 {
+    let t = temperature_k;
+    pseudo_adiabat(
+        t,
+        pressure_bar,
+        vapour_saturation_bar_over(t, condensate),
+        vapour_latent_j_mol_over(t, condensate),
+        air.cp,
+        steam_cp(t),
+    )
+}
+
+/// The temperature, K, a step of `h` in `ln p` up water's moist
+/// pseudo-adiabat reaches from `temperature_k` at `pressure_bar`: a
+/// midpoint (second-order Runge–Kutta) step over the condensate stable
+/// where it starts ([`water_lapse`]).
+///
+/// The latent heat jumps by fusion's at the triple point (273.16 K), so a
+/// step that crosses it is split there, as the step where the vapour
+/// first saturates is: liquid up to where the step over liquid alone
+/// reaches 273.16 K (`T` taken linear across the step), ice above.
+/// Without the split, the phase of the midpoint decides the whole step,
+/// and the column above jumps colder when the surface moves the midpoint
+/// across 273.16 K (study 32: a sawtooth of up to 1.2 W/m² in Earth's
+/// outgoing radiation). The triple point is a `Source:`
+/// ([`TRIPLE_POINT_TEMPERATURE`], IAPWS R10-06(2009), Table 1).
+fn saturated_step(air: &DryAir, temperature_k: f64, pressure_bar: f64, h: f64) -> f64 {
+    let step = |t: f64, from: f64, h: f64, condensate: Condensate| {
+        let half = t - 0.5 * h * water_lapse(air, t, from, condensate);
+        t - h * water_lapse(air, half, from * (-0.5 * h).exp(), condensate)
+    };
+    let t = temperature_k;
+    let triple = TRIPLE_POINT_TEMPERATURE.0;
+    let condensate = Condensate::at(t);
+    if condensate == Condensate::Ice {
+        return step(t, pressure_bar, h, condensate);
     }
+    let liquid = step(t, pressure_bar, h, condensate);
+    if liquid >= triple {
+        return liquid;
+    }
+    let f = (t - triple) / (t - liquid);
+    let melted = step(t, pressure_bar, f * h, Condensate::Liquid);
+    step(
+        melted,
+        pressure_bar * (-f * h).exp(),
+        (1.0 - f) * h,
+        Condensate::Ice,
+    )
 }
 
 /// The sky and humidity of a column.
@@ -493,10 +533,13 @@ impl Sky {
 /// Source: the floor of the troposphere's relative humidity profile, as
 /// a share of the surface pressure: `RH_s (Q − 0.02) / (1 − 0.02)`,
 /// Manabe & Wetherald 1967 (*J. Atmos. Sci.* 24, 241,
-/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2, eq. 2). The paper
-/// is not open; the profile is confirmed indirectly by climlab's
-/// `ManabeWaterVapor` (`RH_s ((Q − 0.02)/(1 − 0.02))`, "following Manabe
-/// 1967") and by arXiv:2006.03098, as the audit (Wiki study 19) records.
+/// doi:10.1175/1520-0469(1967)024<0241:TEOTAW>2.0.CO;2), their eq. 2,
+/// read in the scan GFDL hosts (Wiki study 33; Kluft et al. 2019, *J.
+/// Climate* 32, 8111, doi:10.1175/JCLI-D-18-0774.1, §2b, number it 3,
+/// which is the paper's stratospheric floor). Below 0 °C the column
+/// refers the humidity to ice; climlab refers it to liquid water and
+/// Kluft et al. to a mix (study 32); the 1967 paper speaks only of "the
+/// saturation vapor pressure of water vapor".
 const HUMIDITY_FLOOR_SHARE: f64 = 0.02;
 
 /// Relative humidity of the troposphere at `share` of the surface
@@ -801,8 +844,7 @@ fn with_column<R>(
     let mut vapour_share = vapour / surface_bar;
     let mut t = surface_k;
     let mut p = surface_bar;
-    let (ratio, half_ratio) = ((-step).exp(), (-0.5 * step).exp());
-    let (last_ratio, last_half) = ((-last).exp(), (-0.5 * last).exp());
+    let (ratio, last_ratio) = ((-step).exp(), (-last).exp());
     // CO₂'s share of the dry air: where the air reaches its saturation it
     // condenses, the air follows its pseudo-adiabat ([`co2_lapse`]) and
     // the share falls to what saturation leaves; above the skin it keeps
@@ -845,13 +887,12 @@ fn with_column<R>(
         if i == n {
             break;
         }
-        let (h, r, half_r) = if i + 1 == n {
-            (last, last_ratio, last_half)
+        let (h, r) = if i + 1 == n {
+            (last, last_ratio)
         } else {
-            (step, ratio, half_ratio)
+            (step, ratio)
         };
         let p_here = p;
-        let p_mid = p * half_r;
         p *= r;
         if frozen {
             continue;
@@ -870,8 +911,12 @@ fn with_column<R>(
         if co2_saturated {
             t = moist(t, p_here, h);
         } else {
-            let half = t - 0.5 * h * lapse(&air, t, p_here, saturated, vapour_share);
-            let mut next = t - h * lapse(&air, half, p_mid, saturated, vapour_share);
+            let mut next = if saturated {
+                saturated_step(&air, t, p_here, h)
+            } else {
+                let half = t - 0.5 * h * lapse(&air, t, vapour_share);
+                t - h * lapse(&air, half, vapour_share)
+            };
             // The step in which the vapour first saturates is split where
             // it does (the excess `ln(e / e_sat)` taken linear across the
             // step), the rest taken on the moist adiabat: the vapour the
@@ -891,9 +936,7 @@ fn with_column<R>(
                     let crossed = t + f * (next - t);
                     let from = p_here * (-f * h).exp();
                     let rest = (1.0 - f) * h;
-                    let half = crossed - 0.5 * rest * lapse(&air, crossed, from, true, 0.0);
-                    next =
-                        crossed - rest * lapse(&air, half, from * (-0.5 * rest).exp(), true, 0.0);
+                    next = saturated_step(&air, crossed, from, rest);
                     saturated = true;
                 }
             }
