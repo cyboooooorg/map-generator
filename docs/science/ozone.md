@@ -61,8 +61,7 @@ and only for the Sun:
 
 | O₂ (PAL) | Cooke et al. 2022 (3-D, WACCM6) | Kozakis et al. 2022 (1-D, Sun) | Rugheimer et al. 2015b (1-D, Sun) |
 | --- | --- | --- | --- |
-| 1.5 | plotted only | 5.0e18 cm⁻² (fit) | |
-| 1 | 279 DU | 5.15e18 (192 DU) | 5.29e18 (197 DU) |
+| 1 | 279 DU | 5.15e18 cm⁻² (192 DU) | 5.29e18 cm⁻² (197 DU) |
 | 0.25 | | 5.63e18 (210 DU, its maximum) | |
 | 0.1 | 169 DU | 5.36e18 (199 DU) | 4.23e18 (157 DU) |
 | 0.01 | 66 DU | 2.90e18 (108 DU) | 6.01e17 (22 DU) |
