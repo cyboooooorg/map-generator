@@ -910,51 +910,89 @@ pub fn vapour_saturation_pressure(t: Kelvin) -> Pascal {
     Pascal(vapour_saturation_bar(t.0) * PASCALS_PER_BAR)
 }
 
+/// The condensate water vapour is in equilibrium with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Condensate {
+    /// Ice Ih: the sublimation curve and its latent heat.
+    Ice,
+    /// Liquid water: the vaporisation curve and its latent heat.
+    Liquid,
+}
+
+impl Condensate {
+    /// The stable condensate at `t_k`: ice Ih below the triple point
+    /// (and at a NaN temperature, read as 0 K), liquid above.
+    pub(crate) fn at(t_k: f64) -> Condensate {
+        if t_k.is_nan() || t_k < TRIPLE_POINT_TEMPERATURE.0 {
+            Condensate::Ice
+        } else {
+            Condensate::Liquid
+        }
+    }
+}
+
 /// Pressure of water vapour in equilibrium with its condensate at `t_k`,
 /// bar: the sublimation curve of ice Ih below the triple point, the
 /// saturation curve over liquid up to the critical point, and the
 /// critical pressure above it, where no liquid exists (the legacy clamp,
 /// `water_saturation_bar`). 0 at and below 0 K.
 pub(crate) fn vapour_saturation_bar(t_k: f64) -> f64 {
-    let pa = if t_k.is_nan() || t_k < TRIPLE_POINT_TEMPERATURE.0 {
-        sublimation_pa(t_k)
-    } else if t_k < CRITICAL_TEMPERATURE {
-        saturation_pa(t_k)
-    } else {
-        CRITICAL_PRESSURE.0
+    vapour_saturation_bar_over(t_k, Condensate::at(t_k))
+}
+
+/// [`vapour_saturation_bar`] over `condensate` whatever the temperature:
+/// either curve read a little past the triple point, where the moist
+/// adiabat's step that crosses it is split ([`crate::radiation::column`]).
+/// Both curves meet at the triple point.
+pub(crate) fn vapour_saturation_bar_over(t_k: f64, condensate: Condensate) -> f64 {
+    let pa = match condensate {
+        Condensate::Ice => sublimation_pa(t_k),
+        Condensate::Liquid if t_k < CRITICAL_TEMPERATURE => saturation_pa(t_k),
+        Condensate::Liquid => CRITICAL_PRESSURE.0,
     };
     pa / PASCALS_PER_BAR
 }
 
-/// Molar latent heat of water, J/mol, at `t_k`, taken from the slope of
-/// [`vapour_saturation_bar`] by Clausius-Clapeyron for an ideal vapour over
-/// a condensate of negligible volume, `L = R T^2 d ln e_s / dT`
-/// (Pierrehumbert 2010, section 2.6), the derivative taken analytically
-/// from the equation of each branch: sublimation below the triple point,
-/// vaporisation above. The moist adiabat that uses it then agrees with the
-/// curve, as the legacy model's single latent heat did. Above the critical
-/// temperature it keeps its value there (the legacy clamp). The ideal-vapour
-/// form does not fall to zero at the critical point as the real latent heat
-/// does: it gives `-R Tc a1`, 42.3 kJ/mol.
+/// [`vapour_latent_j_mol_over`] the condensate stable at `t_k`
+/// ([`Condensate::at`]), for the tests of the latent heat.
+#[cfg(test)]
 pub(crate) fn vapour_latent_j_mol(t_k: f64) -> f64 {
+    vapour_latent_j_mol_over(t_k, Condensate::at(t_k))
+}
+
+/// Molar latent heat of water over `condensate`, J/mol, at `t_k`, taken
+/// from the slope of its curve ([`vapour_saturation_bar_over`]) by
+/// Clausius-Clapeyron for an ideal vapour over a condensate of negligible
+/// volume, `L = R T^2 d ln e_s / dT` (Pierrehumbert 2010, section 2.6),
+/// the derivative taken analytically from the equation of each branch:
+/// sublimation over ice, vaporisation over liquid, which differ by
+/// fusion's at the triple point. The moist adiabat that uses it then
+/// agrees with the curve, as the legacy model's single latent heat did.
+/// Above the critical temperature it keeps its value there (the legacy
+/// clamp). The ideal-vapour form does not fall to zero at the critical
+/// point as the real latent heat does: it gives `-R Tc a1`, 42.3 kJ/mol.
+pub(crate) fn vapour_latent_j_mol_over(t_k: f64, condensate: Condensate) -> f64 {
     // A NaN temperature reads as 0 K, like the pressure's.
     let t = if t_k.is_nan() {
         0.0
     } else {
         t_k.clamp(0.0, CRITICAL_TEMPERATURE)
     };
-    if t < TRIPLE_POINT_TEMPERATURE.0 {
-        // d ln p / dT = (1/Tt) sum a_i (b_i - 1) theta^(b_i - 2).
-        let theta = t / TRIPLE_POINT_TEMPERATURE.0;
-        let mut sum = 0.0;
-        for (a, b) in SUBLIMATION_A.iter().zip(SUBLIMATION_B) {
-            sum += a * (b - 1.0) * theta.powf(b);
+    match condensate {
+        Condensate::Ice => {
+            // d ln p / dT = (1/Tt) sum a_i (b_i - 1) theta^(b_i - 2).
+            let theta = t / TRIPLE_POINT_TEMPERATURE.0;
+            let mut sum = 0.0;
+            for (a, b) in SUBLIMATION_A.iter().zip(SUBLIMATION_B) {
+                sum += a * (b - 1.0) * theta.powf(b);
+            }
+            MOLAR_GAS_CONSTANT * TRIPLE_POINT_TEMPERATURE.0 * sum
         }
-        MOLAR_GAS_CONSTANT * TRIPLE_POINT_TEMPERATURE.0 * sum
-    } else {
-        // d ln p / dT = -(Tc f) / T^2 - f'(tau) / T.
-        let (f, slope) = saturation_sum(t);
-        MOLAR_GAS_CONSTANT * (-CRITICAL_TEMPERATURE * f - t * slope)
+        Condensate::Liquid => {
+            // d ln p / dT = -(Tc f) / T^2 - f'(tau) / T.
+            let (f, slope) = saturation_sum(t);
+            MOLAR_GAS_CONSTANT * (-CRITICAL_TEMPERATURE * f - t * slope)
+        }
     }
 }
 
